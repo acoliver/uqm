@@ -29,7 +29,7 @@ pub(super) fn witness(
 
 pub(super) fn advance(
     run: &mut Battle,
-    world: &mut World<'_>,
+    world: &mut World,
     hooks: &Hooks,
 ) -> Result<Option<Vec<Effect>>, String> {
     match run.stage {
@@ -42,17 +42,15 @@ pub(super) fn advance(
                     let ship = world.order.iter().copied().find(|h| {
                         let e = &world.elements[h];
                         e.is_player_ship()
-                            && !e
-                                .state_flags
-                                .intersects(ElementFlags::APPEARING | ElementFlags::NONSOLID)
+                            && e.flags & (ElementFlags::APPEARING | ElementFlags::NONSOLID).bits()
+                                == 0
                     });
                     let source = world.order.iter().copied().find(|h| {
-                        world.elements[h].collision_func.map_or(0, |f| f.address())
-                            == hooks.star_collision
+                        world.elements[h].collide.map_or(0, |f| f.address()) == hooks.star_collision
                     });
                     if let (Some(ship), Some(source)) = (ship, source) {
-                        run.a = ship;
-                        run.b = source;
+                        run.a = Some(ship);
+                        run.b = Some(source);
                         return contact(run, world);
                     }
                 }
@@ -66,23 +64,18 @@ pub(super) fn advance(
         }
         1 => {
             run.proof.require(
-                world.elements[&run.a]
-                    .preprocess_func
-                    .map_or(0, |f| f.address())
-                    == hooks.unhyper,
+                world.elements[&run.a()].pre.map_or(0, |f| f.address()) == hooks.unhyper,
                 "star-contact",
             )?;
             run.star = world.star;
-            run.velocity = world.elements[&run.a].velocity;
-            run.next(vec![Effect::Collide(run.b, run.a)])
+            run.velocity = world.elements[&run.a()].velocity;
+            run.next(vec![Effect::Collide(run.b(), run.a())])
         }
         _ => {
             run.proof.require(
                 world.star == run.star
-                    && world.elements[&run.b]
-                        .state_flags
-                        .contains(ElementFlags::DEFY_PHYSICS)
-                    && world.elements[&run.a].velocity.vector == run.velocity.vector,
+                    && world.elements[&run.b()].flags & ElementFlags::DEFY_PHYSICS.bits() != 0
+                    && world.elements[&run.a()].velocity.vector == run.velocity.vector,
                 "repeat-suppressed",
             )?;
             run.proof.star.phase = 2;
@@ -93,20 +86,20 @@ pub(super) fn advance(
     }
 }
 
-fn contact(run: &mut Battle, world: &mut World<'_>) -> Result<Option<Vec<Effect>>, String> {
+fn contact(run: &mut Battle, world: &mut World) -> Result<Option<Vec<Effect>>, String> {
     run.proof.require(true, "system-exit")?;
-    let location = world.elements[&run.b].current.location;
+    let location = world.elements[&run.b()].current.location;
     let ship = world
         .elements
-        .get_mut(&run.a)
+        .get_mut(&run.a())
         .ok_or("fixture element or owner is no longer live")?;
     place(ship, location.x, location.y);
     ship.velocity.set_components(1 << VELOCITY_SHIFT, 0);
-    world.ship_mut(run.a).state.cur_status_flags |= THRUST as u16;
+    world.ship_mut(run.a()).state.status |= THRUST as u16;
     run.next(vec![
-        Effect::Intersect(run.a),
+        Effect::Intersect(run.a()),
         Effect::ClearStar,
-        Effect::Collide(run.b, run.a),
+        Effect::Collide(run.b(), run.a()),
     ])
 }
 

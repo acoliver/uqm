@@ -3,65 +3,11 @@
 use super::resources::Frame;
 use super::{ships::characteristics, value, Fields};
 use crate::automation::parity::Journal;
+pub(super) use crate::battle::context_access::observe::CustomData as RaceData;
 #[cfg(not(test))]
 use crate::engine::battle::kernel::LAST_PKUNK_SOUND as LAST_SOUND;
 use crate::ships::native::abi::*;
-
-pub(super) enum RaceData<'a> {
-    None,
-    #[cfg(not(test))]
-    Androsynth(crate::engine::battle::record::ElementCollisionFunc),
-    #[cfg(not(test))]
-    Pkunk {
-        phoenix: usize,
-        hooks: [ElementProcessFunc; 3],
-    },
-    #[cfg(not(test))]
-    Umgah(u16),
-    Mmrnmhrm(&'a CHARACTERISTIC_STUFF),
-    #[cfg(not(test))]
-    Sis(&'a crate::engine::battle::race::SisState),
-}
-
-impl<'a> RaceData<'a> {
-    /// # Safety
-    /// `pointer` is the given species' actual live descriptor data, immutable for `'a`.
-    #[cfg(not(test))]
-    pub(super) unsafe fn borrow(species: u32, descriptor: &'a RACE_DESC) -> Self {
-        if let crate::engine::battle::RaceState::Androsynth { collision } = descriptor.race_state {
-            return Self::Androsynth(collision);
-        }
-        if let crate::engine::battle::RaceState::Mmrnmhrm { ref alternate } = descriptor.race_state
-        {
-            return Self::Mmrnmhrm(alternate);
-        }
-        if let crate::engine::battle::RaceState::Pkunk {
-            phoenix,
-            saved_pre,
-            saved_post,
-            saved_death,
-        } = descriptor.race_state
-        {
-            // SAFETY: this snapshot retains the initialized game-thread pool.
-            let phoenix = unsafe { phoenix_address(phoenix) };
-            return Self::Pkunk {
-                phoenix,
-                hooks: [saved_pre, saved_post, saved_death],
-            };
-        }
-        if let crate::engine::battle::RaceState::Sis(ref data) = descriptor.race_state {
-            return Self::Sis(data);
-        }
-        if let crate::engine::battle::RaceState::Umgah { previous_facing } = descriptor.race_state {
-            return previous_facing.map_or(Self::None, Self::Umgah);
-        }
-        assert!(
-            descriptor.data.is_null(),
-            "unexpected custom data for species {species}"
-        );
-        Self::None
-    }
-
+impl RaceData<'_> {
     pub(super) fn write(
         &self,
         fields: &mut Fields,
@@ -83,13 +29,12 @@ impl<'a> RaceData<'a> {
                 _hooks,
             ),
             #[cfg(not(test))]
-            Self::Pkunk { phoenix, hooks } => {
+            Self::NativePkunk { phoenix, saved } => {
                 value(fields, &prefix, "phoenix", _journal.identity(*phoenix));
-                for (name, callback) in [
-                    ("saved_preprocess", hooks[0]),
-                    ("saved_postprocess", hooks[1]),
-                    ("saved_death", hooks[2]),
-                ] {
+                for (name, callback) in ["saved_preprocess", "saved_postprocess", "saved_death"]
+                    .into_iter()
+                    .zip(saved)
+                {
                     hook(
                         fields,
                         &prefix,
@@ -101,7 +46,7 @@ impl<'a> RaceData<'a> {
                 }
             }
             #[cfg(not(test))]
-            Self::Umgah(data) => value(fields, &prefix, "prev_facing", *data),
+            Self::NativeUmgah(previous) => value(fields, &prefix, "prev_facing", *previous),
             Self::Mmrnmhrm(data) => {
                 characteristics(fields, &format!("{prefix}.characteristics"), data)
             }
@@ -220,31 +165,4 @@ mod tests {
             Fields::from([("ship.custom.present".into(), "false".into())])
         );
     }
-}
-
-/// Decode the legacy address token without accessing its element record.
-///
-/// # Safety
-/// The initialized display pool must remain owned by this synchronous snapshot.
-#[cfg(not(test))]
-pub(in crate::automation) unsafe fn phoenix_address(
-    phoenix: Option<crate::engine::battle::ElementId>,
-) -> usize {
-    let Some(id) = phoenix else {
-        return 0;
-    };
-    // Pkunk retains this token after free. Legacy observation follows the pool
-    // address even if its slot is reused; live element operations still check gen.
-    // SAFETY: the snapshot owns the initialized queue; only its address is read.
-    let queue = unsafe { &*crate::c_bindings::live_queues::display_list() };
-    assert!(
-        !queue.pq_tab.is_null(),
-        "Pkunk snapshot pool is not initialized"
-    );
-    assert!(
-        id.slot < queue.num_objects,
-        "Pkunk snapshot slot outside pool"
-    );
-    assert!(queue.object_size > 0, "Pkunk snapshot has no record stride");
-    queue.pq_tab as usize + usize::from(id.slot) * usize::from(queue.object_size)
 }

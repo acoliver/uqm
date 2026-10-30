@@ -9,7 +9,7 @@ pub(super) struct Run {
     pair: usize,
     stage: u8,
     wait: u16,
-    active: [HLINK; 2],
+    active: Option<[ShipId; 2]>,
     selected: BTreeSet<u32>,
     observations: Observations,
 }
@@ -75,7 +75,7 @@ impl Run {
             pair: 0,
             stage: 0,
             wait: 0,
-            active: [ptr::null_mut(); 2],
+            active: None,
             selected: BTreeSet::new(),
             observations: Observations {
                 coverage: CorpusCoverage::default(),
@@ -92,7 +92,7 @@ impl Run {
 
     pub(super) fn advance(
         &mut self,
-        world: &mut World<'_>,
+        world: &mut World,
         catalog: &BTreeMap<u8, u32>,
     ) -> Result<Option<Vec<Effect>>, String> {
         match self.stage {
@@ -104,26 +104,35 @@ impl Run {
             1 => {
                 reset(world, &FLEETS[usize::from(self.request.fleet)], catalog);
                 let pair = self.pairs[self.pair];
+                let mut selected = [None; 2];
                 for side in 0..2 {
                     let species = catalog[&pair[side]];
                     self.selected.insert(species);
-                    self.active[side] = *world
-                        .ships
-                        .iter()
-                        .find(|(_, s)| {
-                            s.state.playerNr == side as i16 && s.state.SpeciesID == species
-                        })
-                        .ok_or("requested species missing from loaded fleet")?
-                        .0;
+                    selected[side] = Some(
+                        *world
+                            .ships
+                            .iter()
+                            .find(|(_, s)| s.state.player == side as i16 && s.species == species)
+                            .ok_or("requested species missing from loaded fleet")?
+                            .0,
+                    );
                     world
                         .ships
-                        .get_mut(&self.active[side])
+                        .get_mut(&selected[side].unwrap_or_else(|| panic!("selected corpus ship")))
                         .ok_or("corpus requested owner is no longer queued")?
                         .state
                         .control = 2 | 64;
                 }
+                self.active =
+                    Some(selected.map(|id| id.unwrap_or_else(|| panic!("selected corpus ship"))));
                 self.stage = 2;
-                Ok(Some(self.active.into_iter().map(Effect::Spawn).collect()))
+                Ok(Some(
+                    self.active
+                        .unwrap_or_else(|| panic!("active corpus pair"))
+                        .into_iter()
+                        .map(Effect::Spawn)
+                        .collect(),
+                ))
             }
             2 => {
                 self.observations.observe()?;
@@ -142,15 +151,22 @@ impl Run {
         }
     }
 
-    fn arrival(&mut self, world: &World<'_>) -> Result<Option<Vec<Effect>>, String> {
+    fn arrival(&mut self, world: &World) -> Result<Option<Vec<Effect>>, String> {
         self.observations.observe()?;
         if self.ended(world)? {
             return Err("production corpus ship died during arrival".into());
         }
         if self
             .active
+            .unwrap_or_else(|| panic!("active corpus pair"))
             .iter()
-            .all(|h| arrived(world.elements[&world.ships[h].state.hShip.cast()]))
+            .all(|h| {
+                arrived(
+                    &world.elements[&world.ships[h]
+                        .element
+                        .unwrap_or_else(|| panic!("spawned ship element"))],
+                )
+            })
         {
             self.stage = 4;
             self.wait = 0;
@@ -163,7 +179,7 @@ impl Run {
         Ok(Some(vec![Effect::Redraw(false)]))
     }
 
-    fn engage(&mut self, world: &World<'_>) -> Result<Option<Vec<Effect>>, String> {
+    fn engage(&mut self, world: &World) -> Result<Option<Vec<Effect>>, String> {
         self.observations.observe()?;
         self.wait += 1;
         if self.ended(world)? || self.wait == 96 {
@@ -178,32 +194,38 @@ impl Run {
         Ok(Some(vec![self.think(world)?, Effect::Redraw(false)]))
     }
 
-    fn think(&self, world: &World<'_>) -> Result<Effect, String> {
-        let mut active = [(ptr::null_mut(), 0); 2];
-        for (slot, h) in active.iter_mut().zip(self.active) {
+    fn think(&self, world: &World) -> Result<Effect, String> {
+        let mut active = [None; 2];
+        for (slot, h) in active
+            .iter_mut()
+            .zip(self.active.unwrap_or_else(|| panic!("active corpus pair")))
+        {
             let ship = &world.ships[&h];
-            *slot = (
-                ship.state.hShip.cast(),
+            *slot = Some((
+                ship.element
+                    .unwrap_or_else(|| panic!("spawned ship element")),
                 ship.info
                     .as_ref()
                     .ok_or("corpus descriptor is unavailable")?
                     .crew_level,
-            );
+            ));
         }
-        Ok(Effect::Think(active))
+        Ok(Effect::Think(active.map(|entry| {
+            entry.unwrap_or_else(|| panic!("active thinker"))
+        })))
     }
 
-    fn ended(&self, world: &World<'_>) -> Result<bool, String> {
-        for h in &self.active {
+    fn ended(&self, world: &World) -> Result<bool, String> {
+        for h in &self.active.unwrap_or_else(|| panic!("active corpus pair")) {
             let ship = &world.ships[h];
-            assert!(!ship.state.hShip.is_null(), "active corpus element");
+            assert!(ship.element.is_some(), "active corpus element");
             if ship
                 .info
                 .as_ref()
                 .ok_or("active corpus descriptor is unavailable")?
                 .crew_level
                 == 0
-                || ship.state.SpeciesID == SPECIES_ID_NO_ID
+                || ship.species == SPECIES_ID_NO_ID
             {
                 return Ok(true);
             }
@@ -212,15 +234,15 @@ impl Run {
     }
 }
 
-fn reset(world: &mut World<'_>, fleet: &[u8; 7], catalog: &BTreeMap<u8, u32>) {
+fn reset(world: &mut World, fleet: &[u8; 7], catalog: &BTreeMap<u8, u32>) {
     for ship in world.ships.values_mut() {
-        let slot = usize::from(ship.state.index);
+        let slot = usize::from(ship.index);
         assert!(slot < fleet.len(), "configured corpus fleet slot");
-        ship.state.hShip = ptr::null_mut();
-        ship.state.SpeciesID = catalog[&fleet[slot]];
-        ship.state.crew_level = 0;
-        ship.state.ship_input_state = 0;
-        ship.state.cur_status_flags = 0;
-        ship.state.old_status_flags = 0;
+        ship.clear_element();
+        ship.species = catalog[&fleet[slot]];
+        ship.state.crew = 0;
+        ship.state.input = 0;
+        ship.state.status = 0;
+        ship.state.old_status = 0;
     }
 }

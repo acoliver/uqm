@@ -40,31 +40,9 @@
 //! Nothing here moves the flagship: no field of `GAME_STATE` other than
 //! `ShipFacing` is written.
 
-use std::ffi::c_void;
-use std::fmt;
-
-use super::queues::{walk, QueueElement, QueueError, QueueKind};
-use crate::c_bindings::global_state::{ELEMENT, PLAYER_SHIP, STARSHIP};
+use super::queues::QueueError;
 use crate::comm::locdata::{CGameState, CQueue};
-
-impl QueueElement for STARSHIP {
-    fn pred(&self) -> *mut c_void {
-        self.pred
-    }
-    fn succ(&self) -> *mut c_void {
-        self.succ
-    }
-}
-
-impl QueueElement for ELEMENT {
-    fn pred(&self) -> *mut c_void {
-        self.pred
-    }
-    fn succ(&self) -> *mut c_void {
-        self.succ
-    }
-}
-
+use std::fmt;
 /// Why the flagship's facing could not be prepared.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HyperSaveError {
@@ -117,36 +95,7 @@ pub unsafe fn read_flagship_facing(
     player_ships: &CQueue,
     display_list: &CQueue,
 ) -> Result<Option<u16>, HyperSaveError> {
-    let ships = walk::<STARSHIP>(player_ships, QueueKind::PlayerShips)?;
-    let Some(&flagship) = ships.first() else {
-        return Ok(None);
-    };
-    let ship_element = (*flagship).hShip;
-    if ship_element.is_null() {
-        return Ok(None);
-    }
-
-    let elements = walk::<ELEMENT>(display_list, QueueKind::DisplayList)?;
-    let Some(&element) = elements
-        .iter()
-        .find(|link| link.cast::<c_void>() == ship_element)
-    else {
-        return Err(HyperSaveError::ElementNotInDisplayList);
-    };
-    let element = &*element;
-    if u32::from(element.state_flags) & PLAYER_SHIP == 0 {
-        return Err(HyperSaveError::ElementIsNotAPlayerShip);
-    }
-    if element.pParent.is_null() {
-        return Err(HyperSaveError::NoOwner);
-    }
-    let Some(&owner) = ships
-        .iter()
-        .find(|link| link.cast::<c_void>() == element.pParent)
-    else {
-        return Err(HyperSaveError::OwnerNotInPlayerQueue);
-    };
-    Ok(Some((*owner).ShipFacing))
+    crate::battle::context_access::save::read_flagship_facing(player_ships, display_list)
 }
 
 /// The flagship's facing plus one, or `None` when there is no flagship element

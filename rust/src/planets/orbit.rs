@@ -11,10 +11,9 @@ fn submenu_selection(current: u8, selected: bool, pc_menu: bool) -> u8 {
 #[cfg(not(test))]
 pub(crate) mod live {
     use super::submenu_selection;
-    use crate::battle::element::Element;
     use crate::c_bindings::{
         global_state::{MENU_STATE, PLANET_INFO},
-        live_queues, solar_system,
+        solar_system,
     };
     use crate::comm::locdata::CRect;
     use crate::graphics::drawable_abi::SetContextFGFrame;
@@ -121,32 +120,34 @@ pub(crate) mod live {
 
     #[no_mangle]
     pub unsafe extern "C" fn DrawScannedObjects(reversed: u32) {
-        let queue = live_queues::display_list();
-        let mut handle = if reversed != 0 {
-            (*queue).tail
-        } else {
-            (*queue).head
-        } as usize;
-        while handle != 0 {
-            let element = handle as *const Element;
-            handle = if reversed != 0 {
-                (*element).pred as usize
+        crate::app::bridge::enter(|cx| {
+            let mut handle = if reversed != 0 {
+                cx.elements().tail()
             } else {
-                (*element).succ as usize
+                cx.elements().head()
             };
-            if crate::planet_side::orbit_scan::node_visible(
-                &*element,
-                &(*solar_system::current()).SysInfo.PlanetInfo,
-            ) {
-                CffiPlatform.draw_stamp(Stamp {
-                    origin: Point {
-                        x: (*element).current.location.x,
-                        y: (*element).current.location.y,
-                    },
-                    frame: (*element).next.frame as usize,
-                });
+            while let Some(element) = handle {
+                handle = if reversed != 0 {
+                    cx.elements().pred(element)
+                } else {
+                    cx.elements().succ(element)
+                };
+                let state = cx.element(element);
+                if crate::planet_side::orbit_scan::node_visible(
+                    state.flags,
+                    state.life,
+                    &(*solar_system::current()).SysInfo.PlanetInfo,
+                ) {
+                    CffiPlatform.draw_stamp(Stamp {
+                        origin: Point {
+                            x: state.current.location.x,
+                            y: state.current.location.y,
+                        },
+                        frame: state.next.image.frame.raw() as usize,
+                    });
+                }
             }
-        }
+        });
     }
 
     #[no_mangle]

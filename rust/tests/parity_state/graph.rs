@@ -206,6 +206,7 @@ pub(super) fn fighters_without_journal(directory: &Path) {
     // SAFETY: this child has not initialized Coordinator, and it alone owns the graph.
     unsafe {
         GlobData.Game_state.CurrentActivity = IN_BATTLE as u16;
+        install_ship(&mut ship);
         attach_elements(std::slice::from_mut(&mut element));
         disp_q.head = ptr::from_mut(&mut element).cast();
         disp_q.tail = disp_q.head;
@@ -258,6 +259,13 @@ pub(super) unsafe fn attach_elements(elements: &mut [Element]) {
         disp_q.pq_tab = base.cast();
         disp_q.object_size = std::mem::size_of::<Element>() as u16;
         disp_q.num_objects = elements.len() as u8;
+        let saved = elements.to_vec();
+        uqm_rust::battle::process_native::InitDisplayList();
+        for (index, value) in saved.into_iter().enumerate() {
+            let allocated = uqm_rust::battle::process_native::AllocElement().cast::<Element>();
+            assert_eq!(allocated, base.add(index), "fixture allocation order");
+            allocated.write(value);
+        }
         disp_q.head = base.cast();
         disp_q.tail = ptr::from_mut(
             elements

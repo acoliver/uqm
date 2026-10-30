@@ -10,7 +10,16 @@ impl<'a, T: QueueRecord> LinkQueue<'a, T> {
     pub unsafe fn new(queue: &'a mut Queue) -> Self {
         assert_eq!(usize::from(queue.object_size), size_of::<T::Storage>());
         Self {
-            queue,
+            queue: QueueBorrow::Exclusive(queue),
+            marker: PhantomData,
+        }
+    }
+    /// # Safety
+    /// The initialized queue and its records remain live and immutable for the view.
+    pub unsafe fn borrow(queue: &'a Queue) -> Self {
+        assert_eq!(usize::from(queue.object_size), size_of::<T::Storage>());
+        Self {
+            queue: QueueBorrow::Shared(queue),
             marker: PhantomData,
         }
     }
@@ -38,12 +47,13 @@ impl<'a, T: QueueRecord> LinkQueue<'a, T> {
         unsafe { &*self.raw(id).cast::<T::Storage>() }
     }
     pub(crate) fn record_mut(&mut self, id: LinkId<T>) -> &mut T::Storage {
+        let _ = &mut *self.queue;
         // SAFETY: this exclusive view scopes the checked one-record borrow.
         unsafe { &mut *self.raw(id).cast::<T::Storage>() }
     }
     pub fn alloc(&mut self) -> Option<LinkId<T>> {
         // SAFETY: the view exclusively owns this queue's initialized free list.
-        let raw = unsafe { queue::AllocLink(self.queue) };
+        let raw = unsafe { queue::AllocLink(&mut *self.queue) };
         let id = self.id(raw)?;
         // SAFETY: all fields of a newly allocated legacy ship admit zero.
         unsafe {
@@ -56,7 +66,7 @@ impl<'a, T: QueueRecord> LinkQueue<'a, T> {
         let raw = self.raw(id);
         // SAFETY: callers append allocated unlinked records to this pool.
         unsafe {
-            queue::PutQueue(self.queue, raw);
+            queue::PutQueue(&mut *self.queue, raw);
         }
     }
     pub fn remove(&mut self, id: LinkId<T>) {
@@ -64,13 +74,13 @@ impl<'a, T: QueueRecord> LinkQueue<'a, T> {
         let raw = self.raw(id);
         // SAFETY: callers unlink a currently linked record from this pool.
         unsafe {
-            queue::RemoveQueue(self.queue, raw);
+            queue::RemoveQueue(&mut *self.queue, raw);
         }
     }
     pub fn reinit(&mut self) {
         // SAFETY: no record borrow outlives this exclusive view's operation.
         unsafe {
-            queue::ReinitQueue(self.queue);
+            queue::ReinitQueue(&mut *self.queue);
         }
     }
 }
@@ -108,4 +118,13 @@ pub(crate) unsafe fn identify(address: usize) -> ShipId {
         }
     }
     panic!("ship address {address:#x} is outside the ship pools")
+}
+
+impl LinkQueue<'_, Starship> {
+    pub fn facing(&self, id: LinkId<Starship>) -> u16 {
+        self.record(id).ShipFacing
+    }
+    pub(crate) fn element_handle(&self, id: LinkId<Starship>) -> HLink {
+        self.record(id).hShip
+    }
 }

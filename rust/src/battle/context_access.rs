@@ -45,13 +45,22 @@ impl Cx<'_> {
     pub fn gravity(&mut self, id: ElementId) -> bool {
         let pointer = self.elements().raw(id).cast();
         // SAFETY: the checked element and display queue belong to this context.
-        unsafe { CalculateGravity(pointer) != 0 }
+        unsafe { crate::app::bridge::publish(self, || CalculateGravity(pointer) != 0) }
     }
 
     pub fn matter_conflict(&mut self, id: ElementId) -> bool {
         let pointer = self.elements().raw(id).cast();
         // SAFETY: no record projection survives the legacy resource operation.
-        unsafe { TimeSpaceMatterConflict(pointer) != 0 }
+        unsafe { crate::app::bridge::publish(self, || TimeSpaceMatterConflict(pointer) != 0) }
+    }
+
+    pub(crate) fn negotiate_battle(
+        &mut self,
+        net: &dyn crate::engine::battle::net::BattleNet,
+        state: u32,
+    ) -> bool {
+        // SAFETY: the caller retains only a cloned network handle, not live record borrows.
+        unsafe { crate::app::bridge::publish(self, || net.negotiate(true, state)) }
     }
 
     pub fn screen_dimensions(&self) -> (i32, i32) {
@@ -170,10 +179,20 @@ impl Cx<'_> {
         }
     }
 
+    pub fn setup_element(&mut self, id: ElementId) {
+        self.copy_current_to_next(id);
+        if self.element(id).flags & SKIP_COLLISION as u16 == 0 {
+            self.init_intersect(id);
+            let frame = self.equivalent_frame(
+                self.element_frame_set_first(id, true),
+                self.element(id).next.image.frame,
+            );
+            self.set_intersect_frame(id, frame);
+        }
+    }
+
     pub fn hyper_transition(&mut self, id: ElementId) -> bool {
-        let pointer = self.elements().raw(id).cast();
-        // SAFETY: the checked flagship element belongs to this context.
-        unsafe { crate::navigation::hyper_transition::hyper_transition(pointer) != 0 }
+        crate::navigation::hyper_transition::hyper_transition(self, id)
     }
 
     pub fn object_cloaked(&mut self, id: ElementId) -> bool {
@@ -585,10 +604,9 @@ mod star_access {
             unsafe { GlobData.Game_state.autopilot }
         }
         pub(crate) fn star_contact(&self, id: crate::engine::battle::ElementId) -> StarContact {
-            let element = self.elements().raw(id).cast();
+            let mut point = element_universe(self, id);
             // SAFETY: lookup reads the checked element and loaded star catalog synchronously.
             unsafe {
-                let mut point = element_universe(element);
                 let star = FindStar(ptr::null_mut(), &mut point, 5, 5);
                 assert!(!star.is_null(), "star collision has no catalog entry");
                 StarContact {
@@ -610,12 +628,7 @@ mod star_access {
             ship: crate::engine::battle::ElementId,
             kind: u8,
         ) {
-            let source = self.elements().raw(source).cast();
-            let ship = self.elements().raw(ship).cast();
-            // SAFETY: checked elements remain live and no record references cross the call.
-            unsafe {
-                init_transition(source, ship, kind);
-            }
+            init_transition(self, source, ship, kind);
         }
     }
 }
@@ -775,3 +788,20 @@ impl Cx<'_> {
 pub(crate) mod links;
 
 pub(crate) mod fleet_legacy;
+
+mod navigation;
+
+pub(crate) mod lifecycle;
+
+pub(crate) mod save;
+
+pub(crate) mod observe;
+
+pub(crate) mod fixture;
+
+const _: () = {
+    assert!(
+        crate::comm::locdata::CGameState::DISPLAY_ARRAY_OFFSET
+            == std::mem::offset_of!(crate::c_bindings::global_state::GAME_STATE, DisplayArray)
+    );
+};

@@ -64,6 +64,18 @@ impl Cx<'_> {
             target.map_or(std::ptr::null_mut(), |id| self.b.elements.raw(id));
     }
 
+    pub(crate) fn set_ip_group_parent(&mut self, id: ElementId, slot: u8) {
+        let queue = self.project(
+            std::ptr::NonNull::new(self.world.groups().cast_mut())
+                .unwrap_or_else(|| panic!("IP-group queue")),
+        );
+        assert!(slot < queue.num_objects, "IP-group slot outside pool");
+        let parent = queue
+            .pq_tab
+            .wrapping_add(usize::from(slot) * usize::from(queue.object_size));
+        self.b.elements[id].pParent = parent.cast();
+    }
+
     pub fn put(&mut self, id: ElementId) {
         self.insert_before(id, None);
     }
@@ -112,6 +124,10 @@ impl Cx<'_> {
             image!(frame;self.b.elements[id].current.image.frame,frame.0);
         }
     }
+    pub fn set_single_frames(&mut self, id: ElementId, frames: Frames, frame: Frame) {
+        crate::collections::observation::image!(single; self.b.elements[id].current.image.farray, frames.0, frame.0);
+    }
+
     pub fn set_frames(&mut self, id: ElementId, next: bool, frames: Frames) {
         use crate::collections::observation::image;
         if next {
@@ -441,14 +457,18 @@ pub unsafe fn invoke_legacy_collision<E, P>(
 
 #[cfg(not(test))]
 impl Cx<'_> {
+    pub fn init_intersect(&mut self, id: ElementId) {
+        self.init_intersect_start(id);
+        self.init_intersect_end(id);
+    }
+
     pub fn init_intersect_start(&mut self, id: ElementId) {
         let e = &mut self.b.elements[id];
         e.IntersectControl.IntersectStamp.origin.x = e.current.location.x >> 2;
         e.IntersectControl.IntersectStamp.origin.y = e.current.location.y >> 2;
     }
 
-    pub fn init_intersect(&mut self, id: ElementId) {
-        self.init_intersect_start(id);
+    pub fn init_intersect_end(&mut self, id: ElementId) {
         let e = &mut self.b.elements[id];
         e.IntersectControl.EndPoint.x = e.next.location.x >> 2;
         e.IntersectControl.EndPoint.y = e.next.location.y >> 2;
@@ -636,4 +656,57 @@ impl Cx<'_> {
             }
         }
     }
+}
+
+#[cfg(not(test))]
+impl Cx<'_> {
+    pub fn primitive_stamp(&mut self, id: ElementId) -> crate::graphics::native_abi::STAMP {
+        let pointer = std::ptr::NonNull::from(&mut self.primitive(id).Object).cast();
+        *self.project(pointer)
+    }
+
+    pub fn set_primitive_stamp(
+        &mut self,
+        id: ElementId,
+        stamp: crate::graphics::native_abi::STAMP,
+    ) {
+        let pointer = std::ptr::NonNull::from(&mut self.primitive(id).Object).cast();
+        *self.project_mut(pointer) = stamp;
+    }
+
+    pub fn copy_current_to_next(&mut self, id: ElementId) {
+        let record = &mut self.b.elements[id];
+        crate::collections::observation::image!(copy; record.next, record.current);
+    }
+
+    pub fn copy_next_to_current(&mut self, id: ElementId) {
+        let record = &mut self.b.elements[id];
+        crate::collections::observation::image!(copy; record.current, record.next);
+    }
+}
+
+#[cfg(not(test))]
+impl Cx<'_> {
+    pub(crate) fn has_descriptor(&self, ship: ShipId) -> bool {
+        !self.ship(ship).RaceDescPtr.is_null()
+    }
+}
+
+/// # Safety
+/// The caller retains the live element graph throughout this staging observation.
+pub(crate) unsafe fn observe_element_record(record: &super::record::ELEMENT) -> ElementState {
+    ElementState::decode(record)
+}
+
+/// # Safety
+/// The caller retains the ship pool throughout this staging observation.
+pub(crate) unsafe fn observe_ship_record(record: &super::record::STARSHIP) -> ShipState {
+    ShipState::decode(record)
+}
+
+#[cfg(test)]
+/// # Safety
+/// The caller retains the test descriptor and all resources referenced by its state.
+pub(crate) unsafe fn observe_descriptor_record(record: &super::record::RACE_DESC) -> RaceStats {
+    RaceStats::decode(record)
 }

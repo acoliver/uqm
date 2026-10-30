@@ -355,7 +355,7 @@ pub(crate) mod engine {
         }
         if net
             .as_ref()
-            .is_some_and(|net| !net.negotiate(true, NetState_NetState_interBattle))
+            .is_some_and(|net| !cx.negotiate_battle(net.as_ref(), NetState_NetState_interBattle))
         {
             set_activity(activity() & !(IN_BATTLE as u16));
             BatchGraphics();
@@ -368,7 +368,7 @@ pub(crate) mod engine {
         if crate::app::bridge::publish(cx, || pick(ship, (*ship).playerNr as COUNT)) != 0 {
             if net
                 .as_ref()
-                .is_some_and(|net| !net.negotiate(true, NetState_NetState_inBattle))
+                .is_some_and(|net| !cx.negotiate_battle(net.as_ref(), NetState_NetState_inBattle))
             {
                 set_activity(activity() & !(IN_BATTLE as u16));
                 BatchGraphics();

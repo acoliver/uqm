@@ -1,11 +1,11 @@
 //! Scan-node generation, visibility and display-list synchronization.
 
-use crate::battle::element::{Element, ElementFlags};
+use crate::battle::element::ElementFlags;
 use crate::c_bindings::global_state::PLANET_INFO;
 
-pub(crate) fn node_retrieved(element: &Element, info: &PLANET_INFO) -> bool {
-    let scan = element.life_span as u8;
-    let node = (element.life_span >> 8) as u8;
+pub(crate) fn node_retrieved(life: u16, info: &PLANET_INFO) -> bool {
+    let scan = life as u8;
+    let node = (life >> 8) as u8;
     assert!(
         scan < 3 && (1..=32).contains(&node),
         "invalid scan-node identity"
@@ -13,95 +13,49 @@ pub(crate) fn node_retrieved(element: &Element, info: &PLANET_INFO) -> bool {
     unsafe { crate::planets::scan::is_node_retrieved(std::ptr::from_ref(info), scan, node - 1) }
 }
 
-pub(crate) fn node_visible(element: &Element, info: &PLANET_INFO) -> bool {
-    element.state_flags.contains(ElementFlags::APPEARING) && !node_retrieved(element, info)
+pub(crate) fn node_visible(flags: u16, life: u16, info: &PLANET_INFO) -> bool {
+    flags & ElementFlags::APPEARING.bits() != 0 && !node_retrieved(life, info)
 }
 
-pub(crate) fn sync_node_position(
-    element: &mut Element,
+pub(crate) fn synced_node_position(
+    life: u16,
+    flags: u16,
     positions: &[(
         super::generation::ScanType,
         super::generation::ScanNodeId,
         super::model::SurfacePoint,
     )],
-) {
-    if !element.state_flags.contains(ElementFlags::APPEARING) {
-        return;
+) -> Option<(i16, i16)> {
+    if flags & ElementFlags::APPEARING.bits() == 0 {
+        return None;
     }
-    if let Some((_, _, position)) = positions.iter().find(|(scan, node, _)| {
-        element.life_span == (*scan as u16 | (u16::from(node.get() + 1) << 8))
-    }) {
-        element.current.location.x = (position.x >> 2) as i16;
-        element.current.location.y = (position.y >> 2) as i16;
-    }
+    positions
+        .iter()
+        .find(|(scan, node, _)| life == (*scan as u16 | (u16::from(node.get() + 1) << 8)))
+        .map(|(_, _, position)| ((position.x >> 2) as i16, (position.y >> 2) as i16))
 }
 
 #[cfg(not(test))]
 mod production {
-    use crate::collections::observation::image;
-    use std::ffi::c_void;
-
-    use crate::battle::element::{Element, ElementFlags};
-    use crate::c_bindings::global_state::SOLARSYS_STATE;
-    use crate::c_bindings::solar_system;
-
     use super::super::generation::{ScanNodeId, ScanPersistence, ScanType, SurfaceGenerator};
     use super::super::generation_adapter::CffiSurfaceGenerator;
     use super::super::scan_frames::{
         mineral_scan_dot, mineral_surface_sprite, ScanFrameError, BIO_SCAN_DOT, ENERGY_SCAN_DOT,
     };
-
+    use crate::c_bindings::global_state::SOLARSYS_STATE;
+    use crate::c_bindings::solar_system;
+    use crate::engine::battle::views::Frame;
+    use crate::engine::battle::{Cx, ElementId};
     const MAG_SHIFT: i32 = 2;
     const MAX_SCROUNGED: u8 = 50;
     const STAMP_PRIM: u8 = 1;
     const PS_NON_PLAYER: i16 = 1;
-
-    use crate::battle::process_native::engine::InitDisplayList;
-
-    use crate::battle::process_native::engine::AllocElement;
-
-    use crate::battle::process_native::engine::FreeElement;
-
     use crate::graphics::pixmap_abi::SetAbsFrameIndex;
-
-    use crate::engine::battle::legacy::DisplayArray;
-
     extern "C" {
         static mut MiscDataFrame: *mut crate::graphics::native_abi::frame_desc;
-        #[cfg(test)]
-        #[link_name = "rust_bridge_LockElement"]
-        fn rust_bridge_lock_element(element: usize, pointer: *mut *mut c_void);
-        #[cfg(test)]
-        #[link_name = "rust_bridge_UnlockElement"]
-        fn rust_bridge_unlock_element(element: usize);
-        #[cfg(test)]
-        #[link_name = "rust_bridge_PutElement"]
-        fn rust_bridge_put_element(element: usize);
-    }
-    /// # Safety
-    /// Called on the game thread with the live resources required by the Rust provider.
-    #[cfg(not(test))]
-    unsafe fn rust_bridge_lock_element(element: usize, pointer: *mut *mut c_void) {
-        crate::ships::native_adapters::rust_bridge_LockElement(element as _, pointer as _);
     }
 
-    /// # Safety
-    /// Called on the game thread with the live resources required by the Rust provider.
-    #[cfg(not(test))]
-    unsafe fn rust_bridge_unlock_element(element: usize) {
-        crate::ships::native_adapters::rust_bridge_UnlockElement(element as _);
-    }
-
-    /// # Safety
-    /// Called on the game thread with the live resources required by the Rust provider.
-    #[cfg(not(test))]
-    unsafe fn rust_bridge_put_element(element: usize) {
-        crate::ships::native_adapters::rust_bridge_PutElement(element as _);
-    }
-
-    pub unsafe fn generate() {
-        InitDisplayList();
-
+    pub unsafe fn generate(cx: &mut Cx<'_>) {
         let solar = solar_system::current();
         if solar.is_null() || (*solar).pOrbitalDesc.is_null() || MiscDataFrame.is_null() {
             return;
@@ -130,29 +84,24 @@ mod production {
                 let Ok(generated) = generator.generate(scan, node) else {
                     continue;
                 };
-                let handle = AllocElement() as usize;
-                if handle == 0 {
-                    continue;
+                {
+                    let Some(element) = cx.alloc_element() else {
+                        continue;
+                    };
+                    if initialize_element(cx, element, solar, scan, raw_node, generated).is_err() {
+                        cx.dispose(element);
+                    } else {
+                        cx.put(element);
+                    }
                 }
-                let mut element = std::ptr::null_mut::<c_void>();
-                rust_bridge_lock_element(handle, &mut element);
-                if element.is_null() {
-                    FreeElement(handle as *mut c_void);
-                    continue;
-                }
-                let initialized =
-                    initialize_element(element.cast::<Element>(), solar, scan, raw_node, generated);
-                rust_bridge_unlock_element(handle);
-                if initialized.is_err() {
-                    FreeElement(handle as *mut c_void);
-                    continue;
-                }
-                rust_bridge_put_element(handle);
             }
         }
     }
 
-    pub(super) unsafe fn sync_positions(surface: &crate::planet_side::assembly::SurfaceAssembly) {
+    pub(super) unsafe fn sync_positions(
+        cx: &mut Cx<'_>,
+        surface: &crate::planet_side::assembly::SurfaceAssembly,
+    ) {
         let positions: Vec<_> = surface
             .generated
             .iter()
@@ -168,33 +117,42 @@ mod production {
                 )
             })
             .collect();
-        let mut handle = (*crate::c_bindings::live_queues::display_list()).head as usize;
-        while handle != 0 {
-            let element = &mut *(handle as *mut Element);
-            handle = element.succ as usize;
-            super::sync_node_position(element, &positions);
+        {
+            let mut handle = cx.elements().head();
+            while let Some(element) = handle {
+                handle = cx.elements().succ(element);
+                let state = cx.element(element);
+                if let Some((x, y)) =
+                    super::synced_node_position(state.life, state.flags, &positions)
+                {
+                    cx.element_mut(element).current.location =
+                        crate::graphics::native_abi::POINT { x, y };
+                }
+            }
         }
     }
 
     unsafe fn initialize_element(
-        element: *mut Element,
+        cx: &mut Cx<'_>,
+        element: ElementId,
         solar: *mut SOLARSYS_STATE,
         scan: ScanType,
         raw_node: u8,
         generated: super::super::generation::GeneratedNode,
     ) -> Result<(), ScanFrameError> {
-        let element = &mut *element;
-        element.life_span = u16::from(scan as u8) | (u16::from(raw_node + 1) << 8);
-        element.player_nr = PS_NON_PLAYER;
-        element.current.location.x = (generated.position.x >> MAG_SHIFT) as i16;
-        element.current.location.y = (generated.position.y >> MAG_SHIFT) as i16;
-        element.next.location.x = generated.position.x as i16;
-        element.next.location.y = generated.position.y as i16;
-        element.state_flags = ElementFlags::empty();
+        cx.element_mut(element).life = u16::from(scan as u8) | (u16::from(raw_node + 1) << 8);
+        cx.element_mut(element).player = PS_NON_PLAYER;
+        cx.element_mut(element).current.location.x = (generated.position.x >> MAG_SHIFT) as i16;
+        cx.element_mut(element).current.location.y = (generated.position.y >> MAG_SHIFT) as i16;
+        cx.element_mut(element).next.location.x = generated.position.x as i16;
+        cx.element_mut(element).next.location.y = generated.position.y as i16;
+        cx.element_mut(element).flags = 0;
 
-        let primitive = &mut DisplayArray[usize::from(element.prim_index)];
-        primitive.Type = STAMP_PRIM;
-        primitive.Object.Stamp.origin = crate::ships::native::abi::POINT { x: 0, y: 0 };
+        cx.primitive_style_mut(element).kind = STAMP_PRIM;
+        let mut stamp = crate::graphics::native_abi::STAMP {
+            origin: crate::graphics::native_abi::POINT { x: 0, y: 0 },
+            frame: std::ptr::null_mut(),
+        };
 
         match generated.kind {
             super::super::generation::GeneratedNodeKind::Mineral {
@@ -202,55 +160,87 @@ mod production {
                 gross_size,
                 fine_quantity,
             } => {
-                element.turn_wait = category as u8;
-                element.mass_points = fine_quantity as u8;
+                cx.element_mut(element).turn = category as u8;
+                cx.element_mut(element).mass = fine_quantity as u8;
                 let dot = mineral_scan_dot(category, gross_size)?;
                 let surface = mineral_surface_sprite(category, gross_size)?;
-                image!(frame; element.current.frame, (SetAbsFrameIndex((MiscDataFrame).cast(), dot.current)).cast());
-                image!(frame; element.next.frame, (SetAbsFrameIndex((MiscDataFrame).cast(), dot.next)).cast());
-                primitive.Object.Stamp.frame =
-                    (SetAbsFrameIndex((MiscDataFrame).cast(), surface)).cast();
+                cx.set_frame(
+                    element,
+                    false,
+                    Frame::from_native(SetAbsFrameIndex((MiscDataFrame).cast(), dot.current)),
+                );
+                cx.set_frame(
+                    element,
+                    true,
+                    Frame::from_native(SetAbsFrameIndex((MiscDataFrame).cast(), dot.next)),
+                );
+                stamp.frame = (SetAbsFrameIndex((MiscDataFrame).cast(), surface)).cast();
             }
             super::super::generation::GeneratedNodeKind::Energy => {
-                image!(frame; element.current.frame, (SetAbsFrameIndex((MiscDataFrame).cast(), ENERGY_SCAN_DOT.current)).cast());
-                image!(frame; element.next.frame, (SetAbsFrameIndex((MiscDataFrame).cast(), ENERGY_SCAN_DOT.next)).cast());
-                element.turn_wait = 0x44;
-                element.mass_points = MAX_SCROUNGED;
-                primitive.Object.Stamp.frame = (*solar).PlanetSideFrame[1].cast();
+                cx.set_frame(
+                    element,
+                    false,
+                    Frame::from_native(SetAbsFrameIndex(
+                        (MiscDataFrame).cast(),
+                        ENERGY_SCAN_DOT.current,
+                    )),
+                );
+                cx.set_frame(
+                    element,
+                    true,
+                    Frame::from_native(SetAbsFrameIndex(
+                        (MiscDataFrame).cast(),
+                        ENERGY_SCAN_DOT.next,
+                    )),
+                );
+                cx.element_mut(element).turn = 0x44;
+                cx.element_mut(element).mass = MAX_SCROUNGED;
+                stamp.frame = (*solar).PlanetSideFrame[1].cast();
             }
             super::super::generation::GeneratedNodeKind::CannedBiological { value } => {
-                image!(frame; element.current.frame, (SetAbsFrameIndex((MiscDataFrame).cast(), BIO_SCAN_DOT.current)).cast());
-                image!(frame; element.next.frame, (SetAbsFrameIndex((MiscDataFrame).cast(), BIO_SCAN_DOT.next)).cast());
-                element.mass_points = value as u8;
-                element.crew_or_hp = 0;
-                primitive.Object.Stamp.frame = (*solar).PlanetSideFrame[0].cast();
+                cx.set_frame(
+                    element,
+                    false,
+                    Frame::from_native(SetAbsFrameIndex(
+                        (MiscDataFrame).cast(),
+                        BIO_SCAN_DOT.current,
+                    )),
+                );
+                cx.set_frame(
+                    element,
+                    true,
+                    Frame::from_native(SetAbsFrameIndex((MiscDataFrame).cast(), BIO_SCAN_DOT.next)),
+                );
+                cx.element_mut(element).mass = value as u8;
+                cx.element_mut(element).hits = 0;
+                stamp.frame = (*solar).PlanetSideFrame[0].cast();
             }
             super::super::generation::GeneratedNodeKind::Biological {
                 creature,
                 hit_points,
                 ..
             } => {
-                image!(frame; element.current.frame, (SetAbsFrameIndex((MiscDataFrame).cast(), BIO_SCAN_DOT.current)).cast());
-                image!(frame; element.next.frame, (SetAbsFrameIndex((MiscDataFrame).cast(), BIO_SCAN_DOT.next)).cast());
-                element.turn_wait = 0x44;
-                element.mass_points = creature.index();
-                element.crew_or_hp = u16::from(hit_points);
-                primitive.Object.Stamp.frame = (*solar).PlanetSideFrame[3].cast();
+                cx.set_frame(
+                    element,
+                    false,
+                    Frame::from_native(SetAbsFrameIndex(
+                        (MiscDataFrame).cast(),
+                        BIO_SCAN_DOT.current,
+                    )),
+                );
+                cx.set_frame(
+                    element,
+                    true,
+                    Frame::from_native(SetAbsFrameIndex((MiscDataFrame).cast(), BIO_SCAN_DOT.next)),
+                );
+                cx.element_mut(element).turn = 0x44;
+                cx.element_mut(element).mass = creature.index();
+                cx.element_mut(element).hits = u16::from(hit_points);
+                stamp.frame = (*solar).PlanetSideFrame[3].cast();
             }
         }
+        cx.set_primitive_stamp(element, stamp);
         Ok(())
-    }
-
-    #[cfg(test)]
-    mod tests {
-        use super::*;
-
-        #[test]
-        fn production_mirrors_match_measured_c_layouts() {
-            assert_eq!(std::mem::size_of::<CPrimitive>(), 40);
-            assert_eq!(std::mem::offset_of!(CPrimitive, primitive_type), 4);
-            assert_eq!(std::mem::offset_of!(CPrimitive, stamp), 16);
-        }
     }
 }
 
@@ -258,13 +248,29 @@ mod production {
 pub extern "C" fn generate_planet_side() {
     #[cfg(not(test))]
     unsafe {
-        production::generate();
+        crate::battle::process_native::engine::InitDisplayList();
+        crate::app::bridge::enter(|cx| production::generate(cx));
     }
 }
 
 #[cfg(test)]
 mod retrieval_tests {
     use super::*;
+    use crate::battle::element::Element;
+    fn sync_node_position(
+        element: &mut Element,
+        positions: &[(
+            super::super::generation::ScanType,
+            super::super::generation::ScanNodeId,
+            super::super::model::SurfacePoint,
+        )],
+    ) {
+        if let Some((x, y)) =
+            synced_node_position(element.life_span, element.state_flags.bits(), positions)
+        {
+            element.current.location = crate::battle::element::Point::new(x, y);
+        }
+    }
     #[test]
     fn moving_scanned_lifeform_follows_surface_across_wrap_but_mineral_stays_put() {
         use crate::battle::velocity::{world_to_velocity, VelocityDesc};
@@ -369,17 +375,32 @@ mod retrieval_tests {
             let mut element = Element::new();
             element.life_span = (32 << 8) | scan;
             element.state_flags |= ElementFlags::APPEARING;
-            assert!(node_visible(&element, &info));
+            assert!(node_visible(
+                element.state_flags.bits(),
+                element.life_span,
+                &info
+            ));
             unsafe { crate::planets::scan::set_node_retrieved(&mut info, scan as u8, 31) };
-            assert!(node_retrieved(&element, &info));
-            assert!(!node_visible(&element, &info));
+            assert!(node_retrieved(element.life_span, &info));
+            assert!(!node_visible(
+                element.state_flags.bits(),
+                element.life_span,
+                &info
+            ));
             element.state_flags |= ElementFlags::APPEARING;
-            assert!(!node_visible(&element, &info));
+            assert!(!node_visible(
+                element.state_flags.bits(),
+                element.life_span,
+                &info
+            ));
         }
     }
 }
 
 #[cfg(not(test))]
-pub(crate) unsafe fn sync_positions(surface: &super::assembly::SurfaceAssembly) {
-    production::sync_positions(surface);
+pub(crate) unsafe fn sync_positions(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    surface: &super::assembly::SurfaceAssembly,
+) {
+    production::sync_positions(cx, surface);
 }

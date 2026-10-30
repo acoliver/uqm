@@ -36,18 +36,27 @@ impl Frame {
         self.0.is_null()
     }
 }
-#[cfg(not(test))]
 impl Frame {
     pub(crate) fn raw(self) -> FRAME {
         self.0
     }
 }
-#[cfg(not(test))]
 impl Frames {
     pub(crate) fn raw(self) -> *mut FRAME {
         self.0
     }
 }
+impl Frame {
+    pub(crate) unsafe fn from_native(frame: FRAME) -> Self {
+        Self(frame)
+    }
+}
+impl Frames {
+    pub(crate) unsafe fn from_native(frames: std::ptr::NonNull<FRAME>) -> Self {
+        Self(frames.as_ptr())
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct Image {
     pub frame: Frame,

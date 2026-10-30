@@ -4,10 +4,10 @@ use super::*;
 
 pub(super) fn advance(
     run: &mut Battle,
-    world: &mut World<'_>,
+    world: &mut World,
     hooks: &Hooks,
 ) -> Result<Option<Vec<Effect>>, String> {
-    let a = run.a;
+    let a = run.a();
     match run.stage {
         0 => install(run, world, hooks),
         1 => {
@@ -22,17 +22,14 @@ pub(super) fn advance(
                 .ship(a)
                 .phoenix
                 .ok_or("Pkunk instance state is unavailable")?
-                .handle;
-            assert!(!phoenix.is_null(), "fixture Phoenix");
+                .handle
+                .unwrap_or_else(|| panic!("fixture Phoenix"));
             let element = world
                 .elements
                 .get_mut(&phoenix)
                 .ok_or("fixture element or owner is no longer live")?;
-            assert_eq!(
-                element.death_func.map_or(0, |f| f.address()),
-                hooks.intercept
-            );
-            element.life_span = 0;
+            assert_eq!(element.death.map_or(0, |f| f.address()), hooks.intercept);
+            element.life = 0;
             let crew = world
                 .ship(a)
                 .info
@@ -45,8 +42,8 @@ pub(super) fn advance(
             ])
         }
         2 => {
-            if world.elements[&a].death_func.map_or(0, |f| f.address()) == hooks.rebirth
-                && world.elements[&a].life_span == 0
+            if world.elements[&a].death.map_or(0, |f| f.address()) == hooks.rebirth
+                && world.elements[&a].life == 0
             {
                 run.phoenix = world.ship(a).phoenix;
                 run.next(vec![Effect::Death(a)])
@@ -61,7 +58,7 @@ pub(super) fn advance(
         3 => {
             restore(
                 &mut run.proof,
-                world.elements[&a],
+                &world.elements[&a],
                 world.ship(a),
                 run.phoenix.ok_or("Phoenix saved hooks were not captured")?,
             )?;
@@ -75,10 +72,10 @@ pub(super) fn advance(
 
 fn install(
     run: &mut Battle,
-    world: &mut World<'_>,
+    world: &mut World,
     hooks: &Hooks,
 ) -> Result<Option<Vec<Effect>>, String> {
-    let a = run.a;
+    let a = run.a();
     let exists = phoenix_exists(world, hooks.intercept);
     if !exists {
         crate::math::seed_random(1);
@@ -100,17 +97,17 @@ fn install(
     })
 }
 
-fn phoenix_exists(world: &World<'_>, intercept: usize) -> bool {
+fn phoenix_exists(world: &World, intercept: usize) -> bool {
     world
         .elements
         .values()
-        .any(|e| e.death_func.map_or(0, |f| f.address()) == intercept)
+        .any(|e| e.death.map_or(0, |f| f.address()) == intercept)
 }
 
 fn restore(
     proof: &mut FixtureRun,
     element: &Element,
-    ship: &Ship<'_>,
+    ship: &Ship,
     saved: Phoenix,
 ) -> Result<(), String> {
     let info = ship
@@ -118,14 +115,14 @@ fn restore(
         .as_ref()
         .ok_or("fixture requires loaded descriptor fields")?;
     proof.require(
-        info.crew_level == info.max_crew && element.h_target.cast() == ship.state.hShip,
+        info.crew_level == info.max_crew && element.target == ship.element,
         "target-hack",
     )?;
     proof.require(
         [
-            element.preprocess_func.map_or(0, |f| f.address()),
-            element.postprocess_func.map_or(0, |f| f.address()),
-            element.death_func.map_or(0, |f| f.address()),
+            element.pre.map_or(0, |f| f.address()),
+            element.post.map_or(0, |f| f.address()),
+            element.death.map_or(0, |f| f.address()),
         ] == saved.hooks,
         "hooks-restored",
     )

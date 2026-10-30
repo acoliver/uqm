@@ -7,13 +7,13 @@ use std::{
     ptr::{self, NonNull},
 };
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ElementId {
     pub slot: u8,
     pub gen: u32,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ShipId {
     pub side: u8,
     pub slot: u8,
@@ -77,6 +77,19 @@ impl ElementTable {
             "element handle addresses free slot {slot}"
         );
         Some(ElementId {
+            slot: slot as u8,
+            gen: self.generations[slot],
+        })
+    }
+
+    /// Legacy bookkeeping can retain an address after its allocation retires.
+    /// Foreign addresses still fail validation; a retired slot has no current id.
+    pub(crate) fn allocated_id(&self, handle: HLink) -> Option<ElementId> {
+        if handle.is_null() {
+            return None;
+        }
+        let slot = self.slot(handle);
+        self.allocated[slot].then_some(ElementId {
             slot: slot as u8,
             gen: self.generations[slot],
         })
@@ -235,8 +248,20 @@ mod tests {
             assert_eq!([a.slot, b.slot, c.slot], [0, 1, 2]);
             assert!(elements.alloc().is_none());
             assert_eq!(elements.id(elements.raw(b)), Some(b));
+            let retained = elements.raw(b);
+            assert_eq!(elements.allocated_id(retained), Some(b));
             elements.free(b);
+            assert_eq!(elements.allocated_id(retained), None);
+            assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+                || elements.id(retained)
+            ))
+            .is_err());
+            assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+                || elements.allocated_id(std::ptr::dangling_mut())
+            ))
+            .is_err());
             let replacement = elements.alloc().unwrap();
+            assert_eq!(elements.allocated_id(retained), Some(replacement));
             assert_eq!(b.slot, replacement.slot);
             assert_ne!(b, replacement);
             assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(

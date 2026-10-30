@@ -1,6 +1,6 @@
 use super::{landing_fuel, move_cursor};
-use crate::battle::element::{Element, ElementFlags};
-use crate::c_bindings::{controller_input::*, global_state::MENU_STATE, live_queues, solar_system};
+use crate::battle::element::ElementFlags;
+use crate::c_bindings::{controller_input::*, global_state::MENU_STATE, solar_system};
 use crate::collections::queue::{CountLinks, Queue, ReinitQueue};
 use crate::comm::dispatch::{clone_ship_fragment, CShipFragment};
 use crate::comm::locdata::{CColor, CPoint, CRect};
@@ -408,58 +408,65 @@ unsafe fn pick_side() -> bool {
     result
 }
 
-unsafe fn scanned_stuff(y: u16, scan: u16) {
+unsafe fn scanned_stuff(cx: &mut crate::engine::battle::Cx<'_>, y: u16, scan: u16) {
     let g = CffiPlatform;
     let old_color = g.set_fg_color(Rgba::BLACK);
-    let queue = live_queues::display_list();
-    let mut handle = (*queue).head as usize;
-    while handle != 0 {
-        let element = handle as *mut Element;
-        handle = (*element).succ as usize;
-        let mut dy = (i32::from(y) - i32::from((*element).current.location.y)) as i16;
-        if (*element).life_span as u8 != scan as u8
-            || dy < 0
-            || crate::planet_side::orbit_scan::node_retrieved(
-                &*element,
-                &(*solar_system::current()).SysInfo.PlanetInfo,
-            )
-        {
-            continue;
-        }
-        (*element).state_flags |= ElementFlags::APPEARING;
-        let point = CPoint {
-            x: (*element).current.location.x,
-            y: (*element).current.location.y,
-        };
-        if dy >= 8 {
-            draw((*element).next.frame, point, false);
-        } else {
-            let gradient = (255 - 255 * dy / 7) as u8;
-            let mut c = Rgba::rgb15(31, 31, 31);
-            match scan {
-                0 => c.r = gradient,
-                1 => {
-                    c.g = gradient;
-                    c.b = gradient;
+    {
+        let mut handle = cx.elements().head();
+        while let Some(element) = handle {
+            handle = cx.elements().succ(element);
+            let mut dy = (i32::from(y) - i32::from(cx.element(element).current.location.y)) as i16;
+            if cx.element(element).life as u8 != scan as u8
+                || dy < 0
+                || crate::planet_side::orbit_scan::node_retrieved(
+                    cx.element(element).life,
+                    &(*solar_system::current()).SysInfo.PlanetInfo,
+                )
+            {
+                continue;
+            }
+            cx.element_mut(element).flags |= ElementFlags::APPEARING.bits();
+            let point = CPoint {
+                x: cx.element(element).current.location.x,
+                y: cx.element(element).current.location.y,
+            };
+            if dy >= 8 {
+                draw(
+                    cx.element(element).next.image.frame.raw().cast(),
+                    point,
+                    false,
+                );
+            } else {
+                let gradient = (255 - 255 * dy / 7) as u8;
+                let mut c = Rgba::rgb15(31, 31, 31);
+                match scan {
+                    0 => c.r = gradient,
+                    1 => {
+                        c.g = gradient;
+                        c.b = gradient;
+                    }
+                    2 => c.g = gradient,
+                    _ => unreachable!("scan type"),
                 }
-                2 => c.g = gradient,
-                _ => unreachable!("scan type"),
+                g.set_fg_color(c);
+                let size = g
+                    .frame_index(cx.element(element).next.image.frame.raw() as usize)
+                    .wrapping_sub(
+                        g.frame_index(cx.element(element).current.image.frame.raw() as usize),
+                    );
+                if dy as u16 > size {
+                    dy = size as i16;
+                }
+                let frame = g.rel_frame(cx.element(element).current.image.frame.raw() as usize, dy)
+                    as *mut c_void;
+                draw(frame, point, true);
             }
-            g.set_fg_color(c);
-            let size = g
-                .frame_index((*element).next.frame as usize)
-                .wrapping_sub(g.frame_index((*element).current.frame as usize));
-            if dy as u16 > size {
-                dy = size as i16;
-            }
-            let frame = g.rel_frame((*element).current.frame as usize, dy) as *mut c_void;
-            draw(frame, point, true);
         }
     }
     g.set_fg_color(old_color);
 }
 
-unsafe fn scan_planet(scan_type: u16) {
+unsafe fn scan_planet(cx: &mut crate::engine::battle::Cx<'_>, scan_type: u16) {
     let (start, end) = if scan_type == 4 {
         (0, 2)
     } else {
@@ -505,19 +512,19 @@ unsafe fn scan_planet(scan_type: u16) {
         let mut line = 0;
         while line < 84 {
             timeout = timeout.wrapping_add((840 * 7 / 4) / 84);
-            if WaitForAnyButtonUntil(1, timeout, 0) != 0 {
+            if crate::app::bridge::publish(cx, || WaitForAnyButtonUntil(1, timeout, 0)) != 0 {
                 break;
             }
             CffiPlatform.batch();
             DrawPlanet(line, tint);
-            scanned_stuff(line as u16, scan);
+            scanned_stuff(cx, line as u16, scan);
             CffiPlatform.unbatch();
             line += 1;
         }
         if line < 84 {
             CffiPlatform.batch();
             DrawPlanet(83, tint);
-            scanned_stuff(83, scan);
+            scanned_stuff(cx, 83, scan);
             CffiPlatform.unbatch();
         }
     }
@@ -526,7 +533,7 @@ unsafe fn scan_planet(scan_type: u16) {
     SetContext(SCAN_CONTEXT);
     if scan_type == 4 {
         DrawPlanet(0, black());
-        DrawScannedObjects(0);
+        crate::app::bridge::publish(cx, || DrawScannedObjects(0));
     }
     FlushInput();
 }
@@ -571,7 +578,7 @@ unsafe extern "C" fn scan_input(menu: *mut MENU_STATE) -> u32 {
             PlayMenuSound(2);
             return 1;
         }
-        scan_planet(u16::from((*menu).CurState));
+        crate::app::bridge::enter(|cx| scan_planet(cx, u16::from((*menu).CurState)));
         if (*menu).CurState == 4 {
             (*menu).CurState = 5;
             crate::automation::ui_observation::rust_automation_observe_planet_menu(3);

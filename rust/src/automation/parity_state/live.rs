@@ -2,15 +2,26 @@
 use super::Fields;
 #[cfg(not(test))]
 use super::{custom, elements, ships::Ship, value};
+use crate::battle::context_access::observe::ElementObservation;
 #[cfg(not(test))]
 use crate::{
     automation::battle_fight::ShipState, battle::netplay::CrcState, comm::locdata::CGameState,
     ships::native::abi::GlobData,
 };
-use crate::{automation::parity::Journal, battle::element::Element, comm::locdata::CQueue};
+use crate::{automation::parity::Journal, comm::locdata::CQueue};
 
 #[cfg(not(test))]
 pub fn checkpoint(journal: &mut Journal, boundary: &str) -> std::io::Result<()> {
+    // SAFETY: the checkpoint owns the immutable live graph until this operation returns.
+    unsafe { crate::app::bridge::enter(|cx| checkpoint_with_context(cx, journal, boundary)) }
+}
+
+#[cfg(not(test))]
+fn checkpoint_with_context(
+    cx: &crate::engine::battle::Cx<'_>,
+    journal: &mut Journal,
+    boundary: &str,
+) -> std::io::Result<()> {
     let mut hooks = crate::ships::hook_registry::hooks();
     hooks.extend(crate::automation::parity_hooks::hooks());
     let mut fields = Fields::new();
@@ -23,7 +34,10 @@ pub fn checkpoint(journal: &mut Journal, boundary: &str) -> std::io::Result<()> 
             std::array::from_fn::<_, 2, _>(|side| {
                 Ship::queue(&*crate::c_bindings::live_queues::player_ships(side))
             }),
-            display_elements(&*crate::c_bindings::live_queues::display_list()),
+            display_elements(
+                &*crate::c_bindings::live_queues::display_list(),
+                cx.elements(),
+            ),
         )
     };
     crate::automation::parity_mode::capture(&mut fields, game, journal);
@@ -63,74 +77,68 @@ pub fn checkpoint(journal: &mut Journal, boundary: &str) -> std::io::Result<()> 
     value(&mut fields, "mode", "rng", seed);
     let mut crc = CrcState::new();
     crc.process_u32(seed);
-    for (index, element) in elements.enumerate() {
+    for (index, element) in elements.iter().enumerate() {
         let prefix = format!("elements.{index}");
         elements::element(&mut fields, &prefix, element, journal, &hooks, &owners);
         visuals(&mut fields, &prefix, element, journal);
-        crc.process_element(element);
+        crate::supermelee::netplay::checksum::crc_process_element(&mut crc, &element.state);
     }
     journal.checkpoint(game.current_activity, crc.finish(), &fields)
 }
 
 #[cfg(not(test))]
-pub(in crate::automation) fn fighters() -> ([Option<ShipState>; 2], [u8; 2]) {
-    let mut fighters = [None, None];
-    // SAFETY: BattleSnapshot::live runs synchronously on the game thread.
-    let (elements, counters) = unsafe {
-        (
-            display_elements(&*crate::c_bindings::live_queues::display_list()),
-            crate::battle::ffi::live_counters::battle_counters(),
-        )
-    };
-    for element in elements.filter(|element| element.is_player_ship()) {
-        let side = match element.player_nr {
-            0 => 0,
-            1 => 1,
-            _ => continue,
-        };
-        if !element.p_parent.is_null() {
-            // SAFETY: a non-null PLAYER_SHIP parent is a live ship record; the
-            // synchronous snapshot keeps it immutable until its fields are read.
-            let state = unsafe { &*element.p_parent.cast() };
-            let owner = Ship { state };
-            fighters[side] = Some(ShipState {
-                x: i32::from(element.current.location.x),
-                y: i32::from(element.current.location.y),
-                facing: (owner.facing() % 16) as u8,
-                crew: element.crew_or_hp,
-            });
+pub(in crate::automation) fn fighters(
+    cx: &crate::engine::battle::Cx<'_>,
+) -> ([Option<ShipState>; 2], [u8; 2]) {
+    {
+        let mut fighters = [None, None];
+        let mut next = cx.elements().head();
+        while let Some(id) = next {
+            next = cx.elements().succ(id);
+            let e = cx.element(id);
+            if e.flags & crate::ships::native::abi::PLAYER_SHIP as u16 == 0 {
+                continue;
+            }
+            let side = match e.player {
+                0 => 0,
+                1 => 1,
+                _ => continue,
+            };
+            if let crate::engine::battle::Parent::Ship(owner) = cx.parent(id) {
+                fighters[side] = Some(ShipState {
+                    x: i32::from(e.current.location.x),
+                    y: i32::from(e.current.location.y),
+                    facing: (cx.ship_state(owner).facing % 16) as u8,
+                    crew: e.hits,
+                });
+            }
         }
+        (fighters, cx.b.counters)
     }
-    (fighters, counters)
 }
 
 /// # Safety
-/// The queue authority and its pool must remain live and immutable for the borrow.
-unsafe fn display_elements(queue: &CQueue) -> impl Iterator<Item = &Element> {
-    use crate::savegame::runtime::queues::{walk, QueueKind};
-    let links = if queue.pq_tab.is_null() && queue.head.is_null() {
-        assert!(
-            queue.tail.is_null(),
-            "uninitialized display queue has a tail"
-        );
-        Vec::new()
-    } else {
-        walk::<Element>(queue, QueueKind::DisplayList)
-            .unwrap_or_else(|error| panic!("live display queue: {error}"))
-    };
-    // SAFETY: pool, slot alignment, record size, links and tail were checked by walk.
-    links.into_iter().map(|pointer| unsafe { &*pointer })
+/// The pool remains live and immutable throughout observation.
+unsafe fn display_elements(
+    queue: &CQueue,
+    #[cfg(not(test))] elements: &crate::engine::battle::ElementTable,
+) -> Vec<ElementObservation> {
+    // SAFETY: the caller retains the immutable display pool throughout this observation.
+    unsafe {
+        crate::battle::context_access::observe::elements(
+            queue,
+            #[cfg(not(test))]
+            elements,
+        )
+    }
 }
 
-fn visuals(fields: &mut Fields, prefix: &str, element: &Element, journal: &mut Journal) {
-    let identity = journal.identity(std::ptr::from_ref(element) as usize);
+fn visuals(fields: &mut Fields, prefix: &str, element: &ElementObservation, journal: &mut Journal) {
+    let identity = journal.identity(element.address);
     for (name, pointer) in [
-        ("current.frame", element.current.frame),
-        ("next.frame", element.next.frame),
-        (
-            "intersect.frame",
-            element.intersect_control.intersect_stamp.frame,
-        ),
+        ("current.frame", element.current.image.frame.raw()),
+        ("next.frame", element.next.image.frame.raw()),
+        ("intersect.frame", element.intersect.IntersectStamp.frame),
     ] {
         journal.write_element_frame(
             &identity,
@@ -141,8 +149,8 @@ fn visuals(fields: &mut Fields, prefix: &str, element: &Element, journal: &mut J
         );
     }
     for (name, array) in [
-        ("current.farray", element.current.farray),
-        ("next.farray", element.next.farray),
+        ("current.farray", element.current.image.frames.raw()),
+        ("next.farray", element.next.image.frames.raw()),
     ] {
         let address = array as usize;
         if address != 0 && journal.frame_set(address).is_none() {
@@ -170,6 +178,14 @@ fn visuals(fields: &mut Fields, prefix: &str, element: &Element, journal: &mut J
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::battle::element::Element;
+    fn visuals(fields: &mut Fields, prefix: &str, element: &Element, journal: &mut Journal) {
+        // SAFETY: the test owns a layout-compatible source record.
+        let observation =
+            unsafe { ElementObservation::decode(&*std::ptr::from_ref(element).cast()) };
+        super::visuals(fields, prefix, &observation, journal);
+    }
+
     use crate::graphics::native_abi::frame_desc;
     fn pool(elements: &mut [Element]) -> CQueue {
         let base = elements.as_mut_ptr();
@@ -342,8 +358,8 @@ mod tests {
         let mut elements = [Element::new(); 3];
         let queue = pool(&mut elements);
         // SAFETY: the local pool remains live and unchanged for this traversal.
-        let addresses: Vec<_> = unsafe { display_elements(&queue) }
-            .map(std::ptr::from_ref)
+        let addresses: Vec<_> = unsafe { display_elements(&queue).into_iter() }
+            .map(|e| e.address as *const Element)
             .collect();
         assert_eq!(
             addresses,
@@ -359,7 +375,7 @@ mod tests {
         elements[1].succ = &mut elements[0];
         // SAFETY: the pool remains live; walk rejects the malformed link before
         // borrowing any slot through it.
-        let _ = unsafe { display_elements(&queue) }.count();
+        let _ = unsafe { display_elements(&queue).into_iter() }.count();
     }
     #[test]
     #[should_panic(expected = "live display queue")]
@@ -370,6 +386,6 @@ mod tests {
         elements[0].succ = std::ptr::dangling_mut();
         // SAFETY: the pool remains live; walk rejects the malformed link before
         // borrowing any slot through it.
-        let _ = unsafe { display_elements(&queue) }.count();
+        let _ = unsafe { display_elements(&queue).into_iter() }.count();
     }
 }
