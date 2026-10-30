@@ -4,11 +4,11 @@
 mod battle;
 #[path = "support/battle_context.rs"]
 mod battle_context;
-use battle::{prim, Battle, PoolElement, Ship};
+use battle::{Battle, FrameSet, Ship};
 
 use std::ffi::CStr;
 use std::{mem, ptr};
-use uqm_rust::ships::native::{abi::*, element, put_element};
+use uqm_rust::ships::native::{abi::*, element};
 
 /// Mirrors `FRAME_DESC` from `drawable.h` so the engine's frame functions can
 /// walk a drawable built here.
@@ -18,7 +18,6 @@ unsafe fn index_of(frame: FRAME) -> u16 {
 unsafe fn queue_tail() -> HELEMENT {
     disp_q.tail
 }
-use battle::prim as prim_of;
 #[test]
 fn eluder_descriptor_matches_the_c_template() {
     battle_context::run(|| {
@@ -119,7 +118,7 @@ fn forward_missile_leaves_the_nose_along_the_ship_facing() {
         unsafe {
             let _battle = Battle::new(16);
             let mut fleet = Ship::new(&_battle, SPECIES_ID_SPATHI_ID, 0);
-            let mut missile_frames = FrameSet::new(16);
+            let missile_frames = FrameSet::new(16);
             fleet.descriptor_mut().ship_data.weapon[0] = missile_frames.frame(0);
             fleet.ship_mut().playerNr = 0;
             (*fleet.ptr()).playerNr = 0;
@@ -165,7 +164,7 @@ fn butt_leaves_the_tail_not_the_nose() {
         unsafe {
             let _battle = Battle::new(16);
             let mut fleet = Ship::new(&_battle, SPECIES_ID_SPATHI_ID, 0);
-            let mut butt_frames = FrameSet::new(16);
+            let butt_frames = FrameSet::new(16);
             fleet.descriptor_mut().ship_data.special[0] = butt_frames.frame(0);
             fleet.ship_mut().playerNr = 0;
             (*fleet.ptr()).playerNr = 0;
@@ -206,13 +205,12 @@ fn butt_rear_facing_wraps_through_sixteen_facings() {
     battle_context::run(|| unsafe {
         let _battle = Battle::new(16);
         let mut fleet = Ship::new(&_battle, SPECIES_ID_SPATHI_ID, 0);
-        let mut butt_frames = FrameSet::new(16);
+        let butt_frames = FrameSet::new(16);
         fleet.descriptor_mut().ship_data.special[0] = butt_frames.frame(0);
         fleet.ship_mut().playerNr = 0;
         (*fleet.ptr()).playerNr = 0;
         (*fleet.ptr()).current.location = POINT { x: 0, y: 0 };
         (*fleet.ptr()).next.location = POINT { x: 0, y: 0 };
-        let ship = fleet.ptr();
         fleet.ship_mut().cur_status_flags = SPECIAL as u16;
         for (ship_facing, rear) in [(0, 8), (3, 11), (8, 0), (15, 7)] {
             fleet.ship_mut().ShipFacing = ship_facing;
@@ -235,7 +233,6 @@ fn butt_needs_the_special_key_a_ready_counter_and_energy() {
             (*fleet.ptr()).playerNr = 0;
             (*fleet.ptr()).current.location = POINT { x: 0, y: 0 };
             (*fleet.ptr()).next.location = POINT { x: 0, y: 0 };
-            let ship = fleet.ptr();
             let tail = queue_tail();
 
             // Key not held.
@@ -268,13 +265,12 @@ fn butt_homes_one_facing_step_per_tracking_pass() {
         unsafe {
             let _battle = Battle::new(16);
             let mut spathi = Ship::new(&_battle, SPECIES_ID_SPATHI_ID, 0);
-            let mut butt_frames = FrameSet::new(16);
+            let butt_frames = FrameSet::new(16);
             spathi.descriptor_mut().ship_data.special[0] = butt_frames.frame(0);
             spathi.ship_mut().playerNr = 0;
             (*spathi.ptr()).playerNr = 0;
             (*spathi.ptr()).current.location = POINT { x: 400, y: 500 };
             (*spathi.ptr()).next.location = POINT { x: 400, y: 500 };
-            let ship = spathi.ptr();
             spathi.ship_mut().cur_status_flags = SPECIAL as u16;
             spathi.ship_mut().ShipFacing = 4;
             spathi.postprocess();
@@ -364,7 +360,7 @@ fn intelligence_fires_the_butt_only_at_targets_behind_the_ship() {
             (*other.ptr()).current.location = POINT { x: 2000, y: 3000 };
             (*other.ptr()).next.location = POINT { x: 2000, y: 3000 };
             let behind = other.ptr();
-            let mut ahead_fixture = Ship::new(&_battle, SPECIES_ID_SPATHI_ID, 1);
+            let ahead_fixture = Ship::new(&_battle, SPECIES_ID_SPATHI_ID, 1);
             (*ahead_fixture.ptr()).current.location = POINT { x: 2000, y: 1000 };
             (*ahead_fixture.ptr()).next.location = (*ahead_fixture.ptr()).current.location;
             (*other.ptr()).current.location = POINT { x: 2000, y: 3000 };

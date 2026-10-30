@@ -7,9 +7,7 @@ mod battle_context;
 use battle::{prim, Battle, PoolElement, Ship};
 
 use std::{ffi::CStr, ptr};
-use uqm_rust::ships::native::{
-    abi::*, cosine, element, facing_to_angle, frame_index, put_element, sine,
-};
+use uqm_rust::ships::native::{abi::*, cosine, element, facing_to_angle, frame_index, sine};
 
 // FRAME_DESC and DRAWABLE_DESC layouts from drawable.h.
 
@@ -246,6 +244,12 @@ fn per_init_descriptor_copies_isolate_energy_resources_animation_and_custom_data
             template.ship_info.energy_level = 0;
             template.characteristics.special_wait = 0;
             template.race_callbacks.pre = uqm_rust::engine::battle::Selection::Disabled;
+            assert_eq!(template.ship_info.energy_level, 0);
+            assert_eq!(template.characteristics.special_wait, 0);
+            assert!(matches!(
+                template.race_callbacks.pre,
+                uqm_rust::engine::battle::Selection::Disabled
+            ));
             let fresh = battle::descriptor(SPECIES_ID_UMGAH_ID);
             assert_eq!(fresh.ship_info.energy_level, 30);
             assert_eq!(fresh.characteristics.special_wait, 2);
@@ -483,7 +487,7 @@ fn collision_preserves_disappearing_when_blast_allocation_fails() {
                 cone,
                 &mut p,
                 &mut *hit,
-                ptr::null_mut(),
+                &mut POINT { x: 0, y: 0 },
                 uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
             );
             assert_eq!(
@@ -513,9 +517,9 @@ fn finite_weapon_hit_damages_once_without_a_blast_and_does_not_clear_disappearin
                 uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
                     collide,
                     cone,
-                    ptr::null_mut(),
+                    &mut POINT { x: 0, y: 0 },
                     &mut *hit,
-                    ptr::null_mut(),
+                    &mut POINT { x: 0, y: 0 },
                     uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
                 )
             });
@@ -527,9 +531,9 @@ fn finite_weapon_hit_damages_once_without_a_blast_and_does_not_clear_disappearin
             uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
                 collide,
                 cone,
-                ptr::null_mut(),
+                &mut POINT { x: 0, y: 0 },
                 &mut *hit,
-                ptr::null_mut(),
+                &mut POINT { x: 0, y: 0 },
                 uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
             );
             assert_eq!(hit.__bindgen_anon_2.hit_points, 2);
@@ -641,8 +645,7 @@ fn intelligence_filters_enticing_weapons_before_the_shared_pass() {
         unsafe {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
-            let mut threat =
-                Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 1, [16, 16, 48], [4, 4]);
+            let threat = Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 1, [16, 16, 48], [4, 4]);
             for (turn, old, flags, keep, movement) in [
                 (4, 0, FINITE_LIFE, false, MOVEMENT_STATE_ENTICE),
                 (3, SPECIAL, FINITE_LIFE, false, MOVEMENT_STATE_ENTICE),
@@ -681,8 +684,7 @@ fn short_range_ai_resets_special_wait_and_fires_only_before_turn_16() {
         unsafe {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
-            let mut enemy =
-                Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 1, [16, 16, 48], [4, 4]);
+            let enemy = Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 1, [16, 16, 48], [4, 4]);
             for reason in 0..3 {
                 for turn in [15, 16] {
                     ship.ship_mut().special_counter = if reason == 0 { 1 } else { 0 };
@@ -720,8 +722,7 @@ fn rearward_zip_uses_one_draw_with_both_random_turn_directions() {
         unsafe {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
-            let mut enemy =
-                Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 1, [16, 16, 48], [4, 4]);
+            let enemy = Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 1, [16, 16, 48], [4, 4]);
             (*enemy.ptr()).next.location = POINT { x: 4000, y: 4400 };
             for odd in [false, true] {
                 let seed = seed_where(|d| (d[0] & 1 != 0) == odd);
@@ -742,8 +743,7 @@ fn ai_rng_follows_shared_steering_and_uses_old_turn_flags_for_alignment() {
         unsafe {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
-            let mut enemy =
-                Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 1, [16, 16, 48], [4, 4]);
+            let enemy = Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 1, [16, 16, 48], [4, 4]);
             (*enemy.ptr()).current.location = POINT { x: 4000, y: 4400 };
             (*enemy.ptr()).next = (*enemy.ptr()).current;
             ship.ship_mut().weapon_counter = 1;
@@ -751,7 +751,7 @@ fn ai_rng_follows_shared_steering_and_uses_old_turn_flags_for_alignment() {
                 let seed =
                     seed_where(|d| (d[0] & 1 != 0) == first_odd && (d[1] & 1 != 0) != first_odd);
                 ship.ship_mut().ShipFacing = 0;
-                (*ship.ptr()).current.image.frame = ship._ship_frames.frame(0);
+                (*ship.ptr()).current.image.frame = ship.raw_frame(0, 0);
                 (*ship.ptr()).next = (*ship.ptr()).current;
                 let mut c = enemy_concern(&enemy, 8);
                 let input = with_rng(seed, 2, || think(&mut ship, &mut c, 0, 1));
@@ -781,8 +781,7 @@ fn rear_zip_alignment_and_randomness_change_at_turns_8_and_16() {
         unsafe {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
-            let mut enemy =
-                Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 1, [16, 16, 48], [4, 4]);
+            let enemy = Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 1, [16, 16, 48], [4, 4]);
             (*enemy.ptr()).next.location = POINT { x: 4000, y: 4400 };
             for (turn, wait, old, boost, used) in [
                 (8, 0, 0, true, 1),
@@ -820,8 +819,7 @@ fn ai_energy_test_is_strict_and_uses_world_to_turn_shift() {
         unsafe {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
-            let mut enemy =
-                Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 1, [16, 16, 48], [4, 4]);
+            let enemy = Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 1, [16, 16, 48], [4, 4]);
             (*enemy.ptr()).next.location = POINT { x: 4000, y: 4400 };
             (*ship.ptr()).__bindgen_anon_4.turn_wait = 1;
             for (energy, turn, boost) in [
@@ -890,8 +888,7 @@ fn active_zip_continues_on_nonincreasing_turns_then_exits_with_thrust_and_no_ste
         unsafe {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
-            let mut enemy =
-                Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 1, [16, 16, 48], [4, 4]);
+            let enemy = Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 1, [16, 16, 48], [4, 4]);
             (*enemy.ptr()).next.location = POINT { x: 4000, y: 3600 };
             ship.ship_mut().old_status_flags = SPECIAL as u16;
             for (turn, previous, continuing) in [(9, 10, true), (10, 10, true), (11, 10, false)] {
@@ -941,8 +938,7 @@ fn rear_arc_uses_unwrapped_next_location_difference_and_inclusive_angle_bounds()
         unsafe {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
-            let mut enemy =
-                Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 1, [16, 16, 48], [4, 4]);
+            let enemy = Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 1, [16, 16, 48], [4, 4]);
             (*ship.ptr()).__bindgen_anon_4.turn_wait = 1;
             for facing in 0..16 {
                 ship.ship_mut().ShipFacing = facing;

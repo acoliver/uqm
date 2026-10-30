@@ -200,8 +200,7 @@ impl<'a> Ship<'a> {
     }
     unsafe fn ai(&mut self, concerns: &mut [EVALUATE_DESC; 5]) {
         let mut subject = *self.ptr();
-        self.inner
-            .intelligence(&mut subject, (&mut concerns[..4]).try_into().unwrap(), 0);
+        self.inner.intelligence(&mut subject, &mut concerns[..4], 0);
     }
     unsafe fn arm(&mut self) -> ElementProcessFunc {
         self.inner

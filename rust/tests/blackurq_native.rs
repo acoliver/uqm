@@ -265,7 +265,7 @@ fn ai_crew_threat_boundaries_and_no_target_do_not_draw_rng() {
                     pursue
                 );
             }
-            let mut concerns = mem::zeroed();
+            let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
             with_rng(4, 0, || {
                 ship.intelligence(&mut *ship.ptr(), &mut concerns, 0)
             });

@@ -385,22 +385,6 @@ impl<'a> Ship<'a> {
     pub unsafe fn intelligence(
         &mut self,
         subject: &mut ELEMENT,
-        concerns: &mut [EVALUATE_DESC; 4],
-        count: u16,
-    ) {
-        // SAFETY: subject and four concerns live through this synchronous callback.
-        unsafe {
-            uqm_rust::engine::battle::Cx::invoke_intelligence(
-                self.ss.0 as usize,
-                subject,
-                concerns,
-                count,
-            );
-        }
-    }
-    pub unsafe fn intelligence(
-        &mut self,
-        subject: &mut ELEMENT,
         concerns: &mut [EVALUATE_DESC],
         count: u16,
     ) {

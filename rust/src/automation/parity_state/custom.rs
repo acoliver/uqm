@@ -55,7 +55,10 @@ impl<'a> RaceData<'a> {
         if let crate::engine::battle::RaceState::Umgah { previous_facing } = descriptor.race_state {
             return previous_facing.map_or(Self::None, Self::Umgah);
         }
-        assert!(descriptor.data.is_null(), "unexpected custom data for species {species}");
+        assert!(
+            descriptor.data.is_null(),
+            "unexpected custom data for species {species}"
+        );
         Self::None
     }
 

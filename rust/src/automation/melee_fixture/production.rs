@@ -503,7 +503,8 @@ impl World<'_> {
                         }
                         Effect::Intelligence(h, mut concerns) => {
                             let (_, parent) = observed.ok_or("fixture intelligence lacks owner metadata")?;
-                            crate::engine::battle::Cx::invoke_intelligence(parent, h.cast(), concerns.as_mut_ptr(), concerns.len() as u16);
+                            let count = concerns.len() as u16;
+                            crate::engine::battle::Cx::invoke_intelligence(parent, h.cast(), &mut concerns, count);
                         }
                         other => return dispatch(other),
                     }

@@ -4,7 +4,7 @@
 mod battle;
 #[path = "support/battle_context.rs"]
 mod battle_context;
-use battle::{prim, Battle, PoolElement, Ship};
+use battle::{prim, PoolElement, Ship};
 
 use std::{ffi::CStr, mem, ptr};
 use uqm_rust::ships::native::{
@@ -564,7 +564,7 @@ fn satellite_collision_is_noop_and_death_installs_four_tick_animation() {
                 s,
                 &mut p,
                 &mut *other,
-                ptr::null_mut(),
+                &mut POINT { x: 0, y: 0 },
                 uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
             );
             assert_eq!((*s).__bindgen_anon_2.hit_points, 10);
@@ -824,7 +824,7 @@ fn tractor_applies_mass_division_speed_flags_and_head_inserted_blue_shadows() {
         ] {
             let _battle = Battlefield::new(32);
             unsafe {
-                let mut ship =
+                let ship =
                     Ship::with_frames(&_battle, SPECIES_ID_CHMMR_ID, 0, [16, 41, 12], [16, 12]);
                 let mut enemy =
                     Ship::with_frames(&_battle, SPECIES_ID_CHMMR_ID, 1, [16, 41, 12], [16, 12]);
@@ -896,7 +896,7 @@ fn tractor_energy_target_gravity_and_allocation_boundaries() {
             unsafe {
                 let mut ship =
                     Ship::with_frames(&_battle, SPECIES_ID_CHMMR_ID, 0, [16, 41, 12], [16, 12]);
-                let mut enemy =
+                let enemy =
                     Ship::with_frames(&_battle, SPECIES_ID_CHMMR_ID, 1, [16, 41, 12], [16, 12]);
                 (*enemy.ptr()).__bindgen_anon_3.mass_points = mass;
                 (*enemy.ptr()).current.location = POINT { x: 3000, y: 3728 };
@@ -939,8 +939,7 @@ fn ai_exact_travel_angle_and_turn_gates_follow_shared_intelligence() {
         unsafe {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_CHMMR_ID, 0, [16, 41, 12], [16, 12]);
-            let mut enemy =
-                Ship::with_frames(&_battle, SPECIES_ID_CHMMR_ID, 1, [16, 41, 12], [16, 12]);
+            let enemy = Ship::with_frames(&_battle, SPECIES_ID_CHMMR_ID, 1, [16, 41, 12], [16, 12]);
             let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
             concerns[0].ObjectPtr = enemy.ptr();
             concerns[0].which_turn = 13;
@@ -1002,7 +1001,7 @@ fn tractor_tracking_consumes_only_the_half_turn_rng_before_shadow_allocation() {
             unsafe {
                 let mut ship =
                     Ship::with_frames(&_battle, SPECIES_ID_CHMMR_ID, 0, [16, 41, 12], [16, 12]);
-                let mut enemy =
+                let enemy =
                     Ship::with_frames(&_battle, SPECIES_ID_CHMMR_ID, 1, [16, 41, 12], [16, 12]);
                 // South is exactly half a circle from TrackShip's initial facing.
                 (*enemy.ptr()).current.location = POINT { x: 4000, y: 5000 };
