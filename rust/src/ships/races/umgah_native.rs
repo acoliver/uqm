@@ -2,14 +2,22 @@
 
 #[cfg(not(test))]
 pub(crate) mod engine {
-    use crate::collections::observation::image;
-    use crate::memory::{rust_hfree, rust_hmalloc};
     use crate::ships::native::{
-        abi::*, angle_to_facing, cosine, element, facing_to_angle, frame_index, normalize_angle,
-        rel_frame_index, sine, starship,
+        abi::*, angle_to_facing, cosine, facing_to_angle, normalize_angle, sine,
     };
-    use std::mem;
 
+    use crate::engine::battle::views::Missile;
+    use crate::engine::battle::{
+        Concerns, Cx, ElementId, Race, RaceState, RaceTemplate, ShipId, WeaponOrigin, WeaponSpawn,
+    };
+    pub static UMGAH: Race = Race {
+        descriptor,
+        preprocess: Some(umgah_preprocess),
+        postprocess: Some(umgah_postprocess),
+        init_weapon: Some(initialize_cone),
+        intelligence: Some(umgah_intelligence),
+        uninit: Some(uninit_umgah),
+    };
     const MAX_CREW: u16 = 10;
     const MAX_ENERGY: u8 = 30;
     const MAX_THRUST: u16 = 18;
@@ -18,25 +26,19 @@ pub(crate) mod engine {
     const CLOSE_RANGE_WEAPON: u16 = 50 << ONE_SHIFT;
     const LONG_RANGE_WEAPON: u32 = 1000 << ONE_SHIFT;
 
-    #[repr(C)]
-    #[derive(Clone, Copy)]
-    pub(crate) struct UmgahData {
-        pub(crate) prev_facing: u16,
-    }
-
-    const fn descriptor() -> RACE_DESC {
-        let mut d = RACE_DESC::EMPTY;
-        d.ship_info.ship_flags = (FIRES_FORE | IMMEDIATE_WEAPON) as u16;
-        d.ship_info.ship_cost = 7;
-        d.ship_info.crew_level = MAX_CREW;
-        d.ship_info.max_crew = MAX_CREW;
-        d.ship_info.energy_level = MAX_ENERGY;
-        d.ship_info.max_energy = MAX_ENERGY;
-        d.ship_info.race_strings_rsc = c"ship.umgah.text".as_ptr();
-        d.ship_info.icons_rsc = c"ship.umgah.icons".as_ptr();
-        d.ship_info.melee_icon_rsc = c"ship.umgah.meleeicons".as_ptr();
-        d.fleet.strength = 833 / SPHERE_RADIUS_INCREMENT as u16 * 2;
-        d.fleet.known_loc = POINT { x: 1798, y: 6000 };
+    fn descriptor(_world: &mut crate::engine::battle::World) -> crate::engine::battle::RaceDesc {
+        let mut d = RaceTemplate::default();
+        d.info.ship_flags = (FIRES_FORE | IMMEDIATE_WEAPON) as u16;
+        d.info.ship_cost = 7;
+        d.info.crew_level = MAX_CREW;
+        d.info.max_crew = MAX_CREW;
+        d.info.energy_level = MAX_ENERGY;
+        d.info.max_energy = MAX_ENERGY;
+        d.resources.strings = Some(c"ship.umgah.text");
+        d.resources.icons = Some(c"ship.umgah.icons");
+        d.resources.melee_icon = Some(c"ship.umgah.meleeicons");
+        d.fleet_strength = 833 / SPHERE_RADIUS_INCREMENT as u16 * 2;
+        d.fleet_location = POINT { x: 1798, y: 6000 };
         d.characteristics = CHARACTERISTIC_STUFF {
             max_thrust: MAX_THRUST,
             thrust_increment: THRUST_INCREMENT,
@@ -50,229 +52,186 @@ pub(crate) mod engine {
             special_wait: 2,
             ship_mass: 1,
         };
-        d.ship_data.ship_rsc = [
-            c"ship.umgah.graphics.drone.large".as_ptr(),
-            c"ship.umgah.graphics.drone.medium".as_ptr(),
-            c"ship.umgah.graphics.drone.small".as_ptr(),
+        d.resources.ship = [
+            Some(c"ship.umgah.graphics.drone.large"),
+            Some(c"ship.umgah.graphics.drone.medium"),
+            Some(c"ship.umgah.graphics.drone.small"),
         ];
-        d.ship_data.weapon_rsc = [
-            c"ship.umgah.graphics.spritz".as_ptr(),
-            std::ptr::null(),
-            std::ptr::null(),
+        d.resources.weapon = [Some(c"ship.umgah.graphics.spritz"), None, None];
+        d.resources.special = [
+            Some(c"ship.umgah.graphics.cone.large"),
+            Some(c"ship.umgah.graphics.cone.medium"),
+            Some(c"ship.umgah.graphics.cone.small"),
         ];
-        d.ship_data.special_rsc = [
-            c"ship.umgah.graphics.cone.large".as_ptr(),
-            c"ship.umgah.graphics.cone.medium".as_ptr(),
-            c"ship.umgah.graphics.cone.small".as_ptr(),
-        ];
-        d.ship_data.captain_control.captain_rsc = c"ship.umgah.graphics.captain".as_ptr();
-        d.ship_data.victory_ditty_rsc = c"ship.umgah.ditty".as_ptr();
-        d.ship_data.ship_sounds_rsc = c"ship.umgah.sounds".as_ptr();
-        d.cyborg_control.WeaponRange = (LONG_RANGE_WEAPON << 2) as u16;
-        d
+        d.resources.captain = Some(c"ship.umgah.graphics.captain");
+        d.resources.victory = Some(c"ship.umgah.ditty");
+        d.resources.sounds = Some(c"ship.umgah.sounds");
+        d.intelligence.weapon_range = (LONG_RANGE_WEAPON << 2) as u16;
+        d.state = RaceState::Umgah {
+            previous_facing: None,
+        };
+        d.descriptor(&UMGAH)
     }
-
-    static mut UMGAH_DESC: RACE_DESC = descriptor();
-
-    #[no_mangle]
-    pub extern "C" fn init_umgah() -> *mut RACE_DESC {
-        unsafe {
-            // GetCodeResData copies this return value into its owned descriptor.
-            // Rebuild the template so each capture starts with private, empty data.
-            UMGAH_DESC = descriptor();
-            UMGAH_DESC.uninit_func = Some(uninit_umgah);
-            UMGAH_DESC.preprocess_func = Some(umgah_preprocess);
-            UMGAH_DESC.postprocess_func = Some(umgah_postprocess);
-            UMGAH_DESC.init_weapon_func = Some(initialize_cone);
-            UMGAH_DESC.cyborg_control.intelligence_func = Some(umgah_intelligence);
-        }
-        &raw mut UMGAH_DESC
-    }
-
-    unsafe fn set_data(desc: *mut RACE_DESC, value: Option<UmgahData>) {
-        if !(*desc).data.is_null() {
-            rust_hfree((*desc).data);
-            (*desc).data = std::ptr::null_mut();
-        }
-        if let Some(v) = value {
-            let p = rust_hmalloc(mem::size_of::<UmgahData>()).cast::<UmgahData>();
-            *p = v;
-            (*desc).data = p.cast();
-        }
-    }
-
-    pub(crate) unsafe extern "C" fn cone_preprocess(e: *mut ELEMENT) {
-        let ss = starship(e);
-        image!(view; (*(*ss).RaceDescPtr).ship_data.special[0], rel_frame_index(
-            (*(*ss).RaceDescPtr).ship_data.special[0],
+    pub(crate) fn cone_preprocess(cx: &mut Cx<'_>, e: ElementId) {
+        let ss = cx.owner(e);
+        let frame = cx.relative_frame(
+            cx.ship_frame(ss, 2),
             angle_to_facing(FULL_CIRCLE as i32) as i16,
-        ));
-        (*e).state_flags |= APPEARING as u16;
+        );
+        cx.set_ship_frame(ss, 2, 0, frame);
+        cx.element_mut(e).flags |= APPEARING as u16;
     }
 
-    pub(crate) unsafe extern "C" fn cone_collision(
-        a: *mut ELEMENT,
-        pa: *mut POINT,
-        b: *mut ELEMENT,
-        pb: *mut POINT,
+    pub(crate) fn cone_collision(
+        cx: &mut Cx<'_>,
+        a: ElementId,
+        pa: &mut POINT,
+        b: ElementId,
+        pb: &mut POINT,
     ) {
-        let h = weapon_collision(a, pa, b, pb);
-        if !h.is_null() {
-            RemoveElement(h);
-            FreeElement(h);
-            (*a).state_flags &= !(DISAPPEARING as u16);
+        if let Some(h) = cx.weapon_collision(a, pa, b, pb) {
+            cx.unlink(h);
+            cx.dispose(h);
+            cx.element_mut(a).flags &= !(DISAPPEARING as u16);
         }
     }
 
-    pub(crate) unsafe extern "C" fn initialize_cone(
-        ship: *mut ELEMENT,
-        out: *mut HELEMENT,
-    ) -> COUNT {
-        let ss = starship(ship);
-        let desc = (*ss).RaceDescPtr;
-        let facing = (*ss).ShipFacing;
-        let mut b = MISSILE_BLOCK {
-            cx: (*ship).next.location.x,
-            cy: (*ship).next.location.y,
-            farray: (&raw mut (*desc).ship_data.special).cast(),
+    pub(crate) fn initialize_cone(
+        cx: &mut Cx<'_>,
+        ss: ShipId,
+        origin: WeaponOrigin,
+    ) -> WeaponSpawn {
+        let facing = cx.ship_state(ss).facing;
+        let mut b = Missile {
+            cx: origin.next.location.x,
+            cy: origin.next.location.y,
+            farray: cx.ship_frame_set(ss, 2),
             face: facing,
-            sender: (*ship).playerNr,
+            sender: origin.player,
             flags: IGNORE_SIMILAR as u16,
             pixoffs: 0,
             speed: 0,
             hit_points: 100,
             damage: 1,
             life: 1,
-            preprocess_func: Some(ElementHook::Legacy(cone_preprocess)),
+            preprocess: Some(cone_preprocess),
             blast_offs: 0,
             index: 0,
         };
-        let data = (*desc).data.cast::<UmgahData>();
-        if data.is_null() || facing != (*data).prev_facing {
-            set_data(
-                desc,
-                Some(UmgahData {
-                    prev_facing: facing,
-                }),
-            );
-            image!(view; (*desc).ship_data.special[0], SetAbsFrameIndex((*desc).ship_data.special[0], facing));
-        }
-        b.index = frame_index((*desc).ship_data.special[0]);
-        *out = initialize_missile(&mut b);
-        if !(*out).is_null() {
-            let cone = element(*out);
-            (*cone).collision_func = Some(CollisionHook::Legacy(cone_collision));
-            (*cone).state_flags &= !(APPEARING as u16);
-            image!(copy; (*cone).next, (*cone).current);
-            (*cone).IntersectControl.IntersectStamp.origin = POINT {
-                x: (*cone).current.location.x >> ONE_SHIFT,
-                y: (*cone).current.location.y >> ONE_SHIFT,
+        let RaceState::Umgah { previous_facing } = cx.race_stats(ss).state else {
+            panic!("Umgah ship state");
+        };
+        if previous_facing != Some(facing) {
+            cx.race_stats_mut(ss).state = RaceState::Umgah {
+                previous_facing: Some(facing),
             };
-            (*cone).IntersectControl.EndPoint = POINT {
-                x: (*cone).next.location.x >> ONE_SHIFT,
-                y: (*cone).next.location.y >> ONE_SHIFT,
-            };
-            image!(frame; (*cone).IntersectControl.IntersectStamp.frame, (*desc).ship_data.special[0]);
+            cx.set_ship_frame(ss, 2, 0, cx.absolute_frame(cx.ship_frame(ss, 2), facing));
         }
-        1
+        b.index = cx.frame_number(cx.ship_frame(ss, 2));
+        let out = cx.missile(&mut b);
+        if let Some(cone) = out {
+            cx.element_mut(cone).collide = Some(CollisionHook::Native(cone_collision));
+            cx.element_mut(cone).flags &= !(APPEARING as u16);
+            cx.copy_visual_to_next(cone, cx.element(cone).current);
+            cx.init_intersect(cone);
+            cx.set_intersect_frame(cone, cx.ship_frame(ss, 2));
+        }
+        vec![out]
     }
 
-    pub(crate) unsafe extern "C" fn umgah_preprocess(e: *mut ELEMENT) {
-        let ss = starship(e);
-        if (*e).state_flags & APPEARING as u16 != 0 {
-            set_data((*ss).RaceDescPtr, None);
-        } else if (*e).__bindgen_anon_5.thrust_wait == 0
-            && (*ss).cur_status_flags & SPECIAL as u16 != 0
-            && DeltaEnergy(e, -1) != 0
+    pub(crate) fn umgah_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
+        let e = cx.ship_element(ss);
+        if cx.element(e).flags & APPEARING as u16 != 0 {
+            cx.race_stats_mut(ss).state = RaceState::Umgah {
+                previous_facing: None,
+            };
+        } else if cx.element(e).thrust == 0
+            && cx.ship_state(ss).status & SPECIAL as u16 != 0
+            && cx.delta_energy(e, -1)
         {
-            ProcessSound(
-                SetAbsStringTableIndex((*(*ss).RaceDescPtr).ship_data.ship_sounds, 1),
-                e,
-            );
-            let facing = facing_to_angle(i32::from((*ss).ShipFacing)) + HALF_CIRCLE as i32;
+            cx.process_ship_sound(ss, 1, e);
+            let facing = facing_to_angle(i32::from(cx.ship_state(ss).facing)) + HALF_CIRCLE as i32;
             let speed = JUMP_DIST << VELOCITY_SHIFT;
-            DeltaVelocityComponents(
-                &raw mut (*e).velocity,
-                cosine(facing, speed),
-                sine(facing, speed),
+            cx.element_mut(e).velocity.delta_components(
+                i32::from((cosine(facing, speed)) as SIZE),
+                i32::from((sine(facing, speed)) as SIZE),
             );
-            (*ss).cur_status_flags &= !((SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16);
-            (*ss).special_counter = 2;
+            cx.ship_state_mut(ss).status &= !((SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16);
+            cx.ship_state_mut(ss).special_counter = 2;
         }
     }
 
-    pub(crate) unsafe extern "C" fn umgah_postprocess(e: *mut ELEMENT) {
-        let ss = starship(e);
-        if (*ss).special_counter > 0 {
-            (*ss).special_counter = 0;
-            (*e).velocity = mem::zeroed();
+    pub(crate) fn umgah_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
+        let e = cx.ship_element(ss);
+        if cx.ship_state(ss).special_counter > 0 {
+            cx.ship_state_mut(ss).special_counter = 0;
+            cx.element_mut(e).velocity.zero();
         }
     }
 
-    pub(crate) unsafe extern "C" fn uninit_umgah(desc: *mut RACE_DESC) {
-        set_data(desc, None);
-    }
-
-    pub(crate) unsafe extern "C" fn umgah_intelligence(
-        ship: *mut ELEMENT,
-        concerns: *mut EVALUATE_DESC,
-        count: COUNT,
+    pub(crate) fn uninit_umgah(
+        _world: &mut crate::engine::battle::World,
+        stats: &mut crate::engine::battle::views::RaceStats,
     ) {
-        let ss = starship(ship);
-        let weapon = concerns.add(ENEMY_WEAPON_INDEX as usize);
-        if !(*weapon).ObjectPtr.is_null() && (*weapon).MoveState == MOVEMENT_STATE_ENTICE {
-            if (*weapon).which_turn > 3 || (*ss).old_status_flags & SPECIAL as u16 != 0 {
-                (*weapon).ObjectPtr = std::ptr::null_mut();
-            } else if (*(*weapon).ObjectPtr).state_flags & FINITE_LIFE as u16 != 0
-                && (*(*weapon).ObjectPtr).state_flags & CREW_OBJECT as u16 == 0
+        stats.state = RaceState::Umgah {
+            previous_facing: None,
+        };
+    }
+
+    pub(crate) fn umgah_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
+        let weapon = ENEMY_WEAPON_INDEX as usize;
+        if concerns.objects[weapon].object.is_some()
+            && concerns.objects[weapon].movement == MOVEMENT_STATE_ENTICE
+        {
+            let object = concerns.objects[weapon]
+                .object
+                .unwrap_or_else(|| panic!("weapon concern"));
+            if concerns.objects[weapon].which_turn > 3
+                || cx.ship_state(ss).old_status & SPECIAL as u16 != 0
             {
-                (*weapon).MoveState = MOVEMENT_STATE_AVOID;
+                concerns.objects[weapon].object = None;
+            } else if cx.element(object).flags & FINITE_LIFE as u16 != 0
+                && cx.element(object).flags & CREW_OBJECT as u16 == 0
+            {
+                concerns.objects[weapon].movement = MOVEMENT_STATE_AVOID;
             } else {
-                (*weapon).MoveState = MOVEMENT_STATE_PURSUE;
+                concerns.objects[weapon].movement = MOVEMENT_STATE_PURSUE;
             }
         }
-        let enemy = concerns.add(ENEMY_SHIP_INDEX as usize);
-        let gravity = concerns.add(GRAVITY_MASS_INDEX as usize);
-        if (*ss).special_counter != 0
-            || !(*gravity).ObjectPtr.is_null()
-            || (*enemy).ObjectPtr.is_null()
+        let enemy = ENEMY_SHIP_INDEX as usize;
+        let gravity = GRAVITY_MASS_INDEX as usize;
+        if cx.ship_state(ss).special_counter != 0
+            || concerns.objects[gravity].object.is_some()
+            || concerns.objects[enemy].object.is_none()
         {
-            (*(*ss).RaceDescPtr).cyborg_control.WeaponRange = CLOSE_RANGE_WEAPON;
-            ship_intelligence(ship, concerns, count);
-            if (*enemy).which_turn < 16 {
-                (*ss).ship_input_state |= WEAPON as u8;
+            cx.race_stats_mut(ss).intelligence.weapon_range = CLOSE_RANGE_WEAPON;
+            cx.ship_intelligence(ss, concerns);
+            if concerns.objects[enemy].which_turn < 16 {
+                cx.ship_state_mut(ss).input |= WEAPON as u8;
             }
-            (*ss).ship_input_state &= !(SPECIAL as u8);
+            cx.ship_state_mut(ss).input &= !(SPECIAL as u8);
         } else {
-            let turn = (*enemy).which_turn.min(255) as u8;
-            let enough = ((JUMP_DIST * i32::from((*(*ss).RaceDescPtr).ship_info.energy_level))
-                >> 6)
+            let turn = concerns.objects[enemy].which_turn.min(255) as u8;
+            let enough = ((JUMP_DIST * i32::from(cx.race_stats(ss).ship_info.energy_level)) >> 6)
                 > i32::from(turn);
-            let dx = (*(*enemy).ObjectPtr)
-                .next
-                .location
-                .x
-                .wrapping_sub((*ship).next.location.x);
-            let dy = (*(*enemy).ObjectPtr)
-                .next
-                .location
-                .y
-                .wrapping_sub((*ship).next.location.y);
+            let enemy_id = concerns.objects[enemy]
+                .object
+                .unwrap_or_else(|| panic!("enemy ship"));
+            let location = cx.element(enemy_id).next.location;
+            let dx = location.x.wrapping_sub(concerns.subject.next.location.x);
+            let dy = location.y.wrapping_sub(concerns.subject.next.location.y);
             let behind = normalize_angle(
-                ARCTAN(dx, dy) as i32
-                    - (facing_to_angle(i32::from((*ss).ShipFacing)) + HALF_CIRCLE as i32)
+                crate::math::arctan(dx, dy) as i32
+                    - (facing_to_angle(i32::from(cx.ship_state(ss).facing)) + HALF_CIRCLE as i32)
                     + OCTANT as i32
                     + (OCTANT >> 2) as i32,
             ) <= ((OCTANT as i32 + (OCTANT >> 2) as i32) << 1);
-            let enemy_ss = starship((*enemy).ObjectPtr);
-            let desc = (*ss).RaceDescPtr;
-            (*desc).cyborg_control.WeaponRange = if enough
-                && ((*ss).old_status_flags & SPECIAL as u16 != 0
+            let enemy_ss = cx.owner(enemy_id);
+            cx.race_stats_mut(ss).intelligence.weapon_range = if enough
+                && (cx.ship_state(ss).old_status & SPECIAL as u16 != 0
                     || behind
                     || (turn > 6
-                        && (*(*enemy_ss).RaceDescPtr)
-                            .cyborg_control
-                            .ManeuverabilityIndex
+                        && cx.race_stats(enemy_ss).intelligence.maneuverability
                             <= SLOW_SHIP as u16)
                     || (16..=24).contains(&turn))
             {
@@ -280,39 +239,39 @@ pub(crate) mod engine {
             } else {
                 CLOSE_RANGE_WEAPON
             };
-            ship_intelligence(ship, concerns, count);
-            if (*desc).cyborg_control.WeaponRange == CLOSE_RANGE_WEAPON {
-                (*ss).ship_input_state &= !(SPECIAL as u8);
+            cx.ship_intelligence(ss, concerns);
+            if cx.race_stats(ss).intelligence.weapon_range == CLOSE_RANGE_WEAPON {
+                cx.ship_state_mut(ss).input &= !(SPECIAL as u8);
             } else {
-                (*ss).ship_input_state &= !(THRUST as u8);
-                let lined = (*ship).__bindgen_anon_4.turn_wait == 0
-                    && (*ss).old_status_flags & (LEFT | RIGHT) as u16 == 0;
-                if ((*ss).old_status_flags & SPECIAL as u16 != 0
-                    && turn <= (*desc).characteristics.special_wait)
-                    || ((*ss).old_status_flags & SPECIAL as u16 == 0
+                cx.ship_state_mut(ss).input &= !(THRUST as u8);
+                let lined = concerns.subject.turn == 0
+                    && cx.ship_state(ss).old_status & (LEFT | RIGHT) as u16 == 0;
+                if (cx.ship_state(ss).old_status & SPECIAL as u16 != 0
+                    && turn <= cx.race_stats(ss).characteristics.special_wait)
+                    || (cx.ship_state(ss).old_status & SPECIAL as u16 == 0
                         && behind
                         && (lined || turn < 16))
                 {
-                    (*ss).ship_input_state |= SPECIAL as u8;
-                    (*desc).characteristics.special_wait = turn;
+                    cx.ship_state_mut(ss).input |= SPECIAL as u8;
+                    cx.race_stats_mut(ss).characteristics.special_wait = turn;
                     if turn <= 8 && lined {
-                        if TFB_Random() & 1 != 0 {
-                            (*ss).ship_input_state |= LEFT as u8;
+                        if cx.random() & 1 != 0 {
+                            cx.ship_state_mut(ss).input |= LEFT as u8;
                         } else {
-                            (*ss).ship_input_state |= RIGHT as u8;
+                            cx.ship_state_mut(ss).input |= RIGHT as u8;
                         }
                     }
-                } else if (*ss).old_status_flags & SPECIAL as u16 != 0 {
-                    (*ss).ship_input_state &= !((SPECIAL | LEFT | RIGHT) as u8);
-                    (*ss).ship_input_state |= THRUST as u8;
+                } else if cx.ship_state(ss).old_status & SPECIAL as u16 != 0 {
+                    cx.ship_state_mut(ss).input &= !((SPECIAL | LEFT | RIGHT) as u8);
+                    cx.ship_state_mut(ss).input |= THRUST as u8;
                 }
             }
             if turn < 16 && !behind {
-                (*ss).ship_input_state |= WEAPON as u8;
+                cx.ship_state_mut(ss).input |= WEAPON as u8;
             }
         }
-        if (*ss).ship_input_state & SPECIAL as u8 == 0 {
-            (*(*ss).RaceDescPtr).characteristics.special_wait = 255;
+        if cx.ship_state(ss).input & SPECIAL as u8 == 0 {
+            cx.race_stats_mut(ss).characteristics.special_wait = 255;
         }
     }
 }

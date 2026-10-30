@@ -48,7 +48,9 @@ fn hooks() -> Hooks {
     };
     Hooks {
         blazer_collision: androsynth_native::engine::blazer_collision as *const () as usize,
-        satellite: Some(chmmr_native::engine::satellite_postprocess),
+        satellite: Some(crate::engine::battle::ElementHook::Native(
+            chmmr_native::engine::satellite_postprocess,
+        )),
         defense: chmmr_native::engine::spawn_point_defense as *const () as usize,
         limpets: Some(crate::engine::battle::ElementHook::Native(
             vux_native::engine::spawn_limpets,

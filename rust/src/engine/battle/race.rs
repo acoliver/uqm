@@ -97,7 +97,7 @@ pub struct Concern {
 
 /// The AI evaluates a projected subject without moving the live ship.
 pub struct Concerns {
-    pub objects: [Concern; 4],
+    pub objects: [Concern; 10],
     pub subject: Subject,
     pub count: u16,
 }

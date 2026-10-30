@@ -57,6 +57,10 @@ pub fn race(species: u32) -> Option<&'static crate::engine::battle::Race> {
         SPECIES_ID_ILWRATH_ID => Some(&ilwrath_native::engine::ILWRATH),
         SPECIES_ID_MELNORME_ID => Some(&melnorme_native::engine::MELNORME),
         SPECIES_ID_SIS_SHIP_ID => Some(&sis_native::engine::SIS),
+        SPECIES_ID_SLYLANDRO_ID => Some(&slylandro_native::engine::SLYLANDRO),
+        SPECIES_ID_UMGAH_ID => Some(&umgah_native::engine::UMGAH),
+        SPECIES_ID_CHMMR_ID => Some(&chmmr_native::engine::CHMMR),
+        SPECIES_ID_SPATHI_ID => Some(&spathi_native::engine::SPATHI),
         _ => None,
     }
 }
@@ -68,22 +72,13 @@ pub use crate::ships::code_resources::engine::descriptor as legacy_descriptor;
 pub use orz_native::engine::init_orz;
 
 #[cfg(not(test))]
-pub use spathi_native::engine::init_spathi;
-
-#[cfg(not(test))]
-pub use slylandro_native::engine::init_slylandro;
-
-#[cfg(not(test))]
 pub use samatra::engine::init_samatra;
 
 #[cfg(not(test))]
 pub use chenjesu_native::engine::init_chenjesu;
 
 #[cfg(not(test))]
-pub use chmmr_native::engine::init_chmmr;
-
-#[cfg(not(test))]
-pub use umgah_native::engine::init_umgah;
-
-#[cfg(not(test))]
 pub use orz_native::engine::{intruder_preprocess, marine_collision};
+
+#[cfg(not(test))]
+pub use slylandro_native::engine::lightning_segment;

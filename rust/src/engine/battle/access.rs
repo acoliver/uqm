@@ -42,10 +42,12 @@ impl Cx<'_> {
     }
 
     pub fn ship_element(&self, ship: ShipId) -> ElementId {
-        self.b
-            .elements
-            .id(self.ship(ship).hShip)
+        self.optional_ship_element(ship)
             .unwrap_or_else(|| panic!("{}", "ship has no element"))
+    }
+
+    pub fn optional_ship_element(&self, ship: ShipId) -> Option<ElementId> {
+        self.b.elements.id(self.ship(ship).hShip)
     }
 
     pub fn set_parent(&mut self, element: ElementId, parent: Option<ShipId>) {

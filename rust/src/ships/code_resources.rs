@@ -18,15 +18,7 @@ pub(crate) mod engine {
 
     use crate::ships::races::chenjesu_native::engine::init_chenjesu;
 
-    use crate::ships::races::chmmr_native::engine::init_chmmr;
-
     use crate::ships::races::orz_native::engine::init_orz;
-
-    use crate::ships::races::slylandro_native::engine::init_slylandro;
-
-    use crate::ships::races::spathi_native::engine::init_spathi;
-
-    use crate::ships::races::umgah_native::engine::init_umgah;
 
     use crate::ships::races::samatra::engine::init_samatra;
 
@@ -36,7 +28,7 @@ pub(crate) mod engine {
         None,
         None,
         Some(init_chenjesu),
-        Some(init_chmmr),
+        None,
         None,
         None,
         None,
@@ -46,12 +38,12 @@ pub(crate) mod engine {
         Some(init_orz),
         None,
         None,
-        Some(init_slylandro),
-        Some(init_spathi),
         None,
         None,
         None,
-        Some(init_umgah),
+        None,
+        None,
+        None,
         None,
         None,
         None,
@@ -139,6 +131,10 @@ pub(crate) mod engine {
             9 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_MMRNMHRM_ID),
             20 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_UR_QUAN_ID),
             27 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_UR_QUAN_PROBE_ID),
+            14 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_SLYLANDRO_ID),
+            19 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_UMGAH_ID),
+            4 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_CHMMR_ID),
+            15 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_SPATHI_ID),
             _ => None,
         }
     }

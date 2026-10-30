@@ -333,7 +333,7 @@ fn absent_callbacks_remain_absent_in_metadata_and_dispatch() {
                         facing: 0,
                         which_turn: 0,
                         movement: 0,
-                    }; 4],
+                    }; 10],
                     count: 0,
                 };
                 uqm_rust::collections::observation::enable();

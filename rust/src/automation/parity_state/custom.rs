@@ -6,8 +6,6 @@ use crate::automation::parity::Journal;
 #[cfg(not(test))]
 use crate::engine::battle::kernel::LAST_PKUNK_SOUND as LAST_SOUND;
 use crate::ships::native::abi::*;
-#[cfg(not(test))]
-use crate::ships::races::umgah_native::engine::UmgahData;
 
 pub(super) enum RaceData<'a> {
     None,
@@ -19,7 +17,7 @@ pub(super) enum RaceData<'a> {
         hooks: [ElementProcessFunc; 3],
     },
     #[cfg(not(test))]
-    Umgah(&'a UmgahData),
+    Umgah(u16),
     Mmrnmhrm(&'a CHARACTERISTIC_STUFF),
     #[cfg(not(test))]
     Sis(&'a crate::engine::battle::race::SisState),
@@ -54,17 +52,11 @@ impl<'a> RaceData<'a> {
         if let crate::engine::battle::RaceState::Sis(ref data) = descriptor.race_state {
             return Self::Sis(data);
         }
-        let pointer = descriptor.data;
-        if pointer.is_null() {
-            return Self::None;
+        if let crate::engine::battle::RaceState::Umgah { previous_facing } = descriptor.race_state {
+            return previous_facing.map_or(Self::None, Self::Umgah);
         }
-        // SAFETY: each native initializer owns the corresponding concrete allocation.
-        unsafe {
-            match species {
-                SPECIES_ID_UMGAH_ID => Self::Umgah(&*pointer.cast()),
-                _ => panic!("unexpected custom data for species {species}"),
-            }
-        }
+        assert!(descriptor.data.is_null(), "unexpected custom data for species {species}");
+        Self::None
     }
 
     pub(super) fn write(
@@ -106,7 +98,7 @@ impl<'a> RaceData<'a> {
                 }
             }
             #[cfg(not(test))]
-            Self::Umgah(data) => value(fields, &prefix, "prev_facing", data.prev_facing),
+            Self::Umgah(data) => value(fields, &prefix, "prev_facing", *data),
             Self::Mmrnmhrm(data) => {
                 characteristics(fields, &format!("{prefix}.characteristics"), data)
             }
