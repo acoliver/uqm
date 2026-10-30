@@ -140,11 +140,6 @@ issue = 719
 
 
 
-[[expectation]]
-scenario = "campaign-s09i-refueled-ambush"
-classification = "known_bug"
-terminal = "semantic_mismatch"
-issue = 719
 
 
 
