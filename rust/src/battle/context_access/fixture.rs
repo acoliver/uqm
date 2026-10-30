@@ -247,44 +247,14 @@ impl Cx<'_> {
     ) {
         let ship = self.owner(element);
         let mut concerns = crate::engine::battle::Concerns {
+            count: objects.len() as u16,
             objects,
             subject: self.weapon_origin(element),
-            count: 10,
         };
-        if self.desc(ship).race.is_some() {
-            self.race_intelligence(ship, &mut concerns);
-            return;
-        }
-        let callback = self
-            .desc(ship)
-            .cyborg_control
-            .intelligence_func
-            .unwrap_or_else(|| panic!("fixture intelligence callback"));
-        let pointer = self.elements().raw(element);
-        let mut raw = [EVALUATE_DESC {
-            ObjectPtr: std::ptr::null_mut(),
-            facing: 0,
-            which_turn: 0,
-            MoveState: 0,
-        }; 10];
-        for (dest, source) in raw.iter_mut().zip(objects) {
-            dest.ObjectPtr = source
-                .object
-                .map_or(std::ptr::null_mut(), |id| self.elements().raw(id).cast());
-            dest.facing = source.facing;
-            dest.which_turn = source.which_turn;
-            dest.MoveState = source.movement;
-        }
-        let parent = self.ship_address(ship);
-        // SAFETY: ten real operands reproduce the legacy fixture callback's count and scratch space.
-        unsafe {
-            crate::battle::process_native::dispatch::invoke_legacy(
-                self,
-                callback as usize,
-                parent,
-                || callback(pointer.cast(), raw.as_mut_ptr(), 10),
-            );
-        }
+        assert!(
+            self.race_intelligence(ship, &mut concerns),
+            "fixture intelligence callback"
+        );
     }
     pub(crate) fn zoom_sample(
         &self,
