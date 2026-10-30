@@ -202,7 +202,7 @@ fn ai_halves_finite_threat_turns_and_consumes_rng_only_at_shield_boundary() {
                 }
             }
             ship.descriptor_mut().ship_info.energy_level = 0;
-            let mut concerns = mem::zeroed();
+            let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
             with_rng(2, 0, || {
                 ship.intelligence(&mut *ship.ptr(), &mut concerns, 0)
             });

@@ -35,30 +35,44 @@ pub mod samatra_state;
 #[cfg(not(test))]
 pub fn race(species: u32) -> Option<&'static crate::engine::battle::Race> {
     use crate::ships::native::abi::*;
-    match species {
-        SPECIES_ID_VUX_ID => Some(&vux_native::engine::VUX),
-        SPECIES_ID_ANDROSYNTH_ID => Some(&androsynth_native::engine::ANDROSYNTH),
-        SPECIES_ID_KOHR_AH_ID => Some(&blackurq_native::engine::BLACKURQ),
-        SPECIES_ID_DRUUGE_ID => Some(&druuge_native::engine::DRUUGE),
-        SPECIES_ID_UTWIG_ID => Some(&utwig_native::engine::UTWIG),
-        SPECIES_ID_ZOQFOTPIK_ID => Some(&zoqfot_native::engine::ZOQFOT),
-        SPECIES_ID_MYCON_ID => Some(&mycon_native::engine::MYCON),
-        SPECIES_ID_YEHAT_ID => Some(&yehat_native::engine::YEHAT),
-        SPECIES_ID_SUPOX_ID => Some(&supox_native::engine::SUPOX),
-        SPECIES_ID_SYREEN_ID => Some(&syreen_native::engine::SYREEN),
-        SPECIES_ID_MMRNMHRM_ID => Some(&mmrnmhrm_native::engine::MMRNMHRM),
-        SPECIES_ID_UR_QUAN_ID => Some(&urquan_native::engine::URQUAN),
-        SPECIES_ID_EARTHLING_ID => Some(&human_native::engine::HUMAN),
-        SPECIES_ID_ARILOU_ID => Some(&arilou_native::engine::ARILOU),
-        SPECIES_ID_PKUNK_ID => Some(&pkunk_native::engine::PKUNK),
-        SPECIES_ID_SHOFIXTI_ID => Some(&shofixti_native::engine::SHOFIXTI),
-        SPECIES_ID_UR_QUAN_PROBE_ID => Some(&probe_native::engine::PROBE),
-        SPECIES_ID_THRADDASH_ID => Some(&thraddash_native::engine::THRADDASH),
-        SPECIES_ID_ILWRATH_ID => Some(&ilwrath_native::engine::ILWRATH),
-        SPECIES_ID_MELNORME_ID => Some(&melnorme_native::engine::MELNORME),
-        SPECIES_ID_SIS_SHIP_ID => Some(&sis_native::engine::SIS),
-        _ => None,
-    }
+    [
+        (SPECIES_ID_VUX_ID, &vux_native::engine::VUX),
+        (
+            SPECIES_ID_ANDROSYNTH_ID,
+            &androsynth_native::engine::ANDROSYNTH,
+        ),
+        (SPECIES_ID_KOHR_AH_ID, &blackurq_native::engine::BLACKURQ),
+        (SPECIES_ID_DRUUGE_ID, &druuge_native::engine::DRUUGE),
+        (SPECIES_ID_UTWIG_ID, &utwig_native::engine::UTWIG),
+        (SPECIES_ID_ZOQFOTPIK_ID, &zoqfot_native::engine::ZOQFOT),
+        (SPECIES_ID_MYCON_ID, &mycon_native::engine::MYCON),
+        (SPECIES_ID_YEHAT_ID, &yehat_native::engine::YEHAT),
+        (SPECIES_ID_SUPOX_ID, &supox_native::engine::SUPOX),
+        (SPECIES_ID_SYREEN_ID, &syreen_native::engine::SYREEN),
+        (SPECIES_ID_MMRNMHRM_ID, &mmrnmhrm_native::engine::MMRNMHRM),
+        (SPECIES_ID_UR_QUAN_ID, &urquan_native::engine::URQUAN),
+        (SPECIES_ID_EARTHLING_ID, &human_native::engine::HUMAN),
+        (SPECIES_ID_ARILOU_ID, &arilou_native::engine::ARILOU),
+        (SPECIES_ID_PKUNK_ID, &pkunk_native::engine::PKUNK),
+        (SPECIES_ID_SHOFIXTI_ID, &shofixti_native::engine::SHOFIXTI),
+        (SPECIES_ID_UR_QUAN_PROBE_ID, &probe_native::engine::PROBE),
+        (
+            SPECIES_ID_THRADDASH_ID,
+            &thraddash_native::engine::THRADDASH,
+        ),
+        (SPECIES_ID_ILWRATH_ID, &ilwrath_native::engine::ILWRATH),
+        (SPECIES_ID_MELNORME_ID, &melnorme_native::engine::MELNORME),
+        (SPECIES_ID_SIS_SHIP_ID, &sis_native::engine::SIS),
+        (
+            SPECIES_ID_SLYLANDRO_ID,
+            &slylandro_native::engine::SLYLANDRO,
+        ),
+        (SPECIES_ID_UMGAH_ID, &umgah_native::engine::UMGAH),
+        (SPECIES_ID_CHMMR_ID, &chmmr_native::engine::CHMMR),
+        (SPECIES_ID_SPATHI_ID, &spathi_native::engine::SPATHI),
+    ]
+    .into_iter()
+    .find_map(|(id, race)| (id == species).then_some(race))
 }
 
 #[cfg(not(test))]
@@ -68,22 +82,13 @@ pub use crate::ships::code_resources::engine::descriptor as legacy_descriptor;
 pub use orz_native::engine::init_orz;
 
 #[cfg(not(test))]
-pub use spathi_native::engine::init_spathi;
-
-#[cfg(not(test))]
-pub use slylandro_native::engine::init_slylandro;
-
-#[cfg(not(test))]
 pub use samatra::engine::init_samatra;
 
 #[cfg(not(test))]
 pub use chenjesu_native::engine::init_chenjesu;
 
 #[cfg(not(test))]
-pub use chmmr_native::engine::init_chmmr;
-
-#[cfg(not(test))]
-pub use umgah_native::engine::init_umgah;
-
-#[cfg(not(test))]
 pub use orz_native::engine::{intruder_preprocess, marine_collision};
+
+#[cfg(not(test))]
+pub use slylandro_native::engine::lightning_segment;

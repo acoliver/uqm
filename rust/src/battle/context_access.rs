@@ -59,12 +59,17 @@ impl Cx<'_> {
         unsafe { (ScreenWidth, ScreenHeight) }
     }
 
-    pub fn process_ship_sound(&mut self, ship: ShipId, index: u16, source: ElementId) {
+    pub fn process_ship_sound(
+        &mut self,
+        ship: ShipId,
+        index: u16,
+        source: impl Into<Option<ElementId>>,
+    ) {
         let sounds = self.desc(ship).ship_data.ship_sounds;
         // SAFETY: loaded sound bank and checked source outlive this synchronous call.
         unsafe {
             let sound = SetAbsStringTableIndex(sounds, index);
-            self.queue_sound(sound as usize, Some(source));
+            self.queue_sound(sound as usize, source.into());
         }
     }
 
@@ -309,12 +314,7 @@ impl Cx<'_> {
         }
     }
 
-    pub(crate) fn race_intelligence_with_junk(
-        &mut self,
-        ship: ShipId,
-        concerns: &mut Concerns,
-        junk: Concern,
-    ) {
+    pub(crate) fn race_intelligence_with_junk(&mut self, ship: ShipId, concerns: &mut Concerns) {
         let parent = self.ship_pointer(ship) as usize;
         if self.desc(ship).race.is_some() {
             self.race_intelligence(ship, concerns);
@@ -325,15 +325,7 @@ impl Cx<'_> {
                 .intelligence_func
                 .unwrap_or_else(|| panic!("ship intelligence"));
             let mut subject = self.encode_subject(&concerns.subject);
-            // Slylandro's legacy callback reads slot four and can pass count=5 back into the AI.
-            let mut raw = [
-                concerns.objects[0],
-                concerns.objects[1],
-                concerns.objects[2],
-                concerns.objects[3],
-                junk,
-            ]
-            .map(|c| EVALUATE_DESC {
+            let mut raw = concerns.objects.map(|c| EVALUATE_DESC {
                 ObjectPtr: c
                     .object
                     .map_or(std::ptr::null_mut(), |id| self.elements().raw(id).cast()),
@@ -341,7 +333,7 @@ impl Cx<'_> {
                 which_turn: c.which_turn,
                 MoveState: c.movement,
             });
-            // SAFETY: A2 retains the subject and five initialized concern slots through the callback.
+            // SAFETY: A2 retains the subject and ten initialized concern slots through the callback.
             unsafe {
                 crate::battle::process_native::dispatch::invoke_legacy(
                     self,

@@ -48,7 +48,9 @@ fn hooks() -> Hooks {
     };
     Hooks {
         blazer_collision: androsynth_native::engine::blazer_collision as *const () as usize,
-        satellite: Some(chmmr_native::engine::satellite_postprocess),
+        satellite: Some(crate::engine::battle::ElementHook::Native(
+            chmmr_native::engine::satellite_postprocess,
+        )),
         defense: chmmr_native::engine::spawn_point_defense as *const () as usize,
         limpets: Some(crate::engine::battle::ElementHook::Native(
             vux_native::engine::spawn_limpets,
@@ -501,7 +503,8 @@ impl World<'_> {
                         }
                         Effect::Intelligence(h, mut concerns) => {
                             let (_, parent) = observed.ok_or("fixture intelligence lacks owner metadata")?;
-                            crate::engine::battle::Cx::invoke_intelligence(parent, h.cast(), concerns.as_mut_ptr(), concerns.len() as u16);
+                            let count = concerns.len() as u16;
+                            crate::engine::battle::Cx::invoke_intelligence(parent, h.cast(), &mut concerns, count);
                         }
                         other => return dispatch(other),
                     }

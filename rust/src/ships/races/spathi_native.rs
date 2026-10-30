@@ -31,10 +31,21 @@ const fn within_half_circle(direction_facing: u16, subtracted: i32) -> bool {
 #[cfg(not(test))]
 pub(crate) mod engine {
     use super::*;
-    use crate::collections::observation::image;
-    use crate::ships::native::{abi::*, element, frame_index, put_element, starship};
+    use crate::ships::native::abi::*;
 
     // Core characteristics
+    use crate::engine::battle::views::Missile;
+    use crate::engine::battle::{
+        Concerns, Cx, ElementId, Race, RaceTemplate, ShipId, WeaponOrigin, WeaponSpawn,
+    };
+    pub static SPATHI: Race = Race {
+        descriptor,
+        preprocess: None,
+        postprocess: Some(spathi_postprocess),
+        init_weapon: Some(initialize_standard_missile),
+        intelligence: Some(spathi_intelligence),
+        uninit: None,
+    };
     const MAX_CREW: u16 = 30;
     const MAX_ENERGY: u8 = 10;
     const ENERGY_REGENERATION: u8 = 1;
@@ -73,20 +84,20 @@ pub(crate) mod engine {
         x << ONE_SHIFT
     }
 
-    const fn descriptor() -> RACE_DESC {
+    fn descriptor(_world: &mut crate::engine::battle::World) -> crate::engine::battle::RaceDesc {
         // All zero fields are null handles, absent callbacks, or zero counters.
-        let mut d = RACE_DESC::EMPTY;
-        d.ship_info.ship_flags = (FIRES_FORE | FIRES_AFT | SEEKING_SPECIAL | DONT_CHASE) as u16;
-        d.ship_info.ship_cost = 18;
-        d.ship_info.crew_level = MAX_CREW;
-        d.ship_info.max_crew = MAX_CREW;
-        d.ship_info.energy_level = MAX_ENERGY;
-        d.ship_info.max_energy = MAX_ENERGY;
-        d.ship_info.race_strings_rsc = c"ship.spathi.text".as_ptr();
-        d.ship_info.icons_rsc = c"ship.spathi.icons".as_ptr();
-        d.ship_info.melee_icon_rsc = c"ship.spathi.meleeicons".as_ptr();
-        d.fleet.strength = 1000 / SPHERE_RADIUS_INCREMENT as u16 * 2;
-        d.fleet.known_loc = POINT { x: 2549, y: 3600 };
+        let mut d = RaceTemplate::default();
+        d.info.ship_flags = (FIRES_FORE | FIRES_AFT | SEEKING_SPECIAL | DONT_CHASE) as u16;
+        d.info.ship_cost = 18;
+        d.info.crew_level = MAX_CREW;
+        d.info.max_crew = MAX_CREW;
+        d.info.energy_level = MAX_ENERGY;
+        d.info.max_energy = MAX_ENERGY;
+        d.resources.strings = Some(c"ship.spathi.text");
+        d.resources.icons = Some(c"ship.spathi.icons");
+        d.resources.melee_icon = Some(c"ship.spathi.meleeicons");
+        d.fleet_strength = 1000 / SPHERE_RADIUS_INCREMENT as u16 * 2;
+        d.fleet_location = POINT { x: 2549, y: 3600 };
         d.characteristics = CHARACTERISTIC_STUFF {
             max_thrust: MAX_THRUST,
             thrust_increment: THRUST_INCREMENT,
@@ -100,64 +111,57 @@ pub(crate) mod engine {
             special_wait: SPECIAL_WAIT,
             ship_mass: SHIP_MASS,
         };
-        d.ship_data.ship_rsc = [
-            c"ship.spathi.graphics.eluder.large".as_ptr(),
-            c"ship.spathi.graphics.eluder.medium".as_ptr(),
-            c"ship.spathi.graphics.eluder.small".as_ptr(),
+        d.resources.ship = [
+            Some(c"ship.spathi.graphics.eluder.large"),
+            Some(c"ship.spathi.graphics.eluder.medium"),
+            Some(c"ship.spathi.graphics.eluder.small"),
         ];
-        d.ship_data.weapon_rsc = [
-            c"ship.spathi.graphics.missile.large".as_ptr(),
-            c"ship.spathi.graphics.missile.medium".as_ptr(),
-            c"ship.spathi.graphics.missile.small".as_ptr(),
+        d.resources.weapon = [
+            Some(c"ship.spathi.graphics.missile.large"),
+            Some(c"ship.spathi.graphics.missile.medium"),
+            Some(c"ship.spathi.graphics.missile.small"),
         ];
-        d.ship_data.special_rsc = [
-            c"ship.spathi.graphics.butt.large".as_ptr(),
-            c"ship.spathi.graphics.butt.medium".as_ptr(),
-            c"ship.spathi.graphics.butt.small".as_ptr(),
+        d.resources.special = [
+            Some(c"ship.spathi.graphics.butt.large"),
+            Some(c"ship.spathi.graphics.butt.medium"),
+            Some(c"ship.spathi.graphics.butt.small"),
         ];
-        d.ship_data.captain_control.captain_rsc = c"ship.spathi.graphics.captain".as_ptr();
-        d.ship_data.victory_ditty_rsc = c"ship.spathi.ditty".as_ptr();
-        d.ship_data.ship_sounds_rsc = c"ship.spathi.sounds".as_ptr();
-        d.cyborg_control.WeaponRange = MISSILE_RANGE;
-        d.cyborg_control.intelligence_func = Some(spathi_intelligence);
-        d.postprocess_func = Some(spathi_postprocess);
-        d.init_weapon_func = Some(initialize_standard_missile);
-        d
+        d.resources.captain = Some(c"ship.spathi.graphics.captain");
+        d.resources.victory = Some(c"ship.spathi.ditty");
+        d.resources.sounds = Some(c"ship.spathi.sounds");
+        d.intelligence.weapon_range = MISSILE_RANGE;
+        d.descriptor(&SPATHI)
     }
-
-    static mut SPATHI_DESC: RACE_DESC = descriptor();
-
-    /// Returns the static template copied by CaptureCodeRes for each ship.
-    #[no_mangle]
-    pub extern "C" fn init_spathi() -> *mut RACE_DESC {
-        &raw mut SPATHI_DESC
-    }
-
-    pub(crate) unsafe extern "C" fn butt_missile_preprocess(missile: *mut ELEMENT) {
-        if (*missile).__bindgen_anon_4.turn_wait > 0 {
-            (*missile).__bindgen_anon_4.turn_wait -= 1;
+    pub(crate) fn butt_missile_preprocess(cx: &mut Cx<'_>, missile: ElementId) {
+        if cx.element(missile).turn > 0 {
+            cx.element_mut(missile).turn -= 1;
         } else {
-            let mut facing = frame_index((*missile).next.image.frame);
-            if track_ship(missile, &mut facing) > 0 {
-                image!(frame; (*missile).next.image.frame, SetAbsFrameIndex((*missile).next.image.frame, facing));
-                (*missile).state_flags |= CHANGING as u16;
+            let mut facing = cx.frame_number(cx.element(missile).next.image.frame);
+            if cx.track_ship(missile, &mut facing) > 0 {
+                cx.set_frame(
+                    missile,
+                    true,
+                    cx.absolute_frame(cx.element(missile).next.image.frame, facing),
+                );
+                cx.element_mut(missile).flags |= CHANGING as u16;
 
-                SetVelocityVector(&raw mut (*missile).velocity, DISCRIMINATOR_SPEED, facing);
+                cx.element_mut(missile)
+                    .velocity
+                    .set_vector(i32::from((DISCRIMINATOR_SPEED) as SIZE), facing);
             }
 
-            (*missile).__bindgen_anon_4.turn_wait = TRACK_WAIT;
+            cx.element_mut(missile).turn = TRACK_WAIT;
         }
     }
 
-    pub(crate) unsafe extern "C" fn spawn_butt_missile(ship: *mut ELEMENT) {
-        let ss = starship(ship);
-        let race = (*ss).RaceDescPtr;
-        let face = normalize_facing((*ss).ShipFacing as i32 + HALF_FACING);
-        let mut block = MISSILE_BLOCK {
-            cx: (*ship).next.location.x,
-            cy: (*ship).next.location.y,
+    pub(crate) fn spawn_butt_missile(cx: &mut Cx<'_>, ship: ElementId) {
+        let ss = cx.owner(ship);
+        let face = normalize_facing(cx.ship_state(ss).facing as i32 + HALF_FACING);
+        let mut block = Missile {
+            cx: cx.element(ship).next.location.x,
+            cy: cx.element(ship).next.location.y,
             flags: 0,
-            sender: (*ship).playerNr,
+            sender: cx.element(ship).player,
             pixoffs: SPATHI_REAR_OFFSET,
             speed: DISCRIMINATOR_SPEED,
             hit_points: DISCRIMINATOR_HITS,
@@ -165,100 +169,98 @@ pub(crate) mod engine {
             face,
             index: face,
             life: DISCRIMINATOR_LIFE,
-            farray: (&raw mut (*race).ship_data.special).cast::<FRAME>(),
-            preprocess_func: Some(ElementHook::Legacy(butt_missile_preprocess)),
+            farray: cx.ship_frame_set(ss, 2),
+            preprocess: Some(butt_missile_preprocess),
             blast_offs: DISCRIMINATOR_OFFSET,
         };
-        let butt = initialize_missile(&mut block);
-        if !butt.is_null() {
-            let butt_ptr = element(butt);
-            (*butt_ptr).__bindgen_anon_4.turn_wait = TRACK_WAIT;
-            (*butt_ptr).pParent = ss.cast();
+        if let Some(butt_ptr) = cx.missile(&mut block) {
+            cx.element_mut(butt_ptr).turn = TRACK_WAIT;
+            cx.set_parent(butt_ptr, Some(ss));
 
             // LAUNCH_BUTT_MISSILE
-            ProcessSound(
-                SetAbsStringTableIndex((*race).ship_data.ship_sounds, 1),
-                butt_ptr,
-            );
+            cx.process_ship_sound(ss, 1, butt_ptr);
 
-            put_element(butt);
+            cx.put(butt_ptr);
         }
     }
 
-    pub(crate) unsafe extern "C" fn spathi_intelligence(
-        ship: *mut ELEMENT,
-        concerns: *mut EVALUATE_DESC,
-        count: COUNT,
-    ) {
-        ship_intelligence(ship, concerns, count);
+    pub(crate) fn spathi_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
+        cx.ship_intelligence(ss, concerns);
 
-        let ss = starship(ship);
-        (*ss).ship_input_state &= !(SPECIAL as u8);
+        cx.ship_state_mut(ss).input &= !(SPECIAL as u8);
 
-        let eval = concerns.add(ENEMY_SHIP_INDEX as usize);
-        if (*ss).special_counter == 0 && !(*eval).ObjectPtr.is_null() && (*eval).which_turn <= 24 {
-            let target = (*eval).ObjectPtr;
+        let eval = ENEMY_SHIP_INDEX as usize;
+        if cx.ship_state(ss).special_counter == 0
+            && concerns.objects[eval].object.is_some()
+            && concerns.objects[eval].which_turn <= 24
+        {
+            let target = concerns.objects[eval]
+                .object
+                .unwrap_or_else(|| panic!("enemy ship concern"));
             let travel_facing = normalize_facing(angle_to_facing(
-                i32::from((*ship).velocity.travel_angle) + HALF_CIRCLE as i32,
+                i32::from(concerns.subject.velocity.travel_angle) + HALF_CIRCLE as i32,
             ));
             // SIZE locals: the int difference is truncated to 16 bits.
-            let delta_x = (i32::from((*target).current.location.x)
-                - i32::from((*ship).current.location.x)) as SIZE;
-            let delta_y = (i32::from((*target).current.location.y)
-                - i32::from((*ship).current.location.y)) as SIZE;
-            let direction_facing =
-                normalize_facing(angle_to_facing(i32::from(ARCTAN(delta_x, delta_y))));
+            let delta_x = (i32::from(cx.element(target).current.location.x)
+                - i32::from(concerns.subject.current.location.x)) as SIZE;
+            let delta_y = (i32::from(cx.element(target).current.location.y)
+                - i32::from(concerns.subject.current.location.y)) as SIZE;
+            let direction_facing = normalize_facing(angle_to_facing(i32::from(
+                crate::math::arctan(delta_x, delta_y),
+            )));
 
-            if within_half_circle(direction_facing, i32::from((*ss).ShipFacing) + HALF_FACING)
-                && ((*eval).which_turn <= 8
-                    || within_half_circle(
-                        direction_facing,
-                        angle_to_facing(i32::from((*target).velocity.travel_angle)) - HALF_FACING,
-                    ))
-                && ((*ss).cur_status_flags & (SHIP_BEYOND_MAX_SPEED | SHIP_IN_GRAVITY_WELL) as u16
+            if within_half_circle(
+                direction_facing,
+                i32::from(cx.ship_state(ss).facing) + HALF_FACING,
+            ) && (concerns.objects[eval].which_turn <= 8
+                || within_half_circle(
+                    direction_facing,
+                    angle_to_facing(i32::from(cx.element(target).velocity.travel_angle))
+                        - HALF_FACING,
+                ))
+                && (cx.ship_state(ss).status
+                    & (SHIP_BEYOND_MAX_SPEED | SHIP_IN_GRAVITY_WELL) as u16
                     == 0
                     || within_half_circle(direction_facing, i32::from(travel_facing)))
             {
-                (*ss).ship_input_state |= SPECIAL as u8;
+                cx.ship_state_mut(ss).input |= SPECIAL as u8;
             }
         }
     }
 
-    pub(crate) unsafe extern "C" fn initialize_standard_missile(
-        ship: *mut ELEMENT,
-        weapons: *mut HELEMENT,
-    ) -> COUNT {
-        let ss = starship(ship);
-        let mut block = MISSILE_BLOCK {
-            cx: (*ship).next.location.x,
-            cy: (*ship).next.location.y,
+    pub(crate) fn initialize_standard_missile(
+        cx: &mut Cx<'_>,
+        ss: ShipId,
+        origin: WeaponOrigin,
+    ) -> WeaponSpawn {
+        let mut block = Missile {
+            cx: origin.next.location.x,
+            cy: origin.next.location.y,
             flags: IGNORE_SIMILAR as u16,
-            sender: (*ship).playerNr,
+            sender: origin.player,
             pixoffs: SPATHI_FORWARD_OFFSET,
             speed: MISSILE_SPEED,
             hit_points: MISSILE_HITS,
             damage: MISSILE_DAMAGE,
-            face: (*ss).ShipFacing,
-            index: (*ss).ShipFacing,
+            face: cx.ship_state(ss).facing,
+            index: cx.ship_state(ss).facing,
             life: MISSILE_LIFE,
-            farray: (&raw mut (*(*ss).RaceDescPtr).ship_data.weapon).cast::<FRAME>(),
-            preprocess_func: None,
+            farray: cx.ship_frame_set(ss, 1),
+            preprocess: None,
             blast_offs: MISSILE_OFFSET,
         };
-        *weapons = initialize_missile(&mut block);
-
-        1
+        vec![cx.missile(&mut block)]
     }
 
-    pub(crate) unsafe extern "C" fn spathi_postprocess(ship: *mut ELEMENT) {
-        let ss = starship(ship);
-        if (*ss).cur_status_flags & SPECIAL as u16 != 0
-            && (*ss).special_counter == 0
-            && DeltaEnergy(ship, -(SPECIAL_ENERGY_COST as SIZE)) != 0
+    pub(crate) fn spathi_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
+        let ship = cx.ship_element(ss);
+        if cx.ship_state(ss).status & SPECIAL as u16 != 0
+            && cx.ship_state(ss).special_counter == 0
+            && cx.delta_energy(ship, -(SPECIAL_ENERGY_COST as SIZE))
         {
-            spawn_butt_missile(ship);
+            spawn_butt_missile(cx, ship);
 
-            (*ss).special_counter = (*(*ss).RaceDescPtr).characteristics.special_wait;
+            cx.ship_state_mut(ss).special_counter = cx.race_stats(ss).characteristics.special_wait;
         }
     }
 }

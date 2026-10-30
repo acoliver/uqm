@@ -224,9 +224,35 @@ impl<'a> Ship<'a> {
             uqm_rust::engine::battle::Cx::invoke_intelligence(
                 self.ss.0 as usize,
                 subject,
-                concerns.as_mut_ptr(),
+                concerns,
                 count,
             );
+        }
+    }
+    pub fn set_hot_spot(&mut self, role: usize, index: usize, hot_spot: [i16; 2]) {
+        self.frames
+            .as_mut()
+            .unwrap_or_else(|| panic!("loaded fixture frames"))[role]
+            .frames[index]
+            .hot_spot = hot_spot;
+    }
+    /// # Safety
+    /// The source must be a live element in this fixture's retained battle pool.
+    pub unsafe fn initialize_from(&self, source: *mut ELEMENT, expected: u16) -> Vec<HELEMENT> {
+        // SAFETY: the caller retains all pool records through the synchronous Native dispatch.
+        unsafe {
+            uqm_rust::app::bridge::enter(|cx| {
+                let source = cx
+                    .elements()
+                    .id(source.cast())
+                    .unwrap_or_else(|| panic!("weapon source"));
+                let origin = cx.weapon_origin(source);
+                let out = cx.spawn_weapons(self.ship_id, origin);
+                assert_eq!(out.len(), usize::from(expected));
+                out.into_iter()
+                    .map(|id| id.map_or(ptr::null_mut(), |id| cx.legacy_element(id).cast()))
+                    .collect()
+            })
         }
     }
     pub fn frame(&self, role: usize, index: u16) -> uqm_rust::engine::battle::views::Frame {
@@ -359,15 +385,15 @@ impl<'a> Ship<'a> {
     pub unsafe fn intelligence(
         &mut self,
         subject: &mut ELEMENT,
-        concerns: &mut [EVALUATE_DESC; 4],
+        concerns: &mut [EVALUATE_DESC],
         count: u16,
     ) {
-        // SAFETY: subject and four concerns live through this synchronous callback.
+        // SAFETY: subject and the supplied concerns live through this synchronous callback.
         unsafe {
             uqm_rust::engine::battle::Cx::invoke_intelligence(
                 self.ss.0 as usize,
                 subject,
-                concerns.as_mut_ptr(),
+                concerns,
                 count,
             );
         }

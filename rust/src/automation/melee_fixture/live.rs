@@ -148,7 +148,7 @@ fn checkpoint() {
 
 struct Hooks {
     blazer_collision: usize,
-    satellite: PREPROCESS_FUNC,
+    satellite: crate::engine::battle::record::ElementProcessFunc,
     defense: usize,
     limpets: crate::engine::battle::record::ElementProcessFunc,
     fighters: crate::engine::battle::record::ElementProcessFunc,

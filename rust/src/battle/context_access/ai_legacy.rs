@@ -201,11 +201,11 @@ impl Cx<'_> {
 #[cfg(not(test))]
 impl Cx<'_> {
     /// # Safety
-    /// Owner, projected element, and four initialized concern slots remain live on the game thread.
+    /// Owner, projected element, and all supplied concern slots remain live on the game thread.
     pub unsafe fn invoke_intelligence(
         parent: usize,
         element: *mut ELEMENT,
-        raw: *mut EVALUATE_DESC,
+        raw: &mut [EVALUATE_DESC],
         count: u16,
     ) {
         // SAFETY: the function contract retains the serialized context and all operand storage.
@@ -214,26 +214,23 @@ impl Cx<'_> {
 
             subject_call(element, true, |cx, subject| {
                 let ship = cx.ship_id(parent);
-                let objects: [crate::engine::battle::Concern; 4] = decode_concerns(cx, raw, 4)
-                    .try_into()
-                    .unwrap_or_else(|_| panic!("missing checked battle value"));
+                assert!(raw.len() <= 10 && usize::from(count) <= raw.len());
+                let mut objects = [crate::engine::battle::Concern {
+                    object: None,
+                    facing: 0,
+                    which_turn: u16::MAX,
+                    movement: 0,
+                }; 10];
+                let decoded = decode_concerns(cx, raw.as_ptr(), raw.len());
+                objects[..raw.len()].copy_from_slice(&decoded);
                 let mut concerns = crate::engine::battle::Concerns {
                     objects,
                     subject: *subject,
                     count,
                 };
-                cx.race_intelligence_with_junk(
-                    ship,
-                    &mut concerns,
-                    crate::engine::battle::Concern {
-                        object: None,
-                        facing: 0,
-                        which_turn: u16::MAX,
-                        movement: 0,
-                    },
-                );
+                cx.race_intelligence_with_junk(ship, &mut concerns);
                 *subject = concerns.subject;
-                encode_concerns(cx, raw, &concerns.objects);
+                encode_concerns(cx, raw.as_mut_ptr(), &concerns.objects[..raw.len()]);
             });
         }
     }

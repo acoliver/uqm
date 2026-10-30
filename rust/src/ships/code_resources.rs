@@ -18,15 +18,7 @@ pub(crate) mod engine {
 
     use crate::ships::races::chenjesu_native::engine::init_chenjesu;
 
-    use crate::ships::races::chmmr_native::engine::init_chmmr;
-
     use crate::ships::races::orz_native::engine::init_orz;
-
-    use crate::ships::races::slylandro_native::engine::init_slylandro;
-
-    use crate::ships::races::spathi_native::engine::init_spathi;
-
-    use crate::ships::races::umgah_native::engine::init_umgah;
 
     use crate::ships::races::samatra::engine::init_samatra;
 
@@ -36,7 +28,7 @@ pub(crate) mod engine {
         None,
         None,
         Some(init_chenjesu),
-        Some(init_chmmr),
+        None,
         None,
         None,
         None,
@@ -46,12 +38,12 @@ pub(crate) mod engine {
         Some(init_orz),
         None,
         None,
-        Some(init_slylandro),
-        Some(init_spathi),
         None,
         None,
         None,
-        Some(init_umgah),
+        None,
+        None,
+        None,
         None,
         None,
         None,
@@ -117,30 +109,36 @@ pub(crate) mod engine {
     }
 
     fn native_race(which: u8) -> Option<&'static crate::engine::battle::Race> {
-        match which {
-            0 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_ANDROSYNTH_ID),
-            1 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_ARILOU_ID),
-            6 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_EARTHLING_ID),
-            12 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_PKUNK_ID),
-            13 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_SHOFIXTI_ID),
-            7 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_ILWRATH_ID),
-            8 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_MELNORME_ID),
-            18 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_THRADDASH_ID),
-            26 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_SIS_SHIP_ID),
-            22 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_VUX_ID),
-            2 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_KOHR_AH_ID),
-            5 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_DRUUGE_ID),
-            21 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_UTWIG_ID),
-            24 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_ZOQFOTPIK_ID),
-            10 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_MYCON_ID),
-            23 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_YEHAT_ID),
-            16 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_SUPOX_ID),
-            17 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_SYREEN_ID),
-            9 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_MMRNMHRM_ID),
-            20 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_UR_QUAN_ID),
-            27 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_UR_QUAN_PROBE_ID),
-            _ => None,
-        }
+        [
+            (0, crate::ships::native::abi::SPECIES_ID_ANDROSYNTH_ID),
+            (1, crate::ships::native::abi::SPECIES_ID_ARILOU_ID),
+            (6, crate::ships::native::abi::SPECIES_ID_EARTHLING_ID),
+            (12, crate::ships::native::abi::SPECIES_ID_PKUNK_ID),
+            (13, crate::ships::native::abi::SPECIES_ID_SHOFIXTI_ID),
+            (7, crate::ships::native::abi::SPECIES_ID_ILWRATH_ID),
+            (8, crate::ships::native::abi::SPECIES_ID_MELNORME_ID),
+            (18, crate::ships::native::abi::SPECIES_ID_THRADDASH_ID),
+            (26, crate::ships::native::abi::SPECIES_ID_SIS_SHIP_ID),
+            (22, crate::ships::native::abi::SPECIES_ID_VUX_ID),
+            (2, crate::ships::native::abi::SPECIES_ID_KOHR_AH_ID),
+            (5, crate::ships::native::abi::SPECIES_ID_DRUUGE_ID),
+            (21, crate::ships::native::abi::SPECIES_ID_UTWIG_ID),
+            (24, crate::ships::native::abi::SPECIES_ID_ZOQFOTPIK_ID),
+            (10, crate::ships::native::abi::SPECIES_ID_MYCON_ID),
+            (23, crate::ships::native::abi::SPECIES_ID_YEHAT_ID),
+            (16, crate::ships::native::abi::SPECIES_ID_SUPOX_ID),
+            (17, crate::ships::native::abi::SPECIES_ID_SYREEN_ID),
+            (9, crate::ships::native::abi::SPECIES_ID_MMRNMHRM_ID),
+            (20, crate::ships::native::abi::SPECIES_ID_UR_QUAN_ID),
+            (27, crate::ships::native::abi::SPECIES_ID_UR_QUAN_PROBE_ID),
+            (14, crate::ships::native::abi::SPECIES_ID_SLYLANDRO_ID),
+            (19, crate::ships::native::abi::SPECIES_ID_UMGAH_ID),
+            (4, crate::ships::native::abi::SPECIES_ID_CHMMR_ID),
+            (15, crate::ships::native::abi::SPECIES_ID_SPATHI_ID),
+        ]
+        .into_iter()
+        .find_map(|(code, species)| (code == which).then_some(species))
+        .and_then(crate::ships::races::race)
     }
 
     unsafe extern "C" fn get_code_res_data(ship_id: *const c_char, out: *mut ResourceData) {

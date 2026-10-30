@@ -809,7 +809,7 @@ pub(crate) fn tactical(cx: &mut Cx<'_>, owner: ShipId) -> BATTLE_INPUT_STATE {
         facing: 0,
         which_turn: 0,
         movement: 0,
-    }; 5];
+    }; 10];
     for concern in &mut concerns[..=FIRST_EMPTY_INDEX as usize] {
         concern.object = None;
         concern.movement = MOVEMENT_STATE_NO_MOVEMENT;
@@ -1038,11 +1038,11 @@ pub(crate) fn tactical(cx: &mut Cx<'_>, owner: ShipId) -> BATTLE_INPUT_STATE {
     }
 
     let mut evaluation = Concerns {
-        objects: concerns[..4].try_into().unwrap(),
+        objects: concerns,
         subject: ship_copy,
         count: FIRST_EMPTY_INDEX as u16,
     };
-    cx.race_intelligence_with_junk(owner, &mut evaluation, concerns[4]);
+    cx.race_intelligence_with_junk(owner, &mut evaluation);
     cx.ship_state_mut(owner).facing = original_facing;
     crate::battle::process_native::dispatch::battle_input(cx.ship_state(owner).input)
 }

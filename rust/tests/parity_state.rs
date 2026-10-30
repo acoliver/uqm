@@ -370,12 +370,13 @@ fn race_custom_fields(directory: &Path) {
         ship.RaceDescPtr = &mut descriptor;
         ship.SpeciesID = SPECIES_ID_UMGAH_ID;
         install_ship(&mut ship);
-        let mut facing = 27u16;
         ship.SpeciesID = SPECIES_ID_UMGAH_ID;
         {
             let descriptor = &mut descriptor;
-            descriptor.race_state = uqm_rust::engine::battle::RaceState::None;
-            descriptor.data = ptr::from_mut(&mut facing).cast();
+            descriptor.data = ptr::null_mut();
+            descriptor.race_state = uqm_rust::engine::battle::RaceState::Umgah {
+                previous_facing: Some(27),
+            };
         }
         let (fields, _) = snapshot(directory);
         assert_eq!(fields["ships.0.0.custom.prev_facing"], "27");
