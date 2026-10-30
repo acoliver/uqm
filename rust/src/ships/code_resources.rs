@@ -116,10 +116,8 @@ pub(crate) mod engine {
             .into_legacy()
     }
 
-    unsafe extern "C" fn get_code_res_data(ship_id: *const c_char, out: *mut ResourceData) {
-        let which = libc::atoi(ship_id) as u8;
-        let mut allocation = rust_hmalloc(mem::size_of::<RACE_DESC>());
-        let native = match which {
+    fn native_race(which: u8) -> Option<&'static crate::engine::battle::Race> {
+        match which {
             0 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_ANDROSYNTH_ID),
             1 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_ARILOU_ID),
             6 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_EARTHLING_ID),
@@ -142,7 +140,13 @@ pub(crate) mod engine {
             20 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_UR_QUAN_ID),
             27 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_UR_QUAN_PROBE_ID),
             _ => None,
-        };
+        }
+    }
+
+    unsafe extern "C" fn get_code_res_data(ship_id: *const c_char, out: *mut ResourceData) {
+        let which = libc::atoi(ship_id) as u8;
+        let mut allocation = rust_hmalloc(mem::size_of::<RACE_DESC>());
+        let native = native_race(which);
         use crate::engine::battle::record::DescriptorSource;
         let source = if let Some(race) = native {
             Some(DescriptorSource::Native(race))

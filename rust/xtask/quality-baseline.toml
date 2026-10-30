@@ -1847,7 +1847,7 @@ layers = true
 
 [budget]
 bridge_calls = { limit = 48, ends = "phase-6" }
-legacy_hooks = { limit = 59, ends = "phase-2" }
+legacy_hooks = { limit = 46, ends = "phase-2" }
 planned_engine_core = { limit = 12, ends = "phase-4" }
 stage_b_access_unsafe = { limit = 810, ends = "phase-2", scopes = { "unsafe|unsafe_block_lines|uqm::battle::context_access::<Cx<'_>>::delta_crew" = 1, "unsafe|unsafe_block_lines|uqm::battle::context_access::<Cx<'_>>::delta_energy" = 1, "unsafe|unsafe_block_lines|uqm::battle::context_access::<Cx<'_>>::dispose" = 5, "unsafe|unsafe_block_lines|uqm::battle::context_access::<Cx<'_>>::draw_final_battle_captain" = 11, "unsafe|unsafe_block_lines|uqm::battle::context_access::<Cx<'_>>::game_sound" = 4, "unsafe|unsafe_block_lines|uqm::battle::context_access::<Cx<'_>>::gravity" = 1, "unsafe|unsafe_block_lines|uqm::battle::context_access::<Cx<'_>>::hyper_transition" = 1, "unsafe|unsafe_block_lines|uqm::battle::context_access::<Cx<'_>>::init_ship_status" = 12, "unsafe|unsafe_block_lines|uqm::battle::context_access::<Cx<'_>>::insert_before" = 7, "unsafe|unsafe_block_lines|uqm::battle::context_access::<Cx<'_>>::invoke_ship_process" = 5, "unsafe|unsafe_block_lines|uqm::battle::context_access::<Cx<'_>>::laser" = 1, "unsafe|unsafe_block_lines|uqm::battle::context_access::<Cx<'_>>::matter_conflict" = 1, "unsafe|unsafe_block_lines|uqm::battle::context_access::<Cx<'_>>::missile" = 1, "unsafe|unsafe_block_lines|uqm::battle::context_access::<Cx<'_>>::object_cloaked" = 1, "unsafe|unsafe_block_lines|uqm::battle::context_access::<Cx<'_>>::preprocess_status" = 1, "unsafe|unsafe_block_lines|uqm::battle::context_access::<Cx<'_>>::process_ship_sound" = 4, "unsafe|unsafe_block_lines|uqm::battle::context_access::<Cx<'_>>::race_intelligence_with_junk" = 9, "unsafe|unsafe_block_lines|uqm::battle::context_access::<Cx<'_>>::screen_dimensions" = 1, "unsafe|unsafe_block_lines|uqm::battle::context_access::<Cx<'_>>::silhouette" = 3, "unsafe|unsafe_block_lines|uqm::battle::context_access::<Cx<'_>>::spawn_weapons" = 8, "unsafe|unsafe_block_lines|uqm::battle::context_access::<Cx<'_>>::start_battle_song_if_ready" = 7, "unsafe|unsafe_block_lines|uqm::battle::context_access::<Cx<'_>>::track_ship" = 1, "unsafe|unsafe_block_lines|uqm::battle::context_access::<Cx<'_>>::unlink" = 3, "unsafe|unsafe_block_lines|uqm::battle::context_access::<Cx<'_>>::weapon_collision" = 5, "unsafe|unsafe_block_lines|uqm::battle::context_access::<crate::engine::battle::Cx<'_>>::invoke_legacy_collision_ids" = 8, "unsafe|unsafe_block_lines|uqm::battle::context_access::<crate::engine::battle::Cx<'_>>::invoke_legacy_element_id" = 3, "unsafe|unsafe_block_lines|uqm::battle::context_access::ai_legacy::<Cx<'_>>::human_input" = 1, "unsafe|unsafe_block_lines|uqm::battle::context_access::ai_legacy::<Cx<'_>>::invoke_intelligence" = 25, "unsafe|unsafe_block_lines|uqm::battle::context_access::ai_legacy::<Cx<'_>>::projected_intersect" = 1, "unsafe|unsafe_block_lines|uqm::battle::context_access::ai_legacy::<Cx<'_>>::selection_delay" = 3, "unsafe|unsafe_block_lines|uqm::battle::context_access::ai_legacy::PlotIntercept" = 11, "unsafe|unsafe_block_lines|uqm::battle::context_access::ai_legacy::computer_intelligence" = 15, "unsafe|unsafe_block_lines|uqm::battle::context_access::ai_legacy::decode_concerns" = 1, "unsafe|unsafe_block_lines|uqm::battle::context_access::ai_legacy::encode_concerns" = 10, "unsafe|unsafe_block_lines|uqm::battle::context_access::ai_legacy::ship_intelligence" = 7, "unsafe|unsafe_block_lines|uqm::battle::context_access::ai_legacy::ship_weapons" = 6, "unsafe|unsafe_block_lines|uqm::battle::context_access::ai_legacy::subject_call" = 10, "unsafe|unsafe_block_lines|uqm::battle::context_access::ai_legacy::tactical_intelligence" = 6, "unsafe|unsafe_block_lines|uqm::battle::context_access::ai_legacy::with_context" = 1, "unsafe|unsafe_block_lines|uqm::battle::context_access::allocation::<Cx<'_>>::alloc_element" = 22, "unsafe|unsafe_block_lines|uqm::battle::context_access::fleet_legacy::Build" = 1, "unsafe|unsafe_block_lines|uqm::battle::context_access::fleet_legacy::GetIndexFromStarShip" = 1, "unsafe|unsafe_block_lines|uqm::battle::context_access::fleet_legacy::NameCaptain" = 13, "unsafe|unsafe_block_lines|uqm::battle::context_access::fleet_legacy::build" = 15, "unsafe|unsafe_block_lines|uqm::battle::context_access::fleet_legacy::captain_in_use" = 36, "unsafe|unsafe_block_lines|uqm::battle::context_access::fleet_legacy::index_from_ship" = 20, "unsafe|unsafe_block_lines|uqm::battle::context_access::fleet_legacy::ship_from_index" = 19, "unsafe|unsafe_block_lines|uqm::battle::context_access::links::with_fleet" = 1, "unsafe|unsafe_block_lines|uqm::battle::context_access::race_access::<Cx<'_>>::abandon_ship" = 5, "unsafe|unsafe_block_lines|uqm::battle::context_access::race_access::<Cx<'_>>::apply_inertial_thrust" = 1, "unsafe|unsafe_block_lines|uqm::battle::context_access::race_access::<Cx<'_>>::flagship_velocity" = 1, "unsafe|unsafe_block_lines|uqm::battle::context_access::race_access::<Cx<'_>>::hyperspace_cancel_pressed" = 1, "unsafe|unsafe_block_lines|uqm::battle::context_access::race_access::<Cx<'_>>::hyperspace_menu" = 3, "unsafe|unsafe_block_lines|uqm::battle::context_access::race_access::<Cx<'_>>::play_ship_sound" = 4, "unsafe|unsafe_block_lines|uqm::battle::context_access::race_access::<Cx<'_>>::select_self_destruct_winner" = 9, "unsafe|unsafe_block_lines|uqm::battle::context_access::race_access::<Cx<'_>>::set_autopilot" = 3, "unsafe|unsafe_block_lines|uqm::battle::context_access::race_access::<Cx<'_>>::set_flagship_velocity" = 3, "unsafe|unsafe_block_lines|uqm::battle::context_access::race_access::<Cx<'_>>::ship_sound_count" = 1, "unsafe|unsafe_block_lines|uqm::battle::context_access::race_access::<Cx<'_>>::untarget" = 3, "unsafe|unsafe_block_lines|uqm::battle::context_access::race_access::<World>::flagship_config" = 12, "unsafe|unsafe_block_lines|uqm::battle::context_access::race_access::<World>::for_legacy_lifecycle" = 11, "unsafe|unsafe_block_lines|uqm::battle::context_access::race_access::<World>::set_flagship_crew" = 3, "unsafe|unsafe_block_lines|uqm::battle::context_access::reader_legacy::GetEncounterStarShip" = 5, "unsafe|unsafe_block_lines|uqm::battle::context_access::reader_legacy::InitShipStatus" = 4, "unsafe|unsafe_block_lines|uqm::battle::context_access::reader_legacy::UpdateShipFragCrew" = 4, "unsafe|unsafe_block_lines|uqm::battle::context_access::reader_legacy::computer_frame" = 1, "unsafe|unsafe_block_lines|uqm::battle::context_access::reader_legacy::get_encounter_star_ship_with_picker" = 8, "unsafe|unsafe_block_lines|uqm::battle::context_access::reader_legacy::human_frame" = 1, "unsafe|unsafe_block_lines|uqm::battle::context_access::reader_legacy::update_ship_frag_crew" = 21, "unsafe|unsafe_block_lines|uqm::battle::context_access::sound_legacy::CalcSoundPosition" = 1, "unsafe|unsafe_block_lines|uqm::battle::context_access::sound_legacy::FlushSounds" = 3, "unsafe|unsafe_block_lines|uqm::battle::context_access::sound_legacy::PlaySound" = 5, "unsafe|unsafe_block_lines|uqm::battle::context_access::sound_legacy::ProcessSound" = 3, "unsafe|unsafe_block_lines|uqm::battle::context_access::sound_legacy::RemoveSoundsForObject" = 3, "unsafe|unsafe_block_lines|uqm::battle::context_access::sound_legacy::UpdateSoundPositions" = 3, "unsafe|unsafe_block_lines|uqm::battle::context_access::sound_legacy::with_object" = 6, "unsafe|unsafe_block_lines|uqm::battle::context_access::star_access::<crate::engine::battle::Cx<'_>>::autopilot" = 1, "unsafe|unsafe_block_lines|uqm::battle::context_access::star_access::<crate::engine::battle::Cx<'_>>::init_hyper_transition" = 3, "unsafe|unsafe_block_lines|uqm::battle::context_access::star_access::<crate::engine::battle::Cx<'_>>::select_star" = 3, "unsafe|unsafe_block_lines|uqm::battle::context_access::star_access::<crate::engine::battle::Cx<'_>>::star_contact" = 10, "unsafe|unsafe_block_lines|uqm::battle::context_access::status_native_access::<Cx<'_>>::draw_captain_controls" = 3, "unsafe|unsafe_block_lines|uqm::battle::context_access::status_native_access::<Cx<'_>>::draw_energy_label" = 3, "unsafe|unsafe_block_lines|uqm::battle::context_access::status_native_access::<Cx<'_>>::draw_explosion_flash" = 8, "unsafe|unsafe_block_lines|uqm::battle::context_access::status_native_access::<Cx<'_>>::status_offset" = 1, "unsafe|unsafe_block_lines|uqm::battle::context_access::tactrans_native_access::<Cx<'_>>::play_ditty" = 3, "unsafe|unsafe_block_lines|uqm::battle::context_access::tactrans_native_access::<Cx<'_>>::record_ship_death" = 3, "unsafe|unsafe_block_lines|uqm::battle::context_access::tactrans_native_access::<Cx<'_>>::replace_dead_ship" = 3, "unsafe|unsafe_block_lines|uqm::battle::context_access::tactrans_native_access::<Cx<'_>>::select_winner" = 3, "unsafe|unsafe_block_lines|uqm::battle::context_access::tactrans_native_access::<Cx<'_>>::spawn_ion_trail" = 10, "unsafe|unsafe_block_lines|uqm::battle::context_access::tactrans_native_access::<Cx<'_>>::start_ship_explosion" = 3, "unsafe|unsafe_block_lines|uqm::battle::context_access::tactrans_native_access::<Cx<'_>>::stop_battle_music" = 3, "unsafe|unsafe_block_lines|uqm::battle::context_access::tactrans_native_access::<Cx<'_>>::winner" = 1, "unsafe|unsafe_block_lines|uqm::engine::battle::access::<Cx<'_>>::abs_frame" = 1, "unsafe|unsafe_block_lines|uqm::engine::battle::access::<Cx<'_>>::equ_frame" = 1, "unsafe|unsafe_block_lines|uqm::engine::battle::access::<Cx<'_>>::frame_at" = 1, "unsafe|unsafe_block_lines|uqm::engine::battle::access::<Cx<'_>>::frame_count" = 1, "unsafe|unsafe_block_lines|uqm::engine::battle::access::<Cx<'_>>::frame_index" = 1, "unsafe|unsafe_block_lines|uqm::engine::battle::access::<Cx<'_>>::frame_rect" = 3, "unsafe|unsafe_block_lines|uqm::engine::battle::access::<Cx<'_>>::inc_frame" = 1, "unsafe|unsafe_block_lines|uqm::engine::battle::access::<Cx<'_>>::parent" = 10, "unsafe|unsafe_block_lines|uqm::engine::battle::access::<Cx<'_>>::pick_ship" = 4, "unsafe|unsafe_block_lines|uqm::engine::battle::access::<Cx<'_>>::project" = 1, "unsafe|unsafe_block_lines|uqm::engine::battle::access::<Cx<'_>>::project_mut" = 1, "unsafe|unsafe_block_lines|uqm::engine::battle::access::<Cx<'_>>::relative_frame" = 3, "unsafe|unsafe_block_lines|uqm::engine::battle::access::<Cx<'_>>::retreat_frame" = 1, "unsafe|unsafe_block_lines|uqm::engine::battle::access::<Cx<'_>>::set_ship_frame" = 9, "unsafe|unsafe_block_lines|uqm::engine::battle::access::<Cx<'_>>::set_ship_sound_bank" = 1, "unsafe|unsafe_block_lines|uqm::engine::battle::access::<Cx<'_>>::shared_frame" = 1, "unsafe|unsafe_block_lines|uqm::engine::battle::access::<Cx<'_>>::ship_frame" = 1, "unsafe|unsafe_block_lines|uqm::engine::battle::access::<Cx<'_>>::ship_frames" = 8, "unsafe|unsafe_block_lines|uqm::engine::battle::access::<Cx<'_>>::sound_point" = 7, "unsafe|unsafe_block_lines|uqm::engine::battle::access::<Cx<'_>>::track_subject" = 1, "unsafe|unsafe_block_lines|uqm::engine::battle::access::<super::ElementTable>::tail" = 1, "unsafe|unsafe_block_lines|uqm::engine::battle::access::<super::World>::set_activity" = 3, "unsafe|unsafe_block_lines|uqm::engine::battle::access::descriptor_template" = 15, "unsafe|unsafe_block_lines|uqm::engine::battle::access::dispatch_legacy_collision" = 29, "unsafe|unsafe_block_lines|uqm::engine::battle::access::dispatch_legacy_element" = 19, "unsafe|unsafe_block_lines|uqm::engine::battle::access::invoke_legacy" = 1, "unsafe|unsafe_block_lines|uqm::engine::battle::access::invoke_legacy_collision" = 3, "unsafe|unsafe_block_lines|uqm::engine::battle::access::invoke_legacy_element" = 3, "unsafe|unsafe_block_lines|uqm::engine::battle::access::links::<LinkQueue<'a,T>>::alloc" = 4, "unsafe|unsafe_block_lines|uqm::engine::battle::access::links::<LinkQueue<'a,T>>::put" = 3, "unsafe|unsafe_block_lines|uqm::engine::battle::access::links::<LinkQueue<'a,T>>::raw" = 1, "unsafe|unsafe_block_lines|uqm::engine::battle::access::links::<LinkQueue<'a,T>>::record" = 1, "unsafe|unsafe_block_lines|uqm::engine::battle::access::links::<LinkQueue<'a,T>>::record_mut" = 1, "unsafe|unsafe_block_lines|uqm::engine::battle::access::links::<LinkQueue<'a,T>>::reinit" = 3, "unsafe|unsafe_block_lines|uqm::engine::battle::access::links::<LinkQueue<'a,T>>::remove" = 3, "unsafe|unsafe_block_lines|uqm::engine::battle::access::links::identify" = 1, "unsafe|unsafe_block_lines|uqm::engine::battle::access::links::ships" = 1, "unsafe|unsafe_block_lines|uqm::engine::battle::record::<ELEMENT>::hit_points" = 1, "unsafe|unsafe_block_lines|uqm::engine::battle::record::<ELEMENT>::life_span" = 1, "unsafe|unsafe_block_lines|uqm::engine::battle::record::<ELEMENT>::mass_points" = 1, "unsafe|unsafe_block_lines|uqm::engine::battle::record::<ELEMENT>::thrust_wait" = 1, "unsafe|unsafe_block_lines|uqm::engine::battle::record::<ELEMENT>::turn_wait" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::<Cx<'_>>::delta_crew" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::<Cx<'_>>::delta_energy" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::<Cx<'_>>::dispose" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::<Cx<'_>>::draw_final_battle_captain" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::<Cx<'_>>::game_sound" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::<Cx<'_>>::gravity" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::<Cx<'_>>::hyper_transition" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::<Cx<'_>>::init_ship_status" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::<Cx<'_>>::insert_before" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::<Cx<'_>>::invoke_ship_process" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::<Cx<'_>>::laser" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::<Cx<'_>>::matter_conflict" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::<Cx<'_>>::missile" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::<Cx<'_>>::object_cloaked" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::<Cx<'_>>::preprocess_status" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::<Cx<'_>>::process_ship_sound" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::<Cx<'_>>::race_intelligence_with_junk" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::<Cx<'_>>::screen_dimensions" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::<Cx<'_>>::silhouette" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::<Cx<'_>>::spawn_weapons" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::<Cx<'_>>::start_battle_song_if_ready" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::<Cx<'_>>::track_ship" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::<Cx<'_>>::unlink" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::<Cx<'_>>::weapon_collision" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::<crate::engine::battle::Cx<'_>>::invoke_legacy_collision_ids" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::<crate::engine::battle::Cx<'_>>::invoke_legacy_element_id" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::ai_legacy::<Cx<'_>>::human_input" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::ai_legacy::<Cx<'_>>::invoke_intelligence" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::ai_legacy::<Cx<'_>>::projected_intersect" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::ai_legacy::<Cx<'_>>::selection_delay" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::ai_legacy::PlotIntercept" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::ai_legacy::computer_intelligence" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::ai_legacy::decode_concerns" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::ai_legacy::encode_concerns" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::ai_legacy::ship_intelligence" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::ai_legacy::ship_weapons" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::ai_legacy::subject_call" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::ai_legacy::tactical_intelligence" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::ai_legacy::with_context" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::allocation::<Cx<'_>>::alloc_element" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::fleet_legacy::Build" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::fleet_legacy::GetIndexFromStarShip" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::fleet_legacy::NameCaptain" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::fleet_legacy::build" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::fleet_legacy::captain_in_use" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::fleet_legacy::index_from_ship" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::fleet_legacy::ship_from_index" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::links::with_fleet" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::race_access::<Cx<'_>>::abandon_ship" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::race_access::<Cx<'_>>::apply_inertial_thrust" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::race_access::<Cx<'_>>::flagship_velocity" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::race_access::<Cx<'_>>::hyperspace_cancel_pressed" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::race_access::<Cx<'_>>::hyperspace_menu" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::race_access::<Cx<'_>>::play_ship_sound" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::race_access::<Cx<'_>>::select_self_destruct_winner" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::race_access::<Cx<'_>>::set_autopilot" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::race_access::<Cx<'_>>::set_flagship_velocity" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::race_access::<Cx<'_>>::ship_sound_count" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::race_access::<Cx<'_>>::untarget" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::race_access::<World>::flagship_config" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::race_access::<World>::for_legacy_lifecycle" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::race_access::<World>::set_flagship_crew" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::reader_legacy::GetEncounterStarShip" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::reader_legacy::InitShipStatus" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::reader_legacy::UpdateShipFragCrew" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::reader_legacy::computer_frame" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::reader_legacy::get_encounter_star_ship_with_picker" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::reader_legacy::human_frame" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::reader_legacy::update_ship_frag_crew" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::sound_legacy::CalcSoundPosition" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::sound_legacy::FlushSounds" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::sound_legacy::PlaySound" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::sound_legacy::ProcessSound" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::sound_legacy::RemoveSoundsForObject" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::sound_legacy::UpdateSoundPositions" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::sound_legacy::with_object" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::star_access::<crate::engine::battle::Cx<'_>>::autopilot" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::star_access::<crate::engine::battle::Cx<'_>>::init_hyper_transition" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::star_access::<crate::engine::battle::Cx<'_>>::select_star" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::star_access::<crate::engine::battle::Cx<'_>>::star_contact" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::status_native_access::<Cx<'_>>::draw_captain_controls" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::status_native_access::<Cx<'_>>::draw_energy_label" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::status_native_access::<Cx<'_>>::draw_explosion_flash" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::status_native_access::<Cx<'_>>::status_offset" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::tactrans_native_access::<Cx<'_>>::play_ditty" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::tactrans_native_access::<Cx<'_>>::record_ship_death" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::tactrans_native_access::<Cx<'_>>::replace_dead_ship" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::tactrans_native_access::<Cx<'_>>::select_winner" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::tactrans_native_access::<Cx<'_>>::spawn_ion_trail" = 3, "unsafe|unsafe_blocks|uqm::battle::context_access::tactrans_native_access::<Cx<'_>>::start_ship_explosion" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::tactrans_native_access::<Cx<'_>>::stop_battle_music" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::tactrans_native_access::<Cx<'_>>::winner" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::access::<Cx<'_>>::abs_frame" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::access::<Cx<'_>>::equ_frame" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::access::<Cx<'_>>::frame_at" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::access::<Cx<'_>>::frame_count" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::access::<Cx<'_>>::frame_index" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::access::<Cx<'_>>::frame_rect" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::access::<Cx<'_>>::inc_frame" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::access::<Cx<'_>>::parent" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::access::<Cx<'_>>::pick_ship" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::access::<Cx<'_>>::project" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::access::<Cx<'_>>::project_mut" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::access::<Cx<'_>>::relative_frame" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::access::<Cx<'_>>::retreat_frame" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::access::<Cx<'_>>::set_ship_frame" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::access::<Cx<'_>>::set_ship_sound_bank" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::access::<Cx<'_>>::shared_frame" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::access::<Cx<'_>>::ship_frame" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::access::<Cx<'_>>::ship_frames" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::access::<Cx<'_>>::sound_point" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::access::<Cx<'_>>::track_subject" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::access::<super::ElementTable>::tail" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::access::<super::World>::set_activity" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::access::descriptor_template" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::access::dispatch_legacy_collision" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::access::dispatch_legacy_element" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::access::invoke_legacy" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::access::invoke_legacy_collision" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::access::invoke_legacy_element" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::access::links::<LinkQueue<'a,T>>::alloc" = 2, "unsafe|unsafe_blocks|uqm::engine::battle::access::links::<LinkQueue<'a,T>>::put" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::access::links::<LinkQueue<'a,T>>::raw" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::access::links::<LinkQueue<'a,T>>::record" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::access::links::<LinkQueue<'a,T>>::record_mut" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::access::links::<LinkQueue<'a,T>>::reinit" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::access::links::<LinkQueue<'a,T>>::remove" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::access::links::identify" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::access::links::ships" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::record::<ELEMENT>::hit_points" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::record::<ELEMENT>::life_span" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::record::<ELEMENT>::mass_points" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::record::<ELEMENT>::thrust_wait" = 1, "unsafe|unsafe_blocks|uqm::engine::battle::record::<ELEMENT>::turn_wait" = 1 } }
 stage_b_raw = { limit = 42, ends = "phase-2", scopes = { "ffi|raw_pointer_parameters|uqm::battle::process_native::invoke_element::invoke_race_element" = 1, "ffi|raw_pointer_parameters|uqm::battle::process_native::invoke_race::invoke_intelligence" = 2, "ffi|raw_pointer_parameters|uqm::battle::process_native::invoke_race::invoke_weapon" = 2, "ffi|raw_pointer_parameters|uqm::engine::battle::access::invoke_legacy_collision" = 4, "ffi|raw_pointer_parameters|uqm::engine::battle::access::invoke_legacy_element" = 1, "ffi|raw_pointer_parameters|uqm::engine::battle::context::<Battle>::new" = 1, "ffi|raw_pointer_parameters|uqm::engine::battle::context::<World>::new" = 2, "ffi|raw_pointer_parameters|uqm::engine::battle::table::<ElementTable>::from_queue" = 1, "ffi|raw_pointer_parameters|uqm::engine::battle::table::<ElementTable>::parent" = 1, "ffi|raw_pointer_parameters|uqm::engine::battle::table::parent_slot" = 1, "ffi|raw_records|uqm::app::bridge::with_battle" = 2, "ffi|raw_records|uqm::battle::process_native::invoke_collision" = 1, "ffi|raw_records|uqm::battle::process_native::invoke_collision::invoke_collision" = 2, "ffi|raw_records|uqm::battle::process_native::invoke_element" = 1, "ffi|raw_records|uqm::battle::process_native::invoke_element::invoke_element" = 1, "ffi|raw_records|uqm::battle::process_native::invoke_element::invoke_race_element" = 1, "ffi|raw_records|uqm::battle::process_native::invoke_race" = 1, "ffi|raw_records|uqm::battle::process_native::invoke_race::invoke_intelligence" = 2, "ffi|raw_records|uqm::battle::process_native::invoke_race::invoke_weapon" = 2, "ffi|raw_records|uqm::engine::battle::access::invoke_legacy_collision" = 1, "ffi|raw_records|uqm::engine::battle::hooks" = 1, "ffi|raw_records|uqm::engine::battle::hooks::LegacyCollisionFn" = 2, "ffi|raw_records|uqm::engine::battle::hooks::LegacyElementFn" = 1, "ffi|raw_records|uqm::engine::battle::table" = 1, "ffi|raw_records|uqm::engine::battle::table::<ElementTable as Index<ElementId>>::Output" = 1, "ffi|raw_records|uqm::engine::battle::table::<ElementTable as Index<ElementId>>::index" = 2, "ffi|raw_records|uqm::engine::battle::table::<ElementTable as IndexMut<ElementId>>::index_mut" = 2, "ffi|raw_records|uqm::engine::battle::table::<ElementTable>::alloc" = 1, "ffi|raw_records|uqm::engine::battle::table::<ElementTable>::slot" = 1 } }
@@ -2431,7 +2431,6 @@ stage_b_raw = { limit = 42, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "complexity|cognitive|uqm::ships::races::shofixti_native::engine::self_destruct_kill_objects" = 35
 "complexity|cognitive|uqm::ships::races::sis_native::engine::sis_hyper_preprocess" = 60
 "complexity|cognitive|uqm::ships::races::sis_native::engine::spawn_point_defense" = 31
-"complexity|cognitive|uqm::ships::races::thraddash_native::engine::thraddash_intelligence" = 33
 "complexity|cognitive|uqm::ships::races::umgah_native::engine::umgah_intelligence" = 51
 "complexity|cognitive|uqm::ships::races::utwig_native::engine::utwig_intelligence" = 34
 "complexity|cognitive|uqm::ships::races::vux_native::engine::vux_preprocess" = 32
@@ -2585,7 +2584,6 @@ stage_b_raw = { limit = 42, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "complexity|cyclomatic|uqm::ships::races::chenjesu_native::engine::chenjesu_intelligence" = 33
 "complexity|cyclomatic|uqm::ships::races::orz_native::engine::marine_preprocess" = 32
 "complexity|cyclomatic|uqm::ships::races::sis_native::engine::sis_hyper_preprocess" = 28
-"complexity|cyclomatic|uqm::ships::races::thraddash_native::engine::thraddash_intelligence" = 27
 "complexity|cyclomatic|uqm::ships::races::umgah_native::engine::umgah_intelligence" = 32
 "complexity|cyclomatic|uqm::ships::registry::descriptor_template_for_species" = 30
 "complexity|cyclomatic|uqm::ships::types::<SpeciesId>::from_i32" = 31
@@ -2815,9 +2813,8 @@ stage_b_raw = { limit = 42, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "complexity|loc|uqm::ships::races::samatra::engine::samatra_preprocess" = 85
 "complexity|loc|uqm::ships::races::samatra::engine::sentinel_preprocess" = 122
 "complexity|loc|uqm::ships::races::samatra::engine::snapshot" = 94
-"complexity|loc|uqm::ships::races::sis_native::engine::sis_hyper_preprocess" = 126
-"complexity|loc|uqm::ships::races::sis_native::engine::spawn_point_defense" = 91
-"complexity|loc|uqm::ships::races::thraddash_native::engine::thraddash_intelligence" = 88
+"complexity|loc|uqm::ships::races::sis_native::engine::sis_hyper_preprocess" = 116
+"complexity|loc|uqm::ships::races::sis_native::engine::spawn_point_defense" = 81
 "complexity|loc|uqm::ships::races::umgah_native::engine::umgah_intelligence" = 98
 "complexity|loc|uqm::ships::races::urquan_native::engine::fighter_preprocess" = 85
 "complexity|loc|uqm::ships::registry::descriptor_template_for_species" = 924
@@ -2868,7 +2865,7 @@ stage_b_raw = { limit = 42, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "ffi|extern_c_fn|uqm::planet_side" = 9
 "ffi|extern_c_fn|uqm::planets" = 214
 "ffi|extern_c_fn|uqm::savegame" = 11
-"ffi|extern_c_fn|uqm::ships" = 134
+"ffi|extern_c_fn|uqm::ships" = 101
 "ffi|extern_c_fn|uqm::starbase" = 1
 "ffi|extern_c_fn|uqm::state" = 11
 "ffi|extern_c_fn|uqm::supermelee" = 168
@@ -2893,7 +2890,7 @@ stage_b_raw = { limit = 42, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "ffi|foreign_items|uqm::time" = 1
 "ffi|foreign_items|uqm::ui" = 1
 "ffi|legacy_hooks|uqm::navigation" = 11
-"ffi|legacy_hooks|uqm::ships" = 48
+"ffi|legacy_hooks|uqm::ships" = 35
 "ffi|link_name|uqm::automation" = 3
 "ffi|link_name|uqm::c_bindings" = 1
 "ffi|link_name|uqm::comm" = 2
@@ -2914,7 +2911,7 @@ stage_b_raw = { limit = 42, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "ffi|no_mangle|uqm::planet_side" = 2
 "ffi|no_mangle|uqm::planets" = 71
 "ffi|no_mangle|uqm::savegame" = 5
-"ffi|no_mangle|uqm::ships" = 30
+"ffi|no_mangle|uqm::ships" = 26
 "ffi|no_mangle|uqm::state" = 11
 "ffi|no_mangle|uqm::supermelee" = 142
 "ffi|no_mangle|uqm::time" = 11
@@ -2924,7 +2921,7 @@ stage_b_raw = { limit = 42, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "ffi|queue_calls|uqm::mainloop" = 2
 "ffi|queue_calls|uqm::planets" = 13
 "ffi|queue_calls|uqm::savegame" = 11
-"ffi|queue_calls|uqm::ships" = 22
+"ffi|queue_calls|uqm::ships" = 20
 "ffi|queue_calls|uqm::starbase" = 4
 "ffi|queue_calls|uqm::time" = 6
 "ffi|raw_pointer_parameters|uqm-engine::uqm-engine" = 1051
@@ -2940,7 +2937,7 @@ stage_b_raw = { limit = 42, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "ffi|raw_pointer_parameters|uqm::planet_side" = 24
 "ffi|raw_pointer_parameters|uqm::planets" = 396
 "ffi|raw_pointer_parameters|uqm::savegame" = 20
-"ffi|raw_pointer_parameters|uqm::ships" = 304
+"ffi|raw_pointer_parameters|uqm::ships" = 245
 "ffi|raw_pointer_parameters|uqm::starbase" = 2
 "ffi|raw_pointer_parameters|uqm::state" = 29
 "ffi|raw_pointer_parameters|uqm::supermelee" = 312
@@ -2958,7 +2955,7 @@ stage_b_raw = { limit = 42, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "ffi|raw_records|uqm::navigation" = 73
 "ffi|raw_records|uqm::planet_side" = 2
 "ffi|raw_records|uqm::savegame" = 6
-"ffi|raw_records|uqm::ships" = 422
+"ffi|raw_records|uqm::ships" = 321
 "ffi|repr_c|uqm-engine::uqm-engine" = 128
 "ffi|repr_c|uqm::automation" = 5
 "ffi|repr_c|uqm::battle" = 11
@@ -2989,7 +2986,7 @@ stage_b_raw = { limit = 42, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "ffi|static_mut|uqm::planet_side" = 1
 "ffi|static_mut|uqm::planets" = 46
 "ffi|static_mut|uqm::savegame" = 6
-"ffi|static_mut|uqm::ships" = 13
+"ffi|static_mut|uqm::ships" = 9
 "ffi|static_mut|uqm::state" = 1
 "ffi|static_mut|uqm::supermelee" = 8
 "ffi|static_mut|uqm::time" = 1
@@ -5412,7 +5409,7 @@ stage_b_raw = { limit = 42, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "unsafe|unsafe_block_lines|uqm-engine::uqm-engine" = 2163
 "unsafe|unsafe_block_lines|uqm-xtask::uqm-xtask" = 9
 "unsafe|unsafe_block_lines|uqm::app" = 43
-"unsafe|unsafe_block_lines|uqm::automation" = 945
+"unsafe|unsafe_block_lines|uqm::automation" = 935
 "unsafe|unsafe_block_lines|uqm::battle" = 91
 "unsafe|unsafe_block_lines|uqm::c_bindings" = 1
 "unsafe|unsafe_block_lines|uqm::comm" = 843
@@ -5425,7 +5422,7 @@ stage_b_raw = { limit = 42, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "unsafe|unsafe_block_lines|uqm::planet_side" = 365
 "unsafe|unsafe_block_lines|uqm::planets" = 227
 "unsafe|unsafe_block_lines|uqm::savegame" = 121
-"unsafe|unsafe_block_lines|uqm::ships" = 317
+"unsafe|unsafe_block_lines|uqm::ships" = 307
 "unsafe|unsafe_block_lines|uqm::starbase" = 147
 "unsafe|unsafe_block_lines|uqm::state" = 2
 "unsafe|unsafe_block_lines|uqm::supermelee" = 260
@@ -5435,7 +5432,7 @@ stage_b_raw = { limit = 42, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "unsafe|unsafe_blocks|uqm-engine::uqm-engine" = 389
 "unsafe|unsafe_blocks|uqm-xtask::uqm-xtask" = 4
 "unsafe|unsafe_blocks|uqm::app" = 6
-"unsafe|unsafe_blocks|uqm::automation" = 168
+"unsafe|unsafe_blocks|uqm::automation" = 165
 "unsafe|unsafe_blocks|uqm::battle" = 30
 "unsafe|unsafe_blocks|uqm::c_bindings" = 1
 "unsafe|unsafe_blocks|uqm::comm" = 277
@@ -5448,7 +5445,7 @@ stage_b_raw = { limit = 42, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "unsafe|unsafe_blocks|uqm::planet_side" = 55
 "unsafe|unsafe_blocks|uqm::planets" = 121
 "unsafe|unsafe_blocks|uqm::savegame" = 37
-"unsafe|unsafe_blocks|uqm::ships" = 45
+"unsafe|unsafe_blocks|uqm::ships" = 43
 "unsafe|unsafe_blocks|uqm::starbase" = 95
 "unsafe|unsafe_blocks|uqm::state" = 2
 "unsafe|unsafe_blocks|uqm::supermelee" = 48
@@ -5457,7 +5454,7 @@ stage_b_raw = { limit = 42, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "unsafe|unsafe_blocks|uqm::uqm" = 1
 "unsafe|unsafe_fn_lines|uqm-engine::uqm-engine" = 15536
 "unsafe|unsafe_fn_lines|uqm::app" = 60
-"unsafe|unsafe_fn_lines|uqm::automation" = 320
+"unsafe|unsafe_fn_lines|uqm::automation" = 311
 "unsafe|unsafe_fn_lines|uqm::battle" = 3652
 "unsafe|unsafe_fn_lines|uqm::c_bindings" = 14
 "unsafe|unsafe_fn_lines|uqm::comm" = 2503
@@ -5470,7 +5467,7 @@ stage_b_raw = { limit = 42, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "unsafe|unsafe_fn_lines|uqm::planet_side" = 551
 "unsafe|unsafe_fn_lines|uqm::planets" = 6414
 "unsafe|unsafe_fn_lines|uqm::savegame" = 715
-"unsafe|unsafe_fn_lines|uqm::ships" = 5029
+"unsafe|unsafe_fn_lines|uqm::ships" = 3736
 "unsafe|unsafe_fn_lines|uqm::starbase" = 13
 "unsafe|unsafe_fn_lines|uqm::state" = 404
 "unsafe|unsafe_fn_lines|uqm::supermelee" = 4008
@@ -5478,7 +5475,7 @@ stage_b_raw = { limit = 42, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "unsafe|unsafe_fn_lines|uqm::ui" = 4727
 "unsafe|unsafe_fn|uqm-engine::uqm-engine" = 926
 "unsafe|unsafe_fn|uqm::app" = 5
-"unsafe|unsafe_fn|uqm::automation" = 11
+"unsafe|unsafe_fn|uqm::automation" = 10
 "unsafe|unsafe_fn|uqm::battle" = 185
 "unsafe|unsafe_fn|uqm::c_bindings" = 3
 "unsafe|unsafe_fn|uqm::comm" = 151
@@ -5491,7 +5488,7 @@ stage_b_raw = { limit = 42, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "unsafe|unsafe_fn|uqm::planet_side" = 18
 "unsafe|unsafe_fn|uqm::planets" = 398
 "unsafe|unsafe_fn|uqm::savegame" = 40
-"unsafe|unsafe_fn|uqm::ships" = 323
+"unsafe|unsafe_fn|uqm::ships" = 286
 "unsafe|unsafe_fn|uqm::starbase" = 2
 "unsafe|unsafe_fn|uqm::state" = 44
 "unsafe|unsafe_fn|uqm::supermelee" = 328
@@ -5508,7 +5505,7 @@ stage_b_raw = { limit = 42, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "unsafe|unsafe_lines|uqm-engine::uqm-engine" = 17122
 "unsafe|unsafe_lines|uqm-xtask::uqm-xtask" = 9
 "unsafe|unsafe_lines|uqm::app" = 64
-"unsafe|unsafe_lines|uqm::automation" = 1124
+"unsafe|unsafe_lines|uqm::automation" = 1107
 "unsafe|unsafe_lines|uqm::battle" = 3902
 "unsafe|unsafe_lines|uqm::c_bindings" = 14
 "unsafe|unsafe_lines|uqm::comm" = 3196
@@ -5521,7 +5518,7 @@ stage_b_raw = { limit = 42, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "unsafe|unsafe_lines|uqm::planet_side" = 902
 "unsafe|unsafe_lines|uqm::planets" = 6514
 "unsafe|unsafe_lines|uqm::savegame" = 834
-"unsafe|unsafe_lines|uqm::ships" = 5190
+"unsafe|unsafe_lines|uqm::ships" = 3887
 "unsafe|unsafe_lines|uqm::starbase" = 157
 "unsafe|unsafe_lines|uqm::state" = 406
 "unsafe|unsafe_lines|uqm::supermelee" = 4080
