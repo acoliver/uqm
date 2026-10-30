@@ -242,8 +242,8 @@
       "sha256": "a98e3ed19b07408706af099542e9d0ec24ecbc863b1d9c3234f618c20a026351"
     },
     "parity/counts/campaign-s09i-refueled-ambush.toml": {
-      "bytes": 247088,
-      "sha256": "e8ed32e138053bc7b4a3fd68f90dcd25504d1c686d6f49d6ebf837967af3442e"
+      "bytes": 681325,
+      "sha256": "cb2630bc7b617561aa870687bb7ffdfd9bb27d6f03f3e7f05da2350d4a219598"
     },
     "parity/counts/campaign-s09j-connected-shattered.toml": {
       "bytes": 409468,
