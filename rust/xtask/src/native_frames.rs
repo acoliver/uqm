@@ -21,8 +21,8 @@
 use std::path::Path;
 
 use image::ImageFormat;
-use uqm_rust::automation::native_checkpoint::CheckpointClass;
-use uqm_rust::automation::NativeAcceptanceManifest;
+use uqm_rust::automation::native_checkpoint::{CheckpointClass, NativeCheckpointPlan};
+use uqm_rust::automation::{Action, NativeAcceptanceManifest};
 
 const GRID_COLUMNS: usize = 32;
 const GRID_ROWS: usize = 24;
@@ -121,7 +121,7 @@ pub(crate) fn check_presentation(
     Ok(())
 }
 
-/// After a screen-changing transition the renderer output must have changed.
+/// After a screen-changing transition the retained screen must have changed.
 pub(crate) fn check_transition(
     transition: &str,
     from_label: &str,
@@ -143,7 +143,7 @@ pub(crate) fn check_transition(
 
 struct Capture {
     label: String,
-    renderer: Grid,
+    renderer: Option<Grid>,
     window: Grid,
     transitions_before: Vec<String>,
 }
@@ -157,42 +157,29 @@ fn read(directory: &Path, relative: &str) -> Result<Vec<u8>, String> {
     std::fs::read(directory.join(relative)).map_err(|error| format!("read {relative}: {error}"))
 }
 
-fn strip_generation(label: &str) -> &str {
-    match label.rsplit_once("_gen") {
-        Some((base, generation))
-            if !generation.is_empty() && generation.bytes().all(|b| b.is_ascii_digit()) =>
-        {
-            base
-        }
-        _ => label,
-    }
+fn read_grid(directory: &Path, relative: &str) -> Result<Grid, String> {
+    Grid::from_png(&read(directory, relative)?)
+        .map_err(|error| format!("image {relative}: {error}"))
 }
 
-/// Load every capture checkpoint in trace order, with the screen-changing
-/// transitions the trace recorded since the previous capture.
+/// Retain captures and visible transition endpoints. Intermediate navigation
+/// checkpoints cannot replace an anchor: completion may be reported after takeoff.
 fn load_captures(
     directory: &Path,
-    native: &NativeAcceptanceManifest,
+    plan: &NativeCheckpointPlan,
+    trace_path: &str,
 ) -> Result<Vec<Capture>, String> {
-    let Some(plan) = &native.window.checkpoint_plan else {
-        return Ok(Vec::new());
-    };
-    let mut action_indexes = std::collections::BTreeMap::new();
-    for checkpoint in &plan.checkpoints {
-        if checkpoint.class != CheckpointClass::Capture {
-            continue;
-        }
-        let action = serde_json::to_value(&checkpoint.action).map_err(|e| e.to_string())?;
-        if let Some(label) = action.get("label").and_then(|value| value.as_str()) {
-            action_indexes.insert(label.to_owned(), checkpoint.action_index);
-        }
-    }
-    let trace = String::from_utf8(read(directory, &native.trace_path)?)
+    let checkpoints: std::collections::BTreeMap<_, _> = plan
+        .checkpoints
+        .iter()
+        .map(|checkpoint| (checkpoint.id.as_str(), checkpoint))
+        .collect();
+    let trace = String::from_utf8(read(directory, trace_path)?)
         .map_err(|error| format!("trace is not utf-8: {error}"))?;
-    let mut captures = Vec::new();
+    let mut captures = Vec::<Capture>::new();
     let mut transitions = Vec::new();
     for line in trace.lines() {
-        if !line.contains("\"kind\":\"capture\"")
+        if !line.contains("\"kind\":\"checkpoint\"")
             && !line.contains("\"kind\":\"semantic_assertion\"")
         {
             continue;
@@ -208,22 +195,44 @@ fn load_captures(
                     transitions.push(name.to_owned());
                 }
             }
-            Some("capture") => {
-                let label = strip_generation(label);
-                let Some(index) = action_indexes.get(label) else {
-                    transitions.clear();
+            Some("checkpoint") => {
+                let id = record["checkpoint"]["id"]
+                    .as_str()
+                    .ok_or("checkpoint has no id")?;
+                let Some(checkpoint) = checkpoints.get(id) else {
                     continue;
                 };
-                let renderer = Grid::from_png(&read(
-                    directory,
-                    &format!("automation/captures/{label}.png"),
-                )?)
-                .map_err(|error| format!("checkpoint {label} renderer image: {error}"))?;
-                let window = Grid::from_png(&read(
-                    directory,
-                    &format!("screenshots/checkpoint-{index:04}.png"),
-                )?)
-                .map_err(|error| format!("checkpoint {label} window image: {error}"))?;
+                if checkpoint.class != CheckpointClass::Capture
+                    && (transitions.is_empty() || captures.is_empty())
+                {
+                    continue;
+                }
+                let (label, renderer) = match &checkpoint.action {
+                    Action::Capture(capture) => {
+                        let image = read_grid(
+                            directory,
+                            &format!("automation/captures/{}.png", capture.label),
+                        )?;
+                        (capture.label.as_str(), Some(image))
+                    }
+                    _ => (id, None),
+                };
+                let index = checkpoint.action_index;
+                let window =
+                    read_grid(directory, &format!("screenshots/checkpoint-{index:04}.png"))?;
+                // Semantic state can precede redraw; keep the transition pending.
+                if renderer.is_none()
+                    && captures.last().is_some_and(|before| {
+                        before
+                            .renderer
+                            .as_ref()
+                            .unwrap_or(&before.window)
+                            .difference(&window)
+                            < MIN_TRANSITION_CHANGE
+                    })
+                {
+                    continue;
+                }
                 captures.push(Capture {
                     label: label.to_owned(),
                     renderer,
@@ -242,18 +251,34 @@ pub(crate) fn validate_scenario(
     directory: &Path,
     native: &NativeAcceptanceManifest,
 ) -> Result<(), String> {
-    let captures = load_captures(directory, native)?;
+    let Some(plan) = &native.window.checkpoint_plan else {
+        return Ok(());
+    };
+    validate_plan(directory, plan, &native.trace_path)
+}
+
+fn validate_plan(
+    directory: &Path,
+    plan: &NativeCheckpointPlan,
+    trace_path: &str,
+) -> Result<(), String> {
+    let captures = load_captures(directory, plan, trace_path)?;
     for capture in &captures {
-        check_presentation(&capture.label, &capture.window, &capture.renderer)?;
+        if let Some(renderer) = &capture.renderer {
+            check_presentation(&capture.label, &capture.window, renderer)?;
+        }
     }
     for pair in captures.windows(2) {
+        if pair[1].transitions_before.len() > 1 {
+            return Err(format!("checkpoint {} spans multiple screen transitions ({}) without an intermediate checkpoint", pair[1].label, pair[1].transitions_before.join(", ")));
+        }
         if let Some(transition) = pair[1].transitions_before.first() {
             check_transition(
                 transition,
                 &pair[0].label,
                 &pair[1].label,
-                &pair[0].renderer,
-                &pair[1].renderer,
+                pair[0].renderer.as_ref().unwrap_or(&pair[0].window),
+                pair[1].renderer.as_ref().unwrap_or(&pair[1].window),
             )?;
         }
     }
@@ -273,6 +298,159 @@ mod tests {
 
     fn solid(color: [u8; 3]) -> Grid {
         png(320, 240, |_, _| color)
+    }
+
+    type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
+
+    fn round_trip(
+        landing: [u8; 3],
+        returned: [u8; 3],
+    ) -> TestResult<(tempfile::TempDir, NativeCheckpointPlan)> {
+        let artifacts = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tmp");
+        std::fs::create_dir_all(&artifacts)?;
+        let directory = tempfile::tempdir_in(artifacts)?;
+        std::fs::create_dir_all(directory.path().join("automation/captures"))?;
+        std::fs::create_dir_all(directory.path().join("screenshots"))?;
+        let actions = [
+            serde_json::json!({"action":"capture", "label":"before"}),
+            serde_json::json!({"action":"wait_for_planet_side_start", "max_ticks":5000}),
+            serde_json::json!({"action":"collect_energy_node", "max_ticks":6000}),
+            serde_json::json!({"action":"wait_for_planet_side_end", "outcome":"returned", "max_ticks":6000}),
+            serde_json::json!({"action":"capture", "label":"after"}),
+        ];
+        let mut checkpoints = Vec::new();
+        for (index, action) in actions.into_iter().enumerate() {
+            let action = serde_json::from_value(action)?;
+            checkpoints.push(uqm_rust::automation::native_checkpoint::NativeCheckpoint {
+                action_index: index,
+                class: uqm_rust::automation::native_checkpoint::checkpoint_class(&action)
+                    .ok_or("not a checkpoint")?,
+                action,
+                id: format!("native:test:{index}"),
+            });
+        }
+        let orbit = [200, 40, 40];
+        for (index, color) in [orbit, landing, returned, returned, returned]
+            .into_iter()
+            .enumerate()
+        {
+            image::RgbImage::from_pixel(32, 24, image::Rgb(color)).save(
+                directory
+                    .path()
+                    .join(format!("screenshots/checkpoint-{index:04}.png")),
+            )?;
+        }
+        for (label, color) in [("before", orbit), ("after", returned)] {
+            image::RgbImage::from_pixel(32, 24, image::Rgb(color)).save(
+                directory
+                    .path()
+                    .join(format!("automation/captures/{label}.png")),
+            )?;
+        }
+        let mut trace = Vec::new();
+        for index in 0..5 {
+            if let Some(label) = match index {
+                1 => Some("planet_side_started:generation=1"),
+                3 => Some("planet_side_completed:generation=1:outcome=Returned"),
+                _ => None,
+            } {
+                trace.push(
+                    serde_json::json!({"kind":"semantic_assertion", "label":label}).to_string(),
+                );
+            }
+            if index == 0 || index == 4 {
+                let label = if index == 0 {
+                    "before_gen1"
+                } else {
+                    "after_gen2"
+                };
+                trace.push(serde_json::json!({"kind":"capture", "label":label}).to_string());
+            }
+            trace.push(serde_json::json!({"kind":"checkpoint", "label":format!("native:test:{index}_gen0"), "checkpoint":{"id":format!("native:test:{index}")}}).to_string());
+        }
+        std::fs::write(directory.path().join("trace.jsonl"), trace.join("\n"))?;
+        Ok((
+            directory,
+            NativeCheckpointPlan {
+                source_sha256: String::new(),
+                resolved_sha256: String::new(),
+                checkpoints,
+                linked_floors: false,
+                expects_quit: false,
+            },
+        ))
+    }
+
+    #[test]
+    fn round_trip_checks_the_intermediate_landing_checkpoint() -> TestResult {
+        let (directory, plan) = round_trip([20, 120, 20], [200, 40, 40])?;
+        validate_plan(directory.path(), &plan, "trace.jsonl")?;
+        Ok(())
+    }
+
+    #[test]
+    fn frozen_landing_and_return_are_each_rejected() -> TestResult {
+        for (landing, returned, transition) in [
+            ([200, 40, 40], [200, 40, 40], "planet_side_started"),
+            ([20, 120, 20], [20, 120, 20], "planet_side_completed"),
+        ] {
+            let (directory, plan) = round_trip(landing, returned)?;
+            let error = validate_plan(directory.path(), &plan, "trace.jsonl")
+                .err()
+                .ok_or("frozen transition accepted")?;
+            assert!(error.contains(transition), "{error}");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn early_semantic_event_waits_for_its_visible_checkpoint() -> TestResult {
+        let (directory, plan) = round_trip([20, 120, 20], [200, 40, 40])?;
+        for (index, color) in [(1, [200, 40, 40]), (2, [20, 120, 20])] {
+            image::RgbImage::from_pixel(32, 24, image::Rgb(color)).save(
+                directory
+                    .path()
+                    .join(format!("screenshots/checkpoint-{index:04}.png")),
+            )?;
+        }
+        let path = directory.path().join("trace.jsonl");
+        let trace = std::fs::read_to_string(&path)?;
+        std::fs::write(path, trace.replace("planet_side_started", "orbit_reached"))?;
+        validate_plan(directory.path(), &plan, "trace.jsonl")?;
+        Ok(())
+    }
+
+    #[test]
+    fn explicit_capture_still_requires_a_matching_window() -> TestResult {
+        let (directory, plan) = round_trip([20, 120, 20], [200, 40, 40])?;
+        image::RgbImage::from_pixel(32, 24, image::Rgb([20, 120, 20]))
+            .save(directory.path().join("screenshots/checkpoint-0004.png"))?;
+        let error = validate_plan(directory.path(), &plan, "trace.jsonl")
+            .err()
+            .ok_or("stale explicit capture accepted")?;
+        assert!(
+            error.contains("checkpoint after: window does not show"),
+            "{error}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn multiple_transitions_without_an_intermediate_checkpoint_are_rejected() -> TestResult {
+        let (directory, plan) = round_trip([20, 120, 20], [200, 40, 40])?;
+        let path = directory.path().join("trace.jsonl");
+        let trace = std::fs::read_to_string(&path)?;
+        let mut records: Vec<_> = trace.lines().map(str::to_owned).collect();
+        records.insert(
+            2,
+            serde_json::json!({"kind":"semantic_assertion", "label":"orbit_reached"}).to_string(),
+        );
+        std::fs::write(path, records.join("\n"))?;
+        let error = validate_plan(directory.path(), &plan, "trace.jsonl")
+            .err()
+            .ok_or("unobserved transitions accepted")?;
+        assert!(error.contains("multiple screen transitions"), "{error}");
+        Ok(())
     }
 
     fn left_half(left: [u8; 3], right: [u8; 3]) -> Grid {
@@ -332,7 +510,5 @@ mod tests {
             Some("planet_side_completed")
         );
         assert_eq!(transition_name("mode_verified:orbit"), None);
-        assert_eq!(strip_generation("mars-reached_gen3"), "mars-reached");
-        assert_eq!(strip_generation("odd_genx"), "odd_genx");
     }
 }
