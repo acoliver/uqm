@@ -129,3 +129,81 @@ fn interplanetary_flagship_keeps_motion_and_native_hooks() {
         }
     });
 }
+
+#[test]
+fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
+    battle_context::run(|| {
+        let _owner = Battle::new(8);
+        let frames = FrameSet::new(16);
+        // SAFETY: this serialized fixture owns the group pool, solar descriptors and frames.
+        unsafe {
+            use uqm_rust::collections::queue::{AllocLink, InitQueue, PutQueue, UninitQueue};
+            use uqm_rust::navigation::abi as nav;
+            let mut solar: Box<nav::SOLARSYS_STATE> = Box::new(std::mem::zeroed());
+            solar.SunDesc[0].radius = 128 << 6;
+            solar.SunDesc[0].NumPlanets = 1;
+            solar.PlanetDesc[0].image.origin = POINT { x: 80, y: 60 };
+            solar.PlanetDesc[0].pPrevDesc = solar.SunDesc.as_mut_ptr();
+            solar.MoonDesc[0].pPrevDesc = solar.PlanetDesc.as_mut_ptr();
+            solar.pBaseDesc = solar.MoonDesc.as_mut_ptr();
+            solar.pOrbitalDesc = solar.MoonDesc.as_mut_ptr();
+            let old_solar = nav::pSolarSysState;
+            let old_race = nav::EncounterRace;
+            let old_stamp = GlobData.Game_state.ShipStamp;
+            let old_location = GlobData.Game_state.ip_location;
+            let old_groups = GlobData.Game_state.ip_group_q;
+            let old_stars = nav::stars_in_space;
+            let queue = &raw mut GlobData.Game_state.ip_group_q;
+            queue.write(std::mem::zeroed());
+            assert!(InitQueue(
+                queue.cast(),
+                2,
+                size_of::<nav::IP_GROUP>() as u16
+            ));
+            let group = AllocLink(queue.cast()).cast::<nav::IP_GROUP>();
+            assert!(!group.is_null());
+            group.write(std::mem::zeroed());
+            (*group).race_id = 0;
+            (*group).group_id = 7;
+            (*group).in_system = 1;
+            (*group).dest_loc = 1;
+            (*group).task = (nav::ON_STATION | nav::IGNORE_FLAGSHIP) as u8;
+            (*group).loc = POINT { x: 300, y: 400 };
+            (*group).melee_icon = frames.frame(0);
+            PutQueue(queue.cast(), group.cast());
+            nav::pSolarSysState = &mut *solar;
+            nav::EncounterRace = -1;
+            nav::stars_in_space = frames.frame(0);
+            GlobData.Game_state.ShipStamp.frame = frames.frame(0);
+            GlobData.Game_state.ip_location = POINT { x: 100, y: 200 };
+            nav::DoMissions();
+            uqm_rust::app::bridge::enter(|cx| {
+                let flagship = cx.elements().head().expect("spawned flagship");
+                assert_eq!(cx.element(flagship).turn, 1);
+                let id = cx.elements().succ(flagship).expect("spawned group");
+                assert_eq!(cx.parent(id), uqm_rust::engine::battle::Parent::IpGroup(0));
+                let state = cx.element(id);
+                assert_eq!(cx.frame_number(state.current.image.frame), 1);
+                let hook = state.death.expect("group movement hook");
+                assert!(matches!(hook, ElementHook::Native(_)));
+                uqm_rust::battle::process_native::invoke_element::invoke_element(cx, hook, id);
+                assert_eq!(cx.element(id).flags & CHANGING as u16, CHANGING as u16);
+                assert_eq!(cx.element(id).flags & NONSOLID as u16, NONSOLID as u16);
+                assert_eq!(cx.parent(id), uqm_rust::engine::battle::Parent::IpGroup(0));
+            });
+            assert_ne!(((*group).loc.x, (*group).loc.y), (300, 400));
+            assert_eq!((*group).sys_loc, 0);
+            assert_eq!((*group).group_id, 7);
+            nav::NotifyOthers(0, 2);
+            assert_eq!((*group).dest_loc, 2);
+            assert_ne!((*group).task & nav::IGNORE_FLAGSHIP as u8, 0);
+            UninitQueue(queue.cast());
+            GlobData.Game_state.ip_group_q = old_groups;
+            GlobData.Game_state.ShipStamp = old_stamp;
+            GlobData.Game_state.ip_location = old_location;
+            nav::stars_in_space = old_stars;
+            nav::pSolarSysState = old_solar;
+            nav::EncounterRace = old_race;
+        }
+    });
+}

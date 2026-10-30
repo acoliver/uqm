@@ -152,9 +152,6 @@ impl<'a> CustomData<'a> {
         // SAFETY: unconverted initializers retain the corresponding species allocation.
         unsafe {
             match species {
-                crate::ships::native::abi::SPECIES_ID_MMRNMHRM_ID => {
-                    Self::Mmrnmhrm(&*pointer.cast())
-                }
                 crate::ships::native::abi::SPECIES_ID_PKUNK_ID => Self::Pkunk(&*pointer.cast()),
                 crate::ships::native::abi::SPECIES_ID_UMGAH_ID => Self::Umgah(&*pointer.cast()),
                 crate::ships::native::abi::SPECIES_ID_SIS_SHIP_ID => Self::Sis(&*pointer.cast()),
