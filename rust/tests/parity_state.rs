@@ -1,9 +1,11 @@
 //! Production checkpoint and fighter callers, including cross-process address stability.
+#[path = "support/battle.rs"]
+mod battle;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
 use std::{collections::BTreeMap, fs, path::Path, process::Command, ptr};
-use uqm_rust::ships::races::{init_human, init_sis};
+use uqm_rust::ships::races::init_sis;
 use uqm_rust::{
     automation::{
         battle_fight::BattleSnapshot,
@@ -289,58 +291,91 @@ unsafe fn install_ship(ship: &mut STARSHIP) {
     });
 }
 
-#[repr(C)]
-struct SavedPkunk {
-    phoenix: HELEMENT,
-    preprocess: ElementProcessFunc,
-    postprocess: ElementProcessFunc,
-    death: ElementProcessFunc,
-}
-
 fn race_custom_fields(directory: &Path) {
     // SAFETY: native initializers run on this sole game thread; all test allocations
     // match the races' repr(C) saved-data records and outlive the snapshots.
     unsafe {
-        let human = &*init_human();
-        let mut phoenix = Element::new();
-        observation::record(Event::Allocate(ptr::from_mut(&mut phoenix) as usize));
-        let mut data = SavedPkunk {
-            phoenix: ptr::from_mut(&mut phoenix).cast(),
-            preprocess: human
-                .postprocess_func
-                .map(uqm_rust::engine::battle::ElementHook::Legacy),
-            postprocess: human
-                .postprocess_func
-                .map(uqm_rust::engine::battle::ElementHook::Legacy),
-            death: human
-                .postprocess_func
-                .map(uqm_rust::engine::battle::ElementHook::Legacy),
-        };
+        let human = uqm_rust::ships::hook_registry::hooks()
+            .into_iter()
+            .find_map(|(address, name)| {
+                (name == "ships::races::human_native::nuke_preprocess").then_some(address)
+            })
+            .unwrap_or_else(|| panic!("registered native Cruiser element hook"));
+        // SAFETY: nuke_preprocess has the Native element signature.
+        let human: uqm_rust::engine::battle::ElementFn = std::mem::transmute(human);
+        let human = Some(uqm_rust::engine::battle::ElementHook::Native(human));
         let mut descriptor: RACE_DESC = std::mem::zeroed();
-        descriptor.data = ptr::from_mut(&mut data).cast();
-        let mut ship: STARSHIP = std::mem::zeroed();
-        ship.SpeciesID = SPECIES_ID_PKUNK_ID;
-        ship.RaceDescPtr = &mut descriptor;
-        install_ship(&mut ship);
-        attach_elements(std::slice::from_mut(&mut phoenix));
-        disp_q.head = ptr::from_mut(&mut phoenix).cast();
-        disp_q.tail = disp_q.head;
-        let (fields, _) = snapshot(directory);
-        assert_eq!(
-            fields["ships.0.0.custom.phoenix"],
-            fields["elements.0.identity"]
-        );
-        assert_eq!(fields["race.pkunk.last_sound"], "0");
-        disp_q.head = ptr::null_mut();
-        disp_q.tail = ptr::null_mut();
-        for name in ["saved_preprocess", "saved_postprocess", "saved_death"] {
-            assert!(fields[&format!("ships.0.0.custom.{name}")]
-                .starts_with("ships::races::human_native::"));
+        {
+            let pool = battle::Battle::new(8);
+            let mut phoenix_object = battle::Object::new(&pool);
+            let phoenix = phoenix_object.ptr();
+            observation::record(Event::Allocate(phoenix as usize));
+            let mut owner = battle::Ship::bare(&pool, SPECIES_ID_PKUNK_ID, 0);
+            owner.descriptor_mut().race_state = uqm_rust::engine::battle::RaceState::Pkunk {
+                phoenix: Some(battle::id(phoenix)),
+                saved_pre: human,
+                saved_post: human,
+                saved_death: human,
+            };
+            let ship = ptr::from_mut(owner.ship_mut());
+            race_q[0].head = ship.cast();
+            race_q[0].tail = race_q[0].head;
+            observation::record(Event::Spawn {
+                address: ship as usize,
+                side: 0,
+                species: SPECIES_ID_PKUNK_ID,
+            });
+            disp_q.head = phoenix.cast();
+            disp_q.tail = disp_q.head;
+            let (fields, _) = snapshot(directory);
+            assert_eq!(
+                fields["ships.0.0.custom.phoenix"],
+                fields["elements.0.identity"]
+            );
+            assert_eq!(fields["race.pkunk.last_sound"], "0");
+            disp_q.head = ptr::null_mut();
+            disp_q.tail = ptr::null_mut();
+            uqm_rust::app::bridge::enter(|cx| cx.dispose(phoenix_object.id));
+            let (retired, _) = snapshot(directory);
+            assert_eq!(
+                retired["ships.0.0.custom.phoenix"],
+                fields["ships.0.0.custom.phoenix"]
+            );
+            let mut reused = battle::Object::new(&pool);
+            assert_eq!(reused.id.slot, phoenix_object.id.slot);
+            assert_ne!(reused.id.gen, phoenix_object.id.gen);
+            assert!(!uqm_rust::app::bridge::enter(|cx| cx
+                .elements()
+                .contains(phoenix_object.id)));
+            disp_q.head = reused.ptr().cast();
+            disp_q.tail = disp_q.head;
+            let (reallocated, _) = snapshot(directory);
+            assert_eq!(
+                reallocated["ships.0.0.custom.phoenix"],
+                reallocated["elements.0.identity"]
+            );
+            assert_ne!(
+                reallocated["ships.0.0.custom.phoenix"],
+                fields["ships.0.0.custom.phoenix"]
+            );
+            disp_q.head = ptr::null_mut();
+            disp_q.tail = ptr::null_mut();
+            race_q[0].head = ptr::null_mut();
+            race_q[0].tail = ptr::null_mut();
+            for name in ["saved_preprocess", "saved_postprocess", "saved_death"] {
+                assert!(fields[&format!("ships.0.0.custom.{name}")]
+                    .starts_with("ships::races::human_native::"));
+            }
         }
+        let mut ship: STARSHIP = std::mem::zeroed();
+        ship.RaceDescPtr = &mut descriptor;
+        ship.SpeciesID = SPECIES_ID_UMGAH_ID;
+        install_ship(&mut ship);
         let mut facing = 27u16;
         ship.SpeciesID = SPECIES_ID_UMGAH_ID;
         {
             let descriptor = &mut descriptor;
+            descriptor.race_state = uqm_rust::engine::battle::RaceState::None;
             descriptor.data = ptr::from_mut(&mut facing).cast();
         }
         let (fields, _) = snapshot(directory);

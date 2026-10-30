@@ -168,17 +168,13 @@ fn threat(run: &mut Battle, world: &mut World<'_>) -> Result<Option<Vec<Effect>>
         facing: 0,
         which_turn: 0,
         MoveState: 0,
-    }; 10];
+    }; 4];
     concerns[ENEMY_SHIP_INDEX as usize].ObjectPtr = run.replacement.cast();
     concerns[ENEMY_SHIP_INDEX as usize].MoveState = MOVEMENT_STATE_ENTICE;
     concerns[ENEMY_WEAPON_INDEX as usize].ObjectPtr = run.object.cast();
     concerns[ENEMY_WEAPON_INDEX as usize].which_turn = 1;
     run.wait = 0;
-    run.next(vec![Effect::Intelligence(
-        world.ship(run.a).intelligence,
-        run.a,
-        concerns,
-    )])
+    run.next(vec![Effect::Intelligence(run.a, concerns)])
 }
 
 fn collision(run: &mut Battle, world: &mut World<'_>) -> Result<Option<Vec<Effect>>, String> {

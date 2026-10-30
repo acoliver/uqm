@@ -1,6 +1,5 @@
 //! Exercise the Arilou live descriptor and registered callbacks against the linked engine.
 
-use uqm_rust::ships::races::init_arilou;
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]
@@ -9,7 +8,7 @@ use battle::{Battle, Ship};
 
 use std::ffi::{c_void, CStr};
 use std::ptr;
-use uqm_rust::ships::native::{abi::*, element};
+use uqm_rust::ships::native::abi::*;
 
 /// Mirrors `FRAME_DESC` from `drawable.h` so the engine's frame functions can
 /// walk a drawable built here.
@@ -139,9 +138,9 @@ unsafe fn velocity_of(element: *mut ELEMENT) -> (SIZE, SIZE) {
 fn skiff_descriptor_matches_the_c_template() {
     battle_context::run(|| {
         unsafe {
-            let template = init_arilou();
-            assert_eq!(template, init_arilou());
-            let desc = &*template;
+            let template = battle::descriptor(SPECIES_ID_ARILOU_ID);
+            let desc = &template;
+            assert!(desc.race.is_some());
             assert_eq!(desc.ship_info.ship_flags, IMMEDIATE_WEAPON as u16);
             assert_eq!(desc.ship_info.ship_cost, 16);
             assert_eq!((desc.ship_info.crew_level, desc.ship_info.max_crew), (6, 6));
@@ -208,11 +207,11 @@ fn skiff_descriptor_matches_the_c_template() {
             // LASER_RANGE >> 1, with LASER_RANGE = DISPLAY_TO_WORLD (109).
             assert_eq!(desc.cyborg_control.ManeuverabilityIndex, 0);
             assert_eq!(desc.cyborg_control.WeaponRange, 218);
-            assert!(desc.cyborg_control.intelligence_func.is_some());
-            assert!(desc.preprocess_func.is_some());
-            assert!(desc.init_weapon_func.is_some());
-            assert!(desc.postprocess_func.is_none());
-            assert!(desc.uninit_func.is_none());
+            assert_ne!(desc.callbacks()[1], 0);
+            assert_ne!(desc.callbacks()[3], 0);
+            assert_ne!(desc.callbacks()[4], 0);
+            assert_eq!(desc.callbacks()[0], 0);
+            assert_eq!(desc.callbacks()[2], 0);
             assert!(desc.data.is_null());
             assert!(desc.code_ref.is_null());
         }
@@ -220,12 +219,13 @@ fn skiff_descriptor_matches_the_c_template() {
 }
 
 unsafe fn fire(fleet: &mut Fleet, ship: *mut ELEMENT) -> *mut ELEMENT {
-    let mut out = [ptr::null_mut()];
-    assert_eq!(
-        fleet.fixture.descriptor_mut().init_weapon_func.unwrap()(ship, out.as_mut_ptr()),
-        1
-    );
-    element(out[0])
+    let id = battle::id(ship);
+    uqm_rust::app::bridge::enter(|cx| {
+        let origin = cx.weapon_origin(id);
+        let out = cx.spawn_weapons(fleet.fixture.ship_id, origin);
+        assert_eq!(out.len(), 1);
+        cx.legacy_element(out[0].unwrap_or_else(|| panic!("allocated laser")))
+    })
 }
 
 #[test]
@@ -332,12 +332,8 @@ unsafe fn think(
     input: u8,
 ) -> u8 {
     fleet.fixture.ship_mut().ship_input_state = input;
-    fleet
-        .fixture
-        .descriptor_mut()
-        .cyborg_control
-        .intelligence_func
-        .unwrap()(ship, concerns.as_mut_ptr(), 0);
+    let mut subject = *ship;
+    fleet.fixture.intelligence(&mut subject, concerns, 0);
     fleet.fixture.ship_mut().ship_input_state
 }
 
@@ -600,7 +596,7 @@ impl<'a> Skiff<'a> {
     }
 
     unsafe fn preprocess(&mut self) {
-        self.fleet.fixture.descriptor_mut().preprocess_func.unwrap()(self.ship);
+        self.fleet.fixture.preprocess();
     }
 
     unsafe fn warp_array(&mut self) -> *mut FRAME {
@@ -787,6 +783,7 @@ fn teleport_animates_jumps_at_life_three_and_returns_at_life_one() {
 
             // Life 1 is NORMAL_LIFE: the teleport ends.
             (*ship).current.location = POINT { x: -9, y: 13 };
+            (*ship).IntersectControl.EndPoint = POINT { x: 123, y: -456 };
             set_life(ship, 1);
             skiff.preprocess();
             let ship_array = skiff.ship_array();
@@ -802,6 +799,8 @@ fn teleport_animates_jumps_at_life_three_and_returns_at_life_one() {
             // InitIntersectStartPoint: WORLD_TO_DISPLAY is an arithmetic >> 2.
             let origin = (*ship).IntersectControl.IntersectStamp.origin;
             assert_eq!((origin.x, origin.y), (-3, 3));
+            let end = (*ship).IntersectControl.EndPoint;
+            assert_eq!((end.x, end.y), (123, -456));
         }
     })
 }
@@ -914,5 +913,29 @@ fn nonsolid_skiff_off_the_warp_frames_is_left_alone() {
         assert_eq!(skiff.fleet.fixture.ship_mut().weapon_counter, 4);
         assert_eq!((*ship).state_flags, (PLAYER_SHIP | NONSOLID) as u16);
         assert_eq!(index_of((*ship).next.image.frame), 6);
+    })
+}
+
+#[test]
+fn init_intersect_start_preserves_endpoint_and_frame() {
+    // SAFETY: the isolated game thread owns the pool and retains the ship through the accessor call.
+    battle_context::run(|| unsafe {
+        let battle = Battle::new(4);
+        let mut ship = Ship::new(&battle, SPECIES_ID_ARILOU_ID, 0);
+        let frame = ship.element_mut().IntersectControl.IntersectStamp.frame;
+        ship.element_mut().current.location = POINT { x: -9, y: 13 };
+        ship.element_mut().next.location = POINT { x: 400, y: 800 };
+        ship.element_mut().IntersectControl.EndPoint = POINT { x: 123, y: -456 };
+        uqm_rust::app::bridge::enter(|cx| cx.init_intersect_start(ship.id));
+        let control = ship.element_mut().IntersectControl;
+        assert_eq!(
+            (
+                control.IntersectStamp.origin.x,
+                control.IntersectStamp.origin.y
+            ),
+            (-3, 3)
+        );
+        assert_eq!((control.EndPoint.x, control.EndPoint.y), (123, -456));
+        assert_eq!(control.IntersectStamp.frame, frame);
     })
 }

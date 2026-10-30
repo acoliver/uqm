@@ -19,10 +19,29 @@ unsafe extern "C" {
     fn DestroyCodeRes(code: *mut c_void) -> u32;
 }
 static UNINIT: AtomicUsize = AtomicUsize::new(0);
-unsafe extern "C" fn uninit(desc: *mut RACE_DESC) {
-    assert!(!(*desc).code_ref.is_null());
+fn uninit(
+    _: &mut uqm_rust::engine::battle::World,
+    stats: &mut uqm_rust::engine::battle::views::RaceStats,
+) {
+    assert_eq!(stats.ship_info.ship_cost, 16);
+    assert!(!uqm_rust::collections::observation::drain()
+        .iter()
+        .any(|event| matches!(
+            event,
+            uqm_rust::collections::observation::Event::ResourcesFree { .. }
+        )));
     UNINIT.fetch_add(1, Ordering::SeqCst);
 }
+static TEARDOWN_RACE: uqm_rust::engine::battle::Race = uqm_rust::engine::battle::Race {
+    descriptor: |_| {
+        uqm_rust::engine::battle::template::RaceTemplate::default().descriptor(&TEARDOWN_RACE)
+    },
+    preprocess: None,
+    postprocess: None,
+    init_weapon: None,
+    intelligence: None,
+    uninit: Some(uninit),
+};
 
 #[test]
 fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failures() {
@@ -123,10 +142,7 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
                 assert!(!loaded.is_null(), "species {}", i + 1);
                 assert_eq!((*loaded).ship_info.ship_cost, original);
                 assert!(!(*loaded).code_ref.is_null());
-                assert_eq!(
-                    (*loaded).preprocess_func.map(|f| f as usize),
-                    (*expected).preprocess_func.map(|f| f as usize)
-                );
+                assert_eq!((*loaded).callbacks(), (*expected).callbacks());
                 c_free_ship(loaded, 1, 0);
                 // CodeRes destruction owns only the record. Its caller owns uninit.
                 for (code, desc) in [(first, expected), (second, other.cast())] {
@@ -144,9 +160,18 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
             assert!(c_load_ship(SPECIES_ID_ARILOU_ID, 1).is_null());
             let loaded = load_ship(SPECIES_ID_ARILOU_ID, 0);
             assert!(!loaded.is_null());
-            (*loaded).uninit_func = Some(uninit);
+            assert!(!(*loaded).code_ref.is_null());
+            (*loaded).race = Some(&TEARDOWN_RACE);
+            uqm_rust::collections::observation::enable();
+            uqm_rust::collections::observation::drain();
             free_ship(loaded, 1, 1);
             assert_eq!(UNINIT.load(Ordering::SeqCst), 1);
+            assert!(uqm_rust::collections::observation::drain()
+                .iter()
+                .any(|event| matches!(
+                    event,
+                    uqm_rust::collections::observation::Event::ResourcesFree { .. }
+                )));
             assert_eq!(DestroyCodeRes(ptr::null_mut()), 1);
             ffi_bridge::UninitResourceSystem();
             assert_eq!(uio_bridge::uio_closeDir(dir), 0);

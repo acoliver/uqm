@@ -5,7 +5,9 @@
 //! live screen size, so they are translated here with the same `int`/COUNT
 //! /COORD conversions the C macros perform.
 
-use crate::ships::native::abi::{CIRCLE_SHIFT, FACING_SHIFT, ONE_SHIFT, SIN_SHIFT};
+#[cfg(test)]
+use crate::ships::native::abi::SIN_SHIFT;
+use crate::ships::native::abi::{CIRCLE_SHIFT, FACING_SHIFT, ONE_SHIFT};
 
 /// `MAX_REDUCTION` from `units.h`: how far the battle view can zoom out.
 const MAX_REDUCTION: i32 = 3;
@@ -38,12 +40,14 @@ const fn normalize_facing(facing: i32) -> u16 {
 }
 
 /// `NORMALIZE_ANGLE`, as the index into `sinetab`.
+#[cfg(test)]
 const fn normalize_angle(angle: i32) -> usize {
     (angle & ((1 << CIRCLE_SHIFT) - 1)) as usize
 }
 
 /// The arithmetic of `SINE (a, m)` once `SINVAL (a)` is known: the product
 /// is taken in `long` and the shifted result truncated to SIZE.
+#[cfg(test)]
 const fn scale_sine(sine_value: i16, magnitude: i32) -> i16 {
     ((sine_value as i64 * magnitude as i64) >> SIN_SHIFT) as i16
 }
@@ -70,9 +74,8 @@ const fn wrap_val(value: i32, extent: i32) -> u16 {
 #[cfg(not(test))]
 pub(crate) mod engine {
     use super::*;
-    use crate::collections::observation::image;
-    use crate::ships::native::{abi::*, starship};
-    use std::ptr;
+    use crate::engine::battle::{Concerns, Cx, ShipId, WeaponOrigin, WeaponSpawn};
+    use crate::ships::native::abi::*;
 
     // Core characteristics
     const MAX_CREW: u16 = 6;
@@ -96,245 +99,202 @@ pub(crate) mod engine {
     const SPECIAL_WAIT: u8 = 2;
     const HYPER_LIFE: u16 = 5;
 
-    const fn descriptor() -> RACE_DESC {
-        // All zero fields are null handles, absent callbacks, or zero counters.
-        let mut d = RACE_DESC::EMPTY;
-        d.ship_info.ship_flags = IMMEDIATE_WEAPON as u16;
-        d.ship_info.ship_cost = 16;
-        d.ship_info.crew_level = MAX_CREW;
-        d.ship_info.max_crew = MAX_CREW;
-        d.ship_info.energy_level = MAX_ENERGY;
-        d.ship_info.max_energy = MAX_ENERGY;
-        d.ship_info.race_strings_rsc = c"ship.arilou.text".as_ptr();
-        d.ship_info.icons_rsc = c"ship.arilou.icons".as_ptr();
-        d.ship_info.melee_icon_rsc = c"ship.arilou.meleeicons".as_ptr();
-        d.fleet.strength = 250 / SPHERE_RADIUS_INCREMENT as u16 * 2;
-        d.fleet.known_loc = POINT { x: 438, y: 6372 };
-        d.characteristics = CHARACTERISTIC_STUFF {
-            max_thrust: MAX_THRUST,
-            thrust_increment: THRUST_INCREMENT,
-            energy_regeneration: ENERGY_REGENERATION,
-            weapon_energy_cost: WEAPON_ENERGY_COST,
-            special_energy_cost: SPECIAL_ENERGY_COST,
-            energy_wait: ENERGY_WAIT,
-            turn_wait: TURN_WAIT,
-            thrust_wait: THRUST_WAIT,
-            weapon_wait: WEAPON_WAIT,
-            special_wait: SPECIAL_WAIT,
-            ship_mass: SHIP_MASS,
+    fn descriptor(_world: &mut crate::engine::battle::World) -> crate::engine::battle::RaceDesc {
+        let d = crate::engine::battle::template::RaceTemplate {
+            info: crate::engine::battle::views::Info {
+                ship_flags: IMMEDIATE_WEAPON as u16,
+                ship_cost: 16,
+                crew_level: MAX_CREW,
+                max_crew: MAX_CREW,
+                energy_level: MAX_ENERGY,
+                max_energy: MAX_ENERGY,
+            },
+            resources: crate::engine::battle::template::RaceResources {
+                strings: Some(c"ship.arilou.text"),
+                icons: Some(c"ship.arilou.icons"),
+                melee_icon: Some(c"ship.arilou.meleeicons"),
+                ship: [
+                    Some(c"ship.arilou.graphics.skiff.large"),
+                    Some(c"ship.arilou.graphics.skiff.medium"),
+                    Some(c"ship.arilou.graphics.skiff.small"),
+                ],
+                special: [
+                    Some(c"ship.arilou.graphics.warp.large"),
+                    Some(c"ship.arilou.graphics.warp.medium"),
+                    Some(c"ship.arilou.graphics.warp.small"),
+                ],
+                captain: Some(c"ship.arilou.graphics.captain"),
+                victory: Some(c"ship.arilou.ditty"),
+                sounds: Some(c"ship.arilou.sounds"),
+                ..Default::default()
+            },
+            fleet_strength: 250 / SPHERE_RADIUS_INCREMENT as u16 * 2,
+            fleet_location: POINT { x: 438, y: 6372 },
+            characteristics: CHARACTERISTIC_STUFF {
+                max_thrust: MAX_THRUST,
+                thrust_increment: THRUST_INCREMENT,
+                energy_regeneration: ENERGY_REGENERATION,
+                weapon_energy_cost: WEAPON_ENERGY_COST,
+                special_energy_cost: SPECIAL_ENERGY_COST,
+                energy_wait: ENERGY_WAIT,
+                turn_wait: TURN_WAIT,
+                thrust_wait: THRUST_WAIT,
+                weapon_wait: WEAPON_WAIT,
+                special_wait: SPECIAL_WAIT,
+                ship_mass: SHIP_MASS,
+            },
+            intelligence: crate::engine::battle::views::Intelligence {
+                weapon_range: (LASER_RANGE >> 1) as COUNT,
+                ..Default::default()
+            },
+            ..Default::default()
         };
-        d.ship_data.ship_rsc = [
-            c"ship.arilou.graphics.skiff.large".as_ptr(),
-            c"ship.arilou.graphics.skiff.medium".as_ptr(),
-            c"ship.arilou.graphics.skiff.small".as_ptr(),
-        ];
-        d.ship_data.special_rsc = [
-            c"ship.arilou.graphics.warp.large".as_ptr(),
-            c"ship.arilou.graphics.warp.medium".as_ptr(),
-            c"ship.arilou.graphics.warp.small".as_ptr(),
-        ];
-        d.ship_data.captain_control.captain_rsc = c"ship.arilou.graphics.captain".as_ptr();
-        d.ship_data.victory_ditty_rsc = c"ship.arilou.ditty".as_ptr();
-        d.ship_data.ship_sounds_rsc = c"ship.arilou.sounds".as_ptr();
-        d.cyborg_control.WeaponRange = (LASER_RANGE >> 1) as COUNT;
-        d.cyborg_control.intelligence_func = Some(arilou_intelligence);
-        d.preprocess_func = Some(arilou_preprocess);
-        d.init_weapon_func = Some(initialize_autoaim_laser);
-        d
+        d.descriptor(&ARILOU)
     }
 
-    static mut ARILOU_DESC: RACE_DESC = descriptor();
+    pub static ARILOU: crate::engine::battle::Race = crate::engine::battle::Race {
+        descriptor,
+        preprocess: Some(arilou_preprocess),
+        postprocess: None,
+        init_weapon: Some(initialize_autoaim_laser),
+        intelligence: Some(arilou_intelligence),
+        uninit: None,
+    };
 
-    /// Returns the static template copied by CaptureCodeRes for each ship.
-    #[no_mangle]
-    pub extern "C" fn init_arilou() -> *mut RACE_DESC {
-        &raw mut ARILOU_DESC
-    }
-
-    /// `SINE (a, m)`.
-    unsafe fn sine(angle: i32, magnitude: i32) -> SIZE {
-        let table = (&raw const sinetab).cast::<SIZE>();
-        scale_sine(*table.add(normalize_angle(angle)), magnitude)
-    }
-
-    /// `COSINE (a, m)`.
-    unsafe fn cosine(angle: i32, magnitude: i32) -> SIZE {
-        sine(angle + QUADRANT as i32, magnitude)
-    }
-
-    pub(crate) unsafe extern "C" fn initialize_autoaim_laser(
-        ship: *mut ELEMENT,
-        lasers: *mut HELEMENT,
-    ) -> COUNT {
-        let ss = starship(ship);
-        let orig_facing = (*ss).ShipFacing;
+    pub(crate) fn initialize_autoaim_laser(
+        cx: &mut Cx<'_>,
+        ss: ShipId,
+        mut origin: WeaponOrigin,
+    ) -> WeaponSpawn {
+        let orig_facing = cx.ship_state(ss).facing;
         let mut face = orig_facing;
-        let delta_facing = track_ship(ship, &mut face);
-        if delta_facing > 0 {
-            face = normalize_facing(i32::from(orig_facing) + i32::from(delta_facing));
+        let delta = cx.track_subject(&mut origin, &mut face);
+        if delta > 0 {
+            face = normalize_facing(i32::from(orig_facing) + i32::from(delta));
         }
-        (*ship).hTarget = ptr::null_mut();
-
+        origin.target = None;
         let angle = facing_to_angle(i32::from(face));
-        let mut block = LASER_BLOCK {
-            cx: (*ship).next.location.x,
-            cy: (*ship).next.location.y,
-            ex: cosine(angle, LASER_RANGE),
-            ey: sine(angle, LASER_RANGE),
+        vec![cx.spawn_laser(crate::engine::battle::views::Laser {
+            origin: origin.next.location,
+            end: POINT {
+                x: crate::ships::native::cosine(angle, LASER_RANGE),
+                y: crate::ships::native::sine(angle, LASER_RANGE),
+            },
             flags: IGNORE_SIMILAR as u16,
-            sender: (*ship).playerNr,
+            sender: origin.player,
             pixoffs: ARILOU_OFFSET,
             face,
-            // BUILD_COLOR (MAKE_RGB15 (0x1F, 0x1F, 0x0A), 0x0E)
             color: Color {
-                r: 0xFF,
-                g: 0xFF,
+                r: 0xff,
+                g: 0xff,
                 b: 0x52,
-                a: 0xFF,
+                a: 0xff,
             },
-        };
-        *lasers = initialize_laser(&mut block);
-
-        1
+        })]
     }
 
-    pub(crate) unsafe extern "C" fn arilou_intelligence(
-        ship: *mut ELEMENT,
-        concerns: *mut EVALUATE_DESC,
-        count: COUNT,
-    ) {
-        let ss = starship(ship);
-        (*ss).ship_input_state |= THRUST as u8;
-
-        (*concerns.add(ENEMY_SHIP_INDEX as usize)).MoveState = MOVEMENT_STATE_ENTICE;
-        ship_intelligence(ship, concerns, count);
-
-        if (*ss).special_counter == 0 {
-            (*ss).ship_input_state &= !(SPECIAL as u8);
-
-            let eval = concerns.add(ENEMY_WEAPON_INDEX as usize);
-            if !(*eval).ObjectPtr.is_null() && (*eval).which_turn <= 6 {
-                let threat = (*eval).ObjectPtr;
-                let enemy_race = (*starship(threat)).RaceDescPtr;
-                let weapon_frames = (&raw mut (*enemy_race).ship_data.weapon).cast::<FRAME>();
-                let special_frames = (&raw mut (*enemy_race).ship_data.special).cast::<FRAME>();
-                let is_tracking_weapon =
-                    ((*enemy_race).ship_info.ship_flags & SEEKING_WEAPON as u16 != 0
-                        && (*threat).next.image.farray == weapon_frames)
-                        || ((*enemy_race).ship_info.ship_flags & SEEKING_SPECIAL as u16 != 0
-                            && (*threat).next.image.farray == special_frames);
-
-                // PLAYER_SHIP here means an IMMEDIATE_WEAPON; the tracking
-                // case covers fighters.
-                if (((*threat).state_flags & PLAYER_SHIP as u16 != 0)
-                    || (is_tracking_weapon
-                        && ((*eval).which_turn == 1
-                            || ((*threat).state_flags & CREW_OBJECT as u16 != 0)))
-                    || PlotIntercept(threat, ship, 3, 0) != 0)
-                    && (TFB_Random() & 3) == 0
+    pub(crate) fn arilou_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
+        cx.ship_state_mut(ss).input |= THRUST as u8;
+        concerns.objects[ENEMY_SHIP_INDEX as usize].movement = MOVEMENT_STATE_ENTICE;
+        cx.ship_intelligence(ss, concerns);
+        if cx.ship_state(ss).special_counter == 0 {
+            cx.ship_state_mut(ss).input &= !(SPECIAL as u8);
+            let eval = concerns.objects[ENEMY_WEAPON_INDEX as usize];
+            if let Some(threat) = eval.object.filter(|_| eval.which_turn <= 6) {
+                let owner = cx.owner(threat);
+                let flags = cx.race_stats(owner).ship_info.ship_flags;
+                let object = cx.element(threat);
+                let tracking = (flags & SEEKING_WEAPON as u16 != 0
+                    && object.next.image.frames == cx.ship_frame_set(owner, 1))
+                    || (flags & SEEKING_SPECIAL as u16 != 0
+                        && object.next.image.frames == cx.ship_frame_set(owner, 2));
+                if (object.flags & PLAYER_SHIP as u16 != 0
+                    || (tracking
+                        && (eval.which_turn == 1 || object.flags & CREW_OBJECT as u16 != 0))
+                    || cx.plot_intercept(&cx.weapon_origin(threat), &concerns.subject, 3, 0) != 0)
+                    && cx.random() & 3 == 0
                 {
-                    (*ss).ship_input_state &= !((LEFT | RIGHT | THRUST | WEAPON) as u8);
-                    (*ss).ship_input_state |= SPECIAL as u8;
+                    cx.ship_state_mut(ss).input &= !((LEFT | RIGHT | THRUST | WEAPON) as u8);
+                    cx.ship_state_mut(ss).input |= SPECIAL as u8;
                 }
             }
         }
-        if u16::from((*(*ss).RaceDescPtr).ship_info.energy_level)
+        if u16::from(cx.race_stats(ss).ship_info.energy_level)
             <= u16::from(SPECIAL_ENERGY_COST) << 1
         {
-            (*ss).ship_input_state &= !(WEAPON as u8);
+            cx.ship_state_mut(ss).input &= !(WEAPON as u8);
         }
     }
 
-    /// `ZeroVelocityComponents`: the macro memsets the whole VELOCITY_DESC,
-    /// TravelAngle included.
-    unsafe fn zero_velocity_components(velocity: *mut VELOCITY_DESC) {
-        ptr::write_bytes(velocity, 0, 1);
-    }
-
-    /// `InitIntersectStartPoint` from `collide.h`.
-    unsafe fn init_intersect_start_point(element: *mut ELEMENT) {
-        let origin = &raw mut (*element).IntersectControl.IntersectStamp.origin;
-        (*origin).x = (i32::from((*element).current.location.x) >> ONE_SHIFT) as COORD;
-        (*origin).y = (i32::from((*element).current.location.y) >> ONE_SHIFT) as COORD;
-    }
-
-    pub(crate) unsafe extern "C" fn arilou_preprocess(ship: *mut ELEMENT) {
-        let ss = starship(ship);
-        let race = (*ss).RaceDescPtr;
-        let special_frames = (&raw mut (*race).ship_data.special).cast::<FRAME>();
-        if (*ship).state_flags & NONSOLID as u16 == 0 {
-            if (*ship).__bindgen_anon_5.thrust_wait == 0 {
-                zero_velocity_components(&raw mut (*ship).velocity);
-                (*ss).cur_status_flags &= !(SHIP_AT_MAX_SPEED as u16);
+    pub(crate) fn arilou_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
+        let ship = cx.ship_element(ss);
+        let special = cx.ship_frame_set(ss, 2);
+        if cx.element(ship).flags & NONSOLID as u16 == 0 {
+            if cx.element(ship).thrust == 0 {
+                cx.element_mut(ship).velocity = VELOCITY_DESC::default();
+                cx.ship_state_mut(ss).status &= !(SHIP_AT_MAX_SPEED as u16);
             }
-
-            if ((*ss).cur_status_flags & SPECIAL as u16 != 0)
-                && (*ss).special_counter == 0
-                && DeltaEnergy(ship, -(SPECIAL_ENERGY_COST as SIZE)) != 0
+            if cx.ship_state(ss).status & SPECIAL as u16 != 0
+                && cx.ship_state(ss).special_counter == 0
+                && cx.delta_energy(ship, -(SPECIAL_ENERGY_COST as SIZE))
             {
-                // Special key is pressed; start teleport
-                zero_velocity_components(&raw mut (*ship).velocity);
-                (*ss).cur_status_flags &=
+                cx.element_mut(ship).velocity = VELOCITY_DESC::default();
+                cx.ship_state_mut(ss).status &=
                     !((SHIP_AT_MAX_SPEED | LEFT | RIGHT | THRUST | WEAPON) as u16);
-
-                (*ship).state_flags |= (NONSOLID | FINITE_LIFE | CHANGING) as u16;
-                (*ship).__bindgen_anon_1.life_span = HYPER_LIFE;
-
-                image!(set; (*ship).next.image.farray, special_frames);
-                image!(frame; (*ship).next.image.frame, (*race).ship_data.special[0]);
-
-                // HYPERJUMP
-                ProcessSound(
-                    SetAbsStringTableIndex((*race).ship_data.ship_sounds, 1),
-                    ship,
-                );
-                (*ss).special_counter = (*race).characteristics.special_wait;
+                cx.element_mut(ship).flags |= (NONSOLID | FINITE_LIFE | CHANGING) as u16;
+                cx.element_mut(ship).life = HYPER_LIFE;
+                cx.set_frames(ship, true, special);
+                cx.set_frame(ship, true, cx.ship_frame(ss, 2));
+                cx.process_ship_sound(ss, 1, ship);
+                cx.ship_state_mut(ss).special_counter =
+                    cx.race_stats(ss).characteristics.special_wait;
             }
-        } else if (*ship).next.image.farray == special_frames {
+        } else if cx.element(ship).next.image.frames == special {
             const INPUT_KEYS: u16 = (LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as u16;
-            (*ss).cur_status_flags =
-                ((*ss).cur_status_flags & !INPUT_KEYS) | ((*ss).old_status_flags & INPUT_KEYS);
-            (*ss).weapon_counter = (*ss).weapon_counter.wrapping_add(1);
-            (*ss).special_counter = (*ss).special_counter.wrapping_add(1);
-            (*ss).energy_counter = (*ss).energy_counter.wrapping_add(1);
-            (*ship).__bindgen_anon_4.turn_wait = (*ship).__bindgen_anon_4.turn_wait.wrapping_add(1);
-            (*ship).__bindgen_anon_5.thrust_wait =
-                (*ship).__bindgen_anon_5.thrust_wait.wrapping_add(1);
-
-            // The original decrements this local copy only; the engine's
-            // FINITE_LIFE processing owns the element's life_span.
-            let mut life_span: COUNT = (*ship).__bindgen_anon_1.life_span;
-            if life_span == NORMAL_LIFE as COUNT {
-                // Ending teleport
-                (*ship).state_flags &= !((NONSOLID | FINITE_LIFE) as u16);
-                (*ship).state_flags |= APPEARING as u16;
-                let ship_frames = (&raw mut (*race).ship_data.ship).cast::<FRAME>();
-                image!(set; (*ship).current.image.farray, ship_frames);
-                image!(set; (*ship).next.image.farray, ship_frames);
-                let frame = SetAbsFrameIndex((*race).ship_data.ship[0], (*ss).ShipFacing);
-                image!(frame; (*ship).current.image.frame, frame);
-                image!(frame; (*ship).next.image.frame, frame);
-                init_intersect_start_point(ship);
+            {
+                let mut state = cx.ship_state_mut(ss);
+                state.status = (state.status & !INPUT_KEYS) | (state.old_status & INPUT_KEYS);
+                state.weapon_counter = state.weapon_counter.wrapping_add(1);
+                state.special_counter = state.special_counter.wrapping_add(1);
+                state.energy_counter = state.energy_counter.wrapping_add(1);
+            }
+            {
+                let mut state = cx.element_mut(ship);
+                state.turn = state.turn.wrapping_add(1);
+                state.thrust = state.thrust.wrapping_add(1);
+            }
+            let mut life = cx.element(ship).life;
+            if life == NORMAL_LIFE as COUNT {
+                cx.element_mut(ship).flags &= !((NONSOLID | FINITE_LIFE) as u16);
+                cx.element_mut(ship).flags |= APPEARING as u16;
+                let frames = cx.ship_frame_set(ss, 0);
+                cx.set_frames(ship, false, frames);
+                cx.set_frames(ship, true, frames);
+                let frame = cx.absolute_frame(cx.ship_frame(ss, 0), cx.ship_state(ss).facing);
+                cx.set_frame(ship, false, frame);
+                cx.set_frame(ship, true, frame);
+                cx.init_intersect_start(ship);
             } else {
-                // Teleporting in progress
-                life_span = life_span.wrapping_sub(1);
-                if life_span != 2 {
-                    if life_span < 2 {
-                        image!(frame; (*ship).next.image.frame, DecFrameIndex((*ship).next.image.frame));
+                life = life.wrapping_sub(1);
+                if life != 2 {
+                    let frame = cx.element(ship).next.image.frame;
+                    let frame = if life < 2 {
+                        cx.retreat_frame(frame)
                     } else {
-                        image!(frame; (*ship).next.image.frame, IncFrameIndex((*ship).next.image.frame));
-                    }
+                        cx.advance_frame(frame)
+                    };
+                    cx.set_frame(ship, true, frame);
                 } else {
-                    let log_width = log_space_width(ScreenWidth);
-                    let log_height = log_space_height(ScreenHeight);
-                    (*ship).next.location.x =
-                        wrap_val(display_align(TFB_Random(), log_width), log_width) as COORD;
-                    (*ship).next.location.y =
-                        wrap_val(display_align(TFB_Random(), log_height), log_height) as COORD;
+                    let (width, height) = cx.screen_dimensions();
+                    let width = log_space_width(width);
+                    let height = log_space_height(height);
+                    cx.element_mut(ship).next.location.x =
+                        wrap_val(display_align(cx.random(), width), width) as COORD;
+                    cx.element_mut(ship).next.location.y =
+                        wrap_val(display_align(cx.random(), height), height) as COORD;
                 }
             }
-
-            (*ship).state_flags |= CHANGING as u16;
+            cx.element_mut(ship).flags |= CHANGING as u16;
         }
     }
 }

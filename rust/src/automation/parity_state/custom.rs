@@ -7,16 +7,17 @@ use crate::automation::parity::Journal;
 use crate::engine::battle::kernel::LAST_PKUNK_SOUND as LAST_SOUND;
 use crate::ships::native::abi::*;
 #[cfg(not(test))]
-use crate::ships::races::{
-    pkunk_native::engine::PkunkData, sis_native::engine::SisData, umgah_native::engine::UmgahData,
-};
+use crate::ships::races::{sis_native::engine::SisData, umgah_native::engine::UmgahData};
 
 pub(super) enum RaceData<'a> {
     None,
     #[cfg(not(test))]
     Androsynth(crate::engine::battle::record::ElementCollisionFunc),
     #[cfg(not(test))]
-    Pkunk(&'a PkunkData),
+    Pkunk {
+        phoenix: usize,
+        hooks: [ElementProcessFunc; 3],
+    },
     #[cfg(not(test))]
     Umgah(&'a UmgahData),
     Mmrnmhrm(&'a CHARACTERISTIC_STUFF),
@@ -36,6 +37,20 @@ impl<'a> RaceData<'a> {
         {
             return Self::Mmrnmhrm(alternate);
         }
+        if let crate::engine::battle::RaceState::Pkunk {
+            phoenix,
+            saved_pre,
+            saved_post,
+            saved_death,
+        } = descriptor.race_state
+        {
+            // SAFETY: this snapshot retains the initialized game-thread pool.
+            let phoenix = unsafe { phoenix_address(phoenix) };
+            return Self::Pkunk {
+                phoenix,
+                hooks: [saved_pre, saved_post, saved_death],
+            };
+        }
         let pointer = descriptor.data;
         if pointer.is_null() {
             return Self::None;
@@ -43,7 +58,6 @@ impl<'a> RaceData<'a> {
         // SAFETY: each native initializer owns the corresponding concrete allocation.
         unsafe {
             match species {
-                SPECIES_ID_PKUNK_ID => Self::Pkunk(&*pointer.cast()),
                 SPECIES_ID_UMGAH_ID => Self::Umgah(&*pointer.cast()),
                 SPECIES_ID_SIS_SHIP_ID => Self::Sis(&*pointer.cast()),
                 _ => panic!("unexpected custom data for species {species}"),
@@ -72,17 +86,12 @@ impl<'a> RaceData<'a> {
                 _hooks,
             ),
             #[cfg(not(test))]
-            Self::Pkunk(data) => {
-                value(
-                    fields,
-                    &prefix,
-                    "phoenix",
-                    _journal.identity(data.hPhoenix as usize),
-                );
+            Self::Pkunk { phoenix, hooks } => {
+                value(fields, &prefix, "phoenix", _journal.identity(*phoenix));
                 for (name, callback) in [
-                    ("saved_preprocess", data.saved_preprocess_func),
-                    ("saved_postprocess", data.saved_postprocess_func),
-                    ("saved_death", data.saved_death_func),
+                    ("saved_preprocess", hooks[0]),
+                    ("saved_postprocess", hooks[1]),
+                    ("saved_death", hooks[2]),
                 ] {
                     hook(
                         fields,
@@ -230,4 +239,31 @@ mod tests {
             Fields::from([("ship.custom.present".into(), "false".into())])
         );
     }
+}
+
+/// Decode the legacy address token without accessing its element record.
+///
+/// # Safety
+/// The initialized display pool must remain owned by this synchronous snapshot.
+#[cfg(not(test))]
+pub(in crate::automation) unsafe fn phoenix_address(
+    phoenix: Option<crate::engine::battle::ElementId>,
+) -> usize {
+    let Some(id) = phoenix else {
+        return 0;
+    };
+    // Pkunk retains this token after free. Legacy observation follows the pool
+    // address even if its slot is reused; live element operations still check gen.
+    // SAFETY: the snapshot owns the initialized queue; only its address is read.
+    let queue = unsafe { &*crate::c_bindings::live_queues::display_list() };
+    assert!(
+        !queue.pq_tab.is_null(),
+        "Pkunk snapshot pool is not initialized"
+    );
+    assert!(
+        id.slot < queue.num_objects,
+        "Pkunk snapshot slot outside pool"
+    );
+    assert!(queue.object_size > 0, "Pkunk snapshot has no record stride");
+    queue.pq_tab as usize + usize::from(id.slot) * usize::from(queue.object_size)
 }

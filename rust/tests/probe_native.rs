@@ -1,14 +1,15 @@
 //! The noncombat drone has a descriptor but no battle callbacks.
 
 use std::ffi::CStr;
-use uqm_rust::ships::races::init_probe;
+#[path = "support/battle.rs"]
+mod battle;
+#[path = "support/battle_context.rs"]
+mod battle_context;
 
 #[test]
 fn drone_descriptor_preserves_resources_stats_and_absent_callbacks() {
-    unsafe {
-        let address = init_probe();
-        assert_eq!(address, init_probe());
-        let d = *address;
+    battle_context::run(|| unsafe {
+        let d = battle::descriptor(uqm_rust::ships::native::abi::SPECIES_ID_UR_QUAN_PROBE_ID);
         let info = d.ship_info;
         assert_eq!((info.ship_flags, info.ship_cost), (0, 0));
         assert_eq!((info.crew_level, info.max_crew), (1, 1));
@@ -69,6 +70,8 @@ fn drone_descriptor_preserves_resources_stats_and_absent_callbacks() {
             ),
             (0, 0)
         );
+        assert!(d.race.is_some());
+        assert_eq!(d.callbacks(), [0; 5]);
         assert!(d.cyborg_control.intelligence_func.is_none());
         assert!(d.preprocess_func.is_none());
         assert!(d.postprocess_func.is_none());
@@ -76,5 +79,5 @@ fn drone_descriptor_preserves_resources_stats_and_absent_callbacks() {
         assert!(d.uninit_func.is_none());
         assert!(d.data.is_null());
         assert!(d.code_ref.is_null());
-    }
+    });
 }

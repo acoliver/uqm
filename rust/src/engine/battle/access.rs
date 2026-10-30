@@ -439,10 +439,15 @@ pub unsafe fn invoke_legacy_collision<E, P>(
 
 #[cfg(not(test))]
 impl Cx<'_> {
-    pub fn init_intersect(&mut self, id: ElementId) {
+    pub fn init_intersect_start(&mut self, id: ElementId) {
         let e = &mut self.b.elements[id];
         e.IntersectControl.IntersectStamp.origin.x = e.current.location.x >> 2;
         e.IntersectControl.IntersectStamp.origin.y = e.current.location.y >> 2;
+    }
+
+    pub fn init_intersect(&mut self, id: ElementId) {
+        self.init_intersect_start(id);
+        let e = &mut self.b.elements[id];
         e.IntersectControl.EndPoint.x = e.next.location.x >> 2;
         e.IntersectControl.EndPoint.y = e.next.location.y >> 2;
     }

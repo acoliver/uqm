@@ -1,26 +1,21 @@
-//! Exercise the race entry point and registered callbacks against the linked engine.
+//! Exercise the Cruiser descriptor and Native callbacks against the linked engine.
 
-use uqm_rust::ships::races::init_human;
+#[path = "support/battle.rs"]
+mod battle;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
-use std::{ffi::CStr, mem, ptr};
+use battle::*;
+use std::{ffi::CStr, mem};
 use uqm_rust::ships::native::{abi::*, element};
-
-unsafe extern "C" {
-    fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> i32;
-    fn UninitQueue(queue: *mut QUEUE) -> i32;
-    fn InitDisplayList();
-    fn FreeElement(handle: HELEMENT);
-}
 
 #[test]
 fn cruiser_descriptor_and_registered_weapon_and_defense_callbacks() {
     battle_context::run(|| {
+        let battle = Battle::new(8);
         unsafe {
-            let template = init_human();
-            assert_eq!(template, init_human());
-            let mut desc = *template;
+            let mut ship = Ship::new(&battle, SPECIES_ID_EARTHLING_ID, 0);
+            let desc = descriptor(SPECIES_ID_EARTHLING_ID);
             assert_eq!(
                 desc.ship_info.ship_flags,
                 (FIRES_FORE | SEEKING_WEAPON | POINT_DEFENSE) as u16
@@ -41,82 +36,63 @@ fn cruiser_descriptor_and_registered_weapon_and_defense_callbacks() {
             assert_eq!(desc.characteristics.special_energy_cost, 4);
             assert_eq!(desc.characteristics.special_wait, 9);
             assert_eq!(desc.cyborg_control.WeaponRange, 4000);
-            assert!(desc.cyborg_control.intelligence_func.is_some());
-            assert!(desc.preprocess_func.is_none());
-            assert!(desc.uninit_func.is_none());
+            assert!(desc.race.is_some());
+            assert_eq!(desc.callbacks()[0], 0);
+            assert_eq!(desc.callbacks()[1], 0);
+            assert_ne!(desc.callbacks()[2], 0);
+            assert_ne!(desc.callbacks()[3], 0);
+            assert_ne!(desc.callbacks()[4], 0);
             assert!(desc.data.is_null());
             assert!(desc.code_ref.is_null());
 
-            assert_ne!(
-                InitQueue(&raw mut disp_q, 8, mem::size_of::<ELEMENT>() as u16),
-                0
-            );
-            InitDisplayList();
-            let mut ss: STARSHIP = mem::zeroed();
-            ss.RaceDescPtr = &raw mut desc;
-            ss.ShipFacing = 0;
-            let mut ship: ELEMENT = mem::zeroed();
-            ship.pParent = (&raw mut ss).cast();
-            ship.state_flags = PLAYER_SHIP as u16;
-            ship.next.location = POINT { x: 1000, y: 2000 };
-            let mut weapons = [ptr::null_mut(); 1];
-            let fire = desc.init_weapon_func.unwrap();
-            assert_eq!(fire(&raw mut ship, weapons.as_mut_ptr()), 1);
-            let nuke = element(weapons[0]);
-            assert!(!nuke.is_null());
+            ship.element_mut().next.location = POINT { x: 1000, y: 2000 };
+            let weapons = ship.weapon(1);
+            let nuke = ship.weapon_record(weapons[0]);
             assert_eq!((*nuke).__bindgen_anon_1.life_span, 60);
             assert_eq!((*nuke).__bindgen_anon_2.hit_points, 1);
             assert_eq!((*nuke).__bindgen_anon_3.mass_points, 4);
             assert_eq!((*nuke).__bindgen_anon_4.turn_wait, 3);
             assert_eq!((*nuke).__bindgen_anon_5.blast_offset, 8);
-            (*nuke).next = (*nuke).current;
-            let preprocess = (*nuke).preprocess_func.unwrap();
             for expected_wait in [2, 1, 0, 3] {
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    preprocess, nuke,
-                );
+                call_element("ships::races::human_native::nuke_preprocess", id(nuke));
                 assert_eq!((*nuke).__bindgen_anon_4.turn_wait, expected_wait);
             }
             (*nuke).__bindgen_anon_1.life_span = 50;
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                preprocess, nuke,
-            );
+            call_element("ships::races::human_native::nuke_preprocess", id(nuke));
             let mut expected: VELOCITY_DESC = mem::zeroed();
             SetVelocityVector(&raw mut expected, 80, 0);
             assert_eq!((*nuke).velocity.vector.width, expected.vector.width);
             assert_eq!((*nuke).velocity.vector.height, expected.vector.height);
-            FreeElement(weapons[0]);
+            FreeElement(nuke.cast());
 
             // Special creates a deferred scan only when pressed and off cooldown.
-            let postprocess = desc.postprocess_func.unwrap();
-            postprocess(&raw mut ship);
-            assert!(disp_q.tail.is_null());
-            ss.cur_status_flags = SPECIAL as u16;
-            ss.special_counter = 1;
-            postprocess(&raw mut ship);
-            assert!(disp_q.tail.is_null());
-            ss.special_counter = 0;
-            postprocess(&raw mut ship);
-            let defense_handle = disp_q.tail;
-            let defense = element(defense_handle);
-            assert!(!defense.is_null());
+            let before = queued();
+            ship.postprocess();
+            assert_eq!(queued(), before);
+            ship.ship_mut().cur_status_flags = SPECIAL as u16;
+            ship.ship_mut().special_counter = 1;
+            ship.postprocess();
+            assert_eq!(queued(), before);
+            ship.ship_mut().special_counter = 0;
+            ship.postprocess();
+            let defense = element(disp_q.tail);
+            assert_ne!(defense, ship.ptr());
             assert_eq!(
                 (*defense).state_flags,
                 (APPEARING | NONSOLID | FINITE_LIFE) as u16
             );
-            assert_eq!((*defense).pParent, ship.pParent);
+            assert_eq!((*defense).pParent, (*ship.ptr()).pParent);
             assert!((*defense).death_func.is_some());
-            ss.hShip = (&raw mut ship).cast();
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                (*defense).death_func.unwrap(),
-                defense,
+            call_element(
+                "ships::races::human_native::spawn_point_defense",
+                id(defense),
             );
             assert_eq!(
-                desc.ship_info.energy_level, 18,
+                ship.descriptor_mut().ship_info.energy_level,
+                18,
                 "no targets, no energy payment"
             );
-            assert_eq!(ss.special_counter, 0);
-            UninitQueue(&raw mut disp_q);
+            assert_eq!(ship.ship_mut().special_counter, 0);
         }
     })
 }
