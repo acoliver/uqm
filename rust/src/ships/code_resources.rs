@@ -20,23 +20,15 @@ pub(crate) mod engine {
 
     use crate::ships::races::chmmr_native::engine::init_chmmr;
 
-    use crate::ships::races::ilwrath_native::engine::init_ilwrath;
-
-    use crate::ships::races::melnorme_native::engine::init_melnorme;
-
     use crate::ships::races::orz_native::engine::init_orz;
 
     use crate::ships::races::slylandro_native::engine::init_slylandro;
 
     use crate::ships::races::spathi_native::engine::init_spathi;
 
-    use crate::ships::races::thraddash_native::engine::init_thraddash;
-
     use crate::ships::races::umgah_native::engine::init_umgah;
 
     use crate::ships::races::samatra::engine::init_samatra;
-
-    use crate::ships::races::sis_native::engine::init_sis;
 
     // Resource IDs follow uqm.rmp's SHIP values, not SPECIES_ID ordering.
     pub(crate) const INITIALIZERS: [Option<Initializer>; 28] = [
@@ -47,8 +39,8 @@ pub(crate) mod engine {
         Some(init_chmmr),
         None,
         None,
-        Some(init_ilwrath),
-        Some(init_melnorme),
+        None,
+        None,
         None,
         None,
         Some(init_orz),
@@ -58,7 +50,7 @@ pub(crate) mod engine {
         Some(init_spathi),
         None,
         None,
-        Some(init_thraddash),
+        None,
         Some(init_umgah),
         None,
         None,
@@ -66,7 +58,7 @@ pub(crate) mod engine {
         None,
         None,
         Some(init_samatra),
-        Some(init_sis),
+        None,
         None,
     ];
 
@@ -124,15 +116,17 @@ pub(crate) mod engine {
             .into_legacy()
     }
 
-    unsafe extern "C" fn get_code_res_data(ship_id: *const c_char, out: *mut ResourceData) {
-        let which = libc::atoi(ship_id) as u8;
-        let mut allocation = rust_hmalloc(mem::size_of::<RACE_DESC>());
-        let native = match which {
+    fn native_race(which: u8) -> Option<&'static crate::engine::battle::Race> {
+        match which {
             0 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_ANDROSYNTH_ID),
             1 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_ARILOU_ID),
             6 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_EARTHLING_ID),
             12 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_PKUNK_ID),
             13 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_SHOFIXTI_ID),
+            7 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_ILWRATH_ID),
+            8 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_MELNORME_ID),
+            18 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_THRADDASH_ID),
+            26 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_SIS_SHIP_ID),
             22 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_VUX_ID),
             2 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_KOHR_AH_ID),
             5 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_DRUUGE_ID),
@@ -146,7 +140,13 @@ pub(crate) mod engine {
             20 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_UR_QUAN_ID),
             27 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_UR_QUAN_PROBE_ID),
             _ => None,
-        };
+        }
+    }
+
+    unsafe extern "C" fn get_code_res_data(ship_id: *const c_char, out: *mut ResourceData) {
+        let which = libc::atoi(ship_id) as u8;
+        let mut allocation = rust_hmalloc(mem::size_of::<RACE_DESC>());
+        let native = native_race(which);
         use crate::engine::battle::record::DescriptorSource;
         let source = if let Some(race) = native {
             Some(DescriptorSource::Native(race))

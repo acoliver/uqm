@@ -1,13 +1,13 @@
 //! Per-instance race data, borrowed using the actual race-owned types.
 #[cfg(not(test))]
-use super::resources::{Frame, FrameSet};
+use super::resources::Frame;
 use super::{ships::characteristics, value, Fields};
 use crate::automation::parity::Journal;
 #[cfg(not(test))]
 use crate::engine::battle::kernel::LAST_PKUNK_SOUND as LAST_SOUND;
 use crate::ships::native::abi::*;
 #[cfg(not(test))]
-use crate::ships::races::{sis_native::engine::SisData, umgah_native::engine::UmgahData};
+use crate::ships::races::umgah_native::engine::UmgahData;
 
 pub(super) enum RaceData<'a> {
     None,
@@ -22,7 +22,7 @@ pub(super) enum RaceData<'a> {
     Umgah(&'a UmgahData),
     Mmrnmhrm(&'a CHARACTERISTIC_STUFF),
     #[cfg(not(test))]
-    Sis(&'a SisData),
+    Sis(&'a crate::engine::battle::race::SisState),
 }
 
 impl<'a> RaceData<'a> {
@@ -51,6 +51,9 @@ impl<'a> RaceData<'a> {
                 hooks: [saved_pre, saved_post, saved_death],
             };
         }
+        if let crate::engine::battle::RaceState::Sis(ref data) = descriptor.race_state {
+            return Self::Sis(data);
+        }
         let pointer = descriptor.data;
         if pointer.is_null() {
             return Self::None;
@@ -59,7 +62,6 @@ impl<'a> RaceData<'a> {
         unsafe {
             match species {
                 SPECIES_ID_UMGAH_ID => Self::Umgah(&*pointer.cast()),
-                SPECIES_ID_SIS_SHIP_ID => Self::Sis(&*pointer.cast()),
                 _ => panic!("unexpected custom data for species {species}"),
             }
         }
@@ -110,13 +112,13 @@ impl<'a> RaceData<'a> {
             }
             #[cfg(not(test))]
             Self::Sis(data) => {
-                value(fields, &prefix, "num_trackers", data.num_trackers);
-                value(fields, &prefix, "num_blasters", data.num_blasters);
+                value(fields, &prefix, "num_trackers", data.trackers);
+                value(fields, &prefix, "num_blasters", data.blasters);
                 for (index, missile) in data.missiles.iter().enumerate() {
                     missile_fields(
                         fields,
                         &format!("{prefix}.missiles.{index}"),
-                        missile,
+                        &missile.unwrap_or_default(),
                         _journal,
                         _hooks,
                     );
@@ -157,23 +159,23 @@ fn hook(
 fn missile_fields(
     fields: &mut Fields,
     prefix: &str,
-    missile: &MISSILE_BLOCK,
+    missile: &crate::engine::battle::race::FlagshipWeapon,
     journal: &Journal,
     hooks: &[(usize, &'static str)],
 ) {
     for (name, number) in [
-        ("cx", i64::from(missile.cx)),
-        ("cy", i64::from(missile.cy)),
+        ("cx", 0),
+        ("cy", 0),
         ("flags", i64::from(missile.flags)),
-        ("sender", i64::from(missile.sender)),
-        ("pixoffs", i64::from(missile.pixoffs)),
+        ("sender", 0),
+        ("pixoffs", i64::from(missile.pixel_offset)),
         ("speed", i64::from(missile.speed)),
         ("hit_points", i64::from(missile.hit_points)),
         ("damage", i64::from(missile.damage)),
-        ("face", i64::from(missile.face)),
+        ("face", i64::from(missile.facing)),
         ("index", i64::from(missile.index)),
         ("life", i64::from(missile.life)),
-        ("blast_offs", i64::from(missile.blast_offs)),
+        ("blast_offs", i64::from(missile.blast_offset)),
     ] {
         value(fields, prefix, name, number);
     }
@@ -181,28 +183,12 @@ fn missile_fields(
         fields,
         prefix,
         "preprocess",
-        missile.preprocess_func.map_or(0, |f| f.address()),
+        missile.preprocess.map_or(0, |f| f as usize),
         SPECIES_ID_SIS_SHIP_ID,
         hooks,
     );
-    // SAFETY: RaceData holds the live SIS allocation and its missile frame arrays.
-    let frame = unsafe {
-        Frame(missile.farray.as_ref().and_then(|pointer| {
-            pointer
-                .cast::<crate::graphics::native_abi::frame_desc>()
-                .as_ref()
-        }))
-    };
-    frame.write(fields, &format!("{prefix}.farray"), journal);
-    if !missile.farray.is_null() {
-        let role = journal.parent(missile.farray as usize);
-        let count = if role.starts_with("frame-set:") { 3 } else { 1 };
-        // SAFETY: descriptor frame roles identify live three-view arrays; any other
-        // engine array contributes only its guaranteed first entry.
-        let set =
-            unsafe { FrameSet::borrow(std::slice::from_raw_parts(missile.farray.cast(), count)) };
-        set.write(fields, &format!("{prefix}.farray"), journal);
-    }
+    // Module configuration has no loaded frame array, just as the original launch templates.
+    Frame(None).write(fields, &format!("{prefix}.farray"), journal);
 }
 
 #[cfg(test)]

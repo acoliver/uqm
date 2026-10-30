@@ -14,6 +14,7 @@ use uqm_rust::{
 pub struct Battle {
     display: *mut PRIMITIVE,
     dimensions: (i32, i32),
+    graphics: u8,
 }
 impl Battle {
     pub fn new(capacity: COUNT) -> Self {
@@ -21,6 +22,8 @@ impl Battle {
         unsafe {
             let display = GlobData.Game_state.DisplayArray;
             let dimensions = (ScreenWidth, ScreenHeight);
+            let graphics = uqm_rust::graphics::context_abi::_GraphicsStatusFlags;
+            uqm_rust::graphics::context_abi::_GraphicsStatusFlags &= !4;
             assert!(InitQueue(
                 &raw mut disp_q,
                 capacity,
@@ -37,6 +40,7 @@ impl Battle {
             Self {
                 display,
                 dimensions,
+                graphics,
             }
         }
     }
@@ -52,6 +56,7 @@ impl Drop for Battle {
             }
             GlobData.Game_state.DisplayArray = self.display;
             (ScreenWidth, ScreenHeight) = self.dimensions;
+            uqm_rust::graphics::context_abi::_GraphicsStatusFlags = self.graphics;
         }
     }
 }
@@ -132,13 +137,29 @@ impl<'a> Ship<'a> {
         ship
     }
     pub unsafe fn new(battle: &'a Battle, species: u32, player: SIZE) -> Self {
-        // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
+        // SAFETY: the caller retains the serialized battle and its frame resources.
+        unsafe { Self::with_frames(battle, species, player, [16; 3], [4, 4]) }
+    }
+    /// # Safety
+    /// Retain the serialized battle until this ship drops; do not retain projections across callbacks.
+    pub unsafe fn with_frames(
+        battle: &'a Battle,
+        species: u32,
+        player: SIZE,
+        counts: [u16; 3],
+        bounds: [i16; 2],
+    ) -> Self {
+        // SAFETY: the caller retains the serialized battle through fixture construction.
         unsafe {
             let mut ship = Self::bare(battle, species, player);
-            let frames = [FrameSet::new(16), FrameSet::new(16), FrameSet::new(16)];
+            let frames = counts.map(|count| FrameSet::with_bounds(count, bounds));
             ship.desc.ship_data.ship = [frames[0].frame(0); 3];
             ship.desc.ship_data.weapon = [frames[1].frame(0); 3];
             ship.desc.ship_data.special = [frames[2].frame(0); 3];
+            ship.element_mut().collision_func =
+                Some(uqm_rust::engine::battle::CollisionHook::Native(
+                    uqm_rust::battle::ship_native::collision,
+                ));
             ship.element_mut().set_life_span(NORMAL_LIFE as u16);
             let crew = ship.desc.ship_info.crew_level;
             ship.element_mut().set_hit_points(crew);
@@ -156,6 +177,56 @@ impl<'a> Ship<'a> {
             ship.frames = Some(frames);
             ship.queue();
             ship
+        }
+    }
+    pub fn raw_frame(&self, role: usize, index: usize) -> FRAME {
+        self.frames
+            .as_ref()
+            .unwrap_or_else(|| panic!("fixture frames"))[role]
+            .frame(index)
+    }
+    pub fn make_opaque(&mut self, role: usize) {
+        self.frames
+            .as_mut()
+            .unwrap_or_else(|| panic!("fixture frames"))[role]
+            .make_opaque();
+    }
+    pub fn set_frame_bounds(&mut self, role: usize, index: usize, bounds: [i16; 2]) {
+        self.frames
+            .as_mut()
+            .unwrap_or_else(|| panic!("fixture frames"))[role]
+            .frames[index]
+            .bounds = bounds;
+    }
+    pub fn weapon_handles(&mut self, expected: COUNT) -> Vec<HELEMENT> {
+        // SAFETY: the owning battle and ship remain live throughout weapon creation.
+        unsafe {
+            uqm_rust::app::bridge::enter(|cx| {
+                let origin = cx.weapon_origin(self.id);
+                let out = uqm_rust::engine::battle::Cx::spawn_weapons(cx, self.ship_id, origin);
+                assert_eq!(out.len(), usize::from(expected));
+                out.into_iter()
+                    .map(|id| id.map_or(ptr::null_mut(), |id| cx.legacy_element(id).cast()))
+                    .collect()
+            })
+        }
+    }
+    /// # Safety
+    /// The subject and concerns must be live fixture operands retained through the callback.
+    pub unsafe fn think(
+        &mut self,
+        subject: *mut ELEMENT,
+        concerns: &mut [EVALUATE_DESC; 4],
+        count: u16,
+    ) {
+        // SAFETY: callers supply this fixture's live subject, without retaining a record borrow.
+        unsafe {
+            uqm_rust::engine::battle::Cx::invoke_intelligence(
+                self.ss.0 as usize,
+                subject,
+                concerns.as_mut_ptr(),
+                count,
+            );
         }
     }
     pub fn frame(&self, role: usize, index: u16) -> uqm_rust::engine::battle::views::Frame {
@@ -422,9 +493,13 @@ struct DrawableDesc {
 pub struct FrameSet {
     _drawable: Box<DrawableDesc>,
     frames: Vec<FrameDesc>,
+    image: *mut c_void,
 }
 impl FrameSet {
     pub fn new(count: u16) -> Self {
+        Self::with_bounds(count, [4, 4])
+    }
+    pub fn with_bounds(count: u16, bounds: [i16; 2]) -> Self {
         let mut drawable = Box::new(DrawableDesc {
             flags: 0,
             max_index: count - 1,
@@ -436,7 +511,7 @@ impl FrameSet {
                 kind: 0,
                 index,
                 hot_spot: [0, 0],
-                bounds: [4, 4],
+                bounds,
                 image: ptr::null_mut(),
                 parent,
             })
@@ -445,10 +520,46 @@ impl FrameSet {
         Self {
             _drawable: drawable,
             frames,
+            image: ptr::null_mut(),
+        }
+    }
+    pub fn make_opaque(&mut self) {
+        use uqm_rust::graphics::{
+            native_canvas::{
+                lifecycle::TFB_DrawCanvas_New_Paletted, pixels::TFB_DrawCanvas_SetPixelIndexes,
+            },
+            tfb_draw_abi::{TFB_DrawImage_Delete, TFB_DrawImage_New},
+        };
+        // SAFETY: the fixture owns these small SDL canvas/image resources and frees them on drop.
+        unsafe {
+            let canvas = TFB_DrawCanvas_New_Paletted(4, 4, ptr::null_mut(), -1);
+            assert!(!canvas.is_null());
+            assert_ne!(
+                TFB_DrawCanvas_SetPixelIndexes(canvas, [1u8; 16].as_ptr(), 4, 4),
+                0
+            );
+            if !self.image.is_null() {
+                TFB_DrawImage_Delete(self.image.cast());
+            }
+            self.image = TFB_DrawImage_New(canvas).cast();
+            assert!(!self.image.is_null());
+            for frame in &mut self.frames {
+                frame.image = self.image;
+            }
         }
     }
     pub fn frame(&self, index: usize) -> FRAME {
         (&raw const self.frames[index]).cast_mut().cast()
+    }
+}
+impl Drop for FrameSet {
+    fn drop(&mut self) {
+        if !self.image.is_null() {
+            // SAFETY: this frame set uniquely owns the image and its canvas.
+            unsafe {
+                uqm_rust::graphics::tfb_draw_abi::TFB_DrawImage_Delete(self.image.cast());
+            }
+        }
     }
 }
 pub unsafe fn prim(e: *mut ELEMENT) -> *mut PRIMITIVE {
