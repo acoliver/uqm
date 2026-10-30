@@ -320,7 +320,7 @@ pub(crate) mod engine {
             eval = weapon;
         }
         cx.ship_intelligence(ss, concerns);
-        if concerns.objects[eval].object.is_some() {
+        if let Some(selected) = concerns.objects[eval].object {
             let mut h = if cx.ship_state(ss).old_status & WEAPON as u16 != 0 {
                 cx.elements().tail()
             } else {
@@ -357,11 +357,7 @@ pub(crate) mod engine {
                 } else if cx.ship_state(ss).weapon_counter == 0
                     && cx.ship_weapons(
                         &concerns.subject,
-                        &cx.weapon_origin(
-                            concerns.objects[eval]
-                                .object
-                                .unwrap_or_else(|| panic!("selected concern")),
-                        ),
+                        &cx.weapon_origin(selected),
                         (FRAGMENT_RANGE / 2) as COUNT,
                     ) != 0
                 {
