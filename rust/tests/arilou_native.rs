@@ -918,6 +918,7 @@ fn nonsolid_skiff_off_the_warp_frames_is_left_alone() {
 
 #[test]
 fn init_intersect_start_preserves_endpoint_and_frame() {
+    // SAFETY: the isolated game thread owns the pool and retains the ship through the accessor call.
     battle_context::run(|| unsafe {
         let battle = Battle::new(4);
         let mut ship = Ship::new(&battle, SPECIES_ID_ARILOU_ID, 0);
