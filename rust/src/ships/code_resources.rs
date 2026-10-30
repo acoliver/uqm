@@ -16,18 +16,14 @@ pub(crate) mod engine {
 
     type Initializer = unsafe extern "C" fn() -> *mut RACE_DESC;
 
-    use crate::ships::races::chenjesu_native::engine::init_chenjesu;
-
     use crate::ships::races::orz_native::engine::init_orz;
-
-    use crate::ships::races::samatra::engine::init_samatra;
 
     // Resource IDs follow uqm.rmp's SHIP values, not SPECIES_ID ordering.
     pub(crate) const INITIALIZERS: [Option<Initializer>; 28] = [
         None,
         None,
         None,
-        Some(init_chenjesu),
+        None,
         None,
         None,
         None,
@@ -49,7 +45,7 @@ pub(crate) mod engine {
         None,
         None,
         None,
-        Some(init_samatra),
+        None,
         None,
         None,
     ];
@@ -110,6 +106,8 @@ pub(crate) mod engine {
 
     fn native_race(which: u8) -> Option<&'static crate::engine::battle::Race> {
         [
+            (3, crate::ships::native::abi::SPECIES_ID_CHENJESU_ID),
+            (25, crate::ships::native::abi::SPECIES_ID_SA_MATRA_ID),
             (0, crate::ships::native::abi::SPECIES_ID_ANDROSYNTH_ID),
             (1, crate::ships::native::abi::SPECIES_ID_ARILOU_ID),
             (6, crate::ships::native::abi::SPECIES_ID_EARTHLING_ID),
