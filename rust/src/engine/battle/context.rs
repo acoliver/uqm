@@ -5,6 +5,7 @@ use std::ptr::NonNull;
 
 pub struct Battle {
     pub(super) elements: ElementTable,
+    pub(super) terminal_outcome: Option<super::RaceState>,
     kernel: super::record::Kernel,
     pub zoom_out: i16,
     pub nth_frame: u16,
@@ -14,6 +15,11 @@ pub struct Battle {
 }
 
 impl Battle {
+    /// Start a battle, including encounters with no Sa-Matra descriptor.
+    pub fn initialize(&mut self) {
+        self.terminal_outcome = None;
+    }
+
     pub fn network(&self) -> std::rc::Rc<dyn super::net::BattleNet> {
         self.net
             .clone()
@@ -40,6 +46,7 @@ impl Battle {
         Self {
             // SAFETY: the caller owns the queue for this battle context's lifetime.
             elements: unsafe { ElementTable::from_queue(queue) },
+            terminal_outcome: None,
             kernel: super::record::Kernel::new(),
             zoom_out: 1 << 8,
             nth_frame: 0,

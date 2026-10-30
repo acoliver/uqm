@@ -6,6 +6,19 @@ use crate::ships::native::abi::*;
 
 #[cfg(not(test))]
 impl Cx<'_> {
+    pub fn finish_battle(&mut self) {
+        let mut current = self.elements().head();
+        while let Some(id) = current {
+            current = self.elements().succ(id);
+            if self.element(id).flags & PLAYER_SHIP as u16 != 0 {
+                self.retain_terminal_outcome(self.owner(id));
+            }
+        }
+    }
+}
+
+#[cfg(not(test))]
+impl Cx<'_> {
     /// Predicts contact using the supplied value projections, including a moved AI subject.
     /// Obtain a live element's projection with `weapon_origin(ElementId)`.
     pub fn plot_intercept(&mut self, a: &Subject, b: &Subject, turns: u16, margin: u16) -> u16 {
