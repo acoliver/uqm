@@ -354,7 +354,12 @@ pub(crate) mod engine {
             net.init_end_frames();
         }
         if net.as_ref().is_some_and(|net| {
-            !crate::app::bridge::publish(cx, || net.negotiate(true, NetState_NetState_interBattle))
+            // SAFETY: no record borrow crosses negotiation or its nested input callbacks.
+            unsafe {
+                !crate::app::bridge::publish(cx, || {
+                    net.negotiate(true, NetState_NetState_interBattle)
+                })
+            }
         }) {
             set_activity(activity() & !(IN_BATTLE as u16));
             BatchGraphics();
@@ -366,7 +371,12 @@ pub(crate) mod engine {
         }
         if crate::app::bridge::publish(cx, || pick(ship, (*ship).playerNr as COUNT)) != 0 {
             if net.as_ref().is_some_and(|net| {
-                !crate::app::bridge::publish(cx, || net.negotiate(true, NetState_NetState_inBattle))
+                // SAFETY: the picker returned and no record borrow crosses negotiation.
+                unsafe {
+                    !crate::app::bridge::publish(cx, || {
+                        net.negotiate(true, NetState_NetState_inBattle)
+                    })
+                }
             }) {
                 set_activity(activity() & !(IN_BATTLE as u16));
                 BatchGraphics();
