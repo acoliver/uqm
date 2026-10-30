@@ -174,11 +174,7 @@ fn threat(run: &mut Battle, world: &mut World) -> Result<Option<Vec<Effect>>, St
     concerns[ENEMY_WEAPON_INDEX as usize].object = Some(run.object());
     concerns[ENEMY_WEAPON_INDEX as usize].which_turn = 1;
     run.wait = 0;
-    run.next(vec![Effect::Intelligence(
-        world.ship(run.a()).intelligence,
-        run.a(),
-        concerns,
-    )])
+    run.next(vec![Effect::Intelligence(run.a(), concerns)])
 }
 
 fn collision(run: &mut Battle, world: &mut World) -> Result<Option<Vec<Effect>>, String> {

@@ -46,7 +46,6 @@ impl Frames {
         self.0
     }
 }
-#[cfg(not(test))]
 impl Frame {
     pub(crate) unsafe fn from_native(frame: FRAME) -> Self {
         Self(frame)

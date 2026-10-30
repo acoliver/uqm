@@ -3,8 +3,6 @@
 use super::parity::Fields;
 
 mod custom;
-#[cfg(not(test))]
-pub(in crate::automation) use custom::phoenix_address;
 mod elements;
 mod live;
 mod resources;

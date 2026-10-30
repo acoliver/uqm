@@ -685,8 +685,6 @@ impl Cx<'_> {
     }
 }
 
-mod navigation;
-
 #[cfg(not(test))]
 impl Cx<'_> {
     pub(crate) fn has_descriptor(&self, ship: ShipId) -> bool {
@@ -694,17 +692,21 @@ impl Cx<'_> {
     }
 }
 
-pub(crate) mod lifecycle;
+/// # Safety
+/// The caller retains the live element graph throughout this staging observation.
+pub(crate) unsafe fn observe_element_record(record: &super::record::ELEMENT) -> ElementState {
+    ElementState::decode(record)
+}
 
-pub(crate) mod save;
+/// # Safety
+/// The caller retains the ship pool throughout this staging observation.
+pub(crate) unsafe fn observe_ship_record(record: &super::record::STARSHIP) -> ShipState {
+    ShipState::decode(record)
+}
 
-pub(crate) mod observe;
-
-pub(crate) mod fixture;
-
-const _: () = {
-    assert!(
-        crate::comm::locdata::CGameState::DISPLAY_ARRAY_OFFSET
-            == std::mem::offset_of!(crate::c_bindings::global_state::GAME_STATE, DisplayArray)
-    );
-};
+#[cfg(test)]
+/// # Safety
+/// The caller retains the test descriptor and all resources referenced by its state.
+pub(crate) unsafe fn observe_descriptor_record(record: &super::record::RACE_DESC) -> RaceStats {
+    RaceStats::decode(record)
+}

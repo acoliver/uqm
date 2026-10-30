@@ -15,8 +15,8 @@ fn ship_detachment_is_an_explicit_fixture_command() {
 }
 
 #[cfg(not(test))]
-use super::super::{link_queue, Cx, ShipId};
-use super::super::{record::*, views::*, ElementId, Parent};
+use crate::engine::battle::{link_queue, Cx, ShipId};
+use crate::engine::battle::{record::*, views::*, ElementId, Parent};
 #[derive(Clone, Copy)]
 pub(crate) struct Element {
     pub state: ElementState,
@@ -72,7 +72,6 @@ pub(crate) struct Ship {
     pub info: Option<Info>,
     pub data: Option<ShipFrames>,
     pub characteristics: Option<CHARACTERISTIC_STUFF>,
-    pub intelligence: Option<usize>,
     pub phoenix: Option<Phoenix>,
 }
 impl Ship {
@@ -115,7 +114,6 @@ impl Cx<'_> {
             info: None,
             data: None,
             characteristics: None,
-            intelligence: None,
             phoenix: None,
         };
         if s.RaceDescPtr.is_null() {
@@ -125,16 +123,15 @@ impl Cx<'_> {
         let stats = self.race_stats(id);
         view.info = Some(stats.ship_info);
         view.characteristics = Some(stats.characteristics);
-        let callbacks = d.callbacks();
-        view.intelligence = (callbacks[4] != 0).then_some(callbacks[4]);
         view.data = Some(ShipFrames {
             ship: self.ship_frame_set(id, 0),
             weapon: self.ship_frame_set(id, 1),
             special: self.ship_frame_set(id, 2),
-            captain_special: Frame(d.ship_data.captain_control.special),
+            // SAFETY: the descriptor retains this loaded captain frame.
+            captain_special: unsafe { Frame::from_native(d.ship_data.captain_control.special) },
         });
         view.phoenix = match d.race_state {
-            super::super::RaceState::Pkunk {
+            crate::engine::battle::RaceState::Pkunk {
                 phoenix,
                 saved_pre,
                 saved_post,
@@ -143,24 +140,6 @@ impl Cx<'_> {
                 handle: phoenix,
                 hooks: [saved_pre, saved_post, saved_death].map(|f| f.map_or(0, |f| f.address())),
             }),
-            _ if s.SpeciesID == crate::ships::native::abi::SPECIES_ID_PKUNK_ID => {
-                std::ptr::NonNull::new(
-                    d.data
-                        .cast::<crate::ships::races::pkunk_native::engine::PkunkData>(),
-                )
-                .map(|pointer| {
-                    let data = self.project(pointer);
-                    Phoenix {
-                        handle: self.elements().allocated_id(data.hPhoenix),
-                        hooks: [
-                            data.saved_preprocess_func,
-                            data.saved_postprocess_func,
-                            data.saved_death_func,
-                        ]
-                        .map(|f| f.map_or(0, |f| f.address())),
-                    }
-                })
-            }
             _ => None,
         };
         view
@@ -177,7 +156,10 @@ impl Cx<'_> {
             });
         }
         if ship.clear_element {
-            self.ship_mut(id).hShip = std::ptr::null_mut();
+            // SAFETY: the checked ship is exclusively owned during the command commit.
+            unsafe {
+                (*self.ship_pointer(id)).hShip = std::ptr::null_mut();
+            }
         }
         if let Some(info) = ship.info {
             self.race_stats_mut(id).ship_info = info;
@@ -190,10 +172,13 @@ impl Cx<'_> {
         self.ship_pointer(id) as usize
     }
     pub(crate) fn detach_descriptor(&mut self, id: ShipId) -> Descriptor {
-        Descriptor(std::mem::replace(
-            &mut self.ship_mut(id).RaceDescPtr,
-            std::ptr::null_mut(),
-        ))
+        // SAFETY: this lifecycle command exclusively detaches the checked ship descriptor.
+        unsafe {
+            Descriptor(std::mem::replace(
+                &mut (*self.ship_pointer(id)).RaceDescPtr,
+                std::ptr::null_mut(),
+            ))
+        }
     }
     pub(crate) fn descriptor_handle(&self, id: ShipId) -> Descriptor {
         Descriptor(self.ship(id).RaceDescPtr)
@@ -258,10 +243,10 @@ impl Cx<'_> {
     pub(crate) fn fixture_intelligence(
         &mut self,
         element: ElementId,
-        objects: [super::super::Concern; 4],
+        objects: [crate::engine::battle::Concern; 4],
     ) {
         let ship = self.owner(element);
-        let mut concerns = super::super::Concerns {
+        let mut concerns = crate::engine::battle::Concerns {
             objects,
             subject: self.weapon_origin(element),
             count: 10,
@@ -311,11 +296,11 @@ impl Cx<'_> {
         assert!(view < 3, "fixture zoom view");
         // SAFETY: the fixture retains the descriptor's three views and all selected drawable images.
         unsafe {
-            let frame = &*self.element(element).current.image.frame.0;
-            let expected = &**frames.0.add(view);
+            let frame = &*self.element(element).current.image.frame.raw();
+            let expected = &**frames.raw().add(view);
             let mipmap = (view == 1).then(|| {
                 let adjacent = &*crate::graphics::pixmap_abi::SetAbsFrameIndex(
-                    (*frames.0.add(view + 1)).cast(),
+                    (*frames.raw().add(view + 1)).cast(),
                     index,
                 );
                 let selected = &*frame.image;
@@ -334,9 +319,10 @@ impl Cx<'_> {
 impl Element {
     pub(crate) fn new() -> Self {
         // SAFETY: this test source has the same zero-valid representation as a newly allocated element.
-        let record: super::super::record::ELEMENT = unsafe { std::mem::zeroed() };
+        let record: crate::engine::battle::record::ELEMENT = unsafe { std::mem::zeroed() };
         Self {
-            state: ElementState::decode(&record),
+            // SAFETY: this test retains its initialized local record.
+            state: unsafe { crate::engine::battle::access::observe_element_record(&record) },
             parent: Parent::None,
             target: None,
             pred: None,
@@ -347,20 +333,33 @@ impl Element {
 impl Ship {
     pub(crate) fn for_test(s: &STARSHIP, d: &RACE_DESC, element: ElementId) -> Self {
         Self {
-            state: ShipState::decode(s),
+            // SAFETY: the retained ship pool remains immutable during observation.
+            state: unsafe { crate::engine::battle::access::observe_ship_record(s) },
             species: s.SpeciesID,
             index: s.index,
             element: Some(element),
             clear_element: false,
-            info: Some(RaceStats::decode(d).ship_info),
+            // SAFETY: the test retains its descriptor throughout this value snapshot.
+            info: Some(
+                unsafe { crate::engine::battle::access::observe_descriptor_record(d) }.ship_info,
+            ),
             data: Some(ShipFrames {
-                ship: Frames(std::ptr::from_ref(&d.ship_data.ship).cast_mut().cast()),
-                weapon: Frames(std::ptr::from_ref(&d.ship_data.weapon).cast_mut().cast()),
-                special: Frames(std::ptr::from_ref(&d.ship_data.special).cast_mut().cast()),
-                captain_special: Frame(d.ship_data.captain_control.special),
+                // SAFETY: the test descriptor retains all three ship frames.
+                ship: unsafe {
+                    Frames::from_native(std::ptr::NonNull::from(&d.ship_data.ship).cast())
+                },
+                // SAFETY: the test descriptor retains all three weapon frames.
+                weapon: unsafe {
+                    Frames::from_native(std::ptr::NonNull::from(&d.ship_data.weapon).cast())
+                },
+                // SAFETY: the test descriptor retains all three special frames.
+                special: unsafe {
+                    Frames::from_native(std::ptr::NonNull::from(&d.ship_data.special).cast())
+                },
+                // SAFETY: the descriptor retains this loaded captain frame.
+                captain_special: unsafe { Frame::from_native(d.ship_data.captain_control.special) },
             }),
             characteristics: Some(d.characteristics),
-            intelligence: None,
             phoenix: None,
         }
     }

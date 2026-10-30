@@ -1,8 +1,8 @@
 //! Scoped live records and fixture phases. No record borrow crosses an engine call.
 
 use super::*;
+use crate::battle::context_access::fixture::{Element, Phoenix, Ship};
 use crate::battle::element::ElementFlags;
-use crate::engine::battle::access::fixture::{Element, Phoenix, Ship};
 use crate::engine::battle::views::{Frame, Frames};
 #[cfg(not(test))]
 use crate::engine::battle::Cx;
@@ -126,6 +126,7 @@ struct Hooks {
 /// Only operations that invalidate live borrows leave the safe phase logic.
 enum Effect {
     RaceProcess(bool, ElementId),
+    NativeShip(crate::engine::battle::race::ShipFn, ElementId),
     Invoke(crate::engine::battle::record::ElementProcessFunc, ElementId),
     Death(ElementId),
     Weapon(ElementId),
@@ -144,7 +145,7 @@ enum Effect {
     FreeRetained,
     Reset,
     Think([(ElementId, u16); 2]),
-    Intelligence(Option<usize>, ElementId, [Concern; 4]),
+    Intelligence(ElementId, [Concern; 4]),
     Scale(i32),
     RestoreScale,
     ZoomProof(Frames, ElementId, usize, u16),

@@ -1,10 +1,9 @@
 //! Save-facing projection over checked typed ship links and element ids.
-use super::super::{
+use crate::comm::locdata::CQueue;
+use crate::engine::battle::{
     link_queue::{LinkQueue, Starship},
     record::{ELEMENT, STARSHIP},
-    views::ElementState,
 };
-use crate::comm::locdata::CQueue;
 use crate::savegame::runtime::{
     hyper_save::HyperSaveError,
     queues::{walk, QueueElement, QueueKind},
@@ -56,7 +55,8 @@ pub(crate) unsafe fn read_flagship_facing(
     }
     // SAFETY: the validated display list contains this exact live record; no callback runs here.
     let element = unsafe { &*handle.cast::<ELEMENT>() };
-    let state = ElementState::decode(element);
+    // SAFETY: the validator retained the display pool and checked this element address.
+    let state = unsafe { crate::engine::battle::access::observe_element_record(element) };
     if state.flags & crate::ships::native::abi::PLAYER_SHIP as u16 == 0 {
         return Err(HyperSaveError::ElementIsNotAPlayerShip);
     }

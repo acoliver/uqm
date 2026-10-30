@@ -2,7 +2,7 @@
 use super::Fields;
 #[cfg(not(test))]
 use super::{custom, elements, ships::Ship, value};
-use crate::engine::battle::access::observe::ElementObservation;
+use crate::battle::context_access::observe::ElementObservation;
 #[cfg(not(test))]
 use crate::{
     automation::battle_fight::ShipState, battle::netplay::CrcState, comm::locdata::CGameState,
@@ -12,6 +12,16 @@ use crate::{automation::parity::Journal, comm::locdata::CQueue};
 
 #[cfg(not(test))]
 pub fn checkpoint(journal: &mut Journal, boundary: &str) -> std::io::Result<()> {
+    // SAFETY: the checkpoint owns the immutable live graph until this operation returns.
+    unsafe { crate::app::bridge::enter(|cx| checkpoint_with_context(cx, journal, boundary)) }
+}
+
+#[cfg(not(test))]
+fn checkpoint_with_context(
+    cx: &crate::engine::battle::Cx<'_>,
+    journal: &mut Journal,
+    boundary: &str,
+) -> std::io::Result<()> {
     let mut hooks = crate::ships::hook_registry::hooks();
     hooks.extend(crate::automation::parity_hooks::hooks());
     let mut fields = Fields::new();
@@ -19,21 +29,16 @@ pub fn checkpoint(journal: &mut Journal, boundary: &str) -> std::io::Result<()> 
     // SAFETY: the checkpoint owns an immutable borrow of the initialized game,
     // queue pools and their linked records. No callback runs before it returns.
     let (game, queues, elements) = unsafe {
-        crate::app::bridge::enter(|cx| {
-            (
-                &*(&raw const GlobData.Game_state).cast::<CGameState>(),
-                std::array::from_fn::<_, 2, _>(|side| {
-                    Ship::queue(
-                        &*crate::c_bindings::live_queues::player_ships(side),
-                        cx.elements(),
-                    )
-                }),
-                display_elements(
-                    &*crate::c_bindings::live_queues::display_list(),
-                    cx.elements(),
-                ),
-            )
-        })
+        (
+            &*(&raw const GlobData.Game_state).cast::<CGameState>(),
+            std::array::from_fn::<_, 2, _>(|side| {
+                Ship::queue(&*crate::c_bindings::live_queues::player_ships(side))
+            }),
+            display_elements(
+                &*crate::c_bindings::live_queues::display_list(),
+                cx.elements(),
+            ),
+        )
     };
     crate::automation::parity_mode::capture(&mut fields, game, journal);
     let ships: [_; 2] = std::array::from_fn(|side| {
@@ -82,34 +87,33 @@ pub fn checkpoint(journal: &mut Journal, boundary: &str) -> std::io::Result<()> 
 }
 
 #[cfg(not(test))]
-pub(in crate::automation) fn fighters() -> ([Option<ShipState>; 2], [u8; 2]) {
-    // SAFETY: the snapshot runs synchronously at a published game-thread boundary.
-    unsafe {
-        crate::app::bridge::enter(|cx| {
-            let mut fighters = [None, None];
-            let mut next = cx.elements().head();
-            while let Some(id) = next {
-                next = cx.elements().succ(id);
-                let e = cx.element(id);
-                if e.flags & crate::ships::native::abi::PLAYER_SHIP as u16 == 0 {
-                    continue;
-                }
-                let side = match e.player {
-                    0 => 0,
-                    1 => 1,
-                    _ => continue,
-                };
-                if let crate::engine::battle::Parent::Ship(owner) = cx.parent(id) {
-                    fighters[side] = Some(ShipState {
-                        x: i32::from(e.current.location.x),
-                        y: i32::from(e.current.location.y),
-                        facing: (cx.ship_state(owner).facing % 16) as u8,
-                        crew: e.hits,
-                    });
-                }
+pub(in crate::automation) fn fighters(
+    cx: &crate::engine::battle::Cx<'_>,
+) -> ([Option<ShipState>; 2], [u8; 2]) {
+    {
+        let mut fighters = [None, None];
+        let mut next = cx.elements().head();
+        while let Some(id) = next {
+            next = cx.elements().succ(id);
+            let e = cx.element(id);
+            if e.flags & crate::ships::native::abi::PLAYER_SHIP as u16 == 0 {
+                continue;
             }
-            (fighters, cx.b.counters)
-        })
+            let side = match e.player {
+                0 => 0,
+                1 => 1,
+                _ => continue,
+            };
+            if let crate::engine::battle::Parent::Ship(owner) = cx.parent(id) {
+                fighters[side] = Some(ShipState {
+                    x: i32::from(e.current.location.x),
+                    y: i32::from(e.current.location.y),
+                    facing: (cx.ship_state(owner).facing % 16) as u8,
+                    crew: e.hits,
+                });
+            }
+        }
+        (fighters, cx.b.counters)
     }
 }
 
@@ -121,7 +125,7 @@ unsafe fn display_elements(
 ) -> Vec<ElementObservation> {
     // SAFETY: the caller retains the immutable display pool throughout this observation.
     unsafe {
-        crate::engine::battle::access::observe::elements(
+        crate::battle::context_access::observe::elements(
             queue,
             #[cfg(not(test))]
             elements,
@@ -178,7 +182,7 @@ mod tests {
     fn visuals(fields: &mut Fields, prefix: &str, element: &Element, journal: &mut Journal) {
         // SAFETY: the test owns a layout-compatible source record.
         let observation =
-            ElementObservation::decode(unsafe { &*std::ptr::from_ref(element).cast() });
+            unsafe { ElementObservation::decode(&*std::ptr::from_ref(element).cast()) };
         super::visuals(fields, prefix, &observation, journal);
     }
 

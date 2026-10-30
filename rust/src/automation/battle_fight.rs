@@ -443,7 +443,12 @@ impl BattleSnapshot {
         if activity & crate::mainloop::types::activity_flags::IN_BATTLE == 0 {
             return Self::none(arena);
         }
-        let ([player, enemy], counters) = super::parity_state::fighters();
+        // SAFETY: the automation snapshot is a synchronous game-thread operation.
+        unsafe { crate::app::bridge::enter(|cx| Self::from_context(cx, arena)) }
+    }
+
+    fn from_context(cx: &crate::engine::battle::Cx<'_>, arena: (i32, i32)) -> Self {
+        let ([player, enemy], counters) = super::parity_state::fighters(cx);
         Self {
             in_battle: true,
             counters,

@@ -32,7 +32,7 @@ pub(crate) unsafe fn init_ships() {
             InitQueue(
                 record::ship_queue(side).as_ptr(),
                 crate::ships::native::abi::MAX_SHIPS_PER_SIDE as u16,
-                super::links::ship_size() as u16,
+                crate::engine::battle::link_queue::ship_size() as u16,
             );
         }
     }

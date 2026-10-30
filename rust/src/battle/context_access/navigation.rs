@@ -9,23 +9,26 @@ use crate::planets::starmap::{star_array, CurStarDescPtr};
 use std::ptr::{self, NonNull};
 impl Cx<'_> {
     pub(crate) fn navigation(&self) -> &GLOBDATA {
-        self.project(
-            NonNull::new(&raw mut GlobData).unwrap_or_else(|| panic!("navigation authority")),
-        )
+        let pointer =
+            NonNull::new(&raw mut GlobData).unwrap_or_else(|| panic!("navigation authority"));
+        // SAFETY: Cx retains the game-thread navigation authority for this borrow.
+        unsafe { pointer.as_ref() }
     }
 
     pub(crate) fn navigation_mut(&mut self) -> &mut GLOBDATA {
-        self.project_mut(
-            NonNull::new(&raw mut GlobData).unwrap_or_else(|| panic!("navigation authority")),
-        )
+        let mut pointer =
+            NonNull::new(&raw mut GlobData).unwrap_or_else(|| panic!("navigation authority"));
+        // SAFETY: the exclusive Cx borrow serializes navigation mutations.
+        unsafe { pointer.as_mut() }
     }
 
     pub(crate) fn solar(&self) -> &SOLARSYS_STATE {
-        let pointer = *self.project(
-            NonNull::new(&raw mut pSolarSysState)
-                .unwrap_or_else(|| panic!("retained navigation authority")),
-        );
-        self.project(NonNull::new(pointer).unwrap_or_else(|| panic!("active solar system")))
+        // SAFETY: the navigation mode retains its current system for this context borrow.
+        unsafe {
+            pSolarSysState
+                .as_ref()
+                .unwrap_or_else(|| panic!("active solar system"))
+        }
     }
 
     fn ip_group_pointer(&self, element: ElementId) -> NonNull<IP_GROUP> {
@@ -40,25 +43,25 @@ impl Cx<'_> {
     }
 
     pub(crate) fn ip_group(&self, element: ElementId) -> &IP_GROUP {
-        self.project(self.ip_group_pointer(element))
+        // SAFETY: the typed parent identifies a retained record in the context's group pool.
+        unsafe { self.ip_group_pointer(element).as_ref() }
     }
 
     pub(crate) fn ip_group_mut(&mut self, element: ElementId) -> &mut IP_GROUP {
-        self.project_mut(self.ip_group_pointer(element))
+        // SAFETY: the exclusive context scopes this checked parent record mutation.
+        unsafe { self.ip_group_pointer(element).as_mut() }
     }
 
     pub(crate) fn previous_activity(&self) -> u16 {
-        *self.project(
-            NonNull::new(&raw mut LastActivity)
-                .unwrap_or_else(|| panic!("retained navigation authority")),
-        )
+        // SAFETY: the owning game thread serializes navigation activity.
+        unsafe { LastActivity }
     }
 
     pub(crate) fn set_previous_activity(&mut self, activity: u16) {
-        *self.project_mut(
-            NonNull::new(&raw mut LastActivity)
-                .unwrap_or_else(|| panic!("retained navigation authority")),
-        ) = activity;
+        // SAFETY: this exclusive context owns navigation activity mutations.
+        unsafe {
+            LastActivity = activity;
+        }
     }
 
     pub(crate) fn planet_outer_location(&self, planet: u16) -> POINT {
@@ -175,10 +178,13 @@ impl Cx<'_> {
             return 0;
         }
         assert_eq!(solar.pBaseDesc, solar.MoonDesc.as_ptr().cast_mut());
-        let orbital = self.project(
-            std::ptr::NonNull::new(solar.pOrbitalDesc)
-                .unwrap_or_else(|| panic!("orbital descriptor")),
-        );
+        // SAFETY: the current system retains its active orbital descriptor for this borrow.
+        let orbital = unsafe {
+            solar
+                .pOrbitalDesc
+                .as_ref()
+                .unwrap_or_else(|| panic!("orbital descriptor"))
+        };
         let planet = if orbital.pPrevDesc == solar.SunDesc.as_ptr().cast_mut() {
             solar.pOrbitalDesc
         } else {
@@ -191,48 +197,69 @@ impl Cx<'_> {
         (1 + offset / std::mem::size_of::<PLANET_DESC>()) as u8
     }
     pub(crate) fn group_record(&self, p: NonNull<IP_GROUP>) -> &IP_GROUP {
-        self.project(p)
+        // SAFETY: the navigation caller supplies a record retained by the current context.
+        unsafe { p.as_ref() }
     }
-    pub(crate) fn group_record_mut(&mut self, p: NonNull<IP_GROUP>) -> &mut IP_GROUP {
-        self.project_mut(p)
+    pub(crate) fn group_record_mut(&mut self, mut p: NonNull<IP_GROUP>) -> &mut IP_GROUP {
+        // SAFETY: the exclusive context serializes the retained navigation record mutation.
+        unsafe { p.as_mut() }
     }
     pub(crate) fn encounter_record(&self, p: NonNull<ENCOUNTER>) -> &ENCOUNTER {
-        self.project(p)
+        // SAFETY: the navigation caller supplies a record retained by the current context.
+        unsafe { p.as_ref() }
     }
-    pub(crate) fn encounter_record_mut(&mut self, p: NonNull<ENCOUNTER>) -> &mut ENCOUNTER {
-        self.project_mut(p)
+    pub(crate) fn encounter_record_mut(&mut self, mut p: NonNull<ENCOUNTER>) -> &mut ENCOUNTER {
+        // SAFETY: the exclusive context serializes the retained navigation record mutation.
+        unsafe { p.as_mut() }
     }
     pub(crate) fn set_encounter_group(&mut self, group: u8) {
-        *self.project_mut(
-            NonNull::new(&raw mut EncounterGroup)
-                .unwrap_or_else(|| panic!("retained navigation authority")),
-        ) = group;
+        // SAFETY: encounter selection is owned by this exclusive navigation context.
+        unsafe {
+            EncounterGroup = group;
+        }
     }
-    pub(crate) fn navigation_stars(&self) -> super::super::views::Frame {
-        super::super::views::Frame(
-            *self.project(
-                NonNull::new(&raw mut stars_in_space)
-                    .unwrap_or_else(|| panic!("retained navigation authority")),
-            ),
-        )
+    pub(crate) fn navigation_stars(&self) -> crate::engine::battle::views::Frame {
+        // SAFETY: the loaded navigation resource is retained throughout the context borrow.
+        unsafe { crate::engine::battle::views::Frame::from_native(stars_in_space) }
     }
-    pub(crate) fn group_icon(&self, group: NonNull<IP_GROUP>) -> super::super::views::Frame {
-        super::super::views::Frame(self.group_record(group).melee_icon)
+    pub(crate) fn group_icon(
+        &self,
+        group: NonNull<IP_GROUP>,
+    ) -> crate::engine::battle::views::Frame {
+        // SAFETY: the current group retains its loaded icon for this context borrow.
+        unsafe {
+            crate::engine::battle::views::Frame::from_native(self.group_record(group).melee_icon)
+        }
     }
     pub(crate) fn set_group_image(&mut self, id: ElementId, group: NonNull<IP_GROUP>) {
         let record = self.group_record(group);
-        let frame = super::super::views::Frame(record.melee_icon);
-        let frames = super::super::views::Frames(std::ptr::from_ref(&record.melee_icon).cast_mut());
+        // SAFETY: the retained group owns its single icon frame slot.
+        let (frame, frames) = unsafe {
+            (
+                crate::engine::battle::views::Frame::from_native(record.melee_icon),
+                crate::engine::battle::views::Frames::from_native(NonNull::from(
+                    &record.melee_icon,
+                )),
+            )
+        };
         self.set_single_frames(id, frames, frame);
     }
-    pub(crate) fn flagship_stamp_frame(&self) -> super::super::views::Frame {
-        super::super::views::Frame(self.navigation().Game_state.ShipStamp.frame)
+    pub(crate) fn flagship_stamp_frame(&self) -> crate::engine::battle::views::Frame {
+        // SAFETY: the navigation authority retains the current flagship drawable.
+        unsafe {
+            crate::engine::battle::views::Frame::from_native(
+                self.navigation().Game_state.ShipStamp.frame,
+            )
+        }
     }
     pub(crate) fn set_flagship_image(&mut self, id: ElementId) {
         let frame = self.flagship_stamp_frame();
-        let frames = super::super::views::Frames(
-            std::ptr::from_ref(&self.navigation().Game_state.ShipStamp.frame).cast_mut(),
-        );
+        // SAFETY: the navigation authority retains this single-frame stamp slot.
+        let frames = unsafe {
+            crate::engine::battle::views::Frames::from_native(NonNull::from(
+                &self.navigation().Game_state.ShipStamp.frame,
+            ))
+        };
         self.set_single_frames(id, frames, frame);
         self.set_frame(id, false, frame);
     }

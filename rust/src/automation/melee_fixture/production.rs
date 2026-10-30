@@ -85,25 +85,25 @@ pub(in crate::automation::melee_fixture) fn execute(
             })
             .collect()
     };
-    drive(task, &hooks, &catalog)
+    // SAFETY: this admitted operation owns the game thread; legacy callbacks republish Cx.
+    unsafe { crate::app::bridge::enter(|cx| drive(cx, task, &hooks, &catalog)) }
 }
 
 #[cfg(not(test))]
 fn drive(
+    cx: &mut Cx<'_>,
     mut task: Task<'_>,
     hooks: &Hooks,
     catalog: &BTreeMap<u8, u32>,
 ) -> Result<Option<FixtureRun>, String> {
-    let mut retained: Option<crate::engine::battle::access::fixture::Descriptor> = None;
+    let mut retained: Option<crate::battle::context_access::fixture::Descriptor> = None;
     let mut old_scale = 0;
     loop {
-        // SAFETY: no record reference leaves the snapshot or commit boundary.
-        let mut world = unsafe { crate::app::bridge::enter(|cx| borrow_world(cx)) };
-        let effects = task.advance(&mut world, hooks, catalog);
-        // SAFETY: planning cannot allocate or invoke callbacks; all observed ids remain live.
-        unsafe {
-            crate::app::bridge::enter(|cx| world.commit(cx));
-        }
+        let mut world = borrow_world(cx);
+        // SAFETY: planning owns only copied values; its legacy checkpoint may enter Cx.
+        let effects =
+            unsafe { crate::app::bridge::publish(cx, || task.advance(&mut world, hooks, catalog)) };
+        world.commit(cx);
         let elements = world.order;
         let ships = world.ship_order;
         let Some(effects) = effects? else {
@@ -114,8 +114,7 @@ fn drive(
             let reply = unsafe {
                 match effect {
                     Effect::RetainDescriptor(owner) => {
-                        retained =
-                            Some(crate::app::bridge::enter(|cx| cx.descriptor_handle(owner)));
+                        retained = Some(cx.descriptor_handle(owner));
                         Reply::None
                     }
                     Effect::FreeRetained => {
@@ -129,10 +128,10 @@ fn drive(
                     Effect::Reset => {
                         crate::mainloop::input_frame::drain_committed_draws();
                         crate::battle::tactrans_native::ResetWinnerStarShip();
-                        crate::app::bridge::battle(|b| b.counters = [7, 7]);
-                        apply(Effect::Remove(elements.clone()))?;
+                        cx.b.counters = [7, 7];
+                        apply(cx, Effect::Remove(elements.clone()))?;
                         for &owner in &ships {
-                            crate::app::bridge::enter(|cx| cx.detach_descriptor(owner)).free();
+                            cx.detach_descriptor(owner).free();
                         }
                         Reply::None
                     }
@@ -144,7 +143,7 @@ fn drive(
                         optMeleeScale = old_scale;
                         Reply::None
                     }
-                    other => apply(other)?,
+                    other => apply(cx, other)?,
                 }
             };
             task.reply(reply)?;
@@ -188,13 +187,15 @@ pub(super) enum Reply {
 /// Handles and callback addresses must have come from the just-dropped live
 /// graph. No borrowed Element, ship, descriptor or frame may cross this call.
 #[cfg(not(test))]
-unsafe fn apply(effect: Effect) -> Result<Reply, String> {
+unsafe fn apply(cx: &mut Cx<'_>, effect: Effect) -> Result<Reply, String> {
     // SAFETY: effects execute at the published game-thread boundary after command planning commits.
     unsafe {
         match effect {
             Effect::Redraw(check) => {
-                crate::battle::process_native::RedrawQueue(0);
-                redrawn(check);
+                crate::app::bridge::publish(cx, || {
+                    crate::battle::process_native::RedrawQueue(0);
+                    redrawn(check);
+                });
                 return Ok(Reply::None);
             }
             Effect::ClearStar => {
@@ -206,7 +207,7 @@ unsafe fn apply(effect: Effect) -> Result<Reply, String> {
             }
             _ => {}
         }
-        crate::app::bridge::enter(|cx| {
+        {
             use crate::battle::process_native::{
                 invoke_collision::invoke_collision, invoke_element::invoke_element,
             };
@@ -260,6 +261,15 @@ unsafe fn apply(effect: Effect) -> Result<Reply, String> {
                     let ship = cx.owner(id);
                     cx.invoke_ship_process(ship, post);
                 }
+                Effect::NativeShip(callback, id) => {
+                    let ship = cx.owner(id);
+                    let parent = cx.ship_address(ship);
+                    crate::battle::process_native::dispatch::invoke(
+                        callback as usize,
+                        parent,
+                        || callback(cx, ship),
+                    );
+                }
                 Effect::Weapon(id) => crate::battle::ship_native::ship_postprocess(cx, id),
                 Effect::Death(id) => {
                     let hook = cx
@@ -292,14 +302,13 @@ unsafe fn apply(effect: Effect) -> Result<Reply, String> {
                         cx.fixture_think(ship, crew);
                     }
                 }
-                Effect::Intelligence(callback, id, concerns) => {
-                    callback.ok_or("Arilou intelligence callback is unavailable")?;
+                Effect::Intelligence(id, concerns) => {
                     cx.fixture_intelligence(id, concerns);
                 }
                 _ => unreachable!(),
             }
             Ok(Reply::None)
-        })
+        }
     }
 }
 
@@ -430,29 +439,5 @@ mod zoom_tests {
             assert!(!zoom_matches(1, 700, (11, 5), (11, 5), mipmap));
         }
         assert!(zoom_matches(1, 700, (11, 5), (11, 5), Some((99, 99))));
-    }
-}
-
-#[cfg(not(test))]
-fn ship_effect(
-    cx: &mut crate::engine::battle::Cx<'_>,
-    id: crate::engine::battle::ElementId,
-    effect: Effect,
-    observed: Option<(usize, usize)>,
-) {
-    match effect {
-        Effect::RaceProcess(post, _) => {
-            let ship = cx.owner(id);
-            cx.invoke_ship_process(ship, post);
-        }
-        Effect::NativeShip(callback, _) => {
-            let ship = cx.owner(id);
-            let (_, parent) = observed.unwrap_or_else(|| panic!("fixture native callback owner"));
-            crate::battle::process_native::dispatch::invoke(callback as usize, parent, || {
-                callback(cx, ship)
-            });
-        }
-        Effect::Weapon(_) => crate::battle::ship_native::ship_postprocess(cx, id),
-        _ => unreachable!("non-ship fixture effect"),
     }
 }

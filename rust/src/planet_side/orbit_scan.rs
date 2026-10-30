@@ -50,15 +50,12 @@ mod production {
     const MAX_SCROUNGED: u8 = 50;
     const STAMP_PRIM: u8 = 1;
     const PS_NON_PLAYER: i16 = 1;
-    use crate::battle::process_native::engine::InitDisplayList;
     use crate::graphics::pixmap_abi::SetAbsFrameIndex;
     extern "C" {
         static mut MiscDataFrame: *mut crate::graphics::native_abi::frame_desc;
     }
 
-    pub unsafe fn generate() {
-        InitDisplayList();
-
+    pub unsafe fn generate(cx: &mut Cx<'_>) {
         let solar = solar_system::current();
         if solar.is_null() || (*solar).pOrbitalDesc.is_null() || MiscDataFrame.is_null() {
             return;
@@ -87,21 +84,24 @@ mod production {
                 let Ok(generated) = generator.generate(scan, node) else {
                     continue;
                 };
-                crate::app::bridge::enter(|cx| {
+                {
                     let Some(element) = cx.alloc_element() else {
-                        return;
+                        continue;
                     };
                     if initialize_element(cx, element, solar, scan, raw_node, generated).is_err() {
                         cx.dispose(element);
                     } else {
                         cx.put(element);
                     }
-                });
+                }
             }
         }
     }
 
-    pub(super) unsafe fn sync_positions(surface: &crate::planet_side::assembly::SurfaceAssembly) {
+    pub(super) unsafe fn sync_positions(
+        cx: &mut Cx<'_>,
+        surface: &crate::planet_side::assembly::SurfaceAssembly,
+    ) {
         let positions: Vec<_> = surface
             .generated
             .iter()
@@ -117,7 +117,7 @@ mod production {
                 )
             })
             .collect();
-        crate::app::bridge::enter(|cx| {
+        {
             let mut handle = cx.elements().head();
             while let Some(element) = handle {
                 handle = cx.elements().succ(element);
@@ -129,7 +129,7 @@ mod production {
                         crate::graphics::native_abi::POINT { x, y };
                 }
             }
-        });
+        }
     }
 
     unsafe fn initialize_element(
@@ -248,7 +248,8 @@ mod production {
 pub extern "C" fn generate_planet_side() {
     #[cfg(not(test))]
     unsafe {
-        production::generate();
+        crate::battle::process_native::engine::InitDisplayList();
+        crate::app::bridge::enter(|cx| production::generate(cx));
     }
 }
 
@@ -397,6 +398,9 @@ mod retrieval_tests {
 }
 
 #[cfg(not(test))]
-pub(crate) unsafe fn sync_positions(surface: &super::assembly::SurfaceAssembly) {
-    production::sync_positions(surface);
+pub(crate) unsafe fn sync_positions(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    surface: &super::assembly::SurfaceAssembly,
+) {
+    production::sync_positions(cx, surface);
 }

@@ -156,7 +156,7 @@ fn arilou_threat_and_collision_operands_are_snapshots_of_the_real_borrowed_recor
         .unwrap()
         .unwrap();
     assert!(
-        matches!(effects.as_slice(), [Effect::Intelligence(callback, a, concerns)] if callback.is_none() && *a == run.a() && concerns[ENEMY_WEAPON_INDEX as usize].object == Some(run.object()) && concerns[ENEMY_WEAPON_INDEX as usize].which_turn == 1)
+        matches!(effects.as_slice(), [Effect::Intelligence(a, concerns)] if concerns.len() == 4 && *a == run.a() && concerns[ENEMY_WEAPON_INDEX as usize].object == Some(run.object()) && concerns[ENEMY_WEAPON_INDEX as usize].which_turn == 1)
     );
     let effects = frames::advance(&mut run, &mut world, &hooks)
         .unwrap()

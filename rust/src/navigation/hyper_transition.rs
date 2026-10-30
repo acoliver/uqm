@@ -218,10 +218,9 @@ fn save_sis_facing(cx: &mut Cx<'_>) {
         cx.navigation_mut().Game_state.ShipFacing = cx.ship_state(cx.owner(element)).facing + 1;
     }
 }
-/// # Safety
-/// Game-thread access to the live flagship queue and world state.
-pub unsafe fn save_sis_hyper_state() {
-    crate::app::bridge::enter(save_sis_facing);
+/// Retain the flagship facing while the navigation context owns the live queues.
+pub fn save_sis_hyper_state(cx: &mut Cx<'_>) {
+    save_sis_facing(cx);
 }
 
 use crate::engine::battle::{Cx, ElementId};

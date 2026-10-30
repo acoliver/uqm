@@ -779,3 +779,20 @@ impl Cx<'_> {
 pub(crate) mod links;
 
 pub(crate) mod fleet_legacy;
+
+mod navigation;
+
+pub(crate) mod lifecycle;
+
+pub(crate) mod save;
+
+pub(crate) mod observe;
+
+pub(crate) mod fixture;
+
+const _: () = {
+    assert!(
+        crate::comm::locdata::CGameState::DISPLAY_ARRAY_OFFSET
+            == std::mem::offset_of!(crate::c_bindings::global_state::GAME_STATE, DisplayArray)
+    );
+};
