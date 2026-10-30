@@ -22,6 +22,7 @@ fn terminal_outcome_survives_descriptor_teardown_until_the_next_battle() {
             assert!(matches!(ship.descriptor_mut().race_state, RaceState::None));
             drop(ship);
             uqm_rust::battle::process_native::InitDisplayList();
+            GlobData.Game_state.CurrentActivity = WON_LAST_BATTLE as u16;
             assert_eq!(observe(), (expected, None));
             // A non-boss battle must clear the result too, before any ship spawns.
             GlobData.Game_state.CurrentActivity = (IN_ENCOUNTER | IN_BATTLE) as u16;

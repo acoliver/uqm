@@ -28,12 +28,12 @@ fn project_events(state: &crate::engine::battle::race::SaMatraState) -> Events {
 
 #[cfg(not(test))]
 fn snapshot(cx: &mut Cx<'_>) -> (Events, Option<Snapshot>) {
+    if let Some(RaceState::SaMatra(state)) = cx.terminal_outcome() {
+        return (project_events(state), None);
+    }
     let activity = cx.world.activity();
     if activity & 0xff != IN_LAST_BATTLE as u16 {
         return (Events::default(), None);
-    }
-    if let Some(RaceState::SaMatra(state)) = cx.terminal_outcome() {
-        return (project_events(state), None);
     }
     let (width, height) = cx.screen_dimensions();
     let arena = ((width - 64) << (ONE_SHIFT + 3), height << (ONE_SHIFT + 3));
