@@ -54,6 +54,15 @@ impl Cx<'_> {
         unsafe { crate::app::bridge::publish(self, || TimeSpaceMatterConflict(pointer) != 0) }
     }
 
+    pub(crate) fn negotiate_battle(
+        &mut self,
+        net: &dyn crate::engine::battle::net::BattleNet,
+        state: u32,
+    ) -> bool {
+        // SAFETY: the caller retains only a cloned network handle, not live record borrows.
+        unsafe { crate::app::bridge::publish(self, || net.negotiate(true, state)) }
+    }
+
     pub fn screen_dimensions(&self) -> (i32, i32) {
         // SAFETY: dimensions are initialized by the owning game thread.
         unsafe { (ScreenWidth, ScreenHeight) }

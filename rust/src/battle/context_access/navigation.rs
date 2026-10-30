@@ -166,9 +166,6 @@ impl Cx<'_> {
         let ships = unsafe { crate::engine::battle::link_queue::ships(side) };
         ships.head().map(|id| ships.ship_id(id, side as u8))
     }
-    pub(crate) fn optional_ship_element(&self, ship: ShipId) -> Option<ElementId> {
-        self.elements().id(self.ship(ship).hShip)
-    }
 }
 
 impl Cx<'_> {

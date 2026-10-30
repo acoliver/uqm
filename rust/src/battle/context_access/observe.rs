@@ -112,8 +112,6 @@ pub(crate) enum CustomData<'a> {
         saved: [Option<crate::engine::battle::ElementHook>; 3],
     },
     #[cfg(not(test))]
-    Umgah(&'a crate::ships::races::umgah_native::engine::UmgahData),
-    #[cfg(not(test))]
     NativeUmgah(u16),
     Mmrnmhrm(&'a CHARACTERISTIC_STUFF),
     #[cfg(not(test))]
@@ -157,17 +155,11 @@ impl<'a> CustomData<'a> {
             }
             _ => {}
         }
-        let pointer = descriptor.data;
-        if pointer.is_null() {
-            return Self::None;
-        }
-        // SAFETY: unconverted initializers retain the corresponding species allocation.
-        unsafe {
-            match species {
-                crate::ships::native::abi::SPECIES_ID_UMGAH_ID => Self::Umgah(&*pointer.cast()),
-                _ => panic!("unexpected custom data for species {species}"),
-            }
-        }
+        assert!(
+            descriptor.data.is_null(),
+            "unexpected custom data for species {species}"
+        );
+        Self::None
     }
 }
 /// # Safety
