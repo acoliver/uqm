@@ -364,7 +364,7 @@ pub struct LiveCampaign;
 
 impl StateSource for LiveCampaign {
     fn read(&self, key: StateKey) -> Option<u32> {
-        use crate::automation::input_ffi;
+        use crate::automation::{input_ffi, samatra::observe as boss_observation};
         match key {
             StateKey::Ending(index) => {
                 let e = super::ending::snapshot();
@@ -379,26 +379,18 @@ impl StateSource for LiveCampaign {
                     ][usize::from(index)],
                 ))
             }
-            StateKey::BossDestroyed => Some(
-                crate::ships::races::samatra::observation::events()
-                    .destroyed
-                    .count_ones(),
-            ),
-            StateKey::BossGateEntered => Some(u32::from(
-                crate::ships::races::samatra::observation::events().gate_entered,
-            )),
+            StateKey::BossDestroyed => Some(boss_observation().0.destroyed.count_ones()),
+            StateKey::BossGateEntered => Some(u32::from(boss_observation().0.gate_entered)),
             StateKey::BossRemaining
             | StateKey::BossGateOpen
             | StateKey::BossBombCarrier
-            | StateKey::BossSelectedSpecies => {
-                crate::ships::races::samatra::snapshot().and_then(|s| match key {
-                    StateKey::BossRemaining => Some(u32::from(s.remaining)),
-                    StateKey::BossGateOpen => Some(u32::from(s.gate_open)),
-                    StateKey::BossBombCarrier => Some(u32::from(s.bomb_carrier)),
-                    StateKey::BossSelectedSpecies => s.selected_species,
-                    _ => unreachable!(),
-                })
-            }
+            | StateKey::BossSelectedSpecies => boss_observation().1.and_then(|s| match key {
+                StateKey::BossRemaining => Some(u32::from(s.remaining)),
+                StateKey::BossGateOpen => Some(u32::from(s.gate_open)),
+                StateKey::BossBombCarrier => Some(u32::from(s.bomb_carrier)),
+                StateKey::BossSelectedSpecies => s.selected_species,
+                _ => unreachable!(),
+            }),
             StateKey::StarCurrent | StateKey::StarmapCursorX | StateKey::StarmapCursorY => {
                 let target =
                     super::star_flight::StarTarget::resolve("Sol").expect("Sol in catalog");
