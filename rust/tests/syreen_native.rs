@@ -116,7 +116,7 @@ fn dagger_is_launched_with_the_c_missile_block() {
             let slots = ship.weapon(1);
             let daggers = [ship.weapon_record(slots[0]).cast()];
 
-            let dagger = battle_context::element(daggers[0]);
+            let dagger = battle::element(daggers[0]);
             assert!(!dagger.is_null());
             assert_eq!((*dagger).__bindgen_anon_1.life_span, 10);
             assert_eq!((*dagger).__bindgen_anon_2.hit_points, 1);
@@ -176,7 +176,7 @@ fn song_pays_energy_and_queues_the_deferred_scan() {
 
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 16 - 5);
             assert_eq!(ship.ship_mut().special_counter, 20);
-            let scan = battle_context::element(disp_q.tail);
+            let scan = battle::element(disp_q.tail);
             assert!(!scan.is_null());
             assert_eq!(
                 (*scan).state_flags,
@@ -195,7 +195,7 @@ fn song_pays_energy_and_queues_the_deferred_scan() {
             // The song cannot be restarted during the cooldown.
             ship.postprocess();
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 16 - 5);
-            assert_eq!(battle_context::element(disp_q.tail), scan);
+            assert_eq!(battle::element(disp_q.tail), scan);
         }
     })
 }
@@ -211,7 +211,7 @@ unsafe fn enter_battle(ship: &mut Ship<'_>, location: POINT, crew: u16) {
 unsafe fn queued_scan(ship: &mut Ship) -> (*mut ELEMENT, uqm_rust::engine::battle::ElementHook) {
     ship.ship_mut().cur_status_flags = SPECIAL as u16;
     ship.postprocess();
-    let scan = battle_context::element(disp_q.tail);
+    let scan = battle::element(disp_q.tail);
     (scan, (*scan).death_func.unwrap())
 }
 
@@ -247,7 +247,7 @@ fn deferred_scan_requeues_nothing_and_leaves_out_of_range_crews_alone() {
             hooks::invoke_element_pointer(run_scan, scan);
             assert_eq!((disp_q.head, disp_q.tail), before, "nothing was queued");
             for handle in walk_queue() {
-                let queued = battle_context::element(handle);
+                let queued = battle::element(handle);
                 if (*queued).state_flags & PLAYER_SHIP as u16 != 0 {
                     let crew = (*queued).__bindgen_anon_2.crew_level;
                     assert!(matches!(crew, 1 | 10), "crew {crew}");
@@ -262,7 +262,7 @@ unsafe fn walk_queue() -> Vec<HELEMENT> {
     let mut handle = disp_q.head;
     while !handle.is_null() {
         handles.push(handle);
-        handle = (*battle_context::element(handle)).succ;
+        handle = (*battle::element(handle)).succ;
     }
     handles
 }
@@ -303,9 +303,7 @@ fn deferred_scan_survives_a_ship_in_range_when_no_crew_elements_are_available() 
             hooks::invoke_element_pointer(run_scan, scan);
             assert_eq!(walk_queue(), before);
             assert_eq!(
-                (*battle_context::element(before[1]))
-                    .__bindgen_anon_2
-                    .crew_level,
+                (*battle::element(before[1])).__bindgen_anon_2.crew_level,
                 10
             );
             for handle in ghosts {

@@ -116,7 +116,7 @@ fn gob_is_launched_with_the_c_missile_block() {
             let slots = ship.weapon(1);
             let horns = [ship.weapon_record(slots[0]).cast()];
 
-            let gob = battle_context::element(horns[0]);
+            let gob = battle::element(horns[0]);
             assert!(!gob.is_null());
             assert_eq!((*gob).__bindgen_anon_1.life_span, 10);
             assert_eq!((*gob).__bindgen_anon_2.hit_points, 1);

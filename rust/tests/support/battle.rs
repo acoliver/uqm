@@ -100,7 +100,7 @@ impl<'a> Ship<'a> {
                     .map_or(ptr::null_mut(), |id| cx.elements().raw(id))
             });
             assert!(!handle.is_null());
-            let el = super::battle_context::element(handle);
+            let el = element(handle);
             (*el).pParent = raw_ship.cast();
             (*el).playerNr = player;
             (*el).state_flags = PLAYER_SHIP as u16;
@@ -277,7 +277,7 @@ impl<'a> Ship<'a> {
         assert!(!self.queued);
         // SAFETY: this fixture owns the unlinked, allocated slot.
         unsafe {
-            super::battle_context::put(self.handle);
+            put(self.handle);
         }
         self.queued = true;
     }
@@ -632,7 +632,7 @@ pub unsafe fn queued() -> Vec<HELEMENT> {
         while !h.is_null() {
             all.push(h);
             assert!(all.len() <= 128, "queue cycle");
-            h = (*super::battle_context::element(h)).succ;
+            h = (*element(h)).succ;
         }
         all
     }
@@ -782,4 +782,20 @@ impl Drop for PoolElement {
             });
         }
     }
+}
+
+/// # Safety
+/// The supplied pointer is a retained fixture record owned by the active battle.
+pub unsafe fn put(handle: *mut std::ffi::c_void) {
+    uqm_rust::app::bridge::enter(|cx| {
+        let id = cx
+            .elements()
+            .id(handle)
+            .unwrap_or_else(|| panic!("fixture element"));
+        cx.put(id);
+    });
+}
+/// Cast a retained fixture handle without dereferencing it.
+pub fn element(handle: *mut std::ffi::c_void) -> *mut uqm_rust::engine::battle::record::ELEMENT {
+    handle.cast()
 }

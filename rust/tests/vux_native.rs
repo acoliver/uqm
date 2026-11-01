@@ -44,7 +44,7 @@ fn descriptor_laser_and_limpet_launch() {
             with_rng(11, 0, || ship.postprocess());
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 38);
             assert_eq!(ship.ship_mut().special_counter, 7);
-            let e = battle_context::element(disp_q.tail);
+            let e = battle::element(disp_q.tail);
             assert_eq!(
                 (
                     (*e).__bindgen_anon_1.life_span,
@@ -73,7 +73,7 @@ fn limpets_saturate_waits_and_reduce_thrust_without_rng_for_nonships() {
             let mut enemy = Ship::new(&_battle, SPECIES_ID_VUX_ID, 1);
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
             ship.postprocess();
-            let e = battle_context::element(disp_q.tail);
+            let e = battle::element(disp_q.tail);
             for (increment, max, expected_inc, expected_max) in
                 [(7, 21, 6, 18), (5, 25, 4, 20), (4, 20, 4, 8), (1, 10, 1, 2)]
             {

@@ -16,7 +16,7 @@ unsafe fn burn(ship: &mut Ship<'_>) -> *mut ELEMENT {
     ship.preprocess();
     let trail = disp_q.head;
     assert_ne!(trail, head);
-    battle_context::element(trail)
+    battle::element(trail)
 }
 unsafe fn fire(ship: &mut Ship<'_>) -> HELEMENT {
     ship.weapon_handles(1)[0]
@@ -27,7 +27,7 @@ unsafe fn queued() -> Vec<HELEMENT> {
     while !h.is_null() {
         result.push(h);
         assert!(result.len() <= 64, "display queue cycle");
-        h = (*battle_context::element(h)).succ;
+        h = (*battle::element(h)).succ;
     }
     result
 }
@@ -202,7 +202,7 @@ fn horn_uses_next_location_exact_facing_speed_and_offsets_without_inheriting_vel
                 ship.ship_mut().ShipFacing = facing;
                 let h = with_rng(101, 0, || fire(&mut ship));
                 assert!(!h.is_null());
-                let e = battle_context::element(h);
+                let e = battle::element(h);
                 let angle = facing_to_angle(i32::from(facing));
                 let vx = cosine(angle, 120 << VELOCITY_SHIFT);
                 let vy = sine(angle, 120 << VELOCITY_SHIFT);
@@ -811,7 +811,7 @@ fn napalm_and_horn_collide_with_battle_objects_without_optional_callback_skips()
                         ship.make_opaque(2);
                         trail
                     } else {
-                        let horn = battle_context::element(fire(&mut ship));
+                        let horn = battle::element(fire(&mut ship));
                         (*horn).next = (*horn).current;
                         ship.make_opaque(1);
                         horn

@@ -18,7 +18,7 @@ unsafe fn queued() -> Vec<HELEMENT> {
     while !h.is_null() {
         result.push(h);
         assert!(result.len() <= 64, "display queue cycle");
-        h = (*battle_context::element(h)).succ;
+        h = (*battle::element(h)).succ;
     }
     result
 }
@@ -206,8 +206,8 @@ fn per_init_descriptor_copies_isolate_energy_resources_animation_and_custom_data
             let data = previous_facing(&mut first);
             assert!(data.is_some());
             hooks::invoke_element_pointer(
-                (*battle_context::element(h)).preprocess_func.unwrap(),
-                battle_context::element(h),
+                (*battle::element(h)).preprocess_func.unwrap(),
+                battle::element(h),
             );
             assert_eq!(frame_index(first.descriptor_mut().ship_data.special[0]), 21);
             first.descriptor_mut().ship_info.energy_level = 1;
@@ -231,8 +231,8 @@ fn per_init_descriptor_copies_isolate_energy_resources_animation_and_custom_data
             assert!(previous_facing(&mut first).is_none());
             assert!(!previous_facing(&mut second).is_none());
             hooks::invoke_element_pointer(
-                (*battle_context::element(other)).preprocess_func.unwrap(),
-                battle_context::element(other),
+                (*battle::element(other)).preprocess_func.unwrap(),
+                battle::element(other),
             );
             assert_eq!(
                 frame_index(second.descriptor_mut().ship_data.special[0]),
@@ -270,7 +270,7 @@ fn cone_initialization_fixes_intersection_and_does_not_inherit_velocity() {
             SetVelocityComponents(&raw mut (*ship.ptr()).velocity, 321, -654);
             let h = with_rng(8, 0, || fire(&mut ship));
             assert!(!h.is_null());
-            let cone = battle_context::element(h);
+            let cone = battle::element(h);
             assert_eq!((*cone).state_flags, (FINITE_LIFE | IGNORE_SIMILAR) as u16);
             assert_eq!((*cone).__bindgen_anon_1.life_span, 1);
             assert_eq!((*cone).__bindgen_anon_2.hit_points, 100);
@@ -315,7 +315,7 @@ fn held_cone_advances_by_16_preserves_phase_and_resets_only_when_facing_changes(
             ship.ship_mut().ShipFacing = 5;
             for index in [5, 21, 37, 5] {
                 let h = with_rng(3, 0, || fire(&mut ship));
-                let cone = battle_context::element(h);
+                let cone = battle::element(h);
                 let data = previous_facing(&mut ship);
                 assert!(data.is_some());
                 assert_eq!(data, Some(5));
@@ -340,7 +340,7 @@ fn held_cone_advances_by_16_preserves_phase_and_resets_only_when_facing_changes(
                     "holding facing keeps the saved facing"
                 );
                 assert_eq!(
-                    frame_index((*battle_context::element(next)).current.image.frame),
+                    frame_index((*battle::element(next)).current.image.frame),
                     (index + 16) % 48
                 );
                 battle_context::dispose(next);
@@ -349,15 +349,9 @@ fn held_cone_advances_by_16_preserves_phase_and_resets_only_when_facing_changes(
             ship.ship_mut().ShipFacing = 9;
             let h = fire(&mut ship);
             assert_eq!(previous_facing(&mut ship).unwrap(), 9);
+            assert_eq!(frame_index((*battle::element(h)).current.image.frame), 9);
             assert_eq!(
-                frame_index((*battle_context::element(h)).current.image.frame),
-                9
-            );
-            assert_eq!(
-                (*battle_context::element(h))
-                    .IntersectControl
-                    .IntersectStamp
-                    .frame,
+                (*battle::element(h)).IntersectControl.IntersectStamp.frame,
                 ship.raw_frame(2, 9)
             );
             battle_context::dispose(h);
@@ -438,7 +432,7 @@ fn collision_removes_and_frees_the_blast_but_does_not_restore_cone_life_or_solid
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
             let h = fire(&mut ship);
-            let cone = battle_context::element(h);
+            let cone = battle::element(h);
             let mut hit = target(false);
             let mut a = POINT { x: 10, y: 20 };
             let mut b = POINT { x: 30, y: 40 };
@@ -487,7 +481,7 @@ fn collision_preserves_disappearing_when_blast_allocation_fails() {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
             let h = fire(&mut ship);
-            let cone = battle_context::element(h);
+            let cone = battle::element(h);
             let mut hit = target(false);
             let mut p = POINT { x: 0, y: 0 };
             hooks::invoke_collision_pointer(
@@ -517,7 +511,7 @@ fn finite_weapon_hit_damages_once_without_a_blast_and_does_not_clear_disappearin
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
             let h = fire(&mut ship);
-            let cone = battle_context::element(h);
+            let cone = battle::element(h);
             let mut hit = target(true);
             (*cone).state_flags |= DISAPPEARING as u16;
             let collide = (*cone).collision_func.unwrap();
@@ -991,8 +985,8 @@ fn rear_arc_uses_unwrapped_next_location_difference_and_inclusive_angle_bounds()
 unsafe fn fire(ship: &mut Ship<'_>) -> HELEMENT {
     let h = ship.initialize_from(ship.ptr(), 1)[0];
     if !h.is_null() {
-        assert!((*battle_context::element(h)).pParent.is_null());
-        (*battle_context::element(h)).pParent = (*ship.ptr()).pParent;
+        assert!((*battle::element(h)).pParent.is_null());
+        (*battle::element(h)).pParent = (*ship.ptr()).pParent;
     }
     h
 }

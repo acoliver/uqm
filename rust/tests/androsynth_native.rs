@@ -256,7 +256,7 @@ fn bubble_steers_toward_the_nearest_enemy_with_a_random_wobble() {
 
                 // Remove this enemy before trying the other side.
                 let handle = disp_q.tail;
-                assert_eq!(battle_context::element(handle), enemy);
+                assert_eq!(battle::element(handle), enemy);
                 drop(enemy_ship);
             }
             battle_context::dispose(bubble.cast());

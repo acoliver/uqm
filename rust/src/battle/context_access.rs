@@ -156,11 +156,10 @@ impl Cx<'_> {
     }
 
     pub fn start_battle_song_if_ready(&mut self, ship: ShipId) {
+        use crate::battle::tactrans_native::opponent_alive;
         // SAFETY: audio and ship authorities remain live on the game thread.
         unsafe {
-            if PLRPlaying(usize::MAX as MUSIC_REF) == 0
-                && crate::battle::tactrans_native::opponent_alive(self, ship)
-            {
+            if PLRPlaying(usize::MAX as MUSIC_REF) == 0 && opponent_alive(self, ship) {
                 BattleSong(1);
             }
         }
@@ -569,9 +568,7 @@ impl Cx<'_> {
         // SAFETY: stereo configuration belongs to the game thread.
         if unsafe { optStereoSFX } != 0 {
             // SAFETY: the live source is removed before this context releases its storage.
-            unsafe {
-                crate::battle::sounds::engine::remove_sounds(Some(id));
-            }
+            unsafe { crate::battle::sounds::engine::remove_sounds(Some(id)) };
         }
         self.unlink_storage(id);
     }

@@ -155,7 +155,7 @@ fn flame_inherits_the_ship_velocity_and_starts_on_the_first_frame() {
 
             let mut out = [ptr::null_mut()];
             out[0] = fleet.weapon_handles(1)[0];
-            let flame = battle_context::element(out[0]);
+            let flame = battle::element(out[0]);
             assert_eq!((*flame).__bindgen_anon_1.life_span, 8);
             assert_eq!((*flame).__bindgen_anon_2.hit_points, 1);
             assert_eq!((*flame).__bindgen_anon_3.mass_points, 1);
@@ -197,7 +197,7 @@ fn flame_advances_its_animation_every_next_turn_frames() {
             spawn_ship(&mut fleet, 0, 0);
             let mut out = [ptr::null_mut()];
             out[0] = fleet.weapon_handles(1)[0];
-            let flame = battle_context::element(out[0]);
+            let flame = battle::element(out[0]);
             let step = (*flame).preprocess_func.unwrap();
             (*flame).__bindgen_anon_5.next_turn = 2;
 
@@ -240,7 +240,7 @@ fn flame_that_hits_goes_nonsolid_without_disappearing() {
             spawn_ship(&mut fleet, 400, 500);
             let mut out = [ptr::null_mut()];
             out[0] = fleet.weapon_handles(1)[0];
-            let flame = battle_context::element(out[0]);
+            let flame = battle::element(out[0]);
             let mut other = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 1, [16; 3], [0, 0]);
             let target = spawn_ship(&mut other, 410, 500);
             // A target that neither has finite life nor the normal-life marker

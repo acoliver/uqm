@@ -79,12 +79,12 @@ fn ninth_saw_expires_and_postprocess_requeues_after_ship_with_intersection_point
             let h = ship.weapon(1)[0];
             let saw = ship.weapon_record(h);
             let h = saw.cast();
-            battle_context::put(h);
+            battle::put(h);
             (*saw).next.location = POINT { x: 1235, y: 2347 };
             hooks::invoke_element_pointer((*saw).postprocess_func.unwrap(), saw);
             let all = queued();
             assert_eq!(all.len(), 3);
-            let copy = battle_context::element(all[1]);
+            let copy = battle::element(all[1]);
             assert_eq!(all[2], h);
             assert_eq!((*saw).__bindgen_anon_1.life_span, 0);
             assert!((*copy).postprocess_func.is_none());
@@ -131,7 +131,7 @@ fn fried_launches_sixteen_clouds_in_facing_order_with_inherited_velocity() {
             let all = queued();
             assert_eq!(all.len(), 17);
             for (face, &h) in all[1..].iter().enumerate() {
-                let e = battle_context::element(h);
+                let e = battle::element(h);
                 assert_eq!(
                     (
                         (*e).__bindgen_anon_1.life_span,
@@ -184,7 +184,7 @@ fn saw_collision_splinters_and_cloud_damage_depends_on_ship_flag() {
             battle_context::dispose(h);
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
             ship.postprocess();
-            let cloud = battle_context::element(disp_q.tail);
+            let cloud = battle::element(disp_q.tail);
             let collide = (*cloud).collision_func.unwrap();
             hooks::invoke_collision_pointer(
                 collide,

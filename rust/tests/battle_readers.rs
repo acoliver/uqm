@@ -26,7 +26,7 @@ fn legacy_slylandro_receives_the_fifth_junk_concern() {
                 };
                 e.next = e.current;
             }
-            battle_context::put(junk.ptr().cast());
+            battle::put(junk.ptr().cast());
             ship.descriptor_mut().ship_info.energy_level = 0;
             ship.ship_mut().special_counter = 0;
             uqm_rust::app::bridge::enter(|cx| {

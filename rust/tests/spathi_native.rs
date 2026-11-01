@@ -134,7 +134,7 @@ fn forward_missile_leaves_the_nose_along_the_ship_facing() {
                 },
                 1
             );
-            let m = battle_context::element(out[0]);
+            let m = battle::element(out[0]);
             assert_eq!((*m).__bindgen_anon_1.life_span, 10);
             assert_eq!((*m).__bindgen_anon_2.hit_points, 1);
             assert_eq!((*m).__bindgen_anon_3.mass_points, 1);
@@ -177,7 +177,7 @@ fn butt_leaves_the_tail_not_the_nose() {
 
             // ANGLE_TO_FACING (HALF_CIRCLE) is eight facings, so the butt flies
             // out at facing 12 (angle 48, along -x).
-            let butt = battle_context::element(queue_tail());
+            let butt = battle::element(queue_tail());
             assert_ne!(butt, ship);
             assert_eq!((*butt).pParent, (fleet.ship_mut() as *mut STARSHIP).cast());
             assert_eq!(index_of((*butt).current.image.frame), 12);
@@ -216,7 +216,7 @@ fn butt_rear_facing_wraps_through_sixteen_facings() {
             fleet.ship_mut().special_counter = 0;
             fleet.descriptor_mut().ship_info.energy_level = 10;
             fleet.postprocess();
-            let butt = battle_context::element(queue_tail());
+            let butt = battle::element(queue_tail());
             assert_eq!(index_of((*butt).current.image.frame), rear);
         }
     })
@@ -273,7 +273,7 @@ fn butt_homes_one_facing_step_per_tracking_pass() {
             spathi.ship_mut().cur_status_flags = SPECIAL as u16;
             spathi.ship_mut().ShipFacing = 4;
             spathi.postprocess();
-            let butt = battle_context::element(queue_tail());
+            let butt = battle::element(queue_tail());
             // The engine starts each frame with `next` equal to `current`.
             (*butt).next = (*butt).current;
             let preprocess = (*butt).preprocess_func.unwrap();

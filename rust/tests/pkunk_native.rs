@@ -254,7 +254,7 @@ impl<'a> Ship<'a> {
         self.appearing();
         TFB_SeedRandom(odd_seed());
         self.preprocess();
-        let phoenix = battle_context::element(self.data().phoenix);
+        let phoenix = shared::element(self.data().phoenix);
         self.inner.descriptor_mut().ship_info.crew_level = 0;
         hooks::invoke_element_pointer((*phoenix).death_func.unwrap(), phoenix);
         let explode = (*self.ptr()).death_func.unwrap();
@@ -284,7 +284,7 @@ unsafe fn queued() -> Vec<HELEMENT> {
     while !h.is_null() {
         result.push(h);
         assert!(result.len() <= 64, "display queue cycle");
-        h = (*battle_context::element(h)).succ;
+        h = (*shared::element(h)).succ;
     }
     result
 }
@@ -635,7 +635,7 @@ fn bug_missiles_launch_fore_left_and_right_inheriting_ship_velocity() {
                         // Fore, +90 degrees, and +270 degrees (the i == 2 extra quadrant).
                         let turn = [0, 4, 12][i];
                         let face = normalize_facing(i32::from(facing) + turn);
-                        let m = battle_context::element(h);
+                        let m = shared::element(h);
                         assert_eq!((*m).__bindgen_anon_1.life_span, 5);
                         assert_eq!((*m).__bindgen_anon_2.hit_points, 1);
                         assert_eq!((*m).__bindgen_anon_3.mass_points, 1);
@@ -706,7 +706,7 @@ fn bug_missile_allocation_failure_leaves_null_slots_but_still_reports_three() {
             assert!(out[1].is_null());
             assert!(out[2].is_null());
             assert_eq!(
-                frame_index((*battle_context::element(out[0])).current.image.frame),
+                frame_index((*shared::element(out[0])).current.image.frame),
                 0,
                 "the first missile is the forward one"
             );
@@ -723,7 +723,7 @@ fn bug_missiles_animate_one_frame_per_blast_offset_delay() {
             let mut ship = Ship::new(&_battle, 0);
             let mut out = [ptr::null_mut(); 3];
             ship.fire(&mut out);
-            let m = battle_context::element(out[0]);
+            let m = shared::element(out[0]);
             let animate = (*m).preprocess_func.unwrap();
             (*m).current.image.frame = ship.weapon_frames.frame(2);
             (*m).state_flags &= !(CHANGING as u16);
@@ -785,7 +785,7 @@ fn first_preprocess_with_an_odd_draw_queues_a_phoenix_at_the_head() {
             with_rng(odd_seed(), 1, || ship.preprocess());
             let all = queued();
             assert_eq!(all.len(), 2);
-            let phoenix = battle_context::element(all[0]);
+            let phoenix = shared::element(all[0]);
             assert_eq!(all[1], ship.handle);
             assert_eq!(ship.data().phoenix, all[0]);
             assert_eq!((*phoenix).playerNr, 1);
@@ -859,7 +859,7 @@ fn reincarnation_preprocess_queues_four_trails_around_the_ship() {
                 assert_eq!(all[1], ship.handle);
                 assert_eq!(ship.data().phoenix, all[0]);
                 assert_eq!(
-                    (*battle_context::element(all[0])).state_flags,
+                    (*shared::element(all[0])).state_flags,
                     (FINITE_LIFE | NONSOLID | IGNORE_SIMILAR) as u16
                 );
 
@@ -889,7 +889,7 @@ fn reincarnation_preprocess_queues_four_trails_around_the_ship() {
                         normalize_facing(i32::from(facing) + angle_to_facing(8 + 16 * k as i32));
                     let angle = facing_to_angle(i32::from(trail_facing)) as u16;
                     let expected = trail_origin(POINT { x, y }, trail_facing, 12);
-                    check_trail(&mut ship, battle_context::element(h), expected, angle);
+                    check_trail(&mut ship, shared::element(h), expected, angle);
                 }
                 ship.drain();
             }
@@ -912,10 +912,10 @@ fn reincarnation_trails_are_limited_by_free_elements() {
                 let trail_facing = normalize_facing(3 + angle_to_facing(8 + 16 * k as i32));
                 let angle = facing_to_angle(i32::from(trail_facing)) as u16;
                 let expected = trail_origin(POINT { x: 4000, y: 4000 }, trail_facing, 12);
-                check_trail(&mut ship, battle_context::element(h), expected, angle);
+                check_trail(&mut ship, shared::element(h), expected, angle);
             }
             // A trail that cannot allocate keeps its callback to retry next frame.
-            let first_trail = battle_context::element(all[1]);
+            let first_trail = shared::element(all[1]);
             let callback = addr((*first_trail).preprocess_func);
             hooks::invoke_element_pointer((*first_trail).preprocess_func.unwrap(), first_trail);
             assert_eq!(queued(), all);
@@ -990,7 +990,7 @@ fn trails_hop_forward_until_the_ship_is_solid_again() {
             let mut ship = Ship::new(&_battle, 0);
             ship.reincarnating(4000, 4000, 0);
             with_rng(even_seed(), 1, || ship.preprocess());
-            let first = battle_context::element(queued()[1]);
+            let first = shared::element(queued()[1]);
             let mut parent = first;
             let mut from = (*first).current.location;
             let angle = i32::from((*first).__bindgen_anon_3.mass_points);
@@ -1001,7 +1001,7 @@ fn trails_hop_forward_until_the_ship_is_solid_again() {
                 // The old trail stops hopping; one new trail takes its place.
                 assert!((*parent).preprocess_func.is_none(), "hop {hop}");
                 assert_eq!(queued().len(), before + 1);
-                let child = battle_context::element(*queued().last().unwrap());
+                let child = shared::element(*queued().last().unwrap());
                 let to = POINT {
                     x: (i32::from(from.x) + i32::from(cosine(angle, 80))) as i16,
                     y: (i32::from(from.y) + i32::from(sine(angle, 80))) as i16,
@@ -1029,7 +1029,7 @@ fn trail_death_steps_through_the_twelve_ember_colors() {
             let mut ship = Ship::new(&_battle, 0);
             ship.reincarnating(4000, 4000, 0);
             with_rng(even_seed(), 1, || ship.preprocess());
-            let trail = battle_context::element(queued()[1]);
+            let trail = shared::element(queued()[1]);
             let death = (*trail).death_func.unwrap();
             // BUILD_COLOR (MAKE_RGB15 (r, g, b), _) for the C table, as bytes.
             let table: [[u8; 3]; 12] = [
@@ -1092,7 +1092,7 @@ fn phoenix_death_hook_keeps_a_living_ship_and_arms_reincarnation_for_a_dead_one(
             (*el).death_func = Some(uqm_rust::engine::battle::ElementHook::Native(engine_death));
             ship.appearing();
             with_rng(odd_seed(), 1, || ship.preprocess());
-            let phoenix = battle_context::element(ship.data().phoenix);
+            let phoenix = shared::element(ship.data().phoenix);
             let hook = (*phoenix).death_func.unwrap();
 
             // Crew left: the phoenix survives another frame and nothing else moves.
@@ -1199,7 +1199,7 @@ fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
             // The brand-new ship spawns its phoenix, which later sees the death.
             ship.appearing();
             with_rng(odd_seed(), 1, || ship.preprocess());
-            let phoenix = battle_context::element(ship.data().phoenix);
+            let phoenix = shared::element(ship.data().phoenix);
             ship.inner.descriptor_mut().ship_info.crew_level = 0;
             hooks::invoke_element_pointer((*phoenix).death_func.unwrap(), phoenix);
             assert_eq!((*el).__bindgen_anon_3.mass_points, 11);
@@ -1406,7 +1406,7 @@ fn new_pkunk_redraws_its_position_while_a_planet_pulls_on_it() {
                 (&raw mut ship.inner.descriptor_mut().ship_data.ship).cast();
             (*planet).current.image.frame = ship.ship_frames.frame(0);
             (*prim(planet)).Type = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
-            battle_context::put(planet_handle);
+            shared::put(planet_handle);
 
             let el = ship.ptr();
             with_rng(seed, 13, || hooks::invoke_element_pointer(new_pkunk, el));

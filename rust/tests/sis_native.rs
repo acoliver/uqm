@@ -72,14 +72,8 @@ fn module_configuration_preserves_weapon_order_energy_caps_and_drive_rounding() 
             );
             let out = ship.weapon_handles(6);
             for (h, damage) in out.iter().zip([2, 4, 4, 6, 6, 2]) {
-                assert_eq!(
-                    (*battle_context::element(*h)).__bindgen_anon_3.mass_points,
-                    damage
-                );
-                assert_eq!(
-                    (*battle_context::element(*h)).__bindgen_anon_4.turn_wait,
-                    17
-                );
+                assert_eq!((*battle::element(*h)).__bindgen_anon_3.mass_points, damage);
+                assert_eq!((*battle::element(*h)).__bindgen_anon_4.turn_wait, 17);
                 battle_context::dispose(*h);
             }
             ship.descriptor_mut().ship_info.crew_level = 4;

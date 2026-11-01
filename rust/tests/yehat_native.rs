@@ -43,7 +43,7 @@ fn descriptor_and_twin_missile_launch() {
                     .collect::<Vec<HELEMENT>>()
             });
             for (i, &h) in out.iter().enumerate() {
-                let e = battle_context::element(h);
+                let e = battle::element(h);
                 assert_eq!(
                     (
                         (*e).__bindgen_anon_1.life_span,

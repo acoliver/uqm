@@ -42,7 +42,7 @@ fn descriptor_and_spit_animation_preserve_jitter_rng_and_speed() {
                     })
                     .collect::<Vec<HELEMENT>>()
             })[0];
-            let e = battle_context::element(h);
+            let e = battle::element(h);
             assert_eq!(
                 (
                     (*e).__bindgen_anon_1.life_span,
@@ -94,7 +94,7 @@ fn tongue_chain_extends_in_facing_direction_and_stops_at_zero() {
             with_rng(3, 0, || ship.postprocess());
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 3);
             assert_eq!(ship.ship_mut().special_counter, 6);
-            let mut e = battle_context::element(disp_q.tail);
+            let mut e = battle::element(disp_q.tail);
             assert_eq!((*e).__bindgen_anon_4.turn_wait, 6);
             for remaining in (0..6).rev() {
                 (*e).next = (*e).current;
@@ -102,7 +102,7 @@ fn tongue_chain_extends_in_facing_direction_and_stops_at_zero() {
                 with_rng(3, 0, || {
                     hooks::invoke_element_pointer((*e).postprocess_func.unwrap(), e)
                 });
-                e = battle_context::element(disp_q.tail);
+                e = battle::element(disp_q.tail);
                 assert_eq!((*e).__bindgen_anon_4.turn_wait, remaining);
                 assert_eq!((*e).current.location.y, y - 8);
                 assert_eq!(
@@ -130,7 +130,7 @@ fn first_tongue_collision_damages_but_later_frames_only_cancel_extension() {
             let mut enemy = Ship::new(&_battle, SPECIES_ID_ZOQFOTPIK_ID, 1);
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
             ship.postprocess();
-            let tongue = battle_context::element(disp_q.tail);
+            let tongue = battle::element(disp_q.tail);
             let mut a = POINT { x: 100, y: 100 };
             let mut b = POINT { x: 110, y: 100 };
             with_rng(7, 0, || {

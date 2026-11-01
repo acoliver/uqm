@@ -106,7 +106,7 @@ unsafe fn queue_len() -> usize {
     while !h.is_null() {
         n += 1;
         assert!(n <= 128);
-        h = (*battle_context::element(h)).succ;
+        h = (*battle::element(h)).succ;
     }
     n
 }
@@ -123,7 +123,7 @@ unsafe fn junk(ship: &Ship<'_>, dx: i32, dy: i32, flags: u16, mass: BYTE) -> Poo
         y: (i32::from((*ship.ptr()).next.location.y) + dy) as COORD,
     };
     (*e).current = (*e).next;
-    battle_context::put(e.cast());
+    battle::put(e.cast());
     fixture
 }
 
@@ -141,20 +141,16 @@ fn native_weapon_uses_the_projected_source_without_mutating_its_live_target() {
         assert!(!direct.is_null());
         assert!((*ship.ptr()).hTarget.is_null());
         assert_eq!(
-            velocity(&(*battle_context::element(projected)).velocity),
-            velocity(&(*battle_context::element(direct)).velocity)
+            velocity(&(*battle::element(projected)).velocity),
+            velocity(&(*battle::element(direct)).velocity)
         );
         assert_eq!(
-            rgba((*prim(battle_context::element(projected))).color),
-            rgba((*prim(battle_context::element(direct))).color)
+            rgba((*prim(battle::element(projected))).color),
+            rgba((*prim(battle::element(direct))).color)
         );
         assert_eq!(
-            (*battle_context::element(projected))
-                .__bindgen_anon_4
-                .turn_wait,
-            (*battle_context::element(direct))
-                .__bindgen_anon_4
-                .turn_wait
+            (*battle::element(projected)).__bindgen_anon_4.turn_wait,
+            (*battle::element(direct)).__bindgen_anon_4.turn_wait
         );
         battle_context::dispose(projected);
         battle_context::dispose(direct);
@@ -307,7 +303,7 @@ fn root_bolts_have_exact_random_color_length_angle_and_folded_chain_length() {
                 (*ship.ptr()).hTarget = ship.handle;
                 let h = with_rng(seed, 1, || fire_from(ship.ptr()));
                 assert!(!h.is_null());
-                let bolt = battle_context::element(h);
+                let bolt = battle::element(h);
                 let wait = if counter == 0 { 17u8 } else { counter };
                 let wait = if wait > 8 {
                     17u8.wrapping_sub(wait)
@@ -377,7 +373,7 @@ fn lightning_tracks_all_turn_directions_and_draws_the_bolt_random_before_opposit
                 let h = with_rng(seed, if delta == 8 { 2 } else { 1 }, || {
                     fire_from(ship.ptr())
                 });
-                let bolt = battle_context::element(h);
+                let bolt = battle::element(h);
                 assert_eq!(
                     velocity(&(*bolt).velocity),
                     bolt_velocity(facing_to_angle(facing as i32) as COUNT, delta, random)
@@ -416,7 +412,7 @@ fn roots_choose_nearest_live_visible_opponent_not_a_cached_target_ally_or_dead_s
         let (random, _) = randoms(313);
         let h = with_rng(313, 1, || fire_from(ship.ptr()));
         assert_eq!(
-            velocity(&(*battle_context::element(h)).velocity),
+            velocity(&(*battle::element(h)).velocity),
             bolt_velocity(4, 4, random)
         );
         assert!((*ship.ptr()).hTarget.is_null());
@@ -424,7 +420,7 @@ fn roots_choose_nearest_live_visible_opponent_not_a_cached_target_ally_or_dead_s
         (*ship.ptr()).state_flags |= APPEARING as u16;
         let h = with_rng(313, 1, || fire_from(ship.ptr()));
         assert_eq!(
-            velocity(&(*battle_context::element(h)).velocity),
+            velocity(&(*battle::element(h)).velocity),
             bolt_velocity(0, 0, random),
             "appearing ship can target cloaked opponents"
         );
@@ -433,7 +429,7 @@ fn roots_choose_nearest_live_visible_opponent_not_a_cached_target_ally_or_dead_s
         (*near.ptr()).__bindgen_anon_1.life_span = 0;
         let h = with_rng(313, 1, || fire_from(ship.ptr()));
         assert_eq!(
-            velocity(&(*battle_context::element(h)).velocity),
+            velocity(&(*battle::element(h)).velocity),
             bolt_velocity(0, 0, random)
         );
         battle_context::dispose(h);
@@ -453,7 +449,7 @@ fn child_segments_keep_unrounded_travel_angle_inherit_color_and_retain_selected_
                 Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 1, [16; 3], [4, 4]);
             at(&mut cached, 6000, 4000);
             let h = fire_from(ship.ptr());
-            let parent = battle_context::element(h);
+            let parent = battle::element(h);
             (*parent).current.location = POINT { x: 4000, y: 4000 };
             (*parent).next.location = POINT { x: 4100, y: 4200 };
             (*parent).__bindgen_anon_4.turn_wait = 4;
@@ -476,7 +472,7 @@ fn child_segments_keep_unrounded_travel_angle_inherit_color_and_retain_selected_
                 (*parent).hTarget = ptr::null_mut();
                 let (random, _) = randoms(77);
                 let child_h = with_rng(77, if delta == 8 { 2 } else { 1 }, || fire_from(parent));
-                let child = battle_context::element(child_h);
+                let child = battle::element(child_h);
                 assert_eq!(
                     velocity(&(*child).velocity),
                     bolt_velocity(angle, delta, random),
@@ -501,7 +497,7 @@ fn child_segments_keep_unrounded_travel_angle_inherit_color_and_retain_selected_
             let child_h = with_rng(99, 1, || fire_from(parent));
             assert_eq!((*parent).hTarget, cached.handle);
             assert_eq!(
-                velocity(&(*battle_context::element(child_h)).velocity),
+                velocity(&(*battle::element(child_h)).velocity),
                 bolt_velocity(1, 4, random)
             );
             battle_context::dispose(child_h);
@@ -511,21 +507,16 @@ fn child_segments_keep_unrounded_travel_angle_inherit_color_and_retain_selected_
             let child_h = with_rng(99, 1, || fire_from(parent));
             assert!((*parent).hTarget.is_null());
             assert_eq!(
-                velocity(&(*battle_context::element(child_h)).velocity),
+                velocity(&(*battle::element(child_h)).velocity),
                 bolt_velocity(1, -1, random)
             );
             battle_context::dispose(child_h);
             enemy.descriptor_mut().ship_info.crew_level = 0;
             (*parent).__bindgen_anon_4.turn_wait = 0;
             let child_h = with_rng(99, 1, || fire_from(parent));
+            assert_eq!((*battle::element(child_h)).__bindgen_anon_4.turn_wait, 255);
             assert_eq!(
-                (*battle_context::element(child_h))
-                    .__bindgen_anon_4
-                    .turn_wait,
-                255
-            );
-            assert_eq!(
-                velocity(&(*battle_context::element(child_h)).velocity),
+                velocity(&(*battle::element(child_h)).velocity),
                 bolt_velocity(1, -1, random)
             );
             battle_context::dispose(child_h);
@@ -542,8 +533,8 @@ fn lightning_postprocess_extends_chains_until_zero_or_collision() {
             Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 0, [16; 3], [4, 4]);
         ship.ship_mut().weapon_counter = 8;
         let h = fire_from(ship.ptr());
-        battle_context::put(h);
-        let mut parent = battle_context::element(h);
+        battle::put(h);
+        let mut parent = battle::element(h);
         for wait in (0..8).rev() {
             (*parent).next = (*parent).current;
             let before = queue_len();
@@ -551,7 +542,7 @@ fn lightning_postprocess_extends_chains_until_zero_or_collision() {
                 hooks::invoke_element_pointer((*parent).postprocess_func.unwrap(), parent)
             });
             assert_eq!(queue_len(), before + 1);
-            let child = battle_context::element(disp_q.tail);
+            let child = battle::element(disp_q.tail);
             assert_ne!(child, parent);
             assert_eq!((*child).__bindgen_anon_4.turn_wait, wait);
             assert_eq!(rgba((*prim(child)).color), rgba((*prim(parent)).color));
@@ -579,8 +570,8 @@ fn allocation_failure_consumes_no_lightning_random_and_keeps_initializer_count()
             Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 0, [16; 3], [4, 4]);
         ship.ship_mut().weapon_counter = 8;
         let h = fire_from(ship.ptr());
-        battle_context::put(h);
-        let parent = battle_context::element(h);
+        battle::put(h);
+        let parent = battle::element(h);
         assert!(with_rng(7, 0, || fire_from(ship.ptr())).is_null());
         with_rng(7, 0, || {
             hooks::invoke_element_pointer((*parent).postprocess_func.unwrap(), parent)
@@ -598,7 +589,7 @@ fn lightning_collision_folds_and_subtracts_counter_then_calls_generic_weapon_col
         let mut ship =
             Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 0, [16; 3], [4, 4]);
         let h = fire_from(ship.ptr());
-        let beam = battle_context::element(h);
+        let beam = battle::element(h);
         let collide = (*beam).collision_func.unwrap();
         let mut pa = POINT { x: 10, y: 20 };
         let mut pb = POINT { x: 30, y: 40 };
@@ -676,7 +667,7 @@ fn ship_postprocess_emits_only_during_the_sixteen_active_weapon_ticks() {
             assert_eq!(queue_len(), before + usize::from(emits));
             if emits {
                 assert_eq!(
-                    (*battle_context::element(disp_q.tail)).pParent,
+                    (*battle::element(disp_q.tail)).pParent,
                     (*ship.ptr()).pParent
                 );
             }

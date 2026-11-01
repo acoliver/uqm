@@ -83,7 +83,7 @@ fn cannon_launch_uses_mass_driver_missile_parameters() {
             ship.element_mut().next.location = POINT { x: 100, y: 200 };
             let slots = ship.weapon(1);
             let out = [ship.weapon_record(slots[0]).cast()];
-            let missile = battle_context::element(out[0]);
+            let missile = battle::element(out[0]);
             assert!(!missile.is_null());
             assert_eq!((*missile).__bindgen_anon_1.life_span, 20);
             assert_eq!((*missile).__bindgen_anon_2.hit_points, 4);

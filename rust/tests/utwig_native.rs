@@ -57,7 +57,7 @@ fn descriptor_and_six_lance_order_and_coordinates() {
                 ) >> VELOCITY_SHIFT;
                 for (i, (x, y)) in [(5, -18), (13, -9), (17, -4)].into_iter().enumerate() {
                     for (side, sign) in [(0, 1), (1, -1)] {
-                        let e = battle_context::element(handles[i * 2 + side]);
+                        let e = battle::element(handles[i * 2 + side]);
                         let dx = sign * i32::from(cosine(angle, x << ONE_SHIFT))
                             - i32::from(sine(angle, y << ONE_SHIFT));
                         let dy = sign * i32::from(sine(angle, x << ONE_SHIFT))
