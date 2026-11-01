@@ -1443,8 +1443,7 @@ impl Coordinator {
     ) -> SchedulerEvent {
         use crate::automation::samatra::{Controls, Progress};
         use crate::automation::script::{MenuKey, PlayerKey};
-        let events = crate::ships::races::samatra::observation::events();
-        let snapshot = crate::ships::races::samatra::snapshot();
+        let (events, snapshot) = crate::automation::samatra::observe();
         let observation = crate::automation::input_ffi::fleet_fight_observation();
         if inner.input_seen % 60 == 1 || inner.sched_state.phase == ActionPhase::WaitingForInput {
             self.write_trace_labeled(

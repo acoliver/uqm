@@ -1,5 +1,20 @@
 //! Stage B resource and record projections. Borrows end before legacy handoffs.
 #[cfg(not(test))]
+impl Cx<'_> {
+    /// Move the boss result before descriptor disposal; no live graph is retained.
+    pub(crate) fn retain_terminal_outcome(&mut self, owner: ShipId) {
+        if matches!(self.desc(owner).race_state, super::RaceState::SaMatra(_)) {
+            assert!(self.b.terminal_outcome.is_none(), "duplicate boss outcome");
+            self.b.terminal_outcome = Some(std::mem::take(&mut self.desc_mut(owner).race_state));
+        }
+    }
+
+    pub fn terminal_outcome(&self) -> Option<&super::RaceState> {
+        self.b.terminal_outcome.as_ref()
+    }
+}
+
+#[cfg(not(test))]
 impl super::World {
     pub fn set_activity(&mut self, activity: u16) {
         // SAFETY: World construction retains this exclusive game-thread projection.

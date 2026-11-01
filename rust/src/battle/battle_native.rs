@@ -64,15 +64,27 @@ type BattleNetwork = (
     bool,
 );
 #[cfg(not(test))]
+fn initialize_battle(battle: &mut crate::engine::battle::Battle) -> BattleNetwork {
+    battle.initialize();
+    let had_net = battle.net.is_some();
+    battle
+        .net
+        .get_or_insert_with(|| crate::supermelee::netplay::NetplaySession::default().battle_net());
+    (battle, battle.network(), had_net)
+}
+
+#[cfg(not(test))]
+fn finish_battle_network(battle: &mut crate::engine::battle::Battle, had_net: bool) {
+    if !had_net {
+        battle.net = None;
+    }
+}
+
+#[cfg(not(test))]
 unsafe fn battle_network() -> BattleNetwork {
     use abi::NetworkInputContext;
     use engine::{player_control, player_input, NETWORK_CONTROL};
-    let battle = crate::app::bridge::battle(|b| b as *mut crate::engine::battle::Battle);
-    let had_net = (*battle).net.is_some();
-    (*battle)
-        .net
-        .get_or_insert_with(|| crate::supermelee::netplay::NetplaySession::default().battle_net());
-    let net = (*battle).network();
+    let (battle, net, had_net) = crate::app::bridge::battle(initialize_battle);
     for side in 0..2 {
         if player_control(side) & NETWORK_CONTROL != 0 {
             let context = player_input(side).cast::<NetworkInputContext>();
@@ -476,11 +488,10 @@ pub(crate) mod engine {
             StopMusic();
             StopSound();
         }
+        crate::battle::context_access::ai_legacy::with_context(|cx| cx.finish_battle());
         UninitShips();
         FreeBattleSong();
-        if !had_net {
-            (*battle).net = None;
-        }
+        finish_battle_network(&mut *battle, had_net);
         (count < 0) as BOOLEAN
     }
 }
