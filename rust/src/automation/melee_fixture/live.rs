@@ -110,15 +110,15 @@ fn checkpoint() {
 
 struct Hooks {
     blazer_collision: usize,
-    satellite: crate::engine::battle::record::ElementProcessFunc,
+    satellite: Option<crate::engine::battle::ElementHook>,
     defense: usize,
-    limpets: crate::engine::battle::record::ElementProcessFunc,
-    fighters: crate::engine::battle::record::ElementProcessFunc,
+    limpets: Option<crate::engine::battle::ElementHook>,
+    fighters: Option<crate::engine::battle::ElementHook>,
     fighter_preprocess: usize,
     pkunk: Option<crate::engine::battle::race::ShipFn>,
     intercept: usize,
     rebirth: usize,
-    ship_death: crate::engine::battle::record::ElementProcessFunc,
+    ship_death: Option<crate::engine::battle::ElementHook>,
     star_collision: usize,
     unhyper: usize,
 }
@@ -127,7 +127,7 @@ struct Hooks {
 enum Effect {
     RaceProcess(bool, ElementId),
     NativeShip(crate::engine::battle::race::ShipFn, ElementId),
-    Invoke(crate::engine::battle::record::ElementProcessFunc, ElementId),
+    Invoke(Option<crate::engine::battle::ElementHook>, ElementId),
     Death(ElementId),
     Weapon(ElementId),
     Collide(ElementId, ElementId),
@@ -412,7 +412,7 @@ impl<'a> Task<'a> {
 
 #[cfg(test)]
 struct Collision {
-    callback: crate::engine::battle::record::ElementCollisionFunc,
+    callback: Option<crate::engine::battle::CollisionHook>,
     points: [Point; 2],
     parent: Parent,
 }

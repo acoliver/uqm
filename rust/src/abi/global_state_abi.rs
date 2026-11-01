@@ -137,7 +137,6 @@ pub use crate::engine::battle::record::state;
 pub use crate::engine::battle::record::state__bindgen_ty_1;
 pub type STATE = state;
 pub use crate::engine::battle::record::ELEMENT;
-pub use crate::engine::battle::record::{ElementProcessFunc, ElementCollisionFunc};
 pub use crate::engine::battle::record::element;
 pub use crate::engine::battle::record::element__bindgen_ty_1;
 pub use crate::engine::battle::record::element__bindgen_ty_2;

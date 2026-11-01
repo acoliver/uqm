@@ -45,25 +45,17 @@ fn descriptor_saw_launch_hold_release_decelerate_and_tracking() {
             ship.ship_mut().cur_status_flags = WEAPON as u16;
             ship.descriptor_mut().characteristics.special_wait = 0;
             with_rng(9, 0, || {
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    (*saw).preprocess_func.unwrap(),
-                    saw,
-                )
+                hooks::invoke_element_pointer((*saw).preprocess_func.unwrap(), saw)
             });
             assert_eq!((*saw).__bindgen_anon_1.life_span, 65);
             assert_eq!(frame_index((*saw).next.image.frame), 1);
             ship.ship_mut().cur_status_flags = 0;
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                (*saw).preprocess_func.unwrap(),
-                saw,
-            );
+            hooks::invoke_element_pointer((*saw).preprocess_func.unwrap(), saw);
             assert_eq!((*saw).__bindgen_anon_1.life_span, 33);
             ship.descriptor_mut().characteristics.special_wait = 0;
             let decelerate = (*saw).preprocess_func.unwrap();
             for speed in [1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1, 0] {
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    decelerate, saw,
-                );
+                hooks::invoke_element_pointer(decelerate, saw);
                 let mut dx = 0;
                 let mut dy = 0;
                 GetCurrentVelocityComponents(&raw mut (*saw).velocity, &mut dx, &mut dy);
@@ -71,10 +63,7 @@ fn descriptor_saw_launch_hold_release_decelerate_and_tracking() {
                 ship.descriptor_mut().characteristics.special_wait = 0;
             }
             with_rng(9, 0, || {
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    (*saw).preprocess_func.unwrap(),
-                    saw,
-                )
+                hooks::invoke_element_pointer((*saw).preprocess_func.unwrap(), saw)
             });
             assert_eq!(velocity(&(*saw).velocity), [0; 9]);
             FreeElement(h);
@@ -92,10 +81,7 @@ fn ninth_saw_expires_and_postprocess_requeues_after_ship_with_intersection_point
             let h = saw.cast();
             put_element(h);
             (*saw).next.location = POINT { x: 1235, y: 2347 };
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                (*saw).postprocess_func.unwrap(),
-                saw,
-            );
+            hooks::invoke_element_pointer((*saw).postprocess_func.unwrap(), saw);
             let all = queued();
             assert_eq!(all.len(), 3);
             let copy = element(all[1]);
@@ -120,10 +106,7 @@ fn ninth_saw_expires_and_postprocess_requeues_after_ship_with_intersection_point
             assert_ne!((*copy).state_flags & POST_PROCESS as u16, 0);
             ship.descriptor_mut().characteristics.special_wait = 8;
             ship.ship_mut().cur_status_flags = WEAPON as u16;
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                (*copy).preprocess_func.unwrap(),
-                copy,
-            );
+            hooks::invoke_element_pointer((*copy).preprocess_func.unwrap(), copy);
             assert_eq!((*copy).__bindgen_anon_1.life_span, 1);
             assert_ne!((*copy).state_flags & DISAPPEARING as u16, 0);
             assert_eq!(ship.descriptor_mut().characteristics.special_wait, 9);
@@ -162,15 +145,9 @@ fn fried_launches_sixteen_clouds_in_facing_order_with_inherited_velocity() {
                 SetVelocityVector(&mut expected, 16, face as COUNT);
                 DeltaVelocityComponents(&mut expected, 41, -21);
                 assert_eq!(velocity(&(*e).velocity), velocity(&expected));
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    (*e).preprocess_func.unwrap(),
-                    e,
-                );
+                hooks::invoke_element_pointer((*e).preprocess_func.unwrap(), e);
                 assert_eq!((*e).__bindgen_anon_4.turn_wait, 0);
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    (*e).preprocess_func.unwrap(),
-                    e,
-                );
+                hooks::invoke_element_pointer((*e).preprocess_func.unwrap(), e);
                 assert_eq!(frame_index((*e).next.image.frame), 1);
                 assert_eq!((*e).__bindgen_anon_4.turn_wait, 2);
                 assert!((*e).hTarget.is_null());
@@ -192,13 +169,13 @@ fn saw_collision_splinters_and_cloud_damage_depends_on_ship_flag() {
             (*target).playerNr = 1;
             (*target).__bindgen_anon_1.life_span = 2;
             let mut p = POINT { x: 100, y: 200 };
-            uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
+            hooks::invoke_collision_pointer(
                 (*saw).collision_func.unwrap(),
                 saw,
                 &mut p,
                 target,
                 &mut p,
-                uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
+                hooks::CollisionCall::Hook,
             );
             assert_eq!((*saw).__bindgen_anon_1.life_span, 5);
             assert_eq!(frame_index((*saw).next.image.frame), 2);
@@ -209,24 +186,24 @@ fn saw_collision_splinters_and_cloud_damage_depends_on_ship_flag() {
             ship.postprocess();
             let cloud = element(disp_q.tail);
             let collide = (*cloud).collision_func.unwrap();
-            uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
+            hooks::invoke_collision_pointer(
                 collide,
                 cloud,
                 &mut p,
                 target,
                 &mut p,
-                uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
+                hooks::CollisionCall::Hook,
             );
             assert_eq!((*cloud).__bindgen_anon_3.mass_points, 50);
             (*target).state_flags = PLAYER_SHIP as u16;
             // Already collided: weapon_collision returns without needing target parent.
-            uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
+            hooks::invoke_collision_pointer(
                 collide,
                 cloud,
                 &mut p,
                 target,
                 &mut p,
-                uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
+                hooks::CollisionCall::Hook,
             );
             assert_eq!((*cloud).__bindgen_anon_3.mass_points, 3);
         }
@@ -275,3 +252,6 @@ fn ai_crew_threat_boundaries_and_no_target_do_not_draw_rng() {
         }
     })
 }
+
+#[path = "support/hooks.rs"]
+mod hooks;

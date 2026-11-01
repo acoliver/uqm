@@ -122,9 +122,9 @@ impl Drop for Sounds {
 #[derive(Clone, Copy)]
 struct SavedState {
     phoenix: HELEMENT,
-    saved_preprocess: ElementProcessFunc,
-    saved_postprocess: ElementProcessFunc,
-    saved_death: ElementProcessFunc,
+    saved_preprocess: Option<uqm_rust::engine::battle::ElementHook>,
+    saved_postprocess: Option<uqm_rust::engine::battle::ElementHook>,
+    saved_death: Option<uqm_rust::engine::battle::ElementHook>,
 }
 
 static MARK: AtomicUsize = AtomicUsize::new(0);
@@ -147,7 +147,7 @@ fn engine_death(_: &mut uqm_rust::engine::battle::Cx<'_>, _: uqm_rust::engine::b
     MARK.store(3, Ordering::SeqCst);
 }
 
-fn addr(f: ElementProcessFunc) -> Option<usize> {
+fn addr(f: Option<uqm_rust::engine::battle::ElementHook>) -> Option<usize> {
     f.map(|f| (f).address())
 }
 
@@ -257,15 +257,9 @@ impl<'a> Ship<'a> {
         self.preprocess();
         let phoenix = element(self.data().phoenix);
         self.inner.descriptor_mut().ship_info.crew_level = 0;
-        uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-            (*phoenix).death_func.unwrap(),
-            phoenix,
-        );
+        hooks::invoke_element_pointer((*phoenix).death_func.unwrap(), phoenix);
         let explode = (*self.ptr()).death_func.unwrap();
-        uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-            explode,
-            self.ptr(),
-        );
+        hooks::invoke_element_pointer(explode, self.ptr());
         (*self.ptr()).death_func.unwrap()
     }
 
@@ -536,8 +530,7 @@ fn descriptor_matches_every_c_initializer_field() {
             assert!(d.callbacks()[2] != 0);
             assert!(d.callbacks()[3] != 0);
             assert!(d.callbacks()[0] != 0);
-            assert!(d.code_ref.is_null());
-            assert!(d.data.is_null());
+
             assert!(block_is_zero(d.race_state));
         }
     })
@@ -736,7 +729,7 @@ fn bug_missiles_animate_one_frame_per_blast_offset_delay() {
             (*m).current.image.frame = ship.weapon_frames.frame(2);
             (*m).state_flags &= !(CHANGING as u16);
             assert_eq!((*m).__bindgen_anon_4.turn_wait, 0);
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(animate, m);
+            hooks::invoke_element_pointer(animate, m);
             assert_eq!(frame_index((*m).next.image.frame), 3);
             assert_ne!((*m).state_flags & CHANGING as u16, 0);
             // next_turn shares its byte with the missile's blast offset (1).
@@ -744,13 +737,13 @@ fn bug_missiles_animate_one_frame_per_blast_offset_delay() {
 
             (*m).state_flags &= !(CHANGING as u16);
             (*m).next.image.frame = ship.weapon_frames.frame(6);
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(animate, m);
+            hooks::invoke_element_pointer(animate, m);
             assert_eq!((*m).__bindgen_anon_4.turn_wait, 0);
             assert_eq!((*m).state_flags & CHANGING as u16, 0);
             assert_eq!(frame_index((*m).next.image.frame), 6);
 
             (*m).current.image.frame = ship.weapon_frames.frame(7);
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(animate, m);
+            hooks::invoke_element_pointer(animate, m);
             assert_eq!(frame_index((*m).next.image.frame), 0);
             assert_ne!((*m).state_flags & CHANGING as u16, 0);
             assert_eq!((*m).__bindgen_anon_4.turn_wait, 1);
@@ -925,10 +918,7 @@ fn reincarnation_trails_are_limited_by_free_elements() {
             // A trail that cannot allocate keeps its callback to retry next frame.
             let first_trail = element(all[1]);
             let callback = addr((*first_trail).preprocess_func);
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                (*first_trail).preprocess_func.unwrap(),
-                first_trail,
-            );
+            hooks::invoke_element_pointer((*first_trail).preprocess_func.unwrap(), first_trail);
             assert_eq!(queued(), all);
             assert_eq!(addr((*first_trail).preprocess_func), callback);
         }
@@ -1008,9 +998,7 @@ fn trails_hop_forward_until_the_ship_is_solid_again() {
             for hop in 0..3 {
                 let before = queued().len();
                 let step = (*parent).preprocess_func.unwrap();
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    step, parent,
-                );
+                hooks::invoke_element_pointer(step, parent);
                 // The old trail stops hopping; one new trail takes its place.
                 assert!((*parent).preprocess_func.is_none(), "hop {hop}");
                 assert_eq!(queued().len(), before + 1);
@@ -1027,10 +1015,7 @@ fn trails_hop_forward_until_the_ship_is_solid_again() {
             // Once the ship is solid the pending trail simply stops.
             (*ship.ptr()).state_flags &= !(NONSOLID as u16);
             let before = queued();
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                (*parent).preprocess_func.unwrap(),
-                parent,
-            );
+            hooks::invoke_element_pointer((*parent).preprocess_func.unwrap(), parent);
             assert!((*parent).preprocess_func.is_none());
             assert_eq!(queued(), before);
         }
@@ -1066,9 +1051,7 @@ fn trail_death_steps_through_the_twelve_ember_colors() {
                 (*trail).state_flags |= DISAPPEARING as u16;
                 (*trail).state_flags &= !(CHANGING as u16);
                 (*trail).__bindgen_anon_1.life_span = 0;
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    death, trail,
-                );
+                hooks::invoke_element_pointer(death, trail);
                 assert_eq!((*trail).colorCycleIndex as usize, index);
                 assert_eq!((*trail).__bindgen_anon_1.life_span, 1);
                 assert_eq!(
@@ -1084,7 +1067,7 @@ fn trail_death_steps_through_the_twelve_ember_colors() {
             (*trail).state_flags |= DISAPPEARING as u16;
             (*trail).state_flags &= !(CHANGING as u16);
             (*trail).__bindgen_anon_1.life_span = 0;
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(death, trail);
+            hooks::invoke_element_pointer(death, trail);
             assert_eq!((*trail).colorCycleIndex, 12);
             assert_eq!((*trail).__bindgen_anon_1.life_span, 0);
             assert_ne!((*trail).state_flags & DISAPPEARING as u16, 0);
@@ -1116,7 +1099,7 @@ fn phoenix_death_hook_keeps_a_living_ship_and_arms_reincarnation_for_a_dead_one(
             // Crew left: the phoenix survives another frame and nothing else moves.
             (*phoenix).state_flags |= DISAPPEARING as u16;
             (*phoenix).__bindgen_anon_1.life_span = 0;
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(hook, phoenix);
+            hooks::invoke_element_pointer(hook, phoenix);
             assert_eq!((*phoenix).state_flags & DISAPPEARING as u16, 0);
             assert_eq!((*phoenix).__bindgen_anon_1.life_span, 1);
             assert_eq!((*el).__bindgen_anon_3.mass_points, 1);
@@ -1132,9 +1115,7 @@ fn phoenix_death_hook_keeps_a_living_ship_and_arms_reincarnation_for_a_dead_one(
             ship.inner.descriptor_mut().ship_info.crew_level = 0;
             for warping in [100u8, 101, 255] {
                 (*el).__bindgen_anon_3.mass_points = warping;
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    hook, phoenix,
-                );
+                hooks::invoke_element_pointer(hook, phoenix);
                 assert_eq!((*el).__bindgen_anon_3.mass_points, warping);
                 assert_eq!(
                     addr((*el).death_func),
@@ -1160,9 +1141,7 @@ fn phoenix_death_hook_keeps_a_living_ship_and_arms_reincarnation_for_a_dead_one(
                 } else {
                     panic!("Pkunk state");
                 }
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    hook, phoenix,
-                );
+                hooks::invoke_element_pointer(hook, phoenix);
                 assert_eq!((*el).__bindgen_anon_3.mass_points, 11, "mass {mass}");
                 let data = ship.data();
                 assert_eq!(
@@ -1223,10 +1202,7 @@ fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
             with_rng(odd_seed(), 1, || ship.preprocess());
             let phoenix = element(ship.data().phoenix);
             ship.inner.descriptor_mut().ship_info.crew_level = 0;
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                (*phoenix).death_func.unwrap(),
-                phoenix,
-            );
+            hooks::invoke_element_pointer((*phoenix).death_func.unwrap(), phoenix);
             assert_eq!((*el).__bindgen_anon_3.mass_points, 11);
             let reincarnation = (*el).death_func.unwrap();
 
@@ -1235,10 +1211,7 @@ fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
             (*el).state_flags |= DISAPPEARING as u16;
             SetVelocityVector(&raw mut (*el).velocity, 20, 3);
             ship.inner.descriptor_mut().ship_info.energy_level = 9;
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                reincarnation,
-                el,
-            );
+            hooks::invoke_element_pointer(reincarnation, el);
             assert_eq!((*el).__bindgen_anon_1.life_span, 36);
             assert_eq!((*el).state_flags & DISAPPEARING as u16, 0);
             assert_eq!(
@@ -1304,10 +1277,7 @@ fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
             assert_eq!((after_x, after_y), (4, 7), "three draws per coordinate");
             let facing = (draws[0] & 15) as u16;
             with_rng(seed, 7, || {
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    (*el).death_func.unwrap(),
-                    el,
-                )
+                hooks::invoke_element_pointer((*el).death_func.unwrap(), el)
             });
 
             assert_eq!(
@@ -1440,11 +1410,7 @@ fn new_pkunk_redraws_its_position_while_a_planet_pulls_on_it() {
             put_element(planet_handle);
 
             let el = ship.ptr();
-            with_rng(seed, 13, || {
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    new_pkunk, el,
-                )
-            });
+            with_rng(seed, 13, || hooks::invoke_element_pointer(new_pkunk, el));
             assert_eq!(
                 ((*el).current.location.x, (*el).current.location.y),
                 (x2, y2),
@@ -1477,11 +1443,7 @@ fn new_pkunk_macro_expansion_draws_again_for_a_negative_coordinate() {
             let mut ship = Ship::new(&_battle, 0);
             let new_pkunk = ship.armed_new_pkunk();
             let el = ship.ptr();
-            with_rng(seed, 6, || {
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    new_pkunk, el,
-                )
-            });
+            with_rng(seed, 6, || hooks::invoke_element_pointer(new_pkunk, el));
             assert_eq!(((*el).current.location.x, (*el).current.location.y), (x, y));
         }
     })
@@ -1704,3 +1666,6 @@ fn ai_finishes_with_the_shared_pass_after_deciding_on_the_taunt() {
         }
     })
 }
+
+#[path = "support/hooks.rs"]
+mod hooks;

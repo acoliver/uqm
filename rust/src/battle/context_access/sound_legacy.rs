@@ -37,16 +37,6 @@ pub unsafe extern "C" fn PlaySound(
     }
 }
 /// # Safety
-/// Sound and a non-null object remain live on the owning game thread.
-#[cfg(not(test))]
-#[no_mangle]
-pub unsafe extern "C" fn ProcessSound(sound: SOUND, object: *mut ELEMENT) {
-    // SAFETY: legacy storage is decoded before entering the id-based sound queue.
-    unsafe {
-        with_object(object, |cx, id| cx.b.kernel_sounds().push(sound, id));
-    }
-}
-/// # Safety
 /// A non-null object is live and owns its display primitive on the game thread.
 #[cfg(not(test))]
 #[no_mangle]

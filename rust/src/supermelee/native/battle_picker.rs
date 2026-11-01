@@ -377,28 +377,24 @@ pub mod live {
                 if ship == 255 {
                     continue;
                 }
-                let master =
-                    GetStarShipFromIndex(&raw mut master_q, ship as u16).cast::<MASTER_SHIP_INFO>();
-                if master.is_null() {
-                    eprintln!("[BUG] FillPickMeleeFrame: StarShip={ship} master_q missing ship");
-                    continue;
-                }
-                let captain = NameCaptain(player_queue(side), (*master).SpeciesID);
+                let master = crate::ships::master_native::master(ship as u16)
+                    .unwrap_or_else(|| panic!("melee master ship {ship}"));
+                let captain = NameCaptain(player_queue(side), master.species);
                 let built = link_queue::ships(side)
-                    .build((*master).SpeciesID)
+                    .build(master.species)
                     .unwrap_or_else(|| panic!("battle ship pool exhausted"));
                 let mut s = STAMP {
                     origin: POINT {
                         x: 4 + 18 * (index % 7) as i16,
                         y: 10 + 18 * (index / 7) as i16,
                     },
-                    frame: (*master).ShipInfo.icons,
+                    frame: master.info.icons,
                 };
                 DrawStamp(&mut s);
                 let mut queue = link_queue::ships(side);
                 queue.edit(built, |ship| {
                     ship.index = index;
-                    ship.cost = (*master).ShipInfo.ship_cost;
+                    ship.cost = master.info.ship_cost;
                     ship.player = side as i16;
                     ship.captain = captain;
                     ship.crew = 0;

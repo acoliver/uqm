@@ -45,6 +45,7 @@ impl Drop for PoolShip {
     fn drop(&mut self) {
         // SAFETY: the construction contract retains the pool until this slot is released.
         unsafe {
+            std::ptr::drop_in_place(self.pointer);
             FreeLink(&raw mut race_q[self.side], self.pointer.cast());
         }
     }

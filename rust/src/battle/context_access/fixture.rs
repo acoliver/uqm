@@ -116,7 +116,7 @@ impl Cx<'_> {
             characteristics: None,
             phoenix: None,
         };
-        if s.RaceDescPtr.is_null() {
+        if s.descriptor.is_none() {
             return view;
         }
         let d = self.desc(id);
@@ -173,44 +173,26 @@ impl Cx<'_> {
     }
     pub(crate) fn detach_descriptor(&mut self, id: ShipId) -> Descriptor {
         // SAFETY: this lifecycle command exclusively detaches the checked ship descriptor.
-        unsafe {
-            Descriptor(std::mem::replace(
-                &mut (*self.ship_pointer(id)).RaceDescPtr,
-                std::ptr::null_mut(),
-            ))
-        }
-    }
-    pub(crate) fn descriptor_handle(&self, id: ShipId) -> Descriptor {
-        Descriptor(self.ship(id).RaceDescPtr)
+        unsafe { Descriptor((*self.ship_pointer(id)).descriptor.take()) }
     }
     pub(crate) fn fixture_spawn(&mut self, id: ShipId) -> bool {
         let pointer = self.ship_pointer(id);
         // SAFETY: all command planning values have been committed before this lifecycle handoff.
-        unsafe {
-            crate::app::bridge::publish(self, || crate::battle::ship_native::spawn_ship(pointer))
-                != 0
-        }
+        unsafe { crate::battle::ship_native::spawn_ship(self, pointer) != 0 }
     }
     pub(crate) fn fixture_damage(&mut self, id: ElementId, damage: i16) {
-        let pointer = self.elements().raw(id);
-        // SAFETY: this checked element remains live across the legacy damage callback.
-        unsafe {
-            crate::app::bridge::publish(self, || {
-                crate::battle::world_elements::do_damage(pointer.cast(), damage)
-            });
-        }
+        self.damage(id, damage);
     }
 }
-#[derive(Clone, Copy)]
 #[cfg(not(test))]
-pub(crate) struct Descriptor(*mut RACE_DESC);
+pub(crate) struct Descriptor(Option<Box<RACE_DESC>>);
 #[cfg(not(test))]
 impl Descriptor {
     pub(crate) fn free(self) {
-        if !self.0.is_null() {
+        if let Some(descriptor) = self.0 {
             // SAFETY: the caller retires the detached descriptor only after its last frame user.
             unsafe {
-                crate::ships::loader_native::free_ship(self.0, 1, 1);
+                crate::ships::loader_native::unload_ship(descriptor, 1, 1);
             }
         }
     }
@@ -231,13 +213,7 @@ impl Cx<'_> {
         }
     }
     pub(crate) fn fixture_think(&mut self, ship: ShipId, crew: u16) {
-        let pointer = self.ship_pointer(ship);
-        // SAFETY: command planning ended before invoking the existing tactical routine.
-        let input = unsafe {
-            crate::app::bridge::publish(self, || {
-                crate::battle::cyborg_native::tactical_intelligence(std::ptr::null_mut(), pointer)
-            })
-        };
+        let input = crate::battle::cyborg_native::tactical(self, ship);
         self.ship_state_mut(ship).input = crate::battle::battle_native::ship_input(input, crew);
     }
     pub(crate) fn fixture_intelligence(

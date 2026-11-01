@@ -116,13 +116,12 @@ pub unsafe extern "C" fn InitGameStructures() -> BOOLEAN {
         let fleet = handle.cast::<FLEET_INFO>();
         (*fleet).SpeciesID = ship;
         if i < count - 1 {
-            let master = FindMasterShip(ship).cast::<MASTER_SHIP_INFO>();
-            copy_fleet(fleet, &(*master).ShipInfo, &(*master).Fleet);
+            let master = find_master_ship(ship).unwrap_or_else(|| panic!("master species {ship}"));
+            copy_fleet(fleet, &master.info, &master.fleet);
         } else {
-            let desc = c_load_ship(ship, 0);
-            if !desc.is_null() {
-                copy_fleet(fleet, &(*desc).ship_info, &(*desc).fleet);
-                c_free_ship(desc, 0, 0);
+            if let Some(desc) = load_ship(ship, 0) {
+                copy_fleet(fleet, &desc.ship_info, &desc.fleet);
+                unload_ship(desc, 0, 0);
             }
         }
         (*fleet).allied_state = BAD_GUY as u16;

@@ -43,7 +43,7 @@ fn part0() -> Vec<(usize, &'static str)> {
             "battle::process_native::Untarget",
         ),
         (
-            crate::battle::world_elements::engine::AbandonShip as *const () as usize,
+            crate::battle::world_elements::engine::abandon_ship as *const () as usize,
             "battle::world_elements::AbandonShip",
         ),
     ]
@@ -62,10 +62,6 @@ fn part1() -> Vec<(usize, &'static str)> {
         (
             crate::battle::world_elements::engine::crew_preprocess as *const () as usize,
             "battle::world_elements::crew_preprocess",
-        ),
-        (
-            crate::battle::world_elements::engine::do_damage as *const () as usize,
-            "battle::world_elements::do_damage",
         ),
         (
             crate::battle::world_elements::engine::gravity_postprocess as *const () as usize,

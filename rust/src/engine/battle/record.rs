@@ -15,10 +15,9 @@ pub type QUEUE = Queue;
 pub use abi::{
     captain_stuff, element, element__bindgen_ty_1, element__bindgen_ty_2, element__bindgen_ty_3,
     element__bindgen_ty_4, element__bindgen_ty_5, race_desc, state, state__bindgen_ty_1,
-    tfb_soundsample, ElementCollisionFunc, ElementProcessFunc, IntelligenceFunc, TFB_SoundSample,
-    CAPTAIN_STUFF, CHARACTERISTIC_STUFF, DATA_STUFF, ELEMENT, EVALUATE_DESC, FLEET_STUFF,
-    INIT_WEAPON_FUNC, INTEL_STUFF, MAX_DISPLAY_PRIMS, MOVEMENT_STATE, MUSIC_REF, POSTPROCESS_FUNC,
-    PREPROCESS_FUNC, PRIM_DESC, RACE_DESC, SHIP_INFO, STARSHIP, STATE, UNINIT_FUNC,
+    tfb_soundsample, TFB_SoundSample, CAPTAIN_STUFF, CHARACTERISTIC_STUFF, DATA_STUFF, ELEMENT,
+    EVALUATE_DESC, FLEET_STUFF, INTEL_STUFF, MAX_DISPLAY_PRIMS, MOVEMENT_STATE, MUSIC_REF,
+    PRIM_DESC, RACE_DESC, SHIP_INFO, STARSHIP, STATE,
 };
 
 #[allow(non_camel_case_types, non_snake_case)]
@@ -56,17 +55,15 @@ mod abi {
             offset!(STATE, image) + offset!(state__bindgen_ty_1, farray) == offset!(Visual, farray)
         );
     };
-    pub type ElementProcessFunc = Option<super::super::hooks::ElementHook>;
-    pub type ElementCollisionFunc = Option<super::super::hooks::CollisionHook>;
     #[repr(C)]
     #[derive(Copy, Clone)]
     pub struct element {
         pub pred: HELEMENT,
         pub succ: HELEMENT,
-        pub preprocess_func: ElementProcessFunc,
-        pub postprocess_func: ElementProcessFunc,
-        pub collision_func: ElementCollisionFunc,
-        pub death_func: ElementProcessFunc,
+        pub preprocess_func: Option<super::super::hooks::ElementHook>,
+        pub postprocess_func: Option<super::super::hooks::ElementHook>,
+        pub collision_func: Option<crate::engine::battle::CollisionHook>,
+        pub death_func: Option<crate::engine::battle::ElementHook>,
         pub playerNr: SIZE,
         pub state_flags: ELEMENT_FLAGS,
         pub __bindgen_anon_1: element__bindgen_ty_1,
@@ -117,21 +114,16 @@ mod abi {
     }
 
     pub type RACE_DESC = race_desc;
-    pub type PREPROCESS_FUNC = Option<unsafe extern "C" fn(ElementPtr: *mut ELEMENT)>;
-    pub type POSTPROCESS_FUNC = Option<unsafe extern "C" fn(ElementPtr: *mut ELEMENT)>;
-    pub type INIT_WEAPON_FUNC =
-        Option<unsafe extern "C" fn(ElementPtr: *mut ELEMENT, Weapon: *mut HELEMENT) -> COUNT>;
-    pub type UNINIT_FUNC = Option<unsafe extern "C" fn(pRaceDesc: *mut RACE_DESC)>;
     pub use super::RaceDescriptor as race_desc;
 
     #[repr(C)]
-    #[derive(Debug, Copy, Clone)]
+    #[derive(Debug, Clone)]
     pub struct STARSHIP {
         pub pred: HLINK,
         pub succ: HLINK,
         pub SpeciesID: SPECIES_ID,
         pub captains_name_index: BYTE,
-        pub RaceDescPtr: *mut RACE_DESC,
+        pub descriptor: Option<Box<RACE_DESC>>,
         pub crew_level: COUNT,
         pub max_crew: COUNT,
         pub ship_cost: BYTE,
@@ -150,6 +142,13 @@ mod abi {
         pub control: BYTE,
     }
 
+    impl STARSHIP {
+        pub fn descriptor_ptr(&mut self) -> *mut RACE_DESC {
+            self.descriptor
+                .as_deref_mut()
+                .map_or(std::ptr::null_mut(), std::ptr::from_mut)
+        }
+    }
     #[repr(C)]
     #[derive(Debug, Copy, Clone)]
     pub struct tfb_soundsample {
@@ -184,20 +183,11 @@ mod abi {
         pub MoveState: MOVEMENT_STATE,
     }
 
-    pub type IntelligenceFunc = Option<
-        unsafe extern "C" fn(
-            ShipPtr: *mut ELEMENT,
-            ObjectsOfConcern: *mut EVALUATE_DESC,
-            ConcernCounter: COUNT,
-        ),
-    >;
-
     #[repr(C)]
     #[derive(Debug, Copy, Clone)]
     pub struct INTEL_STUFF {
         pub ManeuverabilityIndex: COUNT,
         pub WeaponRange: COUNT,
-        pub intelligence_func: IntelligenceFunc,
     }
 
     #[repr(C)]
@@ -479,18 +469,16 @@ impl Cx<'_> {
         )
     }
     pub(crate) fn desc(&self, id: ShipId) -> &RACE_DESC {
-        let pointer = self.ship(id).RaceDescPtr;
-        assert!(!pointer.is_null(), "ship {id:?} has no descriptor");
-        // SAFETY: each live ship owns its descriptor until teardown.
-        self.project(std::ptr::NonNull::new(pointer).unwrap_or_else(|| panic!("{}", "descriptor")))
+        self.ship(id)
+            .descriptor
+            .as_deref()
+            .unwrap_or_else(|| panic!("ship {id:?} has no descriptor"))
     }
     pub(super) fn desc_mut(&mut self, id: ShipId) -> &mut RACE_DESC {
-        let pointer = self.ship(id).RaceDescPtr;
-        assert!(!pointer.is_null(), "ship {id:?} has no descriptor");
-        // SAFETY: the exclusive context borrow scopes the descriptor projection.
-        self.project_mut(
-            std::ptr::NonNull::new(pointer).unwrap_or_else(|| panic!("{}", "descriptor")),
-        )
+        self.ship_mut(id)
+            .descriptor
+            .as_deref_mut()
+            .unwrap_or_else(|| panic!("ship {id:?} has no descriptor"))
     }
     #[cfg(not(test))]
     pub(crate) fn captain_controls(&mut self, id: ShipId) -> std::ptr::NonNull<CAPTAIN_STUFF> {
@@ -617,15 +605,7 @@ impl RACE_DESC {
                 race.intelligence.map_or(0, |f| f as usize),
             ]
         } else {
-            [
-                self.uninit_func.map_or(0, |f| f as usize),
-                self.preprocess_func.map_or(0, |f| f as usize),
-                self.postprocess_func.map_or(0, |f| f as usize),
-                self.init_weapon_func.map_or(0, |f| f as usize),
-                self.cyborg_control
-                    .intelligence_func
-                    .map_or(0, |f| f as usize),
-            ]
+            [0; 5]
         }
     }
 }
@@ -828,27 +808,13 @@ mod projection_tests {
 
 #[cfg(not(test))]
 impl RACE_DESC {
-    pub(crate) fn cleanup(&mut self, world: &mut super::World) -> abi::UNINIT_FUNC {
-        if let Some(race) = self.race {
-            if let Some(uninit) = race.uninit {
-                let mut stats = RaceStats::decode(self);
-                uninit(world, &mut stats);
-                RaceStats::apply(self, stats);
-            }
-            None
-        } else {
-            self.uninit_func
+    pub(crate) fn cleanup(&mut self, world: &mut super::World) {
+        if let Some(uninit) = self.race.and_then(|race| race.uninit) {
+            let mut stats = RaceStats::decode(self);
+            uninit(world, &mut stats);
+            RaceStats::apply(self, stats);
         }
     }
-}
-
-#[cfg(not(test))]
-pub(crate) type DescriptorInitializer = unsafe extern "C" fn() -> *mut RACE_DESC;
-
-#[cfg(not(test))]
-pub(crate) enum DescriptorSource {
-    Native(&'static super::Race),
-    Legacy(DescriptorInitializer),
 }
 
 #[cfg(test)]
@@ -864,23 +830,6 @@ mod zero_descriptor_tests {
     }
 }
 
-impl Cx<'_> {
-    /// # Safety
-    /// The pointer names a live, layout-compatible legacy element on the game thread.
-    pub(crate) unsafe fn legacy_parent<E>(&self, pointer: std::ptr::NonNull<E>) -> usize {
-        let pointer = pointer.cast::<ELEMENT>();
-        self.project(pointer).pParent as usize
-    }
-}
-
-pub(super) struct CollisionOperands<E, P>(
-    pub(super) *mut E,
-    pub(super) *mut P,
-    pub(super) *mut E,
-    pub(super) *mut P,
-);
-pub(super) struct ElementOperand<E>(pub(super) *mut E);
-
 #[repr(C)]
 #[repr(align(16))]
 #[derive(Debug, Copy, Clone)]
@@ -891,12 +840,6 @@ pub struct RaceDescriptor {
     pub characteristics: CHARACTERISTIC_STUFF,
     pub ship_data: DATA_STUFF,
     pub cyborg_control: INTEL_STUFF,
-    pub uninit_func: UNINIT_FUNC,
-    pub preprocess_func: PREPROCESS_FUNC,
-    pub postprocess_func: POSTPROCESS_FUNC,
-    pub init_weapon_func: INIT_WEAPON_FUNC,
-    pub data: *mut ::std::os::raw::c_void,
-    pub code_ref: *mut ::std::os::raw::c_void,
     pub race: Option<&'static super::race::Race>,
     pub race_state: super::race::RaceState,
     pub race_callbacks: super::race::Callbacks,
@@ -905,6 +848,7 @@ pub struct RaceDescriptor {
 pub(crate) use super::kernel::{Channels, SoundQueue, StarPlane};
 
 pub(crate) struct Kernel {
+    pub(crate) master_queue: QUEUE,
     pub(crate) player_input: [*mut std::ffi::c_void; 2],
     pub(crate) instant_victory: u32,
     pub(crate) battle_music: MUSIC_REF,
@@ -936,6 +880,7 @@ impl Kernel {
             plane
         }));
         Self {
+            master_queue: QUEUE::default(),
             player_input: [ptr::null_mut(); 2],
             instant_victory: 0,
             battle_music: ptr::null_mut(),

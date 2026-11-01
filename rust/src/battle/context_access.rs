@@ -58,13 +58,13 @@ impl Cx<'_> {
     pub fn gravity(&mut self, id: ElementId) -> bool {
         let pointer = self.elements().raw(id).cast();
         // SAFETY: the checked element and display queue belong to this context.
-        unsafe { crate::app::bridge::publish(self, || CalculateGravity(pointer) != 0) }
+        unsafe { crate::battle::gravity::calculate_gravity_in(self, pointer) != 0 }
     }
 
     pub fn matter_conflict(&mut self, id: ElementId) -> bool {
         let pointer = self.elements().raw(id).cast();
         // SAFETY: no record projection survives the legacy resource operation.
-        unsafe { crate::app::bridge::publish(self, || TimeSpaceMatterConflict(pointer) != 0) }
+        unsafe { crate::battle::gravity::time_space_matter_conflict_in(self, pointer) != 0 }
     }
 
     pub(crate) fn negotiate_battle(
@@ -72,8 +72,7 @@ impl Cx<'_> {
         net: &dyn crate::engine::battle::net::BattleNet,
         state: u32,
     ) -> bool {
-        // SAFETY: the caller retains only a cloned network handle, not live record borrows.
-        unsafe { crate::app::bridge::publish(self, || net.negotiate(true, state)) }
+        net.negotiate(true, state)
     }
 
     pub fn screen_dimensions(&self) -> (i32, i32) {
@@ -101,9 +100,19 @@ impl Cx<'_> {
         frame: crate::engine::battle::views::Frame,
         flags: u8,
     ) {
+        self.silhouette_at(source, POINT { x: 0, y: 0 }, frame, flags);
+    }
+
+    pub fn silhouette_at(
+        &mut self,
+        source: ElementId,
+        origin: POINT,
+        frame: crate::engine::battle::views::Frame,
+        flags: u8,
+    ) {
         let pointer = self.elements().raw(source).cast();
         let mut stamp = STAMP {
-            origin: POINT { x: 0, y: 0 },
+            origin,
             frame: frame.raw(),
         };
         // SAFETY: the checked ship and supplied loaded frame remain live.
@@ -133,14 +142,13 @@ impl Cx<'_> {
             blast_offs: value.blast_offs,
         };
         // SAFETY: the block's frame array belongs to a loaded race descriptor.
-        let handle =
-            unsafe { crate::app::bridge::publish(self, || initialize_missile(&mut block)) };
+        let handle = unsafe { initialize_missile(self, &mut block) };
         self.elements().id(handle)
     }
 
     pub(crate) fn laser(&mut self, block: &mut LASER_BLOCK) -> Option<ElementId> {
         // SAFETY: the synchronous constructor allocates through this context's pool.
-        let handle = unsafe { crate::app::bridge::publish(self, || initialize_laser(block)) };
+        let handle = unsafe { initialize_laser(self, block) };
         self.elements().id(handle)
     }
 }
@@ -169,7 +177,7 @@ impl Cx<'_> {
         unsafe {
             {
                 InitShipStatus(
-                    &raw mut (*(*owner).RaceDescPtr).ship_info,
+                    &raw mut (*(*owner).descriptor_ptr()).ship_info,
                     owner,
                     std::ptr::null_mut(),
                 );
@@ -238,11 +246,7 @@ impl Cx<'_> {
         let a = self.elements().raw(a).cast();
         let b = self.elements().raw(b).cast();
         // SAFETY: both checked elements and points outlive this synchronous collision.
-        let handle = unsafe {
-            crate::app::bridge::publish(self, || {
-                crate::battle::weapon_native::weapon_collision(a, pa, b, pb)
-            })
-        };
+        let handle = unsafe { crate::battle::weapon_native::weapon_collision(self, a, pa, b, pb) };
         self.elements().id(handle)
     }
 }
@@ -257,9 +261,8 @@ impl Cx<'_> {
 }
 
 #[cfg(not(test))]
-use crate::engine::battle::record::{ELEMENT, EVALUATE_DESC};
 #[cfg(not(test))]
-use crate::engine::battle::{Concern, Concerns, WeaponOrigin};
+use crate::engine::battle::{Concerns, WeaponOrigin};
 
 #[cfg(not(test))]
 impl Cx<'_> {
@@ -283,26 +286,7 @@ impl Cx<'_> {
                 callback(cx, ship, origin)
             })
         } else {
-            let callback = cx
-                .desc(ship)
-                .init_weapon_func
-                .unwrap_or_else(|| panic!("{}", "ship weapon initializer"));
-            let mut subject = cx.encode_subject(&origin);
-            let pointer = &raw mut subject;
-            let mut weapons = [std::ptr::null_mut(); 6];
-            // SAFETY: the checked ship and six output slots remain live for this handoff.
-            let count = unsafe {
-                crate::battle::process_native::dispatch::invoke_legacy(
-                    cx,
-                    callback as usize,
-                    parent,
-                    || callback(pointer, weapons.as_mut_ptr()),
-                )
-            };
-            weapons[..usize::from(count)]
-                .iter()
-                .map(|&h| cx.elements().id(h))
-                .collect()
+            panic!("ship has no race");
         }
     }
 
@@ -325,66 +309,12 @@ impl Cx<'_> {
                 false
             }
         } else {
-            let callback = if post {
-                desc.postprocess_func
-            } else {
-                desc.preprocess_func
-            };
-            if let Some(callback) = callback {
-                let element = cx.ship_element(ship);
-                let pointer = cx.elements().raw(element).cast::<ELEMENT>();
-                // SAFETY: the owner and checked element remain live across this handoff.
-                unsafe {
-                    crate::battle::process_native::invoke_element::invoke_race_element(
-                        cx, callback, pointer,
-                    );
-                }
-                true
-            } else {
-                false
-            }
+            panic!("ship has no race");
         }
     }
 
     pub(crate) fn race_intelligence_with_junk(&mut self, ship: ShipId, concerns: &mut Concerns) {
-        let parent = self.ship_pointer(ship) as usize;
-        if self.desc(ship).race.is_some() {
-            self.race_intelligence(ship, concerns);
-        } else {
-            let callback = self
-                .desc(ship)
-                .cyborg_control
-                .intelligence_func
-                .unwrap_or_else(|| panic!("ship intelligence"));
-            let mut subject = self.encode_subject(&concerns.subject);
-            let mut raw = concerns.objects.map(|c| EVALUATE_DESC {
-                ObjectPtr: c
-                    .object
-                    .map_or(std::ptr::null_mut(), |id| self.elements().raw(id).cast()),
-                facing: c.facing,
-                which_turn: c.which_turn,
-                MoveState: c.movement,
-            });
-            // SAFETY: A2 retains the subject and ten initialized concern slots through the callback.
-            unsafe {
-                crate::battle::process_native::dispatch::invoke_legacy(
-                    self,
-                    callback as usize,
-                    parent,
-                    || callback(&mut subject, raw.as_mut_ptr(), concerns.count),
-                );
-                concerns.subject = self.legacy_subject(&subject);
-            }
-            concerns.objects = std::array::from_fn(|i| {
-                let c = raw[i];
-                Concern {
-                    object: self.elements().id(c.ObjectPtr.cast()),
-                    facing: c.facing,
-                    which_turn: c.which_turn,
-                    movement: c.MoveState,
-                }
-            });
-        }
+        self.race_intelligence(ship, concerns);
     }
 }
 
@@ -476,7 +406,7 @@ mod tactrans_native_access {
             let pointer = self.ship(ship) as *const STARSHIP as *mut STARSHIP;
             // SAFETY: the checked winner owns its loaded victory music.
             unsafe {
-                PlayDitty(pointer);
+                play_ditty(pointer);
             }
         }
         pub(crate) fn replace_dead_ship(&mut self, dead: ElementId) {
@@ -739,41 +669,6 @@ impl Cx<'_> {
                 &raw mut crate::engine::battle::legacy::disp_q,
                 handle,
                 before,
-            );
-        }
-    }
-}
-
-impl crate::engine::battle::Cx<'_> {
-    pub(crate) fn invoke_legacy_element_id(
-        &mut self,
-        callback: crate::engine::battle::hooks::LegacyElementFn,
-        id: crate::engine::battle::ElementId,
-    ) {
-        let raw = self.elements().raw(id).cast();
-        // SAFETY: checked pool membership holds; the dispatcher publishes the context before calling legacy code.
-        unsafe {
-            crate::battle::process_native::invoke_element::invoke_race_element(self, callback, raw);
-        }
-    }
-    pub(crate) fn invoke_legacy_collision_ids(
-        &mut self,
-        callback: crate::engine::battle::hooks::LegacyCollisionFn,
-        a: crate::engine::battle::ElementId,
-        pa: &mut crate::graphics::native_abi::POINT,
-        b: crate::engine::battle::ElementId,
-        pb: &mut crate::graphics::native_abi::POINT,
-    ) {
-        let parent = self.elements()[a].pParent as usize;
-        let first = self.elements().raw(a).cast();
-        let second = self.elements().raw(b).cast();
-        // SAFETY: both ids and mutable point borrows remain live for the published legacy call.
-        unsafe {
-            crate::battle::process_native::dispatch::invoke_legacy(
-                self,
-                callback as usize,
-                parent,
-                || callback(first, pa, second, pb),
             );
         }
     }

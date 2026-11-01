@@ -4,8 +4,6 @@ use super::*;
 
 pub(crate) use crate::engine::battle::access::invoke;
 
-pub(crate) use crate::engine::battle::access::invoke_legacy;
-
 pub(crate) fn record_spawn(address: usize, side: i16, species: u32) {
     crate::collections::observation::record(crate::collections::observation::Event::Spawn {
         address,

@@ -172,12 +172,7 @@ fn descriptor_matches_all_c_initializer_fields_and_resources() {
                 (0, 900)
             );
             assert!(d.callbacks()[1] != 0 && d.callbacks()[3] != 0 && d.callbacks()[4] != 0);
-            assert!(
-                d.callbacks()[2] == 0
-                    && d.callbacks()[0] == 0
-                    && d.data.is_null()
-                    && d.code_ref.is_null()
-            );
+            assert!(d.callbacks()[2] == 0 && d.callbacks()[0] == 0);
             let mut owned = battle::descriptor(SPECIES_ID_THRADDASH_ID);
             owned.ship_info.energy_level = 17;
             owned.race_callbacks.pre = uqm_rust::engine::battle::Selection::Disabled;
@@ -344,8 +339,8 @@ fn boost_uses_temporary_characteristics_and_preserves_the_inertial_thrust_result
                 expected_desc.characteristics.max_thrust = 72;
                 expected_desc.characteristics.thrust_increment = 12;
                 let mut expected_ss = PoolShip::new(0);
-                *expected_ss = *ship.ship_mut();
-                expected_ss.RaceDescPtr = &mut expected_desc;
+                *expected_ss = ship.ship_mut().clone();
+                expected_ss.descriptor = Some(Box::new(expected_desc));
                 if old == 0 {
                     expected_ss.cur_status_flags &=
                         !((SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16);
@@ -469,9 +464,7 @@ fn napalm_materializes_without_decaying_and_initializes_the_intersection_from_ne
             let callback = (*e)
                 .preprocess_func
                 .unwrap_or_else(|| panic!("installed napalm callback"));
-            with_rng(66, 0, || {
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(callback, e)
-            });
+            with_rng(66, 0, || hooks::invoke_element_pointer(callback, e));
             assert_eq!(velocity_fields(&(*e).velocity), [0; 9]);
             assert_eq!((*e).state_flags & NONSOLID as u16, 0);
             assert_ne!((*e).state_flags & APPEARING as u16, 0);
@@ -502,15 +495,11 @@ fn napalm_decay_wait_and_loop_boundary_match_c_including_last_frame_wrap() {
             let callback = (*e)
                 .preprocess_func
                 .unwrap_or_else(|| panic!("installed napalm callback"));
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(callback, e);
+            hooks::invoke_element_pointer(callback, e);
             (*e).state_flags &= !(APPEARING as u16);
             for wait in (0..5).rev() {
                 SetVelocityComponents(&raw mut (*e).velocity, 77, 99);
-                with_rng(3, 0, || {
-                    uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                        callback, e,
-                    )
-                });
+                with_rng(3, 0, || hooks::invoke_element_pointer(callback, e));
                 assert_eq!((*e).__bindgen_anon_4.turn_wait, wait);
                 assert_eq!((*e).next.image.frame, ship.raw_frame(2, 9));
                 assert_eq!((*e).state_flags & CHANGING as u16, 0);
@@ -529,11 +518,7 @@ fn napalm_decay_wait_and_loop_boundary_match_c_including_last_frame_wrap() {
                 (*e).__bindgen_anon_1.life_span = life;
                 (*e).__bindgen_anon_4.turn_wait = 0;
                 (*e).state_flags &= !(CHANGING as u16);
-                with_rng(3, 0, || {
-                    uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                        callback, e,
-                    )
-                });
+                with_rng(3, 0, || hooks::invoke_element_pointer(callback, e));
                 assert_eq!(frame_index((*e).next.image.frame), expected);
                 assert_eq!((*e).__bindgen_anon_4.turn_wait, 5);
                 assert_ne!((*e).state_flags & CHANGING as u16, 0);
@@ -732,7 +717,7 @@ fn owner_cleanup_during_collision_scan_invalidates_the_active_napalm() {
             let mut enemy =
                 Ship::with_frames(&_battle, SPECIES_ID_THRADDASH_ID, 1, [16, 16, 10], [4, 4]);
             let trail = burn(&mut ship);
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
+            hooks::invoke_element_pointer(
                 (*trail)
                     .preprocess_func
                     .unwrap_or_else(|| panic!("installed napalm callback")),
@@ -813,7 +798,7 @@ fn napalm_and_horn_collide_with_battle_objects_without_optional_callback_skips()
                     );
                     let weapon = if napalm {
                         let trail = burn(&mut ship);
-                        uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
+                        hooks::invoke_element_pointer(
                             (*trail)
                                 .preprocess_func
                                 .unwrap_or_else(|| panic!("installed napalm callback")),
@@ -880,3 +865,6 @@ fn napalm_and_horn_collide_with_battle_objects_without_optional_callback_skips()
         }
     })
 }
+
+#[path = "support/hooks.rs"]
+mod hooks;

@@ -306,13 +306,13 @@ fn xwing_launches_two_lasers_and_preserves_friendly_ships() {
             (*target).playerNr = (*first).playerNr;
             (*target).__bindgen_anon_2.crew_level = 20;
             let mut point = POINT { x: 0, y: 0 };
-            uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
+            hooks::invoke_collision_pointer(
                 (*first).collision_func.unwrap(),
                 first,
                 &mut point,
                 target,
                 &mut point,
-                uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
+                hooks::CollisionCall::Hook,
             );
             assert_eq!((*target).__bindgen_anon_2.crew_level, 20);
             assert_eq!((*first).__bindgen_anon_2.hit_points, 1);
@@ -330,3 +330,6 @@ fn alternate(desc: &RACE_DESC) -> CHARACTERISTIC_STUFF {
     };
     alternate
 }
+
+#[path = "support/hooks.rs"]
+mod hooks;

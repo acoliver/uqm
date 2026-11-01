@@ -165,7 +165,6 @@ fn install_ship_hooks(e: &mut ELEMENT, parent: *mut std::ffi::c_void, side: SIZE
 const GRAVITY_MASS_NATIVE: u16 = 100;
 
 #[cfg(not(test))]
-#[allow(non_snake_case)]
 pub(crate) mod engine {
     use super::*;
     use crate::battle::status_native::PostProcessStatus;
@@ -195,7 +194,7 @@ pub(crate) mod engine {
     #[no_mangle]
     pub unsafe extern "C" fn inertial_thrust(e: *mut ELEMENT) -> STATUS_FLAGS {
         let ship = starship(e);
-        let desc = (*ship).RaceDescPtr;
+        let desc = (*ship).descriptor_ptr();
         thrust(
             &mut (*e).velocity,
             (*ship).ShipFacing,
@@ -337,12 +336,12 @@ pub(crate) mod engine {
 
     /// # Safety
     /// Ship, loader, battle queues, display primitives, and element pool must be live.
-    pub unsafe fn spawn_ship(ship: *mut STARSHIP) -> BOOLEAN {
-        let rd = load_ship((*ship).SpeciesID, 1);
-        if rd.is_null() {
+    pub unsafe fn spawn_ship(cx: &mut Cx<'_>, ship: *mut STARSHIP) -> BOOLEAN {
+        let Some(descriptor) = load_ship((*ship).SpeciesID, 1) else {
             return 0;
-        }
-        (*ship).RaceDescPtr = rd;
+        };
+        (*ship).descriptor = Some(descriptor);
+        let rd = (*ship).descriptor_ptr();
         (*ship).ship_input_state = 0;
         (*ship).cur_status_flags = 0;
         (*ship).old_status_flags = 0;
@@ -357,7 +356,9 @@ pub(crate) mod engine {
         (*ship).special_counter = 0;
         let mut handle = (*ship).hShip;
         if handle.is_null() {
-            handle = AllocElement();
+            handle = cx
+                .alloc_element()
+                .map_or(ptr::null_mut(), |id| cx.elements().raw(id));
             if !handle.is_null() {
                 InsertQueue(&raw mut disp_q, handle, disp_q.head);
             }
@@ -365,6 +366,10 @@ pub(crate) mod engine {
         (*ship).hShip = handle;
         if !handle.is_null() {
             let e = element(handle);
+            let id = cx
+                .elements()
+                .allocated_id(handle)
+                .unwrap_or_else(|| panic!("spawn element"));
             (*e).playerNr = (*ship).playerNr;
             (*e).__bindgen_anon_2.crew_level = 0;
             (*e).__bindgen_anon_3.mass_points = (*rd).characteristics.ship_mass;
@@ -400,7 +405,7 @@ pub(crate) mod engine {
                 loop {
                     (*e).current.location.x = spawn_coordinate(TFB_Random(), width);
                     (*e).current.location.y = spawn_coordinate(TFB_Random(), height);
-                    if CalculateGravity(e) == 0 && TimeSpaceMatterConflict(e) == 0 {
+                    if !cx.gravity(id) && !cx.matter_conflict(id) {
                         break;
                     }
                 }
@@ -428,7 +433,7 @@ pub(crate) mod engine {
                     (*ship).hShip = (*last).hShip;
                 }
             }
-            if spawn_ship(ship) == 0 {
+            if crate::app::bridge::enter(|cx| spawn_ship(cx, ship)) == 0 {
                 return 0;
             }
         }
@@ -454,7 +459,9 @@ pub(crate) mod engine {
                         as usize,
                     mem::size_of::<STARSHIP>()
                 );
-                if spawn_ship(ships[player as usize].cast()) == 0 {
+                if crate::app::bridge::enter(|cx| spawn_ship(cx, ships[player as usize].cast()))
+                    == 0
+                {
                     return 0;
                 }
             }

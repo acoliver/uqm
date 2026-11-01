@@ -145,7 +145,7 @@ pub(crate) mod engine {
 
         let mut handle = cx.elements().head();
         while let Some(object) = handle {
-            // AbandonShip may append to the queue, so read the link first.
+            // abandon_ship may append to the queue, so read the link first.
             let next = cx.elements().succ(object);
 
             if cx.element(object).flags & PLAYER_SHIP as u16 != 0

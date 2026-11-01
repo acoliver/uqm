@@ -101,8 +101,6 @@ fn descriptor_matches_the_c_race_data() {
             assert!(desc.callbacks()[3] != 0);
             assert!(desc.callbacks()[0] == 0);
             assert!(desc.callbacks()[2] == 0);
-            assert!(desc.data.is_null());
-            assert!(desc.code_ref.is_null());
         }
     })
 }

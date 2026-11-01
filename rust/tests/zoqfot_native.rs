@@ -54,10 +54,7 @@ fn descriptor_and_spit_animation_preserve_jitter_rng_and_speed() {
             TFB_SeedRandom(19);
             let angle = ((TFB_Random() as COUNT) % 3).wrapping_sub(1);
             with_rng(19, 1, || {
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    (*e).preprocess_func.unwrap(),
-                    e,
-                )
+                hooks::invoke_element_pointer((*e).preprocess_func.unwrap(), e)
             });
             assert_eq!(frame_index((*e).next.image.frame), 1);
             assert_eq!((*e).__bindgen_anon_4.turn_wait, 2);
@@ -71,19 +68,13 @@ fn descriptor_and_spit_animation_preserve_jitter_rng_and_speed() {
             assert_eq!(velocity(&(*e).velocity), velocity(&v));
             for expected in [1, 0] {
                 with_rng(19, 0, || {
-                    uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                        (*e).preprocess_func.unwrap(),
-                        e,
-                    )
+                    hooks::invoke_element_pointer((*e).preprocess_func.unwrap(), e)
                 });
                 assert_eq!((*e).__bindgen_anon_4.turn_wait, expected);
                 assert_eq!(frame_index((*e).next.image.frame), 1);
             }
             with_rng(19, 0, || {
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    (*e).preprocess_func.unwrap(),
-                    e,
-                )
+                hooks::invoke_element_pointer((*e).preprocess_func.unwrap(), e)
             });
             assert_eq!(frame_index((*e).next.image.frame), 2);
             assert_eq!((*e).__bindgen_anon_4.turn_wait, 2);
@@ -108,10 +99,7 @@ fn tongue_chain_extends_in_facing_direction_and_stops_at_zero() {
                 (*e).next = (*e).current;
                 let y = (*e).next.location.y;
                 with_rng(3, 0, || {
-                    uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                        (*e).postprocess_func.unwrap(),
-                        e,
-                    )
+                    hooks::invoke_element_pointer((*e).postprocess_func.unwrap(), e)
                 });
                 e = element(disp_q.tail);
                 assert_eq!((*e).__bindgen_anon_4.turn_wait, remaining);
@@ -127,10 +115,7 @@ fn tongue_chain_extends_in_facing_direction_and_stops_at_zero() {
             }
             let all = queued();
             assert_eq!(all.len(), 8);
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                (*e).postprocess_func.unwrap(),
-                e,
-            );
+            hooks::invoke_element_pointer((*e).postprocess_func.unwrap(), e);
             assert_eq!(queued(), all);
         }
     })
@@ -148,13 +133,13 @@ fn first_tongue_collision_damages_but_later_frames_only_cancel_extension() {
             let mut a = POINT { x: 100, y: 100 };
             let mut b = POINT { x: 110, y: 100 };
             with_rng(7, 0, || {
-                uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
+                hooks::invoke_collision_pointer(
                     (*tongue).collision_func.unwrap(),
                     tongue,
                     &mut a,
                     enemy.ptr(),
                     &mut b,
-                    uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
+                    hooks::CollisionCall::Hook,
                 )
             });
             assert_eq!(enemy.descriptor_mut().ship_info.crew_level, 0);
@@ -168,13 +153,13 @@ fn first_tongue_collision_damages_but_later_frames_only_cancel_extension() {
             (*target).__bindgen_anon_1.life_span = 1;
             (*tongue).__bindgen_anon_4.turn_wait = 4;
             let before = queued();
-            uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
+            hooks::invoke_collision_pointer(
                 (*tongue).collision_func.unwrap(),
                 tongue,
                 &mut a,
                 target,
                 &mut b,
-                uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
+                hooks::CollisionCall::Hook,
             );
             assert_eq!(ship.ship_mut().special_counter, 1);
             assert_eq!(queued(), before);
@@ -235,3 +220,6 @@ fn ai_tongue_range_and_facing_suppress_spit_without_energy_gate() {
         }
     })
 }
+
+#[path = "support/hooks.rs"]
+mod hooks;

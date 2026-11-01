@@ -58,14 +58,7 @@ impl race_desc {
         cyborg_control: INTEL_STUFF {
             ManeuverabilityIndex: 0,
             WeaponRange: 0,
-            intelligence_func: None,
         },
-        uninit_func: None,
-        preprocess_func: None,
-        postprocess_func: None,
-        init_weapon_func: None,
-        data: std::ptr::null_mut(),
-        code_ref: std::ptr::null_mut(),
         race: None,
         race_state: crate::engine::battle::RaceState::None,
         race_callbacks: crate::engine::battle::Callbacks {
@@ -83,10 +76,7 @@ mod tests {
     #[test]
     fn empty_descriptor_has_no_resources_or_callbacks() {
         let descriptor = race_desc::EMPTY;
-        assert!(descriptor.data.is_null() && descriptor.code_ref.is_null());
-        assert!(descriptor.uninit_func.is_none() && descriptor.preprocess_func.is_none());
-        assert!(descriptor.postprocess_func.is_none() && descriptor.init_weapon_func.is_none());
-        assert!(descriptor.cyborg_control.intelligence_func.is_none());
+        assert!(descriptor.race.is_none());
         assert_eq!(descriptor.ship_info.crew_level, 0);
         assert_eq!(descriptor.characteristics.max_thrust, 0);
         for resource in descriptor

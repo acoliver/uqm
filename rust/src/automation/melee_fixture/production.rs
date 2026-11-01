@@ -75,13 +75,9 @@ pub(in crate::automation::melee_fixture) fn execute(
         task.needed_species()
             .into_iter()
             .map(|index| {
-                let master = crate::battle::build_native::engine::GetStarShipFromIndex(
-                    &raw mut master_q,
-                    u16::from(index),
-                )
-                .cast::<MASTER_SHIP_INFO>();
-                assert!(!master.is_null(), "loaded fixture catalog");
-                (index, (*master).SpeciesID)
+                let master = crate::ships::master_native::master(u16::from(index))
+                    .unwrap_or_else(|| panic!("loaded fixture catalog"));
+                (index, master.species)
             })
             .collect()
     };
@@ -97,6 +93,7 @@ fn drive(
     catalog: &BTreeMap<u8, u32>,
 ) -> Result<Option<FixtureRun>, String> {
     let mut retained: Option<crate::battle::context_access::fixture::Descriptor> = None;
+    let mut retained_owner = None;
     let mut old_scale = 0;
     loop {
         let mut world = borrow_world(cx);
@@ -114,8 +111,15 @@ fn drive(
             let reply = unsafe {
                 match effect {
                     Effect::RetainDescriptor(owner) => {
-                        retained = Some(cx.descriptor_handle(owner));
+                        retained_owner = Some(owner);
                         Reply::None
+                    }
+                    Effect::Spawn(owner) => {
+                        if retained_owner == Some(owner) {
+                            retained = Some(cx.detach_descriptor(owner));
+                            retained_owner = None;
+                        }
+                        apply(cx, Effect::Spawn(owner))?
                     }
                     Effect::FreeRetained => {
                         crate::mainloop::input_frame::drain_committed_draws();

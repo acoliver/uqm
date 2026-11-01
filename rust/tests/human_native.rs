@@ -42,8 +42,6 @@ fn cruiser_descriptor_and_registered_weapon_and_defense_callbacks() {
             assert_ne!(desc.callbacks()[2], 0);
             assert_ne!(desc.callbacks()[3], 0);
             assert_ne!(desc.callbacks()[4], 0);
-            assert!(desc.data.is_null());
-            assert!(desc.code_ref.is_null());
 
             ship.element_mut().next.location = POINT { x: 1000, y: 2000 };
             let weapons = ship.weapon(1);

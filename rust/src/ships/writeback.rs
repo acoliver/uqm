@@ -22,8 +22,8 @@
 //! Called when the dead ship element's life_span reaches 0:
 //! - If not ready for battle end: keeps element alive longer, returns
 //! - Otherwise: stops audio (ditty/music/sound)
-//! - Frees dead ship's descriptor: `free_ship(RaceDescPtr, TRUE, TRUE)`
-//! - Sets RaceDescPtr = NULL
+//! - Frees dead ship's descriptor: `free_ship(descriptor, TRUE, TRUE)`
+//! - Sets descriptor = NULL
 //! - If NOT FleetIsInfinite: UpdateShipFragCrew, marks SpeciesID = NO_ID
 //! - Calls GetNextStarShip to spawn replacement
 //! - If no ships left on one side: clears IN_BATTLE

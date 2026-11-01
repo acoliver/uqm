@@ -327,34 +327,22 @@ fn generators_spawn_at_exact_offsets_and_decrement_once_before_gate_opens() {
                     .unwrap(),
             );
             for (i, h) in generators.iter().enumerate() {
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    (*gate).preprocess_func.unwrap(),
-                    gate,
-                );
+                hooks::invoke_element_pointer((*gate).preprocess_func.unwrap(), gate);
                 assert_eq!((*prim(gate)).Type, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
                 let g = element(*h);
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    (*g).death_func.unwrap(),
-                    g,
-                );
+                hooks::invoke_element_pointer((*g).death_func.unwrap(), g);
                 assert_eq!(
                     ship.descriptor_mut().characteristics.max_thrust,
                     7 - i as u16
                 );
                 assert_eq!(frame_index((*g).current.image.frame), 9);
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    (*g).death_func.unwrap(),
-                    g,
-                );
+                hooks::invoke_element_pointer((*g).death_func.unwrap(), g);
                 assert_eq!(
                     ship.descriptor_mut().characteristics.max_thrust,
                     7 - i as u16
                 );
             }
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                (*gate).preprocess_func.unwrap(),
-                gate,
-            );
+            hooks::invoke_element_pointer((*gate).preprocess_func.unwrap(), gate);
             assert!((*gate).preprocess_func.is_none());
             assert_eq!((*gate).state_flags & FINITE_LIFE as u16, 0);
             assert_eq!(
@@ -391,10 +379,7 @@ fn only_player_ship_bomb_carrier_through_open_gate_finishes_battle() {
             for generators in [8, 1, 0] {
                 ship.descriptor_mut().characteristics.max_thrust = generators;
                 if generators == 0 {
-                    uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                        (*gate).preprocess_func.unwrap(),
-                        gate,
-                    );
+                    hooks::invoke_element_pointer((*gate).preprocess_func.unwrap(), gate);
                 }
                 for bomb in [0, 1] {
                     for is_ship in [false, true] {
@@ -407,13 +392,14 @@ fn only_player_ship_bomb_carrier_through_open_gate_finishes_battle() {
                             } else {
                                 FINITE_LIFE as u16
                             };
-                            uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
-                            collide,
-                            gate,
-                            &mut point,
-                            player.ptr(),
-                            &mut other_point,
-                         uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook);
+                            hooks::invoke_collision_pointer(
+                                collide,
+                                gate,
+                                &mut point,
+                                player.ptr(),
+                                &mut other_point,
+                                hooks::CollisionCall::Hook,
+                            );
                             assert_eq!(
                                 GlobData.Game_state.CurrentActivity & IN_BATTLE as u16 == 0,
                                 generators == 0 && bomb == 1 && is_ship && owner == RPG_PLAYER_NUM
@@ -451,10 +437,7 @@ fn postprocess_spawns_comets_and_sentinels_only_while_generators_live() {
             );
             (*comet).next = (*comet).current;
             with_rng(5, 0, || {
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    (*comet).preprocess_func.unwrap(),
-                    comet,
-                )
+                hooks::invoke_element_pointer((*comet).preprocess_func.unwrap(), comet)
             });
             assert_eq!(ship.descriptor_mut().characteristics.weapon_wait, 1);
             assert_eq!(queued().len(), 14);
@@ -466,10 +449,7 @@ fn postprocess_spawns_comets_and_sentinels_only_while_generators_live() {
                     .unwrap(),
             );
             (*sentinel).next = (*sentinel).current;
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                (*sentinel).preprocess_func.unwrap(),
-                sentinel,
-            );
+            hooks::invoke_element_pointer((*sentinel).preprocess_func.unwrap(), sentinel);
             assert_eq!(ship.descriptor_mut().characteristics.special_wait, 1);
             assert_eq!((*sentinel).__bindgen_anon_1.life_span, 3);
             ship.descriptor_mut().characteristics.max_thrust = 0;
@@ -510,13 +490,13 @@ fn sentinel_recoil_stuns_live_player_caps_velocity_and_preserves_sentinel() {
             SetVelocityVector(&raw mut (*sentinel).velocity, 32, 4);
             let mut p = POINT { x: 0, y: 0 };
             let mut q = p;
-            uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
+            hooks::invoke_collision_pointer(
                 (*sentinel).collision_func.unwrap(),
                 sentinel,
                 &mut p,
                 player.ptr(),
                 &mut q,
-                uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
+                hooks::CollisionCall::Hook,
             );
             assert_eq!((*sentinel).__bindgen_anon_2.hit_points, 10);
             assert_eq!((*sentinel).__bindgen_anon_1.life_span, 2);
@@ -538,3 +518,6 @@ fn sentinel_recoil_stuns_live_player_caps_velocity_and_preserves_sentinel() {
         }
     })
 }
+
+#[path = "support/hooks.rs"]
+mod hooks;

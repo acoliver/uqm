@@ -441,9 +441,9 @@ pub unsafe extern "C" fn DrawMeleeShipStrings(state: *mut MELEE_STATE, ship: u32
         t.baseline.y += TINY_TEXT_HEIGHT as i16;
         font_DrawText(&mut t);
     } else {
-        let master =
-            GetStarShipFromIndex(&raw mut master_q, ship as u16).cast::<MASTER_SHIP_INFO>();
-        InitShipStatus(&mut (*master).ShipInfo, ptr::null_mut(), ptr::null_mut());
+        let mut master = crate::ships::master_native::master(ship as u16)
+            .unwrap_or_else(|| panic!("melee master ship {ship}"));
+        InitShipStatus(&mut master.info, ptr::null_mut(), ptr::null_mut());
     }
     UnbatchGraphics();
     set_context_clip_rect(&mut clip);

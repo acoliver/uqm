@@ -33,10 +33,92 @@ fn recover_ship_crew(descriptor: &mut crate::ships::native::abi::RACE_DESC, crew
     remaining
 }
 
+/// # Safety
+/// Call on the game thread while the battle queues and their resources remain live.
+#[cfg(not(test))]
+pub unsafe fn uninit_ships() {
+    use crate::ships::native::abi::*;
+    use std::ptr;
+
+    StopSound();
+    crate::game_init::space_resources::UninitSpace();
+    let mut ships: [*mut STARSHIP; 2] = [ptr::null_mut(); 2];
+    let mut crew = 0u16;
+    let mut handle = rust_bridge_GetHeadElement();
+    while !handle.is_null() {
+        let element = &*handle.cast::<ELEMENT>();
+        if element.state_flags & CREW_OBJECT as u16 != 0 {
+            crew = crew.wrapping_add(1);
+        }
+        handle = element.succ;
+    }
+    handle = rust_bridge_GetHeadElement();
+    while !handle.is_null() {
+        let element = &mut *handle.cast::<ELEMENT>();
+        handle = element.succ;
+        if element.state_flags & PLAYER_SHIP as u16 != 0
+            || element.death_func.is_some_and(|callback| {
+                callback.address() == crate::battle::tactrans_native::new_ship as *const () as usize
+            })
+        {
+            let ship = element.pParent.cast::<STARSHIP>();
+            if ship.is_null() || (*ship).descriptor.is_none() {
+                continue;
+            }
+            let mut descriptor = (*ship)
+                .descriptor
+                .take()
+                .unwrap_or_else(|| panic!("ship descriptor"));
+            (*ship).crew_level = recover_ship_crew(&mut descriptor, crew);
+            ships[(*ship).playerNr as usize] = ship;
+            crate::ships::loader_native::unload_ship(descriptor, 1, 1);
+        }
+    }
+    // SAFETY: the game-thread teardown exclusively updates the activity word.
+    let activity = unsafe {
+        let word = &raw mut crate::navigation::globals::GlobData
+            .Game_state
+            .CurrentActivity;
+        *word &= !(IN_BATTLE as u16);
+        *word
+    };
+    if activity as u8 == IN_ENCOUNTER as u8 && activity & CHECK_ABORT as u16 == 0 {
+        for i in (0..2).rev() {
+            if !ships[i].is_null() && FleetIsInfinite(i as u16) == 0 {
+                UpdateShipFragCrew(ships[i]);
+            }
+        }
+    }
+    // A failed spawn can retain a loaded descriptor without a ship element.
+    use crate::engine::battle::link_queue::{LinkQueue, Starship};
+    let races = ptr::addr_of_mut!(crate::engine::battle::legacy::race_q).cast::<QUEUE>();
+    // SAFETY: teardown owns the idle race queues and their remaining descriptors.
+    unsafe {
+        for side in 0..2 {
+            let mut queue = LinkQueue::<Starship>::new(&mut *races.add(side));
+            let mut next = queue.head();
+            while let Some(id) = next {
+                next = queue.succ(id);
+                if let Some(descriptor) = queue.record_mut(id).descriptor.take() {
+                    crate::ships::loader_native::unload_ship(descriptor, 1, 1);
+                }
+            }
+        }
+    }
+    if uqm_get_current_activity_lobyte() != IN_ENCOUNTER as u8 {
+        let races = ptr::addr_of_mut!(crate::engine::battle::legacy::race_q).cast::<QUEUE>();
+        ReinitQueue(races);
+        ReinitQueue(races.add(1));
+        if inHQSpace() != 0 {
+            crate::navigation::hyper_data::FreeHyperspace();
+        }
+    }
+}
+
 #[cfg(not(test))]
 mod live {
     #![allow(non_snake_case)]
-    use super::{display_primitive, recover_ship_crew, wrap};
+    use super::{display_primitive, wrap};
     use crate::ships::native::{abi::*, cosine, normalize_facing, sine};
     use std::{mem, ptr};
 
@@ -67,8 +149,8 @@ mod live {
     operation!(rust_bridge_GetPredElement(element: *mut ELEMENT) -> HELEMENT { (*element).pred });
     operation!(rust_bridge_GetSuccElement(element: *mut ELEMENT) -> HELEMENT { (*element).succ });
     operation!(rust_bridge_GetFrameIndex(frame: FRAME) -> u16 { crate::graphics::pixmap_abi::GetFrameIndex(frame.cast()) });
-    operation!(rust_bridge_initialize_missile(block: *mut MISSILE_BLOCK) -> HELEMENT { crate::battle::weapon_native::initialize_missile(block) });
-    operation!(rust_bridge_initialize_laser(block: *mut LASER_BLOCK) -> HELEMENT { crate::battle::weapon_native::initialize_laser(block) });
+    operation!(rust_bridge_initialize_missile(block: *mut MISSILE_BLOCK) -> HELEMENT { crate::app::bridge::enter(|cx| crate::battle::weapon_native::initialize_missile(cx, block)) });
+    operation!(rust_bridge_initialize_laser(block: *mut LASER_BLOCK) -> HELEMENT { crate::app::bridge::enter(|cx| crate::battle::weapon_native::initialize_laser(cx, block)) });
     operation!(rust_bridge_ship_intelligence(ship: *mut ELEMENT, objects: *mut EVALUATE_DESC, count: u16) { crate::battle::cyborg_native::engine::ship_intelligence(ship, objects, count); });
     operation!(rust_bridge_SetAbsSoundIndex(sound: usize, index: u16) -> usize { crate::strings::string_table::SetAbsStringTableIndex(sound as *mut _, index) as usize });
     operation!(rust_bridge_DISPLAY_TO_WORLD(value: i32) -> i32 { value.wrapping_shl(2) });
@@ -92,14 +174,14 @@ mod live {
     operation!(rust_bridge_TrackShip(element: *mut ELEMENT, facing: *mut u16) -> i16 { crate::battle::weapon_native::track_ship(element, facing) });
     operation!(rust_bridge_Untarget(element: *mut ELEMENT) { crate::battle::process_native::Untarget(element); });
     operation!(rust_bridge_ModifySilhouette(element: *mut ELEMENT, stamp: *mut STAMP, flags: u8) -> FRAME { crate::battle::weapon_native::ModifySilhouette(element, stamp, flags) });
-    operation!(rust_bridge_ProcessSound(sound: usize, source: *mut ELEMENT) { crate::battle::sounds::engine::ProcessSound(sound as *mut _, source); });
-    operation!(rust_bridge_weapon_collision(e0: *mut ELEMENT, p0: *mut POINT, e1: *mut ELEMENT, p1: *mut POINT) -> HELEMENT { crate::battle::weapon_native::weapon_collision(e0, p0, e1, p1) });
+    operation!(rust_bridge_ProcessSound(sound: usize, source: *mut ELEMENT) { crate::app::bridge::enter(|cx| { let source = cx.elements().id(source.cast()); cx.b.kernel_sounds().push(sound as *mut _, source); }); });
+    operation!(rust_bridge_weapon_collision(e0: *mut ELEMENT, p0: *mut POINT, e1: *mut ELEMENT, p1: *mut POINT) -> HELEMENT { crate::app::bridge::enter(|cx| crate::battle::weapon_native::weapon_collision(cx, e0, p0, e1, p1)) });
 
     operation!(rust_bridge_spawn_element(ship: *mut STARSHIP, descriptor: *mut RACE_DESC, mass: u8, activity: u8) -> u32 {
         debug_assert_eq!(activity, uqm_get_current_activity_lobyte());
         let mut handle = (*ship).hShip;
         if handle.is_null() {
-            handle = crate::battle::process_native::AllocElement();
+            handle = crate::app::bridge::enter(|cx| cx.alloc_element().map_or(ptr::null_mut(), |id| cx.elements().raw(id)));
             if !handle.is_null() { rust_bridge_InsertElement(handle, rust_bridge_GetHeadElement()); }
         }
         (*ship).hShip = handle;
@@ -130,7 +212,7 @@ mod live {
             loop {
                 (*element).current.location.x = wrap(((i32::from(crate::math::random() as u16) % width()) as i16 & !3) as i32, width()) as i16;
                 (*element).current.location.y = wrap(((i32::from(crate::math::random() as u16) % height()) as i16 & !3) as i32, height()) as i16;
-                if CalculateGravity(element) == 0 && TimeSpaceMatterConflict(element) == 0 { break; }
+                if crate::app::bridge::enter(|cx| { let id = cx.elements().allocated_id(element.cast()).unwrap_or_else(|| panic!("spawn element")); !cx.gravity(id) && !cx.matter_conflict(id) }) { break; }
             }
         }
         (*element).preprocess_func = Some(ElementHook::Native(crate::battle::ship_native::ship_preprocess));
@@ -162,38 +244,8 @@ mod live {
             let old = SetContext(ScreenContext);
             SetContextBackGroundColor(Color {r:0,g:0,b:0,a:255}); ClearDrawable(); SetContext(old);
             if uqm_get_current_activity_lobyte() == IN_LAST_BATTLE as u8 { crate::game_init::world_resources::free_gravity_well(); }
-            else { for _ in 0..5 { crate::app::bridge::enter(|cx| crate::battle::world_elements::create_asteroid(cx, None)); } crate::battle::world_elements::spawn_planet(); }
+            else { for _ in 0..5 { crate::app::bridge::enter(|cx| crate::battle::world_elements::create_asteroid(cx, None)); } crate::app::bridge::enter(|cx| crate::battle::world_elements::spawn_planet(cx)); }
             2
-        }
-    });
-
-    operation!(rust_bridge_uninit_ships() {
-        StopSound(); crate::game_init::space_resources::UninitSpace();
-        let mut ships: [*mut STARSHIP; 2] = [ptr::null_mut(); 2];
-        let mut crew = 0u16;
-        let mut handle = rust_bridge_GetHeadElement();
-        while !handle.is_null() { let element = &*handle.cast::<ELEMENT>(); if element.state_flags & CREW_OBJECT as u16 != 0 { crew = crew.wrapping_add(1); } handle = element.succ; }
-        handle = rust_bridge_GetHeadElement();
-        while !handle.is_null() {
-            let element = &mut *handle.cast::<ELEMENT>(); handle = element.succ;
-            if element.state_flags & PLAYER_SHIP as u16 != 0 || element.death_func.is_some_and(|callback| callback.address() == crate::battle::tactrans_native::new_ship as *const () as usize) {
-                let ship = element.pParent.cast::<STARSHIP>();
-                if ship.is_null() || (*ship).RaceDescPtr.is_null() { continue; }
-                let descriptor = (*ship).RaceDescPtr;
-                (*ship).crew_level = recover_ship_crew(&mut *descriptor, crew);
-                ships[(*ship).playerNr as usize] = ship;
-                crate::ships::loader_native::free_ship(descriptor, 1, 1);
-                (*ship).RaceDescPtr = ptr::null_mut();
-            }
-        }
-        crate::navigation::globals::GlobData.Game_state.CurrentActivity &= !(IN_BATTLE as u16);
-        if uqm_get_current_activity_lobyte() == IN_ENCOUNTER as u8 && crate::navigation::globals::GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 == 0 {
-            for i in (0..2).rev() { if !ships[i].is_null() && FleetIsInfinite(i as u16) == 0 { UpdateShipFragCrew(ships[i]); } }
-        }
-        if uqm_get_current_activity_lobyte() != IN_ENCOUNTER as u8 {
-            let races = ptr::addr_of_mut!(crate::engine::battle::legacy::race_q).cast::<QUEUE>();
-            ReinitQueue(races); ReinitQueue(races.add(1));
-            if inHQSpace() != 0 { crate::navigation::hyper_data::FreeHyperspace(); }
         }
     });
 

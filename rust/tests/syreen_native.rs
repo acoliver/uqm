@@ -100,8 +100,6 @@ fn descriptor_matches_the_c_race_data() {
             assert!(desc.callbacks()[3] != 0);
             assert!(desc.callbacks()[1] == 0);
             assert!(desc.callbacks()[0] == 0);
-            assert!(desc.data.is_null());
-            assert!(desc.code_ref.is_null());
         }
     })
 }
@@ -245,7 +243,7 @@ fn deferred_scan_requeues_nothing_and_leaves_out_of_range_crews_alone() {
             enter_battle(&mut shot, POINT { x: 5100, y: 5000 }, 10);
 
             let before = (disp_q.head, disp_q.tail);
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(run_scan, scan);
+            hooks::invoke_element_pointer(run_scan, scan);
             assert_eq!((disp_q.head, disp_q.tail), before, "nothing was queued");
             for handle in walk_queue() {
                 let queued = element(handle);
@@ -291,14 +289,17 @@ fn deferred_scan_survives_a_ship_in_range_when_no_crew_elements_are_available() 
             );
             let mut ghosts = Vec::new();
             loop {
-                let handle = AllocElement();
+                let handle = uqm_rust::app::bridge::enter(|cx| {
+                    cx.alloc_element()
+                        .map_or(std::ptr::null_mut(), |id| cx.elements().raw(id))
+                });
                 if handle.is_null() {
                     break;
                 }
                 ghosts.push(handle);
             }
             let before = walk_queue();
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(run_scan, scan);
+            hooks::invoke_element_pointer(run_scan, scan);
             assert_eq!(walk_queue(), before);
             assert_eq!((*element(before[1])).__bindgen_anon_2.crew_level, 10);
             for handle in ghosts {
@@ -389,3 +390,6 @@ fn ai_sings_only_when_it_can_drain_a_reachable_crew() {
         }
     })
 }
+
+#[path = "support/hooks.rs"]
+mod hooks;

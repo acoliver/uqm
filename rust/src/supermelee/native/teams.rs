@@ -1,5 +1,4 @@
 //! Team ownership and persistence from meleesetup.c.
-#![allow(non_snake_case)]
 use crate::io::uio_bridge::{uio_fread, uio_fwrite};
 use crate::memory::{rust_hfree, rust_hmalloc};
 use crate::ships::native::abi::{MeleeSetup, MeleeShip, MeleeTeam};
@@ -191,13 +190,13 @@ pub unsafe extern "C" fn MeleeSetup_setShip(
         return false;
     }
     if old != 255 {
-        (*setup).fleetValue[side] = (*setup).fleetValue[side]
-            .wrapping_sub(crate::ships::ffi::rust_ships_get_cost_by_index(old as u16));
+        (*setup).fleetValue[side] =
+            (*setup).fleetValue[side].wrapping_sub(crate::ships::master_native::cost(old));
     }
     MeleeTeam_setShip(&mut (*setup).teams[side], slot, ship);
     if ship != 255 {
-        (*setup).fleetValue[side] = (*setup).fleetValue[side]
-            .wrapping_add(crate::ships::ffi::rust_ships_get_cost_by_index(ship as u16));
+        (*setup).fleetValue[side] =
+            (*setup).fleetValue[side].wrapping_add(crate::ships::master_native::cost(ship));
     }
     true
 }

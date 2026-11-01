@@ -31,7 +31,7 @@ fn inventory_recognizes_legacy_native_and_race_assignments() -> Result<(), Box<d
     ] {
         for callback in [
             "hook",
-            "ElementHook::Legacy(hook)",
+            "ElementHook::Native(hook)",
             "ElementHook::Native(hook)",
         ] {
             for separator in ["=", ":"] {

@@ -17,7 +17,11 @@ pub(super) unsafe fn clear_queues() {
     }
 }
 
-pub(super) unsafe extern "C" fn unregistered_hook(_element: *mut Element) {}
+pub(super) fn unregistered_hook(
+    _: &mut uqm_rust::engine::battle::Cx<'_>,
+    _: uqm_rust::engine::battle::ElementId,
+) {
+}
 
 pub(super) fn elements_and_fighters(directory: &Path) {
     let mut pool = [Element::new(); 3];
@@ -44,7 +48,7 @@ pub(super) fn elements_and_fighters(directory: &Path) {
     second.current.location.x = -91;
     second.current.location.y = 43;
     second.crew_or_hp = 7;
-    second.preprocess_func = Some(uqm_rust::engine::battle::ElementHook::Legacy(
+    second.preprocess_func = Some(uqm_rust::engine::battle::ElementHook::Native(
         unregistered_hook,
     ));
     neutral.pred = &mut *second;
@@ -193,14 +197,14 @@ pub(super) fn fighters_without_journal(directory: &Path) {
     let mut element = Element::new();
     // SAFETY: zero is valid for all native ship scalar/optional pointer fields.
     let mut ship: STARSHIP = unsafe { std::mem::zeroed() };
-    ship.RaceDescPtr = ptr::dangling_mut();
+    ship.descriptor = Some(Box::new(RACE_DESC::EMPTY));
     ship.ShipFacing = 31;
     element.state_flags = ElementFlags::PLAYER_SHIP;
     element.player_nr = 0;
     element.crew_or_hp = 19;
     element.current.location.x = -9;
     element.p_parent = ptr::from_mut(&mut ship).cast();
-    element.preprocess_func = Some(uqm_rust::engine::battle::ElementHook::Legacy(
+    element.preprocess_func = Some(uqm_rust::engine::battle::ElementHook::Native(
         unregistered_hook,
     ));
     // SAFETY: this child has not initialized Coordinator, and it alone owns the graph.
@@ -262,7 +266,11 @@ pub(super) unsafe fn attach_elements(elements: &mut [Element]) {
         let saved = elements.to_vec();
         uqm_rust::battle::process_native::InitDisplayList();
         for (index, value) in saved.into_iter().enumerate() {
-            let allocated = uqm_rust::battle::process_native::AllocElement().cast::<Element>();
+            let allocated = uqm_rust::app::bridge::enter(|cx| {
+                cx.alloc_element()
+                    .map_or(std::ptr::null_mut(), |id| cx.elements().raw(id))
+            })
+            .cast::<Element>();
             assert_eq!(allocated, base.add(index), "fixture allocation order");
             allocated.write(value);
         }

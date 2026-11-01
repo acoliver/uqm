@@ -51,7 +51,7 @@ pub struct MissileBlock {
     pub index: u16,
     pub life: u16,
     pub farray: *mut Frame,
-    pub preprocess_func: crate::engine::battle::record::ElementProcessFunc,
+    pub preprocess_func: Option<crate::engine::battle::ElementHook>,
     pub blast_offs: i16,
 }
 
@@ -117,7 +117,6 @@ pub const NUM_EVALUATE_DESCS: usize = 4;
 // ---------------------------------------------------------------------------
 
 #[cfg(not(test))]
-use crate::battle::process_native::engine::AllocElement;
 #[cfg(not(test))]
 use crate::battle::process_native::engine::FreeElement;
 #[cfg(not(test))]
@@ -460,7 +459,12 @@ pub mod bridge {
     use super::*;
 
     pub fn alloc_element() -> Option<HElement> {
-        let h = unsafe { AllocElement() } as usize;
+        let h = unsafe {
+            crate::app::bridge::enter(|cx| {
+                cx.alloc_element()
+                    .map_or(0, |id| cx.elements().raw(id) as usize)
+            })
+        };
         if h == 0 {
             None
         } else {

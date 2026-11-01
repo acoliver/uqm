@@ -41,9 +41,7 @@ impl Cx<'_> {
         let source = self.elements().raw(source).cast();
         // SAFETY: publication suspends all record borrows through crew allocation callbacks.
         unsafe {
-            crate::app::bridge::publish(self, || {
-                crate::battle::world_elements::AbandonShip(victim, source, count)
-            });
+            crate::battle::world_elements::abandon_ship(self, victim, source, count);
         }
     }
 

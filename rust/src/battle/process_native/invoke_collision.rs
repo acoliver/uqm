@@ -16,13 +16,8 @@ pub fn invoke_collision(
         CollisionHook::Native(callback) => {
             super::dispatch::invoke(callback as usize, parent, || callback(cx, a, pa, b, pb))
         }
-        CollisionHook::Legacy(callback) => cx.invoke_legacy_collision_ids(callback, a, pa, b, pb),
     }
 }
-
-pub use crate::engine::battle::access::CollisionCall;
-
-pub use crate::engine::battle::access::invoke_legacy_collision;
 
 pub fn invoke_pair(
     cx: &mut Cx<'_>,

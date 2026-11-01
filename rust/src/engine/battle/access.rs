@@ -31,7 +31,7 @@ use super::{
     record::{state__bindgen_ty_1, STATE},
     Parent,
 };
-use super::{CollisionHook, Cx, ElementHook, ElementId, ShipId};
+use super::{Cx, ElementId, ShipId};
 
 #[cfg(not(test))]
 impl Cx<'_> {
@@ -243,117 +243,6 @@ impl Cx<'_> {
     }
 }
 
-/// # Safety
-/// `call` may use only live legacy storage and must retain no record reference.
-pub(crate) unsafe fn invoke_legacy<R>(
-    cx: &mut crate::engine::battle::Cx<'_>,
-    callback: usize,
-    parent: usize,
-    call: impl FnOnce() -> R,
-) -> R {
-    // SAFETY: publishing suspends context access until the legacy invocation returns.
-    unsafe { invoke(callback, parent, || crate::app::bridge::publish(cx, call)) }
-}
-
-#[cfg(not(test))]
-/// # Safety
-/// The resource owner thread must retain the initialized descriptor's resources.
-pub(crate) unsafe fn descriptor_template(
-    source: super::record::DescriptorSource,
-) -> Option<super::RaceDesc> {
-    // SAFETY: the initializer and its returned template remain live for this synchronous value copy.
-    unsafe {
-        match source {
-            super::record::DescriptorSource::Native(race) => {
-                Some((race.descriptor)(&mut super::World::for_legacy_lifecycle()))
-            }
-            super::record::DescriptorSource::Legacy(init) => {
-                let pointer = init();
-                if pointer.is_null() {
-                    None
-                } else {
-                    Some(super::RaceDesc::from_legacy(*pointer))
-                }
-            }
-        }
-    }
-}
-
-#[derive(Clone, Copy)]
-pub enum CollisionCall {
-    Hook,
-    Direct,
-}
-
-/// # Safety
-/// Pointers name live legacy elements and collision points on the game thread.
-pub(super) unsafe fn dispatch_legacy_collision<E, P>(
-    hook: super::CollisionHook<unsafe extern "C" fn(*mut E, *mut P, *mut E, *mut P)>,
-    operands: super::record::CollisionOperands<E, P>,
-    call: CollisionCall,
-) {
-    let super::record::CollisionOperands(a, pa, b, pb) = operands;
-    // SAFETY: the caller is a published boundary and retains no record borrow.
-    unsafe {
-        crate::app::bridge::enter(|cx| match hook {
-            super::CollisionHook::Legacy(callback) => {
-                let parent = cx.legacy_parent(
-                    std::ptr::NonNull::new(a).unwrap_or_else(|| panic!("null collision element")),
-                );
-                invoke_legacy(cx, callback as usize, parent, || callback(a, pa, b, pb));
-            }
-            super::CollisionHook::Native(callback) => {
-                let a =
-                    cx.b.elements
-                        .id(a.cast())
-                        .unwrap_or_else(|| panic!("{}", "null first collision element"));
-                let b =
-                    cx.b.elements
-                        .id(b.cast())
-                        .unwrap_or_else(|| panic!("{}", "null second collision element"));
-                match call {
-                    CollisionCall::Hook => {
-                        let parent = cx.b.elements[a].pParent as usize;
-                        invoke(callback as usize, parent, || {
-                            callback(cx, a, &mut *pa.cast(), b, &mut *pb.cast())
-                        });
-                    }
-                    CollisionCall::Direct => callback(cx, a, &mut *pa.cast(), b, &mut *pb.cast()),
-                }
-            }
-        });
-    }
-}
-
-/// # Safety
-/// The pointer is a live element; no record borrow crosses this call.
-pub(super) unsafe fn dispatch_legacy_element<E>(
-    hook: super::ElementHook<unsafe extern "C" fn(*mut E)>,
-    operand: super::record::ElementOperand<E>,
-) {
-    let super::record::ElementOperand(element) = operand;
-    // SAFETY: this legacy boundary owns the currently published context.
-    unsafe {
-        crate::app::bridge::enter(|cx| match hook {
-            super::ElementHook::Legacy(callback) => {
-                let parent = cx.legacy_parent(
-                    std::ptr::NonNull::new(element)
-                        .unwrap_or_else(|| panic!("null legacy element")),
-                );
-                invoke_legacy(cx, callback as usize, parent, || callback(element));
-            }
-            super::ElementHook::Native(callback) => {
-                let id =
-                    cx.b.elements
-                        .id(element.cast())
-                        .unwrap_or_else(|| panic!("{}", "null native element"));
-                let parent = cx.b.elements[id].pParent as usize;
-                invoke(callback as usize, parent, || callback(cx, id));
-            }
-        });
-    }
-}
-
 pub(crate) fn invoke<R>(callback: usize, parent: usize, call: impl FnOnce() -> R) -> R {
     crate::collections::observation::observe(callback, parent);
     call()
@@ -373,13 +262,13 @@ use crate::graphics::pixmap_abi::{IncFrameIndex, SetAbsFrameIndex, SetEquFrameIn
 #[cfg(not(test))]
 impl Cx<'_> {
     pub(super) fn ship_frames(&self, ship: ShipId, role: usize) -> *mut FRAME {
-        let pointer = self.ship(ship).RaceDescPtr;
+        let pointer = self.desc(ship) as *const super::record::RACE_DESC;
         // SAFETY: the ship owns this descriptor and its stable embedded arrays.
         unsafe {
             match role {
-                0 => (&raw mut (*pointer).ship_data.ship).cast(),
-                1 => (&raw mut (*pointer).ship_data.weapon).cast(),
-                2 => (&raw mut (*pointer).ship_data.special).cast(),
+                0 => (&raw const (*pointer).ship_data.ship).cast_mut().cast(),
+                1 => (&raw const (*pointer).ship_data.weapon).cast_mut().cast(),
+                2 => (&raw const (*pointer).ship_data.special).cast_mut().cast(),
                 _ => panic!("invalid frame role {role}"),
             }
         }
@@ -437,36 +326,6 @@ impl Cx<'_> {
             farray: image.frames.0,
         };
         image!(copy; self.b.elements[id].current.image, raw);
-    }
-}
-
-/// # Safety
-/// The pointer names a live legacy element with no record borrow across the hook.
-pub unsafe fn invoke_legacy_element<E>(
-    hook: ElementHook<unsafe extern "C" fn(*mut E)>,
-    element: *mut E,
-) {
-    let operand = super::record::ElementOperand(element);
-    // SAFETY: the caller retains the element through the synchronous hook.
-    unsafe {
-        dispatch_legacy_element(hook, operand);
-    }
-}
-
-/// # Safety
-/// The pointers name live legacy collision operands; Native hooks require live points.
-pub unsafe fn invoke_legacy_collision<E, P>(
-    hook: CollisionHook<unsafe extern "C" fn(*mut E, *mut P, *mut E, *mut P)>,
-    a: *mut E,
-    pa: *mut P,
-    b: *mut E,
-    pb: *mut P,
-    call: CollisionCall,
-) {
-    let operands = super::record::CollisionOperands(a, pa, b, pb);
-    // SAFETY: the caller retains all operands through the synchronous hook.
-    unsafe {
-        dispatch_legacy_collision(hook, operands, call);
     }
 }
 
@@ -703,7 +562,7 @@ impl Cx<'_> {
 #[cfg(not(test))]
 impl Cx<'_> {
     pub(crate) fn has_descriptor(&self, ship: ShipId) -> bool {
-        !self.ship(ship).RaceDescPtr.is_null()
+        !self.ship(ship).descriptor.is_none()
     }
 }
 
