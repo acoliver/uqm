@@ -38,6 +38,29 @@ fn is_flight_hold(step: &Value) -> bool {
 }
 
 #[test]
+fn v1_opening_deadline_is_derived_without_increasing_global_budgets(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("scripts/probe-encounter-v1.json");
+    let document: Value = serde_json::from_str(&std::fs::read_to_string(path)?)?;
+    let [replay, real, native]: [u64; 3] = [3107, 2873, 2697];
+    let bound = (2 * replay.max(real).max(native)).div_ceil(100) * 100;
+    let opening = script_steps("probe-encounter-v1")
+        .into_iter()
+        .find(|step| action_of(step) == "wait_for_communication_end")
+        .ok_or("opening communication wait")?;
+    assert_eq!(opening["max_ticks"], bound);
+    assert_eq!(
+        document["budgets"],
+        serde_json::json!({
+            "max_input_ticks": 15030,
+            "max_presentations": 28060,
+            "max_wallclock_seconds": 480
+        })
+    );
+    Ok(())
+}
+
+#[test]
 fn long_flight_holds_are_player_keys_not_menu_keys() {
     for name in SCRIPTS {
         for (index, step) in script_steps(name).iter().enumerate() {
@@ -286,6 +309,7 @@ fn without_probe_contacts(steps: &[Value]) -> Vec<Value> {
 #[test]
 fn incidental_probes_are_fought_and_release_controls_only_after_hyperspace_reentry() {
     for (name, contacts) in [
+        ("probe-encounter-v1", 2),
         ("probe-encounter-v2", 2),
         ("probe-encounter-v5", 2),
         ("probe-encounter-v6", 3),
@@ -314,6 +338,22 @@ fn incidental_probes_are_fought_and_release_controls_only_after_hyperspace_reent
     }
 }
 
+fn without_v1_contact_clearance(steps: &[Value]) -> Vec<Value> {
+    let expected = serde_json::json!([
+        {"action": "set_player_key", "key": "thrust", "value": 1},
+        {"action": "wait_input_ticks", "count": 32},
+        {"action": "set_player_key", "key": "thrust", "value": 0}
+    ]);
+    let Value::Array(expected) = expected else {
+        unreachable!("contact clearance contract is an array literal");
+    };
+    let start = position(steps, 0, |step| {
+        action_of(step) == "set_player_key" && step["key"] == "thrust" && step["value"] == 1
+    });
+    assert_eq!(&steps[start..start + expected.len()], expected.as_slice());
+    [&steps[..start], &steps[start + expected.len()..]].concat()
+}
+
 /// Whether the square re-enters Sol is decided by how closely it closes, and
 /// the simulation is deterministic for the fixed seed. v1's recorded real-window
 /// flight closes on Sol, so v5 reuses its flight section action for action;
@@ -332,9 +372,18 @@ fn v5_flies_the_flight_section_recorded_for_v1() {
                 .iter()
                 .position(|step| action_of(step) == "assert_activity" && step["equals"] == 4)
                 .expect("return to Sol assertion");
-        without_probe_contacts(&steps[start..=end])
+        let resumed = without_probe_contacts(&steps[start..=end]);
+        let resumed = if name == "probe-encounter-v1" {
+            without_v1_contact_clearance(&resumed)
+        } else {
+            resumed
+        };
+        resumed
             .into_iter()
-            .filter(|step| action_of(step) != "capture")
+            .filter(|step| {
+                action_of(step) != "capture"
+                    && !(name == "probe-encounter-v1" && action_of(step) == "fly_to_star")
+            })
             .collect()
     };
     assert_eq!(flight("probe-encounter-v5"), flight("probe-encounter-v1"));
@@ -354,11 +403,11 @@ fn v1_to_v5_end_by_asserting_the_return_to_sol() {
             "{name}: the fourth leg is still proven"
         );
         let mut resumed = without_probe_contacts(&steps[last_leg + 2..]);
-        if name == "probe-encounter-v2" {
+        if matches!(name, "probe-encounter-v1" | "probe-encounter-v2") {
             assert_eq!(
                 resumed.remove(1),
                 serde_json::json!({"action": "fly_to_star", "target": "Sol", "max_ticks": 600}),
-                "v2 explicitly returns to Sol after its fourth leg and second contact"
+                "{name} explicitly returns to Sol after its fourth leg and probe contacts"
             );
         }
         let tail: Vec<&Value> = resumed
