@@ -658,8 +658,8 @@
       "sha256": "7cba2fb1f5db059c6656dd0ba63d4a83dbf279ef1afc3a919b516a920d700436"
     },
     "parity/counts/probe-encounter-v1.toml": {
-      "bytes": 411520,
-      "sha256": "91d8ba52c025c80781f7bafe30166e48f97000622276a2a23ccb6e7ea7cf625d"
+      "bytes": 559877,
+      "sha256": "770d957e1f2844db4dc3dacfd09c7c8165b425d816abc350bcaf4e0d8edcd245"
     },
     "parity/counts/probe-encounter-v2.toml": {
       "bytes": 572180,
