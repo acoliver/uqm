@@ -133,7 +133,7 @@ pub(crate) mod engine {
     use crate::engine::battle::{Cx, ElementFn, ElementId, Parent};
     use crate::ships::native::{cosine, facing_to_angle, sine, starship};
     use abi::*;
-    use std::{mem, ptr};
+    use std::ptr;
 
     use crate::battle::world_elements::engine::crew_preprocess;
 
@@ -352,10 +352,12 @@ pub(crate) mod engine {
         (*dead).pParent = ptr::null_mut();
         let restart = OpponentAlive(ship) != 0;
         unload_ship(
-            (*ship)
-                .descriptor
-                .take()
-                .unwrap_or_else(|| panic!("dead ship descriptor")),
+            crate::engine::battle::RaceDesc::from_storage(
+                (*ship)
+                    .descriptor
+                    .take()
+                    .unwrap_or_else(|| panic!("dead ship descriptor")),
+            ),
             1,
             1,
         );
@@ -501,32 +503,33 @@ pub(crate) mod engine {
         });
     }
 
-    /// # Safety
-    /// `ship` must be a live ship with a valid owner, race descriptor, primitive, and initialized sound resources.
-    #[no_mangle]
-    pub unsafe extern "C" fn StartShipExplosion(ship: *mut ELEMENT, play_sound: bool) {
-        let owner = starship(ship);
-        (*ship).velocity = mem::zeroed();
-        DeltaEnergy(
-            ship,
-            -((*(*owner).descriptor_ptr()).ship_info.energy_level as i16),
-        );
-        (*ship).__bindgen_anon_1.life_span = (NUM_EXPLOSION_FRAMES * 3) as u16;
-        (*ship).state_flags &= !(DISAPPEARING as u16);
-        (*ship).state_flags |= (FINITE_LIFE | NONSOLID) as u16;
-        (*ship).preprocess_func = Some(ElementHook::Native(explosion_preprocess));
-        (*ship).postprocess_func = Some(ElementHook::Native(PostProcessStatus));
-        (*ship).death_func = Some(ElementHook::Native(cleanup_dead_ship));
-        (*ship).hTarget = ptr::null_mut();
+    pub fn start_ship_explosion(cx: &mut Cx<'_>, ship: ElementId, play_sound: bool) {
+        let owner = cx.owner(ship);
+        cx.element_mut(ship).velocity = Default::default();
+        cx.delta_energy(ship, -(cx.race_stats(owner).ship_info.energy_level as i16));
+        cx.element_mut(ship).life = (NUM_EXPLOSION_FRAMES * 3) as u16;
+        cx.element_mut(ship).flags &= !(DISAPPEARING as u16);
+        cx.element_mut(ship).flags |= (FINITE_LIFE | NONSOLID) as u16;
+        cx.element_mut(ship).pre = Some(ElementHook::Native(explosion_preprocess));
+        cx.element_mut(ship).post = Some(ElementHook::Native(PostProcessStatus));
+        cx.element_mut(ship).death = Some(ElementHook::Native(cleanup_dead_ship));
+        cx.set_target(ship, None);
         if play_sound {
-            PlaySound(
-                SetAbsStringTableIndex(Kernel::current().game_sounds, 1),
-                CalcSoundPosition(ship),
-                ship,
-                (GAME_SOUND_PRIORITY + 1) as u8,
-            );
+            let position = crate::battle::sounds::engine::position(cx, Some(ship));
+            // SAFETY: the battle sound bank and source element remain live during playback.
+            unsafe {
+                let sound = SetAbsStringTableIndex((*cx.kernel()).game_sounds, 1);
+                crate::battle::sounds::engine::play_sound(
+                    cx,
+                    sound,
+                    position,
+                    Some(ship),
+                    (GAME_SOUND_PRIORITY + 1) as u8,
+                );
+            }
         }
     }
+
     pub fn ship_death(cx: &mut Cx<'_>, ship: ElementId) {
         let owner = cx.owner(ship);
         cx.stop_battle_music();

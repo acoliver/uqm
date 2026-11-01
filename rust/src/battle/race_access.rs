@@ -175,7 +175,6 @@ impl World {
                     (&raw mut crate::game_init::space_resources::asteroid).cast(),
                     (&raw mut crate::game_init::space_resources::explosion).cast(),
                 ],
-                Some(crate::battle::weapon_native::track_ship),
             )
         }
     }

@@ -21,15 +21,32 @@ fn laser_construction_preserves_fields_and_pool_exhaustion() {
                     sender: 1,
                     pixoffs: 0,
                     face: 0,
-                    color: Color { r: 11, g: 22, b: 33, a: 255 },
+                    color: Color {
+                        r: 11,
+                        g: 22,
+                        b: 33,
+                        a: 255,
+                    },
                 };
                 let id = cx.spawn_laser(laser).unwrap();
                 let state = cx.element(id);
                 assert_eq!(state.player, 1);
-                assert_eq!(state.flags, (APPEARING | FINITE_LIFE | IGNORE_SIMILAR) as u16);
-                assert_eq!((state.hits, state.mass, state.life, state.thrust), (1, 1, 1, 1));
-                assert_eq!((state.current.location.x, state.current.location.y), (100, 200));
-                assert_eq!(state.velocity.get_current_components(), (300 << 5, -400 << 5));
+                assert_eq!(
+                    state.flags,
+                    (APPEARING | FINITE_LIFE | IGNORE_SIMILAR) as u16
+                );
+                assert_eq!(
+                    (state.hits, state.mass, state.life, state.thrust),
+                    (1, 1, 1, 1)
+                );
+                assert_eq!(
+                    (state.current.location.x, state.current.location.y),
+                    (100, 200)
+                );
+                assert_eq!(
+                    state.velocity.get_current_components(),
+                    (300 << 5, -400 << 5)
+                );
                 let style = cx.primitive_style(id);
                 assert_eq!(style.kind, gfx_object_LINE_PRIM as u8);
                 assert_eq!((style.color.r, style.color.g, style.color.b), (11, 22, 33));
@@ -64,6 +81,25 @@ fn gravity_reads_next_positions_and_preserves_queue_order() {
                 assert_eq!(cx.elements().head(), head);
                 cx.unlink(planet);
                 cx.dispose(planet);
+            });
+        }
+    });
+}
+
+#[test]
+fn insufficient_energy_sets_status_without_resetting_counter_or_energy() {
+    battle_context::run(|| {
+        let owner = Battle::new(4);
+        let mut ship = Ship::bare(&owner, SPECIES_ID_VUX_ID, 0);
+        // SAFETY: the fixture owns the published battle and this checked ship.
+        unsafe {
+            ship.descriptor_mut().ship_info.energy_level = 2;
+            uqm_rust::app::bridge::enter(|cx| {
+                cx.ship_state_mut(ship.ship_id).energy_counter = 9;
+                assert!(!cx.delta_energy(ship.id, -3));
+                assert_ne!(cx.ship_state(ship.ship_id).status & LOW_ON_ENERGY as u16, 0);
+                assert_eq!(cx.ship_state(ship.ship_id).energy_counter, 9);
+                assert_eq!(cx.race_stats(ship.ship_id).ship_info.energy_level, 2);
             });
         }
     });

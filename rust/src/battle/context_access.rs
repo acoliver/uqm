@@ -44,27 +44,19 @@ impl Cx<'_> {
     }
 
     pub fn track_ship(&mut self, id: ElementId, facing: &mut u16) -> i16 {
-        let pointer = self.elements().raw(id).cast();
-        // SAFETY: no record reference crosses this game-thread legacy call.
-        unsafe { track_ship(pointer, facing) }
+        crate::battle::weapon_native::track_ship(self, id, facing)
     }
 
     pub fn delta_energy(&mut self, id: ElementId, delta: i16) -> bool {
-        let pointer = self.elements().raw(id).cast();
-        // SAFETY: checked element and its attached descriptor are live.
-        unsafe { crate::battle::status_native::DeltaEnergy(pointer, delta) != 0 }
+        crate::battle::status_native::delta_energy(self, id, delta)
     }
 
     pub fn gravity(&mut self, id: ElementId) -> bool {
-        let pointer = self.elements().raw(id).cast();
-        // SAFETY: the checked element and display queue belong to this context.
-        unsafe { crate::battle::gravity::calculate_gravity_in(self, pointer) != 0 }
+        crate::battle::gravity::calculate_gravity(self, id)
     }
 
     pub fn matter_conflict(&mut self, id: ElementId) -> bool {
-        let pointer = self.elements().raw(id).cast();
-        // SAFETY: no record projection survives the legacy resource operation.
-        unsafe { crate::battle::gravity::time_space_matter_conflict_in(self, pointer) != 0 }
+        crate::battle::gravity::time_space_matter_conflict(self, id)
     }
 
     pub(crate) fn negotiate_battle(
@@ -125,31 +117,11 @@ impl Cx<'_> {
         &mut self,
         value: &mut crate::engine::battle::views::Missile,
     ) -> Option<ElementId> {
-        let mut block = MISSILE_BLOCK {
-            cx: value.cx,
-            cy: value.cy,
-            flags: value.flags,
-            sender: value.sender,
-            pixoffs: value.pixoffs,
-            speed: value.speed,
-            hit_points: value.hit_points,
-            damage: value.damage,
-            face: value.face,
-            index: value.index,
-            life: value.life,
-            farray: value.farray.raw(),
-            preprocess_func: value.preprocess.map(ElementHook::Native),
-            blast_offs: value.blast_offs,
-        };
-        // SAFETY: the block's frame array belongs to a loaded race descriptor.
-        let handle = unsafe { initialize_missile(self, &mut block) };
-        self.elements().id(handle)
+        crate::battle::weapon_native::initialize_missile(self, value)
     }
 
     pub(crate) fn laser(&mut self, block: &mut LASER_BLOCK) -> Option<ElementId> {
-        // SAFETY: the synchronous constructor allocates through this context's pool.
-        let handle = unsafe { initialize_laser(self, block) };
-        self.elements().id(handle)
+        crate::battle::weapon_native::initialize_laser(self, block)
     }
 }
 
@@ -223,9 +195,7 @@ impl Cx<'_> {
     }
 
     pub fn preprocess_status(&mut self, id: ElementId) {
-        let pointer = self.elements().raw(id).cast();
-        // SAFETY: the checked ship's status resources remain loaded.
-        unsafe { crate::battle::status_native::PreProcessStatus(pointer) }
+        crate::battle::status_native::preprocess_status(self, id)
     }
 
     pub fn game_sound(&mut self, index: u16, source: ElementId) {
@@ -243,20 +213,14 @@ impl Cx<'_> {
         b: ElementId,
         pb: &mut POINT,
     ) -> Option<ElementId> {
-        let a = self.elements().raw(a).cast();
-        let b = self.elements().raw(b).cast();
-        // SAFETY: both checked elements and points outlive this synchronous collision.
-        let handle = unsafe { crate::battle::weapon_native::weapon_collision(self, a, pa, b, pb) };
-        self.elements().id(handle)
+        crate::battle::weapon_native::weapon_collision(self, a, pa, b, pb)
     }
 }
 
 #[cfg(not(test))]
 impl Cx<'_> {
     pub fn delta_crew(&mut self, id: ElementId, amount: i16) -> bool {
-        let pointer = self.elements().raw(id).cast();
-        // SAFETY: the checked ship and its descriptor are live.
-        unsafe { crate::battle::status_native::DeltaCrew(pointer, amount) != 0 }
+        crate::battle::status_native::delta_crew(self, id, amount)
     }
 }
 
@@ -423,12 +387,9 @@ mod tactrans_native_access {
             }
         }
         pub fn start_ship_explosion(&mut self, ship: ElementId, play_sound: bool) {
-            let pointer = self.elements().raw(ship).cast();
-            // SAFETY: the checked dying ship retains its owner and resources.
-            unsafe {
-                crate::app::bridge::publish(self, || StartShipExplosion(pointer, play_sound));
-            }
+            crate::battle::tactrans_native::start_ship_explosion(self, ship, play_sound);
         }
+
         pub(crate) fn select_winner(&mut self, dead: ElementId) {
             let pointer = self.elements().raw(dead).cast();
             // SAFETY: the scan and update are synchronous with no retained record borrow.

@@ -192,7 +192,11 @@ impl Descriptor {
         if let Some(descriptor) = self.0 {
             // SAFETY: the caller retires the detached descriptor only after its last frame user.
             unsafe {
-                crate::ships::loader_native::unload_ship(descriptor, 1, 1);
+                crate::ships::loader_native::unload_ship(
+                    crate::engine::battle::RaceDesc::from_storage(descriptor),
+                    1,
+                    1,
+                );
             }
         }
     }

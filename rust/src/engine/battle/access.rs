@@ -375,15 +375,7 @@ impl Cx<'_> {
 #[cfg(not(test))]
 impl Cx<'_> {
     pub fn track_subject(&mut self, subject: &mut super::Subject, facing: &mut u16) -> i16 {
-        let mut raw = self.encode_subject(subject);
-        let tracking = self
-            .world
-            .tracking
-            .unwrap_or_else(|| panic!("world has no legacy tracking dependency"));
-        // SAFETY: construction supplies the tracker and the checked projection retains its resources.
-        let result = unsafe { tracking(&mut raw, facing) };
-        *subject = self.decode_subject(&raw);
-        result
+        crate::battle::weapon_native::track_subject(self, subject, facing)
     }
 }
 
@@ -583,4 +575,85 @@ pub(crate) unsafe fn observe_ship_record(record: &super::record::STARSHIP) -> Sh
 /// The caller retains the test descriptor and all resources referenced by its state.
 pub(crate) unsafe fn observe_descriptor_record(record: &super::record::RACE_DESC) -> RaceStats {
     RaceStats::decode(record)
+}
+
+#[cfg(not(test))]
+impl Cx<'_> {
+    pub(crate) fn frames_first(&self, frames: Frames) -> Frame {
+        // SAFETY: the supplied frame set belongs to this context's loaded resources.
+        Frame(unsafe { *frames.0 })
+    }
+    pub(crate) fn set_star_image(&mut self, id: ElementId) {
+        use crate::collections::observation::image;
+        use crate::ships::native::abi::{stars_in_space, DecFrameIndex};
+        // SAFETY: the shared stars frame remains live throughout the battle.
+        unsafe {
+            image!(frame; self.b.elements[id].current.image.frame, DecFrameIndex(stars_in_space));
+            image!(set; self.b.elements[id].current.image.farray, &raw mut stars_in_space);
+        }
+    }
+    pub(crate) fn set_blast_frames(&mut self, id: ElementId) {
+        // SAFETY: the shared blast frames remain loaded throughout the battle.
+        unsafe {
+            crate::collections::observation::image!(set; self.b.elements[id].current.image.farray, (&raw mut crate::game_init::space_resources::blast).cast());
+        }
+    }
+    pub(crate) fn copy_next_frame_set(&mut self, destination: ElementId, source: ElementId) {
+        crate::collections::observation::image!(copy; self.b.elements[destination].current.image.farray, self.b.elements[source].next.image.farray);
+    }
+}
+
+#[cfg(not(test))]
+pub(crate) fn decode_missile(b: &crate::ships::native::abi::MISSILE_BLOCK) -> Missile {
+    Missile {
+        cx: b.cx,
+        cy: b.cy,
+        flags: b.flags,
+        sender: b.sender,
+        pixoffs: b.pixoffs,
+        speed: b.speed,
+        hit_points: b.hit_points,
+        damage: b.damage,
+        face: b.face,
+        index: b.index,
+        life: b.life,
+        farray: Frames(b.farray),
+        preprocess: b.preprocess_func.map(|super::ElementHook::Native(f)| f),
+        blast_offs: b.blast_offs,
+    }
+}
+
+#[cfg(not(test))]
+impl Cx<'_> {
+    pub(crate) fn draw_statistics(&mut self, ship: ShipId, crew: i16, energy: i16) {
+        let y = self.status_offset(ship);
+        let info = &raw mut self.desc_mut(ship).ship_info;
+        // SAFETY: the checked descriptor and status resources remain live during drawing.
+        unsafe {
+            crate::ships::native::abi::DeltaStatistics(info, y, crew, energy);
+        }
+    }
+    pub(crate) fn draw_captain_controls_pass(
+        &mut self,
+        ship: ShipId,
+        y: i16,
+        delta: u16,
+        current: u16,
+        pass: u16,
+    ) {
+        let controls = self.captain_controls(ship).as_ptr();
+        // SAFETY: these frames are retained by this ship throughout the synchronous draw.
+        unsafe {
+            crate::battle::status_native::engine::CaptainsWindow(controls, y, delta, current, pass);
+        }
+    }
+}
+
+impl super::Battle {
+    /// # Safety
+    /// The game thread retains the element authority throughout this battle lifecycle.
+    pub(crate) unsafe fn for_lifecycle() -> Self {
+        // SAFETY: lifecycle ownership excludes any other active battle projection.
+        unsafe { Self::new(&raw mut super::legacy::disp_q) }
+    }
 }

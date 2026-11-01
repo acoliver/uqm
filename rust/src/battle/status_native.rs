@@ -214,7 +214,7 @@ pub(crate) fn explosion_flash(life: COUNT, y: COORD, mut draw: impl FnMut(Color,
 pub(crate) mod engine {
     use super::*;
     use crate::engine::battle::{Cx, ElementId};
-    use crate::ships::native::{rel_frame_index, starship};
+    use crate::ships::native::rel_frame_index;
 
     /// # Safety
     /// Status rendering runs on the game thread after screen initialization.
@@ -381,63 +381,47 @@ pub(crate) mod engine {
         UnbatchGraphics();
     }
 
-    /// # Safety
-    /// Element and attached ship/race data must be live on the battle thread.
-    #[no_mangle]
-    pub unsafe extern "C" fn DeltaEnergy(e: *mut ELEMENT, delta: SIZE) -> BOOLEAN {
-        let ship = starship(e);
-        let rd = (*ship).descriptor_ptr();
-        let info = &raw mut (*rd).ship_info;
-        let (success, adjusted) = energy_delta((*info).energy_level, (*info).max_energy, delta);
+    pub fn delta_energy(cx: &mut Cx<'_>, e: ElementId, delta: SIZE) -> bool {
+        let ship = cx.owner(e);
+        let info = cx.race_stats(ship).ship_info;
+        let (success, adjusted) = energy_delta(info.energy_level, info.max_energy, delta);
         if !success {
-            (*ship).cur_status_flags |= LOW_ON_ENERGY as u16;
+            cx.ship_state_mut(ship).status |= LOW_ON_ENERGY as u16;
         } else {
-            (*ship).cur_status_flags &= !(LOW_ON_ENERGY as u16);
-            (*ship).energy_counter = (*rd).characteristics.energy_wait;
-            DeltaStatistics(info, offset(ship), 0, adjusted);
+            cx.ship_state_mut(ship).status &= !(LOW_ON_ENERGY as u16);
+            cx.ship_state_mut(ship).energy_counter =
+                cx.race_stats(ship).characteristics.energy_wait;
+            cx.draw_statistics(ship, 0, adjusted);
         }
-        success as BOOLEAN
+        success
     }
 
-    /// # Safety
-    /// Element and attached ship/race data must be live on the battle thread.
-    #[no_mangle]
-    pub unsafe extern "C" fn DeltaCrew(e: *mut ELEMENT, delta: SIZE) -> BOOLEAN {
-        if GlobData.Game_state.CurrentActivity as BYTE == IN_LAST_BATTLE as BYTE
-            && (*e).playerNr == NPC_PLAYER_NUM as SIZE
+    pub fn delta_crew(cx: &mut Cx<'_>, e: ElementId, delta: SIZE) -> bool {
+        if cx.world.activity() as BYTE == IN_LAST_BATTLE as BYTE
+            && cx.element(e).player == NPC_PLAYER_NUM as SIZE
         {
-            return 1;
+            return true;
         }
-        let ship = starship(e);
-        let info = &raw mut (*(*ship).descriptor_ptr()).ship_info;
-        let (success, updated, adjusted) = crew_delta(
-            (*e).__bindgen_anon_2.crew_level,
-            (*info).crew_level,
-            (*info).max_crew,
-            delta,
-        );
-        (*e).__bindgen_anon_2.crew_level = updated;
-        DeltaStatistics(info, offset(ship), adjusted, 0);
-        success as BOOLEAN
+        let ship = cx.owner(e);
+        let info = cx.race_stats(ship).ship_info;
+        let (success, updated, adjusted) =
+            crew_delta(cx.element(e).hits, info.crew_level, info.max_crew, delta);
+        cx.element_mut(e).hits = updated;
+        cx.draw_statistics(ship, adjusted, 0);
+        success
     }
 
-    /// # Safety
-    /// Element, owning ship, captain frames, and active status context must be live.
-    #[no_mangle]
-    pub unsafe extern "C" fn PreProcessStatus(e: *mut ELEMENT) {
-        let ship = starship(e);
-        if (*ship).captains_name_index != 0 || (*ship).playerNr == RPG_PLAYER_NUM as SIZE {
-            let current = (*ship).cur_status_flags;
-            let delta = ((*ship).old_status_flags ^ current)
+    pub fn preprocess_status(cx: &mut Cx<'_>, e: ElementId) {
+        let ship = cx.owner(e);
+        if cx.ship(ship).captains_name_index != 0
+            || cx.ship_state(ship).player == RPG_PLAYER_NUM as SIZE
+        {
+            let current = cx.ship_state(ship).status;
+            let delta = (cx.ship_state(ship).old_status ^ current)
                 & (LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as u16;
             if delta != 0 {
-                CaptainsWindow(
-                    &raw mut (*(*ship).descriptor_ptr()).ship_data.captain_control,
-                    offset(ship),
-                    delta,
-                    current,
-                    1,
-                );
+                let y = cx.status_offset(ship);
+                cx.draw_captain_controls_pass(ship, y, delta, current, 1);
             }
         }
     }
@@ -481,8 +465,8 @@ pub(crate) mod engine {
 
 #[cfg(not(test))]
 pub use engine::{
-    DeltaCrew, DeltaEnergy, DrawBattleCrewAmount, DrawCaptainsWindow, InitStatusOffsets,
-    PostProcessStatus, PreProcessStatus,
+    delta_crew, delta_energy, preprocess_status, DrawBattleCrewAmount, DrawCaptainsWindow,
+    InitStatusOffsets, PostProcessStatus,
 };
 
 #[cfg(test)]

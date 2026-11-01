@@ -230,9 +230,11 @@ fn bubble_steers_toward_the_nearest_enemy_with_a_random_wobble() {
                 (*battle::prim(enemy_ship.ptr())).Type = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
                 enemy_ship.queue();
                 let enemy = enemy_ship.ptr();
-                let mut probe = *bubble;
                 let mut tracked_facing: COUNT = 0;
-                let delta = track_ship(&mut probe, &mut tracked_facing);
+                let delta = uqm_rust::app::bridge::enter(|cx| {
+                    let mut subject = cx.weapon_origin(bubbles[0].unwrap());
+                    cx.track_subject(&mut subject, &mut tracked_facing)
+                });
                 assert_eq!((delta > 0 && delta < 8), turn_is_short, "delta {delta}");
                 assert!(delta > 0 && delta != 8);
 

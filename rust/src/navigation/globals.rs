@@ -120,7 +120,7 @@ pub unsafe extern "C" fn InitGameStructures() -> BOOLEAN {
             copy_fleet(fleet, &master.info, &master.fleet);
         } else {
             if let Some(desc) = load_ship(ship, 0) {
-                copy_fleet(fleet, &desc.ship_info, &desc.fleet);
+                copy_fleet(fleet, desc.info(), desc.fleet());
                 unload_ship(desc, 0, 0);
             }
         }

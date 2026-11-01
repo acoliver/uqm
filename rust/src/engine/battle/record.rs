@@ -417,8 +417,6 @@ impl Cx<'_> {
     }
 }
 
-pub(crate) type Tracker = unsafe extern "C" fn(*mut ELEMENT, *mut u16) -> i16;
-
 impl Cx<'_> {
     pub(crate) fn ship_id(&self, address: usize) -> ShipId {
         for side in 0..2 {
@@ -566,22 +564,47 @@ impl Cx<'_> {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Debug)]
 pub struct RaceDesc {
-    pub(super) raw: RACE_DESC,
+    pub(super) raw: Box<RACE_DESC>,
 }
 impl RaceDesc {
     pub(super) fn empty() -> Self {
         Self {
-            raw: RACE_DESC::EMPTY,
+            raw: Box::new(RACE_DESC::EMPTY),
         }
     }
     pub(super) fn from_legacy(raw: RACE_DESC) -> Self {
+        Self { raw: Box::new(raw) }
+    }
+    pub(crate) fn from_storage(raw: Box<RACE_DESC>) -> Self {
         Self { raw }
+    }
+    pub(crate) fn into_storage(self) -> Box<RACE_DESC> {
+        self.raw
+    }
+    pub(crate) fn info(&self) -> &SHIP_INFO {
+        &self.raw.ship_info
+    }
+    pub(crate) fn info_mut(&mut self) -> &mut SHIP_INFO {
+        &mut self.raw.ship_info
+    }
+    pub(crate) fn data_mut(&mut self) -> &mut DATA_STUFF {
+        &mut self.raw.ship_data
+    }
+    pub(crate) fn fleet(&self) -> &FLEET_STUFF {
+        &self.raw.fleet
+    }
+    pub(crate) fn address(&self) -> usize {
+        std::ptr::from_ref(&*self.raw) as usize
+    }
+    #[cfg(not(test))]
+    pub(crate) fn cleanup(&mut self, world: &mut super::World) {
+        self.raw.cleanup(world);
     }
     /// Extract the legacy record; dereferencing its resource pointers remains unsafe.
     pub fn into_legacy(self) -> RACE_DESC {
-        self.raw
+        *self.raw
     }
 }
 
@@ -718,9 +741,8 @@ mod projection_tests {
         // SAFETY: these local queue authorities and projections outlive the context.
         let mut battle = unsafe { super::super::Battle::new(&mut queue) };
         // SAFETY: the local world authorities remain live and exclusively borrowed.
-        let mut world = unsafe {
-            super::super::World::new(&mut activity, &mut groups, [ptr::null_mut(); 2], None)
-        };
+        let mut world =
+            unsafe { super::super::World::new(&mut activity, &mut groups, [ptr::null_mut(); 2]) };
         let cx = Cx {
             b: &mut battle,
             world: &mut world,
@@ -740,7 +762,6 @@ mod projection_tests {
         raw.current.location = POINT { x: 11, y: 12 };
         raw.next.location = POINT { x: 21, y: 22 };
         raw.IntersectControl.last_time_val = 31;
-        assert!(cx.world.tracking.is_none());
         let mut subject = cx.decode_subject(&raw);
         assert_eq!(subject.life_span(), 21);
         assert_eq!(subject.hit_points(), 7);

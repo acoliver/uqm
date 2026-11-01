@@ -1707,14 +1707,8 @@ pub use crate::battle::status_native::engine::DrawBattleCrewAmount;
 #[cfg(not(test))]
 pub use crate::battle::status_native::engine::DrawCaptainsWindow;
 
-#[cfg(not(test))]
-pub use crate::battle::status_native::engine::DeltaEnergy;
 
-#[cfg(not(test))]
-pub use crate::battle::status_native::engine::DeltaCrew;
 
-#[cfg(not(test))]
-pub use crate::battle::status_native::engine::PreProcessStatus;
 
 #[cfg(not(test))]
 pub use crate::battle::status_native::engine::PostProcessStatus;
@@ -3335,8 +3329,6 @@ pub use crate::battle::tactrans_native::engine::SetWinnerStarShip;
 #[cfg(not(test))]
 pub use crate::battle::tactrans_native::engine::RecordShipDeath;
 
-#[cfg(not(test))]
-pub use crate::battle::tactrans_native::engine::StartShipExplosion;
 
 pub const GLOBAL_PLAYER_NAME: _bindgen_ty_17 = -1000000;
 pub const GLOBAL_SHIP_NAME: _bindgen_ty_17 = -999999;

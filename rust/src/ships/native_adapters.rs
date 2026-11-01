@@ -71,7 +71,11 @@ pub unsafe fn uninit_ships() {
                 .unwrap_or_else(|| panic!("ship descriptor"));
             (*ship).crew_level = recover_ship_crew(&mut descriptor, crew);
             ships[(*ship).playerNr as usize] = ship;
-            crate::ships::loader_native::unload_ship(descriptor, 1, 1);
+            crate::ships::loader_native::unload_ship(
+                crate::engine::battle::RaceDesc::from_storage(descriptor),
+                1,
+                1,
+            );
         }
     }
     // SAFETY: the game-thread teardown exclusively updates the activity word.
@@ -100,7 +104,11 @@ pub unsafe fn uninit_ships() {
             while let Some(id) = next {
                 next = queue.succ(id);
                 if let Some(descriptor) = queue.record_mut(id).descriptor.take() {
-                    crate::ships::loader_native::unload_ship(descriptor, 1, 1);
+                    crate::ships::loader_native::unload_ship(
+                        crate::engine::battle::RaceDesc::from_storage(descriptor),
+                        1,
+                        1,
+                    );
                 }
             }
         }
@@ -149,8 +157,8 @@ mod live {
     operation!(rust_bridge_GetPredElement(element: *mut ELEMENT) -> HELEMENT { (*element).pred });
     operation!(rust_bridge_GetSuccElement(element: *mut ELEMENT) -> HELEMENT { (*element).succ });
     operation!(rust_bridge_GetFrameIndex(frame: FRAME) -> u16 { crate::graphics::pixmap_abi::GetFrameIndex(frame.cast()) });
-    operation!(rust_bridge_initialize_missile(block: *mut MISSILE_BLOCK) -> HELEMENT { crate::app::bridge::enter(|cx| crate::battle::weapon_native::initialize_missile(cx, block)) });
-    operation!(rust_bridge_initialize_laser(block: *mut LASER_BLOCK) -> HELEMENT { crate::app::bridge::enter(|cx| crate::battle::weapon_native::initialize_laser(cx, block)) });
+    operation!(rust_bridge_initialize_missile(block: *mut MISSILE_BLOCK) -> HELEMENT { crate::app::bridge::enter(|cx| { let value = crate::engine::battle::access::decode_missile(&*block); cx.missile(&mut { value }).map_or(ptr::null_mut(), |id| cx.elements().raw(id)) }) });
+    operation!(rust_bridge_initialize_laser(block: *mut LASER_BLOCK) -> HELEMENT { crate::app::bridge::enter(|cx| { crate::battle::weapon_native::initialize_laser(cx, &*block).map_or(ptr::null_mut(), |id| cx.elements().raw(id)) }) });
     operation!(rust_bridge_ship_intelligence(ship: *mut ELEMENT, objects: *mut EVALUATE_DESC, count: u16) { crate::battle::cyborg_native::engine::ship_intelligence(ship, objects, count); });
     operation!(rust_bridge_SetAbsSoundIndex(sound: usize, index: u16) -> usize { crate::strings::string_table::SetAbsStringTableIndex(sound as *mut _, index) as usize });
     operation!(rust_bridge_DISPLAY_TO_WORLD(value: i32) -> i32 { value.wrapping_shl(2) });
@@ -167,15 +175,15 @@ mod live {
     let primitive = &*display_primitive(ptr::addr_of!(crate::navigation::globals::GlobData.Game_state), (*element).PrimIndex);
     u32::from(primitive.Type as u32 >= gfx_object_NUM_PRIMS || (primitive.Type as u32 == gfx_object_STAMPFILL_PRIM && primitive.color.r == 0 && primitive.color.g == 0 && primitive.color.b == 0 && primitive.color.a == 255))
 } });
-    operation!(rust_bridge_DeltaEnergy(element: *mut ELEMENT, delta: i16) -> u32 { crate::battle::status_native::DeltaEnergy(element, delta) });
-    operation!(rust_bridge_DeltaCrew(element: *mut ELEMENT, delta: i16) -> u32 { crate::battle::status_native::DeltaCrew(element, delta) });
+    operation!(rust_bridge_DeltaEnergy(element: *mut ELEMENT, delta: i16) -> u32 { crate::app::bridge::enter(|cx| { let id = cx.elements().id(element.cast()).unwrap_or_else(|| panic!("status element")); cx.delta_energy(id, delta) as u32 }) });
+    operation!(rust_bridge_DeltaCrew(element: *mut ELEMENT, delta: i16) -> u32 { crate::app::bridge::enter(|cx| { let id = cx.elements().id(element.cast()).unwrap_or_else(|| panic!("status element")); cx.delta_crew(id, delta) as u32 }) });
     operation!(rust_bridge_GetElementStarShip(element: *mut ELEMENT, ship: *mut *mut STARSHIP) { *ship = (*element).pParent.cast(); });
     operation!(rust_bridge_SetElementStarShip(element: *mut ELEMENT, ship: *mut STARSHIP) { (*element).pParent = ship.cast(); });
-    operation!(rust_bridge_TrackShip(element: *mut ELEMENT, facing: *mut u16) -> i16 { crate::battle::weapon_native::track_ship(element, facing) });
+    operation!(rust_bridge_TrackShip(element: *mut ELEMENT, facing: *mut u16) -> i16 { crate::app::bridge::enter(|cx| { let mut subject = cx.legacy_subject(&*element); let result = cx.track_subject(&mut subject, &mut *facing); (*element).hTarget = subject.target.map_or(ptr::null_mut(), |id| cx.elements().raw(id)); result }) });
     operation!(rust_bridge_Untarget(element: *mut ELEMENT) { crate::battle::process_native::Untarget(element); });
     operation!(rust_bridge_ModifySilhouette(element: *mut ELEMENT, stamp: *mut STAMP, flags: u8) -> FRAME { crate::battle::weapon_native::ModifySilhouette(element, stamp, flags) });
     operation!(rust_bridge_ProcessSound(sound: usize, source: *mut ELEMENT) { crate::app::bridge::enter(|cx| { let source = cx.elements().id(source.cast()); cx.b.kernel_sounds().push(sound as *mut _, source); }); });
-    operation!(rust_bridge_weapon_collision(e0: *mut ELEMENT, p0: *mut POINT, e1: *mut ELEMENT, p1: *mut POINT) -> HELEMENT { crate::app::bridge::enter(|cx| crate::battle::weapon_native::weapon_collision(cx, e0, p0, e1, p1)) });
+    operation!(rust_bridge_weapon_collision(e0: *mut ELEMENT, p0: *mut POINT, e1: *mut ELEMENT, p1: *mut POINT) -> HELEMENT { crate::app::bridge::enter(|cx| { let a = cx.elements().id(e0.cast()).unwrap_or_else(|| panic!("weapon collision source")); let b = cx.elements().id(e1.cast()).unwrap_or_else(|| panic!("weapon collision target")); cx.weapon_collision(a, &mut *p0, b, &mut *p1).map_or(ptr::null_mut(), |id| cx.elements().raw(id)) }) });
 
     operation!(rust_bridge_spawn_element(ship: *mut STARSHIP, descriptor: *mut RACE_DESC, mass: u8, activity: u8) -> u32 {
         debug_assert_eq!(activity, uqm_get_current_activity_lobyte());

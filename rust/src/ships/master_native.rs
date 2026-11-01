@@ -92,7 +92,7 @@ pub(crate) mod engine {
                 let descriptor = crate::ships::load_ship(species, 0)
                     .unwrap_or_else(|| panic!("master species {species}"));
                 let name = CStr::from_ptr(GetStringAddress(SetAbsStringTableIndex(
-                    descriptor.ship_info.race_strings,
+                    descriptor.info().race_strings,
                     2,
                 )));
                 let mut queue = LinkQueue::<Starship>::new(&mut *raw);
@@ -100,7 +100,7 @@ pub(crate) mod engine {
                     .alloc()
                     .unwrap_or_else(|| panic!("master catalog capacity"));
                 queue.record_mut(id).SpeciesID = species;
-                queue.record_mut(id).descriptor = Some(descriptor);
+                queue.record_mut(id).descriptor = Some(descriptor.into_storage());
                 let mut before = queue.head();
                 while let Some(other) = before {
                     let info = entry(&queue, other).info;
@@ -134,7 +134,11 @@ pub(crate) mod engine {
                     .descriptor
                     .take()
                     .unwrap_or_else(|| panic!("master descriptor"));
-                crate::ships::unload_ship(descriptor, 1, 0);
+                crate::ships::unload_ship(
+                    crate::engine::battle::RaceDesc::from_storage(descriptor),
+                    1,
+                    0,
+                );
             }
             UninitQueue(raw);
         });
@@ -215,7 +219,7 @@ mod tests {
                     let id = ships.build(species).unwrap();
                     let mut descriptor = Box::new(crate::engine::battle::record::RACE_DESC::EMPTY);
                     descriptor.ship_info.ship_cost = cost;
-                    ships.record_mut(id).descriptor = Some(descriptor);
+                    ships.record_mut(id).descriptor = Some(descriptor.into_storage());
                 }
                 assert_eq!(cost_in(&ships, 0), 23);
                 assert_eq!(cost_in(&ships, 1), 16);

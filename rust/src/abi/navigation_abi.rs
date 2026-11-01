@@ -4638,11 +4638,7 @@ pub use crate::ui::shipstat::DeltaStatistics;
 #[cfg(not(test))]
 pub use crate::battle::status_native::engine::DrawBattleCrewAmount;
 
-#[cfg(not(test))]
-pub use crate::battle::status_native::engine::DeltaEnergy;
 
-#[cfg(not(test))]
-pub use crate::battle::status_native::engine::DeltaCrew;
 
 #[cfg(not(test))]
 pub use crate::battle::ship_native::engine::animation_preprocess;

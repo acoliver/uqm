@@ -323,7 +323,11 @@ pub(crate) mod engine {
             if handle.is_null() {
                 break;
             }
-            DeltaCrew(ship, -1);
+            let ship_id = cx
+                .elements()
+                .id(ship.cast())
+                .unwrap_or_else(|| panic!("abandon ship"));
+            cx.delta_crew(ship_id, -1);
             put_element(handle);
             let crew = element(handle);
             (*crew).playerNr = NEUTRAL_PLAYER_NUM as i16;

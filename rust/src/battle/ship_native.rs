@@ -340,7 +340,7 @@ pub(crate) mod engine {
         let Some(descriptor) = load_ship((*ship).SpeciesID, 1) else {
             return 0;
         };
-        (*ship).descriptor = Some(descriptor);
+        (*ship).descriptor = Some(descriptor.into_storage());
         let rd = (*ship).descriptor_ptr();
         (*ship).ship_input_state = 0;
         (*ship).cur_status_flags = 0;
