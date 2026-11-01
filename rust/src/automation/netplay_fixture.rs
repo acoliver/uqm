@@ -17,6 +17,14 @@ impl Request {
     }
 }
 
+fn setup_synchronized(setup: &crate::ships::native::abi::MeleeSetup, side: usize) -> bool {
+    !setup.haveSentTeamName[side]
+        && setup.sentTeams[side]
+            .ships
+            .iter()
+            .all(|ship| *ship == crate::ships::native::abi::MeleeShip_MELEE_UNSET)
+}
+
 #[cfg(not(test))]
 pub(crate) fn connect(request: &Request) -> Result<(), String> {
     use crate::supermelee::{native::menu::live::drawing::P_MELEE_STATE, netplay::abi::*};
@@ -48,11 +56,13 @@ pub(crate) fn connect(request: &Request) -> Result<(), String> {
     loop {
         // SAFETY: session teardown has not run and no callback deletes connections
         // during polling; disconnection only updates their state until cleanup.
-        let (status, disconnected) = unsafe { ((*conn).state, (*conn).stateFlags.disconnected) };
-        if status == NetState_NetState_inSetup {
+        let (connection, setup) = unsafe { (&*conn, &*state.melee_setup) };
+        // Entering setup sends the bootstrap fleet/name but does not wait for
+        // their echoes. A late bootstrap update cancels menu confirmation.
+        if connection.state == NetState_NetState_inSetup && setup_synchronized(setup, side) {
             break;
         }
-        if disconnected || std::time::Instant::now() >= deadline {
+        if connection.stateFlags.disconnected || std::time::Instant::now() >= deadline {
             return Err("netplay fixture disconnected or did not enter setup".into());
         }
         // SAFETY: called on the menu's game thread while the session is live.
@@ -68,6 +78,39 @@ pub(crate) fn connect(_request: &Request) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn setup_is_not_ready_until_every_bootstrap_update_is_acknowledged() {
+        use crate::ships::native::abi::{MeleeSetup, MeleeTeam};
+        let team = MeleeTeam {
+            ships: [254; 14],
+            name: [0; 55],
+        };
+        let mut setup = MeleeSetup {
+            teams: [team; 2],
+            fleetValue: [0; 2],
+            sentTeams: [team; 2],
+            haveSentTeamName: [false; 2],
+        };
+        for side in 0..2 {
+            assert!(setup_synchronized(&setup, side));
+            for slot in 0..14 {
+                setup.sentTeams[side].ships[slot] = 255;
+                assert!(
+                    !setup_synchronized(&setup, side),
+                    "unacknowledged slot {slot}"
+                );
+                setup.sentTeams[side].ships[slot] = 254;
+            }
+            setup.haveSentTeamName[side] = true;
+            assert!(
+                !setup_synchronized(&setup, side),
+                "unacknowledged team name"
+            );
+            setup.haveSentTeamName[side] = false;
+            assert!(setup_synchronized(&setup, side));
+        }
+    }
+
     #[test]
     fn endpoints_validate_before_the_live_boundary() {
         for remote_player in [0, 1, 2] {
