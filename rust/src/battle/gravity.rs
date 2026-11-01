@@ -1,16 +1,19 @@
 //! Gravity and spawn overlap checks over the live ordered element pool.
-#![cfg(not(test))]
 
 use crate::engine::battle::{Cx, ElementId};
 use crate::ships::native::abi::{
-    DISAPPEARING, INTERSECT_CONTROL, MAX_TIME_VALUE, NONSOLID, PLAYER_SHIP, PRE_PROCESS,
+    DISAPPEARING, INTERSECT_CONTROL, NONSOLID, PLAYER_SHIP, PRE_PROCESS,
 };
 
 fn gravity_mass(mass: u8) -> bool {
     mass > 100
 }
 
-pub(crate) fn calculate_gravity(cx: &mut Cx<'_>, element: ElementId) -> bool {
+pub(crate) fn calculate_gravity(
+    cx: &mut Cx<'_>,
+    element: ElementId,
+    dimensions: (i32, i32),
+) -> bool {
     let elem = cx.element(element);
     let has_gravity = elem.flags & (NONSOLID | DISAPPEARING) as u16 == 0
         && gravity_mass(elem.mass.wrapping_add(1));
@@ -30,7 +33,7 @@ pub(crate) fn calculate_gravity(cx: &mut Cx<'_>, element: ElementId) -> bool {
         } else {
             (elem.next.location, other.next.location)
         };
-        let (width, height) = cx.screen_dimensions();
+        let (width, height) = dimensions;
         let dx = crate::math::wrap_delta(a.x - b.x, (width - 64) << 5);
         let dy = crate::math::wrap_delta(a.y - b.y, height << 5);
         let ax = i32::from(dx).unsigned_abs() >> 2;
@@ -50,7 +53,11 @@ pub(crate) fn calculate_gravity(cx: &mut Cx<'_>, element: ElementId) -> bool {
     false
 }
 
-fn control(cx: &Cx<'_>, id: ElementId) -> INTERSECT_CONTROL {
+pub(crate) fn control(
+    cx: &Cx<'_>,
+    id: ElementId,
+    frame: crate::engine::battle::views::Frame,
+) -> INTERSECT_CONTROL {
     let current = cx.element(id).current;
     let origin = crate::graphics::native_abi::POINT {
         x: current.location.x >> 2,
@@ -61,15 +68,16 @@ fn control(cx: &Cx<'_>, id: ElementId) -> INTERSECT_CONTROL {
         EndPoint: origin,
         IntersectStamp: crate::graphics::native_abi::STAMP {
             origin,
-            frame: cx
-                .equivalent_frame(cx.element_frame_set_first(id, false), current.image.frame)
-                .raw(),
+            frame: frame.raw(),
         },
     }
 }
 
-pub(crate) fn time_space_matter_conflict(cx: &mut Cx<'_>, element: ElementId) -> bool {
-    let mut elem_control = control(cx, element);
+pub(crate) fn time_space_matter_conflict(
+    cx: &Cx<'_>,
+    element: ElementId,
+    mut intersects: impl FnMut(ElementId) -> bool,
+) -> bool {
     let mut next = cx.elements().head();
     while let Some(test) = next {
         next = cx.elements().succ(test);
@@ -80,9 +88,7 @@ pub(crate) fn time_space_matter_conflict(cx: &mut Cx<'_>, element: ElementId) ->
         {
             continue;
         }
-        let mut test_control = control(cx, test);
-        if cx.projected_intersect(&mut elem_control, &mut test_control, MAX_TIME_VALUE as u16) != 0
-        {
+        if intersects(test) {
             return true;
         }
     }

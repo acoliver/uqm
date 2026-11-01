@@ -1843,7 +1843,6 @@ stage_b_raw = { limit = 15, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "allows|cfg_not_test_modules|uqm::battle::encount_native::engine" = 1
 "allows|cfg_not_test_modules|uqm::battle::ffi::live_counters" = 1
 "allows|cfg_not_test_modules|uqm::battle::galaxy::engine" = 1
-"allows|cfg_not_test_modules|uqm::battle::gravity" = 1
 "allows|cfg_not_test_modules|uqm::battle::process_native::engine" = 1
 "allows|cfg_not_test_modules|uqm::battle::ship_native::engine" = 1
 "allows|cfg_not_test_modules|uqm::battle::sounds::engine" = 1
@@ -2400,7 +2399,6 @@ stage_b_raw = { limit = 15, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "complexity|cognitive|uqm::planets::roster::navigate" = 31
 "complexity|cognitive|uqm::planets::starmap_cursor::DoMoveCursor" = 47
 "complexity|cognitive|uqm::savegame::lzh::encode::<Encoder>::insert" = 32
-"complexity|cognitive|uqm::ships::native_adapters::uninit_ships" = 35
 "complexity|cognitive|uqm::ships::races::androsynth_native::engine::androsynth_intelligence" = 36
 "complexity|cognitive|uqm::ships::races::blackurq_native::engine::black_urquan_intelligence" = 37
 "complexity|cognitive|uqm::ships::races::chenjesu_native::engine::chenjesu_intelligence" = 49
@@ -2990,10 +2988,10 @@ stage_b_raw = { limit = 15, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "layers|module_edges|uqm::battle::encount_native::engine::@file" = 2
 "layers|module_edges|uqm::battle::encount_native::engine::DrawFadeText::@file" = 2
 "layers|module_edges|uqm::battle::encount_native::engine::UninitEncounter::@file" = 1
-"layers|module_edges|uqm::battle::gravity::@file" = 6
+"layers|module_edges|uqm::battle::gravity::@file" = 5
 "layers|module_edges|uqm::battle::gravity::calculate_gravity::@file" = 7
 "layers|module_edges|uqm::battle::gravity::control::@file" = 2
-"layers|module_edges|uqm::battle::gravity::time_space_matter_conflict::@file" = 4
+"layers|module_edges|uqm::battle::gravity::time_space_matter_conflict::@file" = 3
 "layers|module_edges|uqm::battle::process_native::@file" = 1
 "layers|module_edges|uqm::battle::process_native::engine::@file" = 1
 "layers|module_edges|uqm::battle::process_native::engine::process_collisions::@file" = 6
@@ -5409,7 +5407,7 @@ stage_b_raw = { limit = 15, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "unsafe|unsafe_fn_lines|uqm::planet_side" = 585
 "unsafe|unsafe_fn_lines|uqm::planets" = 6430
 "unsafe|unsafe_fn_lines|uqm::savegame" = 690
-"unsafe|unsafe_fn_lines|uqm::ships" = 715
+"unsafe|unsafe_fn_lines|uqm::ships" = 697
 "unsafe|unsafe_fn_lines|uqm::starbase" = 13
 "unsafe|unsafe_fn_lines|uqm::state" = 404
 "unsafe|unsafe_fn_lines|uqm::supermelee" = 3977
@@ -5460,7 +5458,7 @@ stage_b_raw = { limit = 15, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "unsafe|unsafe_lines|uqm::planet_side" = 939
 "unsafe|unsafe_lines|uqm::planets" = 6531
 "unsafe|unsafe_lines|uqm::savegame" = 810
-"unsafe|unsafe_lines|uqm::ships" = 799
+"unsafe|unsafe_lines|uqm::ships" = 781
 "unsafe|unsafe_lines|uqm::starbase" = 157
 "unsafe|unsafe_lines|uqm::state" = 406
 "unsafe|unsafe_lines|uqm::supermelee" = 4047

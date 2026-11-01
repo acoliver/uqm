@@ -52,11 +52,25 @@ impl Cx<'_> {
     }
 
     pub fn gravity(&mut self, id: ElementId) -> bool {
-        crate::battle::gravity::calculate_gravity(self, id)
+        crate::battle::gravity::calculate_gravity(self, id, self.screen_dimensions())
     }
 
     pub fn matter_conflict(&mut self, id: ElementId) -> bool {
-        crate::battle::gravity::time_space_matter_conflict(self, id)
+        let control_for = |element| {
+            crate::battle::gravity::control(
+                self,
+                element,
+                self.equivalent_frame(
+                    self.element_frame_set_first(element, false),
+                    self.element(element).current.image.frame,
+                ),
+            )
+        };
+        let mut control = control_for(id);
+        crate::battle::gravity::time_space_matter_conflict(self, id, |test| {
+            let mut other = control_for(test);
+            self.projected_intersect(&mut control, &mut other, MAX_TIME_VALUE as u16) != 0
+        })
     }
 
     pub(crate) fn negotiate_battle(

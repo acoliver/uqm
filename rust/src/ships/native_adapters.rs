@@ -14,41 +14,63 @@ fn recover_ship_crew(descriptor: &mut crate::ships::native::abi::SHIP_INFO, crew
     remaining
 }
 
+#[cfg(not(test))]
+fn remaining_battle_crew(cx: &crate::engine::battle::Cx<'_>) -> u16 {
+    let mut crew = 0u16;
+    let mut next = cx.elements().head();
+    while let Some(id) = next {
+        if cx.element(id).flags & crate::ships::native::abi::CREW_OBJECT as u16 != 0 {
+            crew = crew.wrapping_add(1);
+        }
+        next = cx.elements().succ(id);
+    }
+    crew
+}
+
+#[cfg(not(test))]
+fn retire_element_ship(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    id: crate::engine::battle::ElementId,
+    crew: u16,
+    replacement: crate::engine::battle::ElementHook,
+) -> Option<(
+    crate::engine::battle::ShipId,
+    crate::engine::battle::RaceDesc,
+)> {
+    use crate::engine::battle::Parent;
+    let element = cx.element(id);
+    if element.flags & crate::ships::native::abi::PLAYER_SHIP as u16 == 0
+        && !element
+            .death
+            .is_some_and(|callback| callback.address() == replacement.address())
+    {
+        return None;
+    }
+    let Parent::Ship(ship) = cx.parent(id) else {
+        return None;
+    };
+    let mut descriptor = cx.take_descriptor(ship)?;
+    cx.ship_state_mut(ship).crew = recover_ship_crew(descriptor.info_mut(), crew);
+    Some((ship, descriptor))
+}
+
 /// # Safety
 /// Call on the game thread while the battle queues and their resources remain live.
 #[cfg(not(test))]
 pub unsafe fn uninit_ships() {
-    use crate::engine::battle::Parent;
     use crate::ships::native::abi::*;
 
     StopSound();
     crate::game_init::space_resources::UninitSpace();
     crate::app::bridge::enter(|cx| {
         let mut ships = [None; 2];
-        let mut crew = 0u16;
+        let crew = remaining_battle_crew(cx);
+        let replacement =
+            crate::engine::battle::ElementHook::Native(crate::battle::tactrans_native::new_ship);
         let mut next = cx.elements().head();
         while let Some(id) = next {
-            if cx.element(id).flags & CREW_OBJECT as u16 != 0 {
-                crew = crew.wrapping_add(1);
-            }
             next = cx.elements().succ(id);
-        }
-        next = cx.elements().head();
-        while let Some(id) = next {
-            next = cx.elements().succ(id);
-            if cx.element(id).flags & PLAYER_SHIP as u16 != 0
-                || cx.element(id).death.is_some_and(|callback| {
-                    callback.address()
-                        == crate::battle::tactrans_native::new_ship as *const () as usize
-                })
-            {
-                let Parent::Ship(ship) = cx.parent(id) else {
-                    continue;
-                };
-                let Some(mut descriptor) = cx.take_descriptor(ship) else {
-                    continue;
-                };
-                cx.ship_state_mut(ship).crew = recover_ship_crew(descriptor.info_mut(), crew);
+            if let Some((ship, descriptor)) = retire_element_ship(cx, id, crew, replacement) {
                 ships[cx.ship_state(ship).player as usize] = Some(ship);
                 crate::ships::loader_native::unload_ship(descriptor, 1, 1);
             }
