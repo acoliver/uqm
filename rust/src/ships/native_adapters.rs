@@ -33,9 +33,10 @@ fn recover_ship_crew(descriptor: &mut crate::ships::native::abi::RACE_DESC, crew
     remaining
 }
 
+/// # Safety
+/// Call on the game thread while the battle queues and their resources remain live.
 #[cfg(not(test))]
 pub unsafe fn uninit_ships() {
-    use crate::navigation::globals::GlobData;
     use crate::ships::native::abi::*;
     use std::ptr;
 
@@ -73,10 +74,15 @@ pub unsafe fn uninit_ships() {
             crate::ships::loader_native::unload_ship(descriptor, 1, 1);
         }
     }
-    GlobData.Game_state.CurrentActivity &= !(IN_BATTLE as u16);
-    if uqm_get_current_activity_lobyte() == IN_ENCOUNTER as u8
-        && GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 == 0
-    {
+    // SAFETY: the game-thread teardown exclusively updates the activity word.
+    let activity = unsafe {
+        let word = &raw mut crate::navigation::globals::GlobData
+            .Game_state
+            .CurrentActivity;
+        *word &= !(IN_BATTLE as u16);
+        *word
+    };
+    if activity as u8 == IN_ENCOUNTER as u8 && activity & CHECK_ABORT as u16 == 0 {
         for i in (0..2).rev() {
             if !ships[i].is_null() && FleetIsInfinite(i as u16) == 0 {
                 UpdateShipFragCrew(ships[i]);
@@ -86,13 +92,16 @@ pub unsafe fn uninit_ships() {
     // A failed spawn can retain a loaded descriptor without a ship element.
     use crate::engine::battle::link_queue::{LinkQueue, Starship};
     let races = ptr::addr_of_mut!(crate::engine::battle::legacy::race_q).cast::<QUEUE>();
-    for side in 0..2 {
-        let mut queue = LinkQueue::<Starship>::new(&mut *races.add(side));
-        let mut next = queue.head();
-        while let Some(id) = next {
-            next = queue.succ(id);
-            if let Some(descriptor) = queue.record_mut(id).descriptor.take() {
-                crate::ships::loader_native::unload_ship(descriptor, 1, 1);
+    // SAFETY: teardown owns the idle race queues and their remaining descriptors.
+    unsafe {
+        for side in 0..2 {
+            let mut queue = LinkQueue::<Starship>::new(&mut *races.add(side));
+            let mut next = queue.head();
+            while let Some(id) = next {
+                next = queue.succ(id);
+                if let Some(descriptor) = queue.record_mut(id).descriptor.take() {
+                    crate::ships::loader_native::unload_ship(descriptor, 1, 1);
+                }
             }
         }
     }

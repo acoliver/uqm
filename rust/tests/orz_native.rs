@@ -274,7 +274,7 @@ fn appearing_turret_is_inserted_immediately_after_ship_and_inputs_suppress_hull_
         let _battle = Battle::new(128);
         unsafe {
             let mut ship = orz(&_battle, 0);
-            let mut enemy = orz(&_battle, 1);
+            let enemy = orz(&_battle, 1);
             ship.ship_mut().ShipFacing = 7;
             let turret = with_rng(2, 0, || ship.install_turret());
             assert_eq!(queued(), vec![ship.handle, turret.cast(), enemy.handle]);

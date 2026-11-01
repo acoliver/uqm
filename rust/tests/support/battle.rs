@@ -311,8 +311,14 @@ impl<'a> Ship<'a> {
     pub unsafe fn descriptor_mut(&mut self) -> &mut RACE_DESC {
         // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
 
-        self.assert_live();
-        self.ss.get_mut().descriptor.as_deref_mut().unwrap()
+        unsafe {
+            self.assert_live();
+            self.ss
+                .get_mut()
+                .descriptor
+                .as_deref_mut()
+                .unwrap_or_else(|| panic!("fixture owns its loaded descriptor"))
+        }
     }
     pub fn snapshot(&self) -> uqm_rust::engine::battle::views::ElementState {
         // SAFETY: the fixture retains its battle and checked element through this value projection.
@@ -326,7 +332,13 @@ impl<'a> Ship<'a> {
     }
     fn descriptor(&self) -> &RACE_DESC {
         // SAFETY: the serialized fixture retains its owned ship slot.
-        unsafe { self.ss.get().descriptor.as_deref().unwrap() }
+        unsafe {
+            self.ss
+                .get()
+                .descriptor
+                .as_deref()
+                .unwrap_or_else(|| panic!("fixture owns its loaded descriptor"))
+        }
     }
     pub fn ship_frames(&self) -> *mut FRAME {
         (&raw const self.descriptor().ship_data.ship)
@@ -410,7 +422,10 @@ impl<'a> Ship<'a> {
         }
     }
     pub fn uninit(&mut self) {
-        if let Some(race) = self.descriptor().race {
+        // The replacement path can consume the descriptor before fixture teardown.
+        // SAFETY: the fixture still owns its live ship slot.
+        let race = unsafe { self.ss.get().descriptor.as_deref().and_then(|d| d.race) };
+        if let Some(race) = race {
             if let Some(uninit) = race.uninit {
                 // SAFETY: the fixture retains the checked ship through its typed teardown.
                 unsafe {

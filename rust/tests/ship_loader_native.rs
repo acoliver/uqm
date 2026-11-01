@@ -6,7 +6,7 @@ mod battle_context;
 mod battle;
 use battle::Battle;
 use std::{
-    ffi::{c_void, CString},
+    ffi::CString,
     ptr,
     sync::atomic::{AtomicUsize, Ordering},
 };
@@ -144,7 +144,7 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
             assert!(load_ship(SPECIES_ID_ARILOU_ID, 1).is_none());
             let mut loaded = load_ship(SPECIES_ID_ARILOU_ID, 0).unwrap();
             assert!(loaded.race.is_some());
-            (*loaded).race = Some(&TEARDOWN_RACE);
+            loaded.race = Some(&TEARDOWN_RACE);
             uqm_rust::collections::observation::enable();
             uqm_rust::collections::observation::drain();
             unload_ship(loaded, 1, 1);

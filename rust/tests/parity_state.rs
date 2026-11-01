@@ -43,8 +43,20 @@ impl std::ops::DerefMut for DescriptorRecord {
     }
 }
 fn install_descriptor(ship: &mut STARSHIP, value: RACE_DESC) -> DescriptorRecord {
+    release_descriptor(ship);
     ship.descriptor = Some(Box::new(value));
     DescriptorRecord(ship.descriptor_ptr())
+}
+
+fn release_descriptor(ship: &mut STARSHIP) {
+    if let Some(owned) = ship.descriptor.take() {
+        // Fixture resources are stack records; retire their identities before dropping the box.
+        observation::record(Event::ResourcesFree {
+            descriptor: std::ptr::from_ref(&*owned) as usize,
+            icons: true,
+            battle: true,
+        });
+    }
 }
 
 type Fields = BTreeMap<String, String>;
@@ -170,7 +182,7 @@ fn changed(before: &Fields, after: &Fields) -> Vec<String> {
 
 fn descriptor_fields(directory: &Path) {
     // SAFETY: all native records contain only scalar fields, optional callbacks and pointers.
-    let mut descriptor: RACE_DESC = unsafe { std::mem::zeroed() };
+    let descriptor: RACE_DESC = unsafe { std::mem::zeroed() };
     // SAFETY: STARSHIP contains integers, pointers and optional callbacks; zero is valid.
     let mut ship: STARSHIP = unsafe { std::mem::zeroed() };
     ship.SpeciesID = SPECIES_ID_EARTHLING_ID;
@@ -219,6 +231,7 @@ fn descriptor_fields(directory: &Path) {
     assert_characteristics(&after, "ships.0.0.characteristics");
     // SAFETY: detach stack records before they are dropped.
     unsafe {
+        release_descriptor(&mut ship);
         clear_queues();
     }
 }
@@ -323,7 +336,7 @@ fn race_custom_fields(directory: &Path) {
         // SAFETY: nuke_preprocess has the Native element signature.
         let human: uqm_rust::engine::battle::ElementFn = std::mem::transmute(human);
         let human = Some(uqm_rust::engine::battle::ElementHook::Native(human));
-        let mut descriptor: RACE_DESC = std::mem::zeroed();
+        let descriptor: RACE_DESC = std::mem::zeroed();
         {
             let pool = battle::Battle::new(8);
             let mut phoenix_object = battle::Object::new(&pool);
@@ -407,12 +420,14 @@ fn race_custom_fields(directory: &Path) {
         let (fields, _) = snapshot(directory);
         assert_eq!(fields["ships.0.0.custom.prev_facing"], "27");
         ship.SpeciesID = SPECIES_ID_ANDROSYNTH_ID;
-        ship.descriptor.as_deref_mut().unwrap().race_state =
-            uqm_rust::engine::battle::RaceState::Androsynth {
-                collision: Some(uqm_rust::engine::battle::CollisionHook::Native(
-                    known_collision(),
-                )),
-            };
+        ship.descriptor
+            .as_deref_mut()
+            .unwrap_or_else(|| panic!("installed descriptor"))
+            .race_state = uqm_rust::engine::battle::RaceState::Androsynth {
+            collision: Some(uqm_rust::engine::battle::CollisionHook::Native(
+                known_collision(),
+            )),
+        };
         let (fields, _) = snapshot(directory);
         assert!(fields["ships.0.0.custom.collision"].ends_with("::collision"));
         ship.SpeciesID = SPECIES_ID_MMRNMHRM_ID;
@@ -420,10 +435,12 @@ fn race_custom_fields(directory: &Path) {
         mmrnmhrm.race_state = uqm_rust::engine::battle::RaceState::Mmrnmhrm {
             alternate: sample_characteristics(),
         };
+        release_descriptor(&mut ship);
         ship.descriptor = Some(mmrnmhrm);
         let (fields, _) = snapshot(directory);
         assert_characteristics(&fields, "ships.0.0.custom.characteristics");
         sis_fields(directory, &mut ship);
+        release_descriptor(&mut ship);
         clear_queues();
     }
 }
@@ -459,8 +476,8 @@ unsafe fn sis_fields(directory: &Path, ship: &mut STARSHIP) {
     }
     ship.SpeciesID = SPECIES_ID_SIS_SHIP_ID;
     // SAFETY: the caller runs native initialization on the sole game thread.
-    let mut descriptor = unsafe { uqm_rust::ships::races::descriptor(SPECIES_ID_SIS_SHIP_ID) };
-    let mut descriptor = install_descriptor(ship, descriptor);
+    let descriptor = unsafe { uqm_rust::ships::races::descriptor(SPECIES_ID_SIS_SHIP_ID) };
+    let descriptor = install_descriptor(ship, descriptor);
     let (fields, _) = snapshot(directory);
     assert_eq!(fields["ships.0.0.custom.num_trackers"], "1");
     assert_eq!(fields["ships.0.0.custom.num_blasters"], "3");
@@ -514,7 +531,7 @@ unsafe fn sis_fields(directory: &Path, ship: &mut STARSHIP) {
             race.uninit.unwrap_or_else(|| panic!("SIS teardown"))(cx.world, &mut stats);
         });
     }
-    ship.descriptor = None;
+    release_descriptor(ship);
 }
 
 fn campaign_fields(directory: &Path) {
@@ -585,7 +602,7 @@ fn descriptor_assets(directory: &Path) {
     descriptor.ship_data.victory_ditty = &mut music;
     descriptor.race = uqm_rust::ships::races::race(SPECIES_ID_EARTHLING_ID);
     ship.SpeciesID = SPECIES_ID_EARTHLING_ID;
-    let mut descriptor = install_descriptor(&mut ship, descriptor);
+    install_descriptor(&mut ship, descriptor);
     ship.icons = frame_pointer;
     ship.race_strings = &mut strings;
     // SAFETY: the full local resource graph stays live until the snapshot returns.
@@ -609,6 +626,7 @@ fn descriptor_assets(directory: &Path) {
     asset_expectations(&fields);
     // SAFETY: detach all stack resource owners before returning.
     unsafe {
+        release_descriptor(&mut ship);
         clear_queues();
     }
 }
@@ -750,7 +768,10 @@ fn frameset_and_media_identity(directory: &Path) {
     assert_eq!(after["elements.0.current.farray.1.index"], "2");
     let replacement = *descriptor;
     let ship = &mut ship;
-    let _outgoing_descriptor = ship.descriptor.take().unwrap();
+    let _outgoing_descriptor = ship
+        .descriptor
+        .take()
+        .unwrap_or_else(|| panic!("outgoing frame owner"));
     let mut replacement = install_descriptor(ship, replacement);
     let element = &mut element;
     observe_test_frames(&replacement.ship_data.ship, "replacement-ship");
@@ -771,6 +792,12 @@ fn frameset_and_media_identity(directory: &Path) {
     media_identity(directory, &mut replacement);
     // SAFETY: all snapshots finished; detach stack nodes before returning.
     unsafe {
+        release_descriptor(ship);
+        observation::record(Event::ResourcesFree {
+            descriptor: std::ptr::from_ref(&*_outgoing_descriptor) as usize,
+            icons: true,
+            battle: true,
+        });
         clear_queues();
     }
 }
