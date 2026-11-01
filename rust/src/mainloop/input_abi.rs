@@ -33,20 +33,11 @@ impl Repeat {
     }
 }
 
-/// Wait at DoInput's native yield boundary without flushing partial draws.
-pub fn yield_input_loop(native_yield: impl FnOnce()) {
-    if crate::time::source::is_replay() {
-        // The native 1 ms sleep rounds up to one 840-Hz replay tick.
-        crate::time::source::advance_to(crate::time::source::now_ticks().saturating_add(1));
-    } else {
-        native_yield();
-    }
-}
-
 #[cfg(not(test))]
 pub(crate) mod live {
     #![allow(non_snake_case)]
     use super::*;
+    use crate::threading::pacing::yield_input_loop;
     use crate::c_bindings::controller_input::{
         CONTROLLER_INPUT_STATE as InputState, NUM_KEYS as FLIGHT_KEYS, NUM_MENU_KEYS as MENU_KEYS,
     };

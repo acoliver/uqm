@@ -68,7 +68,7 @@ pub(crate) fn connect(request: &Request) -> Result<(), String> {
         // SAFETY: called on the menu's game thread while the session is live.
         unsafe { state.netplay.net_input_blocking(1) };
         // This nested input wait must advance replay time so async alarms run.
-        crate::mainloop::input_abi::yield_input_loop(std::thread::yield_now);
+        crate::threading::pacing::yield_input_loop(std::thread::yield_now);
     }
     Ok(())
 }

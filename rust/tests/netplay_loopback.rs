@@ -268,16 +268,16 @@ fn run_peers(manifest: &Path, root_path: &Path) -> Result<()> {
         Bridge::new(b_socket, b_net, client)?,
     ];
     loop {
-        for bridge in &mut bridges {
-            bridge.poll().map_err(|error| {
-                format!(
-                    "forward peer: {error}; logs: {}\n{}",
-                    fs::read_to_string(root_path.join("0/stderr.log"))
-                        .unwrap_or_else(|error| panic!("peer log: {error}")),
-                    fs::read_to_string(root_path.join("1/stderr.log"))
-                        .unwrap_or_else(|error| panic!("peer log: {error}"))
-                )
-            })?;
+        let error = bridges.iter_mut().find_map(|bridge| bridge.poll().err());
+        if let Some(error) = error {
+            drop(bridges);
+            while Instant::now() < deadline {
+                if a.0.try_wait()?.is_some() && b.0.try_wait()?.is_some() {
+                    break;
+                }
+                std::thread::yield_now();
+            }
+            return Err(format!("forward peer: {error}").into());
         }
         let statuses = [a.0.try_wait()?, b.0.try_wait()?];
         for (peer, status) in statuses.iter().enumerate() {

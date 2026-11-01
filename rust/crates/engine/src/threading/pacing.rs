@@ -116,6 +116,16 @@ pub trait PacingEnv {
     fn report(&mut self, line: &str);
 }
 
+/// Wait at DoInput's native yield boundary without flushing partial draws.
+pub fn yield_input_loop(native_yield: impl FnOnce()) {
+    if crate::time::source::is_replay() {
+        // The native 1 ms sleep rounds up to one 840-Hz replay tick.
+        crate::time::source::advance_to(crate::time::source::now_ticks().saturating_add(1));
+    } else {
+        native_yield();
+    }
+}
+
 /// Sleep until the game clock reaches `wake_time`, servicing async work and
 /// the display on every pass. The display is serviced even when `wake_time`
 /// has already passed, since nothing else drains the draw command queue.

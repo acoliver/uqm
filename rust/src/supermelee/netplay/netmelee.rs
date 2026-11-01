@@ -87,15 +87,11 @@ pub unsafe extern "C" fn negotiateReady(
         next,
         done: false,
     };
-    Netplay_localReady(
-        conn,
-        Some(ready_transition),
-        (&raw mut state).cast(),
-        notify,
-    );
+    let arg = (&raw mut state).cast();
+    Netplay_localReady(conn, Some(ready_transition), arg, notify);
     flushPacketQueue(conn);
-    if !state.done {
-        DoInput((&raw mut state).cast(), 0);
+    if !state.done && !(*(*conn).session).replay_wait(|| transition_input(arg) != 0) {
+        DoInput(arg, 0);
     }
     (*conn).stateFlags.connected
 }
@@ -109,14 +105,15 @@ pub unsafe extern "C" fn waitReset(conn: *mut NetConnection, next: NetState) -> 
         next,
         done: false,
     };
-    Netplay_setResetCallback(conn, Some(reset_transition), (&raw mut state).cast());
+    let arg = (&raw mut state).cast();
+    Netplay_setResetCallback(conn, Some(reset_transition), arg);
     if !state.done {
         if !Netplay_isLocalReset(conn) {
             Netplay_localReset(conn, NetplayResetReason_ResetReason_manualReset);
             flushPacketQueue(conn);
         }
-        if !state.done {
-            DoInput((&raw mut state).cast(), 0);
+        if !state.done && !(*(*conn).session).replay_wait(|| transition_input(arg) != 0) {
+            DoInput(arg, 0);
         }
     }
     (*conn).stateFlags.connected
@@ -154,8 +151,11 @@ pub unsafe extern "C" fn waitReady(conn: *mut NetConnection) -> bool {
         arg: (*conn).readyCallbackArg,
         done: false,
     };
-    NetConnection_setReadyCallback(conn, Some(wait_ready_callback), (&raw mut state).cast());
-    DoInput((&raw mut state).cast(), 0);
+    let arg = (&raw mut state).cast();
+    NetConnection_setReadyCallback(conn, Some(wait_ready_callback), arg);
+    if !(*(*conn).session).replay_wait(|| wait_ready_input(arg) != 0) {
+        DoInput(arg, 0);
+    }
     (*conn).stateFlags.connected
 }
 

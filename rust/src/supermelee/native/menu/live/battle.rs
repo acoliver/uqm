@@ -39,7 +39,7 @@ pub(super) unsafe extern "C" fn confirm(state: *mut MELEE_STATE) -> u32 {
     (*state).netplay.close_disconnected_connections();
     (*state).netplay.net_input();
     SleepThread(840 / 120);
-    let count = ready();
+    let count = session.replay_confirmation(|| ready());
     if count == -1 {
         (*state).netplay.cancel_confirmations();
         (*state).netplay.flush_packet_queues();
