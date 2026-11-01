@@ -140,7 +140,12 @@ unsafe fn thrust_heading(_battle: &Battle, heading: COUNT, flags: u16) -> ([i32;
         oracle.ship_mut().ShipFacing = heading;
         oracle.ship_mut().cur_status_flags = flags;
         let status = uqm_rust::app::bridge::enter(|cx| {
-            inertial_thrust(cx, cx.elements().id(oracle.el().cast()).unwrap())
+            inertial_thrust(
+                cx,
+                cx.elements()
+                    .id(oracle.el().cast())
+                    .unwrap_or_else(|| panic!("fixture subject")),
+            )
         });
         (velocity_fields(&oracle.element_mut().velocity), status)
     }

@@ -26,7 +26,10 @@ pub unsafe fn unlink(handle: *mut std::ffi::c_void) {
     // SAFETY: callers own the serialized fixture and pass a currently linked allocation.
     unsafe {
         uqm_rust::app::bridge::enter(|cx| {
-            let id = cx.elements().id(handle).unwrap();
+            let id = cx
+                .elements()
+                .id(handle)
+                .unwrap_or_else(|| panic!("fixture element"));
             cx.unlink(id);
         });
     }

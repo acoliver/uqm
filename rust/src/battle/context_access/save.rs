@@ -34,7 +34,9 @@ pub(crate) unsafe fn read_flagship_facing(
         QueueKind::DisplayList,
         crate::engine::battle::access::observe::ELEMENT_LINKS,
     )?;
-    let Some((state, owner)) = display_element(display_list, handle) else {
+    // SAFETY: the caller retains the validated display pool for this lookup.
+    let projection = unsafe { display_element(display_list, handle) };
+    let Some((state, owner)) = projection else {
         return Err(HyperSaveError::ElementNotInDisplayList);
     };
     if state.flags & crate::ships::native::abi::PLAYER_SHIP as u16 == 0 {
@@ -58,16 +60,19 @@ unsafe fn display_element(
     _queue: &CQueue,
     handle: *mut c_void,
 ) -> Option<(crate::engine::battle::views::ElementState, *mut c_void)> {
-    crate::app::bridge::enter(|cx| {
-        let mut next = cx.elements().head();
-        while let Some(id) = next {
-            if cx.elements().raw(id) == handle {
-                return Some((cx.element(id), cx.element_parent_address(id)));
+    // SAFETY: the caller owns the published game-thread context.
+    unsafe {
+        crate::app::bridge::enter(|cx| {
+            let mut next = cx.elements().head();
+            while let Some(id) = next {
+                if cx.elements().raw(id) == handle {
+                    return Some((cx.element(id), cx.element_parent_address(id)));
+                }
+                next = cx.elements().succ(id);
             }
-            next = cx.elements().succ(id);
-        }
-        None
-    })
+            None
+        })
+    }
 }
 #[cfg(test)]
 unsafe fn display_element(
@@ -87,9 +92,12 @@ unsafe fn display_element(
         .into_iter()
         .find(|p| p.cast::<c_void>() == handle)
         .map(|p| {
-            (
-                crate::engine::battle::access::observe_element_record(&*p.cast::<ELEMENT>()),
-                (*p.cast::<ELEMENT>()).pParent,
-            )
+            // SAFETY: walk_layout validated this retained fixture record.
+            unsafe {
+                (
+                    crate::engine::battle::access::observe_element_record(&*p.cast::<ELEMENT>()),
+                    (*p.cast::<ELEMENT>()).pParent,
+                )
+            }
         })
 }

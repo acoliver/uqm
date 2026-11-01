@@ -787,13 +787,16 @@ impl Drop for PoolElement {
 /// # Safety
 /// The supplied pointer is a retained fixture record owned by the active battle.
 pub unsafe fn put(handle: *mut std::ffi::c_void) {
-    uqm_rust::app::bridge::enter(|cx| {
-        let id = cx
-            .elements()
-            .id(handle)
-            .unwrap_or_else(|| panic!("fixture element"));
-        cx.put(id);
-    });
+    // SAFETY: the fixture owns the published context and this allocated slot.
+    unsafe {
+        uqm_rust::app::bridge::enter(|cx| {
+            let id = cx
+                .elements()
+                .id(handle)
+                .unwrap_or_else(|| panic!("fixture element"));
+            cx.put(id);
+        });
+    }
 }
 /// Cast a retained fixture handle without dereferencing it.
 pub fn element(handle: *mut std::ffi::c_void) -> *mut uqm_rust::engine::battle::record::ELEMENT {

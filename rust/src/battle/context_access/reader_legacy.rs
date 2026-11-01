@@ -11,9 +11,12 @@ use std::ffi::c_void;
 /// # Safety
 /// The game thread retains the initialized battle context and all resources used by this call.
 pub unsafe fn get_encounter_star_ship(last: Option<ShipId>, player: u16) -> Option<ShipId> {
-    get_encounter_star_ship_with_picker(last, player, |player, result| {
-        crate::supermelee::native::battle_picker::live::GetNextMeleeStarShip(player, result)
-    })
+    // SAFETY: the game-thread picker retains its selected ship through this synchronous handoff.
+    unsafe {
+        get_encounter_star_ship_with_picker(last, player, |player, result| {
+            crate::supermelee::native::battle_picker::live::GetNextMeleeStarShip(player, result)
+        })
+    }
 }
 
 /// # Safety

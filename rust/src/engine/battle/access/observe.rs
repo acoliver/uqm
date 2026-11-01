@@ -78,7 +78,8 @@ pub(crate) fn element(table: &ElementTable, id: ElementId) -> ElementObservation
 #[cfg(not(test))]
 pub(crate) unsafe fn retired_element_address(id: ElementId) -> usize {
     let pointer = &raw const super::super::legacy::disp_q;
-    let queue = &*pointer;
+    // SAFETY: the caller retains the initialized pool authority.
+    let queue = unsafe { &*pointer };
     assert!(
         !queue.pq_tab.is_null(),
         "Pkunk snapshot pool is not initialized"
@@ -126,7 +127,8 @@ pub(crate) unsafe fn ship<'a>(
     ships: &LinkQueue<'a, Starship>,
     id: LinkId<Starship>,
 ) -> ShipRecordObservation<'a> {
-    let s = &*ships.raw(id).cast::<STARSHIP>();
+    // SAFETY: the checked link names a retained ship slot.
+    let s = unsafe { &*ships.raw(id).cast::<STARSHIP>() };
     ShipRecordObservation {
         state: ShipState::decode(s),
         pick: ships.get(id),
@@ -150,12 +152,11 @@ pub(crate) unsafe fn ship<'a>(
                 state: &d.race_state,
             }),
         #[cfg(not(test))]
-        icons: s
-            .icons
-            .cast::<crate::graphics::native_abi::frame_desc>()
-            .as_ref(),
+        // SAFETY: the caller retains the loaded icon array for the observation lifetime.
+        icons: unsafe { s.icons.cast::<crate::graphics::native_abi::frame_desc>().as_ref() },
         #[cfg(not(test))]
-        strings: s.race_strings.as_ref(),
+        // SAFETY: the caller retains this ship's loaded string table for the observation lifetime.
+        strings: unsafe { s.race_strings.as_ref() },
         #[cfg(test)]
         lifetime: std::marker::PhantomData,
     }

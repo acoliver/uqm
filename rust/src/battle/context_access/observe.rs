@@ -36,7 +36,8 @@ pub(crate) unsafe fn elements(
     }
     #[cfg(test)]
     for pointer in walk_layout(queue, QueueKind::DisplayList, ELEMENT_LINKS).unwrap() {
-        result.push(ElementObservation::decode(&*pointer.cast()));
+        // SAFETY: validation retained this fixture pool for the decode.
+        result.push(unsafe { ElementObservation::decode(&*pointer.cast()) });
     }
     result
 }
@@ -98,7 +99,8 @@ impl<'a> CustomData<'a> {
                 saved_death,
             } => {
                 let address = phoenix.map_or(0, |id| {
-                    crate::engine::battle::access::observe::retired_element_address(id)
+                    // SAFETY: the retained Pkunk state names a slot in the initialized display pool.
+                    unsafe { crate::engine::battle::access::observe::retired_element_address(id) }
                 });
                 return Self::NativePkunk {
                     phoenix: address,
@@ -128,7 +130,8 @@ pub(crate) unsafe fn ships<'a>(queue: &'a CQueue) -> Vec<ShipObservation<'a>> {
     let mut result = Vec::new();
     let mut next = ships.head();
     while let Some(id) = next {
-        let s = crate::engine::battle::access::observe::ship(&ships, id);
+        // SAFETY: validated immutable ship storage and its loaded resources remain live.
+        let s = unsafe { crate::engine::battle::access::observe::ship(&ships, id) };
         next = ships.succ(id);
         #[cfg(not(test))]
         let (race, icons, strings) = {
@@ -141,7 +144,8 @@ pub(crate) unsafe fn ships<'a>(queue: &'a CQueue) -> Vec<ShipObservation<'a>> {
                 intel: d.intel,
                 callbacks: d.callbacks,
                 code_loaded: d.code_loaded,
-                custom: CustomData::decode(s.pick.species, d.state),
+                // SAFETY: the observation retains this live descriptor and its race state.
+                custom: unsafe { CustomData::decode(s.pick.species, d.state) },
             });
             (race, s.icons, s.strings)
         };

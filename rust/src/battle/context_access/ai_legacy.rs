@@ -28,7 +28,8 @@ pub(crate) unsafe fn computer_intelligence(
     }
     let player = context.playerNr;
     let control = if id.is_none() {
-        crate::supermelee::c_bridge::PlayerControl[player as usize]
+        // SAFETY: player controls are retained on the game thread.
+        unsafe { crate::supermelee::c_bridge::PlayerControl[player as usize] }
     } else {
         0
     };

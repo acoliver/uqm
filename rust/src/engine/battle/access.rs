@@ -684,7 +684,9 @@ mod intersection_projection_tests {
     fn live_helpers_preserve_record_coordinates_and_pool_addresses() {
         use crate::engine::battle::{Battle, Cx, World};
         use crate::ships::native::abi::*;
+        // SAFETY: a zeroed uninitialized queue has no allocated storage.
         let mut queue: super::super::record::QUEUE = unsafe { std::mem::zeroed() };
+        // SAFETY: a zeroed group queue has no allocated storage.
         let mut groups: super::super::record::QUEUE = unsafe { std::mem::zeroed() };
         let mut activity = 0;
         // SAFETY: the local queue authorities and their pool remain exclusive for this test.
@@ -781,18 +783,28 @@ pub(crate) unsafe fn insert_primitive(
     index: u16,
     before: u16,
 ) {
-    primitives::insert_prim_links(
-        (&raw mut super::legacy::DisplayArray).cast(),
-        list,
-        index,
-        before,
-    );
+    // SAFETY: the caller retains the initialized storage and resources for this synchronous projection.
+    unsafe {
+        primitives::insert_prim_links(
+            (&raw mut super::legacy::DisplayArray).cast(),
+            list,
+            index,
+            before,
+        );
+    }
 }
 /// # Safety
 /// The list belongs to the live display primitive pool and the drawing context is initialized.
 #[cfg(not(test))]
 pub(crate) unsafe fn draw_display_batch(links: crate::graphics::native_abi::PRIM_LINKS) {
-    crate::graphics::frame_abi::DrawBatch((&raw mut super::legacy::DisplayArray).cast(), links, 0);
+    // SAFETY: the caller retains the initialized storage and resources for this synchronous projection.
+    unsafe {
+        crate::graphics::frame_abi::DrawBatch(
+            (&raw mut super::legacy::DisplayArray).cast(),
+            links,
+            0,
+        );
+    }
 }
 
 #[cfg(not(test))]
@@ -805,31 +817,34 @@ impl Cx<'_> {
         raw: &mut [super::record::EVALUATE_DESC],
         count: u16,
     ) {
-        crate::app::bridge::enter(|cx| {
-            let ship = cx.ship_id(parent);
-            let mut subject = cx.decode_subject(&*element);
-            let mut concerns = raw
-                .iter()
-                .map(|item| super::Concern {
-                    object: cx.elements().id(item.ObjectPtr.cast()),
-                    facing: item.facing,
-                    which_turn: item.which_turn,
-                    movement: item.MoveState,
-                })
-                .collect::<Vec<_>>();
-            cx.run_fixture_intelligence(ship, &mut subject, &mut concerns, count);
-            *element = cx.encode_subject(&subject);
-            for (raw, item) in raw.iter_mut().zip(concerns) {
-                *raw = super::record::EVALUATE_DESC {
-                    ObjectPtr: item
-                        .object
-                        .map_or(std::ptr::null_mut(), |id| cx.elements().raw(id).cast()),
-                    facing: item.facing,
-                    which_turn: item.which_turn,
-                    MoveState: item.movement,
-                };
-            }
-        });
+        // SAFETY: the caller retains the initialized storage and resources for this synchronous projection.
+        unsafe {
+            crate::app::bridge::enter(|cx| {
+                let ship = cx.ship_id(parent);
+                let mut subject = cx.decode_subject(&*element);
+                let mut concerns = raw
+                    .iter()
+                    .map(|item| super::Concern {
+                        object: cx.elements().id(item.ObjectPtr.cast()),
+                        facing: item.facing,
+                        which_turn: item.which_turn,
+                        movement: item.MoveState,
+                    })
+                    .collect::<Vec<_>>();
+                cx.run_fixture_intelligence(ship, &mut subject, &mut concerns, count);
+                *element = cx.encode_subject(&subject);
+                for (raw, item) in raw.iter_mut().zip(concerns) {
+                    *raw = super::record::EVALUATE_DESC {
+                        ObjectPtr: item
+                            .object
+                            .map_or(std::ptr::null_mut(), |id| cx.elements().raw(id).cast()),
+                        facing: item.facing,
+                        which_turn: item.which_turn,
+                        MoveState: item.movement,
+                    };
+                }
+            });
+        }
     }
 }
 /// # Safety
@@ -842,14 +857,17 @@ pub unsafe extern "C" fn PlotIntercept(
     turns: u16,
     margin: u16,
 ) -> u16 {
-    crate::app::bridge::enter(|cx| {
-        cx.plot_intercept(
-            &cx.legacy_intercept_subject(&*a),
-            &cx.legacy_intercept_subject(&*b),
-            turns,
-            margin,
-        )
-    })
+    // SAFETY: the caller retains the initialized storage and resources for this synchronous projection.
+    unsafe {
+        crate::app::bridge::enter(|cx| {
+            cx.plot_intercept(
+                &cx.legacy_intercept_subject(&*a),
+                &cx.legacy_intercept_subject(&*b),
+                turns,
+                margin,
+            )
+        })
+    }
 }
 
 #[cfg(not(test))]
@@ -908,8 +926,11 @@ pub(crate) mod live_queues {
     /// Game thread only. The caller may read the queue only while no other code is
     /// changing it.
     pub unsafe fn player_ships(player: usize) -> *const Queue {
-        assert!(player < 2, "race_q has no side {player}");
-        ptr::addr_of!(queues::race_q).cast::<Queue>().add(player)
+        // SAFETY: the caller retains the initialized storage and resources for this synchronous projection.
+        unsafe {
+            assert!(player < 2, "race_q has no side {player}");
+            ptr::addr_of!(queues::race_q).cast::<Queue>().add(player)
+        }
     }
 
     /// `&disp_q`, the queue of every live `ELEMENT`.
