@@ -180,7 +180,6 @@ impl Bridge {
 }
 fn join_peers(
     listener: TcpListener,
-    port: u16,
     deadline: Instant,
     ready_file: &Path,
 ) -> Result<[TcpStream; 2]> {
@@ -197,8 +196,14 @@ fn join_peers(
             }
         }
         ready_file.read_to_string(&mut readiness)?;
-        if sockets[1].is_none() && readiness.contains("netplay fixture listener ready") {
-            sockets[1] = Some(TcpStream::connect(("127.0.0.1", port))?);
+        if sockets[1].is_none() {
+            if let Some(port) = readiness.split_inclusive('\n').find_map(|line| {
+                line.strip_suffix('\n')?
+                    .strip_prefix("netplay fixture listener ready ")
+            }) {
+                let port = port.parse::<u16>()?;
+                sockets[1] = Some(TcpStream::connect(("127.0.0.1", port))?);
+            }
         }
         assert!(Instant::now() < deadline, "peer startup deadline");
         std::thread::yield_now();
@@ -251,15 +256,11 @@ fn run_peers(manifest: &Path, root_path: &Path) -> Result<()> {
     .extract(root_path.join("content"))?;
     fs::copy(source.join("version"), root_path.join("content/version"))?;
     let listener = TcpListener::bind("127.0.0.1:0")?;
-    let reserved = TcpListener::bind("127.0.0.1:0")?;
-    let port = reserved.local_addr()?.port();
     let mut a = start_replay(root_path, 0, listener.local_addr()?.port())?;
-    drop(reserved);
-    let mut b = start_replay(root_path, 1, port)?;
+    let mut b = start_replay(root_path, 1, 0)?;
     let deadline = Instant::now() + Duration::from_secs(420);
-    let [a_socket, b_socket] =
-        join_peers(listener, port, deadline, &root_path.join("1/stderr.log"))
-            .map_err(|error| format!("join peers: {error}"))?;
+    let [a_socket, b_socket] = join_peers(listener, deadline, &root_path.join("1/stderr.log"))
+        .map_err(|error| format!("join peers: {error}"))?;
     let (mut a_net, mut b_net) = LoopbackNet::pair();
     let server = a_net.listen("battle")?;
     let client = b_net.connect("loopback", "battle")?;

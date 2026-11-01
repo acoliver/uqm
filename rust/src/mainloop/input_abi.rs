@@ -34,10 +34,12 @@ impl Repeat {
 }
 
 #[cfg(not(test))]
+use crate::threading::pacing::yield_input_loop;
+
+#[cfg(not(test))]
 pub(crate) mod live {
     #![allow(non_snake_case)]
     use super::*;
-    use crate::threading::pacing::yield_input_loop;
     use crate::c_bindings::controller_input::{
         CONTROLLER_INPUT_STATE as InputState, NUM_KEYS as FLIGHT_KEYS, NUM_MENU_KEYS as MENU_KEYS,
     };

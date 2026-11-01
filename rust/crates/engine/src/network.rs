@@ -83,13 +83,19 @@ impl crate::host::Net for NativeNet {
         Ok(self.insert(PortEntry::Connecting { result, cancel }))
     }
     fn listen(&mut self, port: &str) -> std::io::Result<crate::host::Connection> {
-        let port = port_number(port)?;
+        let mut port = port_number(port)?;
+        let hosts = if port == 0 {
+            ["0.0.0.0", "::"]
+        } else {
+            ["::", "0.0.0.0"]
+        };
         let mut listeners = Vec::new();
         let mut last_error = None;
-        for host in ["::", "0.0.0.0"] {
+        for host in hosts {
             match std::net::TcpListener::bind((host, port)) {
                 Ok(listener) => {
                     listener.set_nonblocking(true)?;
+                    port = listener.local_addr()?.port();
                     listeners.push(listener);
                 }
                 Err(error) => last_error = Some(error),
@@ -99,6 +105,13 @@ impl crate::host::Net for NativeNet {
             return Err(last_error.unwrap_or_else(|| panic!("both address families attempted")));
         }
         Ok(self.insert(PortEntry::Listening(listeners)))
+    }
+    fn local_port(&self, connection: crate::host::Connection) -> std::io::Result<u16> {
+        match &self.entries[&connection] {
+            PortEntry::Listening(listeners) => Ok(listeners[0].local_addr()?.port()),
+            PortEntry::Connected(stream) => Ok(stream.local_addr()?.port()),
+            PortEntry::Connecting { .. } => Err(std::io::ErrorKind::NotConnected.into()),
+        }
     }
     fn poll(&mut self, connection: crate::host::Connection) -> std::io::Result<bool> {
         let stream = match self

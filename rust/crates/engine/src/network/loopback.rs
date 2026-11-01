@@ -69,6 +69,9 @@ impl Net for LoopbackNet {
         bus.listeners.insert(port.to_owned(), listener);
         Ok(listener)
     }
+    fn local_port(&self, _connection: Connection) -> io::Result<u16> {
+        Err(io::ErrorKind::Unsupported.into())
+    }
     fn poll(&mut self, connection: Connection) -> io::Result<bool> {
         Ok(self.bus.borrow().streams[&connection].peer.is_some())
     }

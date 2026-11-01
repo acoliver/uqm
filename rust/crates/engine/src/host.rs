@@ -9,6 +9,8 @@ pub struct Connection(pub u64);
 pub trait Net {
     fn connect(&mut self, host: &str, port: &str) -> io::Result<Connection>;
     fn listen(&mut self, port: &str) -> io::Result<Connection>;
+    /// Bound OS port, including an ephemeral listener selected with port zero.
+    fn local_port(&self, connection: Connection) -> io::Result<u16>;
     fn poll(&mut self, connection: Connection) -> io::Result<bool>;
     fn send(&mut self, connection: Connection, bytes: &[u8]) -> io::Result<usize>;
     fn recv(&mut self, connection: Connection, bytes: &mut [u8]) -> io::Result<usize>;

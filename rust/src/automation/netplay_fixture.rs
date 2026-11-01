@@ -10,8 +10,8 @@ pub struct Request {
 }
 impl Request {
     pub fn validate(&self) -> Result<(), String> {
-        if self.remote_player > 1 || self.port == 0 {
-            return Err("netplay fixture requires player 0 or 1 and a nonzero port".into());
+        if self.remote_player > 1 || (!self.server && self.port == 0) {
+            return Err("netplay fixture requires player 0 or 1 and a nonzero client port".into());
         }
         Ok(())
     }
@@ -40,18 +40,24 @@ pub(crate) fn connect(request: &Request) -> Result<(), String> {
     state
         .netplay
         .configure_peer(side, request.server, request.port);
+    let session = &state.netplay;
+    let remote = request.remote_player;
     // SAFETY: the menu and session outlive this connection and its callbacks.
-    let conn = unsafe {
-        state
-            .netplay
-            .open_player_network_connection(request.remote_player, P_MELEE_STATE.cast())
+    let (conn, socket) = unsafe {
+        let conn = session.open_player_network_connection(remote, P_MELEE_STATE.cast());
+        let socket = conn.as_ref().and_then(|conn| conn.socket);
+        (conn, socket)
     };
     if conn.is_null() {
         return Err("could not open netplay fixture endpoint".into());
     }
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
     if request.server {
-        eprintln!("netplay fixture listener ready");
+        let socket = socket.unwrap_or_else(|| panic!("opened endpoint has no socket"));
+        let port = session
+            .local_port(socket)
+            .map_err(|error| format!("fixture port: {error}"))?;
+        eprintln!("netplay fixture listener ready {port}");
     }
     loop {
         // SAFETY: session teardown has not run and no callback deletes connections
@@ -122,7 +128,12 @@ mod tests {
                     server: true,
                     port,
                 };
-                assert_eq!(request.validate().is_ok(), remote_player < 2 && port != 0);
+                assert_eq!(request.validate().is_ok(), remote_player < 2);
+                let client = Request {
+                    server: false,
+                    ..request
+                };
+                assert_eq!(client.validate().is_ok(), remote_player < 2 && port != 0);
             }
         }
         assert!(connect(&Request {
