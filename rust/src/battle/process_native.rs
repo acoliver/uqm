@@ -12,6 +12,8 @@ pub mod invoke_collision;
 pub mod invoke_element;
 use crate::engine::battle::access::primitives;
 mod queue_view;
+#[cfg(test)]
+use primitives::insert_prim_links;
 use primitives::{make_links, END};
 
 const SKIP_COLLISION: u16 = NONSOLID as u16 | DISAPPEARING as u16;

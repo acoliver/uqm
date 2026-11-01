@@ -23,12 +23,7 @@ pub(crate) unsafe fn uninit_elements() {
     }
 }
 
-/// # Safety
-/// Run while initializing the game-thread-owned world.
-#[cfg(not(test))]
-pub(crate) unsafe fn bind_display_array(game: &mut super::schema::GAME_STATE) {
-    // SAFETY: the caller guarantees exclusive access at this pool lifecycle boundary.
-    unsafe {
-        game.DisplayArray = (&raw mut record::DisplayArray).cast();
-    }
+/// Bind the retained display storage while initializing the game-thread-owned world.
+pub(crate) fn bind_display_array(game: &mut super::schema::GAME_STATE) {
+    game.DisplayArray = (&raw mut record::DisplayArray).cast();
 }

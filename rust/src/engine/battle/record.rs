@@ -571,6 +571,7 @@ impl RaceDesc {
     pub(crate) fn from_storage(raw: Box<RACE_DESC>) -> Self {
         Self { raw }
     }
+    #[cfg(not(test))]
     pub(crate) fn into_storage(self) -> Box<RACE_DESC> {
         self.raw
     }
@@ -589,9 +590,11 @@ impl RaceDesc {
     pub fn callbacks(&self) -> [usize; 5] {
         self.raw.callbacks()
     }
+    #[cfg(not(test))]
     pub(crate) fn data_mut(&mut self) -> &mut DATA_STUFF {
         &mut self.raw.ship_data
     }
+    #[cfg(not(test))]
     pub(crate) fn fleet(&self) -> &FLEET_STUFF {
         &self.raw.fleet
     }

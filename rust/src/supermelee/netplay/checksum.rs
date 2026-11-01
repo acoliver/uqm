@@ -43,6 +43,7 @@ pub fn crc_process_element(state: &mut CrcState, value: &ElementState) {
 
 /// # Safety
 /// `state` must be writable; the display queue must not be mutated during traversal.
+#[cfg(not(test))]
 pub unsafe fn crc_process_display_queue(state: &mut CrcState) {
     crate::app::bridge::enter(|cx| {
         let mut link = cx.elements().head();
@@ -55,6 +56,7 @@ pub unsafe fn crc_process_display_queue(state: &mut CrcState) {
 
 /// # Safety
 /// `state` must be writable; called on the game thread owning the RNG.
+#[cfg(not(test))]
 pub unsafe fn crc_process_rng(state: &mut CrcState) {
     let seed = TFB_SeedRandom(0);
     crc_process_u32(state, seed);
@@ -63,6 +65,7 @@ pub unsafe fn crc_process_rng(state: &mut CrcState) {
 
 /// # Safety
 /// Called on the game thread with a writable CRC state and stable display queue.
+#[cfg(not(test))]
 pub unsafe fn crc_process_game_state(state: &mut CrcState) {
     crc_process_rng(state);
     crc_process_display_queue(state);

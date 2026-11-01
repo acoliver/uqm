@@ -237,7 +237,9 @@ pub unsafe fn InitGlobData() {
     ptr::write_bytes(ptr::addr_of_mut!(GlobData), 0, 1);
     GlobData.Game_state.glob_flags = flags;
     ffi::rust_init_game_state();
-    crate::engine::battle::access::lifecycle::bind_display_array(&mut GlobData.Game_state);
+    crate::engine::battle::access::lifecycle::bind_display_array(&mut *ptr::addr_of_mut!(
+        GlobData.Game_state
+    ));
 }
 
 /// # Safety

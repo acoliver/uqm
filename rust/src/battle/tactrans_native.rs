@@ -482,7 +482,7 @@ pub(crate) mod engine {
             // SAFETY: the battle sound bank and source element remain live during playback.
             unsafe {
                 let sound = SetAbsStringTableIndex((*cx.kernel()).game_sounds, 1);
-                crate::battle::sounds::engine::play_sound(
+                crate::battle::sounds::engine::play_sound_in_context(
                     cx,
                     sound,
                     position,

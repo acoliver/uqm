@@ -431,6 +431,10 @@ pub fn read_locdata(ld: &CLocData) -> CommData {
 // Tests — unit-testable without C linkage
 // ===========================================================================
 
+const _: () = assert!(
+    CGameState::DISPLAY_ARRAY_OFFSET == crate::engine::battle::schema::DISPLAY_ARRAY_OFFSET
+);
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -523,7 +527,3 @@ mod tests {
         assert_eq!(TextValign::from(99), TextValign::Top);
     }
 }
-
-const _: () = assert!(
-    CGameState::DISPLAY_ARRAY_OFFSET == crate::engine::battle::schema::DISPLAY_ARRAY_OFFSET
-);

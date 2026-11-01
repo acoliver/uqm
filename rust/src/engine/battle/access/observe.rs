@@ -3,8 +3,10 @@ use super::super::{
     link_queue::{LinkId, LinkQueue, Starship},
     record::*,
     views::*,
-    ElementId, ElementTable,
 };
+#[cfg(not(test))]
+use super::super::{ElementId, ElementTable};
+#[cfg(not(test))]
 use std::ffi::c_void;
 pub(crate) const SHIP_LINKS: crate::collections::queue::LinkLayout =
     crate::collections::queue::LinkLayout {
@@ -27,6 +29,7 @@ pub(crate) const ELEMENT_LINKS: crate::collections::queue::LinkLayout =
         },
     };
 impl super::super::Cx<'_> {
+    #[cfg(not(test))]
     pub(crate) fn element_parent_address(&self, id: ElementId) -> *mut c_void {
         self.b.elements[id].pParent
     }
@@ -67,6 +70,7 @@ impl ElementObservation {
     }
 }
 
+#[cfg(not(test))]
 pub(crate) fn element(table: &ElementTable, id: ElementId) -> ElementObservation {
     // SAFETY: the checked table retains the decoded record through this synchronous copy.
     unsafe { ElementObservation::decode(&table[id]) }

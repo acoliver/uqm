@@ -372,9 +372,6 @@ impl Cx<'_> {
 }
 
 #[cfg(not(test))]
-impl Cx<'_> {}
-
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn frame_count(&self, frame: Frame) -> u16 {
         // SAFETY: opaque frames originate in retained battle resources, or are absent.
@@ -561,7 +558,7 @@ pub(crate) unsafe fn observe_element_record(record: &super::record::ELEMENT) -> 
 
 /// # Safety
 /// The caller retains the ship pool throughout this staging observation.
-#[cfg(not(test))]
+#[cfg(test)]
 pub(crate) unsafe fn observe_ship_record(record: &super::record::STARSHIP) -> ShipState {
     ShipState::decode(record)
 }
@@ -584,9 +581,6 @@ impl Cx<'_> {
         crate::collections::observation::image!(copy; self.b.elements[destination].current.image.farray, self.b.elements[source].next.image.farray);
     }
 }
-
-#[cfg(not(test))]
-impl Cx<'_> {}
 
 impl super::Battle {
     /// # Safety
@@ -800,9 +794,6 @@ pub(crate) unsafe fn insert_primitive(
 pub(crate) unsafe fn draw_display_batch(links: crate::graphics::native_abi::PRIM_LINKS) {
     crate::graphics::frame_abi::DrawBatch((&raw mut super::legacy::DisplayArray).cast(), links, 0);
 }
-
-#[cfg(not(test))]
-impl Cx<'_> {}
 
 #[cfg(not(test))]
 impl Cx<'_> {

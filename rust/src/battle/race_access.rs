@@ -66,13 +66,13 @@ impl Cx<'_> {
     }
 
     pub fn play_ship_sound(&mut self, ship: ShipId, index: u16, source: ElementId, priority: u8) {
-        use crate::battle::sounds::engine::{play_sound, position};
+        use crate::battle::sounds::engine::{play_sound_in_context, position};
         let sounds = self.desc(ship).ship_data.ship_sounds;
         let position = position(self, Some(source));
         // SAFETY: the ship sound bank and source remain live for immediate positional playback.
         unsafe {
             let sound = SetAbsStringTableIndex(sounds, index);
-            play_sound(self, sound, position, Some(source), priority);
+            play_sound_in_context(self, sound, position, Some(source), priority);
         }
     }
 
