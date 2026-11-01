@@ -118,6 +118,33 @@ pub struct BattleStateData {
     pub end_frame_count: BattleFrameCounter,
 }
 
+impl SessionCore {
+    pub(crate) fn local_port(&self, socket: uqm_engine::host::Connection) -> std::io::Result<u16> {
+        self.transport.borrow().local_port(socket)
+    }
+
+    #[cfg(not(test))]
+    pub(crate) fn replay_confirmation(&self, mut ready: impl FnMut() -> isize) -> isize {
+        let mut count = ready();
+        self.replay_wait(|| {
+            if count != 1 {
+                return false;
+            }
+            <SessionCore as crate::engine::battle::net::BattleNet>::poll(self);
+            count = ready();
+            count == 1
+        });
+        count
+    }
+
+    // Network readiness polls must not consume the replay's next gameplay input.
+    pub(crate) fn replay_wait(&self, poll: impl FnMut() -> bool) -> bool {
+        poll_replay_wait(self.replay_remote_player.is_some(), poll, || {
+            crate::threading::pacing::yield_input_loop(std::thread::yield_now);
+        })
+    }
+}
+
 impl NetplaySession {
     pub(crate) fn configure_peer(&mut self, side: usize, server: bool, port: u16) {
         let core = std::rc::Rc::get_mut(&mut self.0)
@@ -138,9 +165,67 @@ impl NetplaySession {
     }
 }
 
+fn poll_replay_wait(
+    replay: bool,
+    mut poll: impl FnMut() -> bool,
+    mut yield_wait: impl FnMut(),
+) -> bool {
+    if !replay {
+        return false;
+    }
+    while poll() {
+        yield_wait();
+    }
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn fixture_server_retains_its_bound_port_until_connection() {
+        use uqm_engine::host::Net;
+        let mut net = uqm_engine::network::NativeNet::default();
+        let endpoint = net
+            .listen("0")
+            .unwrap_or_else(|error| panic!("listen: {error}"));
+        let session = NetplaySession::with_net(net);
+        let port = session
+            .local_port(endpoint)
+            .unwrap_or_else(|error| panic!("port: {error}"));
+        assert_ne!(port, 0);
+        assert!(std::net::TcpListener::bind(("0.0.0.0", port)).is_err());
+        let peer = std::net::TcpStream::connect(("127.0.0.1", port))
+            .unwrap_or_else(|error| panic!("connect: {error}"));
+        assert_eq!(
+            peer.peer_addr()
+                .unwrap_or_else(|error| panic!("address: {error}"))
+                .port(),
+            port
+        );
+    }
+
+    #[test]
+    fn replay_protocol_waits_poll_without_admitting_input() {
+        let mut polls = 0;
+        let mut yields = 0;
+        assert!(poll_replay_wait(
+            true,
+            || {
+                polls += 1;
+                polls <= 10_001
+            },
+            || yields += 1,
+        ));
+        assert_eq!(polls, 10_002);
+        assert_eq!(yields, 10_001);
+        assert!(!poll_replay_wait(
+            false,
+            || panic!("native wait polled"),
+            || panic!("native wait yielded")
+        ));
+    }
+
     #[test]
     fn consecutive_battles_borrow_the_same_menu_session() {
         let mut session = NetplaySession::default();

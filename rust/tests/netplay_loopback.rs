@@ -37,7 +37,8 @@ impl Drop for Replay {
 fn start_replay(root: &Path, peer: usize, port: u16) -> Result<Replay> {
     let directory = root.join(peer.to_string());
     fs::create_dir_all(directory.join("config"))?;
-    let log = fs::File::create(directory.join("game.log"))?;
+    let stdout = fs::File::create(directory.join("stdout.log"))?;
+    let stderr = fs::File::create(directory.join("stderr.log"))?;
     let mut script: serde_json::Value =
         serde_json::from_str(include_str!("../scripts/super-melee-v1.json"))?;
     let steps = script["steps"]
@@ -69,8 +70,8 @@ fn start_replay(root: &Path, peer: usize, port: u16) -> Result<Replay> {
             .env("SDL_AUDIODRIVER", "dummy")
             .env("UQM_PARITY", "1")
             .env_remove("UQM_REPLAY_JITTER")
-            .stdout(Stdio::from(log.try_clone()?))
-            .stderr(Stdio::from(log))
+            .stdout(Stdio::from(stdout))
+            .stderr(Stdio::from(stderr))
             .spawn()?,
     ))
 }
@@ -179,7 +180,6 @@ impl Bridge {
 }
 fn join_peers(
     listener: TcpListener,
-    port: u16,
     deadline: Instant,
     ready_file: &Path,
 ) -> Result<[TcpStream; 2]> {
@@ -196,8 +196,14 @@ fn join_peers(
             }
         }
         ready_file.read_to_string(&mut readiness)?;
-        if sockets[1].is_none() && readiness.contains("netplay fixture listener ready") {
-            sockets[1] = Some(TcpStream::connect(("127.0.0.1", port))?);
+        if sockets[1].is_none() {
+            if let Some(port) = readiness.split_inclusive('\n').find_map(|line| {
+                line.strip_suffix('\n')?
+                    .strip_prefix("netplay fixture listener ready ")
+            }) {
+                let port = port.parse::<u16>()?;
+                sockets[1] = Some(TcpStream::connect(("127.0.0.1", port))?);
+            }
         }
         assert!(Instant::now() < deadline, "peer startup deadline");
         std::thread::yield_now();
@@ -214,6 +220,35 @@ fn two_battle_peers_match_melee_input_at_every_checksum_interval() -> Result<()>
         .tempdir_in(temporary)?;
     let root_path = root.path().canonicalize()?;
     eprintln!("live loopback artifacts {}", root_path.display());
+    let outcome = std::panic::catch_unwind(|| run_peers(manifest, &root_path));
+    if matches!(&outcome, Ok(Ok(()))) {
+        return Ok(());
+    }
+    let retained = root.keep();
+    eprintln!("retained failed loopback artifacts {}", retained.display());
+    for peer in 0..2 {
+        for name in [
+            "summary.json",
+            "automation/trace.jsonl",
+            "scenario.json",
+            "stdout.log",
+            "stderr.log",
+        ] {
+            let path = retained.join(peer.to_string()).join(name);
+            eprintln!("--- {} ---", path.display());
+            match fs::read_to_string(&path) {
+                Ok(text) => eprintln!("{text}"),
+                Err(error) => eprintln!("cannot read diagnostic: {error}"),
+            }
+        }
+    }
+    match outcome {
+        Ok(result) => result,
+        Err(panic) => std::panic::resume_unwind(panic),
+    }
+}
+
+fn run_peers(manifest: &Path, root_path: &Path) -> Result<()> {
     let source = manifest.join("../sc2/content");
     zip::ZipArchive::new(fs::File::open(
         source.join("packages/uqm-0.8.0-content.uqm"),
@@ -221,13 +256,10 @@ fn two_battle_peers_match_melee_input_at_every_checksum_interval() -> Result<()>
     .extract(root_path.join("content"))?;
     fs::copy(source.join("version"), root_path.join("content/version"))?;
     let listener = TcpListener::bind("127.0.0.1:0")?;
-    let reserved = TcpListener::bind("127.0.0.1:0")?;
-    let port = reserved.local_addr()?.port();
-    let mut a = start_replay(&root_path, 0, listener.local_addr()?.port())?;
-    drop(reserved);
-    let mut b = start_replay(&root_path, 1, port)?;
+    let mut a = start_replay(root_path, 0, listener.local_addr()?.port())?;
+    let mut b = start_replay(root_path, 1, 0)?;
     let deadline = Instant::now() + Duration::from_secs(420);
-    let [a_socket, b_socket] = join_peers(listener, port, deadline, &root_path.join("1/game.log"))
+    let [a_socket, b_socket] = join_peers(listener, deadline, &root_path.join("1/stderr.log"))
         .map_err(|error| format!("join peers: {error}"))?;
     let (mut a_net, mut b_net) = LoopbackNet::pair();
     let server = a_net.listen("battle")?;
@@ -237,16 +269,16 @@ fn two_battle_peers_match_melee_input_at_every_checksum_interval() -> Result<()>
         Bridge::new(b_socket, b_net, client)?,
     ];
     loop {
-        for bridge in &mut bridges {
-            bridge.poll().map_err(|error| {
-                format!(
-                    "forward peer: {error}; logs: {}\n{}",
-                    fs::read_to_string(root_path.join("0/game.log"))
-                        .unwrap_or_else(|error| panic!("peer log: {error}")),
-                    fs::read_to_string(root_path.join("1/game.log"))
-                        .unwrap_or_else(|error| panic!("peer log: {error}"))
-                )
-            })?;
+        let error = bridges.iter_mut().find_map(|bridge| bridge.poll().err());
+        if let Some(error) = error {
+            drop(bridges);
+            while Instant::now() < deadline {
+                if a.0.try_wait()?.is_some() && b.0.try_wait()?.is_some() {
+                    break;
+                }
+                std::thread::yield_now();
+            }
+            return Err(format!("forward peer: {error}").into());
         }
         let statuses = [a.0.try_wait()?, b.0.try_wait()?];
         for (peer, status) in statuses.iter().enumerate() {
@@ -254,7 +286,7 @@ fn two_battle_peers_match_melee_input_at_every_checksum_interval() -> Result<()>
                 assert!(
                     status.success(),
                     "peer {peer}: {}",
-                    fs::read_to_string(root_path.join(peer.to_string()).join("game.log"))?
+                    fs::read_to_string(root_path.join(peer.to_string()).join("stderr.log"))?
                 );
             }
         }

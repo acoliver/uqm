@@ -6,10 +6,7 @@ use std::{ffi::c_void, ptr};
 
 impl BattleNet for SessionCore {
     fn poll(&self) {
-        // SAFETY: SessionCore owns the live connections and buffers on the game thread.
-        unsafe {
-            self.net_input();
-        }
+        self.net_input();
     }
     fn flush(&self) {
         // SAFETY: SessionCore owns the live connections and buffers on the game thread.
