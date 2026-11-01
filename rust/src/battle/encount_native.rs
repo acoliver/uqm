@@ -236,8 +236,6 @@ pub(crate) mod engine {
         ((*h.cast::<SHIP_FRAGMENT>()).crew_level == COUNT::MAX) as BOOLEAN
     }
 
-    pub use crate::battle::context_access::reader_legacy::UpdateShipFragCrew;
-
     pub(crate) use crate::battle::context_access::reader_legacy::update_ship_frag_crew;
 
     /// # Safety

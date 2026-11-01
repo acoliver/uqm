@@ -1248,10 +1248,8 @@ pub use crate::engine::battle::legacy::DisplayFreeList;
 pub use crate::engine::battle::legacy::DisplayArray;
 
 #[cfg(not(test))]
-pub use crate::battle::process_native::engine::RemoveElement;
 
 #[cfg(not(test))]
-pub use crate::battle::cyborg_native::engine::PlotIntercept;
 
 pub use crate::supermelee::netplay::checksum::crc_process_game_state as crc_processState;
 
@@ -1658,13 +1656,10 @@ pub const FIRST_EMPTY_INDEX: _bindgen_ty_5 = 4;
 pub type _bindgen_ty_5 = ::std::os::raw::c_uint;
 
 #[cfg(not(test))]
-pub use crate::battle::cyborg_native::engine::tactical_intelligence;
 
 #[cfg(not(test))]
-pub use crate::battle::cyborg_native::engine::ship_intelligence;
 
 #[cfg(not(test))]
-pub use crate::battle::cyborg_native::engine::ship_weapons;
 
 
 
@@ -1680,10 +1675,10 @@ pub use crate::ui::shipstat::DrawCrewFuelString;
 #[cfg(not(test))]
 pub unsafe fn InitShipStatus(
     ShipInfoPtr: *mut SHIP_INFO,
-    StarShipPtr: *mut STARSHIP,
+    ship: Option<crate::engine::battle::ShipId>,
     pClipRect: *mut RECT,
 ) {
-    crate::ui::shipstat::InitShipStatus(ShipInfoPtr.cast(), StarShipPtr.cast(), pClipRect.cast());
+    crate::ui::shipstat::init_ship_status(ShipInfoPtr.cast(), ship, pClipRect.cast());
 }
 #[cfg(test)]
 #[cfg(not(test))]
@@ -1705,7 +1700,6 @@ pub use crate::ui::shipstat::DeltaStatistics;
 pub use crate::battle::status_native::engine::DrawBattleCrewAmount;
 
 #[cfg(not(test))]
-pub use crate::battle::status_native::engine::DrawCaptainsWindow;
 
 
 
@@ -1759,10 +1753,8 @@ pub struct MISSILE_BLOCK {
 }
 
 #[cfg(not(test))]
-pub use crate::battle::process_native::engine::Untarget;
 
 #[cfg(not(test))]
-pub use crate::battle::ship_native::engine::GetNextStarShip;
 
 #[cfg(not(test))]
 pub use crate::battle::ship_native::engine::GetInitialStarShips;
@@ -3255,10 +3247,8 @@ pub use crate::battle::process_native::engine::RedrawQueue;
 pub use crate::battle::process_native::engine::InitDisplayList;
 
 #[cfg(not(test))]
-pub use crate::battle::process_native::engine::SetUpElement;
 
 #[cfg(not(test))]
-pub use crate::battle::process_native::engine::InsertPrim;
 pub const TFB_GFXDRIVER_SDL_OPENGL: _bindgen_ty_15 = 0;
 pub const TFB_GFXDRIVER_SDL_PURE: _bindgen_ty_15 = 1;
 pub type _bindgen_ty_15 = ::std::os::raw::c_uint;
@@ -3294,7 +3284,6 @@ extern "C" {
 pub use crate::battle::tactrans_native::engine::ship_transition;
 
 #[cfg(not(test))]
-pub use crate::battle::tactrans_native::engine::OpponentAlive;
 
 #[cfg(not(test))]
 pub use crate::battle::tactrans_native::engine::new_ship;
@@ -3318,16 +3307,12 @@ pub use crate::battle::tactrans_native::engine::ResetWinnerStarShip;
 pub use crate::battle::tactrans_native::engine::StopAllBattleMusic;
 
 #[cfg(not(test))]
-pub use crate::battle::tactrans_native::engine::FindAliveStarShip;
 
 #[cfg(not(test))]
-pub use crate::battle::tactrans_native::engine::GetWinnerStarShip;
 
 #[cfg(not(test))]
-pub use crate::battle::tactrans_native::engine::SetWinnerStarShip;
 
 #[cfg(not(test))]
-pub use crate::battle::tactrans_native::engine::RecordShipDeath;
 
 
 pub const GLOBAL_PLAYER_NAME: _bindgen_ty_17 = -1000000;
@@ -3730,7 +3715,6 @@ pub const ATTACK: _bindgen_ty_26 = 1;
 pub type _bindgen_ty_26 = ::std::os::raw::c_uint;
 
 #[cfg(not(test))]
-pub use crate::battle::encount_native::engine::UpdateShipFragCrew;
 unsafe extern "C" {
     pub static mut EncounterRace: SIZE;
 }
@@ -3771,16 +3755,6 @@ pub use crate::front_end::gameopt::runtime::ConfirmSaveLoad;
 
 #[cfg(not(test))]
 pub use crate::front_end::gameopt::runtime::GameOptions;
-#[cfg(not(test))]
-pub unsafe fn GetEncounterStarShip(
-    LastStarShipPtr: *mut STARSHIP,
-    which_player: COUNT,
-) -> HSTARSHIP {
-    crate::pickship::ffi::get_encounter_star_ship(LastStarShipPtr.cast(), which_player)
-}
-#[cfg(test)]
-#[cfg(not(test))]
-pub use crate::pickship::ffi::get_encounter_star_ship as GetEncounterStarShip;
 #[cfg(not(test))]
 pub unsafe fn DrawArmadaPickShip(draw_salvage_frame: BOOLEAN, pPickRect: *mut RECT) {
     crate::pickship::ffi::draw_armada_pick_ship(

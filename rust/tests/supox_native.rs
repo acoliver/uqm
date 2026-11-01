@@ -7,7 +7,7 @@ mod battle_context;
 use battle::*;
 
 use std::{ffi::CStr, mem};
-use uqm_rust::ships::native::{abi::*, element};
+use uqm_rust::ships::native::abi::*;
 
 /// The element queue and RNG are process-wide engine state.
 use battle::Battle as Battlefield;
@@ -116,7 +116,7 @@ fn gob_is_launched_with_the_c_missile_block() {
             let slots = ship.weapon(1);
             let horns = [ship.weapon_record(slots[0]).cast()];
 
-            let gob = element(horns[0]);
+            let gob = battle_context::element(horns[0]);
             assert!(!gob.is_null());
             assert_eq!((*gob).__bindgen_anon_1.life_span, 10);
             assert_eq!((*gob).__bindgen_anon_2.hit_points, 1);
@@ -126,7 +126,7 @@ fn gob_is_launched_with_the_c_missile_block() {
             assert!((*gob).preprocess_func.is_none());
             // DISPLAY_TO_WORLD (30) world units per tick along the ship facing.
             assert_eq!(velocity_fields(&(*gob).velocity), velocity_toward(120, 4));
-            FreeElement(horns[0]);
+            battle_context::dispose(horns[0]);
         }
     })
 }
@@ -139,7 +139,9 @@ unsafe fn thrust_heading(_battle: &Battle, heading: COUNT, flags: u16) -> ([i32;
     unsafe {
         oracle.ship_mut().ShipFacing = heading;
         oracle.ship_mut().cur_status_flags = flags;
-        let status = inertial_thrust(oracle.el());
+        let status = uqm_rust::app::bridge::enter(|cx| {
+            inertial_thrust(cx, cx.elements().id(oracle.el().cast()).unwrap())
+        });
         (velocity_fields(&oracle.element_mut().velocity), status)
     }
 }

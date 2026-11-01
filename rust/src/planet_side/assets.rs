@@ -39,7 +39,6 @@ impl CffiPlanetSideAudio {
 #[cfg(not(test))]
 use crate::battle::sounds::engine::NotPositional;
 #[cfg(not(test))]
-use crate::battle::sounds::engine::PlaySound;
 #[cfg(not(test))]
 use crate::strings::string_table::SetAbsStringTableIndex;
 
@@ -57,7 +56,7 @@ impl PlanetSideAudio for CffiPlanetSideAudio {
             } else {
                 2
             };
-            PlaySound(sound, NotPositional(), std::ptr::null_mut(), priority);
+            crate::battle::sounds::play_sound(sound, NotPositional(), None, priority);
         }
         #[cfg(test)]
         let _ = cue;

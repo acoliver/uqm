@@ -223,13 +223,6 @@ pub(crate) mod engine {
         Kernel::current().status_offsets = status_offsets(ScreenHeight);
     }
 
-    pub(crate) unsafe fn offset(ship: *const STARSHIP) -> COORD {
-        assert!((*ship).playerNr >= 0);
-        *(&raw const Kernel::current().status_offsets)
-            .cast::<COORD>()
-            .add((*ship).playerNr as usize)
-    }
-
     unsafe fn filled(color: Color, mut r: RECT) {
         SetContextForeGroundColor(color);
         DrawFilledRectangle(&mut r);
@@ -299,25 +292,24 @@ pub(crate) mod engine {
 
     /// # Safety
     /// Ship, captain assets, and the active status context must be live.
-    #[no_mangle]
-    pub unsafe extern "C" fn DrawCaptainsWindow(ship: *mut STARSHIP) {
-        let rd = (*ship).descriptor_ptr();
-        let captain = &raw mut (*rd).ship_data.captain_control;
-        let mut frame = (*captain).background;
+    pub unsafe fn draw_captains_window(cx: &mut Cx<'_>, ship: crate::engine::battle::ShipId) {
+        let mut captain = cx.captain_data(ship);
+        let mut frame = captain.background;
         if !frame.is_null() {
             frame = SetAbsFrameIndex(frame, 0);
-            (*captain).background = frame;
+            captain.background = frame;
             frame = rel_frame_index(frame, 1);
-            (*captain).turn = frame;
+            captain.turn = frame;
             frame = rel_frame_index(frame, 5);
-            (*captain).thrust = frame;
+            captain.thrust = frame;
             frame = rel_frame_index(frame, 3);
-            (*captain).weapon = frame;
+            captain.weapon = frame;
             frame = rel_frame_index(frame, 3);
-            (*captain).special = frame;
+            captain.special = frame;
         }
+        cx.set_captain_data(ship, captain);
         BatchGraphics();
-        let y = offset(ship);
+        let y = cx.status_offset(ship);
         let height = (ScreenHeight >> 1) as SIZE;
         let dark = rgb15(8, 8, 8);
         let light = rgb15(16, 16, 16);
@@ -356,10 +348,12 @@ pub(crate) mod engine {
         filled(light, rect(3, cy, 1, 30));
         let mut stamp = STAMP {
             origin: POINT { x: 4, y: cy },
-            frame: (*captain).background,
+            frame: captain.background,
         };
         DrawStamp(&mut stamp);
-        if (*ship).captains_name_index == 0 && (*ship).playerNr == RPG_PLAYER_NUM as SIZE {
+        if cx.ship(ship).captains_name_index == 0
+            && cx.ship(ship).playerNr == RPG_PLAYER_NUM as SIZE
+        {
             let mut text = TEXT {
                 baseline: POINT {
                     x: 32,
@@ -373,10 +367,10 @@ pub(crate) mod engine {
             SetContextFont(TinyFont);
             font_DrawText(&mut text);
         }
-        if (*rd).ship_info.max_crew > MAX_CREW_SIZE as COUNT
-            || (*rd).ship_info.ship_flags & PLAYER_CAPTAIN as u16 != 0
+        if cx.race_stats(ship).ship_info.max_crew > MAX_CREW_SIZE as COUNT
+            || cx.race_stats(ship).ship_info.ship_flags & PLAYER_CAPTAIN as u16 != 0
         {
-            DrawBattleCrewAmount(&raw mut (*rd).ship_info, y);
+            DrawBattleCrewAmount(cx.ship_info_mut(ship), y);
         }
         UnbatchGraphics();
     }
@@ -465,7 +459,7 @@ pub(crate) mod engine {
 
 #[cfg(not(test))]
 pub use engine::{
-    delta_crew, delta_energy, preprocess_status, DrawBattleCrewAmount, DrawCaptainsWindow,
+    delta_crew, delta_energy, draw_captains_window, preprocess_status, DrawBattleCrewAmount,
     InitStatusOffsets, PostProcessStatus,
 };
 

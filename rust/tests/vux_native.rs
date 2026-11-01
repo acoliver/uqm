@@ -5,7 +5,7 @@ mod battle_context;
 mod battle;
 use battle::*;
 use std::mem;
-use uqm_rust::ships::native::{abi::*, angle_to_facing, element, frame_index, normalize_facing};
+use uqm_rust::ships::native::{abi::*, angle_to_facing, frame_index, normalize_facing};
 #[test]
 fn descriptor_laser_and_limpet_launch() {
     battle_context::run(|| {
@@ -39,12 +39,12 @@ fn descriptor_laser_and_limpet_launch() {
             let (mut dx, mut dy) = (0, 0);
             GetCurrentVelocityComponents(&raw mut (*laser).velocity, &mut dx, &mut dy);
             assert_eq!((dx, dy), (600 << VELOCITY_SHIFT, 0));
-            FreeElement(laser.cast());
+            battle_context::dispose(laser.cast());
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
             with_rng(11, 0, || ship.postprocess());
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 38);
             assert_eq!(ship.ship_mut().special_counter, 7);
-            let e = element(disp_q.tail);
+            let e = battle_context::element(disp_q.tail);
             assert_eq!(
                 (
                     (*e).__bindgen_anon_1.life_span,
@@ -73,7 +73,7 @@ fn limpets_saturate_waits_and_reduce_thrust_without_rng_for_nonships() {
             let mut enemy = Ship::new(&_battle, SPECIES_ID_VUX_ID, 1);
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
             ship.postprocess();
-            let e = element(disp_q.tail);
+            let e = battle_context::element(disp_q.tail);
             for (increment, max, expected_inc, expected_max) in
                 [(7, 21, 6, 18), (5, 25, 4, 20), (4, 20, 4, 8), (1, 10, 1, 2)]
             {

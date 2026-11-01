@@ -1,40 +1,23 @@
 //! Save-facing projection over checked typed ship links and element ids.
 use crate::comm::locdata::CQueue;
-use crate::engine::battle::{
-    link_queue::{LinkQueue, Starship},
-    record::{ELEMENT, STARSHIP},
-};
+use crate::engine::battle::link_queue::{LinkQueue, Starship};
 use crate::savegame::runtime::{
     hyper_save::HyperSaveError,
-    queues::{walk, QueueElement, QueueKind},
+    queues::{walk_layout, QueueKind},
 };
 use std::ffi::c_void;
-impl QueueElement for STARSHIP {
-    fn pred(&self) -> *mut c_void {
-        self.pred
-    }
-    fn succ(&self) -> *mut c_void {
-        self.succ
-    }
-}
-
-impl QueueElement for ELEMENT {
-    fn pred(&self) -> *mut c_void {
-        self.pred
-    }
-    fn succ(&self) -> *mut c_void {
-        self.succ
-    }
-}
-
 /// # Safety
 /// Both queues and their pools are live, immutable game-thread authorities.
 pub(crate) unsafe fn read_flagship_facing(
     player_ships: &CQueue,
     display_list: &CQueue,
 ) -> Result<Option<u16>, HyperSaveError> {
-    let linked_ships = walk::<STARSHIP>(player_ships, QueueKind::PlayerShips)?;
-    if linked_ships.is_empty() {
+    walk_layout(
+        player_ships,
+        QueueKind::PlayerShips,
+        crate::engine::battle::access::observe::SHIP_LINKS,
+    )?;
+    if player_ships.head.is_null() {
         return Ok(None);
     }
     // SAFETY: walk checked the live pool, record stride and link order.
@@ -46,31 +29,67 @@ pub(crate) unsafe fn read_flagship_facing(
     if handle.is_null() {
         return Ok(None);
     }
-    let linked_elements = walk::<ELEMENT>(display_list, QueueKind::DisplayList)?;
-    if !linked_elements
-        .iter()
-        .any(|pointer| pointer.cast::<c_void>() == handle)
-    {
+    walk_layout(
+        display_list,
+        QueueKind::DisplayList,
+        crate::engine::battle::access::observe::ELEMENT_LINKS,
+    )?;
+    let Some((state, owner)) = display_element(display_list, handle) else {
         return Err(HyperSaveError::ElementNotInDisplayList);
-    }
-    // SAFETY: the validated display list contains this exact live record; no callback runs here.
-    let element = unsafe { &*handle.cast::<ELEMENT>() };
-    // SAFETY: the validator retained the display pool and checked this element address.
-    let state = unsafe { crate::engine::battle::access::observe_element_record(element) };
+    };
     if state.flags & crate::ships::native::abi::PLAYER_SHIP as u16 == 0 {
         return Err(HyperSaveError::ElementIsNotAPlayerShip);
     }
-    let owner = element.pParent;
     if owner.is_null() {
         return Err(HyperSaveError::NoOwner);
     }
-    if !linked_ships
-        .iter()
-        .any(|pointer| pointer.cast::<c_void>() == owner)
-    {
-        return Err(HyperSaveError::OwnerNotInPlayerQueue);
+    let mut next = ships.head();
+    while let Some(id) = next {
+        if ships.raw(id) == owner {
+            return Ok(Some(ships.facing(id)));
+        }
+        next = ships.succ(id);
     }
-    Ok(Some(ships.facing(
-        ships.id(owner).unwrap_or_else(|| panic!("validated owner")),
-    )))
+    return Err(HyperSaveError::OwnerNotInPlayerQueue);
+}
+
+#[cfg(not(test))]
+unsafe fn display_element(
+    _queue: &CQueue,
+    handle: *mut c_void,
+) -> Option<(crate::engine::battle::views::ElementState, *mut c_void)> {
+    crate::app::bridge::enter(|cx| {
+        let mut next = cx.elements().head();
+        while let Some(id) = next {
+            if cx.elements().raw(id) == handle {
+                return Some((cx.element(id), cx.element_parent_address(id)));
+            }
+            next = cx.elements().succ(id);
+        }
+        None
+    })
+}
+#[cfg(test)]
+unsafe fn display_element(
+    queue: &CQueue,
+    handle: *mut c_void,
+) -> Option<(crate::engine::battle::views::ElementState, *mut c_void)> {
+    use crate::engine::battle::record::ELEMENT;
+    use crate::savegame::runtime::queues::walk_layout;
+    // Unit fixtures supply independent immutable pools instead of the published game authority.
+    let elements = walk_layout(
+        queue,
+        QueueKind::DisplayList,
+        crate::engine::battle::access::observe::ELEMENT_LINKS,
+    )
+    .unwrap();
+    elements
+        .into_iter()
+        .find(|p| p.cast::<c_void>() == handle)
+        .map(|p| {
+            (
+                crate::engine::battle::access::observe_element_record(&*p.cast::<ELEMENT>()),
+                (*p.cast::<ELEMENT>()).pParent,
+            )
+        })
 }

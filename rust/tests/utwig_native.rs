@@ -5,7 +5,7 @@ mod battle_context;
 mod battle;
 use battle::*;
 use std::mem;
-use uqm_rust::ships::native::{abi::*, cosine, element, facing_to_angle, frame_index, sine};
+use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, frame_index, sine};
 
 #[test]
 fn descriptor_and_six_lance_order_and_coordinates() {
@@ -56,7 +56,7 @@ fn descriptor_and_six_lance_order_and_coordinates() {
                 ) >> VELOCITY_SHIFT;
                 for (i, (x, y)) in [(5, -18), (13, -9), (17, -4)].into_iter().enumerate() {
                     for (side, sign) in [(0, 1), (1, -1)] {
-                        let e = element(handles[i * 2 + side]);
+                        let e = battle_context::element(handles[i * 2 + side]);
                         let dx = sign * i32::from(cosine(angle, x << ONE_SHIFT))
                             - i32::from(sine(angle, y << ONE_SHIFT));
                         let dy = sign * i32::from(sine(angle, x << ONE_SHIFT))
@@ -78,7 +78,7 @@ fn descriptor_and_six_lance_order_and_coordinates() {
                         );
                         assert_eq!(frame_index((*e).current.image.frame), facing);
                         assert_eq!(velocity(&(*e).velocity), toward(30 << ONE_SHIFT, facing));
-                        FreeElement(handles[i * 2 + side]);
+                        battle_context::dispose(handles[i * 2 + side]);
                     }
                 }
             }
@@ -227,8 +227,8 @@ fn lance_allocation_failure_still_returns_six_slots() {
                 .collect::<Vec<HELEMENT>>();
             assert!(!out[0].is_null() && !out[1].is_null());
             assert!(out[2..].iter().all(|h| h.is_null()));
-            FreeElement(out[0]);
-            FreeElement(out[1]);
+            battle_context::dispose(out[0]);
+            battle_context::dispose(out[1]);
         }
     })
 }

@@ -7,7 +7,7 @@ mod battle_context;
 use battle::{prim, Battle, PoolElement, Ship};
 
 use std::{ffi::CStr, ptr};
-use uqm_rust::ships::native::{abi::*, cosine, element, facing_to_angle, frame_index, sine};
+use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, frame_index, sine};
 
 // FRAME_DESC and DRAWABLE_DESC layouts from drawable.h.
 
@@ -17,7 +17,7 @@ unsafe fn queued() -> Vec<HELEMENT> {
     while !h.is_null() {
         result.push(h);
         assert!(result.len() <= 64, "display queue cycle");
-        h = (*element(h)).succ;
+        h = (*battle_context::element(h)).succ;
     }
     result
 }
@@ -204,7 +204,10 @@ fn per_init_descriptor_copies_isolate_energy_resources_animation_and_custom_data
             let h = fire(&mut first);
             let data = previous_facing(&mut first);
             assert!(data.is_some());
-            hooks::invoke_element_pointer((*element(h)).preprocess_func.unwrap(), element(h));
+            hooks::invoke_element_pointer(
+                (*battle_context::element(h)).preprocess_func.unwrap(),
+                battle_context::element(h),
+            );
             assert_eq!(frame_index(first.descriptor_mut().ship_data.special[0]), 21);
             first.descriptor_mut().ship_info.energy_level = 1;
             first.descriptor_mut().characteristics.special_wait = 77;
@@ -227,15 +230,15 @@ fn per_init_descriptor_copies_isolate_energy_resources_animation_and_custom_data
             assert!(previous_facing(&mut first).is_none());
             assert!(!previous_facing(&mut second).is_none());
             hooks::invoke_element_pointer(
-                (*element(other)).preprocess_func.unwrap(),
-                element(other),
+                (*battle_context::element(other)).preprocess_func.unwrap(),
+                battle_context::element(other),
             );
             assert_eq!(
                 frame_index(second.descriptor_mut().ship_data.special[0]),
                 25
             );
-            FreeElement(h);
-            FreeElement(other);
+            battle_context::dispose(h);
+            battle_context::dispose(other);
             let mut template = battle::descriptor(SPECIES_ID_UMGAH_ID);
             template.ship_info.energy_level = 0;
             template.characteristics.special_wait = 0;
@@ -266,7 +269,7 @@ fn cone_initialization_fixes_intersection_and_does_not_inherit_velocity() {
             SetVelocityComponents(&raw mut (*ship.ptr()).velocity, 321, -654);
             let h = with_rng(8, 0, || fire(&mut ship));
             assert!(!h.is_null());
-            let cone = element(h);
+            let cone = battle_context::element(h);
             assert_eq!((*cone).state_flags, (FINITE_LIFE | IGNORE_SIMILAR) as u16);
             assert_eq!((*cone).__bindgen_anon_1.life_span, 1);
             assert_eq!((*cone).__bindgen_anon_2.hit_points, 100);
@@ -296,7 +299,7 @@ fn cone_initialization_fixes_intersection_and_does_not_inherit_velocity() {
             assert!((*cone).preprocess_func.is_some() && (*cone).collision_func.is_some());
             assert!((*cone).postprocess_func.is_none() && (*cone).death_func.is_none());
             assert_eq!(queued(), vec![ship.handle]);
-            FreeElement(h);
+            battle_context::dispose(h);
         }
     })
 }
@@ -311,7 +314,7 @@ fn held_cone_advances_by_16_preserves_phase_and_resets_only_when_facing_changes(
             ship.ship_mut().ShipFacing = 5;
             for index in [5, 21, 37, 5] {
                 let h = with_rng(3, 0, || fire(&mut ship));
-                let cone = element(h);
+                let cone = battle_context::element(h);
                 let data = previous_facing(&mut ship);
                 assert!(data.is_some());
                 assert_eq!(data, Some(5));
@@ -336,21 +339,27 @@ fn held_cone_advances_by_16_preserves_phase_and_resets_only_when_facing_changes(
                     "holding facing keeps the saved facing"
                 );
                 assert_eq!(
-                    frame_index((*element(next)).current.image.frame),
+                    frame_index((*battle_context::element(next)).current.image.frame),
                     (index + 16) % 48
                 );
-                FreeElement(next);
-                FreeElement(h);
+                battle_context::dispose(next);
+                battle_context::dispose(h);
             }
             ship.ship_mut().ShipFacing = 9;
             let h = fire(&mut ship);
             assert_eq!(previous_facing(&mut ship).unwrap(), 9);
-            assert_eq!(frame_index((*element(h)).current.image.frame), 9);
             assert_eq!(
-                (*element(h)).IntersectControl.IntersectStamp.frame,
+                frame_index((*battle_context::element(h)).current.image.frame),
+                9
+            );
+            assert_eq!(
+                (*battle_context::element(h))
+                    .IntersectControl
+                    .IntersectStamp
+                    .frame,
                 ship.raw_frame(2, 9)
             );
-            FreeElement(h);
+            battle_context::dispose(h);
         }
     })
 }
@@ -363,7 +372,7 @@ fn appearance_and_uninit_free_only_the_instance_custom_data_and_are_repeatable()
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
             let h = fire(&mut ship);
-            FreeElement(h);
+            battle_context::dispose(h);
             assert!(!previous_facing(&mut ship).is_none());
             SetVelocityComponents(&raw mut (*ship.ptr()).velocity, 123, -456);
             let before = velocity_fields(&(*ship.ptr()).velocity);
@@ -377,7 +386,7 @@ fn appearance_and_uninit_free_only_the_instance_custom_data_and_are_repeatable()
             assert_eq!(velocity_fields(&(*ship.ptr()).velocity), before);
             ship.preprocess();
             let h = fire(&mut ship);
-            FreeElement(h);
+            battle_context::dispose(h);
             assert!(!previous_facing(&mut ship).is_none());
             let frame = ship.descriptor_mut().ship_data.special[0];
             ship.uninit();
@@ -428,7 +437,7 @@ fn collision_removes_and_frees_the_blast_but_does_not_restore_cone_life_or_solid
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
             let h = fire(&mut ship);
-            let cone = element(h);
+            let cone = battle_context::element(h);
             let mut hit = target(false);
             let mut a = POINT { x: 10, y: 20 };
             let mut b = POINT { x: 30, y: 40 };
@@ -463,8 +472,8 @@ fn collision_removes_and_frees_the_blast_but_does_not_restore_cone_life_or_solid
                 .alloc_element()
                 .map_or(std::ptr::null_mut(), |id| cx.elements().raw(id)))
             .is_null());
-            FreeElement(freed_blast);
-            FreeElement(h);
+            battle_context::dispose(freed_blast);
+            battle_context::dispose(h);
         }
     })
 }
@@ -477,7 +486,7 @@ fn collision_preserves_disappearing_when_blast_allocation_fails() {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
             let h = fire(&mut ship);
-            let cone = element(h);
+            let cone = battle_context::element(h);
             let mut hit = target(false);
             let mut p = POINT { x: 0, y: 0 };
             hooks::invoke_collision_pointer(
@@ -494,7 +503,7 @@ fn collision_preserves_disappearing_when_blast_allocation_fails() {
             );
             assert_eq!((*cone).__bindgen_anon_1.life_span, 0);
             assert_eq!(queued(), vec![ship.handle]);
-            FreeElement(h);
+            battle_context::dispose(h);
         }
     })
 }
@@ -507,7 +516,7 @@ fn finite_weapon_hit_damages_once_without_a_blast_and_does_not_clear_disappearin
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
             let h = fire(&mut ship);
-            let cone = element(h);
+            let cone = battle_context::element(h);
             let mut hit = target(true);
             (*cone).state_flags |= DISAPPEARING as u16;
             let collide = (*cone).collision_func.unwrap();
@@ -536,7 +545,7 @@ fn finite_weapon_hit_damages_once_without_a_blast_and_does_not_clear_disappearin
             );
             assert_eq!(hit.__bindgen_anon_2.hit_points, 2);
             assert_eq!(queued(), vec![ship.handle]);
-            FreeElement(h);
+            battle_context::dispose(h);
         }
     })
 }
@@ -981,8 +990,8 @@ fn rear_arc_uses_unwrapped_next_location_difference_and_inclusive_angle_bounds()
 unsafe fn fire(ship: &mut Ship<'_>) -> HELEMENT {
     let h = ship.initialize_from(ship.ptr(), 1)[0];
     if !h.is_null() {
-        assert!((*element(h)).pParent.is_null());
-        (*element(h)).pParent = (*ship.ptr()).pParent;
+        assert!((*battle_context::element(h)).pParent.is_null());
+        (*battle_context::element(h)).pParent = (*ship.ptr()).pParent;
     }
     h
 }

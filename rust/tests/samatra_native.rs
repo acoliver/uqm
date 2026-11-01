@@ -79,9 +79,9 @@ fn live_observation_projects_owned_events_generators_hazards_and_player() {
             assert_eq!(observe().1.unwrap().hazards.len(), 2);
             let sentinel = queued()
                 .into_iter()
-                .find(|h| (*element(*h)).__bindgen_anon_2.hit_points == 10)
+                .find(|h| (*battle_context::element(*h)).__bindgen_anon_2.hit_points == 10)
                 .unwrap();
-            (*element(sentinel)).state_flags |= DISAPPEARING as u16;
+            (*battle_context::element(sentinel)).state_flags |= DISAPPEARING as u16;
             assert_eq!(observe().1.unwrap().hazards.len(), 1);
             let state = owned_state(&mut ship);
             for generator in state.generators.into_iter().flatten() {
@@ -90,12 +90,14 @@ fn live_observation_projects_owned_events_generators_hazards_and_player() {
             let gate = queued()
                 .into_iter()
                 .find(|h| {
-                    (*element(*h)).collision_func.is_some_and(|hook| {
-                        uqm_rust::ships::hook_registry::name(
-                            &uqm_rust::ships::hook_registry::hooks(),
-                            hook.address(),
-                        ) == "ships::races::samatra::gate_collision"
-                    })
+                    (*battle_context::element(*h))
+                        .collision_func
+                        .is_some_and(|hook| {
+                            uqm_rust::ships::hook_registry::name(
+                                &uqm_rust::ships::hook_registry::hooks(),
+                                hook.address(),
+                            ) == "ships::races::samatra::gate_collision"
+                        })
                 })
                 .unwrap();
             call_element("ships::races::samatra::gate_preprocess", id(gate.cast()));
@@ -160,12 +162,14 @@ fn lifecycle_counts_each_identity_once_and_retains_gate_entry() {
             let gate = queued()
                 .into_iter()
                 .find(|h| {
-                    (*element(*h)).collision_func.is_some_and(|hook| {
-                        uqm_rust::ships::hook_registry::name(
-                            &uqm_rust::ships::hook_registry::hooks(),
-                            hook.address(),
-                        ) == "ships::races::samatra::gate_collision"
-                    })
+                    (*battle_context::element(*h))
+                        .collision_func
+                        .is_some_and(|hook| {
+                            uqm_rust::ships::hook_registry::name(
+                                &uqm_rust::ships::hook_registry::hooks(),
+                                hook.address(),
+                            ) == "ships::races::samatra::gate_collision"
+                        })
                 })
                 .unwrap_or_else(|| panic!("boss gate"));
             call_element("ships::races::samatra::gate_preprocess", id(gate.cast()));
@@ -228,9 +232,11 @@ fn sentinel_tracking_preserves_absent_owner_element() {
             ship.postprocess();
             let sentinel = queued()
                 .into_iter()
-                .find(|h| (*element(*h)).__bindgen_anon_2.hit_points == 10)
+                .find(|h| (*battle_context::element(*h)).__bindgen_anon_2.hit_points == 10)
                 .unwrap_or_else(|| panic!("sentinel"));
-            (*element(sentinel)).__bindgen_anon_4.turn_wait = 0;
+            (*battle_context::element(sentinel))
+                .__bindgen_anon_4
+                .turn_wait = 0;
             ship.ship_mut().hShip = std::ptr::null_mut();
             uqm_rust::app::bridge::enter(|cx| {
                 assert_eq!(cx.optional_ship_element(ship.ship_id), None);
@@ -241,7 +247,12 @@ fn sentinel_tracking_preserves_absent_owner_element() {
                     id(sentinel.cast()),
                 )
             });
-            assert_eq!((*element(sentinel)).__bindgen_anon_4.turn_wait, 1);
+            assert_eq!(
+                (*battle_context::element(sentinel))
+                    .__bindgen_anon_4
+                    .turn_wait,
+                1
+            );
         }
     });
 }
@@ -260,7 +271,7 @@ mod battle_context;
 mod battle;
 use battle::*;
 use uqm_rust::{
-    ships::native::{abi::*, element, frame_index},
+    ships::native::{abi::*, frame_index},
     state::game_state_keys::set_game_state,
 };
 
@@ -295,12 +306,12 @@ fn generators_spawn_at_exact_offsets_and_decrement_once_before_gate_opens() {
             let generators: Vec<_> = all
                 .iter()
                 .copied()
-                .filter(|h| (*element(*h)).death_func.is_some())
+                .filter(|h| (*battle_context::element(*h)).death_func.is_some())
                 .collect();
             let mut positions: Vec<_> = generators
                 .iter()
                 .map(|h| {
-                    let e = element(*h);
+                    let e = battle_context::element(*h);
                     assert_eq!((*e).__bindgen_anon_2.hit_points, 15);
                     ((*e).current.location.x, (*e).current.location.y)
                 })
@@ -321,15 +332,15 @@ fn generators_spawn_at_exact_offsets_and_decrement_once_before_gate_opens() {
             .collect();
             expected.sort();
             assert_eq!(positions, expected);
-            let gate = element(
+            let gate = battle_context::element(
                 *all.iter()
-                    .find(|h| (*element(**h)).state_flags & FINITE_LIFE as u16 != 0)
+                    .find(|h| (*battle_context::element(**h)).state_flags & FINITE_LIFE as u16 != 0)
                     .unwrap(),
             );
             for (i, h) in generators.iter().enumerate() {
                 hooks::invoke_element_pointer((*gate).preprocess_func.unwrap(), gate);
                 assert_eq!((*prim(gate)).Type, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
-                let g = element(*h);
+                let g = battle_context::element(*h);
                 hooks::invoke_element_pointer((*g).death_func.unwrap(), g);
                 assert_eq!(
                     ship.descriptor_mut().characteristics.max_thrust,
@@ -360,10 +371,10 @@ fn only_player_ship_bomb_carrier_through_open_gate_finishes_battle() {
         unsafe {
             uqm_rust::state::ffi::rust_init_game_state();
             let mut ship = boss(&_battle);
-            let gate = element(
+            let gate = battle_context::element(
                 *queued()
                     .iter()
-                    .find(|h| (*element(**h)).state_flags & FINITE_LIFE as u16 != 0)
+                    .find(|h| (*battle_context::element(**h)).state_flags & FINITE_LIFE as u16 != 0)
                     .unwrap(),
             );
             let player = Ship::with_frames(
@@ -429,10 +440,12 @@ fn postprocess_spawns_comets_and_sentinels_only_while_generators_live() {
                 ),
                 (240, 72)
             );
-            let comet = element(
+            let comet = battle_context::element(
                 *queued()
                     .iter()
-                    .find(|h| frame_index((*element(**h)).current.image.frame) == 24)
+                    .find(|h| {
+                        frame_index((*battle_context::element(**h)).current.image.frame) == 24
+                    })
                     .unwrap(),
             );
             (*comet).next = (*comet).current;
@@ -442,10 +455,10 @@ fn postprocess_spawns_comets_and_sentinels_only_while_generators_live() {
             assert_eq!(ship.descriptor_mut().characteristics.weapon_wait, 1);
             assert_eq!(queued().len(), 14);
             assert_ne!((*comet).state_flags & NONSOLID as u16, 0);
-            let sentinel = element(
+            let sentinel = battle_context::element(
                 *queued()
                     .iter()
-                    .find(|h| (*element(**h)).__bindgen_anon_2.hit_points == 10)
+                    .find(|h| (*battle_context::element(**h)).__bindgen_anon_2.hit_points == 10)
                     .unwrap(),
             );
             (*sentinel).next = (*sentinel).current;
@@ -469,10 +482,10 @@ fn sentinel_recoil_stuns_live_player_caps_velocity_and_preserves_sentinel() {
             let mut ship = boss(&_battle);
             ship.ship_mut().special_counter = 0;
             ship.postprocess();
-            let sentinel = element(
+            let sentinel = battle_context::element(
                 *queued()
                     .iter()
-                    .find(|h| (*element(**h)).__bindgen_anon_2.hit_points == 10)
+                    .find(|h| (*battle_context::element(**h)).__bindgen_anon_2.hit_points == 10)
                     .unwrap(),
             );
             let mut player = Ship::with_frames(

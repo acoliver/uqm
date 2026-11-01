@@ -59,15 +59,12 @@ pub mod abi {
         rel_frame_index as SetRelFrameIndex,
     };
     #[cfg(not(test))]
-    pub use crate::battle::battle_native::frameInputHuman;
     #[cfg(not(test))]
     pub use crate::battle::encount_native::FleetIsInfinite;
     #[cfg(not(test))]
     pub use crate::battle::galaxy::MoveGalaxy;
     #[cfg(not(test))]
-    pub use crate::battle::process_native::FreeElement;
     #[cfg(not(test))]
-    pub use crate::battle::sounds::engine::{CalcSoundPosition, PlaySound, RemoveSoundsForObject};
     #[cfg(not(test))]
     pub use crate::battle::tactrans_native::{
         battleEndReadyComputer, battleEndReadyHuman, battleEndReadyNetwork,
@@ -76,7 +73,7 @@ pub mod abi {
 
     #[cfg(not(test))]
     pub use crate::battle::weapon_native::{
-        initialize_laser, initialize_missile, track_ship, weapon_collision, ModifySilhouette,
+        initialize_laser, initialize_missile, modify_silhouette, track_ship, weapon_collision,
     };
     #[cfg(not(test))]
     pub use crate::battle::world_elements::abandon_ship;
@@ -111,18 +108,7 @@ mod engine {
 
     use crate::graphics::frame_abi::DrawRectangle;
 
-    extern "C" {
-        #[cfg(test)]
-        #[link_name = "rust_bridge_OBJECT_CLOAKED"]
-        fn rust_bridge_object_cloaked(element: *mut c_void) -> c_int;
-    }
     use crate::sound::heart_ffi::DestroySound;
-    /// # Safety
-    /// Called on the game thread with the live resources required by the Rust provider.
-    #[cfg(not(test))]
-    unsafe fn rust_bridge_object_cloaked(element: *mut c_void) -> c_int {
-        (crate::ships::native_adapters::rust_bridge_OBJECT_CLOAKED(element as _)) as _
-    }
 
     /// # Safety
     /// `queue` must be live; both handles must belong to its pool and `handle` must be unlinked.
@@ -407,12 +393,6 @@ mod engine {
     }
 
     /// # Safety
-    /// `handle` must be an allocated element not currently linked in `disp_q`.
-    pub unsafe fn put_element(handle: abi::HELEMENT) {
-        put_queue(&raw mut abi::disp_q, handle);
-    }
-
-    /// # Safety
     /// `frame` must be null or a live engine frame.
     pub unsafe fn frame_index(frame: abi::FRAME) -> u16 {
         crate::graphics::pixmap_abi::GetFrameIndex(frame.cast())
@@ -428,47 +408,16 @@ mod engine {
     pub unsafe fn rel_frame_index(frame: abi::FRAME, offset: i16) -> abi::FRAME {
         crate::graphics::pixmap_abi::SetRelFrameIndex(frame.cast(), offset).cast()
     }
-
-    /// # Safety
-    /// `element` must be live, with a valid display primitive.
-    pub unsafe fn object_cloaked(element: *mut abi::ELEMENT) -> bool {
-        rust_bridge_object_cloaked(element.cast()) != 0
-    }
 }
 
 #[cfg(not(test))]
-pub use engine::{frame_count, frame_index, object_cloaked, put_element, rel_frame_index};
-
-/// Queue-table handles are the element addresses, not separate allocations.
-///
-/// # Safety
-/// `handle` must be a live element handle belonging to `disp_q`.
-pub unsafe fn element(handle: abi::HELEMENT) -> *mut abi::ELEMENT {
-    handle.cast()
-}
-
-/// # Safety
-/// `element` must be a live ship or weapon with its owning STARSHIP attached.
-pub unsafe fn starship(element: *mut abi::ELEMENT) -> *mut abi::STARSHIP {
-    (*element).pParent.cast()
-}
+pub use engine::{frame_count, frame_index, rel_frame_index};
 
 pub use crate::math::{angle_to_facing, facing_to_angle, normalize_angle, normalize_facing};
 
 pub use crate::math::{cosine, sine};
 
 pub use crate::math::wrap_delta;
-
-/// Initialize collision endpoints using C WORLD_TO_DISPLAY truncation.
-///
-/// # Safety
-/// `e` must point to a live engine element.
-pub unsafe fn init_intersect_points(e: *mut abi::ELEMENT) {
-    (*e).IntersectControl.IntersectStamp.origin.x = (*e).current.location.x >> abi::ONE_SHIFT;
-    (*e).IntersectControl.IntersectStamp.origin.y = (*e).current.location.y >> abi::ONE_SHIFT;
-    (*e).IntersectControl.EndPoint.x = (*e).next.location.x >> abi::ONE_SHIFT;
-    (*e).IntersectControl.EndPoint.y = (*e).next.location.y >> abi::ONE_SHIFT;
-}
 
 #[cfg(test)]
 mod tests {

@@ -8,7 +8,7 @@ use uqm_rust::collections::queue::{AllocLink, FreeLink, InitQueue, UninitQueue};
 use uqm_rust::engine::battle::legacy::DisplayArray;
 use uqm_rust::{
     engine::battle::{ElementId, RaceState, ShipId},
-    ships::native::{abi::*, element, put_element},
+    ships::native::abi::*,
 };
 
 pub struct Battle {
@@ -99,7 +99,7 @@ impl<'a> Ship<'a> {
                     .map_or(ptr::null_mut(), |id| cx.elements().raw(id))
             });
             assert!(!handle.is_null());
-            let el = element(handle);
+            let el = super::battle_context::element(handle);
             (*el).pParent = raw_ship.cast();
             (*el).playerNr = player;
             (*el).state_flags = PLAYER_SHIP as u16;
@@ -276,7 +276,7 @@ impl<'a> Ship<'a> {
         assert!(!self.queued);
         // SAFETY: this fixture owns the unlinked, allocated slot.
         unsafe {
-            put_element(self.handle);
+            super::battle_context::put(self.handle);
         }
         self.queued = true;
     }
@@ -468,7 +468,7 @@ impl Drop for Ship<'_> {
 }
 pub fn descriptor(species: u32) -> RACE_DESC {
     // SAFETY: the caller owns the serialized test context.
-    unsafe { uqm_rust::ships::races::descriptor(species) }
+    unsafe { uqm_rust::ships::races::descriptor(species).into_legacy() }
 }
 
 pub unsafe fn call_element(name: &str, id: ElementId) {
@@ -631,7 +631,7 @@ pub unsafe fn queued() -> Vec<HELEMENT> {
         while !h.is_null() {
             all.push(h);
             assert!(all.len() <= 128, "queue cycle");
-            h = (*element(h)).succ;
+            h = (*super::battle_context::element(h)).succ;
         }
         all
     }

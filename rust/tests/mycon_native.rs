@@ -7,7 +7,7 @@ mod battle_context;
 use battle::*;
 
 use std::ffi::CStr;
-use uqm_rust::ships::native::{abi::*, element};
+use uqm_rust::ships::native::abi::*;
 
 #[test]
 fn descriptor_and_plasmoid_callbacks_match_mycon_c_data() {
@@ -80,7 +80,7 @@ fn plasma_launch_and_postprocess_boundaries_match_c() {
         let slots = fixture.weapon(1);
         let handles: [HELEMENT; 1] = [fixture.weapon_record(slots[0]).cast()];
         assert!(!handles[0].is_null());
-        let plasma = element(handles[0]);
+        let plasma = battle_context::element(handles[0]);
         assert_eq!((*plasma).__bindgen_anon_1.life_span, 143);
         assert_eq!((*plasma).__bindgen_anon_2.hit_points, 10);
         assert_eq!((*plasma).__bindgen_anon_3.mass_points, 10);
@@ -109,7 +109,7 @@ fn plasma_launch_and_postprocess_boundaries_match_c() {
         fixture.postprocess();
         assert_eq!((*ship).__bindgen_anon_2.crew_level, 10);
         assert_eq!(fixture.descriptor_mut().ship_info.energy_level, 39);
-        FreeElement(handles[0]);
+        battle_context::dispose(handles[0]);
     })
 }
 

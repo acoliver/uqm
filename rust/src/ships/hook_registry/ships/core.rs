@@ -27,22 +27,6 @@ fn part0() -> Vec<(usize, &'static str)> {
             "battle::ship_native::ship_preprocess",
         ),
         (
-            crate::battle::sounds::engine::CalcSoundPosition as *const () as usize,
-            "battle::sounds::CalcSoundPosition",
-        ),
-        (
-            crate::battle::sounds::engine::RemoveSoundsForObject as *const () as usize,
-            "battle::sounds::RemoveSoundsForObject",
-        ),
-        (
-            crate::battle::process_native::engine::SetUpElement as *const () as usize,
-            "battle::process_native::SetUpElement",
-        ),
-        (
-            crate::battle::process_native::engine::Untarget as *const () as usize,
-            "battle::process_native::Untarget",
-        ),
-        (
             crate::battle::world_elements::engine::abandon_ship as *const () as usize,
             "battle::world_elements::AbandonShip",
         ),
@@ -76,7 +60,7 @@ fn part1() -> Vec<(usize, &'static str)> {
             "battle::world_elements::spawn_rubble",
         ),
         (
-            crate::battle::weapon_native::engine::ModifySilhouette as *const () as usize,
+            crate::battle::weapon_native::engine::modify_silhouette as *const () as usize,
             "battle::weapon_native::ModifySilhouette",
         ),
         (
@@ -91,22 +75,8 @@ fn part1() -> Vec<(usize, &'static str)> {
 }
 #[cfg(not(test))]
 fn part2() -> Vec<(usize, &'static str)> {
-    vec![
-        (
-            crate::battle::weapon_native::engine::weapon_collision as *const () as usize,
-            "battle::weapon_native::weapon_collision",
-        ),
-        (
-            crate::battle::cyborg_native::engine::PlotIntercept as *const () as usize,
-            "battle::cyborg_native::PlotIntercept",
-        ),
-        (
-            crate::battle::cyborg_native::engine::ship_intelligence as *const () as usize,
-            "battle::cyborg_native::ship_intelligence",
-        ),
-        (
-            crate::battle::cyborg_native::engine::ship_weapons as *const () as usize,
-            "battle::cyborg_native::ship_weapons",
-        ),
-    ]
+    vec![(
+        crate::battle::weapon_native::engine::weapon_collision as *const () as usize,
+        "battle::weapon_native::weapon_collision",
+    )]
 }

@@ -5,7 +5,7 @@ mod battle_context;
 use battle::*;
 
 use std::{ffi::CStr, mem};
-use uqm_rust::ships::native::{abi::*, element};
+use uqm_rust::ships::native::abi::*;
 
 use battle::Battle as Battlefield;
 
@@ -83,14 +83,14 @@ fn cannon_launch_uses_mass_driver_missile_parameters() {
             ship.element_mut().next.location = POINT { x: 100, y: 200 };
             let slots = ship.weapon(1);
             let out = [ship.weapon_record(slots[0]).cast()];
-            let missile = element(out[0]);
+            let missile = battle_context::element(out[0]);
             assert!(!missile.is_null());
             assert_eq!((*missile).__bindgen_anon_1.life_span, 20);
             assert_eq!((*missile).__bindgen_anon_2.hit_points, 4);
             assert_eq!((*missile).__bindgen_anon_3.mass_points, 6);
             assert_eq!((*missile).__bindgen_anon_5.blast_offset, 6);
             assert_ne!((*missile).state_flags & IGNORE_SIMILAR as u16, 0);
-            FreeElement(out[0]);
+            battle_context::dispose(out[0]);
         }
     })
 }

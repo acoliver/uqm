@@ -10,12 +10,8 @@ pub(super) fn hooks() -> Vec<(usize, &'static str)> {
 fn part0() -> Vec<(usize, &'static str)> {
     vec![
         (
-            crate::battle::tactrans_native::engine::FindAliveStarShip as *const () as usize,
+            crate::battle::tactrans_native::engine::find_alive_ship as *const () as usize,
             "battle::tactrans_native::FindAliveStarShip",
-        ),
-        (
-            crate::battle::tactrans_native::engine::RecordShipDeath as *const () as usize,
-            "battle::tactrans_native::RecordShipDeath",
         ),
         (
             crate::battle::tactrans_native::engine::start_ship_explosion as *const () as usize,

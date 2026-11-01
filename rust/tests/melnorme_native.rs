@@ -6,9 +6,7 @@ mod battle;
 mod battle_context;
 use battle::{prim, Battle, FrameSet, PoolElement, Ship};
 use std::{ffi::CStr, mem, ptr};
-use uqm_rust::ships::native::{
-    abi::*, cosine, element, facing_to_angle, frame_index, put_element, sine,
-};
+use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, frame_index, sine};
 
 unsafe fn trader(battle: &Battle, player: SIZE) -> Ship<'_> {
     // SAFETY: the serialized fixture retains the battle pools and the ship's frame resources.
@@ -29,10 +27,10 @@ unsafe fn trader(battle: &Battle, player: SIZE) -> Ship<'_> {
 unsafe fn pump(ship: &mut Ship<'_>) -> *mut ELEMENT {
     let handle = ship.weapon_handles(1)[0];
     assert!(!handle.is_null());
-    let e = element(handle);
+    let e = battle_context::element(handle);
     (*e).pParent = (&raw mut *ship.ship_mut()).cast();
     (*e).next = (*e).current;
-    put_element(handle);
+    battle_context::put(handle);
     e
 }
 unsafe fn confusion(ship: &mut Ship<'_>) -> *mut ELEMENT {
@@ -43,13 +41,13 @@ unsafe fn confusion(ship: &mut Ship<'_>) -> *mut ELEMENT {
     ship.postprocess();
     let handle = disp_q.tail;
     assert_ne!(handle, old_tail);
-    let e = element(handle);
+    let e = battle_context::element(handle);
     (*e).next = (*e).current;
     e
 }
 unsafe fn remove(e: *mut ELEMENT) {
-    RemoveElement(e.cast());
-    FreeElement(e.cast());
+    battle_context::unlink(e.cast());
+    battle_context::dispose(e.cast());
 }
 
 unsafe fn queue() -> Vec<HELEMENT> {
@@ -57,7 +55,7 @@ unsafe fn queue() -> Vec<HELEMENT> {
     let mut h = disp_q.head;
     while !h.is_null() {
         handles.push(h);
-        h = (*element(h)).succ;
+        h = (*battle_context::element(h)).succ;
     }
     handles
 }
@@ -237,7 +235,7 @@ fn initial_pump_uses_the_c_missile_block_at_all_facings_and_coordinate_limits() 
                 TFB_SeedRandom(32);
                 let h = ship.weapon_handles(1)[0];
                 assert_rng_after(32, 0);
-                let e = element(h);
+                let e = battle_context::element(h);
                 assert!(!e.is_null());
                 assert_eq!((*e).__bindgen_anon_1.life_span, 2);
                 assert_eq!((*e).__bindgen_anon_2.hit_points, 2);
@@ -278,7 +276,7 @@ fn initial_pump_uses_the_c_missile_block_at_all_facings_and_coordinate_limits() 
                 assert_eq!(((*e).current.location.x, (*e).current.location.y), (x, y));
                 assert_eq!(((*e).next.location.x, (*e).next.location.y), (0, 0));
                 assert_eq!((*prim(e)).Type, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
-                FreeElement(h);
+                battle_context::dispose(h);
             }
         }
     })
@@ -326,7 +324,7 @@ fn held_charge_replaces_the_element_and_uses_the_old_level_for_damage() {
                     ship.ship_mut().energy_counter = 0;
                     TFB_SeedRandom(12);
                     hooks::invoke_element_pointer((*e).postprocess_func.unwrap(), e);
-                    let p = element(disp_q.tail);
+                    let p = battle_context::element(disp_q.tail);
                     assert_ne!(p, e);
                     let next_level = (level + 1).min(3);
                     assert_eq!((*p).__bindgen_anon_4.turn_wait, reverse | next_level);
@@ -371,7 +369,7 @@ fn charge_wait_wraps_as_a_byte_and_hit_points_truncate_after_the_c_assignment_ch
             ship.ship_mut().cur_status_flags = WEAPON as u16;
             ship.ship_mut().old_status_flags = WEAPON as u16;
             hooks::invoke_element_pointer((*e).postprocess_func.unwrap(), e);
-            let p = element(disp_q.tail);
+            let p = battle_context::element(disp_q.tail);
             assert_eq!((*p).__bindgen_anon_5.thrust_wait, 255);
             assert_eq!((*p).__bindgen_anon_4.turn_wait, 8);
             assert_eq!(frame_index((*p).current.image.frame), 1);
@@ -397,7 +395,7 @@ fn release_requires_both_weapon_status_words_to_hold_and_uses_full_velocity_unit
                     ship.ship_mut().weapon_counter = 9;
                     TFB_SeedRandom(14);
                     hooks::invoke_element_pointer((*e).postprocess_func.unwrap(), e);
-                    let p = element(disp_q.tail);
+                    let p = battle_context::element(disp_q.tail);
                     let held = current & old & WEAPON != 0;
                     assert_eq!((*p).__bindgen_anon_1.life_span, if held { 2 } else { 10 });
                     assert_eq!((*p).preprocess_func.is_some(), !held);
@@ -426,7 +424,7 @@ fn fired_charge_animation_bounces_at_each_five_frame_boundary_without_changing_l
             (*e).state_flags &= !(APPEARING as u16);
             ship.ship_mut().cur_status_flags = 0;
             hooks::invoke_element_pointer((*e).postprocess_func.unwrap(), e);
-            let p = element(disp_q.tail);
+            let p = battle_context::element(disp_q.tail);
             let pre = (*p).preprocess_func.unwrap();
             for level in 0..4u8 {
                 for (offset, reverse, next, next_reverse) in [
@@ -493,7 +491,7 @@ fn pump_collision_restores_the_shared_blast_counter_and_sets_the_level_blast_ani
                     hooks::CollisionCall::Hook,
                 );
                 assert_ne!({ disp_q.tail }, old_tail);
-                let blast = element(disp_q.tail);
+                let blast = battle_context::element(disp_q.tail);
                 assert_eq!((*e).__bindgen_anon_5.thrust_wait, 67);
                 assert_eq!((*e).__bindgen_anon_2.hit_points, 0);
                 assert_eq!((*blast).__bindgen_anon_1.life_span, 3 + u16::from(level));
@@ -563,7 +561,7 @@ fn confusion_special_obeys_energy_input_and_cooldown_boundaries() {
                     if fired { 29 } else { counter }
                 );
                 if fired {
-                    let e = element(disp_q.tail);
+                    let e = battle_context::element(disp_q.tail);
                     assert_eq!((*e).__bindgen_anon_1.life_span, 20);
                     assert_eq!((*e).__bindgen_anon_2.hit_points, 200);
                     assert_eq!((*e).__bindgen_anon_3.mass_points, 0);
@@ -624,7 +622,7 @@ fn failed_initialization_returns_one_null_slot_and_special_still_spends_energy()
             assert_eq!(queue(), before);
             assert_rng_after(18, 0);
             for h in exhausted {
-                FreeElement(h);
+                battle_context::dispose(h);
             }
         }
     })
@@ -668,7 +666,7 @@ fn confusion_collision_inserts_a_controller_at_the_head_with_exactly_one_rng_dra
                 collide(e, victim.ptr());
                 let h = disp_q.head;
                 assert_ne!(h, old_head);
-                let controller = element(h);
+                let controller = battle_context::element(h);
                 assert_eq!((*controller).succ, old_head);
                 assert_eq!((*controller).playerNr, 0);
                 assert_eq!(
@@ -732,7 +730,7 @@ fn confusion_reuses_the_first_same_player_nonsolid_special_even_if_it_is_a_trail
                         .map_or(std::ptr::null_mut(), |id| cx.elements().raw(id))
                 });
                 assert!(!h.is_null());
-                let e = element(h);
+                let e = battle_context::element(h);
                 (*e).playerNr = player;
                 (*e).current.image.farray = frames;
                 (*e).current.image.frame = ship.raw_frame(2, 11);
@@ -741,7 +739,7 @@ fn confusion_reuses_the_first_same_player_nonsolid_special_even_if_it_is_a_trail
                 (*e).hTarget = victim.ship_mut().hShip;
                 (*e).pParent = (&raw mut *ship.ship_mut()).cast();
                 (*prim(e)).Type = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
-                put_element(h);
+                battle_context::put(h);
                 candidates.push(e);
             }
             let chosen = candidates[3];
@@ -774,7 +772,7 @@ fn confusion_reuses_the_first_same_player_nonsolid_special_even_if_it_is_a_trail
             }
             assert_rng_after(51, 1);
             for h in exhausted {
-                FreeElement(h);
+                battle_context::dispose(h);
             }
         }
     })
@@ -806,7 +804,7 @@ fn confusion_ignores_nonships_and_consumes_no_rng_when_controller_allocation_fai
             assert_ne!((*e).state_flags & NONSOLID as u16, 0);
             assert_rng_after(62, 0);
             for h in exhausted {
-                FreeElement(h);
+                battle_context::dispose(h);
             }
         }
     })
@@ -821,7 +819,7 @@ fn controller_follows_target_overrides_controls_wraps_animation_and_emits_one_fr
             let mut victim = trader(&_battle, 1);
             let e = confusion(&mut ship);
             collide(e, victim.ptr());
-            let controller = element(disp_q.head);
+            let controller = battle_context::element(disp_q.head);
             let pre = (*controller).preprocess_func.unwrap();
             for direction in [LEFT, RIGHT] {
                 (*controller).__bindgen_anon_4.turn_wait = direction as u8;
@@ -842,7 +840,7 @@ fn controller_follows_target_overrides_controls_wraps_animation_and_emits_one_fr
                 );
                 assert_eq!(frame_index((*controller).next.image.frame), 8);
                 assert_eq!(queue().len(), before + 1);
-                let trail = element(disp_q.tail);
+                let trail = battle_context::element(disp_q.tail);
                 assert_eq!((*trail).playerNr, 0);
                 assert_eq!(
                     (*trail).state_flags,
@@ -887,7 +885,7 @@ fn controller_still_overrides_controls_when_trail_allocation_fails() {
             let mut victim = trader(&_battle, 1);
             let pulse = confusion(&mut ship);
             collide(pulse, victim.ptr());
-            let controller = element(disp_q.head);
+            let controller = battle_context::element(disp_q.head);
             (*controller).__bindgen_anon_4.turn_wait = RIGHT as u8;
             (*controller).current.image.frame = ship.raw_frame(2, 8);
             let exhausted = exhaust_queue();
@@ -900,7 +898,7 @@ fn controller_still_overrides_controls_when_trail_allocation_fails() {
             assert_eq!(queue(), before);
             assert_rng_after(9, 0);
             for h in exhausted {
-                FreeElement(h);
+                battle_context::dispose(h);
             }
         }
     })
@@ -1058,7 +1056,7 @@ fn held_charge_uses_the_same_ping_pong_animation_as_a_released_pulse() {
                 (*e).__bindgen_anon_4.turn_wait = turn;
                 (*e).__bindgen_anon_5.thrust_wait = 2;
                 hooks::invoke_element_pointer((*e).postprocess_func.unwrap(), e);
-                let p = element(disp_q.tail);
+                let p = battle_context::element(disp_q.tail);
                 assert_eq!((*p).__bindgen_anon_5.thrust_wait, 1);
                 assert_eq!((*p).__bindgen_anon_4.turn_wait, expected_turn);
                 assert_eq!(frame_index((*p).current.image.frame), expected_index);

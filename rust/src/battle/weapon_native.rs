@@ -29,7 +29,7 @@ pub(crate) mod engine {
     use super::*;
     use crate::collections::observation::image;
     use crate::engine::battle::{Cx, ElementId, Subject};
-    use crate::ships::native::{cosine, sine, starship, wrap_delta};
+    use crate::ships::native::{cosine, sine, wrap_delta};
     use std::{mem, ptr};
 
     pub(crate) fn collision_cb(
@@ -178,31 +178,31 @@ pub(crate) mod engine {
 
     /// # Safety
     /// Element must own a live ship, and stamp/status resources must be loaded.
-    #[no_mangle]
-    pub unsafe extern "C" fn ModifySilhouette(
-        e: *mut ELEMENT,
-        stamp: *mut STAMP,
+    pub unsafe fn modify_silhouette(
+        cx: &mut Cx<'_>,
+        e: ElementId,
+        stamp: &mut STAMP,
         flags: u8,
     ) -> FRAME {
         let mut object: INTERSECT_CONTROL = mem::zeroed();
         object.IntersectStamp = *stamp;
         let mut object_rect: RECT = mem::zeroed();
         GetFrameRect(object.IntersectStamp.frame, &mut object_rect);
-        let ship = starship(e);
+        let ship = cx.owner(e);
         if flags & MODIFY_IMAGE as u8 != 0 {
             let mut ship_intersect: INTERSECT_CONTROL = mem::zeroed();
-            image!(frame; ship_intersect.IntersectStamp.frame, SetAbsFrameIndex((*(*ship).descriptor_ptr()).ship_info.icons, 1));
+            image!(frame; ship_intersect.IntersectStamp.frame, SetAbsFrameIndex(cx.desc(ship).ship_info.icons, 1));
             if ship_intersect.IntersectStamp.frame.is_null() {
                 return ptr::null_mut();
             }
             let mut rect: RECT = mem::zeroed();
             GetFrameRect(ship_intersect.IntersectStamp.frame, &mut rect);
             loop {
-                object.IntersectStamp.origin.x = (i32::from(TFB_Random() as u16)
+                object.IntersectStamp.origin.x = (i32::from(cx.random() as u16)
                     % (i32::from(rect.extent.width) - i32::from(object_rect.extent.width))
                     + ((i32::from(object_rect.extent.width) - i32::from(rect.extent.width)) >> 1))
                     as i16;
-                object.IntersectStamp.origin.y = (i32::from(TFB_Random() as u16)
+                object.IntersectStamp.origin.y = (i32::from(cx.random() as u16)
                     % (i32::from(rect.extent.height) - i32::from(object_rect.extent.height))
                     + ((i32::from(object_rect.extent.height) - i32::from(rect.extent.height)) >> 1))
                     as i16;
@@ -218,7 +218,7 @@ pub(crate) mod engine {
         object.IntersectStamp.origin.y = object.IntersectStamp.origin.y.wrapping_add(
             *(&raw const Kernel::current().status_offsets)
                 .cast::<i16>()
-                .offset((*e).playerNr as isize),
+                .offset(cx.element(e).player as isize),
         );
         if flags & MODIFY_SWAP as u8 != 0 {
             object_rect.corner.x = object_rect
@@ -229,11 +229,7 @@ pub(crate) mod engine {
                 .corner
                 .y
                 .wrapping_add(object.IntersectStamp.origin.y);
-            InitShipStatus(
-                &raw mut (*(*ship).descriptor_ptr()).ship_info,
-                ship,
-                &mut object_rect,
-            );
+            InitShipStatus(cx.ship_info_mut(ship), Some(ship), &mut object_rect);
         } else {
             let old = SetContext(StatusContext);
             DrawStamp(&mut object.IntersectStamp);

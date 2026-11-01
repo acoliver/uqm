@@ -65,57 +65,39 @@ pub(crate) mod engine {
     use crate::collections::observation::image;
     use crate::engine::battle::views::SharedFrames;
     use crate::engine::battle::{Cx, ElementId, Parent};
-    use crate::ships::native::{
-        angle_to_facing, cosine, element, normalize_facing, put_element, sine, starship,
-    };
+    use crate::ships::native::{angle_to_facing, cosine, normalize_facing, sine};
     use std::{mem, ptr};
 
-    extern "C" {
-        static mut planet: [*mut crate::graphics::native_abi::frame_desc; 3];
-    }
-
-    unsafe fn primitive(e: *mut ELEMENT) -> *mut PRIMITIVE {
-        (&raw mut DisplayArray)
-            .cast::<PRIMITIVE>()
-            .add((*e).PrimIndex as usize)
-    }
     pub(crate) fn gravity_postprocess(cx: &mut Cx<'_>, e: ElementId) {
         cx.gravity(e);
     }
 
-    /// # Safety
-    /// The element pool and planet image must be initialized on the game thread.
-    pub unsafe fn spawn_planet(cx: &mut Cx<'_>) {
-        let handle = cx
-            .alloc_element()
-            .map_or(ptr::null_mut(), |id| cx.elements().raw(id));
-        if handle.is_null() {
+    pub fn spawn_planet(cx: &mut Cx<'_>) {
+        let Some(e) = cx.alloc_element() else {
             return;
-        }
-        let e = element(handle);
-        let id = cx
-            .elements()
-            .allocated_id(handle)
-            .unwrap_or_else(|| panic!("spawn element"));
-        (*e).playerNr = NEUTRAL_PLAYER_NUM as i16;
-        (*e).__bindgen_anon_2.hit_points = 200;
-        (*e).state_flags = APPEARING as u16;
-        (*e).__bindgen_anon_1.life_span = (NORMAL_LIFE + 1) as u16;
-        (*primitive(e)).Type = gfx_object_STAMP_PRIM as u8;
-        image!(set; (*e).current.image.farray, (&raw mut planet).cast::<FRAME>());
-        image!(frame; (*e).current.image.frame, *(*e).current.image.farray);
-        (*e).collision_func = Some(CollisionHook::Native(collision));
-        (*e).postprocess_func = Some(ElementHook::Native(gravity_postprocess));
-        (*e).velocity = mem::zeroed();
+        };
+        cx.element_mut(e).player = NEUTRAL_PLAYER_NUM as i16;
+        cx.element_mut(e).hits = 200;
+        cx.element_mut(e).flags = APPEARING as u16;
+        cx.element_mut(e).life = (NORMAL_LIFE + 1) as u16;
+        cx.primitive_style_mut(e).kind = gfx_object_STAMP_PRIM as u8;
+        let frames = cx.planet_frames();
+        cx.set_frames(e, false, frames);
+        cx.set_frame(e, false, cx.frames_first(frames));
+        cx.element_mut(e).collide = Some(CollisionHook::Native(collision));
+        cx.element_mut(e).post = Some(ElementHook::Native(gravity_postprocess));
+        // SAFETY: the legacy velocity record admits the zero state.
+        cx.element_mut(e).velocity = unsafe { mem::zeroed() };
+        let (sw, sh) = cx.screen_dimensions();
         loop {
-            (*e).current.location.x = aligned_random(TFB_Random(), width(ScreenWidth));
-            (*e).current.location.y = aligned_random(TFB_Random(), height(ScreenHeight));
-            if !cx.gravity(id) && !cx.matter_conflict(id) {
+            cx.element_mut(e).current.location.x = aligned_random(cx.random(), width(sw));
+            cx.element_mut(e).current.location.y = aligned_random(cx.random(), height(sh));
+            if !cx.gravity(e) && !cx.matter_conflict(e) {
                 break;
             }
         }
-        (*e).__bindgen_anon_3.mass_points = (*e).__bindgen_anon_2.hit_points as u8;
-        put_element(handle);
+        cx.element_mut(e).mass = cx.element(e).hits as u8;
+        cx.put(e);
     }
 
     pub(crate) fn spawn_rubble(cx: &mut Cx<'_>, source: ElementId) {
@@ -295,20 +277,15 @@ pub(crate) mod engine {
 
     /// # Safety
     /// Ship/target elements, descriptors and intersect frames must be live.
-    pub unsafe fn abandon_ship(
-        cx: &mut Cx<'_>,
-        ship: *mut ELEMENT,
-        target: *mut ELEMENT,
-        mut loss: u16,
-    ) {
-        let mut owner = starship(ship);
-        if (*(*owner).descriptor_ptr()).ship_info.ship_flags & CREW_IMMUNE as u16 != 0 {
+    pub unsafe fn abandon_ship(cx: &mut Cx<'_>, ship: ElementId, target: ElementId, mut loss: u16) {
+        let mut owner = cx.owner(ship);
+        if cx.race_stats(owner).ship_info.ship_flags & CREW_IMMUNE as u16 != 0 {
             return;
         }
-        let mut intersect = (*ship).IntersectControl;
+        let mut intersect = cx.weapon_origin(ship).intersection();
         let mut rect: RECT = mem::zeroed();
         GetFrameRect(intersect.IntersectStamp.frame, &mut rect);
-        let direction = (*ship).velocity.travel_angle;
+        let direction = cx.element(ship).velocity.travel_angle;
         let (dx, dy) = if direction == FULL_CIRCLE as u16 {
             (0, 0)
         } else {
@@ -317,36 +294,27 @@ pub(crate) mod engine {
         };
         while loss != 0 {
             loss -= 1;
-            let handle = cx
-                .alloc_element()
-                .map_or(ptr::null_mut(), |id| cx.elements().raw(id));
-            if handle.is_null() {
+            let Some(crew) = cx.alloc_element() else {
                 break;
-            }
-            let ship_id = cx
-                .elements()
-                .id(ship.cast())
-                .unwrap_or_else(|| panic!("abandon ship"));
-            cx.delta_crew(ship_id, -1);
-            put_element(handle);
-            let crew = element(handle);
-            (*crew).playerNr = NEUTRAL_PLAYER_NUM as i16;
-            (*crew).__bindgen_anon_2.hit_points = 1;
-            (*crew).state_flags = (APPEARING | FINITE_LIFE | CREW_OBJECT) as u16;
-            (*crew).__bindgen_anon_1.life_span = 300;
-            (*primitive(crew)).Type = gfx_object_POINT_PRIM as u8;
-            (*primitive(crew)).color = crew_color(false);
-            image!(frame; (*crew).current.image.frame, DecFrameIndex(stars_in_space));
-            image!(set; (*crew).current.image.farray, &raw mut stars_in_space);
-            (*crew).preprocess_func = Some(ElementHook::Native(crew_preprocess));
-            (*crew).collision_func = Some(CollisionHook::Native(crew_collision));
-            (*crew).pParent = owner.cast();
+            };
+            cx.delta_crew(ship, -1);
+            cx.put(crew);
+            cx.element_mut(crew).player = NEUTRAL_PLAYER_NUM as i16;
+            cx.element_mut(crew).hits = 1;
+            cx.element_mut(crew).flags = (APPEARING | FINITE_LIFE | CREW_OBJECT) as u16;
+            cx.element_mut(crew).life = 300;
+            cx.primitive_style_mut(crew).kind = gfx_object_POINT_PRIM as u8;
+            cx.primitive_style_mut(crew).color = crew_color(false);
+            cx.set_star_image(crew);
+            cx.element_mut(crew).pre = Some(ElementHook::Native(crew_preprocess));
+            cx.element_mut(crew).collide = Some(CollisionHook::Native(crew_collision));
+            cx.set_parent(crew, Some(owner));
             // The original loop retains this reassignment for subsequent crew.
-            owner = starship(target);
-            (*crew).hTarget = (*owner).hShip;
-            intersect.IntersectStamp.origin = (*ship).IntersectControl.EndPoint;
-            let w = (i32::from(TFB_Random() as u16) % i32::from(rect.extent.width)) as i16;
-            let h = (i32::from(TFB_Random() as u16) % i32::from(rect.extent.height)) as i16;
+            owner = cx.owner(target);
+            cx.set_target(crew, cx.optional_ship_element(owner));
+            intersect.IntersectStamp.origin = cx.weapon_origin(ship).intersection().EndPoint;
+            let w = (i32::from(cx.random() as u16) % i32::from(rect.extent.width)) as i16;
+            let h = (i32::from(cx.random() as u16) % i32::from(rect.extent.height)) as i16;
             let mut crew_intersect: INTERSECT_CONTROL = mem::zeroed();
             crew_intersect.EndPoint = intersect.EndPoint;
             image!(frame; crew_intersect.IntersectStamp.frame, DecFrameIndex(stars_in_space));
@@ -359,7 +327,8 @@ pub(crate) mod engine {
                     .EndPoint
                     .y
                     .wrapping_add(h - (rect.extent.height >> 1));
-                crew_intersect.IntersectStamp.origin = (*target).IntersectControl.EndPoint;
+                crew_intersect.IntersectStamp.origin =
+                    cx.weapon_origin(target).intersection().EndPoint;
             } else {
                 crew_intersect.EndPoint.x = crew_intersect.EndPoint.x.wrapping_add(if dx == 0 {
                     w - (rect.extent.width >> 1)
@@ -379,8 +348,10 @@ pub(crate) mod engine {
                 crew_intersect.IntersectStamp.origin.y = crew_intersect.EndPoint.y.wrapping_add(dy);
             }
             DrawablesIntersect(&mut crew_intersect, &mut intersect, MAX_TIME_VALUE as u16);
-            (*crew).current.location.x = (i32::from(crew_intersect.EndPoint.x) << ONE_SHIFT) as i16;
-            (*crew).current.location.y = (i32::from(crew_intersect.EndPoint.y) << ONE_SHIFT) as i16;
+            cx.element_mut(crew).current.location.x =
+                (i32::from(crew_intersect.EndPoint.x) << ONE_SHIFT) as i16;
+            cx.element_mut(crew).current.location.y =
+                (i32::from(crew_intersect.EndPoint.y) << ONE_SHIFT) as i16;
         }
     }
 }

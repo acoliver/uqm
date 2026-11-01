@@ -544,3 +544,13 @@ mod tests {
         teardown_queue(pq);
     }
 }
+
+/// Field-only decoding metadata used after a pool walker checks slot boundaries.
+#[derive(Clone, Copy)]
+pub struct LinkLayout {
+    pub size: usize,
+    pub align: usize,
+    pub read: unsafe fn(
+        std::ptr::NonNull<std::ffi::c_void>,
+    ) -> (*mut std::ffi::c_void, *mut std::ffi::c_void),
+}

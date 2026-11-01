@@ -128,10 +128,10 @@ pub(crate) mod engine {
     use super::*;
     use crate::battle::battle_native::engine::{activity, player_input, rgb15, set_activity};
     use crate::battle::battle_native::BattleSong;
-    use crate::battle::encount_native::{FleetIsInfinite, UpdateShipFragCrew};
+    use crate::battle::encount_native::FleetIsInfinite;
     use crate::engine::battle::views::SharedFrames;
     use crate::engine::battle::{Cx, ElementFn, ElementId, Parent};
-    use crate::ships::native::{cosine, facing_to_angle, sine, starship};
+    use crate::ships::native::{cosine, facing_to_angle, sine};
     use abi::*;
     use std::ptr;
 
@@ -151,28 +151,22 @@ pub(crate) mod engine {
         a.map(|f| f.address()) == Some(b as usize)
     }
 
-    /// # Safety
-    /// `test` must identify a live starship; the display queue and attached ships must be valid on the game thread.
-    #[no_mangle]
-    pub unsafe extern "C" fn OpponentAlive(test: *mut STARSHIP) -> BOOLEAN {
-        let mut h = disp_q.head;
-        while !h.is_null() {
-            let e = h.cast::<ELEMENT>();
-            h = (*e).succ;
-            let ship = starship(e);
-            if !ship.is_null()
-                && ship != test
-                && (*(*ship).descriptor_ptr()).ship_info.crew_level == 0
-            {
-                return 0;
+    pub(crate) fn opponent_alive(cx: &Cx<'_>, test: crate::engine::battle::ShipId) -> bool {
+        let mut next = cx.elements().head();
+        while let Some(e) = next {
+            next = cx.elements().succ(e);
+            if let Parent::Ship(ship) = cx.parent(e) {
+                if ship != test && cx.race_stats(ship).ship_info.crew_level == 0 {
+                    return false;
+                }
             }
         }
-        1
+        true
     }
 
-    pub(crate) unsafe fn play_ditty(ship: *mut STARSHIP) {
-        PlayMusic((*(*ship).descriptor_ptr()).ship_data.victory_ditty, 0, 3);
-        Kernel::current().ditty_playing = 1;
+    pub(crate) unsafe fn play_ditty(cx: &mut Cx<'_>, ship: crate::engine::battle::ShipId) {
+        PlayMusic(cx.desc(ship).ship_data.victory_ditty, 0, 3);
+        (*cx.kernel()).ditty_playing = 1;
     }
 
     /// # Safety
@@ -285,39 +279,36 @@ pub(crate) mod engine {
         cx.set_parent(dead, Some(dead_ship));
     }
 
-    unsafe fn set_min_ship_life_span(ship: *mut ELEMENT, life: COUNT) {
-        if same_callback((*ship).death_func, new_ship) {
-            assert_ne!((*ship).state_flags & FINITE_LIFE as u16, 0);
-            assert_eq!((*ship).state_flags & DISAPPEARING as u16, 0);
-            if (*ship).__bindgen_anon_1.life_span < life {
-                (*ship).__bindgen_anon_1.life_span = life;
+    fn set_min_ship_life_span(cx: &mut Cx<'_>, ship: ElementId, life: COUNT) {
+        let state = cx.element(ship);
+        if same_callback(state.death, new_ship) {
+            assert_ne!(state.flags & FINITE_LIFE as u16, 0);
+            assert_eq!(state.flags & DISAPPEARING as u16, 0);
+            if state.life < life {
+                cx.element_mut(ship).life = life;
             }
         }
     }
 
-    unsafe fn set_min_star_ship_life_span(ship: *mut STARSHIP, life: COUNT) {
-        set_min_ship_life_span((*ship).hShip.cast(), life);
-    }
-
-    unsafe fn check_other_ship_life_span(dead: *mut ELEMENT) {
-        let owner = starship(dead);
-        let winner = Kernel::current().winner;
-        if !winner.is_null()
-            && owner != winner
-            && (*(*winner).descriptor_ptr()).ship_info.crew_level == 0
+    fn check_other_ship_life_span(cx: &mut Cx<'_>, dead: ElementId) {
+        let owner = cx.owner(dead);
+        let winner = cx.winner();
+        if let Some(winner) = winner
+            .filter(|&winner| owner != winner && cx.race_stats(winner).ship_info.crew_level == 0)
         {
-            set_min_star_ship_life_span(winner, (*dead).__bindgen_anon_1.life_span.wrapping_add(1));
-        } else if winner.is_null() {
-            let mut h = disp_q.head;
-            while !h.is_null() {
-                let e = h.cast::<ELEMENT>();
-                h = (*e).succ;
-                let ship = starship(e);
-                if !ship.is_null()
-                    && e != dead
-                    && (*(*ship).descriptor_ptr()).ship_info.crew_level == 0
-                {
-                    set_min_ship_life_span(e, (*dead).__bindgen_anon_1.life_span);
+            set_min_ship_life_span(
+                cx,
+                cx.ship_element(winner),
+                cx.element(dead).life.wrapping_add(1),
+            );
+        } else if winner.is_none() {
+            let mut next = cx.elements().head();
+            while let Some(e) = next {
+                next = cx.elements().succ(e);
+                if let Parent::Ship(ship) = cx.parent(e) {
+                    if e != dead && cx.race_stats(ship).ship_info.crew_level == 0 {
+                        set_min_ship_life_span(cx, e, cx.element(dead).life);
+                    }
                 }
             }
         }
@@ -334,30 +325,26 @@ pub(crate) mod engine {
     /// supplied player and must not retain the outgoing ship pointer.
     pub unsafe fn new_ship_with_picker(
         cx: &mut Cx<'_>,
-        dead: *mut ELEMENT,
-        pick: impl FnOnce(*mut STARSHIP, COUNT) -> BOOLEAN,
+        dead: ElementId,
+        pick: impl FnOnce(&mut Cx<'_>, crate::engine::battle::ShipId, COUNT) -> BOOLEAN,
     ) {
         let net = cx.b.net.clone();
-        let ship = starship(dead);
+        let ship = cx.owner(dead);
         if !ready_for_battle_end() {
-            (*dead).state_flags &= !(DISAPPEARING as u16);
-            (*dead).__bindgen_anon_1.life_span = (*dead).__bindgen_anon_1.life_span.wrapping_add(1);
-            check_other_ship_life_span(dead);
+            cx.element_mut(dead).flags &= !(DISAPPEARING as u16);
+            cx.element_mut(dead).life = cx.element(dead).life.wrapping_add(1);
+            check_other_ship_life_span(cx, dead);
             return;
         }
-        (*cx.kernel()).winner = ptr::null_mut();
+        cx.set_winner_slot(None);
         StopDitty();
         StopMusic();
         StopSound();
-        (*dead).pParent = ptr::null_mut();
-        let restart = OpponentAlive(ship) != 0;
+        cx.set_parent(dead, None);
+        let restart = opponent_alive(cx, ship);
         unload_ship(
-            crate::engine::battle::RaceDesc::from_storage(
-                (*ship)
-                    .descriptor
-                    .take()
-                    .unwrap_or_else(|| panic!("dead ship descriptor")),
-            ),
+            cx.take_descriptor(ship)
+                .unwrap_or_else(|| panic!("dead ship descriptor")),
             1,
             1,
         );
@@ -374,11 +361,11 @@ pub(crate) mod engine {
             BatchGraphics();
             return;
         }
-        if FleetIsInfinite((*ship).playerNr as COUNT) == 0 {
-            UpdateShipFragCrew(ship);
-            (*ship).SpeciesID = SPECIES_ID_NO_ID;
+        if FleetIsInfinite(cx.ship_state(ship).player as COUNT) == 0 {
+            crate::battle::encount_native::engine::update_ship_frag_crew(ship);
+            cx.set_ship_species(ship, SPECIES_ID_NO_ID);
         }
-        if crate::app::bridge::publish(cx, || pick(ship, (*ship).playerNr as COUNT)) != 0 {
+        if pick(cx, ship, cx.ship_state(ship).player as COUNT) != 0 {
             if net
                 .as_ref()
                 .is_some_and(|net| !cx.negotiate_battle(net.as_ref(), NetState_NetState_inBattle))
@@ -445,62 +432,38 @@ pub(crate) mod engine {
         StopMusic();
     }
 
-    /// # Safety
-    /// `dead` must identify the excluded element; all display queue ship attachments must be valid on the game thread.
-    #[no_mangle]
-    pub unsafe extern "C" fn FindAliveStarShip(dead: *mut ELEMENT) -> *mut STARSHIP {
-        let mut alive = ptr::null_mut();
-        let mut h = disp_q.head;
-        while !h.is_null() {
-            let e = h.cast::<ELEMENT>();
-            if (*e).state_flags & PLAYER_SHIP as u16 != 0
+    pub(crate) fn find_alive_ship(
+        cx: &Cx<'_>,
+        dead: ElementId,
+    ) -> Option<crate::engine::battle::ShipId> {
+        let mut next = cx.elements().head();
+        while let Some(e) = next {
+            let state = cx.element(e);
+            if state.flags & PLAYER_SHIP as u16 != 0
                 && e != dead
-                && (*e).__bindgen_anon_3.mass_points as u32 <= MAX_SHIP_MASS + 1
+                && u32::from(state.mass) <= MAX_SHIP_MASS + 1
             {
-                alive = starship(e);
-                assert!(!alive.is_null());
-                if (*(*alive).descriptor_ptr()).ship_info.crew_level == 0
-                    && (*e).__bindgen_anon_3.mass_points as u32 != MAX_SHIP_MASS + 1
+                let alive = cx.owner(e);
+                if cx.race_stats(alive).ship_info.crew_level == 0
+                    && u32::from(state.mass) != MAX_SHIP_MASS + 1
                 {
-                    alive = ptr::null_mut();
+                    return None;
                 }
-                break;
+                return Some(alive);
             }
-            h = (*e).succ;
+            next = cx.elements().succ(e);
         }
-        alive
+        None
     }
 
-    /// # Safety
-    /// The caller must access winner state only on the game thread and not retain the result past ship teardown.
-    #[no_mangle]
-    pub unsafe extern "C" fn GetWinnerStarShip() -> *mut STARSHIP {
-        Kernel::current().winner
-    }
-    /// # Safety
-    /// A non-null `winner` must be a live starship that remains live until winner state is reset.
-    #[no_mangle]
-    pub unsafe extern "C" fn SetWinnerStarShip(winner: *mut STARSHIP) {
-        if winner.is_null() {
+    pub fn set_winner_ship(cx: &mut Cx<'_>, winner: Option<crate::engine::battle::ShipId>) {
+        let Some(winner) = winner else {
             return;
+        };
+        cx.ship_state_mut(winner).status |= PLAY_VICTORY_DITTY as u16;
+        if cx.winner().is_none() {
+            cx.set_winner_slot(Some(winner));
         }
-        (*winner).cur_status_flags |= PLAY_VICTORY_DITTY as u16;
-        if Kernel::current().winner.is_null() {
-            Kernel::current().winner = winner;
-        }
-    }
-    /// # Safety
-    /// `dead` must be a live ship with a valid owner, player index, and battle counter on the game thread.
-    #[no_mangle]
-    pub unsafe extern "C" fn RecordShipDeath(dead: *mut ELEMENT) {
-        // SAFETY: the legacy ship element is checked before entering native behavior.
-        crate::app::bridge::enter(|cx| {
-            let id = cx
-                .elements()
-                .id(dead.cast())
-                .unwrap_or_else(|| panic!("{}", "null dead ship"));
-            cx.record_ship_death(id);
-        });
     }
 
     pub fn start_ship_explosion(cx: &mut Cx<'_>, ship: ElementId, play_sound: bool) {

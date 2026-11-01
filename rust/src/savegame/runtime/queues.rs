@@ -44,7 +44,7 @@ use std::ffi::c_void;
 use std::fmt;
 use std::mem::{align_of, size_of};
 
-use crate::collections::queue::{Queue, ReinitQueue};
+use crate::collections::queue::{LinkLayout, Queue, ReinitQueue};
 use crate::comm::dispatch::{
     clone_ship_fragment_from, production_captain_name, CFleetInfo, CPoint, CShipFragment,
     INFINITE_FLEET, START_ENCOUNTER, START_INTERPLANETARY,
@@ -178,17 +178,25 @@ pub(super) fn pool_slots<T: QueueElement>(
     queue: &CQueue,
     kind: QueueKind,
 ) -> Result<usize, QueueError> {
+    pool_slots_layout(queue, kind, size_of::<T>(), align_of::<T>())
+}
+fn pool_slots_layout(
+    queue: &CQueue,
+    kind: QueueKind,
+    size: usize,
+    align: usize,
+) -> Result<usize, QueueError> {
     if queue.pq_tab.is_null() {
         return Err(QueueError::PoolMissing { queue: kind });
     }
-    if usize::from(queue.object_size) != size_of::<T>() {
+    if usize::from(queue.object_size) != size {
         return Err(QueueError::WrongObjectSize {
             queue: kind,
             found: queue.object_size,
-            expected: size_of::<T>(),
+            expected: size,
         });
     }
-    if !(queue.pq_tab as usize).is_multiple_of(align_of::<T>()) {
+    if !(queue.pq_tab as usize).is_multiple_of(align) {
         return Err(QueueError::MisalignedPool { queue: kind });
     }
     Ok(usize::from(queue.num_objects))
@@ -202,11 +210,28 @@ pub(crate) fn walk<T: QueueElement>(
     queue: &CQueue,
     kind: QueueKind,
 ) -> Result<Vec<*mut T>, QueueError> {
-    let slots = pool_slots::<T>(queue, kind)?;
+    let layout = LinkLayout {
+        size: size_of::<T>(),
+        align: align_of::<T>(),
+        read: |pointer| {
+            // SAFETY: walk_layout checks each slot against this exact record layout before invoking the codec.
+            let record = unsafe { &*pointer.cast::<T>().as_ptr() };
+            (record.pred(), record.succ())
+        },
+    };
+    walk_layout(queue, kind, layout).map(|links| links.into_iter().map(|p| p.cast()).collect())
+}
+
+pub(crate) fn walk_layout(
+    queue: &CQueue,
+    kind: QueueKind,
+    layout: LinkLayout,
+) -> Result<Vec<*mut c_void>, QueueError> {
+    let slots = pool_slots_layout(queue, kind, layout.size, layout.align)?;
     let pool = queue.pq_tab as usize;
     let slot_size = usize::from(queue.object_size);
 
-    let mut links: Vec<*mut T> = Vec::new();
+    let mut links: Vec<*mut c_void> = Vec::new();
     let mut previous: *mut c_void = std::ptr::null_mut();
     let mut link = queue.head;
     while !link.is_null() {
@@ -219,18 +244,17 @@ pub(crate) fn walk<T: QueueElement>(
                 position,
             });
         }
-        // SAFETY: `link` is an aligned slot inside the pool, checked above,
-        // and the pool holds `T`s (size and alignment checked by `pool_slots`).
-        let element = unsafe { &*(link as *const T) };
-        if element.pred() != previous {
+        // SAFETY: link is non-null, aligned and inside the retained pool with the codec's exact record stride.
+        let (pred, succ) = unsafe { (layout.read)(std::ptr::NonNull::new_unchecked(link)) };
+        if pred != previous {
             return Err(QueueError::CorruptQueue {
                 queue: kind,
                 position,
             });
         }
-        links.push(link.cast::<T>());
+        links.push(link);
         previous = link;
-        link = element.succ();
+        link = succ;
     }
     if previous != queue.tail {
         return Err(QueueError::CorruptQueue {

@@ -229,7 +229,7 @@ pub(crate) mod engine {
                 };
             }
             let previous = links as u16;
-            InsertPrim(&mut links, p, previous);
+            crate::engine::battle::access::insert_primitive(&mut links, p, previous);
         }
         for i in 0..3 {
             (*blocks(i)).sort();

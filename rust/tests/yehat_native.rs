@@ -5,7 +5,7 @@ mod battle_context;
 mod battle;
 use battle::*;
 use std::mem;
-use uqm_rust::ships::native::{abi::*, element, frame_index};
+use uqm_rust::ships::native::{abi::*, frame_index};
 #[test]
 fn descriptor_and_twin_missile_launch() {
     battle_context::run(|| {
@@ -42,7 +42,7 @@ fn descriptor_and_twin_missile_launch() {
                     .collect::<Vec<HELEMENT>>()
             });
             for (i, &h) in out.iter().enumerate() {
-                let e = element(h);
+                let e = battle_context::element(h);
                 assert_eq!(
                     (
                         (*e).__bindgen_anon_1.life_span,
@@ -57,7 +57,7 @@ fn descriptor_and_twin_missile_launch() {
                 );
                 assert_eq!((*e).current.location.y, 4000 - 64 + 80);
                 assert_eq!(velocity(&(*e).velocity), toward(80, 0));
-                FreeElement(h);
+                battle_context::dispose(h);
             }
         }
     })

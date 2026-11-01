@@ -134,7 +134,7 @@ fn missile_mode_returns_two_missiles_with_c_boundary_values() {
                 assert_eq!((*missile).__bindgen_anon_5.blast_offset, 0);
                 assert_ne!((*missile).state_flags & IGNORE_SIMILAR as u16, 0);
                 assert_eq!((*missile).__bindgen_anon_4.turn_wait, 5);
-                FreeElement(handle);
+                battle_context::dispose(handle);
             }
             fixture.uninit();
         }
@@ -317,7 +317,7 @@ fn xwing_launches_two_lasers_and_preserves_friendly_ships() {
             assert_eq!((*target).__bindgen_anon_2.crew_level, 20);
             assert_eq!((*first).__bindgen_anon_2.hit_points, 1);
             for handle in handles {
-                FreeElement(handle);
+                battle_context::dispose(handle);
             }
             fixture.uninit();
         }

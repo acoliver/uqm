@@ -583,11 +583,20 @@ impl RaceDesc {
     pub(crate) fn into_storage(self) -> Box<RACE_DESC> {
         self.raw
     }
-    pub(crate) fn info(&self) -> &SHIP_INFO {
+    pub fn info(&self) -> &SHIP_INFO {
         &self.raw.ship_info
     }
-    pub(crate) fn info_mut(&mut self) -> &mut SHIP_INFO {
+    pub fn info_mut(&mut self) -> &mut SHIP_INFO {
         &mut self.raw.ship_info
+    }
+    pub fn race(&self) -> Option<&'static super::Race> {
+        self.raw.race
+    }
+    pub fn set_race(&mut self, race: &'static super::Race) {
+        self.raw.race = Some(race);
+    }
+    pub fn callbacks(&self) -> [usize; 5] {
+        self.raw.callbacks()
     }
     pub(crate) fn data_mut(&mut self) -> &mut DATA_STUFF {
         &mut self.raw.ship_data
@@ -595,7 +604,7 @@ impl RaceDesc {
     pub(crate) fn fleet(&self) -> &FLEET_STUFF {
         &self.raw.fleet
     }
-    pub(crate) fn address(&self) -> usize {
+    pub fn address(&self) -> usize {
         std::ptr::from_ref(&*self.raw) as usize
     }
     #[cfg(not(test))]
@@ -663,7 +672,6 @@ pub(crate) fn ship_queue(side: usize) -> std::ptr::NonNull<QUEUE> {
     std::ptr::NonNull::new((&raw mut race_q).cast::<QUEUE>().wrapping_add(side))
         .unwrap_or_else(|| panic!("{}", "static ship queues"))
 }
-#[cfg(not(test))]
 pub(crate) fn primitive_slot(index: usize) -> std::ptr::NonNull<PRIMITIVE> {
     assert!(index < 330);
     std::ptr::NonNull::new(

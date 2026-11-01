@@ -385,22 +385,22 @@ pub use crate::battle::context_access::reader_legacy::{
 /// As for `get_encounter_star_ship`. The picker must write a live selected
 /// ship handle when it succeeds.
 pub(crate) unsafe fn encounter_ship(
-    last: *mut c_void,
+    last: Option<crate::engine::battle::ShipId>,
     which_player: u16,
     activity: u16,
     pick: impl FnOnce(u16, *mut *mut c_void) -> u32,
-) -> *mut c_void {
+) -> Option<crate::engine::battle::ShipId> {
     let side = usize::from(which_player);
     // SAFETY: `battle_counter` and `race_q` have a slot for each side.
     // SAFETY: as above.
-    let last_id = LinkQueue::<Starship>::identify_ship(side, last);
+    let last_id = last;
 
     // SAFETY: plain call.
     if unsafe { inHQSpace() } != 0 {
         assert_eq!(side, RPG_PLAYER_NUM);
         // SIS for the Hyperspace flight
         // SAFETY: `queue` is `race_q[side]`.
-        return LinkQueue::<Starship>::ship_raw(LinkQueue::<Starship>::first_ship(side));
+        return LinkQueue::<Starship>::first_ship(side);
     }
     if activity & 0xFF == SUPER_MELEE {
         // Let the player chose their own ship. (May be a computer player).
@@ -409,14 +409,14 @@ pub(crate) unsafe fn encounter_ship(
             unsafe { crate::app::bridge::battle(|b| (b.counters[0], b.counters[1])) };
         if own == 0 || other == 0 {
             // One side is out of ships. Game over.
-            return std::ptr::null_mut();
+            return None;
         }
         let mut ship = std::ptr::null_mut();
         // SAFETY: `ship` is a valid out-parameter.
         if pick(which_player, &mut ship) == 0 {
-            return std::ptr::null_mut();
+            return None;
         }
-        return ship;
+        return LinkQueue::<Starship>::identify_ship(side, ship);
     }
 
     // Full game.
@@ -424,17 +424,20 @@ pub(crate) unsafe fn encounter_ship(
         // Human player in a full game.
         // SAFETY: `counter` points into `battle_counter`.
         let ships_left = unsafe { crate::app::bridge::battle(|b| b.counters[side]) };
-        if last.is_null() && ships_left == 1 {
+        if last.is_none() && ships_left == 1 {
             // First time picking a ship and player has no escorts: SIS is the
             // last ship in the queue (though there is only one).
-            return LinkQueue::<Starship>::tail_of(side);
+            return LinkQueue::<Starship>::identify_ship(
+                side,
+                LinkQueue::<Starship>::tail_of(side),
+            );
         }
         if ships_left != 0 {
             // Player still has ships left
             // SAFETY: game thread inside a full-game battle.
-            return unsafe { get_armada_star_ship() };
+            return LinkQueue::<Starship>::identify_ship(side, unsafe { get_armada_star_ship() });
         }
-        if !last.is_null() {
+        if last.is_some() {
             // The last ship was the flagship.
             // SAFETY: `last` is a live `STARSHIP` and `GlobData` is owned by
             // the game thread.
@@ -456,13 +459,13 @@ pub(crate) unsafe fn encounter_ship(
                 }
             }
         }
-        return std::ptr::null_mut();
+        return None;
     }
 
     // NPC player in a full game
     // SAFETY: plain call.
     if unsafe { FleetIsInfinite(which_player) } != 0 {
-        if !last.is_null() {
+        if last.is_some() {
             // The current STARSHIP is reused for the next one; update with new
             // info.
             // SAFETY: `last` is a live `STARSHIP`.
@@ -476,18 +479,18 @@ pub(crate) unsafe fn encounter_ship(
         // SAFETY: `counter` points into `battle_counter`.
         unsafe { crate::app::bridge::battle(|b| b.counters[side] += 1) };
         // SAFETY: `queue` is `race_q[side]`.
-        return LinkQueue::<Starship>::ship_raw(LinkQueue::<Starship>::first_ship(side));
+        return LinkQueue::<Starship>::first_ship(side);
     }
-    if !last.is_null() {
+    if last.is_some() {
         // Get the next ship for the computer
         // SAFETY: `last` is a live `STARSHIP`.
-        return LinkQueue::<Starship>::ship_raw(LinkQueue::<Starship>::next_ship(
+        return LinkQueue::<Starship>::next_ship(
             last_id.unwrap_or_else(|| panic!("missing checked battle value")),
-        ));
+        );
     }
     // Get the very first ship for the computer
     // SAFETY: `queue` is `race_q[side]`.
-    LinkQueue::<Starship>::ship_raw(LinkQueue::<Starship>::first_ship(side))
+    LinkQueue::<Starship>::first_ship(side)
 }
 
 /// `DrawArmadaPickShip`: draw the picker frame, the SIS name and the escorts'

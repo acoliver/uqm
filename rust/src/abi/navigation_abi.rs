@@ -3484,7 +3484,6 @@ pub use crate::engine::battle::record::element__bindgen_ty_5;
 
 
 #[cfg(not(test))]
-pub use crate::battle::process_native::engine::RemoveElement;
 
 #[cfg(not(test))]
 pub use crate::battle::world_elements::engine::spawn_planet;
@@ -3816,7 +3815,6 @@ pub type _bindgen_ty_23 = ::std::os::raw::c_uint;
 pub use crate::battle::encount_native::engine::FleetIsInfinite;
 
 #[cfg(not(test))]
-pub use crate::battle::encount_native::engine::UpdateShipFragCrew;
 extern "C" {
     pub static mut EncounterRace: SIZE;
 }
@@ -4548,7 +4546,6 @@ pub const FIRST_EMPTY_INDEX: _bindgen_ty_28 = 4;
 pub type _bindgen_ty_28 = ::std::os::raw::c_uint;
 
 #[cfg(not(test))]
-pub use crate::battle::cyborg_native::engine::ship_intelligence;
 
 #[cfg(not(test))]
 pub use crate::navigation::interplanetary::live::notify_others_abi as NotifyOthers;
@@ -4560,7 +4557,6 @@ pub use crate::navigation::interplanetary::live::do_missions as DoMissions;
 pub use crate::battle::process_native::engine::InitDisplayList;
 
 #[cfg(not(test))]
-pub use crate::battle::process_native::engine::SetUpElement;
 pub const SOUND_EFFECTS_GRAB_CREW: SOUND_EFFECTS = 0;
 pub const SOUND_EFFECTS_SHIP_EXPLODES: SOUND_EFFECTS = 1;
 pub const SOUND_EFFECTS_TARGET_DAMAGED_FOR_1_PT: SOUND_EFFECTS = 2;

@@ -7,9 +7,8 @@ mod battle_context;
 mod battle;
 use battle::{Battle, Object, Ship};
 use std::{ffi::CStr, mem, ptr};
-use uqm_rust::battle::process_native::FreeElement;
 use uqm_rust::engine::battle::{Cx, ElementId, RaceState};
-use uqm_rust::ships::native::{abi::*, element};
+use uqm_rust::ships::native::abi::*;
 
 fn original_collision(_: &mut Cx<'_>, _: ElementId, _: &mut POINT, _: ElementId, _: &mut POINT) {}
 
@@ -150,7 +149,7 @@ fn bubble_is_launched_with_the_c_missile_block() {
             assert!((*bubble).preprocess_func.is_some());
             // DISPLAY_TO_WORLD (8) world units per tick along the ship facing.
             assert_eq!(velocity_fields(&(*bubble).velocity), velocity_toward(32, 4));
-            FreeElement(bubble.cast());
+            battle_context::dispose(bubble.cast());
         }
     })
 }
@@ -199,7 +198,7 @@ fn bubble_wait_nibbles_count_down_then_retarget_with_the_c_rng_order() {
             TFB_Random();
             TFB_Random();
             assert_eq!(next_draw, TFB_Random());
-            FreeElement(bubble.cast());
+            battle_context::dispose(bubble.cast());
         }
     })
 }
@@ -257,10 +256,10 @@ fn bubble_steers_toward_the_nearest_enemy_with_a_random_wobble() {
 
                 // Remove this enemy before trying the other side.
                 let handle = disp_q.tail;
-                assert_eq!(element(handle), enemy);
+                assert_eq!(battle_context::element(handle), enemy);
                 drop(enemy_ship);
             }
-            FreeElement(bubble.cast());
+            battle_context::dispose(bubble.cast());
         }
     })
 }

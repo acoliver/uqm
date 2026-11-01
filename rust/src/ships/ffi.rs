@@ -14,9 +14,8 @@
 
 use super::catalog::{free_master_ship_list, get_ship_cost_from_index, load_master_ship_list};
 use super::ffi_contract::*;
-use super::lifecycle::spawn_ship as lifecycle_spawn;
 use super::loader::{free_ship as loader_free_ship, load_ship, LoadTier};
-use super::types::{RaceDesc, SpeciesId, Starship};
+use super::types::{RaceDesc, SpeciesId};
 use crate::collections::queue::{AllocLink, PutQueue, Queue};
 use std::os::raw::c_void;
 use std::panic::catch_unwind;
@@ -191,134 +190,6 @@ pub unsafe extern "C" fn rust_ships_clone_fragment(
 // ===========================================================================
 // Spawn/Lifecycle FFI
 // ===========================================================================
-
-/// Spawns a ship in battle.
-///
-/// C: `BOOLEAN rust_ships_spawn(STARSHIP *starship);`
-///
-/// Returns 1 on success, 0 on failure.
-///
-/// # Safety
-/// `starship` must be a valid pointer to a C-owned `STARSHIP` struct.
-pub unsafe extern "C" fn rust_ships_spawn(starship: *mut std::os::raw::c_void) -> CBoolean {
-    catch_unwind(|| {
-        if starship.is_null() {
-            return 0;
-        }
-
-        // Safety: we trust C to pass a valid pointer
-        unsafe {
-            let starship_c = &mut *(starship as *mut CStarship);
-
-            #[cfg(debug_assertions)]
-            eprintln!(
-                "LIFECYCLE: rust_ships_spawn entry (species={}, player={})",
-                starship_c.species_id, starship_c.player_nr
-            );
-
-            let mut starship_rust = Starship {
-                species_id: match SpeciesId::from_i32(starship_c.species_id) {
-                    Some(s) => s,
-                    None => return 0,
-                },
-                captains_name_index: starship_c.captains_name_index,
-                race_desc: None,
-                crew_level: starship_c.crew_level,
-                max_crew: starship_c.max_crew,
-                ship_cost: starship_c.ship_cost,
-                index: starship_c.index,
-                race_strings: starship_c.race_strings as usize,
-                icons: starship_c.icons as usize,
-                weapon_counter: starship_c.weapon_counter,
-                special_counter: starship_c.special_counter,
-                energy_counter: starship_c.energy_counter,
-                ship_input_state: starship_c.ship_input_state,
-                cur_status_flags: super::types::StatusFlags(starship_c.cur_status_flags),
-                old_status_flags: super::types::StatusFlags(starship_c.old_status_flags),
-                h_ship: starship_c.h_ship as usize,
-                ship_facing: starship_c.ship_facing,
-                player_nr: starship_c.player_nr,
-                control: starship_c.control,
-                audio_stopped: false,
-            };
-
-            // Get activity from C
-            #[cfg(test)]
-            let activity = 2u8; // IN_ENCOUNTER for tests
-            #[cfg(not(test))]
-            let activity = (crate::mainloop::ffi::get_current_activity().0 & 0xFF) as u8;
-
-            match lifecycle_spawn(&mut starship_rust, activity) {
-                Ok(_) => {
-                    // Extract race_desc_ptr — the only CStarship mutation before
-                    // the C helper call (H3 rollback contract).
-                    let race_desc_ptr = match starship_rust.race_desc {
-                        Some(desc) => Box::into_raw(desc) as *mut c_void,
-                        None => return 0,
-                    };
-                    starship_c.race_desc_ptr = race_desc_ptr;
-
-                    // Call C helper to create the ELEMENT.
-                    // C helper reads starship_c.hShip to decide fresh alloc vs reuse.
-                    // We do NOT modify hShip before this call.
-                    #[cfg(not(test))]
-                    {
-                        use crate::ships::ffi_contract::rust_bridge_spawn_element;
-
-                        // Get ship mass from descriptor for element creation.
-                        // Safe: race_desc_ptr is a valid *mut RaceDesc from Box::into_raw.
-                        let ship_mass = (*(race_desc_ptr as *const RaceDesc))
-                            .characteristics
-                            .ship_mass;
-
-                        let element_ok = rust_bridge_spawn_element(
-                            starship as *mut CStarship,
-                            race_desc_ptr,
-                            ship_mass,
-                            activity,
-                        );
-                        if element_ok == 0 {
-                            // H3: Element creation failed — rollback.
-                            // Free the descriptor we just allocated.
-                            let _desc = Box::from_raw(race_desc_ptr as *mut RaceDesc);
-                            // Null the pointer so C doesn't see a dangling ref.
-                            starship_c.race_desc_ptr = ptr::null_mut();
-                            // Do NOT write back counters/flags — CStarship
-                            // remains in its pre-spawn state.
-                            return 0;
-                        }
-
-                        // C helper succeeded. hShip and ShipFacing are already
-                        // set by the C helper via the pointer we passed.
-                    }
-
-                    // Post-helper success: write back cleared counters/flags.
-                    // These are safe to write because the element exists.
-                    starship_c.ship_input_state = starship_rust.ship_input_state;
-                    starship_c.cur_status_flags = starship_rust.cur_status_flags.0;
-                    starship_c.old_status_flags = starship_rust.old_status_flags.0;
-                    starship_c.energy_counter = starship_rust.energy_counter;
-                    starship_c.weapon_counter = starship_rust.weapon_counter;
-                    starship_c.special_counter = starship_rust.special_counter;
-
-                    #[cfg(debug_assertions)]
-                    eprintln!(
-                        "LIFECYCLE: rust_ships_spawn exit OK (species={}, player={})",
-                        starship_c.species_id, starship_c.player_nr
-                    );
-
-                    1
-                }
-                Err(_error) => {
-                    #[cfg(debug_assertions)]
-                    eprintln!("LIFECYCLE: rust_ships_spawn FAILED: {:?}", _error);
-                    0
-                }
-            }
-        }
-    })
-    .unwrap_or_default()
-}
 
 /// Initializes the battle subsystem.
 /// # Safety
@@ -658,7 +529,6 @@ mod tests {
         unsafe {
             // All functions should handle null pointers gracefully
             rust_ships_free(ptr::null_mut(), 0, 0);
-            assert_eq!(rust_ships_spawn(ptr::null_mut()), 0);
             assert_eq!(
                 rust_ships_clone_fragment(ptr::null_mut(), ptr::null_mut()),
                 0

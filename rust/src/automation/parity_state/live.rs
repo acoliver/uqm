@@ -2,7 +2,7 @@
 use super::Fields;
 #[cfg(not(test))]
 use super::{custom, elements, ships::Ship, value};
-use crate::battle::context_access::observe::ElementObservation;
+use crate::engine::battle::access::observe::ElementObservation;
 #[cfg(not(test))]
 use crate::{
     automation::battle_fight::ShipState, battle::netplay::CrcState, comm::locdata::CGameState,
