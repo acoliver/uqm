@@ -1,49 +1,41 @@
 //! Scalar element observation, shared by the live journal and checksum.
 use super::{value, Fields};
 use crate::automation::parity::Journal;
-use crate::battle::{element::Element, velocity::VelocityDesc};
+use crate::battle::context_access::observe::ElementObservation;
+use crate::battle::velocity::VelocityDesc;
 
 pub(super) fn element(
     fields: &mut Fields,
     prefix: &str,
-    e: &Element,
+    e: &ElementObservation,
     journal: &Journal,
     hooks: &[(usize, &'static str)],
     owners: &std::collections::BTreeSet<usize>,
 ) {
-    for (name, address) in [
-        ("identity", std::ptr::from_ref(e) as usize),
-        ("pred", e.pred as usize),
-        ("succ", e.succ as usize),
-    ] {
+    for (name, address) in [("identity", e.address), ("pred", e.pred), ("succ", e.succ)] {
         value(fields, prefix, name, journal.identity(address));
     }
-    value(
-        fields,
-        prefix,
-        "parent",
-        journal.parent(e.p_parent as usize),
-    );
+    value(fields, prefix, "parent", journal.parent(e.parent));
     for (name, number) in [
-        ("side", i64::from(e.player_nr)),
-        ("flags", i64::from(e.state_flags.bits())),
-        ("life_span", i64::from(e.life_span)),
-        ("crew_or_hp", i64::from(e.crew_or_hp)),
-        ("mass", i64::from(e.mass_points)),
-        ("turn_wait", i64::from(e.turn_wait)),
-        ("thrust_or_blast", i64::from(e.thrust_or_blast)),
-        ("color_cycle", i64::from(e.color_cycle_index)),
-        ("primitive", i64::from(e.prim_index)),
+        ("side", i64::from(e.player)),
+        ("flags", i64::from(e.flags)),
+        ("life_span", i64::from(e.life)),
+        ("crew_or_hp", i64::from(e.hits)),
+        ("mass", i64::from(e.mass)),
+        ("turn_wait", i64::from(e.turn)),
+        ("thrust_or_blast", i64::from(e.thrust)),
+        ("color_cycle", i64::from(e.color_cycle)),
+        ("primitive", i64::from(e.primitive)),
     ] {
         value(fields, prefix, name, number);
     }
     target(fields, prefix, e, journal, owners);
     velocity(fields, prefix, &e.velocity);
     for (name, address) in [
-        ("preprocess", e.preprocess_func.map_or(0, |f| f.address())),
-        ("postprocess", e.postprocess_func.map_or(0, |f| f.address())),
-        ("collision", e.collision_func.map_or(0, |f| f.address())),
-        ("death", e.death_func.map_or(0, |f| f.address())),
+        ("preprocess", e.pre.map_or(0, |f| f.address())),
+        ("postprocess", e.post.map_or(0, |f| f.address())),
+        ("collision", e.collide.map_or(0, |f| f.address())),
+        ("death", e.death.map_or(0, |f| f.address())),
     ] {
         value(
             fields,
@@ -52,7 +44,7 @@ pub(super) fn element(
             crate::ships::hook_registry::name_for_species(
                 hooks,
                 address,
-                journal.species(e.p_parent as usize),
+                journal.species(e.parent),
             ),
         );
     }
@@ -62,39 +54,30 @@ pub(super) fn element(
 fn target(
     fields: &mut Fields,
     prefix: &str,
-    element: &Element,
+    element: &ElementObservation,
     journal: &Journal,
     owners: &std::collections::BTreeSet<usize>,
 ) {
-    let address = element.h_target as usize;
-    let identity =
-        if address != 0 && (owners.contains(&address) || address == element.p_parent as usize) {
-            journal.parent(address)
-        } else {
-            journal.identity(address)
-        };
+    let address = element.target;
+    let identity = if address != 0 && (owners.contains(&address) || address == element.parent) {
+        journal.parent(address)
+    } else {
+        journal.identity(address)
+    };
     value(fields, prefix, "target", identity);
 }
 
-fn positions(fields: &mut Fields, prefix: &str, e: &Element) {
+fn positions(fields: &mut Fields, prefix: &str, e: &ElementObservation) {
     for (name, point) in [
         ("current", e.current.location),
         ("next", e.next.location),
-        (
-            "intersect.origin",
-            e.intersect_control.intersect_stamp.origin,
-        ),
-        ("intersect.end", e.intersect_control.end_point),
+        ("intersect.origin", e.intersect.IntersectStamp.origin),
+        ("intersect.end", e.intersect.EndPoint),
     ] {
         value(fields, prefix, &format!("{name}.x"), point.x);
         value(fields, prefix, &format!("{name}.y"), point.y);
     }
-    value(
-        fields,
-        prefix,
-        "intersect.time",
-        e.intersect_control.last_time_val,
-    );
+    value(fields, prefix, "intersect.time", e.intersect.last_time_val);
 }
 
 pub(super) fn velocity(fields: &mut Fields, prefix: &str, v: &VelocityDesc) {
@@ -120,18 +103,22 @@ pub(super) fn velocity(fields: &mut Fields, prefix: &str, v: &VelocityDesc) {
     }
 }
 
-impl crate::savegame::runtime::queues::QueueElement for Element {
-    fn pred(&self) -> *mut std::ffi::c_void {
-        self.pred.cast()
-    }
-    fn succ(&self) -> *mut std::ffi::c_void {
-        self.succ.cast()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::battle::element::Element;
+    fn element(
+        fields: &mut Fields,
+        prefix: &str,
+        e: &Element,
+        journal: &Journal,
+        hooks: &[(usize, &'static str)],
+        owners: &BTreeSet<usize>,
+    ) {
+        // SAFETY: the test owns the source and matching record layout.
+        let view = unsafe { ElementObservation::decode(&*std::ptr::from_ref(e).cast()) };
+        super::element(fields, prefix, &view, journal, hooks, owners);
+    }
     use std::collections::BTreeSet;
 
     #[test]

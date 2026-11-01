@@ -2,34 +2,10 @@
 #![allow(non_snake_case)]
 
 use crate::graphics::{native_abi::drawable_desc, resgfx::LoadGraphicInstance};
-use crate::ships::native::abi::{ELEMENT, STARSHIP};
 use crate::strings::string_table::{
     CaptureStringTable, ReleaseStringTable, StringTable, StringTableEntry,
 };
 use std::ffi::{c_char, c_void};
-
-/// # Safety
-/// The element must be live and exclusively borrowed on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn InitIntersectStartPoint(e: *mut ELEMENT) {
-    (*e).IntersectControl.IntersectStamp.origin.x = (*e).current.location.x >> 2;
-    (*e).IntersectControl.IntersectStamp.origin.y = (*e).current.location.y >> 2;
-}
-
-/// # Safety
-/// The element must be live and exclusively borrowed on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn InitIntersectEndPoint(e: *mut ELEMENT) {
-    (*e).IntersectControl.EndPoint.x = (*e).next.location.x >> 2;
-    (*e).IntersectControl.EndPoint.y = (*e).next.location.y >> 2;
-}
-
-/// # Safety
-/// Both pointers must be valid; the element's parent must remain live.
-#[no_mangle]
-pub unsafe extern "C" fn GetElementStarShip(e: *const ELEMENT, ship: *mut *mut STARSHIP) {
-    *ship = (*e).pParent.cast();
-}
 
 /// # Safety
 /// Resource key must be a NUL-terminated string and the loader initialized.

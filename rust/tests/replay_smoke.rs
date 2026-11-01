@@ -128,6 +128,26 @@ fn campaign_failure_replays_complete_twice_with_identical_summaries() -> Result<
 
 #[test]
 #[cfg(feature = "debug-process")]
+fn quasispace_roundtrip_restores_the_saved_hyperspace_position() -> Result<(), Box<dyn Error>> {
+    let temporary = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tmp");
+    std::fs::create_dir_all(&temporary)?;
+    let root = tempfile::Builder::new()
+        .prefix("replay-portal-")
+        .tempdir_in(temporary)?;
+    install_content(root.path())?;
+    let summary = run_replay(
+        root.path(),
+        "campaign-s08f-portal-roundtrip",
+        "roundtrip",
+        false,
+    )?;
+    assert_eq!(summary["completed"], true);
+    assert_eq!(summary["final_activity"], 515);
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "debug-process")]
 fn bounded_parity_scenarios_exercise_the_production_observer() -> Result<(), Box<dyn Error>> {
     let temporary = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tmp");
     std::fs::create_dir_all(&temporary)?;

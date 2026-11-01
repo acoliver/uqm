@@ -1,5 +1,4 @@
 //! Restart-menu state operations formerly supplied by rust_bridge_restart.c.
-use crate::engine::battle::legacy;
 use crate::game_init::kernel_abi;
 use crate::ships::native::abi::*;
 use std::{ffi::c_void, ptr};
@@ -22,8 +21,7 @@ operation!(uqm_sleep_thread_until(time: u32) { crate::threading::pacing::linked:
 operation!(uqm_sleep_thread(time: u32) { crate::threading::pacing::linked::sleep_thread(time); });
 operation!(uqm_set_game_paused(value: u32) { ptr::addr_of_mut!(super::super::input_abi::GamePaused).write_volatile(value); });
 operation!(uqm_reinit_race_queues() {
-    let queues = ptr::addr_of_mut!(legacy::race_q).cast::<crate::collections::queue::Queue>();
-    crate::collections::queue::ReinitQueue(queues); crate::collections::queue::ReinitQueue(queues.add(1));
+    for side in 0..2 { crate::engine::battle::link_queue::ships(side).reinit(); }
 });
 operation!(uqm_assign_star_planet_globals() { crate::planets::starmap::star_array = ptr::addr_of_mut!(crate::planets::tables::STARMAP_ARRAY).cast(); });
 operation!(uqm_do_popup_window_msg(id: u16) {

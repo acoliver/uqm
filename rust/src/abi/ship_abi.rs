@@ -3308,14 +3308,7 @@ unsafe extern "C" {
 #[cfg(not(test))]
 pub use crate::navigation::hyperspace::live::MoveSIS;
 #[cfg(not(test))]
-pub unsafe fn hyper_transition(ElementPtr: *mut ELEMENT) -> BOOLEAN {
-    crate::navigation::hyper_transition::hyper_transition(ElementPtr.cast())
-}
-#[cfg(not(test))]
 pub use crate::navigation::hyper_menu::HyperspaceMenu;
-#[cfg(test)]
-#[cfg(not(test))]
-pub use crate::navigation::hyper_transition::hyper_transition;
 #[cfg(test)]
 extern "C" {
     pub fn HyperspaceMenu();

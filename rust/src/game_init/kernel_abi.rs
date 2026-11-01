@@ -148,21 +148,11 @@ pub unsafe extern "C" fn InitContexts() -> u32 {
     if OffScreenContext.is_null() {
         return 0;
     }
-    InitQueue(
-        ptr::addr_of_mut!(disp_q),
-        MAX_DISPLAY_ELEMENTS as u16,
-        mem::size_of::<ELEMENT>() as u16,
-    )
+    u32::from(crate::battle::context_access::lifecycle::init_elements())
 }
 
 unsafe fn init_kernel() -> u32 {
-    for queue in &mut *ptr::addr_of_mut!(race_q) {
-        InitQueue(
-            queue,
-            MAX_SHIPS_PER_SIDE as u16,
-            mem::size_of::<STARSHIP>() as u16,
-        );
-    }
+    crate::battle::context_access::lifecycle::init_ships();
     StarConFont = crate::graphics::resgfx::LoadGraphicInstance(c"font.starcon".as_ptr()).cast();
     if StarConFont.is_null() {
         return 0;

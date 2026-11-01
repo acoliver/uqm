@@ -27,13 +27,6 @@ extern "C" {
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
 #[cfg(not(test))]
-unsafe fn uqm_get_head_element() -> HElement {
-    (crate::mainloop::main2_abi::uqm_get_head_element()) as _
-}
-
-/// # Safety
-/// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(not(test))]
 unsafe fn uqm_wrap_delta_x(dx: i16) -> i16 {
     (crate::mainloop::main2_abi::uqm_wrap_delta_x(dx as _)) as _
 }
@@ -96,17 +89,9 @@ pub struct ElementQueueIter {
     next: HElement,
 }
 
-impl Default for ElementQueueIter {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl ElementQueueIter {
-    pub fn new() -> Self {
-        ElementQueueIter {
-            next: unsafe { uqm_get_head_element().cast() },
-        }
+    fn from_head(next: HElement) -> Self {
+        Self { next }
     }
 }
 
@@ -139,6 +124,27 @@ impl Iterator for ElementQueueIter {
 /// A nonnull `element` must point to a live Element in the initialized
 /// game-thread element queue. The caller must serialize queue access.
 pub unsafe extern "C" fn CalculateGravity(element: *mut Element) -> c_int {
+    #[cfg(not(test))]
+    {
+        // SAFETY: the legacy entry owns this synchronous game-thread operation.
+        unsafe {
+            crate::app::bridge::enter(|cx| {
+                let head = cx
+                    .elements()
+                    .head()
+                    .map_or(std::ptr::null_mut(), |id| cx.elements().raw(id).cast());
+                calculate_gravity(element, head)
+            })
+        }
+    }
+    #[cfg(test)]
+    // SAFETY: the test provider retains its mocked element queue throughout the call.
+    unsafe {
+        calculate_gravity(element, uqm_get_head_element().cast())
+    }
+}
+
+unsafe fn calculate_gravity(element: *mut Element, head: HElement) -> c_int {
     if element.is_null() {
         return 0;
     }
@@ -148,7 +154,7 @@ pub unsafe extern "C" fn CalculateGravity(element: *mut Element) -> c_int {
 
     let mut retval = false;
 
-    for test_elem_ptr in ElementQueueIter::new() {
+    for test_elem_ptr in ElementQueueIter::from_head(head) {
         let test_elem = unsafe { &*test_elem_ptr };
 
         if test_elem_ptr == element {
@@ -239,6 +245,27 @@ pub unsafe extern "C" fn CalculateGravity(element: *mut Element) -> c_int {
 /// A nonnull `element` must point to a live Element. The element queue
 /// and drawable system must be initialized and accessed on the game thread.
 pub unsafe extern "C" fn TimeSpaceMatterConflict(element: *mut Element) -> c_int {
+    #[cfg(not(test))]
+    {
+        // SAFETY: the legacy entry owns this synchronous game-thread operation.
+        unsafe {
+            crate::app::bridge::enter(|cx| {
+                let head = cx
+                    .elements()
+                    .head()
+                    .map_or(std::ptr::null_mut(), |id| cx.elements().raw(id).cast());
+                time_space_matter_conflict(element, head)
+            })
+        }
+    }
+    #[cfg(test)]
+    // SAFETY: the test provider retains its mocked element queue throughout the call.
+    unsafe {
+        time_space_matter_conflict(element, uqm_get_head_element().cast())
+    }
+}
+
+unsafe fn time_space_matter_conflict(element: *mut Element, head: HElement) -> c_int {
     if element.is_null() {
         return 0;
     }
@@ -264,7 +291,7 @@ pub unsafe extern "C" fn TimeSpaceMatterConflict(element: *mut Element) -> c_int
         },
     };
 
-    for test_elem_ptr in ElementQueueIter::new() {
+    for test_elem_ptr in ElementQueueIter::from_head(head) {
         let test_elem = unsafe { &*test_elem_ptr };
 
         if test_elem_ptr == element {

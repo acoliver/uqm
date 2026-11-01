@@ -9,76 +9,63 @@ use crate::ships::native::abi::*;
 mod assets;
 
 pub(super) struct Ship<'a> {
-    pub(super) state: &'a STARSHIP,
+    pub(super) observation: crate::battle::context_access::observe::ShipObservation<'a>,
 }
-
 impl<'a> Ship<'a> {
     /// # Safety
-    /// The queue authority and pool must remain live and immutable for `'a`.
+    /// The pool and all resource allocations remain immutable for the observation.
     pub(super) unsafe fn queue(queue: &'a crate::comm::locdata::CQueue) -> Vec<Self> {
-        use crate::savegame::runtime::queues::{walk, QueueKind};
-        if queue.pq_tab.is_null() && queue.head.is_null() {
-            assert!(queue.tail.is_null(), "uninitialized ship queue has a tail");
-            return Vec::new();
-        }
-        walk(queue, QueueKind::PlayerShips)
-            .unwrap_or_else(|error| panic!("live ship queue: {error}"))
+        // SAFETY: the caller retains the immutable pool and every reachable resource.
+        unsafe { crate::battle::context_access::observe::ships(queue) }
             .into_iter()
-            .map(|pointer| {
-                Self {
-                    // SAFETY: walk checked the slot and links; the caller keeps the
-                    // queue pool live and immutable for the returned borrow.
-                    state: unsafe { &*pointer },
-                }
-            })
+            .map(|observation| Self { observation })
             .collect()
     }
-
     pub(super) fn address(&self) -> usize {
-        std::ptr::from_ref(self.state) as usize
+        self.observation.address
     }
     pub(super) fn side(&self) -> i16 {
-        self.state.playerNr
+        self.observation.state.player
     }
     pub(super) fn species(&self) -> u32 {
-        self.state.SpeciesID
+        self.observation.pick.species
     }
+    #[cfg(test)]
     pub(super) fn facing(&self) -> u16 {
-        self.state.ShipFacing
+        self.observation.state.facing
     }
-
     pub(super) fn write(&self, fields: &mut Fields, prefix: &str, journal: &Journal) {
-        let s = self.state;
+        let s = &self.observation;
         for (name, number) in [
-            ("species", i64::from(s.SpeciesID)),
-            ("captain", i64::from(s.captains_name_index)),
-            ("crew", i64::from(s.crew_level)),
-            ("max_crew", i64::from(s.max_crew)),
-            ("cost", i64::from(s.ship_cost)),
-            ("index", i64::from(s.index)),
-            ("weapon_counter", i64::from(s.weapon_counter)),
-            ("special_counter", i64::from(s.special_counter)),
-            ("energy_counter", i64::from(s.energy_counter)),
-            ("input", i64::from(s.ship_input_state)),
-            ("status", i64::from(s.cur_status_flags)),
-            ("old_status", i64::from(s.old_status_flags)),
-            ("facing", i64::from(s.ShipFacing)),
-            ("side", i64::from(s.playerNr)),
-            ("control", i64::from(s.control)),
+            ("species", i64::from(s.pick.species)),
+            ("captain", i64::from(s.pick.captain)),
+            ("crew", i64::from(s.pick.crew)),
+            ("max_crew", i64::from(s.pick.max_crew)),
+            ("cost", i64::from(s.pick.cost)),
+            ("index", i64::from(s.pick.index)),
+            ("weapon_counter", i64::from(s.state.weapon_counter)),
+            ("special_counter", i64::from(s.state.special_counter)),
+            ("energy_counter", i64::from(s.state.energy_counter)),
+            ("input", i64::from(s.state.input)),
+            ("status", i64::from(s.state.status)),
+            ("old_status", i64::from(s.state.old_status)),
+            ("facing", i64::from(s.state.facing)),
+            ("side", i64::from(s.state.player)),
+            ("control", i64::from(s.state.control)),
         ] {
             value(fields, prefix, name, number);
         }
         value(fields, prefix, "identity", journal.parent(self.address()));
-        value(fields, prefix, "pred", journal.parent(s.pred as usize));
-        value(fields, prefix, "succ", journal.parent(s.succ as usize));
+        value(fields, prefix, "pred", journal.parent(s.pred));
+        value(fields, prefix, "succ", journal.parent(s.succ));
         value(
             fields,
             prefix,
             "element",
-            if s.hShip as usize == self.address() {
+            if s.element == self.address() {
                 journal.parent(self.address())
             } else {
-                journal.identity(s.hShip as usize)
+                journal.identity(s.element)
             },
         );
     }
@@ -87,26 +74,26 @@ impl<'a> Ship<'a> {
     /// All resource and custom-data pointers reachable from this ship must remain
     /// live and immutable for the returned borrow, on the game thread.
     #[cfg(not(test))]
-    pub(super) unsafe fn resources(&self) -> ShipResources<'a> {
-        let state = self.state;
-        let icon_pointer = state
-            .icons
-            .cast::<crate::graphics::native_abi::frame_desc>();
-        // SAFETY: the ship graph retains these native handles, descriptor and
-        // its concrete species allocation for this immutable resource view.
-        let (icons, strings, race) = unsafe {
-            let race = state.RaceDescPtr.as_ref().map(|race| {
-                (
-                    race,
-                    assets::Assets::borrow(&race.ship_info, &race.ship_data),
-                    RaceData::borrow(state.SpeciesID, race),
-                )
-            });
-            (icon_pointer.as_ref(), state.race_strings.as_ref(), race)
-        };
-        let race =
-            race.map(|(race, assets, custom)| Race::new(state.SpeciesID, race, assets, custom));
-
+    pub(super) unsafe fn resources(&self) -> ShipResources<'_> {
+        let state = &self.observation;
+        let race = state.race.as_ref().map(|race| {
+            // SAFETY: the observation borrows the descriptor and its resources for this entire scope.
+            let assets = unsafe { assets::Assets::borrow(race.info, race.data) };
+            Race {
+                species: state.pick.species,
+                address: race.address,
+                info: race.info,
+                fleet: race.fleet,
+                characteristics: race.characteristics,
+                intel: race.intel,
+                assets,
+                custom: &race.custom,
+                callbacks: race.callbacks,
+                code_loaded: race.code_loaded,
+            }
+        });
+        let icons = state.icons;
+        let strings = state.strings;
         ShipResources {
             icons: Frame(icons),
             strings: StringEntry(strings),
@@ -158,33 +145,12 @@ struct Race<'a> {
     characteristics: &'a CHARACTERISTIC_STUFF,
     intel: &'a INTEL_STUFF,
     assets: assets::Assets<'a>,
-    custom: RaceData<'a>,
+    custom: &'a RaceData<'a>,
     callbacks: [usize; 5],
     code_loaded: bool,
 }
 
 impl<'a> Race<'a> {
-    #[cfg(not(test))]
-    fn new(
-        species: u32,
-        race: &'a RACE_DESC,
-        assets: assets::Assets<'a>,
-        custom: RaceData<'a>,
-    ) -> Self {
-        Self {
-            species,
-            address: std::ptr::from_ref(race) as usize,
-            info: &race.ship_info,
-            fleet: &race.fleet,
-            characteristics: &race.characteristics,
-            intel: &race.cyborg_control,
-            assets,
-            custom,
-            callbacks: race.callbacks(),
-            code_loaded: !race.code_ref.is_null(),
-        }
-    }
-
     fn write(
         &self,
         fields: &mut Fields,
@@ -322,7 +288,7 @@ mod tests {
                 characteristics: &descriptor.characteristics,
                 intel: &descriptor.cyborg_control,
                 assets,
-                custom: RaceData::None,
+                custom: &RaceData::None,
                 callbacks: [0; 5],
                 code_loaded: false,
             }),

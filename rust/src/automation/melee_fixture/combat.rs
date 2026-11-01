@@ -4,17 +4,17 @@ use super::*;
 
 pub(super) fn mutual_loss(
     run: &mut Battle,
-    world: &mut World<'_>,
+    world: &mut World,
 ) -> Result<Option<Vec<Effect>>, String> {
     match run.stage {
         0 => {
             if world.activity != (SUPER_MELEE | IN_BATTLE) as u16 || world.counters != [2, 2] {
                 return Err("mutual-loss fixture requires an active 2-vs-2 Super Melee".into());
             }
-            [run.a, run.b] = world.fighters()?;
-            if world.ship(run.a).state.SpeciesID != SPECIES_ID_SHOFIXTI_ID
+            [run.a, run.b] = world.fighters()?.map(Some);
+            if world.ship(run.a()).species != SPECIES_ID_SHOFIXTI_ID
                 || world
-                    .ship(run.b)
+                    .ship(run.b())
                     .info
                     .as_ref()
                     .ok_or("fixture requires loaded descriptor fields")?
@@ -28,7 +28,7 @@ pub(super) fn mutual_loss(
             place(
                 world
                     .elements
-                    .get_mut(&run.a)
+                    .get_mut(&run.a())
                     .ok_or("fixture element or owner is no longer live")?,
                 4000,
                 4000,
@@ -36,37 +36,35 @@ pub(super) fn mutual_loss(
             place(
                 world
                     .elements
-                    .get_mut(&run.b)
+                    .get_mut(&run.b())
                     .ok_or("fixture element or owner is no longer live")?,
                 4160,
                 4000,
             );
-            let ship = world.ship_mut(run.a);
-            ship.state.old_status_flags &= !(SPECIAL as u16);
-            ship.state.cur_status_flags |= SPECIAL as u16;
+            let ship = world.ship_mut(run.a());
+            ship.state.old_status &= !(SPECIAL as u16);
+            ship.state.status |= SPECIAL as u16;
             run.next(vec![
-                Effect::Intersect(run.a),
-                Effect::Intersect(run.b),
+                Effect::Intersect(run.a()),
+                Effect::Intersect(run.b()),
                 Effect::Captain(
                     ship.data
                         .as_ref()
                         .ok_or("fixture requires loaded descriptor fields")?
-                        .captain_control
-                        .special,
+                        .captain_special,
                 ),
             ])
         }
         1 => {
-            let ship = world.ship_mut(run.a);
+            let ship = world.ship_mut(run.a());
             ship.data
                 .as_mut()
                 .ok_or("fixture requires loaded descriptor fields")?
-                .captain_control
-                .special = run.captain;
-            run.next(vec![Effect::RaceProcess(true, run.a)])
+                .captain_special = run.captain;
+            run.next(vec![Effect::RaceProcess(true, run.a())])
         }
         _ => {
-            assert_eq!(world.elements[&run.a].life_span, 0);
+            assert_eq!(world.elements[&run.a()].life, 0);
             Ok(None)
         }
     }
@@ -74,10 +72,10 @@ pub(super) fn mutual_loss(
 
 pub(super) fn blazer(
     run: &mut Battle,
-    world: &mut World<'_>,
+    world: &mut World,
     hooks: &Hooks,
 ) -> Result<Option<Vec<Effect>>, String> {
-    let a = run.a;
+    let a = run.a();
     match run.stage {
         0 => {
             let special = world
@@ -85,13 +83,10 @@ pub(super) fn blazer(
                 .data
                 .as_ref()
                 .ok_or("fixture requires loaded descriptor fields")?
-                .special
-                .as_ptr()
-                .cast_mut()
-                .cast();
-            let transformed = world.elements[&a].next.farray == special;
+                .special;
+            let transformed = world.elements[&a].next.image.frames == special;
             let ship = world.ship_mut(a);
-            ship.state.cur_status_flags &= !(SPECIAL as u16);
+            ship.state.status &= !(SPECIAL as u16);
             ship.info
                 .as_mut()
                 .ok_or("fixture requires loaded descriptor fields")?
@@ -103,14 +98,14 @@ pub(super) fn blazer(
             })
         }
         1 => {
-            run.saved_hook = world.elements[&a].collision_func.map_or(0, |f| f.address());
+            run.saved_hook = world.elements[&a].collide.map_or(0, |f| f.address());
             let ship = world.ship_mut(a);
             let info = ship
                 .info
                 .as_mut()
                 .ok_or("fixture requires loaded descriptor fields")?;
             info.energy_level = info.max_energy;
-            ship.state.cur_status_flags |= SPECIAL as u16;
+            ship.state.status |= SPECIAL as u16;
             run.next(vec![
                 Effect::RaceProcess(false, a),
                 Effect::RaceProcess(true, a),
@@ -118,12 +113,11 @@ pub(super) fn blazer(
         }
         2 => {
             run.proof.require(
-                world.elements[&a].collision_func.map_or(0, |f| f.address())
-                    == hooks.blazer_collision,
+                world.elements[&a].collide.map_or(0, |f| f.address()) == hooks.blazer_collision,
                 "blazer-installed",
             )?;
             let ship = world.ship_mut(a);
-            ship.state.cur_status_flags &= !(SPECIAL as u16);
+            ship.state.status &= !(SPECIAL as u16);
             ship.info
                 .as_mut()
                 .ok_or("fixture requires loaded descriptor fields")?
@@ -132,20 +126,17 @@ pub(super) fn blazer(
         }
         3 => {
             run.proof.require(
-                world.elements[&a].collision_func.map_or(0, |f| f.address()) == run.saved_hook,
+                world.elements[&a].collide.map_or(0, |f| f.address()) == run.saved_hook,
                 "collision-restored",
             )?;
             run.proof.require(
-                world.elements[&a].next.farray
+                world.elements[&a].next.image.frames
                     == world
                         .ship(a)
                         .data
                         .as_ref()
                         .ok_or("fixture requires loaded descriptor fields")?
-                        .ship
-                        .as_ptr()
-                        .cast_mut()
-                        .cast(),
+                        .ship,
                 "ship-frames-restored",
             )?;
             run.next(vec![])
@@ -156,7 +147,7 @@ pub(super) fn blazer(
 
 pub(super) fn satellites(
     run: &mut Battle,
-    world: &mut World<'_>,
+    world: &mut World,
     hooks: &Hooks,
 ) -> Result<Option<Vec<Effect>>, String> {
     match run.stage {
@@ -166,32 +157,32 @@ pub(super) fn satellites(
                 .iter()
                 .copied()
                 .filter(|h| {
-                    world.elements[h].postprocess_func.map(|f| f.address())
+                    world.elements[h].post.map(|f| f.address())
                         == hooks.satellite.map(|f| f.address())
                 })
                 .collect();
             run.proof
                 .require(satellites.len() == 3, "three-satellites")?;
-            run.object = satellites[0];
-            let location = world.elements[&run.object].current.location;
+            run.object = Some(satellites[0]);
+            let location = world.elements[&run.object()].current.location;
             place(
                 world
                     .elements
-                    .get_mut(&run.b)
+                    .get_mut(&run.b())
                     .ok_or("fixture element or owner is no longer live")?,
                 location.x + 100,
                 location.y,
             );
             world
                 .elements
-                .get_mut(&run.object)
+                .get_mut(&run.object())
                 .ok_or("fixture element or owner is no longer live")?
-                .thrust_or_blast = 0;
+                .thrust = 0;
             run.before = world.elements.keys().copied().collect();
             let hook = hooks.satellite;
             run.next(vec![
-                Effect::Intersect(run.b),
-                Effect::Invoke(hook, run.object),
+                Effect::Intersect(run.b()),
+                Effect::Invoke(hook, run.object()),
             ])
         }
         1 => {
@@ -200,16 +191,16 @@ pub(super) fn satellites(
                 .iter()
                 .find_map(|(&h, e)| {
                     (!run.before.contains(&h)
-                        && e.death_func.map_or(0, |f| f.address()) == hooks.defense)
+                        && e.death.map_or(0, |f| f.address()) == hooks.defense)
                         .then_some(e)
                 })
                 .ok_or("satellite did not queue delayed defense")?;
             run.proof.require(
-                !delayed.pred.is_null() && delayed.h_target == run.object,
+                delayed.pred.is_some() && delayed.target == Some(run.object()),
                 "delayed-defense",
             )?;
             run.crew = world
-                .ship(run.b)
+                .ship(run.b())
                 .info
                 .as_ref()
                 .ok_or("fixture requires loaded descriptor fields")?
@@ -223,7 +214,7 @@ pub(super) fn satellites(
         _ => {
             run.proof.require(
                 world
-                    .ship(run.b)
+                    .ship(run.b())
                     .info
                     .as_ref()
                     .ok_or("fixture requires loaded descriptor fields")?
@@ -238,43 +229,43 @@ pub(super) fn satellites(
 
 pub(super) fn death_spawn(
     run: &mut Battle,
-    world: &mut World<'_>,
+    world: &mut World,
     hooks: &Hooks,
 ) -> Result<Option<Vec<Effect>>, String> {
     match run.stage {
         0 => {
             let crew = world
-                .ship(run.b)
+                .ship(run.b())
                 .info
                 .as_ref()
                 .ok_or("fixture requires loaded descriptor fields")?
                 .crew_level;
-            let charge = run.prepare_weapon(world, run.a)?;
+            let charge = run.prepare_weapon(world, run.a())?;
             let mut effects = vec![charge];
             if crew > 1 {
-                effects.push(Effect::Crew(run.b, 1 - crew as i16));
+                effects.push(Effect::Crew(run.b(), 1 - crew as i16));
             }
-            effects.push(Effect::Weapon(run.a));
+            effects.push(Effect::Weapon(run.a()));
             run.next(effects)
         }
         1 => {
-            let weapon = run.weapon(world, run.a)?;
-            run.next(vec![Effect::Collide(weapon, run.b)])
+            let weapon = run.weapon(world, run.a())?;
+            run.next(vec![Effect::Collide(weapon, run.b())])
         }
         2 => {
             run.proof.require(
                 world
-                    .ship(run.b)
+                    .ship(run.b())
                     .info
                     .as_ref()
                     .ok_or("fixture requires loaded descriptor fields")?
                     .crew_level
                     == 0
-                    && world.elements[&run.b].life_span == 0,
+                    && world.elements[&run.b()].life == 0,
                 "collision-killed",
             )?;
             run.proof.require(
-                world.elements[&run.b].death_func.map(|f| f.address())
+                world.elements[&run.b()].death.map(|f| f.address())
                     == hooks.ship_death.map(|f| f.address()),
                 "death-hook",
             )?;
@@ -300,66 +291,68 @@ pub(super) fn death_spawn(
 
 pub(super) fn mixed(
     run: &mut Battle,
-    world: &mut World<'_>,
+    world: &mut World,
     hooks: &Hooks,
 ) -> Result<Option<Vec<Effect>>, String> {
     match run.stage {
         0 => {
             run.crew = u16::from(
                 world
-                    .ship(run.b)
+                    .ship(run.b())
                     .characteristics
                     .as_ref()
                     .ok_or("fixture requires loaded descriptor fields")?
                     .turn_wait,
             );
             run.before = world.elements.keys().copied().collect();
-            run.next(vec![Effect::Invoke(hooks.limpets, run.a)])
+            run.next(vec![Effect::Invoke(hooks.limpets, run.a())])
         }
         1 => {
-            run.object = *world
-                .order
-                .iter()
-                .find(|h| !run.before.contains(h))
-                .ok_or("production VUX limpet allocation failed")?;
-            run.next(vec![Effect::Collide(run.object, run.b)])
+            run.object = Some(
+                *world
+                    .order
+                    .iter()
+                    .find(|h| !run.before.contains(h))
+                    .ok_or("production VUX limpet allocation failed")?,
+            );
+            run.next(vec![Effect::Collide(run.object(), run.b())])
         }
         2 => {
             run.proof.require(
                 u16::from(
                     world
-                        .ship(run.b)
+                        .ship(run.b())
                         .characteristics
                         .as_ref()
                         .ok_or("fixture requires loaded descriptor fields")?
                         .turn_wait,
                 ) == run.crew + 1
-                    && world.elements[&run.object].life_span == 0,
+                    && world.elements[&run.object()].life == 0,
                 "limpet-hit",
             )?;
             run.crew = world
-                .ship(run.a)
+                .ship(run.a())
                 .info
                 .as_ref()
                 .ok_or("fixture requires loaded descriptor fields")?
                 .crew_level;
-            let charge = run.prepare_weapon(world, run.b)?;
-            run.next(vec![charge, Effect::Weapon(run.b)])
+            let charge = run.prepare_weapon(world, run.b())?;
+            run.next(vec![charge, Effect::Weapon(run.b())])
         }
         3 => {
-            run.object = run.weapon(world, run.b)?;
-            run.next(vec![Effect::Collide(run.object, run.a)])
+            run.object = Some(run.weapon(world, run.b())?);
+            run.next(vec![Effect::Collide(run.object(), run.a())])
         }
         4 => {
             run.proof.require(
                 world
-                    .ship(run.a)
+                    .ship(run.a())
                     .info
                     .as_ref()
                     .ok_or("fixture requires loaded descriptor fields")?
                     .crew_level
                     < run.crew
-                    && world.elements[&run.object].life_span == 0,
+                    && world.elements[&run.object()].life == 0,
                 "howitzer-hit",
             )?;
             run.next(vec![])
@@ -370,7 +363,7 @@ pub(super) fn mixed(
 
 pub(super) fn pool(
     run: &mut Battle,
-    world: &mut World<'_>,
+    world: &mut World,
     hooks: &Hooks,
 ) -> Result<Option<Vec<Effect>>, String> {
     match run.stage {
@@ -390,7 +383,7 @@ pub(super) fn pool(
                 "fixture retains both Ur-Quan ships"
             );
             let info = world
-                .ship_mut(run.a)
+                .ship_mut(run.a())
                 .info
                 .as_mut()
                 .ok_or("fixture requires loaded descriptor fields")?;
@@ -398,13 +391,13 @@ pub(super) fn pool(
             info.crew_level = 200;
             world
                 .elements
-                .get_mut(&run.a)
+                .get_mut(&run.a())
                 .ok_or("fixture element or owner is no longer live")?
-                .crew_or_hp = 200;
+                .hits = 200;
             run.before = world.elements.keys().copied().collect();
             run.next(
                 (0..76)
-                    .map(|_| Effect::Invoke(hooks.fighters, run.a))
+                    .map(|_| Effect::Invoke(hooks.fighters, run.a()))
                     .collect(),
             )
         }
@@ -412,9 +405,7 @@ pub(super) fn pool(
             let fighters = world
                 .elements
                 .values()
-                .filter(|e| {
-                    e.preprocess_func.map_or(0, |f| f.address()) == hooks.fighter_preprocess
-                })
+                .filter(|e| e.pre.map_or(0, |f| f.address()) == hooks.fighter_preprocess)
                 .count();
             run.proof.require(
                 world.elements.len() == 150 && fighters >= 140,

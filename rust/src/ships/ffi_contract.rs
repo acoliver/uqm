@@ -358,8 +358,6 @@ pub unsafe fn rust_bridge_get_race_desc_layout(out: *mut RaceDescLayout) {
 // during runtime callbacks.
 
 #[cfg(not(test))]
-pub use crate::game_init::macro_abi::GetElementStarShip;
-
 #[cfg(not(test))]
 pub use crate::battle::process_native::engine::AllocElement;
 
