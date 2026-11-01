@@ -90,7 +90,8 @@ pub unsafe extern "C" fn negotiateReady(
     let arg = (&raw mut state).cast();
     Netplay_localReady(conn, Some(ready_transition), arg, notify);
     flushPacketQueue(conn);
-    if !state.done && !(*(*conn).session).replay_wait(|| transition_input(arg) != 0) {
+    // SAFETY: the session and stack callback argument remain live until the wait ends.
+    if !state.done && !unsafe { (*(*conn).session).replay_wait(|| transition_input(arg) != 0) } {
         DoInput(arg, 0);
     }
     (*conn).stateFlags.connected
@@ -112,7 +113,9 @@ pub unsafe extern "C" fn waitReset(conn: *mut NetConnection, next: NetState) -> 
             Netplay_localReset(conn, NetplayResetReason_ResetReason_manualReset);
             flushPacketQueue(conn);
         }
-        if !state.done && !(*(*conn).session).replay_wait(|| transition_input(arg) != 0) {
+        // SAFETY: the session and stack callback argument remain live until the wait ends.
+        if !state.done && !unsafe { (*(*conn).session).replay_wait(|| transition_input(arg) != 0) }
+        {
             DoInput(arg, 0);
         }
     }
@@ -153,7 +156,8 @@ pub unsafe extern "C" fn waitReady(conn: *mut NetConnection) -> bool {
     };
     let arg = (&raw mut state).cast();
     NetConnection_setReadyCallback(conn, Some(wait_ready_callback), arg);
-    if !(*(*conn).session).replay_wait(|| wait_ready_input(arg) != 0) {
+    // SAFETY: the session and stack callback argument remain live until the wait ends.
+    if !unsafe { (*(*conn).session).replay_wait(|| wait_ready_input(arg) != 0) } {
         DoInput(arg, 0);
     }
     (*conn).stateFlags.connected
@@ -226,18 +230,23 @@ impl super::session::SessionCore {
             }
         }
     }
-    unsafe fn input_aux(&self, timeout: u32) {
+    fn input_aux(&self, timeout: u32) {
         let deadline =
             std::time::Instant::now() + std::time::Duration::from_millis(u64::from(timeout));
         let before = self.connection_progress();
         loop {
             Async_process();
-            for conn in self.connections.get() {
-                if !conn.is_null() && !(*conn).stateFlags.disconnected {
-                    super::netconnection::poll(conn);
+            for player in 0..NETPLAY_NUM_PLAYERS as usize {
+                if self
+                    .connection_snapshot(player)
+                    .is_some_and(|(_, _, disconnected)| !disconnected)
+                {
+                    // SAFETY: the session retains this record until cleanup;
+                    // callbacks only update its state while polling.
+                    unsafe { super::netconnection::poll(self.connection(player)) };
                 }
             }
-            self.flush_packet_queues();
+            <Self as crate::engine::battle::net::BattleNet>::flush(self);
             Callback_process();
             if self.connection_progress() != before || std::time::Instant::now() >= deadline {
                 return;
@@ -249,27 +258,28 @@ impl super::session::SessionCore {
             );
         }
     }
+    fn connection_snapshot(&self, player: usize) -> Option<(u32, usize, bool)> {
+        // SAFETY: the session owns the record and the snapshot ends before polling.
+        let conn = unsafe { self.connection(player).as_ref() }?;
+        Some((
+            conn.state,
+            conn.statistics.packetsReceived,
+            conn.stateFlags.disconnected,
+        ))
+    }
     fn connection_progress(&self) -> [(u32, usize); 2] {
-        self.connections.get().map(|conn| {
-            if conn.is_null() {
-                (NetState_NetState_unconnected, 0)
-            } else {
-                // SAFETY: the session owns the record throughout this snapshot.
-                unsafe { ((*conn).state, (*conn).statistics.packetsReceived) }
-            }
+        std::array::from_fn(|player| {
+            self.connection_snapshot(player)
+                .map_or((NetState_NetState_unconnected, 0), |(state, packets, _)| {
+                    (state, packets)
+                })
         })
     }
-    /// # Safety
-    /// Called on the game thread with live connection, state and callback arguments.
-    pub unsafe fn net_input(&self) {
-        // SAFETY: the session is polled on the connection-owning game thread.
-        unsafe { self.input_aux(0) };
+    pub fn net_input(&self) {
+        self.input_aux(0);
     }
-    /// # Safety
-    /// Called on the game thread with live connection, state and callback arguments.
-    pub unsafe fn net_input_blocking(&self, timeout: u32) {
-        // SAFETY: the callback clock and all connections belong to this game thread.
-        unsafe { self.input_aux(timeout.min(Async_timeBeforeNextMs())) };
+    pub fn net_input_blocking(&self, timeout: u32) {
+        self.input_aux(timeout.min(Async_timeBeforeNextMs()));
     }
     /// # Safety
     /// Called on the game thread with live connection, state and callback arguments.
