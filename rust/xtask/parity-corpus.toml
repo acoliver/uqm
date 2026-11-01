@@ -109,11 +109,6 @@ issue = 718
 
 
 
-[[expectation]]
-scenario = "campaign-s06c-utwig-bomb"
-classification = "known_bug"
-terminal = "semantic_mismatch"
-issue = 719
 
 
 
