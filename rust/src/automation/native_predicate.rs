@@ -6,6 +6,98 @@ use super::{
     trace::{RecordKind, TraceRecord},
 };
 
+use super::native_checkpoint::{CheckpointClass, NativeCheckpoint};
+
+/// Classify actions without consulting scenario names or observed results.
+pub fn checkpoint_class(action: &Action) -> Result<Option<CheckpointClass>, String> {
+    Ok(match action {
+        Action::Capture(_) => Some(CheckpointClass::Capture),
+        Action::AssertActivity(_)
+        | Action::AssertScene(_)
+        | Action::AssertMode(_)
+        | Action::AssertDispatch(_)
+        | Action::AssertGameOptions(_)
+        | Action::AssertCommunicationResponses(_)
+        | Action::AssertBattleFrames(_)
+        | Action::AssertHyperspaceDisplacement(_)
+        | Action::AssertHyperspaceStationary(_)
+        | Action::AssertHyperspacePositionRestored(_)
+        | Action::AssertShipResources(_)
+        | Action::AssertState(_)
+        | Action::AssertShipElement(_)
+        | Action::AssertPlanetSideCollisions(_)
+        | Action::AssertMainMenuTransition(_) => Some(CheckpointClass::Assertion),
+        Action::WaitForMainMenuReady(_)
+        | Action::WaitForPlanetSideStart(_)
+        | Action::WaitForPlanetSideEnd(_)
+        | Action::WaitForDispatch(_)
+        | Action::WaitForState(_)
+        | Action::WaitForBattleFrames(_)
+        | Action::WaitForBattleShipLoss(_)
+        | Action::WaitForCommunicationResponses(_)
+        | Action::WaitForCommunicationEnd(_)
+        | Action::WaitForCommunicationReplay(_) => Some(CheckpointClass::SemanticWait),
+        Action::NavigateToContact(_)
+        | Action::NavigateToPlanet(_)
+        | Action::NavigateToMoon(_)
+        | Action::NavigateToOrbit(_)
+        | Action::UseDevice(_)
+        | Action::CollectEnergyNode(_)
+        | Action::FlyToStar(_)
+        | Action::NavigateToHyperspace(_)
+        | Action::TurnFlagship(_)
+        | Action::CollectPlanetMinerals(_)
+        | Action::FightBattle(_)
+        | Action::FightSamatra(_)
+        | Action::FightEncounter(_)
+        | Action::RetreatEncounter(_)
+        | Action::SelectPlanetMenu(_)
+        | Action::PickBattleShip(_)
+        | Action::SelectResponse(_)
+        | Action::SelectCommunicationResponse(_)
+        | Action::SetupPlanetSideCollisionFixture(_)
+        | Action::ConfigureParityMelee(_)
+        | Action::RunParityFixture(_)
+        | Action::RunParityCorpus(_)
+        | Action::SetupMeleeMutualLossFixture(_)
+        | Action::SetupPlanetSideMineralGallery(_) => Some(CheckpointClass::Navigation),
+        Action::ConnectNetplay(_) | Action::AssertParityFixture => {
+            return Err(format!("native proof is unsupported for {action:?}"));
+        }
+        Action::WaitInputTicks(_)
+        | Action::WaitPresentations(_)
+        | Action::SetMenuKey(_)
+        | Action::TapMenuKey(_)
+        | Action::SetPlayerKey(_)
+        | Action::TapPlayerKey(_)
+        | Action::RecordHyperspacePosition(_)
+        | Action::RecordSavedHyperspacePosition(_)
+        | Action::ExpectQuit(_)
+        | Action::Finish => None,
+    })
+}
+
+/// Bound to the resolved script and exact action slot, never a headless label.
+pub(super) fn parity_label(
+    action: &Action,
+    checkpoint: &str,
+    script: &super::script::ValidatedScript,
+) -> Result<Option<String>, String> {
+    let roster = match action {
+        Action::ConfigureParityMelee(request) => serde_json::json!(request.ships),
+        Action::RunParityFixture(request) => serde_json::json!(request.fixture.ships()),
+        Action::RunParityCorpus(request) => serde_json::json!(request.bouts()?),
+        _ => return Ok(None),
+    };
+    Ok(Some(format!(
+        "native_parity:{}",
+        serde_json::json!({
+            "checkpoint": checkpoint, "seed": script.seed(), "requested_seed": script.seed,
+            "fixture": script.fixture(), "request": action, "roster": roster,
+        })
+    )))
+}
+
 fn number(label: &str, key: &str) -> Option<u64> {
     label
         .split(':')
@@ -452,6 +544,27 @@ pub(super) struct PredicateHistory {
 }
 
 impl PredicateHistory {
+    pub(super) fn verify_checkpoint(
+        &mut self,
+        checkpoint: &NativeCheckpoint,
+        records: &[TraceRecord],
+        frame: &super::trace::PresentationEvidence,
+    ) -> bool {
+        match &checkpoint.action {
+            Action::ConfigureParityMelee(_)
+            | Action::RunParityFixture(_)
+            | Action::RunParityCorpus(_) => {
+                checkpoint.parity_label.as_ref().is_some_and(|expected| {
+                    records.iter().any(|record| {
+                        record.kind == RecordKind::SemanticAssertion
+                            && record.label.as_ref() == Some(expected)
+                    })
+                })
+            }
+            _ => self.verify(&checkpoint.action, records, frame),
+        }
+    }
+
     pub(super) fn verify(
         &mut self,
         action: &Action,
@@ -591,7 +704,9 @@ mod tests {
         .unwrap();
         assert_eq!(
             super::super::native_checkpoint::checkpoint_class(&action),
-            Some(super::super::native_checkpoint::CheckpointClass::Navigation)
+            Ok(Some(
+                super::super::native_checkpoint::CheckpointClass::Navigation
+            ))
         );
         let good =
             record("response_selected:generation=2:count=3:index=1:phrase=we_will_transfer_now");
