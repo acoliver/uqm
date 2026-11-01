@@ -1,5 +1,6 @@
 //! Exercise Syreen descriptor registration and callbacks against the linked engine.
 
+use uqm_rust::engine::battle::schema::HELEMENT;
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]

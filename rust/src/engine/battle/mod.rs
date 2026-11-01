@@ -30,3 +30,5 @@ pub use template::{RaceResources, RaceTemplate};
 pub use access::PlotIntercept;
 
 pub use access::RaceDescLayout;
+
+pub use access::schema;

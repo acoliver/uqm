@@ -1,6 +1,7 @@
 //! Starting flagship equipment and prices, shared with the live world initializer.
 
 use super::abi::*;
+use crate::engine::battle::schema::GAME_STATE;
 
 pub fn equipment(sis: &mut SIS_STATE) {
     sis.DriveSlots.fill(NUM_MODULES as u8);

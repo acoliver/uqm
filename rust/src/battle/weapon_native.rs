@@ -229,7 +229,11 @@ pub(crate) mod engine {
                 .corner
                 .y
                 .wrapping_add(object.IntersectStamp.origin.y);
-            InitShipStatus(cx.ship_info_mut(ship), Some(ship), &mut object_rect);
+            crate::ui::shipstat::init_ship_status(
+                cx.ship_info_mut(ship),
+                Some(ship),
+                &mut object_rect,
+            );
         } else {
             let old = SetContext(StatusContext);
             DrawStamp(&mut object.IntersectStamp);

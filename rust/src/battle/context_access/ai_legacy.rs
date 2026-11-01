@@ -1,7 +1,6 @@
 #[cfg(not(test))]
-use crate::battle::cyborg_native as ai;
 #[cfg(not(test))]
-use crate::engine::battle::{record::*, Cx, Subject};
+use crate::engine::battle::{Cx, Subject};
 #[cfg(not(test))]
 use crate::graphics::native_abi::INTERSECT_CONTROL;
 

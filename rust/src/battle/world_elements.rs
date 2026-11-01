@@ -66,7 +66,7 @@ pub(crate) mod engine {
     use crate::engine::battle::views::SharedFrames;
     use crate::engine::battle::{Cx, ElementId, Parent};
     use crate::ships::native::{angle_to_facing, cosine, normalize_facing, sine};
-    use std::{mem, ptr};
+    use std::mem;
 
     pub(crate) fn gravity_postprocess(cx: &mut Cx<'_>, e: ElementId) {
         cx.gravity(e);

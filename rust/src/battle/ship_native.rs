@@ -173,10 +173,9 @@ const GRAVITY_MASS_NATIVE: u16 = 100;
 pub(crate) mod engine {
     use super::*;
     use crate::battle::status_native::PostProcessStatus;
-    use crate::collections::observation::image;
     use crate::engine::battle::{Cx, ElementId, ShipId};
     use crate::ships::native::normalize_facing;
-    use std::{mem, ptr};
+    use std::ptr;
 
     const TARGET_DAMAGED_FOR_1_PT_NATIVE: i16 = 2;
     const TARGET_DAMAGED_FOR_6_PLUS_PT_NATIVE: i16 = 5;
@@ -340,6 +339,8 @@ pub(crate) mod engine {
         }
     }
 
+    /// # Safety
+    /// The game thread retains the initialized battle context and all resources used by this call.
     pub unsafe fn spawn_ship(cx: &mut Cx<'_>, ship: ShipId) -> BOOLEAN {
         let Some(descriptor) = load_ship(cx.ship(ship).SpeciesID, 1) else {
             return 0;
@@ -413,6 +414,8 @@ pub(crate) mod engine {
         1
     }
 
+    /// # Safety
+    /// The game thread retains the initialized battle context and all resources used by this call.
     pub unsafe fn next_star_ship(
         cx: &mut Cx<'_>,
         mut last: Option<ShipId>,

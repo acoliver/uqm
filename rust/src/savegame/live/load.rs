@@ -20,7 +20,8 @@ pub(in crate::savegame) unsafe fn finish_load(star: &super::super::StarDesc, act
     crate::planets::c_api::reset_encounter();
     for player in 0..2 {
         ReinitQueue(
-            crate::c_bindings::live_queues::player_ships(player)
+            crate::engine::battle::access::live_queues::player_ships(player)
+                .cast::<crate::comm::locdata::CQueue>()
                 .cast_mut()
                 .cast::<Queue>(),
         );

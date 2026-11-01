@@ -1,5 +1,6 @@
 //! Exercise Orz's native callbacks with the linked engine queue and physics.
 
+use uqm_rust::engine::battle::schema::HELEMENT;
 use uqm_rust::ships::races::{intruder_preprocess, marine_collision};
 #[path = "support/battle_context.rs"]
 mod battle_context;

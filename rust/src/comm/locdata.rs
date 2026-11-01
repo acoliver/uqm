@@ -148,7 +148,7 @@ assert_c_layout!(
 
 assert_c_layout!(
     CGameState,
-    global_state::GAME_STATE {
+    crate::engine::battle::schema::GAME_STATE {
         glob_flags: glob_flags,
         crew_cost: CrewCost,
         fuel_cost: FuelCost,
@@ -523,3 +523,7 @@ mod tests {
         assert_eq!(TextValign::from(99), TextValign::Top);
     }
 }
+
+const _: () = assert!(
+    CGameState::DISPLAY_ARRAY_OFFSET == crate::engine::battle::schema::DISPLAY_ARRAY_OFFSET
+);

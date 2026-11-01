@@ -2,6 +2,7 @@
 #![allow(non_snake_case)]
 
 use crate::callback::ffi::{AlarmId, Alarm_addAbsoluteMs, Alarm_remove};
+use crate::engine::battle::schema::FlashContext;
 use crate::navigation::abi::*;
 use crate::navigation::globals::GlobData;
 use std::{mem, ptr};

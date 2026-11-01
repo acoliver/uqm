@@ -188,7 +188,6 @@ pub use engine::{
 mod tests {
     use super::*;
     use crate::collections::queue::{InitQueue, Queue, UninitQueue};
-    use crate::engine::battle::record::STARSHIP;
 
     #[test]
     fn cost_uses_the_owned_catalog_in_queue_order() {

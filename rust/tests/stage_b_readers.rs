@@ -104,3 +104,37 @@ fn insufficient_energy_sets_status_without_resetting_counter_or_energy() {
         }
     });
 }
+
+#[test]
+fn ion_trail_is_inserted_before_the_ship_and_keeps_its_owner() {
+    battle_context::run(|| {
+        let owner = Battle::new(4);
+        // SAFETY: the serialized fixture retains the ship, its frames and the published context.
+        unsafe {
+            let ship = Ship::new(&owner, SPECIES_ID_VUX_ID, 0);
+            uqm_rust::app::bridge::enter(|cx| {
+                assert_eq!(cx.elements().head(), Some(ship.id));
+                cx.spawn_ion_trail(ship.id);
+                let trail = cx.elements().head().unwrap();
+                assert_ne!(trail, ship.id);
+                assert_eq!(cx.elements().succ(trail), Some(ship.id));
+                assert_eq!(cx.elements().pred(ship.id), Some(trail));
+                assert_eq!(cx.owner(trail), ship.ship_id);
+                let state = cx.element(trail);
+                assert_eq!(
+                    state.flags,
+                    (APPEARING | FINITE_LIFE | NONSOLID | PRE_PROCESS) as u16
+                );
+                assert_eq!((state.life, state.thrust, state.color_cycle), (0, 1, 0));
+                assert_eq!(
+                    (state.current.location.x, state.current.location.y),
+                    (4000, 4016)
+                );
+                assert_eq!((state.next.location.x, state.next.location.y), (4000, 4016));
+                assert_eq!(cx.primitive_style(trail).kind, gfx_object_POINT_PRIM as u8);
+                cx.unlink(trail);
+                cx.dispose(trail);
+            });
+        }
+    });
+}

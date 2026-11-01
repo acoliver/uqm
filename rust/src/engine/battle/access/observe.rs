@@ -73,7 +73,8 @@ pub(crate) fn element(table: &ElementTable, id: ElementId) -> ElementObservation
 }
 #[cfg(not(test))]
 pub(crate) unsafe fn retired_element_address(id: ElementId) -> usize {
-    let queue = &*(&raw const super::super::legacy::disp_q);
+    let pointer = &raw const super::super::legacy::disp_q;
+    let queue = &*pointer;
     assert!(
         !queue.pq_tab.is_null(),
         "Pkunk snapshot pool is not initialized"

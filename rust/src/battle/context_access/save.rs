@@ -50,7 +50,7 @@ pub(crate) unsafe fn read_flagship_facing(
         }
         next = ships.succ(id);
     }
-    return Err(HyperSaveError::OwnerNotInPlayerQueue);
+    Err(HyperSaveError::OwnerNotInPlayerQueue)
 }
 
 #[cfg(not(test))]

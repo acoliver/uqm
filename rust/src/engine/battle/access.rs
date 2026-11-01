@@ -561,6 +561,7 @@ pub(crate) unsafe fn observe_element_record(record: &super::record::ELEMENT) -> 
 
 /// # Safety
 /// The caller retains the ship pool throughout this staging observation.
+#[cfg(not(test))]
 pub(crate) unsafe fn observe_ship_record(record: &super::record::STARSHIP) -> ShipState {
     ShipState::decode(record)
 }
@@ -896,4 +897,35 @@ pub struct RaceDescLayout {
     pub ship_info_max_crew_offset: usize,
     /// Offset of `CHARACTERISTIC_STUFF.ship_mass` within CHARACTERISTIC_STUFF.
     pub characteristics_mass_offset: usize,
+}
+
+pub mod schema;
+
+pub(crate) mod lifecycle;
+
+/// The running battle or flight's shared queues, borrowed on the game thread.
+#[cfg(not(test))]
+pub(crate) mod live_queues {
+    use super::super::legacy as queues;
+    use crate::collections::queue::Queue;
+    use std::ptr;
+
+    /// `&race_q[player]`, the `STARSHIP` queue of one side (`RPG_PLAYER_NUM` is
+    /// the human player's).
+    ///
+    /// # Safety
+    /// Game thread only. The caller may read the queue only while no other code is
+    /// changing it.
+    pub unsafe fn player_ships(player: usize) -> *const Queue {
+        assert!(player < 2, "race_q has no side {player}");
+        ptr::addr_of!(queues::race_q).cast::<Queue>().add(player)
+    }
+
+    /// `&disp_q`, the queue of every live `ELEMENT`.
+    ///
+    /// The caller may read through this pointer only on the game thread while no
+    /// other code is changing the queue.
+    pub fn display_list() -> *const Queue {
+        ptr::addr_of!(queues::disp_q).cast()
+    }
 }

@@ -135,7 +135,6 @@ fn axis_possible(t0: i32, t1: i32, velocity: i32) -> bool {
 }
 
 #[cfg(not(test))]
-pub(crate) use crate::battle::context_access::ai_legacy as engine;
 #[cfg(not(test))]
 use crate::engine::battle::{Concern, Concerns, Cx, Parent, ShipId, Subject};
 #[cfg(not(test))]

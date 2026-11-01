@@ -1,29 +1,15 @@
 #[cfg(not(test))]
+use crate::engine::battle::link_queue;
+#[cfg(not(test))]
 use crate::engine::battle::ShipId;
-#[cfg(not(test))]
-use crate::engine::battle::{link_queue, record::SHIP_INFO};
-#[cfg(not(test))]
-use crate::graphics::native_abi::RECT;
 #[cfg(not(test))]
 use crate::ships::native::abi::{COUNT, SHIP_FRAGMENT};
 #[cfg(not(test))]
 use std::ffi::c_void;
 
+#[cfg(not(test))]
 /// # Safety
-/// Ship info, optional ship, and optional clip rectangle are live game-thread records.
-#[cfg(not(test))]
-#[no_mangle]
-pub unsafe extern "C" fn InitShipStatus(
-    info: *mut SHIP_INFO,
-    ship: Option<ShipId>,
-    clip: *mut RECT,
-) {
-    // SAFETY: only the optional owner identity leaves this boundary.
-    unsafe {
-        crate::ui::shipstat::init_ship_status(info, ship, clip);
-    }
-}
-#[cfg(not(test))]
+/// The game thread retains the initialized battle context and all resources used by this call.
 pub unsafe fn get_encounter_star_ship(last: Option<ShipId>, player: u16) -> Option<ShipId> {
     get_encounter_star_ship_with_picker(last, player, |player, result| {
         crate::supermelee::native::battle_picker::live::GetNextMeleeStarShip(player, result)

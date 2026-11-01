@@ -408,15 +408,6 @@ impl RaceStats {
 use super::views::*;
 use super::{Cx, ElementId, Parent, ShipId};
 
-#[cfg(not(test))]
-impl Cx<'_> {
-    /// # Safety
-    /// Every pointer in the supplied legacy record must belong to this context's live resources.
-    pub(crate) unsafe fn legacy_subject(&self, e: &ELEMENT) -> super::Subject {
-        self.decode_subject(e)
-    }
-}
-
 impl Cx<'_> {
     pub(crate) fn ship_id(&self, address: usize) -> ShipId {
         for side in 0..2 {

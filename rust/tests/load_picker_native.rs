@@ -1,4 +1,5 @@
 //! Real virtual controls, restart dispatch, DoInput reset and save enumeration.
+use uqm_rust::engine::battle::schema::FlashContext;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 use std::{ffi::CString, ptr};
@@ -20,7 +21,7 @@ use uqm_rust::{
         },
         types::ActivityValue,
     },
-    navigation::abi::{FlashContext, SUMMARY_DESC},
+    navigation::abi::SUMMARY_DESC,
     savegame::{decode_save, SaveSlots},
 };
 

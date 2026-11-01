@@ -1,23 +1,4 @@
 //! Ship runtime operations formerly supplied by rust_bridge_ships.c.
-fn wrap(value: i32, extent: i32) -> u16 {
-    (if value < 0 {
-        value + extent
-    } else if value >= extent {
-        value - extent
-    } else {
-        value
-    }) as u16
-}
-
-unsafe fn display_primitive(
-    state: *const crate::navigation::abi::GAME_STATE,
-    index: u16,
-) -> *mut crate::ships::native::abi::PRIMITIVE {
-    (*state)
-        .DisplayArray
-        .cast::<crate::ships::native::abi::PRIMITIVE>()
-        .add(usize::from(index))
-}
 
 fn recover_ship_crew(descriptor: &mut crate::ships::native::abi::SHIP_INFO, crew: u16) -> u16 {
     let mut remaining = descriptor.crew_level;
@@ -103,16 +84,7 @@ pub unsafe fn uninit_ships() {
 #[cfg(not(test))]
 mod live {
     #![allow(non_snake_case)]
-    use super::{display_primitive, wrap};
-    use crate::ships::native::{abi::*, cosine, normalize_facing, sine};
-    use std::{mem, ptr};
-
-    unsafe fn width() -> i32 {
-        (ScreenWidth - 64) << 5
-    }
-    unsafe fn height() -> i32 {
-        ScreenHeight << 5
-    }
+    use crate::ships::native::abi::*;
 
     macro_rules! operation {
     ($name:ident($($arg:ident: $ty:ty),*) $(-> $ret:ty)? $body:block) => {
@@ -143,41 +115,13 @@ mod live {
             let old = SetContext(ScreenContext);
             SetContextBackGroundColor(Color {r:0,g:0,b:0,a:255}); ClearDrawable(); SetContext(old);
             if uqm_get_current_activity_lobyte() == IN_LAST_BATTLE as u8 { crate::game_init::world_resources::free_gravity_well(); }
-            else { for _ in 0..5 { crate::app::bridge::enter(|cx| crate::battle::world_elements::create_asteroid(cx, None)); } crate::app::bridge::enter(|cx| crate::battle::world_elements::spawn_planet(cx)); }
+            else { for _ in 0..5 { crate::app::bridge::enter(|cx| crate::battle::world_elements::create_asteroid(cx, None)); } crate::app::bridge::enter(crate::battle::world_elements::spawn_planet); }
             2
         }
     });
 }
 #[cfg(not(test))]
 pub use live::*;
-
-#[cfg(test)]
-mod tests {
-    use super::{display_primitive, wrap};
-    #[test]
-    fn display_primitive_uses_the_pointed_to_array() {
-        use crate::ships::native::abi::{gfx_object_STAMP_PRIM, PRIMITIVE};
-        let mut primitives: [PRIMITIVE; 3] = unsafe { std::mem::zeroed() };
-        let mut state: crate::navigation::abi::GAME_STATE = unsafe { std::mem::zeroed() };
-        state.DisplayArray = primitives.as_mut_ptr().cast();
-        let original = state.DisplayArray;
-        unsafe {
-            (*display_primitive(&state, 2)).Type = gfx_object_STAMP_PRIM as u8;
-        }
-        assert_eq!(state.DisplayArray, original);
-        assert_eq!(primitives[0].Type, 0);
-        assert_eq!(primitives[1].Type, 0);
-        assert_eq!(primitives[2].Type, gfx_object_STAMP_PRIM as u8);
-    }
-
-    #[test]
-    fn world_wrap_uses_one_adjustment_not_modulo() {
-        assert_eq!(wrap(-1, 8192), 8191);
-        assert_eq!(wrap(8191, 8192), 8191);
-        assert_eq!(wrap(8192, 8192), 0);
-        assert_eq!(wrap(16385, 8192), 8193);
-    }
-}
 
 #[cfg(test)]
 mod crew_writeback_tests {

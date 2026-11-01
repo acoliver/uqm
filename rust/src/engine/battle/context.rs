@@ -64,7 +64,6 @@ impl Battle {
 
 /// Projections into the single GlobData authority, not copies of world state.
 /// Phase 4 replaces these projections with the owned World.
-
 pub struct World {
     pub(super) activity: NonNull<u16>,
     groups: NonNull<QUEUE>,

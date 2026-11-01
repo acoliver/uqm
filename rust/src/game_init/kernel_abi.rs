@@ -147,7 +147,9 @@ pub unsafe extern "C" fn InitContexts() -> u32 {
     if OffScreenContext.is_null() {
         return 0;
     }
-    u32::from(crate::battle::context_access::lifecycle::init_elements())
+    u32::from(crate::engine::battle::access::lifecycle::init_elements(
+        MAX_DISPLAY_ELEMENTS as u16,
+    ))
 }
 
 unsafe fn init_kernel() -> u32 {

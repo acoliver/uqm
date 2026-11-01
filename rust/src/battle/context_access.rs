@@ -143,15 +143,11 @@ impl Cx<'_> {
     }
 
     pub fn init_ship_status(&mut self, ship: ShipId) {
-        let owner = self.ship_pointer(ship);
-        // SAFETY: publication suspends all record borrows during status drawing.
+        let info = &raw mut *self.ship_info_mut(ship);
+        // SAFETY: the descriptor retains its owned status data while graphics are drawn.
         unsafe {
             {
-                InitShipStatus(
-                    &raw mut (*(*owner).descriptor_ptr()).ship_info,
-                    Some(ship),
-                    std::ptr::null_mut(),
-                );
+                crate::ui::shipstat::init_ship_status(info, Some(ship), std::ptr::null_mut());
                 let old = SetContext(StatusContext);
                 crate::battle::status_native::draw_captains_window(self, ship);
                 SetContext(old);
@@ -162,12 +158,10 @@ impl Cx<'_> {
     pub fn start_battle_song_if_ready(&mut self, ship: ShipId) {
         // SAFETY: audio and ship authorities remain live on the game thread.
         unsafe {
+            if PLRPlaying(usize::MAX as MUSIC_REF) == 0
+                && crate::battle::tactrans_native::opponent_alive(self, ship)
             {
-                if PLRPlaying(usize::MAX as MUSIC_REF) == 0
-                    && crate::battle::tactrans_native::opponent_alive(self, ship)
-                {
-                    BattleSong(1);
-                }
+                BattleSong(1);
             }
         }
     }
@@ -295,7 +289,6 @@ mod tactrans_native_access {
     use crate::battle::tactrans_native::engine::*;
     #[cfg(not(test))]
     #[cfg(not(test))]
-    use crate::collections::observation::image;
     #[cfg(not(test))]
     use crate::ships::native::{cosine, facing_to_angle, sine};
     #[cfg(not(test))]
@@ -306,7 +299,7 @@ mod tactrans_native_access {
                 return;
             };
             let owner = self.owner(ship);
-            let angle = facing_to_angle(self.ship(owner).ShipFacing as i32) + HALF_CIRCLE as i32;
+            let angle = facing_to_angle(self.ship_state(owner).facing as i32) + HALF_CIRCLE as i32;
             let mut rect: RECT = RECT {
                 corner: POINT { x: 0, y: 0 },
                 extent: EXTENT {
@@ -314,18 +307,14 @@ mod tactrans_native_access {
                     height: 0,
                 },
             };
-            let frame = self.desc(owner).ship_data.ship[0];
+            let frame = self.ship_frame(owner, 0).raw();
             // SAFETY: the ship owns the loaded frame; the rectangle is local output.
             unsafe {
                 GetFrameRect(frame, &mut rect);
             }
             rect.extent.height =
                 ((rect.extent.height as i32 + rect.corner.y as i32) << ONE_SHIFT) as _;
-            let handle = self.elements().raw(e);
-            // SAFETY: the new slot is unlinked and inserted before the current head.
-            unsafe {
-                InsertQueue(&raw mut disp_q, handle, disp_q.head);
-            }
+            self.insert_before(e, self.elements().head());
             self.element_mut(e).player = NEUTRAL_PLAYER_NUM as i16;
             self.element_mut(e).flags = (APPEARING | FINITE_LIFE | NONSOLID) as u16;
             self.element_mut(e).set_thrust_wait(1);
@@ -333,11 +322,7 @@ mod tactrans_native_access {
             self.primitive_style_mut(e).kind = gfx_object_POINT_PRIM as u8;
             self.primitive_style_mut(e).color = rgb15(31, 21, 0);
             self.element_mut(e).color_cycle = 0;
-            // SAFETY: the loaded shared frame authority remains live for this battle.
-            unsafe {
-                image!(frame; self.records()[e].current.image.frame, DecFrameIndex(stars_in_space));
-                image!(set; self.records()[e].current.image.farray, &raw mut stars_in_space);
-            }
+            self.set_star_image(e);
             self.element_mut(e).current.location = self.element(ship).current.location;
             self.element_mut(e).current.location.x = self
                 .element(e)
@@ -405,13 +390,13 @@ mod tactrans_native_access {
 
         pub fn record_ship_death(&mut self, dead: ElementId) {
             let owner = self.owner(dead);
-            if u32::from(self.elements()[dead].mass_points()) <= MAX_SHIP_MASS {
-                let player = self.ship(owner).playerNr;
+            if u32::from(self.element(dead).mass) <= MAX_SHIP_MASS {
+                let player = self.ship_state(owner).player;
                 assert!(player >= 0);
                 self.b.ship_lost(player as usize);
             }
             if self.world.activity() as u8 == SUPER_MELEE as u8 {
-                let pointer = self.ship(owner) as *const STARSHIP as *mut STARSHIP;
+                let pointer = self.ship_pointer(owner);
                 // SAFETY: the checked owner remains live while updating melee status.
                 unsafe {
                     MeleeShipDeath(pointer.cast());
@@ -657,13 +642,6 @@ pub(crate) mod save;
 pub(crate) mod observe;
 
 pub(crate) mod fixture;
-
-const _: () = {
-    assert!(
-        crate::comm::locdata::CGameState::DISPLAY_ARRAY_OFFSET
-            == std::mem::offset_of!(crate::c_bindings::global_state::GAME_STATE, DisplayArray)
-    );
-};
 
 #[cfg(not(test))]
 impl Cx<'_> {

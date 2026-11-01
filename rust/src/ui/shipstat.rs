@@ -1,7 +1,6 @@
 #![cfg(not(test))]
 #![allow(non_snake_case)]
 
-pub use crate::battle::context_access::reader_legacy::InitShipStatus;
 use crate::engine::battle::record::Kernel;
 use crate::engine::battle::{link_queue, ShipId};
 use crate::navigation::abi::*;

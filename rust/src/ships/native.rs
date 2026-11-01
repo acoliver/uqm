@@ -82,7 +82,7 @@ pub mod abi {
 #[cfg(not(test))]
 mod engine {
     use super::abi;
-    use std::ffi::{c_int, c_void};
+    use std::ffi::c_void;
 
     // Keep opaque-pointer declarations identical to existing engine imports.
 

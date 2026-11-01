@@ -1,5 +1,7 @@
 //! Battle entry, ordered input processing, and frame scheduling from `battle.c`.
 
+#[cfg(not(test))]
+use crate::engine::battle::schema::InputContext;
 use crate::ships::native::abi;
 
 const BATTLE_LEFT: u8 = 1 << 0;

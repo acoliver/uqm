@@ -1,6 +1,7 @@
 #![cfg(not(test))]
 #![allow(non_snake_case)]
 
+use crate::engine::battle::schema::FlashContext;
 use crate::memory::{rust_hfree as HFree, rust_hmalloc as HMalloc};
 use crate::navigation::abi::*;
 use std::ptr;
@@ -18,8 +19,6 @@ const DRAW_ADDITIVE: u8 = 1;
 const DRAW_ALPHA: u8 = 2;
 const DRAW_FACTOR_1: i32 = 255;
 const WANT_PIXMAP: u8 = 2;
-
-pub use crate::navigation::abi::FlashContext;
 
 unsafe fn cache_at(ctx: &FlashContext, i: usize) -> FRAME {
     *ctx.cache.add(i)
