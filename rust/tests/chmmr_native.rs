@@ -55,7 +55,10 @@ unsafe fn assert_rng_after(seed: u32, draws: usize) {
 unsafe fn exhaust() -> Vec<HELEMENT> {
     let mut handles = Vec::new();
     loop {
-        let h = AllocElement();
+        let h = uqm_rust::app::bridge::enter(|cx| {
+            cx.alloc_element()
+                .map_or(std::ptr::null_mut(), |id| cx.elements().raw(id))
+        });
         if h.is_null() {
             return handles;
         }
@@ -157,8 +160,7 @@ fn descriptor_matches_the_entire_c_template_and_init_reinstalls_callbacks() {
                 (0, 200)
             );
             assert!(d.race.unwrap().uninit.is_none());
-            assert!(d.data.is_null());
-            assert!(d.code_ref.is_null());
+
             assert!(d.race.unwrap().preprocess.is_some());
             assert!(d.race.unwrap().postprocess.is_some());
             assert!(d.race.unwrap().init_weapon.is_some());
@@ -262,9 +264,7 @@ fn laser_death_obeys_range_byte_gate_count_draw_and_animation() {
                     ship.ship_mut().special_counter = 0;
                     let tail = disp_q.tail;
                     TFB_SeedRandom(seed);
-                    uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                        death, laser,
-                    );
+                    hooks::invoke_element_pointer(death, laser);
                     assert_eq!(ship.ship_mut().special_counter, 1);
                     if gate && distance >= 112 {
                         let spot_handle = disp_q.tail;
@@ -287,14 +287,10 @@ fn laser_death_obeys_range_byte_gate_count_draw_and_animation() {
                         let animate = (*spot).preprocess_func.unwrap();
                         (*spot).__bindgen_anon_4.turn_wait = 1;
                         (*spot).__bindgen_anon_5.next_turn = 3;
-                        uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                            animate, spot,
-                        );
+                        hooks::invoke_element_pointer(animate, spot);
                         assert_eq!((*spot).__bindgen_anon_4.turn_wait, 0);
                         assert!((*spot).next.image.frame.is_null());
-                        uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                            animate, spot,
-                        );
+                        hooks::invoke_element_pointer(animate, spot);
                         assert_eq!(frame_index((*spot).next.image.frame), 33);
                         assert_eq!((*spot).__bindgen_anon_4.turn_wait, 3);
                         assert_ne!((*spot).state_flags & CHANGING as u16, 0);
@@ -310,13 +306,13 @@ fn laser_death_obeys_range_byte_gate_count_draw_and_animation() {
             assert_eq!(gates, [true, true]);
             ship.ship_mut().hShip = ptr::null_mut();
             TFB_SeedRandom(123);
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(death, laser);
+            hooks::invoke_element_pointer(death, laser);
             assert_rng_after(123, 0);
             ship.ship_mut().hShip = ship.handle;
             (*laser).current.location.x = origin.x + 600;
             let held = exhaust();
             TFB_SeedRandom(7);
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(death, laser);
+            hooks::invoke_element_pointer(death, laser);
             assert_rng_after(7, 1);
             for h in held {
                 FreeElement(h);
@@ -411,10 +407,7 @@ fn delayed_satellites_spawn_around_live_ship_with_three_ordered_rng_draws() {
                 TFB_Random() as u16 & 7,
             ];
             TFB_SeedRandom(77);
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                (*transit).death_func.unwrap(),
-                transit,
-            );
+            hooks::invoke_element_pointer((*transit).death_func.unwrap(), transit);
             let mut h = (*transit).succ;
             for (i, index) in indices.into_iter().enumerate() {
                 assert!(!h.is_null());
@@ -453,24 +446,15 @@ fn spawn_and_preprocess_allocation_failures_do_not_draw_rng_or_rearm() {
             let delay = delayed_spawn(&mut ship);
             let death = (*element(delay)).death_func.unwrap();
             TFB_SeedRandom(88);
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                death,
-                element(delay),
-            ); // only one free slot
+            hooks::invoke_element_pointer(death, element(delay)); // only one free slot
             assert_eq!((*element(disp_q.tail)).__bindgen_anon_2.hit_points, 10);
             assert_rng_after(88, 1);
             TFB_SeedRandom(88);
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                death,
-                element(delay),
-            );
+            hooks::invoke_element_pointer(death, element(delay));
             assert_rng_after(88, 0);
             ship.ship_mut().hShip = ptr::null_mut();
             TFB_SeedRandom(88);
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                death,
-                element(delay),
-            );
+            hooks::invoke_element_pointer(death, element(delay));
             assert_rng_after(88, 0);
             ship.ship_mut().hShip = ship.handle;
             ship.descriptor_mut().race_callbacks.pre = uqm_rust::engine::battle::Selection::Default;
@@ -518,9 +502,7 @@ fn satellites_wrap_space_cap_speed_and_preserve_half_space_ties() {
                     y: (desired_y - dy) as i16,
                 };
                 ship.descriptor_mut().ship_info.ship_flags &= !(POINT_DEFENSE as u16);
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    preprocess, s,
-                );
+                hooks::invoke_element_pointer(preprocess, s);
                 assert_eq!((*s).__bindgen_anon_1.life_span, 0);
                 assert_eq!((*s).__bindgen_anon_4.turn_wait, 0);
                 assert_eq!(frame_index((*s).next.image.frame), 0);
@@ -542,7 +524,7 @@ fn satellites_wrap_space_cap_speed_and_preserve_half_space_ties() {
             }
             ship.ship_mut().hShip = ptr::null_mut();
             let before = velocity_fields(&(*s).velocity);
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(preprocess, s);
+            hooks::invoke_element_pointer(preprocess, s);
             assert_eq!(velocity_fields(&(*s).velocity), before);
         }
     })
@@ -559,21 +541,18 @@ fn satellite_collision_is_noop_and_death_installs_four_tick_animation() {
             let s = element(satellites[0]);
             let mut other = PoolElement::new();
             let mut p = POINT { x: 1, y: 2 };
-            uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
+            hooks::invoke_collision_pointer(
                 (*s).collision_func.unwrap(),
                 s,
                 &mut p,
                 &mut *other,
                 &mut POINT { x: 0, y: 0 },
-                uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
+                hooks::CollisionCall::Hook,
             );
             assert_eq!((*s).__bindgen_anon_2.hit_points, 10);
             assert_eq!(point(p), (1, 2));
             (*s).state_flags |= DISAPPEARING as u16;
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                (*s).death_func.unwrap(),
-                s,
-            );
+            hooks::invoke_element_pointer((*s).death_func.unwrap(), s);
             assert_eq!(
                 ship.descriptor_mut().ship_info.ship_flags & POINT_DEFENSE as u16,
                 0
@@ -592,16 +571,13 @@ fn satellite_collision_is_noop_and_death_installs_four_tick_animation() {
             assert!((*s).death_func.is_none());
             (*s).current = (*s).next;
             let animate = (*s).preprocess_func.unwrap();
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(animate, s);
+            hooks::invoke_element_pointer(animate, s);
             assert_eq!(frame_index((*s).next.image.frame), 8);
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(animate, s);
+            hooks::invoke_element_pointer(animate, s);
             assert_eq!(frame_index((*s).next.image.frame), 9);
             // A surviving satellite restores point defense on its next preprocess.
             let survivor = element(satellites[1]);
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                (*survivor).preprocess_func.unwrap(),
-                survivor,
-            );
+            hooks::invoke_element_pointer((*survivor).preprocess_func.unwrap(), survivor);
             assert_ne!(
                 ship.descriptor_mut().ship_info.ship_flags & POINT_DEFENSE as u16,
                 0
@@ -632,10 +608,7 @@ unsafe fn target(satellite: *mut ELEMENT, dx: i16, dy: i16, hp: u16) -> PoolElem
 }
 
 unsafe fn defense(satellite: *mut ELEMENT) -> HELEMENT {
-    uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-        (*satellite).postprocess_func.unwrap(),
-        satellite,
-    );
+    hooks::invoke_element_pointer((*satellite).postprocess_func.unwrap(), satellite);
     let h = disp_q.tail;
     assert_eq!((*element(h)).hTarget, satellite.cast());
     assert_eq!((*element(h)).__bindgen_anon_1.life_span, 0);
@@ -666,10 +639,7 @@ fn point_defense_uses_backward_weakest_nearest_and_stable_tie_order() {
             let after: HELEMENT = (&raw mut *after_fixture).cast();
             let before = disp_q.tail;
             TFB_SeedRandom(12);
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                (*element(d)).death_func.unwrap(),
-                element(d),
-            );
+            hooks::invoke_element_pointer((*element(d)).death_func.unwrap(), element(d));
             assert_ne!({ disp_q.tail }, before);
             let beam = element(disp_q.tail);
             assert_eq!(point((*beam).current.location), point((*s).next.location));
@@ -752,10 +722,7 @@ fn point_defense_respects_collision_cloak_range_and_full_width_hitpoints() {
                     _ => {}
                 }
                 let d = defense(s);
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    (*element(d)).death_func.unwrap(),
-                    element(d),
-                );
+                hooks::invoke_element_pointer((*element(d)).death_func.unwrap(), element(d));
                 assert_eq!(
                     disp_q.tail != d,
                     shoot,
@@ -779,18 +746,18 @@ fn satellite_defense_wait_underflows_on_dead_zero_wait_and_handles_exhaustion() 
             let post = (*s).postprocess_func.unwrap();
             (*s).__bindgen_anon_5.thrust_wait = 2;
             let tail = disp_q.tail;
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(post, s);
+            hooks::invoke_element_pointer(post, s);
             assert_eq!((*s).__bindgen_anon_5.thrust_wait, 1);
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(post, s);
+            hooks::invoke_element_pointer(post, s);
             assert_eq!((*s).__bindgen_anon_5.thrust_wait, 0);
             assert_eq!({ disp_q.tail }, tail);
             (*s).__bindgen_anon_1.life_span = 0;
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(post, s);
+            hooks::invoke_element_pointer(post, s);
             assert_eq!((*s).__bindgen_anon_5.thrust_wait, 255);
             (*s).__bindgen_anon_1.life_span = 2;
             (*s).__bindgen_anon_5.thrust_wait = 0;
             let held = exhaust();
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(post, s);
+            hooks::invoke_element_pointer(post, s);
             assert_eq!({ disp_q.tail }, tail);
             assert_eq!((*s).__bindgen_anon_5.thrust_wait, 0);
             for h in held {
@@ -800,10 +767,7 @@ fn satellite_defense_wait_underflows_on_dead_zero_wait_and_handles_exhaustion() 
             let _target = target(s, 40, 0, 1);
             let d = defense(s);
             let held = exhaust();
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                (*element(d)).death_func.unwrap(),
-                element(d),
-            );
+            hooks::invoke_element_pointer((*element(d)).death_func.unwrap(), element(d));
             assert_eq!({ disp_q.tail }, d);
             assert_eq!((*s).__bindgen_anon_5.thrust_wait, 0);
             for h in held {
@@ -1048,10 +1012,7 @@ fn laser_death_preserves_size_subtraction_and_unsigned_count_magnitude() {
                     + 112) as COUNT;
                 let tail = disp_q.tail;
                 TFB_SeedRandom(seed);
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    (*laser).death_func.unwrap(),
-                    laser,
-                );
+                hooks::invoke_element_pointer((*laser).death_func.unwrap(), laser);
                 assert_eq!(ship.ship_mut().special_counter, 255);
                 if gate {
                     saw_large_magnitude |= magnitude > i16::MAX as u16;
@@ -1125,7 +1086,7 @@ unsafe fn satellites(ship: &mut Ship<'_>) -> Vec<HELEMENT> {
     RemoveElement(delay);
     FreeElement(delay);
     let tail = disp_q.tail;
-    uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(death, ship.ptr());
+    hooks::invoke_element_pointer(death, ship.ptr());
     let mut h = (*element(tail)).succ;
     let mut out = Vec::new();
     while !h.is_null() {
@@ -1134,3 +1095,6 @@ unsafe fn satellites(ship: &mut Ship<'_>) -> Vec<HELEMENT> {
     }
     out
 }
+
+#[path = "support/hooks.rs"]
+mod hooks;

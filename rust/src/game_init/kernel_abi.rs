@@ -87,7 +87,6 @@ pub unsafe extern "C" fn LoadKernel(argc: i32, argv: *mut *mut c_char) -> u32 {
         return 0;
     }
     // SAFETY: the resource system was initialized above and registration runs once on the game thread.
-    unsafe { crate::ships::code_resources::engine::InstallCodeResType() };
     if loadIndices(contentDir.cast()) == 0 {
         return 0;
     }

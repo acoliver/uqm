@@ -10,7 +10,6 @@ mod collision_motion;
 pub(crate) mod dispatch;
 pub mod invoke_collision;
 pub mod invoke_element;
-pub mod invoke_race;
 pub(crate) mod primitives;
 mod queue_view;
 use primitives::insert_prim_links;
@@ -259,14 +258,12 @@ pub(crate) mod engine {
     use crate::collections::observation::image;
     use crate::engine::battle::{Cx, ElementId};
     use crate::ships::native::frame_index;
-    use std::ptr;
 
     extern "C" {}
 
     unsafe fn damage(cx: &mut Cx<'_>, id: ElementId) {
-        let pointer = cx.elements().raw(id).cast();
-        let amount = cx.elements()[id].__bindgen_anon_2.hit_points as SIZE;
-        crate::app::bridge::publish(cx, || do_damage(pointer, amount));
+        let amount = cx.element(id).hits as SIZE;
+        cx.damage(id, amount);
     }
 
     fn untarget(cx: &mut Cx<'_>, dead: ElementId) {
@@ -679,16 +676,6 @@ pub(crate) mod engine {
     }
 
     /// # Safety
-    /// The initialized element queue and display pool are exclusively game-thread owned.
-    #[no_mangle]
-    pub unsafe extern "C" fn AllocElement() -> HELEMENT {
-        crate::app::bridge::enter(|cx| {
-            cx.alloc_element()
-                .map_or(ptr::null_mut(), |id| cx.elements().raw(id))
-        })
-    }
-
-    /// # Safety
     /// `handle` is null or an unlinked allocated element from `disp_q`.
     #[no_mangle]
     pub unsafe extern "C" fn FreeElement(handle: HELEMENT) {
@@ -991,7 +978,7 @@ pub(crate) mod engine {
             }
             crate::battle::sounds::engine::flush_sounds(cx);
         } else {
-            crate::app::bridge::publish(cx, || ProcessSound((!0usize) as SOUND, ptr::null_mut()));
+            cx.b.kernel_sounds().push(usize::MAX as SOUND, None);
             crate::battle::sounds::engine::flush_sounds(cx);
         }
         DisplayLinks = make_links(END, END);
@@ -1006,8 +993,8 @@ pub(crate) mod engine {
 
 #[cfg(not(test))]
 pub use engine::{
-    process_collisions, AllocElement, FreeElement, InitDisplayList, InsertPrim, RedrawQueue,
-    RemoveElement, SetUpElement, Untarget,
+    process_collisions, FreeElement, InitDisplayList, InsertPrim, RedrawQueue, RemoveElement,
+    SetUpElement, Untarget,
 };
 
 #[cfg(test)]

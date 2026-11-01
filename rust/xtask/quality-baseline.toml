@@ -4205,8 +4205,8 @@ stage_b_raw = { limit = 42, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "layers|module_edges|uqm::ships::ffi::rust_ships_uninit::@file" = 1
 "layers|module_edges|uqm::ships::ffi_contract::@file" = 0
 "layers|module_edges|uqm::ships::loader_native::engine::@file" = 2
-"layers|module_edges|uqm::ships::loader_native::engine::c_free_ship::@file" = 3
 "layers|module_edges|uqm::ships::loader_native::engine::load_battle::@file" = 3
+"layers|module_edges|uqm::ships::loader_native::engine::unload_ship::@file" = 3
 "layers|module_edges|uqm::ships::native::abi::@file" = 153
 "layers|module_edges|uqm::ships::native::abi::ConfirmSaveLoad::@file" = 1
 "layers|module_edges|uqm::ships::native::abi::DeltaStatistics::@file" = 1
@@ -5059,8 +5059,8 @@ stage_b_raw = { limit = 42, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "layers|planned.uqm-content|uqm::planets::tables::mineral::@file" = 2
 "layers|planned.uqm-content|uqm::planets::tables::star::@file" = 1
 "layers|planned.uqm-content|uqm::ships::loader_native::engine::@file" = 2
-"layers|planned.uqm-content|uqm::ships::loader_native::engine::c_free_ship::@file" = 3
 "layers|planned.uqm-content|uqm::ships::loader_native::engine::load_battle::@file" = 3
+"layers|planned.uqm-content|uqm::ships::loader_native::engine::unload_ship::@file" = 3
 "layers|planned.uqm-content|uqm::ships::races::samatra_state::Snapshot::player::@file" = 1
 "layers|planned.uqm-modes|uqm::battle::battle_native::engine::@file" = 3
 "layers|planned.uqm-modes|uqm::battle::battle_native::engine::Battle::@file" = 4
@@ -5522,6 +5522,7 @@ stage_b_raw = { limit = 42, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "uqm::io" = "uqm-engine::io"
 "uqm::network" = "uqm-engine::network"
 "uqm::resource" = "uqm-engine::resource"
+"uqm::ships::loader_native::engine::c_free_ship" = "uqm::ships::loader_native::engine::unload_ship"
 "uqm::sound" = "uqm-engine::sound"
 "uqm::threading" = "uqm-engine::threading"
 "uqm::video" = "uqm-engine::video"

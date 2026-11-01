@@ -134,8 +134,6 @@ fn avenger_descriptor_matches_the_c_template() {
             assert!(desc.callbacks()[3] != 0);
             assert!(desc.callbacks()[2] == 0);
             assert!(desc.callbacks()[0] == 0);
-            assert!(desc.data.is_null());
-            assert!(desc.code_ref.is_null());
         }
     })
 }
@@ -205,27 +203,27 @@ fn flame_advances_its_animation_every_next_turn_frames() {
 
             // turn_wait starts at 0, so the first pass animates immediately and
             // reloads the delay from next_turn.
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(step, flame);
+            hooks::invoke_element_pointer(step, flame);
             assert_eq!(index_of((*flame).next.image.frame), 1);
             assert_ne!((*flame).state_flags & CHANGING as u16, 0);
             assert_eq!((*flame).__bindgen_anon_4.turn_wait, 2);
 
             (*flame).state_flags &= !(CHANGING as u16);
             (*flame).current.image.frame = (*flame).next.image.frame;
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(step, flame);
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(step, flame);
+            hooks::invoke_element_pointer(step, flame);
+            hooks::invoke_element_pointer(step, flame);
             assert_eq!((*flame).__bindgen_anon_4.turn_wait, 0);
             assert_eq!((*flame).state_flags & CHANGING as u16, 0);
             assert_eq!(index_of((*flame).next.image.frame), 1);
 
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(step, flame);
+            hooks::invoke_element_pointer(step, flame);
             assert_eq!(index_of((*flame).next.image.frame), 2);
             assert_ne!((*flame).state_flags & CHANGING as u16, 0);
 
             // The animation wraps after the last frame.
             (*flame).current.image.frame = flame_frames.frame(3);
             (*flame).__bindgen_anon_4.turn_wait = 0;
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(step, flame);
+            hooks::invoke_element_pointer(step, flame);
             assert_eq!(index_of((*flame).next.image.frame), 0);
         }
     })
@@ -252,13 +250,13 @@ fn flame_that_hits_goes_nonsolid_without_disappearing() {
             let mut flame_point = POINT { x: 100, y: 125 };
             let mut target_point = POINT { x: 102, y: 125 };
 
-            uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
+            hooks::invoke_collision_pointer(
                 (*flame).collision_func.unwrap(),
                 flame,
                 &mut flame_point,
                 target,
                 &mut target_point,
-                uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
+                hooks::CollisionCall::Hook,
             );
 
             // weapon_collision marks it DISAPPEARING | COLLISION | NONSOLID; the
@@ -755,3 +753,6 @@ fn intelligence_runs_the_engine_pursuit_when_the_enemy_is_known() {
         }
     })
 }
+
+#[path = "support/hooks.rs"]
+mod hooks;

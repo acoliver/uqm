@@ -105,7 +105,7 @@ pub(crate) struct DescriptorObservation<'a> {
 pub(crate) enum CustomData<'a> {
     None,
     #[cfg(not(test))]
-    Androsynth(ElementCollisionFunc),
+    Androsynth(Option<crate::engine::battle::CollisionHook>),
     #[cfg(not(test))]
     NativePkunk {
         phoenix: usize,
@@ -119,7 +119,7 @@ pub(crate) enum CustomData<'a> {
 }
 #[cfg(not(test))]
 impl<'a> CustomData<'a> {
-    unsafe fn decode(species: u32, descriptor: &'a RACE_DESC) -> Self {
+    unsafe fn decode(_species: u32, descriptor: &'a RACE_DESC) -> Self {
         use crate::engine::battle::RaceState;
         match &descriptor.race_state {
             RaceState::Androsynth { collision } => return Self::Androsynth(*collision),
@@ -155,10 +155,6 @@ impl<'a> CustomData<'a> {
             }
             _ => {}
         }
-        assert!(
-            descriptor.data.is_null(),
-            "unexpected custom data for species {species}"
-        );
         Self::None
     }
 }
@@ -182,7 +178,7 @@ pub(crate) unsafe fn ships<'a>(queue: &'a CQueue) -> Vec<ShipObservation<'a>> {
         // SAFETY: the caller retains every reachable resource and descriptor for this borrow.
         #[cfg(not(test))]
         let (race, icons, strings) = unsafe {
-            let race = s.RaceDescPtr.as_ref().map(|d| DescriptorObservation {
+            let race = s.descriptor.as_deref().map(|d| DescriptorObservation {
                 address: d as *const _ as usize,
                 info: &d.ship_info,
                 data: &d.ship_data,
@@ -190,7 +186,7 @@ pub(crate) unsafe fn ships<'a>(queue: &'a CQueue) -> Vec<ShipObservation<'a>> {
                 characteristics: &d.characteristics,
                 intel: &d.cyborg_control,
                 callbacks: d.callbacks(),
-                code_loaded: !d.code_ref.is_null(),
+                code_loaded: d.race.is_some(),
                 #[cfg(not(test))]
                 custom: CustomData::decode(s.SpeciesID, d),
                 #[cfg(test)]

@@ -88,18 +88,12 @@ fn plasma_launch_and_postprocess_boundaries_match_c() {
         assert_eq!((*plasma).__bindgen_anon_5.blast_offset, 0);
         (*plasma).next = (*plasma).current;
         (*plasma).__bindgen_anon_1.life_span = 100;
-        uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-            (*plasma).preprocess_func.unwrap(),
-            plasma,
-        );
+        hooks::invoke_element_pointer((*plasma).preprocess_func.unwrap(), plasma);
         assert_eq!((*plasma).__bindgen_anon_2.hit_points, 7);
         assert_eq!((*plasma).__bindgen_anon_3.mass_points, 7);
         assert_eq!((*plasma).__bindgen_anon_4.turn_wait, 2);
         (*plasma).__bindgen_anon_2.hit_points = 3;
-        uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-            (*plasma).preprocess_func.unwrap(),
-            plasma,
-        );
+        hooks::invoke_element_pointer((*plasma).preprocess_func.unwrap(), plasma);
         assert_eq!((*plasma).__bindgen_anon_1.life_span, 39);
         assert_eq!((*plasma).__bindgen_anon_3.mass_points, 3);
         assert_eq!((*plasma).__bindgen_anon_4.turn_wait, 1);
@@ -118,3 +112,6 @@ fn plasma_launch_and_postprocess_boundaries_match_c() {
         FreeElement(handles[0]);
     })
 }
+
+#[path = "support/hooks.rs"]
+mod hooks;

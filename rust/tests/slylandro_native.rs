@@ -264,7 +264,7 @@ fn descriptor_matches_all_c_stats_resources_and_callbacks() {
                 && d.race.unwrap().postprocess.is_some()
                 && d.race.unwrap().init_weapon.is_some()
         );
-        assert!(d.race.unwrap().uninit.is_none() && d.data.is_null() && d.code_ref.is_null());
+        assert!(d.race.unwrap().uninit.is_none());
         let fresh = battle::descriptor(SPECIES_ID_SLYLANDRO_ID);
         assert_eq!(
             fresh.race.unwrap().preprocess.map(|f| f as usize),
@@ -538,10 +538,7 @@ fn lightning_postprocess_extends_chains_until_zero_or_collision() {
             (*parent).next = (*parent).current;
             let before = queue_len();
             with_rng(56, 1, || {
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    (*parent).postprocess_func.unwrap(),
-                    parent,
-                )
+                hooks::invoke_element_pointer((*parent).postprocess_func.unwrap(), parent)
             });
             assert_eq!(queue_len(), before + 1);
             let child = element(disp_q.tail);
@@ -552,19 +549,13 @@ fn lightning_postprocess_extends_chains_until_zero_or_collision() {
         }
         let before = queue_len();
         with_rng(56, 0, || {
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                (*parent).postprocess_func.unwrap(),
-                parent,
-            )
+            hooks::invoke_element_pointer((*parent).postprocess_func.unwrap(), parent)
         });
         assert_eq!(queue_len(), before);
         (*parent).__bindgen_anon_4.turn_wait = 5;
         (*parent).state_flags |= COLLISION as u16;
         with_rng(56, 0, || {
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                (*parent).postprocess_func.unwrap(),
-                parent,
-            )
+            hooks::invoke_element_pointer((*parent).postprocess_func.unwrap(), parent)
         });
         assert_eq!(queue_len(), before);
     })
@@ -582,10 +573,7 @@ fn allocation_failure_consumes_no_lightning_random_and_keeps_initializer_count()
         let parent = element(h);
         assert!(with_rng(7, 0, || fire_from(ship.ptr())).is_null());
         with_rng(7, 0, || {
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                (*parent).postprocess_func.unwrap(),
-                parent,
-            )
+            hooks::invoke_element_pointer((*parent).postprocess_func.unwrap(), parent)
         });
         assert_eq!({ disp_q.tail }, h);
         with_rng(7, 0, || ship.postprocess());
@@ -610,13 +598,13 @@ fn lightning_collision_folds_and_subtracts_counter_then_calls_generic_weapon_col
         target.__bindgen_anon_3.mass_points = 2;
         target.state_flags = FINITE_LIFE as u16;
         with_rng(13, 0, || {
-            uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
+            hooks::invoke_collision_pointer(
                 collide,
                 beam,
                 &mut pa,
                 &mut *target,
                 &mut pb,
-                uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
+                hooks::CollisionCall::Hook,
             )
         });
         assert_eq!(
@@ -642,13 +630,13 @@ fn lightning_collision_folds_and_subtracts_counter_then_calls_generic_weapon_col
                     counter
                 };
                 with_rng(13, 0, || {
-                    uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
+                    hooks::invoke_collision_pointer(
                         collide,
                         beam,
                         &mut pa,
                         &mut *target,
                         &mut pb,
-                        uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
+                        hooks::CollisionCall::Hook,
                     )
                 });
                 assert_eq!(ship.ship_mut().weapon_counter, folded.wrapping_sub(wait));
@@ -1083,3 +1071,6 @@ unsafe fn fire_from(source: *mut ELEMENT) -> HELEMENT {
 unsafe fn think(ship: &mut Ship<'_>, concerns: &mut [EVALUATE_DESC; 5], count: COUNT) {
     ship.intelligence(&mut *ship.ptr(), concerns, count);
 }
+
+#[path = "support/hooks.rs"]
+mod hooks;

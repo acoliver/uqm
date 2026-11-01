@@ -72,12 +72,5 @@ fn drone_descriptor_preserves_resources_stats_and_absent_callbacks() {
         );
         assert!(d.race.is_some());
         assert_eq!(d.callbacks(), [0; 5]);
-        assert!(d.cyborg_control.intelligence_func.is_none());
-        assert!(d.preprocess_func.is_none());
-        assert!(d.postprocess_func.is_none());
-        assert!(d.init_weapon_func.is_none());
-        assert!(d.uninit_func.is_none());
-        assert!(d.data.is_null());
-        assert!(d.code_ref.is_null());
     });
 }

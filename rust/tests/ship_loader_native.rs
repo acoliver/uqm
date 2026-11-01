@@ -1,9 +1,10 @@
-use uqm_rust::ships::{c_free_ship, c_load_ship, free_ship, load_ship};
+use uqm_rust::ships::{load_ship, unload_ship};
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
-mod native_ship_common;
-use native_ship_common::Battle;
+#[path = "support/battle.rs"]
+mod battle;
+use battle::Battle;
 use std::{
     ffi::{c_void, CString},
     ptr,
@@ -13,10 +14,7 @@ use uqm_rust::{io::uio_bridge, resource::ffi_bridge, ships::native::abi::*};
 
 unsafe extern "C" {
     fn log_init(max: i32);
-    fn LoadCodeResInstance(res: *const std::ffi::c_char) -> *mut c_void;
-    fn CaptureCodeRes(code: *mut c_void, data: *mut c_void, out: *mut *mut c_void) -> *mut c_void;
-    fn ReleaseCodeRes(code: *mut c_void) -> *mut c_void;
-    fn DestroyCodeRes(code: *mut c_void) -> u32;
+
 }
 static UNINIT: AtomicUsize = AtomicUsize::new(0);
 fn uninit(
@@ -88,7 +86,6 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
             let dir = uio_bridge::uio_openDir(repository, c"/".as_ptr(), 0);
             assert!(!dir.is_null());
             ffi_bridge::InitResourceSystem();
-            uqm_rust::ships::native::InstallCodeResType();
             ffi_bridge::LoadResourceIndex(dir.cast(), c"ships.rmp".as_ptr(), ptr::null());
             let keys = [
                 "arilou",
@@ -122,49 +119,35 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
             ];
             for (i, key) in keys.iter().enumerate() {
                 let key = CString::new(format!("ship.{key}.code")).unwrap();
-                let first = LoadCodeResInstance(key.as_ptr());
-                assert!(!first.is_null(), "code resource {key:?}");
-                let second = LoadCodeResInstance(key.as_ptr());
-                assert!(!second.is_null());
+                let species = i as u32 + 1;
+                let mut first = load_ship(species, 0).unwrap();
+                let second = load_ship(species, 0).unwrap();
                 assert_ne!(
-                    first, second,
-                    "each detached code resource owns its descriptor copy"
+                    std::ptr::from_ref(&*first),
+                    std::ptr::from_ref(&*second),
+                    "{key:?}"
                 );
-                let mut out = ptr::null_mut();
-                assert_eq!(CaptureCodeRes(first, ptr::null_mut(), &mut out), first);
-                let expected = out.cast::<RACE_DESC>();
-                let original = (*expected).ship_info.ship_cost;
-                (*expected).ship_info.ship_cost = 254;
-                let mut other = ptr::null_mut();
-                CaptureCodeRes(second, ptr::null_mut(), &mut other);
-                assert_eq!((*other.cast::<RACE_DESC>()).ship_info.ship_cost, original);
-                let loaded = c_load_ship(i as u32 + 1, 0);
-                assert!(!loaded.is_null(), "species {}", i + 1);
-                assert_eq!((*loaded).ship_info.ship_cost, original);
-                assert!(!(*loaded).code_ref.is_null());
-                assert_eq!((*loaded).callbacks(), (*expected).callbacks());
-                c_free_ship(loaded, 1, 0);
-                // CodeRes destruction owns only the record. Its caller owns uninit.
-                for (code, desc) in [(first, expected), (second, other.cast())] {
-                    if let Some(uninit) = (*desc).uninit_func {
-                        uninit(desc);
-                    }
-                    assert_eq!(ReleaseCodeRes(code), code);
-                    assert_eq!(DestroyCodeRes(code), 1);
-                }
+                let original = first.ship_info.ship_cost;
+                first.ship_info.ship_cost = 254;
+                assert_eq!(second.ship_info.ship_cost, original);
+                let loaded = load_ship(species, 0).unwrap();
+                assert_eq!(loaded.ship_info.ship_cost, original);
+                assert!(loaded.race.is_some());
+                assert_eq!(loaded.callbacks(), first.callbacks());
+                unload_ship(first, 1, 0);
+                unload_ship(second, 1, 0);
+                unload_ship(loaded, 1, 0);
             }
-            assert!(LoadCodeResInstance(c"test.invalid.code".as_ptr()).is_null());
-            assert!(c_load_ship(SPECIES_ID_NUM_SPECIES_ID, 0).is_null());
-            assert!(load_ship(u32::MAX, 0).is_null());
+            assert!(load_ship(SPECIES_ID_NUM_SPECIES_ID, 0).is_none());
+            assert!(load_ship(u32::MAX, 0).is_none());
             // No graphics are registered in the fixture, so required battle art fails.
-            assert!(c_load_ship(SPECIES_ID_ARILOU_ID, 1).is_null());
-            let loaded = load_ship(SPECIES_ID_ARILOU_ID, 0);
-            assert!(!loaded.is_null());
-            assert!(!(*loaded).code_ref.is_null());
+            assert!(load_ship(SPECIES_ID_ARILOU_ID, 1).is_none());
+            let mut loaded = load_ship(SPECIES_ID_ARILOU_ID, 0).unwrap();
+            assert!(loaded.race.is_some());
             (*loaded).race = Some(&TEARDOWN_RACE);
             uqm_rust::collections::observation::enable();
             uqm_rust::collections::observation::drain();
-            free_ship(loaded, 1, 1);
+            unload_ship(loaded, 1, 1);
             assert_eq!(UNINIT.load(Ordering::SeqCst), 1);
             assert!(uqm_rust::collections::observation::drain()
                 .iter()
@@ -172,7 +155,6 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
                     event,
                     uqm_rust::collections::observation::Event::ResourcesFree { .. }
                 )));
-            assert_eq!(DestroyCodeRes(ptr::null_mut()), 1);
             ffi_bridge::UninitResourceSystem();
             assert_eq!(uio_bridge::uio_closeDir(dir), 0);
             uio_bridge::uio_closeRepository(repository);

@@ -202,7 +202,7 @@ impl<'a> Ship<'a> {
         let mut subject = *self.ptr();
         self.inner.intelligence(&mut subject, &mut concerns[..4], 0);
     }
-    unsafe fn arm(&mut self) -> ElementProcessFunc {
+    unsafe fn arm(&mut self) -> Option<uqm_rust::engine::battle::ElementHook> {
         self.inner
             .descriptor_mut()
             .ship_data
@@ -401,15 +401,10 @@ fn complete_descriptor_and_damaged_tanaka_katana_variant_are_fresh_each_call() {
                 (0, 960)
             );
             assert!(d.callbacks()[4] != 0 && d.callbacks()[2] != 0 && d.callbacks()[3] != 0);
-            assert!(
-                d.callbacks()[1] == 0
-                    && d.callbacks()[0] == 0
-                    && d.data.is_null()
-                    && d.code_ref.is_null()
-            );
+            assert!(d.callbacks()[1] == 0 && d.callbacks()[0] == 0);
             (*p).characteristics.max_thrust = 999;
             (*p).ship_info.crew_level = 0;
-            (*p).postprocess_func = None;
+            (*p).race_callbacks.post = uqm_rust::engine::battle::Selection::Disabled;
             let fresh = shared::descriptor(SPECIES_ID_SHOFIXTI_ID);
             assert_eq!(fresh.ship_info.crew_level, 6);
             assert_ne!(fresh.callbacks()[2], 0);
@@ -666,20 +661,20 @@ fn deferred_glory_damage_obeys_solidity_marine_identity_radius_and_gravity() {
         }
         let mut marine_owner = object(&_battle, (NONSOLID | DISAPPEARING) as u16, 1, 1, 0, 0);
         let marine = marine_owner.ptr();
-        (*marine).preprocess_func = Some(uqm_rust::engine::battle::ElementHook::Legacy(
+        (*marine).preprocess_func = Some(uqm_rust::engine::battle::ElementHook::Native(
             intruder_preprocess,
         ));
-        (*marine).collision_func = Some(uqm_rust::engine::battle::CollisionHook::Legacy(
+        (*marine).collision_func = Some(uqm_rust::engine::battle::CollisionHook::Native(
             marine_collision,
         ));
         let mut preprocess_only_owner = object(&_battle, NONSOLID as u16, 1, 1, 0, 0);
         let preprocess_only = preprocess_only_owner.ptr();
-        (*preprocess_only).preprocess_func = Some(uqm_rust::engine::battle::ElementHook::Legacy(
+        (*preprocess_only).preprocess_func = Some(uqm_rust::engine::battle::ElementHook::Native(
             intruder_preprocess,
         ));
         let mut collision_only_owner = object(&_battle, NONSOLID as u16, 1, 1, 0, 0);
         let collision_only = collision_only_owner.ptr();
-        (*collision_only).collision_func = Some(uqm_rust::engine::battle::CollisionHook::Legacy(
+        (*collision_only).collision_func = Some(uqm_rust::engine::battle::CollisionHook::Native(
             marine_collision,
         ));
         let mut fragile_owner = object(&_battle, 0, 1, 19, 0, 0);
@@ -691,9 +686,7 @@ fn deferred_glory_damage_obeys_solidity_marine_identity_radius_and_gravity() {
             50,
             "damage must be deferred"
         );
-        with_rng(2, 0, || {
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(kill, deferred)
-        });
+        with_rng(2, 0, || hooks::invoke_element_pointer(kill, deferred));
         assert_eq!((*enemy.ptr()).__bindgen_anon_2.crew_level, 31);
         assert_eq!(enemy.inner.descriptor_mut().ship_info.crew_level, 31);
         for (object, hp) in &mut objects {
@@ -710,7 +703,7 @@ fn deferred_glory_damage_obeys_solidity_marine_identity_radius_and_gravity() {
         }
         enemy.inner.descriptor_mut().ship_info.crew_level = 1;
         (*enemy.ptr()).__bindgen_anon_2.crew_level = 1;
-        uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(kill, deferred);
+        hooks::invoke_element_pointer(kill, deferred);
         assert_eq!((*enemy.ptr()).__bindgen_anon_1.life_span, 0);
         assert_eq!(enemy.inner.descriptor_mut().ship_info.crew_level, 0);
     })
@@ -754,12 +747,7 @@ fn glory_death_selects_the_winner_preserves_prior_winners_and_counts_the_death()
             }
             ship.arm();
             let death = (*ship.ptr()).death_func.unwrap();
-            with_rng(13, 0, || {
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    death,
-                    ship.ptr(),
-                )
-            });
+            with_rng(13, 0, || hooks::invoke_element_pointer(death, ship.ptr()));
             let expected = if expected_self {
                 &raw mut *ship.inner.ship_mut()
             } else {
@@ -786,10 +774,7 @@ fn glory_flash_switch_and_explosion_color_sequence_use_twelve_frame_ship_death()
         let _battle = Battle::new(8);
         let mut ship = Ship::new(&_battle, 0);
         ship.arm();
-        uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-            (*ship.ptr()).death_func.unwrap(),
-            ship.ptr(),
-        );
+        hooks::invoke_element_pointer((*ship.ptr()).death_func.unwrap(), ship.ptr());
         let flash = (*ship.ptr()).preprocess_func.unwrap();
         for (life, color) in [
             (36, (255, 255, 255, 255)),
@@ -797,23 +782,13 @@ fn glory_flash_switch_and_explosion_color_sequence_use_twelve_frame_ship_death()
             (34, (255, 255, 255, 255)),
         ] {
             (*ship.ptr()).__bindgen_anon_1.life_span = life;
-            with_rng(3, 0, || {
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    flash,
-                    ship.ptr(),
-                )
-            });
+            with_rng(3, 0, || hooks::invoke_element_pointer(flash, ship.ptr()));
             assert_eq!((*prim(ship.ptr())).Type, gfx_object_STAMPFILL_PRIM as u8);
             assert_eq!(rgba((*prim(ship.ptr())).color), color);
             assert_ne!((*ship.ptr()).state_flags & CHANGING as u16, 0);
         }
         (*ship.ptr()).__bindgen_anon_1.life_span = 33;
-        with_rng(3, 0, || {
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                flash,
-                ship.ptr(),
-            )
-        });
+        with_rng(3, 0, || hooks::invoke_element_pointer(flash, ship.ptr()));
         assert!((*ship.ptr()).preprocess_func.is_none());
         assert_eq!((*prim(ship.ptr())).Type, gfx_object_NUM_PRIMS as u8);
         let explosion = element(disp_q.tail);
@@ -854,11 +829,7 @@ fn glory_flash_switch_and_explosion_color_sequence_use_twelve_frame_ship_death()
             (165, 0, 0, 255),
         ] {
             (*explosion).next.image.frame = ship.special_frames.frame(7);
-            with_rng(3, 0, || {
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    animate, explosion,
-                )
-            });
+            with_rng(3, 0, || hooks::invoke_element_pointer(animate, explosion));
             assert_eq!(
                 frame_index((*explosion).next.image.frame),
                 1,
@@ -872,7 +843,7 @@ fn glory_flash_switch_and_explosion_color_sequence_use_twelve_frame_ship_death()
             b: 255,
             a: 0,
         };
-        uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(animate, explosion);
+        hooks::invoke_element_pointer(animate, explosion);
         assert_eq!(
             rgba((*prim(explosion)).color),
             (255, 255, 255, 0),
@@ -887,15 +858,9 @@ fn failed_visual_explosion_allocation_still_hides_the_ship() {
         let _battle = Battle::new(1);
         let mut ship = Ship::new(&_battle, 0);
         ship.arm();
-        uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-            (*ship.ptr()).death_func.unwrap(),
-            ship.ptr(),
-        );
+        hooks::invoke_element_pointer((*ship.ptr()).death_func.unwrap(), ship.ptr());
         (*ship.ptr()).__bindgen_anon_1.life_span = 33;
-        uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-            (*ship.ptr()).preprocess_func.unwrap(),
-            ship.ptr(),
-        );
+        hooks::invoke_element_pointer((*ship.ptr()).preprocess_func.unwrap(), ship.ptr());
         assert_eq!({ disp_q.tail }, ship.handle);
         assert_eq!((*prim(ship.ptr())).Type, gfx_object_NUM_PRIMS as u8);
         assert!((*ship.ptr()).preprocess_func.is_none());
@@ -964,10 +929,7 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                     // Arm the real glory device, execute its area damage, then
                     // process both deaths within the same simulated frame.
                     let blast = ship.arm().unwrap();
-                    uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                        blast,
-                        element(disp_q.tail),
-                    );
+                    hooks::invoke_element_pointer(blast, element(disp_q.tail));
                     assert_eq!(
                         (
                             ship.inner.descriptor_mut().ship_info.crew_level,
@@ -975,10 +937,7 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                         ),
                         (0, 0)
                     );
-                    uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                        (*ship.ptr()).death_func.unwrap(),
-                        ship.ptr(),
-                    );
+                    hooks::invoke_element_pointer((*ship.ptr()).death_func.unwrap(), ship.ptr());
                     core(transitions::ship_death, other.ptr());
                     let remaining = uqm_rust::app::bridge::battle(|b| b.counters);
                     assert_eq!(remaining, [initial[0] - 1, initial[1] - 1]);
@@ -1069,3 +1028,6 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
         }
     })
 }
+
+#[path = "support/hooks.rs"]
+mod hooks;

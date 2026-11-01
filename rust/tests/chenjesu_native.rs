@@ -152,17 +152,14 @@ fn descriptor_matches_every_c_initializer_field() {
             assert!(d.ship_data.ship_sounds.is_null());
             assert_eq!(d.cyborg_control.ManeuverabilityIndex, 0);
             assert_eq!(d.cyborg_control.WeaponRange, 4000);
-            assert!(d.cyborg_control.intelligence_func.is_none());
+
             assert!(race.intelligence.is_some());
-            assert!(d.preprocess_func.is_none());
+
             assert!(race.preprocess.is_some());
-            assert!(d.postprocess_func.is_none());
+
             assert!(race.postprocess.is_some());
-            assert!(d.init_weapon_func.is_none());
+
             assert!(race.init_weapon.is_some());
-            assert!(d.uninit_func.is_none());
-            assert!(d.data.is_null());
-            assert!(d.code_ref.is_null());
 
             assert!(race.uninit.is_none());
             let fresh = battle::descriptor(SPECIES_ID_CHENJESU_ID);
@@ -221,29 +218,17 @@ fn crystal_launch_hold_release_and_count_truncation_match_c() {
             assert!((*crystal).postprocess_func.is_none());
             let preprocess = (*crystal).preprocess_func.unwrap();
             ship.ship_mut().cur_status_flags = WEAPON as u16;
-            with_rng(21, 0, || {
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    preprocess, crystal,
-                )
-            });
+            with_rng(21, 0, || hooks::invoke_element_pointer(preprocess, crystal));
             assert_eq!((*crystal).__bindgen_anon_1.life_span, 91);
             (*crystal).__bindgen_anon_1.life_span = u16::MAX;
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                preprocess, crystal,
-            );
+            hooks::invoke_element_pointer(preprocess, crystal);
             assert_eq!((*crystal).__bindgen_anon_1.life_span, 0);
             ship.ship_mut().cur_status_flags = 0;
-            with_rng(21, 0, || {
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    preprocess, crystal,
-                )
-            });
+            with_rng(21, 0, || hooks::invoke_element_pointer(preprocess, crystal));
             assert_eq!((*crystal).__bindgen_anon_1.life_span, 1);
             let release = (*crystal).postprocess_func.unwrap().address();
             ship.ship_mut().cur_status_flags = WEAPON as u16;
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                preprocess, crystal,
-            );
+            hooks::invoke_element_pointer(preprocess, crystal);
             assert_eq!((*crystal).__bindgen_anon_1.life_span, 2);
             assert_eq!((*crystal).postprocess_func.unwrap().address(), release);
             FreeElement(h);
@@ -261,16 +246,10 @@ fn released_crystal_queues_eight_fragments_in_facing_order() {
             let h = crystal(&mut ship);
             let crystal = element(h);
             (*crystal).next.location = POINT { x: 5000, y: 6000 };
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                (*crystal).preprocess_func.unwrap(),
-                crystal,
-            );
+            hooks::invoke_element_pointer((*crystal).preprocess_func.unwrap(), crystal);
             let before = queued().len();
             with_rng(90, 0, || {
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    (*crystal).postprocess_func.unwrap(),
-                    crystal,
-                )
+                hooks::invoke_element_pointer((*crystal).postprocess_func.unwrap(), crystal)
             });
             let all = queued();
             assert_eq!(all.len(), before + 8);
@@ -333,15 +312,9 @@ fn allocation_failure_preserves_weapon_count_and_partial_fragment_order() {
                 Ship::with_frames(&_battle, SPECIES_ID_CHENJESU_ID, 0, [16, 10, 6], [4, 4]);
             let crystal_handle = crystal(&mut ship);
             let crystal = element(crystal_handle);
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                (*crystal).preprocess_func.unwrap(),
-                crystal,
-            );
+            hooks::invoke_element_pointer((*crystal).preprocess_func.unwrap(), crystal);
             with_rng(3, 0, || {
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    (*crystal).postprocess_func.unwrap(),
-                    crystal,
-                )
+                hooks::invoke_element_pointer((*crystal).postprocess_func.unwrap(), crystal)
             });
             let all = queued();
             assert_eq!(all.len(), 3);
@@ -378,13 +351,13 @@ fn crystal_collision_creates_sparkles_at_the_target_and_animates_current_frame()
             let mut pb = POINT { x: 40, y: 50 };
             let collide = (*crystal).collision_func.unwrap();
             with_rng(17, 0, || {
-                uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
+                hooks::invoke_collision_pointer(
                     collide,
                     crystal,
                     &mut pa,
                     &mut *target,
                     &mut pb,
-                    uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
+                    hooks::CollisionCall::Hook,
                 )
             });
             let sparkle = element(disp_q.tail);
@@ -413,43 +386,33 @@ fn crystal_collision_creates_sparkles_at_the_target_and_animates_current_frame()
             let animate = (*sparkle).preprocess_func.unwrap();
             (*sparkle).next.image.frame =
                 SetAbsFrameIndex(ship.descriptor_mut().ship_data.weapon[0], 8);
-            with_rng(17, 0, || {
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    animate, sparkle,
-                )
-            });
+            with_rng(17, 0, || hooks::invoke_element_pointer(animate, sparkle));
             assert_eq!(frame_index((*sparkle).next.image.frame), 3);
             assert_ne!((*sparkle).state_flags & CHANGING as u16, 0);
             (*sparkle).__bindgen_anon_4.turn_wait = 2;
             (*sparkle).__bindgen_anon_5.next_turn = 3;
             (*sparkle).state_flags &= !(CHANGING as u16);
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                animate, sparkle,
-            );
+            hooks::invoke_element_pointer(animate, sparkle);
             assert_eq!((*sparkle).__bindgen_anon_4.turn_wait, 1);
             assert_eq!((*sparkle).state_flags & CHANGING as u16, 0);
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                animate, sparkle,
-            );
+            hooks::invoke_element_pointer(animate, sparkle);
             assert_eq!((*sparkle).__bindgen_anon_4.turn_wait, 0);
             (*sparkle).current.image.frame =
                 SetAbsFrameIndex(ship.descriptor_mut().ship_data.weapon[0], 9);
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                animate, sparkle,
-            );
+            hooks::invoke_element_pointer(animate, sparkle);
             assert_eq!(
                 (*sparkle).next.image.frame,
                 SetAbsFrameIndex(ship.descriptor_mut().ship_data.weapon[0], 0)
             );
             assert_eq!((*sparkle).__bindgen_anon_4.turn_wait, 3);
             let tail = disp_q.tail;
-            uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
+            hooks::invoke_collision_pointer(
                 collide,
                 crystal,
                 &mut pa,
                 &mut *target,
                 &mut pb,
-                uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
+                hooks::CollisionCall::Hook,
             );
             assert_eq!(
                 { disp_q.tail },
@@ -616,13 +579,13 @@ fn doggy_collision_drains_only_enemy_ships_and_extends_only_short_waits() {
                 enemy.ship_mut().energy_counter = 99;
                 (*dog).__bindgen_anon_5.thrust_wait = 0;
                 with_rng(101, 0, || {
-                    uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
+                    hooks::invoke_collision_pointer(
                         collide,
                         dog,
                         &mut pa,
                         enemy.ptr(),
                         &mut pb,
-                        uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
+                        hooks::CollisionCall::Hook,
                     )
                 });
                 assert_eq!(enemy.descriptor_mut().ship_info.energy_level, remaining);
@@ -637,13 +600,13 @@ fn doggy_collision_drains_only_enemy_ships_and_extends_only_short_waits() {
             for (wait, expected) in [(0, 6), (1, 7), (2, 8), (3, 9), (4, 4), (255, 255)] {
                 (*dog).__bindgen_anon_5.thrust_wait = wait;
                 ship.descriptor_mut().ship_info.energy_level = 17;
-                uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
+                hooks::invoke_collision_pointer(
                     collide,
                     dog,
                     &mut pa,
                     ship.ptr(),
                     &mut pb,
-                    uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
+                    hooks::CollisionCall::Hook,
                 );
                 assert_eq!((*dog).__bindgen_anon_5.thrust_wait, expected);
                 assert_eq!(ship.descriptor_mut().ship_info.energy_level, 17);
@@ -653,25 +616,25 @@ fn doggy_collision_drains_only_enemy_ships_and_extends_only_short_waits() {
             object.playerNr = 1;
             object.state_flags = FINITE_LIFE as u16;
             (*dog).state_flags &= !(COLLISION as u16);
-            uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
+            hooks::invoke_collision_pointer(
                 collide,
                 dog,
                 &mut pa,
                 object,
                 &mut pb,
-                uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
+                hooks::CollisionCall::Hook,
             );
             assert_eq!((*dog).state_flags & COLLISION as u16, 0);
             // The generic collision runs first and damages the DOGI on planets.
             object.state_flags = 0;
             object.__bindgen_anon_3.mass_points = 101;
-            uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
+            hooks::invoke_collision_pointer(
                 collide,
                 dog,
                 &mut pa,
                 object,
                 &mut pb,
-                uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
+                hooks::CollisionCall::Hook,
             );
             assert_eq!((*dog).__bindgen_anon_2.hit_points, 2);
             assert_ne!((*dog).state_flags & COLLISION as u16, 0);
@@ -696,10 +659,7 @@ fn doggy_death_preserves_unrelated_fields_and_starts_six_frame_animation() {
             let old_flags = (*dog).state_flags;
             let counter = ship.ship_mut().special_counter;
             with_rng(88, 0, || {
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    (*dog).death_func.unwrap(),
-                    dog,
-                )
+                hooks::invoke_element_pointer((*dog).death_func.unwrap(), dog)
             });
             assert_eq!(
                 (*dog).state_flags,
@@ -722,11 +682,7 @@ fn doggy_death_preserves_unrelated_fields_and_starts_six_frame_animation() {
             assert_eq!((*dog).__bindgen_anon_3.mass_points, 4);
             let animate = (*dog).preprocess_func.unwrap();
             for frame in 1..=6 {
-                with_rng(88, 0, || {
-                    uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                        animate, dog,
-                    )
-                });
+                with_rng(88, 0, || hooks::invoke_element_pointer(animate, dog));
                 assert_eq!(frame_index((*dog).next.image.frame), frame % 6);
                 (*dog).current = (*dog).next;
             }
@@ -752,11 +708,7 @@ fn doggy_wait_counts_before_tracking_and_random_roaming_consumes_one_draw() {
             let original = velocity_fields(&(*dog).velocity);
             (*dog).__bindgen_anon_5.thrust_wait = 1;
             ship.ship_mut().special_counter = 255;
-            with_rng(42, 0, || {
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    preprocess, dog,
-                )
-            });
+            with_rng(42, 0, || hooks::invoke_element_pointer(preprocess, dog));
             assert_eq!(ship.ship_mut().special_counter, 0);
             assert_eq!((*dog).__bindgen_anon_5.thrust_wait, 0);
             assert_eq!(velocity_fields(&(*dog).velocity), original);
@@ -764,11 +716,7 @@ fn doggy_wait_counts_before_tracking_and_random_roaming_consumes_one_draw() {
                 SetVelocityVector(&raw mut (*dog).velocity, 11, 3);
                 TFB_SeedRandom(seed);
                 let face = (TFB_Random() & 15) as u16;
-                with_rng(seed, 1, || {
-                    uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                        preprocess, dog,
-                    )
-                });
+                with_rng(seed, 1, || hooks::invoke_element_pointer(preprocess, dog));
                 assert_eq!(
                     velocity_fields(&(*dog).velocity),
                     if face == 3 {
@@ -805,11 +753,7 @@ fn doggy_steering_uses_exact_rear_facing_boundaries_not_trackships_single_step()
                 (*dog).hTarget = ptr::null_mut();
                 SetVelocityVector(&raw mut (*dog).velocity, 11, 4);
                 let original = velocity_fields(&(*dog).velocity);
-                with_rng(99, 0, || {
-                    uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                        preprocess, dog,
-                    )
-                });
+                with_rng(99, 0, || hooks::invoke_element_pointer(preprocess, dog));
                 assert_eq!((*dog).hTarget, enemy.handle);
                 assert_eq!(
                     velocity_fields(&(*dog).velocity),
@@ -828,11 +772,7 @@ fn doggy_steering_uses_exact_rear_facing_boundaries_not_trackships_single_step()
             for seed in 1..17 {
                 SetVelocityVector(&raw mut (*dog).velocity, 32, 8);
                 (*dog).hTarget = enemy.handle;
-                with_rng(seed, 1, || {
-                    uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                        preprocess, dog,
-                    )
-                });
+                with_rng(seed, 1, || hooks::invoke_element_pointer(preprocess, dog));
                 assert_eq!(velocity_fields(&(*dog).velocity), velocity_toward(32, 0));
             }
         }
@@ -870,11 +810,7 @@ fn doggy_uses_current_unwrapped_coordinates_and_truncates_arctan_arguments() {
                     )))),
                     expected
                 );
-                with_rng(61, 0, || {
-                    uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                        preprocess, dog,
-                    )
-                });
+                with_rng(61, 0, || hooks::invoke_element_pointer(preprocess, dog));
                 assert_eq!(
                     velocity_fields(&(*dog).velocity),
                     velocity_toward(32, expected)
@@ -902,20 +838,12 @@ fn doggy_acquires_nearest_visible_ship_but_retains_an_existing_cloaked_target() 
             at(&mut far, 4000, 3500);
             let preprocess = (*dog).preprocess_func.unwrap();
             SetVelocityVector(&raw mut (*dog).velocity, 32, 0);
-            with_rng(4, 0, || {
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    preprocess, dog,
-                )
-            });
+            with_rng(4, 0, || hooks::invoke_element_pointer(preprocess, dog));
             assert_eq!((*dog).hTarget, near.handle);
             assert_eq!(velocity_fields(&(*dog).velocity), velocity_toward(32, 4));
             (*prim(near.ptr())).Type = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
             SetVelocityVector(&raw mut (*dog).velocity, 32, 0);
-            with_rng(4, 0, || {
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    preprocess, dog,
-                )
-            });
+            with_rng(4, 0, || hooks::invoke_element_pointer(preprocess, dog));
             assert_eq!(
                 (*dog).hTarget,
                 near.handle,
@@ -923,11 +851,7 @@ fn doggy_acquires_nearest_visible_ship_but_retains_an_existing_cloaked_target() 
             );
             (*dog).hTarget = ptr::null_mut();
             SetVelocityVector(&raw mut (*dog).velocity, 32, 0);
-            with_rng(4, 0, || {
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    preprocess, dog,
-                )
-            });
+            with_rng(4, 0, || hooks::invoke_element_pointer(preprocess, dog));
             assert_eq!((*dog).hTarget, far.handle);
             assert_eq!(velocity_fields(&(*dog).velocity), velocity_toward(32, 0));
         }
@@ -1234,3 +1158,6 @@ fn ai_launch_probe_uses_the_selected_target_and_respects_weapon_cooldown() {
         }
     })
 }
+
+#[path = "support/hooks.rs"]
+mod hooks;

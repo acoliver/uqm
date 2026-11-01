@@ -58,10 +58,7 @@ fn descriptor_laser_and_limpet_launch() {
             assert_eq!((*e).pParent, (&raw mut *ship.ship_mut()).cast());
             (*e).next = (*e).current;
             with_rng(11, 0, || {
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    (*e).preprocess_func.unwrap(),
-                    e,
-                )
+                hooks::invoke_element_pointer((*e).preprocess_func.unwrap(), e)
             });
             assert_eq!(frame_index((*e).next.image.frame), 1);
         }
@@ -222,3 +219,6 @@ fn ai_changes_threat_state_and_uses_turning_energy_threshold() {
         }
     })
 }
+
+#[path = "support/hooks.rs"]
+mod hooks;

@@ -4,11 +4,11 @@ pub(crate) use crate::engine::battle::record::Kernel;
 pub use crate::engine::battle::record::{
     captain_stuff, element, element__bindgen_ty_1, element__bindgen_ty_2, element__bindgen_ty_3,
     element__bindgen_ty_4, element__bindgen_ty_5, race_desc, state, state__bindgen_ty_1,
-    tfb_soundsample, ElementCollisionFunc, ElementProcessFunc, IntelligenceFunc, TFB_SoundSample,
+    tfb_soundsample, TFB_SoundSample,
     CAPTAIN_STUFF, CHARACTERISTIC_STUFF, DATA_STUFF, ELEMENT, EVALUATE_DESC, FLEET_STUFF,
-    INIT_WEAPON_FUNC, INTEL_STUFF, INTERSECT_CONTROL, MAX_DISPLAY_PRIMS, MOVEMENT_STATE, MUSIC_REF,
-    POSTPROCESS_FUNC, PREPROCESS_FUNC, PRIMITIVE, PRIM_DESC, QUEUE, RACE_DESC, SHIP_INFO, STARSHIP,
-    STATE, UNINIT_FUNC,
+    INTEL_STUFF, INTERSECT_CONTROL, MAX_DISPLAY_PRIMS, MOVEMENT_STATE, MUSIC_REF,
+    PRIMITIVE, PRIM_DESC, QUEUE, RACE_DESC, SHIP_INFO, STARSHIP,
+    STATE,
 };
 // Shared engine records used by the Rust runtime.
 
@@ -1249,11 +1249,6 @@ pub use crate::engine::battle::legacy::DisplayArray;
 
 #[cfg(not(test))]
 pub use crate::battle::process_native::engine::RemoveElement;
-pub unsafe fn TimeSpaceMatterConflict(ElementPtr: *mut ELEMENT) -> BOOLEAN {
-    // Gravity reads the shared flags/current-state fields, not the differently
-    // ordered intersection-control fields. Their offsets are checked above.
-    crate::battle::gravity::TimeSpaceMatterConflict(ElementPtr.cast()) as BOOLEAN
-}
 
 #[cfg(not(test))]
 pub use crate::battle::cyborg_native::engine::PlotIntercept;
@@ -1765,7 +1760,7 @@ pub struct MISSILE_BLOCK {
     pub index: COUNT,
     pub life: COUNT,
     pub farray: *mut FRAME,
-    pub preprocess_func: crate::engine::battle::record::ElementProcessFunc,
+    pub preprocess_func: Option<crate::engine::battle::ElementHook>,
     pub blast_offs: SIZE,
 }
 
@@ -1848,20 +1843,7 @@ pub use crate::battle::build_native::engine::RemoveEscortShips;
 pub use crate::ships::loader_native::engine::load_ship;
 
 #[cfg(not(test))]
-pub use crate::ships::loader_native::engine::free_ship;
-pub type HMASTERSHIP = HLINK;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct MASTER_SHIP_INFO {
-    pub pred: HMASTERSHIP,
-    pub succ: HMASTERSHIP,
-    pub SpeciesID: SPECIES_ID,
-    pub ShipInfo: SHIP_INFO,
-    pub Fleet: FLEET_STUFF,
-}
-unsafe extern "C" {
-    pub static mut master_q: QUEUE;
-}
+pub use crate::ships::loader_native::engine::unload_ship;
 #[cfg(not(test))]
 pub use crate::ui::settings::StopMusic;
 #[cfg(test)]

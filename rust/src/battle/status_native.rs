@@ -301,7 +301,7 @@ pub(crate) mod engine {
     /// Ship, captain assets, and the active status context must be live.
     #[no_mangle]
     pub unsafe extern "C" fn DrawCaptainsWindow(ship: *mut STARSHIP) {
-        let rd = (*ship).RaceDescPtr;
+        let rd = (*ship).descriptor_ptr();
         let captain = &raw mut (*rd).ship_data.captain_control;
         let mut frame = (*captain).background;
         if !frame.is_null() {
@@ -386,7 +386,7 @@ pub(crate) mod engine {
     #[no_mangle]
     pub unsafe extern "C" fn DeltaEnergy(e: *mut ELEMENT, delta: SIZE) -> BOOLEAN {
         let ship = starship(e);
-        let rd = (*ship).RaceDescPtr;
+        let rd = (*ship).descriptor_ptr();
         let info = &raw mut (*rd).ship_info;
         let (success, adjusted) = energy_delta((*info).energy_level, (*info).max_energy, delta);
         if !success {
@@ -409,7 +409,7 @@ pub(crate) mod engine {
             return 1;
         }
         let ship = starship(e);
-        let info = &raw mut (*(*ship).RaceDescPtr).ship_info;
+        let info = &raw mut (*(*ship).descriptor_ptr()).ship_info;
         let (success, updated, adjusted) = crew_delta(
             (*e).__bindgen_anon_2.crew_level,
             (*info).crew_level,
@@ -432,7 +432,7 @@ pub(crate) mod engine {
                 & (LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as u16;
             if delta != 0 {
                 CaptainsWindow(
-                    &raw mut (*(*ship).RaceDescPtr).ship_data.captain_control,
+                    &raw mut (*(*ship).descriptor_ptr()).ship_data.captain_control,
                     offset(ship),
                     delta,
                     current,

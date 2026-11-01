@@ -68,7 +68,7 @@ pub(crate) mod engine {
     use crate::ships::native::{
         angle_to_facing, cosine, element, normalize_facing, put_element, sine, starship,
     };
-    use std::mem;
+    use std::{mem, ptr};
 
     extern "C" {
         static mut planet: [*mut crate::graphics::native_abi::frame_desc; 3];
@@ -85,13 +85,18 @@ pub(crate) mod engine {
 
     /// # Safety
     /// The element pool and planet image must be initialized on the game thread.
-    #[no_mangle]
-    pub unsafe extern "C" fn spawn_planet() {
-        let handle = AllocElement();
+    pub unsafe fn spawn_planet(cx: &mut Cx<'_>) {
+        let handle = cx
+            .alloc_element()
+            .map_or(ptr::null_mut(), |id| cx.elements().raw(id));
         if handle.is_null() {
             return;
         }
         let e = element(handle);
+        let id = cx
+            .elements()
+            .allocated_id(handle)
+            .unwrap_or_else(|| panic!("spawn element"));
         (*e).playerNr = NEUTRAL_PLAYER_NUM as i16;
         (*e).__bindgen_anon_2.hit_points = 200;
         (*e).state_flags = APPEARING as u16;
@@ -105,7 +110,7 @@ pub(crate) mod engine {
         loop {
             (*e).current.location.x = aligned_random(TFB_Random(), width(ScreenWidth));
             (*e).current.location.y = aligned_random(TFB_Random(), height(ScreenHeight));
-            if CalculateGravity(e) == 0 && TimeSpaceMatterConflict(e) == 0 {
+            if !cx.gravity(id) && !cx.matter_conflict(id) {
                 break;
             }
         }
@@ -207,28 +212,6 @@ pub(crate) mod engine {
         cx.put(e);
     }
 
-    /// # Safety
-    /// Element and its owning STARSHIP, for player ships, must be live.
-    #[no_mangle]
-    pub unsafe extern "C" fn do_damage(e: *mut ELEMENT, damage: i16) {
-        crate::app::bridge::enter(|_cx| {
-            if (*e).state_flags & PLAYER_SHIP as u16 != 0 {
-                if DeltaCrew(e, damage.wrapping_neg()) == 0 {
-                    (*e).__bindgen_anon_1.life_span = 0;
-                    (*e).state_flags |= NONSOLID as u16;
-                }
-            } else {
-                damage_object(
-                    (*e).__bindgen_anon_3.mass_points,
-                    &mut (*e).__bindgen_anon_2.hit_points,
-                    &mut (*e).__bindgen_anon_1.life_span,
-                    &mut (*e).state_flags,
-                    damage,
-                );
-            }
-        });
-    }
-
     impl Cx<'_> {
         pub fn damage(&mut self, e: ElementId, damage: i16) {
             if self.element(e).flags & PLAYER_SHIP as u16 != 0 {
@@ -312,10 +295,14 @@ pub(crate) mod engine {
 
     /// # Safety
     /// Ship/target elements, descriptors and intersect frames must be live.
-    #[no_mangle]
-    pub unsafe extern "C" fn AbandonShip(ship: *mut ELEMENT, target: *mut ELEMENT, mut loss: u16) {
+    pub unsafe fn abandon_ship(
+        cx: &mut Cx<'_>,
+        ship: *mut ELEMENT,
+        target: *mut ELEMENT,
+        mut loss: u16,
+    ) {
         let mut owner = starship(ship);
-        if (*(*owner).RaceDescPtr).ship_info.ship_flags & CREW_IMMUNE as u16 != 0 {
+        if (*(*owner).descriptor_ptr()).ship_info.ship_flags & CREW_IMMUNE as u16 != 0 {
             return;
         }
         let mut intersect = (*ship).IntersectControl;
@@ -330,7 +317,9 @@ pub(crate) mod engine {
         };
         while loss != 0 {
             loss -= 1;
-            let handle = AllocElement();
+            let handle = cx
+                .alloc_element()
+                .map_or(ptr::null_mut(), |id| cx.elements().raw(id));
             if handle.is_null() {
                 break;
             }
@@ -394,8 +383,7 @@ pub(crate) mod engine {
 
 #[cfg(not(test))]
 pub use engine::{
-    create_asteroid, crew_collision, crew_preprocess, do_damage, spawn_asteroid, spawn_planet,
-    AbandonShip,
+    abandon_ship, create_asteroid, crew_collision, crew_preprocess, spawn_asteroid, spawn_planet,
 };
 
 #[cfg(test)]

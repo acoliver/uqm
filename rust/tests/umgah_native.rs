@@ -189,7 +189,6 @@ fn descriptor_matches_all_c_initializer_fields_and_resources() {
                     && d.race.unwrap().uninit.is_some()
                     && d.race.unwrap().intelligence.is_some()
             );
-            assert!(d.data.is_null() && d.code_ref.is_null());
         }
     })
 }
@@ -205,10 +204,7 @@ fn per_init_descriptor_copies_isolate_energy_resources_animation_and_custom_data
             let h = fire(&mut first);
             let data = previous_facing(&mut first);
             assert!(data.is_some());
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                (*element(h)).preprocess_func.unwrap(),
-                element(h),
-            );
+            hooks::invoke_element_pointer((*element(h)).preprocess_func.unwrap(), element(h));
             assert_eq!(frame_index(first.descriptor_mut().ship_data.special[0]), 21);
             first.descriptor_mut().ship_info.energy_level = 1;
             first.descriptor_mut().characteristics.special_wait = 77;
@@ -230,7 +226,7 @@ fn per_init_descriptor_copies_isolate_energy_resources_animation_and_custom_data
             first.uninit();
             assert!(previous_facing(&mut first).is_none());
             assert!(!previous_facing(&mut second).is_none());
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
+            hooks::invoke_element_pointer(
                 (*element(other)).preprocess_func.unwrap(),
                 element(other),
             );
@@ -254,7 +250,6 @@ fn per_init_descriptor_copies_isolate_energy_resources_animation_and_custom_data
             assert_eq!(fresh.ship_info.energy_level, 30);
             assert_eq!(fresh.characteristics.special_wait, 2);
             assert!(fresh.race.unwrap().preprocess.is_some());
-            assert!(fresh.data.is_null());
         }
     })
 }
@@ -323,10 +318,7 @@ fn held_cone_advances_by_16_preserves_phase_and_resets_only_when_facing_changes(
                 assert_eq!(frame_index((*cone).current.image.frame), index);
                 let old_frame = (*cone).next.image.frame;
                 with_rng(3, 0, || {
-                    uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                        (*cone).preprocess_func.unwrap(),
-                        cone,
-                    )
+                    hooks::invoke_element_pointer((*cone).preprocess_func.unwrap(), cone)
                 });
                 assert_eq!(
                     frame_index(ship.descriptor_mut().ship_data.special[0]),
@@ -442,13 +434,13 @@ fn collision_removes_and_frees_the_blast_but_does_not_restore_cone_life_or_solid
             let mut b = POINT { x: 30, y: 40 };
             let before = queued();
             with_rng(1, 0, || {
-                uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
+                hooks::invoke_collision_pointer(
                     (*cone).collision_func.unwrap(),
                     cone,
                     &mut a,
                     &mut *hit,
                     &mut b,
-                    uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
+                    hooks::CollisionCall::Hook,
                 )
             });
             assert_eq!(queued(), before, "the generic collision blast was unlinked");
@@ -459,12 +451,18 @@ fn collision_removes_and_frees_the_blast_but_does_not_restore_cone_life_or_solid
             assert_eq!((*cone).__bindgen_anon_1.life_span, 0);
             assert_eq!((*cone).__bindgen_anon_2.hit_points, 0);
             assert_eq!(hit.__bindgen_anon_2.hit_points, 3);
-            let freed_blast = AllocElement();
+            let freed_blast = uqm_rust::app::bridge::enter(|cx| {
+                cx.alloc_element()
+                    .map_or(std::ptr::null_mut(), |id| cx.elements().raw(id))
+            });
             assert!(
                 !freed_blast.is_null(),
                 "blast element returned to the queue free list"
             );
-            assert!(AllocElement().is_null());
+            assert!(uqm_rust::app::bridge::enter(|cx| cx
+                .alloc_element()
+                .map_or(std::ptr::null_mut(), |id| cx.elements().raw(id)))
+            .is_null());
             FreeElement(freed_blast);
             FreeElement(h);
         }
@@ -482,13 +480,13 @@ fn collision_preserves_disappearing_when_blast_allocation_fails() {
             let cone = element(h);
             let mut hit = target(false);
             let mut p = POINT { x: 0, y: 0 };
-            uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
+            hooks::invoke_collision_pointer(
                 (*cone).collision_func.unwrap(),
                 cone,
                 &mut p,
                 &mut *hit,
                 &mut POINT { x: 0, y: 0 },
-                uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
+                hooks::CollisionCall::Hook,
             );
             assert_eq!(
                 (*cone).state_flags & (DISAPPEARING | COLLISION | NONSOLID) as u16,
@@ -514,13 +512,13 @@ fn finite_weapon_hit_damages_once_without_a_blast_and_does_not_clear_disappearin
             (*cone).state_flags |= DISAPPEARING as u16;
             let collide = (*cone).collision_func.unwrap();
             with_rng(7, 0, || {
-                uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
+                hooks::invoke_collision_pointer(
                     collide,
                     cone,
                     &mut POINT { x: 0, y: 0 },
                     &mut *hit,
                     &mut POINT { x: 0, y: 0 },
-                    uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
+                    hooks::CollisionCall::Hook,
                 )
             });
             assert_eq!(hit.__bindgen_anon_2.hit_points, 2);
@@ -528,13 +526,13 @@ fn finite_weapon_hit_damages_once_without_a_blast_and_does_not_clear_disappearin
             assert_eq!((*cone).__bindgen_anon_1.life_span, 1);
             assert_ne!((*cone).state_flags & COLLISION as u16, 0);
             assert_ne!((*cone).state_flags & DISAPPEARING as u16, 0);
-            uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
+            hooks::invoke_collision_pointer(
                 collide,
                 cone,
                 &mut POINT { x: 0, y: 0 },
                 &mut *hit,
                 &mut POINT { x: 0, y: 0 },
-                uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
+                hooks::CollisionCall::Hook,
             );
             assert_eq!(hit.__bindgen_anon_2.hit_points, 2);
             assert_eq!(queued(), vec![ship.handle]);
@@ -996,3 +994,6 @@ unsafe fn previous_facing(ship: &mut Ship<'_>) -> Option<u16> {
     };
     previous_facing
 }
+
+#[path = "support/hooks.rs"]
+mod hooks;

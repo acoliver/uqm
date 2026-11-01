@@ -212,8 +212,6 @@ fn skiff_descriptor_matches_the_c_template() {
             assert_ne!(desc.callbacks()[4], 0);
             assert_eq!(desc.callbacks()[0], 0);
             assert_eq!(desc.callbacks()[2], 0);
-            assert!(desc.data.is_null());
-            assert!(desc.code_ref.is_null());
         }
     })
 }

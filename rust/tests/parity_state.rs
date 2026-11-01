@@ -27,6 +27,26 @@ use graph::{
     fighters_without_journal, non_ship_parent_fields,
 };
 
+// A test handle projects the descriptor owned by its ship, without retaining a borrow across snapshots.
+struct DescriptorRecord(*mut RACE_DESC);
+impl std::ops::Deref for DescriptorRecord {
+    type Target = RACE_DESC;
+    fn deref(&self) -> &RACE_DESC {
+        // SAFETY: each test retains its owning ship (or detached box) until this handle's last use.
+        unsafe { &*self.0 }
+    }
+}
+impl std::ops::DerefMut for DescriptorRecord {
+    fn deref_mut(&mut self) -> &mut RACE_DESC {
+        // SAFETY: test edits and synchronous snapshots do not overlap.
+        unsafe { &mut *self.0 }
+    }
+}
+fn install_descriptor(ship: &mut STARSHIP, value: RACE_DESC) -> DescriptorRecord {
+    ship.descriptor = Some(Box::new(value));
+    DescriptorRecord(ship.descriptor_ptr())
+}
+
 type Fields = BTreeMap<String, String>;
 
 #[test]
@@ -154,7 +174,7 @@ fn descriptor_fields(directory: &Path) {
     // SAFETY: STARSHIP contains integers, pointers and optional callbacks; zero is valid.
     let mut ship: STARSHIP = unsafe { std::mem::zeroed() };
     ship.SpeciesID = SPECIES_ID_EARTHLING_ID;
-    ship.RaceDescPtr = &mut descriptor;
+    let mut descriptor = install_descriptor(&mut ship, descriptor);
     // SAFETY: stack records outlive the synchronous snapshots, and the queues are idle.
     unsafe {
         install_ship(&mut ship);
@@ -374,13 +394,12 @@ fn race_custom_fields(directory: &Path) {
             });
         }
         let mut ship: STARSHIP = std::mem::zeroed();
-        ship.RaceDescPtr = &mut descriptor;
+        let mut descriptor = install_descriptor(&mut ship, descriptor);
         ship.SpeciesID = SPECIES_ID_UMGAH_ID;
         install_ship(&mut ship);
         ship.SpeciesID = SPECIES_ID_UMGAH_ID;
         {
             let descriptor = &mut descriptor;
-            descriptor.data = ptr::null_mut();
             descriptor.race_state = uqm_rust::engine::battle::RaceState::Umgah {
                 previous_facing: Some(27),
             };
@@ -388,22 +407,20 @@ fn race_custom_fields(directory: &Path) {
         let (fields, _) = snapshot(directory);
         assert_eq!(fields["ships.0.0.custom.prev_facing"], "27");
         ship.SpeciesID = SPECIES_ID_ANDROSYNTH_ID;
-        (*ship.RaceDescPtr).data = ptr::null_mut();
-        (*ship.RaceDescPtr).race_state = uqm_rust::engine::battle::RaceState::Androsynth {
-            collision: Some(uqm_rust::engine::battle::CollisionHook::Legacy(
-                known_collision(),
-            )),
-        };
+        ship.descriptor.as_deref_mut().unwrap().race_state =
+            uqm_rust::engine::battle::RaceState::Androsynth {
+                collision: Some(uqm_rust::engine::battle::CollisionHook::Native(
+                    known_collision(),
+                )),
+            };
         let (fields, _) = snapshot(directory);
         assert!(fields["ships.0.0.custom.collision"].ends_with("::collision"));
         ship.SpeciesID = SPECIES_ID_MMRNMHRM_ID;
-        let mut mmrnmhrm = Box::new(uqm_rust::ships::races::legacy_descriptor(
-            SPECIES_ID_MMRNMHRM_ID,
-        ));
+        let mut mmrnmhrm = Box::new(uqm_rust::ships::races::descriptor(SPECIES_ID_MMRNMHRM_ID));
         mmrnmhrm.race_state = uqm_rust::engine::battle::RaceState::Mmrnmhrm {
             alternate: sample_characteristics(),
         };
-        ship.RaceDescPtr = &raw mut *mmrnmhrm;
+        ship.descriptor = Some(mmrnmhrm);
         let (fields, _) = snapshot(directory);
         assert_characteristics(&fields, "ships.0.0.custom.characteristics");
         sis_fields(directory, &mut ship);
@@ -411,7 +428,7 @@ fn race_custom_fields(directory: &Path) {
     }
 }
 
-fn known_collision() -> unsafe extern "C" fn(*mut ELEMENT, *mut POINT, *mut ELEMENT, *mut POINT) {
+fn known_collision() -> uqm_rust::engine::battle::CollisionFn {
     let registry = uqm_rust::ships::hook_registry::hooks();
     let address = registry
         .iter()
@@ -442,9 +459,8 @@ unsafe fn sis_fields(directory: &Path, ship: &mut STARSHIP) {
     }
     ship.SpeciesID = SPECIES_ID_SIS_SHIP_ID;
     // SAFETY: the caller runs native initialization on the sole game thread.
-    let mut descriptor =
-        unsafe { uqm_rust::ships::races::legacy_descriptor(SPECIES_ID_SIS_SHIP_ID) };
-    ship.RaceDescPtr = &raw mut descriptor;
+    let mut descriptor = unsafe { uqm_rust::ships::races::descriptor(SPECIES_ID_SIS_SHIP_ID) };
+    let mut descriptor = install_descriptor(ship, descriptor);
     let (fields, _) = snapshot(directory);
     assert_eq!(fields["ships.0.0.custom.num_trackers"], "1");
     assert_eq!(fields["ships.0.0.custom.num_blasters"], "3");
@@ -498,7 +514,7 @@ unsafe fn sis_fields(directory: &Path, ship: &mut STARSHIP) {
             race.uninit.unwrap_or_else(|| panic!("SIS teardown"))(cx.world, &mut stats);
         });
     }
-    ship.RaceDescPtr = ptr::null_mut();
+    ship.descriptor = None;
 }
 
 fn campaign_fields(directory: &Path) {
@@ -540,7 +556,6 @@ fn descriptor_assets(directory: &Path) {
         parent: ptr::null_mut(),
     };
     let mut music = ptr::null_mut();
-    let mut code = 0u8;
     frame.parent = &mut drawable;
     frame.Index = 9;
     let frame_pointer = ptr::from_mut(&mut frame).cast();
@@ -568,9 +583,9 @@ fn descriptor_assets(directory: &Path) {
     descriptor.ship_data.ship_sounds_rsc = c"test.sounds".as_ptr();
     descriptor.ship_data.ship_sounds = &mut strings;
     descriptor.ship_data.victory_ditty = &mut music;
-    descriptor.code_ref = ptr::from_mut(&mut code).cast();
+    descriptor.race = uqm_rust::ships::races::race(SPECIES_ID_EARTHLING_ID);
     ship.SpeciesID = SPECIES_ID_EARTHLING_ID;
-    ship.RaceDescPtr = &mut descriptor;
+    let mut descriptor = install_descriptor(&mut ship, descriptor);
     ship.icons = frame_pointer;
     ship.race_strings = &mut strings;
     // SAFETY: the full local resource graph stays live until the snapshot returns.
@@ -701,7 +716,7 @@ fn frameset_and_media_identity(directory: &Path) {
     descriptor.ship_data.ship = [ptr::from_mut(&mut first).cast(); 3];
     let mut element = Element::new();
     ship.SpeciesID = SPECIES_ID_EARTHLING_ID;
-    ship.RaceDescPtr = &mut descriptor;
+    let mut descriptor = install_descriptor(&mut ship, descriptor);
     element.p_parent = ptr::from_mut(&mut ship).cast();
     // SAFETY: the stack graph stays live through all snapshots and is detached below.
     unsafe {
@@ -733,9 +748,10 @@ fn frameset_and_media_identity(directory: &Path) {
     assert_eq!(after["elements.0.current.farray.0.index"], "1");
     assert_eq!(before["elements.0.current.farray.1.index"], "1");
     assert_eq!(after["elements.0.current.farray.1.index"], "2");
-    let mut replacement = descriptor;
+    let replacement = *descriptor;
     let ship = &mut ship;
-    ship.RaceDescPtr = &mut replacement;
+    let _outgoing_descriptor = ship.descriptor.take().unwrap();
+    let mut replacement = install_descriptor(ship, replacement);
     let element = &mut element;
     observe_test_frames(&replacement.ship_data.ship, "replacement-ship");
     observation::assign_set(

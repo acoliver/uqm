@@ -119,29 +119,30 @@ impl Iterator for ElementQueueIter {
 /// Checks all other elements for gravity interactions. If the element is
 /// a non-gravity body near a gravity body, applies gravitational velocity
 /// delta. Returns TRUE if a gravity body is found nearby.
+#[cfg(test)]
 #[no_mangle]
 /// # Safety
 /// A nonnull `element` must point to a live Element in the initialized
 /// game-thread element queue. The caller must serialize queue access.
 pub unsafe extern "C" fn CalculateGravity(element: *mut Element) -> c_int {
-    #[cfg(not(test))]
-    {
-        // SAFETY: the legacy entry owns this synchronous game-thread operation.
-        unsafe {
-            crate::app::bridge::enter(|cx| {
-                let head = cx
-                    .elements()
-                    .head()
-                    .map_or(std::ptr::null_mut(), |id| cx.elements().raw(id).cast());
-                calculate_gravity(element, head)
-            })
-        }
-    }
     #[cfg(test)]
     // SAFETY: the test provider retains its mocked element queue throughout the call.
     unsafe {
         calculate_gravity(element, uqm_get_head_element().cast())
     }
+}
+
+#[cfg(not(test))]
+pub(crate) unsafe fn calculate_gravity_in(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    element: *mut Element,
+) -> c_int {
+    let head = cx
+        .elements()
+        .head()
+        .map_or(std::ptr::null_mut(), |id| cx.elements().raw(id).cast());
+    // SAFETY: the caller retains the checked element and this context owns the queue.
+    unsafe { calculate_gravity(element, head) }
 }
 
 unsafe fn calculate_gravity(element: *mut Element, head: HElement) -> c_int {
@@ -240,29 +241,30 @@ unsafe fn calculate_gravity(element: *mut Element, head: HElement) -> c_int {
 ///
 /// Checks if the element overlaps any colliding element or player ship.
 /// Uses DrawablesIntersect for bounding-box collision detection.
+#[cfg(test)]
 #[no_mangle]
 /// # Safety
 /// A nonnull `element` must point to a live Element. The element queue
 /// and drawable system must be initialized and accessed on the game thread.
 pub unsafe extern "C" fn TimeSpaceMatterConflict(element: *mut Element) -> c_int {
-    #[cfg(not(test))]
-    {
-        // SAFETY: the legacy entry owns this synchronous game-thread operation.
-        unsafe {
-            crate::app::bridge::enter(|cx| {
-                let head = cx
-                    .elements()
-                    .head()
-                    .map_or(std::ptr::null_mut(), |id| cx.elements().raw(id).cast());
-                time_space_matter_conflict(element, head)
-            })
-        }
-    }
     #[cfg(test)]
     // SAFETY: the test provider retains its mocked element queue throughout the call.
     unsafe {
         time_space_matter_conflict(element, uqm_get_head_element().cast())
     }
+}
+
+#[cfg(not(test))]
+pub(crate) unsafe fn time_space_matter_conflict_in(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    element: *mut Element,
+) -> c_int {
+    let head = cx
+        .elements()
+        .head()
+        .map_or(std::ptr::null_mut(), |id| cx.elements().raw(id).cast());
+    // SAFETY: the caller retains the checked element and this context owns the queue.
+    unsafe { time_space_matter_conflict(element, head) }
 }
 
 unsafe fn time_space_matter_conflict(element: *mut Element, head: HElement) -> c_int {

@@ -124,7 +124,6 @@ pub fn flee_cycle(index: u8, thrust: u8) -> (u8, u8, u8) {
 }
 
 #[cfg(not(test))]
-#[allow(non_snake_case)]
 pub(crate) mod engine {
     use super::*;
     use crate::battle::battle_native::engine::{activity, player_input, rgb15, set_activity};
@@ -148,7 +147,7 @@ pub(crate) mod engine {
 
     extern "C" {}
 
-    fn same_callback(a: ElementProcessFunc, b: ElementFn) -> bool {
+    fn same_callback(a: Option<crate::engine::battle::ElementHook>, b: ElementFn) -> bool {
         a.map(|f| f.address()) == Some(b as usize)
     }
 
@@ -161,15 +160,18 @@ pub(crate) mod engine {
             let e = h.cast::<ELEMENT>();
             h = (*e).succ;
             let ship = starship(e);
-            if !ship.is_null() && ship != test && (*(*ship).RaceDescPtr).ship_info.crew_level == 0 {
+            if !ship.is_null()
+                && ship != test
+                && (*(*ship).descriptor_ptr()).ship_info.crew_level == 0
+            {
                 return 0;
             }
         }
         1
     }
 
-    pub(crate) unsafe fn PlayDitty(ship: *mut STARSHIP) {
-        PlayMusic((*(*ship).RaceDescPtr).ship_data.victory_ditty, 0, 3);
+    pub(crate) unsafe fn play_ditty(ship: *mut STARSHIP) {
+        PlayMusic((*(*ship).descriptor_ptr()).ship_data.victory_ditty, 0, 3);
         Kernel::current().ditty_playing = 1;
     }
 
@@ -183,7 +185,7 @@ pub(crate) mod engine {
         Kernel::current().ditty_playing = 0;
     }
 
-    unsafe fn DittyPlaying() -> bool {
+    unsafe fn ditty_playing() -> bool {
         if Kernel::current().ditty_playing == 0 {
             return false;
         }
@@ -221,8 +223,8 @@ pub(crate) mod engine {
             .end_ready((*context).playerNr as usize)
     }
 
-    unsafe fn readyForBattleEnd() -> bool {
-        if DittyPlaying() {
+    unsafe fn ready_for_battle_end() -> bool {
+        if ditty_playing() {
             return false;
         }
         for side in 0..NUM_PLAYERS as usize {
@@ -283,7 +285,7 @@ pub(crate) mod engine {
         cx.set_parent(dead, Some(dead_ship));
     }
 
-    unsafe fn setMinShipLifeSpan(ship: *mut ELEMENT, life: COUNT) {
+    unsafe fn set_min_ship_life_span(ship: *mut ELEMENT, life: COUNT) {
         if same_callback((*ship).death_func, new_ship) {
             assert_ne!((*ship).state_flags & FINITE_LIFE as u16, 0);
             assert_eq!((*ship).state_flags & DISAPPEARING as u16, 0);
@@ -293,27 +295,29 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe fn setMinStarShipLifeSpan(ship: *mut STARSHIP, life: COUNT) {
-        setMinShipLifeSpan((*ship).hShip.cast(), life);
+    unsafe fn set_min_star_ship_life_span(ship: *mut STARSHIP, life: COUNT) {
+        set_min_ship_life_span((*ship).hShip.cast(), life);
     }
 
-    unsafe fn checkOtherShipLifeSpan(dead: *mut ELEMENT) {
+    unsafe fn check_other_ship_life_span(dead: *mut ELEMENT) {
         let owner = starship(dead);
         let winner = Kernel::current().winner;
         if !winner.is_null()
             && owner != winner
-            && (*(*winner).RaceDescPtr).ship_info.crew_level == 0
+            && (*(*winner).descriptor_ptr()).ship_info.crew_level == 0
         {
-            setMinStarShipLifeSpan(winner, (*dead).__bindgen_anon_1.life_span.wrapping_add(1));
+            set_min_star_ship_life_span(winner, (*dead).__bindgen_anon_1.life_span.wrapping_add(1));
         } else if winner.is_null() {
             let mut h = disp_q.head;
             while !h.is_null() {
                 let e = h.cast::<ELEMENT>();
                 h = (*e).succ;
                 let ship = starship(e);
-                if !ship.is_null() && e != dead && (*(*ship).RaceDescPtr).ship_info.crew_level == 0
+                if !ship.is_null()
+                    && e != dead
+                    && (*(*ship).descriptor_ptr()).ship_info.crew_level == 0
                 {
-                    setMinShipLifeSpan(e, (*dead).__bindgen_anon_1.life_span);
+                    set_min_ship_life_span(e, (*dead).__bindgen_anon_1.life_span);
                 }
             }
         }
@@ -335,10 +339,10 @@ pub(crate) mod engine {
     ) {
         let net = cx.b.net.clone();
         let ship = starship(dead);
-        if !readyForBattleEnd() {
+        if !ready_for_battle_end() {
             (*dead).state_flags &= !(DISAPPEARING as u16);
             (*dead).__bindgen_anon_1.life_span = (*dead).__bindgen_anon_1.life_span.wrapping_add(1);
-            checkOtherShipLifeSpan(dead);
+            check_other_ship_life_span(dead);
             return;
         }
         (*cx.kernel()).winner = ptr::null_mut();
@@ -347,8 +351,15 @@ pub(crate) mod engine {
         StopSound();
         (*dead).pParent = ptr::null_mut();
         let restart = OpponentAlive(ship) != 0;
-        free_ship((*ship).RaceDescPtr, 1, 1);
-        (*ship).RaceDescPtr = ptr::null_mut();
+        unload_ship(
+            (*ship)
+                .descriptor
+                .take()
+                .unwrap_or_else(|| panic!("dead ship descriptor")),
+            1,
+            1,
+        );
+
         UnbatchGraphics();
         if let Some(net) = &net {
             net.init_end_frames();
@@ -446,7 +457,7 @@ pub(crate) mod engine {
             {
                 alive = starship(e);
                 assert!(!alive.is_null());
-                if (*(*alive).RaceDescPtr).ship_info.crew_level == 0
+                if (*(*alive).descriptor_ptr()).ship_info.crew_level == 0
                     && (*e).__bindgen_anon_3.mass_points as u32 != MAX_SHIP_MASS + 1
                 {
                     alive = ptr::null_mut();
@@ -498,7 +509,7 @@ pub(crate) mod engine {
         (*ship).velocity = mem::zeroed();
         DeltaEnergy(
             ship,
-            -((*(*owner).RaceDescPtr).ship_info.energy_level as i16),
+            -((*(*owner).descriptor_ptr()).ship_info.energy_level as i16),
         );
         (*ship).__bindgen_anon_1.life_span = (NUM_EXPLOSION_FRAMES * 3) as u16;
         (*ship).state_flags &= !(DISAPPEARING as u16);

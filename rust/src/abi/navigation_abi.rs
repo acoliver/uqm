@@ -3475,7 +3475,6 @@ pub type ELEMENT_FLAGS = UWORD;
 pub use crate::engine::battle::record::state;
 pub use crate::engine::battle::record::state__bindgen_ty_1;
 pub type STATE = state;
-pub use crate::engine::battle::record::{ElementProcessFunc, ElementCollisionFunc};
 pub use crate::engine::battle::record::element;
 pub use crate::engine::battle::record::element__bindgen_ty_1;
 pub use crate::engine::battle::record::element__bindgen_ty_2;
@@ -3483,8 +3482,6 @@ pub use crate::engine::battle::record::element__bindgen_ty_3;
 pub use crate::engine::battle::record::element__bindgen_ty_4;
 pub use crate::engine::battle::record::element__bindgen_ty_5;
 
-#[cfg(not(test))]
-pub use crate::battle::process_native::engine::AllocElement;
 
 #[cfg(not(test))]
 pub use crate::battle::process_native::engine::RemoveElement;
@@ -3495,12 +3492,12 @@ pub use crate::battle::world_elements::engine::spawn_planet;
 #[cfg(not(test))]
 pub use crate::battle::world_elements::engine::spawn_asteroid;
 
-pub use crate::battle::gravity::TimeSpaceMatterConflict;
+
 
 #[cfg(not(test))]
 pub use crate::battle::galaxy::engine::InitGalaxy;
 
-pub use crate::battle::gravity::CalculateGravity;
+
 pub type STATUS_FLAGS = UWORD;
 pub const SPECIES_ID_NO_ID: SPECIES_ID = 0;
 pub const SPECIES_ID_ARILOU_ID: SPECIES_ID = 1;
@@ -3837,14 +3834,11 @@ pub use crate::planets::starmap::FindStar;
 
 #[cfg(not(test))]
 pub use crate::planets::starmap::naming::GetClusterName;
-pub type HMASTERSHIP = HLINK;
-pub use crate::ships::native::abi::MASTER_SHIP_INFO;
-extern "C" {
-    pub static mut master_q: QUEUE;
-}
+
+
 
 #[cfg(not(test))]
-pub use crate::ships::master_native::engine::FindMasterShip;
+pub use crate::ships::master_native::engine::find_master_ship;
 
 #[cfg(not(test))]
 pub use crate::ships::master_native::engine::FindMasterShipIndex;
@@ -3980,14 +3974,12 @@ pub use crate::battle::build_native::engine::StartSphereTracking;
 #[cfg(not(test))]
 pub use crate::battle::build_native::engine::CheckAlliance;
 
-#[cfg(not(test))]
-pub use crate::ships::loader_native::engine::free_ship;
 
 #[cfg(not(test))]
-pub use crate::ships::loader_native::engine::c_load_ship;
+pub use crate::ships::loader_native::engine::load_ship;
 
 #[cfg(not(test))]
-pub use crate::ships::loader_native::engine::c_free_ship;
+pub use crate::ships::loader_native::engine::unload_ship;
 
 #[cfg(not(test))]
 pub use crate::state::c_api::planets::InitPlanetInfo;
@@ -4596,8 +4588,6 @@ pub use crate::mainloop::input_abi::live::GetMenuSounds;
 #[cfg(not(test))]
 pub use crate::battle::sounds::engine::PlayMenuSound;
 
-#[cfg(not(test))]
-pub use crate::battle::sounds::engine::ProcessSound;
 pub const TALK_COMMANDER: _bindgen_ty_29 = 0;
 pub const OUTFIT_STARSHIP: _bindgen_ty_29 = 1;
 pub const SHIPYARD: _bindgen_ty_29 = 2;

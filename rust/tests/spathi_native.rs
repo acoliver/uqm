@@ -106,8 +106,6 @@ fn eluder_descriptor_matches_the_c_template() {
             assert!(desc.race.unwrap().init_weapon.is_some());
             assert!(desc.race.unwrap().preprocess.is_none());
             assert!(desc.race.unwrap().uninit.is_none());
-            assert!(desc.data.is_null());
-            assert!(desc.code_ref.is_null());
         }
     })
 }
@@ -281,17 +279,13 @@ fn butt_homes_one_facing_step_per_tracking_pass() {
 
             // TRACK_WAIT: the first pass only counts the delay down.
             assert_eq!((*butt).__bindgen_anon_4.turn_wait, 1);
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                preprocess, butt,
-            );
+            hooks::invoke_element_pointer(preprocess, butt);
             assert_eq!((*butt).__bindgen_anon_4.turn_wait, 0);
             assert_eq!(index_of((*butt).next.image.frame), 12);
             assert_eq!((*butt).state_flags & CHANGING as u16, 0);
 
             // With no enemy to track, the delay is reloaded and nothing turns.
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                preprocess, butt,
-            );
+            hooks::invoke_element_pointer(preprocess, butt);
             assert_eq!((*butt).__bindgen_anon_4.turn_wait, 1);
             assert_eq!(index_of((*butt).next.image.frame), 12);
             assert_eq!((*butt).state_flags & CHANGING as u16, 0);
@@ -312,12 +306,8 @@ fn butt_homes_one_facing_step_per_tracking_pass() {
                 y: enemy_y,
             };
 
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                preprocess, butt,
-            );
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                preprocess, butt,
-            );
+            hooks::invoke_element_pointer(preprocess, butt);
+            hooks::invoke_element_pointer(preprocess, butt);
             assert_eq!(index_of((*butt).next.image.frame), 13);
             assert_ne!((*butt).state_flags & CHANGING as u16, 0);
             assert_eq!((*butt).velocity.travel_angle, 52);
@@ -476,3 +466,6 @@ fn intelligence_while_fast_or_in_gravity_needs_the_tail_along_travel() {
         }
     })
 }
+
+#[path = "support/hooks.rs"]
+mod hooks;

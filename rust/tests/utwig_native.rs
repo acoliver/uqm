@@ -108,13 +108,13 @@ fn shield_absorbs_damage_before_collision_and_recharges_on_next_preprocess() {
             (*projectile).state_flags = FINITE_LIFE as u16;
             (*projectile).__bindgen_anon_3.mass_points = 6;
             with_rng(1, 0, || {
-                uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
+                hooks::invoke_collision_pointer(
                     (*e).collision_func.unwrap(),
                     e,
                     &mut pa,
                     projectile,
                     &mut pb,
-                    uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
+                    hooks::CollisionCall::Hook,
                 )
             });
             assert_eq!((*e).__bindgen_anon_1.life_span, 8);
@@ -232,3 +232,6 @@ fn lance_allocation_failure_still_returns_six_slots() {
         }
     })
 }
+
+#[path = "support/hooks.rs"]
+mod hooks;

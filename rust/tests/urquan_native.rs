@@ -97,13 +97,13 @@ fn fighters_launch_left_then_right_and_return_crew() {
                 assert_eq!(velocity(&(*e).velocity), toward(8 << ONE_SHIFT, face));
                 (*e).next = (*e).current;
                 with_rng(7, 0, || {
-                    uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
+                    hooks::invoke_collision_pointer(
                         (*e).collision_func.unwrap(),
                         e,
                         &mut POINT { x: 0, y: 0 },
                         ship.ptr(),
                         &mut POINT { x: 0, y: 0 },
-                        uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
+                        hooks::CollisionCall::Hook,
                     )
                 });
                 assert_eq!((*e).__bindgen_anon_1.life_span, 0);
@@ -156,10 +156,7 @@ fn fighter_tracking_delay_then_return_and_fire_use_exact_ranges() {
             let initial = velocity(&(*fighter).velocity);
             (*fighter).__bindgen_anon_1.life_span = 394;
             with_rng(17, 0, || {
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    (*fighter).preprocess_func.unwrap(),
-                    fighter,
-                )
+                hooks::invoke_element_pointer((*fighter).preprocess_func.unwrap(), fighter)
             });
             assert_eq!(velocity(&(*fighter).velocity), initial);
             assert_eq!((*fighter).__bindgen_anon_5.thrust_wait, 7);
@@ -168,17 +165,11 @@ fn fighter_tracking_delay_then_return_and_fire_use_exact_ranges() {
             (*fighter).current.location = POINT { x: 4000, y: 4100 };
             (*fighter).__bindgen_anon_5.thrust_wait = 1;
             with_rng(17, 0, || {
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    (*fighter).preprocess_func.unwrap(),
-                    fighter,
-                )
+                hooks::invoke_element_pointer((*fighter).preprocess_func.unwrap(), fighter)
             });
             assert!((*fighter).postprocess_func.is_some());
             assert_eq!((*fighter).__bindgen_anon_5.thrust_wait, 0);
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                (*fighter).postprocess_func.unwrap(),
-                fighter,
-            );
+            hooks::invoke_element_pointer((*fighter).postprocess_func.unwrap(), fighter);
             assert_eq!((*fighter).__bindgen_anon_5.thrust_wait, 8);
             assert!((*fighter).postprocess_func.is_none());
             let laser = element(disp_q.tail);
@@ -187,10 +178,7 @@ fn fighter_tracking_delay_then_return_and_fire_use_exact_ranges() {
             // On the return leg the ship becomes collidable with its own fighters.
             (*fighter).state_flags &= !(CHANGING as u16);
             (*fighter).__bindgen_anon_1.life_span = 124;
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                (*fighter).preprocess_func.unwrap(),
-                fighter,
-            );
+            hooks::invoke_element_pointer((*fighter).preprocess_func.unwrap(), fighter);
             assert_eq!((*fighter).state_flags & IGNORE_SIMILAR as u16, 0);
         }
     })
@@ -212,13 +200,13 @@ fn fighter_planet_collision_clones_and_deflects_without_rng() {
             let mut pa = POINT { x: 0, y: 0 };
             let mut pb = POINT { x: 0, y: -10 };
             with_rng(18, 0, || {
-                uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
+                hooks::invoke_collision_pointer(
                     (*e).collision_func.unwrap(),
                     e,
                     &mut pa,
                     planet,
                     &mut pb,
-                    uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
+                    hooks::CollisionCall::Hook,
                 )
             });
             let clone = element(disp_q.tail);
@@ -267,3 +255,6 @@ fn ai_fighter_budget_point_defense_and_crew_boundaries() {
         }
     })
 }
+
+#[path = "support/hooks.rs"]
+mod hooks;

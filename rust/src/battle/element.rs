@@ -127,31 +127,9 @@ use super::velocity::VelocityDesc;
 // Element Callbacks
 // ---------------------------------------------------------------------------
 
-/// Element processing function (preprocess, postprocess, death)
-pub type ElementProcessFunc =
-    Option<crate::engine::battle::ElementHook<unsafe extern "C" fn(*mut Element)>>;
-
-/// Element collision function
-pub type ElementCollisionFunc = Option<
-    crate::engine::battle::CollisionHook<
-        unsafe extern "C" fn(*mut Element, *mut Point, *mut Element, *mut Point),
-    >,
->;
-
-// ---------------------------------------------------------------------------
-// Link Types (for doubly-linked display list)
-// ---------------------------------------------------------------------------
-
-/// Element handle (opaque pointer for display list)
 pub type HElement = *mut Element;
 
-// ---------------------------------------------------------------------------
-// Element Struct
-// ---------------------------------------------------------------------------
-
-/// ELEMENT — The central battle entity type
-/// Matches C's ELEMENT struct from element.h exactly
-/// #[repr(C)] ensures binary compatibility with C code
+/// Element processing function (preprocess, postprocess, death)
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct Element {
@@ -160,10 +138,10 @@ pub struct Element {
     pub succ: HElement,
 
     // -- Callbacks --
-    pub preprocess_func: ElementProcessFunc,
-    pub postprocess_func: ElementProcessFunc,
-    pub collision_func: ElementCollisionFunc,
-    pub death_func: ElementProcessFunc,
+    pub preprocess_func: Option<crate::engine::battle::ElementHook>,
+    pub postprocess_func: Option<crate::engine::battle::ElementHook>,
+    pub collision_func: Option<crate::engine::battle::CollisionHook>,
+    pub death_func: Option<crate::engine::battle::ElementHook>,
 
     // -- Owner identity --
     pub player_nr: i16, // -1=neutral, 0=bottom/human, 1=top/NPC
@@ -978,16 +956,16 @@ mod tests {
 
     #[test]
     fn element_layout_matches_native_hook_record() {
-        assert_eq!(std::mem::size_of::<Element>(), 208);
+        assert_eq!(std::mem::size_of::<Element>(), 176);
         assert_eq!(std::mem::offset_of!(Element, preprocess_func), 16);
-        assert_eq!(std::mem::offset_of!(Element, player_nr), 80);
-        assert_eq!(std::mem::offset_of!(Element, state_flags), 82);
-        assert_eq!(std::mem::offset_of!(Element, life_span), 84);
-        assert_eq!(std::mem::offset_of!(Element, crew_or_hp), 86);
-        assert_eq!(std::mem::offset_of!(Element, prim_index), 136);
-        assert_eq!(std::mem::offset_of!(Element, current), 144);
-        assert_eq!(std::mem::offset_of!(Element, next), 168);
-        assert_eq!(std::mem::offset_of!(Element, p_parent), 192);
-        assert_eq!(std::mem::offset_of!(Element, h_target), 200);
+        assert_eq!(std::mem::offset_of!(Element, player_nr), 48);
+        assert_eq!(std::mem::offset_of!(Element, state_flags), 50);
+        assert_eq!(std::mem::offset_of!(Element, life_span), 52);
+        assert_eq!(std::mem::offset_of!(Element, crew_or_hp), 54);
+        assert_eq!(std::mem::offset_of!(Element, prim_index), 104);
+        assert_eq!(std::mem::offset_of!(Element, current), 112);
+        assert_eq!(std::mem::offset_of!(Element, next), 136);
+        assert_eq!(std::mem::offset_of!(Element, p_parent), 160);
+        assert_eq!(std::mem::offset_of!(Element, h_target), 168);
     }
 }

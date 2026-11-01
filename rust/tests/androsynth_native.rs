@@ -13,7 +13,7 @@ use uqm_rust::ships::native::{abi::*, element};
 
 fn original_collision(_: &mut Cx<'_>, _: ElementId, _: &mut POINT, _: ElementId, _: &mut POINT) {}
 
-fn address(func: ElementCollisionFunc) -> Option<usize> {
+fn address(func: Option<uqm_rust::engine::battle::CollisionHook>) -> Option<usize> {
     func.map(|f| (f).address())
 }
 
@@ -125,8 +125,6 @@ fn descriptor_matches_the_c_race_data() {
             assert!(desc.callbacks()[1] != 0);
             assert!(desc.callbacks()[2] != 0);
             assert!(desc.callbacks()[3] != 0);
-            assert!(desc.data.is_null());
-            assert!(desc.code_ref.is_null());
         }
     })
 }
@@ -170,13 +168,9 @@ fn bubble_wait_nibbles_count_down_then_retarget_with_the_c_rng_order() {
             // thrust wait in the high nibble, turn wait in the low nibble.
             let launch_velocity = velocity_fields(&(*bubble).velocity);
             (*bubble).__bindgen_anon_4.turn_wait = 0x32;
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                preprocess, bubble,
-            );
+            hooks::invoke_element_pointer(preprocess, bubble);
             assert_eq!((*bubble).__bindgen_anon_4.turn_wait, 0x21);
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                preprocess, bubble,
-            );
+            hooks::invoke_element_pointer(preprocess, bubble);
             assert_eq!((*bubble).__bindgen_anon_4.turn_wait, 0x10);
             assert_eq!((*bubble).state_flags & CHANGING as u16, 0);
             assert_eq!(velocity_fields(&(*bubble).velocity), launch_velocity);
@@ -188,9 +182,7 @@ fn bubble_wait_nibbles_count_down_then_retarget_with_the_c_rng_order() {
             let thrust_draw = TFB_Random();
             let facing_draw = TFB_Random();
             TFB_SeedRandom(0x5eed);
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                preprocess, bubble,
-            );
+            hooks::invoke_element_pointer(preprocess, bubble);
             let thrust_wait = (thrust_draw as u16 & 3) as u8;
             assert_eq!(
                 (*bubble).__bindgen_anon_4.turn_wait,
@@ -249,9 +241,7 @@ fn bubble_steers_toward_the_nearest_enemy_with_a_random_wobble() {
                 TFB_SeedRandom(77);
                 let wobble = TFB_Random() as u16 & 7;
                 TFB_SeedRandom(77);
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    preprocess, bubble,
-                );
+                hooks::invoke_element_pointer(preprocess, bubble);
                 let facing = if turn_is_short {
                     tracked_facing.wrapping_add(wobble)
                 } else {
@@ -778,3 +768,6 @@ fn guardian_ai_fires_when_close_or_when_the_target_is_ahead_of_the_drift() {
         }
     })
 }
+
+#[path = "support/hooks.rs"]
+mod hooks;

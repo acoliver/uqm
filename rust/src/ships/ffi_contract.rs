@@ -278,7 +278,7 @@ pub struct CMasterShipInfo {
 // C: BOOLEAN rust_spawn_ship(STARSHIP *starship);
 // Rust: pub unsafe extern "C" fn rust_spawn_ship(starship: *mut CStarship) -> CBoolean;
 // Ownership: C owns starship; Rust loads RaceDesc (Rust-owned) and attaches
-//            it via starship->RaceDescPtr.
+//            it via starship->descriptor.
 //
 // C: COUNT rust_init_ships(void);
 // Rust: pub unsafe extern "C" fn rust_init_ships() -> CCount;
@@ -358,12 +358,6 @@ pub unsafe fn rust_bridge_get_race_desc_layout(out: *mut RaceDescLayout) {
 // during runtime callbacks.
 
 #[cfg(not(test))]
-#[cfg(not(test))]
-pub use crate::battle::process_native::engine::AllocElement;
-
-#[cfg(not(test))]
-pub use crate::battle::sounds::engine::ProcessSound;
-
 extern "C" {
     /// Insert an element into the display list.
     /// C: void InsertElement(HELEMENT h, HELEMENT after);
@@ -439,7 +433,7 @@ pub unsafe fn rust_bridge_spawn_element(
 /// Called on the game thread with the live resources required by the Rust provider.
 #[cfg(not(test))]
 pub unsafe fn rust_bridge_uninit_ships() {
-    crate::ships::native_adapters::rust_bridge_uninit_ships();
+    crate::ships::native_adapters::uninit_ships();
 }
 
 // ===========================================================================

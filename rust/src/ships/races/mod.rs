@@ -36,6 +36,7 @@ pub mod samatra_state;
 pub fn race(species: u32) -> Option<&'static crate::engine::battle::Race> {
     use crate::ships::native::abi::*;
     [
+        (SPECIES_ID_ORZ_ID, &orz_native::engine::ORZ),
         (SPECIES_ID_CHENJESU_ID, &chenjesu_native::engine::CHENJESU),
         (SPECIES_ID_SA_MATRA_ID, &samatra::engine::SAMATRA),
         (SPECIES_ID_VUX_ID, &vux_native::engine::VUX),
@@ -78,10 +79,10 @@ pub fn race(species: u32) -> Option<&'static crate::engine::battle::Race> {
 }
 
 #[cfg(not(test))]
-pub use crate::ships::code_resources::engine::descriptor as legacy_descriptor;
+pub use crate::ships::code_resources::descriptor;
 
 #[cfg(not(test))]
-pub use orz_native::engine::init_orz;
+pub use orz_native::engine::ORZ;
 
 #[cfg(not(test))]
 pub use orz_native::engine::{intruder_preprocess, marine_collision};

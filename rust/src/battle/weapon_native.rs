@@ -27,8 +27,6 @@ fn turn_toward(facing: u16, delta: i16, random: impl FnOnce() -> u32) -> u16 {
 #[cfg(not(test))]
 pub(crate) mod engine {
     use super::*;
-    use crate::battle::sounds::engine::ProcessSound;
-    use crate::battle::world_elements::do_damage;
     use crate::collections::observation::image;
     use crate::ships::native::{
         cosine, element, frame_count, object_cloaked, put_element, sine, starship, wrap_delta,
@@ -57,8 +55,13 @@ pub(crate) mod engine {
 
     /// # Safety
     /// Block must be live and the engine element pool initialized on the game thread.
-    pub unsafe extern "C" fn initialize_laser(block: *mut LASER_BLOCK) -> HELEMENT {
-        let handle = AllocElement();
+    pub unsafe fn initialize_laser(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        block: *mut LASER_BLOCK,
+    ) -> HELEMENT {
+        let handle = cx
+            .alloc_element()
+            .map_or(ptr::null_mut(), |id| cx.elements().raw(id));
         if !handle.is_null() {
             let e = element(handle);
             let b = &*block;
@@ -84,8 +87,13 @@ pub(crate) mod engine {
 
     /// # Safety
     /// Block and frame array must be live; the element pool must be initialized.
-    pub unsafe extern "C" fn initialize_missile(block: *mut MISSILE_BLOCK) -> HELEMENT {
-        let handle = AllocElement();
+    pub unsafe fn initialize_missile(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        block: *mut MISSILE_BLOCK,
+    ) -> HELEMENT {
+        let handle = cx
+            .alloc_element()
+            .map_or(ptr::null_mut(), |id| cx.elements().raw(id));
         if !handle.is_null() {
             let e = element(handle);
             let b = &*block;
@@ -111,7 +119,8 @@ pub(crate) mod engine {
 
     /// # Safety
     /// Elements, collision points and their image resources must be live.
-    pub unsafe extern "C" fn weapon_collision(
+    pub unsafe fn weapon_collision(
+        cx: &mut crate::engine::battle::Cx<'_>,
         w: *mut ELEMENT,
         wp: *mut POINT,
         hit: *mut ELEMENT,
@@ -125,7 +134,11 @@ pub(crate) mod engine {
             && ((*hit).state_flags & FINITE_LIFE as u16 != 0
                 || (*hit).__bindgen_anon_1.life_span == NORMAL_LIFE as u16)
         {
-            do_damage(hit, damage);
+            let id = cx
+                .elements()
+                .id(hit.cast())
+                .unwrap_or_else(|| panic!("collision target"));
+            cx.damage(id, damage);
             if (*hit).__bindgen_anon_2.hit_points != 0 {
                 (*w).state_flags |= COLLISION as u16;
             }
@@ -136,10 +149,11 @@ pub(crate) mod engine {
         {
             if damage != 0 {
                 let sound = (2 + (damage >> 1)).min(5);
-                ProcessSound(
-                    SetAbsStringTableIndex(Kernel::current().game_sounds, sound as u16),
-                    hit,
-                );
+                let source = cx
+                    .elements()
+                    .id(hit.cast())
+                    .unwrap_or_else(|| panic!("weapon sound source"));
+                cx.game_sound(sound as u16, source);
             }
             if (*primitive(w)).Type != gfx_object_LINE_PRIM as u8 {
                 (*w).state_flags |= DISAPPEARING as u16;
@@ -147,7 +161,9 @@ pub(crate) mod engine {
             (*w).__bindgen_anon_2.hit_points = 0;
             (*w).__bindgen_anon_1.life_span = 0;
             (*w).state_flags |= (COLLISION | NONSOLID) as u16;
-            let handle = AllocElement();
+            let handle = cx
+                .alloc_element()
+                .map_or(ptr::null_mut(), |id| cx.elements().raw(id));
             if !handle.is_null() {
                 put_element(handle);
                 let b = element(handle);
@@ -205,7 +221,7 @@ pub(crate) mod engine {
         let ship = starship(e);
         if flags & MODIFY_IMAGE as u8 != 0 {
             let mut ship_intersect: INTERSECT_CONTROL = mem::zeroed();
-            image!(frame; ship_intersect.IntersectStamp.frame, SetAbsFrameIndex((*(*ship).RaceDescPtr).ship_info.icons, 1));
+            image!(frame; ship_intersect.IntersectStamp.frame, SetAbsFrameIndex((*(*ship).descriptor_ptr()).ship_info.icons, 1));
             if ship_intersect.IntersectStamp.frame.is_null() {
                 return ptr::null_mut();
             }
@@ -244,7 +260,7 @@ pub(crate) mod engine {
                 .y
                 .wrapping_add(object.IntersectStamp.origin.y);
             InitShipStatus(
-                &raw mut (*(*ship).RaceDescPtr).ship_info,
+                &raw mut (*(*ship).descriptor_ptr()).ship_info,
                 ship,
                 &mut object_rect,
             );
@@ -284,7 +300,7 @@ pub(crate) mod engine {
             {
                 let ship = starship(target);
                 if (*target).__bindgen_anon_1.life_span != 0
-                    && (*(*ship).RaceDescPtr).ship_info.crew_level != 0
+                    && (*(*ship).descriptor_ptr()).ship_info.crew_level != 0
                 {
                     let (t, s) = if (*tracker).state_flags & PRE_PROCESS as u16 != 0 {
                         ((*target).next.location, (*tracker).next.location)

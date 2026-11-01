@@ -12,7 +12,7 @@ pub trait QueueRecord: queue_record::Sealed + Eq {
     fn links(record: &Self::Storage) -> (HLink, HLink);
 }
 
-use std::{marker::PhantomData, ptr};
+use std::marker::PhantomData;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Starship {}
@@ -193,7 +193,7 @@ impl LinkQueue<'_, Starship> {
         self.set(id, value);
     }
     pub fn clear_descriptor(&mut self, id: LinkId<Starship>) {
-        self.record_mut(id).RaceDescPtr = ptr::null_mut();
+        self.record_mut(id).descriptor = None;
     }
     pub fn ship_id(&self, id: LinkId<Starship>, side: u8) -> ShipId {
         self.raw(id);

@@ -254,8 +254,8 @@ pub(crate) mod engine {
                         input = net.local_input(side, input);
                     }
                     (*ship).ship_input_state =
-                        ship_input(input, (*(*ship).RaceDescPtr).ship_info.crew_level);
-                    if (*(*ship).RaceDescPtr).ship_info.crew_level != 0
+                        ship_input(input, (*(*ship).descriptor_ptr()).ship_info.crew_level);
+                    if (*(*ship).descriptor_ptr()).ship_info.crew_level != 0
                         && can_run
                         && side == 0
                         && input & BATTLE_ESCAPE != 0

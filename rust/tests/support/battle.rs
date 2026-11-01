@@ -75,7 +75,6 @@ impl<T> Record<T> {
 
 pub struct Ship<'a> {
     battle: &'a Battle,
-    desc: Box<RACE_DESC>,
     ss: Record<STARSHIP>,
     el: Record<ELEMENT>,
     pub handle: HELEMENT,
@@ -88,14 +87,17 @@ impl<'a> Ship<'a> {
     pub fn bare(battle: &'a Battle, species: u32, player: SIZE) -> Self {
         // SAFETY: construction runs inside the serialized, published test battle.
         unsafe {
-            let mut desc = Box::new(descriptor(species));
+            let desc = Box::new(descriptor(species));
             let raw_ship = AllocLink(&raw mut race_q[player as usize]).cast::<STARSHIP>();
             assert!(!raw_ship.is_null());
             raw_ship.write(mem::zeroed());
-            (*raw_ship).RaceDescPtr = &raw mut *desc;
+            (*raw_ship).descriptor = Some(desc);
             (*raw_ship).playerNr = player;
             (*raw_ship).SpeciesID = species;
-            let handle = AllocElement();
+            let handle = uqm_rust::app::bridge::enter(|cx| {
+                cx.alloc_element()
+                    .map_or(ptr::null_mut(), |id| cx.elements().raw(id))
+            });
             assert!(!handle.is_null());
             let el = element(handle);
             (*el).pParent = raw_ship.cast();
@@ -114,7 +116,6 @@ impl<'a> Ship<'a> {
             };
             Self {
                 battle,
-                desc,
                 ss: Record(raw_ship),
                 el: Record(el),
                 handle,
@@ -132,8 +133,10 @@ impl<'a> Ship<'a> {
     ) -> Self {
         let mut ship = Self::bare(battle, SPECIES_ID_VUX_ID, player);
         // SAFETY: construction runs in this fixture's serialized, published battle.
-        *ship.desc =
-            unsafe { uqm_rust::app::bridge::enter(|cx| (race.descriptor)(cx.world).into_legacy()) };
+        unsafe {
+            *ship.descriptor_mut() =
+                uqm_rust::app::bridge::enter(|cx| (race.descriptor)(cx.world).into_legacy());
+        }
         ship
     }
     pub unsafe fn new(battle: &'a Battle, species: u32, player: SIZE) -> Self {
@@ -153,17 +156,17 @@ impl<'a> Ship<'a> {
         unsafe {
             let mut ship = Self::bare(battle, species, player);
             let frames = counts.map(|count| FrameSet::with_bounds(count, bounds));
-            ship.desc.ship_data.ship = [frames[0].frame(0); 3];
-            ship.desc.ship_data.weapon = [frames[1].frame(0); 3];
-            ship.desc.ship_data.special = [frames[2].frame(0); 3];
+            ship.descriptor_mut().ship_data.ship = [frames[0].frame(0); 3];
+            ship.descriptor_mut().ship_data.weapon = [frames[1].frame(0); 3];
+            ship.descriptor_mut().ship_data.special = [frames[2].frame(0); 3];
             ship.element_mut().collision_func =
                 Some(uqm_rust::engine::battle::CollisionHook::Native(
                     uqm_rust::battle::ship_native::collision,
                 ));
             ship.element_mut().set_life_span(NORMAL_LIFE as u16);
-            let crew = ship.desc.ship_info.crew_level;
+            let crew = ship.descriptor_mut().ship_info.crew_level;
             ship.element_mut().set_hit_points(crew);
-            let mass = ship.desc.characteristics.ship_mass;
+            let mass = ship.descriptor_mut().characteristics.ship_mass;
             ship.element_mut().set_mass_points(mass);
             ship.element_mut().current.location = POINT { x: 4000, y: 4000 };
             ship.element_mut().current.image.farray = ship.ship_frames();
@@ -309,7 +312,7 @@ impl<'a> Ship<'a> {
         // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
 
         self.assert_live();
-        &mut self.desc
+        self.ss.get_mut().descriptor.as_deref_mut().unwrap()
     }
     pub fn snapshot(&self) -> uqm_rust::engine::battle::views::ElementState {
         // SAFETY: the fixture retains its battle and checked element through this value projection.
@@ -321,11 +324,19 @@ impl<'a> Ship<'a> {
     pub fn el(&mut self) -> *mut ELEMENT {
         self.ptr()
     }
+    fn descriptor(&self) -> &RACE_DESC {
+        // SAFETY: the serialized fixture retains its owned ship slot.
+        unsafe { self.ss.get().descriptor.as_deref().unwrap() }
+    }
     pub fn ship_frames(&self) -> *mut FRAME {
-        (&raw const self.desc.ship_data.ship).cast_mut().cast()
+        (&raw const self.descriptor().ship_data.ship)
+            .cast_mut()
+            .cast()
     }
     pub fn special_frames(&self) -> *mut FRAME {
-        (&raw const self.desc.ship_data.special).cast_mut().cast()
+        (&raw const self.descriptor().ship_data.special)
+            .cast_mut()
+            .cast()
     }
     pub unsafe fn guardian_form(mut self) -> Self {
         // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
@@ -399,7 +410,7 @@ impl<'a> Ship<'a> {
         }
     }
     pub fn uninit(&mut self) {
-        if let Some(race) = self.desc.race {
+        if let Some(race) = self.descriptor().race {
             if let Some(uninit) = race.uninit {
                 // SAFETY: the fixture retains the checked ship through its typed teardown.
                 unsafe {
@@ -412,8 +423,8 @@ impl<'a> Ship<'a> {
             }
         }
     }
-    pub fn saved_collision(&self) -> ElementCollisionFunc {
-        let RaceState::Androsynth { collision } = self.desc.race_state else {
+    pub fn saved_collision(&self) -> Option<uqm_rust::engine::battle::CollisionHook> {
+        let RaceState::Androsynth { collision } = self.descriptor().race_state else {
             panic!("no saved Androsynth collision")
         };
         collision
@@ -432,6 +443,7 @@ impl Drop for Ship<'_> {
                     cx.dispose(self.id);
                 }
             });
+            ptr::drop_in_place(self.ss.0);
             FreeLink(
                 &raw mut race_q[self.ship_id.side as usize],
                 self.ss.0.cast(),
@@ -441,7 +453,7 @@ impl Drop for Ship<'_> {
 }
 pub fn descriptor(species: u32) -> RACE_DESC {
     // SAFETY: the caller owns the serialized test context.
-    unsafe { uqm_rust::ships::races::legacy_descriptor(species) }
+    unsafe { uqm_rust::ships::races::descriptor(species) }
 }
 
 pub unsafe fn call_element(name: &str, id: ElementId) {
@@ -653,7 +665,10 @@ impl<'a> Object<'a> {
     pub fn new(battle: &'a Battle) -> Self {
         // SAFETY: object slots belong to the serialized test battle.
         unsafe {
-            let handle = AllocElement();
+            let handle = uqm_rust::app::bridge::enter(|cx| {
+                cx.alloc_element()
+                    .map_or(ptr::null_mut(), |id| cx.elements().raw(id))
+            });
             assert!(!handle.is_null());
             let id = uqm_rust::app::bridge::enter(|cx| {
                 cx.elements()
@@ -713,7 +728,11 @@ impl PoolElement {
     pub unsafe fn new() -> Self {
         // SAFETY: the caller retains the initialized, serialized element pool.
         unsafe {
-            let pointer = AllocElement().cast::<ELEMENT>();
+            let pointer = uqm_rust::app::bridge::enter(|cx| {
+                cx.alloc_element()
+                    .map_or(ptr::null_mut(), |id| cx.elements().raw(id))
+            })
+            .cast::<ELEMENT>();
             assert!(!pointer.is_null(), "fixture element pool exhausted");
             let id = id(pointer);
             Self { pointer, id }

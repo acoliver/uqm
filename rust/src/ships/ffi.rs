@@ -16,147 +16,11 @@ use super::catalog::{free_master_ship_list, get_ship_cost_from_index, load_maste
 use super::ffi_contract::*;
 use super::lifecycle::spawn_ship as lifecycle_spawn;
 use super::loader::{free_ship as loader_free_ship, load_ship, LoadTier};
-#[cfg(not(test))]
-use super::types::{Characteristics, ShipData, ShipInfo};
 use super::types::{RaceDesc, SpeciesId, Starship};
 use crate::collections::queue::{AllocLink, PutQueue, Queue};
 use std::os::raw::c_void;
 use std::panic::catch_unwind;
 use std::ptr;
-
-// ===========================================================================
-// Layout Verification (P05)
-// ===========================================================================
-
-/// Whether the RaceDesc/RACE_DESC layout check has been performed.
-/// Set to `true` after the first call to `verify_race_desc_layout()`.
-// Transitional: layout verification runs but the accessor-mode dispatch path
-// is not yet wired into all field-access sites. Retained so the FFI shape is
-// stable while the accessors are rolled out.
-#[cfg(not(test))]
-static mut LAYOUT_ACCESSOR_MODE: bool = false;
-
-/// Returns `true` if accessor functions must be used instead of direct
-/// struct casts for RaceDesc/RACE_DESC cross-language field access.
-///
-/// This is `true` when Rust's `RaceDesc` layout does not match C's
-/// `RACE_DESC` layout — which is the expected case because RaceDesc
-/// uses owned Rust data instead of native callback pointers.
-#[inline]
-#[cfg(not(test))]
-#[expect(
-    dead_code,
-    reason = "transitional layout-accessor dispatch check, not yet wired into all field-access sites"
-)]
-fn is_accessor_mode() -> bool {
-    // SAFETY: read-only, written once during init before any concurrent access.
-    unsafe { LAYOUT_ACCESSOR_MODE }
-}
-
-/// Verify that Rust `RaceDesc` and C `RACE_DESC` have matching field offsets.
-///
-/// Called once during `rust_ships_init()`. Since RaceDesc is NOT `#[repr(C)]`
-/// and owns Rust metadata rather than native callback pointers, the layouts are expected to differ. When they differ, this sets
-/// `LAYOUT_ACCESSOR_MODE = true` so that accessor functions are used instead
-/// of direct struct casts.
-///
-/// This is NOT debug-only — it runs in all builds because a layout mismatch
-/// without accessor functions would mean silent memory corruption.
-#[cfg(not(test))]
-fn verify_race_desc_layout() {
-    use crate::ships::ffi_contract::{rust_bridge_get_race_desc_layout, RaceDescLayout};
-
-    let mut c_layout = RaceDescLayout {
-        race_desc_size: 0,
-        ship_data_offset: 0,
-        ship_info_offset: 0,
-        characteristics_offset: 0,
-        ship_data_ship_offset: 0,
-        ship_info_crew_offset: 0,
-        ship_info_max_crew_offset: 0,
-        characteristics_mass_offset: 0,
-    };
-    // SAFETY: the provider initializes this live writable layout record.
-    unsafe {
-        rust_bridge_get_race_desc_layout(&mut c_layout);
-    }
-
-    let mismatches: Vec<String> = [
-        (
-            "RACE_DESC size",
-            c_layout.race_desc_size,
-            std::mem::size_of::<RaceDesc>(),
-        ),
-        (
-            "ship_info",
-            c_layout.ship_info_offset,
-            std::mem::offset_of!(RaceDesc, ship_info),
-        ),
-        (
-            "characteristics",
-            c_layout.characteristics_offset,
-            std::mem::offset_of!(RaceDesc, characteristics),
-        ),
-        (
-            "ship_data",
-            c_layout.ship_data_offset,
-            std::mem::offset_of!(RaceDesc, ship_data),
-        ),
-        (
-            "ship_data.ship",
-            c_layout.ship_data_ship_offset,
-            std::mem::offset_of!(ShipData, ship),
-        ),
-        (
-            "ship_info.crew_level",
-            c_layout.ship_info_crew_offset,
-            std::mem::offset_of!(ShipInfo, crew_level),
-        ),
-        (
-            "ship_info.max_crew",
-            c_layout.ship_info_max_crew_offset,
-            std::mem::offset_of!(ShipInfo, max_crew),
-        ),
-        (
-            "characteristics.ship_mass",
-            c_layout.characteristics_mass_offset,
-            std::mem::offset_of!(Characteristics, ship_mass),
-        ),
-    ]
-    .into_iter()
-    .filter(|(_, native, owned)| native != owned)
-    .map(|(name, native, owned)| format!("{name}: C={native} Rust={owned}"))
-    .collect();
-
-    if mismatches.is_empty() {
-        eprintln!(
-            "rust_ships: RaceDesc/RACE_DESC layout verified — \
-             direct cast is safe."
-        );
-    } else {
-        // Layouts differ (expected) — switch to accessor mode.
-        // Do NOT abort: accessor functions handle field access safely.
-        // SAFETY: initialization runs before callbacks or concurrent access.
-        unsafe {
-            LAYOUT_ACCESSOR_MODE = true;
-        }
-        eprintln!(
-            "rust_ships: RaceDesc/RACE_DESC layout mismatch detected \
-             (expected — RaceDesc is not #[repr(C)]). \
-             Switching to accessor-function mode.
-\
-             Mismatches:
-  {}
-\
-             Accessor functions will be used for all cross-language \
-             RaceDesc field access.",
-            mismatches.join(
-                "
-  "
-            )
-        );
-    }
-}
 
 // ===========================================================================
 // Catalog FFI
@@ -484,14 +348,6 @@ pub unsafe extern "C" fn rust_ships_init() -> CCount {
         unsafe {
             use crate::ships::ffi_contract::rust_bridge_init_battle_arena;
 
-            // P05: One-time layout verification — logs result, does not abort.
-            // Sets LAYOUT_ACCESSOR_MODE if layouts differ (expected).
-            // Must run before any spawn.
-            static LAYOUT_VERIFIED: std::sync::Once = std::sync::Once::new();
-            LAYOUT_VERIFIED.call_once(|| {
-                verify_race_desc_layout();
-            });
-
             // Delegate arena setup entirely to C — this calls the original
             // InitShips() body which handles InitSpace, display list, galaxy,
             // asteroids, planets, hyperspace setup, etc.
@@ -609,7 +465,7 @@ pub unsafe extern "C" fn rust_ships_uninit() {
             //   - ReinitQueue / FreeHyperspace for non-IN_ENCOUNTER
             //
             // C-side null guards (C3): The C helper guards against null
-            // StarShipPtr and null RaceDescPtr on each element, so
+            // StarShipPtr and null descriptor on each element, so
             // partial-init states are handled safely.
             rust_bridge_uninit_ships();
 

@@ -1,16 +1,7 @@
 //! Live descriptor/resource lifecycle translated from uqm/loadship.c.
 #[cfg(not(test))]
 pub(crate) mod engine {
-    use crate::ships::native::abi::{RACE_DESC, SPECIES_ID_NUM_SPECIES_ID};
-    use std::ptr;
-
-    use crate::ships::code_resources::engine::LoadCodeResInstance;
-
-    use crate::ships::code_resources::engine::CaptureCodeRes;
-
-    use crate::ships::code_resources::engine::ReleaseCodeRes;
-
-    use crate::ships::code_resources::engine::DestroyCodeRes;
+    use crate::ships::native::abi::RACE_DESC;
 
     use crate::graphics::resgfx::LoadGraphicInstance;
 
@@ -38,57 +29,15 @@ pub(crate) mod engine {
     use crate::sound::heart_ffi::DestroyMusic;
     use crate::sound::heart_ffi::DestroySound;
 
-    const CODE_RESOURCES: [Option<&std::ffi::CStr>; SPECIES_ID_NUM_SPECIES_ID as usize] = [
-        None,
-        Some(c"ship.arilou.code"),
-        Some(c"ship.chmmr.code"),
-        Some(c"ship.earthling.code"),
-        Some(c"ship.orz.code"),
-        Some(c"ship.pkunk.code"),
-        Some(c"ship.shofixti.code"),
-        Some(c"ship.spathi.code"),
-        Some(c"ship.supox.code"),
-        Some(c"ship.thraddash.code"),
-        Some(c"ship.utwig.code"),
-        Some(c"ship.vux.code"),
-        Some(c"ship.yehat.code"),
-        Some(c"ship.melnorme.code"),
-        Some(c"ship.druuge.code"),
-        Some(c"ship.ilwrath.code"),
-        Some(c"ship.mycon.code"),
-        Some(c"ship.slylandro.code"),
-        Some(c"ship.umgah.code"),
-        Some(c"ship.urquan.code"),
-        Some(c"ship.zoqfotpik.code"),
-        Some(c"ship.syreen.code"),
-        Some(c"ship.kohrah.code"),
-        Some(c"ship.androsynth.code"),
-        Some(c"ship.chenjesu.code"),
-        Some(c"ship.mmrnmhrm.code"),
-        Some(c"ship.flagship.code"),
-        Some(c"ship.samatra.code"),
-        Some(c"ship.drone.code"),
-    ];
-
-    #[no_mangle]
     /// # Safety
-    /// Call on the game thread with the ship catalog and resource system initialized.
-    /// Species must identify a catalog entry; the returned descriptor must be freed once.
-    pub unsafe extern "C" fn c_load_ship(species: u32, battle: u32) -> *mut RACE_DESC {
-        let Some(key) = CODE_RESOURCES.get(species as usize) else {
-            return ptr::null_mut();
-        };
-        let mut desc = ptr::null_mut();
-        let code = CaptureCodeRes(
-            LoadCodeResInstance(key.map_or(ptr::null(), |k| k.as_ptr())),
-            (&raw mut crate::ships::native::abi::GlobData).cast(),
-            &mut desc,
+    /// The caller owns the resource system on the game thread.
+    pub unsafe fn load_ship(species: u32, battle: u32) -> Option<Box<RACE_DESC>> {
+        let race = crate::ships::races::race(species)?;
+        let mut owned = Box::new(
+            (race.descriptor)(&mut crate::engine::battle::World::for_legacy_lifecycle())
+                .into_legacy(),
         );
-        if code.is_null() {
-            return ptr::null_mut();
-        }
-        let d = desc.cast::<RACE_DESC>();
-        (*d).code_ref = code;
+        let d: *mut RACE_DESC = &mut *owned;
         let info = &mut (*d).ship_info;
         if !info.icons_rsc.is_null() {
             info.icons = CaptureDrawable((LoadGraphicInstance(info.icons_rsc)).cast()).cast();
@@ -102,11 +51,10 @@ pub(crate) mod engine {
                 CaptureStringTable(LoadStringTableInstance(info.race_strings_rsc)).cast();
         }
         if battle != 0 && !load_battle(d) {
-            // Preserve the original failed-load contract: only code_ref is freed.
-            DestroyCodeRes(ReleaseCodeRes(code));
-            return ptr::null_mut();
+            unload_ship(owned, 1, 1);
+            return None;
         }
-        d
+        Some(owned)
     }
 
     unsafe fn load_battle(d: *mut RACE_DESC) -> bool {
@@ -164,24 +112,18 @@ pub(crate) mod engine {
         true
     }
 
-    #[no_mangle]
     /// # Safety
-    /// Descriptor must be live and owned by the caller, with no outstanding borrows.
-    /// Resource flags must match the parts loaded into this descriptor.
-    pub unsafe extern "C" fn c_free_ship(d: *mut RACE_DESC, icons: u32, battle: u32) {
-        if let Some(uninit) =
-            (&mut *d).cleanup(&mut crate::engine::battle::World::for_legacy_lifecycle())
-        {
-            uninit(d);
-        }
+    /// The descriptor resources are exclusively owned by this value.
+    pub unsafe fn unload_ship(mut owned: Box<RACE_DESC>, icons: u32, battle: u32) {
+        let descriptor = &mut *owned;
+        descriptor.cleanup(&mut crate::engine::battle::World::for_legacy_lifecycle());
         crate::collections::observation::record(
             crate::collections::observation::Event::ResourcesFree {
-                descriptor: d as usize,
+                descriptor: descriptor as *mut RACE_DESC as usize,
                 icons: icons != 0,
                 battle: battle != 0,
             },
         );
-        let descriptor = &mut *d;
         if battle != 0 {
             let data = &mut descriptor.ship_data;
             free_image((&raw mut data.special).cast());
@@ -197,24 +139,8 @@ pub(crate) mod engine {
             DestroyDrawable(ReleaseDrawable(info.icons.cast()));
             DestroyStringTable(ReleaseStringTable(info.race_strings.cast()));
         }
-        DestroyCodeRes(ReleaseCodeRes(descriptor.code_ref));
-    }
-
-    #[no_mangle]
-    /// # Safety
-    /// Call on the game thread with the ship catalog and resource system initialized.
-    /// Species must identify a catalog entry; the returned descriptor must be freed once.
-    pub unsafe extern "C" fn load_ship(species: u32, battle: u32) -> *mut RACE_DESC {
-        c_load_ship(species, battle)
-    }
-    #[no_mangle]
-    /// # Safety
-    /// Descriptor must be live and owned by the caller, with no outstanding borrows.
-    /// Resource flags must match the parts loaded into this descriptor.
-    pub unsafe extern "C" fn free_ship(d: *mut RACE_DESC, icons: u32, battle: u32) {
-        c_free_ship(d, icons, battle);
     }
 }
 
 #[cfg(not(test))]
-pub(crate) use engine::free_ship;
+pub use engine::unload_ship;

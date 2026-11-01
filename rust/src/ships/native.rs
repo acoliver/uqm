@@ -2,8 +2,6 @@
 //! be returned directly to the engine's `init_<race>` callers.
 
 mod descriptor;
-#[cfg(not(test))]
-pub use crate::ships::code_resources::engine::InstallCodeResType;
 
 #[allow(
     non_camel_case_types,
@@ -18,13 +16,12 @@ pub mod abi {
     #[cfg(not(test))]
     pub use super::engine::{
         abs_frame_index as SetAbsFrameIndex, abs_string_index as SetAbsStringTableIndex,
-        calculate_gravity as CalculateGravity, capture_drawable as CaptureDrawable,
-        current_battle_input as CurrentInputToBattleInput, dec_frame_index as DecFrameIndex,
-        destroy_drawable as DestroyDrawable, destroy_music as DestroyMusic,
-        destroy_sound as DestroySound, destroy_string_table as DestroyStringTable,
-        do_input as DoInput, draw_filled_rectangle as DrawFilledRectangle,
-        draw_filled_stamp as DrawFilledStamp, draw_sis_title as DrawSISTitle,
-        draw_stamp as DrawStamp, draw_text as font_DrawText,
+        capture_drawable as CaptureDrawable, current_battle_input as CurrentInputToBattleInput,
+        dec_frame_index as DecFrameIndex, destroy_drawable as DestroyDrawable,
+        destroy_music as DestroyMusic, destroy_sound as DestroySound,
+        destroy_string_table as DestroyStringTable, do_input as DoInput,
+        draw_filled_rectangle as DrawFilledRectangle, draw_filled_stamp as DrawFilledStamp,
+        draw_sis_title as DrawSISTitle, draw_stamp as DrawStamp, draw_text as font_DrawText,
         drawables_intersect as DrawablesIntersect, equ_frame_index as SetEquFrameIndex,
         frame_hot as GetFrameHot, frame_rect as GetFrameRect, in_hq_space as inHQSpace,
         in_hyper_space as inHyperSpace, inc_frame_index as IncFrameIndex,
@@ -68,17 +65,13 @@ pub mod abi {
     #[cfg(not(test))]
     pub use crate::battle::galaxy::MoveGalaxy;
     #[cfg(not(test))]
-    pub use crate::battle::process_native::{AllocElement, FreeElement};
+    pub use crate::battle::process_native::FreeElement;
     #[cfg(not(test))]
-    pub use crate::battle::sounds::engine::{
-        CalcSoundPosition, PlaySound, ProcessSound, RemoveSoundsForObject,
-    };
+    pub use crate::battle::sounds::engine::{CalcSoundPosition, PlaySound, RemoveSoundsForObject};
     #[cfg(not(test))]
     pub use crate::battle::tactrans_native::{
         battleEndReadyComputer, battleEndReadyHuman, battleEndReadyNetwork,
     };
-    #[cfg(not(test))]
-    pub use crate::battle::world_elements::do_damage;
     pub use crate::math::seed_random as TFB_SeedRandom;
 
     #[cfg(not(test))]
@@ -86,7 +79,7 @@ pub mod abi {
         initialize_laser, initialize_missile, track_ship, weapon_collision, ModifySilhouette,
     };
     #[cfg(not(test))]
-    pub use crate::battle::world_elements::AbandonShip;
+    pub use crate::battle::world_elements::abandon_ship;
 }
 
 #[cfg(not(test))]
@@ -217,12 +210,6 @@ mod engine {
         facing: abi::COUNT,
     ) {
         crate::battle::velocity::set_velocity_vector(&mut *velocity.cast(), magnitude, facing);
-    }
-
-    /// # Safety
-    /// `element` and the display queue must be live on the game thread.
-    pub unsafe fn calculate_gravity(element: *mut abi::ELEMENT) -> abi::BOOLEAN {
-        crate::battle::gravity::CalculateGravity(element.cast()) as abi::BOOLEAN
     }
 
     /// # Safety

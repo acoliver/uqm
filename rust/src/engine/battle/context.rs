@@ -31,6 +31,11 @@ impl Battle {
     }
 
     #[cfg(not(test))]
+    pub(crate) fn master_queue(&mut self) -> &mut QUEUE {
+        &mut self.kernel.master_queue
+    }
+
+    #[cfg(not(test))]
     pub(crate) fn kernel_channels(&mut self) -> &mut super::record::Channels {
         &mut self.kernel.channels
     }
@@ -129,5 +134,12 @@ impl<'a> Cx<'a> {
 impl Cx<'_> {
     pub(crate) fn kernel(&mut self) -> *mut super::record::Kernel {
         &raw mut self.b.kernel
+    }
+}
+
+impl Cx<'_> {
+    #[cfg(not(test))]
+    pub(crate) fn master_queue(&mut self) -> &mut QUEUE {
+        self.b.master_queue()
     }
 }

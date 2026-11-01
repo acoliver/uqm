@@ -65,7 +65,10 @@ unsafe fn queue() -> Vec<HELEMENT> {
 unsafe fn exhaust_queue() -> Vec<HELEMENT> {
     let mut handles = Vec::new();
     loop {
-        let h = AllocElement();
+        let h = uqm_rust::app::bridge::enter(|cx| {
+            cx.alloc_element()
+                .map_or(std::ptr::null_mut(), |id| cx.elements().raw(id))
+        });
         if h.is_null() {
             return handles;
         }
@@ -108,13 +111,13 @@ unsafe fn assert_rng_after(seed: u32, draws: usize) {
 }
 
 unsafe fn collide(pulse: *mut ELEMENT, target: *mut ELEMENT) {
-    uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
+    hooks::invoke_collision_pointer(
         (*pulse).collision_func.unwrap(),
         pulse,
         &mut POINT { x: 0, y: 0 },
         target,
         &mut POINT { x: 0, y: 0 },
-        uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
+        hooks::CollisionCall::Hook,
     );
 }
 
@@ -200,7 +203,7 @@ fn descriptor_matches_all_c_resources_values_and_empty_runtime_fields() {
             );
             assert!(d.callbacks()[2] != 0 && d.callbacks()[3] != 0 && d.callbacks()[4] != 0);
             assert!(d.callbacks()[1] == 0 && d.callbacks()[0] == 0);
-            assert!(d.data.is_null() && d.code_ref.is_null());
+
             let mut owned = battle::descriptor(SPECIES_ID_MELNORME_ID);
             let loaded = FrameSet::with_bounds(26, [22, 18]);
             let frame = loaded.frame(0);
@@ -293,10 +296,7 @@ fn appearing_charge_only_zeros_the_entire_velocity_record() {
             (*e).__bindgen_anon_5.thrust_wait = 13;
             ship.ship_mut().energy_counter = 19;
             TFB_SeedRandom(7);
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                (*e).postprocess_func.unwrap(),
-                e,
-            );
+            hooks::invoke_element_pointer((*e).postprocess_func.unwrap(), e);
             assert_eq!(velocity_fields(&(*e).velocity), [0; 9]);
             assert_eq!((*e).__bindgen_anon_4.turn_wait, 0x82);
             assert_eq!((*e).__bindgen_anon_5.thrust_wait, 13);
@@ -325,10 +325,7 @@ fn held_charge_replaces_the_element_and_uses_the_old_level_for_damage() {
                     ship.ship_mut().old_status_flags = WEAPON as u16;
                     ship.ship_mut().energy_counter = 0;
                     TFB_SeedRandom(12);
-                    uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                        (*e).postprocess_func.unwrap(),
-                        e,
-                    );
+                    hooks::invoke_element_pointer((*e).postprocess_func.unwrap(), e);
                     let p = element(disp_q.tail);
                     assert_ne!(p, e);
                     let next_level = (level + 1).min(3);
@@ -373,10 +370,7 @@ fn charge_wait_wraps_as_a_byte_and_hit_points_truncate_after_the_c_assignment_ch
             (*e).current.image.frame = ship.raw_frame(1, 0);
             ship.ship_mut().cur_status_flags = WEAPON as u16;
             ship.ship_mut().old_status_flags = WEAPON as u16;
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                (*e).postprocess_func.unwrap(),
-                e,
-            );
+            hooks::invoke_element_pointer((*e).postprocess_func.unwrap(), e);
             let p = element(disp_q.tail);
             assert_eq!((*p).__bindgen_anon_5.thrust_wait, 255);
             assert_eq!((*p).__bindgen_anon_4.turn_wait, 8);
@@ -402,10 +396,7 @@ fn release_requires_both_weapon_status_words_to_hold_and_uses_full_velocity_unit
                     ship.ship_mut().ShipFacing = facing;
                     ship.ship_mut().weapon_counter = 9;
                     TFB_SeedRandom(14);
-                    uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                        (*e).postprocess_func.unwrap(),
-                        e,
-                    );
+                    hooks::invoke_element_pointer((*e).postprocess_func.unwrap(), e);
                     let p = element(disp_q.tail);
                     let held = current & old & WEAPON != 0;
                     assert_eq!((*p).__bindgen_anon_1.life_span, if held { 2 } else { 10 });
@@ -434,10 +425,7 @@ fn fired_charge_animation_bounces_at_each_five_frame_boundary_without_changing_l
             let e = pump(&mut ship);
             (*e).state_flags &= !(APPEARING as u16);
             ship.ship_mut().cur_status_flags = 0;
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                (*e).postprocess_func.unwrap(),
-                e,
-            );
+            hooks::invoke_element_pointer((*e).postprocess_func.unwrap(), e);
             let p = element(disp_q.tail);
             let pre = (*p).preprocess_func.unwrap();
             for level in 0..4u8 {
@@ -453,7 +441,7 @@ fn fired_charge_animation_bounces_at_each_five_frame_boundary_without_changing_l
                     (*p).__bindgen_anon_5.thrust_wait = 2;
                     (*p).state_flags &= !(CHANGING as u16);
                     TFB_SeedRandom(11);
-                    uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(pre, p);
+                    hooks::invoke_element_pointer(pre, p);
                     assert_eq!((*p).__bindgen_anon_5.thrust_wait, 1);
                     assert_eq!((*p).__bindgen_anon_4.turn_wait, level | next_reverse);
                     assert_eq!(
@@ -467,11 +455,11 @@ fn fired_charge_animation_bounces_at_each_five_frame_boundary_without_changing_l
             (*p).__bindgen_anon_5.thrust_wait = 1;
             (*p).state_flags &= !(CHANGING as u16);
             let frame = (*p).next.image.frame;
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(pre, p);
+            hooks::invoke_element_pointer(pre, p);
             assert_eq!((*p).__bindgen_anon_5.thrust_wait, 0);
             assert_eq!((*p).next.image.frame, frame);
             assert_eq!((*p).state_flags & CHANGING as u16, 0);
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(pre, p);
+            hooks::invoke_element_pointer(pre, p);
             assert_eq!((*p).__bindgen_anon_5.thrust_wait, 255);
             assert_ne!((*p).state_flags & CHANGING as u16, 0);
         }
@@ -496,13 +484,13 @@ fn pump_collision_restores_the_shared_blast_counter_and_sets_the_level_blast_ani
                 let mut point = POINT { x: 20, y: 30 };
                 let old_tail = disp_q.tail;
                 TFB_SeedRandom(33);
-                uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
+                hooks::invoke_collision_pointer(
                     (*e).collision_func.unwrap(),
                     e,
                     &mut point,
                     &mut *obstacle,
                     &mut point,
-                    uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
+                    hooks::CollisionCall::Hook,
                 );
                 assert_ne!({ disp_q.tail }, old_tail);
                 let blast = element(disp_q.tail);
@@ -520,27 +508,23 @@ fn pump_collision_restores_the_shared_blast_counter_and_sets_the_level_blast_ani
                 (*blast).__bindgen_anon_4.turn_wait = 1;
                 (*blast).__bindgen_anon_5.next_turn = 3;
                 (*blast).state_flags &= !(CHANGING as u16);
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    animate, blast,
-                );
+                hooks::invoke_element_pointer(animate, blast);
                 assert_eq!((*blast).__bindgen_anon_4.turn_wait, 0);
                 assert_eq!((*blast).state_flags & CHANGING as u16, 0);
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    animate, blast,
-                );
+                hooks::invoke_element_pointer(animate, blast);
                 assert_eq!(frame_index((*blast).next.image.frame), 21);
                 assert_eq!((*blast).__bindgen_anon_4.turn_wait, 3);
                 assert_ne!((*blast).state_flags & CHANGING as u16, 0);
                 assert_rng_after(33, 0);
                 // Already-collided weapons do not allocate a second blast.
                 let before = queue();
-                uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
+                hooks::invoke_collision_pointer(
                     (*e).collision_func.unwrap(),
                     e,
                     &mut point,
                     &mut *obstacle,
                     &mut point,
-                    uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
+                    hooks::CollisionCall::Hook,
                 );
                 assert_eq!(queue(), before);
                 assert_eq!((*e).__bindgen_anon_5.thrust_wait, 67);
@@ -658,7 +642,7 @@ fn solid_confusion_animation_wraps_in_the_first_eight_frames() {
                 (*e).current.image.frame = ship.raw_frame(2, index);
                 (*e).state_flags &= !(CHANGING as u16);
                 TFB_SeedRandom(17);
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(pre, e);
+                hooks::invoke_element_pointer(pre, e);
                 assert_eq!(frame_index((*e).next.image.frame), expected);
                 assert_ne!((*e).state_flags & CHANGING as u16, 0);
                 assert_rng_after(17, 0);
@@ -743,7 +727,10 @@ fn confusion_reuses_the_first_same_player_nonsolid_special_even_if_it_is_a_trail
                 (0, farray, FINITE_LIFE | NONSOLID | CHANGING),
                 (0, farray, FINITE_LIFE | NONSOLID),
             ] {
-                let h = AllocElement();
+                let h = uqm_rust::app::bridge::enter(|cx| {
+                    cx.alloc_element()
+                        .map_or(std::ptr::null_mut(), |id| cx.elements().raw(id))
+                });
                 assert!(!h.is_null());
                 let e = element(h);
                 (*e).playerNr = player;
@@ -844,9 +831,7 @@ fn controller_follows_target_overrides_controls_wraps_animation_and_emits_one_fr
                     (LEFT | RIGHT | THRUST | WEAPON | SPECIAL | 0x80) as u8;
                 let before = queue().len();
                 TFB_SeedRandom(88);
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    pre, controller,
-                );
+                hooks::invoke_element_pointer(pre, controller);
                 assert_eq!(
                     victim.ship_mut().ship_input_state,
                     (THRUST | WEAPON | 0x80 | direction) as u8
@@ -876,7 +861,7 @@ fn controller_follows_target_overrides_controls_wraps_animation_and_emits_one_fr
                 victim.ship_mut().ship_input_state = SPECIAL as u8;
                 (*victim.ptr()).next.location.x = 800;
                 let count = queue().len();
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(pre, trail);
+                hooks::invoke_element_pointer(pre, trail);
                 assert_eq!((*trail).next.location.x, 800);
                 assert_eq!(victim.ship_mut().ship_input_state, SPECIAL as u8);
                 assert_eq!(queue().len(), count);
@@ -885,9 +870,7 @@ fn controller_follows_target_overrides_controls_wraps_animation_and_emits_one_fr
             }
             (*controller).hTarget = ptr::null_mut();
             let before = queue();
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                pre, controller,
-            );
+            hooks::invoke_element_pointer(pre, controller);
             assert_eq!((*controller).__bindgen_anon_1.life_span, 0);
             assert_ne!((*controller).state_flags & DISAPPEARING as u16, 0);
             assert_eq!(queue(), before);
@@ -911,10 +894,7 @@ fn controller_still_overrides_controls_when_trail_allocation_fails() {
             let before = queue();
             victim.ship_mut().ship_input_state = (LEFT | SPECIAL | WEAPON) as u8;
             TFB_SeedRandom(9);
-            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                (*controller).preprocess_func.unwrap(),
-                controller,
-            );
+            hooks::invoke_element_pointer((*controller).preprocess_func.unwrap(), controller);
             assert_eq!(victim.ship_mut().ship_input_state, (RIGHT | WEAPON) as u8);
             assert_eq!(frame_index((*controller).next.image.frame), 9);
             assert_eq!(queue(), before);
@@ -1077,10 +1057,7 @@ fn held_charge_uses_the_same_ping_pong_animation_as_a_released_pulse() {
                 (*e).current.image.frame = ship.raw_frame(1, index);
                 (*e).__bindgen_anon_4.turn_wait = turn;
                 (*e).__bindgen_anon_5.thrust_wait = 2;
-                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
-                    (*e).postprocess_func.unwrap(),
-                    e,
-                );
+                hooks::invoke_element_pointer((*e).postprocess_func.unwrap(), e);
                 let p = element(disp_q.tail);
                 assert_eq!((*p).__bindgen_anon_5.thrust_wait, 1);
                 assert_eq!((*p).__bindgen_anon_4.turn_wait, expected_turn);
@@ -1180,3 +1157,6 @@ fn ai_pursuit_uses_the_shared_half_turn_rng_draw_without_extra_draws() {
         }
     })
 }
+
+#[path = "support/hooks.rs"]
+mod hooks;

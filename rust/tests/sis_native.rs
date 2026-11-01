@@ -79,7 +79,6 @@ fn module_configuration_preserves_weapon_order_energy_caps_and_drive_rounding() 
             ship.descriptor_mut().ship_info.crew_level = 4;
             ship.uninit();
             assert_eq!({ GlobData.SIS_state.CrewEnlisted }, 3);
-            assert!(ship.descriptor_mut().data.is_null());
         }
     })
 }
