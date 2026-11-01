@@ -63,10 +63,12 @@ pub(crate) fn connect(request: &Request) -> Result<(), String> {
             break;
         }
         if connection.stateFlags.disconnected || std::time::Instant::now() >= deadline {
-            return Err("netplay fixture disconnected or did not enter setup".into());
+            return Err("netplay fixture disconnected or did not synchronize setup".into());
         }
         // SAFETY: called on the menu's game thread while the session is live.
         unsafe { state.netplay.net_input_blocking(1) };
+        // This nested input wait must advance replay time so async alarms run.
+        crate::mainloop::input_abi::yield_input_loop(std::thread::yield_now);
     }
     Ok(())
 }
