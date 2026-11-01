@@ -15,74 +15,7 @@ pub enum CheckpointClass {
     Navigation,
 }
 
-/// Classify actions without consulting scenario names or observed results.
-#[must_use]
-pub fn checkpoint_class(action: &Action) -> Option<CheckpointClass> {
-    match action {
-        Action::Capture(_) => Some(CheckpointClass::Capture),
-        Action::AssertActivity(_)
-        | Action::AssertScene(_)
-        | Action::AssertMode(_)
-        | Action::AssertDispatch(_)
-        | Action::AssertGameOptions(_)
-        | Action::AssertCommunicationResponses(_)
-        | Action::AssertBattleFrames(_)
-        | Action::AssertHyperspaceDisplacement(_)
-        | Action::AssertHyperspaceStationary(_)
-        | Action::AssertHyperspacePositionRestored(_)
-        | Action::AssertShipResources(_)
-        | Action::AssertState(_)
-        | Action::AssertShipElement(_)
-        | Action::AssertPlanetSideCollisions(_)
-        | Action::AssertMainMenuTransition(_) => Some(CheckpointClass::Assertion),
-        Action::WaitForMainMenuReady(_)
-        | Action::WaitForPlanetSideStart(_)
-        | Action::WaitForPlanetSideEnd(_)
-        | Action::WaitForDispatch(_)
-        | Action::WaitForState(_)
-        | Action::WaitForBattleFrames(_)
-        | Action::WaitForBattleShipLoss(_)
-        | Action::WaitForCommunicationResponses(_)
-        | Action::WaitForCommunicationEnd(_)
-        | Action::WaitForCommunicationReplay(_) => Some(CheckpointClass::SemanticWait),
-        Action::NavigateToContact(_)
-        | Action::NavigateToPlanet(_)
-        | Action::NavigateToMoon(_)
-        | Action::NavigateToOrbit(_)
-        | Action::UseDevice(_)
-        | Action::CollectEnergyNode(_)
-        | Action::FlyToStar(_)
-        | Action::NavigateToHyperspace(_)
-        | Action::TurnFlagship(_)
-        | Action::CollectPlanetMinerals(_)
-        | Action::FightBattle(_)
-        | Action::FightSamatra(_)
-        | Action::FightEncounter(_)
-        | Action::RetreatEncounter(_)
-        | Action::SelectPlanetMenu(_)
-        | Action::PickBattleShip(_)
-        | Action::SelectResponse(_)
-        | Action::SelectCommunicationResponse(_)
-        | Action::SetupPlanetSideCollisionFixture(_)
-        | Action::ConnectNetplay(_)
-        | Action::ConfigureParityMelee(_)
-        | Action::RunParityFixture(_)
-        | Action::RunParityCorpus(_)
-        | Action::AssertParityFixture
-        | Action::SetupMeleeMutualLossFixture(_)
-        | Action::SetupPlanetSideMineralGallery(_) => Some(CheckpointClass::Navigation),
-        Action::WaitInputTicks(_)
-        | Action::WaitPresentations(_)
-        | Action::SetMenuKey(_)
-        | Action::TapMenuKey(_)
-        | Action::SetPlayerKey(_)
-        | Action::TapPlayerKey(_)
-        | Action::RecordHyperspacePosition(_)
-        | Action::RecordSavedHyperspacePosition(_)
-        | Action::ExpectQuit(_)
-        | Action::Finish => None,
-    }
-}
+pub use super::native_predicate::checkpoint_class;
 
 /// An immutable obligation derived from the selected script, not from child output.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -92,6 +25,7 @@ pub struct NativeCheckpoint {
     pub class: CheckpointClass,
     pub action: Action,
     pub id: String,
+    pub parity_label: Option<String>,
 }
 
 /// Complete selected source identity and ordered checkpoint obligations.
@@ -112,19 +46,20 @@ impl NativeCheckpointPlan {
     pub fn derive(source: &[u8], script: &ValidatedScript) -> Result<Self, String> {
         let resolved = serde_json::to_vec(&script.resolved()).map_err(|error| error.to_string())?;
         let resolved_sha256 = format!("{:x}", Sha256::digest(resolved));
-        let checkpoints = script
-            .steps()
-            .iter()
-            .enumerate()
-            .filter_map(|(index, action)| {
-                checkpoint_class(action).map(|class| NativeCheckpoint {
+        let mut checkpoints = Vec::new();
+        for (index, action) in script.steps().iter().enumerate() {
+            if let Some(class) = checkpoint_class(action)? {
+                let id = checkpoint_id(&resolved_sha256, index);
+                let parity_label = super::native_predicate::parity_label(action, &id, script)?;
+                checkpoints.push(NativeCheckpoint {
                     action_index: index,
                     class,
                     action: action.clone(),
-                    id: checkpoint_id(&resolved_sha256, index),
-                })
-            })
-            .collect();
+                    id,
+                    parity_label,
+                });
+            }
+        }
         Ok(Self {
             source_sha256: format!("{:x}", Sha256::digest(source)),
             resolved_sha256,
@@ -137,6 +72,15 @@ impl NativeCheckpointPlan {
                 .iter()
                 .any(|action| matches!(action, Action::ExpectQuit(_))),
         })
+    }
+
+    pub(super) fn checkpoints_between(
+        &self,
+        range: std::ops::Range<usize>,
+    ) -> impl Iterator<Item = &NativeCheckpoint> {
+        self.checkpoints
+            .iter()
+            .filter(move |checkpoint| range.contains(&checkpoint.action_index))
     }
 
     /// The previous script capture, excluding intervening semantic checkpoints.
@@ -313,7 +257,7 @@ impl CheckpointScan {
         }
         if !self
             .history
-            .verify(&expected.action, &records[evidence_range], frame)
+            .verify_checkpoint(expected, &records[evidence_range], frame)
         {
             return Err(
                 "native checkpoint lacks its action's successful semantic/frame evidence".into(),
@@ -445,6 +389,117 @@ mod tests {
         } else {
             vec![evidence, present, checkpoint]
         }
+    }
+
+    #[test]
+    fn parity_checkpoints_bind_requests_seed_fixture_and_action_identity() {
+        for action in [
+            serde_json::json!({"action":"configure_parity_melee","ships":[[7,8,9,10,11,12,13],[7,8,9,10,11,12,13]],"cyborg":true}),
+            serde_json::json!({"action":"run_parity_fixture","fixture":"mixed-collision"}),
+            serde_json::json!({"action":"run_parity_corpus","fleet":1}),
+        ] {
+            let (source, script) = script(serde_json::json!([action, action, {"action":"finish"}]));
+            let plan = NativeCheckpointPlan::derive(&source, &script).unwrap();
+            let proof = serde_json::json!({
+                "checkpoint": plan.checkpoints[0].id,
+                "seed": script.seed(),
+                "requested_seed": script.seed,
+                "roster": match &plan.checkpoints[0].action {
+                    Action::ConfigureParityMelee(request) => serde_json::json!(request.ships),
+                    Action::RunParityFixture(request) => serde_json::json!(request.fixture.ships()),
+                    Action::RunParityCorpus(request) => serde_json::json!(request.bouts().unwrap()),
+                    _ => unreachable!(),
+                },
+                "fixture": script.fixture(),
+                "request": plan.checkpoints[0].action,
+            });
+            let label = |proof: &serde_json::Value| format!("native_parity:{proof}");
+            let trace = committed_trace(&plan, &label(&proof));
+            assert_eq!(plan.committed(&trace).unwrap().len(), 1);
+            for key in [
+                "checkpoint",
+                "seed",
+                "requested_seed",
+                "fixture",
+                "request",
+                "roster",
+            ] {
+                let mut missing = proof.clone();
+                missing.as_object_mut().unwrap().remove(key);
+                assert!(plan
+                    .committed(&committed_trace(&plan, &label(&missing)))
+                    .is_err());
+                let mut wrong = proof.clone();
+                wrong[key] = match key {
+                    "seed" | "requested_seed" => serde_json::json!(script.seed() + 1),
+                    "request" => serde_json::json!({"action":"run_parity_corpus","fleet":3}),
+                    _ => serde_json::json!("another-request"),
+                };
+                assert!(plan
+                    .committed(&committed_trace(&plan, &label(&wrong)))
+                    .is_err());
+            }
+            for (key, wrong_value) in match &plan.checkpoints[0].action {
+                Action::ConfigureParityMelee(_) => vec![
+                    (
+                        "ships",
+                        serde_json::json!([[0, 8, 9, 10, 11, 12, 13], [7, 8, 9, 10, 11, 12, 13]]),
+                    ),
+                    ("cyborg", serde_json::json!(false)),
+                ],
+                Action::RunParityFixture(_) => vec![("fixture", serde_json::json!("pool-full"))],
+                Action::RunParityCorpus(_) => vec![("fleet", serde_json::json!(2))],
+                _ => unreachable!(),
+            } {
+                let mut wrong = proof.clone();
+                wrong["request"][key] = wrong_value;
+                assert!(plan
+                    .committed(&committed_trace(&plan, &label(&wrong)))
+                    .is_err());
+                let mut missing = proof.clone();
+                missing["request"].as_object_mut().unwrap().remove(key);
+                assert!(plan
+                    .committed(&committed_trace(&plan, &label(&missing)))
+                    .is_err());
+            }
+            let mut wrong_kind = trace.clone();
+            wrong_kind[0].kind = RecordKind::Failure;
+            assert!(plan.committed(&wrong_kind).is_err());
+            for bare in [
+                "parity_melee_configured",
+                "parity_fixture_started",
+                "parity_corpus_completed:1",
+            ] {
+                assert!(plan.committed(&committed_trace(&plan, bare)).is_err());
+            }
+            // Even identical requests need their own successful execution.
+            let mut stale = trace.clone();
+            let mut second = trace;
+            for record in &mut second {
+                record.sequence += 3;
+                if let Some(frame) = &mut record.presentation {
+                    frame.count += 1;
+                }
+                if let Some(checkpoint) = &mut record.checkpoint {
+                    checkpoint.id = plan.checkpoints[1].id.clone();
+                }
+            }
+            stale.extend(second);
+            assert!(plan.committed(&stale).is_err());
+            let mut fresh = proof.clone();
+            fresh["checkpoint"] = serde_json::json!(plan.checkpoints[1].id);
+            stale[3].label = Some(label(&fresh));
+            assert_eq!(plan.committed(&stale).unwrap().len(), 2);
+        }
+    }
+
+    #[test]
+    fn unsupported_predicates_are_rejected_during_plan_construction() {
+        let (source, script) = script(serde_json::json!([
+            {"action":"assert_parity_fixture"}, {"action":"finish"}
+        ]));
+        let error = NativeCheckpointPlan::derive(&source, &script).unwrap_err();
+        assert!(error.contains("native proof is unsupported"), "{error}");
     }
 
     #[test]
@@ -628,7 +683,17 @@ mod tests {
             let source = std::fs::read(&path).unwrap();
             let document = super::super::script::parse_script(&source, &path).unwrap();
             let script = super::super::script::validate_script(document, &path).unwrap();
-            let plan = NativeCheckpointPlan::derive(&source, &script).unwrap();
+            let derived = NativeCheckpointPlan::derive(&source, &script);
+            if script.steps().iter().any(|action| {
+                matches!(
+                    action,
+                    Action::ConnectNetplay(_) | Action::AssertParityFixture
+                )
+            }) {
+                assert!(derived.unwrap_err().contains("native proof is unsupported"));
+                continue;
+            }
+            let plan = derived.unwrap();
             let expected_captures = script
                 .steps()
                 .iter()

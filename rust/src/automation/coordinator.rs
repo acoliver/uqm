@@ -363,7 +363,7 @@ pub struct Coordinator {
     seed: u32,
     /// The validated script actions.
     actions: Vec<Action>,
-    native_checkpoint_identity: Option<String>,
+    native_checkpoint_plan: Option<super::native_checkpoint::NativeCheckpointPlan>,
     #[cfg(feature = "debug-process")]
     native_linked_floors: bool,
     native_trace: Option<Mutex<super::native_trace::NativeTraceJournal>>,
@@ -410,11 +410,11 @@ impl Coordinator {
             .is_some()
             .then(|| super::native_checkpoint::NativeCheckpointPlan::derive(&[], &script))
             .transpose();
-        let native_checkpoint_identity = checkpoint_plan
+        let native_checkpoint_plan = checkpoint_plan
             .as_ref()
             .ok()
             .and_then(|plan| plan.as_ref())
-            .map(|plan| plan.resolved_sha256.clone());
+            .cloned();
         // Missing input identity must stop automation before any step executes.
         let resolved_result =
             crate::automation::lifecycle::write_resolved_scenario(&output_root, &script.resolved())
@@ -443,7 +443,7 @@ impl Coordinator {
         let coord = Coordinator {
             seed: script.seed(),
             actions,
-            native_checkpoint_identity,
+            native_checkpoint_plan,
             #[cfg(feature = "debug-process")]
             native_linked_floors: script.name() == "linked-playable-v1",
             native_trace: native_trace.ok().flatten(),
@@ -2561,21 +2561,21 @@ impl Coordinator {
     }
 
     fn native_checkpoint_pending(&self, inner: &CoordInner) -> bool {
-        self.native_checkpoint_identity.is_some()
-            && self.actions[inner.checkpoint_step..inner.sched_state.step_index]
-                .iter()
-                .any(|action| super::native_checkpoint::checkpoint_class(action).is_some())
+        self.native_checkpoint_plan.as_ref().is_some_and(|plan| {
+            plan.checkpoints_between(inner.checkpoint_step..inner.sched_state.step_index)
+                .next()
+                .is_some()
+        })
     }
 
     fn commit_native_checkpoints(&self, inner: &mut CoordInner, frame: &PresentedFrame) -> bool {
-        let Some(identity) = &self.native_checkpoint_identity else {
+        let Some(plan) = &self.native_checkpoint_plan else {
             return false;
         };
-        for index in inner.checkpoint_step..inner.sched_state.step_index {
-            if super::native_checkpoint::checkpoint_class(&self.actions[index]).is_none() {
-                continue;
-            }
-            let id = super::native_checkpoint::checkpoint_id(identity, index);
+        for checkpoint in
+            plan.checkpoints_between(inner.checkpoint_step..inner.sched_state.step_index)
+        {
+            let id = checkpoint.id.clone();
             let reservation = self.runtime.commit.reserve();
             let mut record = super::capture::capture_trace_record(
                 reservation.sequence(),
