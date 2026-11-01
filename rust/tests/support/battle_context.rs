@@ -47,21 +47,3 @@ pub unsafe fn put(handle: *mut std::ffi::c_void) {
 pub fn element(handle: *mut std::ffi::c_void) -> *mut uqm_rust::engine::battle::record::ELEMENT {
     handle.cast()
 }
-/// # Safety
-/// The fixture element retains its owner through this synchronous read.
-pub unsafe fn starship(
-    element: *mut uqm_rust::engine::battle::record::ELEMENT,
-) -> *mut uqm_rust::engine::battle::record::STARSHIP {
-    (*element).pParent.cast()
-}
-/// # Safety
-/// The supplied fixture record belongs to the active battle.
-pub unsafe fn init_intersect_points(element: *mut uqm_rust::engine::battle::record::ELEMENT) {
-    uqm_rust::app::bridge::enter(|cx| {
-        let id = cx
-            .elements()
-            .id(element.cast())
-            .unwrap_or_else(|| panic!("fixture element"));
-        cx.init_intersect(id);
-    });
-}

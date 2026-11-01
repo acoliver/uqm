@@ -22,7 +22,7 @@ pub(crate) unsafe fn elements(
         return Vec::new();
     }
     walk_layout(queue, QueueKind::DisplayList, ELEMENT_LINKS)
-        .unwrap_or_else(|e| panic!("live element queue: {e}"));
+        .unwrap_or_else(|e| panic!("live display queue: {e}"));
     let mut result = Vec::new();
     #[cfg(not(test))]
     {
