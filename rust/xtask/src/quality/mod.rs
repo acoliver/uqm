@@ -325,7 +325,10 @@ fn edit_baseline(root: &Path, path: &Path, command: &str, options: &Options) -> 
     }
     if command == "budget" {
         if options.positional.len() != 3 {
-            return Err("usage: quality budget <name> <value> [--allow-growth]".into());
+            return Err("usage: quality budget <name> <value|retire> [--allow-growth]".into());
+        }
+        if options.positional[2] == "retire" {
+            return retire_budget(root, path, options);
         }
         let value = options.positional[2]
             .parse::<u64>()
@@ -350,6 +353,24 @@ fn edit_baseline(root: &Path, path: &Path, command: &str, options: &Options) -> 
         return baseline.write(path);
     }
     unreachable!("only baseline editing commands are dispatched here")
+}
+
+fn retire_budget(root: &Path, path: &Path, options: &Options) -> Result<(), String> {
+    if options.approved() || !options.scopes.is_empty() {
+        return Err("budget retirement takes no approval or scope options".into());
+    }
+    let name = &options.positional[1];
+    let mut baseline = Baseline::read(path)?;
+    if !baseline.budget.contains_key(name) {
+        return Err(format!("budget {name} is not present"));
+    }
+    let measurement = walk::measure(root, None, false)?;
+    let remaining = measurement.report(name, None)?;
+    if remaining != 0 {
+        return Err(format!("cannot retire {name}: {remaining} remaining sites"));
+    }
+    baseline.budget.remove(name);
+    baseline.write(path)
 }
 
 fn initialize_layers(
@@ -514,6 +535,49 @@ fn is_native(path: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn budget_retirement_requires_zero_remaining_sites() {
+        let root = tool::fixture_directory();
+        let source = root.path().join("rust/src/lib.rs");
+        std::fs::create_dir_all(source.parent().unwrap()).unwrap();
+        std::fs::write(
+            root.path().join("rust/Cargo.toml"),
+            "[workspace]\n[package]\nname=\"uqm\"\nversion=\"0.1.0\"\nedition=\"2021\"\n",
+        )
+        .unwrap();
+        std::fs::write(
+            root.path().join("rust/Cargo.lock"),
+            "version = 4\n[[package]]\nname = \"uqm\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
+        std::fs::write(&source, "fn f() { let _ = ElementHook::Legacy(f); }").unwrap();
+        let macros = root.path().join("rust/xtask/src/quality/macros.rs");
+        std::fs::create_dir_all(macros.parent().unwrap()).unwrap();
+        std::fs::write(macros, "const HANDLERS: &[(&str, &str)] = &[];").unwrap();
+        let path = root.path().join("rust/xtask/quality-baseline.toml");
+        let mut baseline = Baseline::default();
+        budgets::set(&mut baseline.budget, "legacy_hooks", 1, false).unwrap();
+        baseline.write(&path).unwrap();
+        let args = ["budget".into(), "legacy_hooks".into(), "retire".into()];
+        let before = std::fs::read(&path).unwrap();
+        let error = run(root.path(), &args).unwrap_err();
+        assert!(error.contains("1 remaining"), "{error}");
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        std::fs::write(&source, "").unwrap();
+        run(root.path(), &args).unwrap();
+        assert!(!Baseline::read(&path)
+            .unwrap()
+            .budget
+            .contains_key("legacy_hooks"));
+        assert!(run(root.path(), &args).unwrap_err().contains("not present"));
+        let scoped = [
+            args.as_slice(),
+            &["--scope".into(), "unsafe|module=0".into()],
+        ]
+        .concat();
+        assert!(run(root.path(), &scoped).is_err());
+    }
+
     #[test]
     fn budget_cli_and_base_comparison_require_owner_approval_for_growth() {
         let root = tool::fixture_directory();
