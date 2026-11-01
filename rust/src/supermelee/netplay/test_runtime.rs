@@ -45,7 +45,7 @@ pub fn updateRandomSeed(_state: *mut MELEE_STATE, _side: u16, _seed: u32) {
     panic!("protocol test entered live gameplay RNG");
 }
 pub fn updateMeleeSelection(
-    _state: *mut crate::ships::native::abi::GETMELEE_STATE,
+    _state: *mut crate::engine::battle::schema::GETMELEE_STATE,
     _side: u16,
     _ship: u16,
 ) -> bool {

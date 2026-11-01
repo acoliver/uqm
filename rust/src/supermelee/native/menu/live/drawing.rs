@@ -443,7 +443,7 @@ pub unsafe extern "C" fn DrawMeleeShipStrings(state: *mut MELEE_STATE, ship: u32
     } else {
         let mut master = crate::ships::master_native::master(ship as u16)
             .unwrap_or_else(|| panic!("melee master ship {ship}"));
-        InitShipStatus(&mut master.info, ptr::null_mut(), ptr::null_mut());
+        crate::ui::shipstat::init_ship_status(&mut master.info, None, ptr::null_mut());
     }
     UnbatchGraphics();
     set_context_clip_rect(&mut clip);

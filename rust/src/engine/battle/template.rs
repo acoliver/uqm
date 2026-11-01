@@ -68,6 +68,6 @@ impl RaceTemplate {
         raw.fleet.strength = self.fleet_strength;
         raw.fleet.known_loc = self.fleet_location;
         raw.race = Some(race);
-        RaceDesc::from_legacy(raw)
+        RaceDesc::from_storage(raw)
     }
 }

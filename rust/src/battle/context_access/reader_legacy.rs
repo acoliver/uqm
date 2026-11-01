@@ -1,67 +1,36 @@
 #[cfg(not(test))]
+use crate::engine::battle::link_queue;
+#[cfg(not(test))]
 use crate::engine::battle::ShipId;
-#[cfg(not(test))]
-use crate::engine::battle::{
-    link_queue,
-    record::{SHIP_INFO, STARSHIP},
-};
-#[cfg(not(test))]
-use crate::graphics::native_abi::RECT;
 #[cfg(not(test))]
 use crate::ships::native::abi::{COUNT, SHIP_FRAGMENT};
 #[cfg(not(test))]
 use std::ffi::c_void;
 
-/// # Safety
-/// The ship is a live member of one battle-side pool on the game thread.
 #[cfg(not(test))]
-#[no_mangle]
-pub unsafe extern "C" fn UpdateShipFragCrew(ship: *mut STARSHIP) {
-    // SAFETY: no caller record borrow crosses the encounter writeback.
-    unsafe {
-        let id = link_queue::identify(ship as usize);
-        crate::battle::encount_native::engine::update_ship_frag_crew(id);
-    }
-}
 /// # Safety
-/// Ship info, optional ship, and optional clip rectangle are live game-thread records.
-#[cfg(not(test))]
-#[no_mangle]
-pub unsafe extern "C" fn InitShipStatus(
-    info: *mut SHIP_INFO,
-    ship: *mut STARSHIP,
-    clip: *mut RECT,
-) {
-    // SAFETY: only the optional owner identity leaves this boundary.
-    unsafe {
-        let id = (!ship.is_null()).then(|| link_queue::identify(ship as usize));
-        crate::ui::shipstat::init_ship_status(info, id, clip);
-    }
-}
-/// # Safety
-/// Last is null or a live ship in the selected player's pool; game thread only.
-#[cfg(not(test))]
-#[no_mangle]
-pub unsafe extern "C" fn GetEncounterStarShip(last: *mut STARSHIP, player: u16) -> *mut c_void {
-    // SAFETY: the old ABI address is consumed at the picker boundary.
+/// The game thread retains the initialized battle context and all resources used by this call.
+pub unsafe fn get_encounter_star_ship(last: Option<ShipId>, player: u16) -> Option<ShipId> {
+    // SAFETY: the game-thread picker retains its selected ship through this synchronous handoff.
     unsafe {
         get_encounter_star_ship_with_picker(last, player, |player, result| {
             crate::supermelee::native::battle_picker::live::GetNextMeleeStarShip(player, result)
         })
     }
 }
+
 /// # Safety
 /// Last is null or live; a successful picker must return a live selected ship address.
 #[cfg(not(test))]
 pub unsafe fn get_encounter_star_ship_with_picker(
-    last: *mut STARSHIP,
+    last: Option<ShipId>,
     player: u16,
     pick: impl FnOnce(u16, *mut *mut c_void) -> u32,
-) -> *mut c_void {
+) -> Option<ShipId> {
     // SAFETY: the Native picker retains only an identity while the blocking UI runs.
     unsafe {
         crate::pickship::ffi::encounter_ship(
-            last.cast(),
+            last,
             player,
             crate::battle::battle_native::engine::activity(),
             pick,
@@ -77,22 +46,25 @@ pub(crate) unsafe fn computer_frame(
     ship: *mut c_void,
 ) -> u8 {
     // SAFETY: the vtable's common context prefix and opaque ship address preserve the ABI contract.
-    unsafe { super::ai_legacy::computer_intelligence(context.cast(), ship.cast()) }
+    unsafe {
+        crate::app::bridge::enter(|cx| {
+            let id = (!ship.is_null()).then(|| cx.ship_id(ship as usize));
+            super::ai_legacy::computer_intelligence(cx, &*context.cast(), id)
+        })
+    }
 }
 /// # Safety
 /// Input context and optional ship are initialized game-thread records.
 #[cfg(not(test))]
 pub(crate) unsafe fn human_frame(
     context: *mut crate::battle::battle_controls::InputContext,
-    ship: *mut c_void,
+    _ship: *mut c_void,
 ) -> u8 {
-    // SAFETY: the vtable's common context prefix and opaque ship address preserve the ABI contract.
-    unsafe { crate::battle::battle_native::frameInputHuman(context.cast(), ship.cast()) }
+    // SAFETY: the vtable's common context prefix retains its live human input context.
+    unsafe { crate::battle::battle_native::engine::frame_input_human(&*context.cast()) }
 }
 
 #[cfg(not(test))]
-pub use GetEncounterStarShip as get_encounter_star_ship;
-
 #[cfg(not(test))]
 /// # Safety
 /// The owner's fragment queue matches battle ship link order on the game thread.

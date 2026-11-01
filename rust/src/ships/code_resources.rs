@@ -2,8 +2,8 @@
 #[cfg(not(test))]
 /// # Safety
 /// Construct on the game thread while the lifecycle resources are initialized.
-pub unsafe fn descriptor(species: u32) -> crate::ships::native::abi::RACE_DESC {
+pub unsafe fn descriptor(species: u32) -> crate::engine::battle::RaceDesc {
     let race =
         crate::ships::races::race(species).unwrap_or_else(|| panic!("unknown species {species}"));
-    (race.descriptor)(&mut crate::engine::battle::World::for_legacy_lifecycle()).into_legacy()
+    (race.descriptor)(&mut crate::engine::battle::World::for_legacy_lifecycle())
 }

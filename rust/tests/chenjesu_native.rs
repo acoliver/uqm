@@ -1,4 +1,5 @@
 //! Chenjesu fixtures retain the original integer, order and RNG expectations.
+use uqm_rust::engine::battle::schema::HELEMENT;
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]
@@ -9,8 +10,7 @@ use battle::{
 };
 use std::{ffi::CStr, mem, ptr};
 use uqm_rust::ships::native::{
-    abi::*, angle_to_facing, cosine, element, facing_to_angle, frame_index, normalize_facing,
-    put_element, sine,
+    abi::*, angle_to_facing, cosine, facing_to_angle, frame_index, normalize_facing, sine,
 };
 
 unsafe fn crystal(ship: &mut Ship<'_>) -> HELEMENT {
@@ -39,7 +39,7 @@ unsafe fn doggy(ship: &mut Ship<'_>) -> *mut ELEMENT {
         ship.postprocess();
         let tail = disp_q.tail;
         assert_ne!(tail, old_tail);
-        let dog = element(tail);
+        let dog = battle::element(tail);
         (*dog).next = (*dog).current;
         dog
     }
@@ -181,7 +181,7 @@ fn crystal_launch_hold_release_and_count_truncation_match_c() {
             ship.ship_mut().ShipFacing = 7;
             at(&mut ship, 321, -654);
             let h = crystal(&mut ship);
-            let crystal = element(h);
+            let crystal = battle::element(h);
             assert_eq!((*crystal).__bindgen_anon_1.life_span, 90);
             assert_eq!((*crystal).__bindgen_anon_2.hit_points, 10);
             assert_eq!((*crystal).__bindgen_anon_3.mass_points, 6);
@@ -231,7 +231,7 @@ fn crystal_launch_hold_release_and_count_truncation_match_c() {
             hooks::invoke_element_pointer(preprocess, crystal);
             assert_eq!((*crystal).__bindgen_anon_1.life_span, 2);
             assert_eq!((*crystal).postprocess_func.unwrap().address(), release);
-            FreeElement(h);
+            battle_context::dispose(h);
         }
     })
 }
@@ -244,7 +244,7 @@ fn released_crystal_queues_eight_fragments_in_facing_order() {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_CHENJESU_ID, 1, [16, 10, 6], [4, 4]);
             let h = crystal(&mut ship);
-            let crystal = element(h);
+            let crystal = battle::element(h);
             (*crystal).next.location = POINT { x: 5000, y: 6000 };
             hooks::invoke_element_pointer((*crystal).preprocess_func.unwrap(), crystal);
             let before = queued().len();
@@ -254,7 +254,7 @@ fn released_crystal_queues_eight_fragments_in_facing_order() {
             let all = queued();
             assert_eq!(all.len(), before + 8);
             for (i, &fragment_handle) in all[before..].iter().enumerate() {
-                let fragment = element(fragment_handle);
+                let fragment = battle::element(fragment_handle);
                 let face = i as u16 * 2;
                 assert_eq!(
                     (*fragment).pParent,
@@ -297,8 +297,8 @@ fn released_crystal_queues_eight_fragments_in_facing_order() {
                 );
                 assert_eq!((*fragment).pred, all[before + i - 1]);
             }
-            assert!((*element(disp_q.tail)).succ.is_null());
-            FreeElement(h);
+            assert!((*battle::element(disp_q.tail)).succ.is_null());
+            battle_context::dispose(h);
         }
     })
 }
@@ -311,7 +311,7 @@ fn allocation_failure_preserves_weapon_count_and_partial_fragment_order() {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_CHENJESU_ID, 0, [16, 10, 6], [4, 4]);
             let crystal_handle = crystal(&mut ship);
-            let crystal = element(crystal_handle);
+            let crystal = battle::element(crystal_handle);
             hooks::invoke_element_pointer((*crystal).preprocess_func.unwrap(), crystal);
             with_rng(3, 0, || {
                 hooks::invoke_element_pointer((*crystal).postprocess_func.unwrap(), crystal)
@@ -319,16 +319,16 @@ fn allocation_failure_preserves_weapon_count_and_partial_fragment_order() {
             let all = queued();
             assert_eq!(all.len(), 3);
             assert_eq!(
-                velocity_fields(&(*element(all[1])).velocity),
+                velocity_fields(&(*battle::element(all[1])).velocity),
                 velocity_toward(64, 0)
             );
             assert_eq!(
-                velocity_fields(&(*element(all[2])).velocity),
+                velocity_fields(&(*battle::element(all[2])).velocity),
                 velocity_toward(64, 2)
             );
             let out = ship.weapon(1);
             assert_eq!(out, vec![None]);
-            FreeElement(crystal_handle);
+            battle_context::dispose(crystal_handle);
         }
     })
 }
@@ -341,7 +341,7 @@ fn crystal_collision_creates_sparkles_at_the_target_and_animates_current_frame()
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_CHENJESU_ID, 0, [16, 10, 6], [4, 4]);
             let h = crystal(&mut ship);
-            let crystal = element(h);
+            let crystal = battle::element(h);
             let mut target = PoolElement::new();
             target.playerNr = 1;
             target.current.location = POINT { x: 1234, y: -4321 };
@@ -360,7 +360,7 @@ fn crystal_collision_creates_sparkles_at_the_target_and_animates_current_frame()
                     hooks::CollisionCall::Hook,
                 )
             });
-            let sparkle = element(disp_q.tail);
+            let sparkle = battle::element(disp_q.tail);
             assert_ne!(sparkle, ship.ptr());
             assert_eq!(
                 ((*sparkle).current.location.x, (*sparkle).current.location.y),
@@ -419,7 +419,7 @@ fn crystal_collision_creates_sparkles_at_the_target_and_animates_current_frame()
                 tail,
                 "already-collided crystal creates no second blast"
             );
-            FreeElement(h);
+            battle_context::dispose(h);
         }
     })
 }
@@ -983,7 +983,7 @@ fn ai_weapon_threat_selection_and_release_cooldown_use_exact_boundaries() {
             // A matching crystal without an enemy ship terminates the backwards
             // scan, then follows the same no-crystal release path.
             let h = crystal(&mut ship);
-            put_element(h);
+            battle::put(h);
             ship.ship_mut().old_status_flags = WEAPON as u16;
             ship.ship_mut().weapon_counter = 0;
             ship.ship_mut().special_counter = 1;
@@ -1011,8 +1011,8 @@ fn ai_crystal_intercept_holds_or_releases_at_the_fragment_margin() {
             let mut enemy =
                 Ship::with_frames(&_battle, SPECIES_ID_CHENJESU_ID, 1, [16, 10, 6], [4, 4]);
             let h = crystal(&mut ship);
-            let crystal = element(h);
-            put_element(h);
+            let crystal = battle::element(h);
+            battle::put(h);
             (*crystal).current.location = POINT { x: 4000, y: 4000 };
             SetVelocityVector(&raw mut (*crystal).velocity, 64, 0);
             for (x, y, hold, immediate) in [
@@ -1022,10 +1022,14 @@ fn ai_crystal_intercept_holds_or_releases_at_the_fragment_margin() {
                 (4000, 3800, false, true),
             ] {
                 at(&mut enemy, x, y);
-                let intercept = PlotIntercept(crystal, enemy.ptr(), 90, 320);
+                let intercept =
+                    uqm_rust::engine::battle::PlotIntercept(crystal, enemy.ptr(), 90, 320);
                 if immediate {
                     assert_eq!(intercept, 1);
-                    assert_eq!(PlotIntercept(crystal, enemy.ptr(), 90, 0), 0);
+                    assert_eq!(
+                        uqm_rust::engine::battle::PlotIntercept(crystal, enemy.ptr(), 90, 0),
+                        0
+                    );
                 } else {
                     assert_eq!(intercept > 1, hold, "({x}, {y}) intercept {intercept}");
                 }
@@ -1058,15 +1062,15 @@ fn ai_scans_from_tail_skips_every_noncrystal_case_and_stops_at_the_first_match()
                 Ship::with_frames(&_battle, SPECIES_ID_CHENJESU_ID, 1, [16, 10, 6], [4, 4]);
             at(&mut enemy, 4000, 3000);
             let miss_h = crystal(&mut ship);
-            let miss = element(miss_h);
+            let miss = battle::element(miss_h);
             (*miss).current.location = POINT { x: 1000, y: 4000 };
             SetVelocityVector(&raw mut (*miss).velocity, 64, 0);
-            put_element(miss_h);
+            battle::put(miss_h);
             let hit_h = crystal(&mut ship);
-            let hit = element(hit_h);
+            let hit = battle::element(hit_h);
             (*hit).current.location = POINT { x: 4000, y: 4000 };
             SetVelocityVector(&raw mut (*hit).velocity, 64, 0);
-            put_element(hit_h);
+            battle::put(hit_h);
             let mut invalid_fixtures = Vec::new();
             for invalid in 0..5 {
                 let mut fixture = Object::new(&_battle);
@@ -1088,7 +1092,7 @@ fn ai_scans_from_tail_skips_every_noncrystal_case_and_stops_at_the_first_match()
                     4 => (*e).playerNr = 1,
                     _ => unreachable!(),
                 }
-                put_element(h);
+                battle::put(h);
                 invalid_fixtures.push(fixture);
             }
             ship.ship_mut().old_status_flags = WEAPON as u16;
@@ -1101,8 +1105,8 @@ fn ai_scans_from_tail_skips_every_noncrystal_case_and_stops_at_the_first_match()
                 0,
                 "newest matching crystal intercepts"
             );
-            RemoveElement(hit_h);
-            FreeElement(hit_h);
+            battle_context::unlink(hit_h);
+            battle_context::dispose(hit_h);
             with_rng(30, 0, || intelligence(&mut ship, &mut concerns));
             assert_eq!(
                 ship.ship_mut().ship_input_state & WEAPON as u8,

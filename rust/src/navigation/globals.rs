@@ -120,7 +120,7 @@ pub unsafe extern "C" fn InitGameStructures() -> BOOLEAN {
             copy_fleet(fleet, &master.info, &master.fleet);
         } else {
             if let Some(desc) = load_ship(ship, 0) {
-                copy_fleet(fleet, &desc.ship_info, &desc.fleet);
+                copy_fleet(fleet, desc.info(), desc.fleet());
                 unload_ship(desc, 0, 0);
             }
         }
@@ -237,7 +237,9 @@ pub unsafe fn InitGlobData() {
     ptr::write_bytes(ptr::addr_of_mut!(GlobData), 0, 1);
     GlobData.Game_state.glob_flags = flags;
     ffi::rust_init_game_state();
-    crate::battle::context_access::lifecycle::bind_display_array();
+    crate::engine::battle::access::lifecycle::bind_display_array(&mut *ptr::addr_of_mut!(
+        GlobData.Game_state
+    ));
 }
 
 /// # Safety

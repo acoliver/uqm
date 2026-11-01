@@ -4,7 +4,7 @@ mod battle;
 mod battle_context;
 
 use battle::{Battle, Object, Ship};
-use uqm_rust::ships::native::{abi::*, put_element};
+use uqm_rust::ships::native::abi::*;
 
 #[test]
 fn legacy_slylandro_receives_the_fifth_junk_concern() {
@@ -26,11 +26,12 @@ fn legacy_slylandro_receives_the_fifth_junk_concern() {
                 };
                 e.next = e.current;
             }
-            put_element(junk.ptr().cast());
+            battle::put(junk.ptr().cast());
             ship.descriptor_mut().ship_info.energy_level = 0;
             ship.ship_mut().special_counter = 0;
-            let owner = &raw mut *ship.ship_mut();
-            tactical_intelligence(std::ptr::null_mut(), owner);
+            uqm_rust::app::bridge::enter(|cx| {
+                uqm_rust::battle::cyborg_native::tactical(cx, ship.ship_id)
+            });
             assert_ne!(ship.ship_mut().ship_input_state & SPECIAL as u8, 0);
         }
     });

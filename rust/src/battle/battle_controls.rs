@@ -160,14 +160,14 @@ unsafe extern "C" fn unsafe_select_ship_computer(
     {
         selectShipComputer(
             ctx.cast::<crate::ships::native::abi::ComputerInputContext>(),
-            gms.cast::<crate::ships::native::abi::GETMELEE_STATE>(),
+            gms.cast::<crate::engine::battle::schema::GETMELEE_STATE>(),
         )
     }
     #[cfg(test)]
     {
         handler_stubs::select_ship_computer(
             ctx.cast::<crate::ships::native::abi::ComputerInputContext>(),
-            gms.cast::<crate::ships::native::abi::GETMELEE_STATE>(),
+            gms.cast::<crate::engine::battle::schema::GETMELEE_STATE>(),
         )
     }
 }
@@ -177,14 +177,14 @@ unsafe extern "C" fn unsafe_select_ship_human(ctx: *mut InputContext, gms: *mut 
     {
         selectShipHuman(
             ctx.cast::<crate::ships::native::abi::HumanInputContext>(),
-            gms.cast::<crate::ships::native::abi::GETMELEE_STATE>(),
+            gms.cast::<crate::engine::battle::schema::GETMELEE_STATE>(),
         )
     }
     #[cfg(test)]
     {
         handler_stubs::select_ship_human(
             ctx.cast::<crate::ships::native::abi::HumanInputContext>(),
-            gms.cast::<crate::ships::native::abi::GETMELEE_STATE>(),
+            gms.cast::<crate::engine::battle::schema::GETMELEE_STATE>(),
         )
     }
 }
@@ -324,9 +324,8 @@ unsafe extern "C" fn delete_network_context(context: *mut InputContext) {
 #[cfg(test)]
 mod handler_stubs {
     use super::{BattleInputState, Boolean};
-    use crate::ships::native::abi::{
-        ComputerInputContext, HumanInputContext, GETMELEE_STATE, STARSHIP,
-    };
+    use crate::engine::battle::schema::GETMELEE_STATE;
+    use crate::ships::native::abi::{ComputerInputContext, HumanInputContext, STARSHIP};
 
     pub unsafe extern "C" fn computer_intelligence(
         _context: *mut ComputerInputContext,

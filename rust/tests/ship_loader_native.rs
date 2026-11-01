@@ -122,17 +122,13 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
                 let species = i as u32 + 1;
                 let mut first = load_ship(species, 0).unwrap();
                 let second = load_ship(species, 0).unwrap();
-                assert_ne!(
-                    std::ptr::from_ref(&*first),
-                    std::ptr::from_ref(&*second),
-                    "{key:?}"
-                );
-                let original = first.ship_info.ship_cost;
-                first.ship_info.ship_cost = 254;
-                assert_eq!(second.ship_info.ship_cost, original);
+                assert_ne!(first.address(), second.address(), "{key:?}");
+                let original = first.info().ship_cost;
+                first.info_mut().ship_cost = 254;
+                assert_eq!(second.info().ship_cost, original);
                 let loaded = load_ship(species, 0).unwrap();
-                assert_eq!(loaded.ship_info.ship_cost, original);
-                assert!(loaded.race.is_some());
+                assert_eq!(loaded.info().ship_cost, original);
+                assert!(loaded.race().is_some());
                 assert_eq!(loaded.callbacks(), first.callbacks());
                 unload_ship(first, 1, 0);
                 unload_ship(second, 1, 0);
@@ -143,8 +139,8 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
             // No graphics are registered in the fixture, so required battle art fails.
             assert!(load_ship(SPECIES_ID_ARILOU_ID, 1).is_none());
             let mut loaded = load_ship(SPECIES_ID_ARILOU_ID, 0).unwrap();
-            assert!(loaded.race.is_some());
-            loaded.race = Some(&TEARDOWN_RACE);
+            assert!(loaded.race().is_some());
+            loaded.set_race(&TEARDOWN_RACE);
             uqm_rust::collections::observation::enable();
             uqm_rust::collections::observation::drain();
             unload_ship(loaded, 1, 1);

@@ -148,7 +148,7 @@ assert_c_layout!(
 
 assert_c_layout!(
     CGameState,
-    global_state::GAME_STATE {
+    crate::engine::battle::schema::GAME_STATE {
         glob_flags: glob_flags,
         crew_cost: CrewCost,
         fuel_cost: FuelCost,
@@ -430,6 +430,10 @@ pub fn read_locdata(ld: &CLocData) -> CommData {
 // ===========================================================================
 // Tests — unit-testable without C linkage
 // ===========================================================================
+
+const _: () = assert!(
+    CGameState::DISPLAY_ARRAY_OFFSET == crate::engine::battle::schema::DISPLAY_ARRAY_OFFSET
+);
 
 #[cfg(test)]
 mod tests {

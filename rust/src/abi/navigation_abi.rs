@@ -1,3 +1,5 @@
+use crate::engine::battle::schema::GETMELEE_STATE;
+use crate::engine::battle::schema::{FlashState, FlashType, InputContext};
 pub use crate::engine::battle::{CollisionHook, ElementHook};
 // Shared engine records used by the Rust runtime.
 
@@ -1038,7 +1040,6 @@ pub use crate::collections::queue::RemoveQueue;
 
 pub use crate::collections::queue::CountLinks;
 
-pub use crate::ships::native::abi::CLOCK_STATE;
 pub type HEVENT = HLINK;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -2723,7 +2724,7 @@ pub const CHECK_RESTART: _bindgen_ty_8 = 8192;
 pub const CHECK_ABORT: _bindgen_ty_8 = 16384;
 pub type _bindgen_ty_8 = ::std::os::raw::c_uint;
 pub type ACTIVITY = UWORD;
-pub use crate::ships::native::abi::GAME_STATE;
+
 pub use crate::ships::native::abi::GLOBDATA;
 extern "C" {
     pub static mut GlobData: GLOBDATA;
@@ -3124,53 +3125,10 @@ pub const FlashState_FlashState_fadeIn: FlashState = 0;
 pub const FlashState_FlashState_on: FlashState = 1;
 pub const FlashState_FlashState_fadeOut: FlashState = 2;
 pub const FlashState_FlashState_off: FlashState = 3;
-pub type FlashState = ::std::os::raw::c_uint;
+
 pub const FlashType_FlashType_highlight: FlashType = 0;
 pub const FlashType_FlashType_transition: FlashType = 1;
 pub const FlashType_FlashType_overlay: FlashType = 2;
-pub type FlashType = ::std::os::raw::c_uint;
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct FlashContext {
-    pub gfxContext: CONTEXT,
-    pub rect: RECT,
-    pub original: FRAME,
-    pub type_: FlashType,
-    pub u: FlashContext__bindgen_ty_1,
-    pub startNumer: ::std::os::raw::c_int,
-    pub endNumer: ::std::os::raw::c_int,
-    pub denom: ::std::os::raw::c_int,
-    pub fadeInTime: TimeCount,
-    pub onTime: TimeCount,
-    pub fadeOutTime: TimeCount,
-    pub offTime: TimeCount,
-    pub frameTime: TimeCount,
-    pub state: FlashState,
-    pub lastStateTime: TimeCount,
-    pub lastFrameTime: TimeCount,
-    pub started: BOOLEAN,
-    pub paused: BOOLEAN,
-    pub cache: *mut FRAME,
-    pub cacheSize: COUNT,
-    pub lastFrameIndex: COUNT,
-}
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub union FlashContext__bindgen_ty_1 {
-    pub transition: FlashContext__bindgen_ty_1__bindgen_ty_1,
-    pub overlay: FlashContext__bindgen_ty_1__bindgen_ty_2,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct FlashContext__bindgen_ty_1__bindgen_ty_1 {
-    pub first: FRAME,
-    pub final_: FRAME,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct FlashContext__bindgen_ty_1__bindgen_ty_2 {
-    pub frame: FRAME,
-}
 
 #[cfg(not(test))]
 pub use crate::ui::flash::Flash_createHighlight;
@@ -3482,9 +3440,7 @@ pub use crate::engine::battle::record::element__bindgen_ty_3;
 pub use crate::engine::battle::record::element__bindgen_ty_4;
 pub use crate::engine::battle::record::element__bindgen_ty_5;
 
-
 #[cfg(not(test))]
-pub use crate::battle::process_native::engine::RemoveElement;
 
 #[cfg(not(test))]
 pub use crate::battle::world_elements::engine::spawn_planet;
@@ -3492,11 +3448,8 @@ pub use crate::battle::world_elements::engine::spawn_planet;
 #[cfg(not(test))]
 pub use crate::battle::world_elements::engine::spawn_asteroid;
 
-
-
 #[cfg(not(test))]
 pub use crate::battle::galaxy::engine::InitGalaxy;
-
 
 pub type STATUS_FLAGS = UWORD;
 pub const SPECIES_ID_NO_ID: SPECIES_ID = 0;
@@ -3816,7 +3769,6 @@ pub type _bindgen_ty_23 = ::std::os::raw::c_uint;
 pub use crate::battle::encount_native::engine::FleetIsInfinite;
 
 #[cfg(not(test))]
-pub use crate::battle::encount_native::engine::UpdateShipFragCrew;
 extern "C" {
     pub static mut EncounterRace: SIZE;
 }
@@ -3834,8 +3786,6 @@ pub use crate::planets::starmap::FindStar;
 
 #[cfg(not(test))]
 pub use crate::planets::starmap::naming::GetClusterName;
-
-
 
 #[cfg(not(test))]
 pub use crate::ships::master_native::engine::find_master_ship;
@@ -3973,7 +3923,6 @@ pub use crate::battle::build_native::engine::StartSphereTracking;
 
 #[cfg(not(test))]
 pub use crate::battle::build_native::engine::CheckAlliance;
-
 
 #[cfg(not(test))]
 pub use crate::ships::loader_native::engine::load_ship;
@@ -4178,8 +4127,7 @@ pub const ILWRATH_DEFINED: _bindgen_ty_27 = 43;
 pub const ANDROSYNTH_DEFINED: _bindgen_ty_27 = 44;
 pub const MYCON_TRAP_DEFINED: _bindgen_ty_27 = 45;
 pub type _bindgen_ty_27 = ::std::os::raw::c_uint;
-pub use crate::ships::native::abi::getmelee_struct;
-pub type GETMELEE_STATE = getmelee_struct;
+
 pub use crate::ships::native::abi::MeleeSetup;
 pub use crate::ships::native::abi::MeleeTeam;
 pub type FleetShipIndex = COUNT;
@@ -4535,10 +4483,10 @@ pub type BattleEndReadyFunction =
     ::std::option::Option<unsafe extern "C" fn(context: *mut InputContext) -> bool>;
 pub type DeleteInputContextFunction =
     ::std::option::Option<unsafe extern "C" fn(context: *mut InputContext)>;
-pub use crate::ships::native::abi::BattleInputHandlers;
+
 pub use crate::ships::native::abi::ComputerInputContext;
 pub use crate::ships::native::abi::HumanInputContext;
-pub use crate::ships::native::abi::InputContext;
+
 pub use crate::ships::native::abi::NetworkInputContext;
 pub const ENEMY_SHIP_INDEX: _bindgen_ty_28 = 0;
 pub const CREW_OBJECT_INDEX: _bindgen_ty_28 = 1;
@@ -4548,7 +4496,6 @@ pub const FIRST_EMPTY_INDEX: _bindgen_ty_28 = 4;
 pub type _bindgen_ty_28 = ::std::os::raw::c_uint;
 
 #[cfg(not(test))]
-pub use crate::battle::cyborg_native::engine::ship_intelligence;
 
 #[cfg(not(test))]
 pub use crate::navigation::interplanetary::live::notify_others_abi as NotifyOthers;
@@ -4560,7 +4507,6 @@ pub use crate::navigation::interplanetary::live::do_missions as DoMissions;
 pub use crate::battle::process_native::engine::InitDisplayList;
 
 #[cfg(not(test))]
-pub use crate::battle::process_native::engine::SetUpElement;
 pub const SOUND_EFFECTS_GRAB_CREW: SOUND_EFFECTS = 0;
 pub const SOUND_EFFECTS_SHIP_EXPLODES: SOUND_EFFECTS = 1;
 pub const SOUND_EFFECTS_TARGET_DAMAGED_FOR_1_PT: SOUND_EFFECTS = 2;
@@ -4630,19 +4576,10 @@ pub use crate::ui::shipstat::ClearShipStatus;
 pub use crate::ui::shipstat::OutlineShipStatus;
 
 #[cfg(not(test))]
-pub use crate::ui::shipstat::InitShipStatus;
-
-#[cfg(not(test))]
 pub use crate::ui::shipstat::DeltaStatistics;
 
 #[cfg(not(test))]
 pub use crate::battle::status_native::engine::DrawBattleCrewAmount;
-
-#[cfg(not(test))]
-pub use crate::battle::status_native::engine::DeltaEnergy;
-
-#[cfg(not(test))]
-pub use crate::battle::status_native::engine::DeltaCrew;
 
 #[cfg(not(test))]
 pub use crate::battle::ship_native::engine::animation_preprocess;

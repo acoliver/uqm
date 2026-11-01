@@ -2,7 +2,7 @@
 use super::Fields;
 #[cfg(not(test))]
 use super::{custom, elements, ships::Ship, value};
-use crate::battle::context_access::observe::ElementObservation;
+use crate::engine::battle::access::observe::ElementObservation;
 #[cfg(not(test))]
 use crate::{
     automation::battle_fight::ShipState, battle::netplay::CrcState, comm::locdata::CGameState,
@@ -32,10 +32,14 @@ fn checkpoint_with_context(
         (
             &*(&raw const GlobData.Game_state).cast::<CGameState>(),
             std::array::from_fn::<_, 2, _>(|side| {
-                Ship::queue(&*crate::c_bindings::live_queues::player_ships(side))
+                Ship::queue(
+                    &*crate::engine::battle::access::live_queues::player_ships(side)
+                        .cast::<crate::comm::locdata::CQueue>(),
+                )
             }),
             display_elements(
-                &*crate::c_bindings::live_queues::display_list(),
+                &*crate::engine::battle::access::live_queues::display_list()
+                    .cast::<crate::comm::locdata::CQueue>(),
                 cx.elements(),
             ),
         )

@@ -1,3 +1,4 @@
+use crate::engine::battle::schema::{BattleInputHandlers, FlashContext, GAME_STATE};
 pub use crate::engine::battle::{ElementHook, CollisionHook};
 #[cfg(not(test))]
 pub(crate) use crate::engine::battle::record::Kernel;
@@ -1237,7 +1238,7 @@ pub unsafe fn SetVelocityComponents(velocityptr: *mut VELOCITY_DESC, dx: SIZE, d
 pub unsafe fn DeltaVelocityComponents(velocityptr: *mut VELOCITY_DESC, dx: SIZE, dy: SIZE) {
     crate::battle::velocity::DeltaVelocityComponents(velocityptr.cast(), dx, dy);
 }
-pub type HELEMENT = HLINK;
+
 pub const VIEW_STATE_VIEW_STABLE: VIEW_STATE = 0;
 pub const VIEW_STATE_VIEW_SCROLL: VIEW_STATE = 1;
 pub const VIEW_STATE_VIEW_CHANGE: VIEW_STATE = 2;
@@ -1248,15 +1249,10 @@ pub use crate::engine::battle::legacy::DisplayFreeList;
 pub use crate::engine::battle::legacy::DisplayArray;
 
 #[cfg(not(test))]
-pub use crate::battle::process_native::engine::RemoveElement;
 
 #[cfg(not(test))]
-pub use crate::battle::cyborg_native::engine::PlotIntercept;
 
 pub use crate::supermelee::netplay::checksum::crc_process_game_state as crc_processState;
-
-
-
 
 pub use crate::supermelee::netplay::netconnection::NetConnection_getStateData;
 pub unsafe fn NetConnection_setState(conn: *mut NetConnection, state: NetState) {
@@ -1350,7 +1346,6 @@ unsafe extern "C" {
 #[cfg(not(test))]
 pub use crate::supermelee::native::menu::live::drawing::Melee_flashSelection;
 
-pub use crate::navigation::abi::FlashContext;
 #[cfg(not(test))]
 pub use crate::supermelee::native::menu::live::changes::Melee_LocalChange_team;
 #[cfg(not(test))]
@@ -1452,8 +1447,7 @@ unsafe extern "C" {
 unsafe extern "C" {
     pub static mut ExitRequested: BOOLEAN;
 }
-pub type GETMELEE_STATE = getmelee_struct;
-pub type HSTARSHIP = HLINK;
+
 pub type STATUS_FLAGS = UWORD;
 pub const SPECIES_ID_NO_ID: SPECIES_ID = 0;
 pub const SPECIES_ID_ARILOU_ID: SPECIES_ID = 1;
@@ -1582,55 +1576,7 @@ pub use crate::supermelee::native::battle_picker::live::MeleeGameOver;
 
 #[cfg(not(test))]
 pub use crate::supermelee::native::battle_picker::live::GetInitialMeleeStarShips;
-#[repr(C)]
-pub struct getmelee_struct {
-    pub InputFunc:
-        ::std::option::Option<unsafe extern "C" fn(pInputState: *mut getmelee_struct) -> BOOLEAN>,
-    pub Initialized: BOOLEAN,
-    pub player: [getmelee_struct__bindgen_ty_1; 2usize],
-    pub net: Option<std::rc::Rc<dyn crate::engine::battle::net::BattleNet>>,
-}
-#[repr(C)]
-pub struct getmelee_struct__bindgen_ty_1 {
-    pub timeIn: TimeCount,
-    pub hBattleShip: HSTARSHIP,
-    pub choice: COUNT,
-    pub row: COUNT,
-    pub col: COUNT,
-    pub ships_left: COUNT,
-    pub randomIndex: COUNT,
-    pub selecting: BOOLEAN,
-    pub done: BOOLEAN,
-    pub flashContext: *mut FlashContext,
-    pub remoteSelected: BOOLEAN,
-}
-pub type BattleFrameInputFunction = ::std::option::Option<
-    unsafe extern "C" fn(
-        context: *mut InputContext,
-        StarShipPtr: *mut STARSHIP,
-    ) -> BATTLE_INPUT_STATE,
->;
-pub type SelectShipFunction = ::std::option::Option<
-    unsafe extern "C" fn(context: *mut InputContext, gms: *mut GETMELEE_STATE) -> BOOLEAN,
->;
-pub type BattleEndReadyFunction =
-    ::std::option::Option<unsafe extern "C" fn(context: *mut InputContext) -> bool>;
-pub type DeleteInputContextFunction =
-    ::std::option::Option<unsafe extern "C" fn(context: *mut InputContext)>;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct BattleInputHandlers {
-    pub frameInput: BattleFrameInputFunction,
-    pub selectShip: SelectShipFunction,
-    pub battleEndReady: BattleEndReadyFunction,
-    pub deleteContext: DeleteInputContextFunction,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct InputContext {
-    pub handlers: *mut BattleInputHandlers,
-    pub playerNr: COUNT,
-}
+
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct ComputerInputContext {
@@ -1658,17 +1604,10 @@ pub const FIRST_EMPTY_INDEX: _bindgen_ty_5 = 4;
 pub type _bindgen_ty_5 = ::std::os::raw::c_uint;
 
 #[cfg(not(test))]
-pub use crate::battle::cyborg_native::engine::tactical_intelligence;
 
 #[cfg(not(test))]
-pub use crate::battle::cyborg_native::engine::ship_intelligence;
 
 #[cfg(not(test))]
-pub use crate::battle::cyborg_native::engine::ship_weapons;
-
-
-
-
 
 unsafe extern "C" {}
 
@@ -1677,17 +1616,6 @@ pub use crate::battle::status_native::engine::InitStatusOffsets;
 
 #[cfg(not(test))]
 pub use crate::ui::shipstat::DrawCrewFuelString;
-#[cfg(not(test))]
-pub unsafe fn InitShipStatus(
-    ShipInfoPtr: *mut SHIP_INFO,
-    StarShipPtr: *mut STARSHIP,
-    pClipRect: *mut RECT,
-) {
-    crate::ui::shipstat::InitShipStatus(ShipInfoPtr.cast(), StarShipPtr.cast(), pClipRect.cast());
-}
-#[cfg(test)]
-#[cfg(not(test))]
-pub use crate::ui::shipstat::InitShipStatus;
 #[cfg(not(test))]
 pub unsafe fn DeltaStatistics(
     ShipInfoPtr: *mut SHIP_INFO,
@@ -1705,16 +1633,6 @@ pub use crate::ui::shipstat::DeltaStatistics;
 pub use crate::battle::status_native::engine::DrawBattleCrewAmount;
 
 #[cfg(not(test))]
-pub use crate::battle::status_native::engine::DrawCaptainsWindow;
-
-#[cfg(not(test))]
-pub use crate::battle::status_native::engine::DeltaEnergy;
-
-#[cfg(not(test))]
-pub use crate::battle::status_native::engine::DeltaCrew;
-
-#[cfg(not(test))]
-pub use crate::battle::status_native::engine::PreProcessStatus;
 
 #[cfg(not(test))]
 pub use crate::battle::status_native::engine::PostProcessStatus;
@@ -1765,10 +1683,8 @@ pub struct MISSILE_BLOCK {
 }
 
 #[cfg(not(test))]
-pub use crate::battle::process_native::engine::Untarget;
 
 #[cfg(not(test))]
-pub use crate::battle::ship_native::engine::GetNextStarShip;
 
 #[cfg(not(test))]
 pub use crate::battle::ship_native::engine::GetInitialStarShips;
@@ -1883,16 +1799,7 @@ pub type _bindgen_ty_6 = ::std::os::raw::c_uint;
 pub use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
 
 pub use crate::threading::legacy_abi::TaskSwitch;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct CLOCK_STATE {
-    pub day_index: BYTE,
-    pub month_index: BYTE,
-    pub year_index: COUNT,
-    pub tick_count: SIZE,
-    pub day_in_ticks: SIZE,
-    pub event_q: QUEUE,
-}
+
 pub const COMMON: _bindgen_ty_7 = 0;
 pub const CORROSIVE: _bindgen_ty_7 = 1;
 pub const BASE_METAL: _bindgen_ty_7 = 2;
@@ -3135,31 +3042,7 @@ pub const CHECK_RESTART: _bindgen_ty_13 = 8192;
 pub const CHECK_ABORT: _bindgen_ty_13 = 16384;
 pub type _bindgen_ty_13 = ::std::os::raw::c_uint;
 pub type ACTIVITY = UWORD;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct GAME_STATE {
-    pub glob_flags: BYTE,
-    pub CrewCost: BYTE,
-    pub FuelCost: BYTE,
-    pub ModuleCost: [BYTE; 20usize],
-    pub ElementWorth: [BYTE; 8usize],
-    pub DisplayArray: *mut PRIMITIVE,
-    pub CurrentActivity: ACTIVITY,
-    pub GameClock: CLOCK_STATE,
-    pub autopilot: POINT,
-    pub ip_location: POINT,
-    pub ShipStamp: STAMP,
-    pub ShipFacing: UWORD,
-    pub ip_planet: BYTE,
-    pub in_orbit: BYTE,
-    pub velocity: VELOCITY_DESC,
-    pub BattleGroupRef: DWORD,
-    pub avail_race_q: QUEUE,
-    pub npc_built_ship_q: QUEUE,
-    pub ip_group_q: QUEUE,
-    pub encounter_q: QUEUE,
-    pub built_ship_q: QUEUE,
-}
+
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct GLOBDATA {
@@ -3261,10 +3144,8 @@ pub use crate::battle::process_native::engine::RedrawQueue;
 pub use crate::battle::process_native::engine::InitDisplayList;
 
 #[cfg(not(test))]
-pub use crate::battle::process_native::engine::SetUpElement;
 
 #[cfg(not(test))]
-pub use crate::battle::process_native::engine::InsertPrim;
 pub const TFB_GFXDRIVER_SDL_OPENGL: _bindgen_ty_15 = 0;
 pub const TFB_GFXDRIVER_SDL_PURE: _bindgen_ty_15 = 1;
 pub type _bindgen_ty_15 = ::std::os::raw::c_uint;
@@ -3300,7 +3181,6 @@ extern "C" {
 pub use crate::battle::tactrans_native::engine::ship_transition;
 
 #[cfg(not(test))]
-pub use crate::battle::tactrans_native::engine::OpponentAlive;
 
 #[cfg(not(test))]
 pub use crate::battle::tactrans_native::engine::new_ship;
@@ -3309,7 +3189,6 @@ pub use crate::battle::tactrans_native::engine::new_ship;
 pub use crate::battle::tactrans_native::engine::ship_death;
 
 #[cfg(not(test))]
-
 
 #[cfg(not(test))]
 pub use crate::battle::tactrans_native::engine::flee_preprocess;
@@ -3324,19 +3203,12 @@ pub use crate::battle::tactrans_native::engine::ResetWinnerStarShip;
 pub use crate::battle::tactrans_native::engine::StopAllBattleMusic;
 
 #[cfg(not(test))]
-pub use crate::battle::tactrans_native::engine::FindAliveStarShip;
 
 #[cfg(not(test))]
-pub use crate::battle::tactrans_native::engine::GetWinnerStarShip;
 
 #[cfg(not(test))]
-pub use crate::battle::tactrans_native::engine::SetWinnerStarShip;
 
 #[cfg(not(test))]
-pub use crate::battle::tactrans_native::engine::RecordShipDeath;
-
-#[cfg(not(test))]
-pub use crate::battle::tactrans_native::engine::StartShipExplosion;
 
 pub const GLOBAL_PLAYER_NAME: _bindgen_ty_17 = -1000000;
 pub const GLOBAL_SHIP_NAME: _bindgen_ty_17 = -999999;
@@ -3738,7 +3610,6 @@ pub const ATTACK: _bindgen_ty_26 = 1;
 pub type _bindgen_ty_26 = ::std::os::raw::c_uint;
 
 #[cfg(not(test))]
-pub use crate::battle::encount_native::engine::UpdateShipFragCrew;
 unsafe extern "C" {
     pub static mut EncounterRace: SIZE;
 }
@@ -3780,16 +3651,6 @@ pub use crate::front_end::gameopt::runtime::ConfirmSaveLoad;
 #[cfg(not(test))]
 pub use crate::front_end::gameopt::runtime::GameOptions;
 #[cfg(not(test))]
-pub unsafe fn GetEncounterStarShip(
-    LastStarShipPtr: *mut STARSHIP,
-    which_player: COUNT,
-) -> HSTARSHIP {
-    crate::pickship::ffi::get_encounter_star_ship(LastStarShipPtr.cast(), which_player)
-}
-#[cfg(test)]
-#[cfg(not(test))]
-pub use crate::pickship::ffi::get_encounter_star_ship as GetEncounterStarShip;
-#[cfg(not(test))]
 pub unsafe fn DrawArmadaPickShip(draw_salvage_frame: BOOLEAN, pPickRect: *mut RECT) {
     crate::pickship::ffi::draw_armada_pick_ship(
         draw_salvage_frame as ::std::os::raw::c_int,
@@ -3806,40 +3667,9 @@ pub use crate::game_init::world_resources::live::load_gravity_well;
 #[cfg(not(test))]
 pub use crate::game_init::world_resources::live::free_gravity_well;
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 pub use crate::supermelee::netplay::netmelee::negotiateReady;
 
-
-
 pub use crate::supermelee::netplay::netmelee::waitReady;
-
-
-
-
-
 
 pub type TFB_Canvas = *mut ::std::os::raw::c_void;
 pub use crate::graphics::native_abi::tfb_image;

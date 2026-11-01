@@ -1,5 +1,7 @@
+use crate::engine::battle::schema::GETMELEE_STATE;
 // Shared engine records used by the Rust runtime.
 
+use crate::engine::battle::schema::{InputContext};
 pub use crate::math::{seed_random as TFB_SeedRandom, RandomContext};
 
 pub use super::netconnection::NetConnection_setState;
@@ -399,10 +401,6 @@ pub type BATTLE_INPUT_STATE = UBYTE;
 #[cfg(not(test))]
 pub use crate::mainloop::input_abi::live::DoInput;
 
-
-
-
-
 pub const MeleeShip_MELEE_ANDROSYNTH: MeleeShip = 0;
 pub const MeleeShip_MELEE_ARILOU: MeleeShip = 1;
 pub const MeleeShip_MELEE_CHENJESU: MeleeShip = 2;
@@ -539,9 +537,8 @@ pub use crate::supermelee::netplay::packetsenders::sendChecksum;
 
 pub use crate::supermelee::netplay::packetsenders::sendAbort;
 
-pub use crate::navigation::abi::getmelee_struct;
 pub use crate::supermelee::netplay::packetsenders::sendReset;
-pub type GETMELEE_STATE = getmelee_struct;
+
 pub type STATUS_FLAGS = UWORD;
 pub const SPECIES_ID_NO_ID: SPECIES_ID = 0;
 pub const SPECIES_ID_ARILOU_ID: SPECIES_ID = 1;
@@ -601,8 +598,7 @@ pub type BattleEndReadyFunction =
     ::std::option::Option<unsafe extern "C" fn(context: *mut InputContext) -> bool>;
 pub type DeleteInputContextFunction =
     ::std::option::Option<unsafe extern "C" fn(context: *mut InputContext)>;
-pub use crate::ships::native::abi::BattleInputHandlers;
-pub use crate::ships::native::abi::InputContext;
+
 pub use crate::ships::native::abi::NetworkInputContext;
 pub type ForEachConnectionCallback = ::std::option::Option<
     unsafe extern "C" fn(conn: *mut NetConnection, arg: *mut ::std::os::raw::c_void) -> bool,
@@ -612,10 +608,7 @@ pub use crate::supermelee::netplay::netmelee::NetMelee_getMeleeState;
 
 pub use crate::supermelee::netplay::netmelee::NetMelee_getBattleState;
 
-
-
 pub use crate::ships::native::abi::BattleStateData;
-
 
 pub use crate::supermelee::netplay::netmisc::NetMelee_connectCallback;
 
@@ -626,16 +619,6 @@ extern "C" {}
 
 pub use crate::supermelee::netplay::netsend::sendPacket;
 
-
-
-
-
-
-
-
-
-
-
 pub use crate::callback::ffi::Alarm_addAbsoluteMs;
 pub use crate::callback::ffi::Alarm_addRelativeMs;
 pub use crate::callback::ffi::Alarm_init;
@@ -645,7 +628,6 @@ pub use crate::callback::ffi::Alarm_timeBeforeNextMs;
 pub use crate::callback::ffi::Alarm_uninit;
 pub use crate::callback::ffi::Async_process;
 pub use crate::callback::ffi::Async_timeBeforeNextMs;
-
 
 pub use crate::supermelee::netplay::ready::Netplay_localReady;
 

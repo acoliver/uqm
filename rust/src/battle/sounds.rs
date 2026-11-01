@@ -73,7 +73,7 @@ pub(crate) mod engine {
 
     /// # Safety
     /// Called on the game thread with a live sound and optional live element.
-    pub(crate) unsafe fn play_sound(
+    pub(crate) unsafe fn play_sound_in_context(
         cx: &mut Cx<'_>,
         sound: SOUND,
         pos: SoundPosition,
@@ -173,7 +173,7 @@ pub(crate) mod engine {
             let sound = Kernel::current().sounds.sounds[i];
             let object = Kernel::current().sounds.objects[i];
             let pos = position(cx, object);
-            play_sound(cx, sound, pos, object, GAME_SOUND_PRIORITY as u8);
+            play_sound_in_context(cx, sound, pos, object, GAME_SOUND_PRIORITY as u8);
             i += 1;
             Kernel::current().sounds.count -= 1;
         }

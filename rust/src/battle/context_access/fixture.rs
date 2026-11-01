@@ -172,20 +172,18 @@ impl Cx<'_> {
         self.ship_pointer(id) as usize
     }
     pub(crate) fn detach_descriptor(&mut self, id: ShipId) -> Descriptor {
-        // SAFETY: this lifecycle command exclusively detaches the checked ship descriptor.
-        unsafe { Descriptor((*self.ship_pointer(id)).descriptor.take()) }
+        Descriptor(self.take_descriptor(id))
     }
     pub(crate) fn fixture_spawn(&mut self, id: ShipId) -> bool {
-        let pointer = self.ship_pointer(id);
-        // SAFETY: all command planning values have been committed before this lifecycle handoff.
-        unsafe { crate::battle::ship_native::spawn_ship(self, pointer) != 0 }
+        // SAFETY: all command planning values are committed before this lifecycle handoff.
+        unsafe { crate::battle::ship_native::spawn_ship(self, id) != 0 }
     }
     pub(crate) fn fixture_damage(&mut self, id: ElementId, damage: i16) {
         self.damage(id, damage);
     }
 }
 #[cfg(not(test))]
-pub(crate) struct Descriptor(Option<Box<RACE_DESC>>);
+pub(crate) struct Descriptor(Option<crate::engine::battle::RaceDesc>);
 #[cfg(not(test))]
 impl Descriptor {
     pub(crate) fn free(self) {

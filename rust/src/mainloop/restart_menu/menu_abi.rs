@@ -1,4 +1,5 @@
 //! Restart-menu state operations formerly supplied by rust_bridge_restart.c.
+use crate::engine::battle::schema::FlashContext;
 use crate::game_init::kernel_abi;
 use crate::ships::native::abi::*;
 use std::{ffi::c_void, ptr};

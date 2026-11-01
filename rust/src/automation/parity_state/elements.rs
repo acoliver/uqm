@@ -1,8 +1,8 @@
 //! Scalar element observation, shared by the live journal and checksum.
 use super::{value, Fields};
 use crate::automation::parity::Journal;
-use crate::battle::context_access::observe::ElementObservation;
 use crate::battle::velocity::VelocityDesc;
+use crate::engine::battle::access::observe::ElementObservation;
 
 pub(super) fn element(
     fields: &mut Fields,

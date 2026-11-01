@@ -60,33 +60,6 @@ pub mod solar_system {
     }
 }
 
-/// The running battle or flight's shared queues, borrowed on the game thread.
-#[cfg(not(test))]
-pub mod live_queues {
-    use crate::comm::locdata::CQueue;
-    use crate::{battle::battle_controls::NUM_PLAYERS, engine::battle::legacy as queues};
-    use std::ptr;
-
-    /// `&race_q[player]`, the `STARSHIP` queue of one side (`RPG_PLAYER_NUM` is
-    /// the human player's).
-    ///
-    /// # Safety
-    /// Game thread only. The caller may read the queue only while no other code is
-    /// changing it.
-    pub unsafe fn player_ships(player: usize) -> *const CQueue {
-        assert!(player < NUM_PLAYERS, "race_q has no side {player}");
-        ptr::addr_of!(queues::race_q).cast::<CQueue>().add(player)
-    }
-
-    /// `&disp_q`, the queue of every live `ELEMENT`.
-    ///
-    /// The caller may read through this pointer only on the game thread while no
-    /// other code is changing the queue.
-    pub fn display_list() -> *const CQueue {
-        ptr::addr_of!(queues::disp_q).cast()
-    }
-}
-
 /// Fail the build when a hand-written `#[repr(C)]` mirror disagrees with the
 /// Rust-owned ABI schema: total size, alignment, and for each
 /// listed field its offset and size.

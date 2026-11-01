@@ -7,7 +7,7 @@ mod battle_context;
 
 use battle::*;
 use std::{ffi::CStr, mem};
-use uqm_rust::ships::native::{abi::*, element};
+use uqm_rust::ships::native::abi::*;
 
 #[test]
 fn cruiser_descriptor_and_registered_weapon_and_defense_callbacks() {
@@ -61,7 +61,7 @@ fn cruiser_descriptor_and_registered_weapon_and_defense_callbacks() {
             SetVelocityVector(&raw mut expected, 80, 0);
             assert_eq!((*nuke).velocity.vector.width, expected.vector.width);
             assert_eq!((*nuke).velocity.vector.height, expected.vector.height);
-            FreeElement(nuke.cast());
+            battle_context::dispose(nuke.cast());
 
             // Special creates a deferred scan only when pressed and off cooldown.
             let before = queued();
@@ -73,7 +73,7 @@ fn cruiser_descriptor_and_registered_weapon_and_defense_callbacks() {
             assert_eq!(queued(), before);
             ship.ship_mut().special_counter = 0;
             ship.postprocess();
-            let defense = element(disp_q.tail);
+            let defense = battle::element(disp_q.tail);
             assert_ne!(defense, ship.ptr());
             assert_eq!(
                 (*defense).state_flags,

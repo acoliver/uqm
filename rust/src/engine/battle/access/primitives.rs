@@ -1,5 +1,9 @@
 //! Display primitive allocation and ordered link insertion.
-use super::*;
+use crate::graphics::native_abi::{COUNT, PRIMITIVE, PRIM_LINKS};
+pub(crate) const END: u16 = u16::MAX;
+pub(crate) const fn make_links(pred: COUNT, succ: COUNT) -> PRIM_LINKS {
+    pred as PRIM_LINKS | ((succ as PRIM_LINKS) << 16)
+}
 
 // The primitive pool stores only link words here. The other fields survive a
 // free/reallocate cycle until the caller writes them, as in the C macros.
@@ -20,7 +24,7 @@ pub(crate) unsafe fn free_display_prim(array: *mut PRIMITIVE, free: *mut COUNT, 
     }
 }
 
-pub(super) unsafe fn insert_prim_links(
+pub(crate) unsafe fn insert_prim_links(
     array: *mut PRIMITIVE,
     list: *mut PRIM_LINKS,
     index: COUNT,

@@ -46,7 +46,7 @@ pub const NUM_EVENTS: usize = global_state::NUM_EVENTS as usize;
 
 assert_c_layout!(
     ClockState,
-    global_state::CLOCK_STATE {
+    crate::engine::battle::schema::CLOCK_STATE {
         day_index: day_index,
         month_index: month_index,
         year_index: year_index,

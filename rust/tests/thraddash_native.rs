@@ -1,5 +1,6 @@
 //! Live Thraddash callbacks, using the engine queue, frames, velocity and RNG.
 
+use uqm_rust::engine::battle::schema::HELEMENT;
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]
@@ -7,7 +8,7 @@ mod battle_context;
 use battle::{prim, Battle, FrameSet, PoolElement, PoolShip, Ship};
 use std::{ffi::CStr, mem, ptr};
 use uqm_rust::graphics::context_abi::_GraphicsStatusFlags;
-use uqm_rust::ships::native::{abi::*, cosine, element, facing_to_angle, frame_index, sine};
+use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, frame_index, sine};
 
 unsafe fn burn(ship: &mut Ship<'_>) -> *mut ELEMENT {
     ship.ship_mut().cur_status_flags |= SPECIAL as u16;
@@ -15,7 +16,7 @@ unsafe fn burn(ship: &mut Ship<'_>) -> *mut ELEMENT {
     ship.preprocess();
     let trail = disp_q.head;
     assert_ne!(trail, head);
-    element(trail)
+    battle::element(trail)
 }
 unsafe fn fire(ship: &mut Ship<'_>) -> HELEMENT {
     ship.weapon_handles(1)[0]
@@ -26,7 +27,7 @@ unsafe fn queued() -> Vec<HELEMENT> {
     while !h.is_null() {
         result.push(h);
         assert!(result.len() <= 64, "display queue cycle");
-        h = (*element(h)).succ;
+        h = (*battle::element(h)).succ;
     }
     result
 }
@@ -201,7 +202,7 @@ fn horn_uses_next_location_exact_facing_speed_and_offsets_without_inheriting_vel
                 ship.ship_mut().ShipFacing = facing;
                 let h = with_rng(101, 0, || fire(&mut ship));
                 assert!(!h.is_null());
-                let e = element(h);
+                let e = battle::element(h);
                 let angle = facing_to_angle(i32::from(facing));
                 let vx = cosine(angle, 120 << VELOCITY_SHIFT);
                 let vy = sine(angle, 120 << VELOCITY_SHIFT);
@@ -239,7 +240,7 @@ fn horn_uses_next_location_exact_facing_speed_and_offsets_without_inheriting_vel
                 assert!((*e).pParent.is_null());
                 assert_eq!((*prim(e)).Type, gfx_object_STAMP_PRIM as u8);
                 assert_eq!(queued(), vec![ship.handle]);
-                FreeElement(h);
+                battle_context::dispose(h);
             }
         }
     })
@@ -348,7 +349,10 @@ fn boost_uses_temporary_characteristics_and_preserves_the_inertial_thrust_result
                 let mut expected = PoolElement::new();
                 *expected = *ship.ptr();
                 expected.pParent = (&raw mut *expected_ss).cast();
-                let thrust_status = inertial_thrust(&mut *expected);
+                let thrust_status = uqm_rust::app::bridge::enter(|cx| {
+                    let id = cx.elements().id((&raw mut *expected).cast()).unwrap();
+                    inertial_thrust(cx, id)
+                });
                 with_rng(7, 0, || burn(&mut ship));
                 assert_eq!(
                     velocity_fields(&(*ship.ptr()).velocity),
@@ -807,7 +811,7 @@ fn napalm_and_horn_collide_with_battle_objects_without_optional_callback_skips()
                         ship.make_opaque(2);
                         trail
                     } else {
-                        let horn = element(fire(&mut ship));
+                        let horn = battle::element(fire(&mut ship));
                         (*horn).next = (*horn).current;
                         ship.make_opaque(1);
                         horn

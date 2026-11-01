@@ -28,7 +28,7 @@ pub const BOOLEAN_TRUE: BOOLEAN = 1;
 pub type BOOLEAN = ::std::os::raw::c_uint;
 pub type QUEUE_HANDLE = *mut ::std::os::raw::c_void;
 pub type HLINK = QUEUE_HANDLE;
-pub use crate::ships::native::abi::CLOCK_STATE;
+
 pub use crate::engine::battle::record::QUEUE;
 pub type HEVENT = HLINK;
 pub use crate::navigation::abi::event;
@@ -103,7 +103,7 @@ pub type NUMBER_SPEECH = *const NUMBER_SPEECH_DESC;
 pub type LDAS_FLAGS = DWORD;
 pub use crate::ships::native::abi::LOCDATA;
 pub type ACTIVITY = UWORD;
-pub use crate::ships::native::abi::GAME_STATE;
+
 pub use crate::ships::native::abi::GLOBDATA;
 pub const ARILOU_ENTRANCE_EVENT: _bindgen_ty_10 = 0;
 pub const ARILOU_EXIT_EVENT: _bindgen_ty_10 = 1;
@@ -131,7 +131,7 @@ extern "C" {
 extern "C" {
     pub static mut ScreenHeight: ::std::os::raw::c_int;
 }
-pub type HELEMENT = HLINK;
+
 pub type ELEMENT_FLAGS = UWORD;
 pub use crate::engine::battle::record::state;
 pub use crate::engine::battle::record::state__bindgen_ty_1;
@@ -252,7 +252,7 @@ pub type PickupLifeFunction = ::std::option::Option<
         whichNode: COUNT,
     ) -> bool,
 >;
-pub use crate::navigation::abi::FlashContext;
+
 pub use crate::ships::native::abi::menu_state;
 pub use crate::ships::native::abi::GenerateFunctions;
 pub type MENU_STATE = menu_state;

@@ -128,3 +128,51 @@ impl LinkQueue<'_, Starship> {
         self.record(id).hShip
     }
 }
+
+impl LinkQueue<'_, Starship> {
+    pub(crate) fn descriptor_info(&self, id: LinkId<Starship>) -> super::super::record::SHIP_INFO {
+        self.record(id)
+            .descriptor
+            .as_deref()
+            .unwrap_or_else(|| panic!("ship descriptor"))
+            .ship_info
+    }
+    #[cfg(not(test))]
+    pub(crate) fn descriptor_fleet(
+        &self,
+        id: LinkId<Starship>,
+    ) -> super::super::record::FLEET_STUFF {
+        self.record(id)
+            .descriptor
+            .as_deref()
+            .unwrap_or_else(|| panic!("ship descriptor"))
+            .fleet
+    }
+    #[cfg(not(test))]
+    pub(crate) fn attach_descriptor(
+        &mut self,
+        id: LinkId<Starship>,
+        descriptor: super::super::RaceDesc,
+    ) {
+        self.record_mut(id).descriptor = Some(descriptor.into_storage());
+    }
+    #[cfg(not(test))]
+    pub(crate) fn take_descriptor(
+        &mut self,
+        id: LinkId<Starship>,
+    ) -> Option<super::super::RaceDesc> {
+        self.record_mut(id)
+            .descriptor
+            .take()
+            .map(super::super::RaceDesc::from_storage)
+    }
+    #[cfg(not(test))]
+    pub(crate) fn insert_before(&mut self, id: LinkId<Starship>, before: Option<LinkId<Starship>>) {
+        let raw = self.raw(id);
+        let before = before.map_or(ptr::null_mut(), |id| self.raw(id));
+        // SAFETY: callers provide allocated slots from this exclusive queue view.
+        unsafe {
+            queue::InsertQueue(&mut *self.queue, raw, before);
+        }
+    }
+}

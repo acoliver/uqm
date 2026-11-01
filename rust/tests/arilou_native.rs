@@ -529,7 +529,10 @@ fn intelligence_skips_objects_that_cannot_intercept() {
             // positive PlotIntercept result needs drawable pixel data, which the
             // engine's frame-intersection test reads; it is covered by the engine
             // rather than here.
-            assert_eq!(PlotIntercept(shell, ship, 3, 0), 0);
+            assert_eq!(
+                uqm_rust::engine::battle::PlotIntercept(shell, ship, 3, 0),
+                0
+            );
             let mut concerns = threat_concerns(shell, 3);
             let mut input = 0;
             let used = draws_consumed(taken, || {

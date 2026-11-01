@@ -135,14 +135,11 @@ fn axis_possible(t0: i32, t1: i32, velocity: i32) -> bool {
 }
 
 #[cfg(not(test))]
-pub(crate) use crate::battle::context_access::ai_legacy as engine;
 #[cfg(not(test))]
 use crate::engine::battle::{Concern, Concerns, Cx, Parent, ShipId, Subject};
 #[cfg(not(test))]
 use abi::*;
 #[cfg(not(test))]
-pub use engine::{ship_intelligence, ship_weapons, tactical_intelligence, PlotIntercept};
-
 #[cfg(not(test))]
 fn subject_owner(subject: &Subject) -> ShipId {
     match subject.parent {
@@ -785,7 +782,7 @@ fn init_cyborg(cx: &mut Cx<'_>, ship: ShipId) {
 }
 
 #[cfg(not(test))]
-pub(crate) fn tactical(cx: &mut Cx<'_>, owner: ShipId) -> BATTLE_INPUT_STATE {
+pub fn tactical(cx: &mut Cx<'_>, owner: ShipId) -> BATTLE_INPUT_STATE {
     let rd = owner;
     if cx.race_stats(rd).intelligence.maneuverability == 0 {
         init_cyborg(cx, owner);

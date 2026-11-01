@@ -1,5 +1,7 @@
 //! Battle entry, ordered input processing, and frame scheduling from `battle.c`.
 
+#[cfg(not(test))]
+use crate::engine::battle::schema::InputContext;
 use crate::ships::native::abi;
 
 const BATTLE_LEFT: u8 = 1 << 0;
@@ -164,18 +166,7 @@ pub(crate) mod engine {
     pub unsafe fn set_player_control(side: usize, value: u8) {
         *(&raw mut PlayerControl).cast::<BYTE>().add(side) = value;
     }
-    /// # Safety
-    /// `side` must be a valid player index; queue access must remain on the game thread.
-    pub unsafe fn race_queue(side: usize) -> *mut QUEUE {
-        (&raw mut race_q).cast::<QUEUE>().add(side)
-    }
-    /// # Safety
-    /// `element` must be live and its primitive index must address DisplayArray.
-    pub unsafe fn primitive(element: *mut ELEMENT) -> *mut PRIMITIVE {
-        (&raw mut DisplayArray)
-            .cast::<PRIMITIVE>()
-            .add((*element).PrimIndex as usize)
-    }
+
     pub const fn rgb15(r: u8, g: u8, b: u8) -> Color {
         Color {
             r: (r << 3) | (r >> 2),
@@ -201,69 +192,67 @@ pub(crate) mod engine {
             && game_state(BOMB_CARRIER, END_BOMB_CARRIER) == 0
     }
 
-    unsafe fn DoRunAway(battle: *mut crate::engine::battle::Battle, ship: *mut STARSHIP) {
-        let e = (*ship).hShip.cast::<ELEMENT>();
-        if (*primitive(e)).Type == gfx_object_STAMP_PRIM as u8
-            && (*e).__bindgen_anon_1.life_span == NORMAL_LIFE as u16
-            && (*e).state_flags & FINITE_LIFE as u16 == 0
-            && (*e).__bindgen_anon_3.mass_points != (MAX_SHIP_MASS * 10) as u8
-            && (*e).state_flags & APPEARING as u16 == 0
+    fn run_away(cx: &mut crate::engine::battle::Cx<'_>, ship: crate::engine::battle::ShipId) {
+        let e = cx.ship_element(ship);
+        let state = cx.element(e);
+        if cx.primitive_style(e).kind == gfx_object_STAMP_PRIM as u8
+            && state.life == NORMAL_LIFE as u16
+            && state.flags & FINITE_LIFE as u16 == 0
+            && state.mass != (MAX_SHIP_MASS * 10) as u8
+            && state.flags & APPEARING as u16 == 0
         {
-            (*battle).counters[0] = (*battle).counters[0].wrapping_sub(1);
-            (*e).__bindgen_anon_4.turn_wait = 3;
-            (*e).__bindgen_anon_5.thrust_wait = 4;
-            (*e).colorCycleIndex = 0;
-            (*e).preprocess_func = Some(ElementHook::Native(flee_preprocess));
-            (*e).__bindgen_anon_3.mass_points = (MAX_SHIP_MASS * 10) as u8;
-            (*e).velocity = mem::zeroed();
-            (*ship).cur_status_flags &= !((SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16);
-            (*primitive(e)).color = rgb15(0x0b, 0, 0);
-            (*primitive(e)).Type = gfx_object_STAMPFILL_PRIM as u8;
-            (*ship).ship_input_state = 0;
+            cx.b.counters[0] = cx.b.counters[0].wrapping_sub(1);
+            cx.element_mut(e).turn = 3;
+            cx.element_mut(e).thrust = 4;
+            cx.element_mut(e).color_cycle = 0;
+            cx.element_mut(e).pre = Some(ElementHook::Native(flee_preprocess));
+            cx.element_mut(e).mass = (MAX_SHIP_MASS * 10) as u8;
+            // SAFETY: the legacy velocity record admits the zero state.
+            cx.element_mut(e).velocity = unsafe { mem::zeroed() };
+            cx.ship_state_mut(ship).status &= !((SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16);
+            cx.primitive_style_mut(e).color = rgb15(0x0b, 0, 0);
+            cx.primitive_style_mut(e).kind = gfx_object_STAMPFILL_PRIM as u8;
+            cx.ship_state_mut(ship).input = 0;
             crate::automation::ui_observation::record_ship_escape();
         }
     }
 
-    /// # Safety
-    /// `context` must be a live human input context on the game thread.
-    #[no_mangle]
-    pub unsafe extern "C" fn frameInputHuman(
-        context: *mut HumanInputContext,
-        _ship: *mut STARSHIP,
-    ) -> BATTLE_INPUT_STATE {
-        CurrentInputToBattleInput((*context).playerNr)
+    pub(crate) fn frame_input_human(context: &HumanInputContext) -> BATTLE_INPUT_STATE {
+        // SAFETY: the game thread owns the current input state.
+        unsafe { CurrentInputToBattleInput(context.playerNr) }
     }
 
-    unsafe fn ProcessInput(
-        battle: *mut crate::engine::battle::Battle,
+    unsafe fn process_input(
+        cx: &mut crate::engine::battle::Cx<'_>,
         net: &dyn crate::engine::battle::net::BattleNet,
         order: [usize; 2],
     ) {
         net.poll();
         let can_run = RunAwayAllowed();
         for side in order {
-            let mut h = (*race_queue(side)).head;
-            while !h.is_null() {
-                let ship = h.cast::<STARSHIP>();
-                let next = (*ship).succ;
-                if !(*ship).hShip.is_null() {
-                    (*ship).control = player_control(side);
+            let mut next = cx.first_ship(side);
+            while let Some(ship) = next {
+                next = cx.next_ship(ship);
+                if cx.optional_ship_element(ship).is_some() {
+                    cx.ship_state_mut(ship).control = player_control(side);
                     let ctx = player_input(side);
-                    let mut input = ((*(*ctx).handlers).frameInput.unwrap())(ctx, ship);
+                    let pointer = cx.ship_pointer(ship).cast();
+                    let mut input = crate::app::bridge::publish(cx, || {
+                        ((*(*ctx).handlers).frameInput.unwrap())(ctx, pointer)
+                    });
                     if player_control(side) & NETWORK_CONTROL == 0 {
                         input = net.local_input(side, input);
                     }
-                    (*ship).ship_input_state =
-                        ship_input(input, (*(*ship).descriptor_ptr()).ship_info.crew_level);
-                    if (*(*ship).descriptor_ptr()).ship_info.crew_level != 0
+                    cx.ship_state_mut(ship).input =
+                        ship_input(input, cx.race_stats(ship).ship_info.crew_level);
+                    if cx.race_stats(ship).ship_info.crew_level != 0
                         && can_run
                         && side == 0
                         && input & BATTLE_ESCAPE != 0
                     {
-                        DoRunAway(battle, ship);
+                        run_away(cx, ship);
                     }
                 }
-                h = next;
             }
         }
         net.flush();
@@ -318,11 +307,13 @@ pub(crate) mod engine {
             crc_processState(&mut state);
             net.record_checksum(frame, crc_finish(&state));
         }
-        ProcessInput(
-            (*bs).battle,
-            &*net,
-            battle_input_order(&[player_control(0), player_control(1)], NETWORK_CONTROL),
-        );
+        crate::app::bridge::enter(|cx| {
+            process_input(
+                cx,
+                &*net,
+                battle_input_order(&[player_control(0), player_control(1)], NETWORK_CONTROL),
+            )
+        });
         if net.peer_count() > 0 {
             let delay = net.input_delay();
             if frame as usize >= delay
@@ -392,7 +383,9 @@ pub(crate) mod engine {
 
     unsafe fn selectAllShips(count: SIZE) -> BOOLEAN {
         if count == 1 {
-            return GetNextStarShip(ptr::null_mut(), 0);
+            return crate::app::bridge::enter(|cx| {
+                crate::battle::ship_native::engine::next_star_ship(cx, None, 0)
+            });
         }
         if player_control(0) & NETWORK_CONTROL != 0 && player_control(1) & NETWORK_CONTROL != 0 {
             crate::log_abi::log_message(2, "Only one side at a time can be network controlled.\n");
@@ -427,8 +420,8 @@ pub(crate) mod engine {
         if count != 0 {
             let mut bs: battlestate_struct = mem::zeroed();
             set_activity(activity() | IN_BATTLE as u16);
-            (*battle).counters[0] = CountLinks(race_queue(0)) as u8;
-            (*battle).counters[1] = CountLinks(race_queue(1)) as u8;
+            (*battle).counters[0] = crate::engine::battle::link_queue::ships(0).count() as u8;
+            (*battle).counters[1] = crate::engine::battle::link_queue::ships(1).count() as u8;
             rust_battle_frame_reset();
             if optMeleeScale != SCALE_STEP {
                 SetGraphicScaleMode(optMeleeScale);
@@ -498,8 +491,7 @@ pub(crate) mod engine {
 
 #[cfg(not(test))]
 pub use engine::{
-    frameInputHuman, player_input, set_player_input, Battle, BattleSong, FreeBattleSong,
-    GetPlayerOrder,
+    player_input, set_player_input, Battle, BattleSong, FreeBattleSong, GetPlayerOrder,
 };
 
 #[cfg(test)]

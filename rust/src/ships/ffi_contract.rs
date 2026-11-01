@@ -318,23 +318,7 @@ pub struct CMasterShipInfo {
 // Layout verification (P05)
 // ===========================================================================
 
-/// Layout descriptor for RACE_DESC C-side field offsets.
-/// Matches C `RACE_DESC_LAYOUT` in `rust_bridge_ships.h`.
-#[repr(C)]
-pub struct RaceDescLayout {
-    pub race_desc_size: usize,
-    pub ship_data_offset: usize,
-    pub ship_info_offset: usize,
-    pub characteristics_offset: usize,
-    /// Offset of `DATA_STUFF.ship` within DATA_STUFF (not within RACE_DESC).
-    pub ship_data_ship_offset: usize,
-    /// Offset of `SHIP_INFO.crew_level` within SHIP_INFO (not within RACE_DESC).
-    pub ship_info_crew_offset: usize,
-    /// Offset of `SHIP_INFO.max_crew` within SHIP_INFO (not within RACE_DESC).
-    pub ship_info_max_crew_offset: usize,
-    /// Offset of `CHARACTERISTIC_STUFF.ship_mass` within CHARACTERISTIC_STUFF.
-    pub characteristics_mass_offset: usize,
-}
+use crate::engine::battle::RaceDescLayout;
 
 extern "C" {
     /// Query C-side RACE_DESC field offsets for layout verification.
@@ -347,7 +331,7 @@ extern "C" {
 /// Called on the game thread with the live resources required by the Rust provider.
 #[cfg(not(test))]
 pub unsafe fn rust_bridge_get_race_desc_layout(out: *mut RaceDescLayout) {
-    crate::ships::native_adapters::rust_bridge_get_race_desc_layout(out as _);
+    out.write(crate::engine::battle::access::race_desc_layout());
 }
 
 // ===========================================================================
@@ -380,20 +364,6 @@ extern "C" {
     /// Prototype: rust_bridge_ships.h
     #[cfg(test)]
     pub fn rust_bridge_init_battle_arena() -> CSize;
-    /// Creates a battle ELEMENT for a spawned ship.
-    /// C: BOOLEAN rust_bridge_spawn_element(STARSHIP*, RACE_DESC*, BYTE mass, BYTE activity);
-    /// Prototype: rust_bridge_ships.h
-    ///
-    /// Handles both fresh allocation (hShip==0) and element reuse (hShip!=0).
-    /// Reads StarShipPtr->hShip to decide the branch. Sets preprocess/postprocess/death
-    /// callbacks, position, facing, mass, and all other element fields.
-    #[cfg(test)]
-    pub fn rust_bridge_spawn_element(
-        starship: *mut CStarship,
-        race_desc: *mut c_void,
-        ship_mass: CByte,
-        activity: CByte,
-    ) -> CBoolean;
     /// Performs full battle teardown: audio stop, space uninit, crew writeback,
     /// descriptor freeing, IN_BATTLE clearing, queue reinit.
     /// C: void rust_bridge_uninit_ships(void);
@@ -410,23 +380,6 @@ extern "C" {
 #[cfg(not(test))]
 pub unsafe fn rust_bridge_init_battle_arena() -> CSize {
     (crate::ships::native_adapters::rust_bridge_init_battle_arena()) as _
-}
-
-/// # Safety
-/// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(not(test))]
-pub unsafe fn rust_bridge_spawn_element(
-    starship: *mut CStarship,
-    race_desc: *mut c_void,
-    ship_mass: CByte,
-    activity: CByte,
-) -> CBoolean {
-    (crate::ships::native_adapters::rust_bridge_spawn_element(
-        starship as _,
-        race_desc as _,
-        ship_mass as _,
-        activity as _,
-    )) as _
 }
 
 /// # Safety

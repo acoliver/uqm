@@ -64,10 +64,7 @@ impl Battle {
 
 /// Projections into the single GlobData authority, not copies of world state.
 /// Phase 4 replaces these projections with the owned World.
-use super::record::Tracker;
-
 pub struct World {
-    pub(super) tracking: Option<Tracker>,
     pub(super) activity: NonNull<u16>,
     groups: NonNull<QUEUE>,
     pub shared_frames: [super::views::Frames; 2],
@@ -83,11 +80,9 @@ impl World {
         activity: *mut u16,
         groups: *mut QUEUE,
         shared_frames: [*mut crate::graphics::native_abi::FRAME; 2],
-        _tracking: Option<Tracker>,
     ) -> Self {
         Self {
             shared_frames: shared_frames.map(super::views::Frames),
-            tracking: _tracking,
             activity: NonNull::new(activity).unwrap_or_else(|| panic!("null activity projection")),
             groups: NonNull::new(groups).unwrap_or_else(|| panic!("null group queue projection")),
         }

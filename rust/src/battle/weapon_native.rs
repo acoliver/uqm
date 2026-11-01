@@ -28,20 +28,9 @@ fn turn_toward(facing: u16, delta: i16, random: impl FnOnce() -> u32) -> u16 {
 pub(crate) mod engine {
     use super::*;
     use crate::collections::observation::image;
-    use crate::ships::native::{
-        cosine, element, frame_count, object_cloaked, put_element, sine, starship, wrap_delta,
-    };
+    use crate::engine::battle::{Cx, ElementId, Subject};
+    use crate::ships::native::{cosine, sine, wrap_delta};
     use std::{mem, ptr};
-
-    extern "C" {
-        static mut blast: [*mut crate::graphics::native_abi::frame_desc; 3];
-    }
-
-    unsafe fn primitive(e: *mut ELEMENT) -> *mut PRIMITIVE {
-        (&raw mut DisplayArray)
-            .cast::<PRIMITIVE>()
-            .add((*e).PrimIndex as usize)
-    }
 
     pub(crate) fn collision_cb(
         cx: &mut crate::engine::battle::Cx<'_>,
@@ -53,186 +42,167 @@ pub(crate) mod engine {
         cx.weapon_collision(w, wp, h, hp);
     }
 
-    /// # Safety
-    /// Block must be live and the engine element pool initialized on the game thread.
-    pub unsafe fn initialize_laser(
-        cx: &mut crate::engine::battle::Cx<'_>,
-        block: *mut LASER_BLOCK,
-    ) -> HELEMENT {
-        let handle = cx
-            .alloc_element()
-            .map_or(ptr::null_mut(), |id| cx.elements().raw(id));
-        if !handle.is_null() {
-            let e = element(handle);
-            let b = &*block;
-            (*e).playerNr = b.sender;
-            (*e).__bindgen_anon_2.hit_points = 1;
-            (*e).__bindgen_anon_3.mass_points = 1;
-            (*e).state_flags = (APPEARING | FINITE_LIFE) as u16 | b.flags;
-            (*e).__bindgen_anon_1.life_span = 1;
-            (*e).collision_func = Some(CollisionHook::Native(collision_cb));
-            (*e).__bindgen_anon_5.blast_offset = 1;
-            let (position, velocity) =
-                projectile::laser((b.cx, b.cy), b.face, b.pixoffs, (b.ex, b.ey));
-            (*e).current.location.x = position.0;
-            (*e).current.location.y = position.1;
-            (*primitive(e)).Type = gfx_object_LINE_PRIM as u8;
-            (*primitive(e)).color = b.color;
-            image!(frame; (*e).current.image.frame, DecFrameIndex(stars_in_space));
-            image!(set; (*e).current.image.farray, &raw mut stars_in_space);
-            SetVelocityComponents(&raw mut (*e).velocity, velocity.0, velocity.1);
-        }
-        handle
+    pub fn initialize_laser(cx: &mut Cx<'_>, b: &LASER_BLOCK) -> Option<ElementId> {
+        let e = cx.alloc_element()?;
+        cx.element_mut(e).player = b.sender;
+        cx.element_mut(e).hits = 1;
+        cx.element_mut(e).mass = 1;
+        cx.element_mut(e).flags = (APPEARING | FINITE_LIFE) as u16 | b.flags;
+        cx.element_mut(e).life = 1;
+        cx.element_mut(e).collide = Some(CollisionHook::Native(collision_cb));
+        cx.element_mut(e).thrust = 1;
+        let (position, velocity) = projectile::laser((b.cx, b.cy), b.face, b.pixoffs, (b.ex, b.ey));
+        cx.element_mut(e).current.location = POINT {
+            x: position.0,
+            y: position.1,
+        };
+        cx.primitive_style_mut(e).kind = gfx_object_LINE_PRIM as u8;
+        cx.primitive_style_mut(e).color = b.color;
+        cx.set_star_image(e);
+        cx.element_mut(e)
+            .velocity
+            .set_components(i32::from(velocity.0), i32::from(velocity.1));
+        Some(e)
     }
 
-    /// # Safety
-    /// Block and frame array must be live; the element pool must be initialized.
-    pub unsafe fn initialize_missile(
-        cx: &mut crate::engine::battle::Cx<'_>,
-        block: *mut MISSILE_BLOCK,
-    ) -> HELEMENT {
-        let handle = cx
-            .alloc_element()
-            .map_or(ptr::null_mut(), |id| cx.elements().raw(id));
-        if !handle.is_null() {
-            let e = element(handle);
-            let b = &*block;
-            (*e).__bindgen_anon_2.hit_points = b.hit_points as u8 as u16;
-            (*e).__bindgen_anon_3.mass_points = b.damage as u8;
-            (*e).playerNr = b.sender;
-            (*e).state_flags = (APPEARING | FINITE_LIFE) as u16 | b.flags;
-            (*e).__bindgen_anon_1.life_span = b.life;
-            (*primitive(e)).Type = gfx_object_STAMP_PRIM as u8;
-            image!(set; (*e).current.image.farray, b.farray);
-            image!(frame; (*e).current.image.frame, SetAbsFrameIndex(*b.farray, b.index));
-            (*e).preprocess_func = b.preprocess_func;
-            (*e).collision_func = Some(CollisionHook::Native(collision_cb));
-            (*e).__bindgen_anon_5.blast_offset = b.blast_offs as u8;
-            let (position, velocity) =
-                projectile::missile((b.cx, b.cy), b.face, b.pixoffs, b.speed);
-            (*e).current.location.x = position.0;
-            (*e).current.location.y = position.1;
-            SetVelocityComponents(&raw mut (*e).velocity, velocity.0, velocity.1);
-        }
-        handle
+    pub fn initialize_missile(
+        cx: &mut Cx<'_>,
+        b: &crate::engine::battle::views::Missile,
+    ) -> Option<ElementId> {
+        let e = cx.alloc_element()?;
+        cx.element_mut(e).hits = b.hit_points as u8 as u16;
+        cx.element_mut(e).mass = b.damage as u8;
+        cx.element_mut(e).player = b.sender;
+        cx.element_mut(e).flags = (APPEARING | FINITE_LIFE) as u16 | b.flags;
+        cx.element_mut(e).life = b.life;
+        cx.primitive_style_mut(e).kind = gfx_object_STAMP_PRIM as u8;
+        cx.set_frames(e, false, b.farray);
+        let frame = cx.absolute_frame(cx.frames_first(b.farray), b.index);
+        cx.set_frame(e, false, frame);
+        cx.element_mut(e).pre = b.preprocess.map(ElementHook::Native);
+        cx.element_mut(e).collide = Some(CollisionHook::Native(collision_cb));
+        cx.element_mut(e).thrust = b.blast_offs as u8;
+        let (position, velocity) = projectile::missile((b.cx, b.cy), b.face, b.pixoffs, b.speed);
+        cx.element_mut(e).current.location = POINT {
+            x: position.0,
+            y: position.1,
+        };
+        cx.element_mut(e)
+            .velocity
+            .set_components(i32::from(velocity.0), i32::from(velocity.1));
+        Some(e)
     }
 
-    /// # Safety
-    /// Elements, collision points and their image resources must be live.
-    pub unsafe fn weapon_collision(
-        cx: &mut crate::engine::battle::Cx<'_>,
-        w: *mut ELEMENT,
-        wp: *mut POINT,
-        hit: *mut ELEMENT,
-        _hp: *mut POINT,
-    ) -> HELEMENT {
-        if (*w).state_flags & COLLISION as u16 != 0 {
-            return ptr::null_mut();
+    pub fn weapon_collision(
+        cx: &mut Cx<'_>,
+        w: ElementId,
+        wp: &mut POINT,
+        hit: ElementId,
+        _hp: &mut POINT,
+    ) -> Option<ElementId> {
+        if cx.element(w).flags & COLLISION as u16 != 0 {
+            return None;
         }
-        let damage = (*w).__bindgen_anon_3.mass_points as i16;
+        let damage = i16::from(cx.element(w).mass);
         if damage != 0
-            && ((*hit).state_flags & FINITE_LIFE as u16 != 0
-                || (*hit).__bindgen_anon_1.life_span == NORMAL_LIFE as u16)
+            && (cx.element(hit).flags & FINITE_LIFE as u16 != 0
+                || cx.element(hit).life == NORMAL_LIFE as u16)
         {
-            let id = cx
-                .elements()
-                .id(hit.cast())
-                .unwrap_or_else(|| panic!("collision target"));
-            cx.damage(id, damage);
-            if (*hit).__bindgen_anon_2.hit_points != 0 {
-                (*w).state_flags |= COLLISION as u16;
+            cx.damage(hit, damage);
+            if cx.element(hit).hits != 0 {
+                cx.element_mut(w).flags |= COLLISION as u16;
             }
         }
-        if (*hit).state_flags & FINITE_LIFE as u16 == 0
-            || ((*hit).state_flags & COLLISION as u16 == 0
-                && (*w).__bindgen_anon_2.hit_points <= (*hit).__bindgen_anon_3.mass_points as u16)
+        if cx.element(hit).flags & FINITE_LIFE as u16 == 0
+            || (cx.element(hit).flags & COLLISION as u16 == 0
+                && cx.element(w).hits <= u16::from(cx.element(hit).mass))
         {
             if damage != 0 {
-                let sound = (2 + (damage >> 1)).min(5);
-                let source = cx
-                    .elements()
-                    .id(hit.cast())
-                    .unwrap_or_else(|| panic!("weapon sound source"));
-                cx.game_sound(sound as u16, source);
+                cx.game_sound((2 + (damage >> 1)).min(5) as u16, hit);
             }
-            if (*primitive(w)).Type != gfx_object_LINE_PRIM as u8 {
-                (*w).state_flags |= DISAPPEARING as u16;
+            if cx.primitive_style(w).kind != gfx_object_LINE_PRIM as u8 {
+                cx.element_mut(w).flags |= DISAPPEARING as u16;
             }
-            (*w).__bindgen_anon_2.hit_points = 0;
-            (*w).__bindgen_anon_1.life_span = 0;
-            (*w).state_flags |= (COLLISION | NONSOLID) as u16;
-            let handle = cx
-                .alloc_element()
-                .map_or(ptr::null_mut(), |id| cx.elements().raw(id));
-            if !handle.is_null() {
-                put_element(handle);
-                let b = element(handle);
-                (*b).playerNr = (*w).playerNr;
-                (*b).state_flags = (APPEARING | FINITE_LIFE | NONSOLID) as u16;
-                (*primitive(b)).Type = gfx_object_STAMP_PRIM as u8;
-                (*b).current.location.x = (i32::from((*wp).x) << ONE_SHIFT) as i16;
-                (*b).current.location.y = (i32::from((*wp).y) << ONE_SHIFT) as i16;
-                let angle = (*w).velocity.travel_angle;
-                let offset = (*w).__bindgen_anon_5.blast_offset as i16;
-                if offset > 0 {
-                    (*b).current.location.x = (*b)
-                        .current
-                        .location
-                        .x
-                        .wrapping_add(cosine(angle as i32, i32::from(offset) << ONE_SHIFT));
-                    (*b).current.location.y = (*b)
-                        .current
-                        .location
-                        .y
-                        .wrapping_add(sine(angle as i32, i32::from(offset) << ONE_SHIFT));
-                }
-                let frames = frame_count((*w).next.image.frame);
-                let facings = angle_to_facing(FULL_CIRCLE as i32) as u16;
-                if frames <= facings {
-                    (*b).__bindgen_anon_1.life_span = 2;
-                    image!(set; (*b).current.image.farray, (&raw mut blast).cast::<FRAME>());
-                    image!(frame; (*b).current.image.frame, SetAbsFrameIndex(*(*b).current.image.farray, blast_index(angle)));
-                } else {
-                    (*b).__bindgen_anon_1.life_span = frames - facings;
-                    (*b).__bindgen_anon_4.turn_wait = 0;
-                    (*b).__bindgen_anon_5.next_turn = 0;
-                    (*b).preprocess_func = Some(ElementHook::Native(animation_preprocess));
-                    image!(copy; (*b).current.image.farray, (*w).next.image.farray);
-                    image!(frame; (*b).current.image.frame, SetAbsFrameIndex(*(*b).current.image.farray, facings));
-                }
-                return handle;
+            cx.element_mut(w).hits = 0;
+            cx.element_mut(w).life = 0;
+            cx.element_mut(w).flags |= (COLLISION | NONSOLID) as u16;
+            let b = cx.alloc_element()?;
+            cx.put(b);
+            cx.element_mut(b).player = cx.element(w).player;
+            cx.element_mut(b).flags = (APPEARING | FINITE_LIFE | NONSOLID) as u16;
+            cx.primitive_style_mut(b).kind = gfx_object_STAMP_PRIM as u8;
+            cx.element_mut(b).current.location = POINT {
+                x: (i32::from(wp.x) << ONE_SHIFT) as i16,
+                y: (i32::from(wp.y) << ONE_SHIFT) as i16,
+            };
+            let angle = cx.element(w).velocity.travel_angle;
+            let offset = i16::from(cx.element(w).thrust);
+            if offset > 0 {
+                cx.element_mut(b).current.location.x = cx
+                    .element(b)
+                    .current
+                    .location
+                    .x
+                    .wrapping_add(cosine(i32::from(angle), i32::from(offset) << ONE_SHIFT));
+                cx.element_mut(b).current.location.y = cx
+                    .element(b)
+                    .current
+                    .location
+                    .y
+                    .wrapping_add(sine(i32::from(angle), i32::from(offset) << ONE_SHIFT));
             }
+            let frames = cx.frame_count(cx.element(w).next.image.frame);
+            let facings = angle_to_facing(FULL_CIRCLE as i32) as u16;
+            if frames <= facings {
+                cx.element_mut(b).life = 2;
+                cx.set_blast_frames(b);
+                let frame = cx.absolute_frame(
+                    cx.frames_first(cx.element(b).current.image.frames),
+                    blast_index(angle),
+                );
+                cx.set_frame(b, false, frame);
+            } else {
+                cx.element_mut(b).life = frames - facings;
+                cx.element_mut(b).turn = 0;
+                cx.element_mut(b).thrust = 0;
+                cx.element_mut(b).pre = Some(ElementHook::Native(animation_preprocess));
+                cx.copy_next_frame_set(b, w);
+                let frame =
+                    cx.absolute_frame(cx.frames_first(cx.element(b).current.image.frames), facings);
+                cx.set_frame(b, false, frame);
+            }
+            return Some(b);
         }
-        ptr::null_mut()
+        None
     }
 
     /// # Safety
     /// Element must own a live ship, and stamp/status resources must be loaded.
-    #[no_mangle]
-    pub unsafe extern "C" fn ModifySilhouette(
-        e: *mut ELEMENT,
-        stamp: *mut STAMP,
+    pub unsafe fn modify_silhouette(
+        cx: &mut Cx<'_>,
+        e: ElementId,
+        stamp: &mut STAMP,
         flags: u8,
     ) -> FRAME {
         let mut object: INTERSECT_CONTROL = mem::zeroed();
         object.IntersectStamp = *stamp;
         let mut object_rect: RECT = mem::zeroed();
         GetFrameRect(object.IntersectStamp.frame, &mut object_rect);
-        let ship = starship(e);
+        let ship = cx.owner(e);
         if flags & MODIFY_IMAGE as u8 != 0 {
             let mut ship_intersect: INTERSECT_CONTROL = mem::zeroed();
-            image!(frame; ship_intersect.IntersectStamp.frame, SetAbsFrameIndex((*(*ship).descriptor_ptr()).ship_info.icons, 1));
+            image!(frame; ship_intersect.IntersectStamp.frame, SetAbsFrameIndex(cx.desc(ship).ship_info.icons, 1));
             if ship_intersect.IntersectStamp.frame.is_null() {
                 return ptr::null_mut();
             }
             let mut rect: RECT = mem::zeroed();
             GetFrameRect(ship_intersect.IntersectStamp.frame, &mut rect);
             loop {
-                object.IntersectStamp.origin.x = (i32::from(TFB_Random() as u16)
+                object.IntersectStamp.origin.x = (i32::from(cx.random() as u16)
                     % (i32::from(rect.extent.width) - i32::from(object_rect.extent.width))
                     + ((i32::from(object_rect.extent.width) - i32::from(rect.extent.width)) >> 1))
                     as i16;
-                object.IntersectStamp.origin.y = (i32::from(TFB_Random() as u16)
+                object.IntersectStamp.origin.y = (i32::from(cx.random() as u16)
                     % (i32::from(rect.extent.height) - i32::from(object_rect.extent.height))
                     + ((i32::from(object_rect.extent.height) - i32::from(rect.extent.height)) >> 1))
                     as i16;
@@ -248,7 +218,7 @@ pub(crate) mod engine {
         object.IntersectStamp.origin.y = object.IntersectStamp.origin.y.wrapping_add(
             *(&raw const Kernel::current().status_offsets)
                 .cast::<i16>()
-                .offset((*e).playerNr as isize),
+                .offset(cx.element(e).player as isize),
         );
         if flags & MODIFY_SWAP as u8 != 0 {
             object_rect.corner.x = object_rect
@@ -259,9 +229,9 @@ pub(crate) mod engine {
                 .corner
                 .y
                 .wrapping_add(object.IntersectStamp.origin.y);
-            InitShipStatus(
-                &raw mut (*(*ship).descriptor_ptr()).ship_info,
-                ship,
+            crate::ui::shipstat::init_ship_status(
+                cx.ship_info_mut(ship),
+                Some(ship),
                 &mut object_rect,
             );
         } else {
@@ -272,51 +242,52 @@ pub(crate) mod engine {
         ptr::null_mut()
     }
 
-    /// # Safety
-    /// Tracker, facing and any target/queue elements must be live engine records.
-    pub unsafe extern "C" fn track_ship(tracker: *mut ELEMENT, facing: *mut u16) -> i16 {
+    pub fn track_ship(cx: &mut Cx<'_>, id: ElementId, facing: &mut u16) -> i16 {
+        let mut subject = cx.weapon_origin(id);
+        let result = track_subject(cx, &mut subject, facing);
+        cx.set_target(id, subject.target);
+        result
+    }
+
+    pub fn track_subject(cx: &mut Cx<'_>, tracker: &mut Subject, facing: &mut u16) -> i16 {
         let mut best_distance: i16 = 0;
         let mut best_facing: i16 = -1;
-        let mut handle = (*tracker).hTarget;
-        let explicit = !handle.is_null();
-        if explicit {
-            (*tracker).hTarget = ptr::null_mut();
+        let explicit = tracker.target.is_some();
+        let mut handle = if explicit {
+            tracker.target.take()
         } else {
-            handle = disp_q.head;
-        }
-        while !handle.is_null() {
-            let target = element(handle);
+            cx.elements().head()
+        };
+        while let Some(target) = handle {
             let next = if explicit {
-                ptr::null_mut()
+                None
             } else {
-                (*target).succ
+                cx.elements().succ(target)
             };
+            let state = cx.element(target);
             if explicit
-                || ((*target).state_flags & PLAYER_SHIP as u16 != 0
-                    && (*target).playerNr != (*tracker).playerNr
-                    && (!object_cloaked(target)
-                        || (*tracker).state_flags & (PLAYER_SHIP | APPEARING) as u16
+                || (state.flags & PLAYER_SHIP as u16 != 0
+                    && state.player != tracker.player
+                    && (!cx.object_cloaked(target)
+                        || tracker.flags & (PLAYER_SHIP | APPEARING) as u16
                             == (PLAYER_SHIP | APPEARING) as u16))
             {
-                let ship = starship(target);
-                if (*target).__bindgen_anon_1.life_span != 0
-                    && (*(*ship).descriptor_ptr()).ship_info.crew_level != 0
-                {
-                    let (t, s) = if (*tracker).state_flags & PRE_PROCESS as u16 != 0 {
-                        ((*target).next.location, (*tracker).next.location)
+                let ship = cx.owner(target);
+                if state.life != 0 && cx.race_stats(ship).ship_info.crew_level != 0 {
+                    let (t, s) = if tracker.flags & PRE_PROCESS as u16 != 0 {
+                        (state.next.location, tracker.next.location)
                     } else {
-                        ((*target).current.location, (*tracker).current.location)
+                        (state.current.location, tracker.current.location)
                     };
+                    let (width, height) = cx.screen_dimensions();
                     let mut dx = wrap_delta(
                         t.x.wrapping_sub(s.x),
-                        (ScreenWidth - 64) << (ONE_SHIFT + MAX_REDUCTION),
+                        (width - 64) << (ONE_SHIFT + MAX_REDUCTION),
                     );
-                    let mut dy = wrap_delta(
-                        t.y.wrapping_sub(s.y),
-                        ScreenHeight << (ONE_SHIFT + MAX_REDUCTION),
-                    );
+                    let mut dy =
+                        wrap_delta(t.y.wrapping_sub(s.y), height << (ONE_SHIFT + MAX_REDUCTION));
                     let delta = normalize_facing(
-                        angle_to_facing(ARCTAN(dx, dy) as i32) - i32::from(*facing),
+                        angle_to_facing(crate::math::arctan(dx, dy) as i32) - i32::from(*facing),
                     ) as i16;
                     if dx < 0 {
                         dx = dx.wrapping_neg();
@@ -328,13 +299,13 @@ pub(crate) mod engine {
                     if best_distance == 0 || dx < best_distance {
                         best_distance = dx;
                         best_facing = delta;
-                        (*tracker).hTarget = handle;
+                        tracker.target = Some(target);
                     }
                 }
             }
             handle = next;
         }
-        *facing = turn_toward(*facing, best_facing, TFB_Random);
+        *facing = turn_toward(*facing, best_facing, || cx.random());
         best_facing
     }
 }

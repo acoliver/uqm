@@ -1,4 +1,5 @@
 use super::abi::*;
+use crate::engine::battle::schema::getmelee_struct;
 use std::{
     cell::{Cell, RefCell},
     ptr,

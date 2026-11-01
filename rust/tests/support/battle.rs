@@ -6,9 +6,10 @@ use std::{ffi::c_void, mem, ptr};
 use uqm_rust::battle::process_native::InitDisplayList;
 use uqm_rust::collections::queue::{AllocLink, FreeLink, InitQueue, UninitQueue};
 use uqm_rust::engine::battle::legacy::DisplayArray;
+use uqm_rust::engine::battle::schema::HELEMENT;
 use uqm_rust::{
     engine::battle::{ElementId, RaceState, ShipId},
-    ships::native::{abi::*, element, put_element},
+    ships::native::abi::*,
 };
 
 pub struct Battle {
@@ -276,7 +277,7 @@ impl<'a> Ship<'a> {
         assert!(!self.queued);
         // SAFETY: this fixture owns the unlinked, allocated slot.
         unsafe {
-            put_element(self.handle);
+            put(self.handle);
         }
         self.queued = true;
     }
@@ -468,7 +469,7 @@ impl Drop for Ship<'_> {
 }
 pub fn descriptor(species: u32) -> RACE_DESC {
     // SAFETY: the caller owns the serialized test context.
-    unsafe { uqm_rust::ships::races::descriptor(species) }
+    unsafe { uqm_rust::ships::races::descriptor(species).into_legacy() }
 }
 
 pub unsafe fn call_element(name: &str, id: ElementId) {
@@ -781,4 +782,23 @@ impl Drop for PoolElement {
             });
         }
     }
+}
+
+/// # Safety
+/// The supplied pointer is a retained fixture record owned by the active battle.
+pub unsafe fn put(handle: *mut std::ffi::c_void) {
+    // SAFETY: the fixture owns the published context and this allocated slot.
+    unsafe {
+        uqm_rust::app::bridge::enter(|cx| {
+            let id = cx
+                .elements()
+                .id(handle)
+                .unwrap_or_else(|| panic!("fixture element"));
+            cx.put(id);
+        });
+    }
+}
+/// Cast a retained fixture handle without dereferencing it.
+pub fn element(handle: *mut std::ffi::c_void) -> *mut uqm_rust::engine::battle::record::ELEMENT {
+    handle.cast()
 }

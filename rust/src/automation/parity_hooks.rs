@@ -10,15 +10,11 @@ pub(super) fn hooks() -> Vec<(usize, &'static str)> {
 fn part0() -> Vec<(usize, &'static str)> {
     vec![
         (
-            crate::battle::tactrans_native::engine::FindAliveStarShip as *const () as usize,
+            crate::battle::tactrans_native::engine::find_alive_ship as *const () as usize,
             "battle::tactrans_native::FindAliveStarShip",
         ),
         (
-            crate::battle::tactrans_native::engine::RecordShipDeath as *const () as usize,
-            "battle::tactrans_native::RecordShipDeath",
-        ),
-        (
-            crate::battle::tactrans_native::engine::StartShipExplosion as *const () as usize,
+            crate::battle::tactrans_native::engine::start_ship_explosion as *const () as usize,
             "battle::tactrans_native::StartShipExplosion",
         ),
         (
@@ -124,15 +120,15 @@ fn part2() -> Vec<(usize, &'static str)> {
 fn status() -> Vec<(usize, &'static str)> {
     vec![
         (
-            crate::battle::status_native::engine::DeltaCrew as *const () as usize,
+            crate::battle::status_native::engine::delta_crew as *const () as usize,
             "battle::status_native::DeltaCrew",
         ),
         (
-            crate::battle::status_native::engine::DeltaEnergy as *const () as usize,
+            crate::battle::status_native::engine::delta_energy as *const () as usize,
             "battle::status_native::DeltaEnergy",
         ),
         (
-            crate::battle::status_native::engine::PreProcessStatus as *const () as usize,
+            crate::battle::status_native::engine::preprocess_status as *const () as usize,
             "battle::status_native::PreProcessStatus",
         ),
         (

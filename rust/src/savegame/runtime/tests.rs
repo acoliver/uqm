@@ -6,13 +6,14 @@
 //! event checks use a real `QUEUE_TABLE` pool from `InitQueue`, the way
 //! `InitGameClock` makes it.
 
+use crate::engine::battle::schema::GAME_STATE;
 use std::mem::{offset_of, size_of};
 use std::ops::{Deref, DerefMut};
 
 use serial_test::serial;
 
 use super::*;
-use crate::c_bindings::global_state::GAME_STATE;
+
 use crate::collections::queue::{AllocLink, HLink, InitQueue, Queue, UninitQueue};
 use crate::savegame::decode::decode_save;
 use crate::savegame::types::{ClockState, Extent, Point, Velocity};

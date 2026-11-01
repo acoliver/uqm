@@ -66,8 +66,6 @@ pub(crate) mod live {
 
     use crate::ui::util::live::WaitForNoInput;
 
-    use crate::battle::sounds::engine::PlaySound;
-
     use crate::battle::sounds::engine::NotPositional;
 
     use crate::graphics::pixmap_abi::ReleaseDrawable;
@@ -169,7 +167,12 @@ pub(crate) mod live {
                         let c = getCharFromString(&mut next);
                         font_DrawText(std::ptr::from_mut(&mut t).cast());
                         if sleepy && GlobData.Game_state.CurrentActivity & (1 << 14) == 0 {
-                            PlaySound((sounds).cast(), NotPositional(), std::ptr::null_mut(), 2);
+                            crate::battle::sounds::play_sound(
+                                (sounds).cast(),
+                                NotPositional(),
+                                None,
+                                2,
+                            );
                             timeout = timeout.wrapping_add(character_delay(c, word_chars == 0));
                             if WaitForAnyButtonUntil(1, timeout, 0) != 0 {
                                 sleepy = false;

@@ -37,26 +37,18 @@ impl Cx<'_> {
     }
 
     pub fn abandon_ship(&mut self, victim: ElementId, source: ElementId, count: u16) {
-        let victim = self.elements().raw(victim).cast();
-        let source = self.elements().raw(source).cast();
-        // SAFETY: publication suspends all record borrows through crew allocation callbacks.
+        // SAFETY: the context retains the loaded ship images throughout crew placement.
         unsafe {
             crate::battle::world_elements::abandon_ship(self, victim, source, count);
         }
     }
 
     pub fn apply_inertial_thrust(&mut self, id: ElementId) -> u16 {
-        let pointer = self.elements().raw(id).cast();
-        // SAFETY: the checked ship retains its descriptor throughout thrust evaluation.
-        unsafe { crate::battle::ship_native::inertial_thrust(pointer) }
+        crate::battle::ship_native::inertial_thrust(self, id)
     }
 
     pub fn untarget(&mut self, id: ElementId) {
-        let pointer = self.elements().raw(id).cast();
-        // SAFETY: the checked element and display queue are owned by this context.
-        unsafe {
-            crate::app::bridge::publish(self, || crate::battle::process_native::Untarget(pointer));
-        }
+        crate::battle::process_native::engine::untarget(self, id);
     }
 
     pub fn spawn_laser(&mut self, laser: crate::engine::battle::views::Laser) -> Option<ElementId> {
@@ -74,13 +66,13 @@ impl Cx<'_> {
     }
 
     pub fn play_ship_sound(&mut self, ship: ShipId, index: u16, source: ElementId, priority: u8) {
-        use crate::battle::sounds::engine::{play_sound, position};
+        use crate::battle::sounds::engine::{play_sound_in_context, position};
         let sounds = self.desc(ship).ship_data.ship_sounds;
         let position = position(self, Some(source));
         // SAFETY: the ship sound bank and source remain live for immediate positional playback.
         unsafe {
             let sound = SetAbsStringTableIndex(sounds, index);
-            play_sound(self, sound, position, Some(source), priority);
+            play_sound_in_context(self, sound, position, Some(source), priority);
         }
     }
 
@@ -89,17 +81,8 @@ impl Cx<'_> {
         let owner = self.owner(dead);
         match self.winner() {
             None => {
-                let dead = self.elements().raw(dead).cast();
-                // SAFETY: the scan and winner selection run synchronously on retained ships.
-                unsafe {
-                    let alive = crate::battle::tactrans_native::engine::FindAliveStarShip(dead);
-                    let winner = if alive.is_null() {
-                        self.ship_pointer(owner)
-                    } else {
-                        alive
-                    };
-                    crate::battle::tactrans_native::engine::SetWinnerStarShip(winner);
-                }
+                let alive = crate::battle::tactrans_native::find_alive_ship(self, dead);
+                crate::battle::tactrans_native::set_winner_ship(self, Some(alive.unwrap_or(owner)));
             }
             Some(winner) if winner == owner => {
                 self.ship_state_mut(owner).status &= !(PLAY_VICTORY_DITTY as u16);
@@ -175,7 +158,6 @@ impl World {
                     (&raw mut crate::game_init::space_resources::asteroid).cast(),
                     (&raw mut crate::game_init::space_resources::explosion).cast(),
                 ],
-                Some(crate::battle::weapon_native::track_ship),
             )
         }
     }

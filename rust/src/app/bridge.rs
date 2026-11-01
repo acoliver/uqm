@@ -106,7 +106,6 @@ pub unsafe fn battle<R>(call: impl FnOnce(&mut crate::engine::battle::Battle) ->
 /// Run only on the game thread. The legacy queue and GlobData authorities must
 /// outlive the call; initialization and cleanup occur inside this boundary.
 pub unsafe fn with_battle<R>(call: impl FnOnce() -> R) -> R {
-    use crate::engine::battle::legacy::disp_q;
     use crate::engine::battle::{Battle, Cx, World};
     use crate::ships::native::abi::GlobData;
     #[cfg(not(test))]
@@ -116,19 +115,13 @@ pub unsafe fn with_battle<R>(call: impl FnOnce() -> R) -> R {
     ];
     #[cfg(test)]
     let shared_frames = [ptr::null_mut(); 2];
-    #[cfg(not(test))]
-    let tracking =
-        Some(crate::battle::weapon_native::track_ship as unsafe extern "C" fn(_, _) -> _);
-    #[cfg(test)]
-    let tracking = None;
     // SAFETY: all pointers derive directly from the authority's raw address.
     unsafe {
-        let mut battle = Battle::new(&raw mut disp_q);
+        let mut battle = Battle::for_lifecycle();
         let mut world = World::new(
             &raw mut GlobData.Game_state.CurrentActivity,
             &raw mut GlobData.Game_state.ip_group_q,
             shared_frames,
-            tracking,
         );
         let mut cx = Cx::new(&mut battle, &mut world, crate::math::random);
         publish(&mut cx, call)
@@ -161,14 +154,8 @@ mod tests {
         // SAFETY: this serialized test owns the records and projected storage for the scope.
         let mut battle = unsafe { Battle::new(&raw mut queue) };
         // SAFETY: this serialized test owns the records and projected storage for the scope.
-        let mut world = unsafe {
-            World::new(
-                &raw mut activity,
-                &raw mut groups,
-                [ptr::null_mut(); 2],
-                None,
-            )
-        };
+        let mut world =
+            unsafe { World::new(&raw mut activity, &raw mut groups, [ptr::null_mut(); 2]) };
         let mut cx = Cx::new(&mut battle, &mut world, crate::math::random);
         // SAFETY: this serialized test owns the records and projected storage for the scope.
         unsafe {
