@@ -7,5 +7,6 @@ pub extern "C" fn rust_battle_frame_reset() {
 #[no_mangle]
 pub extern "C" fn rust_battle_frame_advance() {
     crate::collections::observation::advance();
+    super::Coordinator::native_battle_frame_completed(crate::mainloop::ffi::get_current_activity());
     super::Coordinator::parity_checkpoint("battle");
 }
