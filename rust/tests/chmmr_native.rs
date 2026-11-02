@@ -261,12 +261,12 @@ fn laser_death_obeys_range_byte_gate_count_draw_and_animation() {
                         y: origin.y,
                     };
                     ship.ship_mut().special_counter = 0;
-                    let tail = disp_q.tail;
+                    let tail = battle::tail();
                     TFB_SeedRandom(seed);
                     hooks::invoke_element_pointer(death, laser);
                     assert_eq!(ship.ship_mut().special_counter, 1);
                     if gate && distance >= 112 {
-                        let spot_handle = disp_q.tail;
+                        let spot_handle = battle::tail();
                         assert_ne!(spot_handle, tail);
                         let spot = battle::element(spot_handle);
                         let magnitude = draw % ((distance as u16 + 1) - 112) + 112;
@@ -300,7 +300,7 @@ fn laser_death_obeys_range_byte_gate_count_draw_and_animation() {
                         battle_context::unlink(spot_handle);
                         battle_context::dispose(spot_handle);
                     } else {
-                        assert_eq!({ disp_q.tail }, tail);
+                        assert_eq!({ battle::tail() }, tail);
                         assert_rng_after(seed, 1);
                     }
                 }
@@ -334,7 +334,7 @@ fn muzzle_flash_requires_friendly_appearing_tail_line_and_even_cycle() {
             ship.ship_mut().ShipFacing = 5;
             ship.ship_mut().cur_status_flags = WEAPON as u16;
             ship.postprocess(); // tail is the ship itself
-            assert_eq!({ disp_q.tail }, ship.handle);
+            assert_eq!({ battle::tail() }, ship.handle);
             for (counter, player, appearing, kind, expected) in [
                 (0, 0, true, gfx_object_LINE_PRIM, true),
                 (2, 0, true, gfx_object_LINE_PRIM, true),
@@ -356,7 +356,7 @@ fn muzzle_flash_requires_friendly_appearing_tail_line_and_even_cycle() {
                 ship.postprocess();
                 assert_eq!(ship.ship_mut().special_counter, 0);
                 if expected {
-                    let flash_handle = disp_q.tail;
+                    let flash_handle = battle::tail();
                     assert_ne!(flash_handle, h);
                     let flash = battle::element(flash_handle);
                     assert_eq!(
@@ -373,7 +373,7 @@ fn muzzle_flash_requires_friendly_appearing_tail_line_and_even_cycle() {
                     battle_context::unlink(flash_handle);
                     battle_context::dispose(flash_handle);
                 } else {
-                    assert_eq!({ disp_q.tail }, h);
+                    assert_eq!({ battle::tail() }, h);
                 }
                 battle_context::unlink(h);
                 battle_context::dispose(h);
@@ -413,7 +413,7 @@ fn delayed_satellites_spawn_around_live_ship_with_three_ordered_rng_draws() {
             ];
             TFB_SeedRandom(77);
             hooks::invoke_element_pointer((*transit).death_func.unwrap(), transit);
-            let mut h = (*transit).succ;
+            let mut h = battle::succ(transit);
             for (i, index) in indices.into_iter().enumerate() {
                 assert!(!h.is_null());
                 let s = battle::element(h);
@@ -433,7 +433,7 @@ fn delayed_satellites_spawn_around_live_ship_with_three_ordered_rng_draws() {
                 assert!((*s).postprocess_func.is_some());
                 assert!((*s).death_func.is_some());
                 assert!((*s).collision_func.is_some());
-                h = (*s).succ;
+                h = battle::succ(s);
             }
             assert!(h.is_null());
             assert_rng_after(77, 3);
@@ -452,7 +452,7 @@ fn spawn_and_preprocess_allocation_failures_do_not_draw_rng_or_rearm() {
             let death = (*battle::element(delay)).death_func.unwrap();
             TFB_SeedRandom(88);
             hooks::invoke_element_pointer(death, battle::element(delay)); // only one free slot
-            assert_eq!((*battle::element(disp_q.tail)).hits, 10);
+            assert_eq!((*battle::element(battle::tail())).hits, 10);
             assert_rng_after(88, 1);
             TFB_SeedRandom(88);
             hooks::invoke_element_pointer(death, battle::element(delay));
@@ -463,13 +463,13 @@ fn spawn_and_preprocess_allocation_failures_do_not_draw_rng_or_rearm() {
             assert_rng_after(88, 0);
             ship.ship_mut().hShip = ship.handle;
             ship.descriptor_mut().race_callbacks.pre = uqm_rust::engine::battle::Selection::Default;
-            let tail = disp_q.tail;
+            let tail = battle::tail();
             ship.preprocess();
             assert!(matches!(
                 ship.descriptor_mut().race_callbacks.pre,
                 uqm_rust::engine::battle::Selection::Disabled
             ));
-            assert_eq!({ disp_q.tail }, tail);
+            assert_eq!({ battle::tail() }, tail);
         }
     })
 }
@@ -614,7 +614,7 @@ unsafe fn target(satellite: *mut ELEMENT, dx: i16, dy: i16, hp: u16) -> PoolElem
 
 unsafe fn defense(satellite: *mut ELEMENT) -> HELEMENT {
     hooks::invoke_element_pointer((*satellite).postprocess_func.unwrap(), satellite);
-    let h = disp_q.tail;
+    let h = battle::tail();
     assert_eq!(
         (*battle::element(h)).target,
         Some(battle::id(satellite.cast()))
@@ -645,14 +645,14 @@ fn point_defense_uses_backward_weakest_nearest_and_stable_tie_order() {
             // An even weaker candidate appended after the defense is not traversed.
             let mut after_fixture = target(s, 0, 4, 0);
             let after: HELEMENT = (&raw mut *after_fixture).cast();
-            let before = disp_q.tail;
+            let before = battle::tail();
             TFB_SeedRandom(12);
             hooks::invoke_element_pointer(
                 (*battle::element(d)).death_func.unwrap(),
                 battle::element(d),
             );
-            assert_ne!({ disp_q.tail }, before);
-            let beam = battle::element(disp_q.tail);
+            assert_ne!({ battle::tail() }, before);
+            let beam = battle::element(battle::tail());
             assert_eq!(point((*beam).current.location), point((*s).next.location));
             assert_eq!(velocity(beam), (-40 << VELOCITY_SHIFT, 0));
             assert_eq!(rgba((*prim(beam)).color), [0, 8, 255, 255]);
@@ -738,7 +738,7 @@ fn point_defense_respects_collision_cloak_range_and_full_width_hitpoints() {
                     battle::element(d),
                 );
                 assert_eq!(
-                    disp_q.tail != d,
+                    battle::tail() != d,
                     shoot,
                     "dx {dx} dy {dy} hp {hp} exclusion {exclusion}"
                 );
@@ -759,12 +759,12 @@ fn satellite_defense_wait_underflows_on_dead_zero_wait_and_handles_exhaustion() 
             let s = battle::element(satellites[0]);
             let post = (*s).postprocess_func.unwrap();
             (*s).thrust = 2;
-            let tail = disp_q.tail;
+            let tail = battle::tail();
             hooks::invoke_element_pointer(post, s);
             assert_eq!((*s).thrust, 1);
             hooks::invoke_element_pointer(post, s);
             assert_eq!((*s).thrust, 0);
-            assert_eq!({ disp_q.tail }, tail);
+            assert_eq!({ battle::tail() }, tail);
             (*s).life = 0;
             hooks::invoke_element_pointer(post, s);
             assert_eq!((*s).thrust, 255);
@@ -772,7 +772,7 @@ fn satellite_defense_wait_underflows_on_dead_zero_wait_and_handles_exhaustion() 
             (*s).thrust = 0;
             let held = exhaust();
             hooks::invoke_element_pointer(post, s);
-            assert_eq!({ disp_q.tail }, tail);
+            assert_eq!({ battle::tail() }, tail);
             assert_eq!((*s).thrust, 0);
             for h in held {
                 battle_context::dispose(h);
@@ -785,7 +785,7 @@ fn satellite_defense_wait_underflows_on_dead_zero_wait_and_handles_exhaustion() 
                 (*battle::element(d)).death_func.unwrap(),
                 battle::element(d),
             );
-            assert_eq!({ disp_q.tail }, d);
+            assert_eq!({ battle::tail() }, d);
             assert_eq!((*s).thrust, 0);
             for h in held {
                 battle_context::dispose(h);
@@ -830,7 +830,7 @@ fn tractor_applies_mass_division_speed_flags_and_head_inserted_blue_shadows() {
                 assert_eq!(ship.descriptor_mut().ship_info.energy_level, 41);
                 assert_eq!(ship.ship_mut().energy_counter, 1);
                 assert_eq!(ship.ship_mut().special_counter, 0);
-                let mut h = disp_q.head;
+                let mut h = battle::head();
                 for (offset, blue) in [(60, 57), (42, 74), (28, 99), (17, 115), (8, 132)] {
                     let shadow = battle::element(h);
                     assert_ne!(h, ship.handle);
@@ -856,10 +856,10 @@ fn tractor_applies_mass_division_speed_flags_and_head_inserted_blue_shadows() {
                     assert_eq!(velocity(shadow), (vx, 0));
                     assert_eq!((*prim(shadow)).Type, gfx_object_STAMPFILL_PRIM as u8);
                     assert_eq!(rgba((*prim(shadow)).color), [0, 0, blue, 255]);
-                    h = (*shadow).succ;
+                    h = battle::succ(shadow);
                 }
                 assert_eq!(h, ship.handle);
-                assert_eq!({ disp_q.tail }, enemy.handle);
+                assert_eq!({ battle::tail() }, enemy.handle);
                 assert_rng_after(99, 0);
             }
         }
@@ -895,13 +895,13 @@ fn tractor_energy_target_gravity_and_allocation_boundaries() {
                 ship.ship_mut().cur_status_flags = SPECIAL as u16;
                 ship.ship_mut().special_counter = 3;
                 let held = if exhaust_queue { exhaust() } else { Vec::new() };
-                let tail = disp_q.tail;
+                let tail = battle::tail();
                 TFB_SeedRandom(22);
                 ship.postprocess();
                 assert_eq!(ship.ship_mut().special_counter, 0);
                 assert_eq!(ship.descriptor_mut().ship_info.energy_level, 0);
-                assert_eq!({ disp_q.tail }, tail);
-                assert_eq!({ disp_q.head }, ship.handle);
+                assert_eq!({ battle::tail() }, tail);
+                assert_eq!({ battle::head() }, ship.handle);
                 let affected = energy != 0 && mass < 100 && has_target;
                 assert_eq!(
                     velocity(enemy.ptr()),
@@ -1001,11 +1001,11 @@ fn tractor_tracking_consumes_only_the_half_turn_rng_before_shadow_allocation() {
                 assert_eq!(velocity(enemy.ptr()), (0, -38));
                 assert_eq!(ship.descriptor_mut().ship_info.energy_level, 41);
                 // Two free slots produce offsets 8 then 17; later allocations fail.
-                let second = battle::element(disp_q.head);
-                let first = battle::element((*second).succ);
+                let second = battle::element(battle::head());
+                let first = battle::element(battle::succ(second));
                 assert_eq!(point((*second).current.location), (4000, 5000 - 17 * 4));
                 assert_eq!(point((*first).current.location), (4000, 5000 - 8 * 4));
-                assert_eq!((*first).succ, ship.handle);
+                assert_eq!(battle::succ(first), ship.handle);
                 assert_rng_after(seed, 1);
             }
         }
@@ -1033,13 +1033,13 @@ fn laser_death_preserves_size_subtraction_and_unsigned_count_magnitude() {
                 let magnitude = (i32::from(draw)
                     % (i32::from(square_root(distance_squared)) + 1 - 112)
                     + 112) as COUNT;
-                let tail = disp_q.tail;
+                let tail = battle::tail();
                 TFB_SeedRandom(seed);
                 hooks::invoke_element_pointer((*laser).death_func.unwrap(), laser);
                 assert_eq!(ship.ship_mut().special_counter, 255);
                 if gate {
                     saw_large_magnitude |= magnitude > i16::MAX as u16;
-                    let spot_handle = disp_q.tail;
+                    let spot_handle = battle::tail();
                     let spot = battle::element(spot_handle);
                     let a = i32::from(ARCTAN(i16::MIN, i16::MIN));
                     assert_eq!(
@@ -1053,7 +1053,7 @@ fn laser_death_preserves_size_subtraction_and_unsigned_count_magnitude() {
                     battle_context::unlink(spot_handle);
                     battle_context::dispose(spot_handle);
                 } else {
-                    assert_eq!({ disp_q.tail }, tail);
+                    assert_eq!({ battle::tail() }, tail);
                     assert_rng_after(seed, 1);
                 }
             }
@@ -1075,7 +1075,7 @@ fn unrequested_special_and_failed_muzzle_allocation_only_reset_cycle() {
             ship.postprocess();
             assert_eq!(ship.ship_mut().special_counter, 0);
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 42);
-            assert_eq!({ disp_q.head }, ship.handle);
+            assert_eq!({ battle::head() }, ship.handle);
             assert_rng_after(81, 0);
             let h = laser(&mut ship);
             battle::put(h);
@@ -1084,7 +1084,7 @@ fn unrequested_special_and_failed_muzzle_allocation_only_reset_cycle() {
             ship.ship_mut().special_counter = 2;
             ship.postprocess();
             assert_eq!(ship.ship_mut().special_counter, 0);
-            assert_eq!({ disp_q.tail }, h);
+            assert_eq!({ battle::tail() }, h);
             for h in held {
                 battle_context::dispose(h);
             }
@@ -1101,20 +1101,20 @@ unsafe fn laser(ship: &mut Ship<'_>) -> HELEMENT {
 }
 unsafe fn delayed_spawn(ship: &mut Ship<'_>) -> HELEMENT {
     ship.preprocess();
-    disp_q.tail
+    battle::tail()
 }
 unsafe fn satellites(ship: &mut Ship<'_>) -> Vec<HELEMENT> {
     let delay = delayed_spawn(ship);
     let death = (*battle::element(delay)).death_func.unwrap();
     battle_context::unlink(delay);
     battle_context::dispose(delay);
-    let tail = disp_q.tail;
+    let tail = battle::tail();
     hooks::invoke_element_pointer(death, ship.ptr());
-    let mut h = (*battle::element(tail)).succ;
+    let mut h = battle::succ(tail);
     let mut out = Vec::new();
     while !h.is_null() {
         out.push(h);
-        h = (*battle::element(h)).succ;
+        h = battle::succ(h);
     }
     out
 }

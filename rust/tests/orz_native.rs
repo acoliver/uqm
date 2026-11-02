@@ -37,7 +37,7 @@ impl OrzFixture for Ship<'_> {
         (*self.ptr()).state_flags |= APPEARING as u16;
         self.preprocess();
         (*self.ptr()).state_flags &= !(APPEARING as u16);
-        let turret = battle::element((*self.ptr()).succ);
+        let turret = battle::element(battle::succ(self.ptr()));
         assert!(!turret.is_null());
         assert_eq!(
             (*turret).parent,
@@ -47,24 +47,24 @@ impl OrzFixture for Ship<'_> {
     }
 
     unsafe fn tick_turret(&mut self) -> *mut ELEMENT {
-        let old = (*self.ptr()).succ;
+        let old = battle::succ(self.ptr());
         let e = battle::element(old);
         (*e).life = 0;
         hooks::invoke_element_pointer((*e).postprocess_func.unwrap(), e);
         battle_context::unlink(old);
         battle_context::dispose(old);
-        battle::element((*self.ptr()).succ)
+        battle::element(battle::succ(self.ptr()))
     }
 
     unsafe fn launch(&mut self) -> *mut ELEMENT {
         self.ship_mut().cur_status_flags = (SPECIAL | WEAPON) as u16;
         self.ship_mut().special_counter = 0;
-        let tail = disp_q.tail;
+        let tail = battle::tail();
         // Earlier objects have completed their appearing frame before this shot.
         (*battle::element(tail)).state_flags &= !(APPEARING as u16);
         self.tick_turret();
-        assert_ne!({ disp_q.tail }, tail);
-        let marine = battle::element(disp_q.tail);
+        assert_ne!({ battle::tail() }, tail);
+        let marine = battle::element(battle::tail());
         assert_eq!(
             (*marine).collision_func.unwrap().address(),
             marine_collision as *const () as usize
@@ -90,16 +90,16 @@ unsafe fn prim(e: *mut ELEMENT) -> *mut PRIMITIVE {
 
 unsafe fn queued() -> Vec<HELEMENT> {
     let mut result = Vec::new();
-    let mut h = disp_q.head;
+    let mut h = battle::head();
     let mut previous = ptr::null_mut();
     while !h.is_null() {
-        assert_eq!((*battle::element(h)).pred, previous);
+        assert_eq!(battle::pred(h), previous);
         result.push(h);
         assert!(result.len() <= 255, "display queue cycle");
         previous = h;
-        h = (*battle::element(h)).succ;
+        h = battle::succ(h);
     }
-    assert_eq!(previous, { disp_q.tail });
+    assert_eq!(previous, { battle::tail() });
     result
 }
 
@@ -480,7 +480,7 @@ fn turret_replacement_decrements_wait_once_rotates_and_updates_firing_quadrant()
             ship.ship_mut().cur_status_flags = 0;
             for face in 0..16 {
                 ship.ship_mut().ShipFacing = face;
-                let old = battle::element((*ship.ptr()).succ);
+                let old = battle::element(battle::succ(ship.ptr()));
                 (*old).thrust = 0;
                 ship.tick_turret();
                 let expected = (FIRES_FORE << (normalize_facing(i32::from(face) + 2) / 4)) as u16;
@@ -505,7 +505,7 @@ fn muzzle_flash_requires_an_appearing_friendly_stamp_and_animates_from_current()
             let h = ship.missile();
             battle::put(h);
             let turret = with_rng(20, 0, || ship.tick_turret());
-            let flash = battle::element(disp_q.tail);
+            let flash = battle::element(battle::tail());
             assert_ne!(flash, battle::element(h));
             assert_eq!((*flash).life, 4);
             assert_eq!((*flash).current.image.frame, ship.raw_frame(2, 16));
@@ -626,7 +626,7 @@ fn marine_limit_counts_only_live_matching_nonfinite_nondisappearing_elements() {
             }
             assert_eq!(ship.descriptor_mut().ship_info.crew_level, 8);
             ship.ship_mut().special_counter = 0;
-            (*battle::element(disp_q.tail)).state_flags &= !(APPEARING as u16);
+            (*battle::element(battle::tail())).state_flags &= !(APPEARING as u16);
             let before = queued().len();
             with_rng(5, 0, || ship.tick_turret());
             assert_eq!(queued().len(), before);
@@ -1043,7 +1043,7 @@ fn marine_thrust_restores_owner_state_and_inserts_preprocessed_five_color_ion_tr
                 assert_eq!(ship.descriptor_mut().characteristics.thrust_increment, 5);
             }
             assert_eq!((*marine).thrust, (SHIP_AT_MAX_SPEED >> 6) as BYTE);
-            let ion = battle::element(disp_q.head);
+            let ion = battle::element(battle::head());
             assert_eq!((*ion).playerNr, NEUTRAL_PLAYER_NUM as SIZE);
             assert_eq!(
                 (*ion).parent,
@@ -1286,7 +1286,7 @@ fn ai_launch_budget_obeys_crew_point_defense_maneuverability_turn_and_marine_cou
             enemy.at(4500, 4000);
             let a = ship.launch();
             let b = ship.launch();
-            let turret = battle::element((*ship.ptr()).succ);
+            let turret = battle::element(battle::succ(ship.ptr()));
             (*turret).turn = 1;
             ship.ship_mut().weapon_counter = 1;
             for (counter, crew, defense, maneuver, turn, active, expected) in [
@@ -1472,7 +1472,7 @@ fn failed_muzzle_flash_allocation_does_not_recoil_and_failed_ion_allocation_stil
                     ((*turret).current.location.x, (*turret).current.location.y),
                     (4000, 4000)
                 );
-                assert_eq!({ disp_q.tail }, h);
+                assert_eq!({ battle::tail() }, h);
             }
         }
         {

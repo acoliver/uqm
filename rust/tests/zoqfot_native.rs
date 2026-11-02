@@ -87,7 +87,7 @@ fn tongue_chain_extends_in_facing_direction_and_stops_at_zero() {
             with_rng(3, 0, || ship.postprocess());
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 3);
             assert_eq!(ship.ship_mut().special_counter, 6);
-            let mut e = battle::element(disp_q.tail);
+            let mut e = battle::element(battle::tail());
             assert_eq!((*e).turn, 6);
             for remaining in (0..6).rev() {
                 (*e).next = (*e).current;
@@ -95,7 +95,7 @@ fn tongue_chain_extends_in_facing_direction_and_stops_at_zero() {
                 with_rng(3, 0, || {
                     hooks::invoke_element_pointer((*e).postprocess_func.unwrap(), e)
                 });
-                e = battle::element(disp_q.tail);
+                e = battle::element(battle::tail());
                 assert_eq!((*e).turn, remaining);
                 assert_eq!((*e).current.location.y, y - 8);
                 assert_eq!(((*e).life, (*e).mass), (1, 12));
@@ -117,7 +117,7 @@ fn first_tongue_collision_damages_but_later_frames_only_cancel_extension() {
             let mut enemy = Ship::new(&_battle, SPECIES_ID_ZOQFOTPIK_ID, 1);
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
             ship.postprocess();
-            let tongue = battle::element(disp_q.tail);
+            let tongue = battle::element(battle::tail());
             let mut a = POINT { x: 100, y: 100 };
             let mut b = POINT { x: 110, y: 100 };
             with_rng(7, 0, || {

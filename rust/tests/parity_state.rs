@@ -357,17 +357,17 @@ fn race_custom_fields(directory: &Path) {
                 side: 0,
                 species: SPECIES_ID_PKUNK_ID,
             });
-            disp_q.head = phoenix.cast();
-            disp_q.tail = disp_q.head;
+            battle::put(phoenix.cast());
             let (fields, _) = snapshot(directory);
             assert_eq!(
                 fields["ships.0.0.custom.phoenix"],
                 fields["elements.0.identity"]
             );
             assert_eq!(fields["race.pkunk.last_sound"], "0");
-            disp_q.head = ptr::null_mut();
-            disp_q.tail = ptr::null_mut();
-            uqm_rust::app::bridge::enter(|cx| cx.dispose(phoenix_object.id));
+            uqm_rust::app::bridge::enter(|cx| {
+                cx.unlink(phoenix_object.id);
+                cx.dispose(phoenix_object.id);
+            });
             let (retired, _) = snapshot(directory);
             assert_eq!(
                 retired["ships.0.0.custom.phoenix"],
@@ -379,8 +379,7 @@ fn race_custom_fields(directory: &Path) {
             assert!(!uqm_rust::app::bridge::enter(|cx| cx
                 .elements()
                 .contains(phoenix_object.id)));
-            disp_q.head = reused.ptr().cast();
-            disp_q.tail = disp_q.head;
+            battle::put(reused.ptr().cast());
             let (reallocated, _) = snapshot(directory);
             assert_eq!(
                 reallocated["ships.0.0.custom.phoenix"],
@@ -390,8 +389,7 @@ fn race_custom_fields(directory: &Path) {
                 reallocated["ships.0.0.custom.phoenix"],
                 fields["ships.0.0.custom.phoenix"]
             );
-            disp_q.head = ptr::null_mut();
-            disp_q.tail = ptr::null_mut();
+            uqm_rust::app::bridge::enter(|cx| cx.unlink(reused.id));
             race_q[0].head = ptr::null_mut();
             race_q[0].tail = ptr::null_mut();
             for name in ["saved_preprocess", "saved_postprocess", "saved_death"] {
@@ -734,7 +732,7 @@ fn frameset_and_media_identity(directory: &Path) {
     first.Index = 1;
     second.Index = 2;
     descriptor.ship_data.ship = [ptr::from_mut(&mut first).cast(); 3];
-    let mut element = Element::new();
+    let mut element = graph::ElementRecord::new();
     ship.SpeciesID = SPECIES_ID_EARTHLING_ID;
     let mut descriptor = install_descriptor(&mut ship, descriptor);
     element.parent = uqm_rust::engine::battle::Parent::Ship(uqm_rust::engine::battle::ShipId {
@@ -746,7 +744,7 @@ fn frameset_and_media_identity(directory: &Path) {
         attach_elements(std::slice::from_mut(&mut element));
         install_ship(&mut ship);
     }
-    observation::record(Event::Allocate(ptr::from_mut(&mut element) as usize));
+    observation::record(Event::Allocate(element.pointer() as usize));
     observation::record(Event::Drawable(ptr::from_mut(&mut drawable) as usize));
     for frame in [&mut first, &mut second] {
         observation::record(Event::Frame {
@@ -845,19 +843,20 @@ fn media_identity(directory: &Path, descriptor: &mut RACE_DESC) {
 }
 
 fn retired_space_does_not_borrow_released_frames(directory: &Path) {
-    let mut element = Element::new();
+    // SAFETY: clear the prior fixture graph before allocating this owned operand.
+    unsafe {
+        clear_queues();
+    }
+    let mut element = graph::ElementRecord::new();
     element.current.frame = ptr::dangling_mut();
     element.next.frame = ptr::dangling_mut();
     element.current.farray = ptr::null_mut();
     // SAFETY: only the element pool is retained after space teardown; the frame
     // graph is deliberately invalid and must not be traversed by the observer.
     unsafe {
-        clear_queues();
         attach_elements(std::slice::from_mut(&mut element));
-        disp_q.head = ptr::from_mut(&mut element).cast();
-        disp_q.tail = disp_q.head;
     }
-    observation::record(Event::Allocate(ptr::from_mut(&mut element) as usize));
+    observation::record(Event::Allocate(element.pointer() as usize));
     observation::record(Event::Drawable(17));
     observation::record(Event::Frame {
         address: element.current.frame as usize,

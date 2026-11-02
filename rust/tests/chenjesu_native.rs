@@ -35,9 +35,9 @@ unsafe fn doggy(ship: &mut Ship<'_>) -> *mut ELEMENT {
         ship.ship_mut().cur_status_flags = SPECIAL as u16;
         ship.ship_mut().special_counter = 0;
         ship.descriptor_mut().ship_info.energy_level = 30;
-        let old_tail = disp_q.tail;
+        let old_tail = battle::tail();
         ship.postprocess();
-        let tail = disp_q.tail;
+        let tail = battle::tail();
         assert_ne!(tail, old_tail);
         let dog = battle::element(tail);
         (*dog).next = (*dog).current;
@@ -295,9 +295,9 @@ fn released_crystal_queues_eight_fragments_in_facing_order() {
                     ),
                     ((5000 - dx) as i16, (6000 - dy) as i16)
                 );
-                assert_eq!((*fragment).pred, all[before + i - 1]);
+                assert_eq!(battle::pred(fragment), all[before + i - 1]);
             }
-            assert!((*battle::element(disp_q.tail)).succ.is_null());
+            assert!(battle::succ(battle::tail()).is_null());
             battle_context::dispose(h);
         }
     })
@@ -360,7 +360,7 @@ fn crystal_collision_creates_sparkles_at_the_target_and_animates_current_frame()
                     hooks::CollisionCall::Hook,
                 )
             });
-            let sparkle = battle::element(disp_q.tail);
+            let sparkle = battle::element(battle::tail());
             assert_ne!(sparkle, ship.ptr());
             assert_eq!(
                 ((*sparkle).current.location.x, (*sparkle).current.location.y),
@@ -405,7 +405,7 @@ fn crystal_collision_creates_sparkles_at_the_target_and_animates_current_frame()
                 SetAbsFrameIndex(ship.descriptor_mut().ship_data.weapon[0], 0)
             );
             assert_eq!((*sparkle).turn, 3);
-            let tail = disp_q.tail;
+            let tail = battle::tail();
             hooks::invoke_collision_pointer(
                 collide,
                 crystal,
@@ -415,7 +415,7 @@ fn crystal_collision_creates_sparkles_at_the_target_and_animates_current_frame()
                 hooks::CollisionCall::Hook,
             );
             assert_eq!(
-                { disp_q.tail },
+                { battle::tail() },
                 tail,
                 "already-collided crystal creates no second blast"
             );
@@ -1085,8 +1085,6 @@ fn ai_scans_from_tail_skips_every_noncrystal_case_and_stops_at_the_first_match()
                 let prim_index = (*e).PrimIndex;
                 *e = *hit;
                 (*e).PrimIndex = prim_index;
-                (*e).pred = ptr::null_mut();
-                (*e).succ = ptr::null_mut();
                 match invalid {
                     0 => (*e).state_flags |= NONSOLID as u16,
                     1 => {

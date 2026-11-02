@@ -12,7 +12,7 @@
 //!   the head of `race_q` to show that the head is not what is read;
 //! * `PLAYER_SHIP` is bit 2 of the element flags (element.h).
 
-use crate::engine::battle::{Parent, ShipId};
+use crate::engine::battle::{ElementTable, Parent, ShipId};
 use std::ffi::c_void;
 use std::mem::size_of;
 
@@ -69,6 +69,19 @@ fn push<T>(queue: &mut CQueue, record: T) -> *mut T {
     slot
 }
 
+fn allocate_element(elements: &mut ElementTable, value: ELEMENT) -> *mut ELEMENT {
+    let id = elements.alloc().expect("fixture capacity");
+    elements[id] = value;
+    elements.raw(id).cast()
+}
+
+fn push_element(elements: &mut ElementTable, value: ELEMENT) -> *mut ELEMENT {
+    let pointer = allocate_element(elements, value);
+    let id = elements.id(pointer.cast()).unwrap();
+    elements.put(id);
+    pointer
+}
+
 fn starship(facing: u16, element: *mut c_void) -> STARSHIP {
     // SAFETY: `STARSHIP` is integers, pointers and optional function pointers.
     let mut ship: STARSHIP = unsafe { std::mem::zeroed() };
@@ -91,15 +104,14 @@ fn element(flags: u16, owner: Parent) -> ELEMENT {
 /// The two queues of a hyperspace flight with nothing queued yet.
 struct Queues {
     ships: Box<CQueue>,
-    display: Box<CQueue>,
+    display: ElementTable,
 }
 
 impl Queues {
     fn new() -> Self {
         let mut ships = zeroed_queue();
-        let mut display = zeroed_queue();
+        let display = ElementTable::with_capacity(usize::from(ELEMENT_SLOTS));
         init(&mut ships, SHIP_SLOTS, size_of::<STARSHIP>());
-        init(&mut display, ELEMENT_SLOTS, size_of::<ELEMENT>());
         Self { ships, display }
     }
 
@@ -108,16 +120,16 @@ impl Queues {
     /// An unrelated element sits before and after it in the display list.
     fn flight(facing: u16) -> Self {
         let mut queues = Self::new();
-        push(&mut queues.display, element(APPEARING_BIT, Parent::None));
+        push_element(&mut queues.display, element(APPEARING_BIT, Parent::None));
         let ship = push(&mut queues.ships, starship(facing, std::ptr::null_mut()));
-        let flagship = push(
+        let flagship = push_element(
             &mut queues.display,
             element(
                 PLAYER_SHIP_BIT | APPEARING_BIT,
                 Parent::Ship(ShipId { side: 0, slot: 0 }),
             ),
         );
-        push(&mut queues.display, element(0, Parent::None));
+        push_element(&mut queues.display, element(0, Parent::None));
         // SAFETY: `ship` is the slot just pushed.
         unsafe { (*ship).hShip = flagship.cast::<c_void>() };
         queues
@@ -141,12 +153,8 @@ impl Queues {
 
 impl Drop for Queues {
     fn drop(&mut self) {
-        for queue in [&mut self.ships, &mut self.display] {
-            unsafe {
-                // SAFETY: This scope owns the initialized pool and no element is used after teardown.
-                UninitQueue(std::ptr::from_mut::<CQueue>(queue).cast::<Queue>())
-            };
-        }
+        // SAFETY: this fixture exclusively owns its ship queue and its records.
+        unsafe { UninitQueue(std::ptr::from_mut::<CQueue>(&mut self.ships).cast::<Queue>()) };
     }
 }
 
@@ -185,12 +193,22 @@ fn pool_bytes(queue: &CQueue) -> Vec<u8> {
 
 /// Everything about both queues: the queue records, their pools and so the
 /// ship and element records they hold.
-fn queues_snapshot(queues: &Queues) -> (Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>) {
+fn queues_snapshot(queues: &Queues) -> (Vec<u8>, Vec<u8>, Vec<String>) {
     (
         bytes_of(&*queues.ships),
         pool_bytes(&queues.ships),
-        bytes_of(&*queues.display),
-        pool_bytes(&queues.display),
+        (0..usize::from(ELEMENT_SLOTS))
+            .filter_map(|slot| queues.display.id_at(slot))
+            .map(|id| {
+                format!(
+                    "{id:?}:{:?}:{:?}:{:?}:{:?}",
+                    queues.display[id],
+                    queues.display.pred(id),
+                    queues.display.succ(id),
+                    queues.display.linked(id)
+                )
+            })
+            .collect(),
     )
 }
 
@@ -282,7 +300,7 @@ fn only_the_head_ship_names_the_element_and_later_ships_are_not_consulted() {
     let mut queues = Queues::flight(6);
     // A second ship with its own element: C looks at the head only.
     let other_owner = push(&mut queues.ships, starship(14, std::ptr::null_mut()));
-    let other_element = push(
+    let other_element = push_element(
         &mut queues.display,
         element(PLAYER_SHIP_BIT, Parent::Ship(ShipId { side: 0, slot: 1 })),
     );
@@ -310,10 +328,6 @@ fn a_flagship_without_an_element_is_a_no_op_and_the_display_list_is_not_read() {
     let queues = Queues::flight(5);
     // SAFETY: the head is a slot of the ship pool.
     unsafe { (*queues.head_ship()).hShip = std::ptr::null_mut() };
-    // A display list that would be rejected if it were read.
-    let display = queues.display.head.cast::<ELEMENT>();
-    // SAFETY: `display` is a slot of the element pool.
-    unsafe { (*display).succ = display.cast::<c_void>() };
 
     let mut game = game();
     let before_game = bytes_of(&*game);
@@ -327,7 +341,7 @@ fn a_flagship_without_an_element_is_a_no_op_and_the_display_list_is_not_read() {
 fn a_handle_that_is_not_a_link_of_the_display_list_is_refused() {
     let mut queues = Queues::flight(5);
     // A slot of the pool that was allocated but never queued.
-    let loose = allocate(
+    let loose = allocate_element(
         &mut queues.display,
         element(PLAYER_SHIP_BIT, Parent::Ship(ShipId { side: 0, slot: 0 })),
     );
@@ -442,44 +456,29 @@ fn a_queue_that_was_never_initialised_is_refused() {
 }
 
 #[test]
-fn a_display_list_that_loops_is_refused() {
-    let queues = Queues::flight(5);
-    let tail = queues.display.tail.cast::<ELEMENT>();
-    // SAFETY: `tail` is a slot of the element pool.
-    unsafe { (*tail).succ = queues.display.head };
+fn a_retired_element_is_refused_after_its_slot_is_freed() {
+    let mut queues = Queues::flight(5);
+    let id = queues.display.id(queues.flagship_element().cast()).unwrap();
+    queues.display.remove(id);
+    queues.display.free(id);
     let mut game = game();
     assert_eq!(
         queues.save(&mut game),
-        Err(HyperSaveError::Queue(QueueError::CorruptQueue {
-            queue: QueueKind::DisplayList,
-            position: 3,
-        }))
+        Err(HyperSaveError::ElementNotInDisplayList)
     );
     assert_eq!(game.ship_facing, SENTINEL_FACING);
 }
 
 #[test]
-fn a_display_list_that_is_not_a_pool_of_elements_is_refused() {
+fn a_reset_element_pool_does_not_retain_the_flagship() {
     let mut queues = Queues::flight(5);
-    let mut wrong = zeroed_queue();
-    init(&mut wrong, ELEMENT_SLOTS, size_of::<STARSHIP>());
-    std::mem::swap(&mut queues.display, &mut wrong);
+    queues.display.reinit();
     let mut game = game();
-    // The ship queue still names an element that this queue does not hold.
-    let result = queues.save(&mut game);
-    std::mem::swap(&mut queues.display, &mut wrong);
-    unsafe {
-        // SAFETY: This scope owns the initialized pool and no element is used after teardown.
-        UninitQueue(std::ptr::from_mut::<CQueue>(&mut wrong).cast::<Queue>())
-    };
     assert_eq!(
-        result,
-        Err(HyperSaveError::Queue(QueueError::WrongObjectSize {
-            queue: QueueKind::DisplayList,
-            found: size_of::<STARSHIP>() as u16,
-            expected: size_of::<ELEMENT>(),
-        }))
+        queues.save(&mut game),
+        Err(HyperSaveError::ElementNotInDisplayList)
     );
+    assert_eq!(game.ship_facing, SENTINEL_FACING);
 }
 
 /// Starship fields retain their header layout; element fixtures now retain typed targets.
@@ -490,22 +489,13 @@ fn retained_records_use_the_expected_fixture_layouts() {
     assert_eq!(align_of::<STARSHIP>(), 8);
     assert_eq!(offset_of!(STARSHIP, hShip), STARSHIP_HSHIP);
     assert_eq!(offset_of!(STARSHIP, ShipFacing), STARSHIP_SHIP_FACING);
-    assert_eq!(size_of::<ELEMENT>(), ELEMENT_SIZE);
-    assert_eq!(align_of::<ELEMENT>(), 8);
-    assert_eq!(offset_of!(ELEMENT, state_flags), ELEMENT_STATE_FLAGS);
-    assert_eq!(offset_of!(ELEMENT, parent), ELEMENT_PARENT);
     assert_eq!(offset_of!(STARSHIP, pred), 0);
     assert_eq!(offset_of!(STARSHIP, succ), 8);
-    assert_eq!(offset_of!(ELEMENT, pred), 0);
-    assert_eq!(offset_of!(ELEMENT, succ), 8);
 }
 
 const STARSHIP_SIZE: usize = 80;
 const STARSHIP_HSHIP: usize = 64;
 const STARSHIP_SHIP_FACING: usize = 72;
-const ELEMENT_SIZE: usize = 176;
-const ELEMENT_STATE_FLAGS: usize = 50;
-const ELEMENT_PARENT: usize = 160;
 
 #[test]
 fn reading_the_flagship_facing_returns_the_owner_facing_and_writes_nothing() {

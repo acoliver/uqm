@@ -52,6 +52,9 @@ impl<T> Id<T> {
     pub fn index(self) -> usize {
         usize::from(self.ix)
     }
+    pub fn generation(self) -> u32 {
+        self.generation
+    }
 }
 
 struct Slot<T> {
@@ -235,6 +238,11 @@ impl<T, const N: usize> OrderedPool<T, N> {
         // RemoveQueue retains these links; callers may still read the successor.
         self.slots[id.index()].linked = false;
         self.count -= 1;
+    }
+    pub fn reset_capacity(&mut self, capacity: usize) {
+        assert!(capacity <= N, "pool capacity exceeds storage");
+        self.capacity = capacity;
+        self.reinit();
     }
     pub fn reinit(&mut self) {
         for (ix, slot) in self.slots.iter_mut().enumerate() {

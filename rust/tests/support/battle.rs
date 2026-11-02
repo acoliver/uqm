@@ -11,6 +11,60 @@ use uqm_rust::{
     ships::native::abi::*,
 };
 
+/// # Safety
+/// The caller retains the published, serialized fixture battle.
+pub unsafe fn head() -> HELEMENT {
+    // SAFETY: the fixture owns the active context for this synchronous lookup.
+    unsafe {
+        uqm_rust::app::bridge::enter(|cx| {
+            cx.elements()
+                .head()
+                .map_or(ptr::null_mut(), |id| cx.elements().raw(id))
+        })
+    }
+}
+
+/// # Safety
+/// The caller retains the published, serialized fixture battle.
+pub unsafe fn tail() -> HELEMENT {
+    // SAFETY: the fixture owns the active context for this synchronous lookup.
+    unsafe {
+        uqm_rust::app::bridge::enter(|cx| {
+            cx.elements()
+                .tail()
+                .map_or(ptr::null_mut(), |id| cx.elements().raw(id))
+        })
+    }
+}
+
+/// # Safety
+/// The operand must be a retained element allocation of the serialized fixture.
+pub unsafe fn succ<T>(pointer: *mut T) -> HELEMENT {
+    // SAFETY: the fixture retains the operand throughout this synchronous projection.
+    unsafe {
+        uqm_rust::app::bridge::enter(|cx| {
+            let id = cx.elements().id(pointer.cast()).expect("fixture operand");
+            cx.elements()
+                .succ(id)
+                .map_or(ptr::null_mut(), |id| cx.elements().raw(id))
+        })
+    }
+}
+
+/// # Safety
+/// The operand must be a retained element allocation of the serialized fixture.
+pub unsafe fn pred<T>(pointer: *mut T) -> HELEMENT {
+    // SAFETY: the fixture retains the operand throughout this synchronous projection.
+    unsafe {
+        uqm_rust::app::bridge::enter(|cx| {
+            let id = cx.elements().id(pointer.cast()).expect("fixture operand");
+            cx.elements()
+                .pred(id)
+                .map_or(ptr::null_mut(), |id| cx.elements().raw(id))
+        })
+    }
+}
+
 pub struct Battle {
     dimensions: (i32, i32),
     graphics: u8,
@@ -22,11 +76,9 @@ impl Battle {
             let dimensions = (ScreenWidth, ScreenHeight);
             let graphics = uqm_rust::graphics::context_abi::_GraphicsStatusFlags;
             uqm_rust::graphics::context_abi::_GraphicsStatusFlags &= !4;
-            assert!(InitQueue(
-                &raw mut disp_q,
-                capacity,
-                size_of::<ELEMENT>() as u16
-            ));
+            uqm_rust::app::bridge::battle(|battle| {
+                battle.reset_element_capacity(usize::from(capacity));
+            });
             let queues = &raw mut race_q;
             for queue in &mut *queues {
                 assert!(InitQueue(queue, 32, size_of::<STARSHIP>() as u16));
@@ -45,7 +97,7 @@ impl Drop for Battle {
     fn drop(&mut self) {
         // SAFETY: ships and elements created after this owner have already dropped.
         unsafe {
-            UninitQueue(&raw mut disp_q);
+            uqm_rust::app::bridge::battle(|battle| battle.reset_element_capacity(0));
             let queues = &raw mut race_q;
             for queue in &mut *queues {
                 UninitQueue(queue);
@@ -617,18 +669,19 @@ pub unsafe fn prim(e: *mut ELEMENT) -> *mut PRIMITIVE {
     }
 }
 pub unsafe fn queued() -> Vec<HELEMENT> {
-    // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
-    unsafe {
-        let mut all = Vec::new();
-        let mut h = disp_q.head;
-        while !h.is_null() {
-            all.push(h);
-            assert!(all.len() <= 128, "queue cycle");
-            h = (*element(h)).succ;
-        }
-        all
-    }
+    // SAFETY: the serialized fixture retains the published context throughout observation.
+    unsafe { uqm_rust::app::bridge::enter(|cx| queued_in(cx)) }
 }
+pub fn queued_in(cx: &uqm_rust::engine::battle::Cx<'_>) -> Vec<HELEMENT> {
+    let mut all = Vec::new();
+    let mut next = cx.elements().head();
+    while let Some(id) = next {
+        all.push(cx.elements().raw(id));
+        next = cx.elements().succ(id);
+    }
+    all
+}
+
 pub fn velocity(v: &VELOCITY_DESC) -> [i32; 9] {
     [
         v.travel_angle.into(),

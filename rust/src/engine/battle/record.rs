@@ -43,7 +43,6 @@ mod abi {
         use std::mem::offset_of as offset;
         assert!(size_of::<ELEMENT>() == size_of::<Element>());
         assert!(align_of::<ELEMENT>() == align_of::<Element>());
-        assert!(offset!(ELEMENT, succ) == offset!(Element, succ));
         assert!(offset!(ELEMENT, state_flags) == offset!(Element, state_flags));
         assert!(offset!(ELEMENT, current) == offset!(Element, current));
         assert!(offset!(STATE, location) == offset!(Visual, location));
@@ -55,10 +54,8 @@ mod abi {
         );
     };
     #[repr(C)]
-    #[derive(Copy, Clone)]
+    #[derive(Debug, Copy, Clone)]
     pub struct element {
-        pub pred: HELEMENT,
-        pub succ: HELEMENT,
         pub preprocess_func: Option<super::super::hooks::ElementHook>,
         pub postprocess_func: Option<super::super::hooks::ElementHook>,
         pub collision_func: Option<crate::engine::battle::CollisionHook>,
@@ -214,6 +211,46 @@ mod abi {
     }
 
     pub const MAX_DISPLAY_PRIMS: u32 = 330;
+}
+
+impl Default for ELEMENT {
+    fn default() -> Self {
+        let visual = STATE {
+            location: POINT { x: 0, y: 0 },
+            image: state__bindgen_ty_1 {
+                frame: ptr::null_mut(),
+                farray: ptr::null_mut(),
+            },
+        };
+        Self {
+            preprocess_func: None,
+            postprocess_func: None,
+            collision_func: None,
+            death_func: None,
+            playerNr: 0,
+            state_flags: 0,
+            life: 0,
+            hits: 0,
+            mass: 0,
+            turn: 0,
+            thrust: 0,
+            colorCycleIndex: 0,
+            velocity: VELOCITY_DESC::new(),
+            IntersectControl: INTERSECT_CONTROL {
+                IntersectStamp: crate::graphics::native_abi::STAMP {
+                    origin: POINT { x: 0, y: 0 },
+                    frame: ptr::null_mut(),
+                },
+                EndPoint: POINT { x: 0, y: 0 },
+                last_time_val: 0,
+            },
+            PrimIndex: 0,
+            current: visual,
+            next: visual,
+            parent: Parent::None,
+            target: None,
+        }
+    }
 }
 
 impl ELEMENT {
@@ -423,8 +460,6 @@ impl Cx<'_> {
             parent: e.parent,
             intersect: e.IntersectControl,
             primitive: e.PrimIndex,
-            predecessor: self.b.elements.id(e.pred),
-            successor: self.b.elements.id(e.succ),
         }
     }
     pub(crate) fn encode_subject(&self, subject: &super::Subject) -> ELEMENT {
@@ -434,21 +469,15 @@ impl Cx<'_> {
         e.parent = subject.parent;
         e.IntersectControl = subject.intersect;
         e.PrimIndex = subject.primitive;
-        e.pred = subject
-            .predecessor
-            .map_or(std::ptr::null_mut(), |id| self.b.elements.raw(id));
-        e.succ = subject
-            .successor
-            .map_or(std::ptr::null_mut(), |id| self.b.elements.raw(id));
         e
     }
     /// Return the checked legacy address; dereferencing it requires the owning game-thread boundary.
     pub fn legacy_element(&self, id: ElementId) -> *mut ELEMENT {
-        self.b.elements.raw(id).cast()
+        self.b.kernel.elements.raw(id).cast()
     }
     #[cfg(not(test))]
     pub(super) fn primitive(&mut self, id: ElementId) -> &mut PRIMITIVE {
-        let index = usize::from(self.b.elements[id].PrimIndex);
+        let index = usize::from(self.b.kernel.elements[id].PrimIndex);
         assert!(index < 330, "invalid primitive index {index}");
         // SAFETY: the display authority remains live for the context's lifetime.
         self.b.kernel.display.get_mut(index as u16)
@@ -460,7 +489,7 @@ impl Cx<'_> {
         let value = self.element(id);
         Edit {
             value,
-            record: &mut self.b.elements[id],
+            record: &mut self.b.kernel.elements[id],
             commit: ElementState::apply,
         }
     }
@@ -580,8 +609,6 @@ const EMPTY_QUEUE: QUEUE = QUEUE {
 };
 
 #[no_mangle]
-pub static mut disp_q: QUEUE = EMPTY_QUEUE;
-#[no_mangle]
 pub static mut race_q: [QUEUE; 2] = [EMPTY_QUEUE; 2];
 
 pub(crate) fn ship_queue(side: usize) -> std::ptr::NonNull<QUEUE> {
@@ -592,8 +619,6 @@ pub(crate) fn ship_queue(side: usize) -> std::ptr::NonNull<QUEUE> {
 impl ElementState {
     fn encode(self) -> ELEMENT {
         ELEMENT {
-            pred: ptr::null_mut(),
-            succ: ptr::null_mut(),
             preprocess_func: self.pre,
             postprocess_func: self.post,
             collision_func: self.collide,
@@ -641,11 +666,9 @@ mod projection_tests {
     use super::*;
     #[test]
     fn pointer_free_values_roundtrip_record_scalars_and_subject_metadata() {
-        let mut queue = EMPTY_QUEUE;
         let mut groups = EMPTY_QUEUE;
         let mut activity = 0u16;
-        // SAFETY: these local queue authorities and projections outlive the context.
-        let mut battle = unsafe { super::super::Battle::new(&mut queue) };
+        let mut battle = super::super::Battle::new(3);
         // SAFETY: the local world authorities remain live and exclusively borrowed.
         let mut world =
             unsafe { super::super::World::new(&mut activity, &mut groups, [ptr::null_mut(); 2]) };
@@ -781,6 +804,7 @@ pub struct RaceDescriptor {
 pub(crate) use super::kernel::{Channels, SoundQueue, StarPlane};
 
 pub(crate) struct Kernel {
+    pub(crate) elements: super::ElementTable,
     pub(crate) display: super::display::DisplayPool,
     pub(crate) master_queue: super::kernel::MasterCatalog,
     pub(crate) player_input: [*mut std::ffi::c_void; 2],
@@ -814,6 +838,7 @@ impl Kernel {
             plane
         }));
         Self {
+            elements: super::ElementTable::with_capacity(150),
             display: super::display::DisplayPool::new(),
             master_queue: super::kernel::MasterCatalog::new(),
             player_input: [ptr::null_mut(); 2],
@@ -881,8 +906,6 @@ impl Cx<'_> {
             primitive: e.PrimIndex,
             target: None,
             parent: Parent::None,
-            predecessor: None,
-            successor: None,
         }
     }
 }

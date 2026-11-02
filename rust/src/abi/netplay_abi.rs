@@ -245,7 +245,6 @@ pub use crate::engine::battle::record::state__bindgen_ty_1;
 pub type STATE = state;
 pub use crate::engine::battle::record::ELEMENT;
 pub use crate::engine::battle::record::element;
-pub use crate::engine::battle::legacy::disp_q;
 pub use crate::navigation::abi::ChecksumBuffer;
 pub use crate::navigation::abi::ChecksumEntry;
 pub use crate::navigation::abi::NetConnectionError;

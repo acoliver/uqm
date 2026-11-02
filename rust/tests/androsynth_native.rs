@@ -252,7 +252,7 @@ fn bubble_steers_toward_the_nearest_enemy_with_a_random_wobble() {
                 );
 
                 // Remove this enemy before trying the other side.
-                let handle = disp_q.tail;
+                let handle = battle::tail();
                 assert_eq!(battle::element(handle), enemy);
                 drop(enemy_ship);
             }

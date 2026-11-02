@@ -2,13 +2,13 @@
 use super::Fields;
 #[cfg(not(test))]
 use super::{custom, elements, ships::Ship, value};
+use crate::automation::parity::Journal;
 use crate::engine::battle::access::observe::ElementObservation;
 #[cfg(not(test))]
 use crate::{
     automation::battle_fight::ShipState, battle::netplay::CrcState, comm::locdata::CGameState,
     ships::native::abi::GlobData,
 };
-use crate::{automation::parity::Journal, comm::locdata::CQueue};
 
 #[cfg(not(test))]
 pub fn checkpoint(journal: &mut Journal, boundary: &str) -> std::io::Result<()> {
@@ -37,12 +37,7 @@ fn checkpoint_with_context(
                         .cast::<crate::comm::locdata::CQueue>(),
                 )
             }),
-            display_elements(
-                &*crate::engine::battle::access::live_queues::display_list()
-                    .cast::<crate::comm::locdata::CQueue>(),
-                cx.elements(),
-                Some(cx.groups()),
-            ),
+            display_elements(cx.elements(), Some(cx.groups())),
         )
     };
     crate::automation::parity_mode::capture(&mut fields, game, journal);
@@ -120,19 +115,11 @@ pub(in crate::automation) fn fighters(
 /// # Safety
 /// The pool remains live and immutable throughout observation.
 unsafe fn display_elements(
-    queue: &CQueue,
-    #[cfg(not(test))] elements: &crate::engine::battle::ElementTable,
+    elements: &crate::engine::battle::ElementTable,
     groups: Option<&crate::engine::battle::record::QUEUE>,
 ) -> Vec<ElementObservation> {
-    // SAFETY: the caller retains the immutable display pool throughout this observation.
-    unsafe {
-        crate::battle::context_access::observe::elements(
-            queue,
-            groups,
-            #[cfg(not(test))]
-            elements,
-        )
-    }
+    // SAFETY: the caller retains the immutable source authorities throughout observation.
+    unsafe { crate::battle::context_access::observe::elements(elements, groups) }
 }
 
 fn visuals(fields: &mut Fields, prefix: &str, element: &ElementObservation, journal: &mut Journal) {
@@ -189,34 +176,6 @@ mod tests {
     }
 
     use crate::graphics::native_abi::frame_desc;
-    fn pool(elements: &mut [Element]) -> CQueue {
-        let base = elements.as_mut_ptr();
-        for index in 0..elements.len() {
-            elements[index].pred = if index == 0 {
-                std::ptr::null_mut()
-            } else {
-                &mut elements[index - 1]
-            };
-            elements[index].succ = if index + 1 == elements.len() {
-                std::ptr::null_mut()
-            } else {
-                &mut elements[index + 1]
-            };
-        }
-        CQueue {
-            head: base.cast(),
-            tail: std::ptr::from_mut(
-                elements
-                    .last_mut()
-                    .unwrap_or_else(|| panic!("test display pool is empty")),
-            )
-            .cast(),
-            pq_tab: base.cast(),
-            object_size: std::mem::size_of::<Element>() as u16,
-            num_objects: elements.len() as u8,
-            ..CQueue::default()
-        }
-    }
     #[test]
     fn visual_fields_include_the_borrowed_frame_array() {
         let directory = super::super::test_directory();
@@ -357,37 +316,32 @@ mod tests {
 
     #[test]
     fn checked_display_pool_preserves_link_order() {
-        let mut elements = [Element::new(); 3];
-        let queue = pool(&mut elements);
-        // SAFETY: the local pool remains live and unchanged for this traversal.
-        let addresses: Vec<_> = unsafe { display_elements(&queue, None).into_iter() }
-            .map(|e| e.address as *const Element)
+        let mut elements = crate::engine::battle::ElementTable::with_capacity(3);
+        let ids = std::array::from_fn::<_, 3, _>(|_| elements.alloc().unwrap());
+        for id in ids {
+            elements.put(id);
+        }
+        // SAFETY: the local owned pool stays live and immutable throughout the observation.
+        let addresses: Vec<_> = unsafe { display_elements(&elements, None) }
+            .into_iter()
+            .map(|e| e.address)
             .collect();
-        assert_eq!(
-            addresses,
-            elements.iter().map(std::ptr::from_ref).collect::<Vec<_>>()
-        );
+        assert_eq!(addresses, ids.map(|id| elements.raw(id) as usize));
     }
+
     #[test]
-    #[should_panic(expected = "live display queue")]
-    fn cyclic_display_pool_fails_before_following_invalid_links() {
-        let mut elements = [Element::new(); 2];
-        let queue = pool(&mut elements);
-        let elements = &mut elements;
-        elements[1].succ = &mut elements[0];
-        // SAFETY: the pool remains live; walk rejects the malformed link before
-        // borrowing any slot through it.
-        let _ = unsafe { display_elements(&queue, None).into_iter() }.count();
+    #[should_panic(expected = "already linked")]
+    fn duplicate_display_insertion_fails_before_modifying_links() {
+        let mut elements = crate::engine::battle::ElementTable::with_capacity(2);
+        let id = elements.alloc().unwrap();
+        elements.put(id);
+        elements.put(id);
     }
+
     #[test]
-    #[should_panic(expected = "live display queue")]
+    #[should_panic(expected = "element address is not allocated")]
     fn pointer_outside_display_pool_fails_before_dereference() {
-        let mut elements = [Element::new(); 2];
-        let queue = pool(&mut elements);
-        let elements = &mut elements;
-        elements[0].succ = std::ptr::dangling_mut();
-        // SAFETY: the pool remains live; walk rejects the malformed link before
-        // borrowing any slot through it.
-        let _ = unsafe { display_elements(&queue, None).into_iter() }.count();
+        let elements = crate::engine::battle::ElementTable::with_capacity(2);
+        elements.id(std::ptr::dangling_mut());
     }
 }

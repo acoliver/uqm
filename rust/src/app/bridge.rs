@@ -148,11 +148,10 @@ mod tests {
     fn empty_entry_panics_and_nested_handoffs_restore_lifo() {
         // SAFETY: this serialized test owns the records and projected storage for the scope.
         assert!(std::panic::catch_unwind(|| unsafe { enter(|_| ()) }).is_err());
-        let mut queue = QUEUE::default();
         let mut groups = QUEUE::default();
         let mut activity = 7;
         // SAFETY: this serialized test owns the records and projected storage for the scope.
-        let mut battle = unsafe { Battle::new(&raw mut queue) };
+        let mut battle = Battle::new(3);
         // SAFETY: this serialized test owns the records and projected storage for the scope.
         let mut world =
             unsafe { World::new(&raw mut activity, &raw mut groups, [ptr::null_mut(); 2]) };

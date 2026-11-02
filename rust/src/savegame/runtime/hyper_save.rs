@@ -93,7 +93,7 @@ pub enum HyperFlagship {
 /// themselves must be live memory that C is not changing during the call.
 pub unsafe fn read_flagship_facing(
     player_ships: &CQueue,
-    display_list: &CQueue,
+    display_list: &crate::engine::battle::ElementTable,
 ) -> Result<Option<u16>, HyperSaveError> {
     crate::battle::context_access::save::read_flagship_facing(player_ships, display_list)
 }
@@ -105,7 +105,7 @@ pub unsafe fn read_flagship_facing(
 /// As [`read_flagship_facing`].
 unsafe fn flagship_facing(
     player_ships: &CQueue,
-    display_list: &CQueue,
+    display_list: &crate::engine::battle::ElementTable,
 ) -> Result<Option<u16>, HyperSaveError> {
     match read_flagship_facing(player_ships, display_list)? {
         None => Ok(None),
@@ -126,7 +126,7 @@ unsafe fn flagship_facing(
 pub unsafe fn save_hyper_facing(
     game: &mut CGameState,
     player_ships: &CQueue,
-    display_list: &CQueue,
+    display_list: &crate::engine::battle::ElementTable,
 ) -> Result<HyperFlagship, HyperSaveError> {
     match flagship_facing(player_ships, display_list)? {
         None => Ok(HyperFlagship::Absent),

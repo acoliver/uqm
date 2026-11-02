@@ -17,7 +17,7 @@ unsafe fn index_of(frame: FRAME) -> u16 {
     uqm_rust::ships::native::frame_index(frame)
 }
 unsafe fn queue_tail() -> HELEMENT {
-    disp_q.tail
+    battle::tail()
 }
 #[test]
 fn eluder_descriptor_matches_the_c_template() {

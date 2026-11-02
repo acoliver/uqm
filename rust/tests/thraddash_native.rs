@@ -12,9 +12,9 @@ use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, frame_index, sine
 
 unsafe fn burn(ship: &mut Ship<'_>) -> *mut ELEMENT {
     ship.ship_mut().cur_status_flags |= SPECIAL as u16;
-    let head = disp_q.head;
+    let head = battle::head();
     ship.preprocess();
-    let trail = disp_q.head;
+    let trail = battle::head();
     assert_ne!(trail, head);
     battle::element(trail)
 }
@@ -23,11 +23,11 @@ unsafe fn fire(ship: &mut Ship<'_>) -> HELEMENT {
 }
 unsafe fn queued() -> Vec<HELEMENT> {
     let mut result = Vec::new();
-    let mut h = disp_q.head;
+    let mut h = battle::head();
     while !h.is_null() {
         result.push(h);
         assert!(result.len() <= 64, "display queue cycle");
-        h = (*battle::element(h)).succ;
+        h = battle::succ(h);
     }
     result
 }

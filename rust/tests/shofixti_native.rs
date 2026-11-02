@@ -209,12 +209,12 @@ impl<'a> Ship<'a> {
             .special = self.captain.frame(16);
         self.inner.ship_mut().old_status_flags = 0;
         self.inner.ship_mut().cur_status_flags = SPECIAL as u16;
-        let old = disp_q.tail;
+        let old = shared::tail();
         self.inner.postprocess();
-        if old == disp_q.tail {
+        if old == shared::tail() {
             None
         } else {
-            (*shared::element(disp_q.tail)).death_func
+            (*shared::element(shared::tail())).death_func
         }
     }
 }
@@ -606,7 +606,7 @@ fn both_switch_edges_advance_and_only_the_third_remaining_frame_detonates() {
             );
             assert_eq!((*ship.ptr()).hits, if index == 17 { 0 } else { 6 });
         }
-        let deferred = shared::element(disp_q.tail);
+        let deferred = shared::element(shared::tail());
         assert_ne!(deferred, ship.ptr());
         assert_eq!(
             (*deferred).state_flags,
@@ -672,7 +672,7 @@ fn deferred_glory_damage_obeys_solidity_marine_identity_radius_and_gravity() {
         let mut fragile_owner = object(&_battle, 0, 1, 19, 0, 0);
         let fragile = fragile_owner.ptr();
         let kill = ship.arm().unwrap();
-        let deferred = shared::element(disp_q.tail);
+        let deferred = shared::element(shared::tail());
         assert_eq!((*enemy.ptr()).hits, 50, "damage must be deferred");
         with_rng(2, 0, || hooks::invoke_element_pointer(kill, deferred));
         assert_eq!((*enemy.ptr()).hits, 31);
@@ -703,7 +703,7 @@ fn failed_deferred_allocation_still_kills_the_ship() {
         let _battle = Battle::new(1);
         let mut ship = Ship::new(&_battle, 0);
         assert!(with_rng(4, 0, || ship.arm()).is_none());
-        assert_eq!({ disp_q.tail }, ship.handle);
+        assert_eq!({ shared::tail() }, ship.handle);
         assert_eq!((*ship.ptr()).life, 0);
         assert_eq!((*ship.ptr()).hits, 0);
         assert_eq!(ship.inner.descriptor_mut().ship_info.crew_level, 0);
@@ -793,7 +793,7 @@ fn glory_flash_switch_and_explosion_color_sequence_use_twelve_frame_ship_death()
         with_rng(3, 0, || hooks::invoke_element_pointer(flash, ship.ptr()));
         assert!((*ship.ptr()).preprocess_func.is_none());
         assert_eq!((*prim(ship.ptr())).Type, gfx_object_NUM_PRIMS as u8);
-        let explosion = shared::element(disp_q.tail);
+        let explosion = shared::element(shared::tail());
         assert_ne!(explosion, ship.ptr());
         assert_eq!(
             (*explosion).state_flags,
@@ -863,7 +863,7 @@ fn failed_visual_explosion_allocation_still_hides_the_ship() {
         hooks::invoke_element_pointer((*ship.ptr()).death_func.unwrap(), ship.ptr());
         (*ship.ptr()).life = 33;
         hooks::invoke_element_pointer((*ship.ptr()).preprocess_func.unwrap(), ship.ptr());
-        assert_eq!({ disp_q.tail }, ship.handle);
+        assert_eq!({ shared::tail() }, ship.handle);
         assert_eq!((*prim(ship.ptr())).Type, gfx_object_NUM_PRIMS as u8);
         assert!((*ship.ptr()).preprocess_func.is_none());
     })
@@ -931,7 +931,7 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                     // Arm the real glory device, execute its area damage, then
                     // process both deaths within the same simulated frame.
                     let blast = ship.arm().unwrap();
-                    hooks::invoke_element_pointer(blast, shared::element(disp_q.tail));
+                    hooks::invoke_element_pointer(blast, shared::element(shared::tail()));
                     assert_eq!(
                         (
                             ship.inner.descriptor_mut().ship_info.crew_level,

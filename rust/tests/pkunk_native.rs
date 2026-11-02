@@ -218,8 +218,6 @@ impl<'a> Ship<'a> {
         let mut subject = *self.ptr();
         // The AI operand is a value copy, not a member of the live queue.
         // Its phoenix predecessor may be disposed during intelligence.
-        subject.pred = ptr::null_mut();
-        subject.succ = ptr::null_mut();
         self.inner.intelligence(&mut subject, concerns, 0);
     }
 
@@ -277,11 +275,11 @@ unsafe fn prim(el: *mut ELEMENT) -> *mut PRIMITIVE {
 
 unsafe fn queued() -> Vec<HELEMENT> {
     let mut result = Vec::new();
-    let mut h = disp_q.head;
+    let mut h = shared::head();
     while !h.is_null() {
         result.push(h);
         assert!(result.len() <= 64, "display queue cycle");
-        h = (*shared::element(h)).succ;
+        h = shared::succ(h);
     }
     result
 }

@@ -101,12 +101,12 @@ unsafe fn bolt_velocity(angle: COUNT, delta: SIZE, random: DWORD) -> [i32; 9] {
     velocity(&v)
 }
 unsafe fn queue_len() -> usize {
-    let mut h = disp_q.head;
+    let mut h = battle::head();
     let mut n = 0;
     while !h.is_null() {
         n += 1;
         assert!(n <= 128);
-        h = (*battle::element(h)).succ;
+        h = battle::succ(h);
     }
     n
 }
@@ -537,7 +537,7 @@ fn lightning_postprocess_extends_chains_until_zero_or_collision() {
                 hooks::invoke_element_pointer((*parent).postprocess_func.unwrap(), parent)
             });
             assert_eq!(queue_len(), before + 1);
-            let child = battle::element(disp_q.tail);
+            let child = battle::element(battle::tail());
             assert_ne!(child, parent);
             assert_eq!((*child).turn, wait);
             assert_eq!(rgba((*prim(child)).color), rgba((*prim(parent)).color));
@@ -571,9 +571,9 @@ fn allocation_failure_consumes_no_lightning_random_and_keeps_initializer_count()
         with_rng(7, 0, || {
             hooks::invoke_element_pointer((*parent).postprocess_func.unwrap(), parent)
         });
-        assert_eq!({ disp_q.tail }, h);
+        assert_eq!({ battle::tail() }, h);
         with_rng(7, 0, || ship.postprocess());
-        assert_eq!({ disp_q.tail }, h);
+        assert_eq!({ battle::tail() }, h);
     })
 }
 
@@ -612,7 +612,7 @@ fn lightning_collision_folds_and_subtracts_counter_then_calls_generic_weapon_col
             0,
             "line prims do not disappear"
         );
-        let tail = disp_q.tail;
+        let tail = battle::tail();
         for counter in [0u8, 1, 8, 9, 16, 17, 255] {
             for wait in [0u8, 1, 8, 255] {
                 ship.ship_mut().weapon_counter = counter;
@@ -635,7 +635,7 @@ fn lightning_collision_folds_and_subtracts_counter_then_calls_generic_weapon_col
                 assert_eq!(ship.ship_mut().weapon_counter, folded.wrapping_sub(wait));
                 assert_eq!((*beam).turn, 0);
                 assert_eq!(
-                    { disp_q.tail },
+                    { battle::tail() },
                     tail,
                     "generic collision ignores an already-collided beam"
                 );
@@ -658,7 +658,10 @@ fn ship_postprocess_emits_only_during_the_sixteen_active_weapon_ticks() {
             with_rng(303, usize::from(emits), || ship.postprocess());
             assert_eq!(queue_len(), before + usize::from(emits));
             if emits {
-                assert_eq!((*battle::element(disp_q.tail)).parent, (*ship.ptr()).parent);
+                assert_eq!(
+                    (*battle::element(battle::tail())).parent,
+                    (*ship.ptr()).parent
+                );
             }
             assert_eq!(ship.ship_mut().weapon_counter, counter);
         }

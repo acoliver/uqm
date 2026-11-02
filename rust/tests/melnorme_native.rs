@@ -38,9 +38,9 @@ unsafe fn confusion(ship: &mut Ship<'_>) -> *mut ELEMENT {
     ship.descriptor_mut().ship_info.energy_level = 42;
     ship.ship_mut().cur_status_flags = SPECIAL as u16;
     ship.ship_mut().special_counter = 0;
-    let old_tail = disp_q.tail;
+    let old_tail = battle::tail();
     ship.postprocess();
-    let handle = disp_q.tail;
+    let handle = battle::tail();
     assert_ne!(handle, old_tail);
     let e = battle::element(handle);
     (*e).next = (*e).current;
@@ -53,10 +53,10 @@ unsafe fn remove(e: *mut ELEMENT) {
 
 unsafe fn queue() -> Vec<HELEMENT> {
     let mut handles = Vec::new();
-    let mut h = disp_q.head;
+    let mut h = battle::head();
     while !h.is_null() {
         handles.push(h);
-        h = (*battle::element(h)).succ;
+        h = battle::succ(h);
     }
     handles
 }
@@ -325,7 +325,7 @@ fn held_charge_replaces_the_element_and_uses_the_old_level_for_damage() {
                     ship.ship_mut().energy_counter = 0;
                     TFB_SeedRandom(12);
                     hooks::invoke_element_pointer((*e).postprocess_func.unwrap(), e);
-                    let p = battle::element(disp_q.tail);
+                    let p = battle::element(battle::tail());
                     assert_ne!(p, e);
                     let next_level = (level + 1).min(3);
                     assert_eq!((*p).turn, reverse | next_level);
@@ -373,7 +373,7 @@ fn charge_wait_wraps_as_a_byte_and_hit_points_truncate_after_the_c_assignment_ch
             ship.ship_mut().cur_status_flags = WEAPON as u16;
             ship.ship_mut().old_status_flags = WEAPON as u16;
             hooks::invoke_element_pointer((*e).postprocess_func.unwrap(), e);
-            let p = battle::element(disp_q.tail);
+            let p = battle::element(battle::tail());
             assert_eq!((*p).thrust, 255);
             assert_eq!((*p).turn, 8);
             assert_eq!(frame_index((*p).current.image.frame), 1);
@@ -399,7 +399,7 @@ fn release_requires_both_weapon_status_words_to_hold_and_uses_full_velocity_unit
                     ship.ship_mut().weapon_counter = 9;
                     TFB_SeedRandom(14);
                     hooks::invoke_element_pointer((*e).postprocess_func.unwrap(), e);
-                    let p = battle::element(disp_q.tail);
+                    let p = battle::element(battle::tail());
                     let held = current & old & WEAPON != 0;
                     assert_eq!((*p).life, if held { 2 } else { 10 });
                     assert_eq!((*p).preprocess_func.is_some(), !held);
@@ -428,7 +428,7 @@ fn fired_charge_animation_bounces_at_each_five_frame_boundary_without_changing_l
             (*e).state_flags &= !(APPEARING as u16);
             ship.ship_mut().cur_status_flags = 0;
             hooks::invoke_element_pointer((*e).postprocess_func.unwrap(), e);
-            let p = battle::element(disp_q.tail);
+            let p = battle::element(battle::tail());
             let pre = (*p).preprocess_func.unwrap();
             for level in 0..4u8 {
                 for (offset, reverse, next, next_reverse) in [
@@ -484,7 +484,7 @@ fn pump_collision_restores_the_shared_blast_counter_and_sets_the_level_blast_ani
                 (*e).velocity.travel_angle = 0;
                 let mut obstacle = PoolElement::new();
                 let mut point = POINT { x: 20, y: 30 };
-                let old_tail = disp_q.tail;
+                let old_tail = battle::tail();
                 TFB_SeedRandom(33);
                 hooks::invoke_collision_pointer(
                     (*e).collision_func.unwrap(),
@@ -494,8 +494,8 @@ fn pump_collision_restores_the_shared_blast_counter_and_sets_the_level_blast_ani
                     &mut point,
                     hooks::CollisionCall::Hook,
                 );
-                assert_ne!({ disp_q.tail }, old_tail);
-                let blast = battle::element(disp_q.tail);
+                assert_ne!({ battle::tail() }, old_tail);
+                let blast = battle::element(battle::tail());
                 assert_eq!((*e).thrust, 67);
                 assert_eq!((*e).hits, 0);
                 assert_eq!((*blast).life, 3 + u16::from(level));
@@ -565,7 +565,7 @@ fn confusion_special_obeys_energy_input_and_cooldown_boundaries() {
                     if fired { 29 } else { counter }
                 );
                 if fired {
-                    let e = battle::element(disp_q.tail);
+                    let e = battle::element(battle::tail());
                     assert_eq!((*e).life, 20);
                     assert_eq!((*e).hits, 200);
                     assert_eq!((*e).mass, 0);
@@ -666,15 +666,15 @@ fn confusion_collision_inserts_a_controller_at_the_head_with_exactly_one_rng_dra
             let mut seen = [false; 2];
             for seed in 1..33 {
                 let e = confusion(&mut ship);
-                let old_head = disp_q.head;
+                let old_head = battle::head();
                 TFB_SeedRandom(seed);
                 let bit = (TFB_Random() as u8 & 1) as usize;
                 TFB_SeedRandom(seed);
                 collide(e, victim.ptr());
-                let h = disp_q.head;
+                let h = battle::head();
                 assert_ne!(h, old_head);
                 let controller = battle::element(h);
-                assert_eq!((*controller).succ, old_head);
+                assert_eq!(battle::succ(controller), old_head);
                 assert_eq!((*controller).playerNr, 0);
                 assert_eq!(
                     (*controller).state_flags,
@@ -832,7 +832,7 @@ fn controller_follows_target_overrides_controls_wraps_animation_and_emits_one_fr
             let mut victim = trader(&_battle, 1);
             let e = confusion(&mut ship);
             collide(e, victim.ptr());
-            let controller = battle::element(disp_q.head);
+            let controller = battle::element(battle::head());
             let pre = (*controller).preprocess_func.unwrap();
             for direction in [LEFT, RIGHT] {
                 (*controller).turn = direction as u8;
@@ -853,7 +853,7 @@ fn controller_follows_target_overrides_controls_wraps_animation_and_emits_one_fr
                 );
                 assert_eq!(frame_index((*controller).next.image.frame), 8);
                 assert_eq!(queue().len(), before + 1);
-                let trail = battle::element(disp_q.tail);
+                let trail = battle::element(battle::tail());
                 assert_eq!((*trail).playerNr, 0);
                 assert_eq!(
                     (*trail).state_flags,
@@ -901,7 +901,7 @@ fn controller_still_overrides_controls_when_trail_allocation_fails() {
             let mut victim = trader(&_battle, 1);
             let pulse = confusion(&mut ship);
             collide(pulse, victim.ptr());
-            let controller = battle::element(disp_q.head);
+            let controller = battle::element(battle::head());
             (*controller).turn = RIGHT as u8;
             (*controller).current.image.frame = ship.raw_frame(2, 8);
             let exhausted = exhaust_queue();
@@ -1072,7 +1072,7 @@ fn held_charge_uses_the_same_ping_pong_animation_as_a_released_pulse() {
                 (*e).turn = turn;
                 (*e).thrust = 2;
                 hooks::invoke_element_pointer((*e).postprocess_func.unwrap(), e);
-                let p = battle::element(disp_q.tail);
+                let p = battle::element(battle::tail());
                 assert_eq!((*p).thrust, 1);
                 assert_eq!((*p).turn, expected_turn);
                 assert_eq!(frame_index((*p).current.image.frame), expected_index);

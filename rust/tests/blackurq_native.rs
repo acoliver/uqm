@@ -170,7 +170,7 @@ fn saw_collision_splinters_and_cloud_damage_depends_on_ship_flag() {
             battle_context::dispose(h);
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
             ship.postprocess();
-            let cloud = battle::element(disp_q.tail);
+            let cloud = battle::element(battle::tail());
             let collide = (*cloud).collision_func.unwrap();
             hooks::invoke_collision_pointer(
                 collide,

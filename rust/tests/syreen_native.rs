@@ -143,13 +143,13 @@ fn song_needs_the_special_key_a_ready_cooldown_and_energy() {
 
             ship.ship_mut().cur_status_flags = 0;
             ship.postprocess();
-            assert!(disp_q.tail.is_null());
+            assert!(battle::tail().is_null());
             assert_eq!(ship.ship_mut().special_counter, 0);
 
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
             ship.ship_mut().special_counter = 3;
             ship.postprocess();
-            assert!(disp_q.tail.is_null());
+            assert!(battle::tail().is_null());
             assert_eq!(ship.ship_mut().special_counter, 3);
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 16);
 
@@ -157,7 +157,7 @@ fn song_needs_the_special_key_a_ready_cooldown_and_energy() {
             ship.ship_mut().special_counter = 0;
             ship.descriptor_mut().ship_info.energy_level = 4;
             ship.postprocess();
-            assert!(disp_q.tail.is_null());
+            assert!(battle::tail().is_null());
             assert_eq!(ship.ship_mut().special_counter, 0);
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 4);
         }
@@ -176,7 +176,7 @@ fn song_pays_energy_and_queues_the_deferred_scan() {
 
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 16 - 5);
             assert_eq!(ship.ship_mut().special_counter, 20);
-            let scan = battle::element(disp_q.tail);
+            let scan = battle::element(battle::tail());
             assert!(!scan.is_null());
             assert_eq!(
                 (*scan).state_flags,
@@ -195,7 +195,7 @@ fn song_pays_energy_and_queues_the_deferred_scan() {
             // The song cannot be restarted during the cooldown.
             ship.postprocess();
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 16 - 5);
-            assert_eq!(battle::element(disp_q.tail), scan);
+            assert_eq!(battle::element(battle::tail()), scan);
         }
     })
 }
@@ -211,7 +211,7 @@ unsafe fn enter_battle(ship: &mut Ship<'_>, location: POINT, crew: u16) {
 unsafe fn queued_scan(ship: &mut Ship) -> (*mut ELEMENT, uqm_rust::engine::battle::ElementHook) {
     ship.ship_mut().cur_status_flags = SPECIAL as u16;
     ship.postprocess();
-    let scan = battle::element(disp_q.tail);
+    let scan = battle::element(battle::tail());
     (scan, (*scan).death_func.unwrap())
 }
 
@@ -243,9 +243,13 @@ fn deferred_scan_requeues_nothing_and_leaves_out_of_range_crews_alone() {
             shot.element_mut().state_flags = 0;
             enter_battle(&mut shot, POINT { x: 5100, y: 5000 }, 10);
 
-            let before = (disp_q.head, disp_q.tail);
+            let before = (battle::head(), battle::tail());
             hooks::invoke_element_pointer(run_scan, scan);
-            assert_eq!((disp_q.head, disp_q.tail), before, "nothing was queued");
+            assert_eq!(
+                (battle::head(), battle::tail()),
+                before,
+                "nothing was queued"
+            );
             for handle in walk_queue() {
                 let queued = battle::element(handle);
                 if (*queued).state_flags & PLAYER_SHIP as u16 != 0 {
@@ -259,10 +263,10 @@ fn deferred_scan_requeues_nothing_and_leaves_out_of_range_crews_alone() {
 
 unsafe fn walk_queue() -> Vec<HELEMENT> {
     let mut handles = Vec::new();
-    let mut handle = disp_q.head;
+    let mut handle = battle::head();
     while !handle.is_null() {
         handles.push(handle);
-        handle = (*battle::element(handle)).succ;
+        handle = battle::succ(handle);
     }
     handles
 }

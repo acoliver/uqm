@@ -1,6 +1,6 @@
 //! Immutable observations of typed element and ship links for automation.
 use crate::comm::locdata::CQueue;
-use crate::engine::battle::access::observe::{ElementObservation, ELEMENT_LINKS, SHIP_LINKS};
+use crate::engine::battle::access::observe::{ElementObservation, SHIP_LINKS};
 use crate::engine::battle::{
     link_queue::{LinkQueue, Starship},
     record::*,
@@ -9,45 +9,18 @@ use crate::engine::battle::{
 use crate::savegame::runtime::queues::{walk_layout, QueueKind};
 
 /// # Safety
-/// The queue and pool stay live and immutable until this observation completes.
+/// The ship and group authorities remain immutable during the observation.
 pub(crate) unsafe fn elements(
-    queue: &CQueue,
+    elements: &crate::engine::battle::ElementTable,
     groups: Option<&QUEUE>,
-    #[cfg(not(test))] elements: &crate::engine::battle::ElementTable,
 ) -> Vec<ElementObservation> {
-    if queue.pq_tab.is_null() && queue.head.is_null() {
-        assert!(
-            queue.tail.is_null(),
-            "uninitialized display queue has a tail"
-        );
-        return Vec::new();
-    }
-    walk_layout(queue, QueueKind::DisplayList, ELEMENT_LINKS)
-        .unwrap_or_else(|e| panic!("live display queue: {e}"));
     let mut result = Vec::new();
-    #[cfg(not(test))]
-    {
-        let mut next = elements.head();
-        while let Some(id) = next {
-            next = elements.succ(id);
-            result.push(crate::engine::battle::access::observe::element(
-                elements, id, groups,
-            ));
-        }
-    }
-    #[cfg(test)]
-    for pointer in walk_layout(queue, QueueKind::DisplayList, ELEMENT_LINKS).unwrap() {
-        // SAFETY: validation retained this fixture pool for the decode.
-        let record = unsafe { &*pointer.cast::<ELEMENT>() };
-        let target = record.target.map_or(0, |id| {
-            assert!(id.slot < queue.num_objects, "fixture target outside pool");
-            queue
-                .pq_tab
-                .wrapping_add(usize::from(id.slot) * usize::from(queue.object_size))
-                as usize
-        });
-        // SAFETY: validation retains the record and the supplied target identity.
-        result.push(unsafe { ElementObservation::decode(record, groups, target) });
+    let mut next = elements.head();
+    while let Some(id) = next {
+        next = elements.succ(id);
+        result.push(crate::engine::battle::access::observe::element(
+            elements, id, groups,
+        ));
     }
     result
 }

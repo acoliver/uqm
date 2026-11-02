@@ -134,8 +134,6 @@ pub type HElement = *mut Element;
 #[derive(Debug, Clone, Copy)]
 pub struct Element {
     // -- Link fields (must be first for QUEUE compatibility) --
-    pub pred: HElement,
-    pub succ: HElement,
 
     // -- Callbacks --
     pub preprocess_func: Option<crate::engine::battle::ElementHook>,
@@ -195,8 +193,6 @@ impl Element {
     /// All fields are initialized to zero/null
     pub fn new() -> Self {
         Element {
-            pred: std::ptr::null_mut(),
-            succ: std::ptr::null_mut(),
             preprocess_func: None,
             postprocess_func: None,
             collision_func: None,
@@ -687,8 +683,6 @@ mod tests {
         assert_eq!(elem.state_flags, ElementFlags::empty());
         assert_eq!(elem.life_span, 0);
         assert_eq!(elem.mass_points, 0);
-        assert!(elem.pred.is_null());
-        assert!(elem.succ.is_null());
     }
 
     #[test]
@@ -960,16 +954,50 @@ mod tests {
 
     #[test]
     fn element_layout_matches_native_hook_record() {
-        assert_eq!(std::mem::size_of::<Element>(), 176);
-        assert_eq!(std::mem::offset_of!(Element, preprocess_func), 16);
-        assert_eq!(std::mem::offset_of!(Element, player_nr), 48);
-        assert_eq!(std::mem::offset_of!(Element, state_flags), 50);
-        assert_eq!(std::mem::offset_of!(Element, life_span), 52);
-        assert_eq!(std::mem::offset_of!(Element, crew_or_hp), 54);
-        assert_eq!(std::mem::offset_of!(Element, prim_index), 104);
-        assert_eq!(std::mem::offset_of!(Element, current), 112);
-        assert_eq!(std::mem::offset_of!(Element, next), 136);
-        assert_eq!(std::mem::offset_of!(Element, parent), 160);
-        assert_eq!(std::mem::offset_of!(Element, target), 164);
+        use crate::ships::native::abi::ELEMENT;
+        assert_eq!(
+            std::mem::size_of::<Element>(),
+            std::mem::size_of::<ELEMENT>()
+        );
+        assert_eq!(
+            std::mem::offset_of!(Element, preprocess_func),
+            std::mem::offset_of!(ELEMENT, preprocess_func)
+        );
+        assert_eq!(
+            std::mem::offset_of!(Element, player_nr),
+            std::mem::offset_of!(ELEMENT, playerNr)
+        );
+        assert_eq!(
+            std::mem::offset_of!(Element, state_flags),
+            std::mem::offset_of!(ELEMENT, state_flags)
+        );
+        assert_eq!(
+            std::mem::offset_of!(Element, life_span),
+            std::mem::offset_of!(ELEMENT, life)
+        );
+        assert_eq!(
+            std::mem::offset_of!(Element, crew_or_hp),
+            std::mem::offset_of!(ELEMENT, hits)
+        );
+        assert_eq!(
+            std::mem::offset_of!(Element, prim_index),
+            std::mem::offset_of!(ELEMENT, PrimIndex)
+        );
+        assert_eq!(
+            std::mem::offset_of!(Element, current),
+            std::mem::offset_of!(ELEMENT, current)
+        );
+        assert_eq!(
+            std::mem::offset_of!(Element, next),
+            std::mem::offset_of!(ELEMENT, next)
+        );
+        assert_eq!(
+            std::mem::offset_of!(Element, parent),
+            std::mem::offset_of!(ELEMENT, parent)
+        );
+        assert_eq!(
+            std::mem::offset_of!(Element, target),
+            std::mem::offset_of!(ELEMENT, target)
+        );
     }
 }

@@ -207,8 +207,6 @@ pub struct Subject {
     pub parent: super::Parent,
     pub(super) intersect: super::record::INTERSECT_CONTROL,
     pub(super) primitive: u16,
-    pub(super) predecessor: Option<ElementId>,
-    pub(super) successor: Option<ElementId>,
 }
 impl std::ops::Deref for Subject {
     type Target = ElementState;

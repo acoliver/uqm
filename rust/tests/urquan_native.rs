@@ -117,7 +117,7 @@ fn two_crew_launches_one_right_fighter_and_allocation_failure_keeps_crew() {
                     if capacity == 1 { 2 } else { 1 }
                 );
                 if capacity == 2 {
-                    assert_eq!((*battle::element(disp_q.tail)).turn, RIGHT as u8);
+                    assert_eq!((*battle::element(battle::tail())).turn, RIGHT as u8);
                 }
             }
         }
@@ -132,7 +132,7 @@ fn fighter_tracking_delay_then_return_and_fire_use_exact_ranges() {
             let enemy = Ship::new(&_battle, SPECIES_ID_UR_QUAN_ID, 1);
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
             ship.postprocess();
-            let fighter = battle::element(disp_q.tail);
+            let fighter = battle::element(battle::tail());
             (*fighter).next = (*fighter).current;
             let initial = velocity(&(*fighter).velocity);
             (*fighter).life = 394;
@@ -153,7 +153,7 @@ fn fighter_tracking_delay_then_return_and_fire_use_exact_ranges() {
             hooks::invoke_element_pointer((*fighter).postprocess_func.unwrap(), fighter);
             assert_eq!((*fighter).thrust, 8);
             assert!((*fighter).postprocess_func.is_none());
-            let laser = battle::element(disp_q.tail);
+            let laser = battle::element(battle::tail());
             assert_eq!(
                 (*laser).parent,
                 uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
@@ -175,7 +175,7 @@ fn fighter_planet_collision_clones_and_deflects_without_rng() {
             let mut ship = Ship::new(&_battle, SPECIES_ID_UR_QUAN_ID, 0);
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
             ship.postprocess();
-            let e = battle::element(disp_q.tail);
+            let e = battle::element(battle::tail());
             (*e).next = (*e).current;
             SetVelocityVector(&raw mut (*e).velocity, 8 << ONE_SHIFT, 0);
             let mut planet_fixture = Object::new(&_battle);
@@ -193,7 +193,7 @@ fn fighter_planet_collision_clones_and_deflects_without_rng() {
                     hooks::CollisionCall::Hook,
                 )
             });
-            let clone = battle::element(disp_q.tail);
+            let clone = battle::element(battle::tail());
             assert_ne!(clone, e);
             assert_eq!((*e).life, 0);
             assert_eq!(frame_index((*clone).next.image.frame), 4);

@@ -1,6 +1,5 @@
 //! Checked record and resource field projections for immutable observers.
 use super::super::ElementId;
-#[cfg(not(test))]
 use super::super::ElementTable;
 use super::super::{
     link_queue::{LinkId, LinkQueue, Starship},
@@ -15,16 +14,6 @@ pub(crate) const SHIP_LINKS: crate::collections::queue::LinkLayout =
         read: |p| {
             // SAFETY: the queue walker checked the retained ship slot's layout and bounds.
             let r = unsafe { &*p.cast::<STARSHIP>().as_ptr() };
-            (r.pred, r.succ)
-        },
-    };
-pub(crate) const ELEMENT_LINKS: crate::collections::queue::LinkLayout =
-    crate::collections::queue::LinkLayout {
-        size: std::mem::size_of::<ELEMENT>(),
-        align: std::mem::align_of::<ELEMENT>(),
-        read: |p| {
-            // SAFETY: the queue walker checked the retained element slot's layout and bounds.
-            let r = unsafe { &*p.cast::<ELEMENT>().as_ptr() };
             (r.pred, r.succ)
         },
     };
@@ -55,7 +44,7 @@ unsafe fn parent_address(parent: super::super::Parent, groups: Option<&QUEUE>) -
 impl super::super::Cx<'_> {
     pub(crate) fn element_parent_address(&self, id: ElementId) -> *mut c_void {
         // SAFETY: this context retains the source identity pools during observation.
-        unsafe { parent_address(self.b.elements[id].parent, Some(self.groups())) }
+        unsafe { parent_address(self.b.kernel.elements[id].parent, Some(self.groups())) }
     }
 }
 #[derive(Clone, Copy)]
@@ -83,8 +72,8 @@ impl ElementObservation {
         Self {
             state: crate::engine::battle::access::observe_element_record(record),
             address: std::ptr::from_ref(record) as usize,
-            pred: record.pred as usize,
-            succ: record.succ as usize,
+            pred: 0,
+            succ: 0,
             // SAFETY: the observation retains all referenced owner pools.
             parent: unsafe { parent_address(record.parent, groups) } as usize,
             target,
@@ -94,7 +83,6 @@ impl ElementObservation {
     }
 }
 
-#[cfg(not(test))]
 pub(crate) fn element(
     table: &ElementTable,
     id: ElementId,
@@ -103,25 +91,17 @@ pub(crate) fn element(
     let record = &table[id];
     let target = record.target.map_or(0, |id| table.raw(id) as usize);
     // SAFETY: the checked table retains the decoded record through this synchronous copy.
-    unsafe { ElementObservation::decode(record, groups, target) }
+    let mut value = unsafe { ElementObservation::decode(record, groups, target) };
+    value.pred = table.pred(id).map_or(0, |id| table.raw(id) as usize);
+    value.succ = table.succ(id).map_or(0, |id| table.raw(id) as usize);
+    value
 }
 #[cfg(not(test))]
 pub(crate) unsafe fn retired_element_address(id: ElementId) -> usize {
-    let pointer = &raw const super::super::legacy::disp_q;
-    // SAFETY: the caller retains the initialized pool authority.
-    let queue = unsafe { &*pointer };
-    assert!(
-        !queue.pq_tab.is_null(),
-        "Pkunk snapshot pool is not initialized"
-    );
-    assert!(
-        id.slot < queue.num_objects,
-        "Pkunk snapshot slot outside pool"
-    );
-    assert!(queue.object_size > 0, "Pkunk snapshot has no record stride");
-    queue
-        .pq_tab
-        .wrapping_add(usize::from(id.slot) * usize::from(queue.object_size)) as usize
+    // SAFETY: the caller retains the published Kernel while taking the snapshot.
+    unsafe { super::super::record::Kernel::current() }
+        .elements
+        .journal_address(id)
 }
 pub(crate) struct ShipRecordObservation<'a> {
     pub state: ShipState,

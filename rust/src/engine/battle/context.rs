@@ -4,7 +4,6 @@ use super::{record::QUEUE, table::ElementTable};
 use std::ptr::NonNull;
 
 pub struct Battle {
-    pub(super) elements: ElementTable,
     pub(super) terminal_outcome: Option<super::RaceState>,
     pub(super) kernel: super::record::Kernel,
     pub zoom_out: i16,
@@ -15,6 +14,10 @@ pub struct Battle {
 }
 
 impl Battle {
+    pub fn reset_element_capacity(&mut self, capacity: usize) {
+        self.kernel.elements.reset_capacity(capacity);
+    }
+
     /// Start a battle, including encounters with no Sa-Matra descriptor.
     pub fn initialize(&mut self) {
         self.terminal_outcome = None;
@@ -45,14 +48,12 @@ impl Battle {
         &mut self.kernel.sounds
     }
 
-    /// # Safety
-    /// `queue` is the one game-thread element authority, kept live until cleanup.
-    pub unsafe fn new(queue: *mut QUEUE) -> Self {
+    pub fn new(capacity: usize) -> Self {
+        let mut kernel = super::record::Kernel::new();
+        kernel.elements.reset_capacity(capacity);
         Self {
-            // SAFETY: the caller owns the queue for this battle context's lifetime.
-            elements: unsafe { ElementTable::from_queue(queue) },
             terminal_outcome: None,
-            kernel: super::record::Kernel::new(),
+            kernel,
             zoom_out: 1 << 8,
             nth_frame: 0,
             max_zoom_out: 0,
@@ -106,13 +107,13 @@ impl Cx<'_> {
     /// Legacy game-thread access must not retain record borrows across callbacks.
     #[cfg(not(test))]
     pub(crate) unsafe fn records(&mut self) -> &mut ElementTable {
-        &mut self.b.elements
+        &mut self.b.kernel.elements
     }
     pub fn random(&mut self) -> u32 {
         (self.rng)()
     }
     pub fn elements(&self) -> &ElementTable {
-        &self.b.elements
+        &self.b.kernel.elements
     }
     pub(crate) fn groups(&self) -> &QUEUE {
         self.project(self.world.groups)

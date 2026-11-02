@@ -14,11 +14,11 @@ use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, frame_index, sine
 
 unsafe fn queued() -> Vec<HELEMENT> {
     let mut result = Vec::new();
-    let mut h = disp_q.head;
+    let mut h = battle::head();
     while !h.is_null() {
         result.push(h);
         assert!(result.len() <= 64, "display queue cycle");
-        h = (*battle::element(h)).succ;
+        h = battle::succ(h);
     }
     result
 }

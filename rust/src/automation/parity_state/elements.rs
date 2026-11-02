@@ -89,28 +89,27 @@ pub(super) fn velocity(fields: &mut Fields, prefix: &str, v: &VelocityDesc) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::battle::element::Element;
+    use crate::engine::battle::ElementTable;
 
     #[test]
     fn links_and_targets_keep_their_element_identity_domain() {
         let directory = super::super::test_directory();
         let mut journal = Journal::create(directory.path())
             .unwrap_or_else(|error| panic!("create element test journal: {error}"));
-        let mut first = Element::new();
-        let mut second = Element::new();
-        let first_address = std::ptr::from_ref(&first) as usize;
-        let second_address = std::ptr::from_ref(&second) as usize;
+        let mut elements = ElementTable::with_capacity(2);
+        let first = elements.alloc().unwrap();
+        let second = elements.alloc().unwrap();
+        elements.put(first);
+        elements.put(second);
+        let first_address = elements.raw(first) as usize;
+        let second_address = elements.raw(second) as usize;
         journal.allocate(first_address);
         journal.allocate(second_address);
         journal.register_parent(second_address, "ship:0:3:5".into());
-        first.succ = &mut second;
-        second.pred = &mut first;
-        first.velocity.error.width = -23;
-        first.intersect_control.last_time_val = 19;
-        // SAFETY: both local model records match the retained record layout and stay live.
-        let mut view = unsafe {
-            ElementObservation::decode(&*std::ptr::from_ref(&first).cast(), None, second_address)
-        };
+        elements[first].target = Some(second);
+        elements[first].velocity.error.width = -23;
+        elements[first].IntersectControl.last_time_val = 19;
+        let mut view = crate::engine::battle::access::observe::element(&elements, first, None);
         let mut fields = Fields::new();
         element(&mut fields, "first", &view, &journal, &[]);
         assert_eq!(fields["first.identity"], "0:1");
@@ -118,9 +117,7 @@ mod tests {
         assert_eq!(fields["first.target"], "1:1");
         assert_eq!(fields["first.velocity.error.width"], "-23");
         assert_eq!(fields["first.intersect.time"], "19");
-        // SAFETY: the local predecessor and record stay live throughout this snapshot.
-        let second_view =
-            unsafe { ElementObservation::decode(&*std::ptr::from_ref(&second).cast(), None, 0) };
+        let second_view = crate::engine::battle::access::observe::element(&elements, second, None);
         element(&mut fields, "second", &second_view, &journal, &[]);
         assert_eq!(fields["second.pred"], "0:1");
         view.target = 0;

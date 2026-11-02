@@ -73,7 +73,7 @@ fn cruiser_descriptor_and_registered_weapon_and_defense_callbacks() {
             assert_eq!(queued(), before);
             ship.ship_mut().special_counter = 0;
             ship.postprocess();
-            let defense = battle::element(disp_q.tail);
+            let defense = battle::element(battle::tail());
             assert_ne!(defense, ship.ptr());
             assert_eq!(
                 (*defense).state_flags,

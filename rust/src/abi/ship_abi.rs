@@ -1243,7 +1243,6 @@ pub const VIEW_STATE_VIEW_SCROLL: VIEW_STATE = 1;
 pub const VIEW_STATE_VIEW_CHANGE: VIEW_STATE = 2;
 pub type VIEW_STATE = ::std::os::raw::c_uint;
 pub type ELEMENT_FLAGS = UWORD;
-pub use crate::engine::battle::legacy::disp_q;
 
 #[cfg(not(test))]
 
