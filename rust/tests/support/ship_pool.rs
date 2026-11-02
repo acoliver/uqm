@@ -10,6 +10,7 @@ use uqm_rust::{
 pub struct PoolShip {
     pointer: *mut STARSHIP,
     side: usize,
+    pub ship_id: uqm_rust::engine::battle::ShipId,
 }
 impl PoolShip {
     /// # Safety
@@ -24,7 +25,16 @@ impl PoolShip {
             assert!(!pointer.is_null(), "fixture ship pool exhausted");
             pointer.write(mem::zeroed());
             (*pointer).playerNr = player;
-            Self { pointer, side }
+            let ship_id = uqm_rust::engine::battle::ShipId {
+                side: side as u8,
+                slot: ((pointer as usize - race_q[side].pq_tab as usize) / size_of::<STARSHIP>())
+                    as u8,
+            };
+            Self {
+                pointer,
+                side,
+                ship_id,
+            }
         }
     }
 }

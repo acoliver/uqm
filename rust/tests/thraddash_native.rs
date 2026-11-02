@@ -237,7 +237,7 @@ fn horn_uses_next_location_exact_facing_speed_and_offsets_without_inheriting_vel
                         && (*e).death_func.is_none()
                 );
                 assert!((*e).collision_func.is_some());
-                assert!((*e).pParent.is_null());
+                assert!((*e).parent == uqm_rust::engine::battle::Parent::None);
                 assert_eq!((*prim(e)).Type, gfx_object_STAMP_PRIM as u8);
                 assert_eq!(queued(), vec![ship.handle]);
                 battle_context::dispose(h);
@@ -286,7 +286,10 @@ fn afterburner_inserts_owned_invisible_napalm_at_the_head_in_newest_first_order(
             let second = with_rng(31, 0, || burn(&mut ship));
             assert_eq!(queued(), vec![second.cast(), first.cast(), ship.handle]);
             for e in [first, second] {
-                assert_eq!((*e).pParent, (&raw mut *ship.ship_mut()).cast());
+                assert_eq!(
+                    (*e).parent,
+                    uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
+                );
                 assert!((*e).hTarget.is_null());
                 assert_eq!(
                     (*e).state_flags,
@@ -350,7 +353,7 @@ fn boost_uses_temporary_characteristics_and_preserves_the_inertial_thrust_result
                 let thrust_status = uqm_rust::app::bridge::enter(|cx| {
                     let id = cx.elements().id((&raw mut *expected).cast()).unwrap();
                     cx.copy_allocated_element(id, ship.id);
-                    expected.pParent = (&raw mut *expected_ss).cast();
+                    expected.parent = uqm_rust::engine::battle::Parent::Ship(expected_ss.ship_id);
                     inertial_thrust(cx, id)
                 });
                 with_rng(7, 0, || burn(&mut ship));

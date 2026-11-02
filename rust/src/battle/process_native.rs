@@ -233,7 +233,7 @@ pub(crate) mod engine {
 
     unsafe fn preprocess(cx: &mut Cx<'_>, e: ElementId) {
         if cx.elements()[e].life == 0 {
-            if !cx.elements()[e].pParent.is_null() {
+            if cx.elements()[e].parent != crate::engine::battle::Parent::None {
                 untarget(cx, e);
             }
             cx.records()[e].state_flags |= DISAPPEARING as ELEMENT_FLAGS;
@@ -365,7 +365,7 @@ pub(crate) mod engine {
             if collision_eligible(
                 cx.elements()[test].state_flags,
                 cx.elements()[el].state_flags,
-                cx.elements()[test].pParent == cx.elements()[el].pParent,
+                cx.elements()[test].parent == cx.elements()[el].parent,
                 cx.elements()[test].mass,
                 cx.elements()[el].mass,
             ) {
@@ -401,7 +401,9 @@ pub(crate) mod engine {
                             if next == cur && tnext == tcur {
                                 if test_state_flags & APPEARING as ELEMENT_FLAGS != 0 {
                                     damage(cx, test);
-                                    if !cx.elements()[test].pParent.is_null() {
+                                    if cx.elements()[test].parent
+                                        != crate::engine::battle::Parent::None
+                                    {
                                         untarget(cx, test);
                                     }
                                     cx.records()[test].state_flags |=
@@ -412,7 +414,9 @@ pub(crate) mod engine {
                                 }
                                 if state_flags & APPEARING as ELEMENT_FLAGS != 0 {
                                     damage(cx, el);
-                                    if !cx.elements()[el].pParent.is_null() {
+                                    if cx.elements()[el].parent
+                                        != crate::engine::battle::Parent::None
+                                    {
                                         untarget(cx, el);
                                     }
                                     cx.records()[el].state_flags |=

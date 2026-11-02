@@ -257,8 +257,8 @@ fn released_crystal_queues_eight_fragments_in_facing_order() {
                 let fragment = battle::element(fragment_handle);
                 let face = i as u16 * 2;
                 assert_eq!(
-                    (*fragment).pParent,
-                    (ship.ship_mut() as *mut STARSHIP).cast()
+                    (*fragment).parent,
+                    uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
                 );
                 assert_eq!((*fragment).playerNr, 1);
                 assert_eq!(
@@ -452,7 +452,10 @@ fn doggy_spawns_behind_ship_with_exact_state_and_coordinate_truncation() {
                     (*dog).current.image.frame,
                     SetAbsFrameIndex(ship.descriptor_mut().ship_data.special[0], 0)
                 );
-                assert_eq!((*dog).pParent, (ship.ship_mut() as *mut STARSHIP).cast());
+                assert_eq!(
+                    (*dog).parent,
+                    uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
+                );
                 assert!((*dog).hTarget.is_null());
                 assert!((*dog).preprocess_func.is_some());
                 assert!((*dog).postprocess_func.is_none());
@@ -677,7 +680,10 @@ fn doggy_death_preserves_unrelated_fields_and_starts_six_frame_animation() {
                 sentinel as *const () as usize
             );
             assert_eq!((*dog).hTarget, ship.handle);
-            assert_eq!((*dog).pParent, (ship.ship_mut() as *mut STARSHIP).cast());
+            assert_eq!(
+                (*dog).parent,
+                uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
+            );
             assert_eq!((*dog).hits, 3);
             assert_eq!((*dog).mass, 4);
             let animate = (*dog).preprocess_func.unwrap();

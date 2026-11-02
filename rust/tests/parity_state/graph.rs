@@ -36,7 +36,10 @@ pub(super) fn elements_and_fighters(directory: &Path) {
     owner.ShipFacing = 31;
     first.player_nr = 0;
     first.state_flags = ElementFlags::PLAYER_SHIP;
-    first.p_parent = ptr::from_mut(&mut owner).cast();
+    first.parent = uqm_rust::engine::battle::Parent::Ship(uqm_rust::engine::battle::ShipId {
+        side: 0,
+        slot: 0,
+    });
     first.current.location.x = 17;
     first.crew_or_hp = 11;
     first.succ = &mut *second;
@@ -44,7 +47,7 @@ pub(super) fn elements_and_fighters(directory: &Path) {
     second.succ = &mut *neutral;
     second.player_nr = 0;
     second.state_flags = ElementFlags::PLAYER_SHIP | ElementFlags::BACKGROUND_OBJECT;
-    second.p_parent = first.p_parent;
+    second.parent = first.parent;
     second.current.location.x = -91;
     second.current.location.y = 43;
     second.crew_or_hp = 7;
@@ -203,7 +206,10 @@ pub(super) fn fighters_without_journal(directory: &Path) {
     element.player_nr = 0;
     element.crew_or_hp = 19;
     element.current.location.x = -9;
-    element.p_parent = ptr::from_mut(&mut ship).cast();
+    element.parent = uqm_rust::engine::battle::Parent::Ship(uqm_rust::engine::battle::ShipId {
+        side: 0,
+        slot: 0,
+    });
     element.preprocess_func = Some(uqm_rust::engine::battle::ElementHook::Native(
         unregistered_hook,
     ));
@@ -229,7 +235,10 @@ pub(super) fn fighters_without_journal(directory: &Path) {
     let element = &mut element;
     for side in [-1, 2, i16::MAX] {
         element.player_nr = side;
-        element.p_parent = ptr::dangling_mut();
+        element.parent = uqm_rust::engine::battle::Parent::Ship(uqm_rust::engine::battle::ShipId {
+            side: 0,
+            slot: 255,
+        });
         let snapshot = BattleSnapshot::live();
         assert!(snapshot.player.is_none());
         assert!(snapshot.enemy.is_none());
@@ -348,7 +357,7 @@ pub(super) fn non_ship_parent_fields(directory: &Path) {
         group.loc.x = -71;
         group.task = 2;
         PutQueue(queue, handle);
-        element.p_parent = handle;
+        element.parent = uqm_rust::engine::battle::Parent::IpGroup(0);
         attach_elements(std::slice::from_mut(&mut element));
         disp_q.head = ptr::from_mut(&mut element).cast();
         disp_q.tail = disp_q.head;

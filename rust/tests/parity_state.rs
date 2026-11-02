@@ -737,7 +737,10 @@ fn frameset_and_media_identity(directory: &Path) {
     let mut element = Element::new();
     ship.SpeciesID = SPECIES_ID_EARTHLING_ID;
     let mut descriptor = install_descriptor(&mut ship, descriptor);
-    element.p_parent = ptr::from_mut(&mut ship).cast();
+    element.parent = uqm_rust::engine::battle::Parent::Ship(uqm_rust::engine::battle::ShipId {
+        side: 0,
+        slot: 0,
+    });
     // SAFETY: the stack graph stays live through all snapshots and is detached below.
     unsafe {
         attach_elements(std::slice::from_mut(&mut element));

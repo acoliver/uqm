@@ -431,8 +431,8 @@ unsafe fn check_trail(ship: &mut Ship, trail: *mut ELEMENT, at: POINT, angle: u1
     assert!((*trail).postprocess_func.is_none());
     assert!((*trail).collision_func.is_none());
     assert_eq!(
-        (*trail).pParent,
-        (&raw const *ship.inner.ship_mut()).cast_mut().cast()
+        (*trail).parent,
+        uqm_rust::engine::battle::Parent::Ship(ship.inner.ship_id)
     );
 }
 
@@ -651,7 +651,7 @@ fn bug_missiles_launch_fore_left_and_right_inheriting_ship_velocity() {
                         assert!((*m).collision_func.is_some());
                         assert!((*m).postprocess_func.is_none());
                         assert!((*m).death_func.is_none());
-                        assert!((*m).pParent.is_null());
+                        assert!((*m).parent == uqm_rust::engine::battle::Parent::None);
                         assert!((*m).preprocess_func.is_some());
 
                         // initialize_missile at speed DISPLAY_TO_WORLD (24), then the
@@ -794,7 +794,10 @@ fn first_preprocess_with_an_odd_draw_queues_a_phoenix_at_the_head() {
             assert!((*phoenix).death_func.is_some());
             assert!((*phoenix).preprocess_func.is_none());
             assert!((*phoenix).postprocess_func.is_none());
-            assert_eq!((*phoenix).pParent, (&raw mut *ship.inner.ship_mut()).cast());
+            assert_eq!(
+                (*phoenix).parent,
+                uqm_rust::engine::battle::Parent::Ship(ship.inner.ship_id)
+            );
             assert!(ship.inner.descriptor_mut().callbacks()[1] == 0);
             assert_eq!(ship.inner.ship_mut().cur_status_flags, start_status);
             // hTarget stays clear: this is not a reincarnation.

@@ -365,8 +365,7 @@ mod tactrans_native_access {
         }
         pub fn winner(&mut self) -> Option<ShipId> {
             // SAFETY: winner state belongs to the owning game thread.
-            let winner = unsafe { (*self.kernel()).winner };
-            (!winner.is_null()).then(|| self.ship_id(winner as usize))
+            unsafe { (*self.kernel()).winner }
         }
         pub(crate) fn play_ditty(&mut self, ship: ShipId) {
             // SAFETY: the checked winner retains its loaded victory music.
@@ -551,21 +550,18 @@ mod allocation {
     #[cfg(not(test))]
     impl Cx<'_> {
         pub fn alloc_element(&mut self) -> Option<ElementId> {
-            // SAFETY: the battle exclusively owns its initialized primitive pool.
-            unsafe {
-                let handle = if let Some(id) = self.records().alloc() {
-                    self.assign_primitive(id);
-                    self.primitive_style_mut(id).kind = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
-                    self.elements().raw(id)
-                } else {
-                    ptr::null_mut()
-                };
-                crate::collections::observation::record(
-                    crate::collections::observation::Event::Allocate(handle as usize),
-                );
+            let handle = if let Some(id) = self.records().alloc() {
+                self.assign_primitive(id);
+                self.primitive_style_mut(id).kind = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
+                self.elements().raw(id)
+            } else {
+                ptr::null_mut()
+            };
+            crate::collections::observation::record(
+                crate::collections::observation::Event::Allocate(handle as usize),
+            );
 
-                self.elements().id(handle)
-            }
+            self.elements().id(handle)
         }
     }
 }
@@ -593,12 +589,9 @@ impl Cx<'_> {
         let handle = self.elements().raw(id);
         let index = self.elements()[id].PrimIndex;
         use crate::collections::observation::{record, Event};
-        // SAFETY: this allocation exclusively owns the primitive and the unlinked element.
-        unsafe {
-            self.release_primitive(index);
-            record(Event::Free(handle as usize));
-            self.records().free(id);
-        }
+        self.release_primitive(index);
+        record(Event::Free(handle as usize));
+        self.records().free(id);
     }
 }
 

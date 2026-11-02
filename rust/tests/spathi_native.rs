@@ -179,7 +179,10 @@ fn butt_leaves_the_tail_not_the_nose() {
             // out at facing 12 (angle 48, along -x).
             let butt = battle::element(queue_tail());
             assert_ne!(butt, ship);
-            assert_eq!((*butt).pParent, (fleet.ship_mut() as *mut STARSHIP).cast());
+            assert_eq!(
+                (*butt).parent,
+                uqm_rust::engine::battle::Parent::Ship(fleet.ship_id)
+            );
             assert_eq!(index_of((*butt).current.image.frame), 12);
             assert_eq!((*butt).velocity.travel_angle, 48);
             assert_eq!((*butt).state_flags, (APPEARING | FINITE_LIFE) as u16);

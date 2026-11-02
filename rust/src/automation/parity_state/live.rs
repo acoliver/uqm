@@ -41,6 +41,7 @@ fn checkpoint_with_context(
                 &*crate::engine::battle::access::live_queues::display_list()
                     .cast::<crate::comm::locdata::CQueue>(),
                 cx.elements(),
+                Some(cx.groups()),
             ),
         )
     };
@@ -126,11 +127,13 @@ pub(in crate::automation) fn fighters(
 unsafe fn display_elements(
     queue: &CQueue,
     #[cfg(not(test))] elements: &crate::engine::battle::ElementTable,
+    groups: Option<&crate::engine::battle::record::QUEUE>,
 ) -> Vec<ElementObservation> {
     // SAFETY: the caller retains the immutable display pool throughout this observation.
     unsafe {
         crate::battle::context_access::observe::elements(
             queue,
+            groups,
             #[cfg(not(test))]
             elements,
         )
@@ -186,7 +189,7 @@ mod tests {
     fn visuals(fields: &mut Fields, prefix: &str, element: &Element, journal: &mut Journal) {
         // SAFETY: the test owns a layout-compatible source record.
         let observation =
-            unsafe { ElementObservation::decode(&*std::ptr::from_ref(element).cast()) };
+            unsafe { ElementObservation::decode(&*std::ptr::from_ref(element).cast(), None) };
         super::visuals(fields, prefix, &observation, journal);
     }
 
@@ -362,7 +365,7 @@ mod tests {
         let mut elements = [Element::new(); 3];
         let queue = pool(&mut elements);
         // SAFETY: the local pool remains live and unchanged for this traversal.
-        let addresses: Vec<_> = unsafe { display_elements(&queue).into_iter() }
+        let addresses: Vec<_> = unsafe { display_elements(&queue, None).into_iter() }
             .map(|e| e.address as *const Element)
             .collect();
         assert_eq!(
@@ -379,7 +382,7 @@ mod tests {
         elements[1].succ = &mut elements[0];
         // SAFETY: the pool remains live; walk rejects the malformed link before
         // borrowing any slot through it.
-        let _ = unsafe { display_elements(&queue).into_iter() }.count();
+        let _ = unsafe { display_elements(&queue, None).into_iter() }.count();
     }
     #[test]
     #[should_panic(expected = "live display queue")]
@@ -390,6 +393,6 @@ mod tests {
         elements[0].succ = std::ptr::dangling_mut();
         // SAFETY: the pool remains live; walk rejects the malformed link before
         // borrowing any slot through it.
-        let _ = unsafe { display_elements(&queue).into_iter() }.count();
+        let _ = unsafe { display_elements(&queue, None).into_iter() }.count();
     }
 }

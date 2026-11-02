@@ -320,7 +320,7 @@ fn root_bolts_have_exact_random_color_length_angle_and_folded_chain_length() {
                     (1, 1, 1, 1)
                 );
                 assert_eq!((*bolt).playerNr, 0);
-                assert_eq!((*bolt).pParent, (*ship.ptr()).pParent);
+                assert_eq!((*bolt).parent, (*ship.ptr()).parent);
                 assert!(
                     (*bolt).preprocess_func.is_none()
                         && (*bolt).postprocess_func.is_some()
@@ -475,7 +475,7 @@ fn child_segments_keep_unrounded_travel_angle_inherit_color_and_retain_selected_
                 );
                 assert_eq!(rgba((*prim(child)).color), (3, 77, 129, 43));
                 assert_eq!((*child).turn, 3);
-                assert_eq!((*child).pParent, (*parent).pParent);
+                assert_eq!((*child).parent, (*parent).parent);
                 assert_eq!(
                     ((*child).current.location.x, (*child).current.location.y),
                     (4100, 4200)
@@ -658,10 +658,7 @@ fn ship_postprocess_emits_only_during_the_sixteen_active_weapon_ticks() {
             with_rng(303, usize::from(emits), || ship.postprocess());
             assert_eq!(queue_len(), before + usize::from(emits));
             if emits {
-                assert_eq!(
-                    (*battle::element(disp_q.tail)).pParent,
-                    (*ship.ptr()).pParent
-                );
+                assert_eq!((*battle::element(disp_q.tail)).parent, (*ship.ptr()).parent);
             }
             assert_eq!(ship.ship_mut().weapon_counter, counter);
         }
@@ -820,7 +817,7 @@ fn harvester_same_parent_zero_mass_and_ship_solidity_match_collision_possible_ma
             let mut e_fixture = junk(&ship, 0, 0, obj_flags as u16, obj_mass);
             let e = &raw mut *e_fixture;
             if same_parent {
-                (*e).pParent = (*ship.ptr()).pParent;
+                (*e).parent = (*ship.ptr()).parent;
             }
             with_rng(2, 0, || ship.postprocess());
             assert_eq!((*e).life == 0, harvest);

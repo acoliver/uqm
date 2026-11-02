@@ -43,17 +43,7 @@ impl Cx<'_> {
     }
 
     pub fn parent(&self, id: ElementId) -> Parent {
-        // SAFETY: Cx owns the game-thread authorities for this synchronous call.
-        unsafe {
-            self.b.elements.parent(
-                id,
-                [
-                    super::record::ship_queue(0).as_ptr(),
-                    super::record::ship_queue(1).as_ptr(),
-                ],
-                self.world.groups(),
-            )
-        }
+        self.b.elements[id].parent
     }
 
     pub fn ship_element(&self, ship: ShipId) -> ElementId {
@@ -66,8 +56,7 @@ impl Cx<'_> {
     }
 
     pub fn set_parent(&mut self, element: ElementId, parent: Option<ShipId>) {
-        self.b.elements[element].pParent =
-            parent.map_or(std::ptr::null_mut(), |ship| self.ship_pointer(ship).cast());
+        self.b.elements[element].parent = parent.map_or(Parent::None, Parent::Ship);
     }
 
     pub fn target(&self, element: ElementId) -> Option<ElementId> {
@@ -80,15 +69,11 @@ impl Cx<'_> {
     }
 
     pub(crate) fn set_ip_group_parent(&mut self, id: ElementId, slot: u8) {
-        let queue = self.project(
-            std::ptr::NonNull::new(self.world.groups().cast_mut())
-                .unwrap_or_else(|| panic!("IP-group queue")),
+        assert!(
+            slot < self.groups().num_objects,
+            "IP-group slot outside pool"
         );
-        assert!(slot < queue.num_objects, "IP-group slot outside pool");
-        let parent = queue
-            .pq_tab
-            .wrapping_add(usize::from(slot) * usize::from(queue.object_size));
-        self.b.elements[id].pParent = parent.cast();
+        self.b.elements[id].parent = Parent::IpGroup(slot);
     }
 
     pub fn put(&mut self, id: ElementId) {
@@ -548,9 +533,7 @@ impl Cx<'_> {
     }
 }
 
-/// # Safety
-/// The caller retains the live element graph throughout this staging observation.
-pub(crate) unsafe fn observe_element_record(record: &super::record::ELEMENT) -> ElementState {
+pub(crate) fn observe_element_record(record: &super::record::ELEMENT) -> ElementState {
     ElementState::decode(record)
 }
 
@@ -664,11 +647,7 @@ impl Cx<'_> {
 #[cfg(not(test))]
 impl Cx<'_> {
     pub(crate) fn set_winner_slot(&mut self, ship: Option<ShipId>) {
-        let pointer = ship.map_or(std::ptr::null_mut(), |ship| self.ship_pointer(ship));
-        // SAFETY: this context exclusively retains the game-thread battle kernel.
-        unsafe {
-            (*self.kernel()).winner = pointer;
-        }
+        self.b.kernel.winner = ship;
     }
     pub(crate) fn set_ship_species(&mut self, ship: ShipId, species: u32) {
         self.ship_mut(ship).SpeciesID = species;
@@ -780,7 +759,7 @@ impl Cx<'_> {
         // SAFETY: the caller retains the initialized storage and resources for this synchronous projection.
         unsafe {
             crate::app::bridge::enter(|cx| {
-                let ship = cx.ship_id(parent);
+                let ship = super::link_queue::identify(parent);
                 let mut subject = cx.decode_subject(&*element);
                 let mut concerns = raw
                     .iter()

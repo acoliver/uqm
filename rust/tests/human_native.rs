@@ -79,7 +79,7 @@ fn cruiser_descriptor_and_registered_weapon_and_defense_callbacks() {
                 (*defense).state_flags,
                 (APPEARING | NONSOLID | FINITE_LIFE) as u16
             );
-            assert_eq!((*defense).pParent, (*ship.ptr()).pParent);
+            assert_eq!((*defense).parent, (*ship.ptr()).parent);
             assert!((*defense).death_func.is_some());
             call_element(
                 "ships::races::human_native::spawn_point_defense",

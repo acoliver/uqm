@@ -183,8 +183,8 @@ pub struct Element {
     pub current: ElementVisualState,
     pub next: ElementVisualState,
 
-    // -- Parent reference (pointer to StarShip or other owner) --
-    pub p_parent: *mut std::ffi::c_void,
+    // -- Parent reference --
+    pub parent: crate::engine::battle::Parent,
 
     // -- Tracking target reference --
     pub h_target: HElement,
@@ -221,7 +221,7 @@ impl Element {
             prim_index: 0,
             current: ElementVisualState::new(),
             next: ElementVisualState::new(),
-            p_parent: std::ptr::null_mut(),
+            parent: crate::engine::battle::Parent::None,
             h_target: std::ptr::null_mut(),
         }
     }
@@ -257,7 +257,7 @@ impl Element {
         // If IGNORE_SIMILAR, they must have different parents
         if self.state_flags.contains(ElementFlags::IGNORE_SIMILAR)
             && other.state_flags.contains(ElementFlags::IGNORE_SIMILAR)
-            && self.p_parent == other.p_parent
+            && self.parent == other.parent
         {
             return false;
         }
@@ -577,9 +577,10 @@ mod tests {
         e0.mass_points = 1;
         e1.mass_points = 1;
 
-        let parent_ptr = &mut 0u8 as *mut u8 as *mut std::ffi::c_void;
-        e0.p_parent = parent_ptr;
-        e1.p_parent = parent_ptr;
+        let parent =
+            crate::engine::battle::Parent::Ship(crate::engine::battle::ShipId { side: 0, slot: 0 });
+        e0.parent = parent;
+        e1.parent = parent;
 
         e0.state_flags.insert(ElementFlags::IGNORE_SIMILAR);
         e1.state_flags.insert(ElementFlags::IGNORE_SIMILAR);
@@ -747,9 +748,10 @@ mod tests {
         e1.mass_points = 3;
 
         // Set same parent
-        let parent_ptr = &mut 0u8 as *mut u8 as *mut std::ffi::c_void;
-        e0.p_parent = parent_ptr;
-        e1.p_parent = parent_ptr;
+        let parent =
+            crate::engine::battle::Parent::Ship(crate::engine::battle::ShipId { side: 0, slot: 0 });
+        e0.parent = parent;
+        e1.parent = parent;
 
         // Both set IGNORE_SIMILAR
         e0.state_flags.insert(ElementFlags::IGNORE_SIMILAR);
@@ -768,10 +770,12 @@ mod tests {
         e1.mass_points = 3;
 
         // Different parents
-        let parent0 = &mut 0u8 as *mut u8 as *mut std::ffi::c_void;
-        let parent1 = &mut 1u8 as *mut u8 as *mut std::ffi::c_void;
-        e0.p_parent = parent0;
-        e1.p_parent = parent1;
+        let parent0 =
+            crate::engine::battle::Parent::Ship(crate::engine::battle::ShipId { side: 0, slot: 0 });
+        let parent1 =
+            crate::engine::battle::Parent::Ship(crate::engine::battle::ShipId { side: 0, slot: 1 });
+        e0.parent = parent0;
+        e1.parent = parent1;
 
         e0.state_flags.insert(ElementFlags::IGNORE_SIMILAR);
         e1.state_flags.insert(ElementFlags::IGNORE_SIMILAR);
@@ -965,7 +969,7 @@ mod tests {
         assert_eq!(std::mem::offset_of!(Element, prim_index), 104);
         assert_eq!(std::mem::offset_of!(Element, current), 112);
         assert_eq!(std::mem::offset_of!(Element, next), 136);
-        assert_eq!(std::mem::offset_of!(Element, p_parent), 160);
+        assert_eq!(std::mem::offset_of!(Element, parent), 160);
         assert_eq!(std::mem::offset_of!(Element, h_target), 168);
     }
 }

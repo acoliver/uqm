@@ -39,7 +39,10 @@ impl OrzFixture for Ship<'_> {
         (*self.ptr()).state_flags &= !(APPEARING as u16);
         let turret = battle::element((*self.ptr()).succ);
         assert!(!turret.is_null());
-        assert_eq!((*turret).pParent, (self.ship_mut() as *mut STARSHIP).cast());
+        assert_eq!(
+            (*turret).parent,
+            uqm_rust::engine::battle::Parent::Ship(self.ship_id)
+        );
         turret
     }
 
@@ -74,8 +77,8 @@ impl OrzFixture for Ship<'_> {
         let out = self.weapon_handles(1)[0];
         assert!(!out.is_null());
         let e = battle::element(out);
-        assert!((*e).pParent.is_null());
-        (*e).pParent = (self.ship_mut() as *mut STARSHIP).cast();
+        assert!((*e).parent == uqm_rust::engine::battle::Parent::None);
+        (*e).parent = uqm_rust::engine::battle::Parent::Ship(self.ship_id);
         (*e).next = (*e).current;
         out
     }
@@ -510,7 +513,10 @@ fn muzzle_flash_requires_an_appearing_friendly_stamp_and_animates_from_current()
                 (*flash).state_flags,
                 (FINITE_LIFE | NONSOLID | IGNORE_SIMILAR | APPEARING) as u16
             );
-            assert_eq!((*flash).pParent, (ship.ship_mut() as *mut STARSHIP).cast());
+            assert_eq!(
+                (*flash).parent,
+                uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
+            );
             let a = facing_to_angle(4);
             assert_eq!(
                 (*turret).current.location.x,
@@ -576,7 +582,10 @@ fn marines_launch_at_rear_with_exact_state_and_cost_only_after_allocation() {
                     (*marine).current.image.farray,
                     (&raw mut ship.descriptor_mut().ship_data.special).cast()
                 );
-                assert_eq!((*marine).pParent, (ship.ship_mut() as *mut STARSHIP).cast());
+                assert_eq!(
+                    (*marine).parent,
+                    uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
+                );
                 assert_eq!((*prim(marine)).Type, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
                 assert_eq!(velocity_fields(&(*marine).velocity), [0; 9]);
                 assert!((*marine).preprocess_func.is_some());
@@ -1036,7 +1045,10 @@ fn marine_thrust_restores_owner_state_and_inserts_preprocessed_five_color_ion_tr
             assert_eq!((*marine).thrust, (SHIP_AT_MAX_SPEED >> 6) as BYTE);
             let ion = battle::element(disp_q.head);
             assert_eq!((*ion).playerNr, NEUTRAL_PLAYER_NUM as SIZE);
-            assert_eq!((*ion).pParent, (ship.ship_mut() as *mut STARSHIP).cast());
+            assert_eq!(
+                (*ion).parent,
+                uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
+            );
             assert_eq!(
                 (*ion).state_flags,
                 (APPEARING | FINITE_LIFE | NONSOLID | PRE_PROCESS) as u16

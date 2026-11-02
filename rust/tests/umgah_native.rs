@@ -985,8 +985,8 @@ fn rear_arc_uses_unwrapped_next_location_difference_and_inclusive_angle_bounds()
 unsafe fn fire(ship: &mut Ship<'_>) -> HELEMENT {
     let h = ship.initialize_from(ship.ptr(), 1)[0];
     if !h.is_null() {
-        assert!((*battle::element(h)).pParent.is_null());
-        (*battle::element(h)).pParent = (*ship.ptr()).pParent;
+        assert!((*battle::element(h)).parent == uqm_rust::engine::battle::Parent::None);
+        (*battle::element(h)).parent = (*ship.ptr()).parent;
     }
     h
 }

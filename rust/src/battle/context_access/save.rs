@@ -1,6 +1,7 @@
 //! Save-facing projection over checked typed ship links and element ids.
 use crate::comm::locdata::CQueue;
 use crate::engine::battle::link_queue::{LinkQueue, Starship};
+use crate::engine::battle::Parent;
 use crate::savegame::runtime::{
     hyper_save::HyperSaveError,
     queues::{walk_layout, QueueKind},
@@ -42,12 +43,13 @@ pub(crate) unsafe fn read_flagship_facing(
     if state.flags & crate::ships::native::abi::PLAYER_SHIP as u16 == 0 {
         return Err(HyperSaveError::ElementIsNotAPlayerShip);
     }
-    if owner.is_null() {
+    if owner == Parent::None {
         return Err(HyperSaveError::NoOwner);
     }
     let mut next = ships.head();
     while let Some(id) = next {
-        if ships.raw(id) == owner {
+        if owner == Parent::Ship(ships.ship_id(id, crate::ships::native::abi::RPG_PLAYER_NUM as u8))
+        {
             return Ok(Some(ships.facing(id)));
         }
         next = ships.succ(id);
@@ -59,14 +61,14 @@ pub(crate) unsafe fn read_flagship_facing(
 unsafe fn display_element(
     _queue: &CQueue,
     handle: *mut c_void,
-) -> Option<(crate::engine::battle::views::ElementState, *mut c_void)> {
+) -> Option<(crate::engine::battle::views::ElementState, Parent)> {
     // SAFETY: the caller owns the published game-thread context.
     unsafe {
         crate::app::bridge::enter(|cx| {
             let mut next = cx.elements().head();
             while let Some(id) = next {
                 if cx.elements().raw(id) == handle {
-                    return Some((cx.element(id), cx.element_parent_address(id)));
+                    return Some((cx.element(id), cx.parent(id)));
                 }
                 next = cx.elements().succ(id);
             }
@@ -78,7 +80,7 @@ unsafe fn display_element(
 unsafe fn display_element(
     queue: &CQueue,
     handle: *mut c_void,
-) -> Option<(crate::engine::battle::views::ElementState, *mut c_void)> {
+) -> Option<(crate::engine::battle::views::ElementState, Parent)> {
     use crate::engine::battle::record::ELEMENT;
     use crate::savegame::runtime::queues::walk_layout;
     // Unit fixtures supply independent immutable pools instead of the published game authority.
@@ -96,7 +98,7 @@ unsafe fn display_element(
             unsafe {
                 (
                     crate::engine::battle::access::observe_element_record(&*p.cast::<ELEMENT>()),
-                    (*p.cast::<ELEMENT>()).pParent,
+                    (*p.cast::<ELEMENT>()).parent,
                 )
             }
         })

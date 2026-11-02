@@ -1,12 +1,12 @@
 //! Checked record and resource field projections for immutable observers.
+use super::super::ElementId;
+#[cfg(not(test))]
+use super::super::ElementTable;
 use super::super::{
     link_queue::{LinkId, LinkQueue, Starship},
     record::*,
     views::*,
 };
-#[cfg(not(test))]
-use super::super::{ElementId, ElementTable};
-#[cfg(not(test))]
 use std::ffi::c_void;
 pub(crate) const SHIP_LINKS: crate::collections::queue::LinkLayout =
     crate::collections::queue::LinkLayout {
@@ -28,10 +28,34 @@ pub(crate) const ELEMENT_LINKS: crate::collections::queue::LinkLayout =
             (r.pred, r.succ)
         },
     };
+/// Encode an owner identity for the existing journal, without decoding record fields.
+///
+/// # Safety
+/// The game-thread ship and group pools must remain live throughout the observation.
+unsafe fn parent_address(parent: super::super::Parent, groups: Option<&QUEUE>) -> *mut c_void {
+    use super::super::Parent;
+    let (queue, slot) = match parent {
+        Parent::None => return std::ptr::null_mut(),
+        Parent::Ship(id) => {
+            // SAFETY: the observation retains the live ship authority.
+            let queue = unsafe { super::super::record::ship_queue(usize::from(id.side)).as_ref() };
+            (queue, id.slot)
+        }
+        Parent::IpGroup(slot) => (
+            groups.unwrap_or_else(|| panic!("missing IP-group authority")),
+            slot,
+        ),
+    };
+    queue
+        .pq_tab
+        .wrapping_add(usize::from(slot) * usize::from(queue.object_size))
+        .cast()
+}
+
 impl super::super::Cx<'_> {
-    #[cfg(not(test))]
     pub(crate) fn element_parent_address(&self, id: ElementId) -> *mut c_void {
-        self.b.elements[id].pParent
+        // SAFETY: this context retains the source identity pools during observation.
+        unsafe { parent_address(self.b.elements[id].parent, Some(self.groups())) }
     }
 }
 #[derive(Clone, Copy)]
@@ -55,14 +79,14 @@ impl std::ops::Deref for ElementObservation {
 impl ElementObservation {
     /// # Safety
     /// The caller retains the live source record and its reachable resource graph.
-    pub(crate) unsafe fn decode(record: &ELEMENT) -> Self {
+    pub(crate) unsafe fn decode(record: &ELEMENT, groups: Option<&QUEUE>) -> Self {
         Self {
-            // SAFETY: the snapshot retains the source element and its live graph.
-            state: unsafe { crate::engine::battle::access::observe_element_record(record) },
+            state: crate::engine::battle::access::observe_element_record(record),
             address: std::ptr::from_ref(record) as usize,
             pred: record.pred as usize,
             succ: record.succ as usize,
-            parent: record.pParent as usize,
+            // SAFETY: the observation retains all referenced owner pools.
+            parent: unsafe { parent_address(record.parent, groups) } as usize,
             target: record.hTarget as usize,
             primitive: record.PrimIndex,
             intersect: record.IntersectControl,
@@ -71,9 +95,13 @@ impl ElementObservation {
 }
 
 #[cfg(not(test))]
-pub(crate) fn element(table: &ElementTable, id: ElementId) -> ElementObservation {
+pub(crate) fn element(
+    table: &ElementTable,
+    id: ElementId,
+    groups: Option<&QUEUE>,
+) -> ElementObservation {
     // SAFETY: the checked table retains the decoded record through this synchronous copy.
-    unsafe { ElementObservation::decode(&table[id]) }
+    unsafe { ElementObservation::decode(&table[id], groups) }
 }
 #[cfg(not(test))]
 pub(crate) unsafe fn retired_element_address(id: ElementId) -> usize {

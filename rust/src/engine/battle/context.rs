@@ -66,7 +66,7 @@ impl Battle {
 /// Phase 4 replaces these projections with the owned World.
 pub struct World {
     pub(super) activity: NonNull<u16>,
-    groups: NonNull<QUEUE>,
+    pub(super) groups: NonNull<QUEUE>,
     pub shared_frames: [super::views::Frames; 2],
 }
 
@@ -92,10 +92,6 @@ impl World {
         // SAFETY: construction guarantees the projection's validity and exclusivity.
         unsafe { self.activity.as_ptr().read() }
     }
-
-    pub fn groups(&self) -> *const QUEUE {
-        self.groups.as_ptr()
-    }
 }
 
 pub struct Cx<'a> {
@@ -106,10 +102,8 @@ pub struct Cx<'a> {
 }
 
 impl Cx<'_> {
-    /// # Safety
-    /// Legacy game-thread access must not retain record borrows across callbacks.
     #[cfg(not(test))]
-    pub(crate) unsafe fn records(&mut self) -> &mut ElementTable {
+    pub(crate) fn records(&mut self) -> &mut ElementTable {
         &mut self.b.elements
     }
     pub fn random(&mut self) -> u32 {
@@ -117,6 +111,9 @@ impl Cx<'_> {
     }
     pub fn elements(&self) -> &ElementTable {
         &self.b.elements
+    }
+    pub(crate) fn groups(&self) -> &QUEUE {
+        self.project(self.world.groups)
     }
 }
 

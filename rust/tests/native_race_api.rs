@@ -220,7 +220,7 @@ fn native_races_cannot_escape_the_real_accessor_boundary() -> Result<(), Box<dyn
         ("context_free_world_write", "fn probe() { crate::battle::set_flagship_crew(1); }", "E0425"),
         ("untyped_story", "fn probe(cx: &mut Cx<'_>) { let _ = cx.story_state(\"SHOFIXTI_RECRUITED\"); }", "E0308"),
         ("ship_record", "fn probe(cx: &mut Cx<'_>, ship: ShipId) { cx.ship_state_mut(ship).record.descriptor = None; let _ = cx.race_stats(ship); }", "E0616"),
-        ("element_record", "fn probe(cx: &mut Cx<'_>, id: ElementId) { cx.element_mut(id).record.pParent = std::ptr::NonNull::dangling().as_ptr(); let _ = cx.element_frame_set_first(id, true); }", "E0616"),
+        ("element_record", "fn probe(cx: &mut Cx<'_>, id: ElementId) { cx.element_mut(id).record.parent = crate::engine::battle::Parent::None; let _ = cx.element_frame_set_first(id, true); }", "E0616"),
         ("table", "fn probe(cx: &mut Cx<'_>, id: ElementId) { cx.b.elements[id].next.image.farray = std::ptr::NonNull::dangling().as_ptr(); let _ = cx.element_frame_set_first(id, true); }", "E0616"),
         ("frame", "fn probe() { let _ = crate::engine::battle::views::Frame(std::ptr::NonNull::dangling().as_ptr()); }", "E0603"),
         ("frames", "fn probe() { let _ = crate::engine::battle::views::Frames(std::ptr::NonNull::dangling().as_ptr()); }", "E0603"),

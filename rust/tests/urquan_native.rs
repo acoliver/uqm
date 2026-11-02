@@ -154,7 +154,10 @@ fn fighter_tracking_delay_then_return_and_fire_use_exact_ranges() {
             assert_eq!((*fighter).thrust, 8);
             assert!((*fighter).postprocess_func.is_none());
             let laser = battle::element(disp_q.tail);
-            assert_eq!((*laser).pParent, (&raw mut *ship.ship_mut()).cast());
+            assert_eq!(
+                (*laser).parent,
+                uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
+            );
             assert_eq!((*laser).mass, 1);
             // On the return leg the ship becomes collidable with its own fighters.
             (*fighter).state_flags &= !(CHANGING as u16);

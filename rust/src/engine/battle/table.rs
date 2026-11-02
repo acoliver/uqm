@@ -171,46 +171,6 @@ impl ElementTable {
             ReinitQueue(self.queue());
         }
     }
-
-    /// # Safety
-    /// Each parent queue is initialized, address-stable and game-thread owned.
-    pub unsafe fn parent(
-        &self,
-        id: ElementId,
-        ships: [*const QUEUE; 2],
-        groups: *const QUEUE,
-    ) -> Parent {
-        let parent = self[id].pParent;
-        if parent.is_null() {
-            return Parent::None;
-        }
-        for (side, queue) in ships.into_iter().enumerate() {
-            // SAFETY: ship queues are live under the parent accessor's contract.
-            if let Some(slot) = unsafe { parent_slot(queue, parent) } {
-                return Parent::Ship(ShipId {
-                    side: side as u8,
-                    slot,
-                });
-            }
-        }
-        // SAFETY: the IP group queue is live under the parent accessor's contract.
-        if let Some(slot) = unsafe { parent_slot(groups, parent) } {
-            return Parent::IpGroup(slot);
-        }
-        panic!("element {id:?} has parent outside ship and IP group pools");
-    }
-}
-
-unsafe fn parent_slot(queue: *const QUEUE, parent: HLink) -> Option<u8> {
-    // SAFETY: parent queue validity is the caller's contract.
-    let queue = unsafe { &*queue };
-    if queue.pq_tab.is_null() {
-        return None;
-    }
-    let size = usize::from(queue.object_size);
-    let offset = (parent as usize).checked_sub(queue.pq_tab as usize)?;
-    (size != 0 && offset.is_multiple_of(size) && offset / size < usize::from(queue.num_objects))
-        .then_some((offset / size.max(1)) as u8)
 }
 
 impl Index<ElementId> for ElementTable {
@@ -279,48 +239,19 @@ mod tests {
     }
 
     #[test]
-    fn parent_decoding_uses_queue_ranges_and_rejects_an_unknown_owner() {
+    fn typed_parents_preserve_ship_and_group_identity_without_decoding_addresses() {
         let mut queue = QUEUE::default();
-        let mut ships = [QUEUE::default(); 2];
-        let mut groups = QUEUE::default();
-        // SAFETY: this serialized test owns the records and projected storage for the scope.
+        // SAFETY: the test exclusively retains the initialized element authority.
         unsafe {
             assert!(InitQueue(&mut queue, 1, size_of::<ELEMENT>() as u16));
-            for ship in &mut ships {
-                assert!(InitQueue(
-                    ship,
-                    2,
-                    size_of::<super::super::record::STARSHIP>() as u16
-                ));
-            }
-            assert!(InitQueue(
-                &mut groups,
-                1,
-                size_of::<super::super::record::STARSHIP>() as u16
-            ));
             let mut elements = ElementTable::from_queue(&raw mut queue);
             let id = elements.alloc().unwrap();
-            let ranges = [&raw const ships[0], &raw const ships[1]];
-            assert_eq!(elements.parent(id, ranges, &groups), Parent::None);
-            elements[id].pParent = ships[1]
-                .pq_tab
-                .add(usize::from(ships[1].object_size))
-                .cast();
-            assert_eq!(
-                elements.parent(id, ranges, &groups),
-                Parent::Ship(ShipId { side: 1, slot: 1 })
-            );
-            elements[id].pParent = groups.pq_tab.cast();
-            assert_eq!(elements.parent(id, ranges, &groups), Parent::IpGroup(0));
-            elements[id].pParent = (&raw mut queue).cast();
-            assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(
-                || elements.parent(id, ranges, &groups)
-            ))
-            .is_err());
-            for ship in &mut ships {
-                UninitQueue(ship);
-            }
-            UninitQueue(&mut groups);
+            assert_eq!(elements[id].parent, Parent::None);
+            let ship = ShipId { side: 1, slot: 1 };
+            elements[id].parent = Parent::Ship(ship);
+            assert_eq!(elements[id].parent, Parent::Ship(ship));
+            elements[id].parent = Parent::IpGroup(0);
+            assert_eq!(elements[id].parent, Parent::IpGroup(0));
             UninitQueue(&mut queue);
         }
     }

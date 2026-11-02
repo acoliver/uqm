@@ -12,6 +12,7 @@ use crate::savegame::runtime::queues::{walk_layout, QueueKind};
 /// The queue and pool stay live and immutable until this observation completes.
 pub(crate) unsafe fn elements(
     queue: &CQueue,
+    groups: Option<&QUEUE>,
     #[cfg(not(test))] elements: &crate::engine::battle::ElementTable,
 ) -> Vec<ElementObservation> {
     if queue.pq_tab.is_null() && queue.head.is_null() {
@@ -30,14 +31,14 @@ pub(crate) unsafe fn elements(
         while let Some(id) = next {
             next = elements.succ(id);
             result.push(crate::engine::battle::access::observe::element(
-                elements, id,
+                elements, id, groups,
             ));
         }
     }
     #[cfg(test)]
     for pointer in walk_layout(queue, QueueKind::DisplayList, ELEMENT_LINKS).unwrap() {
         // SAFETY: validation retained this fixture pool for the decode.
-        result.push(unsafe { ElementObservation::decode(&*pointer.cast()) });
+        result.push(unsafe { ElementObservation::decode(&*pointer.cast(), groups) });
     }
     result
 }

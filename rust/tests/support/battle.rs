@@ -95,7 +95,6 @@ impl<'a> Ship<'a> {
             });
             assert!(!handle.is_null());
             let el = element(handle);
-            (*el).pParent = raw_ship.cast();
             (*el).playerNr = player;
             (*el).state_flags = PLAYER_SHIP as u16;
             (*raw_ship).hShip = handle;
@@ -109,6 +108,7 @@ impl<'a> Ship<'a> {
                 slot: ((raw_ship as usize - race_q[player as usize].pq_tab as usize)
                     / size_of::<STARSHIP>()) as u8,
             };
+            (*el).parent = uqm_rust::engine::battle::Parent::Ship(ship_id);
             Self {
                 battle,
                 ss: Record(raw_ship),

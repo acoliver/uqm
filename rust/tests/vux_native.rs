@@ -48,7 +48,10 @@ fn descriptor_laser_and_limpet_launch() {
             assert_eq!(((*e).life, (*e).hits, (*e).mass), (80, 1, 0));
             // HALF_CIRCLE is 32, added directly to facing 4 in the C code.
             assert_eq!(velocity(&(*e).velocity), toward(25, 36));
-            assert_eq!((*e).pParent, (&raw mut *ship.ship_mut()).cast());
+            assert_eq!(
+                (*e).parent,
+                uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
+            );
             (*e).next = (*e).current;
             with_rng(11, 0, || {
                 hooks::invoke_element_pointer((*e).preprocess_func.unwrap(), e)

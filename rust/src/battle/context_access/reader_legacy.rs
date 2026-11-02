@@ -48,7 +48,7 @@ pub(crate) unsafe fn computer_frame(
     // SAFETY: the vtable's common context prefix and opaque ship address preserve the ABI contract.
     unsafe {
         crate::app::bridge::enter(|cx| {
-            let id = (!ship.is_null()).then(|| cx.ship_id(ship as usize));
+            let id = (!ship.is_null()).then(|| link_queue::identify(ship as usize));
             super::ai_legacy::computer_intelligence(cx, &*context.cast(), id)
         })
     }

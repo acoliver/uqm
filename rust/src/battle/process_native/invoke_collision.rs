@@ -11,7 +11,7 @@ pub fn invoke_collision(
     b: ElementId,
     pb: &mut POINT,
 ) {
-    let parent = cx.elements()[a].pParent as usize;
+    let parent = cx.element_parent_address(a) as usize;
     match hook {
         CollisionHook::Native(callback) => {
             super::dispatch::invoke(callback as usize, parent, || callback(cx, a, pa, b, pb))

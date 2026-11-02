@@ -282,7 +282,10 @@ fn laser_death_obeys_range_byte_gate_count_draw_and_animation() {
                         assert_eq!((*spot).life, 9);
                         assert_eq!((*spot).thrust, 0);
                         assert_eq!((*prim(spot)).Type, gfx_object_STAMP_PRIM as u8);
-                        assert_eq!((*spot).pParent, (ship.ship_mut() as *mut STARSHIP).cast());
+                        assert_eq!(
+                            (*spot).parent,
+                            uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
+                        );
                         let animate = (*spot).preprocess_func.unwrap();
                         (*spot).turn = 1;
                         (*spot).thrust = 3;
@@ -363,7 +366,10 @@ fn muzzle_flash_requires_friendly_appearing_tail_line_and_even_cycle() {
                     assert_eq!(frame_index((*flash).current.image.frame), 21);
                     assert_eq!((*flash).life, 1);
                     assert_eq!((*prim(flash)).Type, gfx_object_STAMP_PRIM as u8);
-                    assert_eq!((*flash).pParent, (ship.ship_mut() as *mut STARSHIP).cast());
+                    assert_eq!(
+                        (*flash).parent,
+                        uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
+                    );
                     battle_context::unlink(flash_handle);
                     battle_context::dispose(flash_handle);
                 } else {
@@ -647,7 +653,7 @@ fn point_defense_uses_backward_weakest_nearest_and_stable_tie_order() {
             assert_eq!(point((*beam).current.location), point((*s).next.location));
             assert_eq!(velocity(beam), (-40 << VELOCITY_SHIFT, 0));
             assert_eq!(rgba((*prim(beam)).color), [0, 8, 255, 255]);
-            assert_eq!((*beam).pParent, (*s).pParent);
+            assert_eq!((*beam).parent, (*s).parent);
             assert!((*beam).hTarget.is_null());
             assert_eq!((*s).thrust, 2);
             assert_rng_after(12, 0);
@@ -714,7 +720,7 @@ fn point_defense_respects_collision_cloak_range_and_full_width_hitpoints() {
                     8 => {
                         (*obj).state_flags = IGNORE_SIMILAR as u16;
                         (*ship.ptr()).state_flags |= IGNORE_SIMILAR as u16;
-                        (*obj).pParent = (*ship.ptr()).pParent;
+                        (*obj).parent = (*ship.ptr()).parent;
                     }
                     9 => {
                         (*obj).mass = 0;
@@ -826,7 +832,10 @@ fn tractor_applies_mass_division_speed_flags_and_head_inserted_blue_shadows() {
                     let shadow = battle::element(h);
                     assert_ne!(h, ship.handle);
                     assert_eq!((*shadow).playerNr, 1);
-                    assert_eq!((*shadow).pParent, (&raw mut *enemy.ship_mut()).cast());
+                    assert_eq!(
+                        (*shadow).parent,
+                        uqm_rust::engine::battle::Parent::Ship(enemy.ship_id)
+                    );
                     assert_eq!(
                         (*shadow).state_flags,
                         (FINITE_LIFE | NONSOLID | IGNORE_SIMILAR | POST_PROCESS | CHANGING) as u16
@@ -1080,7 +1089,7 @@ fn unrequested_special_and_failed_muzzle_allocation_only_reset_cycle() {
 unsafe fn laser(ship: &mut Ship<'_>) -> HELEMENT {
     let h = ship.initialize_from(ship.ptr(), 1)[0];
     if !h.is_null() {
-        (*battle::element(h)).pParent = (*ship.ptr()).pParent;
+        (*battle::element(h)).parent = (*ship.ptr()).parent;
     }
     h
 }

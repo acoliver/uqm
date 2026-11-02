@@ -273,8 +273,7 @@ impl Element {
         // SAFETY: this test source has the same zero-valid representation as a newly allocated element.
         let record: crate::engine::battle::record::ELEMENT = unsafe { std::mem::zeroed() };
         Self {
-            // SAFETY: this test retains its initialized local record.
-            state: unsafe { crate::engine::battle::access::observe_element_record(&record) },
+            state: crate::engine::battle::access::observe_element_record(&record),
             parent: Parent::None,
             target: None,
             pred: None,

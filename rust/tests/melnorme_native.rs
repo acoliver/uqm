@@ -29,7 +29,7 @@ unsafe fn pump(ship: &mut Ship<'_>) -> *mut ELEMENT {
     let handle = ship.weapon_handles(1)[0];
     assert!(!handle.is_null());
     let e = battle::element(handle);
-    (*e).pParent = (&raw mut *ship.ship_mut()).cast();
+    (*e).parent = uqm_rust::engine::battle::Parent::Ship(ship.ship_id);
     (*e).next = (*e).current;
     battle::put(handle);
     e
@@ -256,7 +256,7 @@ fn initial_pump_uses_the_c_missile_block_at_all_facings_and_coordinate_limits() 
                 assert!((*e).preprocess_func.is_none());
                 assert!((*e).postprocess_func.is_some() && (*e).collision_func.is_some());
                 assert!(
-                    (*e).pParent.is_null(),
+                    (*e).parent == uqm_rust::engine::battle::Parent::None,
                     "the firing path, not the initializer, attaches the ship"
                 );
                 assert_eq!(
@@ -339,7 +339,10 @@ fn held_charge_replaces_the_element_and_uses_the_old_level_for_damage() {
                     assert_eq!((*p).life, 2);
                     assert_eq!(ship.ship_mut().weapon_counter, 1);
                     assert_eq!(ship.ship_mut().energy_counter, 4);
-                    assert_eq!((*p).pParent, (&raw mut *ship.ship_mut()).cast());
+                    assert_eq!(
+                        (*p).parent,
+                        uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
+                    );
                     assert!((*p).preprocess_func.is_none() && (*p).postprocess_func.is_some());
                     assert_eq!((*prim(e)).Type, gfx_object_NUM_PRIMS as GRAPHICS_PRIM);
                     assert_ne!((*e).state_flags & NONSOLID as u16, 0);
@@ -572,7 +575,10 @@ fn confusion_special_obeys_energy_input_and_cooldown_boundaries() {
                         (APPEARING | FINITE_LIFE | IGNORE_SIMILAR) as u16
                     );
                     assert_eq!((*e).playerNr, 1);
-                    assert_eq!((*e).pParent, (&raw mut *ship.ship_mut()).cast());
+                    assert_eq!(
+                        (*e).parent,
+                        uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
+                    );
                     assert_eq!(
                         (*e).current.image.farray,
                         (&raw mut ship.descriptor_mut().ship_data.special).cast()
@@ -677,7 +683,10 @@ fn confusion_collision_inserts_a_controller_at_the_head_with_exactly_one_rng_dra
                 assert_eq!((*controller).life, 400);
                 assert_eq!((*controller).turn, 1 << bit);
                 assert_eq!((*controller).hTarget, victim.ship_mut().hShip);
-                assert_eq!((*controller).pParent, (&raw mut *ship.ship_mut()).cast());
+                assert_eq!(
+                    (*controller).parent,
+                    uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
+                );
                 assert_eq!((*controller).current.image.farray, (*e).next.image.farray);
                 assert_eq!(frame_index((*controller).current.image.frame), 8);
                 assert_eq!(
@@ -738,7 +747,7 @@ fn confusion_reuses_the_first_same_player_nonsolid_special_even_if_it_is_a_trail
                 (*e).state_flags = flags as u16;
                 (*e).life = 1;
                 (*e).hTarget = victim.ship_mut().hShip;
-                (*e).pParent = (&raw mut *ship.ship_mut()).cast();
+                (*e).parent = uqm_rust::engine::battle::Parent::Ship(ship.ship_id);
                 (*prim(e)).Type = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
                 battle::put(h);
                 candidates.push(e);
@@ -850,7 +859,7 @@ fn controller_follows_target_overrides_controls_wraps_animation_and_emits_one_fr
                 assert_eq!((*trail).life, 1);
                 assert_eq!((*trail).turn, 0);
                 assert_eq!((*trail).hTarget, victim.ship_mut().hShip);
-                assert_eq!((*trail).pParent, (*controller).pParent);
+                assert_eq!((*trail).parent, (*controller).parent);
                 assert_eq!((*trail).current.image.frame, (*controller).next.image.frame);
                 assert_eq!((*trail).next.image.frame, (*controller).next.image.frame);
                 assert_eq!((*prim(trail)).Type, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);

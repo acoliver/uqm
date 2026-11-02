@@ -188,7 +188,7 @@ fn song_pays_energy_and_queues_the_deferred_scan() {
                 ((*scan).next.location.x, (*scan).next.location.y),
                 (1234, 4321)
             );
-            assert_eq!((*scan).pParent, ship.element_mut().pParent);
+            assert_eq!((*scan).parent, ship.element_mut().parent);
             assert!((*scan).hTarget.is_null());
             assert!((*scan).death_func.is_some());
 

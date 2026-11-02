@@ -116,7 +116,7 @@ mod tests {
         owners: &BTreeSet<usize>,
     ) {
         // SAFETY: the test owns the source and matching record layout.
-        let view = unsafe { ElementObservation::decode(&*std::ptr::from_ref(e).cast()) };
+        let view = unsafe { ElementObservation::decode(&*std::ptr::from_ref(e).cast(), None) };
         super::element(fields, prefix, &view, journal, hooks, owners);
     }
     use std::collections::BTreeSet;
@@ -136,7 +136,6 @@ mod tests {
         first.succ = &mut second;
         second.pred = &mut first;
         first.h_target = 71usize as _;
-        first.p_parent = 71usize as _;
         first.velocity.error.width = -23;
         first.intersect_control.last_time_val = 19;
         let owners = BTreeSet::from([71]);

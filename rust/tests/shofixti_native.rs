@@ -450,7 +450,7 @@ fn darts_use_next_location_exact_facing_offset_speed_and_failure_count() {
                     && (*dart).death_func.is_none()
                     && (*dart).collision_func.is_some()
             );
-            assert!((*dart).pParent.is_null());
+            assert!((*dart).parent == uqm_rust::engine::battle::Parent::None);
             let angle = facing_to_angle(facing as i32) as COUNT;
             let vx = cosine(angle as i32, 96 << VELOCITY_SHIFT);
             let vy = sine(angle as i32, 96 << VELOCITY_SHIFT);
@@ -613,7 +613,7 @@ fn both_switch_edges_advance_and_only_the_third_remaining_frame_detonates() {
             (APPEARING | NONSOLID | FINITE_LIFE) as u16
         );
         assert_eq!((*deferred).life, 0);
-        assert_eq!((*deferred).pParent, (*ship.ptr()).pParent);
+        assert_eq!((*deferred).parent, (*ship.ptr()).parent);
         assert_eq!(
             ((*deferred).next.location.x, (*deferred).next.location.y),
             (4000, 4000)
@@ -803,7 +803,7 @@ fn glory_flash_switch_and_explosion_color_sequence_use_twelve_frame_ship_death()
         assert_eq!((*explosion).life, 10);
         assert_eq!((*explosion).hits, 0);
         assert_eq!((*explosion).mass, 0);
-        assert_eq!((*explosion).pParent, (*ship.ptr()).pParent);
+        assert_eq!((*explosion).parent, (*ship.ptr()).parent);
         assert_eq!(
             (*explosion).current.image.frame,
             ship.special_frames.frame(0)

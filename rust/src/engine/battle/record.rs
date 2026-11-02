@@ -76,7 +76,7 @@ mod abi {
         pub PrimIndex: COUNT,
         pub current: STATE,
         pub next: STATE,
-        pub pParent: *mut ::std::os::raw::c_void,
+        pub parent: super::super::Parent,
         pub hTarget: HELEMENT,
     }
 
@@ -371,25 +371,6 @@ use super::views::*;
 use super::{Cx, ElementId, Parent, ShipId};
 
 impl Cx<'_> {
-    pub(crate) fn ship_id(&self, address: usize) -> ShipId {
-        for side in 0..2 {
-            // SAFETY: queue authorities are owned by this game-thread context.
-            let queue = self.project(ship_queue(side));
-            let stride = usize::from(queue.object_size);
-            if let Some(offset) = address.checked_sub(queue.pq_tab as usize) {
-                if stride != 0
-                    && offset.is_multiple_of(stride)
-                    && offset / stride < usize::from(queue.num_objects)
-                {
-                    return ShipId {
-                        side: side as u8,
-                        slot: (offset / stride) as u8,
-                    };
-                }
-            }
-        }
-        panic!("ship address {address:#x} is outside the ship pools")
-    }
     pub(crate) fn ship_pointer(&self, id: ShipId) -> *mut STARSHIP {
         assert!(id.side < 2, "invalid ship side {id:?}");
         // SAFETY: queue storage is address-stable for the battle's lifetime.
@@ -439,11 +420,7 @@ impl Cx<'_> {
         super::Subject {
             state: ElementState::decode(e),
             target: self.b.elements.id(e.hTarget),
-            parent: if e.pParent.is_null() {
-                Parent::None
-            } else {
-                Parent::Ship(self.ship_id(e.pParent as usize))
-            },
+            parent: e.parent,
             intersect: e.IntersectControl,
             primitive: e.PrimIndex,
             predecessor: self.b.elements.id(e.pred),
@@ -456,11 +433,7 @@ impl Cx<'_> {
         e.hTarget = subject
             .target
             .map_or(std::ptr::null_mut(), |id| self.b.elements.raw(id));
-        e.pParent = match subject.parent {
-            Parent::None => std::ptr::null_mut(),
-            Parent::Ship(id) => self.ship_pointer(id).cast(),
-            other => panic!("invalid projected subject parent {other:?}"),
-        };
+        e.parent = subject.parent;
         e.IntersectControl = subject.intersect;
         e.PrimIndex = subject.primitive;
         e.pred = subject
@@ -659,7 +632,7 @@ impl ElementState {
                     farray: self.next.image.frames.0,
                 },
             },
-            pParent: ptr::null_mut(),
+            parent: Parent::None,
             hTarget: ptr::null_mut(),
         }
     }
@@ -708,7 +681,9 @@ mod projection_tests {
         subject.set_mass_points(6);
         subject.set_turn_wait(14);
         subject.set_thrust_wait(15);
+        subject.parent = Parent::IpGroup(3);
         let encoded = cx.encode_subject(&subject);
+        assert_eq!(cx.decode_subject(&encoded).parent, Parent::IpGroup(3));
         assert_eq!(encoded.PrimIndex, 17);
         assert_eq!(encoded.IntersectControl.last_time_val, 31);
         assert_eq!(encoded.current.location.x, 11);
@@ -814,7 +789,7 @@ pub(crate) struct Kernel {
     pub(crate) instant_victory: u32,
     pub(crate) battle_music: MUSIC_REF,
     pub(crate) ditty_playing: u32,
-    pub(crate) winner: *mut STARSHIP,
+    pub(crate) winner: Option<ShipId>,
     pub(crate) status_offsets: [i16; 2],
     pub(crate) menu_sounds: SOUND,
     pub(crate) game_sounds: SOUND,
@@ -847,7 +822,7 @@ impl Kernel {
             instant_victory: 0,
             battle_music: ptr::null_mut(),
             ditty_playing: 0,
-            winner: ptr::null_mut(),
+            winner: None,
             status_offsets: [0; 2],
             menu_sounds: ptr::null_mut(),
             game_sounds: ptr::null_mut(),
@@ -885,7 +860,7 @@ mod kernel_tests {
         assert!(fresh.player_input.iter().all(|input| input.is_null()));
         assert!(fresh.menu_sounds.is_null());
         assert!(fresh.game_sounds.is_null());
-        assert!(fresh.winner.is_null());
+        assert!(fresh.winner.is_none());
         assert_eq!(fresh.sounds.count, 0);
         assert_eq!(fresh.channels.lru, [0, 1, 2, 3]);
     }

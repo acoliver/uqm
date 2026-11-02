@@ -454,7 +454,12 @@ pub(crate) mod engine {
             for i in 0..NUM_PLAYERS as COUNT {
                 let player = GetPlayerOrder(i);
                 if crate::app::bridge::enter(|cx| {
-                    spawn_ship(cx, cx.ship_id(ships[player as usize] as usize))
+                    spawn_ship(
+                        cx,
+                        crate::engine::battle::link_queue::identify(
+                            ships[player as usize] as usize,
+                        ),
+                    )
                 }) == 0
                 {
                     return 0;

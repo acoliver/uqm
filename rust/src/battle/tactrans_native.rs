@@ -133,7 +133,6 @@ pub(crate) mod engine {
     use crate::engine::battle::{Cx, ElementFn, ElementId, Parent};
     use crate::ships::native::{cosine, facing_to_angle, sine};
     use abi::*;
-    use std::ptr;
 
     use crate::battle::world_elements::engine::crew_preprocess;
 
@@ -191,7 +190,7 @@ pub(crate) mod engine {
     /// The game thread must exclusively own battle winner state.
     #[no_mangle]
     pub unsafe extern "C" fn ResetWinnerStarShip() {
-        Kernel::current().winner = ptr::null_mut();
+        Kernel::current().winner = None;
     }
 
     /// # Safety
