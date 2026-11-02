@@ -135,10 +135,10 @@ fn forward_missile_leaves_the_nose_along_the_ship_facing() {
                 1
             );
             let m = battle::element(out[0]);
-            assert_eq!((*m).__bindgen_anon_1.life_span, 10);
-            assert_eq!((*m).__bindgen_anon_2.hit_points, 1);
-            assert_eq!((*m).__bindgen_anon_3.mass_points, 1);
-            assert_eq!((*m).__bindgen_anon_5.blast_offset, 1);
+            assert_eq!((*m).life, 10);
+            assert_eq!((*m).hits, 1);
+            assert_eq!((*m).mass, 1);
+            assert_eq!((*m).thrust, 1);
             assert_eq!((*m).playerNr, 0);
             assert_eq!(
                 (*m).state_flags,
@@ -183,11 +183,11 @@ fn butt_leaves_the_tail_not_the_nose() {
             assert_eq!(index_of((*butt).current.image.frame), 12);
             assert_eq!((*butt).velocity.travel_angle, 48);
             assert_eq!((*butt).state_flags, (APPEARING | FINITE_LIFE) as u16);
-            assert_eq!((*butt).__bindgen_anon_1.life_span, 30);
-            assert_eq!((*butt).__bindgen_anon_2.hit_points, 1);
-            assert_eq!((*butt).__bindgen_anon_3.mass_points, 2);
-            assert_eq!((*butt).__bindgen_anon_4.turn_wait, 1);
-            assert_eq!((*butt).__bindgen_anon_5.blast_offset, 4);
+            assert_eq!((*butt).life, 30);
+            assert_eq!((*butt).hits, 1);
+            assert_eq!((*butt).mass, 2);
+            assert_eq!((*butt).turn, 1);
+            assert_eq!((*butt).thrust, 4);
             assert!((*butt).preprocess_func.is_some());
             assert_eq!(
                 ((*butt).current.location.x, (*butt).current.location.y),
@@ -279,15 +279,15 @@ fn butt_homes_one_facing_step_per_tracking_pass() {
             let preprocess = (*butt).preprocess_func.unwrap();
 
             // TRACK_WAIT: the first pass only counts the delay down.
-            assert_eq!((*butt).__bindgen_anon_4.turn_wait, 1);
+            assert_eq!((*butt).turn, 1);
             hooks::invoke_element_pointer(preprocess, butt);
-            assert_eq!((*butt).__bindgen_anon_4.turn_wait, 0);
+            assert_eq!((*butt).turn, 0);
             assert_eq!(index_of((*butt).next.image.frame), 12);
             assert_eq!((*butt).state_flags & CHANGING as u16, 0);
 
             // With no enemy to track, the delay is reloaded and nothing turns.
             hooks::invoke_element_pointer(preprocess, butt);
-            assert_eq!((*butt).__bindgen_anon_4.turn_wait, 1);
+            assert_eq!((*butt).turn, 1);
             assert_eq!(index_of((*butt).next.image.frame), 12);
             assert_eq!((*butt).state_flags & CHANGING as u16, 0);
 
@@ -312,7 +312,7 @@ fn butt_homes_one_facing_step_per_tracking_pass() {
             assert_eq!(index_of((*butt).next.image.frame), 13);
             assert_ne!((*butt).state_flags & CHANGING as u16, 0);
             assert_eq!((*butt).velocity.travel_angle, 52);
-            assert_eq!((*butt).__bindgen_anon_4.turn_wait, 1);
+            assert_eq!((*butt).turn, 1);
         }
     })
 }

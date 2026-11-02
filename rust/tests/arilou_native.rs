@@ -90,7 +90,7 @@ impl<'a> Fleet<'a> {
         let ship = self.fixture.ptr();
         (*ship).playerNr = player;
         (*ship).state_flags = PLAYER_SHIP as u16;
-        (*ship).__bindgen_anon_1.life_span = NORMAL_LIFE as u16;
+        (*ship).life = NORMAL_LIFE as u16;
         (*ship).current.location = POINT { x, y };
         (*ship).next.location = POINT { x, y };
         (*prim_of(ship)).Type = gfx_object_STAMP_PRIM as u8;
@@ -252,10 +252,10 @@ fn laser_snaps_to_the_enemy_within_the_turn_and_is_yellow() {
                 (*laser).state_flags,
                 (APPEARING | FINITE_LIFE | IGNORE_SIMILAR) as u16
             );
-            assert_eq!((*laser).__bindgen_anon_1.life_span, 1);
-            assert_eq!((*laser).__bindgen_anon_2.hit_points, 1);
-            assert_eq!((*laser).__bindgen_anon_3.mass_points, 1);
-            assert_eq!((*laser).__bindgen_anon_5.blast_offset, 1);
+            assert_eq!((*laser).life, 1);
+            assert_eq!((*laser).hits, 1);
+            assert_eq!((*laser).mass, 1);
+            assert_eq!((*laser).thrust, 1);
             assert_eq!((*laser).playerNr, 0);
             assert!((*laser).collision_func.is_some());
             assert!((*ship).hTarget.is_null());
@@ -621,7 +621,7 @@ fn skiff_stops_dead_unless_the_thrust_delay_is_running() {
             skiff.fleet.fixture.ship_mut().cur_status_flags = (SHIP_AT_MAX_SPEED | THRUST) as u16;
 
             // thrust_wait != 0: the engine is still coasting the thrust delay.
-            (*ship).__bindgen_anon_5.thrust_wait = 3;
+            (*ship).thrust = 3;
             skiff.preprocess();
             assert_eq!(velocity_of(ship), (640, -320));
             assert_eq!(
@@ -631,7 +631,7 @@ fn skiff_stops_dead_unless_the_thrust_delay_is_running() {
 
             // thrust_wait == 0: ZeroVelocityComponents memsets the whole record,
             // TravelAngle included.
-            (*ship).__bindgen_anon_5.thrust_wait = 0;
+            (*ship).thrust = 0;
             skiff.preprocess();
             let velocity = (*ship).velocity;
             assert_eq!(velocity.travel_angle, 0);
@@ -655,7 +655,7 @@ fn special_key_starts_the_teleport() {
         let ship = skiff.ship;
         (*ship).velocity.travel_angle = 37;
         DeltaVelocityComponents(&raw mut (*ship).velocity, 640, -320);
-        (*ship).__bindgen_anon_5.thrust_wait = 3;
+        (*ship).thrust = 3;
         skiff.fleet.fixture.ship_mut().cur_status_flags =
             (SHIP_AT_MAX_SPEED | LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as u16;
 
@@ -676,7 +676,7 @@ fn special_key_starts_the_teleport() {
             (*ship).state_flags,
             PLAYER_SHIP as u16 | (NONSOLID | FINITE_LIFE | CHANGING) as u16
         );
-        assert_eq!((*ship).__bindgen_anon_1.life_span, 5);
+        assert_eq!((*ship).life, 5);
         assert_eq!((*ship).next.image.farray, skiff.warp_array());
         assert_eq!(index_of((*ship).next.image.frame), 0);
         assert_eq!(
@@ -722,7 +722,7 @@ unsafe fn start_teleport(skiff: &mut Skiff) {
 }
 
 unsafe fn set_life(ship: *mut ELEMENT, life: COUNT) {
-    (*ship).__bindgen_anon_1.life_span = life;
+    (*ship).life = life;
 }
 
 #[test]
@@ -742,7 +742,7 @@ fn teleport_animates_jumps_at_life_three_and_returns_at_life_one() {
                 skiff.preprocess();
                 assert_eq!(index_of((*ship).next.image.frame), frame, "life {life}");
                 // The decrement is only applied to a local; the engine owns it.
-                assert_eq!((*ship).__bindgen_anon_1.life_span, life);
+                assert_eq!((*ship).life, life);
                 assert_ne!((*ship).state_flags & CHANGING as u16, 0);
                 (*ship).state_flags &= !(CHANGING as u16);
             }
@@ -768,7 +768,7 @@ fn teleport_animates_jumps_at_life_three_and_returns_at_life_one() {
             );
             assert_eq!(TFB_Random(), sequence[2], "two draws, x before y");
             assert_eq!(index_of((*ship).next.image.frame), 2);
-            assert_eq!((*ship).__bindgen_anon_1.life_span, 3);
+            assert_eq!((*ship).life, 3);
             assert_ne!((*ship).state_flags & CHANGING as u16, 0);
             (*ship).state_flags &= !(CHANGING as u16);
 
@@ -877,8 +877,8 @@ fn teleport_frame_ticks_every_counter_and_restores_the_pressed_keys() {
             starship.weapon_counter = 4;
             starship.special_counter = 255;
             starship.energy_counter = 9;
-            (*ship).__bindgen_anon_4.turn_wait = 255;
-            (*ship).__bindgen_anon_5.thrust_wait = 7;
+            (*ship).turn = 255;
+            (*ship).thrust = 7;
             starship.cur_status_flags = (LEFT | SHIP_AT_MAX_SPEED) as u16;
             starship.old_status_flags = (THRUST | SPECIAL | 0x4000) as u16;
             set_life(ship, 5);
@@ -890,8 +890,8 @@ fn teleport_frame_ticks_every_counter_and_restores_the_pressed_keys() {
             // BYTE counters wrap rather than saturate.
             assert_eq!(starship.special_counter, 0);
             assert_eq!(starship.energy_counter, 10);
-            assert_eq!((*ship).__bindgen_anon_4.turn_wait, 0);
-            assert_eq!((*ship).__bindgen_anon_5.thrust_wait, 8);
+            assert_eq!((*ship).turn, 0);
+            assert_eq!((*ship).thrust, 8);
             // Held keys revert to the pre-teleport state; other bits are kept.
             assert_eq!(starship.cur_status_flags & KEYS, (THRUST | SPECIAL) as u16);
             assert_ne!(starship.cur_status_flags & SHIP_AT_MAX_SPEED as u16, 0);

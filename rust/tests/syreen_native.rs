@@ -118,10 +118,10 @@ fn dagger_is_launched_with_the_c_missile_block() {
 
             let dagger = battle::element(daggers[0]);
             assert!(!dagger.is_null());
-            assert_eq!((*dagger).__bindgen_anon_1.life_span, 10);
-            assert_eq!((*dagger).__bindgen_anon_2.hit_points, 1);
-            assert_eq!((*dagger).__bindgen_anon_3.mass_points, 2);
-            assert_eq!((*dagger).__bindgen_anon_5.blast_offset, 3);
+            assert_eq!((*dagger).life, 10);
+            assert_eq!((*dagger).hits, 1);
+            assert_eq!((*dagger).mass, 2);
+            assert_eq!((*dagger).thrust, 3);
             assert_ne!((*dagger).state_flags & IGNORE_SIMILAR as u16, 0);
             assert!((*dagger).preprocess_func.is_none());
             // DISPLAY_TO_WORLD (30) world units per tick along the ship facing.
@@ -182,7 +182,7 @@ fn song_pays_energy_and_queues_the_deferred_scan() {
                 (*scan).state_flags,
                 (APPEARING | NONSOLID | FINITE_LIFE) as u16
             );
-            assert_eq!((*scan).__bindgen_anon_1.life_span, 0);
+            assert_eq!((*scan).life, 0);
             assert_eq!((*scan).playerNr, 0);
             assert_eq!(
                 ((*scan).next.location.x, (*scan).next.location.y),
@@ -249,7 +249,7 @@ fn deferred_scan_requeues_nothing_and_leaves_out_of_range_crews_alone() {
             for handle in walk_queue() {
                 let queued = battle::element(handle);
                 if (*queued).state_flags & PLAYER_SHIP as u16 != 0 {
-                    let crew = (*queued).__bindgen_anon_2.crew_level;
+                    let crew = (*queued).hits;
                     assert!(matches!(crew, 1 | 10), "crew {crew}");
                 }
             }
@@ -302,10 +302,7 @@ fn deferred_scan_survives_a_ship_in_range_when_no_crew_elements_are_available() 
             let before = walk_queue();
             hooks::invoke_element_pointer(run_scan, scan);
             assert_eq!(walk_queue(), before);
-            assert_eq!(
-                (*battle::element(before[1])).__bindgen_anon_2.crew_level,
-                10
-            );
+            assert_eq!((*battle::element(before[1])).hits, 10);
             for handle in ghosts {
                 battle_context::dispose(handle);
             }
@@ -326,7 +323,7 @@ impl<'a> Duel<'a> {
             enemy: Ship::bare(_battle, SPECIES_ID_SYREEN_ID, 1),
             concerns: unsafe { mem::zeroed() },
         };
-        duel.enemy.element_mut().__bindgen_anon_2.crew_level = 5;
+        duel.enemy.element_mut().hits = 5;
         let slot = &mut duel.concerns[ENEMY_SHIP_INDEX as usize];
         slot.ObjectPtr = duel.enemy.el();
         slot.which_turn = which_turn;
@@ -372,7 +369,7 @@ fn ai_sings_only_when_it_can_drain_a_reachable_crew() {
 
             drop(duel);
             let mut duel = Duel::new(&_battle, 14);
-            duel.enemy.element_mut().__bindgen_anon_2.crew_level = 1;
+            duel.enemy.element_mut().hits = 1;
             duel.ship.ship_mut().ship_input_state = special;
             duel.run();
             assert_eq!(duel.input(), 0, "nothing to take from a last crew member");

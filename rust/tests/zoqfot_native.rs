@@ -43,14 +43,7 @@ fn descriptor_and_spit_animation_preserve_jitter_rng_and_speed() {
                     .collect::<Vec<HELEMENT>>()
             })[0];
             let e = battle::element(h);
-            assert_eq!(
-                (
-                    (*e).__bindgen_anon_1.life_span,
-                    (*e).__bindgen_anon_2.hit_points,
-                    (*e).__bindgen_anon_3.mass_points
-                ),
-                (10, 1, 1)
-            );
+            assert_eq!(((*e).life, (*e).hits, (*e).mass), (10, 1, 1));
             assert_eq!(velocity(&(*e).velocity), toward(16 << ONE_SHIFT << 1, 0));
             TFB_SeedRandom(19);
             let angle = ((TFB_Random() as COUNT) % 3).wrapping_sub(1);
@@ -58,7 +51,7 @@ fn descriptor_and_spit_animation_preserve_jitter_rng_and_speed() {
                 hooks::invoke_element_pointer((*e).preprocess_func.unwrap(), e)
             });
             assert_eq!(frame_index((*e).next.image.frame), 1);
-            assert_eq!((*e).__bindgen_anon_4.turn_wait, 2);
+            assert_eq!((*e).turn, 2);
             let mut v: VELOCITY_DESC = mem::zeroed();
             let speed = (15 << ONE_SHIFT) << 1 << VELOCITY_SHIFT;
             SetVelocityComponents(
@@ -71,14 +64,14 @@ fn descriptor_and_spit_animation_preserve_jitter_rng_and_speed() {
                 with_rng(19, 0, || {
                     hooks::invoke_element_pointer((*e).preprocess_func.unwrap(), e)
                 });
-                assert_eq!((*e).__bindgen_anon_4.turn_wait, expected);
+                assert_eq!((*e).turn, expected);
                 assert_eq!(frame_index((*e).next.image.frame), 1);
             }
             with_rng(19, 0, || {
                 hooks::invoke_element_pointer((*e).preprocess_func.unwrap(), e)
             });
             assert_eq!(frame_index((*e).next.image.frame), 2);
-            assert_eq!((*e).__bindgen_anon_4.turn_wait, 2);
+            assert_eq!((*e).turn, 2);
             battle_context::dispose(h);
         }
     })
@@ -95,7 +88,7 @@ fn tongue_chain_extends_in_facing_direction_and_stops_at_zero() {
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 3);
             assert_eq!(ship.ship_mut().special_counter, 6);
             let mut e = battle::element(disp_q.tail);
-            assert_eq!((*e).__bindgen_anon_4.turn_wait, 6);
+            assert_eq!((*e).turn, 6);
             for remaining in (0..6).rev() {
                 (*e).next = (*e).current;
                 let y = (*e).next.location.y;
@@ -103,15 +96,9 @@ fn tongue_chain_extends_in_facing_direction_and_stops_at_zero() {
                     hooks::invoke_element_pointer((*e).postprocess_func.unwrap(), e)
                 });
                 e = battle::element(disp_q.tail);
-                assert_eq!((*e).__bindgen_anon_4.turn_wait, remaining);
+                assert_eq!((*e).turn, remaining);
                 assert_eq!((*e).current.location.y, y - 8);
-                assert_eq!(
-                    (
-                        (*e).__bindgen_anon_1.life_span,
-                        (*e).__bindgen_anon_3.mass_points
-                    ),
-                    (1, 12)
-                );
+                assert_eq!(((*e).life, (*e).mass), (1, 12));
                 assert_eq!(velocity(&(*e).velocity), [0; 9]);
             }
             let all = queued();
@@ -145,14 +132,14 @@ fn first_tongue_collision_damages_but_later_frames_only_cancel_extension() {
             });
             assert_eq!(enemy.descriptor_mut().ship_info.crew_level, 0);
             assert_eq!(ship.ship_mut().special_counter, 0);
-            assert_eq!((*tongue).__bindgen_anon_4.turn_wait, 0);
+            assert_eq!((*tongue).turn, 0);
             assert_ne!((*tongue).state_flags & NONSOLID as u16, 0);
             // A later frame has no damage window even if it still has mass 12.
             ship.ship_mut().special_counter = 5;
             let mut target_fixture = Object::new(&_battle);
             let target = target_fixture.ptr();
-            (*target).__bindgen_anon_1.life_span = 1;
-            (*tongue).__bindgen_anon_4.turn_wait = 4;
+            (*target).life = 1;
+            (*tongue).turn = 4;
             let before = queued();
             hooks::invoke_collision_pointer(
                 (*tongue).collision_func.unwrap(),

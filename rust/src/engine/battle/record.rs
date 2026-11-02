@@ -13,11 +13,10 @@ pub use crate::graphics::native_abi::{INTERSECT_CONTROL, PRIMITIVE};
 pub type QUEUE = Queue;
 
 pub use abi::{
-    captain_stuff, element, element__bindgen_ty_1, element__bindgen_ty_2, element__bindgen_ty_3,
-    element__bindgen_ty_4, element__bindgen_ty_5, race_desc, state, state__bindgen_ty_1,
-    tfb_soundsample, TFB_SoundSample, CAPTAIN_STUFF, CHARACTERISTIC_STUFF, DATA_STUFF, ELEMENT,
-    EVALUATE_DESC, FLEET_STUFF, INTEL_STUFF, MAX_DISPLAY_PRIMS, MOVEMENT_STATE, MUSIC_REF,
-    PRIM_DESC, RACE_DESC, SHIP_INFO, STARSHIP, STATE,
+    captain_stuff, element, race_desc, state, state__bindgen_ty_1, tfb_soundsample,
+    TFB_SoundSample, CAPTAIN_STUFF, CHARACTERISTIC_STUFF, DATA_STUFF, ELEMENT, EVALUATE_DESC,
+    FLEET_STUFF, INTEL_STUFF, MAX_DISPLAY_PRIMS, MOVEMENT_STATE, MUSIC_REF, PRIM_DESC, RACE_DESC,
+    SHIP_INFO, STARSHIP, STATE,
 };
 
 #[allow(non_camel_case_types, non_snake_case)]
@@ -66,11 +65,11 @@ mod abi {
         pub death_func: Option<crate::engine::battle::ElementHook>,
         pub playerNr: SIZE,
         pub state_flags: ELEMENT_FLAGS,
-        pub __bindgen_anon_1: element__bindgen_ty_1,
-        pub __bindgen_anon_2: element__bindgen_ty_2,
-        pub __bindgen_anon_3: element__bindgen_ty_3,
-        pub __bindgen_anon_4: element__bindgen_ty_4,
-        pub __bindgen_anon_5: element__bindgen_ty_5,
+        pub life: COUNT,
+        pub hits: COUNT,
+        pub mass: BYTE,
+        pub turn: BYTE,
+        pub thrust: BYTE,
         pub colorCycleIndex: BYTE,
         pub velocity: VELOCITY_DESC,
         pub IntersectControl: INTERSECT_CONTROL,
@@ -79,38 +78,6 @@ mod abi {
         pub next: STATE,
         pub pParent: *mut ::std::os::raw::c_void,
         pub hTarget: HELEMENT,
-    }
-    #[repr(C)]
-    #[derive(Copy, Clone)]
-    pub union element__bindgen_ty_1 {
-        pub life_span: COUNT,
-        pub scan_node: COUNT,
-    }
-    #[repr(C)]
-    #[derive(Copy, Clone)]
-    pub union element__bindgen_ty_2 {
-        pub crew_level: COUNT,
-        pub hit_points: COUNT,
-        pub facing: COUNT,
-        pub cycle: COUNT,
-    }
-    #[repr(C)]
-    #[derive(Copy, Clone)]
-    pub union element__bindgen_ty_3 {
-        pub mass_points: BYTE,
-    }
-    #[repr(C)]
-    #[derive(Copy, Clone)]
-    pub union element__bindgen_ty_4 {
-        pub turn_wait: BYTE,
-        pub sys_loc: BYTE,
-    }
-    #[repr(C)]
-    #[derive(Copy, Clone)]
-    pub union element__bindgen_ty_5 {
-        pub thrust_wait: BYTE,
-        pub blast_offset: BYTE,
-        pub next_turn: BYTE,
     }
 
     pub type RACE_DESC = race_desc;
@@ -251,39 +218,34 @@ mod abi {
 
 impl ELEMENT {
     pub fn life_span(&self) -> u16 {
-        // SAFETY: every member of this legacy union is a u16.
-        unsafe { self.__bindgen_anon_1.life_span }
+        self.life
     }
     pub fn set_life_span(&mut self, value: u16) {
-        self.__bindgen_anon_1.life_span = value;
+        self.life = value;
     }
     pub fn hit_points(&self) -> u16 {
-        // SAFETY: every member of this legacy union is a u16.
-        unsafe { self.__bindgen_anon_2.hit_points }
+        self.hits
     }
     pub fn set_hit_points(&mut self, value: u16) {
-        self.__bindgen_anon_2.hit_points = value;
+        self.hits = value;
     }
     pub fn mass_points(&self) -> u8 {
-        // SAFETY: the legacy union contains only a u8.
-        unsafe { self.__bindgen_anon_3.mass_points }
+        self.mass
     }
     pub fn set_mass_points(&mut self, value: u8) {
-        self.__bindgen_anon_3.mass_points = value;
+        self.mass = value;
     }
     pub fn turn_wait(&self) -> u8 {
-        // SAFETY: every member of this legacy union is a u8.
-        unsafe { self.__bindgen_anon_4.turn_wait }
+        self.turn
     }
     pub fn set_turn_wait(&mut self, value: u8) {
-        self.__bindgen_anon_4.turn_wait = value;
+        self.turn = value;
     }
     pub fn thrust_wait(&self) -> u8 {
-        // SAFETY: every member of this legacy union is a u8.
-        unsafe { self.__bindgen_anon_5.thrust_wait }
+        self.thrust
     }
     pub fn set_thrust_wait(&mut self, value: u8) {
-        self.__bindgen_anon_5.thrust_wait = value;
+        self.thrust = value;
     }
 }
 
@@ -667,21 +629,11 @@ impl ElementState {
             death_func: self.death,
             playerNr: self.player,
             state_flags: self.flags,
-            __bindgen_anon_1: element__bindgen_ty_1 {
-                life_span: self.life,
-            },
-            __bindgen_anon_2: element__bindgen_ty_2 {
-                hit_points: self.hits,
-            },
-            __bindgen_anon_3: element__bindgen_ty_3 {
-                mass_points: self.mass,
-            },
-            __bindgen_anon_4: element__bindgen_ty_4 {
-                turn_wait: self.turn,
-            },
-            __bindgen_anon_5: element__bindgen_ty_5 {
-                thrust_wait: self.thrust,
-            },
+            life: self.life,
+            hits: self.hits,
+            mass: self.mass,
+            turn: self.turn,
+            thrust: self.thrust,
             colorCycleIndex: self.color_cycle,
             velocity: self.velocity,
             IntersectControl: INTERSECT_CONTROL {
@@ -781,6 +733,10 @@ mod projection_tests {
         }
         assert_eq!(raw.life_span(), 55);
         assert_eq!(raw.hit_points(), 2);
+        assert_eq!(
+            (raw.life, raw.hits, raw.mass, raw.turn, raw.thrust),
+            (55, 2, 6, 14, 15)
+        );
     }
     #[test]
     fn ship_and_descriptor_values_preserve_resources_while_updating_stats() {

@@ -128,12 +128,12 @@ fn missile_mode_returns_two_missiles_with_c_boundary_values() {
             // asserted after the linked queue has allocated the handles.
             for handle in handles {
                 let missile = handle.cast::<ELEMENT>();
-                assert_eq!((*missile).__bindgen_anon_1.life_span, 40);
-                assert_eq!((*missile).__bindgen_anon_2.hit_points, 1);
-                assert_eq!((*missile).__bindgen_anon_3.mass_points, 1);
-                assert_eq!((*missile).__bindgen_anon_5.blast_offset, 0);
+                assert_eq!((*missile).life, 40);
+                assert_eq!((*missile).hits, 1);
+                assert_eq!((*missile).mass, 1);
+                assert_eq!((*missile).thrust, 0);
                 assert_ne!((*missile).state_flags & IGNORE_SIMILAR as u16, 0);
-                assert_eq!((*missile).__bindgen_anon_4.turn_wait, 5);
+                assert_eq!((*missile).turn, 5);
                 battle_context::dispose(handle);
             }
             fixture.uninit();
@@ -304,7 +304,7 @@ fn xwing_launches_two_lasers_and_preserves_friendly_ships() {
             let target = target_fixture.ptr();
             (*target).state_flags = PLAYER_SHIP as u16;
             (*target).playerNr = (*first).playerNr;
-            (*target).__bindgen_anon_2.crew_level = 20;
+            (*target).hits = 20;
             let mut point = POINT { x: 0, y: 0 };
             hooks::invoke_collision_pointer(
                 (*first).collision_func.unwrap(),
@@ -314,8 +314,8 @@ fn xwing_launches_two_lasers_and_preserves_friendly_ships() {
                 &mut point,
                 hooks::CollisionCall::Hook,
             );
-            assert_eq!((*target).__bindgen_anon_2.crew_level, 20);
-            assert_eq!((*first).__bindgen_anon_2.hit_points, 1);
+            assert_eq!((*target).hits, 20);
+            assert_eq!((*first).hits, 1);
             for handle in handles {
                 battle_context::dispose(handle);
             }

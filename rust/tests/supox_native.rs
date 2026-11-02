@@ -118,10 +118,10 @@ fn gob_is_launched_with_the_c_missile_block() {
 
             let gob = battle::element(horns[0]);
             assert!(!gob.is_null());
-            assert_eq!((*gob).__bindgen_anon_1.life_span, 10);
-            assert_eq!((*gob).__bindgen_anon_2.hit_points, 1);
-            assert_eq!((*gob).__bindgen_anon_3.mass_points, 1);
-            assert_eq!((*gob).__bindgen_anon_5.blast_offset, 2);
+            assert_eq!((*gob).life, 10);
+            assert_eq!((*gob).hits, 1);
+            assert_eq!((*gob).mass, 1);
+            assert_eq!((*gob).thrust, 2);
             assert_ne!((*gob).state_flags & IGNORE_SIMILAR as u16, 0);
             assert!((*gob).preprocess_func.is_none());
             // DISPLAY_TO_WORLD (30) world units per tick along the ship facing.
@@ -203,16 +203,16 @@ fn special_arms_the_wait_counters_and_normal_flight_is_untouched() {
             ship.ship_mut().ShipFacing = 4;
             ship.ship_mut().cur_status_flags = (SPECIAL | THRUST | LEFT) as u16;
             ship.preprocess();
-            assert_eq!(ship.element_mut().__bindgen_anon_5.thrust_wait, 1);
-            assert_eq!(ship.element_mut().__bindgen_anon_4.turn_wait, 1);
+            assert_eq!(ship.element_mut().thrust, 1);
+            assert_eq!(ship.element_mut().turn, 1);
 
             // Existing waits are not rearmed.
-            ship.element_mut().__bindgen_anon_5.thrust_wait = 3;
-            ship.element_mut().__bindgen_anon_4.turn_wait = 5;
+            ship.element_mut().thrust = 3;
+            ship.element_mut().turn = 5;
             ship.ship_mut().cur_status_flags = (SPECIAL | THRUST | RIGHT) as u16;
             ship.preprocess();
-            assert_eq!(ship.element_mut().__bindgen_anon_5.thrust_wait, 3);
-            assert_eq!(ship.element_mut().__bindgen_anon_4.turn_wait, 5);
+            assert_eq!(ship.element_mut().thrust, 3);
+            assert_eq!(ship.element_mut().turn, 5);
 
             // Without SPECIAL, or with SPECIAL alone, nothing is changed.
             for held in [THRUST | LEFT, SPECIAL] {
@@ -223,8 +223,8 @@ fn special_arms_the_wait_counters_and_normal_flight_is_untouched() {
                 assert_eq!(velocity_fields(&ship.element_mut().velocity), [0; 9]);
                 assert_eq!(ship.ship_mut().cur_status_flags, held as u16);
                 assert_eq!(ship.ship_mut().ShipFacing, 4);
-                assert_eq!(ship.element_mut().__bindgen_anon_5.thrust_wait, 0);
-                assert_eq!(ship.element_mut().__bindgen_anon_4.turn_wait, 0);
+                assert_eq!(ship.element_mut().thrust, 0);
+                assert_eq!(ship.element_mut().turn, 0);
             }
         }
     })
@@ -418,7 +418,7 @@ fn ai_dodges_with_the_held_turn_or_a_random_side_from_the_byte_draw() {
             assert_eq!(ship.ship_mut().ship_input_state, THRUST as u8);
 
             let mut ship = Ship::bare(&_battle, SPECIES_ID_SUPOX_ID, 0);
-            ship.element_mut().__bindgen_anon_4.turn_wait = 1;
+            ship.element_mut().turn = 1;
             ship.ship_mut().ship_input_state = THRUST as u8;
             let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
             dodge(&mut ship, &mut concerns, missile);

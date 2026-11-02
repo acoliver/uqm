@@ -243,7 +243,7 @@ impl<'a> Ship<'a> {
         self.at(x, y);
         self.inner.ship_mut().ShipFacing = facing;
         (*self.ptr()).state_flags = (PLAYER_SHIP | APPEARING) as u16;
-        (*self.ptr()).__bindgen_anon_1.life_span = NORMAL_LIFE as COUNT;
+        (*self.ptr()).life = NORMAL_LIFE as COUNT;
         (*self.ptr()).hTarget = self.handle;
     }
 
@@ -405,7 +405,7 @@ unsafe fn check_trail(ship: &mut Ship, trail: *mut ELEMENT, at: POINT, angle: u1
         (*trail).state_flags,
         (APPEARING | FINITE_LIFE | NONSOLID) as u16
     );
-    assert_eq!((*trail).__bindgen_anon_1.life_span, 1);
+    assert_eq!((*trail).life, 1);
     assert_eq!(
         (*prim(trail)).Type,
         gfx_object_STAMPFILL_PRIM as GRAPHICS_PRIM
@@ -425,7 +425,7 @@ unsafe fn check_trail(ship: &mut Ship, trail: *mut ELEMENT, at: POINT, angle: u1
         ((*trail).current.location.x, (*trail).current.location.y),
         (at.x, at.y)
     );
-    assert_eq!((*trail).__bindgen_anon_3.mass_points, angle as u8);
+    assert_eq!((*trail).mass, angle as u8);
     assert!((*trail).preprocess_func.is_some());
     assert!((*trail).death_func.is_some());
     assert!((*trail).postprocess_func.is_none());
@@ -633,10 +633,10 @@ fn bug_missiles_launch_fore_left_and_right_inheriting_ship_velocity() {
                         let turn = [0, 4, 12][i];
                         let face = normalize_facing(i32::from(facing) + turn);
                         let m = shared::element(h);
-                        assert_eq!((*m).__bindgen_anon_1.life_span, 5);
-                        assert_eq!((*m).__bindgen_anon_2.hit_points, 1);
-                        assert_eq!((*m).__bindgen_anon_3.mass_points, 1);
-                        assert_eq!((*m).__bindgen_anon_5.blast_offset, 1);
+                        assert_eq!((*m).life, 5);
+                        assert_eq!((*m).hits, 1);
+                        assert_eq!((*m).mass, 1);
+                        assert_eq!((*m).thrust, 1);
                         assert_eq!(
                             (*m).state_flags,
                             (APPEARING | FINITE_LIFE | IGNORE_SIMILAR) as u16
@@ -724,17 +724,17 @@ fn bug_missiles_animate_one_frame_per_blast_offset_delay() {
             let animate = (*m).preprocess_func.unwrap();
             (*m).current.image.frame = ship.weapon_frames.frame(2);
             (*m).state_flags &= !(CHANGING as u16);
-            assert_eq!((*m).__bindgen_anon_4.turn_wait, 0);
+            assert_eq!((*m).turn, 0);
             hooks::invoke_element_pointer(animate, m);
             assert_eq!(frame_index((*m).next.image.frame), 3);
             assert_ne!((*m).state_flags & CHANGING as u16, 0);
             // next_turn shares its byte with the missile's blast offset (1).
-            assert_eq!((*m).__bindgen_anon_4.turn_wait, 1);
+            assert_eq!((*m).turn, 1);
 
             (*m).state_flags &= !(CHANGING as u16);
             (*m).next.image.frame = ship.weapon_frames.frame(6);
             hooks::invoke_element_pointer(animate, m);
-            assert_eq!((*m).__bindgen_anon_4.turn_wait, 0);
+            assert_eq!((*m).turn, 0);
             assert_eq!((*m).state_flags & CHANGING as u16, 0);
             assert_eq!(frame_index((*m).next.image.frame), 6);
 
@@ -742,7 +742,7 @@ fn bug_missiles_animate_one_frame_per_blast_offset_delay() {
             hooks::invoke_element_pointer(animate, m);
             assert_eq!(frame_index((*m).next.image.frame), 0);
             assert_ne!((*m).state_flags & CHANGING as u16, 0);
-            assert_eq!((*m).__bindgen_anon_4.turn_wait, 1);
+            assert_eq!((*m).turn, 1);
             for h in out {
                 battle_context::dispose(h);
             }
@@ -790,7 +790,7 @@ fn first_preprocess_with_an_odd_draw_queues_a_phoenix_at_the_head() {
                 (*phoenix).state_flags,
                 (FINITE_LIFE | NONSOLID | IGNORE_SIMILAR) as u16
             );
-            assert_eq!((*phoenix).__bindgen_anon_1.life_span, 1);
+            assert_eq!((*phoenix).life, 1);
             assert!((*phoenix).death_func.is_some());
             assert!((*phoenix).preprocess_func.is_none());
             assert!((*phoenix).postprocess_func.is_none());
@@ -861,7 +861,7 @@ fn reincarnation_preprocess_queues_four_trails_around_the_ship() {
                 );
 
                 let el = ship.ptr();
-                assert_eq!((*el).__bindgen_anon_1.life_span, 12);
+                assert_eq!((*el).life, 12);
                 assert_eq!((*prim(el)).Type, gfx_object_NUM_PRIMS as GRAPHICS_PRIM);
                 assert_eq!(
                     (*el).state_flags,
@@ -934,7 +934,7 @@ fn reincarnation_ends_when_life_span_returns_to_normal() {
 
             // While the animation is running only the input bits are cleared.
             (*el).state_flags &= !(APPEARING as u16);
-            (*el).__bindgen_anon_1.life_span = 5;
+            (*el).life = 5;
             ship.inner.ship_mut().cur_status_flags = 0x3ff;
             ship.preprocess();
             assert_eq!(ship.inner.ship_mut().cur_status_flags, 0x3e0);
@@ -942,7 +942,7 @@ fn reincarnation_ends_when_life_span_returns_to_normal() {
             assert_eq!((*prim(el)).Type, gfx_object_NUM_PRIMS as GRAPHICS_PRIM);
 
             // At NORMAL_LIFE the ship becomes solid again.
-            (*el).__bindgen_anon_1.life_span = NORMAL_LIFE as COUNT;
+            (*el).life = NORMAL_LIFE as COUNT;
             (*el).current.image.frame = ship.ship_frames.frame(5);
             (*el).next.image.frame = ship.ship_frames.frame(9);
             (*el).next.image.farray = (&raw mut ship.inner.descriptor_mut().ship_data.ship).cast();
@@ -990,7 +990,7 @@ fn trails_hop_forward_until_the_ship_is_solid_again() {
             let first = shared::element(queued()[1]);
             let mut parent = first;
             let mut from = (*first).current.location;
-            let angle = i32::from((*first).__bindgen_anon_3.mass_points);
+            let angle = i32::from((*first).mass);
             for hop in 0..3 {
                 let before = queued().len();
                 let step = (*parent).preprocess_func.unwrap();
@@ -1046,10 +1046,10 @@ fn trail_death_steps_through_the_twelve_ember_colors() {
             for (index, rgb) in table.iter().enumerate().skip(1) {
                 (*trail).state_flags |= DISAPPEARING as u16;
                 (*trail).state_flags &= !(CHANGING as u16);
-                (*trail).__bindgen_anon_1.life_span = 0;
+                (*trail).life = 0;
                 hooks::invoke_element_pointer(death, trail);
                 assert_eq!((*trail).colorCycleIndex as usize, index);
-                assert_eq!((*trail).__bindgen_anon_1.life_span, 1);
+                assert_eq!((*trail).life, 1);
                 assert_eq!(
                     color_bytes((*prim(trail)).color),
                     [rgb[0], rgb[1], rgb[2], 0xFF]
@@ -1062,10 +1062,10 @@ fn trail_death_steps_through_the_twelve_ember_colors() {
             let last_color = color_bytes((*prim(trail)).color);
             (*trail).state_flags |= DISAPPEARING as u16;
             (*trail).state_flags &= !(CHANGING as u16);
-            (*trail).__bindgen_anon_1.life_span = 0;
+            (*trail).life = 0;
             hooks::invoke_element_pointer(death, trail);
             assert_eq!((*trail).colorCycleIndex, 12);
-            assert_eq!((*trail).__bindgen_anon_1.life_span, 0);
+            assert_eq!((*trail).life, 0);
             assert_ne!((*trail).state_flags & DISAPPEARING as u16, 0);
             assert_eq!((*trail).state_flags & CHANGING as u16, 0);
             assert_eq!(color_bytes((*prim(trail)).color), last_color);
@@ -1094,11 +1094,11 @@ fn phoenix_death_hook_keeps_a_living_ship_and_arms_reincarnation_for_a_dead_one(
 
             // Crew left: the phoenix survives another frame and nothing else moves.
             (*phoenix).state_flags |= DISAPPEARING as u16;
-            (*phoenix).__bindgen_anon_1.life_span = 0;
+            (*phoenix).life = 0;
             hooks::invoke_element_pointer(hook, phoenix);
             assert_eq!((*phoenix).state_flags & DISAPPEARING as u16, 0);
-            assert_eq!((*phoenix).__bindgen_anon_1.life_span, 1);
-            assert_eq!((*el).__bindgen_anon_3.mass_points, 1);
+            assert_eq!((*phoenix).life, 1);
+            assert_eq!((*el).mass, 1);
             assert_eq!(
                 addr((*el).death_func),
                 addr(Some(uqm_rust::engine::battle::ElementHook::Native(
@@ -1110,9 +1110,9 @@ fn phoenix_death_hook_keeps_a_living_ship_and_arms_reincarnation_for_a_dead_one(
             // MAX_SHIP_MASS * 10 is the warp-out marker: mass 100 is 101 here.
             ship.inner.descriptor_mut().ship_info.crew_level = 0;
             for warping in [100u8, 101, 255] {
-                (*el).__bindgen_anon_3.mass_points = warping;
+                (*el).mass = warping;
                 hooks::invoke_element_pointer(hook, phoenix);
-                assert_eq!((*el).__bindgen_anon_3.mass_points, warping);
+                assert_eq!((*el).mass, warping);
                 assert_eq!(
                     addr((*el).death_func),
                     addr(Some(uqm_rust::engine::battle::ElementHook::Native(
@@ -1124,7 +1124,7 @@ fn phoenix_death_hook_keeps_a_living_ship_and_arms_reincarnation_for_a_dead_one(
 
             // Anything else is a death Pkunk walks away from.
             for mass in [0u8, 1, 10, 99] {
-                (*el).__bindgen_anon_3.mass_points = mass;
+                (*el).mass = mass;
                 (*el).preprocess_func = Some(uqm_rust::engine::battle::ElementHook::Native(
                     engine_preprocess,
                 ));
@@ -1138,7 +1138,7 @@ fn phoenix_death_hook_keeps_a_living_ship_and_arms_reincarnation_for_a_dead_one(
                     panic!("Pkunk state");
                 }
                 hooks::invoke_element_pointer(hook, phoenix);
-                assert_eq!((*el).__bindgen_anon_3.mass_points, 11, "mass {mass}");
+                assert_eq!((*el).mass, 11, "mass {mass}");
                 let data = ship.data();
                 assert_eq!(
                     addr(data.saved_preprocess),
@@ -1199,7 +1199,7 @@ fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
             let phoenix = shared::element(ship.data().phoenix);
             ship.inner.descriptor_mut().ship_info.crew_level = 0;
             hooks::invoke_element_pointer((*phoenix).death_func.unwrap(), phoenix);
-            assert_eq!((*el).__bindgen_anon_3.mass_points, 11);
+            assert_eq!((*el).mass, 11);
             let reincarnation = (*el).death_func.unwrap();
 
             // The armed death function explodes the ship (without ship_death).
@@ -1208,7 +1208,7 @@ fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
             SetVelocityVector(&raw mut (*el).velocity, 20, 3);
             ship.inner.descriptor_mut().ship_info.energy_level = 9;
             hooks::invoke_element_pointer(reincarnation, el);
-            assert_eq!((*el).__bindgen_anon_1.life_span, 36);
+            assert_eq!((*el).life, 36);
             assert_eq!((*el).state_flags & DISAPPEARING as u16, 0);
             assert_eq!(
                 (*el).state_flags & (FINITE_LIFE | NONSOLID) as u16,
@@ -1258,11 +1258,11 @@ fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
             ship.inner.ship_mut().weapon_counter = 9;
             ship.inner.ship_mut().special_counter = 9;
             ship.inner.ship_mut().ShipFacing = 3;
-            (*el).__bindgen_anon_2.crew_level = 7;
-            (*el).__bindgen_anon_4.turn_wait = 9;
-            (*el).__bindgen_anon_5.thrust_wait = 9;
-            (*el).__bindgen_anon_1.life_span = 3;
-            (*el).__bindgen_anon_3.mass_points = 11;
+            (*el).hits = 7;
+            (*el).turn = 9;
+            (*el).thrust = 9;
+            (*el).life = 3;
+            (*el).mass = 11;
             (*el).hTarget = ptr::null_mut();
             (*prim(el)).Type = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
 
@@ -1280,7 +1280,7 @@ fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
                 (*el).state_flags,
                 (APPEARING | PLAYER_SHIP | IGNORE_SIMILAR) as u16
             );
-            assert_eq!((*el).__bindgen_anon_3.mass_points, 1);
+            assert_eq!((*el).mass, 1);
             assert_eq!(
                 addr((*el).preprocess_func),
                 addr(Some(uqm_rust::engine::battle::ElementHook::Native(
@@ -1333,10 +1333,10 @@ fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
                 ),
                 (0, 0, 0)
             );
-            assert_eq!((*el).__bindgen_anon_2.crew_level, 0);
-            assert_eq!((*el).__bindgen_anon_4.turn_wait, 0);
-            assert_eq!((*el).__bindgen_anon_5.thrust_wait, 0);
-            assert_eq!((*el).__bindgen_anon_1.life_span, 1);
+            assert_eq!((*el).hits, 0);
+            assert_eq!((*el).turn, 0);
+            assert_eq!((*el).thrust, 0);
+            assert_eq!((*el).life, 1);
             assert_eq!(ship.inner.ship_mut().ShipFacing, facing);
             assert_eq!(
                 (*el).current.image.farray,
@@ -1396,7 +1396,7 @@ fn new_pkunk_redraws_its_position_while_a_planet_pulls_on_it() {
             let planet = planet_owner.ptr();
             let planet_handle = planet.cast();
             (*planet).state_flags = 0;
-            (*planet).__bindgen_anon_3.mass_points = 200;
+            (*planet).mass = 200;
             (*planet).current.location = POINT { x: x1, y: y1 };
             (*planet).next = (*planet).current;
             (*planet).current.image.farray =

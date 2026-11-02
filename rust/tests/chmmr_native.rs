@@ -197,10 +197,10 @@ fn laser_uses_frame_hotspot_alignment_facing_rgba_and_cycle() {
                     assert!(!h.is_null());
                     let laser = battle::element(h);
                     assert_eq!(point((*laser).current.location), (-116, -32752));
-                    assert_eq!((*laser).__bindgen_anon_2.hit_points, 1);
-                    assert_eq!((*laser).__bindgen_anon_3.mass_points, 2);
-                    assert_eq!((*laser).__bindgen_anon_1.life_span, 1);
-                    assert_eq!((*laser).__bindgen_anon_4.turn_wait, (counter + 1) % 4);
+                    assert_eq!((*laser).hits, 1);
+                    assert_eq!((*laser).mass, 2);
+                    assert_eq!((*laser).life, 1);
+                    assert_eq!((*laser).turn, (counter + 1) % 4);
                     assert!((*laser).death_func.is_some());
                     assert_eq!((*prim(laser)).Type, gfx_object_LINE_PRIM as u8);
                     assert_eq!(rgba((*prim(laser)).color), colors[counter as usize]);
@@ -279,19 +279,19 @@ fn laser_death_obeys_range_byte_gate_count_draw_and_animation() {
                             (*spot).current.image.farray,
                             ship.descriptor_mut().ship_data.weapon.as_mut_ptr()
                         );
-                        assert_eq!((*spot).__bindgen_anon_1.life_span, 9);
-                        assert_eq!((*spot).__bindgen_anon_5.next_turn, 0);
+                        assert_eq!((*spot).life, 9);
+                        assert_eq!((*spot).thrust, 0);
                         assert_eq!((*prim(spot)).Type, gfx_object_STAMP_PRIM as u8);
                         assert_eq!((*spot).pParent, (ship.ship_mut() as *mut STARSHIP).cast());
                         let animate = (*spot).preprocess_func.unwrap();
-                        (*spot).__bindgen_anon_4.turn_wait = 1;
-                        (*spot).__bindgen_anon_5.next_turn = 3;
+                        (*spot).turn = 1;
+                        (*spot).thrust = 3;
                         hooks::invoke_element_pointer(animate, spot);
-                        assert_eq!((*spot).__bindgen_anon_4.turn_wait, 0);
+                        assert_eq!((*spot).turn, 0);
                         assert!((*spot).next.image.frame.is_null());
                         hooks::invoke_element_pointer(animate, spot);
                         assert_eq!(frame_index((*spot).next.image.frame), 33);
-                        assert_eq!((*spot).__bindgen_anon_4.turn_wait, 3);
+                        assert_eq!((*spot).turn, 3);
                         assert_ne!((*spot).state_flags & CHANGING as u16, 0);
                         assert_rng_after(seed, 2);
                         battle_context::unlink(spot_handle);
@@ -361,7 +361,7 @@ fn muzzle_flash_requires_friendly_appearing_tail_line_and_even_cycle() {
                         point((*ship.ptr()).next.location)
                     );
                     assert_eq!(frame_index((*flash).current.image.frame), 21);
-                    assert_eq!((*flash).__bindgen_anon_1.life_span, 1);
+                    assert_eq!((*flash).life, 1);
                     assert_eq!((*prim(flash)).Type, gfx_object_STAMP_PRIM as u8);
                     assert_eq!((*flash).pParent, (ship.ship_mut() as *mut STARSHIP).cast());
                     battle_context::unlink(flash_handle);
@@ -389,7 +389,7 @@ fn delayed_satellites_spawn_around_live_ship_with_three_ordered_rng_draws() {
                 ship.descriptor_mut().race_callbacks.pre,
                 uqm_rust::engine::battle::Selection::Disabled
             ));
-            assert_eq!((*transit).__bindgen_anon_1.life_span, 16);
+            assert_eq!((*transit).life, 16);
             assert_eq!((*prim(transit)).Type, gfx_object_NUM_PRIMS as u8);
             assert_eq!(
                 (*transit).state_flags,
@@ -413,10 +413,10 @@ fn delayed_satellites_spawn_around_live_ship_with_three_ordered_rng_draws() {
                 let s = battle::element(h);
                 let angle = (i as i32 * 64 + 1) / 3;
                 assert_eq!((*s).playerNr, 1);
-                assert_eq!((*s).__bindgen_anon_4.turn_wait, angle as u8);
-                assert_eq!((*s).__bindgen_anon_1.life_span, 2);
-                assert_eq!((*s).__bindgen_anon_2.hit_points, 10);
-                assert_eq!((*s).__bindgen_anon_3.mass_points, 10);
+                assert_eq!((*s).turn, angle as u8);
+                assert_eq!((*s).life, 2);
+                assert_eq!((*s).hits, 10);
+                assert_eq!((*s).mass, 10);
                 assert_eq!(
                     point((*s).current.location),
                     (7000 + cosine(angle, 256), 6000 + sine(angle, 256))
@@ -446,10 +446,7 @@ fn spawn_and_preprocess_allocation_failures_do_not_draw_rng_or_rearm() {
             let death = (*battle::element(delay)).death_func.unwrap();
             TFB_SeedRandom(88);
             hooks::invoke_element_pointer(death, battle::element(delay)); // only one free slot
-            assert_eq!(
-                (*battle::element(disp_q.tail)).__bindgen_anon_2.hit_points,
-                10
-            );
+            assert_eq!((*battle::element(disp_q.tail)).hits, 10);
             assert_rng_after(88, 1);
             TFB_SeedRandom(88);
             hooks::invoke_element_pointer(death, battle::element(delay));
@@ -493,8 +490,8 @@ fn satellites_wrap_space_cap_speed_and_preserve_half_space_ties() {
                 (4097, 3841, -4095, -3839),
                 (-4097, -3841, 4095, 3839),
             ] {
-                (*s).__bindgen_anon_4.turn_wait = 63;
-                (*s).__bindgen_anon_1.life_span = u16::MAX;
+                (*s).turn = 63;
+                (*s).life = u16::MAX;
                 (*s).current.image.frame = ship.raw_frame(2, 7);
                 let desired_x =
                     i32::from((*ship.ptr()).next.location.x) + i32::from(cosine(0, 256));
@@ -505,8 +502,8 @@ fn satellites_wrap_space_cap_speed_and_preserve_half_space_ties() {
                 };
                 ship.descriptor_mut().ship_info.ship_flags &= !(POINT_DEFENSE as u16);
                 hooks::invoke_element_pointer(preprocess, s);
-                assert_eq!((*s).__bindgen_anon_1.life_span, 0);
-                assert_eq!((*s).__bindgen_anon_4.turn_wait, 0);
+                assert_eq!((*s).life, 0);
+                assert_eq!((*s).turn, 0);
                 assert_eq!(frame_index((*s).next.image.frame), 0);
                 assert_ne!(
                     ship.descriptor_mut().ship_info.ship_flags & POINT_DEFENSE as u16,
@@ -551,7 +548,7 @@ fn satellite_collision_is_noop_and_death_installs_four_tick_animation() {
                 &mut POINT { x: 0, y: 0 },
                 hooks::CollisionCall::Hook,
             );
-            assert_eq!((*s).__bindgen_anon_2.hit_points, 10);
+            assert_eq!((*s).hits, 10);
             assert_eq!(point(p), (1, 2));
             (*s).state_flags |= DISAPPEARING as u16;
             hooks::invoke_element_pointer((*s).death_func.unwrap(), s);
@@ -564,9 +561,9 @@ fn satellite_collision_is_noop_and_death_installs_four_tick_animation() {
                 (*s).state_flags & (NONSOLID | FINITE_LIFE | CHANGING) as u16,
                 (NONSOLID | FINITE_LIFE | CHANGING) as u16
             );
-            assert_eq!((*s).__bindgen_anon_1.life_span, 4);
-            assert_eq!((*s).__bindgen_anon_4.turn_wait, 1);
-            assert_eq!((*s).__bindgen_anon_5.next_turn, 0);
+            assert_eq!((*s).life, 4);
+            assert_eq!((*s).turn, 1);
+            assert_eq!((*s).thrust, 0);
             assert_eq!(frame_index((*s).next.image.frame), 8);
             assert!((*s).postprocess_func.is_none());
             assert!((*s).collision_func.is_none());
@@ -598,8 +595,8 @@ unsafe fn target(satellite: *mut ELEMENT, dx: i16, dy: i16, hp: u16) -> PoolElem
     let mut fixture = PoolElement::new();
     let e = &raw mut *fixture;
     (*e).playerNr = 1;
-    (*e).__bindgen_anon_2.hit_points = hp;
-    (*e).__bindgen_anon_3.mass_points = 1;
+    (*e).hits = hp;
+    (*e).mass = 1;
     (*e).next.location = POINT {
         x: (*satellite).next.location.x.wrapping_add(dx),
         y: (*satellite).next.location.y.wrapping_add(dy),
@@ -613,7 +610,7 @@ unsafe fn defense(satellite: *mut ELEMENT) -> HELEMENT {
     hooks::invoke_element_pointer((*satellite).postprocess_func.unwrap(), satellite);
     let h = disp_q.tail;
     assert_eq!((*battle::element(h)).hTarget, satellite.cast());
-    assert_eq!((*battle::element(h)).__bindgen_anon_1.life_span, 0);
+    assert_eq!((*battle::element(h)).life, 0);
     h
 }
 
@@ -652,7 +649,7 @@ fn point_defense_uses_backward_weakest_nearest_and_stable_tie_order() {
             assert_eq!(rgba((*prim(beam)).color), [0, 8, 255, 255]);
             assert_eq!((*beam).pParent, (*s).pParent);
             assert!((*beam).hTarget.is_null());
-            assert_eq!((*s).__bindgen_anon_5.thrust_wait, 2);
+            assert_eq!((*s).thrust, 2);
             assert_rng_after(12, 0);
             for h in [strong, far_weak, near_weak, tie, after] {
                 assert!(!h.is_null());
@@ -720,8 +717,8 @@ fn point_defense_respects_collision_cloak_range_and_full_width_hitpoints() {
                         (*obj).pParent = (*ship.ptr()).pParent;
                     }
                     9 => {
-                        (*obj).__bindgen_anon_3.mass_points = 0;
-                        (*ship.ptr()).__bindgen_anon_3.mass_points = 0;
+                        (*obj).mass = 0;
+                        (*ship.ptr()).mass = 0;
                     }
                     10 => (*ship.ptr()).state_flags |= NONSOLID as u16,
                     _ => {}
@@ -736,7 +733,7 @@ fn point_defense_respects_collision_cloak_range_and_full_width_hitpoints() {
                     shoot,
                     "dx {dx} dy {dy} hp {hp} exclusion {exclusion}"
                 );
-                assert_eq!((*s).__bindgen_anon_5.thrust_wait, if shoot { 2 } else { 0 });
+                assert_eq!((*s).thrust, if shoot { 2 } else { 0 });
             }
         }
     })
@@ -752,22 +749,22 @@ fn satellite_defense_wait_underflows_on_dead_zero_wait_and_handles_exhaustion() 
             let satellites = satellites(&mut ship);
             let s = battle::element(satellites[0]);
             let post = (*s).postprocess_func.unwrap();
-            (*s).__bindgen_anon_5.thrust_wait = 2;
+            (*s).thrust = 2;
             let tail = disp_q.tail;
             hooks::invoke_element_pointer(post, s);
-            assert_eq!((*s).__bindgen_anon_5.thrust_wait, 1);
+            assert_eq!((*s).thrust, 1);
             hooks::invoke_element_pointer(post, s);
-            assert_eq!((*s).__bindgen_anon_5.thrust_wait, 0);
+            assert_eq!((*s).thrust, 0);
             assert_eq!({ disp_q.tail }, tail);
-            (*s).__bindgen_anon_1.life_span = 0;
+            (*s).life = 0;
             hooks::invoke_element_pointer(post, s);
-            assert_eq!((*s).__bindgen_anon_5.thrust_wait, 255);
-            (*s).__bindgen_anon_1.life_span = 2;
-            (*s).__bindgen_anon_5.thrust_wait = 0;
+            assert_eq!((*s).thrust, 255);
+            (*s).life = 2;
+            (*s).thrust = 0;
             let held = exhaust();
             hooks::invoke_element_pointer(post, s);
             assert_eq!({ disp_q.tail }, tail);
-            assert_eq!((*s).__bindgen_anon_5.thrust_wait, 0);
+            assert_eq!((*s).thrust, 0);
             for h in held {
                 battle_context::dispose(h);
             }
@@ -780,7 +777,7 @@ fn satellite_defense_wait_underflows_on_dead_zero_wait_and_handles_exhaustion() 
                 battle::element(d),
             );
             assert_eq!({ disp_q.tail }, d);
-            assert_eq!((*s).__bindgen_anon_5.thrust_wait, 0);
+            assert_eq!((*s).thrust, 0);
             for h in held {
                 battle_context::dispose(h);
             }
@@ -803,7 +800,7 @@ fn tractor_applies_mass_division_speed_flags_and_head_inserted_blue_shadows() {
                     Ship::with_frames(&_battle, SPECIES_ID_CHMMR_ID, 0, [16, 41, 12], [16, 12]);
                 let mut enemy =
                     Ship::with_frames(&_battle, SPECIES_ID_CHMMR_ID, 1, [16, 41, 12], [16, 12]);
-                (*enemy.ptr()).__bindgen_anon_3.mass_points = mass;
+                (*enemy.ptr()).mass = mass;
                 (*enemy.ptr()).current.location = POINT { x: 3000, y: 3728 };
                 (*enemy.ptr()).next = (*enemy.ptr()).current;
                 (*ship.ptr()).hTarget = enemy.handle;
@@ -834,7 +831,7 @@ fn tractor_applies_mass_division_speed_flags_and_head_inserted_blue_shadows() {
                         (*shadow).state_flags,
                         (FINITE_LIFE | NONSOLID | IGNORE_SIMILAR | POST_PROCESS | CHANGING) as u16
                     );
-                    assert_eq!((*shadow).__bindgen_anon_1.life_span, 1);
+                    assert_eq!((*shadow).life, 1);
                     assert_eq!(point((*shadow).current.location), (3000 + offset * 4, 3728));
                     assert_eq!(
                         point((*shadow).next.location),
@@ -873,7 +870,7 @@ fn tractor_energy_target_gravity_and_allocation_boundaries() {
                     Ship::with_frames(&_battle, SPECIES_ID_CHMMR_ID, 0, [16, 41, 12], [16, 12]);
                 let enemy =
                     Ship::with_frames(&_battle, SPECIES_ID_CHMMR_ID, 1, [16, 41, 12], [16, 12]);
-                (*enemy.ptr()).__bindgen_anon_3.mass_points = mass;
+                (*enemy.ptr()).mass = mass;
                 (*enemy.ptr()).current.location = POINT { x: 3000, y: 3728 };
                 (*enemy.ptr()).next = (*enemy.ptr()).current;
                 if has_target {
@@ -1011,7 +1008,7 @@ fn laser_death_preserves_size_subtraction_and_unsigned_count_magnitude() {
             let laser = battle::element(h);
             (*ship.ptr()).current.location = POINT { x: 32760, y: 32760 };
             (*laser).current.location = POINT { x: -8, y: -8 };
-            (*laser).__bindgen_anon_4.turn_wait = 255;
+            (*laser).turn = 255;
             let mut saw_large_magnitude = false;
             for seed in 1..128 {
                 TFB_SeedRandom(seed);

@@ -232,7 +232,7 @@ pub(crate) mod engine {
     }
 
     unsafe fn preprocess(cx: &mut Cx<'_>, e: ElementId) {
-        if cx.elements()[e].__bindgen_anon_1.life_span == 0 {
+        if cx.elements()[e].life == 0 {
             if !cx.elements()[e].pParent.is_null() {
                 untarget(cx, e);
             }
@@ -278,8 +278,7 @@ pub(crate) mod engine {
                 cx.init_intersect_end(e);
             }
             if flags & FINITE_LIFE as ELEMENT_FLAGS != 0 {
-                cx.records()[e].__bindgen_anon_1.life_span =
-                    cx.elements()[e].__bindgen_anon_1.life_span.wrapping_sub(1);
+                cx.records()[e].life = cx.elements()[e].life.wrapping_sub(1);
             }
         }
         cx.records()[e].state_flags =
@@ -367,8 +366,8 @@ pub(crate) mod engine {
                 cx.elements()[test].state_flags,
                 cx.elements()[el].state_flags,
                 cx.elements()[test].pParent == cx.elements()[el].pParent,
-                cx.elements()[test].__bindgen_anon_3.mass_points,
-                cx.elements()[el].__bindgen_anon_3.mass_points,
+                cx.elements()[test].mass,
+                cx.elements()[el].mass,
             ) {
                 let mut state_flags = cx.elements()[el].state_flags;
                 let mut test_state_flags = cx.elements()[test].state_flags;
@@ -376,9 +375,9 @@ pub(crate) mod engine {
                 let mut time_value;
                 if (state_flags | test_state_flags) & finite_life != 0
                     && (((state_flags & APPEARING as ELEMENT_FLAGS != 0)
-                        && cx.elements()[el].__bindgen_anon_1.life_span > 1)
+                        && cx.elements()[el].life > 1)
                         || ((test_state_flags & APPEARING as ELEMENT_FLAGS != 0)
-                            && cx.elements()[test].__bindgen_anon_1.life_span > 1))
+                            && cx.elements()[test].life > 1))
                 {
                     time_value = 0;
                 } else {
@@ -429,22 +428,16 @@ pub(crate) mod engine {
                                     image!(frame; cx.records()[el].next.image.frame, SetEquFrameIndex(next, cur));
                                 } else if next != cur {
                                     image!(copy; cx.records()[el].next.image, cx.elements()[el].current.image);
-                                    if cx.elements()[el].__bindgen_anon_1.life_span
-                                        > NORMAL_LIFE as COUNT
-                                    {
-                                        cx.records()[el].__bindgen_anon_1.life_span =
-                                            NORMAL_LIFE as COUNT;
+                                    if cx.elements()[el].life > NORMAL_LIFE as COUNT {
+                                        cx.records()[el].life = NORMAL_LIFE as COUNT;
                                     }
                                 }
                                 if frame_index(tcur) != frame_index(tnext) {
                                     image!(frame; cx.records()[test].next.image.frame, SetEquFrameIndex(tnext, tcur));
                                 } else if tnext != tcur {
                                     image!(copy; cx.records()[test].next.image, cx.elements()[test].current.image);
-                                    if cx.elements()[test].__bindgen_anon_1.life_span
-                                        > NORMAL_LIFE as COUNT
-                                    {
-                                        cx.records()[test].__bindgen_anon_1.life_span =
-                                            NORMAL_LIFE as COUNT;
+                                    if cx.elements()[test].life > NORMAL_LIFE as COUNT {
+                                        cx.records()[test].life = NORMAL_LIFE as COUNT;
                                     }
                                 }
                                 cx.init_intersect_start(el);

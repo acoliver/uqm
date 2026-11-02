@@ -3,8 +3,7 @@ pub use crate::engine::battle::{ElementHook, CollisionHook};
 #[cfg(not(test))]
 pub(crate) use crate::engine::battle::record::Kernel;
 pub use crate::engine::battle::record::{
-    captain_stuff, element, element__bindgen_ty_1, element__bindgen_ty_2, element__bindgen_ty_3,
-    element__bindgen_ty_4, element__bindgen_ty_5, race_desc, state, state__bindgen_ty_1,
+    captain_stuff, element, race_desc, state, state__bindgen_ty_1,
     tfb_soundsample, TFB_SoundSample,
     CAPTAIN_STUFF, CHARACTERISTIC_STUFF, DATA_STUFF, ELEMENT, EVALUATE_DESC, FLEET_STUFF,
     INTEL_STUFF, INTERSECT_CONTROL, MAX_DISPLAY_PRIMS, MOVEMENT_STATE, MUSIC_REF,

@@ -33,25 +33,18 @@ fn descriptor_saw_launch_hold_release_decelerate_and_tracking() {
             let h = with_rng(9, 0, || ship.weapon(1))[0];
             let saw = ship.weapon_record(h);
             let h = saw.cast();
-            assert_eq!(
-                (
-                    (*saw).__bindgen_anon_1.life_span,
-                    (*saw).__bindgen_anon_2.hit_points,
-                    (*saw).__bindgen_anon_3.mass_points
-                ),
-                (64, 10, 4)
-            );
+            assert_eq!(((*saw).life, (*saw).hits, (*saw).mass), (64, 10, 4));
             assert_eq!(velocity(&(*saw).velocity), toward(64, 4));
             ship.ship_mut().cur_status_flags = WEAPON as u16;
             ship.descriptor_mut().characteristics.special_wait = 0;
             with_rng(9, 0, || {
                 hooks::invoke_element_pointer((*saw).preprocess_func.unwrap(), saw)
             });
-            assert_eq!((*saw).__bindgen_anon_1.life_span, 65);
+            assert_eq!((*saw).life, 65);
             assert_eq!(frame_index((*saw).next.image.frame), 1);
             ship.ship_mut().cur_status_flags = 0;
             hooks::invoke_element_pointer((*saw).preprocess_func.unwrap(), saw);
-            assert_eq!((*saw).__bindgen_anon_1.life_span, 33);
+            assert_eq!((*saw).life, 33);
             ship.descriptor_mut().characteristics.special_wait = 0;
             let decelerate = (*saw).preprocess_func.unwrap();
             for speed in [1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1, 0] {
@@ -86,7 +79,7 @@ fn ninth_saw_expires_and_postprocess_requeues_after_ship_with_intersection_point
             assert_eq!(all.len(), 3);
             let copy = battle::element(all[1]);
             assert_eq!(all[2], h);
-            assert_eq!((*saw).__bindgen_anon_1.life_span, 0);
+            assert_eq!((*saw).life, 0);
             assert!((*copy).postprocess_func.is_none());
             assert_eq!(
                 ((*copy).current.location.x, (*copy).current.location.y),
@@ -107,7 +100,7 @@ fn ninth_saw_expires_and_postprocess_requeues_after_ship_with_intersection_point
             ship.descriptor_mut().characteristics.special_wait = 8;
             ship.ship_mut().cur_status_flags = WEAPON as u16;
             hooks::invoke_element_pointer((*copy).preprocess_func.unwrap(), copy);
-            assert_eq!((*copy).__bindgen_anon_1.life_span, 1);
+            assert_eq!((*copy).life, 1);
             assert_ne!((*copy).state_flags & DISAPPEARING as u16, 0);
             assert_eq!(ship.descriptor_mut().characteristics.special_wait, 9);
             ship.ship_mut().old_status_flags = WEAPON as u16;
@@ -132,24 +125,17 @@ fn fried_launches_sixteen_clouds_in_facing_order_with_inherited_velocity() {
             assert_eq!(all.len(), 17);
             for (face, &h) in all[1..].iter().enumerate() {
                 let e = battle::element(h);
-                assert_eq!(
-                    (
-                        (*e).__bindgen_anon_1.life_span,
-                        (*e).__bindgen_anon_2.hit_points,
-                        (*e).__bindgen_anon_3.mass_points
-                    ),
-                    (47, 100, 3)
-                );
-                assert_eq!((*e).__bindgen_anon_4.turn_wait, 1);
+                assert_eq!(((*e).life, (*e).hits, (*e).mass), (47, 100, 3));
+                assert_eq!((*e).turn, 1);
                 let mut expected: VELOCITY_DESC = mem::zeroed();
                 SetVelocityVector(&mut expected, 16, face as COUNT);
                 DeltaVelocityComponents(&mut expected, 41, -21);
                 assert_eq!(velocity(&(*e).velocity), velocity(&expected));
                 hooks::invoke_element_pointer((*e).preprocess_func.unwrap(), e);
-                assert_eq!((*e).__bindgen_anon_4.turn_wait, 0);
+                assert_eq!((*e).turn, 0);
                 hooks::invoke_element_pointer((*e).preprocess_func.unwrap(), e);
                 assert_eq!(frame_index((*e).next.image.frame), 1);
-                assert_eq!((*e).__bindgen_anon_4.turn_wait, 2);
+                assert_eq!((*e).turn, 2);
                 assert!((*e).hTarget.is_null());
             }
         }
@@ -167,7 +153,7 @@ fn saw_collision_splinters_and_cloud_damage_depends_on_ship_flag() {
             let mut target_fixture = Object::new(&_battle);
             let target = target_fixture.element_mut() as *mut ELEMENT;
             (*target).playerNr = 1;
-            (*target).__bindgen_anon_1.life_span = 2;
+            (*target).life = 2;
             let mut p = POINT { x: 100, y: 200 };
             hooks::invoke_collision_pointer(
                 (*saw).collision_func.unwrap(),
@@ -177,7 +163,7 @@ fn saw_collision_splinters_and_cloud_damage_depends_on_ship_flag() {
                 &mut p,
                 hooks::CollisionCall::Hook,
             );
-            assert_eq!((*saw).__bindgen_anon_1.life_span, 5);
+            assert_eq!((*saw).life, 5);
             assert_eq!(frame_index((*saw).next.image.frame), 2);
             assert_eq!((*saw).state_flags & DISAPPEARING as u16, 0);
             assert_ne!((*saw).state_flags & NONSOLID as u16, 0);
@@ -194,7 +180,7 @@ fn saw_collision_splinters_and_cloud_damage_depends_on_ship_flag() {
                 &mut p,
                 hooks::CollisionCall::Hook,
             );
-            assert_eq!((*cloud).__bindgen_anon_3.mass_points, 50);
+            assert_eq!((*cloud).mass, 50);
             (*target).state_flags = PLAYER_SHIP as u16;
             // Already collided: weapon_collision returns without needing target parent.
             hooks::invoke_collision_pointer(
@@ -205,7 +191,7 @@ fn saw_collision_splinters_and_cloud_damage_depends_on_ship_flag() {
                 &mut p,
                 hooks::CollisionCall::Hook,
             );
-            assert_eq!((*cloud).__bindgen_anon_3.mass_points, 3);
+            assert_eq!((*cloud).mass, 3);
         }
     })
 }

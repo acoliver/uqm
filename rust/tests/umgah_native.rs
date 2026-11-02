@@ -272,10 +272,10 @@ fn cone_initialization_fixes_intersection_and_does_not_inherit_velocity() {
             assert!(!h.is_null());
             let cone = battle::element(h);
             assert_eq!((*cone).state_flags, (FINITE_LIFE | IGNORE_SIMILAR) as u16);
-            assert_eq!((*cone).__bindgen_anon_1.life_span, 1);
-            assert_eq!((*cone).__bindgen_anon_2.hit_points, 100);
-            assert_eq!((*cone).__bindgen_anon_3.mass_points, 1);
-            assert_eq!((*cone).__bindgen_anon_5.blast_offset, 0);
+            assert_eq!((*cone).life, 1);
+            assert_eq!((*cone).hits, 100);
+            assert_eq!((*cone).mass, 1);
+            assert_eq!((*cone).thrust, 0);
             assert_eq!((*cone).playerNr, 1);
             assert_eq!(velocity_fields(&(*cone).velocity), [0; 9]);
             assert_eq!(
@@ -418,9 +418,9 @@ unsafe fn target(finite: bool) -> PoolElement {
     let mut e = PoolElement::new();
     e.playerNr = 1;
     e.state_flags = if finite { FINITE_LIFE as u16 } else { 0 };
-    e.__bindgen_anon_1.life_span = 2;
-    e.__bindgen_anon_2.hit_points = 3;
-    e.__bindgen_anon_3.mass_points = 1;
+    e.life = 2;
+    e.hits = 3;
+    e.mass = 1;
     e
 }
 
@@ -452,9 +452,9 @@ fn collision_removes_and_frees_the_blast_but_does_not_restore_cone_life_or_solid
                 (*cone).state_flags,
                 (FINITE_LIFE | IGNORE_SIMILAR | COLLISION | NONSOLID) as u16
             );
-            assert_eq!((*cone).__bindgen_anon_1.life_span, 0);
-            assert_eq!((*cone).__bindgen_anon_2.hit_points, 0);
-            assert_eq!(hit.__bindgen_anon_2.hit_points, 3);
+            assert_eq!((*cone).life, 0);
+            assert_eq!((*cone).hits, 0);
+            assert_eq!(hit.hits, 3);
             let freed_blast = uqm_rust::app::bridge::enter(|cx| {
                 cx.alloc_element()
                     .map_or(std::ptr::null_mut(), |id| cx.elements().raw(id))
@@ -496,7 +496,7 @@ fn collision_preserves_disappearing_when_blast_allocation_fails() {
                 (*cone).state_flags & (DISAPPEARING | COLLISION | NONSOLID) as u16,
                 (DISAPPEARING | COLLISION | NONSOLID) as u16
             );
-            assert_eq!((*cone).__bindgen_anon_1.life_span, 0);
+            assert_eq!((*cone).life, 0);
             assert_eq!(queued(), vec![ship.handle]);
             battle_context::dispose(h);
         }
@@ -525,9 +525,9 @@ fn finite_weapon_hit_damages_once_without_a_blast_and_does_not_clear_disappearin
                     hooks::CollisionCall::Hook,
                 )
             });
-            assert_eq!(hit.__bindgen_anon_2.hit_points, 2);
-            assert_eq!((*cone).__bindgen_anon_2.hit_points, 100);
-            assert_eq!((*cone).__bindgen_anon_1.life_span, 1);
+            assert_eq!(hit.hits, 2);
+            assert_eq!((*cone).hits, 100);
+            assert_eq!((*cone).life, 1);
             assert_ne!((*cone).state_flags & COLLISION as u16, 0);
             assert_ne!((*cone).state_flags & DISAPPEARING as u16, 0);
             hooks::invoke_collision_pointer(
@@ -538,7 +538,7 @@ fn finite_weapon_hit_damages_once_without_a_blast_and_does_not_clear_disappearin
                 &mut POINT { x: 0, y: 0 },
                 hooks::CollisionCall::Hook,
             );
-            assert_eq!(hit.__bindgen_anon_2.hit_points, 2);
+            assert_eq!(hit.hits, 2);
             assert_eq!(queued(), vec![ship.handle]);
             battle_context::dispose(h);
         }
@@ -609,7 +609,7 @@ fn retropropulsion_gates_on_appearance_thrust_wait_key_and_energy() {
             ] {
                 (*ship.ptr()).state_flags =
                     (PLAYER_SHIP | if appearing { APPEARING } else { 0 }) as u16;
-                (*ship.ptr()).__bindgen_anon_5.thrust_wait = wait;
+                (*ship.ptr()).thrust = wait;
                 ship.ship_mut().cur_status_flags = if key { SPECIAL as u16 } else { 0 };
                 ship.ship_mut().special_counter = 0;
                 ship.ship_mut().energy_counter = 19;
@@ -630,7 +630,7 @@ fn retropropulsion_gates_on_appearance_thrust_wait_key_and_energy() {
                 );
             }
             (*ship.ptr()).state_flags = PLAYER_SHIP as u16;
-            (*ship.ptr()).__bindgen_anon_5.thrust_wait = 0;
+            (*ship.ptr()).thrust = 0;
             ship.descriptor_mut().ship_info.energy_level = 1;
             ship.preprocess();
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 0);
@@ -796,7 +796,7 @@ fn rear_zip_alignment_and_randomness_change_at_turns_8_and_16() {
                 (16, 0, 0, true, 0),
             ] {
                 ship.ship_mut().old_status_flags = old as u16;
-                (*ship.ptr()).__bindgen_anon_4.turn_wait = wait;
+                (*ship.ptr()).turn = wait;
                 let mut c = enemy_concern(&enemy, turn);
                 let input = with_rng(99, used, || think(&mut ship, &mut c, THRUST as u8, 0));
                 assert_eq!(
@@ -823,7 +823,7 @@ fn ai_energy_test_is_strict_and_uses_world_to_turn_shift() {
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
             let enemy = Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 1, [16, 16, 48], [4, 4]);
             (*enemy.ptr()).next.location = POINT { x: 4000, y: 4400 };
-            (*ship.ptr()).__bindgen_anon_4.turn_wait = 1;
+            (*ship.ptr()).turn = 1;
             for (energy, turn, boost) in [
                 (0, 0, false),
                 (1, 1, true),
@@ -941,7 +941,7 @@ fn rear_arc_uses_unwrapped_next_location_difference_and_inclusive_angle_bounds()
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
             let enemy = Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 1, [16, 16, 48], [4, 4]);
-            (*ship.ptr()).__bindgen_anon_4.turn_wait = 1;
+            (*ship.ptr()).turn = 1;
             for facing in 0..16 {
                 ship.ship_mut().ShipFacing = facing;
                 for angle in 0..64 {

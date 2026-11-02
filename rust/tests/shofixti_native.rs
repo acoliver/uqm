@@ -256,9 +256,9 @@ unsafe fn object<'a>(
     let e = object.ptr();
     (*e).state_flags = flags;
     (*e).playerNr = -1;
-    (*e).__bindgen_anon_1.life_span = 50;
-    (*e).__bindgen_anon_2.hit_points = hp;
-    (*e).__bindgen_anon_3.mass_points = mass;
+    (*e).life = 50;
+    (*e).hits = hp;
+    (*e).mass = mass;
     (*e).next.location = POINT {
         x: (4000 + dx) as COORD,
         y: (4000 + dy) as COORD,
@@ -431,12 +431,7 @@ fn darts_use_next_location_exact_facing_offset_speed_and_failure_count() {
                 (APPEARING | FINITE_LIFE | IGNORE_SIMILAR) as u16
             );
             assert_eq!(
-                (
-                    (*dart).__bindgen_anon_1.life_span,
-                    (*dart).__bindgen_anon_2.hit_points,
-                    (*dart).__bindgen_anon_3.mass_points,
-                    (*dart).__bindgen_anon_5.blast_offset
-                ),
+                ((*dart).life, (*dart).hits, (*dart).mass, (*dart).thrust),
                 (10, 1, 1, 1)
             );
             assert_eq!((*dart).playerNr, 1);
@@ -514,9 +509,9 @@ fn glory_ai_toggles_the_switch_and_checks_all_deterministic_threat_branches() {
             ship.inner.ship_mut().ship_input_state =
                 WEAPON as u8 | if start { SPECIAL as u8 } else { 0 };
             ship.inner.ship_mut().special_counter = counter;
-            (*ship.ptr()).__bindgen_anon_2.crew_level = crew;
+            (*ship.ptr()).hits = crew;
             (*enemy.ptr()).current.location = POINT { x: 6000, y: 6000 };
-            (*enemy.ptr()).__bindgen_anon_3.mass_points = 0;
+            (*enemy.ptr()).mass = 0;
             concerns[0].ObjectPtr = enemy.ptr();
             concerns[0].which_turn = enemy_turn;
             concerns[2].ObjectPtr = if immediate {
@@ -560,20 +555,20 @@ fn glory_ai_intercept_damage_and_random_parity_short_circuit_exactly() {
         for seed in 1..32 {
             TFB_SeedRandom(seed);
             let parity = TFB_Random() & 1 != 0;
-            (*threat.ptr()).__bindgen_anon_3.mass_points = 6;
+            (*threat.ptr()).mass = 6;
             ship.inner.ship_mut().ship_input_state = 0;
             with_rng(seed, 1, || ship.ai(&mut concerns));
             assert_eq!(
                 ship.inner.ship_mut().ship_input_state & SPECIAL as u8 != 0,
                 parity
             );
-            (*threat.ptr()).__bindgen_anon_3.mass_points = 5;
+            (*threat.ptr()).mass = 5;
             ship.inner.ship_mut().ship_input_state = 0;
             with_rng(seed, 0, || ship.ai(&mut concerns));
             assert_eq!(ship.inner.ship_mut().ship_input_state & SPECIAL as u8, 0);
         }
         (*threat.ptr()).current.location.x += 500;
-        (*threat.ptr()).__bindgen_anon_3.mass_points = 255;
+        (*threat.ptr()).mass = 255;
         assert_eq!(
             uqm_rust::engine::battle::PlotIntercept(threat.ptr(), ship.ptr(), 2, 0),
             0
@@ -609,10 +604,7 @@ fn both_switch_edges_advance_and_only_the_third_remaining_frame_detonates() {
                 ),
                 index
             );
-            assert_eq!(
-                (*ship.ptr()).__bindgen_anon_2.crew_level,
-                if index == 17 { 0 } else { 6 }
-            );
+            assert_eq!((*ship.ptr()).hits, if index == 17 { 0 } else { 6 });
         }
         let deferred = shared::element(disp_q.tail);
         assert_ne!(deferred, ship.ptr());
@@ -620,7 +612,7 @@ fn both_switch_edges_advance_and_only_the_third_remaining_frame_detonates() {
             (*deferred).state_flags,
             (APPEARING | NONSOLID | FINITE_LIFE) as u16
         );
-        assert_eq!((*deferred).__bindgen_anon_1.life_span, 0);
+        assert_eq!((*deferred).life, 0);
         assert_eq!((*deferred).pParent, (*ship.ptr()).pParent);
         assert_eq!(
             ((*deferred).next.location.x, (*deferred).next.location.y),
@@ -628,7 +620,7 @@ fn both_switch_edges_advance_and_only_the_third_remaining_frame_detonates() {
         );
         assert!((*deferred).hTarget.is_null() && (*deferred).death_func.is_some());
         assert_eq!(ship.inner.descriptor_mut().ship_info.crew_level, 0);
-        assert_eq!((*ship.ptr()).__bindgen_anon_1.life_span, 0);
+        assert_eq!((*ship.ptr()).life, 0);
         assert_ne!((*ship.ptr()).state_flags & NONSOLID as u16, 0);
         assert!((*ship.ptr()).death_func.is_some());
     })
@@ -642,7 +634,7 @@ fn deferred_glory_damage_obeys_solidity_marine_identity_radius_and_gravity() {
         let mut enemy = Ship::new(&_battle, 1);
         enemy.inner.descriptor_mut().ship_info.max_crew = 50;
         enemy.inner.descriptor_mut().ship_info.crew_level = 50;
-        (*enemy.ptr()).__bindgen_anon_2.crew_level = 50;
+        (*enemy.ptr()).hits = 50;
         let mut objects = Vec::new();
         for (flags, mass, dx, dy, expected) in [
             (0, 1, 0, 0, 11),
@@ -681,30 +673,26 @@ fn deferred_glory_damage_obeys_solidity_marine_identity_radius_and_gravity() {
         let fragile = fragile_owner.ptr();
         let kill = ship.arm().unwrap();
         let deferred = shared::element(disp_q.tail);
-        assert_eq!(
-            (*enemy.ptr()).__bindgen_anon_2.crew_level,
-            50,
-            "damage must be deferred"
-        );
+        assert_eq!((*enemy.ptr()).hits, 50, "damage must be deferred");
         with_rng(2, 0, || hooks::invoke_element_pointer(kill, deferred));
-        assert_eq!((*enemy.ptr()).__bindgen_anon_2.crew_level, 31);
+        assert_eq!((*enemy.ptr()).hits, 31);
         assert_eq!(enemy.inner.descriptor_mut().ship_info.crew_level, 31);
         for (object, hp) in &mut objects {
             let obj = object.ptr();
-            assert_eq!((*obj).__bindgen_anon_2.hit_points, *hp);
-            assert_eq!((*obj).__bindgen_anon_1.life_span, 50);
+            assert_eq!((*obj).hits, *hp);
+            assert_eq!((*obj).life, 50);
         }
         for obj in [marine, fragile] {
-            assert_eq!((*obj).__bindgen_anon_2.hit_points, 0);
-            assert_eq!((*obj).__bindgen_anon_1.life_span, 0);
+            assert_eq!((*obj).hits, 0);
+            assert_eq!((*obj).life, 0);
         }
         for obj in [preprocess_only, collision_only] {
-            assert_eq!((*obj).__bindgen_anon_2.hit_points, 1);
+            assert_eq!((*obj).hits, 1);
         }
         enemy.inner.descriptor_mut().ship_info.crew_level = 1;
-        (*enemy.ptr()).__bindgen_anon_2.crew_level = 1;
+        (*enemy.ptr()).hits = 1;
         hooks::invoke_element_pointer(kill, deferred);
-        assert_eq!((*enemy.ptr()).__bindgen_anon_1.life_span, 0);
+        assert_eq!((*enemy.ptr()).life, 0);
         assert_eq!(enemy.inner.descriptor_mut().ship_info.crew_level, 0);
     })
 }
@@ -716,8 +704,8 @@ fn failed_deferred_allocation_still_kills_the_ship() {
         let mut ship = Ship::new(&_battle, 0);
         assert!(with_rng(4, 0, || ship.arm()).is_none());
         assert_eq!({ disp_q.tail }, ship.handle);
-        assert_eq!((*ship.ptr()).__bindgen_anon_1.life_span, 0);
-        assert_eq!((*ship.ptr()).__bindgen_anon_2.crew_level, 0);
+        assert_eq!((*ship.ptr()).life, 0);
+        assert_eq!((*ship.ptr()).hits, 0);
         assert_eq!(ship.inner.descriptor_mut().ship_info.crew_level, 0);
         assert!((*ship.ptr()).death_func.is_some());
     })
@@ -738,7 +726,7 @@ fn glory_death_selects_the_winner_preserves_prior_winners_and_counts_the_death()
             let mut ship = Ship::new(&_battle, 0);
             let mut other = Ship::new(&_battle, 1);
             other.inner.descriptor_mut().ship_info.crew_level = other_crew;
-            (*other.ptr()).__bindgen_anon_3.mass_points = other_mass;
+            (*other.ptr()).mass = other_mass;
             if prior == 1 {
                 uqm_rust::app::bridge::enter(|cx| {
                     uqm_rust::battle::tactrans_native::set_winner_ship(cx, Some(ship.inner.ship_id))
@@ -770,7 +758,7 @@ fn glory_death_selects_the_winner_preserves_prior_winners_and_counts_the_death()
             );
             assert_eq!((*expected).cur_status_flags & 0x200 != 0, ditty);
             assert_eq!(uqm_rust::app::bridge::battle(|b| b.counters[0]), 9);
-            assert_eq!((*ship.ptr()).__bindgen_anon_1.life_span, 36);
+            assert_eq!((*ship.ptr()).life, 36);
             assert_eq!(ship.inner.descriptor_mut().ship_info.energy_level, 0);
             assert_eq!((*ship.ptr()).velocity.travel_angle, 0);
             assert!(
@@ -795,13 +783,13 @@ fn glory_flash_switch_and_explosion_color_sequence_use_twelve_frame_ship_death()
             (35, (255, 255, 82, 255)),
             (34, (255, 255, 255, 255)),
         ] {
-            (*ship.ptr()).__bindgen_anon_1.life_span = life;
+            (*ship.ptr()).life = life;
             with_rng(3, 0, || hooks::invoke_element_pointer(flash, ship.ptr()));
             assert_eq!((*prim(ship.ptr())).Type, gfx_object_STAMPFILL_PRIM as u8);
             assert_eq!(rgba((*prim(ship.ptr())).color), color);
             assert_ne!((*ship.ptr()).state_flags & CHANGING as u16, 0);
         }
-        (*ship.ptr()).__bindgen_anon_1.life_span = 33;
+        (*ship.ptr()).life = 33;
         with_rng(3, 0, || hooks::invoke_element_pointer(flash, ship.ptr()));
         assert!((*ship.ptr()).preprocess_func.is_none());
         assert_eq!((*prim(ship.ptr())).Type, gfx_object_NUM_PRIMS as u8);
@@ -812,9 +800,9 @@ fn glory_flash_switch_and_explosion_color_sequence_use_twelve_frame_ship_death()
             (APPEARING | FINITE_LIFE | NONSOLID) as u16
         );
         assert_eq!((*explosion).playerNr, -1);
-        assert_eq!((*explosion).__bindgen_anon_1.life_span, 10);
-        assert_eq!((*explosion).__bindgen_anon_2.hit_points, 0);
-        assert_eq!((*explosion).__bindgen_anon_3.mass_points, 0);
+        assert_eq!((*explosion).life, 10);
+        assert_eq!((*explosion).hits, 0);
+        assert_eq!((*explosion).mass, 0);
         assert_eq!((*explosion).pParent, (*ship.ptr()).pParent);
         assert_eq!(
             (*explosion).current.image.frame,
@@ -873,7 +861,7 @@ fn failed_visual_explosion_allocation_still_hides_the_ship() {
         let mut ship = Ship::new(&_battle, 0);
         ship.arm();
         hooks::invoke_element_pointer((*ship.ptr()).death_func.unwrap(), ship.ptr());
-        (*ship.ptr()).__bindgen_anon_1.life_span = 33;
+        (*ship.ptr()).life = 33;
         hooks::invoke_element_pointer((*ship.ptr()).preprocess_func.unwrap(), ship.ptr());
         assert_eq!({ disp_q.tail }, ship.handle);
         assert_eq!((*prim(ship.ptr())).Type, gfx_object_NUM_PRIMS as u8);

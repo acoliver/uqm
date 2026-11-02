@@ -156,11 +156,11 @@ fn flame_inherits_the_ship_velocity_and_starts_on_the_first_frame() {
             let mut out = [ptr::null_mut()];
             out[0] = fleet.weapon_handles(1)[0];
             let flame = battle::element(out[0]);
-            assert_eq!((*flame).__bindgen_anon_1.life_span, 8);
-            assert_eq!((*flame).__bindgen_anon_2.hit_points, 1);
-            assert_eq!((*flame).__bindgen_anon_3.mass_points, 1);
-            assert_eq!((*flame).__bindgen_anon_5.next_turn, 0);
-            assert_eq!((*flame).__bindgen_anon_4.turn_wait, 0);
+            assert_eq!((*flame).life, 8);
+            assert_eq!((*flame).hits, 1);
+            assert_eq!((*flame).mass, 1);
+            assert_eq!((*flame).thrust, 0);
+            assert_eq!((*flame).turn, 0);
             assert_eq!(
                 (*flame).state_flags,
                 (APPEARING | FINITE_LIFE | IGNORE_SIMILAR) as u16
@@ -199,20 +199,20 @@ fn flame_advances_its_animation_every_next_turn_frames() {
             out[0] = fleet.weapon_handles(1)[0];
             let flame = battle::element(out[0]);
             let step = (*flame).preprocess_func.unwrap();
-            (*flame).__bindgen_anon_5.next_turn = 2;
+            (*flame).thrust = 2;
 
             // turn_wait starts at 0, so the first pass animates immediately and
             // reloads the delay from next_turn.
             hooks::invoke_element_pointer(step, flame);
             assert_eq!(index_of((*flame).next.image.frame), 1);
             assert_ne!((*flame).state_flags & CHANGING as u16, 0);
-            assert_eq!((*flame).__bindgen_anon_4.turn_wait, 2);
+            assert_eq!((*flame).turn, 2);
 
             (*flame).state_flags &= !(CHANGING as u16);
             (*flame).current.image.frame = (*flame).next.image.frame;
             hooks::invoke_element_pointer(step, flame);
             hooks::invoke_element_pointer(step, flame);
-            assert_eq!((*flame).__bindgen_anon_4.turn_wait, 0);
+            assert_eq!((*flame).turn, 0);
             assert_eq!((*flame).state_flags & CHANGING as u16, 0);
             assert_eq!(index_of((*flame).next.image.frame), 1);
 
@@ -222,7 +222,7 @@ fn flame_advances_its_animation_every_next_turn_frames() {
 
             // The animation wraps after the last frame.
             (*flame).current.image.frame = flame_frames.frame(3);
-            (*flame).__bindgen_anon_4.turn_wait = 0;
+            (*flame).turn = 0;
             hooks::invoke_element_pointer(step, flame);
             assert_eq!(index_of((*flame).next.image.frame), 0);
         }
@@ -246,7 +246,7 @@ fn flame_that_hits_goes_nonsolid_without_disappearing() {
             // A target that neither has finite life nor the normal-life marker
             // takes no damage, which keeps the collision self-contained.
             (*target).state_flags = 0;
-            (*target).__bindgen_anon_1.life_span = 5;
+            (*target).life = 5;
             let mut flame_point = POINT { x: 100, y: 125 };
             let mut target_point = POINT { x: 102, y: 125 };
 
@@ -264,8 +264,8 @@ fn flame_that_hits_goes_nonsolid_without_disappearing() {
             assert_eq!((*flame).state_flags & DISAPPEARING as u16, 0);
             assert_ne!((*flame).state_flags & NONSOLID as u16, 0);
             assert_ne!((*flame).state_flags & ELEMENT_COLLISION, 0);
-            assert_eq!((*flame).__bindgen_anon_1.life_span, 0);
-            assert_eq!((*flame).__bindgen_anon_2.hit_points, 0);
+            assert_eq!((*flame).life, 0);
+            assert_eq!((*flame).hits, 0);
         }
     })
 }
@@ -442,7 +442,7 @@ fn firing_while_cloaked_decloaks_and_turns_toward_the_target() {
             assert_eq!(fleet.ship_mut().ShipFacing, 4);
             assert_eq!(index_of((*ship).next.image.frame), 4);
             // turn_wait of zero is bumped so the new facing is not undone at once.
-            assert_eq!((*ship).__bindgen_anon_4.turn_wait, 1);
+            assert_eq!((*ship).turn, 1);
             assert!((*ship).hTarget.is_null());
             assert_eq!(fleet.ship_mut().special_counter, 0);
             assert_ne!((*ship).state_flags & CHANGING as u16, 0);
@@ -499,7 +499,7 @@ fn firing_while_cloaked_without_a_target_keeps_the_facing() {
         assert_eq!(color_of(ship), BLUE_DARK);
         assert_eq!(fleet.ship_mut().ShipFacing, 6);
         assert_eq!(index_of((*ship).next.image.frame), 0);
-        assert_eq!((*ship).__bindgen_anon_4.turn_wait, 0);
+        assert_eq!((*ship).turn, 0);
         assert!((*ship).hTarget.is_null());
     })
 }
@@ -737,13 +737,13 @@ fn intelligence_runs_the_engine_pursuit_when_the_enemy_is_known() {
             paint(ship, gfx_object_STAMP_PRIM, WHITE);
             let mut other = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 1, [16; 3], [0, 0]);
             let enemy = spawn_ship(&mut other, 1500, 1000);
-            (*enemy).__bindgen_anon_3.mass_points = 1;
+            (*enemy).mass = 1;
 
             // Concern entries past the first four count as empty for the engine.
             let mut concerns = concerns_with(enemy, 5);
             fleet.ship_mut().ship_input_state = 0;
-            (*ship).__bindgen_anon_4.turn_wait = 0;
-            (*ship).__bindgen_anon_5.thrust_wait = 0;
+            (*ship).turn = 0;
+            (*ship).thrust = 0;
             fleet.think(ship, &mut concerns, FIRST_EMPTY_INDEX as COUNT);
             assert_eq!(
                 concerns[ENEMY_SHIP_INDEX as usize].MoveState,

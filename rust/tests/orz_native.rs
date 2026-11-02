@@ -46,7 +46,7 @@ impl OrzFixture for Ship<'_> {
     unsafe fn tick_turret(&mut self) -> *mut ELEMENT {
         let old = (*self.ptr()).succ;
         let e = battle::element(old);
-        (*e).__bindgen_anon_1.life_span = 0;
+        (*e).life = 0;
         hooks::invoke_element_pointer((*e).postprocess_func.unwrap(), e);
         battle_context::unlink(old);
         battle_context::dispose(old);
@@ -279,7 +279,7 @@ fn appearing_turret_is_inserted_immediately_after_ship_and_inputs_suppress_hull_
                 (*turret).state_flags,
                 (FINITE_LIFE | NONSOLID | IGNORE_SIMILAR) as u16
             );
-            assert_eq!((*turret).__bindgen_anon_1.life_span, 1);
+            assert_eq!((*turret).life, 1);
             assert_eq!((*turret).current.image.frame, ship.raw_frame(2, 7));
             assert_eq!(
                 (*turret).current.image.farray,
@@ -298,9 +298,9 @@ fn appearing_turret_is_inserted_immediately_after_ship_and_inputs_suppress_hull_
                 ship.ship_mut().cur_status_flags = current as u16;
                 ship.ship_mut().old_status_flags = old as u16;
                 ship.ship_mut().weapon_counter = weapon;
-                (*ship.ptr()).__bindgen_anon_4.turn_wait = turn;
+                (*ship.ptr()).turn = turn;
                 with_rng(2, 0, || ship.preprocess());
-                assert_eq!((*ship.ptr()).__bindgen_anon_4.turn_wait, expected_turn);
+                assert_eq!((*ship.ptr()).turn, expected_turn);
                 assert_eq!(ship.ship_mut().weapon_counter, expected_weapon);
             }
         }
@@ -325,17 +325,17 @@ fn howitzer_rotates_before_firing_with_byte_wrap_and_exact_missile_fields() {
             ] {
                 ship.ship_mut().ShipFacing = 15;
                 ship.ship_mut().cur_status_flags = status as u16;
-                (*turret).__bindgen_anon_4.turn_wait = wait;
-                (*turret).__bindgen_anon_5.thrust_wait = offset;
+                (*turret).turn = wait;
+                (*turret).thrust = offset;
                 let h = with_rng(11, 0, || ship.missile());
                 let missile = battle::element(h);
                 let face = normalize_facing(15 + i32::from(expected_offset));
-                assert_eq!((*turret).__bindgen_anon_4.turn_wait, expected_wait);
-                assert_eq!((*turret).__bindgen_anon_5.thrust_wait, expected_offset);
-                assert_eq!((*missile).__bindgen_anon_1.life_span, 12);
-                assert_eq!((*missile).__bindgen_anon_2.hit_points, 2);
-                assert_eq!((*missile).__bindgen_anon_3.mass_points, 3);
-                assert_eq!((*missile).__bindgen_anon_5.blast_offset, 1);
+                assert_eq!((*turret).turn, expected_wait);
+                assert_eq!((*turret).thrust, expected_offset);
+                assert_eq!((*missile).life, 12);
+                assert_eq!((*missile).hits, 2);
+                assert_eq!((*missile).mass, 3);
+                assert_eq!((*missile).thrust, 1);
                 assert_eq!((*missile).playerNr, 1);
                 assert_eq!(
                     (*missile).state_flags,
@@ -394,8 +394,8 @@ fn howitzer_ignores_friendlies_but_damages_enemies_through_engine_collision() {
                     hooks::CollisionCall::Hook,
                 )
             });
-            assert_eq!((*ship.ptr()).__bindgen_anon_2.crew_level, 16);
-            assert_eq!((*missile).__bindgen_anon_1.life_span, 12);
+            assert_eq!((*ship.ptr()).hits, 16);
+            assert_eq!((*missile).life, 12);
             with_rng(17, 0, || {
                 hooks::invoke_collision_pointer(
                     collision,
@@ -406,10 +406,10 @@ fn howitzer_ignores_friendlies_but_damages_enemies_through_engine_collision() {
                     hooks::CollisionCall::Hook,
                 )
             });
-            assert_eq!((*enemy.ptr()).__bindgen_anon_2.crew_level, 13);
+            assert_eq!((*enemy.ptr()).hits, 13);
             assert_eq!(enemy.descriptor_mut().ship_info.crew_level, 13);
-            assert_eq!((*missile).__bindgen_anon_1.life_span, 0);
-            assert_eq!((*missile).__bindgen_anon_2.hit_points, 0);
+            assert_eq!((*missile).life, 0);
+            assert_eq!((*missile).hits, 0);
             assert_ne!(
                 (*missile).state_flags & (COLLISION | NONSOLID | DISAPPEARING) as u16,
                 0
@@ -439,9 +439,9 @@ fn turret_replacement_decrements_wait_once_rotates_and_updates_firing_quadrant()
             (*ship.ptr()).next.location = POINT { x: 123, y: -456 };
             for (expected_offset, expected_wait) in [(1, 3), (1, 2), (1, 1), (1, 0), (2, 3)] {
                 let turret = with_rng(5, 0, || ship.tick_turret());
-                assert_eq!((*turret).__bindgen_anon_5.thrust_wait, expected_offset);
-                assert_eq!((*turret).__bindgen_anon_4.turn_wait, expected_wait);
-                assert_eq!((*turret).__bindgen_anon_1.life_span, 1);
+                assert_eq!((*turret).thrust, expected_offset);
+                assert_eq!((*turret).turn, expected_wait);
+                assert_eq!((*turret).life, 1);
                 assert_eq!(
                     (*turret).state_flags,
                     (FINITE_LIFE
@@ -478,7 +478,7 @@ fn turret_replacement_decrements_wait_once_rotates_and_updates_firing_quadrant()
             for face in 0..16 {
                 ship.ship_mut().ShipFacing = face;
                 let old = battle::element((*ship.ptr()).succ);
-                (*old).__bindgen_anon_5.thrust_wait = 0;
+                (*old).thrust = 0;
                 ship.tick_turret();
                 let expected = (FIRES_FORE << (normalize_facing(i32::from(face) + 2) / 4)) as u16;
                 assert_eq!(
@@ -504,7 +504,7 @@ fn muzzle_flash_requires_an_appearing_friendly_stamp_and_animates_from_current()
             let turret = with_rng(20, 0, || ship.tick_turret());
             let flash = battle::element(disp_q.tail);
             assert_ne!(flash, battle::element(h));
-            assert_eq!((*flash).__bindgen_anon_1.life_span, 4);
+            assert_eq!((*flash).life, 4);
             assert_eq!((*flash).current.image.frame, ship.raw_frame(2, 16));
             assert_eq!(
                 (*flash).state_flags,
@@ -530,12 +530,12 @@ fn muzzle_flash_requires_an_appearing_friendly_stamp_and_animates_from_current()
             );
             let animate = (*flash).preprocess_func.unwrap();
             (*flash).next.image.frame = ship.raw_frame(2, 25);
-            (*flash).__bindgen_anon_5.next_turn = 2;
+            (*flash).thrust = 2;
             with_rng(20, 0, || hooks::invoke_element_pointer(animate, flash));
             assert_eq!((*flash).next.image.frame, ship.raw_frame(2, 17));
-            assert_eq!((*flash).__bindgen_anon_4.turn_wait, 2);
+            assert_eq!((*flash).turn, 2);
             hooks::invoke_element_pointer(animate, flash);
-            assert_eq!((*flash).__bindgen_anon_4.turn_wait, 1);
+            assert_eq!((*flash).turn, 1);
             assert_eq!((*flash).next.image.frame, ship.raw_frame(2, 17));
             (*flash).state_flags &= !(APPEARING as u16);
             let before = queued().len();
@@ -563,12 +563,12 @@ fn marines_launch_at_rear_with_exact_state_and_cost_only_after_allocation() {
                     (*marine).state_flags,
                     (IGNORE_SIMILAR | APPEARING | CREW_OBJECT) as u16
                 );
-                assert_eq!((*marine).__bindgen_anon_1.life_span, 1);
-                assert_eq!((*marine).__bindgen_anon_2.hit_points, 3);
-                assert_eq!((*marine).__bindgen_anon_3.mass_points, 1);
-                assert_eq!((*marine).__bindgen_anon_5.thrust_wait, 0);
+                assert_eq!((*marine).life, 1);
+                assert_eq!((*marine).hits, 3);
+                assert_eq!((*marine).mass, 1);
+                assert_eq!((*marine).thrust, 0);
                 assert_eq!(
-                    (*marine).__bindgen_anon_4.turn_wait,
+                    (*marine).turn,
                     (normalize_facing(i32::from(facing) + 8) << 4) as BYTE
                 );
                 assert_eq!((*marine).current.image.frame, ship.raw_frame(2, 20));
@@ -592,7 +592,7 @@ fn marines_launch_at_rear_with_exact_state_and_cost_only_after_allocation() {
                     (i32::from(i16::MIN) + 10 - i32::from(sine(a, 56))) as COORD
                 );
                 assert_eq!(ship.descriptor_mut().ship_info.crew_level, old_crew - 1);
-                assert_eq!((*ship.ptr()).__bindgen_anon_2.crew_level, old_crew - 1);
+                assert_eq!((*ship.ptr()).hits, old_crew - 1);
                 assert_eq!(ship.ship_mut().special_counter, 12);
                 assert_eq!(ship.descriptor_mut().ship_info.energy_level, 20);
                 // Retain an aligned cached target so launch eligibility never ties.
@@ -626,7 +626,7 @@ fn marine_limit_counts_only_live_matching_nonfinite_nondisappearing_elements() {
                 (*marines[i]).state_flags |= flags as u16;
                 ship.launch();
             }
-            (*marines[2]).__bindgen_anon_1.life_span = 0;
+            (*marines[2]).life = 0;
             ship.launch();
             (*marines[3]).current.image.farray =
                 (&raw mut enemy.descriptor_mut().ship_data.special).cast();
@@ -654,7 +654,7 @@ fn launch_gates_require_both_keys_counter_zero_crew_and_a_trackable_enemy() {
                 ship.ship_mut().cur_status_flags = status as u16;
                 ship.ship_mut().special_counter = counter;
                 ship.descriptor_mut().ship_info.crew_level = crew;
-                (*ship.ptr()).__bindgen_anon_2.crew_level = crew;
+                (*ship.ptr()).hits = crew;
                 (*ship.ptr()).hTarget = ptr::null_mut();
                 (*prim(enemy.ptr())).Type = if cloaked {
                     gfx_object_NUM_PRIMS
@@ -687,8 +687,8 @@ fn boarding_claims_first_unused_slot_and_immediately_kills_one_enemy_crew_withou
                 let marine = ship.launch();
                 (*enemy.ptr()).state_flags |= COLLISION as u16;
                 with_rng(10, 0, || collide(marine, enemy.ptr()));
-                assert_eq!((*marine).__bindgen_anon_4.turn_wait, slot);
-                assert_eq!((*marine).__bindgen_anon_5.thrust_wait, 12);
+                assert_eq!((*marine).turn, slot);
+                assert_eq!((*marine).thrust, 12);
                 assert_eq!(
                     (*marine).next.image.frame,
                     ship.raw_frame(2, 22 + slot as usize)
@@ -706,11 +706,11 @@ fn boarding_claims_first_unused_slot_and_immediately_kills_one_enemy_crew_withou
                 marines.push(marine);
             }
             assert_eq!(enemy.descriptor_mut().ship_info.crew_level, 13);
-            (*marines[1]).__bindgen_anon_1.life_span = 0;
+            (*marines[1]).life = 0;
             (*marines[1]).state_flags |= DISAPPEARING as u16;
             let marine = ship.launch();
             collide(marine, enemy.ptr());
-            assert_eq!((*marine).__bindgen_anon_4.turn_wait, 1);
+            assert_eq!((*marine).turn, 1);
             assert_eq!((*marine).next.image.frame, ship.raw_frame(2, 23));
             let crew = enemy.descriptor_mut().ship_info.crew_level;
             collide(marine, enemy.ptr());
@@ -735,8 +735,8 @@ fn marine_collision_handles_return_planets_nonships_and_last_enemy_crew() {
             let marine = ship.launch();
             with_rng(8, 0, || collide(marine, ship.ptr()));
             assert_eq!(ship.descriptor_mut().ship_info.crew_level, 16);
-            assert_eq!((*marine).__bindgen_anon_1.life_span, 0);
-            assert_eq!((*marine).__bindgen_anon_2.hit_points, 0);
+            assert_eq!((*marine).life, 0);
+            assert_eq!((*marine).hits, 0);
             assert_ne!(
                 (*marine).state_flags & (DISAPPEARING | NONSOLID | FINITE_LIFE) as u16,
                 0
@@ -744,35 +744,35 @@ fn marine_collision_handles_return_planets_nonships_and_last_enemy_crew() {
             let marine = ship.launch();
             let mut object = battle::PoolElement::new();
             object.playerNr = 1;
-            object.__bindgen_anon_3.mass_points = 100;
-            (*marine).__bindgen_anon_4.turn_wait = 0xa0;
-            (*marine).__bindgen_anon_5.thrust_wait = 7;
+            object.mass = 100;
+            (*marine).turn = 0xa0;
+            (*marine).thrust = 7;
             collide(marine, &mut *object);
-            assert_eq!((*marine).__bindgen_anon_4.turn_wait, 0xa5);
-            assert_eq!((*marine).__bindgen_anon_5.thrust_wait, 4);
+            assert_eq!((*marine).turn, 0xa5);
+            assert_eq!((*marine).thrust, 4);
             assert_ne!((*marine).state_flags & COLLISION as u16, 0);
-            assert_eq!((*marine).__bindgen_anon_1.life_span, 1);
+            assert_eq!((*marine).life, 1);
             (*marine).state_flags &= !(COLLISION as u16);
-            object.__bindgen_anon_3.mass_points = 101;
+            object.mass = 101;
             collide(marine, &mut *object);
-            assert_eq!((*marine).__bindgen_anon_1.life_span, 0);
-            assert_eq!((*marine).__bindgen_anon_2.hit_points, 0);
+            assert_eq!((*marine).life, 0);
+            assert_eq!((*marine).hits, 0);
             assert_eq!(
                 (*marine).state_flags & (NONSOLID | FINITE_LIFE) as u16,
                 (NONSOLID | FINITE_LIFE) as u16
             );
             let marine = ship.launch();
             enemy.descriptor_mut().ship_info.crew_level = 1;
-            (*enemy.ptr()).__bindgen_anon_2.crew_level = 1;
+            (*enemy.ptr()).hits = 1;
             with_rng(8, 0, || collide(marine, enemy.ptr()));
-            assert_eq!((*enemy.ptr()).__bindgen_anon_2.crew_level, 0);
-            assert_eq!((*enemy.ptr()).__bindgen_anon_1.life_span, 0);
+            assert_eq!((*enemy.ptr()).hits, 0);
+            assert_eq!((*enemy.ptr()).life, 0);
             assert_eq!((*marine).state_flags & NONSOLID as u16, 0);
             assert_ne!(
                 (*marine).preprocess_func.unwrap().address(),
                 intruder_preprocess as *const () as usize
             );
-            assert_eq!((*marine).__bindgen_anon_4.turn_wait & 15, 5);
+            assert_eq!((*marine).turn & 15, 5);
         }
     })
 }
@@ -793,14 +793,14 @@ fn marine_collision_ignores_finite_targets_dead_marines_and_in_progress_collisio
                 (1, IGNORE_SIMILAR | CREW_OBJECT | COLLISION, PLAYER_SHIP),
                 (1, IGNORE_SIMILAR | CREW_OBJECT, PLAYER_SHIP | FINITE_LIFE),
             ] {
-                (*marine).__bindgen_anon_1.life_span = life;
+                (*marine).life = life;
                 (*marine).state_flags = marine_flags as u16;
-                (*marine).__bindgen_anon_4.turn_wait = 0x90;
+                (*marine).turn = 0x90;
                 (*enemy.ptr()).state_flags = target_flags as u16;
                 with_rng(5, 0, || collide(marine, enemy.ptr()));
                 assert_eq!(enemy.descriptor_mut().ship_info.crew_level, 16);
                 assert_eq!((*marine).state_flags, marine_flags as u16);
-                assert_eq!((*marine).__bindgen_anon_4.turn_wait, 0x90);
+                assert_eq!((*marine).turn, 0x90);
             }
         }
     })
@@ -819,25 +819,22 @@ fn intruder_rng_byte_boundaries_distinguish_death_damage_and_no_action() {
             collide(marine, enemy.ptr());
             let intruder_frame = (*marine).next.image.frame;
             for byte in [0, 15, 16, 143, 144, 255] {
-                (*marine).__bindgen_anon_1.life_span = 1;
+                (*marine).life = 1;
                 (*marine).state_flags = (IGNORE_SIMILAR | NONSOLID) as u16;
-                (*marine).__bindgen_anon_5.thrust_wait = 1;
+                (*marine).thrust = 1;
                 enemy.descriptor_mut().ship_info.crew_level = 10;
-                (*enemy.ptr()).__bindgen_anon_2.crew_level = 10;
+                (*enemy.ptr()).hits = 10;
                 (*enemy.ptr()).next.location = POINT { x: -123, y: 456 };
                 let seed = seed_for_byte(byte);
                 with_rng(seed, 1, || intruder(marine));
-                assert_eq!((*marine).__bindgen_anon_1.life_span, u16::from(byte >= 16));
+                assert_eq!((*marine).life, u16::from(byte >= 16));
                 assert_eq!((*marine).state_flags & DISAPPEARING as u16 != 0, byte < 16);
                 let damaged = (16..144).contains(&byte);
                 assert_eq!(
                     enemy.descriptor_mut().ship_info.crew_level,
                     if damaged { 9 } else { 10 }
                 );
-                assert_eq!(
-                    (*marine).__bindgen_anon_5.thrust_wait,
-                    if damaged { 13 } else { 12 }
-                );
+                assert_eq!((*marine).thrust, if damaged { 13 } else { 12 });
                 assert_eq!(
                     (*marine).next.image.frame,
                     intruder_frame,
@@ -867,24 +864,20 @@ fn intruder_wait_resets_attack_silhouette_without_rng_then_counts_down() {
             enemy.at(4500, 4000);
             let marine = ship.launch();
             collide(marine, enemy.ptr());
-            (*marine).__bindgen_anon_5.thrust_wait = 13;
+            (*marine).thrust = 13;
             with_rng(8, 0, || intruder(marine));
-            assert_eq!((*marine).__bindgen_anon_5.thrust_wait, 11);
+            assert_eq!((*marine).thrust, 11);
             assert_eq!(enemy.descriptor_mut().ship_info.crew_level, 15);
             for expected in (1..=10).rev() {
                 with_rng(8, 0, || intruder(marine));
-                assert_eq!((*marine).__bindgen_anon_5.thrust_wait, expected);
+                assert_eq!((*marine).thrust, expected);
             }
             let seed = seed_for_byte(16);
             enemy.descriptor_mut().ship_info.crew_level = 1;
-            (*enemy.ptr()).__bindgen_anon_2.crew_level = 1;
+            (*enemy.ptr()).hits = 1;
             with_rng(seed, 1, || intruder(marine));
-            assert_eq!((*enemy.ptr()).__bindgen_anon_1.life_span, 0);
-            assert_eq!(
-                (*marine).__bindgen_anon_1.life_span,
-                1,
-                "return begins on the next preprocess"
-            );
+            assert_eq!((*enemy.ptr()).life, 0);
+            assert_eq!((*marine).life, 1, "return begins on the next preprocess");
             with_rng(seed, 1, || intruder(marine));
             assert_eq!((*marine).next.image.frame, ship.raw_frame(2, 21));
             assert_eq!((*marine).state_flags & NONSOLID as u16, 0);
@@ -904,13 +897,13 @@ fn intruder_returns_when_enemy_is_dead_or_absent_and_randomizes_facing_once() {
             let marine = ship.launch();
             collide(marine, enemy.ptr());
             for absent in [false, true] {
-                (*enemy.ptr()).__bindgen_anon_2.crew_level = 0;
+                (*enemy.ptr()).hits = 0;
                 if absent {
                     battle_context::unlink(enemy.handle);
                 }
                 for seed in 1..17 {
                     (*marine).state_flags = (IGNORE_SIMILAR | NONSOLID) as u16;
-                    (*marine).__bindgen_anon_5.thrust_wait = 0;
+                    (*marine).thrust = 0;
                     (*marine).preprocess_func = Some(
                         uqm_rust::engine::battle::ElementHook::Native(intruder_preprocess),
                     );
@@ -918,8 +911,8 @@ fn intruder_returns_when_enemy_is_dead_or_absent_and_randomizes_facing_once() {
                     TFB_SeedRandom(seed);
                     let facing = normalize_facing(i32::from(TFB_Random() as BYTE));
                     with_rng(seed, 1, || intruder(marine));
-                    assert_eq!((*marine).__bindgen_anon_4.turn_wait, (facing << 4) as BYTE);
-                    assert_eq!((*marine).__bindgen_anon_5.thrust_wait, 0);
+                    assert_eq!((*marine).turn, (facing << 4) as BYTE);
+                    assert_eq!((*marine).thrust, 0);
                     assert_eq!(
                         (*marine).state_flags,
                         (IGNORE_SIMILAR | CHANGING | CREW_OBJECT) as u16
@@ -951,23 +944,23 @@ fn returning_marine_tracks_owner_cannot_board_again_and_replenishes_crew() {
             enemy.at(4500, 4000);
             let marine = ship.launch();
             collide(marine, enemy.ptr());
-            (*enemy.ptr()).__bindgen_anon_2.crew_level = 0;
+            (*enemy.ptr()).hits = 0;
             intruder(marine);
             (*marine).current.location = POINT { x: 4000, y: 4500 };
-            (*marine).__bindgen_anon_4.turn_wait = 0;
+            (*marine).turn = 0;
             with_rng(10, 0, || {
                 hooks::invoke_element_pointer((*marine).preprocess_func.unwrap(), marine)
             });
             assert_eq!((*marine).state_flags & IGNORE_SIMILAR as u16, 0);
             assert_eq!((*marine).next.image.frame, ship.raw_frame(2, 21));
-            (*enemy.ptr()).__bindgen_anon_2.crew_level = 15;
+            (*enemy.ptr()).hits = 15;
             collide(marine, enemy.ptr());
             assert_eq!(enemy.descriptor_mut().ship_info.crew_level, 15);
             assert_eq!((*marine).state_flags & NONSOLID as u16, 0);
             with_rng(10, 0, || collide(marine, ship.ptr()));
             assert_eq!(ship.descriptor_mut().ship_info.crew_level, 16);
-            assert_eq!((*ship.ptr()).__bindgen_anon_2.crew_level, 16);
-            assert_eq!((*marine).__bindgen_anon_1.life_span, 0);
+            assert_eq!((*ship.ptr()).hits, 16);
+            assert_eq!((*marine).life, 0);
         }
     })
 }
@@ -984,20 +977,20 @@ fn owner_death_kills_both_free_and_boarded_marines_without_rng() {
             let free = ship.launch();
             let boarded = ship.launch();
             collide(boarded, enemy.ptr());
-            (*ship.ptr()).__bindgen_anon_2.crew_level = 0;
-            (*ship.ptr()).__bindgen_anon_1.life_span = 1;
+            (*ship.ptr()).hits = 0;
+            (*ship.ptr()).life = 1;
             (*ship.ptr()).state_flags |= (FINITE_LIFE | NONSOLID) as u16;
             with_rng(9, 0, || {
                 hooks::invoke_element_pointer((*free).preprocess_func.unwrap(), free)
             });
-            assert_eq!((*free).__bindgen_anon_1.life_span, 0);
-            assert_eq!((*free).__bindgen_anon_4.turn_wait, 0);
+            assert_eq!((*free).life, 0);
+            assert_eq!((*free).turn, 0);
             assert_eq!(
                 (*free).state_flags & (DISAPPEARING | NONSOLID) as u16,
                 (DISAPPEARING | NONSOLID) as u16
             );
             with_rng(9, 0, || intruder(boarded));
-            assert_eq!((*boarded).__bindgen_anon_1.life_span, 0);
+            assert_eq!((*boarded).life, 0);
             assert_ne!((*boarded).state_flags & DISAPPEARING as u16, 0);
             assert_eq!(
                 (*boarded).preprocess_func.unwrap().address(),
@@ -1020,7 +1013,7 @@ fn marine_thrust_restores_owner_state_and_inserts_preprocessed_five_color_ion_tr
             (*marine).current.location = POINT { x: 4000, y: 4500 };
             // Returning marine heads straight at its owner and ignores the enemy.
             (*marine).state_flags &= !(IGNORE_SIMILAR as u16);
-            (*marine).__bindgen_anon_4.turn_wait = 0;
+            (*marine).turn = 0;
             ship.ship_mut().ShipFacing = 7;
             ship.ship_mut().cur_status_flags = (SPECIAL | SHIP_IN_GRAVITY_WELL) as u16;
             let preprocess = (*marine).preprocess_func.unwrap();
@@ -1040,10 +1033,7 @@ fn marine_thrust_restores_owner_state_and_inserts_preprocessed_five_color_ion_tr
                 assert_eq!(ship.descriptor_mut().characteristics.max_thrust, 35);
                 assert_eq!(ship.descriptor_mut().characteristics.thrust_increment, 5);
             }
-            assert_eq!(
-                (*marine).__bindgen_anon_5.thrust_wait,
-                (SHIP_AT_MAX_SPEED >> 6) as BYTE
-            );
+            assert_eq!((*marine).thrust, (SHIP_AT_MAX_SPEED >> 6) as BYTE);
             let ion = battle::element(disp_q.head);
             assert_eq!((*ion).playerNr, NEUTRAL_PLAYER_NUM as SIZE);
             assert_eq!((*ion).pParent, (ship.ship_mut() as *mut STARSHIP).cast());
@@ -1051,8 +1041,8 @@ fn marine_thrust_restores_owner_state_and_inserts_preprocessed_five_color_ion_tr
                 (*ion).state_flags,
                 (APPEARING | FINITE_LIFE | NONSOLID | PRE_PROCESS) as u16
             );
-            assert_eq!((*ion).__bindgen_anon_1.life_span, 0);
-            assert_eq!((*ion).__bindgen_anon_5.thrust_wait, 1);
+            assert_eq!((*ion).life, 0);
+            assert_eq!((*ion).thrust, 1);
             assert_eq!((*ion).colorCycleIndex, 0);
             assert_eq!((*prim(ion)).Type, gfx_object_POINT_PRIM as GRAPHICS_PRIM);
             assert_eq!(
@@ -1082,7 +1072,7 @@ fn marine_thrust_restores_owner_state_and_inserts_preprocessed_five_color_ion_tr
                 (*ion).state_flags |= DISAPPEARING as u16;
                 with_rng(9, 0, || hooks::invoke_element_pointer(cycle, ion));
                 assert_eq!((*ion).colorCycleIndex, index);
-                assert_eq!((*ion).__bindgen_anon_1.life_span, 1);
+                assert_eq!((*ion).life, 1);
                 assert_eq!((*ion).state_flags & DISAPPEARING as u16, 0);
                 assert_ne!((*ion).state_flags & CHANGING as u16, 0);
                 assert_eq!(
@@ -1094,11 +1084,11 @@ fn marine_thrust_restores_owner_state_and_inserts_preprocessed_five_color_ion_tr
                     rgb
                 );
             }
-            (*ion).__bindgen_anon_1.life_span = 0;
+            (*ion).life = 0;
             (*ion).state_flags |= DISAPPEARING as u16;
             with_rng(9, 0, || hooks::invoke_element_pointer(cycle, ion));
             assert_eq!((*ion).colorCycleIndex, 5);
-            assert_eq!((*ion).__bindgen_anon_1.life_span, 0);
+            assert_eq!((*ion).life, 0);
             assert_ne!((*ion).state_flags & DISAPPEARING as u16, 0);
         }
     })
@@ -1117,28 +1107,25 @@ fn marine_collision_delay_precedes_tracking_and_half_circle_turn_uses_one_draw()
             let preprocess = (*marine).preprocess_func.unwrap();
             (*marine).current.location = POINT { x: 4000, y: 4500 };
             (*marine).state_flags &= !(IGNORE_SIMILAR as u16);
-            (*marine).__bindgen_anon_4.turn_wait = 0x85;
-            (*marine).__bindgen_anon_5.thrust_wait = 7;
+            (*marine).turn = 0x85;
+            (*marine).thrust = 7;
             let before = queued().len();
             for expected in (0x80..=0x84).rev() {
                 with_rng(5, 0, || hooks::invoke_element_pointer(preprocess, marine));
-                assert_eq!((*marine).__bindgen_anon_4.turn_wait, expected);
-                assert_eq!((*marine).__bindgen_anon_5.thrust_wait, 7);
+                assert_eq!((*marine).turn, expected);
+                assert_eq!((*marine).thrust, 7);
                 assert_eq!(queued().len(), before);
                 assert_eq!(velocity_fields(&(*marine).velocity), [0; 9]);
             }
-            (*marine).__bindgen_anon_5.thrust_wait = 0;
+            (*marine).thrust = 0;
             for seed in 1..17 {
-                (*marine).__bindgen_anon_4.turn_wait = 0x80;
+                (*marine).turn = 0x80;
                 TFB_SeedRandom(seed);
                 let step = ((TFB_Random() as BYTE & 1) as i32) * 2 - 1;
                 with_rng(seed, 1, || {
                     hooks::invoke_element_pointer(preprocess, marine)
                 });
-                assert_eq!(
-                    (*marine).__bindgen_anon_4.turn_wait,
-                    (normalize_facing(8 + step) << 4) as BYTE
-                );
+                assert_eq!((*marine).turn, (normalize_facing(8 + step) << 4) as BYTE);
                 assert_eq!(queued().len(), before);
             }
         }
@@ -1163,8 +1150,8 @@ fn marine_prediction_uses_wrapped_distance_but_unwrapped_future_position_with_si
                     y: 4000,
                 };
                 ship.at(owner_x, 4000);
-                (*marine).__bindgen_anon_4.turn_wait = 0;
-                (*marine).__bindgen_anon_5.thrust_wait = 0;
+                (*marine).turn = 0;
+                (*marine).thrust = 0;
                 let desired = normalize_facing(angle_to_facing(i32::from(ARCTAN(
                     (i32::from(owner_x) - i32::from(marine_x)) as SIZE,
                     0,
@@ -1172,15 +1159,15 @@ fn marine_prediction_uses_wrapped_distance_but_unwrapped_future_position_with_si
                 assert!(desired == 4 || desired == 12);
                 with_rng(4, 0, || hooks::invoke_element_pointer(preprocess, marine));
                 let expected = if desired == 4 { 1 } else { 15 };
-                assert_eq!((*marine).__bindgen_anon_4.turn_wait, expected << 4);
+                assert_eq!((*marine).turn, expected << 4);
             }
             ship.at(4000, 4000);
             (*marine).current.location = POINT { x: 4000, y: 4500 };
             SetVelocityVector(&raw mut (*ship.ptr()).velocity, 64, 4);
-            (*marine).__bindgen_anon_4.turn_wait = 0;
+            (*marine).turn = 0;
             with_rng(4, 0, || hooks::invoke_element_pointer(preprocess, marine));
             // floor(500 / 64) = 7 turns of eastward target movement.
-            assert_eq!((*marine).__bindgen_anon_4.turn_wait, 0x10);
+            assert_eq!((*marine).turn, 0x10);
         }
     })
 }
@@ -1202,15 +1189,15 @@ fn marine_gravity_avoidance_uses_mass_threshold_distance_and_one_draw_for_head_o
             });
             assert!(!planet_h.is_null());
             let planet = battle::element(planet_h);
-            (*planet).__bindgen_anon_3.mass_points = 101;
+            (*planet).mass = 101;
             (*planet).current.location = POINT { x: 4100, y: 4000 };
             battle::put(planet_h);
             let face = normalize_facing(angle_to_facing(i32::from(ARCTAN(100, 0))));
             let preprocess = (*marine).preprocess_func.unwrap();
             let before = queued().len();
             for seed in 1..17 {
-                (*marine).__bindgen_anon_4.turn_wait = (face << 4) as BYTE;
-                (*marine).__bindgen_anon_5.thrust_wait = 0;
+                (*marine).turn = (face << 4) as BYTE;
+                (*marine).thrust = 0;
                 SetVelocityVector(&raw mut (*marine).velocity, 8, face);
                 TFB_SeedRandom(seed);
                 let step = ((TFB_Random() as SIZE & 1) as i32) * 2 - 1;
@@ -1218,26 +1205,22 @@ fn marine_gravity_avoidance_uses_mass_threshold_distance_and_one_draw_for_head_o
                     hooks::invoke_element_pointer(preprocess, marine)
                 });
                 assert_eq!(
-                    (*marine).__bindgen_anon_4.turn_wait,
+                    (*marine).turn,
                     (normalize_facing(i32::from(face) + step) << 4) as BYTE
                 );
-                assert_ne!(
-                    (*marine).__bindgen_anon_5.thrust_wait & (SHIP_IN_GRAVITY_WELL >> 6) as BYTE,
-                    0
-                );
+                assert_ne!((*marine).thrust & (SHIP_IN_GRAVITY_WELL >> 6) as BYTE, 0);
                 assert_eq!(queued().len(), before);
             }
             for (distance, in_well) in [(1020, true), (1021, false)] {
                 (*planet).current.location.x = 4000 + distance;
-                (*marine).__bindgen_anon_4.turn_wait = (face << 4) as BYTE;
-                (*marine).__bindgen_anon_5.thrust_wait = 0;
+                (*marine).turn = (face << 4) as BYTE;
+                (*marine).thrust = 0;
                 let draws = usize::from(in_well);
                 with_rng(3, draws, || {
                     hooks::invoke_element_pointer(preprocess, marine)
                 });
                 assert_eq!(
-                    (*marine).__bindgen_anon_5.thrust_wait & (SHIP_IN_GRAVITY_WELL >> 6) as BYTE
-                        != 0,
+                    (*marine).thrust & (SHIP_IN_GRAVITY_WELL >> 6) as BYTE != 0,
                     in_well
                 );
             }
@@ -1259,8 +1242,8 @@ fn ai_turret_half_circle_consumes_trackship_draw_then_its_own_tie_break() {
             ship.ship_mut().weapon_counter = 1;
             ship.ship_mut().ShipFacing = 0;
             for seed in 1..33 {
-                (*turret).__bindgen_anon_4.turn_wait = 0;
-                (*turret).__bindgen_anon_5.thrust_wait = 0;
+                (*turret).turn = 0;
+                (*turret).thrust = 0;
                 (*turret).hTarget = ptr::null_mut();
                 ship.ship_mut().ship_input_state = 0;
                 let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
@@ -1273,7 +1256,7 @@ fn ai_turret_half_circle_consumes_trackship_draw_then_its_own_tie_break() {
                     ship.ship_mut().ship_input_state,
                     (SPECIAL | if second_bit == 0 { RIGHT } else { LEFT }) as BYTE
                 );
-                assert_eq!((*turret).__bindgen_anon_4.turn_wait, 0);
+                assert_eq!((*turret).turn, 0);
                 assert_eq!((*turret).hTarget, enemy.handle);
             }
         }
@@ -1292,7 +1275,7 @@ fn ai_launch_budget_obeys_crew_point_defense_maneuverability_turn_and_marine_cou
             let a = ship.launch();
             let b = ship.launch();
             let turret = battle::element((*ship.ptr()).succ);
-            (*turret).__bindgen_anon_4.turn_wait = 1;
+            (*turret).turn = 1;
             ship.ship_mut().weapon_counter = 1;
             for (counter, crew, defense, maneuver, turn, active, expected) in [
                 (0, 5, false, 24, 13, 2, true),
@@ -1309,8 +1292,8 @@ fn ai_launch_budget_obeys_crew_point_defense_maneuverability_turn_and_marine_cou
                 enemy.descriptor_mut().ship_info.ship_flags =
                     if defense { POINT_DEFENSE as u16 } else { 0 };
                 enemy.descriptor_mut().cyborg_control.ManeuverabilityIndex = maneuver;
-                (*a).__bindgen_anon_1.life_span = 1;
-                (*b).__bindgen_anon_1.life_span = u16::from(active == 2);
+                (*a).life = 1;
+                (*b).life = u16::from(active == 2);
                 let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
                 concerns[ENEMY_SHIP_INDEX as usize] = EVALUATE_DESC {
                     ObjectPtr: enemy.ptr(),
@@ -1350,7 +1333,7 @@ fn ai_entice_coasting_clears_hull_turn_only_at_c_angle_boundaries() {
             let turret = ship.install_turret();
             let mut enemy = orz(&_battle, 1);
             enemy.at(4500, 4000);
-            (*turret).__bindgen_anon_4.turn_wait = 1;
+            (*turret).turn = 1;
             ship.ship_mut().special_counter = 2;
             ship.ship_mut().weapon_counter = 1;
             let direction = ARCTAN(500, 0);
@@ -1404,8 +1387,8 @@ fn exhausted_queue_preserves_weapon_return_count_and_still_rotates_turret() {
                 )
             });
             assert!(out.is_null());
-            assert_eq!((*turret).__bindgen_anon_4.turn_wait, 4);
-            assert_eq!((*turret).__bindgen_anon_5.thrust_wait, 255);
+            assert_eq!((*turret).turn, 4);
+            assert_eq!((*turret).thrust, 255);
             assert_eq!(queued(), vec![ship.handle, turret.cast()]);
         }
     })
@@ -1440,13 +1423,13 @@ fn failed_replacement_and_marine_allocation_leave_crew_and_special_budget_untouc
                 let mut enemy = orz(&_battle, 1);
                 enemy.at(4500, 4000);
                 ship.ship_mut().cur_status_flags = (SPECIAL | WEAPON) as u16;
-                (*old).__bindgen_anon_1.life_span = 0;
+                (*old).life = 0;
                 // Facing 0 when replacement allocation fails; facing 0's angle when it succeeds.
                 with_rng(3, 0, || {
                     hooks::invoke_element_pointer((*old).postprocess_func.unwrap(), old)
                 });
                 assert_eq!(ship.descriptor_mut().ship_info.crew_level, 16);
-                assert_eq!((*ship.ptr()).__bindgen_anon_2.crew_level, 16);
+                assert_eq!((*ship.ptr()).hits, 16);
                 assert_eq!(ship.ship_mut().special_counter, 0);
                 assert_eq!((*prim(old)).Type, gfx_object_NUM_PRIMS as GRAPHICS_PRIM);
                 assert_eq!(queued().len(), capacity as usize);
@@ -1496,7 +1479,7 @@ fn failed_muzzle_flash_allocation_does_not_recoil_and_failed_ion_allocation_stil
                 battle::put(filler);
                 (*marine).state_flags &= !(IGNORE_SIMILAR as u16);
                 (*marine).current.location = POINT { x: 4000, y: 4500 };
-                (*marine).__bindgen_anon_4.turn_wait = 0;
+                (*marine).turn = 0;
                 let before = queued();
                 with_rng(1, 0, || {
                     hooks::invoke_element_pointer((*marine).preprocess_func.unwrap(), marine)
@@ -1539,13 +1522,13 @@ fn marine_prefers_visible_enemy_then_returns_to_visible_owner_or_keeps_heading()
                     gfx_object_NUM_PRIMS
                 } as GRAPHICS_PRIM;
                 (*marine).state_flags = (IGNORE_SIMILAR | CREW_OBJECT) as u16;
-                (*marine).__bindgen_anon_4.turn_wait = 0;
-                (*marine).__bindgen_anon_5.thrust_wait = 0;
+                (*marine).turn = 0;
+                (*marine).thrust = 0;
                 (*marine).velocity = mem::zeroed();
                 (*marine).next.image.frame = ship.raw_frame(2, 20);
                 let before = queued().len();
                 with_rng(8, 0, || hooks::invoke_element_pointer(preprocess, marine));
-                assert_eq!((*marine).__bindgen_anon_4.turn_wait, expected_facing << 4);
+                assert_eq!((*marine).turn, expected_facing << 4);
                 assert_eq!(
                     (*marine).state_flags & IGNORE_SIMILAR as u16 == 0,
                     returning
@@ -1582,18 +1565,15 @@ fn marine_without_target_clears_stale_gravity_and_decelerates_only_when_overspee
             (*prim(enemy.ptr())).Type = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
             let preprocess = (*marine).preprocess_func.unwrap();
             for overspeed in [false, true] {
-                (*marine).__bindgen_anon_4.turn_wait = 0;
-                (*marine).__bindgen_anon_5.thrust_wait = ((SHIP_IN_GRAVITY_WELL
+                (*marine).turn = 0;
+                (*marine).thrust = ((SHIP_IN_GRAVITY_WELL
                     | if overspeed { SHIP_BEYOND_MAX_SPEED } else { 0 })
                     >> 6) as BYTE;
                 SetVelocityVector(&raw mut (*marine).velocity, 40, 8);
                 let before = queued().len();
                 with_rng(9, 0, || hooks::invoke_element_pointer(preprocess, marine));
-                assert_eq!(
-                    (*marine).__bindgen_anon_5.thrust_wait & (SHIP_IN_GRAVITY_WELL >> 6) as BYTE,
-                    0
-                );
-                assert_eq!((*marine).__bindgen_anon_4.turn_wait, 0);
+                assert_eq!((*marine).thrust & (SHIP_IN_GRAVITY_WELL >> 6) as BYTE, 0);
+                assert_eq!((*marine).turn, 0);
                 assert_eq!(
                     velocity_fields(&(*marine).velocity),
                     velocity_toward(if overspeed { 32 } else { 40 }, 8)

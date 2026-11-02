@@ -34,7 +34,7 @@ fn descriptor_laser_and_limpet_launch() {
             let h = with_rng(11, 0, || ship.weapon(1))[0];
             let laser = ship.weapon_record(h);
             assert_eq!((*prim(laser)).Type, gfx_object_LINE_PRIM as GRAPHICS_PRIM);
-            assert_eq!((*laser).__bindgen_anon_3.mass_points, 1);
+            assert_eq!((*laser).mass, 1);
             assert_eq!((*laser).current.location.x, 4000 + 48);
             let (mut dx, mut dy) = (0, 0);
             GetCurrentVelocityComponents(&raw mut (*laser).velocity, &mut dx, &mut dy);
@@ -45,14 +45,7 @@ fn descriptor_laser_and_limpet_launch() {
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 38);
             assert_eq!(ship.ship_mut().special_counter, 7);
             let e = battle::element(disp_q.tail);
-            assert_eq!(
-                (
-                    (*e).__bindgen_anon_1.life_span,
-                    (*e).__bindgen_anon_2.hit_points,
-                    (*e).__bindgen_anon_3.mass_points
-                ),
-                (80, 1, 0)
-            );
+            assert_eq!(((*e).life, (*e).hits, (*e).mass), (80, 1, 0));
             // HALF_CIRCLE is 32, added directly to facing 4 in the C code.
             assert_eq!(velocity(&(*e).velocity), toward(25, 36));
             assert_eq!((*e).pParent, (&raw mut *ship.ship_mut()).cast());
@@ -106,8 +99,8 @@ fn limpets_saturate_waits_and_reduce_thrust_without_rng_for_nonships() {
                     enemy.descriptor_mut().cyborg_control.ManeuverabilityIndex,
                     0
                 );
-                assert_eq!((*e).__bindgen_anon_1.life_span, 0);
-                assert_eq!((*e).__bindgen_anon_2.hit_points, 0);
+                assert_eq!((*e).life, 0);
+                assert_eq!((*e).hits, 0);
                 assert_eq!(
                     (*e).state_flags & (COLLISION | DISAPPEARING) as u16,
                     (COLLISION | DISAPPEARING) as u16

@@ -45,15 +45,8 @@ fn descriptor_and_fusion_match_c() {
                     .collect::<Vec<HELEMENT>>()
             })[0];
             let e = battle::element(h);
-            assert_eq!(
-                (
-                    (*e).__bindgen_anon_1.life_span,
-                    (*e).__bindgen_anon_2.hit_points,
-                    (*e).__bindgen_anon_3.mass_points
-                ),
-                (20, 10, 6)
-            );
-            assert_eq!((*e).__bindgen_anon_5.blast_offset, 8);
+            assert_eq!(((*e).life, (*e).hits, (*e).mass), (20, 10, 6));
+            assert_eq!((*e).thrust, 8);
             assert_eq!(frame_index((*e).current.image.frame), 11);
             assert_eq!(velocity(&(*e).velocity), toward(20 << ONE_SHIFT, 11));
             assert!((*e).preprocess_func.is_none());
@@ -81,19 +74,9 @@ fn fighters_launch_left_then_right_and_return_crew() {
                     (*e).state_flags,
                     (APPEARING | FINITE_LIFE | CREW_OBJECT | IGNORE_SIMILAR) as u16
                 );
-                assert_eq!(
-                    (
-                        (*e).__bindgen_anon_1.life_span,
-                        (*e).__bindgen_anon_2.hit_points,
-                        (*e).__bindgen_anon_3.mass_points
-                    ),
-                    (400, 1, 0)
-                );
-                assert_eq!((*e).__bindgen_anon_5.thrust_wait, 7);
-                assert_eq!(
-                    (*e).__bindgen_anon_4.turn_wait,
-                    if i == 0 { LEFT as u8 } else { RIGHT as u8 }
-                );
+                assert_eq!(((*e).life, (*e).hits, (*e).mass), (400, 1, 0));
+                assert_eq!((*e).thrust, 7);
+                assert_eq!((*e).turn, if i == 0 { LEFT as u8 } else { RIGHT as u8 });
                 assert_eq!(frame_index((*e).current.image.frame), face);
                 assert_eq!(velocity(&(*e).velocity), toward(8 << ONE_SHIFT, face));
                 (*e).next = (*e).current;
@@ -107,8 +90,8 @@ fn fighters_launch_left_then_right_and_return_crew() {
                         hooks::CollisionCall::Hook,
                     )
                 });
-                assert_eq!((*e).__bindgen_anon_1.life_span, 0);
-                assert_eq!((*e).__bindgen_anon_2.hit_points, 0);
+                assert_eq!((*e).life, 0);
+                assert_eq!((*e).hits, 0);
                 assert_ne!((*e).state_flags & NONSOLID as u16, 0);
                 assert_eq!((*e).state_flags & DISAPPEARING as u16, 0);
             }
@@ -125,7 +108,7 @@ fn two_crew_launches_one_right_fighter_and_allocation_failure_keeps_crew() {
                 let mut ship = Ship::new(&_battle, SPECIES_ID_UR_QUAN_ID, 0);
                 ship.ship_mut().cur_status_flags = SPECIAL as u16;
                 ship.descriptor_mut().ship_info.crew_level = 2;
-                (*ship.ptr()).__bindgen_anon_2.crew_level = 2;
+                (*ship.ptr()).hits = 2;
                 ship.postprocess();
                 assert_eq!(ship.descriptor_mut().ship_info.energy_level, 34);
                 assert_eq!(ship.ship_mut().special_counter, 9);
@@ -134,10 +117,7 @@ fn two_crew_launches_one_right_fighter_and_allocation_failure_keeps_crew() {
                     if capacity == 1 { 2 } else { 1 }
                 );
                 if capacity == 2 {
-                    assert_eq!(
-                        (*battle::element(disp_q.tail)).__bindgen_anon_4.turn_wait,
-                        RIGHT as u8
-                    );
+                    assert_eq!((*battle::element(disp_q.tail)).turn, RIGHT as u8);
                 }
             }
         }
@@ -155,30 +135,30 @@ fn fighter_tracking_delay_then_return_and_fire_use_exact_ranges() {
             let fighter = battle::element(disp_q.tail);
             (*fighter).next = (*fighter).current;
             let initial = velocity(&(*fighter).velocity);
-            (*fighter).__bindgen_anon_1.life_span = 394;
+            (*fighter).life = 394;
             with_rng(17, 0, || {
                 hooks::invoke_element_pointer((*fighter).preprocess_func.unwrap(), fighter)
             });
             assert_eq!(velocity(&(*fighter).velocity), initial);
-            assert_eq!((*fighter).__bindgen_anon_5.thrust_wait, 7);
-            (*fighter).__bindgen_anon_1.life_span = 392;
+            assert_eq!((*fighter).thrust, 7);
+            (*fighter).life = 392;
             (*fighter).hTarget = enemy.handle;
             (*fighter).current.location = POINT { x: 4000, y: 4100 };
-            (*fighter).__bindgen_anon_5.thrust_wait = 1;
+            (*fighter).thrust = 1;
             with_rng(17, 0, || {
                 hooks::invoke_element_pointer((*fighter).preprocess_func.unwrap(), fighter)
             });
             assert!((*fighter).postprocess_func.is_some());
-            assert_eq!((*fighter).__bindgen_anon_5.thrust_wait, 0);
+            assert_eq!((*fighter).thrust, 0);
             hooks::invoke_element_pointer((*fighter).postprocess_func.unwrap(), fighter);
-            assert_eq!((*fighter).__bindgen_anon_5.thrust_wait, 8);
+            assert_eq!((*fighter).thrust, 8);
             assert!((*fighter).postprocess_func.is_none());
             let laser = battle::element(disp_q.tail);
             assert_eq!((*laser).pParent, (&raw mut *ship.ship_mut()).cast());
-            assert_eq!((*laser).__bindgen_anon_3.mass_points, 1);
+            assert_eq!((*laser).mass, 1);
             // On the return leg the ship becomes collidable with its own fighters.
             (*fighter).state_flags &= !(CHANGING as u16);
-            (*fighter).__bindgen_anon_1.life_span = 124;
+            (*fighter).life = 124;
             hooks::invoke_element_pointer((*fighter).preprocess_func.unwrap(), fighter);
             assert_eq!((*fighter).state_flags & IGNORE_SIMILAR as u16, 0);
         }
@@ -197,7 +177,7 @@ fn fighter_planet_collision_clones_and_deflects_without_rng() {
             SetVelocityVector(&raw mut (*e).velocity, 8 << ONE_SHIFT, 0);
             let mut planet_fixture = Object::new(&_battle);
             let planet = planet_fixture.ptr();
-            (*planet).__bindgen_anon_3.mass_points = 101;
+            (*planet).mass = 101;
             let mut pa = POINT { x: 0, y: 0 };
             let mut pb = POINT { x: 0, y: -10 };
             with_rng(18, 0, || {
@@ -212,7 +192,7 @@ fn fighter_planet_collision_clones_and_deflects_without_rng() {
             });
             let clone = battle::element(disp_q.tail);
             assert_ne!(clone, e);
-            assert_eq!((*e).__bindgen_anon_1.life_span, 0);
+            assert_eq!((*e).life, 0);
             assert_eq!(frame_index((*clone).next.image.frame), 4);
             assert_eq!(velocity(&(*clone).velocity), toward(8 << ONE_SHIFT, 4));
             assert_ne!((*clone).state_flags & CHANGING as u16, 0);

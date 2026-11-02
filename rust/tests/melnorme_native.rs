@@ -238,11 +238,11 @@ fn initial_pump_uses_the_c_missile_block_at_all_facings_and_coordinate_limits() 
                 assert_rng_after(32, 0);
                 let e = battle::element(h);
                 assert!(!e.is_null());
-                assert_eq!((*e).__bindgen_anon_1.life_span, 2);
-                assert_eq!((*e).__bindgen_anon_2.hit_points, 2);
-                assert_eq!((*e).__bindgen_anon_3.mass_points, 2);
-                assert_eq!((*e).__bindgen_anon_4.turn_wait, 0);
-                assert_eq!((*e).__bindgen_anon_5.thrust_wait, 72);
+                assert_eq!((*e).life, 2);
+                assert_eq!((*e).hits, 2);
+                assert_eq!((*e).mass, 2);
+                assert_eq!((*e).turn, 0);
+                assert_eq!((*e).thrust, 72);
                 assert_eq!(
                     (*e).state_flags,
                     (APPEARING | FINITE_LIFE | IGNORE_SIMILAR) as u16
@@ -291,14 +291,14 @@ fn appearing_charge_only_zeros_the_entire_velocity_record() {
             let mut ship = trader(&_battle, 0);
             let e = pump(&mut ship);
             let before = queue();
-            (*e).__bindgen_anon_4.turn_wait = 0x82;
-            (*e).__bindgen_anon_5.thrust_wait = 13;
+            (*e).turn = 0x82;
+            (*e).thrust = 13;
             ship.ship_mut().energy_counter = 19;
             TFB_SeedRandom(7);
             hooks::invoke_element_pointer((*e).postprocess_func.unwrap(), e);
             assert_eq!(velocity_fields(&(*e).velocity), [0; 9]);
-            assert_eq!((*e).__bindgen_anon_4.turn_wait, 0x82);
-            assert_eq!((*e).__bindgen_anon_5.thrust_wait, 13);
+            assert_eq!((*e).turn, 0x82);
+            assert_eq!((*e).thrust, 13);
             assert_eq!(ship.ship_mut().energy_counter, 19);
             assert_eq!(queue(), before);
             assert_eq!((*prim(e)).Type, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
@@ -317,8 +317,8 @@ fn held_charge_replaces_the_element_and_uses_the_old_level_for_damage() {
                 for reverse in [0, 0x80] {
                     let e = pump(&mut ship);
                     (*e).state_flags &= !(APPEARING as u16);
-                    (*e).__bindgen_anon_4.turn_wait = reverse | level;
-                    (*e).__bindgen_anon_5.thrust_wait = 1;
+                    (*e).turn = reverse | level;
+                    (*e).thrust = 1;
                     (*e).current.image.frame = ship.raw_frame(1, usize::from(level) * 5 + 2);
                     ship.ship_mut().cur_status_flags = WEAPON as u16;
                     ship.ship_mut().old_status_flags = WEAPON as u16;
@@ -328,15 +328,15 @@ fn held_charge_replaces_the_element_and_uses_the_old_level_for_damage() {
                     let p = battle::element(disp_q.tail);
                     assert_ne!(p, e);
                     let next_level = (level + 1).min(3);
-                    assert_eq!((*p).__bindgen_anon_4.turn_wait, reverse | next_level);
-                    assert_eq!((*p).__bindgen_anon_5.thrust_wait, 72);
+                    assert_eq!((*p).turn, reverse | next_level);
+                    assert_eq!((*p).thrust, 72);
                     assert_eq!(
                         frame_index((*p).current.image.frame),
                         u16::from(next_level) * 5 + 2
                     );
-                    assert_eq!((*p).__bindgen_anon_2.hit_points, 2u16 << level);
-                    assert_eq!((*p).__bindgen_anon_3.mass_points, 2u8 << level);
-                    assert_eq!((*p).__bindgen_anon_1.life_span, 2);
+                    assert_eq!((*p).hits, 2u16 << level);
+                    assert_eq!((*p).mass, 2u8 << level);
+                    assert_eq!((*p).life, 2);
                     assert_eq!(ship.ship_mut().weapon_counter, 1);
                     assert_eq!(ship.ship_mut().energy_counter, 4);
                     assert_eq!((*p).pParent, (&raw mut *ship.ship_mut()).cast());
@@ -364,18 +364,18 @@ fn charge_wait_wraps_as_a_byte_and_hit_points_truncate_after_the_c_assignment_ch
             let mut ship = trader(&_battle, 0);
             let e = pump(&mut ship);
             (*e).state_flags &= !(APPEARING as u16);
-            (*e).__bindgen_anon_4.turn_wait = 8;
-            (*e).__bindgen_anon_5.thrust_wait = 0;
+            (*e).turn = 8;
+            (*e).thrust = 0;
             (*e).current.image.frame = ship.raw_frame(1, 0);
             ship.ship_mut().cur_status_flags = WEAPON as u16;
             ship.ship_mut().old_status_flags = WEAPON as u16;
             hooks::invoke_element_pointer((*e).postprocess_func.unwrap(), e);
             let p = battle::element(disp_q.tail);
-            assert_eq!((*p).__bindgen_anon_5.thrust_wait, 255);
-            assert_eq!((*p).__bindgen_anon_4.turn_wait, 8);
+            assert_eq!((*p).thrust, 255);
+            assert_eq!((*p).turn, 8);
             assert_eq!(frame_index((*p).current.image.frame), 1);
-            assert_eq!((*p).__bindgen_anon_2.hit_points, 512);
-            assert_eq!((*p).__bindgen_anon_3.mass_points, 0);
+            assert_eq!((*p).hits, 512);
+            assert_eq!((*p).mass, 0);
         }
     })
 }
@@ -398,7 +398,7 @@ fn release_requires_both_weapon_status_words_to_hold_and_uses_full_velocity_unit
                     hooks::invoke_element_pointer((*e).postprocess_func.unwrap(), e);
                     let p = battle::element(disp_q.tail);
                     let held = current & old & WEAPON != 0;
-                    assert_eq!((*p).__bindgen_anon_1.life_span, if held { 2 } else { 10 });
+                    assert_eq!((*p).life, if held { 2 } else { 10 });
                     assert_eq!((*p).preprocess_func.is_some(), !held);
                     assert_eq!((*p).postprocess_func.is_some(), held);
                     assert_eq!(ship.ship_mut().weapon_counter, if held { 1 } else { 9 });
@@ -436,13 +436,13 @@ fn fired_charge_animation_bounces_at_each_five_frame_boundary_without_changing_l
                 ] {
                     (*p).current.image.frame = ship.raw_frame(1, usize::from(level) * 5 + offset);
                     (*p).next.image.frame = (*p).current.image.frame;
-                    (*p).__bindgen_anon_4.turn_wait = level | reverse;
-                    (*p).__bindgen_anon_5.thrust_wait = 2;
+                    (*p).turn = level | reverse;
+                    (*p).thrust = 2;
                     (*p).state_flags &= !(CHANGING as u16);
                     TFB_SeedRandom(11);
                     hooks::invoke_element_pointer(pre, p);
-                    assert_eq!((*p).__bindgen_anon_5.thrust_wait, 1);
-                    assert_eq!((*p).__bindgen_anon_4.turn_wait, level | next_reverse);
+                    assert_eq!((*p).thrust, 1);
+                    assert_eq!((*p).turn, level | next_reverse);
                     assert_eq!(
                         frame_index((*p).next.image.frame),
                         u16::from(level) * 5 + next
@@ -451,15 +451,15 @@ fn fired_charge_animation_bounces_at_each_five_frame_boundary_without_changing_l
                     assert_rng_after(11, 0);
                 }
             }
-            (*p).__bindgen_anon_5.thrust_wait = 1;
+            (*p).thrust = 1;
             (*p).state_flags &= !(CHANGING as u16);
             let frame = (*p).next.image.frame;
             hooks::invoke_element_pointer(pre, p);
-            assert_eq!((*p).__bindgen_anon_5.thrust_wait, 0);
+            assert_eq!((*p).thrust, 0);
             assert_eq!((*p).next.image.frame, frame);
             assert_eq!((*p).state_flags & CHANGING as u16, 0);
             hooks::invoke_element_pointer(pre, p);
-            assert_eq!((*p).__bindgen_anon_5.thrust_wait, 255);
+            assert_eq!((*p).thrust, 255);
             assert_ne!((*p).state_flags & CHANGING as u16, 0);
         }
     })
@@ -473,8 +473,8 @@ fn pump_collision_restores_the_shared_blast_counter_and_sets_the_level_blast_ani
             let mut ship = trader(&_battle, 0);
             for (level, width) in [(0, 22), (1, 23), (2, 1026), (3, 22)] {
                 let e = pump(&mut ship);
-                (*e).__bindgen_anon_4.turn_wait = 0x80 | level;
-                (*e).__bindgen_anon_5.thrust_wait = 67;
+                (*e).turn = 0x80 | level;
+                (*e).thrust = 67;
                 let index = usize::from(level) * 5;
                 ship.set_frame_bounds(1, index, [width, 18]);
                 (*e).next.image.frame = ship.raw_frame(1, index);
@@ -493,26 +493,26 @@ fn pump_collision_restores_the_shared_blast_counter_and_sets_the_level_blast_ani
                 );
                 assert_ne!({ disp_q.tail }, old_tail);
                 let blast = battle::element(disp_q.tail);
-                assert_eq!((*e).__bindgen_anon_5.thrust_wait, 67);
-                assert_eq!((*e).__bindgen_anon_2.hit_points, 0);
-                assert_eq!((*blast).__bindgen_anon_1.life_span, 3 + u16::from(level));
-                assert_eq!((*blast).__bindgen_anon_4.turn_wait, 0);
-                assert_eq!((*blast).__bindgen_anon_5.next_turn, 0);
+                assert_eq!((*e).thrust, 67);
+                assert_eq!((*e).hits, 0);
+                assert_eq!((*blast).life, 3 + u16::from(level));
+                assert_eq!((*blast).turn, 0);
+                assert_eq!((*blast).thrust, 0);
                 assert_eq!((*blast).current.image.farray, (*e).next.image.farray);
                 assert_eq!(frame_index((*blast).current.image.frame), 20);
                 let offset = i32::from((width >> 1) as u8) << ONE_SHIFT;
                 assert_eq!((*blast).current.location.x, 80 + cosine(0, offset));
                 assert_eq!((*blast).current.location.y, 120 + sine(0, offset));
                 let animate = (*blast).preprocess_func.unwrap();
-                (*blast).__bindgen_anon_4.turn_wait = 1;
-                (*blast).__bindgen_anon_5.next_turn = 3;
+                (*blast).turn = 1;
+                (*blast).thrust = 3;
                 (*blast).state_flags &= !(CHANGING as u16);
                 hooks::invoke_element_pointer(animate, blast);
-                assert_eq!((*blast).__bindgen_anon_4.turn_wait, 0);
+                assert_eq!((*blast).turn, 0);
                 assert_eq!((*blast).state_flags & CHANGING as u16, 0);
                 hooks::invoke_element_pointer(animate, blast);
                 assert_eq!(frame_index((*blast).next.image.frame), 21);
-                assert_eq!((*blast).__bindgen_anon_4.turn_wait, 3);
+                assert_eq!((*blast).turn, 3);
                 assert_ne!((*blast).state_flags & CHANGING as u16, 0);
                 assert_rng_after(33, 0);
                 // Already-collided weapons do not allocate a second blast.
@@ -526,7 +526,7 @@ fn pump_collision_restores_the_shared_blast_counter_and_sets_the_level_blast_ani
                     hooks::CollisionCall::Hook,
                 );
                 assert_eq!(queue(), before);
-                assert_eq!((*e).__bindgen_anon_5.thrust_wait, 67);
+                assert_eq!((*e).thrust, 67);
                 remove(blast);
                 remove(e);
             }
@@ -563,10 +563,10 @@ fn confusion_special_obeys_energy_input_and_cooldown_boundaries() {
                 );
                 if fired {
                     let e = battle::element(disp_q.tail);
-                    assert_eq!((*e).__bindgen_anon_1.life_span, 20);
-                    assert_eq!((*e).__bindgen_anon_2.hit_points, 200);
-                    assert_eq!((*e).__bindgen_anon_3.mass_points, 0);
-                    assert_eq!((*e).__bindgen_anon_5.blast_offset, 4);
+                    assert_eq!((*e).life, 20);
+                    assert_eq!((*e).hits, 200);
+                    assert_eq!((*e).mass, 0);
+                    assert_eq!((*e).thrust, 4);
                     assert_eq!(
                         (*e).state_flags,
                         (APPEARING | FINITE_LIFE | IGNORE_SIMILAR) as u16
@@ -674,8 +674,8 @@ fn confusion_collision_inserts_a_controller_at_the_head_with_exactly_one_rng_dra
                     (*controller).state_flags,
                     (FINITE_LIFE | NONSOLID | CHANGING) as u16
                 );
-                assert_eq!((*controller).__bindgen_anon_1.life_span, 400);
-                assert_eq!((*controller).__bindgen_anon_4.turn_wait, 1 << bit);
+                assert_eq!((*controller).life, 400);
+                assert_eq!((*controller).turn, 1 << bit);
                 assert_eq!((*controller).hTarget, victim.ship_mut().hShip);
                 assert_eq!((*controller).pParent, (&raw mut *ship.ship_mut()).cast());
                 assert_eq!((*controller).current.image.farray, (*e).next.image.farray);
@@ -688,8 +688,8 @@ fn confusion_collision_inserts_a_controller_at_the_head_with_exactly_one_rng_dra
                     (*prim(controller)).Type,
                     gfx_object_NUM_PRIMS as GRAPHICS_PRIM
                 );
-                assert_eq!((*e).__bindgen_anon_2.hit_points, 0);
-                assert_eq!((*e).__bindgen_anon_1.life_span, 0);
+                assert_eq!((*e).hits, 0);
+                assert_eq!((*e).life, 0);
                 assert_eq!(
                     (*e).state_flags & (DISAPPEARING | COLLISION | NONSOLID) as u16,
                     (DISAPPEARING | COLLISION | NONSOLID) as u16
@@ -736,7 +736,7 @@ fn confusion_reuses_the_first_same_player_nonsolid_special_even_if_it_is_a_trail
                 (*e).current.image.farray = frames;
                 (*e).current.image.frame = ship.raw_frame(2, 11);
                 (*e).state_flags = flags as u16;
-                (*e).__bindgen_anon_1.life_span = 1;
+                (*e).life = 1;
                 (*e).hTarget = victim.ship_mut().hShip;
                 (*e).pParent = (&raw mut *ship.ship_mut()).cast();
                 (*prim(e)).Type = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
@@ -755,8 +755,8 @@ fn confusion_reuses_the_first_same_player_nonsolid_special_even_if_it_is_a_trail
                 before,
                 "reuse does not move or allocate an element"
             );
-            assert_eq!((*chosen).__bindgen_anon_1.life_span, 400);
-            assert_eq!((*chosen).__bindgen_anon_4.turn_wait, direction);
+            assert_eq!((*chosen).life, 400);
+            assert_eq!((*chosen).turn, direction);
             assert_eq!(
                 (*chosen).hTarget,
                 victim.ship_mut().hShip,
@@ -769,7 +769,7 @@ fn confusion_reuses_the_first_same_player_nonsolid_special_even_if_it_is_a_trail
             );
             assert_eq!((*prim(chosen)).Type, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
             for &i in &[0, 1, 2, 4] {
-                assert_eq!((*candidates[i]).__bindgen_anon_1.life_span, 1);
+                assert_eq!((*candidates[i]).life, 1);
             }
             assert_rng_after(51, 1);
             for h in exhausted {
@@ -794,14 +794,14 @@ fn confusion_ignores_nonships_and_consumes_no_rng_when_controller_allocation_fai
             collide(e, &mut *obstacle);
             assert_eq!(queue(), before);
             assert_eq!((*e).state_flags, flags);
-            assert_eq!((*e).__bindgen_anon_2.hit_points, 200);
+            assert_eq!((*e).hits, 200);
             assert_rng_after(62, 0);
             let exhausted = exhaust_queue();
             TFB_SeedRandom(62);
             collide(e, victim.ptr());
             assert_eq!(queue(), before);
-            assert_eq!((*e).__bindgen_anon_1.life_span, 0);
-            assert_eq!((*e).__bindgen_anon_2.hit_points, 0);
+            assert_eq!((*e).life, 0);
+            assert_eq!((*e).hits, 0);
             assert_ne!((*e).state_flags & NONSOLID as u16, 0);
             assert_rng_after(62, 0);
             for h in exhausted {
@@ -823,7 +823,7 @@ fn controller_follows_target_overrides_controls_wraps_animation_and_emits_one_fr
             let controller = battle::element(disp_q.head);
             let pre = (*controller).preprocess_func.unwrap();
             for direction in [LEFT, RIGHT] {
-                (*controller).__bindgen_anon_4.turn_wait = direction as u8;
+                (*controller).turn = direction as u8;
                 (*controller).current.image.frame = ship.raw_frame(2, 15);
                 (*victim.ptr()).next.location = POINT { x: -123, y: 456 };
                 victim.ship_mut().ship_input_state =
@@ -847,8 +847,8 @@ fn controller_follows_target_overrides_controls_wraps_animation_and_emits_one_fr
                     (*trail).state_flags,
                     (FINITE_LIFE | NONSOLID | CHANGING) as u16
                 );
-                assert_eq!((*trail).__bindgen_anon_1.life_span, 1);
-                assert_eq!((*trail).__bindgen_anon_4.turn_wait, 0);
+                assert_eq!((*trail).life, 1);
+                assert_eq!((*trail).turn, 0);
                 assert_eq!((*trail).hTarget, victim.ship_mut().hShip);
                 assert_eq!((*trail).pParent, (*controller).pParent);
                 assert_eq!((*trail).current.image.frame, (*controller).next.image.frame);
@@ -870,7 +870,7 @@ fn controller_follows_target_overrides_controls_wraps_animation_and_emits_one_fr
             (*controller).hTarget = ptr::null_mut();
             let before = queue();
             hooks::invoke_element_pointer(pre, controller);
-            assert_eq!((*controller).__bindgen_anon_1.life_span, 0);
+            assert_eq!((*controller).life, 0);
             assert_ne!((*controller).state_flags & DISAPPEARING as u16, 0);
             assert_eq!(queue(), before);
         }
@@ -887,7 +887,7 @@ fn controller_still_overrides_controls_when_trail_allocation_fails() {
             let pulse = confusion(&mut ship);
             collide(pulse, victim.ptr());
             let controller = battle::element(disp_q.head);
-            (*controller).__bindgen_anon_4.turn_wait = RIGHT as u8;
+            (*controller).turn = RIGHT as u8;
             (*controller).current.image.frame = ship.raw_frame(2, 8);
             let exhausted = exhaust_queue();
             let before = queue();
@@ -928,8 +928,8 @@ fn ai_without_targets_preserves_c_toggle_thresholds_counters_and_rng_order() {
                 ship.ship_mut().special_counter = special_counter;
                 ship.ship_mut().weapon_counter = weapon_counter;
                 ship.ship_mut().ship_input_state = initial as u8;
-                (*ship.ptr()).__bindgen_anon_4.turn_wait = 255;
-                (*ship.ptr()).__bindgen_anon_5.thrust_wait = 255;
+                (*ship.ptr()).turn = 255;
+                (*ship.ptr()).thrust = 255;
                 let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
                 let init = ship.descriptor_mut().callbacks()[3];
                 let before = queue();
@@ -942,8 +942,8 @@ fn ai_without_targets_preserves_c_toggle_thresholds_counters_and_rng_order() {
                 );
                 assert_eq!(ship.ship_mut().weapon_counter, weapon_counter);
                 assert_eq!(ship.descriptor_mut().callbacks()[3], init);
-                assert_eq!((*ship.ptr()).__bindgen_anon_4.turn_wait, 255);
-                assert_eq!((*ship.ptr()).__bindgen_anon_5.thrust_wait, 255);
+                assert_eq!((*ship.ptr()).turn, 255);
+                assert_eq!((*ship.ptr()).thrust, 255);
                 assert_eq!(queue(), before);
                 assert_rng_after(77, 0);
             }
@@ -993,8 +993,8 @@ fn ai_tests_the_confusion_trajectory_and_restores_waits_and_initializer() {
             let enemy = trader(&_battle, 1);
             // The first pass has zero concerns. The special pass always evaluates
             // the enemy slot and must not move a ship whose waits were zero.
-            (*ship.ptr()).__bindgen_anon_4.turn_wait = 0;
-            (*ship.ptr()).__bindgen_anon_5.thrust_wait = 0;
+            (*ship.ptr()).turn = 0;
+            (*ship.ptr()).thrust = 0;
             let init = ship.descriptor_mut().callbacks()[3];
             for (energy, distance, expected) in [
                 (19, 320, 0),
@@ -1023,8 +1023,8 @@ fn ai_tests_the_confusion_trajectory_and_restores_waits_and_initializer() {
                     expected as u8,
                     "energy {energy}, distance {distance}"
                 );
-                assert_eq!((*ship.ptr()).__bindgen_anon_4.turn_wait, 0);
-                assert_eq!((*ship.ptr()).__bindgen_anon_5.thrust_wait, 0);
+                assert_eq!((*ship.ptr()).turn, 0);
+                assert_eq!((*ship.ptr()).thrust, 0);
                 assert_eq!(ship.ship_mut().ShipFacing, 0);
                 assert_eq!(ship.ship_mut().weapon_counter, 0);
                 assert_eq!(ship.descriptor_mut().callbacks()[3], init);
@@ -1054,12 +1054,12 @@ fn held_charge_uses_the_same_ping_pong_animation_as_a_released_pulse() {
                 let e = pump(&mut ship);
                 (*e).state_flags &= !(APPEARING as u16);
                 (*e).current.image.frame = ship.raw_frame(1, index);
-                (*e).__bindgen_anon_4.turn_wait = turn;
-                (*e).__bindgen_anon_5.thrust_wait = 2;
+                (*e).turn = turn;
+                (*e).thrust = 2;
                 hooks::invoke_element_pointer((*e).postprocess_func.unwrap(), e);
                 let p = battle::element(disp_q.tail);
-                assert_eq!((*p).__bindgen_anon_5.thrust_wait, 1);
-                assert_eq!((*p).__bindgen_anon_4.turn_wait, expected_turn);
+                assert_eq!((*p).thrust, 1);
+                assert_eq!((*p).turn, expected_turn);
                 assert_eq!(frame_index((*p).current.image.frame), expected_index);
                 assert_eq!((*p).state_flags & CHANGING as u16, 0);
                 remove(p);
@@ -1078,8 +1078,8 @@ fn ai_first_pass_tests_the_full_speed_pump_and_toggles_an_existing_charge_to_rel
             let enemy = trader(&_battle, 1);
             // Blocking movement lets the real shared AI test each projectile
             // without changing the facing used by the second pass.
-            (*ship.ptr()).__bindgen_anon_4.turn_wait = 1;
-            (*ship.ptr()).__bindgen_anon_5.thrust_wait = 1;
+            (*ship.ptr()).turn = 1;
+            (*ship.ptr()).thrust = 1;
             for (distance, counter, expected) in [
                 (1400, 0, WEAPON | SPECIAL),
                 (1400, 1, SPECIAL),
@@ -1107,8 +1107,8 @@ fn ai_first_pass_tests_the_full_speed_pump_and_toggles_an_existing_charge_to_rel
                     "distance {distance}, counter {counter}"
                 );
                 assert_eq!(ship.ship_mut().weapon_counter, counter);
-                assert_eq!((*ship.ptr()).__bindgen_anon_4.turn_wait, 1);
-                assert_eq!((*ship.ptr()).__bindgen_anon_5.thrust_wait, 1);
+                assert_eq!((*ship.ptr()).turn, 1);
+                assert_eq!((*ship.ptr()).thrust, 1);
                 assert_eq!(queue(), before);
                 assert_rng_after(71, 0);
             }
@@ -1136,8 +1136,8 @@ fn ai_pursuit_uses_the_shared_half_turn_rng_draw_without_extra_draws() {
             for seed in 1..9 {
                 ship.ship_mut().ShipFacing = 0;
                 ship.ship_mut().ship_input_state = 0;
-                (*ship.ptr()).__bindgen_anon_4.turn_wait = 0;
-                (*ship.ptr()).__bindgen_anon_5.thrust_wait = 1;
+                (*ship.ptr()).turn = 0;
+                (*ship.ptr()).thrust = 1;
                 let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
                 concerns[ENEMY_SHIP_INDEX as usize].ObjectPtr = enemy.ptr();
                 concerns[ENEMY_SHIP_INDEX as usize].which_turn = 1;
