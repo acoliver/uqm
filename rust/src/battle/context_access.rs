@@ -14,6 +14,7 @@ impl Cx<'_> {
                 self.retain_terminal_outcome(self.owner(id));
             }
         }
+        self.finish_battle_storage();
     }
 }
 

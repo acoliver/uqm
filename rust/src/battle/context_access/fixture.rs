@@ -96,7 +96,7 @@ impl Cx<'_> {
             state: self.ship_state(id),
             species: s.SpeciesID,
             index: s.index,
-            element: self.elements().allocated_id(s.hShip),
+            element: s.hShip,
             clear_element: false,
             info: None,
             data: None,
@@ -145,7 +145,7 @@ impl Cx<'_> {
         if ship.clear_element {
             // SAFETY: the checked ship is exclusively owned during the command commit.
             unsafe {
-                (*self.ship_pointer(id)).hShip = std::ptr::null_mut();
+                (*self.ship_pointer(id)).hShip = None;
             }
         }
         if let Some(info) = ship.info {

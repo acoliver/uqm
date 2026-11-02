@@ -81,7 +81,7 @@ impl LinkQueue<'_, Starship> {
     pub fn facing(&self, id: LinkId<Starship>) -> u16 {
         self.record(id).ShipFacing
     }
-    pub(crate) fn element_handle(&self, id: LinkId<Starship>) -> HLink {
+    pub(crate) fn element_handle(&self, id: LinkId<Starship>) -> Option<super::super::ElementId> {
         self.record(id).hShip
     }
 }

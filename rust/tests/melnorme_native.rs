@@ -682,10 +682,7 @@ fn confusion_collision_inserts_a_controller_at_the_head_with_exactly_one_rng_dra
                 );
                 assert_eq!((*controller).life, 400);
                 assert_eq!((*controller).turn, 1 << bit);
-                assert_eq!(
-                    (*controller).target,
-                    Some(battle::id((victim.ship_mut().hShip).cast()))
-                );
+                assert_eq!((*controller).target, victim.ship_mut().hShip);
                 assert_eq!(
                     (*controller).parent,
                     uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
@@ -749,7 +746,7 @@ fn confusion_reuses_the_first_same_player_nonsolid_special_even_if_it_is_a_trail
                 (*e).current.image.frame = ship.raw_frame(2, 11);
                 (*e).state_flags = flags as u16;
                 (*e).life = 1;
-                (*e).target = Some(battle::id((victim.ship_mut().hShip).cast()));
+                (*e).target = victim.ship_mut().hShip;
                 (*e).parent = uqm_rust::engine::battle::Parent::Ship(ship.ship_id);
                 (*prim(e)).Type = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
                 battle::put(h);
@@ -771,7 +768,7 @@ fn confusion_reuses_the_first_same_player_nonsolid_special_even_if_it_is_a_trail
             assert_eq!((*chosen).turn, direction);
             assert_eq!(
                 (*chosen).target,
-                Some(battle::id((victim.ship_mut().hShip).cast())),
+                victim.ship_mut().hShip,
                 "reuse does not retarget"
             );
             assert_eq!(frame_index((*chosen).current.image.frame), 11);
@@ -861,10 +858,7 @@ fn controller_follows_target_overrides_controls_wraps_animation_and_emits_one_fr
                 );
                 assert_eq!((*trail).life, 1);
                 assert_eq!((*trail).turn, 0);
-                assert_eq!(
-                    (*trail).target,
-                    Some(battle::id((victim.ship_mut().hShip).cast()))
-                );
+                assert_eq!((*trail).target, victim.ship_mut().hShip);
                 assert_eq!((*trail).parent, (*controller).parent);
                 assert_eq!((*trail).current.image.frame, (*controller).next.image.frame);
                 assert_eq!((*trail).next.image.frame, (*controller).next.image.frame);

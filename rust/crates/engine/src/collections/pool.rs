@@ -168,8 +168,7 @@ impl<T, const N: usize> OrderedPool<T, N> {
         self.free = slot.succ;
         slot.pred = None;
         slot.succ = None;
-        slot.value = Some(value);
-        slot.retired_address = std::ptr::from_ref(slot.value.as_ref().unwrap()) as usize;
+        slot.retired_address = std::ptr::from_mut(slot.value.insert(value)) as usize;
         Some(self.id(ix))
     }
     pub fn free(&mut self, id: Id<T>) -> T {

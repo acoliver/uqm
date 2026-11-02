@@ -16,9 +16,10 @@ impl<'a> Ship<'a> {
     /// The pool and all resource allocations remain immutable for the observation.
     pub(super) unsafe fn queue(
         queue: &'a crate::engine::battle::link_queue::RacePool,
+        elements: &crate::engine::battle::ElementTable,
     ) -> Vec<Self> {
         // SAFETY: the caller retains the immutable pool and every reachable resource.
-        unsafe { crate::battle::context_access::observe::ships(queue) }
+        unsafe { crate::battle::context_access::observe::ships(queue, elements) }
             .into_iter()
             .map(|observation| Self { observation })
             .collect()
@@ -247,7 +248,12 @@ mod tests {
         let id = queue.alloc(state).unwrap();
         queue.put(id);
         // SAFETY: the local pool remains live and immutable until ships is dropped.
-        let ships = unsafe { Ship::queue(&queue) };
+        let ships = unsafe {
+            Ship::queue(
+                &queue,
+                &crate::engine::battle::ElementTable::with_capacity(0),
+            )
+        };
         let ship = &ships[0];
         assert_eq!(ship.side(), 1);
         assert_eq!(ship.species(), SPECIES_ID_EARTHLING_ID);

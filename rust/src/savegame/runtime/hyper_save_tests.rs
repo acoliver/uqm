@@ -6,8 +6,7 @@
 //! refusal of missing/retired records, and the guarantee that saving writes only
 //! the flagship's stored facing.
 
-use crate::engine::battle::{ElementTable, Parent, ShipId};
-use std::ffi::c_void;
+use crate::engine::battle::{ElementId, ElementTable, Parent, ShipId};
 use std::mem::size_of;
 
 use super::hyper_save::*;
@@ -53,7 +52,7 @@ fn push_element(elements: &mut ElementTable, value: ELEMENT) -> *mut ELEMENT {
     pointer
 }
 
-fn starship(facing: u16, element: *mut c_void) -> STARSHIP {
+fn starship(facing: u16, element: Option<ElementId>) -> STARSHIP {
     // SAFETY: `STARSHIP` is integers, pointers and optional function pointers.
     let mut ship: STARSHIP = unsafe { std::mem::zeroed() };
     ship.ShipFacing = facing;
@@ -91,7 +90,7 @@ impl Queues {
     fn flight(facing: u16) -> Self {
         let mut queues = Self::new();
         push_element(&mut queues.display, element(APPEARING_BIT, Parent::None));
-        let ship = push(&mut queues.ships, starship(facing, std::ptr::null_mut()));
+        let ship = push(&mut queues.ships, starship(facing, None));
         let flagship = push_element(
             &mut queues.display,
             element(
@@ -105,7 +104,7 @@ impl Queues {
         );
         push_element(&mut queues.display, element(0, Parent::None));
         // SAFETY: `ship` is the slot just pushed.
-        unsafe { (*ship).hShip = flagship.cast::<c_void>() };
+        unsafe { (*ship).hShip = queues.display.id(flagship.cast()) };
         queues
     }
 
@@ -117,7 +116,7 @@ impl Queues {
 
     fn flagship_element(&self) -> *mut ELEMENT {
         // SAFETY: the head is a slot of the ship pool.
-        unsafe { (*self.head_ship()).hShip.cast::<ELEMENT>() }
+        unsafe { self.display.raw((*self.head_ship()).hShip.unwrap()).cast() }
     }
 
     fn save(&self, game: &mut CGameState) -> Result<HyperFlagship, HyperSaveError> {
@@ -255,7 +254,7 @@ fn a_facing_that_would_wrap_to_zero_is_refused_and_writes_nothing() {
 #[test]
 fn the_owner_is_the_elements_parent_even_when_it_is_not_the_queue_head() {
     let mut queues = Queues::flight(3);
-    push(&mut queues.ships, starship(11, std::ptr::null_mut()));
+    push(&mut queues.ships, starship(11, None));
     // SAFETY: the flagship element is a slot of the display pool.
     unsafe {
         (*queues.flagship_element()).parent = Parent::Ship(ShipId {
@@ -276,7 +275,7 @@ fn the_owner_is_the_elements_parent_even_when_it_is_not_the_queue_head() {
 fn only_the_head_ship_names_the_element_and_later_ships_are_not_consulted() {
     let mut queues = Queues::flight(6);
     // A second ship with its own element: C looks at the head only.
-    let other_owner = push(&mut queues.ships, starship(14, std::ptr::null_mut()));
+    let other_owner = push(&mut queues.ships, starship(14, None));
     let other_element = push_element(
         &mut queues.display,
         element(
@@ -289,7 +288,7 @@ fn only_the_head_ship_names_the_element_and_later_ships_are_not_consulted() {
         ),
     );
     // SAFETY: `other_owner` is a slot of the ship pool.
-    unsafe { (*other_owner).hShip = other_element.cast::<c_void>() };
+    unsafe { (*other_owner).hShip = queues.display.id(other_element.cast()) };
 
     let mut game = game();
     assert_eq!(queues.save(&mut game), Ok(HyperFlagship::Facing(7)));
@@ -311,7 +310,7 @@ fn an_empty_player_queue_is_a_no_op() {
 fn a_flagship_without_an_element_is_a_no_op_and_the_display_list_is_not_read() {
     let queues = Queues::flight(5);
     // SAFETY: the head is a slot of the ship pool.
-    unsafe { (*queues.head_ship()).hShip = std::ptr::null_mut() };
+    unsafe { (*queues.head_ship()).hShip = None };
 
     let mut game = game();
     let before_game = bytes_of(&*game);
@@ -337,7 +336,7 @@ fn a_handle_that_is_not_a_link_of_the_display_list_is_refused() {
         ),
     );
     // SAFETY: the head is a slot of the ship pool.
-    unsafe { (*queues.head_ship()).hShip = loose.cast::<c_void>() };
+    unsafe { (*queues.head_ship()).hShip = queues.display.id(loose.cast()) };
 
     let mut game = game();
     assert_eq!(
@@ -348,18 +347,21 @@ fn a_handle_that_is_not_a_link_of_the_display_list_is_refused() {
 }
 
 #[test]
-fn a_handle_inside_a_slot_or_outside_the_pool_is_refused() {
+fn a_stale_generation_or_slot_outside_the_pool_is_refused() {
     let queues = Queues::flight(5);
-    let flagship = queues.flagship_element();
-    for handle in [
-        // SAFETY: stays inside the same slot, which is what is being tested.
-        unsafe { flagship.cast::<u8>().add(2) }.cast::<c_void>(),
-        std::ptr::NonNull::<ELEMENT>::dangling()
-            .as_ptr()
-            .cast::<c_void>(),
+    let flagship = queues.display.id(queues.flagship_element().cast()).unwrap();
+    for id in [
+        ElementId {
+            gen: flagship.gen + 1,
+            ..flagship
+        },
+        ElementId {
+            slot: u8::MAX,
+            gen: 0,
+        },
     ] {
         // SAFETY: the head is a slot of the ship pool.
-        unsafe { (*queues.head_ship()).hShip = handle };
+        unsafe { (*queues.head_ship()).hShip = Some(id) };
         let mut game = game();
         assert_eq!(
             queues.save(&mut game),
@@ -394,7 +396,7 @@ fn an_element_with_no_parent_is_refused() {
 #[test]
 fn an_owner_that_is_not_a_link_of_the_player_queue_is_refused() {
     let mut queues = Queues::flight(5);
-    let free_slot = allocate(&mut queues.ships, starship(1, std::ptr::null_mut()));
+    let free_slot = allocate(&mut queues.ships, starship(1, None));
     assert_ne!(free_slot, queues.head_ship());
     for owner in [
         Parent::Ship(ShipId {

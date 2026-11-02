@@ -126,6 +126,7 @@ pub(crate) struct DescriptorRecordObservation<'a> {
 pub(crate) unsafe fn ship<'a>(
     pool: &'a super::super::link_queue::RacePool,
     id: LinkId<Starship>,
+    elements: &ElementTable,
 ) -> ShipRecordObservation<'a> {
     let ships = LinkQueue::<Starship>::borrow(pool);
     let s = pool.get(ships.key(id));
@@ -135,7 +136,7 @@ pub(crate) unsafe fn ship<'a>(
         address: ships.raw(id) as usize,
         pred: ships.pred(id).map_or(0, |id| ships.raw(id) as usize),
         succ: ships.succ(id).map_or(0, |id| ships.raw(id) as usize),
-        element: s.hShip as usize,
+        element: s.hShip.map_or(0, |id| elements.journal_address(id)),
         #[cfg(not(test))]
         descriptor: s
             .descriptor

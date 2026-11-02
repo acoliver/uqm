@@ -163,12 +163,12 @@ impl<'a> Ship<'a> {
             let el = element(handle);
             (*el).playerNr = player;
             (*el).state_flags = PLAYER_SHIP as u16;
-            (*raw_ship).hShip = handle;
             let id = uqm_rust::app::bridge::enter(|cx| {
                 cx.elements()
                     .id(handle)
                     .unwrap_or_else(|| panic!("allocated element missing from pool"))
             });
+            (*raw_ship).hShip = Some(id);
             (*el).parent = uqm_rust::engine::battle::Parent::Ship(ship_id);
             Self {
                 battle,

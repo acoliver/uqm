@@ -17,9 +17,9 @@ extern "C" {
 
 pub(in crate::savegame) unsafe fn finish_load(star: &super::super::StarDesc, activity: u16) {
     crate::planets::c_api::reset_encounter();
-    for player in 0..2 {
-        (*crate::engine::battle::access::live_queues::player_ships(player).cast_mut()).reinit();
-    }
+    // Loading can run inside a ship callback's menu. Unlink the old roster now,
+    // but keep its records alive through callbacks and terminal-outcome capture.
+    crate::engine::battle::record::Kernel::current().request_ship_reset();
     let mut point = crate::comm::dispatch::CPoint {
         x: star.star_pt.x,
         y: star.star_pt.y,

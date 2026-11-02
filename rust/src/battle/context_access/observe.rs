@@ -101,13 +101,14 @@ impl<'a> CustomData<'a> {
 /// The queue, ship resources and descriptor allocations remain immutable for the borrow.
 pub(crate) unsafe fn ships<'a>(
     queue: &'a crate::engine::battle::link_queue::RacePool,
+    elements: &crate::engine::battle::ElementTable,
 ) -> Vec<ShipObservation<'a>> {
     let ships = LinkQueue::<Starship>::borrow(queue);
     let mut result = Vec::new();
     let mut next = ships.head();
     while let Some(id) = next {
         // SAFETY: validated immutable ship storage and its loaded resources remain live.
-        let s = unsafe { crate::engine::battle::access::observe::ship(queue, id) };
+        let s = unsafe { crate::engine::battle::access::observe::ship(queue, id, elements) };
         next = ships.succ(id);
         #[cfg(not(test))]
         let (race, icons, strings) = {

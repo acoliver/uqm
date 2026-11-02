@@ -13,16 +13,12 @@ pub(crate) unsafe fn read_flagship_facing(
     let Some(flagship) = ships.head() else {
         return Ok(None);
     };
-    let handle = ships.element_handle(flagship);
-    if handle.is_null() {
+    let Some(element) = ships.element_handle(flagship) else {
         return Ok(None);
-    }
-    let Some(element) = elements
-        .allocated_id(handle)
-        .filter(|&id| elements.linked(id))
-    else {
-        return Err(HyperSaveError::ElementNotInDisplayList);
     };
+    if !elements.contains(element) || !elements.linked(element) {
+        return Err(HyperSaveError::ElementNotInDisplayList);
+    }
     let record = &elements[element];
     if record.state_flags & crate::ships::native::abi::PLAYER_SHIP as u16 == 0 {
         return Err(HyperSaveError::ElementIsNotAPlayerShip);

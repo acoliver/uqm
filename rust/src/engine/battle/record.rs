@@ -1,6 +1,5 @@
 //! Shared battle record layouts during the storage transition.
 pub use crate::battle::velocity::VelocityDesc as VELOCITY_DESC;
-use crate::collections::queue::HLink as HELEMENT;
 use crate::graphics::native_abi::{
     BYTE, COUNT, FRAME, POINT, RESOURCE, SIZE, STRING, STRING as SOUND, UWORD,
     UWORD as ELEMENT_FLAGS, UWORD as STATUS_FLAGS,
@@ -98,7 +97,7 @@ mod abi {
         pub ship_input_state: BYTE,
         pub cur_status_flags: STATUS_FLAGS,
         pub old_status_flags: STATUS_FLAGS,
-        pub hShip: HELEMENT,
+        pub hShip: Option<super::super::ElementId>,
         pub ShipFacing: COUNT,
         pub playerNr: SIZE,
         pub control: BYTE,
@@ -269,7 +268,7 @@ impl Default for STARSHIP {
             ship_input_state: 0,
             cur_status_flags: 0,
             old_status_flags: 0,
-            hShip: std::ptr::null_mut(),
+            hShip: None,
             ShipFacing: 0,
             playerNr: 0,
             control: 0,
@@ -843,6 +842,8 @@ pub(crate) use super::kernel::{Channels, SoundQueue, StarPlane};
 pub(crate) struct Kernel {
     pub(crate) elements: super::ElementTable,
     pub(crate) races: [super::link_queue::RacePool; 2],
+    ship_reset_pending: bool,
+    battle_active: bool,
     pub(crate) display: super::display::DisplayPool,
     pub(crate) master_queue: super::kernel::MasterCatalog,
     pub(crate) player_input: [*mut std::ffi::c_void; 2],
@@ -860,6 +861,38 @@ pub(crate) struct Kernel {
     pub(crate) star_planes: Box<[StarPlane; 3]>,
 }
 impl Kernel {
+    pub(crate) fn begin_battle(&mut self) {
+        assert!(!self.battle_active, "nested battle session");
+        self.battle_active = true;
+    }
+
+    pub(crate) fn finish_battle(&mut self) {
+        assert!(self.battle_active, "battle session was not started");
+        self.battle_active = false;
+        self.complete_ship_reset();
+    }
+
+    pub(crate) fn request_ship_reset(&mut self) {
+        for pool in &mut self.races {
+            while let Some(id) = pool.head() {
+                pool.remove(id);
+            }
+        }
+        self.ship_reset_pending = true;
+        if !self.battle_active {
+            self.complete_ship_reset();
+        }
+    }
+
+    pub(crate) fn complete_ship_reset(&mut self) {
+        if self.ship_reset_pending {
+            for pool in &mut self.races {
+                pool.reinit();
+            }
+            self.ship_reset_pending = false;
+        }
+    }
+
     pub(super) fn new() -> Self {
         let mut log_stars = Box::new([POINT { x: 0, y: 0 }; 180]);
         let array = log_stars.as_mut_ptr();
@@ -878,6 +911,8 @@ impl Kernel {
         Self {
             elements: super::ElementTable::with_capacity(150),
             races: std::array::from_fn(|_| super::link_queue::RacePool::with_capacity(0)),
+            ship_reset_pending: false,
+            battle_active: false,
             display: super::display::DisplayPool::new(),
             master_queue: super::kernel::MasterCatalog::new(),
             player_input: [ptr::null_mut(); 2],
@@ -900,6 +935,25 @@ impl Kernel {
 #[cfg(test)]
 mod kernel_tests {
     use super::*;
+    #[test]
+    fn loading_during_a_callback_retains_its_ship_through_battle_cleanup() {
+        let mut kernel = Kernel::new();
+        kernel.races[0].reset_capacity(1);
+        let ship = kernel.races[0].alloc(STARSHIP::default()).unwrap();
+        kernel.races[0].get_mut(ship).special_counter = 7;
+        kernel.races[0].put(ship);
+        kernel.begin_battle();
+        kernel.request_ship_reset();
+        assert!(kernel.races[0].head().is_none());
+        assert_eq!(kernel.races[0].get(ship).special_counter, 7);
+        kernel.races[0].get_mut(ship).special_counter = 10;
+        kernel.finish_battle();
+        assert!(!kernel.races[0].contains(ship));
+        let replacement = kernel.races[0].alloc(STARSHIP::default()).unwrap();
+        assert_eq!(replacement.index(), ship.index());
+        assert_ne!(replacement.generation(), ship.generation());
+        assert_eq!(kernel.races[0].get(replacement).special_counter, 0);
+    }
     #[test]
     fn separate_lifecycles_reset_state_and_keep_parallax_backing_stable_when_moved() {
         let mut kernel = Kernel::new();

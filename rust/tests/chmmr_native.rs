@@ -306,11 +306,11 @@ fn laser_death_obeys_range_byte_gate_count_draw_and_animation() {
                 }
             }
             assert_eq!(gates, [true, true]);
-            ship.ship_mut().hShip = ptr::null_mut();
+            ship.ship_mut().hShip = None;
             TFB_SeedRandom(123);
             hooks::invoke_element_pointer(death, laser);
             assert_rng_after(123, 0);
-            ship.ship_mut().hShip = ship.handle;
+            ship.ship_mut().hShip = Some(ship.id);
             (*laser).current.location.x = origin.x + 600;
             let held = exhaust();
             TFB_SeedRandom(7);
@@ -457,11 +457,11 @@ fn spawn_and_preprocess_allocation_failures_do_not_draw_rng_or_rearm() {
             TFB_SeedRandom(88);
             hooks::invoke_element_pointer(death, battle::element(delay));
             assert_rng_after(88, 0);
-            ship.ship_mut().hShip = ptr::null_mut();
+            ship.ship_mut().hShip = None;
             TFB_SeedRandom(88);
             hooks::invoke_element_pointer(death, battle::element(delay));
             assert_rng_after(88, 0);
-            ship.ship_mut().hShip = ship.handle;
+            ship.ship_mut().hShip = Some(ship.id);
             ship.descriptor_mut().race_callbacks.pre = uqm_rust::engine::battle::Selection::Default;
             let tail = battle::tail();
             ship.preprocess();
@@ -527,7 +527,7 @@ fn satellites_wrap_space_cap_speed_and_preserve_half_space_ties() {
                     };
                 assert_eq!(velocity(s), expected, "delta {dx}/{dy}");
             }
-            ship.ship_mut().hShip = ptr::null_mut();
+            ship.ship_mut().hShip = None;
             let before = velocity_fields(&(*s).velocity);
             hooks::invoke_element_pointer(preprocess, s);
             assert_eq!(velocity_fields(&(*s).velocity), before);

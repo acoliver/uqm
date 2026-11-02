@@ -231,7 +231,7 @@ fn sentinel_tracking_preserves_absent_owner_element() {
                 .find(|h| (*battle::element(*h)).hits == 10)
                 .unwrap_or_else(|| panic!("sentinel"));
             (*battle::element(sentinel)).turn = 0;
-            ship.ship_mut().hShip = std::ptr::null_mut();
+            ship.ship_mut().hShip = None;
             uqm_rust::app::bridge::enter(|cx| {
                 assert_eq!(cx.optional_ship_element(ship.ship_id), None);
             });

@@ -30,6 +30,10 @@ impl Cx<'_> {
         self.b.kernel.elements.free(id);
     }
 
+    pub(crate) fn finish_battle_storage(&mut self) {
+        self.b.kernel.finish_battle();
+    }
+
     /// Move the boss result before descriptor disposal; no live graph is retained.
     pub(crate) fn retain_terminal_outcome(&mut self, owner: ShipId) {
         if matches!(self.desc(owner).race_state, super::RaceState::SaMatra(_)) {
@@ -78,7 +82,9 @@ impl Cx<'_> {
     }
 
     pub fn optional_ship_element(&self, ship: ShipId) -> Option<ElementId> {
-        self.b.kernel.elements.id(self.ship(ship).hShip)
+        let id = self.ship(ship).hShip?;
+        assert!(self.elements().contains(id), "stale ship element {id:?}");
+        Some(id)
     }
 
     pub fn set_parent(&mut self, element: ElementId, parent: Option<ShipId>) {
@@ -619,8 +625,7 @@ impl Cx<'_> {
         }
     }
     pub(crate) fn set_ship_element(&mut self, ship: ShipId, element: Option<ElementId>) {
-        self.ship_mut(ship).hShip =
-            element.map_or(std::ptr::null_mut(), |id| self.b.kernel.elements.raw(id));
+        self.ship_mut(ship).hShip = element;
     }
 }
 

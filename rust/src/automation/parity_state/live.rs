@@ -32,9 +32,10 @@ fn checkpoint_with_context(
         (
             &*(&raw const GlobData.Game_state).cast::<CGameState>(),
             std::array::from_fn::<_, 2, _>(|side| {
-                Ship::queue(&*crate::engine::battle::access::live_queues::player_ships(
-                    side,
-                ))
+                Ship::queue(
+                    &*crate::engine::battle::access::live_queues::player_ships(side),
+                    cx.elements(),
+                )
             }),
             display_elements(cx.elements(), Some(cx.groups())),
         )
