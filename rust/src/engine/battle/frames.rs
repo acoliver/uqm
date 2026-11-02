@@ -58,6 +58,9 @@ impl FrameArray {
     }
 
     pub(crate) fn observe(&self, role: &str) {
+        if self.is_absent() {
+            return;
+        }
         crate::collections::observation::record(crate::collections::observation::Event::FrameSet {
             address: self.as_ptr() as usize,
             frames: self
@@ -70,6 +73,9 @@ impl FrameArray {
     }
 
     pub(crate) fn retire_views(&self) {
+        if self.is_absent() {
+            return;
+        }
         crate::collections::observation::record(crate::collections::observation::Event::FrameSet {
             address: self.as_ptr() as usize,
             frames: vec![0; 3],
@@ -275,6 +281,16 @@ mod tests {
         for index in 0..3 {
             assert!(frames.view(index).is_absent());
         }
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn absent_arrays_do_not_publish_a_frame_source() {
+        observation::enable();
+        observation::drain();
+        FrameArray::EMPTY.observe("absent");
+        FrameArray::EMPTY.retire_views();
+        assert!(observation::drain().is_empty());
     }
 
     #[test]

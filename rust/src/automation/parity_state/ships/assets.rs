@@ -71,7 +71,11 @@ impl<'a> Assets<'a> {
         journal.register_resource(self.strings.address(), "strings");
         journal.register_resource(self.sounds.address(), "sounds");
         journal.register_resource(self.music, "music");
-        for (role, views) in self.sets {
+        for (role, views) in self
+            .sets
+            .into_iter()
+            .filter(|(_, views)| !views.is_absent())
+        {
             journal.register_frame_set(
                 views.as_ptr() as usize,
                 views
@@ -146,4 +150,27 @@ fn frame_handles(info: &SHIP_INFO, data: &DATA_STUFF) -> [(&'static str, FRAME);
         ("data.special.1", data.special.view(1).raw()),
         ("data.special.2", data.special.view(2).raw()),
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn descriptor_registration_distinguishes_absent_arrays_from_present_empty_views() {
+        use crate::engine::battle::{frames::FrameArray, record::RaceDescriptor, views};
+        let directory = crate::automation::parity_state::test_directory();
+        let mut journal = Journal::create(directory.path())
+            .unwrap_or_else(|error| panic!("create frame-source journal: {error}"));
+        let mut descriptor = RaceDescriptor::EMPTY;
+        descriptor.ship_data.ship = FrameArray::retain([views::Frame::ABSENT; 3], ());
+        // SAFETY: the local descriptor retains all its null resources and the present ship array.
+        let assets = unsafe { Assets::borrow(&descriptor.ship_info, &descriptor.ship_data) };
+        assets.register(&mut journal, "test");
+        assert_eq!(journal.frame_set(0), None);
+        assert_eq!(
+            journal.frame_set(descriptor.ship_data.ship.as_ptr() as usize),
+            Some([0; 3].as_slice())
+        );
+    }
 }
