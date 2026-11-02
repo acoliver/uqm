@@ -361,11 +361,21 @@ fn retire_budget(root: &Path, path: &Path, options: &Options) -> Result<(), Stri
     }
     let name = &options.positional[1];
     let mut baseline = Baseline::read(path)?;
-    if !baseline.budget.contains_key(name) {
-        return Err(format!("budget {name} is not present"));
-    }
+    let budget = baseline
+        .budget
+        .get(name)
+        .ok_or_else(|| format!("budget {name} is not present"))?;
     let measurement = walk::measure(root, None, false)?;
-    let remaining = measurement.report(name, None)?;
+    let remaining = if budget.scopes.is_empty() {
+        measurement.report(name, None)?
+    } else {
+        measurement
+            .findings
+            .iter()
+            .filter(|finding| budget.scopes.contains_key(&finding.key()))
+            .map(|finding| finding.value)
+            .sum()
+    };
     if remaining != 0 {
         return Err(format!("cannot retire {name}: {remaining} remaining sites"));
     }
@@ -531,6 +541,9 @@ fn is_native(path: &str) -> bool {
         .and_then(|s| s.to_str())
         .is_some_and(|e| ["c", "h", "cc", "cpp", "hpp", "m", "mm", "s", "S", "asm"].contains(&e))
 }
+
+#[cfg(test)]
+mod scoped_retirement_tests;
 
 #[cfg(test)]
 mod tests {
