@@ -66,7 +66,7 @@ fn descriptor_matches_every_c_initializer_field() {
         let _battle = Battle::new(64);
         unsafe {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_CHENJESU_ID, 0);
-            let d = *ship.descriptor_mut();
+            let d = ship.descriptor_mut();
             let race = d
                 .race
                 .unwrap_or_else(|| panic!("Native Chenjesu descriptor"));
@@ -126,9 +126,9 @@ fn descriptor_matches_every_c_initializer_field() {
                     CStr::from_ptr(d.ship_data.special_rsc[i]).to_str().unwrap(),
                     format!("ship.chenjesu.graphics.doggy.{size}")
                 );
-                assert!(d.ship_data.ship[i].is_null());
-                assert!(d.ship_data.weapon[i].is_null());
-                assert!(d.ship_data.special[i].is_null());
+                assert!(d.ship_data.ship.view(i).is_absent());
+                assert!(d.ship_data.weapon.view(i).is_absent());
+                assert!(d.ship_data.special.view(i).is_absent());
             }
             let captain = d.ship_data.captain_control;
             assert_eq!(
@@ -193,11 +193,11 @@ fn crystal_launch_hold_release_and_count_truncation_match_c() {
             assert_eq!((*crystal).playerNr, 0);
             assert_eq!(
                 (*crystal).current.image.frame,
-                SetAbsFrameIndex(ship.descriptor_mut().ship_data.weapon[0], 0)
+                SetAbsFrameIndex(ship.descriptor_mut().ship_data.weapon.view(0).raw(), 0)
             );
             assert_eq!(
                 (*crystal).current.image.farray,
-                (&raw mut ship.descriptor_mut().ship_data.weapon).cast()
+                ship.descriptor_mut().ship_data.weapon.as_ptr()
             );
             assert_eq!(
                 velocity_fields(&(*crystal).velocity),
@@ -271,7 +271,7 @@ fn released_crystal_queues_eight_fragments_in_facing_order() {
                 assert_eq!((*fragment).thrust, 2);
                 assert_eq!(
                     (*fragment).current.image.frame,
-                    SetAbsFrameIndex(ship.descriptor_mut().ship_data.weapon[0], 1)
+                    SetAbsFrameIndex(ship.descriptor_mut().ship_data.weapon.view(0).raw(), 1)
                 );
                 assert_eq!(
                     (*fragment).current.image.farray,
@@ -375,7 +375,7 @@ fn crystal_collision_creates_sparkles_at_the_target_and_animates_current_frame()
             );
             assert_eq!(
                 (*sparkle).current.image.frame,
-                SetAbsFrameIndex(ship.descriptor_mut().ship_data.weapon[0], 2)
+                SetAbsFrameIndex(ship.descriptor_mut().ship_data.weapon.view(0).raw(), 2)
             );
             assert_eq!((*crystal).life, 0);
             assert_eq!((*crystal).hits, 0);
@@ -385,7 +385,7 @@ fn crystal_collision_creates_sparkles_at_the_target_and_animates_current_frame()
             );
             let animate = (*sparkle).preprocess_func.unwrap();
             (*sparkle).next.image.frame =
-                SetAbsFrameIndex(ship.descriptor_mut().ship_data.weapon[0], 8);
+                SetAbsFrameIndex(ship.descriptor_mut().ship_data.weapon.view(0).raw(), 8);
             with_rng(17, 0, || hooks::invoke_element_pointer(animate, sparkle));
             assert_eq!(frame_index((*sparkle).next.image.frame), 3);
             assert_ne!((*sparkle).state_flags & CHANGING as u16, 0);
@@ -398,11 +398,11 @@ fn crystal_collision_creates_sparkles_at_the_target_and_animates_current_frame()
             hooks::invoke_element_pointer(animate, sparkle);
             assert_eq!((*sparkle).turn, 0);
             (*sparkle).current.image.frame =
-                SetAbsFrameIndex(ship.descriptor_mut().ship_data.weapon[0], 9);
+                SetAbsFrameIndex(ship.descriptor_mut().ship_data.weapon.view(0).raw(), 9);
             hooks::invoke_element_pointer(animate, sparkle);
             assert_eq!(
                 (*sparkle).next.image.frame,
-                SetAbsFrameIndex(ship.descriptor_mut().ship_data.weapon[0], 0)
+                SetAbsFrameIndex(ship.descriptor_mut().ship_data.weapon.view(0).raw(), 0)
             );
             assert_eq!((*sparkle).turn, 3);
             let tail = battle::tail();
@@ -446,11 +446,11 @@ fn doggy_spawns_behind_ship_with_exact_state_and_coordinate_truncation() {
                 assert_eq!((*prim(dog)).Type, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
                 assert_eq!(
                     (*dog).current.image.farray,
-                    (&raw mut ship.descriptor_mut().ship_data.special).cast()
+                    ship.descriptor_mut().ship_data.special.as_ptr()
                 );
                 assert_eq!(
                     (*dog).current.image.frame,
-                    SetAbsFrameIndex(ship.descriptor_mut().ship_data.special[0], 0)
+                    SetAbsFrameIndex(ship.descriptor_mut().ship_data.special.view(0).raw(), 0)
                 );
                 assert_eq!(
                     (*dog).parent,
@@ -753,7 +753,7 @@ fn doggy_steering_uses_exact_rear_facing_boundaries_not_trackships_single_step()
             // Enemy due north: raw facing 0, TrackShip's one-step result is 3.
             for (delta, expected) in [(6, 0), (7, 4), (8, 12), (9, 12), (10, 0)] {
                 (*enemy.ptr()).current.image.frame = SetAbsFrameIndex(
-                    enemy.descriptor_mut().ship_data.ship[0],
+                    enemy.descriptor_mut().ship_data.ship.view(0).raw(),
                     (16 - delta) as u16,
                 );
                 (*dog).target = None;
@@ -774,7 +774,7 @@ fn doggy_steering_uses_exact_rear_facing_boundaries_not_trackships_single_step()
             // TrackShip itself draws once for a half-circle tie. DOGI recomputes
             // its heading afterward, so the random tie-break does not choose it.
             (*enemy.ptr()).current.image.frame =
-                SetAbsFrameIndex(enemy.descriptor_mut().ship_data.ship[0], 0);
+                SetAbsFrameIndex(enemy.descriptor_mut().ship_data.ship.view(0).raw(), 0);
             for seed in 1..17 {
                 SetVelocityVector(&raw mut (*dog).velocity, 32, 8);
                 (*dog).target = Some(battle::id((enemy.handle).cast()));
@@ -804,7 +804,7 @@ fn doggy_uses_current_unwrapped_coordinates_and_truncates_arctan_arguments() {
                 at(&mut enemy, enemy_x, 4000);
                 (*enemy.ptr()).next.location = POINT { x: 2000, y: 4000 };
                 (*enemy.ptr()).current.image.frame = SetAbsFrameIndex(
-                    enemy.descriptor_mut().ship_data.ship[0],
+                    enemy.descriptor_mut().ship_data.ship.view(0).raw(),
                     (expected as usize) as u16,
                 );
                 (*dog).target = Some(battle::id((enemy.handle).cast()));
@@ -1087,10 +1087,7 @@ fn ai_scans_from_tail_skips_every_noncrystal_case_and_stops_at_the_first_match()
                 (*e).PrimIndex = prim_index;
                 match invalid {
                     0 => (*e).state_flags |= NONSOLID as u16,
-                    1 => {
-                        (*e).next.image.farray =
-                            (&raw mut ship.descriptor_mut().ship_data.special).cast()
-                    }
+                    1 => (*e).next.image.farray = ship.descriptor_mut().ship_data.special.as_ptr(),
                     2 => (*e).preprocess_func = None,
                     3 => (*e).life = 0,
                     4 => (*e).playerNr = 1,

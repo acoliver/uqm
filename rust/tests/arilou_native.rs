@@ -12,61 +12,10 @@ use uqm_rust::ships::native::abi::*;
 
 /// Mirrors `FRAME_DESC` from `drawable.h` so the engine's frame functions can
 /// walk a drawable built here.
-#[repr(C)]
-struct FrameDesc {
-    kind: u16,
-    index: u16,
-    hot_spot: [i16; 2],
-    bounds: [i16; 2],
-    image: *mut c_void,
-    parent: *mut DrawableDesc,
-}
-
-/// Mirrors `DRAWABLE_DESC`.
-#[repr(C)]
-struct DrawableDesc {
-    flags: u8,
-    max_index: u16,
-    frame: *mut FrameDesc,
-}
-
-struct FrameSet {
-    _drawable: Box<DrawableDesc>,
-    frames: Vec<FrameDesc>,
-}
-
-impl FrameSet {
-    fn new(count: u16) -> Self {
-        let mut drawable = Box::new(DrawableDesc {
-            flags: 0,
-            max_index: count - 1,
-            frame: ptr::null_mut(),
-        });
-        let parent: *mut DrawableDesc = &mut *drawable;
-        let mut frames: Vec<FrameDesc> = (0..count)
-            .map(|index| FrameDesc {
-                kind: 0,
-                index,
-                hot_spot: [0, 0],
-                bounds: [0, 0],
-                image: ptr::null_mut(),
-                parent,
-            })
-            .collect();
-        drawable.frame = frames.as_mut_ptr();
-        Self {
-            _drawable: drawable,
-            frames,
-        }
-    }
-
-    fn frame(&mut self, index: usize) -> FRAME {
-        (&raw mut self.frames[index]).cast()
-    }
-}
+use battle::FrameSet;
 
 unsafe fn index_of(frame: FRAME) -> u16 {
-    (*frame.cast::<FrameDesc>()).index
+    (*frame.cast::<uqm_rust::graphics::native_abi::frame_desc>()).Index
 }
 
 unsafe fn prim_of(element: *mut ELEMENT) -> *mut PRIMITIVE {
@@ -193,9 +142,9 @@ fn skiff_descriptor_matches_the_c_template() {
                 assert_eq!(CStr::from_ptr(data.ship_rsc[i]), expected_ship[i]);
                 assert_eq!(CStr::from_ptr(data.special_rsc[i]), expected_special[i]);
                 assert!(data.weapon_rsc[i].is_null());
-                assert!(data.ship[i].is_null());
-                assert!(data.weapon[i].is_null());
-                assert!(data.special[i].is_null());
+                assert!(data.ship.view(i).is_absent());
+                assert!(data.weapon.view(i).is_absent());
+                assert!(data.special.view(i).is_absent());
             }
             assert_eq!(
                 CStr::from_ptr(data.captain_control.captain_rsc),
@@ -577,10 +526,10 @@ impl<'a> Skiff<'a> {
     /// A skiff at (100, 200) facing 6, flying on its ship frames.
     unsafe fn new(battle: &'a Battle) -> Self {
         let mut fleet = Fleet::new(battle, 0);
-        let mut ship_frames = FrameSet::new(16);
-        let mut warp_frames = FrameSet::new(8);
-        fleet.fixture.descriptor_mut().ship_data.ship[0] = ship_frames.frame(0);
-        fleet.fixture.descriptor_mut().ship_data.special[0] = warp_frames.frame(0);
+        let mut ship_frames = FrameSet::with_bounds(16, [0, 0]);
+        let mut warp_frames = FrameSet::with_bounds(8, [0, 0]);
+        fleet.fixture.descriptor_mut().ship_data.ship = ship_frames.array();
+        fleet.fixture.descriptor_mut().ship_data.special = warp_frames.array();
         let ship = fleet.spawn_ship(0, 100, 200);
         fleet.fixture.ship_mut().ShipFacing = 6;
         let ship_array = (&raw mut fleet.fixture.descriptor_mut().ship_data.ship).cast::<FRAME>();
@@ -601,11 +550,16 @@ impl<'a> Skiff<'a> {
     }
 
     unsafe fn warp_array(&mut self) -> *mut FRAME {
-        (&raw mut self.fleet.fixture.descriptor_mut().ship_data.special).cast()
+        self.fleet
+            .fixture
+            .descriptor_mut()
+            .ship_data
+            .special
+            .as_ptr()
     }
 
     unsafe fn ship_array(&mut self) -> *mut FRAME {
-        (&raw mut self.fleet.fixture.descriptor_mut().ship_data.ship).cast()
+        self.fleet.fixture.descriptor_mut().ship_data.ship.as_ptr()
     }
 }
 

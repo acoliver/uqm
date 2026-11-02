@@ -29,6 +29,7 @@ impl Battle {
 
     /// Start a battle, including encounters with no Sa-Matra descriptor.
     pub fn initialize(&mut self) {
+        self.kernel.begin_battle();
         self.terminal_outcome = None;
     }
 

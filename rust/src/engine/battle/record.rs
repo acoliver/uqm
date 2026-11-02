@@ -80,7 +80,7 @@ mod abi {
     pub use super::RaceDescriptor as race_desc;
 
     #[repr(C)]
-    #[derive(Debug, Clone)]
+    #[derive(Debug)]
     pub struct STARSHIP {
         pub SpeciesID: SPECIES_ID,
         pub captains_name_index: BYTE,
@@ -192,7 +192,7 @@ mod abi {
     }
 
     #[repr(C)]
-    #[derive(Debug, Copy, Clone)]
+    #[derive(Debug)]
     pub struct DATA_STUFF {
         pub ship_rsc: [RESOURCE; 3usize],
         pub weapon_rsc: [RESOURCE; 3usize],
@@ -200,9 +200,9 @@ mod abi {
         pub captain_control: CAPTAIN_STUFF,
         pub victory_ditty_rsc: RESOURCE,
         pub ship_sounds_rsc: RESOURCE,
-        pub ship: [FRAME; 3usize],
-        pub weapon: [FRAME; 3usize],
-        pub special: [FRAME; 3usize],
+        pub ship: super::super::frames::FrameArray,
+        pub weapon: super::super::frames::FrameArray,
+        pub special: super::super::frames::FrameArray,
         pub victory_ditty: MUSIC_REF,
         pub ship_sounds: SOUND,
     }
@@ -824,7 +824,7 @@ mod zero_descriptor_tests {
 
 #[repr(C)]
 #[repr(align(16))]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug)]
 pub struct RaceDescriptor {
     pub ship_info: SHIP_INFO,
     pub fleet: FLEET_STUFF,

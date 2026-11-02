@@ -93,7 +93,6 @@ unsafe fn battle_network() -> BattleNetwork {
             (*context).net = Some(net.clone());
         }
     }
-    crate::engine::battle::record::Kernel::current().begin_battle();
     (battle, net, had_net)
 }
 

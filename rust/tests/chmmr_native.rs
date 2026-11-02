@@ -123,9 +123,9 @@ fn descriptor_matches_the_entire_c_template_and_init_reinstalls_callbacks() {
                     CStr::from_ptr(d.ship_data.special_rsc[i]).to_str().unwrap(),
                     format!("ship.chmmr.graphics.satellite.{size}")
                 );
-                assert!(d.ship_data.ship[i].is_null());
-                assert!(d.ship_data.weapon[i].is_null());
-                assert!(d.ship_data.special[i].is_null());
+                assert!(d.ship_data.ship.view(i).is_absent());
+                assert!(d.ship_data.weapon.view(i).is_absent());
+                assert!(d.ship_data.special.view(i).is_absent());
             }
             let captain = d.ship_data.captain_control;
             assert_eq!(
@@ -277,7 +277,7 @@ fn laser_death_obeys_range_byte_gate_count_draw_and_animation() {
                         assert_eq!(frame_index((*spot).current.image.frame), 32);
                         assert_eq!(
                             (*spot).current.image.farray,
-                            ship.descriptor_mut().ship_data.weapon.as_mut_ptr()
+                            ship.descriptor_mut().ship_data.weapon.as_ptr()
                         );
                         assert_eq!((*spot).life, 9);
                         assert_eq!((*spot).thrust, 0);

@@ -49,9 +49,19 @@ fn drone_descriptor_preserves_resources_stats_and_absent_callbacks() {
         assert!(d.ship_data.ship_rsc.into_iter().all(|p| p.is_null()));
         assert!(d.ship_data.weapon_rsc.into_iter().all(|p| p.is_null()));
         assert!(d.ship_data.special_rsc.into_iter().all(|p| p.is_null()));
-        assert!(d.ship_data.ship.into_iter().all(|p| p.is_null()));
-        assert!(d.ship_data.weapon.into_iter().all(|p| p.is_null()));
-        assert!(d.ship_data.special.into_iter().all(|p| p.is_null()));
+        assert!(d.ship_data.ship.views().into_iter().all(|p| p.is_absent()));
+        assert!(d
+            .ship_data
+            .weapon
+            .views()
+            .into_iter()
+            .all(|p| p.is_absent()));
+        assert!(d
+            .ship_data
+            .special
+            .views()
+            .into_iter()
+            .all(|p| p.is_absent()));
         let captain = d.ship_data.captain_control;
         assert!(captain.captain_rsc.is_null());
         assert!(captain.background.is_null());

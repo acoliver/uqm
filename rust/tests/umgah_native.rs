@@ -145,9 +145,9 @@ fn descriptor_matches_all_c_initializer_fields_and_resources() {
                     format!("ship.umgah.graphics.cone.{size}")
                 );
                 assert!(
-                    d.ship_data.ship[i].is_null()
-                        && d.ship_data.weapon[i].is_null()
-                        && d.ship_data.special[i].is_null()
+                    d.ship_data.ship.view(i).is_absent()
+                        && d.ship_data.weapon.view(i).is_absent()
+                        && d.ship_data.special.view(i).is_absent()
                 );
             }
             assert_eq!(
@@ -209,7 +209,10 @@ fn per_init_descriptor_copies_isolate_energy_resources_animation_and_custom_data
                 (*battle::element(h)).preprocess_func.unwrap(),
                 battle::element(h),
             );
-            assert_eq!(frame_index(first.descriptor_mut().ship_data.special[0]), 21);
+            assert_eq!(
+                frame_index(first.descriptor_mut().ship_data.special.view(0).raw()),
+                21
+            );
             first.descriptor_mut().ship_info.energy_level = 1;
             first.descriptor_mut().characteristics.special_wait = 77;
             let mut second =
@@ -221,12 +224,18 @@ fn per_init_descriptor_copies_isolate_energy_resources_animation_and_custom_data
             assert!(previous_facing(&mut second).is_none());
             assert_eq!(second.descriptor_mut().ship_info.energy_level, 30);
             assert_eq!(second.descriptor_mut().characteristics.special_wait, 2);
-            assert_eq!(frame_index(second.descriptor_mut().ship_data.special[0]), 0);
+            assert_eq!(
+                frame_index(second.descriptor_mut().ship_data.special.view(0).raw()),
+                0
+            );
             second.ship_mut().ShipFacing = 9;
             let other = fire(&mut second);
             assert_ne!(previous_facing(&mut first), previous_facing(&mut second));
             assert_eq!(previous_facing(&mut first), data);
-            assert_eq!(frame_index(first.descriptor_mut().ship_data.special[0]), 21);
+            assert_eq!(
+                frame_index(first.descriptor_mut().ship_data.special.view(0).raw()),
+                21
+            );
             first.uninit();
             assert!(previous_facing(&mut first).is_none());
             assert!(!previous_facing(&mut second).is_none());
@@ -235,7 +244,7 @@ fn per_init_descriptor_copies_isolate_energy_resources_animation_and_custom_data
                 battle::element(other),
             );
             assert_eq!(
-                frame_index(second.descriptor_mut().ship_data.special[0]),
+                frame_index(second.descriptor_mut().ship_data.special.view(0).raw()),
                 25
             );
             battle_context::dispose(h);
@@ -287,7 +296,7 @@ fn cone_initialization_fixes_intersection_and_does_not_inherit_velocity() {
             assert_eq!((*cone).next.image.frame, (*cone).current.image.frame);
             assert_eq!(
                 (*cone).next.image.farray,
-                (&raw mut ship.descriptor_mut().ship_data.special).cast()
+                ship.descriptor_mut().ship_data.special.as_ptr()
             );
             let i = (*cone).IntersectControl;
             assert_eq!(
@@ -325,7 +334,7 @@ fn held_cone_advances_by_16_preserves_phase_and_resets_only_when_facing_changes(
                     hooks::invoke_element_pointer((*cone).preprocess_func.unwrap(), cone)
                 });
                 assert_eq!(
-                    frame_index(ship.descriptor_mut().ship_data.special[0]),
+                    frame_index(ship.descriptor_mut().ship_data.special.view(0).raw()),
                     (index + 16) % 48
                 );
                 assert_eq!((*cone).next.image.frame, old_frame);
@@ -383,11 +392,11 @@ fn appearance_and_uninit_free_only_the_instance_custom_data_and_are_repeatable()
             let h = fire(&mut ship);
             battle_context::dispose(h);
             assert!(!previous_facing(&mut ship).is_none());
-            let frame = ship.descriptor_mut().ship_data.special[0];
+            let frame = ship.descriptor_mut().ship_data.special.view(0).raw();
             ship.uninit();
             ship.uninit();
             assert!(previous_facing(&mut ship).is_none());
-            assert_eq!(ship.descriptor_mut().ship_data.special[0], frame);
+            assert_eq!(ship.descriptor_mut().ship_data.special.view(0).raw(), frame);
         }
     })
 }
@@ -403,12 +412,18 @@ fn failed_cone_allocation_still_updates_private_facing_and_returns_one_slot() {
             assert!(with_rng(5, 0, || fire(&mut ship)).is_null());
             assert!(!previous_facing(&mut ship).is_none());
             assert_eq!(previous_facing(&mut ship).unwrap(), 15);
-            assert_eq!(frame_index(ship.descriptor_mut().ship_data.special[0]), 15);
+            assert_eq!(
+                frame_index(ship.descriptor_mut().ship_data.special.view(0).raw()),
+                15
+            );
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 30);
             ship.ship_mut().ShipFacing = 4;
             assert!(fire(&mut ship).is_null());
             assert_eq!(previous_facing(&mut ship).unwrap(), 4);
-            assert_eq!(frame_index(ship.descriptor_mut().ship_data.special[0]), 4);
+            assert_eq!(
+                frame_index(ship.descriptor_mut().ship_data.special.view(0).raw()),
+                4
+            );
             assert_eq!(queued(), vec![ship.handle]);
         }
     })

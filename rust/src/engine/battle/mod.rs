@@ -1,6 +1,7 @@
 pub(crate) mod access;
 pub mod context;
 pub(crate) mod display;
+pub mod frames;
 pub mod hooks;
 pub mod link_queue;
 pub mod net;

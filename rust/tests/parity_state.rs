@@ -16,6 +16,7 @@ use uqm_rust::{
         netplay::CrcState,
     },
     collections::observation::{self, Event},
+    engine::battle::{frames::FrameArray, views::Frame},
     graphics::native_abi::{drawable_desc, frame_desc},
     ships::native::abi::*,
 };
@@ -596,9 +597,15 @@ fn descriptor_assets(directory: &Path) {
     descriptor.ship_data.ship_rsc = [c"test.ship".as_ptr(); 3];
     descriptor.ship_data.weapon_rsc = [c"test.weapon".as_ptr(); 3];
     descriptor.ship_data.special_rsc = [c"test.special".as_ptr(); 3];
-    descriptor.ship_data.ship = [frame_pointer; 3];
-    descriptor.ship_data.weapon = [frame_pointer; 3];
-    descriptor.ship_data.special = [frame_pointer; 3];
+    // SAFETY: this fixture detaches every consumer before its stack drawable is dropped.
+    descriptor.ship_data.ship =
+        FrameArray::retain([unsafe { Frame::from_native(frame_pointer) }; 3], ());
+    // SAFETY: this fixture detaches every consumer before its stack drawable is dropped.
+    descriptor.ship_data.weapon =
+        FrameArray::retain([unsafe { Frame::from_native(frame_pointer) }; 3], ());
+    // SAFETY: this fixture detaches every consumer before its stack drawable is dropped.
+    descriptor.ship_data.special =
+        FrameArray::retain([unsafe { Frame::from_native(frame_pointer) }; 3], ());
     descriptor.ship_data.captain_control = CAPTAIN_STUFF {
         captain_rsc: c"test.captain".as_ptr(),
         background: frame_pointer,
@@ -719,10 +726,14 @@ fn reused_owner_and_group_identities(directory: &Path) {
     }
 }
 
-fn observe_test_frames(views: &[FRAME], role: &str) {
+fn observe_test_frames(views: &FrameArray, role: &str) {
     observation::record(Event::FrameSet {
         address: views.as_ptr() as usize,
-        frames: views.iter().map(|frame| *frame as usize).collect(),
+        frames: views
+            .views()
+            .iter()
+            .map(|frame| frame.raw() as usize)
+            .collect(),
         role: role.into(),
     });
 }
@@ -742,10 +753,14 @@ fn frameset_and_media_identity(directory: &Path) {
     second.parent = &mut drawable;
     first.Index = 1;
     second.Index = 2;
-    descriptor.ship_data.ship = [ptr::from_mut(&mut first).cast(); 3];
+    // SAFETY: all array consumers are detached before these stack frames are dropped.
+    descriptor.ship_data.ship = FrameArray::retain(
+        [unsafe { Frame::from_native(ptr::from_mut(&mut first).cast()) }; 3],
+        (),
+    );
     let mut element = graph::ElementRecord::new();
     ship.SpeciesID = SPECIES_ID_EARTHLING_ID;
-    let mut descriptor = install_descriptor(&mut ship, descriptor);
+    let descriptor = install_descriptor(&mut ship, descriptor);
     element.parent = uqm_rust::engine::battle::Parent::Ship(ship.ship_id);
     // SAFETY: the stack graph stays live through all snapshots and is detached below.
     unsafe {
@@ -764,20 +779,24 @@ fn frameset_and_media_identity(directory: &Path) {
     observe_test_frames(&descriptor.ship_data.ship, "test-ship");
     observation::assign_set(
         &mut element.current.farray,
-        descriptor.ship_data.ship.as_mut_ptr().cast(),
+        descriptor.ship_data.ship.as_ptr().cast(),
         None,
     );
     let (before, _) = snapshot(directory);
-    observation::assign_view(
-        &mut descriptor.ship_data.ship[1],
-        ptr::from_mut(&mut second).cast(),
-    );
+    // SAFETY: the fixture retains the same drawable and its array through the next snapshot.
+    unsafe {
+        observation::assign_view(
+            &mut *descriptor.ship_data.ship.as_ptr().add(1),
+            ptr::from_mut(&mut second).cast(),
+        );
+    }
     let (after, _) = snapshot(directory);
     assert_eq!(before["elements.0.current.farray.0.index"], "1");
     assert_eq!(after["elements.0.current.farray.0.index"], "1");
     assert_eq!(before["elements.0.current.farray.1.index"], "1");
     assert_eq!(after["elements.0.current.farray.1.index"], "2");
-    let replacement = *descriptor;
+    let mut replacement = RACE_DESC::EMPTY;
+    replacement.ship_data.ship = FrameArray::retain(descriptor.ship_data.ship.views(), ());
     let ship = &mut ship;
     let _outgoing_descriptor = ship
         .descriptor
@@ -788,7 +807,7 @@ fn frameset_and_media_identity(directory: &Path) {
     observe_test_frames(&replacement.ship_data.ship, "replacement-ship");
     observation::assign_set(
         &mut element.next.farray,
-        replacement.ship_data.ship.as_mut_ptr().cast(),
+        replacement.ship_data.ship.as_ptr().cast(),
         None,
     );
     let (outgoing, _) = snapshot(directory);

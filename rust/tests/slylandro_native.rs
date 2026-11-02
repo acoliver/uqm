@@ -226,9 +226,9 @@ fn descriptor_matches_all_c_stats_resources_and_callbacks() {
             );
             assert!(d.ship_data.weapon_rsc[i].is_null() && d.ship_data.special_rsc[i].is_null());
             assert!(
-                d.ship_data.ship[i].is_null()
-                    && d.ship_data.weapon[i].is_null()
-                    && d.ship_data.special[i].is_null()
+                d.ship_data.ship.view(i).is_absent()
+                    && d.ship_data.weapon.view(i).is_absent()
+                    && d.ship_data.special.view(i).is_absent()
             );
         }
         let cap = d.ship_data.captain_control;

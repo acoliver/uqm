@@ -73,77 +73,8 @@ unsafe fn set_recruited(value: bool) {
     );
 }
 
-#[repr(C)]
-struct FrameDesc {
-    kind: u16,
-    index: u16,
-    hot_spot: [i16; 2],
-    bounds: [i16; 2],
-    image: *mut c_void,
-    parent: *mut DrawableDesc,
-}
-#[repr(C)]
-struct DrawableDesc {
-    flags: u8,
-    max_index: u16,
-    frame: *mut FrameDesc,
-}
-struct FrameSet {
-    _drawable: Box<DrawableDesc>,
-    frames: Vec<FrameDesc>,
-    image: *mut c_void,
-}
-impl FrameSet {
-    fn new(count: u16) -> Self {
-        let mut drawable = Box::new(DrawableDesc {
-            flags: 0,
-            max_index: count - 1,
-            frame: ptr::null_mut(),
-        });
-        let parent = &raw mut *drawable;
-        let mut frames: Vec<_> = (0..count)
-            .map(|index| FrameDesc {
-                kind: 0,
-                index,
-                hot_spot: [0, 0],
-                bounds: [4, 4],
-                image: ptr::null_mut(),
-                parent,
-            })
-            .collect();
-        drawable.frame = frames.as_mut_ptr();
-        Self {
-            _drawable: drawable,
-            frames,
-            image: ptr::null_mut(),
-        }
-    }
-    fn frame(&self, index: usize) -> FRAME {
-        (&raw const self.frames[index]).cast_mut().cast()
-    }
-    unsafe fn make_opaque(&mut self) {
-        let canvas = TFB_DrawCanvas_New_Paletted(4, 4, ptr::null_mut(), -1);
-        assert!(!canvas.is_null());
-        assert_ne!(
-            TFB_DrawCanvas_SetPixelIndexes(canvas, [1u8; 16].as_ptr(), 4, 4),
-            0
-        );
-        self.image = TFB_DrawImage_New(canvas).cast();
-        assert!(!self.image.is_null());
-        for frame in &mut self.frames {
-            frame.image = self.image;
-        }
-    }
-}
-impl Drop for FrameSet {
-    fn drop(&mut self) {
-        if !self.image.is_null() {
-            unsafe {
-                TFB_DrawImage_Delete(self.image.cast());
-            }
-        }
-    }
-}
+use shared::FrameSet;
+
 use shared::PoolShip;
 struct Ship<'a> {
     inner: shared::Ship<'a>,
@@ -160,13 +91,13 @@ impl<'a> Ship<'a> {
         let ship_frames = FrameSet::new(16);
         let weapon_frames = FrameSet::new(16);
         let desc = inner.descriptor_mut();
-        desc.ship_data.ship = [ship_frames.frame(0); 3];
-        desc.ship_data.weapon = [weapon_frames.frame(0); 3];
+        desc.ship_data.ship = ship_frames.array();
+        desc.ship_data.weapon = weapon_frames.array();
         let special_frames = FrameSet::new(10);
         let captain = FrameSet::new(20);
-        desc.ship_data.special = [special_frames.frame(0); 3];
+        desc.ship_data.special = special_frames.array();
         desc.ship_data.captain_control.special = captain.frame(14);
-        let frames = (&raw mut desc.ship_data.ship).cast();
+        let frames = desc.ship_data.ship.as_ptr();
         let el = inner.element_mut();
         el.current.image.farray = frames;
         el.current.image.frame = ship_frames.frame(0);
@@ -282,7 +213,7 @@ fn complete_descriptor_and_damaged_tanaka_katana_variant_are_fresh_each_call() {
             set_recruited(recruited);
             let mut original = shared::descriptor(SPECIES_ID_SHOFIXTI_ID);
             let p = &raw mut original;
-            let d = *p;
+            let d = &*p;
             assert_eq!(d.ship_info.ship_flags, FIRES_FORE as u16);
             assert_eq!(d.ship_info.ship_cost, 5);
             assert_eq!(
@@ -360,9 +291,9 @@ fn complete_descriptor_and_damaged_tanaka_katana_variant_are_fresh_each_call() {
                     );
                 }
                 assert!(
-                    d.ship_data.ship[i].is_null()
-                        && d.ship_data.weapon[i].is_null()
-                        && d.ship_data.special[i].is_null()
+                    d.ship_data.ship.view(i).is_absent()
+                        && d.ship_data.weapon.view(i).is_absent()
+                        && d.ship_data.special.view(i).is_absent()
                 );
             }
             assert_eq!(
@@ -442,7 +373,7 @@ fn darts_use_next_location_exact_facing_offset_speed_and_failure_count() {
             );
             assert_eq!(
                 (*dart).current.image.farray,
-                (&raw mut ship.inner.descriptor_mut().ship_data.weapon).cast()
+                ship.inner.descriptor_mut().ship_data.weapon.as_ptr()
             );
             assert!(
                 (*dart).preprocess_func.is_none()
@@ -501,10 +432,10 @@ fn glory_ai_toggles_the_switch_and_checks_all_deterministic_threat_branches() {
                 .ship_data
                 .captain_control
                 .special = ship.captain.frame(20 - remaining);
-            ship.inner.descriptor_mut().ship_data.special[0] = if special_available {
-                ship.special_frames.frame(0)
+            ship.inner.descriptor_mut().ship_data.special = if special_available {
+                ship.special_frames.array()
             } else {
-                ptr::null_mut()
+                uqm_rust::engine::battle::frames::FrameArray::EMPTY
             };
             ship.inner.ship_mut().ship_input_state =
                 WEAPON as u8 | if start { SPECIAL as u8 } else { 0 };
@@ -810,7 +741,7 @@ fn glory_flash_switch_and_explosion_color_sequence_use_twelve_frame_ship_death()
         );
         assert_eq!(
             (*explosion).current.image.farray,
-            (&raw mut ship.inner.descriptor_mut().ship_data.special).cast()
+            ship.inner.descriptor_mut().ship_data.special.as_ptr()
         );
         assert_eq!(
             (
@@ -965,9 +896,10 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                         } else {
                             other.inner.descriptor_mut()
                         };
-                        desc.ship_data.ship = [ptr::null_mut(); 3];
-                        desc.ship_data.weapon = [ptr::null_mut(); 3];
-                        desc.ship_data.special = [ptr::null_mut(); 3];
+                        desc.ship_data.ship = uqm_rust::engine::battle::frames::FrameArray::EMPTY;
+                        desc.ship_data.weapon = uqm_rust::engine::battle::frames::FrameArray::EMPTY;
+                        desc.ship_data.special =
+                            uqm_rust::engine::battle::frames::FrameArray::EMPTY;
                         uqm_rust::app::bridge::enter(|cx| {
                             let outgoing = cx.elements().id(outgoing.cast()).unwrap();
                             transitions::new_ship_with_picker(cx, outgoing, |cx, last, player| {

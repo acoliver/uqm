@@ -139,9 +139,9 @@ fn descriptor_matches_all_c_initializer_fields_and_resources() {
                     );
                 }
                 assert!(
-                    d.ship_data.ship[i].is_null()
-                        && d.ship_data.weapon[i].is_null()
-                        && d.ship_data.special[i].is_null()
+                    d.ship_data.ship.view(i).is_absent()
+                        && d.ship_data.weapon.view(i).is_absent()
+                        && d.ship_data.special.view(i).is_absent()
                 );
             }
             let captain = d.ship_data.captain_control;
@@ -220,7 +220,7 @@ fn horn_uses_next_location_exact_facing_speed_and_offsets_without_inheriting_vel
                 assert_eq!((*e).current.image.frame, ship.raw_frame(1, facing as usize));
                 assert_eq!(
                     (*e).current.image.farray,
-                    (&raw mut ship.descriptor_mut().ship_data.weapon).cast()
+                    ship.descriptor_mut().ship_data.weapon.as_ptr()
                 );
                 assert_eq!(
                     (*e).state_flags,
@@ -339,11 +339,18 @@ fn boost_uses_temporary_characteristics_and_preserves_the_inertial_thrust_result
                 ship.ship_mut().old_status_flags = old as u16;
                 ship.ship_mut().cur_status_flags = (SPECIAL | THRUST | status) as u16;
                 (*ship.ptr()).thrust = wait;
-                let mut expected_desc = *ship.descriptor_mut();
+                let mut expected_desc = battle::descriptor(SPECIES_ID_THRADDASH_ID);
+                expected_desc.characteristics = ship.descriptor_mut().characteristics;
+                expected_desc.ship_info = ship.descriptor_mut().ship_info;
                 expected_desc.characteristics.max_thrust = 72;
                 expected_desc.characteristics.thrust_increment = 12;
                 let mut expected_ss = PoolShip::new(0);
-                *expected_ss = ship.ship_mut().clone();
+                expected_ss.SpeciesID = ship.ship_mut().SpeciesID;
+                expected_ss.hShip = ship.ship_mut().hShip;
+                uqm_rust::app::bridge::enter(|cx| {
+                    let state = cx.ship_state(ship.ship_id);
+                    *cx.ship_state_mut(expected_ss.ship_id) = state;
+                });
                 expected_ss.descriptor = Some(Box::new(expected_desc));
                 if old == 0 {
                     expected_ss.cur_status_flags &=

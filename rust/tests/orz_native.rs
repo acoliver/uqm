@@ -230,9 +230,9 @@ fn descriptor_preserves_c_resources_characteristics_and_callback_abi() {
                     CStr::from_ptr(d.ship_data.special_rsc[i]).to_str().unwrap(),
                     format!("ship.orz.graphics.turret.{size}")
                 );
-                assert!(d.ship_data.ship[i].is_null());
-                assert!(d.ship_data.weapon[i].is_null());
-                assert!(d.ship_data.special[i].is_null());
+                assert!(d.ship_data.ship.view(i).is_absent());
+                assert!(d.ship_data.weapon.view(i).is_absent());
+                assert!(d.ship_data.special.view(i).is_absent());
             }
             assert_eq!(
                 CStr::from_ptr(d.ship_data.captain_control.captain_rsc),
@@ -255,7 +255,7 @@ fn descriptor_preserves_c_resources_characteristics_and_callback_abi() {
             assert!(race.uninit.is_none());
             let _: ElementFn = intruder_preprocess;
             let _: CollisionFn = marine_collision;
-            let mut changed = d;
+            let mut changed = battle::descriptor(SPECIES_ID_ORZ_ID);
             changed.characteristics.turn_wait = 99;
             changed.ship_info.crew_level = 0;
             assert_eq!(changed.characteristics.turn_wait, 99);
@@ -286,7 +286,7 @@ fn appearing_turret_is_inserted_immediately_after_ship_and_inputs_suppress_hull_
             assert_eq!((*turret).current.image.frame, ship.raw_frame(2, 7));
             assert_eq!(
                 (*turret).current.image.farray,
-                (&raw mut ship.descriptor_mut().ship_data.special).cast()
+                ship.descriptor_mut().ship_data.special.as_ptr()
             );
             assert!((*turret).postprocess_func.is_some());
             assert!((*turret).preprocess_func.is_none());
@@ -350,7 +350,7 @@ fn howitzer_rotates_before_firing_with_byte_wrap_and_exact_missile_fields() {
                 );
                 assert_eq!(
                     (*missile).current.image.farray,
-                    (&raw mut ship.descriptor_mut().ship_data.weapon).cast()
+                    ship.descriptor_mut().ship_data.weapon.as_ptr()
                 );
                 assert_eq!(
                     velocity_fields(&(*missile).velocity),
@@ -580,7 +580,7 @@ fn marines_launch_at_rear_with_exact_state_and_cost_only_after_allocation() {
                 assert_eq!((*marine).current.image.frame, ship.raw_frame(2, 20));
                 assert_eq!(
                     (*marine).current.image.farray,
-                    (&raw mut ship.descriptor_mut().ship_data.special).cast()
+                    ship.descriptor_mut().ship_data.special.as_ptr()
                 );
                 assert_eq!(
                     (*marine).parent,
@@ -637,8 +637,7 @@ fn marine_limit_counts_only_live_matching_nonfinite_nondisappearing_elements() {
             }
             (*marines[2]).life = 0;
             ship.launch();
-            (*marines[3]).current.image.farray =
-                (&raw mut enemy.descriptor_mut().ship_data.special).cast();
+            (*marines[3]).current.image.farray = enemy.descriptor_mut().ship_data.special.as_ptr();
             ship.launch();
             assert_eq!(ship.descriptor_mut().ship_info.crew_level, 4);
         }

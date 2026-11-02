@@ -7,6 +7,7 @@ fn terminal_outcome_survives_descriptor_teardown_until_the_next_battle() {
             use uqm_rust::automation::samatra::observe;
             uqm_rust::state::ffi::rust_init_game_state();
             GlobData.Game_state.CurrentActivity = IN_LAST_BATTLE as u16;
+            uqm_rust::app::bridge::battle(|battle| battle.initialize());
             let mut ship = boss(&battle);
             let expected = uqm_rust::ships::races::samatra::observation::Events {
                 generation: 1,

@@ -46,57 +46,7 @@ impl Battle {
 }
 
 // The same engine-readable drawable layout used by the other native race tests.
-#[repr(C)]
-struct FrameDesc {
-    kind: u16,
-    index: u16,
-    hot_spot: [i16; 2],
-    bounds: [i16; 2],
-    image: *mut c_void,
-    parent: *mut DrawableDesc,
-}
-
-#[repr(C)]
-struct DrawableDesc {
-    flags: u8,
-    max_index: u16,
-    frame: *mut FrameDesc,
-}
-
-struct FrameSet {
-    _drawable: Box<DrawableDesc>,
-    frames: Vec<FrameDesc>,
-}
-
-impl FrameSet {
-    fn new(count: u16) -> Self {
-        let mut drawable = Box::new(DrawableDesc {
-            flags: 0,
-            max_index: count - 1,
-            frame: ptr::null_mut(),
-        });
-        let parent = &raw mut *drawable;
-        let mut frames: Vec<_> = (0..count)
-            .map(|index| FrameDesc {
-                kind: 0,
-                index,
-                hot_spot: [0, 0],
-                bounds: [4, 4],
-                image: ptr::null_mut(),
-                parent,
-            })
-            .collect();
-        drawable.frame = frames.as_mut_ptr();
-        Self {
-            _drawable: drawable,
-            frames,
-        }
-    }
-
-    fn frame(&self, index: usize) -> FRAME {
-        (&raw const self.frames[index]).cast_mut().cast()
-    }
-}
+use shared::FrameSet;
 
 /// Owns a string table so `GetSoundCount` reports a real size.
 struct Sounds(*mut StringTable);
@@ -163,9 +113,9 @@ impl<'a> Ship<'a> {
         let ship_frames = FrameSet::new(16);
         let weapon_frames = FrameSet::new(8);
         let desc = inner.descriptor_mut();
-        desc.ship_data.ship = [ship_frames.frame(0); 3];
-        desc.ship_data.weapon = [weapon_frames.frame(0); 3];
-        let frames = (&raw mut desc.ship_data.ship).cast();
+        desc.ship_data.ship = ship_frames.array();
+        desc.ship_data.weapon = weapon_frames.array();
+        let frames = desc.ship_data.ship.as_ptr();
         let el = inner.element_mut();
         el.current.image.farray = frames;
         el.current.image.frame = ship_frames.frame(0);
@@ -492,9 +442,9 @@ fn descriptor_matches_every_c_initializer_field() {
                     format!("ship.pkunk.graphics.bug.{size}")
                 );
                 assert!(d.ship_data.special_rsc[i].is_null());
-                assert!(d.ship_data.ship[i].is_null());
-                assert!(d.ship_data.weapon[i].is_null());
-                assert!(d.ship_data.special[i].is_null());
+                assert!(d.ship_data.ship.view(i).is_absent());
+                assert!(d.ship_data.weapon.view(i).is_absent());
+                assert!(d.ship_data.special.view(i).is_absent());
             }
             let captain = d.ship_data.captain_control;
             assert_eq!(
@@ -643,7 +593,7 @@ fn bug_missiles_launch_fore_left_and_right_inheriting_ship_velocity() {
                         assert_eq!((*m).current.image.frame, ship.weapon_frames.frame(0));
                         assert_eq!(
                             (*m).current.image.farray,
-                            (&raw mut ship.inner.descriptor_mut().ship_data.weapon).cast()
+                            ship.inner.descriptor_mut().ship_data.weapon.as_ptr()
                         );
                         assert_eq!((*prim(m)).Type, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
                         assert!((*m).collision_func.is_some());
@@ -946,7 +896,7 @@ fn reincarnation_ends_when_life_span_returns_to_normal() {
             (*el).life = NORMAL_LIFE as COUNT;
             (*el).current.image.frame = ship.ship_frames.frame(5);
             (*el).next.image.frame = ship.ship_frames.frame(9);
-            (*el).next.image.farray = (&raw mut ship.inner.descriptor_mut().ship_data.ship).cast();
+            (*el).next.image.farray = ship.inner.descriptor_mut().ship_data.ship.as_ptr();
             (*el).current.location = POINT { x: 400, y: -800 };
             (*el).next.location = POINT { x: 1201, y: 77 };
             (*el).velocity = mem::zeroed();
@@ -1341,7 +1291,7 @@ fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
             assert_eq!(ship.inner.ship_mut().ShipFacing, facing);
             assert_eq!(
                 (*el).current.image.farray,
-                (&raw mut ship.inner.descriptor_mut().ship_data.ship).cast()
+                ship.inner.descriptor_mut().ship_data.ship.as_ptr()
             );
             assert_eq!(frame_index((*el).current.image.frame), facing);
             assert_eq!((*prim(el)).Type, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
@@ -1400,8 +1350,7 @@ fn new_pkunk_redraws_its_position_while_a_planet_pulls_on_it() {
             (*planet).mass = 200;
             (*planet).current.location = POINT { x: x1, y: y1 };
             (*planet).next = (*planet).current;
-            (*planet).current.image.farray =
-                (&raw mut ship.inner.descriptor_mut().ship_data.ship).cast();
+            (*planet).current.image.farray = ship.inner.descriptor_mut().ship_data.ship.as_ptr();
             (*planet).current.image.frame = ship.ship_frames.frame(0);
             (*prim(planet)).Type = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
             shared::put(planet_handle);

@@ -112,9 +112,9 @@ fn avenger_descriptor_matches_the_c_template() {
                 assert_eq!(CStr::from_ptr(data.ship_rsc[i]), expected_ship[i]);
                 assert_eq!(CStr::from_ptr(data.weapon_rsc[i]), expected_weapon[i]);
                 assert!(data.special_rsc[i].is_null());
-                assert!(data.ship[i].is_null());
-                assert!(data.weapon[i].is_null());
-                assert!(data.special[i].is_null());
+                assert!(data.ship.view(i).is_absent());
+                assert!(data.weapon.view(i).is_absent());
+                assert!(data.special.view(i).is_absent());
             }
             assert_eq!(
                 CStr::from_ptr(data.captain_control.captain_rsc),
@@ -147,7 +147,7 @@ fn flame_inherits_the_ship_velocity_and_starts_on_the_first_frame() {
             uqm_rust::state::ffi::rust_init_game_state();
             let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
             let flame_frames = FrameSet::with_bounds(16, [0, 0]);
-            fleet.descriptor_mut().ship_data.weapon[0] = flame_frames.frame(0);
+            fleet.descriptor_mut().ship_data.weapon = flame_frames.array();
             let ship = spawn_ship(&mut fleet, 400, 500);
             // Facing 4 is angle 16, along +x (angle 0 points up the screen).
             fleet.ship_mut().ShipFacing = 4;
@@ -193,7 +193,7 @@ fn flame_advances_its_animation_every_next_turn_frames() {
             uqm_rust::state::ffi::rust_init_game_state();
             let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
             let flame_frames = FrameSet::with_bounds(4, [0, 0]);
-            fleet.descriptor_mut().ship_data.weapon[0] = flame_frames.frame(0);
+            fleet.descriptor_mut().ship_data.weapon = flame_frames.array();
             spawn_ship(&mut fleet, 0, 0);
             let mut out = [ptr::null_mut()];
             out[0] = fleet.weapon_handles(1)[0];

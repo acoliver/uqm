@@ -2,7 +2,7 @@
     dead_code,
     reason = "shared fixture API used by independent race test binaries"
 )]
-use std::{ffi::c_void, mem, ptr};
+use std::{cell::RefCell, ffi::c_void, mem, ptr, rc::Rc};
 use uqm_rust::battle::process_native::InitDisplayList;
 use uqm_rust::engine::battle::schema::HELEMENT;
 use uqm_rust::{
@@ -212,9 +212,9 @@ impl<'a> Ship<'a> {
         unsafe {
             let mut ship = Self::bare(battle, species, player);
             let frames = counts.map(|count| FrameSet::with_bounds(count, bounds));
-            ship.descriptor_mut().ship_data.ship = [frames[0].frame(0); 3];
-            ship.descriptor_mut().ship_data.weapon = [frames[1].frame(0); 3];
-            ship.descriptor_mut().ship_data.special = [frames[2].frame(0); 3];
+            ship.descriptor_mut().ship_data.ship = frames[0].array();
+            ship.descriptor_mut().ship_data.weapon = frames[1].array();
+            ship.descriptor_mut().ship_data.special = frames[2].array();
             ship.element_mut().collision_func =
                 Some(uqm_rust::engine::battle::CollisionHook::Native(
                     uqm_rust::battle::ship_native::collision,
@@ -254,6 +254,8 @@ impl<'a> Ship<'a> {
         self.frames
             .as_mut()
             .unwrap_or_else(|| panic!("fixture frames"))[role]
+            .0
+            .borrow_mut()
             .frames[index]
             .bounds = bounds;
     }
@@ -292,6 +294,8 @@ impl<'a> Ship<'a> {
         self.frames
             .as_mut()
             .unwrap_or_else(|| panic!("loaded fixture frames"))[role]
+            .0
+            .borrow_mut()
             .frames[index]
             .hot_spot = hot_spot;
     }
@@ -397,14 +401,10 @@ impl<'a> Ship<'a> {
         }
     }
     pub fn ship_frames(&self) -> *mut FRAME {
-        (&raw const self.descriptor().ship_data.ship)
-            .cast_mut()
-            .cast()
+        self.descriptor().ship_data.ship.as_ptr()
     }
     pub fn special_frames(&self) -> *mut FRAME {
-        (&raw const self.descriptor().ship_data.special)
-            .cast_mut()
-            .cast()
+        self.descriptor().ship_data.special.as_ptr()
     }
     pub unsafe fn guardian_form(mut self) -> Self {
         // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
@@ -602,7 +602,9 @@ struct DrawableDesc {
     max_index: u16,
     frame: *mut FrameDesc,
 }
-pub struct FrameSet {
+#[derive(Clone)]
+pub struct FrameSet(Rc<RefCell<FrameSetData>>);
+struct FrameSetData {
     _drawable: Box<DrawableDesc>,
     frames: Vec<FrameDesc>,
     image: *mut c_void,
@@ -629,11 +631,16 @@ impl FrameSet {
             })
             .collect();
         drawable.frame = frames.as_mut_ptr();
-        Self {
+        Self(Rc::new(RefCell::new(FrameSetData {
             _drawable: drawable,
             frames,
             image: ptr::null_mut(),
-        }
+        })))
+    }
+    pub fn array(&self) -> uqm_rust::engine::battle::frames::FrameArray {
+        // SAFETY: the cloned fixture owner retains the drawables until the last array drops.
+        let first = unsafe { uqm_rust::engine::battle::views::Frame::from_native(self.frame(0)) };
+        uqm_rust::engine::battle::frames::FrameArray::retain([first; 3], self.clone())
     }
     pub fn make_opaque(&mut self) {
         use uqm_rust::graphics::{
@@ -642,6 +649,7 @@ impl FrameSet {
             },
             tfb_draw_abi::{TFB_DrawImage_Delete, TFB_DrawImage_New},
         };
+        let mut data = self.0.borrow_mut();
         // SAFETY: the fixture owns these small SDL canvas/image resources and frees them on drop.
         unsafe {
             let canvas = TFB_DrawCanvas_New_Paletted(4, 4, ptr::null_mut(), -1);
@@ -650,21 +658,22 @@ impl FrameSet {
                 TFB_DrawCanvas_SetPixelIndexes(canvas, [1u8; 16].as_ptr(), 4, 4),
                 0
             );
-            if !self.image.is_null() {
-                TFB_DrawImage_Delete(self.image.cast());
+            if !data.image.is_null() {
+                TFB_DrawImage_Delete(data.image.cast());
             }
-            self.image = TFB_DrawImage_New(canvas).cast();
-            assert!(!self.image.is_null());
-            for frame in &mut self.frames {
-                frame.image = self.image;
+            data.image = TFB_DrawImage_New(canvas).cast();
+            assert!(!data.image.is_null());
+            let image = data.image;
+            for frame in &mut data.frames {
+                frame.image = image;
             }
         }
     }
     pub fn frame(&self, index: usize) -> FRAME {
-        (&raw const self.frames[index]).cast_mut().cast()
+        (&raw const self.0.borrow().frames[index]).cast_mut().cast()
     }
 }
-impl Drop for FrameSet {
+impl Drop for FrameSetData {
     fn drop(&mut self) {
         if !self.image.is_null() {
             // SAFETY: this frame set uniquely owns the image and its canvas.

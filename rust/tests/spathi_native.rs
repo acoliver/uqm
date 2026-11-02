@@ -88,9 +88,9 @@ fn eluder_descriptor_matches_the_c_template() {
                 assert_eq!(CStr::from_ptr(data.ship_rsc[i]), expected_ship[i]);
                 assert_eq!(CStr::from_ptr(data.weapon_rsc[i]), expected_weapon[i]);
                 assert_eq!(CStr::from_ptr(data.special_rsc[i]), expected_special[i]);
-                assert!(data.ship[i].is_null());
-                assert!(data.weapon[i].is_null());
-                assert!(data.special[i].is_null());
+                assert!(data.ship.view(i).is_absent());
+                assert!(data.weapon.view(i).is_absent());
+                assert!(data.special.view(i).is_absent());
             }
             assert_eq!(
                 CStr::from_ptr(data.captain_control.captain_rsc),
@@ -118,7 +118,7 @@ fn forward_missile_leaves_the_nose_along_the_ship_facing() {
             let _battle = Battle::new(16);
             let mut fleet = Ship::new(&_battle, SPECIES_ID_SPATHI_ID, 0);
             let missile_frames = FrameSet::new(16);
-            fleet.descriptor_mut().ship_data.weapon[0] = missile_frames.frame(0);
+            fleet.descriptor_mut().ship_data.weapon = missile_frames.array();
             fleet.ship_mut().playerNr = 0;
             (*fleet.ptr()).playerNr = 0;
             (*fleet.ptr()).current.location = POINT { x: 400, y: 500 };
@@ -164,7 +164,7 @@ fn butt_leaves_the_tail_not_the_nose() {
             let _battle = Battle::new(16);
             let mut fleet = Ship::new(&_battle, SPECIES_ID_SPATHI_ID, 0);
             let butt_frames = FrameSet::new(16);
-            fleet.descriptor_mut().ship_data.special[0] = butt_frames.frame(0);
+            fleet.descriptor_mut().ship_data.special = butt_frames.array();
             fleet.ship_mut().playerNr = 0;
             (*fleet.ptr()).playerNr = 0;
             (*fleet.ptr()).current.location = POINT { x: 400, y: 500 };
@@ -208,7 +208,7 @@ fn butt_rear_facing_wraps_through_sixteen_facings() {
         let _battle = Battle::new(16);
         let mut fleet = Ship::new(&_battle, SPECIES_ID_SPATHI_ID, 0);
         let butt_frames = FrameSet::new(16);
-        fleet.descriptor_mut().ship_data.special[0] = butt_frames.frame(0);
+        fleet.descriptor_mut().ship_data.special = butt_frames.array();
         fleet.ship_mut().playerNr = 0;
         (*fleet.ptr()).playerNr = 0;
         (*fleet.ptr()).current.location = POINT { x: 0, y: 0 };
@@ -268,7 +268,7 @@ fn butt_homes_one_facing_step_per_tracking_pass() {
             let _battle = Battle::new(16);
             let mut spathi = Ship::new(&_battle, SPECIES_ID_SPATHI_ID, 0);
             let butt_frames = FrameSet::new(16);
-            spathi.descriptor_mut().ship_data.special[0] = butt_frames.frame(0);
+            spathi.descriptor_mut().ship_data.special = butt_frames.array();
             spathi.ship_mut().playerNr = 0;
             (*spathi.ptr()).playerNr = 0;
             (*spathi.ptr()).current.location = POINT { x: 400, y: 500 };

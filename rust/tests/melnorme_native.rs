@@ -188,10 +188,11 @@ fn descriptor_matches_all_c_resources_values_and_empty_runtime_fields() {
             assert!(d
                 .ship_data
                 .ship
-                .iter()
-                .chain(d.ship_data.weapon.iter())
-                .chain(d.ship_data.special.iter())
-                .all(|f| f.is_null()));
+                .views()
+                .into_iter()
+                .chain(d.ship_data.weapon.views())
+                .chain(d.ship_data.special.views())
+                .all(|f| f.is_absent()));
             assert!(d.ship_data.victory_ditty.is_null() && d.ship_data.ship_sounds.is_null());
             assert_eq!(
                 (
@@ -207,14 +208,17 @@ fn descriptor_matches_all_c_resources_values_and_empty_runtime_fields() {
             let loaded = FrameSet::with_bounds(26, [22, 18]);
             let frame = loaded.frame(0);
             owned.ship_info.energy_level = 37;
-            owned.ship_data.weapon[0] = frame;
+            owned.ship_data.weapon = loaded.array();
             owned.race_callbacks.post = uqm_rust::engine::battle::Selection::Disabled;
             let fresh = battle::descriptor(SPECIES_ID_MELNORME_ID);
             assert_eq!(fresh.callbacks(), d.callbacks());
             assert_eq!(fresh.ship_info.energy_level, 42);
             assert_eq!(
-                (owned.ship_info.energy_level, owned.ship_data.weapon[0]),
-                (37, frame)
+                (owned.ship_info.energy_level, owned.ship_data.weapon.view(0)),
+                (
+                    37,
+                    uqm_rust::engine::battle::views::Frame::from_native(frame)
+                )
             );
             assert_eq!(owned.callbacks()[2], 0);
         }
@@ -250,7 +254,7 @@ fn initial_pump_uses_the_c_missile_block_at_all_facings_and_coordinate_limits() 
                 assert_eq!((*e).playerNr, 0);
                 assert_eq!(
                     (*e).current.image.farray,
-                    (&raw mut ship.descriptor_mut().ship_data.weapon).cast()
+                    ship.descriptor_mut().ship_data.weapon.as_ptr()
                 );
                 assert_eq!(frame_index((*e).current.image.frame), 0);
                 assert!((*e).preprocess_func.is_none());
@@ -581,7 +585,7 @@ fn confusion_special_obeys_energy_input_and_cooldown_boundaries() {
                     );
                     assert_eq!(
                         (*e).current.image.farray,
-                        (&raw mut ship.descriptor_mut().ship_data.special).cast()
+                        ship.descriptor_mut().ship_data.special.as_ptr()
                     );
                     assert_eq!(frame_index((*e).current.image.frame), 0);
                     assert_eq!(
@@ -722,15 +726,11 @@ fn confusion_reuses_the_first_same_player_nonsolid_special_even_if_it_is_a_trail
             let mut victim = trader(&_battle, 1);
             let another = trader(&_battle, 1);
             let pulse = confusion(&mut ship);
-            let farray = (&raw mut ship.descriptor_mut().ship_data.special).cast();
+            let farray = ship.descriptor_mut().ship_data.special.as_ptr();
             let mut candidates = Vec::new();
             for (player, frames, flags) in [
                 (1, farray, NONSOLID),
-                (
-                    0,
-                    (&raw mut ship.descriptor_mut().ship_data.weapon).cast(),
-                    NONSOLID,
-                ),
+                (0, ship.descriptor_mut().ship_data.weapon.as_ptr(), NONSOLID),
                 (0, farray, FINITE_LIFE),
                 (0, farray, FINITE_LIFE | NONSOLID | CHANGING),
                 (0, farray, FINITE_LIFE | NONSOLID),

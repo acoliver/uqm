@@ -16,7 +16,7 @@ pub(super) struct Assets<'a> {
     strings: StringEntry<'a>,
     sounds: StringEntry<'a>,
     music: usize,
-    sets: [(&'static str, &'a [FRAME; 3]); 3],
+    sets: [(&'static str, &'a crate::engine::battle::frames::FrameArray); 3],
 }
 
 impl<'a> Assets<'a> {
@@ -74,7 +74,11 @@ impl<'a> Assets<'a> {
         for (role, views) in self.sets {
             journal.register_frame_set(
                 views.as_ptr() as usize,
-                views.iter().map(|frame| *frame as usize).collect(),
+                views
+                    .views()
+                    .iter()
+                    .map(|frame| frame.raw() as usize)
+                    .collect(),
                 format!("frame-set:{owner}:{role}"),
             );
         }
@@ -132,14 +136,14 @@ fn frame_handles(info: &SHIP_INFO, data: &DATA_STUFF) -> [(&'static str, FRAME);
         ("data.captain.thrust", captain.thrust),
         ("data.captain.weapon", captain.weapon),
         ("data.captain.special", captain.special),
-        ("data.ship.0", data.ship[0]),
-        ("data.ship.1", data.ship[1]),
-        ("data.ship.2", data.ship[2]),
-        ("data.weapon.0", data.weapon[0]),
-        ("data.weapon.1", data.weapon[1]),
-        ("data.weapon.2", data.weapon[2]),
-        ("data.special.0", data.special[0]),
-        ("data.special.1", data.special[1]),
-        ("data.special.2", data.special[2]),
+        ("data.ship.0", data.ship.view(0).raw()),
+        ("data.ship.1", data.ship.view(1).raw()),
+        ("data.ship.2", data.ship.view(2).raw()),
+        ("data.weapon.0", data.weapon.view(0).raw()),
+        ("data.weapon.1", data.weapon.view(1).raw()),
+        ("data.weapon.2", data.weapon.view(2).raw()),
+        ("data.special.0", data.special.view(0).raw()),
+        ("data.special.1", data.special.view(1).raw()),
+        ("data.special.2", data.special.view(2).raw()),
     ]
 }

@@ -26,6 +26,7 @@ pub struct FlagshipConfig {
     pub hyperspace: bool,
 }
 
+#[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Frame(pub(super) FRAME);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -37,7 +38,7 @@ impl Frame {
     }
 }
 impl Frame {
-    pub(crate) fn raw(self) -> FRAME {
+    pub fn raw(self) -> FRAME {
         self.0
     }
 }
@@ -47,7 +48,9 @@ impl Frames {
     }
 }
 impl Frame {
-    pub(crate) unsafe fn from_native(frame: FRAME) -> Self {
+    /// # Safety
+    /// Retain the frame's loaded drawable for every consumer of the returned handle.
+    pub unsafe fn from_native(frame: FRAME) -> Self {
         Self(frame)
     }
 }

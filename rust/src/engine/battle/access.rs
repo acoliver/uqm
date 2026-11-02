@@ -120,12 +120,10 @@ use super::views::*;
 #[cfg(not(test))]
 impl Cx<'_> {
     pub fn ship_frame_set(&self, id: ShipId, role: usize) -> Frames {
-        Frames(self.ship_frames(id, role))
+        Frames(self.ship_array(id, role).as_ptr())
     }
     pub fn ship_frame(&self, id: ShipId, role: usize) -> Frame {
-        let array = self.ship_frames(id, role);
-        // SAFETY: the checked owner retains the loaded three-frame array.
-        Frame(unsafe { *array })
+        self.ship_array(id, role).view(0)
     }
     pub fn advance_frame(&self, frame: Frame) -> Frame {
         Frame(self.inc_frame(frame.0))
@@ -249,16 +247,13 @@ use crate::graphics::native_abi::FRAME;
 use crate::graphics::pixmap_abi::{IncFrameIndex, SetAbsFrameIndex, SetEquFrameIndex};
 #[cfg(not(test))]
 impl Cx<'_> {
-    pub(super) fn ship_frames(&self, ship: ShipId, role: usize) -> *mut FRAME {
-        let pointer = self.desc(ship) as *const super::record::RACE_DESC;
-        // SAFETY: the ship owns this descriptor and its stable embedded arrays.
-        unsafe {
-            match role {
-                0 => (&raw const (*pointer).ship_data.ship).cast_mut().cast(),
-                1 => (&raw const (*pointer).ship_data.weapon).cast_mut().cast(),
-                2 => (&raw const (*pointer).ship_data.special).cast_mut().cast(),
-                _ => panic!("invalid frame role {role}"),
-            }
+    pub(super) fn ship_array(&self, ship: ShipId, role: usize) -> &super::frames::FrameArray {
+        let data = &self.desc(ship).ship_data;
+        match role {
+            0 => &data.ship,
+            1 => &data.weapon,
+            2 => &data.special,
+            _ => panic!("invalid frame role {role}"),
         }
     }
     pub(super) fn abs_frame(&self, frame: FRAME, index: u16) -> FRAME {
@@ -387,17 +382,17 @@ impl Cx<'_> {
     }
     pub fn set_ship_frame(&mut self, ship: ShipId, role: usize, resolution: usize, frame: Frame) {
         assert!(resolution < 3, "invalid frame resolution {resolution}");
-        let array = self.ship_frames(ship, role);
-        // SAFETY: the checked descriptor retains the slot and both opaque drawable handles.
+        let array = self.ship_array(ship, role);
+        let previous = array.view(resolution);
+        // SAFETY: the checked descriptor retains both opaque drawable handles.
         unsafe {
-            let slot = array.add(resolution);
             assert_eq!(
-                crate::graphics::pixmap_abi::GetFrameParentDrawable((*slot).cast()),
+                crate::graphics::pixmap_abi::GetFrameParentDrawable(previous.raw().cast()),
                 crate::graphics::pixmap_abi::GetFrameParentDrawable(frame.0.cast()),
                 "owning frame slot cannot change drawable"
             );
-            crate::collections::observation::image!(view; *slot, frame.0);
         }
+        array.set_view(resolution, frame);
     }
     pub fn captain_special(&self, ship: ShipId) -> Frame {
         Frame(self.desc(ship).ship_data.captain_control.special)
