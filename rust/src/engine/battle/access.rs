@@ -647,6 +647,9 @@ impl Cx<'_> {
 
 #[cfg(not(test))]
 impl Cx<'_> {
+    pub(crate) fn status_offset(&mut self, ship: ShipId) -> i16 {
+        self.b.kernel.status_offsets[self.ship_state(ship).player as usize]
+    }
     pub fn winner(&mut self) -> Option<ShipId> {
         self.b.kernel.winner
     }

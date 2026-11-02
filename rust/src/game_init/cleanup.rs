@@ -45,7 +45,7 @@ unsafe fn uninit_kernel() {
     DestroyDrawable(ReleaseDrawable(ActivityFrame));
     DestroyFont(TinyFont.cast());
     DestroyFont(StarConFont.cast());
-    crate::battle::context_access::lifecycle::uninit_ships();
+    crate::battle::context_access::lifecycle::uninit_ships(Kernel::current());
     ActivityFrame = ptr::null_mut();
 }
 

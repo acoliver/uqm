@@ -153,7 +153,7 @@ pub unsafe extern "C" fn InitContexts() -> u32 {
 }
 
 unsafe fn init_kernel() -> u32 {
-    crate::battle::context_access::lifecycle::init_ships();
+    crate::battle::context_access::lifecycle::init_ships(Kernel::current());
     StarConFont = crate::graphics::resgfx::LoadGraphicInstance(c"font.starcon".as_ptr()).cast();
     if StarConFont.is_null() {
         return 0;

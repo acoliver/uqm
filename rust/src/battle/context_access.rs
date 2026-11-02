@@ -424,10 +424,6 @@ mod status_native_access {
     use crate::battle::status_native::explosion_flash;
     #[cfg(not(test))]
     impl Cx<'_> {
-        pub(crate) fn status_offset(&mut self, ship: ShipId) -> i16 {
-            // SAFETY: status offsets and this ship's side belong to the game thread.
-            unsafe { (*self.kernel()).status_offsets[self.ship_state(ship).player as usize] }
-        }
         pub(crate) fn draw_explosion_flash(&mut self, life: u16, y: i16) {
             explosion_flash(life, y, |color, mut r, fill| {
                 // SAFETY: the battle owns its active status drawing context.
