@@ -8,13 +8,28 @@ fn allocation_order() {
     let c = pool.alloc(3).unwrap();
     assert_eq!([a.index(), b.index(), c.index()], [0, 1, 2]);
     pool.put(a);
+    assert_eq!(pool.succ(a), None);
     pool.put(b);
+    assert_eq!(pool.succ(a), Some(b));
     pool.put(c);
     assert_eq!(pool.head(), Some(a));
     assert_eq!(pool.succ(a), Some(b));
     assert_eq!(pool.succ(b), Some(c));
     assert_eq!(pool.pred(c), Some(b));
     assert_eq!(pool.tail(), Some(c));
+    pool.remove(b);
+    assert_eq!(pool.succ(b), Some(c));
+    assert_eq!(pool.succ(a), Some(c));
+    pool.insert_before(b, Some(c));
+    assert_eq!(pool.succ(a), Some(b));
+    assert_eq!(pool.pred(c), Some(b));
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| pool.put(b)));
+    assert!(result.is_err());
+    assert_eq!(pool.count(), 3);
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| pool.free(b)));
+    assert!(result.is_err());
+    assert_eq!(pool.succ(a), Some(b));
+    assert_eq!(pool.pred(c), Some(b));
 }
 
 #[test]

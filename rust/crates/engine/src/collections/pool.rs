@@ -122,13 +122,16 @@ impl<T, const N: usize> OrderedPool<T, N> {
             .is_some_and(|s| s.generation == id.generation && s.value.is_some())
     }
     pub fn get(&self, id: Id<T>) -> &T {
-        self.slot(id).value.as_ref().expect("allocated pool slot")
+        self.slot(id)
+            .value
+            .as_ref()
+            .unwrap_or_else(|| unreachable!("allocated pool slot"))
     }
     pub fn get_mut(&mut self, id: Id<T>) -> &mut T {
         self.slot_mut(id)
             .value
             .as_mut()
-            .expect("allocated pool slot")
+            .unwrap_or_else(|| unreachable!("allocated pool slot"))
     }
     pub fn alloc(&mut self, value: T) -> Option<Id<T>> {
         let ix = self.free?;
@@ -146,9 +149,12 @@ impl<T, const N: usize> OrderedPool<T, N> {
         slot.generation = slot
             .generation
             .checked_add(1)
-            .expect("pool generation exhausted");
+            .unwrap_or_else(|| panic!("pool generation exhausted"));
         slot.succ = free;
-        let value = slot.value.take().expect("allocated pool slot");
+        let value = slot
+            .value
+            .take()
+            .unwrap_or_else(|| unreachable!("allocated pool slot"));
         self.free = Some(id.ix);
         value
     }
@@ -222,7 +228,7 @@ impl<T, const N: usize> OrderedPool<T, N> {
             slot.generation = slot
                 .generation
                 .checked_add(1)
-                .expect("pool generation exhausted");
+                .unwrap_or_else(|| panic!("pool generation exhausted"));
             slot.value = None;
             slot.pred = None;
             slot.succ = (ix + 1 < N).then_some((ix + 1) as SlotIx);
