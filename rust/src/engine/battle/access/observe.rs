@@ -18,10 +18,7 @@ unsafe fn parent_address(parent: super::super::Parent, groups: Option<&QUEUE>) -
         Parent::Ship(id) => {
             // SAFETY: the observation retains the live ship authority.
             let queue = unsafe { super::super::record::ship_queue(usize::from(id.side)).as_ref() };
-            let key = queue
-                .id_at(usize::from(id.slot))
-                .unwrap_or_else(|| panic!("invalid ship owner {id:?}"));
-            return std::ptr::from_ref(queue.get(key)).cast_mut().cast();
+            return queue.retired_address(usize::from(id.slot)) as *mut c_void;
         }
         Parent::IpGroup(slot) => (
             groups.unwrap_or_else(|| panic!("missing IP-group authority")),

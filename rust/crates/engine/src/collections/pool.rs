@@ -63,6 +63,7 @@ struct Slot<T> {
     generation: u32,
     value: Option<T>,
     linked: bool,
+    retired_address: usize,
 }
 
 pub struct OrderedPool<T, const N: usize> {
@@ -95,6 +96,7 @@ impl<T, const N: usize> OrderedPool<T, N> {
                 generation: 0,
                 value: None,
                 linked: false,
+                retired_address: 0,
             })
             .collect::<Vec<_>>()
             .into_boxed_slice()
@@ -112,6 +114,13 @@ impl<T, const N: usize> OrderedPool<T, N> {
 
     pub fn storage_identity(&self) -> usize {
         self.slots.as_ptr() as usize
+    }
+
+    /// Identity only: a retired value must never be dereferenced through this address.
+    pub fn retired_address(&self, index: usize) -> usize {
+        let address = self.slots[index].retired_address;
+        assert_ne!(address, 0, "pool slot has never been allocated: {index}");
+        address
     }
 
     fn id(&self, ix: SlotIx) -> Id<T> {
@@ -160,6 +169,7 @@ impl<T, const N: usize> OrderedPool<T, N> {
         slot.pred = None;
         slot.succ = None;
         slot.value = Some(value);
+        slot.retired_address = std::ptr::from_ref(slot.value.as_ref().unwrap()) as usize;
         Some(self.id(ix))
     }
     pub fn free(&mut self, id: Id<T>) -> T {

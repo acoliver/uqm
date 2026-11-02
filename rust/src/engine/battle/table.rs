@@ -29,15 +29,12 @@ pub enum Parent {
 
 pub struct ElementTable {
     pool: OrderedPool<ELEMENT, CAPACITY>,
-    // The journal can name a retired allocation without borrowing its former value.
-    journal_addresses: [usize; CAPACITY],
 }
 
 impl ElementTable {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             pool: OrderedPool::with_capacity(capacity),
-            journal_addresses: [0; CAPACITY],
         }
     }
 
@@ -91,9 +88,7 @@ impl ElementTable {
     }
 
     pub(crate) fn journal_address(&self, id: ElementId) -> usize {
-        let address = self.journal_addresses[usize::from(id.slot)];
-        assert_ne!(address, 0, "element slot has never been allocated: {id:?}");
-        address
+        self.pool.retired_address(usize::from(id.slot))
     }
 
     pub fn head(&self) -> Option<ElementId> {
@@ -114,7 +109,6 @@ impl ElementTable {
     pub fn alloc(&mut self) -> Option<ElementId> {
         let key = self.pool.alloc(ELEMENT::default())?;
         let id = Self::identify(key);
-        self.journal_addresses[key.index()] = self.raw(id) as usize;
         Some(id)
     }
     pub fn free(&mut self, id: ElementId) {

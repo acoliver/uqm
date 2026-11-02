@@ -1,3 +1,20 @@
+#[test]
+fn retired_slot_identity_does_not_require_a_live_value() {
+    let mut pool = uqm_engine::collections::pool::OrderedPool::<u32, 1>::new();
+    let id = pool.alloc(7).unwrap();
+    let address = std::ptr::from_ref(pool.get(id)) as usize;
+    assert_eq!(pool.retired_address(id.index()), address);
+    pool.free(id);
+    assert!(!pool.contains(id));
+    assert_eq!(pool.retired_address(id.index()), address);
+    pool.reinit();
+    assert_eq!(pool.retired_address(id.index()), address);
+    let replacement = pool.alloc(9).unwrap();
+    assert_ne!(id, replacement);
+    assert_eq!(pool.retired_address(id.index()), address);
+    assert!(std::panic::catch_unwind(|| pool.get(id)).is_err());
+}
+
 use uqm_engine::collections::{pool::OrderedPool, queue};
 
 #[test]
