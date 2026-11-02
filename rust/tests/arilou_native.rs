@@ -70,9 +70,9 @@ unsafe fn index_of(frame: FRAME) -> u16 {
 }
 
 unsafe fn prim_of(element: *mut ELEMENT) -> *mut PRIMITIVE {
-    (&raw mut uqm_rust::engine::battle::legacy::DisplayArray)
-        .cast::<PRIMITIVE>()
-        .add(usize::from((*element).PrimIndex))
+    uqm_rust::app::bridge::enter(|cx| {
+        std::ptr::from_mut(cx.display_primitive((*element).PrimIndex))
+    })
 }
 
 struct Fleet<'a> {

@@ -554,11 +554,6 @@ mod allocation {
             // SAFETY: the battle exclusively owns its initialized primitive pool.
             unsafe {
                 let handle = if let Some(id) = self.records().alloc() {
-                    let index = self.free_primitive_index();
-                    if index == u16::MAX {
-                        crate::log_abi::log_message(2, "AllocElement: Out of display prims!");
-                        libc::exit(libc::EXIT_FAILURE);
-                    }
                     self.assign_primitive(id);
                     self.primitive_style_mut(id).kind = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
                     self.elements().raw(id)

@@ -6,7 +6,7 @@ use std::ptr::NonNull;
 pub struct Battle {
     pub(super) elements: ElementTable,
     pub(super) terminal_outcome: Option<super::RaceState>,
-    kernel: super::record::Kernel,
+    pub(super) kernel: super::record::Kernel,
     pub zoom_out: i16,
     pub nth_frame: u16,
     pub max_zoom_out: i16,

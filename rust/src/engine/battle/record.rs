@@ -518,7 +518,7 @@ impl Cx<'_> {
         let index = usize::from(self.b.elements[id].PrimIndex);
         assert!(index < 330, "invalid primitive index {index}");
         // SAFETY: the display authority remains live for the context's lifetime.
-        self.project_mut(primitive_slot(index))
+        self.b.kernel.display.get_mut(index as u16)
     }
 }
 
@@ -636,7 +636,6 @@ impl RACE_DESC {
     }
 }
 
-use crate::graphics::native_abi::PRIM_LINKS;
 use std::ptr;
 const EMPTY_QUEUE: QUEUE = QUEUE {
     head: ptr::null_mut(),
@@ -652,28 +651,10 @@ pub static mut disp_q: QUEUE = EMPTY_QUEUE;
 #[no_mangle]
 pub static mut race_q: [QUEUE; 2] = [EMPTY_QUEUE; 2];
 
-#[no_mangle]
-pub static mut DisplayFreeList: COUNT = 0;
-#[no_mangle]
-// SAFETY: Primitive fields and the PRIM_DESC union members admit all-zero bits.
-pub static mut DisplayArray: [PRIMITIVE; abi::MAX_DISPLAY_PRIMS as usize] =
-    unsafe { std::mem::zeroed() };
-#[no_mangle]
-pub static mut DisplayLinks: PRIM_LINKS = 0;
-
 pub(crate) fn ship_queue(side: usize) -> std::ptr::NonNull<QUEUE> {
     assert!(side < 2);
     std::ptr::NonNull::new((&raw mut race_q).cast::<QUEUE>().wrapping_add(side))
         .unwrap_or_else(|| panic!("{}", "static ship queues"))
-}
-pub(crate) fn primitive_slot(index: usize) -> std::ptr::NonNull<PRIMITIVE> {
-    assert!(index < 330);
-    std::ptr::NonNull::new(
-        (&raw mut DisplayArray)
-            .cast::<PRIMITIVE>()
-            .wrapping_add(index),
-    )
-    .unwrap_or_else(|| panic!("{}", "static primitives"))
 }
 impl ElementState {
     fn encode(self) -> ELEMENT {
@@ -871,6 +852,7 @@ pub struct RaceDescriptor {
 pub(crate) use super::kernel::{Channels, SoundQueue, StarPlane};
 
 pub(crate) struct Kernel {
+    pub(crate) display: super::display::DisplayPool,
     pub(crate) master_queue: QUEUE,
     pub(crate) player_input: [*mut std::ffi::c_void; 2],
     pub(crate) instant_victory: u32,
@@ -903,6 +885,7 @@ impl Kernel {
             plane
         }));
         Self {
+            display: super::display::DisplayPool::new(),
             master_queue: QUEUE::default(),
             player_input: [ptr::null_mut(); 2],
             instant_victory: 0,

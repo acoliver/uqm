@@ -25,5 +25,5 @@ pub(crate) unsafe fn uninit_elements() {
 
 /// Bind the retained display storage while initializing the game-thread-owned world.
 pub(crate) fn bind_display_array(game: &mut super::schema::GAME_STATE) {
-    game.DisplayArray = (&raw mut record::DisplayArray).cast();
+    game._display_array = std::ptr::null_mut();
 }

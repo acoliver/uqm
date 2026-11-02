@@ -133,6 +133,13 @@ impl<T, const N: usize> OrderedPool<T, N> {
             .as_mut()
             .unwrap_or_else(|| unreachable!("allocated pool slot"))
     }
+    /// Resolve a generation-free link belonging to this pool's current allocation.
+    pub fn id_at(&self, index: usize) -> Option<Id<T>> {
+        self.slots
+            .get(index)
+            .filter(|slot| slot.value.is_some())
+            .map(|_| self.id(index as SlotIx))
+    }
     pub fn alloc(&mut self, value: T) -> Option<Id<T>> {
         let ix = self.free?;
         let slot = &mut self.slots[usize::from(ix)];

@@ -423,7 +423,7 @@ impl Cx<'_> {
     }
     pub fn primitive_style(&self, id: ElementId) -> PrimitiveStyle {
         let index = usize::from(self.b.elements[id].PrimIndex);
-        let record = self.project(super::record::primitive_slot(index));
+        let record = self.b.kernel.display.get(index as u16);
         PrimitiveStyle {
             kind: record.Type,
             color: record.color,
@@ -438,7 +438,7 @@ impl Cx<'_> {
         );
         let index = self.b.elements[destination].PrimIndex;
         let source_index = usize::from(self.b.elements[source].PrimIndex);
-        let primitive = *self.project(super::record::primitive_slot(source_index));
+        let primitive = *self.b.kernel.display.get(source_index as u16);
         let value = self.b.elements[source];
         let address = std::ptr::from_ref(&self.b.elements[source]) as usize;
         crate::collections::observation::copy_image(
@@ -482,9 +482,7 @@ impl Cx<'_> {
         &self,
         subject: &Subject,
     ) -> crate::engine::battle::views::PrimitiveStyle {
-        let primitive = self.project(crate::engine::battle::record::primitive_slot(usize::from(
-            subject.primitive,
-        )));
+        let primitive = self.b.kernel.display.get(subject.primitive);
         crate::engine::battle::views::PrimitiveStyle {
             kind: primitive.Type,
             color: primitive.color,
@@ -504,7 +502,7 @@ pub(super) mod links;
 impl Cx<'_> {
     pub(crate) fn sound_point(&self, id: ElementId) -> crate::graphics::native_abi::POINT {
         let index = usize::from(self.elements()[id].PrimIndex);
-        let primitive = self.project(crate::engine::battle::record::primitive_slot(index));
+        let primitive = self.b.kernel.display.get(index as u16);
         // SAFETY: the checked element owns the primitive; its type selects the union variant.
         unsafe {
             if primitive.Type == crate::graphics::native_abi::LINE_PRIMITIVE {
@@ -720,10 +718,16 @@ mod intersection_projection_tests {
                 .is_null());
             assert_eq!(cx.elements().raw(id), queue.pq_tab.cast());
             assert_eq!(cx.elements().id(std::ptr::null_mut()), None);
-            assert_eq!(
-                super::super::record::primitive_slot(0).as_ptr(),
-                (&raw mut DisplayArray).cast()
-            );
+            let primitive = cx.display_pool().alloc().unwrap();
+            cx.b.kernel.display.get_mut(primitive).Type = 3;
+            assert_eq!(cx.display_primitive(primitive).Type, 3);
+            cx.append_display(primitive);
+            assert_eq!(cx.display_batch()[0].Type, 3);
+            cx.clear_display_order();
+            assert!(cx.display_batch().is_empty());
+            cx.reset_display();
+            assert_eq!(cx.b.kernel.display.alloc(), Some(0));
+            assert_eq!(cx.display_primitive(0).Type, 3);
             drop(battle);
             UninitQueue(&mut queue);
         }
@@ -732,28 +736,16 @@ mod intersection_projection_tests {
 
 #[cfg(not(test))]
 impl Cx<'_> {
-    pub(crate) fn free_primitive_index(&self) -> u16 {
-        // SAFETY: the battle owns the game-thread primitive pool.
-        unsafe { super::legacy::DisplayFreeList }
-    }
     pub(crate) fn assign_primitive(&mut self, id: ElementId) {
-        // SAFETY: allocation belongs to this exclusive context and the caller checked capacity.
-        unsafe {
-            self.b.elements[id].PrimIndex = primitives::alloc_display_prim(
-                (&raw mut super::legacy::DisplayArray).cast(),
-                &raw mut super::legacy::DisplayFreeList,
-            );
-        }
+        self.b.elements[id].PrimIndex = self
+            .b
+            .kernel
+            .display
+            .alloc()
+            .unwrap_or_else(|| panic!("AllocElement: Out of display prims!"));
     }
     pub(crate) fn release_primitive(&mut self, index: u16) {
-        // SAFETY: the disposed element exclusively owns this allocated primitive.
-        unsafe {
-            primitives::free_display_prim(
-                (&raw mut super::legacy::DisplayArray).cast(),
-                &raw mut super::legacy::DisplayFreeList,
-                index,
-            );
-        }
+        self.b.kernel.display.free(index);
     }
     pub(crate) fn link_storage(&mut self, id: ElementId, before: Option<ElementId>) {
         let handle = self.b.elements.raw(id);
@@ -775,38 +767,6 @@ impl Cx<'_> {
         }
     }
 }
-/// # Safety
-/// The indices and link list belong to the initialized primitive pool.
-#[cfg(not(test))]
-pub(crate) unsafe fn insert_primitive(
-    list: *mut crate::graphics::native_abi::PRIM_LINKS,
-    index: u16,
-    before: u16,
-) {
-    // SAFETY: the caller retains the initialized storage and resources for this synchronous projection.
-    unsafe {
-        primitives::insert_prim_links(
-            (&raw mut super::legacy::DisplayArray).cast(),
-            list,
-            index,
-            before,
-        );
-    }
-}
-/// # Safety
-/// The list belongs to the live display primitive pool and the drawing context is initialized.
-#[cfg(not(test))]
-pub(crate) unsafe fn draw_display_batch(links: crate::graphics::native_abi::PRIM_LINKS) {
-    // SAFETY: the caller retains the initialized storage and resources for this synchronous projection.
-    unsafe {
-        crate::graphics::frame_abi::DrawBatch(
-            (&raw mut super::legacy::DisplayArray).cast(),
-            links,
-            0,
-        );
-    }
-}
-
 #[cfg(not(test))]
 impl Cx<'_> {
     /// # Safety
@@ -888,8 +848,6 @@ pub(crate) fn race_desc_layout() -> RaceDescLayout {
 
 pub(crate) mod observe;
 
-pub(crate) mod primitives;
-
 /// Layout descriptor for RACE_DESC C-side field offsets.
 /// Matches C `RACE_DESC_LAYOUT` in `rust_bridge_ships.h`.
 #[repr(C)]
@@ -939,5 +897,26 @@ pub(crate) mod live_queues {
     /// other code is changing the queue.
     pub fn display_list() -> *const Queue {
         ptr::addr_of!(queues::disp_q).cast()
+    }
+}
+
+impl Cx<'_> {
+    pub(crate) fn display_pool(&mut self) -> &mut super::display::DisplayPool {
+        &mut self.b.kernel.display
+    }
+    pub fn display_primitive(&mut self, index: u16) -> &mut super::record::PRIMITIVE {
+        self.b.kernel.display.get_mut(index)
+    }
+    pub(crate) fn reset_display(&mut self) {
+        self.b.kernel.display.reinit();
+    }
+    pub(crate) fn clear_display_order(&mut self) {
+        self.b.kernel.display.clear_order();
+    }
+    pub(crate) fn append_display(&mut self, index: u16) {
+        self.b.kernel.display.insert_before(index, None);
+    }
+    pub(crate) fn display_batch(&self) -> Vec<super::record::PRIMITIVE> {
+        self.b.kernel.display.batch()
     }
 }

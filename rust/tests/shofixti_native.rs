@@ -16,7 +16,6 @@ use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, frame_index, sine
 
 use uqm_rust::supermelee::native::battle_picker::live::{selectShipComputer, selectShipHuman};
 
-use uqm_rust::engine::battle::legacy::DisplayArray;
 use uqm_rust::graphics::context_abi::_GraphicsStatusFlags;
 use uqm_rust::graphics::native_canvas::{
     lifecycle::TFB_DrawCanvas_New_Paletted, pixels::TFB_DrawCanvas_SetPixelIndexes,
@@ -225,9 +224,7 @@ unsafe fn core(callback: uqm_rust::engine::battle::ElementFn, element: *mut ELEM
 }
 
 unsafe fn prim(e: *mut ELEMENT) -> *mut PRIMITIVE {
-    (&raw mut DisplayArray)
-        .cast::<PRIMITIVE>()
-        .add((*e).PrimIndex as usize)
+    uqm_rust::app::bridge::enter(|cx| std::ptr::from_mut(cx.display_primitive((*e).PrimIndex)))
 }
 fn rgba(c: Color) -> (u8, u8, u8, u8) {
     (c.r, c.g, c.b, c.a)

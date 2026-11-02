@@ -130,7 +130,7 @@ mod c_offset {
     pub const VELOCITY_ERROR: usize = offset_of!(GAME_STATE, velocity.error);
     pub const VELOCITY_INCR: usize = offset_of!(GAME_STATE, velocity.incr);
     pub const BATTLE_GROUP_REF: usize = offset_of!(GAME_STATE, BattleGroupRef);
-    pub const DISPLAY_ARRAY: usize = offset_of!(GAME_STATE, DisplayArray);
+    pub const DISPLAY_ARRAY: usize = offset_of!(GAME_STATE, _display_array);
 }
 
 /// `SaveGameState` writes the 75 "GlSt" bytes in this order: (position in the

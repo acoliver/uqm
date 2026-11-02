@@ -5,7 +5,6 @@
 use std::{ffi::c_void, mem, ptr};
 use uqm_rust::battle::process_native::InitDisplayList;
 use uqm_rust::collections::queue::{AllocLink, FreeLink, InitQueue, UninitQueue};
-use uqm_rust::engine::battle::legacy::DisplayArray;
 use uqm_rust::engine::battle::schema::HELEMENT;
 use uqm_rust::{
     engine::battle::{ElementId, RaceState, ShipId},
@@ -13,7 +12,6 @@ use uqm_rust::{
 };
 
 pub struct Battle {
-    display: *mut PRIMITIVE,
     dimensions: (i32, i32),
     graphics: u8,
 }
@@ -21,7 +19,6 @@ impl Battle {
     pub fn new(capacity: COUNT) -> Self {
         // SAFETY: battle_context serializes this binary's game authorities.
         unsafe {
-            let display = GlobData.Game_state.DisplayArray;
             let dimensions = (ScreenWidth, ScreenHeight);
             let graphics = uqm_rust::graphics::context_abi::_GraphicsStatusFlags;
             uqm_rust::graphics::context_abi::_GraphicsStatusFlags &= !4;
@@ -35,11 +32,9 @@ impl Battle {
                 assert!(InitQueue(queue, 32, size_of::<STARSHIP>() as u16));
             }
             InitDisplayList();
-            GlobData.Game_state.DisplayArray = (&raw mut DisplayArray).cast();
             ScreenWidth = 320;
             ScreenHeight = 240;
             Self {
-                display,
                 dimensions,
                 graphics,
             }
@@ -55,7 +50,6 @@ impl Drop for Battle {
             for queue in &mut *queues {
                 UninitQueue(queue);
             }
-            GlobData.Game_state.DisplayArray = self.display;
             (ScreenWidth, ScreenHeight) = self.dimensions;
             uqm_rust::graphics::context_abi::_GraphicsStatusFlags = self.graphics;
         }
@@ -619,9 +613,7 @@ impl Drop for FrameSet {
 pub unsafe fn prim(e: *mut ELEMENT) -> *mut PRIMITIVE {
     // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
     unsafe {
-        (&raw mut DisplayArray)
-            .cast::<PRIMITIVE>()
-            .add((*e).PrimIndex as usize)
+        uqm_rust::app::bridge::enter(|cx| std::ptr::from_mut(cx.display_primitive((*e).PrimIndex)))
     }
 }
 pub unsafe fn queued() -> Vec<HELEMENT> {

@@ -174,15 +174,13 @@ impl STAR_BLOCK {
 #[allow(non_snake_case)]
 pub(crate) mod engine {
     use super::*;
+    use crate::engine::battle::Cx;
     use crate::ships::native::{abi::*, frame_index};
 
     const COUNTS: [usize; 3] = [30, 60, 90];
-    extern "C" {}
 
-    use crate::engine::battle::legacy::{DisplayFreeList, DisplayLinks};
-
-    fn prim(index: usize) -> *mut PRIMITIVE {
-        crate::engine::battle::record::primitive_slot(index).as_ptr()
+    fn prim(cx: &mut Cx<'_>, index: usize) -> *mut PRIMITIVE {
+        std::ptr::from_mut(cx.display_primitive(index as u16))
     }
     unsafe fn stars(index: usize) -> *mut POINT {
         Kernel::current().log_stars.as_mut_ptr().add(index)
@@ -201,55 +199,53 @@ pub(crate) mod engine {
     /// Star frames and primitive free list must be initialized on the game thread.
     #[no_mangle]
     pub unsafe extern "C" fn InitGalaxy() {
-        let mut links = u32::MAX;
-        let mut factor = ONE_SHIFT + MAX_REDUCTION + (BACKGROUND_SHIFT - 3);
-        for i in 0..180 {
-            let p = DisplayFreeList;
-            DisplayFreeList = ((*prim(p as usize)).Links >> 16) as u16;
-            if i == 30 || i == 90 {
-                factor += 1;
-            }
-            (*stars(i)).x =
-                ((TFB_Random() as u16 as i32 % (ScreenWidth - 64)) as i16).wrapping_shl(factor);
-            (*stars(i)).y =
-                ((TFB_Random() as u16 as i32 % ScreenHeight) as i16).wrapping_shl(factor);
-            if i < 90 {
-                (*prim(p as usize)).Type = gfx_object_STAMP_PRIM as u8;
-                (*prim(p as usize)).color = color(11, 11, 31);
-                (*prim(p as usize)).Object.Stamp.frame = stars_in_space;
-            } else {
-                (*prim(p as usize)).Type = gfx_object_POINT_PRIM as u8;
-                (*prim(p as usize)).color = if inHQSpace() == 0 {
-                    color(21, 21, 21)
-                } else if crate::state::ffi::rust_get_game_state(c"ARILOU_SPACE_SIDE".as_ptr()) <= 1
-                {
-                    color(20, 0, 0)
+        crate::app::bridge::enter(|cx| {
+            let mut factor = ONE_SHIFT + MAX_REDUCTION + (BACKGROUND_SHIFT - 3);
+            for i in 0..180 {
+                assert_eq!(cx.display_pool().alloc(), Some(i as u16));
+                if i == 30 || i == 90 {
+                    factor += 1;
+                }
+                (*stars(i)).x =
+                    ((TFB_Random() as u16 as i32 % (ScreenWidth - 64)) as i16).wrapping_shl(factor);
+                (*stars(i)).y =
+                    ((TFB_Random() as u16 as i32 % ScreenHeight) as i16).wrapping_shl(factor);
+                if i < 90 {
+                    (*prim(cx, i)).Type = gfx_object_STAMP_PRIM as u8;
+                    (*prim(cx, i)).color = color(11, 11, 31);
+                    (*prim(cx, i)).Object.Stamp.frame = stars_in_space;
                 } else {
-                    color(0, 14, 0)
-                };
+                    (*prim(cx, i)).Type = gfx_object_POINT_PRIM as u8;
+                    (*prim(cx, i)).color = if inHQSpace() == 0 {
+                        color(21, 21, 21)
+                    } else if crate::state::ffi::rust_get_game_state(c"ARILOU_SPACE_SIDE".as_ptr())
+                        <= 1
+                    {
+                        color(20, 0, 0)
+                    } else {
+                        color(0, 14, 0)
+                    };
+                }
             }
-            let previous = links as u16;
-            crate::engine::battle::access::insert_primitive(&mut links, p, previous);
-        }
-        for i in 0..3 {
-            (*blocks(i)).sort();
-        }
+            for i in 0..3 {
+                (*blocks(i)).sort();
+            }
+        });
     }
 
     /// # Safety
     /// InitGalaxy must have completed; all display primitives and frames remain live.
-    #[no_mangle]
-    pub unsafe extern "C" fn MoveGalaxy(view: u32, mut dx: i16, mut dy: i16) {
+    pub unsafe fn MoveGalaxy(cx: &mut Cx<'_>, view: u32, mut dx: i16, mut dy: i16) {
         // VIEW_STABLE=0, VIEW_CHANGE=2; TFB_SCALE_STEP=0.
         if view != 0 {
-            let mut reduction = crate::app::bridge::battle(|b| b.zoom_out) as u16;
+            let mut reduction = cx.b.zoom_out as u16;
             let step = optMeleeScale == 0;
             if view == 2 {
                 if inHQSpace() != 0 {
                     let mut p = 0;
                     for (plane, offset) in [58, 26].into_iter().enumerate() {
                         for _ in 0..COUNTS[plane] {
-                            (*prim(p)).Object.Stamp.frame = SetAbsFrameIndex(
+                            (*prim(cx, p)).Object.Stamp.frame = SetAbsFrameIndex(
                                 stars_in_space,
                                 (TFB_Random() & 31) as u16 + offset,
                             );
@@ -273,8 +269,8 @@ pub(crate) mod engine {
                     let mut p = 0;
                     for plane in 0..2 {
                         for _ in 0..COUNTS[plane] {
-                            (*prim(p)).Type = types[plane] as u8;
-                            (*prim(p)).Object.Stamp.frame = frames[plane];
+                            (*prim(cx, p)).Type = types[plane] as u8;
+                            (*prim(cx, p)).Object.Stamp.frame = frames[plane];
                             p += 1;
                         }
                     }
@@ -282,9 +278,9 @@ pub(crate) mod engine {
             }
             if inHQSpace() != 0 {
                 for i in 0..90 {
-                    let frame = (*prim(i)).Object.Stamp.frame;
+                    let frame = (*prim(cx, i)).Object.Stamp.frame;
                     let base = frame_index(frame).wrapping_sub(26);
-                    (*prim(i)).Object.Stamp.frame = SetAbsFrameIndex(
+                    (*prim(cx, i)).Object.Stamp.frame = SetAbsFrameIndex(
                         frame,
                         ((base & !31) + (base.wrapping_add(1) & 31)).wrapping_add(26),
                     );
@@ -320,7 +316,7 @@ pub(crate) mod engine {
             let mut wrap = width();
             for count in COUNTS {
                 let projected = projected_coords(*stars(p), dx, dy, reduction, step);
-                let displayed = (*prim(p)).Object.Point;
+                let displayed = (*prim(cx, p)).Object.Point;
                 if view != 2
                     && i32::from(displayed.x) == projected.0
                     && i32::from(displayed.y) == projected.1
@@ -329,7 +325,7 @@ pub(crate) mod engine {
                 }
                 for _ in 0..count {
                     (*stars(p)).x = wrap_x((*stars(p)).x, wrap);
-                    (*prim(p)).Object.Point = project(*stars(p), dx, dy, reduction, step);
+                    (*prim(cx, p)).Object.Point = project(*stars(p), dx, dy, reduction, step);
                     p += 1;
                 }
                 if step {
@@ -342,7 +338,7 @@ pub(crate) mod engine {
                 dy = dy.wrapping_shl(1);
             }
         }
-        DisplayLinks = 180 - 1;
+        cx.display_pool().background_order(180);
     }
 }
 

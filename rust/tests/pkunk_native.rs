@@ -15,7 +15,6 @@ use uqm_rust::ships::native::{
     abi::*, angle_to_facing, cosine, facing_to_angle, frame_index, normalize_facing, sine,
 };
 
-use uqm_rust::engine::battle::legacy::DisplayArray;
 use uqm_rust::strings::string_table::{
     AllocStringTable, CaptureStringTable, FreeStringTable, StringTable,
 };
@@ -273,9 +272,7 @@ impl<'a> Ship<'a> {
 }
 
 unsafe fn prim(el: *mut ELEMENT) -> *mut PRIMITIVE {
-    (&raw mut DisplayArray)
-        .cast::<PRIMITIVE>()
-        .add((*el).PrimIndex as usize)
+    uqm_rust::app::bridge::enter(|cx| std::ptr::from_mut(cx.display_primitive((*el).PrimIndex)))
 }
 
 unsafe fn queued() -> Vec<HELEMENT> {
