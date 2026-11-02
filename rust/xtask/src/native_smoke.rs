@@ -16,7 +16,8 @@ use serde::{Deserialize, Serialize};
 
 pub const SMOKE_SET: &str = "rust/xtask/smoke.json";
 const SMOKE_SCHEMA: &str = "uqm-smoke-v1";
-const RECEIPT_SCHEMA: &str = "uqm-smoke-receipt-v1";
+pub(crate) const RECEIPT_JSON: &str = "smoke-receipt.json";
+pub(crate) const RECEIPT_SCHEMA: &str = "uqm-smoke-receipt-v1";
 
 /// The functions a smoke set has to play between them.
 pub const REQUIRED_FUNCTIONS: [&str; 6] = [
@@ -321,8 +322,8 @@ pub fn run(
         scenarios: rows,
     };
     let json = serde_json::to_string_pretty(&receipt).map_err(|error| error.to_string())?;
-    std::fs::write(request.artifacts.join("smoke-receipt.json"), json + "\n")
-        .map_err(|error| format!("write smoke-receipt.json: {error}"))?;
+    std::fs::write(request.artifacts.join(RECEIPT_JSON), json + "\n")
+        .map_err(|error| format!("write {RECEIPT_JSON}: {error}"))?;
     std::fs::write(
         request.artifacts.join("smoke-receipt.md"),
         receipt.to_markdown(),

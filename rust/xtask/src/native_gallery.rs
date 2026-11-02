@@ -8,6 +8,11 @@
 //! original OS screenshot and its normalized derivation, and states the
 //! outcome of the ones that produced nothing instead of omitting them.
 //!
+//! A smoke root, holding `smoke-receipt.json` and one suite directory per
+//! scenario, is read as a collection. The receipt names the members. Each member
+//! goes through the single-suite path, and every member stays in the catalog
+//! whether it passed, failed, or retained no suite.
+//!
 //! Three properties carry the weight here, and each has a test below.
 //!
 //! * An obligation with no retained image is rendered as `missing`, `failed`
@@ -28,12 +33,17 @@ use serde::{Deserialize, Serialize};
 
 use crate::evidence::{EvidencePublisher, EvidenceSnapshot};
 use crate::native_config::Scenario;
+use crate::native_smoke::RECEIPT_JSON;
 use crate::native_suite::{ScenarioAccounting, ScenarioState, SuiteManifest};
 use uqm_rust::automation::native_checkpoint::{CheckpointClass, NativeCheckpointPlan};
 use uqm_rust::automation::{
     parse_script, validate_script, NativeAcceptanceManifest, NativeRetainedInput, NativeScreenshot,
     NativeScreenshotStage,
 };
+
+use smoke::build_collection;
+
+mod smoke;
 
 pub(crate) const GALLERY_SCHEMA: &str = "uqm-native-checkpoint-gallery-v1";
 pub(crate) const GALLERY_JSON: &str = "native-checkpoint-gallery.json";
@@ -133,6 +143,20 @@ pub(crate) struct GalleryTotals {
     pub renderer_readbacks: usize,
 }
 
+/// One suite a smoke collection names in its receipt.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct GalleryMember {
+    /// The member's directory under the smoke root, which is also its scenario name.
+    pub name: String,
+    /// The receipt's verdict for this member, including its frame check.
+    pub receipt_passed: bool,
+    pub terminal_reason: String,
+    /// The member suite's own verdict. `None` when the root retains no suite for it.
+    pub suite_passed: Option<bool>,
+    pub detail: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Gallery {
@@ -140,6 +164,10 @@ pub(crate) struct Gallery {
     pub suite_passed: bool,
     pub scenarios: Vec<GalleryScenario>,
     pub totals: GalleryTotals,
+    /// The suites of a smoke collection, in receipt order. Empty for a single
+    /// suite, which keeps its catalog shape.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub members: Vec<GalleryMember>,
 }
 
 /// Render the catalog for `bundle` into the fresh directory `output`.
@@ -164,8 +192,21 @@ pub(crate) fn publish(bundle: &Path, output: &Path) -> Result<Gallery, String> {
     Ok(gallery)
 }
 
-/// Build the catalog from a retained suite without writing anything.
+/// Build the catalog for `bundle` without writing anything.
+///
+/// A root holding a smoke receipt is a smoke collection, and every other root is
+/// one suite. The receipt's presence alone tells them apart, so a single suite
+/// takes exactly the path it always did.
 pub(crate) fn build(bundle: &Path) -> Result<Gallery, String> {
+    match std::fs::symlink_metadata(bundle.join(RECEIPT_JSON)) {
+        Ok(_) => build_collection(bundle),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => build_suite(bundle),
+        Err(error) => Err(format!("read {RECEIPT_JSON}: {error}")),
+    }
+}
+
+/// One native suite, read from its own directory.
+pub(crate) fn build_suite(bundle: &Path) -> Result<Gallery, String> {
     let snapshot = EvidenceSnapshot::open_native(bundle)
         .map_err(|error| format!("open native suite {}: {error}", bundle.display()))?;
     let manifest: SuiteManifest = serde_json::from_slice(
@@ -180,18 +221,28 @@ pub(crate) fn build(bundle: &Path) -> Result<Gallery, String> {
     for (index, row) in manifest.scenarios.iter().enumerate() {
         scenarios.push(scenario_rows(&snapshot, &retained, &scripts, index, row)?);
     }
+    assemble(manifest.passed, scenarios, Vec::new())
+}
+
+/// Total the obligations and refuse a catalog too large to render.
+pub(crate) fn assemble(
+    suite_passed: bool,
+    scenarios: Vec<GalleryScenario>,
+    members: Vec<GalleryMember>,
+) -> Result<Gallery, String> {
     let totals = totals(&scenarios);
     let rows = totals.obligations + totals.renderer_readbacks;
     if rows > MAX_GALLERY_ROWS {
         return Err(format!(
-            "native suite has {rows} catalog rows, over the {MAX_GALLERY_ROWS} row bound"
+            "catalog has {rows} rows, over the {MAX_GALLERY_ROWS} row bound"
         ));
     }
     Ok(Gallery {
         schema: GALLERY_SCHEMA.to_string(),
-        suite_passed: manifest.passed,
+        suite_passed,
         scenarios,
         totals,
+        members,
     })
 }
 
@@ -661,11 +712,44 @@ fn render_html(gallery: &Gallery, prefix: &str) -> Result<String, String> {
         gallery.totals.renderer_readbacks
     )
     .map_err(|error| error.to_string())?;
+    render_members(&mut html, &gallery.members)?;
     for scenario in &gallery.scenarios {
         render_scenario(&mut html, scenario, prefix)?;
     }
     html.push_str("</html>\n");
     Ok(html)
+}
+
+fn render_members(html: &mut String, members: &[GalleryMember]) -> Result<(), String> {
+    if members.is_empty() {
+        return Ok(());
+    }
+    html.push_str("<h2>Smoke members</h2><ul>");
+    for member in members {
+        let suite = match member.suite_passed {
+            Some(true) => "suite passed",
+            Some(false) => "suite failed",
+            None => "suite missing",
+        };
+        write!(
+            html,
+            "<li><strong>{}</strong>: smoke receipt {}, reason {}; {suite}",
+            escape(&member.name),
+            if member.receipt_passed {
+                "passed"
+            } else {
+                "failed"
+            },
+            escape(&member.terminal_reason)
+        )
+        .map_err(|error| error.to_string())?;
+        if let Some(detail) = &member.detail {
+            write!(html, " <em>{}</em>", escape(detail)).map_err(|error| error.to_string())?;
+        }
+        html.push_str("</li>");
+    }
+    html.push_str("</ul>");
+    Ok(())
 }
 
 fn render_scenario(
@@ -818,6 +902,7 @@ fn render_image(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::native_smoke::RECEIPT_SCHEMA;
 
     const SCRIPT: &str = r#"{"version":1,"name":"gallery-fixture","seed":7,"budgets":{"max_input_ticks":1000,"max_presentations":1000,"max_wallclock_seconds":60},"steps":[{"action":"capture","label":"menu"},{"action":"assert_battle_frames","minimum":4},{"action":"finish"}]}"#;
 
@@ -836,45 +921,7 @@ mod tests {
     impl Fixture {
         fn new(rows: Vec<ScenarioAccounting>, passed: bool) -> Self {
             let directory = tempfile::tempdir().unwrap();
-            let root = directory.path();
-            let publisher = EvidencePublisher::open(root).unwrap();
-            let digest = crate::hex_sha256(SCRIPT.as_bytes());
-            let members = serde_json::json!({
-                "inputs/gallery.json": {
-                    "relative_path": format!("objects/{digest}"),
-                    "byte_length": SCRIPT.len(),
-                    "sha256": digest,
-                },
-            });
-            publisher
-                .create(&format!("shared/objects/{digest}"), SCRIPT.as_bytes())
-                .unwrap();
-            publisher
-                .create(
-                    "shared/descriptor.json",
-                    &serde_json::to_vec(&serde_json::json!({
-                        "schema": "uqm-native-shared-descriptor-v1",
-                        "members": members,
-                    }))
-                    .unwrap(),
-                )
-                .unwrap();
-            let manifest = SuiteManifest {
-                schema: "uqm-native-suite-v1".into(),
-                sequence: 1,
-                request: crate::retained_identity("suite-request.json", b"[]"),
-                scenarios: rows,
-                first_failure: None,
-                elapsed_ms: 1,
-                finalized: true,
-                passed,
-            };
-            publisher
-                .create(
-                    "suite-manifest.json",
-                    &serde_json::to_vec_pretty(&manifest).unwrap(),
-                )
-                .unwrap();
+            write_suite(directory.path(), rows, passed);
             Self { directory }
         }
 
@@ -883,10 +930,92 @@ mod tests {
         }
 
         fn write(&self, relative: &str, bytes: &[u8]) {
-            EvidencePublisher::open(self.root())
-                .unwrap()
-                .create(relative, bytes)
-                .unwrap();
+            write_under(self.root(), relative, bytes);
+        }
+    }
+
+    /// Write one complete native suite into `root`, creating `root` if needed.
+    fn write_suite(root: &Path, rows: Vec<ScenarioAccounting>, passed: bool) {
+        std::fs::create_dir_all(root).unwrap();
+        let publisher = EvidencePublisher::open(root).unwrap();
+        let digest = crate::hex_sha256(SCRIPT.as_bytes());
+        let members = serde_json::json!({
+            "inputs/gallery.json": {
+                "relative_path": format!("objects/{digest}"),
+                "byte_length": SCRIPT.len(),
+                "sha256": digest,
+            },
+        });
+        publisher
+            .create(&format!("shared/objects/{digest}"), SCRIPT.as_bytes())
+            .unwrap();
+        publisher
+            .create(
+                "shared/descriptor.json",
+                &serde_json::to_vec(&serde_json::json!({
+                    "schema": "uqm-native-shared-descriptor-v1",
+                    "members": members,
+                }))
+                .unwrap(),
+            )
+            .unwrap();
+        let manifest = SuiteManifest {
+            schema: "uqm-native-suite-v1".into(),
+            sequence: 1,
+            request: crate::retained_identity("suite-request.json", b"[]"),
+            scenarios: rows,
+            first_failure: None,
+            elapsed_ms: 1,
+            finalized: true,
+            passed,
+        };
+        publisher
+            .create(
+                "suite-manifest.json",
+                &serde_json::to_vec_pretty(&manifest).unwrap(),
+            )
+            .unwrap();
+    }
+
+    fn write_under(root: &Path, relative: &str, bytes: &[u8]) {
+        EvidencePublisher::open(root)
+            .unwrap()
+            .create(relative, bytes)
+            .unwrap();
+    }
+
+    /// Write a smoke receipt naming each `(member, passed, terminal reason)`.
+    fn write_receipt(root: &Path, passed: bool, members: &[(&str, bool, &str)]) {
+        let scenarios: Vec<_> = members
+            .iter()
+            .map(|(name, passed, reason)| {
+                serde_json::json!({
+                    "scenario": name,
+                    "passed": passed,
+                    "terminal_reason": reason,
+                    "duration_ms": 1,
+                    "capture_count": 0,
+                    "frame_check": "passed",
+                    "screenshots_dir": "",
+                    "look_at": [],
+                })
+            })
+            .collect();
+        write_under(
+            root,
+            RECEIPT_JSON,
+            &serde_json::to_vec(&serde_json::json!({
+                "schema": RECEIPT_SCHEMA,
+                "passed": passed,
+                "scenarios": scenarios,
+            }))
+            .unwrap(),
+        );
+    }
+
+    fn completed() -> ScenarioState {
+        ScenarioState::Completed {
+            manifest: crate::retained_identity("native-acceptance.json", b"{}"),
         }
     }
 
@@ -1116,6 +1245,13 @@ mod tests {
                 }],
             }],
             totals: GalleryTotals::default(),
+            members: vec![GalleryMember {
+                name: hostile.into(),
+                receipt_passed: false,
+                terminal_reason: hostile.into(),
+                suite_passed: None,
+                detail: Some(hostile.into()),
+            }],
         };
 
         let html = render_html(&gallery, "../bundle/").unwrap();
@@ -1280,6 +1416,228 @@ mod tests {
         assert_eq!(
             relative_prefix(Path::new("/a/b/c/d"), Path::new("/a/x")).unwrap(),
             "../../../x/"
+        );
+    }
+
+    #[test]
+    fn a_smoke_root_is_read_through_each_member_suite() {
+        let root = tempfile::tempdir().unwrap();
+        write_suite(
+            &root.path().join("main-menu-v1"),
+            vec![row(completed())],
+            true,
+        );
+        write_suite(&root.path().join("battle-v1"), vec![row(completed())], true);
+        write_under(
+            root.path(),
+            "battle-v1/scenarios/0000/automation/captures/menu_gen3.png",
+            b"renderer",
+        );
+        write_receipt(
+            root.path(),
+            true,
+            &[
+                ("main-menu-v1", true, "completed"),
+                ("battle-v1", true, "completed"),
+            ],
+        );
+
+        let gallery = build(root.path()).unwrap();
+
+        assert!(gallery.suite_passed);
+        let names: Vec<&str> = gallery.members.iter().map(|m| m.name.as_str()).collect();
+        assert_eq!(names, ["main-menu-v1", "battle-v1"]);
+        assert!(gallery
+            .members
+            .iter()
+            .all(|member| member.suite_passed == Some(true) && member.detail.is_none()));
+        let directories: Vec<&str> = gallery
+            .scenarios
+            .iter()
+            .map(|scenario| scenario.directory.as_str())
+            .collect();
+        assert_eq!(
+            directories,
+            ["main-menu-v1/scenarios/0000", "battle-v1/scenarios/0000"]
+        );
+        assert_eq!(gallery.totals.obligations, 4);
+        assert_eq!(gallery.totals.missing, 4);
+        assert_eq!(gallery.totals.renderer_readbacks, 1);
+        assert_eq!(
+            gallery.scenarios[1].renderer_readbacks[0].relative_path,
+            "battle-v1/scenarios/0000/automation/captures/menu_gen3.png"
+        );
+    }
+
+    #[test]
+    fn a_smoke_member_path_that_leaves_the_root_is_refused() {
+        for escape in ["../outside", "/absolute"] {
+            let parent = tempfile::tempdir().unwrap();
+            let root = parent.path().join("smoke");
+            let outside = parent.path().join("outside");
+            write_suite(&outside, vec![row(completed())], true);
+            std::fs::create_dir_all(&root).unwrap();
+            let named = if escape == "/absolute" {
+                outside.display().to_string()
+            } else {
+                escape.to_string()
+            };
+            write_receipt(&root, true, &[(named.as_str(), true, "completed")]);
+
+            let error = build(&root).unwrap_err();
+
+            assert!(
+                error.contains("is not a path inside the smoke root"),
+                "{error}"
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_smoke_member_that_is_a_symlink_is_refused() {
+        let parent = tempfile::tempdir().unwrap();
+        let root = parent.path().join("smoke");
+        let outside = parent.path().join("outside");
+        write_suite(&outside, vec![row(completed())], true);
+        std::fs::create_dir_all(&root).unwrap();
+        std::os::unix::fs::symlink(&outside, root.join("battle-v1")).unwrap();
+        write_receipt(&root, true, &[("battle-v1", true, "completed")]);
+
+        let error = build(&root).unwrap_err();
+
+        assert!(
+            error.contains("smoke member \"battle-v1\" is not a directory"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn a_failed_member_stays_visible_and_fails_the_collection() {
+        let root = tempfile::tempdir().unwrap();
+        write_suite(
+            &root.path().join("main-menu-v1"),
+            vec![row(completed())],
+            true,
+        );
+        write_suite(
+            &root.path().join("battle-v1"),
+            vec![row(ScenarioState::Failed {
+                detail: "battle frames 0".into(),
+            })],
+            false,
+        );
+        write_receipt(
+            root.path(),
+            false,
+            &[
+                ("main-menu-v1", true, "completed"),
+                ("battle-v1", false, "battle frames 0"),
+            ],
+        );
+
+        let gallery = build(root.path()).unwrap();
+
+        assert!(!gallery.suite_passed);
+        let battle = gallery
+            .members
+            .iter()
+            .find(|member| member.name == "battle-v1")
+            .unwrap();
+        assert_eq!(battle.suite_passed, Some(false));
+        assert!(!battle.receipt_passed);
+        assert_eq!(battle.terminal_reason, "battle frames 0");
+        let failed: Vec<&GalleryScenario> = gallery
+            .scenarios
+            .iter()
+            .filter(|scenario| scenario.state == "failed")
+            .collect();
+        assert_eq!(failed.len(), 1);
+        assert_eq!(failed[0].directory, "battle-v1/scenarios/0000");
+        assert_eq!(gallery.totals.failed, 2);
+        assert_eq!(gallery.totals.missing, 2);
+        let html = render_html(&gallery, "").unwrap();
+        assert!(html.contains("battle-v1"));
+        assert!(html.contains("suite failed"));
+    }
+
+    #[test]
+    fn a_receipt_member_with_no_retained_suite_is_listed_as_missing() {
+        let root = tempfile::tempdir().unwrap();
+        write_suite(
+            &root.path().join("main-menu-v1"),
+            vec![row(completed())],
+            true,
+        );
+        write_receipt(
+            root.path(),
+            false,
+            &[
+                ("main-menu-v1", true, "completed"),
+                ("load-save-v1", false, "presentation 3 was not acknowledged"),
+            ],
+        );
+
+        let gallery = build(root.path()).unwrap();
+
+        assert!(!gallery.suite_passed);
+        let missing = gallery
+            .members
+            .iter()
+            .find(|member| member.name == "load-save-v1")
+            .unwrap();
+        assert_eq!(missing.suite_passed, None);
+        assert!(missing
+            .detail
+            .as_deref()
+            .unwrap()
+            .contains("retains no suite"));
+        assert_eq!(gallery.scenarios.len(), 1);
+        assert_eq!(gallery.totals.obligations, 2);
+        let html = render_html(&gallery, "").unwrap();
+        assert!(html.contains("suite missing"));
+    }
+
+    #[test]
+    fn a_receipt_that_names_a_member_twice_or_contradicts_its_rows_is_refused() {
+        let root = tempfile::tempdir().unwrap();
+        write_suite(&root.path().join("battle-v1"), vec![row(completed())], true);
+        write_receipt(
+            root.path(),
+            true,
+            &[
+                ("battle-v1", true, "completed"),
+                ("battle-v1", true, "completed"),
+            ],
+        );
+        let error = build(root.path()).unwrap_err();
+        assert!(error.contains("names member battle-v1 twice"), "{error}");
+
+        std::fs::remove_file(root.path().join(RECEIPT_JSON)).unwrap();
+        write_receipt(
+            root.path(),
+            true,
+            &[("battle-v1", false, "battle frames 0")],
+        );
+        let error = build(root.path()).unwrap_err();
+        assert!(
+            error.contains("disagrees with its scenario rows"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn a_single_suite_keeps_its_catalog_shape() {
+        let fixture = Fixture::new(vec![row(completed())], true);
+
+        let gallery = build(fixture.root()).unwrap();
+
+        assert!(gallery.members.is_empty());
+        assert_eq!(gallery.scenarios[0].directory, "scenarios/0000");
+        let json = serde_json::to_value(&gallery).unwrap();
+        assert!(
+            json.get("members").is_none(),
+            "a single suite's catalog must not gain a members key"
         );
     }
 }
