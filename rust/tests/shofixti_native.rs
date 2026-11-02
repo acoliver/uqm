@@ -883,7 +883,6 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
             for computer in [false, true] {
                 for initial in [[2, 2], [1, 2], [2, 1], [1, 1]] {
                     let _battle = Battle::new(16);
-                    let saved_queues = race_q;
                     let saved_inputs = std::array::from_fn::<_, 2, _>(|side| {
                         uqm_rust::battle::battle_native::player_input(side)
                     });
@@ -920,13 +919,15 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                         reserves[side].SpeciesID = SPECIES_ID_SHOFIXTI_ID;
                         reserves[side].index = 1;
                         reserves[side].playerNr = side as SIZE;
-                        race_q[side].head = active.cast();
-                        race_q[side].tail = active.cast();
-                        if initial[side] > 1 {
-                            (*active).succ = (&raw mut *reserves[side]).cast();
-                            reserves[side].pred = active.cast();
-                            race_q[side].tail = (&raw mut *reserves[side]).cast();
-                        }
+                        uqm_rust::app::bridge::battle(|battle| {
+                            let mut ships = battle.ships(side);
+                            let active = ships.id(active.cast()).unwrap();
+                            ships.put(active);
+                            if initial[side] > 1 {
+                                let reserve = ships.link(reserves[side].ship_id);
+                                ships.put(reserve);
+                            }
+                        });
                     }
                     // Arm the real glory device, execute its area damage, then
                     // process both deaths within the same simulated frame.
@@ -1021,7 +1022,6 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                         GlobData.Game_state.CurrentActivity & IN_BATTLE as u16 != 0,
                         expected_selection
                     );
-                    race_q = saved_queues;
                     for (side, input) in saved_inputs.into_iter().enumerate() {
                         uqm_rust::battle::battle_native::set_player_input(side, input);
                     }

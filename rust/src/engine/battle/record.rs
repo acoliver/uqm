@@ -1,6 +1,6 @@
 //! Shared battle record layouts during the storage transition.
 pub use crate::battle::velocity::VelocityDesc as VELOCITY_DESC;
-use crate::collections::queue::{HLink as HELEMENT, HLink as HLINK};
+use crate::collections::queue::HLink as HELEMENT;
 use crate::graphics::native_abi::{
     BYTE, COUNT, FRAME, POINT, RESOURCE, SIZE, STRING, STRING as SOUND, UWORD,
     UWORD as ELEMENT_FLAGS, UWORD as STATUS_FLAGS,
@@ -83,8 +83,6 @@ mod abi {
     #[repr(C)]
     #[derive(Debug, Clone)]
     pub struct STARSHIP {
-        pub pred: HLINK,
-        pub succ: HLINK,
         pub SpeciesID: SPECIES_ID,
         pub captains_name_index: BYTE,
         pub descriptor: Option<Box<RACE_DESC>>,
@@ -253,6 +251,32 @@ impl Default for ELEMENT {
     }
 }
 
+impl Default for STARSHIP {
+    fn default() -> Self {
+        Self {
+            SpeciesID: 0,
+            captains_name_index: 0,
+            descriptor: None,
+            crew_level: 0,
+            max_crew: 0,
+            ship_cost: 0,
+            index: 0,
+            race_strings: std::ptr::null_mut(),
+            icons: std::ptr::null_mut(),
+            weapon_counter: 0,
+            special_counter: 0,
+            energy_counter: 0,
+            ship_input_state: 0,
+            cur_status_flags: 0,
+            old_status_flags: 0,
+            hShip: std::ptr::null_mut(),
+            ShipFacing: 0,
+            playerNr: 0,
+            control: 0,
+        }
+    }
+}
+
 impl ELEMENT {
     pub fn life_span(&self) -> u16 {
         self.life
@@ -409,33 +433,23 @@ use super::{Cx, ElementId, Parent, ShipId};
 
 impl Cx<'_> {
     pub(crate) fn ship_pointer(&self, id: ShipId) -> *mut STARSHIP {
-        assert!(id.side < 2, "invalid ship side {id:?}");
-        // SAFETY: queue storage is address-stable for the battle's lifetime.
-        {
-            let queue = self.project(ship_queue(usize::from(id.side)));
-            assert!(
-                usize::from(id.slot) < usize::from(queue.num_objects),
-                "invalid ship {id:?}"
-            );
-            queue
-                .pq_tab
-                .wrapping_add(usize::from(id.slot) * usize::from(queue.object_size))
-                .cast()
-        }
+        std::ptr::from_ref(self.ship(id)).cast_mut()
     }
     pub(crate) fn ship(&self, id: ShipId) -> &STARSHIP {
-        // SAFETY: the validated slot belongs to this context's ship authority.
-        self.project(
-            std::ptr::NonNull::new(self.ship_pointer(id))
-                .unwrap_or_else(|| panic!("{}", "ship slot")),
-        )
+        let pool = &self.b.kernel.races[usize::from(id.side)];
+        let key = pool
+            .id_at(usize::from(id.slot))
+            .unwrap_or_else(|| panic!("invalid ship {id:?}"));
+        assert_eq!(id.gen, key.generation(), "stale ship {id:?}");
+        pool.get(key)
     }
     pub(super) fn ship_mut(&mut self, id: ShipId) -> &mut STARSHIP {
-        // SAFETY: this exclusive context borrow scopes the one-record projection.
-        self.project_mut(
-            std::ptr::NonNull::new(self.ship_pointer(id))
-                .unwrap_or_else(|| panic!("{}", "ship slot")),
-        )
+        let pool = &mut self.b.kernel.races[usize::from(id.side)];
+        let key = pool
+            .id_at(usize::from(id.slot))
+            .unwrap_or_else(|| panic!("invalid ship {id:?}"));
+        assert_eq!(id.gen, key.generation(), "stale ship {id:?}");
+        pool.get_mut(key)
     }
     pub(crate) fn desc(&self, id: ShipId) -> &RACE_DESC {
         self.ship(id)
@@ -599,22 +613,10 @@ impl RACE_DESC {
 }
 
 use std::ptr;
-const EMPTY_QUEUE: QUEUE = QUEUE {
-    head: ptr::null_mut(),
-    tail: ptr::null_mut(),
-    pq_tab: ptr::null_mut(),
-    free_list: ptr::null_mut(),
-    object_size: 0,
-    num_objects: 0,
-};
-
-#[no_mangle]
-pub static mut race_q: [QUEUE; 2] = [EMPTY_QUEUE; 2];
-
-pub(crate) fn ship_queue(side: usize) -> std::ptr::NonNull<QUEUE> {
-    assert!(side < 2);
-    std::ptr::NonNull::new((&raw mut race_q).cast::<QUEUE>().wrapping_add(side))
-        .unwrap_or_else(|| panic!("{}", "static ship queues"))
+pub(crate) fn ship_queue(side: usize) -> std::ptr::NonNull<super::link_queue::RacePool> {
+    assert!(side < 2, "invalid ship side {side}");
+    // SAFETY: callers use this only while the owning Kernel is published on the game thread.
+    std::ptr::NonNull::from(&mut unsafe { Kernel::current() }.races[side])
 }
 impl ElementState {
     fn encode(self) -> ELEMENT {
@@ -665,8 +667,43 @@ impl ElementState {
 mod projection_tests {
     use super::*;
     #[test]
+    fn ship_projection_retains_its_address_and_rejects_reused_generations() {
+        use crate::engine::battle::link_queue::{LinkQueue, Starship};
+        let mut battle = super::super::Battle::new(1);
+        battle.reset_ship_capacity(0, 1);
+        let (id, pointer) = {
+            let mut ships = battle.ships(0);
+            let link = ships.alloc().unwrap();
+            (ships.ship_id(link, 0), ships.raw(link).cast::<STARSHIP>())
+        };
+        let mut activity = 0;
+        let mut groups = QUEUE::default();
+        // SAFETY: this test retains both local world authorities for the context's lifetime.
+        let mut world =
+            unsafe { super::super::World::new(&mut activity, &mut groups, [ptr::null_mut(); 2]) };
+        let cx = Cx {
+            b: &mut battle,
+            world: &mut world,
+            rng: || 0,
+        };
+        assert_eq!(cx.ship_pointer(id), pointer);
+        let replacement = {
+            let mut ships = LinkQueue::<Starship>::new(&mut cx.b.kernel.races[0]);
+            let link = ships.link(id);
+            ships.free(link);
+            let next = ships.alloc().unwrap();
+            assert_eq!(ships.raw(next).cast::<STARSHIP>(), pointer);
+            ships.ship_id(next, 0)
+        };
+        assert_ne!(replacement.gen, id.gen);
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| cx.ship_pointer(id))).is_err()
+        );
+        assert_eq!(cx.ship_pointer(replacement), pointer);
+    }
+    #[test]
     fn pointer_free_values_roundtrip_record_scalars_and_subject_metadata() {
-        let mut groups = EMPTY_QUEUE;
+        let mut groups = QUEUE::default();
         let mut activity = 0u16;
         let mut battle = super::super::Battle::new(3);
         // SAFETY: the local world authorities remain live and exclusively borrowed.
@@ -805,6 +842,7 @@ pub(crate) use super::kernel::{Channels, SoundQueue, StarPlane};
 
 pub(crate) struct Kernel {
     pub(crate) elements: super::ElementTable,
+    pub(crate) races: [super::link_queue::RacePool; 2],
     pub(crate) display: super::display::DisplayPool,
     pub(crate) master_queue: super::kernel::MasterCatalog,
     pub(crate) player_input: [*mut std::ffi::c_void; 2],
@@ -839,6 +877,7 @@ impl Kernel {
         }));
         Self {
             elements: super::ElementTable::with_capacity(150),
+            races: std::array::from_fn(|_| super::link_queue::RacePool::with_capacity(0)),
             display: super::display::DisplayPool::new(),
             master_queue: super::kernel::MasterCatalog::new(),
             player_input: [ptr::null_mut(); 2],
@@ -892,9 +931,6 @@ mod kernel_tests {
 use super::link_queue::QueueRecord;
 impl QueueRecord for crate::engine::battle::link_queue::Starship {
     type Storage = STARSHIP;
-    fn links(record: &Self::Storage) -> (HLINK, HLINK) {
-        (record.pred, record.succ)
-    }
 }
 
 #[cfg(not(test))]

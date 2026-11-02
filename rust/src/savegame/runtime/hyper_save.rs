@@ -41,7 +41,7 @@
 //! `ShipFacing` is written.
 
 use super::queues::QueueError;
-use crate::comm::locdata::{CGameState, CQueue};
+use crate::comm::locdata::CGameState;
 use std::fmt;
 /// Why the flagship's facing could not be prepared.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -92,7 +92,7 @@ pub enum HyperFlagship {
 /// examined only after the queue was walked against its pool, but the pools
 /// themselves must be live memory that C is not changing during the call.
 pub unsafe fn read_flagship_facing(
-    player_ships: &CQueue,
+    player_ships: &crate::engine::battle::link_queue::RacePool,
     display_list: &crate::engine::battle::ElementTable,
 ) -> Result<Option<u16>, HyperSaveError> {
     crate::battle::context_access::save::read_flagship_facing(player_ships, display_list)
@@ -104,7 +104,7 @@ pub unsafe fn read_flagship_facing(
 /// # Safety
 /// As [`read_flagship_facing`].
 unsafe fn flagship_facing(
-    player_ships: &CQueue,
+    player_ships: &crate::engine::battle::link_queue::RacePool,
     display_list: &crate::engine::battle::ElementTable,
 ) -> Result<Option<u16>, HyperSaveError> {
     match read_flagship_facing(player_ships, display_list)? {
@@ -125,7 +125,7 @@ unsafe fn flagship_facing(
 /// call runs.
 pub unsafe fn save_hyper_facing(
     game: &mut CGameState,
-    player_ships: &CQueue,
+    player_ships: &crate::engine::battle::link_queue::RacePool,
     display_list: &crate::engine::battle::ElementTable,
 ) -> Result<HyperFlagship, HyperSaveError> {
     match flagship_facing(player_ships, display_list)? {

@@ -110,6 +110,10 @@ impl<T, const N: usize> OrderedPool<T, N> {
         }
     }
 
+    pub fn storage_identity(&self) -> usize {
+        self.slots.as_ptr() as usize
+    }
+
     fn id(&self, ix: SlotIx) -> Id<T> {
         Id {
             ix,

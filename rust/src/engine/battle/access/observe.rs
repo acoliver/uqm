@@ -7,16 +7,6 @@ use super::super::{
     views::*,
 };
 use std::ffi::c_void;
-pub(crate) const SHIP_LINKS: crate::collections::queue::LinkLayout =
-    crate::collections::queue::LinkLayout {
-        size: std::mem::size_of::<STARSHIP>(),
-        align: std::mem::align_of::<STARSHIP>(),
-        read: |p| {
-            // SAFETY: the queue walker checked the retained ship slot's layout and bounds.
-            let r = unsafe { &*p.cast::<STARSHIP>().as_ptr() };
-            (r.pred, r.succ)
-        },
-    };
 /// Encode an owner identity for the existing journal, without decoding record fields.
 ///
 /// # Safety
@@ -28,7 +18,10 @@ unsafe fn parent_address(parent: super::super::Parent, groups: Option<&QUEUE>) -
         Parent::Ship(id) => {
             // SAFETY: the observation retains the live ship authority.
             let queue = unsafe { super::super::record::ship_queue(usize::from(id.side)).as_ref() };
-            (queue, id.slot)
+            let key = queue
+                .id_at(usize::from(id.slot))
+                .unwrap_or_else(|| panic!("invalid ship owner {id:?}"));
+            return std::ptr::from_ref(queue.get(key)).cast_mut().cast();
         }
         Parent::IpGroup(slot) => (
             groups.unwrap_or_else(|| panic!("missing IP-group authority")),
@@ -134,17 +127,17 @@ pub(crate) struct DescriptorRecordObservation<'a> {
 /// # Safety
 /// The caller retains every descriptor and loaded resource referenced by this immutable queue view.
 pub(crate) unsafe fn ship<'a>(
-    ships: &LinkQueue<'a, Starship>,
+    pool: &'a super::super::link_queue::RacePool,
     id: LinkId<Starship>,
 ) -> ShipRecordObservation<'a> {
-    // SAFETY: the checked link names a retained ship slot.
-    let s = unsafe { &*ships.raw(id).cast::<STARSHIP>() };
+    let ships = LinkQueue::<Starship>::borrow(pool);
+    let s = pool.get(ships.key(id));
     ShipRecordObservation {
         state: ShipState::decode(s),
         pick: ships.get(id),
         address: ships.raw(id) as usize,
-        pred: s.pred as usize,
-        succ: s.succ as usize,
+        pred: ships.pred(id).map_or(0, |id| ships.raw(id) as usize),
+        succ: ships.succ(id).map_or(0, |id| ships.raw(id) as usize),
         element: s.hShip as usize,
         #[cfg(not(test))]
         descriptor: s

@@ -14,7 +14,9 @@ pub(super) struct Ship<'a> {
 impl<'a> Ship<'a> {
     /// # Safety
     /// The pool and all resource allocations remain immutable for the observation.
-    pub(super) unsafe fn queue(queue: &'a crate::comm::locdata::CQueue) -> Vec<Self> {
+    pub(super) unsafe fn queue(
+        queue: &'a crate::engine::battle::link_queue::RacePool,
+    ) -> Vec<Self> {
         // SAFETY: the caller retains the immutable pool and every reachable resource.
         unsafe { crate::battle::context_access::observe::ships(queue) }
             .into_iter()
@@ -241,15 +243,9 @@ mod tests {
         state.playerNr = 1;
         state.ShipFacing = 31;
         state.crew_level = 17;
-        let address = std::ptr::from_mut(&mut state).cast();
-        let queue = crate::comm::locdata::CQueue {
-            head: address,
-            tail: address,
-            pq_tab: address.cast(),
-            object_size: std::mem::size_of_val(&state) as u16,
-            num_objects: 1,
-            ..Default::default()
-        };
+        let mut queue = crate::engine::battle::link_queue::RacePool::with_capacity(1);
+        let id = queue.alloc(state).unwrap();
+        queue.put(id);
         // SAFETY: the local pool remains live and immutable until ships is dropped.
         let ships = unsafe { Ship::queue(&queue) };
         let ship = &ships[0];

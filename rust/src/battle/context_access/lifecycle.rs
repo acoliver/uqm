@@ -1,29 +1,21 @@
-//! Storage lifecycle for the transitional element and ship pools.
+//! Lifecycle of the Kernel-owned battle ship pools.
 #![cfg(not(test))]
-use crate::collections::queue::{InitQueue, UninitQueue};
-use crate::engine::battle::record;
+use crate::engine::battle::record::Kernel;
 
 /// # Safety
-/// Run on the game thread before the first ship allocation.
+/// Run on the owning game thread before the first ship allocation.
 pub(crate) unsafe fn init_ships() {
-    for side in 0..2 {
-        // SAFETY: the caller guarantees exclusive access at this pool lifecycle boundary.
-        unsafe {
-            InitQueue(
-                record::ship_queue(side).as_ptr(),
-                crate::ships::native::abi::MAX_SHIPS_PER_SIDE as u16,
-                crate::engine::battle::link_queue::ship_size() as u16,
-            );
-        }
+    // SAFETY: the lifecycle owner exclusively retains the published Kernel.
+    for pool in &mut unsafe { Kernel::current() }.races {
+        pool.reset_capacity(crate::ships::native::abi::MAX_SHIPS_PER_SIDE as usize);
     }
 }
+
 /// # Safety
-/// Run after all ship resources and element references have been retired.
+/// Run after ship resources and element references have been retired.
 pub(crate) unsafe fn uninit_ships() {
-    for side in 0..2 {
-        // SAFETY: the caller guarantees exclusive access at this pool lifecycle boundary.
-        unsafe {
-            UninitQueue(record::ship_queue(side).as_ptr());
-        }
+    // SAFETY: the lifecycle owner exclusively retains the published Kernel.
+    for pool in &mut unsafe { Kernel::current() }.races {
+        pool.reset_capacity(0);
     }
 }

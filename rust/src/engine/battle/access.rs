@@ -211,10 +211,6 @@ impl Cx<'_> {
         // SAFETY: record decoders supply checked pointers retained by this context.
         unsafe { &*pointer.as_ptr() }
     }
-    pub(super) fn project_mut<T>(&mut self, pointer: std::ptr::NonNull<T>) -> &mut T {
-        // SAFETY: the exclusive context borrow scopes one checked record projection.
-        unsafe { &mut *pointer.as_ptr() }
-    }
 }
 
 impl Cx<'_> {
@@ -499,8 +495,8 @@ impl Cx<'_> {
 #[cfg(not(test))]
 impl Cx<'_> {
     pub fn primitive_stamp(&mut self, id: ElementId) -> crate::graphics::native_abi::STAMP {
-        let pointer = std::ptr::NonNull::from(&mut self.primitive(id).Object).cast();
-        *self.project(pointer)
+        // SAFETY: the caller selected a stamp primitive from the retained graphics union.
+        unsafe { self.primitive(id).Object.Stamp }
     }
 
     pub fn set_primitive_stamp(
@@ -508,8 +504,7 @@ impl Cx<'_> {
         id: ElementId,
         stamp: crate::graphics::native_abi::STAMP,
     ) {
-        let pointer = std::ptr::NonNull::from(&mut self.primitive(id).Object).cast();
-        *self.project_mut(pointer) = stamp;
+        self.primitive(id).Object.Stamp = stamp;
     }
 
     pub fn copy_current_to_next(&mut self, id: ElementId) {
@@ -842,9 +837,6 @@ pub(crate) mod lifecycle;
 /// The running battle or flight's shared queues, borrowed on the game thread.
 #[cfg(not(test))]
 pub(crate) mod live_queues {
-    use super::super::legacy as queues;
-    use crate::collections::queue::Queue;
-    use std::ptr;
 
     /// `&race_q[player]`, the `STARSHIP` queue of one side (`RPG_PLAYER_NUM` is
     /// the human player's).
@@ -852,12 +844,8 @@ pub(crate) mod live_queues {
     /// # Safety
     /// Game thread only. The caller may read the queue only while no other code is
     /// changing it.
-    pub unsafe fn player_ships(player: usize) -> *const Queue {
-        // SAFETY: the caller retains the initialized storage and resources for this synchronous projection.
-        unsafe {
-            assert!(player < 2, "race_q has no side {player}");
-            ptr::addr_of!(queues::race_q).cast::<Queue>().add(player)
-        }
+    pub unsafe fn player_ships(player: usize) -> *const super::super::link_queue::RacePool {
+        super::super::record::ship_queue(player).as_ptr()
     }
 
     /// The Kernel-owned element pool, retained for this game-thread call.

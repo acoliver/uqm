@@ -1,62 +1,69 @@
-use std::{
-    mem,
-    ops::{Deref, DerefMut},
-};
+use std::ops::{Deref, DerefMut};
 use uqm_rust::{
-    collections::queue::{AllocLink, FreeLink},
-    ships::native::abi::{race_q, SIZE, STARSHIP},
+    engine::battle::link_queue::{LinkId, Starship},
+    ships::native::abi::{SIZE, STARSHIP},
 };
 
 pub struct PoolShip {
     pointer: *mut STARSHIP,
     side: usize,
+    link: LinkId<Starship>,
     pub ship_id: uqm_rust::engine::battle::ShipId,
 }
 impl PoolShip {
     /// # Safety
-    /// The caller initialized and exclusively owns the fixture pools, and retains
-    /// them until this ship and all references to it have dropped.
+    /// The caller exclusively retains the serialized fixture pools throughout this borrow.
     pub unsafe fn new(player: SIZE) -> Self {
         let side = player as usize;
-        assert!(side < 2);
-        // SAFETY: the fixture owns the initialized queue and the newly allocated slot.
-        unsafe {
-            let pointer = AllocLink(&raw mut race_q[side]).cast::<STARSHIP>();
-            assert!(!pointer.is_null(), "fixture ship pool exhausted");
-            pointer.write(mem::zeroed());
-            (*pointer).playerNr = player;
-            let ship_id = uqm_rust::engine::battle::ShipId {
-                side: side as u8,
-                slot: ((pointer as usize - race_q[side].pq_tab as usize) / size_of::<STARSHIP>())
-                    as u8,
-            };
-            Self {
-                pointer,
-                side,
-                ship_id,
-            }
+        // SAFETY: the constructor's contract retains the serialized published fixture.
+        let (pointer, link, ship_id) = unsafe {
+            uqm_rust::app::bridge::battle(|owner| {
+                let mut ships = owner.ships(side);
+                let link = ships
+                    .alloc()
+                    .unwrap_or_else(|| panic!("fixture ship pool exhausted"));
+                ships.edit(link, |ship| ship.player = player);
+                (
+                    ships.raw(link).cast(),
+                    link,
+                    ships.ship_id(link, side as u8),
+                )
+            })
+        };
+        Self {
+            pointer,
+            side,
+            link,
+            ship_id,
         }
     }
 }
 impl Deref for PoolShip {
     type Target = STARSHIP;
     fn deref(&self) -> &STARSHIP {
-        // SAFETY: construction retains this owned slot in the fixture's live pool.
+        // SAFETY: the construction contract retains this owned fixture slot.
         unsafe { &*self.pointer }
     }
 }
 impl DerefMut for PoolShip {
     fn deref_mut(&mut self) -> &mut STARSHIP {
-        // SAFETY: this exclusive borrow is the only projection of the owned slot.
+        // SAFETY: this exclusive borrow retains the fixture slot.
         unsafe { &mut *self.pointer }
     }
 }
 impl Drop for PoolShip {
     fn drop(&mut self) {
-        // SAFETY: the construction contract retains the pool until this slot is released.
+        // SAFETY: the fixture contract retains the published pool until this owner drops.
         unsafe {
-            std::ptr::drop_in_place(self.pointer);
-            FreeLink(&raw mut race_q[self.side], self.pointer.cast());
+            uqm_rust::app::bridge::battle(|owner| {
+                let mut ships = owner.ships(self.side);
+                if ships.contains(self.link) {
+                    if ships.linked(self.link) {
+                        ships.remove(self.link);
+                    }
+                    ships.free(self.link);
+                }
+            });
         }
     }
 }

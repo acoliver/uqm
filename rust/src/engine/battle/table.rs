@@ -17,6 +17,7 @@ pub struct ElementId {
 pub struct ShipId {
     pub side: u8,
     pub slot: u8,
+    pub gen: u32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

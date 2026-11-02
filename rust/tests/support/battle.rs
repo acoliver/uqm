@@ -4,7 +4,6 @@
 )]
 use std::{ffi::c_void, mem, ptr};
 use uqm_rust::battle::process_native::InitDisplayList;
-use uqm_rust::collections::queue::{AllocLink, FreeLink, InitQueue, UninitQueue};
 use uqm_rust::engine::battle::schema::HELEMENT;
 use uqm_rust::{
     engine::battle::{ElementId, RaceState, ShipId},
@@ -85,10 +84,11 @@ impl Battle {
             uqm_rust::app::bridge::battle(|battle| {
                 battle.reset_element_capacity(usize::from(capacity));
             });
-            let queues = &raw mut race_q;
-            for queue in &mut *queues {
-                assert!(InitQueue(queue, 32, size_of::<STARSHIP>() as u16));
-            }
+            uqm_rust::app::bridge::battle(|battle| {
+                for side in 0..2 {
+                    battle.reset_ship_capacity(side, 32);
+                }
+            });
             InitDisplayList();
             ScreenWidth = 320;
             ScreenHeight = 240;
@@ -104,10 +104,11 @@ impl Drop for Battle {
         // SAFETY: ships and elements created after this owner have already dropped.
         unsafe {
             uqm_rust::app::bridge::battle(|battle| battle.reset_element_capacity(0));
-            let queues = &raw mut race_q;
-            for queue in &mut *queues {
-                UninitQueue(queue);
-            }
+            uqm_rust::app::bridge::battle(|battle| {
+                for side in 0..2 {
+                    battle.reset_ship_capacity(side, 0);
+                }
+            });
             (ScreenWidth, ScreenHeight) = self.dimensions;
             uqm_rust::graphics::context_abi::_GraphicsStatusFlags = self.graphics;
         }
@@ -141,9 +142,16 @@ impl<'a> Ship<'a> {
         // SAFETY: construction runs inside the serialized, published test battle.
         unsafe {
             let desc = Box::new(descriptor(species));
-            let raw_ship = AllocLink(&raw mut race_q[player as usize]).cast::<STARSHIP>();
-            assert!(!raw_ship.is_null());
-            raw_ship.write(mem::zeroed());
+            let (raw_ship, ship_id) = uqm_rust::app::bridge::battle(|owner| {
+                let mut ships = owner.ships(player as usize);
+                let link = ships
+                    .alloc()
+                    .unwrap_or_else(|| panic!("fixture ship pool exhausted"));
+                (
+                    ships.raw(link).cast::<STARSHIP>(),
+                    ships.ship_id(link, player as u8),
+                )
+            });
             (*raw_ship).descriptor = Some(desc);
             (*raw_ship).playerNr = player;
             (*raw_ship).SpeciesID = species;
@@ -161,11 +169,6 @@ impl<'a> Ship<'a> {
                     .id(handle)
                     .unwrap_or_else(|| panic!("allocated element missing from pool"))
             });
-            let ship_id = ShipId {
-                side: player as u8,
-                slot: ((raw_ship as usize - race_q[player as usize].pq_tab as usize)
-                    / size_of::<STARSHIP>()) as u8,
-            };
             (*el).parent = uqm_rust::engine::battle::Parent::Ship(ship_id);
             Self {
                 battle,
@@ -511,11 +514,14 @@ impl Drop for Ship<'_> {
                     cx.dispose(self.id);
                 }
             });
-            ptr::drop_in_place(self.ss.0);
-            FreeLink(
-                &raw mut race_q[self.ship_id.side as usize],
-                self.ss.0.cast(),
-            );
+            uqm_rust::app::bridge::battle(|owner| {
+                let mut ships = owner.ships(self.ship_id.side as usize);
+                let link = ships.link(self.ship_id);
+                if ships.linked(link) {
+                    ships.remove(link);
+                }
+                ships.free(link);
+            });
         }
     }
 }

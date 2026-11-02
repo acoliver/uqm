@@ -31,6 +31,7 @@ fn world(
         let owner = ShipId {
             side: side as u8,
             slot: 0,
+            gen: 0,
         };
         element.parent = Parent::Ship(owner);
         element.player = side as i16;

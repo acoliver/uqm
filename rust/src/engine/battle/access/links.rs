@@ -1,87 +1,49 @@
 use super::super::link_queue::*;
 #[cfg(not(test))]
 use super::super::ShipId;
-use crate::collections::queue::{self, HLink, Queue};
+use crate::collections::queue::HLink;
 use std::{marker::PhantomData, ptr};
 impl<'a, T: QueueRecord> LinkQueue<'a, T> {
-    /// # Safety
-    /// The initialized queue must contain ship records and be exclusively borrowed
-    /// on the owning game thread. End the view before a legacy call can use it.
-    pub unsafe fn new(queue: &'a mut Queue) -> Self {
-        assert_eq!(usize::from(queue.object_size), size_of::<T::Storage>());
+    pub fn new(queue: &'a mut crate::collections::pool::OrderedPool<T::Storage, 32>) -> Self {
         Self {
             queue: QueueBorrow::Exclusive(queue),
             marker: PhantomData,
         }
     }
-    /// # Safety
-    /// The initialized queue and its records remain live and immutable for the view.
-    pub unsafe fn borrow(queue: &'a Queue) -> Self {
-        assert_eq!(usize::from(queue.object_size), size_of::<T::Storage>());
+    pub fn borrow(queue: &'a crate::collections::pool::OrderedPool<T::Storage, 32>) -> Self {
         Self {
             queue: QueueBorrow::Shared(queue),
             marker: PhantomData,
         }
     }
     pub fn raw(&self, id: LinkId<T>) -> HLink {
-        assert_eq!(
-            id.pool, self.queue.pq_tab as usize,
-            "ship link belongs to another pool"
-        );
-        assert!(id.slot < self.queue.num_objects, "ship link outside pool");
-        let raw = self
-            .queue
-            .pq_tab
-            .wrapping_add(usize::from(id.slot) * size_of::<T::Storage>())
-            .cast();
-        let mut free = self.queue.free_list;
-        while !free.is_null() {
-            assert_ne!(raw, free, "ship link addresses free storage");
-            // SAFETY: queue initialization writes every free-list link before a view is created.
-            free = unsafe { (*free.cast::<queue::Link>()).succ };
-        }
-        raw
+        ptr::from_ref(self.record(id)).cast_mut().cast()
     }
     pub(crate) fn record(&self, id: LinkId<T>) -> &T::Storage {
-        // SAFETY: construction guarantees ship storage; raw checks pool membership.
-        unsafe { &*self.raw(id).cast::<T::Storage>() }
+        self.queue.get(self.key(id))
     }
     pub(crate) fn record_mut(&mut self, id: LinkId<T>) -> &mut T::Storage {
-        let _ = &mut *self.queue;
-        // SAFETY: this exclusive view scopes the checked one-record borrow.
-        unsafe { &mut *self.raw(id).cast::<T::Storage>() }
+        let key = self.key(id);
+        self.queue.get_mut(key)
     }
     pub fn alloc(&mut self) -> Option<LinkId<T>> {
-        // SAFETY: the view exclusively owns this queue's initialized free list.
-        let raw = unsafe { queue::AllocLink(&mut *self.queue) };
-        let id = self.id(raw)?;
-        // SAFETY: all fields of a newly allocated legacy ship admit zero.
-        unsafe {
-            ptr::write_bytes(raw.cast::<T::Storage>(), 0, 1);
-        }
-        Some(id)
+        let key = self.queue.alloc(T::Storage::default())?;
+        Some(self.identify(key))
     }
     pub fn put(&mut self, id: LinkId<T>) {
-        assert!(!self.linked(id), "ship is already linked");
-        let raw = self.raw(id);
-        // SAFETY: callers append allocated unlinked records to this pool.
-        unsafe {
-            queue::PutQueue(&mut *self.queue, raw);
-        }
+        let key = self.key(id);
+        self.queue.put(key);
     }
     pub fn remove(&mut self, id: LinkId<T>) {
-        assert!(self.linked(id), "ship is not linked");
-        let raw = self.raw(id);
-        // SAFETY: callers unlink a currently linked record from this pool.
-        unsafe {
-            queue::RemoveQueue(&mut *self.queue, raw);
-        }
+        let key = self.key(id);
+        self.queue.remove(key);
+    }
+    pub fn free(&mut self, id: LinkId<T>) {
+        let key = self.key(id);
+        self.queue.free(key);
     }
     pub fn reinit(&mut self) {
-        // SAFETY: no record borrow outlives this exclusive view's operation.
-        unsafe {
-            queue::ReinitQueue(&mut *self.queue);
-        }
+        self.queue.reinit();
     }
 }
 /// # Safety
@@ -93,27 +55,22 @@ pub(crate) unsafe fn ships<'a>(side: usize) -> LinkQueue<'a, Starship> {
     unsafe { LinkQueue::new(&mut *super::super::record::ship_queue(side).as_ptr()) }
 }
 
-pub(crate) const fn ship_size() -> usize {
-    size_of::<<Starship as QueueRecord>::Storage>()
-}
-
 /// # Safety
 /// The address is a live ship in a game-thread-owned battle pool, without a retained queue borrow.
 #[cfg(not(test))]
 pub(crate) unsafe fn identify(address: usize) -> ShipId {
     for side in 0..2 {
-        // SAFETY: the queue headers outlive all battle-side records.
-        let queue = unsafe { &*super::super::record::ship_queue(side).as_ptr() };
-        if let Some(offset) = address.checked_sub(queue.pq_tab as usize) {
-            let stride = usize::from(queue.object_size);
-            if stride == ship_size()
-                && offset.is_multiple_of(stride)
-                && offset / stride < usize::from(queue.num_objects)
-            {
-                return ShipId {
-                    side: side as u8,
-                    slot: (offset / stride) as u8,
-                };
+        // SAFETY: callers retain the published game-thread Kernel throughout this lookup.
+        let pool = unsafe { super::super::record::ship_queue(side).as_ref() };
+        for slot in 0..32 {
+            if let Some(id) = pool.id_at(slot) {
+                if ptr::from_ref(pool.get(id)) as usize == address {
+                    return ShipId {
+                        side: side as u8,
+                        slot: slot as u8,
+                        gen: id.generation(),
+                    };
+                }
             }
         }
     }

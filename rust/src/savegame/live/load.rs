@@ -2,7 +2,6 @@
 use super::super::abi::SummaryDesc;
 use super::super::runtime::{self, groups, queues, statefiles};
 use super::super::{SaveFile, SaveSlots};
-use crate::collections::queue::{Queue, ReinitQueue};
 use crate::comm::dispatch::{IN_INTERPLANETARY, START_ENCOUNTER, START_INTERPLANETARY};
 use crate::mainloop::dir_prep::saveDir;
 use crate::planets::c_api::GLOB_DATA;
@@ -19,12 +18,7 @@ extern "C" {
 pub(in crate::savegame) unsafe fn finish_load(star: &super::super::StarDesc, activity: u16) {
     crate::planets::c_api::reset_encounter();
     for player in 0..2 {
-        ReinitQueue(
-            crate::engine::battle::access::live_queues::player_ships(player)
-                .cast::<crate::comm::locdata::CQueue>()
-                .cast_mut()
-                .cast::<Queue>(),
-        );
+        (*crate::engine::battle::access::live_queues::player_ships(player).cast_mut()).reinit();
     }
     let mut point = crate::comm::dispatch::CPoint {
         x: star.star_pt.x,

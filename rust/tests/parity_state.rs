@@ -110,6 +110,8 @@ fn live_state_is_complete_stable_and_read_only() {
 }
 
 fn exercise_live_callers(directory: &Path) {
+    // SAFETY: this process exclusively owns the published fixture pools.
+    unsafe { clear_queues() };
     fighters_without_journal(directory);
     uqm_rust::time::source::install(true);
     std::env::set_var("UQM_PARITY", "1");
@@ -184,7 +186,7 @@ fn descriptor_fields(directory: &Path) {
     // SAFETY: all native records contain only scalar fields, optional callbacks and pointers.
     let descriptor: RACE_DESC = unsafe { std::mem::zeroed() };
     // SAFETY: STARSHIP contains integers, pointers and optional callbacks; zero is valid.
-    let mut ship: STARSHIP = unsafe { std::mem::zeroed() };
+    let mut ship = unsafe { battle::PoolShip::new(0) };
     ship.SpeciesID = SPECIES_ID_EARTHLING_ID;
     let mut descriptor = install_descriptor(&mut ship, descriptor);
     // SAFETY: stack records outlive the synchronous snapshots, and the queues are idle.
@@ -310,11 +312,13 @@ unsafe fn install_ship(ship: &mut STARSHIP) {
     // SAFETY: the caller owns the idle queues and keeps ship at this address
     // until the synchronous snapshot finishes and the queue is detached.
     unsafe {
-        race_q[0].pq_tab = ptr::from_mut(ship).cast();
-        race_q[0].object_size = std::mem::size_of_val(ship) as u16;
-        race_q[0].num_objects = 1;
-        race_q[0].head = ptr::from_mut(ship).cast();
-        race_q[0].tail = race_q[0].head;
+        uqm_rust::app::bridge::battle(|owner| {
+            let mut ships = owner.ships(0);
+            let link = ships
+                .id(ptr::from_mut(ship).cast())
+                .unwrap_or_else(|| panic!("fixture ship is missing"));
+            ships.put(link);
+        });
     }
     observation::record(Event::Spawn {
         address: ptr::from_mut(ship) as usize,
@@ -350,8 +354,11 @@ fn race_custom_fields(directory: &Path) {
                 saved_death: human,
             };
             let ship = ptr::from_mut(owner.ship_mut());
-            race_q[0].head = ship.cast();
-            race_q[0].tail = race_q[0].head;
+            uqm_rust::app::bridge::battle(|battle| {
+                let mut ships = battle.ships(0);
+                let link = ships.link(owner.ship_id);
+                ships.put(link);
+            });
             observation::record(Event::Spawn {
                 address: ship as usize,
                 side: 0,
@@ -390,8 +397,11 @@ fn race_custom_fields(directory: &Path) {
                 fields["ships.0.0.custom.phoenix"]
             );
             uqm_rust::app::bridge::enter(|cx| cx.unlink(reused.id));
-            race_q[0].head = ptr::null_mut();
-            race_q[0].tail = ptr::null_mut();
+            uqm_rust::app::bridge::battle(|battle| {
+                let mut ships = battle.ships(0);
+                let link = ships.link(owner.ship_id);
+                ships.remove(link);
+            });
             for name in ["saved_preprocess", "saved_postprocess", "saved_death"] {
                 assert!(fields[&format!("ships.0.0.custom.{name}")]
                     .starts_with("ships::races::human_native::"));
@@ -404,7 +414,8 @@ fn race_custom_fields(directory: &Path) {
                 battle: true,
             });
         }
-        let mut ship: STARSHIP = std::mem::zeroed();
+        clear_queues();
+        let mut ship = battle::PoolShip::new(0);
         let mut descriptor = install_descriptor(&mut ship, descriptor);
         ship.SpeciesID = SPECIES_ID_UMGAH_ID;
         install_ship(&mut ship);
@@ -561,7 +572,7 @@ fn descriptor_assets(directory: &Path) {
     // SAFETY: native records contain no invalid zero scalar representations.
     let mut descriptor: RACE_DESC = unsafe { std::mem::zeroed() };
     // SAFETY: STARSHIP contains integers, pointers and optional callbacks; zero is valid.
-    let mut ship: STARSHIP = unsafe { std::mem::zeroed() };
+    let mut ship = unsafe { battle::PoolShip::new(0) };
     // SAFETY: drawable_desc contains integers, pointers and optional callbacks.
     let mut drawable: drawable_desc = unsafe { std::mem::zeroed() };
     // SAFETY: frame_desc contains integers, pointers and optional callbacks.
@@ -669,7 +680,7 @@ fn asset_expectations(fields: &Fields) {
 
 fn reused_owner_and_group_identities(directory: &Path) {
     // SAFETY: STARSHIP contains integers, pointers and optional callbacks; zero is valid.
-    let mut ship: STARSHIP = unsafe { std::mem::zeroed() };
+    let mut ship = unsafe { battle::PoolShip::new(0) };
     ship.SpeciesID = SPECIES_ID_EARTHLING_ID;
     // SAFETY: the idle queue borrows this stack ship only until clear_queues below.
     unsafe {
@@ -678,17 +689,17 @@ fn reused_owner_and_group_identities(directory: &Path) {
     let _ = snapshot(directory);
     let callback = known_collision() as usize;
     observation::record(Event::Hook {
-        parent: ptr::from_mut(&mut ship) as usize,
+        parent: ptr::from_mut(&mut *ship) as usize,
         callback,
     });
     ship.SpeciesID = SPECIES_ID_UMGAH_ID;
     observation::record(Event::Spawn {
-        address: ptr::from_mut(&mut ship) as usize,
+        address: ptr::from_mut(&mut *ship) as usize,
         side: 0,
         species: SPECIES_ID_UMGAH_ID,
     });
     observation::record(Event::Hook {
-        parent: ptr::from_mut(&mut ship) as usize,
+        parent: ptr::from_mut(&mut *ship) as usize,
         callback,
     });
     let (_, line) = snapshot(directory);
@@ -720,7 +731,7 @@ fn frameset_and_media_identity(directory: &Path) {
     // SAFETY: RACE_DESC contains integers, pointers and optional callbacks.
     let mut descriptor: RACE_DESC = unsafe { std::mem::zeroed() };
     // SAFETY: STARSHIP contains integers, pointers and optional callbacks; zero is valid.
-    let mut ship: STARSHIP = unsafe { std::mem::zeroed() };
+    let mut ship = unsafe { battle::PoolShip::new(0) };
     // SAFETY: drawable_desc contains integers, pointers and optional callbacks.
     let mut drawable: drawable_desc = unsafe { std::mem::zeroed() };
     // SAFETY: frame_desc contains integers, pointers and optional callbacks.
@@ -735,10 +746,7 @@ fn frameset_and_media_identity(directory: &Path) {
     let mut element = graph::ElementRecord::new();
     ship.SpeciesID = SPECIES_ID_EARTHLING_ID;
     let mut descriptor = install_descriptor(&mut ship, descriptor);
-    element.parent = uqm_rust::engine::battle::Parent::Ship(uqm_rust::engine::battle::ShipId {
-        side: 0,
-        slot: 0,
-    });
+    element.parent = uqm_rust::engine::battle::Parent::Ship(ship.ship_id);
     // SAFETY: the stack graph stays live through all snapshots and is detached below.
     unsafe {
         attach_elements(std::slice::from_mut(&mut element));

@@ -14,6 +14,15 @@ pub struct Battle {
 }
 
 impl Battle {
+    pub fn ships(
+        &mut self,
+        side: usize,
+    ) -> super::link_queue::LinkQueue<'_, super::link_queue::Starship> {
+        super::link_queue::LinkQueue::new(&mut self.kernel.races[side])
+    }
+    pub fn reset_ship_capacity(&mut self, side: usize, capacity: usize) {
+        self.kernel.races[side].reset_capacity(capacity);
+    }
     pub fn reset_element_capacity(&mut self, capacity: usize) {
         self.kernel.elements.reset_capacity(capacity);
     }

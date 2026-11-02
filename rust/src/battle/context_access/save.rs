@@ -1,25 +1,15 @@
 //! Save-facing projection over typed element allocations and ship links.
-use crate::comm::locdata::CQueue;
-use crate::engine::battle::link_queue::{LinkQueue, Starship};
+use crate::engine::battle::link_queue::{LinkQueue, RacePool, Starship};
 use crate::engine::battle::{ElementTable, Parent};
-use crate::savegame::runtime::{
-    hyper_save::HyperSaveError,
-    queues::{walk_layout, QueueKind},
-};
+use crate::savegame::runtime::hyper_save::HyperSaveError;
 
 /// # Safety
 /// The ship pool and its resources remain live and immutable for the call.
 pub(crate) unsafe fn read_flagship_facing(
-    player_ships: &CQueue,
+    player_ships: &RacePool,
     elements: &ElementTable,
 ) -> Result<Option<u16>, HyperSaveError> {
-    walk_layout(
-        player_ships,
-        QueueKind::PlayerShips,
-        crate::engine::battle::access::observe::SHIP_LINKS,
-    )?;
-    // SAFETY: validation checked the retained ship pool and its links.
-    let ships = unsafe { LinkQueue::<Starship>::borrow(&*std::ptr::from_ref(player_ships).cast()) };
+    let ships = LinkQueue::<Starship>::borrow(player_ships);
     let Some(flagship) = ships.head() else {
         return Ok(None);
     };

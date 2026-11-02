@@ -4,17 +4,6 @@ use std::ptr;
 pub(crate) unsafe fn ship_from_index(queue: *mut QUEUE, mut index: COUNT) -> HLINK {
     // SAFETY: the caller owns the initialized queue and its live links for this operation.
     unsafe {
-        if usize::from((*queue).object_size) == crate::engine::battle::link_queue::ship_size() {
-            let ships = crate::engine::battle::link_queue::LinkQueue::<
-                crate::engine::battle::link_queue::Starship,
-            >::new(&mut *queue);
-            let mut link = ships.head();
-            while let Some(id) = link.filter(|_| index > 0) {
-                link = ships.succ(id);
-                index -= 1;
-            }
-            return link.map_or(std::ptr::null_mut(), |id| ships.raw(id));
-        }
         let mut handle = (*queue).head;
         while index > 0 && !handle.is_null() {
             handle = (*handle.cast::<LINK>()).succ;
@@ -53,7 +42,7 @@ pub unsafe extern "C" fn NameCaptain(queue: *mut QUEUE, species: SPECIES_ID) -> 
     // SAFETY: the caller owns the initialized queue and its live links for this operation.
     unsafe {
         assert!(
-            matches!((*queue).object_size as usize, size if size == crate::engine::battle::link_queue::ship_size() || size == std::mem::size_of::<SHIP_FRAGMENT>())
+            matches!((*queue).object_size as usize, size if size == std::mem::size_of::<SHIP_FRAGMENT>())
         );
         loop {
             let name = (((TFB_Random() as COUNT) & (NUM_CAPTAINS_NAMES - 1) as COUNT)
@@ -70,40 +59,23 @@ pub unsafe extern "C" fn NameCaptain(queue: *mut QUEUE, species: SPECIES_ID) -> 
 unsafe fn captain_in_use(queue: *mut QUEUE, species: SPECIES_ID, name: BYTE) -> bool {
     // SAFETY: NameCaptain retains the initialized queue and its links.
     unsafe {
-        if usize::from((*queue).object_size) == crate::engine::battle::link_queue::ship_size() {
-            let ships = crate::engine::battle::link_queue::LinkQueue::<
-                crate::engine::battle::link_queue::Starship,
-            >::new(&mut *queue);
-            let mut link = ships.head();
-            let mut found = false;
-            while let Some(id) = link {
-                let ship = ships.get(id);
-                if ship.species == species && ship.captain == name {
-                    found = true;
-                    break;
-                }
-                link = ships.succ(id);
+        let mut handle = (*queue).head;
+        let mut matched = false;
+        while !handle.is_null() {
+            let ship = handle.cast::<SHIP_BASE>();
+            let next = (*ship).succ;
+            let test_name = if (*ship).SpeciesID == species {
+                (*ship).captains_name_index
+            } else {
+                BYTE::MAX
+            };
+            if test_name == name {
+                matched = true;
+                break;
             }
-            found
-        } else {
-            let mut handle = (*queue).head;
-            let mut matched = false;
-            while !handle.is_null() {
-                let ship = handle.cast::<SHIP_BASE>();
-                let next = (*ship).succ;
-                let test_name = if (*ship).SpeciesID == species {
-                    (*ship).captains_name_index
-                } else {
-                    BYTE::MAX
-                };
-                if test_name == name {
-                    matched = true;
-                    break;
-                }
-                handle = next;
-            }
-            matched
+            handle = next;
         }
+        matched
     }
 }
 
@@ -114,16 +86,7 @@ unsafe fn build(queue: *mut QUEUE, species: SPECIES_ID) -> HLINK {
         if queue.is_null() {
             return ptr::null_mut();
         }
-        if usize::from((*queue).object_size) == crate::engine::battle::link_queue::ship_size() {
-            let mut ships = crate::engine::battle::link_queue::LinkQueue::<
-                crate::engine::battle::link_queue::Starship,
-            >::new(&mut *queue);
-            ships
-                .build(species)
-                .map_or(ptr::null_mut(), |id| ships.raw(id))
-        } else {
-            crate::ships::ffi::build_ship(&mut *queue.cast(), species as i32)
-        }
+        crate::ships::ffi::build_ship(&mut *queue.cast(), species as i32)
     }
 }
 
@@ -132,17 +95,6 @@ unsafe fn index_from_ship(queue: *mut QUEUE, mut handle: HLINK) -> COUNT {
     // SAFETY: the caller owns the initialized queue and its live links for this operation.
     unsafe {
         let mut index: COUNT = 0;
-        if usize::from((*queue).object_size) == crate::engine::battle::link_queue::ship_size() {
-            let ships = crate::engine::battle::link_queue::LinkQueue::<
-                crate::engine::battle::link_queue::Starship,
-            >::new(&mut *queue);
-            let mut link = ships.id(handle);
-            while link != ships.head() {
-                link = ships.pred(link.unwrap_or_else(|| panic!("ship is not linked")));
-                index = index.wrapping_add(1);
-            }
-            return index;
-        }
         while handle != (*queue).head {
             let link = handle.cast::<LINK>();
             handle = (*link).pred;

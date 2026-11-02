@@ -5,14 +5,13 @@ pub(super) unsafe fn clear_queues() {
     // SAFETY: the caller owns the idle global queues and detaches all test
     // records before releasing their stack storage; there are no active readers.
     unsafe {
-        race_q[0].head = ptr::null_mut();
-        race_q[0].tail = ptr::null_mut();
-        race_q[1].head = ptr::null_mut();
-        race_q[1].tail = ptr::null_mut();
-        uqm_rust::app::bridge::battle(|battle| battle.reset_element_capacity(150));
+        uqm_rust::app::bridge::battle(|battle| {
+            battle.reset_element_capacity(150);
+            for side in 0..2 {
+                battle.reset_ship_capacity(side, 32);
+            }
+        });
         uqm_rust::battle::process_native::InitDisplayList();
-        race_q[0].pq_tab = ptr::null_mut();
-        race_q[1].pq_tab = ptr::null_mut();
     }
 }
 
@@ -30,15 +29,12 @@ pub(super) fn elements_and_fighters(directory: &Path) {
     }
     let [first, second, neutral] = &mut pool;
     // SAFETY: STARSHIP contains integers, pointers and optional callbacks.
-    let mut owner: STARSHIP = unsafe { std::mem::zeroed() };
+    let mut owner = unsafe { battle::PoolShip::new(0) };
     owner.SpeciesID = SPECIES_ID_EARTHLING_ID;
     owner.ShipFacing = 31;
     first.player_nr = 0;
     first.state_flags = ElementFlags::PLAYER_SHIP;
-    first.parent = uqm_rust::engine::battle::Parent::Ship(uqm_rust::engine::battle::ShipId {
-        side: 0,
-        slot: 0,
-    });
+    first.parent = uqm_rust::engine::battle::Parent::Ship(owner.ship_id);
     first.current.location.x = 17;
     first.crew_or_hp = 11;
 
@@ -208,17 +204,14 @@ pub(super) fn frame_fields(
 pub(super) fn fighters_without_journal(directory: &Path) {
     let mut element = ElementRecord::new();
     // SAFETY: zero is valid for all native ship scalar/optional pointer fields.
-    let mut ship: STARSHIP = unsafe { std::mem::zeroed() };
+    let mut ship = unsafe { battle::PoolShip::new(0) };
     ship.descriptor = Some(Box::new(RACE_DESC::EMPTY));
     ship.ShipFacing = 31;
     element.state_flags = ElementFlags::PLAYER_SHIP;
     element.player_nr = 0;
     element.crew_or_hp = 19;
     element.current.location.x = -9;
-    element.parent = uqm_rust::engine::battle::Parent::Ship(uqm_rust::engine::battle::ShipId {
-        side: 0,
-        slot: 0,
-    });
+    element.parent = uqm_rust::engine::battle::Parent::Ship(ship.ship_id);
     element.preprocess_func = Some(uqm_rust::engine::battle::ElementHook::Native(
         unregistered_hook,
     ));
@@ -245,6 +238,7 @@ pub(super) fn fighters_without_journal(directory: &Path) {
         element.parent = uqm_rust::engine::battle::Parent::Ship(uqm_rust::engine::battle::ShipId {
             side: 0,
             slot: 255,
+            gen: 0,
         });
         let snapshot = BattleSnapshot::live();
         assert!(snapshot.player.is_none());

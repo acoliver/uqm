@@ -168,8 +168,7 @@ pub unsafe fn prepare_live_solar_location() -> Result<(), LiveLocationError> {
 /// Game thread only; `GlobData` must be initialised and `race_q` and `disp_q`
 /// must have been set up by `InitQueue` (`InitKernel` and `InitSpace`).
 pub unsafe fn prepare_live_hyper_state() -> Result<HyperFlagship, HyperSaveError> {
-    let player_ships =
-        &*live_queues::player_ships(RPG_PLAYER_NUM as usize).cast::<crate::comm::locdata::CQueue>();
+    let player_ships = &*live_queues::player_ships(RPG_PLAYER_NUM as usize);
     // SAFETY: the save operation retains the published game-thread Kernel.
     let display_list = unsafe { &*live_queues::display_list() };
     let glob = &mut *std::ptr::addr_of_mut!(GLOB_DATA);
@@ -187,8 +186,7 @@ pub unsafe fn prepare_live_hyper_state() -> Result<HyperFlagship, HyperSaveError
 /// Game thread only; `race_q` and `disp_q` must have been set up by
 /// `InitQueue` (`InitKernel` and `InitSpace`).
 pub unsafe fn live_flagship_facing() -> Result<Option<u16>, HyperSaveError> {
-    let player_ships =
-        &*live_queues::player_ships(RPG_PLAYER_NUM as usize).cast::<crate::comm::locdata::CQueue>();
+    let player_ships = &*live_queues::player_ships(RPG_PLAYER_NUM as usize);
     // SAFETY: the save operation retains the published game-thread Kernel.
     let display_list = unsafe { &*live_queues::display_list() };
     hyper_save::read_flagship_facing(player_ships, display_list)

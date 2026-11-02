@@ -484,8 +484,7 @@ pub const BATTLE_CREW_X: u32 = 10;
 pub const BATTLE_CREW_Y: u32 = 64;
 pub const MODIFY_IMAGE: u32 = 1;
 pub const MODIFY_SWAP: u32 = 2;
-pub const NAME_OFFSET: u32 = 5;
-pub const NUM_CAPTAINS_NAMES: u32 = 16;
+pub use crate::engine::battle::link_queue::{NAME_OFFSET, NUM_CAPTAINS_NAMES};
 pub const TASK_INUSE: u32 = 1;
 pub const TASK_EXIT: u32 = 2;
 pub const START_YEAR: u32 = 2155;
@@ -3116,7 +3115,6 @@ unsafe extern "C" {
 unsafe extern "C" {
     pub static mut TinyFont: FONT;
 }
-pub use crate::engine::battle::legacy::race_q;
 unsafe extern "C" {
     pub static mut LastActivity: ACTIVITY;
 }

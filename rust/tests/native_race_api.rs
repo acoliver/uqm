@@ -225,7 +225,7 @@ fn native_races_cannot_escape_the_real_accessor_boundary() -> Result<(), Box<dyn
         ("frame", "fn probe() { let _ = crate::engine::battle::views::Frame(std::ptr::NonNull::dangling().as_ptr()); }", "E0603"),
         ("frames", "fn probe() { let _ = crate::engine::battle::views::Frames(std::ptr::NonNull::dangling().as_ptr()); }", "E0603"),
         ("descriptor", "fn probe() { let _ = crate::engine::battle::RaceDesc::from_legacy(crate::engine::battle::record::RACE_DESC::EMPTY); }", "E0624"),
-        ("projection", "fn probe(cx: &mut Cx<'_>, p: std::ptr::NonNull<u8>) { *cx.project_mut(p) = 1; }", "E0624"),
+        ("projection", "fn probe(cx: &mut Cx<'_>, p: std::ptr::NonNull<u8>) { let _ = cx.project(p); }", "E0624"),
         ("primitive", "fn probe(cx: &mut Cx<'_>, id: ElementId) { cx.primitive(id).Type = 0; }", "E0624"),
         ("raw_frame", "fn probe(cx: &mut Cx<'_>) { cx.abs_frame(std::ptr::NonNull::dangling().as_ptr(), 0); }", "E0624"),
         ("element_operand", "fn probe() { let _ = crate::engine::battle::record::ElementOperand(std::ptr::null_mut::<u8>()); }", "E0425"),
