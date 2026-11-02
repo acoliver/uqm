@@ -27,9 +27,6 @@ pub(crate) mod kernel;
 pub mod template;
 pub use template::{RaceResources, RaceTemplate};
 
-#[cfg(not(test))]
-pub use access::PlotIntercept;
-
 pub use access::RaceDescLayout;
 
 pub use access::schema;

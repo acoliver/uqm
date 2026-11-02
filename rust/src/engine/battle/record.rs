@@ -461,24 +461,6 @@ impl Cx<'_> {
     pub(crate) fn captain_controls(&mut self, id: ShipId) -> std::ptr::NonNull<CAPTAIN_STUFF> {
         std::ptr::NonNull::from(&mut self.desc_mut(id).ship_data.captain_control)
     }
-    pub(super) fn decode_subject(&self, e: &ElementRecord) -> super::Subject {
-        super::Subject {
-            state: ElementState::decode(e),
-            target: e.target,
-            parent: e.parent,
-            intersect: e.IntersectControl,
-            primitive: e.PrimIndex,
-        }
-    }
-    pub(crate) fn encode_subject(&self, subject: &super::Subject) -> ElementRecord {
-        let mut e = subject.state.clone().encode();
-        ElementState::apply(&mut e, subject.state.clone());
-        e.target = subject.target;
-        e.parent = subject.parent;
-        e.IntersectControl = subject.intersect;
-        e.PrimIndex = subject.primitive;
-        e
-    }
     /// Return the checked legacy address; dereferencing it requires the owning game-thread boundary.
     pub fn legacy_element(&self, id: ElementId) -> *mut ElementRecord {
         self.b.kernel.elements.raw(id).cast()
@@ -657,6 +639,29 @@ impl ElementState {
     }
 }
 
+impl From<&ElementRecord> for Subject {
+    fn from(record: &ElementRecord) -> Self {
+        Self {
+            state: ElementState::decode(record),
+            target: record.target,
+            parent: record.parent,
+            intersect: record.IntersectControl,
+            primitive: record.PrimIndex,
+        }
+    }
+}
+
+impl From<Subject> for ElementRecord {
+    fn from(subject: Subject) -> Self {
+        let mut record = subject.state.encode();
+        record.target = subject.target;
+        record.parent = subject.parent;
+        record.IntersectControl = subject.intersect;
+        record.PrimIndex = subject.primitive;
+        record
+    }
+}
+
 #[cfg(test)]
 mod projection_tests {
     use super::*;
@@ -702,28 +707,13 @@ mod projection_tests {
     }
     #[test]
     fn pointer_free_values_roundtrip_record_scalars_and_subject_metadata() {
-        let mut groups = QUEUE::default();
-        let mut activity = 0u16;
-        let mut battle = super::super::Battle::new(3);
-        // SAFETY: the local world authorities remain live and exclusively borrowed.
-        let mut world = unsafe {
-            super::super::World::new(
-                std::ptr::NonNull::from(&mut activity),
-                std::ptr::NonNull::from(&mut groups),
-                |_| panic!("unused shared frame source"),
-            )
+        let mut raw = ElementRecord {
+            state_flags: 513,
+            playerNr: 1,
+            colorCycleIndex: 9,
+            PrimIndex: 17,
+            ..ElementRecord::default()
         };
-        let cx = Cx {
-            b: &mut battle,
-            world: &mut world,
-            rng: || 0,
-        };
-        // SAFETY: legacy record scalar fields, nullable hooks and unions admit zero.
-        let mut raw: ElementRecord = unsafe { std::mem::zeroed() };
-        raw.state_flags = 513;
-        raw.playerNr = 1;
-        raw.colorCycleIndex = 9;
-        raw.PrimIndex = 17;
         raw.set_life_span(21);
         raw.set_hit_points(7);
         raw.set_mass_points(5);
@@ -732,7 +722,7 @@ mod projection_tests {
         raw.current.location = POINT { x: 11, y: 12 };
         raw.next.location = POINT { x: 21, y: 22 };
         raw.IntersectControl.last_time_val = 31;
-        let mut subject = cx.decode_subject(&raw);
+        let mut subject = Subject::from(&raw);
         assert_eq!(subject.life_span(), 21);
         assert_eq!(subject.hit_points(), 7);
         assert_eq!(subject.mass_points(), 5);
@@ -744,8 +734,8 @@ mod projection_tests {
         subject.set_turn_wait(14);
         subject.set_thrust_wait(15);
         subject.parent = Parent::IpGroup(3);
-        let encoded = cx.encode_subject(&subject);
-        assert_eq!(cx.decode_subject(&encoded).parent, Parent::IpGroup(3));
+        let encoded = ElementRecord::from(subject);
+        assert_eq!(Subject::from(&encoded).parent, Parent::IpGroup(3));
         assert_eq!(encoded.PrimIndex, 17);
         assert_eq!(encoded.IntersectControl.last_time_val, 31);
         assert_eq!(encoded.current.location.x, 11);
@@ -990,17 +980,4 @@ mod kernel_tests {
 use super::link_queue::QueueRecord;
 impl QueueRecord for crate::engine::battle::link_queue::Starship {
     type Storage = ShipRecord;
-}
-
-#[cfg(not(test))]
-impl Cx<'_> {
-    pub(crate) fn legacy_intercept_subject(&self, e: &ElementRecord) -> Subject {
-        Subject {
-            state: ElementState::decode(e),
-            intersect: e.IntersectControl,
-            primitive: e.PrimIndex,
-            target: None,
-            parent: Parent::None,
-        }
-    }
 }

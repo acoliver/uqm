@@ -465,7 +465,7 @@ fn glory_ai_intercept_damage_and_random_parity_short_circuit_exactly() {
             .special = ship.captain.frame(15);
         (*threat.ptr()).state_flags = 0;
         assert_ne!(
-            uqm_rust::engine::battle::PlotIntercept(threat.ptr(), ship.ptr(), 2, 0),
+            shared::plot_intercept(threat.ptr(), ship.ptr(), 2, 0),
             0,
             "opaque overlapping frames must intercept"
         );
@@ -488,10 +488,7 @@ fn glory_ai_intercept_damage_and_random_parity_short_circuit_exactly() {
         }
         (*threat.ptr()).current.location.x += 500;
         (*threat.ptr()).mass = 255;
-        assert_eq!(
-            uqm_rust::engine::battle::PlotIntercept(threat.ptr(), ship.ptr(), 2, 0),
-            0
-        );
+        assert_eq!(shared::plot_intercept(threat.ptr(), ship.ptr(), 2, 0), 0);
         with_rng(55, 0, || ship.ai(&mut concerns));
         assert_eq!(ship.inner.ship_mut().ship_input_state & SPECIAL as u8, 0);
     })

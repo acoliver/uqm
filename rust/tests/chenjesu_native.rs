@@ -1022,14 +1022,10 @@ fn ai_crystal_intercept_holds_or_releases_at_the_fragment_margin() {
                 (4000, 3800, false, true),
             ] {
                 at(&mut enemy, x, y);
-                let intercept =
-                    uqm_rust::engine::battle::PlotIntercept(crystal, enemy.ptr(), 90, 320);
+                let intercept = battle::plot_intercept(crystal, enemy.ptr(), 90, 320);
                 if immediate {
                     assert_eq!(intercept, 1);
-                    assert_eq!(
-                        uqm_rust::engine::battle::PlotIntercept(crystal, enemy.ptr(), 90, 0),
-                        0
-                    );
+                    assert_eq!(battle::plot_intercept(crystal, enemy.ptr(), 90, 0), 0);
                 } else {
                     assert_eq!(intercept > 1, hold, "({x}, {y}) intercept {intercept}");
                 }

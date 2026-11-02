@@ -55,7 +55,7 @@ impl Cx<'_> {
 
 #[cfg(not(test))]
 impl Cx<'_> {
-    pub(crate) fn run_fixture_intelligence(
+    pub fn invoke_intelligence(
         &mut self,
         ship: crate::engine::battle::ShipId,
         subject: &mut Subject,

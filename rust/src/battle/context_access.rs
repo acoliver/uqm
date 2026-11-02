@@ -364,10 +364,6 @@ mod tactrans_native_access {
             // SAFETY: no record borrow crosses the sound queue boundary.
             self.queue_sound(usize::MAX, None);
         }
-        pub fn winner(&mut self) -> Option<ShipId> {
-            // SAFETY: winner state belongs to the owning game thread.
-            unsafe { (*self.kernel()).winner }
-        }
         pub(crate) fn play_ditty(&mut self, ship: ShipId) {
             // SAFETY: the checked winner retains its loaded victory music.
             unsafe {

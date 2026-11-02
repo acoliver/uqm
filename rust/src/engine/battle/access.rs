@@ -145,7 +145,7 @@ impl Cx<'_> {
 #[cfg(not(test))]
 impl Cx<'_> {
     pub fn weapon_origin(&self, id: ElementId) -> super::Subject {
-        self.decode_subject(&self.b.kernel.elements[id])
+        Subject::from(&self.b.kernel.elements[id])
     }
 
     pub fn set_frame(&mut self, id: ElementId, next: bool, frame: Frame) {
@@ -647,6 +647,9 @@ impl Cx<'_> {
 
 #[cfg(not(test))]
 impl Cx<'_> {
+    pub fn winner(&mut self) -> Option<ShipId> {
+        self.b.kernel.winner
+    }
     pub(crate) fn set_winner_slot(&mut self, ship: Option<ShipId>) {
         self.b.kernel.winner = ship;
     }
@@ -740,69 +743,6 @@ impl Cx<'_> {
         self.b.kernel.elements.remove(id);
     }
 }
-#[cfg(not(test))]
-impl Cx<'_> {
-    /// # Safety
-    /// The caller retains the fixture subject and writable concern records on the game thread.
-    pub unsafe fn invoke_intelligence(
-        parent: usize,
-        element: *mut super::record::ElementRecord,
-        raw: &mut [super::record::EVALUATE_DESC],
-        count: u16,
-    ) {
-        // SAFETY: the caller retains the initialized storage and resources for this synchronous projection.
-        unsafe {
-            crate::app::bridge::enter(|cx| {
-                let ship = super::link_queue::identify(parent);
-                let mut subject = cx.decode_subject(&*element);
-                let mut concerns = raw
-                    .iter()
-                    .map(|item| super::Concern {
-                        object: cx.elements().id(item.ObjectPtr.cast()),
-                        facing: item.facing,
-                        which_turn: item.which_turn,
-                        movement: item.MoveState,
-                    })
-                    .collect::<Vec<_>>();
-                cx.run_fixture_intelligence(ship, &mut subject, &mut concerns, count);
-                *element = cx.encode_subject(&subject);
-                for (raw, item) in raw.iter_mut().zip(concerns) {
-                    *raw = super::record::EVALUATE_DESC {
-                        ObjectPtr: item
-                            .object
-                            .map_or(std::ptr::null_mut(), |id| cx.elements().raw(id).cast()),
-                        facing: item.facing,
-                        which_turn: item.which_turn,
-                        MoveState: item.movement,
-                    };
-                }
-            });
-        }
-    }
-}
-/// # Safety
-/// Both fixture projections and their loaded resources remain live for this synchronous call.
-#[cfg(not(test))]
-#[no_mangle]
-pub unsafe extern "C" fn PlotIntercept(
-    a: *mut super::record::ElementRecord,
-    b: *mut super::record::ElementRecord,
-    turns: u16,
-    margin: u16,
-) -> u16 {
-    // SAFETY: the caller retains the initialized storage and resources for this synchronous projection.
-    unsafe {
-        crate::app::bridge::enter(|cx| {
-            cx.plot_intercept(
-                &cx.legacy_intercept_subject(&*a),
-                &cx.legacy_intercept_subject(&*b),
-                turns,
-                margin,
-            )
-        })
-    }
-}
-
 #[cfg(not(test))]
 pub(crate) fn race_desc_layout() -> RaceDescLayout {
     use super::record::*;

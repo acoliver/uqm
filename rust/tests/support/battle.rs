@@ -10,6 +10,70 @@ use uqm_rust::{
     ships::native::abi::*,
 };
 
+unsafe fn invoke_intelligence(
+    ship: ShipId,
+    element: *mut ElementRecord,
+    raw: &mut [EVALUATE_DESC],
+    count: u16,
+) {
+    // SAFETY: fixtures serialize the context and retain their subject and concern operands.
+    unsafe {
+        uqm_rust::app::bridge::enter(|cx| {
+            let mut subject = uqm_rust::engine::battle::Subject::from(&*element);
+            let mut concerns = raw
+                .iter()
+                .map(|item| uqm_rust::engine::battle::Concern {
+                    object: cx.elements().id(item.ObjectPtr.cast()),
+                    facing: item.facing,
+                    which_turn: item.which_turn,
+                    movement: item.MoveState,
+                })
+                .collect::<Vec<_>>();
+            cx.invoke_intelligence(ship, &mut subject, &mut concerns, count);
+            *element = subject.into();
+            for (raw, item) in raw.iter_mut().zip(concerns) {
+                *raw = EVALUATE_DESC {
+                    ObjectPtr: item
+                        .object
+                        .map_or(ptr::null_mut(), |id| cx.legacy_element(id)),
+                    facing: item.facing,
+                    which_turn: item.which_turn,
+                    MoveState: item.movement,
+                };
+            }
+        });
+    }
+}
+
+/// # Safety
+/// Both operands belong to the serialized fixture's live element pool.
+pub unsafe fn plot_intercept(
+    a: *mut ElementRecord,
+    b: *mut ElementRecord,
+    turns: u16,
+    margin: u16,
+) -> u16 {
+    // SAFETY: fixture operands and their retained frame resources live through the projection.
+    unsafe {
+        uqm_rust::app::bridge::enter(|cx| {
+            cx.plot_intercept(
+                &cx.weapon_origin(
+                    cx.elements()
+                        .id(a.cast())
+                        .unwrap_or_else(|| panic!("fixture operand")),
+                ),
+                &cx.weapon_origin(
+                    cx.elements()
+                        .id(b.cast())
+                        .unwrap_or_else(|| panic!("fixture operand")),
+                ),
+                turns,
+                margin,
+            )
+        })
+    }
+}
+
 /// # Safety
 /// The caller retains the published, serialized fixture battle.
 pub unsafe fn head() -> HLINK {
@@ -282,12 +346,7 @@ impl<'a> Ship<'a> {
     ) {
         // SAFETY: callers supply this fixture's live subject, without retaining a record borrow.
         unsafe {
-            uqm_rust::engine::battle::Cx::invoke_intelligence(
-                self.ss.0 as usize,
-                subject,
-                concerns,
-                count,
-            );
+            invoke_intelligence(self.ship_id, subject, concerns, count);
         }
     }
     pub fn set_hot_spot(&mut self, role: usize, index: usize, hot_spot: [i16; 2]) {
@@ -469,12 +528,7 @@ impl<'a> Ship<'a> {
     ) {
         // SAFETY: subject and the supplied concerns live through this synchronous callback.
         unsafe {
-            uqm_rust::engine::battle::Cx::invoke_intelligence(
-                self.ss.0 as usize,
-                subject,
-                concerns,
-                count,
-            );
+            invoke_intelligence(self.ship_id, subject, concerns, count);
         }
     }
     pub fn uninit(&mut self) {
