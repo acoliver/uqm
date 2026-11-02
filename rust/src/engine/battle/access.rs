@@ -34,6 +34,10 @@ impl Cx<'_> {
         self.b.kernel.finish_battle();
     }
 
+    pub(crate) fn complete_ship_reset(&mut self) {
+        self.b.kernel.complete_ship_reset();
+    }
+
     /// Move the boss result before descriptor disposal; no live graph is retained.
     pub(crate) fn retain_terminal_outcome(&mut self, owner: ShipId) {
         if matches!(self.desc(owner).race_state, super::RaceState::SaMatra(_)) {

@@ -100,6 +100,7 @@ pub unsafe fn uninit_ships() {
                 crate::navigation::hyper_data::FreeHyperspace();
             }
         }
+        cx.complete_ship_reset();
     });
 }
 

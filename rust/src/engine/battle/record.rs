@@ -864,7 +864,6 @@ impl Kernel {
     pub(crate) fn finish_battle(&mut self) {
         assert!(self.battle_active, "battle session was not started");
         self.battle_active = false;
-        self.complete_ship_reset();
     }
 
     pub(crate) fn request_ship_reset(&mut self) {
@@ -943,6 +942,8 @@ mod kernel_tests {
         assert_eq!(kernel.races[0].get(ship).special_counter, 7);
         kernel.races[0].get_mut(ship).special_counter = 10;
         kernel.finish_battle();
+        assert_eq!(kernel.races[0].get(ship).special_counter, 10);
+        kernel.complete_ship_reset();
         assert!(!kernel.races[0].contains(ship));
         let replacement = kernel.races[0].alloc(ShipRecord::default()).unwrap();
         assert_eq!(replacement.index(), ship.index());
