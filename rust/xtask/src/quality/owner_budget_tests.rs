@@ -5,6 +5,7 @@ fn owner_budgets_keep_fixed_phases_exact_scopes_and_growth_approval() {
     let scope = "unsafe|unsafe_blocks|uqm::battle::context_access::navigation::f";
     for (name, ends) in [
         ("phase4_state_access_unsafe", "phase-4"),
+        ("phase6_bridge_access_unsafe", "phase-6"),
         ("phase7_render_access_unsafe", "phase-7"),
         ("phase7_assets_access_unsafe", "phase-7"),
         ("phase7_sound_access_unsafe", "phase-7"),
@@ -43,4 +44,5 @@ fn owner_budgets_keep_fixed_phases_exact_scopes_and_growth_approval() {
     }
     assert!(phase("phase4_other_access_unsafe").is_err());
     assert!(phase("phase7_other_access_unsafe").is_err());
+    assert!(phase("phase6_other_access_unsafe").is_err());
 }

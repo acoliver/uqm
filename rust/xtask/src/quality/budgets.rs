@@ -24,6 +24,7 @@ fn access_phase(name: &str) -> Option<&'static str> {
     match name {
         "stage_b_access_unsafe" => Some("phase-2"),
         "phase4_state_access_unsafe" => Some("phase-4"),
+        "phase6_bridge_access_unsafe" => Some("phase-6"),
         "phase7_render_access_unsafe"
         | "phase7_assets_access_unsafe"
         | "phase7_sound_access_unsafe"
