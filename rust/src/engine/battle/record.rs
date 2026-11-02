@@ -678,7 +678,13 @@ mod projection_tests {
         let mut activity = 0;
         let mut groups = QUEUE::default();
         // SAFETY: this test retains both local world authorities for the context's lifetime.
-        let mut world = unsafe { super::super::World::new(&mut activity, &mut groups) };
+        let mut world = unsafe {
+            super::super::World::new(
+                std::ptr::NonNull::from(&mut activity),
+                std::ptr::NonNull::from(&mut groups),
+                |_| panic!("unused shared frame source"),
+            )
+        };
         let cx = Cx {
             b: &mut battle,
             world: &mut world,
@@ -705,7 +711,13 @@ mod projection_tests {
         let mut activity = 0u16;
         let mut battle = super::super::Battle::new(3);
         // SAFETY: the local world authorities remain live and exclusively borrowed.
-        let mut world = unsafe { super::super::World::new(&mut activity, &mut groups) };
+        let mut world = unsafe {
+            super::super::World::new(
+                std::ptr::NonNull::from(&mut activity),
+                std::ptr::NonNull::from(&mut groups),
+                |_| panic!("unused shared frame source"),
+            )
+        };
         let cx = Cx {
             b: &mut battle,
             world: &mut world,

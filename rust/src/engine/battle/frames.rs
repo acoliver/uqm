@@ -228,3 +228,58 @@ impl Frames {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::collections::observation::{self, Event};
+
+    #[test]
+    fn native_sources_snapshot_views_without_borrowing_source_storage() {
+        let frames = {
+            let mut source = [std::ptr::null_mut(); 3];
+            let address = source.as_mut_ptr();
+            // SAFETY: the source contains three absent frame slots throughout construction.
+            let frames = unsafe {
+                Frames::native_shared(
+                    SharedFrames::Blast,
+                    std::ptr::NonNull::new(address).unwrap(),
+                    3,
+                )
+            };
+            assert_eq!(frames.raw(), address);
+            frames
+        };
+        for index in 0..3 {
+            assert!(frames.view(index).is_absent());
+        }
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn array_edits_and_retirement_observe_storage_without_releasing_clones() {
+        observation::enable();
+        observation::drain();
+        let array = FrameArray::retain([Frame::ABSENT; 3], ());
+        let copied = array.clone();
+        array.observe("test-array");
+        array.set_view(1, Frame::ABSENT);
+        array.retire_views();
+        let events = observation::drain();
+        assert!(
+            matches!(&events[0], Event::FrameSet { address, frames, role } if *address == array.as_ptr() as usize && frames == &[0; 3] && role == "test-array")
+        );
+        assert!(matches!(
+            &events[1],
+            Event::ImageFrame {
+                address: 0,
+                source_view: true,
+                ..
+            }
+        ));
+        assert!(
+            matches!(&events[2], Event::FrameSet { frames, role, .. } if frames == &[0; 3] && role == "animation")
+        );
+        assert_eq!(copied.views(), [Frame::ABSENT; 3]);
+    }
+}

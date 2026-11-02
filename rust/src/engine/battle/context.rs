@@ -78,6 +78,8 @@ impl Battle {
 pub struct World {
     pub(super) activity: NonNull<u16>,
     pub(super) groups: NonNull<QUEUE>,
+    pub(super) frame_source:
+        fn(super::views::SharedFrames) -> NonNull<crate::graphics::native_abi::FRAME>,
 }
 
 impl World {
@@ -85,11 +87,17 @@ impl World {
     /// Pointers must project the game-thread-owned GlobData authority, remain live,
     /// and never have a Rust reference held across a legacy call. The caller must
     /// also retain exclusive game-thread access to GlobData, input, and story
-    /// authorities until this World is dropped or its use is suspended.
-    pub unsafe fn new(activity: *mut u16, groups: *mut QUEUE) -> Self {
+    /// authorities until this World is dropped or its use is suspended. The frame
+    /// resolver must return three live source slots for each requested shared role.
+    pub unsafe fn new(
+        activity: NonNull<u16>,
+        groups: NonNull<QUEUE>,
+        frame_source: fn(super::views::SharedFrames) -> NonNull<crate::graphics::native_abi::FRAME>,
+    ) -> Self {
         Self {
-            activity: NonNull::new(activity).unwrap_or_else(|| panic!("null activity projection")),
-            groups: NonNull::new(groups).unwrap_or_else(|| panic!("null group queue projection")),
+            activity,
+            groups,
+            frame_source,
         }
     }
 

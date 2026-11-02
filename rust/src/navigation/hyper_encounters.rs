@@ -40,9 +40,7 @@ pub(super) unsafe fn allocate(cx: &mut Cx<'_>, point: POINT) -> Option<ElementId
     cx.set_single_frames(
         element,
         Frames::native_shared(
-            crate::engine::battle::views::SharedFrames::Hyperspace(
-                (get("ARILOU_SPACE_SIDE") >> 1) as u8,
-            ),
+            crate::engine::battle::views::SharedFrames::Hyperspace(get("ARILOU_SPACE_SIDE") >> 1),
             NonNull::new(frames).unwrap_or_else(|| panic!("retained navigation authority")),
             1,
         ),

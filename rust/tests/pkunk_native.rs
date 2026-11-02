@@ -7,7 +7,7 @@ mod battle_context;
 mod shared;
 
 use std::{
-    ffi::{c_void, CStr},
+    ffi::CStr,
     mem, ptr,
     sync::atomic::{AtomicUsize, Ordering},
 };

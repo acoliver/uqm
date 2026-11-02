@@ -6,7 +6,7 @@ mod battle;
 mod battle_context;
 use battle::{Battle, Ship};
 
-use std::ffi::{c_void, CStr};
+use std::ffi::CStr;
 use std::ptr;
 use uqm_rust::ships::native::abi::*;
 
@@ -524,8 +524,8 @@ impl<'a> Skiff<'a> {
     /// A skiff at (100, 200) facing 6, flying on its ship frames.
     unsafe fn new(battle: &'a Battle) -> Self {
         let mut fleet = Fleet::new(battle, 0);
-        let mut ship_frames = FrameSet::with_bounds(16, [0, 0]);
-        let mut warp_frames = FrameSet::with_bounds(8, [0, 0]);
+        let ship_frames = FrameSet::with_bounds(16, [0, 0]);
+        let warp_frames = FrameSet::with_bounds(8, [0, 0]);
         fleet.fixture.descriptor_mut().ship_data.ship = ship_frames.array();
         fleet.fixture.descriptor_mut().ship_data.special = warp_frames.array();
         let ship = fleet.spawn_ship(0, 100, 200);

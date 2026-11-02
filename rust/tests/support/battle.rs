@@ -868,3 +868,51 @@ pub unsafe fn put(handle: *mut std::ffi::c_void) {
 pub fn element(handle: *mut std::ffi::c_void) -> *mut uqm_rust::engine::battle::record::ELEMENT {
     handle.cast()
 }
+
+pub struct NativeFrameSet(*mut uqm_rust::graphics::native_abi::drawable_desc);
+impl NativeFrameSet {
+    pub fn new(count: u16) -> Self {
+        // SAFETY: the serialized fixture owns this drawable and all of its frame slots.
+        unsafe {
+            let drawable = uqm_rust::graphics::drawable_abi::AllocDrawable(count);
+            assert!(!drawable.is_null());
+            (*drawable).MaxIndex = count - 1;
+            for index in 0..count {
+                let frame = &mut *(*drawable).Frame.add(usize::from(index));
+                frame.Index = index;
+                frame.Bounds = uqm_rust::graphics::native_abi::EXTENT {
+                    width: 4,
+                    height: 4,
+                };
+            }
+            Self(drawable)
+        }
+    }
+    pub fn frame(&self, index: usize) -> FRAME {
+        // SAFETY: the fixture retains the allocation throughout the returned handle's use.
+        unsafe {
+            assert!(index <= usize::from((*self.0).MaxIndex));
+            (*self.0).Frame.add(index).cast()
+        }
+    }
+    pub fn array(&self) -> uqm_rust::engine::battle::frames::FrameArray {
+        // SAFETY: these leases retain the drawable after the fixture's logical release.
+        unsafe {
+            let frame = self.frame(0);
+            let leases =
+                uqm_rust::graphics::drawable_abi::retain_frame_allocations(&[frame.cast()]);
+            uqm_rust::engine::battle::frames::FrameArray::retain(
+                [uqm_rust::engine::battle::views::Frame::from_native(frame.cast()); 3],
+                leases,
+            )
+        }
+    }
+}
+impl Drop for NativeFrameSet {
+    fn drop(&mut self) {
+        // SAFETY: this fixture uniquely owns the drawable's logical release.
+        unsafe {
+            uqm_rust::graphics::drawable_abi::DestroyDrawable(self.0);
+        }
+    }
+}

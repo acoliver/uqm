@@ -82,7 +82,7 @@ pub(in crate::automation::melee_fixture) fn execute(
             .collect()
     };
     // SAFETY: this admitted operation owns the game thread; legacy callbacks republish Cx.
-    unsafe { crate::app::bridge::enter(|cx| drive(cx, task, &hooks, &catalog)) }
+    unsafe { crate::app::bridge::enter(|cx| drive(cx, *task, &hooks, &catalog)) }
 }
 
 #[cfg(not(test))]

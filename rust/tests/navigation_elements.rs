@@ -3,7 +3,7 @@ mod battle;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
-use battle::{Battle, FrameSet, Object};
+use battle::{Battle, NativeFrameSet as NativeFrames, Object};
 use uqm_rust::engine::battle::{ElementHook, ElementId};
 use uqm_rust::ships::native::abi::*;
 
@@ -28,7 +28,7 @@ fn call_transition(id: ElementId) {
 fn encounter_transition_preserves_frame_cadence_and_completion() {
     battle_context::run(|| {
         let owner = Battle::new(8);
-        let frames = FrameSet::new(12);
+        let frames = NativeFrames::new(12);
         let mut element = Object::new(&owner);
         // SAFETY: this test owns the allocated element and its frame set.
         unsafe {
@@ -82,7 +82,7 @@ fn encounter_transition_preserves_frame_cadence_and_completion() {
 fn interplanetary_flagship_keeps_motion_and_native_hooks() {
     battle_context::run(|| {
         let _owner = Battle::new(8);
-        let frames = FrameSet::new(16);
+        let frames = NativeFrames::new(16);
         // SAFETY: the serialized fixture owns and restores navigation's live projections.
         unsafe {
             use uqm_rust::navigation::abi as nav;
@@ -136,7 +136,7 @@ fn interplanetary_flagship_keeps_motion_and_native_hooks() {
 fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
     battle_context::run(|| {
         let _owner = Battle::new(8);
-        let frames = FrameSet::new(16);
+        let frames = NativeFrames::new(16);
         // SAFETY: this serialized fixture owns the group pool, solar descriptors and frames.
         unsafe {
             use uqm_rust::collections::queue::{AllocLink, InitQueue, PutQueue, UninitQueue};

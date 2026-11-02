@@ -68,7 +68,7 @@ fn abandonment_keeps_allocation_rng_parent_and_target_order() {
         unsafe {
             let a = Ship::new(&owner, SPECIES_ID_VUX_ID, 0);
             let b = Ship::new(&owner, SPECIES_ID_VUX_ID, 1);
-            let frames = battle::FrameSet::new(4);
+            let frames = battle::NativeFrameSet::new(4);
             let old = stars_in_space;
             stars_in_space = frames.frame(0);
             uqm_rust::app::bridge::enter(|cx| {

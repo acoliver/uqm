@@ -155,10 +155,9 @@ pub(super) fn frame_fields(
     frame.parent = &mut drawable;
     frame.Index = 7;
     let pointer: *mut std::ffi::c_void = ptr::from_mut(&mut frame).cast();
-    let array = uqm_rust::engine::battle::frames::FrameArray::retain(
-        [unsafe { uqm_rust::engine::battle::views::Frame::from_native(pointer.cast()) }; 3],
-        (),
-    );
+    // SAFETY: the observer fixture retains this frame and drawable through all image uses.
+    let view = unsafe { uqm_rust::engine::battle::views::Frame::from_native(pointer.cast()) };
+    let array = uqm_rust::engine::battle::frames::FrameArray::retain([view; 3], ());
     let set = uqm_rust::engine::battle::frames::Frames::shared(
         uqm_rust::engine::battle::frames::SharedFrames::Fixture(0),
         array.clone(),

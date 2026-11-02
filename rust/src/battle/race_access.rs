@@ -149,11 +149,12 @@ impl World {
     pub(crate) unsafe fn for_legacy_lifecycle() -> Self {
         use crate::navigation::globals::GlobData;
         // SAFETY: the legacy lifecycle caller suspends other authority access;
-        // resource arrays are address-stable even before their handles are loaded.
+        // the resolver reads resource slots only when a loaded frame set is requested.
         unsafe {
             Self::new(
-                &raw mut GlobData.Game_state.CurrentActivity,
-                &raw mut GlobData.Game_state.ip_group_q,
+                std::ptr::NonNull::new_unchecked(&raw mut GlobData.Game_state.CurrentActivity),
+                std::ptr::NonNull::new_unchecked(&raw mut GlobData.Game_state.ip_group_q),
+                crate::game_init::space_resources::shared_frame_source,
             )
         }
     }

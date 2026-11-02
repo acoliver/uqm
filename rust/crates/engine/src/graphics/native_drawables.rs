@@ -1,15 +1,15 @@
 //! Shared allocation leases for native drawable handles.
 use super::native_abi::{drawable_desc, FRAME};
-use std::{collections::BTreeMap, rc::Rc};
+use std::{collections::BTreeMap, ptr::NonNull, rc::Rc};
 
 pub(super) type Allocations = BTreeMap<usize, Rc<Allocation>>;
 
-pub(super) struct Allocation(*mut drawable_desc);
+pub(super) struct Allocation(NonNull<drawable_desc>);
 impl Drop for Allocation {
     fn drop(&mut self) {
         // SAFETY: this is the last graphics-thread owner of the registered allocation.
         unsafe {
-            super::gfxload::release_cel_data_now(self.0.cast());
+            super::gfxload::release_cel_data_now(self.0);
         }
     }
 }
@@ -19,19 +19,19 @@ pub struct DrawableLease {
     pub(super) _allocation: Rc<Allocation>,
 }
 
-pub(super) unsafe fn register(drawable: *mut drawable_desc) {
+pub(super) unsafe fn register(drawable: NonNull<drawable_desc>) {
     let mut allocations = super::ffi::native_allocations();
     assert!(
         allocations
-            .insert(drawable as usize, Rc::new(Allocation(drawable)))
+            .insert(drawable.as_ptr() as usize, Rc::new(Allocation(drawable)))
             .is_none(),
         "drawable allocation is already registered"
     );
 }
 
-pub(super) unsafe fn release(drawable: *mut drawable_desc) {
+pub(super) unsafe fn release(drawable: NonNull<drawable_desc>) {
     let allocation = super::ffi::native_allocations()
-        .remove(&(drawable as usize))
+        .remove(&(drawable.as_ptr() as usize))
         .unwrap_or_else(|| panic!("release of unowned drawable {drawable:p}"));
     drop(allocation);
 }
@@ -44,7 +44,8 @@ pub unsafe fn retain_frame_allocations(frames: &[FRAME]) -> Vec<DrawableLease> {
         .iter()
         .filter(|frame| !frame.is_null())
         .map(|frame| {
-            let drawable = (**frame).parent;
+            // SAFETY: the caller retains each non-null native frame during this lookup.
+            let drawable = unsafe { (**frame).parent };
             DrawableLease {
                 _allocation: allocations
                     .get(&(drawable as usize))

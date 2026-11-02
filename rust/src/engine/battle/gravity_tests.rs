@@ -1,6 +1,6 @@
 use super::{record::*, Battle, Cx, ElementId, World};
 use crate::battle::gravity::{calculate_gravity, time_space_matter_conflict};
-use std::{cell::Cell, ptr};
+use std::cell::Cell;
 
 fn with_elements(call: impl FnOnce(&mut Cx<'_>, [ElementId; 3])) {
     let mut groups = QUEUE::default();
@@ -18,7 +18,11 @@ fn with_elements(call: impl FnOnce(&mut Cx<'_>, [ElementId; 3])) {
             battle.kernel.elements.put(id);
             id
         });
-        let mut world = World::new(&mut activity, &mut groups);
+        let mut world = World::new(
+            std::ptr::NonNull::from(&mut activity),
+            std::ptr::NonNull::from(&mut groups),
+            |_| panic!("unused shared frame source"),
+        );
         let mut cx = Cx {
             b: &mut battle,
             world: &mut world,

@@ -132,7 +132,10 @@ pub unsafe extern "C" fn AllocDrawable(count: u16) -> *mut drawable_desc {
                 },
             );
         }
-        super::native_drawables::register(drawable);
+        // SAFETY: allocation succeeded and initialized every frame's parent link.
+        unsafe {
+            super::native_drawables::register(std::ptr::NonNull::new_unchecked(drawable));
+        }
     }
     drawable
 }

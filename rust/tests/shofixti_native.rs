@@ -8,19 +8,12 @@ mod battle_context;
 #[path = "support/battle.rs"]
 mod shared;
 
-use std::{
-    ffi::{c_void, CStr},
-    mem, ptr,
-};
+use std::{ffi::CStr, mem, ptr};
 use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, frame_index, sine};
 
 use uqm_rust::supermelee::native::battle_picker::live::{selectShipComputer, selectShipHuman};
 
 use uqm_rust::graphics::context_abi::_GraphicsStatusFlags;
-use uqm_rust::graphics::native_canvas::{
-    lifecycle::TFB_DrawCanvas_New_Paletted, pixels::TFB_DrawCanvas_SetPixelIndexes,
-};
-use uqm_rust::graphics::tfb_draw_abi::{TFB_DrawImage_Delete, TFB_DrawImage_New};
 
 struct Battle {
     inner: shared::Battle,

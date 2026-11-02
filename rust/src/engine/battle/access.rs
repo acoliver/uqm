@@ -288,17 +288,10 @@ impl Cx<'_> {
 #[cfg(not(test))]
 impl Cx<'_> {
     pub fn shared_frame_set(&self, role: SharedFrames) -> Frames {
-        let source = match role {
-            SharedFrames::Asteroid => (&raw mut crate::game_init::space_resources::asteroid).cast(),
-            SharedFrames::Explosion => {
-                (&raw mut crate::game_init::space_resources::explosion).cast()
-            }
-            _ => panic!("not a battle shared frame role {role:?}"),
-        };
-        // SAFETY: the live resource authority owns these slots; the returned set retains their allocations.
-        unsafe { Frames::native_shared(role, std::ptr::NonNull::new_unchecked(source), 3) }
+        let source = (self.world.frame_source)(role);
+        // SAFETY: World retains these source slots; the result leases their loaded allocations.
+        unsafe { Frames::native_shared(role, source, 3) }
     }
-
     pub fn first_shared_frame(&self, role: SharedFrames) -> Frame {
         Frame(self.shared_frame(role))
     }
@@ -680,7 +673,11 @@ mod intersection_projection_tests {
                         (),
                     ),
                 );
-            let mut world = World::new(&mut activity, &mut groups);
+            let mut world = World::new(
+                std::ptr::NonNull::from(&mut activity),
+                std::ptr::NonNull::from(&mut groups),
+                |_| panic!("unused shared frame source"),
+            );
             let mut cx = Cx {
                 b: &mut battle,
                 world: &mut world,

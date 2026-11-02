@@ -230,15 +230,13 @@ impl Cx<'_> {
     }
     pub(crate) fn set_group_image(&mut self, id: ElementId, group: NonNull<IP_GROUP>) {
         let record = self.group_record(group);
+        let role = crate::engine::battle::views::SharedFrames::GroupIcon(group.as_ptr() as usize);
+        let source = NonNull::from(&record.melee_icon);
         // SAFETY: the retained group owns its single icon frame slot.
         let (frame, frames) = unsafe {
             (
                 crate::engine::battle::views::Frame::from_native(record.melee_icon),
-                crate::engine::battle::views::Frames::native_shared(
-                    crate::engine::battle::views::SharedFrames::GroupIcon(group.as_ptr() as usize),
-                    NonNull::from(&record.melee_icon),
-                    1,
-                ),
+                crate::engine::battle::views::Frames::native_shared(role, source, 1),
             )
         };
         self.set_single_frames(id, frames, frame);
@@ -253,14 +251,11 @@ impl Cx<'_> {
     }
     pub(crate) fn set_flagship_image(&mut self, id: ElementId) {
         let frame = self.flagship_stamp_frame();
+        let role = crate::engine::battle::views::SharedFrames::Flagship;
+        let source = NonNull::from(&self.navigation().Game_state.ShipStamp.frame);
         // SAFETY: the navigation authority retains this single-frame stamp slot.
-        let frames = unsafe {
-            crate::engine::battle::views::Frames::native_shared(
-                crate::engine::battle::views::SharedFrames::Flagship,
-                NonNull::from(&self.navigation().Game_state.ShipStamp.frame),
-                1,
-            )
-        };
+        let frames =
+            unsafe { crate::engine::battle::views::Frames::native_shared(role, source, 1) };
         self.set_single_frames(id, frames, frame);
         self.set_frame(id, false, frame);
     }

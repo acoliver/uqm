@@ -138,14 +138,12 @@ fn visuals(fields: &mut Fields, prefix: &str, element: &ElementObservation, jour
         );
     }
     for (name, array) in [
-        ("current.farray", element.current.image.frames.raw()),
-        ("next.farray", element.next.image.frames.raw()),
+        ("current.farray", &element.current.image.frames),
+        ("next.farray", &element.next.image.frames),
     ] {
-        let address = array as usize;
+        let address = array.raw() as usize;
         if address != 0 && journal.frame_set(address).is_none() {
-            // SAFETY: descriptor arrays are registered while owned by their ship.
-            // Remaining first-seen arrays are the live engine's fixed frame globals.
-            let first = unsafe { *array };
+            let first = array.view(0).raw();
             let mut frame = Fields::new();
             journal.write_frame(first as usize, &mut frame, "frame");
             journal.register_frame_set(
@@ -176,7 +174,14 @@ mod tests {
         };
         Frames::shared(
             SharedFrames::Fixture(0),
-            FrameArray::with_source([Frame::ABSENT; 3], (), Some(views.as_ptr() as usize)),
+            FrameArray::with_source(
+                std::array::from_fn(|index| {
+                    // SAFETY: journal fixtures use these retained handles only as opaque identities.
+                    unsafe { Frame::from_native(views[index.min(views.len() - 1)].cast()) }
+                }),
+                (),
+                Some(views.as_ptr() as usize),
+            ),
         )
     }
 
@@ -194,7 +199,7 @@ mod tests {
         let mut journal = Journal::create(directory.path())
             .unwrap_or_else(|error| panic!("create visual test journal: {error}"));
         let mut storage = 0u8;
-        let mut views = [std::ptr::from_mut(&mut storage).cast()];
+        let views = [std::ptr::from_mut(&mut storage).cast()];
         let mut element = Element::new();
         element.current.frame = views[0];
         element.current.farray = observed_set(&views);
@@ -213,7 +218,7 @@ mod tests {
         let mut journal = Journal::create(directory.path()).expect("journal");
         let mut storage = 0u8;
         let pointer = std::ptr::from_mut(&mut storage).cast();
-        let mut views = [pointer];
+        let views = [pointer];
         let mut element = Element::new();
         element.current.frame = pointer;
         element.current.farray = observed_set(&views);

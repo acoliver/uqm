@@ -9,7 +9,14 @@ fn observed_set<T>(views: &[*mut T]) -> crate::engine::battle::frames::Frames {
     };
     Frames::shared(
         SharedFrames::Fixture(0),
-        FrameArray::with_source([Frame::ABSENT; 3], (), Some(views.as_ptr() as usize)),
+        FrameArray::with_source(
+            std::array::from_fn(|index| {
+                // SAFETY: journal fixtures use these retained handles only as opaque identities.
+                unsafe { Frame::from_native(views[index.min(views.len() - 1)].cast()) }
+            }),
+            (),
+            Some(views.as_ptr() as usize),
+        ),
     )
 }
 
@@ -170,7 +177,7 @@ fn unsampled_assignments_and_individual_copies_survive_reuse() {
         Journal::create(directory.path()).unwrap_or_else(|error| panic!("journal: {error}"));
     let mut element = Element::new();
     let pointer = 200usize as *mut std::ffi::c_void;
-    let mut views = [pointer; 3];
+    let views = [pointer; 3];
     observation::record(Event::Allocate(std::ptr::from_ref(&element) as usize));
     drawable(100, pointer as usize, 7);
     frame_set(&views, "old-set");
@@ -267,7 +274,7 @@ fn raw_abi_image_and_state_copies_keep_the_source_identity() {
     };
     let mut next = current.clone();
     let pointer = 200usize as crate::ships::native::abi::FRAME;
-    let mut views = [pointer; 3];
+    let views = [pointer; 3];
     drawable(100, pointer as usize, 7);
     observation::record(Event::FrameSet {
         address: views.as_ptr() as usize,

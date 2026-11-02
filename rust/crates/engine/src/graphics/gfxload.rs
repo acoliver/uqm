@@ -203,15 +203,18 @@ pub unsafe extern "C" fn release_cel_data(handle: *mut c_void) -> i32 {
     if handle.is_null() {
         return 0;
     }
-    super::native_drawables::release(handle.cast());
+    // SAFETY: the non-null handle denotes the caller's registered drawable ownership.
+    unsafe {
+        super::native_drawables::release(std::ptr::NonNull::new_unchecked(handle.cast()));
+    }
     1
 }
 
-pub(super) unsafe fn release_cel_data_now(handle: *mut c_void) {
-    let drawable = handle.cast::<drawable_desc>();
+pub(super) unsafe fn release_cel_data_now(handle: std::ptr::NonNull<drawable_desc>) {
+    let drawable = handle.as_ptr();
     let count = usize::from((*drawable).MaxIndex) + 1;
     let frames = (*drawable).Frame;
-    rust_hfree(handle);
+    rust_hfree(drawable.cast());
     if !frames.is_null() {
         for i in 0..count {
             let frame = frames.add(i);

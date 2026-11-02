@@ -54,28 +54,19 @@ pub(crate) mod engine {
         Some(owned)
     }
 
-    unsafe fn load_animation_set(
-        keys: [crate::graphics::native_abi::RESOURCE; 3],
-    ) -> Option<crate::engine::battle::frames::FrameArray> {
-        use crate::engine::battle::{frames::FrameArray, views::Frame};
-        let mut raw = [std::ptr::null_mut(); 3];
-        if load_animation(raw.as_mut_ptr(), keys[0], keys[1], keys[2]) == 0 {
-            free_image(&raw mut raw);
-            return None;
-        }
-        let leases = crate::graphics::drawable_abi::retain_frame_allocations(&raw);
-        let array = FrameArray::retain(raw.map(|frame| Frame::from_native(frame)), leases);
-        array.observe("animation");
-        Some(array)
-    }
-
-    unsafe fn release_animation_set(array: &crate::engine::battle::frames::FrameArray) {
-        let mut raw = array.views().map(|frame| frame.raw());
-        free_image(&raw mut raw);
-        array.retire_views();
-    }
-
     unsafe fn load_battle(d: &mut RaceDesc) -> bool {
+        let load_animation_set = |keys: [_; 3]| {
+            use crate::engine::battle::{frames::FrameArray, views::Frame};
+            let mut raw = [std::ptr::null_mut(); 3];
+            if load_animation(raw.as_mut_ptr(), keys[0], keys[1], keys[2]) == 0 {
+                free_image(&raw mut raw);
+                return None;
+            }
+            let leases = crate::graphics::drawable_abi::retain_frame_allocations(&raw);
+            let array = FrameArray::retain(raw.map(|frame| Frame::from_native(frame)), leases);
+            array.observe("animation");
+            Some(array)
+        };
         let data = d.data_mut();
         let Some(ship) = load_animation_set(data.ship_rsc) else {
             return false;
@@ -120,6 +111,12 @@ pub(crate) mod engine {
     /// # Safety
     /// The descriptor resources are exclusively owned by this value.
     pub unsafe fn unload_ship(mut owned: RaceDesc, icons: u32, battle: u32) {
+        let release_animation_set = |array: &crate::engine::battle::frames::FrameArray| {
+            let mut raw = array.views().map(|frame| frame.raw());
+            free_image(&raw mut raw);
+            array.retire_views();
+        };
+
         let descriptor = &mut owned;
         descriptor.cleanup(&mut crate::engine::battle::World::for_legacy_lifecycle());
         crate::collections::observation::record(

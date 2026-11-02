@@ -305,7 +305,7 @@ impl Battle {
 enum Admission<'a> {
     Configure(&'a MeleeSetupRequest),
     Complete(Option<FixtureRun>),
-    Task(Task<'a>),
+    Task(Box<Task<'a>>),
 }
 
 fn admit<'a>(
@@ -327,7 +327,7 @@ fn admit<'a>(
         Operation::Fixture(FixtureName::StarContact) => {
             star::start(activity).map(|proof| Admission::Complete(Some(proof)))
         }
-        other => Task::new(other, registry).map(Admission::Task),
+        other => Task::new(other, registry).map(|task| Admission::Task(Box::new(task))),
     }
 }
 
