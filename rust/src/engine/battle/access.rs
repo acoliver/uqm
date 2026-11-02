@@ -5,8 +5,7 @@ impl Cx<'_> {
         let allocated = self.b.elements.alloc();
         let address = if let Some(id) = allocated {
             self.assign_primitive(id);
-            self.primitive_style_mut(id).kind = crate::ships::native::abi::gfx_object_NUM_PRIMS
-                as crate::graphics::native_abi::GRAPHICS_PRIM;
+            self.primitive_style_mut(id).kind = crate::graphics::records::EMPTY_PRIMITIVE;
             self.b.elements.raw(id) as usize
         } else {
             0
