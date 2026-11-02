@@ -290,7 +290,7 @@ fn afterburner_inserts_owned_invisible_napalm_at_the_head_in_newest_first_order(
                     (*e).parent,
                     uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
                 );
-                assert!((*e).hTarget.is_null());
+                assert!((*e).target.is_none());
                 assert_eq!(
                     (*e).state_flags,
                     (APPEARING | FINITE_LIFE | IGNORE_SIMILAR | NONSOLID | PRE_PROCESS) as u16

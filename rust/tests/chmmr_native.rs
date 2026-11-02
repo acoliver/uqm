@@ -615,7 +615,10 @@ unsafe fn target(satellite: *mut ELEMENT, dx: i16, dy: i16, hp: u16) -> PoolElem
 unsafe fn defense(satellite: *mut ELEMENT) -> HELEMENT {
     hooks::invoke_element_pointer((*satellite).postprocess_func.unwrap(), satellite);
     let h = disp_q.tail;
-    assert_eq!((*battle::element(h)).hTarget, satellite.cast());
+    assert_eq!(
+        (*battle::element(h)).target,
+        Some(battle::id(satellite.cast()))
+    );
     assert_eq!((*battle::element(h)).life, 0);
     h
 }
@@ -654,7 +657,7 @@ fn point_defense_uses_backward_weakest_nearest_and_stable_tie_order() {
             assert_eq!(velocity(beam), (-40 << VELOCITY_SHIFT, 0));
             assert_eq!(rgba((*prim(beam)).color), [0, 8, 255, 255]);
             assert_eq!((*beam).parent, (*s).parent);
-            assert!((*beam).hTarget.is_null());
+            assert!((*beam).target.is_none());
             assert_eq!((*s).thrust, 2);
             assert_rng_after(12, 0);
             for h in [strong, far_weak, near_weak, tie, after] {
@@ -809,7 +812,7 @@ fn tractor_applies_mass_division_speed_flags_and_head_inserted_blue_shadows() {
                 (*enemy.ptr()).mass = mass;
                 (*enemy.ptr()).current.location = POINT { x: 3000, y: 3728 };
                 (*enemy.ptr()).next = (*enemy.ptr()).current;
-                (*ship.ptr()).hTarget = enemy.handle;
+                (*ship.ptr()).target = Some(battle::id((enemy.handle).cast()));
                 SetVelocityComponents(&mut (*enemy.ptr()).velocity, initial_vx, 0);
                 enemy.ship_mut().cur_status_flags =
                     (LEFT | SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16;
@@ -883,7 +886,7 @@ fn tractor_energy_target_gravity_and_allocation_boundaries() {
                 (*enemy.ptr()).current.location = POINT { x: 3000, y: 3728 };
                 (*enemy.ptr()).next = (*enemy.ptr()).current;
                 if has_target {
-                    (*ship.ptr()).hTarget = enemy.handle;
+                    (*ship.ptr()).target = Some(battle::id((enemy.handle).cast()));
                 } else {
                     // TrackShip must see no target, including through its queue scan.
                     (*enemy.ptr()).state_flags = 0;
@@ -988,10 +991,13 @@ fn tractor_tracking_consumes_only_the_half_turn_rng_before_shadow_allocation() {
                 (*enemy.ptr()).current.location = POINT { x: 4000, y: 5000 };
                 (*enemy.ptr()).next = (*enemy.ptr()).current;
                 ship.ship_mut().cur_status_flags = SPECIAL as u16;
-                assert!((*ship.ptr()).hTarget.is_null());
+                assert!((*ship.ptr()).target.is_none());
                 TFB_SeedRandom(seed);
                 ship.postprocess();
-                assert_eq!((*ship.ptr()).hTarget, enemy.handle);
+                assert_eq!(
+                    (*ship.ptr()).target,
+                    Some(battle::id((enemy.handle).cast()))
+                );
                 assert_eq!(velocity(enemy.ptr()), (0, -38));
                 assert_eq!(ship.descriptor_mut().ship_info.energy_level, 41);
                 // Two free slots produce offsets 8 then 17; later allocations fail.

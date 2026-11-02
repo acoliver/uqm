@@ -142,7 +142,7 @@ fn fighter_tracking_delay_then_return_and_fire_use_exact_ranges() {
             assert_eq!(velocity(&(*fighter).velocity), initial);
             assert_eq!((*fighter).thrust, 7);
             (*fighter).life = 392;
-            (*fighter).hTarget = enemy.handle;
+            (*fighter).target = Some(battle::id((enemy.handle).cast()));
             (*fighter).current.location = POINT { x: 4000, y: 4100 };
             (*fighter).thrust = 1;
             with_rng(17, 0, || {

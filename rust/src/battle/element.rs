@@ -187,7 +187,7 @@ pub struct Element {
     pub parent: crate::engine::battle::Parent,
 
     // -- Tracking target reference --
-    pub h_target: HElement,
+    pub target: Option<crate::engine::battle::ElementId>,
 }
 
 impl Element {
@@ -222,7 +222,7 @@ impl Element {
             current: ElementVisualState::new(),
             next: ElementVisualState::new(),
             parent: crate::engine::battle::Parent::None,
-            h_target: std::ptr::null_mut(),
+            target: None,
         }
     }
 
@@ -970,6 +970,6 @@ mod tests {
         assert_eq!(std::mem::offset_of!(Element, current), 112);
         assert_eq!(std::mem::offset_of!(Element, next), 136);
         assert_eq!(std::mem::offset_of!(Element, parent), 160);
-        assert_eq!(std::mem::offset_of!(Element, h_target), 168);
+        assert_eq!(std::mem::offset_of!(Element, target), 164);
     }
 }

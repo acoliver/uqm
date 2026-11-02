@@ -56,7 +56,20 @@ pub(super) fn elements_and_fighters(directory: &Path) {
     ));
     neutral.pred = &mut *second;
     neutral.player_nr = -1;
-    neutral.h_target = &mut *first;
+    // SAFETY: attachment publishes these allocated stack slots for this synchronous fixture.
+    unsafe {
+        uqm_rust::app::bridge::enter(|cx| {
+            let source = cx
+                .elements()
+                .id(ptr::from_mut(&mut *neutral).cast())
+                .unwrap_or_else(|| panic!("fixture source"));
+            let target = cx
+                .elements()
+                .id(ptr::from_mut(&mut *first).cast())
+                .unwrap_or_else(|| panic!("fixture target"));
+            cx.set_target(source, Some(target));
+        });
+    }
     // SAFETY: stack graph remains live; no renderer or pool allocator is running.
     unsafe {
         install_ship(&mut owner);

@@ -5,7 +5,7 @@ impl Cx<'_> {
         let allocated = self.b.elements.alloc();
         let address = if let Some(id) = allocated {
             self.assign_primitive(id);
-            self.primitive_style_mut(id).kind = crate::graphics::records::EMPTY_PRIMITIVE;
+            self.primitive_style_mut(id).kind = crate::graphics::native_abi::EMPTY_PRIMITIVE;
             self.b.elements.raw(id) as usize
         } else {
             0
@@ -89,12 +89,14 @@ impl Cx<'_> {
     }
 
     pub fn target(&self, element: ElementId) -> Option<ElementId> {
-        self.b.elements.id(self.b.elements[element].hTarget)
+        self.b.elements[element].target
     }
 
     pub fn set_target(&mut self, element: ElementId, target: Option<ElementId>) {
-        self.b.elements[element].hTarget =
-            target.map_or(std::ptr::null_mut(), |id| self.b.elements.raw(id));
+        if let Some(id) = target {
+            assert!(self.b.elements.contains(id), "stale target {id:?}");
+        }
+        self.b.elements[element].target = target;
     }
 
     pub(crate) fn set_ip_group_parent(&mut self, id: ElementId, slot: u8) {

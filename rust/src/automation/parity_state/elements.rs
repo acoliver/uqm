@@ -10,7 +10,6 @@ pub(super) fn element(
     e: &ElementObservation,
     journal: &Journal,
     hooks: &[(usize, &'static str)],
-    owners: &std::collections::BTreeSet<usize>,
 ) {
     for (name, address) in [("identity", e.address), ("pred", e.pred), ("succ", e.succ)] {
         value(fields, prefix, name, journal.identity(address));
@@ -29,7 +28,7 @@ pub(super) fn element(
     ] {
         value(fields, prefix, name, number);
     }
-    target(fields, prefix, e, journal, owners);
+    value(fields, prefix, "target", journal.identity(e.target));
     velocity(fields, prefix, &e.velocity);
     for (name, address) in [
         ("preprocess", e.pre.map_or(0, |f| f.address())),
@@ -49,22 +48,6 @@ pub(super) fn element(
         );
     }
     positions(fields, prefix, e);
-}
-
-fn target(
-    fields: &mut Fields,
-    prefix: &str,
-    element: &ElementObservation,
-    journal: &Journal,
-    owners: &std::collections::BTreeSet<usize>,
-) {
-    let address = element.target;
-    let identity = if address != 0 && (owners.contains(&address) || address == element.parent) {
-        journal.parent(address)
-    } else {
-        journal.identity(address)
-    };
-    value(fields, prefix, "target", identity);
 }
 
 fn positions(fields: &mut Fields, prefix: &str, e: &ElementObservation) {
@@ -107,22 +90,9 @@ pub(super) fn velocity(fields: &mut Fields, prefix: &str, v: &VelocityDesc) {
 mod tests {
     use super::*;
     use crate::battle::element::Element;
-    fn element(
-        fields: &mut Fields,
-        prefix: &str,
-        e: &Element,
-        journal: &Journal,
-        hooks: &[(usize, &'static str)],
-        owners: &BTreeSet<usize>,
-    ) {
-        // SAFETY: the test owns the source and matching record layout.
-        let view = unsafe { ElementObservation::decode(&*std::ptr::from_ref(e).cast(), None) };
-        super::element(fields, prefix, &view, journal, hooks, owners);
-    }
-    use std::collections::BTreeSet;
 
     #[test]
-    fn links_and_overloaded_targets_use_their_own_identity_domains() {
+    fn links_and_targets_keep_their_element_identity_domain() {
         let directory = super::super::test_directory();
         let mut journal = Journal::create(directory.path())
             .unwrap_or_else(|error| panic!("create element test journal: {error}"));
@@ -132,23 +102,30 @@ mod tests {
         let second_address = std::ptr::from_ref(&second) as usize;
         journal.allocate(first_address);
         journal.allocate(second_address);
-        journal.register_parent(71, "ship:0:3:5".into());
+        journal.register_parent(second_address, "ship:0:3:5".into());
         first.succ = &mut second;
         second.pred = &mut first;
-        first.h_target = 71usize as _;
         first.velocity.error.width = -23;
         first.intersect_control.last_time_val = 19;
-        let owners = BTreeSet::from([71]);
+        // SAFETY: both local model records match the retained record layout and stay live.
+        let mut view = unsafe {
+            ElementObservation::decode(&*std::ptr::from_ref(&first).cast(), None, second_address)
+        };
         let mut fields = Fields::new();
-        element(&mut fields, "first", &first, &journal, &[], &owners);
+        element(&mut fields, "first", &view, &journal, &[]);
         assert_eq!(fields["first.identity"], "0:1");
         assert_eq!(fields["first.succ"], "1:1");
-        assert_eq!(fields["first.target"], "ship:0:3:5");
+        assert_eq!(fields["first.target"], "1:1");
         assert_eq!(fields["first.velocity.error.width"], "-23");
         assert_eq!(fields["first.intersect.time"], "19");
-        first.h_target = &mut second;
-        element(&mut fields, "first", &first, &journal, &[], &owners);
-        assert_eq!(fields["first.target"], "1:1");
+        // SAFETY: the local predecessor and record stay live throughout this snapshot.
+        let second_view =
+            unsafe { ElementObservation::decode(&*std::ptr::from_ref(&second).cast(), None, 0) };
+        element(&mut fields, "second", &second_view, &journal, &[]);
+        assert_eq!(fields["second.pred"], "0:1");
+        view.target = 0;
+        element(&mut fields, "first", &view, &journal, &[]);
+        assert_eq!(fields["first.target"], journal.identity(0));
         assert!(!fields.values().any(|value| value.contains("0x")));
     }
 }

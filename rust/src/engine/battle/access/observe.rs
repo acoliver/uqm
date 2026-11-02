@@ -79,7 +79,7 @@ impl std::ops::Deref for ElementObservation {
 impl ElementObservation {
     /// # Safety
     /// The caller retains the live source record and its reachable resource graph.
-    pub(crate) unsafe fn decode(record: &ELEMENT, groups: Option<&QUEUE>) -> Self {
+    pub(crate) unsafe fn decode(record: &ELEMENT, groups: Option<&QUEUE>, target: usize) -> Self {
         Self {
             state: crate::engine::battle::access::observe_element_record(record),
             address: std::ptr::from_ref(record) as usize,
@@ -87,7 +87,7 @@ impl ElementObservation {
             succ: record.succ as usize,
             // SAFETY: the observation retains all referenced owner pools.
             parent: unsafe { parent_address(record.parent, groups) } as usize,
-            target: record.hTarget as usize,
+            target,
             primitive: record.PrimIndex,
             intersect: record.IntersectControl,
         }
@@ -100,8 +100,10 @@ pub(crate) fn element(
     id: ElementId,
     groups: Option<&QUEUE>,
 ) -> ElementObservation {
+    let record = &table[id];
+    let target = record.target.map_or(0, |id| table.raw(id) as usize);
     // SAFETY: the checked table retains the decoded record through this synchronous copy.
-    unsafe { ElementObservation::decode(&table[id], groups) }
+    unsafe { ElementObservation::decode(record, groups, target) }
 }
 #[cfg(not(test))]
 pub(crate) unsafe fn retired_element_address(id: ElementId) -> usize {

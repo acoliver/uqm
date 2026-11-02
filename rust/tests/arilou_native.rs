@@ -258,7 +258,7 @@ fn laser_snaps_to_the_enemy_within_the_turn_and_is_yellow() {
             assert_eq!((*laser).thrust, 1);
             assert_eq!((*laser).playerNr, 0);
             assert!((*laser).collision_func.is_some());
-            assert!((*ship).hTarget.is_null());
+            assert!((*ship).target.is_none());
 
             // BUILD_COLOR (MAKE_RGB15 (0x1F, 0x1F, 0x0A), 0x0E) on a line.
             let prim = prim_of(laser);

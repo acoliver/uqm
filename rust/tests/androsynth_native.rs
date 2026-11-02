@@ -6,7 +6,7 @@ mod battle_context;
 #[path = "support/battle.rs"]
 mod battle;
 use battle::{Battle, Object, Ship};
-use std::{ffi::CStr, mem, ptr};
+use std::{ffi::CStr, mem};
 use uqm_rust::engine::battle::{Cx, ElementId, RaceState};
 use uqm_rust::ships::native::abi::*;
 
@@ -226,6 +226,7 @@ fn bubble_steers_toward_the_nearest_enemy_with_a_random_wobble() {
                 (*battle::prim(enemy_ship.ptr())).Type = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
                 enemy_ship.queue();
                 let enemy = enemy_ship.ptr();
+                (*bubble).target = None;
                 let mut tracked_facing: COUNT = 0;
                 let delta = uqm_rust::app::bridge::enter(|cx| {
                     let mut subject = cx.weapon_origin(bubbles[0].unwrap());
@@ -235,7 +236,6 @@ fn bubble_steers_toward_the_nearest_enemy_with_a_random_wobble() {
                 assert!(delta > 0 && delta != 8);
 
                 (*bubble).turn = 0x30;
-                (*bubble).hTarget = ptr::null_mut();
                 TFB_SeedRandom(77);
                 let wobble = TFB_Random() as u16 & 7;
                 TFB_SeedRandom(77);

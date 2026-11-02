@@ -235,7 +235,7 @@ impl<'a> Ship<'a> {
     /// A brand-new ship about to run its first preprocess.
     unsafe fn appearing(&mut self) {
         (*self.ptr()).state_flags = (PLAYER_SHIP | APPEARING) as u16;
-        (*self.ptr()).hTarget = ptr::null_mut();
+        (*self.ptr()).target = None;
     }
 
     /// The ship `new_pkunk` leaves behind: appearing with hTarget set.
@@ -244,7 +244,7 @@ impl<'a> Ship<'a> {
         self.inner.ship_mut().ShipFacing = facing;
         (*self.ptr()).state_flags = (PLAYER_SHIP | APPEARING) as u16;
         (*self.ptr()).life = NORMAL_LIFE as COUNT;
-        (*self.ptr()).hTarget = self.handle;
+        (*self.ptr()).target = Some(shared::id((self.handle).cast()));
     }
 
     /// Drives the real hooks (the phoenix sees the death, then the death
@@ -801,7 +801,7 @@ fn first_preprocess_with_an_odd_draw_queues_a_phoenix_at_the_head() {
             assert!(ship.inner.descriptor_mut().callbacks()[1] == 0);
             assert_eq!(ship.inner.ship_mut().cur_status_flags, start_status);
             // hTarget stays clear: this is not a reincarnation.
-            assert!((*ship.ptr()).hTarget.is_null());
+            assert!((*ship.ptr()).target.is_none());
             assert_eq!(
                 (*ship.ptr()).state_flags,
                 (PLAYER_SHIP | APPEARING) as u16,
@@ -1206,7 +1206,7 @@ fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
             let reincarnation = (*el).death_func.unwrap();
 
             // The armed death function explodes the ship (without ship_death).
-            (*el).hTarget = ship.handle;
+            (*el).target = Some(shared::id((ship.handle).cast()));
             (*el).state_flags |= DISAPPEARING as u16;
             SetVelocityVector(&raw mut (*el).velocity, 20, 3);
             ship.inner.descriptor_mut().ship_info.energy_level = 9;
@@ -1217,7 +1217,7 @@ fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
                 (*el).state_flags & (FINITE_LIFE | NONSOLID) as u16,
                 (FINITE_LIFE | NONSOLID) as u16
             );
-            assert!((*el).hTarget.is_null());
+            assert!((*el).target.is_none());
             assert_eq!(velocity_fields(&(*el).velocity), [0; 9]);
             assert_eq!(ship.inner.descriptor_mut().ship_info.energy_level, 0);
             assert_ne!(
@@ -1266,7 +1266,7 @@ fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
             (*el).thrust = 9;
             (*el).life = 3;
             (*el).mass = 11;
-            (*el).hTarget = ptr::null_mut();
+            (*el).target = None;
             (*prim(el)).Type = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
 
             let seed = 777;
@@ -1349,8 +1349,8 @@ fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
             assert_eq!((*prim(el)).Type, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
             assert_eq!(((*el).current.location.x, (*el).current.location.y), (x, y));
             assert_eq!(
-                (*el).hTarget,
-                ship.handle,
+                (*el).target,
+                Some(shared::id((ship.handle).cast())),
                 "marks the next preprocess as a reincarnation"
             );
         }

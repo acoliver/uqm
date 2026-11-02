@@ -605,7 +605,7 @@ fn marines_launch_at_rear_with_exact_state_and_cost_only_after_allocation() {
                 assert_eq!(ship.ship_mut().special_counter, 12);
                 assert_eq!(ship.descriptor_mut().ship_info.energy_level, 20);
                 // Retain an aligned cached target so launch eligibility never ties.
-                (*ship.ptr()).hTarget = enemy.handle;
+                (*ship.ptr()).target = Some(battle::id((enemy.handle).cast()));
             }
         }
     })
@@ -664,7 +664,7 @@ fn launch_gates_require_both_keys_counter_zero_crew_and_a_trackable_enemy() {
                 ship.ship_mut().special_counter = counter;
                 ship.descriptor_mut().ship_info.crew_level = crew;
                 (*ship.ptr()).hits = crew;
-                (*ship.ptr()).hTarget = ptr::null_mut();
+                (*ship.ptr()).target = None;
                 (*prim(enemy.ptr())).Type = if cloaked {
                     gfx_object_NUM_PRIMS
                 } else {
@@ -1256,7 +1256,7 @@ fn ai_turret_half_circle_consumes_trackship_draw_then_its_own_tie_break() {
             for seed in 1..33 {
                 (*turret).turn = 0;
                 (*turret).thrust = 0;
-                (*turret).hTarget = ptr::null_mut();
+                (*turret).target = None;
                 ship.ship_mut().ship_input_state = 0;
                 let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
                 concerns[ENEMY_SHIP_INDEX as usize].ObjectPtr = enemy.ptr();
@@ -1269,7 +1269,7 @@ fn ai_turret_half_circle_consumes_trackship_draw_then_its_own_tie_break() {
                     (SPECIAL | if second_bit == 0 { RIGHT } else { LEFT }) as BYTE
                 );
                 assert_eq!((*turret).turn, 0);
-                assert_eq!((*turret).hTarget, enemy.handle);
+                assert_eq!((*turret).target, Some(battle::id((enemy.handle).cast())));
             }
         }
     })
@@ -1446,8 +1446,8 @@ fn failed_replacement_and_marine_allocation_leave_crew_and_special_budget_untouc
                 assert_eq!((*prim(old)).Type, gfx_object_NUM_PRIMS as GRAPHICS_PRIM);
                 assert_eq!(queued().len(), capacity as usize);
                 assert_eq!(
-                    (*ship.ptr()).hTarget,
-                    enemy.handle,
+                    (*ship.ptr()).target,
+                    Some(battle::id((enemy.handle).cast())),
                     "tracking eligibility runs before failed marine allocation"
                 );
             }

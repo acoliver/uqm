@@ -618,7 +618,7 @@ fn both_switch_edges_advance_and_only_the_third_remaining_frame_detonates() {
             ((*deferred).next.location.x, (*deferred).next.location.y),
             (4000, 4000)
         );
-        assert!((*deferred).hTarget.is_null() && (*deferred).death_func.is_some());
+        assert!((*deferred).target.is_none() && (*deferred).death_func.is_some());
         assert_eq!(ship.inner.descriptor_mut().ship_info.crew_level, 0);
         assert_eq!((*ship.ptr()).life, 0);
         assert_ne!((*ship.ptr()).state_flags & NONSOLID as u16, 0);

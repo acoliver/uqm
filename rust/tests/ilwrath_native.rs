@@ -337,7 +337,7 @@ fn cloak_fades_to_black_one_step_per_frame_and_drops_pursuers() {
             let ship = avenger(&mut fleet);
             let mut other = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 1, [16; 3], [0, 0]);
             let hunter = spawn_ship(&mut other, 3000, 1000);
-            (*hunter).hTarget = ship.cast();
+            (*hunter).target = Some(battle::id(ship.cast()));
             paint(ship, gfx_object_STAMP_PRIM, WHITE);
             fleet.ship_mut().cur_status_flags = SPECIAL as u16;
             preprocess(&mut fleet, ship);
@@ -348,7 +348,7 @@ fn cloak_fades_to_black_one_step_per_frame_and_drops_pursuers() {
             let walk = [CYAN_LIGHT, CYAN_DARK, BLUE_LIGHT, BLUE_DARK, BLACK];
             for expected in walk {
                 (*ship).state_flags &= !(CHANGING as u16);
-                assert!(!(*hunter).hTarget.is_null());
+                assert!(!(*hunter).target.is_none());
                 preprocess(&mut fleet, ship);
                 assert_eq!(color_of(ship), expected);
                 assert_ne!((*ship).state_flags & CHANGING as u16, 0);
@@ -356,7 +356,7 @@ fn cloak_fades_to_black_one_step_per_frame_and_drops_pursuers() {
                 assert_eq!(fleet.ship_mut().special_counter, 13);
             }
             // Reaching black untargets the ship.
-            assert!((*hunter).hTarget.is_null());
+            assert!((*hunter).target.is_none());
             assert_eq!(prim_kind(ship), gfx_object_STAMPFILL_PRIM as u8);
 
             // Fully cloaked: nothing more happens until the counter runs out.
@@ -443,7 +443,7 @@ fn firing_while_cloaked_decloaks_and_turns_toward_the_target() {
             assert_eq!(index_of((*ship).next.image.frame), 4);
             // turn_wait of zero is bumped so the new facing is not undone at once.
             assert_eq!((*ship).turn, 1);
-            assert!((*ship).hTarget.is_null());
+            assert!((*ship).target.is_none());
             assert_eq!(fleet.ship_mut().special_counter, 0);
             assert_ne!((*ship).state_flags & CHANGING as u16, 0);
             assert_eq!(fleet.ship_mut().cur_status_flags, WEAPON as u16);
@@ -500,7 +500,7 @@ fn firing_while_cloaked_without_a_target_keeps_the_facing() {
         assert_eq!(fleet.ship_mut().ShipFacing, 6);
         assert_eq!(index_of((*ship).next.image.frame), 0);
         assert_eq!((*ship).turn, 0);
-        assert!((*ship).hTarget.is_null());
+        assert!((*ship).target.is_none());
     })
 }
 

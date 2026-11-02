@@ -71,11 +71,6 @@ fn checkpoint_with_context(
             resources.write(&mut fields, prefix, journal, &hooks);
         }
     }
-    let owners = ships
-        .iter()
-        .flatten()
-        .map(|(_, ship)| ship.address())
-        .collect();
     custom::pkunk_sound(&mut fields);
     let seed = crate::math::seed_random(0);
     crate::math::seed_random(seed);
@@ -84,7 +79,7 @@ fn checkpoint_with_context(
     crc.process_u32(seed);
     for (index, element) in elements.iter().enumerate() {
         let prefix = format!("elements.{index}");
-        elements::element(&mut fields, &prefix, element, journal, &hooks, &owners);
+        elements::element(&mut fields, &prefix, element, journal, &hooks);
         visuals(&mut fields, &prefix, element, journal);
         crate::supermelee::netplay::checksum::crc_process_element(&mut crc, &element.state);
     }
@@ -189,7 +184,7 @@ mod tests {
     fn visuals(fields: &mut Fields, prefix: &str, element: &Element, journal: &mut Journal) {
         // SAFETY: the test owns a layout-compatible source record.
         let observation =
-            unsafe { ElementObservation::decode(&*std::ptr::from_ref(element).cast(), None) };
+            unsafe { ElementObservation::decode(&*std::ptr::from_ref(element).cast(), None, 0) };
         super::visuals(fields, prefix, &observation, journal);
     }
 

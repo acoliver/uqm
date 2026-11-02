@@ -77,7 +77,7 @@ mod abi {
         pub current: STATE,
         pub next: STATE,
         pub parent: super::super::Parent,
-        pub hTarget: HELEMENT,
+        pub target: Option<super::super::ElementId>,
     }
 
     pub type RACE_DESC = race_desc;
@@ -419,7 +419,7 @@ impl Cx<'_> {
     pub(super) fn decode_subject(&self, e: &ELEMENT) -> super::Subject {
         super::Subject {
             state: ElementState::decode(e),
-            target: self.b.elements.id(e.hTarget),
+            target: e.target,
             parent: e.parent,
             intersect: e.IntersectControl,
             primitive: e.PrimIndex,
@@ -430,9 +430,7 @@ impl Cx<'_> {
     pub(crate) fn encode_subject(&self, subject: &super::Subject) -> ELEMENT {
         let mut e = subject.state.encode();
         ElementState::apply(&mut e, subject.state);
-        e.hTarget = subject
-            .target
-            .map_or(std::ptr::null_mut(), |id| self.b.elements.raw(id));
+        e.target = subject.target;
         e.parent = subject.parent;
         e.IntersectControl = subject.intersect;
         e.PrimIndex = subject.primitive;
@@ -633,7 +631,7 @@ impl ElementState {
                 },
             },
             parent: Parent::None,
-            hTarget: ptr::null_mut(),
+            target: None,
         }
     }
 }

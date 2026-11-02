@@ -83,23 +83,10 @@ impl Ship {
 #[cfg(not(test))]
 impl Cx<'_> {
     pub(crate) fn fixture_element(&self, id: ElementId) -> Element {
-        let handle = self.elements()[id].hTarget;
-        let target_ship = if handle.is_null() {
-            None
-        } else {
-            self.queued_ships(0)
-                .into_iter()
-                .chain(self.queued_ships(1))
-                .find(|&ship| self.ship_address(ship) == handle as usize)
-        };
         Element {
             state: self.element(id),
             parent: self.parent(id),
-            target: if target_ship.is_none() {
-                self.target(id)
-            } else {
-                None
-            },
+            target: self.target(id),
             pred: self.elements().pred(id),
         }
     }

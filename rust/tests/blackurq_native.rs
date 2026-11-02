@@ -136,7 +136,7 @@ fn fried_launches_sixteen_clouds_in_facing_order_with_inherited_velocity() {
                 hooks::invoke_element_pointer((*e).preprocess_func.unwrap(), e);
                 assert_eq!(frame_index((*e).next.image.frame), 1);
                 assert_eq!((*e).turn, 2);
-                assert!((*e).hTarget.is_null());
+                assert!((*e).target.is_none());
             }
         }
     })

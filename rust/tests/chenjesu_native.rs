@@ -456,7 +456,7 @@ fn doggy_spawns_behind_ship_with_exact_state_and_coordinate_truncation() {
                     (*dog).parent,
                     uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
                 );
-                assert!((*dog).hTarget.is_null());
+                assert!((*dog).target.is_none());
                 assert!((*dog).preprocess_func.is_some());
                 assert!((*dog).postprocess_func.is_none());
                 assert!((*dog).collision_func.is_some());
@@ -655,7 +655,7 @@ fn doggy_death_preserves_unrelated_fields_and_starts_six_frame_animation() {
             let dog = doggy(&mut ship);
             (*dog).state_flags |= (DISAPPEARING | COLLISION | DEFY_PHYSICS) as u16;
             (*dog).postprocess_func = Some(uqm_rust::engine::battle::ElementHook::Native(sentinel));
-            (*dog).hTarget = ship.handle;
+            (*dog).target = Some(battle::id((ship.handle).cast()));
             (*dog).turn = 9;
             (*dog).thrust = 7;
             let preprocess = (*dog).preprocess_func.unwrap().address();
@@ -679,7 +679,7 @@ fn doggy_death_preserves_unrelated_fields_and_starts_six_frame_animation() {
                 (*dog).postprocess_func.unwrap().address(),
                 sentinel as *const () as usize
             );
-            assert_eq!((*dog).hTarget, ship.handle);
+            assert_eq!((*dog).target, Some(battle::id((ship.handle).cast())));
             assert_eq!(
                 (*dog).parent,
                 uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
@@ -731,7 +731,7 @@ fn doggy_wait_counts_before_tracking_and_random_roaming_consumes_one_draw() {
                         velocity_toward(32, face)
                     }
                 );
-                assert!((*dog).hTarget.is_null());
+                assert!((*dog).target.is_none());
             }
         }
     })
@@ -756,11 +756,11 @@ fn doggy_steering_uses_exact_rear_facing_boundaries_not_trackships_single_step()
                     enemy.descriptor_mut().ship_data.ship[0],
                     (16 - delta) as u16,
                 );
-                (*dog).hTarget = ptr::null_mut();
+                (*dog).target = None;
                 SetVelocityVector(&raw mut (*dog).velocity, 11, 4);
                 let original = velocity_fields(&(*dog).velocity);
                 with_rng(99, 0, || hooks::invoke_element_pointer(preprocess, dog));
-                assert_eq!((*dog).hTarget, enemy.handle);
+                assert_eq!((*dog).target, Some(battle::id((enemy.handle).cast())));
                 assert_eq!(
                     velocity_fields(&(*dog).velocity),
                     if expected == 4 {
@@ -777,7 +777,7 @@ fn doggy_steering_uses_exact_rear_facing_boundaries_not_trackships_single_step()
                 SetAbsFrameIndex(enemy.descriptor_mut().ship_data.ship[0], 0);
             for seed in 1..17 {
                 SetVelocityVector(&raw mut (*dog).velocity, 32, 8);
-                (*dog).hTarget = enemy.handle;
+                (*dog).target = Some(battle::id((enemy.handle).cast()));
                 with_rng(seed, 1, || hooks::invoke_element_pointer(preprocess, dog));
                 assert_eq!(velocity_fields(&(*dog).velocity), velocity_toward(32, 0));
             }
@@ -807,7 +807,7 @@ fn doggy_uses_current_unwrapped_coordinates_and_truncates_arctan_arguments() {
                     enemy.descriptor_mut().ship_data.ship[0],
                     (expected as usize) as u16,
                 );
-                (*dog).hTarget = enemy.handle;
+                (*dog).target = Some(battle::id((enemy.handle).cast()));
                 SetVelocityVector(&raw mut (*dog).velocity, 32, 0);
                 assert_eq!(
                     normalize_facing(angle_to_facing(i32::from(ARCTAN(
@@ -845,20 +845,20 @@ fn doggy_acquires_nearest_visible_ship_but_retains_an_existing_cloaked_target() 
             let preprocess = (*dog).preprocess_func.unwrap();
             SetVelocityVector(&raw mut (*dog).velocity, 32, 0);
             with_rng(4, 0, || hooks::invoke_element_pointer(preprocess, dog));
-            assert_eq!((*dog).hTarget, near.handle);
+            assert_eq!((*dog).target, Some(battle::id((near.handle).cast())));
             assert_eq!(velocity_fields(&(*dog).velocity), velocity_toward(32, 4));
             (*prim(near.ptr())).Type = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
             SetVelocityVector(&raw mut (*dog).velocity, 32, 0);
             with_rng(4, 0, || hooks::invoke_element_pointer(preprocess, dog));
             assert_eq!(
-                (*dog).hTarget,
-                near.handle,
+                (*dog).target,
+                Some(battle::id((near.handle).cast())),
                 "TrackShip retains a live prior target even when cloaked"
             );
-            (*dog).hTarget = ptr::null_mut();
+            (*dog).target = None;
             SetVelocityVector(&raw mut (*dog).velocity, 32, 0);
             with_rng(4, 0, || hooks::invoke_element_pointer(preprocess, dog));
-            assert_eq!((*dog).hTarget, far.handle);
+            assert_eq!((*dog).target, Some(battle::id((far.handle).cast())));
             assert_eq!(velocity_fields(&(*dog).velocity), velocity_toward(32, 0));
         }
     })

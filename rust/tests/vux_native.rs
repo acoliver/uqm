@@ -158,7 +158,7 @@ fn warp_in_is_disabled_in_encounters_and_one_shot_in_melee() {
             ))));
             assert_eq!(ship.ship_mut().ShipFacing, face);
             assert_eq!(frame_index((*ship.ptr()).current.image.frame), face);
-            assert!((*ship.ptr()).hTarget.is_null());
+            assert!((*ship.ptr()).target.is_none());
             assert_eq!(ship.descriptor_mut().callbacks()[1], 0);
             assert_eq!(
                 (*ship.ptr()).IntersectControl.EndPoint.x,

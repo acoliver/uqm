@@ -38,7 +38,16 @@ pub(crate) unsafe fn elements(
     #[cfg(test)]
     for pointer in walk_layout(queue, QueueKind::DisplayList, ELEMENT_LINKS).unwrap() {
         // SAFETY: validation retained this fixture pool for the decode.
-        result.push(unsafe { ElementObservation::decode(&*pointer.cast(), groups) });
+        let record = unsafe { &*pointer.cast::<ELEMENT>() };
+        let target = record.target.map_or(0, |id| {
+            assert!(id.slot < queue.num_objects, "fixture target outside pool");
+            queue
+                .pq_tab
+                .wrapping_add(usize::from(id.slot) * usize::from(queue.object_size))
+                as usize
+        });
+        // SAFETY: validation retains the record and the supplied target identity.
+        result.push(unsafe { ElementObservation::decode(record, groups, target) });
     }
     result
 }

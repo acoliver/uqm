@@ -133,13 +133,13 @@ fn native_weapon_uses_the_projected_source_without_mutating_its_live_target() {
     battle_context::run(|| unsafe {
         let battle = Battle::new(8);
         let ship = Ship::with_frames(&battle._pool, SPECIES_ID_SLYLANDRO_ID, 0, [16; 3], [4, 4]);
-        (*ship.ptr()).hTarget = ship.handle;
+        (*ship.ptr()).target = Some(battle::id((ship.handle).cast()));
         let projected = with_rng(99, 1, || ship.initialize_from(ship.ptr(), 1)[0]);
         assert!(!projected.is_null());
-        assert_eq!((*ship.ptr()).hTarget, ship.handle);
+        assert_eq!((*ship.ptr()).target, Some(battle::id((ship.handle).cast())));
         let direct = with_rng(99, 1, || fire_from(ship.ptr()));
         assert!(!direct.is_null());
-        assert!((*ship.ptr()).hTarget.is_null());
+        assert!((*ship.ptr()).target.is_none());
         assert_eq!(
             velocity(&(*battle::element(projected)).velocity),
             velocity(&(*battle::element(direct)).velocity)
@@ -300,7 +300,7 @@ fn root_bolts_have_exact_random_color_length_angle_and_folded_chain_length() {
             colors_seen[((random >> 8) & 3) as usize] = true;
             for counter in [0u8, 1, 8, 9, 16, 17, 255] {
                 ship.ship_mut().weapon_counter = counter;
-                (*ship.ptr()).hTarget = ship.handle;
+                (*ship.ptr()).target = Some(battle::id((ship.handle).cast()));
                 let h = with_rng(seed, 1, || fire_from(ship.ptr()));
                 assert!(!h.is_null());
                 let bolt = battle::element(h);
@@ -334,7 +334,7 @@ fn root_bolts_have_exact_random_color_length_angle_and_folded_chain_length() {
                 assert_eq!(rgba((*prim(bolt)).color), bolt_color(random));
                 assert_eq!(velocity(&(*bolt).velocity), bolt_velocity(60, -1, random));
                 assert!(
-                    (*ship.ptr()).hTarget.is_null(),
+                    (*ship.ptr()).target.is_none(),
                     "ship targeting starts fresh and is cleared after tracking"
                 );
                 battle_context::dispose(h);
@@ -374,7 +374,7 @@ fn lightning_tracks_all_turn_directions_and_draws_the_bolt_random_before_opposit
                     bolt_velocity(facing_to_angle(facing as i32) as COUNT, delta, random)
                 );
                 assert_eq!(rgba((*prim(bolt)).color), bolt_color(random));
-                assert!((*ship.ptr()).hTarget.is_null());
+                assert!((*ship.ptr()).target.is_none());
                 battle_context::dispose(h);
             }
         }
@@ -403,14 +403,14 @@ fn roots_choose_nearest_live_visible_opponent_not_a_cached_target_ally_or_dead_s
         let mut near =
             Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 1, [16; 3], [4, 4]);
         at(&mut near, 4500, 4000);
-        (*ship.ptr()).hTarget = far.handle;
+        (*ship.ptr()).target = Some(battle::id((far.handle).cast()));
         let (random, _) = randoms(313);
         let h = with_rng(313, 1, || fire_from(ship.ptr()));
         assert_eq!(
             velocity(&(*battle::element(h)).velocity),
             bolt_velocity(4, 4, random)
         );
-        assert!((*ship.ptr()).hTarget.is_null());
+        assert!((*ship.ptr()).target.is_none());
         battle_context::dispose(h);
         (*ship.ptr()).state_flags |= APPEARING as u16;
         let h = with_rng(313, 1, || fire_from(ship.ptr()));
@@ -464,7 +464,7 @@ fn child_segments_keep_unrounded_travel_angle_inherit_color_and_retain_selected_
                 at(&mut enemy, 4000 + dx, 4000 + dy);
                 cached.descriptor_mut().ship_info.crew_level = 0;
                 (*parent).velocity.travel_angle = angle;
-                (*parent).hTarget = ptr::null_mut();
+                (*parent).target = None;
                 let (random, _) = randoms(77);
                 let child_h = with_rng(77, if delta == 8 { 2 } else { 1 }, || fire_from(parent));
                 let child = battle::element(child_h);
@@ -480,17 +480,17 @@ fn child_segments_keep_unrounded_travel_angle_inherit_color_and_retain_selected_
                     ((*child).current.location.x, (*child).current.location.y),
                     (4100, 4200)
                 );
-                assert_eq!((*parent).hTarget, enemy.handle);
+                assert_eq!((*parent).target, Some(battle::id((enemy.handle).cast())));
                 battle_context::dispose(child_h);
             }
             // A child with a cached target uses that target even if a nearer ship exists.
             cached.descriptor_mut().ship_info.crew_level = 12;
             at(&mut enemy, 4000, 3999);
             (*parent).velocity.travel_angle = 1;
-            (*parent).hTarget = cached.handle;
+            (*parent).target = Some(battle::id((cached.handle).cast()));
             let (random, _) = randoms(99);
             let child_h = with_rng(99, 1, || fire_from(parent));
-            assert_eq!((*parent).hTarget, cached.handle);
+            assert_eq!((*parent).target, Some(battle::id((cached.handle).cast())));
             assert_eq!(
                 velocity(&(*battle::element(child_h)).velocity),
                 bolt_velocity(1, 4, random)
@@ -498,9 +498,9 @@ fn child_segments_keep_unrounded_travel_angle_inherit_color_and_retain_selected_
             battle_context::dispose(child_h);
             // A dead cached target is cleared without starting a fresh queue scan.
             cached.descriptor_mut().ship_info.crew_level = 0;
-            (*parent).hTarget = cached.handle;
+            (*parent).target = Some(battle::id((cached.handle).cast()));
             let child_h = with_rng(99, 1, || fire_from(parent));
-            assert!((*parent).hTarget.is_null());
+            assert!((*parent).target.is_none());
             assert_eq!(
                 velocity(&(*battle::element(child_h)).velocity),
                 bolt_velocity(1, -1, random)

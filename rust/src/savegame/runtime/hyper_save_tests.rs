@@ -482,12 +482,9 @@ fn a_display_list_that_is_not_a_pool_of_elements_is_refused() {
     );
 }
 
-/// The numbers below are what clang computes for these headers on the 64-bit
-/// targets this project builds for (bindgen's own layout tests compare the
-/// same types field by field at test time); they are a check of this build, not
-/// a claim about every ABI.
+/// Starship fields retain their header layout; element fixtures now retain typed targets.
 #[test]
-fn generated_records_have_the_layout_the_headers_give_them() {
+fn retained_records_use_the_expected_fixture_layouts() {
     use std::mem::{align_of, offset_of};
     assert_eq!(size_of::<STARSHIP>(), STARSHIP_SIZE);
     assert_eq!(align_of::<STARSHIP>(), 8);
