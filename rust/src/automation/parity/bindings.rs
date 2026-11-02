@@ -216,8 +216,8 @@ impl Journal {
             + match name {
                 "current.frame" => current + frame,
                 "next.frame" => next + frame,
-                "current.frames" => current + set,
-                "next.frames" => next + set,
+                "current.farray" => current + set,
+                "next.farray" => next + set,
                 "intersect.frame" => {
                     std::mem::offset_of!(Element, intersect_control)
                         + std::mem::offset_of!(IntersectControl, intersect_stamp)

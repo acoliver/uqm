@@ -794,10 +794,10 @@ fn frameset_and_media_identity(directory: &Path) {
         );
     }
     let (after, _) = snapshot(directory);
-    assert_eq!(before["elements.0.current.frames.0.index"], "1");
-    assert_eq!(after["elements.0.current.frames.0.index"], "1");
-    assert_eq!(before["elements.0.current.frames.1.index"], "1");
-    assert_eq!(after["elements.0.current.frames.1.index"], "2");
+    assert_eq!(before["elements.0.current.farray.0.index"], "1");
+    assert_eq!(after["elements.0.current.farray.0.index"], "1");
+    assert_eq!(before["elements.0.current.farray.1.index"], "1");
+    assert_eq!(after["elements.0.current.farray.1.index"], "2");
     let mut replacement = RaceDescriptor::EMPTY;
     replacement.ship_data.ship = FrameArray::retain(descriptor.ship_data.ship.views(), ());
     let ship = &mut ship;
@@ -818,12 +818,12 @@ fn frameset_and_media_identity(directory: &Path) {
     );
     let (outgoing, _) = snapshot(directory);
     assert_eq!(
-        outgoing["elements.0.current.frames.role"],
-        after["elements.0.current.frames.role"]
+        outgoing["elements.0.current.farray.role"],
+        after["elements.0.current.farray.role"]
     );
     assert_ne!(
-        outgoing["elements.0.current.frames.role"],
-        outgoing["elements.0.next.frames.role"]
+        outgoing["elements.0.current.farray.role"],
+        outgoing["elements.0.next.farray.role"]
     );
     media_identity(directory, &mut replacement);
     // SAFETY: all snapshots finished; detach stack nodes before returning.

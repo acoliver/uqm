@@ -183,8 +183,8 @@ pub(super) fn frame_fields(
         "current.frame",
         "next.frame",
         "intersect.frame",
-        "current.frames",
-        "next.frames",
+        "current.farray",
+        "next.farray",
     ] {
         assert_eq!(
             fields[&format!("elements.0.{name}.owner")],
@@ -193,7 +193,7 @@ pub(super) fn frame_fields(
         assert_eq!(fields[&format!("elements.0.{name}.index")], "7");
     }
     assert_eq!(fields["elements.1.current.frame.owner"], "none");
-    assert_eq!(fields["elements.2.current.frames.index"], "0");
+    assert_eq!(fields["elements.2.current.farray.index"], "0");
     observation::assign_frame(&mut first.current.frame, ptr::null_mut());
     observation::assign_set(
         &mut first.current.frames,
