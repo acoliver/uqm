@@ -346,9 +346,7 @@ struct CoordInner {
     /// Most recent battle ship picker generation confirmed semantically.
     consumed_ship_picker_generation: u64,
     orbit: crate::automation::navigation::OrbitApproach,
-    /// Whether the current `navigate_to_hyperspace` step has sampled live
-    /// interplanetary flight, which arrival requires.
-    hyperspace_flight_observed: bool,
+    departure: navigation::Departure,
     /// Release a semantically injected Select key on the next callback.
     release_semantic_select: bool,
     replay_final_activity: u16,
@@ -501,7 +499,7 @@ impl Coordinator {
                 parity_fixture: None,
                 save_capture: super::save_capture::Request::from_environment(),
                 orbit: Default::default(),
-                hyperspace_flight_observed: false,
+                departure: Default::default(),
             }),
         };
 
@@ -1265,68 +1263,6 @@ impl Coordinator {
                 scheduler_event
             }
         }
-    }
-
-    fn service_hyperspace_departure(
-        &self,
-        inner: &mut CoordInner,
-        mut scheduler_event: SchedulerEvent,
-    ) -> SchedulerEvent {
-        let snapshot = crate::automation::input_ffi::departure_snapshot();
-        let solar_system_active = snapshot.active != 0;
-        if solar_system_active && snapshot.in_ip_flight != 0 && !inner.hyperspace_flight_observed {
-            inner.hyperspace_flight_observed = true;
-            self.write_trace_labeled(
-                inner,
-                RecordKind::SemanticAssertion,
-                format!(
-                    "hyperspace_departure_started:ship={},{}:facing={}",
-                    snapshot.ship_x, snapshot.ship_y, snapshot.ship_facing
-                ),
-            );
-        }
-        let activity = crate::mainloop::ffi::get_current_activity().0;
-        if crate::automation::navigation::hyperspace_reached(
-            inner.hyperspace_flight_observed,
-            solar_system_active,
-            activity,
-        ) {
-            if !Self::set_navigation_controls(
-                crate::automation::navigation::NavigationControl::default(),
-            ) {
-                self.reject_input(inner, "navigation", -1, -1);
-                return scheduler_event;
-            }
-            inner.hyperspace_flight_observed = false;
-            scheduler_event = SchedulerEvent::NavigationReached;
-            self.write_trace_labeled(
-                inner,
-                RecordKind::SemanticAssertion,
-                crate::automation::navigation::HYPERSPACE_REACHED_LABEL.to_string(),
-            );
-            return scheduler_event;
-        }
-        let control = crate::automation::navigation::steer_out_of_system(
-            crate::automation::navigation::NavigationObservation {
-                active: solar_system_active,
-                inner_planet: u8::try_from(snapshot.inner_planet).ok(),
-                in_orbit: snapshot.in_orbit != 0,
-                ship_x: snapshot.ship_x,
-                ship_y: snapshot.ship_y,
-                ship_facing: u8::try_from(snapshot.ship_facing).unwrap_or(0),
-                target_x: snapshot.target_x,
-                target_y: snapshot.target_y,
-                velocity_x: snapshot.velocity_x,
-                velocity_y: snapshot.velocity_y,
-                view_center_x: snapshot.view_center_x,
-                view_center_y: snapshot.view_center_y,
-                target_guard_active: false,
-            },
-        );
-        if !Self::set_navigation_controls(control) {
-            self.reject_input(inner, "navigation", -1, -1);
-        }
-        scheduler_event
     }
 
     fn service_device(
@@ -2575,6 +2511,11 @@ impl Coordinator {
         for checkpoint in
             plan.checkpoints_between(inner.checkpoint_step..inner.sched_state.step_index)
         {
+            if matches!(checkpoint.action, Action::NavigateToHyperspace(_))
+                && inner.departure.native_frame_pending
+            {
+                return false;
+            }
             let id = checkpoint.id.clone();
             let reservation = self.runtime.commit.reserve();
             let mut record = super::capture::capture_trace_record(
@@ -4003,6 +3944,63 @@ mod tests {
         assert!(records
             .windows(2)
             .all(|records| records[1].sequence == records[0].sequence + 1));
+    }
+
+    #[test]
+    fn native_departure_checkpoint_waits_for_hyperspace_redraw() {
+        const CHILD: &str = "UQM_NATIVE_DEPARTURE_FRAME_TEST";
+        if std::env::var_os(CHILD).is_none() {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "automation::coordinator::tests::native_departure_checkpoint_waits_for_hyperspace_redraw", "--nocapture"])
+                .env(CHILD, "1").output().unwrap();
+            assert!(
+                output.status.success(),
+                "{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
+        let artifacts = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../tmp");
+        std::fs::create_dir_all(&artifacts).unwrap();
+        let temp = tempfile::tempdir_in(artifacts).unwrap();
+        let source = br#"{"version":1,"name":"departure-frame-test","budgets":{"max_input_ticks":200,"max_presentations":100,"max_wallclock_seconds":60},"steps":[{"action":"navigate_to_hyperspace","max_ticks":100},{"action":"finish"}]}"#;
+        let script = crate::automation::validate_script(
+            crate::automation::parse_script(source, "test.json").unwrap(),
+            "test.json",
+        )
+        .unwrap();
+        Coordinator::init_with_native_checkpoints(script, temp.path().into(), Some(65536));
+        let coord = Coordinator::get().unwrap();
+        let frame = PresentedFrame {
+            count: 1,
+            generation: 0,
+            width: 1,
+            height: 1,
+            rgba: vec![1, 2, 3, 255],
+        };
+        {
+            let mut inner = coord.inner.lock();
+            inner.sched_state.step_index = 1;
+            inner.departure.native_frame_pending = true;
+            assert!(!coord.commit_native_checkpoints(&mut inner, &frame));
+            assert_eq!(
+                inner.checkpoint_step, 0,
+                "initialization UI frame was accepted"
+            );
+            assert!(!inner.native_publication_pending);
+        }
+        Coordinator::native_battle_frame_completed(2u16.into());
+        assert!(
+            coord.inner.lock().departure.native_frame_pending,
+            "encounter combat must not release the departure endpoint"
+        );
+        Coordinator::native_battle_frame_completed((3u16 | (1 << 9)).into());
+        let mut inner = coord.inner.lock();
+        assert!(!inner.departure.native_frame_pending);
+        assert!(!coord.commit_native_checkpoints(&mut inner, &frame));
+        assert_eq!(inner.checkpoint_step, 1);
+        assert!(inner.native_publication_pending);
     }
 
     #[test]

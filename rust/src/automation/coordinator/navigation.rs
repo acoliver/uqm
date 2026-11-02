@@ -1,6 +1,89 @@
-//! Orbital navigation input and arrival observation.
+//! Orbital navigation and hyperspace departure observation.
 
 use super::*;
+
+#[derive(Default)]
+pub(super) struct Departure {
+    pub(super) flight_observed: bool,
+    /// Scene initialization presents UI over the old solar drawing. Native
+    /// checkpoints must wait until the hyperspace battle loop has drawn a frame.
+    pub(super) native_frame_pending: bool,
+}
+
+impl Coordinator {
+    pub(in crate::automation) fn native_battle_frame_completed(
+        activity: crate::mainloop::types::ActivityValue,
+    ) {
+        if activity.kind() == crate::mainloop::types::ActivityKind::InHyperspace {
+            if let Some(coord) = Self::get() {
+                coord.inner.lock().departure.native_frame_pending = false;
+            }
+        }
+    }
+
+    pub(super) fn service_hyperspace_departure(
+        &self,
+        inner: &mut CoordInner,
+        mut scheduler_event: SchedulerEvent,
+    ) -> SchedulerEvent {
+        let snapshot = crate::automation::input_ffi::departure_snapshot();
+        let solar_system_active = snapshot.active != 0;
+        if solar_system_active && snapshot.in_ip_flight != 0 && !inner.departure.flight_observed {
+            inner.departure.flight_observed = true;
+            inner.departure.native_frame_pending = self.native_checkpoint_plan.is_some();
+            self.write_trace_labeled(
+                inner,
+                RecordKind::SemanticAssertion,
+                format!(
+                    "hyperspace_departure_started:ship={},{}:facing={}",
+                    snapshot.ship_x, snapshot.ship_y, snapshot.ship_facing
+                ),
+            );
+        }
+        let activity = crate::mainloop::ffi::get_current_activity().0;
+        if crate::automation::navigation::hyperspace_reached(
+            inner.departure.flight_observed,
+            solar_system_active,
+            activity,
+        ) {
+            if !Self::set_navigation_controls(
+                crate::automation::navigation::NavigationControl::default(),
+            ) {
+                self.reject_input(inner, "navigation", -1, -1);
+                return scheduler_event;
+            }
+            inner.departure.flight_observed = false;
+            scheduler_event = SchedulerEvent::NavigationReached;
+            self.write_trace_labeled(
+                inner,
+                RecordKind::SemanticAssertion,
+                crate::automation::navigation::HYPERSPACE_REACHED_LABEL.to_string(),
+            );
+            return scheduler_event;
+        }
+        let control = crate::automation::navigation::steer_out_of_system(
+            crate::automation::navigation::NavigationObservation {
+                active: solar_system_active,
+                inner_planet: u8::try_from(snapshot.inner_planet).ok(),
+                in_orbit: snapshot.in_orbit != 0,
+                ship_x: snapshot.ship_x,
+                ship_y: snapshot.ship_y,
+                ship_facing: u8::try_from(snapshot.ship_facing).unwrap_or(0),
+                target_x: snapshot.target_x,
+                target_y: snapshot.target_y,
+                velocity_x: snapshot.velocity_x,
+                velocity_y: snapshot.velocity_y,
+                view_center_x: snapshot.view_center_x,
+                view_center_y: snapshot.view_center_y,
+                target_guard_active: false,
+            },
+        );
+        if !Self::set_navigation_controls(control) {
+            self.reject_input(inner, "navigation", -1, -1);
+        }
+        scheduler_event
+    }
+}
 
 impl Coordinator {
     pub(super) fn service_orbit_navigation(
