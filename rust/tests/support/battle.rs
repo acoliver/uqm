@@ -43,7 +43,10 @@ pub unsafe fn succ<T>(pointer: *mut T) -> HELEMENT {
     // SAFETY: the fixture retains the operand throughout this synchronous projection.
     unsafe {
         uqm_rust::app::bridge::enter(|cx| {
-            let id = cx.elements().id(pointer.cast()).expect("fixture operand");
+            let id = cx
+                .elements()
+                .id(pointer.cast())
+                .unwrap_or_else(|| panic!("fixture operand"));
             cx.elements()
                 .succ(id)
                 .map_or(ptr::null_mut(), |id| cx.elements().raw(id))
@@ -57,7 +60,10 @@ pub unsafe fn pred<T>(pointer: *mut T) -> HELEMENT {
     // SAFETY: the fixture retains the operand throughout this synchronous projection.
     unsafe {
         uqm_rust::app::bridge::enter(|cx| {
-            let id = cx.elements().id(pointer.cast()).expect("fixture operand");
+            let id = cx
+                .elements()
+                .id(pointer.cast())
+                .unwrap_or_else(|| panic!("fixture operand"));
             cx.elements()
                 .pred(id)
                 .map_or(ptr::null_mut(), |id| cx.elements().raw(id))

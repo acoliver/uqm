@@ -8,7 +8,7 @@ use battle::{
     prim, queued, toward as velocity_toward, velocity as velocity_fields, with_rng, Battle, Object,
     PoolElement, Ship,
 };
-use std::{ffi::CStr, mem, ptr};
+use std::{ffi::CStr, mem};
 use uqm_rust::ships::native::{
     abi::*, angle_to_facing, cosine, facing_to_angle, frame_index, normalize_facing, sine,
 };

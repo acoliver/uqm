@@ -200,11 +200,9 @@ pub(super) fn frame_fields(
         &mut first.intersect_control.intersect_stamp.frame,
         ptr::null_mut(),
     );
-    // Keep node borrows explicit until the last graph read.
-    assert_eq!(
-        unsafe { battle::succ(second.pointer()) },
-        neutral.pointer().cast()
-    );
+    // SAFETY: both fixture owners retain their slots throughout this read.
+    let successor = unsafe { battle::succ(second.pointer()) };
+    assert_eq!(successor, neutral.pointer().cast());
 }
 
 pub(super) fn fighters_without_journal(directory: &Path) {
@@ -277,7 +275,9 @@ impl ElementRecord {
         // SAFETY: the fixture owns the published context and every allocated operand.
         unsafe {
             uqm_rust::app::bridge::enter(|cx| {
-                let id = cx.alloc_element().expect("fixture capacity");
+                let id = cx
+                    .alloc_element()
+                    .unwrap_or_else(|| panic!("fixture capacity"));
                 let pointer = cx.elements().raw(id).cast::<Element>();
                 let primitive = (*pointer).prim_index;
                 pointer.write(Element::new());

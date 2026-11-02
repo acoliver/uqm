@@ -56,10 +56,7 @@ impl super::World {
 #[cfg(not(test))]
 use super::record::PRIMITIVE;
 #[cfg(not(test))]
-use super::{
-    record::{state__bindgen_ty_1, STATE},
-    Parent,
-};
+use super::Parent;
 use super::{Cx, ElementId, ShipId};
 
 #[cfg(not(test))]
@@ -172,15 +169,9 @@ impl Cx<'_> {
 #[cfg(not(test))]
 impl Cx<'_> {
     pub fn copy_visual_to_next(&mut self, id: ElementId, visual: Visual) {
-        use crate::collections::observation::image;
-        let value = STATE {
-            location: visual.location,
-            image: state__bindgen_ty_1 {
-                frame: visual.image.frame.0,
-                farray: visual.image.frames.0,
-            },
-        };
-        image!(copy;self.b.kernel.elements[id].next,value);
+        self.b.kernel.elements[id].next.location = visual.location;
+        self.set_frame(id, true, visual.image.frame);
+        self.set_frames(id, true, visual.image.frames);
     }
     pub fn element_frame_set_first(&self, id: ElementId, next: bool) -> Frame {
         Frame(self.frame_at(id, next))
@@ -315,12 +306,8 @@ impl Cx<'_> {
         Frame(self.shared_frame(role))
     }
     pub fn copy_image_to_current(&mut self, id: ElementId, image: Image) {
-        use crate::collections::observation::image;
-        let raw = state__bindgen_ty_1 {
-            frame: image.frame.0,
-            farray: image.frames.0,
-        };
-        image!(copy; self.b.kernel.elements[id].current.image, raw);
+        self.set_frame(id, false, image.frame);
+        self.set_frames(id, false, image.frames);
     }
 }
 

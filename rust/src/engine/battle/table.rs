@@ -150,3 +150,23 @@ impl IndexMut<ElementId> for ElementTable {
         self.pool.get_mut(key)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::ElementTable;
+
+    #[test]
+    fn retired_observation_addresses_survive_retirement_and_slot_reuse() {
+        let mut elements = ElementTable::with_capacity(1);
+        let retired = elements.alloc().unwrap();
+        let address = elements.raw(retired) as usize;
+        elements.free(retired);
+        assert_eq!(elements.journal_address(retired), address);
+        let replacement = elements.alloc().unwrap();
+        assert_ne!(retired, replacement);
+        assert_eq!(elements.journal_address(retired), address);
+        assert_eq!(elements.journal_address(replacement), address);
+        elements.reinit();
+        assert_eq!(elements.journal_address(replacement), address);
+    }
+}
