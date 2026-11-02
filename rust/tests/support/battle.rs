@@ -227,7 +227,7 @@ impl<'a> Ship<'a> {
             ship.element_mut().current.location = POINT { x: 4000, y: 4000 };
             ship.element_mut().current.image.farray = ship.ship_frames();
             ship.element_mut().current.image.frame = frames[0].frame(0);
-            ship.element_mut().next = ship.element_mut().current;
+            ship.element_mut().next = ship.element_mut().current.clone();
             ship.element_mut().IntersectControl.IntersectStamp.frame = frames[0].frame(0);
             // SAFETY: this slot owns its allocated display primitive.
 
@@ -400,11 +400,11 @@ impl<'a> Ship<'a> {
                 .unwrap_or_else(|| panic!("fixture owns its loaded descriptor"))
         }
     }
-    pub fn ship_frames(&self) -> *mut FRAME {
-        self.descriptor().ship_data.ship.as_ptr()
+    pub fn ship_frames(&self) -> uqm_rust::engine::battle::views::Frames {
+        self.frame_set(0)
     }
-    pub fn special_frames(&self) -> *mut FRAME {
-        self.descriptor().ship_data.special.as_ptr()
+    pub fn special_frames(&self) -> uqm_rust::engine::battle::views::Frames {
+        self.frame_set(2)
     }
     pub unsafe fn guardian_form(mut self) -> Self {
         // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
@@ -444,7 +444,7 @@ impl<'a> Ship<'a> {
                 for &id in out.iter().flatten() {
                     cx.set_parent(id, Some(self.ship_id));
                     let current = cx.element(id).current;
-                    cx.copy_visual_to_next(id, current);
+                    cx.copy_visual_to_next(id, current.clone());
                     cx.set_intersect_frame(id, current.image.frame);
                 }
                 out

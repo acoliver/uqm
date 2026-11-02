@@ -54,30 +54,25 @@ pub(crate) mod engine {
         Some(owned)
     }
 
-    struct Animation([crate::graphics::native_abi::FRAME; 3]);
-    impl Drop for Animation {
-        fn drop(&mut self) {
-            // SAFETY: the last array lease uniquely owns these loaded drawables.
-            unsafe {
-                free_image((&raw mut self.0).cast());
-            }
-        }
-    }
-
     unsafe fn load_animation_set(
         keys: [crate::graphics::native_abi::RESOURCE; 3],
     ) -> Option<crate::engine::battle::frames::FrameArray> {
         use crate::engine::battle::{frames::FrameArray, views::Frame};
-        let mut animation = Animation([std::ptr::null_mut(); 3]);
-        if load_animation(animation.0.as_mut_ptr(), keys[0], keys[1], keys[2]) == 0 {
+        let mut raw = [std::ptr::null_mut(); 3];
+        if load_animation(raw.as_mut_ptr(), keys[0], keys[1], keys[2]) == 0 {
+            free_image(&raw mut raw);
             return None;
         }
-        let views = animation.0.map(|frame| Frame::from_native(frame));
-        let array = FrameArray::retain(views, animation);
-        crate::collections::observation::observe_views(&array.views(), "animation", |frame| {
-            frame.raw() as usize
-        });
+        let leases = crate::graphics::drawable_abi::retain_frame_allocations(&raw);
+        let array = FrameArray::retain(raw.map(|frame| Frame::from_native(frame)), leases);
+        array.observe("animation");
         Some(array)
+    }
+
+    unsafe fn release_animation_set(array: &crate::engine::battle::frames::FrameArray) {
+        let mut raw = array.views().map(|frame| frame.raw());
+        free_image(&raw mut raw);
+        array.retire_views();
     }
 
     unsafe fn load_battle(d: &mut RaceDesc) -> bool {
@@ -136,8 +131,11 @@ pub(crate) mod engine {
         );
         if battle != 0 {
             let data = descriptor.data_mut();
+            release_animation_set(&data.special);
             data.special = crate::engine::battle::frames::FrameArray::EMPTY;
+            release_animation_set(&data.weapon);
             data.weapon = crate::engine::battle::frames::FrameArray::EMPTY;
+            release_animation_set(&data.ship);
             data.ship = crate::engine::battle::frames::FrameArray::EMPTY;
             DestroyDrawable(ReleaseDrawable(data.captain_control.background.cast()));
             DestroyMusic(data.victory_ditty.cast());

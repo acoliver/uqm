@@ -24,16 +24,16 @@ mod abi {
     pub use crate::graphics::native_abi::PRIM_DESC;
 
     #[repr(C)]
-    #[derive(Debug, Copy, Clone)]
+    #[derive(Debug, Clone)]
     pub struct state {
         pub location: POINT,
         pub image: state__bindgen_ty_1,
     }
     #[repr(C)]
-    #[derive(Debug, Copy, Clone)]
+    #[derive(Debug, Clone)]
     pub struct state__bindgen_ty_1 {
         pub frame: FRAME,
-        pub farray: *mut FRAME,
+        pub farray: super::super::frames::Frames,
     }
     pub type STATE = state;
     pub type ELEMENT = element;
@@ -53,7 +53,7 @@ mod abi {
         );
     };
     #[repr(C)]
-    #[derive(Debug, Copy, Clone)]
+    #[derive(Debug, Clone)]
     pub struct element {
         pub preprocess_func: Option<super::super::hooks::ElementHook>,
         pub postprocess_func: Option<super::super::hooks::ElementHook>,
@@ -216,7 +216,7 @@ impl Default for ELEMENT {
             location: POINT { x: 0, y: 0 },
             image: state__bindgen_ty_1 {
                 frame: ptr::null_mut(),
-                farray: ptr::null_mut(),
+                farray: super::frames::Frames::ABSENT,
             },
         };
         Self {
@@ -242,7 +242,7 @@ impl Default for ELEMENT {
                 last_time_val: 0,
             },
             PrimIndex: 0,
-            current: visual,
+            current: visual.clone(),
             next: visual,
             parent: Parent::None,
             target: None,
@@ -325,14 +325,14 @@ impl ElementState {
                 location: e.current.location,
                 image: Image {
                     frame: Frame(e.current.image.frame),
-                    frames: Frames(e.current.image.farray),
+                    frames: e.current.image.farray.clone(),
                 },
             },
             next: Visual {
                 location: e.next.location,
                 image: Image {
                     frame: Frame(e.next.image.frame),
-                    frames: Frames(e.next.image.farray),
+                    frames: e.next.image.farray.clone(),
                 },
             },
             pre: e.preprocess_func,
@@ -354,9 +354,9 @@ impl ElementState {
         e.current.location = value.current.location;
         e.next.location = value.next.location;
         e.current.image.frame = value.current.image.frame.0;
-        e.current.image.farray = value.current.image.frames.0;
+        e.current.image.farray = value.current.image.frames;
         e.next.image.frame = value.next.image.frame.0;
-        e.next.image.farray = value.next.image.frames.0;
+        e.next.image.farray = value.next.image.frames;
         e.preprocess_func = value.pre;
         e.postprocess_func = value.post;
         e.collision_func = value.collide;
@@ -476,8 +476,8 @@ impl Cx<'_> {
         }
     }
     pub(crate) fn encode_subject(&self, subject: &super::Subject) -> ELEMENT {
-        let mut e = subject.state.encode();
-        ElementState::apply(&mut e, subject.state);
+        let mut e = subject.state.clone().encode();
+        ElementState::apply(&mut e, subject.state.clone());
         e.target = subject.target;
         e.parent = subject.parent;
         e.IntersectControl = subject.intersect;
@@ -646,14 +646,14 @@ impl ElementState {
                 location: self.current.location,
                 image: state__bindgen_ty_1 {
                     frame: self.current.image.frame.0,
-                    farray: self.current.image.frames.0,
+                    farray: self.current.image.frames,
                 },
             },
             next: STATE {
                 location: self.next.location,
                 image: state__bindgen_ty_1 {
                     frame: self.next.image.frame.0,
-                    farray: self.next.image.frames.0,
+                    farray: self.next.image.frames,
                 },
             },
             parent: Parent::None,
@@ -678,8 +678,7 @@ mod projection_tests {
         let mut activity = 0;
         let mut groups = QUEUE::default();
         // SAFETY: this test retains both local world authorities for the context's lifetime.
-        let mut world =
-            unsafe { super::super::World::new(&mut activity, &mut groups, [ptr::null_mut(); 2]) };
+        let mut world = unsafe { super::super::World::new(&mut activity, &mut groups) };
         let cx = Cx {
             b: &mut battle,
             world: &mut world,
@@ -706,8 +705,7 @@ mod projection_tests {
         let mut activity = 0u16;
         let mut battle = super::super::Battle::new(3);
         // SAFETY: the local world authorities remain live and exclusively borrowed.
-        let mut world =
-            unsafe { super::super::World::new(&mut activity, &mut groups, [ptr::null_mut(); 2]) };
+        let mut world = unsafe { super::super::World::new(&mut activity, &mut groups) };
         let cx = Cx {
             b: &mut battle,
             world: &mut world,

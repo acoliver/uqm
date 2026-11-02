@@ -17,7 +17,7 @@ fn ship_detachment_is_an_explicit_fixture_command() {
 #[cfg(not(test))]
 use crate::engine::battle::{link_queue, Cx, ShipId};
 use crate::engine::battle::{record::*, views::*, ElementId, Parent};
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub(crate) struct Element {
     pub state: ElementState,
     pub parent: Parent,
@@ -51,7 +51,7 @@ impl Element {
 }
 #[cfg(not(test))]
 pub(crate) type ZoomSample = ((usize, u16), (usize, u16), Option<(usize, usize)>);
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub(crate) struct ShipFrames {
     pub ship: Frames,
     pub weapon: Frames,
@@ -151,7 +151,7 @@ impl Cx<'_> {
         if let Some(info) = ship.info {
             self.race_stats_mut(id).ship_info = info;
         }
-        if let Some(data) = ship.data {
+        if let Some(data) = &ship.data {
             self.set_captain_special(id, data.captain_special);
         }
     }
@@ -257,8 +257,7 @@ impl Cx<'_> {
 #[cfg(test)]
 impl Element {
     pub(crate) fn new() -> Self {
-        // SAFETY: this test source has the same zero-valid representation as a newly allocated element.
-        let record: crate::engine::battle::record::ELEMENT = unsafe { std::mem::zeroed() };
+        let record = crate::engine::battle::record::ELEMENT::default();
         Self {
             state: crate::engine::battle::access::observe_element_record(&record),
             parent: Parent::None,
@@ -282,18 +281,18 @@ impl Ship {
                 unsafe { crate::engine::battle::access::observe_descriptor_record(d) }.ship_info,
             ),
             data: Some(ShipFrames {
-                // SAFETY: the test descriptor retains all three ship frames.
-                ship: unsafe {
-                    Frames::from_native(std::ptr::NonNull::from(&d.ship_data.ship).cast())
-                },
-                // SAFETY: the test descriptor retains all three weapon frames.
-                weapon: unsafe {
-                    Frames::from_native(std::ptr::NonNull::from(&d.ship_data.weapon).cast())
-                },
-                // SAFETY: the test descriptor retains all three special frames.
-                special: unsafe {
-                    Frames::from_native(std::ptr::NonNull::from(&d.ship_data.special).cast())
-                },
+                ship: Frames::shared(
+                    crate::engine::battle::frames::SharedFrames::Fixture(0),
+                    d.ship_data.ship.clone(),
+                ),
+                weapon: Frames::shared(
+                    crate::engine::battle::frames::SharedFrames::Fixture(1),
+                    d.ship_data.weapon.clone(),
+                ),
+                special: Frames::shared(
+                    crate::engine::battle::frames::SharedFrames::Fixture(2),
+                    d.ship_data.special.clone(),
+                ),
                 // SAFETY: the descriptor retains this loaded captain frame.
                 captain_special: unsafe { Frame::from_native(d.ship_data.captain_control.special) },
             }),

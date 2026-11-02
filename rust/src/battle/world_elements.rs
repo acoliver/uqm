@@ -82,8 +82,8 @@ pub(crate) mod engine {
         cx.element_mut(e).life = (NORMAL_LIFE + 1) as u16;
         cx.primitive_style_mut(e).kind = gfx_object_STAMP_PRIM as u8;
         let frames = cx.planet_frames();
-        cx.set_frames(e, false, frames);
-        cx.set_frame(e, false, cx.frames_first(frames));
+        cx.set_frames(e, false, frames.clone());
+        cx.set_frame(e, false, cx.frames_first(&frames));
         cx.element_mut(e).collide = Some(CollisionHook::Native(collision));
         cx.element_mut(e).post = Some(ElementHook::Native(gravity_postprocess));
         // SAFETY: the legacy velocity record admits the zero state.

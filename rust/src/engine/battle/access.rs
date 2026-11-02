@@ -120,7 +120,7 @@ use super::views::*;
 #[cfg(not(test))]
 impl Cx<'_> {
     pub fn ship_frame_set(&self, id: ShipId, role: usize) -> Frames {
-        Frames(self.ship_array(id, role).as_ptr())
+        super::frames::Frames::ship(id, role.into(), self.ship_array(id, role).clone())
     }
     pub fn ship_frame(&self, id: ShipId, role: usize) -> Frame {
         self.ship_array(id, role).view(0)
@@ -157,15 +157,15 @@ impl Cx<'_> {
         }
     }
     pub fn set_single_frames(&mut self, id: ElementId, frames: Frames, frame: Frame) {
-        crate::collections::observation::image!(single; self.b.kernel.elements[id].current.image.farray, frames.0, frame.0);
+        crate::collections::observation::image!(single; self.b.kernel.elements[id].current.image.farray, frames, frame.0);
     }
 
     pub fn set_frames(&mut self, id: ElementId, next: bool, frames: Frames) {
         use crate::collections::observation::image;
         if next {
-            image!(set;self.b.kernel.elements[id].next.image.farray,frames.0);
+            image!(set;self.b.kernel.elements[id].next.image.farray,frames);
         } else {
-            image!(set;self.b.kernel.elements[id].current.image.farray,frames.0);
+            image!(set;self.b.kernel.elements[id].current.image.farray,frames);
         }
     }
 }
@@ -269,36 +269,36 @@ impl Cx<'_> {
         unsafe { IncFrameIndex(frame) }
     }
     pub(super) fn frame_at(&self, element: ElementId, next: bool) -> FRAME {
-        let array = if next {
-            self.b.kernel.elements[element].next.image.farray
+        let image = if next {
+            &self.b.kernel.elements[element].next.image
         } else {
-            self.b.kernel.elements[element].current.image.farray
+            &self.b.kernel.elements[element].current.image
         };
-        assert!(!array.is_null(), "element {element:?} has no frame set");
-        // SAFETY: the array is retained by the descriptor or shared battle resources.
-        unsafe { *array }
+        image.farray.view(0).raw()
     }
     pub(super) fn frame_index(&self, frame: FRAME) -> u16 {
         // SAFETY: this battle retains the element's loaded frame resources.
         unsafe { crate::graphics::pixmap_abi::GetFrameIndex(frame.cast()) }
     }
-    pub(super) fn shared_frames(&self, role: SharedFrames) -> *mut FRAME {
-        match role {
-            SharedFrames::Asteroid => self.world.shared_frames[0].0,
-            SharedFrames::Explosion => self.world.shared_frames[1].0,
-        }
-    }
     pub(super) fn shared_frame(&self, role: SharedFrames) -> FRAME {
-        // SAFETY: shared frame sets stay loaded until battle cleanup.
-        unsafe { *self.shared_frames(role) }
+        self.shared_frame_set(role).view(0).raw()
     }
 }
 
 #[cfg(not(test))]
 impl Cx<'_> {
     pub fn shared_frame_set(&self, role: SharedFrames) -> Frames {
-        Frames(self.shared_frames(role))
+        let source = match role {
+            SharedFrames::Asteroid => (&raw mut crate::game_init::space_resources::asteroid).cast(),
+            SharedFrames::Explosion => {
+                (&raw mut crate::game_init::space_resources::explosion).cast()
+            }
+            _ => panic!("not a battle shared frame role {role:?}"),
+        };
+        // SAFETY: the live resource authority owns these slots; the returned set retains their allocations.
+        unsafe { Frames::native_shared(role, std::ptr::NonNull::new_unchecked(source), 3) }
     }
+
     pub fn first_shared_frame(&self, role: SharedFrames) -> Frame {
         Frame(self.shared_frame(role))
     }
@@ -418,7 +418,7 @@ impl Cx<'_> {
         let index = self.b.kernel.elements[destination].PrimIndex;
         let source_index = usize::from(self.b.kernel.elements[source].PrimIndex);
         let primitive = *self.b.kernel.display.get(source_index as u16);
-        let value = self.b.kernel.elements[source];
+        let value = self.b.kernel.elements[source].clone();
         let address = std::ptr::from_ref(&self.b.kernel.elements[source]) as usize;
         crate::collections::observation::copy_image(
             &mut self.b.kernel.elements[destination],
@@ -546,9 +546,9 @@ pub(crate) unsafe fn observe_descriptor_record(record: &super::record::RACE_DESC
 
 #[cfg(not(test))]
 impl Cx<'_> {
-    pub(crate) fn frames_first(&self, frames: Frames) -> Frame {
+    pub(crate) fn frames_first(&self, frames: &Frames) -> Frame {
         // SAFETY: the supplied frame set belongs to this context's loaded resources.
-        Frame(unsafe { *frames.0 })
+        frames.view(0)
     }
 
     pub(crate) fn copy_next_frame_set(&mut self, destination: ElementId, source: ElementId) {
@@ -641,7 +641,7 @@ impl Cx<'_> {
         let e = &mut self.b.kernel.elements[id];
         // SAFETY: the allocated element retains its loaded frame array during this projection.
         unsafe {
-            crate::collections::observation::image!(frame; e.IntersectControl.IntersectStamp.frame, crate::graphics::pixmap_abi::SetEquFrameIndex(*e.next.image.farray, e.next.image.frame));
+            crate::collections::observation::image!(frame; e.IntersectControl.IntersectStamp.frame, crate::graphics::pixmap_abi::SetEquFrameIndex(e.next.image.farray.view(0).raw(), e.next.image.frame));
         }
     }
 }
@@ -672,9 +672,15 @@ mod intersection_projection_tests {
             let id = battle.kernel.elements.alloc().unwrap();
             battle.kernel.elements[id].current.location = POINT { x: 44, y: 52 };
             battle.kernel.elements[id].next.location = POINT { x: 60, y: 68 };
-            let mut frame = std::ptr::null_mut();
-            battle.kernel.elements[id].next.image.farray = &raw mut frame;
-            let mut world = World::new(&mut activity, &mut groups, [std::ptr::null_mut(); 2]);
+            battle.kernel.elements[id].next.image.farray =
+                crate::engine::battle::views::Frames::shared(
+                    crate::engine::battle::frames::SharedFrames::Fixture(0),
+                    crate::engine::battle::frames::FrameArray::retain(
+                        [crate::engine::battle::views::Frame::ABSENT; 3],
+                        (),
+                    ),
+                );
+            let mut world = World::new(&mut activity, &mut groups);
             let mut cx = Cx {
                 b: &mut battle,
                 world: &mut world,

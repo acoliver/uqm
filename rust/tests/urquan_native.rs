@@ -79,7 +79,7 @@ fn fighters_launch_left_then_right_and_return_crew() {
                 assert_eq!((*e).turn, if i == 0 { LEFT as u8 } else { RIGHT as u8 });
                 assert_eq!(frame_index((*e).current.image.frame), face);
                 assert_eq!(velocity(&(*e).velocity), toward(8 << ONE_SHIFT, face));
-                (*e).next = (*e).current;
+                (*e).next = (*e).current.clone();
                 with_rng(7, 0, || {
                     hooks::invoke_collision_pointer(
                         (*e).collision_func.unwrap(),
@@ -133,7 +133,7 @@ fn fighter_tracking_delay_then_return_and_fire_use_exact_ranges() {
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
             ship.postprocess();
             let fighter = battle::element(battle::tail());
-            (*fighter).next = (*fighter).current;
+            (*fighter).next = (*fighter).current.clone();
             let initial = velocity(&(*fighter).velocity);
             (*fighter).life = 394;
             with_rng(17, 0, || {
@@ -176,7 +176,7 @@ fn fighter_planet_collision_clones_and_deflects_without_rng() {
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
             ship.postprocess();
             let e = battle::element(battle::tail());
-            (*e).next = (*e).current;
+            (*e).next = (*e).current.clone();
             SetVelocityVector(&raw mut (*e).velocity, 8 << ONE_SHIFT, 0);
             let mut planet_fixture = Object::new(&_battle);
             let planet = planet_fixture.ptr();

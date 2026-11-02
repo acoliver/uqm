@@ -275,10 +275,7 @@ fn laser_death_obeys_range_byte_gate_count_draw_and_animation() {
                             (origin.x + magnitude as i16, origin.y)
                         );
                         assert_eq!(frame_index((*spot).current.image.frame), 32);
-                        assert_eq!(
-                            (*spot).current.image.farray,
-                            ship.descriptor_mut().ship_data.weapon.as_ptr()
-                        );
+                        assert_eq!((*spot).current.image.farray, ship.frame_set(1));
                         assert_eq!((*spot).life, 9);
                         assert_eq!((*spot).thrust, 0);
                         assert_eq!((*prim(spot)).Type, gfx_object_STAMP_PRIM as u8);
@@ -574,7 +571,7 @@ fn satellite_collision_is_noop_and_death_installs_four_tick_animation() {
             assert!((*s).postprocess_func.is_none());
             assert!((*s).collision_func.is_none());
             assert!((*s).death_func.is_none());
-            (*s).current = (*s).next;
+            (*s).current = (*s).next.clone();
             let animate = (*s).preprocess_func.unwrap();
             hooks::invoke_element_pointer(animate, s);
             assert_eq!(frame_index((*s).next.image.frame), 8);
@@ -632,7 +629,7 @@ fn point_defense_uses_backward_weakest_nearest_and_stable_tie_order() {
                 Ship::with_frames(&_battle, SPECIES_ID_CHMMR_ID, 0, [16, 41, 12], [16, 12]);
             let satellites = satellites(&mut ship);
             let s = battle::element(satellites[0]);
-            (*s).next = (*s).current;
+            (*s).next = (*s).current.clone();
             let mut strong_fixture = target(s, 4, 0, 3);
             let strong: HELEMENT = (&raw mut *strong_fixture).cast();
             let mut far_weak_fixture = target(s, 200, 0, 1);
@@ -697,7 +694,7 @@ fn point_defense_respects_collision_cloak_range_and_full_width_hitpoints() {
                     Ship::with_frames(&_battle, SPECIES_ID_CHMMR_ID, 0, [16, 41, 12], [16, 12]);
                 let satellites = satellites(&mut ship);
                 let s = battle::element(satellites[0]);
-                (*s).next = (*s).current;
+                (*s).next = (*s).current.clone();
                 let mut h_fixture = target(s, dx, dy, hp);
                 let h: HELEMENT = (&raw mut *h_fixture).cast();
                 let obj = battle::element(h);
@@ -777,7 +774,7 @@ fn satellite_defense_wait_underflows_on_dead_zero_wait_and_handles_exhaustion() 
             for h in held {
                 battle_context::dispose(h);
             }
-            (*s).next = (*s).current;
+            (*s).next = (*s).current.clone();
             let _target = target(s, 40, 0, 1);
             let d = defense(s);
             let held = exhaust();
@@ -811,7 +808,7 @@ fn tractor_applies_mass_division_speed_flags_and_head_inserted_blue_shadows() {
                     Ship::with_frames(&_battle, SPECIES_ID_CHMMR_ID, 1, [16, 41, 12], [16, 12]);
                 (*enemy.ptr()).mass = mass;
                 (*enemy.ptr()).current.location = POINT { x: 3000, y: 3728 };
-                (*enemy.ptr()).next = (*enemy.ptr()).current;
+                (*enemy.ptr()).next = (*enemy.ptr()).current.clone();
                 (*ship.ptr()).target = Some(battle::id((enemy.handle).cast()));
                 SetVelocityComponents(&mut (*enemy.ptr()).velocity, initial_vx, 0);
                 enemy.ship_mut().cur_status_flags =
@@ -884,7 +881,7 @@ fn tractor_energy_target_gravity_and_allocation_boundaries() {
                     Ship::with_frames(&_battle, SPECIES_ID_CHMMR_ID, 1, [16, 41, 12], [16, 12]);
                 (*enemy.ptr()).mass = mass;
                 (*enemy.ptr()).current.location = POINT { x: 3000, y: 3728 };
-                (*enemy.ptr()).next = (*enemy.ptr()).current;
+                (*enemy.ptr()).next = (*enemy.ptr()).current.clone();
                 if has_target {
                     (*ship.ptr()).target = Some(battle::id((enemy.handle).cast()));
                 } else {
@@ -989,7 +986,7 @@ fn tractor_tracking_consumes_only_the_half_turn_rng_before_shadow_allocation() {
                     Ship::with_frames(&_battle, SPECIES_ID_CHMMR_ID, 1, [16, 41, 12], [16, 12]);
                 // South is exactly half a circle from TrackShip's initial facing.
                 (*enemy.ptr()).current.location = POINT { x: 4000, y: 5000 };
-                (*enemy.ptr()).next = (*enemy.ptr()).current;
+                (*enemy.ptr()).next = (*enemy.ptr()).current.clone();
                 ship.ship_mut().cur_status_flags = SPECIAL as u16;
                 assert!((*ship.ptr()).target.is_none());
                 TFB_SeedRandom(seed);

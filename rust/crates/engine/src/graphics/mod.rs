@@ -110,3 +110,5 @@ pub mod gfx_common_abi;
 pub mod widgets_abi;
 
 mod value_helpers;
+
+mod native_drawables;

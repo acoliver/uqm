@@ -115,11 +115,11 @@ impl<'a> Ship<'a> {
         let desc = inner.descriptor_mut();
         desc.ship_data.ship = ship_frames.array();
         desc.ship_data.weapon = weapon_frames.array();
-        let frames = desc.ship_data.ship.as_ptr();
+        let frames = inner.frame_set(0);
         let el = inner.element_mut();
         el.current.image.farray = frames;
         el.current.image.frame = ship_frames.frame(0);
-        el.next = el.current;
+        el.next = el.current.clone();
         el.IntersectControl.IntersectStamp.frame = ship_frames.frame(0);
         el.IntersectControl.EndPoint = POINT { x: 1000, y: 1000 };
         el.IntersectControl.IntersectStamp.origin = POINT { x: 1000, y: 1000 };
@@ -165,7 +165,7 @@ impl<'a> Ship<'a> {
         }
     }
     unsafe fn intelligence(&mut self, concerns: &mut [EVALUATE_DESC; 4]) {
-        let mut subject = *self.ptr();
+        let mut subject = (*self.ptr()).clone();
         // The AI operand is a value copy, not a member of the live queue.
         // Its phoenix predecessor may be disposed during intelligence.
         self.inner.intelligence(&mut subject, concerns, 0);
@@ -591,10 +591,7 @@ fn bug_missiles_launch_fore_left_and_right_inheriting_ship_velocity() {
                         );
                         assert_eq!((*m).playerNr, 1);
                         assert_eq!((*m).current.image.frame, ship.weapon_frames.frame(0));
-                        assert_eq!(
-                            (*m).current.image.farray,
-                            ship.inner.descriptor_mut().ship_data.weapon.as_ptr()
-                        );
+                        assert_eq!((*m).current.image.farray, ship.inner.frame_set(1));
                         assert_eq!((*prim(m)).Type, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
                         assert!((*m).collision_func.is_some());
                         assert!((*m).postprocess_func.is_none());
@@ -896,7 +893,7 @@ fn reincarnation_ends_when_life_span_returns_to_normal() {
             (*el).life = NORMAL_LIFE as COUNT;
             (*el).current.image.frame = ship.ship_frames.frame(5);
             (*el).next.image.frame = ship.ship_frames.frame(9);
-            (*el).next.image.farray = ship.inner.descriptor_mut().ship_data.ship.as_ptr();
+            (*el).next.image.farray = ship.inner.frame_set(0);
             (*el).current.location = POINT { x: 400, y: -800 };
             (*el).next.location = POINT { x: 1201, y: 77 };
             (*el).velocity = mem::zeroed();
@@ -1289,10 +1286,7 @@ fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
             assert_eq!((*el).thrust, 0);
             assert_eq!((*el).life, 1);
             assert_eq!(ship.inner.ship_mut().ShipFacing, facing);
-            assert_eq!(
-                (*el).current.image.farray,
-                ship.inner.descriptor_mut().ship_data.ship.as_ptr()
-            );
+            assert_eq!((*el).current.image.farray, ship.inner.frame_set(0));
             assert_eq!(frame_index((*el).current.image.frame), facing);
             assert_eq!((*prim(el)).Type, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
             assert_eq!(((*el).current.location.x, (*el).current.location.y), (x, y));
@@ -1349,8 +1343,8 @@ fn new_pkunk_redraws_its_position_while_a_planet_pulls_on_it() {
             (*planet).state_flags = 0;
             (*planet).mass = 200;
             (*planet).current.location = POINT { x: x1, y: y1 };
-            (*planet).next = (*planet).current;
-            (*planet).current.image.farray = ship.inner.descriptor_mut().ship_data.ship.as_ptr();
+            (*planet).next = (*planet).current.clone();
+            (*planet).current.image.farray = ship.inner.frame_set(0);
             (*planet).current.image.frame = ship.ship_frames.frame(0);
             (*prim(planet)).Type = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
             shared::put(planet_handle);

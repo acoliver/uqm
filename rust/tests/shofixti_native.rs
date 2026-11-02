@@ -97,11 +97,11 @@ impl<'a> Ship<'a> {
         let captain = FrameSet::new(20);
         desc.ship_data.special = special_frames.array();
         desc.ship_data.captain_control.special = captain.frame(14);
-        let frames = desc.ship_data.ship.as_ptr();
+        let frames = inner.frame_set(0);
         let el = inner.element_mut();
         el.current.image.farray = frames;
         el.current.image.frame = ship_frames.frame(0);
-        el.next = el.current;
+        el.next = el.current.clone();
         el.IntersectControl.IntersectStamp.frame = ship_frames.frame(0);
         el.IntersectControl.EndPoint = POINT { x: 1000, y: 1000 };
         el.IntersectControl.IntersectStamp.origin = POINT { x: 1000, y: 1000 };
@@ -129,7 +129,7 @@ impl<'a> Ship<'a> {
         self.handle.cast()
     }
     unsafe fn ai(&mut self, concerns: &mut [EVALUATE_DESC; 5]) {
-        let mut subject = *self.ptr();
+        let mut subject = (*self.ptr()).clone();
         self.inner.intelligence(&mut subject, &mut concerns[..4], 0);
     }
     unsafe fn arm(&mut self) -> Option<uqm_rust::engine::battle::ElementHook> {
@@ -371,10 +371,7 @@ fn darts_use_next_location_exact_facing_offset_speed_and_failure_count() {
                 (*dart).current.image.frame,
                 ship.weapon_frames.frame((facing % 16) as usize)
             );
-            assert_eq!(
-                (*dart).current.image.farray,
-                ship.inner.descriptor_mut().ship_data.weapon.as_ptr()
-            );
+            assert_eq!((*dart).current.image.farray, ship.inner.frame_set(1));
             assert!(
                 (*dart).preprocess_func.is_none()
                     && (*dart).postprocess_func.is_none()
@@ -739,10 +736,7 @@ fn glory_flash_switch_and_explosion_color_sequence_use_twelve_frame_ship_death()
             (*explosion).current.image.frame,
             ship.special_frames.frame(0)
         );
-        assert_eq!(
-            (*explosion).current.image.farray,
-            ship.inner.descriptor_mut().ship_data.special.as_ptr()
-        );
+        assert_eq!((*explosion).current.image.farray, ship.inner.frame_set(2));
         assert_eq!(
             (
                 (*explosion).current.location.x,

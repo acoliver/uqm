@@ -779,7 +779,10 @@ fn frameset_and_media_identity(directory: &Path) {
     observe_test_frames(&descriptor.ship_data.ship, "test-ship");
     observation::assign_set(
         &mut element.current.farray,
-        descriptor.ship_data.ship.as_ptr().cast(),
+        uqm_rust::engine::battle::frames::Frames::shared(
+            uqm_rust::engine::battle::frames::SharedFrames::Fixture(0),
+            descriptor.ship_data.ship.clone(),
+        ),
         None,
     );
     let (before, _) = snapshot(directory);
@@ -807,7 +810,10 @@ fn frameset_and_media_identity(directory: &Path) {
     observe_test_frames(&replacement.ship_data.ship, "replacement-ship");
     observation::assign_set(
         &mut element.next.farray,
-        replacement.ship_data.ship.as_ptr().cast(),
+        uqm_rust::engine::battle::frames::Frames::shared(
+            uqm_rust::engine::battle::frames::SharedFrames::Fixture(0),
+            replacement.ship_data.ship.clone(),
+        ),
         None,
     );
     let (outgoing, _) = snapshot(directory);
@@ -877,7 +883,7 @@ fn retired_space_does_not_borrow_released_frames(directory: &Path) {
     let mut element = graph::ElementRecord::new();
     element.current.frame = ptr::dangling_mut();
     element.next.frame = ptr::dangling_mut();
-    element.current.farray = ptr::null_mut();
+    element.current.farray = uqm_rust::engine::battle::frames::Frames::ABSENT;
     // SAFETY: only the element pool is retained after space teardown; the frame
     // graph is deliberately invalid and must not be traversed by the observer.
     unsafe {

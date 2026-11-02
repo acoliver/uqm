@@ -378,7 +378,7 @@ pub(crate) fn weapons(
     if cx.subject_cloaked(other) {
         margin = margin.wrapping_add((40 << ONE_SHIFT) as u16);
     }
-    let mut moved = *ship;
+    let mut moved = ship.clone();
     let (dx, dy) = next_velocity(&mut moved.velocity, 1);
     moved.next.location.x = moved.current.location.x.wrapping_add(dx);
     moved.next.location.y = moved.current.location.y.wrapping_add(dy);

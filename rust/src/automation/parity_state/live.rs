@@ -168,6 +168,18 @@ fn visuals(fields: &mut Fields, prefix: &str, element: &ElementObservation, jour
 mod tests {
     use super::*;
     use crate::battle::element::Element;
+
+    fn observed_set<T>(views: &[*mut T]) -> crate::engine::battle::frames::Frames {
+        use crate::engine::battle::{
+            frames::{FrameArray, Frames, SharedFrames},
+            views::Frame,
+        };
+        Frames::shared(
+            SharedFrames::Fixture(0),
+            FrameArray::with_source([Frame::ABSENT; 3], (), Some(views.as_ptr() as usize)),
+        )
+    }
+
     fn visuals(fields: &mut Fields, prefix: &str, element: &Element, journal: &mut Journal) {
         // SAFETY: the test owns a layout-compatible source record.
         let observation =
@@ -185,7 +197,7 @@ mod tests {
         let mut views = [std::ptr::from_mut(&mut storage).cast()];
         let mut element = Element::new();
         element.current.frame = views[0];
-        element.current.farray = views.as_mut_ptr();
+        element.current.farray = observed_set(&views);
         journal.register_frame(views[0] as usize, 0, 7);
         journal.allocate(std::ptr::from_ref(&element) as usize);
         let mut fields = Fields::new();
@@ -204,7 +216,7 @@ mod tests {
         let mut views = [pointer];
         let mut element = Element::new();
         element.current.frame = pointer;
-        element.current.farray = views.as_mut_ptr();
+        element.current.farray = observed_set(&views);
         journal.allocate(std::ptr::from_ref(&element) as usize);
         let owner = journal.register_resource(100, "drawable");
         journal.register_frame(pointer as usize, 100, 7);
@@ -271,7 +283,7 @@ mod tests {
                 if cycle == 0 {
                     observation::assign_set(
                         &mut element.current.farray,
-                        views.as_mut_ptr().cast(),
+                        observed_set(&views),
                         None,
                     );
                 }

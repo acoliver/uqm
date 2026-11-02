@@ -154,8 +154,15 @@ pub(super) fn frame_fields(
     let mut frame: frame_desc = unsafe { std::mem::zeroed() };
     frame.parent = &mut drawable;
     frame.Index = 7;
-    let pointer = ptr::from_mut(&mut frame).cast();
-    let mut array = [pointer; 3];
+    let pointer: *mut std::ffi::c_void = ptr::from_mut(&mut frame).cast();
+    let array = uqm_rust::engine::battle::frames::FrameArray::retain(
+        [unsafe { uqm_rust::engine::battle::views::Frame::from_native(pointer.cast()) }; 3],
+        (),
+    );
+    let set = uqm_rust::engine::battle::frames::Frames::shared(
+        uqm_rust::engine::battle::frames::SharedFrames::Fixture(0),
+        array.clone(),
+    );
     observation::record(Event::Drawable(ptr::from_mut(&mut drawable) as usize));
     observation::record(Event::Frame {
         address: ptr::from_mut(&mut frame) as usize,
@@ -168,9 +175,9 @@ pub(super) fn frame_fields(
         role: "test-views".into(),
     });
     observation::assign_frame(&mut first.current.frame, pointer);
-    observation::assign_set(&mut first.current.farray, array.as_mut_ptr(), None);
+    observation::assign_set(&mut first.current.farray, set.clone(), None);
     observation::assign_frame(&mut first.next.frame, pointer);
-    observation::assign_set(&mut first.next.farray, array.as_mut_ptr(), None);
+    observation::assign_set(&mut first.next.farray, set.clone(), None);
     observation::assign_frame(&mut first.intersect_control.intersect_stamp.frame, pointer);
     let (fields, _) = snapshot(directory);
     for name in [
@@ -189,9 +196,17 @@ pub(super) fn frame_fields(
     assert_eq!(fields["elements.1.current.frame.owner"], "none");
     assert_eq!(fields["elements.2.current.farray.index"], "0");
     observation::assign_frame(&mut first.current.frame, ptr::null_mut());
-    observation::assign_set(&mut first.current.farray, ptr::null_mut(), None);
+    observation::assign_set(
+        &mut first.current.farray,
+        uqm_rust::engine::battle::frames::Frames::ABSENT,
+        None,
+    );
     observation::assign_frame(&mut first.next.frame, ptr::null_mut());
-    observation::assign_set(&mut first.next.farray, ptr::null_mut(), None);
+    observation::assign_set(
+        &mut first.next.farray,
+        uqm_rust::engine::battle::frames::Frames::ABSENT,
+        None,
+    );
     observation::assign_frame(
         &mut first.intersect_control.intersect_stamp.frame,
         ptr::null_mut(),

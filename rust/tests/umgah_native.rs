@@ -294,10 +294,7 @@ fn cone_initialization_fixes_intersection_and_does_not_inherit_velocity() {
             assert_eq!(((*cone).next.location.x, (*cone).next.location.y), (-9, 13));
             assert_eq!((*cone).current.image.frame, ship.raw_frame(2, 5));
             assert_eq!((*cone).next.image.frame, (*cone).current.image.frame);
-            assert_eq!(
-                (*cone).next.image.farray,
-                ship.descriptor_mut().ship_data.special.as_ptr()
-            );
+            assert_eq!((*cone).next.image.farray, ship.frame_set(2));
             let i = (*cone).IntersectControl;
             assert_eq!(
                 (i.IntersectStamp.origin.x, i.IntersectStamp.origin.y),
@@ -762,14 +759,14 @@ fn ai_rng_follows_shared_steering_and_uses_old_turn_flags_for_alignment() {
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
             let enemy = Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 1, [16, 16, 48], [4, 4]);
             (*enemy.ptr()).current.location = POINT { x: 4000, y: 4400 };
-            (*enemy.ptr()).next = (*enemy.ptr()).current;
+            (*enemy.ptr()).next = (*enemy.ptr()).current.clone();
             ship.ship_mut().weapon_counter = 1;
             for first_odd in [false, true] {
                 let seed =
                     seed_where(|d| (d[0] & 1 != 0) == first_odd && (d[1] & 1 != 0) != first_odd);
                 ship.ship_mut().ShipFacing = 0;
                 (*ship.ptr()).current.image.frame = ship.raw_frame(0, 0);
-                (*ship.ptr()).next = (*ship.ptr()).current;
+                (*ship.ptr()).next = (*ship.ptr()).current.clone();
                 let mut c = enemy_concern(&enemy, 8);
                 let input = with_rng(seed, 2, || think(&mut ship, &mut c, 0, 1));
                 assert_eq!(ship.ship_mut().ShipFacing, if first_odd { 15 } else { 1 });

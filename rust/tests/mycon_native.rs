@@ -87,7 +87,7 @@ fn plasma_launch_and_postprocess_boundaries_match_c() {
         assert_eq!((*plasma).mass, 10);
         assert_eq!((*plasma).turn, 3);
         assert_eq!((*plasma).thrust, 0);
-        (*plasma).next = (*plasma).current;
+        (*plasma).next = (*plasma).current.clone();
         (*plasma).life = 100;
         hooks::invoke_element_pointer((*plasma).preprocess_func.unwrap(), plasma);
         assert_eq!((*plasma).hits, 7);

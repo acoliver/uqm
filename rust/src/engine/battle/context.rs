@@ -78,7 +78,6 @@ impl Battle {
 pub struct World {
     pub(super) activity: NonNull<u16>,
     pub(super) groups: NonNull<QUEUE>,
-    pub shared_frames: [super::views::Frames; 2],
 }
 
 impl World {
@@ -87,13 +86,8 @@ impl World {
     /// and never have a Rust reference held across a legacy call. The caller must
     /// also retain exclusive game-thread access to GlobData, input, and story
     /// authorities until this World is dropped or its use is suspended.
-    pub unsafe fn new(
-        activity: *mut u16,
-        groups: *mut QUEUE,
-        shared_frames: [*mut crate::graphics::native_abi::FRAME; 2],
-    ) -> Self {
+    pub unsafe fn new(activity: *mut u16, groups: *mut QUEUE) -> Self {
         Self {
-            shared_frames: shared_frames.map(super::views::Frames),
             activity: NonNull::new(activity).unwrap_or_else(|| panic!("null activity projection")),
             groups: NonNull::new(groups).unwrap_or_else(|| panic!("null group queue projection")),
         }

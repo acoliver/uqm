@@ -101,7 +101,10 @@ fn free_owned_surface(surface: *mut SDL_Surface) {
 }
 
 /// Thread-local graphics state wrapper
-struct GraphicsStateCell(UnsafeCell<Option<RustGraphicsState>>);
+struct GraphicsStateCell(
+    UnsafeCell<Option<RustGraphicsState>>,
+    std::sync::Mutex<super::native_drawables::Allocations>,
+);
 
 // SAFETY: All FFI functions are called exclusively from the C graphics thread.
 // The UQM C code guarantees single-threaded access to the TFB_GRAPHICS_BACKEND
@@ -145,7 +148,18 @@ struct RustGraphicsState {
     native_display_bounds: Option<sdl2::rect::Rect>,
 }
 
-static RUST_GFX: GraphicsStateCell = GraphicsStateCell(UnsafeCell::new(None));
+static RUST_GFX: GraphicsStateCell = GraphicsStateCell(
+    UnsafeCell::new(None),
+    std::sync::Mutex::new(std::collections::BTreeMap::new()),
+);
+
+pub(super) fn native_allocations(
+) -> std::sync::MutexGuard<'static, super::native_drawables::Allocations> {
+    RUST_GFX
+        .1
+        .lock()
+        .unwrap_or_else(|error| panic!("drawable allocation registry poisoned: {error}"))
+}
 
 fn get_gfx_state() -> Option<&'static mut RustGraphicsState> {
     unsafe { (*RUST_GFX.0.get()).as_mut() }

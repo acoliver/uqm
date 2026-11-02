@@ -154,10 +154,6 @@ impl World {
             Self::new(
                 &raw mut GlobData.Game_state.CurrentActivity,
                 &raw mut GlobData.Game_state.ip_group_q,
-                [
-                    (&raw mut crate::game_init::space_resources::asteroid).cast(),
-                    (&raw mut crate::game_init::space_resources::explosion).cast(),
-                ],
             )
         }
     }

@@ -218,10 +218,7 @@ fn horn_uses_next_location_exact_facing_speed_and_offsets_without_inheriting_vel
                         - (i32::from(vy) >> VELOCITY_SHIFT)) as i16
                 );
                 assert_eq!((*e).current.image.frame, ship.raw_frame(1, facing as usize));
-                assert_eq!(
-                    (*e).current.image.farray,
-                    ship.descriptor_mut().ship_data.weapon.as_ptr()
-                );
+                assert_eq!((*e).current.image.farray, ship.frame_set(1));
                 assert_eq!(
                     (*e).state_flags,
                     (APPEARING | FINITE_LIFE | IGNORE_SIMILAR) as u16
@@ -465,8 +462,10 @@ fn napalm_materializes_without_decaying_and_initializes_the_intersection_from_ne
                 Ship::with_frames(&_battle, SPECIES_ID_THRADDASH_ID, 0, [16, 16, 10], [4, 4]);
             let e = burn(&mut ship);
             let next_frames = FrameSet::new(10);
-            let mut next_array = [next_frames.frame(0); 3];
-            (*e).next.image.farray = next_array.as_mut_ptr();
+            (*e).next.image.farray = uqm_rust::engine::battle::frames::Frames::shared(
+                uqm_rust::engine::battle::frames::SharedFrames::Fixture(0),
+                next_frames.array(),
+            );
             (*e).next.image.frame = next_frames.frame(7);
             (*e).current.location = POINT { x: -9, y: 13 };
             (*e).next.location = POINT { x: 42, y: -5 };
@@ -705,7 +704,7 @@ fn shared_ai_steers_before_thraddash_decides_whether_to_boost() {
             let enemy =
                 Ship::with_frames(&_battle, SPECIES_ID_THRADDASH_ID, 1, [16, 16, 10], [4, 4]);
             (*enemy.ptr()).current.location = POINT { x: 4400, y: 4000 };
-            (*enemy.ptr()).next = (*enemy.ptr()).current;
+            (*enemy.ptr()).next = (*enemy.ptr()).current.clone();
             ship.ship_mut().weapon_counter = 1;
             let mut c = concerns();
             c[0].ObjectPtr = enemy.ptr();
@@ -743,7 +742,7 @@ fn owner_cleanup_during_collision_scan_invalidates_the_active_napalm() {
                 uqm_rust::battle::ship_native::collision,
             ));
             (*enemy.ptr()).current.location = (*trail).current.location;
-            (*enemy.ptr()).next = (*enemy.ptr()).current;
+            (*enemy.ptr()).next = (*enemy.ptr()).current.clone();
             ship.make_opaque(2);
             enemy.make_opaque(0);
             (*enemy.ptr()).IntersectControl = (*trail).IntersectControl;
@@ -819,7 +818,7 @@ fn napalm_and_horn_collide_with_battle_objects_without_optional_callback_skips()
                         trail
                     } else {
                         let horn = battle::element(fire(&mut ship));
-                        (*horn).next = (*horn).current;
+                        (*horn).next = (*horn).current.clone();
                         ship.make_opaque(1);
                         horn
                     };

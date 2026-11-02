@@ -278,7 +278,7 @@ fn butt_homes_one_facing_step_per_tracking_pass() {
             spathi.postprocess();
             let butt = battle::element(queue_tail());
             // The engine starts each frame with `next` equal to `current`.
-            (*butt).next = (*butt).current;
+            (*butt).next = (*butt).current.clone();
             let preprocess = (*butt).preprocess_func.unwrap();
 
             // TRACK_WAIT: the first pass only counts the delay down.

@@ -7,6 +7,7 @@ use std::{any::Any, cell::Cell, rc::Rc};
 struct Array {
     views: [Cell<Frame>; 3],
     _resource: Box<dyn Any>,
+    source: Option<usize>,
 }
 
 #[derive(Clone, Default)]
@@ -15,9 +16,18 @@ impl FrameArray {
     pub const EMPTY: Self = Self(None);
 
     pub fn retain(views: [Frame; 3], resource: impl Any) -> Self {
+        Self::with_source(views, resource, None)
+    }
+
+    pub(crate) fn with_source(
+        views: [Frame; 3],
+        resource: impl Any,
+        source: Option<usize>,
+    ) -> Self {
         Self(Some(Rc::new(Array {
             views: views.map(Cell::new),
             _resource: Box::new(resource),
+            source,
         })))
     }
 
@@ -57,6 +67,21 @@ impl FrameArray {
                 .collect(),
             role: role.into(),
         });
+    }
+
+    pub(crate) fn retire_views(&self) {
+        crate::collections::observation::record(crate::collections::observation::Event::FrameSet {
+            address: self.as_ptr() as usize,
+            frames: vec![0; 3],
+            role: "animation".into(),
+        });
+    }
+
+    fn source_address(&self) -> usize {
+        self.0
+            .as_ref()
+            .and_then(|array| array.source)
+            .unwrap_or(self.as_ptr() as usize)
     }
 
     pub fn is_absent(&self) -> bool {
@@ -101,11 +126,13 @@ pub enum SharedFrames {
     Hyperspace(u8),
     Portal,
     Flagship,
+    Planet,
+    GroupIcon(usize),
+    Fixture(u32),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FrameOwner {
-    None,
     Ship(ShipId, Role),
     Shared(SharedFrames),
 }
@@ -116,11 +143,6 @@ pub struct FrameSetRef {
     frames: FrameArray,
 }
 impl FrameSetRef {
-    pub const ABSENT: Self = Self {
-        owner: FrameOwner::None,
-        frames: FrameArray::EMPTY,
-    };
-
     pub fn ship(ship: ShipId, role: Role, frames: FrameArray) -> Self {
         Self {
             owner: FrameOwner::Ship(ship, role),
@@ -140,7 +162,7 @@ impl FrameSetRef {
     }
 
     pub(crate) fn raw(&self) -> *mut FRAME {
-        self.frames.as_ptr()
+        self.frames.source_address() as *mut FRAME
     }
 }
 impl PartialEq for FrameSetRef {
@@ -149,8 +171,60 @@ impl PartialEq for FrameSetRef {
     }
 }
 impl Eq for FrameSetRef {}
-impl crate::collections::observation::ImagePointer for FrameSetRef {
+impl crate::collections::observation::ImagePointer for Frames {
     fn address(&self) -> usize {
         self.raw() as usize
+    }
+}
+
+/// Optional image binding; a present set always owns its frame allocation lease.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Frames(Option<FrameSetRef>);
+impl Frames {
+    pub const ABSENT: Self = Self(None);
+
+    pub fn ship(ship: ShipId, role: Role, frames: FrameArray) -> Self {
+        Self(Some(FrameSetRef::ship(ship, role, frames)))
+    }
+
+    pub fn shared(role: SharedFrames, frames: FrameArray) -> Self {
+        Self(Some(FrameSetRef::shared(role, frames)))
+    }
+
+    pub fn view(&self, index: usize) -> Frame {
+        self.0.as_ref().map_or(Frame::ABSENT, |set| set.view(index))
+    }
+
+    pub fn is_absent(&self) -> bool {
+        self.0.is_none()
+    }
+
+    pub(crate) fn raw(&self) -> *mut FRAME {
+        self.0
+            .as_ref()
+            .map_or(std::ptr::null_mut(), FrameSetRef::raw)
+    }
+
+    /// # Safety
+    /// The source contains one or three live native frame slots on the graphics thread.
+    pub(crate) unsafe fn native_shared(
+        role: SharedFrames,
+        source: std::ptr::NonNull<FRAME>,
+        count: usize,
+    ) -> Self {
+        assert!(
+            count == 1 || count == 3,
+            "invalid native frame array length {count}"
+        );
+        // SAFETY: construction retains the registered allocations behind these live source slots.
+        let (views, leases) = unsafe {
+            let raw = std::array::from_fn(|index| *source.as_ptr().add(index.min(count - 1)));
+            let leases = crate::graphics::drawable_abi::retain_frame_allocations(&raw);
+            (raw.map(|frame| Frame::from_native(frame)), leases)
+        };
+        Self::shared(
+            role,
+            FrameArray::with_source(views, leases, Some(source.as_ptr() as usize)),
+        )
     }
 }

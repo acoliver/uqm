@@ -37,7 +37,7 @@ impl super::super::Cx<'_> {
         unsafe { parent_address(self.b.kernel.elements[id].parent, Some(self.groups())) }
     }
 }
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub(crate) struct ElementObservation {
     pub state: ElementState,
     pub address: usize,

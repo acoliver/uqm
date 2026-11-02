@@ -24,7 +24,7 @@ fn legacy_slylandro_receives_the_fifth_junk_concern() {
                     x: location.x + 32,
                     y: location.y,
                 };
-                e.next = e.current;
+                e.next = e.current.clone();
             }
             battle::put(junk.ptr().cast());
             ship.descriptor_mut().ship_info.energy_level = 0;
@@ -50,7 +50,7 @@ fn typed_ai_uses_the_supplied_subject_projection() {
             uqm_rust::app::bridge::enter(|cx| {
                 let live = cx.weapon_origin(ship.id);
                 let other = cx.weapon_origin(target.id);
-                let mut projected = live;
+                let mut projected = live.clone();
                 projected.current.location.x = 2900;
                 projected.next.location = projected.current.location;
                 assert_eq!(cx.plot_intercept(&live, &other, 1, 100), 0);

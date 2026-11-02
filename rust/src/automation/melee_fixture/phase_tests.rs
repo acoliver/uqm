@@ -1,8 +1,7 @@
 //! Phase contracts use real borrowed records; engine execution is integration-tested.
 use super::*;
 fn frame_views(views: Frames) -> [FRAME; 3] {
-    // SAFETY: phase tests retain the complete three-view descriptor arrays throughout each assertion.
-    unsafe { views.raw().cast::<[FRAME; 3]>().read() }
+    std::array::from_fn(|index| views.view(index).raw())
 }
 
 fn records() -> ([Element; 2], [STARSHIP; 2], [race_desc; 2]) {
@@ -14,7 +13,7 @@ fn records() -> ([Element; 2], [STARSHIP; 2], [race_desc; 2]) {
         race.ship_info.max_energy = 100;
         race.ship_info.energy_level = 50;
     }
-    ([Element::new(); 2], states, races)
+    (std::array::from_fn(|_| Element::new()), states, races)
 }
 
 fn world(
@@ -40,7 +39,7 @@ fn world(
         element.hits = 10;
         state.playerNr = side as i16;
         world.order.push(id);
-        world.elements.insert(id, *element);
+        world.elements.insert(id, element.clone());
         world.ship_order.push(owner);
         world.ships.insert(owner, Ship::for_test(state, race, id));
     }
@@ -116,9 +115,10 @@ fn outgoing_descriptor_is_retained_until_frame_users_retire_and_zoom_restores_sc
         .unwrap();
     assert!(matches!(effects.as_slice(), [Effect::Spawn(owner)] if *owner == run.owner()));
     run.stage = 9;
-    let mut retained_frame = ptr::null_mut();
-    // SAFETY: this local retained array stays live through both identity checks.
-    run.array = Some(unsafe { Frames::from_native(std::ptr::NonNull::from(&mut retained_frame)) });
+    run.array = Some(Frames::shared(
+        crate::engine::battle::frames::SharedFrames::Fixture(0),
+        crate::engine::battle::frames::FrameArray::retain([Frame::ABSENT; 3], ()),
+    ));
     let effects = frames::advance(&mut run, &mut world, &hooks)
         .unwrap()
         .unwrap();
@@ -131,7 +131,7 @@ fn outgoing_descriptor_is_retained_until_frame_users_retire_and_zoom_restores_sc
         .unwrap()
         .unwrap();
     assert!(
-        matches!(effects.as_slice(), [Effect::Intersect(a), Effect::Intersect(b), Effect::Redraw(true), Effect::ZoomProof(views, element, 0, 0)] if *a == run.a() && *b == run.b() && *element == run.a() && frame_views(*views) == [ptr::null_mut(); 3])
+        matches!(effects.as_slice(), [Effect::Intersect(a), Effect::Intersect(b), Effect::Redraw(true), Effect::ZoomProof(views, element, 0, 0)] if *a == run.a() && *b == run.b() && *element == run.a() && frame_views(views.clone()) == [ptr::null_mut(); 3])
     );
     run.wait = 3;
     let effects = frames::advance(&mut run, &mut world, &hooks)
@@ -151,7 +151,7 @@ fn arilou_threat_and_collision_operands_are_snapshots_of_the_real_borrowed_recor
     run.stage = 6;
     run.object = Some(run.b());
     run.replacement = Some(run.b());
-    run.array = Some(world.elements[&run.object()].current.image.frames);
+    run.array = Some(world.elements[&run.object()].current.image.frames.clone());
     let hooks = super::tests::test_hooks();
     let effects = frames::advance(&mut run, &mut world, &hooks)
         .unwrap()

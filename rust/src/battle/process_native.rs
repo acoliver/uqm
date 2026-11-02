@@ -781,7 +781,7 @@ pub(crate) mod engine {
                                     calc_zoom_stuff(cx.b.zoom_out)
                                 };
                                 image!(frame; cx.records()[e].next.image.frame, SetEquFrameIndex(
-                                    *cx.elements()[e].next.image.farray.wrapping_add(usize::from(index)),
+                                    cx.elements()[e].next.image.farray.view(usize::from(index)).raw(),
                                     cx.elements()[e].next.image.frame,
                                 ));
                                 if optMeleeScale == SCALE_TRILINEAR
@@ -790,11 +790,12 @@ pub(crate) mod engine {
                                 {
                                     let frame = cx.elements()[e].next.image.frame;
                                     let mmframe = SetEquFrameIndex(
-                                        *cx.elements()[e]
+                                        cx.elements()[e]
                                             .next
                                             .image
                                             .farray
-                                            .add(usize::from(index) + 1),
+                                            .view(usize::from(index) + 1)
+                                            .raw(),
                                         frame,
                                     );
                                     if !frame.is_null() && !mmframe.is_null() {

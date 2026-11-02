@@ -51,7 +51,7 @@ fn opening(
         }
         1 => {
             run.object = Some(run.weapon(world, run.b())?);
-            run.array = Some(world.elements[&run.object()].current.image.frames);
+            run.array = Some(world.elements[&run.object()].current.image.frames.clone());
             run.owner = Some(world.owner(run.b()));
             run.species = world.ship(run.b()).species;
             let mut effects = Vec::new();
@@ -224,7 +224,8 @@ fn zoom(run: &mut Battle, world: &mut World) -> Result<Option<Vec<Effect>>, Stri
             .data
             .as_ref()
             .ok_or("fixture requires loaded descriptor fields")?
-            .ship;
+            .ship
+            .clone();
         place(
             world
                 .elements

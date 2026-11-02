@@ -645,8 +645,10 @@ impl Cx<'_> {
         unsafe {
             let frame =
                 crate::engine::battle::views::Frame::from_native(DecFrameIndex(stars_in_space));
-            let frames = crate::engine::battle::views::Frames::from_native(
+            let frames = crate::engine::battle::views::Frames::native_shared(
+                crate::engine::battle::views::SharedFrames::Stars,
                 std::ptr::NonNull::new_unchecked(&raw mut stars_in_space),
+                1,
             );
             self.set_frame(id, false, frame);
             self.set_frames(id, false, frames);
@@ -655,10 +657,12 @@ impl Cx<'_> {
     pub(crate) fn set_blast_frames(&mut self, id: ElementId) {
         // SAFETY: the shared blast frames remain loaded throughout the battle.
         unsafe {
-            let frames = crate::engine::battle::views::Frames::from_native(
+            let frames = crate::engine::battle::views::Frames::native_shared(
+                crate::engine::battle::views::SharedFrames::Blast,
                 std::ptr::NonNull::new_unchecked(
                     (&raw mut crate::game_init::space_resources::blast).cast(),
                 ),
+                3,
             );
             self.set_frames(id, false, frames);
         }
@@ -666,9 +670,13 @@ impl Cx<'_> {
     pub(crate) fn planet_frames(&self) -> crate::engine::battle::views::Frames {
         // SAFETY: the current solar-system resources retain this frame set throughout the battle.
         unsafe {
-            crate::engine::battle::views::Frames::from_native(std::ptr::NonNull::new_unchecked(
-                (&raw mut crate::game_init::world_resources::live::planet).cast(),
-            ))
+            crate::engine::battle::views::Frames::native_shared(
+                crate::engine::battle::views::SharedFrames::Planet,
+                std::ptr::NonNull::new_unchecked(
+                    (&raw mut crate::game_init::world_resources::live::planet).cast(),
+                ),
+                3,
+            )
         }
     }
 }

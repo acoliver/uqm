@@ -285,7 +285,7 @@ fn special_switches_to_blazer_and_saves_the_collision_function() {
             ship.ship_mut().cur_status_flags = (SPECIAL | WEAPON) as u16;
             ship.preprocess();
             assert_eq!(
-                { ship.element_mut().next.image.farray },
+                { ship.element_mut().next.image.farray.clone() },
                 ship.special_frames()
             );
             // Weapon is suppressed on the switching frame; special is still held.
@@ -350,7 +350,10 @@ fn low_energy_special_flashes_text_without_switching() {
             ship.descriptor_mut().ship_info.energy_level = 1;
             ship.ship_mut().cur_status_flags = (SPECIAL | WEAPON) as u16;
             ship.preprocess();
-            assert_eq!({ ship.element_mut().next.image.farray }, ship.ship_frames());
+            assert_eq!(
+                { ship.element_mut().next.image.farray.clone() },
+                ship.ship_frames()
+            );
             assert_eq!(ship.element_mut().state_flags & CHANGING as u16, 0);
             // The status word written back is the one read before DeltaEnergy.
             assert_eq!(ship.ship_mut().cur_status_flags, (SPECIAL | WEAPON) as u16);
@@ -450,7 +453,10 @@ fn exhausted_blazer_reverts_and_restores_the_saved_collision_function() {
             ship.element_mut().state_flags &= !(CHANGING as u16);
             ship.preprocess();
 
-            assert_eq!({ ship.element_mut().next.image.farray }, ship.ship_frames());
+            assert_eq!(
+                { ship.element_mut().next.image.farray.clone() },
+                ship.ship_frames()
+            );
             assert_ne!(ship.element_mut().state_flags & CHANGING as u16, 0);
             assert_eq!(velocity_fields(&ship.element_mut().velocity), [0; 9]);
             assert_eq!(ship.ship_mut().cur_status_flags, 0);
@@ -769,3 +775,19 @@ fn guardian_ai_fires_when_close_or_when_the_target_is_ahead_of_the_drift() {
 
 #[path = "support/hooks.rs"]
 mod hooks;
+
+#[test]
+fn guardian_preprocess_keeps_an_absent_optional_image_set() {
+    battle_context::run(|| {
+        let pool = Battle::new(8);
+        let mut ship = Ship::bare(&pool, SPECIES_ID_ANDROSYNTH_ID, 0);
+        // SAFETY: the fixture owns the serialized pool throughout the callback.
+        unsafe {
+            assert!(ship.element_mut().current.image.farray.is_absent());
+            ship.preprocess();
+            assert!(ship.element_mut().current.image.farray.is_absent());
+            assert!(ship.element_mut().next.image.farray.is_absent());
+            assert_eq!(ship.descriptor_mut().ship_info.energy_level, 24);
+        }
+    });
+}

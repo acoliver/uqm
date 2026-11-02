@@ -52,7 +52,7 @@ fn descriptor_laser_and_limpet_launch() {
                 (*e).parent,
                 uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
             );
-            (*e).next = (*e).current;
+            (*e).next = (*e).current.clone();
             with_rng(11, 0, || {
                 hooks::invoke_element_pointer((*e).preprocess_func.unwrap(), e)
             });
@@ -130,7 +130,7 @@ fn warp_in_is_disabled_in_encounters_and_one_shot_in_melee() {
             let mut ship = Ship::new(&_battle, SPECIES_ID_VUX_ID, 0);
             let enemy = Ship::new(&_battle, SPECIES_ID_VUX_ID, 1);
             (*enemy.ptr()).current.location = POINT { x: 5000, y: 5000 };
-            (*enemy.ptr()).next = (*enemy.ptr()).current;
+            (*enemy.ptr()).next = (*enemy.ptr()).current.clone();
             (*ship.ptr()).state_flags |= APPEARING as u16;
             let previous = GlobData.Game_state.CurrentActivity;
             GlobData.Game_state.CurrentActivity = IN_ENCOUNTER as _;

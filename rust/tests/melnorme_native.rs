@@ -20,7 +20,7 @@ unsafe fn trader(battle: &Battle, player: SIZE) -> Ship<'_> {
             [22, 18],
         );
         ship.element_mut().current.location = POINT { x: 2000, y: 2000 };
-        ship.element_mut().next = ship.element_mut().current;
+        ship.element_mut().next = ship.element_mut().current.clone();
         ship
     }
 }
@@ -30,7 +30,7 @@ unsafe fn pump(ship: &mut Ship<'_>) -> *mut ELEMENT {
     assert!(!handle.is_null());
     let e = battle::element(handle);
     (*e).parent = uqm_rust::engine::battle::Parent::Ship(ship.ship_id);
-    (*e).next = (*e).current;
+    (*e).next = (*e).current.clone();
     battle::put(handle);
     e
 }
@@ -43,7 +43,7 @@ unsafe fn confusion(ship: &mut Ship<'_>) -> *mut ELEMENT {
     let handle = battle::tail();
     assert_ne!(handle, old_tail);
     let e = battle::element(handle);
-    (*e).next = (*e).current;
+    (*e).next = (*e).current.clone();
     e
 }
 unsafe fn remove(e: *mut ELEMENT) {
@@ -252,10 +252,7 @@ fn initial_pump_uses_the_c_missile_block_at_all_facings_and_coordinate_limits() 
                     (APPEARING | FINITE_LIFE | IGNORE_SIMILAR) as u16
                 );
                 assert_eq!((*e).playerNr, 0);
-                assert_eq!(
-                    (*e).current.image.farray,
-                    ship.descriptor_mut().ship_data.weapon.as_ptr()
-                );
+                assert_eq!((*e).current.image.farray, ship.frame_set(1));
                 assert_eq!(frame_index((*e).current.image.frame), 0);
                 assert!((*e).preprocess_func.is_none());
                 assert!((*e).postprocess_func.is_some() && (*e).collision_func.is_some());
@@ -583,10 +580,7 @@ fn confusion_special_obeys_energy_input_and_cooldown_boundaries() {
                         (*e).parent,
                         uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
                     );
-                    assert_eq!(
-                        (*e).current.image.farray,
-                        ship.descriptor_mut().ship_data.special.as_ptr()
-                    );
+                    assert_eq!((*e).current.image.farray, ship.frame_set(2));
                     assert_eq!(frame_index((*e).current.image.frame), 0);
                     assert_eq!(
                         velocity_fields(&(*e).velocity),
@@ -726,14 +720,14 @@ fn confusion_reuses_the_first_same_player_nonsolid_special_even_if_it_is_a_trail
             let mut victim = trader(&_battle, 1);
             let another = trader(&_battle, 1);
             let pulse = confusion(&mut ship);
-            let farray = ship.descriptor_mut().ship_data.special.as_ptr();
+            let farray = ship.frame_set(2);
             let mut candidates = Vec::new();
             for (player, frames, flags) in [
-                (1, farray, NONSOLID),
-                (0, ship.descriptor_mut().ship_data.weapon.as_ptr(), NONSOLID),
-                (0, farray, FINITE_LIFE),
-                (0, farray, FINITE_LIFE | NONSOLID | CHANGING),
-                (0, farray, FINITE_LIFE | NONSOLID),
+                (1, farray.clone(), NONSOLID),
+                (0, ship.frame_set(1), NONSOLID),
+                (0, farray.clone(), FINITE_LIFE),
+                (0, farray.clone(), FINITE_LIFE | NONSOLID | CHANGING),
+                (0, farray.clone(), FINITE_LIFE | NONSOLID),
             ] {
                 let h = uqm_rust::app::bridge::enter(|cx| {
                     cx.alloc_element()
@@ -1020,7 +1014,7 @@ fn ai_tests_the_confusion_trajectory_and_restores_waits_and_initializer() {
                     x: 2000 + cosine(0, distance),
                     y: 2000 + sine(0, distance),
                 };
-                (*enemy.ptr()).next = (*enemy.ptr()).current;
+                (*enemy.ptr()).next = (*enemy.ptr()).current.clone();
                 let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
                 concerns[ENEMY_SHIP_INDEX as usize].ObjectPtr = enemy.ptr();
                 concerns[ENEMY_SHIP_INDEX as usize].MoveState = MOVEMENT_STATE_NO_MOVEMENT;
@@ -1104,7 +1098,7 @@ fn ai_first_pass_tests_the_full_speed_pump_and_toggles_an_existing_charge_to_rel
                     x: 2000 + cosine(0, distance),
                     y: 2000 + sine(0, distance),
                 };
-                (*enemy.ptr()).next = (*enemy.ptr()).current;
+                (*enemy.ptr()).next = (*enemy.ptr()).current.clone();
                 let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
                 concerns[ENEMY_SHIP_INDEX as usize].ObjectPtr = enemy.ptr();
                 let before = queue();
@@ -1139,7 +1133,7 @@ fn ai_pursuit_uses_the_shared_half_turn_rng_draw_without_extra_draws() {
                 x: 2000 + dx,
                 y: 2000 + dy,
             };
-            (*enemy.ptr()).next = (*enemy.ptr()).current;
+            (*enemy.ptr()).next = (*enemy.ptr()).current.clone();
             ship.ship_mut().weapon_counter = 2;
             ship.ship_mut().special_counter = 1;
             for seed in 1..9 {

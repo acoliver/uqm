@@ -69,7 +69,7 @@ impl OrzFixture for Ship<'_> {
             (*marine).collision_func.unwrap().address(),
             marine_collision as *const () as usize
         );
-        (*marine).next = (*marine).current;
+        (*marine).next = (*marine).current.clone();
         marine
     }
 
@@ -79,7 +79,7 @@ impl OrzFixture for Ship<'_> {
         let e = battle::element(out);
         assert!((*e).parent == uqm_rust::engine::battle::Parent::None);
         (*e).parent = uqm_rust::engine::battle::Parent::Ship(self.ship_id);
-        (*e).next = (*e).current;
+        (*e).next = (*e).current.clone();
         out
     }
 }
@@ -284,10 +284,7 @@ fn appearing_turret_is_inserted_immediately_after_ship_and_inputs_suppress_hull_
             );
             assert_eq!((*turret).life, 1);
             assert_eq!((*turret).current.image.frame, ship.raw_frame(2, 7));
-            assert_eq!(
-                (*turret).current.image.farray,
-                ship.descriptor_mut().ship_data.special.as_ptr()
-            );
+            assert_eq!((*turret).current.image.farray, ship.frame_set(2));
             assert!((*turret).postprocess_func.is_some());
             assert!((*turret).preprocess_func.is_none());
             assert!((*turret).collision_func.is_none());
@@ -348,10 +345,7 @@ fn howitzer_rotates_before_firing_with_byte_wrap_and_exact_missile_fields() {
                     (*missile).current.image.frame,
                     ship.raw_frame(1, face as usize)
                 );
-                assert_eq!(
-                    (*missile).current.image.farray,
-                    ship.descriptor_mut().ship_data.weapon.as_ptr()
-                );
+                assert_eq!((*missile).current.image.farray, ship.frame_set(1));
                 assert_eq!(
                     velocity_fields(&(*missile).velocity),
                     velocity_toward(120, face)
@@ -578,10 +572,7 @@ fn marines_launch_at_rear_with_exact_state_and_cost_only_after_allocation() {
                     (normalize_facing(i32::from(facing) + 8) << 4) as BYTE
                 );
                 assert_eq!((*marine).current.image.frame, ship.raw_frame(2, 20));
-                assert_eq!(
-                    (*marine).current.image.farray,
-                    ship.descriptor_mut().ship_data.special.as_ptr()
-                );
+                assert_eq!((*marine).current.image.farray, ship.frame_set(2));
                 assert_eq!(
                     (*marine).parent,
                     uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
@@ -637,7 +628,7 @@ fn marine_limit_counts_only_live_matching_nonfinite_nondisappearing_elements() {
             }
             (*marines[2]).life = 0;
             ship.launch();
-            (*marines[3]).current.image.farray = enemy.descriptor_mut().ship_data.special.as_ptr();
+            (*marines[3]).current.image.farray = enemy.frame_set(2);
             ship.launch();
             assert_eq!(ship.descriptor_mut().ship_info.crew_level, 4);
         }

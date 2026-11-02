@@ -84,7 +84,7 @@ impl World {
     #[cfg(not(test))]
     fn commit(&self, cx: &mut Cx<'_>) {
         for (&id, element) in &self.elements {
-            *cx.element_mut(id) = element.state;
+            *cx.element_mut(id) = element.state.clone();
         }
         for (&id, ship) in &self.ships {
             cx.apply_fixture_ship(id, ship);
@@ -196,6 +196,7 @@ impl Battle {
     }
     fn array(&self) -> Frames {
         self.array
+            .clone()
             .unwrap_or_else(|| panic!("fixture frame array selected"))
     }
 

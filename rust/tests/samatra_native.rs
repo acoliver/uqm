@@ -436,7 +436,7 @@ fn postprocess_spawns_comets_and_sentinels_only_while_generators_live() {
                     .find(|h| frame_index((*battle::element(**h)).current.image.frame) == 24)
                     .unwrap(),
             );
-            (*comet).next = (*comet).current;
+            (*comet).next = (*comet).current.clone();
             with_rng(5, 0, || {
                 hooks::invoke_element_pointer((*comet).preprocess_func.unwrap(), comet)
             });
@@ -449,7 +449,7 @@ fn postprocess_spawns_comets_and_sentinels_only_while_generators_live() {
                     .find(|h| (*battle::element(**h)).hits == 10)
                     .unwrap(),
             );
-            (*sentinel).next = (*sentinel).current;
+            (*sentinel).next = (*sentinel).current.clone();
             hooks::invoke_element_pointer((*sentinel).preprocess_func.unwrap(), sentinel);
             assert_eq!(ship.descriptor_mut().characteristics.special_wait, 1);
             assert_eq!((*sentinel).life, 3);

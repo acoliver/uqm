@@ -40,7 +40,7 @@ unsafe fn doggy(ship: &mut Ship<'_>) -> *mut ELEMENT {
         let tail = battle::tail();
         assert_ne!(tail, old_tail);
         let dog = battle::element(tail);
-        (*dog).next = (*dog).current;
+        (*dog).next = (*dog).current.clone();
         dog
     }
 }
@@ -195,10 +195,7 @@ fn crystal_launch_hold_release_and_count_truncation_match_c() {
                 (*crystal).current.image.frame,
                 SetAbsFrameIndex(ship.descriptor_mut().ship_data.weapon.view(0).raw(), 0)
             );
-            assert_eq!(
-                (*crystal).current.image.farray,
-                ship.descriptor_mut().ship_data.weapon.as_ptr()
-            );
+            assert_eq!((*crystal).current.image.farray, ship.frame_set(1));
             assert_eq!(
                 velocity_fields(&(*crystal).velocity),
                 velocity_toward(64, 7)
@@ -444,10 +441,7 @@ fn doggy_spawns_behind_ship_with_exact_state_and_coordinate_truncation() {
                 assert_eq!((*dog).mass, 4);
                 assert_eq!((*dog).thrust, 0);
                 assert_eq!((*prim(dog)).Type, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
-                assert_eq!(
-                    (*dog).current.image.farray,
-                    ship.descriptor_mut().ship_data.special.as_ptr()
-                );
+                assert_eq!((*dog).current.image.farray, ship.frame_set(2));
                 assert_eq!(
                     (*dog).current.image.frame,
                     SetAbsFrameIndex(ship.descriptor_mut().ship_data.special.view(0).raw(), 0)
@@ -690,7 +684,7 @@ fn doggy_death_preserves_unrelated_fields_and_starts_six_frame_animation() {
             for frame in 1..=6 {
                 with_rng(88, 0, || hooks::invoke_element_pointer(animate, dog));
                 assert_eq!(frame_index((*dog).next.image.frame), frame % 6);
-                (*dog).current = (*dog).next;
+                (*dog).current = (*dog).next.clone();
             }
             assert_eq!(
                 ship.ship_mut().special_counter,
@@ -839,7 +833,7 @@ fn doggy_acquires_nearest_visible_ship_but_retains_an_existing_cloaked_target() 
                 Ship::with_frames(&_battle, SPECIES_ID_CHENJESU_ID, 1, [16, 10, 6], [4, 4]);
             let dog = doggy(&mut ship);
             (*dog).current.location = POINT { x: 4000, y: 4000 };
-            (*dog).next = (*dog).current;
+            (*dog).next = (*dog).current.clone();
             at(&mut near, 4100, 4000);
             at(&mut far, 4000, 3500);
             let preprocess = (*dog).preprocess_func.unwrap();
@@ -1083,11 +1077,11 @@ fn ai_scans_from_tail_skips_every_noncrystal_case_and_stops_at_the_first_match()
                 let e = fixture.ptr();
                 let h = e.cast();
                 let prim_index = (*e).PrimIndex;
-                *e = *hit;
+                *e = (*hit).clone();
                 (*e).PrimIndex = prim_index;
                 match invalid {
                     0 => (*e).state_flags |= NONSOLID as u16,
-                    1 => (*e).next.image.farray = ship.descriptor_mut().ship_data.special.as_ptr(),
+                    1 => (*e).next.image.farray = ship.frame_set(2),
                     2 => (*e).preprocess_func = None,
                     3 => (*e).life = 0,
                     4 => (*e).playerNr = 1,
@@ -1149,7 +1143,7 @@ fn ai_launch_probe_uses_the_selected_target_and_respects_weapon_cooldown() {
             ship.ship_mut().special_counter = 1;
             let mut threat = PoolElement::new();
             threat.current.location = POINT { x: 4000, y: 3000 };
-            threat.next = threat.current;
+            threat.next = threat.current.clone();
             let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
             concerns[ENEMY_WEAPON_INDEX as usize] = EVALUATE_DESC {
                 ObjectPtr: &mut *threat,

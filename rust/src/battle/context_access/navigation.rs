@@ -234,9 +234,11 @@ impl Cx<'_> {
         let (frame, frames) = unsafe {
             (
                 crate::engine::battle::views::Frame::from_native(record.melee_icon),
-                crate::engine::battle::views::Frames::from_native(NonNull::from(
-                    &record.melee_icon,
-                )),
+                crate::engine::battle::views::Frames::native_shared(
+                    crate::engine::battle::views::SharedFrames::GroupIcon(group.as_ptr() as usize),
+                    NonNull::from(&record.melee_icon),
+                    1,
+                ),
             )
         };
         self.set_single_frames(id, frames, frame);
@@ -253,9 +255,11 @@ impl Cx<'_> {
         let frame = self.flagship_stamp_frame();
         // SAFETY: the navigation authority retains this single-frame stamp slot.
         let frames = unsafe {
-            crate::engine::battle::views::Frames::from_native(NonNull::from(
-                &self.navigation().Game_state.ShipStamp.frame,
-            ))
+            crate::engine::battle::views::Frames::native_shared(
+                crate::engine::battle::views::SharedFrames::Flagship,
+                NonNull::from(&self.navigation().Game_state.ShipStamp.frame),
+                1,
+            )
         };
         self.set_single_frames(id, frames, frame);
         self.set_frame(id, false, frame);

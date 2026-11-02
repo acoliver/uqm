@@ -279,7 +279,7 @@ unsafe fn think(
     input: u8,
 ) -> u8 {
     fleet.fixture.ship_mut().ship_input_state = input;
-    let mut subject = *ship;
+    let mut subject = (*ship).clone();
     fleet.fixture.intelligence(&mut subject, concerns, 0);
     fleet.fixture.ship_mut().ship_input_state
 }
@@ -409,15 +409,13 @@ fn intelligence_teleports_from_homing_weapons_only_when_close_or_fighters() {
             let missile = other.spawn_ship(1, 3000, 1000);
             (*missile).state_flags = 0;
             let taken = seed_where(1, |d| d[0] & 3 == 0);
-            let weapon_frames =
-                (&raw mut other.fixture.descriptor_mut().ship_data.weapon).cast::<FRAME>();
-            let special_frames =
-                (&raw mut other.fixture.descriptor_mut().ship_data.special).cast::<FRAME>();
+            let weapon_frames = other.fixture.frame_set(1);
+            let special_frames = other.fixture.frame_set(2);
 
             // A seeking weapon aimed through the enemy's weapon frames: only a
             // hit next turn or a crew object (fighters) counts.
             other.fixture.descriptor_mut().ship_info.ship_flags = SEEKING_WEAPON as u16;
-            (*missile).next.image.farray = weapon_frames;
+            (*missile).next.image.farray = weapon_frames.clone();
             for (which_turn, flags, expected) in [
                 (1, 0, 1),
                 (2, 0, 0),
@@ -443,7 +441,7 @@ fn intelligence_teleports_from_homing_weapons_only_when_close_or_fighters() {
 
             // Seeking specials are matched against the special frames instead.
             other.fixture.descriptor_mut().ship_info.ship_flags = SEEKING_SPECIAL as u16;
-            (*missile).next.image.farray = special_frames;
+            (*missile).next.image.farray = special_frames.clone();
             let mut concerns = threat_concerns(missile, 1);
             let used = draws_consumed(taken, || {
                 think(&mut fleet, ship, &mut concerns, 0);
@@ -451,7 +449,7 @@ fn intelligence_teleports_from_homing_weapons_only_when_close_or_fighters() {
             assert_eq!(used, 1);
 
             // A special-seeking race's weapon frames do not match its special flag.
-            (*missile).next.image.farray = weapon_frames;
+            (*missile).next.image.farray = weapon_frames.clone();
             let mut concerns = threat_concerns(missile, 1);
             let used = draws_consumed(taken, || {
                 think(&mut fleet, ship, &mut concerns, 0);
@@ -532,9 +530,9 @@ impl<'a> Skiff<'a> {
         fleet.fixture.descriptor_mut().ship_data.special = warp_frames.array();
         let ship = fleet.spawn_ship(0, 100, 200);
         fleet.fixture.ship_mut().ShipFacing = 6;
-        let ship_array = (&raw mut fleet.fixture.descriptor_mut().ship_data.ship).cast::<FRAME>();
-        (*ship).current.image.farray = ship_array;
-        (*ship).next.image.farray = ship_array;
+        let ship_array = fleet.fixture.frame_set(0);
+        (*ship).current.image.farray = ship_array.clone();
+        (*ship).next.image.farray = ship_array.clone();
         (*ship).current.image.frame = ship_frames.frame(6);
         (*ship).next.image.frame = ship_frames.frame(6);
         Self {
@@ -549,17 +547,12 @@ impl<'a> Skiff<'a> {
         self.fleet.fixture.preprocess();
     }
 
-    unsafe fn warp_array(&mut self) -> *mut FRAME {
-        self.fleet
-            .fixture
-            .descriptor_mut()
-            .ship_data
-            .special
-            .as_ptr()
+    unsafe fn warp_array(&mut self) -> uqm_rust::engine::battle::views::Frames {
+        self.fleet.fixture.frame_set(2)
     }
 
-    unsafe fn ship_array(&mut self) -> *mut FRAME {
-        self.fleet.fixture.descriptor_mut().ship_data.ship.as_ptr()
+    unsafe fn ship_array(&mut self) -> uqm_rust::engine::battle::views::Frames {
+        self.fleet.fixture.frame_set(0)
     }
 }
 

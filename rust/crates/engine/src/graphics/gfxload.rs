@@ -203,6 +203,11 @@ pub unsafe extern "C" fn release_cel_data(handle: *mut c_void) -> i32 {
     if handle.is_null() {
         return 0;
     }
+    super::native_drawables::release(handle.cast());
+    1
+}
+
+pub(super) unsafe fn release_cel_data_now(handle: *mut c_void) {
     let drawable = handle.cast::<drawable_desc>();
     let count = usize::from((*drawable).MaxIndex) + 1;
     let frames = (*drawable).Frame;
@@ -218,7 +223,6 @@ pub unsafe extern "C" fn release_cel_data(handle: *mut c_void) -> i32 {
         }
         rust_hfree(frames.cast());
     }
-    1
 }
 #[repr(C)]
 struct BuildChar {

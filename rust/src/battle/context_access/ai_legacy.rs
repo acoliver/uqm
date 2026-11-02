@@ -72,7 +72,7 @@ impl Cx<'_> {
         objects[..raw.len()].copy_from_slice(raw);
         let mut concerns = crate::engine::battle::Concerns {
             objects,
-            subject: *subject,
+            subject: subject.clone(),
             count,
         };
         self.race_intelligence_with_junk(ship, &mut concerns);

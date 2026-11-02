@@ -75,34 +75,25 @@ fn special_transform_checks_appearance_energy_and_cooldown() {
             let mut fixture = Ship::bare(&_battle, SPECIES_ID_MMRNMHRM_ID, 0);
             let ship = fixture.ptr();
             fixture.ship_mut().cur_status_flags = SPECIAL as u16;
-            (*ship).next.image.farray = fixture.descriptor_mut().ship_data.ship.as_ptr();
+            (*ship).next.image.farray = fixture.frame_set(0);
             (*ship).next.image.frame = fixture.descriptor_mut().ship_data.ship.view(0).raw();
 
             // Exactly enough energy is consumed, switching to Y form.
             fixture.preprocess();
-            assert_eq!(
-                (*ship).next.image.farray,
-                fixture.descriptor_mut().ship_data.special.as_ptr()
-            );
+            assert_eq!((*ship).next.image.farray, fixture.frame_set(2));
             assert_ne!((*ship).state_flags & CHANGING as u16, 0);
             assert_eq!(fixture.ship_mut().special_counter, 0);
 
             // Cooldown and appearing state preserve the selected form and energy.
             fixture.ship_mut().special_counter = 1;
-            (*ship).next.image.farray = fixture.descriptor_mut().ship_data.special.as_ptr();
+            (*ship).next.image.farray = fixture.frame_set(2);
             assert_eq!(fixture.descriptor_mut().ship_info.energy_level, 0);
             fixture.preprocess();
-            assert_eq!(
-                (*ship).next.image.farray,
-                fixture.descriptor_mut().ship_data.special.as_ptr()
-            );
+            assert_eq!((*ship).next.image.farray, fixture.frame_set(2));
             fixture.ship_mut().special_counter = 0;
             (*ship).state_flags |= APPEARING as u16;
             fixture.preprocess();
-            assert_eq!(
-                (*ship).next.image.farray,
-                fixture.descriptor_mut().ship_data.special.as_ptr()
-            );
+            assert_eq!((*ship).next.image.farray, fixture.frame_set(2));
             fixture.uninit();
         }
     })
@@ -116,7 +107,7 @@ fn missile_mode_returns_two_missiles_with_c_boundary_values() {
             let mut fixture = Ship::bare(&_battle, SPECIES_ID_MMRNMHRM_ID, 0);
             let ship = fixture.ptr();
             (*ship).next.location = POINT { x: 1200, y: -900 };
-            (*ship).next.image.farray = fixture.descriptor_mut().ship_data.special.as_ptr();
+            (*ship).next.image.farray = fixture.frame_set(2);
             let slots = fixture.weapon(2);
             let handles = slots
                 .into_iter()
@@ -159,8 +150,8 @@ fn transforming_swaps_characteristics_and_each_ship_owns_its_alternate_form() {
                 second_fixture.descriptor_mut() as *mut RACE_DESC
             );
             let ship = first_fixture.ptr();
-            (*ship).current.image.farray = first_fixture.descriptor_mut().ship_data.ship.as_ptr();
-            (*ship).next.image.farray = first_fixture.descriptor_mut().ship_data.special.as_ptr();
+            (*ship).current.image.farray = first_fixture.frame_set(0);
+            (*ship).next.image.farray = first_fixture.frame_set(2);
             first_fixture.ship_mut().cur_status_flags =
                 (SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16;
             first_fixture.ship_mut().weapon_counter = 7;
@@ -221,9 +212,8 @@ fn transforming_swaps_characteristics_and_each_ship_owns_its_alternate_form() {
             );
 
             first_fixture.descriptor_mut().characteristics.turn_wait = 17;
-            (*ship).current.image.farray =
-                first_fixture.descriptor_mut().ship_data.special.as_ptr();
-            (*ship).next.image.farray = first_fixture.descriptor_mut().ship_data.ship.as_ptr();
+            (*ship).current.image.farray = first_fixture.frame_set(2);
+            (*ship).next.image.farray = first_fixture.frame_set(0);
             first_fixture.ship_mut().cur_status_flags = SHIP_AT_MAX_SPEED as u16;
             first_fixture.postprocess();
             assert_eq!(
@@ -277,7 +267,7 @@ fn xwing_launches_two_lasers_and_preserves_friendly_ships() {
         unsafe {
             let mut fixture = Ship::bare(&_battle, SPECIES_ID_MMRNMHRM_ID, 0);
             let ship = fixture.ptr();
-            (*ship).next.image.farray = fixture.descriptor_mut().ship_data.ship.as_ptr();
+            (*ship).next.image.farray = fixture.frame_set(0);
             (*ship).next.location = POINT { x: 1000, y: 1000 };
             let slots = fixture.weapon(2);
             let handles = slots

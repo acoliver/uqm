@@ -122,7 +122,7 @@ unsafe fn junk(ship: &Ship<'_>, dx: i32, dy: i32, flags: u16, mass: BYTE) -> Poo
         x: (i32::from((*ship.ptr()).next.location.x) + dx) as COORD,
         y: (i32::from((*ship.ptr()).next.location.y) + dy) as COORD,
     };
-    (*e).current = (*e).next;
+    (*e).current = (*e).next.clone();
     battle::put(e.cast());
     fixture
 }
@@ -531,7 +531,7 @@ fn lightning_postprocess_extends_chains_until_zero_or_collision() {
         battle::put(h);
         let mut parent = battle::element(h);
         for wait in (0..8).rev() {
-            (*parent).next = (*parent).current;
+            (*parent).next = (*parent).current.clone();
             let before = queue_len();
             with_rng(56, 1, || {
                 hooks::invoke_element_pointer((*parent).postprocess_func.unwrap(), parent)

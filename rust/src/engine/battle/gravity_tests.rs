@@ -14,11 +14,11 @@ fn with_elements(call: impl FnOnce(&mut Cx<'_>, [ElementId; 3])) {
                 .elements
                 .alloc()
                 .unwrap_or_else(|| panic!("fixture slot"));
-            battle.kernel.elements[id] = std::mem::zeroed();
+            battle.kernel.elements[id] = Default::default();
             battle.kernel.elements.put(id);
             id
         });
-        let mut world = World::new(&mut activity, &mut groups, [ptr::null_mut(); 2]);
+        let mut world = World::new(&mut activity, &mut groups);
         let mut cx = Cx {
             b: &mut battle,
             world: &mut world,

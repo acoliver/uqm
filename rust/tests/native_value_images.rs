@@ -18,7 +18,7 @@ fn projected_images_record_provenance_without_borrowing_stack_storage() {
             observation::drain();
             let expected = uqm_rust::app::bridge::enter(|cx| {
                 let visual = cx.element(source.id).current;
-                cx.copy_image_to_current(destination.id, visual.image);
+                cx.copy_image_to_current(destination.id, visual.image.clone());
                 cx.copy_visual_to_next(destination.id, visual);
                 let destination = &cx.elements()[destination.id];
                 [

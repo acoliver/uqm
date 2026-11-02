@@ -92,11 +92,11 @@ crate::c_bindings::assert_c_layout!(
 /// Visual state (current or next frame)
 /// Matches C's STATE struct from element.h
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct ElementVisualState {
     pub location: Point,
     pub frame: FrameHandle,
-    pub farray: *mut FrameHandle, // Pointer to frame array
+    pub farray: crate::engine::battle::frames::Frames,
 }
 
 impl Default for ElementVisualState {
@@ -110,7 +110,7 @@ impl ElementVisualState {
         ElementVisualState {
             location: Point::zero(),
             frame: std::ptr::null_mut(),
-            farray: std::ptr::null_mut(),
+            farray: crate::engine::battle::frames::Frames::ABSENT,
         }
     }
 }
@@ -131,7 +131,7 @@ pub type HElement = *mut Element;
 
 /// Element processing function (preprocess, postprocess, death)
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Element {
     // -- Link fields (must be first for QUEUE compatibility) --
 

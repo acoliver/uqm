@@ -29,15 +29,17 @@ fn encounter_transition_preserves_frame_cadence_and_completion() {
     battle_context::run(|| {
         let owner = Battle::new(8);
         let frames = FrameSet::new(12);
-        let mut frame_set = [frames.frame(0)];
         let mut element = Object::new(&owner);
         // SAFETY: this test owns the allocated element and its frame set.
         unsafe {
             let record = element.element_mut();
             record.state_flags = DISAPPEARING as u16;
-            record.current.image.farray = frame_set.as_mut_ptr();
+            record.current.image.farray = uqm_rust::engine::battle::frames::Frames::shared(
+                uqm_rust::engine::battle::frames::SharedFrames::Fixture(0),
+                frames.array(),
+            );
             record.current.image.frame = frames.frame(10);
-            record.next = record.current;
+            record.next = record.current.clone();
             record.set_turn_wait(1);
             record.death_func = Some(transition_hook());
         }
@@ -56,7 +58,7 @@ fn encounter_transition_preserves_frame_cadence_and_completion() {
             let record = element.element_mut();
             assert_eq!(record.turn_wait(), 1);
             assert_eq!(record.next.image.frame, frames.frame(11));
-            record.current = record.next;
+            record.current = record.next.clone();
             record.set_turn_wait(0);
         }
         call_transition(element.id);

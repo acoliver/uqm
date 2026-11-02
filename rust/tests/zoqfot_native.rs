@@ -90,7 +90,7 @@ fn tongue_chain_extends_in_facing_direction_and_stops_at_zero() {
             let mut e = battle::element(battle::tail());
             assert_eq!((*e).turn, 6);
             for remaining in (0..6).rev() {
-                (*e).next = (*e).current;
+                (*e).next = (*e).current.clone();
                 let y = (*e).next.location.y;
                 with_rng(3, 0, || {
                     hooks::invoke_element_pointer((*e).postprocess_func.unwrap(), e)
