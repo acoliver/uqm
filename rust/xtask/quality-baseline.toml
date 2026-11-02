@@ -5318,7 +5318,7 @@ planned_engine_core = { limit = 12, ends = "phase-4" }
 "loc|loc|uqm-xtask::abi_check::@file" = 1465
 "loc|loc|uqm-xtask::native_suite::@file" = 1545
 "loc|loc|uqm::automation::child_session::@file" = 2774
-"loc|loc|uqm::automation::coordinator::@file" = 3150
+"loc|loc|uqm::automation::coordinator::@file" = 3094
 "loc|loc|uqm::automation::native_runner::@file" = 3716
 "loc|loc|uqm::automation::native_window::@file" = 3623
 "loc|loc|uqm::automation::scheduler::@file" = 1429
@@ -5396,7 +5396,7 @@ planned_engine_core = { limit = 12, ends = "phase-4" }
 "unsafe|unsafe_blocks|uqm::time" = 5
 "unsafe|unsafe_blocks|uqm::ui" = 2
 "unsafe|unsafe_blocks|uqm::uqm" = 1
-"unsafe|unsafe_fn_lines|uqm-engine::uqm-engine" = 15575
+"unsafe|unsafe_fn_lines|uqm-engine::uqm-engine" = 15571
 "unsafe|unsafe_fn_lines|uqm::app" = 50
 "unsafe|unsafe_fn_lines|uqm::automation" = 238
 "unsafe|unsafe_fn_lines|uqm::battle" = 2877
@@ -5446,7 +5446,7 @@ planned_engine_core = { limit = 12, ends = "phase-4" }
 "unsafe|unsafe_impl|uqm::comm" = 2
 "unsafe|unsafe_impl|uqm::planet_side" = 2
 "unsafe|unsafe_impl|uqm::planets" = 1
-"unsafe|unsafe_lines|uqm-engine::uqm-engine" = 17164
+"unsafe|unsafe_lines|uqm-engine::uqm-engine" = 17160
 "unsafe|unsafe_lines|uqm-xtask::uqm-xtask" = 9
 "unsafe|unsafe_lines|uqm::app" = 54
 "unsafe|unsafe_lines|uqm::automation" = 988

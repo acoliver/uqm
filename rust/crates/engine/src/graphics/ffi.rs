@@ -8,6 +8,7 @@
 mod video;
 pub(crate) use video::reconfigure_video;
 
+use super::native_drawables::Allocations;
 use crate::graphics::presented_frame::PresentedFrame;
 use crate::graphics::sdl::lifecycle_abi::GraphicsOptions;
 use std::cell::UnsafeCell;
@@ -100,15 +101,15 @@ fn free_owned_surface(surface: *mut SDL_Surface) {
     }
 }
 
-/// Thread-local graphics state wrapper
+/// Serialized game/render-thread graphics state wrapper.
 struct GraphicsStateCell(
     UnsafeCell<Option<RustGraphicsState>>,
-    std::sync::Mutex<super::native_drawables::Allocations>,
+    std::sync::Mutex<Allocations>,
 );
 
-// SAFETY: All FFI functions are called exclusively from the C graphics thread.
-// The UQM C code guarantees single-threaded access to the TFB_GRAPHICS_BACKEND
-// vtable. No Rust-side threading is used (REQ-THR-010, REQ-THR-030, REQ-THR-035).
+// SAFETY: the main game/render thread owns the backend. Registry access asserts
+// its owner before touching any Rc; each live allocation pins that ownership.
+// DrawableLease is non-Send, so its Rc clones and drops remain on that thread.
 unsafe impl Sync for GraphicsStateCell {}
 
 /// The Rust graphics state - owns everything
@@ -150,15 +151,21 @@ struct RustGraphicsState {
 
 static RUST_GFX: GraphicsStateCell = GraphicsStateCell(
     UnsafeCell::new(None),
-    std::sync::Mutex::new(std::collections::BTreeMap::new()),
+    std::sync::Mutex::new(Allocations::new()),
 );
 
-pub(super) fn native_allocations(
-) -> std::sync::MutexGuard<'static, super::native_drawables::Allocations> {
-    RUST_GFX
-        .1
-        .lock()
-        .unwrap_or_else(|error| panic!("drawable allocation registry poisoned: {error}"))
+impl GraphicsStateCell {
+    fn native_allocations(&self) -> std::sync::MutexGuard<'_, Allocations> {
+        let mut allocations = self
+            .1
+            .lock()
+            .unwrap_or_else(|error| panic!("drawable allocation registry poisoned: {error}"));
+        allocations.assert_thread();
+        allocations
+    }
+}
+pub(super) fn native_allocations() -> std::sync::MutexGuard<'static, Allocations> {
+    RUST_GFX.native_allocations()
 }
 
 fn get_gfx_state() -> Option<&'static mut RustGraphicsState> {
@@ -1030,6 +1037,26 @@ pub unsafe extern "C" fn rust_gfx_get_height() -> c_int {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn allocation_registry_rejects_another_thread_while_a_lease_is_live() {
+        let registry = GraphicsStateCell(
+            UnsafeCell::new(None),
+            std::sync::Mutex::new(Allocations::new()),
+        );
+        let owner = registry.native_allocations().owner.clone().unwrap();
+        assert_eq!(*owner, std::thread::current().id());
+        drop(registry.native_allocations());
+        let failure = std::thread::scope(|scope| {
+            scope
+                .spawn(|| drop(registry.native_allocations()))
+                .join()
+                .unwrap_err()
+        });
+        let message = failure.downcast_ref::<String>().unwrap();
+        assert!(message.contains("drawable allocation registry accessed from a non-owner thread"));
+        drop(owner);
+    }
 
     #[test]
     fn test_sdl_rect_size() {
