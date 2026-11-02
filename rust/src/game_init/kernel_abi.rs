@@ -1,6 +1,7 @@
 //! Live game kernel and resource globals, ported from setup.c.
 #![allow(non_snake_case)]
 
+use crate::engine::battle::access::lifecycle;
 use crate::graphics::native_abi as gfx;
 use crate::graphics::{context_abi, drawable_abi, pixmap_abi};
 use crate::io::uio_bridge as uio;
@@ -147,7 +148,8 @@ pub unsafe extern "C" fn InitContexts() -> u32 {
     if OffScreenContext.is_null() {
         return 0;
     }
-    u32::from(crate::engine::battle::access::lifecycle::init_elements(
+    u32::from(lifecycle::init_elements(
+        Kernel::current(),
         MAX_DISPLAY_ELEMENTS as u16,
     ))
 }

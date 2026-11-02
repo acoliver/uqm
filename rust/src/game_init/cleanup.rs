@@ -30,7 +30,7 @@ pub unsafe fn FreeKernel() {
 }
 
 unsafe fn uninit_contexts() {
-    crate::engine::battle::access::lifecycle::uninit_elements();
+    crate::engine::battle::access::lifecycle::uninit_elements(Kernel::current());
     DestroyContext(OffScreenContext.cast());
     DestroyContext(SpaceContext.cast());
     DestroyContext(StatusContext.cast());
