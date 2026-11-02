@@ -29,11 +29,11 @@ pub(super) fn validate(
     scopes: &BTreeMap<String, u64>,
     limit: u64,
 ) -> Result<(), String> {
-    if !["stage_b_raw", "stage_b_access_unsafe"].contains(&name) {
+    if name != "stage_b_raw" && super::access_phase(name).is_none() {
         return if scopes.is_empty() {
             Ok(())
         } else {
-            Err("only Stage B budgets accept identity scopes".into())
+            Err("only registered scoped budgets accept identity scopes".into())
         };
     }
     if scopes.is_empty() {
@@ -50,12 +50,11 @@ pub(super) fn validate(
                         && ["raw_records", "raw_pointer_parameters"].contains(&fields[1])
                         && fields[2].contains("::")
                 }
-                "stage_b_access_unsafe" => {
+                _ => {
                     fields[0] == "unsafe"
                         && ["unsafe_blocks", "unsafe_block_lines"].contains(&fields[1])
-                        && accessor_identity(fields[2])
+                        && accessor_identity(name, fields[2])
                 }
-                _ => false,
             };
         if !valid {
             return Err(format!("invalid {name} identity: {key}"));
@@ -104,7 +103,7 @@ pub(super) fn check(measured: &Measurement, budget: &Budget) -> Result<(), Strin
     Ok(())
 }
 
-fn accessor_identity(identity: &str) -> bool {
+fn accessor_identity(name: &str, identity: &str) -> bool {
     [
         "uqm::engine::battle::access::",
         "uqm::battle::context_access::",
@@ -114,20 +113,21 @@ fn accessor_identity(identity: &str) -> bool {
         identity
             .strip_prefix(prefix)
             .is_some_and(|rest| !rest.is_empty() && !rest.ends_with("::"))
-    }) || [
-        "life_span",
-        "hit_points",
-        "mass_points",
-        "turn_wait",
-        "thrust_wait",
-    ]
-    .iter()
-    .any(|decoder| {
-        [
-            "uqm::engine::battle::record",
-            "uqm::engine::battle::record::abi",
+    }) || name == "stage_b_access_unsafe"
+        && [
+            "life_span",
+            "hit_points",
+            "mass_points",
+            "turn_wait",
+            "thrust_wait",
         ]
         .iter()
-        .any(|module| identity == format!("{module}::<ELEMENT>::{decoder}"))
-    })
+        .any(|decoder| {
+            [
+                "uqm::engine::battle::record",
+                "uqm::engine::battle::record::abi",
+            ]
+            .iter()
+            .any(|module| identity == format!("{module}::<ELEMENT>::{decoder}"))
+        })
 }

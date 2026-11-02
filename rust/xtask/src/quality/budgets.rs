@@ -14,9 +14,21 @@ pub struct Budget {
 pub fn phase(name: &str) -> Result<&'static str, String> {
     match name {
         "bridge_calls" => Ok("phase-6"),
-        "legacy_hooks" | "stage_b_raw" | "stage_b_access_unsafe" => Ok("phase-2"),
+        "legacy_hooks" | "stage_b_raw" => Ok("phase-2"),
         "planned_engine_core" => Ok("phase-4"),
-        _ => Err(format!("unknown transition budget {name}")),
+        _ => access_phase(name).ok_or_else(|| format!("unknown transition budget {name}")),
+    }
+}
+
+fn access_phase(name: &str) -> Option<&'static str> {
+    match name {
+        "stage_b_access_unsafe" => Some("phase-2"),
+        "phase4_state_access_unsafe" => Some("phase-4"),
+        "phase7_render_access_unsafe"
+        | "phase7_assets_access_unsafe"
+        | "phase7_sound_access_unsafe"
+        | "phase7_input_access_unsafe" => Some("phase-7"),
+        _ => None,
     }
 }
 
@@ -341,3 +353,7 @@ stage_b_raw = { limit = 2, ends = "phase-2", scopes = { "ffi|raw_records|uqm::en
 #[cfg(test)]
 #[path = "access_budget_tests.rs"]
 mod access_budget_tests;
+
+#[cfg(test)]
+#[path = "owner_budget_tests.rs"]
+mod owner_budget_tests;

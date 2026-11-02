@@ -508,3 +508,35 @@ decoders qualify. Wildcards and other metrics are rejected. Every unsafe block
 needs a SAFETY comment. The workspace `unsafe_lines`, `unsafe_fn` and
 `unsafe_fn_lines` ratchets remain in force. New or enlarged scopes still require
 owner approval; no baseline values are changed by adding this tool support.
+
+### Owner-scoped accessor budget transfers (#817)
+
+The [U2-09 decision](https://github.com/acoliver/uqm/issues/680) separates battle
+storage removal from later subsystem work. The tooling registers these exact
+budget names and end phases:
+
+| Budget | Owning work-items heading | Ends |
+| --- | --- | --- |
+| `phase4_state_access_unsafe` | U4-01 owned World/Kernel; U4-02 GAME_STATE queues | phase-4 |
+| `phase7_render_access_unsafe` | U7-01 render pipeline | phase-7 |
+| `phase7_assets_access_unsafe` | U7-02 graphics assets and ResourceCache | phase-7 |
+| `phase7_sound_access_unsafe` | U7-04 sound/video decoders and audio port | phase-7 |
+| `phase7_input_access_unsafe` | U7-05 input, threading, callbacks and clock | phase-7 |
+
+Registering a name grants no allowance. New budgets still require exact
+`unsafe_blocks`/`unsafe_block_lines` identities in the Stage B accessor namespaces,
+with limits summing to the budget total. They cannot cover the legacy element
+union decoders, other metrics, wildcard scopes or unrelated modules. Unknown
+budget names and incorrect end phases remain errors. New or enlarged budgets
+still require `quality-growth-approved` against the base.
+
+Use `quality budget <name> <sum> --scope '<identity>=<count>' ...` to record an
+approved transfer. The PR must attribute each scope to its owning work-items
+heading and preserve its count; battle-storage code and its allowance must be
+removed. This tooling change does not edit the recorded budget table.
+
+`quality budget <name> retire` sums the remaining findings for the budget's exact
+scope keys. It rejects retirement while any matching finding remains, without
+writing the baseline. Once those scopes are empty, it removes only that budget;
+unrelated findings remain subject to their existing ratchets. Unscoped budgets
+continue to use their named metric.
