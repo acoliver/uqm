@@ -9,7 +9,7 @@ fn invalid(detail: &str) -> io::Error {
 }
 
 /// A bundle path must stay inside the bundle: relative, normalized, no `..`.
-fn bundle_path(root: &Path, relative: &str) -> io::Result<PathBuf> {
+pub(crate) fn bundle_path(root: &Path, relative: &str) -> io::Result<PathBuf> {
     let escapes = relative.is_empty()
         || Path::new(relative)
             .components()
