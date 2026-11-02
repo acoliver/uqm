@@ -102,8 +102,10 @@ pub struct Cx<'a> {
 }
 
 impl Cx<'_> {
+    /// # Safety
+    /// Legacy game-thread access must not retain record borrows across callbacks.
     #[cfg(not(test))]
-    pub(crate) fn records(&mut self) -> &mut ElementTable {
+    pub(crate) unsafe fn records(&mut self) -> &mut ElementTable {
         &mut self.b.elements
     }
     pub fn random(&mut self) -> u32 {

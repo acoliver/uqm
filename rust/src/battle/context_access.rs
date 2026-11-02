@@ -540,32 +540,6 @@ mod star_access {
     }
 }
 
-mod allocation {
-    #[cfg(not(test))]
-    use super::*;
-    #[cfg(not(test))]
-    #[cfg(not(test))]
-    #[cfg(not(test))]
-    use std::ptr;
-    #[cfg(not(test))]
-    impl Cx<'_> {
-        pub fn alloc_element(&mut self) -> Option<ElementId> {
-            let handle = if let Some(id) = self.records().alloc() {
-                self.assign_primitive(id);
-                self.primitive_style_mut(id).kind = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
-                self.elements().raw(id)
-            } else {
-                ptr::null_mut()
-            };
-            crate::collections::observation::record(
-                crate::collections::observation::Event::Allocate(handle as usize),
-            );
-
-            self.elements().id(handle)
-        }
-    }
-}
-
 #[cfg(not(test))]
 impl Cx<'_> {
     pub fn unlink(&mut self, id: ElementId) {
@@ -576,22 +550,6 @@ impl Cx<'_> {
             unsafe { crate::battle::sounds::engine::remove_sounds(Some(id)) };
         }
         self.unlink_storage(id);
-    }
-}
-
-#[cfg(not(test))]
-impl Cx<'_> {
-    pub fn dispose(&mut self, id: ElementId) {
-        assert!(
-            !self.elements().linked(id),
-            "dispose requires an unlinked element"
-        );
-        let handle = self.elements().raw(id);
-        let index = self.elements()[id].PrimIndex;
-        use crate::collections::observation::{record, Event};
-        self.release_primitive(index);
-        record(Event::Free(handle as usize));
-        self.records().free(id);
     }
 }
 

@@ -1,6 +1,36 @@
 //! Stage B resource and record projections. Borrows end before legacy handoffs.
 #[cfg(not(test))]
 impl Cx<'_> {
+    pub fn alloc_element(&mut self) -> Option<ElementId> {
+        let allocated = self.b.elements.alloc();
+        let address = if let Some(id) = allocated {
+            self.assign_primitive(id);
+            self.primitive_style_mut(id).kind = crate::ships::native::abi::gfx_object_NUM_PRIMS
+                as crate::graphics::native_abi::GRAPHICS_PRIM;
+            self.b.elements.raw(id) as usize
+        } else {
+            0
+        };
+        crate::collections::observation::record(crate::collections::observation::Event::Allocate(
+            address,
+        ));
+        allocated
+    }
+
+    pub fn dispose(&mut self, id: ElementId) {
+        assert!(
+            !self.b.elements.linked(id),
+            "dispose requires an unlinked element"
+        );
+        let address = self.b.elements.raw(id) as usize;
+        let index = self.b.elements[id].PrimIndex;
+        self.release_primitive(index);
+        crate::collections::observation::record(crate::collections::observation::Event::Free(
+            address,
+        ));
+        self.b.elements.free(id);
+    }
+
     /// Move the boss result before descriptor disposal; no live graph is retained.
     pub(crate) fn retain_terminal_outcome(&mut self, owner: ShipId) {
         if matches!(self.desc(owner).race_state, super::RaceState::SaMatra(_)) {
