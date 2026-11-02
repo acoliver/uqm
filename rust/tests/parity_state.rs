@@ -508,8 +508,8 @@ unsafe fn sis_fields(directory: &Path, ship: &mut ShipRecord) {
             "life",
             "blast_offs",
             "preprocess",
-            "frames.owner",
-            "frames.index",
+            "farray.owner",
+            "farray.index",
         ] {
             assert!(
                 fields.contains_key(&format!("ships.0.0.custom.missiles.{index}.{name}")),
