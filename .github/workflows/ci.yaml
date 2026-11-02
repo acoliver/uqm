@@ -41,6 +41,8 @@ jobs:
           workspaces: rust
       - run: cargo fmt --all --check
       - run: cargo xtask abi-check
+      - name: Assert Stage C raw-reader boundary
+        run: cargo xtask quality report raw_records --expect-only uqm::engine::battle
       - name: Scope engine-crate approval
         if: contains(github.event.pull_request.labels.*.name, 'quality-growth-approved')
         run: |
