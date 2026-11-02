@@ -5411,7 +5411,7 @@ planned_engine_core = { limit = 12, ends = "phase-4" }
 "unsafe|unsafe_fn_lines|uqm::planet_side" = 585
 "unsafe|unsafe_fn_lines|uqm::planets" = 6430
 "unsafe|unsafe_fn_lines|uqm::savegame" = 681
-"unsafe|unsafe_fn_lines|uqm::ships" = 687
+"unsafe|unsafe_fn_lines|uqm::ships" = 688
 "unsafe|unsafe_fn_lines|uqm::starbase" = 13
 "unsafe|unsafe_fn_lines|uqm::state" = 404
 "unsafe|unsafe_fn_lines|uqm::supermelee" = 3971
@@ -5462,7 +5462,7 @@ planned_engine_core = { limit = 12, ends = "phase-4" }
 "unsafe|unsafe_lines|uqm::planet_side" = 939
 "unsafe|unsafe_lines|uqm::planets" = 6531
 "unsafe|unsafe_lines|uqm::savegame" = 801
-"unsafe|unsafe_lines|uqm::ships" = 771
+"unsafe|unsafe_lines|uqm::ships" = 772
 "unsafe|unsafe_lines|uqm::starbase" = 157
 "unsafe|unsafe_lines|uqm::state" = 406
 "unsafe|unsafe_lines|uqm::supermelee" = 4041
