@@ -169,7 +169,7 @@ pub(crate) mod engine {
             face,
             index: face,
             life: DISCRIMINATOR_LIFE,
-            farray: cx.ship_frame_set(ss, 2),
+            frames: cx.ship_frame_set(ss, 2),
             preprocess: Some(butt_missile_preprocess),
             blast_offs: DISCRIMINATOR_OFFSET,
         };
@@ -245,7 +245,7 @@ pub(crate) mod engine {
             face: cx.ship_state(ss).facing,
             index: cx.ship_state(ss).facing,
             life: MISSILE_LIFE,
-            farray: cx.ship_frame_set(ss, 1),
+            frames: cx.ship_frame_set(ss, 1),
             preprocess: None,
             blast_offs: MISSILE_OFFSET,
         };

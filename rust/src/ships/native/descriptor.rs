@@ -1,7 +1,7 @@
 //! Empty native descriptors have explicit scalar and optional-handle initialization.
 use super::abi::*;
 
-impl race_desc {
+impl RaceDescriptor {
     pub const EMPTY: Self = Self {
         ship_info: SHIP_INFO {
             ship_flags: 0,
@@ -75,7 +75,7 @@ mod tests {
 
     #[test]
     fn empty_descriptor_has_no_resources_or_callbacks() {
-        let descriptor = race_desc::EMPTY;
+        let descriptor = RaceDescriptor::EMPTY;
         assert!(descriptor.race.is_none());
         assert_eq!(descriptor.ship_info.crew_level, 0);
         assert_eq!(descriptor.characteristics.max_thrust, 0);

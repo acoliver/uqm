@@ -1,6 +1,6 @@
 //! Fixed-capacity element ownership and queue order on the game thread.
 
-use super::record::ELEMENT;
+use super::record::ElementRecord;
 use crate::collections::pool::{Id, OrderedPool};
 use crate::collections::queue::HLink;
 use std::ops::{Index, IndexMut};
@@ -28,7 +28,7 @@ pub enum Parent {
 }
 
 pub struct ElementTable {
-    pool: OrderedPool<ELEMENT, CAPACITY>,
+    pool: OrderedPool<ElementRecord, CAPACITY>,
 }
 
 impl ElementTable {
@@ -38,14 +38,14 @@ impl ElementTable {
         }
     }
 
-    fn identify(id: Id<ELEMENT>) -> ElementId {
+    fn identify(id: Id<ElementRecord>) -> ElementId {
         ElementId {
             slot: id.index() as u8,
             gen: id.generation(),
         }
     }
 
-    fn key(&self, id: ElementId) -> Id<ELEMENT> {
+    fn key(&self, id: ElementId) -> Id<ElementRecord> {
         let key = self.pool.id_at(usize::from(id.slot));
         assert!(self.contains(id), "stale element id {id:?}");
         key.unwrap_or_else(|| unreachable!("checked element allocation"))
@@ -53,6 +53,16 @@ impl ElementTable {
 
     pub fn id_at(&self, slot: usize) -> Option<ElementId> {
         self.pool.id_at(slot).map(Self::identify)
+    }
+
+    pub(super) fn pair_mut(
+        &mut self,
+        left: ElementId,
+        right: ElementId,
+    ) -> (&mut ElementRecord, &mut ElementRecord) {
+        let left = self.key(left);
+        let right = self.key(right);
+        self.pool.get_pair_mut(left, right)
     }
 
     pub fn contains(&self, id: ElementId) -> bool {
@@ -107,7 +117,7 @@ impl ElementTable {
         self.pool.linked(self.key(id))
     }
     pub fn alloc(&mut self) -> Option<ElementId> {
-        let key = self.pool.alloc(ELEMENT::default())?;
+        let key = self.pool.alloc(ElementRecord::default())?;
         let id = Self::identify(key);
         Some(id)
     }
@@ -134,13 +144,13 @@ impl ElementTable {
 }
 
 impl Index<ElementId> for ElementTable {
-    type Output = ELEMENT;
-    fn index(&self, id: ElementId) -> &ELEMENT {
+    type Output = ElementRecord;
+    fn index(&self, id: ElementId) -> &ElementRecord {
         self.pool.get(self.key(id))
     }
 }
 impl IndexMut<ElementId> for ElementTable {
-    fn index_mut(&mut self, id: ElementId) -> &mut ELEMENT {
+    fn index_mut(&mut self, id: ElementId) -> &mut ElementRecord {
         let key = self.key(id);
         self.pool.get_mut(key)
     }
@@ -149,6 +159,17 @@ impl IndexMut<ElementId> for ElementTable {
 #[cfg(test)]
 mod tests {
     use super::ElementTable;
+
+    #[test]
+    fn paired_elements_mutate_the_checked_owner_in_argument_order() {
+        let mut elements = ElementTable::with_capacity(2);
+        let a = elements.alloc().unwrap();
+        let b = elements.alloc().unwrap();
+        let (right, left) = elements.pair_mut(b, a);
+        right.hits = 7;
+        left.hits = 9;
+        assert_eq!((elements[a].hits, elements[b].hits), (9, 7));
+    }
 
     #[test]
     fn retired_observation_addresses_survive_retirement_and_slot_reuse() {

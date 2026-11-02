@@ -178,7 +178,7 @@ pub struct Missile {
     pub face: u16,
     pub index: u16,
     pub life: u16,
-    pub farray: Frames,
+    pub frames: Frames,
     pub preprocess: Option<super::ElementFn>,
     pub blast_offs: i16,
 }

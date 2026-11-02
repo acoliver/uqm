@@ -14,7 +14,7 @@ use crate::{
 #[cfg(not(test))]
 pub fn observe() -> (Events, Option<Snapshot>) {
     // SAFETY: the synchronous input service owns the published game-thread context.
-    unsafe { crate::battle::context_access::ai_legacy::with_context(snapshot) }
+    unsafe { crate::app::bridge::enter(snapshot) }
 }
 
 #[cfg(not(test))]

@@ -3,8 +3,8 @@
 #[test]
 fn ship_detachment_is_an_explicit_fixture_command() {
     // SAFETY: zero is valid for the native record's scalars and optional pointers.
-    let record: STARSHIP = unsafe { std::mem::zeroed() };
-    let descriptor = RACE_DESC::EMPTY;
+    let record: ShipRecord = unsafe { std::mem::zeroed() };
+    let descriptor = RaceDescriptor::EMPTY;
     let id = ElementId { slot: 0, gen: 1 };
     let mut ship = Ship::for_test(&record, &descriptor, id);
     assert!(!ship.clear_element);
@@ -14,9 +14,9 @@ fn ship_detachment_is_an_explicit_fixture_command() {
     assert_eq!(ship.element, None);
 }
 
-#[cfg(not(test))]
-use crate::engine::battle::{link_queue, Cx, ShipId};
 use crate::engine::battle::{record::*, views::*, ElementId, Parent};
+#[cfg(not(test))]
+use crate::engine::battle::{Cx, ShipId};
 #[derive(Clone)]
 pub(crate) struct Element {
     pub state: ElementState,
@@ -133,20 +133,9 @@ impl Cx<'_> {
     }
     pub(crate) fn apply_fixture_ship(&mut self, id: ShipId, ship: &Ship) {
         *self.ship_state_mut(id) = ship.state;
-        // SAFETY: the checked queue view is exclusive and no callback runs during command planning.
-        unsafe {
-            let mut queue = link_queue::ships(usize::from(id.side));
-            let link = queue.link(id);
-            queue.edit(link, |pick| {
-                pick.species = ship.species;
-                pick.index = ship.index;
-            });
-        }
+        self.set_ship_identity(id, ship.species, ship.index);
         if ship.clear_element {
-            // SAFETY: the checked ship is exclusively owned during the command commit.
-            unsafe {
-                (*self.ship_pointer(id)).hShip = None;
-            }
+            self.set_ship_element(id, None);
         }
         if let Some(info) = ship.info {
             self.race_stats_mut(id).ship_info = info;
@@ -184,19 +173,6 @@ impl Descriptor {
 }
 #[cfg(not(test))]
 impl Cx<'_> {
-    pub(crate) fn queued_ships(&self, side: u8) -> Vec<ShipId> {
-        // SAFETY: only typed ids leave this queue borrow; no callback or record borrow crosses it.
-        unsafe {
-            let queue = link_queue::ships(usize::from(side));
-            let mut result = Vec::new();
-            let mut next = queue.head();
-            while let Some(id) = next {
-                result.push(queue.ship_id(id, side));
-                next = queue.succ(id);
-            }
-            result
-        }
-    }
     pub(crate) fn fixture_think(&mut self, ship: ShipId, crew: u16) {
         let input = crate::battle::cyborg_native::tactical(self, ship);
         self.ship_state_mut(ship).input = crate::battle::battle_native::ship_input(input, crew);
@@ -257,7 +233,7 @@ impl Cx<'_> {
 #[cfg(test)]
 impl Element {
     pub(crate) fn new() -> Self {
-        let record = crate::engine::battle::record::ELEMENT::default();
+        let record = crate::engine::battle::record::ElementRecord::default();
         Self {
             state: crate::engine::battle::access::observe_element_record(&record),
             parent: Parent::None,
@@ -268,7 +244,7 @@ impl Element {
 }
 #[cfg(test)]
 impl Ship {
-    pub(crate) fn for_test(s: &STARSHIP, d: &RACE_DESC, element: ElementId) -> Self {
+    pub(crate) fn for_test(s: &ShipRecord, d: &RaceDescriptor, element: ElementId) -> Self {
         Self {
             // SAFETY: the retained ship pool remains immutable during observation.
             state: unsafe { crate::engine::battle::access::observe_ship_record(s) },

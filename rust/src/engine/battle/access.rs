@@ -157,15 +157,15 @@ impl Cx<'_> {
         }
     }
     pub fn set_single_frames(&mut self, id: ElementId, frames: Frames, frame: Frame) {
-        crate::collections::observation::image!(single; self.b.kernel.elements[id].current.image.farray, frames, frame.0);
+        crate::collections::observation::image!(single; self.b.kernel.elements[id].current.image.frames, frames, frame.0);
     }
 
     pub fn set_frames(&mut self, id: ElementId, next: bool, frames: Frames) {
         use crate::collections::observation::image;
         if next {
-            image!(set;self.b.kernel.elements[id].next.image.farray,frames);
+            image!(set;self.b.kernel.elements[id].next.image.frames,frames);
         } else {
-            image!(set;self.b.kernel.elements[id].current.image.farray,frames);
+            image!(set;self.b.kernel.elements[id].current.image.frames,frames);
         }
     }
 }
@@ -274,7 +274,7 @@ impl Cx<'_> {
         } else {
             &self.b.kernel.elements[element].current.image
         };
-        image.farray.view(0).raw()
+        image.frames.view(0).raw()
     }
     pub(super) fn frame_index(&self, frame: FRAME) -> u16 {
         // SAFETY: this battle retains the element's loaded frame resources.
@@ -287,11 +287,6 @@ impl Cx<'_> {
 
 #[cfg(not(test))]
 impl Cx<'_> {
-    pub fn shared_frame_set(&self, role: SharedFrames) -> Frames {
-        let source = (self.world.frame_source)(role);
-        // SAFETY: World retains these source slots; the result leases their loaded allocations.
-        unsafe { Frames::native_shared(role, source, 3) }
-    }
     pub fn first_shared_frame(&self, role: SharedFrames) -> Frame {
         Frame(self.shared_frame(role))
     }
@@ -302,6 +297,11 @@ impl Cx<'_> {
 }
 
 impl Cx<'_> {
+    pub fn shared_frame_set(&self, role: SharedFrames) -> Frames {
+        let source = (self.world.frame_source)(role);
+        // SAFETY: World retains these source slots; the result leases their loaded allocations.
+        unsafe { Frames::native_shared(role, source, 3) }
+    }
     pub fn init_intersect(&mut self, id: ElementId) {
         self.init_intersect_start(id);
         self.init_intersect_end(id);
@@ -440,15 +440,35 @@ impl Cx<'_> {
 
 #[cfg(not(test))]
 impl Cx<'_> {
+    pub(crate) fn set_ship_identity(&mut self, id: ShipId, species: u32, index: u16) {
+        let record = self.ship_mut(id);
+        record.SpeciesID = species;
+        record.index = index;
+    }
+
+    pub(crate) fn queued_ships(&self, side: u8) -> Vec<ShipId> {
+        let queue = super::link_queue::LinkQueue::borrow(&self.b.kernel.races[usize::from(side)]);
+        let mut result = Vec::new();
+        let mut next = queue.head();
+        while let Some(id) = next {
+            result.push(queue.ship_id(id, side));
+            next = queue.succ(id);
+        }
+        result
+    }
+
+    pub(crate) fn first_ship(&self, side: usize) -> Option<ShipId> {
+        let ships = super::link_queue::LinkQueue::borrow(&self.b.kernel.races[side]);
+        ships.head().map(|id| ships.ship_id(id, side as u8))
+    }
+
     pub(crate) fn pick_ship(
         &self,
         id: crate::engine::battle::ShipId,
     ) -> crate::engine::battle::link_queue::PickShip {
-        // SAFETY: Cx owns this pool and no record borrow survives this value read.
-        unsafe {
-            let ships = crate::engine::battle::link_queue::ships(usize::from(id.side));
-            ships.get(ships.link(id))
-        }
+        let ships =
+            super::link_queue::LinkQueue::borrow(&self.b.kernel.races[usize::from(id.side)]);
+        ships.get(ships.link(id))
     }
     pub(crate) fn subject_style(
         &self,
@@ -519,21 +539,23 @@ impl Cx<'_> {
     }
 }
 
-pub(crate) fn observe_element_record(record: &super::record::ELEMENT) -> ElementState {
+pub(crate) fn observe_element_record(record: &super::record::ElementRecord) -> ElementState {
     ElementState::decode(record)
 }
 
 /// # Safety
 /// The caller retains the ship pool throughout this staging observation.
 #[cfg(test)]
-pub(crate) unsafe fn observe_ship_record(record: &super::record::STARSHIP) -> ShipState {
+pub(crate) unsafe fn observe_ship_record(record: &super::record::ShipRecord) -> ShipState {
     ShipState::decode(record)
 }
 
 #[cfg(test)]
 /// # Safety
 /// The caller retains the test descriptor and all resources referenced by its state.
-pub(crate) unsafe fn observe_descriptor_record(record: &super::record::RACE_DESC) -> RaceStats {
+pub(crate) unsafe fn observe_descriptor_record(
+    record: &super::record::RaceDescriptor,
+) -> RaceStats {
     RaceStats::decode(record)
 }
 
@@ -545,7 +567,7 @@ impl Cx<'_> {
     }
 
     pub(crate) fn copy_next_frame_set(&mut self, destination: ElementId, source: ElementId) {
-        crate::collections::observation::image!(copy; self.b.kernel.elements[destination].current.image.farray, self.b.kernel.elements[source].next.image.farray);
+        crate::collections::observation::image!(copy; self.b.kernel.elements[destination].current.image.frames, self.b.kernel.elements[source].next.image.frames);
     }
 }
 
@@ -562,23 +584,12 @@ impl super::Battle {
 impl Cx<'_> {
     pub(crate) fn intersect_elements(&mut self, a: ElementId, b: ElementId, time: u16) -> u16 {
         assert_ne!(a, b, "collision operands alias");
-        let left = self
-            .b
-            .kernel
-            .elements
-            .raw(a)
-            .cast::<super::record::ELEMENT>();
-        let right = self
-            .b
-            .kernel
-            .elements
-            .raw(b)
-            .cast::<super::record::ELEMENT>();
+        let (left, right) = self.b.kernel.elements.pair_mut(a, b);
         // SAFETY: checked distinct slots and loaded frames remain live during the synchronous geometry call.
         unsafe {
             crate::graphics::geometry_ffi::DrawablesIntersect(
-                &raw mut (*left).IntersectControl,
-                &raw mut (*right).IntersectControl,
+                &mut left.IntersectControl,
+                &mut right.IntersectControl,
                 time,
             )
         }
@@ -598,19 +609,14 @@ impl Cx<'_> {
     }
 
     pub(crate) fn next_ship(&self, ship: ShipId) -> Option<ShipId> {
-        // SAFETY: the checked ship belongs to this context's live side queue.
-        unsafe {
-            let queue = super::link_queue::ships(usize::from(ship.side));
-            queue
-                .succ(queue.link(ship))
-                .map(|id| queue.ship_id(id, ship.side))
-        }
+        let queue =
+            super::link_queue::LinkQueue::borrow(&self.b.kernel.races[usize::from(ship.side)]);
+        queue
+            .succ(queue.link(ship))
+            .map(|id| queue.ship_id(id, ship.side))
     }
     pub(crate) fn reset_ships(&mut self, side: usize) {
-        // SAFETY: lifecycle teardown exclusively owns this idle side queue.
-        unsafe {
-            super::link_queue::ships(side).reinit();
-        }
+        self.b.kernel.races[side].reinit();
     }
     pub(crate) fn set_ship_element(&mut self, ship: ShipId, element: Option<ElementId>) {
         self.ship_mut(ship).hShip = element;
@@ -634,7 +640,7 @@ impl Cx<'_> {
         let e = &mut self.b.kernel.elements[id];
         // SAFETY: the allocated element retains its loaded frame array during this projection.
         unsafe {
-            crate::collections::observation::image!(frame; e.IntersectControl.IntersectStamp.frame, crate::graphics::pixmap_abi::SetEquFrameIndex(e.next.image.farray.view(0).raw(), e.next.image.frame));
+            crate::collections::observation::image!(frame; e.IntersectControl.IntersectStamp.frame, crate::graphics::pixmap_abi::SetEquFrameIndex(e.next.image.frames.view(0).raw(), e.next.image.frame));
         }
     }
 }
@@ -665,7 +671,7 @@ mod intersection_projection_tests {
             let id = battle.kernel.elements.alloc().unwrap();
             battle.kernel.elements[id].current.location = POINT { x: 44, y: 52 };
             battle.kernel.elements[id].next.location = POINT { x: 60, y: 68 };
-            battle.kernel.elements[id].next.image.farray =
+            battle.kernel.elements[id].next.image.frames =
                 crate::engine::battle::views::Frames::shared(
                     crate::engine::battle::frames::SharedFrames::Fixture(0),
                     crate::engine::battle::frames::FrameArray::retain(
@@ -740,7 +746,7 @@ impl Cx<'_> {
     /// The caller retains the fixture subject and writable concern records on the game thread.
     pub unsafe fn invoke_intelligence(
         parent: usize,
-        element: *mut super::record::ELEMENT,
+        element: *mut super::record::ElementRecord,
         raw: &mut [super::record::EVALUATE_DESC],
         count: u16,
     ) {
@@ -779,8 +785,8 @@ impl Cx<'_> {
 #[cfg(not(test))]
 #[no_mangle]
 pub unsafe extern "C" fn PlotIntercept(
-    a: *mut super::record::ELEMENT,
-    b: *mut super::record::ELEMENT,
+    a: *mut super::record::ElementRecord,
+    b: *mut super::record::ElementRecord,
     turns: u16,
     margin: u16,
 ) -> u16 {
@@ -802,10 +808,10 @@ pub(crate) fn race_desc_layout() -> RaceDescLayout {
     use super::record::*;
     use std::mem;
     RaceDescLayout {
-        race_desc_size: mem::size_of::<RACE_DESC>(),
-        ship_data_offset: mem::offset_of!(RACE_DESC, ship_data),
-        ship_info_offset: mem::offset_of!(RACE_DESC, ship_info),
-        characteristics_offset: mem::offset_of!(RACE_DESC, characteristics),
+        race_desc_size: mem::size_of::<RaceDescriptor>(),
+        ship_data_offset: mem::offset_of!(RaceDescriptor, ship_data),
+        ship_info_offset: mem::offset_of!(RaceDescriptor, ship_info),
+        characteristics_offset: mem::offset_of!(RaceDescriptor, characteristics),
         ship_data_ship_offset: mem::offset_of!(DATA_STUFF, ship),
         ship_info_crew_offset: mem::offset_of!(SHIP_INFO, crew_level),
         ship_info_max_crew_offset: mem::offset_of!(SHIP_INFO, max_crew),

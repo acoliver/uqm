@@ -1,6 +1,6 @@
 //! Linked callback checks against the Chmmr C rules, without a running renderer.
 
-use uqm_rust::engine::battle::schema::HELEMENT;
+use uqm_rust::engine::battle::schema::HLINK;
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]
@@ -22,7 +22,7 @@ fn point(p: POINT) -> (i16, i16) {
     (p.x, p.y)
 }
 
-unsafe fn velocity(el: *mut ELEMENT) -> (SIZE, SIZE) {
+unsafe fn velocity(el: *mut ElementRecord) -> (SIZE, SIZE) {
     let (mut x, mut y) = (0, 0);
     GetCurrentVelocityComponents(&mut (*el).velocity, &mut x, &mut y);
     (x, y)
@@ -51,7 +51,7 @@ unsafe fn assert_rng_after(seed: u32, draws: usize) {
     assert_eq!(actual, TFB_Random(), "RNG draws for seed {seed}");
 }
 
-unsafe fn exhaust() -> Vec<HELEMENT> {
+unsafe fn exhaust() -> Vec<HLINK> {
     let mut handles = Vec::new();
     loop {
         let h = uqm_rust::app::bridge::enter(|cx| {
@@ -275,7 +275,7 @@ fn laser_death_obeys_range_byte_gate_count_draw_and_animation() {
                             (origin.x + magnitude as i16, origin.y)
                         );
                         assert_eq!(frame_index((*spot).current.image.frame), 32);
-                        assert_eq!((*spot).current.image.farray, ship.frame_set(1));
+                        assert_eq!((*spot).current.image.frames, ship.frame_set(1));
                         assert_eq!((*spot).life, 9);
                         assert_eq!((*spot).thrust, 0);
                         assert_eq!((*prim(spot)).Type, gfx_object_STAMP_PRIM as u8);
@@ -594,7 +594,7 @@ fn satellite_collision_is_noop_and_death_installs_four_tick_animation() {
     })
 }
 
-unsafe fn target(satellite: *mut ELEMENT, dx: i16, dy: i16, hp: u16) -> PoolElement {
+unsafe fn target(satellite: *mut ElementRecord, dx: i16, dy: i16, hp: u16) -> PoolElement {
     let mut fixture = PoolElement::new();
     let e = &raw mut *fixture;
     (*e).playerNr = 1;
@@ -609,7 +609,7 @@ unsafe fn target(satellite: *mut ELEMENT, dx: i16, dy: i16, hp: u16) -> PoolElem
     fixture
 }
 
-unsafe fn defense(satellite: *mut ELEMENT) -> HELEMENT {
+unsafe fn defense(satellite: *mut ElementRecord) -> HLINK {
     hooks::invoke_element_pointer((*satellite).postprocess_func.unwrap(), satellite);
     let h = battle::tail();
     assert_eq!(
@@ -631,17 +631,17 @@ fn point_defense_uses_backward_weakest_nearest_and_stable_tie_order() {
             let s = battle::element(satellites[0]);
             (*s).next = (*s).current.clone();
             let mut strong_fixture = target(s, 4, 0, 3);
-            let strong: HELEMENT = (&raw mut *strong_fixture).cast();
+            let strong: HLINK = (&raw mut *strong_fixture).cast();
             let mut far_weak_fixture = target(s, 200, 0, 1);
-            let far_weak: HELEMENT = (&raw mut *far_weak_fixture).cast();
+            let far_weak: HLINK = (&raw mut *far_weak_fixture).cast();
             let mut near_weak_fixture = target(s, 40, 0, 1);
-            let near_weak: HELEMENT = (&raw mut *near_weak_fixture).cast();
+            let near_weak: HLINK = (&raw mut *near_weak_fixture).cast();
             let mut tie_fixture = target(s, -40, 0, 1);
-            let tie: HELEMENT = (&raw mut *tie_fixture).cast();
+            let tie: HLINK = (&raw mut *tie_fixture).cast();
             let d = defense(s);
             // An even weaker candidate appended after the defense is not traversed.
             let mut after_fixture = target(s, 0, 4, 0);
-            let after: HELEMENT = (&raw mut *after_fixture).cast();
+            let after: HLINK = (&raw mut *after_fixture).cast();
             let before = battle::tail();
             TFB_SeedRandom(12);
             hooks::invoke_element_pointer(
@@ -696,7 +696,7 @@ fn point_defense_respects_collision_cloak_range_and_full_width_hitpoints() {
                 let s = battle::element(satellites[0]);
                 (*s).next = (*s).current.clone();
                 let mut h_fixture = target(s, dx, dy, hp);
-                let h: HELEMENT = (&raw mut *h_fixture).cast();
+                let h: HLINK = (&raw mut *h_fixture).cast();
                 let obj = battle::element(h);
                 match exclusion {
                     1 => (*obj).playerNr = 0,
@@ -1089,18 +1089,18 @@ fn unrequested_special_and_failed_muzzle_allocation_only_reset_cycle() {
     })
 }
 
-unsafe fn laser(ship: &mut Ship<'_>) -> HELEMENT {
+unsafe fn laser(ship: &mut Ship<'_>) -> HLINK {
     let h = ship.initialize_from(ship.ptr(), 1)[0];
     if !h.is_null() {
         (*battle::element(h)).parent = (*ship.ptr()).parent;
     }
     h
 }
-unsafe fn delayed_spawn(ship: &mut Ship<'_>) -> HELEMENT {
+unsafe fn delayed_spawn(ship: &mut Ship<'_>) -> HLINK {
     ship.preprocess();
     battle::tail()
 }
-unsafe fn satellites(ship: &mut Ship<'_>) -> Vec<HELEMENT> {
+unsafe fn satellites(ship: &mut Ship<'_>) -> Vec<HLINK> {
     let delay = delayed_spawn(ship);
     let death = (*battle::element(delay)).death_func.unwrap();
     battle_context::unlink(delay);

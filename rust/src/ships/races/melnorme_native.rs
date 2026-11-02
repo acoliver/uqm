@@ -235,7 +235,7 @@ pub(crate) mod engine {
         let mut block = Missile {
             cx: origin.next.location.x,
             cy: origin.next.location.y,
-            farray: cx.ship_frame_set(ss, 1),
+            frames: cx.ship_frame_set(ss, 1),
             face: cx.ship_state(ss).facing,
             index: 0,
             sender: origin.player,
@@ -366,7 +366,7 @@ pub(crate) mod engine {
         let mut block = Missile {
             cx: origin.next.location.x,
             cy: origin.next.location.y,
-            farray: cx.ship_frame_set(ss, 2),
+            frames: cx.ship_frame_set(ss, 2),
             index: 0,
             face: cx.ship_state(ss).facing,
             sender: origin.player,
@@ -395,7 +395,7 @@ pub(crate) mod engine {
         let mut block = Missile {
             cx: origin.next.location.x,
             cy: origin.next.location.y,
-            farray: cx.ship_frame_set(ss, 1),
+            frames: cx.ship_frame_set(ss, 1),
             face: cx.ship_state(ss).facing,
             index: 0,
             sender: origin.player,

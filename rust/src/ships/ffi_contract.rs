@@ -55,7 +55,7 @@ pub type CBoolean = u8;
 /// pointers at the ABI level.
 pub type HLink = *mut c_void;
 
-/// C `HSTARSHIP` = `HLINK`.
+/// C `HELEMENT` = `HLINK`.
 pub type HStarship = HLink;
 
 /// C `HSHIPFRAG` = `HLINK`.
@@ -123,7 +123,7 @@ pub struct CStarship {
     pub species_id: CSpeciesId,
     pub captains_name_index: CByte,
 
-    pub race_desc_ptr: *mut c_void, // *mut RACE_DESC, Rust-owned when non-null
+    pub race_desc_ptr: *mut c_void, // *mut RaceDescriptor, Rust-owned when non-null
     pub crew_level: CCount,
     pub max_crew: CCount,
     pub ship_cost: CByte,

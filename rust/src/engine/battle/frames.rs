@@ -167,7 +167,8 @@ impl FrameSetRef {
 }
 impl PartialEq for FrameSetRef {
     fn eq(&self, other: &Self) -> bool {
-        self.owner == other.owner
+        // A catalog ship can load a replacement descriptor while old projectiles retain its frames.
+        self.owner == other.owner && self.frames.as_ptr() == other.frames.as_ptr()
     }
 }
 impl Eq for FrameSetRef {}
@@ -233,6 +234,27 @@ impl Frames {
 mod tests {
     use super::*;
     use crate::collections::observation::{self, Event};
+
+    #[test]
+    fn replacement_descriptor_has_distinct_frames_even_for_the_same_ship_and_role() {
+        let ship = ShipId {
+            side: 0,
+            slot: 0,
+            gen: 1,
+        };
+        let old = Frames::ship(
+            ship,
+            Role::Weapon,
+            FrameArray::retain([Frame::ABSENT; 3], ()),
+        );
+        let replacement = Frames::ship(
+            ship,
+            Role::Weapon,
+            FrameArray::retain([Frame::ABSENT; 3], ()),
+        );
+        assert_eq!(old, old.clone());
+        assert_ne!(old, replacement);
+    }
 
     #[test]
     fn native_sources_snapshot_views_without_borrowing_source_storage() {

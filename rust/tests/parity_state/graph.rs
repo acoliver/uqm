@@ -174,17 +174,17 @@ pub(super) fn frame_fields(
         role: "test-views".into(),
     });
     observation::assign_frame(&mut first.current.frame, pointer);
-    observation::assign_set(&mut first.current.farray, set.clone(), None);
+    observation::assign_set(&mut first.current.frames, set.clone(), None);
     observation::assign_frame(&mut first.next.frame, pointer);
-    observation::assign_set(&mut first.next.farray, set.clone(), None);
+    observation::assign_set(&mut first.next.frames, set.clone(), None);
     observation::assign_frame(&mut first.intersect_control.intersect_stamp.frame, pointer);
     let (fields, _) = snapshot(directory);
     for name in [
         "current.frame",
         "next.frame",
         "intersect.frame",
-        "current.farray",
-        "next.farray",
+        "current.frames",
+        "next.frames",
     ] {
         assert_eq!(
             fields[&format!("elements.0.{name}.owner")],
@@ -193,16 +193,16 @@ pub(super) fn frame_fields(
         assert_eq!(fields[&format!("elements.0.{name}.index")], "7");
     }
     assert_eq!(fields["elements.1.current.frame.owner"], "none");
-    assert_eq!(fields["elements.2.current.farray.index"], "0");
+    assert_eq!(fields["elements.2.current.frames.index"], "0");
     observation::assign_frame(&mut first.current.frame, ptr::null_mut());
     observation::assign_set(
-        &mut first.current.farray,
+        &mut first.current.frames,
         uqm_rust::engine::battle::frames::Frames::ABSENT,
         None,
     );
     observation::assign_frame(&mut first.next.frame, ptr::null_mut());
     observation::assign_set(
-        &mut first.next.farray,
+        &mut first.next.frames,
         uqm_rust::engine::battle::frames::Frames::ABSENT,
         None,
     );
@@ -219,7 +219,7 @@ pub(super) fn fighters_without_journal(directory: &Path) {
     let mut element = ElementRecord::new();
     // SAFETY: zero is valid for all native ship scalar/optional pointer fields.
     let mut ship = unsafe { battle::PoolShip::new(0) };
-    ship.descriptor = Some(Box::new(RACE_DESC::EMPTY));
+    ship.descriptor = Some(Box::new(RaceDescriptor::EMPTY));
     ship.ShipFacing = 31;
     element.state_flags = ElementFlags::PLAYER_SHIP;
     element.player_nr = 0;

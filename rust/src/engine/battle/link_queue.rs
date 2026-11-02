@@ -5,7 +5,7 @@ use crate::collections::pool::{Id, OrderedPool};
 use crate::collections::queue::HLink;
 pub const NAME_OFFSET: u32 = 5;
 pub const NUM_CAPTAINS_NAMES: u32 = 16;
-pub type RacePool = OrderedPool<super::record::STARSHIP, 32>;
+pub type RacePool = OrderedPool<super::record::ShipRecord, 32>;
 /// Storage mapping for typed views over the transitional intrusive queues.
 mod queue_record {
     pub trait Sealed {}

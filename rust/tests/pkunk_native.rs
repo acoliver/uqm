@@ -1,6 +1,6 @@
 //! Exercise the Pkunk descriptor and callbacks against the linked engine.
 
-use uqm_rust::engine::battle::schema::HELEMENT;
+use uqm_rust::engine::battle::schema::HLINK;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 #[path = "support/battle.rs"]
@@ -69,7 +69,7 @@ impl Drop for Sounds {
 
 #[derive(Clone, Copy)]
 struct SavedState {
-    phoenix: HELEMENT,
+    phoenix: HLINK,
     saved_preprocess: Option<uqm_rust::engine::battle::ElementHook>,
     saved_postprocess: Option<uqm_rust::engine::battle::ElementHook>,
     saved_death: Option<uqm_rust::engine::battle::ElementHook>,
@@ -101,7 +101,7 @@ fn addr(f: Option<uqm_rust::engine::battle::ElementHook>) -> Option<usize> {
 
 struct Ship<'a> {
     inner: shared::Ship<'a>,
-    handle: HELEMENT,
+    handle: HLINK,
     ship_frames: FrameSet,
     weapon_frames: FrameSet,
 }
@@ -117,7 +117,7 @@ impl<'a> Ship<'a> {
         desc.ship_data.weapon = weapon_frames.array();
         let frames = inner.frame_set(0);
         let el = inner.element_mut();
-        el.current.image.farray = frames;
+        el.current.image.frames = frames;
         el.current.image.frame = ship_frames.frame(0);
         el.next = el.current.clone();
         el.IntersectControl.IntersectStamp.frame = ship_frames.frame(0);
@@ -131,7 +131,7 @@ impl<'a> Ship<'a> {
         }
     }
 
-    unsafe fn fire(&mut self, out: &mut [HELEMENT]) -> COUNT {
+    unsafe fn fire(&mut self, out: &mut [HLINK]) -> COUNT {
         uqm_rust::app::bridge::enter(|cx| {
             let origin = cx.weapon_origin(self.inner.id);
             let weapons = cx.spawn_weapons(self.inner.ship_id, origin);
@@ -141,7 +141,7 @@ impl<'a> Ship<'a> {
             weapons.len() as COUNT
         })
     }
-    fn ptr(&self) -> *mut ELEMENT {
+    fn ptr(&self) -> *mut ElementRecord {
         self.handle.cast()
     }
 
@@ -219,11 +219,11 @@ impl<'a> Ship<'a> {
     }
 }
 
-unsafe fn prim(el: *mut ELEMENT) -> *mut PRIMITIVE {
+unsafe fn prim(el: *mut ElementRecord) -> *mut PRIMITIVE {
     uqm_rust::app::bridge::enter(|cx| std::ptr::from_mut(cx.display_primitive((*el).PrimIndex)))
 }
 
-unsafe fn queued() -> Vec<HELEMENT> {
+unsafe fn queued() -> Vec<HLINK> {
     let mut result = Vec::new();
     let mut h = shared::head();
     while !h.is_null() {
@@ -347,7 +347,7 @@ fn block_is_zero(state: uqm_rust::engine::battle::RaceState) -> bool {
     )
 }
 
-unsafe fn check_trail(ship: &mut Ship, trail: *mut ELEMENT, at: POINT, angle: u16) {
+unsafe fn check_trail(ship: &mut Ship, trail: *mut ElementRecord, at: POINT, angle: u16) {
     assert_eq!((*trail).playerNr, -1);
     assert_eq!(
         (*trail).state_flags,
@@ -366,8 +366,8 @@ unsafe fn check_trail(ship: &mut Ship, trail: *mut ELEMENT, at: POINT, angle: u1
         (*ship.ptr()).current.image.frame
     );
     assert_eq!(
-        (*trail).current.image.farray,
-        (*ship.ptr()).current.image.farray
+        (*trail).current.image.frames,
+        (*ship.ptr()).current.image.frames
     );
     assert_eq!(
         ((*trail).current.location.x, (*trail).current.location.y),
@@ -567,7 +567,7 @@ fn bug_missiles_launch_fore_left_and_right_inheriting_ship_velocity() {
                     );
                     let (mut dx, mut dy) = (0, 0);
                     GetCurrentVelocityComponents(&raw mut (*ship.ptr()).velocity, &mut dx, &mut dy);
-                    let mut out = [1usize as HELEMENT; 3];
+                    let mut out = [1usize as HLINK; 3];
                     let before = queued();
                     let count = with_rng(5, 0, || ship.fire(&mut out));
                     assert_eq!(count, 3);
@@ -591,7 +591,7 @@ fn bug_missiles_launch_fore_left_and_right_inheriting_ship_velocity() {
                         );
                         assert_eq!((*m).playerNr, 1);
                         assert_eq!((*m).current.image.frame, ship.weapon_frames.frame(0));
-                        assert_eq!((*m).current.image.farray, ship.inner.frame_set(1));
+                        assert_eq!((*m).current.image.frames, ship.inner.frame_set(1));
                         assert_eq!((*prim(m)).Type, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
                         assert!((*m).collision_func.is_some());
                         assert!((*m).postprocess_func.is_none());
@@ -641,7 +641,7 @@ fn bug_missile_allocation_failure_leaves_null_slots_but_still_reports_three() {
         unsafe {
             let mut ship = Ship::new(&_battle, 0);
             ship.inner.ship_mut().ShipFacing = 6;
-            let mut out = [1usize as HELEMENT; 3];
+            let mut out = [1usize as HLINK; 3];
             let count = ship.fire(&mut out);
             assert_eq!(count, 3);
             assert!(!out[0].is_null());
@@ -893,7 +893,7 @@ fn reincarnation_ends_when_life_span_returns_to_normal() {
             (*el).life = NORMAL_LIFE as COUNT;
             (*el).current.image.frame = ship.ship_frames.frame(5);
             (*el).next.image.frame = ship.ship_frames.frame(9);
-            (*el).next.image.farray = ship.inner.frame_set(0);
+            (*el).next.image.frames = ship.inner.frame_set(0);
             (*el).current.location = POINT { x: 400, y: -800 };
             (*el).next.location = POINT { x: 1201, y: 77 };
             (*el).velocity = mem::zeroed();
@@ -1286,7 +1286,7 @@ fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
             assert_eq!((*el).thrust, 0);
             assert_eq!((*el).life, 1);
             assert_eq!(ship.inner.ship_mut().ShipFacing, facing);
-            assert_eq!((*el).current.image.farray, ship.inner.frame_set(0));
+            assert_eq!((*el).current.image.frames, ship.inner.frame_set(0));
             assert_eq!(frame_index((*el).current.image.frame), facing);
             assert_eq!((*prim(el)).Type, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
             assert_eq!(((*el).current.location.x, (*el).current.location.y), (x, y));
@@ -1344,7 +1344,7 @@ fn new_pkunk_redraws_its_position_while_a_planet_pulls_on_it() {
             (*planet).mass = 200;
             (*planet).current.location = POINT { x: x1, y: y1 };
             (*planet).next = (*planet).current.clone();
-            (*planet).current.image.farray = ship.inner.frame_set(0);
+            (*planet).current.image.frames = ship.inner.frame_set(0);
             (*planet).current.image.frame = ship.ship_frames.frame(0);
             (*prim(planet)).Type = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
             shared::put(planet_handle);

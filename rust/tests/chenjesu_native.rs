@@ -1,5 +1,5 @@
 //! Chenjesu fixtures retain the original integer, order and RNG expectations.
-use uqm_rust::engine::battle::schema::HELEMENT;
+use uqm_rust::engine::battle::schema::HLINK;
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]
@@ -13,7 +13,7 @@ use uqm_rust::ships::native::{
     abi::*, angle_to_facing, cosine, facing_to_angle, frame_index, normalize_facing, sine,
 };
 
-unsafe fn crystal(ship: &mut Ship<'_>) -> HELEMENT {
+unsafe fn crystal(ship: &mut Ship<'_>) -> HLINK {
     // SAFETY: the fixture owns the published battle, ship and returned missile.
     unsafe {
         uqm_rust::app::bridge::enter(|cx| {
@@ -29,7 +29,7 @@ unsafe fn crystal(ship: &mut Ship<'_>) -> HELEMENT {
         })
     }
 }
-unsafe fn doggy(ship: &mut Ship<'_>) -> *mut ELEMENT {
+unsafe fn doggy(ship: &mut Ship<'_>) -> *mut ElementRecord {
     // SAFETY: the fixture retains the serialized ship and its resources.
     unsafe {
         ship.ship_mut().cur_status_flags = SPECIAL as u16;
@@ -195,7 +195,7 @@ fn crystal_launch_hold_release_and_count_truncation_match_c() {
                 (*crystal).current.image.frame,
                 SetAbsFrameIndex(ship.descriptor_mut().ship_data.weapon.view(0).raw(), 0)
             );
-            assert_eq!((*crystal).current.image.farray, ship.frame_set(1));
+            assert_eq!((*crystal).current.image.frames, ship.frame_set(1));
             assert_eq!(
                 velocity_fields(&(*crystal).velocity),
                 velocity_toward(64, 7)
@@ -271,8 +271,8 @@ fn released_crystal_queues_eight_fragments_in_facing_order() {
                     SetAbsFrameIndex(ship.descriptor_mut().ship_data.weapon.view(0).raw(), 1)
                 );
                 assert_eq!(
-                    (*fragment).current.image.farray,
-                    (*crystal).next.image.farray
+                    (*fragment).current.image.frames,
+                    (*crystal).next.image.frames
                 );
                 assert!((*fragment).preprocess_func.is_none());
                 assert!((*fragment).postprocess_func.is_none());
@@ -367,8 +367,8 @@ fn crystal_collision_creates_sparkles_at_the_target_and_animates_current_frame()
             assert_eq!((*sparkle).turn, 0);
             assert_eq!((*sparkle).thrust, 0);
             assert_eq!(
-                (*sparkle).current.image.farray,
-                (*crystal).next.image.farray
+                (*sparkle).current.image.frames,
+                (*crystal).next.image.frames
             );
             assert_eq!(
                 (*sparkle).current.image.frame,
@@ -441,7 +441,7 @@ fn doggy_spawns_behind_ship_with_exact_state_and_coordinate_truncation() {
                 assert_eq!((*dog).mass, 4);
                 assert_eq!((*dog).thrust, 0);
                 assert_eq!((*prim(dog)).Type, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
-                assert_eq!((*dog).current.image.farray, ship.frame_set(2));
+                assert_eq!((*dog).current.image.frames, ship.frame_set(2));
                 assert_eq!(
                     (*dog).current.image.frame,
                     SetAbsFrameIndex(ship.descriptor_mut().ship_data.special.view(0).raw(), 0)
@@ -1081,7 +1081,7 @@ fn ai_scans_from_tail_skips_every_noncrystal_case_and_stops_at_the_first_match()
                 (*e).PrimIndex = prim_index;
                 match invalid {
                     0 => (*e).state_flags |= NONSOLID as u16,
-                    1 => (*e).next.image.farray = ship.frame_set(2),
+                    1 => (*e).next.image.frames = ship.frame_set(2),
                     2 => (*e).preprocess_func = None,
                     3 => (*e).life = 0,
                     4 => (*e).playerNr = 1,

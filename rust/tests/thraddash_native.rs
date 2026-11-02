@@ -1,6 +1,6 @@
 //! Live Thraddash callbacks, using the engine queue, frames, velocity and RNG.
 
-use uqm_rust::engine::battle::schema::HELEMENT;
+use uqm_rust::engine::battle::schema::HLINK;
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]
@@ -10,7 +10,7 @@ use std::{ffi::CStr, mem, ptr};
 use uqm_rust::graphics::context_abi::_GraphicsStatusFlags;
 use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, frame_index, sine};
 
-unsafe fn burn(ship: &mut Ship<'_>) -> *mut ELEMENT {
+unsafe fn burn(ship: &mut Ship<'_>) -> *mut ElementRecord {
     ship.ship_mut().cur_status_flags |= SPECIAL as u16;
     let head = battle::head();
     ship.preprocess();
@@ -18,10 +18,10 @@ unsafe fn burn(ship: &mut Ship<'_>) -> *mut ELEMENT {
     assert_ne!(trail, head);
     battle::element(trail)
 }
-unsafe fn fire(ship: &mut Ship<'_>) -> HELEMENT {
+unsafe fn fire(ship: &mut Ship<'_>) -> HLINK {
     ship.weapon_handles(1)[0]
 }
-unsafe fn queued() -> Vec<HELEMENT> {
+unsafe fn queued() -> Vec<HLINK> {
     let mut result = Vec::new();
     let mut h = battle::head();
     while !h.is_null() {
@@ -46,7 +46,7 @@ fn velocity_fields(v: &VELOCITY_DESC) -> [i32; 9] {
     ]
 }
 
-unsafe fn velocity(e: *mut ELEMENT) -> (SIZE, SIZE) {
+unsafe fn velocity(e: *mut ElementRecord) -> (SIZE, SIZE) {
     let (mut x, mut y) = (0, 0);
     GetCurrentVelocityComponents(&raw mut (*e).velocity, &mut x, &mut y);
     (x, y)
@@ -218,7 +218,7 @@ fn horn_uses_next_location_exact_facing_speed_and_offsets_without_inheriting_vel
                         - (i32::from(vy) >> VELOCITY_SHIFT)) as i16
                 );
                 assert_eq!((*e).current.image.frame, ship.raw_frame(1, facing as usize));
-                assert_eq!((*e).current.image.farray, ship.frame_set(1));
+                assert_eq!((*e).current.image.frames, ship.frame_set(1));
                 assert_eq!(
                     (*e).state_flags,
                     (APPEARING | FINITE_LIFE | IGNORE_SIMILAR) as u16
@@ -300,7 +300,7 @@ fn afterburner_inserts_owned_invisible_napalm_at_the_head_in_newest_first_order(
                 assert_eq!((*e).playerNr, 1);
                 assert_eq!((*e).current.image.frame, ship.raw_frame(2, 9));
                 assert_eq!((*e).next.image.frame, (*e).current.image.frame);
-                assert_eq!((*e).next.image.farray, (*e).current.image.farray);
+                assert_eq!((*e).next.image.frames, (*e).current.image.frames);
                 assert_eq!(((*e).current.location.x, (*e).current.location.y), (-9, 13));
                 assert_eq!(((*e).next.location.x, (*e).next.location.y), (-9, 13));
                 assert_eq!(velocity_fields(&(*e).velocity), [0; 9]);
@@ -462,7 +462,7 @@ fn napalm_materializes_without_decaying_and_initializes_the_intersection_from_ne
                 Ship::with_frames(&_battle, SPECIES_ID_THRADDASH_ID, 0, [16, 16, 10], [4, 4]);
             let e = burn(&mut ship);
             let next_frames = FrameSet::new(10);
-            (*e).next.image.farray = uqm_rust::engine::battle::frames::Frames::shared(
+            (*e).next.image.frames = uqm_rust::engine::battle::frames::Frames::shared(
                 uqm_rust::engine::battle::frames::SharedFrames::Fixture(0),
                 next_frames.array(),
             );

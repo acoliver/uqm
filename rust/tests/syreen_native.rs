@@ -1,6 +1,6 @@
 //! Exercise Syreen descriptor registration and callbacks against the linked engine.
 
-use uqm_rust::engine::battle::schema::HELEMENT;
+use uqm_rust::engine::battle::schema::HLINK;
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]
@@ -208,7 +208,9 @@ unsafe fn enter_battle(ship: &mut Ship<'_>, location: POINT, crew: u16) {
 }
 
 /// The scan the song queues, ready to be run as the element's death function.
-unsafe fn queued_scan(ship: &mut Ship) -> (*mut ELEMENT, uqm_rust::engine::battle::ElementHook) {
+unsafe fn queued_scan(
+    ship: &mut Ship,
+) -> (*mut ElementRecord, uqm_rust::engine::battle::ElementHook) {
     ship.ship_mut().cur_status_flags = SPECIAL as u16;
     ship.postprocess();
     let scan = battle::element(battle::tail());
@@ -261,7 +263,7 @@ fn deferred_scan_requeues_nothing_and_leaves_out_of_range_crews_alone() {
     })
 }
 
-unsafe fn walk_queue() -> Vec<HELEMENT> {
+unsafe fn walk_queue() -> Vec<HLINK> {
     let mut handles = Vec::new();
     let mut handle = battle::head();
     while !handle.is_null() {

@@ -58,7 +58,11 @@ impl std::ops::Deref for ElementObservation {
 impl ElementObservation {
     /// # Safety
     /// The caller retains the live source record and its reachable resource graph.
-    pub(crate) unsafe fn decode(record: &ELEMENT, groups: Option<&QUEUE>, target: usize) -> Self {
+    pub(crate) unsafe fn decode(
+        record: &ElementRecord,
+        groups: Option<&QUEUE>,
+        target: usize,
+    ) -> Self {
         Self {
             state: crate::engine::battle::access::observe_element_record(record),
             address: std::ptr::from_ref(record) as usize,

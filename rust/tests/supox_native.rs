@@ -355,7 +355,7 @@ fn ai_without_an_enemy_ship_drops_the_special_request() {
 }
 
 /// An incoming weapon the AI wants to dodge.
-fn dodge(ship: &mut Ship, concerns: &mut [EVALUATE_DESC; 4], weapon: *mut ELEMENT) {
+fn dodge(ship: &mut Ship, concerns: &mut [EVALUATE_DESC; 4], weapon: *mut ElementRecord) {
     let slot = &mut concerns[ENEMY_WEAPON_INDEX as usize];
     slot.ObjectPtr = weapon;
     slot.MoveState = MOVEMENT_STATE_AVOID;

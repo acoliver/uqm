@@ -167,10 +167,10 @@ pub use engine::{
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::battle::{kernel::CatalogEntry, record::RACE_DESC, RaceDesc};
+    use crate::engine::battle::{kernel::CatalogEntry, record::RaceDescriptor, RaceDesc};
 
     fn push(queue: &mut MasterCatalog, species: u32, cost: u8) {
-        let mut descriptor = RACE_DESC::EMPTY;
+        let mut descriptor = RaceDescriptor::EMPTY;
         descriptor.ship_info.ship_cost = cost;
         let id = queue
             .alloc(CatalogEntry {
@@ -217,7 +217,7 @@ mod tests {
         assert!(ships
             .alloc(CatalogEntry {
                 species: 26,
-                descriptor: RaceDesc::from_storage(Box::new(RACE_DESC::EMPTY)),
+                descriptor: RaceDesc::from_storage(Box::new(RaceDescriptor::EMPTY)),
             })
             .is_none());
     }

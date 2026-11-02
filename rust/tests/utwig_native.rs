@@ -1,4 +1,4 @@
-use uqm_rust::engine::battle::schema::HELEMENT;
+use uqm_rust::engine::battle::schema::HLINK;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
@@ -44,7 +44,7 @@ fn descriptor_and_six_lance_order_and_coordinates() {
                                 ship.weapon_record(Some(id)).cast()
                             })
                         })
-                        .collect::<Vec<HELEMENT>>()
+                        .collect::<Vec<HLINK>>()
                 });
                 let angle = facing_to_angle(i32::from(facing)) + QUADRANT as i32;
                 let vx = cosine(
@@ -218,7 +218,7 @@ fn lance_allocation_failure_still_returns_six_slots() {
                         ship.weapon_record(Some(id)).cast()
                     })
                 })
-                .collect::<Vec<HELEMENT>>();
+                .collect::<Vec<HLINK>>();
             assert!(!out[0].is_null() && !out[1].is_null());
             assert!(out[2..].iter().all(|h| h.is_null()));
             battle_context::dispose(out[0]);

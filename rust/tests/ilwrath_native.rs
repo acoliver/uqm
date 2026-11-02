@@ -8,7 +8,7 @@ use battle::{prim as prim_of, Battle, FrameSet, Ship};
 use std::{ffi::CStr, ptr};
 use uqm_rust::ships::native::{abi::*, frame_index as index_of};
 
-unsafe fn spawn_ship(fleet: &mut Ship<'_>, x: COORD, y: COORD) -> *mut ELEMENT {
+unsafe fn spawn_ship(fleet: &mut Ship<'_>, x: COORD, y: COORD) -> *mut ElementRecord {
     let ship = fleet.ptr();
     (*ship).current.location = POINT { x, y };
     (*ship).next.location = POINT { x, y };
@@ -28,28 +28,28 @@ const CYAN_DARK: Rgba = (0, 165, 165, 255);
 const BLUE_LIGHT: Rgba = (82, 82, 255, 255);
 const BLUE_DARK: Rgba = (0, 0, 165, 255);
 
-unsafe fn color_of(ship: *mut ELEMENT) -> Rgba {
+unsafe fn color_of(ship: *mut ElementRecord) -> Rgba {
     let color = (*prim_of(ship)).color;
     (color.r, color.g, color.b, color.a)
 }
 
-unsafe fn paint(ship: *mut ELEMENT, kind: gfx_object, (r, g, b, a): Rgba) {
+unsafe fn paint(ship: *mut ElementRecord, kind: gfx_object, (r, g, b, a): Rgba) {
     let prim = prim_of(ship);
     (*prim).Type = kind as u8;
     (*prim).color = Color { r, g, b, a };
 }
 
-unsafe fn prim_kind(ship: *mut ELEMENT) -> u8 {
+unsafe fn prim_kind(ship: *mut ElementRecord) -> u8 {
     (*prim_of(ship)).Type
 }
 
-unsafe fn preprocess(fleet: &mut Ship<'_>, ship: *mut ELEMENT) {
+unsafe fn preprocess(fleet: &mut Ship<'_>, ship: *mut ElementRecord) {
     assert_eq!(ship, fleet.ptr());
     fleet.preprocess();
 }
 
 /// An Avenger at (1000, 1000) facing 0 with a visible primitive.
-unsafe fn avenger(fleet: &mut Ship<'_>) -> *mut ELEMENT {
+unsafe fn avenger(fleet: &mut Ship<'_>) -> *mut ElementRecord {
     let ship = spawn_ship(fleet, 1000, 1000);
     fleet.ship_mut().ShipFacing = 0;
     ship
@@ -538,7 +538,7 @@ fn enemy_in_range(which_turn: COUNT) -> EVALUATE_DESC {
 /// act on, so only the Avenger's own decisions show in the input state.
 unsafe fn think(
     fleet: &mut Ship<'_>,
-    ship: *mut ELEMENT,
+    ship: *mut ElementRecord,
     concerns: &mut [EVALUATE_DESC; 4],
     input: u8,
 ) -> u8 {
@@ -547,7 +547,7 @@ unsafe fn think(
     fleet.ship_mut().ship_input_state
 }
 
-fn concerns_with(enemy: *mut ELEMENT, which_turn: COUNT) -> [EVALUATE_DESC; 4] {
+fn concerns_with(enemy: *mut ElementRecord, which_turn: COUNT) -> [EVALUATE_DESC; 4] {
     let mut concerns = [enemy_in_range(0); 4];
     concerns[ENEMY_SHIP_INDEX as usize].ObjectPtr = enemy;
     concerns[ENEMY_SHIP_INDEX as usize].which_turn = which_turn;

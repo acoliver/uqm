@@ -130,7 +130,7 @@ unsafe extern "C" fn unsafe_frame_input_computer(
     {
         handler_stubs::computer_intelligence(
             ctx.cast::<crate::ships::native::abi::ComputerInputContext>(),
-            ship.cast::<crate::ships::native::abi::STARSHIP>(),
+            ship.cast::<crate::ships::native::abi::ShipRecord>(),
         )
     }
 }
@@ -147,7 +147,7 @@ unsafe extern "C" fn unsafe_frame_input_human(
     {
         handler_stubs::frame_input_human(
             ctx.cast::<crate::ships::native::abi::HumanInputContext>(),
-            ship.cast::<crate::ships::native::abi::STARSHIP>(),
+            ship.cast::<crate::ships::native::abi::ShipRecord>(),
         )
     }
 }
@@ -325,18 +325,18 @@ unsafe extern "C" fn delete_network_context(context: *mut InputContext) {
 mod handler_stubs {
     use super::{BattleInputState, Boolean};
     use crate::engine::battle::schema::GETMELEE_STATE;
-    use crate::ships::native::abi::{ComputerInputContext, HumanInputContext, STARSHIP};
+    use crate::ships::native::abi::{ComputerInputContext, HumanInputContext, ShipRecord};
 
     pub unsafe extern "C" fn computer_intelligence(
         _context: *mut ComputerInputContext,
-        _ship: *mut STARSHIP,
+        _ship: *mut ShipRecord,
     ) -> BattleInputState {
         0
     }
 
     pub unsafe extern "C" fn frame_input_human(
         _context: *mut HumanInputContext,
-        _ship: *mut STARSHIP,
+        _ship: *mut ShipRecord,
     ) -> BattleInputState {
         0
     }

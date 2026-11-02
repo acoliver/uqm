@@ -472,7 +472,7 @@ pub extern "C" fn rust_game_loop() -> c_int {
     // SAFETY: this is the synchronous game-thread lifecycle and storage boundary.
     match unsafe {
         crate::app::bridge::with_battle(
-            crate::game_init::space_resources::shared_frame_source,
+            crate::game_init::world_resources::shared_frame_source,
             || run_game_lifecycle_impl(&cffi::CffiOps),
         )
     } {

@@ -285,7 +285,7 @@ fn special_switches_to_blazer_and_saves_the_collision_function() {
             ship.ship_mut().cur_status_flags = (SPECIAL | WEAPON) as u16;
             ship.preprocess();
             assert_eq!(
-                { ship.element_mut().next.image.farray.clone() },
+                { ship.element_mut().next.image.frames.clone() },
                 ship.special_frames()
             );
             // Weapon is suppressed on the switching frame; special is still held.
@@ -351,7 +351,7 @@ fn low_energy_special_flashes_text_without_switching() {
             ship.ship_mut().cur_status_flags = (SPECIAL | WEAPON) as u16;
             ship.preprocess();
             assert_eq!(
-                { ship.element_mut().next.image.farray.clone() },
+                { ship.element_mut().next.image.frames.clone() },
                 ship.ship_frames()
             );
             assert_eq!(ship.element_mut().state_flags & CHANGING as u16, 0);
@@ -443,7 +443,7 @@ fn exhausted_blazer_reverts_and_restores_the_saved_collision_function() {
             enter_blazer(&mut ship);
             let blazer_handler = address(ship.element_mut().collision_func);
             let blazer_farray = ship.special_frames();
-            assert_eq!(ship.element_mut().next.image.farray, blazer_farray);
+            assert_eq!(ship.element_mut().next.image.frames, blazer_farray);
 
             // Moving, turning and out of energy.
             SetVelocityVector(&raw mut ship.element_mut().velocity, 60, 3);
@@ -454,7 +454,7 @@ fn exhausted_blazer_reverts_and_restores_the_saved_collision_function() {
             ship.preprocess();
 
             assert_eq!(
-                { ship.element_mut().next.image.farray.clone() },
+                { ship.element_mut().next.image.frames.clone() },
                 ship.ship_frames()
             );
             assert_ne!(ship.element_mut().state_flags & CHANGING as u16, 0);
@@ -614,7 +614,7 @@ impl<'a> Duel<'a> {
         duel
     }
 
-    fn weapon_threat(mut self, threat: *mut ELEMENT, which_turn: u16) -> Self {
+    fn weapon_threat(mut self, threat: *mut ElementRecord, which_turn: u16) -> Self {
         let slot = &mut self.concerns[concern_slot(ENEMY_WEAPON_INDEX)];
         slot.ObjectPtr = threat;
         slot.which_turn = which_turn;
@@ -783,10 +783,10 @@ fn guardian_preprocess_keeps_an_absent_optional_image_set() {
         let mut ship = Ship::bare(&pool, SPECIES_ID_ANDROSYNTH_ID, 0);
         // SAFETY: the fixture owns the serialized pool throughout the callback.
         unsafe {
-            assert!(ship.element_mut().current.image.farray.is_absent());
+            assert!(ship.element_mut().current.image.frames.is_absent());
             ship.preprocess();
-            assert!(ship.element_mut().current.image.farray.is_absent());
-            assert!(ship.element_mut().next.image.farray.is_absent());
+            assert!(ship.element_mut().current.image.frames.is_absent());
+            assert!(ship.element_mut().next.image.frames.is_absent());
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 24);
         }
     });

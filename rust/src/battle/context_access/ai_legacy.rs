@@ -80,9 +80,3 @@ impl Cx<'_> {
         raw.copy_from_slice(&concerns.objects[..raw.len()]);
     }
 }
-
-#[cfg(not(test))]
-pub(crate) unsafe fn with_context<R>(call: impl FnOnce(&mut Cx<'_>) -> R) -> R {
-    // SAFETY: the legacy entry owns the current game-thread publication.
-    unsafe { crate::app::bridge::enter(call) }
-}

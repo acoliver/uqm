@@ -127,19 +127,6 @@ pub unsafe extern "C" fn free_image(frames: *mut [*mut frame_desc; 3]) -> u32 {
 #[cfg(not(test))]
 pub(crate) mod live {
     #![allow(non_snake_case)]
-    pub fn shared_frame_source(
-        role: crate::engine::battle::views::SharedFrames,
-    ) -> std::ptr::NonNull<crate::graphics::native_abi::FRAME> {
-        use crate::engine::battle::views::SharedFrames;
-        let source = match role {
-            SharedFrames::Asteroid => (&raw mut asteroid).cast(),
-            SharedFrames::Explosion => (&raw mut explosion).cast(),
-            _ => panic!("not a battle shared frame role {role:?}"),
-        };
-        std::ptr::NonNull::new(source)
-            .unwrap_or_else(|| panic!("shared frame authority has no address"))
-    }
-
     use super::*;
 
     #[no_mangle]

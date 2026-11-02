@@ -10,7 +10,7 @@ use crate::engine::battle::{ElementId, ElementTable, Parent, ShipId};
 use std::mem::size_of;
 
 use super::hyper_save::*;
-use crate::c_bindings::global_state::{ELEMENT, PLAYER_SHIP, RPG_PLAYER_NUM, STARSHIP};
+use crate::c_bindings::global_state::{ElementRecord, ShipRecord, PLAYER_SHIP, RPG_PLAYER_NUM};
 use crate::comm::locdata::CGameState;
 use crate::engine::battle::link_queue::RacePool;
 
@@ -24,14 +24,14 @@ const SHIP_SLOTS: u16 = 14;
 const ELEMENT_SLOTS: u16 = 150;
 const SENTINEL_FACING: u16 = 0x5555;
 
-fn allocate(queue: &mut RacePool, record: STARSHIP) -> *mut STARSHIP {
+fn allocate(queue: &mut RacePool, record: ShipRecord) -> *mut ShipRecord {
     let id = queue
         .alloc(record)
         .unwrap_or_else(|| panic!("fixture capacity"));
     std::ptr::from_mut(queue.get_mut(id))
 }
 
-fn push(queue: &mut RacePool, record: STARSHIP) -> *mut STARSHIP {
+fn push(queue: &mut RacePool, record: ShipRecord) -> *mut ShipRecord {
     let id = queue
         .alloc(record)
         .unwrap_or_else(|| panic!("fixture capacity"));
@@ -39,22 +39,22 @@ fn push(queue: &mut RacePool, record: STARSHIP) -> *mut STARSHIP {
     std::ptr::from_mut(queue.get_mut(id))
 }
 
-fn allocate_element(elements: &mut ElementTable, value: ELEMENT) -> *mut ELEMENT {
+fn allocate_element(elements: &mut ElementTable, value: ElementRecord) -> *mut ElementRecord {
     let id = elements.alloc().expect("fixture capacity");
     elements[id] = value;
     elements.raw(id).cast()
 }
 
-fn push_element(elements: &mut ElementTable, value: ELEMENT) -> *mut ELEMENT {
+fn push_element(elements: &mut ElementTable, value: ElementRecord) -> *mut ElementRecord {
     let pointer = allocate_element(elements, value);
     let id = elements.id(pointer.cast()).unwrap();
     elements.put(id);
     pointer
 }
 
-fn starship(facing: u16, element: Option<ElementId>) -> STARSHIP {
+fn starship(facing: u16, element: Option<ElementId>) -> ShipRecord {
     // SAFETY: `STARSHIP` is integers, pointers and optional function pointers.
-    let mut ship: STARSHIP = unsafe { std::mem::zeroed() };
+    let mut ship: ShipRecord = unsafe { std::mem::zeroed() };
     ship.ShipFacing = facing;
     ship.hShip = element;
     ship.captains_name_index = 1;
@@ -62,9 +62,9 @@ fn starship(facing: u16, element: Option<ElementId>) -> STARSHIP {
     ship
 }
 
-fn element(flags: u16, owner: Parent) -> ELEMENT {
+fn element(flags: u16, owner: Parent) -> ElementRecord {
     // SAFETY: `ELEMENT` is integers, pointers and optional function pointers.
-    let mut element: ELEMENT = unsafe { std::mem::zeroed() };
+    let mut element: ElementRecord = unsafe { std::mem::zeroed() };
     element.state_flags = flags;
     element.parent = owner;
     element.playerNr = 0;
@@ -108,13 +108,13 @@ impl Queues {
         queues
     }
 
-    fn head_ship(&self) -> *mut STARSHIP {
+    fn head_ship(&self) -> *mut ShipRecord {
         self.ships.head().map_or(std::ptr::null_mut(), |id| {
             std::ptr::from_ref(self.ships.get(id)).cast_mut()
         })
     }
 
-    fn flagship_element(&self) -> *mut ELEMENT {
+    fn flagship_element(&self) -> *mut ElementRecord {
         // SAFETY: the head is a slot of the ship pool.
         unsafe { self.display.raw((*self.head_ship()).hShip.unwrap()).cast() }
     }

@@ -423,7 +423,7 @@ fn allocated_copy_keeps_primitive_identity_parent_target_and_observations() {
                     matches!(events.as_slice(), [uqm_rust::collections::observation::Event::ImageCopy { target, source, bytes }]
                     if *target == cx.elements().raw(dest) as usize
                         && *source == cx.elements().raw(ship.id) as usize
-                        && *bytes == std::mem::size_of::<ELEMENT>())
+                        && *bytes == std::mem::size_of::<ElementRecord>())
                 );
                 cx.put(dest);
                 cx.unlink(dest);

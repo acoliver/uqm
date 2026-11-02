@@ -12,10 +12,9 @@ pub use crate::graphics::native_abi::{INTERSECT_CONTROL, PRIMITIVE};
 pub type QUEUE = Queue;
 
 pub use abi::{
-    captain_stuff, element, race_desc, state, state__bindgen_ty_1, tfb_soundsample,
-    TFB_SoundSample, CAPTAIN_STUFF, CHARACTERISTIC_STUFF, DATA_STUFF, ELEMENT, EVALUATE_DESC,
-    FLEET_STUFF, INTEL_STUFF, MAX_DISPLAY_PRIMS, MOVEMENT_STATE, MUSIC_REF, PRIM_DESC, RACE_DESC,
-    SHIP_INFO, STARSHIP, STATE,
+    captain_stuff, state, state__bindgen_ty_1, tfb_soundsample, ElementRecord, ShipRecord,
+    TFB_SoundSample, CAPTAIN_STUFF, CHARACTERISTIC_STUFF, DATA_STUFF, EVALUATE_DESC, FLEET_STUFF,
+    INTEL_STUFF, MAX_DISPLAY_PRIMS, MOVEMENT_STATE, MUSIC_REF, PRIM_DESC, SHIP_INFO, STATE,
 };
 
 #[allow(non_camel_case_types, non_snake_case)]
@@ -33,28 +32,27 @@ mod abi {
     #[derive(Debug, Clone)]
     pub struct state__bindgen_ty_1 {
         pub frame: FRAME,
-        pub farray: super::super::frames::Frames,
+        pub frames: super::super::frames::Frames,
     }
     pub type STATE = state;
-    pub type ELEMENT = element;
     const _: () = {
         use crate::battle::element::{Element, ElementVisualState as Visual};
         use std::mem::offset_of as offset;
-        assert!(size_of::<ELEMENT>() == size_of::<Element>());
-        assert!(align_of::<ELEMENT>() == align_of::<Element>());
-        assert!(offset!(ELEMENT, state_flags) == offset!(Element, state_flags));
-        assert!(offset!(ELEMENT, current) == offset!(Element, current));
+        assert!(size_of::<ElementRecord>() == size_of::<Element>());
+        assert!(align_of::<ElementRecord>() == align_of::<Element>());
+        assert!(offset!(ElementRecord, state_flags) == offset!(Element, state_flags));
+        assert!(offset!(ElementRecord, current) == offset!(Element, current));
         assert!(offset!(STATE, location) == offset!(Visual, location));
         assert!(
             offset!(STATE, image) + offset!(state__bindgen_ty_1, frame) == offset!(Visual, frame)
         );
         assert!(
-            offset!(STATE, image) + offset!(state__bindgen_ty_1, farray) == offset!(Visual, farray)
+            offset!(STATE, image) + offset!(state__bindgen_ty_1, frames) == offset!(Visual, frames)
         );
     };
     #[repr(C)]
     #[derive(Debug, Clone)]
-    pub struct element {
+    pub struct ElementRecord {
         pub preprocess_func: Option<super::super::hooks::ElementHook>,
         pub postprocess_func: Option<super::super::hooks::ElementHook>,
         pub collision_func: Option<crate::engine::battle::CollisionHook>,
@@ -76,15 +74,12 @@ mod abi {
         pub target: Option<super::super::ElementId>,
     }
 
-    pub type RACE_DESC = race_desc;
-    pub use super::RaceDescriptor as race_desc;
-
     #[repr(C)]
     #[derive(Debug)]
-    pub struct STARSHIP {
+    pub struct ShipRecord {
         pub SpeciesID: SPECIES_ID,
         pub captains_name_index: BYTE,
-        pub descriptor: Option<Box<RACE_DESC>>,
+        pub descriptor: Option<Box<RaceDescriptor>>,
         pub crew_level: COUNT,
         pub max_crew: COUNT,
         pub ship_cost: BYTE,
@@ -103,8 +98,8 @@ mod abi {
         pub control: BYTE,
     }
 
-    impl STARSHIP {
-        pub fn descriptor_ptr(&mut self) -> *mut RACE_DESC {
+    impl ShipRecord {
+        pub fn descriptor_ptr(&mut self) -> *mut RaceDescriptor {
             self.descriptor
                 .as_deref_mut()
                 .map_or(std::ptr::null_mut(), std::ptr::from_mut)
@@ -138,7 +133,7 @@ mod abi {
     #[repr(C)]
     #[derive(Debug, Copy, Clone)]
     pub struct EVALUATE_DESC {
-        pub ObjectPtr: *mut ELEMENT,
+        pub ObjectPtr: *mut ElementRecord,
         pub facing: COUNT,
         pub which_turn: COUNT,
         pub MoveState: MOVEMENT_STATE,
@@ -210,13 +205,13 @@ mod abi {
     pub const MAX_DISPLAY_PRIMS: u32 = 330;
 }
 
-impl Default for ELEMENT {
+impl Default for ElementRecord {
     fn default() -> Self {
         let visual = STATE {
             location: POINT { x: 0, y: 0 },
             image: state__bindgen_ty_1 {
                 frame: ptr::null_mut(),
-                farray: super::frames::Frames::ABSENT,
+                frames: super::frames::Frames::ABSENT,
             },
         };
         Self {
@@ -250,7 +245,7 @@ impl Default for ELEMENT {
     }
 }
 
-impl Default for STARSHIP {
+impl Default for ShipRecord {
     fn default() -> Self {
         Self {
             SpeciesID: 0,
@@ -276,7 +271,7 @@ impl Default for STARSHIP {
     }
 }
 
-impl ELEMENT {
+impl ElementRecord {
     pub fn life_span(&self) -> u16 {
         self.life
     }
@@ -310,7 +305,7 @@ impl ELEMENT {
 }
 
 impl ElementState {
-    pub(super) fn decode(e: &ELEMENT) -> Self {
+    pub(super) fn decode(e: &ElementRecord) -> Self {
         Self {
             player: e.playerNr,
             flags: e.state_flags,
@@ -325,14 +320,14 @@ impl ElementState {
                 location: e.current.location,
                 image: Image {
                     frame: Frame(e.current.image.frame),
-                    frames: e.current.image.farray.clone(),
+                    frames: e.current.image.frames.clone(),
                 },
             },
             next: Visual {
                 location: e.next.location,
                 image: Image {
                     frame: Frame(e.next.image.frame),
-                    frames: e.next.image.farray.clone(),
+                    frames: e.next.image.frames.clone(),
                 },
             },
             pre: e.preprocess_func,
@@ -341,7 +336,7 @@ impl ElementState {
             death: e.death_func,
         }
     }
-    pub(super) fn apply(e: &mut ELEMENT, value: Self) {
+    pub(super) fn apply(e: &mut ElementRecord, value: Self) {
         e.playerNr = value.player;
         e.state_flags = value.flags;
         e.set_life_span(value.life);
@@ -354,9 +349,9 @@ impl ElementState {
         e.current.location = value.current.location;
         e.next.location = value.next.location;
         e.current.image.frame = value.current.image.frame.0;
-        e.current.image.farray = value.current.image.frames;
+        e.current.image.frames = value.current.image.frames;
         e.next.image.frame = value.next.image.frame.0;
-        e.next.image.farray = value.next.image.frames;
+        e.next.image.frames = value.next.image.frames;
         e.preprocess_func = value.pre;
         e.postprocess_func = value.post;
         e.collision_func = value.collide;
@@ -365,7 +360,7 @@ impl ElementState {
 }
 
 impl ShipState {
-    pub(super) fn decode(s: &STARSHIP) -> Self {
+    pub(super) fn decode(s: &ShipRecord) -> Self {
         Self {
             facing: s.ShipFacing,
             control: s.control,
@@ -379,7 +374,7 @@ impl ShipState {
             crew: s.crew_level,
         }
     }
-    fn apply(s: &mut STARSHIP, v: Self) {
+    fn apply(s: &mut ShipRecord, v: Self) {
         s.ShipFacing = v.facing;
         s.control = v.control;
         s.playerNr = v.player;
@@ -394,7 +389,7 @@ impl ShipState {
 }
 
 impl RaceStats {
-    pub(super) fn decode(d: &RACE_DESC) -> Self {
+    pub(super) fn decode(d: &RaceDescriptor) -> Self {
         let i = d.ship_info;
         Self {
             ship_info: Info {
@@ -413,7 +408,7 @@ impl RaceStats {
             state: d.race_state,
         }
     }
-    pub(super) fn apply(d: &mut RACE_DESC, v: Self) {
+    pub(super) fn apply(d: &mut RaceDescriptor, v: Self) {
         d.ship_info.ship_flags = v.ship_info.ship_flags;
         d.ship_info.ship_cost = v.ship_info.ship_cost;
         d.ship_info.crew_level = v.ship_info.crew_level;
@@ -431,10 +426,10 @@ use super::views::*;
 use super::{Cx, ElementId, Parent, ShipId};
 
 impl Cx<'_> {
-    pub(crate) fn ship_pointer(&self, id: ShipId) -> *mut STARSHIP {
+    pub(crate) fn ship_pointer(&self, id: ShipId) -> *mut ShipRecord {
         std::ptr::from_ref(self.ship(id)).cast_mut()
     }
-    pub(crate) fn ship(&self, id: ShipId) -> &STARSHIP {
+    pub(crate) fn ship(&self, id: ShipId) -> &ShipRecord {
         let pool = &self.b.kernel.races[usize::from(id.side)];
         let key = pool
             .id_at(usize::from(id.slot))
@@ -442,7 +437,7 @@ impl Cx<'_> {
         assert_eq!(id.gen, key.generation(), "stale ship {id:?}");
         pool.get(key)
     }
-    pub(super) fn ship_mut(&mut self, id: ShipId) -> &mut STARSHIP {
+    pub(super) fn ship_mut(&mut self, id: ShipId) -> &mut ShipRecord {
         let pool = &mut self.b.kernel.races[usize::from(id.side)];
         let key = pool
             .id_at(usize::from(id.slot))
@@ -450,13 +445,13 @@ impl Cx<'_> {
         assert_eq!(id.gen, key.generation(), "stale ship {id:?}");
         pool.get_mut(key)
     }
-    pub(crate) fn desc(&self, id: ShipId) -> &RACE_DESC {
+    pub(crate) fn desc(&self, id: ShipId) -> &RaceDescriptor {
         self.ship(id)
             .descriptor
             .as_deref()
             .unwrap_or_else(|| panic!("ship {id:?} has no descriptor"))
     }
-    pub(super) fn desc_mut(&mut self, id: ShipId) -> &mut RACE_DESC {
+    pub(super) fn desc_mut(&mut self, id: ShipId) -> &mut RaceDescriptor {
         self.ship_mut(id)
             .descriptor
             .as_deref_mut()
@@ -466,7 +461,7 @@ impl Cx<'_> {
     pub(crate) fn captain_controls(&mut self, id: ShipId) -> std::ptr::NonNull<CAPTAIN_STUFF> {
         std::ptr::NonNull::from(&mut self.desc_mut(id).ship_data.captain_control)
     }
-    pub(super) fn decode_subject(&self, e: &ELEMENT) -> super::Subject {
+    pub(super) fn decode_subject(&self, e: &ElementRecord) -> super::Subject {
         super::Subject {
             state: ElementState::decode(e),
             target: e.target,
@@ -475,7 +470,7 @@ impl Cx<'_> {
             primitive: e.PrimIndex,
         }
     }
-    pub(crate) fn encode_subject(&self, subject: &super::Subject) -> ELEMENT {
+    pub(crate) fn encode_subject(&self, subject: &super::Subject) -> ElementRecord {
         let mut e = subject.state.clone().encode();
         ElementState::apply(&mut e, subject.state.clone());
         e.target = subject.target;
@@ -485,7 +480,7 @@ impl Cx<'_> {
         e
     }
     /// Return the checked legacy address; dereferencing it requires the owning game-thread boundary.
-    pub fn legacy_element(&self, id: ElementId) -> *mut ELEMENT {
+    pub fn legacy_element(&self, id: ElementId) -> *mut ElementRecord {
         self.b.kernel.elements.raw(id).cast()
     }
     #[cfg(not(test))]
@@ -498,7 +493,7 @@ impl Cx<'_> {
 }
 
 impl Cx<'_> {
-    pub fn element_mut(&mut self, id: ElementId) -> Edit<'_, ElementState, ELEMENT> {
+    pub fn element_mut(&mut self, id: ElementId) -> Edit<'_, ElementState, ElementRecord> {
         let value = self.element(id);
         Edit {
             value,
@@ -509,7 +504,7 @@ impl Cx<'_> {
 }
 
 impl Cx<'_> {
-    pub fn ship_state_mut(&mut self, id: ShipId) -> Edit<'_, ShipState, STARSHIP> {
+    pub fn ship_state_mut(&mut self, id: ShipId) -> Edit<'_, ShipState, ShipRecord> {
         let value = self.ship_state(id);
         Edit {
             value,
@@ -520,7 +515,7 @@ impl Cx<'_> {
 }
 
 impl Cx<'_> {
-    pub fn race_stats_mut(&mut self, id: ShipId) -> Edit<'_, RaceStats, RACE_DESC> {
+    pub fn race_stats_mut(&mut self, id: ShipId) -> Edit<'_, RaceStats, RaceDescriptor> {
         let value = self.race_stats(id);
         Edit {
             value,
@@ -532,22 +527,22 @@ impl Cx<'_> {
 
 #[derive(Debug)]
 pub struct RaceDesc {
-    pub(super) raw: Box<RACE_DESC>,
+    pub(super) raw: Box<RaceDescriptor>,
 }
 impl RaceDesc {
     pub(super) fn empty() -> Self {
         Self {
-            raw: Box::new(RACE_DESC::EMPTY),
+            raw: Box::new(RaceDescriptor::EMPTY),
         }
     }
-    pub(super) fn from_legacy(raw: RACE_DESC) -> Self {
+    pub(super) fn from_legacy(raw: RaceDescriptor) -> Self {
         Self { raw: Box::new(raw) }
     }
-    pub(crate) fn from_storage(raw: Box<RACE_DESC>) -> Self {
+    pub(crate) fn from_storage(raw: Box<RaceDescriptor>) -> Self {
         Self { raw }
     }
     #[cfg(not(test))]
-    pub(crate) fn into_storage(self) -> Box<RACE_DESC> {
+    pub(crate) fn into_storage(self) -> Box<RaceDescriptor> {
         self.raw
     }
     pub fn info(&self) -> &SHIP_INFO {
@@ -581,12 +576,12 @@ impl RaceDesc {
         self.raw.cleanup(world);
     }
     /// Extract the legacy record; dereferencing its resource pointers remains unsafe.
-    pub fn into_legacy(self) -> RACE_DESC {
+    pub fn into_legacy(self) -> RaceDescriptor {
         *self.raw
     }
 }
 
-impl RACE_DESC {
+impl RaceDescriptor {
     pub fn callbacks(&self) -> [usize; 5] {
         if let Some(race) = self.race {
             [
@@ -618,8 +613,8 @@ pub(crate) fn ship_queue(side: usize) -> std::ptr::NonNull<super::link_queue::Ra
     std::ptr::NonNull::from(&mut unsafe { Kernel::current() }.races[side])
 }
 impl ElementState {
-    fn encode(self) -> ELEMENT {
-        ELEMENT {
+    fn encode(self) -> ElementRecord {
+        ElementRecord {
             preprocess_func: self.pre,
             postprocess_func: self.post,
             collision_func: self.collide,
@@ -646,14 +641,14 @@ impl ElementState {
                 location: self.current.location,
                 image: state__bindgen_ty_1 {
                     frame: self.current.image.frame.0,
-                    farray: self.current.image.frames,
+                    frames: self.current.image.frames,
                 },
             },
             next: STATE {
                 location: self.next.location,
                 image: state__bindgen_ty_1 {
                     frame: self.next.image.frame.0,
-                    farray: self.next.image.frames,
+                    frames: self.next.image.frames,
                 },
             },
             parent: Parent::None,
@@ -673,7 +668,7 @@ mod projection_tests {
         let (id, pointer) = {
             let mut ships = battle.ships(0);
             let link = ships.alloc().unwrap();
-            (ships.ship_id(link, 0), ships.raw(link).cast::<STARSHIP>())
+            (ships.ship_id(link, 0), ships.raw(link).cast::<ShipRecord>())
         };
         let mut activity = 0;
         let mut groups = QUEUE::default();
@@ -696,7 +691,7 @@ mod projection_tests {
             let link = ships.link(id);
             ships.free(link);
             let next = ships.alloc().unwrap();
-            assert_eq!(ships.raw(next).cast::<STARSHIP>(), pointer);
+            assert_eq!(ships.raw(next).cast::<ShipRecord>(), pointer);
             ships.ship_id(next, 0)
         };
         assert_ne!(replacement.gen, id.gen);
@@ -724,7 +719,7 @@ mod projection_tests {
             rng: || 0,
         };
         // SAFETY: legacy record scalar fields, nullable hooks and unions admit zero.
-        let mut raw: ELEMENT = unsafe { std::mem::zeroed() };
+        let mut raw: ElementRecord = unsafe { std::mem::zeroed() };
         raw.state_flags = 513;
         raw.playerNr = 1;
         raw.colorCycleIndex = 9;
@@ -783,7 +778,7 @@ mod projection_tests {
     #[test]
     fn ship_and_descriptor_values_preserve_resources_while_updating_stats() {
         // SAFETY: zero is valid for nullable legacy ship fields and scalars.
-        let mut ship: STARSHIP = unsafe { std::mem::zeroed() };
+        let mut ship: ShipRecord = unsafe { std::mem::zeroed() };
         let mut state = ShipState::decode(&ship);
         state.facing = 7;
         state.energy_counter = 9;
@@ -792,7 +787,7 @@ mod projection_tests {
         assert_eq!(ship.ShipFacing, 7);
         assert_eq!(ship.energy_counter, 9);
         assert_eq!(ship.weapon_counter, 4);
-        let mut descriptor = RACE_DESC::EMPTY;
+        let mut descriptor = RaceDescriptor::EMPTY;
         descriptor.ship_data.ship_rsc[0] = c"retained".as_ptr();
         let mut stats = RaceStats::decode(&descriptor);
         stats.ship_info.energy_level = 10;
@@ -809,7 +804,7 @@ mod projection_tests {
 }
 
 #[cfg(not(test))]
-impl RACE_DESC {
+impl RaceDescriptor {
     pub(crate) fn cleanup(&mut self, world: &mut super::World) {
         if let Some(uninit) = self.race.and_then(|race| race.uninit) {
             let mut stats = RaceStats::decode(self);
@@ -824,7 +819,7 @@ mod zero_descriptor_tests {
     #[test]
     fn zero_descriptor_has_no_native_race_state() {
         // SAFETY: a zeroed legacy descriptor contains nullable callbacks, pointers, and scalar state.
-        let descriptor: super::RACE_DESC = unsafe { std::mem::zeroed() };
+        let descriptor: super::RaceDescriptor = unsafe { std::mem::zeroed() };
         assert!(matches!(
             descriptor.race_state,
             crate::engine::battle::RaceState::None
@@ -949,7 +944,7 @@ mod kernel_tests {
     fn loading_during_a_callback_retains_its_ship_through_battle_cleanup() {
         let mut kernel = Kernel::new();
         kernel.races[0].reset_capacity(1);
-        let ship = kernel.races[0].alloc(STARSHIP::default()).unwrap();
+        let ship = kernel.races[0].alloc(ShipRecord::default()).unwrap();
         kernel.races[0].get_mut(ship).special_counter = 7;
         kernel.races[0].put(ship);
         kernel.begin_battle();
@@ -959,7 +954,7 @@ mod kernel_tests {
         kernel.races[0].get_mut(ship).special_counter = 10;
         kernel.finish_battle();
         assert!(!kernel.races[0].contains(ship));
-        let replacement = kernel.races[0].alloc(STARSHIP::default()).unwrap();
+        let replacement = kernel.races[0].alloc(ShipRecord::default()).unwrap();
         assert_eq!(replacement.index(), ship.index());
         assert_ne!(replacement.generation(), ship.generation());
         assert_eq!(kernel.races[0].get(replacement).special_counter, 0);
@@ -994,12 +989,12 @@ mod kernel_tests {
 
 use super::link_queue::QueueRecord;
 impl QueueRecord for crate::engine::battle::link_queue::Starship {
-    type Storage = STARSHIP;
+    type Storage = ShipRecord;
 }
 
 #[cfg(not(test))]
 impl Cx<'_> {
-    pub(crate) fn legacy_intercept_subject(&self, e: &ELEMENT) -> Subject {
+    pub(crate) fn legacy_intercept_subject(&self, e: &ElementRecord) -> Subject {
         Subject {
             state: ElementState::decode(e),
             intersect: e.IntersectControl,

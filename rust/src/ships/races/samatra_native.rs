@@ -142,7 +142,7 @@ pub(crate) mod engine {
         let mut b = Missile {
             cx: cx.element(e).next.location.x,
             cy: cx.element(e).next.location.y,
-            farray: cx.ship_frame_set(ss, 1),
+            frames: cx.ship_frame_set(ss, 1),
             face: 0,
             index: 24,
             sender: cx.element(e).player,
@@ -590,7 +590,7 @@ pub(crate) mod engine {
                 let mut b = Missile {
                     cx: cx.element(e).next.location.x,
                     cy: cx.element(e).next.location.y,
-                    farray: cx.ship_frame_set(ss, 1),
+                    frames: cx.ship_frame_set(ss, 1),
                     face: 0,
                     index: 0,
                     sender: cx.element(e).player,

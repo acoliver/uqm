@@ -20,7 +20,7 @@ fn parentless_image_retains_frames_after_descriptor_and_owner_are_gone() {
     let lease = Rc::new(Lease {
         drops: releases.clone(),
     });
-    let mut descriptor = uqm_rust::engine::battle::record::RACE_DESC::EMPTY;
+    let mut descriptor = uqm_rust::engine::battle::record::RaceDescriptor::EMPTY;
     descriptor.ship_data.weapon = FrameArray::retain([Frame::ABSENT; 3], lease.clone());
     let ship = ShipId {
         side: 0,

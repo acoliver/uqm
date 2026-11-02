@@ -4,10 +4,10 @@ fn frame_views(views: Frames) -> [FRAME; 3] {
     std::array::from_fn(|index| views.view(index).raw())
 }
 
-fn records() -> ([Element; 2], [STARSHIP; 2], [race_desc; 2]) {
+fn records() -> ([Element; 2], [ShipRecord; 2], [RaceDescriptor; 2]) {
     // SAFETY: these ABI ship records contain only integers, pointers and optional callbacks.
     let states = unsafe { mem::zeroed() };
-    let mut races = [race_desc::EMPTY; 2];
+    let mut races = [RaceDescriptor::EMPTY; 2];
     for race in &mut races {
         race.ship_info.crew_level = 10;
         race.ship_info.max_energy = 100;
@@ -18,8 +18,8 @@ fn records() -> ([Element; 2], [STARSHIP; 2], [race_desc; 2]) {
 
 fn world(
     elements: &mut [Element; 2],
-    states: &mut [STARSHIP; 2],
-    races: &mut [race_desc; 2],
+    states: &mut [ShipRecord; 2],
+    races: &mut [RaceDescriptor; 2],
 ) -> World {
     let mut world = World::new((SUPER_MELEE | IN_BATTLE) as u16, [2; 2], 0);
     for (side, ((element, state), race)) in elements.iter_mut().zip(states).zip(races).enumerate() {

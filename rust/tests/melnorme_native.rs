@@ -1,6 +1,6 @@
 //! Exercise the Melnorme descriptor and callbacks against the linked battle engine.
 
-use uqm_rust::engine::battle::schema::HELEMENT;
+use uqm_rust::engine::battle::schema::HLINK;
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]
@@ -25,7 +25,7 @@ unsafe fn trader(battle: &Battle, player: SIZE) -> Ship<'_> {
     }
 }
 
-unsafe fn pump(ship: &mut Ship<'_>) -> *mut ELEMENT {
+unsafe fn pump(ship: &mut Ship<'_>) -> *mut ElementRecord {
     let handle = ship.weapon_handles(1)[0];
     assert!(!handle.is_null());
     let e = battle::element(handle);
@@ -34,7 +34,7 @@ unsafe fn pump(ship: &mut Ship<'_>) -> *mut ELEMENT {
     battle::put(handle);
     e
 }
-unsafe fn confusion(ship: &mut Ship<'_>) -> *mut ELEMENT {
+unsafe fn confusion(ship: &mut Ship<'_>) -> *mut ElementRecord {
     ship.descriptor_mut().ship_info.energy_level = 42;
     ship.ship_mut().cur_status_flags = SPECIAL as u16;
     ship.ship_mut().special_counter = 0;
@@ -46,12 +46,12 @@ unsafe fn confusion(ship: &mut Ship<'_>) -> *mut ELEMENT {
     (*e).next = (*e).current.clone();
     e
 }
-unsafe fn remove(e: *mut ELEMENT) {
+unsafe fn remove(e: *mut ElementRecord) {
     battle_context::unlink(e.cast());
     battle_context::dispose(e.cast());
 }
 
-unsafe fn queue() -> Vec<HELEMENT> {
+unsafe fn queue() -> Vec<HLINK> {
     let mut handles = Vec::new();
     let mut h = battle::head();
     while !h.is_null() {
@@ -61,7 +61,7 @@ unsafe fn queue() -> Vec<HELEMENT> {
     handles
 }
 
-unsafe fn exhaust_queue() -> Vec<HELEMENT> {
+unsafe fn exhaust_queue() -> Vec<HLINK> {
     let mut handles = Vec::new();
     loop {
         let h = uqm_rust::app::bridge::enter(|cx| {
@@ -109,7 +109,7 @@ unsafe fn assert_rng_after(seed: u32, draws: usize) {
     assert_eq!(after, TFB_Random(), "expected {draws} random draws");
 }
 
-unsafe fn collide(pulse: *mut ELEMENT, target: *mut ELEMENT) {
+unsafe fn collide(pulse: *mut ElementRecord, target: *mut ElementRecord) {
     hooks::invoke_collision_pointer(
         (*pulse).collision_func.unwrap(),
         pulse,
@@ -252,7 +252,7 @@ fn initial_pump_uses_the_c_missile_block_at_all_facings_and_coordinate_limits() 
                     (APPEARING | FINITE_LIFE | IGNORE_SIMILAR) as u16
                 );
                 assert_eq!((*e).playerNr, 0);
-                assert_eq!((*e).current.image.farray, ship.frame_set(1));
+                assert_eq!((*e).current.image.frames, ship.frame_set(1));
                 assert_eq!(frame_index((*e).current.image.frame), 0);
                 assert!((*e).preprocess_func.is_none());
                 assert!((*e).postprocess_func.is_some() && (*e).collision_func.is_some());
@@ -502,7 +502,7 @@ fn pump_collision_restores_the_shared_blast_counter_and_sets_the_level_blast_ani
                 assert_eq!((*blast).life, 3 + u16::from(level));
                 assert_eq!((*blast).turn, 0);
                 assert_eq!((*blast).thrust, 0);
-                assert_eq!((*blast).current.image.farray, (*e).next.image.farray);
+                assert_eq!((*blast).current.image.frames, (*e).next.image.frames);
                 assert_eq!(frame_index((*blast).current.image.frame), 20);
                 let offset = i32::from((width >> 1) as u8) << ONE_SHIFT;
                 assert_eq!((*blast).current.location.x, 80 + cosine(0, offset));
@@ -580,7 +580,7 @@ fn confusion_special_obeys_energy_input_and_cooldown_boundaries() {
                         (*e).parent,
                         uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
                     );
-                    assert_eq!((*e).current.image.farray, ship.frame_set(2));
+                    assert_eq!((*e).current.image.frames, ship.frame_set(2));
                     assert_eq!(frame_index((*e).current.image.frame), 0);
                     assert_eq!(
                         velocity_fields(&(*e).velocity),
@@ -685,7 +685,7 @@ fn confusion_collision_inserts_a_controller_at_the_head_with_exactly_one_rng_dra
                     (*controller).parent,
                     uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
                 );
-                assert_eq!((*controller).current.image.farray, (*e).next.image.farray);
+                assert_eq!((*controller).current.image.frames, (*e).next.image.frames);
                 assert_eq!(frame_index((*controller).current.image.frame), 8);
                 assert_eq!(
                     (*controller).next.image.frame,
@@ -720,14 +720,14 @@ fn confusion_reuses_the_first_same_player_nonsolid_special_even_if_it_is_a_trail
             let mut victim = trader(&_battle, 1);
             let another = trader(&_battle, 1);
             let pulse = confusion(&mut ship);
-            let farray = ship.frame_set(2);
+            let frames = ship.frame_set(2);
             let mut candidates = Vec::new();
             for (player, frames, flags) in [
-                (1, farray.clone(), NONSOLID),
+                (1, frames.clone(), NONSOLID),
                 (0, ship.frame_set(1), NONSOLID),
-                (0, farray.clone(), FINITE_LIFE),
-                (0, farray.clone(), FINITE_LIFE | NONSOLID | CHANGING),
-                (0, farray.clone(), FINITE_LIFE | NONSOLID),
+                (0, frames.clone(), FINITE_LIFE),
+                (0, frames.clone(), FINITE_LIFE | NONSOLID | CHANGING),
+                (0, frames.clone(), FINITE_LIFE | NONSOLID),
             ] {
                 let h = uqm_rust::app::bridge::enter(|cx| {
                     cx.alloc_element()
@@ -736,7 +736,7 @@ fn confusion_reuses_the_first_same_player_nonsolid_special_even_if_it_is_a_trail
                 assert!(!h.is_null());
                 let e = battle::element(h);
                 (*e).playerNr = player;
-                (*e).current.image.farray = frames;
+                (*e).current.image.frames = frames;
                 (*e).current.image.frame = ship.raw_frame(2, 11);
                 (*e).state_flags = flags as u16;
                 (*e).life = 1;

@@ -1,6 +1,6 @@
 //! Exercise Orz's native callbacks with the linked engine queue and physics.
 
-use uqm_rust::engine::battle::schema::HELEMENT;
+use uqm_rust::engine::battle::schema::HLINK;
 use uqm_rust::ships::races::{intruder_preprocess, marine_collision};
 #[path = "support/battle_context.rs"]
 mod battle_context;
@@ -22,10 +22,10 @@ unsafe fn orz(battle: &Battle, player: SIZE) -> Ship<'_> {
 
 trait OrzFixture {
     unsafe fn at(&mut self, x: COORD, y: COORD);
-    unsafe fn install_turret(&mut self) -> *mut ELEMENT;
-    unsafe fn tick_turret(&mut self) -> *mut ELEMENT;
-    unsafe fn launch(&mut self) -> *mut ELEMENT;
-    unsafe fn missile(&mut self) -> HELEMENT;
+    unsafe fn install_turret(&mut self) -> *mut ElementRecord;
+    unsafe fn tick_turret(&mut self) -> *mut ElementRecord;
+    unsafe fn launch(&mut self) -> *mut ElementRecord;
+    unsafe fn missile(&mut self) -> HLINK;
 }
 impl OrzFixture for Ship<'_> {
     unsafe fn at(&mut self, x: COORD, y: COORD) {
@@ -33,7 +33,7 @@ impl OrzFixture for Ship<'_> {
         (*self.ptr()).next.location = POINT { x, y };
     }
 
-    unsafe fn install_turret(&mut self) -> *mut ELEMENT {
+    unsafe fn install_turret(&mut self) -> *mut ElementRecord {
         (*self.ptr()).state_flags |= APPEARING as u16;
         self.preprocess();
         (*self.ptr()).state_flags &= !(APPEARING as u16);
@@ -46,7 +46,7 @@ impl OrzFixture for Ship<'_> {
         turret
     }
 
-    unsafe fn tick_turret(&mut self) -> *mut ELEMENT {
+    unsafe fn tick_turret(&mut self) -> *mut ElementRecord {
         let old = battle::succ(self.ptr());
         let e = battle::element(old);
         (*e).life = 0;
@@ -56,7 +56,7 @@ impl OrzFixture for Ship<'_> {
         battle::element(battle::succ(self.ptr()))
     }
 
-    unsafe fn launch(&mut self) -> *mut ELEMENT {
+    unsafe fn launch(&mut self) -> *mut ElementRecord {
         self.ship_mut().cur_status_flags = (SPECIAL | WEAPON) as u16;
         self.ship_mut().special_counter = 0;
         let tail = battle::tail();
@@ -73,7 +73,7 @@ impl OrzFixture for Ship<'_> {
         marine
     }
 
-    unsafe fn missile(&mut self) -> HELEMENT {
+    unsafe fn missile(&mut self) -> HLINK {
         let out = self.weapon_handles(1)[0];
         assert!(!out.is_null());
         let e = battle::element(out);
@@ -84,11 +84,11 @@ impl OrzFixture for Ship<'_> {
     }
 }
 
-unsafe fn prim(e: *mut ELEMENT) -> *mut PRIMITIVE {
+unsafe fn prim(e: *mut ElementRecord) -> *mut PRIMITIVE {
     uqm_rust::app::bridge::enter(|cx| std::ptr::from_mut(cx.display_primitive((*e).PrimIndex)))
 }
 
-unsafe fn queued() -> Vec<HELEMENT> {
+unsafe fn queued() -> Vec<HLINK> {
     let mut result = Vec::new();
     let mut h = battle::head();
     let mut previous = ptr::null_mut();
@@ -144,7 +144,7 @@ unsafe fn velocity_toward(speed: SIZE, facing: COUNT) -> [i32; 9] {
     velocity_fields(&v)
 }
 
-unsafe fn collide(marine: *mut ELEMENT, target: *mut ELEMENT) {
+unsafe fn collide(marine: *mut ElementRecord, target: *mut ElementRecord) {
     uqm_rust::app::bridge::enter(|cx| {
         let a = cx.elements().id(marine.cast()).unwrap();
         let b = cx.elements().id(target.cast()).unwrap();
@@ -158,7 +158,7 @@ unsafe fn collide(marine: *mut ELEMENT, target: *mut ELEMENT) {
     });
 }
 
-unsafe fn intruder(e: *mut ELEMENT) {
+unsafe fn intruder(e: *mut ElementRecord) {
     uqm_rust::app::bridge::enter(|cx| {
         let id = cx.elements().id(e.cast()).unwrap();
         intruder_preprocess(cx, id);
@@ -284,7 +284,7 @@ fn appearing_turret_is_inserted_immediately_after_ship_and_inputs_suppress_hull_
             );
             assert_eq!((*turret).life, 1);
             assert_eq!((*turret).current.image.frame, ship.raw_frame(2, 7));
-            assert_eq!((*turret).current.image.farray, ship.frame_set(2));
+            assert_eq!((*turret).current.image.frames, ship.frame_set(2));
             assert!((*turret).postprocess_func.is_some());
             assert!((*turret).preprocess_func.is_none());
             assert!((*turret).collision_func.is_none());
@@ -345,7 +345,7 @@ fn howitzer_rotates_before_firing_with_byte_wrap_and_exact_missile_fields() {
                     (*missile).current.image.frame,
                     ship.raw_frame(1, face as usize)
                 );
-                assert_eq!((*missile).current.image.farray, ship.frame_set(1));
+                assert_eq!((*missile).current.image.frames, ship.frame_set(1));
                 assert_eq!(
                     velocity_fields(&(*missile).velocity),
                     velocity_toward(120, face)
@@ -572,7 +572,7 @@ fn marines_launch_at_rear_with_exact_state_and_cost_only_after_allocation() {
                     (normalize_facing(i32::from(facing) + 8) << 4) as BYTE
                 );
                 assert_eq!((*marine).current.image.frame, ship.raw_frame(2, 20));
-                assert_eq!((*marine).current.image.farray, ship.frame_set(2));
+                assert_eq!((*marine).current.image.frames, ship.frame_set(2));
                 assert_eq!(
                     (*marine).parent,
                     uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
@@ -628,7 +628,7 @@ fn marine_limit_counts_only_live_matching_nonfinite_nondisappearing_elements() {
             }
             (*marines[2]).life = 0;
             ship.launch();
-            (*marines[3]).current.image.farray = enemy.frame_set(2);
+            (*marines[3]).current.image.frames = enemy.frame_set(2);
             ship.launch();
             assert_eq!(ship.descriptor_mut().ship_info.crew_level, 4);
         }
@@ -1378,7 +1378,7 @@ fn exhausted_queue_preserves_weapon_return_count_and_still_rotates_turret() {
             let mut ship = orz(&_battle, 0);
             let turret = ship.install_turret();
             ship.ship_mut().cur_status_flags = (SPECIAL | LEFT) as u16;
-            let mut out = 1usize as HELEMENT;
+            let mut out = 1usize as HLINK;
             with_rng(6, 0, || {
                 assert_eq!(
                     {

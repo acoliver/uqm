@@ -1,6 +1,6 @@
 //! Copyable callbacks shared by legacy records and id-based consumers.
 
-use super::{record::ELEMENT, Cx, ElementId};
+use super::{record::ElementRecord, Cx, ElementId};
 use crate::graphics::native_abi::POINT;
 
 pub type ElementFn = fn(&mut Cx<'_>, ElementId);
@@ -39,7 +39,7 @@ pub struct ElementHooks {
 }
 
 impl ElementHooks {
-    pub fn install(self, e: &mut ELEMENT) {
+    pub fn install(self, e: &mut ElementRecord) {
         e.preprocess_func = self.pre.map(ElementHook::Native);
         e.postprocess_func = self.post.map(ElementHook::Native);
         e.collision_func = self.collide.map(CollisionHook::Native);

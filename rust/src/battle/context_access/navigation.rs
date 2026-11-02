@@ -1,6 +1,6 @@
 //! Scoped navigation projections into the retained game-thread authorities.
 #![cfg(not(test))]
-use crate::engine::battle::{Cx, ElementId, Parent, ShipId};
+use crate::engine::battle::{Cx, ElementId, Parent};
 use crate::navigation::abi::*;
 use crate::navigation::globals::GlobData;
 use crate::navigation::hyperspace::live::{logx, logy};
@@ -160,11 +160,6 @@ impl Cx<'_> {
             RemoveQueue(queue, encounter.as_ptr().cast());
             InsertQueue(queue, encounter.as_ptr().cast(), (*queue).head);
         }
-    }
-    pub(crate) fn first_ship(&self, side: usize) -> Option<ShipId> {
-        // SAFETY: the context retains both initialized ship pools for this value projection.
-        let ships = unsafe { crate::engine::battle::link_queue::ships(side) };
-        ships.head().map(|id| ships.ship_id(id, side as u8))
     }
 }
 

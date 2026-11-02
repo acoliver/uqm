@@ -128,7 +128,7 @@ fn missile_fields(
         hooks,
     );
     // Module configuration has no loaded frame array, just as the original launch templates.
-    Frame(None).write(fields, &format!("{prefix}.farray"), journal);
+    Frame(None).write(fields, &format!("{prefix}.frames"), journal);
 }
 
 #[cfg(test)]

@@ -154,7 +154,7 @@ impl World {
             Self::new(
                 std::ptr::NonNull::new_unchecked(&raw mut GlobData.Game_state.CurrentActivity),
                 std::ptr::NonNull::new_unchecked(&raw mut GlobData.Game_state.ip_group_q),
-                crate::game_init::space_resources::shared_frame_source,
+                |_| unreachable!("descriptor lifecycle does not resolve battle frame sources"),
             )
         }
     }

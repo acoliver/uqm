@@ -96,7 +96,7 @@ crate::c_bindings::assert_c_layout!(
 pub struct ElementVisualState {
     pub location: Point,
     pub frame: FrameHandle,
-    pub farray: crate::engine::battle::frames::Frames,
+    pub frames: crate::engine::battle::frames::Frames,
 }
 
 impl Default for ElementVisualState {
@@ -110,7 +110,7 @@ impl ElementVisualState {
         ElementVisualState {
             location: Point::zero(),
             frame: std::ptr::null_mut(),
-            farray: crate::engine::battle::frames::Frames::ABSENT,
+            frames: crate::engine::battle::frames::Frames::ABSENT,
         }
     }
 }
@@ -950,7 +950,7 @@ mod tests {
 
     #[test]
     fn live_intersection_fields_are_read_at_their_native_offsets() {
-        let mut native: crate::ships::native::abi::ELEMENT = unsafe { std::mem::zeroed() };
+        let mut native: crate::ships::native::abi::ElementRecord = unsafe { std::mem::zeroed() };
         native.IntersectControl.last_time_val = 17;
         native.IntersectControl.EndPoint = crate::graphics::native_abi::POINT { x: 31, y: -47 };
         native.IntersectControl.IntersectStamp.origin =
@@ -966,50 +966,50 @@ mod tests {
 
     #[test]
     fn element_layout_matches_native_hook_record() {
-        use crate::ships::native::abi::ELEMENT;
+        use crate::ships::native::abi::ElementRecord;
         assert_eq!(
             std::mem::size_of::<Element>(),
-            std::mem::size_of::<ELEMENT>()
+            std::mem::size_of::<ElementRecord>()
         );
         assert_eq!(
             std::mem::offset_of!(Element, preprocess_func),
-            std::mem::offset_of!(ELEMENT, preprocess_func)
+            std::mem::offset_of!(ElementRecord, preprocess_func)
         );
         assert_eq!(
             std::mem::offset_of!(Element, player_nr),
-            std::mem::offset_of!(ELEMENT, playerNr)
+            std::mem::offset_of!(ElementRecord, playerNr)
         );
         assert_eq!(
             std::mem::offset_of!(Element, state_flags),
-            std::mem::offset_of!(ELEMENT, state_flags)
+            std::mem::offset_of!(ElementRecord, state_flags)
         );
         assert_eq!(
             std::mem::offset_of!(Element, life_span),
-            std::mem::offset_of!(ELEMENT, life)
+            std::mem::offset_of!(ElementRecord, life)
         );
         assert_eq!(
             std::mem::offset_of!(Element, crew_or_hp),
-            std::mem::offset_of!(ELEMENT, hits)
+            std::mem::offset_of!(ElementRecord, hits)
         );
         assert_eq!(
             std::mem::offset_of!(Element, prim_index),
-            std::mem::offset_of!(ELEMENT, PrimIndex)
+            std::mem::offset_of!(ElementRecord, PrimIndex)
         );
         assert_eq!(
             std::mem::offset_of!(Element, current),
-            std::mem::offset_of!(ELEMENT, current)
+            std::mem::offset_of!(ElementRecord, current)
         );
         assert_eq!(
             std::mem::offset_of!(Element, next),
-            std::mem::offset_of!(ELEMENT, next)
+            std::mem::offset_of!(ElementRecord, next)
         );
         assert_eq!(
             std::mem::offset_of!(Element, parent),
-            std::mem::offset_of!(ELEMENT, parent)
+            std::mem::offset_of!(ElementRecord, parent)
         );
         assert_eq!(
             std::mem::offset_of!(Element, target),
-            std::mem::offset_of!(ELEMENT, target)
+            std::mem::offset_of!(ElementRecord, target)
         );
     }
 }

@@ -138,8 +138,8 @@ fn visuals(fields: &mut Fields, prefix: &str, element: &ElementObservation, jour
         );
     }
     for (name, array) in [
-        ("current.farray", &element.current.image.frames),
-        ("next.farray", &element.next.image.frames),
+        ("current.frames", &element.current.image.frames),
+        ("next.frames", &element.next.image.frames),
     ] {
         let address = array.raw() as usize;
         if address != 0 && journal.frame_set(address).is_none() {
@@ -202,13 +202,13 @@ mod tests {
         let views = [std::ptr::from_mut(&mut storage).cast()];
         let mut element = Element::new();
         element.current.frame = views[0];
-        element.current.farray = observed_set(&views);
+        element.current.frames = observed_set(&views);
         journal.register_frame(views[0] as usize, 0, 7);
         journal.allocate(std::ptr::from_ref(&element) as usize);
         let mut fields = Fields::new();
         visuals(&mut fields, "element", &element, &mut journal);
         assert_eq!(fields["element.current.frame.index"], "7");
-        assert_eq!(fields["element.current.farray.0.index"], "7");
+        assert_eq!(fields["element.current.frames.0.index"], "7");
         assert_eq!(fields["element.next.frame.owner"], "none");
     }
 
@@ -221,7 +221,7 @@ mod tests {
         let views = [pointer];
         let mut element = Element::new();
         element.current.frame = pointer;
-        element.current.farray = observed_set(&views);
+        element.current.frames = observed_set(&views);
         journal.allocate(std::ptr::from_ref(&element) as usize);
         let owner = journal.register_resource(100, "drawable");
         journal.register_frame(pointer as usize, 100, 7);
@@ -244,13 +244,13 @@ mod tests {
         assert_eq!(fields["element.current.frame.owner"], owner);
         assert_eq!(fields["element.current.frame.index"], "7");
         assert_eq!(fields["element.current.frame.retired"], "true");
-        assert_eq!(fields["element.current.farray.0.owner"], owner);
-        assert_eq!(fields["element.current.farray.role"], "old-set");
+        assert_eq!(fields["element.current.frames.0.owner"], owner);
+        assert_eq!(fields["element.current.frames.role"], "old-set");
         journal.allocate(std::ptr::from_ref(&element) as usize);
         visuals(&mut fields, "element", &element, &mut journal);
         assert_eq!(fields["element.current.frame.index"], "99");
         assert_eq!(fields["element.current.frame.retired"], "false");
-        assert_eq!(fields["element.current.farray.role"], "new-set");
+        assert_eq!(fields["element.current.frames.role"], "new-set");
     }
 
     #[test]
@@ -287,7 +287,7 @@ mod tests {
                 observation::assign_frame(&mut element.current.frame, views[0].cast());
                 if cycle == 0 {
                     observation::assign_set(
-                        &mut element.current.farray,
+                        &mut element.current.frames,
                         observed_set(&views),
                         None,
                     );
@@ -301,11 +301,11 @@ mod tests {
                 visuals(&mut fields, "element", &element, &mut journal);
                 for (view, owner) in owners.into_iter().enumerate() {
                     assert_eq!(
-                        fields[&format!("element.current.farray.{view}.owner")],
+                        fields[&format!("element.current.frames.{view}.owner")],
                         journal.resource(owner)
                     );
                     assert_eq!(
-                        fields[&format!("element.current.farray.{view}.retired")],
+                        fields[&format!("element.current.frames.{view}.retired")],
                         "false"
                     );
                     observation::record(Event::DrawableFree(owner));
@@ -319,7 +319,7 @@ mod tests {
                 assert_eq!(fields["element.current.frame.retired"], "true");
                 for view in 0..3 {
                     assert_eq!(
-                        fields[&format!("element.current.farray.{view}.owner")],
+                        fields[&format!("element.current.frames.{view}.owner")],
                         "none"
                     );
                 }

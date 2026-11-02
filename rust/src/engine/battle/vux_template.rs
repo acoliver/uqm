@@ -5,7 +5,7 @@ use super::record::*;
 use crate::graphics::native_abi::POINT;
 #[cfg(not(test))]
 pub fn descriptor(race: &'static super::Race) -> crate::engine::battle::RaceDesc {
-    let mut d = RACE_DESC::EMPTY;
+    let mut d = RaceDescriptor::EMPTY;
     d.ship_info.ship_flags = (128 | 8 | 32) as _;
     d.ship_info.ship_cost = 12;
     d.ship_info.crew_level = 20;

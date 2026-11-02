@@ -3,11 +3,11 @@ pub use crate::engine::battle::{ElementHook, CollisionHook};
 #[cfg(not(test))]
 pub(crate) use crate::engine::battle::record::Kernel;
 pub use crate::engine::battle::record::{
-    captain_stuff, element, race_desc, state, state__bindgen_ty_1,
+    captain_stuff, state, state__bindgen_ty_1,
     tfb_soundsample, TFB_SoundSample,
-    CAPTAIN_STUFF, CHARACTERISTIC_STUFF, DATA_STUFF, ELEMENT, EVALUATE_DESC, FLEET_STUFF,
+    CAPTAIN_STUFF, CHARACTERISTIC_STUFF, DATA_STUFF, ElementRecord, EVALUATE_DESC, FLEET_STUFF,
     INTEL_STUFF, INTERSECT_CONTROL, MAX_DISPLAY_PRIMS, MOVEMENT_STATE, MUSIC_REF,
-    PRIMITIVE, PRIM_DESC, QUEUE, RACE_DESC, SHIP_INFO, STARSHIP,
+    PRIMITIVE, PRIM_DESC, QUEUE, RaceDescriptor, SHIP_INFO, ShipRecord,
     STATE,
 };
 // Shared engine records used by the Rust runtime.
@@ -1672,7 +1672,7 @@ pub struct MISSILE_BLOCK {
     pub face: COUNT,
     pub index: COUNT,
     pub life: COUNT,
-    pub farray: *mut FRAME,
+    pub frames: *mut FRAME,
     pub preprocess_func: Option<crate::engine::battle::ElementHook>,
     pub blast_offs: SIZE,
 }

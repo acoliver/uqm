@@ -781,7 +781,7 @@ pub(crate) mod engine {
                                     calc_zoom_stuff(cx.b.zoom_out)
                                 };
                                 image!(frame; cx.records()[e].next.image.frame, SetEquFrameIndex(
-                                    cx.elements()[e].next.image.farray.view(usize::from(index)).raw(),
+                                    cx.elements()[e].next.image.frames.view(usize::from(index)).raw(),
                                     cx.elements()[e].next.image.frame,
                                 ));
                                 if optMeleeScale == SCALE_TRILINEAR
@@ -793,7 +793,7 @@ pub(crate) mod engine {
                                         cx.elements()[e]
                                             .next
                                             .image
-                                            .farray
+                                            .frames
                                             .view(usize::from(index) + 1)
                                             .raw(),
                                         frame,

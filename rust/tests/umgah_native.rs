@@ -1,6 +1,6 @@
 //! Live Umgah callbacks, private cone state, collision cleanup and AI RNG order.
 
-use uqm_rust::engine::battle::schema::HELEMENT;
+use uqm_rust::engine::battle::schema::HLINK;
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]
@@ -12,7 +12,7 @@ use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, frame_index, sine
 
 // FRAME_DESC and DRAWABLE_DESC layouts from drawable.h.
 
-unsafe fn queued() -> Vec<HELEMENT> {
+unsafe fn queued() -> Vec<HLINK> {
     let mut result = Vec::new();
     let mut h = battle::head();
     while !h.is_null() {
@@ -37,7 +37,7 @@ fn velocity_fields(v: &VELOCITY_DESC) -> [i32; 9] {
     ]
 }
 
-unsafe fn velocity(e: *mut ELEMENT) -> (SIZE, SIZE) {
+unsafe fn velocity(e: *mut ElementRecord) -> (SIZE, SIZE) {
     let (mut x, mut y) = (0, 0);
     GetCurrentVelocityComponents(&raw mut (*e).velocity, &mut x, &mut y);
     (x, y)
@@ -294,7 +294,7 @@ fn cone_initialization_fixes_intersection_and_does_not_inherit_velocity() {
             assert_eq!(((*cone).next.location.x, (*cone).next.location.y), (-9, 13));
             assert_eq!((*cone).current.image.frame, ship.raw_frame(2, 5));
             assert_eq!((*cone).next.image.frame, (*cone).current.image.frame);
-            assert_eq!((*cone).next.image.farray, ship.frame_set(2));
+            assert_eq!((*cone).next.image.frames, ship.frame_set(2));
             let i = (*cone).IntersectControl;
             assert_eq!(
                 (i.IntersectStamp.origin.x, i.IntersectStamp.origin.y),
@@ -994,7 +994,7 @@ fn rear_arc_uses_unwrapped_next_location_difference_and_inclusive_angle_bounds()
     })
 }
 
-unsafe fn fire(ship: &mut Ship<'_>) -> HELEMENT {
+unsafe fn fire(ship: &mut Ship<'_>) -> HLINK {
     let h = ship.initialize_from(ship.ptr(), 1)[0];
     if !h.is_null() {
         assert!((*battle::element(h)).parent == uqm_rust::engine::battle::Parent::None);

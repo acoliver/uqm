@@ -1,11 +1,11 @@
 use std::ops::{Deref, DerefMut};
 use uqm_rust::{
     engine::battle::link_queue::{LinkId, Starship},
-    ships::native::abi::{SIZE, STARSHIP},
+    ships::native::abi::{ShipRecord, SIZE},
 };
 
 pub struct PoolShip {
-    pointer: *mut STARSHIP,
+    pointer: *mut ShipRecord,
     side: usize,
     link: LinkId<Starship>,
     pub ship_id: uqm_rust::engine::battle::ShipId,
@@ -39,14 +39,14 @@ impl PoolShip {
     }
 }
 impl Deref for PoolShip {
-    type Target = STARSHIP;
-    fn deref(&self) -> &STARSHIP {
+    type Target = ShipRecord;
+    fn deref(&self) -> &ShipRecord {
         // SAFETY: the construction contract retains this owned fixture slot.
         unsafe { &*self.pointer }
     }
 }
 impl DerefMut for PoolShip {
-    fn deref_mut(&mut self) -> &mut STARSHIP {
+    fn deref_mut(&mut self) -> &mut ShipRecord {
         // SAFETY: this exclusive borrow retains the fixture slot.
         unsafe { &mut *self.pointer }
     }

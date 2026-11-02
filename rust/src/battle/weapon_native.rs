@@ -76,8 +76,8 @@ pub(crate) mod engine {
         cx.element_mut(e).flags = (APPEARING | FINITE_LIFE) as u16 | b.flags;
         cx.element_mut(e).life = b.life;
         cx.primitive_style_mut(e).kind = gfx_object_STAMP_PRIM as u8;
-        cx.set_frames(e, false, b.farray.clone());
-        let frame = cx.absolute_frame(cx.frames_first(&b.farray), b.index);
+        cx.set_frames(e, false, b.frames.clone());
+        let frame = cx.absolute_frame(cx.frames_first(&b.frames), b.index);
         cx.set_frame(e, false, frame);
         cx.element_mut(e).pre = b.preprocess.map(ElementHook::Native);
         cx.element_mut(e).collide = Some(CollisionHook::Native(collision_cb));

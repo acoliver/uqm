@@ -151,7 +151,7 @@ fn saw_collision_splinters_and_cloud_damage_depends_on_ship_flag() {
             let saw = ship.weapon_record(h);
             let h = saw.cast();
             let mut target_fixture = Object::new(&_battle);
-            let target = target_fixture.element_mut() as *mut ELEMENT;
+            let target = target_fixture.element_mut() as *mut ElementRecord;
             (*target).playerNr = 1;
             (*target).life = 2;
             let mut p = POINT { x: 100, y: 200 };
@@ -202,7 +202,7 @@ fn ai_crew_threat_boundaries_and_no_target_do_not_draw_rng() {
         unsafe {
             let mut ship = Ship::new(&_battle, SPECIES_ID_KOHR_AH_ID, 0);
             let mut threat_fixture = Object::new(&_battle);
-            let threat = threat_fixture.element_mut() as *mut ELEMENT;
+            let threat = threat_fixture.element_mut() as *mut ElementRecord;
             (*threat).state_flags = CREW_OBJECT as u16;
             for (turn, pursue) in [(8, true), (9, false)] {
                 let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();

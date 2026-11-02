@@ -1,7 +1,5 @@
 //! Exercise Shofixti's live callbacks against the linked engine.
-use uqm_rust::engine::battle::schema::{
-    BattleInputHandlers, InputContext, GETMELEE_STATE, HELEMENT,
-};
+use uqm_rust::engine::battle::schema::{BattleInputHandlers, InputContext, GETMELEE_STATE, HLINK};
 use uqm_rust::ships::races::{intruder_preprocess, marine_collision};
 #[path = "support/battle_context.rs"]
 mod battle_context;
@@ -71,7 +69,7 @@ use shared::FrameSet;
 use shared::PoolShip;
 struct Ship<'a> {
     inner: shared::Ship<'a>,
-    handle: HELEMENT,
+    handle: HLINK,
     ship_frames: FrameSet,
     weapon_frames: FrameSet,
     special_frames: FrameSet,
@@ -92,7 +90,7 @@ impl<'a> Ship<'a> {
         desc.ship_data.captain_control.special = captain.frame(14);
         let frames = inner.frame_set(0);
         let el = inner.element_mut();
-        el.current.image.farray = frames;
+        el.current.image.frames = frames;
         el.current.image.frame = ship_frames.frame(0);
         el.next = el.current.clone();
         el.IntersectControl.IntersectStamp.frame = ship_frames.frame(0);
@@ -108,7 +106,7 @@ impl<'a> Ship<'a> {
         }
     }
 
-    unsafe fn fire(&mut self, out: &mut [HELEMENT]) -> COUNT {
+    unsafe fn fire(&mut self, out: &mut [HLINK]) -> COUNT {
         uqm_rust::app::bridge::enter(|cx| {
             let origin = cx.weapon_origin(self.inner.id);
             let weapons = cx.spawn_weapons(self.inner.ship_id, origin);
@@ -118,7 +116,7 @@ impl<'a> Ship<'a> {
             weapons.len() as COUNT
         })
     }
-    fn ptr(&self) -> *mut ELEMENT {
+    fn ptr(&self) -> *mut ElementRecord {
         self.handle.cast()
     }
     unsafe fn ai(&mut self, concerns: &mut [EVALUATE_DESC; 5]) {
@@ -142,12 +140,12 @@ impl<'a> Ship<'a> {
         }
     }
 }
-unsafe fn core(callback: uqm_rust::engine::battle::ElementFn, element: *mut ELEMENT) {
+unsafe fn core(callback: uqm_rust::engine::battle::ElementFn, element: *mut ElementRecord) {
     let id = shared::id(element);
     uqm_rust::app::bridge::enter(|cx| callback(cx, id));
 }
 
-unsafe fn prim(e: *mut ELEMENT) -> *mut PRIMITIVE {
+unsafe fn prim(e: *mut ElementRecord) -> *mut PRIMITIVE {
     uqm_rust::app::bridge::enter(|cx| std::ptr::from_mut(cx.display_primitive((*e).PrimIndex)))
 }
 fn rgba(c: Color) -> (u8, u8, u8, u8) {
@@ -364,7 +362,7 @@ fn darts_use_next_location_exact_facing_offset_speed_and_failure_count() {
                 (*dart).current.image.frame,
                 ship.weapon_frames.frame((facing % 16) as usize)
             );
-            assert_eq!((*dart).current.image.farray, ship.inner.frame_set(1));
+            assert_eq!((*dart).current.image.frames, ship.inner.frame_set(1));
             assert!(
                 (*dart).preprocess_func.is_none()
                     && (*dart).postprocess_func.is_none()
@@ -389,7 +387,7 @@ fn darts_use_next_location_exact_facing_offset_speed_and_failure_count() {
                 (*dart).current.location.y,
                 origin_y.wrapping_sub(vy >> VELOCITY_SHIFT)
             );
-            let mut failure = 1usize as HELEMENT;
+            let mut failure = 1usize as HLINK;
             with_rng(31, 0, || {
                 assert_eq!(ship.fire(std::slice::from_mut(&mut failure)), 1)
             });
@@ -729,7 +727,7 @@ fn glory_flash_switch_and_explosion_color_sequence_use_twelve_frame_ship_death()
             (*explosion).current.image.frame,
             ship.special_frames.frame(0)
         );
-        assert_eq!((*explosion).current.image.farray, ship.inner.frame_set(2));
+        assert_eq!((*explosion).current.image.frames, ship.inner.frame_set(2));
         assert_eq!(
             (
                 (*explosion).current.location.x,

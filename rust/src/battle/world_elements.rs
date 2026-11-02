@@ -369,7 +369,7 @@ mod tests {
     #[test]
     fn damage_preserves_gravity_objects_and_byte_truncation() {
         unsafe {
-            let mut e: ELEMENT = mem::zeroed();
+            let mut e: ElementRecord = mem::zeroed();
             e.hits = 200;
             e.mass = 100;
             e.life = 7;

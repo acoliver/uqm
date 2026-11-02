@@ -377,7 +377,7 @@ pub(crate) mod engine {
             let mut b = Missile {
                 cx: origin.next.location.x,
                 cy: origin.next.location.y,
-                farray: cx.ship_frame_set(ss, 1),
+                frames: cx.ship_frame_set(ss, 1),
                 sender: origin.player,
                 face: normalize_facing(
                     i32::from(cx.ship_state(ss).facing) + i32::from(weapon.facing),

@@ -4,7 +4,7 @@
 )]
 use std::{cell::RefCell, ffi::c_void, mem, ptr, rc::Rc};
 use uqm_rust::battle::process_native::InitDisplayList;
-use uqm_rust::engine::battle::schema::HELEMENT;
+use uqm_rust::engine::battle::schema::HLINK;
 use uqm_rust::{
     engine::battle::{ElementId, RaceState, ShipId},
     ships::native::abi::*,
@@ -12,7 +12,7 @@ use uqm_rust::{
 
 /// # Safety
 /// The caller retains the published, serialized fixture battle.
-pub unsafe fn head() -> HELEMENT {
+pub unsafe fn head() -> HLINK {
     // SAFETY: the fixture owns the active context for this synchronous lookup.
     unsafe {
         uqm_rust::app::bridge::enter(|cx| {
@@ -25,7 +25,7 @@ pub unsafe fn head() -> HELEMENT {
 
 /// # Safety
 /// The caller retains the published, serialized fixture battle.
-pub unsafe fn tail() -> HELEMENT {
+pub unsafe fn tail() -> HLINK {
     // SAFETY: the fixture owns the active context for this synchronous lookup.
     unsafe {
         uqm_rust::app::bridge::enter(|cx| {
@@ -38,7 +38,7 @@ pub unsafe fn tail() -> HELEMENT {
 
 /// # Safety
 /// The operand must be a retained element allocation of the serialized fixture.
-pub unsafe fn succ<T>(pointer: *mut T) -> HELEMENT {
+pub unsafe fn succ<T>(pointer: *mut T) -> HLINK {
     // SAFETY: the fixture retains the operand throughout this synchronous projection.
     unsafe {
         uqm_rust::app::bridge::enter(|cx| {
@@ -55,7 +55,7 @@ pub unsafe fn succ<T>(pointer: *mut T) -> HELEMENT {
 
 /// # Safety
 /// The operand must be a retained element allocation of the serialized fixture.
-pub unsafe fn pred<T>(pointer: *mut T) -> HELEMENT {
+pub unsafe fn pred<T>(pointer: *mut T) -> HLINK {
     // SAFETY: the fixture retains the operand throughout this synchronous projection.
     unsafe {
         uqm_rust::app::bridge::enter(|cx| {
@@ -129,9 +129,9 @@ impl<T> Record<T> {
 
 pub struct Ship<'a> {
     battle: &'a Battle,
-    ss: Record<STARSHIP>,
-    el: Record<ELEMENT>,
-    pub handle: HELEMENT,
+    ss: Record<ShipRecord>,
+    el: Record<ElementRecord>,
+    pub handle: HLINK,
     pub id: ElementId,
     pub ship_id: ShipId,
     frames: Option<[FrameSet; 3]>,
@@ -148,7 +148,7 @@ impl<'a> Ship<'a> {
                     .alloc()
                     .unwrap_or_else(|| panic!("fixture ship pool exhausted"));
                 (
-                    ships.raw(link).cast::<STARSHIP>(),
+                    ships.raw(link).cast::<ShipRecord>(),
                     ships.ship_id(link, player as u8),
                 )
             });
@@ -225,7 +225,7 @@ impl<'a> Ship<'a> {
             let mass = ship.descriptor_mut().characteristics.ship_mass;
             ship.element_mut().set_mass_points(mass);
             ship.element_mut().current.location = POINT { x: 4000, y: 4000 };
-            ship.element_mut().current.image.farray = ship.ship_frames();
+            ship.element_mut().current.image.frames = ship.ship_frames();
             ship.element_mut().current.image.frame = frames[0].frame(0);
             ship.element_mut().next = ship.element_mut().current.clone();
             ship.element_mut().IntersectControl.IntersectStamp.frame = frames[0].frame(0);
@@ -259,7 +259,7 @@ impl<'a> Ship<'a> {
             .frames[index]
             .bounds = bounds;
     }
-    pub fn weapon_handles(&mut self, expected: COUNT) -> Vec<HELEMENT> {
+    pub fn weapon_handles(&mut self, expected: COUNT) -> Vec<HLINK> {
         // SAFETY: the owning battle and ship remain live throughout weapon creation.
         unsafe {
             uqm_rust::app::bridge::enter(|cx| {
@@ -276,7 +276,7 @@ impl<'a> Ship<'a> {
     /// The subject and concerns must be live fixture operands retained through the callback.
     pub unsafe fn think(
         &mut self,
-        subject: *mut ELEMENT,
+        subject: *mut ElementRecord,
         concerns: &mut [EVALUATE_DESC; 4],
         count: u16,
     ) {
@@ -301,7 +301,7 @@ impl<'a> Ship<'a> {
     }
     /// # Safety
     /// The source must be a live element in this fixture's retained battle pool.
-    pub unsafe fn initialize_from(&self, source: *mut ELEMENT, expected: u16) -> Vec<HELEMENT> {
+    pub unsafe fn initialize_from(&self, source: *mut ElementRecord, expected: u16) -> Vec<HLINK> {
         // SAFETY: the caller retains all pool records through the synchronous Native dispatch.
         unsafe {
             uqm_rust::app::bridge::enter(|cx| {
@@ -350,7 +350,7 @@ impl<'a> Ship<'a> {
     }
     /// # Safety
     /// Do not retain record references across any engine or fixture hook call.
-    pub unsafe fn element_mut(&mut self) -> &mut ELEMENT {
+    pub unsafe fn element_mut(&mut self) -> &mut ElementRecord {
         // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
         unsafe {
             self.assert_live();
@@ -359,7 +359,7 @@ impl<'a> Ship<'a> {
     }
     /// # Safety
     /// Do not retain record references across any engine or fixture hook call.
-    pub unsafe fn ship_mut(&mut self) -> &mut STARSHIP {
+    pub unsafe fn ship_mut(&mut self) -> &mut ShipRecord {
         // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
         unsafe {
             self.assert_live();
@@ -368,7 +368,7 @@ impl<'a> Ship<'a> {
     }
     /// # Safety
     /// Do not retain descriptor references across any engine or fixture hook call.
-    pub unsafe fn descriptor_mut(&mut self) -> &mut RACE_DESC {
+    pub unsafe fn descriptor_mut(&mut self) -> &mut RaceDescriptor {
         // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
 
         unsafe {
@@ -384,13 +384,13 @@ impl<'a> Ship<'a> {
         // SAFETY: the fixture retains its battle and checked element through this value projection.
         unsafe { uqm_rust::app::bridge::enter(|cx| cx.element(self.id)) }
     }
-    pub fn ptr(&self) -> *mut ELEMENT {
+    pub fn ptr(&self) -> *mut ElementRecord {
         self.el.0
     }
-    pub fn el(&mut self) -> *mut ELEMENT {
+    pub fn el(&mut self) -> *mut ElementRecord {
         self.ptr()
     }
-    fn descriptor(&self) -> &RACE_DESC {
+    fn descriptor(&self) -> &RaceDescriptor {
         // SAFETY: the serialized fixture retains its owned ship slot.
         unsafe {
             self.ss
@@ -409,14 +409,14 @@ impl<'a> Ship<'a> {
     pub unsafe fn guardian_form(mut self) -> Self {
         // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
         unsafe {
-            self.element_mut().next.image.farray = self.ship_frames();
+            self.element_mut().next.image.frames = self.ship_frames();
             self
         }
     }
     pub unsafe fn blazer_form(mut self) -> Self {
         // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
         unsafe {
-            self.element_mut().next.image.farray = self.special_frames();
+            self.element_mut().next.image.frames = self.special_frames();
             self
         }
     }
@@ -453,7 +453,7 @@ impl<'a> Ship<'a> {
     }
     /// # Safety
     /// Do not retain the legacy pointer across callbacks or disposal.
-    pub unsafe fn weapon_record(&self, id: Option<ElementId>) -> *mut ELEMENT {
+    pub unsafe fn weapon_record(&self, id: Option<ElementId>) -> *mut ElementRecord {
         // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
         unsafe {
             uqm_rust::app::bridge::enter(|cx| {
@@ -463,7 +463,7 @@ impl<'a> Ship<'a> {
     }
     pub unsafe fn intelligence(
         &mut self,
-        subject: &mut ELEMENT,
+        subject: &mut ElementRecord,
         concerns: &mut [EVALUATE_DESC],
         count: u16,
     ) {
@@ -525,7 +525,7 @@ impl Drop for Ship<'_> {
         }
     }
 }
-pub fn descriptor(species: u32) -> RACE_DESC {
+pub fn descriptor(species: u32) -> RaceDescriptor {
     // SAFETY: the caller owns the serialized test context.
     unsafe { uqm_rust::ships::races::descriptor(species).into_legacy() }
 }
@@ -576,7 +576,7 @@ pub fn call_collision(name: &str, a: ElementId, pa: &mut POINT, b: ElementId, pb
 }
 /// # Safety
 /// The pointer must be live pool storage belonging to the current test battle.
-pub unsafe fn id(pointer: *mut ELEMENT) -> ElementId {
+pub unsafe fn id(pointer: *mut ElementRecord) -> ElementId {
     // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
     unsafe {
         uqm_rust::app::bridge::enter(|cx| {
@@ -683,17 +683,17 @@ impl Drop for FrameSetData {
         }
     }
 }
-pub unsafe fn prim(e: *mut ELEMENT) -> *mut PRIMITIVE {
+pub unsafe fn prim(e: *mut ElementRecord) -> *mut PRIMITIVE {
     // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
     unsafe {
         uqm_rust::app::bridge::enter(|cx| std::ptr::from_mut(cx.display_primitive((*e).PrimIndex)))
     }
 }
-pub unsafe fn queued() -> Vec<HELEMENT> {
+pub unsafe fn queued() -> Vec<HLINK> {
     // SAFETY: the serialized fixture retains the published context throughout observation.
     unsafe { uqm_rust::app::bridge::enter(|cx| queued_in(cx)) }
 }
-pub fn queued_in(cx: &uqm_rust::engine::battle::Cx<'_>) -> Vec<HELEMENT> {
+pub fn queued_in(cx: &uqm_rust::engine::battle::Cx<'_>) -> Vec<HLINK> {
     let mut all = Vec::new();
     let mut next = cx.elements().head();
     while let Some(id) = next {
@@ -740,7 +740,7 @@ pub unsafe fn with_rng<T>(seed: u32, draws: usize, run: impl FnOnce() -> T) -> T
 
 pub struct Object<'a> {
     battle: &'a Battle,
-    el: Record<ELEMENT>,
+    el: Record<ElementRecord>,
     pub id: ElementId,
 }
 impl<'a> Object<'a> {
@@ -766,7 +766,7 @@ impl<'a> Object<'a> {
     }
     /// # Safety
     /// Do not retain record references across any engine or fixture hook call.
-    pub unsafe fn element_mut(&mut self) -> &mut ELEMENT {
+    pub unsafe fn element_mut(&mut self) -> &mut ElementRecord {
         // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
         unsafe {
             uqm_rust::app::bridge::enter(|cx| {
@@ -775,7 +775,7 @@ impl<'a> Object<'a> {
             self.el.get_mut()
         }
     }
-    pub fn ptr(&mut self) -> *mut ELEMENT {
+    pub fn ptr(&mut self) -> *mut ElementRecord {
         self.el.0
     }
 }
@@ -801,7 +801,7 @@ pub type PoolShip = ship_pool::PoolShip;
 
 /// An unlinked pool slot for legacy callback operands.
 pub struct PoolElement {
-    pointer: *mut ELEMENT,
+    pointer: *mut ElementRecord,
     id: ElementId,
 }
 impl PoolElement {
@@ -814,7 +814,7 @@ impl PoolElement {
                 cx.alloc_element()
                     .map_or(ptr::null_mut(), |id| cx.elements().raw(id))
             })
-            .cast::<ELEMENT>();
+            .cast::<ElementRecord>();
             assert!(!pointer.is_null(), "fixture element pool exhausted");
             let id = id(pointer);
             Self { pointer, id }
@@ -822,14 +822,14 @@ impl PoolElement {
     }
 }
 impl std::ops::Deref for PoolElement {
-    type Target = ELEMENT;
-    fn deref(&self) -> &ELEMENT {
+    type Target = ElementRecord;
+    fn deref(&self) -> &ElementRecord {
         // SAFETY: this owner retains the allocated operand slot.
         unsafe { &*self.pointer }
     }
 }
 impl std::ops::DerefMut for PoolElement {
-    fn deref_mut(&mut self) -> &mut ELEMENT {
+    fn deref_mut(&mut self) -> &mut ElementRecord {
         // SAFETY: this exclusive fixture borrow owns the operand slot.
         unsafe { &mut *self.pointer }
     }
@@ -865,7 +865,9 @@ pub unsafe fn put(handle: *mut std::ffi::c_void) {
     }
 }
 /// Cast a retained fixture handle without dereferencing it.
-pub fn element(handle: *mut std::ffi::c_void) -> *mut uqm_rust::engine::battle::record::ELEMENT {
+pub fn element(
+    handle: *mut std::ffi::c_void,
+) -> *mut uqm_rust::engine::battle::record::ElementRecord {
     handle.cast()
 }
 

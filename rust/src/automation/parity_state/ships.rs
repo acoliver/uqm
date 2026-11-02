@@ -239,7 +239,7 @@ mod tests {
     #[test]
     fn checked_ship_pool_serializes_the_borrowed_ship() {
         // SAFETY: STARSHIP consists of integers, pointers and optional callbacks.
-        let mut state: STARSHIP = unsafe { std::mem::zeroed() };
+        let mut state: ShipRecord = unsafe { std::mem::zeroed() };
         state.SpeciesID = SPECIES_ID_EARTHLING_ID;
         state.playerNr = 1;
         state.ShipFacing = 31;
@@ -271,7 +271,7 @@ mod tests {
     #[test]
     fn borrowed_descriptor_resources_register_and_serialize() {
         // SAFETY: descriptor fields are integers, pointers or optional callbacks.
-        let mut descriptor: RACE_DESC = unsafe { std::mem::zeroed() };
+        let mut descriptor: RaceDescriptor = unsafe { std::mem::zeroed() };
         descriptor.ship_info.max_energy = 23;
         descriptor.ship_info.icons_rsc = c"test.icons".as_ptr();
         descriptor.characteristics.max_thrust = 513;

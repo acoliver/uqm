@@ -30,8 +30,8 @@ fn fields(journal: &mut Journal, element: &Element) -> Fields {
         journal.write_element_frame(&identity, name, frame as usize, &mut fields, name);
     }
     for (name, array) in [
-        ("current.farray", &element.current.farray),
-        ("next.farray", &element.next.farray),
+        ("current.frames", &element.current.frames),
+        ("next.frames", &element.next.frames),
     ] {
         journal.write_element_frame_set(&identity, name, array.raw() as usize, &mut fields, name);
     }
@@ -63,7 +63,7 @@ fn hyperspace_swaps_refresh_the_live_global_view_and_restore_its_owner() {
     observation::observe_views(std::slice::from_ref(&stars), "engine-global:stars", |p| {
         *p as usize
     });
-    image!(single; element.current.farray, observed_set(std::slice::from_ref(&stars)), stars);
+    image!(single; element.current.frames, observed_set(std::slice::from_ref(&stars)), stars);
     journal.drain_events(&[]);
     let before = fields(&mut journal, &element);
     observation::swap_image_view(&mut ambient, &mut stars);
@@ -71,10 +71,10 @@ fn hyperspace_swaps_refresh_the_live_global_view_and_restore_its_owner() {
     let inside = fields(&mut journal, &element);
     assert_eq!(ambient as usize, 200);
     assert_eq!(stars as usize, 400);
-    assert_eq!(inside["current.farray.0.index"], "14");
+    assert_eq!(inside["current.frames.0.index"], "14");
     assert_ne!(
-        inside["current.farray.0.owner"],
-        before["current.farray.0.owner"]
+        inside["current.frames.0.owner"],
+        before["current.frames.0.owner"]
     );
     observation::swap_image_view(&mut ambient, &mut stars);
     journal.drain_events(&[]);
@@ -107,7 +107,7 @@ fn rebind_history(reuse: bool) -> Fields {
         role: "old-set".into(),
     });
     image!(frame; element.current.frame, pointer);
-    image!(set; element.current.farray, observed_set(&views));
+    image!(set; element.current.frames, observed_set(&views));
     journal.drain_events(&[]);
     let old = fields(&mut journal, &element);
     let identity = journal.identity(std::ptr::from_ref(&element) as usize);
@@ -129,12 +129,12 @@ fn rebind_history(reuse: bool) -> Fields {
     assert_eq!(stale["current.frame.owner"], old["current.frame.owner"]);
     assert_eq!(stale["current.frame.retired"], "true");
     assert_eq!(
-        stale["current.farray.2.owner"],
-        old["current.farray.2.owner"]
+        stale["current.frames.2.owner"],
+        old["current.frames.2.owner"]
     );
     image!(copy; element.next, element.current);
     image!(frame; element.current.frame, replacement);
-    image!(set; element.current.farray, observed_set(&views));
+    image!(set; element.current.frames, observed_set(&views));
     journal.drain_events(&[]);
     let rebound = fields(&mut journal, &element);
     assert_eq!(
@@ -144,18 +144,18 @@ fn rebind_history(reuse: bool) -> Fields {
     assert_ne!(rebound["current.frame.owner"], old["current.frame.owner"]);
     assert_eq!(rebound["current.frame.index"], "99");
     assert_eq!(rebound["current.frame.retired"], "false");
-    assert_eq!(rebound["current.farray.role"], "new-set");
+    assert_eq!(rebound["current.frames.role"], "new-set");
     assert_ne!(
-        rebound["current.farray.2.owner"],
-        old["current.farray.2.owner"]
+        rebound["current.frames.2.owner"],
+        old["current.frames.2.owner"]
     );
     assert_eq!(rebound["next.frame.owner"], old["current.frame.owner"]);
     assert_eq!(rebound["next.frame.retired"], "true");
     assert_eq!(
-        rebound["next.farray.2.owner"],
-        old["current.farray.2.owner"]
+        rebound["next.frames.2.owner"],
+        old["current.frames.2.owner"]
     );
-    assert_eq!(rebound["next.farray.role"], "old-set");
+    assert_eq!(rebound["next.frames.role"], "old-set");
     rebound
 }
 
@@ -182,23 +182,23 @@ fn unsampled_assignments_and_individual_copies_survive_reuse() {
     drawable(100, pointer as usize, 7);
     frame_set(&views, "old-set");
     image!(frame; element.current.frame, pointer);
-    image!(set; element.current.farray, observed_set(&views));
+    image!(set; element.current.frames, observed_set(&views));
     observation::record(Event::DrawableFree(100));
     drawable(100, pointer as usize, 99);
     frame_set(&views, "new-set");
     image!(copy; element.next.frame, element.current.frame);
-    image!(copy; element.next.farray, element.current.farray);
+    image!(copy; element.next.frames, element.current.frames);
     image!(frame; element.current.frame, pointer);
-    image!(set; element.current.farray, observed_set(&views));
+    image!(set; element.current.frames, observed_set(&views));
     journal.drain_events(&[]);
     let observed = fields(&mut journal, &element);
     assert_eq!(observed["next.frame.index"], "7");
     assert_eq!(observed["next.frame.retired"], "true");
-    assert_eq!(observed["next.farray.2.index"], "7");
-    assert_eq!(observed["next.farray.role"], "old-set");
+    assert_eq!(observed["next.frames.2.index"], "7");
+    assert_eq!(observed["next.frames.role"], "old-set");
     assert_eq!(observed["current.frame.index"], "99");
-    assert_eq!(observed["current.farray.2.index"], "99");
-    assert_eq!(observed["current.farray.role"], "new-set");
+    assert_eq!(observed["current.frames.2.index"], "99");
+    assert_eq!(observed["current.frames.role"], "new-set");
     assert_ne!(
         observed["current.frame.owner"],
         observed["next.frame.owner"]
@@ -221,7 +221,7 @@ fn array_edits_update_only_references_to_the_written_resource_generation() {
     frame_set(&views, "old-set");
     observation::record(Event::ResetPool);
     observation::record(Event::Allocate(std::ptr::from_ref(&element) as usize));
-    image!(set; element.current.farray, observed_set(&views));
+    image!(set; element.current.frames, observed_set(&views));
     observation::record(Event::Frame {
         address: 201,
         owner: 100,
@@ -231,13 +231,13 @@ fn array_edits_update_only_references_to_the_written_resource_generation() {
     image!(copy; element.next, element.current);
     journal.drain_events(&[]);
     let before = fields(&mut journal, &element);
-    assert_eq!(before["current.farray.0.index"], "8");
-    assert_eq!(before["next.farray.0.index"], "8");
+    assert_eq!(before["current.frames.0.index"], "8");
+    assert_eq!(before["next.frames.0.index"], "8");
     observation::record(Event::DrawableFree(100));
     drawable(100, pointer as usize, 99);
     views.fill(pointer);
     frame_set(&views, "new-set");
-    image!(set; element.current.farray, observed_set(&views));
+    image!(set; element.current.frames, observed_set(&views));
     observation::record(Event::Frame {
         address: 201,
         owner: 100,
@@ -246,13 +246,13 @@ fn array_edits_update_only_references_to_the_written_resource_generation() {
     image!(view; views[0], 201usize as *mut std::ffi::c_void);
     journal.drain_events(&[]);
     let after = fields(&mut journal, &element);
-    assert_eq!(after["current.farray.0.index"], "100");
-    assert_eq!(after["next.farray.0.index"], "8");
-    assert_eq!(after["next.farray.0.retired"], "true");
-    assert_eq!(after["next.farray.2.owner"], before["next.farray.2.owner"]);
+    assert_eq!(after["current.frames.0.index"], "100");
+    assert_eq!(after["next.frames.0.index"], "8");
+    assert_eq!(after["next.frames.0.retired"], "true");
+    assert_eq!(after["next.frames.2.owner"], before["next.frames.2.owner"]);
     assert_ne!(
-        after["current.farray.2.owner"],
-        after["next.farray.2.owner"]
+        after["current.frames.2.owner"],
+        after["next.frames.2.owner"]
     );
 }
 
@@ -269,7 +269,7 @@ fn raw_abi_image_and_state_copies_keep_the_source_identity() {
         location: POINT { x: 7, y: 9 },
         image: state__bindgen_ty_1 {
             frame: std::ptr::null_mut(),
-            farray: crate::engine::battle::views::Frames::ABSENT,
+            frames: crate::engine::battle::views::Frames::ABSENT,
         },
     };
     let mut next = current.clone();
@@ -282,7 +282,7 @@ fn raw_abi_image_and_state_copies_keep_the_source_identity() {
         role: "old-set".into(),
     });
     image!(frame; current.image.frame, pointer);
-    image!(set; current.image.farray, observed_set(&views));
+    image!(set; current.image.frames, observed_set(&views));
     observation::record(Event::DrawableFree(100));
     drawable(100, pointer as usize, 99);
     image!(copy; next.image, current.image);
@@ -304,7 +304,7 @@ fn raw_abi_image_and_state_copies_keep_the_source_identity() {
         7
     );
     assert_eq!(
-        journal.bindings.sets[&(std::ptr::from_ref(&current.image.farray) as usize)].frames[2].1,
+        journal.bindings.sets[&(std::ptr::from_ref(&current.image.frames) as usize)].frames[2].1,
         7
     );
 }
@@ -360,7 +360,7 @@ fn whole_element_clone(reuse: bool) -> Fields {
     drawable(100, pointer as usize, 7);
     observation::observe_views(&views, "old-clone-set", |p| *p as usize);
     image!(frame; source.current.frame, pointer);
-    image!(set; source.current.farray, observed_set(&views));
+    image!(set; source.current.frames, observed_set(&views));
     image!(copy; source.next, source.current);
     image!(frame; source.intersect_control.intersect_stamp.frame, pointer);
     observation::record(Event::Allocate(std::ptr::from_ref(&cloned) as usize));
@@ -389,18 +389,18 @@ fn whole_element_clone(reuse: bool) -> Fields {
         "current.frame",
         "next.frame",
         "intersect",
-        "current.farray.0",
-        "current.farray.1",
-        "current.farray.2",
-        "next.farray.0",
-        "next.farray.1",
-        "next.farray.2",
+        "current.frames.0",
+        "current.frames.1",
+        "current.frames.2",
+        "next.frames.0",
+        "next.frames.1",
+        "next.frames.2",
     ] {
         assert_eq!(observed[&format!("{name}.index")], "7");
         assert_eq!(observed[&format!("{name}.retired")], "true");
     }
-    assert_eq!(observed["current.farray.role"], "old-clone-set");
-    assert_eq!(observed["next.farray.role"], "old-clone-set");
+    assert_eq!(observed["current.frames.role"], "old-clone-set");
+    assert_eq!(observed["next.frames.role"], "old-clone-set");
     assert_eq!(
         generation,
         journal.identity(std::ptr::from_ref(&cloned) as usize)

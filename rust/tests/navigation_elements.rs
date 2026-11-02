@@ -34,7 +34,7 @@ fn encounter_transition_preserves_frame_cadence_and_completion() {
         unsafe {
             let record = element.element_mut();
             record.state_flags = DISAPPEARING as u16;
-            record.current.image.farray = uqm_rust::engine::battle::frames::Frames::shared(
+            record.current.image.frames = uqm_rust::engine::battle::frames::Frames::shared(
                 uqm_rust::engine::battle::frames::SharedFrames::Fixture(0),
                 frames.array(),
             );

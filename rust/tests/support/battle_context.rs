@@ -9,7 +9,7 @@ pub fn run<R>(body: impl FnOnce() -> R) -> R {
     // SAFETY: the test mutex serializes all use of this binary's game authorities.
     unsafe {
         uqm_rust::app::bridge::with_battle(
-            uqm_rust::game_init::space_resources::shared_frame_source,
+            uqm_rust::game_init::world_resources::shared_frame_source,
             body,
         )
     }

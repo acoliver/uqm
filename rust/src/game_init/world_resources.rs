@@ -78,6 +78,22 @@ fn gravity_keys(selector: u8) -> [Option<String>; 3] {
 
 #[cfg(not(test))]
 pub(crate) mod live {
+    pub fn shared_frame_source(
+        role: crate::engine::battle::views::SharedFrames,
+    ) -> std::ptr::NonNull<crate::graphics::native_abi::FRAME> {
+        let source = match role {
+            crate::engine::battle::views::SharedFrames::Asteroid => {
+                (&raw mut crate::game_init::space_resources::asteroid).cast()
+            }
+            crate::engine::battle::views::SharedFrames::Explosion => {
+                (&raw mut crate::game_init::space_resources::explosion).cast()
+            }
+            _ => panic!("not a battle shared frame role {role:?}"),
+        };
+        std::ptr::NonNull::new(source)
+            .unwrap_or_else(|| panic!("shared frame authority has no address"))
+    }
+
     use super::gravity_keys;
     use crate::graphics::native_abi::frame_desc;
     use crate::graphics::{
@@ -174,4 +190,4 @@ mod tests {
 }
 
 #[cfg(not(test))]
-pub use live::free_gravity_well;
+pub use live::{free_gravity_well, shared_frame_source};

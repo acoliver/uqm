@@ -155,6 +155,24 @@ impl<T, const N: usize> OrderedPool<T, N> {
             .as_mut()
             .unwrap_or_else(|| unreachable!("allocated pool slot"))
     }
+    pub fn get_pair_mut(&mut self, left: Id<T>, right: Id<T>) -> (&mut T, &mut T) {
+        self.slot(left);
+        self.slot(right);
+        let [left, right] = self
+            .slots
+            .get_disjoint_mut([left.index(), right.index()])
+            .unwrap_or_else(|_| panic!("paired access requires distinct pool slots"));
+        (
+            left.value
+                .as_mut()
+                .unwrap_or_else(|| unreachable!("allocated pool slot")),
+            right
+                .value
+                .as_mut()
+                .unwrap_or_else(|| unreachable!("allocated pool slot")),
+        )
+    }
+
     /// Resolve a generation-free link belonging to this pool's current allocation.
     pub fn id_at(&self, index: usize) -> Option<Id<T>> {
         self.slots
