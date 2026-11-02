@@ -68,6 +68,7 @@ pub struct OrderedPool<T, const N: usize> {
     tail: Option<SlotIx>,
     free: Option<SlotIx>,
     count: usize,
+    capacity: usize,
 }
 impl<T, const N: usize> Default for OrderedPool<T, N> {
     fn default() -> Self {
@@ -76,6 +77,10 @@ impl<T, const N: usize> Default for OrderedPool<T, N> {
 }
 impl<T, const N: usize> OrderedPool<T, N> {
     pub fn new() -> Self {
+        Self::with_capacity(N)
+    }
+    pub fn with_capacity(capacity: usize) -> Self {
+        assert!(capacity <= N, "pool capacity exceeds storage");
         assert!(
             N <= usize::from(SlotIx::MAX),
             "pool capacity exceeds slot index"
@@ -83,7 +88,7 @@ impl<T, const N: usize> OrderedPool<T, N> {
         let slots = (0..N)
             .map(|ix| Slot {
                 pred: None,
-                succ: (ix + 1 < N).then_some((ix + 1) as SlotIx),
+                succ: (ix + 1 < capacity).then_some((ix + 1) as SlotIx),
                 generation: 0,
                 value: None,
                 linked: false,
@@ -96,8 +101,9 @@ impl<T, const N: usize> OrderedPool<T, N> {
             slots,
             head: None,
             tail: None,
-            free: (N != 0).then_some(0),
+            free: (capacity != 0).then_some(0),
             count: 0,
+            capacity,
         }
     }
 
@@ -238,12 +244,12 @@ impl<T, const N: usize> OrderedPool<T, N> {
                 .unwrap_or_else(|| panic!("pool generation exhausted"));
             slot.value = None;
             slot.pred = None;
-            slot.succ = (ix + 1 < N).then_some((ix + 1) as SlotIx);
+            slot.succ = (ix + 1 < self.capacity).then_some((ix + 1) as SlotIx);
             slot.linked = false;
         }
         self.head = None;
         self.tail = None;
-        self.free = (N != 0).then_some(0);
+        self.free = (self.capacity != 0).then_some(0);
         self.count = 0;
     }
 }

@@ -31,7 +31,7 @@ impl Battle {
     }
 
     #[cfg(not(test))]
-    pub(crate) fn master_queue(&mut self) -> &mut QUEUE {
+    pub(crate) fn master_queue(&mut self) -> &mut super::kernel::MasterCatalog {
         &mut self.kernel.master_queue
     }
 
@@ -134,7 +134,7 @@ impl Cx<'_> {
 
 impl Cx<'_> {
     #[cfg(not(test))]
-    pub(crate) fn master_queue(&mut self) -> &mut QUEUE {
+    pub(crate) fn master_queue(&mut self) -> &mut super::kernel::MasterCatalog {
         self.b.master_queue()
     }
 }

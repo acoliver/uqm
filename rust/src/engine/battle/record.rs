@@ -853,7 +853,7 @@ pub(crate) use super::kernel::{Channels, SoundQueue, StarPlane};
 
 pub(crate) struct Kernel {
     pub(crate) display: super::display::DisplayPool,
-    pub(crate) master_queue: QUEUE,
+    pub(crate) master_queue: super::kernel::MasterCatalog,
     pub(crate) player_input: [*mut std::ffi::c_void; 2],
     pub(crate) instant_victory: u32,
     pub(crate) battle_music: MUSIC_REF,
@@ -886,7 +886,7 @@ impl Kernel {
         }));
         Self {
             display: super::display::DisplayPool::new(),
-            master_queue: QUEUE::default(),
+            master_queue: super::kernel::MasterCatalog::new(),
             player_input: [ptr::null_mut(); 2],
             instant_victory: 0,
             battle_music: ptr::null_mut(),

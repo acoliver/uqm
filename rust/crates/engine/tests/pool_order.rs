@@ -66,6 +66,20 @@ fn exhaustion_at_150() {
     }
     assert!(pool.alloc(150).is_none());
     assert_eq!(pool.count(), 150);
+
+    let mut bounded = OrderedPool::<_, 32>::with_capacity(14);
+    for value in 0..14 {
+        assert_eq!(bounded.alloc(value).unwrap().index(), value);
+    }
+    assert!(bounded.alloc(14).is_none());
+    bounded.reinit();
+    for value in 0..14 {
+        let id = bounded.alloc(value).unwrap();
+        assert_eq!(id.index(), value);
+        assert_eq!(bounded.id_at(value), Some(id));
+    }
+    assert!(bounded.alloc(14).is_none());
+    assert!(bounded.id_at(14).is_none());
 }
 
 #[test]
