@@ -52,7 +52,7 @@ pub(crate) mod runtime {
         },
     };
 
-    use std::ffi::{c_void, CStr};
+    use std::ffi::{c_int, c_void, CStr};
 
     const LOG_WARNING: c_int = 3;
     const MAX_FONTS: usize = 5;
