@@ -62,14 +62,13 @@ pub(super) unsafe fn coarse() {
 }
 
 unsafe fn pc() {
-    let kernel = crate::engine::Kernel::current();
     let info = (*solar_system::current()).SysInfo.PlanetInfo;
     let g = CffiPlatform;
     SetContext(PlanetContext);
     g.set_fg_color(Rgba::rgb15(0, 0, 21));
-    SetContextFont(((*kernel).micro_font).cast());
+    SetContextFont((KernelOwner::current().read(|owner| owner.micro_font)).cast());
     text(width() >> 1, 13, Align::Center, title());
-    SetContextFont(((*kernel).tiny_font).cast());
+    SetContextFont((KernelOwner::current().read(|owner| owner.tiny_font)).cast());
     let orbit = (i64::from(info.PlanetToSunDist) * 100 + 256) / 512;
     pc_value(5, 40, 0, scan_value(orbit, &g.game_string(487)));
     let atmosphere = if info.AtmoDensity == u16::MAX {
@@ -144,12 +143,11 @@ unsafe fn pc() {
 }
 
 unsafe fn three_do() {
-    let kernel = crate::engine::Kernel::current();
     let info = (*solar_system::current()).SysInfo.PlanetInfo;
     let g = CffiPlatform;
     SetContext(PlanetContext);
     g.set_fg_color(Rgba::rgb15(15, 0, 25));
-    SetContextFont(((*kernel).micro_font).cast());
+    SetContextFont((KernelOwner::current().read(|owner| owner.micro_font)).cast());
     text(width() >> 1, 13, Align::Center, title());
     draw(
         (base::SetAbsFrameIndex((SpaceJunkFrame).cast(), 20)).cast(),
@@ -230,3 +228,5 @@ unsafe fn three_do() {
         scan_value(i64::from(info.RotationPeriod) * 10 / 24, "♁"),
     );
 }
+
+use crate::engine::Kernel as KernelOwner;

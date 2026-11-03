@@ -120,10 +120,10 @@ impl SpeechGraphics {
 
         #[cfg(not(test))]
         unsafe {
-            let kernel = crate::engine::Kernel::current();
-            let old_context = c_bridge::SetContext((*kernel).radar_context);
+            let old_context =
+                c_bridge::SetContext(KernelOwner::current().read(|owner| owner.radar_context));
             c_bridge::DrawOscilloscope();
-            c_bridge::SetContext((*kernel).space_context);
+            c_bridge::SetContext(KernelOwner::current().read(|owner| owner.space_context));
             c_bridge::DrawSlider();
             c_bridge::SetContext(old_context);
         }
@@ -152,8 +152,11 @@ impl SpeechGraphics {
 // ============================================================================
 #[cfg(not(test))]
 unsafe fn activity_frame(index: u16) -> *mut std::ffi::c_void {
-    let kernel = crate::engine::Kernel::current();
-    (c_bridge::SetAbsFrameIndex(((*kernel).activity_frame).cast(), index)).cast()
+    (c_bridge::SetAbsFrameIndex(
+        (KernelOwner::current().read(|owner| owner.activity_frame)).cast(),
+        index,
+    ))
+    .cast()
 }
 
 #[cfg(not(test))]
@@ -278,3 +281,5 @@ mod tests {
         assert_eq!(sg.last_update_ms, 0);
     }
 }
+
+use crate::engine::Kernel as KernelOwner;

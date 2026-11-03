@@ -31,10 +31,13 @@ impl MyconOps for Harness {
     fn scan(&mut self, case: ScanCase, node: &mut NODE_INFO) -> (u16, u32) {
         self.star_index = case.star;
         self.set_star(0, 0);
-        set_game_state(
-            uqm_rust::engine::StoryKey::SUN_DEVICE,
-            u32::from(case.taken),
-        );
+        crate::engine::World::current().write(|world| {
+            set_game_state(
+                world,
+                uqm_rust::engine::StoryKey::SUN_DEVICE,
+                u32::from(case.taken),
+            )
+        });
         self.state.PlanetDesc = unsafe { std::mem::zeroed() };
         self.state.MoonDesc = unsafe { std::mem::zeroed() };
         self.state.SysInfo = mycon::scan_info(case);
@@ -73,9 +76,12 @@ impl MyconOps for Harness {
             "scan mutated its solar-system input: {case:?}"
         );
         assert_eq!(
-            uqm_rust::state::game_state_keys::get_game_state(
-                uqm_rust::engine::StoryKey::SUN_DEVICE
-            ),
+            crate::engine::World::current().read(|world| {
+                uqm_rust::state::game_state_keys::get_game_state(
+                    world,
+                    uqm_rust::engine::StoryKey::SUN_DEVICE,
+                )
+            }),
             u32::from(case.taken)
         );
         (count, self.rng_position())

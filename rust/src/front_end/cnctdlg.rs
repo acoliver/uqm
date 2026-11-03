@@ -42,9 +42,8 @@ const MENU_TEXT_COLOR: Color = rgb15(6, 6, 6);
 const MENU_HIGHLIGHT_COLOR: Color = rgb15(31, 31, 0);
 const MENU_CURSOR_COLOR: Color = rgb15(31, 31, 31);
 unsafe fn game_string(index: usize) -> *const c_char {
-    let kernel = crate::engine::Kernel::current();
     GetStringAddress(SetAbsStringTableIndex(
-        (*kernel).game_strings,
+        KernelOwner::current().read(|owner| owner.game_strings),
         index as COUNT,
     ))
 }
@@ -58,9 +57,8 @@ unsafe extern "C" fn mcd_draw_menu_screen(widget: *mut WIDGET, x: c_int, y: c_in
     }
 }
 unsafe extern "C" fn mcd_draw_button(widget: *mut WIDGET, _x: c_int, y: c_int) {
-    let kernel = crate::engine::Kernel::current();
     let button = widget.cast::<WIDGET_BUTTON>();
-    let old_font = SetContextFont((*kernel).star_con_font);
+    let old_font = SetContextFont(KernelOwner::current().read(|owner| owner.star_con_font));
     let old_effect = SetContextFontEffect(ptr::null_mut());
     let mut text: TEXT = mem::zeroed();
     text.baseline = POINT {
@@ -414,7 +412,6 @@ unsafe fn draw_connect_dialog() {
     );
 }
 unsafe extern "C" fn do_melee_connect_dialog(state: *mut ConnectDialogState) -> BOOLEAN {
-    let world = crate::engine::WorldData::current();
     GamePaused = 0;
     if (*state).initialized == 0 {
         (*state).initialized = 1;
@@ -449,7 +446,11 @@ unsafe extern "C" fn do_melee_connect_dialog(state: *mut ConnectDialogState) -> 
     }
     SleepThreadUntil((*state).next_time.wrapping_add(MENU_FRAME_RATE));
     (*state).next_time = GetTimeCounter();
-    BOOLEAN::from((*world).game.current_activity & CHECK_ABORT as ACTIVITY == 0 && DONE == 0)
+    BOOLEAN::from(
+        WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as ACTIVITY
+            == 0
+            && DONE == 0,
+    )
 }
 
 /// # Safety
@@ -473,3 +474,5 @@ pub unsafe fn melee_connect_dialog(
     DestroyFont(PLAYER_FONT_HANDLE);
     state.confirmed as BOOLEAN
 }
+
+use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

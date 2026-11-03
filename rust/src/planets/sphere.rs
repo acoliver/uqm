@@ -33,6 +33,7 @@ pub(crate) mod live {
     use super::{zoom_scale, Rotation};
     use crate::c_bindings::{global_state::DrawMode, solar_system};
     use crate::comm::locdata::{CColor, CRect};
+    use crate::engine::Kernel as KernelOwner;
     use crate::graphics::context_abi::SetContextClipRect;
     use crate::graphics::drawable_abi::SetContextFGFrame;
     use crate::mainloop::restart_menu::c_extern::{
@@ -217,9 +218,8 @@ pub(crate) mod live {
     }
 
     unsafe fn tint_frame(color: CColor) {
-        let kernel = crate::engine::Kernel::current();
         let system = solar_system::current();
-        let old_context = SetContext((*kernel).off_screen_context);
+        let old_context = SetContext(KernelOwner::current().read(|owner| owner.off_screen_context));
         SetContextFGFrame((*system).Orbit.TintFrame.cast());
         SetContextClipRect(std::ptr::null_mut());
         let rect = CffiPlatform.context_clip_rect();
@@ -327,3 +327,5 @@ mod tests {
         assert_eq!(zoom_scale(count, count), 1.0);
     }
 }
+
+use crate::engine::Kernel as KernelOwner;

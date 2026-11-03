@@ -413,7 +413,9 @@ impl StateSource for LiveCampaign {
                 input_ffi::hyperspace_position().and_then(|(_, y)| u32::try_from(y).ok())
             }
             StateKey::HyperStopped => input_ffi::hyperspace_stopped().map(u32::from),
-            StateKey::Story(name) => crate::state::ffi::named_state_value(name).map(u32::from),
+            StateKey::Story(name) => crate::engine::World::current()
+                .read(|world| crate::state::ffi::named_state_value(world, name))
+                .map(u32::from),
             StateKey::Activity => Some(u32::from(crate::mainloop::ffi::get_current_activity().0)),
             StateKey::SisDrive(slot) => input_ffi::sis_fittings()
                 .map(|(drives, _, _, _)| u32::from(drives[usize::from(slot)])),

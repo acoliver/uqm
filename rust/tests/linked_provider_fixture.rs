@@ -35,10 +35,13 @@ fn a_second_new_game_starts_from_zero_state() {
     unsafe {
         uqm_rust::app::bridge::with_game(&mut game, || {
             InitGlobData();
-            rust_set_game_state(moonbase.as_ptr(), 1);
-            rust_set_game_state(on_ship.as_ptr(), 1);
+            crate::engine::World::current()
+                .write(|world| rust_set_game_state(world, moonbase.as_ptr(), 1));
+            crate::engine::World::current()
+                .write(|world| rust_set_game_state(world, on_ship.as_ptr(), 1));
             assert_eq!(
-                rust_get_game_state(moonbase.as_ptr()),
+                crate::engine::World::current()
+                    .read(|world| rust_get_game_state(world, moonbase.as_ptr())),
                 1,
                 "precondition: the first game recorded the moon base as taken"
             );
@@ -46,12 +49,14 @@ fn a_second_new_game_starts_from_zero_state() {
             InitGlobData();
 
             assert_eq!(
-                rust_get_game_state(moonbase.as_ptr()),
+                crate::engine::World::current()
+                    .read(|world| rust_get_game_state(world, moonbase.as_ptr())),
                 0,
                 "a new game must find Luna's moon base intact"
             );
             assert_eq!(
-                rust_get_game_state(on_ship.as_ptr()),
+                crate::engine::World::current()
+                    .read(|world| rust_get_game_state(world, on_ship.as_ptr())),
                 0,
                 "a new game must not start with the moon base already aboard"
             );

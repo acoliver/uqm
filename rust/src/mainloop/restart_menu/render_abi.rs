@@ -7,7 +7,6 @@ use crate::ships::native::abi::*;
 /// Menu and its frame are live; the SDL game thread owns the current context.
 #[cfg(not(test))]
 pub unsafe fn DrawRestartMenuGraphic(menu: *mut MENU_STATE) {
-    let kernel = crate::engine::Kernel::current();
     let mut rect: RECT = std::mem::zeroed();
     GetFrameRect((*menu).CurFrame, &mut rect);
     let mut stamp = STAMP {
@@ -27,7 +26,7 @@ pub unsafe fn DrawRestartMenuGraphic(menu: *mut MENU_STATE) {
     ClearDrawable();
     crate::graphics::cmap_abi::FlushColorXForms();
     DrawStamp(&mut stamp);
-    SetContextFont((*kernel).tiny_font);
+    SetContextFont(KernelOwner::current().read(|owner| owner.tiny_font));
     let version = std::ffi::CString::new(concat!("v", env!("CARGO_PKG_VERSION"))).unwrap();
     let mut text = TEXT {
         baseline: POINT {
@@ -80,3 +79,5 @@ mod tests {
         assert_eq!(centered_coordinate(200, 203), -2);
     }
 }
+
+use crate::engine::Kernel as KernelOwner;

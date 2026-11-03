@@ -183,12 +183,13 @@ pub(crate) mod engine {
         std::ptr::from_mut(cx.display_primitive(index as u16))
     }
     unsafe fn stars(index: usize) -> *mut POINT {
-        let kernel = crate::engine::Kernel::current();
-        (*kernel).log_stars.as_mut_ptr().add(index)
+        (**KernelOwner::current()).log_stars.as_mut_ptr().add(index)
     }
     unsafe fn blocks(index: usize) -> *mut super::STAR_BLOCK {
-        let kernel = crate::engine::Kernel::current();
-        (*kernel).star_planes.as_mut_ptr().add(index)
+        (**KernelOwner::current())
+            .star_planes
+            .as_mut_ptr()
+            .add(index)
     }
     unsafe fn width() -> i32 {
         (ScreenWidth - 64) << (ONE_SHIFT + MAX_REDUCTION)
@@ -218,10 +219,12 @@ pub(crate) mod engine {
                     (*prim(cx, i)).Object.Stamp.frame = cx.kernel.stars_in_space;
                 } else {
                     (*prim(cx, i)).Type = gfx_object_POINT_PRIM as u8;
-                    (*prim(cx, i)).color = if inHQSpace() == 0 {
+                    (*prim(cx, i)).color = if cx.world.activity() as u8 != 3 {
                         color(21, 21, 21)
-                    } else if crate::state::ffi::rust_get_game_state(c"ARILOU_SPACE_SIDE".as_ptr())
-                        <= 1
+                    } else if crate::state::ffi::rust_get_game_state(
+                        cx.world,
+                        c"ARILOU_SPACE_SIDE".as_ptr(),
+                    ) <= 1
                     {
                         color(20, 0, 0)
                     } else {
@@ -243,7 +246,7 @@ pub(crate) mod engine {
             let mut reduction = cx.b.zoom_out as u16;
             let step = optMeleeScale == 0;
             if view == 2 {
-                if inHQSpace() != 0 {
+                if cx.world.activity() as u8 == 3 {
                     let mut p = 0;
                     for (plane, offset) in [58, 26].into_iter().enumerate() {
                         for _ in 0..COUNTS[plane] {
@@ -281,7 +284,7 @@ pub(crate) mod engine {
                     }
                 }
             }
-            if inHQSpace() != 0 {
+            if cx.world.activity() as u8 == 3 {
                 for i in 0..90 {
                     let frame = (*prim(cx, i)).Object.Stamp.frame;
                     let base = frame_index(frame).wrapping_sub(26);
@@ -296,7 +299,7 @@ pub(crate) mod engine {
             for plane in (0..3).rev() {
                 (*blocks(plane)).wrap(plane as i16, dx, dy, height());
             }
-            if inHQSpace() == 0 {
+            if cx.world.activity() as u8 != 3 {
                 dx = cx.kernel.space_origin.x;
                 dy = cx.kernel.space_origin.y;
                 if step {
@@ -437,3 +440,5 @@ mod tests {
         assert_eq!(color(11, 11, 31).b, 255);
     }
 }
+
+use crate::engine::Kernel as KernelOwner;

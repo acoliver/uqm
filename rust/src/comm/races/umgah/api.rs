@@ -7,9 +7,9 @@ pub(super) trait UmgahApi: EncounterApi<Handler> {
 impl UmgahApi for super::super::script::live::LiveScript<Handler> {
     fn add_biomass(&mut self, amount: u16) {
         unsafe {
-            let world = crate::engine::WorldData::current();
-            (*world).flagship.total_bio_mass =
-                (*world).flagship.total_bio_mass.wrapping_add(amount);
+            (**WorldFields::current()).flagship.total_bio_mass = WorldFields::current()
+                .read(|owner| owner.flagship.total_bio_mass)
+                .wrapping_add(amount);
         }
     }
 }
@@ -24,3 +24,5 @@ impl UmgahApi for super::super::encounter::testing::Fake<Handler, World> {
         self.world.biomass = self.world.biomass.wrapping_add(amount);
     }
 }
+
+use crate::engine::WorldData as WorldFields;

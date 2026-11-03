@@ -18,8 +18,7 @@ fn find(queue: &MasterCatalog, species: u32) -> i32 {
 /// # Safety
 /// The game thread owns the initialized catalog throughout this synchronous lookup.
 pub(crate) unsafe fn cost(index: u32) -> u16 {
-    let kernel = crate::engine::Kernel::current();
-    let queue = &(*kernel).master_queue;
+    let queue = &(**KernelOwner::current()).master_queue;
     cost_in(queue, index as u16)
 }
 
@@ -223,3 +222,5 @@ mod tests {
             .is_none());
     }
 }
+
+use crate::engine::Kernel as KernelOwner;

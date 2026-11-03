@@ -6,5 +6,7 @@
 pub unsafe fn descriptor(species: u32) -> crate::engine::battle::RaceDesc {
     let race =
         crate::ships::races::race(species).unwrap_or_else(|| panic!("unknown species {species}"));
-    (race.descriptor)(&mut *crate::engine::World::current())
+    (race.descriptor)(&mut **WorldOwner::current())
 }
+
+use crate::engine::World as WorldOwner;

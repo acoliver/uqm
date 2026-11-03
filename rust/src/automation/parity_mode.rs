@@ -7,6 +7,7 @@ use crate::savegame::types::GlobalState;
 pub(super) fn capture(
     fields: &mut Fields,
     game: &crate::comm::locdata::CGameState,
+    state: Option<&crate::state::game_state::GameState>,
     journal: &mut super::parity::Journal,
 ) {
     global(
@@ -14,7 +15,7 @@ pub(super) fn capture(
         &crate::savegame::runtime::global::capture_global_state(game),
     );
     value(fields, "mode", "battle_group_ref", game.battle_group_ref);
-    story(fields);
+    story(fields, state);
     events(fields, &game.game_clock.event_q);
     groups(fields, &game.ip_group_q, journal);
 }
@@ -79,15 +80,21 @@ fn velocity(fields: &mut Fields, state: &GlobalState) {
     }
 }
 
-pub(super) fn story(fields: &mut Fields) {
-    match crate::state::ffi::snapshot_game_state() {
-        Ok(bytes) => {
+pub(super) fn story(fields: &mut Fields, state: Option<&crate::state::game_state::GameState>) {
+    match state {
+        Some(state) => {
+            let bytes = state.as_bytes();
             value(fields, "mode.story", "initialized", true);
             for (index, byte) in bytes.iter().enumerate() {
                 value(fields, "mode.story", &index.to_string(), byte);
             }
         }
-        Err(error) => value(fields, "mode.story", "unavailable", error),
+        None => value(
+            fields,
+            "mode.story",
+            "unavailable",
+            crate::state::ffi::GameStateOwnerError::NotInitialized,
+        ),
     }
 }
 
@@ -180,7 +187,7 @@ mod tests {
         unsafe {
             crate::app::bridge::with_game(&mut game_owner, || {
                 let mut fields = Fields::new();
-                story(&mut fields);
+                crate::app::bridge::enter(|cx| story(&mut fields, cx.world.story.as_ref()));
                 // Other state tests may initialize the shared owner. Either state must
                 // produce a complete result without requiring native game initialization.
                 if fields.contains_key("mode.story.initialized") {

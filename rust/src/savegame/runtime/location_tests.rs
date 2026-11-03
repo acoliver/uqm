@@ -113,30 +113,47 @@ const PLANETARY_CHANGE_BYTE: usize = 17 / 8;
 const PLANETARY_CHANGE_MASK: u8 = 1 << (17 % 8);
 
 fn planetary_change() -> bool {
-    snapshot_game_state().unwrap()[PLANETARY_CHANGE_BYTE] & PLANETARY_CHANGE_MASK != 0
+    crate::engine::World::current()
+        .read(|world| snapshot_game_state(world))
+        .unwrap()[PLANETARY_CHANGE_BYTE]
+        & PLANETARY_CHANGE_MASK
+        != 0
 }
 
 fn set_planetary_change() {
-    let mut bytes = snapshot_game_state().unwrap();
+    let mut bytes = crate::engine::World::current()
+        .read(|world| snapshot_game_state(world))
+        .unwrap();
     bytes[PLANETARY_CHANGE_BYTE] |= PLANETARY_CHANGE_MASK;
-    replace_game_state(&bytes).unwrap();
+    crate::engine::World::current()
+        .write(|world| replace_game_state(world, &bytes))
+        .unwrap();
 }
 
 /// A fresh game state and a `STARINFO` of `stars` stars nobody has scanned
 /// (`InitPlanetInfo`: one zero offset each).
 fn fresh_starinfo(stars: usize) {
     // SAFETY: no requirements.
-    unsafe { rust_init_game_state() };
-    with_state_files(|files| {
-        files
-            .replace_contents(STARINFO_FILE, &vec![0u8; 4 * stars])
-            .unwrap()
-    })
-    .unwrap();
+    unsafe { crate::engine::World::current().write(|world| rust_init_game_state(world)) };
+    crate::engine::World::current()
+        .write(|world| {
+            with_state_files(world, |files| {
+                files
+                    .replace_contents(STARINFO_FILE, &vec![0u8; 4 * stars])
+                    .unwrap()
+            })
+        })
+        .unwrap();
 }
 
 fn starinfo() -> Vec<u8> {
-    with_state_files(|files| files.get_file(STARINFO_FILE).unwrap().contents().to_vec()).unwrap()
+    crate::engine::World::current()
+        .write(|world| {
+            with_state_files(world, |files| {
+                files.get_file(STARINFO_FILE).unwrap().contents().to_vec()
+            })
+        })
+        .unwrap()
 }
 
 fn words(values: [u32; 3]) -> Vec<u8> {

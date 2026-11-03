@@ -7,12 +7,10 @@ pub fn bit_range(name: &str) -> Option<(u32, u32)> {
 }
 
 #[must_use]
-pub fn get_game_state(key: StoryKey) -> u32 {
-    // SAFETY: legacy story access is synchronous on the published game thread.
-    unsafe { (*crate::engine::World::current()).story_state(key) }
+pub fn get_game_state(world: &crate::engine::World, key: StoryKey) -> u32 {
+    world.story_state(key)
 }
 
-pub fn set_game_state(key: StoryKey, value: u32) {
-    // SAFETY: legacy story access is synchronous on the published game thread.
-    unsafe { (*crate::engine::World::current()).set_story_state(key, value) }
+pub fn set_game_state(world: &mut crate::engine::World, key: StoryKey, value: u32) {
+    world.set_story_state(key, value)
 }

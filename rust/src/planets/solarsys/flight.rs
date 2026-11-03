@@ -55,8 +55,8 @@ unsafe fn system() -> *mut c::SOLARSYS_STATE {
 }
 
 #[inline]
-unsafe fn glob() -> *mut crate::engine::WorldData {
-    crate::engine::WorldData::current()
+unsafe fn glob() -> crate::app::bridge::Projection<crate::engine::WorldData> {
+    WorldFields::current()
 }
 
 #[inline]
@@ -111,10 +111,9 @@ pub(super) unsafe fn get_collision_frame(
     planet: *mut c::PLANET_DESC,
     wait_planet: c::COUNT,
 ) -> c::FRAME {
-    let kernel = crate::engine::Kernel::current();
     let state = system();
     if (*state).WaitIntersect != c::COUNT::MAX && (*state).WaitIntersect != wait_planet {
-        DecFrameIndex(((*kernel).stars_in_space).cast()).cast()
+        DecFrameIndex((KernelOwner::current().read(|owner| owner.stars_in_space)).cast()).cast()
     } else {
         (*planet).image.frame
     }
@@ -122,7 +121,7 @@ pub(super) unsafe fn get_collision_frame(
 
 pub(super) unsafe fn check_intersect() -> *mut c::PLANET_DESC {
     let state = system();
-    let game = ptr::addr_of!((*glob()).game);
+    let game = ptr::addr_of!((**glob()).game);
     let mut current = (*(*state).pBaseDesc).pPrevDesc;
     let mut planet_offset = current
         .offset_from((*state).PlanetDesc.as_ptr())
@@ -203,7 +202,7 @@ pub(super) unsafe fn check_intersect() -> *mut c::PLANET_DESC {
 
 pub(super) unsafe fn flagship_inertial_thrust(current_angle: c::COUNT) -> c::UWORD {
     let max_speed = (*system()).max_ship_speed;
-    let velocity = ptr::addr_of_mut!((*glob()).game.velocity);
+    let velocity = ptr::addr_of_mut!((**glob()).game.velocity);
     let mut current_dx: c::SIZE = 0;
     let mut current_dy: c::SIZE = 0;
     GetCurrentVelocityComponents(velocity, &mut current_dx, &mut current_dy);
@@ -256,7 +255,7 @@ pub(super) unsafe fn flagship_inertial_thrust(current_angle: c::COUNT) -> c::UWO
 
 pub(super) unsafe fn process_ship_controls() {
     let state = system();
-    let game = ptr::addr_of_mut!((*glob()).game);
+    let game = ptr::addr_of_mut!((**glob()).game);
     let input = ptr::addr_of!(CurrentInputState);
     let player = crate::c_bindings::player_control_template(0)
         .expect("player zero has a control template") as usize;
@@ -305,7 +304,7 @@ pub(super) unsafe fn process_ship_controls() {
 
 pub(super) unsafe fn enter_inner_system(planet: *mut c::PLANET_DESC) {
     let state = system();
-    let game = ptr::addr_of_mut!((*glob()).game);
+    let game = ptr::addr_of_mut!((**glob()).game);
     let angle =
         facing_to_angle(GetFrameIndex(((*game).ship_stamp.frame).cast())).wrapping_add(HALF_CIRCLE);
     let (width, height) = sis_dimensions();
@@ -332,7 +331,7 @@ pub(super) unsafe fn enter_inner_system(planet: *mut c::PLANET_DESC) {
 
 pub(super) unsafe fn leave_inner_system(planet: *mut c::PLANET_DESC) {
     let state = system();
-    let game = ptr::addr_of_mut!((*glob()).game);
+    let game = ptr::addr_of_mut!((**glob()).game);
     (*state).pBaseDesc = (*state).PlanetDesc.as_mut_ptr();
     (*state).pOrbitalDesc = ptr::null_mut();
 
@@ -358,7 +357,7 @@ pub(super) unsafe fn leave_inner_system(planet: *mut c::PLANET_DESC) {
 }
 
 pub(super) unsafe fn enter_orbital(planet: *mut c::PLANET_DESC) {
-    (*glob()).game.velocity.zero();
+    (**glob()).game.velocity.zero();
     let state = system();
     (*state).pOrbitalDesc = planet;
     (*state).InOrbit = 1;
@@ -366,7 +365,7 @@ pub(super) unsafe fn enter_orbital(planet: *mut c::PLANET_DESC) {
 
 pub(super) unsafe fn check_ship_location(new_radius: *mut c::SIZE) -> c::BOOLEAN {
     let state = system();
-    let game = ptr::addr_of_mut!((*glob()).game);
+    let game = ptr::addr_of_mut!((**glob()).game);
     let radius = (*state).SunDesc[0].radius;
     *new_radius = (*state).SunDesc[0].radius;
 
@@ -412,7 +411,7 @@ pub(super) unsafe fn check_ship_location(new_radius: *mut c::SIZE) -> c::BOOLEAN
 }
 
 pub(super) unsafe fn scale_system(new_radius: c::SIZE) {
-    let game = ptr::addr_of_mut!((*glob()).game);
+    let game = ptr::addr_of_mut!((**glob()).game);
     (*system()).SunDesc[0].radius = new_radius;
     XFormIPLoc(
         ptr::addr_of_mut!((*game).ip_location).cast(),
@@ -440,8 +439,7 @@ pub(super) unsafe fn restore_system_view() {
 }
 
 pub(super) unsafe fn ip_frame() {
-    let kernel = crate::engine::Kernel::current();
-    SetContext((*kernel).space_context);
+    SetContext(KernelOwner::current().read(|owner| owner.space_context));
     GameClockTick();
     process_ship_controls();
 
@@ -466,7 +464,7 @@ pub(super) unsafe fn ip_frame() {
 
 pub(super) unsafe fn check_zoom_level() -> c::BOOLEAN {
     let state = system();
-    let game = ptr::addr_of_mut!((*glob()).game);
+    let game = ptr::addr_of_mut!((**glob()).game);
     let inner_system = playerInInnerSystem();
     let mut ship_location = if inner_system {
         (*state).SunDesc[0].location
@@ -570,3 +568,5 @@ mod tests {
         assert_eq!(result.y, source.y);
     }
 }
+
+use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

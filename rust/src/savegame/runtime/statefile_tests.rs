@@ -35,14 +35,26 @@ fn game() -> Box<CGameState> {
 /// A fresh game state and empty group files, as `InitGlobData` leaves them.
 fn fresh_game() -> Box<CGameState> {
     // SAFETY: no requirements.
-    unsafe { rust_init_game_state() };
+    unsafe { crate::engine::World::current().write(|world| rust_init_game_state(world)) };
     init_group_info(true).unwrap();
-    with_state_files(|files| files.replace_contents(STARINFO_FILE, &[]).unwrap()).unwrap();
+    crate::engine::World::current()
+        .write(|world| {
+            with_state_files(world, |files| {
+                files.replace_contents(STARINFO_FILE, &[]).unwrap()
+            })
+        })
+        .unwrap();
     game()
 }
 
 fn file(index: usize) -> Vec<u8> {
-    with_state_files(|files| files.get_file(index).unwrap().contents().to_vec()).unwrap()
+    crate::engine::World::current()
+        .write(|world| {
+            with_state_files(world, |files| {
+                files.get_file(index).unwrap().contents().to_vec()
+            })
+        })
+        .unwrap()
 }
 
 fn header(num: u8, day: u8, month: u8, star: u16, year: u16, offsets: &[(usize, u32)]) -> Vec<u8> {
@@ -124,14 +136,18 @@ fn seed_restores_to_the_images_the_c_loader_builds() {
     unsafe {
         crate::app::bridge::with_game(&mut game_owner, || {
             let mut game = fresh_game();
-            replace_game_state(&seed().game_state).unwrap();
+            crate::engine::World::current()
+                .write(|world| replace_game_state(world, &seed().game_state))
+                .unwrap();
             restore_state_files(&mut game, &seed_sections()).unwrap();
 
             assert_eq!(file(STARINFO_FILE), vec![0u8; 2008]);
             assert_eq!(file(RANDGRPINFO_FILE), seed_random_image());
             assert_eq!(file(DEFGRPINFO_FILE), seed_defined_image());
             assert_eq!(game.battle_group_ref, 1);
-            let state = snapshot_game_state().unwrap();
+            let state = crate::engine::World::current()
+                .read(|world| snapshot_game_state(world))
+                .unwrap();
             assert_eq!(get_state_32_raw(&state, PROBE_OFFSET_BIT), 1);
         })
     }
@@ -145,7 +161,9 @@ fn capture_after_restore_gives_back_the_seed_sections() {
     unsafe {
         crate::app::bridge::with_game(&mut game_owner, || {
             let mut game = fresh_game();
-            replace_game_state(&seed().game_state).unwrap();
+            crate::engine::World::current()
+                .write(|world| replace_game_state(world, &seed().game_state))
+                .unwrap();
             restore_state_files(&mut game, &seed_sections()).unwrap();
 
             let captured = capture_state_files(&game).unwrap();
@@ -358,13 +376,17 @@ fn rejected_restore_leaves_files_and_state_alone() {
     unsafe {
         crate::app::bridge::with_game(&mut game_owner, || {
             let mut game = fresh_game();
-            replace_game_state(&seed().game_state).unwrap();
+            crate::engine::World::current()
+                .write(|world| replace_game_state(world, &seed().game_state))
+                .unwrap();
             restore_state_files(&mut game, &seed_sections()).unwrap();
             let before = (
                 file(STARINFO_FILE),
                 file(RANDGRPINFO_FILE),
                 file(DEFGRPINFO_FILE),
-                snapshot_game_state().unwrap(),
+                crate::engine::World::current()
+                    .read(|world| snapshot_game_state(world))
+                    .unwrap(),
                 game.battle_group_ref,
             );
 
@@ -460,7 +482,9 @@ fn rejected_restore_leaves_files_and_state_alone() {
                     file(STARINFO_FILE),
                     file(RANDGRPINFO_FILE),
                     file(DEFGRPINFO_FILE),
-                    snapshot_game_state().unwrap(),
+                    crate::engine::World::current()
+                        .read(|world| snapshot_game_state(world))
+                        .unwrap(),
                     game.battle_group_ref,
                 );
                 assert_eq!(after, before, "state changed after {expected:?}");
@@ -477,11 +501,15 @@ fn repeated_loads_start_from_the_initial_group_files() {
     unsafe {
         crate::app::bridge::with_game(&mut game_owner, || {
             let mut game = fresh_game();
-            replace_game_state(&seed().game_state).unwrap();
+            crate::engine::World::current()
+                .write(|world| replace_game_state(world, &seed().game_state))
+                .unwrap();
             restore_state_files(&mut game, &seed_sections()).unwrap();
 
             // A second save: three random fleets, no defined groups, game state clean.
-            replace_game_state(&[0; GAME_STATE_BYTES]).unwrap();
+            crate::engine::World::current()
+                .write(|world| replace_game_state(world, &[0; GAME_STATE_BYTES]))
+                .unwrap();
             let mut random = random_group(3);
             random.current = true; // LoadBattleGroup forces this off for the random group
             let second = StateFileSections {
@@ -543,7 +571,9 @@ fn several_defined_groups_get_their_own_offsets() {
     unsafe {
         crate::app::bridge::with_game(&mut game_owner, || {
             let mut game = fresh_game();
-            replace_game_state(&[0; GAME_STATE_BYTES]).unwrap();
+            crate::engine::World::current()
+                .write(|world| replace_game_state(world, &[0; GAME_STATE_BYTES]))
+                .unwrap();
             let mut first = probe_group(false);
             first.encounter_id = 1;
             let mut last = probe_group(true);
@@ -559,7 +589,9 @@ fn several_defined_groups_get_their_own_offsets() {
             // Group 14 came first in the save, so it sits at 1; group 1 follows the
             // 268 byte header and the 2 + 17 byte fleet.
             let second_offset = 1 + 268 + 19;
-            let state = snapshot_game_state().unwrap();
+            let state = crate::engine::World::current()
+                .read(|world| snapshot_game_state(world))
+                .unwrap();
             assert_eq!(get_state_32_raw(&state, SAMATRA_OFFSET_BIT), 1);
             assert_eq!(get_state_32_raw(&state, FIRST_OFFSET_BIT), second_offset);
             assert_eq!(game.battle_group_ref, 1);
@@ -580,7 +612,9 @@ fn init_group_info_matches_the_c_initialiser() {
     unsafe {
         crate::app::bridge::with_game(&mut game_owner, || {
             let mut game = fresh_game();
-            replace_game_state(&seed().game_state).unwrap();
+            crate::engine::World::current()
+                .write(|world| replace_game_state(world, &seed().game_state))
+                .unwrap();
             restore_state_files(&mut game, &seed_sections()).unwrap();
 
             init_group_info(false).unwrap();
@@ -597,7 +631,9 @@ fn init_group_info_matches_the_c_initialiser() {
             assert_eq!(file(DEFGRPINFO_FILE), vec![0]);
 
             // An initialised but empty random file still saves its header as a group.
-            replace_game_state(&[0; GAME_STATE_BYTES]).unwrap();
+            crate::engine::World::current()
+                .write(|world| replace_game_state(world, &[0; GAME_STATE_BYTES]))
+                .unwrap();
             let captured = capture_state_files(&game).unwrap();
             assert!(captured.group_list.is_none());
             assert_eq!(captured.battle_groups.len(), 1);
@@ -614,12 +650,15 @@ fn deleted_files_capture_as_empty_storage() {
     unsafe {
         crate::app::bridge::with_game(&mut game_owner, || {
             let game = fresh_game();
-            with_state_files(|files| {
-                for index in [STARINFO_FILE, RANDGRPINFO_FILE, DEFGRPINFO_FILE] {
-                    files.delete(index).unwrap();
-                }
-            })
-            .unwrap();
+            crate::engine::World::current()
+                .write(|world| {
+                    with_state_files(world, |files| {
+                        for index in [STARINFO_FILE, RANDGRPINFO_FILE, DEFGRPINFO_FILE] {
+                            files.delete(index).unwrap();
+                        }
+                    })
+                })
+                .unwrap();
             let captured = capture_state_files(&game).unwrap();
             assert_eq!(captured.scan, Some(Vec::new()));
             assert!(captured.group_list.is_none() && captured.battle_groups.is_empty());
@@ -644,13 +683,21 @@ fn canned_nodes_capture_restore_and_old_save_clear_are_atomic() {
                 x: 967,
                 y: 299,
             };
-            with_state_files(|files| files.can_node(node)).unwrap();
+            crate::engine::World::current()
+                .write(|world| with_state_files(world, |files| files.can_node(node)))
+                .unwrap();
             let captured = capture_state_files(&game).unwrap();
             assert_eq!(captured.canned_nodes, [node]);
-            with_state_files(|files| files.remove_canned_node(node.key())).unwrap();
+            crate::engine::World::current()
+                .write(|world| {
+                    with_state_files(world, |files| files.remove_canned_node(node.key()))
+                })
+                .unwrap();
             restore_state_files(&mut game, &captured).unwrap();
             assert_eq!(
-                with_state_files(|files| files.canned_node(node.key())).unwrap(),
+                crate::engine::World::current()
+                    .write(|world| with_state_files(world, |files| files.canned_node(node.key())))
+                    .unwrap(),
                 Some(node)
             );
             let mut invalid_group = probe_group(false);
@@ -664,16 +711,22 @@ fn canned_nodes_capture_restore_and_old_save_clear_are_atomic() {
             )
             .is_err());
             assert_eq!(
-                with_state_files(|files| files.canned_node(node.key())).unwrap(),
+                crate::engine::World::current()
+                    .write(|world| with_state_files(world, |files| files.canned_node(node.key())))
+                    .unwrap(),
                 Some(node)
             );
             restore_state_files(&mut game, &StateFileSections::default()).unwrap();
-            assert!(with_state_files(|files| files.canned_node(node.key()))
+            assert!(crate::engine::World::current()
+                .write(|world| with_state_files(world, |files| files.canned_node(node.key())))
                 .unwrap()
                 .is_none());
-            with_state_files(|files| files.can_node(node)).unwrap();
-            rust_init_game_state();
-            assert!(with_state_files(|files| files.canned_node(node.key()))
+            crate::engine::World::current()
+                .write(|world| with_state_files(world, |files| files.can_node(node)))
+                .unwrap();
+            crate::engine::World::current().write(|world| rust_init_game_state(world));
+            assert!(crate::engine::World::current()
+                .write(|world| with_state_files(world, |files| files.canned_node(node.key())))
                 .unwrap()
                 .is_none());
         })

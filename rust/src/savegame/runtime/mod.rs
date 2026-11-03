@@ -103,7 +103,7 @@ impl From<GameStateOwnerError> for RuntimeError {
 pub fn capture_runtime(game: &CGameState) -> Result<RuntimeSections, RuntimeError> {
     Ok(RuntimeSections {
         global: global::capture_global_state(game),
-        game_state: snapshot_game_state()?,
+        game_state: crate::engine::World::current().read(|world| snapshot_game_state(world))?,
         events: events::capture_events(&game.game_clock.event_q)?,
     })
 }
@@ -120,7 +120,7 @@ pub fn restore_runtime(
     events: &[EventEntry],
 ) -> Result<Restored, RuntimeError> {
     events::validate_restore(&game.game_clock.event_q, events)?;
-    replace_game_state(game_state)?;
+    crate::engine::World::current().write(|world| replace_game_state(world, game_state))?;
 
     events::install_events(&mut game.game_clock.event_q, events);
     Ok(Restored {

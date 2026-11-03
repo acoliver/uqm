@@ -5,6 +5,7 @@ pub(crate) mod live {
     use crate::automation::coordinator::rust_automation_seed_value;
     use crate::battle::{COMPUTER_CONTROL, HUMAN_CONTROL, NETWORK_CONTROL, PSYTRON_CONTROL};
     use crate::comm::hail::game_string;
+    use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
     use crate::game_init::macro_abi::{LoadMusic, LoadSound};
     use crate::graphics::drawable_abi;
     use crate::graphics::resgfx::LoadGraphicInstance as LoadGraphic;
@@ -43,7 +44,6 @@ pub(crate) mod live {
         PulsedInputState.menu[key as usize] != 0
     }
     unsafe fn select_option(state: *mut MELEE_STATE) {
-        let world = crate::engine::WorldData::current();
         match (*state).melee_option {
             4 => start_button(state),
             3 | 5 => {
@@ -59,7 +59,7 @@ pub(crate) mod live {
                     PlayMenuSound(2);
                 }
             }
-            9 => (*world).game.current_activity |= CHECK_ABORT as u16,
+            9 => (**WorldFields::current()).game.current_activity |= CHECK_ABORT as u16,
             0 | 8 => {
                 let side = u16::from((*state).melee_option == 0);
                 let confirmed = MeleeConnectDialog(&mut (*state).netplay, side as i32);
@@ -79,11 +79,11 @@ pub(crate) mod live {
     /// Call on the game thread after kernel/resource initialization. Any state
     /// pointer must remain exclusively accessible through the nested input loop.
     pub unsafe extern "C" fn DoMelee(state: *mut MELEE_STATE) -> u32 {
-        let kernel = crate::engine::Kernel::current();
-        let world = crate::engine::WorldData::current();
         let time = GetTimeCounter();
         GamePaused = 0;
-        if (*world).game.current_activity & CHECK_ABORT as u16 != 0 {
+        if WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
+            != 0
+        {
             return 0;
         }
         SetMenuSounds(15, 16);
@@ -127,7 +127,10 @@ pub(crate) mod live {
                 (*state).last_input_time = GetTimeCounter();
                 next = super::rules::next_option(next, false, true);
             }
-            if (*kernel).player_control[0] & (*kernel).player_control[1] & PSYTRON_CONTROL != 0
+            if KernelOwner::current().read(|owner| owner.player_control[0])
+                & KernelOwner::current().read(|owner| owner.player_control[1])
+                & PSYTRON_CONTROL
+                != 0
                 && GetTimeCounter().wrapping_sub((*state).last_input_time) > 840 * 10
             {
                 force = true;
@@ -142,16 +145,24 @@ pub(crate) mod live {
                 highlight(next, true);
                 if next == 1 || next == 7 {
                     let side = usize::from(next == 1);
-                    status_player(if (*kernel).player_control[side] & NETWORK_CONTROL != 0 {
-                        side as isize
-                    } else {
-                        -1
-                    });
+                    status_player(
+                        if KernelOwner::current().read(|owner| owner.player_control[side])
+                            & NETWORK_CONTROL
+                            != 0
+                        {
+                            side as isize
+                        } else {
+                            -1
+                        },
+                    );
                 }
             }
             if key(KEY_MENU_SELECT) || force {
                 select_option(state);
-                if (*world).game.current_activity & CHECK_ABORT as u16 != 0 {
+                if WorldFields::current().read(|owner| owner.game.current_activity)
+                    & CHECK_ABORT as u16
+                    != 0
+                {
                     return 0;
                 }
             }
@@ -164,7 +175,6 @@ pub(crate) mod live {
         1
     }
     unsafe fn load_config(state: *mut MELEE_STATE) -> bool {
-        let kernel = crate::engine::Kernel::current();
         let stream = uio_bridge::uio_fopen(configDir.cast(), c"melee.cfg".as_ptr(), c"rb".as_ptr());
         if stream.is_null() {
             return false;
@@ -179,13 +189,15 @@ pub(crate) mod live {
                     ok = false;
                     break;
                 }
-                (*kernel).player_control[side] = byte as u8;
+                (**KernelOwner::current()).player_control[side] = byte as u8;
                 if MeleeSetup_deserializeTeam((*state).melee_setup, side, stream.cast()) == -1 {
                     ok = false;
                     break;
                 }
-                if (*kernel).player_control[side] & NETWORK_CONTROL != 0 {
-                    (*kernel).player_control[side] = HUMAN_CONTROL | 16;
+                if KernelOwner::current().read(|owner| owner.player_control[side]) & NETWORK_CONTROL
+                    != 0
+                {
+                    (**KernelOwner::current()).player_control[side] = HUMAN_CONTROL | 16;
                 }
             }
         }
@@ -193,7 +205,6 @@ pub(crate) mod live {
         ok
     }
     unsafe fn write_config(state: *mut MELEE_STATE) -> bool {
-        let kernel = crate::engine::Kernel::current();
         use crate::resource::ffi_bridge::{res_CloseResFile, res_OpenResFile, DeleteResFile};
         let stream = res_OpenResFile(configDir.cast(), c"melee.cfg".as_ptr(), c"wb".as_ptr());
         if stream.is_null() {
@@ -202,7 +213,7 @@ pub(crate) mod live {
         let mut ok = true;
         for side in [0usize, 1] {
             if crate::resource::ffi_bridge::PutResFileChar(
-                (*kernel).player_control[side] as std::ffi::c_char,
+                KernelOwner::current().read(|owner| owner.player_control[side]) as std::ffi::c_char,
                 stream.cast(),
             ) == -1
                 || MeleeSetup_serializeTeam((*state).melee_setup, side, stream.cast()) == -1
@@ -225,8 +236,6 @@ pub(crate) mod live {
     /// Call on the game thread after kernel/resource initialization. Any state
     /// pointer must remain exclusively accessible through the nested input loop.
     pub unsafe extern "C" fn Melee() {
-        let kernel = crate::engine::Kernel::current();
-        let world = crate::engine::WorldData::current();
         InitGlobData();
         let mut state = MELEE_STATE {
             input_func: None,
@@ -254,17 +263,18 @@ pub(crate) mod live {
         state.current_ship = 255;
         state.cur_index = u16::MAX;
         InitMeleeLoadState(&mut state);
-        (*world).game.current_activity = SUPER_MELEE as u16;
-        (*kernel).game_sounds = capture_sound(LoadSound(GAME_SOUNDS.as_ptr().cast()));
+        (**WorldFields::current()).game.current_activity = SUPER_MELEE as u16;
+        (**KernelOwner::current()).game_sounds =
+            capture_sound(LoadSound(GAME_SOUNDS.as_ptr().cast()));
         crate::supermelee::native::battle_picker::live::BuildPickMeleeFrame();
         MeleeFrame = CaptureDrawable(LoadGraphic(MELEE_SCREEN_PMAP_ANIM.as_ptr().cast()).cast());
         crate::supermelee::native::build_picker::live::BuildBuildPickFrame();
         InitSpace();
         LoadTeamList(&mut state);
         if !load_config(&mut state) {
-            (*kernel).player_control[0] = HUMAN_CONTROL | 16;
+            (**KernelOwner::current()).player_control[0] = HUMAN_CONTROL | 16;
             Melee_LocalChange_team(&mut state, 0, *state.load.preBuiltList);
-            (*kernel).player_control[1] = COMPUTER_CONTROL | 16;
+            (**KernelOwner::current()).player_control[1] = COMPUTER_CONTROL | 16;
             Melee_LocalChange_team(&mut state, 1, *state.load.preBuiltList.add(1));
         }
         state.side = 0;
@@ -289,8 +299,8 @@ pub(crate) mod live {
         crate::supermelee::native::build_picker::live::DestroyBuildPickFrame();
         state.netplay.close_all_connections();
         state.netplay.setup_input_delay(0);
-        DestroySound(release_sound((*kernel).game_sounds).cast());
-        (*kernel).game_sounds = ptr::null_mut();
+        DestroySound(release_sound(KernelOwner::current().read(|owner| owner.game_sounds)).cast());
+        (**KernelOwner::current()).game_sounds = ptr::null_mut();
         UninitMeleeLoadState(&mut state);
         delete_context(state.random_context);
         MeleeSetup_delete(state.melee_setup);
@@ -300,3 +310,5 @@ pub(crate) mod live {
 
 #[cfg(test)]
 mod rules_tests;
+
+use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

@@ -131,9 +131,8 @@ pub(crate) mod runtime {
     }
 
     unsafe fn generate_sis(state: &mut PresentationState) {
-        let kernel = crate::engine::Kernel::current();
-        let world = crate::engine::WorldData::current();
-        let old_context = SetContext((*kernel).off_screen_context);
+        let world = WorldFields::current();
+        let old_context = SetContext(KernelOwner::current().read(|owner| owner.off_screen_context));
         let skeleton =
             CaptureDrawable(LoadGraphicInstance(SISSKEL_MASK_PMAP_ANIM.as_ptr().cast()).cast());
         let modules =
@@ -157,7 +156,7 @@ pub(crate) mod runtime {
             frame: SetAbsFrameIndex(skeleton, 0),
         };
         DrawStamp(&mut stamp);
-        let sis_state = ptr::addr_of!((*world).flagship);
+        let sis_state = ptr::addr_of!((**world).flagship);
         for (pieces, x, y, slots) in [
             (
                 ptr::addr_of!((*sis_state).drive_slots).cast::<BYTE>(),
@@ -232,9 +231,11 @@ pub(crate) mod runtime {
     }
 
     unsafe extern "C" fn do_presentation(raw: *mut c_void) -> BOOLEAN {
-        let world = crate::engine::WorldData::current();
         let state = &mut *raw.cast::<PresentationState>();
-        if menu(KEY_MENU_CANCEL) || (*world).game.current_activity & CHECK_ABORT as u16 != 0 {
+        if menu(KEY_MENU_CANCEL)
+            || WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
+                != 0
+        {
             crate::automation::ending::presentation_cancelled();
             return 0;
         }
@@ -683,7 +684,6 @@ pub(crate) mod runtime {
     }
 
     unsafe fn show_slides(table: STRING, ending: bool) -> BOOLEAN {
-        let kernel = crate::engine::Kernel::current();
         let mut state: PresentationState = std::mem::zeroed();
         state.SlideShow = table;
         if state.SlideShow.is_null() {
@@ -696,7 +696,7 @@ pub(crate) mod runtime {
         }
         state.SlideShow = SetAbsStringTableIndex(state.SlideShow, 0);
         state.OperIndex = 0;
-        let old_context = SetContext((*kernel).screen_context);
+        let old_context = SetContext(KernelOwner::current().read(|owner| owner.screen_context));
         let mut old_rect: RECT = std::mem::zeroed();
         GetContextClipRect(&mut old_rect);
         let old_font = SetContextFont(ptr::null_mut());
@@ -725,7 +725,6 @@ pub(crate) mod runtime {
     }
 
     unsafe extern "C" fn video_input(raw: *mut c_void) -> BOOLEAN {
-        let world = crate::engine::WorldData::current();
         let state = &mut *raw.cast::<VideoState>();
         if PlayingLegacyVideo(state.CurVideo) == 0 {
             return 0;
@@ -733,7 +732,8 @@ pub(crate) mod runtime {
         if menu(KEY_MENU_SELECT)
             || menu(KEY_MENU_CANCEL)
             || menu(KEY_MENU_SPECIAL)
-            || (*world).game.current_activity & CHECK_ABORT as u16 != 0
+            || WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
+                != 0
         {
             return 0;
         }
@@ -758,12 +758,11 @@ pub(crate) mod runtime {
     }
 
     unsafe fn fade_clear_screen() {
-        let kernel = crate::engine::Kernel::current();
         SleepThreadUntil(FadeScreen(
             ScreenFadeType_FadeAllToBlack,
             (ONE_SECOND / 2) as SIZE,
         ));
-        SetContext((*kernel).screen_context);
+        SetContext(KernelOwner::current().read(|owner| owner.screen_context));
         SetContextBackGroundColor(BLACK_COLOR);
         ClearDrawable();
         FadeScreen(ScreenFadeType_FadeAllToColor, 0);
@@ -889,3 +888,5 @@ mod tests {
         }
     }
 }
+
+use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

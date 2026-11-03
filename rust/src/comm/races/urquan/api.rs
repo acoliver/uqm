@@ -11,10 +11,13 @@ impl UrquanApi for super::super::script::live::LiveScript<Handler> {
     fn group_battle(&self, state_key: &str) -> bool {
         let (start, _) = crate::state::game_state_keys::bit_range(state_key)
             .expect("Ur-Quan group offset state is missing");
-        let offset = unsafe { crate::state::ffi::rust_get_game_state_32(start as i32) };
+        let offset = unsafe {
+            crate::engine::World::current()
+                .read(|world| crate::state::ffi::rust_get_game_state_32(world, start as i32))
+        };
         unsafe {
-            (*crate::engine::WorldData::current()).game.battle_group_ref != 0
-                && (*crate::engine::WorldData::current()).game.battle_group_ref == offset
+            WorldFields::current().read(|owner| owner.game.battle_group_ref) != 0
+                && WorldFields::current().read(|owner| owner.game.battle_group_ref) == offset
         }
     }
 
@@ -41,3 +44,5 @@ impl UrquanApi for crate::comm::races::encounter::testing::Fake<Handler, World> 
         self.world.intro_modes.push((mode, duration));
     }
 }
+
+use crate::engine::WorldData as WorldFields;

@@ -7,11 +7,13 @@ use crate::state::c_api::{GameStateFile, ReadStateFile, WriteStateFile};
 
 unsafe fn read<const N: usize>(file: *mut GameStateFile) -> [u8; N] {
     let mut bytes = [0; N];
-    ReadStateFile(bytes.as_mut_ptr().cast(), 1, N as u16, file);
+    crate::engine::World::current()
+        .write(|world| ReadStateFile(world, bytes.as_mut_ptr().cast(), 1, N as u16, file));
     bytes
 }
 unsafe fn write(file: *mut GameStateFile, bytes: &[u8]) {
-    WriteStateFile(bytes.as_ptr().cast(), 1, bytes.len() as u16, file);
+    crate::engine::World::current()
+        .write(|world| WriteStateFile(world, bytes.as_ptr().cast(), 1, bytes.len() as u16, file));
 }
 
 /// # Safety
@@ -159,16 +161,16 @@ pub(crate) mod live {
         0x11, 0x51, 0x51, 0x51, 0, 0x51, 0x51,
     ];
     unsafe fn ip_queue() -> *mut QUEUE {
-        let world = crate::engine::WorldData::current();
-        ptr::addr_of_mut!((*world).game.ip_group_q)
+        let world = WorldFields::current();
+        ptr::addr_of_mut!((**world).game.ip_group_q)
     }
     unsafe fn npc_queue() -> *mut QUEUE {
-        let world = crate::engine::WorldData::current();
-        ptr::addr_of_mut!((*world).game.npc_built_ship_q)
+        let world = WorldFields::current();
+        ptr::addr_of_mut!((**world).game.npc_built_ship_q)
     }
     unsafe fn fleet_queue() -> *mut QUEUE {
-        let world = crate::engine::WorldData::current();
-        ptr::addr_of_mut!((*world).game.avail_race_q)
+        let world = WorldFields::current();
+        ptr::addr_of_mut!((**world).game.avail_race_q)
     }
     unsafe fn count(queue: *const QUEUE) -> u8 {
         let mut handle = (*queue).head;
@@ -180,10 +182,13 @@ pub(crate) mod live {
         count
     }
     unsafe fn open(offset: u32, group: u8) -> *mut GameStateFile {
-        OpenStateFile(
-            if offset != 0 && group != 0 { 2 } else { 1 },
-            c"r+b".as_ptr(),
-        )
+        crate::engine::World::current().write(|world| {
+            OpenStateFile(
+                world,
+                if offset != 0 && group != 0 { 2 } else { 1 },
+                c"r+b".as_ptr(),
+            )
+        })
     }
     fn empty_header() -> GROUP_HEADER {
         let mut header: GROUP_HEADER = unsafe { mem::zeroed() };
@@ -191,23 +196,26 @@ pub(crate) mod live {
         header
     }
     unsafe fn seek(file: *mut GameStateFile, offset: u32) {
-        SeekStateFile(file, offset as libc::c_long, 0);
+        crate::engine::World::current()
+            .write(|world| SeekStateFile(world, file, offset as libc::c_long, 0));
     }
 
     /// # Safety
     /// State storage is initialized; game-thread access only.
     #[no_mangle]
     pub unsafe extern "C" fn InitGroupInfo(first: u32) {
-        let file = OpenStateFile(1, c"wb".as_ptr());
+        let file =
+            crate::engine::World::current().write(|world| OpenStateFile(world, 1, c"wb".as_ptr()));
         if !file.is_null() {
             super::WriteGroupHeader(file, &empty_header());
-            CloseStateFile(file);
+            crate::engine::World::current().write(|world| CloseStateFile(world, file));
         }
         if first != 0 {
-            let file = OpenStateFile(2, c"wb".as_ptr());
+            let file = crate::engine::World::current()
+                .write(|world| OpenStateFile(world, 2, c"wb".as_ptr()));
             if !file.is_null() {
                 write(file, &[0]);
-                CloseStateFile(file);
+                crate::engine::World::current().write(|world| CloseStateFile(world, file));
             }
         }
     }
@@ -215,8 +223,8 @@ pub(crate) mod live {
     /// State files must no longer be in use.
     #[no_mangle]
     pub unsafe extern "C" fn UninitGroupInfo() {
-        DeleteStateFile(2);
-        DeleteStateFile(1);
+        crate::engine::World::current().write(|world| DeleteStateFile(world, 2));
+        crate::engine::World::current().write(|world| DeleteStateFile(world, 1));
     }
 
     /// # Safety
@@ -277,7 +285,7 @@ pub(crate) mod live {
             home[UTWIG_SHIP as usize] = 0;
             home[SUPOX_SHIP as usize] = 0;
         }
-        let universe = (*(*crate::engine::World::current())
+        let universe = (*(**WorldOwner::current())
             .star_pointer(crate::planets::starmap::current_catalog()))
         .star_pt;
         let mut best_index = 0usize;
@@ -291,7 +299,7 @@ pub(crate) mod live {
             let mut chance = percent[index] as u16;
             if radius != 0 && chance != 0 {
                 if home[index] != 0
-                    && (*(*crate::engine::World::current())
+                    && (*(**WorldOwner::current())
                         .star_pointer(crate::planets::starmap::current_catalog()))
                     .index as u32
                         == home[index]
@@ -339,7 +347,7 @@ pub(crate) mod live {
                 number = MAX_BATTLE_GROUPS as u8;
             } else if number < 5
                 && home[best_index] != 0
-                && (*(*crate::engine::World::current())
+                && (*(**WorldOwner::current())
                     .star_pointer(crate::planets::starmap::current_catalog()))
                 .index as u32
                     == home[best_index]
@@ -351,7 +359,7 @@ pub(crate) mod live {
                 let makeup = ENCOUNTER_MAKEUP[best_index];
                 for ships in (1..=makeup >> 4).rev() {
                     if ships <= makeup & 15 || (TFB_Random() as u16 % 100) < 50 {
-                        CloneShipFragment(best_index as u16, npc_queue(), 0);
+                        CloneShipFragment(fleet_queue(), best_index as u16, npc_queue(), 0);
                     }
                 }
                 which += 1;
@@ -364,11 +372,10 @@ pub(crate) mod live {
     }
 
     unsafe fn flush(header: *mut GROUP_HEADER, offset: u32, which: u8, file: *mut GameStateFile) {
-        let kernel = crate::engine::Kernel::current();
-        let world = crate::engine::WorldData::current();
         if which == 0 {
             if (*header).GroupOffset[0] == 0 {
-                (*header).GroupOffset[0] = LengthStateFile(file);
+                (*header).GroupOffset[0] =
+                    crate::engine::World::current().read(|world| LengthStateFile(world, file));
             }
             assert!((*npc_queue()).head.is_null());
             let mut handle = (*ip_queue()).head;
@@ -377,8 +384,11 @@ pub(crate) mod live {
                 let next = group.succ;
                 let id = group.group_id;
                 if group.in_system == 0 {
-                    if (*world).game.battle_group_ref != 0 {
-                        PutGroupInfo((*world).game.battle_group_ref, id);
+                    if WorldFields::current().read(|owner| owner.game.battle_group_ref) != 0 {
+                        PutGroupInfo(
+                            WorldFields::current().read(|owner| owner.game.battle_group_ref),
+                            id,
+                        );
                     } else {
                         flush(header, 0, id, file);
                     }
@@ -390,14 +400,18 @@ pub(crate) mod live {
             }
         } else if which > (*header).NumGroups {
             (*header).NumGroups = which;
-            (*header).GroupOffset[which as usize] = LengthStateFile(file);
+            (*header).GroupOffset[which as usize] =
+                crate::engine::World::current().read(|world| LengthStateFile(world, file));
         }
         seek(file, offset);
         super::WriteGroupHeader(file, header);
         if which == 0 {
             let mut number = count(ip_queue());
             seek(file, (*header).GroupOffset[0]);
-            write(file, &[(*kernel).last_encounter_group, number]);
+            write(
+                file,
+                &[(**KernelOwner::current()).last_encounter_group, number],
+            );
             let mut handle = (*ip_queue()).head;
             while number != 0 {
                 let group = handle.cast::<IP_GROUP>();
@@ -430,8 +444,6 @@ pub(crate) mod live {
     /// Current world and solar-system queues must be initialized and exclusively accessible.
     #[no_mangle]
     pub unsafe extern "C" fn GetGroupInfo(offset: u32, which: u8) -> BOOLEAN {
-        let kernel = crate::engine::Kernel::current();
-        let world = crate::engine::WorldData::current();
         let file = open(offset, which);
         if file.is_null() {
             return 0;
@@ -446,16 +458,17 @@ pub(crate) mod live {
             let mut year = header.year_index;
             if offset == 0
                 && (header.star_index
-                    != (*crate::engine::World::current())
+                    != (**WorldOwner::current())
                         .star_pointer(crate::planets::starmap::current_catalog())
                         .offset_from(star_array) as u16
                     || ValidateEvent(EVENT_TYPE_ABSOLUTE_EVENT, &mut month, &mut day, &mut year)
                         == 0)
             {
-                CloseStateFile(file);
-                let file = OpenStateFile(1, c"wb".as_ptr());
+                crate::engine::World::current().write(|world| CloseStateFile(world, file));
+                let file = crate::engine::World::current()
+                    .write(|world| OpenStateFile(world, 1, c"wb".as_ptr()));
                 super::WriteGroupHeader(file, &empty_header());
-                CloseStateFile(file);
+                crate::engine::World::current().write(|world| CloseStateFile(world, file));
                 return 0;
             }
             for which in 1..=header.NumGroups {
@@ -507,28 +520,33 @@ pub(crate) mod live {
                 InitGroupInfo(0);
             } else if ValidateEvent(EVENT_TYPE_ABSOLUTE_EVENT, &mut month, &mut day, &mut year) != 0
             {
-                CloseStateFile(file);
+                crate::engine::World::current().write(|world| CloseStateFile(world, file));
                 return 1;
             }
-            CloseStateFile(file);
+            crate::engine::World::current().write(|world| CloseStateFile(world, file));
             return u32::from(!(*ip_queue()).head.is_null());
         }
         if header.GroupOffset[which as usize] == 0 {
-            CloseStateFile(file);
+            crate::engine::World::current().write(|world| CloseStateFile(world, file));
             return 0;
         }
         if which == 0 {
             let left = count(npc_queue());
             seek(file, header.GroupOffset[0]);
-            (*kernel).last_encounter_group = read::<1>(file)[0];
-            if (*kernel).last_encounter_group != 0 {
-                if (*world).game.battle_group_ref != 0 {
+            (**KernelOwner::current()).last_encounter_group = read::<1>(file)[0];
+            if KernelOwner::current().read(|owner| owner.last_encounter_group) != 0 {
+                if WorldFields::current().read(|owner| owner.game.battle_group_ref) != 0 {
                     PutGroupInfo(
-                        (*world).game.battle_group_ref,
-                        (*kernel).last_encounter_group,
+                        WorldFields::current().read(|owner| owner.game.battle_group_ref),
+                        KernelOwner::current().read(|owner| owner.last_encounter_group),
                     );
                 } else {
-                    flush(&mut header, offset, (*kernel).last_encounter_group, file);
+                    flush(
+                        &mut header,
+                        offset,
+                        KernelOwner::current().read(|owner| owner.last_encounter_group),
+                        file,
+                    );
                 }
             }
             ReinitQueue(npc_queue());
@@ -540,16 +558,19 @@ pub(crate) mod live {
                 let handle = BuildGroup(ip_queue(), race);
                 let group = handle.cast::<IP_GROUP>();
                 super::ReadIpGroup(file, group);
-                if (*group).group_id == (*kernel).last_encounter_group && left == 0 {
+                if (*group).group_id
+                    == KernelOwner::current().read(|owner| owner.last_encounter_group)
+                    && left == 0
+                {
                     RemoveQueue(ip_queue(), handle);
                     FreeLink(ip_queue(), handle);
                 }
                 number -= 1;
             }
-            CloseStateFile(file);
+            crate::engine::World::current().write(|world| CloseStateFile(world, file));
             u32::from(!(*ip_queue()).head.is_null())
         } else {
-            (*kernel).last_encounter_group = which;
+            (**KernelOwner::current()).last_encounter_group = which;
             if offset != 0 {
                 PutGroupInfo(0, 0);
             } else {
@@ -561,11 +582,11 @@ pub(crate) mod live {
             let mut number = read::<1>(file)[0];
             while number != 0 {
                 let race = read::<1>(file)[0];
-                let handle = CloneShipFragment(race as u16, npc_queue(), 0);
+                let handle = CloneShipFragment(fleet_queue(), race as u16, npc_queue(), 0);
                 super::ReadShipFragment(file, handle.cast());
                 number -= 1;
             }
-            CloseStateFile(file);
+            crate::engine::World::current().write(|world| CloseStateFile(world, file));
             u32::from(!(*npc_queue()).head.is_null())
         }
     }
@@ -574,14 +595,13 @@ pub(crate) mod live {
     /// Current world queues and current star descriptor must be initialized.
     #[no_mangle]
     pub unsafe extern "C" fn PutGroupInfo(mut offset: u32, mut which: u8) -> u32 {
-        let kernel = crate::engine::Kernel::current();
         let file = open(offset, which);
         if file.is_null() {
             return offset;
         }
         let mut header: GROUP_HEADER = mem::zeroed();
         if offset == u32::MAX {
-            offset = LengthStateFile(file);
+            offset = crate::engine::World::current().read(|world| LengthStateFile(world, file));
             seek(file, offset);
             header = empty_header();
             super::WriteGroupHeader(file, &header);
@@ -589,7 +609,7 @@ pub(crate) mod live {
         if which != 0 {
             seek(file, offset);
             if which == u8::MAX {
-                (*kernel).last_encounter_group = 0;
+                (**KernelOwner::current()).last_encounter_group = 0;
                 which = 0;
             }
         }
@@ -601,11 +621,11 @@ pub(crate) mod live {
         header.day_index = day as u8;
         header.month_index = month as u8;
         header.year_index = year;
-        header.star_index = (*crate::engine::World::current())
+        header.star_index = (**WorldOwner::current())
             .star_pointer(crate::planets::starmap::current_catalog())
             .offset_from(star_array) as u16;
         flush(&mut header, offset, which, file);
-        CloseStateFile(file);
+        crate::engine::World::current().write(|world| CloseStateFile(world, file));
         offset
     }
 }
@@ -629,8 +649,10 @@ mod tests {
         // SAFETY: the serialized fixture owns this published lifecycle.
         unsafe {
             crate::app::bridge::with_game(&mut game_owner, || {
-                crate::state::ffi::rust_init_game_state();
-                let file = OpenStateFile(1, c"wb".as_ptr());
+                crate::engine::World::current()
+                    .write(|world| crate::state::ffi::rust_init_game_state(world));
+                let file = crate::engine::World::current()
+                    .write(|world| OpenStateFile(world, 1, c"wb".as_ptr()));
                 let mut group: IP_GROUP = std::mem::zeroed();
                 group.group_counter = 0x1234;
                 group.race_id = 4;
@@ -643,14 +665,17 @@ mod tests {
                 group.loc.x = -123;
                 group.loc.y = 456;
                 super::WriteIpGroup(file, &group);
-                assert_eq!(LengthStateFile(file), 16);
-                SeekStateFile(file, 0, 0);
+                assert_eq!(
+                    crate::engine::World::current().read(|world| LengthStateFile(world, file)),
+                    16
+                );
+                crate::engine::World::current().write(|world| SeekStateFile(world, file, 0, 0));
                 let bytes = read::<16>(file);
                 assert_eq!(
                     &bytes[..12],
                     &[0, 0, 0, 0, 0x34, 0x12, 4, 0x92, 7, 0, 0xf3, 12]
                 );
-                SeekStateFile(file, 0, 0);
+                crate::engine::World::current().write(|world| SeekStateFile(world, file, 0, 0));
                 let mut restored: IP_GROUP = std::mem::zeroed();
                 super::ReadIpGroup(file, &mut restored);
                 assert_eq!(
@@ -662,18 +687,20 @@ mod tests {
                     ),
                     (-123, 456, 9, 15)
                 );
-                SeekStateFile(file, 0, 0);
+                crate::engine::World::current().write(|world| SeekStateFile(world, file, 0, 0));
                 let mut ship: SHIP_FRAGMENT = std::mem::zeroed();
                 ship.crew_level = 300;
                 ship.max_crew = 511;
                 ship.race_id = 6;
                 super::WriteShipFragment(file, &ship);
-                SeekStateFile(file, 0, 0);
+                crate::engine::World::current().write(|world| SeekStateFile(world, file, 0, 0));
                 super::ReadShipFragment(file, &mut ship);
                 assert_eq!((ship.crew_level, ship.max_crew, ship.race_id), (44, 255, 6));
-                CloseStateFile(file);
-                DeleteStateFile(1);
+                crate::engine::World::current().write(|world| CloseStateFile(world, file));
+                crate::engine::World::current().write(|world| DeleteStateFile(world, 1));
             })
         }
     }
 }
+
+use crate::engine::{Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields};

@@ -91,16 +91,15 @@ pub(crate) mod engine {
     use crate::mainloop::input_abi::live::AnyButtonPress;
 
     unsafe fn game_string(index: u32) -> *const UNICODE {
-        let kernel = crate::engine::Kernel::current();
         GetStringAddress(SetAbsStringTableIndex(
-            (*kernel).game_strings,
+            KernelOwner::current().read(|owner| owner.game_strings),
             index as COUNT,
         ))
         .cast()
     }
     unsafe fn planet_name() -> *mut UNICODE {
-        let world = crate::engine::WorldData::current();
-        (&raw mut (*world).flagship.planet_name).cast()
+        let world = WorldFields::current();
+        (&raw mut (**world).flagship.planet_name).cast()
     }
     unsafe fn escape_pressed() -> bool {
         let template = *(&raw const PlayerControls).cast::<CONTROL_TEMPLATE>();
@@ -146,11 +145,11 @@ pub(crate) mod engine {
     }
 
     pub(crate) unsafe fn GetShipFragQueueForPlayer(player: COUNT) -> *mut QUEUE {
-        let world = crate::engine::WorldData::current();
+        let world = WorldFields::current();
         if player == RPG_PLAYER_NUM as u16 {
-            &raw mut (*world).game.built_ship_q
+            &raw mut (**world).game.built_ship_q
         } else {
-            &raw mut (*world).game.npc_built_ship_q
+            &raw mut (**world).game.npc_built_ship_q
         }
     }
 
@@ -158,9 +157,11 @@ pub(crate) mod engine {
     /// `player` must be a valid side; fleet, ship queues, and encounter resources must be initialized on the game thread.
     #[no_mangle]
     pub unsafe extern "C" fn BuildBattle(player: COUNT) {
-        let world = crate::engine::WorldData::current();
         EncounterRace = -1;
-        if (*world).game.npc_built_ship_q.head.is_null() {
+        if WorldFields::current()
+            .read(|owner| owner.game.npc_built_ship_q.head)
+            .is_null()
+        {
             set_game_state(BATTLE_SEGUE, END_BATTLE_SEGUE, 0);
             return;
         }
@@ -241,10 +242,8 @@ pub(crate) mod engine {
     /// The game thread must own initialized encounter, display, input, resource, and audio state.
     #[no_mangle]
     pub unsafe extern "C" fn InitEncounter() -> COUNT {
-        let kernel = crate::engine::Kernel::current();
-        let world = crate::engine::WorldData::current();
-        SetContext((*kernel).space_context);
-        SetContextFont((*kernel).tiny_font);
+        SetContext(KernelOwner::current().read(|owner| owner.space_context));
+        SetContextFont(KernelOwner::current().read(|owner| owner.tiny_font));
         let music =
             crate::sound::resource_types::LoadMusicInstance(REDALERT_MUSIC.as_ptr().cast()).cast();
         PlayMusic(music, 0, 1);
@@ -267,7 +266,7 @@ pub(crate) mod engine {
             TEXT_ALIGN_ALIGN_CENTER,
             ptr::null(),
         );
-        SetContextFont((*kernel).micro_font);
+        SetContextFont(KernelOwner::current().read(|owner| owner.micro_font));
         SetContextForeGroundColor(rgb15(0, 0, 20));
         if inHQSpace() != 0 {
             draw_text(&mut t, game_string(ENCOUNTER_STRING_BASE));
@@ -278,7 +277,7 @@ pub(crate) mod engine {
             draw_text(&mut t, game_string(ENCOUNTER_STRING_BASE + 2));
             t.baseline.y += 12;
             GetClusterName(
-                ((*crate::engine::World::current())
+                ((**WorldOwner::current())
                     .star_pointer(crate::planets::starmap::current_catalog()))
                 .cast(),
                 buf.as_mut_ptr(),
@@ -292,10 +291,10 @@ pub(crate) mod engine {
             x: (sis_width() >> 1) as i16,
             y: (sis_height() >> 1) as i16,
         };
-        stamp.frame = (*kernel).planet[0];
+        stamp.frame = KernelOwner::current().read(|owner| owner.planet[0]);
         DrawStamp(&mut stamp);
         if activity() as u8 != IN_LAST_BATTLE as u8 {
-            let mut h = (*world).game.npc_built_ship_q.head;
+            let mut h = WorldFields::current().read(|owner| owner.game.npc_built_ship_q.head);
             let mut i = 0usize;
             while !h.is_null() && i < 60 {
                 let frag = h.cast::<SHIP_FRAGMENT>();
@@ -396,12 +395,11 @@ pub(crate) mod engine {
     /// The game thread must own initialized encounter fleet queues, game state, display, and salvage resources.
     #[no_mangle]
     pub unsafe extern "C" fn UninitEncounter() -> COUNT {
-        let kernel = crate::engine::Kernel::current();
-        let world = crate::engine::WorldData::current();
+        let world = WorldFields::current();
         let mut killed = 0u16;
         free_gravity_well();
         if activity() & (CHECK_ABORT | CHECK_LOAD) as u16 != 0
-            || (*world).flagship.crew_enlisted == COUNT::MAX
+            || (**world).flagship.crew_enlisted == COUNT::MAX
             || activity() as u8 == IN_LAST_BATTLE as u8
             || activity() as u8 == WON_LAST_BATTLE as u8
         {
@@ -428,9 +426,9 @@ pub(crate) mod engine {
             counters[0],
             game_state(URQUAN_PROTECTING_SAMATRA, END_URQUAN_PROTECTING_SAMATRA) != 0,
         );
-        let frag = (*world).game.npc_built_ship_q.head.cast::<SHIP_FRAGMENT>();
+        let frag = (**world).game.npc_built_ship_q.head.cast::<SHIP_FRAGMENT>();
         EncounterRace = (*frag).race_id as i16;
-        if GetStarShipFromIndex(&raw mut (*world).game.avail_race_q, EncounterRace as COUNT)
+        if GetStarShipFromIndex(&raw mut (**world).game.avail_race_q, EncounterRace as COUNT)
             .is_null()
         {
             victory = -1;
@@ -440,7 +438,7 @@ pub(crate) mod engine {
         let mut sleepy = true;
         for side in 0..NUM_SIDES as usize {
             let q = if side == 0 {
-                &raw mut (*world).game.built_ship_q
+                &raw mut (**world).game.built_ship_q
             } else {
                 if victory < 0 {
                     victory = 0;
@@ -448,22 +446,22 @@ pub(crate) mod engine {
                     DrawSISFrame();
                     DrawSISMessage(ptr::null());
                     if inHQSpace() != 0 {
-                        DrawHyperCoords((*world).game.ship_stamp.origin);
-                    } else if (*world).game.ip_planet == 0 {
+                        DrawHyperCoords((**world).game.ship_stamp.origin);
+                    } else if (**world).game.ip_planet == 0 {
                         DrawHyperCoords(
-                            (*(*crate::engine::World::current())
+                            (*(**WorldOwner::current())
                                 .star_pointer(crate::planets::starmap::current_catalog()))
                             .star_pt,
                         );
                     } else {
                         DrawSISTitle(planet_name());
                     }
-                    SetContext((*kernel).space_context);
+                    SetContext(KernelOwner::current().read(|owner| owner.space_context));
                     if victory != 0 {
                         DrawArmadaPickShip(1, &mut salvage_rect);
                     }
                 }
-                &raw mut (*world).game.npc_built_ship_q
+                &raw mut (**world).game.npc_built_ship_q
             };
             link_queue::ships(NUM_SIDES as usize - 1 - side).reinit();
             let mut h = (*q).head;
@@ -486,7 +484,9 @@ pub(crate) mod engine {
                                 stamp.frame = IncFrameIndex((*frag).icons);
                                 DrawStamp(&mut stamp);
                                 SetContextForeGroundColor(rgb15(8, 8, 8));
-                                SetContextFont((*kernel).tiny_font);
+                                SetContextFont(
+                                    KernelOwner::current().read(|owner| owner.tiny_font),
+                                );
                                 utf8StringCopy(
                                     buf.as_mut_ptr(),
                                     buf.len(),
@@ -503,7 +503,9 @@ pub(crate) mod engine {
                                 t.baseline.y = t.baseline.y.wrapping_add(6);
                                 draw_text(&mut t, game_string(ENCOUNTER_STRING_BASE + 3));
                                 stamp.frame = (*frag).icons;
-                                SetContextFont((*kernel).micro_font);
+                                SetContextFont(
+                                    KernelOwner::current().read(|owner| owner.micro_font),
+                                );
                                 str1 = game_string(ENCOUNTER_STRING_BASE + 4);
                                 str2 = game_string(ENCOUNTER_STRING_BASE + 5);
                                 DrawFadeText(str1, str2, 1, &mut salvage_rect);
@@ -619,8 +621,6 @@ pub(crate) mod engine {
     /// The game thread must own initialized encounter, fleet, input, audio, and activity state.
     #[no_mangle]
     pub unsafe extern "C" fn EncounterBattle() {
-        let kernel = crate::engine::Kernel::current();
-        let world = crate::engine::WorldData::current();
         set_game_state(BATTLE_SEGUE, END_BATTLE_SEGUE, 1);
         let old = activity();
         set_activity(if old as u8 == IN_LAST_BATTLE as u8 {
@@ -630,8 +630,11 @@ pub(crate) mod engine {
         });
         WaitForSoundEnd(COUNT::MAX);
         let mut saved = ptr::null_mut();
-        if (*world).game.glob_flags & CYBORG_ENABLED as u8 != 0 {
-            let speed = 1 | ((combat_speed((*world).game.glob_flags) as u16) << 8);
+        if WorldFields::current().read(|owner| owner.game.glob_flags) & CYBORG_ENABLED as u8 != 0 {
+            let speed = 1
+                | ((combat_speed(WorldFields::current().read(|owner| owner.game.glob_flags))
+                    as u16)
+                    << 8);
             crate::app::bridge::battle(|b| b.nth_frame = speed);
             set_player_control(0, CYBORG_CONTROL | AWESOME_RATING);
             saved = player_input(0);
@@ -646,17 +649,19 @@ pub(crate) mod engine {
                 }
             }
         }
-        (*kernel).game_sounds = crate::strings::string_table::CaptureStringTable(
+        (**KernelOwner::current()).game_sounds = crate::strings::string_table::CaptureStringTable(
             crate::sound::resource_types::LoadSoundInstance(GAME_SOUNDS.as_ptr().cast()).cast(),
         )
         .cast();
         Battle(None);
-        DestroySound(ReleaseStringTable((*kernel).game_sounds));
-        (*kernel).game_sounds = ptr::null_mut();
+        DestroySound(ReleaseStringTable(
+            KernelOwner::current().read(|owner| owner.game_sounds),
+        ));
+        (**KernelOwner::current()).game_sounds = ptr::null_mut();
         if activity() & CHECK_ABORT as u16 != 0 {
-            (*world).flagship.crew_enlisted = COUNT::MAX;
+            (**WorldFields::current()).flagship.crew_enlisted = COUNT::MAX;
         }
-        if (*world).game.glob_flags & CYBORG_ENABLED as u8 != 0 {
+        if WorldFields::current().read(|owner| owner.game.glob_flags) & CYBORG_ENABLED as u8 != 0 {
             crate::app::bridge::battle(|b| b.nth_frame = 0);
             set_player_control(0, HUMAN_CONTROL | STANDARD_RATING);
             ClearPlayerInput(0);
@@ -702,3 +707,5 @@ mod tests {
         assert_eq!(ENCOUNTER_DISPLAY_POINTS[9], (-44, -27));
     }
 }
+
+use crate::engine::{Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields};

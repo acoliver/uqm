@@ -88,6 +88,8 @@ pub struct Walker {
     defs_only: bool,
     generated: bool,
     queue_functions: BTreeSet<String>,
+    owner_projectors: BTreeSet<String>,
+    owner_projection_calls: Vec<(Vec<String>, Finding)>,
     handlers: Vec<(String, String)>,
     layer_declarations: Vec<(Finding, String)>,
     layer_definitions: BTreeMap<String, BTreeSet<String>>,
@@ -212,6 +214,8 @@ impl Walker {
             defs_only,
             generated: false,
             queue_functions,
+            owner_projectors: BTreeSet::new(),
+            owner_projection_calls: Vec::new(),
             layer_declarations: Vec::new(),
             layer_definitions: BTreeMap::new(),
             handlers: macros::HANDLERS
@@ -300,6 +304,14 @@ impl Walker {
         }
         if !self.errors.is_empty() {
             return Err(self.errors.join("\n"));
+        }
+        for (candidates, finding) in std::mem::take(&mut self.owner_projection_calls) {
+            if candidates
+                .iter()
+                .any(|target| self.owner_projectors.contains(target))
+            {
+                self.measurement.findings.push(finding);
+            }
         }
         let excluded_by_file: BTreeMap<_, _> = self
             .excluded
@@ -737,6 +749,13 @@ impl Walker {
             }
             _ => Err("unsupported include path expression".into()),
         }
+    }
+
+    fn projection_key(&self, path: &str) -> String {
+        let absolute = super::layers::absolute(&self.context.lexical_module, path);
+        absolute
+            .strip_prefix(&format!("{}::", self.context.package))
+            .map_or_else(|| absolute.clone(), |tail| format!("crate::{tail}"))
     }
 
     fn resolve(&self, path: &syn::Path) -> String {

@@ -89,10 +89,9 @@ mod live {
         }
         fn date(&self) -> (i16, u8) {
             unsafe {
-                let world = crate::engine::WorldData::current();
                 (
-                    (*world).game.game_clock.year_index as i16,
-                    (*world).game.game_clock.month_index,
+                    WorldFields::current().read(|owner| owner.game.game_clock.year_index) as i16,
+                    WorldFields::current().read(|owner| owner.game.game_clock.month_index),
                 )
             }
         }
@@ -131,3 +130,5 @@ impl ZoqApi for crate::comm::races::encounter::testing::Fake<Handler, Clock> {
         (self.world.year, self.world.month)
     }
 }
+
+use crate::engine::WorldData as WorldFields;

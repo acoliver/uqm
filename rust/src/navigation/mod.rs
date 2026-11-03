@@ -31,14 +31,22 @@ pub mod interplanetary;
 pub(crate) fn get(name: &str) -> u8 {
     let (start, end) = crate::state::game_state::lookup_game_state_bits(name)
         .expect("navigation state key exists");
-    unsafe { crate::state::ffi::rust_get_game_state_bits(start as i32, end as i32) }
+    unsafe {
+        crate::engine::World::current().read(|world| {
+            crate::state::ffi::rust_get_game_state_bits(world, start as i32, end as i32)
+        })
+    }
 }
 
 #[cfg(not(test))]
 pub(crate) fn set(name: &str, value: u8) {
     let (start, end) = crate::state::game_state::lookup_game_state_bits(name)
         .expect("navigation state key exists");
-    unsafe { crate::state::ffi::rust_set_game_state_bits(start as i32, end as i32, value) }
+    unsafe {
+        crate::engine::World::current().write(|world| {
+            crate::state::ffi::rust_set_game_state_bits(world, start as i32, end as i32, value)
+        })
+    }
 }
 
 fn color(r: u8, g: u8, b: u8) -> crate::graphics::native_abi::Color {

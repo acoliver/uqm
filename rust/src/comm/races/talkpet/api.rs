@@ -10,15 +10,13 @@ pub(super) trait TalkpetApi: AllianceApi<Handler> {
 #[cfg(not(test))]
 impl TalkpetApi for super::super::script::live::LiveScript<Handler> {
     fn flags(&self) -> u8 {
-        unsafe {
-            let world = crate::engine::WorldData::current();
-            (*world).game.glob_flags
-        }
+        unsafe { WorldFields::current().read(|owner| owner.game.glob_flags) }
     }
     fn npc_ships(&self) -> bool {
         unsafe {
-            let world = crate::engine::WorldData::current();
-            !(*world).game.npc_built_ship_q.head.is_null()
+            !WorldFields::current()
+                .read(|owner| owner.game.npc_built_ship_q.head)
+                .is_null()
         }
     }
     fn umgah_alive(&mut self) -> bool {
@@ -57,3 +55,5 @@ impl TalkpetApi for super::super::encounter::testing::Fake<Handler, World> {
         self.world.strobes += 1;
     }
 }
+
+use crate::engine::WorldData as WorldFields;

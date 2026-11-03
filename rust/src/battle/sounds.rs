@@ -100,9 +100,11 @@ pub(crate) mod engine {
     /// Menu sound resources must be loaded on the game thread.
     #[no_mangle]
     pub unsafe extern "C" fn PlayMenuSound(sound: u32) {
-        let kernel = crate::engine::Kernel::current();
         PlaySoundEffect(
-            SetAbsStringTableIndex((*kernel).menu_sounds, sound as u16),
+            SetAbsStringTableIndex(
+                KernelOwner::current().read(|owner| owner.menu_sounds),
+                sound as u16,
+            ),
             0,
             NotPositional(),
             ptr::null_mut(),
@@ -182,8 +184,8 @@ pub(crate) mod engine {
     /// # Safety
     /// Called on the game thread before releasing an element's storage.
     pub(crate) unsafe fn remove_sounds(object: Option<ElementId>) {
-        use crate::engine::Kernel;
-        let kernel = &mut *Kernel::current();
+        let mut lease = KernelOwner::current();
+        let kernel = &mut **lease;
         for i in FIRST_SFX_CHANNEL..=LAST_SFX_CHANNEL {
             if kernel.elements.sound_source(get_positional_object(i)) == object {
                 set_positional_object(i, 0);
@@ -268,3 +270,5 @@ mod tests {
         assert_eq!(&queue.objects[..3], &[None, Some(replacement), None]);
     }
 }
+
+use crate::engine::Kernel as KernelOwner;

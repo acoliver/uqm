@@ -171,13 +171,13 @@ pub(super) unsafe fn validate_orbits() {
 }
 
 pub(super) unsafe fn draw_inner_system() {
-    let world = crate::engine::WorldData::current();
+    let world = WorldFields::current();
     let s = system();
     let planet = (*s).pOrbitalDesc;
     validate_inner_orbits();
     draw_system((*planet).radius, true);
 
-    DrawSISTitle(std::ptr::addr_of_mut!((*world).flagship.planet_name).cast());
+    DrawSISTitle(std::ptr::addr_of_mut!((**world).flagship.planet_name).cast());
 }
 
 pub(super) unsafe fn draw_outer_system() {
@@ -185,9 +185,8 @@ pub(super) unsafe fn draw_outer_system() {
     let s = system();
     draw_system((*s).SunDesc[0].radius, false);
     DrawHyperCoords(
-        (*(*crate::engine::World::current())
-            .star_pointer(crate::planets::starmap::current_catalog()))
-        .star_pt,
+        (*(**WorldOwner::current()).star_pointer(crate::planets::starmap::current_catalog()))
+            .star_pt,
     );
 }
 
@@ -205,7 +204,6 @@ pub(super) unsafe fn draw_system_transition(inner: bool) {
 }
 
 pub(super) unsafe fn draw_system(radius: c::SIZE, inner: bool) {
-    let kernel = crate::engine::Kernel::current();
     let s = system();
     if SOLAR_SYS_FRAME.is_null() {
         let mut clip: c::RECT = std::mem::zeroed();
@@ -213,7 +211,7 @@ pub(super) unsafe fn draw_system(radius: c::SIZE, inner: bool) {
         SOLAR_SYS_FRAME =
             CaptureDrawable(CreateDrawable(2, clip.extent.width, clip.extent.height, 1)).cast();
     }
-    let old = SetContext((*kernel).off_screen_context);
+    let old = SetContext(KernelOwner::current().read(|owner| owner.off_screen_context));
     set_frame(SOLAR_SYS_FRAME);
     set_clip(std::ptr::null_mut());
     let mut stamp = c::STAMP {
@@ -254,7 +252,7 @@ pub(super) unsafe fn draw_system(radius: c::SIZE, inner: bool) {
                 .as_mut_ptr()
                 .offset(i32::from(index) as isize);
             if current == (*s).SunDesc.as_mut_ptr() {
-                let star_color = ((*(*crate::engine::World::current())
+                let star_color = ((*(**WorldOwner::current())
                     .star_pointer(crate::planets::starmap::current_catalog()))
                 .star_type
                     & 0xe0)
@@ -278,13 +276,12 @@ pub(super) unsafe fn draw_system(radius: c::SIZE, inner: bool) {
 }
 
 pub(super) unsafe fn create_star_background() -> *mut c::FRAME_DESC {
-    let kernel = crate::engine::Kernel::current();
     let mut clip: c::RECT = std::mem::zeroed();
-    let old = SetContext((*kernel).space_context);
+    let old = SetContext(KernelOwner::current().read(|owner| owner.space_context));
     c::GetContextClipRect(&mut clip);
     let frame = CaptureDrawable(CreateDrawable(2, clip.extent.width, clip.extent.height, 1))
         .cast::<c::FRAME_DESC>();
-    SetContext((*kernel).off_screen_context);
+    SetContext(KernelOwner::current().read(|owner| owner.off_screen_context));
     set_frame(frame);
     set_clip(std::ptr::null_mut());
     set_background(c::Color {
@@ -295,7 +292,7 @@ pub(super) unsafe fn create_star_background() -> *mut c::FRAME_DESC {
     });
     ClearDrawable();
     (*SysGenRNG).reseed(GetRandomSeedForStar(
-        (*crate::engine::World::current())
+        (**WorldOwner::current())
             .star_pointer(crate::planets::starmap::current_catalog())
             .cast(),
     ));
@@ -479,3 +476,5 @@ unsafe fn inc_frame(frame: *mut c::FRAME_DESC) -> *mut c::FRAME_DESC {
 unsafe fn set_frame_index(frame: *mut c::FRAME_DESC, index: u32) -> *mut c::FRAME_DESC {
     crate::graphics::pixmap_abi::SetAbsFrameIndex(frame.cast(), index as u16).cast()
 }
+
+use crate::engine::{Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields};

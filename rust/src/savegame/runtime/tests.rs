@@ -785,8 +785,18 @@ fn restore_then_capture_returns_the_sections_that_were_restored() {
             assert_eq!(restored.next_activity, global.current_activity);
             assert_eq!(game.current_activity, 0x0100);
             // The Rust singleton owns the bits; the C shadow array follows it.
-            assert_eq!(snapshot_game_state().unwrap(), bits);
-            assert_eq!(snapshot_game_state().unwrap(), bits);
+            assert_eq!(
+                crate::engine::World::current()
+                    .read(|world| snapshot_game_state(world))
+                    .unwrap(),
+                bits
+            );
+            assert_eq!(
+                crate::engine::World::current()
+                    .read(|world| snapshot_game_state(world))
+                    .unwrap(),
+                bits
+            );
 
             game.current_activity = global.current_activity;
             let captured = capture_runtime(&game).unwrap();
@@ -854,7 +864,12 @@ fn a_rejected_restore_changes_nothing() {
             assert_eq!(capture_runtime(&game).unwrap(), before_sections);
             assert_eq!(queue_state(&game.game_clock.event_q), before_queue);
 
-            assert_eq!(snapshot_game_state().unwrap(), original_bits);
+            assert_eq!(
+                crate::engine::World::current()
+                    .read(|world| snapshot_game_state(world))
+                    .unwrap(),
+                original_bits
+            );
         })
     }
 }
@@ -908,7 +923,13 @@ fn restoring_a_c_written_save_puts_its_bytes_at_the_c_offsets() {
             }
 
             // GmSt: the singleton holds the chunk.
-            assert_eq!(snapshot_game_state().unwrap().as_slice(), gmst);
+            assert_eq!(
+                crate::engine::World::current()
+                    .read(|world| snapshot_game_state(world))
+                    .unwrap()
+                    .as_slice(),
+                gmst
+            );
 
             // Evts: four events, in the file's order, in real pool slots.
             let walked = walk_events(&game.game_clock.event_q);

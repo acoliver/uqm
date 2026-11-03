@@ -105,10 +105,7 @@ pub fn get_current_activity() -> ActivityValue {
     #[cfg(not(test))]
     {
         // SAFETY: reads CurrentActivity from C GlobData global.
-        let raw = unsafe {
-            let world = crate::engine::WorldData::current();
-            (*world).game.current_activity
-        };
+        let raw = unsafe { WorldFields::current().read(|owner| owner.game.current_activity) };
         ActivityValue(raw)
     }
     #[cfg(test)]
@@ -130,10 +127,7 @@ pub fn set_current_activity(val: ActivityValue) {
     #[cfg(not(test))]
     {
         // SAFETY: writes CurrentActivity to C GlobData global.
-        unsafe {
-            let world = crate::engine::WorldData::current();
-            (*world).game.current_activity = val.0
-        };
+        unsafe { (**WorldFields::current()).game.current_activity = val.0 };
     }
     #[cfg(test)]
     {
@@ -198,10 +192,7 @@ pub fn set_next_activity(val: ActivityValue) {
 #[must_use]
 pub fn get_last_activity() -> ActivityValue {
     // SAFETY: reads a C global, no preconditions.
-    let raw = unsafe {
-        let kernel = crate::engine::Kernel::current();
-        (*kernel).last_activity
-    };
+    let raw = unsafe { KernelOwner::current().read(|owner| owner.last_activity) };
     ActivityValue(raw)
 }
 
@@ -211,10 +202,7 @@ pub fn get_last_activity() -> ActivityValue {
 #[inline]
 pub fn set_last_activity(val: ActivityValue) {
     // SAFETY: writes a u16 to a C global.
-    unsafe {
-        let kernel = crate::engine::Kernel::current();
-        (*kernel).last_activity = val.0
-    };
+    unsafe { (**KernelOwner::current()).last_activity = val.0 };
 }
 
 // ---------------------------------------------------------------------------
@@ -231,7 +219,12 @@ pub fn set_last_activity(val: ActivityValue) {
 #[inline]
 #[must_use]
 pub fn get_chmmr_bomb_state() -> u8 {
-    crate::state::game_state_keys::get_game_state(crate::engine::StoryKey::CHMMR_BOMB_STATE) as u8
+    crate::engine::World::current().read(|world| {
+        crate::state::game_state_keys::get_game_state(
+            world,
+            crate::engine::StoryKey::CHMMR_BOMB_STATE,
+        )
+    }) as u8
 }
 
 /// Write `CHMMR_BOMB_STATE` via direct Rust game-state access.
@@ -240,10 +233,13 @@ pub fn get_chmmr_bomb_state() -> u8 {
 /// @requirement REQ-ML-010
 #[inline]
 pub fn set_chmmr_bomb_state(val: u8) {
-    crate::state::game_state_keys::set_game_state(
-        crate::engine::StoryKey::CHMMR_BOMB_STATE,
-        val as u32,
-    );
+    crate::engine::World::current().write(|world| {
+        crate::state::game_state_keys::set_game_state(
+            world,
+            crate::engine::StoryKey::CHMMR_BOMB_STATE,
+            val as u32,
+        )
+    });
 }
 
 /// Read `STARBASE_AVAILABLE` via direct Rust game-state access.
@@ -253,7 +249,12 @@ pub fn set_chmmr_bomb_state(val: u8) {
 #[inline]
 #[must_use]
 pub fn get_starbase_available() -> u8 {
-    crate::state::game_state_keys::get_game_state(crate::engine::StoryKey::STARBASE_AVAILABLE) as u8
+    crate::engine::World::current().read(|world| {
+        crate::state::game_state_keys::get_game_state(
+            world,
+            crate::engine::StoryKey::STARBASE_AVAILABLE,
+        )
+    }) as u8
 }
 
 /// Read `GLOBAL_FLAGS_AND_DATA` via direct Rust game-state access.
@@ -263,8 +264,12 @@ pub fn get_starbase_available() -> u8 {
 #[inline]
 #[must_use]
 pub fn get_global_flags_and_data() -> u8 {
-    crate::state::game_state_keys::get_game_state(crate::engine::StoryKey::GLOBAL_FLAGS_AND_DATA)
-        as u8
+    crate::engine::World::current().read(|world| {
+        crate::state::game_state_keys::get_game_state(
+            world,
+            crate::engine::StoryKey::GLOBAL_FLAGS_AND_DATA,
+        )
+    }) as u8
 }
 
 /// Read `KOHR_AH_KILLED_ALL` via direct Rust game-state access.
@@ -274,7 +279,12 @@ pub fn get_global_flags_and_data() -> u8 {
 #[inline]
 #[must_use]
 pub fn get_kohr_ah_killed_all() -> u8 {
-    crate::state::game_state_keys::get_game_state(crate::engine::StoryKey::KOHR_AH_KILLED_ALL) as u8
+    crate::engine::World::current().read(|world| {
+        crate::state::game_state_keys::get_game_state(
+            world,
+            crate::engine::StoryKey::KOHR_AH_KILLED_ALL,
+        )
+    }) as u8
 }
 
 // ---------------------------------------------------------------------------
@@ -293,10 +303,7 @@ pub fn get_crew_enlisted() -> u16 {
     #[cfg(not(test))]
     {
         // SAFETY: reads a u16 field from the C GlobData global.
-        unsafe {
-            let world = crate::engine::WorldData::current();
-            (*world).flagship.crew_enlisted
-        }
+        unsafe { WorldFields::current().read(|owner| owner.flagship.crew_enlisted) }
     }
     #[cfg(test)]
     0
@@ -318,8 +325,8 @@ pub fn zero_global_velocity() {
     {
         // SAFETY: zeroes the velocity field in the C GlobData global.
         unsafe {
-            let world = crate::engine::WorldData::current();
-            let velocity_ptr = std::ptr::addr_of_mut!((*world).game.velocity);
+            let world = WorldFields::current();
+            let velocity_ptr = std::ptr::addr_of_mut!((**world).game.velocity);
             std::ptr::write_bytes(velocity_ptr, 0, 1);
         }
     }
@@ -553,3 +560,5 @@ mod tests {
         assert_eq!(false_val, 0);
     }
 }
+
+use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

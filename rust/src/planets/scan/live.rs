@@ -130,8 +130,11 @@ unsafe fn bounds(frame: *mut c_void) -> CRect {
     rect
 }
 unsafe fn cursor_frame() -> *mut c_void {
-    let kernel = crate::engine::Kernel::current();
-    (base::SetAbsFrameIndex(((*kernel).misc_data_frame).cast(), 105)).cast()
+    (base::SetAbsFrameIndex(
+        (KernelOwner::current().read(|owner| owner.misc_data_frame)).cast(),
+        105,
+    ))
+    .cast()
 }
 
 #[no_mangle]
@@ -235,11 +238,11 @@ unsafe fn fuel() -> u16 {
 }
 
 unsafe fn spawn_fwiffo() {
-    let world = crate::engine::WorldData::current();
+    let world = WorldFields::current();
     crate::planets::c_api::set_encounter_group(0);
     PutGroupInfo(0, u8::MAX);
-    ReinitQueue(std::ptr::addr_of_mut!((*world).game.ip_group_q).cast::<Queue>());
-    let queue = std::ptr::addr_of_mut!((*world).game.npc_built_ship_q).cast::<Queue>();
+    ReinitQueue(std::ptr::addr_of_mut!((**world).game.ip_group_q).cast::<Queue>());
+    let queue = std::ptr::addr_of_mut!((**world).game.npc_built_ship_q).cast::<Queue>();
     assert_eq!(CountLinks(queue), 0);
     let ship = clone_ship_fragment(crate::comm::dispatch::ship::SPATHI_SHIP, queue, 1)
         .cast::<CShipFragment>();
@@ -249,8 +252,6 @@ unsafe fn spawn_fwiffo() {
 }
 
 unsafe fn dispatch_lander() -> bool {
-    let kernel = crate::engine::Kernel::current();
-    let owned_world = crate::engine::WorldData::current();
     let landing_fuel = fuel() as i16;
     erase_coarse();
     let old_callback = SetInputCallback(None);
@@ -261,7 +262,9 @@ unsafe fn dispatch_lander() -> bool {
     let mut context = PlanetSideRunContext {
         solar_system: system.cast(),
         world: (*system).pOrbitalDesc.cast(),
-        misc_data_frame: (*kernel).misc_data_frame.cast(),
+        misc_data_frame: KernelOwner::current()
+            .read(|owner| owner.misc_data_frame)
+            .cast(),
         energy_frame: (*system).PlanetSideFrame[1].cast(),
         life_frames: std::array::from_fn(|i| (*system).PlanetSideFrame[i + 3].cast()),
         landing_x: i32::from(PLANET_LOCATION.x),
@@ -287,7 +290,7 @@ unsafe fn dispatch_lander() -> bool {
             crate::logging::LogLevel::Fatal,
             &format!("Rust PlanetSide failed with status {}", reply.status),
         );
-        (*owned_world).game.current_activity |= CHECK_ABORT;
+        (**WorldFields::current()).game.current_activity |= CHECK_ABORT;
     } else {
         (*system).SysInfo.PlanetInfo.ScanRetrieveMask = context.retrieval_masks;
         if reply.detail == 4 {
@@ -305,15 +308,19 @@ unsafe fn dispatch_lander() -> bool {
             );
         }
     }
-    if (*owned_world).game.current_activity & CHECK_ABORT != 0 {
+    if WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT != 0 {
         return false;
     }
-    if crate::state::game_state_keys::get_game_state(crate::engine::StoryKey::FOUND_PLUTO_SPATHI)
-        == 1
+    if crate::engine::World::current().read(|world| {
+        crate::state::game_state_keys::get_game_state(
+            world,
+            crate::engine::StoryKey::FOUND_PLUTO_SPATHI,
+        )
+    }) == 1
     {
         spawn_fwiffo();
         NextActivity |= CHECK_LOAD;
-        (*owned_world).game.current_activity |= START_ENCOUNTER;
+        (**WorldFields::current()).game.current_activity |= START_ENCOUNTER;
         SaveSolarSysLocation();
         return false;
     }
@@ -328,11 +335,10 @@ struct PickState {
 }
 
 unsafe extern "C" fn pick_input(menu: *mut MENU_STATE) -> u32 {
-    let world = crate::engine::WorldData::current();
     let state = &mut *((*menu).privData.cast::<PickState>());
     let time_in = GetTimeCounter();
     let pulse = std::ptr::addr_of!(PulsedInputState).read();
-    if (*world).game.current_activity & CHECK_ABORT != 0
+    if WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT != 0
         || pulse.menu[KEY_MENU_CANCEL as usize] != 0
     {
         state.success = false;
@@ -472,7 +478,6 @@ unsafe fn scanned_stuff(cx: &mut crate::engine::battle::Cx<'_>, y: u16, scan: u1
 }
 
 unsafe fn scan_planet(cx: &mut crate::engine::battle::Cx<'_>, scan_type: u16) {
-    let kernel = crate::engine::Kernel::current();
     let (start, end) = if scan_type == 4 {
         (0, 2)
     } else {
@@ -501,7 +506,7 @@ unsafe fn scan_planet(cx: &mut crate::engine::battle::Cx<'_>, scan_type: u16) {
             height: 11,
         };
         RepairBackRect(&mut repair);
-        SetContextFont(((*kernel).micro_font).cast());
+        SetContextFont((KernelOwner::current().read(|owner| owner.micro_font)).cast());
         CffiPlatform.set_fg_color(text_colors[usize::from(scan)]);
         display::text(
             width() >> 1,
@@ -551,10 +556,9 @@ unsafe fn unavailable() -> bool {
 }
 
 unsafe extern "C" fn scan_input(menu: *mut MENU_STATE) -> u32 {
-    let world = crate::engine::WorldData::current();
     let pulse = std::ptr::addr_of!(PulsedInputState).read();
     let selected = pulse.menu[KEY_MENU_SELECT as usize] != 0;
-    if (*world).game.current_activity & CHECK_ABORT != 0 {
+    if WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT != 0 {
         return 0;
     }
     if pulse.menu[KEY_MENU_CANCEL as usize] != 0 || (selected && (*menu).CurState == 3) {
@@ -566,9 +570,10 @@ unsafe extern "C" fn scan_input(menu: *mut MENU_STATE) -> u32 {
                 return 1;
             }
             let required = fuel();
-            if (*world).flagship.fuel_on_board < u32::from(required)
-                || (*world).flagship.num_landers == 0
-                || (*world).flagship.crew_enlisted == 0
+            if WorldFields::current().read(|owner| owner.flagship.fuel_on_board)
+                < u32::from(required)
+                || WorldFields::current().read(|owner| owner.flagship.num_landers) == 0
+                || WorldFields::current().read(|owner| owner.flagship.crew_enlisted) == 0
             {
                 PlayMenuSound(2);
                 return 1;
@@ -599,7 +604,6 @@ unsafe extern "C" fn scan_input(menu: *mut MENU_STATE) -> u32 {
 
 #[no_mangle]
 pub unsafe extern "C" fn GetScanContext(owner: *mut i32) -> *mut c_void {
-    let kernel = crate::engine::Kernel::current();
     if !SCAN_CONTEXT.is_null() {
         if !owner.is_null() {
             *owner = 0;
@@ -608,11 +612,11 @@ pub unsafe extern "C" fn GetScanContext(owner: *mut i32) -> *mut c_void {
         if !owner.is_null() {
             *owner = 1;
         }
-        let old = SetContext((*kernel).space_context);
+        let old = SetContext(KernelOwner::current().read(|owner| owner.space_context));
         let mut rect = CffiPlatform.context_clip_rect();
         let context = new_context(c"ScanContext".as_ptr());
         SetContext((context).cast());
-        SetContextFGFrame((*kernel).screen.cast());
+        SetContextFGFrame(KernelOwner::current().read(|owner| owner.screen).cast());
         rect.corner.x += rect.width - width();
         rect.corner.y += rect.height - 75;
         rect.width = width();
@@ -680,3 +684,5 @@ unsafe fn new_context(name: *const std::ffi::c_char) -> *mut std::ffi::c_void {
         CreateContextAux().cast()
     }
 }
+
+use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

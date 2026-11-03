@@ -30,7 +30,8 @@ impl Battle {
         (*uqm_rust::engine::WorldData::current())
             .game
             .current_activity = IN_ENCOUNTER as _;
-        uqm_rust::state::ffi::rust_init_game_state();
+        crate::engine::World::current()
+            .write(|world| uqm_rust::state::ffi::rust_init_game_state(world));
         set_recruited(true);
         ScreenWidth = 320;
         ScreenHeight = 240;
@@ -59,11 +60,14 @@ impl Drop for Battle {
 }
 
 unsafe fn set_recruited(value: bool) {
-    uqm_rust::state::ffi::rust_set_game_state_bits(
-        SHOFIXTI_RECRUITED as i32,
-        END_SHOFIXTI_RECRUITED as i32,
-        value as BYTE,
-    );
+    crate::engine::World::current().write(|world| {
+        uqm_rust::state::ffi::rust_set_game_state_bits(
+            world,
+            SHOFIXTI_RECRUITED as i32,
+            END_SHOFIXTI_RECRUITED as i32,
+            value as BYTE,
+        )
+    });
 }
 
 use shared::FrameSet;

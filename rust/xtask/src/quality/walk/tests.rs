@@ -21,6 +21,65 @@ fn fixture(files: &[(&str, &str)], names: Option<&[String]>, defs_only: bool) ->
     walker.finish(false).unwrap()
 }
 #[test]
+fn owner_projections_are_counted_per_caller_through_imports_and_aliases() {
+    let measured = fixture(
+        &[(
+            "src/lib.rs",
+            r#"
+            use crate::engine::{Kernel as Resources, World, WorldData};
+            fn first() {
+                Resources::current();
+                World::current();
+                WorldData::current();
+                crate::engine::Kernel::current();
+            }
+            fn second() { World::current(); unrelated::World::current(); }
+        "#,
+        )],
+        None,
+        false,
+    );
+    assert_eq!(measured.report("owner_projections", None).unwrap(), 5);
+    assert_eq!(
+        measured
+            .report("owner_projections", Some("uqm::first"))
+            .unwrap(),
+        4
+    );
+    assert_eq!(
+        measured
+            .report("owner_projections", Some("uqm::second"))
+            .unwrap(),
+        1
+    );
+}
+
+#[test]
+fn mapped_owner_projection_calls_are_counted_in_the_calling_scope() {
+    let measured = fixture(
+        &[(
+            "src/lib.rs",
+            r#"
+        mod owners {
+            fn fields() -> crate::app::bridge::Projection<Data> { todo!() }
+            mod caller { use super::fields as selected; fn run() { selected(); } }
+        }
+        mod unrelated { fn fields() {} fn run() { fields(); } }
+    "#,
+        )],
+        None,
+        false,
+    );
+    assert_eq!(measured.report("owner_projections", None).unwrap(), 1);
+    assert_eq!(
+        measured
+            .report("owner_projections", Some("uqm::owners::caller::run"))
+            .unwrap(),
+        1
+    );
+}
+
+#[test]
 fn identities_include_modules_impl_types_and_traits() {
     let m = fixture(&[("src/lib.rs", "mod graphics { mod filegfx { fn load() {} } mod sdl { mod png2sdl { fn load() {} } } } struct Ship; trait Race {} impl Race for Ship { fn load() {} }")], None, false);
     let identities: BTreeSet<_> = m

@@ -94,7 +94,7 @@ pub(crate) fn element(
 #[cfg(not(test))]
 pub(crate) unsafe fn retired_element_address(id: ElementId) -> usize {
     // SAFETY: the caller retains the published Kernel while taking the snapshot.
-    unsafe { &*super::super::record::Kernel::current() }
+    unsafe { &**super::super::record::Kernel::current() }
         .elements
         .journal_address(id)
 }

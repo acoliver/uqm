@@ -54,12 +54,12 @@ pub(in crate::automation::melee_fixture) fn execute(
     // SAFETY: automation admits operations on the game thread after initialization.
     let (activity, position) = unsafe {
         (
-            (*crate::engine::WorldData::current()).game.current_activity,
+            WorldFields::current().read(|owner| owner.game.current_activity),
             SavedPosition {
                 slot: 0,
-                log_x: (*crate::engine::WorldData::current()).flagship.log_x,
-                log_y: (*crate::engine::WorldData::current()).flagship.log_y,
-                star: (*crate::engine::World::current())
+                log_x: WorldFields::current().read(|owner| owner.flagship.log_x),
+                log_y: WorldFields::current().read(|owner| owner.flagship.log_y),
+                star: (**WorldOwner::current())
                     .star_pointer(crate::planets::starmap::current_catalog())
                     .as_ref()
                     .map(|s| (s.star_pt.x, s.star_pt.y)),
@@ -165,8 +165,8 @@ fn borrow_world(cx: &Cx<'_>) -> World {
         cx.b.counters,
         // SAFETY: the catalog selection is read on its owning game thread.
         unsafe {
-            (*crate::engine::World::current())
-                .star_pointer(crate::planets::starmap::current_catalog()) as usize
+            (**WorldOwner::current()).star_pointer(crate::planets::starmap::current_catalog())
+                as usize
         },
     );
     let mut next = cx.elements().head();
@@ -207,7 +207,7 @@ unsafe fn apply(cx: &mut Cx<'_>, effect: Effect) -> Result<Reply, String> {
                 return Ok(Reply::None);
             }
             Effect::ClearStar => {
-                (*crate::engine::World::current())
+                (**WorldOwner::current())
                     .select_star(None, crate::planets::starmap::current_catalog());
                 return Ok(Reply::None);
             }
@@ -325,9 +325,9 @@ unsafe fn apply(cx: &mut Cx<'_>, effect: Effect) -> Result<Reply, String> {
 fn configure(request: &MeleeSetupRequest) -> Result<(), String> {
     use crate::supermelee::native::menu::live::drawing::P_MELEE_STATE;
     let controls = unsafe {
-        let kernel = crate::engine::Kernel::current();
+        let kernel = KernelOwner::current();
 
-        &raw mut (*kernel).player_control
+        &raw mut (**kernel).player_control
     };
     let ships = request.ships.iter().enumerate().flat_map(|(side, fleet)| {
         fleet
@@ -345,7 +345,7 @@ fn configure(request: &MeleeSetupRequest) -> Result<(), String> {
         configure_menu(
             state.melee_started != 0,
             &mut *controls,
-            (*crate::engine::WorldData::current()).game.current_activity,
+            WorldFields::current().read(|owner| owner.game.current_activity),
             request.cyborg,
         )?;
         state.melee_option = 4;
@@ -454,3 +454,5 @@ mod zoom_tests {
         assert!(zoom_matches(1, 700, (11, 5), (11, 5), Some((99, 99))));
     }
 }
+
+use crate::engine::{Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields};

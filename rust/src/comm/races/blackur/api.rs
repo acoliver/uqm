@@ -14,9 +14,12 @@ impl BlackurApi for super::super::script::live::LiveScript<Handler> {
     fn battle_group(&self) -> (u32, u32) {
         let (start, _) = crate::state::game_state_keys::bit_range("SAMATRA_GRPOFFS0")
             .expect("missing Samatra group-offset state");
-        let offset = unsafe { crate::state::ffi::rust_get_game_state_32(start as i32) };
+        let offset = unsafe {
+            crate::engine::World::current()
+                .read(|world| crate::state::ffi::rust_get_game_state_32(world, start as i32))
+        };
         (
-            unsafe { (*crate::engine::WorldData::current()).game.battle_group_ref },
+            unsafe { WorldFields::current().read(|owner| owner.game.battle_group_ref) },
             offset,
         )
     }
@@ -27,3 +30,5 @@ impl BlackurApi for crate::comm::races::encounter::testing::Fake<Handler, (u32, 
         self.world
     }
 }
+
+use crate::engine::WorldData as WorldFields;

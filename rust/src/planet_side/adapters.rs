@@ -128,8 +128,8 @@ impl CffiShipStatus {
         #[cfg(not(test))]
         #[cfg(not(test))]
         unsafe {
-            let world = crate::engine::WorldData::current();
-            let sis = std::ptr::addr_of!((*world).flagship).read();
+            let world = WorldFields::current();
+            let sis = std::ptr::addr_of!((**world).flagship).read();
             ShipStatus {
                 crew_enlisted: sis.crew_enlisted,
                 landers: sis.num_landers,
@@ -169,12 +169,12 @@ impl ShipStatusPort for CffiShipStatus {
         #[cfg(not(test))]
         #[cfg(not(test))]
         unsafe {
-            let world = crate::engine::WorldData::current();
+            let world = WorldFields::current();
             if delta.crew != 0 {
                 DeltaSISGauges(delta.crew, 0, 0);
             }
 
-            let sis = std::ptr::addr_of_mut!((*world).flagship);
+            let sis = std::ptr::addr_of_mut!((**world).flagship);
             if delta.landers < 0 {
                 (*sis).num_landers = (*sis)
                     .num_landers
@@ -234,3 +234,5 @@ mod tests {
         assert_eq!(ship.apply(&ShipDelta::default()), Ok(()));
     }
 }
+
+use crate::engine::WorldData as WorldFields;

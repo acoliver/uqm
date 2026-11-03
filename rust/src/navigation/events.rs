@@ -48,21 +48,20 @@ pub(crate) mod live {
     use std::ptr;
 
     unsafe fn fleet(race: u32) -> *mut FLEET_INFO {
-        let world = crate::engine::WorldData::current();
-        GetStarShipFromIndex(ptr::addr_of_mut!((*world).game.avail_race_q), race as u16).cast()
+        let world = WorldFields::current();
+        GetStarShipFromIndex(ptr::addr_of_mut!((**world).game.avail_race_q), race as u16).cast()
     }
     unsafe fn relative(month: u16, day: u16, year: u16, selector: u32) {
         AddEvent(EVENT_TYPE_RELATIVE_EVENT, month, day, year, selector as u8);
     }
     unsafe fn at_star(index: u32) -> bool {
-        let world = crate::engine::WorldData::current();
-        (*world).game.current_activity as u8 as u32 == IN_INTERPLANETARY
-            && !(*crate::engine::World::current())
+        WorldFields::current().read(|owner| owner.game.current_activity) as u8 as u32
+            == IN_INTERPLANETARY
+            && !(**WorldOwner::current())
                 .star_pointer(crate::planets::starmap::current_catalog())
                 .is_null()
-            && (*(*crate::engine::World::current())
-                .star_pointer(crate::planets::starmap::current_catalog()))
-            .index as u32
+            && (*(**WorldOwner::current()).star_pointer(crate::planets::starmap::current_catalog()))
+                .index as u32
                 == index
     }
 
@@ -91,15 +90,17 @@ pub(crate) mod live {
     /// Game-thread access to initialized game-clock and fleet queues.
     #[no_mangle]
     pub unsafe extern "C" fn EventHandler(selector: u8) {
-        let world = crate::engine::WorldData::current();
         match selector as u32 {
             ARILOU_ENTRANCE_EVENT => {
                 set("ARILOU_SPACE", ARILOU_GATE_STATE_OPENING as u8);
                 relative(0, 3, 0, ARILOU_EXIT_EVENT);
             }
             ARILOU_EXIT_EVENT => {
-                let mut year = (*world).game.game_clock.year_index;
-                let month = (*world).game.game_clock.month_index as u16 % 12;
+                let mut year =
+                    WorldFields::current().read(|owner| owner.game.game_clock.year_index);
+                let month = WorldFields::current().read(|owner| owner.game.game_clock.month_index)
+                    as u16
+                    % 12;
                 if month == 0 {
                     year = year.wrapping_add(1);
                 }
@@ -113,7 +114,7 @@ pub(crate) mod live {
                 );
             }
             HYPERSPACE_ENCOUNTER_EVENT => {
-                let mut handle = (*world).game.avail_race_q.head;
+                let mut handle = WorldFields::current().read(|owner| owner.game.avail_race_q.head);
                 while !handle.is_null() {
                     let current = handle.cast::<FLEET_INFO>();
                     handle = (*current).succ;
@@ -158,7 +159,9 @@ pub(crate) mod live {
             }
             SHOFIXTI_RETURN_EVENT => {
                 SetRaceAllied(SHOFIXTI_SHIP as u16, 1);
-                (*world).game.crew_cost = (*world).game.crew_cost.wrapping_sub(2);
+                (**WorldFields::current()).game.crew_cost = WorldFields::current()
+                    .read(|owner| owner.game.crew_cost)
+                    .wrapping_sub(2);
                 set("CREW_PURCHASED0", 0);
                 set("CREW_PURCHASED1", 0);
             }
@@ -217,13 +220,12 @@ pub(crate) mod live {
     }
 
     unsafe fn genocide() {
-        let world = crate::engine::WorldData::current();
         let black = fleet(BLACK_URQUAN_SHIP);
         let mut best_dist = -1i64;
         let mut best_dx = (SOL_X as i32 - (*black).loc.x as i32) as i16;
         let mut best_dy = (SOL_Y as i32 - (*black).loc.y as i32) as i16;
         let mut index = 0u8;
-        let mut handle = (*world).game.avail_race_q.head;
+        let mut handle = WorldFields::current().read(|owner| owner.game.avail_race_q.head);
         while !handle.is_null() {
             let current = handle.cast::<FLEET_INFO>();
             handle = (*current).succ;
@@ -251,8 +253,8 @@ pub(crate) mod live {
             index = index.wrapping_add(1);
         }
         if best_dist < 0 && best_dx == 0 && best_dy == 0 {
-            (*world).game.current_activity &= !(IN_BATTLE as u16);
-            (*world).flagship.crew_enlisted = u16::MAX;
+            (**WorldFields::current()).game.current_activity &= !(IN_BATTLE as u16);
+            (**WorldFields::current()).flagship.crew_enlisted = u16::MAX;
             set("KOHR_AH_KILLED_ALL", 1);
         } else {
             if best_dist < 0 {
@@ -528,3 +530,5 @@ mod tests {
         assert_eq!(fleet.days_left, 3);
     }
 }
+
+use crate::engine::{World as WorldOwner, WorldData as WorldFields};

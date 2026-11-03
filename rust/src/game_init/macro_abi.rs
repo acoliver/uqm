@@ -52,6 +52,6 @@ pub unsafe extern "C" fn ReleaseSound(sound: *mut StringTableEntry) -> *mut Stri
 /// # Safety
 /// Called on the game thread while the live game state is initialized.
 pub unsafe fn get_current_activity() -> u16 {
-    let world = crate::engine::WorldData::current();
-    (*world).game.current_activity
+    // SAFETY: the legacy boundary copies the activity from the Cx-borrowed owner.
+    crate::app::bridge::enter(|cx| cx.world.activity())
 }

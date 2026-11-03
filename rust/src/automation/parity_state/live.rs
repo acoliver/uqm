@@ -28,19 +28,13 @@ fn checkpoint_with_context(
     // SAFETY: the checkpoint owns an immutable borrow of the initialized game,
     // queue pools and their linked records. No callback runs before it returns.
     let (game, queues, elements) = unsafe {
-        let world = crate::engine::WorldData::current();
         (
-            &*(&raw const (*world).game).cast::<CGameState>(),
-            std::array::from_fn::<_, 2, _>(|side| {
-                Ship::queue(
-                    &*crate::engine::battle::access::live_queues::player_ships(side),
-                    cx.elements(),
-                )
-            }),
+            &*(&raw const cx.world.data.game).cast::<CGameState>(),
+            std::array::from_fn::<_, 2, _>(|side| Ship::queue(cx.race_pool(side), cx.elements())),
             display_elements(cx.elements(), Some(cx.groups())),
         )
     };
-    crate::automation::parity_mode::capture(&mut fields, game, journal);
+    crate::automation::parity_mode::capture(&mut fields, game, cx.world.story.as_ref(), journal);
     let ships: [_; 2] = std::array::from_fn(|side| {
         queues[side]
             .iter()

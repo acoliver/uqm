@@ -68,8 +68,7 @@ pub unsafe fn cursor() -> Option<(i16, i16)> {
 pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> u32 {
     use crate::c_bindings::controller_input::PulsedInputState;
     let time_in = crate::time::counter_abi::GetTimeCounter();
-    let glob = crate::engine::WorldData::current();
-    let activity = (*glob).game.current_activity;
+    let activity = WorldFields::current().read(|owner| owner.game.current_activity);
     let hyper = activity & 0xff == 3;
     let last = std::ptr::addr_of_mut!(LAST_BUF).cast::<u8>();
     if (*menu).Initialized == 0 {
@@ -77,7 +76,7 @@ pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> u32 {
         (*menu).InputFunc = Some(DoMoveCursor);
         ACTIVE = true;
         let universe = if hyper {
-            let sis = &(*glob).flagship;
+            let sis = &(**WorldFields::current()).flagship;
             let log_units_x = (((ScreenWidth - 64) << 5) >> 4) * 195;
             let log_units_y = ((ScreenHeight << 5) >> 4) * 25;
             CPoint {
@@ -85,9 +84,8 @@ pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> u32 {
                 y: (9999 - (sis.log_y * 625 + (log_units_y >> 1)) / log_units_y) as i16,
             }
         } else {
-            (*(*crate::engine::World::current())
-                .star_pointer(crate::planets::starmap::current_catalog()))
-            .star_pt
+            (*(**WorldOwner::current()).star_pointer(crate::planets::starmap::current_catalog()))
+                .star_pt
         };
         flashCurrentLocation(&universe);
         *last = 0;
@@ -101,7 +99,7 @@ pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> u32 {
         return 0;
     } else if keys[9] != 0 {
         let selected = std::ptr::addr_of!(cursorLoc).read();
-        (*glob).game.autopilot = crate::comm::locdata::CPoint {
+        (**WorldFields::current()).game.autopilot = crate::comm::locdata::CPoint {
             x: selected.x,
             y: selected.y,
         };
@@ -111,7 +109,7 @@ pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> u32 {
             if hyper {
                 crate::front_end::uqmdebug::doInstantMove();
             } else if activity & 0xff == 4 {
-                (*glob).game.current_activity |= 0x0800;
+                (**WorldFields::current()).game.current_activity |= 0x0800;
                 crate::front_end::uqmdebug::DEBUG_HOOK =
                     Some(crate::front_end::uqmdebug::doInstantMove);
             }
@@ -120,8 +118,12 @@ pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> u32 {
         }
         DrawStarMap(0, std::ptr::null_mut());
     } else if keys[21] != 0 {
-        if crate::state::game_state_keys::get_game_state(crate::engine::StoryKey::ARILOU_SPACE_SIDE)
-            <= 1
+        if crate::engine::World::current().read(|world| {
+            crate::state::game_state_keys::get_game_state(
+                world,
+                crate::engine::StoryKey::ARILOU_SPACE_SIDE,
+            )
+        }) <= 1
         {
             let old = std::ptr::addr_of!(cursorLoc).read();
             if DoStarSearch(menu) == 0 {
@@ -167,9 +169,11 @@ pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> u32 {
         SleepThreadUntil(time_in.wrapping_add(14));
     }
     flashCurrentLocation(std::ptr::null());
-    let keep_going = (*glob).game.current_activity & 0x4000 == 0;
+    let keep_going = WorldFields::current().read(|owner| owner.game.current_activity) & 0x4000 == 0;
     if !keep_going {
         ACTIVE = false;
     }
     u32::from(keep_going)
 }
+
+use crate::engine::{World as WorldOwner, WorldData as WorldFields};

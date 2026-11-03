@@ -75,7 +75,7 @@ impl Harness {
         let mut state: Box<SOLARSYS_STATE> = Box::new(unsafe { std::mem::zeroed() });
         unsafe {
             // `set_game_state` is a no-op until the game state exists.
-            rust_init_game_state();
+            crate::engine::World::current().write(|world| rust_init_game_state(world));
             SysGenRNG = uqm_rust::math::new_context();
             ScreenWidth = 320;
             pSolarSysState = &mut *state;
@@ -258,10 +258,13 @@ fn c_table(system: &str) -> &'static GenerateFunctions {
 impl SpecialOps for Harness {
     fn layout(&mut self, system: &str, case: (u8, u8, u32)) -> (Vec<Desc>, u8, u32) {
         if let Some(unleashed) = system.strip_prefix("chmmr") {
-            set_game_state(
-                uqm_rust::engine::StoryKey::CHMMR_UNLEASHED,
-                unleashed.parse().expect("0 or 1"),
-            );
+            crate::engine::World::current().write(|world| {
+                set_game_state(
+                    world,
+                    uqm_rust::engine::StoryKey::CHMMR_UNLEASHED,
+                    unleashed.parse().expect("0 or 1"),
+                )
+            });
         }
         self.star_index = star_index_of(system);
         self.c_planets(c_table(system), case)
@@ -278,34 +281,49 @@ impl SpecialOps for Harness {
 
     fn energy(&mut self, system: &str, body: Body, seed: u32) -> String {
         if let Some(taken) = system.strip_prefix("burv") {
-            set_game_state(
-                uqm_rust::engine::StoryKey::BURVIXESE_BROADCASTERS,
-                taken.parse().expect("0 or 1"),
-            );
+            crate::engine::World::current().write(|world| {
+                set_game_state(
+                    world,
+                    uqm_rust::engine::StoryKey::BURVIXESE_BROADCASTERS,
+                    taken.parse().expect("0 or 1"),
+                )
+            });
         }
         if let Some(taken) = system.strip_prefix("aqua") {
-            set_game_state(
-                uqm_rust::engine::StoryKey::AQUA_HELIX,
-                taken.parse().expect("0 or 1"),
-            );
+            crate::engine::World::current().write(|world| {
+                set_game_state(
+                    world,
+                    uqm_rust::engine::StoryKey::AQUA_HELIX,
+                    taken.parse().expect("0 or 1"),
+                )
+            });
         }
         if let Some(taken) = system.strip_prefix("bomb") {
-            set_game_state(
-                uqm_rust::engine::StoryKey::UTWIG_BOMB,
-                taken.parse().expect("0 or 1"),
-            );
+            crate::engine::World::current().write(|world| {
+                set_game_state(
+                    world,
+                    uqm_rust::engine::StoryKey::UTWIG_BOMB,
+                    taken.parse().expect("0 or 1"),
+                )
+            });
         }
         if let Some(taken) = system.strip_prefix("sun") {
-            set_game_state(
-                uqm_rust::engine::StoryKey::SUN_DEVICE,
-                taken.parse().expect("0 or 1"),
-            );
+            crate::engine::World::current().write(|world| {
+                set_game_state(
+                    world,
+                    uqm_rust::engine::StoryKey::SUN_DEVICE,
+                    taken.parse().expect("0 or 1"),
+                )
+            });
         }
         if let Some(taken) = system.strip_prefix("taalo") {
-            set_game_state(
-                uqm_rust::engine::StoryKey::TAALO_PROTECTOR,
-                taken.parse().expect("0 or 1"),
-            );
+            crate::engine::World::current().write(|world| {
+                set_game_state(
+                    world,
+                    uqm_rust::engine::StoryKey::TAALO_PROTECTOR,
+                    taken.parse().expect("0 or 1"),
+                )
+            });
         }
         self.star_index = star_index_of(system);
         self.set_star(0, 0);

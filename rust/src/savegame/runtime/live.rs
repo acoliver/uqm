@@ -57,10 +57,10 @@ impl GameStrings for LiveGameStrings {
 /// NULL or point at the live solar-system state, and `CurStarDescPtr` must be
 /// NULL or point at a catalog entry.
 pub unsafe fn capture_live_summary(name: &[u8]) -> Result<Summary, SummaryError> {
-    let glob = &*crate::engine::WorldData::current();
+    let glob = **WorldFields::current();
     let state = solar_system::current();
     let current =
-        (*crate::engine::World::current()).star_pointer(crate::planets::starmap::current_catalog());
+        (**WorldOwner::current()).star_pointer(crate::planets::starmap::current_catalog());
     let solar = SolarSystem::new(
         state.as_ref(),
         current.as_ref().map(|star| star.index),
@@ -92,7 +92,7 @@ unsafe fn live_catalog<'a>() -> &'a [CStarDesc] {
 /// Game thread only; the star map must be initialised.
 pub unsafe fn capture_live_star() -> Result<StarDesc, StarError> {
     let current =
-        (*crate::engine::World::current()).star_pointer(crate::planets::starmap::current_catalog());
+        (**WorldOwner::current()).star_pointer(crate::planets::starmap::current_catalog());
     star::capture_star(live_catalog(), current)
 }
 
@@ -146,10 +146,10 @@ pub unsafe fn prepare_live_solar_location() -> Result<(), LiveLocationError> {
     let state = solar_system::current();
     assert!(!state.is_null(), "not in a solar system");
     let current =
-        (*crate::engine::World::current()).star_pointer(crate::planets::starmap::current_catalog());
+        (**WorldOwner::current()).star_pointer(crate::planets::starmap::current_catalog());
     let star_index =
         star::catalog_index(live_catalog(), current).map_err(LiveLocationError::Star)?;
-    let glob = &mut *crate::engine::WorldData::current();
+    let glob = &mut **WorldFields::current();
     location::save_solar_location(
         &mut *std::ptr::addr_of_mut!(glob.game).cast::<crate::comm::locdata::CGameState>(),
         &*state,
@@ -171,7 +171,7 @@ pub unsafe fn prepare_live_hyper_state() -> Result<HyperFlagship, HyperSaveError
     let player_ships = &*live_queues::player_ships(RPG_PLAYER_NUM as usize);
     // SAFETY: the save operation retains the published game-thread Kernel.
     let display_list = unsafe { &*live_queues::display_list() };
-    let glob = &mut *crate::engine::WorldData::current();
+    let glob = &mut **WorldFields::current();
     hyper_save::save_hyper_facing(
         &mut *std::ptr::addr_of_mut!(glob.game).cast::<crate::comm::locdata::CGameState>(),
         player_ships,
@@ -191,3 +191,5 @@ pub unsafe fn live_flagship_facing() -> Result<Option<u16>, HyperSaveError> {
     let display_list = unsafe { &*live_queues::display_list() };
     hyper_save::read_flagship_facing(player_ships, display_list)
 }
+
+use crate::engine::{World as WorldOwner, WorldData as WorldFields};

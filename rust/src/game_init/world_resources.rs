@@ -94,34 +94,46 @@ pub(crate) mod live {
     /// Called on the game thread with a valid planet selector and initialized resources.
     #[no_mangle]
     pub unsafe extern "C" fn load_gravity_well(selector: u8) {
-        let kernel = crate::engine::Kernel::current();
-        let frames = std::slice::from_raw_parts_mut(ptr::addr_of_mut!((*kernel).planet).cast(), 3);
-        for (frame, key) in frames.iter_mut().zip(gravity_keys(selector)) {
-            *frame = match key {
-                Some(key) => {
-                    CaptureDrawable(LoadGraphicInstance(CString::new(key).unwrap().as_ptr()).cast())
-                }
-                None => ptr::null_mut(),
-            };
-        }
-        crate::collections::observation::observe_views(frames, "engine-global:planet", |frame| {
-            *frame as usize
-        });
+        // SAFETY: the synchronous resource operation borrows its Kernel from Cx.
+        crate::app::bridge::enter(|cx| {
+            let kernel = &mut *cx.kernel;
+            let frames =
+                std::slice::from_raw_parts_mut(ptr::addr_of_mut!((*kernel).planet).cast(), 3);
+            for (frame, key) in frames.iter_mut().zip(gravity_keys(selector)) {
+                *frame = match key {
+                    Some(key) => CaptureDrawable(
+                        LoadGraphicInstance(CString::new(key).unwrap().as_ptr()).cast(),
+                    ),
+                    None => ptr::null_mut(),
+                };
+            }
+            crate::collections::observation::observe_views(
+                frames,
+                "engine-global:planet",
+                |frame| *frame as usize,
+            );
+        })
     }
 
     /// # Safety
     /// Called on the game thread while the graphics resource system is live.
     #[no_mangle]
     pub unsafe extern "C" fn free_gravity_well() {
-        let kernel = crate::engine::Kernel::current();
-        let frames = std::slice::from_raw_parts_mut(ptr::addr_of_mut!((*kernel).planet).cast(), 3);
-        for frame in frames.iter_mut() {
-            DestroyDrawable(ReleaseDrawable(*frame));
-            *frame = ptr::null_mut();
-        }
-        crate::collections::observation::observe_views(frames, "engine-global:planet", |frame| {
-            *frame as usize
-        });
+        // SAFETY: the synchronous resource operation borrows its Kernel from Cx.
+        crate::app::bridge::enter(|cx| {
+            let kernel = &mut *cx.kernel;
+            let frames =
+                std::slice::from_raw_parts_mut(ptr::addr_of_mut!((*kernel).planet).cast(), 3);
+            for frame in frames.iter_mut() {
+                DestroyDrawable(ReleaseDrawable(*frame));
+                *frame = ptr::null_mut();
+            }
+            crate::collections::observation::observe_views(
+                frames,
+                "engine-global:planet",
+                |frame| *frame as usize,
+            );
+        })
     }
 
     /// # Safety

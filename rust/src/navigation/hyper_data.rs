@@ -9,13 +9,13 @@ use std::ptr;
 /// # Safety
 /// Game-thread access, after hyperspace users release their frames and maps.
 pub unsafe fn FreeHyperData() {
-    let kernel = crate::engine::Kernel::current();
-    let frames = std::slice::from_raw_parts_mut(ptr::addr_of_mut!((*kernel).hyperstars).cast(), 3);
+    let kernel = KernelOwner::current();
+    let frames = std::slice::from_raw_parts_mut(ptr::addr_of_mut!((**kernel).hyperstars).cast(), 3);
     for frame in frames {
         DestroyDrawable(ReleaseDrawable(*frame));
         *frame = ptr::null_mut();
     }
-    let maps = std::slice::from_raw_parts_mut(ptr::addr_of_mut!((*kernel).cmaps).cast(), 2);
+    let maps = std::slice::from_raw_parts_mut(ptr::addr_of_mut!((**kernel).cmaps).cast(), 2);
     for map in maps {
         DestroyStringTable(ReleaseStringTable(*map));
         *map = ptr::null_mut();
@@ -23,17 +23,19 @@ pub unsafe fn FreeHyperData() {
 }
 
 unsafe fn load() {
-    let kernel = crate::engine::Kernel::current();
-    if (*kernel).hyperstars[0].is_null() {
-        (*kernel).hyperstars[0] =
+    if KernelOwner::current()
+        .read(|owner| owner.hyperstars[0])
+        .is_null()
+    {
+        (**KernelOwner::current()).hyperstars[0] =
             CaptureDrawable(LoadGraphicInstance(AMBIENT_MASK_PMAP_ANIM.as_ptr().cast()).cast());
-        (*kernel).hyperstars[1] =
+        (**KernelOwner::current()).hyperstars[1] =
             CaptureDrawable(LoadGraphicInstance(HYPERSTARS_MASK_PMAP_ANIM.as_ptr().cast()).cast());
-        (*kernel).cmaps[0] =
+        (**KernelOwner::current()).cmaps[0] =
             CaptureStringTable(LoadStringTableInstance(HYPER_COLOR_TAB.as_ptr().cast()).cast());
-        (*kernel).hyperstars[2] =
+        (**KernelOwner::current()).hyperstars[2] =
             CaptureDrawable(LoadGraphicInstance(ARISPACE_MASK_PMAP_ANIM.as_ptr().cast()).cast());
-        (*kernel).cmaps[1] =
+        (**KernelOwner::current()).cmaps[1] =
             CaptureStringTable(LoadStringTableInstance(ARISPACE_COLOR_TAB.as_ptr().cast()).cast());
     }
 }
@@ -42,35 +44,36 @@ unsafe fn load() {
 /// World globals, contexts and resources must be initialized on the game thread.
 #[no_mangle]
 pub unsafe extern "C" fn LoadHyperspace() -> BOOLEAN {
-    let kernel = crate::engine::Kernel::current();
-    let world = crate::engine::WorldData::current();
+    let kernel = KernelOwner::current();
     super::hyperspace::live::rust_reset_hyper_distance();
-    (*world).game.ship_stamp.origin = POINT { x: -9999, y: -9999 };
+    (**WorldFields::current()).game.ship_stamp.origin = POINT { x: -9999, y: -9999 };
     load();
     crate::collections::observation::swap_image_view(
-        &mut *ptr::addr_of_mut!((*kernel).hyperstars[0]),
-        &mut *ptr::addr_of_mut!((*kernel).stars_in_space),
+        &mut *ptr::addr_of_mut!((**kernel).hyperstars[0]),
+        &mut *ptr::addr_of_mut!((**kernel).stars_in_space),
     );
-    if (*kernel).last_activity & CHECK_LOAD as u16 == 0 {
+    if (**kernel).last_activity & CHECK_LOAD as u16 == 0 {
         RepairSISBorder();
-    } else if (*kernel).last_activity as u8 == 0 {
+    } else if (**kernel).last_activity as u8 == 0 {
         DrawSISFrame();
     } else {
         ClearSISRect(DRAW_SIS_DISPLAY as u8);
         RepairSISBorder();
     }
-    if (*world).game.autopilot.x == -1 || (*world).game.autopilot.y == -1 {
+    if WorldFields::current().read(|owner| owner.game.autopilot.x) == -1
+        || WorldFields::current().read(|owner| owner.game.autopilot.y) == -1
+    {
         DrawSISMessage(ptr::null());
     }
-    SetContext((*kernel).radar_context);
+    SetContext((**kernel).radar_context);
     SetContextBackGroundColor(color(0, 14, 0));
-    SetContext((*kernel).space_context);
+    SetContext((**kernel).space_context);
     if get("ARILOU_SPACE_SIDE") <= 1 {
         SetContextBackGroundColor(color(7, 0, 0));
-        SetColorMap(GetColorMapAddress((*kernel).cmaps[0]));
+        SetColorMap(GetColorMapAddress((**kernel).cmaps[0]));
     } else {
         SetContextBackGroundColor(color(0, 26, 0));
-        SetColorMap(GetColorMapAddress((*kernel).cmaps[1]));
+        SetColorMap(GetColorMapAddress((**kernel).cmaps[1]));
         set("USED_BROADCASTER", 0);
         set("BROADCASTER_RESPONSE", 0);
     }
@@ -82,10 +85,12 @@ pub unsafe extern "C" fn LoadHyperspace() -> BOOLEAN {
 /// Must be paired with `LoadHyperspace` on the game thread.
 #[no_mangle]
 pub unsafe extern "C" fn FreeHyperspace() -> BOOLEAN {
-    let kernel = crate::engine::Kernel::current();
+    let kernel = KernelOwner::current();
     crate::collections::observation::swap_image_view(
-        &mut *ptr::addr_of_mut!((*kernel).hyperstars[0]),
-        &mut *ptr::addr_of_mut!((*kernel).stars_in_space),
+        &mut *ptr::addr_of_mut!((**kernel).hyperstars[0]),
+        &mut *ptr::addr_of_mut!((**kernel).stars_in_space),
     );
     1
 }
+
+use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

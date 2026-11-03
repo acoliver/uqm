@@ -635,9 +635,12 @@ impl super::RaceDialogue for ComandrDialogue {
         let mut desc = descriptor();
         configure(
             &mut desc,
-            crate::state::game_state_keys::get_game_state(
-                crate::engine::StoryKey::RADIOACTIVES_PROVIDED,
-            ) != 0,
+            crate::engine::World::current().read(|world| {
+                crate::state::game_state_keys::get_game_state(
+                    world,
+                    crate::engine::StoryKey::RADIOACTIVES_PROVIDED,
+                )
+            }) != 0,
         );
         as_comm_data(&desc)
     }

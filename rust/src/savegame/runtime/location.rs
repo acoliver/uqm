@@ -155,19 +155,22 @@ fn persist_planet_change(
     let mask = ScanRetrieveMask::from_array(&state.SysInfo.PlanetInfo.ScanRetrieveMask);
     let (start, end) =
         GameState::lookup_bits("PLANETARY_CHANGE").expect("PLANETARY_CHANGE is a game-state key");
-    with_state_owners(|bits, files| {
-        if bits.get_state(start, end) == 0 {
-            return Ok(());
-        }
-        // Every input is built before the first write.
-        let moons = moons_per_planet(state)?;
-        PlanetInfoManager::new(files)
-            .put_planet_info(star_index, target.planet, target.scan_moon, &mask, &moons)
-            .map_err(LocationError::PlanetInfo)?;
-        bits.set_state(start, end, 0);
-        Ok(())
-    })
-    .map_err(LocationError::Owners)?
+    crate::engine::World::current()
+        .write(|world| {
+            with_state_owners(world, |bits, files| {
+                if bits.get_state(start, end) == 0 {
+                    return Ok(());
+                }
+                // Every input is built before the first write.
+                let moons = moons_per_planet(state)?;
+                PlanetInfoManager::new(files)
+                    .put_planet_info(star_index, target.planet, target.scan_moon, &mask, &moons)
+                    .map_err(LocationError::PlanetInfo)?;
+                bits.set_state(start, end, 0);
+                Ok(())
+            })
+        })
+        .map_err(LocationError::Owners)?
 }
 
 /// `SaveSolarSysLocation ()` for a flagship that is in a solar system.

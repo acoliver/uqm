@@ -64,10 +64,19 @@ pub fn check() {
 
 fn check_bomb_queue(h: &mut Harness) {
     // This uses the real live queue adapter, not a recording FleetGroups host.
-    let old_bomb = get_game_state(uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE);
-    let old_probe = get_game_state(uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED);
-    set_game_state(uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE, 3);
-    set_game_state(uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED, 1);
+    let old_bomb = crate::engine::World::current()
+        .read(|world| get_game_state(world, uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE));
+    let old_probe = crate::engine::World::current()
+        .read(|world| get_game_state(world, uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED));
+    crate::engine::World::current()
+        .write(|world| set_game_state(world, uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE, 3));
+    crate::engine::World::current().write(|world| {
+        set_game_state(
+            world,
+            uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED,
+            1,
+        )
+    });
     unsafe {
         let ip = &raw mut (*uqm_rust::engine::WorldData::current()).game.ip_group_q;
         let npc = &raw mut (*uqm_rust::engine::WorldData::current())
@@ -90,11 +99,20 @@ fn check_bomb_queue(h: &mut Harness) {
         npc.write(saved.1);
         reference.write(saved.2);
     }
-    set_game_state(uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE, old_bomb);
-    set_game_state(
-        uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED,
-        old_probe,
-    );
+    crate::engine::World::current().write(|world| {
+        set_game_state(
+            world,
+            uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE,
+            old_bomb,
+        )
+    });
+    crate::engine::World::current().write(|world| {
+        set_game_state(
+            world,
+            uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED,
+            old_probe,
+        )
+    });
 }
 
 fn allocations() -> i32 {

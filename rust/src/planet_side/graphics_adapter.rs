@@ -150,7 +150,6 @@ impl<A: PlanetSideAssetAccess> PlanetSideGraphics for CffiPlanetSideGraphics<'_,
         #[cfg(not(test))]
         #[cfg(not(test))]
         unsafe {
-            let kernel = crate::engine::Kernel::current();
             {
                 crate::app::bridge::enter(|cx| {
                     super::orbit_scan::sync_positions(cx, &self.surface.borrow())
@@ -205,7 +204,8 @@ impl<A: PlanetSideAssetAccess> PlanetSideGraphics for CffiPlanetSideGraphics<'_,
             let lander_base_for_meters =
                 self.assets.graphic(super::resources::LanderGraphic::Lander);
             if !lander_base_for_meters.is_null() {
-                let old_radar_ctx = SetContext((*kernel).radar_context);
+                let old_radar_ctx =
+                    SetContext(KernelOwner::current().read(|owner| owner.radar_context));
                 BatchGraphics();
                 draw_cargo_meters(lander_base_for_meters, snapshot);
                 draw_crew_meter(lander_base_for_meters, snapshot.lander.crew.get());
@@ -736,3 +736,5 @@ mod tests {
         assert_eq!(count, 0);
     }
 }
+
+use crate::engine::Kernel as KernelOwner;

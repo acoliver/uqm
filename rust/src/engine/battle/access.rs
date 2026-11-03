@@ -795,7 +795,7 @@ pub(crate) mod live_queues {
     /// other code is changing the queue.
     pub unsafe fn display_list() -> *const super::super::ElementTable {
         // SAFETY: the caller retains the published, game-thread-owned Kernel.
-        unsafe { &raw const (*super::super::record::Kernel::current()).elements }
+        unsafe { &raw const (**super::super::record::Kernel::current()).elements }
     }
 }
 

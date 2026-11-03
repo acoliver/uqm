@@ -17,7 +17,11 @@ pub fn check(h: &mut Harness) {
         "PROBE_MESSAGE_DELIVERED",
         "GLOBAL_FLAGS_AND_DATA",
     ];
-    let story = keys.map(|key| get_game_state(uqm_rust::engine::StoryKey::from_name(key).unwrap()));
+    let story = keys.map(|key| {
+        crate::engine::World::current().read(|world| {
+            get_game_state(world, uqm_rust::engine::StoryKey::from_name(key).unwrap())
+        })
+    });
     let word = LiveStory.word("URQUAN_PROBE_GRPOFFS0");
     let activity = uqm_rust::mainloop::ffi::get_current_activity();
     unsafe {
@@ -85,8 +89,15 @@ pub fn check(h: &mut Harness) {
             uqm_rust::planets::starmap::current_catalog(),
         );
         LiveStory.set_word("URQUAN_PROBE_GRPOFFS0", 0);
-        set_game_state(uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE, 0);
-        set_game_state(uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED, 0);
+        crate::engine::World::current()
+            .write(|world| set_game_state(world, uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE, 0));
+        crate::engine::World::current().write(|world| {
+            set_game_state(
+                world,
+                uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED,
+                0,
+            )
+        });
         assert!(GENERATE_SOL_FUNCTIONS.init_npcs.unwrap()(&raw mut *h.state));
         let probe_ref = reference.read();
         assert_ne!(probe_ref, 0);
@@ -104,14 +115,17 @@ pub fn check(h: &mut Harness) {
             (0, 0, 0)
         );
         let file = || {
-            uqm_rust::state::ffi::with_state_files(|files| {
-                files
-                    .get_file(uqm_rust::state::state_file::DEFGRPINFO_FILE)
-                    .unwrap()
-                    .contents()
-                    .to_vec()
-            })
-            .unwrap()
+            crate::engine::World::current()
+                .write(|world| {
+                    uqm_rust::state::ffi::with_state_files(world, |files| {
+                        files
+                            .get_file(uqm_rust::state::state_file::DEFGRPINFO_FILE)
+                            .unwrap()
+                            .contents()
+                            .to_vec()
+                    })
+                })
+                .unwrap()
         };
         let saved_file = file();
         assert!(saved_file.len() > probe_ref as usize);
@@ -138,7 +152,13 @@ pub fn check(h: &mut Harness) {
                 | uqm_rust::planets::generate::default::IGNORE_FLAGSHIP
         );
         assert_eq!((*probe).dest_loc, 0);
-        set_game_state(uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED, 1);
+        crate::engine::World::current().write(|world| {
+            set_game_state(
+                world,
+                uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED,
+                1,
+            )
+        });
         assert!(GENERATE_SOL_FUNCTIONS.init_npcs.unwrap()(&raw mut *h.state));
         assert_eq!(reference.read(), probe_ref);
         assert_eq!(file(), saved_file);
@@ -153,7 +173,9 @@ pub fn check(h: &mut Harness) {
                 uqm_rust::mainloop::types::ActivityValue(activity),
             );
             c_api::set_encounter_group(17);
-            set_game_state(uqm_rust::engine::StoryKey::GLOBAL_FLAGS_AND_DATA, 0);
+            crate::engine::World::current().write(|world| {
+                set_game_state(world, uqm_rust::engine::StoryKey::GLOBAL_FLAGS_AND_DATA, 0)
+            });
             assert!(GENERATE_SOL_FUNCTIONS.generate_orbital.unwrap()(
                 system, starbase
             ));
@@ -162,7 +184,10 @@ pub fn check(h: &mut Harness) {
                 activity | START_ENCOUNTER
             );
             assert_eq!(
-                get_game_state(uqm_rust::engine::StoryKey::GLOBAL_FLAGS_AND_DATA),
+                crate::engine::World::current().read(|world| get_game_state(
+                    world,
+                    uqm_rust::engine::StoryKey::GLOBAL_FLAGS_AND_DATA
+                )),
                 255
             );
             assert!(ip.read().head.is_null() && built.read().head.is_null());
@@ -184,7 +209,13 @@ pub fn check(h: &mut Harness) {
         reference.write(saved.3);
     }
     for (key, value) in keys.into_iter().zip(story) {
-        set_game_state(uqm_rust::engine::StoryKey::from_name(key).unwrap(), value);
+        crate::engine::World::current().write(|world| {
+            set_game_state(
+                world,
+                uqm_rust::engine::StoryKey::from_name(key).unwrap(),
+                value,
+            )
+        });
     }
     LiveStory.set_word("URQUAN_PROBE_GRPOFFS0", word);
     uqm_rust::mainloop::ffi::set_current_activity(activity);

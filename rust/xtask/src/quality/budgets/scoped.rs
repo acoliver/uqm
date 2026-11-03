@@ -29,7 +29,10 @@ pub(super) fn validate(
     scopes: &BTreeMap<String, u64>,
     limit: u64,
 ) -> Result<(), String> {
-    if name != "stage_b_raw" && super::access_phase(name).is_none() {
+    if name != "stage_b_raw"
+        && super::access_phase(name).is_none()
+        && super::projection::ends(name).is_none()
+    {
         return if scopes.is_empty() {
             Ok(())
         } else {
@@ -49,6 +52,11 @@ pub(super) fn validate(
                     fields[0] == "ffi"
                         && ["raw_records", "raw_pointer_parameters"].contains(&fields[1])
                         && fields[2].contains("::")
+                }
+                name if super::projection::ends(name).is_some() => {
+                    fields[0] == "ffi"
+                        && fields[1] == "owner_projections"
+                        && super::projection::identity(name, fields[2])
                 }
                 _ => {
                     fields[0] == "unsafe"

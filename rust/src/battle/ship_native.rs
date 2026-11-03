@@ -447,8 +447,9 @@ pub(crate) mod engine {
     /// Player queues and encounter/melee selection state must be initialized.
     #[no_mangle]
     pub unsafe extern "C" fn GetInitialStarShips() -> BOOLEAN {
-        let world = crate::engine::WorldData::current();
-        if (*world).game.current_activity as BYTE == SUPER_MELEE as BYTE {
+        if WorldFields::current().read(|owner| owner.game.current_activity) as BYTE
+            == SUPER_MELEE as BYTE
+        {
             let mut ships = [ptr::null_mut(); NUM_PLAYERS as usize];
             if GetInitialMeleeStarShips(ships.as_mut_ptr()) == 0 {
                 return 0;
@@ -634,3 +635,5 @@ mod tests {
         assert_eq!(velocity_squared(i16::MIN, i16::MIN), 2_147_483_648);
     }
 }
+
+use crate::engine::WorldData as WorldFields;

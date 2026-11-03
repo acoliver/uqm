@@ -83,7 +83,7 @@ impl ChmmrApi for super::super::script::live::LiveScript<Handler> {
         let starbase = self.get("STARBASE_AVAILABLE") != 0;
 
         unsafe {
-            refit(&mut *crate::engine::WorldData::current(), starbase);
+            refit(&mut **WorldFields::current(), starbase);
         }
     }
     fn intro_mode(&mut self, mode: i32, duration: i32) {
@@ -119,3 +119,5 @@ impl ChmmrApi for super::super::encounter::testing::Fake<Handler, World> {
         self.world.intros.push((mode, duration));
     }
 }
+
+use crate::engine::WorldData as WorldFields;

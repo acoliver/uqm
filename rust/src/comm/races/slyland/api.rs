@@ -35,10 +35,9 @@ mod live {
         }
         fn position(&self) -> (i32, i32, i32, i32) {
             unsafe {
-                let world = crate::engine::WorldData::current();
                 (
-                    (*world).flagship.log_x,
-                    (*world).flagship.log_y,
+                    WorldFields::current().read(|owner| owner.flagship.log_x),
+                    WorldFields::current().read(|owner| owner.flagship.log_y),
                     ScreenWidth,
                     ScreenHeight,
                 )
@@ -108,3 +107,5 @@ impl SlylandApi for crate::comm::races::encounter::testing::Fake<Handler, World>
             .push((self.effects.len(), Speech::Number(number, padded)));
     }
 }
+
+use crate::engine::WorldData as WorldFields;

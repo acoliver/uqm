@@ -74,7 +74,9 @@ fn set_key(bytes: &mut StateBytes, name: &str, value: u8) {
 }
 
 fn install(bytes: &StateBytes) {
-    replace_game_state(bytes).expect("the singleton is not poisoned");
+    crate::engine::World::current()
+        .write(|world| replace_game_state(world, bytes))
+        .expect("the singleton is not poisoned");
 }
 
 /// The one-bit "on ship" flags, by device id, as `InventoryDevices` reads them

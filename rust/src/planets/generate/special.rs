@@ -57,11 +57,13 @@ pub struct LiveStory;
 
 impl Story for LiveStory {
     fn flag(&self, name: &'static str) -> u32 {
-        crate::engine::StoryKey::from_name(name).map_or(0, get_game_state)
+        crate::engine::StoryKey::from_name(name).map_or(0, |key| {
+            crate::engine::World::current().read(|world| get_game_state(world, key))
+        })
     }
     fn set_flag(&mut self, name: &'static str, value: u32) {
         if let Some(key) = crate::engine::StoryKey::from_name(name) {
-            set_game_state(key, value);
+            crate::engine::World::current().write(|world| set_game_state(world, key, value));
         }
     }
     fn word(&self, name: &'static str) -> u32 {
@@ -96,12 +98,20 @@ use crate::state::ffi::{rust_get_game_state_bits, rust_set_game_state_bits};
 
 fn get_game_state_byte(start: u32) -> u32 {
     // SAFETY: reads the Rust-owned game state.
-    unsafe { u32::from(rust_get_game_state_bits(start as i32, start as i32 + 7)) }
+    unsafe {
+        u32::from(
+            crate::engine::World::current()
+                .read(|world| rust_get_game_state_bits(world, start as i32, start as i32 + 7)),
+        )
+    }
 }
 
 fn set_game_state_byte(start: u32, value: u8) {
     // SAFETY: writes the Rust-owned game state.
-    unsafe { rust_set_game_state_bits(start as i32, start as i32 + 7, value) };
+    unsafe {
+        crate::engine::World::current()
+            .write(|world| rust_set_game_state_bits(world, start as i32, start as i32 + 7, value))
+    };
 }
 
 /// Re-place `planet` on a circle of `EARTH_RADIUS * percent / 100`, keeping

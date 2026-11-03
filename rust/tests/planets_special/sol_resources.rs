@@ -161,9 +161,12 @@ unsafe fn names(h: &mut Harness) {
         .cast::<std::ffi::c_char>();
         assert_eq!(std::ffi::CStr::from_ptr(name).to_str().unwrap(), expected);
         assert_eq!(
-            uqm_rust::state::game_state_keys::get_game_state(
-                uqm_rust::engine::StoryKey::BATTLE_PLANET
-            ),
+            crate::engine::World::current().read(|world| {
+                uqm_rust::state::game_state_keys::get_game_state(
+                    world,
+                    uqm_rust::engine::StoryKey::BATTLE_PLANET,
+                )
+            }),
             index as u32 + 128
         );
         let moon = &raw mut (*system).MoonDesc[1];
@@ -172,9 +175,12 @@ unsafe fn names(h: &mut Harness) {
         assert!(GENERATE_SOL_FUNCTIONS.generate_name.unwrap()(system, moon));
         assert_eq!(std::ffi::CStr::from_ptr(name).to_str().unwrap(), expected);
         assert_eq!(
-            uqm_rust::state::game_state_keys::get_game_state(
-                uqm_rust::engine::StoryKey::BATTLE_PLANET
-            ),
+            crate::engine::World::current().read(|world| {
+                uqm_rust::state::game_state_keys::get_game_state(
+                    world,
+                    uqm_rust::engine::StoryKey::BATTLE_PLANET,
+                )
+            }),
             index as u32 + 128
         );
     }
@@ -210,8 +216,12 @@ unsafe fn scenes(h: &mut Harness) {
             moon
         };
         (*world).rand_seed = 104729;
-        set_game_state(uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI, 0);
-        set_game_state(uqm_rust::engine::StoryKey::MOONBASE_DESTROYED, 0);
+        crate::engine::World::current().write(|world| {
+            set_game_state(world, uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI, 0)
+        });
+        crate::engine::World::current().write(|world| {
+            set_game_state(world, uqm_rust::engine::StoryKey::MOONBASE_DESTROYED, 0)
+        });
         assert!(GENERATE_SOL_FUNCTIONS.generate_orbital.unwrap()(
             system, world
         ));

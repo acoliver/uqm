@@ -32,6 +32,7 @@ fn navigate(ship: u32, left: bool, right: bool, up: bool, down: bool) -> u32 {
 #[allow(non_snake_case)]
 pub(super) mod live {
     use super::navigate;
+    use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
     use crate::front_end::fmv::DoShipSpin;
     use crate::graphics::{drawable_abi, geometry_ffi, native_abi};
     use crate::ships::native::abi::*;
@@ -51,8 +52,7 @@ pub(super) mod live {
     /// # Safety
     /// Game thread, with the melee graphics and master ship list loaded.
     pub unsafe extern "C" fn BuildBuildPickFrame() {
-        let kernel = crate::engine::Kernel::current();
-        let old = SetContext((*kernel).off_screen_context);
+        let old = SetContext(KernelOwner::current().read(|owner| owner.off_screen_context));
         let mut stamp = STAMP {
             origin: POINT { x: 0, y: 0 },
             frame: SetAbsFrameIndex(MeleeFrame, 27),
@@ -134,10 +134,11 @@ pub(super) mod live {
     }
 
     unsafe extern "C" fn pick(state: *mut MELEE_STATE) -> u32 {
-        let world = crate::engine::WorldData::current();
         let time = GetTimeCounter();
         GamePaused = 0;
-        if (*world).game.current_activity & CHECK_ABORT as u16 != 0 {
+        if WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
+            != 0
+        {
             (*state).build_pick_confirmed = 0;
             return 0;
         }
@@ -205,3 +206,5 @@ mod tests {
         }
     }
 }
+
+use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

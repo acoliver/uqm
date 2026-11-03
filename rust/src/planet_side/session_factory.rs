@@ -70,10 +70,20 @@ fn production_upgrades() -> LanderUpgrades {
     use crate::state::game_state_keys::get_game_state;
 
     LanderUpgrades {
-        improved_speed: get_game_state(crate::engine::StoryKey::IMPROVED_LANDER_SPEED) != 0,
-        improved_cargo: get_game_state(crate::engine::StoryKey::IMPROVED_LANDER_CARGO) != 0,
-        improved_shot: get_game_state(crate::engine::StoryKey::IMPROVED_LANDER_SHOT) != 0,
-        shields: ShieldSet::from_bits(get_game_state(crate::engine::StoryKey::LANDER_SHIELDS) as u8),
+        improved_speed: crate::engine::World::current()
+            .read(|world| get_game_state(world, crate::engine::StoryKey::IMPROVED_LANDER_SPEED))
+            != 0,
+        improved_cargo: crate::engine::World::current()
+            .read(|world| get_game_state(world, crate::engine::StoryKey::IMPROVED_LANDER_CARGO))
+            != 0,
+        improved_shot: crate::engine::World::current()
+            .read(|world| get_game_state(world, crate::engine::StoryKey::IMPROVED_LANDER_SHOT))
+            != 0,
+        shields: ShieldSet::from_bits(
+            crate::engine::World::current()
+                .read(|world| get_game_state(world, crate::engine::StoryKey::LANDER_SHIELDS))
+                as u8,
+        ),
     }
 }
 

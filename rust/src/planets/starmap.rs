@@ -83,7 +83,10 @@ pub unsafe extern "C" fn FindStar(
     xb: i16,
     yb: i16,
 ) -> *mut CStarDesc {
-    let (base, hi) = if crate::state::ffi::rust_get_game_state_bits(42, 43) <= 1 {
+    let (base, hi) = if crate::engine::World::current()
+        .read(|world| crate::state::ffi::rust_get_game_state_bits(world, 42, 43))
+        <= 1
+    {
         (star_array, NUM_SOLAR_SYSTEMS as i16 - 1)
     } else {
         (
@@ -107,11 +110,10 @@ pub(crate) mod naming {
     /// `star` is readable, and `buffer` has space for the prefix and cluster name.
     #[no_mangle]
     pub unsafe extern "C" fn GetClusterName(star: *const CStarDesc, buffer: *mut c_char) {
-        let kernel = crate::engine::Kernel::current();
         let mut out = buffer;
         if (*star).prefix != 0 {
             let mut text = GetStringAddress(SetAbsStringTableIndex(
-                ((*kernel).game_strings).cast(),
+                (KernelOwner::current().read(|owner| owner.game_strings)).cast(),
                 crate::c_bindings::global_state::STAR_NUMBER_BASE as u16 + (*star).prefix as u16
                     - 1,
             ));
@@ -129,7 +131,7 @@ pub(crate) mod naming {
             }
         }
         let mut text = GetStringAddress(SetAbsStringTableIndex(
-            ((*kernel).game_strings).cast(),
+            (KernelOwner::current().read(|owner| owner.game_strings)).cast(),
             (*star).postfix as u16,
         ));
         if text.is_null() {
@@ -180,3 +182,5 @@ mod tests {
         }
     }
 }
+
+use crate::engine::Kernel as KernelOwner;

@@ -183,7 +183,7 @@ fn pulsed_directions() -> (Direction, bool) {
 /// # Safety
 /// `state` is the picker's state, which `DoInput` is running.
 unsafe fn change_selection(state: &mut PickerState) {
-    let kernel = crate::engine::Kernel::current();
+    let kernel = KernelOwner::current();
     crate::automation::ui_observation::observe_ship_picker_cursor(state.cursor);
     let area = highlight(state.frame, state.cursor);
     state.flash = CRect {
@@ -213,22 +213,20 @@ unsafe fn change_selection(state: &mut PickerState) {
 
     let (crew, max_crew) = if let Some(chosen) = state.chosen {
         // SAFETY: font globals are set at startup.
-        unsafe { SetContextFont((std::ptr::addr_of!((*kernel).tiny_font).read()).cast()) };
+        unsafe { SetContextFont((std::ptr::addr_of!((**kernel).tiny_font).read()).cast()) };
         let baseline_x = name.x + (name.width >> 1);
         let baseline_y = name.y + (name.height - 1);
         // SAFETY: `chosen` is a link of `race_q`.
         let ship = LinkQueue::<Starship>::ship_value(chosen);
         let (text, length, crew, max_crew) = if ship.captain == 0 {
-            // SAFETY: the game thread owns `GlobData`.
-            let sis = unsafe { &(*crate::engine::WorldData::current()).flagship };
+            // The legacy picker left the flagship captain strip empty: its name
+            // pointer escaped a temporary SIS copy. Preserve that presentation
+            // without keeping the dangling pointer; crew still comes from World.
+            // SAFETY: the published lifecycle owns the flagship on this thread.
+            let sis = unsafe { &(**WorldFields::current()).flagship };
             // SAFETY: plain call.
             let capacity = unsafe { GetCrewPodCapacity() };
-            (
-                sis.commander_name.as_ptr().cast::<c_char>(),
-                u16::MAX,
-                sis.crew_enlisted,
-                capacity,
-            )
+            (c"".as_ptr(), 0, sis.crew_enlisted, capacity)
         } else {
             // SAFETY: `race_strings` is the ship's name table.
             let entry = unsafe {
@@ -321,7 +319,7 @@ fn base_activity_aborted() -> bool {
 /// # Safety
 /// Game thread, inside a full-game battle.
 unsafe fn get_armada_star_ship() -> *mut c_void {
-    let kernel = crate::engine::Kernel::current();
+    let kernel = KernelOwner::current();
     // SAFETY: `battle_counter` has a slot for each side.
     if unsafe { crate::app::bridge::battle(|b| b.counters[1]) } == 0 {
         // No opponents left.
@@ -330,7 +328,7 @@ unsafe fn get_armada_star_ship() -> *mut c_void {
 
     // SAFETY: the context global is set at startup.
     let old_context =
-        unsafe { base::SetContext(std::ptr::addr_of!((*kernel).space_context).read()) };
+        unsafe { base::SetContext(std::ptr::addr_of!((**kernel).space_context).read()) };
     let mut pick = CRect::default();
     // SAFETY: `pick` is valid for the call.
     unsafe { draw_armada_pick_ship(0, &mut pick) };
@@ -385,7 +383,6 @@ pub(crate) unsafe fn encounter_ship(
     activity: u16,
     pick: impl FnOnce(u16, *mut *mut c_void) -> u32,
 ) -> Option<crate::engine::battle::ShipId> {
-    let world = crate::engine::WorldData::current();
     let side = usize::from(which_player);
     // SAFETY: `battle_counter` and `race_q` have a slot for each side.
     // SAFETY: as above.
@@ -438,7 +435,7 @@ pub(crate) unsafe fn encounter_ship(
             // SAFETY: `last` is a live `STARSHIP` and `GlobData` is owned by
             // the game thread.
             unsafe {
-                let sis = &mut (*world).flagship;
+                let sis = &mut (**WorldFields::current()).flagship;
                 if LinkQueue::<Starship>::ship_value(
                     last_id.unwrap_or_else(|| panic!("missing checked battle value")),
                 )
@@ -497,11 +494,10 @@ pub(crate) unsafe fn encounter_ship(
 /// `pick_rect` is valid for writing; game thread only.
 #[export_name = "DrawArmadaPickShip"]
 pub unsafe extern "C" fn draw_armada_pick_ship(draw_salvage_frame: c_int, pick_rect: *mut CRect) {
-    let kernel = crate::engine::Kernel::current();
-    let world = crate::engine::WorldData::current();
+    let kernel = KernelOwner::current();
     // SAFETY: the context global is set at startup.
     let old_context =
-        unsafe { base::SetContext(std::ptr::addr_of!((*kernel).space_context).read()) };
+        unsafe { base::SetContext(std::ptr::addr_of!((**kernel).space_context).read()) };
     // SAFETY: `PICK_GRAPHIC` is NUL terminated.
     let pick_frame = unsafe {
         base::CaptureDrawable((base::LoadGraphicInstance(PICK_GRAPHIC.as_ptr().cast())).cast())
@@ -563,10 +559,10 @@ pub unsafe extern "C" fn draw_armada_pick_ship(draw_salvage_frame: c_int, pick_r
     unsafe { DrawStamp(std::ptr::from_mut(&mut stamp).cast()) };
 
     // SAFETY: the game thread owns `GlobData`; the name is a C string.
-    let ship_name = unsafe { (*world).flagship.ship_name.as_ptr() };
+    let ship_name = unsafe { (**WorldFields::current()).flagship.ship_name.as_ptr() };
     set_color(Rgba::rgb15(0x12, 0x12, 0x12));
     // SAFETY: font globals are set at startup.
-    unsafe { SetContextFont((std::ptr::addr_of!((*kernel).star_con_font).read()).cast()) };
+    unsafe { SetContextFont((std::ptr::addr_of!((**kernel).star_con_font).read()).cast()) };
     draw_text(
         pick.corner.x + (pick.width >> 1),
         pick.corner.y + pick.height - 5,
@@ -601,7 +597,7 @@ pub unsafe extern "C" fn draw_armada_pick_ship(draw_salvage_frame: c_int, pick_r
                 // SAFETY: `StatusFrame` is loaded at startup.
                 unsafe {
                     stamp.frame = (SetAbsFrameIndex(
-                        (std::ptr::addr_of!((*kernel).status_frame).read()).cast(),
+                        (std::ptr::addr_of!((**kernel).status_frame).read()).cast(),
                         3,
                     ))
                     .cast();
@@ -623,3 +619,5 @@ pub unsafe extern "C" fn draw_armada_pick_ship(draw_salvage_frame: c_int, pick_r
         base::SetContext(old_context);
     }
 }
+
+use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

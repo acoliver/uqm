@@ -592,10 +592,7 @@ pub(crate) fn ship_queue(
 ) -> std::ptr::NonNull<crate::engine::battle::link_queue::RacePool> {
     assert!(side < 2, "invalid ship side {side}");
     // SAFETY: callers use this only while the owning Kernel is published on the game thread.
-    std::ptr::NonNull::from(unsafe {
-        let kernel = Kernel::current();
-        &mut (*kernel).races[side]
-    })
+    std::ptr::NonNull::from(unsafe { &mut (**Kernel::current()).races[side] })
 }
 impl ElementState {
     fn encode(self) -> ElementRecord {

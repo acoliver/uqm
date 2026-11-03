@@ -16,12 +16,6 @@ impl WorldData {
         // SAFETY: these retained save/queue records contain only integers and nullable pointers.
         unsafe { std::mem::zeroed() }
     }
-
-    /// # Safety
-    /// Game-thread legacy boundary only. Do not retain the borrow across callbacks.
-    pub unsafe fn current() -> *mut Self {
-        unsafe { &raw mut (*World::current()).data }
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -357,8 +357,7 @@ impl SceneEntryOps for LinkedSceneEntry {
         // SAFETY: the screen context exists once game initialization is
         // complete, and scene activation runs on the main thread.
         unsafe {
-            let kernel = crate::engine::Kernel::current();
-            c_extern::SetContext((*kernel).screen_context);
+            c_extern::SetContext(KernelOwner::current().read(|owner| owner.screen_context));
             c_extern::ClearDrawable();
         }
     }
@@ -404,7 +403,8 @@ pub fn activate(
             return Err(SceneError::SetupFailed(reason));
         }
         for (name, value) in plan.game_state {
-            crate::state::game_state_keys::set_game_state(*name, *value);
+            crate::engine::World::current()
+                .write(|world| crate::state::game_state_keys::set_game_state(world, *name, *value));
         }
         enter_scene(&plan, &mut LinkedSceneEntry);
     }
@@ -642,3 +642,5 @@ mod tests {
         assert!(observed.verify(AutomationScene::SolProbeEncounter).is_ok());
     }
 }
+
+use crate::engine::Kernel as KernelOwner;

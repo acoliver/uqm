@@ -47,8 +47,8 @@ pub(crate) mod engine {
     /// Fleet queue and fragment handle must be initialized.
     #[no_mangle]
     pub unsafe extern "C" fn GetEscortByStarShipIndex(index: COUNT) -> HSHIPFRAG {
-        let world = crate::engine::WorldData::current();
-        let queue = &raw mut (*world).game.built_ship_q;
+        let world = WorldFields::current();
+        let queue = &raw mut (**world).game.built_ship_q;
         let mut handle = (*queue).head;
         while !handle.is_null() {
             let frag = handle.cast::<SHIP_FRAGMENT>();
@@ -66,11 +66,11 @@ pub(crate) mod engine {
     /// Global queue state and fleet resources must be initialized.
     #[no_mangle]
     pub unsafe extern "C" fn CountEscortShips(race: COUNT) -> COUNT {
-        let world = crate::engine::WorldData::current();
-        if GetStarShipFromIndex(&raw mut (*world).game.avail_race_q, race).is_null() {
+        let world = WorldFields::current();
+        if GetStarShipFromIndex(&raw mut (**world).game.avail_race_q, race).is_null() {
             return 0;
         }
-        let queue = &raw mut (*world).game.built_ship_q;
+        let queue = &raw mut (**world).game.built_ship_q;
         let mut handle = (*queue).head;
         let mut count: COUNT = 0;
         while !handle.is_null() {
@@ -95,23 +95,23 @@ pub(crate) mod engine {
     /// Global queue state and fleet resources must be initialized.
     #[no_mangle]
     pub unsafe extern "C" fn EscortFeasibilityStudy(race: COUNT) -> COUNT {
-        let world = crate::engine::WorldData::current();
-        let fleet = GetStarShipFromIndex(&raw mut (*world).game.avail_race_q, race);
+        let world = WorldFields::current();
+        let fleet = GetStarShipFromIndex(&raw mut (**world).game.avail_race_q, race);
         if fleet.is_null() {
             return 0;
         }
-        (MAX_BUILT_SHIPS as COUNT).wrapping_sub(CountLinks(&raw mut (*world).game.built_ship_q))
+        (MAX_BUILT_SHIPS as COUNT).wrapping_sub(CountLinks(&raw mut (**world).game.built_ship_q))
     }
 
     /// # Safety
     /// Global fleet queue and UI are initialized.
     #[no_mangle]
     pub unsafe extern "C" fn RemoveSomeEscortShips(race: COUNT, mut count: COUNT) -> COUNT {
-        let world = crate::engine::WorldData::current();
+        let world = WorldFields::current();
         if count == 0 {
             return 0;
         }
-        let queue = &raw mut (*world).game.built_ship_q;
+        let queue = &raw mut (**world).game.built_ship_q;
         let mut handle = (*queue).head;
         while !handle.is_null() {
             let frag = handle.cast::<SHIP_FRAGMENT>();
@@ -127,6 +127,7 @@ pub(crate) mod engine {
             }
             handle = next;
         }
+        drop(world);
         if count > 0 {
             DeltaSISGauges(
                 UNDEFINED_DELTA as i16,
@@ -148,8 +149,8 @@ pub(crate) mod engine {
     /// Global race queues and their records are initialized.
     #[no_mangle]
     pub unsafe extern "C" fn CheckAlliance(race: COUNT) -> COUNT {
-        let world = crate::engine::WorldData::current();
-        let fleet = GetStarShipFromIndex(&raw mut (*world).game.avail_race_q, race);
+        let world = WorldFields::current();
+        let fleet = GetStarShipFromIndex(&raw mut (**world).game.avail_race_q, race);
         if fleet.is_null() {
             return 0;
         }
@@ -161,8 +162,8 @@ pub(crate) mod engine {
     /// Global race queues and their records are initialized.
     #[no_mangle]
     pub unsafe extern "C" fn SetRaceAllied(race: COUNT, allied: BOOLEAN) -> COUNT {
-        let world = crate::engine::WorldData::current();
-        let fleet = GetStarShipFromIndex(&raw mut (*world).game.avail_race_q, race);
+        let world = WorldFields::current();
+        let fleet = GetStarShipFromIndex(&raw mut (**world).game.avail_race_q, race);
         if fleet.is_null() {
             return 0;
         }
@@ -181,8 +182,8 @@ pub(crate) mod engine {
     /// Race queue and its fleet records must be initialized on the game thread.
     #[no_mangle]
     pub unsafe extern "C" fn StartSphereTracking(race: COUNT) -> COUNT {
-        let world = crate::engine::WorldData::current();
-        let queue = &raw mut (*world).game.avail_race_q;
+        let world = WorldFields::current();
+        let queue = &raw mut (**world).game.avail_race_q;
         let fleet = GetStarShipFromIndex(queue, race);
         if fleet.is_null() {
             return 0;
@@ -209,15 +210,15 @@ pub(crate) mod engine {
         crew_level: COUNT,
         captain: BYTE,
     ) -> i32 {
-        let world = crate::engine::WorldData::current();
-        let races = &raw mut (*world).game.avail_race_q;
+        let world = WorldFields::current();
+        let races = &raw mut (**world).game.avail_race_q;
         let fleet = GetStarShipFromIndex(races, which_ship);
         if fleet.is_null() {
             return -1;
         }
         let template = fleet.cast::<FLEET_INFO>();
         let full_crew = (*template).crew_level;
-        let queue = &raw mut (*world).game.built_ship_q;
+        let queue = &raw mut (**world).game.built_ship_q;
         let mut handle = (*queue).head;
         let mut index: i32 = 0;
         while !handle.is_null() {
@@ -238,16 +239,15 @@ pub(crate) mod engine {
     /// Destination must be a fragment queue; global race templates must be live.
     #[no_mangle]
     pub unsafe extern "C" fn CloneShipFragment(
+        races: *mut QUEUE,
         ship_index: COUNT,
         destination: *mut QUEUE,
         crew_level: COUNT,
     ) -> HSHIPFRAG {
-        let world = crate::engine::WorldData::current();
         assert_eq!(
             (*destination).object_size as usize,
             std::mem::size_of::<SHIP_FRAGMENT>()
         );
-        let races = &raw mut (*world).game.avail_race_q;
         let fleet = GetStarShipFromIndex(races, ship_index);
         if fleet.is_null() {
             return ptr::null_mut();
@@ -284,17 +284,17 @@ pub(crate) mod engine {
     /// Race and escort queues and SIS display must be initialized; count must be positive.
     #[no_mangle]
     pub unsafe extern "C" fn AddEscortShips(race: COUNT, count: SIZE) -> COUNT {
-        let world = crate::engine::WorldData::current();
-        let races = &raw mut (*world).game.avail_race_q;
+        let world = WorldFields::current();
+        let races = &raw mut (**world).game.avail_race_q;
         if GetStarShipFromIndex(races, race).is_null() {
             return 0;
         }
         assert!(count > 0);
-        let queue = &raw mut (*world).game.built_ship_q;
+        let queue = &raw mut (**world).game.built_ship_q;
         let mut window: BYTE = 0;
         let mut added: COUNT = 0;
         while added < count as COUNT {
-            let ship = CloneShipFragment(race, queue, 0);
+            let ship = CloneShipFragment(races, race, queue, 0);
             if ship.is_null() {
                 break;
             }
@@ -305,6 +305,7 @@ pub(crate) mod engine {
             InsertQueue(queue, ship, old);
             added = added.wrapping_add(1);
         }
+        drop(world);
         DeltaSISGauges(
             UNDEFINED_DELTA as i16,
             UNDEFINED_DELTA as i16,
@@ -317,8 +318,8 @@ pub(crate) mod engine {
     /// Escort queue must contain live fragments with race IDs in RACE_SHIP_COST.
     #[no_mangle]
     pub unsafe extern "C" fn CalculateEscortsWorth() -> COUNT {
-        let world = crate::engine::WorldData::current();
-        let queue = &raw mut (*world).game.built_ship_q;
+        let world = WorldFields::current();
+        let queue = &raw mut (**world).game.built_ship_q;
         let mut handle = (*queue).head;
         let mut total: COUNT = 0;
         while !handle.is_null() {
@@ -389,3 +390,5 @@ mod tests {
         );
     }
 }
+
+use crate::engine::WorldData as WorldFields;

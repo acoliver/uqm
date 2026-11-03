@@ -261,14 +261,12 @@ pub(crate) mod runtime {
         SetGlobalOptions(&mut opts);
     }
     unsafe extern "C" fn DoSetupMenu(state: *mut SetupMenuState) -> BOOLEAN {
-        let kernel = crate::engine::Kernel::current();
-        let world = crate::engine::WorldData::current();
         GamePaused = 0;
         if (*state).initialized == 0 {
             SetDefaultMenuRepeatDelay();
             (*state).NextTime = GetTimeCounter();
             SetDefaults();
-            Widget_SetFont((*kernel).star_con_font);
+            Widget_SetFont(KernelOwner::current().read(|owner| owner.star_con_font));
             Widget_SetWindowColors(
                 rgb15(0x14, 0x14, 0x14),
                 rgb15(8, 8, 8),
@@ -311,7 +309,11 @@ pub(crate) mod runtime {
         }
         SleepThreadUntil((*state).NextTime.wrapping_add(MENU_FRAME_RATE));
         (*state).NextTime = GetTimeCounter();
-        BOOLEAN::from((*world).game.current_activity & CHECK_ABORT as u16 == 0 && !NEXT.is_null())
+        BOOLEAN::from(
+            WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
+                == 0
+                && !NEXT.is_null(),
+        )
     }
     unsafe fn redraw_menu() {
         BatchGraphics();
@@ -860,7 +862,6 @@ pub(crate) mod runtime {
     /// Must run on the game thread with graphics, input and resources initialized.
     #[no_mangle]
     pub unsafe extern "C" fn SetupMenu() {
-        let world = crate::engine::WorldData::current();
         let mut state: SetupMenuState = mem::zeroed();
         state.InputFunc = Some(DoSetupMenu);
         state.initialized = 0;
@@ -873,7 +874,7 @@ pub(crate) mod runtime {
         }
         DONE = 0;
         DoInput(ptr::addr_of_mut!(state).cast(), 1);
-        (*world).game.current_activity &= !(CHECK_ABORT as u16);
+        (**WorldFields::current()).game.current_activity &= !(CHECK_ABORT as u16);
         PropagateResults();
         if !SETUP_TAB.is_null() {
             clean_up_widgets();
@@ -1258,3 +1259,5 @@ mod tests {
         }
     }
 }
+
+use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

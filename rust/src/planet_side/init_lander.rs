@@ -198,8 +198,8 @@ pub fn borrowed_assets(
 #[cfg(not(test))]
 fn sis_num_landers() -> u8 {
     unsafe {
-        let world = crate::engine::WorldData::current();
-        std::ptr::addr_of!((*world).flagship.num_landers).read()
+        let world = WorldFields::current();
+        std::ptr::addr_of!((**world).flagship.num_landers).read()
     }
 }
 
@@ -207,15 +207,15 @@ fn sis_num_landers() -> u8 {
 #[cfg(not(test))]
 fn sis_total_element_mass() -> u16 {
     unsafe {
-        let world = crate::engine::WorldData::current();
-        std::ptr::addr_of!((*world).flagship.total_element_mass).read()
+        let world = WorldFields::current();
+        std::ptr::addr_of!((**world).flagship.total_element_mass).read()
     }
 }
 
 /// Read a game state bit-field via the FFI singleton.
 #[cfg(not(test))]
-fn get_game_state(name: crate::engine::StoryKey) -> u32 {
-    crate::state::game_state_keys::get_game_state(name)
+fn get_game_state(world: &crate::engine::World, name: crate::engine::StoryKey) -> u32 {
+    crate::state::game_state_keys::get_game_state(world, name)
 }
 
 /// Rust port of C `InitLander(BYTE LanderFlags)`.
@@ -229,7 +229,6 @@ pub extern "C" fn InitLander(lander_flags: u8) {
     #[cfg(not(test))]
     #[cfg(not(test))]
     unsafe {
-        let kernel = crate::engine::Kernel::current();
         let Ok(state) = LANDER_FRAMES.lock() else {
             return;
         };
@@ -238,7 +237,7 @@ pub extern "C" fn InitLander(lander_flags: u8) {
         }
         let lander_frame_0 = state.frames[0];
 
-        let old_context = SetContext((*kernel).radar_context);
+        let old_context = SetContext(KernelOwner::current().read(|owner| owner.radar_context));
         BatchGraphics();
 
         let mut r = CRect {
@@ -275,8 +274,12 @@ unsafe fn draw_lander_status(lander_frame_0: *mut c_void, lander_flags: u8) {
 
     let (shield_flags, capacity_shift);
     if lander_flags == 0 {
-        shield_flags = get_game_state(crate::engine::StoryKey::LANDER_SHIELDS) as u8;
-        capacity_shift = get_game_state(crate::engine::StoryKey::IMPROVED_LANDER_CARGO) as u8;
+        shield_flags = crate::engine::World::current()
+            .read(|world| get_game_state(world, crate::engine::StoryKey::LANDER_SHIELDS))
+            as u8;
+        capacity_shift = crate::engine::World::current()
+            .read(|world| get_game_state(world, crate::engine::StoryKey::IMPROVED_LANDER_CARGO))
+            as u8;
     } else {
         shield_flags = lander_flags
             & ((1 << EARTHQUAKE_DISASTER)
@@ -381,3 +384,5 @@ mod tests {
         );
     }
 }
+
+use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

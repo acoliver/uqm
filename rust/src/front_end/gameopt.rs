@@ -76,6 +76,7 @@ pub use runtime::{ConfirmSaveLoad, GameOptions, LoadGameDescriptions, SetNamingC
 #[cfg(not(test))]
 pub(crate) mod runtime {
     use super::{picker_action, picker_slot, PickerAction, MAX_SAVED_GAMES, SAVES_PER_PAGE};
+    use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
     use crate::navigation::abi::*;
 
     use crate::state::game_state_keys::{get_game_state, set_game_state};
@@ -145,9 +146,8 @@ pub(crate) mod runtime {
     const CAPTAIN_NAME_TEXT_COLOR: Color = rgb15(0x16, 0x0b, 0x1f);
 
     unsafe fn game_string(index: u32) -> *mut UNICODE {
-        let kernel = crate::engine::Kernel::current();
         GetStringAddress(SetAbsStringTableIndex(
-            (*kernel).game_strings,
+            KernelOwner::current().read(|owner| owner.game_strings),
             index as COUNT,
         ))
     }
@@ -184,10 +184,9 @@ pub(crate) mod runtime {
     /// must be writable; its captured drawable belongs to the caller.
     #[no_mangle]
     pub unsafe extern "C" fn ConfirmSaveLoad(MsgStamp: *mut STAMP) {
-        let kernel = crate::engine::Kernel::current();
         let mut r: RECT = mem::zeroed();
         let mut clip_r: RECT = mem::zeroed();
-        SetContextFont((*kernel).star_con_font);
+        SetContextFont(KernelOwner::current().read(|owner| owner.star_con_font));
         GetContextClipRect(&mut clip_r);
         let mut t = TEXT {
             baseline: POINT {
@@ -219,7 +218,6 @@ pub(crate) mod runtime {
     }
 
     unsafe fn FeedbackSetting(which_setting: BYTE) {
-        let world = crate::engine::WorldData::current();
         let mut buf: [UNICODE; 128] = [0; 128];
         match which_setting {
             SOUND_ON_SETTING | SOUND_OFF_SETTING => {
@@ -230,7 +228,10 @@ pub(crate) mod runtime {
                     game_string(OPTION_STRING_BASE),
                     game_string(
                         OPTION_STRING_BASE
-                            + if (*world).game.glob_flags & SOUND_DISABLED as u8 != 0 {
+                            + if WorldFields::current().read(|owner| owner.game.glob_flags)
+                                & SOUND_DISABLED as u8
+                                != 0
+                            {
                                 3
                             } else {
                                 4
@@ -246,7 +247,10 @@ pub(crate) mod runtime {
                     game_string(OPTION_STRING_BASE + 1),
                     game_string(
                         OPTION_STRING_BASE
-                            + if (*world).game.glob_flags & MUSIC_DISABLED as u8 != 0 {
+                            + if WorldFields::current().read(|owner| owner.game.glob_flags)
+                                & MUSIC_DISABLED as u8
+                                != 0
+                            {
                                 3
                             } else {
                                 4
@@ -275,7 +279,10 @@ pub(crate) mod runtime {
                     game_string(OPTION_STRING_BASE + 2),
                     game_string(
                         OPTION_STRING_BASE
-                            + if (*world).game.glob_flags & CYBORG_ENABLED as u8 == 0 {
+                            + if WorldFields::current().read(|owner| owner.game.glob_flags)
+                                & CYBORG_ENABLED as u8
+                                == 0
+                            {
                                 3
                             } else {
                                 4
@@ -302,17 +309,16 @@ pub(crate) mod runtime {
         CursorPos: COUNT,
         state: COUNT,
     ) -> BOOLEAN {
-        let kernel = crate::engine::Kernel::current();
         let (Font, mut r, BackGround, ForeGround) = if nameCaptain {
             (
-                (*kernel).tiny_font,
+                KernelOwner::current().read(|owner| owner.tiny_font),
                 CAPTAIN_NAME_RECT,
                 rgb15(0x0a, 0x0a, 0x1f),
                 rgb15(0x0a, 0x1f, 0x1f),
             )
         } else {
             (
-                (*kernel).star_con_font,
+                KernelOwner::current().read(|owner| owner.star_con_font),
                 SHIP_NAME_RECT,
                 rgb15(0x0f, 0, 0),
                 rgb15(0x1f, 0x0a, 0),
@@ -327,7 +333,7 @@ pub(crate) mod runtime {
             pStr: Str,
             CharCount: COUNT::MAX,
         };
-        SetContext((*kernel).status_context);
+        SetContext(KernelOwner::current().read(|owner| owner.status_context));
         SetContextFont(Font);
         if state & DDSHS_EDIT == 0 {
             if nameCaptain {
@@ -385,11 +391,10 @@ pub(crate) mod runtime {
     }
 
     unsafe fn NameCaptainOrShip(nameCaptain: bool) {
-        let kernel = crate::engine::Kernel::current();
-        let world = crate::engine::WorldData::current();
+        let world = WorldFields::current();
         let mut buf: [UNICODE; MAX_NAME_SIZE] = [0; MAX_NAME_SIZE];
         let mut tes: TEXTENTRY_STATE = mem::zeroed();
-        SetContext((*kernel).status_context);
+        SetContext(KernelOwner::current().read(|owner| owner.status_context));
         SetFlashRect(if nameCaptain {
             &CAPTAIN_NAME_RECT
         } else {
@@ -399,10 +404,10 @@ pub(crate) mod runtime {
         DrawStatusMessage(game_string(NAMING_STRING_BASE));
         let Setting = if nameCaptain {
             tes.MaxSize = mem::size_of::<[UNICODE; MAX_NAME_SIZE]>() as i32;
-            ptr::addr_of_mut!((*world).flagship.commander_name).cast::<UNICODE>()
+            ptr::addr_of_mut!((**world).flagship.commander_name).cast::<UNICODE>()
         } else {
             tes.MaxSize = mem::size_of::<[UNICODE; MAX_NAME_SIZE]>() as i32;
-            ptr::addr_of_mut!((*world).flagship.ship_name).cast::<UNICODE>()
+            ptr::addr_of_mut!((**world).flagship.ship_name).cast::<UNICODE>()
         };
         tes.Initialized = 0;
         tes.BaseStr = buf.as_mut_ptr();
@@ -432,16 +437,14 @@ pub(crate) mod runtime {
         state: COUNT,
         gameIndex: COUNT,
     ) -> BOOLEAN {
-        let kernel = crate::engine::Kernel::current();
-        let world = crate::engine::WorldData::current();
         let mut fullStr: [UNICODE; 256] = [0; 256];
         let mut dateStr: [UNICODE; 80] = [0; 80];
         DateToString(
             dateStr.as_mut_ptr(),
             dateStr.len(),
-            (*world).game.game_clock.month_index,
-            (*world).game.game_clock.day_index,
-            (*world).game.game_clock.year_index,
+            WorldFields::current().read(|owner| owner.game.game_clock.month_index),
+            WorldFields::current().read(|owner| owner.game.game_clock.day_index),
+            WorldFields::current().read(|owner| owner.game.game_clock.year_index),
         );
         libc::strncat(
             dateStr.as_mut_ptr(),
@@ -481,7 +484,7 @@ pub(crate) mod runtime {
         };
         let BackGround = rgb15(0x1b, 0, 0x1b);
         let ForeGround = rgb15(0, 0, 0x14);
-        SetContextFont((*kernel).tiny_font);
+        SetContextFont(KernelOwner::current().read(|owner| owner.tiny_font));
         if state & DDSHS_EDIT == 0 {
             SetContextForeGroundColor(BLACK_COLOR);
             DrawFilledRectangle(&mut r);
@@ -585,12 +588,15 @@ pub(crate) mod runtime {
     }
 
     unsafe extern "C" fn DoSettings(pMS: *mut MENU_STATE) -> BOOLEAN {
-        let world = crate::engine::WorldData::current();
-        if (*world).game.current_activity & CHECK_ABORT as ACTIVITY != 0 {
+        if WorldFields::current().read(|owner| owner.game.current_activity)
+            & CHECK_ABORT as ACTIVITY
+            != 0
+        {
             return 0;
         }
-        let mut cur_speed =
-            ((*world).game.glob_flags & COMBAT_SPEED_MASK as u8) >> COMBAT_SPEED_SHIFT;
+        let mut cur_speed = (WorldFields::current().read(|owner| owner.game.glob_flags)
+            & COMBAT_SPEED_MASK as u8)
+            >> COMBAT_SPEED_SHIFT;
         if key(KEY_MENU_CANCEL) || (key(KEY_MENU_SELECT) && (*pMS).CurState == EXIT_SETTINGS_MENU) {
             return 0;
         } else if key(KEY_MENU_SELECT) {
@@ -612,12 +618,13 @@ pub(crate) mod runtime {
                     let previous_speed = cur_speed;
                     cur_speed += 1;
                     if previous_speed < (NUM_COMBAT_SPEEDS - 1) as BYTE {
-                        (*world).game.glob_flags |= CYBORG_ENABLED as BYTE;
+                        (**WorldFields::current()).game.glob_flags |= CYBORG_ENABLED as BYTE;
                     } else {
                         cur_speed = 0;
-                        (*world).game.glob_flags &= !(CYBORG_ENABLED as BYTE);
+                        (**WorldFields::current()).game.glob_flags &= !(CYBORG_ENABLED as BYTE);
                     }
-                    (*world).game.glob_flags = ((*world).game.glob_flags
+                    (**WorldFields::current()).game.glob_flags = (WorldFields::current()
+                        .read(|owner| owner.game.glob_flags)
                         & !(COMBAT_SPEED_MASK as BYTE))
                         | (cur_speed << COMBAT_SPEED_SHIFT);
                     (*pMS).CurState = CYBORG_OFF_SETTING + cur_speed;
@@ -679,7 +686,6 @@ pub(crate) mod runtime {
     }
 
     unsafe fn DrawSavegameCargo(sisState: *mut SIS_STATE) {
-        let kernel = crate::engine::Kernel::current();
         const CARGO_COLORS: [Color; 9] = [
             rgb15(0x02, 0x0e, 0x13),
             rgb15(0x19, 0, 0),
@@ -695,12 +701,12 @@ pub(crate) mod runtime {
         const ELEMENT_SPACING_Y: i16 = 12;
         const ELEMENT_SPACING_X: i16 = 36;
         let mut buf: [UNICODE; 40] = [0; 40];
-        SetContext((*kernel).space_context);
+        SetContext(KernelOwner::current().read(|owner| owner.space_context));
         BatchGraphics();
-        SetContextFont((*kernel).star_con_font);
+        SetContextFont(KernelOwner::current().read(|owner| owner.star_con_font));
         let mut s = STAMP {
             frame: SetAbsFrameIndex(
-                (*kernel).misc_data_frame,
+                KernelOwner::current().read(|owner| owner.misc_data_frame),
                 ((NUM_SCANDOT_TRANSITIONS << 1) + 3) as COUNT,
             ),
             origin: POINT {
@@ -761,8 +767,6 @@ pub(crate) mod runtime {
     }
 
     unsafe fn DrawSavegameSummary(pickState: *mut PickGameState, gameIndex: COUNT) {
-        let kernel = crate::engine::Kernel::current();
-        let world = crate::engine::WorldData::current();
         let pSD = ptr::addr_of_mut!((*pickState).summary)
             .cast::<SUMMARY_DESC>()
             .add(gameIndex as usize);
@@ -780,9 +784,9 @@ pub(crate) mod runtime {
         } else {
             let mut OldRect: RECT = mem::zeroed();
             let mut buf: [UNICODE; 256] = [0; 256];
-            let SaveSS = (*world).flagship;
-            let player_q = (*world).game.built_ship_q;
-            let OldContext = SetContext((*kernel).status_context);
+            let SaveSS = WorldFields::current().read(|world| world.flagship);
+            let player_q = WorldFields::current().read(|world| world.game.built_ship_q);
+            let OldContext = SetContext(KernelOwner::current().read(|owner| owner.status_context));
             GetContextClipRect(&mut OldRect);
             r.corner.x = (SIS_ORG_X as i32
                 + ((sis_screen_width() - STATUS_WIDTH as i32) >> 1)
@@ -793,16 +797,23 @@ pub(crate) mod runtime {
             r.extent.width = STATUS_WIDTH as COORD;
             r.extent.height = (ScreenHeight - (SAFE_Y as i32 * 2)) as COORD;
             SetContextClipRect(&mut r);
-            (*world).flagship = (*pSD).SS;
-            let queue = ptr::addr_of_mut!((*world).game.built_ship_q);
-            InitQueue(
-                queue,
-                MAX_BUILT_SHIPS as COUNT,
-                mem::size_of::<SHIP_FRAGMENT>() as OBJ_SIZE,
-            );
-            for i in 0..(*pSD).NumShips as usize {
-                CloneShipFragment((*pSD).ShipList[i] as COUNT, queue, 0);
-            }
+            WorldFields::current().write(|world| {
+                world.flagship = (*pSD).SS;
+                let queue = &raw mut world.game.built_ship_q;
+                InitQueue(
+                    queue,
+                    MAX_BUILT_SHIPS as COUNT,
+                    mem::size_of::<SHIP_FRAGMENT>() as OBJ_SIZE,
+                );
+                for i in 0..(*pSD).NumShips as usize {
+                    CloneShipFragment(
+                        &raw mut world.game.avail_race_q,
+                        (*pSD).ShipList[i] as COUNT,
+                        queue,
+                        0,
+                    );
+                }
+            });
             DateToString(
                 buf.as_mut_ptr(),
                 buf.len(),
@@ -812,9 +823,9 @@ pub(crate) mod runtime {
             );
             ClearSISRect(DRAW_SIS_DISPLAY as BYTE);
             DrawStatusMessage(buf.as_ptr());
-            UninitQueue(queue);
+            WorldFields::current().write(|world| UninitQueue(&raw mut world.game.built_ship_q));
             SetContextClipRect(&mut OldRect);
-            SetContext((*kernel).space_context);
+            SetContext(KernelOwner::current().read(|owner| owner.space_context));
             s.origin.y = 13;
             for i in 0..4 {
                 s.origin.x = 140 + SUMMARY_X_OFFS + SUMMARY_SIDE_OFFS;
@@ -822,7 +833,7 @@ pub(crate) mod runtime {
                     let devIndex = i * 4 + j;
                     if devIndex < (*pSD).NumDevices as usize {
                         s.frame = SetAbsFrameIndex(
-                            (*kernel).misc_data_frame,
+                            KernelOwner::current().read(|owner| owner.misc_data_frame),
                             77 + (*pSD).DeviceList[devIndex] as COUNT,
                         );
                         DrawStamp(&mut s);
@@ -831,7 +842,7 @@ pub(crate) mod runtime {
                 }
                 s.origin.y += 18;
             }
-            SetContextFont((*kernel).star_con_font);
+            SetContextFont(KernelOwner::current().read(|owner| owner.star_con_font));
             let mut t = TEXT {
                 baseline: POINT {
                     x: 173 + SUMMARY_X_OFFS + SUMMARY_SIDE_OFFS,
@@ -851,7 +862,7 @@ pub(crate) mod runtime {
                 DrawStamp(&mut s);
             } else {
                 DrawSavegameCargo(ptr::addr_of_mut!((*pSD).SS));
-                SetContext((*kernel).radar_context);
+                SetContext(KernelOwner::current().read(|owner| owner.radar_context));
                 GetContextClipRect(&mut OldRect);
                 r.corner.x = SIS_ORG_X as COORD + 10 + SUMMARY_X_OFFS - SUMMARY_SIDE_OFFS;
                 r.corner.y = SIS_ORG_Y as COORD + 84;
@@ -859,7 +870,7 @@ pub(crate) mod runtime {
                 SetContextClipRect(&mut r);
                 InitLander((*pSD).Flags | OVERRIDE_LANDER_FLAGS as BYTE);
                 SetContextClipRect(&mut OldRect);
-                SetContext((*kernel).space_context);
+                SetContext(KernelOwner::current().read(|owner| owner.space_context));
                 libc::snprintf(
                     buf.as_mut_ptr(),
                     buf.len(),
@@ -890,10 +901,20 @@ pub(crate) mod runtime {
             };
             match (*pSD).Activity as u32 {
                 IN_LAST_BATTLE | IN_INTERPLANETARY | IN_PLANET_ORBIT | IN_STARBASE => {
-                    let QuasiState = get_game_state(crate::engine::StoryKey::ARILOU_SPACE_SIDE);
-                    set_game_state(crate::engine::StoryKey::ARILOU_SPACE_SIDE, 0);
+                    let QuasiState = crate::engine::World::current().read(|world| {
+                        get_game_state(world, crate::engine::StoryKey::ARILOU_SPACE_SIDE)
+                    });
+                    crate::engine::World::current().write(|world| {
+                        set_game_state(world, crate::engine::StoryKey::ARILOU_SPACE_SIDE, 0)
+                    });
                     let SDPtr = FindStar(ptr::null_mut(), &mut starPt, 1, 1);
-                    set_game_state(crate::engine::StoryKey::ARILOU_SPACE_SIDE, QuasiState);
+                    crate::engine::World::current().write(|world| {
+                        set_game_state(
+                            world,
+                            crate::engine::StoryKey::ARILOU_SPACE_SIDE,
+                            QuasiState,
+                        )
+                    });
                     if !SDPtr.is_null() {
                         GetClusterName(SDPtr, buf.as_mut_ptr());
                         starPt = (*SDPtr).star_pt;
@@ -919,7 +940,7 @@ pub(crate) mod runtime {
                     buf[0] = 0;
                 }
             }
-            SetContextFont((*kernel).tiny_font);
+            SetContextFont(KernelOwner::current().read(|owner| owner.tiny_font));
             SetContextForeGroundColor(rgb15(0x1b, 0, 0x1b));
             t.CharCount = COUNT::MAX;
             font_DrawText(&mut t);
@@ -963,18 +984,19 @@ pub(crate) mod runtime {
             t.CharCount = COUNT::MAX;
             font_DrawText(&mut t);
             SetContext(OldContext);
-            (*world).game.built_ship_q = player_q;
-            (*world).flagship = SaveSS;
+            WorldFields::current().write(|world| {
+                world.game.built_ship_q = player_q;
+                world.flagship = SaveSS;
+            });
         }
         UnbatchGraphics();
     }
 
     unsafe fn DrawGameSelection(pickState: *mut PickGameState, selSlot: COUNT) {
-        let kernel = crate::engine::Kernel::current();
         let mut buf: [UNICODE; 256] = [0; 256];
         let mut buf2: [UNICODE; 80] = [0; 80];
         BatchGraphics();
-        SetContextFont((*kernel).tiny_font);
+        SetContextFont(KernelOwner::current().read(|owner| owner.tiny_font));
         let mut r = RECT {
             extent: EXTENT {
                 width: 240,
@@ -1090,12 +1112,10 @@ pub(crate) mod runtime {
     }
 
     unsafe extern "C" fn DoPickGame(pMS: *mut MENU_STATE) -> BOOLEAN {
-        let kernel = crate::engine::Kernel::current();
-        let world = crate::engine::WorldData::current();
         let pickState = (*pMS).privData.cast::<PickGameState>();
         let TimeIn = GetTimeCounter();
         let occupied = (*pickState).summary[(*pMS).CurState as usize].year_index != 0;
-        let activity = (*world).game.current_activity;
+        let activity = WorldFields::current().read(|owner| owner.game.current_activity);
         let action = picker_action(
             activity & CHECK_ABORT as ACTIVITY != 0,
             key(KEY_MENU_CANCEL),
@@ -1134,7 +1154,7 @@ pub(crate) mod runtime {
                 );
                 if NewState != (*pMS).CurState {
                     (*pMS).CurState = NewState;
-                    SetContext((*kernel).space_context);
+                    SetContext(KernelOwner::current().read(|owner| owner.space_context));
                     RedrawPickDisplay(pickState, (*pMS).CurState as COUNT);
                 }
                 SleepThreadUntil(TimeIn.wrapping_add(ONE_SECOND / 30));
@@ -1190,23 +1210,22 @@ pub(crate) mod runtime {
     }
 
     unsafe fn PickGame(saving: BOOLEAN, fromMainMenu: BOOLEAN) -> BOOLEAN {
-        let kernel = crate::engine::Kernel::current();
-        let world = crate::engine::WorldData::current();
-        let activity = (*world).game.current_activity;
+        let activity = WorldFields::current().read(|owner| owner.game.current_activity);
         log::info!(
             "RUST_PICKER: enter saving={saving} main_menu={fromMainMenu} activity={:#x}",
             activity,
         );
         let mut pickState: PickGameState = mem::zeroed();
         pickState.saving = saving;
-        pickState.SummaryFrame = SetAbsFrameIndex((*kernel).play_frame, 39);
+        pickState.SummaryFrame =
+            SetAbsFrameIndex(KernelOwner::current().read(|owner| owner.play_frame), 39);
         let mut MenuState: MENU_STATE = mem::zeroed();
         MenuState.privData = ptr::addr_of_mut!(pickState).cast();
         MenuState.CurState = LAST_USED_SLOT as BYTE;
         let TimeOut = FadeMusic(0, (ONE_SECOND / 2) as SIZE);
         let oldCallback = SetInputCallback(None);
         LoadGameDescriptions(ptr::addr_of_mut!(pickState.summary).cast());
-        let OldContext = SetContext((*kernel).space_context);
+        let OldContext = SetContext(KernelOwner::current().read(|owner| owner.space_context));
         let mut DlgStamp = SaveContextFrame(ptr::null());
         let mut DlgRect: RECT = mem::zeroed();
         GetContextClipRect(&mut DlgRect);
@@ -1268,9 +1287,11 @@ pub(crate) mod runtime {
         }
         SetMenuSounds(MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
         if pickState.success != 0 && saving == 0 {
-            (*world).game.current_activity |= CHECK_LOAD as ACTIVITY;
+            (**WorldFields::current()).game.current_activity |= CHECK_LOAD as ACTIVITY;
         }
-        if (*world).game.current_activity & CHECK_ABORT as ACTIVITY == 0
+        if WorldFields::current().read(|owner| owner.game.current_activity)
+            & CHECK_ABORT as ACTIVITY
+            == 0
             && (saving != 0 || (pickState.success == 0 && fromMainMenu == 0))
         {
             SetTransitionSource(&DlgRect);
@@ -1287,8 +1308,10 @@ pub(crate) mod runtime {
     }
 
     unsafe extern "C" fn DoGameOptions(pMS: *mut MENU_STATE) -> BOOLEAN {
-        let world = crate::engine::WorldData::current();
-        if (*world).game.current_activity & CHECK_ABORT as ACTIVITY != 0 {
+        if WorldFields::current().read(|owner| owner.game.current_activity)
+            & CHECK_ABORT as ACTIVITY
+            != 0
+        {
             return 0;
         }
         if key(KEY_MENU_CANCEL) || (key(KEY_MENU_SELECT) && (*pMS).CurState == EXIT_GAME_MENU) {
@@ -1324,14 +1347,12 @@ pub(crate) mod runtime {
     /// contexts. Runs the modal menu and may replace the live game on load.
     #[no_mangle]
     pub unsafe extern "C" fn GameOptions() -> BOOLEAN {
-        let kernel = crate::engine::Kernel::current();
-        let world = crate::engine::WorldData::current();
         let mut MenuState: MENU_STATE = mem::zeroed();
-        if (*kernel).last_activity == CHECK_LOAD as ACTIVITY {
+        if KernelOwner::current().read(|owner| owner.last_activity) == CHECK_LOAD as ACTIVITY {
             DrawMenuStateStrings(PM_SAVE_GAME as BYTE, LOAD_GAME as SWORD);
             let success = PickGame(0, 1);
             if success == 0 {
-                (*world).game.current_activity |= CHECK_ABORT as ACTIVITY;
+                (**WorldFields::current()).game.current_activity |= CHECK_ABORT as ACTIVITY;
             }
             return 0;
         }
@@ -1344,7 +1365,11 @@ pub(crate) mod runtime {
         DoInput(ptr::addr_of_mut!(MenuState).cast(), 1);
         crate::automation::ui_observation::rust_automation_observe_game_options(0);
         SetFlashRect(ptr::null());
-        u32::from((*world).game.current_activity & (CHECK_ABORT | CHECK_LOAD) as ACTIVITY == 0)
+        u32::from(
+            WorldFields::current().read(|owner| owner.game.current_activity)
+                & (CHECK_ABORT | CHECK_LOAD) as ACTIVITY
+                == 0,
+        )
     }
 }
 
@@ -1392,3 +1417,5 @@ mod tests {
         assert_eq!(picker_slot(12, false, false, true, true), 11);
     }
 }
+
+use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

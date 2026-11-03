@@ -212,6 +212,19 @@ impl<'a> Visit<'a> for Walker {
     }
     fn visit_item_fn(&mut self, item: &'a syn::ItemFn) {
         self.exported_symbol(&item.attrs, &item.sig.ident);
+        if let syn::ReturnType::Type(_, ty) = &item.sig.output {
+            if let syn::Type::Path(ty) = &**ty {
+                if ty
+                    .path
+                    .segments
+                    .last()
+                    .is_some_and(|part| part.ident == "Projection")
+                {
+                    self.owner_projectors
+                        .insert(self.projection_key(&self.context.module));
+                }
+            }
+        }
         visit::visit_item_fn(self, item);
         self.function(&item.sig, &item.block);
     }
@@ -548,6 +561,43 @@ impl<'a> Visit<'a> for Walker {
             }
             if resolved.contains("app::bridge::") {
                 self.add("ffi", "bridge_calls", expr.span(), 1);
+            }
+            if self.context.file != "src/app/bridge.rs"
+                && resolved.contains("engine::")
+                && ["Kernel::current", "World::current", "WorldData::current"]
+                    .iter()
+                    .any(|suffix| resolved.ends_with(suffix))
+            {
+                self.add("ffi", "owner_projections", expr.span(), 1);
+            } else if self.names.is_none() && self.context.file != "src/app/bridge.rs" {
+                let key = format!(
+                    "owner-call|{}|{}:{}|{}",
+                    self.context.file,
+                    expr.span().start().line,
+                    expr.span().start().column,
+                    self.context.module
+                );
+                if self.events.insert(key) {
+                    let mut candidates = vec![self.projection_key(&resolved)];
+                    if !resolved.contains("::") {
+                        candidates.push(self.projection_key(&format!(
+                            "{}::{resolved}",
+                            self.context.lexical_module
+                        )));
+                        for import in self
+                            .context
+                            .imports
+                            .values()
+                            .filter_map(|path| path.strip_suffix("::*"))
+                        {
+                            candidates.push(self.projection_key(&format!("{import}::{resolved}")));
+                        }
+                    }
+                    self.owner_projection_calls.push((
+                        candidates,
+                        self.finding("ffi", "owner_projections", self.context.module.clone(), 1),
+                    ));
+                }
             }
             if resolved.ends_with("Hook::Legacy") {
                 self.add("ffi", "legacy_hooks", expr.span(), 1);

@@ -24,6 +24,7 @@ pub(crate) mod live {
     use crate::battle::c_bridge::SleepThread;
     use crate::c_bindings::controller_input::*;
     use crate::comm::locdata::{CColor, CPoint, CRect};
+    use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
     use crate::mainloop::restart_menu::c_extern::DoInput;
     use crate::starbase::cffi::CffiPlatform;
     use crate::starbase::gfx::{Align, ContextId, FontId, Gfx, Point, Rect, Rgba, Stamp, TextDraw};
@@ -60,12 +61,12 @@ pub(crate) mod live {
 
     #[no_mangle]
     pub unsafe extern "C" fn ShowRemainingCapacity() {
-        let world = crate::engine::WorldData::current();
         let g = CffiPlatform;
         let old = g.set_context(ContextId::Status);
         g.set_font(FontId::Tiny);
-        let free = u32::from(GetStorageBayCapacity())
-            .wrapping_sub(u32::from((*world).flagship.total_element_mass));
+        let free = u32::from(GetStorageBayCapacity()).wrapping_sub(u32::from(
+            WorldFields::current().read(|owner| owner.flagship.total_element_mass),
+        ));
         g.batch();
         g.set_fg_color(BACK);
         g.fill_rect(Rect {
@@ -80,7 +81,6 @@ pub(crate) mod live {
     }
 
     unsafe fn element_amount(element: u8, selected: bool) {
-        let world = crate::engine::WorldData::current();
         let g = CffiPlatform;
         let y = if element == 8 {
             119
@@ -94,23 +94,23 @@ pub(crate) mod live {
             height: 7,
         });
         let amount = if element == 8 {
-            (*world).flagship.total_bio_mass
+            WorldFields::current().read(|owner| owner.flagship.total_bio_mass)
         } else {
             g.set_fg_color(if selected { AMOUNT } else { WORTH });
             text(
                 32,
                 y + 6,
                 Align::Right,
-                (*world).game.element_worth[usize::from(element)].to_string(),
+                (**WorldFields::current()).game.element_worth[usize::from(element)].to_string(),
             );
-            (*world).flagship.element_amounts[usize::from(element)]
+            WorldFields::current()
+                .read(|owner| owner.flagship.element_amounts[usize::from(element)])
         };
         g.set_fg_color(if selected { SELECTED } else { AMOUNT });
         text(58, y + 6, Align::Right, amount.to_string());
     }
 
     unsafe fn display() {
-        let kernel = crate::engine::Kernel::current();
         let g = CffiPlatform;
         let color = |v: Rgba| CColor {
             r: v.r,
@@ -135,7 +135,10 @@ pub(crate) mod live {
         g.set_fg_color(SELECTED);
         text(31, 27, Align::Center, g.game_string(CARGO_STRINGS));
         g.set_font(FontId::Tiny);
-        let mut frame = g.abs_frame((*kernel).misc_data_frame as usize, 11);
+        let mut frame = g.abs_frame(
+            KernelOwner::current().read(|owner| owner.misc_data_frame) as usize,
+            11,
+        );
         GetFrameRect((frame as *mut c_void).cast(), (&mut r as *mut CRect).cast());
         g.set_fg_color(WORTH);
         text(32, 34, Align::Right, "$".into());
@@ -217,20 +220,20 @@ pub(crate) mod live {
     }
 
     unsafe extern "C" fn discard(menu: *mut Menu) -> i32 {
-        let world = crate::engine::WorldData::current();
         let menu = &mut *menu;
         let pulse = std::ptr::addr_of!(PulsedInputState).read();
-        if (*world).game.current_activity & (1 << 14) != 0
+        if WorldFields::current().read(|owner| owner.game.current_activity) & (1 << 14) != 0
             || pulse.menu[KEY_MENU_CANCEL as usize] != 0
         {
             return 0;
         }
         if pulse.menu[KEY_MENU_SELECT as usize] != 0 {
-            let amount = &mut (*world).flagship.element_amounts[usize::from(menu.current)];
+            let amount =
+                &mut (**WorldFields::current()).flagship.element_amounts[usize::from(menu.current)];
             if *amount != 0 {
                 *amount -= 1;
                 DrawCargoStrings(menu.current, menu.current);
-                (*world).flagship.total_element_mass -= 1;
+                (**WorldFields::current()).flagship.total_element_mass -= 1;
                 ShowRemainingCapacity();
             } else {
                 PlayMenuSound(2);
@@ -281,3 +284,5 @@ mod tests {
         }
     }
 }
+
+use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

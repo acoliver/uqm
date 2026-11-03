@@ -340,8 +340,7 @@ impl RestartMenuOps for CffiOps {
     fn set_screen_context(&self) {
         // SAFETY: ScreenContext is a global initialized during game startup.
         unsafe {
-            let kernel = crate::engine::Kernel::current();
-            let _ = c_extern::SetContext((*kernel).screen_context);
+            let _ = c_extern::SetContext(KernelOwner::current().read(|owner| owner.screen_context));
         }
     }
 
@@ -474,9 +473,8 @@ impl RestartMenuOps for CffiOps {
     fn create_flash_overlay(&self) -> usize {
         // SAFETY: ScreenContext is a global initialized during game startup.
         unsafe {
-            let kernel = crate::engine::Kernel::current();
             c_extern::Flash_createOverlay(
-                (*kernel).screen_context,
+                KernelOwner::current().read(|owner| owner.screen_context),
                 std::ptr::null_mut(),
                 std::ptr::null_mut(),
             ) as usize
@@ -590,3 +588,5 @@ impl RestartMenuOps for CffiOps {
         crate::mainloop::ffi::set_main_exited(val)
     }
 }
+
+use crate::engine::Kernel as KernelOwner;

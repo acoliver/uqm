@@ -71,14 +71,20 @@ impl Ops for Harness {
 
     fn scan(&mut self, case: Scan, info: &SYSTEM_INFO, node: &mut NODE_INFO) -> (u16, u32) {
         self.set_star(0, 0);
-        set_game_state(
-            uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI,
-            u32::from(case.pluto),
-        );
-        set_game_state(
-            uqm_rust::engine::StoryKey::MOONBASE_DESTROYED,
-            u32::from(case.destroyed),
-        );
+        crate::engine::World::current().write(|world| {
+            set_game_state(
+                world,
+                uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI,
+                u32::from(case.pluto),
+            )
+        });
+        crate::engine::World::current().write(|world| {
+            set_game_state(
+                world,
+                uqm_rust::engine::StoryKey::MOONBASE_DESTROYED,
+                u32::from(case.destroyed),
+            )
+        });
         self.state.SysInfo = *info;
         self.state.PlanetDesc = unsafe { std::mem::zeroed() };
         self.state.MoonDesc = unsafe { std::mem::zeroed() };
@@ -123,11 +129,17 @@ impl Ops for Harness {
             "scan changed solar system: {case:?}"
         );
         assert_eq!(
-            get_game_state(uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI),
+            crate::engine::World::current().read(|world| get_game_state(
+                world,
+                uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI
+            )),
             u32::from(case.pluto)
         );
         assert_eq!(
-            get_game_state(uqm_rust::engine::StoryKey::MOONBASE_DESTROYED),
+            crate::engine::World::current().read(|world| get_game_state(
+                world,
+                uqm_rust::engine::StoryKey::MOONBASE_DESTROYED
+            )),
             u32::from(case.destroyed)
         );
         // The count-only query above must leave the same post-call seed.

@@ -130,50 +130,51 @@ pub(crate) mod engine {
     /// # Safety
     /// Game state must be initialized and accessed only on the game thread.
     pub unsafe fn activity() -> u16 {
-        let world = crate::engine::WorldData::current();
-        (*world).game.current_activity
+        WorldFields::current().read(|owner| owner.game.current_activity)
     }
     /// # Safety
     /// The caller must exclusively own game-thread activity state.
     pub unsafe fn set_activity(value: u16) {
-        let world = crate::engine::WorldData::current();
-        (*world).game.current_activity = value;
+        (**WorldFields::current()).game.current_activity = value;
     }
     /// # Safety
     /// `start..=end` must name a valid game-state bit field on the game thread.
     pub unsafe fn game_state(start: u32, end: u32) -> u8 {
-        getGameState(start as i32, end as i32)
+        crate::engine::World::current().read(|world| getGameState(world, start as i32, end as i32))
     }
     /// # Safety
     /// `start..=end` must name a valid game-state bit field owned by the game thread.
     pub unsafe fn set_game_state(start: u32, end: u32, value: u8) {
-        setGameState(start as i32, end as i32, value);
+        crate::engine::World::current()
+            .write(|world| setGameState(world, start as i32, end as i32, value));
     }
     /// # Safety
     /// `side` must be a valid player index with initialized input state.
     pub unsafe fn player_input(side: usize) -> *mut InputContext {
-        let kernel = crate::engine::Kernel::current();
-        (*kernel).player_input[side].cast()
+        KernelOwner::current()
+            .read(|owner| owner.player_input[side])
+            .cast()
     }
     /// # Safety
     /// `side` must be valid and `input` must remain live while installed, or be null during input replacement.
     pub unsafe fn set_player_input(side: usize, input: *mut InputContext) {
-        let kernel = crate::engine::Kernel::current();
-        (*kernel).player_input[side] = input.cast();
+        (**KernelOwner::current()).player_input[side] = input.cast();
     }
     /// # Safety
     /// `side` must be a valid player index on the game thread.
     pub unsafe fn player_control(side: usize) -> u8 {
-        let kernel = crate::engine::Kernel::current();
-        *(&raw const (*kernel).player_control)
+        let kernel = KernelOwner::current();
+        *(&raw const (**kernel).player_control)
             .cast::<BYTE>()
             .add(side)
     }
     /// # Safety
     /// `side` must be a valid player index owned by the game thread.
     pub unsafe fn set_player_control(side: usize, value: u8) {
-        let kernel = crate::engine::Kernel::current();
-        *(&raw mut (*kernel).player_control).cast::<BYTE>().add(side) = value;
+        let kernel = KernelOwner::current();
+        *(&raw mut (**kernel).player_control)
+            .cast::<BYTE>()
+            .add(side) = value;
     }
 
     pub const fn rgb15(r: u8, g: u8, b: u8) -> Color {
@@ -274,8 +275,10 @@ pub(crate) mod engine {
     /// The game thread must own initialized audio, activity, and resource state.
     #[no_mangle]
     pub unsafe extern "C" fn BattleSong(play: BOOLEAN) {
-        let kernel = crate::engine::Kernel::current();
-        if (*kernel).battle_music.is_null() {
+        if KernelOwner::current()
+            .read(|owner| owner.battle_music)
+            .is_null()
+        {
             let resource = if inHyperSpace() != 0 {
                 HYPERSPACE_MUSIC.as_ptr()
             } else if inQuasiSpace() != 0 {
@@ -283,11 +286,15 @@ pub(crate) mod engine {
             } else {
                 BATTLE_MUSIC.as_ptr()
             };
-            (*kernel).battle_music =
+            (**KernelOwner::current()).battle_music =
                 crate::sound::resource_types::LoadMusicInstance(resource.cast()).cast();
         }
         if play != 0 {
-            PlayMusic((*kernel).battle_music, 1, 1);
+            PlayMusic(
+                KernelOwner::current().read(|owner| owner.battle_music),
+                1,
+                1,
+            );
         }
     }
 
@@ -295,9 +302,8 @@ pub(crate) mod engine {
     /// The game thread must own the battle music handle and initialized audio state.
     #[no_mangle]
     pub unsafe extern "C" fn FreeBattleSong() {
-        let kernel = crate::engine::Kernel::current();
-        DestroyMusic((*kernel).battle_music);
-        (*kernel).battle_music = ptr::null_mut();
+        DestroyMusic(KernelOwner::current().read(|owner| owner.battle_music));
+        (**KernelOwner::current()).battle_music = ptr::null_mut();
     }
 
     unsafe extern "C" fn DoBattle(bs: *mut battlestate_struct) -> BOOLEAN {
@@ -409,7 +415,6 @@ pub(crate) mod engine {
     /// The game thread must own initialized battle, input, audio, and display state; any callback must remain valid for the battle.
     #[no_mangle]
     pub unsafe extern "C" fn Battle(callback: BattleFrameCallback) -> BOOLEAN {
-        let kernel = crate::engine::Kernel::current();
         let (battle, net, had_net) = battle_network();
         if activity() as u8 != SUPER_MELEE as u8 {
             crate::math::seed_random(rust_automation_seed_value(
@@ -424,10 +429,10 @@ pub(crate) mod engine {
         }
         BattleSong(0);
         let mut count = InitShips();
-        if (*kernel).instant_victory != 0 {
+        if KernelOwner::current().read(|owner| owner.instant_victory) != 0 {
             count = 0;
             (*battle).counters = [1, 0];
-            (*kernel).instant_victory = 0;
+            (**KernelOwner::current()).instant_victory = 0;
         }
         if count != 0 {
             let mut bs: battlestate_struct = mem::zeroed();
@@ -569,3 +574,5 @@ mod tests {
         assert_eq!(ship_input(both, 0), 0);
     }
 }
+
+use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

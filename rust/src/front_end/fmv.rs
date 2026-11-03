@@ -4,6 +4,7 @@
 #[cfg(not(test))]
 pub(crate) mod runtime {
     use super::super::intro::ShowPresentation;
+    use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
     use crate::navigation::abi::*;
 
     use std::ptr;
@@ -56,13 +57,11 @@ pub(crate) mod runtime {
     /// processing callback must remain valid throughout this call.
     #[no_mangle]
     pub unsafe extern "C" fn SplashScreen(process: Option<unsafe extern "C" fn(DWORD)>) {
-        let kernel = crate::engine::Kernel::current();
-        let world = crate::engine::WorldData::current();
         SleepThreadUntil(FadeScreen(
             ScreenFadeType_FadeAllToBlack,
             (ONE_SECOND / 120) as SIZE,
         ));
-        SetContext((*kernel).screen_context);
+        SetContext(KernelOwner::current().read(|owner| owner.screen_context));
         let mut stamp = STAMP {
             origin: POINT { x: 0, y: 0 },
             frame: CaptureDrawable(LoadGraphicInstance(TITLE_ANIM.as_ptr().cast()).cast()),
@@ -73,14 +72,18 @@ pub(crate) mod runtime {
         if let Some(callback) = process {
             callback(timeout);
         }
-        if (*world).game.current_activity & CHECK_ABORT as u16 != 0 {
+        if WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
+            != 0
+        {
             return;
         }
         WaitForAnyButton(0, ONE_SECOND * 3, 1);
-        if (*world).game.current_activity & CHECK_ABORT as u16 != 0 {
+        if WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
+            != 0
+        {
             return;
         }
-        (*world).game.current_activity &= !(CHECK_ABORT as u16);
+        (**WorldFields::current()).game.current_activity &= !(CHECK_ABORT as u16);
         SleepThreadUntil(FadeScreen(
             ScreenFadeType_FadeAllToBlack,
             (ONE_SECOND / 2) as SIZE,
@@ -113,3 +116,5 @@ pub(crate) mod runtime {
 
 #[cfg(not(test))]
 pub use runtime::{DoShipSpin, Introduction, SplashScreen, Victory};
+
+use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

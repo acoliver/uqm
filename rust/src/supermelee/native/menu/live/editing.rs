@@ -27,10 +27,9 @@ unsafe fn advance(state: *mut MELEE_STATE) {
     ((*state).row, (*state).col) = super::super::rules::advance_cursor((*state).row, (*state).col);
 }
 pub(super) unsafe extern "C" fn edit(state: *mut MELEE_STATE) -> u32 {
-    let world = crate::engine::WorldData::current();
     let time = GetTimeCounter();
     GamePaused = 0;
-    if (*world).game.current_activity & CHECK_ABORT as u16 != 0 {
+    if WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16 != 0 {
         return 0;
     }
     SetMenuSounds(15, 16 | 512);
@@ -123,3 +122,5 @@ pub(super) unsafe extern "C" fn edit(state: *mut MELEE_STATE) -> u32 {
     SleepThreadUntil(time.wrapping_add(840 / 30));
     1
 }
+
+use crate::engine::WorldData as WorldFields;

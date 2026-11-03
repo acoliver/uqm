@@ -11,16 +11,15 @@ pub static mut NextActivity: u16 = 0;
 use crate::planets::starmap::FindStar;
 
 pub(in crate::savegame) unsafe fn finish_load(star: &super::super::StarDesc, activity: u16) {
-    let kernel = crate::engine::Kernel::current();
     crate::planets::c_api::reset_encounter();
     // Loading can run inside a ship callback's menu. Unlink the old roster now,
     // but keep its records alive through callbacks and terminal-outcome capture.
-    (*kernel).request_ship_reset();
+    (**KernelOwner::current()).request_ship_reset();
     let mut point = crate::comm::dispatch::CPoint {
         x: star.star_pt.x,
         y: star.star_pt.y,
     };
-    (*crate::engine::World::current()).select_star(
+    (**WorldOwner::current()).select_star(
         (FindStar(std::ptr::null_mut(), &mut point, 0, 0)
             .cast::<crate::engine::world::CStarDesc>())
         .as_ref(),
@@ -33,10 +32,10 @@ pub(in crate::savegame) unsafe fn finish_load(star: &super::super::StarDesc, act
 }
 
 unsafe fn install(save: SaveFile) -> anyhow::Result<()> {
-    let world = crate::engine::WorldData::current();
+    let world = WorldFields::current();
     // SAFETY: CGameState's size, alignment and every field offset are asserted against GAME_STATE.
     let game =
-        &mut *std::ptr::addr_of_mut!((*world).game).cast::<crate::comm::locdata::CGameState>();
+        &mut *std::ptr::addr_of_mut!((**world).game).cast::<crate::comm::locdata::CGameState>();
     let restored = runtime::restore_runtime(game, &save.global, &save.game_state, &save.events)?;
     queues::restore_queues(
         game,
@@ -62,7 +61,7 @@ unsafe fn install(save: SaveFile) -> anyhow::Result<()> {
             battle_groups: save.battle_groups,
         },
     )?;
-    std::ptr::addr_of_mut!((*world).flagship)
+    std::ptr::addr_of_mut!((**world).flagship)
         .cast::<crate::comm::locdata::CSisState>()
         .write((&save.summary.sis).into());
     finish_load(&save.star, restored.next_activity);
@@ -95,3 +94,5 @@ pub unsafe extern "C" fn LoadGame(slot: u16, summary: *mut SummaryDesc) -> u32 {
         summary.is_null().then_some((slot, true)),
     )
 }
+
+use crate::engine::{Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields};

@@ -101,8 +101,11 @@ impl CffiSurfaceGenerator {
 
     #[cfg(not(test))]
     fn node_key(&self, node: ScanNodeId) -> (u16, u8, u8, u8) {
-        let (star, planet, moon) =
-            unsafe { crate::state::c_api::planets::location(self.solar_system.cast()) };
+        let (star, planet, moon) = unsafe {
+            crate::engine::World::current().read(|world| {
+                crate::state::c_api::planets::location(world, self.solar_system.cast())
+            })
+        };
         (star as u16, planet as u8, moon as u8, node.get())
     }
 
@@ -152,9 +155,11 @@ impl SurfaceGenerator for CffiSurfaceGenerator {
         unsafe {
             if scan == ScanType::Biological {
                 let key = self.node_key(node);
-                if let Some(canned) =
-                    crate::state::ffi::with_state_files(|files| files.canned_node(key))
-                        .map_err(|_| AdapterError::new("canned_node_state"))?
+                if let Some(canned) = crate::engine::World::current()
+                    .write(|world| {
+                        crate::state::ffi::with_state_files(world, |files| files.canned_node(key))
+                    })
+                    .map_err(|_| AdapterError::new("canned_node_state"))?
                 {
                     return Ok(GeneratedNode::from_canister(canned));
                 }
@@ -227,7 +232,10 @@ impl SurfaceGenerator for CffiSurfaceGenerator {
             x: position.x as i16,
             y: position.y as i16,
         };
-        crate::state::ffi::with_state_files(|files| files.can_node(canned))
+        crate::engine::World::current()
+            .write(|world| {
+                crate::state::ffi::with_state_files(world, |files| files.can_node(canned))
+            })
             .map_err(|_| AdapterError::new("canned_node_state"))
     }
 
@@ -279,13 +287,21 @@ impl SurfaceGenerator for CffiSurfaceGenerator {
                 #[cfg(not(test))]
                 if scan == ScanType::Biological {
                     let key = self.node_key(node);
-                    crate::state::ffi::with_state_files(|files| files.remove_canned_node(key))
+                    crate::engine::World::current()
+                        .write(|world| {
+                            crate::state::ffi::with_state_files(world, |files| {
+                                files.remove_canned_node(key)
+                            })
+                        })
                         .map_err(|_| AdapterError::new("canned_node_state"))?;
                 }
-                crate::state::game_state_keys::set_game_state(
-                    crate::engine::StoryKey::PLANETARY_CHANGE,
-                    1,
-                );
+                crate::engine::World::current().write(|world| {
+                    crate::state::game_state_keys::set_game_state(
+                        world,
+                        crate::engine::StoryKey::PLANETARY_CHANGE,
+                        1,
+                    )
+                });
             }
             Ok(retrieved)
         }
@@ -320,7 +336,8 @@ mod tests {
                     false
                 }
                 {
-                    crate::state::ffi::rust_init_game_state();
+                    crate::engine::World::current()
+                        .write(|world| crate::state::ffi::rust_init_game_state(world));
                 }
                 let mut functions: Box<GenerateFunctions> = Box::new(std::mem::zeroed());
                 functions.pickupMinerals = Some(accept);
@@ -339,7 +356,9 @@ mod tests {
                     (ScanType::Energy, 0),
                     (ScanType::Biological, 9),
                 ] {
-                    set_game_state(crate::engine::StoryKey::PLANETARY_CHANGE, 0);
+                    crate::engine::World::current().write(|world| {
+                        set_game_state(world, crate::engine::StoryKey::PLANETARY_CHANGE, 0)
+                    });
                     assert!(generator
                         .pickup(scan, ScanNodeId::new(index).unwrap())
                         .unwrap());
@@ -347,15 +366,29 @@ mod tests {
                         system.SysInfo.PlanetInfo.ScanRetrieveMask[scan as usize],
                         1 << index
                     );
-                    assert_eq!(get_game_state(crate::engine::StoryKey::PLANETARY_CHANGE), 1);
+                    assert_eq!(
+                        crate::engine::World::current().read(|world| get_game_state(
+                            world,
+                            crate::engine::StoryKey::PLANETARY_CHANGE
+                        )),
+                        1
+                    );
                 }
                 functions.pickupEnergy = Some(reject);
-                set_game_state(crate::engine::StoryKey::PLANETARY_CHANGE, 0);
+                crate::engine::World::current().write(|world| {
+                    set_game_state(world, crate::engine::StoryKey::PLANETARY_CHANGE, 0)
+                });
                 assert!(!generator
                     .pickup(ScanType::Energy, ScanNodeId::new(1).unwrap())
                     .unwrap());
                 assert_eq!(system.SysInfo.PlanetInfo.ScanRetrieveMask[1], 1);
-                assert_eq!(get_game_state(crate::engine::StoryKey::PLANETARY_CHANGE), 0);
+                assert_eq!(
+                    crate::engine::World::current().read(|world| get_game_state(
+                        world,
+                        crate::engine::StoryKey::PLANETARY_CHANGE
+                    )),
+                    0
+                );
             })
         }
     }

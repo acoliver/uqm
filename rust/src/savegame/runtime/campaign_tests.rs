@@ -150,7 +150,7 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
                     path.display()
                 );
                 {
-                    rust_init_game_state();
+                    crate::engine::World::current().write(|world| rust_init_game_state(world));
                 }
                 let mut game = super::queue_tests::LiveGame::new();
                 assert!({
@@ -294,23 +294,27 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
                     ),
                     expected
                 );
-                with_state_owners(|game, _| {
-                    for (name, value) in state.as_object().into_iter().flatten() {
-                        if let Some(name) = name.strip_prefix("story:") {
-                            let (_, start, width) =
-                                STATE_KEYS.iter().find(|(key, _, _)| *key == name).unwrap();
-                            assert_eq!(
-                                u64::from(
-                                    game.get_state(*start as usize, (*start + *width - 1) as usize)
-                                ),
-                                value.as_u64().unwrap(),
-                                "{} {name}",
-                                path.display()
-                            );
-                        }
-                    }
-                })
-                .unwrap();
+                crate::engine::World::current()
+                    .write(|world| {
+                        with_state_owners(world, |game, _| {
+                            for (name, value) in state.as_object().into_iter().flatten() {
+                                if let Some(name) = name.strip_prefix("story:") {
+                                    let (_, start, width) =
+                                        STATE_KEYS.iter().find(|(key, _, _)| *key == name).unwrap();
+                                    assert_eq!(
+                                        u64::from(game.get_state(
+                                            *start as usize,
+                                            (*start + *width - 1) as usize
+                                        )),
+                                        value.as_u64().unwrap(),
+                                        "{} {name}",
+                                        path.display()
+                                    );
+                                }
+                            }
+                        })
+                    })
+                    .unwrap();
                 crate::collections::queue::UninitQueue(
                     std::ptr::addr_of_mut!(game.game_clock.event_q).cast(),
                 );

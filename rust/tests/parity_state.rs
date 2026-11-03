@@ -128,7 +128,8 @@ fn exercise_live_callers(directory: &Path) {
     );
     // SAFETY: this process has one game thread and no running game or renderer.
     unsafe {
-        uqm_rust::state::ffi::rust_init_game_state();
+        crate::engine::World::current()
+            .write(|world| uqm_rust::state::ffi::rust_init_game_state(world));
     }
     observation::record(Event::SpaceActive(true));
     descriptor_fields(directory);
@@ -571,7 +572,9 @@ fn campaign_fields(directory: &Path) {
         (*uqm_rust::engine::WorldData::current())
             .game
             .battle_group_ref = 123;
-        uqm_rust::state::ffi::rust_set_game_state(c"BOMB_CARRIER".as_ptr(), 1);
+        crate::engine::World::current().write(|world| {
+            uqm_rust::state::ffi::rust_set_game_state(world, c"BOMB_CARRIER".as_ptr(), 1)
+        });
     }
     let (after, _) = snapshot(directory);
     assert_eq!(after["mode.clock.day"], "7");

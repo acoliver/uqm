@@ -93,6 +93,7 @@ pub unsafe fn uninit_ships() {
 #[cfg(not(test))]
 mod live {
     #![allow(non_snake_case)]
+    use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
     use crate::ships::native::abi::*;
 
     macro_rules! operation {
@@ -102,11 +103,11 @@ mod live {
         pub unsafe fn $name($($arg: $ty),*) $(-> $ret)? $body
     };
 }
-    operation!(uqm_get_current_activity_lobyte() -> u8 { (*crate::engine::WorldData::current()).game.current_activity as u8 });
+    operation!(uqm_get_current_activity_lobyte() -> u8 { (**WorldFields::current()).game.current_activity as u8 });
 
     operation!(rust_bridge_init_battle_arena() -> i16 {
         if crate::game_init::space_resources::InitSpace() == 0 { return 0; }
-        SetContext((*crate::engine::Kernel::current()).status_context); SetContext((*crate::engine::Kernel::current()).space_context);
+        SetContext((**KernelOwner::current()).status_context); SetContext((**KernelOwner::current()).space_context);
         InitDisplayList(); crate::battle::galaxy::InitGalaxy();
         if inHQSpace() != 0 {
             crate::app::bridge::enter(|cx| {
@@ -117,11 +118,11 @@ mod live {
             crate::navigation::hyper_data::LoadHyperspace();
             1
         } else {
-            crate::graphics::drawable_abi::SetContextFGFrame((*crate::engine::Kernel::current()).screen.cast());
+            crate::graphics::drawable_abi::SetContextFGFrame((**KernelOwner::current()).screen.cast());
             let mut rect = crate::graphics::native_abi::RECT { corner: crate::graphics::native_abi::POINT { x: 0, y: 0 }, extent: crate::graphics::native_abi::EXTENT { width: (ScreenWidth - 64) as i16, height: ScreenHeight as i16 } };
             crate::graphics::context_abi::SetContextClipRect(&mut rect);
             SetContextBackGroundColor(Color {r:0,g:0,b:0,a:255});
-            let old = SetContext((*crate::engine::Kernel::current()).screen_context);
+            let old = SetContext((**KernelOwner::current()).screen_context);
             SetContextBackGroundColor(Color {r:0,g:0,b:0,a:255}); ClearDrawable(); SetContext(old);
             if uqm_get_current_activity_lobyte() == IN_LAST_BATTLE as u8 { crate::game_init::world_resources::free_gravity_well(); }
             else { for _ in 0..5 { crate::app::bridge::enter(|cx| crate::battle::world_elements::create_asteroid(cx, None)); } crate::app::bridge::enter(crate::battle::world_elements::spawn_planet); }
@@ -171,3 +172,5 @@ mod crew_writeback_tests {
         );
     }
 }
+
+use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

@@ -93,13 +93,26 @@ pub(super) mod live {
         fn get(&self, key: &str) -> u8 {
             let (start, end) = crate::state::game_state_keys::bit_range(key)
                 .expect("dialogue uses an unknown game-state key");
-            unsafe { crate::state::ffi::rust_get_game_state_bits(start as i32, end as i32) }
+            unsafe {
+                crate::engine::World::current().read(|world| {
+                    crate::state::ffi::rust_get_game_state_bits(world, start as i32, end as i32)
+                })
+            }
         }
 
         fn set(&mut self, key: &str, value: u8) {
             let (start, end) = crate::state::game_state_keys::bit_range(key)
                 .expect("dialogue uses an unknown game-state key");
-            unsafe { crate::state::ffi::rust_set_game_state_bits(start as i32, end as i32, value) }
+            unsafe {
+                crate::engine::World::current().write(|world| {
+                    crate::state::ffi::rust_set_game_state_bits(
+                        world,
+                        start as i32,
+                        end as i32,
+                        value,
+                    )
+                })
+            }
         }
 
         fn npc(&mut self, phrase: i32) {
@@ -108,7 +121,7 @@ pub(super) mod live {
 
         fn response(&mut self, phrase: u16, handler: H, fragments: &[i32]) {
             unsafe {
-                let world = crate::engine::WorldData::current();
+                let world = WorldFields::current();
                 let text = if fragments.is_empty() {
                     GetStringAddress(SetAbsStringTableIndex(
                         (COMM_DATA.conversation_phrases).cast(),
@@ -121,10 +134,10 @@ pub(super) mod live {
                     for &fragment in fragments {
                         let ptr = match fragment {
                             GLOBAL_PLAYER_NAME => {
-                                std::ptr::addr_of!((*world).flagship.commander_name).cast()
+                                std::ptr::addr_of!((**world).flagship.commander_name).cast()
                             }
                             GLOBAL_SHIP_NAME => {
-                                std::ptr::addr_of!((*world).flagship.ship_name).cast()
+                                std::ptr::addr_of!((**world).flagship.ship_name).cast()
                             }
                             _ => {
                                 let index =
@@ -164,19 +177,18 @@ pub(super) mod live {
 
         fn supplies(&self) -> Supplies {
             unsafe {
-                let world = crate::engine::WorldData::current();
                 Supplies {
-                    landers: (*world).flagship.num_landers,
-                    fuel: (*world).flagship.fuel_on_board,
-                    radioactives: (*world).flagship.element_amounts[6],
+                    landers: WorldFields::current().read(|owner| owner.flagship.num_landers),
+                    fuel: WorldFields::current().read(|owner| owner.flagship.fuel_on_board),
+                    radioactives: WorldFields::current()
+                        .read(|owner| owner.flagship.element_amounts[6]),
                 }
             }
         }
 
         fn add_lander(&mut self) {
             unsafe {
-                let world = crate::engine::WorldData::current();
-                (*world).flagship.num_landers += 1;
+                (**WorldFields::current()).flagship.num_landers += 1;
                 DrawLanders();
             }
         }
@@ -212,3 +224,5 @@ pub(super) mod live {
 pub(super) fn as_comm_data(desc: &CLocData) -> crate::comm::types::CommData {
     crate::comm::locdata::read_locdata(desc)
 }
+
+use crate::engine::WorldData as WorldFields;

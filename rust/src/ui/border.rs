@@ -13,13 +13,12 @@ fn color(r: u8, g: u8, b: u8) -> Color {
 /// # Safety
 /// Initialized graphics and SIS contexts must be accessed on the game thread.
 pub unsafe fn InitSISContexts() {
-    let kernel = crate::engine::Kernel::current();
     let mut r: RECT = std::mem::zeroed();
 
-    SetContext((*kernel).status_context);
+    SetContext(KernelOwner::current().read(|owner| owner.status_context));
 
-    SetContext((*kernel).space_context);
-    SetContextFGFrame((*kernel).screen);
+    SetContext(KernelOwner::current().read(|owner| owner.space_context));
+    SetContextFGFrame(KernelOwner::current().read(|owner| owner.screen));
 
     r.corner.x = 7;
     r.corner.y = 10;
@@ -31,10 +30,9 @@ pub unsafe fn InitSISContexts() {
 /// # Safety
 /// Initialized graphics and SIS contexts must be accessed on the game thread.
 pub unsafe fn DrawSISFrame() {
-    let kernel = crate::engine::Kernel::current();
     let mut r: RECT = std::mem::zeroed();
 
-    SetContext((*kernel).screen_context);
+    SetContext(KernelOwner::current().read(|owner| owner.screen_context));
 
     BatchGraphics();
     {
@@ -192,3 +190,5 @@ pub unsafe fn DrawSISFrame() {
 
     UnbatchGraphics();
 }
+
+use crate::engine::Kernel as KernelOwner;

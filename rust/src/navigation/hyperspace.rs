@@ -60,7 +60,7 @@ pub(crate) mod live {
     /// # Safety
     /// Called on the game thread when entering hyperspace.
     pub unsafe extern "C" fn rust_reset_hyper_distance() {
-        (*crate::engine::World::current()).hyper_distance = FuelDistance {
+        (**WorldOwner::current()).hyper_distance = FuelDistance {
             dx: 0,
             dy: 0,
             extra: 0,
@@ -72,14 +72,14 @@ pub(crate) mod live {
     /// `dx` and `dy` are writable; the game world/display queue is exclusively accessible.
     #[no_mangle]
     pub unsafe extern "C" fn MoveSIS(dx: *mut i16, dy: *mut i16) {
-        let world = crate::engine::WorldData::current();
+        let world = WorldFields::current();
         let mut x = move_axis(
-            &mut *ptr::addr_of_mut!((*world).flagship.log_x),
+            &mut *ptr::addr_of_mut!((**world).flagship.log_x),
             *dx,
             maximum_x(),
         );
         let mut y = move_axis(
-            &mut *ptr::addr_of_mut!((*world).flagship.log_y),
+            &mut *ptr::addr_of_mut!((**world).flagship.log_y),
             *dy,
             maximum_y(),
         );
@@ -101,44 +101,43 @@ pub(crate) mod live {
                 }
             });
         }
-        if (*world).flagship.fuel_on_board != 0 && get("ARILOU_SPACE_SIDE") <= 1 {
+        if (**world).flagship.fuel_on_board != 0 && get("ARILOU_SPACE_SIDE") <= 1 {
             x = x.wrapping_abs();
             y = y.wrapping_abs();
-            (*crate::engine::World::current()).hyper_distance.dx =
-                (*crate::engine::World::current())
-                    .hyper_distance
-                    .dx
-                    .wrapping_add(x as u16);
-            (*crate::engine::World::current()).hyper_distance.dy =
-                (*crate::engine::World::current())
-                    .hyper_distance
-                    .dy
-                    .wrapping_add(y as u16);
+            (**WorldOwner::current()).hyper_distance.dx = WorldOwner::current()
+                .read(|owner| owner.hyper_distance.dx)
+                .wrapping_add(x as u16);
+            (**WorldOwner::current()).hyper_distance.dy = WorldOwner::current()
+                .read(|owner| owner.hyper_distance.dy)
+                .wrapping_add(y as u16);
             let adjusted_x =
-                universe_x(16 * (*crate::engine::World::current()).hyper_distance.dx as i32) as u32;
+                universe_x(16 * WorldOwner::current().read(|owner| owner.hyper_distance.dx) as i32)
+                    as u32;
             let adjusted_y = (9999
-                - universe_y(16 * (*crate::engine::World::current()).hyper_distance.dy as i32)
-                    as i32) as u32;
+                - universe_y(
+                    16 * WorldOwner::current().read(|owner| owner.hyper_distance.dy) as i32,
+                ) as i32) as u32;
             let distance = square_root(
                 adjusted_x
                     .wrapping_mul(adjusted_x)
                     .wrapping_add(adjusted_y.wrapping_mul(adjusted_y)),
             )
-            .wrapping_add((*crate::engine::World::current()).hyper_distance.extra);
+            .wrapping_add(WorldOwner::current().read(|owner| owner.hyper_distance.extra));
             let mut ticks = distance >> 4;
-            if ticks > (*crate::engine::World::current()).hyper_distance.ticks as u16 {
+            if ticks > WorldOwner::current().read(|owner| owner.hyper_distance.ticks) as u16 {
                 DeltaSISGauges(
                     0,
-                    (*crate::engine::World::current()).hyper_distance.ticks as i16 - ticks as i16,
+                    WorldOwner::current().read(|owner| owner.hyper_distance.ticks) as i16
+                        - ticks as i16,
                     0,
                 );
                 if ticks > 255 {
-                    (*crate::engine::World::current()).hyper_distance.dx = 0;
-                    (*crate::engine::World::current()).hyper_distance.dy = 0;
-                    (*crate::engine::World::current()).hyper_distance.extra = distance & 15;
+                    (**WorldOwner::current()).hyper_distance.dx = 0;
+                    (**WorldOwner::current()).hyper_distance.dy = 0;
+                    (**WorldOwner::current()).hyper_distance.extra = distance & 15;
                     ticks = 0;
                 }
-                (*crate::engine::World::current()).hyper_distance.ticks = ticks as u8;
+                (**WorldOwner::current()).hyper_distance.ticks = ticks as u8;
             }
         }
     }
@@ -153,15 +152,15 @@ pub(crate) mod live {
     /// Game-thread access to initialized world fleet and encounter queues.
     #[no_mangle]
     pub unsafe extern "C" fn check_hyperspace_encounter() {
-        let world = crate::engine::WorldData::current();
+        let world = WorldFields::current();
         let universe = POINT {
-            x: universe_x((*world).flagship.log_x),
-            y: universe_y((*world).flagship.log_y),
+            x: universe_x((**world).flagship.log_x),
+            y: universe_y((**world).flagship.log_y),
         };
-        let queue = ptr::addr_of_mut!((*world).game.encounter_q);
-        let mut handle = (*world).game.avail_race_q.head;
+        let queue = ptr::addr_of_mut!((**world).game.encounter_q);
+        let mut handle = (**world).game.avail_race_q.head;
         let mut race = 0usize;
-        while !handle.is_null() && (*world).game.current_activity & IN_BATTLE as u16 != 0 {
+        while !handle.is_null() && (**world).game.current_activity & IN_BATTLE as u16 != 0 {
             let fleet = handle.cast::<FLEET_INFO>();
             handle = (*fleet).succ;
             let mut radius = (*fleet).actual_strength;
@@ -180,7 +179,7 @@ pub(crate) mod live {
                             percent * get("SLYLANDRO_MULTIPLIER") as u16
                         };
                     } else if race == MELNORME_SHIP as usize
-                        && ((*world).flagship.fuel_on_board == 0 || get("USED_BROADCASTER") != 0)
+                        && ((**world).flagship.fuel_on_board == 0 || get("USED_BROADCASTER") != 0)
                         && get("MELNORME_ANGER") < 3
                     {
                         percent = if get("USED_BROADCASTER") == 0 {
@@ -244,3 +243,5 @@ mod tests {
         assert_eq!(position, 93);
     }
 }
+
+use crate::engine::{World as WorldOwner, WorldData as WorldFields};

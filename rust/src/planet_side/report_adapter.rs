@@ -58,7 +58,6 @@ impl DiscoveryReportPort for CffiDiscoveryReport {
         #[cfg(not(test))]
         #[cfg(not(test))]
         unsafe {
-            let kernel = crate::engine::Kernel::current();
             let string = self.discovery_string.read();
             if string.is_null() {
                 return Ok(false);
@@ -70,7 +69,11 @@ impl DiscoveryReportPort for CffiDiscoveryReport {
             // re-acquiring one level was an assumption of the retired native
             // lander loop and leaked a level against a Rust caller.
             REPORT_ACTIVE.store(true, Ordering::Release);
-            DoDiscoveryReport((*kernel).menu_sounds.cast());
+            DoDiscoveryReport(
+                KernelOwner::current()
+                    .read(|owner| owner.menu_sounds)
+                    .cast(),
+            );
             REPORT_ACTIVE.store(false, Ordering::Release);
 
             match disposition {
@@ -126,3 +129,5 @@ mod tests {
         assert!(!string.is_null());
     }
 }
+
+use crate::engine::Kernel as KernelOwner;

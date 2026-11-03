@@ -26,6 +26,7 @@ pub(crate) mod live {
     use crate::c_bindings::solar_system;
     use crate::comm::locdata::CRect;
     use crate::comm::sis_graphics::CText;
+    use crate::engine::WorldData as WorldFields;
     use crate::mainloop::restart_menu::c_extern::SetContext;
 
     use crate::starbase::cffi::CffiPlatform;
@@ -113,7 +114,6 @@ pub(crate) mod live {
     }
 
     unsafe fn make_report(sounds: *mut c_void, text: *const u8, mut remaining: u16) {
-        let world = crate::engine::WorldData::current();
         let g = CffiPlatform;
         let end_page = CString::new(format!("{}\n", g.game_string(305 + 3))).unwrap();
         let end_len = utf8StringCount(end_page.as_ptr().cast()) as u16;
@@ -167,7 +167,11 @@ pub(crate) mod live {
                         next = t.p_str.cast();
                         let c = getCharFromString(&mut next);
                         font_DrawText(std::ptr::from_mut(&mut t).cast());
-                        if sleepy && (*world).game.current_activity & (1 << 14) == 0 {
+                        if sleepy
+                            && WorldFields::current().read(|owner| owner.game.current_activity)
+                                & (1 << 14)
+                                == 0
+                        {
                             crate::battle::sounds::play_sound(
                                 (sounds).cast(),
                                 NotPositional(),
@@ -277,3 +281,5 @@ mod tests {
         assert!(needs_page_marker(11, 12, 41, 40, 0));
     }
 }
+
+use crate::engine::WorldData as WorldFields;

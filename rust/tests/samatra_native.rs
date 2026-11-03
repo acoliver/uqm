@@ -5,7 +5,8 @@ fn terminal_outcome_survives_descriptor_teardown_until_the_next_battle() {
         // SAFETY: this fixture owns the published battle, descriptors and activity.
         unsafe {
             use uqm_rust::automation::samatra::observe;
-            uqm_rust::state::ffi::rust_init_game_state();
+            crate::engine::World::current()
+                .write(|world| uqm_rust::state::ffi::rust_init_game_state(world));
             (*uqm_rust::engine::WorldData::current())
                 .game
                 .current_activity = IN_LAST_BATTLE as u16;
@@ -54,7 +55,8 @@ fn live_observation_projects_owned_events_generators_hazards_and_player() {
         // SAFETY: the serialized fixture publishes the live context for observation.
         unsafe {
             use uqm_rust::automation::samatra::observe;
-            uqm_rust::state::ffi::rust_init_game_state();
+            crate::engine::World::current()
+                .write(|world| uqm_rust::state::ffi::rust_init_game_state(world));
             assert_eq!(observe().0.generation, 0);
             assert!(observe().1.is_none());
             let mut ship = boss(&battle);
@@ -67,7 +69,8 @@ fn live_observation_projects_owned_events_generators_hazards_and_player() {
             );
             player.ship_mut().SpeciesID = SPECIES_ID_SIS_SHIP_ID;
             player.ship_mut().ship_facing = 19;
-            set_game_state(uqm_rust::engine::StoryKey::BOMB_CARRIER, 1);
+            crate::engine::World::current()
+                .write(|world| set_game_state(world, uqm_rust::engine::StoryKey::BOMB_CARRIER, 1));
             (*uqm_rust::engine::WorldData::current())
                 .game
                 .current_activity = (IN_LAST_BATTLE | IN_BATTLE) as u16;
@@ -133,7 +136,8 @@ fn live_observation_projects_owned_events_generators_hazards_and_player() {
             assert!(events.gate_entered);
             assert_eq!(events.destroyed, 255);
             assert!(snapshot.is_none());
-            set_game_state(uqm_rust::engine::StoryKey::BOMB_CARRIER, 0);
+            crate::engine::World::current()
+                .write(|world| set_game_state(world, uqm_rust::engine::StoryKey::BOMB_CARRIER, 0));
         }
     });
 }
@@ -154,7 +158,8 @@ fn lifecycle_counts_each_identity_once_and_retains_gate_entry() {
         let battle = Battle::new(64);
         // SAFETY: the fixture serializes the live element and ship pools.
         unsafe {
-            uqm_rust::state::ffi::rust_init_game_state();
+            crate::engine::World::current()
+                .write(|world| uqm_rust::state::ffi::rust_init_game_state(world));
             let mut ship = boss(&battle);
             let mut other = Ship::with_frames(
                 &battle,
@@ -187,7 +192,8 @@ fn lifecycle_counts_each_identity_once_and_retains_gate_entry() {
             (*uqm_rust::engine::WorldData::current())
                 .game
                 .current_activity = IN_BATTLE as u16;
-            set_game_state(uqm_rust::engine::StoryKey::BOMB_CARRIER, 1);
+            crate::engine::World::current()
+                .write(|world| set_game_state(world, uqm_rust::engine::StoryKey::BOMB_CARRIER, 1));
             let mut pa = POINT { x: 0, y: 0 };
             let mut pb = pa;
             call_collision(
@@ -205,7 +211,8 @@ fn lifecycle_counts_each_identity_once_and_retains_gate_entry() {
             assert_eq!(restarted.generation, initial.generation + 1);
             assert_eq!(restarted.destroyed, 0);
             assert!(!restarted.gate_entered);
-            set_game_state(uqm_rust::engine::StoryKey::BOMB_CARRIER, 0);
+            crate::engine::World::current()
+                .write(|world| set_game_state(world, uqm_rust::engine::StoryKey::BOMB_CARRIER, 0));
         }
     });
 }
@@ -375,7 +382,8 @@ fn only_player_ship_bomb_carrier_through_open_gate_finishes_battle() {
     battle_context::run(|| {
         let _battle = Battle::new(64);
         unsafe {
-            uqm_rust::state::ffi::rust_init_game_state();
+            crate::engine::World::current()
+                .write(|world| uqm_rust::state::ffi::rust_init_game_state(world));
             let mut ship = boss(&_battle);
             let gate = battle::element(
                 *queued()
@@ -404,7 +412,13 @@ fn only_player_ship_bomb_carrier_through_open_gate_finishes_battle() {
                             (*uqm_rust::engine::WorldData::current())
                                 .game
                                 .current_activity = IN_BATTLE as u16;
-                            set_game_state(uqm_rust::engine::StoryKey::BOMB_CARRIER, bomb);
+                            crate::engine::World::current().write(|world| {
+                                set_game_state(
+                                    world,
+                                    uqm_rust::engine::StoryKey::BOMB_CARRIER,
+                                    bomb,
+                                )
+                            });
                             (*player.ptr()).playerNr = owner as SIZE;
                             (*player.ptr()).state_flags = if is_ship {
                                 PLAYER_SHIP as u16
@@ -431,7 +445,8 @@ fn only_player_ship_bomb_carrier_through_open_gate_finishes_battle() {
                     }
                 }
             }
-            set_game_state(uqm_rust::engine::StoryKey::BOMB_CARRIER, 0);
+            crate::engine::World::current()
+                .write(|world| set_game_state(world, uqm_rust::engine::StoryKey::BOMB_CARRIER, 0));
         }
     })
 }

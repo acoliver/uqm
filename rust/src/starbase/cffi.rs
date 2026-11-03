@@ -135,8 +135,8 @@ extern "C" {
 fn built_ship_queue() -> *mut Queue {
     // SAFETY: only the address of the game thread's `GlobData` is taken.
     unsafe {
-        let world = crate::engine::WorldData::current();
-        std::ptr::addr_of_mut!((*world).game.built_ship_q)
+        let world = WorldFields::current();
+        std::ptr::addr_of_mut!((**world).game.built_ship_q)
     }
 }
 
@@ -144,8 +144,8 @@ fn built_ship_queue() -> *mut Queue {
 fn avail_race_queue() -> *mut Queue {
     // SAFETY: only the address of the game thread's `GlobData` is taken.
     unsafe {
-        let world = crate::engine::WorldData::current();
-        std::ptr::addr_of_mut!((*world).game.avail_race_q)
+        let world = WorldFields::current();
+        std::ptr::addr_of_mut!((**world).game.avail_race_q)
     }
 }
 
@@ -227,11 +227,11 @@ impl CffiPlatform {
         // SAFETY: the context globals are set once at startup, before any
         // screen runs, and only read afterwards.
         unsafe {
-            let kernel = crate::engine::Kernel::current();
+            let kernel = KernelOwner::current();
             match ctx {
-                ContextId::Screen => (std::ptr::addr_of!((*kernel).screen_context).read()).cast(),
-                ContextId::Status => (std::ptr::addr_of!((*kernel).status_context).read()).cast(),
-                ContextId::Space => std::ptr::addr_of!((*kernel).space_context).read().cast(),
+                ContextId::Screen => (std::ptr::addr_of!((**kernel).screen_context).read()).cast(),
+                ContextId::Status => (std::ptr::addr_of!((**kernel).status_context).read()).cast(),
+                ContextId::Space => std::ptr::addr_of!((**kernel).space_context).read().cast(),
             }
         }
     }
@@ -239,11 +239,11 @@ impl CffiPlatform {
     fn font_ptr(font: FontId) -> *mut c_void {
         // SAFETY: the font globals are set once at startup.
         unsafe {
-            let kernel = crate::engine::Kernel::current();
+            let kernel = KernelOwner::current();
             match font {
-                FontId::StarCon => std::ptr::addr_of!((*kernel).star_con_font).read().cast(),
-                FontId::Tiny => std::ptr::addr_of!((*kernel).tiny_font).read().cast(),
-                FontId::Micro => std::ptr::addr_of!((*kernel).micro_font).read().cast(),
+                FontId::StarCon => std::ptr::addr_of!((**kernel).star_con_font).read().cast(),
+                FontId::Tiny => std::ptr::addr_of!((**kernel).tiny_font).read().cast(),
+                FontId::Micro => std::ptr::addr_of!((**kernel).micro_font).read().cast(),
             }
         }
     }
@@ -342,9 +342,9 @@ impl Gfx for CffiPlatform {
         // owned by the game.
         let effect = match grad_index {
             Some(index) => unsafe {
-                let kernel = crate::engine::Kernel::current();
+                let kernel = KernelOwner::current();
                 base::SetAbsFrameIndex(
-                    (std::ptr::addr_of!((*kernel).font_grad_frame).read()).cast(),
+                    (std::ptr::addr_of!((**kernel).font_grad_frame).read()).cast(),
                     index,
                 )
             },
@@ -451,8 +451,8 @@ impl Gfx for CffiPlatform {
     fn play_frame(&self) -> FrameId {
         // SAFETY: `PlayFrame` is set at startup.
         unsafe {
-            let kernel = crate::engine::Kernel::current();
-            std::ptr::addr_of!((*kernel).play_frame).read() as FrameId
+            let kernel = KernelOwner::current();
+            std::ptr::addr_of!((**kernel).play_frame).read() as FrameId
         }
     }
 
@@ -517,10 +517,10 @@ impl Gfx for CffiPlatform {
         // SAFETY: `GameStrings` is loaded before any screen runs; the
         // returned string lives as long as the table.
         unsafe {
-            let kernel = crate::engine::Kernel::current();
+            let kernel = KernelOwner::current();
             let index = u16::try_from(index).expect("game string indexes fit a COUNT");
             let entry = SetAbsStringTableIndex(
-                (std::ptr::addr_of!((*kernel).game_strings).read()).cast(),
+                (std::ptr::addr_of!((**kernel).game_strings).read()).cast(),
                 index,
             );
             let text = GetStringAddress(entry);
@@ -600,11 +600,14 @@ impl Platform for CffiPlatform {
     }
 
     fn game_state(&self, key: StateKey) -> u32 {
-        crate::state::game_state_keys::get_game_state(state_key_name(key))
+        crate::engine::World::current()
+            .read(|world| crate::state::game_state_keys::get_game_state(world, state_key_name(key)))
     }
 
     fn set_game_state(&self, key: StateKey, value: u32) {
-        crate::state::game_state_keys::set_game_state(state_key_name(key), value);
+        crate::engine::World::current().write(|world| {
+            crate::state::game_state_keys::set_game_state(world, state_key_name(key), value)
+        });
     }
 
     fn set_status_message_mode(&self, mode: StatusMessageMode) -> StatusMessageMode {
@@ -618,7 +621,7 @@ impl Platform for CffiPlatform {
     fn sis(&self) -> Result<SisView, StarbaseError> {
         // SAFETY: the game thread owns `GlobData`; no other thread writes it
         // while a screen runs.
-        let glob = unsafe { &*crate::engine::WorldData::current() };
+        let glob = unsafe { &**WorldFields::current() };
         let name = glob.flagship.ship_name.map(|byte| byte);
         let name_bytes = name.split(|byte| *byte == 0).next().unwrap_or_default();
         let ship_name = std::str::from_utf8(name_bytes)
@@ -643,10 +646,7 @@ impl Platform for CffiPlatform {
 
     fn set_fuel_on_board(&self, fuel: u32) {
         // SAFETY: the game thread owns `GlobData`.
-        unsafe {
-            let world = crate::engine::WorldData::current();
-            (*world).flagship.fuel_on_board = fuel
-        };
+        unsafe { (**WorldFields::current()).flagship.fuel_on_board = fuel };
     }
 
     fn apply_gauge_delta(&self, delta: GaugeDelta) {
@@ -661,18 +661,12 @@ impl Platform for CffiPlatform {
 
     fn crew_cost(&self) -> u8 {
         // SAFETY: the game thread owns `GlobData`.
-        unsafe {
-            let world = crate::engine::WorldData::current();
-            (*world).game.crew_cost
-        }
+        unsafe { WorldFields::current().read(|owner| owner.game.crew_cost) }
     }
 
     fn set_crew_cost(&self, cost: u8) {
         // SAFETY: the game thread owns `GlobData`.
-        unsafe {
-            let world = crate::engine::WorldData::current();
-            (*world).game.crew_cost = cost
-        };
+        unsafe { (**WorldFields::current()).game.crew_cost = cost };
     }
 
     fn race_templates(&self) -> Result<Vec<RaceTemplate>, StarbaseError> {
@@ -767,34 +761,22 @@ impl Platform for CffiPlatform {
     fn set_drive_slot(&self, index: usize, piece: u8) {
         // SAFETY: the game thread owns `GlobData`; the caller bounds `index`
         // by `NUM_DRIVE_SLOTS`, and the array index checks it again.
-        unsafe {
-            let world = crate::engine::WorldData::current();
-            (*world).flagship.drive_slots[index] = piece
-        };
+        unsafe { (**WorldFields::current()).flagship.drive_slots[index] = piece };
     }
 
     fn set_jet_slot(&self, index: usize, piece: u8) {
         // SAFETY: as for `set_drive_slot`.
-        unsafe {
-            let world = crate::engine::WorldData::current();
-            (*world).flagship.jet_slots[index] = piece
-        };
+        unsafe { (**WorldFields::current()).flagship.jet_slots[index] = piece };
     }
 
     fn set_module_slot(&self, index: usize, piece: u8) {
         // SAFETY: as for `set_drive_slot`.
-        unsafe {
-            let world = crate::engine::WorldData::current();
-            (*world).flagship.module_slots[index] = piece
-        };
+        unsafe { (**WorldFields::current()).flagship.module_slots[index] = piece };
     }
 
     fn set_num_landers(&self, count: u8) {
         // SAFETY: the game thread owns `GlobData`.
-        unsafe {
-            let world = crate::engine::WorldData::current();
-            (*world).flagship.num_landers = count
-        };
+        unsafe { (**WorldFields::current()).flagship.num_landers = count };
     }
 
     fn redraw_ship_status(&self, res_units: ResUnitsUpdate) {
@@ -993,3 +975,5 @@ impl Platform for CffiPlatform {
         unsafe { base::DoInput(std::ptr::addr_of_mut!(state).cast(), 1) };
     }
 }
+
+use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

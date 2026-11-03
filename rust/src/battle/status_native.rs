@@ -220,8 +220,7 @@ pub(crate) mod engine {
     /// Status rendering runs on the game thread after screen initialization.
     #[no_mangle]
     pub unsafe extern "C" fn InitStatusOffsets() {
-        let kernel = crate::engine::Kernel::current();
-        (*kernel).status_offsets = status_offsets(ScreenHeight);
+        (**KernelOwner::current()).status_offsets = status_offsets(ScreenHeight);
     }
 
     unsafe fn filled(color: Color, mut r: RECT) {
@@ -271,7 +270,6 @@ pub(crate) mod engine {
     /// Ship info, fonts, and the active graphics context must be live.
     #[no_mangle]
     pub unsafe extern "C" fn DrawBattleCrewAmount(info: *mut SHIP_INFO, y: COORD) {
-        let kernel = crate::engine::Kernel::current();
         let x = if optWhichMenu == OPT_PC as i32 { 4 } else { 12 };
         let bytes = crew_text((*info).crew_level);
         let mut text = TEXT {
@@ -283,7 +281,7 @@ pub(crate) mod engine {
             align: TEXT_ALIGN_ALIGN_LEFT,
             CharCount: COUNT::MAX,
         };
-        SetContextFont((*kernel).star_con_font);
+        SetContextFont(KernelOwner::current().read(|owner| owner.star_con_font));
         filled(
             rgb15(10, 10, 10),
             rect(x, text.baseline.y.wrapping_sub(5), 24, 5),
@@ -569,3 +567,5 @@ mod tests {
         assert_eq!(ops[0].0.r, 0);
     }
 }
+
+use crate::engine::Kernel as KernelOwner;

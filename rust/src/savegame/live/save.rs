@@ -13,21 +13,21 @@ use crate::planets::solarsys::playerInSolarSystem;
 use crate::navigation::groups::live::PutGroupInfo;
 
 pub(crate) unsafe fn capture(name: &[u8]) -> anyhow::Result<SaveFile> {
-    let world = crate::engine::WorldData::current();
+    let world = WorldFields::current();
     let star = live::capture_live_star()?;
-    let point = (*world).game.ip_location;
+    let point = (**world).game.ip_location;
     if inHQSpace() != 0 {
         live::prepare_live_hyper_state()?;
     } else if playerInSolarSystem() {
         live::prepare_live_solar_location()?;
     }
-    if groups::saves_ip_group_queue((*world).game.current_activity) {
+    if groups::saves_ip_group_queue((**world).game.current_activity) {
         PutGroupInfo(0, u8::MAX);
     }
     let summary = live::capture_live_summary(name)?;
     // SAFETY: CGameState's size, alignment and every field offset are asserted against GAME_STATE.
     let game =
-        &mut *std::ptr::addr_of_mut!((*world).game).cast::<crate::comm::locdata::CGameState>();
+        &mut *std::ptr::addr_of_mut!((**world).game).cast::<crate::comm::locdata::CGameState>();
     let runtime = runtime::capture_runtime(game)?;
     game.ip_location = point;
     game.in_orbit = 0;
@@ -70,3 +70,5 @@ pub unsafe extern "C" fn SaveGame(
     })();
     super::complete(result, "SaveGame", Some((slot, false)))
 }
+
+use crate::engine::WorldData as WorldFields;

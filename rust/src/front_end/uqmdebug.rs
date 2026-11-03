@@ -281,14 +281,14 @@ mod runtime {
     /// # Safety
     /// Must run on the game thread. The game clock and event queue must be live.
     pub unsafe fn forwardToNextEvent(skipHEE: BOOLEAN) {
-        let world = crate::engine::WorldData::current();
+        let world = WorldFields::current();
         if GameClockRunning() == 0 {
             return;
         }
         LockGameClock();
         let mut done = skipHEE == 0;
         loop {
-            let handle = (*world).game.game_clock.event_q.head;
+            let handle = (**world).game.game_clock.event_q.head;
             if handle.is_null() {
                 return;
             }
@@ -302,7 +302,7 @@ mod runtime {
                 event.day_index as COUNT,
             );
             loop {
-                let clock = &*ptr::addr_of!((*world).game.game_clock);
+                let clock = &*ptr::addr_of!((**world).game.game_clock);
                 if clock.year_index > year
                     || (clock.year_index == year
                         && (clock.month_index as COUNT > month
@@ -334,10 +334,10 @@ mod runtime {
     /// # Safety
     /// Must run with a live game clock and an open output stream.
     pub unsafe fn dumpEvents(out: *mut FILE) {
-        let world = crate::engine::WorldData::current();
+        let world = WorldFields::current();
         LockGameClock();
         crate::collections::queue::for_all_links(
-            ptr::addr_of_mut!((*world).game.game_clock.event_q).cast(),
+            ptr::addr_of_mut!((**world).game.game_clock.event_q).cast(),
             |event| dumpEvent(out, ptr::from_mut(event).cast()),
         );
         UnlockGameClock();
@@ -346,28 +346,40 @@ mod runtime {
     /// # Safety
     /// Must run on the game thread with initialized SIS and optional solar system.
     pub unsafe fn equipShip() {
-        let world = crate::engine::WorldData::current();
-        if (*world).game.current_activity as u8 as u32 == SUPER_MELEE {
+        if WorldFields::current().read(|owner| owner.game.current_activity) as u8 as u32
+            == SUPER_MELEE
+        {
             return;
         }
         for i in 0..NUM_DRIVE_SLOTS as usize {
-            (*world).flagship.drive_slots[i] = FUSION_THRUSTER as BYTE;
+            (**WorldFields::current()).flagship.drive_slots[i] = FUSION_THRUSTER as BYTE;
         }
         for i in 0..NUM_JET_SLOTS as usize {
-            (*world).flagship.jet_slots[i] = TURNING_JETS as BYTE;
+            (**WorldFields::current()).flagship.jet_slots[i] = TURNING_JETS as BYTE;
         }
-        set_game_state(
-            crate::engine::StoryKey::LANDER_SHIELDS,
-            (1 << EARTHQUAKE_DISASTER)
-                | (1 << BIOLOGICAL_DISASTER)
-                | (1 << LIGHTNING_DISASTER)
-                | (1 << LAVASPOT_DISASTER),
-        );
-        set_game_state(crate::engine::StoryKey::IMPROVED_LANDER_SPEED, 1);
-        set_game_state(crate::engine::StoryKey::IMPROVED_LANDER_CARGO, 1);
-        set_game_state(crate::engine::StoryKey::IMPROVED_LANDER_SHOT, 1);
+        crate::engine::World::current().write(|world| {
+            set_game_state(
+                world,
+                crate::engine::StoryKey::LANDER_SHIELDS,
+                (1 << EARTHQUAKE_DISASTER)
+                    | (1 << BIOLOGICAL_DISASTER)
+                    | (1 << LIGHTNING_DISASTER)
+                    | (1 << LAVASPOT_DISASTER),
+            )
+        });
+        crate::engine::World::current().write(|world| {
+            set_game_state(world, crate::engine::StoryKey::IMPROVED_LANDER_SPEED, 1)
+        });
+        crate::engine::World::current().write(|world| {
+            set_game_state(world, crate::engine::StoryKey::IMPROVED_LANDER_CARGO, 1)
+        });
+        crate::engine::World::current()
+            .write(|world| set_game_state(world, crate::engine::StoryKey::IMPROVED_LANDER_SHOT, 1));
         let mut i;
-        if get_game_state(crate::engine::StoryKey::CHMMR_BOMB_STATE) < 2 {
+        if crate::engine::World::current()
+            .read(|world| get_game_state(world, crate::engine::StoryKey::CHMMR_BOMB_STATE))
+            < 2
+        {
             i = 0;
             for module in [
                 HIGHEFF_FUELSYS,
@@ -387,10 +399,10 @@ mod runtime {
                 CANNON_WEAPON,
                 CANNON_WEAPON,
             ] {
-                (*world).flagship.module_slots[i] = module as BYTE;
+                (**WorldFields::current()).flagship.module_slots[i] = module as BYTE;
                 i += 1;
             }
-            (*world).flagship.num_landers = MAX_LANDERS as BYTE;
+            (**WorldFields::current()).flagship.num_landers = MAX_LANDERS as BYTE;
         } else {
             i = NUM_BOMB_MODULES as usize;
             for module in [
@@ -401,31 +413,28 @@ mod runtime {
                 CANNON_WEAPON,
                 SHIVA_FURNACE,
             ] {
-                (*world).flagship.module_slots[i] = module as BYTE;
+                (**WorldFields::current()).flagship.module_slots[i] = module as BYTE;
                 i += 1;
             }
         }
         assert!(i <= NUM_MODULE_SLOTS as usize);
-        (*world).flagship.fuel_on_board = FUEL_RESERVE as _;
-        (*world).flagship.crew_enlisted = 0;
+        (**WorldFields::current()).flagship.fuel_on_board = FUEL_RESERVE as _;
+        (**WorldFields::current()).flagship.crew_enlisted = 0;
         for i in 0..NUM_MODULE_SLOTS as usize {
-            match (*world).flagship.module_slots[i] as u32 {
+            match WorldFields::current().read(|owner| owner.flagship.module_slots[i]) as u32 {
                 CREW_POD => {
-                    (*world).flagship.crew_enlisted = (*world)
-                        .flagship
-                        .crew_enlisted
+                    (**WorldFields::current()).flagship.crew_enlisted = WorldFields::current()
+                        .read(|owner| owner.flagship.crew_enlisted)
                         .wrapping_add(CREW_POD_CAPACITY as _)
                 }
                 FUEL_TANK => {
-                    (*world).flagship.fuel_on_board = (*world)
-                        .flagship
-                        .fuel_on_board
+                    (**WorldFields::current()).flagship.fuel_on_board = WorldFields::current()
+                        .read(|owner| owner.flagship.fuel_on_board)
                         .wrapping_add(FUEL_TANK_CAPACITY as _)
                 }
                 HIGHEFF_FUELSYS => {
-                    (*world).flagship.fuel_on_board = (*world)
-                        .flagship
-                        .fuel_on_board
+                    (**WorldFields::current()).flagship.fuel_on_board = WorldFields::current()
+                        .read(|owner| owner.flagship.fuel_on_board)
                         .wrapping_add(HEFUEL_TANK_CAPACITY as _)
                 }
                 _ => {}
@@ -435,7 +444,10 @@ mod runtime {
             (*pSolarSysState).max_ship_speed = (5 * IP_SHIP_THRUST_INCREMENT) as BYTE;
             for i in 0..NUM_DRIVE_SLOTS as usize {
                 // Preserve the original C subscript: DriveSlots[i == FUSION_THRUSTER].
-                if (*world).flagship.drive_slots[usize::from(i == FUSION_THRUSTER as usize)] != 0 {
+                if WorldFields::current().read(|owner| {
+                    owner.flagship.drive_slots[usize::from(i == FUSION_THRUSTER as usize)]
+                }) != 0
+                {
                     (*pSolarSysState).max_ship_speed = (*pSolarSysState)
                         .max_ship_speed
                         .wrapping_add(IP_SHIP_THRUST_INCREMENT as BYTE);
@@ -443,14 +455,19 @@ mod runtime {
             }
             (*pSolarSysState).turn_wait = IP_SHIP_TURN_WAIT as BYTE;
             for i in 0..NUM_JET_SLOTS as usize {
-                if (*world).flagship.jet_slots[i] == TURNING_JETS as BYTE {
+                if WorldFields::current().read(|owner| owner.flagship.jet_slots[i])
+                    == TURNING_JETS as BYTE
+                {
                     (*pSolarSysState).turn_wait = (*pSolarSysState)
                         .turn_wait
                         .wrapping_sub(IP_SHIP_TURN_DECREMENT as BYTE);
                 }
             }
         }
-        if inHQSpace() != 0 || (*world).game.current_activity as u8 as u32 == IN_INTERPLANETARY {
+        if inHQSpace() != 0
+            || WorldFields::current().read(|owner| owner.game.current_activity) as u8 as u32
+                == IN_INTERPLANETARY
+        {
             DeltaSISGauges(
                 UNDEFINED_DELTA as _,
                 UNDEFINED_DELTA as _,
@@ -486,14 +503,14 @@ mod runtime {
             crate::engine::StoryKey::MOONBASE_ON_SHIP,
             crate::engine::StoryKey::DESTRUCT_CODE_ON_SHIP,
         ] {
-            set_game_state(key, 1);
+            crate::engine::World::current().write(|world| set_game_state(world, key, 1));
         }
     }
     /// # Safety
     /// Must run on the game thread with the escort queue initialized.
     pub unsafe fn clearEscorts() {
-        let world = crate::engine::WorldData::current();
-        let queue = ptr::addr_of_mut!((*world).game.built_ship_q);
+        let world = WorldFields::current();
+        let queue = ptr::addr_of_mut!((**world).game.built_ship_q);
         clear_escort_queue(queue.cast());
         DeltaSISGauges(
             UNDEFINED_DELTA as _,
@@ -516,12 +533,12 @@ mod runtime {
     /// # Safety
     /// Must run on the game thread in HyperSpace or QuasiSpace.
     pub unsafe fn doInstantMove() {
-        let owned_world = crate::engine::WorldData::current();
+        let owned_world = WorldFields::current();
         let (log_x, log_y) = log_units();
         let universe_x = ((MAX_X_UNIVERSE as i32 + 1) >> 4) * 10;
         let universe_y = (MAX_Y_UNIVERSE as i32 + 1) >> 4;
-        let game = ptr::addr_of_mut!((*owned_world).game);
-        let sis = ptr::addr_of_mut!((*owned_world).flagship);
+        let game = ptr::addr_of_mut!((**owned_world).game);
+        let sis = ptr::addr_of_mut!((**owned_world).flagship);
         if (*game).autopilot.x == -1 || (*game).autopilot.y == -1 {
             (*game).autopilot.x =
                 (((*sis).log_x.wrapping_mul(universe_x) + (log_x >> 1)) / log_x) as COORD;
@@ -534,18 +551,23 @@ mod runtime {
                 + (universe_y >> 1))
                 / universe_y;
         }
-        if get_game_state(crate::engine::StoryKey::ARILOU_SPACE_SIDE) <= 1 {
-            (*World::current()).select_star(
+        if crate::engine::World::current()
+            .read(|world| get_game_state(world, crate::engine::StoryKey::ARILOU_SPACE_SIDE))
+            <= 1
+        {
+            (**World::current()).select_star(
                 ((FindStar(ptr::null_mut(), ptr::addr_of_mut!((*game).autopilot), 0, 0))
                     .cast::<crate::engine::world::CStarDesc>())
                 .as_ref(),
                 crate::planets::starmap::current_catalog(),
             );
-            if !(*World::current())
+            if !(**World::current())
                 .star_pointer(crate::planets::starmap::current_catalog())
                 .is_null()
             {
-                set_game_state(crate::engine::StoryKey::USED_BROADCASTER, 0);
+                crate::engine::World::current().write(|world| {
+                    set_game_state(world, crate::engine::StoryKey::USED_BROADCASTER, 0)
+                });
                 (*game).current_activity &= !(IN_BATTLE as ACTIVITY);
                 (*game).ship_facing = 0;
                 (*game).ip_planet = 0;
@@ -559,8 +581,7 @@ mod runtime {
     /// # Safety
     /// Must run on the game thread with the race queue initialized.
     pub unsafe fn showSpheres() {
-        let world = crate::engine::WorldData::current();
-        let mut handle = (*world).game.avail_race_q.head;
+        let mut handle = WorldFields::current().read(|owner| owner.game.avail_race_q.head);
         while !handle.is_null() {
             let fleet = handle.cast::<FLEET_INFO>();
             let next = (*fleet).succ;
@@ -576,8 +597,7 @@ mod runtime {
     /// # Safety
     /// Must run on the game thread with the race queue initialized.
     pub unsafe fn activateAllShips() {
-        let world = crate::engine::WorldData::current();
-        let mut handle = (*world).game.avail_race_q.head;
+        let mut handle = WorldFields::current().read(|owner| owner.game.avail_race_q.head);
         while !handle.is_null() {
             let fleet = handle.cast::<FLEET_INFO>();
             let next = (*fleet).succ;
@@ -607,7 +627,7 @@ mod runtime {
         arg: &mut T,
     ) {
         assert!(
-            (*World::current()).star_pointer(crate::planets::starmap::current_catalog())
+            (**World::current()).star_pointer(crate::planets::starmap::current_catalog())
                 == star.cast()
         );
         assert!(pSolarSysState == system);
@@ -650,7 +670,6 @@ mod runtime {
     /// Must run on the game thread. All supplied callbacks and their context must
     /// remain valid throughout universe generation, which can change game state.
     pub unsafe fn UniverseRecurse<T>(arg: &mut UniverseRecurseArg<'_, T>) {
-        let world = crate::engine::WorldData::current();
         if arg.systemFuncPre.is_none()
             && arg.systemFuncPost.is_none()
             && arg.planetFuncPre.is_none()
@@ -660,17 +679,18 @@ mod runtime {
             return;
         }
         LockGameClock();
-        let saved_activity = (*world).game.current_activity;
+        let saved_activity = WorldFields::current().read(|owner| owner.game.current_activity);
         DISABLE_INTERACTIVITY = 1;
         forAllStars(starRecurse, arg);
         DISABLE_INTERACTIVITY = 0;
-        (*world).game.current_activity = saved_activity;
+        (**WorldFields::current()).game.current_activity = saved_activity;
         UnlockGameClock();
     }
     unsafe fn starRecurse<T>(star: *mut STAR_DESC, recurse: &mut UniverseRecurseArg<'_, T>) {
         let old_system = pSolarSysState;
-        let old_star = (*World::current()).star_pointer(crate::planets::starmap::current_catalog());
-        (*World::current()).select_star(
+        let old_star =
+            (**World::current()).star_pointer(crate::planets::starmap::current_catalog());
+        (**World::current()).select_star(
             (star.cast::<crate::engine::world::CStarDesc>()).as_ref(),
             crate::planets::starmap::current_catalog(),
         );
@@ -698,7 +718,7 @@ mod runtime {
             cb(star, &system, recurse.arg);
         }
         pSolarSysState = old_system;
-        (*World::current()).select_star(
+        (**World::current()).select_star(
             (old_star).as_ref(),
             crate::planets::starmap::current_catalog(),
         );
@@ -710,7 +730,7 @@ mod runtime {
         recurse: &mut UniverseRecurseArg<'_, T>,
     ) {
         assert!(
-            (*World::current()).star_pointer(crate::planets::starmap::current_catalog())
+            (**World::current()).star_pointer(crate::planets::starmap::current_catalog())
                 == star.cast()
         );
         assert!(pSolarSysState == system);
@@ -741,7 +761,7 @@ mod runtime {
         recurse: &mut UniverseRecurseArg<'_, T>,
     ) {
         assert!(
-            (*World::current()).star_pointer(crate::planets::starmap::current_catalog())
+            (**World::current()).star_pointer(crate::planets::starmap::current_catalog())
                 == star.cast()
         );
         assert!(pSolarSysState == system);
@@ -853,12 +873,12 @@ mod runtime {
     /// # Safety
     /// Planet must belong to the active system, and `out` be an open stream.
     pub unsafe fn dumpPlanet(out: *mut FILE, planet: *const PLANET_DESC) {
-        let world = crate::engine::WorldData::current();
+        let world = WorldFields::current();
         ((*(*pSolarSysState).genFuncs).generateName.unwrap())(pSolarSysState, planet);
         libc::fprintf(
             out,
             c"- %-37s  %s\n".as_ptr(),
-            ptr::addr_of!((*world).flagship.planet_name).cast::<c_char>(),
+            ptr::addr_of!((**world).flagship.planet_name).cast::<c_char>(),
             planetTypeString(((*planet).data_index & !(PLANET_SHIELDED as BYTE)) as c_int),
         );
         dumpWorld(out, planet);
@@ -1032,7 +1052,6 @@ mod runtime {
         system: *const SOLARSYS_STATE,
         world: *const PLANET_DESC,
     ) -> COUNT {
-        let owned_world = crate::engine::WorldData::current();
         assert_eq!((*system).pOrbitalDesc.cast_const(), world);
         let count = callGenerateForScanType(
             system,
@@ -1053,8 +1072,9 @@ mod runtime {
             );
             result = result.wrapping_add(
                 ((info.density >> 8) as u32
-                    * (*owned_world).game.element_worth[element_category(info.type_ as usize)]
-                        as u32) as COUNT,
+                    * WorldFields::current().read(|owner| {
+                        owner.game.element_worth[element_category(info.type_ as usize)]
+                    }) as u32) as COUNT,
             );
         }
         result
@@ -1199,9 +1219,8 @@ mod runtime {
         dumpPlanetType(arg.out, index, planet);
     }
     unsafe fn game_string(index: usize) -> *const c_char {
-        let kernel = crate::engine::Kernel::current();
         GetStringAddress(SetAbsStringTableIndex(
-            (*kernel).game_strings,
+            KernelOwner::current().read(|owner| owner.game_strings),
             index as COUNT,
         ))
     }
@@ -1290,8 +1309,10 @@ mod runtime {
     /// # Safety
     /// Must run on the game thread with battle and status context initialized.
     pub unsafe fn resetCrewBattle() {
-        let world = crate::engine::WorldData::current();
-        if (*world).game.current_activity & IN_BATTLE as ACTIVITY == 0 || inHQSpace() != 0 {
+        if WorldFields::current().read(|owner| owner.game.current_activity) & IN_BATTLE as ACTIVITY
+            == 0
+            || inHQSpace() != 0
+        {
             return;
         }
         crate::app::bridge::enter(|cx| {
@@ -1311,8 +1332,10 @@ mod runtime {
     /// # Safety
     /// Must run on the game thread with battle and status context initialized.
     pub unsafe fn resetEnergyBattle() {
-        let world = crate::engine::WorldData::current();
-        if (*world).game.current_activity & IN_BATTLE as ACTIVITY == 0 || inHQSpace() != 0 {
+        if WorldFields::current().read(|owner| owner.game.current_activity) & IN_BATTLE as ACTIVITY
+            == 0
+            || inHQSpace() != 0
+        {
             return;
         }
         crate::app::bridge::enter(|cx| {
@@ -1333,7 +1356,6 @@ mod runtime {
     /// # Safety
     /// Game strings must be initialized and `out` an open C stream.
     pub unsafe fn dumpStrings(out: *mut FILE) {
-        let kernel = crate::engine::Kernel::current();
         macro_rules! category {
             ($name:literal,$base:ident,$count:ident) => {
                 (
@@ -1441,7 +1463,8 @@ mod runtime {
                 usize::MAX,
             ),
         ];
-        let num_strings = GetStringTableCount((*kernel).game_strings) as usize;
+        let num_strings =
+            GetStringTableCount(KernelOwner::current().read(|owner| owner.game_strings)) as usize;
         for i in 0..categories.len() - 1 {
             if categories[i].1 + categories[i].2 != categories[i + 1].1 {
                 libc::fprintf(
@@ -1475,11 +1498,10 @@ mod runtime {
     }
 
     unsafe fn isContextVisible(context: CONTEXT) -> bool {
-        let kernel = crate::engine::Kernel::current();
         let old = SetContext(context);
         let frame = GetContextFGFrame();
         SetContext(old);
-        frame == (*kernel).screen
+        frame == KernelOwner::current().read(|owner| owner.screen)
     }
     unsafe fn countVisibleContexts() -> usize {
         let mut count = 0;
@@ -1493,7 +1515,6 @@ mod runtime {
         count
     }
     unsafe fn drawContext(context: CONTEXT, hue: f64) {
-        let kernel = crate::engine::Kernel::current();
         let _draw_frame = GetContextFGFrame();
         let rectangle_color = hsvaToRgba(hue, 1.0, 0.5, 100);
         let line_color = hsvaToRgba(hue, 1.0, 1.0, 90);
@@ -1518,7 +1539,7 @@ mod runtime {
         for (first, second) in [(p1, p2), (p2, p4), (p1, p3), (p3, p4), (p1, p4), (p2, p3)] {
             DrawLine(&mut LINE { first, second });
         }
-        let old_font = SetContextFont((*kernel).tiny_font);
+        let old_font = SetContextFont(KernelOwner::current().read(|owner| owner.tiny_font));
         SetContextForeGroundColor(text_color);
         let old_mode = SetContextDrawMode(DrawMode {
             kind: DrawKind_DRAW_ALPHA as BYTE,
@@ -1566,8 +1587,7 @@ mod runtime {
         1
     }
     unsafe fn getScreen() -> FRAME {
-        let kernel = crate::engine::Kernel::current();
-        let old = SetContext((*kernel).screen_context);
+        let old = SetContext(KernelOwner::current().read(|owner| owner.screen_context));
         let rectangle = RECT {
             corner: POINT { x: 0, y: 0 },
             extent: EXTENT {
@@ -1580,8 +1600,7 @@ mod runtime {
         frame
     }
     unsafe fn putScreen(frame: FRAME) {
-        let kernel = crate::engine::Kernel::current();
-        let old = SetContext((*kernel).screen_context);
+        let old = SetContext(KernelOwner::current().read(|owner| owner.screen_context));
         DrawStamp(&mut STAMP {
             origin: POINT { x: 0, y: 0 },
             frame,
@@ -1749,3 +1768,5 @@ mod tests {
         assert_eq!((color.r, color.g, color.b, color.a), (255, 64, 128, 100));
     }
 }
+
+use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

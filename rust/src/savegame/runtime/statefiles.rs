@@ -499,22 +499,24 @@ pub fn capture_from_images(
 /// defined-group offsets taken from the live game-state singleton and the
 /// current group from `game`.
 pub fn capture_state_files(game: &CGameState) -> Result<StateFileSections, StateSectionError> {
-    with_state_owners(|state, files| {
-        let contents = |index: usize| {
-            files
-                .get_file(index)
-                .expect("the three state files always exist")
-                .contents()
-        };
-        let mut sections = capture_from_images(
-            contents(STARINFO_FILE),
-            contents(RANDGRPINFO_FILE),
-            contents(DEFGRPINFO_FILE),
-            state.as_bytes(),
-            game.battle_group_ref,
-        )?;
-        sections.canned_nodes = files.canned_nodes.clone();
-        Ok(sections)
+    crate::engine::World::current().write(|world| {
+        with_state_owners(world, |state, files| {
+            let contents = |index: usize| {
+                files
+                    .get_file(index)
+                    .expect("the three state files always exist")
+                    .contents()
+            };
+            let mut sections = capture_from_images(
+                contents(STARINFO_FILE),
+                contents(RANDGRPINFO_FILE),
+                contents(DEFGRPINFO_FILE),
+                state.as_bytes(),
+                game.battle_group_ref,
+            )?;
+            sections.canned_nodes = files.canned_nodes.clone();
+            Ok(sections)
+        })
     })?
 }
 
@@ -741,11 +743,13 @@ pub fn restore_state_files(
     game: &mut CGameState,
     sections: &StateFileSections,
 ) -> Result<(), StateSectionError> {
-    let plan = with_state_owners(|state, files| {
-        let plan = plan_restore(sections, state.as_bytes())?;
-        commit(&plan, state, files);
-        files.canned_nodes.clone_from(&sections.canned_nodes);
-        Ok::<_, StateSectionError>(plan)
+    let plan = crate::engine::World::current().write(|world| {
+        with_state_owners(world, |state, files| {
+            let plan = plan_restore(sections, state.as_bytes())?;
+            commit(&plan, state, files);
+            files.canned_nodes.clone_from(&sections.canned_nodes);
+            Ok::<_, StateSectionError>(plan)
+        })
     })??;
 
     if let Some(reference) = plan.battle_group_ref {
@@ -757,15 +761,18 @@ pub fn restore_state_files(
 /// `InitGroupInfo` on the live files: empty the random groups and, when
 /// `first_time`, restart the defined groups.
 pub fn init_group_info(first_time: bool) -> Result<(), StateSectionError> {
-    with_state_files(|files| {
-        files
-            .replace_contents(RANDGRPINFO_FILE, &initial_random_image())
-            .expect("the three state files always exist");
-        if first_time {
-            files
-                .replace_contents(DEFGRPINFO_FILE, &initial_defined_image())
-                .expect("the three state files always exist");
-        }
-    })
-    .map_err(StateSectionError::from)
+    crate::engine::World::current()
+        .write(|world| {
+            with_state_files(world, |files| {
+                files
+                    .replace_contents(RANDGRPINFO_FILE, &initial_random_image())
+                    .expect("the three state files always exist");
+                if first_time {
+                    files
+                        .replace_contents(DEFGRPINFO_FILE, &initial_defined_image())
+                        .expect("the three state files always exist");
+                }
+            })
+        })
+        .map_err(StateSectionError::from)
 }

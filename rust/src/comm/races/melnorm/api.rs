@@ -35,30 +35,26 @@ mod live {
     impl MelnormApi for LiveScript<Handler> {
         fn ship(&self) -> CSisState {
             unsafe {
-                let world = crate::engine::WorldData::current();
-                std::ptr::addr_of!((*world).flagship)
+                let world = WorldFields::current();
+                std::ptr::addr_of!((**world).flagship)
                     .cast::<CSisState>()
                     .read()
             }
         }
         fn set_ship(&mut self, ship: CSisState) {
             unsafe {
-                let world = crate::engine::WorldData::current();
-                std::ptr::addr_of_mut!((*world).flagship)
+                let world = WorldFields::current();
+                std::ptr::addr_of_mut!((**world).flagship)
                     .cast::<CSisState>()
                     .write(ship);
             }
         }
         fn module_cost(&self, id: usize) -> u8 {
-            unsafe {
-                let world = crate::engine::WorldData::current();
-                (*world).game.module_cost[id]
-            }
+            unsafe { WorldFields::current().read(|owner| owner.game.module_cost[id]) }
         }
         fn set_module_cost(&mut self, id: usize, cost: u8) {
             unsafe {
-                let world = crate::engine::WorldData::current();
-                (*world).game.module_cost[id] = cost;
+                (**WorldFields::current()).game.module_cost[id] = cost;
             }
         }
         fn number(&mut self, number: i32) {
@@ -97,3 +93,5 @@ mod live {
         }
     }
 }
+
+use crate::engine::WorldData as WorldFields;

@@ -170,28 +170,25 @@ pub(crate) mod engine {
     /// The game thread must own initialized audio and battle music state.
     #[no_mangle]
     pub unsafe extern "C" fn StopDitty() {
-        let kernel = crate::engine::Kernel::current();
-        if (*kernel).ditty_playing != 0 {
+        if KernelOwner::current().read(|owner| owner.ditty_playing) != 0 {
             StopMusic();
         }
-        (*kernel).ditty_playing = 0;
+        (**KernelOwner::current()).ditty_playing = 0;
     }
 
     unsafe fn ditty_playing() -> bool {
-        let kernel = crate::engine::Kernel::current();
-        if (*kernel).ditty_playing == 0 {
+        if KernelOwner::current().read(|owner| owner.ditty_playing) == 0 {
             return false;
         }
-        (*kernel).ditty_playing = PLRPlaying(usize::MAX as MUSIC_REF);
-        (*kernel).ditty_playing != 0
+        (**KernelOwner::current()).ditty_playing = PLRPlaying(usize::MAX as MUSIC_REF);
+        KernelOwner::current().read(|owner| owner.ditty_playing) != 0
     }
 
     /// # Safety
     /// The game thread must exclusively own battle winner state.
     #[no_mangle]
     pub unsafe extern "C" fn ResetWinnerStarShip() {
-        let kernel = crate::engine::Kernel::current();
-        (*kernel).winner = None;
+        (**KernelOwner::current()).winner = None;
     }
 
     /// # Safety
@@ -706,3 +703,5 @@ mod tests {
         assert_eq!((index, thrust), (10, 0));
     }
 }
+
+use crate::engine::Kernel as KernelOwner;

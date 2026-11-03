@@ -65,7 +65,8 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
         let path = CString::new(fixture.path().to_str().unwrap()).unwrap();
         unsafe {
             log_init(100);
-            uqm_rust::state::ffi::rust_init_game_state();
+            crate::engine::World::current()
+                .write(|world| uqm_rust::state::ffi::rust_init_game_state(world));
             (*uqm_rust::engine::WorldData::current())
                 .flagship
                 .module_slots = [255; 16];
