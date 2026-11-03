@@ -1,6 +1,6 @@
 //! Exercise the Spathi live descriptor and registered callbacks against the linked engine.
 
-use uqm_rust::engine::battle::schema::HELEMENT;
+use uqm_rust::engine::battle::schema::HLINK;
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]
@@ -16,8 +16,8 @@ use uqm_rust::ships::native::abi::*;
 unsafe fn index_of(frame: FRAME) -> u16 {
     uqm_rust::ships::native::frame_index(frame)
 }
-unsafe fn queue_tail() -> HELEMENT {
-    disp_q.tail
+unsafe fn queue_tail() -> HLINK {
+    battle::tail()
 }
 #[test]
 fn eluder_descriptor_matches_the_c_template() {
@@ -88,9 +88,9 @@ fn eluder_descriptor_matches_the_c_template() {
                 assert_eq!(CStr::from_ptr(data.ship_rsc[i]), expected_ship[i]);
                 assert_eq!(CStr::from_ptr(data.weapon_rsc[i]), expected_weapon[i]);
                 assert_eq!(CStr::from_ptr(data.special_rsc[i]), expected_special[i]);
-                assert!(data.ship[i].is_null());
-                assert!(data.weapon[i].is_null());
-                assert!(data.special[i].is_null());
+                assert!(data.ship.view(i).is_absent());
+                assert!(data.weapon.view(i).is_absent());
+                assert!(data.special.view(i).is_absent());
             }
             assert_eq!(
                 CStr::from_ptr(data.captain_control.captain_rsc),
@@ -118,7 +118,7 @@ fn forward_missile_leaves_the_nose_along_the_ship_facing() {
             let _battle = Battle::new(16);
             let mut fleet = Ship::new(&_battle, SPECIES_ID_SPATHI_ID, 0);
             let missile_frames = FrameSet::new(16);
-            fleet.descriptor_mut().ship_data.weapon[0] = missile_frames.frame(0);
+            fleet.descriptor_mut().ship_data.weapon = missile_frames.array();
             fleet.ship_mut().playerNr = 0;
             (*fleet.ptr()).playerNr = 0;
             (*fleet.ptr()).current.location = POINT { x: 400, y: 500 };
@@ -135,10 +135,10 @@ fn forward_missile_leaves_the_nose_along_the_ship_facing() {
                 1
             );
             let m = battle::element(out[0]);
-            assert_eq!((*m).__bindgen_anon_1.life_span, 10);
-            assert_eq!((*m).__bindgen_anon_2.hit_points, 1);
-            assert_eq!((*m).__bindgen_anon_3.mass_points, 1);
-            assert_eq!((*m).__bindgen_anon_5.blast_offset, 1);
+            assert_eq!((*m).life, 10);
+            assert_eq!((*m).hits, 1);
+            assert_eq!((*m).mass, 1);
+            assert_eq!((*m).thrust, 1);
             assert_eq!((*m).playerNr, 0);
             assert_eq!(
                 (*m).state_flags,
@@ -164,7 +164,7 @@ fn butt_leaves_the_tail_not_the_nose() {
             let _battle = Battle::new(16);
             let mut fleet = Ship::new(&_battle, SPECIES_ID_SPATHI_ID, 0);
             let butt_frames = FrameSet::new(16);
-            fleet.descriptor_mut().ship_data.special[0] = butt_frames.frame(0);
+            fleet.descriptor_mut().ship_data.special = butt_frames.array();
             fleet.ship_mut().playerNr = 0;
             (*fleet.ptr()).playerNr = 0;
             (*fleet.ptr()).current.location = POINT { x: 400, y: 500 };
@@ -179,15 +179,18 @@ fn butt_leaves_the_tail_not_the_nose() {
             // out at facing 12 (angle 48, along -x).
             let butt = battle::element(queue_tail());
             assert_ne!(butt, ship);
-            assert_eq!((*butt).pParent, (fleet.ship_mut() as *mut STARSHIP).cast());
+            assert_eq!(
+                (*butt).parent,
+                uqm_rust::engine::battle::Parent::Ship(fleet.ship_id)
+            );
             assert_eq!(index_of((*butt).current.image.frame), 12);
             assert_eq!((*butt).velocity.travel_angle, 48);
             assert_eq!((*butt).state_flags, (APPEARING | FINITE_LIFE) as u16);
-            assert_eq!((*butt).__bindgen_anon_1.life_span, 30);
-            assert_eq!((*butt).__bindgen_anon_2.hit_points, 1);
-            assert_eq!((*butt).__bindgen_anon_3.mass_points, 2);
-            assert_eq!((*butt).__bindgen_anon_4.turn_wait, 1);
-            assert_eq!((*butt).__bindgen_anon_5.blast_offset, 4);
+            assert_eq!((*butt).life, 30);
+            assert_eq!((*butt).hits, 1);
+            assert_eq!((*butt).mass, 2);
+            assert_eq!((*butt).turn, 1);
+            assert_eq!((*butt).thrust, 4);
             assert!((*butt).preprocess_func.is_some());
             assert_eq!(
                 ((*butt).current.location.x, (*butt).current.location.y),
@@ -205,7 +208,7 @@ fn butt_rear_facing_wraps_through_sixteen_facings() {
         let _battle = Battle::new(16);
         let mut fleet = Ship::new(&_battle, SPECIES_ID_SPATHI_ID, 0);
         let butt_frames = FrameSet::new(16);
-        fleet.descriptor_mut().ship_data.special[0] = butt_frames.frame(0);
+        fleet.descriptor_mut().ship_data.special = butt_frames.array();
         fleet.ship_mut().playerNr = 0;
         (*fleet.ptr()).playerNr = 0;
         (*fleet.ptr()).current.location = POINT { x: 0, y: 0 };
@@ -265,7 +268,7 @@ fn butt_homes_one_facing_step_per_tracking_pass() {
             let _battle = Battle::new(16);
             let mut spathi = Ship::new(&_battle, SPECIES_ID_SPATHI_ID, 0);
             let butt_frames = FrameSet::new(16);
-            spathi.descriptor_mut().ship_data.special[0] = butt_frames.frame(0);
+            spathi.descriptor_mut().ship_data.special = butt_frames.array();
             spathi.ship_mut().playerNr = 0;
             (*spathi.ptr()).playerNr = 0;
             (*spathi.ptr()).current.location = POINT { x: 400, y: 500 };
@@ -275,19 +278,19 @@ fn butt_homes_one_facing_step_per_tracking_pass() {
             spathi.postprocess();
             let butt = battle::element(queue_tail());
             // The engine starts each frame with `next` equal to `current`.
-            (*butt).next = (*butt).current;
+            (*butt).next = (*butt).current.clone();
             let preprocess = (*butt).preprocess_func.unwrap();
 
             // TRACK_WAIT: the first pass only counts the delay down.
-            assert_eq!((*butt).__bindgen_anon_4.turn_wait, 1);
+            assert_eq!((*butt).turn, 1);
             hooks::invoke_element_pointer(preprocess, butt);
-            assert_eq!((*butt).__bindgen_anon_4.turn_wait, 0);
+            assert_eq!((*butt).turn, 0);
             assert_eq!(index_of((*butt).next.image.frame), 12);
             assert_eq!((*butt).state_flags & CHANGING as u16, 0);
 
             // With no enemy to track, the delay is reloaded and nothing turns.
             hooks::invoke_element_pointer(preprocess, butt);
-            assert_eq!((*butt).__bindgen_anon_4.turn_wait, 1);
+            assert_eq!((*butt).turn, 1);
             assert_eq!(index_of((*butt).next.image.frame), 12);
             assert_eq!((*butt).state_flags & CHANGING as u16, 0);
 
@@ -312,7 +315,7 @@ fn butt_homes_one_facing_step_per_tracking_pass() {
             assert_eq!(index_of((*butt).next.image.frame), 13);
             assert_ne!((*butt).state_flags & CHANGING as u16, 0);
             assert_eq!((*butt).velocity.travel_angle, 52);
-            assert_eq!((*butt).__bindgen_anon_4.turn_wait, 1);
+            assert_eq!((*butt).turn, 1);
         }
     })
 }
@@ -321,8 +324,8 @@ fn butt_homes_one_facing_step_per_tracking_pass() {
 /// act on, so only the Spathi decision is observed.
 unsafe fn intelligence_sets_special(
     fleet: &mut Ship<'_>,
-    ship: *mut ELEMENT,
-    target: *mut ELEMENT,
+    ship: *mut ElementRecord,
+    target: *mut ElementRecord,
     which_turn: COUNT,
 ) -> bool {
     let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();

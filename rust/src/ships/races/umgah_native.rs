@@ -105,7 +105,7 @@ pub(crate) mod engine {
         let mut b = Missile {
             cx: origin.next.location.x,
             cy: origin.next.location.y,
-            farray: cx.ship_frame_set(ss, 2),
+            frames: cx.ship_frame_set(ss, 2),
             face: facing,
             sender: origin.player,
             flags: IGNORE_SIMILAR as u16,

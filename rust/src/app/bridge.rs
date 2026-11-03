@@ -105,23 +105,21 @@ pub unsafe fn battle<R>(call: impl FnOnce(&mut crate::engine::battle::Battle) ->
 /// # Safety
 /// Run only on the game thread. The legacy queue and GlobData authorities must
 /// outlive the call; initialization and cleanup occur inside this boundary.
-pub unsafe fn with_battle<R>(call: impl FnOnce() -> R) -> R {
+pub unsafe fn with_battle<R>(
+    frame_source: fn(
+        crate::engine::battle::views::SharedFrames,
+    ) -> NonNull<crate::graphics::native_abi::FRAME>,
+    call: impl FnOnce() -> R,
+) -> R {
     use crate::engine::battle::{Battle, Cx, World};
     use crate::ships::native::abi::GlobData;
-    #[cfg(not(test))]
-    let shared_frames = [
-        (&raw mut crate::game_init::space_resources::asteroid).cast(),
-        (&raw mut crate::game_init::space_resources::explosion).cast(),
-    ];
-    #[cfg(test)]
-    let shared_frames = [ptr::null_mut(); 2];
     // SAFETY: all pointers derive directly from the authority's raw address.
     unsafe {
         let mut battle = Battle::for_lifecycle();
         let mut world = World::new(
-            &raw mut GlobData.Game_state.CurrentActivity,
-            &raw mut GlobData.Game_state.ip_group_q,
-            shared_frames,
+            NonNull::new_unchecked(&raw mut GlobData.Game_state.CurrentActivity),
+            NonNull::new_unchecked(&raw mut GlobData.Game_state.ip_group_q),
+            frame_source,
         );
         let mut cx = Cx::new(&mut battle, &mut world, crate::math::random);
         publish(&mut cx, call)
@@ -148,14 +146,18 @@ mod tests {
     fn empty_entry_panics_and_nested_handoffs_restore_lifo() {
         // SAFETY: this serialized test owns the records and projected storage for the scope.
         assert!(std::panic::catch_unwind(|| unsafe { enter(|_| ()) }).is_err());
-        let mut queue = QUEUE::default();
         let mut groups = QUEUE::default();
         let mut activity = 7;
         // SAFETY: this serialized test owns the records and projected storage for the scope.
-        let mut battle = unsafe { Battle::new(&raw mut queue) };
+        let mut battle = Battle::new(3);
         // SAFETY: this serialized test owns the records and projected storage for the scope.
-        let mut world =
-            unsafe { World::new(&raw mut activity, &raw mut groups, [ptr::null_mut(); 2]) };
+        let mut world = unsafe {
+            World::new(
+                NonNull::from(&mut activity),
+                NonNull::from(&mut groups),
+                |_| panic!("unused shared frame source"),
+            )
+        };
         let mut cx = Cx::new(&mut battle, &mut world, crate::math::random);
         // SAFETY: this serialized test owns the records and projected storage for the scope.
         unsafe {

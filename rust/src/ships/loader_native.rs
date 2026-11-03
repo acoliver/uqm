@@ -55,35 +55,34 @@ pub(crate) mod engine {
     }
 
     unsafe fn load_battle(d: &mut RaceDesc) -> bool {
+        let load_animation_set = |keys: [_; 3]| {
+            use crate::engine::battle::{frames::FrameArray, views::Frame};
+            let mut raw = [std::ptr::null_mut(); 3];
+            if load_animation(raw.as_mut_ptr(), keys[0], keys[1], keys[2]) == 0 {
+                free_image(&raw mut raw);
+                return None;
+            }
+            let leases = crate::graphics::drawable_abi::retain_frame_allocations(&raw);
+            let array = FrameArray::retain(raw.map(|frame| Frame::from_native(frame)), leases);
+            array.observe("animation");
+            Some(array)
+        };
         let data = d.data_mut();
-        if load_animation(
-            (&raw mut data.ship).cast(),
-            data.ship_rsc[0],
-            data.ship_rsc[1],
-            data.ship_rsc[2],
-        ) == 0
-        {
+        let Some(ship) = load_animation_set(data.ship_rsc) else {
             return false;
+        };
+        data.ship = ship;
+        if !data.weapon_rsc[0].is_null() {
+            let Some(weapon) = load_animation_set(data.weapon_rsc) else {
+                return false;
+            };
+            data.weapon = weapon;
         }
-        if !data.weapon_rsc[0].is_null()
-            && load_animation(
-                (&raw mut data.weapon).cast(),
-                data.weapon_rsc[0],
-                data.weapon_rsc[1],
-                data.weapon_rsc[2],
-            ) == 0
-        {
-            return false;
-        }
-        if !data.special_rsc[0].is_null()
-            && load_animation(
-                (&raw mut data.special).cast(),
-                data.special_rsc[0],
-                data.special_rsc[1],
-                data.special_rsc[2],
-            ) == 0
-        {
-            return false;
+        if !data.special_rsc[0].is_null() {
+            let Some(special) = load_animation_set(data.special_rsc) else {
+                return false;
+            };
+            data.special = special;
         }
         if !data.captain_control.captain_rsc.is_null() {
             data.captain_control.background =
@@ -112,6 +111,12 @@ pub(crate) mod engine {
     /// # Safety
     /// The descriptor resources are exclusively owned by this value.
     pub unsafe fn unload_ship(mut owned: RaceDesc, icons: u32, battle: u32) {
+        let release_animation_set = |array: &crate::engine::battle::frames::FrameArray| {
+            let mut raw = array.views().map(|frame| frame.raw());
+            free_image(&raw mut raw);
+            array.retire_views();
+        };
+
         let descriptor = &mut owned;
         descriptor.cleanup(&mut crate::engine::battle::World::for_legacy_lifecycle());
         crate::collections::observation::record(
@@ -123,9 +128,12 @@ pub(crate) mod engine {
         );
         if battle != 0 {
             let data = descriptor.data_mut();
-            free_image((&raw mut data.special).cast());
-            free_image((&raw mut data.weapon).cast());
-            free_image((&raw mut data.ship).cast());
+            release_animation_set(&data.special);
+            data.special = crate::engine::battle::frames::FrameArray::EMPTY;
+            release_animation_set(&data.weapon);
+            data.weapon = crate::engine::battle::frames::FrameArray::EMPTY;
+            release_animation_set(&data.ship);
+            data.ship = crate::engine::battle::frames::FrameArray::EMPTY;
             DestroyDrawable(ReleaseDrawable(data.captain_control.background.cast()));
             DestroyMusic(data.victory_ditty.cast());
             DestroySound((ReleaseStringTable(data.ship_sounds.cast())).cast());

@@ -5,15 +5,13 @@ pub(super) unsafe fn clear_queues() {
     // SAFETY: the caller owns the idle global queues and detaches all test
     // records before releasing their stack storage; there are no active readers.
     unsafe {
-        race_q[0].head = ptr::null_mut();
-        race_q[0].tail = ptr::null_mut();
-        race_q[1].head = ptr::null_mut();
-        race_q[1].tail = ptr::null_mut();
-        disp_q.head = ptr::null_mut();
-        disp_q.tail = ptr::null_mut();
-        disp_q.pq_tab = ptr::null_mut();
-        race_q[0].pq_tab = ptr::null_mut();
-        race_q[1].pq_tab = ptr::null_mut();
+        uqm_rust::app::bridge::battle(|battle| {
+            battle.reset_element_capacity(150);
+            for side in 0..2 {
+                battle.reset_ship_capacity(side, 32);
+            }
+        });
+        uqm_rust::battle::process_native::InitDisplayList();
     }
 }
 
@@ -24,41 +22,50 @@ pub(super) fn unregistered_hook(
 }
 
 pub(super) fn elements_and_fighters(directory: &Path) {
-    let mut pool = [Element::new(); 3];
+    let mut pool = std::array::from_fn::<_, 3, _>(|_| ElementRecord::new());
     // SAFETY: the local contiguous pool stays live until the queues are detached.
     unsafe {
         attach_elements(&mut pool);
     }
     let [first, second, neutral] = &mut pool;
     // SAFETY: STARSHIP contains integers, pointers and optional callbacks.
-    let mut owner: STARSHIP = unsafe { std::mem::zeroed() };
+    let mut owner = unsafe { battle::PoolShip::new(0) };
     owner.SpeciesID = SPECIES_ID_EARTHLING_ID;
     owner.ShipFacing = 31;
     first.player_nr = 0;
     first.state_flags = ElementFlags::PLAYER_SHIP;
-    first.p_parent = ptr::from_mut(&mut owner).cast();
+    first.parent = uqm_rust::engine::battle::Parent::Ship(owner.ship_id);
     first.current.location.x = 17;
     first.crew_or_hp = 11;
-    first.succ = &mut *second;
-    second.pred = &mut *first;
-    second.succ = &mut *neutral;
+
     second.player_nr = 0;
     second.state_flags = ElementFlags::PLAYER_SHIP | ElementFlags::BACKGROUND_OBJECT;
-    second.p_parent = first.p_parent;
+    second.parent = first.parent;
     second.current.location.x = -91;
     second.current.location.y = 43;
     second.crew_or_hp = 7;
     second.preprocess_func = Some(uqm_rust::engine::battle::ElementHook::Native(
         unregistered_hook,
     ));
-    neutral.pred = &mut *second;
+
     neutral.player_nr = -1;
-    neutral.h_target = &mut *first;
+    // SAFETY: attachment publishes these allocated stack slots for this synchronous fixture.
+    unsafe {
+        uqm_rust::app::bridge::enter(|cx| {
+            let source = cx
+                .elements()
+                .id(neutral.pointer().cast())
+                .unwrap_or_else(|| panic!("fixture source"));
+            let target = cx
+                .elements()
+                .id(first.pointer().cast())
+                .unwrap_or_else(|| panic!("fixture target"));
+            cx.set_target(source, Some(target));
+        });
+    }
     // SAFETY: stack graph remains live; no renderer or pool allocator is running.
     unsafe {
         install_ship(&mut owner);
-        disp_q.head = ptr::from_mut(&mut *first).cast();
-        disp_q.tail = ptr::from_mut(&mut *neutral).cast();
         GlobData.Game_state.CurrentActivity = IN_BATTLE as u16;
     }
     uqm_rust::math::seed_random(654321);
@@ -73,12 +80,12 @@ pub(super) fn elements_and_fighters(directory: &Path) {
     assert!(fighters.enemy.is_none());
     second.preprocess_func = None;
     for element in [&mut *first, &mut *second, &mut *neutral] {
-        observation::record(Event::Allocate(ptr::from_mut(element) as usize));
+        observation::record(Event::Allocate(element.pointer() as usize));
     }
     let (before, line) = snapshot(directory);
     let mut expected = CrcState::new();
     expected.process_u32(123456);
-    for element in [&*first, &*second, &*neutral] {
+    for element in [&**first, &**second, &**neutral] {
         expected.process_element(element);
     }
     assert_eq!(
@@ -101,9 +108,9 @@ pub(super) fn elements_and_fighters(directory: &Path) {
 
 pub(super) fn element_mutations(
     directory: &Path,
-    first: &mut Element,
-    second: &mut Element,
-    neutral: &mut Element,
+    first: &mut ElementRecord,
+    second: &mut ElementRecord,
+    neutral: &mut ElementRecord,
     before: &Fields,
 ) {
     first.life_span = 19;
@@ -137,9 +144,9 @@ pub(super) fn element_mutations(
 
 pub(super) fn frame_fields(
     directory: &Path,
-    first: &mut Element,
-    second: &mut Element,
-    neutral: &mut Element,
+    first: &mut ElementRecord,
+    second: &mut ElementRecord,
+    neutral: &mut ElementRecord,
 ) {
     // SAFETY: drawable_desc contains integers, pointers and optional callbacks.
     let mut drawable: drawable_desc = unsafe { std::mem::zeroed() };
@@ -147,8 +154,14 @@ pub(super) fn frame_fields(
     let mut frame: frame_desc = unsafe { std::mem::zeroed() };
     frame.parent = &mut drawable;
     frame.Index = 7;
-    let pointer = ptr::from_mut(&mut frame).cast();
-    let mut array = [pointer; 3];
+    let pointer: *mut std::ffi::c_void = ptr::from_mut(&mut frame).cast();
+    // SAFETY: the observer fixture retains this frame and drawable through all image uses.
+    let view = unsafe { uqm_rust::engine::battle::views::Frame::from_native(pointer.cast()) };
+    let array = uqm_rust::engine::battle::frames::FrameArray::retain([view; 3], ());
+    let set = uqm_rust::engine::battle::frames::Frames::shared(
+        uqm_rust::engine::battle::frames::SharedFrames::Fixture(0),
+        array.clone(),
+    );
     observation::record(Event::Drawable(ptr::from_mut(&mut drawable) as usize));
     observation::record(Event::Frame {
         address: ptr::from_mut(&mut frame) as usize,
@@ -161,9 +174,9 @@ pub(super) fn frame_fields(
         role: "test-views".into(),
     });
     observation::assign_frame(&mut first.current.frame, pointer);
-    observation::assign_set(&mut first.current.farray, array.as_mut_ptr(), None);
+    observation::assign_set(&mut first.current.frames, set.clone(), None);
     observation::assign_frame(&mut first.next.frame, pointer);
-    observation::assign_set(&mut first.next.farray, array.as_mut_ptr(), None);
+    observation::assign_set(&mut first.next.frames, set.clone(), None);
     observation::assign_frame(&mut first.intersect_control.intersect_stamp.frame, pointer);
     let (fields, _) = snapshot(directory);
     for name in [
@@ -182,28 +195,37 @@ pub(super) fn frame_fields(
     assert_eq!(fields["elements.1.current.frame.owner"], "none");
     assert_eq!(fields["elements.2.current.farray.index"], "0");
     observation::assign_frame(&mut first.current.frame, ptr::null_mut());
-    observation::assign_set(&mut first.current.farray, ptr::null_mut(), None);
+    observation::assign_set(
+        &mut first.current.frames,
+        uqm_rust::engine::battle::frames::Frames::ABSENT,
+        None,
+    );
     observation::assign_frame(&mut first.next.frame, ptr::null_mut());
-    observation::assign_set(&mut first.next.farray, ptr::null_mut(), None);
+    observation::assign_set(
+        &mut first.next.frames,
+        uqm_rust::engine::battle::frames::Frames::ABSENT,
+        None,
+    );
     observation::assign_frame(
         &mut first.intersect_control.intersect_stamp.frame,
         ptr::null_mut(),
     );
-    // Keep node borrows explicit until the last graph read.
-    assert_eq!(second.succ, ptr::from_mut(neutral));
+    // SAFETY: both fixture owners retain their slots throughout this read.
+    let successor = unsafe { battle::succ(second.pointer()) };
+    assert_eq!(successor, neutral.pointer().cast());
 }
 
 pub(super) fn fighters_without_journal(directory: &Path) {
-    let mut element = Element::new();
+    let mut element = ElementRecord::new();
     // SAFETY: zero is valid for all native ship scalar/optional pointer fields.
-    let mut ship: STARSHIP = unsafe { std::mem::zeroed() };
-    ship.descriptor = Some(Box::new(RACE_DESC::EMPTY));
+    let mut ship = unsafe { battle::PoolShip::new(0) };
+    ship.descriptor = Some(Box::new(RaceDescriptor::EMPTY));
     ship.ShipFacing = 31;
     element.state_flags = ElementFlags::PLAYER_SHIP;
     element.player_nr = 0;
     element.crew_or_hp = 19;
     element.current.location.x = -9;
-    element.p_parent = ptr::from_mut(&mut ship).cast();
+    element.parent = uqm_rust::engine::battle::Parent::Ship(ship.ship_id);
     element.preprocess_func = Some(uqm_rust::engine::battle::ElementHook::Native(
         unregistered_hook,
     ));
@@ -212,8 +234,6 @@ pub(super) fn fighters_without_journal(directory: &Path) {
         GlobData.Game_state.CurrentActivity = IN_BATTLE as u16;
         install_ship(&mut ship);
         attach_elements(std::slice::from_mut(&mut element));
-        disp_q.head = ptr::from_mut(&mut element).cast();
-        disp_q.tail = disp_q.head;
     }
     uqm_rust::math::seed_random(56789);
     let snapshot = uqm_rust::automation::battle_fight::BattleSnapshot::live();
@@ -229,7 +249,11 @@ pub(super) fn fighters_without_journal(directory: &Path) {
     let element = &mut element;
     for side in [-1, 2, i16::MAX] {
         element.player_nr = side;
-        element.p_parent = ptr::dangling_mut();
+        element.parent = uqm_rust::engine::battle::Parent::Ship(uqm_rust::engine::battle::ShipId {
+            side: 0,
+            slot: 255,
+            gen: 0,
+        });
         let snapshot = BattleSnapshot::live();
         assert!(snapshot.player.is_none());
         assert!(snapshot.enemy.is_none());
@@ -240,47 +264,71 @@ pub(super) fn fighters_without_journal(directory: &Path) {
     }
 }
 
-pub(super) unsafe fn attach_elements(elements: &mut [Element]) {
-    let base = elements.as_mut_ptr();
-    for (index, element) in elements.iter_mut().enumerate() {
-        element.pred = if index == 0 {
-            ptr::null_mut()
-        } else {
-            // SAFETY: index is nonzero and strictly inside the borrowed slice.
-            unsafe { base.add(index - 1) }
-        };
-        // SAFETY: this is an in-bounds or one-past pointer; the final successor
-        // is reset to null before any queue traversal can read it.
-        element.succ = unsafe { base.add(index + 1) };
-    }
-    elements
-        .last_mut()
-        .unwrap_or_else(|| panic!("test element pool is empty"))
-        .succ = ptr::null_mut();
-    // SAFETY: the caller owns the idle queue and keeps the pool live at this
-    // address until clear_queues detaches it after the synchronous readers finish.
-    unsafe {
-        disp_q.pq_tab = base.cast();
-        disp_q.object_size = std::mem::size_of::<Element>() as u16;
-        disp_q.num_objects = elements.len() as u8;
-        let saved = elements.to_vec();
-        uqm_rust::battle::process_native::InitDisplayList();
-        for (index, value) in saved.into_iter().enumerate() {
-            let allocated = uqm_rust::app::bridge::enter(|cx| {
-                cx.alloc_element()
-                    .map_or(std::ptr::null_mut(), |id| cx.elements().raw(id))
-            })
-            .cast::<Element>();
-            assert_eq!(allocated, base.add(index), "fixture allocation order");
-            allocated.write(value);
+pub(super) unsafe fn attach_elements(elements: &mut [ElementRecord]) {
+    for element in elements {
+        // SAFETY: each owner retains its allocated fixture slot on the game thread.
+        unsafe {
+            uqm_rust::app::bridge::enter(|cx| cx.put(element.id));
         }
-        disp_q.head = base.cast();
-        disp_q.tail = ptr::from_mut(
-            elements
-                .last_mut()
-                .unwrap_or_else(|| panic!("test element pool is empty")),
-        )
-        .cast();
+    }
+}
+
+pub(super) struct ElementRecord {
+    id: uqm_rust::engine::battle::ElementId,
+    pointer: *mut Element,
+    primitive: u16,
+}
+impl ElementRecord {
+    pub(super) fn new() -> Self {
+        // SAFETY: the fixture owns the published context and every allocated operand.
+        unsafe {
+            uqm_rust::app::bridge::enter(|cx| {
+                let id = cx
+                    .alloc_element()
+                    .unwrap_or_else(|| panic!("fixture capacity"));
+                let pointer = cx.elements().raw(id).cast::<Element>();
+                let primitive = (*pointer).prim_index;
+                pointer.write(Element::new());
+                (*pointer).prim_index = primitive;
+                Self {
+                    id,
+                    pointer,
+                    primitive,
+                }
+            })
+        }
+    }
+    pub(super) fn pointer(&self) -> *mut Element {
+        self.pointer
+    }
+}
+impl std::ops::Deref for ElementRecord {
+    type Target = Element;
+    fn deref(&self) -> &Element {
+        // SAFETY: this fixture owner retains its slot, and the projection ends before a callback.
+        unsafe { &*self.pointer }
+    }
+}
+impl std::ops::DerefMut for ElementRecord {
+    fn deref_mut(&mut self) -> &mut Element {
+        // SAFETY: fixture edits and context callbacks do not overlap.
+        unsafe { &mut *self.pointer }
+    }
+}
+impl Drop for ElementRecord {
+    fn drop(&mut self) {
+        // SAFETY: the owning serialized fixture outlives its allocated operands.
+        unsafe {
+            uqm_rust::app::bridge::enter(|cx| {
+                if cx.elements().contains(self.id) {
+                    (*self.pointer).prim_index = self.primitive;
+                    if cx.elements().linked(self.id) {
+                        cx.unlink(self.id);
+                    }
+                    cx.dispose(self.id);
+                }
+            });
+        }
     }
 }
 
@@ -333,7 +381,7 @@ pub(super) fn non_ship_parent_fields(directory: &Path) {
         collections::queue::{AllocLink, InitQueue, PutQueue, UninitQueue},
         savegame::runtime::groups::CIpGroup,
     };
-    let mut element = Element::new();
+    let mut element = ElementRecord::new();
     // SAFETY: no game loop is running; this test owns both queues and the group pool.
     unsafe {
         let queue = &raw mut GlobData.Game_state.ip_group_q;
@@ -348,11 +396,9 @@ pub(super) fn non_ship_parent_fields(directory: &Path) {
         group.loc.x = -71;
         group.task = 2;
         PutQueue(queue, handle);
-        element.p_parent = handle;
+        element.parent = uqm_rust::engine::battle::Parent::IpGroup(0);
         attach_elements(std::slice::from_mut(&mut element));
-        disp_q.head = ptr::from_mut(&mut element).cast();
-        disp_q.tail = disp_q.head;
-        observation::record(Event::Allocate(ptr::from_mut(&mut element) as usize));
+        observation::record(Event::Allocate(element.pointer() as usize));
         let callback = uqm_rust::ships::hook_registry::hooks()
             .into_iter()
             .find(|(_, name)| *name == "battle::ship_native::collision")

@@ -126,7 +126,7 @@ pub(crate) mod engine {
             face: facing,
             index: facing,
             life: MISSILE_LIFE,
-            farray: cx.ship_frame_set(ss, 1),
+            frames: cx.ship_frame_set(ss, 1),
             preprocess: Some(nuke_preprocess),
             blast_offs: 8,
         };

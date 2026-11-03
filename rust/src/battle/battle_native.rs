@@ -481,7 +481,7 @@ pub(crate) mod engine {
             StopMusic();
             StopSound();
         }
-        crate::battle::context_access::ai_legacy::with_context(|cx| cx.finish_battle());
+        crate::app::bridge::enter(|cx| cx.finish_battle());
         UninitShips();
         FreeBattleSong();
         finish_battle_network(&mut *battle, had_net);

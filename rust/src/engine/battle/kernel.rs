@@ -25,3 +25,10 @@ pub struct StarPlane {
     pub(crate) pmin_star: *mut POINT,
     pub(crate) plast_star: *mut POINT,
 }
+
+pub(crate) type MasterCatalog = crate::collections::pool::OrderedPool<CatalogEntry, 25>;
+
+pub(crate) struct CatalogEntry {
+    pub species: u32,
+    pub descriptor: super::RaceDesc,
+}

@@ -75,34 +75,25 @@ fn special_transform_checks_appearance_energy_and_cooldown() {
             let mut fixture = Ship::bare(&_battle, SPECIES_ID_MMRNMHRM_ID, 0);
             let ship = fixture.ptr();
             fixture.ship_mut().cur_status_flags = SPECIAL as u16;
-            (*ship).next.image.farray = fixture.descriptor_mut().ship_data.ship.as_mut_ptr();
-            (*ship).next.image.frame = fixture.descriptor_mut().ship_data.ship[0];
+            (*ship).next.image.frames = fixture.frame_set(0);
+            (*ship).next.image.frame = fixture.descriptor_mut().ship_data.ship.view(0).raw();
 
             // Exactly enough energy is consumed, switching to Y form.
             fixture.preprocess();
-            assert_eq!(
-                (*ship).next.image.farray,
-                fixture.descriptor_mut().ship_data.special.as_mut_ptr()
-            );
+            assert_eq!((*ship).next.image.frames, fixture.frame_set(2));
             assert_ne!((*ship).state_flags & CHANGING as u16, 0);
             assert_eq!(fixture.ship_mut().special_counter, 0);
 
             // Cooldown and appearing state preserve the selected form and energy.
             fixture.ship_mut().special_counter = 1;
-            (*ship).next.image.farray = fixture.descriptor_mut().ship_data.special.as_mut_ptr();
+            (*ship).next.image.frames = fixture.frame_set(2);
             assert_eq!(fixture.descriptor_mut().ship_info.energy_level, 0);
             fixture.preprocess();
-            assert_eq!(
-                (*ship).next.image.farray,
-                fixture.descriptor_mut().ship_data.special.as_mut_ptr()
-            );
+            assert_eq!((*ship).next.image.frames, fixture.frame_set(2));
             fixture.ship_mut().special_counter = 0;
             (*ship).state_flags |= APPEARING as u16;
             fixture.preprocess();
-            assert_eq!(
-                (*ship).next.image.farray,
-                fixture.descriptor_mut().ship_data.special.as_mut_ptr()
-            );
+            assert_eq!((*ship).next.image.frames, fixture.frame_set(2));
             fixture.uninit();
         }
     })
@@ -116,7 +107,7 @@ fn missile_mode_returns_two_missiles_with_c_boundary_values() {
             let mut fixture = Ship::bare(&_battle, SPECIES_ID_MMRNMHRM_ID, 0);
             let ship = fixture.ptr();
             (*ship).next.location = POINT { x: 1200, y: -900 };
-            (*ship).next.image.farray = fixture.descriptor_mut().ship_data.special.as_mut_ptr();
+            (*ship).next.image.frames = fixture.frame_set(2);
             let slots = fixture.weapon(2);
             let handles = slots
                 .into_iter()
@@ -127,13 +118,13 @@ fn missile_mode_returns_two_missiles_with_c_boundary_values() {
             // Launch positions and the missile's C-defined life/damage fields are
             // asserted after the linked queue has allocated the handles.
             for handle in handles {
-                let missile = handle.cast::<ELEMENT>();
-                assert_eq!((*missile).__bindgen_anon_1.life_span, 40);
-                assert_eq!((*missile).__bindgen_anon_2.hit_points, 1);
-                assert_eq!((*missile).__bindgen_anon_3.mass_points, 1);
-                assert_eq!((*missile).__bindgen_anon_5.blast_offset, 0);
+                let missile = handle.cast::<ElementRecord>();
+                assert_eq!((*missile).life, 40);
+                assert_eq!((*missile).hits, 1);
+                assert_eq!((*missile).mass, 1);
+                assert_eq!((*missile).thrust, 0);
                 assert_ne!((*missile).state_flags & IGNORE_SIMILAR as u16, 0);
-                assert_eq!((*missile).__bindgen_anon_4.turn_wait, 5);
+                assert_eq!((*missile).turn, 5);
                 battle_context::dispose(handle);
             }
             fixture.uninit();
@@ -155,17 +146,12 @@ fn transforming_swaps_characteristics_and_each_ship_owns_its_alternate_form() {
             second_fixture.descriptor_mut().ship_data.ship_sounds =
                 CaptureStringTable(sounds).cast();
             assert_ne!(
-                first_fixture.descriptor_mut() as *mut RACE_DESC,
-                second_fixture.descriptor_mut() as *mut RACE_DESC
+                first_fixture.descriptor_mut() as *mut RaceDescriptor,
+                second_fixture.descriptor_mut() as *mut RaceDescriptor
             );
             let ship = first_fixture.ptr();
-            (*ship).current.image.farray =
-                first_fixture.descriptor_mut().ship_data.ship.as_mut_ptr();
-            (*ship).next.image.farray = first_fixture
-                .descriptor_mut()
-                .ship_data
-                .special
-                .as_mut_ptr();
+            (*ship).current.image.frames = first_fixture.frame_set(0);
+            (*ship).next.image.frames = first_fixture.frame_set(2);
             first_fixture.ship_mut().cur_status_flags =
                 (SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16;
             first_fixture.ship_mut().weapon_counter = 7;
@@ -226,12 +212,8 @@ fn transforming_swaps_characteristics_and_each_ship_owns_its_alternate_form() {
             );
 
             first_fixture.descriptor_mut().characteristics.turn_wait = 17;
-            (*ship).current.image.farray = first_fixture
-                .descriptor_mut()
-                .ship_data
-                .special
-                .as_mut_ptr();
-            (*ship).next.image.farray = first_fixture.descriptor_mut().ship_data.ship.as_mut_ptr();
+            (*ship).current.image.frames = first_fixture.frame_set(2);
+            (*ship).next.image.frames = first_fixture.frame_set(0);
             first_fixture.ship_mut().cur_status_flags = SHIP_AT_MAX_SPEED as u16;
             first_fixture.postprocess();
             assert_eq!(
@@ -285,15 +267,15 @@ fn xwing_launches_two_lasers_and_preserves_friendly_ships() {
         unsafe {
             let mut fixture = Ship::bare(&_battle, SPECIES_ID_MMRNMHRM_ID, 0);
             let ship = fixture.ptr();
-            (*ship).next.image.farray = fixture.descriptor_mut().ship_data.ship.as_mut_ptr();
+            (*ship).next.image.frames = fixture.frame_set(0);
             (*ship).next.location = POINT { x: 1000, y: 1000 };
             let slots = fixture.weapon(2);
             let handles = slots
                 .into_iter()
                 .map(|slot| fixture.weapon_record(slot).cast::<std::ffi::c_void>())
                 .collect::<Vec<_>>();
-            let first = handles[0].cast::<ELEMENT>();
-            let second = handles[1].cast::<ELEMENT>();
+            let first = handles[0].cast::<ElementRecord>();
+            let second = handles[1].cast::<ElementRecord>();
             assert!(!first.is_null() && !second.is_null());
             assert_eq!(
                 (*first).current.location.x + (*second).current.location.x,
@@ -304,7 +286,7 @@ fn xwing_launches_two_lasers_and_preserves_friendly_ships() {
             let target = target_fixture.ptr();
             (*target).state_flags = PLAYER_SHIP as u16;
             (*target).playerNr = (*first).playerNr;
-            (*target).__bindgen_anon_2.crew_level = 20;
+            (*target).hits = 20;
             let mut point = POINT { x: 0, y: 0 };
             hooks::invoke_collision_pointer(
                 (*first).collision_func.unwrap(),
@@ -314,8 +296,8 @@ fn xwing_launches_two_lasers_and_preserves_friendly_ships() {
                 &mut point,
                 hooks::CollisionCall::Hook,
             );
-            assert_eq!((*target).__bindgen_anon_2.crew_level, 20);
-            assert_eq!((*first).__bindgen_anon_2.hit_points, 1);
+            assert_eq!((*target).hits, 20);
+            assert_eq!((*first).hits, 1);
             for handle in handles {
                 battle_context::dispose(handle);
             }
@@ -324,7 +306,7 @@ fn xwing_launches_two_lasers_and_preserves_friendly_ships() {
     })
 }
 
-fn alternate(desc: &RACE_DESC) -> CHARACTERISTIC_STUFF {
+fn alternate(desc: &RaceDescriptor) -> CHARACTERISTIC_STUFF {
     let RaceState::Mmrnmhrm { alternate } = desc.race_state else {
         panic!("Mmrnmhrm alternate characteristics missing");
     };

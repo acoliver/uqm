@@ -3433,12 +3433,6 @@ pub type ELEMENT_FLAGS = UWORD;
 pub use crate::engine::battle::record::state;
 pub use crate::engine::battle::record::state__bindgen_ty_1;
 pub type STATE = state;
-pub use crate::engine::battle::record::element;
-pub use crate::engine::battle::record::element__bindgen_ty_1;
-pub use crate::engine::battle::record::element__bindgen_ty_2;
-pub use crate::engine::battle::record::element__bindgen_ty_3;
-pub use crate::engine::battle::record::element__bindgen_ty_4;
-pub use crate::engine::battle::record::element__bindgen_ty_5;
 
 #[cfg(not(test))]
 
@@ -3497,7 +3491,6 @@ pub use crate::ships::native::abi::DATA_STUFF;
 pub use crate::ships::native::abi::FLEET_STUFF;
 pub use crate::ships::native::abi::INTEL_STUFF;
 pub use crate::ships::native::abi::SHIP_INFO;
-pub use crate::engine::battle::record::race_desc;
 pub use crate::ships::native::abi::SHIP_BASE;
 pub type HSHIPFRAG = HLINK;
 pub use crate::ships::native::abi::SHIP_FRAGMENT;

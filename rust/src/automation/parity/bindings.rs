@@ -211,7 +211,7 @@ impl Journal {
         let current = std::mem::offset_of!(Element, current);
         let next = std::mem::offset_of!(Element, next);
         let frame = std::mem::offset_of!(ElementVisualState, frame);
-        let set = std::mem::offset_of!(ElementVisualState, farray);
+        let set = std::mem::offset_of!(ElementVisualState, frames);
         address
             + match name {
                 "current.frame" => current + frame,

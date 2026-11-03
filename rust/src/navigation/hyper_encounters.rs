@@ -39,8 +39,10 @@ pub(super) unsafe fn allocate(cx: &mut Cx<'_>, point: POINT) -> Option<ElementId
         .wrapping_add(1 + (get("ARILOU_SPACE_SIDE") >> 1) as usize);
     cx.set_single_frames(
         element,
-        Frames::from_native(
+        Frames::native_shared(
+            crate::engine::battle::views::SharedFrames::Hyperspace(get("ARILOU_SPACE_SIDE") >> 1),
             NonNull::new(frames).unwrap_or_else(|| panic!("retained navigation authority")),
+            1,
         ),
         Frame::from_native(*frames),
     );
@@ -74,9 +76,11 @@ pub(super) unsafe fn ambient(cx: &mut Cx<'_>) {
     let stars = stars_in_space;
     cx.set_single_frames(
         element,
-        Frames::from_native(
+        Frames::native_shared(
+            crate::engine::battle::views::SharedFrames::Stars,
             NonNull::new(&raw mut stars_in_space)
                 .unwrap_or_else(|| panic!("retained navigation authority")),
+            1,
         ),
         Frame::from_native(stars),
     );

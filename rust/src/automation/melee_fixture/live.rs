@@ -84,7 +84,7 @@ impl World {
     #[cfg(not(test))]
     fn commit(&self, cx: &mut Cx<'_>) {
         for (&id, element) in &self.elements {
-            *cx.element_mut(id) = element.state;
+            *cx.element_mut(id) = element.state.clone();
         }
         for (&id, ship) in &self.ships {
             cx.apply_fixture_ship(id, ship);
@@ -196,6 +196,7 @@ impl Battle {
     }
     fn array(&self) -> Frames {
         self.array
+            .clone()
             .unwrap_or_else(|| panic!("fixture frame array selected"))
     }
 
@@ -304,7 +305,7 @@ impl Battle {
 enum Admission<'a> {
     Configure(&'a MeleeSetupRequest),
     Complete(Option<FixtureRun>),
-    Task(Task<'a>),
+    Task(Box<Task<'a>>),
 }
 
 fn admit<'a>(
@@ -326,7 +327,7 @@ fn admit<'a>(
         Operation::Fixture(FixtureName::StarContact) => {
             star::start(activity).map(|proof| Admission::Complete(Some(proof)))
         }
-        other => Task::new(other, registry).map(Admission::Task),
+        other => Task::new(other, registry).map(|task| Admission::Task(Box::new(task))),
     }
 }
 

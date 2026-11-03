@@ -1,4 +1,4 @@
-use uqm_rust::engine::battle::schema::HELEMENT;
+use uqm_rust::engine::battle::schema::HLINK;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
@@ -44,7 +44,7 @@ fn descriptor_and_six_lance_order_and_coordinates() {
                                 ship.weapon_record(Some(id)).cast()
                             })
                         })
-                        .collect::<Vec<HELEMENT>>()
+                        .collect::<Vec<HLINK>>()
                 });
                 let angle = facing_to_angle(i32::from(facing)) + QUADRANT as i32;
                 let vx = cosine(
@@ -69,14 +69,7 @@ fn descriptor_and_six_lance_order_and_coordinates() {
                                 (4000 + dy - i32::from(vy)) as i16
                             )
                         );
-                        assert_eq!(
-                            (
-                                (*e).__bindgen_anon_1.life_span,
-                                (*e).__bindgen_anon_2.hit_points,
-                                (*e).__bindgen_anon_3.mass_points
-                            ),
-                            (10, 1, 1)
-                        );
+                        assert_eq!(((*e).life, (*e).hits, (*e).mass), (10, 1, 1));
                         assert_eq!(frame_index((*e).current.image.frame), facing);
                         assert_eq!(velocity(&(*e).velocity), toward(30 << ONE_SHIFT, facing));
                         battle_context::dispose(handles[i * 2 + side]);
@@ -98,7 +91,7 @@ fn shield_absorbs_damage_before_collision_and_recharges_on_next_preprocess() {
             with_rng(1, 0, || ship.preprocess());
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 9);
             assert_eq!(ship.ship_mut().special_counter, 12);
-            assert_eq!((*e).__bindgen_anon_1.life_span, 2);
+            assert_eq!((*e).life, 2);
             assert_eq!((*e).colorCycleIndex, 1);
             assert_eq!((*prim(e)).Type, gfx_object_STAMPFILL_PRIM as GRAPHICS_PRIM);
             ship.ship_mut().weapon_counter = 1;
@@ -107,7 +100,7 @@ fn shield_absorbs_damage_before_collision_and_recharges_on_next_preprocess() {
             let mut pa = POINT { x: 0, y: 0 };
             let mut pb = POINT { x: 0, y: 0 };
             (*projectile).state_flags = FINITE_LIFE as u16;
-            (*projectile).__bindgen_anon_3.mass_points = 6;
+            (*projectile).mass = 6;
             with_rng(1, 0, || {
                 hooks::invoke_collision_pointer(
                     (*e).collision_func.unwrap(),
@@ -118,12 +111,12 @@ fn shield_absorbs_damage_before_collision_and_recharges_on_next_preprocess() {
                     hooks::CollisionCall::Hook,
                 )
             });
-            assert_eq!((*e).__bindgen_anon_1.life_span, 8);
+            assert_eq!((*e).life, 8);
             assert_eq!(ship.descriptor_mut().ship_info.crew_level, 20);
             ship.ship_mut().special_counter = 11;
             ship.preprocess();
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 15);
-            assert_eq!((*e).__bindgen_anon_1.life_span, 2);
+            assert_eq!((*e).life, 2);
             for index in [3, 4, 5, 6, 7, 1] {
                 ship.preprocess();
                 assert_eq!((*e).colorCycleIndex, index);
@@ -131,7 +124,7 @@ fn shield_absorbs_damage_before_collision_and_recharges_on_next_preprocess() {
             ship.ship_mut().cur_status_flags = 0;
             ship.preprocess();
             assert_eq!(ship.ship_mut().special_counter, 0);
-            assert_eq!((*e).__bindgen_anon_1.life_span, 1);
+            assert_eq!((*e).life, 1);
             assert_eq!((*e).colorCycleIndex, 0);
             assert_eq!((*prim(e)).Type, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
         }
@@ -170,7 +163,7 @@ fn ai_halves_finite_threat_turns_and_consumes_rng_only_at_shield_boundary() {
             let mut projectile_fixture = Object::new(&_battle);
             let projectile = projectile_fixture.ptr();
             (*projectile).state_flags = FINITE_LIFE as u16;
-            (*projectile).__bindgen_anon_3.mass_points = 1;
+            (*projectile).mass = 1;
             for turn in [0, 1, 2, 4, 5, 6] {
                 for seed in 1..9 {
                     let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
@@ -225,7 +218,7 @@ fn lance_allocation_failure_still_returns_six_slots() {
                         ship.weapon_record(Some(id)).cast()
                     })
                 })
-                .collect::<Vec<HELEMENT>>();
+                .collect::<Vec<HLINK>>();
             assert!(!out[0].is_null() && !out[1].is_null());
             assert!(out[2..].iter().all(|h| h.is_null()));
             battle_context::dispose(out[0]);

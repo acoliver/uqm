@@ -14,6 +14,7 @@ impl Cx<'_> {
                 self.retain_terminal_outcome(self.owner(id));
             }
         }
+        self.finish_battle_storage();
     }
 }
 
@@ -363,11 +364,6 @@ mod tactrans_native_access {
             // SAFETY: no record borrow crosses the sound queue boundary.
             self.queue_sound(usize::MAX, None);
         }
-        pub fn winner(&mut self) -> Option<ShipId> {
-            // SAFETY: winner state belongs to the owning game thread.
-            let winner = unsafe { (*self.kernel()).winner };
-            (!winner.is_null()).then(|| self.ship_id(winner as usize))
-        }
         pub(crate) fn play_ditty(&mut self, ship: ShipId) {
             // SAFETY: the checked winner retains its loaded victory music.
             unsafe {
@@ -428,10 +424,6 @@ mod status_native_access {
     use crate::battle::status_native::explosion_flash;
     #[cfg(not(test))]
     impl Cx<'_> {
-        pub(crate) fn status_offset(&mut self, ship: ShipId) -> i16 {
-            // SAFETY: status offsets and this ship's side belong to the game thread.
-            unsafe { (*self.kernel()).status_offsets[self.ship_state(ship).player as usize] }
-        }
         pub(crate) fn draw_explosion_flash(&mut self, life: u16, y: i16) {
             explosion_flash(life, y, |color, mut r, fill| {
                 // SAFETY: the battle owns its active status drawing context.
@@ -541,40 +533,6 @@ mod star_access {
     }
 }
 
-mod allocation {
-    #[cfg(not(test))]
-    use super::*;
-    #[cfg(not(test))]
-    #[cfg(not(test))]
-    #[cfg(not(test))]
-    use std::ptr;
-    #[cfg(not(test))]
-    impl Cx<'_> {
-        pub fn alloc_element(&mut self) -> Option<ElementId> {
-            // SAFETY: the battle exclusively owns its initialized primitive pool.
-            unsafe {
-                let handle = if let Some(id) = self.records().alloc() {
-                    let index = self.free_primitive_index();
-                    if index == u16::MAX {
-                        crate::log_abi::log_message(2, "AllocElement: Out of display prims!");
-                        libc::exit(libc::EXIT_FAILURE);
-                    }
-                    self.assign_primitive(id);
-                    self.primitive_style_mut(id).kind = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
-                    self.elements().raw(id)
-                } else {
-                    ptr::null_mut()
-                };
-                crate::collections::observation::record(
-                    crate::collections::observation::Event::Allocate(handle as usize),
-                );
-
-                self.elements().id(handle)
-            }
-        }
-    }
-}
-
 #[cfg(not(test))]
 impl Cx<'_> {
     pub fn unlink(&mut self, id: ElementId) {
@@ -585,25 +543,6 @@ impl Cx<'_> {
             unsafe { crate::battle::sounds::engine::remove_sounds(Some(id)) };
         }
         self.unlink_storage(id);
-    }
-}
-
-#[cfg(not(test))]
-impl Cx<'_> {
-    pub fn dispose(&mut self, id: ElementId) {
-        assert!(
-            !self.elements().linked(id),
-            "dispose requires an unlinked element"
-        );
-        let handle = self.elements().raw(id);
-        let index = self.elements()[id].PrimIndex;
-        use crate::collections::observation::{record, Event};
-        // SAFETY: this allocation exclusively owns the primitive and the unlinked element.
-        unsafe {
-            self.release_primitive(index);
-            record(Event::Free(handle as usize));
-            self.records().free(id);
-        }
     }
 }
 
@@ -698,8 +637,10 @@ impl Cx<'_> {
         unsafe {
             let frame =
                 crate::engine::battle::views::Frame::from_native(DecFrameIndex(stars_in_space));
-            let frames = crate::engine::battle::views::Frames::from_native(
+            let frames = crate::engine::battle::views::Frames::native_shared(
+                crate::engine::battle::views::SharedFrames::Stars,
                 std::ptr::NonNull::new_unchecked(&raw mut stars_in_space),
+                1,
             );
             self.set_frame(id, false, frame);
             self.set_frames(id, false, frames);
@@ -708,10 +649,12 @@ impl Cx<'_> {
     pub(crate) fn set_blast_frames(&mut self, id: ElementId) {
         // SAFETY: the shared blast frames remain loaded throughout the battle.
         unsafe {
-            let frames = crate::engine::battle::views::Frames::from_native(
+            let frames = crate::engine::battle::views::Frames::native_shared(
+                crate::engine::battle::views::SharedFrames::Blast,
                 std::ptr::NonNull::new_unchecked(
                     (&raw mut crate::game_init::space_resources::blast).cast(),
                 ),
+                3,
             );
             self.set_frames(id, false, frames);
         }
@@ -719,9 +662,13 @@ impl Cx<'_> {
     pub(crate) fn planet_frames(&self) -> crate::engine::battle::views::Frames {
         // SAFETY: the current solar-system resources retain this frame set throughout the battle.
         unsafe {
-            crate::engine::battle::views::Frames::from_native(std::ptr::NonNull::new_unchecked(
-                (&raw mut crate::game_init::world_resources::live::planet).cast(),
-            ))
+            crate::engine::battle::views::Frames::native_shared(
+                crate::engine::battle::views::SharedFrames::Planet,
+                std::ptr::NonNull::new_unchecked(
+                    (&raw mut crate::game_init::world_resources::live::planet).cast(),
+                ),
+                3,
+            )
         }
     }
 }

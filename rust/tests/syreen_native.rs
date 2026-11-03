@@ -1,6 +1,6 @@
 //! Exercise Syreen descriptor registration and callbacks against the linked engine.
 
-use uqm_rust::engine::battle::schema::HELEMENT;
+use uqm_rust::engine::battle::schema::HLINK;
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]
@@ -118,10 +118,10 @@ fn dagger_is_launched_with_the_c_missile_block() {
 
             let dagger = battle::element(daggers[0]);
             assert!(!dagger.is_null());
-            assert_eq!((*dagger).__bindgen_anon_1.life_span, 10);
-            assert_eq!((*dagger).__bindgen_anon_2.hit_points, 1);
-            assert_eq!((*dagger).__bindgen_anon_3.mass_points, 2);
-            assert_eq!((*dagger).__bindgen_anon_5.blast_offset, 3);
+            assert_eq!((*dagger).life, 10);
+            assert_eq!((*dagger).hits, 1);
+            assert_eq!((*dagger).mass, 2);
+            assert_eq!((*dagger).thrust, 3);
             assert_ne!((*dagger).state_flags & IGNORE_SIMILAR as u16, 0);
             assert!((*dagger).preprocess_func.is_none());
             // DISPLAY_TO_WORLD (30) world units per tick along the ship facing.
@@ -143,13 +143,13 @@ fn song_needs_the_special_key_a_ready_cooldown_and_energy() {
 
             ship.ship_mut().cur_status_flags = 0;
             ship.postprocess();
-            assert!(disp_q.tail.is_null());
+            assert!(battle::tail().is_null());
             assert_eq!(ship.ship_mut().special_counter, 0);
 
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
             ship.ship_mut().special_counter = 3;
             ship.postprocess();
-            assert!(disp_q.tail.is_null());
+            assert!(battle::tail().is_null());
             assert_eq!(ship.ship_mut().special_counter, 3);
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 16);
 
@@ -157,7 +157,7 @@ fn song_needs_the_special_key_a_ready_cooldown_and_energy() {
             ship.ship_mut().special_counter = 0;
             ship.descriptor_mut().ship_info.energy_level = 4;
             ship.postprocess();
-            assert!(disp_q.tail.is_null());
+            assert!(battle::tail().is_null());
             assert_eq!(ship.ship_mut().special_counter, 0);
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 4);
         }
@@ -176,26 +176,26 @@ fn song_pays_energy_and_queues_the_deferred_scan() {
 
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 16 - 5);
             assert_eq!(ship.ship_mut().special_counter, 20);
-            let scan = battle::element(disp_q.tail);
+            let scan = battle::element(battle::tail());
             assert!(!scan.is_null());
             assert_eq!(
                 (*scan).state_flags,
                 (APPEARING | NONSOLID | FINITE_LIFE) as u16
             );
-            assert_eq!((*scan).__bindgen_anon_1.life_span, 0);
+            assert_eq!((*scan).life, 0);
             assert_eq!((*scan).playerNr, 0);
             assert_eq!(
                 ((*scan).next.location.x, (*scan).next.location.y),
                 (1234, 4321)
             );
-            assert_eq!((*scan).pParent, ship.element_mut().pParent);
-            assert!((*scan).hTarget.is_null());
+            assert_eq!((*scan).parent, ship.element_mut().parent);
+            assert!((*scan).target.is_none());
             assert!((*scan).death_func.is_some());
 
             // The song cannot be restarted during the cooldown.
             ship.postprocess();
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 16 - 5);
-            assert_eq!(battle::element(disp_q.tail), scan);
+            assert_eq!(battle::element(battle::tail()), scan);
         }
     })
 }
@@ -208,10 +208,12 @@ unsafe fn enter_battle(ship: &mut Ship<'_>, location: POINT, crew: u16) {
 }
 
 /// The scan the song queues, ready to be run as the element's death function.
-unsafe fn queued_scan(ship: &mut Ship) -> (*mut ELEMENT, uqm_rust::engine::battle::ElementHook) {
+unsafe fn queued_scan(
+    ship: &mut Ship,
+) -> (*mut ElementRecord, uqm_rust::engine::battle::ElementHook) {
     ship.ship_mut().cur_status_flags = SPECIAL as u16;
     ship.postprocess();
-    let scan = battle::element(disp_q.tail);
+    let scan = battle::element(battle::tail());
     (scan, (*scan).death_func.unwrap())
 }
 
@@ -243,13 +245,17 @@ fn deferred_scan_requeues_nothing_and_leaves_out_of_range_crews_alone() {
             shot.element_mut().state_flags = 0;
             enter_battle(&mut shot, POINT { x: 5100, y: 5000 }, 10);
 
-            let before = (disp_q.head, disp_q.tail);
+            let before = (battle::head(), battle::tail());
             hooks::invoke_element_pointer(run_scan, scan);
-            assert_eq!((disp_q.head, disp_q.tail), before, "nothing was queued");
+            assert_eq!(
+                (battle::head(), battle::tail()),
+                before,
+                "nothing was queued"
+            );
             for handle in walk_queue() {
                 let queued = battle::element(handle);
                 if (*queued).state_flags & PLAYER_SHIP as u16 != 0 {
-                    let crew = (*queued).__bindgen_anon_2.crew_level;
+                    let crew = (*queued).hits;
                     assert!(matches!(crew, 1 | 10), "crew {crew}");
                 }
             }
@@ -257,12 +263,12 @@ fn deferred_scan_requeues_nothing_and_leaves_out_of_range_crews_alone() {
     })
 }
 
-unsafe fn walk_queue() -> Vec<HELEMENT> {
+unsafe fn walk_queue() -> Vec<HLINK> {
     let mut handles = Vec::new();
-    let mut handle = disp_q.head;
+    let mut handle = battle::head();
     while !handle.is_null() {
         handles.push(handle);
-        handle = (*battle::element(handle)).succ;
+        handle = battle::succ(handle);
     }
     handles
 }
@@ -302,10 +308,7 @@ fn deferred_scan_survives_a_ship_in_range_when_no_crew_elements_are_available() 
             let before = walk_queue();
             hooks::invoke_element_pointer(run_scan, scan);
             assert_eq!(walk_queue(), before);
-            assert_eq!(
-                (*battle::element(before[1])).__bindgen_anon_2.crew_level,
-                10
-            );
+            assert_eq!((*battle::element(before[1])).hits, 10);
             for handle in ghosts {
                 battle_context::dispose(handle);
             }
@@ -326,7 +329,7 @@ impl<'a> Duel<'a> {
             enemy: Ship::bare(_battle, SPECIES_ID_SYREEN_ID, 1),
             concerns: unsafe { mem::zeroed() },
         };
-        duel.enemy.element_mut().__bindgen_anon_2.crew_level = 5;
+        duel.enemy.element_mut().hits = 5;
         let slot = &mut duel.concerns[ENEMY_SHIP_INDEX as usize];
         slot.ObjectPtr = duel.enemy.el();
         slot.which_turn = which_turn;
@@ -372,7 +375,7 @@ fn ai_sings_only_when_it_can_drain_a_reachable_crew() {
 
             drop(duel);
             let mut duel = Duel::new(&_battle, 14);
-            duel.enemy.element_mut().__bindgen_anon_2.crew_level = 1;
+            duel.enemy.element_mut().hits = 1;
             duel.ship.ship_mut().ship_input_state = special;
             duel.run();
             assert_eq!(duel.input(), 0, "nothing to take from a last crew member");

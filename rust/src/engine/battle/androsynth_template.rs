@@ -38,7 +38,7 @@ const MAX_UNIVERSE: i32 = 9999;
 #[cfg(not(test))]
 pub fn descriptor(race: &'static super::Race) -> crate::engine::battle::RaceDesc {
     // All zero fields are null handles, absent callbacks, or zero counters.
-    let mut desc = RACE_DESC::EMPTY;
+    let mut desc = RaceDescriptor::EMPTY;
     desc.ship_info.ship_flags = (128 | 4) as u16;
     desc.ship_info.ship_cost = 15;
     desc.ship_info.crew_level = MAX_CREW;

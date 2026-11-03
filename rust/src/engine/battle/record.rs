@@ -1,6 +1,5 @@
 //! Shared battle record layouts during the storage transition.
 pub use crate::battle::velocity::VelocityDesc as VELOCITY_DESC;
-use crate::collections::queue::{HLink as HELEMENT, HLink as HLINK};
 use crate::graphics::native_abi::{
     BYTE, COUNT, FRAME, POINT, RESOURCE, SIZE, STRING, STRING as SOUND, UWORD,
     UWORD as ELEMENT_FLAGS, UWORD as STATUS_FLAGS,
@@ -13,11 +12,9 @@ pub use crate::graphics::native_abi::{INTERSECT_CONTROL, PRIMITIVE};
 pub type QUEUE = Queue;
 
 pub use abi::{
-    captain_stuff, element, element__bindgen_ty_1, element__bindgen_ty_2, element__bindgen_ty_3,
-    element__bindgen_ty_4, element__bindgen_ty_5, race_desc, state, state__bindgen_ty_1,
-    tfb_soundsample, TFB_SoundSample, CAPTAIN_STUFF, CHARACTERISTIC_STUFF, DATA_STUFF, ELEMENT,
-    EVALUATE_DESC, FLEET_STUFF, INTEL_STUFF, MAX_DISPLAY_PRIMS, MOVEMENT_STATE, MUSIC_REF,
-    PRIM_DESC, RACE_DESC, SHIP_INFO, STARSHIP, STATE,
+    captain_stuff, state, state__bindgen_ty_1, tfb_soundsample, ElementRecord, ShipRecord,
+    TFB_SoundSample, CAPTAIN_STUFF, CHARACTERISTIC_STUFF, DATA_STUFF, EVALUATE_DESC, FLEET_STUFF,
+    INTEL_STUFF, MAX_DISPLAY_PRIMS, MOVEMENT_STATE, MUSIC_REF, PRIM_DESC, SHIP_INFO, STATE,
 };
 
 #[allow(non_camel_case_types, non_snake_case)]
@@ -26,104 +23,63 @@ mod abi {
     pub use crate::graphics::native_abi::PRIM_DESC;
 
     #[repr(C)]
-    #[derive(Debug, Copy, Clone)]
+    #[derive(Debug, Clone)]
     pub struct state {
         pub location: POINT,
         pub image: state__bindgen_ty_1,
     }
     #[repr(C)]
-    #[derive(Debug, Copy, Clone)]
+    #[derive(Debug, Clone)]
     pub struct state__bindgen_ty_1 {
         pub frame: FRAME,
-        pub farray: *mut FRAME,
+        pub frames: super::super::frames::Frames,
     }
     pub type STATE = state;
-    pub type ELEMENT = element;
     const _: () = {
         use crate::battle::element::{Element, ElementVisualState as Visual};
         use std::mem::offset_of as offset;
-        assert!(size_of::<ELEMENT>() == size_of::<Element>());
-        assert!(align_of::<ELEMENT>() == align_of::<Element>());
-        assert!(offset!(ELEMENT, succ) == offset!(Element, succ));
-        assert!(offset!(ELEMENT, state_flags) == offset!(Element, state_flags));
-        assert!(offset!(ELEMENT, current) == offset!(Element, current));
+        assert!(size_of::<ElementRecord>() == size_of::<Element>());
+        assert!(align_of::<ElementRecord>() == align_of::<Element>());
+        assert!(offset!(ElementRecord, state_flags) == offset!(Element, state_flags));
+        assert!(offset!(ElementRecord, current) == offset!(Element, current));
         assert!(offset!(STATE, location) == offset!(Visual, location));
         assert!(
             offset!(STATE, image) + offset!(state__bindgen_ty_1, frame) == offset!(Visual, frame)
         );
         assert!(
-            offset!(STATE, image) + offset!(state__bindgen_ty_1, farray) == offset!(Visual, farray)
+            offset!(STATE, image) + offset!(state__bindgen_ty_1, frames) == offset!(Visual, frames)
         );
     };
     #[repr(C)]
-    #[derive(Copy, Clone)]
-    pub struct element {
-        pub pred: HELEMENT,
-        pub succ: HELEMENT,
+    #[derive(Debug, Clone)]
+    pub struct ElementRecord {
         pub preprocess_func: Option<super::super::hooks::ElementHook>,
         pub postprocess_func: Option<super::super::hooks::ElementHook>,
         pub collision_func: Option<crate::engine::battle::CollisionHook>,
         pub death_func: Option<crate::engine::battle::ElementHook>,
         pub playerNr: SIZE,
         pub state_flags: ELEMENT_FLAGS,
-        pub __bindgen_anon_1: element__bindgen_ty_1,
-        pub __bindgen_anon_2: element__bindgen_ty_2,
-        pub __bindgen_anon_3: element__bindgen_ty_3,
-        pub __bindgen_anon_4: element__bindgen_ty_4,
-        pub __bindgen_anon_5: element__bindgen_ty_5,
+        pub life: COUNT,
+        pub hits: COUNT,
+        pub mass: BYTE,
+        pub turn: BYTE,
+        pub thrust: BYTE,
         pub colorCycleIndex: BYTE,
         pub velocity: VELOCITY_DESC,
         pub IntersectControl: INTERSECT_CONTROL,
         pub PrimIndex: COUNT,
         pub current: STATE,
         pub next: STATE,
-        pub pParent: *mut ::std::os::raw::c_void,
-        pub hTarget: HELEMENT,
-    }
-    #[repr(C)]
-    #[derive(Copy, Clone)]
-    pub union element__bindgen_ty_1 {
-        pub life_span: COUNT,
-        pub scan_node: COUNT,
-    }
-    #[repr(C)]
-    #[derive(Copy, Clone)]
-    pub union element__bindgen_ty_2 {
-        pub crew_level: COUNT,
-        pub hit_points: COUNT,
-        pub facing: COUNT,
-        pub cycle: COUNT,
-    }
-    #[repr(C)]
-    #[derive(Copy, Clone)]
-    pub union element__bindgen_ty_3 {
-        pub mass_points: BYTE,
-    }
-    #[repr(C)]
-    #[derive(Copy, Clone)]
-    pub union element__bindgen_ty_4 {
-        pub turn_wait: BYTE,
-        pub sys_loc: BYTE,
-    }
-    #[repr(C)]
-    #[derive(Copy, Clone)]
-    pub union element__bindgen_ty_5 {
-        pub thrust_wait: BYTE,
-        pub blast_offset: BYTE,
-        pub next_turn: BYTE,
+        pub parent: super::super::Parent,
+        pub target: Option<super::super::ElementId>,
     }
 
-    pub type RACE_DESC = race_desc;
-    pub use super::RaceDescriptor as race_desc;
-
     #[repr(C)]
-    #[derive(Debug, Clone)]
-    pub struct STARSHIP {
-        pub pred: HLINK,
-        pub succ: HLINK,
+    #[derive(Debug)]
+    pub struct ShipRecord {
         pub SpeciesID: SPECIES_ID,
         pub captains_name_index: BYTE,
-        pub descriptor: Option<Box<RACE_DESC>>,
+        pub descriptor: Option<Box<RaceDescriptor>>,
         pub crew_level: COUNT,
         pub max_crew: COUNT,
         pub ship_cost: BYTE,
@@ -136,14 +92,14 @@ mod abi {
         pub ship_input_state: BYTE,
         pub cur_status_flags: STATUS_FLAGS,
         pub old_status_flags: STATUS_FLAGS,
-        pub hShip: HELEMENT,
+        pub hShip: Option<super::super::ElementId>,
         pub ShipFacing: COUNT,
         pub playerNr: SIZE,
         pub control: BYTE,
     }
 
-    impl STARSHIP {
-        pub fn descriptor_ptr(&mut self) -> *mut RACE_DESC {
+    impl ShipRecord {
+        pub fn descriptor_ptr(&mut self) -> *mut RaceDescriptor {
             self.descriptor
                 .as_deref_mut()
                 .map_or(std::ptr::null_mut(), std::ptr::from_mut)
@@ -177,7 +133,7 @@ mod abi {
     #[repr(C)]
     #[derive(Debug, Copy, Clone)]
     pub struct EVALUATE_DESC {
-        pub ObjectPtr: *mut ELEMENT,
+        pub ObjectPtr: *mut ElementRecord,
         pub facing: COUNT,
         pub which_turn: COUNT,
         pub MoveState: MOVEMENT_STATE,
@@ -231,7 +187,7 @@ mod abi {
     }
 
     #[repr(C)]
-    #[derive(Debug, Copy, Clone)]
+    #[derive(Debug)]
     pub struct DATA_STUFF {
         pub ship_rsc: [RESOURCE; 3usize],
         pub weapon_rsc: [RESOURCE; 3usize],
@@ -239,9 +195,9 @@ mod abi {
         pub captain_control: CAPTAIN_STUFF,
         pub victory_ditty_rsc: RESOURCE,
         pub ship_sounds_rsc: RESOURCE,
-        pub ship: [FRAME; 3usize],
-        pub weapon: [FRAME; 3usize],
-        pub special: [FRAME; 3usize],
+        pub ship: super::super::frames::FrameArray,
+        pub weapon: super::super::frames::FrameArray,
+        pub special: super::super::frames::FrameArray,
         pub victory_ditty: MUSIC_REF,
         pub ship_sounds: SOUND,
     }
@@ -249,46 +205,107 @@ mod abi {
     pub const MAX_DISPLAY_PRIMS: u32 = 330;
 }
 
-impl ELEMENT {
+impl Default for ElementRecord {
+    fn default() -> Self {
+        let visual = STATE {
+            location: POINT { x: 0, y: 0 },
+            image: state__bindgen_ty_1 {
+                frame: ptr::null_mut(),
+                frames: super::frames::Frames::ABSENT,
+            },
+        };
+        Self {
+            preprocess_func: None,
+            postprocess_func: None,
+            collision_func: None,
+            death_func: None,
+            playerNr: 0,
+            state_flags: 0,
+            life: 0,
+            hits: 0,
+            mass: 0,
+            turn: 0,
+            thrust: 0,
+            colorCycleIndex: 0,
+            velocity: VELOCITY_DESC::new(),
+            IntersectControl: INTERSECT_CONTROL {
+                IntersectStamp: crate::graphics::native_abi::STAMP {
+                    origin: POINT { x: 0, y: 0 },
+                    frame: ptr::null_mut(),
+                },
+                EndPoint: POINT { x: 0, y: 0 },
+                last_time_val: 0,
+            },
+            PrimIndex: 0,
+            current: visual.clone(),
+            next: visual,
+            parent: Parent::None,
+            target: None,
+        }
+    }
+}
+
+impl Default for ShipRecord {
+    fn default() -> Self {
+        Self {
+            SpeciesID: 0,
+            captains_name_index: 0,
+            descriptor: None,
+            crew_level: 0,
+            max_crew: 0,
+            ship_cost: 0,
+            index: 0,
+            race_strings: std::ptr::null_mut(),
+            icons: std::ptr::null_mut(),
+            weapon_counter: 0,
+            special_counter: 0,
+            energy_counter: 0,
+            ship_input_state: 0,
+            cur_status_flags: 0,
+            old_status_flags: 0,
+            hShip: None,
+            ShipFacing: 0,
+            playerNr: 0,
+            control: 0,
+        }
+    }
+}
+
+impl ElementRecord {
     pub fn life_span(&self) -> u16 {
-        // SAFETY: every member of this legacy union is a u16.
-        unsafe { self.__bindgen_anon_1.life_span }
+        self.life
     }
     pub fn set_life_span(&mut self, value: u16) {
-        self.__bindgen_anon_1.life_span = value;
+        self.life = value;
     }
     pub fn hit_points(&self) -> u16 {
-        // SAFETY: every member of this legacy union is a u16.
-        unsafe { self.__bindgen_anon_2.hit_points }
+        self.hits
     }
     pub fn set_hit_points(&mut self, value: u16) {
-        self.__bindgen_anon_2.hit_points = value;
+        self.hits = value;
     }
     pub fn mass_points(&self) -> u8 {
-        // SAFETY: the legacy union contains only a u8.
-        unsafe { self.__bindgen_anon_3.mass_points }
+        self.mass
     }
     pub fn set_mass_points(&mut self, value: u8) {
-        self.__bindgen_anon_3.mass_points = value;
+        self.mass = value;
     }
     pub fn turn_wait(&self) -> u8 {
-        // SAFETY: every member of this legacy union is a u8.
-        unsafe { self.__bindgen_anon_4.turn_wait }
+        self.turn
     }
     pub fn set_turn_wait(&mut self, value: u8) {
-        self.__bindgen_anon_4.turn_wait = value;
+        self.turn = value;
     }
     pub fn thrust_wait(&self) -> u8 {
-        // SAFETY: every member of this legacy union is a u8.
-        unsafe { self.__bindgen_anon_5.thrust_wait }
+        self.thrust
     }
     pub fn set_thrust_wait(&mut self, value: u8) {
-        self.__bindgen_anon_5.thrust_wait = value;
+        self.thrust = value;
     }
 }
 
 impl ElementState {
-    pub(super) fn decode(e: &ELEMENT) -> Self {
+    pub(super) fn decode(e: &ElementRecord) -> Self {
         Self {
             player: e.playerNr,
             flags: e.state_flags,
@@ -303,14 +320,14 @@ impl ElementState {
                 location: e.current.location,
                 image: Image {
                     frame: Frame(e.current.image.frame),
-                    frames: Frames(e.current.image.farray),
+                    frames: e.current.image.frames.clone(),
                 },
             },
             next: Visual {
                 location: e.next.location,
                 image: Image {
                     frame: Frame(e.next.image.frame),
-                    frames: Frames(e.next.image.farray),
+                    frames: e.next.image.frames.clone(),
                 },
             },
             pre: e.preprocess_func,
@@ -319,7 +336,7 @@ impl ElementState {
             death: e.death_func,
         }
     }
-    pub(super) fn apply(e: &mut ELEMENT, value: Self) {
+    pub(super) fn apply(e: &mut ElementRecord, value: Self) {
         e.playerNr = value.player;
         e.state_flags = value.flags;
         e.set_life_span(value.life);
@@ -332,9 +349,9 @@ impl ElementState {
         e.current.location = value.current.location;
         e.next.location = value.next.location;
         e.current.image.frame = value.current.image.frame.0;
-        e.current.image.farray = value.current.image.frames.0;
+        e.current.image.frames = value.current.image.frames;
         e.next.image.frame = value.next.image.frame.0;
-        e.next.image.farray = value.next.image.frames.0;
+        e.next.image.frames = value.next.image.frames;
         e.preprocess_func = value.pre;
         e.postprocess_func = value.post;
         e.collision_func = value.collide;
@@ -343,7 +360,7 @@ impl ElementState {
 }
 
 impl ShipState {
-    pub(super) fn decode(s: &STARSHIP) -> Self {
+    pub(super) fn decode(s: &ShipRecord) -> Self {
         Self {
             facing: s.ShipFacing,
             control: s.control,
@@ -357,7 +374,7 @@ impl ShipState {
             crew: s.crew_level,
         }
     }
-    fn apply(s: &mut STARSHIP, v: Self) {
+    fn apply(s: &mut ShipRecord, v: Self) {
         s.ShipFacing = v.facing;
         s.control = v.control;
         s.playerNr = v.player;
@@ -372,7 +389,7 @@ impl ShipState {
 }
 
 impl RaceStats {
-    pub(super) fn decode(d: &RACE_DESC) -> Self {
+    pub(super) fn decode(d: &RaceDescriptor) -> Self {
         let i = d.ship_info;
         Self {
             ship_info: Info {
@@ -391,7 +408,7 @@ impl RaceStats {
             state: d.race_state,
         }
     }
-    pub(super) fn apply(d: &mut RACE_DESC, v: Self) {
+    pub(super) fn apply(d: &mut RaceDescriptor, v: Self) {
         d.ship_info.ship_flags = v.ship_info.ship_flags;
         d.ship_info.ship_cost = v.ship_info.ship_cost;
         d.ship_info.crew_level = v.ship_info.crew_level;
@@ -409,61 +426,32 @@ use super::views::*;
 use super::{Cx, ElementId, Parent, ShipId};
 
 impl Cx<'_> {
-    pub(crate) fn ship_id(&self, address: usize) -> ShipId {
-        for side in 0..2 {
-            // SAFETY: queue authorities are owned by this game-thread context.
-            let queue = self.project(ship_queue(side));
-            let stride = usize::from(queue.object_size);
-            if let Some(offset) = address.checked_sub(queue.pq_tab as usize) {
-                if stride != 0
-                    && offset.is_multiple_of(stride)
-                    && offset / stride < usize::from(queue.num_objects)
-                {
-                    return ShipId {
-                        side: side as u8,
-                        slot: (offset / stride) as u8,
-                    };
-                }
-            }
-        }
-        panic!("ship address {address:#x} is outside the ship pools")
+    pub(crate) fn ship_pointer(&self, id: ShipId) -> *mut ShipRecord {
+        std::ptr::from_ref(self.ship(id)).cast_mut()
     }
-    pub(crate) fn ship_pointer(&self, id: ShipId) -> *mut STARSHIP {
-        assert!(id.side < 2, "invalid ship side {id:?}");
-        // SAFETY: queue storage is address-stable for the battle's lifetime.
-        {
-            let queue = self.project(ship_queue(usize::from(id.side)));
-            assert!(
-                usize::from(id.slot) < usize::from(queue.num_objects),
-                "invalid ship {id:?}"
-            );
-            queue
-                .pq_tab
-                .wrapping_add(usize::from(id.slot) * usize::from(queue.object_size))
-                .cast()
-        }
+    pub(crate) fn ship(&self, id: ShipId) -> &ShipRecord {
+        let pool = &self.b.kernel.races[usize::from(id.side)];
+        let key = pool
+            .id_at(usize::from(id.slot))
+            .unwrap_or_else(|| panic!("invalid ship {id:?}"));
+        assert_eq!(id.gen, key.generation(), "stale ship {id:?}");
+        pool.get(key)
     }
-    pub(crate) fn ship(&self, id: ShipId) -> &STARSHIP {
-        // SAFETY: the validated slot belongs to this context's ship authority.
-        self.project(
-            std::ptr::NonNull::new(self.ship_pointer(id))
-                .unwrap_or_else(|| panic!("{}", "ship slot")),
-        )
+    pub(super) fn ship_mut(&mut self, id: ShipId) -> &mut ShipRecord {
+        let pool = &mut self.b.kernel.races[usize::from(id.side)];
+        let key = pool
+            .id_at(usize::from(id.slot))
+            .unwrap_or_else(|| panic!("invalid ship {id:?}"));
+        assert_eq!(id.gen, key.generation(), "stale ship {id:?}");
+        pool.get_mut(key)
     }
-    pub(super) fn ship_mut(&mut self, id: ShipId) -> &mut STARSHIP {
-        // SAFETY: this exclusive context borrow scopes the one-record projection.
-        self.project_mut(
-            std::ptr::NonNull::new(self.ship_pointer(id))
-                .unwrap_or_else(|| panic!("{}", "ship slot")),
-        )
-    }
-    pub(crate) fn desc(&self, id: ShipId) -> &RACE_DESC {
+    pub(crate) fn desc(&self, id: ShipId) -> &RaceDescriptor {
         self.ship(id)
             .descriptor
             .as_deref()
             .unwrap_or_else(|| panic!("ship {id:?} has no descriptor"))
     }
-    pub(super) fn desc_mut(&mut self, id: ShipId) -> &mut RACE_DESC {
+    pub(super) fn desc_mut(&mut self, id: ShipId) -> &mut RaceDescriptor {
         self.ship_mut(id)
             .descriptor
             .as_deref_mut()
@@ -473,68 +461,32 @@ impl Cx<'_> {
     pub(crate) fn captain_controls(&mut self, id: ShipId) -> std::ptr::NonNull<CAPTAIN_STUFF> {
         std::ptr::NonNull::from(&mut self.desc_mut(id).ship_data.captain_control)
     }
-    pub(super) fn decode_subject(&self, e: &ELEMENT) -> super::Subject {
-        super::Subject {
-            state: ElementState::decode(e),
-            target: self.b.elements.id(e.hTarget),
-            parent: if e.pParent.is_null() {
-                Parent::None
-            } else {
-                Parent::Ship(self.ship_id(e.pParent as usize))
-            },
-            intersect: e.IntersectControl,
-            primitive: e.PrimIndex,
-            predecessor: self.b.elements.id(e.pred),
-            successor: self.b.elements.id(e.succ),
-        }
-    }
-    pub(crate) fn encode_subject(&self, subject: &super::Subject) -> ELEMENT {
-        let mut e = subject.state.encode();
-        ElementState::apply(&mut e, subject.state);
-        e.hTarget = subject
-            .target
-            .map_or(std::ptr::null_mut(), |id| self.b.elements.raw(id));
-        e.pParent = match subject.parent {
-            Parent::None => std::ptr::null_mut(),
-            Parent::Ship(id) => self.ship_pointer(id).cast(),
-            other => panic!("invalid projected subject parent {other:?}"),
-        };
-        e.IntersectControl = subject.intersect;
-        e.PrimIndex = subject.primitive;
-        e.pred = subject
-            .predecessor
-            .map_or(std::ptr::null_mut(), |id| self.b.elements.raw(id));
-        e.succ = subject
-            .successor
-            .map_or(std::ptr::null_mut(), |id| self.b.elements.raw(id));
-        e
-    }
     /// Return the checked legacy address; dereferencing it requires the owning game-thread boundary.
-    pub fn legacy_element(&self, id: ElementId) -> *mut ELEMENT {
-        self.b.elements.raw(id).cast()
+    pub fn legacy_element(&self, id: ElementId) -> *mut ElementRecord {
+        self.b.kernel.elements.raw(id).cast()
     }
     #[cfg(not(test))]
     pub(super) fn primitive(&mut self, id: ElementId) -> &mut PRIMITIVE {
-        let index = usize::from(self.b.elements[id].PrimIndex);
+        let index = usize::from(self.b.kernel.elements[id].PrimIndex);
         assert!(index < 330, "invalid primitive index {index}");
         // SAFETY: the display authority remains live for the context's lifetime.
-        self.project_mut(primitive_slot(index))
+        self.b.kernel.display.get_mut(index as u16)
     }
 }
 
 impl Cx<'_> {
-    pub fn element_mut(&mut self, id: ElementId) -> Edit<'_, ElementState, ELEMENT> {
+    pub fn element_mut(&mut self, id: ElementId) -> Edit<'_, ElementState, ElementRecord> {
         let value = self.element(id);
         Edit {
             value,
-            record: &mut self.b.elements[id],
+            record: &mut self.b.kernel.elements[id],
             commit: ElementState::apply,
         }
     }
 }
 
 impl Cx<'_> {
-    pub fn ship_state_mut(&mut self, id: ShipId) -> Edit<'_, ShipState, STARSHIP> {
+    pub fn ship_state_mut(&mut self, id: ShipId) -> Edit<'_, ShipState, ShipRecord> {
         let value = self.ship_state(id);
         Edit {
             value,
@@ -545,7 +497,7 @@ impl Cx<'_> {
 }
 
 impl Cx<'_> {
-    pub fn race_stats_mut(&mut self, id: ShipId) -> Edit<'_, RaceStats, RACE_DESC> {
+    pub fn race_stats_mut(&mut self, id: ShipId) -> Edit<'_, RaceStats, RaceDescriptor> {
         let value = self.race_stats(id);
         Edit {
             value,
@@ -557,22 +509,22 @@ impl Cx<'_> {
 
 #[derive(Debug)]
 pub struct RaceDesc {
-    pub(super) raw: Box<RACE_DESC>,
+    pub(super) raw: Box<RaceDescriptor>,
 }
 impl RaceDesc {
     pub(super) fn empty() -> Self {
         Self {
-            raw: Box::new(RACE_DESC::EMPTY),
+            raw: Box::new(RaceDescriptor::EMPTY),
         }
     }
-    pub(super) fn from_legacy(raw: RACE_DESC) -> Self {
+    pub(super) fn from_legacy(raw: RaceDescriptor) -> Self {
         Self { raw: Box::new(raw) }
     }
-    pub(crate) fn from_storage(raw: Box<RACE_DESC>) -> Self {
+    pub(crate) fn from_storage(raw: Box<RaceDescriptor>) -> Self {
         Self { raw }
     }
     #[cfg(not(test))]
-    pub(crate) fn into_storage(self) -> Box<RACE_DESC> {
+    pub(crate) fn into_storage(self) -> Box<RaceDescriptor> {
         self.raw
     }
     pub fn info(&self) -> &SHIP_INFO {
@@ -606,12 +558,12 @@ impl RaceDesc {
         self.raw.cleanup(world);
     }
     /// Extract the legacy record; dereferencing its resource pointers remains unsafe.
-    pub fn into_legacy(self) -> RACE_DESC {
+    pub fn into_legacy(self) -> RaceDescriptor {
         *self.raw
     }
 }
 
-impl RACE_DESC {
+impl RaceDescriptor {
     pub fn callbacks(&self) -> [usize; 5] {
         if let Some(race) = self.race {
             [
@@ -636,71 +588,26 @@ impl RACE_DESC {
     }
 }
 
-use crate::graphics::native_abi::PRIM_LINKS;
 use std::ptr;
-const EMPTY_QUEUE: QUEUE = QUEUE {
-    head: ptr::null_mut(),
-    tail: ptr::null_mut(),
-    pq_tab: ptr::null_mut(),
-    free_list: ptr::null_mut(),
-    object_size: 0,
-    num_objects: 0,
-};
-
-#[no_mangle]
-pub static mut disp_q: QUEUE = EMPTY_QUEUE;
-#[no_mangle]
-pub static mut race_q: [QUEUE; 2] = [EMPTY_QUEUE; 2];
-
-#[no_mangle]
-pub static mut DisplayFreeList: COUNT = 0;
-#[no_mangle]
-// SAFETY: Primitive fields and the PRIM_DESC union members admit all-zero bits.
-pub static mut DisplayArray: [PRIMITIVE; abi::MAX_DISPLAY_PRIMS as usize] =
-    unsafe { std::mem::zeroed() };
-#[no_mangle]
-pub static mut DisplayLinks: PRIM_LINKS = 0;
-
-pub(crate) fn ship_queue(side: usize) -> std::ptr::NonNull<QUEUE> {
-    assert!(side < 2);
-    std::ptr::NonNull::new((&raw mut race_q).cast::<QUEUE>().wrapping_add(side))
-        .unwrap_or_else(|| panic!("{}", "static ship queues"))
-}
-pub(crate) fn primitive_slot(index: usize) -> std::ptr::NonNull<PRIMITIVE> {
-    assert!(index < 330);
-    std::ptr::NonNull::new(
-        (&raw mut DisplayArray)
-            .cast::<PRIMITIVE>()
-            .wrapping_add(index),
-    )
-    .unwrap_or_else(|| panic!("{}", "static primitives"))
+pub(crate) fn ship_queue(side: usize) -> std::ptr::NonNull<super::link_queue::RacePool> {
+    assert!(side < 2, "invalid ship side {side}");
+    // SAFETY: callers use this only while the owning Kernel is published on the game thread.
+    std::ptr::NonNull::from(&mut unsafe { Kernel::current() }.races[side])
 }
 impl ElementState {
-    fn encode(self) -> ELEMENT {
-        ELEMENT {
-            pred: ptr::null_mut(),
-            succ: ptr::null_mut(),
+    fn encode(self) -> ElementRecord {
+        ElementRecord {
             preprocess_func: self.pre,
             postprocess_func: self.post,
             collision_func: self.collide,
             death_func: self.death,
             playerNr: self.player,
             state_flags: self.flags,
-            __bindgen_anon_1: element__bindgen_ty_1 {
-                life_span: self.life,
-            },
-            __bindgen_anon_2: element__bindgen_ty_2 {
-                hit_points: self.hits,
-            },
-            __bindgen_anon_3: element__bindgen_ty_3 {
-                mass_points: self.mass,
-            },
-            __bindgen_anon_4: element__bindgen_ty_4 {
-                turn_wait: self.turn,
-            },
-            __bindgen_anon_5: element__bindgen_ty_5 {
-                thrust_wait: self.thrust,
-            },
+            life: self.life,
+            hits: self.hits,
+            mass: self.mass,
+            turn: self.turn,
+            thrust: self.thrust,
             colorCycleIndex: self.color_cycle,
             velocity: self.velocity,
             IntersectControl: INTERSECT_CONTROL {
@@ -716,19 +623,42 @@ impl ElementState {
                 location: self.current.location,
                 image: state__bindgen_ty_1 {
                     frame: self.current.image.frame.0,
-                    farray: self.current.image.frames.0,
+                    frames: self.current.image.frames,
                 },
             },
             next: STATE {
                 location: self.next.location,
                 image: state__bindgen_ty_1 {
                     frame: self.next.image.frame.0,
-                    farray: self.next.image.frames.0,
+                    frames: self.next.image.frames,
                 },
             },
-            pParent: ptr::null_mut(),
-            hTarget: ptr::null_mut(),
+            parent: Parent::None,
+            target: None,
         }
+    }
+}
+
+impl From<&ElementRecord> for Subject {
+    fn from(record: &ElementRecord) -> Self {
+        Self {
+            state: ElementState::decode(record),
+            target: record.target,
+            parent: record.parent,
+            intersect: record.IntersectControl,
+            primitive: record.PrimIndex,
+        }
+    }
+}
+
+impl From<Subject> for ElementRecord {
+    fn from(subject: Subject) -> Self {
+        let mut record = subject.state.encode();
+        record.target = subject.target;
+        record.parent = subject.parent;
+        record.IntersectControl = subject.intersect;
+        record.PrimIndex = subject.primitive;
+        record
     }
 }
 
@@ -736,26 +666,54 @@ impl ElementState {
 mod projection_tests {
     use super::*;
     #[test]
-    fn pointer_free_values_roundtrip_record_scalars_and_subject_metadata() {
-        let mut queue = EMPTY_QUEUE;
-        let mut groups = EMPTY_QUEUE;
-        let mut activity = 0u16;
-        // SAFETY: these local queue authorities and projections outlive the context.
-        let mut battle = unsafe { super::super::Battle::new(&mut queue) };
-        // SAFETY: the local world authorities remain live and exclusively borrowed.
-        let mut world =
-            unsafe { super::super::World::new(&mut activity, &mut groups, [ptr::null_mut(); 2]) };
+    fn ship_projection_retains_its_address_and_rejects_reused_generations() {
+        use crate::engine::battle::link_queue::{LinkQueue, Starship};
+        let mut battle = super::super::Battle::new(1);
+        battle.reset_ship_capacity(0, 1);
+        let (id, pointer) = {
+            let mut ships = battle.ships(0);
+            let link = ships.alloc().unwrap();
+            (ships.ship_id(link, 0), ships.raw(link).cast::<ShipRecord>())
+        };
+        let mut activity = 0;
+        let mut groups = QUEUE::default();
+        // SAFETY: this test retains both local world authorities for the context's lifetime.
+        let mut world = unsafe {
+            super::super::World::new(
+                std::ptr::NonNull::from(&mut activity),
+                std::ptr::NonNull::from(&mut groups),
+                |_| panic!("unused shared frame source"),
+            )
+        };
         let cx = Cx {
             b: &mut battle,
             world: &mut world,
             rng: || 0,
         };
-        // SAFETY: legacy record scalar fields, nullable hooks and unions admit zero.
-        let mut raw: ELEMENT = unsafe { std::mem::zeroed() };
-        raw.state_flags = 513;
-        raw.playerNr = 1;
-        raw.colorCycleIndex = 9;
-        raw.PrimIndex = 17;
+        assert_eq!(cx.ship_pointer(id), pointer);
+        let replacement = {
+            let mut ships = LinkQueue::<Starship>::new(&mut cx.b.kernel.races[0]);
+            let link = ships.link(id);
+            ships.free(link);
+            let next = ships.alloc().unwrap();
+            assert_eq!(ships.raw(next).cast::<ShipRecord>(), pointer);
+            ships.ship_id(next, 0)
+        };
+        assert_ne!(replacement.gen, id.gen);
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| cx.ship_pointer(id))).is_err()
+        );
+        assert_eq!(cx.ship_pointer(replacement), pointer);
+    }
+    #[test]
+    fn pointer_free_values_roundtrip_record_scalars_and_subject_metadata() {
+        let mut raw = ElementRecord {
+            state_flags: 513,
+            playerNr: 1,
+            colorCycleIndex: 9,
+            PrimIndex: 17,
+            ..ElementRecord::default()
+        };
         raw.set_life_span(21);
         raw.set_hit_points(7);
         raw.set_mass_points(5);
@@ -764,7 +722,7 @@ mod projection_tests {
         raw.current.location = POINT { x: 11, y: 12 };
         raw.next.location = POINT { x: 21, y: 22 };
         raw.IntersectControl.last_time_val = 31;
-        let mut subject = cx.decode_subject(&raw);
+        let mut subject = Subject::from(&raw);
         assert_eq!(subject.life_span(), 21);
         assert_eq!(subject.hit_points(), 7);
         assert_eq!(subject.mass_points(), 5);
@@ -775,7 +733,9 @@ mod projection_tests {
         subject.set_mass_points(6);
         subject.set_turn_wait(14);
         subject.set_thrust_wait(15);
-        let encoded = cx.encode_subject(&subject);
+        subject.parent = Parent::IpGroup(3);
+        let encoded = ElementRecord::from(subject);
+        assert_eq!(Subject::from(&encoded).parent, Parent::IpGroup(3));
         assert_eq!(encoded.PrimIndex, 17);
         assert_eq!(encoded.IntersectControl.last_time_val, 31);
         assert_eq!(encoded.current.location.x, 11);
@@ -800,11 +760,15 @@ mod projection_tests {
         }
         assert_eq!(raw.life_span(), 55);
         assert_eq!(raw.hit_points(), 2);
+        assert_eq!(
+            (raw.life, raw.hits, raw.mass, raw.turn, raw.thrust),
+            (55, 2, 6, 14, 15)
+        );
     }
     #[test]
     fn ship_and_descriptor_values_preserve_resources_while_updating_stats() {
         // SAFETY: zero is valid for nullable legacy ship fields and scalars.
-        let mut ship: STARSHIP = unsafe { std::mem::zeroed() };
+        let mut ship: ShipRecord = unsafe { std::mem::zeroed() };
         let mut state = ShipState::decode(&ship);
         state.facing = 7;
         state.energy_counter = 9;
@@ -813,7 +777,7 @@ mod projection_tests {
         assert_eq!(ship.ShipFacing, 7);
         assert_eq!(ship.energy_counter, 9);
         assert_eq!(ship.weapon_counter, 4);
-        let mut descriptor = RACE_DESC::EMPTY;
+        let mut descriptor = RaceDescriptor::EMPTY;
         descriptor.ship_data.ship_rsc[0] = c"retained".as_ptr();
         let mut stats = RaceStats::decode(&descriptor);
         stats.ship_info.energy_level = 10;
@@ -830,7 +794,7 @@ mod projection_tests {
 }
 
 #[cfg(not(test))]
-impl RACE_DESC {
+impl RaceDescriptor {
     pub(crate) fn cleanup(&mut self, world: &mut super::World) {
         if let Some(uninit) = self.race.and_then(|race| race.uninit) {
             let mut stats = RaceStats::decode(self);
@@ -845,7 +809,7 @@ mod zero_descriptor_tests {
     #[test]
     fn zero_descriptor_has_no_native_race_state() {
         // SAFETY: a zeroed legacy descriptor contains nullable callbacks, pointers, and scalar state.
-        let descriptor: super::RACE_DESC = unsafe { std::mem::zeroed() };
+        let descriptor: super::RaceDescriptor = unsafe { std::mem::zeroed() };
         assert!(matches!(
             descriptor.race_state,
             crate::engine::battle::RaceState::None
@@ -855,7 +819,7 @@ mod zero_descriptor_tests {
 
 #[repr(C)]
 #[repr(align(16))]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug)]
 pub struct RaceDescriptor {
     pub ship_info: SHIP_INFO,
     pub fleet: FLEET_STUFF,
@@ -871,12 +835,17 @@ pub struct RaceDescriptor {
 pub(crate) use super::kernel::{Channels, SoundQueue, StarPlane};
 
 pub(crate) struct Kernel {
-    pub(crate) master_queue: QUEUE,
+    pub(crate) elements: super::ElementTable,
+    pub(crate) races: [super::link_queue::RacePool; 2],
+    ship_reset_pending: bool,
+    battle_active: bool,
+    pub(crate) display: super::display::DisplayPool,
+    pub(crate) master_queue: super::kernel::MasterCatalog,
     pub(crate) player_input: [*mut std::ffi::c_void; 2],
     pub(crate) instant_victory: u32,
     pub(crate) battle_music: MUSIC_REF,
     pub(crate) ditty_playing: u32,
-    pub(crate) winner: *mut STARSHIP,
+    pub(crate) winner: Option<ShipId>,
     pub(crate) status_offsets: [i16; 2],
     pub(crate) menu_sounds: SOUND,
     pub(crate) game_sounds: SOUND,
@@ -887,6 +856,37 @@ pub(crate) struct Kernel {
     pub(crate) star_planes: Box<[StarPlane; 3]>,
 }
 impl Kernel {
+    pub(crate) fn begin_battle(&mut self) {
+        assert!(!self.battle_active, "nested battle session");
+        self.battle_active = true;
+    }
+
+    pub(crate) fn finish_battle(&mut self) {
+        assert!(self.battle_active, "battle session was not started");
+        self.battle_active = false;
+    }
+
+    pub(crate) fn request_ship_reset(&mut self) {
+        for pool in &mut self.races {
+            while let Some(id) = pool.head() {
+                pool.remove(id);
+            }
+        }
+        self.ship_reset_pending = true;
+        if !self.battle_active {
+            self.complete_ship_reset();
+        }
+    }
+
+    pub(crate) fn complete_ship_reset(&mut self) {
+        if self.ship_reset_pending {
+            for pool in &mut self.races {
+                pool.reinit();
+            }
+            self.ship_reset_pending = false;
+        }
+    }
+
     pub(super) fn new() -> Self {
         let mut log_stars = Box::new([POINT { x: 0, y: 0 }; 180]);
         let array = log_stars.as_mut_ptr();
@@ -903,12 +903,17 @@ impl Kernel {
             plane
         }));
         Self {
-            master_queue: QUEUE::default(),
+            elements: super::ElementTable::with_capacity(150),
+            races: std::array::from_fn(|_| super::link_queue::RacePool::with_capacity(0)),
+            ship_reset_pending: false,
+            battle_active: false,
+            display: super::display::DisplayPool::new(),
+            master_queue: super::kernel::MasterCatalog::new(),
             player_input: [ptr::null_mut(); 2],
             instant_victory: 0,
             battle_music: ptr::null_mut(),
             ditty_playing: 0,
-            winner: ptr::null_mut(),
+            winner: None,
             status_offsets: [0; 2],
             menu_sounds: ptr::null_mut(),
             game_sounds: ptr::null_mut(),
@@ -924,6 +929,27 @@ impl Kernel {
 #[cfg(test)]
 mod kernel_tests {
     use super::*;
+    #[test]
+    fn loading_during_a_callback_retains_its_ship_through_battle_cleanup() {
+        let mut kernel = Kernel::new();
+        kernel.races[0].reset_capacity(1);
+        let ship = kernel.races[0].alloc(ShipRecord::default()).unwrap();
+        kernel.races[0].get_mut(ship).special_counter = 7;
+        kernel.races[0].put(ship);
+        kernel.begin_battle();
+        kernel.request_ship_reset();
+        assert!(kernel.races[0].head().is_none());
+        assert_eq!(kernel.races[0].get(ship).special_counter, 7);
+        kernel.races[0].get_mut(ship).special_counter = 10;
+        kernel.finish_battle();
+        assert_eq!(kernel.races[0].get(ship).special_counter, 10);
+        kernel.complete_ship_reset();
+        assert!(!kernel.races[0].contains(ship));
+        let replacement = kernel.races[0].alloc(ShipRecord::default()).unwrap();
+        assert_eq!(replacement.index(), ship.index());
+        assert_ne!(replacement.generation(), ship.generation());
+        assert_eq!(kernel.races[0].get(replacement).special_counter, 0);
+    }
     #[test]
     fn separate_lifecycles_reset_state_and_keep_parallax_backing_stable_when_moved() {
         let mut kernel = Kernel::new();
@@ -946,7 +972,7 @@ mod kernel_tests {
         assert!(fresh.player_input.iter().all(|input| input.is_null()));
         assert!(fresh.menu_sounds.is_null());
         assert!(fresh.game_sounds.is_null());
-        assert!(fresh.winner.is_null());
+        assert!(fresh.winner.is_none());
         assert_eq!(fresh.sounds.count, 0);
         assert_eq!(fresh.channels.lru, [0, 1, 2, 3]);
     }
@@ -954,23 +980,5 @@ mod kernel_tests {
 
 use super::link_queue::QueueRecord;
 impl QueueRecord for crate::engine::battle::link_queue::Starship {
-    type Storage = STARSHIP;
-    fn links(record: &Self::Storage) -> (HLINK, HLINK) {
-        (record.pred, record.succ)
-    }
-}
-
-#[cfg(not(test))]
-impl Cx<'_> {
-    pub(crate) fn legacy_intercept_subject(&self, e: &ELEMENT) -> Subject {
-        Subject {
-            state: ElementState::decode(e),
-            intersect: e.IntersectControl,
-            primitive: e.PrimIndex,
-            target: None,
-            parent: Parent::None,
-            predecessor: None,
-            successor: None,
-        }
-    }
+    type Storage = ShipRecord;
 }

@@ -46,16 +46,16 @@ fn cruiser_descriptor_and_registered_weapon_and_defense_callbacks() {
             ship.element_mut().next.location = POINT { x: 1000, y: 2000 };
             let weapons = ship.weapon(1);
             let nuke = ship.weapon_record(weapons[0]);
-            assert_eq!((*nuke).__bindgen_anon_1.life_span, 60);
-            assert_eq!((*nuke).__bindgen_anon_2.hit_points, 1);
-            assert_eq!((*nuke).__bindgen_anon_3.mass_points, 4);
-            assert_eq!((*nuke).__bindgen_anon_4.turn_wait, 3);
-            assert_eq!((*nuke).__bindgen_anon_5.blast_offset, 8);
+            assert_eq!((*nuke).life, 60);
+            assert_eq!((*nuke).hits, 1);
+            assert_eq!((*nuke).mass, 4);
+            assert_eq!((*nuke).turn, 3);
+            assert_eq!((*nuke).thrust, 8);
             for expected_wait in [2, 1, 0, 3] {
                 call_element("ships::races::human_native::nuke_preprocess", id(nuke));
-                assert_eq!((*nuke).__bindgen_anon_4.turn_wait, expected_wait);
+                assert_eq!((*nuke).turn, expected_wait);
             }
-            (*nuke).__bindgen_anon_1.life_span = 50;
+            (*nuke).life = 50;
             call_element("ships::races::human_native::nuke_preprocess", id(nuke));
             let mut expected: VELOCITY_DESC = mem::zeroed();
             SetVelocityVector(&raw mut expected, 80, 0);
@@ -73,13 +73,13 @@ fn cruiser_descriptor_and_registered_weapon_and_defense_callbacks() {
             assert_eq!(queued(), before);
             ship.ship_mut().special_counter = 0;
             ship.postprocess();
-            let defense = battle::element(disp_q.tail);
+            let defense = battle::element(battle::tail());
             assert_ne!(defense, ship.ptr());
             assert_eq!(
                 (*defense).state_flags,
                 (APPEARING | NONSOLID | FINITE_LIFE) as u16
             );
-            assert_eq!((*defense).pParent, (*ship.ptr()).pParent);
+            assert_eq!((*defense).parent, (*ship.ptr()).parent);
             assert!((*defense).death_func.is_some());
             call_element(
                 "ships::races::human_native::spawn_point_defense",

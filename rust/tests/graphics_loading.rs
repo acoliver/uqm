@@ -103,7 +103,7 @@ unsafe fn check_animation(path: &std::ffi::CStr) {
     assert!(!drawable.is_null());
     assert_eq!(((*drawable).Flags, (*drawable).MaxIndex), (2, 1));
     for i in 0..2 {
-        let frame = &*(*drawable).Frame.add(i);
+        let frame = &mut *(*drawable).Frame.add(i);
         assert_eq!(
             (
                 frame.Type,
@@ -141,9 +141,12 @@ unsafe fn check_animation(path: &std::ffi::CStr) {
             );
         }
         abi::TFB_DrawImage_Delete(frame.image);
+        frame.image = ptr::null_mut();
     }
-    rust_hfree((*drawable).Frame.cast());
-    rust_hfree(drawable.cast());
+    assert_ne!(
+        uqm_rust::graphics::drawable_abi::DestroyDrawable(drawable),
+        0
+    );
 }
 
 #[test]

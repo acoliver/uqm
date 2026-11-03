@@ -41,6 +41,8 @@ jobs:
           workspaces: rust
       - run: cargo fmt --all --check
       - run: cargo xtask abi-check
+      - name: Assert Stage C raw-reader boundary
+        run: cargo xtask quality report raw_records --expect-only uqm::engine::battle
       - name: Scope engine-crate approval
         if: contains(github.event.pull_request.labels.*.name, 'quality-growth-approved')
         run: |
@@ -88,6 +90,12 @@ jobs:
       SDL_AUDIODRIVER: dummy
     steps:
       - uses: actions/checkout@v4
+      - name: Free unused SDK space for instrumented builds and replay artifacts
+        working-directory: .
+        run: |
+          df -h /
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
+          df -h /
       - if: github.event_name == 'pull_request'
         run: git fetch --no-tags --depth=1 origin "+refs/heads/$BASE:refs/remotes/origin/$BASE"
       - run: echo "BASE_ARG=${BASE:+--base origin/$BASE}" >> "$GITHUB_ENV"

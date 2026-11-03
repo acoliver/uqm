@@ -7,6 +7,7 @@ fn terminal_outcome_survives_descriptor_teardown_until_the_next_battle() {
             use uqm_rust::automation::samatra::observe;
             uqm_rust::state::ffi::rust_init_game_state();
             GlobData.Game_state.CurrentActivity = IN_LAST_BATTLE as u16;
+            uqm_rust::app::bridge::battle(|battle| battle.initialize());
             let mut ship = boss(&battle);
             let expected = uqm_rust::ships::races::samatra::observation::Events {
                 generation: 1,
@@ -79,7 +80,7 @@ fn live_observation_projects_owned_events_generators_hazards_and_player() {
             assert_eq!(observe().1.unwrap().hazards.len(), 2);
             let sentinel = queued()
                 .into_iter()
-                .find(|h| (*battle::element(*h)).__bindgen_anon_2.hit_points == 10)
+                .find(|h| (*battle::element(*h)).hits == 10)
                 .unwrap();
             (*battle::element(sentinel)).state_flags |= DISAPPEARING as u16;
             assert_eq!(observe().1.unwrap().hazards.len(), 1);
@@ -228,10 +229,10 @@ fn sentinel_tracking_preserves_absent_owner_element() {
             ship.postprocess();
             let sentinel = queued()
                 .into_iter()
-                .find(|h| (*battle::element(*h)).__bindgen_anon_2.hit_points == 10)
+                .find(|h| (*battle::element(*h)).hits == 10)
                 .unwrap_or_else(|| panic!("sentinel"));
-            (*battle::element(sentinel)).__bindgen_anon_4.turn_wait = 0;
-            ship.ship_mut().hShip = std::ptr::null_mut();
+            (*battle::element(sentinel)).turn = 0;
+            ship.ship_mut().hShip = None;
             uqm_rust::app::bridge::enter(|cx| {
                 assert_eq!(cx.optional_ship_element(ship.ship_id), None);
             });
@@ -241,7 +242,7 @@ fn sentinel_tracking_preserves_absent_owner_element() {
                     id(sentinel.cast()),
                 )
             });
-            assert_eq!((*battle::element(sentinel)).__bindgen_anon_4.turn_wait, 1);
+            assert_eq!((*battle::element(sentinel)).turn, 1);
         }
     });
 }
@@ -301,7 +302,7 @@ fn generators_spawn_at_exact_offsets_and_decrement_once_before_gate_opens() {
                 .iter()
                 .map(|h| {
                     let e = battle::element(*h);
-                    assert_eq!((*e).__bindgen_anon_2.hit_points, 15);
+                    assert_eq!((*e).hits, 15);
                     ((*e).current.location.x, (*e).current.location.y)
                 })
                 .collect();
@@ -349,7 +350,7 @@ fn generators_spawn_at_exact_offsets_and_decrement_once_before_gate_opens() {
                 (*prim(gate)).Type,
                 gfx_object_STAMPFILL_PRIM as GRAPHICS_PRIM
             );
-            assert_eq!((*gate).__bindgen_anon_1.life_span, 2);
+            assert_eq!((*gate).life, 2);
         }
     })
 }
@@ -435,7 +436,7 @@ fn postprocess_spawns_comets_and_sentinels_only_while_generators_live() {
                     .find(|h| frame_index((*battle::element(**h)).current.image.frame) == 24)
                     .unwrap(),
             );
-            (*comet).next = (*comet).current;
+            (*comet).next = (*comet).current.clone();
             with_rng(5, 0, || {
                 hooks::invoke_element_pointer((*comet).preprocess_func.unwrap(), comet)
             });
@@ -445,13 +446,13 @@ fn postprocess_spawns_comets_and_sentinels_only_while_generators_live() {
             let sentinel = battle::element(
                 *queued()
                     .iter()
-                    .find(|h| (*battle::element(**h)).__bindgen_anon_2.hit_points == 10)
+                    .find(|h| (*battle::element(**h)).hits == 10)
                     .unwrap(),
             );
-            (*sentinel).next = (*sentinel).current;
+            (*sentinel).next = (*sentinel).current.clone();
             hooks::invoke_element_pointer((*sentinel).preprocess_func.unwrap(), sentinel);
             assert_eq!(ship.descriptor_mut().characteristics.special_wait, 1);
-            assert_eq!((*sentinel).__bindgen_anon_1.life_span, 3);
+            assert_eq!((*sentinel).life, 3);
             ship.descriptor_mut().characteristics.max_thrust = 0;
             ship.ship_mut().weapon_counter = 0;
             ship.ship_mut().special_counter = 0;
@@ -472,7 +473,7 @@ fn sentinel_recoil_stuns_live_player_caps_velocity_and_preserves_sentinel() {
             let sentinel = battle::element(
                 *queued()
                     .iter()
-                    .find(|h| (*battle::element(**h)).__bindgen_anon_2.hit_points == 10)
+                    .find(|h| (*battle::element(**h)).hits == 10)
                     .unwrap(),
             );
             let mut player = Ship::with_frames(
@@ -483,8 +484,8 @@ fn sentinel_recoil_stuns_live_player_caps_velocity_and_preserves_sentinel() {
                 [4, 4],
             );
             player.descriptor_mut().ship_info.crew_level = 20;
-            (*player.ptr()).__bindgen_anon_2.crew_level = 20;
-            (*player.ptr()).__bindgen_anon_3.mass_points = 10;
+            (*player.ptr()).hits = 20;
+            (*player.ptr()).mass = 10;
             player.ship_mut().cur_status_flags = (SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16;
             SetVelocityComponents(&raw mut (*player.ptr()).velocity, 5000, 0);
             SetVelocityVector(&raw mut (*sentinel).velocity, 32, 4);
@@ -498,9 +499,9 @@ fn sentinel_recoil_stuns_live_player_caps_velocity_and_preserves_sentinel() {
                 &mut q,
                 hooks::CollisionCall::Hook,
             );
-            assert_eq!((*sentinel).__bindgen_anon_2.hit_points, 10);
-            assert_eq!((*sentinel).__bindgen_anon_1.life_span, 2);
-            assert_eq!((*sentinel).__bindgen_anon_4.turn_wait, 12);
+            assert_eq!((*sentinel).hits, 10);
+            assert_eq!((*sentinel).life, 2);
+            assert_eq!((*sentinel).turn, 12);
             assert_ne!((*sentinel).state_flags & DEFY_PHYSICS as u16, 0);
             assert_eq!((*sentinel).state_flags & DISAPPEARING as u16, 0);
             assert_eq!(
@@ -508,8 +509,8 @@ fn sentinel_recoil_stuns_live_player_caps_velocity_and_preserves_sentinel() {
                     & (SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16,
                 0
             );
-            assert_eq!((*player.ptr()).__bindgen_anon_4.turn_wait, 1);
-            assert_eq!((*player.ptr()).__bindgen_anon_5.thrust_wait, 3);
+            assert_eq!((*player.ptr()).turn, 1);
+            assert_eq!((*player.ptr()).thrust, 3);
             let mut dx = 0;
             let mut dy = 0;
             GetCurrentVelocityComponents(&raw mut (*player.ptr()).velocity, &mut dx, &mut dy);

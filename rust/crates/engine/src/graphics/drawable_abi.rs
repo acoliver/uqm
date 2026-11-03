@@ -1,5 +1,6 @@
 //! Drawable allocation and frame operations, ported from drawable.c (GPL-2.0-or-later).
 use super::native_abi::*;
+pub use super::native_drawables::{retain_frame_allocations, DrawableLease};
 use super::pixmap_abi::{CaptureDrawable, ReleaseDrawable};
 use crate::memory::{rust_hcalloc, rust_hfree, rust_hmalloc};
 use std::ptr;
@@ -130,6 +131,10 @@ pub unsafe extern "C" fn AllocDrawable(count: u16) -> *mut drawable_desc {
                     index: i,
                 },
             );
+        }
+        // SAFETY: allocation succeeded and initialized every frame's parent link.
+        unsafe {
+            super::native_drawables::register(std::ptr::NonNull::new_unchecked(drawable));
         }
     }
     drawable
@@ -435,6 +440,27 @@ pub unsafe extern "C" fn WriteFramePixelIndexes(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn frame_leases_retain_drawables_after_the_owner_releases_them() {
+        // SAFETY: the test owns the allocation, leases and its serialized graphics operations.
+        unsafe {
+            let drawable = AllocDrawable(1);
+            assert!(!drawable.is_null());
+            let frame = CaptureDrawable(drawable);
+            let leases = retain_frame_allocations(&[frame, frame, frame]);
+            let weak = std::rc::Rc::downgrade(&leases[0]._allocation);
+            let copied = leases.clone();
+            assert_ne!(DestroyDrawable(drawable), 0);
+            assert!(weak.upgrade().is_some());
+            assert_eq!((*frame).parent, drawable);
+            drop(leases);
+            assert!(weak.upgrade().is_some());
+            drop(copied);
+            assert!(weak.upgrade().is_none());
+        }
+    }
+
     #[test]
     fn frame_hotspot_and_bounds_preserve_signed_coordinates() {
         unsafe {

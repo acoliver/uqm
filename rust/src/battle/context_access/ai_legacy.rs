@@ -55,7 +55,7 @@ impl Cx<'_> {
 
 #[cfg(not(test))]
 impl Cx<'_> {
-    pub(crate) fn run_fixture_intelligence(
+    pub fn invoke_intelligence(
         &mut self,
         ship: crate::engine::battle::ShipId,
         subject: &mut Subject,
@@ -72,17 +72,11 @@ impl Cx<'_> {
         objects[..raw.len()].copy_from_slice(raw);
         let mut concerns = crate::engine::battle::Concerns {
             objects,
-            subject: *subject,
+            subject: subject.clone(),
             count,
         };
         self.race_intelligence_with_junk(ship, &mut concerns);
         *subject = concerns.subject;
         raw.copy_from_slice(&concerns.objects[..raw.len()]);
     }
-}
-
-#[cfg(not(test))]
-pub(crate) unsafe fn with_context<R>(call: impl FnOnce(&mut Cx<'_>) -> R) -> R {
-    // SAFETY: the legacy entry owns the current game-thread publication.
-    unsafe { crate::app::bridge::enter(call) }
 }

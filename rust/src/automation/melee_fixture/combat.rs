@@ -83,7 +83,8 @@ pub(super) fn blazer(
                 .data
                 .as_ref()
                 .ok_or("fixture requires loaded descriptor fields")?
-                .special;
+                .special
+                .clone();
             let transformed = world.elements[&a].next.image.frames == special;
             let ship = world.ship_mut(a);
             ship.state.status &= !(SPECIAL as u16);

@@ -1,26 +1,28 @@
 use super::{record::*, Battle, Cx, ElementId, World};
 use crate::battle::gravity::{calculate_gravity, time_space_matter_conflict};
-use crate::collections::queue::{InitQueue, PutQueue, UninitQueue};
-use std::{cell::Cell, ptr};
+use std::cell::Cell;
 
 fn with_elements(call: impl FnOnce(&mut Cx<'_>, [ElementId; 3])) {
-    let mut queue = QUEUE::default();
     let mut groups = QUEUE::default();
     let mut activity = 0;
     // SAFETY: the fixture owns the local queues, slots and projections until cleanup.
     unsafe {
-        assert!(InitQueue(&mut queue, 3, size_of::<ELEMENT>() as u16));
-        let mut battle = Battle::new(&mut queue);
+        let mut battle = Battle::new(3);
         let ids = std::array::from_fn(|_| {
             let id = battle
+                .kernel
                 .elements
                 .alloc()
                 .unwrap_or_else(|| panic!("fixture slot"));
-            battle.elements[id] = std::mem::zeroed();
-            PutQueue(&mut queue, battle.elements.raw(id));
+            battle.kernel.elements[id] = Default::default();
+            battle.kernel.elements.put(id);
             id
         });
-        let mut world = World::new(&mut activity, &mut groups, [ptr::null_mut(); 2]);
+        let mut world = World::new(
+            std::ptr::NonNull::from(&mut activity),
+            std::ptr::NonNull::from(&mut groups),
+            |_| panic!("unused shared frame source"),
+        );
         let mut cx = Cx {
             b: &mut battle,
             world: &mut world,
@@ -28,7 +30,6 @@ fn with_elements(call: impl FnOnce(&mut Cx<'_>, [ElementId; 3])) {
         };
         cx.element_mut(ids[2]).flags = crate::ships::native::abi::NONSOLID as u16;
         call(&mut cx, ids);
-        UninitQueue(&mut queue);
     }
 }
 

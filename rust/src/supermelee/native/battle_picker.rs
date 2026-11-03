@@ -65,12 +65,6 @@ pub mod live {
     use std::{ffi::CString, mem, ptr};
     #[no_mangle]
     pub static mut PickMeleeFrame: FRAME = ptr::null_mut();
-    unsafe fn player_queue(player: usize) -> *mut QUEUE {
-        crate::engine::battle::access::live_queues::player_ships(player)
-            .cast::<crate::comm::locdata::CQueue>()
-            .cast_mut()
-            .cast()
-    }
     unsafe fn by_index(player: usize, index: u16, used: bool) -> Option<ShipId> {
         link_queue::ships(player).by_index(player as u8, index, used)
     }
@@ -381,7 +375,7 @@ pub mod live {
                 }
                 let master = crate::ships::master_native::master(ship as u16)
                     .unwrap_or_else(|| panic!("melee master ship {ship}"));
-                let captain = NameCaptain(player_queue(side), master.species);
+                let captain = link_queue::ships(side).captain_name(master.species, TFB_Random);
                 let built = link_queue::ships(side)
                     .build(master.species)
                     .unwrap_or_else(|| panic!("battle ship pool exhausted"));

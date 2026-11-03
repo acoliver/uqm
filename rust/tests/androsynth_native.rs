@@ -6,7 +6,7 @@ mod battle_context;
 #[path = "support/battle.rs"]
 mod battle;
 use battle::{Battle, Object, Ship};
-use std::{ffi::CStr, mem, ptr};
+use std::{ffi::CStr, mem};
 use uqm_rust::engine::battle::{Cx, ElementId, RaceState};
 use uqm_rust::ships::native::abi::*;
 
@@ -140,11 +140,11 @@ fn bubble_is_launched_with_the_c_missile_block() {
 
             let bubble = ship.weapon_record(bubbles[0]);
             assert!(!bubble.is_null());
-            assert_eq!((*bubble).__bindgen_anon_1.life_span, 200);
-            assert_eq!((*bubble).__bindgen_anon_2.hit_points, 3);
-            assert_eq!((*bubble).__bindgen_anon_3.mass_points, 2);
-            assert_eq!((*bubble).__bindgen_anon_4.turn_wait, 0);
-            assert_eq!((*bubble).__bindgen_anon_5.blast_offset, 3);
+            assert_eq!((*bubble).life, 200);
+            assert_eq!((*bubble).hits, 3);
+            assert_eq!((*bubble).mass, 2);
+            assert_eq!((*bubble).turn, 0);
+            assert_eq!((*bubble).thrust, 3);
             assert_ne!((*bubble).state_flags & IGNORE_SIMILAR as u16, 0);
             assert!((*bubble).preprocess_func.is_some());
             // DISPLAY_TO_WORLD (8) world units per tick along the ship facing.
@@ -166,27 +166,24 @@ fn bubble_wait_nibbles_count_down_then_retarget_with_the_c_rng_order() {
 
             // thrust wait in the high nibble, turn wait in the low nibble.
             let launch_velocity = velocity_fields(&(*bubble).velocity);
-            (*bubble).__bindgen_anon_4.turn_wait = 0x32;
+            (*bubble).turn = 0x32;
             hooks::invoke_element_pointer(preprocess, bubble);
-            assert_eq!((*bubble).__bindgen_anon_4.turn_wait, 0x21);
+            assert_eq!((*bubble).turn, 0x21);
             hooks::invoke_element_pointer(preprocess, bubble);
-            assert_eq!((*bubble).__bindgen_anon_4.turn_wait, 0x10);
+            assert_eq!((*bubble).turn, 0x10);
             assert_eq!((*bubble).state_flags & CHANGING as u16, 0);
             assert_eq!(velocity_fields(&(*bubble).velocity), launch_velocity);
 
             // Thrust wait expires and the turn wait is zero: one draw for the new
             // thrust wait, then no target in the queue so one draw for the facing.
-            (*bubble).__bindgen_anon_4.turn_wait = 0;
+            (*bubble).turn = 0;
             TFB_SeedRandom(0x5eed);
             let thrust_draw = TFB_Random();
             let facing_draw = TFB_Random();
             TFB_SeedRandom(0x5eed);
             hooks::invoke_element_pointer(preprocess, bubble);
             let thrust_wait = (thrust_draw as u16 & 3) as u8;
-            assert_eq!(
-                (*bubble).__bindgen_anon_4.turn_wait,
-                make_byte(2, thrust_wait)
-            );
+            assert_eq!((*bubble).turn, make_byte(2, thrust_wait));
             assert_ne!((*bubble).state_flags & CHANGING as u16, 0);
             assert_eq!(
                 velocity_fields(&(*bubble).velocity),
@@ -229,6 +226,7 @@ fn bubble_steers_toward_the_nearest_enemy_with_a_random_wobble() {
                 (*battle::prim(enemy_ship.ptr())).Type = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
                 enemy_ship.queue();
                 let enemy = enemy_ship.ptr();
+                (*bubble).target = None;
                 let mut tracked_facing: COUNT = 0;
                 let delta = uqm_rust::app::bridge::enter(|cx| {
                     let mut subject = cx.weapon_origin(bubbles[0].unwrap());
@@ -237,8 +235,7 @@ fn bubble_steers_toward_the_nearest_enemy_with_a_random_wobble() {
                 assert_eq!((delta > 0 && delta < 8), turn_is_short, "delta {delta}");
                 assert!(delta > 0 && delta != 8);
 
-                (*bubble).__bindgen_anon_4.turn_wait = 0x30;
-                (*bubble).hTarget = ptr::null_mut();
+                (*bubble).turn = 0x30;
                 TFB_SeedRandom(77);
                 let wobble = TFB_Random() as u16 & 7;
                 TFB_SeedRandom(77);
@@ -248,14 +245,14 @@ fn bubble_steers_toward_the_nearest_enemy_with_a_random_wobble() {
                 } else {
                     tracked_facing.wrapping_sub(wobble)
                 };
-                assert_eq!((*bubble).__bindgen_anon_4.turn_wait, make_byte(2, 2));
+                assert_eq!((*bubble).turn, make_byte(2, 2));
                 assert_eq!(
                     velocity_fields(&(*bubble).velocity),
                     velocity_toward(32, facing)
                 );
 
                 // Remove this enemy before trying the other side.
-                let handle = disp_q.tail;
+                let handle = battle::tail();
                 assert_eq!(battle::element(handle), enemy);
                 drop(enemy_ship);
             }
@@ -281,14 +278,14 @@ fn special_switches_to_blazer_and_saves_the_collision_function() {
             ship.element_mut().collision_func = Some(
                 uqm_rust::engine::battle::CollisionHook::Native(original_collision),
             );
-            ship.element_mut().__bindgen_anon_3.mass_points = 6;
-            ship.element_mut().__bindgen_anon_4.turn_wait = 3;
-            ship.element_mut().__bindgen_anon_5.thrust_wait = 3;
+            ship.element_mut().mass = 6;
+            ship.element_mut().turn = 3;
+            ship.element_mut().thrust = 3;
 
             ship.ship_mut().cur_status_flags = (SPECIAL | WEAPON) as u16;
             ship.preprocess();
             assert_eq!(
-                { ship.element_mut().next.image.farray },
+                { ship.element_mut().next.image.frames.clone() },
                 ship.special_frames()
             );
             // Weapon is suppressed on the switching frame; special is still held.
@@ -300,14 +297,14 @@ fn special_switches_to_blazer_and_saves_the_collision_function() {
             let c = ship.descriptor_mut().characteristics;
             assert_eq!(c.energy_regeneration, 0xff, "BLAZER_DEGENERATION as BYTE");
             assert_eq!(ship.ship_mut().energy_counter, 8);
-            assert_eq!(ship.element_mut().__bindgen_anon_4.turn_wait, 0);
-            assert_eq!(ship.element_mut().__bindgen_anon_5.thrust_wait, 0);
+            assert_eq!(ship.element_mut().turn, 0);
+            assert_eq!(ship.element_mut().thrust, 0);
             assert_eq!(
                 c.special_wait, 4,
                 "special_wait keeps the Guardian turn_wait"
             );
             assert_eq!(c.turn_wait, 1);
-            assert_eq!(ship.element_mut().__bindgen_anon_3.mass_points, 1);
+            assert_eq!(ship.element_mut().mass, 1);
 
             // The engine copy owns a block that remembers the original handler.
             assert!(matches!(
@@ -353,7 +350,10 @@ fn low_energy_special_flashes_text_without_switching() {
             ship.descriptor_mut().ship_info.energy_level = 1;
             ship.ship_mut().cur_status_flags = (SPECIAL | WEAPON) as u16;
             ship.preprocess();
-            assert_eq!({ ship.element_mut().next.image.farray }, ship.ship_frames());
+            assert_eq!(
+                { ship.element_mut().next.image.frames.clone() },
+                ship.ship_frames()
+            );
             assert_eq!(ship.element_mut().state_flags & CHANGING as u16, 0);
             // The status word written back is the one read before DeltaEnergy.
             assert_eq!(ship.ship_mut().cur_status_flags, (SPECIAL | WEAPON) as u16);
@@ -371,14 +371,14 @@ fn blazer_thrusts_on_its_own_and_turns_one_facing_per_tick() {
             enter_blazer(&mut ship);
 
             // Thrust wait ticks down before the blazer accelerates.
-            ship.element_mut().__bindgen_anon_5.thrust_wait = 2;
+            ship.element_mut().thrust = 2;
             ship.ship_mut().cur_status_flags = (THRUST | WEAPON | SPECIAL | LEFT) as u16;
             ship.preprocess();
-            assert_eq!(ship.element_mut().__bindgen_anon_5.thrust_wait, 1);
+            assert_eq!(ship.element_mut().thrust, 1);
             assert_eq!(ship.ship_mut().cur_status_flags, LEFT as u16);
             assert_eq!(velocity_fields(&ship.element_mut().velocity), [0; 9]);
 
-            ship.element_mut().__bindgen_anon_5.thrust_wait = 0;
+            ship.element_mut().thrust = 0;
             ship.ship_mut().ShipFacing = 5;
             ship.ship_mut().cur_status_flags = (THRUST | WEAPON | SPECIAL | LEFT) as u16;
             ship.preprocess();
@@ -401,7 +401,7 @@ fn blazer_thrusts_on_its_own_and_turns_one_facing_per_tick() {
             );
 
             // A blocked turn keeps the facing.
-            ship.element_mut().__bindgen_anon_4.turn_wait = 1;
+            ship.element_mut().turn = 1;
             ship.ship_mut().ShipFacing = 15;
             ship.ship_mut().cur_status_flags = RIGHT as u16;
             ship.preprocess();
@@ -422,7 +422,7 @@ fn blazer_clamps_turn_wait_against_vux_slowing() {
             enter_blazer(&mut ship);
             ship.descriptor_mut().characteristics.turn_wait = 5;
             ship.descriptor_mut().characteristics.special_wait = 4;
-            ship.element_mut().__bindgen_anon_5.thrust_wait = 1;
+            ship.element_mut().thrust = 1;
             ship.ship_mut().cur_status_flags = 0;
             ship.preprocess();
             assert_eq!(ship.descriptor_mut().characteristics.turn_wait, 1);
@@ -443,7 +443,7 @@ fn exhausted_blazer_reverts_and_restores_the_saved_collision_function() {
             enter_blazer(&mut ship);
             let blazer_handler = address(ship.element_mut().collision_func);
             let blazer_farray = ship.special_frames();
-            assert_eq!(ship.element_mut().next.image.farray, blazer_farray);
+            assert_eq!(ship.element_mut().next.image.frames, blazer_farray);
 
             // Moving, turning and out of energy.
             SetVelocityVector(&raw mut ship.element_mut().velocity, 60, 3);
@@ -453,13 +453,16 @@ fn exhausted_blazer_reverts_and_restores_the_saved_collision_function() {
             ship.element_mut().state_flags &= !(CHANGING as u16);
             ship.preprocess();
 
-            assert_eq!({ ship.element_mut().next.image.farray }, ship.ship_frames());
+            assert_eq!(
+                { ship.element_mut().next.image.frames.clone() },
+                ship.ship_frames()
+            );
             assert_ne!(ship.element_mut().state_flags & CHANGING as u16, 0);
             assert_eq!(velocity_fields(&ship.element_mut().velocity), [0; 9]);
             assert_eq!(ship.ship_mut().cur_status_flags, 0);
             assert_eq!(ship.descriptor_mut().characteristics.turn_wait, 4);
             assert_eq!(ship.descriptor_mut().characteristics.energy_regeneration, 1);
-            assert_eq!(ship.element_mut().__bindgen_anon_3.mass_points, 6);
+            assert_eq!(ship.element_mut().mass, 6);
             assert_ne!(address(ship.element_mut().collision_func), blazer_handler);
             assert_eq!(
                 address(ship.element_mut().collision_func),
@@ -587,7 +590,7 @@ impl<'a> Opponent<'a> {
         let mut ship = Ship::bare(_battle, SPECIES_ID_ANDROSYNTH_ID, 1);
         ship.descriptor_mut().cyborg_control.WeaponRange = weapon_range;
         ship.descriptor_mut().cyborg_control.ManeuverabilityIndex = maneuverability;
-        ship.element_mut().__bindgen_anon_2.crew_level = crew;
+        ship.element_mut().hits = crew;
         Self { ship }
     }
 }
@@ -611,7 +614,7 @@ impl<'a> Duel<'a> {
         duel
     }
 
-    fn weapon_threat(mut self, threat: *mut ELEMENT, which_turn: u16) -> Self {
+    fn weapon_threat(mut self, threat: *mut ElementRecord, which_turn: u16) -> Self {
         let slot = &mut self.concerns[concern_slot(ENEMY_WEAPON_INDEX)];
         slot.ObjectPtr = threat;
         slot.which_turn = which_turn;
@@ -772,3 +775,19 @@ fn guardian_ai_fires_when_close_or_when_the_target_is_ahead_of_the_drift() {
 
 #[path = "support/hooks.rs"]
 mod hooks;
+
+#[test]
+fn guardian_preprocess_keeps_an_absent_optional_image_set() {
+    battle_context::run(|| {
+        let pool = Battle::new(8);
+        let mut ship = Ship::bare(&pool, SPECIES_ID_ANDROSYNTH_ID, 0);
+        // SAFETY: the fixture owns the serialized pool throughout the callback.
+        unsafe {
+            assert!(ship.element_mut().current.image.frames.is_absent());
+            ship.preprocess();
+            assert!(ship.element_mut().current.image.frames.is_absent());
+            assert!(ship.element_mut().next.image.frames.is_absent());
+            assert_eq!(ship.descriptor_mut().ship_info.energy_level, 24);
+        }
+    });
+}

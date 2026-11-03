@@ -1,8 +1,6 @@
 //! Live element, collision traversal, camera and display-list processing.
 //! Integer narrowing follows `uqm/process.c` and its header macros.
 
-#[cfg(not(test))]
-use crate::engine::battle::legacy::DisplayLinks;
 use crate::math::wrap_delta;
 use crate::ships::native::abi::*;
 
@@ -10,11 +8,7 @@ mod collision_motion;
 pub(crate) mod dispatch;
 pub mod invoke_collision;
 pub mod invoke_element;
-use crate::engine::battle::access::primitives;
 mod queue_view;
-#[cfg(test)]
-use primitives::insert_prim_links;
-use primitives::{make_links, END};
 
 const SKIP_COLLISION: u16 = NONSOLID as u16 | DISAPPEARING as u16;
 const COLLISION_BIT: u16 = COLLISION as u16;
@@ -238,8 +232,8 @@ pub(crate) mod engine {
     }
 
     unsafe fn preprocess(cx: &mut Cx<'_>, e: ElementId) {
-        if cx.elements()[e].__bindgen_anon_1.life_span == 0 {
-            if !cx.elements()[e].pParent.is_null() {
+        if cx.elements()[e].life == 0 {
+            if cx.elements()[e].parent != crate::engine::battle::Parent::None {
                 untarget(cx, e);
             }
             cx.records()[e].state_flags |= DISAPPEARING as ELEMENT_FLAGS;
@@ -284,8 +278,7 @@ pub(crate) mod engine {
                 cx.init_intersect_end(e);
             }
             if flags & FINITE_LIFE as ELEMENT_FLAGS != 0 {
-                cx.records()[e].__bindgen_anon_1.life_span =
-                    cx.elements()[e].__bindgen_anon_1.life_span.wrapping_sub(1);
+                cx.records()[e].life = cx.elements()[e].life.wrapping_sub(1);
             }
         }
         cx.records()[e].state_flags =
@@ -372,9 +365,9 @@ pub(crate) mod engine {
             if collision_eligible(
                 cx.elements()[test].state_flags,
                 cx.elements()[el].state_flags,
-                cx.elements()[test].pParent == cx.elements()[el].pParent,
-                cx.elements()[test].__bindgen_anon_3.mass_points,
-                cx.elements()[el].__bindgen_anon_3.mass_points,
+                cx.elements()[test].parent == cx.elements()[el].parent,
+                cx.elements()[test].mass,
+                cx.elements()[el].mass,
             ) {
                 let mut state_flags = cx.elements()[el].state_flags;
                 let mut test_state_flags = cx.elements()[test].state_flags;
@@ -382,9 +375,9 @@ pub(crate) mod engine {
                 let mut time_value;
                 if (state_flags | test_state_flags) & finite_life != 0
                     && (((state_flags & APPEARING as ELEMENT_FLAGS != 0)
-                        && cx.elements()[el].__bindgen_anon_1.life_span > 1)
+                        && cx.elements()[el].life > 1)
                         || ((test_state_flags & APPEARING as ELEMENT_FLAGS != 0)
-                            && cx.elements()[test].__bindgen_anon_1.life_span > 1))
+                            && cx.elements()[test].life > 1))
                 {
                     time_value = 0;
                 } else {
@@ -408,7 +401,9 @@ pub(crate) mod engine {
                             if next == cur && tnext == tcur {
                                 if test_state_flags & APPEARING as ELEMENT_FLAGS != 0 {
                                     damage(cx, test);
-                                    if !cx.elements()[test].pParent.is_null() {
+                                    if cx.elements()[test].parent
+                                        != crate::engine::battle::Parent::None
+                                    {
                                         untarget(cx, test);
                                     }
                                     cx.records()[test].state_flags |=
@@ -419,7 +414,9 @@ pub(crate) mod engine {
                                 }
                                 if state_flags & APPEARING as ELEMENT_FLAGS != 0 {
                                     damage(cx, el);
-                                    if !cx.elements()[el].pParent.is_null() {
+                                    if cx.elements()[el].parent
+                                        != crate::engine::battle::Parent::None
+                                    {
                                         untarget(cx, el);
                                     }
                                     cx.records()[el].state_flags |=
@@ -435,22 +432,16 @@ pub(crate) mod engine {
                                     image!(frame; cx.records()[el].next.image.frame, SetEquFrameIndex(next, cur));
                                 } else if next != cur {
                                     image!(copy; cx.records()[el].next.image, cx.elements()[el].current.image);
-                                    if cx.elements()[el].__bindgen_anon_1.life_span
-                                        > NORMAL_LIFE as COUNT
-                                    {
-                                        cx.records()[el].__bindgen_anon_1.life_span =
-                                            NORMAL_LIFE as COUNT;
+                                    if cx.elements()[el].life > NORMAL_LIFE as COUNT {
+                                        cx.records()[el].life = NORMAL_LIFE as COUNT;
                                     }
                                 }
                                 if frame_index(tcur) != frame_index(tnext) {
                                     image!(frame; cx.records()[test].next.image.frame, SetEquFrameIndex(tnext, tcur));
                                 } else if tnext != tcur {
                                     image!(copy; cx.records()[test].next.image, cx.elements()[test].current.image);
-                                    if cx.elements()[test].__bindgen_anon_1.life_span
-                                        > NORMAL_LIFE as COUNT
-                                    {
-                                        cx.records()[test].__bindgen_anon_1.life_span =
-                                            NORMAL_LIFE as COUNT;
+                                    if cx.elements()[test].life > NORMAL_LIFE as COUNT {
+                                        cx.records()[test].life = NORMAL_LIFE as COUNT;
                                     }
                                 }
                                 cx.init_intersect_start(el);
@@ -665,7 +656,7 @@ pub(crate) mod engine {
             ViewState::Change
         };
         if (cx.world.activity() as u8) <= IN_HYPERSPACE as u8 {
-            crate::app::bridge::publish(cx, || MoveGalaxy(state as VIEW_STATE, dx, dy));
+            MoveGalaxy(cx, state as VIEW_STATE, dx, dy);
         }
         *scroll_x = dx;
         *scroll_y = dy;
@@ -688,17 +679,7 @@ pub(crate) mod engine {
                 crate::collections::observation::Event::ResetPool,
             );
             cx.records().reinit();
-            for i in 0..MAX_DISPLAY_PRIMS as COUNT {
-                (*crate::engine::battle::record::primitive_slot((i) as usize).as_ptr()).Links =
-                    make_links(END, i + 1);
-            }
-            (*crate::engine::battle::record::primitive_slot(
-                (MAX_DISPLAY_PRIMS as COUNT - 1) as usize,
-            )
-            .as_ptr())
-            .Links = make_links(END, END);
-            DisplayFreeList = 0;
-            DisplayLinks = make_links(END, END);
+            cx.reset_display();
         });
     }
 
@@ -766,10 +747,8 @@ pub(crate) mod engine {
                 next_handle = cx.elements().succ(e);
                 retire(cx, e);
             } else {
-                let primitive = crate::engine::battle::record::primitive_slot(usize::from(
-                    cx.elements()[e].PrimIndex,
-                ))
-                .as_ptr();
+                let index = cx.elements()[e].PrimIndex;
+                let primitive = std::ptr::from_mut(cx.display_primitive(index));
                 let kind = (*primitive).Type;
                 if view_state != ViewState::Stable || flags & CHANGE_BITS != 0 {
                     let projection = queue_view::Projection {
@@ -802,7 +781,7 @@ pub(crate) mod engine {
                                     calc_zoom_stuff(cx.b.zoom_out)
                                 };
                                 image!(frame; cx.records()[e].next.image.frame, SetEquFrameIndex(
-                                    *cx.elements()[e].next.image.farray.wrapping_add(usize::from(index)),
+                                    cx.elements()[e].next.image.frames.view(usize::from(index)).raw(),
                                     cx.elements()[e].next.image.frame,
                                 ));
                                 if optMeleeScale == SCALE_TRILINEAR
@@ -811,11 +790,12 @@ pub(crate) mod engine {
                                 {
                                     let frame = cx.elements()[e].next.image.frame;
                                     let mmframe = SetEquFrameIndex(
-                                        *cx.elements()[e]
+                                        cx.elements()[e]
                                             .next
                                             .image
-                                            .farray
-                                            .add(usize::from(index) + 1),
+                                            .frames
+                                            .view(usize::from(index) + 1)
+                                            .raw(),
                                         frame,
                                     );
                                     if !frame.is_null() && !mmframe.is_null() {
@@ -836,11 +816,7 @@ pub(crate) mod engine {
                 }
                 postprocess(cx, e);
                 if kind < gfx_object_NUM_PRIMS as GRAPHICS_PRIM {
-                    crate::engine::battle::access::insert_primitive(
-                        &raw mut DisplayLinks,
-                        cx.elements()[e].PrimIndex,
-                        END,
-                    );
+                    cx.append_display(cx.elements()[e].PrimIndex);
                 }
                 next_handle = cx.elements().succ(e);
             }
@@ -878,7 +854,9 @@ pub(crate) mod engine {
                     let (_, scale) = calc_zoom_stuff(cx.b.zoom_out);
                     SetGraphicScale(i32::from(scale));
                 }
-                crate::engine::battle::access::draw_display_batch(DisplayLinks);
+                let mut batch = cx.display_batch();
+                let head = if batch.is_empty() { u16::MAX } else { 0 };
+                crate::graphics::frame_abi::DrawBatch(batch.as_mut_ptr(), u32::from(head), 0);
                 SetGraphicScale(0);
             }
             crate::battle::sounds::engine::flush_sounds(cx);
@@ -886,7 +864,7 @@ pub(crate) mod engine {
             cx.b.kernel_sounds().push(usize::MAX as SOUND, None);
             crate::battle::sounds::engine::flush_sounds(cx);
         }
-        DisplayLinks = make_links(END, END);
+        cx.clear_display_order();
     }
     /// # Safety
     /// Game thread, inside the published lifecycle, with initialized rendering state.
@@ -901,8 +879,8 @@ pub use engine::{process_collisions, InitDisplayList, RedrawQueue};
 
 #[cfg(test)]
 mod tests {
-    use super::primitives::{alloc_display_prim, free_display_prim};
     use super::*;
+    use crate::engine::battle::display::DisplayPool;
 
     #[test]
     fn live_helper_dimensions_and_collision_flags() {
@@ -1055,49 +1033,32 @@ mod tests {
 
     #[test]
     fn primitive_insertion_preserves_head_tail_and_neighbor_order() {
-        // SAFETY: this serialized test owns the records and projected storage for the scope.
-        let mut array: [PRIMITIVE; 5] = unsafe { std::mem::zeroed() };
-        let mut list = make_links(END, END);
-        // SAFETY: this serialized test owns the records and projected storage for the scope.
-        unsafe {
-            insert_prim_links(array.as_mut_ptr(), &mut list, 0, END);
-            insert_prim_links(array.as_mut_ptr(), &mut list, 1, END);
-            insert_prim_links(array.as_mut_ptr(), &mut list, 2, 0);
-            insert_prim_links(array.as_mut_ptr(), &mut list, 3, 1);
+        let mut display = DisplayPool::new();
+        for _ in 0..5 {
+            display.alloc().unwrap();
         }
-        assert_eq!(list, make_links(2, 1));
-        assert_eq!(array[2].Links, make_links(END, 0));
-        assert_eq!(array[0].Links, make_links(2, 3));
-        assert_eq!(array[3].Links, make_links(0, 1));
-        assert_eq!(array[1].Links, make_links(3, END));
+        display.insert_before(0, None);
+        display.insert_before(1, None);
+        display.insert_before(2, Some(0));
+        display.insert_before(3, Some(1));
+        assert_eq!(display.order(), vec![2, 0, 3, 1]);
     }
 
     #[test]
     fn primitive_pool_allocates_in_order_and_reuses_frees_lifo() {
-        // SAFETY: this serialized test owns the records and projected storage for the scope.
-        let mut array: [PRIMITIVE; 4] = unsafe { std::mem::zeroed() };
-        for (i, primitive) in array.iter_mut().enumerate() {
-            primitive.Links = make_links(END, if i == 3 { END } else { i as COUNT + 1 });
-            primitive.Type = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
+        let mut display = DisplayPool::new();
+        for index in 0..330 {
+            assert_eq!(display.alloc(), Some(index));
+            display.get_mut(index).Type = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
         }
-        let mut free = 0;
-        // SAFETY: this serialized test owns the records and projected storage for the scope.
-        unsafe {
-            assert_eq!(alloc_display_prim(array.as_mut_ptr(), &mut free), 0);
-            assert_eq!(alloc_display_prim(array.as_mut_ptr(), &mut free), 1);
-            free_display_prim(array.as_mut_ptr(), &mut free, 0);
-            free_display_prim(array.as_mut_ptr(), &mut free, 1);
-            assert_eq!(free, 1);
-            assert_eq!(array[1].Links, make_links(END, 0));
-            assert_eq!(array[0].Links, make_links(END, 2));
-            for expected in [1, 0, 2, 3] {
-                assert_eq!(alloc_display_prim(array.as_mut_ptr(), &mut free), expected);
-            }
-        }
-        assert_eq!(free, END);
-        assert!(array
-            .iter()
-            .all(|p| p.Type == gfx_object_STAMP_PRIM as GRAPHICS_PRIM));
+        display.free(0);
+        display.free(1);
+        assert_eq!(display.alloc(), Some(1));
+        assert_eq!(display.alloc(), Some(0));
+        assert!(display.alloc().is_none());
+        assert!(
+            (0..330).all(|index| display.get(index).Type == gfx_object_STAMP_PRIM as GRAPHICS_PRIM)
+        );
     }
 
     #[test]

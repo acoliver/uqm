@@ -6,7 +6,7 @@ use uqm_rust::ships::{ffi::build_ship, ffi_contract::CStarship, native::abi};
 #[test]
 fn ship_construction_clears_payload_and_preserves_allocation_order() {
     for size in [
-        mem::size_of::<abi::STARSHIP>(),
+        mem::size_of::<abi::ShipRecord>(),
         mem::size_of::<abi::SHIP_FRAGMENT>(),
     ] {
         let mut queue = Queue {

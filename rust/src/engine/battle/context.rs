@@ -4,9 +4,8 @@ use super::{record::QUEUE, table::ElementTable};
 use std::ptr::NonNull;
 
 pub struct Battle {
-    pub(super) elements: ElementTable,
     pub(super) terminal_outcome: Option<super::RaceState>,
-    kernel: super::record::Kernel,
+    pub(super) kernel: super::record::Kernel,
     pub zoom_out: i16,
     pub nth_frame: u16,
     pub max_zoom_out: i16,
@@ -15,8 +14,22 @@ pub struct Battle {
 }
 
 impl Battle {
+    pub fn ships(
+        &mut self,
+        side: usize,
+    ) -> super::link_queue::LinkQueue<'_, super::link_queue::Starship> {
+        super::link_queue::LinkQueue::new(&mut self.kernel.races[side])
+    }
+    pub fn reset_ship_capacity(&mut self, side: usize, capacity: usize) {
+        self.kernel.races[side].reset_capacity(capacity);
+    }
+    pub fn reset_element_capacity(&mut self, capacity: usize) {
+        self.kernel.elements.reset_capacity(capacity);
+    }
+
     /// Start a battle, including encounters with no Sa-Matra descriptor.
     pub fn initialize(&mut self) {
+        self.kernel.begin_battle();
         self.terminal_outcome = None;
     }
 
@@ -31,7 +44,7 @@ impl Battle {
     }
 
     #[cfg(not(test))]
-    pub(crate) fn master_queue(&mut self) -> &mut QUEUE {
+    pub(crate) fn master_queue(&mut self) -> &mut super::kernel::MasterCatalog {
         &mut self.kernel.master_queue
     }
 
@@ -45,14 +58,12 @@ impl Battle {
         &mut self.kernel.sounds
     }
 
-    /// # Safety
-    /// `queue` is the one game-thread element authority, kept live until cleanup.
-    pub unsafe fn new(queue: *mut QUEUE) -> Self {
+    pub fn new(capacity: usize) -> Self {
+        let mut kernel = super::record::Kernel::new();
+        kernel.elements.reset_capacity(capacity);
         Self {
-            // SAFETY: the caller owns the queue for this battle context's lifetime.
-            elements: unsafe { ElementTable::from_queue(queue) },
             terminal_outcome: None,
-            kernel: super::record::Kernel::new(),
+            kernel,
             zoom_out: 1 << 8,
             nth_frame: 0,
             max_zoom_out: 0,
@@ -66,8 +77,9 @@ impl Battle {
 /// Phase 4 replaces these projections with the owned World.
 pub struct World {
     pub(super) activity: NonNull<u16>,
-    groups: NonNull<QUEUE>,
-    pub shared_frames: [super::views::Frames; 2],
+    pub(super) groups: NonNull<QUEUE>,
+    pub(super) frame_source:
+        fn(super::views::SharedFrames) -> NonNull<crate::graphics::native_abi::FRAME>,
 }
 
 impl World {
@@ -75,26 +87,23 @@ impl World {
     /// Pointers must project the game-thread-owned GlobData authority, remain live,
     /// and never have a Rust reference held across a legacy call. The caller must
     /// also retain exclusive game-thread access to GlobData, input, and story
-    /// authorities until this World is dropped or its use is suspended.
+    /// authorities until this World is dropped or its use is suspended. The frame
+    /// resolver must return three live source slots for each requested shared role.
     pub unsafe fn new(
-        activity: *mut u16,
-        groups: *mut QUEUE,
-        shared_frames: [*mut crate::graphics::native_abi::FRAME; 2],
+        activity: NonNull<u16>,
+        groups: NonNull<QUEUE>,
+        frame_source: fn(super::views::SharedFrames) -> NonNull<crate::graphics::native_abi::FRAME>,
     ) -> Self {
         Self {
-            shared_frames: shared_frames.map(super::views::Frames),
-            activity: NonNull::new(activity).unwrap_or_else(|| panic!("null activity projection")),
-            groups: NonNull::new(groups).unwrap_or_else(|| panic!("null group queue projection")),
+            activity,
+            groups,
+            frame_source,
         }
     }
 
     pub fn activity(&self) -> u16 {
         // SAFETY: construction guarantees the projection's validity and exclusivity.
         unsafe { self.activity.as_ptr().read() }
-    }
-
-    pub fn groups(&self) -> *const QUEUE {
-        self.groups.as_ptr()
     }
 }
 
@@ -110,13 +119,16 @@ impl Cx<'_> {
     /// Legacy game-thread access must not retain record borrows across callbacks.
     #[cfg(not(test))]
     pub(crate) unsafe fn records(&mut self) -> &mut ElementTable {
-        &mut self.b.elements
+        &mut self.b.kernel.elements
     }
     pub fn random(&mut self) -> u32 {
         (self.rng)()
     }
     pub fn elements(&self) -> &ElementTable {
-        &self.b.elements
+        &self.b.kernel.elements
+    }
+    pub(crate) fn groups(&self) -> &QUEUE {
+        self.project(self.world.groups)
     }
 }
 
@@ -134,7 +146,7 @@ impl Cx<'_> {
 
 impl Cx<'_> {
     #[cfg(not(test))]
-    pub(crate) fn master_queue(&mut self) -> &mut QUEUE {
+    pub(crate) fn master_queue(&mut self) -> &mut super::kernel::MasterCatalog {
         self.b.master_queue()
     }
 }

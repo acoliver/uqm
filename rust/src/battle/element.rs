@@ -92,11 +92,11 @@ crate::c_bindings::assert_c_layout!(
 /// Visual state (current or next frame)
 /// Matches C's STATE struct from element.h
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct ElementVisualState {
     pub location: Point,
     pub frame: FrameHandle,
-    pub farray: *mut FrameHandle, // Pointer to frame array
+    pub frames: crate::engine::battle::frames::Frames,
 }
 
 impl Default for ElementVisualState {
@@ -110,7 +110,7 @@ impl ElementVisualState {
         ElementVisualState {
             location: Point::zero(),
             frame: std::ptr::null_mut(),
-            farray: std::ptr::null_mut(),
+            frames: crate::engine::battle::frames::Frames::ABSENT,
         }
     }
 }
@@ -131,11 +131,9 @@ pub type HElement = *mut Element;
 
 /// Element processing function (preprocess, postprocess, death)
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Element {
     // -- Link fields (must be first for QUEUE compatibility) --
-    pub pred: HElement,
-    pub succ: HElement,
 
     // -- Callbacks --
     pub preprocess_func: Option<crate::engine::battle::ElementHook>,
@@ -183,11 +181,11 @@ pub struct Element {
     pub current: ElementVisualState,
     pub next: ElementVisualState,
 
-    // -- Parent reference (pointer to StarShip or other owner) --
-    pub p_parent: *mut std::ffi::c_void,
+    // -- Parent reference --
+    pub parent: crate::engine::battle::Parent,
 
     // -- Tracking target reference --
-    pub h_target: HElement,
+    pub target: Option<crate::engine::battle::ElementId>,
 }
 
 impl Element {
@@ -195,8 +193,6 @@ impl Element {
     /// All fields are initialized to zero/null
     pub fn new() -> Self {
         Element {
-            pred: std::ptr::null_mut(),
-            succ: std::ptr::null_mut(),
             preprocess_func: None,
             postprocess_func: None,
             collision_func: None,
@@ -221,8 +217,8 @@ impl Element {
             prim_index: 0,
             current: ElementVisualState::new(),
             next: ElementVisualState::new(),
-            p_parent: std::ptr::null_mut(),
-            h_target: std::ptr::null_mut(),
+            parent: crate::engine::battle::Parent::None,
+            target: None,
         }
     }
 
@@ -257,7 +253,7 @@ impl Element {
         // If IGNORE_SIMILAR, they must have different parents
         if self.state_flags.contains(ElementFlags::IGNORE_SIMILAR)
             && other.state_flags.contains(ElementFlags::IGNORE_SIMILAR)
-            && self.p_parent == other.p_parent
+            && self.parent == other.parent
         {
             return false;
         }
@@ -577,9 +573,13 @@ mod tests {
         e0.mass_points = 1;
         e1.mass_points = 1;
 
-        let parent_ptr = &mut 0u8 as *mut u8 as *mut std::ffi::c_void;
-        e0.p_parent = parent_ptr;
-        e1.p_parent = parent_ptr;
+        let parent = crate::engine::battle::Parent::Ship(crate::engine::battle::ShipId {
+            side: 0,
+            slot: 0,
+            gen: 0,
+        });
+        e0.parent = parent;
+        e1.parent = parent;
 
         e0.state_flags.insert(ElementFlags::IGNORE_SIMILAR);
         e1.state_flags.insert(ElementFlags::IGNORE_SIMILAR);
@@ -686,8 +686,6 @@ mod tests {
         assert_eq!(elem.state_flags, ElementFlags::empty());
         assert_eq!(elem.life_span, 0);
         assert_eq!(elem.mass_points, 0);
-        assert!(elem.pred.is_null());
-        assert!(elem.succ.is_null());
     }
 
     #[test]
@@ -747,9 +745,13 @@ mod tests {
         e1.mass_points = 3;
 
         // Set same parent
-        let parent_ptr = &mut 0u8 as *mut u8 as *mut std::ffi::c_void;
-        e0.p_parent = parent_ptr;
-        e1.p_parent = parent_ptr;
+        let parent = crate::engine::battle::Parent::Ship(crate::engine::battle::ShipId {
+            side: 0,
+            slot: 0,
+            gen: 0,
+        });
+        e0.parent = parent;
+        e1.parent = parent;
 
         // Both set IGNORE_SIMILAR
         e0.state_flags.insert(ElementFlags::IGNORE_SIMILAR);
@@ -768,10 +770,18 @@ mod tests {
         e1.mass_points = 3;
 
         // Different parents
-        let parent0 = &mut 0u8 as *mut u8 as *mut std::ffi::c_void;
-        let parent1 = &mut 1u8 as *mut u8 as *mut std::ffi::c_void;
-        e0.p_parent = parent0;
-        e1.p_parent = parent1;
+        let parent0 = crate::engine::battle::Parent::Ship(crate::engine::battle::ShipId {
+            side: 0,
+            slot: 0,
+            gen: 0,
+        });
+        let parent1 = crate::engine::battle::Parent::Ship(crate::engine::battle::ShipId {
+            side: 0,
+            slot: 1,
+            gen: 0,
+        });
+        e0.parent = parent0;
+        e1.parent = parent1;
 
         e0.state_flags.insert(ElementFlags::IGNORE_SIMILAR);
         e1.state_flags.insert(ElementFlags::IGNORE_SIMILAR);
@@ -940,7 +950,7 @@ mod tests {
 
     #[test]
     fn live_intersection_fields_are_read_at_their_native_offsets() {
-        let mut native: crate::ships::native::abi::ELEMENT = unsafe { std::mem::zeroed() };
+        let mut native: crate::ships::native::abi::ElementRecord = unsafe { std::mem::zeroed() };
         native.IntersectControl.last_time_val = 17;
         native.IntersectControl.EndPoint = crate::graphics::native_abi::POINT { x: 31, y: -47 };
         native.IntersectControl.IntersectStamp.origin =
@@ -956,16 +966,50 @@ mod tests {
 
     #[test]
     fn element_layout_matches_native_hook_record() {
-        assert_eq!(std::mem::size_of::<Element>(), 176);
-        assert_eq!(std::mem::offset_of!(Element, preprocess_func), 16);
-        assert_eq!(std::mem::offset_of!(Element, player_nr), 48);
-        assert_eq!(std::mem::offset_of!(Element, state_flags), 50);
-        assert_eq!(std::mem::offset_of!(Element, life_span), 52);
-        assert_eq!(std::mem::offset_of!(Element, crew_or_hp), 54);
-        assert_eq!(std::mem::offset_of!(Element, prim_index), 104);
-        assert_eq!(std::mem::offset_of!(Element, current), 112);
-        assert_eq!(std::mem::offset_of!(Element, next), 136);
-        assert_eq!(std::mem::offset_of!(Element, p_parent), 160);
-        assert_eq!(std::mem::offset_of!(Element, h_target), 168);
+        use crate::ships::native::abi::ElementRecord;
+        assert_eq!(
+            std::mem::size_of::<Element>(),
+            std::mem::size_of::<ElementRecord>()
+        );
+        assert_eq!(
+            std::mem::offset_of!(Element, preprocess_func),
+            std::mem::offset_of!(ElementRecord, preprocess_func)
+        );
+        assert_eq!(
+            std::mem::offset_of!(Element, player_nr),
+            std::mem::offset_of!(ElementRecord, playerNr)
+        );
+        assert_eq!(
+            std::mem::offset_of!(Element, state_flags),
+            std::mem::offset_of!(ElementRecord, state_flags)
+        );
+        assert_eq!(
+            std::mem::offset_of!(Element, life_span),
+            std::mem::offset_of!(ElementRecord, life)
+        );
+        assert_eq!(
+            std::mem::offset_of!(Element, crew_or_hp),
+            std::mem::offset_of!(ElementRecord, hits)
+        );
+        assert_eq!(
+            std::mem::offset_of!(Element, prim_index),
+            std::mem::offset_of!(ElementRecord, PrimIndex)
+        );
+        assert_eq!(
+            std::mem::offset_of!(Element, current),
+            std::mem::offset_of!(ElementRecord, current)
+        );
+        assert_eq!(
+            std::mem::offset_of!(Element, next),
+            std::mem::offset_of!(ElementRecord, next)
+        );
+        assert_eq!(
+            std::mem::offset_of!(Element, parent),
+            std::mem::offset_of!(ElementRecord, parent)
+        );
+        assert_eq!(
+            std::mem::offset_of!(Element, target),
+            std::mem::offset_of!(ElementRecord, target)
+        );
     }
 }

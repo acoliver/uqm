@@ -3,12 +3,11 @@ pub use crate::engine::battle::{ElementHook, CollisionHook};
 #[cfg(not(test))]
 pub(crate) use crate::engine::battle::record::Kernel;
 pub use crate::engine::battle::record::{
-    captain_stuff, element, element__bindgen_ty_1, element__bindgen_ty_2, element__bindgen_ty_3,
-    element__bindgen_ty_4, element__bindgen_ty_5, race_desc, state, state__bindgen_ty_1,
+    captain_stuff, state, state__bindgen_ty_1,
     tfb_soundsample, TFB_SoundSample,
-    CAPTAIN_STUFF, CHARACTERISTIC_STUFF, DATA_STUFF, ELEMENT, EVALUATE_DESC, FLEET_STUFF,
+    CAPTAIN_STUFF, CHARACTERISTIC_STUFF, DATA_STUFF, ElementRecord, EVALUATE_DESC, FLEET_STUFF,
     INTEL_STUFF, INTERSECT_CONTROL, MAX_DISPLAY_PRIMS, MOVEMENT_STATE, MUSIC_REF,
-    PRIMITIVE, PRIM_DESC, QUEUE, RACE_DESC, SHIP_INFO, STARSHIP,
+    PRIMITIVE, PRIM_DESC, QUEUE, RaceDescriptor, SHIP_INFO, ShipRecord,
     STATE,
 };
 // Shared engine records used by the Rust runtime.
@@ -485,8 +484,7 @@ pub const BATTLE_CREW_X: u32 = 10;
 pub const BATTLE_CREW_Y: u32 = 64;
 pub const MODIFY_IMAGE: u32 = 1;
 pub const MODIFY_SWAP: u32 = 2;
-pub const NAME_OFFSET: u32 = 5;
-pub const NUM_CAPTAINS_NAMES: u32 = 16;
+pub use crate::engine::battle::link_queue::{NAME_OFFSET, NUM_CAPTAINS_NAMES};
 pub const TASK_INUSE: u32 = 1;
 pub const TASK_EXIT: u32 = 2;
 pub const START_YEAR: u32 = 2155;
@@ -992,7 +990,7 @@ pub const gfx_object_LINE_PRIM: gfx_object = crate::graphics::native_abi::LINE_P
 pub const gfx_object_TEXT_PRIM: gfx_object = 4;
 pub const gfx_object_RECT_PRIM: gfx_object = 5;
 pub const gfx_object_RECTFILL_PRIM: gfx_object = 6;
-pub const gfx_object_NUM_PRIMS: gfx_object = 7;
+pub const gfx_object_NUM_PRIMS: gfx_object = crate::graphics::native_abi::EMPTY_PRIMITIVE as gfx_object;
 pub type gfx_object = ::std::os::raw::c_uint;
 pub type GRAPHICS_PRIM = BYTE;
 pub type PRIM_LINKS = DWORD;
@@ -1244,9 +1242,6 @@ pub const VIEW_STATE_VIEW_SCROLL: VIEW_STATE = 1;
 pub const VIEW_STATE_VIEW_CHANGE: VIEW_STATE = 2;
 pub type VIEW_STATE = ::std::os::raw::c_uint;
 pub type ELEMENT_FLAGS = UWORD;
-pub use crate::engine::battle::legacy::disp_q;
-pub use crate::engine::battle::legacy::DisplayFreeList;
-pub use crate::engine::battle::legacy::DisplayArray;
 
 #[cfg(not(test))]
 
@@ -1677,7 +1672,7 @@ pub struct MISSILE_BLOCK {
     pub face: COUNT,
     pub index: COUNT,
     pub life: COUNT,
-    pub farray: *mut FRAME,
+    pub frames: *mut FRAME,
     pub preprocess_func: Option<crate::engine::battle::ElementHook>,
     pub blast_offs: SIZE,
 }
@@ -3120,7 +3115,6 @@ unsafe extern "C" {
 unsafe extern "C" {
     pub static mut TinyFont: FONT;
 }
-pub use crate::engine::battle::legacy::race_q;
 unsafe extern "C" {
     pub static mut LastActivity: ACTIVITY;
 }

@@ -118,12 +118,12 @@ pub fn reset() {
     BATTLE_FRAME_COUNT.frames.store(0, Ordering::Release);
 }
 
-pub trait ImagePointer: Copy {
-    fn address(self) -> usize;
+pub trait ImagePointer: Clone {
+    fn address(&self) -> usize;
 }
 impl<T> ImagePointer for *mut T {
-    fn address(self) -> usize {
-        self as usize
+    fn address(&self) -> usize {
+        *self as usize
     }
 }
 
@@ -155,13 +155,13 @@ pub fn assign_set<T: ImagePointer>(slot: &mut T, array: T, single: Option<usize>
 }
 
 pub fn swap_image_view<T: ImagePointer>(ambient: &mut T, view: &mut T) {
-    let previous = *ambient;
-    assign_frame(ambient, *view);
+    let previous = ambient.clone();
+    assign_frame(ambient, view.clone());
     assign_view(view, previous);
 }
 
 /// Copy provenance with the value, without resolving its pointers again.
-pub fn copy_image<T: Copy>(slot: &mut T, value: T, source: usize) {
+pub fn copy_image<T>(slot: &mut T, value: T, source: usize) {
     record(Event::ImageCopy {
         target: std::ptr::from_mut(slot) as usize,
         source,
@@ -192,7 +192,7 @@ macro_rules! image {
     }};
     (copy; $slot:expr, $source:expr) => {{
         let source = &$source;
-        let value = *source;
+        let value = (*source).clone();
         let address = std::ptr::from_ref(source) as usize;
         $crate::collections::observation::copy_image(&mut $slot, value, address);
     }};
@@ -238,6 +238,40 @@ pub fn assert_progress(min_frames: u64) -> Result<u64, String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    #[serial]
+    fn image_copy_retains_non_copy_resource_handles() {
+        let source = std::rc::Rc::new(7u8);
+        let mut target = std::rc::Rc::new(3u8);
+        image!(copy; target, source);
+        assert!(std::rc::Rc::ptr_eq(&target, &source));
+        assert_eq!(std::rc::Rc::strong_count(&target), 2);
+        drop(source);
+        assert_eq!(std::rc::Rc::strong_count(&target), 1);
+        assert_eq!(*target, 7);
+    }
+
+    #[test]
+    #[serial]
+    fn swapping_views_retains_both_non_copy_resource_handles() {
+        #[derive(Clone)]
+        struct Retained(std::rc::Rc<u8>);
+        impl super::ImagePointer for Retained {
+            fn address(&self) -> usize {
+                std::rc::Rc::as_ptr(&self.0) as usize
+            }
+        }
+        let first = std::rc::Rc::new(1);
+        let second = std::rc::Rc::new(2);
+        let mut ambient = Retained(first.clone());
+        let mut view = Retained(second.clone());
+        super::swap_image_view(&mut ambient, &mut view);
+        assert!(std::rc::Rc::ptr_eq(&ambient.0, &second));
+        assert!(std::rc::Rc::ptr_eq(&view.0, &first));
+        assert_eq!(std::rc::Rc::strong_count(&first), 2);
+        assert_eq!(std::rc::Rc::strong_count(&second), 2);
+    }
+
     use super::*;
     use serial_test::serial;
 

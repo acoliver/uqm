@@ -30,7 +30,7 @@ pub unsafe fn FreeKernel() {
 }
 
 unsafe fn uninit_contexts() {
-    crate::engine::battle::access::lifecycle::uninit_elements();
+    crate::engine::battle::access::lifecycle::uninit_elements(Kernel::current());
     DestroyContext(OffScreenContext.cast());
     DestroyContext(SpaceContext.cast());
     DestroyContext(StatusContext.cast());
@@ -45,7 +45,7 @@ unsafe fn uninit_kernel() {
     DestroyDrawable(ReleaseDrawable(ActivityFrame));
     DestroyFont(TinyFont.cast());
     DestroyFont(StarConFont.cast());
-    crate::battle::context_access::lifecycle::uninit_ships();
+    crate::battle::context_access::lifecycle::uninit_ships(Kernel::current());
     ActivityFrame = ptr::null_mut();
 }
 

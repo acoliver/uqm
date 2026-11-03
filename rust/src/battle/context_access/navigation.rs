@@ -1,6 +1,6 @@
 //! Scoped navigation projections into the retained game-thread authorities.
 #![cfg(not(test))]
-use crate::engine::battle::{Cx, ElementId, Parent, ShipId};
+use crate::engine::battle::{Cx, ElementId, Parent};
 use crate::navigation::abi::*;
 use crate::navigation::globals::GlobData;
 use crate::navigation::hyperspace::live::{logx, logy};
@@ -161,11 +161,6 @@ impl Cx<'_> {
             InsertQueue(queue, encounter.as_ptr().cast(), (*queue).head);
         }
     }
-    pub(crate) fn first_ship(&self, side: usize) -> Option<ShipId> {
-        // SAFETY: the context retains both initialized ship pools for this value projection.
-        let ships = unsafe { crate::engine::battle::link_queue::ships(side) };
-        ships.head().map(|id| ships.ship_id(id, side as u8))
-    }
 }
 
 impl Cx<'_> {
@@ -230,13 +225,13 @@ impl Cx<'_> {
     }
     pub(crate) fn set_group_image(&mut self, id: ElementId, group: NonNull<IP_GROUP>) {
         let record = self.group_record(group);
+        let role = crate::engine::battle::views::SharedFrames::GroupIcon(group.as_ptr() as usize);
+        let source = NonNull::from(&record.melee_icon);
         // SAFETY: the retained group owns its single icon frame slot.
         let (frame, frames) = unsafe {
             (
                 crate::engine::battle::views::Frame::from_native(record.melee_icon),
-                crate::engine::battle::views::Frames::from_native(NonNull::from(
-                    &record.melee_icon,
-                )),
+                crate::engine::battle::views::Frames::native_shared(role, source, 1),
             )
         };
         self.set_single_frames(id, frames, frame);
@@ -251,12 +246,11 @@ impl Cx<'_> {
     }
     pub(crate) fn set_flagship_image(&mut self, id: ElementId) {
         let frame = self.flagship_stamp_frame();
+        let role = crate::engine::battle::views::SharedFrames::Flagship;
+        let source = NonNull::from(&self.navigation().Game_state.ShipStamp.frame);
         // SAFETY: the navigation authority retains this single-frame stamp slot.
-        let frames = unsafe {
-            crate::engine::battle::views::Frames::from_native(NonNull::from(
-                &self.navigation().Game_state.ShipStamp.frame,
-            ))
-        };
+        let frames =
+            unsafe { crate::engine::battle::views::Frames::native_shared(role, source, 1) };
         self.set_single_frames(id, frames, frame);
         self.set_frame(id, false, frame);
     }

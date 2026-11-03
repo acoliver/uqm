@@ -76,7 +76,7 @@ pub(crate) mod engine {
     pub(crate) fn spawn_limpets(cx: &mut Cx<'_>, e: ElementId) {
         let ss = cx.owner(e);
         let mut block = crate::engine::battle::views::Missile {
-            farray: cx.ship_frame_set(ss, 2),
+            frames: cx.ship_frame_set(ss, 2),
             // The original expression adds HALF_CIRCLE directly to the facing.
             face: (i32::from(cx.ship_state(ss).facing) + HALF_CIRCLE as i32) as COUNT,
             index: 0,

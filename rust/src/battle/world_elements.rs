@@ -82,8 +82,8 @@ pub(crate) mod engine {
         cx.element_mut(e).life = (NORMAL_LIFE + 1) as u16;
         cx.primitive_style_mut(e).kind = gfx_object_STAMP_PRIM as u8;
         let frames = cx.planet_frames();
-        cx.set_frames(e, false, frames);
-        cx.set_frame(e, false, cx.frames_first(frames));
+        cx.set_frames(e, false, frames.clone());
+        cx.set_frame(e, false, cx.frames_first(&frames));
         cx.element_mut(e).collide = Some(CollisionHook::Native(collision));
         cx.element_mut(e).post = Some(ElementHook::Native(gravity_postprocess));
         // SAFETY: the legacy velocity record admits the zero state.
@@ -369,38 +369,20 @@ mod tests {
     #[test]
     fn damage_preserves_gravity_objects_and_byte_truncation() {
         unsafe {
-            let mut e: ELEMENT = mem::zeroed();
-            e.__bindgen_anon_2.hit_points = 200;
-            e.__bindgen_anon_3.mass_points = 100;
-            e.__bindgen_anon_1.life_span = 7;
-            damage_object(
-                e.__bindgen_anon_3.mass_points,
-                &mut e.__bindgen_anon_2.hit_points,
-                &mut e.__bindgen_anon_1.life_span,
-                &mut e.state_flags,
-                257,
-            );
-            assert_eq!(e.__bindgen_anon_2.hit_points, 199);
-            e.__bindgen_anon_3.mass_points = 101;
-            damage_object(
-                e.__bindgen_anon_3.mass_points,
-                &mut e.__bindgen_anon_2.hit_points,
-                &mut e.__bindgen_anon_1.life_span,
-                &mut e.state_flags,
-                255,
-            );
-            assert_eq!(e.__bindgen_anon_2.hit_points, 199);
-            assert_eq!(e.__bindgen_anon_1.life_span, 7);
-            e.__bindgen_anon_3.mass_points = 3;
-            damage_object(
-                e.__bindgen_anon_3.mass_points,
-                &mut e.__bindgen_anon_2.hit_points,
-                &mut e.__bindgen_anon_1.life_span,
-                &mut e.state_flags,
-                199,
-            );
-            assert_eq!(e.__bindgen_anon_2.hit_points, 0);
-            assert_eq!(e.__bindgen_anon_1.life_span, 0);
+            let mut e: ElementRecord = mem::zeroed();
+            e.hits = 200;
+            e.mass = 100;
+            e.life = 7;
+            damage_object(e.mass, &mut e.hits, &mut e.life, &mut e.state_flags, 257);
+            assert_eq!(e.hits, 199);
+            e.mass = 101;
+            damage_object(e.mass, &mut e.hits, &mut e.life, &mut e.state_flags, 255);
+            assert_eq!(e.hits, 199);
+            assert_eq!(e.life, 7);
+            e.mass = 3;
+            damage_object(e.mass, &mut e.hits, &mut e.life, &mut e.state_flags, 199);
+            assert_eq!(e.hits, 0);
+            assert_eq!(e.life, 0);
             assert_eq!(e.state_flags, NONSOLID as u16);
         }
     }

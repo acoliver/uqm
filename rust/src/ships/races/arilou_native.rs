@@ -268,7 +268,7 @@ pub(crate) mod engine {
                 cx.element_mut(ship).flags &= !((NONSOLID | FINITE_LIFE) as u16);
                 cx.element_mut(ship).flags |= APPEARING as u16;
                 let frames = cx.ship_frame_set(ss, 0);
-                cx.set_frames(ship, false, frames);
+                cx.set_frames(ship, false, frames.clone());
                 cx.set_frames(ship, true, frames);
                 let frame = cx.absolute_frame(cx.ship_frame(ss, 0), cx.ship_state(ss).facing);
                 cx.set_frame(ship, false, frame);

@@ -1,6 +1,6 @@
 //! Mycon native entry point and callbacks linked against the engine archive.
 
-use uqm_rust::engine::battle::schema::HELEMENT;
+use uqm_rust::engine::battle::schema::HLINK;
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]
@@ -79,36 +79,36 @@ fn plasma_launch_and_postprocess_boundaries_match_c() {
         let ship = fixture.ptr();
         (*ship).next.location = POINT { x: 100, y: 200 };
         let slots = fixture.weapon(1);
-        let handles: [HELEMENT; 1] = [fixture.weapon_record(slots[0]).cast()];
+        let handles: [HLINK; 1] = [fixture.weapon_record(slots[0]).cast()];
         assert!(!handles[0].is_null());
         let plasma = battle::element(handles[0]);
-        assert_eq!((*plasma).__bindgen_anon_1.life_span, 143);
-        assert_eq!((*plasma).__bindgen_anon_2.hit_points, 10);
-        assert_eq!((*plasma).__bindgen_anon_3.mass_points, 10);
-        assert_eq!((*plasma).__bindgen_anon_4.turn_wait, 3);
-        assert_eq!((*plasma).__bindgen_anon_5.blast_offset, 0);
-        (*plasma).next = (*plasma).current;
-        (*plasma).__bindgen_anon_1.life_span = 100;
+        assert_eq!((*plasma).life, 143);
+        assert_eq!((*plasma).hits, 10);
+        assert_eq!((*plasma).mass, 10);
+        assert_eq!((*plasma).turn, 3);
+        assert_eq!((*plasma).thrust, 0);
+        (*plasma).next = (*plasma).current.clone();
+        (*plasma).life = 100;
         hooks::invoke_element_pointer((*plasma).preprocess_func.unwrap(), plasma);
-        assert_eq!((*plasma).__bindgen_anon_2.hit_points, 7);
-        assert_eq!((*plasma).__bindgen_anon_3.mass_points, 7);
-        assert_eq!((*plasma).__bindgen_anon_4.turn_wait, 2);
-        (*plasma).__bindgen_anon_2.hit_points = 3;
+        assert_eq!((*plasma).hits, 7);
+        assert_eq!((*plasma).mass, 7);
+        assert_eq!((*plasma).turn, 2);
+        (*plasma).hits = 3;
         hooks::invoke_element_pointer((*plasma).preprocess_func.unwrap(), plasma);
-        assert_eq!((*plasma).__bindgen_anon_1.life_span, 39);
-        assert_eq!((*plasma).__bindgen_anon_3.mass_points, 3);
-        assert_eq!((*plasma).__bindgen_anon_4.turn_wait, 1);
-        (*ship).__bindgen_anon_2.crew_level = 17;
+        assert_eq!((*plasma).life, 39);
+        assert_eq!((*plasma).mass, 3);
+        assert_eq!((*plasma).turn, 1);
+        (*ship).hits = 17;
         fixture.ship_mut().cur_status_flags = SPECIAL as u16;
         fixture.postprocess();
-        assert_eq!((*ship).__bindgen_anon_2.crew_level, 20);
+        assert_eq!((*ship).hits, 20);
         assert_eq!(fixture.descriptor_mut().ship_info.energy_level, 0);
         assert_eq!(fixture.ship_mut().special_counter, 0);
 
-        (*ship).__bindgen_anon_2.crew_level = 10;
+        (*ship).hits = 10;
         fixture.descriptor_mut().ship_info.energy_level = 39;
         fixture.postprocess();
-        assert_eq!((*ship).__bindgen_anon_2.crew_level, 10);
+        assert_eq!((*ship).hits, 10);
         assert_eq!(fixture.descriptor_mut().ship_info.energy_level, 39);
         battle_context::dispose(handles[0]);
     })

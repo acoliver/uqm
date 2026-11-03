@@ -1,8 +1,8 @@
 //! Master metadata owns its descriptors in the game lifecycle's typed ship queue.
 
-use crate::engine::battle::link_queue::{LinkQueue, Starship};
+use crate::engine::battle::kernel::MasterCatalog;
 
-fn find(queue: &LinkQueue<'_, Starship>, species: u32) -> i32 {
+fn find(queue: &MasterCatalog, species: u32) -> i32 {
     let mut next = queue.head();
     let mut index = 0;
     while let Some(id) = next {
@@ -18,25 +18,23 @@ fn find(queue: &LinkQueue<'_, Starship>, species: u32) -> i32 {
 /// # Safety
 /// The game thread owns the initialized catalog throughout this synchronous lookup.
 pub(crate) unsafe fn cost(index: u32) -> u16 {
-    let queue = LinkQueue::<Starship>::borrow(
-        &crate::engine::battle::record::Kernel::current().master_queue,
-    );
-    cost_in(&queue, index as u16)
+    let queue = &crate::engine::battle::record::Kernel::current().master_queue;
+    cost_in(queue, index as u16)
 }
 
-fn cost_in(queue: &LinkQueue<'_, Starship>, index: u16) -> u16 {
+fn cost_in(queue: &MasterCatalog, index: u16) -> u16 {
     let mut next = queue.head();
     for _ in 0..index {
         let Some(id) = next else { return 0 };
         next = queue.succ(id);
     }
-    next.map_or(0, |id| u16::from(queue.descriptor_info(id).ship_cost))
+    next.map_or(0, |id| u16::from(queue.get(id).descriptor.info().ship_cost))
 }
 
 #[cfg(not(test))]
 pub(crate) mod engine {
     use crate::engine::battle::{
-        link_queue::{LinkQueue, Starship},
+        kernel::{CatalogEntry, MasterCatalog},
         record::{FLEET_STUFF, SHIP_INFO},
     };
     use crate::ships::native::abi::*;
@@ -49,18 +47,15 @@ pub(crate) mod engine {
         pub fleet: FLEET_STUFF,
     }
 
-    unsafe fn with_catalog<R>(call: impl FnOnce(*mut QUEUE) -> R) -> R {
+    unsafe fn with_catalog<R>(call: impl FnOnce(&mut MasterCatalog) -> R) -> R {
         crate::app::bridge::enter(|cx| call(cx.master_queue()))
     }
 
-    fn entry(
-        queue: &LinkQueue<'_, Starship>,
-        id: crate::engine::battle::link_queue::LinkId<Starship>,
-    ) -> MasterShip {
+    fn entry(queue: &MasterCatalog, id: crate::collections::pool::Id<CatalogEntry>) -> MasterShip {
         MasterShip {
             species: queue.get(id).species,
-            info: queue.descriptor_info(id),
-            fleet: queue.descriptor_fleet(id),
+            info: *queue.get(id).descriptor.info(),
+            fleet: *queue.get(id).descriptor.fleet(),
         }
     }
 
@@ -68,34 +63,27 @@ pub(crate) mod engine {
     /// The game thread owns the resource system and calls this once before using the catalog.
     #[no_mangle]
     pub unsafe extern "C" fn LoadMasterShipList(yield_processing: Option<unsafe extern "C" fn()>) {
-        with_catalog(|raw| {
-            assert_ne!(
-                InitQueue(
-                    raw,
-                    25,
-                    crate::engine::battle::link_queue::ship_size() as u16
-                ),
-                0
-            );
-            for species in SPECIES_ID_ARILOU_ID..=SPECIES_ID_LAST_MELEE_ID {
-                if let Some(yield_processing) = yield_processing {
-                    yield_processing();
-                }
-                let descriptor = crate::ships::load_ship(species, 0)
-                    .unwrap_or_else(|| panic!("master species {species}"));
-                let name = CStr::from_ptr(GetStringAddress(SetAbsStringTableIndex(
-                    descriptor.info().race_strings,
-                    2,
-                )));
-                let mut queue = LinkQueue::<Starship>::new(&mut *raw);
+        with_catalog(|queue| assert_eq!(queue.count(), 0, "catalog already loaded"));
+        for species in SPECIES_ID_ARILOU_ID..=SPECIES_ID_LAST_MELEE_ID {
+            if let Some(yield_processing) = yield_processing {
+                yield_processing();
+            }
+            let descriptor = crate::ships::load_ship(species, 0)
+                .unwrap_or_else(|| panic!("master species {species}"));
+            let name = CStr::from_ptr(GetStringAddress(SetAbsStringTableIndex(
+                descriptor.info().race_strings,
+                2,
+            )));
+            with_catalog(|queue| {
                 let id = queue
-                    .alloc()
+                    .alloc(CatalogEntry {
+                        species,
+                        descriptor,
+                    })
                     .unwrap_or_else(|| panic!("master catalog capacity"));
-                queue.edit(id, |ship| ship.species = species);
-                queue.attach_descriptor(id, descriptor);
                 let mut before = queue.head();
                 while let Some(other) = before {
-                    let info = entry(&queue, other).info;
+                    let info = entry(queue, other).info;
                     let other_name = CStr::from_ptr(GetStringAddress(SetAbsStringTableIndex(
                         info.race_strings,
                         2,
@@ -106,38 +94,33 @@ pub(crate) mod engine {
                     before = queue.succ(other);
                 }
                 queue.insert_before(id, before);
-            }
-        });
+            });
+        }
     }
 
     /// # Safety
     /// Called after all catalog resource users have released their references.
     #[no_mangle]
     pub unsafe extern "C" fn FreeMasterShipList() {
-        with_catalog(|raw| {
-            let mut queue = LinkQueue::<Starship>::new(&mut *raw);
-            let mut next = queue.head();
-            while let Some(id) = next {
-                next = queue.succ(id);
-                let descriptor = queue
-                    .take_descriptor(id)
-                    .unwrap_or_else(|| panic!("master descriptor"));
-                crate::ships::unload_ship(descriptor, 1, 0);
-            }
-            UninitQueue(raw);
-        });
+        while let Some(descriptor) = with_catalog(|queue| {
+            let id = queue.head()?;
+            queue.remove(id);
+            Some(queue.free(id).descriptor)
+        }) {
+            crate::ships::unload_ship(descriptor, 1, 0);
+        }
+        with_catalog(MasterCatalog::reinit);
     }
 
     /// # Safety
     /// The initialized master catalog is owned by the calling game thread.
     pub unsafe fn master(index: u16) -> Option<MasterShip> {
-        with_catalog(|raw| {
-            let queue = LinkQueue::<Starship>::borrow(&*raw);
+        with_catalog(|queue| {
             let mut next = queue.head();
             for _ in 0..index {
                 next = queue.succ(next?);
             }
-            next.map(|id| entry(&queue, id))
+            next.map(|id| entry(queue, id))
         })
     }
 
@@ -152,10 +135,7 @@ pub(crate) mod engine {
     /// The initialized master catalog is owned by the calling game thread.
     #[no_mangle]
     pub unsafe extern "C" fn FindMasterShipIndex(species: u32) -> i32 {
-        with_catalog(|raw| {
-            let queue = LinkQueue::<Starship>::borrow(&*raw);
-            super::find(&queue, species)
-        })
+        with_catalog(|queue| super::find(queue, species))
     }
 
     /// # Safety
@@ -187,62 +167,58 @@ pub use engine::{
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::collections::queue::{InitQueue, Queue, UninitQueue};
+    use crate::engine::battle::{kernel::CatalogEntry, record::RaceDescriptor, RaceDesc};
+
+    fn push(queue: &mut MasterCatalog, species: u32, cost: u8) {
+        let mut descriptor = RaceDescriptor::EMPTY;
+        descriptor.ship_info.ship_cost = cost;
+        let id = queue
+            .alloc(CatalogEntry {
+                species,
+                descriptor: RaceDesc::from_storage(Box::new(descriptor)),
+            })
+            .unwrap();
+        queue.put(id);
+    }
 
     #[test]
     fn cost_uses_the_owned_catalog_in_queue_order() {
-        let mut raw = Queue::default();
-        // SAFETY: this test exclusively owns the queue and its descriptor allocations.
-        unsafe {
-            assert!(InitQueue(
-                &mut raw,
-                2,
-                crate::engine::battle::link_queue::ship_size() as u16
-            ));
-            {
-                let mut ships = LinkQueue::<Starship>::new(&mut raw);
-                assert_eq!(cost_in(&ships, 0), 0);
-                for (species, cost) in [(23, 23), (1, 16)] {
-                    let id = ships.build(species).unwrap();
-                    let mut descriptor = Box::new(crate::engine::battle::record::RACE_DESC::EMPTY);
-                    descriptor.ship_info.ship_cost = cost;
-                    ships.record_mut(id).descriptor = Some(descriptor);
-                }
-                assert_eq!(cost_in(&ships, 0), 23);
-                assert_eq!(cost_in(&ships, 1), 16);
-                assert_eq!(cost_in(&ships, 2), 0);
-                assert_eq!(cost_in(&ships, u16::MAX), 0);
-                let mut next = ships.head();
-                while let Some(id) = next {
-                    next = ships.succ(id);
-                    ships.record_mut(id).descriptor.take();
-                }
-            }
-            UninitQueue(&mut raw);
-        }
+        let mut ships = MasterCatalog::new();
+        assert_eq!(cost_in(&ships, 0), 0);
+        push(&mut ships, 23, 23);
+        push(&mut ships, 1, 16);
+        assert_eq!(cost_in(&ships, 0), 23);
+        assert_eq!(cost_in(&ships, 1), 16);
+        assert_eq!(cost_in(&ships, 2), 0);
+        assert_eq!(cost_in(&ships, u16::MAX), 0);
+        let id = ships.head().unwrap();
+        ships.remove(id);
+        let retired = ships.free(id);
+        assert_eq!(retired.species, 23);
+        assert_eq!(retired.descriptor.info().ship_cost, 23);
+        assert_eq!(cost_in(&ships, 0), 16);
     }
 
     #[test]
     fn lookup_uses_queue_order_and_reports_absent_species() {
-        let mut raw = Queue::default();
-        // SAFETY: this test exclusively owns the queue and every record in it.
-        unsafe {
-            assert!(InitQueue(
-                &mut raw,
-                3,
-                crate::engine::battle::link_queue::ship_size() as u16
-            ));
-            {
-                let mut ships = LinkQueue::<Starship>::new(&mut raw);
-                assert_eq!(find(&ships, 1), -1);
-                for species in [23, 1, 2] {
-                    ships.build(species).unwrap();
-                }
-                assert_eq!(find(&ships, 1), 1);
-                assert_eq!(find(&ships, 2), 2);
-                assert_eq!(find(&ships, 99), -1);
-            }
-            UninitQueue(&mut raw);
+        let mut ships = MasterCatalog::new();
+        assert_eq!(find(&ships, 1), -1);
+        for species in [23, 1, 2] {
+            push(&mut ships, species, 0);
         }
+        assert_eq!(find(&ships, 1), 1);
+        assert_eq!(find(&ships, 2), 2);
+        assert_eq!(find(&ships, 99), -1);
+        ships.reinit();
+        assert_eq!(find(&ships, 1), -1);
+        for species in 1..=25 {
+            push(&mut ships, species, 0);
+        }
+        assert!(ships
+            .alloc(CatalogEntry {
+                species: 26,
+                descriptor: RaceDesc::from_storage(Box::new(RaceDescriptor::EMPTY)),
+            })
+            .is_none());
     }
 }

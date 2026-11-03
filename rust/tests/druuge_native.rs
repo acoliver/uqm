@@ -85,10 +85,10 @@ fn cannon_launch_uses_mass_driver_missile_parameters() {
             let out = [ship.weapon_record(slots[0]).cast()];
             let missile = battle::element(out[0]);
             assert!(!missile.is_null());
-            assert_eq!((*missile).__bindgen_anon_1.life_span, 20);
-            assert_eq!((*missile).__bindgen_anon_2.hit_points, 4);
-            assert_eq!((*missile).__bindgen_anon_3.mass_points, 6);
-            assert_eq!((*missile).__bindgen_anon_5.blast_offset, 6);
+            assert_eq!((*missile).life, 20);
+            assert_eq!((*missile).hits, 4);
+            assert_eq!((*missile).mass, 6);
+            assert_eq!((*missile).thrust, 6);
             assert_ne!((*missile).state_flags & IGNORE_SIMILAR as u16, 0);
             battle_context::dispose(out[0]);
         }
@@ -101,11 +101,11 @@ fn furnace_burns_one_crew_and_adds_sixteen_energy_at_boundaries() {
         let _battle = Battlefield::new(8);
         unsafe {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_DRUUGE_ID, 0);
-            (*ship.el()).__bindgen_anon_2.crew_level = 2;
+            (*ship.el()).hits = 2;
             ship.descriptor_mut().ship_info.energy_level = 15;
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
             ship.preprocess();
-            assert_eq!((*ship.el()).__bindgen_anon_2.crew_level, 1);
+            assert_eq!((*ship.el()).hits, 1);
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 31);
             assert_eq!(ship.ship_mut().special_counter, 30);
 
@@ -113,7 +113,7 @@ fn furnace_burns_one_crew_and_adds_sixteen_energy_at_boundaries() {
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
             ship.ship_mut().special_counter = 0;
             ship.preprocess();
-            assert_eq!((*ship.el()).__bindgen_anon_2.crew_level, 1);
+            assert_eq!((*ship.el()).hits, 1);
             assert_eq!(ship.ship_mut().cur_status_flags & SPECIAL as u16, 0);
         }
     })
@@ -127,8 +127,8 @@ fn intelligence_selects_pursuit_and_furnace_for_weapon_energy_shortfall() {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_DRUUGE_ID, 0);
             let mut enemy = Ship::bare(&_battle, SPECIES_ID_DRUUGE_ID, 1);
             ship.descriptor_mut().ship_info.energy_level = 3;
-            ship.element_mut().__bindgen_anon_2.crew_level = 14;
-            (*ship.el()).__bindgen_anon_5.thrust_wait = 0;
+            ship.element_mut().hits = 14;
+            (*ship.el()).thrust = 0;
             let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
             concerns[ENEMY_SHIP_INDEX as usize].ObjectPtr = enemy.el();
             concerns[ENEMY_SHIP_INDEX as usize].which_turn = 10;
@@ -137,7 +137,7 @@ fn intelligence_selects_pursuit_and_furnace_for_weapon_energy_shortfall() {
                 concerns[ENEMY_SHIP_INDEX as usize].MoveState,
                 MOVEMENT_STATE_PURSUE
             );
-            assert_eq!((*ship.el()).__bindgen_anon_5.thrust_wait, 11);
+            assert_eq!((*ship.el()).thrust, 11);
             assert_ne!(
                 ship.ship_mut().ship_input_state & (WEAPON | SPECIAL) as u8,
                 0

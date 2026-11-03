@@ -100,6 +100,7 @@ pub unsafe fn uninit_ships() {
                 crate::navigation::hyper_data::FreeHyperspace();
             }
         }
+        cx.complete_ship_reset();
     });
 }
 
@@ -148,11 +149,11 @@ pub use live::*;
 #[cfg(test)]
 mod crew_writeback_tests {
     use super::recover_ship_crew;
-    use crate::ships::native::abi::RACE_DESC;
+    use crate::ships::native::abi::RaceDescriptor;
 
     #[test]
     fn battle_survivor_retains_native_descriptor_crew_and_recovers_pods() {
-        let mut descriptor: RACE_DESC = unsafe { std::mem::zeroed() };
+        let mut descriptor: RaceDescriptor = unsafe { std::mem::zeroed() };
         descriptor.ship_info.crew_level = 7;
         descriptor.ship_info.max_crew = 18;
         assert_eq!(recover_ship_crew(&mut descriptor.ship_info, 3), 10);

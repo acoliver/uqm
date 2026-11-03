@@ -34,7 +34,7 @@ fn descriptor_laser_and_limpet_launch() {
             let h = with_rng(11, 0, || ship.weapon(1))[0];
             let laser = ship.weapon_record(h);
             assert_eq!((*prim(laser)).Type, gfx_object_LINE_PRIM as GRAPHICS_PRIM);
-            assert_eq!((*laser).__bindgen_anon_3.mass_points, 1);
+            assert_eq!((*laser).mass, 1);
             assert_eq!((*laser).current.location.x, 4000 + 48);
             let (mut dx, mut dy) = (0, 0);
             GetCurrentVelocityComponents(&raw mut (*laser).velocity, &mut dx, &mut dy);
@@ -44,19 +44,15 @@ fn descriptor_laser_and_limpet_launch() {
             with_rng(11, 0, || ship.postprocess());
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 38);
             assert_eq!(ship.ship_mut().special_counter, 7);
-            let e = battle::element(disp_q.tail);
-            assert_eq!(
-                (
-                    (*e).__bindgen_anon_1.life_span,
-                    (*e).__bindgen_anon_2.hit_points,
-                    (*e).__bindgen_anon_3.mass_points
-                ),
-                (80, 1, 0)
-            );
+            let e = battle::element(battle::tail());
+            assert_eq!(((*e).life, (*e).hits, (*e).mass), (80, 1, 0));
             // HALF_CIRCLE is 32, added directly to facing 4 in the C code.
             assert_eq!(velocity(&(*e).velocity), toward(25, 36));
-            assert_eq!((*e).pParent, (&raw mut *ship.ship_mut()).cast());
-            (*e).next = (*e).current;
+            assert_eq!(
+                (*e).parent,
+                uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
+            );
+            (*e).next = (*e).current.clone();
             with_rng(11, 0, || {
                 hooks::invoke_element_pointer((*e).preprocess_func.unwrap(), e)
             });
@@ -73,7 +69,7 @@ fn limpets_saturate_waits_and_reduce_thrust_without_rng_for_nonships() {
             let mut enemy = Ship::new(&_battle, SPECIES_ID_VUX_ID, 1);
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
             ship.postprocess();
-            let e = battle::element(disp_q.tail);
+            let e = battle::element(battle::tail());
             for (increment, max, expected_inc, expected_max) in
                 [(7, 21, 6, 18), (5, 25, 4, 20), (4, 20, 4, 8), (1, 10, 1, 2)]
             {
@@ -106,8 +102,8 @@ fn limpets_saturate_waits_and_reduce_thrust_without_rng_for_nonships() {
                     enemy.descriptor_mut().cyborg_control.ManeuverabilityIndex,
                     0
                 );
-                assert_eq!((*e).__bindgen_anon_1.life_span, 0);
-                assert_eq!((*e).__bindgen_anon_2.hit_points, 0);
+                assert_eq!((*e).life, 0);
+                assert_eq!((*e).hits, 0);
                 assert_eq!(
                     (*e).state_flags & (COLLISION | DISAPPEARING) as u16,
                     (COLLISION | DISAPPEARING) as u16
@@ -134,7 +130,7 @@ fn warp_in_is_disabled_in_encounters_and_one_shot_in_melee() {
             let mut ship = Ship::new(&_battle, SPECIES_ID_VUX_ID, 0);
             let enemy = Ship::new(&_battle, SPECIES_ID_VUX_ID, 1);
             (*enemy.ptr()).current.location = POINT { x: 5000, y: 5000 };
-            (*enemy.ptr()).next = (*enemy.ptr()).current;
+            (*enemy.ptr()).next = (*enemy.ptr()).current.clone();
             (*ship.ptr()).state_flags |= APPEARING as u16;
             let previous = GlobData.Game_state.CurrentActivity;
             GlobData.Game_state.CurrentActivity = IN_ENCOUNTER as _;
@@ -162,7 +158,7 @@ fn warp_in_is_disabled_in_encounters_and_one_shot_in_melee() {
             ))));
             assert_eq!(ship.ship_mut().ShipFacing, face);
             assert_eq!(frame_index((*ship.ptr()).current.image.frame), face);
-            assert!((*ship.ptr()).hTarget.is_null());
+            assert!((*ship.ptr()).target.is_none());
             assert_eq!(ship.descriptor_mut().callbacks()[1], 0);
             assert_eq!(
                 (*ship.ptr()).IntersectControl.EndPoint.x,

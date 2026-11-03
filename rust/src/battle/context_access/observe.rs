@@ -1,43 +1,24 @@
 //! Immutable observations of typed element and ship links for automation.
-use crate::comm::locdata::CQueue;
-use crate::engine::battle::access::observe::{ElementObservation, ELEMENT_LINKS, SHIP_LINKS};
+use crate::engine::battle::access::observe::ElementObservation;
 use crate::engine::battle::{
     link_queue::{LinkQueue, Starship},
     record::*,
     views::*,
 };
-use crate::savegame::runtime::queues::{walk_layout, QueueKind};
 
 /// # Safety
-/// The queue and pool stay live and immutable until this observation completes.
+/// The ship and group authorities remain immutable during the observation.
 pub(crate) unsafe fn elements(
-    queue: &CQueue,
-    #[cfg(not(test))] elements: &crate::engine::battle::ElementTable,
+    elements: &crate::engine::battle::ElementTable,
+    groups: Option<&QUEUE>,
 ) -> Vec<ElementObservation> {
-    if queue.pq_tab.is_null() && queue.head.is_null() {
-        assert!(
-            queue.tail.is_null(),
-            "uninitialized display queue has a tail"
-        );
-        return Vec::new();
-    }
-    walk_layout(queue, QueueKind::DisplayList, ELEMENT_LINKS)
-        .unwrap_or_else(|e| panic!("live display queue: {e}"));
     let mut result = Vec::new();
-    #[cfg(not(test))]
-    {
-        let mut next = elements.head();
-        while let Some(id) = next {
-            next = elements.succ(id);
-            result.push(crate::engine::battle::access::observe::element(
-                elements, id,
-            ));
-        }
-    }
-    #[cfg(test)]
-    for pointer in walk_layout(queue, QueueKind::DisplayList, ELEMENT_LINKS).unwrap() {
-        // SAFETY: validation retained this fixture pool for the decode.
-        result.push(unsafe { ElementObservation::decode(&*pointer.cast()) });
+    let mut next = elements.head();
+    while let Some(id) = next {
+        next = elements.succ(id);
+        result.push(crate::engine::battle::access::observe::element(
+            elements, id, groups,
+        ));
     }
     result
 }
@@ -118,20 +99,16 @@ impl<'a> CustomData<'a> {
 }
 /// # Safety
 /// The queue, ship resources and descriptor allocations remain immutable for the borrow.
-pub(crate) unsafe fn ships<'a>(queue: &'a CQueue) -> Vec<ShipObservation<'a>> {
-    if queue.pq_tab.is_null() && queue.head.is_null() {
-        assert!(queue.tail.is_null(), "uninitialized ship queue has a tail");
-        return Vec::new();
-    }
-    walk_layout(queue, QueueKind::PlayerShips, SHIP_LINKS)
-        .unwrap_or_else(|e| panic!("live ship queue: {e}"));
-    // SAFETY: validation above checked this immutable pool's layout and links.
-    let ships = unsafe { LinkQueue::<Starship>::borrow(&*std::ptr::from_ref(queue).cast()) };
+pub(crate) unsafe fn ships<'a>(
+    queue: &'a crate::engine::battle::link_queue::RacePool,
+    elements: &crate::engine::battle::ElementTable,
+) -> Vec<ShipObservation<'a>> {
+    let ships = LinkQueue::<Starship>::borrow(queue);
     let mut result = Vec::new();
     let mut next = ships.head();
     while let Some(id) = next {
         // SAFETY: validated immutable ship storage and its loaded resources remain live.
-        let s = unsafe { crate::engine::battle::access::observe::ship(&ships, id) };
+        let s = unsafe { crate::engine::battle::access::observe::ship(queue, id, elements) };
         next = ships.succ(id);
         #[cfg(not(test))]
         let (race, icons, strings) = {

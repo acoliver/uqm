@@ -70,7 +70,7 @@ pub(crate) mod engine {
     ) -> WeaponSpawn {
         let mut out = Vec::new();
         let mut block = Missile {
-            farray: cx.ship_frame_set(ss, 1),
+            frames: cx.ship_frame_set(ss, 1),
             face: cx.ship_state(ss).facing,
             index: cx.ship_state(ss).facing,
             sender: origin.player,

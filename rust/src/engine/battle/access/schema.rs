@@ -1,15 +1,11 @@
 //! Unchanged ABI storage declarations used at the Stage B boundary.
 #![allow(non_snake_case, non_camel_case_types)]
-use super::super::record::{QUEUE, STARSHIP, VELOCITY_DESC};
-use crate::collections::queue::HLink as HLINK;
+use super::super::record::{ShipRecord, QUEUE, VELOCITY_DESC};
+pub use crate::collections::queue::HLink as HLINK;
 use crate::graphics::native_abi::*;
 use crate::graphics::native_abi::{
     BYTE as BATTLE_INPUT_STATE, DWORD as TimeCount, UWORD as ACTIVITY,
 };
-
-pub type HELEMENT = HLINK;
-
-pub type HSTARSHIP = HLINK;
 
 pub type GETMELEE_STATE = getmelee_struct;
 
@@ -25,7 +21,7 @@ pub struct getmelee_struct {
 #[repr(C)]
 pub struct getmelee_struct__bindgen_ty_1 {
     pub timeIn: TimeCount,
-    pub hBattleShip: HSTARSHIP,
+    pub hBattleShip: HLINK,
     pub choice: COUNT,
     pub row: COUNT,
     pub col: COUNT,
@@ -40,7 +36,7 @@ pub struct getmelee_struct__bindgen_ty_1 {
 pub type BattleFrameInputFunction = ::std::option::Option<
     unsafe extern "C" fn(
         context: *mut InputContext,
-        StarShipPtr: *mut STARSHIP,
+        StarShipPtr: *mut ShipRecord,
     ) -> BATTLE_INPUT_STATE,
 >;
 
@@ -89,7 +85,7 @@ pub struct GAME_STATE {
     pub FuelCost: BYTE,
     pub ModuleCost: [BYTE; 20usize],
     pub ElementWorth: [BYTE; 8usize],
-    pub DisplayArray: *mut PRIMITIVE,
+    pub _display_array: *mut PRIMITIVE,
     pub CurrentActivity: ACTIVITY,
     pub GameClock: CLOCK_STATE,
     pub autopilot: POINT,
@@ -157,4 +153,4 @@ pub struct FlashContext__bindgen_ty_1__bindgen_ty_2 {
     pub frame: FRAME,
 }
 
-pub(crate) const DISPLAY_ARRAY_OFFSET: usize = std::mem::offset_of!(GAME_STATE, DisplayArray);
+pub(crate) const DISPLAY_ARRAY_OFFSET: usize = std::mem::offset_of!(GAME_STATE, _display_array);

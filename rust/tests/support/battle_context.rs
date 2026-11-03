@@ -7,7 +7,12 @@ pub fn run<R>(body: impl FnOnce() -> R) -> R {
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     // SAFETY: the test mutex serializes all use of this binary's game authorities.
-    unsafe { uqm_rust::app::bridge::with_battle(body) }
+    unsafe {
+        uqm_rust::app::bridge::with_battle(
+            uqm_rust::game_init::world_resources::shared_frame_source,
+            body,
+        )
+    }
 }
 
 #[allow(dead_code)]

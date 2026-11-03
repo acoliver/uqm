@@ -243,14 +243,7 @@ pub type ELEMENT_FLAGS = UWORD;
 pub use crate::engine::battle::record::state;
 pub use crate::engine::battle::record::state__bindgen_ty_1;
 pub type STATE = state;
-pub use crate::engine::battle::record::ELEMENT;
-pub use crate::engine::battle::record::element;
-pub use crate::engine::battle::record::element__bindgen_ty_1;
-pub use crate::engine::battle::record::element__bindgen_ty_2;
-pub use crate::engine::battle::record::element__bindgen_ty_3;
-pub use crate::engine::battle::record::element__bindgen_ty_4;
-pub use crate::engine::battle::record::element__bindgen_ty_5;
-pub use crate::engine::battle::legacy::disp_q;
+pub use crate::engine::battle::record::ElementRecord;
 pub use crate::navigation::abi::ChecksumBuffer;
 pub use crate::navigation::abi::ChecksumEntry;
 pub use crate::navigation::abi::NetConnectionError;
@@ -585,9 +578,8 @@ pub use crate::ships::native::abi::DATA_STUFF;
 pub use crate::ships::native::abi::FLEET_STUFF;
 pub use crate::ships::native::abi::INTEL_STUFF;
 pub use crate::ships::native::abi::SHIP_INFO;
-pub use crate::engine::battle::record::RACE_DESC;
-pub use crate::engine::battle::record::race_desc;
-pub use crate::engine::battle::record::STARSHIP;
+pub use crate::engine::battle::record::RaceDescriptor;
+pub use crate::engine::battle::record::ShipRecord;
 
 #[cfg(not(test))]
 pub use crate::supermelee::native::battle_picker::live::updateMeleeSelection;

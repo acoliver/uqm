@@ -137,7 +137,7 @@ pub(crate) mod engine {
         vec![cx.missile(&mut crate::engine::battle::views::Missile {
             cx: origin.next.location.x,
             cy: origin.next.location.y,
-            farray: cx.ship_frame_set(ss, 1),
+            frames: cx.ship_frame_set(ss, 1),
             face: facing,
             index: facing,
             sender: origin.player,

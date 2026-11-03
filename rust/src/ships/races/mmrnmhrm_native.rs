@@ -260,7 +260,7 @@ pub(crate) mod engine {
             let mut block = Missile {
                 cx: 0,
                 cy: 0,
-                farray: cx.ship_frame_set(ss, 1),
+                frames: cx.ship_frame_set(ss, 1),
                 sender: origin.player,
                 flags: IGNORE_SIMILAR as u16,
                 pixoffs: 0,

@@ -1,4 +1,4 @@
-use uqm_rust::engine::battle::schema::HELEMENT;
+use uqm_rust::engine::battle::schema::HLINK;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
@@ -40,18 +40,11 @@ fn descriptor_and_twin_missile_launch() {
                             ship.weapon_record(Some(id)).cast()
                         })
                     })
-                    .collect::<Vec<HELEMENT>>()
+                    .collect::<Vec<HLINK>>()
             });
             for (i, &h) in out.iter().enumerate() {
                 let e = battle::element(h);
-                assert_eq!(
-                    (
-                        (*e).__bindgen_anon_1.life_span,
-                        (*e).__bindgen_anon_2.hit_points,
-                        (*e).__bindgen_anon_3.mass_points
-                    ),
-                    (10, 1, 1)
-                );
+                assert_eq!(((*e).life, (*e).hits, (*e).mass), (10, 1, 1));
                 assert_eq!(
                     (*e).current.location.x,
                     4000 + if i == 0 { 32 } else { -32 }
@@ -70,22 +63,20 @@ fn shield_uses_equivalent_facing_expires_and_recharges_on_postprocess() {
         unsafe {
             let mut ship = Ship::new(&_battle, SPECIES_ID_YEHAT_ID, 0);
             let e = ship.ptr();
-            (*e).next.image.frame = SetAbsFrameIndex(ship.descriptor_mut().ship_data.ship[0], 7);
+            (*e).next.image.frame =
+                SetAbsFrameIndex(ship.descriptor_mut().ship_data.ship.view(0).raw(), 7);
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
             with_rng(2, 0, || ship.preprocess());
-            assert_eq!((*e).__bindgen_anon_1.life_span, 11);
+            assert_eq!((*e).life, 11);
             assert_eq!(ship.ship_mut().special_counter, 2);
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 10);
-            assert_eq!(
-                (*e).next.image.farray,
-                (&raw mut ship.descriptor_mut().ship_data.special).cast()
-            );
+            assert_eq!((*e).next.image.frames, ship.frame_set(2));
             assert_eq!(frame_index((*e).next.image.frame), 7);
             ship.postprocess();
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 7);
             ship.ship_mut().special_counter = 0;
             ship.preprocess();
-            assert_eq!((*e).__bindgen_anon_1.life_span, 11);
+            assert_eq!((*e).life, 11);
             assert_eq!(ship.ship_mut().special_counter, 2);
             ship.postprocess();
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 4);
@@ -93,11 +84,8 @@ fn shield_uses_equivalent_facing_expires_and_recharges_on_postprocess() {
             for _ in 0..10 {
                 ship.preprocess();
             }
-            assert_eq!((*e).__bindgen_anon_1.life_span, 1);
-            assert_eq!(
-                (*e).next.image.farray,
-                (&raw mut ship.descriptor_mut().ship_data.ship).cast()
-            );
+            assert_eq!((*e).life, 1);
+            assert_eq!((*e).next.image.frames, ship.frame_set(0));
             assert_eq!(frame_index((*e).next.image.frame), 7);
             ship.postprocess();
             assert_eq!(ship.ship_mut().special_counter, 0);
@@ -114,7 +102,7 @@ fn low_energy_flashes_without_shield_and_appearing_or_nonsolid_skips_callbacks()
             ship.descriptor_mut().ship_info.energy_level = 2;
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
             ship.preprocess();
-            assert_eq!((*ship.ptr()).__bindgen_anon_1.life_span, 1);
+            assert_eq!((*ship.ptr()).life, 1);
             assert_eq!(ship.ship_mut().special_counter, 0);
             assert_ne!(ship.ship_mut().cur_status_flags & (1 << 5), 0);
             ship.descriptor_mut().ship_info.energy_level = 10;
@@ -150,7 +138,7 @@ fn ai_doubles_nonfinite_crew_turns_halves_finite_turns_and_obeys_life_boundary()
                                 which_turn: turn,
                                 MoveState: MOVEMENT_STATE_ENTICE,
                             };
-                            (*ship.ptr()).__bindgen_anon_1.life_span = life;
+                            (*ship.ptr()).life = life;
                             ship.ship_mut().ship_input_state = 0;
                             let transformed = if finite { (turn >> 1).max(1) } else { turn * 2 };
                             TFB_SeedRandom(seed);

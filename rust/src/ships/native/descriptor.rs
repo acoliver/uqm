@@ -1,7 +1,7 @@
 //! Empty native descriptors have explicit scalar and optional-handle initialization.
 use super::abi::*;
 
-impl race_desc {
+impl RaceDescriptor {
     pub const EMPTY: Self = Self {
         ship_info: SHIP_INFO {
             ship_flags: 0,
@@ -49,9 +49,9 @@ impl race_desc {
             },
             victory_ditty_rsc: std::ptr::null(),
             ship_sounds_rsc: std::ptr::null(),
-            ship: [std::ptr::null_mut(); 3],
-            weapon: [std::ptr::null_mut(); 3],
-            special: [std::ptr::null_mut(); 3],
+            ship: crate::engine::battle::frames::FrameArray::EMPTY,
+            weapon: crate::engine::battle::frames::FrameArray::EMPTY,
+            special: crate::engine::battle::frames::FrameArray::EMPTY,
             victory_ditty: std::ptr::null_mut(),
             ship_sounds: std::ptr::null_mut(),
         },
@@ -75,7 +75,7 @@ mod tests {
 
     #[test]
     fn empty_descriptor_has_no_resources_or_callbacks() {
-        let descriptor = race_desc::EMPTY;
+        let descriptor = RaceDescriptor::EMPTY;
         assert!(descriptor.race.is_none());
         assert_eq!(descriptor.ship_info.crew_level, 0);
         assert_eq!(descriptor.characteristics.max_thrust, 0);
@@ -88,14 +88,12 @@ mod tests {
         {
             assert!(resource.is_null());
         }
-        for frame in descriptor
-            .ship_data
-            .ship
-            .into_iter()
-            .chain(descriptor.ship_data.weapon)
-            .chain(descriptor.ship_data.special)
-        {
-            assert!(frame.is_null());
+        for frames in [
+            descriptor.ship_data.ship,
+            descriptor.ship_data.weapon,
+            descriptor.ship_data.special,
+        ] {
+            assert!(frames.is_absent());
         }
     }
 }

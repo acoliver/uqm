@@ -26,10 +26,10 @@ pub struct FlagshipConfig {
     pub hyperspace: bool,
 }
 
+#[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Frame(pub(super) FRAME);
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Frames(pub(super) *mut FRAME);
+pub use super::frames::{Frames, SharedFrames};
 impl Frame {
     pub const ABSENT: Self = Self(std::ptr::null_mut());
     pub fn is_absent(self) -> bool {
@@ -37,37 +37,28 @@ impl Frame {
     }
 }
 impl Frame {
-    pub(crate) fn raw(self) -> FRAME {
-        self.0
-    }
-}
-impl Frames {
-    pub(crate) fn raw(self) -> *mut FRAME {
+    pub fn raw(self) -> FRAME {
         self.0
     }
 }
 impl Frame {
-    pub(crate) unsafe fn from_native(frame: FRAME) -> Self {
+    /// # Safety
+    /// Retain the frame's loaded drawable for every consumer of the returned handle.
+    pub unsafe fn from_native(frame: FRAME) -> Self {
         Self(frame)
     }
 }
-impl Frames {
-    pub(crate) unsafe fn from_native(frames: std::ptr::NonNull<FRAME>) -> Self {
-        Self(frames.as_ptr())
-    }
-}
-
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct Image {
     pub frame: Frame,
     pub frames: Frames,
 }
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct Visual {
     pub location: POINT,
     pub image: Image,
 }
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct ElementState {
     pub player: i16,
     pub flags: u16,
@@ -152,29 +143,29 @@ pub struct RaceStats {
     pub state: super::RaceState,
 }
 
-pub struct Edit<'a, T: Copy, R> {
+pub struct Edit<'a, T: Clone, R> {
     pub(super) value: T,
     pub(super) record: &'a mut R,
     pub(super) commit: fn(&mut R, T),
 }
-impl<T: Copy, R> std::ops::Deref for Edit<'_, T, R> {
+impl<T: Clone, R> std::ops::Deref for Edit<'_, T, R> {
     type Target = T;
     fn deref(&self) -> &T {
         &self.value
     }
 }
-impl<T: Copy, R> std::ops::DerefMut for Edit<'_, T, R> {
+impl<T: Clone, R> std::ops::DerefMut for Edit<'_, T, R> {
     fn deref_mut(&mut self) -> &mut T {
         &mut self.value
     }
 }
-impl<T: Copy, R> Drop for Edit<'_, T, R> {
+impl<T: Clone, R> Drop for Edit<'_, T, R> {
     fn drop(&mut self) {
-        (self.commit)(self.record, self.value);
+        (self.commit)(self.record, self.value.clone());
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct Missile {
     pub cx: i16,
     pub cy: i16,
@@ -187,28 +178,19 @@ pub struct Missile {
     pub face: u16,
     pub index: u16,
     pub life: u16,
-    pub farray: Frames,
+    pub frames: Frames,
     pub preprocess: Option<super::ElementFn>,
     pub blast_offs: i16,
 }
 
-#[cfg(not(test))]
-#[derive(Clone, Copy)]
-pub enum SharedFrames {
-    Asteroid,
-    Explosion,
-}
-
 use super::ElementId;
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct Subject {
     pub state: ElementState,
     pub target: Option<ElementId>,
     pub parent: super::Parent,
     pub(super) intersect: super::record::INTERSECT_CONTROL,
     pub(super) primitive: u16,
-    pub(super) predecessor: Option<ElementId>,
-    pub(super) successor: Option<ElementId>,
 }
 impl std::ops::Deref for Subject {
     type Target = ElementState;

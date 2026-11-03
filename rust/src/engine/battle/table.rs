@@ -1,11 +1,11 @@
-//! Generational identities over the one, address-stable legacy element pool.
+//! Fixed-capacity element ownership and queue order on the game thread.
 
-use super::record::{ELEMENT, QUEUE};
-use crate::collections::queue::{AllocLink, FreeLink, HLink, ReinitQueue};
-use std::{
-    ops::{Index, IndexMut},
-    ptr::{self, NonNull},
-};
+use super::record::ElementRecord;
+use crate::collections::pool::{Id, OrderedPool};
+use crate::collections::queue::HLink;
+use std::ops::{Index, IndexMut};
+
+const CAPACITY: usize = 150;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ElementId {
@@ -17,6 +17,7 @@ pub struct ElementId {
 pub struct ShipId {
     pub side: u8,
     pub slot: u8,
+    pub gen: u32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -27,321 +28,161 @@ pub enum Parent {
 }
 
 pub struct ElementTable {
-    queue: NonNull<QUEUE>,
-    generations: [u32; 256],
-    allocated: [bool; 256],
+    pool: OrderedPool<ElementRecord, CAPACITY>,
 }
 
 impl ElementTable {
-    /// # Safety
-    /// The queue remains live on the owning game thread. Initialize its fixed pool
-    /// before record access, and finish all access before cleaning the pool up.
-    /// No record reference may cross a call into legacy code.
-    pub unsafe fn from_queue(queue: *mut QUEUE) -> Self {
+    pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            queue: NonNull::new(queue).unwrap_or_else(|| panic!("null element queue")),
-            generations: [0; 256],
-            allocated: [false; 256],
+            pool: OrderedPool::with_capacity(capacity),
         }
     }
 
-    pub(super) fn queue(&self) -> *mut QUEUE {
-        self.queue.as_ptr()
-    }
-
-    #[inline]
-    fn slot(&self, handle: HLink) -> usize {
-        // SAFETY: the construction contract keeps the queue and backing pool live.
-        let queue = unsafe { &*self.queue() };
-        assert!(!queue.pq_tab.is_null(), "element pool is not initialized");
-        let size = usize::from(queue.object_size);
-        assert_eq!(size, size_of::<ELEMENT>(), "wrong element record stride");
-        let offset = (handle as usize)
-            .checked_sub(queue.pq_tab as usize)
-            .unwrap_or_else(|| panic!("element handle precedes pool"));
-        assert!(
-            offset.is_multiple_of(size) && offset / size < usize::from(queue.num_objects),
-            "element handle outside pool"
-        );
-        offset / size
-    }
-
-    #[inline]
-    pub fn id(&self, handle: HLink) -> Option<ElementId> {
-        if handle.is_null() {
-            return None;
+    fn identify(id: Id<ElementRecord>) -> ElementId {
+        ElementId {
+            slot: id.index() as u8,
+            gen: id.generation(),
         }
-        let slot = self.slot(handle);
-        assert!(
-            self.allocated[slot],
-            "element handle addresses free slot {slot}"
-        );
-        Some(ElementId {
-            slot: slot as u8,
-            gen: self.generations[slot],
-        })
     }
 
-    /// Legacy bookkeeping can retain an address after its allocation retires.
-    /// Foreign addresses still fail validation; a retired slot has no current id.
-    pub(crate) fn allocated_id(&self, handle: HLink) -> Option<ElementId> {
-        if handle.is_null() {
-            return None;
-        }
-        let slot = self.slot(handle);
-        self.allocated[slot].then_some(ElementId {
-            slot: slot as u8,
-            gen: self.generations[slot],
-        })
+    fn key(&self, id: ElementId) -> Id<ElementRecord> {
+        let key = self.pool.id_at(usize::from(id.slot));
+        assert!(self.contains(id), "stale element id {id:?}");
+        key.unwrap_or_else(|| unreachable!("checked element allocation"))
+    }
+
+    pub fn id_at(&self, slot: usize) -> Option<ElementId> {
+        self.pool.id_at(slot).map(Self::identify)
+    }
+
+    pub(super) fn pair_mut(
+        &mut self,
+        left: ElementId,
+        right: ElementId,
+    ) -> (&mut ElementRecord, &mut ElementRecord) {
+        let left = self.key(left);
+        let right = self.key(right);
+        self.pool.get_pair_mut(left, right)
     }
 
     pub fn contains(&self, id: ElementId) -> bool {
-        let slot = usize::from(id.slot);
-        self.allocated[slot] && self.generations[slot] == id.gen
+        self.pool
+            .id_at(usize::from(id.slot))
+            .is_some_and(|key| key.generation() == id.gen)
     }
 
-    #[inline]
     pub fn raw(&self, id: ElementId) -> HLink {
-        let slot = usize::from(id.slot);
-        assert!(
-            self.allocated[slot] && self.generations[slot] == id.gen,
-            "stale element id {id:?}"
-        );
-        // SAFETY: slot membership was checked when the id was created. This pointer
-        // derives from the pool address, never from a reference to a record.
-        unsafe {
-            (*self.queue())
-                .pq_tab
-                .add(slot * usize::from((*self.queue()).object_size))
-                .cast()
-        }
+        std::ptr::from_ref(self.pool.get(self.key(id)))
+            .cast_mut()
+            .cast()
     }
 
-    #[inline]
-    pub fn head(&self) -> Option<ElementId> {
-        // SAFETY: queue access is game-thread exclusive.
-        self.id(unsafe { (*self.queue()).head })
-    }
-
-    #[inline]
-    pub fn succ(&self, id: ElementId) -> Option<ElementId> {
-        self.id(self[id].succ)
-    }
-
-    pub fn alloc(&mut self) -> Option<ElementId> {
-        // SAFETY: this table owns allocation of the legacy queue.
-        let handle = unsafe { AllocLink(self.queue()) };
-        if handle.is_null() {
+    pub fn id(&self, address: HLink) -> Option<ElementId> {
+        if address.is_null() {
             return None;
         }
-        let slot = self.slot(handle);
-        assert!(!self.allocated[slot], "allocated slot was already live");
-        self.allocated[slot] = true;
-        // SAFETY: ELEMENT's nullable hooks, pointers, integers and unions admit zero.
-        unsafe {
-            ptr::write_bytes(handle.cast::<ELEMENT>(), 0, 1);
-        }
-        self.id(handle)
+        let id = self.allocated_id(address);
+        assert!(
+            id.is_some(),
+            "element address is not allocated: {address:p}"
+        );
+        id
     }
 
-    pub(crate) fn free(&mut self, id: ElementId) {
-        let handle = self.raw(id);
-        let slot = usize::from(id.slot);
-        self.allocated[slot] = false;
-        self.bump(slot);
-        // SAFETY: the caller unlinked this allocated element before freeing it.
-        unsafe {
-            FreeLink(self.queue(), handle);
-        }
+    pub(crate) fn allocated_id(&self, address: HLink) -> Option<ElementId> {
+        (0..CAPACITY).find_map(|index| {
+            let key = self.pool.id_at(index)?;
+            (std::ptr::from_ref(self.pool.get(key)).cast::<()>() == address.cast::<()>())
+                .then_some(Self::identify(key))
+        })
     }
 
-    fn bump(&mut self, slot: usize) {
-        self.generations[slot] = self.generations[slot]
-            .checked_add(1)
-            .unwrap_or_else(|| panic!("element generation exhausted at slot {slot}"));
+    pub(crate) fn journal_address(&self, id: ElementId) -> usize {
+        self.pool.retired_address(usize::from(id.slot))
     }
 
+    pub fn head(&self) -> Option<ElementId> {
+        self.pool.head().map(Self::identify)
+    }
+    pub fn tail(&self) -> Option<ElementId> {
+        self.pool.tail().map(Self::identify)
+    }
+    pub fn succ(&self, id: ElementId) -> Option<ElementId> {
+        self.pool.succ(self.key(id)).map(Self::identify)
+    }
+    pub fn pred(&self, id: ElementId) -> Option<ElementId> {
+        self.pool.pred(self.key(id)).map(Self::identify)
+    }
+    pub fn linked(&self, id: ElementId) -> bool {
+        self.pool.linked(self.key(id))
+    }
+    pub fn alloc(&mut self) -> Option<ElementId> {
+        let key = self.pool.alloc(ElementRecord::default())?;
+        let id = Self::identify(key);
+        Some(id)
+    }
+    pub fn free(&mut self, id: ElementId) {
+        self.pool.free(self.key(id));
+    }
+    pub fn put(&mut self, id: ElementId) {
+        self.insert_before(id, None);
+    }
+    pub fn insert_before(&mut self, id: ElementId, before: Option<ElementId>) {
+        let key = self.key(id);
+        let before = before.map(|other| self.key(other));
+        self.pool.insert_before(key, before);
+    }
+    pub fn remove(&mut self, id: ElementId) {
+        self.pool.remove(self.key(id));
+    }
+    pub fn reset_capacity(&mut self, capacity: usize) {
+        self.pool.reset_capacity(capacity);
+    }
     pub fn reinit(&mut self) {
-        for slot in 0..self.generations.len() {
-            self.bump(slot);
-        }
-        self.allocated.fill(false);
-        // SAFETY: reset is called at the existing mode-entry queue reset point.
-        unsafe {
-            ReinitQueue(self.queue());
-        }
+        self.pool.reinit();
     }
-
-    /// # Safety
-    /// Each parent queue is initialized, address-stable and game-thread owned.
-    pub unsafe fn parent(
-        &self,
-        id: ElementId,
-        ships: [*const QUEUE; 2],
-        groups: *const QUEUE,
-    ) -> Parent {
-        let parent = self[id].pParent;
-        if parent.is_null() {
-            return Parent::None;
-        }
-        for (side, queue) in ships.into_iter().enumerate() {
-            // SAFETY: ship queues are live under the parent accessor's contract.
-            if let Some(slot) = unsafe { parent_slot(queue, parent) } {
-                return Parent::Ship(ShipId {
-                    side: side as u8,
-                    slot,
-                });
-            }
-        }
-        // SAFETY: the IP group queue is live under the parent accessor's contract.
-        if let Some(slot) = unsafe { parent_slot(groups, parent) } {
-            return Parent::IpGroup(slot);
-        }
-        panic!("element {id:?} has parent outside ship and IP group pools");
-    }
-}
-
-unsafe fn parent_slot(queue: *const QUEUE, parent: HLink) -> Option<u8> {
-    // SAFETY: parent queue validity is the caller's contract.
-    let queue = unsafe { &*queue };
-    if queue.pq_tab.is_null() {
-        return None;
-    }
-    let size = usize::from(queue.object_size);
-    let offset = (parent as usize).checked_sub(queue.pq_tab as usize)?;
-    (size != 0 && offset.is_multiple_of(size) && offset / size < usize::from(queue.num_objects))
-        .then_some((offset / size.max(1)) as u8)
 }
 
 impl Index<ElementId> for ElementTable {
-    type Output = ELEMENT;
-    #[inline]
-    fn index(&self, id: ElementId) -> &ELEMENT {
-        // SAFETY: raw validates generation and membership; reference is scoped to this borrow.
-        unsafe { &*self.raw(id).cast::<ELEMENT>() }
+    type Output = ElementRecord;
+    fn index(&self, id: ElementId) -> &ElementRecord {
+        self.pool.get(self.key(id))
     }
 }
 impl IndexMut<ElementId> for ElementTable {
-    #[inline]
-    fn index_mut(&mut self, id: ElementId) -> &mut ELEMENT {
-        // SAFETY: the exclusive table borrow scopes this one-record reference.
-        unsafe { &mut *self.raw(id).cast::<ELEMENT>() }
+    fn index_mut(&mut self, id: ElementId) -> &mut ElementRecord {
+        let key = self.key(id);
+        self.pool.get_mut(key)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::super::record::{ELEMENT, QUEUE};
-    use super::*;
-    use crate::collections::queue::{InitQueue, PutQueue, UninitQueue};
+    use super::ElementTable;
 
     #[test]
-    fn allocation_order_reuse_and_reset_invalidate_old_ids() {
-        let mut queue = QUEUE::default();
-        // SAFETY: this serialized test owns the records and projected storage for the scope.
-        unsafe {
-            assert!(InitQueue(&mut queue, 3, size_of::<ELEMENT>() as u16));
-            let mut elements = ElementTable::from_queue(&raw mut queue);
-            let a = elements.alloc().unwrap();
-            let b = elements.alloc().unwrap();
-            let c = elements.alloc().unwrap();
-            assert_eq!([a.slot, b.slot, c.slot], [0, 1, 2]);
-            assert!(elements.alloc().is_none());
-            assert_eq!(elements.id(elements.raw(b)), Some(b));
-            let retained = elements.raw(b);
-            assert_eq!(elements.allocated_id(retained), Some(b));
-            elements.free(b);
-            assert_eq!(elements.allocated_id(retained), None);
-            assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(
-                || elements.id(retained)
-            ))
-            .is_err());
-            assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(
-                || elements.allocated_id(std::ptr::dangling_mut())
-            ))
-            .is_err());
-            let replacement = elements.alloc().unwrap();
-            assert_eq!(elements.allocated_id(retained), Some(replacement));
-            assert_eq!(b.slot, replacement.slot);
-            assert_ne!(b, replacement);
-            assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(
-                || elements[b].state_flags
-            ))
-            .is_err());
-            elements.reinit();
-            assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(
-                || elements[a].state_flags
-            ))
-            .is_err());
-            assert_ne!(elements.alloc().unwrap(), a);
-            UninitQueue(&mut queue);
-        }
+    fn paired_elements_mutate_the_checked_owner_in_argument_order() {
+        let mut elements = ElementTable::with_capacity(2);
+        let a = elements.alloc().unwrap();
+        let b = elements.alloc().unwrap();
+        let (right, left) = elements.pair_mut(b, a);
+        right.hits = 7;
+        left.hits = 9;
+        assert_eq!((elements[a].hits, elements[b].hits), (9, 7));
     }
 
     #[test]
-    fn parent_decoding_uses_queue_ranges_and_rejects_an_unknown_owner() {
-        let mut queue = QUEUE::default();
-        let mut ships = [QUEUE::default(); 2];
-        let mut groups = QUEUE::default();
-        // SAFETY: this serialized test owns the records and projected storage for the scope.
-        unsafe {
-            assert!(InitQueue(&mut queue, 1, size_of::<ELEMENT>() as u16));
-            for ship in &mut ships {
-                assert!(InitQueue(
-                    ship,
-                    2,
-                    size_of::<super::super::record::STARSHIP>() as u16
-                ));
-            }
-            assert!(InitQueue(
-                &mut groups,
-                1,
-                size_of::<super::super::record::STARSHIP>() as u16
-            ));
-            let mut elements = ElementTable::from_queue(&raw mut queue);
-            let id = elements.alloc().unwrap();
-            let ranges = [&raw const ships[0], &raw const ships[1]];
-            assert_eq!(elements.parent(id, ranges, &groups), Parent::None);
-            elements[id].pParent = ships[1]
-                .pq_tab
-                .add(usize::from(ships[1].object_size))
-                .cast();
-            assert_eq!(
-                elements.parent(id, ranges, &groups),
-                Parent::Ship(ShipId { side: 1, slot: 1 })
-            );
-            elements[id].pParent = groups.pq_tab.cast();
-            assert_eq!(elements.parent(id, ranges, &groups), Parent::IpGroup(0));
-            elements[id].pParent = (&raw mut queue).cast();
-            assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(
-                || elements.parent(id, ranges, &groups)
-            ))
-            .is_err());
-            for ship in &mut ships {
-                UninitQueue(ship);
-            }
-            UninitQueue(&mut groups);
-            UninitQueue(&mut queue);
-        }
-    }
-
-    #[test]
-    fn successor_reads_see_elements_appended_during_the_pass() {
-        let mut queue = QUEUE::default();
-        // SAFETY: this serialized test owns the records and projected storage for the scope.
-        unsafe {
-            assert!(InitQueue(&mut queue, 3, size_of::<ELEMENT>() as u16));
-            let mut elements = ElementTable::from_queue(&raw mut queue);
-            let a = elements.alloc().unwrap();
-            PutQueue(&mut queue, elements.raw(a));
-            assert_eq!(elements.head(), Some(a));
-            assert_eq!(elements.succ(a), None);
-            let b = elements.alloc().unwrap();
-            PutQueue(&mut queue, elements.raw(b));
-            assert_eq!(elements.succ(a), Some(b));
-            elements[b].state_flags = 123;
-            assert_eq!((*elements.raw(b).cast::<ELEMENT>()).state_flags, 123);
-            UninitQueue(&mut queue);
-        }
+    fn retired_observation_addresses_survive_retirement_and_slot_reuse() {
+        let mut elements = ElementTable::with_capacity(1);
+        let retired = elements.alloc().unwrap();
+        let address = elements.raw(retired) as usize;
+        elements.free(retired);
+        assert_eq!(elements.journal_address(retired), address);
+        let replacement = elements.alloc().unwrap();
+        assert_ne!(retired, replacement);
+        assert_eq!(elements.journal_address(retired), address);
+        assert_eq!(elements.journal_address(replacement), address);
+        elements.reinit();
+        assert_eq!(elements.journal_address(replacement), address);
     }
 }

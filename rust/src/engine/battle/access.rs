@@ -1,6 +1,43 @@
 //! Stage B resource and record projections. Borrows end before legacy handoffs.
 #[cfg(not(test))]
 impl Cx<'_> {
+    pub fn alloc_element(&mut self) -> Option<ElementId> {
+        let allocated = self.b.kernel.elements.alloc();
+        let address = if let Some(id) = allocated {
+            self.assign_primitive(id);
+            self.primitive_style_mut(id).kind = crate::graphics::native_abi::EMPTY_PRIMITIVE;
+            self.b.kernel.elements.raw(id) as usize
+        } else {
+            0
+        };
+        crate::collections::observation::record(crate::collections::observation::Event::Allocate(
+            address,
+        ));
+        allocated
+    }
+
+    pub fn dispose(&mut self, id: ElementId) {
+        assert!(
+            !self.b.kernel.elements.linked(id),
+            "dispose requires an unlinked element"
+        );
+        let address = self.b.kernel.elements.raw(id) as usize;
+        let index = self.b.kernel.elements[id].PrimIndex;
+        self.release_primitive(index);
+        crate::collections::observation::record(crate::collections::observation::Event::Free(
+            address,
+        ));
+        self.b.kernel.elements.free(id);
+    }
+
+    pub(crate) fn finish_battle_storage(&mut self) {
+        self.b.kernel.finish_battle();
+    }
+
+    pub(crate) fn complete_ship_reset(&mut self) {
+        self.b.kernel.complete_ship_reset();
+    }
+
     /// Move the boss result before descriptor disposal; no live graph is retained.
     pub(crate) fn retain_terminal_outcome(&mut self, owner: ShipId) {
         if matches!(self.desc(owner).race_state, super::RaceState::SaMatra(_)) {
@@ -27,10 +64,7 @@ impl super::World {
 #[cfg(not(test))]
 use super::record::PRIMITIVE;
 #[cfg(not(test))]
-use super::{
-    record::{state__bindgen_ty_1, STATE},
-    Parent,
-};
+use super::Parent;
 use super::{Cx, ElementId, ShipId};
 
 #[cfg(not(test))]
@@ -43,17 +77,7 @@ impl Cx<'_> {
     }
 
     pub fn parent(&self, id: ElementId) -> Parent {
-        // SAFETY: Cx owns the game-thread authorities for this synchronous call.
-        unsafe {
-            self.b.elements.parent(
-                id,
-                [
-                    super::record::ship_queue(0).as_ptr(),
-                    super::record::ship_queue(1).as_ptr(),
-                ],
-                self.world.groups(),
-            )
-        }
+        self.b.kernel.elements[id].parent
     }
 
     pub fn ship_element(&self, ship: ShipId) -> ElementId {
@@ -62,33 +86,32 @@ impl Cx<'_> {
     }
 
     pub fn optional_ship_element(&self, ship: ShipId) -> Option<ElementId> {
-        self.b.elements.id(self.ship(ship).hShip)
+        let id = self.ship(ship).hShip?;
+        assert!(self.elements().contains(id), "stale ship element {id:?}");
+        Some(id)
     }
 
     pub fn set_parent(&mut self, element: ElementId, parent: Option<ShipId>) {
-        self.b.elements[element].pParent =
-            parent.map_or(std::ptr::null_mut(), |ship| self.ship_pointer(ship).cast());
+        self.b.kernel.elements[element].parent = parent.map_or(Parent::None, Parent::Ship);
     }
 
     pub fn target(&self, element: ElementId) -> Option<ElementId> {
-        self.b.elements.id(self.b.elements[element].hTarget)
+        self.b.kernel.elements[element].target
     }
 
     pub fn set_target(&mut self, element: ElementId, target: Option<ElementId>) {
-        self.b.elements[element].hTarget =
-            target.map_or(std::ptr::null_mut(), |id| self.b.elements.raw(id));
+        if let Some(id) = target {
+            assert!(self.b.kernel.elements.contains(id), "stale target {id:?}");
+        }
+        self.b.kernel.elements[element].target = target;
     }
 
     pub(crate) fn set_ip_group_parent(&mut self, id: ElementId, slot: u8) {
-        let queue = self.project(
-            std::ptr::NonNull::new(self.world.groups().cast_mut())
-                .unwrap_or_else(|| panic!("IP-group queue")),
+        assert!(
+            slot < self.groups().num_objects,
+            "IP-group slot outside pool"
         );
-        assert!(slot < queue.num_objects, "IP-group slot outside pool");
-        let parent = queue
-            .pq_tab
-            .wrapping_add(usize::from(slot) * usize::from(queue.object_size));
-        self.b.elements[id].pParent = parent.cast();
+        self.b.kernel.elements[id].parent = Parent::IpGroup(slot);
     }
 
     pub fn put(&mut self, id: ElementId) {
@@ -101,12 +124,10 @@ use super::views::*;
 #[cfg(not(test))]
 impl Cx<'_> {
     pub fn ship_frame_set(&self, id: ShipId, role: usize) -> Frames {
-        Frames(self.ship_frames(id, role))
+        super::frames::Frames::ship(id, role.into(), self.ship_array(id, role).clone())
     }
     pub fn ship_frame(&self, id: ShipId, role: usize) -> Frame {
-        let array = self.ship_frames(id, role);
-        // SAFETY: the checked owner retains the loaded three-frame array.
-        Frame(unsafe { *array })
+        self.ship_array(id, role).view(0)
     }
     pub fn advance_frame(&self, frame: Frame) -> Frame {
         Frame(self.inc_frame(frame.0))
@@ -128,27 +149,27 @@ impl Cx<'_> {
 #[cfg(not(test))]
 impl Cx<'_> {
     pub fn weapon_origin(&self, id: ElementId) -> super::Subject {
-        self.decode_subject(&self.b.elements[id])
+        Subject::from(&self.b.kernel.elements[id])
     }
 
     pub fn set_frame(&mut self, id: ElementId, next: bool, frame: Frame) {
         use crate::collections::observation::image;
         if next {
-            image!(frame;self.b.elements[id].next.image.frame,frame.0);
+            image!(frame;self.b.kernel.elements[id].next.image.frame,frame.0);
         } else {
-            image!(frame;self.b.elements[id].current.image.frame,frame.0);
+            image!(frame;self.b.kernel.elements[id].current.image.frame,frame.0);
         }
     }
     pub fn set_single_frames(&mut self, id: ElementId, frames: Frames, frame: Frame) {
-        crate::collections::observation::image!(single; self.b.elements[id].current.image.farray, frames.0, frame.0);
+        crate::collections::observation::image!(single; self.b.kernel.elements[id].current.image.frames, frames, frame.0);
     }
 
     pub fn set_frames(&mut self, id: ElementId, next: bool, frames: Frames) {
         use crate::collections::observation::image;
         if next {
-            image!(set;self.b.elements[id].next.image.farray,frames.0);
+            image!(set;self.b.kernel.elements[id].next.image.frames,frames);
         } else {
-            image!(set;self.b.elements[id].current.image.farray,frames.0);
+            image!(set;self.b.kernel.elements[id].current.image.frames,frames);
         }
     }
 }
@@ -156,22 +177,16 @@ impl Cx<'_> {
 #[cfg(not(test))]
 impl Cx<'_> {
     pub fn copy_visual_to_next(&mut self, id: ElementId, visual: Visual) {
-        use crate::collections::observation::image;
-        let value = STATE {
-            location: visual.location,
-            image: state__bindgen_ty_1 {
-                frame: visual.image.frame.0,
-                farray: visual.image.frames.0,
-            },
-        };
-        image!(copy;self.b.elements[id].next,value);
+        self.b.kernel.elements[id].next.location = visual.location;
+        self.set_frame(id, true, visual.image.frame);
+        self.set_frames(id, true, visual.image.frames);
     }
     pub fn element_frame_set_first(&self, id: ElementId, next: bool) -> Frame {
         Frame(self.frame_at(id, next))
     }
     pub fn set_intersect_frame(&mut self, id: ElementId, frame: Frame) {
         use crate::collections::observation::image;
-        image!(frame;self.b.elements[id].IntersectControl.IntersectStamp.frame,frame.0);
+        image!(frame;self.b.kernel.elements[id].IntersectControl.IntersectStamp.frame,frame.0);
     }
 }
 
@@ -199,41 +214,16 @@ impl Cx<'_> {
     }
 }
 
-impl super::ElementTable {
-    pub fn tail(&self) -> Option<ElementId> {
-        // SAFETY: the table's construction contract retains the queue authority.
-        self.id(unsafe { (*self.queue()).tail })
-    }
-    pub fn pred(&self, id: ElementId) -> Option<ElementId> {
-        self.id(self[id].pred)
-    }
-    pub fn linked(&self, id: ElementId) -> bool {
-        self.raw(id);
-        let mut current = self.head();
-        while let Some(entry) = current {
-            if entry == id {
-                return true;
-            }
-            current = self.succ(entry);
-        }
-        false
-    }
-}
-
 impl Cx<'_> {
     pub(super) fn project<T>(&self, pointer: std::ptr::NonNull<T>) -> &T {
         // SAFETY: record decoders supply checked pointers retained by this context.
         unsafe { &*pointer.as_ptr() }
     }
-    pub(super) fn project_mut<T>(&mut self, pointer: std::ptr::NonNull<T>) -> &mut T {
-        // SAFETY: the exclusive context borrow scopes one checked record projection.
-        unsafe { &mut *pointer.as_ptr() }
-    }
 }
 
 impl Cx<'_> {
     pub fn element(&self, id: ElementId) -> ElementState {
-        ElementState::decode(&self.b.elements[id])
+        ElementState::decode(&self.b.kernel.elements[id])
     }
     pub fn ship_state(&self, id: ShipId) -> ShipState {
         ShipState::decode(self.ship(id))
@@ -261,16 +251,13 @@ use crate::graphics::native_abi::FRAME;
 use crate::graphics::pixmap_abi::{IncFrameIndex, SetAbsFrameIndex, SetEquFrameIndex};
 #[cfg(not(test))]
 impl Cx<'_> {
-    pub(super) fn ship_frames(&self, ship: ShipId, role: usize) -> *mut FRAME {
-        let pointer = self.desc(ship) as *const super::record::RACE_DESC;
-        // SAFETY: the ship owns this descriptor and its stable embedded arrays.
-        unsafe {
-            match role {
-                0 => (&raw const (*pointer).ship_data.ship).cast_mut().cast(),
-                1 => (&raw const (*pointer).ship_data.weapon).cast_mut().cast(),
-                2 => (&raw const (*pointer).ship_data.special).cast_mut().cast(),
-                _ => panic!("invalid frame role {role}"),
-            }
+    pub(super) fn ship_array(&self, ship: ShipId, role: usize) -> &super::frames::FrameArray {
+        let data = &self.desc(ship).ship_data;
+        match role {
+            0 => &data.ship,
+            1 => &data.weapon,
+            2 => &data.special,
+            _ => panic!("invalid frame role {role}"),
         }
     }
     pub(super) fn abs_frame(&self, frame: FRAME, index: u16) -> FRAME {
@@ -286,63 +273,52 @@ impl Cx<'_> {
         unsafe { IncFrameIndex(frame) }
     }
     pub(super) fn frame_at(&self, element: ElementId, next: bool) -> FRAME {
-        let array = if next {
-            self.b.elements[element].next.image.farray
+        let image = if next {
+            &self.b.kernel.elements[element].next.image
         } else {
-            self.b.elements[element].current.image.farray
+            &self.b.kernel.elements[element].current.image
         };
-        assert!(!array.is_null(), "element {element:?} has no frame set");
-        // SAFETY: the array is retained by the descriptor or shared battle resources.
-        unsafe { *array }
+        image.frames.view(0).raw()
     }
     pub(super) fn frame_index(&self, frame: FRAME) -> u16 {
         // SAFETY: this battle retains the element's loaded frame resources.
         unsafe { crate::graphics::pixmap_abi::GetFrameIndex(frame.cast()) }
     }
-    pub(super) fn shared_frames(&self, role: SharedFrames) -> *mut FRAME {
-        match role {
-            SharedFrames::Asteroid => self.world.shared_frames[0].0,
-            SharedFrames::Explosion => self.world.shared_frames[1].0,
-        }
-    }
     pub(super) fn shared_frame(&self, role: SharedFrames) -> FRAME {
-        // SAFETY: shared frame sets stay loaded until battle cleanup.
-        unsafe { *self.shared_frames(role) }
+        self.shared_frame_set(role).view(0).raw()
     }
 }
 
 #[cfg(not(test))]
 impl Cx<'_> {
-    pub fn shared_frame_set(&self, role: SharedFrames) -> Frames {
-        Frames(self.shared_frames(role))
-    }
     pub fn first_shared_frame(&self, role: SharedFrames) -> Frame {
         Frame(self.shared_frame(role))
     }
     pub fn copy_image_to_current(&mut self, id: ElementId, image: Image) {
-        use crate::collections::observation::image;
-        let raw = state__bindgen_ty_1 {
-            frame: image.frame.0,
-            farray: image.frames.0,
-        };
-        image!(copy; self.b.elements[id].current.image, raw);
+        self.set_frame(id, false, image.frame);
+        self.set_frames(id, false, image.frames);
     }
 }
 
 impl Cx<'_> {
+    pub fn shared_frame_set(&self, role: SharedFrames) -> Frames {
+        let source = (self.world.frame_source)(role);
+        // SAFETY: World retains these source slots; the result leases their loaded allocations.
+        unsafe { Frames::native_shared(role, source, 3) }
+    }
     pub fn init_intersect(&mut self, id: ElementId) {
         self.init_intersect_start(id);
         self.init_intersect_end(id);
     }
 
     pub fn init_intersect_start(&mut self, id: ElementId) {
-        let e = &mut self.b.elements[id];
+        let e = &mut self.b.kernel.elements[id];
         e.IntersectControl.IntersectStamp.origin.x = e.current.location.x >> 2;
         e.IntersectControl.IntersectStamp.origin.y = e.current.location.y >> 2;
     }
 
     pub fn init_intersect_end(&mut self, id: ElementId) {
-        let e = &mut self.b.elements[id];
+        let e = &mut self.b.kernel.elements[id];
         e.IntersectControl.EndPoint.x = e.next.location.x >> 2;
         e.IntersectControl.EndPoint.y = e.next.location.y >> 2;
     }
@@ -403,17 +379,17 @@ impl Cx<'_> {
     }
     pub fn set_ship_frame(&mut self, ship: ShipId, role: usize, resolution: usize, frame: Frame) {
         assert!(resolution < 3, "invalid frame resolution {resolution}");
-        let array = self.ship_frames(ship, role);
-        // SAFETY: the checked descriptor retains the slot and both opaque drawable handles.
+        let array = self.ship_array(ship, role);
+        let previous = array.view(resolution);
+        // SAFETY: the checked descriptor retains both opaque drawable handles.
         unsafe {
-            let slot = array.add(resolution);
             assert_eq!(
-                crate::graphics::pixmap_abi::GetFrameParentDrawable((*slot).cast()),
+                crate::graphics::pixmap_abi::GetFrameParentDrawable(previous.raw().cast()),
                 crate::graphics::pixmap_abi::GetFrameParentDrawable(frame.0.cast()),
                 "owning frame slot cannot change drawable"
             );
-            crate::collections::observation::image!(view; *slot, frame.0);
         }
+        array.set_view(resolution, frame);
     }
     pub fn captain_special(&self, ship: ShipId) -> Frame {
         Frame(self.desc(ship).ship_data.captain_control.special)
@@ -422,8 +398,8 @@ impl Cx<'_> {
         self.desc_mut(ship).ship_data.captain_control.special = frame.0;
     }
     pub fn primitive_style(&self, id: ElementId) -> PrimitiveStyle {
-        let index = usize::from(self.b.elements[id].PrimIndex);
-        let record = self.project(super::record::primitive_slot(index));
+        let index = usize::from(self.b.kernel.elements[id].PrimIndex);
+        let record = self.b.kernel.display.get(index as u16);
         PrimitiveStyle {
             kind: record.Type,
             color: record.color,
@@ -436,17 +412,17 @@ impl Cx<'_> {
             !self.elements().linked(destination),
             "copy destination is linked"
         );
-        let index = self.b.elements[destination].PrimIndex;
-        let source_index = usize::from(self.b.elements[source].PrimIndex);
-        let primitive = *self.project(super::record::primitive_slot(source_index));
-        let value = self.b.elements[source];
-        let address = std::ptr::from_ref(&self.b.elements[source]) as usize;
+        let index = self.b.kernel.elements[destination].PrimIndex;
+        let source_index = usize::from(self.b.kernel.elements[source].PrimIndex);
+        let primitive = *self.b.kernel.display.get(source_index as u16);
+        let value = self.b.kernel.elements[source].clone();
+        let address = std::ptr::from_ref(&self.b.kernel.elements[source]) as usize;
         crate::collections::observation::copy_image(
-            &mut self.b.elements[destination],
+            &mut self.b.kernel.elements[destination],
             value,
             address,
         );
-        self.b.elements[destination].PrimIndex = index;
+        self.b.kernel.elements[destination].PrimIndex = index;
         *self.primitive(destination) = primitive;
     }
 }
@@ -468,23 +444,41 @@ impl Cx<'_> {
 
 #[cfg(not(test))]
 impl Cx<'_> {
+    pub(crate) fn set_ship_identity(&mut self, id: ShipId, species: u32, index: u16) {
+        let record = self.ship_mut(id);
+        record.SpeciesID = species;
+        record.index = index;
+    }
+
+    pub(crate) fn queued_ships(&self, side: u8) -> Vec<ShipId> {
+        let queue = super::link_queue::LinkQueue::borrow(&self.b.kernel.races[usize::from(side)]);
+        let mut result = Vec::new();
+        let mut next = queue.head();
+        while let Some(id) = next {
+            result.push(queue.ship_id(id, side));
+            next = queue.succ(id);
+        }
+        result
+    }
+
+    pub(crate) fn first_ship(&self, side: usize) -> Option<ShipId> {
+        let ships = super::link_queue::LinkQueue::borrow(&self.b.kernel.races[side]);
+        ships.head().map(|id| ships.ship_id(id, side as u8))
+    }
+
     pub(crate) fn pick_ship(
         &self,
         id: crate::engine::battle::ShipId,
     ) -> crate::engine::battle::link_queue::PickShip {
-        // SAFETY: Cx owns this pool and no record borrow survives this value read.
-        unsafe {
-            let ships = crate::engine::battle::link_queue::ships(usize::from(id.side));
-            ships.get(ships.link(id))
-        }
+        let ships =
+            super::link_queue::LinkQueue::borrow(&self.b.kernel.races[usize::from(id.side)]);
+        ships.get(ships.link(id))
     }
     pub(crate) fn subject_style(
         &self,
         subject: &Subject,
     ) -> crate::engine::battle::views::PrimitiveStyle {
-        let primitive = self.project(crate::engine::battle::record::primitive_slot(usize::from(
-            subject.primitive,
-        )));
+        let primitive = self.b.kernel.display.get(subject.primitive);
         crate::engine::battle::views::PrimitiveStyle {
             kind: primitive.Type,
             color: primitive.color,
@@ -504,7 +498,7 @@ pub(super) mod links;
 impl Cx<'_> {
     pub(crate) fn sound_point(&self, id: ElementId) -> crate::graphics::native_abi::POINT {
         let index = usize::from(self.elements()[id].PrimIndex);
-        let primitive = self.project(crate::engine::battle::record::primitive_slot(index));
+        let primitive = self.b.kernel.display.get(index as u16);
         // SAFETY: the checked element owns the primitive; its type selects the union variant.
         unsafe {
             if primitive.Type == crate::graphics::native_abi::LINE_PRIMITIVE {
@@ -519,8 +513,8 @@ impl Cx<'_> {
 #[cfg(not(test))]
 impl Cx<'_> {
     pub fn primitive_stamp(&mut self, id: ElementId) -> crate::graphics::native_abi::STAMP {
-        let pointer = std::ptr::NonNull::from(&mut self.primitive(id).Object).cast();
-        *self.project(pointer)
+        // SAFETY: the caller selected a stamp primitive from the retained graphics union.
+        unsafe { self.primitive(id).Object.Stamp }
     }
 
     pub fn set_primitive_stamp(
@@ -528,17 +522,16 @@ impl Cx<'_> {
         id: ElementId,
         stamp: crate::graphics::native_abi::STAMP,
     ) {
-        let pointer = std::ptr::NonNull::from(&mut self.primitive(id).Object).cast();
-        *self.project_mut(pointer) = stamp;
+        self.primitive(id).Object.Stamp = stamp;
     }
 
     pub fn copy_current_to_next(&mut self, id: ElementId) {
-        let record = &mut self.b.elements[id];
+        let record = &mut self.b.kernel.elements[id];
         crate::collections::observation::image!(copy; record.next, record.current);
     }
 
     pub fn copy_next_to_current(&mut self, id: ElementId) {
-        let record = &mut self.b.elements[id];
+        let record = &mut self.b.kernel.elements[id];
         crate::collections::observation::image!(copy; record.current, record.next);
     }
 }
@@ -550,35 +543,35 @@ impl Cx<'_> {
     }
 }
 
-/// # Safety
-/// The caller retains the live element graph throughout this staging observation.
-pub(crate) unsafe fn observe_element_record(record: &super::record::ELEMENT) -> ElementState {
+pub(crate) fn observe_element_record(record: &super::record::ElementRecord) -> ElementState {
     ElementState::decode(record)
 }
 
 /// # Safety
 /// The caller retains the ship pool throughout this staging observation.
 #[cfg(test)]
-pub(crate) unsafe fn observe_ship_record(record: &super::record::STARSHIP) -> ShipState {
+pub(crate) unsafe fn observe_ship_record(record: &super::record::ShipRecord) -> ShipState {
     ShipState::decode(record)
 }
 
 #[cfg(test)]
 /// # Safety
 /// The caller retains the test descriptor and all resources referenced by its state.
-pub(crate) unsafe fn observe_descriptor_record(record: &super::record::RACE_DESC) -> RaceStats {
+pub(crate) unsafe fn observe_descriptor_record(
+    record: &super::record::RaceDescriptor,
+) -> RaceStats {
     RaceStats::decode(record)
 }
 
 #[cfg(not(test))]
 impl Cx<'_> {
-    pub(crate) fn frames_first(&self, frames: Frames) -> Frame {
+    pub(crate) fn frames_first(&self, frames: &Frames) -> Frame {
         // SAFETY: the supplied frame set belongs to this context's loaded resources.
-        Frame(unsafe { *frames.0 })
+        frames.view(0)
     }
 
     pub(crate) fn copy_next_frame_set(&mut self, destination: ElementId, source: ElementId) {
-        crate::collections::observation::image!(copy; self.b.elements[destination].current.image.farray, self.b.elements[source].next.image.farray);
+        crate::collections::observation::image!(copy; self.b.kernel.elements[destination].current.image.frames, self.b.kernel.elements[source].next.image.frames);
     }
 }
 
@@ -587,7 +580,7 @@ impl super::Battle {
     /// The game thread retains the element authority throughout this battle lifecycle.
     pub(crate) unsafe fn for_lifecycle() -> Self {
         // SAFETY: lifecycle ownership excludes any other active battle projection.
-        unsafe { Self::new(&raw mut super::legacy::disp_q) }
+        Self::new(150)
     }
 }
 
@@ -595,13 +588,12 @@ impl super::Battle {
 impl Cx<'_> {
     pub(crate) fn intersect_elements(&mut self, a: ElementId, b: ElementId, time: u16) -> u16 {
         assert_ne!(a, b, "collision operands alias");
-        let left = self.b.elements.raw(a).cast::<super::record::ELEMENT>();
-        let right = self.b.elements.raw(b).cast::<super::record::ELEMENT>();
+        let (left, right) = self.b.kernel.elements.pair_mut(a, b);
         // SAFETY: checked distinct slots and loaded frames remain live during the synchronous geometry call.
         unsafe {
             crate::graphics::geometry_ffi::DrawablesIntersect(
-                &raw mut (*left).IntersectControl,
-                &raw mut (*right).IntersectControl,
+                &mut left.IntersectControl,
+                &mut right.IntersectControl,
                 time,
             )
         }
@@ -621,23 +613,17 @@ impl Cx<'_> {
     }
 
     pub(crate) fn next_ship(&self, ship: ShipId) -> Option<ShipId> {
-        // SAFETY: the checked ship belongs to this context's live side queue.
-        unsafe {
-            let queue = super::link_queue::ships(usize::from(ship.side));
-            queue
-                .succ(queue.link(ship))
-                .map(|id| queue.ship_id(id, ship.side))
-        }
+        let queue =
+            super::link_queue::LinkQueue::borrow(&self.b.kernel.races[usize::from(ship.side)]);
+        queue
+            .succ(queue.link(ship))
+            .map(|id| queue.ship_id(id, ship.side))
     }
     pub(crate) fn reset_ships(&mut self, side: usize) {
-        // SAFETY: lifecycle teardown exclusively owns this idle side queue.
-        unsafe {
-            super::link_queue::ships(side).reinit();
-        }
+        self.b.kernel.races[side].reinit();
     }
     pub(crate) fn set_ship_element(&mut self, ship: ShipId, element: Option<ElementId>) {
-        self.ship_mut(ship).hShip =
-            element.map_or(std::ptr::null_mut(), |id| self.b.elements.raw(id));
+        self.ship_mut(ship).hShip = element;
     }
 }
 
@@ -655,22 +641,24 @@ impl Cx<'_> {
 }
 impl Cx<'_> {
     pub(crate) fn refresh_intersect_frame(&mut self, id: ElementId) {
-        let e = &mut self.b.elements[id];
+        let e = &mut self.b.kernel.elements[id];
         // SAFETY: the allocated element retains its loaded frame array during this projection.
         unsafe {
-            crate::collections::observation::image!(frame; e.IntersectControl.IntersectStamp.frame, crate::graphics::pixmap_abi::SetEquFrameIndex(*e.next.image.farray, e.next.image.frame));
+            crate::collections::observation::image!(frame; e.IntersectControl.IntersectStamp.frame, crate::graphics::pixmap_abi::SetEquFrameIndex(e.next.image.frames.view(0).raw(), e.next.image.frame));
         }
     }
 }
 
 #[cfg(not(test))]
 impl Cx<'_> {
+    pub(crate) fn status_offset(&mut self, ship: ShipId) -> i16 {
+        self.b.kernel.status_offsets[self.ship_state(ship).player as usize]
+    }
+    pub fn winner(&mut self) -> Option<ShipId> {
+        self.b.kernel.winner
+    }
     pub(crate) fn set_winner_slot(&mut self, ship: Option<ShipId>) {
-        let pointer = ship.map_or(std::ptr::null_mut(), |ship| self.ship_pointer(ship));
-        // SAFETY: this context exclusively retains the game-thread battle kernel.
-        unsafe {
-            (*self.kernel()).winner = pointer;
-        }
+        self.b.kernel.winner = ship;
     }
     pub(crate) fn set_ship_species(&mut self, ship: ShipId, species: u32) {
         self.ship_mut(ship).SpeciesID = species;
@@ -684,21 +672,28 @@ mod intersection_projection_tests {
     fn live_helpers_preserve_record_coordinates_and_pool_addresses() {
         use crate::engine::battle::{Battle, Cx, World};
         use crate::ships::native::abi::*;
-        // SAFETY: a zeroed uninitialized queue has no allocated storage.
-        let mut queue: super::super::record::QUEUE = unsafe { std::mem::zeroed() };
         // SAFETY: a zeroed group queue has no allocated storage.
         let mut groups: super::super::record::QUEUE = unsafe { std::mem::zeroed() };
         let mut activity = 0;
         // SAFETY: the local queue authorities and their pool remain exclusive for this test.
         unsafe {
-            assert_ne!(InitQueue(&mut queue, 1, size_of::<ELEMENT>() as u16), 0);
-            let mut battle = Battle::new(&mut queue);
-            let id = battle.elements.alloc().unwrap();
-            battle.elements[id].current.location = POINT { x: 44, y: 52 };
-            battle.elements[id].next.location = POINT { x: 60, y: 68 };
-            let mut frame = std::ptr::null_mut();
-            battle.elements[id].next.image.farray = &raw mut frame;
-            let mut world = World::new(&mut activity, &mut groups, [std::ptr::null_mut(); 2]);
+            let mut battle = Battle::new(1);
+            let id = battle.kernel.elements.alloc().unwrap();
+            battle.kernel.elements[id].current.location = POINT { x: 44, y: 52 };
+            battle.kernel.elements[id].next.location = POINT { x: 60, y: 68 };
+            battle.kernel.elements[id].next.image.frames =
+                crate::engine::battle::views::Frames::shared(
+                    crate::engine::battle::frames::SharedFrames::Fixture(0),
+                    crate::engine::battle::frames::FrameArray::retain(
+                        [crate::engine::battle::views::Frame::ABSENT; 3],
+                        (),
+                    ),
+                );
+            let mut world = World::new(
+                std::ptr::NonNull::from(&mut activity),
+                std::ptr::NonNull::from(&mut groups),
+                |_| panic!("unused shared frame source"),
+            );
             let mut cx = Cx {
                 b: &mut battle,
                 world: &mut world,
@@ -718,167 +713,52 @@ mod intersection_projection_tests {
                 .IntersectStamp
                 .frame
                 .is_null());
-            assert_eq!(cx.elements().raw(id), queue.pq_tab.cast());
+            assert_eq!(cx.elements().id(cx.elements().raw(id)), Some(id));
             assert_eq!(cx.elements().id(std::ptr::null_mut()), None);
-            assert_eq!(
-                super::super::record::primitive_slot(0).as_ptr(),
-                (&raw mut DisplayArray).cast()
-            );
+            let primitive = cx.display_pool().alloc().unwrap();
+            cx.b.kernel.display.get_mut(primitive).Type = 3;
+            assert_eq!(cx.display_primitive(primitive).Type, 3);
+            cx.append_display(primitive);
+            assert_eq!(cx.display_batch()[0].Type, 3);
+            cx.clear_display_order();
+            assert!(cx.display_batch().is_empty());
+            cx.reset_display();
+            assert_eq!(cx.b.kernel.display.alloc(), Some(0));
+            assert_eq!(cx.display_primitive(0).Type, 3);
             drop(battle);
-            UninitQueue(&mut queue);
         }
     }
 }
 
 #[cfg(not(test))]
 impl Cx<'_> {
-    pub(crate) fn free_primitive_index(&self) -> u16 {
-        // SAFETY: the battle owns the game-thread primitive pool.
-        unsafe { super::legacy::DisplayFreeList }
-    }
     pub(crate) fn assign_primitive(&mut self, id: ElementId) {
-        // SAFETY: allocation belongs to this exclusive context and the caller checked capacity.
-        unsafe {
-            self.b.elements[id].PrimIndex = primitives::alloc_display_prim(
-                (&raw mut super::legacy::DisplayArray).cast(),
-                &raw mut super::legacy::DisplayFreeList,
-            );
-        }
+        self.b.kernel.elements[id].PrimIndex = self
+            .b
+            .kernel
+            .display
+            .alloc()
+            .unwrap_or_else(|| panic!("AllocElement: Out of display prims!"));
     }
     pub(crate) fn release_primitive(&mut self, index: u16) {
-        // SAFETY: the disposed element exclusively owns this allocated primitive.
-        unsafe {
-            primitives::free_display_prim(
-                (&raw mut super::legacy::DisplayArray).cast(),
-                &raw mut super::legacy::DisplayFreeList,
-                index,
-            );
-        }
+        self.b.kernel.display.free(index);
     }
     pub(crate) fn link_storage(&mut self, id: ElementId, before: Option<ElementId>) {
-        let handle = self.b.elements.raw(id);
-        let before = before.map_or(std::ptr::null_mut(), |id| self.b.elements.raw(id));
-        // SAFETY: the caller checked queue membership and insertion ordering.
-        unsafe {
-            crate::collections::queue::InsertQueue(
-                (&raw mut super::legacy::disp_q).cast(),
-                handle,
-                before,
-            );
-        }
+        self.b.kernel.elements.insert_before(id, before);
     }
     pub(crate) fn unlink_storage(&mut self, id: ElementId) {
-        let handle = self.b.elements.raw(id);
-        // SAFETY: the caller checked that this allocated element is linked.
-        unsafe {
-            crate::collections::queue::RemoveQueue((&raw mut super::legacy::disp_q).cast(), handle);
-        }
+        self.b.kernel.elements.remove(id);
     }
 }
-/// # Safety
-/// The indices and link list belong to the initialized primitive pool.
-#[cfg(not(test))]
-pub(crate) unsafe fn insert_primitive(
-    list: *mut crate::graphics::native_abi::PRIM_LINKS,
-    index: u16,
-    before: u16,
-) {
-    // SAFETY: the caller retains the initialized storage and resources for this synchronous projection.
-    unsafe {
-        primitives::insert_prim_links(
-            (&raw mut super::legacy::DisplayArray).cast(),
-            list,
-            index,
-            before,
-        );
-    }
-}
-/// # Safety
-/// The list belongs to the live display primitive pool and the drawing context is initialized.
-#[cfg(not(test))]
-pub(crate) unsafe fn draw_display_batch(links: crate::graphics::native_abi::PRIM_LINKS) {
-    // SAFETY: the caller retains the initialized storage and resources for this synchronous projection.
-    unsafe {
-        crate::graphics::frame_abi::DrawBatch(
-            (&raw mut super::legacy::DisplayArray).cast(),
-            links,
-            0,
-        );
-    }
-}
-
-#[cfg(not(test))]
-impl Cx<'_> {
-    /// # Safety
-    /// The caller retains the fixture subject and writable concern records on the game thread.
-    pub unsafe fn invoke_intelligence(
-        parent: usize,
-        element: *mut super::record::ELEMENT,
-        raw: &mut [super::record::EVALUATE_DESC],
-        count: u16,
-    ) {
-        // SAFETY: the caller retains the initialized storage and resources for this synchronous projection.
-        unsafe {
-            crate::app::bridge::enter(|cx| {
-                let ship = cx.ship_id(parent);
-                let mut subject = cx.decode_subject(&*element);
-                let mut concerns = raw
-                    .iter()
-                    .map(|item| super::Concern {
-                        object: cx.elements().id(item.ObjectPtr.cast()),
-                        facing: item.facing,
-                        which_turn: item.which_turn,
-                        movement: item.MoveState,
-                    })
-                    .collect::<Vec<_>>();
-                cx.run_fixture_intelligence(ship, &mut subject, &mut concerns, count);
-                *element = cx.encode_subject(&subject);
-                for (raw, item) in raw.iter_mut().zip(concerns) {
-                    *raw = super::record::EVALUATE_DESC {
-                        ObjectPtr: item
-                            .object
-                            .map_or(std::ptr::null_mut(), |id| cx.elements().raw(id).cast()),
-                        facing: item.facing,
-                        which_turn: item.which_turn,
-                        MoveState: item.movement,
-                    };
-                }
-            });
-        }
-    }
-}
-/// # Safety
-/// Both fixture projections and their loaded resources remain live for this synchronous call.
-#[cfg(not(test))]
-#[no_mangle]
-pub unsafe extern "C" fn PlotIntercept(
-    a: *mut super::record::ELEMENT,
-    b: *mut super::record::ELEMENT,
-    turns: u16,
-    margin: u16,
-) -> u16 {
-    // SAFETY: the caller retains the initialized storage and resources for this synchronous projection.
-    unsafe {
-        crate::app::bridge::enter(|cx| {
-            cx.plot_intercept(
-                &cx.legacy_intercept_subject(&*a),
-                &cx.legacy_intercept_subject(&*b),
-                turns,
-                margin,
-            )
-        })
-    }
-}
-
 #[cfg(not(test))]
 pub(crate) fn race_desc_layout() -> RaceDescLayout {
     use super::record::*;
     use std::mem;
     RaceDescLayout {
-        race_desc_size: mem::size_of::<RACE_DESC>(),
-        ship_data_offset: mem::offset_of!(RACE_DESC, ship_data),
-        ship_info_offset: mem::offset_of!(RACE_DESC, ship_info),
-        characteristics_offset: mem::offset_of!(RACE_DESC, characteristics),
+        race_desc_size: mem::size_of::<RaceDescriptor>(),
+        ship_data_offset: mem::offset_of!(RaceDescriptor, ship_data),
+        ship_info_offset: mem::offset_of!(RaceDescriptor, ship_info),
+        characteristics_offset: mem::offset_of!(RaceDescriptor, characteristics),
         ship_data_ship_offset: mem::offset_of!(DATA_STUFF, ship),
         ship_info_crew_offset: mem::offset_of!(SHIP_INFO, crew_level),
         ship_info_max_crew_offset: mem::offset_of!(SHIP_INFO, max_crew),
@@ -887,8 +767,6 @@ pub(crate) fn race_desc_layout() -> RaceDescLayout {
 }
 
 pub(crate) mod observe;
-
-pub(crate) mod primitives;
 
 /// Layout descriptor for RACE_DESC C-side field offsets.
 /// Matches C `RACE_DESC_LAYOUT` in `rust_bridge_ships.h`.
@@ -915,9 +793,6 @@ pub(crate) mod lifecycle;
 /// The running battle or flight's shared queues, borrowed on the game thread.
 #[cfg(not(test))]
 pub(crate) mod live_queues {
-    use super::super::legacy as queues;
-    use crate::collections::queue::Queue;
-    use std::ptr;
 
     /// `&race_q[player]`, the `STARSHIP` queue of one side (`RPG_PLAYER_NUM` is
     /// the human player's).
@@ -925,19 +800,37 @@ pub(crate) mod live_queues {
     /// # Safety
     /// Game thread only. The caller may read the queue only while no other code is
     /// changing it.
-    pub unsafe fn player_ships(player: usize) -> *const Queue {
-        // SAFETY: the caller retains the initialized storage and resources for this synchronous projection.
-        unsafe {
-            assert!(player < 2, "race_q has no side {player}");
-            ptr::addr_of!(queues::race_q).cast::<Queue>().add(player)
-        }
+    pub unsafe fn player_ships(player: usize) -> *const super::super::link_queue::RacePool {
+        super::super::record::ship_queue(player).as_ptr()
     }
 
-    /// `&disp_q`, the queue of every live `ELEMENT`.
+    /// The Kernel-owned element pool, retained for this game-thread call.
     ///
     /// The caller may read through this pointer only on the game thread while no
     /// other code is changing the queue.
-    pub fn display_list() -> *const Queue {
-        ptr::addr_of!(queues::disp_q).cast()
+    pub unsafe fn display_list() -> *const super::super::ElementTable {
+        // SAFETY: the caller retains the published, game-thread-owned Kernel.
+        &raw const unsafe { super::super::record::Kernel::current() }.elements
+    }
+}
+
+impl Cx<'_> {
+    pub(crate) fn display_pool(&mut self) -> &mut super::display::DisplayPool {
+        &mut self.b.kernel.display
+    }
+    pub fn display_primitive(&mut self, index: u16) -> &mut super::record::PRIMITIVE {
+        self.b.kernel.display.get_mut(index)
+    }
+    pub(crate) fn reset_display(&mut self) {
+        self.b.kernel.display.reinit();
+    }
+    pub(crate) fn clear_display_order(&mut self) {
+        self.b.kernel.display.clear_order();
+    }
+    pub(crate) fn append_display(&mut self, index: u16) {
+        self.b.kernel.display.insert_before(index, None);
+    }
+    pub(crate) fn display_batch(&self) -> Vec<super::record::PRIMITIVE> {
+        self.b.kernel.display.batch()
     }
 }

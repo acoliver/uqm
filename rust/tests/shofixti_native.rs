@@ -1,27 +1,17 @@
 //! Exercise Shofixti's live callbacks against the linked engine.
-use uqm_rust::engine::battle::schema::{
-    BattleInputHandlers, InputContext, GETMELEE_STATE, HELEMENT,
-};
+use uqm_rust::engine::battle::schema::{BattleInputHandlers, InputContext, GETMELEE_STATE, HLINK};
 use uqm_rust::ships::races::{intruder_preprocess, marine_collision};
 #[path = "support/battle_context.rs"]
 mod battle_context;
 #[path = "support/battle.rs"]
 mod shared;
 
-use std::{
-    ffi::{c_void, CStr},
-    mem, ptr,
-};
+use std::{ffi::CStr, mem, ptr};
 use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, frame_index, sine};
 
 use uqm_rust::supermelee::native::battle_picker::live::{selectShipComputer, selectShipHuman};
 
-use uqm_rust::engine::battle::legacy::DisplayArray;
 use uqm_rust::graphics::context_abi::_GraphicsStatusFlags;
-use uqm_rust::graphics::native_canvas::{
-    lifecycle::TFB_DrawCanvas_New_Paletted, pixels::TFB_DrawCanvas_SetPixelIndexes,
-};
-use uqm_rust::graphics::tfb_draw_abi::{TFB_DrawImage_Delete, TFB_DrawImage_New};
 
 struct Battle {
     inner: shared::Battle,
@@ -74,81 +64,12 @@ unsafe fn set_recruited(value: bool) {
     );
 }
 
-#[repr(C)]
-struct FrameDesc {
-    kind: u16,
-    index: u16,
-    hot_spot: [i16; 2],
-    bounds: [i16; 2],
-    image: *mut c_void,
-    parent: *mut DrawableDesc,
-}
-#[repr(C)]
-struct DrawableDesc {
-    flags: u8,
-    max_index: u16,
-    frame: *mut FrameDesc,
-}
-struct FrameSet {
-    _drawable: Box<DrawableDesc>,
-    frames: Vec<FrameDesc>,
-    image: *mut c_void,
-}
-impl FrameSet {
-    fn new(count: u16) -> Self {
-        let mut drawable = Box::new(DrawableDesc {
-            flags: 0,
-            max_index: count - 1,
-            frame: ptr::null_mut(),
-        });
-        let parent = &raw mut *drawable;
-        let mut frames: Vec<_> = (0..count)
-            .map(|index| FrameDesc {
-                kind: 0,
-                index,
-                hot_spot: [0, 0],
-                bounds: [4, 4],
-                image: ptr::null_mut(),
-                parent,
-            })
-            .collect();
-        drawable.frame = frames.as_mut_ptr();
-        Self {
-            _drawable: drawable,
-            frames,
-            image: ptr::null_mut(),
-        }
-    }
-    fn frame(&self, index: usize) -> FRAME {
-        (&raw const self.frames[index]).cast_mut().cast()
-    }
-    unsafe fn make_opaque(&mut self) {
-        let canvas = TFB_DrawCanvas_New_Paletted(4, 4, ptr::null_mut(), -1);
-        assert!(!canvas.is_null());
-        assert_ne!(
-            TFB_DrawCanvas_SetPixelIndexes(canvas, [1u8; 16].as_ptr(), 4, 4),
-            0
-        );
-        self.image = TFB_DrawImage_New(canvas).cast();
-        assert!(!self.image.is_null());
-        for frame in &mut self.frames {
-            frame.image = self.image;
-        }
-    }
-}
-impl Drop for FrameSet {
-    fn drop(&mut self) {
-        if !self.image.is_null() {
-            unsafe {
-                TFB_DrawImage_Delete(self.image.cast());
-            }
-        }
-    }
-}
+use shared::FrameSet;
+
 use shared::PoolShip;
 struct Ship<'a> {
     inner: shared::Ship<'a>,
-    handle: HELEMENT,
+    handle: HLINK,
     ship_frames: FrameSet,
     weapon_frames: FrameSet,
     special_frames: FrameSet,
@@ -161,17 +82,17 @@ impl<'a> Ship<'a> {
         let ship_frames = FrameSet::new(16);
         let weapon_frames = FrameSet::new(16);
         let desc = inner.descriptor_mut();
-        desc.ship_data.ship = [ship_frames.frame(0); 3];
-        desc.ship_data.weapon = [weapon_frames.frame(0); 3];
+        desc.ship_data.ship = ship_frames.array();
+        desc.ship_data.weapon = weapon_frames.array();
         let special_frames = FrameSet::new(10);
         let captain = FrameSet::new(20);
-        desc.ship_data.special = [special_frames.frame(0); 3];
+        desc.ship_data.special = special_frames.array();
         desc.ship_data.captain_control.special = captain.frame(14);
-        let frames = (&raw mut desc.ship_data.ship).cast();
+        let frames = inner.frame_set(0);
         let el = inner.element_mut();
-        el.current.image.farray = frames;
+        el.current.image.frames = frames;
         el.current.image.frame = ship_frames.frame(0);
-        el.next = el.current;
+        el.next = el.current.clone();
         el.IntersectControl.IntersectStamp.frame = ship_frames.frame(0);
         el.IntersectControl.EndPoint = POINT { x: 1000, y: 1000 };
         el.IntersectControl.IntersectStamp.origin = POINT { x: 1000, y: 1000 };
@@ -185,7 +106,7 @@ impl<'a> Ship<'a> {
         }
     }
 
-    unsafe fn fire(&mut self, out: &mut [HELEMENT]) -> COUNT {
+    unsafe fn fire(&mut self, out: &mut [HLINK]) -> COUNT {
         uqm_rust::app::bridge::enter(|cx| {
             let origin = cx.weapon_origin(self.inner.id);
             let weapons = cx.spawn_weapons(self.inner.ship_id, origin);
@@ -195,11 +116,11 @@ impl<'a> Ship<'a> {
             weapons.len() as COUNT
         })
     }
-    fn ptr(&self) -> *mut ELEMENT {
+    fn ptr(&self) -> *mut ElementRecord {
         self.handle.cast()
     }
     unsafe fn ai(&mut self, concerns: &mut [EVALUATE_DESC; 5]) {
-        let mut subject = *self.ptr();
+        let mut subject = (*self.ptr()).clone();
         self.inner.intelligence(&mut subject, &mut concerns[..4], 0);
     }
     unsafe fn arm(&mut self) -> Option<uqm_rust::engine::battle::ElementHook> {
@@ -210,24 +131,22 @@ impl<'a> Ship<'a> {
             .special = self.captain.frame(16);
         self.inner.ship_mut().old_status_flags = 0;
         self.inner.ship_mut().cur_status_flags = SPECIAL as u16;
-        let old = disp_q.tail;
+        let old = shared::tail();
         self.inner.postprocess();
-        if old == disp_q.tail {
+        if old == shared::tail() {
             None
         } else {
-            (*shared::element(disp_q.tail)).death_func
+            (*shared::element(shared::tail())).death_func
         }
     }
 }
-unsafe fn core(callback: uqm_rust::engine::battle::ElementFn, element: *mut ELEMENT) {
+unsafe fn core(callback: uqm_rust::engine::battle::ElementFn, element: *mut ElementRecord) {
     let id = shared::id(element);
     uqm_rust::app::bridge::enter(|cx| callback(cx, id));
 }
 
-unsafe fn prim(e: *mut ELEMENT) -> *mut PRIMITIVE {
-    (&raw mut DisplayArray)
-        .cast::<PRIMITIVE>()
-        .add((*e).PrimIndex as usize)
+unsafe fn prim(e: *mut ElementRecord) -> *mut PRIMITIVE {
+    uqm_rust::app::bridge::enter(|cx| std::ptr::from_mut(cx.display_primitive((*e).PrimIndex)))
 }
 fn rgba(c: Color) -> (u8, u8, u8, u8) {
     (c.r, c.g, c.b, c.a)
@@ -259,9 +178,9 @@ unsafe fn object<'a>(
     let e = object.ptr();
     (*e).state_flags = flags;
     (*e).playerNr = -1;
-    (*e).__bindgen_anon_1.life_span = 50;
-    (*e).__bindgen_anon_2.hit_points = hp;
-    (*e).__bindgen_anon_3.mass_points = mass;
+    (*e).life = 50;
+    (*e).hits = hp;
+    (*e).mass = mass;
     (*e).next.location = POINT {
         x: (4000 + dx) as COORD,
         y: (4000 + dy) as COORD,
@@ -285,7 +204,7 @@ fn complete_descriptor_and_damaged_tanaka_katana_variant_are_fresh_each_call() {
             set_recruited(recruited);
             let mut original = shared::descriptor(SPECIES_ID_SHOFIXTI_ID);
             let p = &raw mut original;
-            let d = *p;
+            let d = &*p;
             assert_eq!(d.ship_info.ship_flags, FIRES_FORE as u16);
             assert_eq!(d.ship_info.ship_cost, 5);
             assert_eq!(
@@ -363,9 +282,9 @@ fn complete_descriptor_and_damaged_tanaka_katana_variant_are_fresh_each_call() {
                     );
                 }
                 assert!(
-                    d.ship_data.ship[i].is_null()
-                        && d.ship_data.weapon[i].is_null()
-                        && d.ship_data.special[i].is_null()
+                    d.ship_data.ship.view(i).is_absent()
+                        && d.ship_data.weapon.view(i).is_absent()
+                        && d.ship_data.special.view(i).is_absent()
                 );
             }
             assert_eq!(
@@ -434,12 +353,7 @@ fn darts_use_next_location_exact_facing_offset_speed_and_failure_count() {
                 (APPEARING | FINITE_LIFE | IGNORE_SIMILAR) as u16
             );
             assert_eq!(
-                (
-                    (*dart).__bindgen_anon_1.life_span,
-                    (*dart).__bindgen_anon_2.hit_points,
-                    (*dart).__bindgen_anon_3.mass_points,
-                    (*dart).__bindgen_anon_5.blast_offset
-                ),
+                ((*dart).life, (*dart).hits, (*dart).mass, (*dart).thrust),
                 (10, 1, 1, 1)
             );
             assert_eq!((*dart).playerNr, 1);
@@ -448,17 +362,14 @@ fn darts_use_next_location_exact_facing_offset_speed_and_failure_count() {
                 (*dart).current.image.frame,
                 ship.weapon_frames.frame((facing % 16) as usize)
             );
-            assert_eq!(
-                (*dart).current.image.farray,
-                (&raw mut ship.inner.descriptor_mut().ship_data.weapon).cast()
-            );
+            assert_eq!((*dart).current.image.frames, ship.inner.frame_set(1));
             assert!(
                 (*dart).preprocess_func.is_none()
                     && (*dart).postprocess_func.is_none()
                     && (*dart).death_func.is_none()
                     && (*dart).collision_func.is_some()
             );
-            assert!((*dart).pParent.is_null());
+            assert!((*dart).parent == uqm_rust::engine::battle::Parent::None);
             let angle = facing_to_angle(facing as i32) as COUNT;
             let vx = cosine(angle as i32, 96 << VELOCITY_SHIFT);
             let vy = sine(angle as i32, 96 << VELOCITY_SHIFT);
@@ -476,7 +387,7 @@ fn darts_use_next_location_exact_facing_offset_speed_and_failure_count() {
                 (*dart).current.location.y,
                 origin_y.wrapping_sub(vy >> VELOCITY_SHIFT)
             );
-            let mut failure = 1usize as HELEMENT;
+            let mut failure = 1usize as HLINK;
             with_rng(31, 0, || {
                 assert_eq!(ship.fire(std::slice::from_mut(&mut failure)), 1)
             });
@@ -509,17 +420,17 @@ fn glory_ai_toggles_the_switch_and_checks_all_deterministic_threat_branches() {
                 .ship_data
                 .captain_control
                 .special = ship.captain.frame(20 - remaining);
-            ship.inner.descriptor_mut().ship_data.special[0] = if special_available {
-                ship.special_frames.frame(0)
+            ship.inner.descriptor_mut().ship_data.special = if special_available {
+                ship.special_frames.array()
             } else {
-                ptr::null_mut()
+                uqm_rust::engine::battle::frames::FrameArray::EMPTY
             };
             ship.inner.ship_mut().ship_input_state =
                 WEAPON as u8 | if start { SPECIAL as u8 } else { 0 };
             ship.inner.ship_mut().special_counter = counter;
-            (*ship.ptr()).__bindgen_anon_2.crew_level = crew;
+            (*ship.ptr()).hits = crew;
             (*enemy.ptr()).current.location = POINT { x: 6000, y: 6000 };
-            (*enemy.ptr()).__bindgen_anon_3.mass_points = 0;
+            (*enemy.ptr()).mass = 0;
             concerns[0].ObjectPtr = enemy.ptr();
             concerns[0].which_turn = enemy_turn;
             concerns[2].ObjectPtr = if immediate {
@@ -554,7 +465,7 @@ fn glory_ai_intercept_damage_and_random_parity_short_circuit_exactly() {
             .special = ship.captain.frame(15);
         (*threat.ptr()).state_flags = 0;
         assert_ne!(
-            uqm_rust::engine::battle::PlotIntercept(threat.ptr(), ship.ptr(), 2, 0),
+            shared::plot_intercept(threat.ptr(), ship.ptr(), 2, 0),
             0,
             "opaque overlapping frames must intercept"
         );
@@ -563,24 +474,21 @@ fn glory_ai_intercept_damage_and_random_parity_short_circuit_exactly() {
         for seed in 1..32 {
             TFB_SeedRandom(seed);
             let parity = TFB_Random() & 1 != 0;
-            (*threat.ptr()).__bindgen_anon_3.mass_points = 6;
+            (*threat.ptr()).mass = 6;
             ship.inner.ship_mut().ship_input_state = 0;
             with_rng(seed, 1, || ship.ai(&mut concerns));
             assert_eq!(
                 ship.inner.ship_mut().ship_input_state & SPECIAL as u8 != 0,
                 parity
             );
-            (*threat.ptr()).__bindgen_anon_3.mass_points = 5;
+            (*threat.ptr()).mass = 5;
             ship.inner.ship_mut().ship_input_state = 0;
             with_rng(seed, 0, || ship.ai(&mut concerns));
             assert_eq!(ship.inner.ship_mut().ship_input_state & SPECIAL as u8, 0);
         }
         (*threat.ptr()).current.location.x += 500;
-        (*threat.ptr()).__bindgen_anon_3.mass_points = 255;
-        assert_eq!(
-            uqm_rust::engine::battle::PlotIntercept(threat.ptr(), ship.ptr(), 2, 0),
-            0
-        );
+        (*threat.ptr()).mass = 255;
+        assert_eq!(shared::plot_intercept(threat.ptr(), ship.ptr(), 2, 0), 0);
         with_rng(55, 0, || ship.ai(&mut concerns));
         assert_eq!(ship.inner.ship_mut().ship_input_state & SPECIAL as u8, 0);
     })
@@ -612,26 +520,23 @@ fn both_switch_edges_advance_and_only_the_third_remaining_frame_detonates() {
                 ),
                 index
             );
-            assert_eq!(
-                (*ship.ptr()).__bindgen_anon_2.crew_level,
-                if index == 17 { 0 } else { 6 }
-            );
+            assert_eq!((*ship.ptr()).hits, if index == 17 { 0 } else { 6 });
         }
-        let deferred = shared::element(disp_q.tail);
+        let deferred = shared::element(shared::tail());
         assert_ne!(deferred, ship.ptr());
         assert_eq!(
             (*deferred).state_flags,
             (APPEARING | NONSOLID | FINITE_LIFE) as u16
         );
-        assert_eq!((*deferred).__bindgen_anon_1.life_span, 0);
-        assert_eq!((*deferred).pParent, (*ship.ptr()).pParent);
+        assert_eq!((*deferred).life, 0);
+        assert_eq!((*deferred).parent, (*ship.ptr()).parent);
         assert_eq!(
             ((*deferred).next.location.x, (*deferred).next.location.y),
             (4000, 4000)
         );
-        assert!((*deferred).hTarget.is_null() && (*deferred).death_func.is_some());
+        assert!((*deferred).target.is_none() && (*deferred).death_func.is_some());
         assert_eq!(ship.inner.descriptor_mut().ship_info.crew_level, 0);
-        assert_eq!((*ship.ptr()).__bindgen_anon_1.life_span, 0);
+        assert_eq!((*ship.ptr()).life, 0);
         assert_ne!((*ship.ptr()).state_flags & NONSOLID as u16, 0);
         assert!((*ship.ptr()).death_func.is_some());
     })
@@ -645,7 +550,7 @@ fn deferred_glory_damage_obeys_solidity_marine_identity_radius_and_gravity() {
         let mut enemy = Ship::new(&_battle, 1);
         enemy.inner.descriptor_mut().ship_info.max_crew = 50;
         enemy.inner.descriptor_mut().ship_info.crew_level = 50;
-        (*enemy.ptr()).__bindgen_anon_2.crew_level = 50;
+        (*enemy.ptr()).hits = 50;
         let mut objects = Vec::new();
         for (flags, mass, dx, dy, expected) in [
             (0, 1, 0, 0, 11),
@@ -683,31 +588,27 @@ fn deferred_glory_damage_obeys_solidity_marine_identity_radius_and_gravity() {
         let mut fragile_owner = object(&_battle, 0, 1, 19, 0, 0);
         let fragile = fragile_owner.ptr();
         let kill = ship.arm().unwrap();
-        let deferred = shared::element(disp_q.tail);
-        assert_eq!(
-            (*enemy.ptr()).__bindgen_anon_2.crew_level,
-            50,
-            "damage must be deferred"
-        );
+        let deferred = shared::element(shared::tail());
+        assert_eq!((*enemy.ptr()).hits, 50, "damage must be deferred");
         with_rng(2, 0, || hooks::invoke_element_pointer(kill, deferred));
-        assert_eq!((*enemy.ptr()).__bindgen_anon_2.crew_level, 31);
+        assert_eq!((*enemy.ptr()).hits, 31);
         assert_eq!(enemy.inner.descriptor_mut().ship_info.crew_level, 31);
         for (object, hp) in &mut objects {
             let obj = object.ptr();
-            assert_eq!((*obj).__bindgen_anon_2.hit_points, *hp);
-            assert_eq!((*obj).__bindgen_anon_1.life_span, 50);
+            assert_eq!((*obj).hits, *hp);
+            assert_eq!((*obj).life, 50);
         }
         for obj in [marine, fragile] {
-            assert_eq!((*obj).__bindgen_anon_2.hit_points, 0);
-            assert_eq!((*obj).__bindgen_anon_1.life_span, 0);
+            assert_eq!((*obj).hits, 0);
+            assert_eq!((*obj).life, 0);
         }
         for obj in [preprocess_only, collision_only] {
-            assert_eq!((*obj).__bindgen_anon_2.hit_points, 1);
+            assert_eq!((*obj).hits, 1);
         }
         enemy.inner.descriptor_mut().ship_info.crew_level = 1;
-        (*enemy.ptr()).__bindgen_anon_2.crew_level = 1;
+        (*enemy.ptr()).hits = 1;
         hooks::invoke_element_pointer(kill, deferred);
-        assert_eq!((*enemy.ptr()).__bindgen_anon_1.life_span, 0);
+        assert_eq!((*enemy.ptr()).life, 0);
         assert_eq!(enemy.inner.descriptor_mut().ship_info.crew_level, 0);
     })
 }
@@ -718,9 +619,9 @@ fn failed_deferred_allocation_still_kills_the_ship() {
         let _battle = Battle::new(1);
         let mut ship = Ship::new(&_battle, 0);
         assert!(with_rng(4, 0, || ship.arm()).is_none());
-        assert_eq!({ disp_q.tail }, ship.handle);
-        assert_eq!((*ship.ptr()).__bindgen_anon_1.life_span, 0);
-        assert_eq!((*ship.ptr()).__bindgen_anon_2.crew_level, 0);
+        assert_eq!({ shared::tail() }, ship.handle);
+        assert_eq!((*ship.ptr()).life, 0);
+        assert_eq!((*ship.ptr()).hits, 0);
         assert_eq!(ship.inner.descriptor_mut().ship_info.crew_level, 0);
         assert!((*ship.ptr()).death_func.is_some());
     })
@@ -741,7 +642,7 @@ fn glory_death_selects_the_winner_preserves_prior_winners_and_counts_the_death()
             let mut ship = Ship::new(&_battle, 0);
             let mut other = Ship::new(&_battle, 1);
             other.inner.descriptor_mut().ship_info.crew_level = other_crew;
-            (*other.ptr()).__bindgen_anon_3.mass_points = other_mass;
+            (*other.ptr()).mass = other_mass;
             if prior == 1 {
                 uqm_rust::app::bridge::enter(|cx| {
                     uqm_rust::battle::tactrans_native::set_winner_ship(cx, Some(ship.inner.ship_id))
@@ -773,7 +674,7 @@ fn glory_death_selects_the_winner_preserves_prior_winners_and_counts_the_death()
             );
             assert_eq!((*expected).cur_status_flags & 0x200 != 0, ditty);
             assert_eq!(uqm_rust::app::bridge::battle(|b| b.counters[0]), 9);
-            assert_eq!((*ship.ptr()).__bindgen_anon_1.life_span, 36);
+            assert_eq!((*ship.ptr()).life, 36);
             assert_eq!(ship.inner.descriptor_mut().ship_info.energy_level, 0);
             assert_eq!((*ship.ptr()).velocity.travel_angle, 0);
             assert!(
@@ -798,35 +699,32 @@ fn glory_flash_switch_and_explosion_color_sequence_use_twelve_frame_ship_death()
             (35, (255, 255, 82, 255)),
             (34, (255, 255, 255, 255)),
         ] {
-            (*ship.ptr()).__bindgen_anon_1.life_span = life;
+            (*ship.ptr()).life = life;
             with_rng(3, 0, || hooks::invoke_element_pointer(flash, ship.ptr()));
             assert_eq!((*prim(ship.ptr())).Type, gfx_object_STAMPFILL_PRIM as u8);
             assert_eq!(rgba((*prim(ship.ptr())).color), color);
             assert_ne!((*ship.ptr()).state_flags & CHANGING as u16, 0);
         }
-        (*ship.ptr()).__bindgen_anon_1.life_span = 33;
+        (*ship.ptr()).life = 33;
         with_rng(3, 0, || hooks::invoke_element_pointer(flash, ship.ptr()));
         assert!((*ship.ptr()).preprocess_func.is_none());
         assert_eq!((*prim(ship.ptr())).Type, gfx_object_NUM_PRIMS as u8);
-        let explosion = shared::element(disp_q.tail);
+        let explosion = shared::element(shared::tail());
         assert_ne!(explosion, ship.ptr());
         assert_eq!(
             (*explosion).state_flags,
             (APPEARING | FINITE_LIFE | NONSOLID) as u16
         );
         assert_eq!((*explosion).playerNr, -1);
-        assert_eq!((*explosion).__bindgen_anon_1.life_span, 10);
-        assert_eq!((*explosion).__bindgen_anon_2.hit_points, 0);
-        assert_eq!((*explosion).__bindgen_anon_3.mass_points, 0);
-        assert_eq!((*explosion).pParent, (*ship.ptr()).pParent);
+        assert_eq!((*explosion).life, 10);
+        assert_eq!((*explosion).hits, 0);
+        assert_eq!((*explosion).mass, 0);
+        assert_eq!((*explosion).parent, (*ship.ptr()).parent);
         assert_eq!(
             (*explosion).current.image.frame,
             ship.special_frames.frame(0)
         );
-        assert_eq!(
-            (*explosion).current.image.farray,
-            (&raw mut ship.inner.descriptor_mut().ship_data.special).cast()
-        );
+        assert_eq!((*explosion).current.image.frames, ship.inner.frame_set(2));
         assert_eq!(
             (
                 (*explosion).current.location.x,
@@ -876,9 +774,9 @@ fn failed_visual_explosion_allocation_still_hides_the_ship() {
         let mut ship = Ship::new(&_battle, 0);
         ship.arm();
         hooks::invoke_element_pointer((*ship.ptr()).death_func.unwrap(), ship.ptr());
-        (*ship.ptr()).__bindgen_anon_1.life_span = 33;
+        (*ship.ptr()).life = 33;
         hooks::invoke_element_pointer((*ship.ptr()).preprocess_func.unwrap(), ship.ptr());
-        assert_eq!({ disp_q.tail }, ship.handle);
+        assert_eq!({ shared::tail() }, ship.handle);
         assert_eq!((*prim(ship.ptr())).Type, gfx_object_NUM_PRIMS as u8);
         assert!((*ship.ptr()).preprocess_func.is_none());
     })
@@ -898,7 +796,6 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
             for computer in [false, true] {
                 for initial in [[2, 2], [1, 2], [2, 1], [1, 1]] {
                     let _battle = Battle::new(16);
-                    let saved_queues = race_q;
                     let saved_inputs = std::array::from_fn::<_, 2, _>(|side| {
                         uqm_rust::battle::battle_native::player_input(side)
                     });
@@ -935,18 +832,20 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                         reserves[side].SpeciesID = SPECIES_ID_SHOFIXTI_ID;
                         reserves[side].index = 1;
                         reserves[side].playerNr = side as SIZE;
-                        race_q[side].head = active.cast();
-                        race_q[side].tail = active.cast();
-                        if initial[side] > 1 {
-                            (*active).succ = (&raw mut *reserves[side]).cast();
-                            reserves[side].pred = active.cast();
-                            race_q[side].tail = (&raw mut *reserves[side]).cast();
-                        }
+                        uqm_rust::app::bridge::battle(|battle| {
+                            let mut ships = battle.ships(side);
+                            let active = ships.id(active.cast()).unwrap();
+                            ships.put(active);
+                            if initial[side] > 1 {
+                                let reserve = ships.link(reserves[side].ship_id);
+                                ships.put(reserve);
+                            }
+                        });
                     }
                     // Arm the real glory device, execute its area damage, then
                     // process both deaths within the same simulated frame.
                     let blast = ship.arm().unwrap();
-                    hooks::invoke_element_pointer(blast, shared::element(disp_q.tail));
+                    hooks::invoke_element_pointer(blast, shared::element(shared::tail()));
                     assert_eq!(
                         (
                             ship.inner.descriptor_mut().ship_info.crew_level,
@@ -979,9 +878,10 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                         } else {
                             other.inner.descriptor_mut()
                         };
-                        desc.ship_data.ship = [ptr::null_mut(); 3];
-                        desc.ship_data.weapon = [ptr::null_mut(); 3];
-                        desc.ship_data.special = [ptr::null_mut(); 3];
+                        desc.ship_data.ship = uqm_rust::engine::battle::frames::FrameArray::EMPTY;
+                        desc.ship_data.weapon = uqm_rust::engine::battle::frames::FrameArray::EMPTY;
+                        desc.ship_data.special =
+                            uqm_rust::engine::battle::frames::FrameArray::EMPTY;
                         uqm_rust::app::bridge::enter(|cx| {
                             let outgoing = cx.elements().id(outgoing.cast()).unwrap();
                             transitions::new_ship_with_picker(cx, outgoing, |cx, last, player| {
@@ -1036,7 +936,6 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                         GlobData.Game_state.CurrentActivity & IN_BATTLE as u16 != 0,
                         expected_selection
                     );
-                    race_q = saved_queues;
                     for (side, input) in saved_inputs.into_iter().enumerate() {
                         uqm_rust::battle::battle_native::set_player_input(side, input);
                     }
