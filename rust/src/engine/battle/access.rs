@@ -52,6 +52,7 @@ impl Cx<'_> {
 }
 
 #[cfg(not(test))]
+#[cfg(not(test))]
 use super::record::PRIMITIVE;
 #[cfg(not(test))]
 use super::Parent;
@@ -82,8 +83,7 @@ impl Cx<'_> {
     }
 
     pub fn set_parent(&mut self, element: ElementId, parent: Option<ShipId>) {
-        self.kernel.elements.record_mut(element).parent =
-            parent.map_or(Parent::None, Parent::Ship);
+        self.kernel.elements.record_mut(element).parent = parent.map_or(Parent::None, Parent::Ship);
     }
 
     pub fn target(&self, element: ElementId) -> Option<ElementId> {
@@ -174,12 +174,12 @@ impl Cx<'_> {
 #[cfg(not(test))]
 impl Cx<'_> {
     pub fn copy_visual_to_next(&mut self, id: ElementId, visual: Visual) {
-        self.kernel.elements[id].next.location = visual.location;
+        self.kernel.elements.record_mut(id).next.location = visual.location;
         self.set_frame(id, true, visual.image.frame);
         self.set_frames(id, true, visual.image.frames);
     }
     pub fn element_frame_set_first(&self, id: ElementId, next: bool) -> FrameRef<'_> {
-        let record = &self.b.kernel.elements[id];
+        let record = &self.kernel.elements[id];
         let image = if next {
             &record.next.image
         } else {
@@ -189,7 +189,8 @@ impl Cx<'_> {
     }
     pub fn set_intersect_frame(&mut self, id: ElementId, frame: FrameSelection) {
         use crate::collections::observation::image;
-        image!(frame;self.kernel.elements[id].IntersectControl.IntersectStamp.frame,frame.0);
+        image!(frame;self.kernel.elements.record_mut(id).IntersectControl.IntersectStamp.frame,frame.raw());
+        self.kernel.elements.record_mut(id).intersect_frame = frame;
     }
 }
 
@@ -214,13 +215,6 @@ impl Cx<'_> {
     }
     pub fn set_weapon(&mut self, ship: ShipId, selection: super::Selection<super::race::WeaponFn>) {
         self.desc_mut(ship).race_callbacks.weapon = selection;
-    }
-}
-
-impl Cx<'_> {
-    fn project<T>(&self, pointer: std::ptr::NonNull<T>) -> &T {
-        // SAFETY: record decoders supply checked pointers retained by this context.
-        unsafe { &*pointer.as_ptr() }
     }
 }
 
@@ -573,8 +567,6 @@ impl Cx<'_> {
         crate::collections::observation::image!(copy; self.kernel.elements.record_mut(destination).current.image.frames, self.kernel.elements[source].next.image.frames);
     }
 }
-    }
-}
 
 #[cfg(not(test))]
 impl Cx<'_> {
@@ -662,21 +654,24 @@ mod intersection_projection_tests {
     fn live_helpers_preserve_record_coordinates_and_pool_addresses() {
         use crate::engine::battle::{Battle, Cx, World};
         use crate::ships::native::abi::*;
+        // SAFETY: a zeroed group queue has no allocated storage.
+
         // SAFETY: the local queue authorities and their pool remain exclusive for this test.
-        {
+        unsafe {
             let mut battle = Battle::new();
-            let mut kernel = crate::engine::battle::record::Kernel::new();
+            let mut kernel = crate::engine::Kernel::new();
             kernel.elements.reset_capacity(1);
             let id = kernel.elements.alloc().unwrap();
-            kernel.elements[id].current.location = POINT { x: 44, y: 52 };
-            kernel.elements[id].next.location = POINT { x: 60, y: 68 };
-            kernel.elements[id].next.image.frames = crate::engine::battle::views::Frames::shared(
-                crate::engine::battle::frames::SharedFrames::Fixture(0),
-                crate::engine::battle::frames::FrameArray::retain(
-                    [crate::engine::battle::views::Frame::ABSENT; 3],
-                    (),
-                ),
-            );
+            kernel.elements.record_mut(id).current.location = POINT { x: 44, y: 52 };
+            kernel.elements.record_mut(id).next.location = POINT { x: 60, y: 68 };
+            kernel.elements.record_mut(id).next.image.frames =
+                crate::engine::battle::views::Frames::shared(
+                    crate::engine::battle::frames::SharedFrames::Fixture(0),
+                    crate::engine::battle::frames::FrameArray::fixture(
+                        [std::ptr::null_mut(); 3],
+                        (),
+                    ),
+                );
             let mut world = World::new();
             let mut cx = Cx {
                 b: &mut battle,
@@ -718,8 +713,7 @@ mod intersection_projection_tests {
 #[cfg(not(test))]
 impl Cx<'_> {
     pub(crate) fn assign_primitive(&mut self, id: ElementId) {
-        self.b.kernel.elements.record_mut(id).PrimIndex = self
-            .b
+        self.kernel.elements.record_mut(id).PrimIndex = self
             .kernel
             .display
             .alloc()
@@ -820,23 +814,12 @@ impl Cx<'_> {
     }
 }
 
-impl super::Battle {
-    pub fn ships(
-        &mut self,
-        side: usize,
-    ) -> super::link_queue::LinkQueue<'_, super::link_queue::Starship> {
-        super::link_queue::LinkQueue::new(&mut self.kernel.races[side])
-    }
-    pub fn reset_ship_capacity(&mut self, side: usize, capacity: usize) {
-        self.kernel.races[side].reset_capacity(capacity);
-    }
-}
 impl Cx<'_> {
     /// # Safety
     /// Legacy game-thread access must not retain record borrows across callbacks.
     #[cfg(not(test))]
     pub(crate) unsafe fn records(&mut self) -> &mut super::table::Records {
-        self.b.kernel.elements.records_mut()
+        self.kernel.elements.records_mut()
     }
 }
 
@@ -860,12 +843,6 @@ pub(super) mod links;
 impl super::RaceDesc {
     pub(crate) fn info_pointer(&mut self) -> *mut super::record::SHIP_INFO {
         &raw mut self.raw.ship_info
-    }
-}
-
-impl Cx<'_> {
-    pub(crate) fn groups(&self) -> &super::record::QUEUE {
-        self.project(self.world.groups)
     }
 }
 

@@ -50,7 +50,4 @@ impl LinkQueue<'_, Starship> {
         ship.race_strings = strings;
         ship.icons = icons;
     }
-    pub fn facing(&self, id: LinkId<Starship>) -> u16 {
-        self.record(id).ship_facing
-    }
 }

@@ -72,9 +72,10 @@ impl Kernel {
     }
 
     pub(crate) fn request_ship_reset(&mut self) {
-        for pool in &mut self.races {
-            while let Some(id) = pool.head() {
-                pool.remove(id);
+        for side in 0..2 {
+            let mut ships = self.ships(side);
+            while let Some(id) = ships.head() {
+                ships.remove(id);
             }
         }
         self.ship_reset_pending = true;
@@ -141,7 +142,9 @@ impl Kernel {
             last_encounter_group: 0,
             portal_point: POINT { x: 0, y: 0 },
             elements: super::battle::ElementTable::with_capacity(150),
-            races: std::array::from_fn(|_| super::battle::link_queue::RacePool::with_capacity(0)),
+            races: std::array::from_fn(|side| {
+                super::battle::link_queue::RacePool::with_capacity(side as u8, 0)
+            }),
             ship_reset_pending: false,
             battle_active: false,
             display: super::battle::display::DisplayPool::new(),

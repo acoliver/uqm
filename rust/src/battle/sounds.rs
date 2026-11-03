@@ -189,7 +189,7 @@ pub(crate) mod engine {
         let mut lease = KernelOwner::current();
         let kernel = &mut **lease;
         for i in FIRST_SFX_CHANNEL..=LAST_SFX_CHANNEL {
-            if kernel.elements.sound_source(get_positional_object(i)) == object {
+            if kernel.element_sound_source(get_positional_object(i)) == object {
                 set_positional_object(i, 0);
             }
         }

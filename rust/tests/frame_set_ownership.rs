@@ -1,6 +1,5 @@
-use uqm_rust::engine::battle::{
-    frames::{FrameArray, FrameOwner, FrameSetRef, Frames, Role, SharedFrames},
-    Battle,
+use uqm_rust::engine::battle::frames::{
+    FrameArray, FrameOwner, FrameSetRef, Frames, Role, SharedFrames,
 };
 use uqm_rust::graphics::{
     drawable_abi::{retain_frame_allocations, AllocDrawable, DestroyDrawable},
@@ -14,9 +13,9 @@ fn parentless_image_retains_frames_after_descriptor_and_owner_are_gone() {
     unsafe {
         let drawable = AllocDrawable(1);
         let frame = CaptureDrawable(drawable);
-        let mut owner = Battle::new(0);
-        owner.reset_ship_capacity(0, 1);
-        let mut ships = owner.ships(0);
+        let mut owner = uqm_rust::engine::Game::new();
+        owner.kernel.reset_ship_capacity(0, 1);
+        let mut ships = owner.kernel.ships(0);
         let link = ships.alloc().unwrap();
         let ship = ships.ship_id(link);
         let mut descriptor = uqm_rust::engine::battle::record::RaceDescriptor::EMPTY;
@@ -36,9 +35,9 @@ fn parentless_image_retains_frames_after_descriptor_and_owner_are_gone() {
 
 #[test]
 fn ownership_distinguishes_role_ship_and_reused_slot_generation() {
-    let mut owner = Battle::new(0);
-    owner.reset_ship_capacity(0, 1);
-    let mut ships = owner.ships(0);
+    let mut owner = uqm_rust::engine::Game::new();
+    owner.kernel.reset_ship_capacity(0, 1);
+    let mut ships = owner.kernel.ships(0);
     let link = ships.alloc().unwrap();
     let ship = ships.ship_id(link);
     ships.free(link);

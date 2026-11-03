@@ -671,7 +671,7 @@ mod projection_tests {
     #[test]
     fn ship_projection_retains_its_address_and_rejects_reused_generations() {
         use crate::engine::battle::link_queue::{LinkQueue, Starship};
-        let mut battle = super::super::Battle::new();
+        let mut battle = crate::engine::battle::Battle::new();
         let mut kernel = crate::engine::battle::record::Kernel::new();
         kernel.elements.reset_capacity(1);
         kernel.races[0].reset_capacity(1);
@@ -681,7 +681,7 @@ mod projection_tests {
             (ships.ship_id(link), ships.raw(link).cast::<ShipRecord>())
         };
         // SAFETY: this test retains both local world authorities for the context's lifetime.
-        let mut world = { super::super::World::new() };
+        let mut world = { crate::engine::World::new() };
         let cx = Cx {
             b: &mut battle,
             world: &mut world,
@@ -830,7 +830,7 @@ pub struct RaceDescriptor {
     pub race_callbacks: crate::engine::battle::race::Callbacks,
 }
 
-pub(crate) use super::kernel::{Channels, SoundQueue};
+pub(crate) use crate::engine::battle::kernel::{Channels, SoundQueue};
 
 pub use crate::engine::kernel::Kernel;
 
@@ -936,5 +936,14 @@ impl Kernel {
             super::views::SharedFrames::Explosion => std::ptr::NonNull::from(&self.explosion[0]),
             _ => panic!("not a battle shared frame role {role:?}"),
         }
+    }
+}
+
+impl Kernel {
+    pub(crate) fn element_sound_source(
+        &self,
+        token: usize,
+    ) -> Option<crate::engine::battle::ElementId> {
+        self.elements.sound_source(token)
     }
 }

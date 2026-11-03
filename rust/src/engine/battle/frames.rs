@@ -442,9 +442,9 @@ mod tests {
 
     #[test]
     fn replacement_descriptor_has_distinct_frames_even_for_the_same_ship_and_role() {
-        let mut battle = crate::engine::battle::Battle::new(0);
-        battle.reset_ship_capacity(0, 1);
-        let mut ships = battle.ships(0);
+        let mut kernel = crate::engine::Kernel::new();
+        kernel.reset_ship_capacity(0, 1);
+        let mut ships = kernel.ships(0);
         let link = ships.alloc().unwrap();
         let ship = ships.ship_id(link);
         let old = Frames::ship(

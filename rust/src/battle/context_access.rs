@@ -637,8 +637,9 @@ impl Cx<'_> {
     pub(crate) fn set_star_image(&mut self, id: ElementId) {
         // SAFETY: the shared stars frame and its frame set remain loaded throughout the battle.
         unsafe {
-            let frame =
-                crate::engine::battle::views::FrameSelection::retain(DecFrameIndex(self.kernel.stars_in_space));
+            let frame = crate::engine::battle::views::FrameSelection::retain(DecFrameIndex(
+                self.kernel.stars_in_space,
+            ));
             let frames = crate::engine::battle::views::Frames::native_shared(
                 crate::engine::battle::views::SharedFrames::Stars,
                 std::ptr::NonNull::new_unchecked(&raw mut self.kernel.stars_in_space),

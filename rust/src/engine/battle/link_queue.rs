@@ -407,7 +407,7 @@ impl<'a, T: QueueRecord> LinkQueue<'a, T> {
 
 impl LinkQueue<'_, Starship> {
     pub fn facing(&self, id: LinkId<Starship>) -> u16 {
-        self.record(id).ShipFacing
+        self.record(id).ship_facing
     }
     pub(crate) fn element_handle(
         &self,
