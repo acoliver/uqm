@@ -74,10 +74,7 @@ pub fn validate(
 }
 
 pub fn retire(moves: &mut BTreeMap<String, String>, base: &Measurement) {
-    moves.retain(|old, new| {
-        identities(base).any(|f| prefix(&f.identity, old))
-            || !identities(base).any(|f| prefix(&f.identity, new))
-    });
+    moves.retain(|old, _| identities(base).any(|f| prefix(&f.identity, old)));
 }
 
 // Reaggregate the base findings after relocating only the declared identities.
@@ -112,10 +109,12 @@ pub fn limits(
         }
         relocated.findings.push(finding);
     }
-    let before = super::budgets::scoped_entries(base, budgets);
+    let before =
+        super::budgets::without_budgeted(&super::budgets::scoped_entries(base, budgets), budgets);
     let moved_budgets = super::budgets::relocated(budgets, moves)?;
     let mut after = super::budgets::scoped_entries(&relocated, &moved_budgets);
     transfer_allows(&mut after, current, base, moves)?;
+    let after = super::budgets::without_budgeted(&after, &moved_budgets);
     adjust(entries, &before, &after)
 }
 
@@ -368,6 +367,62 @@ mod nested_tests {
                 .collect(),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn deleted_historical_moves_retire_without_crediting_unknown_new_sources() -> Result<(), String>
+    {
+        let base = measured(&["uqm::old::Record"]);
+        let current = measured(&["uqm::new::Record"]);
+        let mut baseline = super::super::baseline::Baseline {
+            moved: [("uqm::deleted".into(), "uqm::also_deleted".into())].into(),
+            ..Default::default()
+        };
+        baseline.add_move("uqm::old", "uqm::new", &current, &base)?;
+        assert_eq!(
+            baseline.moved,
+            [("uqm::old".into(), "uqm::new".into())].into()
+        );
+        assert!(baseline.entries.is_empty());
+        assert!(baseline.budget.is_empty());
+        assert!(baseline
+            .add_move("uqm::missing", "uqm::invented", &current, &base)
+            .is_err());
+        let mut pending = [("uqm::old".into(), "uqm::new".into())].into();
+        retire(&mut pending, &base);
+        assert!(validate(&Measurement::default(), &base, &pending).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn aggregate_budgeted_edges_do_not_spend_unbudgeted_transfer_credit() -> Result<(), String> {
+        let old = "uqm::engine::record";
+        let new = "uqm::battle::record";
+        let mut base = measured(&["uqm::engine::record::project"]);
+        base.findings.push(Finding {
+            counter: "layers".into(),
+            metric: "planned_engine_core".into(),
+            identity: format!("{old}::@file"),
+            file: "src/record.rs".into(),
+            package: "uqm".into(),
+            subsystem: "engine".into(),
+            value: 1,
+        });
+        let mut current = measured(&["uqm::battle::record::project"]);
+        let mut baseline = super::super::baseline::Baseline {
+            entries: [(format!("layers|planned_engine_core|{old}::@file"), 0)].into(),
+            ..Default::default()
+        };
+        super::super::budgets::set(&mut baseline.budget, "planned_engine_core", 1, true)?;
+        let budget = baseline.budget.clone();
+        baseline.add_move(old, new, &current, &base)?;
+        assert_eq!(baseline.budget, budget);
+        assert!(baseline.entries.values().all(|value| *value == 0));
+        let mut growth = base.findings[0].clone();
+        growth.value = 2;
+        current.findings.push(growth);
+        assert!(super::super::budgets::check(&current, &baseline.budget).is_err());
+        Ok(())
     }
 
     #[test]
