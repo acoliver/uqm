@@ -768,7 +768,7 @@ fn canned_nodes_capture_restore_and_old_save_clear_are_atomic() {
     unsafe {
         crate::app::bridge::with_game(&mut game_owner, || {
             let mut game = fresh_game();
-            let node = crate::state::planet_info::CannedNode {
+            let node = crate::engine::world::planet_info::CannedNode {
                 star: 1,
                 planet: 2,
                 moon: 1,

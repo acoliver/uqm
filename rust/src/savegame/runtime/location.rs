@@ -49,10 +49,10 @@ use std::fmt;
 use super::solar::{position_in, SolarError, SolarSystem, World};
 use crate::c_bindings::global_state::{FRAME_DESC, MAX_PLANETS, SOLARSYS_STATE};
 use crate::comm::locdata::{CGameState, CPoint};
+use crate::engine::world::planet_info::{PlanetInfoManager, ScanRetrieveMask};
 use crate::engine::world::state_file::StateFileError;
 use crate::state::ffi::{with_state_owners, GameStateOwnerError};
 use crate::state::game_state::GameState;
-use crate::state::planet_info::{PlanetInfoManager, ScanRetrieveMask};
 
 /// `GetFrameIndex (frame)`: 0 for NULL, else the frame's `Index`.
 ///

@@ -197,7 +197,7 @@ impl From<StateSectionError> for RuntimeError {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct StateFileSections {
     pub scan: Option<Vec<u32>>,
-    pub canned_nodes: Vec<crate::state::planet_info::CannedNode>,
+    pub canned_nodes: Vec<crate::engine::world::planet_info::CannedNode>,
     pub group_list: Option<GroupList>,
     pub battle_groups: Vec<BattleGroup>,
 }

@@ -846,7 +846,7 @@ mod tests {
         ) -> Result<(), AdapterError> {
             self.files
                 .borrow_mut()
-                .can_node(crate::state::planet_info::CannedNode {
+                .can_node(crate::engine::world::planet_info::CannedNode {
                     star: 1,
                     planet: 2,
                     moon: 1,

@@ -1,6 +1,7 @@
 //! Campaign state owned by one game-thread lifecycle.
 
 use crate::engine::battle::schema::GAME_STATE;
+pub mod planet_info;
 pub mod state_file;
 pub mod story;
 use self::{state_file::StateFileManager, story::GameState};

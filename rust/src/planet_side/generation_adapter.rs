@@ -225,7 +225,7 @@ impl SurfaceGenerator for CffiSurfaceGenerator {
         value: u16,
     ) -> Result<(), AdapterError> {
         let (star, planet, moon, node) = self.node_key(node);
-        let canned = crate::state::planet_info::CannedNode {
+        let canned = crate::engine::world::planet_info::CannedNode {
             star,
             planet,
             moon,

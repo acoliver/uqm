@@ -10,7 +10,7 @@ use super::game_state::{
     copy_state_bits_raw, get_state_32_raw, get_state_bits_raw, set_state_32_raw,
     set_state_bits_raw, GameState, NUM_GAME_STATE_BITS, NUM_GAME_STATE_BYTES,
 };
-use super::planet_info::{PlanetInfoManager, ScanRetrieveMask, NUM_SCAN_TYPES};
+use crate::engine::world::planet_info::{PlanetInfoManager, ScanRetrieveMask, NUM_SCAN_TYPES};
 use crate::engine::world::state_file::{FileMode, StateFileManager};
 
 pub fn rust_init_game_state(world: &mut crate::engine::World) {
