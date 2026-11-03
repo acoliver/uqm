@@ -95,7 +95,7 @@ crate::c_bindings::assert_c_layout!(
 #[derive(Debug, Clone)]
 pub struct ElementVisualState {
     pub location: Point,
-    pub frame: FrameHandle,
+    pub frame: crate::engine::battle::frames::FrameSelection,
     pub frames: crate::engine::battle::frames::Frames,
 }
 
@@ -109,7 +109,7 @@ impl ElementVisualState {
     pub const fn new() -> Self {
         ElementVisualState {
             location: Point::zero(),
-            frame: std::ptr::null_mut(),
+            frame: crate::engine::battle::frames::FrameSelection::ABSENT,
             frames: crate::engine::battle::frames::Frames::ABSENT,
         }
     }
@@ -186,6 +186,7 @@ pub struct Element {
 
     // -- Tracking target reference --
     pub target: Option<crate::engine::battle::ElementId>,
+    pub intersect_frame: crate::engine::battle::frames::FrameSelection,
 }
 
 impl Element {
@@ -219,6 +220,7 @@ impl Element {
             next: ElementVisualState::new(),
             parent: crate::engine::battle::Parent::None,
             target: None,
+            intersect_frame: crate::engine::battle::frames::FrameSelection::ABSENT,
         }
     }
 
@@ -360,10 +362,10 @@ impl Element {
     /// Safe accessor for stamp visual (when using STAMP primitive)
     pub fn get_stamp(&self) -> Option<Stamp> {
         // In the C code, the stamp is constructed from current.location + current.image.frame
-        if !self.current.frame.is_null() {
+        if !self.current.frame.is_absent() {
             Some(Stamp {
                 origin: self.current.location,
-                frame: self.current.frame,
+                frame: self.current.frame.raw().cast(),
             })
         } else {
             None
@@ -372,10 +374,10 @@ impl Element {
 
     /// Safe accessor for next stamp visual
     pub fn get_next_stamp(&self) -> Option<Stamp> {
-        if !self.next.frame.is_null() {
+        if !self.next.frame.is_absent() {
             Some(Stamp {
                 origin: self.next.location,
-                frame: self.next.frame,
+                frame: self.next.frame.raw().cast(),
             })
         } else {
             None
@@ -938,7 +940,7 @@ mod tests {
 
     #[test]
     fn live_intersection_fields_are_read_at_their_native_offsets() {
-        let mut native: crate::ships::native::abi::ElementRecord = unsafe { std::mem::zeroed() };
+        let mut native = crate::ships::native::abi::ElementRecord::default();
         native.IntersectControl.last_time_val = 17;
         native.IntersectControl.EndPoint = crate::graphics::native_abi::POINT { x: 31, y: -47 };
         native.IntersectControl.IntersectStamp.origin =

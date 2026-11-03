@@ -3,16 +3,13 @@ use crate::battle::element::Element;
 use crate::collections::observation::{self, image, Event};
 
 fn observed_set<T>(views: &[*mut T]) -> crate::engine::battle::frames::Frames {
-    use crate::engine::battle::{
-        frames::{FrameArray, Frames, SharedFrames},
-        views::Frame,
-    };
+    use crate::engine::battle::frames::{FrameArray, Frames, SharedFrames};
     Frames::shared(
         SharedFrames::Fixture(0),
         FrameArray::fixture_source(
             std::array::from_fn(|index| {
                 // SAFETY: journal fixtures use these retained handles only as opaque identities.
-                unsafe { Frame::from_native(views[index.min(views.len() - 1)].cast()) }
+                views[index.min(views.len() - 1)].cast()
             }),
             (),
             Some(views.as_ptr() as usize),
@@ -20,12 +17,18 @@ fn observed_set<T>(views: &[*mut T]) -> crate::engine::battle::frames::Frames {
     )
 }
 
+fn observed_frame<T>(raw: *mut T) -> crate::engine::battle::frames::FrameSelection {
+    crate::engine::battle::frames::FrameArray::fixture([raw.cast(); 3], ())
+        .view(0)
+        .to_owned()
+}
+
 fn fields(journal: &mut Journal, element: &Element) -> Fields {
     let identity = journal.identity(std::ptr::from_ref(element) as usize);
     let mut fields = Fields::new();
     for (name, frame) in [
-        ("current.frame", element.current.frame),
-        ("next.frame", element.next.frame),
+        ("current.frame", element.current.frame.raw()),
+        ("next.frame", element.next.frame.raw()),
     ] {
         journal.write_element_frame(&identity, name, frame as usize, &mut fields, name);
     }
@@ -106,7 +109,7 @@ fn rebind_history(reuse: bool) -> Fields {
         frames: vec![pointer as usize; 3],
         role: "old-set".into(),
     });
-    image!(frame; element.current.frame, pointer);
+    image!(frame; element.current.frame, observed_frame(pointer));
     image!(set; element.current.frames, observed_set(&views));
     journal.drain_events(&[]);
     let old = fields(&mut journal, &element);
@@ -133,7 +136,7 @@ fn rebind_history(reuse: bool) -> Fields {
         old["current.farray.2.owner"]
     );
     image!(copy; element.next, element.current);
-    image!(frame; element.current.frame, replacement);
+    image!(frame; element.current.frame, observed_frame(replacement));
     image!(set; element.current.frames, observed_set(&views));
     journal.drain_events(&[]);
     let rebound = fields(&mut journal, &element);
@@ -181,14 +184,14 @@ fn unsampled_assignments_and_individual_copies_survive_reuse() {
     observation::record(Event::Allocate(std::ptr::from_ref(&element) as usize));
     drawable(100, pointer as usize, 7);
     frame_set(&views, "old-set");
-    image!(frame; element.current.frame, pointer);
+    image!(frame; element.current.frame, observed_frame(pointer));
     image!(set; element.current.frames, observed_set(&views));
     observation::record(Event::DrawableFree(100));
     drawable(100, pointer as usize, 99);
     frame_set(&views, "new-set");
     image!(copy; element.next.frame, element.current.frame);
     image!(copy; element.next.frames, element.current.frames);
-    image!(frame; element.current.frame, pointer);
+    image!(frame; element.current.frame, observed_frame(pointer));
     image!(set; element.current.frames, observed_set(&views));
     journal.drain_events(&[]);
     let observed = fields(&mut journal, &element);
@@ -268,7 +271,7 @@ fn raw_abi_image_and_state_copies_keep_the_source_identity() {
     let mut current = state {
         location: POINT { x: 7, y: 9 },
         image: state__bindgen_ty_1 {
-            frame: std::ptr::null_mut(),
+            frame: crate::engine::battle::frames::FrameSelection::ABSENT,
             frames: crate::engine::battle::views::Frames::ABSENT,
         },
     };
@@ -281,12 +284,12 @@ fn raw_abi_image_and_state_copies_keep_the_source_identity() {
         frames: vec![pointer as usize; 3],
         role: "old-set".into(),
     });
-    image!(frame; current.image.frame, pointer);
+    image!(frame; current.image.frame, observed_frame(pointer));
     image!(set; current.image.frames, observed_set(&views));
     observation::record(Event::DrawableFree(100));
     drawable(100, pointer as usize, 99);
     image!(copy; next.image, current.image);
-    image!(frame; current.image.frame, pointer);
+    image!(frame; current.image.frame, observed_frame(pointer));
     journal.drain_events(&[]);
     let old = &journal.bindings.frames[&(std::ptr::from_ref(&next.image.frame) as usize)].frame;
     let new = &journal.bindings.frames[&(std::ptr::from_ref(&current.image.frame) as usize)].frame;
@@ -329,7 +332,7 @@ fn element_field_assignment_is_not_an_array_edit_at_reused_storage() {
     observation::record(Event::DrawableFree(100));
     observation::record(Event::Allocate(std::ptr::from_ref(&element) as usize));
     drawable(100, pointer as usize, 99);
-    image!(frame; element.current.frame, pointer);
+    image!(frame; element.current.frame, observed_frame(pointer));
     journal.drain_events(&[]);
     let observed = fields(&mut journal, &element);
     assert_eq!(observed["current.frame.index"], "99");
@@ -359,7 +362,7 @@ fn whole_element_clone(reuse: bool) -> Fields {
     observation::record(Event::Allocate(std::ptr::from_ref(&source) as usize));
     drawable(100, pointer as usize, 7);
     observation::observe_views(&views, "old-clone-set", |p| *p as usize);
-    image!(frame; source.current.frame, pointer);
+    image!(frame; source.current.frame, observed_frame(pointer));
     image!(set; source.current.frames, observed_set(&views));
     image!(copy; source.next, source.current);
     image!(frame; source.intersect_control.intersect_stamp.frame, pointer);

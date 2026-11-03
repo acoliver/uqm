@@ -51,7 +51,8 @@ pub(super) fn mutual_loss(
                     ship.data
                         .as_ref()
                         .ok_or("fixture requires loaded descriptor fields")?
-                        .captain_special,
+                        .captain_special
+                        .clone(),
                 ),
             ])
         }
@@ -60,7 +61,7 @@ pub(super) fn mutual_loss(
             ship.data
                 .as_mut()
                 .ok_or("fixture requires loaded descriptor fields")?
-                .captain_special = run.captain;
+                .captain_special = run.captain.clone();
             run.next(vec![Effect::RaceProcess(true, run.a())])
         }
         _ => {

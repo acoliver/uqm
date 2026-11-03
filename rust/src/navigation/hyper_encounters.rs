@@ -6,7 +6,7 @@ use super::globals::GlobData;
 use super::hyper_data::HYPERSTARS;
 use super::hyper_transition::{init_transition, sis_element};
 use super::hyperspace::live::{cosine, height, logx, logy, sine, universe_x, universe_y, width};
-use crate::engine::battle::views::{Frame, Frames};
+use crate::engine::battle::views::{FrameSelection as Frame, Frames};
 use crate::engine::battle::{Cx, ElementId};
 use std::ptr;
 use std::ptr::NonNull;
@@ -44,7 +44,7 @@ pub(super) unsafe fn allocate(cx: &mut Cx<'_>, point: POINT) -> Option<ElementId
             NonNull::new(frames).unwrap_or_else(|| panic!("retained navigation authority")),
             1,
         ),
-        Frame::from_native(*frames),
+        Frame::retain(*frames),
     );
     Some(element)
 }
@@ -82,18 +82,14 @@ pub(super) unsafe fn ambient(cx: &mut Cx<'_>) {
                 .unwrap_or_else(|| panic!("retained navigation authority")),
             1,
         ),
-        Frame::from_native(stars),
+        Frame::retain(stars),
     );
     if (random >> 16) & 7 != 0 {
         cx.element_mut(element).life = 14;
-        cx.set_frame(element, false, Frame::from_native(stars));
+        cx.set_frame(element, false, Frame::retain(stars));
     } else {
         cx.element_mut(element).life = 12;
-        cx.set_frame(
-            element,
-            false,
-            Frame::from_native(SetAbsFrameIndex(stars, 14)),
-        );
+        cx.set_frame(element, false, Frame::retain(SetAbsFrameIndex(stars, 14)));
     }
     let head = cx.elements().head();
     cx.insert_before(element, head);
@@ -109,11 +105,11 @@ pub fn transition(
         cx.element_mut(element).turn -= 1;
     } else {
         if state.hits != 0 {
-            let frame = cx.retreat_frame(state.current.image.frame);
+            let frame = cx.retreat_frame(state.current.image.frame.view());
             cx.set_frame(element, true, frame);
         } else {
-            let frame = cx.advance_frame(state.current.image.frame);
-            if frame != cx.element_frame_set_first(element, false) {
+            let frame = cx.advance_frame(state.current.image.frame.view());
+            if frame != cx.element_frame_set_first(element, false).to_owned() {
                 cx.set_frame(element, true, frame);
             } else {
                 cx.element_mut(element).death = None;
@@ -215,7 +211,7 @@ unsafe fn add(cx: &mut Cx<'_>, encounter: *mut ENCOUNTER, universe: POINT) -> Op
             cx.set_frame(
                 element,
                 false,
-                Frame::from_native(SetRelFrameIndex(
+                Frame::retain(SetRelFrameIndex(
                     cx.element_frame_set_first(element, false).raw(),
                     -i,
                 )),
@@ -225,7 +221,7 @@ unsafe fn add(cx: &mut Cx<'_>, encounter: *mut ENCOUNTER, universe: POINT) -> Op
             cx.set_frame(
                 element,
                 false,
-                Frame::from_native(DecFrameIndex(
+                Frame::retain(DecFrameIndex(
                     cx.element_frame_set_first(element, false).raw(),
                 )),
             );
@@ -235,7 +231,7 @@ unsafe fn add(cx: &mut Cx<'_>, encounter: *mut ENCOUNTER, universe: POINT) -> Op
         cx.element_mut(element).post = None;
         cx.element_mut(element).collide = Some(CollisionHook::Native(collision));
         cx.setup_element(element);
-        cx.set_intersect_frame(element, Frame::from_native(DecFrameIndex(stars_in_space)));
+        cx.set_intersect_frame(element, Frame::retain(DecFrameIndex(stars_in_space)));
         cx.primitive_style_mut(element).kind = gfx_object_NUM_PRIMS as u8;
         cx.element_mut(element).flags |= (NONSOLID | IGNORE_VELOCITY) as u16;
         let tail = cx.elements().tail();

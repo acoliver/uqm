@@ -231,7 +231,7 @@ fn descriptor_matches_all_c_stats_resources_and_callbacks() {
                     && d.ship_data.special.view(i).is_absent()
             );
         }
-        let cap = d.ship_data.captain_control;
+        let cap = &d.ship_data.captain_control;
         assert_eq!(
             CStr::from_ptr(cap.captain_rsc),
             c"ship.slylandro.graphics.captain"
@@ -241,7 +241,7 @@ fn descriptor_matches_all_c_stats_resources_and_callbacks() {
                 && cap.turn.is_null()
                 && cap.thrust.is_null()
                 && cap.weapon.is_null()
-                && cap.special.is_null()
+                && cap.special.is_absent()
         );
         assert_eq!(
             CStr::from_ptr(d.ship_data.victory_ditty_rsc),
@@ -692,8 +692,8 @@ fn movement_reverses_on_thrust_press_turns_with_left_priority_and_animates_next_
             (*ship.ptr()).turn = turn_wait;
             (*ship.ptr()).thrust = thrust_wait;
             (*ship.ptr()).velocity = mem::zeroed();
-            (*ship.ptr()).current.image.frame = ship.raw_frame(0, 3);
-            (*ship.ptr()).next.image.frame = ship.raw_frame(0, 15);
+            (*ship.ptr()).current.image.frame = ship.frame(0, 3);
+            (*ship.ptr()).next.image.frame = ship.frame(0, 15);
             with_rng(64, 0, || ship.preprocess());
             assert_eq!(ship.ship_mut().ShipFacing, facing);
             assert_eq!(
@@ -704,7 +704,7 @@ fn movement_reverses_on_thrust_press_turns_with_left_priority_and_animates_next_
                 (*ship.ptr()).thrust,
                 if thrust_wait == 0 { 1 } else { thrust_wait }
             );
-            assert_eq!(frame_index((*ship.ptr()).next.image.frame), 0);
+            assert_eq!(frame_index((*ship.ptr()).next.image.frame.raw()), 0);
             assert_ne!((*ship.ptr()).state_flags & CHANGING as u16, 0);
             if thrust_wait == 0 {
                 assert_eq!(velocity(&(*ship.ptr()).velocity), vector(60, facing));
@@ -734,11 +734,11 @@ fn movement_reverses_on_thrust_press_turns_with_left_priority_and_animates_next_
         for flags in [APPEARING, NONSOLID, APPEARING | NONSOLID] {
             (*ship.ptr()).state_flags = flags as u16;
             let facing = ship.ship_mut().ShipFacing;
-            let frame = (*ship.ptr()).next.image.frame;
+            let frame = (*ship.ptr()).next.image.frame.raw();
             let v = velocity(&(*ship.ptr()).velocity);
             with_rng(64, 0, || ship.preprocess());
             assert_eq!(ship.ship_mut().ShipFacing, facing);
-            assert_eq!((*ship.ptr()).next.image.frame, frame);
+            assert_eq!((*ship.ptr()).next.image.frame.raw(), frame);
             assert_eq!(velocity(&(*ship.ptr()).velocity), v);
             assert_eq!((*ship.ptr()).state_flags, flags as u16);
         }

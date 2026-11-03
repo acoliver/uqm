@@ -283,7 +283,7 @@ fn appearing_turret_is_inserted_immediately_after_ship_and_inputs_suppress_hull_
                 (FINITE_LIFE | NONSOLID | IGNORE_SIMILAR) as u16
             );
             assert_eq!((*turret).life, 1);
-            assert_eq!((*turret).current.image.frame, ship.raw_frame(2, 7));
+            assert_eq!((*turret).current.image.frame.raw(), ship.raw_frame(2, 7));
             assert_eq!((*turret).current.image.frames, ship.frame_set(2));
             assert!((*turret).postprocess_func.is_some());
             assert!((*turret).preprocess_func.is_none());
@@ -342,7 +342,7 @@ fn howitzer_rotates_before_firing_with_byte_wrap_and_exact_missile_fields() {
                     (APPEARING | FINITE_LIFE | IGNORE_SIMILAR) as u16
                 );
                 assert_eq!(
-                    (*missile).current.image.frame,
+                    (*missile).current.image.frame.raw(),
                     ship.raw_frame(1, face as usize)
                 );
                 assert_eq!((*missile).current.image.frames, ship.frame_set(1));
@@ -452,9 +452,12 @@ fn turret_replacement_decrements_wait_once_rotates_and_updates_firing_quadrant()
                     ((*turret).current.location.x, (*turret).current.location.y),
                     (123, -456)
                 );
-                assert_eq!((*turret).next.image.frame, (*turret).current.image.frame);
                 assert_eq!(
-                    frame_index((*turret).current.image.frame),
+                    (*turret).next.image.frame.raw(),
+                    (*turret).current.image.frame.raw()
+                );
+                assert_eq!(
+                    frame_index((*turret).current.image.frame.raw()),
                     normalize_facing(15 + i32::from(expected_offset))
                 );
                 assert_eq!(
@@ -502,7 +505,7 @@ fn muzzle_flash_requires_an_appearing_friendly_stamp_and_animates_from_current()
             let flash = battle::element(battle::tail());
             assert_ne!(flash, battle::element(h));
             assert_eq!((*flash).life, 4);
-            assert_eq!((*flash).current.image.frame, ship.raw_frame(2, 16));
+            assert_eq!((*flash).current.image.frame.raw(), ship.raw_frame(2, 16));
             assert_eq!(
                 (*flash).state_flags,
                 (FINITE_LIFE | NONSOLID | IGNORE_SIMILAR | APPEARING) as u16
@@ -529,14 +532,14 @@ fn muzzle_flash_requires_an_appearing_friendly_stamp_and_animates_from_current()
                 (i32::from((*turret).current.location.y) + i32::from(sine(a, 56))) as COORD
             );
             let animate = (*flash).preprocess_func.unwrap();
-            (*flash).next.image.frame = ship.raw_frame(2, 25);
+            (*flash).next.image.frame = ship.frame(2, 25);
             (*flash).thrust = 2;
             with_rng(20, 0, || hooks::invoke_element_pointer(animate, flash));
-            assert_eq!((*flash).next.image.frame, ship.raw_frame(2, 17));
+            assert_eq!((*flash).next.image.frame.raw(), ship.raw_frame(2, 17));
             assert_eq!((*flash).turn, 2);
             hooks::invoke_element_pointer(animate, flash);
             assert_eq!((*flash).turn, 1);
-            assert_eq!((*flash).next.image.frame, ship.raw_frame(2, 17));
+            assert_eq!((*flash).next.image.frame.raw(), ship.raw_frame(2, 17));
             (*flash).state_flags &= !(APPEARING as u16);
             let before = queued().len();
             ship.tick_turret();
@@ -571,7 +574,7 @@ fn marines_launch_at_rear_with_exact_state_and_cost_only_after_allocation() {
                     (*marine).turn,
                     (normalize_facing(i32::from(facing) + 8) << 4) as BYTE
                 );
-                assert_eq!((*marine).current.image.frame, ship.raw_frame(2, 20));
+                assert_eq!((*marine).current.image.frame.raw(), ship.raw_frame(2, 20));
                 assert_eq!((*marine).current.image.frames, ship.frame_set(2));
                 assert_eq!(
                     (*marine).parent,
@@ -689,7 +692,7 @@ fn boarding_claims_first_unused_slot_and_immediately_kills_one_enemy_crew_withou
                 assert_eq!((*marine).turn, slot);
                 assert_eq!((*marine).thrust, 12);
                 assert_eq!(
-                    (*marine).next.image.frame,
+                    (*marine).next.image.frame.raw(),
                     ship.raw_frame(2, 22 + slot as usize)
                 );
                 assert_eq!(
@@ -710,7 +713,7 @@ fn boarding_claims_first_unused_slot_and_immediately_kills_one_enemy_crew_withou
             let marine = ship.launch();
             collide(marine, enemy.ptr());
             assert_eq!((*marine).turn, 1);
-            assert_eq!((*marine).next.image.frame, ship.raw_frame(2, 23));
+            assert_eq!((*marine).next.image.frame.raw(), ship.raw_frame(2, 23));
             let crew = enemy.descriptor_mut().ship_info.crew_level;
             collide(marine, enemy.ptr());
             assert_eq!(
@@ -816,7 +819,7 @@ fn intruder_rng_byte_boundaries_distinguish_death_damage_and_no_action() {
             enemy.at(4500, 4000);
             let marine = ship.launch();
             collide(marine, enemy.ptr());
-            let intruder_frame = (*marine).next.image.frame;
+            let intruder_frame = (*marine).next.image.frame.raw();
             for byte in [0, 15, 16, 143, 144, 255] {
                 (*marine).life = 1;
                 (*marine).state_flags = (IGNORE_SIMILAR | NONSOLID) as u16;
@@ -835,7 +838,7 @@ fn intruder_rng_byte_boundaries_distinguish_death_damage_and_no_action() {
                 );
                 assert_eq!((*marine).thrust, if damaged { 13 } else { 12 });
                 assert_eq!(
-                    (*marine).next.image.frame,
+                    (*marine).next.image.frame.raw(),
                     intruder_frame,
                     "silhouette changes do not replace marine identity frame"
                 );
@@ -878,7 +881,7 @@ fn intruder_wait_resets_attack_silhouette_without_rng_then_counts_down() {
             assert_eq!((*enemy.ptr()).life, 0);
             assert_eq!((*marine).life, 1, "return begins on the next preprocess");
             with_rng(seed, 1, || intruder(marine));
-            assert_eq!((*marine).next.image.frame, ship.raw_frame(2, 21));
+            assert_eq!((*marine).next.image.frame.raw(), ship.raw_frame(2, 21));
             assert_eq!((*marine).state_flags & NONSOLID as u16, 0);
         }
     })
@@ -917,8 +920,8 @@ fn intruder_returns_when_enemy_is_dead_or_absent_and_randomizes_facing_once() {
                         (IGNORE_SIMILAR | CHANGING | CREW_OBJECT) as u16
                     );
                     assert_eq!((*prim(marine)).Type, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
-                    assert_eq!((*marine).current.image.frame, ship.raw_frame(2, 21));
-                    assert_eq!((*marine).next.image.frame, ship.raw_frame(2, 21));
+                    assert_eq!((*marine).current.image.frame.raw(), ship.raw_frame(2, 21));
+                    assert_eq!((*marine).next.image.frame.raw(), ship.raw_frame(2, 21));
                     assert_ne!(
                         (*marine).preprocess_func.unwrap().address(),
                         intruder_preprocess as *const () as usize
@@ -951,7 +954,7 @@ fn returning_marine_tracks_owner_cannot_board_again_and_replenishes_crew() {
                 hooks::invoke_element_pointer((*marine).preprocess_func.unwrap(), marine)
             });
             assert_eq!((*marine).state_flags & IGNORE_SIMILAR as u16, 0);
-            assert_eq!((*marine).next.image.frame, ship.raw_frame(2, 21));
+            assert_eq!((*marine).next.image.frame.raw(), ship.raw_frame(2, 21));
             (*enemy.ptr()).hits = 15;
             collide(marine, enemy.ptr());
             assert_eq!(enemy.descriptor_mut().ship_info.crew_level, 15);
@@ -1527,7 +1530,7 @@ fn marine_prefers_visible_enemy_then_returns_to_visible_owner_or_keeps_heading()
                 (*marine).turn = 0;
                 (*marine).thrust = 0;
                 (*marine).velocity = mem::zeroed();
-                (*marine).next.image.frame = ship.raw_frame(2, 20);
+                (*marine).next.image.frame = ship.frame(2, 20);
                 let before = queued().len();
                 with_rng(8, 0, || hooks::invoke_element_pointer(preprocess, marine));
                 assert_eq!((*marine).turn, expected_facing << 4);
@@ -1536,7 +1539,7 @@ fn marine_prefers_visible_enemy_then_returns_to_visible_owner_or_keeps_heading()
                     returning
                 );
                 assert_eq!(
-                    (*marine).next.image.frame,
+                    (*marine).next.image.frame.raw(),
                     ship.raw_frame(2, if returning { 21 } else { 20 })
                 );
                 assert_eq!(queued().len(), before + usize::from(returning));

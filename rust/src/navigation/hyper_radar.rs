@@ -8,7 +8,7 @@ use super::hyper_encounters::{allocate, ambient, process_all, XOFFS, YOFFS};
 use super::hyper_transition::{portal_collision, portal_death, star_collision, star_death};
 use super::hyperspace::live::{universe_x, universe_y};
 use super::{color, get, set};
-use crate::engine::battle::views::Frame;
+use crate::engine::battle::views::FrameSelection as Frame;
 use crate::planets::starmap::CurStarDescPtr;
 use std::ptr;
 
@@ -149,7 +149,7 @@ pub unsafe fn SeedUniverse() {
                 cx.set_frame(
                     element,
                     false,
-                    Frame::from_native(SetAbsFrameIndex(
+                    Frame::retain(SetAbsFrameIndex(
                         HYPERSTARS[1 + (get("ARILOU_SPACE_SIDE") >> 1) as usize],
                         index,
                     )),
@@ -162,10 +162,7 @@ pub unsafe fn SeedUniverse() {
                     cx.element_mut(element).death = Some(ElementHook::Native(portal_death));
                 } else {
                     cx.element_mut(element).death = None;
-                    cx.set_intersect_frame(
-                        element,
-                        Frame::from_native(DecFrameIndex(stars_in_space)),
-                    );
+                    cx.set_intersect_frame(element, Frame::retain(DecFrameIndex(stars_in_space)));
                 }
                 let head = cx.elements().head();
                 cx.insert_before(element, head);
@@ -190,7 +187,7 @@ pub unsafe fn SeedUniverse() {
             cx.set_frame(
                 element,
                 false,
-                Frame::from_native(SetAbsFrameIndex(
+                Frame::retain(SetAbsFrameIndex(
                     HYPERSTARS[1 + (get("ARILOU_SPACE_SIDE") >> 1) as usize],
                     (((kind >> 3) & 3) as u16 * NUM_STAR_COLORS as u16) + (kind >> 5) as u16,
                 )),
@@ -203,7 +200,7 @@ pub unsafe fn SeedUniverse() {
                 cx.element_mut(element).death = Some(ElementHook::Native(star_death));
             } else {
                 cx.element_mut(element).death = None;
-                cx.set_intersect_frame(element, Frame::from_native(DecFrameIndex(stars_in_space)));
+                cx.set_intersect_frame(element, Frame::retain(DecFrameIndex(stars_in_space)));
             }
             let head = cx.elements().head();
             cx.insert_before(element, head);

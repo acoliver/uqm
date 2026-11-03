@@ -16,7 +16,7 @@ use uqm_rust::{
         netplay::CrcState,
     },
     collections::observation::{self, Event},
-    engine::battle::{frames::FrameArray, views::Frame},
+    engine::battle::{frames::FrameArray, views::FrameSelection},
     graphics::native_abi::frame_desc,
     ships::native::abi::*,
 };
@@ -601,17 +601,17 @@ fn descriptor_assets(directory: &Path) {
     descriptor.ship_data.weapon_rsc = [c"test.weapon".as_ptr(); 3];
     descriptor.ship_data.special_rsc = [c"test.special".as_ptr(); 3];
     // SAFETY: native retains this registered drawable through every snapshot.
-    let view = unsafe { Frame::from_native(frame_pointer) };
-    descriptor.ship_data.ship = FrameArray::retain([view; 3]);
-    descriptor.ship_data.weapon = FrameArray::retain([view; 3]);
-    descriptor.ship_data.special = FrameArray::retain([view; 3]);
+    let view = FrameSelection::retain(frame_pointer);
+    descriptor.ship_data.ship = FrameArray::retain([view.view(); 3]);
+    descriptor.ship_data.weapon = FrameArray::retain([view.view(); 3]);
+    descriptor.ship_data.special = FrameArray::retain([view.view(); 3]);
     descriptor.ship_data.captain_control = CAPTAIN_STUFF {
         captain_rsc: c"test.captain".as_ptr(),
         background: frame_pointer,
         turn: frame_pointer,
         thrust: frame_pointer,
         weapon: frame_pointer,
-        special: frame_pointer,
+        special: view.clone(),
     };
     descriptor.ship_data.victory_ditty_rsc = c"test.victory".as_ptr();
     descriptor.ship_data.ship_sounds_rsc = c"test.sounds".as_ptr();
@@ -750,8 +750,8 @@ fn frameset_and_media_identity(directory: &Path) {
         (&mut *first.parent, first, second)
     };
     // SAFETY: native owns the registered first frame throughout this fixture.
-    let view = unsafe { Frame::from_native(ptr::from_mut(first).cast()) };
-    descriptor.ship_data.ship = FrameArray::retain([view; 3]);
+    let view = FrameSelection::retain(ptr::from_mut(first).cast());
+    descriptor.ship_data.ship = FrameArray::retain([view.view(); 3]);
     let mut element = graph::ElementRecord::new();
     ship.SpeciesID = SPECIES_ID_EARTHLING_ID;
     let descriptor = install_descriptor(&mut ship, descriptor);
@@ -875,18 +875,22 @@ fn retired_space_does_not_borrow_released_frames(directory: &Path) {
         clear_queues();
     }
     let mut element = graph::ElementRecord::new();
-    element.current.frame = ptr::dangling_mut();
-    element.next.frame = ptr::dangling_mut();
+    let native = battle::NativeFrameSet::new(24);
+    // SAFETY: the registered fixture retains all 24 frame slots.
+    let frame = FrameSelection::retain(native.frame(23).cast());
+    element.current.frame = frame.clone();
+    element.next.frame = frame;
+    drop(native);
     element.current.frames = uqm_rust::engine::battle::frames::Frames::ABSENT;
-    // SAFETY: only the element pool is retained after space teardown; the frame
-    // graph is deliberately invalid and must not be traversed by the observer.
+    // SAFETY: the element pool and its selections remain owned after space teardown.
+    // The retired journal graph must not be traversed by the observer.
     unsafe {
         attach_elements(std::slice::from_mut(&mut element));
     }
     observation::record(Event::Allocate(element.pointer() as usize));
     observation::record(Event::Drawable(17));
     observation::record(Event::Frame {
-        address: element.current.frame as usize,
+        address: element.current.frame.raw() as usize,
         owner: 17,
         index: 23,
     });

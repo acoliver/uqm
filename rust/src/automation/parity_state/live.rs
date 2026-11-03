@@ -168,16 +168,13 @@ mod tests {
     use crate::battle::element::Element;
 
     fn observed_set<T>(views: &[*mut T]) -> crate::engine::battle::frames::Frames {
-        use crate::engine::battle::{
-            frames::{FrameArray, Frames, SharedFrames},
-            views::Frame,
-        };
+        use crate::engine::battle::frames::{FrameArray, Frames, SharedFrames};
         Frames::shared(
             SharedFrames::Fixture(0),
             FrameArray::fixture_source(
                 std::array::from_fn(|index| {
                     // SAFETY: journal fixtures use these retained handles only as opaque identities.
-                    unsafe { Frame::from_native(views[index.min(views.len() - 1)].cast()) }
+                    views[index.min(views.len() - 1)].cast()
                 }),
                 (),
                 Some(views.as_ptr() as usize),
@@ -193,15 +190,21 @@ mod tests {
     }
 
     use crate::graphics::native_abi::frame_desc;
+    fn observed_frame<T>(raw: *mut T) -> crate::engine::battle::frames::FrameSelection {
+        crate::engine::battle::frames::FrameArray::fixture([raw.cast(); 3], ())
+            .view(0)
+            .to_owned()
+    }
+
     #[test]
     fn visual_fields_include_the_borrowed_frame_array() {
         let directory = super::super::test_directory();
         let mut journal = Journal::create(directory.path())
             .unwrap_or_else(|error| panic!("create visual test journal: {error}"));
         let mut storage = 0u8;
-        let views = [std::ptr::from_mut(&mut storage).cast()];
+        let views = [std::ptr::from_mut(&mut storage).cast::<std::ffi::c_void>()];
         let mut element = Element::new();
-        element.current.frame = views[0];
+        element.current.frame = observed_frame(views[0]);
         element.current.frames = observed_set(&views);
         journal.register_frame(views[0] as usize, 0, 7);
         journal.allocate(std::ptr::from_ref(&element) as usize);
@@ -217,10 +220,10 @@ mod tests {
         let directory = super::super::test_directory();
         let mut journal = Journal::create(directory.path()).expect("journal");
         let mut storage = 0u8;
-        let pointer = std::ptr::from_mut(&mut storage).cast();
+        let pointer = std::ptr::from_mut(&mut storage).cast::<std::ffi::c_void>();
         let views = [pointer];
         let mut element = Element::new();
-        element.current.frame = pointer;
+        element.current.frame = observed_frame(pointer);
         element.current.frames = observed_set(&views);
         journal.allocate(std::ptr::from_ref(&element) as usize);
         let owner = journal.register_resource(100, "drawable");
@@ -284,7 +287,7 @@ mod tests {
                 observe_views(&views, "engine-global:test-animation", |frame| {
                     *frame as usize
                 });
-                observation::assign_frame(&mut element.current.frame, views[0].cast());
+                observation::assign_frame(&mut element.current.frame, observed_frame(views[0]));
                 if cycle == 0 {
                     observation::assign_set(
                         &mut element.current.frames,

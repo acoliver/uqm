@@ -177,12 +177,12 @@ fn descriptor_matches_all_c_resources_values_and_empty_runtime_fields() {
                     format!("ship.melnorme.graphics.confuse.{size}")
                 );
             }
-            let captain = d.ship_data.captain_control;
+            let captain = &d.ship_data.captain_control;
             assert_eq!(s(captain.captain_rsc), c"ship.melnorme.graphics.captain");
             assert!(
                 captain.background.is_null() && captain.turn.is_null() && captain.thrust.is_null()
             );
-            assert!(captain.weapon.is_null() && captain.special.is_null());
+            assert!(captain.weapon.is_null() && captain.special.is_absent());
             assert_eq!(s(d.ship_data.victory_ditty_rsc), c"ship.melnorme.ditty");
             assert_eq!(s(d.ship_data.ship_sounds_rsc), c"ship.melnorme.sounds");
             assert!(d
@@ -214,11 +214,11 @@ fn descriptor_matches_all_c_resources_values_and_empty_runtime_fields() {
             assert_eq!(fresh.callbacks(), d.callbacks());
             assert_eq!(fresh.ship_info.energy_level, 42);
             assert_eq!(
-                (owned.ship_info.energy_level, owned.ship_data.weapon.view(0)),
                 (
-                    37,
-                    uqm_rust::engine::battle::views::Frame::from_native(frame)
-                )
+                    owned.ship_info.energy_level,
+                    owned.ship_data.weapon.view(0).raw()
+                ),
+                (37, frame)
             );
             assert_eq!(owned.callbacks()[2], 0);
         }
@@ -253,7 +253,7 @@ fn initial_pump_uses_the_c_missile_block_at_all_facings_and_coordinate_limits() 
                 );
                 assert_eq!((*e).playerNr, 0);
                 assert_eq!((*e).current.image.frames, ship.frame_set(1));
-                assert_eq!(frame_index((*e).current.image.frame), 0);
+                assert_eq!(frame_index((*e).current.image.frame.raw()), 0);
                 assert!((*e).preprocess_func.is_none());
                 assert!((*e).postprocess_func.is_some() && (*e).collision_func.is_some());
                 assert!(
@@ -320,7 +320,7 @@ fn held_charge_replaces_the_element_and_uses_the_old_level_for_damage() {
                     (*e).state_flags &= !(APPEARING as u16);
                     (*e).turn = reverse | level;
                     (*e).thrust = 1;
-                    (*e).current.image.frame = ship.raw_frame(1, usize::from(level) * 5 + 2);
+                    (*e).current.image.frame = ship.frame(1, (usize::from(level) * 5 + 2) as u16);
                     ship.ship_mut().cur_status_flags = WEAPON as u16;
                     ship.ship_mut().old_status_flags = WEAPON as u16;
                     ship.ship_mut().energy_counter = 0;
@@ -332,7 +332,7 @@ fn held_charge_replaces_the_element_and_uses_the_old_level_for_damage() {
                     assert_eq!((*p).turn, reverse | next_level);
                     assert_eq!((*p).thrust, 72);
                     assert_eq!(
-                        frame_index((*p).current.image.frame),
+                        frame_index((*p).current.image.frame.raw()),
                         u16::from(next_level) * 5 + 2
                     );
                     assert_eq!((*p).hits, 2u16 << level);
@@ -370,14 +370,14 @@ fn charge_wait_wraps_as_a_byte_and_hit_points_truncate_after_the_c_assignment_ch
             (*e).state_flags &= !(APPEARING as u16);
             (*e).turn = 8;
             (*e).thrust = 0;
-            (*e).current.image.frame = ship.raw_frame(1, 0);
+            (*e).current.image.frame = ship.frame(1, 0);
             ship.ship_mut().cur_status_flags = WEAPON as u16;
             ship.ship_mut().old_status_flags = WEAPON as u16;
             hooks::invoke_element_pointer((*e).postprocess_func.unwrap(), e);
             let p = battle::element(battle::tail());
             assert_eq!((*p).thrust, 255);
             assert_eq!((*p).turn, 8);
-            assert_eq!(frame_index((*p).current.image.frame), 1);
+            assert_eq!(frame_index((*p).current.image.frame.raw()), 1);
             assert_eq!((*p).hits, 512);
             assert_eq!((*p).mass, 0);
         }
@@ -438,8 +438,9 @@ fn fired_charge_animation_bounces_at_each_five_frame_boundary_without_changing_l
                     (3, 0x80, 2, 0x80),
                     (0, 0x80, 1, 0),
                 ] {
-                    (*p).current.image.frame = ship.raw_frame(1, usize::from(level) * 5 + offset);
-                    (*p).next.image.frame = (*p).current.image.frame;
+                    (*p).current.image.frame =
+                        ship.frame(1, (usize::from(level) * 5 + offset) as u16);
+                    (*p).next.image.frame = (*p).current.image.frame.clone();
                     (*p).turn = level | reverse;
                     (*p).thrust = 2;
                     (*p).state_flags &= !(CHANGING as u16);
@@ -448,7 +449,7 @@ fn fired_charge_animation_bounces_at_each_five_frame_boundary_without_changing_l
                     assert_eq!((*p).thrust, 1);
                     assert_eq!((*p).turn, level | next_reverse);
                     assert_eq!(
-                        frame_index((*p).next.image.frame),
+                        frame_index((*p).next.image.frame.raw()),
                         u16::from(level) * 5 + next
                     );
                     assert_ne!((*p).state_flags & CHANGING as u16, 0);
@@ -457,10 +458,10 @@ fn fired_charge_animation_bounces_at_each_five_frame_boundary_without_changing_l
             }
             (*p).thrust = 1;
             (*p).state_flags &= !(CHANGING as u16);
-            let frame = (*p).next.image.frame;
+            let frame = (*p).next.image.frame.raw();
             hooks::invoke_element_pointer(pre, p);
             assert_eq!((*p).thrust, 0);
-            assert_eq!((*p).next.image.frame, frame);
+            assert_eq!((*p).next.image.frame.raw(), frame);
             assert_eq!((*p).state_flags & CHANGING as u16, 0);
             hooks::invoke_element_pointer(pre, p);
             assert_eq!((*p).thrust, 255);
@@ -481,7 +482,7 @@ fn pump_collision_restores_the_shared_blast_counter_and_sets_the_level_blast_ani
                 (*e).thrust = 67;
                 let index = usize::from(level) * 5;
                 ship.set_frame_bounds(1, index, [width, 18]);
-                (*e).next.image.frame = ship.raw_frame(1, index);
+                (*e).next.image.frame = ship.frame(1, index as u16);
                 (*e).velocity.travel_angle = 0;
                 let mut obstacle = PoolElement::new();
                 let mut point = POINT { x: 20, y: 30 };
@@ -503,7 +504,7 @@ fn pump_collision_restores_the_shared_blast_counter_and_sets_the_level_blast_ani
                 assert_eq!((*blast).turn, 0);
                 assert_eq!((*blast).thrust, 0);
                 assert_eq!((*blast).current.image.frames, (*e).next.image.frames);
-                assert_eq!(frame_index((*blast).current.image.frame), 20);
+                assert_eq!(frame_index((*blast).current.image.frame.raw()), 20);
                 let offset = i32::from((width >> 1) as u8) << ONE_SHIFT;
                 assert_eq!((*blast).current.location.x, 80 + cosine(0, offset));
                 assert_eq!((*blast).current.location.y, 120 + sine(0, offset));
@@ -515,7 +516,7 @@ fn pump_collision_restores_the_shared_blast_counter_and_sets_the_level_blast_ani
                 assert_eq!((*blast).turn, 0);
                 assert_eq!((*blast).state_flags & CHANGING as u16, 0);
                 hooks::invoke_element_pointer(animate, blast);
-                assert_eq!(frame_index((*blast).next.image.frame), 21);
+                assert_eq!(frame_index((*blast).next.image.frame.raw()), 21);
                 assert_eq!((*blast).turn, 3);
                 assert_ne!((*blast).state_flags & CHANGING as u16, 0);
                 assert_rng_after(33, 0);
@@ -581,7 +582,7 @@ fn confusion_special_obeys_energy_input_and_cooldown_boundaries() {
                         uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
                     );
                     assert_eq!((*e).current.image.frames, ship.frame_set(2));
-                    assert_eq!(frame_index((*e).current.image.frame), 0);
+                    assert_eq!(frame_index((*e).current.image.frame.raw()), 0);
                     assert_eq!(
                         velocity_fields(&(*e).velocity),
                         velocity_fields(&velocity_for(120, ship.ship_mut().ShipFacing))
@@ -642,11 +643,11 @@ fn solid_confusion_animation_wraps_in_the_first_eight_frames() {
             let e = confusion(&mut ship);
             let pre = (*e).preprocess_func.unwrap();
             for (index, expected) in [(0, 1), (6, 7), (7, 0), (15, 0)] {
-                (*e).current.image.frame = ship.raw_frame(2, index);
+                (*e).current.image.frame = ship.frame(2, index as u16);
                 (*e).state_flags &= !(CHANGING as u16);
                 TFB_SeedRandom(17);
                 hooks::invoke_element_pointer(pre, e);
-                assert_eq!(frame_index((*e).next.image.frame), expected);
+                assert_eq!(frame_index((*e).next.image.frame.raw()), expected);
                 assert_ne!((*e).state_flags & CHANGING as u16, 0);
                 assert_rng_after(17, 0);
             }
@@ -686,10 +687,10 @@ fn confusion_collision_inserts_a_controller_at_the_head_with_exactly_one_rng_dra
                     uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
                 );
                 assert_eq!((*controller).current.image.frames, (*e).next.image.frames);
-                assert_eq!(frame_index((*controller).current.image.frame), 8);
+                assert_eq!(frame_index((*controller).current.image.frame.raw()), 8);
                 assert_eq!(
-                    (*controller).next.image.frame,
-                    (*controller).current.image.frame
+                    (*controller).next.image.frame.raw(),
+                    (*controller).current.image.frame.raw()
                 );
                 assert_eq!(
                     (*prim(controller)).Type,
@@ -737,7 +738,7 @@ fn confusion_reuses_the_first_same_player_nonsolid_special_even_if_it_is_a_trail
                 let e = battle::element(h);
                 (*e).playerNr = player;
                 (*e).current.image.frames = frames;
-                (*e).current.image.frame = ship.raw_frame(2, 11);
+                (*e).current.image.frame = ship.frame(2, 11);
                 (*e).state_flags = flags as u16;
                 (*e).life = 1;
                 (*e).target = victim.ship_mut().hShip;
@@ -765,7 +766,7 @@ fn confusion_reuses_the_first_same_player_nonsolid_special_even_if_it_is_a_trail
                 victim.ship_mut().hShip,
                 "reuse does not retarget"
             );
-            assert_eq!(frame_index((*chosen).current.image.frame), 11);
+            assert_eq!(frame_index((*chosen).current.image.frame.raw()), 11);
             assert!(
                 (*chosen).preprocess_func.is_none(),
                 "reuse does not initialize the callback"
@@ -827,7 +828,7 @@ fn controller_follows_target_overrides_controls_wraps_animation_and_emits_one_fr
             let pre = (*controller).preprocess_func.unwrap();
             for direction in [LEFT, RIGHT] {
                 (*controller).turn = direction as u8;
-                (*controller).current.image.frame = ship.raw_frame(2, 15);
+                (*controller).current.image.frame = ship.frame(2, 15);
                 (*victim.ptr()).next.location = POINT { x: -123, y: 456 };
                 victim.ship_mut().ship_input_state =
                     (LEFT | RIGHT | THRUST | WEAPON | SPECIAL | 0x80) as u8;
@@ -842,7 +843,7 @@ fn controller_follows_target_overrides_controls_wraps_animation_and_emits_one_fr
                     ((*controller).next.location.x, (*controller).next.location.y),
                     (-123, 456)
                 );
-                assert_eq!(frame_index((*controller).next.image.frame), 8);
+                assert_eq!(frame_index((*controller).next.image.frame.raw()), 8);
                 assert_eq!(queue().len(), before + 1);
                 let trail = battle::element(battle::tail());
                 assert_eq!((*trail).playerNr, 0);
@@ -854,8 +855,14 @@ fn controller_follows_target_overrides_controls_wraps_animation_and_emits_one_fr
                 assert_eq!((*trail).turn, 0);
                 assert_eq!((*trail).target, victim.ship_mut().hShip);
                 assert_eq!((*trail).parent, (*controller).parent);
-                assert_eq!((*trail).current.image.frame, (*controller).next.image.frame);
-                assert_eq!((*trail).next.image.frame, (*controller).next.image.frame);
+                assert_eq!(
+                    (*trail).current.image.frame.raw(),
+                    (*controller).next.image.frame.raw()
+                );
+                assert_eq!(
+                    (*trail).next.image.frame.raw(),
+                    (*controller).next.image.frame.raw()
+                );
                 assert_eq!((*prim(trail)).Type, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
                 assert_eq!((*trail).preprocess_func.unwrap().address(), (pre).address());
                 // The visible one-frame copy follows, but does not override inputs
@@ -891,14 +898,14 @@ fn controller_still_overrides_controls_when_trail_allocation_fails() {
             collide(pulse, victim.ptr());
             let controller = battle::element(battle::head());
             (*controller).turn = RIGHT as u8;
-            (*controller).current.image.frame = ship.raw_frame(2, 8);
+            (*controller).current.image.frame = ship.frame(2, 8);
             let exhausted = exhaust_queue();
             let before = queue();
             victim.ship_mut().ship_input_state = (LEFT | SPECIAL | WEAPON) as u8;
             TFB_SeedRandom(9);
             hooks::invoke_element_pointer((*controller).preprocess_func.unwrap(), controller);
             assert_eq!(victim.ship_mut().ship_input_state, (RIGHT | WEAPON) as u8);
-            assert_eq!(frame_index((*controller).next.image.frame), 9);
+            assert_eq!(frame_index((*controller).next.image.frame.raw()), 9);
             assert_eq!(queue(), before);
             assert_rng_after(9, 0);
             for h in exhausted {
@@ -1056,14 +1063,14 @@ fn held_charge_uses_the_same_ping_pong_animation_as_a_released_pulse() {
             ] {
                 let e = pump(&mut ship);
                 (*e).state_flags &= !(APPEARING as u16);
-                (*e).current.image.frame = ship.raw_frame(1, index);
+                (*e).current.image.frame = ship.frame(1, index as u16);
                 (*e).turn = turn;
                 (*e).thrust = 2;
                 hooks::invoke_element_pointer((*e).postprocess_func.unwrap(), e);
                 let p = battle::element(battle::tail());
                 assert_eq!((*p).thrust, 1);
                 assert_eq!((*p).turn, expected_turn);
-                assert_eq!(frame_index((*p).current.image.frame), expected_index);
+                assert_eq!(frame_index((*p).current.image.frame.raw()), expected_index);
                 assert_eq!((*p).state_flags & CHANGING as u16, 0);
                 remove(p);
                 remove(e);

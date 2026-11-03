@@ -21,11 +21,23 @@ fn escaped_frame_retains_drawable_after_last_array_and_resource_owner_drop() {
     battle_context::run(|| {
         let resource = battle::FrameSet::new(1);
         let original = resource.array();
-        let view = original.view(0);
+        let view = original.view(0).to_owned();
         drop(original);
         drop(resource);
-        let retained = uqm_rust::engine::battle::frames::FrameArray::retain([view; 3]);
-        assert_eq!(retained.view(0), view);
+        let retained = uqm_rust::engine::battle::frames::FrameArray::retain([view.view(); 3]);
+        let raw = view.raw();
+        drop(view);
+        // SAFETY: the fixture owns the published game-thread context for this call.
+        unsafe {
+            uqm_rust::app::bridge::enter(|cx| {
+                assert_eq!(cx.frame_count(retained.view(0)), 1);
+            });
+        }
+        drop(retained);
+        assert!(std::panic::catch_unwind(|| {
+            uqm_rust::graphics::drawable_abi::retain_frame_allocations(&[raw]);
+        })
+        .is_err());
     });
 }
 
@@ -234,9 +246,9 @@ fn native_races_cannot_escape_the_real_accessor_boundary() -> Result<(), Box<dyn
         ("context_free_world_write", "fn probe() { crate::battle::set_flagship_crew(1); }", "E0425"),
         ("untyped_story", "fn probe(cx: &mut Cx<'_>) { let _ = cx.story_state(\"SHOFIXTI_RECRUITED\"); }", "E0308"),
         ("ship_record", "fn probe(cx: &mut Cx<'_>, ship: ShipId) { cx.ship_state_mut(ship).record.descriptor = None; let _ = cx.race_stats(ship); }", "E0616"),
-        ("element_record", "fn probe(cx: &mut Cx<'_>, id: ElementId) { cx.element_mut(id).record.parent = crate::engine::battle::Parent::None; let _ = cx.element_frame_set_first(id, true); }", "E0616"),
-        ("table", "fn probe(cx: &mut Cx<'_>, id: ElementId) { cx.b.kernel.elements[id].next.image.frames = std::ptr::NonNull::dangling().as_ptr(); let _ = cx.element_frame_set_first(id, true); }", "E0616"),
-        ("frame", "fn probe() { let _ = crate::engine::battle::views::Frame(std::ptr::NonNull::dangling().as_ptr()); }", "E0603"),
+        ("element_record", "fn probe(cx: &mut Cx<'_>, id: ElementId) { cx.element_mut(id).record.parent = crate::engine::battle::Parent::None; let _ = cx.element_frame_set_first(id, true).to_owned(); }", "E0616"),
+        ("table", "fn probe(cx: &mut Cx<'_>, id: ElementId) { cx.b.kernel.elements[id].next.image.frames = std::ptr::NonNull::dangling().as_ptr(); let _ = cx.element_frame_set_first(id, true).to_owned(); }", "E0616"),
+        ("frame", "fn probe() { let _ = crate::engine::battle::views::FrameRef { raw: std::ptr::NonNull::dangling().as_ptr(), owner: &crate::engine::battle::frames::FrameArray::EMPTY, resolution: 0, identity: crate::engine::battle::frames::FrameOwner::Drawable }; }", "E0451"),
         ("frames", "fn probe() { let _ = crate::engine::battle::views::Frames(None); }", "E0423"),
         ("descriptor", "fn probe() { let _ = crate::engine::battle::RaceDesc::from_legacy(crate::engine::battle::record::RaceDescriptor::EMPTY); }", "E0624"),
         ("projection", "fn probe(cx: &mut Cx<'_>, p: std::ptr::NonNull<u8>) { let _ = cx.project(p); }", "E0624"),
@@ -251,15 +263,16 @@ fn native_races_cannot_escape_the_real_accessor_boundary() -> Result<(), Box<dyn
         ("subject", "fn probe(mut subject: crate::engine::battle::Subject) { subject.intersect.IntersectStamp.frame = std::ptr::NonNull::dangling().as_ptr(); }", "E0616"),
     ];
     let probes = probes.into_iter().chain([
+        ("escaped_frame", "fn probe(a: crate::engine::battle::frames::FrameArray) { let frame = a.view(0); drop(a); let _ = crate::engine::battle::frames::FrameArray::retain([frame; 3]); }", "E0505"),
         ("pool_id_fields", "fn probe() { let _=crate::collections::pool::Id::<u8> { ix:0, generation:0, owner:0, token:0, marker:std::marker::PhantomData }; }", "E0451"),
-        ("production_fixture", "fn probe(f: crate::engine::battle::views::Frame) { let _=crate::engine::battle::frames::FrameArray::fixture([f;3], ()); }", "E0599"),
+        ("production_fixture", "fn probe(f: crate::engine::battle::views::FrameRef) { let _=crate::engine::battle::frames::FrameArray::fixture([f;3], ()); }", "E0599"),
         ("picker_icons", "fn probe(b: &mut crate::engine::battle::Battle) { let mut q = b.ships(0); let id=q.build(1).unwrap(); let mut v=q.get(id); v.icons=1; q.set(id,v); }", "E0609"),
         ("picker_strings", "fn probe(b: &mut crate::engine::battle::Battle) { let mut q = b.ships(0); let id=q.build(1).unwrap(); let mut v=q.get(id); v.strings=1; q.set(id,v); }", "E0609"),
         ("picker_backing", "fn probe(b: &mut crate::engine::battle::Battle) { let mut q=b.ships(0); let _=&mut q.queue; }", "E0616"),
-        ("mutable_table", "fn probe(t: &mut crate::engine::battle::ElementTable, id: ElementId) { t[id].current.image.frame=1usize as _; }", "E0594"),
+        ("mutable_table", "fn probe(t: &mut crate::engine::battle::ElementTable, id: ElementId) { t[id].current.image.frame=crate::engine::battle::frames::FrameSelection::ABSENT; }", "E0594"),
         ("raw_subject", "fn probe(r: &crate::engine::battle::record::ElementRecord) { let _=crate::engine::battle::Subject::from(r); }", "E0308"),
-        ("lease_free_array", "fn probe(f: crate::engine::battle::views::Frame) { let _=crate::engine::battle::frames::FrameArray::retain([f;3], ()); }", "E0061"),
-        ("unchecked_array", "fn probe(a: &crate::engine::battle::frames::FrameArray, f: crate::engine::battle::views::Frame) { a.set_view(0,f); }", "E0624"),
+        ("lease_free_array", "fn probe(f: crate::engine::battle::views::FrameRef) { let _=crate::engine::battle::frames::FrameArray::retain([f;3], ()); }", "E0061"),
+        ("unchecked_array", "fn probe(a: &crate::engine::battle::frames::FrameArray, f: crate::engine::battle::views::FrameRef) { a.set_view(0,f); }", "E0624"),
         ("element_id_fields", "fn probe() { let _=ElementId { slot:0, gen:0, owner:0, token:0 }; }", "E0451"),
         ("ship_id_fields", "fn probe() { let _=ShipId { side:0, slot:0, gen:0, owner:0 }; }", "E0451"),
         ("link_id_fields", "fn probe() { let _=crate::engine::battle::link_queue::LinkId::<crate::engine::battle::link_queue::Starship> { slot:0, pool:123, generation:0, marker:std::marker::PhantomData }; }", "E0451"),

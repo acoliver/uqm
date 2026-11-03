@@ -70,7 +70,7 @@ fn descriptor_and_six_lance_order_and_coordinates() {
                             )
                         );
                         assert_eq!(((*e).life, (*e).hits, (*e).mass), (10, 1, 1));
-                        assert_eq!(frame_index((*e).current.image.frame), facing);
+                        assert_eq!(frame_index((*e).current.image.frame.raw()), facing);
                         assert_eq!(velocity(&(*e).velocity), toward(30 << ONE_SHIFT, facing));
                         battle_context::dispose(handles[i * 2 + side]);
                     }

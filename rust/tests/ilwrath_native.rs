@@ -167,7 +167,7 @@ fn flame_inherits_the_ship_velocity_and_starts_on_the_first_frame() {
             );
             // MissileBlock.index is 0 whatever the facing: the flame animates
             // from its first frame.
-            assert_eq!(index_of((*flame).current.image.frame), 0);
+            assert_eq!(index_of((*flame).current.image.frame.raw()), 0);
             assert!((*flame).preprocess_func.is_some());
             assert!((*flame).collision_func.is_some());
 
@@ -204,27 +204,27 @@ fn flame_advances_its_animation_every_next_turn_frames() {
             // turn_wait starts at 0, so the first pass animates immediately and
             // reloads the delay from next_turn.
             hooks::invoke_element_pointer(step, flame);
-            assert_eq!(index_of((*flame).next.image.frame), 1);
+            assert_eq!(index_of((*flame).next.image.frame.raw()), 1);
             assert_ne!((*flame).state_flags & CHANGING as u16, 0);
             assert_eq!((*flame).turn, 2);
 
             (*flame).state_flags &= !(CHANGING as u16);
-            (*flame).current.image.frame = (*flame).next.image.frame;
+            (*flame).current.image.frame = (*flame).next.image.frame.clone();
             hooks::invoke_element_pointer(step, flame);
             hooks::invoke_element_pointer(step, flame);
             assert_eq!((*flame).turn, 0);
             assert_eq!((*flame).state_flags & CHANGING as u16, 0);
-            assert_eq!(index_of((*flame).next.image.frame), 1);
+            assert_eq!(index_of((*flame).next.image.frame.raw()), 1);
 
             hooks::invoke_element_pointer(step, flame);
-            assert_eq!(index_of((*flame).next.image.frame), 2);
+            assert_eq!(index_of((*flame).next.image.frame.raw()), 2);
             assert_ne!((*flame).state_flags & CHANGING as u16, 0);
 
             // The animation wraps after the last frame.
-            (*flame).current.image.frame = flame_frames.frame(3);
+            (*flame).current.image.frame = flame_frames.selection(3);
             (*flame).turn = 0;
             hooks::invoke_element_pointer(step, flame);
-            assert_eq!(index_of((*flame).next.image.frame), 0);
+            assert_eq!(index_of((*flame).next.image.frame.raw()), 0);
         }
     })
 }
@@ -428,7 +428,7 @@ fn firing_while_cloaked_decloaks_and_turns_toward_the_target() {
             let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
             let ship_frames = FrameSet::with_bounds(16, [0, 0]);
             let ship = avenger(&mut fleet);
-            (*ship).next.image.frame = ship_frames.frame(0);
+            (*ship).next.image.frame = ship_frames.selection(0);
             let mut other = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 1, [16; 3], [0, 0]);
             // Straight along +x: ARCTAN gives angle 16, facing 4.
             spawn_ship(&mut other, 2000, 1000);
@@ -440,7 +440,7 @@ fn firing_while_cloaked_decloaks_and_turns_toward_the_target() {
 
             assert_eq!(color_of(ship), BLUE_DARK);
             assert_eq!(fleet.ship_mut().ShipFacing, 4);
-            assert_eq!(index_of((*ship).next.image.frame), 4);
+            assert_eq!(index_of((*ship).next.image.frame.raw()), 4);
             // turn_wait of zero is bumped so the new facing is not undone at once.
             assert_eq!((*ship).turn, 1);
             assert!((*ship).target.is_none());
@@ -461,7 +461,7 @@ fn decloak_aim_leads_the_target_by_four_frames_of_motion() {
             let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
             let ship_frames = FrameSet::with_bounds(16, [0, 0]);
             let ship = avenger(&mut fleet);
-            (*ship).next.image.frame = ship_frames.frame(0);
+            (*ship).next.image.frame = ship_frames.selection(0);
             // Moving +y by 250 world units a frame puts the ship 1000 units
             // further on after the four look-ahead frames.
             DeltaVelocityComponents(&raw mut (*ship).velocity, 0, 8000);
@@ -475,7 +475,7 @@ fn decloak_aim_leads_the_target_by_four_frames_of_motion() {
             // The aim point is (2000 - 1000, 1000 - 2000): angle 8, facing 2.
             // Without the look-ahead the ship would face 4.
             assert_eq!(fleet.ship_mut().ShipFacing, 2);
-            assert_eq!(index_of((*ship).next.image.frame), 2);
+            assert_eq!(index_of((*ship).next.image.frame.raw()), 2);
         }
     })
 }
@@ -489,7 +489,7 @@ fn firing_while_cloaked_without_a_target_keeps_the_facing() {
         let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
         let ship_frames = FrameSet::with_bounds(16, [0, 0]);
         let ship = avenger(&mut fleet);
-        (*ship).next.image.frame = ship_frames.frame(0);
+        (*ship).next.image.frame = ship_frames.selection(0);
         paint(ship, gfx_object_STAMPFILL_PRIM, BLACK);
         fleet.ship_mut().ShipFacing = 6;
         fleet.ship_mut().cur_status_flags = WEAPON as u16;
@@ -498,7 +498,7 @@ fn firing_while_cloaked_without_a_target_keeps_the_facing() {
 
         assert_eq!(color_of(ship), BLUE_DARK);
         assert_eq!(fleet.ship_mut().ShipFacing, 6);
-        assert_eq!(index_of((*ship).next.image.frame), 0);
+        assert_eq!(index_of((*ship).next.image.frame.raw()), 0);
         assert_eq!((*ship).turn, 0);
         assert!((*ship).target.is_none());
     })

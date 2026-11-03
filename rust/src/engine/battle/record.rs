@@ -31,7 +31,7 @@ mod abi {
     #[repr(C)]
     #[derive(Debug, Clone)]
     pub struct state__bindgen_ty_1 {
-        pub frame: FRAME,
+        pub frame: crate::engine::battle::frames::FrameSelection,
         pub frames: crate::engine::battle::frames::Frames,
     }
     pub type STATE = state;
@@ -72,6 +72,7 @@ mod abi {
         pub next: STATE,
         pub parent: crate::engine::battle::Parent,
         pub target: Option<crate::engine::battle::ElementId>,
+        pub intersect_frame: crate::engine::battle::frames::FrameSelection,
     }
 
     #[repr(C)]
@@ -100,9 +101,8 @@ mod abi {
 
     impl ShipRecord {
         pub fn descriptor_ptr(&mut self) -> *mut RaceDescriptor {
-            self.descriptor
-                .as_deref_mut()
-                .map_or(std::ptr::null_mut(), std::ptr::from_mut)
+            let descriptor = self.descriptor.as_deref_mut();
+            descriptor.map_or(ptr::null_mut(), ptr::from_mut)
         }
     }
     #[repr(C)]
@@ -116,14 +116,14 @@ mod abi {
     pub type MUSIC_REF = *mut *mut TFB_SoundSample;
 
     #[repr(C)]
-    #[derive(Debug, Copy, Clone)]
+    #[derive(Debug, Clone)]
     pub struct captain_stuff {
         pub captain_rsc: RESOURCE,
         pub background: FRAME,
         pub turn: FRAME,
         pub thrust: FRAME,
         pub weapon: FRAME,
-        pub special: FRAME,
+        pub special: crate::engine::battle::frames::FrameSelection,
     }
 
     pub type CAPTAIN_STUFF = captain_stuff;
@@ -210,7 +210,7 @@ impl Default for ElementRecord {
         let visual = STATE {
             location: POINT { x: 0, y: 0 },
             image: state__bindgen_ty_1 {
-                frame: ptr::null_mut(),
+                frame: FrameSelection::ABSENT,
                 frames: crate::engine::battle::frames::Frames::ABSENT,
             },
         };
@@ -241,6 +241,7 @@ impl Default for ElementRecord {
             next: visual,
             parent: Parent::None,
             target: None,
+            intersect_frame: FrameSelection::ABSENT,
         }
     }
 }
@@ -319,14 +320,14 @@ impl ElementState {
             current: Visual {
                 location: e.current.location,
                 image: Image {
-                    frame: Frame(e.current.image.frame),
+                    frame: e.current.image.frame.clone(),
                     frames: e.current.image.frames.clone(),
                 },
             },
             next: Visual {
                 location: e.next.location,
                 image: Image {
-                    frame: Frame(e.next.image.frame),
+                    frame: e.next.image.frame.clone(),
                     frames: e.next.image.frames.clone(),
                 },
             },
@@ -348,9 +349,9 @@ impl ElementState {
         e.velocity = value.velocity;
         e.current.location = value.current.location;
         e.next.location = value.next.location;
-        e.current.image.frame = value.current.image.frame.0;
+        e.current.image.frame = value.current.image.frame;
         e.current.image.frames = value.current.image.frames;
-        e.next.image.frame = value.next.image.frame.0;
+        e.next.image.frame = value.next.image.frame;
         e.next.image.frames = value.next.image.frames;
         e.preprocess_func = value.pre;
         e.postprocess_func = value.post;
@@ -621,19 +622,20 @@ impl ElementState {
             current: STATE {
                 location: self.current.location,
                 image: state__bindgen_ty_1 {
-                    frame: self.current.image.frame.0,
+                    frame: self.current.image.frame,
                     frames: self.current.image.frames,
                 },
             },
             next: STATE {
                 location: self.next.location,
                 image: state__bindgen_ty_1 {
-                    frame: self.next.image.frame.0,
+                    frame: self.next.image.frame,
                     frames: self.next.image.frames,
                 },
             },
             parent: Parent::None,
             target: None,
+            intersect_frame: FrameSelection::ABSENT,
         }
     }
 }
@@ -646,6 +648,7 @@ impl Subject {
             parent: record.parent,
             intersect: record.IntersectControl,
             primitive: record.PrimIndex,
+            intersect_frame: FrameSelection::retain(record.IntersectControl.IntersectStamp.frame),
         }
     }
 }
@@ -656,6 +659,7 @@ impl From<Subject> for ElementRecord {
         record.target = subject.target;
         record.parent = subject.parent;
         record.IntersectControl = subject.intersect;
+        record.intersect_frame = subject.intersect_frame;
         record.PrimIndex = subject.primitive;
         record
     }

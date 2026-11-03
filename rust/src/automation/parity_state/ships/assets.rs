@@ -139,7 +139,7 @@ fn frame_handles(info: &SHIP_INFO, data: &DATA_STUFF) -> [(&'static str, FRAME);
         ("data.captain.turn", captain.turn),
         ("data.captain.thrust", captain.thrust),
         ("data.captain.weapon", captain.weapon),
-        ("data.captain.special", captain.special),
+        ("data.captain.special", captain.special.raw()),
         ("data.ship.0", data.ship.view(0).raw()),
         ("data.ship.1", data.ship.view(1).raw()),
         ("data.ship.2", data.ship.view(2).raw()),
@@ -158,12 +158,12 @@ mod tests {
 
     #[test]
     fn descriptor_registration_distinguishes_absent_arrays_from_present_empty_views() {
-        use crate::engine::battle::{frames::FrameArray, record::RaceDescriptor, views};
+        use crate::engine::battle::{frames::FrameArray, record::RaceDescriptor};
         let directory = crate::automation::parity_state::test_directory();
         let mut journal = Journal::create(directory.path())
             .unwrap_or_else(|error| panic!("create frame-source journal: {error}"));
         let mut descriptor = RaceDescriptor::EMPTY;
-        descriptor.ship_data.ship = FrameArray::fixture([views::Frame::ABSENT; 3], ());
+        descriptor.ship_data.ship = FrameArray::fixture([std::ptr::null_mut(); 3], ());
         // SAFETY: the local descriptor retains all its null resources and the present ship array.
         let assets = unsafe { Assets::borrow(&descriptor.ship_info, &descriptor.ship_data) };
         assets.register(&mut journal, "test");

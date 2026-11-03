@@ -44,7 +44,7 @@ mod production {
     };
     use crate::c_bindings::global_state::SOLARSYS_STATE;
     use crate::c_bindings::solar_system;
-    use crate::engine::battle::views::Frame;
+    use crate::engine::battle::views::FrameSelection as Frame;
     use crate::engine::battle::{Cx, ElementId};
     const MAG_SHIFT: i32 = 2;
     const MAX_SCROUNGED: u8 = 50;
@@ -167,12 +167,12 @@ mod production {
                 cx.set_frame(
                     element,
                     false,
-                    Frame::from_native(SetAbsFrameIndex((MiscDataFrame).cast(), dot.current)),
+                    Frame::retain(SetAbsFrameIndex((MiscDataFrame).cast(), dot.current)),
                 );
                 cx.set_frame(
                     element,
                     true,
-                    Frame::from_native(SetAbsFrameIndex((MiscDataFrame).cast(), dot.next)),
+                    Frame::retain(SetAbsFrameIndex((MiscDataFrame).cast(), dot.next)),
                 );
                 stamp.frame = (SetAbsFrameIndex((MiscDataFrame).cast(), surface)).cast();
             }
@@ -180,7 +180,7 @@ mod production {
                 cx.set_frame(
                     element,
                     false,
-                    Frame::from_native(SetAbsFrameIndex(
+                    Frame::retain(SetAbsFrameIndex(
                         (MiscDataFrame).cast(),
                         ENERGY_SCAN_DOT.current,
                     )),
@@ -188,7 +188,7 @@ mod production {
                 cx.set_frame(
                     element,
                     true,
-                    Frame::from_native(SetAbsFrameIndex(
+                    Frame::retain(SetAbsFrameIndex(
                         (MiscDataFrame).cast(),
                         ENERGY_SCAN_DOT.next,
                     )),
@@ -201,7 +201,7 @@ mod production {
                 cx.set_frame(
                     element,
                     false,
-                    Frame::from_native(SetAbsFrameIndex(
+                    Frame::retain(SetAbsFrameIndex(
                         (MiscDataFrame).cast(),
                         BIO_SCAN_DOT.current,
                     )),
@@ -209,7 +209,7 @@ mod production {
                 cx.set_frame(
                     element,
                     true,
-                    Frame::from_native(SetAbsFrameIndex((MiscDataFrame).cast(), BIO_SCAN_DOT.next)),
+                    Frame::retain(SetAbsFrameIndex((MiscDataFrame).cast(), BIO_SCAN_DOT.next)),
                 );
                 cx.element_mut(element).mass = value as u8;
                 cx.element_mut(element).hits = 0;
@@ -223,7 +223,7 @@ mod production {
                 cx.set_frame(
                     element,
                     false,
-                    Frame::from_native(SetAbsFrameIndex(
+                    Frame::retain(SetAbsFrameIndex(
                         (MiscDataFrame).cast(),
                         BIO_SCAN_DOT.current,
                     )),
@@ -231,7 +231,7 @@ mod production {
                 cx.set_frame(
                     element,
                     true,
-                    Frame::from_native(SetAbsFrameIndex((MiscDataFrame).cast(), BIO_SCAN_DOT.next)),
+                    Frame::retain(SetAbsFrameIndex((MiscDataFrame).cast(), BIO_SCAN_DOT.next)),
                 );
                 cx.element_mut(element).turn = 0x44;
                 cx.element_mut(element).mass = creature.index();

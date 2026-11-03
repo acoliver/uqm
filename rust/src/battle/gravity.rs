@@ -56,7 +56,7 @@ pub(crate) fn calculate_gravity(
 pub(crate) fn control(
     cx: &Cx<'_>,
     id: ElementId,
-    frame: crate::engine::battle::views::Frame,
+    frame: crate::engine::battle::views::FrameSelection,
 ) -> INTERSECT_CONTROL {
     let current = cx.element(id).current;
     let origin = crate::graphics::native_abi::POINT {

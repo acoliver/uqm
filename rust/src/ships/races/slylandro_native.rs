@@ -334,7 +334,7 @@ pub(crate) mod engine {
             cx.set_frame(
                 ship,
                 true,
-                cx.advance_frame(cx.element(ship).next.image.frame),
+                cx.advance_frame(cx.element(ship).next.image.frame.view()),
             );
             cx.element_mut(ship).flags |= CHANGING as u16;
         }

@@ -112,12 +112,12 @@ pub(crate) mod engine {
         if cx.element(element).turn > 0 {
             cx.element_mut(element).turn -= 1;
         } else {
-            let mut facing = cx.frame_number(cx.element(element).next.image.frame);
+            let mut facing = cx.frame_number(cx.element(element).next.image.frame.view());
             if cx.track_ship(element, &mut facing) > 0 {
                 cx.set_frame(
                     element,
                     true,
-                    cx.absolute_frame(cx.element(element).next.image.frame, facing),
+                    cx.absolute_frame(cx.element(element).next.image.frame.view(), facing),
                 );
                 cx.element_mut(element).flags |= CHANGING as u16;
                 cx.element_mut(element)
@@ -345,7 +345,7 @@ pub(crate) mod engine {
                 true,
                 cx.equivalent_frame(
                     cx.element_frame_set_first(ship, true),
-                    cx.element(ship).next.image.frame,
+                    cx.element(ship).next.image.frame.view(),
                 ),
             );
             cx.element_mut(ship).flags |= CHANGING as u16;

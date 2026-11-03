@@ -77,7 +77,7 @@ pub(crate) mod engine {
         cx.race_stats_mut(ss).state = RaceState::SaMatra(state);
     }
     pub(crate) fn comet_preprocess(cx: &mut Cx<'_>, e: ElementId) {
-        let index = cx.frame_number(cx.element(e).current.image.frame) + 1;
+        let index = cx.frame_number(cx.element(e).current.image.frame.view()) + 1;
         if index < 29 {
             if index == 25 {
                 let ss = cx.owner(e);
@@ -98,7 +98,7 @@ pub(crate) mod engine {
         cx.set_frame(
             e,
             true,
-            cx.absolute_frame(cx.element(e).current.image.frame, index),
+            cx.absolute_frame(cx.element(e).current.image.frame.view(), index),
         );
         cx.element_mut(e).flags |= CHANGING as u16;
     }
@@ -197,8 +197,8 @@ pub(crate) mod engine {
                 e,
                 true,
                 cx.absolute_frame(
-                    cx.element(e).current.image.frame,
-                    cx.frame_number(cx.element(e).current.image.frame) % 10 + 1,
+                    cx.element(e).current.image.frame.view(),
+                    cx.frame_number(cx.element(e).current.image.frame.view()) % 10 + 1,
                 ),
             );
             cx.element_mut(e).flags |= CHANGING as u16;
@@ -258,12 +258,16 @@ pub(crate) mod engine {
             cx.primitive_style_mut(e).kind = gfx_object_STAMPFILL_PRIM as u8;
         } else {
             cx.element_mut(e).life = cx.element(e).life.wrapping_add(1);
-            cx.set_frame(e, true, cx.advance_frame(cx.element(e).current.image.frame));
-            if cx.frame_number(cx.element(e).next.image.frame) == 0 {
+            cx.set_frame(
+                e,
+                true,
+                cx.advance_frame(cx.element(e).current.image.frame.view()),
+            );
+            if cx.frame_number(cx.element(e).next.image.frame.view()) == 0 {
                 cx.set_frame(
                     e,
                     true,
-                    cx.absolute_frame(cx.element(e).next.image.frame, 11),
+                    cx.absolute_frame(cx.element(e).next.image.frame.view(), 11),
                 );
             }
             cx.element_mut(e).flags |= CHANGING as u16;
@@ -287,7 +291,7 @@ pub(crate) mod engine {
             cx.set_frame(
                 e,
                 false,
-                cx.absolute_frame(cx.element(e).current.image.frame, 9),
+                cx.absolute_frame(cx.element(e).current.image.frame.view(), 9),
             );
         }
         if cx.element(e).thrust != 0 {
@@ -302,7 +306,11 @@ pub(crate) mod engine {
                 cx.element_mut(e).flags &= !(DISAPPEARING as u16);
                 cx.element_mut(e).flags |= CHANGING as u16;
                 cx.element_mut(e).life = cx.element(e).life.wrapping_add(1);
-                cx.set_frame(e, true, cx.advance_frame(cx.element(e).current.image.frame));
+                cx.set_frame(
+                    e,
+                    true,
+                    cx.advance_frame(cx.element(e).current.image.frame.view()),
+                );
                 cx.element_mut(e).thrust = 1;
             }
         }
@@ -317,8 +325,8 @@ pub(crate) mod engine {
                     e,
                     true,
                     cx.absolute_frame(
-                        cx.element(e).current.image.frame,
-                        (cx.frame_number(cx.element(e).current.image.frame) + 1) % 10,
+                        cx.element(e).current.image.frame.view(),
+                        (cx.frame_number(cx.element(e).current.image.frame.view()) + 1) % 10,
                     ),
                 );
                 cx.element_mut(e).flags |= CHANGING as u16;
@@ -395,8 +403,8 @@ pub(crate) mod engine {
                 e,
                 true,
                 cx.absolute_frame(
-                    cx.element(e).current.image.frame,
-                    (cx.frame_number(cx.element(e).current.image.frame) + 1) % 6,
+                    cx.element(e).current.image.frame.view(),
+                    (cx.frame_number(cx.element(e).current.image.frame.view()) + 1) % 6,
                 ),
             );
             cx.element_mut(e).flags |= CHANGING as u16;

@@ -285,7 +285,7 @@ impl<'a> Ship<'a> {
             ship.element_mut().set_mass_points(mass);
             ship.element_mut().current.location = POINT { x: 4000, y: 4000 };
             ship.element_mut().current.image.frames = ship.ship_frames();
-            ship.element_mut().current.image.frame = frames[0].frame(0);
+            ship.element_mut().current.image.frame = frames[0].selection(0);
             ship.element_mut().next = ship.element_mut().current.clone();
             ship.element_mut().IntersectControl.IntersectStamp.frame = frames[0].frame(0);
             // SAFETY: this slot owns its allocated display primitive.
@@ -385,7 +385,11 @@ impl<'a> Ship<'a> {
             })
         }
     }
-    pub fn frame(&self, role: usize, index: u16) -> uqm_rust::engine::battle::views::Frame {
+    pub fn frame(
+        &self,
+        role: usize,
+        index: u16,
+    ) -> uqm_rust::engine::battle::views::FrameSelection {
         self.assert_live();
         // SAFETY: the fixture retains its descriptor and loaded frame sets through projection.
         unsafe {
@@ -694,6 +698,10 @@ impl FrameSet {
         }
         Self(Rc::new(native))
     }
+    pub fn selection(&self, index: usize) -> uqm_rust::engine::battle::frames::FrameSelection {
+        self.0.selection(index)
+    }
+
     pub fn array(&self) -> uqm_rust::engine::battle::frames::FrameArray {
         self.0.array()
     }
@@ -940,13 +948,15 @@ impl NativeFrameSet {
             (*self.0).Frame.add(index).cast()
         }
     }
+    pub fn selection(&self, index: usize) -> uqm_rust::engine::battle::frames::FrameSelection {
+        uqm_rust::engine::battle::frames::FrameSelection::retain(self.frame(index).cast())
+    }
+
     pub fn array(&self) -> uqm_rust::engine::battle::frames::FrameArray {
         // SAFETY: these leases retain the drawable after the fixture's logical release.
         unsafe {
             let frame = self.frame(0);
-            uqm_rust::engine::battle::frames::FrameArray::retain(
-                [uqm_rust::engine::battle::views::Frame::from_native(frame.cast()); 3],
-            )
+            uqm_rust::engine::battle::frames::FrameArray::from_native([frame.cast(); 3])
         }
     }
 }

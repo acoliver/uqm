@@ -406,8 +406,8 @@ pub(crate) mod engine {
             cx.primitive_style_mut(e).kind = gfx_object_STAMP_PRIM as u8;
             let array = cx.shared_frame_set(SharedFrames::Explosion);
             cx.set_frames(e, false, array);
-            let frame = cx.first_shared_frame(SharedFrames::Explosion);
-            cx.set_frame(e, false, frame);
+            let frame = cx.shared_frame_selection(SharedFrames::Explosion);
+            cx.set_frame(e, false, frame.clone());
             let (angle, dist) = explosion_position_random(cx.random());
             let location = cx.element(ship).current.location;
             cx.element_mut(e).current.location.x =
@@ -528,15 +528,15 @@ pub(crate) mod engine {
                 {
                     let frame = cx.equivalent_frame(
                         cx.element_frame_set_first(e, false),
-                        cx.element(e).current.image.frame,
+                        cx.element(e).current.image.frame.view(),
                     );
-                    cx.set_frame(e, false, frame);
+                    cx.set_frame(e, false, frame.clone());
                     cx.set_frame(e, true, frame);
                     cx.primitive_style_mut(e).kind = gfx_object_STAMP_PRIM as u8;
                     cx.init_intersect(e);
                     let frame = cx.equivalent_frame(
                         cx.element_frame_set_first(e, true),
-                        cx.element(e).next.image.frame,
+                        cx.element(e).next.image.frame.view(),
                     );
                     cx.set_intersect_frame(e, frame);
                     cx.element_mut(e).velocity.zero();

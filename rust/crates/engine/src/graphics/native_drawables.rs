@@ -111,6 +111,12 @@ impl DrawableLease {
     pub fn owns_frame(&self, frame: FRAME) -> bool {
         self.frame_at_address(frame).is_some()
     }
+    pub fn frame_index(&self, frame: FRAME) -> Option<usize> {
+        self._allocation.2.iter().position(|owned| *owned == frame)
+    }
+    pub fn frame(&self, index: usize) -> Option<FRAME> {
+        self._allocation.2.get(index).copied()
+    }
     pub fn frame_at_address(&self, frame: FRAME) -> Option<FRAME> {
         self._allocation
             .2

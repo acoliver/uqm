@@ -184,7 +184,7 @@ pub(super) enum Reply {
     None,
     Loaded(bool),
     Check(&'static str, bool),
-    Captain(Frame),
+    Captain(FrameSelection),
 }
 
 /// # Safety
@@ -258,7 +258,7 @@ unsafe fn apply(cx: &mut Cx<'_>, effect: Effect) -> Result<Reply, String> {
                 }
                 Effect::Captain(frame) => {
                     return Ok(Reply::Captain(
-                        cx.absolute_frame(frame, cx.frame_count(frame) - 4),
+                        cx.absolute_frame(frame.view(), cx.frame_count(frame.view()) - 4),
                     ))
                 }
                 Effect::RaceProcess(post, id) => {

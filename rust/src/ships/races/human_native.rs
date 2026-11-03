@@ -90,13 +90,13 @@ pub(crate) mod engine {
     };
 
     pub(crate) fn nuke_preprocess(cx: &mut Cx<'_>, missile: ElementId) {
-        let mut facing = cx.frame_number(cx.element(missile).next.image.frame);
+        let mut facing = cx.frame_number(cx.element(missile).next.image.frame.view());
         if cx.element(missile).turn_wait() > 0 {
             let wait = cx.element(missile).turn_wait() - 1;
             cx.element_mut(missile).set_turn_wait(wait);
         } else {
             if cx.track_ship(missile, &mut facing) > 0 {
-                let frame = cx.absolute_frame(cx.element(missile).next.image.frame, facing);
+                let frame = cx.absolute_frame(cx.element(missile).next.image.frame.view(), facing);
                 cx.set_frame(missile, true, frame);
                 cx.element_mut(missile).flags |= CHANGING as u16;
             }

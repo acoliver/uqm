@@ -38,7 +38,7 @@ fn encounter_transition_preserves_frame_cadence_and_completion() {
                 uqm_rust::engine::battle::frames::SharedFrames::Fixture(0),
                 frames.array(),
             );
-            record.current.image.frame = frames.frame(10);
+            record.current.image.frame = frames.selection(10);
             record.next = record.current.clone();
             record.set_turn_wait(1);
             record.death_func = Some(transition_hook());
@@ -50,14 +50,14 @@ fn encounter_transition_preserves_frame_cadence_and_completion() {
             assert_eq!(record.state_flags & DISAPPEARING as u16, 0);
             assert_eq!(record.life_span(), 1);
             assert_eq!(record.turn_wait(), 0);
-            assert_eq!(record.next.image.frame, frames.frame(10));
+            assert_eq!(record.next.image.frame.raw(), frames.frame(10));
         }
         call_transition(element.id);
         // SAFETY: the callback has returned and no borrow crosses the next call.
         unsafe {
             let record = element.element_mut();
             assert_eq!(record.turn_wait(), 1);
-            assert_eq!(record.next.image.frame, frames.frame(11));
+            assert_eq!(record.next.image.frame.raw(), frames.frame(11));
             record.current = record.next.clone();
             record.set_turn_wait(0);
         }
@@ -68,12 +68,15 @@ fn encounter_transition_preserves_frame_cadence_and_completion() {
             assert!(record.death_func.is_none());
             record.set_hit_points(1);
             record.set_turn_wait(0);
-            record.current.image.frame = frames.frame(0);
+            record.current.image.frame = frames.selection(0);
         }
         call_transition(element.id);
         // SAFETY: the fixture retains its live element and frame set.
         unsafe {
-            assert_eq!(element.element_mut().next.image.frame, frames.frame(11));
+            assert_eq!(
+                element.element_mut().next.image.frame.raw(),
+                frames.frame(11)
+            );
         }
     });
 }
@@ -185,7 +188,7 @@ fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
                 let id = cx.elements().succ(flagship).expect("spawned group");
                 assert_eq!(cx.parent(id), uqm_rust::engine::battle::Parent::IpGroup(0));
                 let state = cx.element(id);
-                assert_eq!(cx.frame_number(state.current.image.frame), 1);
+                assert_eq!(cx.frame_number(state.current.image.frame.view()), 1);
                 let hook = state.death.expect("group movement hook");
                 assert!(matches!(hook, ElementHook::Native(_)));
                 uqm_rust::battle::process_native::invoke_element::invoke_element(cx, hook, id);

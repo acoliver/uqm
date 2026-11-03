@@ -151,7 +151,7 @@ pub(crate) mod engine {
                     .y
                     .wrapping_add(sine(i32::from(angle), i32::from(offset) << ONE_SHIFT));
             }
-            let frames = cx.frame_count(cx.element(w).next.image.frame);
+            let frames = cx.frame_count(cx.element(w).next.image.frame.view());
             let facings = angle_to_facing(FULL_CIRCLE as i32) as u16;
             if frames <= facings {
                 cx.element_mut(b).life = 2;

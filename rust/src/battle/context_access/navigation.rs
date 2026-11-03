@@ -210,18 +210,16 @@ impl Cx<'_> {
             EncounterGroup = group;
         }
     }
-    pub(crate) fn navigation_stars(&self) -> crate::engine::battle::views::Frame {
+    pub(crate) fn navigation_stars(&self) -> crate::engine::battle::views::FrameSelection {
         // SAFETY: the loaded navigation resource is retained throughout the context borrow.
-        unsafe { crate::engine::battle::views::Frame::from_native(stars_in_space) }
+        unsafe { crate::engine::battle::views::FrameSelection::retain(stars_in_space) }
     }
     pub(crate) fn group_icon(
         &self,
         group: NonNull<IP_GROUP>,
-    ) -> crate::engine::battle::views::Frame {
-        // SAFETY: the current group retains its loaded icon for this context borrow.
-        unsafe {
-            crate::engine::battle::views::Frame::from_native(self.group_record(group).melee_icon)
-        }
+    ) -> crate::engine::battle::views::FrameSelection {
+        let icon = self.group_record(group).melee_icon;
+        crate::engine::battle::views::FrameSelection::retain(icon)
     }
     pub(crate) fn set_group_image(&mut self, id: ElementId, group: NonNull<IP_GROUP>) {
         let record = self.group_record(group);
@@ -230,19 +228,15 @@ impl Cx<'_> {
         // SAFETY: the retained group owns its single icon frame slot.
         let (frame, frames) = unsafe {
             (
-                crate::engine::battle::views::Frame::from_native(record.melee_icon),
+                crate::engine::battle::views::FrameSelection::retain(record.melee_icon),
                 crate::engine::battle::views::Frames::native_shared(role, source, 1),
             )
         };
         self.set_single_frames(id, frames, frame);
     }
-    pub(crate) fn flagship_stamp_frame(&self) -> crate::engine::battle::views::Frame {
-        // SAFETY: the navigation authority retains the current flagship drawable.
-        unsafe {
-            crate::engine::battle::views::Frame::from_native(
-                self.navigation().Game_state.ShipStamp.frame,
-            )
-        }
+    pub(crate) fn flagship_stamp_frame(&self) -> crate::engine::battle::views::FrameSelection {
+        let frame = self.navigation().Game_state.ShipStamp.frame;
+        crate::engine::battle::views::FrameSelection::retain(frame)
     }
     pub(crate) fn set_flagship_image(&mut self, id: ElementId) {
         let frame = self.flagship_stamp_frame();
@@ -251,7 +245,7 @@ impl Cx<'_> {
         // SAFETY: the navigation authority retains this single-frame stamp slot.
         let frames =
             unsafe { crate::engine::battle::views::Frames::native_shared(role, source, 1) };
-        self.set_single_frames(id, frames, frame);
+        self.set_single_frames(id, frames, frame.clone());
         self.set_frame(id, false, frame);
     }
 }

@@ -56,7 +56,7 @@ fn descriptor_laser_and_limpet_launch() {
             with_rng(11, 0, || {
                 hooks::invoke_element_pointer((*e).preprocess_func.unwrap(), e)
             });
-            assert_eq!(frame_index((*e).next.image.frame), 1);
+            assert_eq!(frame_index((*e).next.image.frame.raw()), 1);
         }
     })
 }
@@ -157,7 +157,7 @@ fn warp_in_is_disabled_in_encounters_and_one_shot_in_melee() {
                 (5000 - i32::from(raw_y)) as SIZE,
             ))));
             assert_eq!(ship.ship_mut().ShipFacing, face);
-            assert_eq!(frame_index((*ship.ptr()).current.image.frame), face);
+            assert_eq!(frame_index((*ship.ptr()).current.image.frame.raw()), face);
             assert!((*ship.ptr()).target.is_none());
             assert_eq!(ship.descriptor_mut().callbacks()[1], 0);
             assert_eq!(

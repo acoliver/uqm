@@ -76,7 +76,7 @@ fn special_transform_checks_appearance_energy_and_cooldown() {
             let ship = fixture.ptr();
             fixture.ship_mut().cur_status_flags = SPECIAL as u16;
             (*ship).next.image.frames = fixture.frame_set(0);
-            (*ship).next.image.frame = fixture.descriptor_mut().ship_data.ship.view(0).raw();
+            (*ship).next.image.frame = fixture.descriptor_mut().ship_data.ship.view(0).to_owned();
 
             // Exactly enough energy is consumed, switching to Y form.
             fixture.preprocess();

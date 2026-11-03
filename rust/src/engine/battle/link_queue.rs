@@ -420,19 +420,21 @@ impl LinkQueue<'_, Starship> {
 /// Read-only resource projection borrowed from its owning ship queue.
 pub struct PickerResources<'a> {
     owner: &'a crate::engine::battle::record::ShipRecord,
+    icon: crate::engine::battle::frames::FrameSelection,
 }
 impl PickerResources<'_> {
     pub fn strings(&self) -> crate::graphics::native_abi::STRING {
         self.owner.race_strings
     }
-    pub fn icon(&self) -> crate::engine::battle::views::Frame {
-        crate::engine::battle::views::Frame(self.owner.icons)
+    pub fn icon(&self) -> crate::engine::battle::views::FrameRef<'_> {
+        self.icon.view()
     }
 }
 impl LinkQueue<'_, Starship> {
     pub fn resources(&self, id: LinkId<Starship>) -> PickerResources<'_> {
         PickerResources {
             owner: self.record(id),
+            icon: crate::engine::battle::frames::FrameSelection::retain(self.record(id).icons),
         }
     }
 }

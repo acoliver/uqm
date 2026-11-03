@@ -336,7 +336,7 @@ fn generators_spawn_at_exact_offsets_and_decrement_once_before_gate_opens() {
                     ship.descriptor_mut().characteristics.max_thrust,
                     7 - i as u16
                 );
-                assert_eq!(frame_index((*g).current.image.frame), 9);
+                assert_eq!(frame_index((*g).current.image.frame.raw()), 9);
                 hooks::invoke_element_pointer((*g).death_func.unwrap(), g);
                 assert_eq!(
                     ship.descriptor_mut().characteristics.max_thrust,
@@ -433,7 +433,7 @@ fn postprocess_spawns_comets_and_sentinels_only_while_generators_live() {
             let comet = battle::element(
                 *queued()
                     .iter()
-                    .find(|h| frame_index((*battle::element(**h)).current.image.frame) == 24)
+                    .find(|h| frame_index((*battle::element(**h)).current.image.frame.raw()) == 24)
                     .unwrap(),
             );
             (*comet).next = (*comet).current.clone();

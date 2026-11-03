@@ -127,22 +127,28 @@ impl Cx<'_> {
     pub fn ship_frame_set(&self, id: ShipId, role: usize) -> Frames {
         super::frames::Frames::ship(id, role.into(), self.ship_array(id, role).clone())
     }
-    pub fn ship_frame(&self, id: ShipId, role: usize) -> Frame {
-        self.ship_array(id, role).view(0)
+    pub fn ship_frame(&self, id: ShipId, role: usize) -> FrameRef<'_> {
+        self.ship_array(id, role)
+            .view(0)
+            .owned_by(super::frames::FrameOwner::Ship(id, role.into()))
     }
-    pub fn advance_frame(&self, frame: Frame) -> Frame {
-        Frame(self.inc_frame(frame.0))
+    pub fn advance_frame(&self, frame: FrameRef<'_>) -> FrameSelection {
+        frame.to_owned().with_raw(self.inc_frame(frame.raw()))
     }
-    pub fn equivalent_frame(&self, frame: Frame, source: Frame) -> Frame {
-        Frame(self.equ_frame(frame.0, source.0))
+    pub fn equivalent_frame(&self, frame: FrameRef<'_>, source: FrameRef<'_>) -> FrameSelection {
+        frame
+            .to_owned()
+            .with_raw(self.equ_frame(frame.raw(), source.raw()))
     }
-    pub fn absolute_frame(&self, frame: Frame, index: u16) -> Frame {
-        Frame(self.abs_frame(frame.0, index))
+    pub fn absolute_frame(&self, frame: FrameRef<'_>, index: u16) -> FrameSelection {
+        frame
+            .to_owned()
+            .with_raw(self.abs_frame(frame.raw(), index))
     }
-    pub fn frame_number(&self, frame: Frame) -> u16 {
-        self.frame_index(frame.0)
+    pub fn frame_number(&self, frame: FrameRef<'_>) -> u16 {
+        self.frame_index(frame.raw())
     }
-    pub fn silhouette_frame(&mut self, id: ElementId, frame: Frame, flags: u8) {
+    pub fn silhouette_frame(&mut self, id: ElementId, frame: FrameSelection, flags: u8) {
         self.silhouette(id, frame, flags);
     }
 }
@@ -153,16 +159,16 @@ impl Cx<'_> {
         Subject::decode(&self.b.kernel.elements[id])
     }
 
-    pub fn set_frame(&mut self, id: ElementId, next: bool, frame: Frame) {
+    pub fn set_frame(&mut self, id: ElementId, next: bool, frame: FrameSelection) {
         use crate::collections::observation::image;
         if next {
-            image!(frame;self.b.kernel.elements.record_mut(id).next.image.frame,frame.0);
+            image!(frame;self.b.kernel.elements.record_mut(id).next.image.frame,frame);
         } else {
-            image!(frame;self.b.kernel.elements.record_mut(id).current.image.frame,frame.0);
+            image!(frame;self.b.kernel.elements.record_mut(id).current.image.frame,frame);
         }
     }
-    pub fn set_single_frames(&mut self, id: ElementId, frames: Frames, frame: Frame) {
-        crate::collections::observation::image!(single; self.b.kernel.elements.record_mut(id).current.image.frames, frames, frame.0);
+    pub fn set_single_frames(&mut self, id: ElementId, frames: Frames, frame: FrameSelection) {
+        crate::collections::observation::image!(single; self.b.kernel.elements.record_mut(id).current.image.frames, frames, frame.raw());
     }
 
     pub fn set_frames(&mut self, id: ElementId, next: bool, frames: Frames) {
@@ -182,12 +188,19 @@ impl Cx<'_> {
         self.set_frame(id, true, visual.image.frame);
         self.set_frames(id, true, visual.image.frames);
     }
-    pub fn element_frame_set_first(&self, id: ElementId, next: bool) -> Frame {
-        Frame(self.frame_at(id, next))
+    pub fn element_frame_set_first(&self, id: ElementId, next: bool) -> FrameRef<'_> {
+        let record = &self.b.kernel.elements[id];
+        let image = if next {
+            &record.next.image
+        } else {
+            &record.current.image
+        };
+        image.frames.view(0)
     }
-    pub fn set_intersect_frame(&mut self, id: ElementId, frame: Frame) {
+    pub fn set_intersect_frame(&mut self, id: ElementId, frame: FrameSelection) {
         use crate::collections::observation::image;
-        image!(frame;self.b.kernel.elements.record_mut(id).IntersectControl.IntersectStamp.frame,frame.0);
+        image!(frame;self.b.kernel.elements.record_mut(id).IntersectControl.IntersectStamp.frame,frame.raw());
+        self.b.kernel.elements.record_mut(id).intersect_frame = frame;
     }
 }
 
@@ -273,27 +286,16 @@ impl Cx<'_> {
         // SAFETY: the current element's resource remains loaded.
         unsafe { IncFrameIndex(frame) }
     }
-    pub(super) fn frame_at(&self, element: ElementId, next: bool) -> FRAME {
-        let image = if next {
-            &self.b.kernel.elements[element].next.image
-        } else {
-            &self.b.kernel.elements[element].current.image
-        };
-        image.frames.view(0).raw()
-    }
     pub(super) fn frame_index(&self, frame: FRAME) -> u16 {
         // SAFETY: this battle retains the element's loaded frame resources.
         unsafe { crate::graphics::pixmap_abi::GetFrameIndex(frame.cast()) }
-    }
-    pub(super) fn shared_frame(&self, role: SharedFrames) -> FRAME {
-        self.shared_frame_set(role).view(0).raw()
     }
 }
 
 #[cfg(not(test))]
 impl Cx<'_> {
-    pub fn first_shared_frame(&self, role: SharedFrames) -> Frame {
-        Frame(self.shared_frame(role))
+    pub fn shared_frame_selection(&self, role: SharedFrames) -> FrameSelection {
+        self.shared_frame_set(role).view(0).to_owned()
     }
     pub fn copy_image_to_current(&mut self, id: ElementId, image: Image) {
         self.set_frame(id, false, image.frame);
@@ -350,21 +352,23 @@ impl Cx<'_> {
 
 #[cfg(not(test))]
 impl Cx<'_> {
-    pub fn frame_count(&self, frame: Frame) -> u16 {
+    pub fn frame_count(&self, frame: FrameRef<'_>) -> u16 {
         // SAFETY: opaque frames originate in retained battle resources, or are absent.
-        unsafe { crate::graphics::pixmap_abi::GetFrameCount(frame.0.cast()) }
+        unsafe { crate::graphics::pixmap_abi::GetFrameCount(frame.raw().cast()) }
     }
-    pub fn retreat_frame(&self, frame: Frame) -> Frame {
-        // SAFETY: the context retains the frame's drawable.
-        Frame(unsafe { crate::graphics::pixmap_abi::DecFrameIndex(frame.0.cast()).cast() })
+    pub fn retreat_frame(&self, frame: FrameRef<'_>) -> FrameSelection {
+        let raw = frame.raw().cast();
+        // SAFETY: the selection retains the frame's drawable.
+        let previous = unsafe { crate::graphics::pixmap_abi::DecFrameIndex(raw).cast() };
+        frame.to_owned().with_raw(previous)
     }
-    pub fn relative_frame(&self, frame: Frame, offset: i16) -> Frame {
-        // SAFETY: the context retains the frame's drawable.
-        Frame(unsafe {
-            crate::graphics::pixmap_abi::SetRelFrameIndex(frame.0.cast(), offset).cast()
-        })
+    pub fn relative_frame(&self, frame: FrameRef<'_>, offset: i16) -> FrameSelection {
+        let raw = frame.raw().cast();
+        // SAFETY: the selection retains the frame's drawable.
+        let relative = unsafe { crate::graphics::pixmap_abi::SetRelFrameIndex(raw, offset).cast() };
+        frame.to_owned().with_raw(relative)
     }
-    pub fn frame_rect(&self, frame: Frame) -> crate::graphics::native_abi::RECT {
+    pub fn frame_rect(&self, frame: FrameRef<'_>) -> crate::graphics::native_abi::RECT {
         let mut rect = crate::graphics::native_abi::RECT {
             corner: crate::graphics::native_abi::POINT { x: 0, y: 0 },
             extent: crate::graphics::native_abi::EXTENT {
@@ -374,20 +378,26 @@ impl Cx<'_> {
         };
         // SAFETY: the resource owner retains the frame and rect is local output.
         unsafe {
-            crate::graphics::drawable_abi::GetFrameRect(frame.0.cast(), &mut rect);
+            crate::graphics::drawable_abi::GetFrameRect(frame.raw().cast(), &mut rect);
         }
         rect
     }
-    pub fn set_ship_frame(&mut self, ship: ShipId, role: usize, resolution: usize, frame: Frame) {
+    pub fn set_ship_frame(
+        &mut self,
+        ship: ShipId,
+        role: usize,
+        resolution: usize,
+        frame: FrameSelection,
+    ) {
         assert!(resolution < 3, "invalid frame resolution {resolution}");
         let array = self.ship_array(ship, role);
-        array.replace_view(resolution, frame);
+        array.replace_view(resolution, frame.view());
     }
-    pub fn captain_special(&self, ship: ShipId) -> Frame {
-        Frame(self.desc(ship).ship_data.captain_control.special)
+    pub fn captain_special(&self, ship: ShipId) -> FrameRef<'_> {
+        self.desc(ship).ship_data.captain_control.special.view()
     }
-    pub fn set_captain_special(&mut self, ship: ShipId, frame: Frame) {
-        self.desc_mut(ship).ship_data.captain_control.special = frame.0;
+    pub fn set_captain_special(&mut self, ship: ShipId, frame: FrameSelection) {
+        self.desc_mut(ship).ship_data.captain_control.special = frame;
     }
     pub fn primitive_style(&self, id: ElementId) -> PrimitiveStyle {
         let index = usize::from(self.b.kernel.elements[id].PrimIndex);
@@ -476,11 +486,8 @@ impl Cx<'_> {
             color: primitive.color,
         }
     }
-    pub(crate) fn subject_intersect_frame(
-        &self,
-        subject: &Subject,
-    ) -> crate::engine::battle::views::Frame {
-        crate::engine::battle::views::Frame(subject.intersect.IntersectStamp.frame)
+    pub(crate) fn subject_intersect_frame<'a>(&self, subject: &'a Subject) -> FrameRef<'a> {
+        subject.intersect_frame.view()
     }
 }
 
@@ -562,7 +569,7 @@ pub(crate) unsafe fn observe_descriptor_record(
 
 #[cfg(not(test))]
 impl Cx<'_> {
-    pub(crate) fn frames_first(&self, frames: &Frames) -> Frame {
+    pub(crate) fn frames_first<'a>(&self, frames: &'a Frames) -> FrameRef<'a> {
         // SAFETY: the supplied frame set belongs to this context's loaded resources.
         frames.view(0)
     }
@@ -634,10 +641,13 @@ impl Cx<'_> {
 impl Cx<'_> {
     pub(crate) fn refresh_intersect_frame(&mut self, id: ElementId) {
         let e = self.b.kernel.elements.record_mut(id);
-        // SAFETY: the allocated element retains its loaded frame array during this projection.
-        unsafe {
-            crate::collections::observation::image!(frame; e.IntersectControl.IntersectStamp.frame, crate::graphics::pixmap_abi::SetEquFrameIndex(e.next.image.frames.view(0).raw(), e.next.image.frame));
-        }
+        let first = e.next.image.frames.view(0).to_owned();
+        // SAFETY: both selections retain their native allocations throughout this projection.
+        let raw = unsafe {
+            crate::graphics::pixmap_abi::SetEquFrameIndex(first.raw(), e.next.image.frame.raw())
+        };
+        e.intersect_frame = first.with_raw(raw);
+        crate::collections::observation::image!(frame; e.IntersectControl.IntersectStamp.frame, raw);
     }
 }
 
@@ -677,7 +687,7 @@ mod intersection_projection_tests {
                 crate::engine::battle::views::Frames::shared(
                     crate::engine::battle::frames::SharedFrames::Fixture(0),
                     crate::engine::battle::frames::FrameArray::fixture(
-                        [crate::engine::battle::views::Frame::ABSENT; 3],
+                        [std::ptr::null_mut(); 3],
                         (),
                     ),
                 );

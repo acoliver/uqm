@@ -56,13 +56,13 @@ pub(crate) mod engine {
 
     unsafe fn load_battle(d: &mut RaceDesc) -> bool {
         let load_animation_set = |keys: [_; 3]| {
-            use crate::engine::battle::{frames::FrameArray, views::Frame};
+            use crate::engine::battle::frames::FrameArray;
             let mut raw = [std::ptr::null_mut(); 3];
             if load_animation(raw.as_mut_ptr(), keys[0], keys[1], keys[2]) == 0 {
                 free_image(&raw mut raw);
                 return None;
             }
-            let array = FrameArray::retain(raw.map(|frame| Frame::from_native(frame)));
+            let array = FrameArray::from_native(raw);
             array.observe("animation");
             Some(array)
         };

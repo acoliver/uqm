@@ -187,7 +187,10 @@ pub(crate) mod engine {
                 cx.set_frame(
                     e,
                     true,
-                    cx.equivalent_frame(cx.ship_frame(ss, 0), cx.element(e).next.image.frame),
+                    cx.equivalent_frame(
+                        cx.ship_frame(ss, 0),
+                        cx.element(e).next.image.frame.view(),
+                    ),
                 );
                 cx.element_mut(e).flags |= CHANGING as u16;
             }
@@ -202,7 +205,10 @@ pub(crate) mod engine {
                     cx.set_frame(
                         e,
                         true,
-                        cx.equivalent_frame(cx.ship_frame(ss, 2), cx.element(e).next.image.frame),
+                        cx.equivalent_frame(
+                            cx.ship_frame(ss, 2),
+                            cx.element(e).next.image.frame.view(),
+                        ),
                     );
                     cx.element_mut(e).flags |= CHANGING as u16;
                     cx.ship_state_mut(ss).special_counter =

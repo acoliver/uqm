@@ -70,7 +70,8 @@ fn conflict_checks_player_ships_even_when_nonsolid() {
     with_elements(|cx, [subject, other, _]| {
         cx.element_mut(subject).current.location.x = 100;
         cx.element_mut(other).flags = NONSOLID as u16;
-        let control = crate::battle::gravity::control(cx, subject, super::views::Frame::ABSENT);
+        let control =
+            crate::battle::gravity::control(cx, subject, super::views::FrameSelection::ABSENT);
         assert_eq!(control.EndPoint.x, 25);
         assert_eq!(control.IntersectStamp.origin.x, 25);
         let calls = Cell::new(0);

@@ -144,7 +144,7 @@ fn descriptor_matches_all_c_initializer_fields_and_resources() {
                         && d.ship_data.special.view(i).is_absent()
                 );
             }
-            let captain = d.ship_data.captain_control;
+            let captain = &d.ship_data.captain_control;
             assert_eq!(
                 CStr::from_ptr(captain.captain_rsc),
                 c"ship.thraddash.graphics.captain"
@@ -154,7 +154,7 @@ fn descriptor_matches_all_c_initializer_fields_and_resources() {
                     && captain.turn.is_null()
                     && captain.thrust.is_null()
                     && captain.weapon.is_null()
-                    && captain.special.is_null()
+                    && captain.special.is_absent()
             );
             assert_eq!(
                 CStr::from_ptr(d.ship_data.victory_ditty_rsc),
@@ -217,7 +217,10 @@ fn horn_uses_next_location_exact_facing_speed_and_offsets_without_inheriting_vel
                     (i32::from(i16::MIN) + 5 + i32::from(sine(angle, 36))
                         - (i32::from(vy) >> VELOCITY_SHIFT)) as i16
                 );
-                assert_eq!((*e).current.image.frame, ship.raw_frame(1, facing as usize));
+                assert_eq!(
+                    (*e).current.image.frame.raw(),
+                    ship.raw_frame(1, facing as usize)
+                );
                 assert_eq!((*e).current.image.frames, ship.frame_set(1));
                 assert_eq!(
                     (*e).state_flags,
@@ -298,8 +301,8 @@ fn afterburner_inserts_owned_invisible_napalm_at_the_head_in_newest_first_order(
                 assert_eq!((*e).turn, 5);
                 assert_eq!((*e).thrust, 0);
                 assert_eq!((*e).playerNr, 1);
-                assert_eq!((*e).current.image.frame, ship.raw_frame(2, 9));
-                assert_eq!((*e).next.image.frame, (*e).current.image.frame);
+                assert_eq!((*e).current.image.frame.raw(), ship.raw_frame(2, 9));
+                assert_eq!((*e).next.image.frame.raw(), (*e).current.image.frame.raw());
                 assert_eq!((*e).next.image.frames, (*e).current.image.frames);
                 assert_eq!(((*e).current.location.x, (*e).current.location.y), (-9, 13));
                 assert_eq!(((*e).next.location.x, (*e).next.location.y), (-9, 13));
@@ -466,7 +469,7 @@ fn napalm_materializes_without_decaying_and_initializes_the_intersection_from_ne
                 uqm_rust::engine::battle::frames::SharedFrames::Fixture(0),
                 next_frames.array(),
             );
-            (*e).next.image.frame = next_frames.frame(7);
+            (*e).next.image.frame = next_frames.selection(7);
             (*e).current.location = POINT { x: -9, y: 13 };
             (*e).next.location = POINT { x: 42, y: -5 };
             SetVelocityComponents(&raw mut (*e).velocity, 1001, -4003);
@@ -488,8 +491,8 @@ fn napalm_materializes_without_decaying_and_initializes_the_intersection_from_ne
             assert_eq!((i.EndPoint.x, i.EndPoint.y), (10, -2));
             assert_eq!(i.IntersectStamp.frame, next_frames.frame(7));
             assert_eq!((*e).turn, 5);
-            assert_eq!((*e).current.image.frame, ship.raw_frame(2, 9));
-            assert_eq!((*e).next.image.frame, next_frames.frame(7));
+            assert_eq!((*e).current.image.frame.raw(), ship.raw_frame(2, 9));
+            assert_eq!((*e).next.image.frame.raw(), next_frames.frame(7));
         }
     })
 }
@@ -511,7 +514,7 @@ fn napalm_decay_wait_and_loop_boundary_match_c_including_last_frame_wrap() {
                 SetVelocityComponents(&raw mut (*e).velocity, 77, 99);
                 with_rng(3, 0, || hooks::invoke_element_pointer(callback, e));
                 assert_eq!((*e).turn, wait);
-                assert_eq!((*e).next.image.frame, ship.raw_frame(2, 9));
+                assert_eq!((*e).next.image.frame.raw(), ship.raw_frame(2, 9));
                 assert_eq!((*e).state_flags & CHANGING as u16, 0);
                 assert_eq!(velocity_fields(&(*e).velocity), [0; 9]);
             }
@@ -523,13 +526,13 @@ fn napalm_decay_wait_and_loop_boundary_match_c_including_last_frame_wrap() {
                 (6, 0, 5),
                 (0, 1, 9),
             ] {
-                (*e).current.image.frame = ship.raw_frame(2, frame);
-                (*e).next.image.frame = ship.raw_frame(2, 2);
+                (*e).current.image.frame = ship.frame(2, frame);
+                (*e).next.image.frame = ship.frame(2, 2);
                 (*e).life = life;
                 (*e).turn = 0;
                 (*e).state_flags &= !(CHANGING as u16);
                 with_rng(3, 0, || hooks::invoke_element_pointer(callback, e));
-                assert_eq!(frame_index((*e).next.image.frame), expected);
+                assert_eq!(frame_index((*e).next.image.frame.raw()), expected);
                 assert_eq!((*e).turn, 5);
                 assert_ne!((*e).state_flags & CHANGING as u16, 0);
                 assert_eq!((*e).life, life);
@@ -712,7 +715,7 @@ fn shared_ai_steers_before_thraddash_decides_whether_to_boost() {
             let input = with_rng(8, 0, || think(&mut ship, &mut c, 0, 1));
             assert_ne!(input & RIGHT as u8, 0);
             assert_eq!(input & (LEFT | SPECIAL) as u8, 0);
-            assert_eq!(frame_index((*ship.ptr()).next.image.frame), 1);
+            assert_eq!(frame_index((*ship.ptr()).next.image.frame.raw()), 1);
         }
     })
 }
@@ -826,7 +829,8 @@ fn napalm_and_horn_collide_with_battle_objects_without_optional_callback_skips()
                     (*weapon).state_flags |= PRE_PROCESS as u16;
                     (*weapon).IntersectControl.IntersectStamp.origin = POINT { x: 1000, y: 1000 };
                     (*weapon).IntersectControl.EndPoint = POINT { x: 1000, y: 1000 };
-                    (*weapon).IntersectControl.IntersectStamp.frame = (*weapon).next.image.frame;
+                    (*weapon).IntersectControl.IntersectStamp.frame =
+                        (*weapon).next.image.frame.raw();
                     target.make_opaque(0);
                     let t = target.ptr();
                     (*t).state_flags = flags as u16 | PRE_PROCESS as u16;

@@ -165,7 +165,7 @@ pub(crate) mod engine {
             };
         } else if life < DESTRUCT_SWITCH {
             let color = cx.primitive_style(e).color;
-            let frame = cx.advance_frame(cx.element(e).current.image.frame);
+            let frame = cx.advance_frame(cx.element(e).current.image.frame.view());
             cx.set_frame(e, true, frame);
             for (from, to) in [
                 (rgb15(31, 31, 31), rgb15(31, 31, 10)),
@@ -191,10 +191,10 @@ pub(crate) mod engine {
                 cx.element_mut(d).flags = (APPEARING | FINITE_LIFE | NONSOLID) as u16;
                 cx.primitive_style_mut(d).kind = gfx_object_STAMPFILL_PRIM as GRAPHICS_PRIM;
                 cx.primitive_style_mut(d).color = rgb15(31, 31, 31);
-                let frame = cx.ship_frame(ss, 2);
+                let frame = cx.ship_frame(ss, 2).to_owned();
                 cx.set_frames(d, false, cx.ship_frame_set(ss, 2));
-                cx.set_frame(d, false, frame);
-                cx.element_mut(d).life = cx.frame_count(frame);
+                cx.set_frame(d, false, frame.clone());
+                cx.element_mut(d).life = cx.frame_count(frame.view());
                 cx.element_mut(d).current.location = cx.element(e).current.location;
                 cx.element_mut(d).pre = Some(ElementHook::Native(destruct_preprocess));
                 cx.element_mut(d).post = None;
@@ -292,9 +292,11 @@ pub(crate) mod engine {
         } else {
             let weapon = concerns.objects[ENEMY_WEAPON_INDEX as usize];
             let enemy = concerns.objects[ENEMY_SHIP_INDEX as usize];
-            let captain = cx.captain_special(ss);
-            if !cx.ship_frame(ss, 2).is_absent()
-                && (i32::from(cx.frame_count(captain)) - i32::from(cx.frame_number(captain)) > 5
+            let captain = cx.captain_special(ss).to_owned();
+            if !cx.ship_frame(ss, 2).to_owned().is_absent()
+                && (i32::from(cx.frame_count(captain.view()))
+                    - i32::from(cx.frame_number(captain.view()))
+                    > 5
                     || (enemy.object.is_some() && enemy.which_turn <= 4)
                     || weapon.object.is_some_and(|threat| {
                         (cx.element(threat).flags & PLAYER_SHIP as u16 != 0
@@ -317,8 +319,11 @@ pub(crate) mod engine {
     pub(crate) fn shofixti_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
         if (cx.ship_state(ss).status ^ cx.ship_state(ss).old_status) & SPECIAL as u16 != 0 {
             let captain = cx.advance_frame(cx.captain_special(ss));
-            cx.set_captain_special(ss, captain);
-            if i32::from(cx.frame_count(captain)) - i32::from(cx.frame_number(captain)) == 3 {
+            cx.set_captain_special(ss, captain.clone());
+            if i32::from(cx.frame_count(captain.view()))
+                - i32::from(cx.frame_number(captain.view()))
+                == 3
+            {
                 self_destruct(cx, cx.ship_element(ss));
             }
         }

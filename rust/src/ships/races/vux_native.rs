@@ -30,7 +30,7 @@ pub(crate) mod engine {
             face = (i32::from(original) + i32::from(delta)) as COUNT;
             cx.element_mut(e).velocity.set_vector(25, face);
         }
-        let frame = cx.advance_frame(cx.element(e).next.image.frame);
+        let frame = cx.advance_frame(cx.element(e).next.image.frame.view());
         cx.set_frame(e, true, frame);
         cx.element_mut(e).flags |= CHANGING as u16;
     }
@@ -197,7 +197,7 @@ pub(crate) mod engine {
                         .wrapping_sub(cx.element(e).current.location.y);
                     face =
                         normalize_facing(angle_to_facing(i32::from(crate::math::arctan(dx, dy))));
-                    let frame = cx.absolute_frame(cx.element(e).current.image.frame, face);
+                    let frame = cx.absolute_frame(cx.element(e).current.image.frame.view(), face);
                     cx.set_frame(e, false, frame);
                     let x = i32::from(cx.element(e).current.location.x) & !((1 << ONE_SHIFT) - 1);
                     let y = i32::from(cx.element(e).current.location.y) & !((1 << ONE_SHIFT) - 1);
@@ -228,7 +228,7 @@ pub(crate) mod engine {
                 cx.init_intersect(e);
                 let frame = cx.equivalent_frame(
                     cx.element_frame_set_first(e, true),
-                    cx.element(e).next.image.frame,
+                    cx.element(e).next.image.frame.view(),
                 );
                 cx.set_intersect_frame(e, frame);
                 cx.ship_state_mut(ss).facing = face;

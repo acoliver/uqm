@@ -2,7 +2,7 @@
 use crate::engine::battle::record::CHARACTERISTIC_STUFF;
 use crate::engine::battle::record::VELOCITY_DESC as VelocityDesc;
 use crate::engine::battle::{CollisionHook, ElementHook};
-use crate::graphics::native_abi::{FRAME, POINT};
+use crate::graphics::native_abi::POINT;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Laser {
@@ -26,47 +26,10 @@ pub struct FlagshipConfig {
     pub hyperspace: bool,
 }
 
-#[repr(transparent)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Frame(pub(super) FRAME);
-pub use crate::engine::battle::frames::{Frames, SharedFrames};
-impl Frame {
-    pub const ABSENT: Self = Self(std::ptr::null_mut());
-    pub fn is_absent(self) -> bool {
-        self.0.is_null()
-    }
-}
-impl Frame {
-    pub fn raw(self) -> FRAME {
-        self.0
-    }
-}
-impl Frame {
-    pub(in crate::engine::battle) fn retained(
-        self,
-        leases: &[crate::graphics::drawable_abi::DrawableLease],
-    ) -> Self {
-        if self.is_absent() {
-            return Self::ABSENT;
-        }
-        Self(
-            leases
-                .iter()
-                .find_map(|lease| lease.frame_at_address(self.0))
-                .unwrap_or_else(|| panic!("frame has no owning drawable lease")),
-        )
-    }
-}
-impl Frame {
-    /// # Safety
-    /// Retain the frame's loaded drawable for every consumer of the returned handle.
-    pub unsafe fn from_native(frame: FRAME) -> Self {
-        Self(frame)
-    }
-}
+pub use crate::engine::battle::frames::{FrameRef, FrameSelection, Frames, SharedFrames};
 #[derive(Clone)]
 pub struct Image {
-    pub frame: Frame,
+    pub frame: FrameSelection,
     pub frames: Frames,
 }
 #[derive(Clone)]
@@ -207,6 +170,7 @@ pub struct Subject {
     pub parent: crate::engine::battle::Parent,
     pub(super) intersect: crate::engine::battle::record::INTERSECT_CONTROL,
     pub(super) primitive: u16,
+    pub(super) intersect_frame: FrameSelection,
 }
 impl std::ops::Deref for Subject {
     type Target = ElementState;

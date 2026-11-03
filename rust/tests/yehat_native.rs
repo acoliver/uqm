@@ -63,15 +63,14 @@ fn shield_uses_equivalent_facing_expires_and_recharges_on_postprocess() {
         unsafe {
             let mut ship = Ship::new(&_battle, SPECIES_ID_YEHAT_ID, 0);
             let e = ship.ptr();
-            (*e).next.image.frame =
-                SetAbsFrameIndex(ship.descriptor_mut().ship_data.ship.view(0).raw(), 7);
+            (*e).next.image.frame = ship.frame(0, 7);
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
             with_rng(2, 0, || ship.preprocess());
             assert_eq!((*e).life, 11);
             assert_eq!(ship.ship_mut().special_counter, 2);
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 10);
             assert_eq!((*e).next.image.frames, ship.frame_set(2));
-            assert_eq!(frame_index((*e).next.image.frame), 7);
+            assert_eq!(frame_index((*e).next.image.frame.raw()), 7);
             ship.postprocess();
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 7);
             ship.ship_mut().special_counter = 0;
@@ -86,7 +85,7 @@ fn shield_uses_equivalent_facing_expires_and_recharges_on_postprocess() {
             }
             assert_eq!((*e).life, 1);
             assert_eq!((*e).next.image.frames, ship.frame_set(0));
-            assert_eq!(frame_index((*e).next.image.frame), 7);
+            assert_eq!(frame_index((*e).next.image.frame.raw()), 7);
             ship.postprocess();
             assert_eq!(ship.ship_mut().special_counter, 0);
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 4);

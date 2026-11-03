@@ -93,11 +93,11 @@ pub(crate) mod engine {
         let index = (NUM_PLASMAS
             - ((i32::from(cx.element(e).life) + PLASMA_DURATION - 1) / PLASMA_DURATION))
             as u16;
-        if index != cx.frame_number(cx.element(e).next.image.frame) {
+        if index != cx.frame_number(cx.element(e).next.image.frame.view()) {
             cx.set_frame(
                 e,
                 true,
-                cx.absolute_frame(cx.element(e).next.image.frame, index),
+                cx.absolute_frame(cx.element(e).next.image.frame.view(), index),
             );
             cx.element_mut(e).flags |= CHANGING as u16;
         }
@@ -118,9 +118,17 @@ pub(crate) mod engine {
 
     pub(crate) fn plasma_blast_preprocess(cx: &mut Cx<'_>, e: ElementId) {
         if cx.element(e).life >= u16::from(cx.element(e).thrust) {
-            cx.set_frame(e, true, cx.advance_frame(cx.element(e).next.image.frame));
+            cx.set_frame(
+                e,
+                true,
+                cx.advance_frame(cx.element(e).next.image.frame.view()),
+            );
         } else {
-            cx.set_frame(e, true, cx.retreat_frame(cx.element(e).next.image.frame));
+            cx.set_frame(
+                e,
+                true,
+                cx.retreat_frame(cx.element(e).next.image.frame.view()),
+            );
         }
         if cx.target(e).is_some() {
             let target = cx.target(e).unwrap_or_else(|| panic!("tracked target"));

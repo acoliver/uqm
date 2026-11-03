@@ -63,7 +63,7 @@ impl Cx<'_> {
                 element,
                 self.equivalent_frame(
                     self.element_frame_set_first(element, false),
-                    self.element(element).current.image.frame,
+                    self.element(element).current.image.frame.view(),
                 ),
             )
         };
@@ -104,7 +104,7 @@ impl Cx<'_> {
     pub(crate) fn silhouette(
         &mut self,
         source: ElementId,
-        frame: crate::engine::battle::views::Frame,
+        frame: crate::engine::battle::views::FrameSelection,
         flags: u8,
     ) {
         self.silhouette_at(source, POINT { x: 0, y: 0 }, frame, flags);
@@ -114,7 +114,7 @@ impl Cx<'_> {
         &mut self,
         source: ElementId,
         origin: POINT,
-        frame: crate::engine::battle::views::Frame,
+        frame: crate::engine::battle::views::FrameSelection,
         flags: u8,
     ) {
         let mut stamp = STAMP {
@@ -184,7 +184,7 @@ impl Cx<'_> {
             self.init_intersect(id);
             let frame = self.equivalent_frame(
                 self.element_frame_set_first(id, true),
-                self.element(id).next.image.frame,
+                self.element(id).next.image.frame.view(),
             );
             self.set_intersect_frame(id, frame);
         }
@@ -319,7 +319,7 @@ mod tactrans_native_access {
                     height: 0,
                 },
             };
-            let frame = self.ship_frame(owner, 0).raw();
+            let frame = self.ship_frame(owner, 0).to_owned().raw();
             // SAFETY: the ship owns the loaded frame; the rectangle is local output.
             unsafe {
                 GetFrameRect(frame, &mut rect);
@@ -634,7 +634,7 @@ impl Cx<'_> {
         // SAFETY: the shared stars frame and its frame set remain loaded throughout the battle.
         unsafe {
             let frame =
-                crate::engine::battle::views::Frame::from_native(DecFrameIndex(stars_in_space));
+                crate::engine::battle::views::FrameSelection::retain(DecFrameIndex(stars_in_space));
             let frames = crate::engine::battle::views::Frames::native_shared(
                 crate::engine::battle::views::SharedFrames::Stars,
                 std::ptr::NonNull::new_unchecked(&raw mut stars_in_space),

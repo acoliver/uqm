@@ -87,11 +87,11 @@ impl<'a> Ship<'a> {
         let special_frames = FrameSet::new(10);
         let captain = FrameSet::new(20);
         desc.ship_data.special = special_frames.array();
-        desc.ship_data.captain_control.special = captain.frame(14);
+        desc.ship_data.captain_control.special = captain.selection(14);
         let frames = inner.frame_set(0);
         let el = inner.element_mut();
         el.current.image.frames = frames;
-        el.current.image.frame = ship_frames.frame(0);
+        el.current.image.frame = ship_frames.selection(0);
         el.next = el.current.clone();
         el.IntersectControl.IntersectStamp.frame = ship_frames.frame(0);
         el.IntersectControl.EndPoint = POINT { x: 1000, y: 1000 };
@@ -129,7 +129,7 @@ impl<'a> Ship<'a> {
             .descriptor_mut()
             .ship_data
             .captain_control
-            .special = self.captain.frame(16);
+            .special = self.captain.selection(16);
         self.inner.ship_mut().old_status_flags = 0;
         self.inner.ship_mut().cur_status_flags = SPECIAL as u16;
         let old = shared::tail();
@@ -296,13 +296,13 @@ fn complete_descriptor_and_damaged_tanaka_katana_variant_are_fresh_each_call() {
                     c"ship.shofixti.graphics.captain"
                 }
             );
-            let cap = d.ship_data.captain_control;
+            let cap = &d.ship_data.captain_control;
             assert!(
                 cap.background.is_null()
                     && cap.turn.is_null()
                     && cap.thrust.is_null()
                     && cap.weapon.is_null()
-                    && cap.special.is_null()
+                    && cap.special.is_absent()
             );
             assert_eq!(
                 CStr::from_ptr(d.ship_data.victory_ditty_rsc),
@@ -358,9 +358,9 @@ fn darts_use_next_location_exact_facing_offset_speed_and_failure_count() {
                 (10, 1, 1, 1)
             );
             assert_eq!((*dart).playerNr, 1);
-            assert_eq!(frame_index((*dart).current.image.frame), facing % 16);
+            assert_eq!(frame_index((*dart).current.image.frame.raw()), facing % 16);
             assert_eq!(
-                (*dart).current.image.frame,
+                (*dart).current.image.frame.raw(),
                 ship.weapon_frames.frame((facing % 16) as usize)
             );
             assert_eq!((*dart).current.image.frames, ship.inner.frame_set(1));
@@ -420,7 +420,7 @@ fn glory_ai_toggles_the_switch_and_checks_all_deterministic_threat_branches() {
                 .descriptor_mut()
                 .ship_data
                 .captain_control
-                .special = ship.captain.frame(20 - remaining);
+                .special = ship.captain.selection(20 - remaining);
             ship.inner.descriptor_mut().ship_data.special = if special_available {
                 ship.special_frames.array()
             } else {
@@ -463,7 +463,7 @@ fn glory_ai_intercept_damage_and_random_parity_short_circuit_exactly() {
             .descriptor_mut()
             .ship_data
             .captain_control
-            .special = ship.captain.frame(15);
+            .special = ship.captain.selection(15);
         (*threat.ptr()).state_flags = 0;
         assert_ne!(
             shared::plot_intercept(threat.ptr(), ship.ptr(), 2, 0),
@@ -518,6 +518,7 @@ fn both_switch_edges_advance_and_only_the_third_remaining_frame_detonates() {
                         .ship_data
                         .captain_control
                         .special
+                        .raw()
                 ),
                 index
             );
@@ -722,7 +723,7 @@ fn glory_flash_switch_and_explosion_color_sequence_use_twelve_frame_ship_death()
         assert_eq!((*explosion).mass, 0);
         assert_eq!((*explosion).parent, (*ship.ptr()).parent);
         assert_eq!(
-            (*explosion).current.image.frame,
+            (*explosion).current.image.frame.raw(),
             ship.special_frames.frame(0)
         );
         assert_eq!((*explosion).current.image.frames, ship.inner.frame_set(2));
@@ -744,10 +745,10 @@ fn glory_flash_switch_and_explosion_color_sequence_use_twelve_frame_ship_death()
             (165, 0, 0, 255),
             (165, 0, 0, 255),
         ] {
-            (*explosion).next.image.frame = ship.special_frames.frame(7);
+            (*explosion).next.image.frame = ship.special_frames.selection(7);
             with_rng(3, 0, || hooks::invoke_element_pointer(animate, explosion));
             assert_eq!(
-                frame_index((*explosion).next.image.frame),
+                frame_index((*explosion).next.image.frame.raw()),
                 1,
                 "advance current, not next frame"
             );

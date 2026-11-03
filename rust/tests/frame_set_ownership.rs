@@ -1,6 +1,5 @@
 use uqm_rust::engine::battle::{
     frames::{FrameArray, FrameOwner, FrameSetRef, Frames, Role, SharedFrames},
-    views::Frame,
     Battle,
 };
 use uqm_rust::graphics::{
@@ -14,14 +13,14 @@ fn parentless_image_retains_frames_after_descriptor_and_owner_are_gone() {
     // SAFETY: the fixture owns the registered drawable and serializes its graphics calls.
     unsafe {
         let drawable = AllocDrawable(1);
-        let frame = Frame::from_native(CaptureDrawable(drawable));
+        let frame = CaptureDrawable(drawable);
         let mut owner = Battle::new(0);
         owner.reset_ship_capacity(0, 1);
         let mut ships = owner.ships(0);
         let link = ships.alloc().unwrap();
         let ship = ships.ship_id(link);
         let mut descriptor = uqm_rust::engine::battle::record::RaceDescriptor::EMPTY;
-        descriptor.ship_data.weapon = FrameArray::retain([frame; 3]);
+        descriptor.ship_data.weapon = FrameArray::from_native([frame; 3]);
         let image = FrameSetRef::ship(ship, Role::Weapon, descriptor.ship_data.weapon.clone());
         drop(descriptor);
         drop(owner);
@@ -31,7 +30,7 @@ fn parentless_image_retains_frames_after_descriptor_and_owner_are_gone() {
         drop(image);
         assert_eq!((*copy.view(2).raw()).parent, drawable);
         drop(copy);
-        assert!(std::panic::catch_unwind(|| retain_frame_allocations(&[frame.raw()])).is_err());
+        assert!(std::panic::catch_unwind(|| retain_frame_allocations(&[frame])).is_err());
     }
 }
 
@@ -59,8 +58,8 @@ fn copy_view_then_release_owner_keeps_each_drawable_alive() {
     // SAFETY: every native address comes from one of the serialized registered allocations.
     unsafe {
         let drawables = std::array::from_fn::<_, 3, _>(|_| AllocDrawable(1));
-        let views = drawables.map(|d| Frame::from_native(CaptureDrawable(d)));
-        let owner = FrameArray::retain(views);
+        let views = drawables.map(|d| CaptureDrawable(d));
+        let owner = FrameArray::from_native(views);
         for drawable in drawables {
             assert_ne!(DestroyDrawable(drawable), 0);
         }
@@ -77,7 +76,7 @@ fn copy_view_then_release_owner_keeps_each_drawable_alive() {
         assert_eq!((*last.view(2).raw()).parent, drawables[2]);
         drop(last);
         for view in views {
-            assert!(std::panic::catch_unwind(|| retain_frame_allocations(&[view.raw()])).is_err());
+            assert!(std::panic::catch_unwind(|| retain_frame_allocations(&[view])).is_err());
         }
     }
 }

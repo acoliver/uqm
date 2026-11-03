@@ -188,7 +188,7 @@ pub(crate) mod engine {
                 facing = normalize_facing(angle_to_facing(i32::from(crate::math::arctan(dx, dy))));
                 let delta_facing = normalize_facing(
                     i32::from(facing)
-                        - i32::from(cx.frame_number(cx.element(target).current.image.frame)),
+                        - i32::from(cx.frame_number(cx.element(target).current.image.frame.view())),
                 );
                 if i32::from(delta_facing) > angle_to_facing(HALF_CIRCLE as i32 - OCTANT as i32)
                     && i32::from(delta_facing) < angle_to_facing(HALF_CIRCLE as i32 + OCTANT as i32)
@@ -272,7 +272,7 @@ pub(crate) mod engine {
                 + i32::from(sine(i32::from(angle), offset)))
                 as COORD;
             cx.set_frames(dog, false, cx.ship_frame_set(ss, 2));
-            cx.set_frame(dog, false, cx.ship_frame(ss, 2));
+            cx.set_frame(dog, false, cx.ship_frame(ss, 2).to_owned());
             cx.element_mut(dog).velocity.set_vector(
                 i32::from(DOGGY_SPEED),
                 normalize_facing(angle_to_facing(i32::from(angle))),

@@ -47,7 +47,7 @@ fn descriptor_and_fusion_match_c() {
             let e = battle::element(h);
             assert_eq!(((*e).life, (*e).hits, (*e).mass), (20, 10, 6));
             assert_eq!((*e).thrust, 8);
-            assert_eq!(frame_index((*e).current.image.frame), 11);
+            assert_eq!(frame_index((*e).current.image.frame.raw()), 11);
             assert_eq!(velocity(&(*e).velocity), toward(20 << ONE_SHIFT, 11));
             assert!((*e).preprocess_func.is_none());
             battle_context::dispose(h);
@@ -77,7 +77,7 @@ fn fighters_launch_left_then_right_and_return_crew() {
                 assert_eq!(((*e).life, (*e).hits, (*e).mass), (400, 1, 0));
                 assert_eq!((*e).thrust, 7);
                 assert_eq!((*e).turn, if i == 0 { LEFT as u8 } else { RIGHT as u8 });
-                assert_eq!(frame_index((*e).current.image.frame), face);
+                assert_eq!(frame_index((*e).current.image.frame.raw()), face);
                 assert_eq!(velocity(&(*e).velocity), toward(8 << ONE_SHIFT, face));
                 (*e).next = (*e).current.clone();
                 with_rng(7, 0, || {
@@ -196,7 +196,7 @@ fn fighter_planet_collision_clones_and_deflects_without_rng() {
             let clone = battle::element(battle::tail());
             assert_ne!(clone, e);
             assert_eq!((*e).life, 0);
-            assert_eq!(frame_index((*clone).next.image.frame), 4);
+            assert_eq!(frame_index((*clone).next.image.frame.raw()), 4);
             assert_eq!(velocity(&(*clone).velocity), toward(8 << ONE_SHIFT, 4));
             assert_ne!((*clone).state_flags & CHANGING as u16, 0);
         }

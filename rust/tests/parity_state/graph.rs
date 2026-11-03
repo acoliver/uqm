@@ -156,8 +156,8 @@ pub(super) fn frame_fields(
     };
     let pointer: *mut std::ffi::c_void = ptr::from_mut(frame).cast();
     // SAFETY: native retains this registered drawable through every image observation.
-    let view = unsafe { uqm_rust::engine::battle::views::Frame::from_native(pointer.cast()) };
-    let array = uqm_rust::engine::battle::frames::FrameArray::retain([view; 3]);
+    let view = uqm_rust::engine::battle::views::FrameSelection::retain(pointer.cast());
+    let array = uqm_rust::engine::battle::frames::FrameArray::retain([view.view(); 3]);
     let set = uqm_rust::engine::battle::frames::Frames::shared(
         uqm_rust::engine::battle::frames::SharedFrames::Fixture(0),
         array.clone(),
@@ -173,9 +173,9 @@ pub(super) fn frame_fields(
         frames: vec![pointer as usize; 3],
         role: "test-views".into(),
     });
-    observation::assign_frame(&mut first.current.frame, pointer);
+    observation::assign_frame(&mut first.current.frame, view.clone());
     observation::assign_set(&mut first.current.frames, set.clone(), None);
-    observation::assign_frame(&mut first.next.frame, pointer);
+    observation::assign_frame(&mut first.next.frame, view.clone());
     observation::assign_set(&mut first.next.frames, set.clone(), None);
     observation::assign_frame(&mut first.intersect_control.intersect_stamp.frame, pointer);
     let (fields, _) = snapshot(directory);
@@ -194,13 +194,19 @@ pub(super) fn frame_fields(
     }
     assert_eq!(fields["elements.1.current.frame.owner"], "none");
     assert_eq!(fields["elements.2.current.farray.index"], "0");
-    observation::assign_frame(&mut first.current.frame, ptr::null_mut());
+    observation::assign_frame(
+        &mut first.current.frame,
+        uqm_rust::engine::battle::frames::FrameSelection::ABSENT,
+    );
     observation::assign_set(
         &mut first.current.frames,
         uqm_rust::engine::battle::frames::Frames::ABSENT,
         None,
     );
-    observation::assign_frame(&mut first.next.frame, ptr::null_mut());
+    observation::assign_frame(
+        &mut first.next.frame,
+        uqm_rust::engine::battle::frames::FrameSelection::ABSENT,
+    );
     observation::assign_set(
         &mut first.next.frames,
         uqm_rust::engine::battle::frames::Frames::ABSENT,

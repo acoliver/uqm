@@ -213,7 +213,7 @@ pub(crate) fn explosion_flash(life: COUNT, y: COORD, mut draw: impl FnMut(Color,
 #[allow(non_snake_case)]
 pub(crate) mod engine {
     use super::*;
-    use crate::engine::battle::{Cx, ElementId};
+    use crate::engine::battle::{views::FrameSelection, Cx, ElementId};
     use crate::ships::native::rel_frame_index;
 
     /// # Safety
@@ -250,7 +250,7 @@ pub(crate) mod engine {
         for (flag, base) in [
             (THRUST, (*captain).thrust),
             (WEAPON, (*captain).weapon),
-            (SPECIAL, (*captain).special),
+            (SPECIAL, (*captain).special.raw()),
         ] {
             if delta & flag as u16 != 0 {
                 let frame = if pass == 1 {
@@ -293,7 +293,7 @@ pub(crate) mod engine {
     /// # Safety
     /// Ship, captain assets, and the active status context must be live.
     pub unsafe fn draw_captains_window(cx: &mut Cx<'_>, ship: crate::engine::battle::ShipId) {
-        let mut captain = *cx.captain_pointer(ship);
+        let mut captain = (*cx.captain_pointer(ship)).clone();
         let mut frame = captain.background;
         if !frame.is_null() {
             frame = SetAbsFrameIndex(frame, 0);
@@ -305,9 +305,9 @@ pub(crate) mod engine {
             frame = rel_frame_index(frame, 3);
             captain.weapon = frame;
             frame = rel_frame_index(frame, 3);
-            captain.special = frame;
+            captain.special = FrameSelection::retain(frame);
         }
-        *cx.captain_pointer(ship) = captain;
+        *cx.captain_pointer(ship) = captain.clone();
         BatchGraphics();
         let y = cx.status_offset(ship);
         let height = (ScreenHeight >> 1) as SIZE;
