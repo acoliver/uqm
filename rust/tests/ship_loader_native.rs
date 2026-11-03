@@ -66,15 +66,13 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
         unsafe {
             log_init(100);
             uqm_rust::state::ffi::rust_init_game_state();
-            (*uqm_rust::ships::native::abi::GLOBDATA::current())
-                .SIS_state
-                .ModuleSlots = [255; 16];
-            (*uqm_rust::ships::native::abi::GLOBDATA::current())
-                .SIS_state
-                .DriveSlots = [255; 11];
-            (*uqm_rust::ships::native::abi::GLOBDATA::current())
-                .SIS_state
-                .JetSlots = [255; 8];
+            (*uqm_rust::engine::WorldData::current())
+                .flagship
+                .module_slots = [255; 16];
+            (*uqm_rust::engine::WorldData::current())
+                .flagship
+                .drive_slots = [255; 11];
+            (*uqm_rust::engine::WorldData::current()).flagship.jet_slots = [255; 8];
             uio_bridge::uio_init();
             let repository = uio_bridge::uio_openRepository(0);
             let mount = uio_bridge::uio_mountDir(

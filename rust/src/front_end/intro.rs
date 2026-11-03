@@ -131,7 +131,8 @@ pub(crate) mod runtime {
     }
 
     unsafe fn generate_sis(state: &mut PresentationState) {
-        let old_context = SetContext(OffScreenContext);
+        use crate::engine::{Kernel, WorldData};
+        let old_context = SetContext((*Kernel::current()).off_screen_context);
         let skeleton =
             CaptureDrawable(LoadGraphicInstance(SISSKEL_MASK_PMAP_ANIM.as_ptr().cast()).cast());
         let modules =
@@ -155,22 +156,22 @@ pub(crate) mod runtime {
             frame: SetAbsFrameIndex(skeleton, 0),
         };
         DrawStamp(&mut stamp);
-        let sis_state = ptr::addr_of!((*crate::ships::native::abi::GLOBDATA::current()).SIS_state);
+        let sis_state = ptr::addr_of!((*WorldData::current()).flagship);
         for (pieces, x, y, slots) in [
             (
-                ptr::addr_of!((*sis_state).DriveSlots).cast::<BYTE>(),
+                ptr::addr_of!((*sis_state).drive_slots).cast::<BYTE>(),
                 DRIVE_TOP_X,
                 DRIVE_TOP_Y,
                 NUM_DRIVE_SLOTS,
             ),
             (
-                ptr::addr_of!((*sis_state).JetSlots).cast::<BYTE>(),
+                ptr::addr_of!((*sis_state).jet_slots).cast::<BYTE>(),
                 JET_TOP_X,
                 JET_TOP_Y,
                 NUM_JET_SLOTS,
             ),
             (
-                ptr::addr_of!((*sis_state).ModuleSlots).cast::<BYTE>(),
+                ptr::addr_of!((*sis_state).module_slots).cast::<BYTE>(),
                 MODULE_TOP_X,
                 MODULE_TOP_Y,
                 NUM_MODULE_SLOTS,
@@ -230,13 +231,10 @@ pub(crate) mod runtime {
     }
 
     unsafe extern "C" fn do_presentation(raw: *mut c_void) -> BOOLEAN {
+        use crate::engine::WorldData;
         let state = &mut *raw.cast::<PresentationState>();
         if menu(KEY_MENU_CANCEL)
-            || (*crate::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .CurrentActivity
-                & CHECK_ABORT as u16
-                != 0
+            || (*WorldData::current()).game.current_activity & CHECK_ABORT as u16 != 0
         {
             crate::automation::ending::presentation_cancelled();
             return 0;
@@ -686,6 +684,7 @@ pub(crate) mod runtime {
     }
 
     unsafe fn show_slides(table: STRING, ending: bool) -> BOOLEAN {
+        use crate::engine::Kernel;
         let mut state: PresentationState = std::mem::zeroed();
         state.SlideShow = table;
         if state.SlideShow.is_null() {
@@ -698,7 +697,7 @@ pub(crate) mod runtime {
         }
         state.SlideShow = SetAbsStringTableIndex(state.SlideShow, 0);
         state.OperIndex = 0;
-        let old_context = SetContext(ScreenContext);
+        let old_context = SetContext((*Kernel::current()).screen_context);
         let mut old_rect: RECT = std::mem::zeroed();
         GetContextClipRect(&mut old_rect);
         let old_font = SetContextFont(ptr::null_mut());
@@ -727,6 +726,7 @@ pub(crate) mod runtime {
     }
 
     unsafe extern "C" fn video_input(raw: *mut c_void) -> BOOLEAN {
+        use crate::engine::WorldData;
         let state = &mut *raw.cast::<VideoState>();
         if PlayingLegacyVideo(state.CurVideo) == 0 {
             return 0;
@@ -734,11 +734,7 @@ pub(crate) mod runtime {
         if menu(KEY_MENU_SELECT)
             || menu(KEY_MENU_CANCEL)
             || menu(KEY_MENU_SPECIAL)
-            || (*crate::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .CurrentActivity
-                & CHECK_ABORT as u16
-                != 0
+            || (*WorldData::current()).game.current_activity & CHECK_ABORT as u16 != 0
         {
             return 0;
         }
@@ -763,11 +759,12 @@ pub(crate) mod runtime {
     }
 
     unsafe fn fade_clear_screen() {
+        use crate::engine::Kernel;
         SleepThreadUntil(FadeScreen(
             ScreenFadeType_FadeAllToBlack,
             (ONE_SECOND / 2) as SIZE,
         ));
-        SetContext(ScreenContext);
+        SetContext((*Kernel::current()).screen_context);
         SetContextBackGroundColor(BLACK_COLOR);
         ClearDrawable();
         FadeScreen(ScreenFadeType_FadeAllToColor, 0);

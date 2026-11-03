@@ -21,6 +21,7 @@ fn checkpoint_with_context(
     journal: &mut Journal,
     boundary: &str,
 ) -> std::io::Result<()> {
+    use crate::engine::WorldData;
     let mut hooks = crate::ships::hook_registry::hooks();
     hooks.extend(crate::automation::parity_hooks::hooks());
     let mut fields = Fields::new();
@@ -29,8 +30,7 @@ fn checkpoint_with_context(
     // queue pools and their linked records. No callback runs before it returns.
     let (game, queues, elements) = unsafe {
         (
-            &*(&raw const (*crate::ships::native::abi::GLOBDATA::current()).Game_state)
-                .cast::<CGameState>(),
+            &*(&raw const (*WorldData::current()).game).cast::<CGameState>(),
             std::array::from_fn::<_, 2, _>(|side| {
                 Ship::queue(
                     &*crate::engine::battle::access::live_queues::player_ships(side),

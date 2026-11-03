@@ -220,7 +220,7 @@ pub(crate) mod engine {
                 }
                 if cx.element(o).flags & PLAYER_SHIP as u16 != 0
                     && cx.primitive_style_mut(e).kind == gfx_object_STAMPFILL_PRIM as u8
-                    && cx.story_state(StoryKey::BombCarrier) != 0
+                    && cx.story_state(StoryKey::BOMB_CARRIER) != 0
                 {
                     edit_state(cx, ss, |state| state.gate_entered = true);
                     cx.set_activity(cx.world.activity() & !(IN_BATTLE as u16));

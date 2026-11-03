@@ -64,15 +64,12 @@ pub(super) mod c_bridge {
     pub use crate::comm::comm_abi::c_ClearPhraseBuf;
 
     extern "C" {
-        pub static mut LastActivity: u16;
-        pub static mut Screen: *mut crate::graphics::native_abi::frame_desc;
-        pub static mut SpaceContext: *mut crate::graphics::native_abi::context_desc;
+
         pub static mut ScreenWidth: c_int;
         pub static mut ScreenHeight: c_int;
         #[allow(dead_code)]
         pub static mut optSmoothScroll: c_int;
         pub static mut CommWndRect: crate::comm::locdata::CRect;
-        pub static mut GameStrings: *mut crate::strings::string_table::StringTableEntry;
 
     }
     pub use crate::graphics::gfx_common_abi::BatchGraphics;
@@ -117,8 +114,11 @@ impl super::player_font::FontRelease for CFontRelease {
 #[cfg(not(test))]
 unsafe fn is_starbase_conversation() -> bool {
     // Direct game state access (replaces c_IsStarbaseConversation)
-    let global_flags = crate::state::game_state_keys::get_game_state("GLOBAL_FLAGS_AND_DATA");
-    let starbase_available = crate::state::game_state_keys::get_game_state("STARBASE_AVAILABLE");
+    let global_flags = crate::state::game_state_keys::get_game_state(
+        crate::engine::StoryKey::GLOBAL_FLAGS_AND_DATA,
+    );
+    let starbase_available =
+        crate::state::game_state_keys::get_game_state(crate::engine::StoryKey::STARBASE_AVAILABLE);
     global_flags == 0xFF && starbase_available != 0
 }
 
@@ -128,23 +128,22 @@ unsafe fn draw_sis_com_window() {
     super::sis_graphics::draw_sis_com_window();
 }
 
-/// Get the planet name from GlobData.SIS_state.PlanetName.
+/// Get the planet name from GlobData.flagship.planet_name.
 #[cfg(not(test))]
 unsafe fn planet_name() -> *const std::ffi::c_char {
-    // GlobData.SIS_state.PlanetName is a char[16] array
+    use crate::engine::WorldData;
+    // GlobData.flagship.planet_name is a char[16] array
     // Use addr_of_mut! to avoid creating a shared reference to mutable static
-    let planet_name_ptr = std::ptr::addr_of_mut!(
-        (*crate::ships::native::abi::GLOBDATA::current())
-            .SIS_state
-            .PlanetName
-    );
+    let planet_name_ptr = std::ptr::addr_of_mut!((*WorldData::current()).flagship.planet_name);
     planet_name_ptr as *const std::ffi::c_char
 }
 
 /// Get a game string via GAME_STRING macro: SetAbsStringTableIndex(GameStrings, i) → GetStringAddress.
 #[cfg(not(test))]
 pub(crate) unsafe fn game_string(index: i32) -> *const std::ffi::c_char {
-    let s = c_bridge::SetAbsStringTableIndex(c_bridge::GameStrings.cast(), index as u16);
+    use crate::engine::Kernel;
+    let s =
+        c_bridge::SetAbsStringTableIndex((*Kernel::current()).game_strings.cast(), index as u16);
     c_bridge::GetStringAddress(s)
 }
 
@@ -169,6 +168,8 @@ const NORMAL_VOLUME: i32 = 128;
 /// @plan PLAN-20260326-COMMPT2.P07
 /// @requirement REQ-HL-001
 pub unsafe fn hail_alien() {
+    #[cfg(not(test))]
+    use crate::engine::Kernel;
     #[cfg(not(test))]
     {
         use super::player_font::CONVERSATION_PLAYER_FONT;
@@ -301,7 +302,7 @@ pub unsafe fn hail_alien() {
         // ----------------------------------------------------------------
         // Step 7: Set SpaceContext and save old font
         // ----------------------------------------------------------------
-        let space_ctx = unsafe { SpaceContext };
+        let space_ctx = unsafe { (*Kernel::current()).space_context };
         SetContext(space_ctx.cast());
         let old_font = SetContextFont(player_font.cast());
 
@@ -312,7 +313,7 @@ pub unsafe fn hail_alien() {
         let anim_ctx = create_named_context(anim_ctx_name);
         c_SetAnimContext(anim_ctx.cast());
         SetContext(anim_ctx);
-        let screen = unsafe { Screen };
+        let screen = unsafe { (*Kernel::current()).screen };
         SetContextFGFrame(screen.cast());
 
         let mut frame_rect = crate::comm::locdata::CRect::default();
@@ -371,7 +372,7 @@ pub unsafe fn hail_alien() {
         // Step 11: Set CHECK_LOAD flag, call encounter funcs, run DoInput
         // ----------------------------------------------------------------
         // LastActivity |= CHECK_LOAD (0x1000)
-        LastActivity |= 0x1000;
+        (*Kernel::current()).last_activity |= 0x1000;
         if let Some(callback) = c_bridge::CommData.init_encounter_func {
             callback();
         }

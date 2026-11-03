@@ -45,8 +45,7 @@ use crate::ui::sis::DrawAutoPilotMessage;
 extern "C" {
 
     static mut CurrentInputState: input::CONTROLLER_INPUT_STATE;
-    static mut SpaceContext: *mut crate::graphics::native_abi::context_desc;
-    static mut stars_in_space: *mut crate::graphics::native_abi::frame_desc;
+
 }
 use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 
@@ -56,8 +55,9 @@ unsafe fn system() -> *mut c::SOLARSYS_STATE {
 }
 
 #[inline]
-unsafe fn glob() -> *mut crate::ships::native::abi::GLOBDATA {
-    ptr::addr_of_mut!((*crate::ships::native::abi::GLOBDATA::current()))
+unsafe fn glob() -> *mut crate::engine::WorldData {
+    use crate::engine::WorldData;
+    WorldData::current()
 }
 
 #[inline]
@@ -112,9 +112,10 @@ pub(super) unsafe fn get_collision_frame(
     planet: *mut c::PLANET_DESC,
     wait_planet: c::COUNT,
 ) -> c::FRAME {
+    use crate::engine::Kernel;
     let state = system();
     if (*state).WaitIntersect != c::COUNT::MAX && (*state).WaitIntersect != wait_planet {
-        DecFrameIndex((stars_in_space).cast()).cast()
+        DecFrameIndex(((*Kernel::current()).stars_in_space).cast()).cast()
     } else {
         (*planet).image.frame
     }
@@ -122,7 +123,7 @@ pub(super) unsafe fn get_collision_frame(
 
 pub(super) unsafe fn check_intersect() -> *mut c::PLANET_DESC {
     let state = system();
-    let game = ptr::addr_of!((*glob()).Game_state);
+    let game = ptr::addr_of!((*glob()).game);
     let mut current = (*(*state).pBaseDesc).pPrevDesc;
     let mut planet_offset = current
         .offset_from((*state).PlanetDesc.as_ptr())
@@ -131,9 +132,9 @@ pub(super) unsafe fn check_intersect() -> *mut c::PLANET_DESC {
     let mut ship: c::INTERSECT_CONTROL = std::mem::zeroed();
     let mut planet: c::INTERSECT_CONTROL = std::mem::zeroed();
 
-    ship.IntersectStamp.origin = c_point((*game).ShipStamp.origin);
+    ship.IntersectStamp.origin = c_point((*game).ship_stamp.origin);
     ship.EndPoint = ship.IntersectStamp.origin;
-    ship.IntersectStamp.frame = (*game).ShipStamp.frame.cast();
+    ship.IntersectStamp.frame = (*game).ship_stamp.frame.cast();
 
     let (width, height) = sis_dimensions();
     planet.IntersectStamp.origin.x = (width >> 1) as _;
@@ -203,7 +204,7 @@ pub(super) unsafe fn check_intersect() -> *mut c::PLANET_DESC {
 
 pub(super) unsafe fn flagship_inertial_thrust(current_angle: c::COUNT) -> c::UWORD {
     let max_speed = (*system()).max_ship_speed;
-    let velocity = ptr::addr_of_mut!((*glob()).Game_state.velocity);
+    let velocity = ptr::addr_of_mut!((*glob()).game.velocity);
     let mut current_dx: c::SIZE = 0;
     let mut current_dy: c::SIZE = 0;
     GetCurrentVelocityComponents(velocity, &mut current_dx, &mut current_dy);
@@ -256,7 +257,7 @@ pub(super) unsafe fn flagship_inertial_thrust(current_angle: c::COUNT) -> c::UWO
 
 pub(super) unsafe fn process_ship_controls() {
     let state = system();
-    let game = ptr::addr_of_mut!((*glob()).Game_state);
+    let game = ptr::addr_of_mut!((*glob()).game);
     let input = ptr::addr_of!(CurrentInputState);
     let player = crate::c_bindings::player_control_template(0)
         .expect("player zero has a control template") as usize;
@@ -282,7 +283,7 @@ pub(super) unsafe fn process_ship_controls() {
         dy = 0;
     }
 
-    let mut index = GetFrameIndex(((*game).ShipStamp.frame).cast());
+    let mut index = GetFrameIndex(((*game).ship_stamp.frame).cast());
     if (*state).turn_counter != 0 {
         (*state).turn_counter -= 1;
     } else if dx != 0 {
@@ -291,8 +292,8 @@ pub(super) unsafe fn process_ship_controls() {
         } else {
             index = normalize_facing(index.wrapping_add(1));
         }
-        (*game).ShipStamp.frame =
-            (SetAbsFrameIndex(((*game).ShipStamp.frame).cast(), index)).cast();
+        (*game).ship_stamp.frame =
+            (SetAbsFrameIndex(((*game).ship_stamp.frame).cast(), index)).cast();
         (*state).turn_counter = (*state).turn_wait;
     }
     if (*state).thrust_counter != 0 {
@@ -305,21 +306,21 @@ pub(super) unsafe fn process_ship_controls() {
 
 pub(super) unsafe fn enter_inner_system(planet: *mut c::PLANET_DESC) {
     let state = system();
-    let game = ptr::addr_of_mut!((*glob()).Game_state);
+    let game = ptr::addr_of_mut!((*glob()).game);
     let angle =
-        facing_to_angle(GetFrameIndex(((*game).ShipStamp.frame).cast())).wrapping_add(HALF_CIRCLE);
+        facing_to_angle(GetFrameIndex(((*game).ship_stamp.frame).cast())).wrapping_add(HALF_CIRCLE);
     let (width, height) = sis_dimensions();
-    (*game).ShipStamp.origin.x =
+    (*game).ship_stamp.origin.x =
         ((width >> 1) + i32::from(cosine(angle, INNER_ENTRY_DISTANCE))) as _;
-    (*game).ShipStamp.origin.y =
+    (*game).ship_stamp.origin.y =
         ((height >> 1) + i32::from(sine(angle, INNER_ENTRY_DISTANCE))) as _;
-    if (*game).ShipStamp.origin.y < 0 {
-        (*game).ShipStamp.origin.y = 1;
-    } else if i32::from((*game).ShipStamp.origin.y) >= height {
-        (*game).ShipStamp.origin.y = (height - 1 - 1) as _;
+    if (*game).ship_stamp.origin.y < 0 {
+        (*game).ship_stamp.origin.y = 1;
+    } else if i32::from((*game).ship_stamp.origin.y) >= height {
+        (*game).ship_stamp.origin.y = (height - 1 - 1) as _;
     }
     (*game).ip_location = game_point(displayToLocation(
-        c_point((*game).ShipStamp.origin),
+        c_point((*game).ship_stamp.origin),
         MAX_ZOOM_RADIUS,
     ));
     (*state).SunDesc[0].location = planetOuterLocation(planetIndex(state, planet));
@@ -332,7 +333,7 @@ pub(super) unsafe fn enter_inner_system(planet: *mut c::PLANET_DESC) {
 
 pub(super) unsafe fn leave_inner_system(planet: *mut c::PLANET_DESC) {
     let state = system();
-    let game = ptr::addr_of_mut!((*glob()).Game_state);
+    let game = ptr::addr_of_mut!((*glob()).game);
     (*state).pBaseDesc = (*state).PlanetDesc.as_mut_ptr();
     (*state).pOrbitalDesc = ptr::null_mut();
 
@@ -345,7 +346,7 @@ pub(super) unsafe fn leave_inner_system(planet: *mut c::PLANET_DESC) {
     (*game).ip_location = game_point((*state).SunDesc[0].location);
     XFormIPLoc(
         ptr::addr_of_mut!((*game).ip_location).cast(),
-        ptr::addr_of_mut!((*game).ShipStamp.origin).cast(),
+        ptr::addr_of_mut!((*game).ship_stamp.origin).cast(),
         1,
     );
     (*game).velocity.zero();
@@ -358,7 +359,7 @@ pub(super) unsafe fn leave_inner_system(planet: *mut c::PLANET_DESC) {
 }
 
 pub(super) unsafe fn enter_orbital(planet: *mut c::PLANET_DESC) {
-    (*glob()).Game_state.velocity.zero();
+    (*glob()).game.velocity.zero();
     let state = system();
     (*state).pOrbitalDesc = planet;
     (*state).InOrbit = 1;
@@ -366,19 +367,19 @@ pub(super) unsafe fn enter_orbital(planet: *mut c::PLANET_DESC) {
 
 pub(super) unsafe fn check_ship_location(new_radius: *mut c::SIZE) -> c::BOOLEAN {
     let state = system();
-    let game = ptr::addr_of_mut!((*glob()).Game_state);
+    let game = ptr::addr_of_mut!((*glob()).game);
     let radius = (*state).SunDesc[0].radius;
     *new_radius = (*state).SunDesc[0].radius;
 
     let (width, height) = sis_dimensions();
-    if (*game).ShipStamp.origin.x < 0
-        || i32::from((*game).ShipStamp.origin.x) >= width
-        || (*game).ShipStamp.origin.y < 0
-        || i32::from((*game).ShipStamp.origin.y) >= height
+    if (*game).ship_stamp.origin.x < 0
+        || i32::from((*game).ship_stamp.origin.x) >= width
+        || (*game).ship_stamp.origin.y < 0
+        || i32::from((*game).ship_stamp.origin.y) >= height
     {
         if !playerInInnerSystem() {
             if radius == MAX_ZOOM_RADIUS {
-                (*game).CurrentActivity |= END_INTERPLANETARY;
+                (*game).current_activity |= END_INTERPLANETARY;
                 return 0;
             }
             *new_radius = find_radius(
@@ -391,7 +392,7 @@ pub(super) unsafe fn check_ship_location(new_radius: *mut c::SIZE) -> c::BOOLEAN
         return 1;
     }
 
-    if !playerInInnerSystem() && point_within_rect(SCALE_RECT, c_point((*game).ShipStamp.origin)) {
+    if !playerInInnerSystem() && point_within_rect(SCALE_RECT, c_point((*game).ship_stamp.origin)) {
         *new_radius = find_radius(i32::from(radius), c_point((*game).ip_location)) as c::SIZE;
         return 1;
     }
@@ -412,11 +413,11 @@ pub(super) unsafe fn check_ship_location(new_radius: *mut c::SIZE) -> c::BOOLEAN
 }
 
 pub(super) unsafe fn scale_system(new_radius: c::SIZE) {
-    let game = ptr::addr_of_mut!((*glob()).Game_state);
+    let game = ptr::addr_of_mut!((*glob()).game);
     (*system()).SunDesc[0].radius = new_radius;
     XFormIPLoc(
         ptr::addr_of_mut!((*game).ip_location).cast(),
-        ptr::addr_of_mut!((*game).ShipStamp.origin).cast(),
+        ptr::addr_of_mut!((*game).ship_stamp.origin).cast(),
         1,
     );
 
@@ -440,7 +441,8 @@ pub(super) unsafe fn restore_system_view() {
 }
 
 pub(super) unsafe fn ip_frame() {
-    SetContext(SpaceContext);
+    use crate::engine::Kernel;
+    SetContext((*Kernel::current()).space_context);
     GameClockTick();
     process_ship_controls();
 
@@ -465,7 +467,7 @@ pub(super) unsafe fn ip_frame() {
 
 pub(super) unsafe fn check_zoom_level() -> c::BOOLEAN {
     let state = system();
-    let game = ptr::addr_of_mut!((*glob()).Game_state);
+    let game = ptr::addr_of_mut!((*glob()).game);
     let inner_system = playerInInnerSystem();
     let mut ship_location = if inner_system {
         (*state).SunDesc[0].location
@@ -477,7 +479,7 @@ pub(super) unsafe fn check_zoom_level() -> c::BOOLEAN {
     if !inner_system {
         XFormIPLoc(
             &mut ship_location,
-            ptr::addr_of_mut!((*game).ShipStamp.origin).cast(),
+            ptr::addr_of_mut!((*game).ship_stamp.origin).cast(),
             1,
         );
     }

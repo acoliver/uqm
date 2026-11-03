@@ -54,7 +54,7 @@ unsafe fn preprocess(fleet: &mut Ship<'_>, ship: *mut ElementRecord) {
 /// An Avenger at (1000, 1000) facing 0 with a visible primitive.
 unsafe fn avenger(fleet: &mut Ship<'_>) -> *mut ElementRecord {
     let ship = spawn_ship(fleet, 1000, 1000);
-    fleet.ship_mut().ShipFacing = 0;
+    fleet.ship_mut().ship_facing = 0;
     ship
 }
 
@@ -146,16 +146,16 @@ fn flame_inherits_the_ship_velocity_and_starts_on_the_first_frame() {
     battle_context::run(|| {
         unsafe {
             let _battle = Battle::new(16);
-            (*uqm_rust::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .CurrentActivity = 0;
+            (*uqm_rust::engine::WorldData::current())
+                .game
+                .current_activity = 0;
             uqm_rust::state::ffi::rust_init_game_state();
             let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
             let flame_frames = FrameSet::with_bounds(16, [0, 0]);
             fleet.descriptor_mut().ship_data.weapon = flame_frames.array();
             let ship = spawn_ship(&mut fleet, 400, 500);
             // Facing 4 is angle 16, along +x (angle 0 points up the screen).
-            fleet.ship_mut().ShipFacing = 4;
+            fleet.ship_mut().ship_facing = 4;
             DeltaVelocityComponents(&raw mut (*ship).velocity, 160, -64);
 
             let mut out = [ptr::null_mut()];
@@ -194,9 +194,9 @@ fn flame_advances_its_animation_every_next_turn_frames() {
     battle_context::run(|| {
         unsafe {
             let _battle = Battle::new(16);
-            (*uqm_rust::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .CurrentActivity = 0;
+            (*uqm_rust::engine::WorldData::current())
+                .game
+                .current_activity = 0;
             uqm_rust::state::ffi::rust_init_game_state();
             let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
             let flame_frames = FrameSet::with_bounds(4, [0, 0]);
@@ -241,9 +241,9 @@ fn flame_that_hits_goes_nonsolid_without_disappearing() {
     battle_context::run(|| {
         unsafe {
             let _battle = Battle::new(16);
-            (*uqm_rust::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .CurrentActivity = 0;
+            (*uqm_rust::engine::WorldData::current())
+                .game
+                .current_activity = 0;
             uqm_rust::state::ffi::rust_init_game_state();
             let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
             spawn_ship(&mut fleet, 400, 500);
@@ -284,9 +284,9 @@ fn special_key_starts_the_cloak_and_spends_energy() {
     battle_context::run(|| {
         unsafe {
             let _battle = Battle::new(16);
-            (*uqm_rust::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .CurrentActivity = 0;
+            (*uqm_rust::engine::WorldData::current())
+                .game
+                .current_activity = 0;
             uqm_rust::state::ffi::rust_init_game_state();
             let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
             let ship = avenger(&mut fleet);
@@ -313,9 +313,9 @@ fn special_key_starts_the_cloak_and_spends_energy() {
 fn cloak_needs_energy_and_a_ready_counter() {
     battle_context::run(|| unsafe {
         let _battle = Battle::new(16);
-        (*uqm_rust::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .CurrentActivity = 0;
+        (*uqm_rust::engine::WorldData::current())
+            .game
+            .current_activity = 0;
         uqm_rust::state::ffi::rust_init_game_state();
         let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
         let ship = avenger(&mut fleet);
@@ -350,9 +350,9 @@ fn cloak_fades_to_black_one_step_per_frame_and_drops_pursuers() {
     battle_context::run(|| {
         unsafe {
             let _battle = Battle::new(16);
-            (*uqm_rust::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .CurrentActivity = 0;
+            (*uqm_rust::engine::WorldData::current())
+                .game
+                .current_activity = 0;
             uqm_rust::state::ffi::rust_init_game_state();
             let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
             let ship = avenger(&mut fleet);
@@ -394,9 +394,9 @@ fn decloak_walks_back_up_and_ends_as_a_plain_stamp() {
     battle_context::run(|| {
         unsafe {
             let _battle = Battle::new(16);
-            (*uqm_rust::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .CurrentActivity = 0;
+            (*uqm_rust::engine::WorldData::current())
+                .game
+                .current_activity = 0;
             uqm_rust::state::ffi::rust_init_game_state();
             let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
             let ship = avenger(&mut fleet);
@@ -450,9 +450,9 @@ fn firing_while_cloaked_decloaks_and_turns_toward_the_target() {
     battle_context::run(|| {
         unsafe {
             let _battle = Battle::new(16);
-            (*uqm_rust::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .CurrentActivity = 0;
+            (*uqm_rust::engine::WorldData::current())
+                .game
+                .current_activity = 0;
             uqm_rust::state::ffi::rust_init_game_state();
             let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
             let ship_frames = FrameSet::with_bounds(16, [0, 0]);
@@ -468,7 +468,7 @@ fn firing_while_cloaked_decloaks_and_turns_toward_the_target() {
             preprocess(&mut fleet, ship);
 
             assert_eq!(color_of(ship), BLUE_DARK);
-            assert_eq!(fleet.ship_mut().ShipFacing, 4);
+            assert_eq!(fleet.ship_mut().ship_facing, 4);
             assert_eq!(index_of((*ship).next.image.frame.raw()), 4);
             // turn_wait of zero is bumped so the new facing is not undone at once.
             assert_eq!((*ship).turn, 1);
@@ -485,9 +485,9 @@ fn decloak_aim_leads_the_target_by_four_frames_of_motion() {
     battle_context::run(|| {
         unsafe {
             let _battle = Battle::new(16);
-            (*uqm_rust::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .CurrentActivity = 0;
+            (*uqm_rust::engine::WorldData::current())
+                .game
+                .current_activity = 0;
             uqm_rust::state::ffi::rust_init_game_state();
             let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
             let ship_frames = FrameSet::with_bounds(16, [0, 0]);
@@ -505,7 +505,7 @@ fn decloak_aim_leads_the_target_by_four_frames_of_motion() {
 
             // The aim point is (2000 - 1000, 1000 - 2000): angle 8, facing 2.
             // Without the look-ahead the ship would face 4.
-            assert_eq!(fleet.ship_mut().ShipFacing, 2);
+            assert_eq!(fleet.ship_mut().ship_facing, 2);
             assert_eq!(index_of((*ship).next.image.frame.raw()), 2);
         }
     })
@@ -515,22 +515,22 @@ fn decloak_aim_leads_the_target_by_four_frames_of_motion() {
 fn firing_while_cloaked_without_a_target_keeps_the_facing() {
     battle_context::run(|| unsafe {
         let _battle = Battle::new(16);
-        (*uqm_rust::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .CurrentActivity = 0;
+        (*uqm_rust::engine::WorldData::current())
+            .game
+            .current_activity = 0;
         uqm_rust::state::ffi::rust_init_game_state();
         let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
         let ship_frames = FrameSet::with_bounds(16, [0, 0]);
         let ship = avenger(&mut fleet);
         (*ship).next.image.frame = ship_frames.selection(0);
         paint(ship, gfx_object_STAMPFILL_PRIM, BLACK);
-        fleet.ship_mut().ShipFacing = 6;
+        fleet.ship_mut().ship_facing = 6;
         fleet.ship_mut().cur_status_flags = WEAPON as u16;
 
         preprocess(&mut fleet, ship);
 
         assert_eq!(color_of(ship), BLUE_DARK);
-        assert_eq!(fleet.ship_mut().ShipFacing, 6);
+        assert_eq!(fleet.ship_mut().ship_facing, 6);
         assert_eq!(index_of((*ship).next.image.frame.raw()), 0);
         assert_eq!((*ship).turn, 0);
         assert!((*ship).target.is_none());
@@ -541,9 +541,9 @@ fn firing_while_cloaked_without_a_target_keeps_the_facing() {
 fn firing_needs_energy_to_break_the_cloak() {
     battle_context::run(|| unsafe {
         let _battle = Battle::new(16);
-        (*uqm_rust::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .CurrentActivity = 0;
+        (*uqm_rust::engine::WorldData::current())
+            .game
+            .current_activity = 0;
         uqm_rust::state::ffi::rust_init_game_state();
         let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
         let ship = avenger(&mut fleet);
@@ -594,9 +594,9 @@ fn intelligence_pursues_and_ignores_incoming_fire_when_flaming() {
     battle_context::run(|| {
         unsafe {
             let _battle = Battle::new(16);
-            (*uqm_rust::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .CurrentActivity = 0;
+            (*uqm_rust::engine::WorldData::current())
+                .game
+                .current_activity = 0;
             uqm_rust::state::ffi::rust_init_game_state();
             let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
             let ship = avenger(&mut fleet);
@@ -630,9 +630,9 @@ fn intelligence_fires_flames_in_range_and_unwinds_the_cloak_input() {
     battle_context::run(|| {
         unsafe {
             let _battle = Battle::new(16);
-            (*uqm_rust::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .CurrentActivity = 0;
+            (*uqm_rust::engine::WorldData::current())
+                .game
+                .current_activity = 0;
             uqm_rust::state::ffi::rust_init_game_state();
             let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
             let ship = avenger(&mut fleet);
@@ -669,9 +669,9 @@ fn intelligence_flame_window_depends_on_enemy_and_incoming_fire_timing() {
     battle_context::run(|| {
         unsafe {
             let _battle = Battle::new(16);
-            (*uqm_rust::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .CurrentActivity = 0;
+            (*uqm_rust::engine::WorldData::current())
+                .game
+                .current_activity = 0;
             uqm_rust::state::ffi::rust_init_game_state();
             let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
             let ship = avenger(&mut fleet);
@@ -705,9 +705,9 @@ fn intelligence_cloaks_when_idle_and_ready() {
     battle_context::run(|| {
         unsafe {
             let _battle = Battle::new(16);
-            (*uqm_rust::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .CurrentActivity = 0;
+            (*uqm_rust::engine::WorldData::current())
+                .game
+                .current_activity = 0;
             uqm_rust::state::ffi::rust_init_game_state();
             let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
             let ship = avenger(&mut fleet);
@@ -742,9 +742,9 @@ fn intelligence_skips_cloaking_during_the_probe_encounter() {
     battle_context::run(|| {
         unsafe {
             let _battle = Battle::new(16);
-            (*uqm_rust::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .CurrentActivity = 0;
+            (*uqm_rust::engine::WorldData::current())
+                .game
+                .current_activity = 0;
             uqm_rust::state::ffi::rust_init_game_state();
             let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
             let ship = avenger(&mut fleet);
@@ -754,9 +754,9 @@ fn intelligence_skips_cloaking_during_the_probe_encounter() {
 
             // LOBYTE (CurrentActivity): CHECK_PAUSE sits in the high byte.
             let encounter = (IN_ENCOUNTER | CHECK_PAUSE) as u16;
-            (*uqm_rust::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .CurrentActivity = encounter;
+            (*uqm_rust::engine::WorldData::current())
+                .game
+                .current_activity = encounter;
             uqm_rust::state::ffi::rust_set_game_state(probe, 1);
             assert_eq!(think(&mut fleet, ship, &mut concerns, 0), 0);
 
@@ -765,9 +765,9 @@ fn intelligence_skips_cloaking_during_the_probe_encounter() {
 
             // Outside an encounter the probe flag is irrelevant.
             uqm_rust::state::ffi::rust_set_game_state(probe, 1);
-            (*uqm_rust::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .CurrentActivity = (IN_HYPERSPACE | CHECK_PAUSE) as u16;
+            (*uqm_rust::engine::WorldData::current())
+                .game
+                .current_activity = (IN_HYPERSPACE | CHECK_PAUSE) as u16;
             assert_eq!(think(&mut fleet, ship, &mut concerns, 0), SPECIAL as u8);
             uqm_rust::state::ffi::rust_set_game_state(probe, 0);
         }
@@ -779,9 +779,9 @@ fn intelligence_runs_the_engine_pursuit_when_the_enemy_is_known() {
     battle_context::run(|| {
         unsafe {
             let _battle = Battle::new(16);
-            (*uqm_rust::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .CurrentActivity = 0;
+            (*uqm_rust::engine::WorldData::current())
+                .game
+                .current_activity = 0;
             uqm_rust::state::ffi::rust_init_game_state();
             let mut fleet = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 0, [16; 3], [0, 0]);
             let ship = avenger(&mut fleet);

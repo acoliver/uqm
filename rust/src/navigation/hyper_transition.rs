@@ -9,17 +9,17 @@ pub(crate) fn element_universe(cx: &Cx<'_>, element: ElementId) -> POINT {
     let (width, height) = cx.screen_dimensions();
     POINT {
         x: crate::navigation::hyper_units::universe_x(
-            cx.navigation().SIS_state.log_x + i32::from(point.x) - (((width - 64) << 5) >> 1),
+            cx.navigation().flagship.log_x + i32::from(point.x) - (((width - 64) << 5) >> 1),
             width - 64,
         ),
         y: crate::navigation::hyper_units::universe_y(
-            cx.navigation().SIS_state.log_y + i32::from(point.y) - ((height << 5) >> 1),
+            cx.navigation().flagship.log_y + i32::from(point.y) - ((height << 5) >> 1),
             height,
         ),
     }
 }
 pub(super) fn cleanup(cx: &mut Cx<'_>) {
-    let mut handle = cx.navigation().Game_state.encounter_q.head;
+    let mut handle = cx.navigation().game.encounter_q.head;
     while let Some(encounter) = NonNull::new(handle.cast::<ENCOUNTER>()) {
         handle = cx.encounter_record(encounter).succ;
         let element = cx.elements().id(cx.encounter_record(encounter).hElement);
@@ -215,7 +215,7 @@ pub(super) fn sis_element(cx: &Cx<'_>) -> Option<ElementId> {
 }
 fn save_sis_facing(cx: &mut Cx<'_>) {
     if let Some(element) = sis_element(cx) {
-        cx.navigation_mut().Game_state.ShipFacing = cx.ship_state(cx.owner(element)).facing + 1;
+        cx.navigation_mut().game.ship_facing = cx.ship_state(cx.owner(element)).facing + 1;
     }
 }
 /// Retain the flagship facing while the navigation context owns the live queues.

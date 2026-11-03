@@ -1,25 +1,19 @@
 //! Scoped navigation projections into the retained game-thread authorities.
 #![cfg(not(test))]
 use crate::engine::battle::{Cx, ElementId, Parent};
+use crate::engine::StoryKey;
 use crate::navigation::abi::*;
 
 use crate::navigation::hyperspace::live::{logx, logy};
-use crate::navigation::{get, set};
-use crate::planets::starmap::{star_array, CurStarDescPtr};
+use crate::planets::starmap::star_array;
 use std::ptr::{self, NonNull};
 impl Cx<'_> {
-    pub(crate) fn navigation(&self) -> &GLOBDATA {
-        let pointer = NonNull::new(&raw mut (*crate::ships::native::abi::GLOBDATA::current()))
-            .unwrap_or_else(|| panic!("navigation authority"));
-        // SAFETY: Cx retains the game-thread navigation authority for this borrow.
-        unsafe { pointer.as_ref() }
+    pub(crate) fn navigation(&self) -> &crate::engine::WorldData {
+        &self.world.data
     }
 
-    pub(crate) fn navigation_mut(&mut self) -> &mut GLOBDATA {
-        let mut pointer = NonNull::new(&raw mut (*crate::ships::native::abi::GLOBDATA::current()))
-            .unwrap_or_else(|| panic!("navigation authority"));
-        // SAFETY: the exclusive Cx borrow serializes navigation mutations.
-        unsafe { pointer.as_mut() }
+    pub(crate) fn navigation_mut(&mut self) -> &mut crate::engine::WorldData {
+        &mut self.world.data
     }
 
     pub(crate) fn solar(&self) -> &SOLARSYS_STATE {
@@ -35,7 +29,7 @@ impl Cx<'_> {
         let Parent::IpGroup(slot) = self.parent(element) else {
             panic!("navigation element has no IP-group parent");
         };
-        let queue = &self.navigation().Game_state.ip_group_q;
+        let queue = &self.navigation().game.ip_group_q;
         let pointer = queue
             .pq_tab
             .wrapping_add(usize::from(slot) * usize::from(queue.object_size));
@@ -54,14 +48,12 @@ impl Cx<'_> {
 
     pub(crate) fn previous_activity(&self) -> u16 {
         // SAFETY: the owning game thread serializes navigation activity.
-        unsafe { LastActivity }
+        self.kernel.last_activity
     }
 
     pub(crate) fn set_previous_activity(&mut self, activity: u16) {
         // SAFETY: this exclusive context owns navigation activity mutations.
-        unsafe {
-            LastActivity = activity;
-        }
+        self.kernel.last_activity = activity;
     }
 
     pub(crate) fn planet_outer_location(&self, planet: u16) -> POINT {
@@ -72,36 +64,29 @@ impl Cx<'_> {
         )
     }
 }
-pub(crate) unsafe fn interplanetary(mut point: POINT) {
+pub(crate) unsafe fn interplanetary(world: &mut crate::engine::World, mut point: POINT) {
+    world.data.game.ip_planet = 0;
+    world.data.game.in_orbit = 0;
+    world.data.game.ship_facing = 0;
+    world.set_story_state(StoryKey::USED_BROADCASTER, 0);
     // SAFETY: the caller holds exclusive game-thread navigation state and its loaded catalog.
     unsafe {
-        (*crate::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .ip_planet = 0;
-        (*crate::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .in_orbit = 0;
-        (*crate::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .ShipFacing = 0;
-        set("USED_BROADCASTER", 0);
-        if get("ARILOU_SPACE_SIDE") <= 1 {
-            (*crate::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .CurrentActivity |= START_INTERPLANETARY as u16;
-            set("ESCAPE_COUNTER", 0);
+        if world.story_state(StoryKey::ARILOU_SPACE_SIDE) <= 1 {
+            world.data.game.current_activity |= START_INTERPLANETARY as u16;
+            world.set_story_state(StoryKey::ESCAPE_COUNTER, 0);
         } else {
-            (*crate::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .autopilot = POINT { x: -1, y: -1 };
+            world.data.game.autopilot = POINT { x: -1, y: -1 };
             let star = FindStar(ptr::null_mut(), &mut point, 5, 5);
-            CurStarDescPtr = star.cast();
+            world.select_star(
+                (star.cast::<crate::engine::world::CStarDesc>()).as_ref(),
+                (star_array
+                    as *const [crate::engine::world::CStarDesc; crate::engine::world::CATALOG_LEN])
+                    .as_ref(),
+            );
             if (*star).star_pt.x == ARILOU_HOME_X as i16
                 && (*star).star_pt.y == ARILOU_HOME_Y as i16
             {
-                (*crate::ships::native::abi::GLOBDATA::current())
-                    .Game_state
-                    .CurrentActivity |= START_ENCOUNTER as u16;
+                world.data.game.current_activity |= START_ENCOUNTER as u16;
             } else {
                 const PORTALS: [(i16, i16); 15] = [
                     (4091, 7748),
@@ -120,53 +105,55 @@ pub(crate) unsafe fn interplanetary(mut point: POINT) {
                     (9735, 3153),
                     (5850, 6213),
                 ];
-                let index = CurStarDescPtr.offset_from(star_array.add(503)) as usize;
+                let index = world
+                    .star_pointer(
+                        (star_array
+                            as *const [crate::engine::world::CStarDesc;
+                                crate::engine::world::CATALOG_LEN])
+                            .as_ref(),
+                    )
+                    .offset_from(star_array.add(503)) as usize;
                 let (x, y) = PORTALS[index];
-                (*crate::ships::native::abi::GLOBDATA::current())
-                    .SIS_state
-                    .log_x = logx(x);
-                (*crate::ships::native::abi::GLOBDATA::current())
-                    .SIS_state
-                    .log_y = logy(y);
-                set("ARILOU_SPACE_SIDE", 0);
+                world.data.flagship.log_x = logx(x);
+                world.data.flagship.log_y = logy(y);
+                world.set_story_state(StoryKey::ARILOU_SPACE_SIDE, 0);
                 // The source portal is not a star at the HyperSpace destination.
                 // Keeping it makes a save name a descriptor from the wrong catalog.
-                CurStarDescPtr = ptr::null_mut();
+                world.select_star(
+                    None,
+                    (star_array
+                        as *const [crate::engine::world::CStarDesc;
+                            crate::engine::world::CATALOG_LEN])
+                        .as_ref(),
+                );
             }
         }
     }
 }
-pub(crate) unsafe fn arilou() {
+pub(crate) unsafe fn arilou(world: &mut crate::engine::World) {
     // SAFETY: the caller holds exclusive game-thread navigation state and its loaded catalog.
     unsafe {
-        (*crate::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .ShipFacing = 0;
-        set("USED_BROADCASTER", 0);
-        (*crate::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .autopilot = POINT { x: -1, y: -1 };
-        if get("ARILOU_SPACE_SIDE") <= 1 {
-            (*crate::ships::native::abi::GLOBDATA::current())
-                .SIS_state
-                .log_x = logx(QUASI_SPACE_X as i16);
-            (*crate::ships::native::abi::GLOBDATA::current())
-                .SIS_state
-                .log_y = logy(QUASI_SPACE_Y as i16);
-            if get("PORTAL_COUNTER") != 0 {
-                set("PORTAL_COUNTER", 0);
+        world.data.game.ship_facing = 0;
+        world.set_story_state(StoryKey::USED_BROADCASTER, 0);
+        world.data.game.autopilot = POINT { x: -1, y: -1 };
+        if world.story_state(StoryKey::ARILOU_SPACE_SIDE) <= 1 {
+            world.data.flagship.log_x = logx(QUASI_SPACE_X as i16);
+            world.data.flagship.log_y = logy(QUASI_SPACE_Y as i16);
+            if world.story_state(StoryKey::PORTAL_COUNTER) != 0 {
+                world.set_story_state(StoryKey::PORTAL_COUNTER, 0);
             }
-            set("ARILOU_SPACE_SIDE", 3);
+            world.set_story_state(StoryKey::ARILOU_SPACE_SIDE, 3);
         } else {
-            (*crate::ships::native::abi::GLOBDATA::current())
-                .SIS_state
-                .log_x = logx(ARILOU_SPACE_X as i16);
-            (*crate::ships::native::abi::GLOBDATA::current())
-                .SIS_state
-                .log_y = logy(ARILOU_SPACE_Y as i16);
-            set("ARILOU_SPACE_SIDE", 0);
+            world.data.flagship.log_x = logx(ARILOU_SPACE_X as i16);
+            world.data.flagship.log_y = logy(ARILOU_SPACE_Y as i16);
+            world.set_story_state(StoryKey::ARILOU_SPACE_SIDE, 0);
         }
-        CurStarDescPtr = ptr::null_mut();
+        world.select_star(
+            None,
+            (star_array
+                as *const [crate::engine::world::CStarDesc; crate::engine::world::CATALOG_LEN])
+                .as_ref(),
+        );
     }
 }
 
@@ -175,14 +162,14 @@ impl Cx<'_> {
         // SAFETY: Cx retains exclusive game-thread access and no projection crosses this call.
         unsafe {
             if kind == 1 {
-                interplanetary(point);
+                interplanetary(self.world, point);
             } else {
-                arilou();
+                arilou(self.world);
             }
         }
     }
     pub(crate) fn promote_hyper_encounter(&mut self, encounter: NonNull<ENCOUNTER>) {
-        let queue = &raw mut self.navigation_mut().Game_state.encounter_q;
+        let queue = &raw mut self.navigation_mut().game.encounter_q;
         // SAFETY: the encounter is a linked record from this queue; no borrow crosses the splice.
         unsafe {
             RemoveQueue(queue, encounter.as_ptr().cast());
@@ -240,7 +227,7 @@ impl Cx<'_> {
     }
     pub(crate) fn navigation_stars(&self) -> crate::engine::battle::views::FrameSelection {
         // SAFETY: the loaded navigation resource is retained throughout the context borrow.
-        unsafe { crate::engine::battle::views::FrameSelection::retain(stars_in_space) }
+        unsafe { crate::engine::battle::views::FrameSelection::retain(self.kernel.stars_in_space) }
     }
     pub(crate) fn group_icon(
         &self,
@@ -263,13 +250,13 @@ impl Cx<'_> {
         self.set_single_frames(id, frames, frame);
     }
     pub(crate) fn flagship_stamp_frame(&self) -> crate::engine::battle::views::FrameSelection {
-        let frame = self.navigation().Game_state.ShipStamp.frame;
+        let frame = self.navigation().game.ship_stamp.frame;
         crate::engine::battle::views::FrameSelection::retain(frame)
     }
     pub(crate) fn set_flagship_image(&mut self, id: ElementId) {
         let frame = self.flagship_stamp_frame();
         let role = crate::engine::battle::views::SharedFrames::Flagship;
-        let source = NonNull::from(&self.navigation().Game_state.ShipStamp.frame);
+        let source = NonNull::from(&self.navigation().game.ship_stamp.frame);
         // SAFETY: the navigation authority retains this single-frame stamp slot.
         let frames =
             unsafe { crate::engine::battle::views::Frames::native_shared(role, source, 1) };

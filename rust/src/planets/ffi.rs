@@ -29,8 +29,7 @@ pub static mut ELEMENTS: *const u8 = ELEMENT_ARRAY.as_ptr();
 extern "C" {
     #[link_name = "SysGenRNG"]
     static mut SYS_GEN_RNG: *mut RandomContext;
-    #[link_name = "CurStarDescPtr"]
-    static mut CUR_STAR_DESC_PTR: *mut crate::savegame::runtime::star::CStarDesc;
+
 }
 
 /// `*SysGenRNG`: the stream shared with the rest of the system generators.
@@ -70,7 +69,8 @@ pub(crate) fn blank_node() -> NODE_INFO {
 /// # Safety
 /// `CurStarDescPtr` must point at a valid star description.
 pub(crate) unsafe fn current_star_type() -> u8 {
-    (*std::ptr::addr_of!(CUR_STAR_DESC_PTR).read()).star_type
+    use crate::engine::World as GameWorld;
+    (*(*GameWorld::current()).star_pointer(crate::planets::starmap::current_catalog())).star_type
 }
 
 /// The star and the orbit `DoPlanetaryAnalysis` reads for `desc`: the sun and

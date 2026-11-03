@@ -124,16 +124,11 @@ pub(super) mod c_bridge {
 
     pub use crate::graphics::gfx_common_abi::ScreenTransition;
 
-    extern "C" {
-        pub static mut ActivityFrame: *mut crate::graphics::native_abi::frame_desc;
-        pub static mut RadarContext: *mut crate::graphics::native_abi::context_desc;
-        pub static mut SpaceContext: *mut crate::graphics::native_abi::context_desc;
-    }
     pub use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
     pub use crate::threading::pacing::linked::sleep_thread as SleepThread;
 
     extern "C" {
-        static mut LastActivity: u16;
+
         pub static mut optSmoothScroll: i32;
     }
 
@@ -157,7 +152,9 @@ pub(super) mod c_bridge {
 
     /// Clear CHECK_LOAD bit from LastActivity (replaces c_ClearLastActivityLoadFlag)
     pub unsafe fn clear_last_activity_load_flag() {
-        LastActivity &= !0x1000; // CHECK_LOAD = 0x1000
+        use crate::engine::Kernel;
+        (*Kernel::current()).last_activity &= !0x1000;
+        // CHECK_LOAD = 0x1000
     }
 
     /// Check if CommData.AlienTransitionDesc.NumFrames > 0 (replaces c_HasTransitionAnim)
@@ -286,9 +283,6 @@ pub mod dinput {
     const OPT_PC: c_int = 0x02;
     const CHECK_ABORT: u32 = 0x4000;
 
-    extern "C" {
-        static mut usingSpeech: u32;
-    }
     use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
 
     use crate::comm::ffi::rust_update_speech_graphics;
@@ -477,6 +471,7 @@ pub mod dinput {
 
     // DoInput callback for last replay (replaces c_DoLastReplay)
     unsafe extern "C" fn do_last_replay_cb(p_lrs: *mut LastReplayStateDInput) -> c_int {
+        use crate::engine::Kernel;
         let lrs = unsafe { &mut *p_lrs };
 
         let activity = crate::mainloop::ffi::get_current_activity().0 as u32;
@@ -496,7 +491,7 @@ pub mod dinput {
         let left_pressed = lrs.left.pressed(KEY_MENU_LEFT);
 
         if cancel_pressed && !won_last_battle {
-            let speech = unsafe { *std::ptr::addr_of_mut!(usingSpeech) };
+            let speech = unsafe { *std::ptr::addr_of_mut!((*Kernel::current()).using_speech) };
             c_bridge::FadeMusic(
                 super::communication_background_volume(
                     crate::sound::types::NORMAL_VOLUME as u8,
@@ -508,7 +503,7 @@ pub mod dinput {
             lrs.time_out = c_bridge::FadeMusic(0, (c_bridge::ONE_SECOND_TICKS * 2) as i16)
                 + (c_bridge::ONE_SECOND_TICKS as u32) / 60;
         } else if left_pressed {
-            let speech = unsafe { *std::ptr::addr_of_mut!(usingSpeech) };
+            let speech = unsafe { *std::ptr::addr_of_mut!((*Kernel::current()).using_speech) };
             c_bridge::FadeMusic(
                 super::communication_background_volume(
                     crate::sound::types::NORMAL_VOLUME as u8,
@@ -1379,6 +1374,8 @@ fn clear_subtitles(state: &mut CommState) {
 }
 
 fn update_speech_graphics(state: &mut CommState) {
+    #[cfg(not(test))]
+    use crate::engine::Kernel;
     let _ = state;
     #[cfg(not(test))]
     unsafe {
@@ -1391,15 +1388,17 @@ fn update_speech_graphics(state: &mut CommState) {
         }
         NEXT_TIME = now + (840 / 32); // ONE_SECOND = 840
 
-        let old_ctx = c_bridge::SetContext(c_bridge::RadarContext);
+        let old_ctx = c_bridge::SetContext((*Kernel::current()).radar_context);
         c_bridge::DrawOscilloscope();
-        c_bridge::SetContext(c_bridge::SpaceContext);
+        c_bridge::SetContext((*Kernel::current()).space_context);
         c_bridge::DrawSlider();
         c_bridge::SetContext(old_ctx);
     }
 }
 
 fn init_speech_graphics(state: &mut CommState) {
+    #[cfg(not(test))]
+    use crate::engine::Kernel;
     let _ = state;
     #[cfg(not(test))]
     unsafe {
@@ -1407,7 +1406,7 @@ fn init_speech_graphics(state: &mut CommState) {
         // SLIDER_Y = 107 (comm.h), SIS_SCREEN_WIDTH = SPACE_WIDTH - 14
         let slider_y: std::ffi::c_int = 107;
         let sis_w: std::ffi::c_int = 320 - 64 - 14;
-        let af = std::ptr::addr_of_mut!(c_bridge::ActivityFrame);
+        let af = std::ptr::addr_of_mut!((*Kernel::current()).activity_frame);
         let frame5 = c_bridge::SetAbsFrameIndex(std::ptr::read((af).cast()), 5);
         let frame2 = c_bridge::SetAbsFrameIndex(std::ptr::read((af).cast()), 2);
         let frame9 = c_bridge::SetAbsFrameIndex(std::ptr::read((af).cast()), 9);
@@ -1418,7 +1417,8 @@ fn init_speech_graphics(state: &mut CommState) {
 
 #[cfg(not(test))]
 unsafe fn set_slider_image_frame(index: u16) {
-    let frame = c_bridge::SetAbsFrameIndex((c_bridge::ActivityFrame).cast(), index);
+    use crate::engine::Kernel;
+    let frame = c_bridge::SetAbsFrameIndex(((*Kernel::current()).activity_frame).cast(), index);
     c_bridge::SetSliderImage(frame);
 }
 

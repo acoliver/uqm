@@ -4,13 +4,8 @@
 use super::abi::*;
 
 #[cfg(not(test))]
-#[derive(Default)]
-struct FuelDistance {
-    dx: u16,
-    dy: u16,
-    extra: u16,
-    ticks: u8,
-}
+#[cfg(not(test))]
+use crate::engine::world::FuelDistance;
 
 fn move_axis(position: &mut i32, delta: i16, maximum: i32) -> i16 {
     *position -= delta as i32;
@@ -35,12 +30,6 @@ pub(crate) mod live {
     use crate::navigation::{get, set};
     use std::ptr;
 
-    static mut DISTANCE: FuelDistance = FuelDistance {
-        dx: 0,
-        dy: 0,
-        extra: 0,
-        ticks: 1,
-    };
     const PERCENT: [u16; 24] = [
         20, 0, 0, 20, 40, 0, 20, 40, 60, 40, 40, 60, 0, 30, 60, 40, 2, 30, 70, 0, 0, 70, 60, 0,
     ];
@@ -72,7 +61,8 @@ pub(crate) mod live {
     /// # Safety
     /// Called on the game thread when entering hyperspace.
     pub unsafe extern "C" fn rust_reset_hyper_distance() {
-        DISTANCE = FuelDistance {
+        use crate::engine::World as GameWorld;
+        (*GameWorld::current()).hyper_distance = FuelDistance {
             dx: 0,
             dy: 0,
             extra: 0,
@@ -84,21 +74,14 @@ pub(crate) mod live {
     /// `dx` and `dy` are writable; the game world/display queue is exclusively accessible.
     #[no_mangle]
     pub unsafe extern "C" fn MoveSIS(dx: *mut i16, dy: *mut i16) {
+        use crate::engine::{World as GameWorld, WorldData};
         let mut x = move_axis(
-            &mut *ptr::addr_of_mut!(
-                (*crate::ships::native::abi::GLOBDATA::current())
-                    .SIS_state
-                    .log_x
-            ),
+            &mut *ptr::addr_of_mut!((*WorldData::current()).flagship.log_x),
             *dx,
             maximum_x(),
         );
         let mut y = move_axis(
-            &mut *ptr::addr_of_mut!(
-                (*crate::ships::native::abi::GLOBDATA::current())
-                    .SIS_state
-                    .log_y
-            ),
+            &mut *ptr::addr_of_mut!((*WorldData::current()).flagship.log_y),
             *dy,
             maximum_y(),
         );
@@ -120,34 +103,42 @@ pub(crate) mod live {
                 }
             });
         }
-        if (*crate::ships::native::abi::GLOBDATA::current())
-            .SIS_state
-            .FuelOnBoard
-            != 0
-            && get("ARILOU_SPACE_SIDE") <= 1
-        {
+        if (*WorldData::current()).flagship.fuel_on_board != 0 && get("ARILOU_SPACE_SIDE") <= 1 {
             x = x.wrapping_abs();
             y = y.wrapping_abs();
-            DISTANCE.dx = DISTANCE.dx.wrapping_add(x as u16);
-            DISTANCE.dy = DISTANCE.dy.wrapping_add(y as u16);
-            let adjusted_x = universe_x(16 * DISTANCE.dx as i32) as u32;
-            let adjusted_y = (9999 - universe_y(16 * DISTANCE.dy as i32) as i32) as u32;
+            (*GameWorld::current()).hyper_distance.dx = (*GameWorld::current())
+                .hyper_distance
+                .dx
+                .wrapping_add(x as u16);
+            (*GameWorld::current()).hyper_distance.dy = (*GameWorld::current())
+                .hyper_distance
+                .dy
+                .wrapping_add(y as u16);
+            let adjusted_x =
+                universe_x(16 * (*GameWorld::current()).hyper_distance.dx as i32) as u32;
+            let adjusted_y = (9999
+                - universe_y(16 * (*GameWorld::current()).hyper_distance.dy as i32) as i32)
+                as u32;
             let distance = square_root(
                 adjusted_x
                     .wrapping_mul(adjusted_x)
                     .wrapping_add(adjusted_y.wrapping_mul(adjusted_y)),
             )
-            .wrapping_add(DISTANCE.extra);
+            .wrapping_add((*GameWorld::current()).hyper_distance.extra);
             let mut ticks = distance >> 4;
-            if ticks > DISTANCE.ticks as u16 {
-                DeltaSISGauges(0, DISTANCE.ticks as i16 - ticks as i16, 0);
+            if ticks > (*GameWorld::current()).hyper_distance.ticks as u16 {
+                DeltaSISGauges(
+                    0,
+                    (*GameWorld::current()).hyper_distance.ticks as i16 - ticks as i16,
+                    0,
+                );
                 if ticks > 255 {
-                    DISTANCE.dx = 0;
-                    DISTANCE.dy = 0;
-                    DISTANCE.extra = distance & 15;
+                    (*GameWorld::current()).hyper_distance.dx = 0;
+                    (*GameWorld::current()).hyper_distance.dy = 0;
+                    (*GameWorld::current()).hyper_distance.extra = distance & 15;
                     ticks = 0;
                 }
-                DISTANCE.ticks = ticks as u8;
+                (*GameWorld::current()).hyper_distance.ticks = ticks as u8;
             }
         }
     }
@@ -162,34 +153,16 @@ pub(crate) mod live {
     /// Game-thread access to initialized world fleet and encounter queues.
     #[no_mangle]
     pub unsafe extern "C" fn check_hyperspace_encounter() {
+        use crate::engine::WorldData;
         let universe = POINT {
-            x: universe_x(
-                (*crate::ships::native::abi::GLOBDATA::current())
-                    .SIS_state
-                    .log_x,
-            ),
-            y: universe_y(
-                (*crate::ships::native::abi::GLOBDATA::current())
-                    .SIS_state
-                    .log_y,
-            ),
+            x: universe_x((*WorldData::current()).flagship.log_x),
+            y: universe_y((*WorldData::current()).flagship.log_y),
         };
-        let queue = ptr::addr_of_mut!(
-            (*crate::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .encounter_q
-        );
-        let mut handle = (*crate::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .avail_race_q
-            .head;
+        let queue = ptr::addr_of_mut!((*WorldData::current()).game.encounter_q);
+        let mut handle = (*WorldData::current()).game.avail_race_q.head;
         let mut race = 0usize;
         while !handle.is_null()
-            && (*crate::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .CurrentActivity
-                & IN_BATTLE as u16
-                != 0
+            && (*WorldData::current()).game.current_activity & IN_BATTLE as u16 != 0
         {
             let fleet = handle.cast::<FLEET_INFO>();
             handle = (*fleet).succ;
@@ -209,10 +182,7 @@ pub(crate) mod live {
                             percent * get("SLYLANDRO_MULTIPLIER") as u16
                         };
                     } else if race == MELNORME_SHIP as usize
-                        && ((*crate::ships::native::abi::GLOBDATA::current())
-                            .SIS_state
-                            .FuelOnBoard
-                            == 0
+                        && ((*WorldData::current()).flagship.fuel_on_board == 0
                             || get("USED_BROADCASTER") != 0)
                         && get("MELNORME_ANGER") < 3
                     {

@@ -12,7 +12,7 @@ pub struct GameStateFile {
     index: c_int,
 }
 
-static mut FILES: [GameStateFile; 3] = [
+static FILES: [GameStateFile; 3] = [
     GameStateFile { index: 0 },
     GameStateFile { index: 1 },
     GameStateFile { index: 2 },
@@ -25,7 +25,8 @@ pub unsafe extern "C" fn OpenStateFile(index: c_int, mode: *const c_char) -> *mu
     if !(0..3).contains(&index) || rust_open_state_file(index, mode) == 0 {
         return ptr::null_mut();
     }
-    ptr::addr_of_mut!(FILES)
+    ptr::addr_of!(FILES)
+        .cast_mut()
         .cast::<GameStateFile>()
         .add(index as usize)
 }
@@ -90,15 +91,13 @@ pub unsafe extern "C" fn SeekStateFile(
 pub(crate) mod planets {
     use super::*;
     use crate::c_bindings::{global_state::SOLARSYS_STATE, solar_system};
-    use crate::savegame::runtime::star::CStarDesc;
-
-    extern "C" {
-        static mut star_array: *mut CStarDesc;
-        static mut CurStarDescPtr: *mut crate::savegame::runtime::star::CStarDesc;
-    }
+    use crate::planets::starmap::star_array;
 
     pub(crate) unsafe fn location(system: *mut SOLARSYS_STATE) -> (c_int, c_int, c_int) {
-        let star = CurStarDescPtr.offset_from(star_array) as u16;
+        use crate::engine::World as GameWorld;
+        let star = (*GameWorld::current())
+            .star_pointer(crate::planets::starmap::current_catalog())
+            .offset_from(star_array) as u16;
         let planet = (*(*system).pBaseDesc)
             .pPrevDesc
             .offset_from((*system).PlanetDesc.as_ptr()) as u16;
@@ -179,24 +178,28 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn handles_share_the_existing_file_manager_and_preserve_io() {
+        let mut game = crate::engine::Game::new();
+        // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
-            rust_init_game_state();
-            assert!(OpenStateFile(-1, c"wb".as_ptr()).is_null());
-            assert!(OpenStateFile(3, c"wb".as_ptr()).is_null());
-            let file = OpenStateFile(1, c"wb".as_ptr());
-            assert!(!file.is_null());
-            let data = [11u8, 22, 33, 44];
-            assert_eq!(WriteStateFile(data.as_ptr().cast(), 2, 2, file), 2);
-            assert_eq!(LengthStateFile(file), 4);
-            assert_eq!(rust_length_state_file(1), 4);
-            assert_eq!(SeekStateFile(file, -2, 2), 1);
-            let mut output = [0u8; 2];
-            assert_eq!(ReadStateFile(output.as_mut_ptr().cast(), 1, 2, file), 2);
-            assert_eq!(output, [33, 44]);
-            CloseStateFile(file);
-            assert_eq!(OpenStateFile(1, c"rb".as_ptr()), file);
-            CloseStateFile(file);
-            DeleteStateFile(1);
+            crate::app::bridge::with_game(&mut game, || {
+                rust_init_game_state();
+                assert!(OpenStateFile(-1, c"wb".as_ptr()).is_null());
+                assert!(OpenStateFile(3, c"wb".as_ptr()).is_null());
+                let file = OpenStateFile(1, c"wb".as_ptr());
+                assert!(!file.is_null());
+                let data = [11u8, 22, 33, 44];
+                assert_eq!(WriteStateFile(data.as_ptr().cast(), 2, 2, file), 2);
+                assert_eq!(LengthStateFile(file), 4);
+                assert_eq!(rust_length_state_file(1), 4);
+                assert_eq!(SeekStateFile(file, -2, 2), 1);
+                let mut output = [0u8; 2];
+                assert_eq!(ReadStateFile(output.as_mut_ptr().cast(), 1, 2, file), 2);
+                assert_eq!(output, [33, 44]);
+                CloseStateFile(file);
+                assert_eq!(OpenStateFile(1, c"rb".as_ptr()), file);
+                CloseStateFile(file);
+                DeleteStateFile(1);
+            })
         }
     }
 }

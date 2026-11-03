@@ -12,7 +12,7 @@ use crate::automation::mode::GameMode;
 use crate::automation::script::ShipElementAssertion;
 use crate::planet_side::cargo::NUM_ELEMENT_CATEGORIES;
 
-/// `SIS_STATE.ElementAmounts`, indexed by element category.
+/// `SIS_STATE.element_amounts`, indexed by element category.
 pub type ElementAmounts = [u16; NUM_ELEMENT_CATEGORIES];
 
 /// Why an element assertion did not hold.

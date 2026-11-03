@@ -173,6 +173,7 @@ const DEFAULT_SCREEN_HEIGHT: i32 = 240;
 /// `pSolarSysState`, as the automation input hook does.
 #[cfg(not(test))]
 unsafe fn read_flight_state(solar_system: &SOLARSYS_STATE, snapshot: &mut NavigationSnapshot) {
+    use crate::engine::WorldData;
     snapshot.active = 1;
     snapshot.in_ip_flight = i32::from(solar_system.InIpFlight != 0);
     // Ask the game for live orbit state rather than inferring it. The
@@ -184,9 +185,8 @@ unsafe fn read_flight_state(solar_system: &SOLARSYS_STATE, snapshot: &mut Naviga
     // would report orbit during encounters.
     snapshot.in_orbit = i32::from(playerInPlanetOrbit());
     snapshot.wait_intersect = solar_system.WaitIntersect;
-    let game_state =
-        std::ptr::addr_of!((*crate::ships::native::abi::GLOBDATA::current()).Game_state);
-    let ship_stamp = std::ptr::addr_of!((*game_state).ShipStamp).read();
+    let game_state = std::ptr::addr_of!((*WorldData::current()).game);
+    let ship_stamp = std::ptr::addr_of!((*game_state).ship_stamp).read();
     snapshot.ship_x = i32::from(ship_stamp.origin.x);
     snapshot.ship_y = i32::from(ship_stamp.origin.y);
     if !ship_stamp.frame.is_null() {
@@ -225,11 +225,10 @@ unsafe fn read_flight_state(solar_system: &SOLARSYS_STATE, snapshot: &mut Naviga
 /// position a movement assertion must read.
 #[cfg(not(test))]
 pub(crate) fn hyperspace_position() -> Option<(i32, i32)> {
+    use crate::engine::WorldData;
     // SAFETY: the production game invokes the automation hooks synchronously
     // on the game thread, so `GlobData` cannot change during this read.
-    let sis_state = unsafe {
-        &*std::ptr::addr_of!((*crate::ships::native::abi::GLOBDATA::current()).SIS_state)
-    };
+    let sis_state = unsafe { &*std::ptr::addr_of!((*WorldData::current()).flagship) };
     Some((sis_state.log_x, sis_state.log_y))
 }
 
@@ -243,6 +242,7 @@ pub(crate) fn hyperspace_position() -> Option<(i32, i32)> {
 /// Unavailable outside hyperspace flight or while a conversation is active.
 #[cfg(not(test))]
 pub(crate) fn hyperspace_stopped() -> Option<bool> {
+    use crate::engine::WorldData;
     if crate::mainloop::ffi::get_current_activity().kind()
         != crate::mainloop::types::ActivityKind::InHyperspace
         || super::ui_observation::conversation_snapshot().active
@@ -250,14 +250,7 @@ pub(crate) fn hyperspace_stopped() -> Option<bool> {
         return None;
     }
     // SAFETY: the input hook runs synchronously on the game thread.
-    let velocity = unsafe {
-        std::ptr::addr_of!(
-            (*crate::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .velocity
-        )
-        .read()
-    };
+    let velocity = unsafe { std::ptr::addr_of!((*WorldData::current()).game.velocity).read() };
     Some(velocity.get_current_components() == (0, 0))
 }
 
@@ -292,12 +285,11 @@ pub(crate) fn hyperspace_facing() -> Option<u8> {
 /// a purchase is visible here only after the game applied it.
 #[cfg(not(test))]
 pub(crate) fn ship_resources() -> Option<(u32, u32)> {
+    use crate::engine::WorldData;
     // SAFETY: the production game invokes the automation hooks synchronously
     // on the game thread, so `GlobData` cannot change during this read.
-    let sis_state = unsafe {
-        &*std::ptr::addr_of!((*crate::ships::native::abi::GLOBDATA::current()).SIS_state)
-    };
-    Some((sis_state.FuelOnBoard, sis_state.ResUnits))
+    let sis_state = unsafe { &*std::ptr::addr_of!((*WorldData::current()).flagship) };
+    Some((sis_state.fuel_on_board, sis_state.res_units))
 }
 
 /// Without the linked game there is no flagship state to read.
@@ -309,12 +301,11 @@ pub(crate) fn ship_resources() -> Option<(u32, u32)> {
 /// The flagship's `CrewEnlisted` and `NumLanders`, in that order.
 #[cfg(not(test))]
 pub(crate) fn sis_crew_and_landers() -> Option<(u16, u8)> {
+    use crate::engine::WorldData;
     // SAFETY: the production game invokes the automation hooks synchronously
     // on the game thread, so `GlobData` cannot change during this read.
-    let sis_state = unsafe {
-        &*std::ptr::addr_of!((*crate::ships::native::abi::GLOBDATA::current()).SIS_state)
-    };
-    Some((sis_state.CrewEnlisted, sis_state.NumLanders))
+    let sis_state = unsafe { &*std::ptr::addr_of!((*WorldData::current()).flagship) };
+    Some((sis_state.crew_enlisted, sis_state.num_landers))
 }
 
 /// Without the linked game there is no flagship state to read.
@@ -327,14 +318,14 @@ type SisFittings = ([u8; 11], [u8; 8], [u8; 16], u16);
 
 #[cfg(not(test))]
 pub(crate) fn sis_fittings() -> Option<SisFittings> {
+    use crate::engine::WorldData;
     unsafe {
-        let sis =
-            std::ptr::addr_of!((*crate::ships::native::abi::GLOBDATA::current()).SIS_state).read();
+        let sis = std::ptr::addr_of!((*WorldData::current()).flagship).read();
         Some((
-            sis.DriveSlots,
-            sis.JetSlots,
-            sis.ModuleSlots,
-            sis.TotalElementMass,
+            sis.drive_slots,
+            sis.jet_slots,
+            sis.module_slots,
+            sis.total_element_mass,
         ))
     }
 }
@@ -346,14 +337,11 @@ pub(crate) fn sis_fittings() -> Option<SisFittings> {
 /// The game clock's `(day, month, year)` indices.
 #[cfg(not(test))]
 pub(crate) fn game_date() -> Option<(u8, u8, u16)> {
+    use crate::engine::WorldData;
     // SAFETY: the production game invokes the automation hooks synchronously
     // on the game thread, so `GlobData` cannot change during this read.
     unsafe {
-        let clock = std::ptr::addr_of!(
-            (*crate::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .GameClock
-        );
+        let clock = std::ptr::addr_of!((*WorldData::current()).game.game_clock);
         Some((
             std::ptr::addr_of!((*clock).day_index).read(),
             std::ptr::addr_of!((*clock).month_index).read(),
@@ -377,9 +365,8 @@ pub(crate) fn ship_element_amounts() -> Option<[u16; 8]> {
     // SAFETY: the production game invokes the automation hooks synchronously
     // on the game thread, so `GlobData` cannot change during this read.
     unsafe {
-        let sis_state =
-            std::ptr::addr_of!((*crate::ships::native::abi::GLOBDATA::current()).SIS_state);
-        Some(std::ptr::addr_of!((*sis_state).ElementAmounts).read())
+        let sis_state = std::ptr::addr_of!((*crate::engine::WorldData::current()).flagship);
+        Some(std::ptr::addr_of!((*sis_state).element_amounts).read())
     }
 }
 
@@ -441,6 +428,7 @@ pub(crate) fn departure_snapshot() -> NavigationSnapshot {
 #[cfg(not(test))]
 pub(crate) fn contact_snapshot(race: u8) -> Option<(NavigationSnapshot, bool)> {
     use crate::c_bindings::global_state::POINT;
+    use crate::engine::WorldData;
     use crate::savegame::runtime::groups::CIpGroup;
     use crate::savegame::runtime::queues::{walk, QueueKind};
     extern "C" {
@@ -448,12 +436,8 @@ pub(crate) fn contact_snapshot(race: u8) -> Option<(NavigationSnapshot, bool)> {
     }
     unsafe {
         let solar = crate::c_bindings::solar_system::current().as_ref()?;
-        let queue = &*std::ptr::addr_of!(
-            (*crate::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .ip_group_q
-        )
-        .cast::<crate::comm::locdata::CQueue>();
+        let queue = &*std::ptr::addr_of!((*WorldData::current()).game.ip_group_q)
+            .cast::<crate::collections::queue::Queue>();
         let group = walk::<CIpGroup>(queue, QueueKind::IpGroups)
             .expect("live IP group queue")
             .into_iter()
@@ -494,17 +478,13 @@ pub(crate) fn contact_snapshot(_race: u8) -> Option<(NavigationSnapshot, bool)> 
 
 #[cfg(not(test))]
 pub(crate) fn contact_race() -> Option<u8> {
+    use crate::engine::WorldData;
     unsafe {
-        std::ptr::addr_of!(
-            (*crate::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .npc_built_ship_q
-                .head
-        )
-        .read()
-        .cast::<crate::comm::dispatch::CShipFragment>()
-        .as_ref()
-        .map(|ship| ship.race_id)
+        std::ptr::addr_of!((*WorldData::current()).game.npc_built_ship_q.head)
+            .read()
+            .cast::<crate::comm::dispatch::CShipFragment>()
+            .as_ref()
+            .map(|ship| ship.race_id)
     }
 }
 
@@ -1012,15 +992,18 @@ pub extern "C" fn rust_automation_get_pulsed_menu_key(index: i32) -> i32 {
 pub(crate) fn star_flight_observation(
     target: super::star_flight::StarTarget,
 ) -> super::star_flight::Observation {
+    use crate::engine::{World as GameWorld, WorldData};
     use crate::savegame::runtime::star::{CStarDesc, CATALOG_LEN};
     extern "C" {
-        static mut CurStarDescPtr: *mut crate::savegame::runtime::star::CStarDesc;
+
         fn universeToDispx(x: std::ffi::c_long) -> i16;
         fn universeToDispy(y: std::ffi::c_long) -> i16;
     }
     // SAFETY: the coordinator is called synchronously on the game thread.
     unsafe {
-        let current = std::ptr::addr_of!(CurStarDescPtr).read() as usize;
+        let current = (*GameWorld::current())
+            .star_pointer(crate::planets::starmap::current_catalog())
+            as usize;
         let base = std::ptr::addr_of!(crate::planets::tables::STARMAP_ARRAY) as usize;
         let offset = current.wrapping_sub(base);
         let entry_size = std::mem::size_of::<CStarDesc>();
@@ -1034,12 +1017,7 @@ pub(crate) fn star_flight_observation(
                 universeToDispy(ty.into()) - universeToDispy(y.into()),
             )
         });
-        let autopilot = std::ptr::addr_of!(
-            (*crate::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .autopilot
-        )
-        .read();
+        let autopilot = std::ptr::addr_of!((*WorldData::current()).game.autopilot).read();
         super::star_flight::Observation {
             activity: crate::mainloop::ffi::get_current_activity().0,
             current_star,
@@ -1077,15 +1055,9 @@ pub(crate) fn star_flight_observation(
 /// Player-selected combat settings: enabled flag and speed selector.
 #[cfg(not(test))]
 pub(crate) fn cyborg_settings() -> Option<(bool, u8)> {
+    use crate::engine::WorldData;
     // Game thread, read only while the input callback owns the live game.
-    let flags = unsafe {
-        std::ptr::addr_of!(
-            (*crate::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .glob_flags
-        )
-        .read()
-    };
+    let flags = unsafe { std::ptr::addr_of!((*WorldData::current()).game.glob_flags).read() };
     Some((flags & (1 << 5) != 0, flags >> 6))
 }
 
@@ -1096,16 +1068,13 @@ pub(crate) fn cyborg_settings() -> Option<(bool, u8)> {
 
 #[cfg(not(test))]
 pub(crate) fn escort_roster() -> Option<Vec<(u8, u16)>> {
+    use crate::engine::WorldData;
     crate::state::ffi::named_state_value("STARBASE_AVAILABLE")?;
     use crate::comm::dispatch::CShipFragment;
     use crate::savegame::runtime::queues::{walk, QueueKind};
     unsafe {
-        let queue = &*std::ptr::addr_of!(
-            (*crate::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .built_ship_q
-        )
-        .cast::<crate::comm::locdata::CQueue>();
+        let queue = &*std::ptr::addr_of!((*WorldData::current()).game.built_ship_q)
+            .cast::<crate::collections::queue::Queue>();
         Some(
             walk::<CShipFragment>(queue, QueueKind::BuiltShips)
                 .expect("live escort queue")

@@ -189,7 +189,7 @@ fn laser_snaps_to_the_enemy_within_the_turn_and_is_yellow() {
             // Straight along +x: ARCTAN gives angle 16, facing 4, four facings
             // from the ship's facing 0.
             other.spawn_ship(1, 2000, 1000);
-            fleet.fixture.ship_mut().ShipFacing = 0;
+            fleet.fixture.ship_mut().ship_facing = 0;
 
             let laser = fire(&mut fleet, ship);
 
@@ -233,7 +233,7 @@ fn laser_without_a_target_follows_the_ship_facing() {
             let _battle = Battle::new(16);
             let mut fleet = Fleet::new(&_battle, 0);
             let ship = fleet.spawn_ship(0, 1000, 1000);
-            fleet.fixture.ship_mut().ShipFacing = 8;
+            fleet.fixture.ship_mut().ship_facing = 8;
 
             let laser = fire(&mut fleet, ship);
 
@@ -258,7 +258,7 @@ fn laser_aims_exactly_at_a_target_directly_behind() {
             // Eight facings away: TrackShip turns a random way by one step, but
             // Arilou adds the whole delta, so the beam points straight at it.
             other.spawn_ship(1, 1000, 2000);
-            fleet.fixture.ship_mut().ShipFacing = 0;
+            fleet.fixture.ship_mut().ship_facing = 0;
 
             let seed = seed_where(1, |d| d[0] & 1 == 0);
             TFB_SeedRandom(seed);
@@ -537,7 +537,7 @@ impl<'a> Skiff<'a> {
         fleet.fixture.descriptor_mut().ship_data.ship = ship_frames.array();
         fleet.fixture.descriptor_mut().ship_data.special = warp_frames.array();
         let ship = fleet.spawn_ship(0, 100, 200);
-        fleet.fixture.ship_mut().ShipFacing = 6;
+        fleet.fixture.ship_mut().ship_facing = 6;
         let ship_array = fleet.fixture.frame_set(0);
         (*ship).current.image.frames = ship_array.clone();
         (*ship).next.image.frames = ship_array.clone();

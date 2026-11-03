@@ -58,20 +58,14 @@ mod live {
 
     use crate::mainloop::input_abi::live::AnyButtonPress;
 
-    extern "C" {
-
-        static mut usingSpeech: u32;
-    }
     use crate::threading::pacing::linked::sleep_thread as SleepThread;
     use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
 
     impl StarbaseApi for LiveScript<Handler> {
         fn date(&self) -> Date {
+            use crate::engine::WorldData;
             unsafe {
-                let clock =
-                    &(*std::ptr::addr_of!((*crate::ships::native::abi::GLOBDATA::current())))
-                        .Game_state
-                        .GameClock;
+                let clock = &(*WorldData::current()).game.game_clock;
                 Date {
                     year: clock.year_index,
                     month: clock.month_index,
@@ -80,18 +74,18 @@ mod live {
             }
         }
         fn ship(&self) -> Ship {
+            use crate::engine::WorldData;
             unsafe {
-                let sis = &(*std::ptr::addr_of!((*crate::ships::native::abi::GLOBDATA::current())))
-                    .SIS_state;
+                let sis = &(*WorldData::current()).flagship;
                 Ship {
-                    drives: sis.DriveSlots,
-                    jets: sis.JetSlots,
-                    modules: sis.ModuleSlots,
-                    crew: sis.CrewEnlisted,
-                    fuel: sis.FuelOnBoard,
-                    landers: sis.NumLanders,
-                    units: sis.ResUnits,
-                    mineral_mass: sis.TotalElementMass,
+                    drives: sis.drive_slots,
+                    jets: sis.jet_slots,
+                    modules: sis.module_slots,
+                    crew: sis.crew_enlisted,
+                    fuel: sis.fuel_on_board,
+                    landers: sis.num_landers,
+                    units: sis.res_units,
+                    mineral_mass: sis.total_element_mass,
                 }
             }
         }
@@ -99,7 +93,8 @@ mod live {
             unsafe { CalculateEscortsWorth() }
         }
         fn using_speech(&self) -> bool {
-            unsafe { usingSpeech != 0 }
+            use crate::engine::Kernel;
+            unsafe { (*Kernel::current()).using_speech != 0 }
         }
         fn random(&mut self) -> u32 {
             crate::math::random()
@@ -110,27 +105,18 @@ mod live {
             }
         }
         fn mineral_amount(&self, category: usize) -> u16 {
-            unsafe {
-                (*crate::ships::native::abi::GLOBDATA::current())
-                    .SIS_state
-                    .ElementAmounts[category]
-            }
+            use crate::engine::WorldData;
+            unsafe { (*WorldData::current()).flagship.element_amounts[category] }
         }
         fn mineral_worth(&self, category: usize) -> u8 {
-            unsafe {
-                (*crate::ships::native::abi::GLOBDATA::current())
-                    .Game_state
-                    .ElementWorth[category]
-            }
+            use crate::engine::WorldData;
+            unsafe { (*WorldData::current()).game.element_worth[category] }
         }
         fn remove_minerals(&mut self, category: usize, amount: u16) {
+            use crate::engine::WorldData;
             unsafe {
-                (*crate::ships::native::abi::GLOBDATA::current())
-                    .SIS_state
-                    .ElementAmounts[category] -= amount;
-                (*crate::ships::native::abi::GLOBDATA::current())
-                    .SIS_state
-                    .TotalElementMass -= amount;
+                (*WorldData::current()).flagship.element_amounts[category] -= amount;
+                (*WorldData::current()).flagship.total_element_mass -= amount;
             }
         }
         fn draw_cargo(&mut self, old: u8, new: u8) {
@@ -167,13 +153,10 @@ mod live {
             }
         }
         fn skip_sale(&mut self) -> bool {
+            use crate::engine::WorldData;
             unsafe {
                 AnyButtonPress(1) != 0
-                    || (*crate::ships::native::abi::GLOBDATA::current())
-                        .Game_state
-                        .CurrentActivity
-                        & (1 << 14)
-                        != 0
+                    || (*WorldData::current()).game.current_activity & (1 << 14) != 0
             }
         }
     }

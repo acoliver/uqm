@@ -78,22 +78,6 @@ fn gravity_keys(selector: u8) -> [Option<String>; 3] {
 
 #[cfg(not(test))]
 pub(crate) mod live {
-    pub fn shared_frame_source(
-        role: crate::engine::battle::views::SharedFrames,
-    ) -> std::ptr::NonNull<crate::graphics::native_abi::FRAME> {
-        let source = match role {
-            crate::engine::battle::views::SharedFrames::Asteroid => {
-                (&raw mut crate::game_init::space_resources::asteroid).cast()
-            }
-            crate::engine::battle::views::SharedFrames::Explosion => {
-                (&raw mut crate::game_init::space_resources::explosion).cast()
-            }
-            _ => panic!("not a battle shared frame role {role:?}"),
-        };
-        std::ptr::NonNull::new(source)
-            .unwrap_or_else(|| panic!("shared frame authority has no address"))
-    }
-
     use super::gravity_keys;
     use crate::graphics::native_abi::frame_desc;
     use crate::graphics::{
@@ -106,14 +90,15 @@ pub(crate) mod live {
         ptr,
     };
 
-    #[no_mangle]
-    pub static mut planet: [*mut frame_desc; 3] = [ptr::null_mut(); 3];
-
     /// # Safety
     /// Called on the game thread with a valid planet selector and initialized resources.
     #[no_mangle]
     pub unsafe extern "C" fn load_gravity_well(selector: u8) {
-        let frames = std::slice::from_raw_parts_mut(ptr::addr_of_mut!(planet).cast(), 3);
+        use crate::engine::Kernel;
+        let frames = std::slice::from_raw_parts_mut(
+            ptr::addr_of_mut!((*Kernel::current()).planet).cast(),
+            3,
+        );
         for (frame, key) in frames.iter_mut().zip(gravity_keys(selector)) {
             *frame = match key {
                 Some(key) => {
@@ -131,7 +116,11 @@ pub(crate) mod live {
     /// Called on the game thread while the graphics resource system is live.
     #[no_mangle]
     pub unsafe extern "C" fn free_gravity_well() {
-        let frames = std::slice::from_raw_parts_mut(ptr::addr_of_mut!(planet).cast(), 3);
+        use crate::engine::Kernel;
+        let frames = std::slice::from_raw_parts_mut(
+            ptr::addr_of_mut!((*Kernel::current()).planet).cast(),
+            3,
+        );
         for frame in frames.iter_mut() {
             DestroyDrawable(ReleaseDrawable(*frame));
             *frame = ptr::null_mut();
@@ -190,4 +179,4 @@ mod tests {
 }
 
 #[cfg(not(test))]
-pub use live::{free_gravity_well, shared_frame_source};
+pub use live::free_gravity_well;

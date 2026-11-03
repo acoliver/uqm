@@ -7,7 +7,6 @@ use std::sync::Mutex;
 
 use crate::battle::velocity::VelocityDesc;
 use crate::c_bindings::{assert_c_layout, global_state};
-use crate::time::clock_bridge::ClockState;
 
 use super::types::{AnimationDescData, CommData, TextAlign, TextValign, MAX_ANIMATIONS};
 
@@ -55,122 +54,8 @@ const _: () = {
     );
 };
 
-/// C `SIS_STATE` struct (sis.h) — full repr(C) mirror.
-/// Layout verified via offsetof: total size 124 bytes.
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct CSisState {
-    pub log_x: i32,
-    pub log_y: i32,
-    pub res_units: u32,
-    pub fuel_on_board: u32,
-    pub crew_enlisted: u16,
-    pub total_element_mass: u16,
-    pub total_bio_mass: u16,
-    pub module_slots: [u8; 16], // NUM_MODULE_SLOTS=16
-    pub drive_slots: [u8; 11],  // NUM_DRIVE_SLOTS=11
-    pub jet_slots: [u8; 8],     // NUM_JET_SLOTS=8
-    pub num_landers: u8,
-    pub element_amounts: [u16; 8], // NUM_ELEMENT_CATEGORIES=8
-    pub ship_name: [u8; 16],
-    pub commander_name: [u8; 16],
-    pub planet_name: [u8; 16],
-}
-
-/// C `QUEUE` struct (displist.h) — repr(C) mirror.
-/// Total size 40 bytes on 64-bit (QUEUE_TABLE variant).
-#[repr(C)]
-#[derive(Clone, Copy, Default)]
-pub struct CQueue {
-    pub head: *mut c_void,
-    pub tail: *mut c_void,
-    pub pq_tab: *mut u8,
-    pub free_list: *mut c_void,
-    pub object_size: u16,
-    pub num_objects: u8,
-}
-
-/// C `GAME_STATE` struct (globdata.h) — repr(C) mirror of every field.
-///
-/// No padding is written by hand: each gap the C compiler leaves is the same
-/// alignment gap `repr(C)` leaves here, and the layout assertions below fail
-/// the build if any offset or the 512-byte size ever differs.
-#[repr(C)]
-pub struct CGameState {
-    pub glob_flags: u8,          // offset 0
-    pub crew_cost: u8,           // offset 1
-    pub fuel_cost: u8,           // offset 2
-    pub module_cost: [u8; 20],   // offset 3, NUM_MODULES=20
-    pub element_worth: [u8; 8],  // offset 23, NUM_ELEMENT_CATEGORIES=8
-    _display_array: *mut c_void, // offset 32, PRIMITIVE*
-    pub current_activity: u16,   // offset 40
-    pub game_clock: ClockState,  // offset 48, CLOCK_STATE
-    pub autopilot: CPoint,       // offset 96
-    pub ip_location: CPoint,     // offset 100
-    pub ship_stamp: CStamp,      // offset 104
-    pub ship_facing: u16,        // offset 120
-    pub ip_planet: u8,           // offset 122
-    // `GLOBAL(in_orbit)`: save/load-only orbit encoding, not live orbit state.
-    pub in_orbit: u8,             // offset 123
-    pub velocity: VelocityDesc,   // offset 124, VELOCITY_DESC
-    pub battle_group_ref: u32,    // offset 144, DWORD
-    pub avail_race_q: CQueue,     // offset 152
-    pub npc_built_ship_q: CQueue, // offset 192
-    pub ip_group_q: CQueue,       // offset 232
-    pub encounter_q: CQueue,      // offset 272
-    pub built_ship_q: CQueue,     // offset 312
-}
-
-impl CGameState {
-    pub(crate) const DISPLAY_ARRAY_OFFSET: usize = std::mem::offset_of!(Self, _display_array);
-}
-
-assert_c_layout!(
-    CSisState,
-    global_state::SIS_STATE {
-        log_x: log_x,
-        log_y: log_y,
-        res_units: ResUnits,
-        fuel_on_board: FuelOnBoard,
-        crew_enlisted: CrewEnlisted,
-        total_element_mass: TotalElementMass,
-        total_bio_mass: TotalBioMass,
-        module_slots: ModuleSlots,
-        drive_slots: DriveSlots,
-        jet_slots: JetSlots,
-        num_landers: NumLanders,
-        element_amounts: ElementAmounts,
-        ship_name: ShipName,
-        commander_name: CommanderName,
-        planet_name: PlanetName,
-    }
-);
-
-assert_c_layout!(
-    CGameState,
-    crate::engine::battle::schema::GAME_STATE {
-        glob_flags: glob_flags,
-        crew_cost: CrewCost,
-        fuel_cost: FuelCost,
-        module_cost: ModuleCost,
-        element_worth: ElementWorth,
-        current_activity: CurrentActivity,
-        game_clock: GameClock,
-        autopilot: autopilot,
-        ip_location: ip_location,
-        ship_stamp: ShipStamp,
-        ship_facing: ShipFacing,
-        ip_planet: ip_planet,
-        in_orbit: in_orbit,
-        velocity: velocity,
-        battle_group_ref: BattleGroupRef,
-        avail_race_q: avail_race_q,
-        npc_built_ship_q: npc_built_ship_q,
-        ip_group_q: ip_group_q,
-        encounter_q: encounter_q,
-        built_ship_q: built_ship_q,
-    }
-);
+pub use crate::engine::battle::schema::GAME_STATE as CGameState;
+pub use crate::ships::native::abi::SIS_STATE as CSisState;
 
 assert_c_layout!(CPoint, global_state::POINT { x: x, y: y });
 assert_c_layout!(
@@ -178,17 +63,6 @@ assert_c_layout!(
     global_state::STAMP {
         origin: origin,
         frame: frame
-    }
-);
-assert_c_layout!(
-    CQueue,
-    global_state::QUEUE {
-        head: head,
-        tail: tail,
-        pq_tab: pq_tab,
-        free_list: free_list,
-        object_size: object_size,
-        num_objects: num_objects,
     }
 );
 assert_c_layout!(
@@ -431,10 +305,6 @@ pub fn read_locdata(ld: &CLocData) -> CommData {
 // Tests — unit-testable without C linkage
 // ===========================================================================
 
-const _: () = assert!(
-    CGameState::DISPLAY_ARRAY_OFFSET == crate::engine::battle::schema::DISPLAY_ARRAY_OFFSET
-);
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -491,11 +361,8 @@ mod tests {
         assert_eq!(std::mem::offset_of!(CSisState, drive_slots), 38);
         assert_eq!(std::mem::offset_of!(CSisState, ship_name), 74);
         assert_eq!(std::mem::size_of::<CStamp>(), 16);
-        assert_eq!(std::mem::size_of::<global_state::GLOBDATA>(), 480);
-        assert_eq!(
-            std::mem::offset_of!(global_state::GLOBDATA, Game_state),
-            128
-        );
+        assert_eq!(std::mem::size_of::<crate::engine::WorldData>(), 480);
+        assert_eq!(std::mem::offset_of!(crate::engine::WorldData, game), 128);
         assert_eq!(std::mem::size_of::<CGameState>(), 352);
         assert_eq!(std::mem::offset_of!(CGameState, current_activity), 40);
         assert_eq!(std::mem::offset_of!(CGameState, ship_stamp), 104);

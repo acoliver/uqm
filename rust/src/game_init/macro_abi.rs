@@ -52,7 +52,6 @@ pub unsafe extern "C" fn ReleaseSound(sound: *mut StringTableEntry) -> *mut Stri
 /// # Safety
 /// Called on the game thread while the live game state is initialized.
 pub unsafe fn get_current_activity() -> u16 {
-    (*crate::ships::native::abi::GLOBDATA::current())
-        .Game_state
-        .CurrentActivity
+    use crate::engine::WorldData;
+    (*WorldData::current()).game.current_activity
 }

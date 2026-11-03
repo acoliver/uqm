@@ -100,8 +100,6 @@ pub(crate) mod live {
 
     use crate::battle::sounds::engine::PlayMenuSound;
 
-    extern "C" {}
-
     #[repr(C)]
     struct Menu {
         input: unsafe extern "C" fn(*mut Menu) -> i32,
@@ -113,10 +111,8 @@ pub(crate) mod live {
     }
 
     unsafe fn support_ship(menu: &Menu) -> *mut CShipFragment {
-        let mut link = (*crate::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .built_ship_q
-            .head;
+        use crate::engine::WorldData;
+        let mut link = (*WorldData::current()).game.built_ship_q.head;
         let mut index = 0;
         while !link.is_null() {
             let ship = link.cast::<CShipFragment>();
@@ -162,16 +158,12 @@ pub(crate) mod live {
     }
 
     unsafe fn delta_crew(menu: &Menu, delta: i16) -> bool {
+        use crate::engine::WorldData;
         let ship = support_ship(menu);
         if ship.is_null() {
             return false;
         }
-        let queue = std::ptr::addr_of!(
-            (*crate::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .avail_race_q
-        )
-        .cast::<Queue>();
+        let queue = std::ptr::addr_of!((*WorldData::current()).game.avail_race_q).cast::<Queue>();
         let template = get_star_ship_from_index(queue, (*ship).race_id).cast::<CFleetInfo>();
         if !transfer_crew(&mut (*ship).crew_level, (*template).crew_level, delta) {
             return false;
@@ -221,13 +213,9 @@ pub(crate) mod live {
     }
 
     unsafe extern "C" fn modify(menu: *mut Menu) -> i32 {
+        use crate::engine::WorldData;
         let menu = &mut *menu;
-        if (*crate::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .CurrentActivity
-            & (1 << 14)
-            != 0
-        {
+        if (*WorldData::current()).game.current_activity & (1 << 14) != 0 {
             return 0;
         }
         let pulse = std::ptr::addr_of!(PulsedInputState).read();
@@ -256,21 +244,13 @@ pub(crate) mod live {
             let mut delta = 0;
             let mut failed = false;
             if up {
-                if (*crate::ships::native::abi::GLOBDATA::current())
-                    .SIS_state
-                    .CrewEnlisted
-                    != 0
-                {
+                if (*WorldData::current()).flagship.crew_enlisted != 0 {
                     delta = 1;
                 } else {
                     failed = true;
                 }
             } else if down {
-                if (*crate::ships::native::abi::GLOBDATA::current())
-                    .SIS_state
-                    .CrewEnlisted
-                    < GetCrewPodCapacity()
-                {
+                if (*WorldData::current()).flagship.crew_enlisted < GetCrewPodCapacity() {
                     delta = -1;
                 } else {
                     failed = true;
@@ -302,13 +282,9 @@ pub(crate) mod live {
     /// # Safety
     /// Call on the game thread with campaign globals and screen resources initialized.
     pub unsafe extern "C" fn RosterMenu() -> i32 {
+        use crate::engine::WorldData;
         let count = CountLinks(
-            std::ptr::addr_of!(
-                (*crate::ships::native::abi::GLOBDATA::current())
-                    .Game_state
-                    .built_ship_q
-            )
-            .cast::<Queue>(),
+            std::ptr::addr_of!((*WorldData::current()).game.built_ship_q).cast::<Queue>(),
         ) as usize;
         if count == 0 {
             return 0;

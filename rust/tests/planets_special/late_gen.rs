@@ -26,7 +26,10 @@ impl Ops for Harness {
         self.set_star(case.size, case.color);
         self.state.PlanetDesc.copy_from_slice(planets);
         self.state.SunDesc[0].NumPlanets = 0;
-        set_game_state("SPATHI_SHIELDED_SELVES", u32::from(case.shielded));
+        set_game_state(
+            uqm_rust::engine::StoryKey::SPATHI_SHIELDED_SELVES,
+            u32::from(case.shielded),
+        );
         self.seed(case.seed);
         let hook = table(case.kind).generate_planets.unwrap();
         let mut expected = *self.state;
@@ -69,7 +72,10 @@ impl Ops for Harness {
         self.star_index = case.star;
         self.set_star(0, 0);
         for name in ["SHOFIXTI_MAIDENS", "UMGAH_BROADCASTERS"] {
-            set_game_state(name, u32::from(case.taken));
+            set_game_state(
+                uqm_rust::engine::StoryKey::from_name(name).unwrap(),
+                u32::from(case.taken),
+            );
         }
         self.state.PlanetDesc = unsafe { std::mem::zeroed() };
         self.state.MoonDesc = unsafe { std::mem::zeroed() };
@@ -107,7 +113,10 @@ impl Ops for Harness {
             "scan input changed: {case:?}"
         );
         for name in ["SHOFIXTI_MAIDENS", "UMGAH_BROADCASTERS"] {
-            assert_eq!(get_game_state(name), u32::from(case.taken));
+            assert_eq!(
+                get_game_state(uqm_rust::engine::StoryKey::from_name(name).unwrap()),
+                u32::from(case.taken)
+            );
         }
         (result, self.rng_position())
     }

@@ -1178,6 +1178,10 @@ const ALLIANCE_NAME_BUF_SIZE: usize = 400;
 
 // C bridge declarations used only by NPCPhrase (not test-compiled).
 #[cfg(not(test))]
+// Splice one or more voice clips with text (used by npcphrase_splice when clip exists).
+#[cfg(not(test))]
+use crate::sound::heart_ffi::splice_multi_track as SpliceMultiTrack;
+#[cfg(not(test))]
 use crate::sound::heart_ffi::splice_track as SpliceTrack;
 #[cfg(not(test))]
 use crate::strings::string_table::GetStringAddress;
@@ -1187,18 +1191,14 @@ use crate::strings::string_table::GetStringSoundClip;
 use crate::strings::string_table::GetStringTimeStamp;
 #[cfg(not(test))]
 use crate::strings::string_table::SetAbsStringTableIndex;
-#[cfg(not(test))]
-extern "C" {}
-
-// Splice one or more voice clips with text (used by npcphrase_splice when clip exists).
-#[cfg(not(test))]
-use crate::sound::heart_ffi::splice_multi_track as SpliceMultiTrack;
 
 /// Ported from C's c_get_alliance_name: returns alliance name phrase text.
 /// Uses CommData.ConversationPhrases + GET_GAME_STATE(NEW_ALLIANCE_NAME).
 #[cfg(not(test))]
 pub(crate) unsafe fn get_alliance_name(index: c_int) -> *const u8 {
-    let i = crate::state::game_state_keys::get_game_state("NEW_ALLIANCE_NAME") as c_int;
+    let i =
+        crate::state::game_state_keys::get_game_state(crate::engine::StoryKey::NEW_ALLIANCE_NAME)
+            as c_int;
     let phrases = std::ptr::addr_of_mut!(CommData.conversation_phrases) as *mut std::ffi::c_void;
     if phrases.is_null() {
         return std::ptr::null();
@@ -1214,6 +1214,7 @@ unsafe fn get_alliance_name_full(
     buf: *mut std::ffi::c_char,
     buf_len: c_int,
 ) -> *const std::ffi::c_char {
+    use crate::engine::WorldData;
     use std::ffi::CStr;
 
     let phrases = std::ptr::addr_of_mut!(CommData.conversation_phrases) as *mut std::ffi::c_void;
@@ -1221,7 +1222,9 @@ unsafe fn get_alliance_name_full(
         return std::ptr::null();
     }
 
-    let i = crate::state::game_state_keys::get_game_state("NEW_ALLIANCE_NAME") as c_int;
+    let i =
+        crate::state::game_state_keys::get_game_state(crate::engine::StoryKey::NEW_ALLIANCE_NAME)
+            as c_int;
     let s = SetAbsStringTableIndex((phrases).cast(), ((adjusted_index - 1) + i) as u16);
     let src = GetStringAddress(s);
     if src.is_null() {
@@ -1237,11 +1240,8 @@ unsafe fn get_alliance_name_full(
 
     // If state==3, append CommanderName
     if i == 3 {
-        let cname_ptr = std::ptr::addr_of_mut!(
-            (*crate::ships::native::abi::GLOBDATA::current())
-                .SIS_state
-                .CommanderName
-        ) as *const std::ffi::c_char;
+        let cname_ptr = std::ptr::addr_of_mut!((*WorldData::current()).flagship.commander_name)
+            as *const std::ffi::c_char;
         if !cname_ptr.is_null() {
             let cname = CStr::from_ptr(cname_ptr);
             let cname_bytes = cname.to_bytes();
@@ -1290,6 +1290,8 @@ unsafe fn libc_strlen(s: *const std::ffi::c_char) -> usize {
 /// @plan PLAN-20260326-COMMPT2.P04
 /// @requirement REQ-NP-001, REQ-NP-002, REQ-NP-003, REQ-NP-004
 pub unsafe fn rust_npc_phrase_cb(index: c_int, cb: super::glue::PhraseCallback) {
+    #[cfg(not(test))]
+    use crate::engine::WorldData;
     eprintln!(
         "[DBG] rust_NPCPhrase_cb: index={} cb={}",
         index,
@@ -1311,20 +1313,14 @@ pub unsafe fn rust_npc_phrase_cb(index: c_int, cb: super::glue::PhraseCallback) 
         use std::ptr;
 
         if index == GLOBAL_PLAYER_NAME {
-            // Branch 2: commander name — direct GlobData.SIS_state access
-            let name = std::ptr::addr_of_mut!(
-                (*crate::ships::native::abi::GLOBDATA::current())
-                    .SIS_state
-                    .CommanderName
-            ) as *mut std::ffi::c_char;
+            // Branch 2: commander name — direct GlobData.flagship access
+            let name = std::ptr::addr_of_mut!((*WorldData::current()).flagship.commander_name)
+                as *mut std::ffi::c_char;
             SpliceTrack(ptr::null_mut(), name, ptr::null_mut(), cb);
         } else if index == GLOBAL_SHIP_NAME {
-            // Branch 3: ship name — direct GlobData.SIS_state access
-            let name = std::ptr::addr_of_mut!(
-                (*crate::ships::native::abi::GLOBDATA::current())
-                    .SIS_state
-                    .ShipName
-            ) as *mut std::ffi::c_char;
+            // Branch 3: ship name — direct GlobData.flagship access
+            let name = std::ptr::addr_of_mut!((*WorldData::current()).flagship.ship_name)
+                as *mut std::ffi::c_char;
             SpliceTrack(ptr::null_mut(), name, ptr::null_mut(), cb);
         } else if index < 0 {
             // Branch 4: alliance-name variant

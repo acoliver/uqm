@@ -7,10 +7,8 @@ pub(super) trait SyreenApi: AllianceApi<Handler> {
 #[cfg(not(test))]
 impl SyreenApi for super::super::script::live::LiveScript<Handler> {
     fn using_speech(&self) -> bool {
-        extern "C" {
-            static mut usingSpeech: u32;
-        }
-        unsafe { usingSpeech != 0 }
+        use crate::engine::Kernel;
+        unsafe { (*Kernel::current()).using_speech != 0 }
     }
 }
 #[cfg(test)]

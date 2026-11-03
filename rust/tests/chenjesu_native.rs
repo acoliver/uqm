@@ -178,7 +178,7 @@ fn crystal_launch_hold_release_and_count_truncation_match_c() {
         unsafe {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_CHENJESU_ID, 0, [16, 10, 6], [4, 4]);
-            ship.ship_mut().ShipFacing = 7;
+            ship.ship_mut().ship_facing = 7;
             at(&mut ship, 321, -654);
             let h = crystal(&mut ship);
             let crystal = battle::element(h);
@@ -427,7 +427,7 @@ fn doggy_spawns_behind_ship_with_exact_state_and_coordinate_truncation() {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_CHENJESU_ID, 0, [16, 10, 6], [4, 4]);
             for facing in [0, 4, 7, 8, 15, u16::MAX] {
-                ship.ship_mut().ShipFacing = facing;
+                ship.ship_mut().ship_facing = facing;
                 at(&mut ship, i16::MAX - 10, i16::MIN + 10);
                 let dog = with_rng(7, 0, || doggy(&mut ship));
                 let angle = (facing_to_angle(i32::from(facing)) + HALF_CIRCLE as i32) as COUNT;
@@ -1107,7 +1107,7 @@ fn ai_launch_probe_uses_the_selected_target_and_respects_weapon_cooldown() {
                 Ship::with_frames(&_battle, SPECIES_ID_CHENJESU_ID, 0, [16, 10, 6], [4, 4]);
             let mut enemy =
                 Ship::with_frames(&_battle, SPECIES_ID_CHENJESU_ID, 1, [16, 10, 6], [4, 4]);
-            ship.ship_mut().ShipFacing = 0;
+            ship.ship_mut().ship_facing = 0;
             ship.ship_mut().special_counter = 4;
             for (x, counter, fire) in [(4000, 0, true), (4400, 0, false), (4000, 1, false)] {
                 at(&mut enemy, x, 3000);

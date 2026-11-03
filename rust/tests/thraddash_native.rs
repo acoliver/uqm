@@ -202,7 +202,7 @@ fn horn_uses_next_location_exact_facing_speed_and_offsets_without_inheriting_vel
                 y: i16::MIN + 5,
             };
             for facing in 0..16 {
-                ship.ship_mut().ShipFacing = facing;
+                ship.ship_mut().ship_facing = facing;
                 let h = with_rng(101, 0, || fire(&mut ship));
                 assert!(!h.is_null());
                 let e = battle::element(h);
@@ -282,7 +282,7 @@ fn afterburner_inserts_owned_invisible_napalm_at_the_head_in_newest_first_order(
         unsafe {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_THRADDASH_ID, 1, [16, 16, 10], [4, 4]);
-            ship.ship_mut().ShipFacing = 7;
+            ship.ship_mut().ship_facing = 7;
             (*ship.ptr()).next.location = POINT { x: -9, y: 13 };
             observation::enable();
             observation::drain();
@@ -341,7 +341,7 @@ fn boost_uses_temporary_characteristics_and_preserves_the_inertial_thrust_result
                     255,
                 ),
             ] {
-                ship.ship_mut().ShipFacing = face;
+                ship.ship_mut().ship_facing = face;
                 SetVelocityVector(&raw mut (*ship.ptr()).velocity, speed, 0);
                 ship.ship_mut().old_status_flags = old as u16;
                 ship.ship_mut().cur_status_flags = (SPECIAL | THRUST | status) as u16;
@@ -641,7 +641,7 @@ fn enticing_weapon_takes_priority_and_uses_rounded_wrapped_travel_angle() {
                 Ship::with_frames(&_battle, SPECIES_ID_THRADDASH_ID, 1, [16, 16, 10], [4, 4]);
             (*ship.ptr()).turn = 1;
             for facing in 0..16 {
-                ship.ship_mut().ShipFacing = facing;
+                ship.ship_mut().ship_facing = facing;
                 for angle in 0..64 {
                     (*weapon.ptr()).velocity.travel_angle = angle;
                     let mut c = concerns();
@@ -660,7 +660,7 @@ fn enticing_weapon_takes_priority_and_uses_rounded_wrapped_travel_angle() {
                 }
             }
             (*weapon.ptr()).velocity.travel_angle = 32;
-            ship.ship_mut().ShipFacing = 0;
+            ship.ship_mut().ship_facing = 0;
             for (energy, wait, input, expected) in [
                 (0, 1, THRUST, THRUST | SPECIAL),
                 (1, 1, THRUST, SPECIAL),

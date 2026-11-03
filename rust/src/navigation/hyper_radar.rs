@@ -2,14 +2,12 @@
 #![cfg(not(test))]
 #![allow(non_snake_case)]
 use super::abi::*;
-use super::globals::RadarContext;
-use super::hyper_data::HYPERSTARS;
+
 use super::hyper_encounters::{allocate, ambient, process_all, XOFFS, YOFFS};
 use super::hyper_transition::{portal_collision, portal_death, star_collision, star_death};
 use super::hyperspace::live::{universe_x, universe_y};
 use super::{color, get, set};
 use crate::engine::battle::views::FrameSelection as Frame;
-use crate::planets::starmap::CurStarDescPtr;
 use std::ptr;
 
 unsafe fn grid(ux: i16, uy: i16, ox: i16, oy: i16) {
@@ -59,21 +57,12 @@ fn radar(point: POINT, ox: i16, oy: i16) -> POINT {
 /// Hyperspace resources, contexts and queues must be initialized on the game thread.
 pub unsafe fn SeedUniverse() {
     crate::app::bridge::enter(|cx| {
-        static mut PORTAL_POINT: POINT = POINT { x: 0, y: 0 };
         let mut universe = POINT {
-            x: universe_x(
-                (*crate::ships::native::abi::GLOBDATA::current())
-                    .SIS_state
-                    .log_x,
-            ),
-            y: universe_y(
-                (*crate::ships::native::abi::GLOBDATA::current())
-                    .SIS_state
-                    .log_y,
-            ),
+            x: universe_x(cx.world.data.flagship.log_x),
+            y: universe_y(cx.world.data.flagship.log_y),
         };
-        let blip = SetAbsFrameIndex(stars_in_space, 90);
-        SetContext(RadarContext);
+        let blip = SetAbsFrameIndex(cx.kernel.stars_in_space, 90);
+        SetContext(cx.kernel.radar_context);
         BatchGraphics();
         let ox = (universe.x as i32 * 56 / 756 - 28) as i16;
         let oy = ((9999 - universe.y as i32) * 53 / 600 - 26) as i16;
@@ -105,9 +94,9 @@ pub unsafe fn SeedUniverse() {
             let mut count = 0usize;
             if portal != 0 {
                 if portal == 1 {
-                    PORTAL_POINT = universe;
+                    cx.kernel.portal_point = universe;
                 }
-                portals[count] = (PORTAL_POINT, ((portal as u16 - 1) >> 1) + 18);
+                portals[count] = (cx.kernel.portal_point, ((portal as u16 - 1) >> 1) + 18);
                 count += 1;
                 portal += 1;
                 if portal == 11 {
@@ -144,7 +133,7 @@ pub unsafe fn SeedUniverse() {
                     continue;
                 }
                 stamp.origin = radar(point, ox, oy);
-                stamp.frame = SetAbsFrameIndex(stars_in_space, 95);
+                stamp.frame = SetAbsFrameIndex(cx.kernel.stars_in_space, 95);
                 DrawStamp(&mut stamp);
                 if (point.x as i32 - universe.x as i32).abs() > XOFFS as i32 / 12
                     || (point.y as i32 - universe.y as i32).abs() > YOFFS as i32 / 12
@@ -158,7 +147,7 @@ pub unsafe fn SeedUniverse() {
                     element,
                     false,
                     Frame::retain(SetAbsFrameIndex(
-                        HYPERSTARS[1 + (get("ARILOU_SPACE_SIDE") >> 1) as usize],
+                        cx.kernel.hyperstars[1 + (get("ARILOU_SPACE_SIDE") >> 1) as usize],
                         index,
                     )),
                 );
@@ -170,7 +159,10 @@ pub unsafe fn SeedUniverse() {
                     cx.element_mut(element).death = Some(ElementHook::Native(portal_death));
                 } else {
                     cx.element_mut(element).death = None;
-                    cx.set_intersect_frame(element, Frame::retain(DecFrameIndex(stars_in_space)));
+                    cx.set_intersect_frame(
+                        element,
+                        Frame::retain(DecFrameIndex(cx.kernel.stars_in_space)),
+                    );
                 }
                 let head = cx.elements().head();
                 cx.insert_before(element, head);
@@ -196,7 +188,7 @@ pub unsafe fn SeedUniverse() {
                 element,
                 false,
                 Frame::retain(SetAbsFrameIndex(
-                    HYPERSTARS[1 + (get("ARILOU_SPACE_SIDE") >> 1) as usize],
+                    cx.kernel.hyperstars[1 + (get("ARILOU_SPACE_SIDE") >> 1) as usize],
                     (((kind >> 3) & 3) as u16 * NUM_STAR_COLORS as u16) + (kind >> 5) as u16,
                 )),
             );
@@ -204,11 +196,19 @@ pub unsafe fn SeedUniverse() {
             cx.element_mut(element).post = None;
             cx.element_mut(element).collide = Some(CollisionHook::Native(star_collision));
             cx.setup_element(element);
-            if star.cast() == CurStarDescPtr && get("PORTAL_COUNTER") == 0 {
+            if star.cast()
+                == cx
+                    .world
+                    .star_pointer(crate::planets::starmap::current_catalog())
+                && get("PORTAL_COUNTER") == 0
+            {
                 cx.element_mut(element).death = Some(ElementHook::Native(star_death));
             } else {
                 cx.element_mut(element).death = None;
-                cx.set_intersect_frame(element, Frame::retain(DecFrameIndex(stars_in_space)));
+                cx.set_intersect_frame(
+                    element,
+                    Frame::retain(DecFrameIndex(cx.kernel.stars_in_space)),
+                );
             }
             let head = cx.elements().head();
             cx.insert_before(element, head);
@@ -246,27 +246,14 @@ pub unsafe fn SeedUniverse() {
         rect.corner = POINT { x: 55, y: 0 };
         DrawPoint(&mut rect.corner);
         UnbatchGraphics();
-        SetContext(StatusContext);
+        SetContext(cx.kernel.status_context);
         if TFB_Random() as u16 & 7 == 0 {
             ambient(cx);
         }
-        if universe.x
-            != (*crate::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .ShipStamp
-                .origin
-                .x
-            || universe.y
-                != (*crate::ships::native::abi::GLOBDATA::current())
-                    .Game_state
-                    .ShipStamp
-                    .origin
-                    .y
+        if universe.x != cx.world.data.game.ship_stamp.origin.x
+            || universe.y != cx.world.data.game.ship_stamp.origin.y
         {
-            (*crate::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .ShipStamp
-                .origin = universe;
+            cx.world.data.game.ship_stamp.origin = universe;
             DrawHyperCoords(universe);
         }
     });

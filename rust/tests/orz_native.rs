@@ -275,7 +275,7 @@ fn appearing_turret_is_inserted_immediately_after_ship_and_inputs_suppress_hull_
         unsafe {
             let mut ship = orz(&_battle, 0);
             let enemy = orz(&_battle, 1);
-            ship.ship_mut().ShipFacing = 7;
+            ship.ship_mut().ship_facing = 7;
             let turret = with_rng(2, 0, || ship.install_turret());
             assert_eq!(queued(), vec![ship.handle, turret.cast(), enemy.handle]);
             assert_eq!(
@@ -323,7 +323,7 @@ fn howitzer_rotates_before_firing_with_byte_wrap_and_exact_missile_fields() {
                 (SPECIAL | RIGHT, 9, 1, 9, 1),
                 (RIGHT, 9, 0, 9, 0),
             ] {
-                ship.ship_mut().ShipFacing = 15;
+                ship.ship_mut().ship_facing = 15;
                 ship.ship_mut().cur_status_flags = status as u16;
                 (*turret).turn = wait;
                 (*turret).thrust = offset;
@@ -423,7 +423,7 @@ fn turret_replacement_decrements_wait_once_rotates_and_updates_firing_quadrant()
         unsafe {
             let mut ship = orz(&_battle, 0);
             ship.install_turret();
-            ship.ship_mut().ShipFacing = 15;
+            ship.ship_mut().ship_facing = 15;
             ship.ship_mut().cur_status_flags = (SPECIAL | RIGHT) as u16;
             let tint = Color {
                 r: 3,
@@ -476,7 +476,7 @@ fn turret_replacement_decrements_wait_once_rotates_and_updates_firing_quadrant()
             }
             ship.ship_mut().cur_status_flags = 0;
             for face in 0..16 {
-                ship.ship_mut().ShipFacing = face;
+                ship.ship_mut().ship_facing = face;
                 let old = battle::element(battle::succ(ship.ptr()));
                 (*old).thrust = 0;
                 ship.tick_turret();
@@ -497,7 +497,7 @@ fn muzzle_flash_requires_an_appearing_friendly_stamp_and_animates_from_current()
         unsafe {
             let mut ship = orz(&_battle, 0);
             ship.install_turret();
-            ship.ship_mut().ShipFacing = 4;
+            ship.ship_mut().ship_facing = 4;
             ship.ship_mut().cur_status_flags = WEAPON as u16;
             let h = ship.missile();
             battle::put(h);
@@ -558,7 +558,7 @@ fn marines_launch_at_rear_with_exact_state_and_cost_only_after_allocation() {
             let mut enemy = orz(&_battle, 1);
             enemy.at(4500, 4000);
             for facing in [0, 4, 7, 15] {
-                ship.ship_mut().ShipFacing = facing;
+                ship.ship_mut().ship_facing = facing;
                 ship.at(i16::MAX - 10, i16::MIN + 10);
                 let old_crew = ship.descriptor_mut().ship_info.crew_level;
                 let marine = with_rng(50, 0, || ship.launch());
@@ -1016,7 +1016,7 @@ fn marine_thrust_restores_owner_state_and_inserts_preprocessed_five_color_ion_tr
             // Returning marine heads straight at its owner and ignores the enemy.
             (*marine).state_flags &= !(IGNORE_SIMILAR as u16);
             (*marine).turn = 0;
-            ship.ship_mut().ShipFacing = 7;
+            ship.ship_mut().ship_facing = 7;
             ship.ship_mut().cur_status_flags = (SPECIAL | SHIP_IN_GRAVITY_WELL) as u16;
             let preprocess = (*marine).preprocess_func.unwrap();
             for (speed, trail) in [(8, true), (16, true), (24, true), (32, true), (32, false)] {
@@ -1027,7 +1027,7 @@ fn marine_thrust_restores_owner_state_and_inserts_preprocessed_five_color_ion_tr
                     velocity_toward(speed, 0)
                 );
                 assert_eq!(queued().len(), before + usize::from(trail));
-                assert_eq!(ship.ship_mut().ShipFacing, 7);
+                assert_eq!(ship.ship_mut().ship_facing, 7);
                 assert_eq!(
                     ship.ship_mut().cur_status_flags,
                     (SPECIAL | SHIP_IN_GRAVITY_WELL) as u16
@@ -1245,7 +1245,7 @@ fn ai_turret_half_circle_consumes_trackship_draw_then_its_own_tie_break() {
             (*turret).current.location = POINT { x: 4000, y: 4000 };
             ship.ship_mut().special_counter = 2;
             ship.ship_mut().weapon_counter = 1;
-            ship.ship_mut().ShipFacing = 0;
+            ship.ship_mut().ship_facing = 0;
             for seed in 1..33 {
                 (*turret).turn = 0;
                 (*turret).thrust = 0;
@@ -1584,7 +1584,7 @@ fn marine_without_target_clears_stale_gravity_and_decelerates_only_when_overspee
                     velocity_toward(if overspeed { 32 } else { 40 }, 8)
                 );
                 assert_eq!(queued().len(), before + usize::from(overspeed));
-                assert_eq!(ship.ship_mut().ShipFacing, 0);
+                assert_eq!(ship.ship_mut().ship_facing, 0);
                 assert_eq!(ship.descriptor_mut().characteristics.max_thrust, 35);
             }
         }

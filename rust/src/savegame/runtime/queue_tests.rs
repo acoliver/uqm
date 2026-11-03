@@ -15,7 +15,7 @@ use super::groups::CIpGroup;
 use super::queues::*;
 use crate::collections::queue::{AllocLink, HLink, InitQueue, PutQueue, Queue, UninitQueue};
 use crate::comm::dispatch::{CEncounter, CFleetInfo, CPoint, CShipFragment, INFINITE_FLEET};
-use crate::comm::locdata::{CGameState, CQueue};
+use crate::comm::locdata::CGameState;
 use crate::savegame::decode::decode_save;
 use crate::savegame::types::{Point, RaceEntry, ShipFragmentEntry};
 use crate::time::clock_bridge::NUM_EVENTS;
@@ -220,7 +220,7 @@ impl DerefMut for LiveGame {
 
 /// The links of a queue by following the raw `succ` pointers, independent of
 /// the walker under test.
-pub(super) fn links<T>(queue: &CQueue) -> Vec<*mut T> {
+pub(super) fn links<T>(queue: &Queue) -> Vec<*mut T> {
     let mut out = Vec::new();
     let mut link = queue.head;
     while !link.is_null() {
@@ -232,7 +232,7 @@ pub(super) fn links<T>(queue: &CQueue) -> Vec<*mut T> {
     out
 }
 
-fn fragments(queue: &CQueue) -> Vec<&CShipFragment> {
+fn fragments(queue: &Queue) -> Vec<&CShipFragment> {
     links::<CShipFragment>(queue)
         .into_iter()
         // SAFETY: the links are slots of a `SHIP_FRAGMENT` pool.
@@ -241,7 +241,7 @@ fn fragments(queue: &CQueue) -> Vec<&CShipFragment> {
 }
 
 /// Slots on the free list of `queue`.
-pub(super) fn free_slots(queue: &CQueue) -> usize {
+pub(super) fn free_slots(queue: &Queue) -> usize {
     let mut count = 0;
     let mut link: HLink = queue.free_list;
     while !link.is_null() {

@@ -232,7 +232,7 @@ fn initial_pump_uses_the_c_missile_block_at_all_facings_and_coordinate_limits() 
         unsafe {
             let mut ship = trader(&_battle, 0);
             for facing in 0..16 {
-                ship.ship_mut().ShipFacing = facing;
+                ship.ship_mut().ship_facing = facing;
                 (*ship.ptr()).next.location = POINT {
                     x: i16::MAX,
                     y: i16::MIN,
@@ -349,7 +349,7 @@ fn held_charge_replaces_the_element_and_uses_the_old_level_for_damage() {
                     assert_ne!((*e).state_flags & NONSOLID as u16, 0);
                     assert_eq!(
                         velocity_fields(&(*p).velocity),
-                        velocity_fields(&velocity_for(96, ship.ship_mut().ShipFacing))
+                        velocity_fields(&velocity_for(96, ship.ship_mut().ship_facing))
                     );
                     assert_rng_after(12, 0);
                     remove(p);
@@ -396,7 +396,7 @@ fn release_requires_both_weapon_status_words_to_hold_and_uses_full_velocity_unit
                     (*e).state_flags &= !(APPEARING as u16);
                     ship.ship_mut().cur_status_flags = current as u16;
                     ship.ship_mut().old_status_flags = old as u16;
-                    ship.ship_mut().ShipFacing = facing;
+                    ship.ship_mut().ship_facing = facing;
                     ship.ship_mut().weapon_counter = 9;
                     TFB_SeedRandom(14);
                     hooks::invoke_element_pointer((*e).postprocess_func.unwrap(), e);
@@ -585,7 +585,7 @@ fn confusion_special_obeys_energy_input_and_cooldown_boundaries() {
                     assert_eq!(frame_index((*e).current.image.frame.raw()), 0);
                     assert_eq!(
                         velocity_fields(&(*e).velocity),
-                        velocity_fields(&velocity_for(120, ship.ship_mut().ShipFacing))
+                        velocity_fields(&velocity_for(120, ship.ship_mut().ship_facing))
                     );
                     assert!((*e).preprocess_func.is_some() && (*e).collision_func.is_some());
                     assert!((*e).postprocess_func.is_none());
@@ -1035,7 +1035,7 @@ fn ai_tests_the_confusion_trajectory_and_restores_waits_and_initializer() {
                 );
                 assert_eq!((*ship.ptr()).turn, 0);
                 assert_eq!((*ship.ptr()).thrust, 0);
-                assert_eq!(ship.ship_mut().ShipFacing, 0);
+                assert_eq!(ship.ship_mut().ship_facing, 0);
                 assert_eq!(ship.ship_mut().weapon_counter, 0);
                 assert_eq!(ship.descriptor_mut().callbacks()[3], init);
                 assert_eq!(queue(), before, "AI test missiles are freed, not queued");
@@ -1144,7 +1144,7 @@ fn ai_pursuit_uses_the_shared_half_turn_rng_draw_without_extra_draws() {
             ship.ship_mut().weapon_counter = 2;
             ship.ship_mut().special_counter = 1;
             for seed in 1..9 {
-                ship.ship_mut().ShipFacing = 0;
+                ship.ship_mut().ship_facing = 0;
                 ship.ship_mut().ship_input_state = 0;
                 (*ship.ptr()).turn = 0;
                 (*ship.ptr()).thrust = 1;
@@ -1159,7 +1159,7 @@ fn ai_pursuit_uses_the_shared_half_turn_rng_draw_without_extra_draws() {
                     ship.ship_mut().ship_input_state,
                     if left { LEFT } else { RIGHT } as u8
                 );
-                assert_eq!(ship.ship_mut().ShipFacing, if left { 15 } else { 1 });
+                assert_eq!(ship.ship_mut().ship_facing, if left { 15 } else { 1 });
                 assert_eq!(ship.ship_mut().weapon_counter, 2);
                 assert_rng_after(seed, 1);
             }

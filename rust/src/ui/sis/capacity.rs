@@ -6,7 +6,7 @@ use super::*;
 /// Game state must be initialized.
 #[no_mangle]
 pub unsafe extern "C" fn GetCrewCount() -> COUNT {
-    (*sis()).CrewEnlisted
+    (*sis()).crew_enlisted
 }
 /// # Safety
 /// None; moduleType is an SIS module identifier.
@@ -19,7 +19,7 @@ pub unsafe extern "C" fn GetModuleCrewCapacity(module_type: BYTE) -> COUNT {
 #[no_mangle]
 pub unsafe extern "C" fn GetCrewPodCapacity() -> COUNT {
     (*sis())
-        .ModuleSlots
+        .module_slots
         .iter()
         .map(|&m| GetModuleCrewCapacity(m))
         .sum()
@@ -29,11 +29,11 @@ pub unsafe extern "C" fn GetCrewPodCapacity() -> COUNT {
 #[no_mangle]
 pub unsafe extern "C" fn GetCPodCapacity(ppt: *mut POINT) -> COUNT {
     let crew = GetCrewCount();
-    let (slot, seat) = match crate::ui::sis_capacity_math::crew_pod_for(&(*sis()).ModuleSlots, crew)
-    {
-        Some(v) => v,
-        None => return GetCrewPodCapacity(),
-    };
+    let (slot, seat) =
+        match crate::ui::sis_capacity_math::crew_pod_for(&(*sis()).module_slots, crew) {
+            Some(v) => v,
+            None => return GetCrewPodCapacity(),
+        };
     let row = i32::from(seat) / CREW_PER_ROW as i32;
     let col = i32::from(seat) % CREW_PER_ROW as i32;
     if optWhichFonts == OPT_PC {
@@ -47,7 +47,7 @@ pub unsafe extern "C" fn GetCPodCapacity(ppt: *mut POINT) -> COUNT {
 }
 #[inline]
 unsafe fn element_mass() -> COUNT {
-    (*sis()).TotalElementMass
+    (*sis()).total_element_mass
 }
 /// # Safety
 /// None; moduleType is an SIS module identifier.
@@ -60,7 +60,7 @@ pub unsafe extern "C" fn GetModuleStorageCapacity(module_type: BYTE) -> COUNT {
 #[no_mangle]
 pub unsafe extern "C" fn GetStorageBayCapacity() -> COUNT {
     (*sis())
-        .ModuleSlots
+        .module_slots
         .iter()
         .map(|&m| GetModuleStorageCapacity(m))
         .sum()
@@ -69,12 +69,13 @@ pub unsafe extern "C" fn GetStorageBayCapacity() -> COUNT {
 /// ppt must be writable; SIS state and graphics context must be initialized.
 #[no_mangle]
 pub unsafe extern "C" fn GetSBayCapacity(ppt: *mut POINT) -> COUNT {
-    let (slot, cell) =
-        match crate::ui::sis_capacity_math::storage_cell_for(&(*sis()).ModuleSlots, element_mass())
-        {
-            Some(v) => v,
-            None => return GetStorageBayCapacity(),
-        };
+    let (slot, cell) = match crate::ui::sis_capacity_math::storage_cell_for(
+        &(*sis()).module_slots,
+        element_mass(),
+    ) {
+        Some(v) => v,
+        None => return GetStorageBayCapacity(),
+    };
     let mut row = i32::from(cell) / SBAY_MASS_PER_ROW as i32;
     if row == 0 {
         SetContextForeGroundColor(rgb15(0, 0, 0));
@@ -98,7 +99,7 @@ pub unsafe extern "C" fn GetModuleFuelCapacity(module_type: BYTE) -> DWORD {
 #[no_mangle]
 pub unsafe extern "C" fn GetFuelTankCapacity() -> DWORD {
     (*sis())
-        .ModuleSlots
+        .module_slots
         .iter()
         .fold(FUEL_RESERVE, |cap, &m| cap + GetModuleFuelCapacity(m))
 }
@@ -106,7 +107,7 @@ unsafe fn fuel_slot_for(amount: DWORD) -> Option<(COUNT, DWORD)> {
     assert!(amount >= FUEL_RESERVE);
     let mut cap = FUEL_RESERVE;
     for slot in (0..NUM_MODULE_SLOTS as COUNT).rev() {
-        cap += GetModuleFuelCapacity((*sis()).ModuleSlots[slot as usize]);
+        cap += GetModuleFuelCapacity((*sis()).module_slots[slot as usize]);
         if amount < cap {
             return Some((slot, cap - amount));
         }
@@ -118,7 +119,7 @@ unsafe fn fuel_slot_for(amount: DWORD) -> Option<(COUNT, DWORD)> {
 #[no_mangle]
 pub unsafe extern "C" fn GetFTankCapacity(ppt: *mut POINT) -> DWORD {
     let capacity = GetFuelTankCapacity();
-    let amount = (*sis()).FuelOnBoard;
+    let amount = (*sis()).fuel_on_board;
     if amount < FUEL_RESERVE {
         return capacity;
     }
@@ -126,7 +127,7 @@ pub unsafe extern "C" fn GetFTankCapacity(ppt: *mut POINT) -> DWORD {
         Some(v) => v,
         None => return capacity,
     };
-    let module = (*sis()).ModuleSlots[slot as usize];
+    let module = (*sis()).module_slots[slot as usize];
     let volume = GetModuleFuelCapacity(module);
     let row = ((volume - compartment) * MAX_FUEL_BARS / HEFUEL_TANK_CAPACITY) as COUNT;
     (*ppt).x = (21 + i32::from(slot) * SHIP_PIECE_OFFSET as i32) as SIZE;
@@ -147,11 +148,11 @@ pub unsafe extern "C" fn GetFTankCapacity(ppt: *mut POINT) -> DWORD {
 pub unsafe extern "C" fn CountSISPieces(piece_type: BYTE) -> COUNT {
     let s = sis();
     let slots: &[BYTE] = if u32::from(piece_type) == FUSION_THRUSTER {
-        &(*s).DriveSlots
+        &(*s).drive_slots
     } else if u32::from(piece_type) == TURNING_JETS {
-        &(*s).JetSlots
+        &(*s).jet_slots
     } else {
-        &(*s).ModuleSlots
+        &(*s).module_slots
     };
     slots.iter().filter(|&&v| v == piece_type).count() as COUNT
 }

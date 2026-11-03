@@ -51,6 +51,9 @@ impl PlanetSideInput for CffiPlanetSideInput {
 #[cfg(not(test))]
 use crate::mainloop::input_abi::live::UpdateInputState;
 #[cfg(not(test))]
+#[cfg(not(test))]
+use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
+#[cfg(not(test))]
 use crate::time::counter_abi::GetTimeCounter;
 #[cfg(not(test))]
 use crate::ui::sis::capacity::GetStorageBayCapacity;
@@ -60,10 +63,6 @@ use crate::ui::sis::DeltaSISGauges;
 use crate::ui::sis::DrawLanders;
 #[cfg(not(test))]
 use crate::ui::sis::DrawStorageBays;
-#[cfg(not(test))]
-extern "C" {}
-#[cfg(not(test))]
-use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
 
 #[cfg(not(test))]
 fn read_player_one_input() -> FrameInput {
@@ -127,16 +126,16 @@ impl CffiShipStatus {
     #[must_use]
     pub fn snapshot(&self) -> ShipStatus {
         #[cfg(not(test))]
+        use crate::engine::WorldData;
+        #[cfg(not(test))]
         unsafe {
-            let sis =
-                std::ptr::addr_of!((*crate::ships::native::abi::GLOBDATA::current()).SIS_state)
-                    .read();
+            let sis = std::ptr::addr_of!((*WorldData::current()).flagship).read();
             ShipStatus {
-                crew_enlisted: sis.CrewEnlisted,
-                landers: sis.NumLanders,
-                total_element_mass: sis.TotalElementMass,
-                element_amounts: sis.ElementAmounts,
-                total_bio_mass: sis.TotalBioMass,
+                crew_enlisted: sis.crew_enlisted,
+                landers: sis.num_landers,
+                total_element_mass: sis.total_element_mass,
+                element_amounts: sis.element_amounts,
+                total_bio_mass: sis.total_bio_mass,
             }
         }
         #[cfg(test)]
@@ -168,28 +167,30 @@ impl CffiShipStatus {
 impl ShipStatusPort for CffiShipStatus {
     fn apply(&mut self, delta: &ShipDelta) -> Result<(), AdapterError> {
         #[cfg(not(test))]
+        use crate::engine::WorldData;
+        #[cfg(not(test))]
         unsafe {
             if delta.crew != 0 {
                 DeltaSISGauges(delta.crew, 0, 0);
             }
 
-            let sis =
-                std::ptr::addr_of_mut!((*crate::ships::native::abi::GLOBDATA::current()).SIS_state);
+            let sis = std::ptr::addr_of_mut!((*WorldData::current()).flagship);
             if delta.landers < 0 {
-                (*sis).NumLanders = (*sis)
-                    .NumLanders
+                (*sis).num_landers = (*sis)
+                    .num_landers
                     .saturating_sub(delta.landers.unsigned_abs());
                 DrawLanders();
             } else if delta.landers > 0 {
-                (*sis).NumLanders = (*sis).NumLanders.saturating_add(delta.landers as u8);
+                (*sis).num_landers = (*sis).num_landers.saturating_add(delta.landers as u8);
                 DrawLanders();
             }
 
-            for (current, added) in (*sis).ElementAmounts.iter_mut().zip(delta.element_amounts) {
+            for (current, added) in (*sis).element_amounts.iter_mut().zip(delta.element_amounts) {
                 *current = current.saturating_add(added);
             }
-            (*sis).TotalElementMass = (*sis).TotalElementMass.saturating_add(delta.element_mass);
-            (*sis).TotalBioMass = (*sis).TotalBioMass.saturating_add(delta.biological_mass);
+            (*sis).total_element_mass =
+                (*sis).total_element_mass.saturating_add(delta.element_mass);
+            (*sis).total_bio_mass = (*sis).total_bio_mass.saturating_add(delta.biological_mass);
             if delta.element_mass != 0 {
                 DrawStorageBays(0);
             }

@@ -2,22 +2,24 @@
 #![cfg(not(test))]
 #![allow(non_snake_case)]
 use super::abi::*;
-use super::globals::RadarContext;
+
 use super::{color, get, set};
 use std::ptr;
-
-pub static mut HYPERSTARS: [FRAME; 3] = [ptr::null_mut(); 3];
-static mut CMAPS: [COLORMAP; 2] = [ptr::null_mut(); 2];
 
 /// # Safety
 /// Game-thread access, after hyperspace users release their frames and maps.
 pub unsafe fn FreeHyperData() {
-    let frames = std::slice::from_raw_parts_mut(ptr::addr_of_mut!(HYPERSTARS).cast(), 3);
+    use crate::engine::Kernel;
+    let frames = std::slice::from_raw_parts_mut(
+        ptr::addr_of_mut!((*Kernel::current()).hyperstars).cast(),
+        3,
+    );
     for frame in frames {
         DestroyDrawable(ReleaseDrawable(*frame));
         *frame = ptr::null_mut();
     }
-    let maps = std::slice::from_raw_parts_mut(ptr::addr_of_mut!(CMAPS).cast(), 2);
+    let maps =
+        std::slice::from_raw_parts_mut(ptr::addr_of_mut!((*Kernel::current()).cmaps).cast(), 2);
     for map in maps {
         DestroyStringTable(ReleaseStringTable(*map));
         *map = ptr::null_mut();
@@ -25,16 +27,17 @@ pub unsafe fn FreeHyperData() {
 }
 
 unsafe fn load() {
-    if HYPERSTARS[0].is_null() {
-        HYPERSTARS[0] =
+    use crate::engine::Kernel;
+    if (*Kernel::current()).hyperstars[0].is_null() {
+        (*Kernel::current()).hyperstars[0] =
             CaptureDrawable(LoadGraphicInstance(AMBIENT_MASK_PMAP_ANIM.as_ptr().cast()).cast());
-        HYPERSTARS[1] =
+        (*Kernel::current()).hyperstars[1] =
             CaptureDrawable(LoadGraphicInstance(HYPERSTARS_MASK_PMAP_ANIM.as_ptr().cast()).cast());
-        CMAPS[0] =
+        (*Kernel::current()).cmaps[0] =
             CaptureStringTable(LoadStringTableInstance(HYPER_COLOR_TAB.as_ptr().cast()).cast());
-        HYPERSTARS[2] =
+        (*Kernel::current()).hyperstars[2] =
             CaptureDrawable(LoadGraphicInstance(ARISPACE_MASK_PMAP_ANIM.as_ptr().cast()).cast());
-        CMAPS[1] =
+        (*Kernel::current()).cmaps[1] =
             CaptureStringTable(LoadStringTableInstance(ARISPACE_COLOR_TAB.as_ptr().cast()).cast());
     }
 }
@@ -43,46 +46,36 @@ unsafe fn load() {
 /// World globals, contexts and resources must be initialized on the game thread.
 #[no_mangle]
 pub unsafe extern "C" fn LoadHyperspace() -> BOOLEAN {
+    use crate::engine::{Kernel, WorldData};
     super::hyperspace::live::rust_reset_hyper_distance();
-    (*crate::ships::native::abi::GLOBDATA::current())
-        .Game_state
-        .ShipStamp
-        .origin = POINT { x: -9999, y: -9999 };
+    (*WorldData::current()).game.ship_stamp.origin = POINT { x: -9999, y: -9999 };
     load();
     crate::collections::observation::swap_image_view(
-        &mut *ptr::addr_of_mut!(HYPERSTARS[0]),
-        &mut *ptr::addr_of_mut!(stars_in_space),
+        &mut *ptr::addr_of_mut!((*Kernel::current()).hyperstars[0]),
+        &mut *ptr::addr_of_mut!((*Kernel::current()).stars_in_space),
     );
-    if LastActivity & CHECK_LOAD as u16 == 0 {
+    if (*Kernel::current()).last_activity & CHECK_LOAD as u16 == 0 {
         RepairSISBorder();
-    } else if LastActivity as u8 == 0 {
+    } else if (*Kernel::current()).last_activity as u8 == 0 {
         DrawSISFrame();
     } else {
         ClearSISRect(DRAW_SIS_DISPLAY as u8);
         RepairSISBorder();
     }
-    if (*crate::ships::native::abi::GLOBDATA::current())
-        .Game_state
-        .autopilot
-        .x
-        == -1
-        || (*crate::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .autopilot
-            .y
-            == -1
+    if (*WorldData::current()).game.autopilot.x == -1
+        || (*WorldData::current()).game.autopilot.y == -1
     {
         DrawSISMessage(ptr::null());
     }
-    SetContext(RadarContext);
+    SetContext((*Kernel::current()).radar_context);
     SetContextBackGroundColor(color(0, 14, 0));
-    SetContext(SpaceContext);
+    SetContext((*Kernel::current()).space_context);
     if get("ARILOU_SPACE_SIDE") <= 1 {
         SetContextBackGroundColor(color(7, 0, 0));
-        SetColorMap(GetColorMapAddress(CMAPS[0]));
+        SetColorMap(GetColorMapAddress((*Kernel::current()).cmaps[0]));
     } else {
         SetContextBackGroundColor(color(0, 26, 0));
-        SetColorMap(GetColorMapAddress(CMAPS[1]));
+        SetColorMap(GetColorMapAddress((*Kernel::current()).cmaps[1]));
         set("USED_BROADCASTER", 0);
         set("BROADCASTER_RESPONSE", 0);
     }
@@ -94,9 +87,10 @@ pub unsafe extern "C" fn LoadHyperspace() -> BOOLEAN {
 /// Must be paired with `LoadHyperspace` on the game thread.
 #[no_mangle]
 pub unsafe extern "C" fn FreeHyperspace() -> BOOLEAN {
+    use crate::engine::Kernel;
     crate::collections::observation::swap_image_view(
-        &mut *ptr::addr_of_mut!(HYPERSTARS[0]),
-        &mut *ptr::addr_of_mut!(stars_in_space),
+        &mut *ptr::addr_of_mut!((*Kernel::current()).hyperstars[0]),
+        &mut *ptr::addr_of_mut!((*Kernel::current()).stars_in_space),
     );
     1
 }

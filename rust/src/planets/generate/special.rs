@@ -57,10 +57,12 @@ pub struct LiveStory;
 
 impl Story for LiveStory {
     fn flag(&self, name: &'static str) -> u32 {
-        get_game_state(name)
+        crate::engine::StoryKey::from_name(name).map_or(0, get_game_state)
     }
     fn set_flag(&mut self, name: &'static str, value: u32) {
-        set_game_state(name, value);
+        if let Some(key) = crate::engine::StoryKey::from_name(name) {
+            set_game_state(key, value);
+        }
     }
     fn word(&self, name: &'static str) -> u32 {
         read_word(word_start(name), get_game_state_byte)

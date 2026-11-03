@@ -15,21 +15,21 @@ use uqm_rust::graphics::context_abi::_GraphicsStatusFlags;
 
 struct Battle {
     inner: shared::Battle,
-    globals: GLOBDATA,
+    globals: crate::engine::WorldData,
     screen: (i32, i32),
     graphics_flags: BYTE,
     counters: [BYTE; 2],
 }
 impl Battle {
     unsafe fn new(capacity: COUNT) -> Self {
-        let globals = (*uqm_rust::ships::native::abi::GLOBDATA::current());
+        let globals = uqm_rust::engine::WorldData::current();
         let screen = (ScreenWidth, ScreenHeight);
         let graphics_flags = _GraphicsStatusFlags;
         let counters = uqm_rust::app::bridge::battle(|b| b.counters);
         let inner = shared::Battle::new(capacity);
-        (*uqm_rust::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .CurrentActivity = IN_ENCOUNTER as _;
+        (*uqm_rust::engine::WorldData::current())
+            .game
+            .current_activity = IN_ENCOUNTER as _;
         uqm_rust::state::ffi::rust_init_game_state();
         set_recruited(true);
         ScreenWidth = 320;
@@ -50,7 +50,7 @@ impl Drop for Battle {
     fn drop(&mut self) {
         unsafe {
             ResetWinnerStarShip();
-            (*uqm_rust::ships::native::abi::GLOBDATA::current()) = self.globals;
+            uqm_rust::engine::WorldData::current() = self.globals;
             (ScreenWidth, ScreenHeight) = self.screen;
             _GraphicsStatusFlags = self.graphics_flags;
             uqm_rust::app::bridge::battle(|b| b.counters = self.counters);
@@ -203,9 +203,9 @@ fn complete_descriptor_and_damaged_tanaka_katana_variant_are_fresh_each_call() {
             (2, false, true),
             (0, false, false),
         ] {
-            (*uqm_rust::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .CurrentActivity = activity;
+            (*uqm_rust::engine::WorldData::current())
+                .game
+                .current_activity = activity;
             set_recruited(recruited);
             let mut original = shared::descriptor(SPECIES_ID_SHOFIXTI_ID);
             let p = &raw mut original;
@@ -342,7 +342,7 @@ fn darts_use_next_location_exact_facing_offset_speed_and_failure_count() {
         let _battle = Battle::new(2);
         let mut ship = Ship::new(&_battle, 1);
         for facing in [0, 4, 7, 15, u16::MAX] {
-            ship.inner.ship_mut().ShipFacing = facing;
+            ship.inner.ship_mut().ship_facing = facing;
             (*ship.ptr()).next.location = POINT {
                 x: i16::MAX - 5,
                 y: i16::MIN + 5,
@@ -810,9 +810,9 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                     let saved_pulsed = PulsedInputState;
                     let mut context = mem::zeroed();
                     OffScreenContext = &mut context;
-                    (*uqm_rust::ships::native::abi::GLOBDATA::current())
-                        .Game_state
-                        .CurrentActivity = (SUPER_MELEE | IN_BATTLE) as u16;
+                    (*uqm_rust::engine::WorldData::current())
+                        .game
+                        .current_activity = (SUPER_MELEE | IN_BATTLE) as u16;
                     uqm_rust::app::bridge::battle(|b| b.counters = initial);
                     let mut ship = Ship::new(&_battle, 0);
                     let mut other = Ship::new(&_battle, 1);
@@ -940,16 +940,16 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                     let remaining = uqm_rust::app::bridge::battle(|b| b.counters);
                     assert_eq!(remaining, [initial[0] - 1, initial[1] - 1]);
                     assert_eq!(
-                        (*uqm_rust::ships::native::abi::GLOBDATA::current())
-                            .Game_state
-                            .CurrentActivity
+                        (*uqm_rust::engine::WorldData::current())
+                            .game
+                            .current_activity
                             & CHECK_ABORT as u16,
                         0
                     );
                     assert_eq!(
-                        (*uqm_rust::ships::native::abi::GLOBDATA::current())
-                            .Game_state
-                            .CurrentActivity
+                        (*uqm_rust::engine::WorldData::current())
+                            .game
+                            .current_activity
                             & IN_BATTLE as u16
                             != 0,
                         expected_selection

@@ -51,13 +51,14 @@ mod production {
     const STAMP_PRIM: u8 = 1;
     const PS_NON_PLAYER: i16 = 1;
     use crate::graphics::pixmap_abi::SetAbsFrameIndex;
-    extern "C" {
-        static mut MiscDataFrame: *mut crate::graphics::native_abi::frame_desc;
-    }
 
     pub unsafe fn generate(cx: &mut Cx<'_>) {
+        use crate::engine::Kernel;
         let solar = solar_system::current();
-        if solar.is_null() || (*solar).pOrbitalDesc.is_null() || MiscDataFrame.is_null() {
+        if solar.is_null()
+            || (*solar).pOrbitalDesc.is_null()
+            || (*Kernel::current()).misc_data_frame.is_null()
+        {
             return;
         }
         let persistence = ScanPersistence::from_masks((*solar).SysInfo.PlanetInfo.ScanRetrieveMask);
@@ -140,6 +141,7 @@ mod production {
         raw_node: u8,
         generated: super::super::generation::GeneratedNode,
     ) -> Result<(), ScanFrameError> {
+        use crate::engine::Kernel;
         cx.element_mut(element).life = u16::from(scan as u8) | (u16::from(raw_node + 1) << 8);
         cx.element_mut(element).player = PS_NON_PLAYER;
         cx.element_mut(element).current.location.x = (generated.position.x >> MAG_SHIFT) as i16;
@@ -167,21 +169,29 @@ mod production {
                 cx.set_frame(
                     element,
                     false,
-                    Frame::retain(SetAbsFrameIndex((MiscDataFrame).cast(), dot.current)),
+                    Frame::retain(SetAbsFrameIndex(
+                        ((*Kernel::current()).misc_data_frame).cast(),
+                        dot.current,
+                    )),
                 );
                 cx.set_frame(
                     element,
                     true,
-                    Frame::retain(SetAbsFrameIndex((MiscDataFrame).cast(), dot.next)),
+                    Frame::retain(SetAbsFrameIndex(
+                        ((*Kernel::current()).misc_data_frame).cast(),
+                        dot.next,
+                    )),
                 );
-                stamp.frame = (SetAbsFrameIndex((MiscDataFrame).cast(), surface)).cast();
+                stamp.frame =
+                    (SetAbsFrameIndex(((*Kernel::current()).misc_data_frame).cast(), surface))
+                        .cast();
             }
             super::super::generation::GeneratedNodeKind::Energy => {
                 cx.set_frame(
                     element,
                     false,
                     Frame::retain(SetAbsFrameIndex(
-                        (MiscDataFrame).cast(),
+                        ((*Kernel::current()).misc_data_frame).cast(),
                         ENERGY_SCAN_DOT.current,
                     )),
                 );
@@ -189,7 +199,7 @@ mod production {
                     element,
                     true,
                     Frame::retain(SetAbsFrameIndex(
-                        (MiscDataFrame).cast(),
+                        ((*Kernel::current()).misc_data_frame).cast(),
                         ENERGY_SCAN_DOT.next,
                     )),
                 );
@@ -202,14 +212,17 @@ mod production {
                     element,
                     false,
                     Frame::retain(SetAbsFrameIndex(
-                        (MiscDataFrame).cast(),
+                        ((*Kernel::current()).misc_data_frame).cast(),
                         BIO_SCAN_DOT.current,
                     )),
                 );
                 cx.set_frame(
                     element,
                     true,
-                    Frame::retain(SetAbsFrameIndex((MiscDataFrame).cast(), BIO_SCAN_DOT.next)),
+                    Frame::retain(SetAbsFrameIndex(
+                        ((*Kernel::current()).misc_data_frame).cast(),
+                        BIO_SCAN_DOT.next,
+                    )),
                 );
                 cx.element_mut(element).mass = value as u8;
                 cx.element_mut(element).hits = 0;
@@ -224,14 +237,17 @@ mod production {
                     element,
                     false,
                     Frame::retain(SetAbsFrameIndex(
-                        (MiscDataFrame).cast(),
+                        ((*Kernel::current()).misc_data_frame).cast(),
                         BIO_SCAN_DOT.current,
                     )),
                 );
                 cx.set_frame(
                     element,
                     true,
-                    Frame::retain(SetAbsFrameIndex((MiscDataFrame).cast(), BIO_SCAN_DOT.next)),
+                    Frame::retain(SetAbsFrameIndex(
+                        ((*Kernel::current()).misc_data_frame).cast(),
+                        BIO_SCAN_DOT.next,
+                    )),
                 );
                 cx.element_mut(element).turn = 0x44;
                 cx.element_mut(element).mass = creature.index();

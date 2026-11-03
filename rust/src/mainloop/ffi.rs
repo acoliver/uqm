@@ -34,14 +34,11 @@ mod c_globals {
     extern "C" {
         #[link_name = "NextActivity"]
         pub static mut NEXT_ACTIVITY: u16;
-        #[link_name = "LastActivity"]
-        pub static mut LAST_ACTIVITY: u16;
+
         #[link_name = "MainExited"]
         pub static mut MAIN_EXITED: CBoolean;
     }
-    pub mod globdata_ffi {
-        extern "C" {}
-    }
+    pub mod globdata_ffi {}
 }
 
 #[cfg(test)]
@@ -49,8 +46,6 @@ mod c_globals {
     use super::CBoolean;
     #[allow(dead_code)]
     pub static mut NEXT_ACTIVITY: u16 = 0;
-    #[allow(dead_code)]
-    pub static mut LAST_ACTIVITY: u16 = 0;
     #[allow(dead_code)]
     pub static mut MAIN_EXITED: CBoolean = 0;
 }
@@ -107,13 +102,11 @@ mod c_ffi {
 #[must_use]
 pub fn get_current_activity() -> ActivityValue {
     #[cfg(not(test))]
+    use crate::engine::WorldData;
+    #[cfg(not(test))]
     {
         // SAFETY: reads CurrentActivity from C GlobData global.
-        let raw = unsafe {
-            (*crate::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .CurrentActivity
-        };
+        let raw = unsafe { (*WorldData::current()).game.current_activity };
         ActivityValue(raw)
     }
     #[cfg(test)]
@@ -132,13 +125,11 @@ pub fn get_current_activity() -> ActivityValue {
 #[inline]
 pub fn set_current_activity(val: ActivityValue) {
     #[cfg(not(test))]
+    use crate::engine::WorldData;
+    #[cfg(not(test))]
     {
         // SAFETY: writes CurrentActivity to C GlobData global.
-        unsafe {
-            (*crate::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .CurrentActivity = val.0
-        };
+        unsafe { (*WorldData::current()).game.current_activity = val.0 };
     }
     #[cfg(test)]
     {
@@ -202,8 +193,9 @@ pub fn set_next_activity(val: ActivityValue) {
 #[inline]
 #[must_use]
 pub fn get_last_activity() -> ActivityValue {
+    use crate::engine::Kernel;
     // SAFETY: reads a C global, no preconditions.
-    let raw = unsafe { c_globals::LAST_ACTIVITY };
+    let raw = unsafe { (*Kernel::current()).last_activity };
     ActivityValue(raw)
 }
 
@@ -212,8 +204,9 @@ pub fn get_last_activity() -> ActivityValue {
 /// @plan PLAN-20260707-MAINLOOP.P03
 #[inline]
 pub fn set_last_activity(val: ActivityValue) {
+    use crate::engine::Kernel;
     // SAFETY: writes a u16 to a C global.
-    unsafe { c_globals::LAST_ACTIVITY = val.0 };
+    unsafe { (*Kernel::current()).last_activity = val.0 };
 }
 
 // ---------------------------------------------------------------------------
@@ -230,7 +223,7 @@ pub fn set_last_activity(val: ActivityValue) {
 #[inline]
 #[must_use]
 pub fn get_chmmr_bomb_state() -> u8 {
-    crate::state::game_state_keys::get_game_state("CHMMR_BOMB_STATE") as u8
+    crate::state::game_state_keys::get_game_state(crate::engine::StoryKey::CHMMR_BOMB_STATE) as u8
 }
 
 /// Write `CHMMR_BOMB_STATE` via direct Rust game-state access.
@@ -239,7 +232,10 @@ pub fn get_chmmr_bomb_state() -> u8 {
 /// @requirement REQ-ML-010
 #[inline]
 pub fn set_chmmr_bomb_state(val: u8) {
-    crate::state::game_state_keys::set_game_state("CHMMR_BOMB_STATE", val as u32);
+    crate::state::game_state_keys::set_game_state(
+        crate::engine::StoryKey::CHMMR_BOMB_STATE,
+        val as u32,
+    );
 }
 
 /// Read `STARBASE_AVAILABLE` via direct Rust game-state access.
@@ -249,7 +245,7 @@ pub fn set_chmmr_bomb_state(val: u8) {
 #[inline]
 #[must_use]
 pub fn get_starbase_available() -> u8 {
-    crate::state::game_state_keys::get_game_state("STARBASE_AVAILABLE") as u8
+    crate::state::game_state_keys::get_game_state(crate::engine::StoryKey::STARBASE_AVAILABLE) as u8
 }
 
 /// Read `GLOBAL_FLAGS_AND_DATA` via direct Rust game-state access.
@@ -259,7 +255,8 @@ pub fn get_starbase_available() -> u8 {
 #[inline]
 #[must_use]
 pub fn get_global_flags_and_data() -> u8 {
-    crate::state::game_state_keys::get_game_state("GLOBAL_FLAGS_AND_DATA") as u8
+    crate::state::game_state_keys::get_game_state(crate::engine::StoryKey::GLOBAL_FLAGS_AND_DATA)
+        as u8
 }
 
 /// Read `KOHR_AH_KILLED_ALL` via direct Rust game-state access.
@@ -269,7 +266,7 @@ pub fn get_global_flags_and_data() -> u8 {
 #[inline]
 #[must_use]
 pub fn get_kohr_ah_killed_all() -> u8 {
-    crate::state::game_state_keys::get_game_state("KOHR_AH_KILLED_ALL") as u8
+    crate::state::game_state_keys::get_game_state(crate::engine::StoryKey::KOHR_AH_KILLED_ALL) as u8
 }
 
 // ---------------------------------------------------------------------------
@@ -285,13 +282,11 @@ pub fn get_kohr_ah_killed_all() -> u8 {
 #[must_use]
 pub fn get_crew_enlisted() -> u16 {
     #[cfg(not(test))]
+    use crate::engine::WorldData;
+    #[cfg(not(test))]
     {
         // SAFETY: reads a u16 field from the C GlobData global.
-        unsafe {
-            (*crate::ships::native::abi::GLOBDATA::current())
-                .SIS_state
-                .CrewEnlisted
-        }
+        unsafe { (*WorldData::current()).flagship.crew_enlisted }
     }
     #[cfg(test)]
     0
@@ -305,18 +300,16 @@ pub fn get_crew_enlisted() -> u16 {
 ///
 /// Wraps `ZeroVelocityComponents(&GLOBAL(velocity))` — which is `memset(pv,0,sizeof(*pv))`.
 /// Since `ZeroVelocityComponents` is a `#define` macro (not a function), we inline the
-/// memset directly on the `velocity` field in `GlobData.Game_state`.
+/// memset directly on the `velocity` field in `GlobData.game`.
 #[inline]
 pub fn zero_global_velocity() {
+    #[cfg(not(test))]
+    use crate::engine::WorldData;
     #[cfg(not(test))]
     {
         // SAFETY: zeroes the velocity field in the C GlobData global.
         unsafe {
-            let velocity_ptr = std::ptr::addr_of_mut!(
-                (*crate::ships::native::abi::GLOBDATA::current())
-                    .Game_state
-                    .velocity
-            );
+            let velocity_ptr = std::ptr::addr_of_mut!((*WorldData::current()).game.velocity);
             std::ptr::write_bytes(velocity_ptr, 0, 1);
         }
     }

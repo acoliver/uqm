@@ -145,13 +145,12 @@ pub(crate) mod live {
     use crate::navigation::abi::*;
     use crate::navigation::get;
 
-    use crate::planets::starmap::{star_array, CurStarDescPtr};
+    use crate::planets::starmap::star_array;
     use crate::state::c_api::{
         CloseStateFile, DeleteStateFile, LengthStateFile, OpenStateFile, SeekStateFile,
     };
     use std::{mem, ptr};
 
-    static mut LAST_ENCOUNTER_GROUP: u8 = 0;
     const ENCOUNTER_PERCENT: [u8; 24] = [
         0, 0, 0, 20, 20, 0, 10, 20, 20, 20, 20, 40, 0, 20, 60, 20, 5, 20, 40, 0, 0, 40, 40, 0,
     ];
@@ -160,25 +159,16 @@ pub(crate) mod live {
         0x11, 0x51, 0x51, 0x51, 0, 0x51, 0x51,
     ];
     unsafe fn ip_queue() -> *mut QUEUE {
-        ptr::addr_of_mut!(
-            (*crate::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .ip_group_q
-        )
+        use crate::engine::WorldData;
+        ptr::addr_of_mut!((*WorldData::current()).game.ip_group_q)
     }
     unsafe fn npc_queue() -> *mut QUEUE {
-        ptr::addr_of_mut!(
-            (*crate::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .npc_built_ship_q
-        )
+        use crate::engine::WorldData;
+        ptr::addr_of_mut!((*WorldData::current()).game.npc_built_ship_q)
     }
     unsafe fn fleet_queue() -> *mut QUEUE {
-        ptr::addr_of_mut!(
-            (*crate::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .avail_race_q
-        )
+        use crate::engine::WorldData;
+        ptr::addr_of_mut!((*WorldData::current()).game.avail_race_q)
     }
     unsafe fn count(queue: *const QUEUE) -> u8 {
         let mut handle = (*queue).head;
@@ -254,6 +244,7 @@ pub(crate) mod live {
     /// A current star, solar system, and initialized world queues are required.
     #[no_mangle]
     pub unsafe extern "C" fn BuildGroups() {
+        use crate::engine::World as GameWorld;
         let mut home = [
             0,
             0,
@@ -287,7 +278,9 @@ pub(crate) mod live {
             home[UTWIG_SHIP as usize] = 0;
             home[SUPOX_SHIP as usize] = 0;
         }
-        let universe = (*CurStarDescPtr).star_pt;
+        let universe = (*(*GameWorld::current())
+            .star_pointer(crate::planets::starmap::current_catalog()))
+        .star_pt;
         let mut best_index = 0usize;
         let mut best_percent = 0u16;
         let mut handle = (*fleet_queue()).head;
@@ -298,7 +291,12 @@ pub(crate) mod live {
             let mut radius = fleet.actual_strength;
             let mut chance = percent[index] as u16;
             if radius != 0 && chance != 0 {
-                if home[index] != 0 && (*CurStarDescPtr).index as u32 == home[index] {
+                if home[index] != 0
+                    && (*(*GameWorld::current())
+                        .star_pointer(crate::planets::starmap::current_catalog()))
+                    .index as u32
+                        == home[index]
+                {
                     best_index = index;
                     best_percent = if home[index] == SPATHI_DEFINED || home[index] == SUPOX_DEFINED
                     {
@@ -342,7 +340,10 @@ pub(crate) mod live {
                 number = MAX_BATTLE_GROUPS as u8;
             } else if number < 5
                 && home[best_index] != 0
-                && (*CurStarDescPtr).index as u32 == home[best_index]
+                && (*(*GameWorld::current())
+                    .star_pointer(crate::planets::starmap::current_catalog()))
+                .index as u32
+                    == home[best_index]
             {
                 number = 5;
             }
@@ -364,6 +365,7 @@ pub(crate) mod live {
     }
 
     unsafe fn flush(header: *mut GROUP_HEADER, offset: u32, which: u8, file: *mut GameStateFile) {
+        use crate::engine::{Kernel, WorldData};
         if which == 0 {
             if (*header).GroupOffset[0] == 0 {
                 (*header).GroupOffset[0] = LengthStateFile(file);
@@ -375,17 +377,8 @@ pub(crate) mod live {
                 let next = group.succ;
                 let id = group.group_id;
                 if group.in_system == 0 {
-                    if (*crate::ships::native::abi::GLOBDATA::current())
-                        .Game_state
-                        .BattleGroupRef
-                        != 0
-                    {
-                        PutGroupInfo(
-                            (*crate::ships::native::abi::GLOBDATA::current())
-                                .Game_state
-                                .BattleGroupRef,
-                            id,
-                        );
+                    if (*WorldData::current()).game.battle_group_ref != 0 {
+                        PutGroupInfo((*WorldData::current()).game.battle_group_ref, id);
                     } else {
                         flush(header, 0, id, file);
                     }
@@ -404,7 +397,7 @@ pub(crate) mod live {
         if which == 0 {
             let mut number = count(ip_queue());
             seek(file, (*header).GroupOffset[0]);
-            write(file, &[LAST_ENCOUNTER_GROUP, number]);
+            write(file, &[(*Kernel::current()).last_encounter_group, number]);
             let mut handle = (*ip_queue()).head;
             while number != 0 {
                 let group = handle.cast::<IP_GROUP>();
@@ -437,6 +430,7 @@ pub(crate) mod live {
     /// Current world and solar-system queues must be initialized and exclusively accessible.
     #[no_mangle]
     pub unsafe extern "C" fn GetGroupInfo(offset: u32, which: u8) -> BOOLEAN {
+        use crate::engine::{Kernel, World as GameWorld, WorldData};
         let file = open(offset, which);
         if file.is_null() {
             return 0;
@@ -450,7 +444,10 @@ pub(crate) mod live {
             let mut month = header.month_index as u16;
             let mut year = header.year_index;
             if offset == 0
-                && (header.star_index != CurStarDescPtr.offset_from(star_array) as u16
+                && (header.star_index
+                    != (*GameWorld::current())
+                        .star_pointer(crate::planets::starmap::current_catalog())
+                        .offset_from(star_array) as u16
                     || ValidateEvent(EVENT_TYPE_ABSOLUTE_EVENT, &mut month, &mut day, &mut year)
                         == 0)
             {
@@ -522,21 +519,20 @@ pub(crate) mod live {
         if which == 0 {
             let left = count(npc_queue());
             seek(file, header.GroupOffset[0]);
-            LAST_ENCOUNTER_GROUP = read::<1>(file)[0];
-            if LAST_ENCOUNTER_GROUP != 0 {
-                if (*crate::ships::native::abi::GLOBDATA::current())
-                    .Game_state
-                    .BattleGroupRef
-                    != 0
-                {
+            (*Kernel::current()).last_encounter_group = read::<1>(file)[0];
+            if (*Kernel::current()).last_encounter_group != 0 {
+                if (*WorldData::current()).game.battle_group_ref != 0 {
                     PutGroupInfo(
-                        (*crate::ships::native::abi::GLOBDATA::current())
-                            .Game_state
-                            .BattleGroupRef,
-                        LAST_ENCOUNTER_GROUP,
+                        (*WorldData::current()).game.battle_group_ref,
+                        (*Kernel::current()).last_encounter_group,
                     );
                 } else {
-                    flush(&mut header, offset, LAST_ENCOUNTER_GROUP, file);
+                    flush(
+                        &mut header,
+                        offset,
+                        (*Kernel::current()).last_encounter_group,
+                        file,
+                    );
                 }
             }
             ReinitQueue(npc_queue());
@@ -548,7 +544,7 @@ pub(crate) mod live {
                 let handle = BuildGroup(ip_queue(), race);
                 let group = handle.cast::<IP_GROUP>();
                 super::ReadIpGroup(file, group);
-                if (*group).group_id == LAST_ENCOUNTER_GROUP && left == 0 {
+                if (*group).group_id == (*Kernel::current()).last_encounter_group && left == 0 {
                     RemoveQueue(ip_queue(), handle);
                     FreeLink(ip_queue(), handle);
                 }
@@ -557,7 +553,7 @@ pub(crate) mod live {
             CloseStateFile(file);
             u32::from(!(*ip_queue()).head.is_null())
         } else {
-            LAST_ENCOUNTER_GROUP = which;
+            (*Kernel::current()).last_encounter_group = which;
             if offset != 0 {
                 PutGroupInfo(0, 0);
             } else {
@@ -582,6 +578,7 @@ pub(crate) mod live {
     /// Current world queues and current star descriptor must be initialized.
     #[no_mangle]
     pub unsafe extern "C" fn PutGroupInfo(mut offset: u32, mut which: u8) -> u32 {
+        use crate::engine::{Kernel, World as GameWorld};
         let file = open(offset, which);
         if file.is_null() {
             return offset;
@@ -596,7 +593,7 @@ pub(crate) mod live {
         if which != 0 {
             seek(file, offset);
             if which == u8::MAX {
-                LAST_ENCOUNTER_GROUP = 0;
+                (*Kernel::current()).last_encounter_group = 0;
                 which = 0;
             }
         }
@@ -608,7 +605,9 @@ pub(crate) mod live {
         header.day_index = day as u8;
         header.month_index = month as u8;
         header.year_index = year;
-        header.star_index = CurStarDescPtr.offset_from(star_array) as u16;
+        header.star_index = (*GameWorld::current())
+            .star_pointer(crate::planets::starmap::current_catalog())
+            .offset_from(star_array) as u16;
         flush(&mut header, offset, which, file);
         CloseStateFile(file);
         offset
@@ -630,51 +629,55 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn group_and_fragment_records_keep_the_legacy_sixteen_byte_wire_layout() {
+        let mut game_owner = crate::engine::Game::new();
+        // SAFETY: the serialized fixture owns this published lifecycle.
         unsafe {
-            crate::state::ffi::rust_init_game_state();
-            let file = OpenStateFile(1, c"wb".as_ptr());
-            let mut group: IP_GROUP = std::mem::zeroed();
-            group.group_counter = 0x1234;
-            group.race_id = 4;
-            group.sys_loc = 2;
-            group.task = 9;
-            group.in_system = 7;
-            group.dest_loc = 3;
-            group.orbit_pos = 15;
-            group.group_id = 12;
-            group.loc.x = -123;
-            group.loc.y = 456;
-            super::WriteIpGroup(file, &group);
-            assert_eq!(LengthStateFile(file), 16);
-            SeekStateFile(file, 0, 0);
-            let bytes = read::<16>(file);
-            assert_eq!(
-                &bytes[..12],
-                &[0, 0, 0, 0, 0x34, 0x12, 4, 0x92, 7, 0, 0xf3, 12]
-            );
-            SeekStateFile(file, 0, 0);
-            let mut restored: IP_GROUP = std::mem::zeroed();
-            super::ReadIpGroup(file, &mut restored);
-            assert_eq!(
-                (
-                    restored.loc.x,
-                    restored.loc.y,
-                    restored.task,
-                    restored.orbit_pos
-                ),
-                (-123, 456, 9, 15)
-            );
-            SeekStateFile(file, 0, 0);
-            let mut ship: SHIP_FRAGMENT = std::mem::zeroed();
-            ship.crew_level = 300;
-            ship.max_crew = 511;
-            ship.race_id = 6;
-            super::WriteShipFragment(file, &ship);
-            SeekStateFile(file, 0, 0);
-            super::ReadShipFragment(file, &mut ship);
-            assert_eq!((ship.crew_level, ship.max_crew, ship.race_id), (44, 255, 6));
-            CloseStateFile(file);
-            DeleteStateFile(1);
+            crate::app::bridge::with_game(&mut game_owner, || {
+                crate::state::ffi::rust_init_game_state();
+                let file = OpenStateFile(1, c"wb".as_ptr());
+                let mut group: IP_GROUP = std::mem::zeroed();
+                group.group_counter = 0x1234;
+                group.race_id = 4;
+                group.sys_loc = 2;
+                group.task = 9;
+                group.in_system = 7;
+                group.dest_loc = 3;
+                group.orbit_pos = 15;
+                group.group_id = 12;
+                group.loc.x = -123;
+                group.loc.y = 456;
+                super::WriteIpGroup(file, &group);
+                assert_eq!(LengthStateFile(file), 16);
+                SeekStateFile(file, 0, 0);
+                let bytes = read::<16>(file);
+                assert_eq!(
+                    &bytes[..12],
+                    &[0, 0, 0, 0, 0x34, 0x12, 4, 0x92, 7, 0, 0xf3, 12]
+                );
+                SeekStateFile(file, 0, 0);
+                let mut restored: IP_GROUP = std::mem::zeroed();
+                super::ReadIpGroup(file, &mut restored);
+                assert_eq!(
+                    (
+                        restored.loc.x,
+                        restored.loc.y,
+                        restored.task,
+                        restored.orbit_pos
+                    ),
+                    (-123, 456, 9, 15)
+                );
+                SeekStateFile(file, 0, 0);
+                let mut ship: SHIP_FRAGMENT = std::mem::zeroed();
+                ship.crew_level = 300;
+                ship.max_crew = 511;
+                ship.race_id = 6;
+                super::WriteShipFragment(file, &ship);
+                SeekStateFile(file, 0, 0);
+                super::ReadShipFragment(file, &mut ship);
+                assert_eq!((ship.crew_level, ship.max_crew, ship.race_id), (44, 255, 6));
+                CloseStateFile(file);
+                DeleteStateFile(1);
+            })
         }
     }
 }

@@ -105,6 +105,8 @@ impl SpeechGraphics {
     /// passed since the last update. `now_ms` is the current timestamp in
     /// milliseconds (caller provides to avoid platform dependencies here).
     pub fn update(&mut self, osc: &Oscilloscope, now_ms: u64) {
+        #[cfg(not(test))]
+        use crate::engine::Kernel;
         if !self.initialized {
             return;
         }
@@ -120,9 +122,9 @@ impl SpeechGraphics {
 
         #[cfg(not(test))]
         unsafe {
-            let old_context = c_bridge::SetContext(c_bridge::RadarContext);
+            let old_context = c_bridge::SetContext((*Kernel::current()).radar_context);
             c_bridge::DrawOscilloscope();
-            c_bridge::SetContext(c_bridge::SpaceContext);
+            c_bridge::SetContext((*Kernel::current()).space_context);
             c_bridge::DrawSlider();
             c_bridge::SetContext(old_context);
         }
@@ -151,7 +153,8 @@ impl SpeechGraphics {
 // ============================================================================
 #[cfg(not(test))]
 unsafe fn activity_frame(index: u16) -> *mut std::ffi::c_void {
-    (c_bridge::SetAbsFrameIndex((c_bridge::ActivityFrame).cast(), index)).cast()
+    use crate::engine::Kernel;
+    (c_bridge::SetAbsFrameIndex(((*Kernel::current()).activity_frame).cast(), index)).cast()
 }
 
 #[cfg(not(test))]
@@ -170,12 +173,6 @@ mod c_bridge {
     pub use crate::comm::oscill_abi::runtime::DrawOscilloscope;
 
     pub use crate::comm::oscill_abi::runtime::DrawSlider;
-
-    extern "C" {
-        pub static mut ActivityFrame: *mut crate::graphics::native_abi::frame_desc;
-        pub static mut RadarContext: *mut crate::graphics::native_abi::context_desc;
-        pub static mut SpaceContext: *mut crate::graphics::native_abi::context_desc;
-    }
 }
 
 // ============================================================================

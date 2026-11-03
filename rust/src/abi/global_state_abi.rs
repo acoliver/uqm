@@ -104,7 +104,7 @@ pub type LDAS_FLAGS = DWORD;
 pub use crate::ships::native::abi::LOCDATA;
 pub type ACTIVITY = UWORD;
 
-pub use crate::ships::native::abi::GLOBDATA;
+
 pub const ARILOU_ENTRANCE_EVENT: _bindgen_ty_10 = 0;
 pub const ARILOU_EXIT_EVENT: _bindgen_ty_10 = 1;
 pub const HYPERSPACE_ENCOUNTER_EVENT: _bindgen_ty_10 = 2;

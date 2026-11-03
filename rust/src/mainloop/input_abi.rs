@@ -243,6 +243,7 @@ pub(crate) mod live {
     /// State starts with a live non-null C ABI input callback; nested loops run on the game thread.
     #[no_mangle]
     pub unsafe extern "C" fn DoInput(state: *mut c_void, reset: u32) {
+        use crate::engine::Kernel;
         if reset != 0 {
             FlushInput();
         }
@@ -260,7 +261,7 @@ pub(crate) mod live {
                 break;
             }
             let flags = menu_sound_flags(&ptr::addr_of!(PulsedInputState).read());
-            let mut sound = Kernel::current().menu_sounds;
+            let mut sound = (*Kernel::current()).menu_sounds;
             if !sound.is_null() && flags & (SOUND_0 | SOUND_1) != 0 {
                 if flags & SOUND_1 != 0 {
                     sound = crate::strings::string_table::SetAbsStringTableIndex(sound.cast(), 1)

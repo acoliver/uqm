@@ -2,7 +2,7 @@
 #[cfg(not(test))]
 use super::*;
 #[cfg(not(test))]
-use crate::engine::battle::{StoryKey, World};
+use crate::engine::battle::StoryKey;
 
 #[cfg(not(test))]
 impl Cx<'_> {
@@ -109,11 +109,7 @@ impl Cx<'_> {
 
     pub fn flagship_velocity(&self) -> crate::engine::battle::record::VELOCITY_DESC {
         // SAFETY: this is a value copy of game-thread-owned navigation state.
-        unsafe {
-            (*crate::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .velocity
-        }
+        self.world.data.game.velocity
     }
 
     pub fn set_flagship_velocity(
@@ -121,20 +117,12 @@ impl Cx<'_> {
         velocity: crate::engine::battle::record::VELOCITY_DESC,
     ) {
         // SAFETY: this context owns the navigation velocity authority.
-        unsafe {
-            (*crate::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .velocity = velocity;
-        }
+        self.world.data.game.velocity = velocity;
     }
 
     pub fn set_autopilot(&mut self, point: POINT) {
         // SAFETY: this context owns the navigation autopilot authority.
-        unsafe {
-            (*crate::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .autopilot = point;
-        }
+        self.world.data.game.autopilot = point;
     }
 
     pub fn set_flagship_crew(&mut self, crew: u16) {
@@ -146,77 +134,6 @@ impl Cx<'_> {
         unsafe {
             crate::app::bridge::publish(self, || HyperspaceMenu());
         }
-    }
-}
-
-#[cfg(not(test))]
-impl World {
-    /// # Safety
-    /// Legacy resource construction/teardown must run on the game thread, with
-    /// every other World and GlobData borrow suspended until this value is dropped.
-    pub(crate) unsafe fn for_legacy_lifecycle() -> Self {
-        // SAFETY: the legacy lifecycle caller suspends other authority access;
-        // the resolver reads resource slots only when a loaded frame set is requested.
-        unsafe {
-            Self::new(
-                std::ptr::NonNull::new_unchecked(
-                    &raw mut (*crate::ships::native::abi::GLOBDATA::current())
-                        .Game_state
-                        .CurrentActivity,
-                ),
-                std::ptr::NonNull::new_unchecked(
-                    &raw mut (*crate::ships::native::abi::GLOBDATA::current())
-                        .Game_state
-                        .ip_group_q,
-                ),
-                |_| unreachable!("descriptor lifecycle does not resolve battle frame sources"),
-            )
-        }
-    }
-
-    pub fn flagship_config(&self) -> crate::engine::battle::views::FlagshipConfig {
-        use crate::engine::battle::views::FlagshipConfig;
-        // SAFETY: World construction retains exclusive game-thread access to GlobData.
-        unsafe {
-            let state = (*crate::ships::native::abi::GLOBDATA::current()).SIS_state;
-            FlagshipConfig {
-                modules: state.ModuleSlots,
-                drives: state.DriveSlots,
-                jets: state.JetSlots,
-                crew: state.CrewEnlisted,
-                fuel: state.FuelOnBoard,
-                position: (state.log_x, state.log_y),
-                hyperspace: inHQSpace() != 0,
-            }
-        }
-    }
-
-    pub fn set_flagship_crew(&mut self, crew: u16) {
-        // SAFETY: World construction retains exclusive game-thread access to enlisted crew.
-        unsafe {
-            (*crate::ships::native::abi::GLOBDATA::current())
-                .SIS_state
-                .CrewEnlisted = crew;
-        }
-    }
-
-    pub fn story_state(&self, key: StoryKey) -> u32 {
-        crate::state::game_state_keys::get_game_state(story_name(key))
-    }
-
-    pub fn set_story_state(&mut self, key: StoryKey, value: u32) {
-        crate::state::game_state_keys::set_game_state(story_name(key), value);
-    }
-}
-
-#[cfg(not(test))]
-fn story_name(key: StoryKey) -> &'static str {
-    match key {
-        StoryKey::ShofixtiRecruited => "SHOFIXTI_RECRUITED",
-        StoryKey::ProbeIlwrathEncounter => "PROBE_ILWRATH_ENCOUNTER",
-        StoryKey::ArilouSpaceSide => "ARILOU_SPACE_SIDE",
-        StoryKey::ChmmrBombState => "CHMMR_BOMB_STATE",
-        StoryKey::BombCarrier => "BOMB_CARRIER",
     }
 }
 

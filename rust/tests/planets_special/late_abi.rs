@@ -83,9 +83,9 @@ pub fn check() {
     let world = std::ptr::addr_of_mut!(harness.state.PlanetDesc[0]);
     let pickup = GENERATE_SPATHI_FUNCTIONS.pickup_life.unwrap();
     for retrieved in 0..=32 {
-        set_game_state("SPATHI_CREATURES_ELIMINATED", 0);
-        set_game_state("SPATHI_SHIELDED_SELVES", 0);
-        set_game_state("SPATHI_CREATURES_EXAMINED", 0);
+        set_game_state(uqm_rust::engine::StoryKey::SPATHI_CREATURES_ELIMINATED, 0);
+        set_game_state(uqm_rust::engine::StoryKey::SPATHI_SHIELDED_SELVES, 0);
+        set_game_state(uqm_rust::engine::StoryKey::SPATHI_CREATURES_EXAMINED, 0);
         harness.state.SysInfo.PlanetInfo.ScanRetrieveMask[BIOLOGICAL_SCAN] = if retrieved == 32 {
             u32::MAX
         } else {
@@ -93,9 +93,12 @@ pub fn check() {
         };
         let before = format!("{:?}", harness.state);
         assert!(unsafe { pickup(&mut *harness.state, world, 0) });
-        assert_eq!(get_game_state("SPATHI_CREATURES_EXAMINED"), 1);
         assert_eq!(
-            get_game_state("SPATHI_CREATURES_ELIMINATED"),
+            get_game_state(uqm_rust::engine::StoryKey::SPATHI_CREATURES_EXAMINED),
+            1
+        );
+        assert_eq!(
+            get_game_state(uqm_rust::engine::StoryKey::SPATHI_CREATURES_ELIMINATED),
             u32::from(retrieved == 31)
         );
         assert_eq!(format!("{:?}", harness.state), before);
@@ -103,9 +106,12 @@ pub fn check() {
     }
     harness.state.PlanetDesc[1].pPrevDesc = sun;
     let other = std::ptr::addr_of_mut!(harness.state.PlanetDesc[1]);
-    set_game_state("SPATHI_CREATURES_EXAMINED", 0);
+    set_game_state(uqm_rust::engine::StoryKey::SPATHI_CREATURES_EXAMINED, 0);
     assert!(unsafe { pickup(&mut *harness.state, other, u16::MAX) });
-    assert_eq!(get_game_state("SPATHI_CREATURES_EXAMINED"), 0);
+    assert_eq!(
+        get_game_state(uqm_rust::engine::StoryKey::SPATHI_CREATURES_EXAMINED),
+        0
+    );
 
     // Mycon's life callback does not read any pointer or consume RNG.
     assert_eq!(
@@ -156,14 +162,10 @@ fn check_live_queues(harness: &mut Harness) {
     };
     // No references into GlobData or the group array cross either callback.
     unsafe {
-        let ip = std::ptr::addr_of_mut!(
-            (*uqm_rust::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .ip_group_q
-        );
+        let ip = std::ptr::addr_of_mut!((*uqm_rust::engine::WorldData::current()).game.ip_group_q);
         let npc = std::ptr::addr_of_mut!(
-            (*uqm_rust::ships::native::abi::GLOBDATA::current())
-                .Game_state
+            (*uqm_rust::engine::WorldData::current())
+                .game
                 .npc_built_ship_q
         );
         let saved_ip = ip.read();
@@ -179,7 +181,7 @@ fn check_live_queues(harness: &mut Harness) {
         assert!(groups.iter().all(|group| group.task == 0));
         harness.star_index = BOMB_DEFINED;
         harness.set_star(0, 0);
-        set_game_state("UTWIG_BOMB", 0);
+        set_game_state(uqm_rust::engine::StoryKey::UTWIG_BOMB, 0);
         let before = format!("{:?}", harness.state);
         assert!(GENERATE_UTWIG_FUNCTIONS.init_npcs.unwrap()(
             &mut *harness.state
@@ -190,7 +192,7 @@ fn check_live_queues(harness: &mut Harness) {
         assert_eq!(groups[1].succ, first.add(2).cast());
         assert!(groups[2].succ.is_null());
         assert_eq!(format!("{:?}", harness.state), before);
-        assert_eq!(get_game_state("UTWIG_BOMB"), 0);
+        assert_eq!(get_game_state(uqm_rust::engine::StoryKey::UTWIG_BOMB), 0);
         assert_eq!(harness.rng_position(), 104729);
         ip.write(saved_ip);
         npc.write(saved_npc);
@@ -206,16 +208,12 @@ fn check_live_queues(harness: &mut Harness) {
         std::ptr::addr_of_mut!(EncounterRace).write(saved_race);
         std::ptr::addr_of_mut!(EncounterGroup).write(saved_group);
 
-        let saved_location = std::ptr::addr_of!(
-            (*uqm_rust::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .ip_location
-        )
-        .read();
+        let saved_location =
+            std::ptr::addr_of!((*uqm_rust::engine::WorldData::current()).game.ip_location).read();
         let saved_origin = std::ptr::addr_of!(
-            (*uqm_rust::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .ShipStamp
+            (*uqm_rust::engine::WorldData::current())
+                .game
+                .ship_stamp
                 .origin
         )
         .read();
@@ -237,9 +235,9 @@ fn check_live_queues(harness: &mut Harness) {
         let location = GuardSite::ip_location(&LiveGame);
         assert_eq!((location.x, location.y), (120, -90));
         let origin = std::ptr::addr_of!(
-            (*uqm_rust::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .ShipStamp
+            (*uqm_rust::engine::WorldData::current())
+                .game
+                .ship_stamp
                 .origin
         )
         .read();
@@ -247,16 +245,12 @@ fn check_live_queues(harness: &mut Harness) {
             (i32::from(origin.x), i32::from(origin.y)),
             (half_width + 12, half_height - 9)
         );
+        std::ptr::addr_of_mut!((*uqm_rust::engine::WorldData::current()).game.ip_location)
+            .write(saved_location);
         std::ptr::addr_of_mut!(
-            (*uqm_rust::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .ip_location
-        )
-        .write(saved_location);
-        std::ptr::addr_of_mut!(
-            (*uqm_rust::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .ShipStamp
+            (*uqm_rust::engine::WorldData::current())
+                .game
+                .ship_stamp
                 .origin
         )
         .write(saved_origin);

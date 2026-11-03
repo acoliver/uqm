@@ -18,7 +18,6 @@ use crate::comm::dispatch::{
     BriefShipInfo as CBriefShipInfo, CEncounter, CFleetInfo, CPoint, IN_ENCOUNTER, IN_HYPERSPACE,
     IN_INTERPLANETARY, START_ENCOUNTER, START_INTERPLANETARY,
 };
-use crate::comm::locdata::CQueue;
 use crate::savegame::decode::decode_save;
 use crate::savegame::encode::encode_save;
 use crate::savegame::types::{BriefShipInfo, EncounterEntry, IpGroup, Point};
@@ -183,7 +182,7 @@ fn push_encounter(game: &mut LiveGame, entry: &EncounterEntry, element: usize) {
     };
 }
 
-fn raw_groups(queue: &CQueue) -> Vec<&CIpGroup> {
+fn raw_groups(queue: &Queue) -> Vec<&CIpGroup> {
     links::<CIpGroup>(queue)
         .into_iter()
         // SAFETY: the links are slots of an `IP_GROUP` pool.
@@ -191,7 +190,7 @@ fn raw_groups(queue: &CQueue) -> Vec<&CIpGroup> {
         .collect()
 }
 
-fn raw_encounters(queue: &CQueue) -> Vec<&CEncounter> {
+fn raw_encounters(queue: &Queue) -> Vec<&CEncounter> {
     links::<CEncounter>(queue)
         .into_iter()
         // SAFETY: the links are slots of an `ENCOUNTER` pool.
@@ -217,7 +216,7 @@ fn group_wire(g: &CIpGroup) -> Vec<u8> {
 }
 
 /// The queue words that tell whether a queue was touched.
-fn queue_words(queue: &CQueue) -> (usize, usize, usize, usize) {
+fn queue_words(queue: &Queue) -> (usize, usize, usize, usize) {
     (
         queue.head as usize,
         queue.tail as usize,
@@ -643,7 +642,7 @@ fn a_queue_that_is_not_the_right_pool_is_rejected_before_any_write() {
     let good = sections(vec![group(1, 1)], vec![encounter(1, 1, 1)]);
 
     let saved = game.ip_group_q;
-    game.ip_group_q = CQueue::default();
+    game.ip_group_q = Queue::default();
     assert_eq!(
         restore_groups(&mut game, &good),
         Err(GroupError::Queue(QueueError::PoolMissing {

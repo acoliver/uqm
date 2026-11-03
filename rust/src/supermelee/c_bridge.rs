@@ -26,11 +26,6 @@ pub use crate::sound::heart_ffi::stop_sound as StopSound;
 // Global state (from globdata.h)
 // ---------------------------------------------------------------------------
 
-extern "C" {
-    /// PlayerControl array — `BYTE PlayerControl[NUM_PLAYERS]`
-    pub static mut PlayerControl: [u8; 2];
-}
-
 // ---------------------------------------------------------------------------
 // UIO directory for melee files
 // ---------------------------------------------------------------------------

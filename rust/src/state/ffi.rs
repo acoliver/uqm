@@ -3,7 +3,6 @@
 use std::ffi::CStr;
 use std::fmt;
 use std::os::raw::{c_char, c_int, c_uchar};
-use std::sync::Mutex;
 
 use super::game_state::{
     copy_state_bits_raw, get_state_32_raw, get_state_bits_raw, set_state_32_raw,
@@ -12,32 +11,14 @@ use super::game_state::{
 use super::planet_info::{PlanetInfoManager, ScanRetrieveMask, NUM_SCAN_TYPES};
 use super::state_file::{FileMode, StateFileManager};
 
-static GLOBAL_GAME_STATE: Mutex<Option<GameState>> = Mutex::new(None);
-static GLOBAL_STATE_FILES: Mutex<Option<StateFileManager>> = Mutex::new(None);
-
 ///
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
 pub unsafe fn rust_init_game_state() {
-    // Always start from zero. The sole caller, InitGlobData, memsets the C
-    // shadow and calls this to match; Rust holds the authoritative copy. Only
-    // creating the state when absent left a second New Game in the same process
-    // carrying every bit of the first, so the game believed the Ur-Quan probe
-    // had already been met and the moon base already taken. Loading a save
-    // restores over this afterwards, so resetting here is safe.
-    let mut global = GLOBAL_GAME_STATE.lock().unwrap();
-    *global = Some(GameState::new());
-
-    let mut files = GLOBAL_STATE_FILES.lock().unwrap();
-    if files.is_none() {
-        *files = Some(StateFileManager::new());
-    }
-    files
-        .as_mut()
-        .expect("state files initialized")
-        .canned_nodes
-        .clear();
+    let world = world();
+    (*world).story = Some(GameState::new());
+    (*world).files.canned_nodes.clear();
 }
 
 ///
@@ -49,9 +30,7 @@ pub unsafe fn rust_get_game_state(key: *const c_char) -> c_uchar {
         return 0;
     };
 
-    guard_convert_value(&GLOBAL_GAME_STATE, |state| {
-        state.get_state(start_bit, end_bit)
-    })
+    read_story(|state| state.get_state(start_bit, end_bit))
 }
 
 ///
@@ -63,7 +42,7 @@ pub unsafe fn rust_set_game_state(key: *const c_char, value: c_uchar) {
         return;
     };
 
-    guard_convert_value_mut(&GLOBAL_GAME_STATE, |state| {
+    write_story(|state| {
         state.set_state(start_bit, end_bit, value);
     });
 }
@@ -74,9 +53,7 @@ pub unsafe fn rust_set_game_state(key: *const c_char, value: c_uchar) {
 /// No safety requirements; marked unsafe for C ABI compatibility.
 pub unsafe fn rust_get_game_state_bits(start_bit: c_int, end_bit: c_int) -> c_uchar {
     if let Some((start_bit, end_bit)) = normalize_bit_range(start_bit, end_bit) {
-        guard_convert_value(&GLOBAL_GAME_STATE, |state| {
-            state.get_state(start_bit, end_bit)
-        })
+        read_story(|state| state.get_state(start_bit, end_bit))
     } else {
         0
     }
@@ -88,7 +65,7 @@ pub unsafe fn rust_get_game_state_bits(start_bit: c_int, end_bit: c_int) -> c_uc
 /// No safety requirements; marked unsafe for C ABI compatibility.
 pub unsafe fn rust_set_game_state_bits(start_bit: c_int, end_bit: c_int, value: c_uchar) {
     if let Some((start_bit, end_bit)) = normalize_bit_range(start_bit, end_bit) {
-        guard_convert_value_mut(&GLOBAL_GAME_STATE, |state| {
+        write_story(|state| {
             state.set_state(start_bit, end_bit, value);
         });
     }
@@ -103,7 +80,7 @@ pub unsafe fn rust_get_game_state_32(start_bit: c_int) -> u32 {
         return 0;
     };
 
-    guard_convert_value(&GLOBAL_GAME_STATE, |state| state.get_state_32(start_bit))
+    read_story(|state| state.get_state_32(start_bit))
 }
 
 ///
@@ -115,7 +92,7 @@ pub unsafe fn rust_set_game_state_32(start_bit: c_int, value: u32) {
         return;
     };
 
-    guard_convert_value_mut(&GLOBAL_GAME_STATE, |state| {
+    write_story(|state| {
         state.set_state_32(start_bit, value);
     });
 }
@@ -131,12 +108,7 @@ pub unsafe fn rust_copy_game_state(dest_bit: c_int, src_start_bit: c_int, src_en
         return;
     };
 
-    let mut guard = match GLOBAL_GAME_STATE.lock() {
-        Ok(g) => g,
-        Err(_) => return,
-    };
-
-    if let Some(state) = guard.as_mut() {
+    if let Some(state) = (*world()).story.as_mut() {
         let snapshot = GameState::from_bytes(state.as_bytes());
         state.copy_state(dest_bit, &snapshot, src_start_bit, src_end_bit);
     }
@@ -147,7 +119,7 @@ pub unsafe fn rust_copy_game_state(dest_bit: c_int, src_start_bit: c_int, src_en
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
 pub unsafe fn rust_reset_game_state() {
-    guard_convert_value_mut(&GLOBAL_GAME_STATE, |state| {
+    write_story(|state| {
         state.reset();
     });
 }
@@ -174,9 +146,7 @@ pub unsafe fn rust_open_state_file(file_index: c_int, mode: *const c_char) -> c_
         _ => return 0,
     };
 
-    match guard_convert_state_result_mut(&GLOBAL_STATE_FILES, |files| {
-        files.open(file_index as usize, file_mode).map(|_| ())
-    }) {
+    match files_result(|files| files.open(file_index as usize, file_mode).map(|_| ())) {
         Some(()) => 1,
         _ => 0,
     }
@@ -187,7 +157,7 @@ pub unsafe fn rust_open_state_file(file_index: c_int, mode: *const c_char) -> c_
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
 pub unsafe fn rust_close_state_file(file_index: c_int) {
-    guard_convert_state_value_mut(&GLOBAL_STATE_FILES, |files| {
+    write_files(|files| {
         let _ = files.close(file_index as usize);
     });
 }
@@ -197,7 +167,7 @@ pub unsafe fn rust_close_state_file(file_index: c_int) {
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
 pub unsafe fn rust_delete_state_file(file_index: c_int) {
-    guard_convert_state_value_mut(&GLOBAL_STATE_FILES, |files| {
+    write_files(|files| {
         let _ = files.delete(file_index as usize);
     });
 }
@@ -207,7 +177,7 @@ pub unsafe fn rust_delete_state_file(file_index: c_int) {
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
 pub unsafe fn rust_length_state_file(file_index: c_int) -> usize {
-    guard_convert_state_value(&GLOBAL_STATE_FILES, |files| {
+    read_files(|files| {
         files
             .get_file(file_index as usize)
             .map(|f| f.length())
@@ -232,7 +202,7 @@ pub unsafe fn rust_read_state_file(
     let bytes = size * count;
     let slice = std::slice::from_raw_parts_mut(buf, bytes);
 
-    guard_convert_state_value_mut(&GLOBAL_STATE_FILES, |files| {
+    write_files(|files| {
         files
             .get_file_mut(file_index as usize)
             .map(|f| f.read(slice).unwrap_or(0) / size)
@@ -257,14 +227,12 @@ pub unsafe fn rust_write_state_file(
     let bytes = size * count;
     let slice = std::slice::from_raw_parts(buf, bytes);
 
-    guard_convert_state_value_mut(&GLOBAL_STATE_FILES, |files| {
-        match files.get_file_mut(file_index as usize) {
-            Some(file) => match file.write(slice) {
-                Ok(()) => count,
-                Err(_) => 0,
-            },
-            None => 0,
-        }
+    write_files(|files| match files.get_file_mut(file_index as usize) {
+        Some(file) => match file.write(slice) {
+            Ok(()) => count,
+            Err(_) => 0,
+        },
+        None => 0,
     })
 }
 
@@ -282,15 +250,15 @@ pub unsafe fn rust_seek_state_file(file_index: c_int, offset: i64, whence: c_int
         _ => return 0,
     };
 
-    guard_convert_state_value_mut(&GLOBAL_STATE_FILES, |state_files| {
-        match state_files.get_file_mut(file_index as usize) {
+    write_files(
+        |state_files| match state_files.get_file_mut(file_index as usize) {
             Some(file) => match file.seek(offset, seek_whence) {
                 Ok(()) => 1,
                 Err(_) => 0,
             },
             None => 0,
-        }
-    })
+        },
+    )
 }
 
 ///
@@ -298,14 +266,14 @@ pub unsafe fn rust_seek_state_file(file_index: c_int, offset: i64, whence: c_int
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
 pub unsafe fn rust_get_game_state_bytes() -> *const u8 {
-    guard_convert_value(&GLOBAL_GAME_STATE, |state| state.as_bytes().as_ptr())
+    read_story(|state| state.as_bytes().as_ptr())
 }
 
 ///
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe fn rust_get_game_state_size() -> usize {
+pub fn rust_get_game_state_size() -> usize {
     super::game_state::NUM_GAME_STATE_BYTES
 }
 
@@ -329,15 +297,12 @@ pub unsafe fn rust_restore_game_state_from_bytes(bytes: *const u8, size: usize) 
 pub enum GameStateOwnerError {
     /// `rust_init_game_state` has not run, so there is no state to read.
     NotInitialized,
-    /// A thread panicked while holding the singleton.
-    Poisoned,
 }
 
 impl fmt::Display for GameStateOwnerError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NotInitialized => f.write_str("the game-state singleton is not initialised"),
-            Self::Poisoned => f.write_str("the game-state singleton is poisoned"),
         }
     }
 }
@@ -346,55 +311,34 @@ impl std::error::Error for GameStateOwnerError {}
 
 /// Copy of the singleton's bytes: the game state a save writes as "GmSt".
 pub fn snapshot_game_state() -> Result<[u8; NUM_GAME_STATE_BYTES], GameStateOwnerError> {
-    let guard = GLOBAL_GAME_STATE
-        .lock()
-        .map_err(|_| GameStateOwnerError::Poisoned)?;
-    guard
+    unsafe { &(*world()).story }
         .as_ref()
         .map(|state| *state.as_bytes())
         .ok_or(GameStateOwnerError::NotInitialized)
 }
 
-/// Run `f` with the game-state singleton and the state files, both locked
-/// for the whole call so that a caller can validate and then change both
-/// without another thread seeing or changing either in between.
-///
-/// Locks in the order `rust_init_game_state` does. The state files are created
-/// when absent, as every state-file export does.
+/// Borrow the story and file fields together for a synchronous game-thread operation.
 pub fn with_state_owners<R>(
     f: impl FnOnce(&mut GameState, &mut StateFileManager) -> R,
 ) -> Result<R, GameStateOwnerError> {
-    let mut game = GLOBAL_GAME_STATE
-        .lock()
-        .map_err(|_| GameStateOwnerError::Poisoned)?;
-    let mut files = GLOBAL_STATE_FILES
-        .lock()
-        .map_err(|_| GameStateOwnerError::Poisoned)?;
-    ensure_state_files_init(&mut files);
-    let game = game.as_mut().ok_or(GameStateOwnerError::NotInitialized)?;
-    let files = files.as_mut().ok_or(GameStateOwnerError::NotInitialized)?;
-    Ok(f(game, files))
+    let world = world();
+    let game = unsafe { &mut (*world).story }
+        .as_mut()
+        .ok_or(GameStateOwnerError::NotInitialized)?;
+    Ok(f(game, unsafe { &mut (*world).files }))
 }
 
-/// Run `f` with the state files locked. They are created when absent.
+/// Borrow the owned state files for a synchronous game-thread operation.
 pub fn with_state_files<R>(
     f: impl FnOnce(&mut StateFileManager) -> R,
 ) -> Result<R, GameStateOwnerError> {
-    let mut files = GLOBAL_STATE_FILES
-        .lock()
-        .map_err(|_| GameStateOwnerError::Poisoned)?;
-    ensure_state_files_init(&mut files);
-    let files = files.as_mut().ok_or(GameStateOwnerError::NotInitialized)?;
-    Ok(f(files))
+    Ok(f(unsafe { &mut (*world()).files }))
 }
 
 /// Replace the whole singleton with `bytes`, creating it when absent: a load
 /// defines the game state whether or not a New Game ran first.
 pub fn replace_game_state(bytes: &[u8; NUM_GAME_STATE_BYTES]) -> Result<(), GameStateOwnerError> {
-    let mut guard = GLOBAL_GAME_STATE
-        .lock()
-        .map_err(|_| GameStateOwnerError::Poisoned)?;
-    *guard = Some(GameState::from_bytes(bytes));
+    unsafe { (*world()).story = Some(GameState::from_bytes(bytes)) };
     Ok(())
 }
 
@@ -500,7 +444,7 @@ pub unsafe fn rust_init_planet_info(num_stars: c_int) -> c_int {
         return 0;
     }
 
-    match guard_convert_state_result_mut(&GLOBAL_STATE_FILES, |files| {
+    match files_result(|files| {
         let mut manager = PlanetInfoManager::new(files);
         manager.init_planet_info(num_stars as usize)
     }) {
@@ -514,7 +458,7 @@ pub unsafe fn rust_init_planet_info(num_stars: c_int) -> c_int {
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
 pub unsafe fn rust_uninit_planet_info() {
-    guard_convert_state_value_mut(&GLOBAL_STATE_FILES, |files| {
+    write_files(|files| {
         let mut manager = PlanetInfoManager::new(files);
         let _ = manager.uninit_planet_info();
     });
@@ -543,7 +487,7 @@ pub unsafe fn rust_get_planet_info(
     let planet_num_moons = std::slice::from_raw_parts(planet_num_moons, num_planets);
     let out_mask = std::slice::from_raw_parts_mut(out_mask, NUM_SCAN_TYPES);
 
-    match guard_convert_state_result_mut(&GLOBAL_STATE_FILES, |files| {
+    match files_result(|files| {
         let mut manager = PlanetInfoManager::new(files);
         manager.get_planet_info(
             star_index as usize,
@@ -587,7 +531,7 @@ pub unsafe fn rust_put_planet_info(
     let mask_values = std::slice::from_raw_parts(mask, NUM_SCAN_TYPES);
     let mask = ScanRetrieveMask::from_array(&[mask_values[0], mask_values[1], mask_values[2]]);
 
-    match guard_convert_state_result_mut(&GLOBAL_STATE_FILES, |files| {
+    match files_result(|files| {
         let mut manager = PlanetInfoManager::new(files);
         manager.put_planet_info(
             star_index as usize,
@@ -688,96 +632,34 @@ unsafe fn normalize_state_bytes_mut<'a>(bytes: *mut u8, bit_count: usize) -> Opt
 #[must_use]
 pub fn named_state_value(name: &str) -> Option<u8> {
     let (start_bit, end_bit) = super::game_state_keys::bit_range(name)?;
-    let guard = GLOBAL_GAME_STATE.lock().ok()?;
-    let state = guard.as_ref()?;
+    let state = unsafe { &(*world()).story }.as_ref()?;
     Some(state.get_state(start_bit as usize, end_bit as usize))
 }
 
-fn guard_convert_value<R, F>(mutex: &Mutex<Option<GameState>>, f: F) -> R
-where
-    F: FnOnce(&GameState) -> R,
-    R: Default,
-{
-    match mutex.lock() {
-        Ok(guard) => match guard.as_ref() {
-            Some(state) => f(state),
-            None => R::default(),
-        },
-        Err(_) => R::default(),
-    }
+fn world() -> *mut crate::engine::World {
+    use crate::engine::World as GameWorld;
+    // SAFETY: these transitional exports run only on the published game thread.
+    unsafe { GameWorld::current() }
 }
 
-fn guard_convert_value_mut<R, F>(mutex: &Mutex<Option<GameState>>, f: F) -> R
-where
-    F: FnOnce(&mut GameState) -> R,
-    R: Default,
-{
-    match mutex.lock() {
-        Ok(mut guard) => match guard.as_mut() {
-            Some(state) => f(state),
-            None => R::default(),
-        },
-        Err(_) => R::default(),
-    }
+fn read_story<R: Default>(f: impl FnOnce(&GameState) -> R) -> R {
+    unsafe { &(*world()).story }
+        .as_ref()
+        .map_or_else(R::default, f)
 }
-
-fn ensure_state_files_init(guard: &mut Option<StateFileManager>) {
-    if guard.is_none() {
-        *guard = Some(StateFileManager::new());
-    }
+fn write_story<R: Default>(f: impl FnOnce(&mut GameState) -> R) -> R {
+    unsafe { &mut (*world()).story }
+        .as_mut()
+        .map_or_else(R::default, f)
 }
-
-fn guard_convert_state_value<R, F>(mutex: &Mutex<Option<StateFileManager>>, f: F) -> R
-where
-    F: FnOnce(&StateFileManager) -> R,
-    R: Default,
-{
-    match mutex.lock() {
-        Ok(mut guard) => {
-            ensure_state_files_init(&mut guard);
-            match guard.as_ref() {
-                Some(state) => f(state),
-                None => R::default(),
-            }
-        }
-        Err(_) => R::default(),
-    }
+fn read_files<R>(f: impl FnOnce(&StateFileManager) -> R) -> R {
+    f(unsafe { &(*world()).files })
 }
-
-fn guard_convert_state_value_mut<R, F>(mutex: &Mutex<Option<StateFileManager>>, f: F) -> R
-where
-    F: FnOnce(&mut StateFileManager) -> R,
-    R: Default,
-{
-    match mutex.lock() {
-        Ok(mut guard) => {
-            ensure_state_files_init(&mut guard);
-            match guard.as_mut() {
-                Some(state) => f(state),
-                None => R::default(),
-            }
-        }
-        Err(_) => R::default(),
-    }
+fn write_files<R>(f: impl FnOnce(&mut StateFileManager) -> R) -> R {
+    f(unsafe { &mut (*world()).files })
 }
-
-fn guard_convert_state_result_mut<R, E, F>(
-    mutex: &Mutex<Option<StateFileManager>>,
-    f: F,
-) -> Option<R>
-where
-    F: FnOnce(&mut StateFileManager) -> Result<R, E>,
-{
-    match mutex.lock() {
-        Ok(mut guard) => {
-            ensure_state_files_init(&mut guard);
-            match guard.as_mut() {
-                Some(state) => f(state).ok(),
-                None => None,
-            }
-        }
-        Err(_) => None,
-    }
+fn files_result<R, E>(f: impl FnOnce(&mut StateFileManager) -> Result<R, E>) -> Option<R> {
+    f(unsafe { &mut (*world()).files }).ok()
 }
 
 #[cfg(test)]
@@ -788,410 +670,498 @@ mod tests {
     #[test]
     #[serial]
     fn test_rust_init_game_state() {
+        let mut game = crate::engine::Game::new();
+        // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
-            rust_init_game_state();
+            crate::app::bridge::with_game(&mut game, || {
+                rust_init_game_state();
 
-            let guard = GLOBAL_GAME_STATE.lock().unwrap();
-            assert!(guard.is_some());
+                let guard = &(*world()).story;
+                assert!(guard.is_some());
+            })
         }
     }
 
     #[test]
     #[serial]
     fn starting_a_second_game_does_not_inherit_the_first_games_state() {
-        // InitGlobData memsets the C shadow and calls this to match, so a New
-        // Game after finishing one must not remember what the player already
-        // did. Leaving the bits set makes the Ur-Quan probe never appear and
-        // the moon base never generate, because the game believes both are
-        // already done.
+        let mut game = crate::engine::Game::new();
+        // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
-            rust_init_game_state();
-            rust_set_game_state(c"MOONBASE_DESTROYED".as_ptr() as *const c_char, 1);
-            rust_set_game_state(c"MOONBASE_ON_SHIP".as_ptr() as *const c_char, 1);
-            assert_eq!(
-                rust_get_game_state(c"MOONBASE_DESTROYED".as_ptr() as *const c_char),
-                1
-            );
+            crate::app::bridge::with_game(&mut game, || {
+                // InitGlobData memsets the C shadow and calls this to match, so a New
+                // Game after finishing one must not remember what the player already
+                // did. Leaving the bits set makes the Ur-Quan probe never appear and
+                // the moon base never generate, because the game believes both are
+                // already done.
+                {
+                    rust_init_game_state();
+                    rust_set_game_state(c"MOONBASE_DESTROYED".as_ptr() as *const c_char, 1);
+                    rust_set_game_state(c"MOONBASE_ON_SHIP".as_ptr() as *const c_char, 1);
+                    assert_eq!(
+                        rust_get_game_state(c"MOONBASE_DESTROYED".as_ptr() as *const c_char),
+                        1
+                    );
 
-            rust_init_game_state();
+                    rust_init_game_state();
 
-            assert_eq!(
-                rust_get_game_state(c"MOONBASE_DESTROYED".as_ptr() as *const c_char),
-                0,
-                "a new game must start with the moon base intact"
-            );
-            assert_eq!(
-                rust_get_game_state(c"MOONBASE_ON_SHIP".as_ptr() as *const c_char),
-                0
-            );
+                    assert_eq!(
+                        rust_get_game_state(c"MOONBASE_DESTROYED".as_ptr() as *const c_char),
+                        0,
+                        "a new game must start with the moon base intact"
+                    );
+                    assert_eq!(
+                        rust_get_game_state(c"MOONBASE_ON_SHIP".as_ptr() as *const c_char),
+                        0
+                    );
+                }
+            })
         }
     }
 
     #[test]
     #[serial]
     fn a_new_game_clears_every_state_bit() {
-        use super::super::game_state::NUM_GAME_STATE_BITS;
-
-        // Every bit, including the partial trailing byte. The last six bits
-        // belong to SAMATRA_GRPOFFS3, so stopping at the last whole byte would
-        // let a reset regression confined to them pass unnoticed.
-        let ranges: Vec<(c_int, c_int, c_uchar)> = (0..NUM_GAME_STATE_BITS)
-            .step_by(8)
-            .map(|start| {
-                let end = (start + 7).min(NUM_GAME_STATE_BITS - 1);
-                let width = end - start + 1;
-                let full = if width == 8 {
-                    0xFF
-                } else {
-                    // set_state_bits_raw rejects a value wider than the field.
-                    ((1u16 << width) - 1) as u8
-                };
-                (start as c_int, end as c_int, full)
-            })
-            .collect();
-
+        let mut game = crate::engine::Game::new();
+        // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
-            rust_init_game_state();
-            for (start, end, value) in &ranges {
-                rust_set_game_state_bits(*start, *end, *value);
-                assert_eq!(
-                    rust_get_game_state_bits(*start, *end),
-                    *value,
-                    "bit range {start}..={end} did not accept its value"
-                );
-            }
+            crate::app::bridge::with_game(&mut game, || {
+                use super::super::game_state::NUM_GAME_STATE_BITS;
 
-            rust_init_game_state();
+                // Every bit, including the partial trailing byte. The last six bits
+                // belong to SAMATRA_GRPOFFS3, so stopping at the last whole byte would
+                // let a reset regression confined to them pass unnoticed.
+                let ranges: Vec<(c_int, c_int, c_uchar)> = (0..NUM_GAME_STATE_BITS)
+                    .step_by(8)
+                    .map(|start| {
+                        let end = (start + 7).min(NUM_GAME_STATE_BITS - 1);
+                        let width = end - start + 1;
+                        let full = if width == 8 {
+                            0xFF
+                        } else {
+                            // set_state_bits_raw rejects a value wider than the field.
+                            ((1u16 << width) - 1) as u8
+                        };
+                        (start as c_int, end as c_int, full)
+                    })
+                    .collect();
 
-            for (start, end, _) in &ranges {
+                {
+                    rust_init_game_state();
+                    for (start, end, value) in &ranges {
+                        rust_set_game_state_bits(*start, *end, *value);
+                        assert_eq!(
+                            rust_get_game_state_bits(*start, *end),
+                            *value,
+                            "bit range {start}..={end} did not accept its value"
+                        );
+                    }
+
+                    rust_init_game_state();
+
+                    for (start, end, _) in &ranges {
+                        assert_eq!(
+                            rust_get_game_state_bits(*start, *end),
+                            0,
+                            "bit range {start}..={end} survived a new game"
+                        );
+                    }
+                }
                 assert_eq!(
-                    rust_get_game_state_bits(*start, *end),
-                    0,
-                    "bit range {start}..={end} survived a new game"
+                    ranges.last().map(|(_, end, _)| *end),
+                    Some(NUM_GAME_STATE_BITS as c_int - 1),
+                    "the final state bit must be covered"
                 );
-            }
+            })
         }
-        assert_eq!(
-            ranges.last().map(|(_, end, _)| *end),
-            Some(NUM_GAME_STATE_BITS as c_int - 1),
-            "the final state bit must be covered"
-        );
     }
 
     #[test]
     #[serial]
     fn test_named_state_lookup_uses_generated_ranges() {
+        let mut game = crate::engine::Game::new();
+        // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
-            rust_init_game_state();
+            crate::app::bridge::with_game(&mut game, || {
+                rust_init_game_state();
 
-            {
-                rust_set_game_state(c"SHOFIXTI_VISITS".as_ptr() as *const c_char, 5);
-                rust_set_game_state(c"SHOFIXTI_RECRUITED".as_ptr() as *const c_char, 1);
-                rust_set_game_state(c"SPATHI_VISITS".as_ptr() as *const c_char, 3);
+                {
+                    rust_set_game_state(c"SHOFIXTI_VISITS".as_ptr() as *const c_char, 5);
+                    rust_set_game_state(c"SHOFIXTI_RECRUITED".as_ptr() as *const c_char, 1);
+                    rust_set_game_state(c"SPATHI_VISITS".as_ptr() as *const c_char, 3);
 
-                assert_eq!(
-                    rust_get_game_state(c"SHOFIXTI_VISITS".as_ptr() as *const c_char),
-                    5
-                );
-                assert_eq!(
-                    rust_get_game_state(c"SHOFIXTI_RECRUITED".as_ptr() as *const c_char),
-                    1
-                );
-                assert_eq!(
-                    rust_get_game_state(c"SPATHI_VISITS".as_ptr() as *const c_char),
-                    3
-                );
-                assert_eq!(
-                    rust_get_game_state(c"NOT_A_REAL_STATE".as_ptr() as *const c_char),
-                    0
-                );
-            }
+                    assert_eq!(
+                        rust_get_game_state(c"SHOFIXTI_VISITS".as_ptr() as *const c_char),
+                        5
+                    );
+                    assert_eq!(
+                        rust_get_game_state(c"SHOFIXTI_RECRUITED".as_ptr() as *const c_char),
+                        1
+                    );
+                    assert_eq!(
+                        rust_get_game_state(c"SPATHI_VISITS".as_ptr() as *const c_char),
+                        3
+                    );
+                    assert_eq!(
+                        rust_get_game_state(c"NOT_A_REAL_STATE".as_ptr() as *const c_char),
+                        0
+                    );
+                }
+            })
         }
     }
 
     #[test]
     #[serial]
     fn test_rust_get_set_game_state_bits() {
+        let mut game = crate::engine::Game::new();
+        // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
-            rust_init_game_state();
-            rust_set_game_state_bits(0, 2, 5);
-            let result = rust_get_game_state_bits(0, 2);
-            assert_eq!(result, 5);
+            crate::app::bridge::with_game(&mut game, || {
+                rust_init_game_state();
+                rust_set_game_state_bits(0, 2, 5);
+                let result = rust_get_game_state_bits(0, 2);
+                assert_eq!(result, 5);
+            })
         }
     }
 
     #[test]
     #[serial]
     fn test_rust_get_set_game_state_32() {
+        let mut game = crate::engine::Game::new();
+        // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
-            rust_init_game_state();
+            crate::app::bridge::with_game(&mut game, || {
+                rust_init_game_state();
 
-            let test_value = 0xDEADBEEF;
-            rust_set_game_state_32(0, test_value);
+                let test_value = 0xDEADBEEF;
+                rust_set_game_state_32(0, test_value);
 
-            let result = rust_get_game_state_32(0);
-            assert_eq!(result, test_value);
+                let result = rust_get_game_state_32(0);
+                assert_eq!(result, test_value);
+            })
         }
     }
 
     #[test]
     #[serial]
     fn test_raw_byte_buffer_ffi_access() {
-        {
-            let mut bytes = [0u8; super::super::game_state::NUM_GAME_STATE_BYTES];
+        let mut game = crate::engine::Game::new();
+        // SAFETY: serial tests own the published lifecycle until this call returns.
+        unsafe {
+            crate::app::bridge::with_game(&mut game, || {
+                let mut bytes = [0u8; super::super::game_state::NUM_GAME_STATE_BYTES];
 
-            unsafe {
-                rust_set_game_state_bits_in_bytes(bytes.as_mut_ptr(), 0, 2, 5);
-                rust_set_game_state_bits_in_bytes(bytes.as_mut_ptr(), 12, 12, 1);
-                rust_set_game_state32_in_bytes(bytes.as_mut_ptr(), 32, 0xCAFEBABE);
+                {
+                    rust_set_game_state_bits_in_bytes(bytes.as_mut_ptr(), 0, 2, 5);
+                    rust_set_game_state_bits_in_bytes(bytes.as_mut_ptr(), 12, 12, 1);
+                    rust_set_game_state32_in_bytes(bytes.as_mut_ptr(), 32, 0xCAFEBABE);
 
-                assert_eq!(rust_get_game_state_bits_from_bytes(bytes.as_ptr(), 0, 2), 5);
-                assert_eq!(
-                    rust_get_game_state_bits_from_bytes(bytes.as_ptr(), 12, 12),
-                    1
-                );
-                assert_eq!(
-                    rust_get_game_state32_from_bytes(bytes.as_ptr(), 32),
-                    0xCAFEBABE
-                );
-            }
+                    assert_eq!(rust_get_game_state_bits_from_bytes(bytes.as_ptr(), 0, 2), 5);
+                    assert_eq!(
+                        rust_get_game_state_bits_from_bytes(bytes.as_ptr(), 12, 12),
+                        1
+                    );
+                    assert_eq!(
+                        rust_get_game_state32_from_bytes(bytes.as_ptr(), 32),
+                        0xCAFEBABE
+                    );
+                }
+            })
         }
     }
 
     #[test]
     #[serial]
     fn test_raw_byte_buffer_copy_matches_c_semantics() {
-        {
-            let mut src = [0u8; super::super::game_state::NUM_GAME_STATE_BYTES];
-            let mut dest = [0u8; super::super::game_state::NUM_GAME_STATE_BYTES];
+        let mut game = crate::engine::Game::new();
+        // SAFETY: serial tests own the published lifecycle until this call returns.
+        unsafe {
+            crate::app::bridge::with_game(&mut game, || {
+                let mut src = [0u8; super::super::game_state::NUM_GAME_STATE_BYTES];
+                let mut dest = [0u8; super::super::game_state::NUM_GAME_STATE_BYTES];
 
-            unsafe {
-                rust_set_game_state_bits_in_bytes(src.as_mut_ptr(), 0, 7, 0xAB);
-                rust_set_game_state_bits_in_bytes(src.as_mut_ptr(), 8, 15, 0xCD);
+                {
+                    rust_set_game_state_bits_in_bytes(src.as_mut_ptr(), 0, 7, 0xAB);
+                    rust_set_game_state_bits_in_bytes(src.as_mut_ptr(), 8, 15, 0xCD);
 
-                rust_copy_game_state_bits_between_bytes(dest.as_mut_ptr(), 32, src.as_ptr(), 0, 15);
-                rust_copy_game_state_bits_between_bytes(dest.as_mut_ptr(), 80, src.as_ptr(), 0, 0);
+                    rust_copy_game_state_bits_between_bytes(
+                        dest.as_mut_ptr(),
+                        32,
+                        src.as_ptr(),
+                        0,
+                        15,
+                    );
+                    rust_copy_game_state_bits_between_bytes(
+                        dest.as_mut_ptr(),
+                        80,
+                        src.as_ptr(),
+                        0,
+                        0,
+                    );
 
-                assert_eq!(
-                    rust_get_game_state_bits_from_bytes(dest.as_ptr(), 32, 39),
-                    0xAB
-                );
-                assert_eq!(
-                    rust_get_game_state_bits_from_bytes(dest.as_ptr(), 40, 47),
-                    0xCD
-                );
-                assert_eq!(
-                    rust_get_game_state_bits_from_bytes(dest.as_ptr(), 80, 80),
-                    0
-                );
-            }
+                    assert_eq!(
+                        rust_get_game_state_bits_from_bytes(dest.as_ptr(), 32, 39),
+                        0xAB
+                    );
+                    assert_eq!(
+                        rust_get_game_state_bits_from_bytes(dest.as_ptr(), 40, 47),
+                        0xCD
+                    );
+                    assert_eq!(
+                        rust_get_game_state_bits_from_bytes(dest.as_ptr(), 80, 80),
+                        0
+                    );
+                }
+            })
         }
     }
 
     #[test]
     #[serial]
     fn test_rust_reset_game_state() {
+        let mut game = crate::engine::Game::new();
+        // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
-            rust_init_game_state();
+            crate::app::bridge::with_game(&mut game, || {
+                rust_init_game_state();
 
-            rust_set_game_state_bits(0, 7, 0xFF);
-            rust_reset_game_state();
+                rust_set_game_state_bits(0, 7, 0xFF);
+                rust_reset_game_state();
 
-            let result = rust_get_game_state_bits(0, 7);
-            assert_eq!(result, 0);
+                let result = rust_get_game_state_bits(0, 7);
+                assert_eq!(result, 0);
+            })
         }
     }
 
     #[test]
     #[serial]
     fn test_rust_planet_info_round_trip() {
+        let mut game = crate::engine::Game::new();
+        // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
-            rust_init_game_state();
+            crate::app::bridge::with_game(&mut game, || {
+                rust_init_game_state();
 
-            let moon_counts = [2u8, 0u8];
-            let input_mask = [0x11u32, 0x22u32, 0x33u32];
-            let mut output_mask = [0u32; NUM_SCAN_TYPES];
+                let moon_counts = [2u8, 0u8];
+                let input_mask = [0x11u32, 0x22u32, 0x33u32];
+                let mut output_mask = [0u32; NUM_SCAN_TYPES];
 
-            {
-                assert_eq!(rust_init_planet_info(8), 1);
-                assert_eq!(
-                    rust_put_planet_info(
-                        1,
-                        0,
-                        1,
-                        moon_counts.as_ptr(),
-                        moon_counts.len() as c_int,
-                        input_mask.as_ptr()
-                    ),
-                    1
-                );
-                assert_eq!(
-                    rust_get_planet_info(
-                        1,
-                        0,
-                        1,
-                        moon_counts.as_ptr(),
-                        moon_counts.len() as c_int,
-                        output_mask.as_mut_ptr(),
-                    ),
-                    1
-                );
-            }
+                {
+                    assert_eq!(rust_init_planet_info(8), 1);
+                    assert_eq!(
+                        rust_put_planet_info(
+                            1,
+                            0,
+                            1,
+                            moon_counts.as_ptr(),
+                            moon_counts.len() as c_int,
+                            input_mask.as_ptr()
+                        ),
+                        1
+                    );
+                    assert_eq!(
+                        rust_get_planet_info(
+                            1,
+                            0,
+                            1,
+                            moon_counts.as_ptr(),
+                            moon_counts.len() as c_int,
+                            output_mask.as_mut_ptr(),
+                        ),
+                        1
+                    );
+                }
 
-            assert_eq!(output_mask, input_mask);
+                assert_eq!(output_mask, input_mask);
+            })
         }
     }
 
     #[test]
     #[serial]
     fn test_rust_open_state_file() {
+        let mut game = crate::engine::Game::new();
+        // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
-            rust_init_game_state();
+            crate::app::bridge::with_game(&mut game, || {
+                rust_init_game_state();
 
-            {
-                let result = rust_open_state_file(0, c"wb".as_ptr() as *const c_char);
-                assert_eq!(result, 1);
-            }
+                {
+                    let result = rust_open_state_file(0, c"wb".as_ptr() as *const c_char);
+                    assert_eq!(result, 1);
+                }
+            })
         }
     }
 
     #[test]
     #[serial]
     fn test_rust_write_read_state_file() {
+        let mut game = crate::engine::Game::new();
+        // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
-            rust_init_game_state();
+            crate::app::bridge::with_game(&mut game, || {
+                rust_init_game_state();
 
-            let test_data = b"Hello, World!";
+                let test_data = b"Hello, World!";
 
-            {
-                rust_open_state_file(0, c"wb".as_ptr() as *const c_char);
-                let written = rust_write_state_file(0, test_data.as_ptr(), 1, test_data.len());
-                assert_eq!(written, test_data.len());
+                {
+                    rust_open_state_file(0, c"wb".as_ptr() as *const c_char);
+                    let written = rust_write_state_file(0, test_data.as_ptr(), 1, test_data.len());
+                    assert_eq!(written, test_data.len());
 
-                rust_seek_state_file(0, 0, 0);
+                    rust_seek_state_file(0, 0, 0);
 
-                let mut buf = vec![0u8; test_data.len()];
-                let read = rust_read_state_file(0, buf.as_mut_ptr(), 1, test_data.len());
-                assert_eq!(read, test_data.len());
-                assert_eq!(&buf, test_data);
-            }
+                    let mut buf = vec![0u8; test_data.len()];
+                    let read = rust_read_state_file(0, buf.as_mut_ptr(), 1, test_data.len());
+                    assert_eq!(read, test_data.len());
+                    assert_eq!(&buf, test_data);
+                }
+            })
         }
     }
 
     #[test]
     #[serial]
     fn test_rust_length_state_file() {
+        let mut game = crate::engine::Game::new();
+        // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
-            rust_init_game_state();
+            crate::app::bridge::with_game(&mut game, || {
+                rust_init_game_state();
 
-            let test_data = b"Test";
+                let test_data = b"Test";
 
-            {
-                rust_open_state_file(1, c"wb".as_ptr() as *const c_char);
-                rust_write_state_file(1, test_data.as_ptr(), 1, test_data.len());
-            }
+                {
+                    rust_open_state_file(1, c"wb".as_ptr() as *const c_char);
+                    rust_write_state_file(1, test_data.as_ptr(), 1, test_data.len());
+                }
 
-            let length = rust_length_state_file(1);
-            assert_eq!(length, test_data.len());
+                let length = rust_length_state_file(1);
+                assert_eq!(length, test_data.len());
+            })
         }
     }
 
     #[test]
     #[serial]
     fn test_rust_delete_state_file() {
+        let mut game = crate::engine::Game::new();
+        // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
-            rust_init_game_state();
+            crate::app::bridge::with_game(&mut game, || {
+                rust_init_game_state();
 
-            let test_data = b"Test";
+                let test_data = b"Test";
 
-            {
-                rust_open_state_file(2, c"wb".as_ptr() as *const c_char);
-                rust_write_state_file(2, test_data.as_ptr(), 1, test_data.len());
-            }
+                {
+                    rust_open_state_file(2, c"wb".as_ptr() as *const c_char);
+                    rust_write_state_file(2, test_data.as_ptr(), 1, test_data.len());
+                }
 
-            rust_delete_state_file(2);
-            let length = rust_length_state_file(2);
-            assert_eq!(length, 0);
+                rust_delete_state_file(2);
+                let length = rust_length_state_file(2);
+                assert_eq!(length, 0);
+            })
         }
     }
 
     #[test]
     #[serial]
     fn test_rust_seek_state_file() {
+        let mut game = crate::engine::Game::new();
+        // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
-            rust_init_game_state();
+            crate::app::bridge::with_game(&mut game, || {
+                rust_init_game_state();
 
-            let test_data = b"HelloWorld";
+                let test_data = b"HelloWorld";
 
-            {
-                rust_open_state_file(0, c"wb".as_ptr() as *const c_char);
-                rust_write_state_file(0, test_data.as_ptr(), 1, test_data.len());
-            }
+                {
+                    rust_open_state_file(0, c"wb".as_ptr() as *const c_char);
+                    rust_write_state_file(0, test_data.as_ptr(), 1, test_data.len());
+                }
 
-            let result = rust_seek_state_file(0, 5, 0);
-            assert_eq!(result, 1);
+                let result = rust_seek_state_file(0, 5, 0);
+                assert_eq!(result, 1);
 
-            let mut buf = vec![0u8; 5];
-            {
-                let read = rust_read_state_file(0, buf.as_mut_ptr(), 1, 5);
-                assert_eq!(read, 5);
-            }
-            assert_eq!(&buf, b"World");
+                let mut buf = vec![0u8; 5];
+                {
+                    let read = rust_read_state_file(0, buf.as_mut_ptr(), 1, 5);
+                    assert_eq!(read, 5);
+                }
+                assert_eq!(&buf, b"World");
+            })
         }
     }
 
     #[test]
     #[serial]
     fn test_rust_get_game_state_bytes() {
+        let mut game = crate::engine::Game::new();
+        // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
-            rust_init_game_state();
+            crate::app::bridge::with_game(&mut game, || {
+                rust_init_game_state();
 
-            let test_value: u8 = 0xAB;
-            rust_set_game_state_bits(0, 7, test_value);
+                let test_value: u8 = 0xAB;
+                rust_set_game_state_bits(0, 7, test_value);
 
-            let ptr = rust_get_game_state_bytes();
-            assert!(!ptr.is_null());
+                let ptr = rust_get_game_state_bytes();
+                assert!(!ptr.is_null());
 
-            {
-                assert_eq!(*ptr, test_value);
-            }
+                {
+                    assert_eq!(*ptr, test_value);
+                }
+            })
         }
     }
 
     #[test]
     #[serial]
     fn test_rust_get_game_state_size() {
+        let mut game = crate::engine::Game::new();
+        // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
-            let size = rust_get_game_state_size();
-            assert_eq!(size, super::super::game_state::NUM_GAME_STATE_BYTES);
+            crate::app::bridge::with_game(&mut game, || {
+                let size = rust_get_game_state_size();
+                assert_eq!(size, super::super::game_state::NUM_GAME_STATE_BYTES);
+            })
         }
     }
 
     #[test]
     #[serial]
     fn test_rust_restore_game_state_from_bytes() {
+        let mut game = crate::engine::Game::new();
+        // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
-            rust_init_game_state();
+            crate::app::bridge::with_game(&mut game, || {
+                rust_init_game_state();
 
-            rust_set_game_state_bits(0, 7, 0xAB);
-            let ptr = rust_get_game_state_bytes();
-            let size = rust_get_game_state_size();
+                rust_set_game_state_bits(0, 7, 0xAB);
+                let ptr = rust_get_game_state_bytes();
+                let size = rust_get_game_state_size();
 
-            let mut buffer = vec![0u8; size];
-            {
-                std::ptr::copy_nonoverlapping(ptr, buffer.as_mut_ptr(), size);
-            }
+                let mut buffer = vec![0u8; size];
+                {
+                    std::ptr::copy_nonoverlapping(ptr, buffer.as_mut_ptr(), size);
+                }
 
-            rust_reset_game_state();
-            rust_init_game_state();
+                rust_reset_game_state();
+                rust_init_game_state();
 
-            assert_eq!(rust_get_game_state_bits(0, 7), 0);
+                assert_eq!(rust_get_game_state_bits(0, 7), 0);
 
-            {
-                rust_restore_game_state_from_bytes(buffer.as_ptr(), size);
-            }
+                {
+                    rust_restore_game_state_from_bytes(buffer.as_ptr(), size);
+                }
 
-            assert_eq!(rust_get_game_state_bits(0, 7), 0xAB);
+                assert_eq!(rust_get_game_state_bits(0, 7), 0xAB);
+            })
         }
     }
 }

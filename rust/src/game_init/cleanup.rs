@@ -19,34 +19,37 @@ use crate::planets::solarsys::resources::FreeIPData;
 /// # Safety
 /// Run on the game thread after the game loop stops, before graphics teardown.
 pub unsafe fn FreeKernel() {
+    use crate::engine::Kernel;
     UninitPlayerInput();
     crate::resource::ffi_bridge::UninitResourceSystem();
-    DestroyDrawable(ReleaseDrawable(Screen));
-    Screen = ptr::null_mut();
-    DestroyContext(ScreenContext.cast());
-    ScreenContext = ptr::null_mut();
+    DestroyDrawable(ReleaseDrawable((*Kernel::current()).screen));
+    (*Kernel::current()).screen = ptr::null_mut();
+    DestroyContext((*Kernel::current()).screen_context.cast());
+    (*Kernel::current()).screen_context = ptr::null_mut();
     crate::video::control::UninitVideoPlayer();
     crate::sound::heart_ffi::uninit_sound();
 }
 
 unsafe fn uninit_contexts() {
-    crate::engine::battle::access::lifecycle::uninit_elements(Kernel::current());
-    DestroyContext(OffScreenContext.cast());
-    DestroyContext(SpaceContext.cast());
-    DestroyContext(StatusContext.cast());
+    use crate::engine::Kernel;
+    crate::engine::battle::access::lifecycle::uninit_elements(&mut *Kernel::current());
+    DestroyContext((*Kernel::current()).off_screen_context.cast());
+    DestroyContext((*Kernel::current()).space_context.cast());
+    DestroyContext((*Kernel::current()).status_context.cast());
 }
 
 unsafe fn uninit_kernel() {
+    use crate::engine::Kernel;
     UninitSpace();
-    DestroySound(ReleaseStringTable(Kernel::current().menu_sounds.cast()).cast());
-    DestroyFont(MicroFont.cast());
-    DestroyStringTable(ReleaseStringTable(GameStrings));
-    DestroyDrawable(ReleaseDrawable(StatusFrame));
-    DestroyDrawable(ReleaseDrawable(ActivityFrame));
-    DestroyFont(TinyFont.cast());
-    DestroyFont(StarConFont.cast());
-    crate::battle::context_access::lifecycle::uninit_ships(Kernel::current());
-    ActivityFrame = ptr::null_mut();
+    DestroySound(ReleaseStringTable((*Kernel::current()).menu_sounds.cast()).cast());
+    DestroyFont((*Kernel::current()).micro_font.cast());
+    DestroyStringTable(ReleaseStringTable((*Kernel::current()).game_strings));
+    DestroyDrawable(ReleaseDrawable((*Kernel::current()).status_frame));
+    DestroyDrawable(ReleaseDrawable((*Kernel::current()).activity_frame));
+    DestroyFont((*Kernel::current()).tiny_font.cast());
+    DestroyFont((*Kernel::current()).star_con_font.cast());
+    crate::battle::context_access::lifecycle::uninit_ships(&mut *Kernel::current());
+    (*Kernel::current()).activity_frame = ptr::null_mut();
 }
 
 /// # Safety
@@ -61,7 +64,8 @@ pub unsafe fn FreeGameData() {
 /// # Safety
 /// Game thread only, after the active game has stopped using its resources.
 pub unsafe fn UninitGameKernel() {
-    if !ActivityFrame.is_null() {
+    use crate::engine::Kernel;
+    if !(*Kernel::current()).activity_frame.is_null() {
         FreeGameData();
         uninit_kernel();
         uninit_contexts();

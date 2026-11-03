@@ -262,7 +262,7 @@ fn update_descriptor(descriptor: &mut RaceDescriptor, ship: &mut ShipRecord) {
     ship.ship_input_state = 8;
     ship.cur_status_flags = 10;
     ship.old_status_flags = 12;
-    ship.ShipFacing = 14;
+    ship.ship_facing = 14;
     ship.control = 16;
 }
 
@@ -472,20 +472,20 @@ unsafe fn sis_fields(directory: &Path, ship: &mut ShipRecord) {
     // SAFETY: this child process has no running game; no other references to SIS
     // state exist while this short exclusive borrow initializes its module slots.
     unsafe {
-        let sis = &raw mut (*uqm_rust::ships::native::abi::GLOBDATA::current()).SIS_state;
+        let sis = &raw mut (*uqm_rust::engine::WorldData::current()).flagship;
         let sis = &mut *sis;
-        sis.ModuleSlots
+        sis.module_slots
             .fill(uqm_rust::starbase::sis_modules::EMPTY_SLOT);
-        sis.ModuleSlots[15] = GUN_WEAPON as u8;
-        sis.ModuleSlots[14] = CANNON_WEAPON as u8;
-        sis.ModuleSlots[4] = TRACKING_SYSTEM as u8;
-        sis.DriveSlots
+        sis.module_slots[15] = GUN_WEAPON as u8;
+        sis.module_slots[14] = CANNON_WEAPON as u8;
+        sis.module_slots[4] = TRACKING_SYSTEM as u8;
+        sis.drive_slots
             .fill(uqm_rust::starbase::sis_modules::EMPTY_SLOT);
-        sis.JetSlots
+        sis.jet_slots
             .fill(uqm_rust::starbase::sis_modules::EMPTY_SLOT);
-        (*uqm_rust::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .CurrentActivity = SUPER_MELEE as u16;
+        (*uqm_rust::engine::WorldData::current())
+            .game
+            .current_activity = SUPER_MELEE as u16;
     }
     ship.SpeciesID = SPECIES_ID_SIS_SHIP_ID;
     // SAFETY: the caller runs native initialization on the sole game thread.
@@ -552,25 +552,25 @@ fn campaign_fields(directory: &Path) {
     let (before, _) = snapshot(directory);
     // SAFETY: the game is idle and this is its sole thread.
     unsafe {
-        (*uqm_rust::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .GameClock
+        (*uqm_rust::engine::WorldData::current())
+            .game
+            .game_clock
             .day_index = 7;
-        (*uqm_rust::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .GameClock
+        (*uqm_rust::engine::WorldData::current())
+            .game
+            .game_clock
             .month_index = 9;
-        (*uqm_rust::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .GameClock
+        (*uqm_rust::engine::WorldData::current())
+            .game
+            .game_clock
             .year_index = 2161;
-        (*uqm_rust::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .GameClock
+        (*uqm_rust::engine::WorldData::current())
+            .game
+            .game_clock
             .tick_count = -17;
-        (*uqm_rust::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .BattleGroupRef = 123;
+        (*uqm_rust::engine::WorldData::current())
+            .game
+            .battle_group_ref = 123;
         uqm_rust::state::ffi::rust_set_game_state(c"BOMB_CARRIER".as_ptr(), 1);
     }
     let (after, _) = snapshot(directory);

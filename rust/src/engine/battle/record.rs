@@ -94,7 +94,7 @@ mod abi {
         pub cur_status_flags: STATUS_FLAGS,
         pub old_status_flags: STATUS_FLAGS,
         pub hShip: Option<crate::engine::battle::ElementId>,
-        pub ShipFacing: COUNT,
+        pub ship_facing: COUNT,
         pub playerNr: SIZE,
         pub control: BYTE,
     }
@@ -265,7 +265,7 @@ impl Default for ShipRecord {
             cur_status_flags: 0,
             old_status_flags: 0,
             hShip: None,
-            ShipFacing: 0,
+            ship_facing: 0,
             playerNr: 0,
             control: 0,
         }
@@ -363,7 +363,7 @@ impl ElementState {
 impl ShipState {
     pub(super) fn decode(s: &ShipRecord) -> Self {
         Self {
-            facing: s.ShipFacing,
+            facing: s.ship_facing,
             control: s.control,
             player: s.playerNr,
             input: s.ship_input_state,
@@ -376,7 +376,7 @@ impl ShipState {
         }
     }
     fn apply(s: &mut ShipRecord, v: Self) {
-        s.ShipFacing = v.facing;
+        s.ship_facing = v.facing;
         s.control = v.control;
         s.playerNr = v.player;
         s.ship_input_state = v.input;
@@ -431,7 +431,7 @@ impl Cx<'_> {
         std::ptr::from_ref(self.ship(id)).cast_mut()
     }
     pub(crate) fn ship(&self, id: ShipId) -> &ShipRecord {
-        let pool = &self.b.kernel.races[usize::from(id.side)];
+        let pool = &self.kernel.races[usize::from(id.side)];
         let key = pool
             .pool
             .id_at(usize::from(id.slot))
@@ -441,7 +441,7 @@ impl Cx<'_> {
         pool.pool.get(key)
     }
     pub(super) fn ship_mut(&mut self, id: ShipId) -> &mut ShipRecord {
-        let pool = &mut self.b.kernel.races[usize::from(id.side)];
+        let pool = &mut self.kernel.races[usize::from(id.side)];
         let key = pool
             .pool
             .id_at(usize::from(id.slot))
@@ -468,14 +468,14 @@ impl Cx<'_> {
     }
     /// Return the checked legacy address; dereferencing it requires the owning game-thread boundary.
     pub fn legacy_element(&self, id: ElementId) -> *mut ElementRecord {
-        self.b.kernel.elements.raw(id).cast()
+        self.kernel.elements.raw(id).cast()
     }
     #[cfg(not(test))]
     pub(super) fn primitive(&mut self, id: ElementId) -> &mut PRIMITIVE {
-        let index = usize::from(self.b.kernel.elements[id].PrimIndex);
+        let index = usize::from(self.kernel.elements[id].PrimIndex);
         assert!(index < 330, "invalid primitive index {index}");
         // SAFETY: the display authority remains live for the context's lifetime.
-        self.b.kernel.display.get_mut(index as u16)
+        self.kernel.display.get_mut(index as u16)
     }
 }
 
@@ -484,7 +484,7 @@ impl Cx<'_> {
         let value = self.element(id);
         Edit {
             value,
-            record: self.b.kernel.elements.record_mut(id),
+            record: self.kernel.elements.record_mut(id),
             commit: ElementState::apply,
         }
     }
@@ -592,7 +592,7 @@ pub(crate) fn ship_queue(
 ) -> std::ptr::NonNull<crate::engine::battle::link_queue::RacePool> {
     assert!(side < 2, "invalid ship side {side}");
     // SAFETY: callers use this only while the owning Kernel is published on the game thread.
-    std::ptr::NonNull::from(&mut unsafe { Kernel::current() }.races[side])
+    std::ptr::NonNull::from(unsafe { &mut (*Kernel::current()).races[side] })
 }
 impl ElementState {
     fn encode(self) -> ElementRecord {
@@ -671,31 +671,26 @@ mod projection_tests {
     #[test]
     fn ship_projection_retains_its_address_and_rejects_reused_generations() {
         use crate::engine::battle::link_queue::{LinkQueue, Starship};
-        let mut battle = crate::engine::battle::Battle::new(1);
-        battle.reset_ship_capacity(0, 1);
+        let mut battle = super::super::Battle::new();
+        let mut kernel = crate::engine::battle::record::Kernel::new();
+        kernel.elements.reset_capacity(1);
+        kernel.races[0].reset_capacity(1);
         let (id, pointer) = {
-            let mut ships = battle.ships(0);
+            let mut ships = LinkQueue::<Starship>::new(&mut kernel.races[0]);
             let link = ships.alloc().unwrap();
             (ships.ship_id(link), ships.raw(link).cast::<ShipRecord>())
         };
-        let mut activity = 0;
-        let mut groups = QUEUE::default();
         // SAFETY: this test retains both local world authorities for the context's lifetime.
-        let mut world = unsafe {
-            crate::engine::battle::World::new(
-                std::ptr::NonNull::from(&mut activity),
-                std::ptr::NonNull::from(&mut groups),
-                |_| panic!("unused shared frame source"),
-            )
-        };
+        let mut world = { super::super::World::new() };
         let cx = Cx {
             b: &mut battle,
             world: &mut world,
+            kernel: &mut kernel,
             rng: || 0,
         };
         assert_eq!(cx.ship_pointer(id), pointer);
         let replacement = {
-            let mut ships = LinkQueue::<Starship>::new(&mut cx.b.kernel.races[0]);
+            let mut ships = LinkQueue::<Starship>::new(&mut cx.kernel.races[0]);
             let link = ships.link(id);
             ships.free(link);
             let next = ships.alloc().unwrap();
@@ -777,7 +772,7 @@ mod projection_tests {
         state.energy_counter = 9;
         state.weapon_counter = 4;
         ShipState::apply(&mut ship, state);
-        assert_eq!(ship.ShipFacing, 7);
+        assert_eq!(ship.ship_facing, 7);
         assert_eq!(ship.energy_counter, 9);
         assert_eq!(ship.weapon_counter, 4);
         let mut descriptor = RaceDescriptor::EMPTY;
@@ -835,101 +830,9 @@ pub struct RaceDescriptor {
     pub race_callbacks: crate::engine::battle::race::Callbacks,
 }
 
-pub(crate) use crate::engine::battle::kernel::{Channels, SoundQueue, StarPlane};
+pub(crate) use super::kernel::{Channels, SoundQueue};
 
-pub(crate) struct Kernel {
-    pub(crate) elements: crate::engine::battle::ElementTable,
-    pub(super) races: [crate::engine::battle::link_queue::RacePool; 2],
-    ship_reset_pending: bool,
-    battle_active: bool,
-    pub(crate) display: crate::engine::battle::display::DisplayPool,
-    pub(crate) master_queue: crate::engine::battle::kernel::MasterCatalog,
-    pub(crate) player_input: [*mut std::ffi::c_void; 2],
-    pub(crate) instant_victory: u32,
-    pub(crate) battle_music: MUSIC_REF,
-    pub(crate) ditty_playing: u32,
-    pub(crate) winner: Option<ShipId>,
-    pub(crate) status_offsets: [i16; 2],
-    pub(crate) menu_sounds: SOUND,
-    pub(crate) game_sounds: SOUND,
-    pub(crate) sounds: SoundQueue,
-    pub(crate) channels: Channels,
-    pub(crate) log_stars: Box<[POINT; 180]>,
-    pub(crate) space_origin: POINT,
-    pub(crate) star_planes: Box<[StarPlane; 3]>,
-}
-impl Kernel {
-    pub(crate) fn begin_battle(&mut self) {
-        assert!(!self.battle_active, "nested battle session");
-        self.battle_active = true;
-    }
-
-    pub(crate) fn finish_battle(&mut self) {
-        assert!(self.battle_active, "battle session was not started");
-        self.battle_active = false;
-    }
-
-    pub(crate) fn request_ship_reset(&mut self) {
-        for pool in &mut self.races {
-            while let Some(id) = pool.pool.head() {
-                pool.pool.remove(id);
-            }
-        }
-        self.ship_reset_pending = true;
-        if !self.battle_active {
-            self.complete_ship_reset();
-        }
-    }
-
-    pub(crate) fn complete_ship_reset(&mut self) {
-        if self.ship_reset_pending {
-            for pool in &mut self.races {
-                pool.reinit();
-            }
-            self.ship_reset_pending = false;
-        }
-    }
-
-    pub(in crate::engine::battle) fn new() -> Self {
-        let mut log_stars = Box::new([POINT { x: 0, y: 0 }; 180]);
-        let array = log_stars.as_mut_ptr();
-        let mut offset = 0;
-        let star_planes = Box::new([30, 60, 90].map(|count| {
-            let plane = StarPlane {
-                min_star_index: 0,
-                num_stars: count,
-                star_array: array.wrapping_add(offset),
-                pmin_star: ptr::null_mut(),
-                plast_star: ptr::null_mut(),
-            };
-            offset += usize::from(count);
-            plane
-        }));
-        Self {
-            elements: crate::engine::battle::ElementTable::with_capacity(150),
-            races: std::array::from_fn(|side| {
-                crate::engine::battle::link_queue::RacePool::with_capacity(side as u8, 0)
-            }),
-            ship_reset_pending: false,
-            battle_active: false,
-            display: crate::engine::battle::display::DisplayPool::new(),
-            master_queue: crate::engine::battle::kernel::MasterCatalog::new(),
-            player_input: [ptr::null_mut(); 2],
-            instant_victory: 0,
-            battle_music: ptr::null_mut(),
-            ditty_playing: 0,
-            winner: None,
-            status_offsets: [0; 2],
-            menu_sounds: ptr::null_mut(),
-            game_sounds: ptr::null_mut(),
-            sounds: SoundQueue::new(),
-            channels: Channels::new(),
-            log_stars,
-            space_origin: POINT { x: 0, y: 0 },
-            star_planes,
-        }
-    }
-}
+pub use crate::engine::kernel::Kernel;
 
 #[cfg(test)]
 mod kernel_tests {
@@ -1019,6 +922,19 @@ impl Kernel {
     pub(crate) fn reset_race_capacities(&mut self, capacity: usize) {
         for pool in &mut self.races {
             pool.reset_capacity(capacity);
+        }
+    }
+}
+
+impl Kernel {
+    pub(crate) fn shared_frame_source(
+        &self,
+        role: super::views::SharedFrames,
+    ) -> std::ptr::NonNull<crate::graphics::native_abi::FRAME> {
+        match role {
+            super::views::SharedFrames::Asteroid => std::ptr::NonNull::from(&self.asteroid[0]),
+            super::views::SharedFrames::Explosion => std::ptr::NonNull::from(&self.explosion[0]),
+            _ => panic!("not a battle shared frame role {role:?}"),
         }
     }
 }

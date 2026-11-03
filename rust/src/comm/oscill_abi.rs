@@ -39,10 +39,6 @@ pub(crate) mod runtime {
 
     use crate::sound::heart_ffi::GraphForegroundStream;
 
-    extern "C" {
-        static mut OffScreenContext: *mut crate::graphics::native_abi::context_desc;
-        static mut usingSpeech: u32;
-    }
     use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 
     static mut SCOPE_FRAME: *mut frame_desc = null_mut();
@@ -105,6 +101,7 @@ pub(crate) mod runtime {
     /// Oscilloscope and graphics contexts must be initialized.
     #[no_mangle]
     pub unsafe extern "C" fn DrawOscilloscope() {
+        use crate::engine::Kernel;
         if oscillDisabled != 0 {
             return;
         }
@@ -116,10 +113,10 @@ pub(crate) mod runtime {
             data.as_mut_ptr(),
             SCOPE_WIDTH.into(),
             SCOPE_HEIGHT.into(),
-            usingSpeech as i32,
+            (*Kernel::current()).using_speech as i32,
         ) != 0
         {
-            let old = SetContext(OffScreenContext);
+            let old = SetContext((*Kernel::current()).off_screen_context);
             SetContextFGFrame(SCOPE_WORK);
             SetContextClipRect(std::ptr::null_mut());
             stamp.frame = SCOPE_FRAME.cast();

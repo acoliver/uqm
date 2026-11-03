@@ -470,11 +470,9 @@ pub extern "C" fn rust_game_loop() -> c_int {
 #[cfg(not(test))]
 pub extern "C" fn rust_game_loop() -> c_int {
     // SAFETY: this is the synchronous game-thread lifecycle and storage boundary.
+    let mut game = crate::engine::Game::new();
     match unsafe {
-        crate::app::bridge::with_battle(
-            crate::game_init::world_resources::shared_frame_source,
-            || run_game_lifecycle_impl(&cffi::CffiOps),
-        )
+        crate::app::bridge::with_game(&mut game, || run_game_lifecycle_impl(&cffi::CffiOps))
     } {
         Ok(_) => 0,
         Err(e) => {

@@ -14,6 +14,8 @@ mod sol_npcs;
 mod sol_orbital;
 mod sol_resources;
 
+use uqm_rust::savegame::runtime::star::{CStarDesc, CATALOG_LEN};
+
 use std::ffi::c_void;
 use std::fmt::Write as _;
 
@@ -33,7 +35,7 @@ use uqm_rust::state::ffi::rust_init_game_state;
 extern "C" {
     static mut SysGenRNG: *mut RandomContext;
     static mut pSolarSysState: *mut SOLARSYS_STATE;
-    static mut CurStarDescPtr: *mut c_void;
+
     static mut ScreenWidth: i32;
 
     static generateYehatFunctions: GenerateFunctions;
@@ -62,7 +64,9 @@ extern "C" {
 
 struct Harness {
     state: Box<SOLARSYS_STATE>,
-    star: Box<[u8; 8]>,
+    star: Box<[CStarDesc; CATALOG_LEN]>,
+    previous_catalog: *mut CStarDesc,
+    previous_star: Option<uqm_rust::engine::StarId>,
     /// `CurStarDescPtr->Index` the next `set_star` installs.
     star_index: u8,
 }
@@ -77,18 +81,34 @@ impl Harness {
             ScreenWidth = 320;
             pSolarSysState = &mut *state;
         }
+        let previous_catalog = unsafe { uqm_rust::planets::starmap::star_array };
+        let previous_star = unsafe { (*uqm_rust::engine::World::current()).current_star };
+        let mut star = Box::new(unsafe { super::starmap_array });
+        star[0] = unsafe { std::mem::zeroed() };
         Self {
             state,
-            star: Box::new([0; 8]),
+            star,
+            previous_catalog,
+            previous_star,
             star_index: 0,
         }
     }
 
     fn set_star(&mut self, size: u8, color: u8) {
         self.state.SunDesc[0].data_index = size;
-        self.star[4] = (color << 5) | 0b101;
-        self.star[5] = self.star_index;
-        unsafe { CurStarDescPtr = self.star.as_mut_ptr().cast() };
+        self.star[0].star_type = (color << 5) | 0b101;
+        self.star[0].index = self.star_index;
+        unsafe {
+            uqm_rust::planets::starmap::star_array = self.star.as_mut_ptr();
+            (*uqm_rust::engine::World::current()).select_star(
+                (self
+                    .star
+                    .as_mut_ptr()
+                    .cast::<uqm_rust::engine::world::CStarDesc>())
+                .as_ref(),
+                uqm_rust::planets::starmap::current_catalog(),
+            );
+        }
     }
 
     fn seed(&self, seed: u32) {
@@ -239,7 +259,10 @@ fn c_table(system: &str) -> &'static GenerateFunctions {
 impl SpecialOps for Harness {
     fn layout(&mut self, system: &str, case: (u8, u8, u32)) -> (Vec<Desc>, u8, u32) {
         if let Some(unleashed) = system.strip_prefix("chmmr") {
-            set_game_state("CHMMR_UNLEASHED", unleashed.parse().expect("0 or 1"));
+            set_game_state(
+                uqm_rust::engine::StoryKey::CHMMR_UNLEASHED,
+                unleashed.parse().expect("0 or 1"),
+            );
         }
         self.star_index = star_index_of(system);
         self.c_planets(c_table(system), case)
@@ -256,19 +279,34 @@ impl SpecialOps for Harness {
 
     fn energy(&mut self, system: &str, body: Body, seed: u32) -> String {
         if let Some(taken) = system.strip_prefix("burv") {
-            set_game_state("BURVIXESE_BROADCASTERS", taken.parse().expect("0 or 1"));
+            set_game_state(
+                uqm_rust::engine::StoryKey::BURVIXESE_BROADCASTERS,
+                taken.parse().expect("0 or 1"),
+            );
         }
         if let Some(taken) = system.strip_prefix("aqua") {
-            set_game_state("AQUA_HELIX", taken.parse().expect("0 or 1"));
+            set_game_state(
+                uqm_rust::engine::StoryKey::AQUA_HELIX,
+                taken.parse().expect("0 or 1"),
+            );
         }
         if let Some(taken) = system.strip_prefix("bomb") {
-            set_game_state("UTWIG_BOMB", taken.parse().expect("0 or 1"));
+            set_game_state(
+                uqm_rust::engine::StoryKey::UTWIG_BOMB,
+                taken.parse().expect("0 or 1"),
+            );
         }
         if let Some(taken) = system.strip_prefix("sun") {
-            set_game_state("SUN_DEVICE", taken.parse().expect("0 or 1"));
+            set_game_state(
+                uqm_rust::engine::StoryKey::SUN_DEVICE,
+                taken.parse().expect("0 or 1"),
+            );
         }
         if let Some(taken) = system.strip_prefix("taalo") {
-            set_game_state("TAALO_PROTECTOR", taken.parse().expect("0 or 1"));
+            set_game_state(
+                uqm_rust::engine::StoryKey::TAALO_PROTECTOR,
+                taken.parse().expect("0 or 1"),
+            );
         }
         self.star_index = star_index_of(system);
         self.set_star(0, 0);
@@ -299,4 +337,14 @@ pub fn late_generators_match(frames: &[uqm_rust::c_bindings::global_state::Plane
 pub fn sol_matches_the_c_original(table: &[uqm_rust::c_bindings::global_state::PlanetFrame]) {
     sol::check(table);
     sol_abi::check();
+}
+
+impl Drop for Harness {
+    fn drop(&mut self) {
+        // SAFETY: the enclosing serialized test retains the published game.
+        unsafe {
+            uqm_rust::planets::starmap::star_array = self.previous_catalog;
+            (*uqm_rust::engine::World::current()).current_star = self.previous_star;
+        }
+    }
 }

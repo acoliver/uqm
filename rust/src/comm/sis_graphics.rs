@@ -191,12 +191,9 @@ mod c_bridge {
 
     extern "C" {
         #[allow(dead_code)]
-        pub static mut SpaceContext: *mut crate::graphics::native_abi::context_desc;
-        pub static mut ActivityFrame: *mut crate::graphics::native_abi::frame_desc;
-        pub static mut TinyFont: *mut crate::graphics::native_abi::font_desc;
         pub static mut PulsedInputState:
             crate::c_bindings::controller_input::_controller_input_state;
-        pub static mut GameStrings: *mut crate::strings::string_table::StringTableEntry;
+
     }
     pub use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
     pub use crate::threading::pacing::linked::sleep_thread as SleepThread;
@@ -263,7 +260,8 @@ unsafe extern "C" fn do_summary_page_cb(state: *mut SummaryLoopState) -> std::ff
 
 #[cfg(not(test))]
 unsafe fn draw_summary_page_contents(pss: &mut SummaryLoopState) {
-    let old_ctx = c_bridge::SetContext(c_bridge::SpaceContext);
+    use crate::engine::Kernel;
+    let old_ctx = c_bridge::SetContext((*Kernel::current()).space_context);
 
     let mut rect = CRect {
         corner: CPoint {
@@ -277,7 +275,7 @@ unsafe fn draw_summary_page_contents(pss: &mut SummaryLoopState) {
     c_bridge::DrawFilledRectangle(std::ptr::from_mut(&mut rect).cast());
 
     c_bridge::SetContextForeGroundColor(COMM_HISTORY_TEXT_COLOR);
-    c_bridge::SetContextFont((c_bridge::TinyFont).cast());
+    c_bridge::SetContextFont(((*Kernel::current()).tiny_font).cast());
 
     let tw = rect.width - 2 - 2;
     let mut t = CText::default();
@@ -405,7 +403,9 @@ const FEEDBACK_STRING_BASE: i32 = 0x0100;
 /// Inline GAME_STRING(i) macro: GetStringAddress(SetAbsStringTableIndex(GameStrings, i))
 #[cfg(not(test))]
 unsafe fn game_string(id: i32) -> *const std::ffi::c_char {
-    let table = c_bridge::SetAbsStringTableIndex((c_bridge::GameStrings).cast(), id as u16);
+    use crate::engine::Kernel;
+    let table =
+        c_bridge::SetAbsStringTableIndex(((*Kernel::current()).game_strings).cast(), id as u16);
     c_bridge::GetStringAddress(table)
 }
 
@@ -634,8 +634,9 @@ impl CommWindowGfx for CommWindow {
     }
 
     fn space_context(&self) -> *mut std::ffi::c_void {
+        use crate::engine::Kernel;
         // SAFETY: set once at startup, read on the game thread.
-        unsafe { (c_bridge::SpaceContext).cast() }
+        unsafe { ((*Kernel::current()).space_context).cast() }
     }
 
     fn set_context(&mut self, ctx: *mut std::ffi::c_void) -> *mut std::ffi::c_void {
@@ -710,9 +711,13 @@ impl CommWindowGfx for CommWindow {
     }
 
     fn draw_scroll_indicator(&mut self, frame_index: u16, origin_y: i16) {
+        use crate::engine::Kernel;
         // SAFETY: `ActivityFrame` is loaded before any communication starts.
         unsafe {
-            let frame = c_bridge::SetAbsFrameIndex((c_bridge::ActivityFrame).cast(), frame_index);
+            let frame = c_bridge::SetAbsFrameIndex(
+                ((*Kernel::current()).activity_frame).cast(),
+                frame_index,
+            );
             if let Some(mut stamp) = scroll_indicator_stamp(frame.cast(), origin_y) {
                 c_bridge::DrawStamp(std::ptr::from_mut(&mut stamp).cast());
             }

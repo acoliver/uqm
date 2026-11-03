@@ -48,24 +48,20 @@ fn hooks() -> Hooks {
 pub(in crate::automation::melee_fixture) fn execute(
     operation: Operation<'_>,
 ) -> Result<Option<FixtureRun>, String> {
+    use crate::engine::{World as GameWorld, WorldData};
     let hooks = hooks();
     let mut registry = crate::ships::hook_registry::hooks();
     registry.extend(crate::automation::parity_hooks::hooks());
     // SAFETY: automation admits operations on the game thread after initialization.
     let (activity, position) = unsafe {
         (
-            (*crate::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .CurrentActivity,
+            (*WorldData::current()).game.current_activity,
             SavedPosition {
                 slot: 0,
-                log_x: (*crate::ships::native::abi::GLOBDATA::current())
-                    .SIS_state
-                    .log_x,
-                log_y: (*crate::ships::native::abi::GLOBDATA::current())
-                    .SIS_state
-                    .log_y,
-                star: crate::planets::starmap::CurStarDescPtr
+                log_x: (*WorldData::current()).flagship.log_x,
+                log_y: (*WorldData::current()).flagship.log_y,
+                star: (*GameWorld::current())
+                    .star_pointer(crate::planets::starmap::current_catalog())
                     .as_ref()
                     .map(|s| (s.star_pt.x, s.star_pt.y)),
             },
@@ -165,11 +161,15 @@ fn drive(
 
 #[cfg(not(test))]
 fn borrow_world(cx: &Cx<'_>) -> World {
+    use crate::engine::World as GameWorld;
     let mut world = World::new(
         cx.world.activity(),
         cx.b.counters,
         // SAFETY: the catalog selection is read on its owning game thread.
-        unsafe { crate::planets::starmap::CurStarDescPtr as usize },
+        unsafe {
+            (*GameWorld::current()).star_pointer(crate::planets::starmap::current_catalog())
+                as usize
+        },
     );
     let mut next = cx.elements().head();
     while let Some(id) = next {
@@ -198,6 +198,7 @@ pub(super) enum Reply {
 /// graph. No borrowed Element, ship, descriptor or frame may cross this call.
 #[cfg(not(test))]
 unsafe fn apply(cx: &mut Cx<'_>, effect: Effect) -> Result<Reply, String> {
+    use crate::engine::World as GameWorld;
     // SAFETY: effects execute at the published game-thread boundary after command planning commits.
     unsafe {
         match effect {
@@ -209,7 +210,8 @@ unsafe fn apply(cx: &mut Cx<'_>, effect: Effect) -> Result<Reply, String> {
                 return Ok(Reply::None);
             }
             Effect::ClearStar => {
-                crate::planets::starmap::CurStarDescPtr = ptr::null_mut();
+                (*GameWorld::current())
+                    .select_star(None, crate::planets::starmap::current_catalog());
                 return Ok(Reply::None);
             }
             Effect::Remove(_) | Effect::ZoomProof(..) => {
@@ -324,8 +326,9 @@ unsafe fn apply(cx: &mut Cx<'_>, effect: Effect) -> Result<Reply, String> {
 
 #[cfg(not(test))]
 fn configure(request: &MeleeSetupRequest) -> Result<(), String> {
+    use crate::engine::{Kernel, WorldData};
     use crate::supermelee::native::menu::live::drawing::P_MELEE_STATE;
-    let controls = &raw mut crate::supermelee::c_bridge::PlayerControl;
+    let controls = unsafe { &raw mut (*Kernel::current()).player_control };
     let ships = request.ships.iter().enumerate().flat_map(|(side, fleet)| {
         fleet
             .iter()
@@ -342,9 +345,7 @@ fn configure(request: &MeleeSetupRequest) -> Result<(), String> {
         configure_menu(
             state.melee_started != 0,
             &mut *controls,
-            (*crate::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .CurrentActivity,
+            (*WorldData::current()).game.current_activity,
             request.cyborg,
         )?;
         state.melee_option = 4;

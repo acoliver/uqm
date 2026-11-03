@@ -107,6 +107,7 @@ pub(super) mod live {
         }
 
         fn response(&mut self, phrase: u16, handler: H, fragments: &[i32]) {
+            use crate::engine::WorldData;
             unsafe {
                 let text = if fragments.is_empty() {
                     GetStringAddress(SetAbsStringTableIndex(
@@ -119,18 +120,14 @@ pub(super) mod live {
                     let mut text = Vec::new();
                     for &fragment in fragments {
                         let ptr = match fragment {
-                            GLOBAL_PLAYER_NAME => std::ptr::addr_of!(
-                                (*crate::ships::native::abi::GLOBDATA::current())
-                                    .SIS_state
-                                    .CommanderName
-                            )
-                            .cast(),
-                            GLOBAL_SHIP_NAME => std::ptr::addr_of!(
-                                (*crate::ships::native::abi::GLOBDATA::current())
-                                    .SIS_state
-                                    .ShipName
-                            )
-                            .cast(),
+                            GLOBAL_PLAYER_NAME => {
+                                std::ptr::addr_of!((*WorldData::current()).flagship.commander_name)
+                                    .cast()
+                            }
+                            GLOBAL_SHIP_NAME => {
+                                std::ptr::addr_of!((*WorldData::current()).flagship.ship_name)
+                                    .cast()
+                            }
                             _ => {
                                 let index =
                                     u16::try_from(fragment - 1).expect("invalid response fragment");
@@ -168,26 +165,20 @@ pub(super) mod live {
         }
 
         fn supplies(&self) -> Supplies {
+            use crate::engine::WorldData;
             unsafe {
                 Supplies {
-                    landers: (*crate::ships::native::abi::GLOBDATA::current())
-                        .SIS_state
-                        .NumLanders,
-                    fuel: (*crate::ships::native::abi::GLOBDATA::current())
-                        .SIS_state
-                        .FuelOnBoard,
-                    radioactives: (*crate::ships::native::abi::GLOBDATA::current())
-                        .SIS_state
-                        .ElementAmounts[6],
+                    landers: (*WorldData::current()).flagship.num_landers,
+                    fuel: (*WorldData::current()).flagship.fuel_on_board,
+                    radioactives: (*WorldData::current()).flagship.element_amounts[6],
                 }
             }
         }
 
         fn add_lander(&mut self) {
+            use crate::engine::WorldData;
             unsafe {
-                (*crate::ships::native::abi::GLOBDATA::current())
-                    .SIS_state
-                    .NumLanders += 1;
+                (*WorldData::current()).flagship.num_landers += 1;
                 DrawLanders();
             }
         }

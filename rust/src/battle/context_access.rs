@@ -145,7 +145,7 @@ impl Cx<'_> {
         let frame = self.desc(ship).ship_data.captain_control.background;
         // SAFETY: these resources belong to the live final-battle descriptor.
         unsafe {
-            let old = SetContext(StatusContext);
+            let old = SetContext(self.kernel.status_context);
             let mut stamp = STAMP {
                 origin: POINT { x: 0, y: 0 },
                 frame,
@@ -162,7 +162,7 @@ impl Cx<'_> {
         unsafe {
             let info = self.ship_info_pointer(ship);
             crate::ui::shipstat::init_ship_status(info, Some(ship), std::ptr::null_mut());
-            let old = SetContext(StatusContext);
+            let old = SetContext(self.kernel.status_context);
             crate::battle::status_native::draw_captains_window(self, ship);
             SetContext(old);
         }
@@ -468,25 +468,24 @@ mod sounds_access {
             sound: usize,
             source: Option<crate::engine::battle::ElementId>,
         ) {
-            self.b.kernel_sounds().push(sound as SOUND, source);
+            self.kernel.sounds.push(sound as SOUND, source);
         }
     }
 }
 
 mod star_access {
     #[cfg(not(test))]
+    use crate::navigation::abi::*;
+    #[cfg(not(test))]
     #[cfg(not(test))]
     use crate::navigation::hyper_transition::{element_universe, init_transition};
     #[cfg(not(test))]
-    use crate::navigation::{abi::*, get};
-    #[cfg(not(test))]
-    use crate::planets::starmap::CurStarDescPtr;
     #[cfg(not(test))]
     use std::ptr;
     #[cfg(not(test))]
     #[derive(Clone, Copy)]
     pub(crate) struct StarContact {
-        pub(super) address: usize,
+        pub(super) star: crate::engine::StarId,
         pub(crate) position: crate::graphics::native_abi::POINT,
         pub(crate) current: bool,
     }
@@ -494,34 +493,41 @@ mod star_access {
     impl crate::engine::battle::Cx<'_> {
         pub(crate) fn portal_counter(&self) -> u8 {
             // SAFETY: story state is accessed only on the game thread.
-            get("PORTAL_COUNTER")
+            self.world
+                .story_state(crate::engine::StoryKey::PORTAL_COUNTER) as u8
         }
         pub fn autopilot(&self) -> crate::graphics::native_abi::POINT {
             // SAFETY: this is a value projection of the game-thread-owned world.
-            unsafe {
-                (*crate::ships::native::abi::GLOBDATA::current())
-                    .Game_state
-                    .autopilot
-            }
+            self.world.data.game.autopilot
         }
         pub(crate) fn star_contact(&self, id: crate::engine::battle::ElementId) -> StarContact {
             let mut point = element_universe(self, id);
             // SAFETY: lookup reads the checked element and loaded star catalog synchronously.
-            unsafe {
+            let (star, position) = unsafe {
                 let star = FindStar(ptr::null_mut(), &mut point, 5, 5);
                 assert!(!star.is_null(), "star collision has no catalog entry");
-                StarContact {
-                    address: star as usize,
-                    position: (*star).star_pt,
-                    current: star.cast() == CurStarDescPtr,
-                }
+                let catalog = crate::planets::starmap::star_array;
+                (
+                    self.world.identify_star(
+                        &*(star.cast()),
+                        (catalog
+                            as *const [crate::engine::world::CStarDesc;
+                                crate::engine::world::CATALOG_LEN])
+                            .as_ref()
+                            .unwrap_or_else(|| panic!("star contact without catalog")),
+                    ),
+                    (*star).star_pt,
+                )
+            };
+            StarContact {
+                star,
+                position,
+                current: self.world.current_star == Some(star),
             }
         }
+
         pub(crate) fn select_star(&mut self, contact: Option<StarContact>) {
-            // SAFETY: catalog addresses originate only in star_contact; None clears selection.
-            unsafe {
-                CurStarDescPtr = contact.map_or(ptr::null_mut(), |c| c.address as *mut _);
-            }
+            self.world.current_star = contact.map(|contact| contact.star);
         }
         pub(crate) fn init_hyper_transition(
             &mut self,
@@ -637,10 +643,10 @@ impl Cx<'_> {
         // SAFETY: the shared stars frame and its frame set remain loaded throughout the battle.
         unsafe {
             let frame =
-                crate::engine::battle::views::FrameSelection::retain(DecFrameIndex(stars_in_space));
+                crate::engine::battle::views::FrameSelection::retain(DecFrameIndex(self.kernel.stars_in_space));
             let frames = crate::engine::battle::views::Frames::native_shared(
                 crate::engine::battle::views::SharedFrames::Stars,
-                std::ptr::NonNull::new_unchecked(&raw mut stars_in_space),
+                std::ptr::NonNull::new_unchecked(&raw mut self.kernel.stars_in_space),
                 1,
             );
             self.set_frame(id, false, frame);
@@ -652,9 +658,7 @@ impl Cx<'_> {
         unsafe {
             let frames = crate::engine::battle::views::Frames::native_shared(
                 crate::engine::battle::views::SharedFrames::Blast,
-                std::ptr::NonNull::new_unchecked(
-                    (&raw mut crate::game_init::space_resources::blast).cast(),
-                ),
+                std::ptr::NonNull::new_unchecked((&raw mut self.kernel.blast).cast()),
                 3,
             );
             self.set_frames(id, false, frames);
@@ -665,9 +669,7 @@ impl Cx<'_> {
         unsafe {
             crate::engine::battle::views::Frames::native_shared(
                 crate::engine::battle::views::SharedFrames::Planet,
-                std::ptr::NonNull::new_unchecked(
-                    (&raw mut crate::game_init::world_resources::live::planet).cast(),
-                ),
+                std::ptr::NonNull::from(&self.kernel.planet[0]),
                 3,
             )
         }

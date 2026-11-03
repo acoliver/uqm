@@ -66,8 +66,9 @@ type BattleNetwork = (
     bool,
 );
 #[cfg(not(test))]
-fn initialize_battle(battle: &mut crate::engine::battle::Battle) -> BattleNetwork {
-    battle.initialize();
+fn initialize_battle(cx: &mut crate::engine::battle::Cx<'_>) -> BattleNetwork {
+    cx.b.initialize(cx.kernel);
+    let battle = &mut *cx.b;
     let had_net = battle.net.is_some();
     battle
         .net
@@ -86,7 +87,7 @@ fn finish_battle_network(battle: &mut crate::engine::battle::Battle, had_net: bo
 unsafe fn battle_network() -> BattleNetwork {
     use abi::NetworkInputContext;
     use engine::{player_control, player_input, NETWORK_CONTROL};
-    let (battle, net, had_net) = crate::app::bridge::battle(initialize_battle);
+    let (battle, net, had_net) = crate::app::bridge::enter(initialize_battle);
     for side in 0..2 {
         if player_control(side) & NETWORK_CONTROL != 0 {
             let context = player_input(side).cast::<NetworkInputContext>();
@@ -122,23 +123,21 @@ pub(crate) mod engine {
 
     use crate::battle::process_native::engine::RedrawQueue;
 
-    use crate::navigation::globals::getGameState;
+    use crate::state::ffi::rust_get_game_state_bits as getGameState;
 
-    use crate::navigation::globals::setGameState;
+    use crate::state::ffi::rust_set_game_state_bits as setGameState;
 
     /// # Safety
     /// Game state must be initialized and accessed only on the game thread.
     pub unsafe fn activity() -> u16 {
-        (*crate::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .CurrentActivity
+        use crate::engine::WorldData;
+        (*WorldData::current()).game.current_activity
     }
     /// # Safety
     /// The caller must exclusively own game-thread activity state.
     pub unsafe fn set_activity(value: u16) {
-        (*crate::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .CurrentActivity = value;
+        use crate::engine::WorldData;
+        (*WorldData::current()).game.current_activity = value;
     }
     /// # Safety
     /// `start..=end` must name a valid game-state bit field on the game thread.
@@ -153,22 +152,30 @@ pub(crate) mod engine {
     /// # Safety
     /// `side` must be a valid player index with initialized input state.
     pub unsafe fn player_input(side: usize) -> *mut InputContext {
-        Kernel::current().player_input[side].cast()
+        use crate::engine::Kernel;
+        (*Kernel::current()).player_input[side].cast()
     }
     /// # Safety
     /// `side` must be valid and `input` must remain live while installed, or be null during input replacement.
     pub unsafe fn set_player_input(side: usize, input: *mut InputContext) {
-        Kernel::current().player_input[side] = input.cast();
+        use crate::engine::Kernel;
+        (*Kernel::current()).player_input[side] = input.cast();
     }
     /// # Safety
     /// `side` must be a valid player index on the game thread.
     pub unsafe fn player_control(side: usize) -> u8 {
-        *(&raw const PlayerControl).cast::<BYTE>().add(side)
+        use crate::engine::Kernel;
+        *(&raw const (*Kernel::current()).player_control)
+            .cast::<BYTE>()
+            .add(side)
     }
     /// # Safety
     /// `side` must be a valid player index owned by the game thread.
     pub unsafe fn set_player_control(side: usize, value: u8) {
-        *(&raw mut PlayerControl).cast::<BYTE>().add(side) = value;
+        use crate::engine::Kernel;
+        *(&raw mut (*Kernel::current()).player_control)
+            .cast::<BYTE>()
+            .add(side) = value;
     }
 
     pub const fn rgb15(r: u8, g: u8, b: u8) -> Color {
@@ -269,7 +276,8 @@ pub(crate) mod engine {
     /// The game thread must own initialized audio, activity, and resource state.
     #[no_mangle]
     pub unsafe extern "C" fn BattleSong(play: BOOLEAN) {
-        if Kernel::current().battle_music.is_null() {
+        use crate::engine::Kernel;
+        if (*Kernel::current()).battle_music.is_null() {
             let resource = if inHyperSpace() != 0 {
                 HYPERSPACE_MUSIC.as_ptr()
             } else if inQuasiSpace() != 0 {
@@ -277,11 +285,11 @@ pub(crate) mod engine {
             } else {
                 BATTLE_MUSIC.as_ptr()
             };
-            Kernel::current().battle_music =
+            (*Kernel::current()).battle_music =
                 crate::sound::resource_types::LoadMusicInstance(resource.cast()).cast();
         }
         if play != 0 {
-            PlayMusic(Kernel::current().battle_music, 1, 1);
+            PlayMusic((*Kernel::current()).battle_music, 1, 1);
         }
     }
 
@@ -289,8 +297,9 @@ pub(crate) mod engine {
     /// The game thread must own the battle music handle and initialized audio state.
     #[no_mangle]
     pub unsafe extern "C" fn FreeBattleSong() {
-        DestroyMusic(Kernel::current().battle_music);
-        Kernel::current().battle_music = ptr::null_mut();
+        use crate::engine::Kernel;
+        DestroyMusic((*Kernel::current()).battle_music);
+        (*Kernel::current()).battle_music = ptr::null_mut();
     }
 
     unsafe extern "C" fn DoBattle(bs: *mut battlestate_struct) -> BOOLEAN {
@@ -402,6 +411,7 @@ pub(crate) mod engine {
     /// The game thread must own initialized battle, input, audio, and display state; any callback must remain valid for the battle.
     #[no_mangle]
     pub unsafe extern "C" fn Battle(callback: BattleFrameCallback) -> BOOLEAN {
+        use crate::engine::Kernel;
         let (battle, net, had_net) = battle_network();
         if activity() as u8 != SUPER_MELEE as u8 {
             crate::math::seed_random(rust_automation_seed_value(
@@ -416,10 +426,10 @@ pub(crate) mod engine {
         }
         BattleSong(0);
         let mut count = InitShips();
-        if Kernel::current().instant_victory != 0 {
+        if (*Kernel::current()).instant_victory != 0 {
             count = 0;
             (*battle).counters = [1, 0];
-            Kernel::current().instant_victory = 0;
+            (*Kernel::current()).instant_victory = 0;
         }
         if count != 0 {
             let mut bs: battlestate_struct = mem::zeroed();

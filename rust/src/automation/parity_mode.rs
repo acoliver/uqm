@@ -117,7 +117,7 @@ fn events(fields: &mut Fields, queue: &crate::collections::queue::Queue) {
 #[cfg(not(test))]
 fn groups(
     fields: &mut Fields,
-    queue: &crate::comm::locdata::CQueue,
+    queue: &crate::collections::queue::Queue,
     journal: &mut super::parity::Journal,
 ) {
     use crate::savegame::runtime::{
@@ -173,16 +173,23 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn story_reports_the_current_state_owner() {
-        let mut fields = Fields::new();
-        story(&mut fields);
-        // Other state tests may initialize the shared owner. Either state must
-        // produce a complete result without requiring native game initialization.
-        if fields.contains_key("mode.story.initialized") {
-            assert_eq!(fields["mode.story.initialized"], "true");
-            assert!(fields.contains_key("mode.story.0"));
-        } else {
-            assert!(fields.contains_key("mode.story.unavailable"));
+        let mut game_owner = crate::engine::Game::new();
+        // SAFETY: the serialized fixture owns this published lifecycle.
+        unsafe {
+            crate::app::bridge::with_game(&mut game_owner, || {
+                let mut fields = Fields::new();
+                story(&mut fields);
+                // Other state tests may initialize the shared owner. Either state must
+                // produce a complete result without requiring native game initialization.
+                if fields.contains_key("mode.story.initialized") {
+                    assert_eq!(fields["mode.story.initialized"], "true");
+                    assert!(fields.contains_key("mode.story.0"));
+                } else {
+                    assert!(fields.contains_key("mode.story.unavailable"));
+                }
+            })
         }
     }
 }

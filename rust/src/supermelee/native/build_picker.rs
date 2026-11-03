@@ -51,7 +51,8 @@ pub(super) mod live {
     /// # Safety
     /// Game thread, with the melee graphics and master ship list loaded.
     pub unsafe extern "C" fn BuildBuildPickFrame() {
-        let old = SetContext(OffScreenContext);
+        use crate::engine::Kernel;
+        let old = SetContext((*Kernel::current()).off_screen_context);
         let mut stamp = STAMP {
             origin: POINT { x: 0, y: 0 },
             frame: SetAbsFrameIndex(MeleeFrame, 27),
@@ -133,14 +134,10 @@ pub(super) mod live {
     }
 
     unsafe extern "C" fn pick(state: *mut MELEE_STATE) -> u32 {
+        use crate::engine::WorldData;
         let time = GetTimeCounter();
         GamePaused = 0;
-        if (*crate::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .CurrentActivity
-            & CHECK_ABORT as u16
-            != 0
-        {
+        if (*WorldData::current()).game.current_activity & CHECK_ABORT as u16 != 0 {
             (*state).build_pick_confirmed = 0;
             return 0;
         }

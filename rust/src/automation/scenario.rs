@@ -58,7 +58,7 @@ pub struct ScenePlan {
     /// must establish it as the real game does.
     pub star_location: (i16, i16),
     /// Named game-state values the scene's circumstances require.
-    pub game_state: &'static [(&'static str, u32)],
+    pub game_state: &'static [(crate::engine::StoryKey, u32)],
 }
 
 /// Scene activation or verification failure.
@@ -143,10 +143,10 @@ pub fn scene_plan(
                     | crate::comm::dispatch::START_ENCOUNTER,
                 star_location: (6200, 5935),
                 game_state: &[
-                    ("CHMMR_BOMB_STATE", 3),
-                    ("UTWIG_BOMB_ON_SHIP", 1),
-                    ("STARBASE_AVAILABLE", 1),
-                    ("BOMB_CARRIER", 0),
+                    (crate::engine::StoryKey::CHMMR_BOMB_STATE, 3),
+                    (crate::engine::StoryKey::UTWIG_BOMB_ON_SHIP, 1),
+                    (crate::engine::StoryKey::STARBASE_AVAILABLE, 1),
+                    (crate::engine::StoryKey::BOMB_CARRIER, 0),
                 ],
             })
         }
@@ -158,7 +158,7 @@ pub fn scene_plan(
             current_activity: crate::comm::dispatch::IN_ENCOUNTER
                 | crate::comm::dispatch::START_ENCOUNTER,
             star_location: SOL_UNIVERSE_LOCATION,
-            game_state: &[("PROBE_MESSAGE_DELIVERED", 0)],
+            game_state: &[(crate::engine::StoryKey::PROBE_MESSAGE_DELIVERED, 0)],
         }),
         AutomationScene::StarbaseCommander => Ok(ScenePlan {
             scene,
@@ -169,13 +169,13 @@ pub fn scene_plan(
                 | crate::comm::dispatch::START_ENCOUNTER,
             star_location: SOL_UNIVERSE_LOCATION,
             game_state: &[
-                ("GLOBAL_FLAGS_AND_DATA", 0xFF),
-                ("STARBASE_AVAILABLE", 1),
-                ("PROBE_ILWRATH_ENCOUNTER", 0),
+                (crate::engine::StoryKey::GLOBAL_FLAGS_AND_DATA, 0xFF),
+                (crate::engine::StoryKey::STARBASE_AVAILABLE, 1),
+                (crate::engine::StoryKey::PROBE_ILWRATH_ENCOUNTER, 0),
                 // The visit goes straight into the Commander conversation only
                 // when the moon base is on the ship (or Chmmr installed the
                 // bomb); otherwise it falls through to the starbase menu.
-                ("MOONBASE_ON_SHIP", 1),
+                (crate::engine::StoryKey::MOONBASE_ON_SHIP, 1),
             ],
         }),
     }
@@ -353,11 +353,12 @@ impl SceneEntryOps for LinkedSceneEntry {
     }
 
     fn clear_screen(&mut self) {
+        use crate::engine::Kernel;
         use crate::mainloop::restart_menu::c_extern;
         // SAFETY: the screen context exists once game initialization is
         // complete, and scene activation runs on the main thread.
         unsafe {
-            c_extern::SetContext(c_extern::ScreenContext);
+            c_extern::SetContext((*Kernel::current()).screen_context);
             c_extern::ClearDrawable();
         }
     }
@@ -403,7 +404,7 @@ pub fn activate(
             return Err(SceneError::SetupFailed(reason));
         }
         for (name, value) in plan.game_state {
-            crate::state::game_state_keys::set_game_state(name, *value);
+            crate::state::game_state_keys::set_game_state(*name, *value);
         }
         enter_scene(&plan, &mut LinkedSceneEntry);
     }
@@ -545,15 +546,18 @@ mod tests {
             SceneActivationBoundary::GameInitialized,
         )
         .unwrap();
-        let state = |name: &str| {
+        let state = |name: crate::engine::StoryKey| {
             plan.game_state
                 .iter()
                 .find(|(key, _)| *key == name)
                 .map(|(_, value)| *value)
         };
-        assert_eq!(state("STARBASE_AVAILABLE"), Some(1));
-        assert_eq!(state("MOONBASE_ON_SHIP"), Some(1));
-        assert_eq!(state("PROBE_ILWRATH_ENCOUNTER"), Some(0));
+        assert_eq!(state(crate::engine::StoryKey::STARBASE_AVAILABLE), Some(1));
+        assert_eq!(state(crate::engine::StoryKey::MOONBASE_ON_SHIP), Some(1));
+        assert_eq!(
+            state(crate::engine::StoryKey::PROBE_ILWRATH_ENCOUNTER),
+            Some(0)
+        );
     }
 
     #[test]
@@ -568,7 +572,7 @@ mod tests {
         assert!(plan
             .game_state
             .iter()
-            .all(|(key, _)| *key != "BATTLE_SEGUE"));
+            .all(|(key, _)| *key != crate::engine::StoryKey::BATTLE_SEGUE));
     }
 
     #[derive(Default)]

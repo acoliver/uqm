@@ -338,9 +338,10 @@ impl RestartMenuOps for CffiOps {
     }
 
     fn set_screen_context(&self) {
+        use crate::engine::Kernel;
         // SAFETY: ScreenContext is a global initialized during game startup.
         unsafe {
-            let _ = c_extern::SetContext(c_extern::ScreenContext);
+            let _ = c_extern::SetContext((*Kernel::current()).screen_context);
         }
     }
 
@@ -471,13 +472,14 @@ impl RestartMenuOps for CffiOps {
     }
 
     fn create_flash_overlay(&self) -> usize {
-        extern "C" {
-            static mut ScreenContext: *mut crate::graphics::native_abi::context_desc;
-        }
+        use crate::engine::Kernel;
         // SAFETY: ScreenContext is a global initialized during game startup.
         unsafe {
-            c_extern::Flash_createOverlay(ScreenContext, std::ptr::null_mut(), std::ptr::null_mut())
-                as usize
+            c_extern::Flash_createOverlay(
+                (*Kernel::current()).screen_context,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            ) as usize
         }
     }
     fn flash_process(&self, ctx: usize) {

@@ -110,16 +110,13 @@ use crate::ui::sis::DrawHyperCoords;
 
 extern "C" {
 
-    #[link_name = "GameStrings"]
-    pub static mut GAME_STRINGS: *mut crate::strings::string_table::StringTableEntry;
     #[link_name = "format_conv_surf"]
     pub static mut FORMAT_CONV_SURF: *mut crate::graphics::ffi::SDL_Surface;
     #[link_name = "SDL_Screen"]
     pub static mut SDL_SCREEN: *mut crate::graphics::ffi::SDL_Surface;
     #[link_name = "star_array"]
     pub static mut STAR_ARRAY: *mut crate::savegame::runtime::star::CStarDesc;
-    #[link_name = "CurStarDescPtr"]
-    static mut CUR_STAR_DESC_PTR: *mut crate::savegame::runtime::star::CStarDesc;
+
 }
 
 /// `GROUP_INIT_IP`, `GROUP_SAVE_IP` (`state.h`): `(BYTE)~0`.
@@ -182,7 +179,8 @@ pub unsafe fn load_planet_default_surface() {
 /// # Safety
 /// `CurStarDescPtr` must point at a valid star description.
 pub unsafe fn current_star_index() -> u8 {
-    (*std::ptr::addr_of!(CUR_STAR_DESC_PTR).read()).index
+    use crate::engine::World as GameWorld;
+    (*(*GameWorld::current()).star_pointer(crate::planets::starmap::current_catalog())).index
 }
 
 /// `GROUPS_ADD_NEW` (`state.h`).
@@ -238,7 +236,7 @@ pub unsafe fn notify_others_all_clear(race: u16) {
 pub unsafe fn clone_infinite_ship_into_built_queue(ship: u16) {
     crate::comm::dispatch::clone_ship_fragment(
         u8::try_from(ship).expect("ship index fits a byte"),
-        std::ptr::addr_of_mut!((*glob()).Game_state.npc_built_ship_q).cast::<Queue>(),
+        std::ptr::addr_of_mut!((*glob()).game.npc_built_ship_q).cast::<Queue>(),
         INFINITE_FLEET,
     );
 }
@@ -248,7 +246,7 @@ pub unsafe fn clone_infinite_ship_into_built_queue(ship: u16) {
 /// # Safety
 /// Game thread; `GlobData` is initialised.
 pub unsafe fn built_ship_count() -> u16 {
-    CountLinks(std::ptr::addr_of!((*glob()).Game_state.npc_built_ship_q).cast::<Queue>())
+    CountLinks(std::ptr::addr_of!((*glob()).game.npc_built_ship_q).cast::<Queue>())
 }
 
 /// The `star_index` byte of every catalog entry before `CurStarDescPtr`:
@@ -257,10 +255,11 @@ pub unsafe fn built_ship_count() -> u16 {
 /// # Safety
 /// `CurStarDescPtr` must be an entry of `star_array`.
 pub unsafe fn star_indexes_before_current() -> Vec<u8> {
+    use crate::engine::World as GameWorld;
     let first = std::ptr::addr_of!(STAR_ARRAY).read();
-    let current = std::ptr::addr_of!(CUR_STAR_DESC_PTR).read();
+    let current = (*GameWorld::current()).star_pointer(crate::planets::starmap::current_catalog());
     let before = usize::try_from(current.offset_from(first))
-        .expect("CurStarDescPtr is an entry of star_array");
+        .expect("(*GameWorld::current()).star_pointer(crate::planets::starmap::current_catalog()) is an entry of star_array");
     std::slice::from_raw_parts(first, before)
         .iter()
         .map(|star| star.index)
@@ -348,7 +347,7 @@ pub unsafe fn free_lander_font(system: *mut crate::c_bindings::global_state::SOL
 pub unsafe fn clone_named_ship_into_built_queue(ship: u16, name_index: u8) {
     let fragment = crate::comm::dispatch::clone_ship_fragment(
         u8::try_from(ship).expect("ship index fits a byte"),
-        std::ptr::addr_of_mut!((*glob()).Game_state.npc_built_ship_q).cast::<Queue>(),
+        std::ptr::addr_of_mut!((*glob()).game.npc_built_ship_q).cast::<Queue>(),
         1,
     );
     if !fragment.is_null() {
@@ -370,7 +369,7 @@ pub unsafe fn put_group_info(offset: u32) -> u32 {
 /// # Safety
 /// Game thread; `GlobData` is initialised.
 pub unsafe fn built_ship_queue_has_ships() -> bool {
-    !(*std::ptr::addr_of!((*glob()).Game_state.npc_built_ship_q))
+    !(*std::ptr::addr_of!((*glob()).game.npc_built_ship_q))
         .head
         .is_null()
 }
@@ -385,7 +384,7 @@ const ONE_SHOT_ENCOUNTER: u8 = 1 << 7;
 /// # Safety
 /// Game thread; `GlobData` is initialised.
 unsafe fn take_encounter() -> HLink {
-    let queue = std::ptr::addr_of_mut!((*glob()).Game_state.encounter_q).cast::<Queue>();
+    let queue = std::ptr::addr_of_mut!((*glob()).game.encounter_q).cast::<Queue>();
     let mut handle = AllocLink(queue);
     if handle.is_null() {
         handle = (*queue).head;
@@ -407,13 +406,13 @@ pub unsafe fn begin_urquan_encounter(loc: (i16, i16)) -> bool {
     if handle.is_null() {
         return false;
     }
-    let queue = std::ptr::addr_of_mut!((*glob()).Game_state.encounter_q).cast::<Queue>();
+    let queue = std::ptr::addr_of_mut!((*glob()).game.encounter_q).cast::<Queue>();
     // `LockEncounter` on a table queue is a cast.
     let encounter = handle.cast::<CEncounter>();
     std::ptr::write_bytes(encounter, 0, 1);
     InsertQueue(queue, handle, (*queue).head);
 
-    let fleets = std::ptr::addr_of!((*glob()).Game_state.avail_race_q).cast::<Queue>();
+    let fleets = std::ptr::addr_of!((*glob()).game.avail_race_q).cast::<Queue>();
     let template = get_star_ship_from_index(fleets, ship::URQUAN_SHIP).cast::<CFleetInfo>();
     assert!(
         !template.is_null(),
@@ -435,8 +434,8 @@ pub unsafe fn begin_urquan_encounter(loc: (i16, i16)) -> bool {
     (*encounter).loc_pt = CPoint { x: loc.0, y: loc.1 };
     (*encounter).log_x = universe_to_logx(loc.0);
     (*encounter).log_y = universe_to_logy(loc.1);
-    (*glob()).SIS_state.log_x = (*encounter).log_x;
-    (*glob()).SIS_state.log_y = (*encounter).log_y;
+    (*glob()).flagship.log_x = (*encounter).log_x;
+    (*glob()).flagship.log_y = (*encounter).log_y;
     true
 }
 
@@ -454,7 +453,9 @@ pub unsafe fn fade_to_black_for_two_seconds() {
 /// # Safety
 /// `CurStarDescPtr` must point at a valid star description.
 pub unsafe fn current_star_point() -> (i16, i16) {
-    let point = (*std::ptr::addr_of!(CUR_STAR_DESC_PTR).read()).star_pt;
+    use crate::engine::World as GameWorld;
+    let point =
+        (*(*GameWorld::current()).star_pointer(crate::planets::starmap::current_catalog())).star_pt;
     (point.x, point.y)
 }
 
@@ -463,7 +464,7 @@ pub unsafe fn current_star_point() -> (i16, i16) {
 /// # Safety
 /// Game thread; `GlobData` is initialised.
 pub unsafe fn fuel_on_board() -> u32 {
-    (*glob()).SIS_state.FuelOnBoard
+    (*glob()).flagship.fuel_on_board
 }
 
 /// `DeltaSISGauges (0, delta, 0)`.
@@ -493,18 +494,19 @@ pub unsafe fn draw_hyper_coords(loc: (i16, i16)) {
 /// The live game, through `GlobData` and the C group functions.
 pub struct LiveGame;
 
-fn glob() -> *mut crate::ships::native::abi::GLOBDATA {
-    std::ptr::addr_of_mut!((*crate::ships::native::abi::GLOBDATA::current()))
+fn glob() -> *mut crate::engine::WorldData {
+    use crate::engine::WorldData;
+    unsafe { WorldData::current() }
 }
 
 impl Npcs for LiveGame {
     fn init_ip_groups(&mut self) -> bool {
         // SAFETY: game thread; `GlobData` is initialised.
-        unsafe { GetGroupInfo((*glob()).Game_state.BattleGroupRef, GROUP_INIT_IP) != 0 }
+        unsafe { GetGroupInfo((*glob()).game.battle_group_ref, GROUP_INIT_IP) != 0 }
     }
     fn clear_battle_group_ref(&mut self) {
         // SAFETY: as above.
-        unsafe { (*glob()).Game_state.BattleGroupRef = 0 };
+        unsafe { (*glob()).game.battle_group_ref = 0 };
     }
     fn build_groups(&mut self) {
         // SAFETY: game thread.
@@ -521,16 +523,12 @@ impl Npcs for LiveGame {
     fn reinit_npc_built_ship_q(&mut self) {
         // SAFETY: the queue is the live `npc_built_ship_q`.
         unsafe {
-            ReinitQueue(
-                std::ptr::addr_of_mut!((*glob()).Game_state.npc_built_ship_q).cast::<Queue>(),
-            )
+            ReinitQueue(std::ptr::addr_of_mut!((*glob()).game.npc_built_ship_q).cast::<Queue>())
         };
     }
     fn reinit_ip_group_q(&mut self) {
         // SAFETY: the queue is the live `ip_group_q`.
-        unsafe {
-            ReinitQueue(std::ptr::addr_of_mut!((*glob()).Game_state.ip_group_q).cast::<Queue>())
-        };
+        unsafe { ReinitQueue(std::ptr::addr_of_mut!((*glob()).game.ip_group_q).cast::<Queue>()) };
     }
     fn yehat_civil_war(&self) -> bool {
         // SAFETY: reads the Rust-owned game state.
@@ -545,7 +543,7 @@ impl Npcs for LiveGame {
         // the visit, as C does. `LockLink` on a table queue is a cast: the
         // links are the elements themselves.
         unsafe {
-            let queue = std::ptr::addr_of!((*glob()).Game_state.ip_group_q);
+            let queue = std::ptr::addr_of!((*glob()).game.ip_group_q);
             let mut handle = (*queue).head;
             while !handle.is_null() {
                 let group = handle.cast::<IP_GROUP>();
@@ -568,7 +566,7 @@ impl PlanetNames for LiveGame {
         // `GAME_STRING` text is NUL terminated.
         unsafe {
             let text = crate::comm::hail::game_string(i32::from(string_index));
-            let name = &mut (*glob()).SIS_state.PlanetName;
+            let name = &mut (*glob()).flagship.planet_name;
             utf8StringCopy(name.as_mut_ptr().cast(), name.len(), (text).cast());
         }
     }
@@ -581,18 +579,18 @@ impl PlanetNames for LiveGame {
 impl FleetGroups for LiveGame {
     fn battle_group_ref(&self) -> u32 {
         // SAFETY: game thread; `GlobData` is initialised.
-        unsafe { (*glob()).Game_state.BattleGroupRef }
+        unsafe { (*glob()).game.battle_group_ref }
     }
     fn set_battle_group_ref(&mut self, value: u32) {
         // SAFETY: as above.
-        unsafe { (*glob()).Game_state.BattleGroupRef = value };
+        unsafe { (*glob()).game.battle_group_ref = value };
     }
     fn clone_ship_into_built_queue(&mut self, ship: u8) {
         // SAFETY: the queue is the live `npc_built_ship_q`.
         unsafe {
             crate::comm::dispatch::clone_ship_fragment(
                 ship,
-                std::ptr::addr_of_mut!((*glob()).Game_state.npc_built_ship_q).cast::<Queue>(),
+                std::ptr::addr_of_mut!((*glob()).game.npc_built_ship_q).cast::<Queue>(),
                 0,
             )
         };
@@ -608,11 +606,11 @@ impl FleetGroups for LiveGame {
         // SAFETY: the head of the live `ip_group_q`; its links are the
         // elements themselves, as in `for_each_ip_group`.
         unsafe {
-            let head = (*std::ptr::addr_of!((*glob()).Game_state.ip_group_q)).head;
+            let head = (*std::ptr::addr_of!((*glob()).game.ip_group_q)).head;
             if head.is_null() {
                 None
             } else {
-                let queue = std::ptr::addr_of!((*glob()).Game_state.ip_group_q).cast::<Queue>();
+                let queue = std::ptr::addr_of!((*glob()).game.ip_group_q).cast::<Queue>();
                 assert_eq!(
                     usize::from((*queue).object_size),
                     std::mem::size_of::<IP_GROUP>()
@@ -676,7 +674,7 @@ impl crate::planets::generate::sam::GuardSite for LiveGame {
         // SAFETY: the live table queue on the game thread. Preserve both
         // LockIpGroup's size assertion and Lock/UnlockLink's bounds checks.
         unsafe {
-            let queue = std::ptr::addr_of!((*glob()).Game_state.ip_group_q).cast::<Queue>();
+            let queue = std::ptr::addr_of!((*glob()).game.ip_group_q).cast::<Queue>();
             let mut handle = (*queue).head;
             while !handle.is_null() {
                 assert_eq!(
@@ -693,9 +691,9 @@ impl crate::planets::generate::sam::GuardSite for LiveGame {
         }
     }
     fn ip_location(&self) -> crate::c_bindings::global_state::POINT {
-        // SAFETY: game-thread global, represented by the asserted GLOBDATA layout.
+        // SAFETY: game-thread global, represented by the asserted crate::engine::WorldData layout.
         unsafe {
-            let point = (*glob()).Game_state.ip_location;
+            let point = (*glob()).game.ip_location;
             crate::c_bindings::global_state::POINT {
                 x: point.x,
                 y: point.y,
@@ -706,12 +704,12 @@ impl crate::planets::generate::sam::GuardSite for LiveGame {
         // SAFETY: disjoint global fields, with no Rust references held across
         // the legacy coordinate transform. CPoint's layout is bindgen-asserted.
         unsafe {
-            let input = std::ptr::addr_of_mut!((*glob()).Game_state.ip_location);
+            let input = std::ptr::addr_of_mut!((*glob()).game.ip_location);
             input.write(crate::comm::locdata::CPoint {
                 x: location.x,
                 y: location.y,
             });
-            let output = std::ptr::addr_of_mut!((*glob()).Game_state.ShipStamp.origin);
+            let output = std::ptr::addr_of_mut!((*glob()).game.ship_stamp.origin);
             XFormIPLoc(input.cast(), output.cast(), 1);
         }
     }

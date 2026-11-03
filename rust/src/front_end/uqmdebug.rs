@@ -203,6 +203,7 @@ pub struct UniverseRecurseArg<'a, T> {
 #[cfg(not(test))]
 mod runtime {
     use super::*;
+    use crate::engine::{Kernel, World, WorldData};
 
     use crate::planets::tables::{PLANET_ARRAY as planet_array, STARMAP_ARRAY as starmap_array};
     use crate::state::game_state_keys::{get_game_state, set_game_state};
@@ -286,11 +287,7 @@ mod runtime {
         LockGameClock();
         let mut done = skipHEE == 0;
         loop {
-            let handle = (*crate::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .GameClock
-                .event_q
-                .head;
+            let handle = (*WorldData::current()).game.game_clock.event_q.head;
             if handle.is_null() {
                 return;
             }
@@ -304,11 +301,7 @@ mod runtime {
                 event.day_index as COUNT,
             );
             loop {
-                let clock = &*ptr::addr_of!(
-                    (*crate::ships::native::abi::GLOBDATA::current())
-                        .Game_state
-                        .GameClock
-                );
+                let clock = &*ptr::addr_of!((*WorldData::current()).game.game_clock);
                 if clock.year_index > year
                     || (clock.year_index == year
                         && (clock.month_index as COUNT > month
@@ -342,13 +335,7 @@ mod runtime {
     pub unsafe fn dumpEvents(out: *mut FILE) {
         LockGameClock();
         crate::collections::queue::for_all_links(
-            ptr::addr_of_mut!(
-                (*crate::ships::native::abi::GLOBDATA::current())
-                    .Game_state
-                    .GameClock
-                    .event_q
-            )
-            .cast(),
+            ptr::addr_of_mut!((*WorldData::current()).game.game_clock.event_q).cast(),
             |event| dumpEvent(out, ptr::from_mut(event).cast()),
         );
         UnlockGameClock();
@@ -357,35 +344,27 @@ mod runtime {
     /// # Safety
     /// Must run on the game thread with initialized SIS and optional solar system.
     pub unsafe fn equipShip() {
-        if (*crate::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .CurrentActivity as u8 as u32
-            == SUPER_MELEE
-        {
+        if (*WorldData::current()).game.current_activity as u8 as u32 == SUPER_MELEE {
             return;
         }
         for i in 0..NUM_DRIVE_SLOTS as usize {
-            (*crate::ships::native::abi::GLOBDATA::current())
-                .SIS_state
-                .DriveSlots[i] = FUSION_THRUSTER as BYTE;
+            (*WorldData::current()).flagship.drive_slots[i] = FUSION_THRUSTER as BYTE;
         }
         for i in 0..NUM_JET_SLOTS as usize {
-            (*crate::ships::native::abi::GLOBDATA::current())
-                .SIS_state
-                .JetSlots[i] = TURNING_JETS as BYTE;
+            (*WorldData::current()).flagship.jet_slots[i] = TURNING_JETS as BYTE;
         }
         set_game_state(
-            "LANDER_SHIELDS",
+            crate::engine::StoryKey::LANDER_SHIELDS,
             (1 << EARTHQUAKE_DISASTER)
                 | (1 << BIOLOGICAL_DISASTER)
                 | (1 << LIGHTNING_DISASTER)
                 | (1 << LAVASPOT_DISASTER),
         );
-        set_game_state("IMPROVED_LANDER_SPEED", 1);
-        set_game_state("IMPROVED_LANDER_CARGO", 1);
-        set_game_state("IMPROVED_LANDER_SHOT", 1);
+        set_game_state(crate::engine::StoryKey::IMPROVED_LANDER_SPEED, 1);
+        set_game_state(crate::engine::StoryKey::IMPROVED_LANDER_CARGO, 1);
+        set_game_state(crate::engine::StoryKey::IMPROVED_LANDER_SHOT, 1);
         let mut i;
-        if get_game_state("CHMMR_BOMB_STATE") < 2 {
+        if get_game_state(crate::engine::StoryKey::CHMMR_BOMB_STATE) < 2 {
             i = 0;
             for module in [
                 HIGHEFF_FUELSYS,
@@ -405,14 +384,10 @@ mod runtime {
                 CANNON_WEAPON,
                 CANNON_WEAPON,
             ] {
-                (*crate::ships::native::abi::GLOBDATA::current())
-                    .SIS_state
-                    .ModuleSlots[i] = module as BYTE;
+                (*WorldData::current()).flagship.module_slots[i] = module as BYTE;
                 i += 1;
             }
-            (*crate::ships::native::abi::GLOBDATA::current())
-                .SIS_state
-                .NumLanders = MAX_LANDERS as BYTE;
+            (*WorldData::current()).flagship.num_landers = MAX_LANDERS as BYTE;
         } else {
             i = NUM_BOMB_MODULES as usize;
             for module in [
@@ -423,46 +398,31 @@ mod runtime {
                 CANNON_WEAPON,
                 SHIVA_FURNACE,
             ] {
-                (*crate::ships::native::abi::GLOBDATA::current())
-                    .SIS_state
-                    .ModuleSlots[i] = module as BYTE;
+                (*WorldData::current()).flagship.module_slots[i] = module as BYTE;
                 i += 1;
             }
         }
         assert!(i <= NUM_MODULE_SLOTS as usize);
-        (*crate::ships::native::abi::GLOBDATA::current())
-            .SIS_state
-            .FuelOnBoard = FUEL_RESERVE as _;
-        (*crate::ships::native::abi::GLOBDATA::current())
-            .SIS_state
-            .CrewEnlisted = 0;
+        (*WorldData::current()).flagship.fuel_on_board = FUEL_RESERVE as _;
+        (*WorldData::current()).flagship.crew_enlisted = 0;
         for i in 0..NUM_MODULE_SLOTS as usize {
-            match (*crate::ships::native::abi::GLOBDATA::current())
-                .SIS_state
-                .ModuleSlots[i] as u32
-            {
+            match (*WorldData::current()).flagship.module_slots[i] as u32 {
                 CREW_POD => {
-                    (*crate::ships::native::abi::GLOBDATA::current())
-                        .SIS_state
-                        .CrewEnlisted = (*crate::ships::native::abi::GLOBDATA::current())
-                        .SIS_state
-                        .CrewEnlisted
+                    (*WorldData::current()).flagship.crew_enlisted = (*WorldData::current())
+                        .flagship
+                        .crew_enlisted
                         .wrapping_add(CREW_POD_CAPACITY as _)
                 }
                 FUEL_TANK => {
-                    (*crate::ships::native::abi::GLOBDATA::current())
-                        .SIS_state
-                        .FuelOnBoard = (*crate::ships::native::abi::GLOBDATA::current())
-                        .SIS_state
-                        .FuelOnBoard
+                    (*WorldData::current()).flagship.fuel_on_board = (*WorldData::current())
+                        .flagship
+                        .fuel_on_board
                         .wrapping_add(FUEL_TANK_CAPACITY as _)
                 }
                 HIGHEFF_FUELSYS => {
-                    (*crate::ships::native::abi::GLOBDATA::current())
-                        .SIS_state
-                        .FuelOnBoard = (*crate::ships::native::abi::GLOBDATA::current())
-                        .SIS_state
-                        .FuelOnBoard
+                    (*WorldData::current()).flagship.fuel_on_board = (*WorldData::current())
+                        .flagship
+                        .fuel_on_board
                         .wrapping_add(HEFUEL_TANK_CAPACITY as _)
                 }
                 _ => {}
@@ -472,9 +432,8 @@ mod runtime {
             (*pSolarSysState).max_ship_speed = (5 * IP_SHIP_THRUST_INCREMENT) as BYTE;
             for i in 0..NUM_DRIVE_SLOTS as usize {
                 // Preserve the original C subscript: DriveSlots[i == FUSION_THRUSTER].
-                if (*crate::ships::native::abi::GLOBDATA::current())
-                    .SIS_state
-                    .DriveSlots[usize::from(i == FUSION_THRUSTER as usize)]
+                if (*WorldData::current()).flagship.drive_slots
+                    [usize::from(i == FUSION_THRUSTER as usize)]
                     != 0
                 {
                     (*pSolarSysState).max_ship_speed = (*pSolarSysState)
@@ -484,11 +443,7 @@ mod runtime {
             }
             (*pSolarSysState).turn_wait = IP_SHIP_TURN_WAIT as BYTE;
             for i in 0..NUM_JET_SLOTS as usize {
-                if (*crate::ships::native::abi::GLOBDATA::current())
-                    .SIS_state
-                    .JetSlots[i]
-                    == TURNING_JETS as BYTE
-                {
+                if (*WorldData::current()).flagship.jet_slots[i] == TURNING_JETS as BYTE {
                     (*pSolarSysState).turn_wait = (*pSolarSysState)
                         .turn_wait
                         .wrapping_sub(IP_SHIP_TURN_DECREMENT as BYTE);
@@ -496,10 +451,7 @@ mod runtime {
             }
         }
         if inHQSpace() != 0
-            || (*crate::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .CurrentActivity as u8 as u32
-                == IN_INTERPLANETARY
+            || (*WorldData::current()).game.current_activity as u8 as u32 == IN_INTERPLANETARY
         {
             DeltaSISGauges(
                 UNDEFINED_DELTA as _,
@@ -513,28 +465,28 @@ mod runtime {
     /// Must run with the game-state singleton initialized.
     pub unsafe fn giveDevices() {
         for key in [
-            "ROSY_SPHERE_ON_SHIP",
-            "ARTIFACT_2_ON_SHIP",
-            "ARTIFACT_3_ON_SHIP",
-            "SUN_DEVICE_ON_SHIP",
-            "UTWIG_BOMB_ON_SHIP",
-            "ULTRON_CONDITION",
-            "MAIDENS_ON_SHIP",
-            "TALKING_PET_ON_SHIP",
-            "AQUA_HELIX_ON_SHIP",
-            "CLEAR_SPINDLE_ON_SHIP",
-            "UMGAH_BROADCASTERS_ON_SHIP",
-            "TAALO_PROTECTOR_ON_SHIP",
-            "EGG_CASE0_ON_SHIP",
-            "EGG_CASE1_ON_SHIP",
-            "EGG_CASE2_ON_SHIP",
-            "SYREEN_SHUTTLE_ON_SHIP",
-            "VUX_BEAST_ON_SHIP",
-            "PORTAL_SPAWNER_ON_SHIP",
-            "PORTAL_KEY_ON_SHIP",
-            "BURV_BROADCASTERS_ON_SHIP",
-            "MOONBASE_ON_SHIP",
-            "DESTRUCT_CODE_ON_SHIP",
+            crate::engine::StoryKey::ROSY_SPHERE_ON_SHIP,
+            crate::engine::StoryKey::ARTIFACT_2_ON_SHIP,
+            crate::engine::StoryKey::ARTIFACT_3_ON_SHIP,
+            crate::engine::StoryKey::SUN_DEVICE_ON_SHIP,
+            crate::engine::StoryKey::UTWIG_BOMB_ON_SHIP,
+            crate::engine::StoryKey::ULTRON_CONDITION,
+            crate::engine::StoryKey::MAIDENS_ON_SHIP,
+            crate::engine::StoryKey::TALKING_PET_ON_SHIP,
+            crate::engine::StoryKey::AQUA_HELIX_ON_SHIP,
+            crate::engine::StoryKey::CLEAR_SPINDLE_ON_SHIP,
+            crate::engine::StoryKey::UMGAH_BROADCASTERS_ON_SHIP,
+            crate::engine::StoryKey::TAALO_PROTECTOR_ON_SHIP,
+            crate::engine::StoryKey::EGG_CASE0_ON_SHIP,
+            crate::engine::StoryKey::EGG_CASE1_ON_SHIP,
+            crate::engine::StoryKey::EGG_CASE2_ON_SHIP,
+            crate::engine::StoryKey::SYREEN_SHUTTLE_ON_SHIP,
+            crate::engine::StoryKey::VUX_BEAST_ON_SHIP,
+            crate::engine::StoryKey::PORTAL_SPAWNER_ON_SHIP,
+            crate::engine::StoryKey::PORTAL_KEY_ON_SHIP,
+            crate::engine::StoryKey::BURV_BROADCASTERS_ON_SHIP,
+            crate::engine::StoryKey::MOONBASE_ON_SHIP,
+            crate::engine::StoryKey::DESTRUCT_CODE_ON_SHIP,
         ] {
             set_game_state(key, 1);
         }
@@ -542,11 +494,7 @@ mod runtime {
     /// # Safety
     /// Must run on the game thread with the escort queue initialized.
     pub unsafe fn clearEscorts() {
-        let queue = ptr::addr_of_mut!(
-            (*crate::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .built_ship_q
-        );
+        let queue = ptr::addr_of_mut!((*WorldData::current()).game.built_ship_q);
         clear_escort_queue(queue.cast());
         DeltaSISGauges(
             UNDEFINED_DELTA as _,
@@ -572,8 +520,8 @@ mod runtime {
         let (log_x, log_y) = log_units();
         let universe_x = ((MAX_X_UNIVERSE as i32 + 1) >> 4) * 10;
         let universe_y = (MAX_Y_UNIVERSE as i32 + 1) >> 4;
-        let game = ptr::addr_of_mut!((*crate::ships::native::abi::GLOBDATA::current()).Game_state);
-        let sis = ptr::addr_of_mut!((*crate::ships::native::abi::GLOBDATA::current()).SIS_state);
+        let game = ptr::addr_of_mut!((*WorldData::current()).game);
+        let sis = ptr::addr_of_mut!((*WorldData::current()).flagship);
         if (*game).autopilot.x == -1 || (*game).autopilot.y == -1 {
             (*game).autopilot.x =
                 (((*sis).log_x.wrapping_mul(universe_x) + (log_x >> 1)) / log_x) as COORD;
@@ -586,16 +534,23 @@ mod runtime {
                 + (universe_y >> 1))
                 / universe_y;
         }
-        if get_game_state("ARILOU_SPACE_SIDE") <= 1 {
-            CurStarDescPtr =
-                (FindStar(ptr::null_mut(), ptr::addr_of_mut!((*game).autopilot), 0, 0)).cast();
-            if !CurStarDescPtr.is_null() {
-                set_game_state("USED_BROADCASTER", 0);
-                (*game).CurrentActivity &= !(IN_BATTLE as ACTIVITY);
-                (*game).ShipFacing = 0;
+        if get_game_state(crate::engine::StoryKey::ARILOU_SPACE_SIDE) <= 1 {
+            (*World::current()).select_star(
+                ((FindStar(ptr::null_mut(), ptr::addr_of_mut!((*game).autopilot), 0, 0))
+                    .cast::<crate::engine::world::CStarDesc>())
+                .as_ref(),
+                crate::planets::starmap::current_catalog(),
+            );
+            if !(*World::current())
+                .star_pointer(crate::planets::starmap::current_catalog())
+                .is_null()
+            {
+                set_game_state(crate::engine::StoryKey::USED_BROADCASTER, 0);
+                (*game).current_activity &= !(IN_BATTLE as ACTIVITY);
+                (*game).ship_facing = 0;
                 (*game).ip_planet = 0;
                 (*game).in_orbit = 0;
-                (*game).CurrentActivity |= START_INTERPLANETARY as ACTIVITY;
+                (*game).current_activity |= START_INTERPLANETARY as ACTIVITY;
             }
         }
         (*game).autopilot.x = -1;
@@ -604,10 +559,7 @@ mod runtime {
     /// # Safety
     /// Must run on the game thread with the race queue initialized.
     pub unsafe fn showSpheres() {
-        let mut handle = (*crate::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .avail_race_q
-            .head;
+        let mut handle = (*WorldData::current()).game.avail_race_q.head;
         while !handle.is_null() {
             let fleet = handle.cast::<FLEET_INFO>();
             let next = (*fleet).succ;
@@ -623,10 +575,7 @@ mod runtime {
     /// # Safety
     /// Must run on the game thread with the race queue initialized.
     pub unsafe fn activateAllShips() {
-        let mut handle = (*crate::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .avail_race_q
-            .head;
+        let mut handle = (*WorldData::current()).game.avail_race_q.head;
         while !handle.is_null() {
             let fleet = handle.cast::<FLEET_INFO>();
             let next = (*fleet).succ;
@@ -655,7 +604,10 @@ mod runtime {
         callback: unsafe fn(*mut STAR_DESC, *mut SOLARSYS_STATE, *mut PLANET_DESC, &mut T),
         arg: &mut T,
     ) {
-        assert!(CurStarDescPtr == star.cast());
+        assert!(
+            (*World::current()).star_pointer(crate::planets::starmap::current_catalog())
+                == star.cast()
+        );
         assert!(pSolarSysState == system);
         for i in 0..(*system).SunDesc[0].NumPlanets as usize {
             callback(
@@ -705,21 +657,20 @@ mod runtime {
             return;
         }
         LockGameClock();
-        let saved_activity = (*crate::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .CurrentActivity;
+        let saved_activity = (*WorldData::current()).game.current_activity;
         DISABLE_INTERACTIVITY = 1;
         forAllStars(starRecurse, arg);
         DISABLE_INTERACTIVITY = 0;
-        (*crate::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .CurrentActivity = saved_activity;
+        (*WorldData::current()).game.current_activity = saved_activity;
         UnlockGameClock();
     }
     unsafe fn starRecurse<T>(star: *mut STAR_DESC, recurse: &mut UniverseRecurseArg<'_, T>) {
         let old_system = pSolarSysState;
-        let old_star = CurStarDescPtr;
-        CurStarDescPtr = star.cast();
+        let old_star = (*World::current()).star_pointer(crate::planets::starmap::current_catalog());
+        (*World::current()).select_star(
+            (star.cast::<crate::engine::world::CStarDesc>()).as_ref(),
+            crate::planets::starmap::current_catalog(),
+        );
         (*SysGenRNG).reseed(GetRandomSeedForStar(star));
         let mut system: SOLARSYS_STATE = mem::zeroed();
         system.SunDesc[0].pPrevDesc = ptr::null_mut();
@@ -744,7 +695,10 @@ mod runtime {
             cb(star, &system, recurse.arg);
         }
         pSolarSysState = old_system;
-        CurStarDescPtr = old_star;
+        (*World::current()).select_star(
+            (old_star).as_ref(),
+            crate::planets::starmap::current_catalog(),
+        );
     }
     unsafe fn planetRecurse<T>(
         star: *mut STAR_DESC,
@@ -752,7 +706,10 @@ mod runtime {
         planet: *mut PLANET_DESC,
         recurse: &mut UniverseRecurseArg<'_, T>,
     ) {
-        assert!(CurStarDescPtr == star.cast());
+        assert!(
+            (*World::current()).star_pointer(crate::planets::starmap::current_catalog())
+                == star.cast()
+        );
         assert!(pSolarSysState == system);
         (*planet).pPrevDesc = ptr::addr_of_mut!((*system).SunDesc[0]);
         if let Some(cb) = recurse.planetFuncPre {
@@ -780,7 +737,10 @@ mod runtime {
         moon: *mut PLANET_DESC,
         recurse: &mut UniverseRecurseArg<'_, T>,
     ) {
-        assert!(CurStarDescPtr == star.cast());
+        assert!(
+            (*World::current()).star_pointer(crate::planets::starmap::current_catalog())
+                == star.cast()
+        );
         assert!(pSolarSysState == system);
         (*moon).pPrevDesc = planet;
         if let Some(cb) = recurse.moonFunc {
@@ -894,12 +854,7 @@ mod runtime {
         libc::fprintf(
             out,
             c"- %-37s  %s\n".as_ptr(),
-            ptr::addr_of!(
-                (*crate::ships::native::abi::GLOBDATA::current())
-                    .SIS_state
-                    .PlanetName
-            )
-            .cast::<c_char>(),
+            ptr::addr_of!((*WorldData::current()).flagship.planet_name).cast::<c_char>(),
             planetTypeString(((*planet).data_index & !(PLANET_SHIELDED as BYTE)) as c_int),
         );
         dumpWorld(out, planet);
@@ -1093,10 +1048,8 @@ mod runtime {
             );
             result = result.wrapping_add(
                 ((info.density >> 8) as u32
-                    * (*crate::ships::native::abi::GLOBDATA::current())
-                        .Game_state
-                        .ElementWorth[element_category(info.type_ as usize)]
-                        as u32) as COUNT,
+                    * (*WorldData::current()).game.element_worth
+                        [element_category(info.type_ as usize)] as u32) as COUNT,
             );
         }
         result
@@ -1241,7 +1194,10 @@ mod runtime {
         dumpPlanetType(arg.out, index, planet);
     }
     unsafe fn game_string(index: usize) -> *const c_char {
-        GetStringAddress(SetAbsStringTableIndex(GameStrings, index as COUNT))
+        GetStringAddress(SetAbsStringTableIndex(
+            (*Kernel::current()).game_strings,
+            index as COUNT,
+        ))
     }
     /// # Safety
     /// Planet type must be readable, game strings initialized, and stream open.
@@ -1328,11 +1284,7 @@ mod runtime {
     /// # Safety
     /// Must run on the game thread with battle and status context initialized.
     pub unsafe fn resetCrewBattle() {
-        if (*crate::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .CurrentActivity
-            & IN_BATTLE as ACTIVITY
-            == 0
+        if (*WorldData::current()).game.current_activity & IN_BATTLE as ACTIVITY == 0
             || inHQSpace() != 0
         {
             return;
@@ -1346,7 +1298,7 @@ mod runtime {
             }
             let info = cx.race_stats(ship).ship_info;
             let delta = (info.max_crew as c_int - info.crew_level as c_int) as COUNT;
-            let old = SetContext(StatusContext);
+            let old = SetContext(cx.kernel.status_context);
             cx.delta_crew(cx.ship_element(ship), delta as SIZE);
             SetContext(old);
         });
@@ -1354,11 +1306,7 @@ mod runtime {
     /// # Safety
     /// Must run on the game thread with battle and status context initialized.
     pub unsafe fn resetEnergyBattle() {
-        if (*crate::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .CurrentActivity
-            & IN_BATTLE as ACTIVITY
-            == 0
+        if (*WorldData::current()).game.current_activity & IN_BATTLE as ACTIVITY == 0
             || inHQSpace() != 0
         {
             return;
@@ -1372,7 +1320,7 @@ mod runtime {
             }
             let info = cx.race_stats(ship).ship_info;
             let delta = (info.max_energy as c_int - info.energy_level as c_int) as COUNT;
-            let old = SetContext(StatusContext);
+            let old = SetContext(cx.kernel.status_context);
             cx.delta_energy(cx.ship_element(ship), delta as SIZE);
             SetContext(old);
         });
@@ -1488,7 +1436,7 @@ mod runtime {
                 usize::MAX,
             ),
         ];
-        let num_strings = GetStringTableCount(GameStrings) as usize;
+        let num_strings = GetStringTableCount((*Kernel::current()).game_strings) as usize;
         for i in 0..categories.len() - 1 {
             if categories[i].1 + categories[i].2 != categories[i + 1].1 {
                 libc::fprintf(
@@ -1525,7 +1473,7 @@ mod runtime {
         let old = SetContext(context);
         let frame = GetContextFGFrame();
         SetContext(old);
-        frame == Screen
+        frame == (*Kernel::current()).screen
     }
     unsafe fn countVisibleContexts() -> usize {
         let mut count = 0;
@@ -1563,7 +1511,7 @@ mod runtime {
         for (first, second) in [(p1, p2), (p2, p4), (p1, p3), (p3, p4), (p1, p4), (p2, p3)] {
             DrawLine(&mut LINE { first, second });
         }
-        let old_font = SetContextFont(TinyFont);
+        let old_font = SetContextFont((*Kernel::current()).tiny_font);
         SetContextForeGroundColor(text_color);
         let old_mode = SetContextDrawMode(DrawMode {
             kind: DrawKind_DRAW_ALPHA as BYTE,
@@ -1611,7 +1559,7 @@ mod runtime {
         1
     }
     unsafe fn getScreen() -> FRAME {
-        let old = SetContext(ScreenContext);
+        let old = SetContext((*Kernel::current()).screen_context);
         let rectangle = RECT {
             corner: POINT { x: 0, y: 0 },
             extent: EXTENT {
@@ -1624,7 +1572,7 @@ mod runtime {
         frame
     }
     unsafe fn putScreen(frame: FRAME) {
-        let old = SetContext(ScreenContext);
+        let old = SetContext((*Kernel::current()).screen_context);
         DrawStamp(&mut STAMP {
             origin: POINT { x: 0, y: 0 },
             frame,

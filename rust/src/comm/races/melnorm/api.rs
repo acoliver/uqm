@@ -31,35 +31,32 @@ mod live {
 
     use crate::ui::sis::ClearSISRect;
 
-    extern "C" {}
     use crate::threading::pacing::linked::sleep_thread as SleepThread;
     impl MelnormApi for LiveScript<Handler> {
         fn ship(&self) -> CSisState {
+            use crate::engine::WorldData;
             unsafe {
-                std::ptr::addr_of!((*crate::ships::native::abi::GLOBDATA::current()).SIS_state)
+                std::ptr::addr_of!((*WorldData::current()).flagship)
                     .cast::<CSisState>()
                     .read()
             }
         }
         fn set_ship(&mut self, ship: CSisState) {
+            use crate::engine::WorldData;
             unsafe {
-                std::ptr::addr_of_mut!((*crate::ships::native::abi::GLOBDATA::current()).SIS_state)
+                std::ptr::addr_of_mut!((*WorldData::current()).flagship)
                     .cast::<CSisState>()
                     .write(ship);
             }
         }
         fn module_cost(&self, id: usize) -> u8 {
-            unsafe {
-                (*crate::ships::native::abi::GLOBDATA::current())
-                    .Game_state
-                    .ModuleCost[id]
-            }
+            use crate::engine::WorldData;
+            unsafe { (*WorldData::current()).game.module_cost[id] }
         }
         fn set_module_cost(&mut self, id: usize, cost: u8) {
+            use crate::engine::WorldData;
             unsafe {
-                (*crate::ships::native::abi::GLOBDATA::current())
-                    .Game_state
-                    .ModuleCost[id] = cost;
+                (*WorldData::current()).game.module_cost[id] = cost;
             }
         }
         fn number(&mut self, number: i32) {

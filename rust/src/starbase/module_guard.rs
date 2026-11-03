@@ -76,11 +76,11 @@ pub enum ModuleCheck {
 /// Ship contents that can pin a module in place.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ShipLoad {
-    /// `SIS_STATE.CrewEnlisted`.
+    /// `SIS_STATE.crew_enlisted`.
     pub crew_enlisted: u16,
-    /// `SIS_STATE.TotalElementMass`.
+    /// `SIS_STATE.total_element_mass`.
     pub total_element_mass: u16,
-    /// `SIS_STATE.FuelOnBoard`.
+    /// `SIS_STATE.fuel_on_board`.
     pub fuel_on_board: u32,
 }
 

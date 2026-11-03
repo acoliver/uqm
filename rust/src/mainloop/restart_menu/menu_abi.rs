@@ -1,6 +1,5 @@
 //! Restart-menu state operations formerly supplied by rust_bridge_restart.c.
 use crate::engine::battle::schema::FlashContext;
-use crate::game_init::kernel_abi;
 use crate::ships::native::abi::*;
 use std::{ffi::c_void, ptr};
 
@@ -14,7 +13,7 @@ macro_rules! operation {
 operation!(uqm_get_utwig_bomb_on_ship() -> u8 { super::super::state_abi::game_byte("UTWIG_BOMB_ON_SHIP") });
 operation!(uqm_set_utwig_bomb_on_ship(value: u8) { super::super::state_abi::set_game_byte("UTWIG_BOMB_ON_SHIP", value); });
 operation!(uqm_get_utwig_bomb() -> u8 { super::super::state_abi::game_byte("UTWIG_BOMB") });
-operation!(uqm_set_player_control(player: u8, control: u16) { kernel_abi::PlayerControl[player as usize] = control as u8; });
+operation!(uqm_set_player_control(player: u8, control: u16) { (*crate::engine::Kernel::current()).player_control[player as usize] = control as u8; });
 operation!(uqm_get_pulsed_menu_key(index: u8) -> u32 { super::super::input_abi::PulsedInputState.menu[index as usize] as u32 });
 operation!(uqm_get_mouse_button_down() -> u32 { crate::input::sdl_input::MouseButtonDown as u32 });
 pub use crate::time::counter_abi::GetTimeCounter as uqm_get_time_counter;
@@ -26,7 +25,7 @@ operation!(uqm_reinit_race_queues() {
 });
 operation!(uqm_assign_star_planet_globals() { crate::planets::starmap::star_array = ptr::addr_of_mut!(crate::planets::tables::STARMAP_ARRAY).cast(); });
 operation!(uqm_do_popup_window_msg(id: u16) {
-    let string = crate::strings::string_table::SetAbsStringTableIndex(kernel_abi::GameStrings.cast(), (MAINMENU_STRING_BASE as u16).wrapping_add(id));
+    let string = crate::strings::string_table::SetAbsStringTableIndex((*crate::engine::Kernel::current()).game_strings.cast(), (MAINMENU_STRING_BASE as u16).wrapping_add(id));
     crate::ui::confirm::DoPopupWindow(crate::strings::string_table::GetStringAddress(string));
 });
 unsafe extern "C" fn restart_input(menu: *mut MENU_STATE) -> u32 {

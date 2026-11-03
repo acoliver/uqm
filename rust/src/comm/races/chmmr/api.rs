@@ -8,59 +8,59 @@ pub(super) trait ChmmrApi: AllianceApi<Handler> {
     fn intro_mode(&mut self, mode: i32, duration: i32);
 }
 
-fn refit(glob: &mut crate::ships::native::abi::GLOBDATA, starbase: bool) {
-    let ship = &mut glob.SIS_state;
-    let game = &mut glob.Game_state;
-    ship.ResUnits = 1_000_000;
-    ship.NumLanders = 0;
-    game.ModuleCost[ModuleType::PlanetLander as usize] = 0;
+fn refit(glob: &mut crate::engine::WorldData, starbase: bool) {
+    let ship = &mut glob.flagship;
+    let game = &mut glob.game;
+    ship.res_units = 1_000_000;
+    ship.num_landers = 0;
+    game.module_cost[ModuleType::PlanetLander as usize] = 0;
     ship.log_x = universe_to_logx(1752);
     ship.log_y = universe_to_logy(1450);
-    game.ShipFacing = 1;
+    game.ship_facing = 1;
     game.ip_planet = 3;
     game.in_orbit = 0;
     game.ip_location.x = -725;
     game.ip_location.y = 597;
     if starbase {
-        ship.FuelOnBoard = FUEL_RESERVE;
-        ship.CrewEnlisted = 0;
-        ship.TotalElementMass = 0;
-        game.ModuleCost[ModuleType::StorageBay as usize] = 0;
-        ship.ElementAmounts.fill(0);
-        ship.ModuleSlots[10..].fill(EMPTY_MODULE_SLOT);
-        game.ShipStamp.origin.x = 86;
-        game.ShipStamp.origin.y = 113;
+        ship.fuel_on_board = FUEL_RESERVE;
+        ship.crew_enlisted = 0;
+        ship.total_element_mass = 0;
+        game.module_cost[ModuleType::StorageBay as usize] = 0;
+        ship.element_amounts.fill(0);
+        ship.module_slots[10..].fill(EMPTY_MODULE_SLOT);
+        game.ship_stamp.origin.x = 86;
+        game.ship_stamp.origin.y = 113;
     } else {
         // Pack from the high end before replacing the ten bomb slots, exactly
         // as the original refit does when the Starbase has never been visited.
         let mut i = 15usize;
         while i > 0 {
-            while i > 0 && ship.ModuleSlots[i] != EMPTY_MODULE_SLOT {
+            while i > 0 && ship.module_slots[i] != EMPTY_MODULE_SLOT {
                 i -= 1;
             }
             if i == 0 {
                 break;
             }
             let mut m = i as i32 - 1;
-            while m >= 0 && ship.ModuleSlots[m as usize] == EMPTY_MODULE_SLOT {
+            while m >= 0 && ship.module_slots[m as usize] == EMPTY_MODULE_SLOT {
                 m -= 1;
             }
             if m < 0 {
                 break;
             }
-            ship.ModuleSlots[i] = ship.ModuleSlots[m as usize];
-            ship.ModuleSlots[m as usize] = EMPTY_MODULE_SLOT;
+            ship.module_slots[i] = ship.module_slots[m as usize];
+            ship.module_slots[m as usize] = EMPTY_MODULE_SLOT;
             i -= 1;
         }
-        game.ShipStamp.origin.x = 121;
-        game.ShipStamp.origin.y = 113;
+        game.ship_stamp.origin.x = 121;
+        game.ship_stamp.origin.y = 113;
     }
-    ship.DriveSlots.fill(ModuleType::FusionThruster as u8);
-    ship.JetSlots.fill(ModuleType::TurningJets as u8);
+    ship.drive_slots.fill(ModuleType::FusionThruster as u8);
+    ship.jet_slots.fill(ModuleType::TurningJets as u8);
     use ModuleType::{
         BombModule0, BombModule1, BombModule2, BombModule3, BombModule4, BombModule5,
     };
-    ship.ModuleSlots[..10].copy_from_slice(
+    ship.module_slots[..10].copy_from_slice(
         &[
             BombModule4,
             BombModule5,
@@ -80,13 +80,11 @@ fn refit(glob: &mut crate::ships::native::abi::GLOBDATA, starbase: bool) {
 impl ChmmrApi for super::super::script::live::LiveScript<Handler> {
     fn refit(&mut self) {
         use crate::comm::races::script::ScriptApi;
+        use crate::engine::WorldData;
         let starbase = self.get("STARBASE_AVAILABLE") != 0;
-        extern "C" {}
+
         unsafe {
-            refit(
-                &mut *std::ptr::addr_of_mut!((*crate::ships::native::abi::GLOBDATA::current())),
-                starbase,
-            );
+            refit(&mut *WorldData::current(), starbase);
         }
     }
     fn intro_mode(&mut self, mode: i32, duration: i32) {
@@ -96,7 +94,7 @@ impl ChmmrApi for super::super::script::live::LiveScript<Handler> {
 }
 #[cfg(test)]
 pub(super) struct World {
-    pub glob: crate::ships::native::abi::GLOBDATA,
+    pub glob: crate::engine::WorldData,
     pub refits: usize,
     pub intros: Vec<(i32, i32)>,
 }

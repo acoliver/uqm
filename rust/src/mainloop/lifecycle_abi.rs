@@ -8,6 +8,7 @@ use std::{ffi::c_void, ptr};
 pub static mut MainExited: i32 = 0;
 
 unsafe extern "C" fn on_battle_frame() {
+    use crate::engine::WorldData;
     crate::time::clock_abi::live::GameClockTick();
     let opening = crate::navigation::get("ARILOU_SPACE") == 1;
     let counter = crate::navigation::get("ARILOU_SPACE_COUNTER");
@@ -19,27 +20,19 @@ unsafe extern "C" fn on_battle_frame() {
             counter - u8::from(counter > 0)
         },
     );
-    if (*crate::ships::native::abi::GLOBDATA::current())
-        .Game_state
-        .CurrentActivity
-        & (CHECK_ABORT | CHECK_LOAD) as u16
-        == 0
-    {
+    if (*WorldData::current()).game.current_activity & (CHECK_ABORT | CHECK_LOAD) as u16 == 0 {
         crate::navigation::hyper_radar::SeedUniverse();
     }
     crate::ui::sis::DrawAutoPilotMessage(0);
 }
 
 unsafe extern "C" fn background_init_kernel(timeout: u32) {
+    use crate::engine::WorldData;
     crate::ships::master_native::LoadMasterShipList(Some(crate::threading::legacy_abi::TaskSwitch));
     crate::threading::legacy_abi::TaskSwitch();
     crate::game_init::kernel_abi::InitGameKernel();
     while crate::time::counter_abi::GetTimeCounter() <= timeout
-        && (*crate::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .CurrentActivity
-            & CHECK_ABORT as u16
-            == 0
+        && (*WorldData::current()).game.current_activity & CHECK_ABORT as u16 == 0
     {
         super::input_abi::UpdateInputState();
         if crate::time::source::is_replay() {
@@ -70,10 +63,9 @@ pub unsafe fn uqm_battle_with_frame_callback() {
 /// # Safety
 /// Called on the game thread while live state and input are initialized.
 pub unsafe extern "C" fn SignalStopMainThread() {
+    use crate::engine::WorldData;
     ptr::addr_of_mut!(GamePaused).write_volatile(0);
-    (*crate::ships::native::abi::GLOBDATA::current())
-        .Game_state
-        .CurrentActivity |= CHECK_ABORT as u16;
+    (*WorldData::current()).game.current_activity |= CHECK_ABORT as u16;
     crate::threading::legacy_abi::TaskSwitch();
 }
 

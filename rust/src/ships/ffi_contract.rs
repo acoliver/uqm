@@ -103,7 +103,7 @@ pub struct CElement {
 /// Opaque C `QUEUE` — Rust never inspects queue internals; all access is
 /// through C queue API functions.
 #[repr(C)]
-pub struct CQueue {
+pub struct Queue {
     _opaque: [u8; 0],
 }
 
@@ -262,7 +262,7 @@ pub struct CMasterShipInfo {
 // ---------------------------------------------------------------------------
 //
 // C: HSTARSHIP rust_build_ship(QUEUE *queue, SPECIES_ID species);
-// Rust: pub unsafe extern "C" fn rust_build_ship(queue: *mut CQueue,
+// Rust: pub unsafe extern "C" fn rust_build_ship(queue: *mut Queue,
 //                                          species: CSpeciesId) -> HStarship;
 // Ownership: C queue owns storage; Rust inserts into C-owned queue.
 //

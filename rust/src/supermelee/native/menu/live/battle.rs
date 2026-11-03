@@ -1,13 +1,15 @@
 //! Battle launch and network confirmation.
 use super::*;
 pub(super) unsafe fn ready() -> isize {
+    use crate::engine::Kernel;
     // SAFETY: the function contract requires live, game-thread-owned records
     // and callback arguments for all legacy accesses in this operation.
     unsafe {
         let mut done = 0;
         for player in [0usize, 1] {
             let conn = connection(player);
-            if conn.is_null() && PlayerControl[player] & NETWORK_CONTROL == 0 {
+            if conn.is_null() && (*Kernel::current()).player_control[player] & NETWORK_CONTROL == 0
+            {
                 done += 1;
                 continue;
             }
@@ -22,6 +24,7 @@ pub(super) unsafe fn ready() -> isize {
     }
 }
 pub(super) unsafe extern "C" fn confirm(state: *mut MELEE_STATE) -> u32 {
+    use crate::engine::{Kernel, WorldData};
     let session = &(*state).netplay;
     GamePaused = 0;
     if key(KEY_MENU_CANCEL) {
@@ -53,7 +56,7 @@ pub(super) unsafe extern "C" fn confirm(state: *mut MELEE_STATE) -> u32 {
         .netplay
         .netplay_notify_all_input_delay(session.options.inputDelay);
     for player in [0usize, 1] {
-        if PlayerControl[player] & NETWORK_CONTROL == 0 {
+        if (*Kernel::current()).player_control[player] & NETWORK_CONTROL == 0 {
             continue;
         }
         let conn = connection(player);
@@ -77,15 +80,10 @@ pub(super) unsafe extern "C" fn confirm(state: *mut MELEE_STATE) -> u32 {
     }
     (*state).input_func = Some(DoMelee);
     start(state);
-    u32::from(
-        (*crate::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .CurrentActivity
-            & CHECK_ABORT as u16
-            == 0,
-    )
+    u32::from((*WorldData::current()).game.current_activity & CHECK_ABORT as u16 == 0)
 }
 pub(super) unsafe fn start(state: *mut MELEE_STATE) {
+    use crate::engine::WorldData;
     FadeMusic(0, 840 / 2);
     SleepThreadUntil(FadeScreen(FADE_ALL_TO_BLACK, 840 / 2).wrapping_add(840 / 60));
     FlushColorXForms();
@@ -109,42 +107,40 @@ pub(super) unsafe fn start(state: *mut MELEE_STATE) {
         (*battle).net = None;
         free_gravity_well();
         ClearPlayerInputAll();
-        if (*crate::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .CurrentActivity
-            & CHECK_ABORT as u16
-            != 0
-        {
+        if (*WorldData::current()).game.current_activity & CHECK_ABORT as u16 != 0 {
             return;
         }
         SleepThreadUntil(FadeScreen(FADE_ALL_TO_BLACK, 840 / 2).wrapping_add(840 / 60));
         FlushColorXForms();
     }
-    (*crate::ships::native::abi::GLOBDATA::current())
-        .Game_state
-        .CurrentActivity = SUPER_MELEE as u16;
+    (*WorldData::current()).game.current_activity = SUPER_MELEE as u16;
     (*state).initialized = 0;
 }
 pub(super) unsafe fn start_button(state: *mut MELEE_STATE) {
+    use crate::engine::Kernel;
     if MeleeSetup_getFleetValue((*state).melee_setup, 0) == 0
         || MeleeSetup_getFleetValue((*state).melee_setup, 1) == 0
     {
         PlayMenuSound(2);
         return;
     }
-    if PlayerControl[0] & NETWORK_CONTROL != 0 && PlayerControl[1] & NETWORK_CONTROL != 0 {
+    if (*Kernel::current()).player_control[0] & NETWORK_CONTROL != 0
+        && (*Kernel::current()).player_control[1] & NETWORK_CONTROL != 0
+    {
         status(game_string(NETMELEE_STRING_BASE as i32 + 32));
         return;
     }
-    if (PlayerControl[0] & NETWORK_CONTROL != 0 && PlayerControl[1] & COMPUTER_CONTROL != 0)
-        || (PlayerControl[1] & NETWORK_CONTROL != 0 && PlayerControl[0] & COMPUTER_CONTROL != 0)
+    if ((*Kernel::current()).player_control[0] & NETWORK_CONTROL != 0
+        && (*Kernel::current()).player_control[1] & COMPUTER_CONTROL != 0)
+        || ((*Kernel::current()).player_control[1] & NETWORK_CONTROL != 0
+            && (*Kernel::current()).player_control[0] & COMPUTER_CONTROL != 0)
     {
         status(game_string(NETMELEE_STRING_BASE as i32 + 33));
         return;
     }
     let mut ok = true;
     for player in [0usize, 1] {
-        if PlayerControl[player] & NETWORK_CONTROL == 0 {
+        if (*Kernel::current()).player_control[player] & NETWORK_CONTROL == 0 {
             continue;
         }
         let conn = connection(player);
@@ -171,18 +167,14 @@ pub(super) unsafe fn start_button(state: *mut MELEE_STATE) {
     (*state).input_func = Some(confirm);
 }
 pub(super) unsafe extern "C" fn connecting(state: *mut MELEE_STATE) -> u32 {
+    use crate::engine::{Kernel, WorldData};
     // SAFETY: the function contract requires live, game-thread-owned records
     // and callback arguments for all legacy accesses in this operation.
     unsafe {
         let time = GetTimeCounter();
         let side = usize::from((*state).melee_option == 0);
         GamePaused = 0;
-        if (*crate::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .CurrentActivity
-            & CHECK_ABORT as u16
-            != 0
-        {
+        if (*WorldData::current()).game.current_activity & CHECK_ABORT as u16 != 0 {
             return 0;
         }
         SetMenuSounds(0, 0);
@@ -193,7 +185,7 @@ pub(super) unsafe extern "C" fn connecting(state: *mut MELEE_STATE) -> u32 {
             (*state).initialized = 1;
             let conn = open_player_network_connection(side as u16, state.cast());
             (*state).input_func = Some(connecting);
-            let font = SetContextFont(StarConFont);
+            let font = SetContextFont((*Kernel::current()).star_con_font);
             let color = SetContextForeGroundColor(rgb(0, 0, 0));
             BatchGraphics();
             let mut r = RECT {
@@ -237,7 +229,7 @@ pub(super) unsafe extern "C" fn connecting(state: *mut MELEE_STATE) -> u32 {
         if !conn.is_null() {
             let phase = NetConnection_getState(conn);
             if phase == 2 || phase == 3 {
-                PlayerControl[side] = NETWORK_CONTROL | 16;
+                (*Kernel::current()).player_control[side] = NETWORK_CONTROL | 16;
                 controls(side, true);
                 redraw();
                 status_player(side as isize);
@@ -253,23 +245,25 @@ pub(super) unsafe extern "C" fn connecting(state: *mut MELEE_STATE) -> u32 {
     }
 }
 pub(super) unsafe fn disconnects() {
+    use crate::engine::Kernel;
     for player in [0usize, 1] {
-        if PlayerControl[player] & NETWORK_CONTROL == 0 {
+        if (*Kernel::current()).player_control[player] & NETWORK_CONTROL == 0 {
             continue;
         }
         let conn = connection(player);
         if conn.is_null() || !net_connection_is_connected(conn) {
-            PlayerControl[player] = HUMAN_CONTROL | 16;
+            (*Kernel::current()).player_control[player] = HUMAN_CONTROL | 16;
             controls(player, false);
             log::info!("Player {player} has disconnected; shifting controls");
         }
     }
 }
 pub(super) unsafe fn next_control(side: usize) {
+    use crate::engine::Kernel;
     let human = HUMAN_CONTROL | 16;
     let computer = COMPUTER_CONTROL;
-    let value = PlayerControl[side];
-    PlayerControl[side] = if value == human
+    let value = (*Kernel::current()).player_control[side];
+    (*Kernel::current()).player_control[side] = if value == human
         || value == computer | 16
         || value == computer | 32
         || value == computer | 64

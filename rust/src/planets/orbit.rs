@@ -91,9 +91,6 @@ pub(crate) mod live {
 
     extern "C" {
 
-        static mut LastActivity: u16;
-        static mut SpaceContext: *mut crate::graphics::native_abi::context_desc;
-        static mut Screen: *mut crate::graphics::native_abi::frame_desc;
         static mut optWhichMenu: i32;
     }
 
@@ -107,12 +104,13 @@ pub(crate) mod live {
     }
 
     unsafe fn create_context() {
+        use crate::engine::Kernel;
         assert!(PlanetContext.is_null());
-        let old = SetContext(SpaceContext);
+        let old = SetContext((*Kernel::current()).space_context);
         let mut r = CffiPlatform.context_clip_rect();
         PlanetContext = (new_context(c"PlanetContext".as_ptr())).cast();
         SetContext(PlanetContext);
-        SetContextFGFrame(Screen.cast());
+        SetContextFGFrame((*Kernel::current()).screen.cast());
         r.height -= 75 + 5;
         CffiPlatform.set_context_clip_rect(r);
         SetContext(old);
@@ -198,6 +196,7 @@ pub(crate) mod live {
     const UPDATE: u8 = 2;
 
     unsafe fn draw_display(mode: u8) {
+        use crate::engine::WorldData;
         let g = CffiPlatform;
         g.set_context(ContextId::Space);
         let clip = g.context_clip_rect();
@@ -214,14 +213,7 @@ pub(crate) mod live {
             base::SetTransitionSource(std::ptr::null_mut());
             DrawSISFrame();
             DrawSISMessage(std::ptr::null());
-            DrawSISTitle(
-                std::ptr::addr_of!(
-                    (*crate::ships::native::abi::GLOBDATA::current())
-                        .SIS_state
-                        .PlanetName
-                )
-                .cast(),
-            );
+            DrawSISTitle(std::ptr::addr_of!((*WorldData::current()).flagship.planet_name).cast());
             DrawStarBackGround();
             DrawPlanetSurfaceBorder();
         }
@@ -256,12 +248,13 @@ pub(crate) mod live {
 
     #[no_mangle]
     pub unsafe extern "C" fn LoadPlanet(surface: *mut crate::c_bindings::global_state::FRAME_DESC) {
+        use crate::engine::Kernel;
         #[cfg(feature = "debug-process")]
         if crate::front_end::uqmdebug::DISABLE_INTERACTIVITY != 0 {
             return;
         }
         let system = solar_system::current();
-        let wait = LastActivity & CHECK_LOAD == 0;
+        let wait = (*Kernel::current()).last_activity & CHECK_LOAD == 0;
         assert!((*system).InOrbit != 0 && (*system).TopoFrame.is_null());
         create_context();
         if wait {
@@ -288,6 +281,7 @@ pub(crate) mod live {
     /// Call on the game thread with a loaded solar system. No other code may retain
     /// references to the planet resources released by this call.
     pub unsafe extern "C" fn FreePlanet() {
+        use crate::engine::Kernel;
         let system = solar_system::current();
         let orbit = std::ptr::addr_of_mut!((*system).Orbit);
         UninitSphereRotation();
@@ -329,7 +323,7 @@ pub(crate) mod live {
         ));
         (*system).SysInfo.PlanetInfo.DiscoveryString = std::ptr::null_mut();
         FreeLanderFont(std::ptr::addr_of_mut!((*system).SysInfo.PlanetInfo));
-        SetContext(SpaceContext);
+        SetContext((*Kernel::current()).space_context);
         if !PlanetContext.is_null() {
             DestroyContext(PlanetContext);
             PlanetContext = std::ptr::null_mut();
@@ -356,16 +350,10 @@ pub(crate) mod live {
 
     unsafe extern "C" fn do_orbit(menu: *mut MENU_STATE) -> u32 {
         use crate::c_bindings::controller_input::{PulsedInputState, KEY_MENU_SELECT};
+        use crate::engine::WorldData;
         let mut selected = PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0;
-        if (*crate::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .CurrentActivity
-            & (CHECK_ABORT | CHECK_LOAD)
-            != 0
-            || (*crate::ships::native::abi::GLOBDATA::current())
-                .SIS_state
-                .CrewEnlisted
-                == u16::MAX
+        if (*WorldData::current()).game.current_activity & (CHECK_ABORT | CHECK_LOAD) != 0
+            || (*WorldData::current()).flagship.crew_enlisted == u16::MAX
         {
             return 0;
         }
@@ -376,23 +364,13 @@ pub(crate) mod live {
         match (*menu).CurState {
             0 => {
                 ScanSystem();
-                if (*crate::ships::native::abi::GLOBDATA::current())
-                    .Game_state
-                    .CurrentActivity
-                    & START_ENCOUNTER
-                    != 0
-                {
+                if (*WorldData::current()).game.current_activity & START_ENCOUNTER != 0 {
                     return 0;
                 }
             }
             2 => {
                 selected = DevicesMenu() != 0;
-                if (*crate::ships::native::abi::GLOBDATA::current())
-                    .Game_state
-                    .CurrentActivity
-                    & START_ENCOUNTER
-                    != 0
-                {
+                if (*WorldData::current()).game.current_activity & START_ENCOUNTER != 0 {
                     return 0;
                 }
             }
@@ -407,12 +385,7 @@ pub(crate) mod live {
                 let old = SetInputCallback(None);
                 RepairSISBorder();
                 let autopilot = StarMap();
-                if (*crate::ships::native::abi::GLOBDATA::current())
-                    .Game_state
-                    .CurrentActivity
-                    & CHECK_ABORT
-                    != 0
-                {
+                if (*WorldData::current()).game.current_activity & CHECK_ABORT != 0 {
                     return 0;
                 }
                 SetInputCallback(old);
@@ -425,12 +398,7 @@ pub(crate) mod live {
             6 => return 0,
             _ => {}
         }
-        if (*crate::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .CurrentActivity
-            & CHECK_ABORT
-            == 0
-        {
+        if (*WorldData::current()).game.current_activity & CHECK_ABORT == 0 {
             if selected {
                 (*menu).CurState = submenu_selection((*menu).CurState, selected, optWhichMenu == 2);
                 DrawMenuStateStrings(0, i16::from((*menu).CurState));

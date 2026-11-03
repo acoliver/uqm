@@ -5,7 +5,6 @@ use super::super::abi::SummaryDesc;
 use super::super::runtime::{self, groups, live, queues, statefiles};
 use super::super::{SaveFile, SaveSlots};
 use crate::mainloop::dir_prep::saveDir;
-use crate::planets::c_api::GLOB_DATA;
 
 use crate::navigation::globals::inHQSpace;
 
@@ -14,19 +13,20 @@ use crate::planets::solarsys::playerInSolarSystem;
 use crate::navigation::groups::live::PutGroupInfo;
 
 pub(crate) unsafe fn capture(name: &[u8]) -> anyhow::Result<SaveFile> {
+    use crate::engine::WorldData;
     let star = live::capture_live_star()?;
-    let point = GLOB_DATA.Game_state.ip_location;
+    let point = (*WorldData::current()).game.ip_location;
     if inHQSpace() != 0 {
         live::prepare_live_hyper_state()?;
     } else if playerInSolarSystem() {
         live::prepare_live_solar_location()?;
     }
-    if groups::saves_ip_group_queue(GLOB_DATA.Game_state.CurrentActivity) {
+    if groups::saves_ip_group_queue((*WorldData::current()).game.current_activity) {
         PutGroupInfo(0, u8::MAX);
     }
     let summary = live::capture_live_summary(name)?;
     // SAFETY: CGameState's size, alignment and every field offset are asserted against GAME_STATE.
-    let game = &mut *std::ptr::addr_of_mut!(GLOB_DATA.Game_state)
+    let game = &mut *std::ptr::addr_of_mut!((*WorldData::current()).game)
         .cast::<crate::comm::locdata::CGameState>();
     let runtime = runtime::capture_runtime(game)?;
     game.ip_location = point;

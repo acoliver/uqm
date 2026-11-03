@@ -220,7 +220,8 @@ pub(crate) mod engine {
     /// Status rendering runs on the game thread after screen initialization.
     #[no_mangle]
     pub unsafe extern "C" fn InitStatusOffsets() {
-        Kernel::current().status_offsets = status_offsets(ScreenHeight);
+        use crate::engine::Kernel;
+        (*Kernel::current()).status_offsets = status_offsets(ScreenHeight);
     }
 
     unsafe fn filled(color: Color, mut r: RECT) {
@@ -270,6 +271,7 @@ pub(crate) mod engine {
     /// Ship info, fonts, and the active graphics context must be live.
     #[no_mangle]
     pub unsafe extern "C" fn DrawBattleCrewAmount(info: *mut SHIP_INFO, y: COORD) {
+        use crate::engine::Kernel;
         let x = if optWhichMenu == OPT_PC as i32 { 4 } else { 12 };
         let bytes = crew_text((*info).crew_level);
         let mut text = TEXT {
@@ -281,7 +283,7 @@ pub(crate) mod engine {
             align: TEXT_ALIGN_ALIGN_LEFT,
             CharCount: COUNT::MAX,
         };
-        SetContextFont(StarConFont);
+        SetContextFont((*Kernel::current()).star_con_font);
         filled(
             rgb15(10, 10, 10),
             rect(x, text.baseline.y.wrapping_sub(5), 24, 5),
@@ -293,6 +295,7 @@ pub(crate) mod engine {
     /// # Safety
     /// Ship, captain assets, and the active status context must be live.
     pub unsafe fn draw_captains_window(cx: &mut Cx<'_>, ship: crate::engine::battle::ShipId) {
+        use crate::engine::{Kernel, WorldData};
         let mut captain = (*cx.captain_pointer(ship)).clone();
         let mut frame = captain.background;
         if !frame.is_null() {
@@ -359,15 +362,12 @@ pub(crate) mod engine {
                     x: 32,
                     y: cy.wrapping_add(6),
                 },
-                pStr: (&raw const (*crate::ships::native::abi::GLOBDATA::current())
-                    .SIS_state
-                    .CommanderName)
-                    .cast(),
+                pStr: (&raw const (*WorldData::current()).flagship.commander_name).cast(),
                 align: TEXT_ALIGN_ALIGN_CENTER,
                 CharCount: COUNT::MAX,
             };
             SetContextForeGroundColor(rgb15(0, 20, 0));
-            SetContextFont(TinyFont);
+            SetContextFont((*Kernel::current()).tiny_font);
             font_DrawText(&mut text);
         }
         if cx.race_stats(ship).ship_info.max_crew > MAX_CREW_SIZE as COUNT

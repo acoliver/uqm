@@ -2725,10 +2725,8 @@ pub const CHECK_ABORT: _bindgen_ty_8 = 16384;
 pub type _bindgen_ty_8 = ::std::os::raw::c_uint;
 pub type ACTIVITY = UWORD;
 
-pub use crate::ships::native::abi::GLOBDATA;
-extern "C" {
-    
-}
+
+
 pub const DEFGRP_NONE: _bindgen_ty_9 = 0;
 pub const DEFGRP_SHOFIXTI: _bindgen_ty_9 = 1;
 pub const DEFGRP_ZOQFOT: _bindgen_ty_9 = 2;
@@ -2748,13 +2746,11 @@ pub const NUM_DEFGRPS: _bindgen_ty_9 = 15;
 pub type _bindgen_ty_9 = ::std::os::raw::c_uint;
 
 #[cfg(not(test))]
-pub use crate::navigation::globals::getGameState;
+pub use crate::state::ffi::rust_get_game_state_bits as getGameState;
 
 #[cfg(not(test))]
-pub use crate::navigation::globals::setGameState;
-extern "C" {
-    pub static mut RadarContext: CONTEXT;
-}
+pub use crate::state::ffi::rust_set_game_state_bits as setGameState;
+
 #[cfg(not(test))]
 pub use crate::navigation::globals::FreeSC2Data;
 #[cfg(test)]
@@ -3768,9 +3764,7 @@ extern "C" {
 extern "C" {
     pub static mut EncounterGroup: BYTE;
 }
-extern "C" {
-    pub static mut CurStarDescPtr: *mut crate::savegame::runtime::star::CStarDesc;
-}
+
 extern "C" {
     pub static mut star_array: *mut crate::savegame::runtime::star::CStarDesc;
 }
@@ -3788,51 +3782,21 @@ pub use crate::ships::master_native::engine::FindMasterShipIndex;
 
 #[cfg(not(test))]
 pub use crate::ships::master_native::engine::GetShipMeleeIconsFromIndex;
-extern "C" {
-    pub static mut Screen: FRAME;
-}
-extern "C" {
-    pub static mut ActivityFrame: FRAME;
-}
-extern "C" {
-    pub static mut StatusFrame: FRAME;
-}
-extern "C" {
-    pub static mut FlagStatFrame: FRAME;
-}
-extern "C" {
-    pub static mut MiscDataFrame: FRAME;
-}
-extern "C" {
-    pub static mut FontGradFrame: FRAME;
-}
-extern "C" {
-    pub static mut OffScreenContext: CONTEXT;
-}
-extern "C" {
-    pub static mut ScreenContext: CONTEXT;
-}
-extern "C" {
-    pub static mut SpaceContext: CONTEXT;
-}
-extern "C" {
-    pub static mut StatusContext: CONTEXT;
-}
-extern "C" {
-    pub static mut StarConFont: FONT;
-}
-extern "C" {
-    pub static mut MicroFont: FONT;
-}
-extern "C" {
-    pub static mut TinyFont: FONT;
-}
-extern "C" {
-    pub static mut LastActivity: ACTIVITY;
-}
-extern "C" {
-    pub static mut PlayerControl: [u8;2];
-}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 #[cfg(not(test))]
 pub use crate::game_init::cleanup::FreeKernel;
 #[cfg(not(test))]
@@ -4039,9 +4003,7 @@ pub const MAINMENU_STRING_BASE: _bindgen_ty_25 = 505;
 pub const NETMELEE_STRING_BASE: _bindgen_ty_25 = 560;
 pub const GAMESTR_COUNT: _bindgen_ty_25 = 579;
 pub type _bindgen_ty_25 = ::std::os::raw::c_uint;
-extern "C" {
-    pub static mut GameStrings: STRING;
-}
+
 pub const ARILOU_ENTRANCE_EVENT: _bindgen_ty_26 = 0;
 pub const ARILOU_EXIT_EVENT: _bindgen_ty_26 = 1;
 pub const HYPERSPACE_ENCOUNTER_EVENT: _bindgen_ty_26 = 2;
@@ -4124,9 +4086,7 @@ pub type _bindgen_ty_27 = ::std::os::raw::c_uint;
 pub use crate::ships::native::abi::MeleeSetup;
 pub use crate::ships::native::abi::MeleeTeam;
 pub type FleetShipIndex = COUNT;
-extern "C" {
-    pub static mut stars_in_space: FRAME;
-}
+
 
 #[cfg(not(test))]
 pub use crate::game_init::space_resources::live::InitSpace;
@@ -4512,10 +4472,8 @@ pub const MENU_SOUND_EFFECT_MENU_SOUND_SUCCESS: MENU_SOUND_EFFECT = 1;
 pub const MENU_SOUND_EFFECT_MENU_SOUND_FAILURE: MENU_SOUND_EFFECT = 2;
 pub const MENU_SOUND_EFFECT_MENU_SOUND_INVOKED: MENU_SOUND_EFFECT = 3;
 pub type MENU_SOUND_EFFECT = ::std::os::raw::c_uint;
-extern "C" {
-}
-extern "C" {
-}
+
+
 pub type MENU_SOUND_FLAGS = UWORD;
 
 #[cfg(not(test))]
@@ -4557,7 +4515,7 @@ pub use crate::ui::shipyard::DoShipyard;
 
 #[cfg(not(test))]
 pub use crate::ui::starbase::DrawShipPiece;
-extern "C" {}
+
 
 #[cfg(not(test))]
 pub use crate::ui::shipstat::DrawCrewFuelString;

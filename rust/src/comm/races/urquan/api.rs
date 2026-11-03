@@ -9,19 +9,13 @@ pub(super) trait UrquanApi: EncounterApi<Handler> {
 #[cfg(not(test))]
 impl UrquanApi for super::super::script::live::LiveScript<Handler> {
     fn group_battle(&self, state_key: &str) -> bool {
-        extern "C" {}
+        use crate::engine::WorldData;
         let (start, _) = crate::state::game_state_keys::bit_range(state_key)
             .expect("Ur-Quan group offset state is missing");
         let offset = unsafe { crate::state::ffi::rust_get_game_state_32(start as i32) };
         unsafe {
-            (*crate::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .BattleGroupRef
-                != 0
-                && (*crate::ships::native::abi::GLOBDATA::current())
-                    .Game_state
-                    .BattleGroupRef
-                    == offset
+            (*WorldData::current()).game.battle_group_ref != 0
+                && (*WorldData::current()).game.battle_group_ref == offset
         }
     }
 

@@ -281,6 +281,7 @@ pub(crate) mod engine {
     /// # Safety
     /// Ship/target elements, descriptors and intersect frames must be live.
     pub unsafe fn abandon_ship(cx: &mut Cx<'_>, ship: ElementId, target: ElementId, mut loss: u16) {
+        use crate::engine::Kernel;
         let mut owner = cx.owner(ship);
         if cx.race_stats(owner).ship_info.ship_flags & CREW_IMMUNE as u16 != 0 {
             return;
@@ -320,7 +321,7 @@ pub(crate) mod engine {
             let h = (i32::from(cx.random() as u16) % i32::from(rect.extent.height)) as i16;
             let mut crew_intersect: INTERSECT_CONTROL = mem::zeroed();
             crew_intersect.EndPoint = intersect.EndPoint;
-            image!(frame; crew_intersect.IntersectStamp.frame, DecFrameIndex(stars_in_space));
+            image!(frame; crew_intersect.IntersectStamp.frame, DecFrameIndex((*Kernel::current()).stars_in_space));
             if dx == 0 && dy == 0 {
                 crew_intersect.EndPoint.x = crew_intersect
                     .EndPoint

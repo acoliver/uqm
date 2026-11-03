@@ -222,7 +222,7 @@ pub(crate) mod engine {
             cx.ship_state_mut(ss).input |= WEAPON as u8;
         } else if cx.ship_state(ss).special_counter == 0
             && (cx.world.activity() as u8 != IN_ENCOUNTER as u8
-                || cx.story_state(StoryKey::ProbeIlwrathEncounter) == 0)
+                || cx.story_state(StoryKey::PROBE_ILWRATH_ENCOUNTER) == 0)
         {
             cx.ship_state_mut(ss).input &= !(SPECIAL as u8);
             if !object_cloaked(cx, ship) && cx.ship_state(ss).input & WEAPON as u8 == 0 {

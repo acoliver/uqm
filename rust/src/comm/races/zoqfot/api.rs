@@ -54,7 +54,7 @@ mod live {
     use crate::comm::locdata::COMM_DATA;
     use crate::comm::races::script::{live::LiveScript, ScriptApi};
     static mut LAST_ALIEN: u8 = 1;
-    extern "C" {}
+
     unsafe fn select(speaker: Speaker) {
         select_speaker(
             &mut *std::ptr::addr_of_mut!(COMM_DATA),
@@ -88,16 +88,11 @@ mod live {
             self.talk_segue(track);
         }
         fn date(&self) -> (i16, u8) {
+            use crate::engine::WorldData;
             unsafe {
                 (
-                    (*crate::ships::native::abi::GLOBDATA::current())
-                        .Game_state
-                        .GameClock
-                        .year_index as i16,
-                    (*crate::ships::native::abi::GLOBDATA::current())
-                        .Game_state
-                        .GameClock
-                        .month_index,
+                    (*WorldData::current()).game.game_clock.year_index as i16,
+                    (*WorldData::current()).game.game_clock.month_index,
                 )
             }
         }

@@ -482,7 +482,7 @@ pub use crate::supermelee::native::teams::MeleeSetup_delete;
 pub use crate::supermelee::native::teams::MeleeSetup_setShip;
 
 pub use crate::supermelee::native::teams::MeleeSetup_getShip;
-extern "C" {}
+
 
 pub use crate::supermelee::native::teams::MeleeSetup_getFleet;
 
@@ -607,7 +607,7 @@ pub use crate::supermelee::netplay::netmisc::NetMelee_connectCallback;
 pub use crate::supermelee::netplay::netmisc::NetMelee_closeCallback;
 
 pub use crate::supermelee::netplay::netmisc::NetMelee_errorCallback;
-extern "C" {}
+
 
 pub use crate::supermelee::netplay::netsend::sendPacket;
 

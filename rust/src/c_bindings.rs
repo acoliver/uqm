@@ -44,11 +44,6 @@ pub mod global_state {
 pub mod solar_system {
     use super::global_state::SOLARSYS_STATE;
 
-    extern "C" {
-        #[link_name = "pSolarSysState"]
-        static mut P_SOLAR_SYSTEM_STATE: *mut SOLARSYS_STATE;
-    }
-
     /// The live `pSolarSysState`; NULL outside a solar system.
     ///
     /// # Safety
@@ -56,7 +51,7 @@ pub mod solar_system {
     /// solar system. The caller may dereference the result only while it knows
     /// the state is not being torn down.
     pub unsafe fn current() -> *mut SOLARSYS_STATE {
-        std::ptr::addr_of!(P_SOLAR_SYSTEM_STATE).read()
+        crate::planets::solarsys::lifecycle::P_SOLAR_SYS_STATE
     }
 }
 
@@ -94,21 +89,18 @@ macro_rules! assert_c_layout {
 }
 pub(crate) use assert_c_layout;
 
-extern "C" {
-    static mut PlayerControls:
-        [controller_input::CONTROL_TEMPLATE; crate::battle::battle_controls::NUM_PLAYERS];
-}
-
 /// Read one control-template selector without creating a reference to the C global.
 ///
 /// # Safety
 ///
 /// The caller must run on the game thread at a point where C cannot mutate
 /// `PlayerControls` concurrently.
+#[cfg(not(test))]
 pub unsafe fn player_control_template(player: usize) -> Option<controller_input::CONTROL_TEMPLATE> {
     if player >= crate::battle::battle_controls::NUM_PLAYERS {
         return None;
     }
-    let controls = std::ptr::addr_of!(PlayerControls).cast::<controller_input::CONTROL_TEMPLATE>();
+    let controls = std::ptr::addr_of!(crate::mainloop::input_abi::live::PlayerControls)
+        .cast::<controller_input::CONTROL_TEMPLATE>();
     Some(unsafe { controls.add(player).read_volatile() })
 }

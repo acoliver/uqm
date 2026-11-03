@@ -144,11 +144,13 @@ impl Battle {
             let graphics = uqm_rust::graphics::context_abi::_GraphicsStatusFlags;
             uqm_rust::graphics::context_abi::_GraphicsStatusFlags &= !4;
             uqm_rust::app::bridge::battle(|battle| {
-                battle.reset_element_capacity(usize::from(capacity));
+                (*uqm_rust::engine::battle::record::Kernel::current())
+                    .reset_element_capacity(usize::from(capacity));
             });
             uqm_rust::app::bridge::battle(|battle| {
                 for side in 0..2 {
-                    battle.reset_ship_capacity(side, 32);
+                    (*uqm_rust::engine::battle::record::Kernel::current())
+                        .reset_ship_capacity(side, 32);
                 }
             });
             InitDisplayList();
@@ -165,10 +167,13 @@ impl Drop for Battle {
     fn drop(&mut self) {
         // SAFETY: ships and elements created after this owner have already dropped.
         unsafe {
-            uqm_rust::app::bridge::battle(|battle| battle.reset_element_capacity(0));
+            uqm_rust::app::bridge::battle(|battle| {
+                (*uqm_rust::engine::battle::record::Kernel::current()).reset_element_capacity(0)
+            });
             uqm_rust::app::bridge::battle(|battle| {
                 for side in 0..2 {
-                    battle.reset_ship_capacity(side, 0);
+                    (*uqm_rust::engine::battle::record::Kernel::current())
+                        .reset_ship_capacity(side, 0);
                 }
             });
             (ScreenWidth, ScreenHeight) = self.dimensions;
@@ -204,8 +209,9 @@ impl<'a> Ship<'a> {
         // SAFETY: construction runs inside the serialized, published test battle.
         unsafe {
             let desc = Box::new(descriptor(species));
-            let (raw_ship, ship_id) = uqm_rust::app::bridge::battle(|owner| {
-                let mut ships = owner.ships(player as usize);
+            let (raw_ship, ship_id) = uqm_rust::app::bridge::battle(|_| {
+                let mut ships =
+                    (*uqm_rust::engine::battle::record::Kernel::current()).ships(player as usize);
                 let link = ships
                     .alloc()
                     .unwrap_or_else(|| panic!("fixture ship pool exhausted"));
@@ -603,8 +609,9 @@ impl Drop for Ship<'_> {
                     cx.dispose(self.id);
                 }
             });
-            uqm_rust::app::bridge::battle(|owner| {
-                let mut ships = owner.ships(self.ship_id.side() as usize);
+            uqm_rust::app::bridge::battle(|_| {
+                let mut ships = (*uqm_rust::engine::battle::record::Kernel::current())
+                    .ships(self.ship_id.side() as usize);
                 let link = ships.link(self.ship_id);
                 if ships.linked(link) {
                     ships.remove(link);

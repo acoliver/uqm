@@ -16,9 +16,9 @@ use crate::automation::script::ShipResourcesAssertion;
 /// The two values a fuel purchase or reward changes, as stored in `SIS_STATE`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ShipResources {
-    /// `SIS_STATE.FuelOnBoard`, raw fuel points (100 per displayed unit).
+    /// `SIS_STATE.fuel_on_board`, raw fuel points (100 per displayed unit).
     pub fuel_on_board: u32,
-    /// `SIS_STATE.ResUnits`.
+    /// `SIS_STATE.res_units`.
     pub res_units: u32,
 }
 

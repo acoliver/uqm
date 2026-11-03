@@ -84,6 +84,9 @@ use crate::graphics::frame_abi::DrawFilledRectangle;
 #[cfg(not(test))]
 use crate::graphics::frame_abi::DrawStamp;
 #[cfg(not(test))]
+#[cfg(not(test))]
+use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
+#[cfg(not(test))]
 use crate::graphics::pixmap_abi::IncFrameIndex;
 #[cfg(not(test))]
 use crate::graphics::pixmap_abi::ReleaseDrawable;
@@ -91,12 +94,6 @@ use crate::graphics::pixmap_abi::ReleaseDrawable;
 use crate::graphics::pixmap_abi::SetAbsFrameIndex;
 #[cfg(not(test))]
 use crate::ui::sis::capacity::GetStorageBayCapacity;
-#[cfg(not(test))]
-extern "C" {
-    static mut RadarContext: *mut crate::graphics::native_abi::context_desc;
-}
-#[cfg(not(test))]
-use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 
 /// Load the global LanderFrame graphics. Called by `load_lander_data`.
 pub fn load_lander_frames() {
@@ -200,34 +197,20 @@ pub fn borrowed_assets(
 /// Read `GLOBAL_SIS(NumLanders)` from the global SIS state.
 #[cfg(not(test))]
 fn sis_num_landers() -> u8 {
-    extern "C" {}
-    unsafe {
-        std::ptr::addr_of!(
-            (*crate::ships::native::abi::GLOBDATA::current())
-                .SIS_state
-                .NumLanders
-        )
-        .read()
-    }
+    use crate::engine::WorldData;
+    unsafe { std::ptr::addr_of!((*WorldData::current()).flagship.num_landers).read() }
 }
 
 /// Read `GLOBAL_SIS(TotalElementMass)` from the global SIS state.
 #[cfg(not(test))]
 fn sis_total_element_mass() -> u16 {
-    extern "C" {}
-    unsafe {
-        std::ptr::addr_of!(
-            (*crate::ships::native::abi::GLOBDATA::current())
-                .SIS_state
-                .TotalElementMass
-        )
-        .read()
-    }
+    use crate::engine::WorldData;
+    unsafe { std::ptr::addr_of!((*WorldData::current()).flagship.total_element_mass).read() }
 }
 
 /// Read a game state bit-field via the FFI singleton.
 #[cfg(not(test))]
-fn get_game_state(name: &str) -> u32 {
+fn get_game_state(name: crate::engine::StoryKey) -> u32 {
     crate::state::game_state_keys::get_game_state(name)
 }
 
@@ -240,6 +223,8 @@ fn get_game_state(name: &str) -> u32 {
 #[no_mangle]
 pub extern "C" fn InitLander(lander_flags: u8) {
     #[cfg(not(test))]
+    use crate::engine::Kernel;
+    #[cfg(not(test))]
     unsafe {
         let Ok(state) = LANDER_FRAMES.lock() else {
             return;
@@ -249,7 +234,7 @@ pub extern "C" fn InitLander(lander_flags: u8) {
         }
         let lander_frame_0 = state.frames[0];
 
-        let old_context = SetContext(RadarContext);
+        let old_context = SetContext((*Kernel::current()).radar_context);
         BatchGraphics();
 
         let mut r = CRect {
@@ -286,8 +271,8 @@ unsafe fn draw_lander_status(lander_frame_0: *mut c_void, lander_flags: u8) {
 
     let (shield_flags, capacity_shift);
     if lander_flags == 0 {
-        shield_flags = get_game_state("LANDER_SHIELDS") as u8;
-        capacity_shift = get_game_state("IMPROVED_LANDER_CARGO") as u8;
+        shield_flags = get_game_state(crate::engine::StoryKey::LANDER_SHIELDS) as u8;
+        capacity_shift = get_game_state(crate::engine::StoryKey::IMPROVED_LANDER_CARGO) as u8;
     } else {
         shield_flags = lander_flags
             & ((1 << EARTHQUAKE_DISASTER)

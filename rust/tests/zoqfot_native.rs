@@ -82,7 +82,7 @@ fn tongue_chain_extends_in_facing_direction_and_stops_at_zero() {
         let _battle = Battle::new(64);
         unsafe {
             let mut ship = Ship::new(&_battle, SPECIES_ID_ZOQFOTPIK_ID, 0);
-            ship.ship_mut().ShipFacing = 0;
+            ship.ship_mut().ship_facing = 0;
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
             with_rng(3, 0, || ship.postprocess());
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 3);
@@ -185,7 +185,7 @@ fn ai_tongue_range_and_facing_suppress_spit_without_energy_gate() {
                     which_turn: turn,
                     MoveState: MOVEMENT_STATE_ENTICE,
                 };
-                ship.ship_mut().ShipFacing = face;
+                ship.ship_mut().ship_facing = face;
                 ship.ship_mut().ship_input_state = WEAPON as u8;
                 with_rng(5, 0, || {
                     ship.intelligence(&mut *ship.ptr(), &mut concerns, 0)

@@ -62,13 +62,14 @@ pub(super) unsafe fn coarse() {
 }
 
 unsafe fn pc() {
+    use crate::engine::Kernel;
     let info = (*solar_system::current()).SysInfo.PlanetInfo;
     let g = CffiPlatform;
     SetContext(PlanetContext);
     g.set_fg_color(Rgba::rgb15(0, 0, 21));
-    SetContextFont((MicroFont).cast());
+    SetContextFont(((*Kernel::current()).micro_font).cast());
     text(width() >> 1, 13, Align::Center, title());
-    SetContextFont((TinyFont).cast());
+    SetContextFont(((*Kernel::current()).tiny_font).cast());
     let orbit = (i64::from(info.PlanetToSunDist) * 100 + 256) / 512;
     pc_value(5, 40, 0, scan_value(orbit, &g.game_string(487)));
     let atmosphere = if info.AtmoDensity == u16::MAX {
@@ -143,11 +144,12 @@ unsafe fn pc() {
 }
 
 unsafe fn three_do() {
+    use crate::engine::Kernel;
     let info = (*solar_system::current()).SysInfo.PlanetInfo;
     let g = CffiPlatform;
     SetContext(PlanetContext);
     g.set_fg_color(Rgba::rgb15(15, 0, 25));
-    SetContextFont((MicroFont).cast());
+    SetContextFont(((*Kernel::current()).micro_font).cast());
     text(width() >> 1, 13, Align::Center, title());
     draw(
         (base::SetAbsFrameIndex((SpaceJunkFrame).cast(), 20)).cast(),

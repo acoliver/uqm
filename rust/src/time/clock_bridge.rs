@@ -6,25 +6,9 @@ use std::ffi::c_int;
 
 use crate::bridge_log::rust_bridge_log_msg;
 use crate::c_bindings::{assert_c_layout, global_state};
-use crate::collections::queue::{HLink, Queue};
+use crate::collections::queue::HLink;
 
-// CLOCK_STATE layout must match C struct exactly
-// C layout (from clock.h):
-//   BYTE day_index, month_index;  // 2 bytes
-//   COUNT year_index;             // 2 bytes (unsigned short)
-//   SIZE tick_count, day_in_ticks; // 4 bytes (2x signed short)
-//   QUEUE event_q;                // 40 bytes (inline struct, element is EVENT)
-// Total: 48 bytes. The build checks every field against bindgen's reading of
-// clock.h, so a layout drift is a compile error.
-#[repr(C)]
-pub struct ClockState {
-    pub day_index: u8,
-    pub month_index: u8,
-    pub year_index: u16,   // COUNT = unsigned short
-    pub tick_count: i16,   // SIZE = signed short
-    pub day_in_ticks: i16, // SIZE = signed short
-    pub event_q: Queue,
-}
+pub use crate::engine::battle::schema::CLOCK_STATE as ClockState;
 
 /// C `EVENT` (clock.h): a scheduled game-clock event, the element type of
 /// `ClockState::event_q`.
@@ -43,18 +27,6 @@ pub struct CEvent {
 /// `NUM_EVENTS` (gameev.h): the number of event kinds, and the size of the
 /// pool `InitGameClock` allocates for `ClockState::event_q`.
 pub const NUM_EVENTS: usize = global_state::NUM_EVENTS as usize;
-
-assert_c_layout!(
-    ClockState,
-    crate::engine::battle::schema::CLOCK_STATE {
-        day_index: day_index,
-        month_index: month_index,
-        year_index: year_index,
-        tick_count: tick_count,
-        day_in_ticks: day_in_ticks,
-        event_q: event_q,
-    }
-);
 
 assert_c_layout!(
     CEvent,

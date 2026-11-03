@@ -8,8 +8,17 @@ use std::ptr;
 
 #[no_mangle]
 pub static mut star_array: *mut CStarDesc = ptr::null_mut();
-#[no_mangle]
-pub static mut CurStarDescPtr: *mut CStarDesc = ptr::null_mut();
+
+/// Borrow the current catalog without retaining it across a catalog replacement.
+/// # Safety
+/// Game thread only. A non-null catalog must contain CATALOG_LEN live entries.
+pub unsafe fn current_catalog<'a>() -> Option<&'a [CStarDesc; crate::engine::world::CATALOG_LEN]> {
+    unsafe {
+        star_array
+            .cast::<[CStarDesc; crate::engine::world::CATALOG_LEN]>()
+            .as_ref()
+    }
+}
 
 unsafe fn find_star(
     base: *mut CStarDesc,
@@ -94,18 +103,15 @@ pub(crate) mod naming {
 
     use crate::strings::string_table::GetStringAddress;
 
-    extern "C" {
-        static mut GameStrings: *mut crate::strings::string_table::StringTableEntry;
-    }
-
     /// # Safety
     /// `star` is readable, and `buffer` has space for the prefix and cluster name.
     #[no_mangle]
     pub unsafe extern "C" fn GetClusterName(star: *const CStarDesc, buffer: *mut c_char) {
+        use crate::engine::Kernel;
         let mut out = buffer;
         if (*star).prefix != 0 {
             let mut text = GetStringAddress(SetAbsStringTableIndex(
-                (GameStrings).cast(),
+                ((*Kernel::current()).game_strings).cast(),
                 crate::c_bindings::global_state::STAR_NUMBER_BASE as u16 + (*star).prefix as u16
                     - 1,
             ));
@@ -123,7 +129,7 @@ pub(crate) mod naming {
             }
         }
         let mut text = GetStringAddress(SetAbsStringTableIndex(
-            (GameStrings).cast(),
+            ((*Kernel::current()).game_strings).cast(),
             (*star).postfix as u16,
         ));
         if text.is_null() {

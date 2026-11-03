@@ -69,6 +69,7 @@ impl GammaRange {
 #[cfg(not(test))]
 pub(crate) mod runtime {
     use super::*;
+    use crate::engine::{Kernel, WorldData};
     use crate::memory::{rust_hfree as HFree, rust_hmalloc as HMalloc};
 
     use crate::video::control::{InitVideoPlayer, UninitVideoPlayer};
@@ -266,7 +267,7 @@ pub(crate) mod runtime {
             SetDefaultMenuRepeatDelay();
             (*state).NextTime = GetTimeCounter();
             SetDefaults();
-            Widget_SetFont(StarConFont);
+            Widget_SetFont((*Kernel::current()).star_con_font);
             Widget_SetWindowColors(
                 rgb15(0x14, 0x14, 0x14),
                 rgb15(8, 8, 8),
@@ -310,11 +311,7 @@ pub(crate) mod runtime {
         SleepThreadUntil((*state).NextTime.wrapping_add(MENU_FRAME_RATE));
         (*state).NextTime = GetTimeCounter();
         BOOLEAN::from(
-            (*crate::ships::native::abi::GLOBDATA::current())
-                .Game_state
-                .CurrentActivity
-                & CHECK_ABORT as u16
-                == 0
+            (*WorldData::current()).game.current_activity & CHECK_ABORT as u16 == 0
                 && !NEXT.is_null(),
         )
     }
@@ -877,9 +874,7 @@ pub(crate) mod runtime {
         }
         DONE = 0;
         DoInput(ptr::addr_of_mut!(state).cast(), 1);
-        (*crate::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .CurrentActivity &= !(CHECK_ABORT as u16);
+        (*WorldData::current()).game.current_activity &= !(CHECK_ABORT as u16);
         PropagateResults();
         if !SETUP_TAB.is_null() {
             clean_up_widgets();

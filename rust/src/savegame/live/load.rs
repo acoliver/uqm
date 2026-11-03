@@ -4,27 +4,28 @@ use super::super::runtime::{self, groups, queues, statefiles};
 use super::super::{SaveFile, SaveSlots};
 use crate::comm::dispatch::{IN_INTERPLANETARY, START_ENCOUNTER, START_INTERPLANETARY};
 use crate::mainloop::dir_prep::saveDir;
-use crate::planets::c_api::GLOB_DATA;
 
 #[no_mangle]
 pub static mut NextActivity: u16 = 0;
 
 use crate::planets::starmap::FindStar;
 
-extern "C" {
-    static mut CurStarDescPtr: *mut crate::savegame::runtime::star::CStarDesc;
-}
-
 pub(in crate::savegame) unsafe fn finish_load(star: &super::super::StarDesc, activity: u16) {
+    use crate::engine::{Kernel, World as GameWorld};
     crate::planets::c_api::reset_encounter();
     // Loading can run inside a ship callback's menu. Unlink the old roster now,
     // but keep its records alive through callbacks and terminal-outcome capture.
-    crate::engine::battle::record::Kernel::current().request_ship_reset();
+    (*Kernel::current()).request_ship_reset();
     let mut point = crate::comm::dispatch::CPoint {
         x: star.star_pt.x,
         y: star.star_pt.y,
     };
-    CurStarDescPtr = FindStar(std::ptr::null_mut(), &mut point, 0, 0).cast();
+    (*GameWorld::current()).select_star(
+        (FindStar(std::ptr::null_mut(), &mut point, 0, 0)
+            .cast::<crate::engine::world::CStarDesc>())
+        .as_ref(),
+        crate::planets::starmap::current_catalog(),
+    );
     NextActivity = activity;
     if activity & START_ENCOUNTER == 0 && activity & 0xff == IN_INTERPLANETARY {
         NextActivity |= START_INTERPLANETARY;
@@ -32,8 +33,9 @@ pub(in crate::savegame) unsafe fn finish_load(star: &super::super::StarDesc, act
 }
 
 unsafe fn install(save: SaveFile) -> anyhow::Result<()> {
+    use crate::engine::WorldData;
     // SAFETY: CGameState's size, alignment and every field offset are asserted against GAME_STATE.
-    let game = &mut *std::ptr::addr_of_mut!(GLOB_DATA.Game_state)
+    let game = &mut *std::ptr::addr_of_mut!((*WorldData::current()).game)
         .cast::<crate::comm::locdata::CGameState>();
     let restored = runtime::restore_runtime(game, &save.global, &save.game_state, &save.events)?;
     queues::restore_queues(
@@ -60,7 +62,7 @@ unsafe fn install(save: SaveFile) -> anyhow::Result<()> {
             battle_groups: save.battle_groups,
         },
     )?;
-    std::ptr::addr_of_mut!(GLOB_DATA.SIS_state)
+    std::ptr::addr_of_mut!((*WorldData::current()).flagship)
         .cast::<crate::comm::locdata::CSisState>()
         .write((&save.summary.sis).into());
     finish_load(&save.star, restored.next_activity);

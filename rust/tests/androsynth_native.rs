@@ -134,7 +134,7 @@ fn bubble_is_launched_with_the_c_missile_block() {
         let _battle = Battle::new(32);
         unsafe {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_ANDROSYNTH_ID, 0).guardian_form();
-            ship.ship_mut().ShipFacing = 4;
+            ship.ship_mut().ship_facing = 4;
             ship.element_mut().next.location = POINT { x: 1000, y: 2000 };
             let bubbles = ship.weapon(1);
 
@@ -379,7 +379,7 @@ fn blazer_thrusts_on_its_own_and_turns_one_facing_per_tick() {
             assert_eq!(velocity_fields(&ship.element_mut().velocity), [0; 9]);
 
             ship.element_mut().thrust = 0;
-            ship.ship_mut().ShipFacing = 5;
+            ship.ship_mut().ship_facing = 5;
             ship.ship_mut().cur_status_flags = (THRUST | WEAPON | SPECIAL | LEFT) as u16;
             ship.preprocess();
             assert_eq!(
@@ -391,7 +391,7 @@ fn blazer_thrusts_on_its_own_and_turns_one_facing_per_tick() {
                 velocity_toward(60, 4)
             );
 
-            ship.ship_mut().ShipFacing = 15;
+            ship.ship_mut().ship_facing = 15;
             ship.ship_mut().cur_status_flags = RIGHT as u16;
             ship.preprocess();
             // facing 16 wraps to 0
@@ -402,7 +402,7 @@ fn blazer_thrusts_on_its_own_and_turns_one_facing_per_tick() {
 
             // A blocked turn keeps the facing.
             ship.element_mut().turn = 1;
-            ship.ship_mut().ShipFacing = 15;
+            ship.ship_mut().ship_facing = 15;
             ship.ship_mut().cur_status_flags = RIGHT as u16;
             ship.preprocess();
             assert_eq!(

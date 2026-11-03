@@ -27,14 +27,10 @@ unsafe fn advance(state: *mut MELEE_STATE) {
     ((*state).row, (*state).col) = super::super::rules::advance_cursor((*state).row, (*state).col);
 }
 pub(super) unsafe extern "C" fn edit(state: *mut MELEE_STATE) -> u32 {
+    use crate::engine::WorldData;
     let time = GetTimeCounter();
     GamePaused = 0;
-    if (*crate::ships::native::abi::GLOBDATA::current())
-        .Game_state
-        .CurrentActivity
-        & CHECK_ABORT as u16
-        != 0
-    {
+    if (*WorldData::current()).game.current_activity & CHECK_ABORT as u16 != 0 {
         return 0;
     }
     SetMenuSounds(15, 16 | 512);

@@ -6,13 +6,11 @@ pub(super) trait UmgahApi: EncounterApi<Handler> {
 #[cfg(not(test))]
 impl UmgahApi for super::super::script::live::LiveScript<Handler> {
     fn add_biomass(&mut self, amount: u16) {
-        extern "C" {}
+        use crate::engine::WorldData;
         unsafe {
-            (*crate::ships::native::abi::GLOBDATA::current())
-                .SIS_state
-                .TotalBioMass = (*crate::ships::native::abi::GLOBDATA::current())
-                .SIS_state
-                .TotalBioMass
+            (*WorldData::current()).flagship.total_bio_mass = (*WorldData::current())
+                .flagship
+                .total_bio_mass
                 .wrapping_add(amount);
         }
     }

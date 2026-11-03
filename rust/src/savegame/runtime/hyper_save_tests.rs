@@ -57,7 +57,7 @@ fn push_element(elements: &mut ElementTable, value: ElementRecord) -> *mut Eleme
 fn starship(facing: u16, element: Option<ElementId>) -> ShipRecord {
     // SAFETY: `STARSHIP` is integers, pointers and optional function pointers.
     let mut ship: ShipRecord = unsafe { std::mem::zeroed() };
-    ship.ShipFacing = facing;
+    ship.ship_facing = facing;
     ship.hShip = element;
     ship.captains_name_index = 1;
     ship.crew_level = 42;
@@ -259,7 +259,7 @@ fn the_owner_is_the_elements_parent_even_when_it_is_not_the_queue_head() {
     // SAFETY: the flagship element is a slot of the display pool.
     unsafe { (*queues.flagship_element()).parent = Parent::Ship(queue_ship(&queues.ships, 1)) };
     // SAFETY: the head is a slot of the ship pool.
-    assert_eq!(unsafe { (*queues.head_ship()).ShipFacing }, 3);
+    assert_eq!(unsafe { (*queues.head_ship()).ship_facing }, 3);
 
     let mut game = game();
     assert_eq!(queues.save(&mut game), Ok(HyperFlagship::Facing(12)));

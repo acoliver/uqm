@@ -49,8 +49,14 @@ impl Ops for Harness {
             format!("{expected:?}"),
             "orbital wrote unrelated state: {case:?}"
         );
-        assert_eq!(get_game_state("FOUND_PLUTO_SPATHI"), 1);
-        assert_eq!(get_game_state("MOONBASE_DESTROYED"), 1);
+        assert_eq!(
+            get_game_state(uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI),
+            1
+        );
+        assert_eq!(
+            get_game_state(uqm_rust::engine::StoryKey::MOONBASE_DESTROYED),
+            1
+        );
         (result, info, self.rng_position())
     }
 }
@@ -61,14 +67,14 @@ impl DebugTraversal {
     fn enter() -> Self {
         let saved = Self(
             unsafe { DISABLE_INTERACTIVITY },
-            get_game_state("FOUND_PLUTO_SPATHI"),
-            get_game_state("MOONBASE_DESTROYED"),
+            get_game_state(uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI),
+            get_game_state(uqm_rust::engine::StoryKey::MOONBASE_DESTROYED),
         );
         unsafe {
             DISABLE_INTERACTIVITY = 1;
         }
-        set_game_state("FOUND_PLUTO_SPATHI", 1);
-        set_game_state("MOONBASE_DESTROYED", 1);
+        set_game_state(uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI, 1);
+        set_game_state(uqm_rust::engine::StoryKey::MOONBASE_DESTROYED, 1);
         saved
     }
 }
@@ -78,8 +84,8 @@ impl Drop for DebugTraversal {
         unsafe {
             DISABLE_INTERACTIVITY = self.0;
         }
-        set_game_state("FOUND_PLUTO_SPATHI", self.1);
-        set_game_state("MOONBASE_DESTROYED", self.2);
+        set_game_state(uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI, self.1);
+        set_game_state(uqm_rust::engine::StoryKey::MOONBASE_DESTROYED, self.2);
     }
 }
 

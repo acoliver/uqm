@@ -108,7 +108,7 @@ fn project_player(cx: &Cx<'_>, id: ElementId, owner: ShipId, result: &mut Snapsh
     let (vx, vy) = e.velocity.preview_next_components(1);
     result.selected_species = Some(species);
     result.bomb_carrier = species == SPECIES_ID_SIS_SHIP_ID
-        && cx.story_state(crate::engine::battle::StoryKey::BombCarrier) != 0;
+        && cx.story_state(crate::engine::battle::StoryKey::BOMB_CARRIER) != 0;
     result.velocity = (i32::from(vx as SIZE), i32::from(vy as SIZE));
     result.player = Some(crate::automation::battle_fight::ShipState {
         x: i32::from(e.current.location.x),

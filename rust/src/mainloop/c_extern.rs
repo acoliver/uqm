@@ -380,7 +380,7 @@ static TEST_CURRENT_ACTIVITY: AtomicU16 = AtomicU16::new(0);
 /// Test shim: set the test-local current activity.
 ///
 /// This writes to a **test-local** global,
-/// NOT to the real `GlobData.Game_state.CurrentActivity`.
+/// NOT to the real `GlobData.game.current_activity`.
 ///
 /// @plan PLAN-20260707-MAINLOOP.P03
 #[cfg(test)]

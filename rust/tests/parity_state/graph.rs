@@ -31,7 +31,7 @@ pub(super) fn elements_and_fighters(directory: &Path) {
     // SAFETY: STARSHIP contains integers, pointers and optional callbacks.
     let mut owner = unsafe { battle::PoolShip::new(0) };
     owner.SpeciesID = SPECIES_ID_EARTHLING_ID;
-    owner.ShipFacing = 31;
+    owner.ship_facing = 31;
     first.player_nr = 0;
     first.state_flags = ElementFlags::PLAYER_SHIP;
     first.parent = uqm_rust::engine::battle::Parent::Ship(owner.ship_id);
@@ -66,9 +66,9 @@ pub(super) fn elements_and_fighters(directory: &Path) {
     // SAFETY: stack graph remains live; no renderer or pool allocator is running.
     unsafe {
         install_ship(&mut owner);
-        (*uqm_rust::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .CurrentActivity = IN_BATTLE as u16;
+        (*uqm_rust::engine::WorldData::current())
+            .game
+            .current_activity = IN_BATTLE as u16;
     }
     uqm_rust::math::seed_random(654321);
     let fighters = BattleSnapshot::live();
@@ -228,7 +228,7 @@ pub(super) fn fighters_without_journal(directory: &Path) {
     // SAFETY: zero is valid for all native ship scalar/optional pointer fields.
     let mut ship = unsafe { battle::PoolShip::new(0) };
     ship.descriptor = Some(Box::new(RaceDescriptor::EMPTY));
-    ship.ShipFacing = 31;
+    ship.ship_facing = 31;
     element.state_flags = ElementFlags::PLAYER_SHIP;
     element.player_nr = 0;
     element.crew_or_hp = 19;
@@ -239,9 +239,9 @@ pub(super) fn fighters_without_journal(directory: &Path) {
     ));
     // SAFETY: this child has not initialized Coordinator, and it alone owns the graph.
     unsafe {
-        (*uqm_rust::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .CurrentActivity = IN_BATTLE as u16;
+        (*uqm_rust::engine::WorldData::current())
+            .game
+            .current_activity = IN_BATTLE as u16;
         install_ship(&mut ship);
         attach_elements(std::slice::from_mut(&mut element));
     }
@@ -346,9 +346,9 @@ pub(super) fn event_queue_fields(directory: &Path) {
     };
     // SAFETY: this test owns the idle game clock queue until it is uninitialized.
     unsafe {
-        let queue = &raw mut (*uqm_rust::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .GameClock
+        let queue = &raw mut (*uqm_rust::engine::WorldData::current())
+            .game
+            .game_clock
             .event_q;
         assert!(InitQueue(
             queue,
@@ -393,9 +393,7 @@ pub(super) fn non_ship_parent_fields(directory: &Path) {
     let mut element = ElementRecord::new();
     // SAFETY: no game loop is running; this test owns both queues and the group pool.
     unsafe {
-        let queue = &raw mut (*uqm_rust::ships::native::abi::GLOBDATA::current())
-            .Game_state
-            .ip_group_q;
+        let queue = &raw mut (*uqm_rust::engine::WorldData::current()).game.ip_group_q;
         assert!(InitQueue(queue, 4, std::mem::size_of::<CIpGroup>() as u16));
         let handle = AllocLink(queue);
         assert!(!handle.is_null());
