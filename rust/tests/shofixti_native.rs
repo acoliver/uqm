@@ -9,8 +9,6 @@ mod shared;
 use std::{ffi::CStr, mem, ptr};
 use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, frame_index, sine};
 
-use uqm_rust::supermelee::native::battle_picker::live::{selectShipComputer, selectShipHuman};
-
 use uqm_rust::graphics::context_abi::_GraphicsStatusFlags;
 
 struct Battle {
@@ -381,8 +379,8 @@ fn darts_use_next_location_exact_facing_offset_speed_and_failure_count() {
             let angle = facing_to_angle(facing as i32) as COUNT;
             let vx = cosine(angle as i32, 96 << VELOCITY_SHIFT);
             let vy = sine(angle as i32, 96 << VELOCITY_SHIFT);
-            let (vx, vy) = ((*dart).velocity).get_current_components();
-            let (mut x, mut y) = (vx as i16, vy as i16);
+            let (velocity_x, velocity_y) = ((*dart).velocity).get_current_components();
+            let (mut x, mut y) = (velocity_x as i16, velocity_y as i16);
             assert_eq!((x, y), (vx, vy));
             let origin_x =
                 ((i32::from(i16::MAX) - 5) + i32::from(cosine(angle as i32, 60))) as COORD;

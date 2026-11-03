@@ -87,7 +87,7 @@ pub(crate) mod engine {
         cx.element_mut(e).collide = Some(CollisionHook::Native(collision));
         cx.element_mut(e).post = Some(ElementHook::Native(gravity_postprocess));
         // SAFETY: the legacy velocity record admits the zero state.
-        cx.element_mut(e).velocity = unsafe { mem::zeroed() };
+        cx.element_mut(e).velocity = crate::battle::velocity::VelocityDesc::default();
         let (sw, sh) = cx.screen_dimensions();
         loop {
             cx.element_mut(e).current.location.x = aligned_random(cx.random(), width(sw));

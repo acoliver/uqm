@@ -36,8 +36,8 @@ fn descriptor_laser_and_limpet_launch() {
             assert_eq!((*prim(laser)).Type, gfx_object_LINE_PRIM as GRAPHICS_PRIM);
             assert_eq!((*laser).mass, 1);
             assert_eq!((*laser).current.location.x, 4000 + 48);
-            let (vx, vy) = ((*laser).velocity).get_current_components();
-            let (mut dx, mut dy) = (vx as i16, vy as i16);
+            let (velocity_x, velocity_y) = ((*laser).velocity).get_current_components();
+            let (mut dx, mut dy) = (velocity_x as i16, velocity_y as i16);
             assert_eq!((dx, dy), (600 << VELOCITY_SHIFT, 0));
             battle_context::dispose(laser.cast());
             ship.ship_mut().cur_status_flags = SPECIAL as u16;

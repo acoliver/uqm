@@ -3607,13 +3607,15 @@ mod ship_abi_tests {
         unsafe {
             let mut velocity: VELOCITY_DESC = std::mem::zeroed();
             (velocity).set_components(i32::from(96), i32::from(-64));
-            let (vx, vy) = (velocity).get_current_components();
-let (mut dx, mut dy) = (vx as i16, vy as i16);
+            let (velocity_x, velocity_y) = (velocity).get_current_components();
+let (mut dx, mut dy) = (velocity_x as i16, velocity_y as i16);
             assert_eq!((dx, dy), (96, -64));
             (velocity).delta_components(i32::from(32), i32::from(-32));
-            { let (vx, vy) = (velocity).get_current_components(); (dx, dy) = (vx as i16, vy as i16); };
+            { let (velocity_x, velocity_y) = (velocity).get_current_components();
+(dx, dy) = (velocity_x as i16, velocity_y as i16); };
             assert_eq!((dx, dy), (128, -96));
-            { let (vx, vy) = (velocity).get_next_components(2); (dx, dy) = (vx as i16, vy as i16); };
+            { let (velocity_x, velocity_y) = (velocity).get_next_components(2);
+(dx, dy) = (velocity_x as i16, velocity_y as i16); };
             assert_eq!((dx, dy), (8, -6));
         }
     }

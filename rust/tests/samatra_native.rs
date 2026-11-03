@@ -544,8 +544,8 @@ fn sentinel_recoil_stuns_live_player_caps_velocity_and_preserves_sentinel() {
             );
             assert_eq!((*player.ptr()).turn, 1);
             assert_eq!((*player.ptr()).thrust, 3);
-            let (vx, vy) = ((*player.ptr()).velocity).get_current_components();
-            let (mut dx, mut dy) = (vx as i16, vy as i16);
+            let (velocity_x, velocity_y) = ((*player.ptr()).velocity).get_current_components();
+            let (mut dx, mut dy) = (velocity_x as i16, velocity_y as i16);
             assert_eq!((dx, dy), (5120, 0));
             assert_eq!(velocity(&(*sentinel).velocity), [0; 9]);
         }

@@ -213,7 +213,7 @@ pub(crate) mod engine {
     use crate::collections::observation::image;
     use crate::engine::battle::{Cx, ElementId};
 
-    unsafe fn damage(cx: &mut Cx<'_>, id: ElementId) {
+    fn damage(cx: &mut Cx<'_>, id: ElementId) {
         let amount = cx.element(id).hits as SIZE;
         cx.damage(id, amount);
     }
@@ -228,7 +228,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe fn preprocess(cx: &mut Cx<'_>, e: ElementId) {
+    fn preprocess(cx: &mut Cx<'_>, e: ElementId) {
         if cx.elements()[e].life == 0 {
             if cx.elements()[e].parent != crate::engine::battle::Parent::None {
                 untarget(cx, e);
@@ -261,8 +261,8 @@ pub(crate) mod engine {
                 }
             }
             if flags & IGNORE_VELOCITY as ELEMENT_FLAGS == 0 {
-                let (vx, vy) = (cx.records()[e].velocity).get_next_components(1);
-                let (dx, dy) = (vx as i16, vy as i16);
+                let (velocity_x, velocity_y) = (cx.records()[e].velocity).get_next_components(1);
+                let (dx, dy) = (velocity_x as i16, velocity_y as i16);
                 if dx != 0 || dy != 0 {
                     flags |= CHANGING as ELEMENT_FLAGS;
                     cx.records()[e].next.location.x =
@@ -338,7 +338,7 @@ pub(crate) mod engine {
     /// # Safety
     /// Elements must belong to the initialized display queue on the game thread,
     /// with live collision images and callbacks on every solid element.
-    pub unsafe fn process_collisions(
+    pub fn process_collisions(
         cx: &mut Cx<'_>,
         mut next_test: Option<ElementId>,
         el: ElementId,
@@ -602,7 +602,7 @@ pub(crate) mod engine {
         )
     }
 
-    unsafe fn postprocess(cx: &mut Cx<'_>, e: ElementId) {
+    fn postprocess(cx: &mut Cx<'_>, e: ElementId) {
         if let Some(post) = cx.elements()[e].postprocess_func {
             invoke_element(cx, post, e);
         }

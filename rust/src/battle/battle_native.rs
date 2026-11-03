@@ -220,7 +220,7 @@ pub(crate) mod engine {
             cx.element_mut(e).pre = Some(ElementHook::Native(flee_preprocess));
             cx.element_mut(e).mass = (MAX_SHIP_MASS * 10) as u8;
             // SAFETY: the legacy velocity record admits the zero state.
-            cx.element_mut(e).velocity = unsafe { mem::zeroed() };
+            cx.element_mut(e).velocity = crate::battle::velocity::VelocityDesc::default();
             cx.ship_state_mut(ship).status &= !((SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16);
             cx.primitive_style_mut(e).color = rgb15(0x0b, 0, 0);
             cx.primitive_style_mut(e).kind = gfx_object_STAMPFILL_PRIM as u8;
