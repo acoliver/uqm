@@ -10,23 +10,25 @@ The #839 review identified 16 unsupported assignments. Fixture execution now bor
 
 The updated ledger follows the Rust-only function renames and scoped transaction reductions. Five new acquisition boundaries replace the removed encounter queue-header accessor and the clock raw-pointer adapter. The four battle callers retire with #837; with_game_clock is reserved by U4-02 at work-items.md:1479. No other retirement assignment changes.
 
+The final cleanup reduces the ledger to 1,130 calls in 542 scopes. Retirement assignments are unchanged; remaining acquisitions stay at the reserved live boundaries.
+
 | Retirement | Budget | Calls | Scopes | Work-item Change/Deletes |
 | --- | --- | ---: | ---: | --- |
 | U2-10a | `u2_10a_projection` | 76 | 38 | #837; #839 scope decision, ending phase-2 |
 | U2-10b | `u2_10b_projection` | 15 | 8 | #838; #839 scope decision, ending phase-2 |
-| U3-02 | `u3_02_world_projection` | 91 | 42 | 1379, 1383 |
+| U3-02 | `u3_02_world_projection` | 90 | 42 | 1379, 1383 |
 | U4-02 | `u4_02_world_projection` | 48 | 15 | 1479–1481 |
-| U4-03 | `u4_03_world_projection` | 27 | 20 | 1526, 1530–1532 |
+| U4-03 | `u4_03_world_projection` | 25 | 19 | 1526, 1530–1532 |
 | U4-04 | `u4_04_world_projection` | 69 | 57 | 1572, 1576–1578 |
 | U5-01 | `u5_01_world_projection` | 4 | 4 | 1631–1632 |
 | U5-02 | `u5_02_world_projection` | 257 | 100 | 1680–1682 |
 | U5-03 | `u5_03_world_projection` | 20 | 14 | 1730–1731 |
 | U5-04 | `u5_04_world_projection` | 44 | 8 | 1775 |
-| U6-01 | `u6_01_world_projection` | 60 | 32 | 1824–1827 |
+| U6-01 | `u6_01_world_projection` | 58 | 32 | 1824–1827 |
 | U6-02 | `u6_02_world_projection` | 44 | 35 | 1875–1876 |
-| U6-03 | `u6_03_world_projection` | 267 | 107 | 1925 |
-| U6-04 | `u6_04_world_projection` | 120 | 63 | 1967, 1971–1974 |
-| Total | | 1142 | 543 | |
+| U6-03 | `u6_03_world_projection` | 262 | 107 | 1925 |
+| U6-04 | `u6_04_world_projection` | 118 | 63 | 1967, 1971–1974 |
+| Total | | 1130 | 542 | |
 
 Each caller has an exact scope, its current count, source file, and a retirement work-item reference.
 
@@ -115,7 +117,7 @@ Work-items.md Change/Deletes: 1379, 1383.
 | `uqm::supermelee::native::load_teams::live::draw` | `src/supermelee/native/load_teams.rs` | 2 |
 | `uqm::supermelee::native::load_teams::live::flash` | `src/supermelee/native/load_teams.rs` | 1 |
 | `uqm::supermelee::native::load_teams::live::select` | `src/supermelee/native/load_teams.rs` | 2 |
-| `uqm::supermelee::native::menu::live::DoMelee` | `src/supermelee/native/menu.rs` | 5 |
+| `uqm::supermelee::native::menu::live::DoMelee` | `src/supermelee/native/menu.rs` | 4 |
 | `uqm::supermelee::native::menu::live::Melee` | `src/supermelee/native/menu.rs` | 10 |
 | `uqm::supermelee::native::menu::live::battle::confirm` | `src/supermelee/native/menu/live/battle.rs` | 2 |
 | `uqm::supermelee::native::menu::live::battle::connecting` | `src/supermelee/native/menu/live/battle.rs` | 3 |
@@ -170,7 +172,6 @@ Work-items.md Change/Deletes: 1526, 1530–1532.
 | `uqm::automation::campaign_state::<LiveCampaign as StateSource>::read` | `src/automation/campaign_state.rs` | 1 |
 | `uqm::automation::coordinator::<Coordinator>::activate_start_scene` | `src/automation/coordinator.rs` | 2 |
 | `uqm::automation::coordinator::<Coordinator>::service_energy` | `src/automation/coordinator.rs` | 2 |
-| `uqm::automation::coordinator::<Coordinator>::service_navigation` | `src/automation/coordinator.rs` | 2 |
 | `uqm::automation::coordinator::<Coordinator>::service_patrol_contact` | `src/automation/coordinator.rs` | 1 |
 | `uqm::automation::coordinator::terminal::<Coordinator>::set_terminal` | `src/automation/coordinator/terminal.rs` | 1 |
 | `uqm::automation::input_ffi::contact_race` | `src/automation/input_ffi.rs` | 1 |
@@ -426,7 +427,7 @@ Work-items.md Change/Deletes: 1824–1827.
 | `uqm::comm::dispatch::place_flagship_at_star` | `src/comm/dispatch.rs` | 1 |
 | `uqm::comm::dispatch::prepare_samatra_dev_fixture` | `src/comm/dispatch.rs` | 1 |
 | `uqm::comm::dispatch::rust_init_race_dispatch` | `src/comm/dispatch.rs` | 2 |
-| `uqm::comm::dispatch::rust_race_communication` | `src/comm/dispatch.rs` | 6 |
+| `uqm::comm::dispatch::rust_race_communication` | `src/comm/dispatch.rs` | 4 |
 | `uqm::comm::ffi::get_alliance_name` | `src/comm/ffi.rs` | 1 |
 | `uqm::comm::ffi::get_alliance_name_full` | `src/comm/ffi.rs` | 2 |
 | `uqm::comm::ffi::rust_npc_phrase_cb` | `src/comm/ffi.rs` | 1 |
@@ -522,7 +523,7 @@ Work-items.md Change/Deletes: 1925.
 | `uqm::ui::menu::draw_pc_menu` | `src/ui/menu.rs` | 3 |
 | `uqm::ui::menu::game_string` | `src/ui/menu.rs` | 1 |
 | `uqm::ui::menu::previous_menu_state` | `src/ui/menu.rs` | 1 |
-| `uqm::ui::outfit::DoOutfit` | `src/ui/outfit.rs` | 13 |
+| `uqm::ui::outfit::DoOutfit` | `src/ui/outfit.rs` | 11 |
 | `uqm::ui::outfit::change_fuel_quantity` | `src/ui/outfit.rs` | 6 |
 | `uqm::ui::outfit::display_landers` | `src/ui/outfit.rs` | 2 |
 | `uqm::ui::outfit::do_install_module` | `src/ui/outfit.rs` | 10 |
@@ -538,7 +539,7 @@ Work-items.md Change/Deletes: 1925.
 | `uqm::ui::shipstat::draw_ship_name_string` | `src/ui/shipstat.rs` | 1 |
 | `uqm::ui::shipstat::draw_status_title` | `src/ui/shipstat.rs` | 2 |
 | `uqm::ui::shipstat::init_ship_status` | `src/ui/shipstat.rs` | 2 |
-| `uqm::ui::shipyard::DoShipyard` | `src/ui/shipyard.rs` | 6 |
+| `uqm::ui::shipyard::DoShipyard` | `src/ui/shipyard.rs` | 4 |
 | `uqm::ui::shipyard::crew_transaction` | `src/ui/shipyard.rs` | 4 |
 | `uqm::ui::shipyard::dms_dismiss_escort_ship_crew` | `src/ui/shipyard.rs` | 1 |
 | `uqm::ui::shipyard::dms_dismiss_flag_ship_crew` | `src/ui/shipyard.rs` | 1 |
@@ -591,7 +592,7 @@ Work-items.md Change/Deletes: 1925.
 | `uqm::ui::sis::repair_sisborder` | `src/ui/sis.rs` | 1 |
 | `uqm::ui::sis::sis` | `src/ui/sis.rs` | 1 |
 | `uqm::ui::starbase::DoStarBase` | `src/ui/starbase.rs` | 4 |
-| `uqm::ui::starbase::DrawShipPiece` | `src/ui/starbase.rs` | 3 |
+| `uqm::ui::starbase::DrawShipPiece` | `src/ui/starbase.rs` | 2 |
 | `uqm::ui::starbase::cleanup_after_star_base` | `src/ui/starbase.rs` | 3 |
 | `uqm::ui::starbase::draw_base_state_strings` | `src/ui/starbase.rs` | 2 |
 | `uqm::ui::starbase::exit_star_base` | `src/ui/starbase.rs` | 3 |
@@ -624,7 +625,7 @@ Work-items.md Change/Deletes: 1967, 1971–1974.
 | `uqm::front_end::gameopt::runtime::do_settings` | `src/front_end/gameopt.rs` | 6 |
 | `uqm::front_end::gameopt::runtime::draw_game_selection` | `src/front_end/gameopt.rs` | 1 |
 | `uqm::front_end::gameopt::runtime::draw_name_string` | `src/front_end/gameopt.rs` | 3 |
-| `uqm::front_end::gameopt::runtime::draw_save_name_string` | `src/front_end/gameopt.rs` | 4 |
+| `uqm::front_end::gameopt::runtime::draw_save_name_string` | `src/front_end/gameopt.rs` | 2 |
 | `uqm::front_end::gameopt::runtime::draw_savegame_cargo` | `src/front_end/gameopt.rs` | 3 |
 | `uqm::front_end::gameopt::runtime::draw_savegame_summary` | `src/front_end/gameopt.rs` | 14 |
 | `uqm::front_end::gameopt::runtime::feedback_setting` | `src/front_end/gameopt.rs` | 1 |
