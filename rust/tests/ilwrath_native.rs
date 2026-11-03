@@ -156,7 +156,7 @@ fn flame_inherits_the_ship_velocity_and_starts_on_the_first_frame() {
             let ship = spawn_ship(&mut fleet, 400, 500);
             // Facing 4 is angle 16, along +x (angle 0 points up the screen).
             fleet.ship_mut().ship_facing = 4;
-            DeltaVelocityComponents(&raw mut (*ship).velocity, 160, -64);
+            ((*ship).velocity).delta_components(i32::from(160), i32::from(-64));
 
             let mut out = [ptr::null_mut()];
             out[0] = fleet.weapon_handles(1)[0];
@@ -183,7 +183,10 @@ fn flame_inherits_the_ship_velocity_and_starts_on_the_first_frame() {
                 (400 + 29 * 4 - 25 - (160 >> 5), 500 + (64 >> 5))
             );
             let (mut dx, mut dy) = (0, 0);
-            GetCurrentVelocityComponents(&raw mut (*flame).velocity, &mut dx, &mut dy);
+            {
+                let (vx, vy) = ((*flame).velocity).get_current_components();
+                (dx, dy) = (vx as i16, vy as i16);
+            };
             assert_eq!((dx, dy), (25 * 32 + 160, -64));
         }
     })
@@ -495,7 +498,7 @@ fn decloak_aim_leads_the_target_by_four_frames_of_motion() {
             (*ship).next.image.frame = ship_frames.selection(0);
             // Moving +y by 250 world units a frame puts the ship 1000 units
             // further on after the four look-ahead frames.
-            DeltaVelocityComponents(&raw mut (*ship).velocity, 0, 8000);
+            ((*ship).velocity).delta_components(i32::from(0), i32::from(8000));
             let mut other = Ship::with_frames(&_battle, SPECIES_ID_ILWRATH_ID, 1, [16; 3], [0, 0]);
             spawn_ship(&mut other, 2000, 1000);
             paint(ship, gfx_object_STAMPFILL_PRIM, BLACK);

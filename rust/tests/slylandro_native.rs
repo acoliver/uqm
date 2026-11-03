@@ -101,11 +101,10 @@ unsafe fn bolt_velocity(angle: COUNT, delta: SIZE, random: DWORD) -> [i32; 9] {
         _ => angle.wrapping_sub(random as COUNT & 15),
     };
     let length = ((((random >> 16) & 31) + 4) << (ONE_SHIFT + VELOCITY_SHIFT)) as SIZE;
-    let mut v = mem::zeroed();
-    SetVelocityComponents(
-        &mut v,
-        cosine(i32::from(angle), i32::from(length)),
-        sine(i32::from(angle), i32::from(length)),
+    let mut v = VELOCITY_DESC::default();
+    (v).set_components(
+        i32::from(cosine(i32::from(angle), i32::from(length))),
+        i32::from(sine(i32::from(angle), i32::from(length))),
     );
     velocity(&v)
 }

@@ -2,9 +2,6 @@
 
 use super::drawing::{draw_outer_system, draw_system_transition, find_radius, point_within_rect};
 use super::*;
-use crate::battle::velocity::{
-    DeltaVelocityComponents, GetCurrentVelocityComponents, SetVelocityComponents,
-};
 use crate::c_bindings::controller_input as input;
 use crate::comm::locdata::CPoint;
 use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
@@ -208,7 +205,10 @@ pub(super) unsafe fn flagship_inertial_thrust(
 ) -> c::UWORD {
     let mut current_dx: c::SIZE = 0;
     let mut current_dy: c::SIZE = 0;
-    GetCurrentVelocityComponents(velocity, &mut current_dx, &mut current_dy);
+    {
+        let (vx, vy) = (velocity).get_current_components();
+        (current_dx, current_dy) = (vx as i16, vy as i16);
+    };
     let travel_angle = velocity.travel_angle;
     if travel_angle == current_angle
         && current_dx == cosine(current_angle, i32::from(max_speed))
@@ -224,30 +224,36 @@ pub(super) unsafe fn flagship_inertial_thrust(
     let mut desired_speed = speed_squared(dx, dy);
     let max_speed_squared = c::DWORD::from(max_speed) * c::DWORD::from(max_speed);
     if desired_speed <= max_speed_squared {
-        SetVelocityComponents(velocity, dx, dy);
+        (velocity).set_components(i32::from(dx), i32::from(dy));
     } else if travel_angle == current_angle {
-        SetVelocityComponents(
-            velocity,
-            cosine(current_angle, i32::from(max_speed)),
-            sine(current_angle, i32::from(max_speed)),
+        (velocity).set_components(
+            i32::from(cosine(current_angle, i32::from(max_speed))),
+            i32::from(sine(current_angle, i32::from(max_speed))),
         );
         return SHIP_AT_MAX_SPEED;
     } else {
         let mut candidate = *velocity;
-        DeltaVelocityComponents(
-            &mut candidate,
-            (i32::from(cosine(current_angle, IP_SHIP_THRUST_INCREMENT >> 1))
-                - i32::from(cosine(travel_angle, IP_SHIP_THRUST_INCREMENT))) as c::SIZE,
-            (i32::from(sine(current_angle, IP_SHIP_THRUST_INCREMENT >> 1))
-                - i32::from(sine(travel_angle, IP_SHIP_THRUST_INCREMENT))) as c::SIZE,
+        (candidate).delta_components(
+            i32::from(
+                (i32::from(cosine(current_angle, IP_SHIP_THRUST_INCREMENT >> 1))
+                    - i32::from(cosine(travel_angle, IP_SHIP_THRUST_INCREMENT)))
+                    as c::SIZE,
+            ),
+            i32::from(
+                (i32::from(sine(current_angle, IP_SHIP_THRUST_INCREMENT >> 1))
+                    - i32::from(sine(travel_angle, IP_SHIP_THRUST_INCREMENT)))
+                    as c::SIZE,
+            ),
         );
-        GetCurrentVelocityComponents(&mut candidate, &mut current_dx, &mut current_dy);
+        {
+            let (vx, vy) = (candidate).get_current_components();
+            (current_dx, current_dy) = (vx as i16, vy as i16);
+        };
         desired_speed = speed_squared(current_dx, current_dy);
         if desired_speed > max_speed_squared {
-            SetVelocityComponents(
-                velocity,
-                cosine(current_angle, i32::from(max_speed)),
-                sine(current_angle, i32::from(max_speed)),
+            (velocity).set_components(
+                i32::from(cosine(current_angle, i32::from(max_speed))),
+                i32::from(sine(current_angle, i32::from(max_speed))),
             );
             return SHIP_AT_MAX_SPEED;
         }

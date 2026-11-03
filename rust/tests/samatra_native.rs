@@ -520,7 +520,7 @@ fn sentinel_recoil_stuns_live_player_caps_velocity_and_preserves_sentinel() {
             (*player.ptr()).hits = 20;
             (*player.ptr()).mass = 10;
             player.ship_mut().cur_status_flags = (SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16;
-            SetVelocityComponents(&raw mut (*player.ptr()).velocity, 5000, 0);
+            ((*player.ptr()).velocity).set_components(i32::from(5000), i32::from(0));
             SetVelocityVector(&raw mut (*sentinel).velocity, 32, 4);
             let mut p = POINT { x: 0, y: 0 };
             let mut q = p;
@@ -546,7 +546,10 @@ fn sentinel_recoil_stuns_live_player_caps_velocity_and_preserves_sentinel() {
             assert_eq!((*player.ptr()).thrust, 3);
             let mut dx = 0;
             let mut dy = 0;
-            GetCurrentVelocityComponents(&raw mut (*player.ptr()).velocity, &mut dx, &mut dy);
+            {
+                let (vx, vy) = ((*player.ptr()).velocity).get_current_components();
+                (dx, dy) = (vx as i16, vy as i16);
+            };
             assert_eq!((dx, dy), (5120, 0));
             assert_eq!(velocity(&(*sentinel).velocity), [0; 9]);
         }

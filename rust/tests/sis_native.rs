@@ -164,7 +164,7 @@ fn hyperspace_fuel_brakes_and_quasispace_allows_thrust_without_fuel() {
             assert!(ship.descriptor_mut().callbacks()[3] == 0);
             assert_eq!(ship.descriptor_mut().characteristics.max_thrust, 8);
             assert!(ship.descriptor_mut().ship_info.icons_rsc.is_null());
-            SetVelocityComponents(&raw mut (*ship.ptr()).velocity, 256, 0);
+            ((*ship.ptr()).velocity).set_components(i32::from(256), i32::from(0));
             ship.ship_mut().cur_status_flags = THRUST as u16;
             uqm_rust::engine::World::current().write(|world| {
                 set_game_state(world, uqm_rust::engine::StoryKey::ARILOU_SPACE_SIDE, 0)
@@ -172,7 +172,10 @@ fn hyperspace_fuel_brakes_and_quasispace_allows_thrust_without_fuel() {
             ship.preprocess();
             let mut x = 0;
             let mut y = 0;
-            GetCurrentVelocityComponents(&raw mut (*ship.ptr()).velocity, &mut x, &mut y);
+            {
+                let (vx, vy) = ((*ship.ptr()).velocity).get_current_components();
+                (x, y) = (vx as i16, vy as i16);
+            };
             assert_eq!((x, y), (128, 0));
             assert_eq!(ship.ship_mut().cur_status_flags & THRUST as u16, 0);
             assert_eq!(ship.ship_mut().weapon_counter, 1);
@@ -219,7 +222,10 @@ fn autopilot_accelerates_toward_target_and_cancels_on_manual_turn() {
             ship.preprocess();
             let mut x = 0;
             let mut y = 0;
-            GetCurrentVelocityComponents(&raw mut (*ship.ptr()).velocity, &mut x, &mut y);
+            {
+                let (vx, vy) = ((*ship.ptr()).velocity).get_current_components();
+                (x, y) = (vx as i16, vy as i16);
+            };
             assert_eq!((x, y), (128, 0));
             assert_ne!(
                 ship.ship_mut().cur_status_flags & SHIP_AT_MAX_SPEED as u16,

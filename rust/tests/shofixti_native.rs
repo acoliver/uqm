@@ -382,7 +382,10 @@ fn darts_use_next_location_exact_facing_offset_speed_and_failure_count() {
             let vx = cosine(angle as i32, 96 << VELOCITY_SHIFT);
             let vy = sine(angle as i32, 96 << VELOCITY_SHIFT);
             let (mut x, mut y) = (0, 0);
-            GetCurrentVelocityComponents(&raw mut (*dart).velocity, &mut x, &mut y);
+            {
+                let (vx, vy) = ((*dart).velocity).get_current_components();
+                (x, y) = (vx as i16, vy as i16);
+            };
             assert_eq!((x, y), (vx, vy));
             let origin_x =
                 ((i32::from(i16::MAX) - 5) + i32::from(cosine(angle as i32, 60))) as COORD;

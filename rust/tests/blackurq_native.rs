@@ -51,7 +51,10 @@ fn descriptor_saw_launch_hold_release_decelerate_and_tracking() {
                 hooks::invoke_element_pointer(decelerate, saw);
                 let mut dx = 0;
                 let mut dy = 0;
-                GetCurrentVelocityComponents(&raw mut (*saw).velocity, &mut dx, &mut dy);
+                {
+                    let (vx, vy) = ((*saw).velocity).get_current_components();
+                    (dx, dy) = (vx as i16, vy as i16);
+                };
                 assert_eq!((dx, dy), (speed, 0));
                 ship.descriptor_mut().characteristics.special_wait = 0;
             }
@@ -117,7 +120,7 @@ fn fried_launches_sixteen_clouds_in_facing_order_with_inherited_velocity() {
         unsafe {
             let mut ship = Ship::new(&_battle, SPECIES_ID_KOHR_AH_ID, 0);
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
-            SetVelocityComponents(&raw mut (*ship.ptr()).velocity, 41, -21);
+            ((*ship.ptr()).velocity).set_components(i32::from(41), i32::from(-21));
             with_rng(12, 0, || ship.postprocess());
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 21);
             assert_eq!(ship.ship_mut().special_counter, 9);
@@ -129,7 +132,7 @@ fn fried_launches_sixteen_clouds_in_facing_order_with_inherited_velocity() {
                 assert_eq!((*e).turn, 1);
                 let mut expected: VELOCITY_DESC = mem::zeroed();
                 SetVelocityVector(&mut expected, 16, face as COUNT);
-                DeltaVelocityComponents(&mut expected, 41, -21);
+                (expected).delta_components(i32::from(41), i32::from(-21));
                 assert_eq!(velocity(&(*e).velocity), velocity(&expected));
                 hooks::invoke_element_pointer((*e).preprocess_func.unwrap(), e);
                 assert_eq!((*e).turn, 0);

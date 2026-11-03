@@ -91,11 +91,10 @@ fn velocity_fields(v: &VELOCITY_DESC) -> [i32; 9] {
 
 unsafe fn velocity_for(speed: i32, facing: u16) -> VELOCITY_DESC {
     let angle = facing_to_angle(i32::from(facing)) as COUNT;
-    let mut v = mem::zeroed();
-    SetVelocityComponents(
-        &mut v,
-        cosine(i32::from(angle), speed << VELOCITY_SHIFT),
-        sine(i32::from(angle), speed << VELOCITY_SHIFT),
+    let mut v = VELOCITY_DESC::default();
+    (v).set_components(
+        i32::from(cosine(i32::from(angle), speed << VELOCITY_SHIFT)),
+        i32::from(sine(i32::from(angle), speed << VELOCITY_SHIFT)),
     );
     v
 }

@@ -1763,11 +1763,8 @@ extern "C" {
 pub use crate::ships::native::abi::velocity_desc;
 pub type VELOCITY_DESC = velocity_desc;
 
-pub use crate::battle::velocity::GetCurrentVelocityComponents;
 
-pub use crate::battle::velocity::GetNextVelocityComponents;
 
-pub use crate::battle::velocity::SetVelocityComponents;
 pub use crate::ships::native::abi::ANIMATION_DESC;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]

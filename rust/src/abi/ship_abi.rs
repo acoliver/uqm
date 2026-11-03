@@ -1209,28 +1209,6 @@ unsafe extern "C" {
 
 pub use crate::battle::velocity::VelocityDesc as velocity_desc;
 pub type VELOCITY_DESC = velocity_desc;
-pub unsafe fn GetCurrentVelocityComponents(
-    velocityptr: *mut VELOCITY_DESC,
-    pdx: *mut SIZE,
-    pdy: *mut SIZE,
-) {
-    crate::battle::velocity::GetCurrentVelocityComponents(velocityptr.cast(), pdx, pdy);
-}
-pub unsafe fn GetNextVelocityComponents(
-    velocityptr: *mut VELOCITY_DESC,
-    pdx: *mut SIZE,
-    pdy: *mut SIZE,
-    num_frames: COUNT,
-) {
-    crate::battle::velocity::GetNextVelocityComponents(velocityptr.cast(), pdx, pdy, num_frames);
-}
-pub unsafe fn SetVelocityComponents(velocityptr: *mut VELOCITY_DESC, dx: SIZE, dy: SIZE) {
-    crate::battle::velocity::SetVelocityComponents(velocityptr.cast(), dx, dy);
-}
-pub unsafe fn DeltaVelocityComponents(velocityptr: *mut VELOCITY_DESC, dx: SIZE, dy: SIZE) {
-    crate::battle::velocity::DeltaVelocityComponents(velocityptr.cast(), dx, dy);
-}
-
 pub const VIEW_STATE_VIEW_STABLE: VIEW_STATE = 0;
 pub const VIEW_STATE_VIEW_SCROLL: VIEW_STATE = 1;
 pub const VIEW_STATE_VIEW_CHANGE: VIEW_STATE = 2;
@@ -3647,14 +3625,14 @@ mod ship_abi_tests {
     fn velocity_adapters_preserve_signed_components_and_frame_steps() {
         unsafe {
             let mut velocity: VELOCITY_DESC = std::mem::zeroed();
-            SetVelocityComponents(&mut velocity, 96, -64);
+            (velocity).set_components(i32::from(96), i32::from(-64));
             let (mut dx, mut dy) = (0, 0);
-            GetCurrentVelocityComponents(&mut velocity, &mut dx, &mut dy);
+            { let (vx, vy) = (velocity).get_current_components(); (dx, dy) = (vx as i16, vy as i16); };
             assert_eq!((dx, dy), (96, -64));
-            DeltaVelocityComponents(&mut velocity, 32, -32);
-            GetCurrentVelocityComponents(&mut velocity, &mut dx, &mut dy);
+            (velocity).delta_components(i32::from(32), i32::from(-32));
+            { let (vx, vy) = (velocity).get_current_components(); (dx, dy) = (vx as i16, vy as i16); };
             assert_eq!((dx, dy), (128, -96));
-            GetNextVelocityComponents(&mut velocity, &mut dx, &mut dy, 2);
+            { let (vx, vy) = (velocity).get_next_components(2); (dx, dy) = (vx as i16, vy as i16); };
             assert_eq!((dx, dy), (8, -6));
         }
     }

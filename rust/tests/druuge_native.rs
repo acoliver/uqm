@@ -169,11 +169,17 @@ fn cannon_recoil_is_applied_only_on_the_firing_frame_and_caps_speed() {
             ship.ship_mut().weapon_counter = 9;
             ship.postprocess();
             let (mut dx, mut dy) = (0, 0);
-            GetCurrentVelocityComponents(&raw mut ship.element_mut().velocity, &mut dx, &mut dy);
+            {
+                let (vx, vy) = (ship.element_mut().velocity).get_current_components();
+                (dx, dy) = (vx as i16, vy as i16);
+            };
             assert_eq!((dx, dy), (0, 0));
             ship.ship_mut().weapon_counter = 10;
             ship.postprocess();
-            GetCurrentVelocityComponents(&raw mut ship.element_mut().velocity, &mut dx, &mut dy);
+            {
+                let (vx, vy) = (ship.element_mut().velocity).get_current_components();
+                (dx, dy) = (vx as i16, vy as i16);
+            };
             assert_eq!((dx, dy), (-768, 0));
             assert_eq!(
                 ship.ship_mut().cur_status_flags & SHIP_AT_MAX_SPEED as u16,
@@ -182,7 +188,10 @@ fn cannon_recoil_is_applied_only_on_the_firing_frame_and_caps_speed() {
             for _ in 0..5 {
                 ship.postprocess();
             }
-            GetCurrentVelocityComponents(&raw mut ship.element_mut().velocity, &mut dx, &mut dy);
+            {
+                let (vx, vy) = (ship.element_mut().velocity).get_current_components();
+                (dx, dy) = (vx as i16, vy as i16);
+            };
             assert_eq!((dx, dy), (-3072, 0));
         }
     })

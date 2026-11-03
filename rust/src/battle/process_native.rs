@@ -262,7 +262,10 @@ pub(crate) mod engine {
             }
             if flags & IGNORE_VELOCITY as ELEMENT_FLAGS == 0 {
                 let (mut dx, mut dy) = (0, 0);
-                GetNextVelocityComponents(&mut cx.records()[e].velocity, &mut dx, &mut dy, 1);
+                {
+                    let (vx, vy) = (cx.records()[e].velocity).get_next_components(1);
+                    (dx, dy) = (vx as i16, vy as i16);
+                };
                 if dx != 0 || dy != 0 {
                     flags |= CHANGING as ELEMENT_FLAGS;
                     cx.records()[e].next.location.x =
