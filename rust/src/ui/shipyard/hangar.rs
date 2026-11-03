@@ -33,12 +33,12 @@ pub(super) unsafe fn prepare_windows(
     } else {
         let mut handle;
         if window == COUNT::MAX {
-            handle = (*queue).head;
+            handle = queue.head;
             num_ships = CountLinks(queue);
         } else {
-            let tail = (*queue).tail;
+            let tail = queue.tail;
             RemoveQueue(queue, tail);
-            handle = (*queue).head;
+            handle = queue.head;
             while !handle.is_null() {
                 let ship = handle.cast::<SHIP_FRAGMENT>();
                 if (*ship).index as COUNT > window {

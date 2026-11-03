@@ -5,10 +5,7 @@ mod text;
 #[cfg(not(test))]
 use crate::engine::{Kernel, WorldData};
 use crate::navigation::abi::*;
-use std::{
-    ffi::{c_char, c_int},
-    ptr,
-};
+use std::{ffi::c_char, ptr};
 
 #[cfg(not(test))]
 pub(super) const WANT_PIXMAP: CREATE_FLAGS = 1 << 1;
