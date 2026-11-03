@@ -6,7 +6,10 @@ mod battle;
 mod battle_context;
 use battle::{prim, Battle as PoolBattle, PoolElement, Ship};
 
+#[path = "support/special_hooks.rs"]
+mod special_hooks;
 use std::{ffi::CStr, mem, ptr};
+use uqm_rust::collections::observation;
 use uqm_rust::ships::native::{
     abi::*, cosine, facing_to_angle, frame_index, normalize_facing, sine,
 };
@@ -849,7 +852,13 @@ fn harvester_requires_key_and_ready_counter_but_can_run_at_full_energy() {
                 ship.ship_mut().cur_status_flags = if key { SPECIAL as u16 } else { 0 };
                 ship.ship_mut().special_counter = counter;
                 ship.descriptor_mut().ship_info.energy_level = energy;
+                observation::enable();
+                observation::drain();
                 with_rng(6, 0, || ship.postprocess());
+                assert_eq!(
+                    special_hooks::count(&observation::drain(), "slylandro"),
+                    usize::from(harvest)
+                );
                 assert_eq!((*e).life == 0, harvest);
                 assert_eq!(
                     ship.ship_mut().special_counter,
@@ -865,6 +874,7 @@ fn harvester_requires_key_and_ready_counter_but_can_run_at_full_energy() {
             ship.ship_mut().special_counter = 0;
             ship.descriptor_mut().ship_info.energy_level = 0;
             ship.postprocess();
+            assert_eq!(special_hooks::count(&observation::drain(), "slylandro"), 0);
             assert_eq!(ship.ship_mut().special_counter, 0);
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 0);
             at(&mut ship, -32760, 4000);

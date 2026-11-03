@@ -170,6 +170,10 @@ pub(crate) mod engine {
             }
         }
     }
+
+    /// Names the shield in the parity trace; observed inline, never called.
+    pub(crate) fn special_hook(_cx: &mut Cx<'_>, _ss: ShipId) {}
+
     pub(crate) fn yehat_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let e = cx.ship_element(ss);
         if cx.element(e).flags & APPEARING as u16 == 0 {
@@ -200,6 +204,7 @@ pub(crate) mod engine {
                 if cx.race_stats(ss).ship_info.energy_level < 3 {
                     cx.delta_energy(e, -3);
                 } else {
+                    cx.observe_special(ss, special_hook);
                     cx.element_mut(e).life = (10 + NORMAL_LIFE) as COUNT;
                     cx.set_frames(e, true, cx.ship_frame_set(ss, 2));
                     cx.set_frame(

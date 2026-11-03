@@ -87,11 +87,13 @@ impl MeleeSetupRequest {
 }
 
 /// Four groups of seven. The last group repeats three ships, never a sentinel.
+/// The last group's order is chosen so the Zoq-Fot-Pik tongue and the Yehat
+/// shield both fire in melee-cyborg-d (#830).
 pub(crate) const FLEETS: [[u8; 7]; 4] = [
     [0, 1, 2, 3, 4, 5, 6],
     [7, 8, 9, 10, 11, 12, 13],
     [14, 15, 16, 17, 18, 19, 20],
-    [21, 22, 23, 24, 0, 7, 14],
+    [21, 7, 14, 24, 23, 0, 22],
 ];
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]

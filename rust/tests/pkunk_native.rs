@@ -5,12 +5,15 @@ use uqm_rust::engine::battle::schema::HLINK;
 mod battle_context;
 #[path = "support/battle.rs"]
 mod shared;
+#[path = "support/special_hooks.rs"]
+mod special_hooks;
 
 use std::{
     ffi::CStr,
     mem, ptr,
     sync::atomic::{AtomicUsize, Ordering},
 };
+use uqm_rust::collections::observation;
 use uqm_rust::ships::native::{
     abi::*, angle_to_facing, cosine, facing_to_angle, frame_index, normalize_facing, sine,
 };
@@ -1401,11 +1404,13 @@ fn taunt_waits_out_its_cooldown_and_needs_the_key_and_missing_energy() {
             ship.inner.ship_mut().cur_status_flags = SPECIAL as u16;
             ship.inner.descriptor_mut().ship_info.energy_level = 5;
 
+            observation::enable();
             // The cooldown only counts down; no energy, no draw.
             ship.inner.descriptor_mut().characteristics.special_wait = 3;
             with_rng(1, 0, || ship.inner.postprocess());
             assert_eq!(ship.inner.descriptor_mut().characteristics.special_wait, 2);
             assert_eq!(ship.inner.descriptor_mut().ship_info.energy_level, 5);
+            assert_eq!(special_hooks::count(&observation::drain(), "pkunk"), 0);
 
             // No key, or already full: nothing happens, and no draw is spent.
             ship.inner.descriptor_mut().characteristics.special_wait = 0;
@@ -1416,6 +1421,7 @@ fn taunt_waits_out_its_cooldown_and_needs_the_key_and_missing_energy() {
             with_rng(1, 0, || ship.inner.postprocess());
             assert_eq!(ship.inner.descriptor_mut().characteristics.special_wait, 0);
             assert_eq!(ship.inner.descriptor_mut().ship_info.energy_level, 12);
+            assert_eq!(special_hooks::count(&observation::drain(), "pkunk"), 0);
 
             // Taunting buys two energy (capped), arms the 16-frame cooldown and
             // goes through DeltaEnergy's bookkeeping.
@@ -1427,6 +1433,7 @@ fn taunt_waits_out_its_cooldown_and_needs_the_key_and_missing_energy() {
                 ship.inner.ship_mut().cur_status_flags = SPECIAL as u16 | LOW_ON_ENERGY;
                 ship.inner.ship_mut().special_counter = 77;
                 ship.inner.postprocess();
+                assert_eq!(special_hooks::count(&observation::drain(), "pkunk"), 1);
                 assert_eq!(ship.inner.descriptor_mut().ship_info.energy_level, after);
                 assert_eq!(ship.inner.descriptor_mut().characteristics.special_wait, 16);
                 // DeltaEnergy installs the ship's energy_wait (zero for Pkunk).

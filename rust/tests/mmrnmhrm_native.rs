@@ -6,7 +6,10 @@ mod battle;
 mod battle_context;
 use battle::*;
 
+#[path = "support/special_hooks.rs"]
+mod special_hooks;
 use std::ffi::CStr;
+use uqm_rust::collections::observation;
 use uqm_rust::engine::battle::RaceState;
 use uqm_rust::ships::native::abi::*;
 
@@ -79,7 +82,10 @@ fn special_transform_checks_appearance_energy_and_cooldown() {
             (*ship).next.image.frame = fixture.descriptor_mut().ship_data.ship.view(0).to_owned();
 
             // Exactly enough energy is consumed, switching to Y form.
+            observation::enable();
+            observation::drain();
             fixture.preprocess();
+            assert_eq!(special_hooks::count(&observation::drain(), "mmrnmhrm"), 1);
             assert_eq!((*ship).next.image.frames, fixture.frame_set(2));
             assert_ne!((*ship).state_flags & CHANGING as u16, 0);
             assert_eq!(fixture.ship_mut().special_counter, 0);
@@ -89,10 +95,12 @@ fn special_transform_checks_appearance_energy_and_cooldown() {
             (*ship).next.image.frames = fixture.frame_set(2);
             assert_eq!(fixture.descriptor_mut().ship_info.energy_level, 0);
             fixture.preprocess();
+            assert_eq!(special_hooks::count(&observation::drain(), "mmrnmhrm"), 0);
             assert_eq!((*ship).next.image.frames, fixture.frame_set(2));
             fixture.ship_mut().special_counter = 0;
             (*ship).state_flags |= APPEARING as u16;
             fixture.preprocess();
+            assert_eq!(special_hooks::count(&observation::drain(), "mmrnmhrm"), 0);
             assert_eq!((*ship).next.image.frames, fixture.frame_set(2));
             fixture.uninit();
         }

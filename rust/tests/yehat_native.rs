@@ -4,8 +4,11 @@ mod battle_context;
 
 #[path = "support/battle.rs"]
 mod battle;
+#[path = "support/special_hooks.rs"]
+mod special_hooks;
 use battle::*;
 use std::mem;
+use uqm_rust::collections::observation;
 use uqm_rust::ships::native::{abi::*, frame_index};
 #[test]
 fn descriptor_and_twin_missile_launch() {
@@ -65,7 +68,10 @@ fn shield_uses_equivalent_facing_expires_and_recharges_on_postprocess() {
             let e = ship.ptr();
             (*e).next.image.frame = ship.frame(0, 7);
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
+            observation::enable();
+            observation::drain();
             with_rng(2, 0, || ship.preprocess());
+            assert_eq!(special_hooks::count(&observation::drain(), "yehat"), 1);
             assert_eq!((*e).life, 11);
             assert_eq!(ship.ship_mut().special_counter, 2);
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 10);
@@ -75,6 +81,7 @@ fn shield_uses_equivalent_facing_expires_and_recharges_on_postprocess() {
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 7);
             ship.ship_mut().special_counter = 0;
             ship.preprocess();
+            assert_eq!(special_hooks::count(&observation::drain(), "yehat"), 1);
             assert_eq!((*e).life, 11);
             assert_eq!(ship.ship_mut().special_counter, 2);
             ship.postprocess();
@@ -100,6 +107,8 @@ fn low_energy_flashes_without_shield_and_appearing_or_nonsolid_skips_callbacks()
             let mut ship = Ship::new(&_battle, SPECIES_ID_YEHAT_ID, 0);
             ship.descriptor_mut().ship_info.energy_level = 2;
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
+            observation::enable();
+            observation::drain();
             ship.preprocess();
             assert_eq!((*ship.ptr()).life, 1);
             assert_eq!(ship.ship_mut().special_counter, 0);
@@ -107,6 +116,8 @@ fn low_energy_flashes_without_shield_and_appearing_or_nonsolid_skips_callbacks()
             ship.descriptor_mut().ship_info.energy_level = 10;
             (*ship.ptr()).state_flags |= APPEARING as u16;
             ship.preprocess();
+            // Low energy only flashes, and an appearing ship skips the shield.
+            assert_eq!(special_hooks::count(&observation::drain(), "yehat"), 0);
             assert_eq!(ship.ship_mut().special_counter, 0);
             ship.ship_mut().special_counter = 2;
             (*ship.ptr()).state_flags |= NONSOLID as u16;

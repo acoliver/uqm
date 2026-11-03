@@ -145,6 +145,9 @@ pub(crate) mod engine {
         vec![cx.missile(&mut b)]
     }
 
+    /// Names the afterburner in the parity trace; observed inline, never called.
+    pub(crate) fn special_hook(_cx: &mut Cx<'_>, _ss: ShipId) {}
+
     pub(crate) fn thraddash_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let e = cx.ship_element(ss);
         if cx.ship_state(ss).status & SPECIAL as u16 == 0 {
@@ -158,6 +161,7 @@ pub(crate) mod engine {
         if !cx.delta_energy(e, -1) {
             return;
         }
+        cx.observe_special(ss, special_hook);
         if cx.ship_state(ss).old_status & SPECIAL as u16 == 0 {
             cx.ship_state_mut(ss).status &= !((SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16);
         }

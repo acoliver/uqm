@@ -226,6 +226,9 @@ pub(crate) mod engine {
         }
     }
 
+    /// Names the teleport in the parity trace; observed inline, never called.
+    pub(crate) fn special_hook(_cx: &mut Cx<'_>, _ss: ShipId) {}
+
     pub(crate) fn arilou_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let ship = cx.ship_element(ss);
         let special = cx.ship_frame_set(ss, 2);
@@ -238,6 +241,7 @@ pub(crate) mod engine {
                 && cx.ship_state(ss).special_counter == 0
                 && cx.delta_energy(ship, -(SPECIAL_ENERGY_COST as SIZE))
             {
+                cx.observe_special(ss, special_hook);
                 cx.element_mut(ship).velocity = VELOCITY_DESC::default();
                 cx.ship_state_mut(ss).status &=
                     !((SHIP_AT_MAX_SPEED | LEFT | RIGHT | THRUST | WEAPON) as u16);

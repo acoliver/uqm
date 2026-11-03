@@ -202,11 +202,15 @@ pub(crate) mod engine {
         out
     }
 
+    /// Names the sideways maneuver in the parity trace; observed inline, never called.
+    pub(crate) fn special_hook(_cx: &mut Cx<'_>, _ss: ShipId) {}
+
     pub(crate) fn supox_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let ship = cx.ship_element(ss);
         if cx.ship_state(ss).status & SPECIAL as u16 == 0 {
             return;
         }
+        cx.observe_special(ss, special_hook);
 
         let mut add_facing: i32 = 0;
         if cx.ship_state(ss).status & THRUST as u16 != 0 {

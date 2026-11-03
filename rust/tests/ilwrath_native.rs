@@ -5,7 +5,10 @@ mod battle;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 use battle::{prim as prim_of, Battle, FrameSet, Ship};
+#[path = "support/special_hooks.rs"]
+mod special_hooks;
 use std::{ffi::CStr, ptr};
+use uqm_rust::collections::observation;
 use uqm_rust::ships::native::{abi::*, frame_index as index_of};
 
 unsafe fn spawn_ship(fleet: &mut Ship<'_>, x: COORD, y: COORD) -> *mut ElementRecord {
@@ -281,9 +284,12 @@ fn special_key_starts_the_cloak_and_spends_energy() {
             let ship = avenger(&mut fleet);
             paint(ship, gfx_object_STAMP_PRIM, WHITE);
             fleet.ship_mut().cur_status_flags = SPECIAL as u16;
+            observation::enable();
+            observation::drain();
 
             preprocess(&mut fleet, ship);
 
+            assert_eq!(special_hooks::count(&observation::drain(), "ilwrath"), 1);
             assert_eq!(prim_kind(ship), gfx_object_STAMPFILL_PRIM as u8);
             assert_eq!(color_of(ship), WHITE);
             assert_eq!(fleet.descriptor_mut().ship_info.energy_level, 13);
@@ -307,7 +313,10 @@ fn cloak_needs_energy_and_a_ready_counter() {
         fleet.ship_mut().cur_status_flags = SPECIAL as u16;
 
         fleet.descriptor_mut().ship_info.energy_level = 2;
+        observation::enable();
+        observation::drain();
         preprocess(&mut fleet, ship);
+        assert_eq!(special_hooks::count(&observation::drain(), "ilwrath"), 0);
         assert_eq!(prim_kind(ship), gfx_object_STAMP_PRIM as u8);
         assert_eq!(fleet.descriptor_mut().ship_info.energy_level, 2);
         assert_eq!(fleet.ship_mut().special_counter, 0);
@@ -383,7 +392,11 @@ fn decloak_walks_back_up_and_ends_as_a_plain_stamp() {
 
             // Pressing special while cloaked starts the decloak at the darkest
             // blue; it neither recloaks nor spends energy.
+            observation::enable();
+            observation::drain();
             preprocess(&mut fleet, ship);
+            // Decloaking clears the local SPECIAL before the cloak check, so nothing activates.
+            assert_eq!(special_hooks::count(&observation::drain(), "ilwrath"), 0);
             assert_eq!(color_of(ship), BLUE_DARK);
             assert_eq!(prim_kind(ship), gfx_object_STAMPFILL_PRIM as u8);
             assert_eq!(fleet.descriptor_mut().ship_info.energy_level, 16);

@@ -245,6 +245,12 @@ impl Cx<'_> {
     pub fn race_stats(&self, id: ShipId) -> RaceStats {
         RaceStats::decode(self.desc(id))
     }
+    /// Records a SPECIAL activation that runs inline in a race callback under
+    /// that race's `special` hook. `marker` only names the hook; it is not called.
+    #[cfg(not(test))]
+    pub(crate) fn observe_special(&self, ship: ShipId, marker: fn(&mut Cx<'_>, ShipId)) {
+        crate::collections::observation::observe(marker as usize, self.ship_pointer(ship) as usize);
+    }
 }
 
 pub(crate) fn invoke<R>(callback: usize, parent: usize, call: impl FnOnce() -> R) -> R {

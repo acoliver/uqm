@@ -1,7 +1,7 @@
 //! Assigned callbacks with non-element first arguments and restored hooks.
 #[cfg(not(test))]
 pub(super) fn hooks() -> Vec<(usize, &'static str)> {
-    [part0(), part1(), part2(), part3(), part4()]
+    [part0(), part1(), part2(), part3(), part4(), part5()]
         .into_iter()
         .flatten()
         .collect()
@@ -263,6 +263,59 @@ fn part4() -> Vec<(usize, &'static str)> {
             crate::ships::races::blackurq_native::engine::gas_cloud_preprocess as *const ()
                 as usize,
             "ships::races::blackurq_native::gas_cloud_preprocess",
+        ),
+    ]
+}
+#[cfg(not(test))]
+fn part5() -> Vec<(usize, &'static str)> {
+    vec![
+        (
+            crate::ships::races::arilou_native::engine::special_hook as *const () as usize,
+            "ships::races::arilou_native::special",
+        ),
+        (
+            crate::ships::races::chmmr_native::engine::special_hook as *const () as usize,
+            "ships::races::chmmr_native::special",
+        ),
+        (
+            crate::ships::races::pkunk_native::engine::special_hook as *const () as usize,
+            "ships::races::pkunk_native::special",
+        ),
+        (
+            crate::ships::races::supox_native::engine::special_hook as *const () as usize,
+            "ships::races::supox_native::special",
+        ),
+        (
+            crate::ships::races::thraddash_native::engine::special_hook as *const () as usize,
+            "ships::races::thraddash_native::special",
+        ),
+        (
+            crate::ships::races::utwig_native::engine::special_hook as *const () as usize,
+            "ships::races::utwig_native::special",
+        ),
+        (
+            crate::ships::races::yehat_native::engine::special_hook as *const () as usize,
+            "ships::races::yehat_native::special",
+        ),
+        (
+            crate::ships::races::druuge_native::engine::special_hook as *const () as usize,
+            "ships::races::druuge_native::special",
+        ),
+        (
+            crate::ships::races::ilwrath_native::engine::special_hook as *const () as usize,
+            "ships::races::ilwrath_native::special",
+        ),
+        (
+            crate::ships::races::slylandro_native::engine::special_hook as *const () as usize,
+            "ships::races::slylandro_native::special",
+        ),
+        (
+            crate::ships::races::umgah_native::engine::special_hook as *const () as usize,
+            "ships::races::umgah_native::special",
+        ),
+        (
+            crate::ships::races::mmrnmhrm_native::engine::special_hook as *const () as usize,
+            "ships::races::mmrnmhrm_native::special",
         ),
     ]
 }

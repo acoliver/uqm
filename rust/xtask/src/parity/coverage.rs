@@ -33,12 +33,12 @@ pub(super) const MELEE_SPECIES: [SpeciesCallbacks; 25] = [
     SpeciesCallbacks {
         species: 1,
         weapon: Some("arilou_native::initialize_autoaim_laser"),
-        special: None,
+        special: Some("arilou_native::special"),
     },
     SpeciesCallbacks {
         species: 2,
         weapon: Some("chmmr_native::initialize_megawatt_laser"),
-        special: None,
+        special: Some("chmmr_native::special"),
     },
     SpeciesCallbacks {
         species: 3,
@@ -53,7 +53,7 @@ pub(super) const MELEE_SPECIES: [SpeciesCallbacks; 25] = [
     SpeciesCallbacks {
         species: 5,
         weapon: Some("pkunk_native::initialize_bug_missile"),
-        special: None,
+        special: Some("pkunk_native::special"),
     },
     SpeciesCallbacks {
         species: 6,
@@ -68,17 +68,17 @@ pub(super) const MELEE_SPECIES: [SpeciesCallbacks; 25] = [
     SpeciesCallbacks {
         species: 8,
         weapon: Some("supox_native::initialize_horn"),
-        special: None,
+        special: Some("supox_native::special"),
     },
     SpeciesCallbacks {
         species: 9,
         weapon: Some("thraddash_native::initialize_horn"),
-        special: None,
+        special: Some("thraddash_native::special"),
     },
     SpeciesCallbacks {
         species: 10,
         weapon: Some("utwig_native::initialize_lance"),
-        special: None,
+        special: Some("utwig_native::special"),
     },
     SpeciesCallbacks {
         species: 11,
@@ -88,7 +88,7 @@ pub(super) const MELEE_SPECIES: [SpeciesCallbacks; 25] = [
     SpeciesCallbacks {
         species: 12,
         weapon: Some("yehat_native::initialize_standard_missiles"),
-        special: None,
+        special: Some("yehat_native::special"),
     },
     SpeciesCallbacks {
         species: 13,
@@ -98,12 +98,12 @@ pub(super) const MELEE_SPECIES: [SpeciesCallbacks; 25] = [
     SpeciesCallbacks {
         species: 14,
         weapon: Some("druuge_native::initialize_cannon"),
-        special: None,
+        special: Some("druuge_native::special"),
     },
     SpeciesCallbacks {
         species: 15,
         weapon: Some("ilwrath_native::initialize_flame"),
-        special: None,
+        special: Some("ilwrath_native::special"),
     },
     SpeciesCallbacks {
         species: 16,
@@ -113,12 +113,12 @@ pub(super) const MELEE_SPECIES: [SpeciesCallbacks; 25] = [
     SpeciesCallbacks {
         species: 17,
         weapon: Some("slylandro_native::initialize_lightning"),
-        special: None,
+        special: Some("slylandro_native::special"),
     },
     SpeciesCallbacks {
         species: 18,
         weapon: Some("umgah_native::initialize_cone"),
-        special: None,
+        special: Some("umgah_native::special"),
     },
     SpeciesCallbacks {
         species: 19,
@@ -153,7 +153,7 @@ pub(super) const MELEE_SPECIES: [SpeciesCallbacks; 25] = [
     SpeciesCallbacks {
         species: 25,
         weapon: Some("mmrnmhrm_native::initialize_dual_weapons"),
-        special: None,
+        special: Some("mmrnmhrm_native::special"),
     },
 ];
 
