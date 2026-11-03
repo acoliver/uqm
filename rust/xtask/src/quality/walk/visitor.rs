@@ -562,43 +562,7 @@ impl<'a> Visit<'a> for Walker {
             if resolved.contains("app::bridge::") {
                 self.add("ffi", "bridge_calls", expr.span(), 1);
             }
-            if self.context.file != "src/app/bridge.rs"
-                && resolved.contains("engine::")
-                && ["Kernel::current", "World::current", "WorldData::current"]
-                    .iter()
-                    .any(|suffix| resolved.ends_with(suffix))
-            {
-                self.add("ffi", "owner_projections", expr.span(), 1);
-            } else if self.names.is_none() && self.context.file != "src/app/bridge.rs" {
-                let key = format!(
-                    "owner-call|{}|{}:{}|{}",
-                    self.context.file,
-                    expr.span().start().line,
-                    expr.span().start().column,
-                    self.context.module
-                );
-                if self.events.insert(key) {
-                    let mut candidates = vec![self.projection_key(&resolved)];
-                    if !resolved.contains("::") {
-                        candidates.push(self.projection_key(&format!(
-                            "{}::{resolved}",
-                            self.context.lexical_module
-                        )));
-                        for import in self
-                            .context
-                            .imports
-                            .values()
-                            .filter_map(|path| path.strip_suffix("::*"))
-                        {
-                            candidates.push(self.projection_key(&format!("{import}::{resolved}")));
-                        }
-                    }
-                    self.owner_projection_calls.push((
-                        candidates,
-                        self.finding("ffi", "owner_projections", self.context.module.clone(), 1),
-                    ));
-                }
-            }
+            self.record_owner_call(&resolved, expr.span());
             if resolved.ends_with("Hook::Legacy") {
                 self.add("ffi", "legacy_hooks", expr.span(), 1);
             }
