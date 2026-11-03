@@ -2,6 +2,7 @@
 #![allow(non_snake_case)]
 
 use super::palette::*;
+use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
 use crate::navigation::abi::*;
 
 use super::menu_state::{
@@ -362,5 +363,3 @@ unsafe fn game_string(index: u32) -> *mut UNICODE {
     ))
     .cast()
 }
-
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

@@ -2,6 +2,8 @@
 #![allow(non_snake_case)]
 #![cfg(feature = "debug-process")]
 
+#[cfg(not(test))]
+use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
 use crate::navigation::abi::*;
 use std::ffi::{c_char, c_int};
 
@@ -464,7 +466,7 @@ mod runtime {
                 }
             }
         }
-        if crate::engine::World::current().read(|world| inHQSpace(world)) != 0
+        if crate::engine::World::current().read(inHQSpace) != 0
             || WorldFields::current().read(|owner| owner.game.current_activity) as u8 as u32
                 == IN_INTERPLANETARY
         {
@@ -1311,7 +1313,7 @@ mod runtime {
     pub unsafe fn resetCrewBattle() {
         if WorldFields::current().read(|owner| owner.game.current_activity) & IN_BATTLE as ACTIVITY
             == 0
-            || crate::engine::World::current().read(|world| inHQSpace(world)) != 0
+            || crate::engine::World::current().read(inHQSpace) != 0
         {
             return;
         }
@@ -1334,7 +1336,7 @@ mod runtime {
     pub unsafe fn resetEnergyBattle() {
         if WorldFields::current().read(|owner| owner.game.current_activity) & IN_BATTLE as ACTIVITY
             == 0
-            || crate::engine::World::current().read(|world| inHQSpace(world)) != 0
+            || crate::engine::World::current().read(inHQSpace) != 0
         {
             return;
         }
@@ -1768,5 +1770,3 @@ mod tests {
         assert_eq!((color.r, color.g, color.b, color.a), (255, 64, 128, 100));
     }
 }
-
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

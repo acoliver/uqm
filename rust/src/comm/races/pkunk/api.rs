@@ -1,5 +1,7 @@
 use super::Handler;
 use crate::comm::races::alliance::AllianceApi;
+#[cfg(not(test))]
+use crate::engine::WorldData as WorldFields;
 
 pub(super) trait PkunkApi: AllianceApi<Handler> {
     fn date(&self) -> (u16, u16, u16);
@@ -45,5 +47,3 @@ impl PkunkApi for super::super::encounter::testing::Fake<Handler, World> {
         self.world.ships_added
     }
 }
-
-use crate::engine::WorldData as WorldFields;

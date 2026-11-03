@@ -461,5 +461,3 @@ mod tests {
         }
     }
 }
-
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

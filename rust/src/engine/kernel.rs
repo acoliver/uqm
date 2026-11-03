@@ -164,6 +164,7 @@ impl Kernel {
 }
 
 impl super::battle::Cx<'_> {
+    #[cfg(not(test))]
     pub(crate) fn race_pool(&self, side: usize) -> &super::battle::link_queue::RacePool {
         &self.kernel.races[side]
     }

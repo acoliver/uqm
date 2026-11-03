@@ -1,6 +1,7 @@
 //! The C functions and globals the default system generator still needs, in
 //! one place. Each goes away when its owner is ported.
 
+use crate::engine::{World as WorldOwner, WorldData as WorldFields};
 mod surface;
 pub use surface::{load_planet_surface, CapturedSurface};
 
@@ -179,7 +180,10 @@ pub unsafe fn load_planet_default_surface() {
 /// # Safety
 /// `CurStarDescPtr` must point at a valid star description.
 pub unsafe fn current_star_index() -> u8 {
-    (*(**WorldOwner::current()).star_pointer(crate::planets::starmap::current_catalog())).index
+    // SAFETY: the caller retains a selected entry of the initialized catalog on the game thread.
+    unsafe {
+        (*(**WorldOwner::current()).star_pointer(crate::planets::starmap::current_catalog())).index
+    }
 }
 
 /// `GROUPS_ADD_NEW` (`state.h`).
@@ -503,7 +507,9 @@ pub unsafe fn draw_hyper_coords(loc: (i16, i16)) {
 pub struct LiveGame;
 
 fn glob() -> crate::app::bridge::Projection<crate::engine::WorldData> {
-    unsafe { WorldFields::current() }
+    {
+        WorldFields::current()
+    }
 }
 
 impl Npcs for LiveGame {
@@ -599,7 +605,9 @@ impl PlanetNames for LiveGame {
 impl FleetGroups for LiveGame {
     fn battle_group_ref(&self) -> u32 {
         // SAFETY: game thread; `GlobData` is initialised.
-        unsafe { glob().read(|owner| owner.game.battle_group_ref) }
+        {
+            glob().read(|owner| owner.game.battle_group_ref)
+        }
     }
     fn set_battle_group_ref(&mut self, value: u32) {
         // SAFETY: as above.
@@ -706,7 +714,7 @@ impl crate::planets::generate::sam::GuardSite for LiveGame {
     }
     fn ip_location(&self) -> crate::c_bindings::global_state::POINT {
         // SAFETY: game-thread global, represented by the asserted crate::engine::WorldData layout.
-        unsafe {
+        {
             let point = glob().read(|owner| owner.game.ip_location);
             crate::c_bindings::global_state::POINT {
                 x: point.x,
@@ -718,15 +726,14 @@ impl crate::planets::generate::sam::GuardSite for LiveGame {
         // SAFETY: disjoint global fields, with no Rust references held across
         // the legacy coordinate transform. CPoint's layout is bindgen-asserted.
         unsafe {
-            let input = std::ptr::addr_of_mut!((**glob()).game.ip_location);
+            let world = glob();
+            let input = std::ptr::addr_of_mut!((**world).game.ip_location);
             input.write(crate::comm::locdata::CPoint {
                 x: location.x,
                 y: location.y,
             });
-            let output = std::ptr::addr_of_mut!((**glob()).game.ship_stamp.origin);
+            let output = std::ptr::addr_of_mut!((**world).game.ship_stamp.origin);
             XFormIPLoc(input.cast(), output.cast(), 1);
         }
     }
 }
-
-use crate::engine::{World as WorldOwner, WorldData as WorldFields};

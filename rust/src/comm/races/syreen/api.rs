@@ -1,5 +1,7 @@
 use super::Handler;
 use crate::comm::races::alliance::AllianceApi;
+#[cfg(not(test))]
+use crate::engine::Kernel as KernelOwner;
 
 pub(super) trait SyreenApi: AllianceApi<Handler> {
     fn using_speech(&self) -> bool;
@@ -7,7 +9,9 @@ pub(super) trait SyreenApi: AllianceApi<Handler> {
 #[cfg(not(test))]
 impl SyreenApi for super::super::script::live::LiveScript<Handler> {
     fn using_speech(&self) -> bool {
-        unsafe { KernelOwner::current().read(|owner| owner.using_speech) != 0 }
+        {
+            KernelOwner::current().read(|owner| owner.using_speech) != 0
+        }
     }
 }
 #[cfg(test)]
@@ -21,5 +25,3 @@ impl SyreenApi for super::super::encounter::testing::Fake<Handler, World> {
         self.world.speech
     }
 }
-
-use crate::engine::Kernel as KernelOwner;

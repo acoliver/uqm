@@ -3,6 +3,8 @@
 #![allow(non_snake_case)]
 
 use crate::comm::dispatch::CPoint;
+#[cfg(not(test))]
+use crate::engine::Kernel as KernelOwner;
 use crate::savegame::runtime::star::{CStarDesc, NUM_HYPER_VORTICES, NUM_SOLAR_SYSTEMS};
 use std::ptr;
 
@@ -13,6 +15,7 @@ pub static mut star_array: *mut CStarDesc = ptr::null_mut();
 /// # Safety
 /// Game thread only. A non-null catalog must contain CATALOG_LEN live entries.
 pub unsafe fn current_catalog<'a>() -> Option<&'a [CStarDesc; crate::engine::world::CATALOG_LEN]> {
+    // SAFETY: the caller retains the initialized catalog on the game thread.
     unsafe {
         star_array
             .cast::<[CStarDesc; crate::engine::world::CATALOG_LEN]>()
@@ -182,5 +185,3 @@ mod tests {
         }
     }
 }
-
-use crate::engine::Kernel as KernelOwner;

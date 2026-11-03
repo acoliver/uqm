@@ -4,6 +4,7 @@
 use crate::callback::ffi::{AlarmId, Alarm_addAbsoluteMs, Alarm_remove};
 use crate::engine::battle::schema::FlashContext;
 use crate::engine::World;
+use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
 use crate::navigation::abi::*;
 
 use std::{mem, ptr};
@@ -284,13 +285,13 @@ pub unsafe extern "C" fn DrawSISMessageEx(
                 );
                 buf.as_ptr().cast()
             }
-            IN_HYPERSPACE => game_string(
-                if crate::engine::World::current().read(|world| inHyperSpace(world)) != 0 {
+            IN_HYPERSPACE => {
+                game_string(if crate::engine::World::current().read(inHyperSpace) != 0 {
                     NAVIGATION_STRING_BASE
                 } else {
                     NAVIGATION_STRING_BASE + 1
-                },
-            ),
+                })
+            }
             _ => c"".as_ptr().cast(),
         };
     }
@@ -1196,5 +1197,3 @@ pub unsafe fn ContinueFlash() {
         FLASH_PAUSED = 0;
     }
 }
-
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

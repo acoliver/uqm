@@ -15,6 +15,8 @@
 
 use super::response::ResponseFunc;
 use super::state::CommState;
+#[cfg(not(test))]
+use crate::engine::Kernel as KernelOwner;
 
 fn communication_background_volume(background: u8, using_speech: u32) -> u8 {
     if using_speech != 0 {
@@ -473,7 +475,6 @@ pub mod dinput {
 
     // DoInput callback for last replay (replaces c_DoLastReplay)
     unsafe extern "C" fn do_last_replay_cb(p_lrs: *mut LastReplayStateDInput) -> c_int {
-        let kernel = KernelOwner::current();
         let lrs = unsafe { &mut *p_lrs };
 
         let activity = crate::mainloop::ffi::get_current_activity().0 as u32;
@@ -493,7 +494,7 @@ pub mod dinput {
         let left_pressed = lrs.left.pressed(KEY_MENU_LEFT);
 
         if cancel_pressed && !won_last_battle {
-            let speech = unsafe { *std::ptr::addr_of_mut!((**kernel).using_speech) };
+            let speech = KernelOwner::current().read(|kernel| kernel.using_speech);
             c_bridge::FadeMusic(
                 super::communication_background_volume(
                     crate::sound::types::NORMAL_VOLUME as u8,
@@ -505,7 +506,7 @@ pub mod dinput {
             lrs.time_out = c_bridge::FadeMusic(0, (c_bridge::ONE_SECOND_TICKS * 2) as i16)
                 + (c_bridge::ONE_SECOND_TICKS as u32) / 60;
         } else if left_pressed {
-            let speech = unsafe { *std::ptr::addr_of_mut!((**kernel).using_speech) };
+            let speech = KernelOwner::current().read(|kernel| kernel.using_speech);
             c_bridge::FadeMusic(
                 super::communication_background_volume(
                     crate::sound::types::NORMAL_VOLUME as u8,
@@ -3085,5 +3086,3 @@ mod tests {
         let _ = intro_transition(4, 0);
     }
 }
-
-use crate::engine::Kernel as KernelOwner;

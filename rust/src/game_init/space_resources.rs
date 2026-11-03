@@ -113,13 +113,12 @@ pub(crate) mod live {
 
     /// # Safety
     /// Game thread only, after graphics and resource initialization.
-
     pub unsafe fn InitSpace(kernel: &mut crate::engine::Kernel, activity: u16) -> u32 {
         {
-            let old = (*kernel).space_init_count;
-            (*kernel).space_init_count = (*kernel).space_init_count.wrapping_add(1);
+            let old = kernel.space_init_count;
+            kernel.space_init_count = kernel.space_init_count.wrapping_add(1);
             if old == 0 && activity as u8 <= crate::ships::native::abi::IN_ENCOUNTER as u8 {
-                let stars = &mut *ptr::addr_of_mut!((*kernel).stars_in_space);
+                let stars = &mut *ptr::addr_of_mut!(kernel.stars_in_space);
                 *stars = CaptureDrawable(LoadGraphicInstance(c"graphics.stars".as_ptr()).cast());
                 if stars.is_null() {
                     return 0;
@@ -155,25 +154,21 @@ pub(crate) mod live {
 
     /// # Safety
     /// Game thread only; pairs with InitSpace while graphics is live.
-
     pub unsafe fn UninitSpace(kernel: &mut crate::engine::Kernel) {
         {
-            if (*kernel).space_init_count != 0 {
-                (*kernel).space_init_count -= 1;
-                if (*kernel).space_init_count == 0 {
+            if kernel.space_init_count != 0 {
+                kernel.space_init_count -= 1;
+                if kernel.space_init_count == 0 {
                     crate::collections::observation::record(
                         crate::collections::observation::Event::SpaceActive(false),
                     );
-                    free_image(ptr::addr_of_mut!((*kernel).blast), "engine-global:blast");
+                    free_image(ptr::addr_of_mut!(kernel.blast), "engine-global:blast");
                     free_image(
-                        ptr::addr_of_mut!((*kernel).explosion),
+                        ptr::addr_of_mut!(kernel.explosion),
                         "engine-global:explosion",
                     );
-                    free_image(
-                        ptr::addr_of_mut!((*kernel).asteroid),
-                        "engine-global:asteroid",
-                    );
-                    let stars = &mut *ptr::addr_of_mut!((*kernel).stars_in_space);
+                    free_image(ptr::addr_of_mut!(kernel.asteroid), "engine-global:asteroid");
+                    let stars = &mut *ptr::addr_of_mut!(kernel.stars_in_space);
                     DestroyDrawable(ReleaseDrawable(*stars));
                     *stars = ptr::null_mut();
                     observe_views(std::slice::from_ref(stars), "engine-global:stars", |f| {

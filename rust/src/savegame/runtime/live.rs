@@ -14,6 +14,7 @@
 //!
 //! All of them must run on the game thread.
 
+use crate::engine::{World as WorldOwner, WorldData as WorldFields};
 use std::fmt;
 
 use super::hyper_save::{self, HyperFlagship, HyperSaveError};
@@ -149,13 +150,20 @@ pub unsafe fn prepare_live_solar_location() -> Result<(), LiveLocationError> {
         (**WorldOwner::current()).star_pointer(crate::planets::starmap::current_catalog());
     let star_index =
         star::catalog_index(live_catalog(), current).map_err(LiveLocationError::Star)?;
-    let glob = &mut **WorldFields::current();
+    let mut game = WorldFields::current().read(|world| world.game);
     location::save_solar_location(
-        &mut *std::ptr::addr_of_mut!(glob.game).cast::<crate::comm::locdata::CGameState>(),
+        &mut *std::ptr::addr_of_mut!(game).cast::<crate::comm::locdata::CGameState>(),
         &*state,
         star_index,
     )
-    .map_err(LiveLocationError::Location)
+    .map_err(LiveLocationError::Location)?;
+    WorldFields::current().write(|world| {
+        world.game.in_orbit = game.in_orbit;
+        world.game.ship_facing = game.ship_facing;
+        world.game.ip_planet = game.ip_planet;
+        world.game.ip_location = game.ip_location;
+    });
+    Ok(())
 }
 
 /// `SaveSisHyperState ()` over the live `GlobData`, `race_q[RPG_PLAYER_NUM]`
@@ -191,5 +199,3 @@ pub unsafe fn live_flagship_facing() -> Result<Option<u16>, HyperSaveError> {
     let display_list = unsafe { &*live_queues::display_list() };
     hyper_save::read_flagship_facing(player_ships, display_list)
 }
-
-use crate::engine::{World as WorldOwner, WorldData as WorldFields};

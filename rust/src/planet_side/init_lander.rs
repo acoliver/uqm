@@ -4,6 +4,8 @@
 //! lander sprite, shield indicators, and cargo capacity bar. Called by
 //! `PickPlanetSide` in `scan.c` before the landing-site selection menu.
 
+#[cfg(not(test))]
+use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
 use std::ffi::c_void;
 use std::sync::Mutex;
 
@@ -384,5 +386,3 @@ mod tests {
         );
     }
 }
-
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

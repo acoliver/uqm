@@ -1,5 +1,7 @@
 //! Discovery-report ownership at the PlanetSide runtime boundary.
 
+#[cfg(not(test))]
+use crate::engine::Kernel as KernelOwner;
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -129,5 +131,3 @@ mod tests {
         assert!(!string.is_null());
     }
 }
-
-use crate::engine::Kernel as KernelOwner;

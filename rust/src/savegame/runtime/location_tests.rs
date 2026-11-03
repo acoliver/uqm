@@ -114,7 +114,7 @@ const PLANETARY_CHANGE_MASK: u8 = 1 << (17 % 8);
 
 fn planetary_change() -> bool {
     crate::engine::World::current()
-        .read(|world| snapshot_game_state(world))
+        .read(snapshot_game_state)
         .unwrap()[PLANETARY_CHANGE_BYTE]
         & PLANETARY_CHANGE_MASK
         != 0
@@ -122,7 +122,7 @@ fn planetary_change() -> bool {
 
 fn set_planetary_change() {
     let mut bytes = crate::engine::World::current()
-        .read(|world| snapshot_game_state(world))
+        .read(snapshot_game_state)
         .unwrap();
     bytes[PLANETARY_CHANGE_BYTE] |= PLANETARY_CHANGE_MASK;
     crate::engine::World::current()

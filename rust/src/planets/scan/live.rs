@@ -4,6 +4,7 @@ use crate::c_bindings::{controller_input::*, global_state::MENU_STATE, solar_sys
 use crate::collections::queue::{CountLinks, Queue, ReinitQueue};
 use crate::comm::dispatch::{clone_ship_fragment, CShipFragment};
 use crate::comm::locdata::{CColor, CPoint, CRect};
+use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
 use crate::graphics::drawable_abi::SetContextFGFrame;
 use crate::mainloop::restart_menu::c_extern::{
     self as base, uqm_sleep_thread_until as SleepThreadUntil, SetContext,
@@ -684,5 +685,3 @@ unsafe fn new_context(name: *const std::ffi::c_char) -> *mut std::ffi::c_void {
         CreateContextAux().cast()
     }
 }
-
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

@@ -3,6 +3,7 @@
 
 //! Shipyard menu, crew transactions and hangar animation, ported from shipyard.c.
 
+use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
 use crate::navigation::abi::*;
 
 use crate::state::game_state_keys::{get_game_state, set_game_state};
@@ -116,7 +117,7 @@ unsafe fn GetAvailableRaceFromIndex(mut index: BYTE) -> HFLEETINFO {
 }
 
 unsafe fn DrawRaceStrings(menu: *mut MENU_STATE, mut race: BYTE) {
-    let world = WorldFields::current();
+    let mut world = WorldFields::current().read(|world| *world);
     let old = SetContext(KernelOwner::current().read(|owner| owner.status_context));
     let mut r: RECT = mem::zeroed();
     GetContextClipRect(&mut r);
@@ -144,7 +145,7 @@ unsafe fn DrawRaceStrings(menu: *mut MENU_STATE, mut race: BYTE) {
     DrawFilledRectangle(&mut r);
     if race != BYTE::MAX {
         let ship = GetAvailableRaceFromIndex(race);
-        race = GetIndexFromStarShip(ptr::addr_of_mut!((**world).game.avail_race_q), ship) as BYTE;
+        race = GetIndexFromStarShip(ptr::addr_of_mut!(world.game.avail_race_q), ship) as BYTE;
         stamp.frame = SetAbsFrameIndex((*menu).ModuleFrame, 3 + race as COUNT);
         DrawStamp(&mut stamp);
         stamp.frame = (*ship.cast::<FLEET_INFO>()).melee_icon;
@@ -283,6 +284,7 @@ unsafe fn ShowCombatShip(menu: *mut MENU_STATE, mut window: COUNT, yanked: *mut 
             handle = next;
         }
     }
+    drop(world);
     if num_ships != 0 {
         let mut all_finished = false;
         let r = RECT {
@@ -471,7 +473,7 @@ unsafe fn DMS_SetMode(menu: *mut MENU_STATE, mode: ModifyMode) {
 }
 
 unsafe fn DMS_SpinShip(menu: *mut MENU_STATE, ship: HSHIPFRAG) -> bool {
-    let world = WorldFields::current();
+    let mut world = WorldFields::current().read(|world| *world);
     if (*menu).CurState >> 4 != 0 {
         return false;
     }
@@ -487,7 +489,7 @@ unsafe fn DMS_SpinShip(menu: *mut MENU_STATE, ship: HSHIPFRAG) -> bool {
     } else {
         let fragment = ship.cast::<SHIP_FRAGMENT>();
         GetStarShipFromIndex(
-            ptr::addr_of_mut!((**world).game.avail_race_q),
+            ptr::addr_of_mut!(world.game.avail_race_q),
             (*fragment).race_id as COUNT,
         )
     };
@@ -547,13 +549,13 @@ unsafe fn DMS_DismissFlagShipCrew() -> SIZE {
 }
 
 unsafe fn DMS_HireEscortShipCrew(ship: *mut SHIP_FRAGMENT) -> SIZE {
-    let world = WorldFields::current();
+    let mut world = WorldFields::current().read(|world| *world);
     let template = GetStarShipFromIndex(
-        ptr::addr_of_mut!((**world).game.avail_race_q),
+        ptr::addr_of_mut!(world.game.avail_race_q),
         (*ship).race_id as COUNT,
     );
     let max_crew = (*template.cast::<FLEET_INFO>()).crew_level;
-    if (**world).flagship.res_units < (**world).game.crew_cost as DWORD {
+    if world.flagship.res_units < world.game.crew_cost as DWORD {
         return 0;
     }
     if (*ship).crew_level >= (*ship).max_crew {
@@ -563,7 +565,7 @@ unsafe fn DMS_HireEscortShipCrew(ship: *mut SHIP_FRAGMENT) -> SIZE {
         return 0;
     }
     if (*ship).crew_level > 0 {
-        DeltaSISGauges(0, 0, -((**world).game.crew_cost as i32));
+        DeltaSISGauges(0, 0, -(world.game.crew_cost as i32));
     } else {
         DeltaSISGauges(0, 0, -(SHIP_COST[(*ship).race_id as usize] as i32));
     }
@@ -637,18 +639,19 @@ unsafe fn DMS_ModifyCrew(menu: *mut MENU_STATE, handle: HSHIPFRAG, dy: SBYTE) {
 }
 
 unsafe fn DMS_TryAddEscortShip(menu: *mut MENU_STATE) {
-    let world = WorldFields::current();
     let info = GetAvailableRaceFromIndex((*menu).delta_item as BYTE);
+    let world = WorldFields::current();
     let index = GetIndexFromStarShip(ptr::addr_of_mut!((**world).game.avail_race_q), info);
-    if (**world).flagship.res_units >= SHIP_COST[index as usize] as DWORD
+    let added = (**world).flagship.res_units >= SHIP_COST[index as usize] as DWORD
         && !CloneShipFragment(
             &raw mut (**world).game.avail_race_q,
             index,
             ptr::addr_of_mut!((**world).game.built_ship_q),
             1,
         )
-        .is_null()
-    {
+        .is_null();
+    drop(world);
+    if added {
         ShowCombatShip(menu, (*menu).CurState as COUNT, ptr::null_mut());
         DrawMenuStateStrings(PM_CREW as BYTE, SHIPYARD_CREW as i16);
         DeltaSISGauges(
@@ -710,13 +713,14 @@ unsafe fn DMS_AddEscortShip(
 }
 
 unsafe fn DMS_ScrapEscortShip(menu: *mut MENU_STATE, handle: HSHIPFRAG) {
-    let world = WorldFields::current();
     let ship = handle.cast::<SHIP_FRAGMENT>();
     SetFlashRect(ptr::null());
     ShowCombatShip(menu, (*menu).CurState as COUNT, ship);
+    let world = WorldFields::current();
     let queue = ptr::addr_of_mut!((**world).game.built_ship_q);
     RemoveQueue(queue, handle);
     FreeLink(queue, handle);
+    drop(world);
     DeltaSISGauges(
         UNDEFINED_DELTA as SIZE,
         UNDEFINED_DELTA as SIZE,
@@ -1022,5 +1026,3 @@ pub unsafe extern "C" fn DoShipyard(menu: *mut MENU_STATE) -> BOOLEAN {
     }
     1
 }
-
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

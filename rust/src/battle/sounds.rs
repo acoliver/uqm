@@ -3,6 +3,8 @@
 #[cfg(not(test))]
 use crate::engine::battle::Cx;
 use crate::engine::battle::ElementId;
+#[cfg(not(test))]
+use crate::engine::Kernel as KernelOwner;
 use crate::ships::native::abi::SOUND;
 use std::ptr;
 
@@ -270,5 +272,3 @@ mod tests {
         assert_eq!(&queue.objects[..3], &[None, Some(replacement), None]);
     }
 }
-
-use crate::engine::Kernel as KernelOwner;

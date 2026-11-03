@@ -1,6 +1,29 @@
 use super::*;
 
 #[test]
+fn picker_projection_retires_with_its_melee_session_owner() {
+    let scope = "ffi|owner_projections|uqm::pickship::ffi::encounter_ship";
+    let mut budgets = BTreeMap::new();
+    set_scoped(
+        &mut budgets,
+        "u3_02_world_projection",
+        1,
+        [(scope.into(), 1)].into(),
+        false,
+    )
+    .unwrap();
+    assert_eq!(budgets["u3_02_world_projection"].ends, "U3-02");
+    assert!(set_scoped(
+        &mut budgets,
+        "u6_04_world_projection",
+        1,
+        [(scope.into(), 1)].into(),
+        false
+    )
+    .is_err());
+}
+
+#[test]
 fn projection_budgets_have_exact_callers_unit_retirement_and_shrink_only_limits() {
     let name = "u5_02_world_projection";
     let scope = "ffi|owner_projections|uqm::planets::solarsys::lifecycle::ExploreSolarSys";

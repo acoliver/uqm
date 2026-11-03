@@ -1,6 +1,7 @@
 //! Devices menu, ported from `planets/devices.c`.
 
 use crate::battle::c_bridge::SleepThread;
+use crate::engine::{Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields};
 use crate::mainloop::restart_menu::c_extern::uqm_sleep_thread_until as SleepThreadUntil;
 use crate::mainloop::restart_menu::c_extern::{DoInput, FadeScreen};
 use std::sync::Mutex;
@@ -8,7 +9,7 @@ use std::sync::Mutex;
 use crate::automation::story_actions::DeviceObservation;
 use crate::c_bindings::global_state::{CHMMR_DEFINED, ILWRATH_DEFINED, SAMATRA_DEFINED};
 use crate::collections::queue::{CountLinks, Queue, ReinitQueue};
-use crate::comm::dispatch::{clone_ship_fragment, ship};
+use crate::comm::dispatch::ship;
 use crate::comm::locdata::{CColor, CRect};
 use crate::mainloop::types::activity_flags::{CHECK_LOAD, START_ENCOUNTER};
 use crate::starbase::cffi::CffiPlatform;
@@ -166,9 +167,9 @@ unsafe fn draw(menu: &Menu, old: Option<usize>, refresh: bool) {
 }
 
 unsafe fn reset_groups() {
-    let world = WorldFields::current();
     crate::c_bindings::global_state::EncounterGroup = 0;
     PutGroupInfo(0, 255);
+    let world = WorldFields::current();
     ReinitQueue(std::ptr::addr_of_mut!((**world).game.ip_group_q).cast::<Queue>());
     assert_eq!(
         CountLinks(std::ptr::addr_of_mut!((**world).game.npc_built_ship_q).cast::<Queue>()),
@@ -181,8 +182,7 @@ unsafe fn orbit_is(planet: u8) -> bool {
 }
 
 unsafe fn use_caster() -> bool {
-    let world = WorldFields::current();
-    if crate::engine::World::current().read(|world| inHQSpace(world)) != 0 {
+    if crate::engine::World::current().read(inHQSpace) != 0 {
         if crate::engine::World::current()
             .read(|world| get(world, crate::engine::StoryKey::ARILOU_SPACE_SIDE))
             <= 1
@@ -193,7 +193,7 @@ unsafe fn use_caster() -> bool {
         }
         return false;
     }
-    if (**world).game.current_activity & 0xff != 4 || !playerInSolarSystem() {
+    if (**WorldFields::current()).game.current_activity & 0xff != 4 || !playerInSolarSystem() {
         return false;
     }
     if orbit_is(1)
@@ -206,7 +206,7 @@ unsafe fn use_caster() -> bool {
             == 0
     {
         NextActivity |= CHECK_LOAD;
-        (**world).game.current_activity |= START_ENCOUNTER;
+        (**WorldFields::current()).game.current_activity |= START_ENCOUNTER;
         reset_groups();
         crate::engine::World::current().write(|world| {
             set(
@@ -223,7 +223,7 @@ unsafe fn use_caster() -> bool {
     ) == ILWRATH_DEFINED;
     let mut found = home && StartSphereTracking(u16::from(ship::ILWRATH_SHIP)) != 0;
     if !found {
-        let queue = std::ptr::addr_of!((**world).game.ip_group_q);
+        let queue = std::ptr::addr_of!((**WorldFields::current()).game.ip_group_q);
         let group = (*queue)
             .head
             .cast::<crate::c_bindings::global_state::IP_GROUP>();
@@ -235,7 +235,7 @@ unsafe fn use_caster() -> bool {
         return false;
     }
     NextActivity |= CHECK_LOAD;
-    (**world).game.current_activity |= START_ENCOUNTER;
+    (**WorldFields::current()).game.current_activity |= START_ENCOUNTER;
     reset_groups();
     crate::engine::World::current().write(|world| {
         set(
@@ -252,7 +252,6 @@ unsafe fn use_caster() -> bool {
 
 /// Returns the original DeviceStatus (failure, success, success without sound).
 unsafe fn invoke(id: u8) -> u8 {
-    let world = WorldFields::current();
     match id {
         4..=6 => {
             let condition = crate::engine::World::current()
@@ -285,7 +284,9 @@ unsafe fn invoke(id: u8) -> u8 {
             1
         }
         3 => {
-            if (**world).game.current_activity & 0xff != 4 || !playerInPlanetOrbit() {
+            if (**WorldFields::current()).game.current_activity & 0xff != 4
+                || !playerInPlanetOrbit()
+            {
                 return 0;
             }
             PlayMenuSound(3);
@@ -301,41 +302,44 @@ unsafe fn invoke(id: u8) -> u8 {
             } else {
                 crate::engine::World::current()
                     .write(|world| set(world, crate::engine::StoryKey::CHMMR_EMERGING, 1));
-                (**world).game.current_activity |= START_ENCOUNTER;
+                (**WorldFields::current()).game.current_activity |= START_ENCOUNTER;
                 reset_groups();
-                clone_ship_fragment(
-                    ship::CHMMR_SHIP,
-                    std::ptr::addr_of_mut!((**world).game.npc_built_ship_q).cast::<Queue>(),
-                    0,
-                );
+                WorldFields::current().write(|world| {
+                    crate::battle::build_native::CloneShipFragment(
+                        &raw mut world.game.avail_race_q,
+                        ship::CHMMR_SHIP.into(),
+                        &raw mut world.game.npc_built_ship_q,
+                        0,
+                    );
+                });
             }
             2
         }
         2 => {
             crate::engine::World::current()
                 .write(|world| set(world, crate::engine::StoryKey::UTWIG_BOMB, 0));
-            (**world).game.current_activity &= !0x0200;
-            (**world).flagship.crew_enlisted = u16::MAX;
+            (**WorldFields::current()).game.current_activity &= !0x0200;
+            (**WorldFields::current()).flagship.crew_enlisted = u16::MAX;
             1
         }
         1 => {
             NextActivity |= CHECK_LOAD;
-            (**world).game.current_activity |= START_ENCOUNTER;
+            (**WorldFields::current()).game.current_activity |= START_ENCOUNTER;
             crate::engine::World::current()
                 .write(|world| set(world, crate::engine::StoryKey::GLOBAL_FLAGS_AND_DATA, 0));
-            if crate::engine::World::current().read(|world| inHQSpace(world)) != 0 {
-                if !(**world).game.encounter_q.head.is_null() {
+            if crate::engine::World::current().read(inHQSpace) != 0 {
+                if !(**WorldFields::current()).game.encounter_q.head.is_null() {
                     crate::engine::World::current()
                         .write(|world| set(world, crate::engine::StoryKey::SHIP_TO_COMPEL, 1));
                 }
-                (**world).game.current_activity &= !0x0200;
+                (**WorldFields::current()).game.current_activity &= !0x0200;
                 #[cfg(not(test))]
                 crate::app::bridge::enter(save_sis_hyper_state);
                 #[cfg(test)]
                 save_sis_hyper_state();
             } else {
                 crate::c_bindings::global_state::EncounterGroup = 0;
-                if !(**world).game.ip_group_q.head.is_null() {
+                if !(**WorldFields::current()).game.ip_group_q.head.is_null() {
                     crate::engine::World::current()
                         .write(|world| set(world, crate::engine::StoryKey::SHIP_TO_COMPEL, 1));
                     reset_groups();
@@ -358,12 +362,12 @@ unsafe fn invoke(id: u8) -> u8 {
         }
         12 | 13 => u8::from(use_caster()),
         0 => {
-            if crate::engine::World::current().read(|world| inHyperSpace(world)) == 0
-                || (**world).flagship.fuel_on_board < 1000
+            if crate::engine::World::current().read(inHyperSpace) == 0
+                || (**WorldFields::current()).flagship.fuel_on_board < 1000
             {
                 return 0;
             }
-            (**world).flagship.fuel_on_board -= 1000;
+            (**WorldFields::current()).flagship.fuel_on_board -= 1000;
             crate::engine::World::current()
                 .write(|world| set(world, crate::engine::StoryKey::PORTAL_COUNTER, 1));
             1
@@ -386,7 +390,7 @@ fn effect_state() -> std::collections::BTreeMap<String, u32> {
                 )
             })
             .collect();
-    unsafe {
+    {
         state.insert(
             "activity".into(),
             u32::from(WorldFields::current().read(|owner| owner.game.current_activity)),
@@ -467,7 +471,7 @@ unsafe extern "C" fn frame(menu: *mut Menu) -> i32 {
 #[no_mangle]
 pub unsafe extern "C" fn InventoryDevices(map: *mut u8, size: u16) -> i16 {
     let state = crate::engine::World::current()
-        .read(|world| crate::state::ffi::snapshot_game_state(world))
+        .read(crate::state::ffi::snapshot_game_state)
         .expect("initialized device inventory");
     let state = crate::state::game_state::GameState::from_bytes(&state);
     let list = crate::savegame::runtime::summary::inventory_devices(&state, usize::from(size));
@@ -516,5 +520,3 @@ pub unsafe extern "C" fn DevicesMenu() -> i32 {
     }
     0
 }
-
-use crate::engine::{Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields};

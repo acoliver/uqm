@@ -7,6 +7,8 @@ use super::simulation::FrameInput;
 use crate::c_bindings::controller_input::{CurrentInputState, CONTROL_TEMPLATE_NUM_TEMPLATES};
 #[cfg(not(test))]
 use crate::c_bindings::player_control_template;
+#[cfg(not(test))]
+use crate::engine::WorldData as WorldFields;
 
 #[cfg(not(test))]
 const KEY_UP: usize = 0;
@@ -172,28 +174,28 @@ impl ShipStatusPort for CffiShipStatus {
         #[cfg(not(test))]
         #[cfg(not(test))]
         unsafe {
-            let world = WorldFields::current();
             if delta.crew != 0 {
                 DeltaSISGauges(delta.crew, 0, 0);
             }
-
-            let sis = std::ptr::addr_of_mut!((**world).flagship);
-            if delta.landers < 0 {
-                (*sis).num_landers = (*sis)
-                    .num_landers
-                    .saturating_sub(delta.landers.unsigned_abs());
-                DrawLanders();
-            } else if delta.landers > 0 {
-                (*sis).num_landers = (*sis).num_landers.saturating_add(delta.landers as u8);
+            WorldFields::current().write(|world| {
+                let sis = &mut world.flagship;
+                if delta.landers < 0 {
+                    sis.num_landers = sis.num_landers.saturating_sub(delta.landers.unsigned_abs());
+                } else if delta.landers > 0 {
+                    sis.num_landers = sis.num_landers.saturating_add(delta.landers as u8);
+                }
+            });
+            if delta.landers != 0 {
                 DrawLanders();
             }
-
-            for (current, added) in (*sis).element_amounts.iter_mut().zip(delta.element_amounts) {
-                *current = current.saturating_add(added);
-            }
-            (*sis).total_element_mass =
-                (*sis).total_element_mass.saturating_add(delta.element_mass);
-            (*sis).total_bio_mass = (*sis).total_bio_mass.saturating_add(delta.biological_mass);
+            WorldFields::current().write(|world| {
+                let sis = &mut world.flagship;
+                for (current, added) in sis.element_amounts.iter_mut().zip(delta.element_amounts) {
+                    *current = current.saturating_add(added);
+                }
+                sis.total_element_mass = sis.total_element_mass.saturating_add(delta.element_mass);
+                sis.total_bio_mass = sis.total_bio_mass.saturating_add(delta.biological_mass);
+            });
             if delta.element_mass != 0 {
                 DrawStorageBays(0);
             }
@@ -237,5 +239,3 @@ mod tests {
         assert_eq!(ship.apply(&ShipDelta::default()), Ok(()));
     }
 }
-
-use crate::engine::WorldData as WorldFields;

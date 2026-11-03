@@ -1,6 +1,8 @@
 use super::Handler;
 use crate::comm::locdata::CSisState;
 use crate::comm::races::encounter::EncounterApi;
+#[cfg(not(test))]
+use crate::engine::WorldData as WorldFields;
 
 pub(super) trait DruugeApi: EncounterApi<Handler> {
     fn ship(&self) -> CSisState;
@@ -21,14 +23,16 @@ impl DruugeApi for crate::comm::races::script::live::LiveScript<Handler> {
         }
     }
     fn has_escorts(&self) -> bool {
-        unsafe {
+        {
             !WorldFields::current()
                 .read(|owner| owner.game.built_ship_q.head)
                 .is_null()
         }
     }
     fn crew_cost(&self) -> u8 {
-        unsafe { WorldFields::current().read(|owner| owner.game.crew_cost) }
+        {
+            WorldFields::current().read(|owner| owner.game.crew_cost)
+        }
     }
     fn set_crew_cost(&mut self, value: u8) {
         unsafe {
@@ -79,5 +83,3 @@ impl DruugeApi for super::super::encounter::testing::Fake<Handler, World> {
         self.world.numbers.push(value);
     }
 }
-
-use crate::engine::WorldData as WorldFields;

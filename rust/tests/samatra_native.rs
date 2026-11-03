@@ -11,7 +11,7 @@ fn terminal_outcome_survives_descriptor_teardown_until_the_next_battle() {
                 .game
                 .current_activity = IN_LAST_BATTLE as u16;
             uqm_rust::app::bridge::battle(|battle| {
-                battle.initialize(&mut *uqm_rust::engine::Kernel::current())
+                battle.initialize(&mut **uqm_rust::engine::Kernel::current())
             });
             let mut ship = boss(&battle);
             let expected = uqm_rust::ships::races::samatra::observation::Events {
@@ -37,7 +37,7 @@ fn terminal_outcome_survives_descriptor_teardown_until_the_next_battle() {
                 .game
                 .current_activity = (IN_ENCOUNTER | IN_BATTLE) as u16;
             uqm_rust::app::bridge::battle(|battle| {
-                battle.initialize(&mut *uqm_rust::engine::Kernel::current())
+                battle.initialize(&mut **uqm_rust::engine::Kernel::current())
             });
             uqm_rust::app::bridge::enter(|cx| assert!(cx.terminal_outcome().is_none()));
             (**uqm_rust::engine::WorldData::current())

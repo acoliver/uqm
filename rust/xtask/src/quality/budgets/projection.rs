@@ -2,6 +2,7 @@
 
 pub(super) fn ends(name: &str) -> Option<&'static str> {
     match name {
+        "u3_02_world_projection" => Some("U3-02"),
         "u4_02_world_projection" => Some("U4-02"),
         "u4_03_world_projection" => Some("U4-03"),
         "u4_04_world_projection" => Some("U4-04"),
@@ -35,6 +36,7 @@ pub(super) fn identity(name: &str, identity: &str) -> bool {
         return false;
     }
     let prefixes: &[&str] = match name {
+        "u3_02_world_projection" => &["supermelee::native::", "supermelee::setup::", "pickship::"],
         "u4_02_world_projection" => &[
             "navigation::groups::",
             "time::clock_abi::",
@@ -57,8 +59,6 @@ pub(super) fn identity(name: &str, identity: &str) -> bool {
             "mainloop::input_abi::",
             "ships::",
             "battle::",
-            "supermelee::",
-            "pickship::",
         ],
         _ => &[],
     };

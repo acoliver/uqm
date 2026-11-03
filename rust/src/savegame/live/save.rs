@@ -1,4 +1,5 @@
 //! The SaveGame ABI and live-state capture.
+use crate::engine::WorldData as WorldFields;
 use std::ffi::{c_char, CStr};
 
 use super::super::abi::SummaryDesc;
@@ -15,7 +16,7 @@ use crate::navigation::groups::live::PutGroupInfo;
 pub(crate) unsafe fn capture(name: &[u8]) -> anyhow::Result<SaveFile> {
     let star = live::capture_live_star()?;
     let point = WorldFields::current().read(|world| world.game.ip_location);
-    if crate::engine::World::current().read(|world| inHQSpace(world)) != 0 {
+    if crate::engine::World::current().read(inHQSpace) != 0 {
         live::prepare_live_hyper_state()?;
     } else if playerInSolarSystem() {
         live::prepare_live_solar_location()?;
@@ -73,5 +74,3 @@ pub unsafe extern "C" fn SaveGame(
     })();
     super::complete(result, "SaveGame", Some((slot, false)))
 }
-
-use crate::engine::WorldData as WorldFields;

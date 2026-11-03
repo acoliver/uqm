@@ -1,5 +1,6 @@
 //! Super Melee menu rendering and selection feedback.
 use super::*;
+use crate::engine::Kernel as KernelOwner;
 
 #[no_mangle]
 pub static mut MeleeFrame: FRAME = ptr::null_mut();
@@ -461,5 +462,3 @@ pub(super) unsafe fn current(state: *mut MELEE_STATE) {
     };
     DrawMeleeShipStrings(state, (*state).current_ship);
 }
-
-use crate::engine::Kernel as KernelOwner;

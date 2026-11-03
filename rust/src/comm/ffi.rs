@@ -1,5 +1,7 @@
 //! Rust communication facade for state, playback and dialogue orchestration.
 
+#[cfg(not(test))]
+use crate::engine::WorldData as WorldFields;
 use std::cell::RefCell;
 use std::ffi::{c_char, c_int, c_uint, CStr};
 
@@ -1687,5 +1689,3 @@ fn alien_talk_callbacks_run_without_the_global_state_lock() {
     assert_eq!(finished, 1);
     assert!(COMM_STATE.read().is_talking_finished());
 }
-
-use crate::engine::WorldData as WorldFields;

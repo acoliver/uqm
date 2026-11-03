@@ -22,10 +22,10 @@ pub unsafe fn FreeKernel(kernel: &mut crate::engine::Kernel) {
     {
         UninitPlayerInput();
         crate::resource::ffi_bridge::UninitResourceSystem();
-        DestroyDrawable(ReleaseDrawable((*kernel).screen));
-        (*kernel).screen = ptr::null_mut();
-        DestroyContext((*kernel).screen_context.cast());
-        (*kernel).screen_context = ptr::null_mut();
+        DestroyDrawable(ReleaseDrawable(kernel.screen));
+        kernel.screen = ptr::null_mut();
+        DestroyContext(kernel.screen_context.cast());
+        kernel.screen_context = ptr::null_mut();
         crate::video::control::UninitVideoPlayer();
         crate::sound::heart_ffi::uninit_sound();
     }
@@ -34,24 +34,24 @@ pub unsafe fn FreeKernel(kernel: &mut crate::engine::Kernel) {
 unsafe fn uninit_contexts(kernel: &mut crate::engine::Kernel) {
     {
         crate::engine::battle::access::lifecycle::uninit_elements(&mut *kernel);
-        DestroyContext((*kernel).off_screen_context.cast());
-        DestroyContext((*kernel).space_context.cast());
-        DestroyContext((*kernel).status_context.cast());
+        DestroyContext(kernel.off_screen_context.cast());
+        DestroyContext(kernel.space_context.cast());
+        DestroyContext(kernel.status_context.cast());
     }
 }
 
 unsafe fn uninit_kernel(kernel: &mut crate::engine::Kernel) {
     UninitSpace(kernel);
     {
-        DestroySound(ReleaseStringTable((*kernel).menu_sounds.cast()).cast());
-        DestroyFont((*kernel).micro_font.cast());
-        DestroyStringTable(ReleaseStringTable((*kernel).game_strings));
-        DestroyDrawable(ReleaseDrawable((*kernel).status_frame));
-        DestroyDrawable(ReleaseDrawable((*kernel).activity_frame));
-        DestroyFont((*kernel).tiny_font.cast());
-        DestroyFont((*kernel).star_con_font.cast());
+        DestroySound(ReleaseStringTable(kernel.menu_sounds.cast()).cast());
+        DestroyFont(kernel.micro_font.cast());
+        DestroyStringTable(ReleaseStringTable(kernel.game_strings));
+        DestroyDrawable(ReleaseDrawable(kernel.status_frame));
+        DestroyDrawable(ReleaseDrawable(kernel.activity_frame));
+        DestroyFont(kernel.tiny_font.cast());
+        DestroyFont(kernel.star_con_font.cast());
         crate::battle::context_access::lifecycle::uninit_ships(&mut *kernel);
-        (*kernel).activity_frame = ptr::null_mut();
+        kernel.activity_frame = ptr::null_mut();
     }
 }
 

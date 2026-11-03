@@ -22,7 +22,7 @@ struct Battle {
 }
 impl Battle {
     unsafe fn new(capacity: COUNT) -> Self {
-        let globals = *uqm_rust::engine::WorldData::current();
+        let globals = uqm_rust::engine::WorldData::current().read(|world| *world);
         let screen = (ScreenWidth, ScreenHeight);
         let graphics_flags = _GraphicsStatusFlags;
         let counters = uqm_rust::app::bridge::battle(|b| b.counters);
@@ -51,7 +51,7 @@ impl Drop for Battle {
     fn drop(&mut self) {
         unsafe {
             ResetWinnerStarShip();
-            *uqm_rust::engine::WorldData::current() = self.globals;
+            uqm_rust::engine::WorldData::current().write(|world| *world = self.globals);
             (ScreenWidth, ScreenHeight) = self.screen;
             _GraphicsStatusFlags = self.graphics_flags;
             uqm_rust::app::bridge::battle(|b| b.counters = self.counters);

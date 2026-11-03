@@ -5,6 +5,8 @@
 //! dispatch. Runtime setup then drives the normal game-loop encounter path;
 //! it does not invoke communication recursively from an input callback.
 
+#[cfg(not(test))]
+use crate::engine::Kernel as KernelOwner;
 use serde::Deserialize;
 use std::fmt;
 use std::sync::OnceLock;
@@ -642,5 +644,3 @@ mod tests {
         assert!(observed.verify(AutomationScene::SolProbeEncounter).is_ok());
     }
 }
-
-use crate::engine::Kernel as KernelOwner;

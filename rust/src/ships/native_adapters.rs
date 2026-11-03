@@ -110,7 +110,7 @@ mod live {
         if crate::engine::Kernel::current().write(|kernel| crate::game_init::space_resources::InitSpace(kernel, crate::engine::World::current().read(|world|world.activity()))) == 0 { return 0; }
         SetContext((**KernelOwner::current()).status_context); SetContext((**KernelOwner::current()).space_context);
         InitDisplayList(); crate::battle::galaxy::InitGalaxy();
-        if crate::engine::World::current().read(|world| inHQSpace(world)) != 0 {
+        if crate::engine::World::current().read(inHQSpace) != 0 {
             crate::app::bridge::enter(|cx| {
                 cx.reset_ships(0); cx.reset_ships(1);
                 let mut ships = crate::engine::battle::link_queue::ships(0);
@@ -173,5 +173,3 @@ mod crew_writeback_tests {
         );
     }
 }
-
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

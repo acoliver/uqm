@@ -209,5 +209,3 @@ mod tests {
         assert_eq!(button_y(107, 10, 10), 107);
     }
 }
-
-use crate::engine::Kernel as KernelOwner;

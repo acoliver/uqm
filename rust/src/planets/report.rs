@@ -281,5 +281,3 @@ mod tests {
         assert!(needs_page_marker(11, 12, 41, 40, 0));
     }
 }
-
-use crate::engine::WorldData as WorldFields;

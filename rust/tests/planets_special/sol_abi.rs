@@ -78,26 +78,28 @@ fn check_bomb_queue(h: &mut Harness) {
         )
     });
     unsafe {
-        let ip = &raw mut (**uqm_rust::engine::WorldData::current()).game.ip_group_q;
-        let npc = &raw mut (**uqm_rust::engine::WorldData::current())
-            .game
-            .npc_built_ship_q;
-        let reference = &raw mut (**uqm_rust::engine::WorldData::current())
-            .game
-            .battle_group_ref;
-        let saved = (ip.read(), npc.read(), reference.read());
-        ip.write(Queue::default());
-        npc.write(Queue::default());
-        reference.write(0x12345678);
+        let saved = uqm_rust::engine::WorldData::current().write(|world| {
+            let saved = (
+                world.game.ip_group_q,
+                world.game.npc_built_ship_q,
+                world.game.battle_group_ref,
+            );
+            world.game.ip_group_q = Queue::default();
+            world.game.npc_built_ship_q = Queue::default();
+            world.game.battle_group_ref = 0x12345678;
+            saved
+        });
         assert!(GENERATE_SOL_FUNCTIONS.reinit_npcs.unwrap()(
             &raw mut *h.state
         ));
-        assert_eq!(reference.read(), 0);
-        assert!(ip.read().head.is_null());
-        assert!(npc.read().head.is_null());
-        ip.write(saved.0);
-        npc.write(saved.1);
-        reference.write(saved.2);
+        uqm_rust::engine::WorldData::current().write(|world| {
+            assert_eq!(world.game.battle_group_ref, 0);
+            assert!(world.game.ip_group_q.head.is_null());
+            assert!(world.game.npc_built_ship_q.head.is_null());
+            world.game.ip_group_q = saved.0;
+            world.game.npc_built_ship_q = saved.1;
+            world.game.battle_group_ref = saved.2;
+        });
     }
     uqm_rust::engine::World::current().write(|world| {
         set_game_state(

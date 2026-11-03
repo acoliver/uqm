@@ -1,5 +1,6 @@
 //! Restart-menu state operations formerly supplied by rust_bridge_restart.c.
 use crate::engine::battle::schema::FlashContext;
+use crate::engine::Kernel as KernelOwner;
 use crate::ships::native::abi::*;
 use std::{ffi::c_void, ptr};
 
@@ -46,5 +47,3 @@ operation!(uqm_create_menu_state() -> *mut MENU_STATE {
 });
 operation!(uqm_set_menu_priv_data(menu: *mut MENU_STATE, data: *mut c_void) { if !menu.is_null() { (*menu).privData = data; } });
 operation!(uqm_destroy_menu_state(menu: *mut MENU_STATE) { if !menu.is_null() { drop(Box::from_raw(menu)); } });
-
-use crate::engine::Kernel as KernelOwner;

@@ -92,11 +92,9 @@ pub(crate) mod live {
 
     /// # Safety
     /// Called on the game thread with a valid planet selector and initialized resources.
-
     pub unsafe fn load_gravity_well(kernel: &mut crate::engine::Kernel, selector: u8) {
         {
-            let frames =
-                std::slice::from_raw_parts_mut(ptr::addr_of_mut!((*kernel).planet).cast(), 3);
+            let frames = std::slice::from_raw_parts_mut(ptr::addr_of_mut!(kernel.planet).cast(), 3);
             for (frame, key) in frames.iter_mut().zip(gravity_keys(selector)) {
                 *frame = match key {
                     Some(key) => CaptureDrawable(
@@ -115,11 +113,9 @@ pub(crate) mod live {
 
     /// # Safety
     /// Called on the game thread while the graphics resource system is live.
-
     pub unsafe fn free_gravity_well(kernel: &mut crate::engine::Kernel) {
         {
-            let frames =
-                std::slice::from_raw_parts_mut(ptr::addr_of_mut!((*kernel).planet).cast(), 3);
+            let frames = std::slice::from_raw_parts_mut(ptr::addr_of_mut!(kernel.planet).cast(), 3);
             for frame in frames.iter_mut() {
                 DestroyDrawable(ReleaseDrawable(*frame));
                 *frame = ptr::null_mut();

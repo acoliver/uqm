@@ -229,10 +229,8 @@ fn autopilot_accelerates_toward_target_and_cancels_on_manual_turn() {
             ship.ship_mut().cur_status_flags = LEFT as u16;
             ship.preprocess();
             assert_eq!(
-                (
-                    (**uqm_rust::engine::WorldData::current()).game.autopilot.x,
-                    (**uqm_rust::engine::WorldData::current()).game.autopilot.y
-                ),
+                uqm_rust::engine::WorldData::current()
+                    .read(|world| (world.game.autopilot.x, world.game.autopilot.y)),
                 (-1, -1)
             );
             ship.uninit();

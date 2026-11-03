@@ -12,6 +12,8 @@
 // ============================================================================
 
 #[cfg(not(test))]
+use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
+#[cfg(not(test))]
 pub(super) mod c_bridge {
     use std::ffi::c_int;
 
@@ -311,7 +313,7 @@ pub unsafe fn hail_alien() {
         // ----------------------------------------------------------------
         // Step 7: Set SpaceContext and save old font
         // ----------------------------------------------------------------
-        let space_ctx = unsafe { KernelOwner::current().read(|owner| owner.space_context) };
+        let space_ctx = { KernelOwner::current().read(|owner| owner.space_context) };
         SetContext(space_ctx.cast());
         let old_font = SetContextFont(player_font.cast());
 
@@ -322,7 +324,7 @@ pub unsafe fn hail_alien() {
         let anim_ctx = create_named_context(anim_ctx_name);
         c_SetAnimContext(anim_ctx.cast());
         SetContext(anim_ctx);
-        let screen = unsafe { KernelOwner::current().read(|owner| owner.screen) };
+        let screen = { KernelOwner::current().read(|owner| owner.screen) };
         SetContextFGFrame(screen.cast());
 
         let mut frame_rect = crate::comm::locdata::CRect::default();
@@ -540,5 +542,3 @@ unsafe fn create_named_context(
         c_bridge::CreateContextAux()
     }
 }
-
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

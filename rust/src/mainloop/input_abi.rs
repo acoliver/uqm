@@ -1,4 +1,6 @@
 //! Input repeat, nested input loops and battle controls, ported from gameinp.c.
+#[cfg(not(test))]
+use crate::engine::Kernel as KernelOwner;
 #[derive(Clone, Copy)]
 struct Repeat {
     delay: u32,
@@ -386,5 +388,3 @@ mod tests {
         assert_eq!(repeat.delay, 15);
     }
 }
-
-use crate::engine::Kernel as KernelOwner;

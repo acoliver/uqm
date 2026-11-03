@@ -127,6 +127,7 @@ impl<T> Projection<T> {
     /// # Safety
     /// The pointer must name an inline field of this owner; no pointer or
     /// reference from the original projection may be retained.
+    #[cfg(not(test))]
     pub(crate) unsafe fn map<U>(self, project: impl FnOnce(*mut T) -> *mut U) -> Projection<U> {
         let this = std::mem::ManuallyDrop::new(self);
         Projection {
@@ -263,9 +264,9 @@ impl crate::engine::WorldData {
     #[track_caller]
     pub fn current() -> Projection<Self> {
         project(Owner::World, |slot| {
-            let world = slot
-                .world
-                .expect("world access without a lifecycle context");
+            let Some(world) = slot.world else {
+                panic!("world access without a lifecycle context");
+            };
             // SAFETY: project asserts the publishing thread and excludes owner
             // leases; the lifecycle pins World, and data is its inline field.
             unsafe { &raw mut (*world.as_ptr()).data }

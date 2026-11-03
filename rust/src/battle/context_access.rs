@@ -506,7 +506,9 @@ mod star_access {
             let (star, position) = unsafe {
                 let star = FindStar(ptr::null_mut(), &mut point, 5, 5);
                 assert!(!star.is_null(), "star collision has no catalog entry");
-                let catalog = crate::planets::starmap::current_catalog().expect("star catalog");
+                let Some(catalog) = crate::planets::starmap::current_catalog() else {
+                    panic!("star collision without a catalog");
+                };
                 (
                     self.world.identify_star(&*star.cast(), catalog),
                     (*star).star_pt,

@@ -4,6 +4,7 @@
 //! movement and destination selection still go through the menu callback.
 
 use crate::comm::dispatch::CPoint;
+use crate::engine::{World as WorldOwner, WorldData as WorldFields};
 
 #[no_mangle]
 pub static mut cursorLoc: CPoint = CPoint { x: 0, y: 0 };
@@ -175,5 +176,3 @@ pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> u32 {
     }
     u32::from(keep_going)
 }
-
-use crate::engine::{World as WorldOwner, WorldData as WorldFields};

@@ -2,6 +2,7 @@
 #![allow(non_snake_case)]
 
 use crate::engine::battle::{link_queue, ShipId};
+use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
 use crate::navigation::abi::*;
 use std::mem;
 
@@ -347,5 +348,3 @@ pub(crate) unsafe fn draw_gauge_frames(siptr: &SHIP_INFO, y: COORD) {
     draw(CREW_XOFFS, bottom + 1 - crew, STAT_WIDTH, crew);
     draw(ENERGY_XOFFS, bottom + 1 - energy, STAT_WIDTH, energy);
 }
-
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

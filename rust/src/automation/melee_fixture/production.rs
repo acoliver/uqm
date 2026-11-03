@@ -1,6 +1,8 @@
 //! The synchronous fixture driver commits plans before callbacks and resource retirement.
 
 use super::*;
+#[cfg(not(test))]
+use crate::engine::{Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields};
 
 fn zoom_matches(
     view: usize,
@@ -324,11 +326,6 @@ unsafe fn apply(cx: &mut Cx<'_>, effect: Effect) -> Result<Reply, String> {
 #[cfg(not(test))]
 fn configure(request: &MeleeSetupRequest) -> Result<(), String> {
     use crate::supermelee::native::menu::live::drawing::P_MELEE_STATE;
-    let controls = unsafe {
-        let kernel = KernelOwner::current();
-
-        &raw mut (**kernel).player_control
-    };
     let ships = request.ships.iter().enumerate().flat_map(|(side, fleet)| {
         fleet
             .iter()
@@ -342,12 +339,15 @@ fn configure(request: &MeleeSetupRequest) -> Result<(), String> {
         let state = P_MELEE_STATE
             .as_mut()
             .ok_or("configure_parity_melee requires the live Super Melee menu")?;
-        configure_menu(
-            state.melee_started != 0,
-            &mut *controls,
-            WorldFields::current().read(|owner| owner.game.current_activity),
-            request.cyborg,
-        )?;
+        let activity = WorldFields::current().read(|owner| owner.game.current_activity);
+        KernelOwner::current().write(|kernel| {
+            configure_menu(
+                state.melee_started != 0,
+                &mut kernel.player_control,
+                activity,
+                request.cyborg,
+            )
+        })?;
         state.melee_option = 4;
         state.input_func = Some(crate::supermelee::native::menu::live::DoMelee);
         for (side, slot, ship) in ships {
@@ -454,5 +454,3 @@ mod zoom_tests {
         assert!(zoom_matches(1, 700, (11, 5), (11, 5), Some((99, 99))));
     }
 }
-
-use crate::engine::{Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields};

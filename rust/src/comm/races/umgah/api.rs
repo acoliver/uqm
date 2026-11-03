@@ -1,5 +1,7 @@
 use super::Handler;
 use crate::comm::races::encounter::EncounterApi;
+#[cfg(not(test))]
+use crate::engine::WorldData as WorldFields;
 pub(super) trait UmgahApi: EncounterApi<Handler> {
     fn add_biomass(&mut self, amount: u16);
 }
@@ -24,5 +26,3 @@ impl UmgahApi for super::super::encounter::testing::Fake<Handler, World> {
         self.world.biomass = self.world.biomass.wrapping_add(amount);
     }
 }
-
-use crate::engine::WorldData as WorldFields;

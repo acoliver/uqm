@@ -315,5 +315,3 @@ pub(crate) mod live {
 
 #[cfg(test)]
 mod rules_tests;
-
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

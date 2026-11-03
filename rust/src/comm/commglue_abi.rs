@@ -1,6 +1,8 @@
 //! Script glue, ported from commglue.c (GPL-2.0-or-later).
 
 use crate::c_bindings::global_state::NUMBER_SPEECH_DESC;
+#[cfg(not(test))]
+use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
 
 /// Collect one-based phrase indices in the same recursive order as NPCNumberPhrase.
 unsafe fn number_phrases(
@@ -246,5 +248,3 @@ mod tests {
         }
     }
 }
-
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

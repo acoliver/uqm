@@ -283,10 +283,6 @@ pub unsafe fn draw_restart_menu(pms: *mut c_void, new_state: u8, frame: *mut c_v
 
 #[cfg(not(test))]
 pub use crate::game_init::macro_abi::get_current_activity;
-#[cfg(test)]
-extern "C" {
-    pub fn get_current_activity(world: &crate::engine::World) -> u16;
-}
 extern "C" {
 
     #[cfg(test)]

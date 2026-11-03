@@ -1,6 +1,8 @@
 //! Campaign events and daily fleet movement, ported from gameev.c.
 
 use super::abi::*;
+#[cfg(not(test))]
+use crate::engine::{World as WorldOwner, WorldData as WorldFields};
 
 fn grow_fleet(fleet: &mut FLEET_INFO) -> Option<u8> {
     if fleet.actual_strength == 0 || fleet.actual_strength == u16::MAX {
@@ -122,7 +124,7 @@ pub(crate) mod live {
                         EventHandler(callback);
                     }
                 }
-                if crate::engine::World::current().read(|world| inHyperSpace(world)) != 0 {
+                if crate::engine::World::current().read(inHyperSpace) != 0 {
                     check_hyperspace_encounter();
                 }
                 relative(0, 1, 0, HYPERSPACE_ENCOUNTER_EVENT);
@@ -533,5 +535,3 @@ mod tests {
         assert_eq!(fleet.days_left, 3);
     }
 }
-
-use crate::engine::{World as WorldOwner, WorldData as WorldFields};

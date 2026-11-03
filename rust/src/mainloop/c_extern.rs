@@ -36,10 +36,6 @@ use super::types::CBoolean;
 
 #[cfg(not(test))]
 pub use crate::game_init::macro_abi::get_current_activity;
-#[cfg(test)]
-extern "C" {
-    pub fn get_current_activity(world: &crate::engine::World) -> u16;
-}
 extern "C" {
 
     /// Write `GLOBAL(CurrentActivity)`.

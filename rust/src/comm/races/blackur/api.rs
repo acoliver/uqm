@@ -1,5 +1,7 @@
 use super::Handler;
 use crate::comm::races::encounter::EncounterApi;
+#[cfg(not(test))]
+use crate::engine::WorldData as WorldFields;
 
 pub(super) trait BlackurApi: EncounterApi<Handler> {
     fn battle_group(&self) -> (u32, u32);
@@ -19,7 +21,7 @@ impl BlackurApi for super::super::script::live::LiveScript<Handler> {
                 .read(|world| crate::state::ffi::rust_get_game_state_32(world, start as i32))
         };
         (
-            unsafe { WorldFields::current().read(|owner| owner.game.battle_group_ref) },
+            { WorldFields::current().read(|owner| owner.game.battle_group_ref) },
             offset,
         )
     }
@@ -30,5 +32,3 @@ impl BlackurApi for crate::comm::races::encounter::testing::Fake<Handler, (u32, 
         self.world
     }
 }
-
-use crate::engine::WorldData as WorldFields;

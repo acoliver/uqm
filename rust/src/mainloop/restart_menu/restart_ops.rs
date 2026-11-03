@@ -4,6 +4,8 @@
 //! @requirement REQ-RM-005
 
 #[cfg(not(test))]
+use crate::engine::Kernel as KernelOwner;
+#[cfg(not(test))]
 use std::ffi::CString;
 #[cfg(not(test))]
 use std::os::raw::c_void;
@@ -590,5 +592,3 @@ impl RestartMenuOps for CffiOps {
         crate::mainloop::ffi::set_main_exited(val)
     }
 }
-
-use crate::engine::Kernel as KernelOwner;

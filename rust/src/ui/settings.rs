@@ -1,6 +1,7 @@
 #![cfg(not(test))]
 #![allow(non_snake_case)]
 
+use crate::engine::WorldData as WorldFields;
 use crate::navigation::abi::*;
 
 static mut LAST_MUSIC_REF: MUSIC_REF = std::ptr::null_mut();
@@ -97,5 +98,3 @@ pub unsafe extern "C" fn PlaySoundEffect(
         );
     }
 }
-
-use crate::engine::WorldData as WorldFields;

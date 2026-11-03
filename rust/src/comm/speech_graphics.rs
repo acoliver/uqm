@@ -7,6 +7,8 @@
 //! @plan PLAN-20260314-COMM.P10
 
 use super::oscilloscope::Oscilloscope;
+#[cfg(not(test))]
+use crate::engine::Kernel as KernelOwner;
 
 // Host-time rate limiting otherwise changes whether a speech frame queues a
 // drawing command, which changes replay presentation counts.
@@ -281,5 +283,3 @@ mod tests {
         assert_eq!(sg.last_update_ms, 0);
     }
 }
-
-use crate::engine::Kernel as KernelOwner;

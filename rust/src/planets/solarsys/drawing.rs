@@ -1,4 +1,5 @@
 use super::*;
+use crate::engine::{Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields};
 use crate::planets::orbit_tables::NUMBER_OF_PLANET_TYPES;
 
 use crate::graphics::context_abi::SetContext;
@@ -476,5 +477,3 @@ unsafe fn inc_frame(frame: *mut c::FRAME_DESC) -> *mut c::FRAME_DESC {
 unsafe fn set_frame_index(frame: *mut c::FRAME_DESC, index: u32) -> *mut c::FRAME_DESC {
     crate::graphics::pixmap_abi::SetAbsFrameIndex(frame.cast(), index as u16).cast()
 }
-
-use crate::engine::{Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields};

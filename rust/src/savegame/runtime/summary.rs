@@ -236,9 +236,7 @@ pub fn capture_summary(
     solar: &dyn SolarSystemOwner,
     name: &[u8],
 ) -> Result<Summary, SummaryError> {
-    let state = GameState::from_bytes(
-        &crate::engine::World::current().read(|world| snapshot_game_state(world))?,
-    );
+    let state = GameState::from_bytes(&crate::engine::World::current().read(snapshot_game_state)?);
 
     let mut sis_copy = sis_state(sis);
     let mut activity = (game.current_activity & 0x00ff) as u8;

@@ -1,5 +1,7 @@
 //! Three live parallax star planes, with the original sort and wrap order.
 
+#[cfg(not(test))]
+use crate::engine::Kernel as KernelOwner;
 use crate::ships::native::abi::{Color, POINT};
 
 pub use crate::engine::battle::kernel::StarPlane as STAR_BLOCK;
@@ -440,5 +442,3 @@ mod tests {
         assert_eq!(color(11, 11, 31).b, 255);
     }
 }
-
-use crate::engine::Kernel as KernelOwner;

@@ -1,5 +1,7 @@
 use super::Handler;
 use crate::comm::races::alliance::AllianceApi;
+#[cfg(not(test))]
+use crate::engine::WorldData as WorldFields;
 use crate::planets::universe_units::{universe_to_logx, universe_to_logy};
 use crate::starbase::sis_modules::{ModuleType, EMPTY_MODULE_SLOT, FUEL_RESERVE};
 
@@ -119,5 +121,3 @@ impl ChmmrApi for super::super::encounter::testing::Fake<Handler, World> {
         self.world.intros.push((mode, duration));
     }
 }
-
-use crate::engine::WorldData as WorldFields;

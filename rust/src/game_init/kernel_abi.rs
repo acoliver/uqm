@@ -37,7 +37,6 @@ unsafe fn context(name: &CStr) -> CONTEXT {
 
 /// # Safety
 /// SDL, IO and resource registration prerequisites must be initialized on the game thread.
-
 pub unsafe fn LoadKernel(
     kernel: &mut crate::engine::Kernel,
     world: &mut crate::engine::World,
@@ -48,24 +47,24 @@ pub unsafe fn LoadKernel(
         let world = &mut world.data;
         crate::sound::heart_ffi::InitSound(argc, argv.cast());
         crate::video::control::InitVideoPlayer(1);
-        (*kernel).screen_context = context(c"ScreenContext");
-        if (*kernel).screen_context.is_null() {
+        kernel.screen_context = context(c"ScreenContext");
+        if kernel.screen_context.is_null() {
             return 0;
         }
-        (*kernel).screen = pixmap_abi::CaptureDrawable(drawable_abi::CreateDisplay(
+        kernel.screen = pixmap_abi::CaptureDrawable(drawable_abi::CreateDisplay(
             3,
-            ptr::addr_of_mut!((*kernel).screen_width),
-            ptr::addr_of_mut!((*kernel).screen_height),
+            ptr::addr_of_mut!(kernel.screen_width),
+            ptr::addr_of_mut!(kernel.screen_height),
         ))
         .cast();
-        if (*kernel).screen.is_null() {
+        if kernel.screen.is_null() {
             return 0;
         }
-        context_abi::SetContext((*kernel).screen_context.cast());
-        drawable_abi::SetContextFGFrame((*kernel).screen.cast());
+        context_abi::SetContext(kernel.screen_context.cast());
+        drawable_abi::SetContextFGFrame(kernel.screen.cast());
         context_abi::SetContextOrigin(gfx::POINT { x: 0, y: 0 });
-        (*kernel).h_res_index = crate::resource::ffi_bridge::InitResourceSystem();
-        if (*kernel).h_res_index.is_null() {
+        kernel.h_res_index = crate::resource::ffi_bridge::InitResourceSystem();
+        if kernel.h_res_index.is_null() {
             return 0;
         }
         // SAFETY: the resource system was initialized above and registration runs once on the game thread.
@@ -75,9 +74,9 @@ pub unsafe fn LoadKernel(
         if opt3doMusic != 0 {
             loadAddon(c"3domusic".as_ptr());
         }
-        (*kernel).using_speech = optSpeech;
+        kernel.using_speech = optSpeech;
         if optSpeech != 0 && loadAddon(c"3dovoice".as_ptr()) == 0 {
-            (*kernel).using_speech = 0;
+            kernel.using_speech = 0;
         }
         if optRemixMusic != 0 {
             loadAddon(c"remix".as_ptr());
@@ -94,22 +93,21 @@ pub unsafe fn LoadKernel(
             map.cast(),
         ));
         DestroyStringTable(ReleaseStringTable(map));
-        (*world).game.current_activity = u16::MAX;
+        world.game.current_activity = u16::MAX;
         1
     }
 }
 
 /// # Safety
 /// Game-thread context creation after LoadKernel.
-
 pub unsafe fn InitContexts(kernel: &mut crate::engine::Kernel) -> u32 {
     {
-        (*kernel).status_context = context(c"StatusContext");
-        if (*kernel).status_context.is_null() {
+        kernel.status_context = context(c"StatusContext");
+        if kernel.status_context.is_null() {
             return 0;
         }
-        context_abi::SetContext((*kernel).status_context.cast());
-        drawable_abi::SetContextFGFrame((*kernel).screen.cast());
+        context_abi::SetContext(kernel.status_context.cast());
+        drawable_abi::SetContextFGFrame(kernel.screen.cast());
         let mut rect = gfx::RECT {
             corner: gfx::POINT {
                 x: (ScreenWidth - STATUS_WIDTH as i32 - SAFE_X as i32) as i16,
@@ -121,12 +119,12 @@ pub unsafe fn InitContexts(kernel: &mut crate::engine::Kernel) -> u32 {
             },
         };
         context_abi::SetContextClipRect(&mut rect);
-        (*kernel).space_context = context(c"SpaceContext");
-        if (*kernel).space_context.is_null() {
+        kernel.space_context = context(c"SpaceContext");
+        if kernel.space_context.is_null() {
             return 0;
         }
-        (*kernel).off_screen_context = context(c"OffScreenContext");
-        if (*kernel).off_screen_context.is_null() {
+        kernel.off_screen_context = context(c"OffScreenContext");
+        if kernel.off_screen_context.is_null() {
             return 0;
         }
         u32::from(lifecycle::init_elements(
@@ -140,45 +138,45 @@ unsafe fn init_kernel(kernel: &mut crate::engine::Kernel, activity: u16) -> u32 
     // SAFETY: only resource loaders run during the owner borrow.
     let loaded = {
         crate::battle::context_access::lifecycle::init_ships(&mut *kernel);
-        (*kernel).star_con_font =
+        kernel.star_con_font =
             crate::graphics::resgfx::LoadGraphicInstance(c"font.starcon".as_ptr()).cast();
-        if (*kernel).star_con_font.is_null() {
+        if kernel.star_con_font.is_null() {
             return 0;
         }
-        (*kernel).tiny_font =
+        kernel.tiny_font =
             crate::graphics::resgfx::LoadGraphicInstance(c"font.tiny".as_ptr()).cast();
-        if (*kernel).tiny_font.is_null() {
+        if kernel.tiny_font.is_null() {
             return 0;
         }
-        (*kernel).activity_frame = pixmap_abi::CaptureDrawable(
+        kernel.activity_frame = pixmap_abi::CaptureDrawable(
             crate::graphics::resgfx::LoadGraphicInstance(c"graphics.activity".as_ptr()).cast(),
         )
         .cast();
-        if (*kernel).activity_frame.is_null() {
+        if kernel.activity_frame.is_null() {
             return 0;
         }
-        (*kernel).status_frame = pixmap_abi::CaptureDrawable(
+        kernel.status_frame = pixmap_abi::CaptureDrawable(
             crate::graphics::resgfx::LoadGraphicInstance(c"graphics.status".as_ptr()).cast(),
         )
         .cast();
-        if (*kernel).status_frame.is_null() {
+        if kernel.status_frame.is_null() {
             return 0;
         }
-        (*kernel).game_strings =
+        kernel.game_strings =
             CaptureStringTable(LoadStringTableInstance(c"text.starcon".as_ptr())).cast();
-        if (*kernel).game_strings.is_null() {
+        if kernel.game_strings.is_null() {
             return 0;
         }
-        (*kernel).micro_font =
+        kernel.micro_font =
             crate::graphics::resgfx::LoadGraphicInstance(c"font.micro".as_ptr()).cast();
-        if (*kernel).micro_font.is_null() {
+        if kernel.micro_font.is_null() {
             return 0;
         }
-        (*kernel).menu_sounds = CaptureStringTable(
+        kernel.menu_sounds = CaptureStringTable(
             crate::sound::resource_types::LoadSoundInstance(c"sounds.menu".as_ptr()).cast(),
         )
         .cast();
-        if (*kernel).menu_sounds.is_null() {
+        if kernel.menu_sounds.is_null() {
             return 0;
         }
         1
@@ -192,7 +190,6 @@ unsafe fn init_kernel(kernel: &mut crate::engine::Kernel, activity: u16) -> u32 
 
 /// # Safety
 /// Called on the game thread with base resources and graphics initialized.
-
 pub unsafe fn InitGameKernel(kernel: &mut crate::engine::Kernel, activity: u16) -> u32 {
     // SAFETY: the copied resource handle retains no owner borrow.
     let needs_init = kernel.activity_frame.is_null();
@@ -206,12 +203,11 @@ pub fn UninitPlayerInput() {}
 
 /// # Safety
 /// Player index is below NUM_PLAYERS and its input context is not already installed.
-
 pub unsafe fn SetPlayerInput(kernel: &mut crate::engine::Kernel, player: u16) -> bool {
     {
-        let slot = &mut (*kernel).player_input[player as usize];
+        let slot = &mut kernel.player_input[player as usize];
         assert!((*slot).is_null());
-        *slot = match (*kernel).player_control[player as usize] & 15 {
+        *slot = match kernel.player_control[player as usize] & 15 {
             1 => crate::battle::battle_controls::HumanInputContext_new(player).cast(),
             6 | 2 => crate::battle::battle_controls::ComputerInputContext_new(player).cast(),
             8 => crate::battle::battle_controls::NetworkInputContext_new(player).cast(),
@@ -226,7 +222,6 @@ pub unsafe fn SetPlayerInput(kernel: &mut crate::engine::Kernel, player: u16) ->
 
 /// # Safety
 /// Both player input contexts must be uninstalled.
-
 pub unsafe fn SetPlayerInputAll(kernel: &mut crate::engine::Kernel) -> bool {
     for player in 0..2 {
         if !SetPlayerInput(kernel, player) {
@@ -238,17 +233,16 @@ pub unsafe fn SetPlayerInputAll(kernel: &mut crate::engine::Kernel) -> bool {
 
 /// # Safety
 /// Player index is below NUM_PLAYERS and context is null or owned by this player.
-
 pub unsafe fn ClearPlayerInput(kernel: &mut crate::engine::Kernel, player: u16) {
     {
-        let input = (*kernel).player_input[player as usize]
+        let input = kernel.player_input[player as usize]
             .cast::<crate::battle::battle_controls::InputContext>();
         if input.is_null() {
             log::debug!("ClearPlayerInput(): PlayerInput[{player}] was NULL.");
             return;
         }
         ((*(*input).handlers).delete_context.unwrap())(input);
-        (*kernel).player_input[player as usize] = ptr::null_mut();
+        kernel.player_input[player as usize] = ptr::null_mut();
     }
 }
 

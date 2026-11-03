@@ -1,5 +1,7 @@
 //! UI drawing and nested input waits, ported from uqm/util.c.
 
+#[cfg(not(test))]
+use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
 use crate::navigation::abi::{Color, RECT};
 
 fn box_rectangles(
@@ -350,5 +352,3 @@ mod tests {
         );
     }
 }
-
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

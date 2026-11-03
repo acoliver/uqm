@@ -7,17 +7,17 @@ use std::{mem, ptr};
 
 unsafe fn create_radar(kernel: &mut crate::engine::Kernel) {
     {
-        if (*kernel).radar_context.is_null() {
+        if kernel.radar_context.is_null() {
             #[cfg(feature = "debug-process")]
             {
-                (*kernel).radar_context = CreateContextAux(c"RadarContext".as_ptr());
+                kernel.radar_context = CreateContextAux(c"RadarContext".as_ptr());
             }
             #[cfg(not(feature = "debug-process"))]
             {
                 (*kernel).radar_context = CreateContextAux();
             }
-            let old = SetContext((*kernel).radar_context);
-            SetContextFGFrame((*kernel).screen);
+            let old = SetContext(kernel.radar_context);
+            SetContextFGFrame(kernel.screen);
             let mut rect = RECT {
                 corner: POINT {
                     x: (4 + ScreenWidth - STATUS_WIDTH as i32 - SAFE_X as i32) as i16,
@@ -36,7 +36,6 @@ unsafe fn create_radar(kernel: &mut crate::engine::Kernel) {
 
 /// # Safety
 /// Resource system and screen contexts must be initialized on the game thread.
-
 pub unsafe fn LoadSC2Data(cx: &mut crate::engine::battle::Cx<'_>) -> BOOLEAN {
     {
         let kernel = cx.kernel();
@@ -201,14 +200,14 @@ pub unsafe extern "C" fn InitGameStructures() -> BOOLEAN {
 /// No renderer may be using these contexts or resources.
 pub unsafe fn FreeSC2Data(kernel: &mut crate::engine::Kernel) {
     {
-        DestroyContext((*kernel).radar_context);
-        (*kernel).radar_context = ptr::null_mut();
-        DestroyDrawable(ReleaseDrawable((*kernel).font_grad_frame));
-        (*kernel).font_grad_frame = ptr::null_mut();
-        DestroyDrawable(ReleaseDrawable((*kernel).misc_data_frame));
-        (*kernel).misc_data_frame = ptr::null_mut();
-        DestroyDrawable(ReleaseDrawable((*kernel).flag_stat_frame));
-        (*kernel).flag_stat_frame = ptr::null_mut();
+        DestroyContext(kernel.radar_context);
+        kernel.radar_context = ptr::null_mut();
+        DestroyDrawable(ReleaseDrawable(kernel.font_grad_frame));
+        kernel.font_grad_frame = ptr::null_mut();
+        DestroyDrawable(ReleaseDrawable(kernel.misc_data_frame));
+        kernel.misc_data_frame = ptr::null_mut();
+        DestroyDrawable(ReleaseDrawable(kernel.flag_stat_frame));
+        kernel.flag_stat_frame = ptr::null_mut();
     }
 }
 

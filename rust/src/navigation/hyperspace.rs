@@ -5,6 +5,8 @@ use super::abi::*;
 #[cfg(not(test))]
 #[cfg(not(test))]
 use crate::engine::world::FuelDistance;
+#[cfg(not(test))]
+use crate::engine::{World as WorldOwner, WorldData as WorldFields};
 
 fn move_axis(position: &mut i32, delta: i16, maximum: i32) -> i16 {
     *position -= delta as i32;
@@ -26,7 +28,7 @@ fn move_axis(position: &mut i32, delta: i16, maximum: i32) -> i16 {
 pub(crate) mod live {
     use super::*;
 
-    use crate::navigation::{get, set};
+    use crate::navigation::get;
     use std::ptr;
 
     const PERCENT: [u16; 24] = [
@@ -83,6 +85,7 @@ pub(crate) mod live {
             *dy,
             maximum_y(),
         );
+        drop(world);
         if x != *dx || y != *dy {
             *dx = x;
             *dy = y;
@@ -101,15 +104,15 @@ pub(crate) mod live {
                 }
             });
         }
-        if (**world).flagship.fuel_on_board != 0 && get("ARILOU_SPACE_SIDE") <= 1 {
+        if WorldFields::current().read(|world| world.flagship.fuel_on_board) != 0
+            && get("ARILOU_SPACE_SIDE") <= 1
+        {
             x = x.wrapping_abs();
             y = y.wrapping_abs();
-            (**WorldOwner::current()).hyper_distance.dx = WorldOwner::current()
-                .read(|owner| owner.hyper_distance.dx)
-                .wrapping_add(x as u16);
-            (**WorldOwner::current()).hyper_distance.dy = WorldOwner::current()
-                .read(|owner| owner.hyper_distance.dy)
-                .wrapping_add(y as u16);
+            WorldOwner::current().write(|world| {
+                world.hyper_distance.dx = world.hyper_distance.dx.wrapping_add(x as u16);
+                world.hyper_distance.dy = world.hyper_distance.dy.wrapping_add(y as u16);
+            });
             let adjusted_x =
                 universe_x(16 * WorldOwner::current().read(|owner| owner.hyper_distance.dx) as i32)
                     as u32;
@@ -152,15 +155,15 @@ pub(crate) mod live {
     /// Game-thread access to initialized world fleet and encounter queues.
     #[no_mangle]
     pub unsafe extern "C" fn check_hyperspace_encounter() {
-        let world = WorldFields::current();
+        let world = WorldOwner::current();
         let universe = POINT {
-            x: universe_x((**world).flagship.log_x),
-            y: universe_y((**world).flagship.log_y),
+            x: universe_x((**world).data.flagship.log_x),
+            y: universe_y((**world).data.flagship.log_y),
         };
-        let queue = ptr::addr_of_mut!((**world).game.encounter_q);
-        let mut handle = (**world).game.avail_race_q.head;
+        let queue = ptr::addr_of_mut!((**world).data.game.encounter_q);
+        let mut handle = (**world).data.game.avail_race_q.head;
         let mut race = 0usize;
-        while !handle.is_null() && (**world).game.current_activity & IN_BATTLE as u16 != 0 {
+        while !handle.is_null() && (**world).data.game.current_activity & IN_BATTLE as u16 != 0 {
             let fleet = handle.cast::<FLEET_INFO>();
             handle = (*fleet).succ;
             let mut radius = (*fleet).actual_strength;
@@ -173,16 +176,31 @@ pub(crate) mod live {
                     radius = 20000;
                     if race == SLYLANDRO_SHIP as usize {
                         flags = ONE_SHOT_ENCOUNTER as u8;
-                        percent = if get("STARBASE_AVAILABLE") == 0 {
+                        percent = if ((**world)
+                            .story_state(crate::engine::StoryKey::STARBASE_AVAILABLE)
+                            as u8)
+                            == 0
+                        {
                             100
                         } else {
-                            percent * get("SLYLANDRO_MULTIPLIER") as u16
+                            percent
+                                * ((**world)
+                                    .story_state(crate::engine::StoryKey::SLYLANDRO_MULTIPLIER)
+                                    as u8) as u16
                         };
                     } else if race == MELNORME_SHIP as usize
-                        && ((**world).flagship.fuel_on_board == 0 || get("USED_BROADCASTER") != 0)
-                        && get("MELNORME_ANGER") < 3
+                        && ((**world).data.flagship.fuel_on_board == 0
+                            || ((**world).story_state(crate::engine::StoryKey::USED_BROADCASTER)
+                                as u8)
+                                != 0)
+                        && ((**world).story_state(crate::engine::StoryKey::MELNORME_ANGER) as u8)
+                            < 3
                     {
-                        percent = if get("USED_BROADCASTER") == 0 {
+                        percent = if ((**world)
+                            .story_state(crate::engine::StoryKey::USED_BROADCASTER)
+                            as u8)
+                            == 0
+                        {
                             30
                         } else {
                             100
@@ -199,7 +217,7 @@ pub(crate) mod live {
                         }
                     }
                     if percent == 100 && race == MELNORME_SHIP as usize {
-                        set("BROADCASTER_RESPONSE", 1);
+                        (**world).set_story_state(crate::engine::StoryKey::BROADCASTER_RESPONSE, 1);
                     }
                 }
                 let dx = universe.x.wrapping_sub((*fleet).loc.x).wrapping_abs() as u16;
@@ -224,7 +242,7 @@ pub(crate) mod live {
             }
             race += 1;
         }
-        set("USED_BROADCASTER", 0);
+        (**world).set_story_state(crate::engine::StoryKey::USED_BROADCASTER, 0);
     }
 }
 
@@ -243,5 +261,3 @@ mod tests {
         assert_eq!(position, 93);
     }
 }
-
-use crate::engine::{World as WorldOwner, WorldData as WorldFields};

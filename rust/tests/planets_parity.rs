@@ -189,9 +189,12 @@ impl ExportedGenerators {
             ScreenWidth = 320;
             pSolarSysState = &mut *state;
         }
+        // SAFETY: the serialized harness saves the catalog it restores before its backing storage is dropped.
         let previous_catalog = unsafe { uqm_rust::planets::starmap::star_array };
-        let previous_star = unsafe { (**uqm_rust::engine::World::current()).current_star };
+        let previous_star = uqm_rust::engine::World::current().read(|world| world.current_star);
+        // SAFETY: the serialized harness copies the initialized integer-only catalog.
         let mut star = Box::new(unsafe { starmap_array });
+        // SAFETY: a star record contains only integer fields; zero initializes its fixture values.
         star[0] = unsafe { std::mem::zeroed() };
         Self {
             state,

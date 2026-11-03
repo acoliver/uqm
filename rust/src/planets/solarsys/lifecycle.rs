@@ -3,6 +3,7 @@
 use super::drawing::*;
 use super::flight::*;
 use super::*;
+use crate::engine::{Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields};
 
 use crate::battle::gendef::getGenerateFunctions;
 use crate::c_bindings::controller_input as input;
@@ -756,5 +757,3 @@ pub(super) unsafe extern "C" fn do_ip_flight(state: *mut c::SOLARSYS_STATE) -> c
         == 0
         && glob().read(|owner| owner.flagship.crew_enlisted) != c::COUNT::MAX) as c::BOOLEAN
 }
-
-use crate::engine::{Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields};

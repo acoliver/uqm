@@ -1,6 +1,7 @@
 //! Main-thread lifecycle callbacks, ported from starcon.c (GPL-2.0-or-later).
 #![allow(non_snake_case)]
 
+use crate::engine::WorldData as WorldFields;
 use crate::ships::native::abi::*;
 use std::{ffi::c_void, ptr};
 
@@ -107,5 +108,3 @@ pub unsafe extern "C" fn ProcessUtilityKeys() {
 pub extern "C" fn Starcon2Main(_arg: *mut c_void) -> i32 {
     super::game_loop::rust_game_loop()
 }
-
-use crate::engine::WorldData as WorldFields;

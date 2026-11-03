@@ -1,5 +1,7 @@
 //! Live captain-window rendering and crew/energy bookkeeping from status.c.
 
+#[cfg(not(test))]
+use crate::engine::Kernel as KernelOwner;
 use crate::ships::native::abi::*;
 
 fn status_offsets(height_pixels: i32) -> [COORD; 2] {
@@ -566,5 +568,3 @@ mod tests {
         assert_eq!(ops[0].0.r, 0);
     }
 }
-
-use crate::engine::Kernel as KernelOwner;

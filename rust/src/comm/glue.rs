@@ -2,6 +2,8 @@
 // @plan PLAN-20260314-COMM.P04
 // @requirement DS-REQ-005, DS-REQ-006, DS-REQ-007, DS-REQ-008, DS-REQ-009, DS-REQ-010
 
+#[cfg(not(test))]
+use crate::engine::WorldData as WorldFields;
 use std::ffi::c_void;
 
 /// Callback type for phrase completion notification.
@@ -208,5 +210,3 @@ mod tests {
         assert_eq!(GLOBAL_SHIP_NAME, -2);
     }
 }
-
-use crate::engine::WorldData as WorldFields;

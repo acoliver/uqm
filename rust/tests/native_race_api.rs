@@ -254,13 +254,13 @@ fn native_races_cannot_escape_the_real_accessor_boundary() -> Result<(), Box<dyn
         ("projection", "fn probe(cx: &mut Cx<'_>, p: std::ptr::NonNull<u8>) { let _ = cx.project(p); }", "E0599"),
         ("primitive", "fn probe(cx: &mut Cx<'_>, id: ElementId) { cx.primitive(id).Type = 0; }", "E0624"),
         ("raw_frame", "fn probe(cx: &mut Cx<'_>) { cx.abs_frame(std::ptr::NonNull::dangling().as_ptr(), 0); }", "E0624"),
-        ("element_operand", "fn probe() { let _ = uqm_rust::engine::battle::record::ElementOperand(std::ptr::null_mut::<u8>()); }", "E0425"),
-        ("collision_operands", "fn probe() { let _ = uqm_rust::engine::battle::record::CollisionOperands(std::ptr::null_mut::<u8>(), std::ptr::null_mut::<u8>(), std::ptr::null_mut::<u8>(), std::ptr::null_mut::<u8>()); }", "E0425"),
-        ("decoder", "fn probe(raw: &uqm_rust::engine::battle::record::ElementRecord) { let _ = uqm_rust::engine::battle::views::ElementState::decode(raw); }", "E0624"),
-        ("legacy_table", "fn probe(cx: &mut Cx<'_>, id: ElementId) { cx.records()[id].next.image.frames = uqm_rust::engine::battle::views::Frames::ABSENT; }", "E0133"),
-        ("legacy_subject", "fn probe(cx: &mut Cx<'_>, raw: &uqm_rust::engine::battle::record::ElementRecord) { let _ = cx.legacy_subject(raw); }", "E0599"),
+        ("element_operand", "fn probe() { let _ = crate::engine::battle::record::ElementOperand(std::ptr::null_mut::<u8>()); }", "E0425"),
+        ("collision_operands", "fn probe() { let _ = crate::engine::battle::record::CollisionOperands(std::ptr::null_mut::<u8>(), std::ptr::null_mut::<u8>(), std::ptr::null_mut::<u8>(), std::ptr::null_mut::<u8>()); }", "E0425"),
+        ("decoder", "fn probe(raw: &crate::engine::battle::record::ElementRecord) { let _ = crate::engine::battle::views::ElementState::decode(raw); }", "E0624"),
+        ("legacy_table", "fn probe(cx: &mut Cx<'_>, id: ElementId) { cx.records()[id].next.image.frames = crate::engine::battle::views::Frames::ABSENT; }", "E0133"),
+        ("legacy_subject", "fn probe(cx: &mut Cx<'_>, raw: &crate::engine::battle::record::ElementRecord) { let _ = cx.legacy_subject(raw); }", "E0599"),
         ("sound", "fn probe(cx: &mut Cx<'_>) { cx.queue_sound(1, None); }", "E0624"),
-        ("subject", "fn probe(mut subject: uqm_rust::engine::battle::Subject) { subject.intersect.IntersectStamp.frame = std::ptr::NonNull::dangling().as_ptr(); }", "E0616"),
+        ("subject", "fn probe(mut subject: crate::engine::battle::Subject) { subject.intersect.IntersectStamp.frame = std::ptr::NonNull::dangling().as_ptr(); }", "E0616"),
     ];
     let probes = probes.into_iter().chain([
         ("escaped_frame", "fn probe(a: crate::engine::battle::frames::FrameArray) { let frame = a.view(0); drop(a); let _ = crate::engine::battle::frames::FrameArray::retain([frame; 3]); }", "E0505"),
@@ -281,7 +281,7 @@ fn native_races_cannot_escape_the_real_accessor_boundary() -> Result<(), Box<dyn
     for (name, probe, error) in probes {
         let input = scratch.path().join(format!("{name}.rs"));
         let output = scratch.path().join(format!("{name}.rmeta"));
-        std::fs::write(&input, format!("{actual_modules}\nmod native_race_probe {{ use uqm_rust::engine::battle::{{Cx, ElementId, ShipId}}; {probe} }}"))?;
+        std::fs::write(&input, format!("{actual_modules}\nmod native_race_probe {{ use crate::engine::battle::{{Cx, ElementId, ShipId}}; {probe} }}"))?;
         let mut command = Command::new("rustc");
         command
             .args([

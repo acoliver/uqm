@@ -1,4 +1,6 @@
 use super::*;
+#[cfg(not(test))]
+use crate::engine::WorldData as WorldFields;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Speaker {
@@ -88,7 +90,7 @@ mod live {
             self.talk_segue(track);
         }
         fn date(&self) -> (i16, u8) {
-            unsafe {
+            {
                 (
                     WorldFields::current().read(|owner| owner.game.game_clock.year_index) as i16,
                     WorldFields::current().read(|owner| owner.game.game_clock.month_index),
@@ -130,5 +132,3 @@ impl ZoqApi for crate::comm::races::encounter::testing::Fake<Handler, Clock> {
         (self.world.year, self.world.month)
     }
 }
-
-use crate::engine::WorldData as WorldFields;

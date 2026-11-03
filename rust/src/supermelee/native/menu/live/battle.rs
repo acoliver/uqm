@@ -1,5 +1,6 @@
 //! Battle launch and network confirmation.
 use super::*;
+use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
 pub(super) unsafe fn ready() -> isize {
     // SAFETY: the function contract requires live, game-thread-owned records
     // and callback arguments for all legacy accesses in this operation.
@@ -291,5 +292,3 @@ pub(super) unsafe fn next_control(side: usize) {
     };
     controls(side, true);
 }
-
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

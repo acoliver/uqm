@@ -74,14 +74,12 @@ impl Ops for Harness {
     fn scan(&mut self, case: Scan, info: &SYSTEM_INFO, node: &mut NODE_INFO) -> (u16, u32) {
         self.star_index = case.star;
         self.set_star(0, 0);
-        for name in ["SHOFIXTI_MAIDENS", "UMGAH_BROADCASTERS"] {
-            uqm_rust::engine::World::current().write(|world| {
-                set_game_state(
-                    world,
-                    uqm_rust::engine::StoryKey::from_name(name).unwrap(),
-                    u32::from(case.taken),
-                )
-            });
+        for key in [
+            uqm_rust::engine::StoryKey::SHOFIXTI_MAIDENS,
+            uqm_rust::engine::StoryKey::UMGAH_BROADCASTERS,
+        ] {
+            uqm_rust::engine::World::current()
+                .write(|world| set_game_state(world, key, u32::from(case.taken)));
         }
         self.state.PlanetDesc = unsafe { std::mem::zeroed() };
         self.state.MoonDesc = unsafe { std::mem::zeroed() };
@@ -118,12 +116,12 @@ impl Ops for Harness {
             before,
             "scan input changed: {case:?}"
         );
-        for name in ["SHOFIXTI_MAIDENS", "UMGAH_BROADCASTERS"] {
+        for key in [
+            uqm_rust::engine::StoryKey::SHOFIXTI_MAIDENS,
+            uqm_rust::engine::StoryKey::UMGAH_BROADCASTERS,
+        ] {
             assert_eq!(
-                uqm_rust::engine::World::current().read(|world| get_game_state(
-                    world,
-                    uqm_rust::engine::StoryKey::from_name(name).unwrap()
-                )),
+                uqm_rust::engine::World::current().read(|world| get_game_state(world, key)),
                 u32::from(case.taken)
             );
         }

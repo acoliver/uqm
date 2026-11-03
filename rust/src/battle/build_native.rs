@@ -1,5 +1,7 @@
 //! Native fleet construction and escort bookkeeping ported from build.c.
 
+#[cfg(not(test))]
+use crate::engine::WorldData as WorldFields;
 use crate::ships::native::abi::*;
 #[cfg(not(test))]
 use std::ptr;
@@ -392,5 +394,3 @@ mod tests {
         );
     }
 }
-
-use crate::engine::WorldData as WorldFields;

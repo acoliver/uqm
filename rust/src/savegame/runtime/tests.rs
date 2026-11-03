@@ -814,13 +814,13 @@ fn restore_then_capture_returns_the_sections_that_were_restored() {
             // The Rust singleton owns the bits; the C shadow array follows it.
             assert_eq!(
                 crate::engine::World::current()
-                    .read(|world| snapshot_game_state(world))
+                    .read(snapshot_game_state)
                     .unwrap(),
                 bits
             );
             assert_eq!(
                 crate::engine::World::current()
-                    .read(|world| snapshot_game_state(world))
+                    .read(snapshot_game_state)
                     .unwrap(),
                 bits
             );
@@ -930,7 +930,7 @@ fn a_rejected_restore_changes_nothing() {
 
             assert_eq!(
                 crate::engine::World::current()
-                    .read(|world| snapshot_game_state(world))
+                    .read(snapshot_game_state)
                     .unwrap(),
                 original_bits
             );
@@ -998,7 +998,7 @@ fn restoring_a_c_written_save_puts_its_bytes_at_the_c_offsets() {
             // GmSt: the singleton holds the chunk.
             assert_eq!(
                 crate::engine::World::current()
-                    .read(|world| snapshot_game_state(world))
+                    .read(snapshot_game_state)
                     .unwrap()
                     .as_slice(),
                 gmst

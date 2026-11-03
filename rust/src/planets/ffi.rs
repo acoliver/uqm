@@ -10,6 +10,7 @@
 use crate::c_bindings::global_state::{
     PlanetFrame, NODE_INFO, PLANET_DESC, PLANET_INFO, POINT, SOLARSYS_STATE, SYSTEM_INFO,
 };
+use crate::engine::World as WorldOwner;
 use crate::math::RandomContext;
 use crate::planets::calc::{self, AnalysisSite, StarDescription};
 use crate::planets::orbit_tables::NUMBER_OF_PLANET_TYPES;
@@ -69,7 +70,11 @@ pub(crate) fn blank_node() -> NODE_INFO {
 /// # Safety
 /// `CurStarDescPtr` must point at a valid star description.
 pub(crate) unsafe fn current_star_type() -> u8 {
-    (*(**WorldOwner::current()).star_pointer(crate::planets::starmap::current_catalog())).star_type
+    // SAFETY: the caller retains a selected entry of the initialized catalog on the game thread.
+    unsafe {
+        (*(**WorldOwner::current()).star_pointer(crate::planets::starmap::current_catalog()))
+            .star_type
+    }
 }
 
 /// The star and the orbit `DoPlanetaryAnalysis` reads for `desc`: the sun and
@@ -309,5 +314,3 @@ pub unsafe extern "C" fn fill_orbits_c(
         (*system).SunDesc[0].NumPlanets = drawn;
     }
 }
-
-use crate::engine::World as WorldOwner;

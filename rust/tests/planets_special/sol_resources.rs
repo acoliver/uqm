@@ -142,9 +142,8 @@ unsafe fn names(h: &mut Harness) {
     let strings =
         c_api::CaptureStringTable(c_api::LoadStringTableInstance(c"text.starcon".as_ptr()));
     assert!(!strings.is_null());
-    let saved = std::ptr::addr_of!((**uqm_rust::engine::Kernel::current()).game_strings).read();
-    std::ptr::addr_of_mut!((**uqm_rust::engine::Kernel::current()).game_strings)
-        .write(strings.cast());
+    let saved = uqm_rust::engine::Kernel::current()
+        .write(|kernel| std::mem::replace(&mut kernel.game_strings, strings.cast()));
     let system = &raw mut *h.state;
     for (index, expected) in [(0, "Mercury"), (2, "Earth"), (8, "Pluto")] {
         let parent = &raw mut (*system).PlanetDesc[index];
@@ -153,12 +152,8 @@ unsafe fn names(h: &mut Harness) {
         assert!(GENERATE_SOL_FUNCTIONS.generate_name.unwrap()(
             system, parent
         ));
-        let name = std::ptr::addr_of!(
-            (**uqm_rust::engine::WorldData::current())
-                .flagship
-                .planet_name
-        )
-        .cast::<std::ffi::c_char>();
+        let name = uqm_rust::engine::WorldData::current().read(|world| world.flagship.planet_name);
+        let name = name.as_ptr().cast::<std::ffi::c_char>();
         assert_eq!(std::ffi::CStr::from_ptr(name).to_str().unwrap(), expected);
         assert_eq!(
             uqm_rust::engine::World::current().read(|world| {
@@ -173,7 +168,13 @@ unsafe fn names(h: &mut Harness) {
         (*moon).pPrevDesc = parent;
         (*moon).data_index = 27;
         assert!(GENERATE_SOL_FUNCTIONS.generate_name.unwrap()(system, moon));
-        assert_eq!(std::ffi::CStr::from_ptr(name).to_str().unwrap(), expected);
+        let name = uqm_rust::engine::WorldData::current().read(|world| world.flagship.planet_name);
+        assert_eq!(
+            std::ffi::CStr::from_ptr(name.as_ptr().cast())
+                .to_str()
+                .unwrap(),
+            expected
+        );
         assert_eq!(
             uqm_rust::engine::World::current().read(|world| {
                 uqm_rust::state::game_state_keys::get_game_state(
@@ -184,7 +185,7 @@ unsafe fn names(h: &mut Harness) {
             index as u32 + 128
         );
     }
-    std::ptr::addr_of_mut!((**uqm_rust::engine::Kernel::current()).game_strings).write(saved);
+    uqm_rust::engine::Kernel::current().write(|kernel| kernel.game_strings = saved);
     // Reuse the production discovery-table cleanup boundary for this captured
     // table after restoring the global that borrowed it.
     (*system).SysInfo.PlanetInfo.DiscoveryString = strings.cast();

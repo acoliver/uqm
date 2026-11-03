@@ -1,5 +1,7 @@
 use super::Handler;
 use crate::comm::races::encounter::EncounterApi;
+#[cfg(not(test))]
+use crate::engine::WorldData as WorldFields;
 
 #[derive(Clone, Copy)]
 pub(super) struct Date {
@@ -64,5 +66,3 @@ impl RebelApi for crate::comm::races::encounter::testing::Fake<Handler, Date> {
         self.world
     }
 }
-
-use crate::engine::WorldData as WorldFields;

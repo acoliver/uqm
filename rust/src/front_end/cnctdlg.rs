@@ -1,6 +1,7 @@
 //! Netplay connection dialog, ported from uqm/cnctdlg.c.
 #![cfg(not(test))]
 
+use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
 use crate::navigation::abi::*;
 
 use std::{
@@ -474,5 +475,3 @@ pub unsafe fn melee_connect_dialog(
     DestroyFont(PLAYER_FONT_HANDLE);
     state.confirmed as BOOLEAN
 }
-
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

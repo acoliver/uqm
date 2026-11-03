@@ -346,29 +346,28 @@ pub(super) fn event_queue_fields(directory: &Path) {
     };
     // SAFETY: this test owns the idle game clock queue until it is uninitialized.
     unsafe {
-        let queue = &raw mut (**uqm_rust::engine::WorldData::current())
-            .game
-            .game_clock
-            .event_q;
-        assert!(InitQueue(
-            queue,
-            NUM_EVENTS as u16,
-            std::mem::size_of::<CEvent>() as u16
-        ));
-        let first = EventEntry {
-            day_index: 8,
-            month_index: 9,
-            year_index: 2161,
-            func_index: 1,
-        };
-        let second = EventEntry {
-            day_index: 10,
-            month_index: 9,
-            year_index: 2161,
-            func_index: 2,
-        };
-        restore_events(&mut *queue, &[first, second])
-            .unwrap_or_else(|error| panic!("restore test events: {error}"));
+        uqm_rust::engine::WorldData::current().write(|world| {
+            let queue = &raw mut world.game.game_clock.event_q;
+            assert!(InitQueue(
+                queue,
+                NUM_EVENTS as u16,
+                std::mem::size_of::<CEvent>() as u16
+            ));
+            let first = EventEntry {
+                day_index: 8,
+                month_index: 9,
+                year_index: 2161,
+                func_index: 1,
+            };
+            let second = EventEntry {
+                day_index: 10,
+                month_index: 9,
+                year_index: 2161,
+                func_index: 2,
+            };
+            restore_events(&mut *queue, &[first, second])
+                .unwrap_or_else(|error| panic!("restore test events: {error}"));
+        });
         let (fields, _) = snapshot(directory);
         assert_eq!(fields["mode.events.initialized"], "true");
         assert_eq!(fields["mode.events.count"], "2");
@@ -381,7 +380,9 @@ pub(super) fn event_queue_fields(directory: &Path) {
                 function.to_string()
             );
         }
-        assert!(UninitQueue(queue));
+        uqm_rust::engine::WorldData::current().write(|world| {
+            assert!(UninitQueue(&raw mut world.game.game_clock.event_q));
+        });
     }
 }
 
@@ -393,18 +394,21 @@ pub(super) fn non_ship_parent_fields(directory: &Path) {
     let mut element = ElementRecord::new();
     // SAFETY: no game loop is running; this test owns both queues and the group pool.
     unsafe {
-        let queue = &raw mut (**uqm_rust::engine::WorldData::current()).game.ip_group_q;
-        assert!(InitQueue(queue, 4, std::mem::size_of::<CIpGroup>() as u16));
-        let handle = AllocLink(queue);
-        assert!(!handle.is_null());
-        handle.cast::<CIpGroup>().write(std::mem::zeroed());
-        let group = &mut *handle.cast::<CIpGroup>();
-        group.group_id = 31;
-        group.race_id = 4;
-        group.group_counter = 123;
-        group.loc.x = -71;
-        group.task = 2;
-        PutQueue(queue, handle);
+        let handle = uqm_rust::engine::WorldData::current().write(|world| {
+            let queue = &raw mut world.game.ip_group_q;
+            assert!(InitQueue(queue, 4, std::mem::size_of::<CIpGroup>() as u16));
+            let handle = AllocLink(queue);
+            assert!(!handle.is_null());
+            handle.cast::<CIpGroup>().write(std::mem::zeroed());
+            let group = &mut *handle.cast::<CIpGroup>();
+            group.group_id = 31;
+            group.race_id = 4;
+            group.group_counter = 123;
+            group.loc.x = -71;
+            group.task = 2;
+            PutQueue(queue, handle);
+            handle
+        });
         element.parent = uqm_rust::engine::battle::Parent::IpGroup(0);
         attach_elements(std::slice::from_mut(&mut element));
         observation::record(Event::Allocate(element.pointer() as usize));
@@ -427,6 +431,8 @@ pub(super) fn non_ship_parent_fields(directory: &Path) {
         assert_eq!(fields["elements.0.parent"], "group:32");
         assert_eq!(fields["mode.groups.32.counter"], "123");
         clear_queues();
-        assert!(UninitQueue(queue));
+        uqm_rust::engine::WorldData::current().write(|world| {
+            assert!(UninitQueue(&raw mut world.game.ip_group_q));
+        });
     }
 }

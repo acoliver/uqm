@@ -8,6 +8,9 @@
 use crate::c_bindings::global_state::{Color, EXTENT, FRAME, MENU_STATE, POINT, RECT, STAMP};
 #[cfg(not(test))]
 use crate::c_bindings::global_state::{FLEET_INFO, QUEUE, TEXT};
+use crate::engine::Kernel as KernelOwner;
+#[cfg(not(test))]
+use crate::engine::{World as WorldOwner, WorldData as WorldFields};
 #[cfg(not(test))]
 use crate::graphics::context_abi::SetContextClipRect;
 #[cfg(not(test))]
@@ -297,7 +300,7 @@ unsafe fn uy(y: i16) -> i16 {
 
 #[cfg(not(test))]
 unsafe fn current_location() -> POINT {
-    if crate::engine::World::current().read(|world| inHQSpace(world)) == 0 {
+    if crate::engine::World::current().read(inHQSpace) == 0 {
         point(
             (*(**WorldOwner::current()).star_pointer(crate::planets::starmap::current_catalog()))
                 .star_pt,
@@ -1187,5 +1190,3 @@ pub unsafe extern "C" fn StarMap() -> u32 {
 #[cfg(test)]
 #[path = "pstarmap/tests.rs"]
 mod tests;
-
-use crate::engine::{Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields};

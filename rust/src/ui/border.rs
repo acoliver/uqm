@@ -1,6 +1,7 @@
 //! Flagship screen border, ported from uqm/border.c.
 #![allow(non_snake_case)]
 use super::util::live::DrawStarConBox;
+use crate::engine::Kernel as KernelOwner;
 use crate::navigation::abi::*;
 fn color(r: u8, g: u8, b: u8) -> Color {
     Color {
@@ -190,5 +191,3 @@ pub unsafe fn DrawSISFrame() {
 
     UnbatchGraphics();
 }
-
-use crate::engine::Kernel as KernelOwner;

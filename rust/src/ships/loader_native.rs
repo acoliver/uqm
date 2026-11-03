@@ -156,5 +156,3 @@ pub(crate) mod engine {
 
 #[cfg(not(test))]
 pub use engine::unload_ship;
-
-use crate::engine::World as WorldOwner;

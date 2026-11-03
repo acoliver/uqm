@@ -1,5 +1,7 @@
 //! Production surface drawing adapter over low-level graphics services.
 
+#[cfg(not(test))]
+use crate::engine::Kernel as KernelOwner;
 use std::collections::HashMap;
 use std::ffi::c_void;
 
@@ -736,5 +738,3 @@ mod tests {
         assert_eq!(count, 0);
     }
 }
-
-use crate::engine::Kernel as KernelOwner;

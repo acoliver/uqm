@@ -158,13 +158,17 @@ pub(crate) mod live {
     }
 
     unsafe fn delta_crew(menu: &Menu, delta: i16) -> bool {
-        let world = WorldFields::current();
         let ship = support_ship(menu);
         if ship.is_null() {
             return false;
         }
-        let queue = std::ptr::addr_of!((**world).game.avail_race_q).cast::<Queue>();
-        let template = get_star_ship_from_index(queue, (*ship).race_id).cast::<CFleetInfo>();
+        let template = WorldFields::current().read(|world| {
+            get_star_ship_from_index(
+                std::ptr::addr_of!(world.game.avail_race_q).cast::<Queue>(),
+                (*ship).race_id,
+            )
+            .cast::<CFleetInfo>()
+        });
         if !transfer_crew(&mut (*ship).crew_level, (*template).crew_level, delta) {
             return false;
         }
@@ -286,6 +290,7 @@ pub(crate) mod live {
         let world = WorldFields::current();
         let count =
             CountLinks(std::ptr::addr_of!((**world).game.built_ship_q).cast::<Queue>()) as usize;
+        drop(world);
         if count == 0 {
             return 0;
         }
@@ -350,5 +355,3 @@ mod tests {
         assert_eq!(navigate(&positions, 4, true, false, false), 2);
     }
 }
-
-use crate::engine::WorldData as WorldFields;

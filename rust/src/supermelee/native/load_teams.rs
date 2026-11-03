@@ -405,5 +405,3 @@ mod tests {
         assert_eq!(page(0, 4, 0, 4, [false, false, false, true]), (0, 3));
     }
 }
-
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

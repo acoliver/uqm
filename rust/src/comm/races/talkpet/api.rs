@@ -1,5 +1,7 @@
 use super::Handler;
 use crate::comm::races::alliance::AllianceApi;
+#[cfg(not(test))]
+use crate::engine::WorldData as WorldFields;
 
 pub(super) trait TalkpetApi: AllianceApi<Handler> {
     fn flags(&self) -> u8;
@@ -10,10 +12,12 @@ pub(super) trait TalkpetApi: AllianceApi<Handler> {
 #[cfg(not(test))]
 impl TalkpetApi for super::super::script::live::LiveScript<Handler> {
     fn flags(&self) -> u8 {
-        unsafe { WorldFields::current().read(|owner| owner.game.glob_flags) }
+        {
+            WorldFields::current().read(|owner| owner.game.glob_flags)
+        }
     }
     fn npc_ships(&self) -> bool {
-        unsafe {
+        {
             !WorldFields::current()
                 .read(|owner| owner.game.npc_built_ship_q.head)
                 .is_null()
@@ -55,5 +59,3 @@ impl TalkpetApi for super::super::encounter::testing::Fake<Handler, World> {
         self.world.strobes += 1;
     }
 }
-
-use crate::engine::WorldData as WorldFields;

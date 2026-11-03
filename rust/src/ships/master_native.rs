@@ -1,6 +1,7 @@
 //! Master metadata owns its descriptors in the game lifecycle's typed ship queue.
 
 use crate::engine::battle::kernel::MasterCatalog;
+use crate::engine::Kernel as KernelOwner;
 
 fn find(queue: &MasterCatalog, species: u32) -> i32 {
     let mut next = queue.head();
@@ -133,12 +134,14 @@ pub(crate) mod engine {
         species: u32,
     ) -> Option<MasterShip> {
         let queue = &kernel.master_queue;
-        let index = super::find(queue, species);
-        let mut id = queue.head();
-        for _ in 0..index {
-            id = queue.succ(id.expect("master index"));
+        let mut next = queue.head();
+        while let Some(id) = next {
+            if queue.get(id).species == species {
+                return Some(entry(queue, id));
+            }
+            next = queue.succ(id);
         }
-        (index >= 0).then(|| entry(queue, id.expect("master index")))
+        None
     }
 
     /// # Safety
@@ -232,5 +235,3 @@ mod tests {
             .is_none());
     }
 }
-
-use crate::engine::Kernel as KernelOwner;

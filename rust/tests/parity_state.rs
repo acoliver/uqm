@@ -470,11 +470,8 @@ fn known_collision() -> uqm_rust::engine::battle::CollisionFn {
 }
 
 unsafe fn sis_fields(directory: &Path, ship: &mut ShipRecord) {
-    // SAFETY: this child process has no running game; no other references to SIS
-    // state exist while this short exclusive borrow initializes its module slots.
-    unsafe {
-        let sis = &raw mut (**uqm_rust::engine::WorldData::current()).flagship;
-        let sis = &mut *sis;
+    uqm_rust::engine::WorldData::current().write(|world| {
+        let sis = &mut world.flagship;
         sis.module_slots
             .fill(uqm_rust::starbase::sis_modules::EMPTY_SLOT);
         sis.module_slots[15] = GUN_WEAPON as u8;
@@ -484,10 +481,8 @@ unsafe fn sis_fields(directory: &Path, ship: &mut ShipRecord) {
             .fill(uqm_rust::starbase::sis_modules::EMPTY_SLOT);
         sis.jet_slots
             .fill(uqm_rust::starbase::sis_modules::EMPTY_SLOT);
-        (**uqm_rust::engine::WorldData::current())
-            .game
-            .current_activity = SUPER_MELEE as u16;
-    }
+        world.game.current_activity = SUPER_MELEE as u16;
+    });
     ship.SpeciesID = SPECIES_ID_SIS_SHIP_ID;
     // SAFETY: the caller runs native initialization on the sole game thread.
     let descriptor =

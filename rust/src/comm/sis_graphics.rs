@@ -23,6 +23,8 @@
 #![allow(static_mut_refs)]
 
 use crate::comm::locdata::{CColor, CPoint, CRect};
+#[cfg(not(test))]
+use crate::engine::Kernel as KernelOwner;
 
 // ============================================================================
 // C ABI types matching gfxlib.h
@@ -635,7 +637,9 @@ impl CommWindowGfx for CommWindow {
 
     fn space_context(&self) -> *mut std::ffi::c_void {
         // SAFETY: set once at startup, read on the game thread.
-        unsafe { (KernelOwner::current().read(|owner| owner.space_context)).cast() }
+        {
+            (KernelOwner::current().read(|owner| owner.space_context)).cast()
+        }
     }
 
     fn set_context(&mut self, ctx: *mut std::ffi::c_void) -> *mut std::ffi::c_void {
@@ -855,5 +859,3 @@ mod tests {
         assert_eq!(ONE_SECOND, 840);
     }
 }
-
-use crate::engine::Kernel as KernelOwner;

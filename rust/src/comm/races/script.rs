@@ -1,6 +1,8 @@
 //! Shared boundary for dialogue scripts while the surrounding engine still uses C.
 
 use crate::comm::locdata::{CAnimationDesc, CLocData};
+#[cfg(not(test))]
+use crate::engine::WorldData as WorldFields;
 
 pub(super) const ANIM_DISABLED: u8 = 1 << 7;
 pub(super) const ONE_SECOND: u16 = 840;
@@ -176,7 +178,7 @@ pub(super) mod live {
         }
 
         fn supplies(&self) -> Supplies {
-            unsafe {
+            {
                 Supplies {
                     landers: WorldFields::current().read(|owner| owner.flagship.num_landers),
                     fuel: WorldFields::current().read(|owner| owner.flagship.fuel_on_board),
@@ -224,5 +226,3 @@ pub(super) mod live {
 pub(super) fn as_comm_data(desc: &CLocData) -> crate::comm::types::CommData {
     crate::comm::locdata::read_locdata(desc)
 }
-
-use crate::engine::WorldData as WorldFields;

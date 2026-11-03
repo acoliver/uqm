@@ -73,8 +73,7 @@ pub(super) unsafe fn ambient(cx: &mut Cx<'_>) {
         y: ((height() >> 1) + (dy << 2)) as i16,
     };
     let stars = cx.kernel.stars_in_space;
-    let source =
-        NonNull::new(&raw mut cx.kernel.stars_in_space).expect("retained navigation authority");
+    let source = NonNull::from(&mut cx.kernel.stars_in_space);
     cx.set_single_frames(
         element,
         Frames::native_shared(crate::engine::battle::views::SharedFrames::Stars, source, 1),

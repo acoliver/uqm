@@ -2,6 +2,8 @@
 
 #[cfg(not(test))]
 use crate::engine::battle::schema::InputContext;
+#[cfg(not(test))]
+use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
 use crate::ships::native::abi;
 
 const BATTLE_LEFT: u8 = 1 << 0;
@@ -279,10 +281,9 @@ pub(crate) mod engine {
             .read(|owner| owner.battle_music)
             .is_null()
         {
-            let resource = if crate::engine::World::current().read(|world| inHyperSpace(world)) != 0
-            {
+            let resource = if crate::engine::World::current().read(inHyperSpace) != 0 {
                 HYPERSPACE_MUSIC.as_ptr()
-            } else if crate::engine::World::current().read(|world| inQuasiSpace(world)) != 0 {
+            } else if crate::engine::World::current().read(inQuasiSpace) != 0 {
                 QUASISPACE_MUSIC.as_ptr()
             } else {
                 BATTLE_MUSIC.as_ptr()
@@ -471,7 +472,7 @@ pub(crate) mod engine {
                 } else {
                     bs.InputFunc = Some(DoBattle);
                     bs.frame_cb = callback;
-                    bs.first_time = crate::engine::World::current().read(|world| inHQSpace(world));
+                    bs.first_time = crate::engine::World::current().read(inHQSpace);
                     crate::log_abi::log_message(
                         5,
                         "BATTLE_DEBUG: About to call DoInput for battle loop",
@@ -575,5 +576,3 @@ mod tests {
         assert_eq!(ship_input(both, 0), 0);
     }
 }
-
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

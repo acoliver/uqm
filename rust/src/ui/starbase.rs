@@ -4,6 +4,7 @@
 
 use super::{outfit::DoOutfit, shipyard::DoShipyard};
 use crate::comm::comm_abi::{InitCommunication, SetCommIntroMode};
+use crate::engine::{Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields};
 use crate::navigation::abi::*;
 
 use crate::state::game_state_keys::{get_game_state, set_game_state};
@@ -540,5 +541,3 @@ pub unsafe fn InstallBombAtEarth() {
     NextActivity = IN_INTERPLANETARY as u16 | START_INTERPLANETARY as u16;
     (**WorldOwner::current()).select_star(None, crate::planets::starmap::current_catalog());
 }
-
-use crate::engine::{Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields};

@@ -3,6 +3,8 @@
 #![allow(non_snake_case)]
 
 use super::abi::{GROUP_HEADER, IP_GROUP, SHIP_FRAGMENT};
+#[cfg(not(test))]
+use crate::engine::{Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields};
 use crate::state::c_api::{GameStateFile, ReadStateFile, WriteStateFile};
 
 unsafe fn read<const N: usize>(file: *mut GameStateFile) -> [u8; N] {
@@ -707,5 +709,3 @@ mod tests {
         }
     }
 }
-
-use crate::engine::{Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields};

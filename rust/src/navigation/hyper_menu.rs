@@ -3,6 +3,7 @@
 #![allow(non_snake_case)]
 use super::abi::*;
 use super::get;
+use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
 
 use super::hyper_transition::cleanup;
 use std::{mem, ptr};
@@ -90,5 +91,3 @@ pub unsafe fn HyperspaceMenu() {
     }
     BatchGraphics();
 }
-
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

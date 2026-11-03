@@ -155,7 +155,7 @@ fn seed_restores_to_the_images_the_c_loader_builds() {
             assert_eq!(file(DEFGRPINFO_FILE), seed_defined_image());
             assert_eq!(game.battle_group_ref, 1);
             let state = crate::engine::World::current()
-                .read(|world| snapshot_game_state(world))
+                .read(snapshot_game_state)
                 .unwrap();
             assert_eq!(get_state_32_raw(&state, PROBE_OFFSET_BIT), 1);
         })
@@ -416,7 +416,7 @@ fn rejected_restore_leaves_files_and_state_alone() {
                 file(RANDGRPINFO_FILE),
                 file(DEFGRPINFO_FILE),
                 crate::engine::World::current()
-                    .read(|world| snapshot_game_state(world))
+                    .read(snapshot_game_state)
                     .unwrap(),
                 game.battle_group_ref,
             );
@@ -524,7 +524,7 @@ fn rejected_restore_leaves_files_and_state_alone() {
                     file(RANDGRPINFO_FILE),
                     file(DEFGRPINFO_FILE),
                     crate::engine::World::current()
-                        .read(|world| snapshot_game_state(world))
+                        .read(snapshot_game_state)
                         .unwrap(),
                     game.battle_group_ref,
                 );
@@ -670,7 +670,7 @@ fn several_defined_groups_get_their_own_offsets() {
             // 268 byte header and the 2 + 17 byte fleet.
             let second_offset = 1 + 268 + 19;
             let state = crate::engine::World::current()
-                .read(|world| snapshot_game_state(world))
+                .read(snapshot_game_state)
                 .unwrap();
             assert_eq!(get_state_32_raw(&state, SAMATRA_OFFSET_BIT), 1);
             assert_eq!(get_state_32_raw(&state, FIRST_OFFSET_BIT), second_offset);

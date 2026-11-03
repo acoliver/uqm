@@ -1,6 +1,7 @@
 #![cfg(not(test))]
 #![allow(non_snake_case)]
 
+use crate::engine::WorldData as WorldFields;
 use crate::memory::{rust_hfree as HFree, rust_hmalloc as HMalloc};
 use crate::navigation::abi::*;
 
@@ -319,5 +320,3 @@ unsafe fn joystick_character(
         PlayMenuSound(MENU_SOUND_EFFECT_MENU_SOUND_FAILURE);
     }
 }
-
-use crate::engine::WorldData as WorldFields;

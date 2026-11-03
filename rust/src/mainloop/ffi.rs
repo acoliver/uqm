@@ -23,6 +23,9 @@
 
 use super::c_extern as prod;
 use super::types::{ActivityValue, CBoolean};
+use crate::engine::Kernel as KernelOwner;
+#[cfg(not(test))]
+use crate::engine::WorldData as WorldFields;
 
 // ---------------------------------------------------------------------------
 // Direct C global access for standalone activity globals
@@ -105,7 +108,7 @@ pub fn get_current_activity() -> ActivityValue {
     #[cfg(not(test))]
     {
         // SAFETY: reads CurrentActivity from C GlobData global.
-        let raw = unsafe { WorldFields::current().read(|owner| owner.game.current_activity) };
+        let raw = { WorldFields::current().read(|owner| owner.game.current_activity) };
         ActivityValue(raw)
     }
     #[cfg(test)]
@@ -192,7 +195,7 @@ pub fn set_next_activity(val: ActivityValue) {
 #[must_use]
 pub fn get_last_activity() -> ActivityValue {
     // SAFETY: reads a C global, no preconditions.
-    let raw = unsafe { KernelOwner::current().read(|owner| owner.last_activity) };
+    let raw = { KernelOwner::current().read(|owner| owner.last_activity) };
     ActivityValue(raw)
 }
 
@@ -303,7 +306,9 @@ pub fn get_crew_enlisted() -> u16 {
     #[cfg(not(test))]
     {
         // SAFETY: reads a u16 field from the C GlobData global.
-        unsafe { WorldFields::current().read(|owner| owner.flagship.crew_enlisted) }
+        {
+            WorldFields::current().read(|owner| owner.flagship.crew_enlisted)
+        }
     }
     #[cfg(test)]
     0
@@ -567,5 +572,3 @@ mod tests {
         assert_eq!(false_val, 0);
     }
 }
-
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

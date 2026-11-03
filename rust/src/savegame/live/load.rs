@@ -3,6 +3,7 @@ use super::super::abi::SummaryDesc;
 use super::super::runtime::{self, groups, queues, statefiles};
 use super::super::{SaveFile, SaveSlots};
 use crate::comm::dispatch::{IN_INTERPLANETARY, START_ENCOUNTER, START_INTERPLANETARY};
+use crate::engine::{Kernel as KernelOwner, World as WorldOwner};
 use crate::mainloop::dir_prep::saveDir;
 
 #[no_mangle]
@@ -104,5 +105,3 @@ pub unsafe extern "C" fn LoadGame(slot: u16, summary: *mut SummaryDesc) -> u32 {
         summary.is_null().then_some((slot, true)),
     )
 }
-
-use crate::engine::{Kernel as KernelOwner, World as WorldOwner};

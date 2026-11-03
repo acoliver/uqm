@@ -156,3 +156,89 @@ fn encounter_teardown_releases_world_before_activity_queries() {
         });
     }
 }
+
+#[test]
+#[serial_test::serial]
+fn campaign_star_observation_releases_world_between_field_reads() {
+    use uqm_rust::automation::campaign_state::{LiveCampaign, StateKey, StateSource};
+    let mut game = Game::new();
+    game.world.story = Some(uqm_rust::state::game_state::GameState::new());
+    // SAFETY: the serialized fixture owns the lifecycle and has no selected star.
+    unsafe {
+        bridge::with_game(&mut game, || {
+            assert_eq!(LiveCampaign.read(StateKey::StarCurrent), None);
+        });
+    }
+}
+
+#[test]
+#[serial_test::serial]
+fn lander_status_releases_world_before_gauge_and_lander_drawing() {
+    use uqm_rust::planet_side::{
+        adapters::CffiShipStatus, runtime::ShipStatusPort, session::ShipDelta,
+    };
+    let mut game = Game::new();
+    game.world.data.flagship.module_slots.fill(255);
+    game.world.data.flagship.module_slots[0] = CREW_POD as u8;
+    game.world.data.flagship.crew_enlisted = 12;
+    game.world.data.flagship.num_landers = 2;
+    // SAFETY: absent graphics handles use the inactive backend on this fixture thread.
+    unsafe {
+        bridge::with_game(&mut game, || {
+            CffiShipStatus
+                .apply(&ShipDelta {
+                    crew: -2,
+                    landers: -1,
+                    ..ShipDelta::default()
+                })
+                .unwrap();
+        });
+    }
+    assert_eq!(game.world.data.flagship.crew_enlisted, 10);
+    assert_eq!(game.world.data.flagship.num_landers, 1);
+}
+
+#[test]
+#[serial_test::serial]
+fn hyperspace_encounter_updates_story_in_the_borrowed_world() {
+    let mut game = Game::new();
+    game.world.story = Some(uqm_rust::state::game_state::GameState::new());
+    game.world
+        .set_story_state(uqm_rust::engine::StoryKey::USED_BROADCASTER, 1);
+    // SAFETY: this serialized fixture has empty fleet and encounter queues.
+    unsafe {
+        let old_size = (ScreenWidth, ScreenHeight);
+        (ScreenWidth, ScreenHeight) = (320, 240);
+        bridge::with_game(&mut game, || {
+            uqm_rust::navigation::abi::check_hyperspace_encounter();
+        });
+        (ScreenWidth, ScreenHeight) = old_size;
+    }
+    assert_eq!(
+        game.world
+            .story_state(uqm_rust::engine::StoryKey::USED_BROADCASTER),
+        0
+    );
+}
+
+#[test]
+#[serial_test::serial]
+fn hyperspace_movement_releases_world_before_fuel_queries() {
+    let mut game = Game::new();
+    game.world.story = Some(uqm_rust::state::game_state::GameState::new());
+    game.world.data.flagship.log_x = 1000;
+    game.world.data.flagship.log_y = 1000;
+    game.world.data.flagship.fuel_on_board = 100;
+    let (mut dx, mut dy) = (0, 0);
+    // SAFETY: the fixture owns the lifecycle, output deltas and unclipped flagship position.
+    unsafe {
+        let old_size = (ScreenWidth, ScreenHeight);
+        (ScreenWidth, ScreenHeight) = (320, 240);
+        bridge::with_game(&mut game, || {
+            uqm_rust::navigation::abi::MoveSIS(&mut dx, &mut dy);
+        });
+        (ScreenWidth, ScreenHeight) = old_size;
+    }
+    assert_eq!((dx, dy), (0, 0));
+    assert_eq!(game.world.data.flagship.fuel_on_board, 100);
+}

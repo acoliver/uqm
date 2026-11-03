@@ -9,6 +9,9 @@
 //! @plan PLAN-20260724-MAINLOOP-AND-COMM.P11
 //! @requirement REQ-ML-007, REQ-COMM-DISPATCH
 
+use crate::engine::World as WorldOwner;
+#[cfg(not(test))]
+use crate::engine::WorldData as WorldFields;
 use std::os::raw::c_void;
 
 use crate::c_bindings::{assert_c_layout, global_state};
@@ -1129,14 +1132,16 @@ pub(crate) unsafe fn prepare_samatra_dev_fixture() -> Result<(), &'static str> {
     if crate::battle::build_native::AddEscortShips(4, 12) != 12 {
         return Err("boss fixture could not allocate Pkunk escorts");
     }
-    let sis = &mut (**WorldFields::current()).flagship;
-    sis.crew_enlisted = 50;
-    sis.fuel_on_board = 1000;
-    sis.drive_slots.fill(1);
-    sis.jet_slots.fill(2);
-    // Bomb conversion removes the flagship weapons; this is a steering ship.
-    sis.module_slots.fill(0xff);
-    (**WorldFields::current()).game.glob_flags &= !(1 << 5);
+    WorldFields::current().write(|world| {
+        let sis = &mut world.flagship;
+        sis.crew_enlisted = 50;
+        sis.fuel_on_board = 1000;
+        sis.drive_slots.fill(1);
+        sis.jet_slots.fill(2);
+        // Bomb conversion removes the flagship weapons; this is a steering ship.
+        sis.module_slots.fill(0xff);
+        world.game.glob_flags &= !(1 << 5);
+    });
     Ok(())
 }
 
@@ -1533,5 +1538,3 @@ mod tests {
         assert_eq!(pt.y, 200);
     }
 }
-
-use crate::engine::{World as WorldOwner, WorldData as WorldFields};

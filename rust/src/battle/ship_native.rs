@@ -1,5 +1,7 @@
 //! Native ship motion and collision callbacks ported from ship.c.
 
+#[cfg(not(test))]
+use crate::engine::WorldData as WorldFields;
 use crate::ships::native::abi::*;
 
 fn velocity_squared(dx: i16, dy: i16) -> u32 {
@@ -635,5 +637,3 @@ mod tests {
         assert_eq!(velocity_squared(i16::MIN, i16::MIN), 2_147_483_648);
     }
 }
-
-use crate::engine::WorldData as WorldFields;

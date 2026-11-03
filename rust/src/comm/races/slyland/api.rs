@@ -1,5 +1,7 @@
 use super::Handler;
 use crate::comm::races::encounter::EncounterApi;
+#[cfg(not(test))]
+use crate::engine::WorldData as WorldFields;
 
 pub(super) trait SlylandApi: EncounterApi<Handler> {
     fn choices(&self) -> [u16; 5];
@@ -107,5 +109,3 @@ impl SlylandApi for crate::comm::races::encounter::testing::Fake<Handler, World>
             .push((self.effects.len(), Speech::Number(number, padded)));
     }
 }
-
-use crate::engine::WorldData as WorldFields;

@@ -1,5 +1,7 @@
 //! Encounter fleet construction, decision screen, combat entry, and salvage.
 
+#[cfg(not(test))]
+use crate::engine::{Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields};
 pub const ENCOUNTER_DISPLAY_POINTS: [(i16, i16); 10] = [
     (10, 51),
     (-10, 51),
@@ -274,7 +276,7 @@ pub(crate) mod engine {
         );
         SetContextFont(KernelOwner::current().read(|owner| owner.micro_font));
         SetContextForeGroundColor(rgb15(0, 0, 20));
-        if crate::engine::World::current().read(|world| inHQSpace(world)) != 0 {
+        if crate::engine::World::current().read(inHQSpace) != 0 {
             draw_text(&mut t, game_string(ENCOUNTER_STRING_BASE));
             t.baseline.y += 12;
             draw_text(&mut t, game_string(ENCOUNTER_STRING_BASE + 1));
@@ -455,7 +457,7 @@ pub(crate) mod engine {
                 } else {
                     DrawSISFrame();
                     DrawSISMessage(ptr::null());
-                    if crate::engine::World::current().read(|world| inHQSpace(world)) != 0 {
+                    if crate::engine::World::current().read(inHQSpace) != 0 {
                         DrawHyperCoords((**WorldFields::current()).game.ship_stamp.origin);
                     } else if (**WorldFields::current()).game.ip_planet == 0 {
                         DrawHyperCoords(
@@ -729,5 +731,3 @@ mod tests {
         assert_eq!(ENCOUNTER_DISPLAY_POINTS[9], (-44, -27));
     }
 }
-
-use crate::engine::{Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields};

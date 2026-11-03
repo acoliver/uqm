@@ -2,6 +2,7 @@
 #![cfg(not(test))]
 #![allow(non_snake_case)]
 use super::abi::*;
+use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
 
 use super::{color, get, set};
 use std::ptr;
@@ -44,17 +45,18 @@ unsafe fn load() {
 /// World globals, contexts and resources must be initialized on the game thread.
 #[no_mangle]
 pub unsafe extern "C" fn LoadHyperspace() -> BOOLEAN {
-    let kernel = KernelOwner::current();
     super::hyperspace::live::rust_reset_hyper_distance();
     (**WorldFields::current()).game.ship_stamp.origin = POINT { x: -9999, y: -9999 };
     load();
-    crate::collections::observation::swap_image_view(
-        &mut *ptr::addr_of_mut!((**kernel).hyperstars[0]),
-        &mut *ptr::addr_of_mut!((**kernel).stars_in_space),
-    );
-    if (**kernel).last_activity & CHECK_LOAD as u16 == 0 {
+    KernelOwner::current().write(|kernel| {
+        crate::collections::observation::swap_image_view(
+            &mut kernel.hyperstars[0],
+            &mut kernel.stars_in_space,
+        );
+    });
+    if KernelOwner::current().read(|kernel| kernel.last_activity) & CHECK_LOAD as u16 == 0 {
         RepairSISBorder();
-    } else if (**kernel).last_activity as u8 == 0 {
+    } else if KernelOwner::current().read(|kernel| kernel.last_activity) as u8 == 0 {
         DrawSISFrame();
     } else {
         ClearSISRect(DRAW_SIS_DISPLAY as u8);
@@ -65,15 +67,19 @@ pub unsafe extern "C" fn LoadHyperspace() -> BOOLEAN {
     {
         DrawSISMessage(ptr::null());
     }
-    SetContext((**kernel).radar_context);
+    SetContext(KernelOwner::current().read(|kernel| kernel.radar_context));
     SetContextBackGroundColor(color(0, 14, 0));
-    SetContext((**kernel).space_context);
+    SetContext(KernelOwner::current().read(|kernel| kernel.space_context));
     if get("ARILOU_SPACE_SIDE") <= 1 {
         SetContextBackGroundColor(color(7, 0, 0));
-        SetColorMap(GetColorMapAddress((**kernel).cmaps[0]));
+        SetColorMap(GetColorMapAddress(
+            KernelOwner::current().read(|kernel| kernel.cmaps[0]),
+        ));
     } else {
         SetContextBackGroundColor(color(0, 26, 0));
-        SetColorMap(GetColorMapAddress((**kernel).cmaps[1]));
+        SetColorMap(GetColorMapAddress(
+            KernelOwner::current().read(|kernel| kernel.cmaps[1]),
+        ));
         set("USED_BROADCASTER", 0);
         set("BROADCASTER_RESPONSE", 0);
     }
@@ -92,5 +98,3 @@ pub unsafe extern "C" fn FreeHyperspace() -> BOOLEAN {
     );
     1
 }
-
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

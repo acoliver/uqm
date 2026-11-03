@@ -327,5 +327,3 @@ mod tests {
         assert_eq!(zoom_scale(count, count), 1.0);
     }
 }
-
-use crate::engine::Kernel as KernelOwner;

@@ -7,6 +7,7 @@ use crate::battle::velocity::{
 };
 use crate::c_bindings::controller_input as input;
 use crate::comm::locdata::CPoint;
+use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
 
 const MIN_MOON_RADIUS: i32 = 35;
 const MAX_MOONS: i32 = 4;
@@ -208,7 +209,7 @@ pub(super) unsafe fn flagship_inertial_thrust(
     let mut current_dx: c::SIZE = 0;
     let mut current_dy: c::SIZE = 0;
     GetCurrentVelocityComponents(velocity, &mut current_dx, &mut current_dy);
-    let travel_angle = (*velocity).travel_angle;
+    let travel_angle = velocity.travel_angle;
     if travel_angle == current_angle
         && current_dx == cosine(current_angle, i32::from(max_speed))
         && current_dy == sine(current_angle, i32::from(max_speed))
@@ -578,5 +579,3 @@ mod tests {
         assert_eq!(result.y, source.y);
     }
 }
-
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

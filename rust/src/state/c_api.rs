@@ -185,17 +185,15 @@ pub(crate) mod planets {
         let system = solar_system::current();
         let (star, planet, moon) = location(world, system);
         let (moons, count) = moons(system);
-        {
-            rust_put_planet_info(
-                world,
-                star,
-                planet,
-                moon,
-                moons.as_ptr(),
-                count,
-                (*system).SysInfo.PlanetInfo.ScanRetrieveMask.as_ptr(),
-            )
-        };
+        rust_put_planet_info(
+            world,
+            star,
+            planet,
+            moon,
+            moons.as_ptr(),
+            count,
+            (*system).SysInfo.PlanetInfo.ScanRetrieveMask.as_ptr(),
+        );
     }
 }
 

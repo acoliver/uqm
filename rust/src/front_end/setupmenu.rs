@@ -1,6 +1,8 @@
 //! Setup menus and persistent options, ported from uqm/setupmenu.c.
 #![allow(non_snake_case)]
 
+#[cfg(not(test))]
+use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
 use crate::navigation::abi::*;
 use std::ffi::c_int;
 
@@ -1259,5 +1261,3 @@ mod tests {
         }
     }
 }
-
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

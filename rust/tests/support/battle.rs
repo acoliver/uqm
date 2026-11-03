@@ -205,8 +205,8 @@ impl<'a> Ship<'a> {
         // SAFETY: construction runs inside the serialized, published test battle.
         unsafe {
             let desc = Box::new(descriptor(species));
-            let (raw_ship, ship_id) = uqm_rust::app::bridge::enter(|cx| {
-                let mut ships = cx.kernel.ships(player as usize);
+            let (raw_ship, ship_id) = uqm_rust::engine::Kernel::current().write(|kernel| {
+                let mut ships = kernel.ships(player as usize);
                 let link = ships
                     .alloc()
                     .unwrap_or_else(|| panic!("fixture ship pool exhausted"));
@@ -604,8 +604,8 @@ impl Drop for Ship<'_> {
                     cx.dispose(self.id);
                 }
             });
-            uqm_rust::app::bridge::enter(|cx| {
-                let mut ships = cx.kernel.ships(self.ship_id.side() as usize);
+            uqm_rust::engine::Kernel::current().write(|kernel| {
+                let mut ships = kernel.ships(self.ship_id.side() as usize);
                 let link = ships.link(self.ship_id);
                 if ships.linked(link) {
                     ships.remove(link);

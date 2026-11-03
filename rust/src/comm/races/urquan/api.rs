@@ -1,5 +1,7 @@
 use super::Handler;
 use crate::comm::races::encounter::EncounterApi;
+#[cfg(not(test))]
+use crate::engine::WorldData as WorldFields;
 
 pub(super) trait UrquanApi: EncounterApi<Handler> {
     fn group_battle(&self, state_key: &str) -> bool;
@@ -15,7 +17,7 @@ impl UrquanApi for super::super::script::live::LiveScript<Handler> {
             crate::engine::World::current()
                 .read(|world| crate::state::ffi::rust_get_game_state_32(world, start as i32))
         };
-        unsafe {
+        {
             WorldFields::current().read(|owner| owner.game.battle_group_ref) != 0
                 && WorldFields::current().read(|owner| owner.game.battle_group_ref) == offset
         }
@@ -44,5 +46,3 @@ impl UrquanApi for crate::comm::races::encounter::testing::Fake<Handler, World> 
         self.world.intro_modes.push((mode, duration));
     }
 }
-
-use crate::engine::WorldData as WorldFields;

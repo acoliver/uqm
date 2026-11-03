@@ -1,5 +1,6 @@
 //! Fleet-slot and team-name editing.
 use super::*;
+use crate::engine::WorldData as WorldFields;
 unsafe extern "C" fn changed(entry: *mut TEXTENTRY_STATE) -> u32 {
     // SAFETY: the function contract requires live, game-thread-owned records
     // and callback arguments for all legacy accesses in this operation.
@@ -122,5 +123,3 @@ pub(super) unsafe extern "C" fn edit(state: *mut MELEE_STATE) -> u32 {
     SleepThreadUntil(time.wrapping_add(840 / 30));
     1
 }
-
-use crate::engine::WorldData as WorldFields;

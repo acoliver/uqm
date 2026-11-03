@@ -6,6 +6,7 @@
 //! purchase costs, which bars to draw) are made by the Rust models in this
 //! module's siblings, not here.
 
+use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
 use crate::graphics::context_abi::SetContextClipRect;
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
 
@@ -661,7 +662,9 @@ impl Platform for CffiPlatform {
 
     fn crew_cost(&self) -> u8 {
         // SAFETY: the game thread owns `GlobData`.
-        unsafe { WorldFields::current().read(|owner| owner.game.crew_cost) }
+        {
+            WorldFields::current().read(|owner| owner.game.crew_cost)
+        }
     }
 
     fn set_crew_cost(&self, cost: u8) {
@@ -975,5 +978,3 @@ impl Platform for CffiPlatform {
         unsafe { base::DoInput(std::ptr::addr_of_mut!(state).cast(), 1) };
     }
 }
-
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

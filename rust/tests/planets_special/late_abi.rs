@@ -191,16 +191,12 @@ fn check_live_queues(harness: &mut Harness) {
     };
     // No references into GlobData or the group array cross either callback.
     unsafe {
-        let ip = std::ptr::addr_of_mut!((**uqm_rust::engine::WorldData::current()).game.ip_group_q);
-        let npc = std::ptr::addr_of_mut!(
-            (**uqm_rust::engine::WorldData::current())
-                .game
-                .npc_built_ship_q
-        );
-        let saved_ip = ip.read();
-        let saved_npc = npc.read();
-        ip.write(queue);
-        npc.write(Queue::default());
+        let (saved_ip, saved_npc) = uqm_rust::engine::WorldData::current().write(|world| {
+            let saved = (world.game.ip_group_q, world.game.npc_built_ship_q);
+            world.game.ip_group_q = queue;
+            world.game.npc_built_ship_q = Queue::default();
+            saved
+        });
         let mut visited = Vec::new();
         GuardSite::for_each_ip_group(&mut LiveGame, &mut |group| {
             visited.push(group.group_id);
@@ -216,8 +212,9 @@ fn check_live_queues(harness: &mut Harness) {
         assert!(GENERATE_UTWIG_FUNCTIONS.init_npcs.unwrap()(
             &mut *harness.state
         ));
-        assert!(ip.read().head.is_null() && ip.read().tail.is_null());
-        assert_eq!(ip.read().free_list, first.cast());
+        let current_ip = uqm_rust::engine::WorldData::current().read(|world| world.game.ip_group_q);
+        assert!(current_ip.head.is_null() && current_ip.tail.is_null());
+        assert_eq!(current_ip.free_list, first.cast());
         assert_eq!(groups[0].succ, first.add(1).cast());
         assert_eq!(groups[1].succ, first.add(2).cast());
         assert!(groups[2].succ.is_null());
@@ -228,8 +225,10 @@ fn check_live_queues(harness: &mut Harness) {
             0
         );
         assert_eq!(harness.rng_position(), 104729);
-        ip.write(saved_ip);
-        npc.write(saved_npc);
+        uqm_rust::engine::WorldData::current().write(|world| {
+            world.game.ip_group_q = saved_ip;
+            world.game.npc_built_ship_q = saved_npc;
+        });
 
         use uqm_rust::c_bindings::global_state::{EncounterGroup, EncounterRace, POINT};
         let saved_race = std::ptr::addr_of!(EncounterRace).read();

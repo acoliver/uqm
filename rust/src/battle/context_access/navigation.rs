@@ -102,7 +102,10 @@ pub(crate) unsafe fn interplanetary(world: &mut crate::engine::World, mut point:
                     (9735, 3153),
                     (5850, 6213),
                 ];
-                let index = world.current_star.expect("selected portal").0 - 503;
+                let Some(portal) = world.current_star else {
+                    panic!("portal transition without a selected star");
+                };
+                let index = portal.0 - 503;
                 let (x, y) = PORTALS[index];
                 world.data.flagship.log_x = logx(x);
                 world.data.flagship.log_y = logy(y);
@@ -119,15 +122,19 @@ pub(crate) unsafe fn arilou(world: &mut crate::engine::World) {
     world.set_story_state(StoryKey::USED_BROADCASTER, 0);
     world.data.game.autopilot = POINT { x: -1, y: -1 };
     if world.story_state(StoryKey::ARILOU_SPACE_SIDE) <= 1 {
-        world.data.flagship.log_x = logx(QUASI_SPACE_X as i16);
-        world.data.flagship.log_y = logy(QUASI_SPACE_Y as i16);
+        // SAFETY: the navigation caller owns the game thread and initialized screen geometry.
+        let (x, y) = unsafe { (logx(QUASI_SPACE_X as i16), logy(QUASI_SPACE_Y as i16)) };
+        world.data.flagship.log_x = x;
+        world.data.flagship.log_y = y;
         if world.story_state(StoryKey::PORTAL_COUNTER) != 0 {
             world.set_story_state(StoryKey::PORTAL_COUNTER, 0);
         }
         world.set_story_state(StoryKey::ARILOU_SPACE_SIDE, 3);
     } else {
-        world.data.flagship.log_x = logx(ARILOU_SPACE_X as i16);
-        world.data.flagship.log_y = logy(ARILOU_SPACE_Y as i16);
+        // SAFETY: the navigation caller owns the game thread and initialized screen geometry.
+        let (x, y) = unsafe { (logx(ARILOU_SPACE_X as i16), logy(ARILOU_SPACE_Y as i16)) };
+        world.data.flagship.log_x = x;
+        world.data.flagship.log_y = y;
         world.set_story_state(StoryKey::ARILOU_SPACE_SIDE, 0);
     }
     world.select_star(None, None);

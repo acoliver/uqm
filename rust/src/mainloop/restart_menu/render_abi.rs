@@ -1,6 +1,8 @@
 //! Restart-menu rendering, ported from restart.c (GPL-2.0-or-later).
 #![allow(non_snake_case)]
 #[cfg(not(test))]
+use crate::engine::Kernel as KernelOwner;
+#[cfg(not(test))]
 use crate::ships::native::abi::*;
 
 /// # Safety
@@ -79,5 +81,3 @@ mod tests {
         assert_eq!(centered_coordinate(200, 203), -2);
     }
 }
-
-use crate::engine::Kernel as KernelOwner;

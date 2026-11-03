@@ -116,5 +116,3 @@ pub(crate) mod runtime {
 
 #[cfg(not(test))]
 pub use runtime::{DoShipSpin, Introduction, SplashScreen, Victory};
-
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

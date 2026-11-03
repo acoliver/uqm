@@ -164,24 +164,27 @@ fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
             let old_location = (**uqm_rust::engine::WorldData::current()).game.ip_location;
             let old_groups = (**uqm_rust::engine::WorldData::current()).game.ip_group_q;
             let old_stars = (**uqm_rust::engine::Kernel::current()).stars_in_space;
-            let queue = &raw mut (**uqm_rust::engine::WorldData::current()).game.ip_group_q;
-            queue.write(std::mem::zeroed());
-            assert!(InitQueue(
-                queue.cast(),
-                2,
-                size_of::<nav::IP_GROUP>() as u16
-            ));
-            let group = AllocLink(queue.cast()).cast::<nav::IP_GROUP>();
-            assert!(!group.is_null());
-            group.write(std::mem::zeroed());
-            (*group).race_id = 0;
-            (*group).group_id = 7;
-            (*group).in_system = 1;
-            (*group).dest_loc = 1;
-            (*group).task = (nav::ON_STATION | nav::IGNORE_FLAGSHIP) as u8;
-            (*group).loc = POINT { x: 300, y: 400 };
-            (*group).melee_icon = frames.frame(0);
-            PutQueue(queue.cast(), group.cast());
+            let group = uqm_rust::engine::WorldData::current().write(|world| {
+                let queue = &raw mut world.game.ip_group_q;
+                queue.write(std::mem::zeroed());
+                assert!(InitQueue(
+                    queue.cast(),
+                    2,
+                    size_of::<nav::IP_GROUP>() as u16
+                ));
+                let group = AllocLink(queue.cast()).cast::<nav::IP_GROUP>();
+                assert!(!group.is_null());
+                group.write(std::mem::zeroed());
+                (*group).race_id = 0;
+                (*group).group_id = 7;
+                (*group).in_system = 1;
+                (*group).dest_loc = 1;
+                (*group).task = (nav::ON_STATION | nav::IGNORE_FLAGSHIP) as u8;
+                (*group).loc = POINT { x: 300, y: 400 };
+                (*group).melee_icon = frames.frame(0);
+                PutQueue(queue.cast(), group.cast());
+                group
+            });
             nav::pSolarSysState = &mut *solar;
             nav::EncounterRace = -1;
             (**uqm_rust::engine::Kernel::current()).stars_in_space = frames.frame(0);
@@ -211,7 +214,8 @@ fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
             nav::NotifyOthers(0, 2);
             assert_eq!((*group).dest_loc, 2);
             assert_ne!((*group).task & nav::IGNORE_FLAGSHIP as u8, 0);
-            UninitQueue(queue.cast());
+            uqm_rust::engine::WorldData::current()
+                .write(|world| UninitQueue((&raw mut world.game.ip_group_q).cast()));
             (**uqm_rust::engine::WorldData::current()).game.ip_group_q = old_groups;
             (**uqm_rust::engine::WorldData::current()).game.ship_stamp = old_stamp;
             (**uqm_rust::engine::WorldData::current()).game.ip_location = old_location;

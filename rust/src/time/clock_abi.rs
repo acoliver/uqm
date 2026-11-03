@@ -4,6 +4,8 @@
 
 use super::clock_bridge::{days_in_month, CEvent};
 use crate::collections::queue::{AllocLink, HLink, InitQueue, InsertQueue, Queue, UninitQueue};
+#[cfg(not(test))]
+use crate::engine::WorldData as WorldFields;
 
 fn event_date(now: (u16, u16, u16), relative: bool, date: (u16, u16, u16)) -> (u16, u16, u16) {
     let (mut year, mut month, mut day) = date;
@@ -292,5 +294,3 @@ mod tests {
         };
     }
 }
-
-use crate::engine::WorldData as WorldFields;

@@ -1,6 +1,7 @@
 use super::super::{planet_mass, scan_value};
 use super::*;
 use crate::comm::sis_graphics::CText;
+use crate::engine::Kernel as KernelOwner;
 use crate::starbase::gfx::{Align, TextDraw};
 use std::ffi::CStr;
 
@@ -228,5 +229,3 @@ unsafe fn three_do() {
         scan_value(i64::from(info.RotationPeriod) * 10 / 24, "♁"),
     );
 }
-
-use crate::engine::Kernel as KernelOwner;

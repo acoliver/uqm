@@ -2,6 +2,7 @@
 #![cfg(not(test))]
 #![allow(non_snake_case)]
 
+use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
 use crate::navigation::abi::*;
 
 use crate::state::game_state_keys::get_game_state;
@@ -704,5 +705,3 @@ pub unsafe extern "C" fn DoOutfit(menu: *mut MENU_STATE) -> BOOLEAN {
     }
     1
 }
-
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

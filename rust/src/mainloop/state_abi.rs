@@ -1,4 +1,5 @@
 //! Shared state entry points formerly supplied by rust_bridge_mainloop.c.
+use crate::engine::{Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields};
 use crate::io::uio_bridge::{uio_DirHandle, uio_MountHandle, uio_Repository};
 
 use crate::ships::native::abi as options;
@@ -41,7 +42,11 @@ accessor!(uqm_get_crew_enlisted() -> u16 = (**WorldFields::current()).flagship.c
 accessor!(uqm_zero_global_velocity() -> () = { (**WorldFields::current()).game.velocity = std::mem::zeroed(); });
 accessor!(uqm_set_flash_rect_null() -> () = crate::ui::sis::SetFlashRect(ptr::null()));
 accessor!(uqm_set_player_input_all_or_explode() -> () = {
-    if !crate::engine::Kernel::current().write(|kernel| crate::game_init::kernel_abi::SetPlayerInputAll(kernel)) { log::error!("Could not set player input."); std::process::abort(); }
+    let initialized = crate::engine::Kernel::current().write(|kernel| {
+        // SAFETY: this game-thread entry owns the initialized input contexts for this short mutation.
+        unsafe { crate::game_init::kernel_abi::SetPlayerInputAll(kernel) }
+    });
+    if !initialized { log::error!("Could not set player input."); std::process::abort(); }
 });
 accessor!(set_main_exited(value: i32) = ptr::addr_of_mut!(super::lifecycle_abi::MainExited).write_volatile(value));
 accessor!(uqm_init_audio() -> () = { crate::sound::audio_init::initAudio(crate::sound::volume_globals::snddriver, crate::sound::volume_globals::soundflags); });
@@ -75,5 +80,3 @@ pub unsafe fn rust_copy_locdata_to_comm_data(data: *const std::ffi::c_void) {
         crate::comm::locdata::COMM_DATA = data.cast::<crate::comm::locdata::CLocData>().read();
     }
 }
-
-use crate::engine::{Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields};

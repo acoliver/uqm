@@ -1,4 +1,6 @@
 use super::{EncounterApi, Handler};
+#[cfg(not(test))]
+use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
 
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) struct Date {
@@ -91,7 +93,9 @@ mod live {
             unsafe { CalculateEscortsWorth() }
         }
         fn using_speech(&self) -> bool {
-            unsafe { KernelOwner::current().read(|owner| owner.using_speech) != 0 }
+            {
+                KernelOwner::current().read(|owner| owner.using_speech) != 0
+            }
         }
         fn random(&mut self) -> u32 {
             crate::math::random()
@@ -102,10 +106,14 @@ mod live {
             }
         }
         fn mineral_amount(&self, category: usize) -> u16 {
-            unsafe { WorldFields::current().read(|owner| owner.flagship.element_amounts[category]) }
+            {
+                WorldFields::current().read(|owner| owner.flagship.element_amounts[category])
+            }
         }
         fn mineral_worth(&self, category: usize) -> u8 {
-            unsafe { WorldFields::current().read(|owner| owner.game.element_worth[category]) }
+            {
+                WorldFields::current().read(|owner| owner.game.element_worth[category])
+            }
         }
         fn remove_minerals(&mut self, category: usize, amount: u16) {
             unsafe {
@@ -155,5 +163,3 @@ mod live {
         }
     }
 }
-
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
