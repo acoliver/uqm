@@ -33,49 +33,49 @@ pub(in crate::savegame) unsafe fn finish_load(star: &super::super::StarDesc, act
 }
 
 unsafe fn install(save: SaveFile) -> anyhow::Result<()> {
-    let lease = WorldOwner::current();
-    let world = &mut **lease;
-    // SAFETY: CGameState's size, alignment and every field offset are asserted against GAME_STATE.
-    let game =
-        &mut *std::ptr::addr_of_mut!(world.data.game).cast::<crate::comm::locdata::CGameState>();
-    let restored = runtime::restore_runtime(
-        game,
-        &mut world.story,
-        &save.global,
-        &save.game_state,
-        &save.events,
-    )?;
-    queues::restore_queues(
-        game,
-        &queues::QueueSections {
-            race_queue: save.race_queue,
-            npc_ship_queue: save.npc_ship_queue,
-            ship_queue: save.ship_queue,
-        },
-    )?;
-    groups::restore_loaded_groups(
-        game,
-        &groups::GroupSections {
-            ip_group_queue: save.ip_group_queue,
-            encounters: save.encounters,
-        },
-    )?;
-    statefiles::restore_state_files(
-        game,
-        &mut world.story,
-        &mut world.files,
-        &statefiles::StateFileSections {
-            scan: save.scan,
-            canned_nodes: save.canned_nodes,
-            group_list: save.group_list,
-            battle_groups: save.battle_groups,
-        },
-    )?;
-    std::ptr::addr_of_mut!(world.data.flagship)
-        .cast::<crate::comm::locdata::CSisState>()
-        .write((&save.summary.sis).into());
-    drop(lease);
-    finish_load(&save.star, restored.next_activity);
+    let next_activity = WorldOwner::current().write(|world| -> anyhow::Result<u16> {
+        // SAFETY: CGameState's size, alignment and every field offset are asserted against GAME_STATE.
+        let game = &mut *std::ptr::addr_of_mut!(world.data.game)
+            .cast::<crate::comm::locdata::CGameState>();
+        let restored = runtime::restore_runtime(
+            game,
+            &mut world.story,
+            &save.global,
+            &save.game_state,
+            &save.events,
+        )?;
+        queues::restore_queues(
+            game,
+            &queues::QueueSections {
+                race_queue: save.race_queue,
+                npc_ship_queue: save.npc_ship_queue,
+                ship_queue: save.ship_queue,
+            },
+        )?;
+        groups::restore_loaded_groups(
+            game,
+            &groups::GroupSections {
+                ip_group_queue: save.ip_group_queue,
+                encounters: save.encounters,
+            },
+        )?;
+        statefiles::restore_state_files(
+            game,
+            &mut world.story,
+            &mut world.files,
+            &statefiles::StateFileSections {
+                scan: save.scan,
+                canned_nodes: save.canned_nodes,
+                group_list: save.group_list,
+                battle_groups: save.battle_groups,
+            },
+        )?;
+        std::ptr::addr_of_mut!(world.data.flagship)
+            .cast::<crate::comm::locdata::CSisState>()
+            .write((&save.summary.sis).into());
+        Ok(restored.next_activity)
+    })?;
+    finish_load(&save.star, next_activity);
     Ok(())
 }
 

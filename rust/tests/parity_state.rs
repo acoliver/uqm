@@ -126,10 +126,7 @@ fn exercise_live_callers(directory: &Path) {
             .unwrap_or_else(|error| panic!("validate state test script: {error}")),
         directory.into(),
     );
-    // SAFETY: this process has one game thread and no running game or renderer.
-    unsafe {
-        uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
-    }
+    uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
     observation::record(Event::SpaceActive(true));
     descriptor_fields(directory);
     elements_and_fighters(directory);

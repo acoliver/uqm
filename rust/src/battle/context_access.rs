@@ -507,9 +507,9 @@ mod star_access {
             let (descriptor, catalog) = unsafe {
                 let star = find_star_in(self.world, ptr::null_mut(), &mut point, 5, 5);
                 assert!(!star.is_null(), "star collision has no catalog entry");
-                let catalog = current_catalog().expect("star collision without a catalog");
-                (&*star.cast(), catalog)
+                (&*star.cast(), current_catalog())
             };
+            let catalog = catalog.unwrap_or_else(|| panic!("star collision without a catalog"));
             let star = self.world.identify_star(descriptor, catalog);
             let position = descriptor.star_pt;
             StarContact {

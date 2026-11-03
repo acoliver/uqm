@@ -75,7 +75,7 @@ impl Harness {
         let mut state: Box<SOLARSYS_STATE> = Box::new(unsafe { std::mem::zeroed() });
         unsafe {
             // `set_game_state` is a no-op until the game state exists.
-            uqm_rust::engine::World::current().write(|world| rust_init_game_state(world));
+            uqm_rust::engine::World::current().write(rust_init_game_state);
             SysGenRNG = uqm_rust::math::new_context();
             ScreenWidth = 320;
             pSolarSysState = &mut *state;

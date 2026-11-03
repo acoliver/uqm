@@ -92,8 +92,9 @@ unsafe fn live_catalog<'a>() -> &'a [CStarDesc] {
 /// # Safety
 /// Game thread only; the star map must be initialised.
 pub unsafe fn capture_live_star() -> Result<StarDesc, StarError> {
-    let current =
-        (**WorldOwner::current()).star_pointer(crate::planets::starmap::current_catalog());
+    // SAFETY: this game-thread operation retains the initialized star catalog.
+    let catalog = unsafe { crate::planets::starmap::current_catalog() };
+    let current = (**WorldOwner::current()).star_pointer(catalog);
     star::capture_star(live_catalog(), current)
 }
 
@@ -146,8 +147,9 @@ impl std::error::Error for LiveLocationError {}
 pub unsafe fn prepare_live_solar_location() -> Result<(), LiveLocationError> {
     let state = solar_system::current();
     assert!(!state.is_null(), "not in a solar system");
-    let current =
-        (**WorldOwner::current()).star_pointer(crate::planets::starmap::current_catalog());
+    // SAFETY: this game-thread operation retains the initialized star catalog.
+    let catalog = unsafe { crate::planets::starmap::current_catalog() };
+    let current = (**WorldOwner::current()).star_pointer(catalog);
     let star_index =
         star::catalog_index(live_catalog(), current).map_err(LiveLocationError::Star)?;
     let mut game = WorldFields::current().read(|world| world.game);
