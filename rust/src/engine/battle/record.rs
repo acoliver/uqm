@@ -879,7 +879,7 @@ mod kernel_tests {
         assert_eq!(fresh.space_origin.x, 0);
         assert_eq!(fresh.space_origin.y, 0);
         assert_eq!(fresh.status_offsets, [0; 2]);
-        assert!(fresh.player_input.iter().all(|input| input.is_null()));
+        assert!(fresh.player_input.iter().all(Option::is_none));
         assert!(fresh.menu_sounds.is_null());
         assert!(fresh.game_sounds.is_null());
         assert!(fresh.winner.is_none());

@@ -26,11 +26,8 @@ fn point(p: POINT) -> (i16, i16) {
 }
 
 unsafe fn velocity(el: *mut ElementRecord) -> (SIZE, SIZE) {
-    let (mut x, mut y) = (0, 0);
-    {
-        let (vx, vy) = ((*el).velocity).get_current_components();
-        (x, y) = (vx as i16, vy as i16);
-    };
+    let (vx, vy) = ((*el).velocity).get_current_components();
+    let (mut x, mut y) = (vx as i16, vy as i16);
     (x, y)
 }
 

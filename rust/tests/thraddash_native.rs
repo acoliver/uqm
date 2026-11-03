@@ -50,11 +50,8 @@ fn velocity_fields(v: &VELOCITY_DESC) -> [i32; 9] {
 }
 
 unsafe fn velocity(e: *mut ElementRecord) -> (SIZE, SIZE) {
-    let (mut x, mut y) = (0, 0);
-    {
-        let (vx, vy) = ((*e).velocity).get_current_components();
-        (x, y) = (vx as i16, vy as i16);
-    };
+    let (vx, vy) = ((*e).velocity).get_current_components();
+    let (mut x, mut y) = (vx as i16, vy as i16);
     (x, y)
 }
 

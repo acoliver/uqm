@@ -1,5 +1,5 @@
 use crate::engine::battle::schema::GETMELEE_STATE;
-use crate::engine::battle::schema::{FlashState, FlashType, InputContext};
+use crate::engine::battle::schema::{FlashState, FlashType};
 pub use crate::engine::battle::{CollisionHook, ElementHook};
 // Shared engine records used by the Rust runtime.
 
@@ -4423,18 +4423,6 @@ pub use crate::supermelee::native::battle_picker::live::DestroyPickMeleeFrame;
 
 #[cfg(not(test))]
 pub use crate::supermelee::native::battle_picker::live::FillPickMeleeFrame;
-pub type SelectShipFunction = ::std::option::Option<
-    unsafe extern "C" fn(context: *mut InputContext, gms: *mut GETMELEE_STATE) -> BOOLEAN,
->;
-pub type BattleEndReadyFunction =
-    ::std::option::Option<unsafe extern "C" fn(context: *mut InputContext) -> bool>;
-pub type DeleteInputContextFunction =
-    ::std::option::Option<unsafe extern "C" fn(context: *mut InputContext)>;
-
-pub use crate::ships::native::abi::ComputerInputContext;
-pub use crate::ships::native::abi::HumanInputContext;
-
-pub use crate::ships::native::abi::NetworkInputContext;
 pub const ENEMY_SHIP_INDEX: _bindgen_ty_28 = 0;
 pub const CREW_OBJECT_INDEX: _bindgen_ty_28 = 1;
 pub const ENEMY_WEAPON_INDEX: _bindgen_ty_28 = 2;

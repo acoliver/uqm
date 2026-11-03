@@ -193,36 +193,13 @@ pub(crate) mod engine {
         (**KernelOwner::current()).winner = None;
     }
 
-    /// # Safety
-    /// The caller must run on the game thread as part of battle-end input processing.
-    #[no_mangle]
-    pub unsafe extern "C" fn battleEndReadyHuman(_context: *mut HumanInputContext) -> bool {
-        true
-    }
-    /// # Safety
-    /// The caller must run on the game thread as part of battle-end input processing.
-    #[no_mangle]
-    pub unsafe extern "C" fn battleEndReadyComputer(_context: *mut ComputerInputContext) -> bool {
-        true
-    }
-    /// # Safety
-    /// `context` and its player connection must be live on the game thread.
-    #[no_mangle]
-    pub unsafe extern "C" fn battleEndReadyNetwork(context: *mut NetworkInputContext) -> bool {
-        (*context)
-            .net
-            .as_ref()
-            .unwrap_or_else(|| panic!("network input has no session"))
-            .end_ready((*context).playerNr as usize)
-    }
-
     unsafe fn ready_for_battle_end() -> bool {
         if ditty_playing() {
             return false;
         }
         for side in 0..NUM_PLAYERS as usize {
-            let ctx = player_input(side);
-            if !((*(*ctx).handlers).battleEndReady.unwrap())(ctx) {
+            let context = player_input(side).expect("missing player input");
+            if !context.battle_end_ready() {
                 return false;
             }
         }

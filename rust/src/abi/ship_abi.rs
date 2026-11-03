@@ -1,4 +1,4 @@
-use crate::engine::battle::schema::{BattleInputHandlers, FlashContext};
+use crate::engine::battle::schema::{FlashContext};
 pub use crate::engine::battle::{ElementHook, CollisionHook};
 pub use crate::engine::battle::record::{
     captain_stuff, state, state__bindgen_ty_1,
@@ -1543,25 +1543,6 @@ pub use crate::supermelee::native::battle_picker::live::MeleeGameOver;
 
 #[cfg(not(test))]
 pub use crate::supermelee::native::battle_picker::live::GetInitialMeleeStarShips;
-
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct ComputerInputContext {
-    pub handlers: *mut BattleInputHandlers,
-    pub playerNr: COUNT,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct HumanInputContext {
-    pub handlers: *mut BattleInputHandlers,
-    pub playerNr: COUNT,
-}
-#[repr(C)]
-pub struct NetworkInputContext {
-    pub handlers: *mut BattleInputHandlers,
-    pub playerNr: COUNT,
-    pub net: Option<std::rc::Rc<dyn crate::engine::battle::net::BattleNet>>,
-}
 
 pub const ENEMY_SHIP_INDEX: _bindgen_ty_5 = 0;
 pub const CREW_OBJECT_INDEX: _bindgen_ty_5 = 1;
@@ -3626,8 +3607,8 @@ mod ship_abi_tests {
         unsafe {
             let mut velocity: VELOCITY_DESC = std::mem::zeroed();
             (velocity).set_components(i32::from(96), i32::from(-64));
-            let (mut dx, mut dy) = (0, 0);
-            { let (vx, vy) = (velocity).get_current_components(); (dx, dy) = (vx as i16, vy as i16); };
+            let (vx, vy) = (velocity).get_current_components();
+let (mut dx, mut dy) = (vx as i16, vy as i16);
             assert_eq!((dx, dy), (96, -64));
             (velocity).delta_components(i32::from(32), i32::from(-32));
             { let (vx, vy) = (velocity).get_current_components(); (dx, dy) = (vx as i16, vy as i16); };

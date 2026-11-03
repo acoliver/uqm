@@ -206,17 +206,12 @@ pub fn UninitPlayerInput() {}
 pub fn SetPlayerInput(kernel: &mut crate::engine::Kernel, player: u16) -> bool {
     {
         let slot = &mut kernel.player_input[player as usize];
-        assert!((*slot).is_null());
-        *slot = match kernel.player_control[player as usize] & 15 {
-            1 => crate::battle::battle_controls::HumanInputContext_new(player).cast(),
-            6 | 2 => crate::battle::battle_controls::ComputerInputContext_new(player).cast(),
-            8 => crate::battle::battle_controls::NetworkInputContext_new(player).cast(),
-            _ => {
-                log::error!("Invalid control method in SetPlayerInput().");
-                std::process::abort();
-            }
-        };
-        !(*slot).is_null()
+        assert!(slot.is_none());
+        *slot = Some(crate::battle::battle_controls::InputContext::new(
+            player,
+            kernel.player_control[player as usize],
+        ));
+        true
     }
 }
 
@@ -233,22 +228,13 @@ pub fn SetPlayerInputAll(kernel: &mut crate::engine::Kernel) -> bool {
 
 /// # Safety
 /// Player index is below NUM_PLAYERS and context is null or owned by this player.
-pub unsafe fn ClearPlayerInput(kernel: &mut crate::engine::Kernel, player: u16) {
-    {
-        let input = kernel.player_input[player as usize]
-            .cast::<crate::battle::battle_controls::InputContext>();
-        if input.is_null() {
-            log::debug!("ClearPlayerInput(): PlayerInput[{player}] was NULL.");
-            return;
-        }
-        ((*(*input).handlers).delete_context.unwrap())(input);
-        kernel.player_input[player as usize] = ptr::null_mut();
-    }
+pub fn ClearPlayerInput(kernel: &mut crate::engine::Kernel, player: u16) {
+    kernel.player_input[player as usize] = None;
 }
 
 /// # Safety
 /// Called on the game thread when the contexts are no longer in use.
-pub unsafe fn ClearPlayerInputAll(kernel: &mut crate::engine::Kernel) {
+pub fn ClearPlayerInputAll(kernel: &mut crate::engine::Kernel) {
     for player in 0..2 {
         ClearPlayerInput(kernel, player);
     }

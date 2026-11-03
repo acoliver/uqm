@@ -630,7 +630,7 @@ pub(crate) mod engine {
             IN_ENCOUNTER as u16
         });
         WaitForSoundEnd(COUNT::MAX);
-        let mut saved = ptr::null_mut();
+        let mut saved = None;
         if WorldFields::current().read(|owner| owner.game.glob_flags) & CYBORG_ENABLED as u8 != 0 {
             let speed = 1
                 | ((combat_speed(WorldFields::current().read(|owner| owner.game.glob_flags))
@@ -639,7 +639,7 @@ pub(crate) mod engine {
             crate::app::bridge::battle(|b| b.nth_frame = speed);
             set_player_control(0, CYBORG_CONTROL | AWESOME_RATING);
             saved = player_input(0);
-            set_player_input(0, ptr::null_mut());
+            set_player_input(0, None);
             if !KernelOwner::current().write(|kernel| SetPlayerInput(kernel, 0)) {
                 crate::log_abi::log_message(1, "Could not set cyborg player input.");
                 // misc.h explode(): abort in DEBUG, exit(EXIT_FAILURE) otherwise.

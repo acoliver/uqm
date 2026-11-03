@@ -38,32 +38,6 @@ pub unsafe fn get_encounter_star_ship_with_picker(
     }
 }
 
-/// # Safety
-/// Input context and optional ship are initialized game-thread records.
-#[cfg(not(test))]
-pub(crate) unsafe fn computer_frame(
-    context: *mut crate::battle::battle_controls::InputContext,
-    ship: *mut c_void,
-) -> u8 {
-    // SAFETY: the vtable's common context prefix and opaque ship address preserve the ABI contract.
-    unsafe {
-        crate::app::bridge::enter(|cx| {
-            let id = (!ship.is_null()).then(|| link_queue::identify(ship as usize));
-            super::ai_legacy::computer_intelligence(cx, &*context.cast(), id)
-        })
-    }
-}
-/// # Safety
-/// Input context and optional ship are initialized game-thread records.
-#[cfg(not(test))]
-pub(crate) unsafe fn human_frame(
-    context: *mut crate::battle::battle_controls::InputContext,
-    _ship: *mut c_void,
-) -> u8 {
-    // SAFETY: the vtable's common context prefix retains its live human input context.
-    unsafe { crate::battle::battle_native::engine::frame_input_human(&*context.cast()) }
-}
-
 #[cfg(not(test))]
 #[cfg(not(test))]
 /// # Safety

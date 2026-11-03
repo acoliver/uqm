@@ -66,9 +66,6 @@ pub mod abi {
     #[cfg(not(test))]
     #[cfg(not(test))]
     #[cfg(not(test))]
-    pub use crate::battle::tactrans_native::{
-        battleEndReadyComputer, battleEndReadyHuman, battleEndReadyNetwork,
-    };
     pub use crate::math::seed_random as TFB_SeedRandom;
 
     #[cfg(not(test))]

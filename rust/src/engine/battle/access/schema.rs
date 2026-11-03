@@ -3,9 +3,7 @@
 use super::super::record::{ShipRecord, QUEUE, VELOCITY_DESC};
 pub use crate::collections::queue::HLink as HLINK;
 use crate::graphics::native_abi::*;
-use crate::graphics::native_abi::{
-    BYTE as BATTLE_INPUT_STATE, DWORD as TimeCount, UWORD as ACTIVITY,
-};
+use crate::graphics::native_abi::{DWORD as TimeCount, UWORD as ACTIVITY};
 
 pub type GETMELEE_STATE = getmelee_struct;
 
@@ -31,39 +29,6 @@ pub struct getmelee_struct__bindgen_ty_1 {
     pub done: BOOLEAN,
     pub flashContext: *mut FlashContext,
     pub remoteSelected: BOOLEAN,
-}
-
-pub type BattleFrameInputFunction = ::std::option::Option<
-    unsafe extern "C" fn(
-        context: *mut InputContext,
-        StarShipPtr: *mut ShipRecord,
-    ) -> BATTLE_INPUT_STATE,
->;
-
-pub type SelectShipFunction = ::std::option::Option<
-    unsafe extern "C" fn(context: *mut InputContext, gms: *mut GETMELEE_STATE) -> BOOLEAN,
->;
-
-pub type BattleEndReadyFunction =
-    ::std::option::Option<unsafe extern "C" fn(context: *mut InputContext) -> bool>;
-
-pub type DeleteInputContextFunction =
-    ::std::option::Option<unsafe extern "C" fn(context: *mut InputContext)>;
-
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct BattleInputHandlers {
-    pub frameInput: BattleFrameInputFunction,
-    pub selectShip: SelectShipFunction,
-    pub battleEndReady: BattleEndReadyFunction,
-    pub deleteContext: DeleteInputContextFunction,
-}
-
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct InputContext {
-    pub handlers: *mut BattleInputHandlers,
-    pub playerNr: COUNT,
 }
 
 #[repr(C)]

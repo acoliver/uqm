@@ -81,11 +81,8 @@ unsafe fn draws_consumed(seed: DWORD, action: impl FnOnce()) -> usize {
 }
 
 unsafe fn velocity_of(element: *mut ElementRecord) -> (SIZE, SIZE) {
-    let (mut dx, mut dy) = (0, 0);
-    {
-        let (vx, vy) = ((*element).velocity).get_current_components();
-        (dx, dy) = (vx as i16, vy as i16);
-    };
+    let (vx, vy) = ((*element).velocity).get_current_components();
+    let (mut dx, mut dy) = (vx as i16, vy as i16);
     (dx, dy)
 }
 

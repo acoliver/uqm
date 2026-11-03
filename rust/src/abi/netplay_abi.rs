@@ -1,7 +1,5 @@
-use crate::engine::battle::schema::GETMELEE_STATE;
 // Shared engine records used by the Rust runtime.
 
-use crate::engine::battle::schema::{InputContext};
 pub use crate::math::{seed_random as TFB_SeedRandom, RandomContext};
 
 pub use super::netconnection::NetConnection_setState;
@@ -583,15 +581,6 @@ pub use crate::engine::battle::record::ShipRecord;
 
 #[cfg(not(test))]
 pub use crate::supermelee::native::battle_picker::live::updateMeleeSelection;
-pub type SelectShipFunction = ::std::option::Option<
-    unsafe extern "C" fn(context: *mut InputContext, gms: *mut GETMELEE_STATE) -> BOOLEAN,
->;
-pub type BattleEndReadyFunction =
-    ::std::option::Option<unsafe extern "C" fn(context: *mut InputContext) -> bool>;
-pub type DeleteInputContextFunction =
-    ::std::option::Option<unsafe extern "C" fn(context: *mut InputContext)>;
-
-pub use crate::ships::native::abi::NetworkInputContext;
 pub type ForEachConnectionCallback = ::std::option::Option<
     unsafe extern "C" fn(conn: *mut NetConnection, arg: *mut ::std::os::raw::c_void) -> bool,
 >;

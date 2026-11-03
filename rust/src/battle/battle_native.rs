@@ -1,7 +1,7 @@
 //! Battle entry, ordered input processing, and frame scheduling from `battle.c`.
 
 #[cfg(not(test))]
-use crate::engine::battle::schema::InputContext;
+use crate::battle::battle_controls::InputContext;
 #[cfg(not(test))]
 use crate::engine::World as WorldOwner;
 #[cfg(not(test))]
@@ -89,15 +89,19 @@ fn finish_battle_network(battle: &mut crate::engine::battle::Battle, had_net: bo
 
 #[cfg(not(test))]
 unsafe fn battle_network() -> BattleNetwork {
-    use abi::NetworkInputContext;
-    use engine::{player_control, player_input, NETWORK_CONTROL};
-    let (battle, net, had_net) = crate::app::bridge::enter(initialize_battle);
-    for side in 0..2 {
-        if player_control(side) & NETWORK_CONTROL != 0 {
-            let context = player_input(side).cast::<NetworkInputContext>();
-            (*context).net = Some(net.clone());
+    use engine::NETWORK_CONTROL;
+    let (battle, net, had_net) = crate::app::bridge::enter(|cx| {
+        let result = initialize_battle(cx);
+        for side in 0..2 {
+            if cx.kernel.player_control[side] & NETWORK_CONTROL != 0 {
+                cx.kernel.player_input[side]
+                    .as_mut()
+                    .expect("missing player input")
+                    .connect(result.1.clone());
+            }
         }
-    }
+        result
+    });
     (battle, net, had_net)
 }
 
@@ -152,15 +156,11 @@ pub(crate) mod engine {
     }
     /// # Safety
     /// `side` must be a valid player index with initialized input state.
-    pub unsafe fn player_input(side: usize) -> *mut InputContext {
-        KernelOwner::current()
-            .read(|owner| owner.player_input[side])
-            .cast()
+    pub fn player_input(side: usize) -> Option<InputContext> {
+        KernelOwner::current().read(|owner| owner.player_input[side].clone())
     }
-    /// # Safety
-    /// `side` must be valid and `input` must remain live while installed, or be null during input replacement.
-    pub unsafe fn set_player_input(side: usize, input: *mut InputContext) {
-        (**KernelOwner::current()).player_input[side] = input.cast();
+    pub fn set_player_input(side: usize, input: Option<InputContext>) {
+        KernelOwner::current().write(|owner| owner.player_input[side] = input);
     }
     /// # Safety
     /// `side` must be a valid player index on the game thread.
@@ -229,11 +229,6 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn frame_input_human(context: &HumanInputContext) -> BATTLE_INPUT_STATE {
-        // SAFETY: the game thread owns the current input state.
-        unsafe { CurrentInputToBattleInput(context.playerNr) }
-    }
-
     unsafe fn process_input(
         cx: &mut crate::engine::battle::Cx<'_>,
         net: &dyn crate::engine::battle::net::BattleNet,
@@ -247,11 +242,10 @@ pub(crate) mod engine {
                 next = cx.next_ship(ship);
                 if cx.optional_ship_element(ship).is_some() {
                     cx.ship_state_mut(ship).control = player_control(side);
-                    let ctx = player_input(side);
-                    let pointer = cx.ship_pointer(ship).cast();
-                    let mut input = crate::app::bridge::publish(cx, || {
-                        ((*(*ctx).handlers).frameInput.unwrap())(ctx, pointer)
-                    });
+                    let context = cx.kernel.player_input[side]
+                        .clone()
+                        .expect("missing player input");
+                    let mut input = context.frame_input(cx, Some(ship));
                     if player_control(side) & NETWORK_CONTROL == 0 {
                         input = net.local_input(side, input);
                     }
@@ -390,11 +384,10 @@ pub(crate) mod engine {
     pub unsafe extern "C" fn GetPlayerOrder(i: COUNT) -> COUNT {
         for side in 0..2 {
             if player_control(side) & NETWORK_CONTROL != 0 {
-                let context = &*player_input(side).cast::<NetworkInputContext>();
-                return match &context.net {
-                    Some(net) => net.player_order(i),
-                    None => panic!("network input has no session"),
-                };
+                return player_input(side)
+                    .expect("missing player input")
+                    .network()
+                    .player_order(i);
             }
         }
         1u16.wrapping_sub(i)

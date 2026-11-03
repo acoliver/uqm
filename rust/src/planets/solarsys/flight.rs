@@ -203,12 +203,8 @@ pub(super) unsafe fn flagship_inertial_thrust(
     current_angle: c::COUNT,
     max_speed: c::COUNT,
 ) -> c::UWORD {
-    let mut current_dx: c::SIZE = 0;
-    let mut current_dy: c::SIZE = 0;
-    {
-        let (vx, vy) = (velocity).get_current_components();
-        (current_dx, current_dy) = (vx as i16, vy as i16);
-    };
+    let (vx, vy) = (velocity).get_current_components();
+    let (mut current_dx, mut current_dy) = (vx as i16, vy as i16);
     let travel_angle = velocity.travel_angle;
     if travel_angle == current_angle
         && current_dx == cosine(current_angle, i32::from(max_speed))

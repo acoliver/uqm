@@ -136,46 +136,37 @@ pub mod live {
         }
         1
     }
-    /// # Safety
-    /// Live input context and fleet selection, game thread only.
-    #[no_mangle]
-    pub unsafe extern "C" fn selectShipHuman(
-        context: *mut HumanInputContext,
-        state: *mut GETMELEE_STATE,
+    pub fn select_ship(
+        context: &crate::battle::battle_controls::InputContext,
+        state: &mut GETMELEE_STATE,
     ) -> u32 {
-        let player = (*context).playerNr;
-        process(state, player as usize, PulsedInputToBattleInput(player))
-    }
-    /// # Safety
-    /// Live input context and fleet selection, game thread only.
-    #[no_mangle]
-    pub unsafe extern "C" fn selectShipComputer(
-        context: *mut ComputerInputContext,
-        state: *mut GETMELEE_STATE,
-    ) -> u32 {
-        let player = (*context).playerNr as usize;
-        if GetTimeCounter() < (*state).player[player].timeIn.wrapping_add(840 >> 1) {
-            return 1;
+        use crate::battle::battle_controls::InputSource;
+        let player = context.player();
+        match context.source() {
+            InputSource::Human => {
+                // SAFETY: the picker owns its selection state and reads game-thread input.
+                unsafe { process(state, usize::from(player), PulsedInputToBattleInput(player)) }
+            }
+            InputSource::Computer => {
+                if crate::time::counter_abi::GetTimeCounter()
+                    < state.player[usize::from(player)]
+                        .timeIn
+                        .wrapping_add(840 >> 1)
+                {
+                    return 1;
+                }
+                // SAFETY: the picker owns the initialized fleet selection for this player.
+                unsafe { process(state, usize::from(player), 8) }
+            }
+            InputSource::Network(_) => {
+                state.net.as_ref().expect("missing net").flush();
+                let p = &mut state.player[usize::from(player)];
+                if p.remoteSelected != 0 {
+                    p.done = 1;
+                }
+                1
+            }
         }
-        process(state, player, 8)
-    }
-    /// # Safety
-    /// Live network input context and fleet selection, game thread only.
-    #[no_mangle]
-    pub unsafe extern "C" fn selectShipNetwork(
-        context: *mut NetworkInputContext,
-        state: *mut GETMELEE_STATE,
-    ) -> u32 {
-        (*state)
-            .net
-            .as_ref()
-            .unwrap_or_else(|| panic!("missing net"))
-            .flush();
-        let p = &mut (*state).player[(*context).playerNr as usize];
-        if p.remoteSelected != 0 {
-            p.done = 1;
-        }
-        1
     }
     unsafe extern "C" fn choose(state: *mut GETMELEE_STATE) -> u32 {
         SetMenuSounds(0, 0);
@@ -209,7 +200,7 @@ pub mod live {
                 if (*state).player[player].selecting == 0 || (*state).player[player].done != 0 {
                     continue;
                 }
-                if ((*(*input).handlers).selectShip.unwrap())(input, state) == 0 {
+                if select_ship(&input.expect("missing player input"), &mut *state) == 0 {
                     abort = true;
                     break;
                 }
