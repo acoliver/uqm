@@ -87,10 +87,19 @@ pub unsafe extern "C" fn FindStar(
     xb: i16,
     yb: i16,
 ) -> *mut CStarDesc {
-    let (base, hi) = if WorldOwner::current()
-        .read(|world| crate::state::ffi::rust_get_game_state_bits(world, 42, 43))
-        <= 1
-    {
+    WorldOwner::current().read(|world| find_star_in(world, last, point, xb, yb))
+}
+
+/// # Safety
+/// The game thread retains the catalog; `last` and `point` obey FindStar's contract.
+pub unsafe fn find_star_in(
+    world: &crate::engine::World,
+    last: *mut CStarDesc,
+    point: *mut CPoint,
+    xb: i16,
+    yb: i16,
+) -> *mut CStarDesc {
+    let (base, hi) = if world.story_state(crate::engine::StoryKey::ARILOU_SPACE_SIDE) <= 1 {
         (star_array, NUM_SOLAR_SYSTEMS as i16 - 1)
     } else {
         (

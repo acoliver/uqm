@@ -9,6 +9,7 @@ use super::hyper_transition::{portal_collision, portal_death, star_collision, st
 use super::hyperspace::live::{universe_x, universe_y};
 use super::{color, get, set};
 use crate::engine::battle::views::FrameSelection as Frame;
+use crate::planets::starmap::find_star_in;
 use std::ptr;
 
 unsafe fn grid(ux: i16, uy: i16, ox: i16, oy: i16) {
@@ -76,7 +77,7 @@ pub unsafe fn SeedUniverse() {
         };
         let mut star = ptr::null_mut();
         loop {
-            star = FindStar(star, &mut universe, XOFFS, YOFFS);
+            star = find_star_in(cx.world, star, &mut universe, XOFFS, YOFFS);
             if star.is_null() {
                 break;
             }
@@ -172,7 +173,7 @@ pub unsafe fn SeedUniverse() {
         }
         star = ptr::null_mut();
         loop {
-            star = FindStar(star, &mut universe, XOFFS, YOFFS);
+            star = find_star_in(cx.world, star, &mut universe, XOFFS, YOFFS);
             if star.is_null() {
                 break;
             }

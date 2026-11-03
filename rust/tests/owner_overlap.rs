@@ -81,9 +81,15 @@ fn restored_star_lookup_finishes_before_selecting_the_owned_star() {
         uqm_rust::planets::starmap::star_array = catalog.as_mut_ptr().cast();
         bridge::with_game(&mut game, || {
             let mut point = POINT { x: 1752, y: 1450 };
-            let selected = uqm_rust::planets::starmap::FindStar(ptr::null_mut(), &mut point, 0, 0);
-            assert_eq!(selected.cast::<CStarDesc>(), catalog.as_mut_ptr());
             World::current().write(|world| {
+                let selected = uqm_rust::planets::starmap::find_star_in(
+                    world,
+                    ptr::null_mut(),
+                    &mut point,
+                    0,
+                    0,
+                );
+                assert_eq!(selected.cast::<CStarDesc>(), catalog.as_mut_ptr());
                 world.select_star(selected.cast::<CStarDesc>().as_ref(), Some(&catalog));
             });
         });

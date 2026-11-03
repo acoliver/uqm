@@ -481,6 +481,7 @@ mod star_access {
     #[cfg(not(test))]
     #[cfg(not(test))]
     use crate::navigation::hyper_transition::{element_universe, init_transition};
+    use crate::planets::starmap::{current_catalog, find_star_in};
     #[cfg(not(test))]
     #[cfg(not(test))]
     use std::ptr;
@@ -505,10 +506,9 @@ mod star_access {
             let mut point = element_universe(self, id);
             // SAFETY: lookup reads the checked element and loaded star catalog synchronously.
             let (descriptor, catalog) = unsafe {
-                let star = FindStar(ptr::null_mut(), &mut point, 5, 5);
+                let star = find_star_in(self.world, ptr::null_mut(), &mut point, 5, 5);
                 assert!(!star.is_null(), "star collision has no catalog entry");
-                let catalog = crate::planets::starmap::current_catalog()
-                    .expect("star collision without a catalog");
+                let catalog = current_catalog().expect("star collision without a catalog");
                 (&*star.cast(), catalog)
             };
             let star = self.world.identify_star(descriptor, catalog);
