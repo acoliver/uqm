@@ -143,14 +143,13 @@ impl Battle {
             let dimensions = (ScreenWidth, ScreenHeight);
             let graphics = uqm_rust::graphics::context_abi::_GraphicsStatusFlags;
             uqm_rust::graphics::context_abi::_GraphicsStatusFlags &= !4;
-            uqm_rust::app::bridge::battle(|battle| {
-                (*uqm_rust::engine::battle::record::Kernel::current())
+            uqm_rust::app::bridge::enter(|cx| {
+                cx.kernel_mut()
                     .reset_element_capacity(usize::from(capacity));
             });
-            uqm_rust::app::bridge::battle(|battle| {
+            uqm_rust::app::bridge::enter(|cx| {
                 for side in 0..2 {
-                    (*uqm_rust::engine::battle::record::Kernel::current())
-                        .reset_ship_capacity(side, 32);
+                    cx.kernel_mut().reset_ship_capacity(side, 32);
                 }
             });
             InitDisplayList();
@@ -167,13 +166,10 @@ impl Drop for Battle {
     fn drop(&mut self) {
         // SAFETY: ships and elements created after this owner have already dropped.
         unsafe {
-            uqm_rust::app::bridge::battle(|battle| {
-                (*uqm_rust::engine::battle::record::Kernel::current()).reset_element_capacity(0)
-            });
-            uqm_rust::app::bridge::battle(|battle| {
+            uqm_rust::app::bridge::enter(|cx| cx.kernel_mut().reset_element_capacity(0));
+            uqm_rust::app::bridge::enter(|cx| {
                 for side in 0..2 {
-                    (*uqm_rust::engine::battle::record::Kernel::current())
-                        .reset_ship_capacity(side, 0);
+                    cx.kernel_mut().reset_ship_capacity(side, 0);
                 }
             });
             (ScreenWidth, ScreenHeight) = self.dimensions;

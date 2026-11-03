@@ -220,8 +220,8 @@ pub(crate) mod engine {
     /// Status rendering runs on the game thread after screen initialization.
     #[no_mangle]
     pub unsafe extern "C" fn InitStatusOffsets() {
-        use crate::engine::Kernel;
-        (*Kernel::current()).status_offsets = status_offsets(ScreenHeight);
+        let kernel = crate::engine::Kernel::current();
+        (*kernel).status_offsets = status_offsets(ScreenHeight);
     }
 
     unsafe fn filled(color: Color, mut r: RECT) {
@@ -271,7 +271,7 @@ pub(crate) mod engine {
     /// Ship info, fonts, and the active graphics context must be live.
     #[no_mangle]
     pub unsafe extern "C" fn DrawBattleCrewAmount(info: *mut SHIP_INFO, y: COORD) {
-        use crate::engine::Kernel;
+        let kernel = crate::engine::Kernel::current();
         let x = if optWhichMenu == OPT_PC as i32 { 4 } else { 12 };
         let bytes = crew_text((*info).crew_level);
         let mut text = TEXT {
@@ -283,7 +283,7 @@ pub(crate) mod engine {
             align: TEXT_ALIGN_ALIGN_LEFT,
             CharCount: COUNT::MAX,
         };
-        SetContextFont((*Kernel::current()).star_con_font);
+        SetContextFont((*kernel).star_con_font);
         filled(
             rgb15(10, 10, 10),
             rect(x, text.baseline.y.wrapping_sub(5), 24, 5),
@@ -362,12 +362,12 @@ pub(crate) mod engine {
                     x: 32,
                     y: cy.wrapping_add(6),
                 },
-                pStr: (&raw const (*WorldData::current()).flagship.commander_name).cast(),
+                pStr: (&raw const cx.world.data.flagship.commander_name).cast(),
                 align: TEXT_ALIGN_ALIGN_CENTER,
                 CharCount: COUNT::MAX,
             };
             SetContextForeGroundColor(rgb15(0, 20, 0));
-            SetContextFont((*Kernel::current()).tiny_font);
+            SetContextFont(cx.kernel.tiny_font);
             font_DrawText(&mut text);
         }
         if cx.race_stats(ship).ship_info.max_crew > MAX_CREW_SIZE as COUNT

@@ -34,18 +34,18 @@ const fn rgb15(r: u8, g: u8, b: u8) -> Color {
 const BLACK: Color = rgb15(0, 0, 0);
 
 unsafe fn game_string(index: u32) -> *mut UNICODE {
-    use crate::engine::Kernel;
+    let kernel = crate::engine::Kernel::current();
     GetStringAddress(SetAbsStringTableIndex(
-        (*Kernel::current()).game_strings,
+        (*kernel).game_strings,
         index as COUNT,
     ))
     .cast()
 }
 
 unsafe fn DrawBaseStateStrings(mut old: BYTE, new: BYTE) {
-    use crate::engine::Kernel;
-    SetContext((*Kernel::current()).screen_context);
-    SetContextFont((*Kernel::current()).star_con_font);
+    let kernel = crate::engine::Kernel::current();
+    SetContext((*kernel).screen_context);
+    SetContextFont((*kernel).star_con_font);
     SetContextForeGroundColor(BLACK);
     let mut text = TEXT {
         baseline: POINT {
@@ -92,7 +92,7 @@ pub unsafe extern "C" fn DrawShipPiece(
     mut which_slot: COUNT,
     blueprint: BOOLEAN,
 ) {
-    use crate::engine::WorldData;
+    let world = crate::engine::WorldData::current();
     let mut old_color = BLACK;
     let mut side: STAMP = mem::zeroed();
     let mut top: STAMP = mem::zeroed();
@@ -120,7 +120,7 @@ pub unsafe extern "C" fn DrawShipPiece(
             repair = 1;
             if which_piece < EMPTY_SLOT
                 && (which_slot == 0
-                    || (*WorldData::current()).flagship.module_slots[(which_slot - 1) as usize]
+                    || (*world).flagship.module_slots[(which_slot - 1) as usize]
                         < EMPTY_SLOT as BYTE)
             {
                 repair += 1;
@@ -130,8 +130,7 @@ pub unsafe extern "C" fn DrawShipPiece(
                 which_piece += 1;
             }
             if which_slot < NUM_MODULE_SLOTS as COUNT - 1
-                && (*WorldData::current()).flagship.module_slots[(which_slot + 1) as usize]
-                    < EMPTY_SLOT as BYTE
+                && (*world).flagship.module_slots[(which_slot + 1) as usize] < EMPTY_SLOT as BYTE
             {
                 repair = -1;
                 if which_piece == EMPTY_SLOT + 3 || which_slot + 1 == NUM_MODULE_SLOTS as COUNT - 3
@@ -244,8 +243,7 @@ pub unsafe extern "C" fn DrawShipPiece(
             top.origin.x += SHIP_PIECE_OFFSET as i16;
             side.origin.x += SHIP_PIECE_OFFSET as i16;
             which_slot += 1;
-            which_piece =
-                (*WorldData::current()).flagship.module_slots[which_slot as usize] as COUNT;
+            which_piece = (*world).flagship.module_slots[which_slot as usize] as COUNT;
             if which_piece == EMPTY_SLOT + 2 && which_slot >= NUM_MODULE_SLOTS as COUNT - 3 {
                 which_piece += 1;
             }
@@ -280,7 +278,7 @@ unsafe fn rotateStarbase(menu: *mut MENU_STATE, frame: FRAME) {
 }
 
 unsafe fn ExitStarBase(menu: *mut MENU_STATE) -> BOOLEAN {
-    use crate::engine::WorldData;
+    let world = crate::engine::WorldData::current();
     DestroyDrawable(ReleaseDrawable((*menu).CurFrame));
     (*menu).CurFrame = ptr::null_mut();
     StopMusic();
@@ -289,7 +287,7 @@ unsafe fn ExitStarBase(menu: *mut MENU_STATE) -> BOOLEAN {
         (*menu).hMusic = ptr::null_mut();
     }
     if (*menu).CurState == DEPART_BASE {
-        if (*WorldData::current()).game.current_activity & (CHECK_ABORT | CHECK_LOAD) as u16 == 0 {
+        if (*world).game.current_activity & (CHECK_ABORT | CHECK_LOAD) as u16 == 0 {
             set_game_state(crate::engine::StoryKey::STARBASE_VISITED, 0);
         }
         return 0;
@@ -327,14 +325,15 @@ unsafe fn ExitStarBase(menu: *mut MENU_STATE) -> BOOLEAN {
 /// and input systems must be initialized and accessed only on that thread.
 #[no_mangle]
 pub unsafe extern "C" fn DoStarBase(menu: *mut MENU_STATE) -> BOOLEAN {
-    use crate::engine::{Kernel, WorldData};
-    if (*WorldData::current()).game.current_activity & (CHECK_ABORT | CHECK_LOAD) as u16 != 0 {
+    let kernel = crate::engine::Kernel::current();
+    let world = crate::engine::WorldData::current();
+    if (*world).game.current_activity & (CHECK_ABORT | CHECK_LOAD) as u16 != 0 {
         (*menu).CurState = DEPART_BASE;
         return ExitStarBase(menu);
     }
     SetMenuSounds(SOUND_ARROWS, SOUND_SELECT);
     if (*menu).Initialized == 0 {
-        (*Kernel::current()).last_activity &= !(CHECK_LOAD as u16);
+        (*kernel).last_activity &= !(CHECK_LOAD as u16);
         (*menu).InputFunc = Some(DoStarBase);
         SetFlashRect(ptr::null());
         if !(*menu).hMusic.is_null() {
@@ -346,7 +345,7 @@ pub unsafe extern "C" fn DoStarBase(menu: *mut MENU_STATE) -> BOOLEAN {
         (*menu).CurFrame =
             CaptureDrawable(LoadGraphicInstance(c"graphics.starbase".as_ptr()).cast());
         (*menu).hMusic = (LoadMusicInstance(c"music.starbase".as_ptr())).cast();
-        SetContext((*Kernel::current()).screen_context);
+        SetContext((*kernel).screen_context);
         SetTransitionSource(ptr::null());
         BatchGraphics();
         SetContextBackGroundColor(BLACK);
@@ -378,7 +377,7 @@ pub unsafe extern "C" fn DoStarBase(menu: *mut MENU_STATE) -> BOOLEAN {
             }
         }
         BatchGraphics();
-        SetContext((*Kernel::current()).screen_context);
+        SetContext((*kernel).screen_context);
         if state != (*menu).CurState {
             DrawBaseStateStrings((*menu).CurState, state);
             (*menu).CurState = state;
@@ -399,10 +398,10 @@ unsafe fn DoTimePassage() {
 }
 
 unsafe fn CleanupAfterStarBase() {
-    use crate::engine::WorldData;
-    if (*WorldData::current()).game.current_activity & (CHECK_LOAD | CHECK_ABORT) as u16 == 0 {
+    let world = crate::engine::WorldData::current();
+    if (*world).game.current_activity & (CHECK_LOAD | CHECK_ABORT) as u16 == 0 {
         set_game_state(crate::engine::StoryKey::GLOBAL_FLAGS_AND_DATA, 0);
-        (*WorldData::current()).game.current_activity = CHECK_LOAD as u16;
+        (*world).game.current_activity = CHECK_LOAD as u16;
         NextActivity = IN_INTERPLANETARY as u16 | START_INTERPLANETARY as u16;
     }
 }
@@ -413,9 +412,11 @@ unsafe fn CleanupAfterStarBase() {
 /// World queues, game clock, communication, input, graphics and audio must be
 /// initialized and exclusively accessed by the calling game thread.
 pub unsafe fn VisitStarBase() {
-    use crate::engine::{Kernel, World as GameWorld, WorldData};
+    let kernel = crate::engine::Kernel::current();
+    let world = crate::engine::WorldData::current();
     if get_game_state(crate::engine::StoryKey::CHMMR_BOMB_STATE) == 2 {
-        (*GameWorld::current()).select_star(None, crate::planets::starmap::current_catalog());
+        (*crate::engine::World::current())
+            .select_star(None, crate::planets::starmap::current_catalog());
         set_game_state(
             crate::engine::StoryKey::GLOBAL_FLAGS_AND_DATA,
             BYTE::MAX as u32,
@@ -428,26 +429,26 @@ pub unsafe fn VisitStarBase() {
         SetCommIntroMode(CROSSFADE_SCREEN, 0);
         InitCommunication(CONVERSATION_COMMANDER_CONVERSATION);
         if get_game_state(crate::engine::StoryKey::PROBE_ILWRATH_ENCOUNTER) == 0
-            || (*WorldData::current()).game.current_activity & CHECK_ABORT as u16 != 0
+            || (*world).game.current_activity & CHECK_ABORT as u16 != 0
         {
             CleanupAfterStarBase();
             return;
         }
         let ship = CloneShipFragment(
             ILWRATH_SHIP as COUNT,
-            ptr::addr_of_mut!((*WorldData::current()).game.npc_built_ship_q),
+            ptr::addr_of_mut!((*world).game.npc_built_ship_q),
             7,
         );
         (*ship.cast::<SHIP_FRAGMENT>()).race_id = BYTE::MAX;
         InitCommunication(CONVERSATION_ILWRATH_CONVERSATION);
-        if (*WorldData::current()).flagship.crew_enlisted == COUNT::MAX
-            || (*WorldData::current()).game.current_activity & CHECK_ABORT as u16 != 0
+        if (*world).flagship.crew_enlisted == COUNT::MAX
+            || (*world).game.current_activity & CHECK_ABORT as u16 != 0
         {
             return;
         }
         SetCommIntroMode(CROSSFADE_SCREEN, 0);
         InitCommunication(CONVERSATION_COMMANDER_CONVERSATION);
-        if (*WorldData::current()).game.current_activity & CHECK_ABORT as u16 != 0 {
+        if (*world).game.current_activity & CHECK_ABORT as u16 != 0 {
             return;
         }
         set_game_state(
@@ -460,7 +461,7 @@ pub unsafe fn VisitStarBase() {
         || get_game_state(crate::engine::StoryKey::CHMMR_BOMB_STATE) == 2
     {
         DoTimePassage();
-        if (*WorldData::current()).flagship.crew_enlisted == COUNT::MAX {
+        if (*world).flagship.crew_enlisted == COUNT::MAX {
             return;
         }
         crate::automation::scenario::observe_encounter_dispatch(
@@ -468,7 +469,7 @@ pub unsafe fn VisitStarBase() {
         );
         SetCommIntroMode(FADE_IN_SCREEN, ONE_SECOND * 2);
         InitCommunication(CONVERSATION_COMMANDER_CONVERSATION);
-        if (*WorldData::current()).game.current_activity & CHECK_ABORT as u16 != 0 {
+        if (*world).game.current_activity & CHECK_ABORT as u16 != 0 {
             return;
         }
         set_game_state(
@@ -478,7 +479,7 @@ pub unsafe fn VisitStarBase() {
     }
     let mut menu: MENU_STATE = mem::zeroed();
     menu.InputFunc = Some(DoStarBase);
-    let old = SetContext((*Kernel::current()).screen_context);
+    let old = SetContext((*kernel).screen_context);
     crate::automation::ui_observation::observe_starbase_menu(true);
     DoInput(ptr::addr_of_mut!(menu).cast(), 1);
     crate::automation::ui_observation::observe_starbase_menu(false);
@@ -493,15 +494,17 @@ pub unsafe fn VisitStarBase() {
 /// The game clock, live world and graphics must be exclusively accessed on
 /// the initialized game thread.
 pub unsafe fn InstallBombAtEarth() {
-    use crate::engine::{Kernel, World as GameWorld, WorldData};
+    let kernel = crate::engine::Kernel::current();
+    let world = crate::engine::WorldData::current();
     DoTimePassage();
-    SetContext((*Kernel::current()).screen_context);
+    SetContext((*kernel).screen_context);
     SetTransitionSource(ptr::null());
     SetContextBackGroundColor(BLACK);
     ClearDrawable();
     SleepThreadUntil(FadeScreen(ScreenFadeType_FadeAllToColor, 0));
     set_game_state(crate::engine::StoryKey::CHMMR_BOMB_STATE, 3);
-    (*WorldData::current()).game.current_activity = CHECK_LOAD as u16;
+    (*world).game.current_activity = CHECK_LOAD as u16;
     NextActivity = IN_INTERPLANETARY as u16 | START_INTERPLANETARY as u16;
-    (*GameWorld::current()).select_star(None, crate::planets::starmap::current_catalog());
+    (*crate::engine::World::current())
+        .select_star(None, crate::planets::starmap::current_catalog());
 }

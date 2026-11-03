@@ -56,12 +56,13 @@ pub(crate) mod runtime {
     /// processing callback must remain valid throughout this call.
     #[no_mangle]
     pub unsafe extern "C" fn SplashScreen(process: Option<unsafe extern "C" fn(DWORD)>) {
-        use crate::engine::{Kernel, WorldData};
+        let kernel = crate::engine::Kernel::current();
+        let world = crate::engine::WorldData::current();
         SleepThreadUntil(FadeScreen(
             ScreenFadeType_FadeAllToBlack,
             (ONE_SECOND / 120) as SIZE,
         ));
-        SetContext((*Kernel::current()).screen_context);
+        SetContext((*kernel).screen_context);
         let mut stamp = STAMP {
             origin: POINT { x: 0, y: 0 },
             frame: CaptureDrawable(LoadGraphicInstance(TITLE_ANIM.as_ptr().cast()).cast()),
@@ -72,14 +73,14 @@ pub(crate) mod runtime {
         if let Some(callback) = process {
             callback(timeout);
         }
-        if (*WorldData::current()).game.current_activity & CHECK_ABORT as u16 != 0 {
+        if (*world).game.current_activity & CHECK_ABORT as u16 != 0 {
             return;
         }
         WaitForAnyButton(0, ONE_SECOND * 3, 1);
-        if (*WorldData::current()).game.current_activity & CHECK_ABORT as u16 != 0 {
+        if (*world).game.current_activity & CHECK_ABORT as u16 != 0 {
             return;
         }
-        (*WorldData::current()).game.current_activity &= !(CHECK_ABORT as u16);
+        (*world).game.current_activity &= !(CHECK_ABORT as u16);
         SleepThreadUntil(FadeScreen(
             ScreenFadeType_FadeAllToBlack,
             (ONE_SECOND / 2) as SIZE,

@@ -313,8 +313,8 @@ unsafe fn install_ship(ship: &mut ShipRecord) {
     // SAFETY: the caller owns the idle queues and keeps ship at this address
     // until the synchronous snapshot finishes and the queue is detached.
     unsafe {
-        uqm_rust::app::bridge::battle(|owner| {
-            let mut ships = owner.ships(0);
+        uqm_rust::app::bridge::enter(|cx| {
+            let mut ships = cx.kernel_mut().ships(0);
             let link = ships
                 .id(ptr::from_mut(ship).cast())
                 .unwrap_or_else(|| panic!("fixture ship is missing"));
@@ -355,8 +355,8 @@ fn race_custom_fields(directory: &Path) {
                 saved_death: human,
             };
             let ship = ptr::from_mut(owner.ship_mut());
-            uqm_rust::app::bridge::battle(|battle| {
-                let mut ships = battle.ships(0);
+            uqm_rust::app::bridge::enter(|cx| {
+                let mut ships = cx.kernel_mut().ships(0);
                 let link = ships.link(owner.ship_id);
                 ships.put(link);
             });
@@ -398,8 +398,8 @@ fn race_custom_fields(directory: &Path) {
                 fields["ships.0.0.custom.phoenix"]
             );
             uqm_rust::app::bridge::enter(|cx| cx.unlink(reused.id));
-            uqm_rust::app::bridge::battle(|battle| {
-                let mut ships = battle.ships(0);
+            uqm_rust::app::bridge::enter(|cx| {
+                let mut ships = cx.kernel_mut().ships(0);
                 let link = ships.link(owner.ship_id);
                 ships.remove(link);
             });

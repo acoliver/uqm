@@ -567,10 +567,10 @@ unsafe fn get_head_link(pq: *const Queue) -> HLink {
 #[inline]
 fn avail_race_queue() -> *mut Queue {
     #[cfg(not(test))]
-    use crate::engine::WorldData;
     #[cfg(not(test))]
     unsafe {
-        std::ptr::addr_of_mut!((*WorldData::current()).game.avail_race_q)
+        let world = crate::engine::WorldData::current();
+        std::ptr::addr_of_mut!((*world).game.avail_race_q)
     }
     #[cfg(test)]
     std::ptr::null_mut()
@@ -578,10 +578,10 @@ fn avail_race_queue() -> *mut Queue {
 #[inline]
 fn npc_built_ship_queue() -> *mut Queue {
     #[cfg(not(test))]
-    use crate::engine::WorldData;
     #[cfg(not(test))]
     unsafe {
-        std::ptr::addr_of_mut!((*WorldData::current()).game.npc_built_ship_q)
+        let world = crate::engine::WorldData::current();
+        std::ptr::addr_of_mut!((*world).game.npc_built_ship_q)
     }
     #[cfg(test)]
     std::ptr::null_mut()
@@ -589,10 +589,10 @@ fn npc_built_ship_queue() -> *mut Queue {
 #[cfg(not(test))]
 #[inline]
 fn encounter_queue() -> *mut Queue {
-    use crate::engine::WorldData;
     #[cfg(not(test))]
     unsafe {
-        std::ptr::addr_of_mut!((*WorldData::current()).game.encounter_q)
+        let world = crate::engine::WorldData::current();
+        std::ptr::addr_of_mut!((*world).game.encounter_q)
     }
     #[cfg(test)]
     std::ptr::null_mut()
@@ -601,10 +601,10 @@ fn encounter_queue() -> *mut Queue {
 #[allow(dead_code)]
 fn built_ship_queue() -> *mut Queue {
     #[cfg(not(test))]
-    use crate::engine::WorldData;
     #[cfg(not(test))]
     unsafe {
-        std::ptr::addr_of_mut!((*WorldData::current()).game.built_ship_q)
+        let world = crate::engine::WorldData::current();
+        std::ptr::addr_of_mut!((*world).game.built_ship_q)
     }
     #[cfg(test)]
     std::ptr::null_mut()
@@ -858,7 +858,7 @@ fn conversation_setup(conversation: u32) -> (u32, u16) {
 /// # Safety
 /// Called on the game thread with initialized game state and resources.
 pub unsafe fn init_communication(which_comm: u32) -> u16 {
-    use crate::engine::{World as GameWorld, WorldData};
+    let world = crate::engine::WorldData::current();
     #[cfg(all(not(test), feature = "debug-process"))]
     {
         if crate::front_end::uqmdebug::DISABLE_INTERACTIVITY != 0 {
@@ -879,13 +879,13 @@ pub unsafe fn init_communication(which_comm: u32) -> u16 {
             }
             ffi::DrawSISMessage(std::ptr::null());
             if in_hq_space() {
-                let point = (*WorldData::current()).game.ship_stamp.origin;
+                let point = (*world).game.ship_stamp.origin;
                 ffi::DrawHyperCoords(CPoint {
                     x: point.x,
                     y: point.y,
                 });
-            } else if (*WorldData::current()).game.ip_planet == 0 {
-                let star = &*(*GameWorld::current())
+            } else if (*world).game.ip_planet == 0 {
+                let star = &*(*crate::engine::World::current())
                     .star_pointer(crate::planets::starmap::current_catalog())
                     .cast::<crate::savegame::runtime::star::CStarDesc>();
                 ffi::DrawHyperCoords(CPoint {
@@ -893,9 +893,7 @@ pub unsafe fn init_communication(which_comm: u32) -> u16 {
                     y: star.star_pt.y,
                 });
             } else {
-                ffi::DrawSISTitle(
-                    std::ptr::addr_of!((*WorldData::current()).flagship.planet_name).cast(),
-                );
+                ffi::DrawSISTitle(std::ptr::addr_of!((*world).flagship.planet_name).cast());
             }
         }
     }
@@ -906,7 +904,7 @@ pub unsafe fn init_communication(which_comm: u32) -> u16 {
 #[cfg(not(test))]
 /// Perform sphere tracking, battle setup, dialogue and teardown in C order.
 unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
-    use crate::engine::WorldData;
+    let world = crate::engine::WorldData::current();
     if ship_type != u16::from(ship::URQUAN_DRONE_SHIP) {
         start_sphere_tracking(ship_type as u8);
         if which_comm == conv::ORZ
@@ -962,9 +960,7 @@ unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
     let activity = crate::mainloop::ffi::get_current_activity().0;
     if activity & (CHECK_ABORT | CHECK_LOAD) == 0 {
         let npc = npc_built_ship_queue();
-        if lobyte(activity) == IN_LAST_BATTLE
-            && (*WorldData::current()).game.glob_flags & CYBORG_ENABLED != 0
-        {
+        if lobyte(activity) == IN_LAST_BATTLE && (*world).game.glob_flags & CYBORG_ENABLED != 0 {
             ReinitQueue(npc);
         }
         set_game_state(crate::engine::StoryKey::GLOBAL_FLAGS_AND_DATA, 0);
@@ -1101,20 +1097,20 @@ pub unsafe fn prepare_automation_sol_probe_encounter() -> Result<(), &'static st
 /// Initialized fleets and SIS must be exclusively owned by the game thread.
 #[cfg(not(test))]
 pub(crate) unsafe fn prepare_samatra_dev_fixture() -> Result<(), &'static str> {
-    use crate::engine::WorldData;
+    let world = crate::engine::WorldData::current();
     let queue = built_ship_queue();
     ReinitQueue(queue);
     if crate::battle::build_native::AddEscortShips(4, 12) != 12 {
         return Err("boss fixture could not allocate Pkunk escorts");
     }
-    let sis = &mut (*WorldData::current()).flagship;
+    let sis = &mut (*world).flagship;
     sis.crew_enlisted = 50;
     sis.fuel_on_board = 1000;
     sis.drive_slots.fill(1);
     sis.jet_slots.fill(2);
     // Bomb conversion removes the flagship weapons; this is a steering ship.
     sis.module_slots.fill(0xff);
-    (*WorldData::current()).game.glob_flags &= !(1 << 5);
+    (*world).game.glob_flags &= !(1 << 5);
     Ok(())
 }
 
@@ -1128,7 +1124,6 @@ pub(crate) unsafe fn prepare_samatra_dev_fixture() -> Result<(), &'static str> {
 /// The star map must be initialized.
 #[cfg_attr(test, allow(dead_code))]
 pub unsafe fn place_flagship_at_star(location: (i16, i16)) -> Result<(), &'static str> {
-    use crate::engine::World as GameWorld;
     let mut universe = CPoint {
         x: location.0,
         y: location.1,
@@ -1137,7 +1132,7 @@ pub unsafe fn place_flagship_at_star(location: (i16, i16)) -> Result<(), &'stati
     if star.is_null() {
         return Err("no star at the scene location");
     }
-    (*GameWorld::current()).select_star(
+    (*crate::engine::World::current()).select_star(
         ((star).cast::<crate::engine::world::CStarDesc>()).as_ref(),
         crate::planets::starmap::current_catalog(),
     );

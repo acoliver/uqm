@@ -278,7 +278,7 @@ pub unsafe extern "C" fn abortFeedback(conn: *mut NetConnection, reason: u32) {
 /// Call on the game thread with initialized melee UI resources. All pointers
 /// must remain live through notification callbacks; side and slot indices must be in range.
 pub unsafe extern "C" fn resetFeedback(conn: *mut NetConnection, reason: u32, remote: bool) {
-    use crate::engine::WorldData;
+    let world = crate::engine::WorldData::current();
     (*P_MELEE_STATE).netplay.flush_packet_queues();
     if reason == 2 && !remote {
         return;
@@ -290,5 +290,5 @@ pub unsafe extern "C" fn resetFeedback(conn: *mut NetConnection, reason: u32, re
             false,
         );
     }
-    (*WorldData::current()).game.current_activity |= CHECK_ABORT as u16;
+    (*world).game.current_activity |= CHECK_ABORT as u16;
 }

@@ -5,10 +5,10 @@ pub(super) unsafe fn clear_queues() {
     // SAFETY: the caller owns the idle global queues and detaches all test
     // records before releasing their stack storage; there are no active readers.
     unsafe {
-        uqm_rust::app::bridge::battle(|battle| {
-            battle.reset_element_capacity(150);
+        uqm_rust::app::bridge::enter(|cx| {
+            cx.kernel_mut().reset_element_capacity(150);
             for side in 0..2 {
-                battle.reset_ship_capacity(side, 32);
+                cx.kernel_mut().reset_ship_capacity(side, 32);
             }
         });
         uqm_rust::battle::process_native::InitDisplayList();

@@ -355,14 +355,12 @@ mod tests {
     }
 
     #[test]
-    fn c_game_state_layout_matches_verified_c_abi() {
+    fn retained_save_records_keep_their_abi_layout() {
         assert_eq!(std::mem::size_of::<CSisState>(), 124);
         assert_eq!(std::mem::offset_of!(CSisState, module_slots), 22);
         assert_eq!(std::mem::offset_of!(CSisState, drive_slots), 38);
         assert_eq!(std::mem::offset_of!(CSisState, ship_name), 74);
         assert_eq!(std::mem::size_of::<CStamp>(), 16);
-        assert_eq!(std::mem::size_of::<crate::engine::WorldData>(), 480);
-        assert_eq!(std::mem::offset_of!(crate::engine::WorldData, game), 128);
         assert_eq!(std::mem::size_of::<CGameState>(), 352);
         assert_eq!(std::mem::offset_of!(CGameState, current_activity), 40);
         assert_eq!(std::mem::offset_of!(CGameState, ship_stamp), 104);

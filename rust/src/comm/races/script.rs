@@ -107,8 +107,8 @@ pub(super) mod live {
         }
 
         fn response(&mut self, phrase: u16, handler: H, fragments: &[i32]) {
-            use crate::engine::WorldData;
             unsafe {
+                let world = crate::engine::WorldData::current();
                 let text = if fragments.is_empty() {
                     GetStringAddress(SetAbsStringTableIndex(
                         (COMM_DATA.conversation_phrases).cast(),
@@ -121,12 +121,10 @@ pub(super) mod live {
                     for &fragment in fragments {
                         let ptr = match fragment {
                             GLOBAL_PLAYER_NAME => {
-                                std::ptr::addr_of!((*WorldData::current()).flagship.commander_name)
-                                    .cast()
+                                std::ptr::addr_of!((*world).flagship.commander_name).cast()
                             }
                             GLOBAL_SHIP_NAME => {
-                                std::ptr::addr_of!((*WorldData::current()).flagship.ship_name)
-                                    .cast()
+                                std::ptr::addr_of!((*world).flagship.ship_name).cast()
                             }
                             _ => {
                                 let index =
@@ -165,20 +163,20 @@ pub(super) mod live {
         }
 
         fn supplies(&self) -> Supplies {
-            use crate::engine::WorldData;
             unsafe {
+                let world = crate::engine::WorldData::current();
                 Supplies {
-                    landers: (*WorldData::current()).flagship.num_landers,
-                    fuel: (*WorldData::current()).flagship.fuel_on_board,
-                    radioactives: (*WorldData::current()).flagship.element_amounts[6],
+                    landers: (*world).flagship.num_landers,
+                    fuel: (*world).flagship.fuel_on_board,
+                    radioactives: (*world).flagship.element_amounts[6],
                 }
             }
         }
 
         fn add_lander(&mut self) {
-            use crate::engine::WorldData;
             unsafe {
-                (*WorldData::current()).flagship.num_landers += 1;
+                let world = crate::engine::WorldData::current();
+                (*world).flagship.num_landers += 1;
                 DrawLanders();
             }
         }

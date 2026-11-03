@@ -107,11 +107,11 @@ pub(crate) mod naming {
     /// `star` is readable, and `buffer` has space for the prefix and cluster name.
     #[no_mangle]
     pub unsafe extern "C" fn GetClusterName(star: *const CStarDesc, buffer: *mut c_char) {
-        use crate::engine::Kernel;
+        let kernel = crate::engine::Kernel::current();
         let mut out = buffer;
         if (*star).prefix != 0 {
             let mut text = GetStringAddress(SetAbsStringTableIndex(
-                ((*Kernel::current()).game_strings).cast(),
+                ((*kernel).game_strings).cast(),
                 crate::c_bindings::global_state::STAR_NUMBER_BASE as u16 + (*star).prefix as u16
                     - 1,
             ));
@@ -129,7 +129,7 @@ pub(crate) mod naming {
             }
         }
         let mut text = GetStringAddress(SetAbsStringTableIndex(
-            ((*Kernel::current()).game_strings).cast(),
+            ((*kernel).game_strings).cast(),
             (*star).postfix as u16,
         ));
         if text.is_null() {

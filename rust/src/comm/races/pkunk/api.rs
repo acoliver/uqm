@@ -9,9 +9,9 @@ pub(super) trait PkunkApi: AllianceApi<Handler> {
 #[cfg(not(test))]
 impl PkunkApi for crate::comm::races::script::live::LiveScript<Handler> {
     fn date(&self) -> (u16, u16, u16) {
-        use crate::engine::WorldData;
         unsafe {
-            let date = &(*WorldData::current()).game.game_clock;
+            let world = crate::engine::WorldData::current();
+            let date = &(*world).game.game_clock;
             (
                 date.year_index,
                 u16::from(date.month_index),

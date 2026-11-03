@@ -197,15 +197,19 @@ pub fn borrowed_assets(
 /// Read `GLOBAL_SIS(NumLanders)` from the global SIS state.
 #[cfg(not(test))]
 fn sis_num_landers() -> u8 {
-    use crate::engine::WorldData;
-    unsafe { std::ptr::addr_of!((*WorldData::current()).flagship.num_landers).read() }
+    unsafe {
+        let world = crate::engine::WorldData::current();
+        std::ptr::addr_of!((*world).flagship.num_landers).read()
+    }
 }
 
 /// Read `GLOBAL_SIS(TotalElementMass)` from the global SIS state.
 #[cfg(not(test))]
 fn sis_total_element_mass() -> u16 {
-    use crate::engine::WorldData;
-    unsafe { std::ptr::addr_of!((*WorldData::current()).flagship.total_element_mass).read() }
+    unsafe {
+        let world = crate::engine::WorldData::current();
+        std::ptr::addr_of!((*world).flagship.total_element_mass).read()
+    }
 }
 
 /// Read a game state bit-field via the FFI singleton.
@@ -223,9 +227,9 @@ fn get_game_state(name: crate::engine::StoryKey) -> u32 {
 #[no_mangle]
 pub extern "C" fn InitLander(lander_flags: u8) {
     #[cfg(not(test))]
-    use crate::engine::Kernel;
     #[cfg(not(test))]
     unsafe {
+        let kernel = crate::engine::Kernel::current();
         let Ok(state) = LANDER_FRAMES.lock() else {
             return;
         };
@@ -234,7 +238,7 @@ pub extern "C" fn InitLander(lander_flags: u8) {
         }
         let lander_frame_0 = state.frames[0];
 
-        let old_context = SetContext((*Kernel::current()).radar_context);
+        let old_context = SetContext((*kernel).radar_context);
         BatchGraphics();
 
         let mut r = CRect {

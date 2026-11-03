@@ -71,8 +71,8 @@ pub(super) unsafe fn ship_box(side: u16, index: usize, ship: u32, highlight: boo
     UnbatchGraphics();
 }
 pub(super) unsafe fn controls(side: usize, highlight: bool) {
-    use crate::engine::Kernel;
-    let control = (*Kernel::current()).player_control[side];
+    let kernel = crate::engine::Kernel::current();
+    let control = (*kernel).player_control[side];
     let icon = if control & NETWORK_CONTROL != 0 {
         31 + u16::from(highlight) + 2 * (1 - side as u16)
     } else {
@@ -110,7 +110,7 @@ pub(super) unsafe fn teams() {
 /// Call on the graphics thread with loaded melee resources. Pointer arguments
 /// must be valid for the call, and player, row, column and ship indices must be in range.
 pub unsafe extern "C" fn RepairMeleeFrame(rect: *const RECT) {
-    use crate::engine::Kernel;
+    let kernel = crate::engine::Kernel::current();
     let mut r = *rect;
     r.corner.x += SAFE_X as i16;
     r.corner.y += SAFE_Y as i16;
@@ -118,7 +118,7 @@ pub unsafe extern "C" fn RepairMeleeFrame(rect: *const RECT) {
         r.corner.y -= 1;
         r.extent.height += 1;
     }
-    let old = SetContext((*Kernel::current()).space_context);
+    let old = SetContext((*kernel).space_context);
     let mut clip = mem::zeroed();
     get_context_clip_rect(&mut clip);
     set_context_clip_rect(&mut r);
@@ -163,7 +163,7 @@ pub(super) fn name_rect(side: u16) -> RECT {
     }
 }
 pub(super) unsafe fn worth(state: *mut MELEE_STATE, side: u16, highlight: u16) {
-    use crate::engine::Kernel;
+    let kernel = crate::engine::Kernel::current();
     let r = RECT {
         corner: POINT {
             x: 217,
@@ -178,7 +178,7 @@ pub(super) unsafe fn worth(state: *mut MELEE_STATE, side: u16, highlight: u16) {
         RepairMeleeFrame(&r);
         return;
     }
-    SetContextFont((*Kernel::current()).micro_font);
+    SetContextFont((*kernel).micro_font);
     let value =
         CString::new(MeleeSetup_getFleetValue((*state).melee_setup, side as usize).to_string())
             .unwrap();
@@ -201,13 +201,13 @@ pub(super) unsafe fn name(
     highlight: u16,
     value: *const c_char,
 ) -> u32 {
-    use crate::engine::Kernel;
+    let kernel = crate::engine::Kernel::current();
     let r = name_rect(side);
     if highlight == 4 {
         RepairMeleeFrame(&r);
         return 1;
     }
-    SetContextFont((*Kernel::current()).micro_font);
+    SetContextFont((*kernel).micro_font);
     let value = if value.is_null() {
         MeleeSetup_getTeamName((*state).melee_setup, side as usize)
     } else {
@@ -268,8 +268,8 @@ pub(super) unsafe fn name(
     1
 }
 pub(super) unsafe fn status(message: *const c_char) {
-    use crate::engine::Kernel;
-    let old = SetContext((*Kernel::current()).space_context);
+    let kernel = crate::engine::Kernel::current();
+    let old = SetContext((*kernel).space_context);
     let mut r = RECT {
         corner: POINT { x: 1, y: 201 },
         extent: EXTENT {
@@ -279,7 +279,7 @@ pub(super) unsafe fn status(message: *const c_char) {
     };
     RepairMeleeFrame(&r);
     if *message != 0 {
-        SetContextFont((*Kernel::current()).micro_font);
+        SetContextFont((*kernel).micro_font);
         SetContextForeGroundColor(rgb(0, 20, 0));
         BatchGraphics();
         let mut clip = mem::zeroed();
@@ -378,22 +378,22 @@ pub(super) unsafe fn highlight(option: u8, on: bool) {
 /// Call on the graphics thread with loaded melee resources. Pointer arguments
 /// must be valid for the call, and player, row, column and ship indices must be in range.
 pub unsafe extern "C" fn Melee_flashSelection(state: *mut MELEE_STATE) {
-    use crate::engine::Kernel;
+    let kernel = crate::engine::Kernel::current();
     static mut NEXT: u32 = 0;
     static mut SELECT: bool = false;
     let now = GetTimeCounter();
     if now >= NEXT {
         NEXT = now.wrapping_add(840 / 9);
         SELECT = !SELECT;
-        let old = SetContext((*Kernel::current()).space_context);
+        let old = SetContext((*kernel).space_context);
         highlight((*state).melee_option, SELECT);
         SetContext(old);
     }
 }
 pub(super) unsafe fn init_screen() {
-    use crate::engine::Kernel;
-    SetContext((*Kernel::current()).space_context);
-    drawable_abi::SetContextFGFrame((*Kernel::current()).screen.cast());
+    let kernel = crate::engine::Kernel::current();
+    SetContext((*kernel).space_context);
+    drawable_abi::SetContextFGFrame((*kernel).screen.cast());
     set_context_clip_rect(ptr::null_mut());
     SetContextBackGroundColor(rgb(0, 0, 0));
     ClearDrawable();
@@ -415,8 +415,8 @@ pub(super) unsafe fn init_screen() {
 /// Call on the graphics thread with loaded melee resources. Pointer arguments
 /// must be valid for the call, and player, row, column and ship indices must be in range.
 pub unsafe extern "C" fn DrawMeleeShipStrings(state: *mut MELEE_STATE, ship: u32) {
-    use crate::engine::Kernel;
-    let old = SetContext((*Kernel::current()).status_context);
+    let kernel = crate::engine::Kernel::current();
+    let old = SetContext((*kernel).status_context);
     let mut clip = mem::zeroed();
     get_context_clip_rect(&mut clip);
     let mut r = clip;
@@ -427,7 +427,7 @@ pub unsafe extern "C" fn DrawMeleeShipStrings(state: *mut MELEE_STATE, ship: u32
     BatchGraphics();
     if ship == 255 {
         ClearShipStatus(0);
-        SetContextFont((*Kernel::current()).star_con_font);
+        SetContextFont((*kernel).star_con_font);
         let mut rect = RECT {
             corner: POINT { x: 3, y: 4 },
             extent: EXTENT {

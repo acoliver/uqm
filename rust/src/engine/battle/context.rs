@@ -68,6 +68,9 @@ impl Cx<'_> {
     pub fn random(&mut self) -> u32 {
         (self.rng)()
     }
+    pub fn kernel_mut(&mut self) -> &mut super::record::Kernel {
+        self.kernel
+    }
     pub fn elements(&self) -> &ElementTable {
         &self.kernel.elements
     }

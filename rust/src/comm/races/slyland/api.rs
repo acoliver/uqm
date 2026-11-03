@@ -34,11 +34,11 @@ mod live {
             }
         }
         fn position(&self) -> (i32, i32, i32, i32) {
-            use crate::engine::WorldData;
             unsafe {
+                let world = crate::engine::WorldData::current();
                 (
-                    (*WorldData::current()).flagship.log_x,
-                    (*WorldData::current()).flagship.log_y,
+                    (*world).flagship.log_x,
+                    (*world).flagship.log_y,
                     ScreenWidth,
                     ScreenHeight,
                 )

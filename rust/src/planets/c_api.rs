@@ -179,8 +179,8 @@ pub unsafe fn load_planet_default_surface() {
 /// # Safety
 /// `CurStarDescPtr` must point at a valid star description.
 pub unsafe fn current_star_index() -> u8 {
-    use crate::engine::World as GameWorld;
-    (*(*GameWorld::current()).star_pointer(crate::planets::starmap::current_catalog())).index
+    (*(*crate::engine::World::current()).star_pointer(crate::planets::starmap::current_catalog()))
+        .index
 }
 
 /// `GROUPS_ADD_NEW` (`state.h`).
@@ -255,11 +255,11 @@ pub unsafe fn built_ship_count() -> u16 {
 /// # Safety
 /// `CurStarDescPtr` must be an entry of `star_array`.
 pub unsafe fn star_indexes_before_current() -> Vec<u8> {
-    use crate::engine::World as GameWorld;
     let first = std::ptr::addr_of!(STAR_ARRAY).read();
-    let current = (*GameWorld::current()).star_pointer(crate::planets::starmap::current_catalog());
+    let current =
+        (*crate::engine::World::current()).star_pointer(crate::planets::starmap::current_catalog());
     let before = usize::try_from(current.offset_from(first))
-        .expect("(*GameWorld::current()).star_pointer(crate::planets::starmap::current_catalog()) is an entry of star_array");
+        .expect("(*crate::engine::World::current()).star_pointer(crate::planets::starmap::current_catalog()) is an entry of star_array");
     std::slice::from_raw_parts(first, before)
         .iter()
         .map(|star| star.index)
@@ -453,9 +453,9 @@ pub unsafe fn fade_to_black_for_two_seconds() {
 /// # Safety
 /// `CurStarDescPtr` must point at a valid star description.
 pub unsafe fn current_star_point() -> (i16, i16) {
-    use crate::engine::World as GameWorld;
-    let point =
-        (*(*GameWorld::current()).star_pointer(crate::planets::starmap::current_catalog())).star_pt;
+    let point = (*(*crate::engine::World::current())
+        .star_pointer(crate::planets::starmap::current_catalog()))
+    .star_pt;
     (point.x, point.y)
 }
 
@@ -495,8 +495,7 @@ pub unsafe fn draw_hyper_coords(loc: (i16, i16)) {
 pub struct LiveGame;
 
 fn glob() -> *mut crate::engine::WorldData {
-    use crate::engine::WorldData;
-    unsafe { WorldData::current() }
+    unsafe { crate::engine::WorldData::current() }
 }
 
 impl Npcs for LiveGame {

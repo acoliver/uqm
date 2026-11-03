@@ -116,7 +116,7 @@ pub(crate) mod runtime {
     /// Buffer must hold the complete alliance name, including commander and suffix.
     #[no_mangle]
     pub unsafe extern "C" fn GetAllianceName(buffer: *mut c_char, first: u16) {
-        use crate::engine::WorldData;
+        let world = crate::engine::WorldData::current();
         let variant = get("NEW_ALLIANCE_NAME");
         let entry = SetAbsStringTableIndex(
             (COMM_DATA.conversation_phrases).cast(),
@@ -124,10 +124,7 @@ pub(crate) mod runtime {
         );
         libc::strcpy(buffer, GetStringAddress(entry));
         if variant == 3 {
-            libc::strcat(
-                buffer,
-                (&raw const (*WorldData::current()).flagship.commander_name).cast(),
-            );
+            libc::strcat(buffer, (&raw const (*world).flagship.commander_name).cast());
             libc::strcat(buffer, GetStringAddress(SetRelStringTableIndex(entry, 1)));
         }
     }
@@ -136,18 +133,19 @@ pub(crate) mod runtime {
     /// Called on the game thread with a valid Segue enum value.
     #[no_mangle]
     pub unsafe extern "C" fn setSegue(segue: i32) {
-        use crate::engine::{Kernel, WorldData};
+        let kernel = crate::engine::Kernel::current();
+        let world = crate::engine::WorldData::current();
         match segue {
             0 => set("BATTLE_SEGUE", 0),
             1 => set("BATTLE_SEGUE", 1),
             2 => {
-                (*Kernel::current()).instant_victory = 1;
+                (*kernel).instant_victory = 1;
                 set("BATTLE_SEGUE", 1);
             }
             3 => {
                 set("BATTLE_SEGUE", 0);
-                (*WorldData::current()).flagship.crew_enlisted = u16::MAX;
-                (*WorldData::current()).game.current_activity |= 0x2000;
+                (*world).flagship.crew_enlisted = u16::MAX;
+                (*world).game.current_activity |= 0x2000;
             }
             _ => unreachable!("invalid Segue"),
         }
@@ -157,16 +155,17 @@ pub(crate) mod runtime {
     /// Called on the game thread with initialized game state.
     #[no_mangle]
     pub unsafe extern "C" fn getSegue() -> i32 {
-        use crate::engine::{Kernel, WorldData};
+        let kernel = crate::engine::Kernel::current();
+        let world = crate::engine::WorldData::current();
         if get("BATTLE_SEGUE") == 0 {
-            if (*WorldData::current()).flagship.crew_enlisted == u16::MAX
-                && (*WorldData::current()).game.current_activity & 0x2000 != 0
+            if (*world).flagship.crew_enlisted == u16::MAX
+                && (*world).game.current_activity & 0x2000 != 0
             {
                 3
             } else {
                 0
             }
-        } else if (*Kernel::current()).instant_victory != 0 {
+        } else if (*kernel).instant_victory != 0 {
             2
         } else {
             1

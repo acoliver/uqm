@@ -63,9 +63,9 @@ mod live {
 
     impl StarbaseApi for LiveScript<Handler> {
         fn date(&self) -> Date {
-            use crate::engine::WorldData;
             unsafe {
-                let clock = &(*WorldData::current()).game.game_clock;
+                let world = crate::engine::WorldData::current();
+                let clock = &(*world).game.game_clock;
                 Date {
                     year: clock.year_index,
                     month: clock.month_index,
@@ -74,9 +74,9 @@ mod live {
             }
         }
         fn ship(&self) -> Ship {
-            use crate::engine::WorldData;
             unsafe {
-                let sis = &(*WorldData::current()).flagship;
+                let world = crate::engine::WorldData::current();
+                let sis = &(*world).flagship;
                 Ship {
                     drives: sis.drive_slots,
                     jets: sis.jet_slots,
@@ -93,8 +93,10 @@ mod live {
             unsafe { CalculateEscortsWorth() }
         }
         fn using_speech(&self) -> bool {
-            use crate::engine::Kernel;
-            unsafe { (*Kernel::current()).using_speech != 0 }
+            unsafe {
+                let kernel = crate::engine::Kernel::current();
+                (*kernel).using_speech != 0
+            }
         }
         fn random(&mut self) -> u32 {
             crate::math::random()
@@ -105,18 +107,22 @@ mod live {
             }
         }
         fn mineral_amount(&self, category: usize) -> u16 {
-            use crate::engine::WorldData;
-            unsafe { (*WorldData::current()).flagship.element_amounts[category] }
+            unsafe {
+                let world = crate::engine::WorldData::current();
+                (*world).flagship.element_amounts[category]
+            }
         }
         fn mineral_worth(&self, category: usize) -> u8 {
-            use crate::engine::WorldData;
-            unsafe { (*WorldData::current()).game.element_worth[category] }
+            unsafe {
+                let world = crate::engine::WorldData::current();
+                (*world).game.element_worth[category]
+            }
         }
         fn remove_minerals(&mut self, category: usize, amount: u16) {
-            use crate::engine::WorldData;
             unsafe {
-                (*WorldData::current()).flagship.element_amounts[category] -= amount;
-                (*WorldData::current()).flagship.total_element_mass -= amount;
+                let world = crate::engine::WorldData::current();
+                (*world).flagship.element_amounts[category] -= amount;
+                (*world).flagship.total_element_mass -= amount;
             }
         }
         fn draw_cargo(&mut self, old: u8, new: u8) {
@@ -153,10 +159,9 @@ mod live {
             }
         }
         fn skip_sale(&mut self) -> bool {
-            use crate::engine::WorldData;
             unsafe {
-                AnyButtonPress(1) != 0
-                    || (*WorldData::current()).game.current_activity & (1 << 14) != 0
+                let world = crate::engine::WorldData::current();
+                AnyButtonPress(1) != 0 || (*world).game.current_activity & (1 << 14) != 0
             }
         }
     }

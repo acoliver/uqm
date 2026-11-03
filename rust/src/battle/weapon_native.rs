@@ -186,7 +186,6 @@ pub(crate) mod engine {
         stamp: &mut STAMP,
         flags: u8,
     ) -> FRAME {
-        use crate::engine::Kernel;
         let mut object: INTERSECT_CONTROL = mem::zeroed();
         object.IntersectStamp = *stamp;
         let mut object_rect: RECT = mem::zeroed();
@@ -219,7 +218,7 @@ pub(crate) mod engine {
             object.IntersectStamp.origin.y = object.IntersectStamp.origin.y.wrapping_add(31);
         }
         object.IntersectStamp.origin.y = object.IntersectStamp.origin.y.wrapping_add(
-            *(&raw const (*Kernel::current()).status_offsets)
+            *(&raw const cx.kernel.status_offsets)
                 .cast::<i16>()
                 .offset(cx.element(e).player as isize),
         );
@@ -238,7 +237,7 @@ pub(crate) mod engine {
                 &mut object_rect,
             );
         } else {
-            let old = SetContext((*Kernel::current()).status_context);
+            let old = SetContext(cx.kernel.status_context);
             DrawStamp(&mut object.IntersectStamp);
             SetContext(old);
         }

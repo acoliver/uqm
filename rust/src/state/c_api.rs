@@ -94,8 +94,7 @@ pub(crate) mod planets {
     use crate::planets::starmap::star_array;
 
     pub(crate) unsafe fn location(system: *mut SOLARSYS_STATE) -> (c_int, c_int, c_int) {
-        use crate::engine::World as GameWorld;
-        let star = (*GameWorld::current())
+        let star = (*crate::engine::World::current())
             .star_pointer(crate::planets::starmap::current_catalog())
             .offset_from(star_array) as u16;
         let planet = (*(*system).pBaseDesc)

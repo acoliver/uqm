@@ -43,12 +43,13 @@ fn release_images(
 }
 
 #[cfg(not(test))]
-unsafe fn space_animations(
+fn space_animations(
+    kernel: &mut crate::engine::Kernel,
 ) -> impl Iterator<Item = (*mut [*mut frame_desc; 3], [&'static std::ffi::CStr; 3])> {
     [
-        &raw mut (*crate::engine::Kernel::current()).explosion,
-        &raw mut (*crate::engine::Kernel::current()).blast,
-        &raw mut (*crate::engine::Kernel::current()).asteroid,
+        &raw mut kernel.explosion,
+        &raw mut kernel.blast,
+        &raw mut kernel.asteroid,
     ]
     .into_iter()
     .zip(SPACE_ANIMATION_KEYS)
@@ -56,18 +57,15 @@ unsafe fn space_animations(
 
 #[cfg(not(test))]
 unsafe fn animation_role(address: usize) -> &'static str {
-    use crate::engine::Kernel;
+    let kernel = crate::engine::Kernel::current();
     for (slot, role) in [
         (
-            &raw mut (*Kernel::current()).explosion as usize,
+            &raw mut (*kernel).explosion as usize,
             "engine-global:explosion",
         ),
+        (&raw mut (*kernel).blast as usize, "engine-global:blast"),
         (
-            &raw mut (*Kernel::current()).blast as usize,
-            "engine-global:blast",
-        ),
-        (
-            &raw mut (*Kernel::current()).asteroid as usize,
+            &raw mut (*kernel).asteroid as usize,
             "engine-global:asteroid",
         ),
     ] {
@@ -143,15 +141,14 @@ pub(crate) mod live {
     /// Game thread only, after graphics and resource initialization.
     #[no_mangle]
     pub unsafe extern "C" fn InitSpace() -> u32 {
-        use crate::engine::Kernel;
-        let old = (*Kernel::current()).space_init_count;
-        (*Kernel::current()).space_init_count =
-            (*Kernel::current()).space_init_count.wrapping_add(1);
+        let kernel = crate::engine::Kernel::current();
+        let old = (*kernel).space_init_count;
+        (*kernel).space_init_count = (*kernel).space_init_count.wrapping_add(1);
         if old == 0
             && crate::game_init::macro_abi::get_current_activity() as u8
                 <= crate::ships::native::abi::IN_ENCOUNTER as u8
         {
-            let stars = &mut *ptr::addr_of_mut!((*Kernel::current()).stars_in_space);
+            let stars = &mut *ptr::addr_of_mut!((*kernel).stars_in_space);
             *stars = CaptureDrawable(LoadGraphicInstance(c"graphics.stars".as_ptr()).cast());
             if stars.is_null() {
                 return 0;
@@ -159,7 +156,7 @@ pub(crate) mod live {
             observe_views(std::slice::from_ref(stars), "engine-global:stars", |f| {
                 *f as usize
             });
-            if space_animations().any(|(frames, [big, medium, small])| {
+            if space_animations(&mut *kernel).any(|(frames, [big, medium, small])| {
                 load_animation(frames.cast(), big.as_ptr(), medium.as_ptr(), small.as_ptr()) == 0
             }) {
                 return 0;
@@ -175,17 +172,17 @@ pub(crate) mod live {
     /// Game thread only; pairs with InitSpace while graphics is live.
     #[no_mangle]
     pub unsafe extern "C" fn UninitSpace() {
-        use crate::engine::Kernel;
-        if (*Kernel::current()).space_init_count != 0 {
-            (*Kernel::current()).space_init_count -= 1;
-            if (*Kernel::current()).space_init_count == 0 {
+        let kernel = crate::engine::Kernel::current();
+        if (*kernel).space_init_count != 0 {
+            (*kernel).space_init_count -= 1;
+            if (*kernel).space_init_count == 0 {
                 crate::collections::observation::record(
                     crate::collections::observation::Event::SpaceActive(false),
                 );
-                free_image(ptr::addr_of_mut!((*Kernel::current()).blast));
-                free_image(ptr::addr_of_mut!((*Kernel::current()).explosion));
-                free_image(ptr::addr_of_mut!((*Kernel::current()).asteroid));
-                let stars = &mut *ptr::addr_of_mut!((*Kernel::current()).stars_in_space);
+                free_image(ptr::addr_of_mut!((*kernel).blast));
+                free_image(ptr::addr_of_mut!((*kernel).explosion));
+                free_image(ptr::addr_of_mut!((*kernel).asteroid));
+                let stars = &mut *ptr::addr_of_mut!((*kernel).stars_in_space);
                 DestroyDrawable(ReleaseDrawable(*stars));
                 *stars = ptr::null_mut();
                 observe_views(std::slice::from_ref(stars), "engine-global:stars", |f| {

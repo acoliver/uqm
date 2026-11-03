@@ -192,9 +192,9 @@ unsafe fn portal_open() -> bool {
 }
 #[cfg(not(test))]
 unsafe fn game_string(index: u16) -> *const c_char {
-    use crate::engine::Kernel;
+    let kernel = crate::engine::Kernel::current();
     string_table::GetStringAddress(string_table::SetAbsStringTableIndex(
-        (*Kernel::current()).game_strings.cast(),
+        (*kernel).game_strings.cast(),
         index,
     ))
 }
@@ -289,18 +289,19 @@ unsafe fn uy(y: i16) -> i16 {
 
 #[cfg(not(test))]
 unsafe fn current_location() -> POINT {
-    use crate::engine::{World as GameWorld, WorldData};
+    let world = crate::engine::WorldData::current();
     if inHQSpace() == 0 {
         point(
-            (*(*GameWorld::current()).star_pointer(crate::planets::starmap::current_catalog()))
-                .star_pt,
+            (*(*crate::engine::World::current())
+                .star_pointer(crate::planets::starmap::current_catalog()))
+            .star_pt,
         )
     } else {
         let lx = (((ScreenWidth - 64) << 5) >> 4) * 195;
         let ly = ((ScreenHeight << 5) >> 4) * 25;
         POINT {
-            x: (((*WorldData::current()).flagship.log_x * 6250 + (lx >> 1)) / lx) as i16,
-            y: (9999 - ((*WorldData::current()).flagship.log_y * 625 + (ly >> 1)) / ly) as i16,
+            x: (((*world).flagship.log_x * 6250 + (lx >> 1)) / lx) as i16,
+            y: (9999 - ((*world).flagship.log_y * 625 + (ly >> 1)) / ly) as i16,
         }
     }
 }
@@ -309,7 +310,7 @@ unsafe fn current_location() -> POINT {
 /// Game-thread only, with native map frames and graphics context live.
 #[no_mangle]
 pub unsafe extern "C" fn flashCurrentLocation(where_: *const POINT) {
-    use crate::engine::Kernel;
+    let kernel = crate::engine::Kernel::current();
     static mut COLOR: u8 = 0;
     static mut DELTA: i32 = -2;
     static mut UNIVERSE: POINT = POINT { x: 0, y: 0 };
@@ -319,7 +320,7 @@ pub unsafe extern "C" fn flashCurrentLocation(where_: *const POINT) {
     }
     if GetTimeCounter() >= NEXT_TIME {
         NEXT_TIME = GetTimeCounter().wrapping_add(ONE_SECOND / 16);
-        let old_context = SetContext((*Kernel::current()).space_context);
+        let old_context = SetContext((*kernel).space_context);
         if COLOR == 0 || COLOR == 0x1a {
             DELTA = -DELTA;
         }
@@ -444,8 +445,8 @@ fn box_union(a: RECT, b: RECT) -> RECT {
 }
 #[cfg(not(test))]
 unsafe fn fleet_queue() -> *mut QUEUE {
-    use crate::engine::WorldData;
-    ptr::addr_of_mut!((*WorldData::current()).game.avail_race_q)
+    let world = crate::engine::WorldData::current();
+    ptr::addr_of_mut!((*world).game.avail_race_q)
 }
 #[cfg(not(test))]
 unsafe fn lock_fleet(handle: *mut c_void) -> *mut FLEET_INFO {
@@ -473,8 +474,8 @@ unsafe fn unlock_fleet(handle: *mut c_void) {
 }
 #[cfg(not(test))]
 unsafe fn sphere_text(fleet: *const FLEET_INFO, r: RECT) -> TEXT {
-    use crate::engine::Kernel;
-    font_abi::SetContextFont((*Kernel::current()).tiny_font.cast());
+    let kernel = crate::engine::Kernel::current();
+    font_abi::SetContextFont((*kernel).tiny_font.cast());
     let string = string_table::SetAbsStringTableIndex((*fleet).race_strings.cast(), 1);
     TEXT {
         baseline: POINT {
@@ -548,7 +549,8 @@ fn intersects(a: RECT, b: RECT) -> bool {
 /// Game-thread only. `clip` is null, the sentinel `(RECT*)-1`, or a live RECT.
 #[no_mangle]
 pub unsafe extern "C" fn DrawStarMap(race_update: u16, clip: *mut RECT) {
-    use crate::engine::{Kernel, WorldData};
+    let kernel = crate::engine::Kernel::current();
+    let world = crate::engine::WorldData::current();
     let draw_cursor_flag = clip as isize != -1;
     let clip = if draw_cursor_flag {
         clip
@@ -557,7 +559,7 @@ pub unsafe extern "C" fn DrawStarMap(race_update: u16, clip: *mut RECT) {
     };
     let mut old_r = zero_rect();
     let mut old_origin = POINT { x: 0, y: 0 };
-    SetContext((*Kernel::current()).space_context);
+    SetContext((*kernel).space_context);
     if !clip.is_null() {
         GetContextClipRect(&mut old_r);
         (*clip).corner.x = (*clip).corner.x.wrapping_add(old_r.corner.x);
@@ -584,7 +586,7 @@ pub unsafe extern "C" fn DrawStarMap(race_update: u16, clip: *mut RECT) {
         SetContextBackGroundColor(rgb15(0, 8, 0));
     }
     ClearDrawable();
-    let mut diameter = (i64::from((*WorldData::current()).flagship.fuel_on_board) << 1)
+    let mut diameter = (i64::from((*world).flagship.fuel_on_board) << 1)
         .min(i64::from(MAX_X_UNIVERSE * 4)) as c_long;
     if race_update == 0 && space < 2 && diameter != 0 {
         let location = current_location();
@@ -730,7 +732,7 @@ pub unsafe extern "C" fn DrawStarMap(race_update: u16, clip: *mut RECT) {
         };
         frame_abi::DrawStamp(ptr::from_mut(&mut stamp).cast());
     }
-    let destination = (*WorldData::current()).game.autopilot;
+    let destination = (*world).game.autopilot;
     if race_update == 0 && destination.x != -1 && destination.y != -1 {
         draw_autopilot(destination);
     }
@@ -1126,14 +1128,14 @@ unsafe fn update_map() {
 /// Game-thread only, with game globals and native UI resources initialized.
 #[no_mangle]
 pub unsafe extern "C" fn StarMap() -> u32 {
-    use crate::engine::{Kernel, WorldData};
+    let kernel = crate::engine::Kernel::current();
+    let world = crate::engine::WorldData::current();
     let mut menu: MENU_STATE = std::mem::zeroed();
     zoomLevel = 0;
     mapOrigin = POINT { x: 4999, y: 4999 };
-    StarMapFrame =
-        pixmap_abi::SetAbsFrameIndex((*Kernel::current()).misc_data_frame.cast(), 48).cast();
+    StarMapFrame = pixmap_abi::SetAbsFrameIndex((*kernel).misc_data_frame.cast(), 48).cast();
     let universe = current_location();
-    cursorLoc = (*WorldData::current()).game.autopilot;
+    cursorLoc = (*world).game.autopilot;
     if cursorLoc.x == -1 && cursorLoc.y == -1 {
         cursorLoc = universe;
     }
@@ -1146,7 +1148,7 @@ pub unsafe extern "C" fn StarMap() -> u32 {
     DrawStarMap(0, (-1isize) as *mut RECT);
     transition_pending = false;
     BatchGraphics();
-    let old_context = SetContext((*Kernel::current()).space_context);
+    let old_context = SetContext((*kernel).space_context);
     let mut clip = zero_rect();
     GetContextClipRect(&mut clip);
     SetContext(old_context);
@@ -1161,15 +1163,10 @@ pub unsafe extern "C" fn StarMap() -> u32 {
     DrawHyperCoords(universe);
     DrawSISMessage(ptr::null());
     DrawStatusMessage(ptr::null());
-    if (*WorldData::current()).game.autopilot.x == universe.x
-        && (*WorldData::current()).game.autopilot.y == universe.y
-    {
-        (*WorldData::current()).game.autopilot = POINT { x: -1, y: -1 };
+    if (*world).game.autopilot.x == universe.x && (*world).game.autopilot.y == universe.y {
+        (*world).game.autopilot = POINT { x: -1, y: -1 };
     }
-    u32::from(
-        (*WorldData::current()).game.autopilot.x != -1
-            && (*WorldData::current()).game.autopilot.y != -1,
-    )
+    u32::from((*world).game.autopilot.x != -1 && (*world).game.autopilot.y != -1)
 }
 
 #[cfg(test)]

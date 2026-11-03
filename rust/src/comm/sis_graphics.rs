@@ -260,8 +260,8 @@ unsafe extern "C" fn do_summary_page_cb(state: *mut SummaryLoopState) -> std::ff
 
 #[cfg(not(test))]
 unsafe fn draw_summary_page_contents(pss: &mut SummaryLoopState) {
-    use crate::engine::Kernel;
-    let old_ctx = c_bridge::SetContext((*Kernel::current()).space_context);
+    let kernel = crate::engine::Kernel::current();
+    let old_ctx = c_bridge::SetContext((*kernel).space_context);
 
     let mut rect = CRect {
         corner: CPoint {
@@ -275,7 +275,7 @@ unsafe fn draw_summary_page_contents(pss: &mut SummaryLoopState) {
     c_bridge::DrawFilledRectangle(std::ptr::from_mut(&mut rect).cast());
 
     c_bridge::SetContextForeGroundColor(COMM_HISTORY_TEXT_COLOR);
-    c_bridge::SetContextFont(((*Kernel::current()).tiny_font).cast());
+    c_bridge::SetContextFont(((*kernel).tiny_font).cast());
 
     let tw = rect.width - 2 - 2;
     let mut t = CText::default();
@@ -403,9 +403,8 @@ const FEEDBACK_STRING_BASE: i32 = 0x0100;
 /// Inline GAME_STRING(i) macro: GetStringAddress(SetAbsStringTableIndex(GameStrings, i))
 #[cfg(not(test))]
 unsafe fn game_string(id: i32) -> *const std::ffi::c_char {
-    use crate::engine::Kernel;
-    let table =
-        c_bridge::SetAbsStringTableIndex(((*Kernel::current()).game_strings).cast(), id as u16);
+    let kernel = crate::engine::Kernel::current();
+    let table = c_bridge::SetAbsStringTableIndex(((*kernel).game_strings).cast(), id as u16);
     c_bridge::GetStringAddress(table)
 }
 
@@ -634,9 +633,11 @@ impl CommWindowGfx for CommWindow {
     }
 
     fn space_context(&self) -> *mut std::ffi::c_void {
-        use crate::engine::Kernel;
         // SAFETY: set once at startup, read on the game thread.
-        unsafe { ((*Kernel::current()).space_context).cast() }
+        unsafe {
+            let kernel = crate::engine::Kernel::current();
+            ((*kernel).space_context).cast()
+        }
     }
 
     fn set_context(&mut self, ctx: *mut std::ffi::c_void) -> *mut std::ffi::c_void {
@@ -711,13 +712,10 @@ impl CommWindowGfx for CommWindow {
     }
 
     fn draw_scroll_indicator(&mut self, frame_index: u16, origin_y: i16) {
-        use crate::engine::Kernel;
         // SAFETY: `ActivityFrame` is loaded before any communication starts.
         unsafe {
-            let frame = c_bridge::SetAbsFrameIndex(
-                ((*Kernel::current()).activity_frame).cast(),
-                frame_index,
-            );
+            let kernel = crate::engine::Kernel::current();
+            let frame = c_bridge::SetAbsFrameIndex(((*kernel).activity_frame).cast(), frame_index);
             if let Some(mut stamp) = scroll_indicator_stamp(frame.cast(), origin_y) {
                 c_bridge::DrawStamp(std::ptr::from_mut(&mut stamp).cast());
             }

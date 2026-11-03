@@ -343,7 +343,6 @@ pub(crate) mod engine {
     /// # Safety
     /// The game thread retains the initialized battle context and all resources used by this call.
     pub unsafe fn spawn_ship(cx: &mut Cx<'_>, ship: ShipId) -> BOOLEAN {
-        use crate::engine::WorldData;
         let Some(descriptor) = load_ship(cx.ship(ship).SpeciesID, 1) else {
             return 0;
         };
@@ -399,7 +398,7 @@ pub(crate) mod engine {
         } else {
             cx.ship_state_mut(ship).facing = normalize_facing(cx.random() as i32);
             if inHQSpace() != 0 {
-                let facing = (*WorldData::current()).game.ship_facing;
+                let facing = cx.world.data.game.ship_facing;
                 cx.ship_state_mut(ship).facing = if facing > 0 { facing - 1 } else { facing };
             }
             let frame = cx.absolute_frame(cx.ship_frame(ship, 0), cx.ship_state(ship).facing);
@@ -448,8 +447,8 @@ pub(crate) mod engine {
     /// Player queues and encounter/melee selection state must be initialized.
     #[no_mangle]
     pub unsafe extern "C" fn GetInitialStarShips() -> BOOLEAN {
-        use crate::engine::WorldData;
-        if (*WorldData::current()).game.current_activity as BYTE == SUPER_MELEE as BYTE {
+        let world = crate::engine::WorldData::current();
+        if (*world).game.current_activity as BYTE == SUPER_MELEE as BYTE {
             let mut ships = [ptr::null_mut(); NUM_PLAYERS as usize];
             if GetInitialMeleeStarShips(ships.as_mut_ptr()) == 0 {
                 return 0;

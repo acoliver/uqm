@@ -69,6 +69,7 @@ pub(super) mod c_bridge {
         CurrentInputState, PulsedInputState, CONTROLLER_INPUT_STATE as ControllerInputState,
     };
     use crate::comm::locdata::COMM_DATA;
+    #[cfg(not(test))]
     use std::ffi::c_int;
 
     pub use crate::sound::heart_ffi::fade_music as FadeMusic;
@@ -152,8 +153,8 @@ pub(super) mod c_bridge {
 
     /// Clear CHECK_LOAD bit from LastActivity (replaces c_ClearLastActivityLoadFlag)
     pub unsafe fn clear_last_activity_load_flag() {
-        use crate::engine::Kernel;
-        (*Kernel::current()).last_activity &= !0x1000;
+        let kernel = crate::engine::Kernel::current();
+        (*kernel).last_activity &= !0x1000;
         // CHECK_LOAD = 0x1000
     }
 
@@ -471,7 +472,7 @@ pub mod dinput {
 
     // DoInput callback for last replay (replaces c_DoLastReplay)
     unsafe extern "C" fn do_last_replay_cb(p_lrs: *mut LastReplayStateDInput) -> c_int {
-        use crate::engine::Kernel;
+        let kernel = crate::engine::Kernel::current();
         let lrs = unsafe { &mut *p_lrs };
 
         let activity = crate::mainloop::ffi::get_current_activity().0 as u32;
@@ -491,7 +492,7 @@ pub mod dinput {
         let left_pressed = lrs.left.pressed(KEY_MENU_LEFT);
 
         if cancel_pressed && !won_last_battle {
-            let speech = unsafe { *std::ptr::addr_of_mut!((*Kernel::current()).using_speech) };
+            let speech = unsafe { *std::ptr::addr_of_mut!((*kernel).using_speech) };
             c_bridge::FadeMusic(
                 super::communication_background_volume(
                     crate::sound::types::NORMAL_VOLUME as u8,
@@ -503,7 +504,7 @@ pub mod dinput {
             lrs.time_out = c_bridge::FadeMusic(0, (c_bridge::ONE_SECOND_TICKS * 2) as i16)
                 + (c_bridge::ONE_SECOND_TICKS as u32) / 60;
         } else if left_pressed {
-            let speech = unsafe { *std::ptr::addr_of_mut!((*Kernel::current()).using_speech) };
+            let speech = unsafe { *std::ptr::addr_of_mut!((*kernel).using_speech) };
             c_bridge::FadeMusic(
                 super::communication_background_volume(
                     crate::sound::types::NORMAL_VOLUME as u8,
@@ -1374,11 +1375,10 @@ fn clear_subtitles(state: &mut CommState) {
 }
 
 fn update_speech_graphics(state: &mut CommState) {
-    #[cfg(not(test))]
-    use crate::engine::Kernel;
     let _ = state;
     #[cfg(not(test))]
     unsafe {
+        let kernel = crate::engine::Kernel::current();
         // Ported from c_UpdateSpeechGraphics in rust_comm.c
         // Rate-limited to ONE_SECOND/32 ticks
         static mut NEXT_TIME: u32 = 0;
@@ -1388,25 +1388,24 @@ fn update_speech_graphics(state: &mut CommState) {
         }
         NEXT_TIME = now + (840 / 32); // ONE_SECOND = 840
 
-        let old_ctx = c_bridge::SetContext((*Kernel::current()).radar_context);
+        let old_ctx = c_bridge::SetContext((*kernel).radar_context);
         c_bridge::DrawOscilloscope();
-        c_bridge::SetContext((*Kernel::current()).space_context);
+        c_bridge::SetContext((*kernel).space_context);
         c_bridge::DrawSlider();
         c_bridge::SetContext(old_ctx);
     }
 }
 
 fn init_speech_graphics(state: &mut CommState) {
-    #[cfg(not(test))]
-    use crate::engine::Kernel;
     let _ = state;
     #[cfg(not(test))]
     unsafe {
+        let kernel = crate::engine::Kernel::current();
         // Ported from c_InitSpeechGraphics in rust_comm.c
         // SLIDER_Y = 107 (comm.h), SIS_SCREEN_WIDTH = SPACE_WIDTH - 14
         let slider_y: std::ffi::c_int = 107;
         let sis_w: std::ffi::c_int = 320 - 64 - 14;
-        let af = std::ptr::addr_of_mut!((*Kernel::current()).activity_frame);
+        let af = std::ptr::addr_of_mut!((*kernel).activity_frame);
         let frame5 = c_bridge::SetAbsFrameIndex(std::ptr::read((af).cast()), 5);
         let frame2 = c_bridge::SetAbsFrameIndex(std::ptr::read((af).cast()), 2);
         let frame9 = c_bridge::SetAbsFrameIndex(std::ptr::read((af).cast()), 9);
@@ -1417,8 +1416,8 @@ fn init_speech_graphics(state: &mut CommState) {
 
 #[cfg(not(test))]
 unsafe fn set_slider_image_frame(index: u16) {
-    use crate::engine::Kernel;
-    let frame = c_bridge::SetAbsFrameIndex(((*Kernel::current()).activity_frame).cast(), index);
+    let kernel = crate::engine::Kernel::current();
+    let frame = c_bridge::SetAbsFrameIndex(((*kernel).activity_frame).cast(), index);
     c_bridge::SetSliderImage(frame);
 }
 

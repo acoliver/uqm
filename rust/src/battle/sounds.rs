@@ -100,9 +100,9 @@ pub(crate) mod engine {
     /// Menu sound resources must be loaded on the game thread.
     #[no_mangle]
     pub unsafe extern "C" fn PlayMenuSound(sound: u32) {
-        use crate::engine::Kernel;
+        let kernel = crate::engine::Kernel::current();
         PlaySoundEffect(
-            SetAbsStringTableIndex((*Kernel::current()).menu_sounds, sound as u16),
+            SetAbsStringTableIndex((*kernel).menu_sounds, sound as u16),
             0,
             NotPositional(),
             ptr::null_mut(),
@@ -168,15 +168,14 @@ pub(crate) mod engine {
     /// # Safety
     /// Called on the game thread while queued elements and sounds remain live.
     pub(crate) unsafe fn flush_sounds(cx: &mut Cx<'_>) {
-        use crate::engine::Kernel;
         let mut i = 0;
-        while (*Kernel::current()).sounds.count > 0 {
-            let sound = (*Kernel::current()).sounds.sounds[i];
-            let object = (*Kernel::current()).sounds.objects[i];
+        while cx.kernel.sounds.count > 0 {
+            let sound = cx.kernel.sounds.sounds[i];
+            let object = cx.kernel.sounds.objects[i];
             let pos = position(cx, object);
             play_sound_in_context(cx, sound, pos, object, GAME_SOUND_PRIORITY as u8);
             i += 1;
-            (*Kernel::current()).sounds.count -= 1;
+            cx.kernel.sounds.count -= 1;
         }
     }
 

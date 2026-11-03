@@ -68,48 +68,28 @@ fn generated_story_keys_cover_the_existing_table_without_changing_bits() {
 fn current_star_is_a_catalog_identity_and_foreign_pointers_are_rejected() {
     use uqm_rust::engine::world::{CStarDesc, CATALOG_LEN};
     let mut game = Game::new();
-    // SAFETY: all fields are integers, and this test retains the whole catalog.
-    let mut catalog = Box::new([unsafe { std::mem::zeroed::<CStarDesc>() }; CATALOG_LEN]);
-    let base = catalog.as_mut_ptr();
-    // SAFETY: the selected entry belongs to the retained catalog.
-    unsafe {
-        game.world.select_star(
-            (base.add(CATALOG_LEN - 1)).as_ref(),
-            (base as *const [uqm_rust::engine::world::CStarDesc;
-                uqm_rust::engine::world::CATALOG_LEN])
-                .as_ref(),
-        );
-        assert_eq!(
-            game.world.star_pointer(
-                (base as *const [uqm_rust::engine::world::CStarDesc;
-                    uqm_rust::engine::world::CATALOG_LEN])
-                    .as_ref()
-            ),
-            base.add(CATALOG_LEN - 1)
-        );
-    }
+    let star = CStarDesc {
+        star_pt: uqm_rust::graphics::native_abi::POINT { x: 0, y: 0 },
+        star_type: 0,
+        index: 0,
+        prefix: 0,
+        postfix: 0,
+    };
+    let catalog = Box::new([star; CATALOG_LEN]);
+    game.world
+        .select_star(Some(&catalog[CATALOG_LEN - 1]), Some(&catalog));
+    assert_eq!(
+        game.world.star_pointer(Some(&catalog)),
+        std::ptr::from_ref(&catalog[CATALOG_LEN - 1]).cast_mut()
+    );
     let selected = game.world.current_star;
-    // SAFETY: validation checks identity before any pointer dereference.
-    let mut foreign: CStarDesc = unsafe { std::mem::zeroed() };
-    let rejected = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
-        game.world.select_star(
-            (&mut foreign).as_ref(),
-            (base as *const [uqm_rust::engine::world::CStarDesc;
-                uqm_rust::engine::world::CATALOG_LEN])
-                .as_ref(),
-        );
+    let foreign = star;
+    let rejected = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        game.world.select_star(Some(&foreign), Some(&catalog));
     }));
     assert!(rejected.is_err());
     assert_eq!(game.world.current_star, selected);
-    // SAFETY: null clears the selection without dereferencing the catalog.
-    unsafe {
-        game.world.select_star(
-            None,
-            (base as *const [uqm_rust::engine::world::CStarDesc;
-                uqm_rust::engine::world::CATALOG_LEN])
-                .as_ref(),
-        )
-    };
+    game.world.select_star(None, None);
     assert_eq!(game.world.current_star, None);
 }
 

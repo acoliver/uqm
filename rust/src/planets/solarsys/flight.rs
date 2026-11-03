@@ -56,8 +56,7 @@ unsafe fn system() -> *mut c::SOLARSYS_STATE {
 
 #[inline]
 unsafe fn glob() -> *mut crate::engine::WorldData {
-    use crate::engine::WorldData;
-    WorldData::current()
+    crate::engine::WorldData::current()
 }
 
 #[inline]
@@ -112,10 +111,10 @@ pub(super) unsafe fn get_collision_frame(
     planet: *mut c::PLANET_DESC,
     wait_planet: c::COUNT,
 ) -> c::FRAME {
-    use crate::engine::Kernel;
+    let kernel = crate::engine::Kernel::current();
     let state = system();
     if (*state).WaitIntersect != c::COUNT::MAX && (*state).WaitIntersect != wait_planet {
-        DecFrameIndex(((*Kernel::current()).stars_in_space).cast()).cast()
+        DecFrameIndex(((*kernel).stars_in_space).cast()).cast()
     } else {
         (*planet).image.frame
     }
@@ -441,8 +440,8 @@ pub(super) unsafe fn restore_system_view() {
 }
 
 pub(super) unsafe fn ip_frame() {
-    use crate::engine::Kernel;
-    SetContext((*Kernel::current()).space_context);
+    let kernel = crate::engine::Kernel::current();
+    SetContext((*kernel).space_context);
     GameClockTick();
     process_ship_controls();
 

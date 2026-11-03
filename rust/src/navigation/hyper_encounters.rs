@@ -21,20 +21,19 @@ pub(super) const XOFFS: i16 = (63 * 12 + 63 * 4) / 2;
 pub(super) const YOFFS: i16 = (50 * 12 + 50 * 4) / 2;
 
 pub(super) unsafe fn allocate(cx: &mut Cx<'_>, point: POINT) -> Option<ElementId> {
-    use crate::engine::{Kernel, WorldData};
     let element = cx.alloc_element()?;
     cx.element_mut(element).player = NEUTRAL_PLAYER_NUM as i16;
     cx.element_mut(element).flags = (CHANGING | FINITE_LIFE) as u16;
     cx.element_mut(element).life = 1;
     cx.element_mut(element).mass = 1;
-    let lx = logx(point.x) + (width() >> 1) - (*WorldData::current()).flagship.log_x;
-    let ly = logy(point.y) + (height() >> 1) - (*WorldData::current()).flagship.log_y;
+    let lx = logx(point.x) + (width() >> 1) - cx.world.data.flagship.log_x;
+    let ly = logy(point.y) + (height() >> 1) - cx.world.data.flagship.log_y;
     cx.element_mut(element).current.location = POINT {
         x: wrap(lx, width()),
         y: wrap(ly, height()),
     };
     cx.primitive_style_mut(element).kind = gfx_object_STAMP_PRIM as u8;
-    let frames = ptr::addr_of_mut!((*Kernel::current()).hyperstars)
+    let frames = ptr::addr_of_mut!(cx.kernel.hyperstars)
         .cast::<FRAME>()
         .wrapping_add(1 + (get("ARILOU_SPACE_SIDE") >> 1) as usize);
     cx.set_single_frames(
@@ -59,7 +58,6 @@ fn wrap(value: i32, limit: i32) -> i16 {
 }
 
 pub(super) unsafe fn ambient(cx: &mut Cx<'_>) {
-    use crate::engine::Kernel;
     let Some(element) = cx.alloc_element() else {
         return;
     };
@@ -74,15 +72,12 @@ pub(super) unsafe fn ambient(cx: &mut Cx<'_>) {
         x: ((width() >> 1) + (dx << 2)) as i16,
         y: ((height() >> 1) + (dy << 2)) as i16,
     };
-    let stars = (*Kernel::current()).stars_in_space;
+    let stars = cx.kernel.stars_in_space;
+    let source =
+        NonNull::new(&raw mut cx.kernel.stars_in_space).expect("retained navigation authority");
     cx.set_single_frames(
         element,
-        Frames::native_shared(
-            crate::engine::battle::views::SharedFrames::Stars,
-            NonNull::new(&raw mut (*Kernel::current()).stars_in_space)
-                .unwrap_or_else(|| panic!("retained navigation authority")),
-            1,
-        ),
+        Frames::native_shared(crate::engine::battle::views::SharedFrames::Stars, source, 1),
         Frame::retain(stars),
     );
     if (random >> 16) & 7 != 0 {
@@ -145,7 +140,6 @@ pub(crate) fn collision(
     cx.element_mut(source).velocity.zero();
 }
 unsafe fn add(cx: &mut Cx<'_>, encounter: *mut ENCOUNTER, universe: POINT) -> Option<ElementId> {
-    use crate::engine::{Kernel, WorldData};
     if get("ARILOU_SPACE_SIDE") >= 2 {
         return None;
     }
@@ -171,7 +165,7 @@ unsafe fn add(cx: &mut Cx<'_>, encounter: *mut ENCOUNTER, universe: POINT) -> Op
         (*encounter).num_ships = ships;
         for i in 0..ships as usize {
             let fleet = GetStarShipFromIndex(
-                ptr::addr_of_mut!((*WorldData::current()).game.avail_race_q),
+                ptr::addr_of_mut!(cx.world.data.game.avail_race_q),
                 race as u16,
             )
             .cast::<FLEET_INFO>();
@@ -235,7 +229,7 @@ unsafe fn add(cx: &mut Cx<'_>, encounter: *mut ENCOUNTER, universe: POINT) -> Op
         cx.setup_element(element);
         cx.set_intersect_frame(
             element,
-            Frame::retain(DecFrameIndex((*Kernel::current()).stars_in_space)),
+            Frame::retain(DecFrameIndex(cx.kernel.stars_in_space)),
         );
         cx.primitive_style_mut(element).kind = gfx_object_NUM_PRIMS as u8;
         cx.element_mut(element).flags |= (NONSOLID | IGNORE_VELOCITY) as u16;
@@ -253,7 +247,6 @@ unsafe fn process(
     oy: i16,
     stamp: *mut STAMP,
 ) -> bool {
-    use crate::engine::WorldData;
     if (*encounter).hElement.is_null() && add(cx, encounter, universe).is_none() {
         return false;
     }
@@ -350,10 +343,10 @@ unsafe fn process(
     let dy = point.y as i32 - universe.y as i32;
     if (-63..=63).contains(&dx) && (-50..=50).contains(&dy) {
         cx.element_mut(element).next.location = POINT {
-            x: (((*encounter).log_x - (*WorldData::current()).flagship.log_x) as i16 as i32
-                + (width() >> 1)) as i16,
-            y: (((*encounter).log_y - (*WorldData::current()).flagship.log_y) as i16 as i32
-                + (height() >> 1)) as i16,
+            x: (((*encounter).log_x - cx.world.data.flagship.log_x) as i16 as i32 + (width() >> 1))
+                as i16,
+            y: (((*encounter).log_y - cx.world.data.flagship.log_y) as i16 as i32 + (height() >> 1))
+                as i16,
         };
         if cx.element_mut(element).flags & NONSOLID as u16 != 0
             && (*encounter).transition_state == 0
@@ -383,12 +376,11 @@ unsafe fn process(
     true
 }
 pub(super) unsafe fn process_all(cx: &mut Cx<'_>, universe: POINT, ox: i16, oy: i16) {
-    use crate::engine::{Kernel, WorldData};
     let mut stamp = STAMP {
         origin: POINT { x: 0, y: 0 },
-        frame: SetAbsFrameIndex((*Kernel::current()).stars_in_space, 91),
+        frame: SetAbsFrameIndex(cx.kernel.stars_in_space, 91),
     };
-    let queue = ptr::addr_of_mut!((*WorldData::current()).game.encounter_q);
+    let queue = ptr::addr_of_mut!(cx.world.data.game.encounter_q);
     let mut handle = (*queue).head;
     while !handle.is_null() {
         let encounter = handle.cast::<ENCOUNTER>();

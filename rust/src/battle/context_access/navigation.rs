@@ -5,7 +5,6 @@ use crate::engine::StoryKey;
 use crate::navigation::abi::*;
 
 use crate::navigation::hyperspace::live::{logx, logy};
-use crate::planets::starmap::star_array;
 use std::ptr::{self, NonNull};
 impl Cx<'_> {
     pub(crate) fn navigation(&self) -> &crate::engine::WorldData {
@@ -79,9 +78,7 @@ pub(crate) unsafe fn interplanetary(world: &mut crate::engine::World, mut point:
             let star = FindStar(ptr::null_mut(), &mut point, 5, 5);
             world.select_star(
                 (star.cast::<crate::engine::world::CStarDesc>()).as_ref(),
-                (star_array
-                    as *const [crate::engine::world::CStarDesc; crate::engine::world::CATALOG_LEN])
-                    .as_ref(),
+                crate::planets::starmap::current_catalog(),
             );
             if (*star).star_pt.x == ARILOU_HOME_X as i16
                 && (*star).star_pt.y == ARILOU_HOME_Y as i16
@@ -105,56 +102,35 @@ pub(crate) unsafe fn interplanetary(world: &mut crate::engine::World, mut point:
                     (9735, 3153),
                     (5850, 6213),
                 ];
-                let index = world
-                    .star_pointer(
-                        (star_array
-                            as *const [crate::engine::world::CStarDesc;
-                                crate::engine::world::CATALOG_LEN])
-                            .as_ref(),
-                    )
-                    .offset_from(star_array.add(503)) as usize;
+                let index = world.current_star.expect("selected portal").0 - 503;
                 let (x, y) = PORTALS[index];
                 world.data.flagship.log_x = logx(x);
                 world.data.flagship.log_y = logy(y);
                 world.set_story_state(StoryKey::ARILOU_SPACE_SIDE, 0);
                 // The source portal is not a star at the HyperSpace destination.
                 // Keeping it makes a save name a descriptor from the wrong catalog.
-                world.select_star(
-                    None,
-                    (star_array
-                        as *const [crate::engine::world::CStarDesc;
-                            crate::engine::world::CATALOG_LEN])
-                        .as_ref(),
-                );
+                world.select_star(None, None);
             }
         }
     }
 }
 pub(crate) unsafe fn arilou(world: &mut crate::engine::World) {
-    // SAFETY: the caller holds exclusive game-thread navigation state and its loaded catalog.
-    unsafe {
-        world.data.game.ship_facing = 0;
-        world.set_story_state(StoryKey::USED_BROADCASTER, 0);
-        world.data.game.autopilot = POINT { x: -1, y: -1 };
-        if world.story_state(StoryKey::ARILOU_SPACE_SIDE) <= 1 {
-            world.data.flagship.log_x = logx(QUASI_SPACE_X as i16);
-            world.data.flagship.log_y = logy(QUASI_SPACE_Y as i16);
-            if world.story_state(StoryKey::PORTAL_COUNTER) != 0 {
-                world.set_story_state(StoryKey::PORTAL_COUNTER, 0);
-            }
-            world.set_story_state(StoryKey::ARILOU_SPACE_SIDE, 3);
-        } else {
-            world.data.flagship.log_x = logx(ARILOU_SPACE_X as i16);
-            world.data.flagship.log_y = logy(ARILOU_SPACE_Y as i16);
-            world.set_story_state(StoryKey::ARILOU_SPACE_SIDE, 0);
+    world.data.game.ship_facing = 0;
+    world.set_story_state(StoryKey::USED_BROADCASTER, 0);
+    world.data.game.autopilot = POINT { x: -1, y: -1 };
+    if world.story_state(StoryKey::ARILOU_SPACE_SIDE) <= 1 {
+        world.data.flagship.log_x = logx(QUASI_SPACE_X as i16);
+        world.data.flagship.log_y = logy(QUASI_SPACE_Y as i16);
+        if world.story_state(StoryKey::PORTAL_COUNTER) != 0 {
+            world.set_story_state(StoryKey::PORTAL_COUNTER, 0);
         }
-        world.select_star(
-            None,
-            (star_array
-                as *const [crate::engine::world::CStarDesc; crate::engine::world::CATALOG_LEN])
-                .as_ref(),
-        );
+        world.set_story_state(StoryKey::ARILOU_SPACE_SIDE, 3);
+    } else {
+        world.data.flagship.log_x = logx(ARILOU_SPACE_X as i16);
+        world.data.flagship.log_y = logy(ARILOU_SPACE_Y as i16);
+        world.set_story_state(StoryKey::ARILOU_SPACE_SIDE, 0);
     }
+    world.select_star(None, None);
 }
 
 impl Cx<'_> {

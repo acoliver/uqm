@@ -30,27 +30,31 @@ fn a_second_new_game_starts_from_zero_state() {
     let moonbase = c"MOONBASE_DESTROYED";
     let on_ship = c"MOONBASE_ON_SHIP";
 
+    let mut game = uqm_rust::engine::Game::new();
+    // SAFETY: this fixture owns the synchronous lifecycle through both initializations.
     unsafe {
-        InitGlobData();
-        rust_set_game_state(moonbase.as_ptr(), 1);
-        rust_set_game_state(on_ship.as_ptr(), 1);
-        assert_eq!(
-            rust_get_game_state(moonbase.as_ptr()),
-            1,
-            "precondition: the first game recorded the moon base as taken"
-        );
+        uqm_rust::app::bridge::with_game(&mut game, || {
+            InitGlobData();
+            rust_set_game_state(moonbase.as_ptr(), 1);
+            rust_set_game_state(on_ship.as_ptr(), 1);
+            assert_eq!(
+                rust_get_game_state(moonbase.as_ptr()),
+                1,
+                "precondition: the first game recorded the moon base as taken"
+            );
 
-        InitGlobData();
+            InitGlobData();
 
-        assert_eq!(
-            rust_get_game_state(moonbase.as_ptr()),
-            0,
-            "a new game must find Luna's moon base intact"
-        );
-        assert_eq!(
-            rust_get_game_state(on_ship.as_ptr()),
-            0,
-            "a new game must not start with the moon base already aboard"
-        );
+            assert_eq!(
+                rust_get_game_state(moonbase.as_ptr()),
+                0,
+                "a new game must find Luna's moon base intact"
+            );
+            assert_eq!(
+                rust_get_game_state(on_ship.as_ptr()),
+                0,
+                "a new game must not start with the moon base already aboard"
+            );
+        })
     }
 }

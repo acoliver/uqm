@@ -56,9 +56,9 @@ use crate::strings::string_table::SetRelStringTableIndex;
 impl DiscoveryReportPort for CffiDiscoveryReport {
     fn present(&mut self, disposition: ReportDisposition) -> Result<bool, AdapterError> {
         #[cfg(not(test))]
-        use crate::engine::Kernel;
         #[cfg(not(test))]
         unsafe {
+            let kernel = crate::engine::Kernel::current();
             let string = self.discovery_string.read();
             if string.is_null() {
                 return Ok(false);
@@ -70,7 +70,7 @@ impl DiscoveryReportPort for CffiDiscoveryReport {
             // re-acquiring one level was an assumption of the retired native
             // lander loop and leaked a level against a Rust caller.
             REPORT_ACTIVE.store(true, Ordering::Release);
-            DoDiscoveryReport((*Kernel::current()).menu_sounds.cast());
+            DoDiscoveryReport((*kernel).menu_sounds.cast());
             REPORT_ACTIVE.store(false, Ordering::Release);
 
             match disposition {

@@ -32,7 +32,6 @@ pub(crate) mod engine {
     /// # Safety
     /// The caller owns the resource system on the game thread.
     pub unsafe fn load_ship(species: u32, battle: u32) -> Option<RaceDesc> {
-        use crate::engine::World as GameWorld;
         let race = crate::ships::races::race(species)?;
         let mut owned = (race.descriptor)(&mut *GameWorld::current());
         let info = &mut *owned.info_pointer();
@@ -110,7 +109,6 @@ pub(crate) mod engine {
     /// # Safety
     /// The descriptor resources are exclusively owned by this value.
     pub unsafe fn unload_ship(mut owned: RaceDesc, icons: u32, battle: u32) {
-        use crate::engine::World as GameWorld;
         let release_animation_set = |array: &crate::engine::battle::frames::FrameArray| {
             let mut raw = array.views().map(|frame| frame.raw());
             free_image(&raw mut raw);
@@ -118,7 +116,7 @@ pub(crate) mod engine {
         };
 
         let descriptor = &mut owned;
-        descriptor.cleanup(&mut *GameWorld::current());
+        descriptor.cleanup(&mut *crate::engine::World::current());
         crate::collections::observation::record(
             crate::collections::observation::Event::ResourcesFree {
                 descriptor: descriptor.address(),

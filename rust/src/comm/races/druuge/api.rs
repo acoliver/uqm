@@ -13,25 +13,29 @@ pub(super) trait DruugeApi: EncounterApi<Handler> {
 #[cfg(not(test))]
 impl DruugeApi for crate::comm::races::script::live::LiveScript<Handler> {
     fn ship(&self) -> CSisState {
-        use crate::engine::WorldData;
         unsafe {
-            std::ptr::addr_of!((*WorldData::current()).flagship)
+            let world = crate::engine::WorldData::current();
+            std::ptr::addr_of!((*world).flagship)
                 .cast::<CSisState>()
                 .read()
         }
     }
     fn has_escorts(&self) -> bool {
-        use crate::engine::WorldData;
-        unsafe { !(*WorldData::current()).game.built_ship_q.head.is_null() }
+        unsafe {
+            let world = crate::engine::WorldData::current();
+            !(*world).game.built_ship_q.head.is_null()
+        }
     }
     fn crew_cost(&self) -> u8 {
-        use crate::engine::WorldData;
-        unsafe { (*WorldData::current()).game.crew_cost }
+        unsafe {
+            let world = crate::engine::WorldData::current();
+            (*world).game.crew_cost
+        }
     }
     fn set_crew_cost(&mut self, value: u8) {
-        use crate::engine::WorldData;
         unsafe {
-            (*WorldData::current()).game.crew_cost = value;
+            let world = crate::engine::WorldData::current();
+            (*world).game.crew_cost = value;
         }
     }
     fn number(&mut self, value: i32) {

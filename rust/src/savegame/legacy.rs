@@ -227,7 +227,7 @@ mod live {
     /// Game thread; summary is null for loading or a writable SUMMARY_DESC.
     #[no_mangle]
     pub unsafe extern "C" fn LoadLegacyGame(slot: u16, summary: *mut SummaryDesc) -> u32 {
-        use crate::engine::WorldData;
+        let world = crate::engine::WorldData::current();
         let result = (|| -> anyhow::Result<()> {
             let slots = SaveSlots::new(saveDir.cast())?;
             let mut stream = slots
@@ -254,7 +254,7 @@ mod live {
             cfilelength(decoder.0, &mut len);
             let legacy = decode_legacy_payload(&saved_summary, decoder, len)?;
             // SAFETY: CGameState's size, alignment and every field offset are asserted against GAME_STATE.
-            let game = &mut *std::ptr::addr_of_mut!((*WorldData::current()).game)
+            let game = &mut *std::ptr::addr_of_mut!((*world).game)
                 .cast::<crate::comm::locdata::CGameState>();
             let save = legacy.save;
             super::super::runtime::restore_runtime(
@@ -287,7 +287,7 @@ mod live {
                 }
             })?;
             game.battle_group_ref = legacy.battle_group_ref;
-            std::ptr::addr_of_mut!((*WorldData::current()).flagship)
+            std::ptr::addr_of_mut!((*world).flagship)
                 .cast::<crate::comm::locdata::CSisState>()
                 .write((&save.summary.sis).into());
             super::super::live::finish_load(&save.star, save.global.current_activity);

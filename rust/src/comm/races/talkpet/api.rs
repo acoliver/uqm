@@ -10,12 +10,16 @@ pub(super) trait TalkpetApi: AllianceApi<Handler> {
 #[cfg(not(test))]
 impl TalkpetApi for super::super::script::live::LiveScript<Handler> {
     fn flags(&self) -> u8 {
-        use crate::engine::WorldData;
-        unsafe { (*WorldData::current()).game.glob_flags }
+        unsafe {
+            let world = crate::engine::WorldData::current();
+            (*world).game.glob_flags
+        }
     }
     fn npc_ships(&self) -> bool {
-        use crate::engine::WorldData;
-        unsafe { !(*WorldData::current()).game.npc_built_ship_q.head.is_null() }
+        unsafe {
+            let world = crate::engine::WorldData::current();
+            !(*world).game.npc_built_ship_q.head.is_null()
+        }
     }
     fn umgah_alive(&mut self) -> bool {
         use crate::battle::build_native::engine::StartSphereTracking;

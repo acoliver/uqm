@@ -823,15 +823,14 @@ pub(crate) mod engine {
     /// # Safety
     /// Engine contexts, element/display pools and sound system are initialized on the game thread.
     unsafe fn redraw_queue(cx: &mut Cx<'_>, clear: BOOLEAN) {
-        use crate::engine::Kernel;
-        SetContext((*Kernel::current()).status_context);
+        SetContext(cx.kernel.status_context);
         let (mut sx, mut sy) = (0, 0);
         let state = preprocess_queue(cx, &mut sx, &mut sy);
         postprocess_queue(cx, state, sx, sy);
         if optStereoSFX != 0 {
             crate::battle::sounds::engine::update_positions(cx);
         }
-        SetContext((*Kernel::current()).space_context);
+        SetContext(cx.kernel.space_context);
         let activity = cx.world.activity();
         if activity as u8 == SUPER_MELEE as u8
             || activity & (CHECK_ABORT | CHECK_LOAD) as UWORD == 0

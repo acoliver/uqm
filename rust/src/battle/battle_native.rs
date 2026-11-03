@@ -130,14 +130,14 @@ pub(crate) mod engine {
     /// # Safety
     /// Game state must be initialized and accessed only on the game thread.
     pub unsafe fn activity() -> u16 {
-        use crate::engine::WorldData;
-        (*WorldData::current()).game.current_activity
+        let world = crate::engine::WorldData::current();
+        (*world).game.current_activity
     }
     /// # Safety
     /// The caller must exclusively own game-thread activity state.
     pub unsafe fn set_activity(value: u16) {
-        use crate::engine::WorldData;
-        (*WorldData::current()).game.current_activity = value;
+        let world = crate::engine::WorldData::current();
+        (*world).game.current_activity = value;
     }
     /// # Safety
     /// `start..=end` must name a valid game-state bit field on the game thread.
@@ -152,30 +152,28 @@ pub(crate) mod engine {
     /// # Safety
     /// `side` must be a valid player index with initialized input state.
     pub unsafe fn player_input(side: usize) -> *mut InputContext {
-        use crate::engine::Kernel;
-        (*Kernel::current()).player_input[side].cast()
+        let kernel = crate::engine::Kernel::current();
+        (*kernel).player_input[side].cast()
     }
     /// # Safety
     /// `side` must be valid and `input` must remain live while installed, or be null during input replacement.
     pub unsafe fn set_player_input(side: usize, input: *mut InputContext) {
-        use crate::engine::Kernel;
-        (*Kernel::current()).player_input[side] = input.cast();
+        let kernel = crate::engine::Kernel::current();
+        (*kernel).player_input[side] = input.cast();
     }
     /// # Safety
     /// `side` must be a valid player index on the game thread.
     pub unsafe fn player_control(side: usize) -> u8 {
-        use crate::engine::Kernel;
-        *(&raw const (*Kernel::current()).player_control)
+        let kernel = crate::engine::Kernel::current();
+        *(&raw const (*kernel).player_control)
             .cast::<BYTE>()
             .add(side)
     }
     /// # Safety
     /// `side` must be a valid player index owned by the game thread.
     pub unsafe fn set_player_control(side: usize, value: u8) {
-        use crate::engine::Kernel;
-        *(&raw mut (*Kernel::current()).player_control)
-            .cast::<BYTE>()
-            .add(side) = value;
+        let kernel = crate::engine::Kernel::current();
+        *(&raw mut (*kernel).player_control).cast::<BYTE>().add(side) = value;
     }
 
     pub const fn rgb15(r: u8, g: u8, b: u8) -> Color {
@@ -276,8 +274,8 @@ pub(crate) mod engine {
     /// The game thread must own initialized audio, activity, and resource state.
     #[no_mangle]
     pub unsafe extern "C" fn BattleSong(play: BOOLEAN) {
-        use crate::engine::Kernel;
-        if (*Kernel::current()).battle_music.is_null() {
+        let kernel = crate::engine::Kernel::current();
+        if (*kernel).battle_music.is_null() {
             let resource = if inHyperSpace() != 0 {
                 HYPERSPACE_MUSIC.as_ptr()
             } else if inQuasiSpace() != 0 {
@@ -285,11 +283,11 @@ pub(crate) mod engine {
             } else {
                 BATTLE_MUSIC.as_ptr()
             };
-            (*Kernel::current()).battle_music =
+            (*kernel).battle_music =
                 crate::sound::resource_types::LoadMusicInstance(resource.cast()).cast();
         }
         if play != 0 {
-            PlayMusic((*Kernel::current()).battle_music, 1, 1);
+            PlayMusic((*kernel).battle_music, 1, 1);
         }
     }
 
@@ -297,9 +295,9 @@ pub(crate) mod engine {
     /// The game thread must own the battle music handle and initialized audio state.
     #[no_mangle]
     pub unsafe extern "C" fn FreeBattleSong() {
-        use crate::engine::Kernel;
-        DestroyMusic((*Kernel::current()).battle_music);
-        (*Kernel::current()).battle_music = ptr::null_mut();
+        let kernel = crate::engine::Kernel::current();
+        DestroyMusic((*kernel).battle_music);
+        (*kernel).battle_music = ptr::null_mut();
     }
 
     unsafe extern "C" fn DoBattle(bs: *mut battlestate_struct) -> BOOLEAN {
@@ -411,7 +409,7 @@ pub(crate) mod engine {
     /// The game thread must own initialized battle, input, audio, and display state; any callback must remain valid for the battle.
     #[no_mangle]
     pub unsafe extern "C" fn Battle(callback: BattleFrameCallback) -> BOOLEAN {
-        use crate::engine::Kernel;
+        let kernel = crate::engine::Kernel::current();
         let (battle, net, had_net) = battle_network();
         if activity() as u8 != SUPER_MELEE as u8 {
             crate::math::seed_random(rust_automation_seed_value(
@@ -426,10 +424,10 @@ pub(crate) mod engine {
         }
         BattleSong(0);
         let mut count = InitShips();
-        if (*Kernel::current()).instant_victory != 0 {
+        if (*kernel).instant_victory != 0 {
             count = 0;
             (*battle).counters = [1, 0];
-            (*Kernel::current()).instant_victory = 0;
+            (*kernel).instant_victory = 0;
         }
         if count != 0 {
             let mut bs: battlestate_struct = mem::zeroed();

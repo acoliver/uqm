@@ -105,8 +105,6 @@ impl SpeechGraphics {
     /// passed since the last update. `now_ms` is the current timestamp in
     /// milliseconds (caller provides to avoid platform dependencies here).
     pub fn update(&mut self, osc: &Oscilloscope, now_ms: u64) {
-        #[cfg(not(test))]
-        use crate::engine::Kernel;
         if !self.initialized {
             return;
         }
@@ -122,9 +120,10 @@ impl SpeechGraphics {
 
         #[cfg(not(test))]
         unsafe {
-            let old_context = c_bridge::SetContext((*Kernel::current()).radar_context);
+            let kernel = crate::engine::Kernel::current();
+            let old_context = c_bridge::SetContext((*kernel).radar_context);
             c_bridge::DrawOscilloscope();
-            c_bridge::SetContext((*Kernel::current()).space_context);
+            c_bridge::SetContext((*kernel).space_context);
             c_bridge::DrawSlider();
             c_bridge::SetContext(old_context);
         }
@@ -153,8 +152,8 @@ impl SpeechGraphics {
 // ============================================================================
 #[cfg(not(test))]
 unsafe fn activity_frame(index: u16) -> *mut std::ffi::c_void {
-    use crate::engine::Kernel;
-    (c_bridge::SetAbsFrameIndex(((*Kernel::current()).activity_frame).cast(), index)).cast()
+    let kernel = crate::engine::Kernel::current();
+    (c_bridge::SetAbsFrameIndex(((*kernel).activity_frame).cast(), index)).cast()
 }
 
 #[cfg(not(test))]

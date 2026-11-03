@@ -19,8 +19,8 @@ const OPT_PC: i32 = 2;
 /// # Safety
 /// Menu state and game settings must be valid on the game thread.
 pub unsafe extern "C" fn PreviousMenuState(base: BYTE, current: BYTE) -> BYTE {
-    use crate::engine::WorldData;
-    super::menu_state::previous_state(base, current, (*WorldData::current()).game.glob_flags)
+    let world = crate::engine::WorldData::current();
+    super::menu_state::previous_state(base, current, (*world).game.glob_flags)
 }
 
 unsafe fn draw_pc_frame(rect: &mut RECT) {
@@ -39,7 +39,8 @@ unsafe fn draw_pc_frame(rect: &mut RECT) {
 }
 
 unsafe fn draw_pc_menu(begin: u8, end: u8, selected: u8, highlight: u8, rect: &mut RECT) {
-    use crate::engine::{Kernel, WorldData};
+    let kernel = crate::engine::Kernel::current();
+    let world = crate::engine::WorldData::current();
     const ITEM_HEIGHT: i16 = 8;
     let selected_item = begin.wrapping_add(selected);
     let count = 1 + end - begin;
@@ -56,7 +57,7 @@ unsafe fn draw_pc_menu(begin: u8, end: u8, selected: u8, highlight: u8, rect: &m
     }
     rect.extent.height = i16::from(count) * ITEM_HEIGHT + 4;
     draw_pc_frame(rect);
-    let old_font = SetContextFont((*Kernel::current()).star_con_font);
+    let old_font = SetContextFont((*kernel).star_con_font);
     let mut text: TEXT = mem::zeroed();
     let mut buffer = [0 as UNICODE; 256];
     text.align = TEXT_ALIGN_ALIGN_LEFT;
@@ -70,9 +71,9 @@ unsafe fn draw_pc_menu(begin: u8, end: u8, selected: u8, highlight: u8, rect: &m
         let label = game_string(MAINMENU_STRING_BASE + item as u32);
         if item == PM_FUEL || item == PM_CREW {
             let cost = if item == PM_FUEL {
-                (*WorldData::current()).game.fuel_cost
+                (*world).game.fuel_cost
             } else {
-                (*WorldData::current()).game.crew_cost
+                (*world).game.crew_cost
             };
             let mut rendered = [0 as UNICODE; 128];
             libc::snprintf(
@@ -187,7 +188,7 @@ fn convert_alternate(base: u8, state: u8) -> u8 {
 /// Menu state and input globals must be initialized on the game thread.
 #[no_mangle]
 pub unsafe extern "C" fn DoMenuChooser(menu: *mut MENU_STATE, base_state: BYTE) -> BOOLEAN {
-    use crate::engine::WorldData;
+    let world = crate::engine::WorldData::current();
     let mut new_state = (*menu).CurState;
     let original_base = base_state;
     let mut base = base_state;
@@ -203,7 +204,7 @@ pub unsafe extern "C" fn DoMenuChooser(menu: *mut MENU_STATE, base_state: BYTE) 
     } else if PulsedInputState.menu[KEY_MENU_RIGHT as usize] != 0
         || PulsedInputState.menu[KEY_MENU_DOWN as usize] != 0
     {
-        new_state = next_state(base, new_state, (*WorldData::current()).game.glob_flags);
+        new_state = next_state(base, new_state, (*world).game.glob_flags);
     } else if use_alt && PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0 {
         new_state = convert_alternate(base, new_state);
         if new_state == ALT_MANIFEST {
@@ -248,7 +249,8 @@ pub unsafe extern "C" fn DoMenuChooser(menu: *mut MENU_STATE, base_state: BYTE) 
 /// The status context, graphics resources, and menu string tables must be initialized.
 #[no_mangle]
 pub unsafe extern "C" fn DrawMenuStateStrings(begin: BYTE, state: SWORD) {
-    use crate::engine::{Kernel, WorldData};
+    let kernel = crate::engine::Kernel::current();
+    let world = crate::engine::WorldData::current();
     let mut begin = begin;
     let mut state = state;
     let mut highlight = 1;
@@ -266,13 +268,10 @@ pub unsafe extern "C" fn DrawMenuStateStrings(begin: BYTE, state: SWORD) {
     }
     let mut frame: FRAME = ptr::null_mut();
     if state <= i16::from(end_state(begin)) - i16::from(begin) {
-        frame = SetAbsFrameIndex(
-            (*Kernel::current()).play_frame,
-            (i16::from(begin) + state) as u16,
-        );
+        frame = SetAbsFrameIndex((*kernel).play_frame, (i16::from(begin) + state) as u16);
     }
     PreUpdateFlashRect();
-    let old_context = SetContext((*Kernel::current()).status_context);
+    let old_context = SetContext((*kernel).status_context);
     let mut rect: RECT = mem::zeroed();
     GetContextClipRect(&mut rect);
     let mut stamp = STAMP {
@@ -324,9 +323,9 @@ pub unsafe extern "C" fn DrawMenuStateStrings(begin: BYTE, state: SWORD) {
         DrawStamp(&mut stamp);
         if begin == PM_CREW || begin == PM_FUEL {
             let value = if begin == PM_CREW {
-                (*WorldData::current()).game.crew_cost
+                (*world).game.crew_cost
             } else {
-                (*WorldData::current()).game.fuel_cost
+                (*world).game.fuel_cost
             };
             let mut cost = [0 as UNICODE; 20];
             let rendered = format!("{value}");
@@ -339,7 +338,7 @@ pub unsafe extern "C" fn DrawMenuStateStrings(begin: BYTE, state: SWORD) {
             text.align = TEXT_ALIGN_ALIGN_RIGHT;
             text.CharCount = COUNT::MAX;
             text.pStr = cost.as_mut_ptr();
-            SetContextFont((*Kernel::current()).tiny_font);
+            SetContextFont((*kernel).tiny_font);
             SetContextForeGroundColor(THREEDOMENU_TEXT_COLOR);
             font_DrawText(&mut text);
         }
@@ -352,10 +351,6 @@ pub unsafe extern "C" fn DrawMenuStateStrings(begin: BYTE, state: SWORD) {
 use std::{mem, ptr};
 
 unsafe fn game_string(index: u32) -> *mut UNICODE {
-    use crate::engine::Kernel;
-    GetStringAddress(SetAbsStringTableIndex(
-        (*Kernel::current()).game_strings,
-        index as u16,
-    ))
-    .cast()
+    let kernel = crate::engine::Kernel::current();
+    GetStringAddress(SetAbsStringTableIndex((*kernel).game_strings, index as u16)).cast()
 }

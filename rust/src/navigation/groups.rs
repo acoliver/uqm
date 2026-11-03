@@ -159,16 +159,16 @@ pub(crate) mod live {
         0x11, 0x51, 0x51, 0x51, 0, 0x51, 0x51,
     ];
     unsafe fn ip_queue() -> *mut QUEUE {
-        use crate::engine::WorldData;
-        ptr::addr_of_mut!((*WorldData::current()).game.ip_group_q)
+        let world = crate::engine::WorldData::current();
+        ptr::addr_of_mut!((*world).game.ip_group_q)
     }
     unsafe fn npc_queue() -> *mut QUEUE {
-        use crate::engine::WorldData;
-        ptr::addr_of_mut!((*WorldData::current()).game.npc_built_ship_q)
+        let world = crate::engine::WorldData::current();
+        ptr::addr_of_mut!((*world).game.npc_built_ship_q)
     }
     unsafe fn fleet_queue() -> *mut QUEUE {
-        use crate::engine::WorldData;
-        ptr::addr_of_mut!((*WorldData::current()).game.avail_race_q)
+        let world = crate::engine::WorldData::current();
+        ptr::addr_of_mut!((*world).game.avail_race_q)
     }
     unsafe fn count(queue: *const QUEUE) -> u8 {
         let mut handle = (*queue).head;
@@ -244,7 +244,6 @@ pub(crate) mod live {
     /// A current star, solar system, and initialized world queues are required.
     #[no_mangle]
     pub unsafe extern "C" fn BuildGroups() {
-        use crate::engine::World as GameWorld;
         let mut home = [
             0,
             0,
@@ -278,7 +277,7 @@ pub(crate) mod live {
             home[UTWIG_SHIP as usize] = 0;
             home[SUPOX_SHIP as usize] = 0;
         }
-        let universe = (*(*GameWorld::current())
+        let universe = (*(*crate::engine::World::current())
             .star_pointer(crate::planets::starmap::current_catalog()))
         .star_pt;
         let mut best_index = 0usize;
@@ -292,7 +291,7 @@ pub(crate) mod live {
             let mut chance = percent[index] as u16;
             if radius != 0 && chance != 0 {
                 if home[index] != 0
-                    && (*(*GameWorld::current())
+                    && (*(*crate::engine::World::current())
                         .star_pointer(crate::planets::starmap::current_catalog()))
                     .index as u32
                         == home[index]
@@ -340,7 +339,7 @@ pub(crate) mod live {
                 number = MAX_BATTLE_GROUPS as u8;
             } else if number < 5
                 && home[best_index] != 0
-                && (*(*GameWorld::current())
+                && (*(*crate::engine::World::current())
                     .star_pointer(crate::planets::starmap::current_catalog()))
                 .index as u32
                     == home[best_index]
@@ -365,7 +364,8 @@ pub(crate) mod live {
     }
 
     unsafe fn flush(header: *mut GROUP_HEADER, offset: u32, which: u8, file: *mut GameStateFile) {
-        use crate::engine::{Kernel, WorldData};
+        let kernel = crate::engine::Kernel::current();
+        let world = crate::engine::WorldData::current();
         if which == 0 {
             if (*header).GroupOffset[0] == 0 {
                 (*header).GroupOffset[0] = LengthStateFile(file);
@@ -377,8 +377,8 @@ pub(crate) mod live {
                 let next = group.succ;
                 let id = group.group_id;
                 if group.in_system == 0 {
-                    if (*WorldData::current()).game.battle_group_ref != 0 {
-                        PutGroupInfo((*WorldData::current()).game.battle_group_ref, id);
+                    if (*world).game.battle_group_ref != 0 {
+                        PutGroupInfo((*world).game.battle_group_ref, id);
                     } else {
                         flush(header, 0, id, file);
                     }
@@ -397,7 +397,7 @@ pub(crate) mod live {
         if which == 0 {
             let mut number = count(ip_queue());
             seek(file, (*header).GroupOffset[0]);
-            write(file, &[(*Kernel::current()).last_encounter_group, number]);
+            write(file, &[(*kernel).last_encounter_group, number]);
             let mut handle = (*ip_queue()).head;
             while number != 0 {
                 let group = handle.cast::<IP_GROUP>();
@@ -430,7 +430,8 @@ pub(crate) mod live {
     /// Current world and solar-system queues must be initialized and exclusively accessible.
     #[no_mangle]
     pub unsafe extern "C" fn GetGroupInfo(offset: u32, which: u8) -> BOOLEAN {
-        use crate::engine::{Kernel, World as GameWorld, WorldData};
+        let kernel = crate::engine::Kernel::current();
+        let world = crate::engine::WorldData::current();
         let file = open(offset, which);
         if file.is_null() {
             return 0;
@@ -445,7 +446,7 @@ pub(crate) mod live {
             let mut year = header.year_index;
             if offset == 0
                 && (header.star_index
-                    != (*GameWorld::current())
+                    != (*crate::engine::World::current())
                         .star_pointer(crate::planets::starmap::current_catalog())
                         .offset_from(star_array) as u16
                     || ValidateEvent(EVENT_TYPE_ABSOLUTE_EVENT, &mut month, &mut day, &mut year)
@@ -519,20 +520,15 @@ pub(crate) mod live {
         if which == 0 {
             let left = count(npc_queue());
             seek(file, header.GroupOffset[0]);
-            (*Kernel::current()).last_encounter_group = read::<1>(file)[0];
-            if (*Kernel::current()).last_encounter_group != 0 {
-                if (*WorldData::current()).game.battle_group_ref != 0 {
+            (*kernel).last_encounter_group = read::<1>(file)[0];
+            if (*kernel).last_encounter_group != 0 {
+                if (*world).game.battle_group_ref != 0 {
                     PutGroupInfo(
-                        (*WorldData::current()).game.battle_group_ref,
-                        (*Kernel::current()).last_encounter_group,
+                        (*world).game.battle_group_ref,
+                        (*kernel).last_encounter_group,
                     );
                 } else {
-                    flush(
-                        &mut header,
-                        offset,
-                        (*Kernel::current()).last_encounter_group,
-                        file,
-                    );
+                    flush(&mut header, offset, (*kernel).last_encounter_group, file);
                 }
             }
             ReinitQueue(npc_queue());
@@ -544,7 +540,7 @@ pub(crate) mod live {
                 let handle = BuildGroup(ip_queue(), race);
                 let group = handle.cast::<IP_GROUP>();
                 super::ReadIpGroup(file, group);
-                if (*group).group_id == (*Kernel::current()).last_encounter_group && left == 0 {
+                if (*group).group_id == (*kernel).last_encounter_group && left == 0 {
                     RemoveQueue(ip_queue(), handle);
                     FreeLink(ip_queue(), handle);
                 }
@@ -553,7 +549,7 @@ pub(crate) mod live {
             CloseStateFile(file);
             u32::from(!(*ip_queue()).head.is_null())
         } else {
-            (*Kernel::current()).last_encounter_group = which;
+            (*kernel).last_encounter_group = which;
             if offset != 0 {
                 PutGroupInfo(0, 0);
             } else {
@@ -578,7 +574,7 @@ pub(crate) mod live {
     /// Current world queues and current star descriptor must be initialized.
     #[no_mangle]
     pub unsafe extern "C" fn PutGroupInfo(mut offset: u32, mut which: u8) -> u32 {
-        use crate::engine::{Kernel, World as GameWorld};
+        let kernel = crate::engine::Kernel::current();
         let file = open(offset, which);
         if file.is_null() {
             return offset;
@@ -593,7 +589,7 @@ pub(crate) mod live {
         if which != 0 {
             seek(file, offset);
             if which == u8::MAX {
-                (*Kernel::current()).last_encounter_group = 0;
+                (*kernel).last_encounter_group = 0;
                 which = 0;
             }
         }
@@ -605,7 +601,7 @@ pub(crate) mod live {
         header.day_index = day as u8;
         header.month_index = month as u8;
         header.year_index = year;
-        header.star_index = (*GameWorld::current())
+        header.star_index = (*crate::engine::World::current())
             .star_pointer(crate::planets::starmap::current_catalog())
             .offset_from(star_array) as u16;
         flush(&mut header, offset, which, file);

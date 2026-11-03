@@ -42,37 +42,42 @@ fn coordinator_started() -> bool {
 
 #[test]
 fn conversation_decisions_follow_the_script_step_in_hand() {
-    assert!(
-        coordinator_started(),
-        "a validated script must activate the coordinator"
-    );
+    battle_context::run(|| {
+        assert!(
+            coordinator_started(),
+            "a validated script must activate the coordinator"
+        );
 
-    // The first step selects a response. Nothing has been observed yet, so
-    // there is no pending list to skip speech for.
-    assert!(
-        !Coordinator::should_skip_pending_communication_speech(),
-        "with no observed responses there is nothing to skip toward"
-    );
+        // The first step selects a response. Nothing has been observed yet, so
+        // there is no pending list to skip speech for.
+        assert!(
+            !Coordinator::should_skip_pending_communication_speech(),
+            "with no observed responses there is nothing to skip toward"
+        );
 
-    // A response action exists in the chain, but only for a list that actually
-    // offers the index the script asks for.
-    assert!(
-        Coordinator::pending_communication_response_action(2),
-        "a two-response list satisfies the scripted index 1"
-    );
-    assert!(
-        !Coordinator::pending_communication_response_action(1),
-        "a one-response list does not offer index 1"
-    );
-    assert!(
-        !Coordinator::pending_communication_response_action(0),
-        "an empty list offers nothing"
-    );
+        // A response action exists in the chain, but only for a list that actually
+        // offers the index the script asks for.
+        assert!(
+            Coordinator::pending_communication_response_action(2),
+            "a two-response list satisfies the scripted index 1"
+        );
+        assert!(
+            !Coordinator::pending_communication_response_action(1),
+            "a one-response list does not offer index 1"
+        );
+        assert!(
+            !Coordinator::pending_communication_response_action(0),
+            "an empty list offers nothing"
+        );
 
-    // The closing-speech decision belongs to the step in hand. The current step
-    // selects a response, so the conversation is not being wound up yet.
-    assert!(
-        !Coordinator::should_skip_communication_closing_speech(),
-        "a response step is not a wait-for-end step"
-    );
+        // The closing-speech decision belongs to the step in hand. The current step
+        // selects a response, so the conversation is not being wound up yet.
+        assert!(
+            !Coordinator::should_skip_communication_closing_speech(),
+            "a response step is not a wait-for-end step"
+        );
+    });
 }
+
+#[path = "support/battle_context.rs"]
+mod battle_context;

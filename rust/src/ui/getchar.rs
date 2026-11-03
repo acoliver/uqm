@@ -48,8 +48,8 @@ unsafe fn switch_case(ch: &mut JoyChar, from: *const JoyChar, to: *const JoyChar
 /// pTES and its strings, callbacks, and input subsystem must remain valid for the duration of the call.
 #[no_mangle]
 pub unsafe extern "C" fn DoTextEntry(pTES: *mut TEXTENTRY_STATE) -> BOOLEAN {
-    use crate::engine::WorldData;
-    if (*WorldData::current()).game.current_activity & CHECK_ABORT as u16 != 0 {
+    let world = crate::engine::WorldData::current();
+    if (*world).game.current_activity & CHECK_ABORT as u16 != 0 {
         return 0;
     }
     if (*pTES).Initialized == 0 {

@@ -10,10 +10,10 @@ static mut LAST_PRIORITY: BYTE = 0;
 /// # Safety
 /// The game settings and music player must be initialized on the game thread.
 pub unsafe fn ToggleMusic() {
-    use crate::engine::WorldData;
-    (*WorldData::current()).game.glob_flags ^= MUSIC_DISABLED as u8;
+    let world = crate::engine::WorldData::current();
+    (*world).game.glob_flags ^= MUSIC_DISABLED as u8;
     if LAST_PRIORITY <= 1 {
-        if (*WorldData::current()).game.glob_flags & (MUSIC_DISABLED as u8) != 0 {
+        if (*world).game.glob_flags & (MUSIC_DISABLED as u8) != 0 {
             PLRStop((LAST_MUSIC_REF).cast());
         } else if !LAST_MUSIC_REF.is_null() {
             PLRPlaySong(
@@ -29,11 +29,11 @@ pub unsafe fn ToggleMusic() {
 /// The music reference and player must be valid on the game thread.
 #[no_mangle]
 pub unsafe extern "C" fn PlayMusic(music_ref: MUSIC_REF, continuous: BOOLEAN, priority: BYTE) {
-    use crate::engine::WorldData;
+    let world = crate::engine::WorldData::current();
     LAST_MUSIC_REF = music_ref;
     LAST_CONTINUOUS = continuous;
     LAST_PRIORITY = priority;
-    if (*WorldData::current()).game.glob_flags & (MUSIC_DISABLED as u8) == 0 {
+    if (*world).game.glob_flags & (MUSIC_DISABLED as u8) == 0 {
         PLRPlaySong(music_ref.cast(), continuous as i32, priority.into());
     }
 }
@@ -60,8 +60,8 @@ pub unsafe fn PauseMusic() {
 /// # Safety
 /// Game settings must be accessed on the game thread.
 pub unsafe fn ToggleSoundEffect() {
-    use crate::engine::WorldData;
-    (*WorldData::current()).game.glob_flags ^= SOUND_DISABLED as u8;
+    let world = crate::engine::WorldData::current();
+    (*world).game.glob_flags ^= SOUND_DISABLED as u8;
 }
 
 /// # Safety
@@ -74,14 +74,14 @@ pub unsafe extern "C" fn PlaySoundEffect(
     positional_object: *mut ::std::ffi::c_void,
     priority: BYTE,
 ) {
-    use crate::engine::WorldData;
+    let world = crate::engine::WorldData::current();
     eprintln!(
         "[PlaySoundEffect] S={sound:p} ch={} pri={} sound_disabled={}",
         channel,
         priority,
-        u8::from((*WorldData::current()).game.glob_flags & (SOUND_DISABLED as u8) != 0)
+        u8::from((*world).game.glob_flags & (SOUND_DISABLED as u8) != 0)
     );
-    if (*WorldData::current()).game.glob_flags & (SOUND_DISABLED as u8) == 0 {
+    if (*world).game.glob_flags & (SOUND_DISABLED as u8) == 0 {
         SetChannelVolume(
             u32::from(channel),
             (MAX_VOLUME >> 1) as i32,

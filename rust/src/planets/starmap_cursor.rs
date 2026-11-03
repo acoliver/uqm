@@ -67,9 +67,8 @@ pub unsafe fn cursor() -> Option<(i16, i16)> {
 #[no_mangle]
 pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> u32 {
     use crate::c_bindings::controller_input::PulsedInputState;
-    use crate::engine::{World as GameWorld, WorldData};
     let time_in = crate::time::counter_abi::GetTimeCounter();
-    let glob = WorldData::current();
+    let glob = crate::engine::WorldData::current();
     let activity = (*glob).game.current_activity;
     let hyper = activity & 0xff == 3;
     let last = std::ptr::addr_of_mut!(LAST_BUF).cast::<u8>();
@@ -86,8 +85,9 @@ pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> u32 {
                 y: (9999 - (sis.log_y * 625 + (log_units_y >> 1)) / log_units_y) as i16,
             }
         } else {
-            (*(*GameWorld::current()).star_pointer(crate::planets::starmap::current_catalog()))
-                .star_pt
+            (*(*crate::engine::World::current())
+                .star_pointer(crate::planets::starmap::current_catalog()))
+            .star_pt
         };
         flashCurrentLocation(&universe);
         *last = 0;

@@ -101,7 +101,7 @@ pub(crate) mod runtime {
     /// Oscilloscope and graphics contexts must be initialized.
     #[no_mangle]
     pub unsafe extern "C" fn DrawOscilloscope() {
-        use crate::engine::Kernel;
+        let kernel = crate::engine::Kernel::current();
         if oscillDisabled != 0 {
             return;
         }
@@ -113,10 +113,10 @@ pub(crate) mod runtime {
             data.as_mut_ptr(),
             SCOPE_WIDTH.into(),
             SCOPE_HEIGHT.into(),
-            (*Kernel::current()).using_speech as i32,
+            (*kernel).using_speech as i32,
         ) != 0
         {
-            let old = SetContext((*Kernel::current()).off_screen_context);
+            let old = SetContext((*kernel).off_screen_context);
             SetContextFGFrame(SCOPE_WORK);
             SetContextClipRect(std::ptr::null_mut());
             stamp.frame = SCOPE_FRAME.cast();

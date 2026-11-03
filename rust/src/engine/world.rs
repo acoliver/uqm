@@ -5,7 +5,7 @@ pub mod state_file;
 pub mod story;
 use self::{state_file::StateFileManager, story::GameState};
 
-#[repr(C)]
+#[derive(Clone, Copy)]
 pub struct WorldData {
     pub flagship: SisState,
     pub game: GAME_STATE,
@@ -59,12 +59,6 @@ impl World {
             files: StateFileManager::new(),
             current_star: None,
         }
-    }
-
-    /// # Safety
-    /// Game-thread legacy boundary only. Do not retain the borrow across callbacks.
-    pub unsafe fn current() -> *mut Self {
-        unsafe { crate::app::bridge::world() }
     }
 
     pub fn activity(&self) -> u16 {

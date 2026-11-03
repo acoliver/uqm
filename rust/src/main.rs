@@ -131,27 +131,34 @@ fn main() {
         }
     }
 
-    // Run the full UQM lifecycle: init -> game loop -> teardown
-    // SAFETY: the main thread keeps all argument CStrings and argv storage alive through shutdown.
-    let exit_code = unsafe { init_sequence::run_uqm(args.len() as c_int, c_argv.as_mut_ptr()) };
+    let mut game = uqm_rust::engine::Game::new();
+    // SAFETY: main owns the game until shutdown and the final state summary have completed.
+    let exit_code = unsafe {
+        uqm_rust::app::bridge::with_game(&mut game, || {
+            // Run the full UQM lifecycle: init -> game loop -> teardown
+            // SAFETY: the main thread keeps all argument CStrings and argv storage alive through shutdown.
+            let exit_code = init_sequence::run_uqm(args.len() as c_int, c_argv.as_mut_ptr());
 
-    // Finalize automation after teardown and propagate its terminal/evidence status.
-    let exit_code = match uqm_rust::automation::Coordinator::finalize(exit_code) {
-        Ok(status) => status,
-        Err(error) => {
-            eprintln!("Automation finalization failed: {error}");
-            1
-        }
+            // Finalize automation after teardown and propagate its terminal/evidence status.
+            let exit_code = match uqm_rust::automation::Coordinator::finalize(exit_code) {
+                Ok(status) => status,
+                Err(error) => {
+                    eprintln!("Automation finalization failed: {error}");
+                    1
+                }
+            };
+
+            if let Some(path) = &parsed.replay_summary {
+                if let Err(error) = uqm_rust::automation::Coordinator::write_replay_summary(
+                    std::path::Path::new(path),
+                ) {
+                    eprintln!("Replay summary failed: {error}");
+                    return 1;
+                }
+            }
+            exit_code
+        })
     };
-
-    if let Some(path) = &parsed.replay_summary {
-        if let Err(error) =
-            uqm_rust::automation::Coordinator::write_replay_summary(std::path::Path::new(path))
-        {
-            eprintln!("Replay summary failed: {error}");
-            exit(1);
-        }
-    }
     exit(exit_code);
 }
 

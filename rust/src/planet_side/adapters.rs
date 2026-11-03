@@ -126,10 +126,10 @@ impl CffiShipStatus {
     #[must_use]
     pub fn snapshot(&self) -> ShipStatus {
         #[cfg(not(test))]
-        use crate::engine::WorldData;
         #[cfg(not(test))]
         unsafe {
-            let sis = std::ptr::addr_of!((*WorldData::current()).flagship).read();
+            let world = crate::engine::WorldData::current();
+            let sis = std::ptr::addr_of!((*world).flagship).read();
             ShipStatus {
                 crew_enlisted: sis.crew_enlisted,
                 landers: sis.num_landers,
@@ -167,14 +167,14 @@ impl CffiShipStatus {
 impl ShipStatusPort for CffiShipStatus {
     fn apply(&mut self, delta: &ShipDelta) -> Result<(), AdapterError> {
         #[cfg(not(test))]
-        use crate::engine::WorldData;
         #[cfg(not(test))]
         unsafe {
+            let world = crate::engine::WorldData::current();
             if delta.crew != 0 {
                 DeltaSISGauges(delta.crew, 0, 0);
             }
 
-            let sis = std::ptr::addr_of_mut!((*WorldData::current()).flagship);
+            let sis = std::ptr::addr_of_mut!((*world).flagship);
             if delta.landers < 0 {
                 (*sis).num_landers = (*sis)
                     .num_landers

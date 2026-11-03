@@ -11,9 +11,9 @@ const CONFIRM_WIN_WIDTH: i16 = 80;
 const CONFIRM_WIN_HEIGHT: i16 = 22;
 
 unsafe fn draw_confirmation(answer: BOOLEAN) {
-    use crate::engine::Kernel;
+    let kernel = crate::engine::Kernel::current();
     let old_fg = SetContextForeGroundColor(MENU_TEXT_COLOR);
-    let old_font = SetContextFont((*Kernel::current()).star_con_font);
+    let old_font = SetContextFont((*kernel).star_con_font);
     let old_effect = SetContextFontEffect(ptr::null_mut());
     let mut rect = RECT {
         corner: POINT {
@@ -68,7 +68,8 @@ unsafe fn draw_confirmation(answer: BOOLEAN) {
 /// Input, graphics, flash, audio, and game state must be initialized on the game thread.
 #[no_mangle]
 pub unsafe extern "C" fn DoConfirmExit() -> BOOLEAN {
-    use crate::engine::{Kernel, WorldData};
+    let kernel = crate::engine::Kernel::current();
+    let world = crate::engine::WorldData::current();
     if PlayingTrack() != 0 {
         PauseTrack();
     }
@@ -76,7 +77,7 @@ pub unsafe extern "C" fn DoConfirmExit() -> BOOLEAN {
     let mut rect: RECT = mem::zeroed();
     let mut context_rect: RECT = mem::zeroed();
     let mut old_rect: RECT = mem::zeroed();
-    let old_context = SetContext((*Kernel::current()).screen_context);
+    let old_context = SetContext((*kernel).screen_context);
     GetContextClipRect(&mut old_rect);
     SetContextClipRect(ptr::null_mut());
     GetContextClipRect(&mut context_rect);
@@ -95,7 +96,7 @@ pub unsafe extern "C" fn DoConfirmExit() -> BOOLEAN {
         ExitRequested = 0;
         GamePaused = 0;
         UpdateInputState();
-        if (*WorldData::current()).game.current_activity & CHECK_ABORT as u16 != 0 {
+        if (*world).game.current_activity & CHECK_ABORT as u16 != 0 {
             done = true;
             response = 1;
         } else if PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0 {
@@ -116,10 +117,8 @@ pub unsafe extern "C" fn DoConfirmExit() -> BOOLEAN {
     DrawStamp(&mut saved);
     DestroyDrawable(ReleaseDrawable(saved.frame));
     ClearSystemRect();
-    let result = if response != 0
-        || (*WorldData::current()).game.current_activity & CHECK_ABORT as u16 != 0
-    {
-        (*WorldData::current()).game.current_activity |= CHECK_ABORT as u16;
+    let result = if response != 0 || (*world).game.current_activity & CHECK_ABORT as u16 != 0 {
+        (*world).game.current_activity |= CHECK_ABORT as u16;
         1
     } else {
         0
@@ -141,12 +140,12 @@ struct PopupState {
     InputFunc: unsafe extern "C" fn(*mut PopupState) -> BOOLEAN,
 }
 unsafe extern "C" fn do_popup(_state: *mut PopupState) -> BOOLEAN {
-    use crate::engine::WorldData;
+    let world = crate::engine::WorldData::current();
     SleepThread(ONE_SECOND / 20);
     u32::from(
         PulsedInputState.menu[KEY_MENU_SELECT as usize] == 0
             && PulsedInputState.menu[KEY_MENU_CANCEL as usize] == 0
-            && (*WorldData::current()).game.current_activity & CHECK_ABORT as u16 == 0,
+            && (*world).game.current_activity & CHECK_ABORT as u16 == 0,
     )
 }
 
@@ -154,7 +153,7 @@ unsafe extern "C" fn do_popup(_state: *mut PopupState) -> BOOLEAN {
 /// msg must be a NUL-terminated UTF-8 string; widget, graphics, and input systems must be initialized.
 #[no_mangle]
 pub unsafe extern "C" fn DoPopupWindow(msg: *const ::std::ffi::c_char) {
-    use crate::engine::Kernel;
+    let kernel = crate::engine::Kernel::current();
     let bank = StringBank_Create();
     if bank.is_null() {
         crate::log_abi::log_message(
@@ -181,12 +180,12 @@ pub unsafe extern "C" fn DoPopupWindow(msg: *const ::std::ffi::c_char) {
     );
     label.lines = lines.as_mut_ptr();
     PauseFlash();
-    let old_context = SetContext((*Kernel::current()).screen_context);
+    let old_context = SetContext((*kernel).screen_context);
     let mut old_rect: RECT = mem::zeroed();
     GetContextClipRect(&mut old_rect);
     SetContextClipRect(ptr::null_mut());
     let mut saved = SaveContextFrame(ptr::null());
-    Widget_SetFont((*Kernel::current()).star_con_font);
+    Widget_SetFont((*kernel).star_con_font);
     Widget_SetWindowColors(
         SHADOWBOX_BACKGROUND_COLOR,
         SHADOWBOX_DARK_COLOR,
@@ -216,10 +215,6 @@ pub unsafe extern "C" fn DoPopupWindow(msg: *const ::std::ffi::c_char) {
 }
 
 unsafe fn game_string(index: u32) -> *mut UNICODE {
-    use crate::engine::Kernel;
-    GetStringAddress(SetAbsStringTableIndex(
-        (*Kernel::current()).game_strings,
-        index as u16,
-    ))
-    .cast()
+    let kernel = crate::engine::Kernel::current();
+    GetStringAddress(SetAbsStringTableIndex((*kernel).game_strings, index as u16)).cast()
 }

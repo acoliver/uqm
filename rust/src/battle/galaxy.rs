@@ -183,12 +183,12 @@ pub(crate) mod engine {
         std::ptr::from_mut(cx.display_primitive(index as u16))
     }
     unsafe fn stars(index: usize) -> *mut POINT {
-        use crate::engine::Kernel;
-        (*Kernel::current()).log_stars.as_mut_ptr().add(index)
+        let kernel = crate::engine::Kernel::current();
+        (*kernel).log_stars.as_mut_ptr().add(index)
     }
     unsafe fn blocks(index: usize) -> *mut super::STAR_BLOCK {
-        use crate::engine::Kernel;
-        (*Kernel::current()).star_planes.as_mut_ptr().add(index)
+        let kernel = crate::engine::Kernel::current();
+        (*kernel).star_planes.as_mut_ptr().add(index)
     }
     unsafe fn width() -> i32 {
         (ScreenWidth - 64) << (ONE_SHIFT + MAX_REDUCTION)
@@ -238,7 +238,6 @@ pub(crate) mod engine {
     /// # Safety
     /// InitGalaxy must have completed; all display primitives and frames remain live.
     pub unsafe fn MoveGalaxy(cx: &mut Cx<'_>, view: u32, mut dx: i16, mut dy: i16) {
-        use crate::engine::Kernel;
         // VIEW_STABLE=0, VIEW_CHANGE=2; TFB_SCALE_STEP=0.
         if view != 0 {
             let mut reduction = cx.b.zoom_out as u16;
@@ -249,7 +248,7 @@ pub(crate) mod engine {
                     for (plane, offset) in [58, 26].into_iter().enumerate() {
                         for _ in 0..COUNTS[plane] {
                             (*prim(cx, p)).Object.Stamp.frame = SetAbsFrameIndex(
-                                (*Kernel::current()).stars_in_space,
+                                cx.kernel.stars_in_space,
                                 (TFB_Random() & 31) as u16 + offset,
                             );
                             p += 1;
@@ -257,8 +256,8 @@ pub(crate) mod engine {
                     }
                 } else {
                     let mut frames = [
-                        IncFrameIndex((*Kernel::current()).stars_in_space),
-                        (*Kernel::current()).stars_in_space,
+                        IncFrameIndex(cx.kernel.stars_in_space),
+                        cx.kernel.stars_in_space,
                     ];
                     let types = if step {
                         if reduction > 0 {
@@ -298,8 +297,8 @@ pub(crate) mod engine {
                 (*blocks(plane)).wrap(plane as i16, dx, dy, height());
             }
             if inHQSpace() == 0 {
-                dx = (*Kernel::current()).space_origin.x;
-                dy = (*Kernel::current()).space_origin.y;
+                dx = cx.kernel.space_origin.x;
+                dy = cx.kernel.space_origin.y;
                 if step {
                     reduction = reduction.wrapping_add(ONE_SHIFT as u16);
                 } else {

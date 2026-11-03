@@ -217,9 +217,9 @@ pub(crate) mod live {
     }
 
     unsafe fn tint_frame(color: CColor) {
-        use crate::engine::Kernel;
+        let kernel = crate::engine::Kernel::current();
         let system = solar_system::current();
-        let old_context = SetContext((*Kernel::current()).off_screen_context);
+        let old_context = SetContext((*kernel).off_screen_context);
         SetContextFGFrame((*system).Orbit.TintFrame.cast());
         SetContextClipRect(std::ptr::null_mut());
         let rect = CffiPlatform.context_clip_rect();

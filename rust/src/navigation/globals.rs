@@ -7,18 +7,18 @@ use crate::state::ffi;
 use std::{mem, ptr};
 
 unsafe fn create_radar() {
-    use crate::engine::Kernel;
-    if (*Kernel::current()).radar_context.is_null() {
+    let kernel = crate::engine::Kernel::current();
+    if (*kernel).radar_context.is_null() {
         #[cfg(feature = "debug-process")]
         {
-            (*Kernel::current()).radar_context = CreateContextAux(c"RadarContext".as_ptr());
+            (*kernel).radar_context = CreateContextAux(c"RadarContext".as_ptr());
         }
         #[cfg(not(feature = "debug-process"))]
         {
-            (*Kernel::current()).radar_context = CreateContextAux();
+            (*kernel).radar_context = CreateContextAux();
         }
-        let old = SetContext((*Kernel::current()).radar_context);
-        SetContextFGFrame((*Kernel::current()).screen);
+        let old = SetContext((*kernel).radar_context);
+        SetContextFGFrame((*kernel).screen);
         let mut rect = RECT {
             corner: POINT {
                 x: (4 + ScreenWidth - STATUS_WIDTH as i32 - SAFE_X as i32) as i16,
@@ -38,25 +38,26 @@ unsafe fn create_radar() {
 /// Resource system and screen contexts must be initialized on the game thread.
 #[no_mangle]
 pub unsafe extern "C" fn LoadSC2Data() -> BOOLEAN {
-    use crate::engine::{Kernel, WorldData};
-    if (*Kernel::current()).flag_stat_frame.is_null() {
-        (*Kernel::current()).flag_stat_frame =
+    let kernel = crate::engine::Kernel::current();
+    let world = crate::engine::WorldData::current();
+    if (*kernel).flag_stat_frame.is_null() {
+        (*kernel).flag_stat_frame =
             CaptureDrawable(LoadGraphicInstance(c"graphics.flagshipstatus".as_ptr()).cast());
-        if (*Kernel::current()).flag_stat_frame.is_null() {
+        if (*kernel).flag_stat_frame.is_null() {
             return 0;
         }
-        (*Kernel::current()).misc_data_frame =
+        (*kernel).misc_data_frame =
             CaptureDrawable(LoadGraphicInstance(c"graphics.miscdata".as_ptr()).cast());
-        if (*Kernel::current()).misc_data_frame.is_null() {
+        if (*kernel).misc_data_frame.is_null() {
             return 0;
         }
-        (*Kernel::current()).font_grad_frame =
+        (*kernel).font_grad_frame =
             CaptureDrawable(LoadGraphicInstance(c"graphics.fontgradient".as_ptr()).cast());
     }
     create_radar();
-    if (*WorldData::current()).game.current_activity as u8 == IN_HYPERSPACE as u8 {
-        (*WorldData::current()).game.ship_stamp.origin.x = -1;
-        (*WorldData::current()).game.ship_stamp.origin.y = -1;
+    if (*world).game.current_activity as u8 == IN_HYPERSPACE as u8 {
+        (*world).game.ship_stamp.origin.x = -1;
+        (*world).game.ship_stamp.origin.y = -1;
     }
     1
 }
@@ -76,13 +77,14 @@ unsafe fn copy_fleet(dst: *mut FLEET_INFO, src: *const SHIP_INFO, fleet: *const 
 /// Game-thread initialization, before any world queues have been allocated.
 #[no_mangle]
 pub unsafe extern "C" fn InitGameStructures() -> BOOLEAN {
-    use crate::engine::{Kernel, World as GameWorld, WorldData};
+    let kernel = crate::engine::Kernel::current();
+    let world = crate::engine::WorldData::current();
     InitGlobData();
-    (*Kernel::current()).play_frame =
+    (*kernel).play_frame =
         CaptureDrawable(LoadGraphicInstance(c"graphics.playmenu".as_ptr()).cast());
     let mut species = SPECIES_ID_ARILOU_ID;
     let count = SPECIES_ID_KOHR_AH_ID - species + 1 + 2;
-    let queue = ptr::addr_of_mut!((*WorldData::current()).game.avail_race_q);
+    let queue = ptr::addr_of_mut!((*world).game.avail_race_q);
     InitQueue(queue, count as u16, mem::size_of::<FLEET_INFO>() as u16);
     for i in 0..count {
         let ship = if i < count - 2 {
@@ -126,8 +128,8 @@ pub unsafe extern "C" fn InitGameStructures() -> BOOLEAN {
     LoadSC2Data();
     InitPlanetInfo();
     InitGroupInfo(1);
-    let state = ptr::addr_of_mut!((*WorldData::current()).game);
-    let sis = ptr::addr_of_mut!((*WorldData::current()).flagship);
+    let state = ptr::addr_of_mut!((*world).game);
+    let sis = ptr::addr_of_mut!((*world).flagship);
     (*state).glob_flags = 0;
     (*state).element_worth = [1, 2, 3, 4, 5, 6, 8, 25];
     (*sis).element_amounts = [0; 8];
@@ -158,7 +160,7 @@ pub unsafe extern "C" fn InitGameStructures() -> BOOLEAN {
         ((*sis).ship_name.as_mut_ptr()).cast(),
         mem::size_of_val(&(*sis).ship_name),
         (GetStringAddress(SetAbsStringTableIndex(
-            (*Kernel::current()).game_strings,
+            (*kernel).game_strings,
             (NAMING_STRING_BASE + 2) as u16,
         )))
         .cast(),
@@ -167,7 +169,7 @@ pub unsafe extern "C" fn InitGameStructures() -> BOOLEAN {
         ((*sis).commander_name.as_mut_ptr()).cast(),
         mem::size_of_val(&(*sis).commander_name),
         (GetStringAddress(SetAbsStringTableIndex(
-            (*Kernel::current()).game_strings,
+            (*kernel).game_strings,
             (NAMING_STRING_BASE + 3) as u16,
         )))
         .cast(),
@@ -176,7 +178,8 @@ pub unsafe extern "C" fn InitGameStructures() -> BOOLEAN {
     CloneShipFragment(HUMAN_SHIP as u16, &mut (*state).built_ship_q, 0);
     (*sis).log_x = crate::planets::universe_units::universe_to_logx(SOL_X as i16);
     (*sis).log_y = crate::planets::universe_units::universe_to_logy(SOL_Y as i16);
-    (*GameWorld::current()).select_star(None, crate::planets::starmap::current_catalog());
+    (*crate::engine::World::current())
+        .select_star(None, crate::planets::starmap::current_catalog());
     (*state).autopilot = POINT { x: -1, y: -1 };
     1
 }
@@ -184,22 +187,23 @@ pub unsafe extern "C" fn InitGameStructures() -> BOOLEAN {
 /// # Safety
 /// No renderer may be using these contexts or resources.
 pub unsafe fn FreeSC2Data() {
-    use crate::engine::Kernel;
-    DestroyContext((*Kernel::current()).radar_context);
-    (*Kernel::current()).radar_context = ptr::null_mut();
-    DestroyDrawable(ReleaseDrawable((*Kernel::current()).font_grad_frame));
-    (*Kernel::current()).font_grad_frame = ptr::null_mut();
-    DestroyDrawable(ReleaseDrawable((*Kernel::current()).misc_data_frame));
-    (*Kernel::current()).misc_data_frame = ptr::null_mut();
-    DestroyDrawable(ReleaseDrawable((*Kernel::current()).flag_stat_frame));
-    (*Kernel::current()).flag_stat_frame = ptr::null_mut();
+    let kernel = crate::engine::Kernel::current();
+    DestroyContext((*kernel).radar_context);
+    (*kernel).radar_context = ptr::null_mut();
+    DestroyDrawable(ReleaseDrawable((*kernel).font_grad_frame));
+    (*kernel).font_grad_frame = ptr::null_mut();
+    DestroyDrawable(ReleaseDrawable((*kernel).misc_data_frame));
+    (*kernel).misc_data_frame = ptr::null_mut();
+    DestroyDrawable(ReleaseDrawable((*kernel).flag_stat_frame));
+    (*kernel).flag_stat_frame = ptr::null_mut();
 }
 
 /// # Safety
 /// The initialized game structures must no longer be in use.
 pub unsafe fn UninitGameStructures() {
-    use crate::engine::{Kernel, WorldData};
-    let state = ptr::addr_of_mut!((*WorldData::current()).game);
+    let kernel = crate::engine::Kernel::current();
+    let world = crate::engine::WorldData::current();
+    let state = ptr::addr_of_mut!((*world).game);
     UninitQueue(ptr::addr_of_mut!((*state).encounter_q));
     UninitQueue(ptr::addr_of_mut!((*state).ip_group_q));
     UninitQueue(ptr::addr_of_mut!((*state).npc_built_ship_q));
@@ -213,20 +217,20 @@ pub unsafe fn UninitGameStructures() {
         DestroyStringTable(ReleaseStringTable((*probe).race_strings));
     }
     UninitQueue(ptr::addr_of_mut!((*state).avail_race_q));
-    DestroyDrawable(ReleaseDrawable((*Kernel::current()).play_frame));
-    (*Kernel::current()).play_frame = ptr::null_mut();
+    DestroyDrawable(ReleaseDrawable((*kernel).play_frame));
+    (*kernel).play_frame = ptr::null_mut();
 }
 
 /// # Safety
 /// Existing world resources must have been released before resetting their owner.
 pub unsafe fn InitGlobData() {
-    use crate::engine::WorldData;
-    let flags = (*WorldData::current()).game.glob_flags;
-    *WorldData::current() = crate::engine::WorldData::new();
-    (*WorldData::current()).game.glob_flags = flags;
+    let world = crate::engine::WorldData::current();
+    let flags = (*world).game.glob_flags;
+    *crate::engine::WorldData::current() = crate::engine::WorldData::new();
+    (*world).game.glob_flags = flags;
     ffi::rust_init_game_state();
     crate::engine::battle::access::lifecycle::bind_display_array(&mut *ptr::addr_of_mut!(
-        (*WorldData::current()).game
+        (*world).game
     ));
 }
 
@@ -234,8 +238,8 @@ pub unsafe fn InitGlobData() {
 /// Game-thread access to the live activity.
 #[no_mangle]
 pub unsafe extern "C" fn inHQSpace() -> BOOLEAN {
-    use crate::engine::WorldData;
-    u32::from((*WorldData::current()).game.current_activity as u8 as u32 == IN_HYPERSPACE)
+    let world = crate::engine::WorldData::current();
+    u32::from((*world).game.current_activity as u8 as u32 == IN_HYPERSPACE)
 }
 /// # Safety
 /// Game-thread access to the live activity and game-state bits.

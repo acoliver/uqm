@@ -47,9 +47,9 @@ pub(super) trait RebelApi: EncounterApi<Handler> {
 #[cfg(not(test))]
 impl RebelApi for super::super::script::live::LiveScript<Handler> {
     fn date(&self) -> Date {
-        use crate::engine::WorldData;
         unsafe {
-            let clock = std::ptr::addr_of!((*WorldData::current()).game.game_clock);
+            let world = crate::engine::WorldData::current();
+            let clock = std::ptr::addr_of!((*world).game.game_clock);
             Date {
                 year: (*clock).year_index,
                 month: (*clock).month_index,

@@ -34,29 +34,31 @@ mod live {
     use crate::threading::pacing::linked::sleep_thread as SleepThread;
     impl MelnormApi for LiveScript<Handler> {
         fn ship(&self) -> CSisState {
-            use crate::engine::WorldData;
             unsafe {
-                std::ptr::addr_of!((*WorldData::current()).flagship)
+                let world = crate::engine::WorldData::current();
+                std::ptr::addr_of!((*world).flagship)
                     .cast::<CSisState>()
                     .read()
             }
         }
         fn set_ship(&mut self, ship: CSisState) {
-            use crate::engine::WorldData;
             unsafe {
-                std::ptr::addr_of_mut!((*WorldData::current()).flagship)
+                let world = crate::engine::WorldData::current();
+                std::ptr::addr_of_mut!((*world).flagship)
                     .cast::<CSisState>()
                     .write(ship);
             }
         }
         fn module_cost(&self, id: usize) -> u8 {
-            use crate::engine::WorldData;
-            unsafe { (*WorldData::current()).game.module_cost[id] }
+            unsafe {
+                let world = crate::engine::WorldData::current();
+                (*world).game.module_cost[id]
+            }
         }
         fn set_module_cost(&mut self, id: usize, cost: u8) {
-            use crate::engine::WorldData;
             unsafe {
-                (*WorldData::current()).game.module_cost[id] = cost;
+                let world = crate::engine::WorldData::current();
+                (*world).game.module_cost[id] = cost;
             }
         }
         fn number(&mut self, number: i32) {

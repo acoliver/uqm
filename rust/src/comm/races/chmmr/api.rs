@@ -80,11 +80,10 @@ fn refit(glob: &mut crate::engine::WorldData, starbase: bool) {
 impl ChmmrApi for super::super::script::live::LiveScript<Handler> {
     fn refit(&mut self) {
         use crate::comm::races::script::ScriptApi;
-        use crate::engine::WorldData;
         let starbase = self.get("STARBASE_AVAILABLE") != 0;
 
         unsafe {
-            refit(&mut *WorldData::current(), starbase);
+            refit(&mut *crate::engine::WorldData::current(), starbase);
         }
     }
     fn intro_mode(&mut self, mode: i32, duration: i32) {

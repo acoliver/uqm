@@ -490,7 +490,7 @@ pub(crate) mod runtime {
     }
 
     unsafe fn outtakes() {
-        use crate::engine::WorldData;
+        let world = crate::engine::WorldData::current();
         const CONVERSATIONS: [CONVERSATION; 15] = [
             CONVERSATION_ZOQFOTPIK_CONVERSATION,
             CONVERSATION_TALKING_PET_CONVERSATION,
@@ -513,9 +513,7 @@ pub(crate) mod runtime {
         sliderDisabled = 1;
         oscillDisabled = 1;
         let mut i = 0;
-        while i < CONVERSATIONS.len()
-            && (*WorldData::current()).game.current_activity & CHECK_ABORT as u16 == 0
-        {
+        while i < CONVERSATIONS.len() && (*world).game.current_activity & CHECK_ABORT as u16 == 0 {
             SetCommIntroMode((CIM_CROSSFADE_WINDOW) as u32, 0);
             InitCommunication(CONVERSATIONS[i]);
             i += 1;
@@ -530,12 +528,12 @@ pub(crate) mod runtime {
     }
 
     unsafe extern "C" fn credits_input(raw: *mut c_void) -> BOOLEAN {
-        use crate::engine::WorldData;
+        let world = crate::engine::WorldData::current();
         let state = &mut *raw.cast::<CreditsInputState>();
         if CREDITS_RUNNING != 0 {
             state.CloseTimeOut = 0;
         }
-        if (*WorldData::current()).game.current_activity & CHECK_ABORT as u16 != 0
+        if (*world).game.current_activity & CHECK_ABORT as u16 != 0
             || (state.AllowCancel != 0 && (menu(KEY_MENU_SELECT) || menu(KEY_MENU_CANCEL)))
         {
             return 0;
@@ -577,9 +575,10 @@ pub(crate) mod runtime {
     /// initialized, and the game thread must exclusively own their state.
     #[no_mangle]
     pub unsafe extern "C" fn Credits(with_outtakes: BOOLEAN) {
-        use crate::engine::{Kernel, WorldData};
+        let kernel = crate::engine::Kernel::current();
+        let world = crate::engine::WorldData::current();
         let music = LoadMusicInstance(CREDITS_MUSIC.as_ptr().cast());
-        SetContext((*Kernel::current()).screen_context);
+        SetContext((*kernel).screen_context);
         SetContextClipRect(ptr::null_mut());
         let mut screen_rect: RECT = std::mem::zeroed();
         GetContextClipRect(&mut screen_rect);
@@ -608,7 +607,7 @@ pub(crate) mod runtime {
             outtakes();
             OUT_TAKES_RUNNING = 0;
         }
-        if (*WorldData::current()).game.current_activity & CHECK_ABORT as u16 == 0 {
+        if (*world).game.current_activity & CHECK_ABORT as u16 == 0 {
             if with_outtakes != 0 {
                 crate::automation::ending::credits_controls_ready();
             }
@@ -628,7 +627,7 @@ pub(crate) mod runtime {
         SetInputCallback(None);
         FadeMusic(0, (ONE_SECOND / 2) as SIZE);
         uninit_credits();
-        SetContext((*Kernel::current()).screen_context);
+        SetContext((*kernel).screen_context);
         SleepThreadUntil(FadeScreen(
             ScreenFadeType_FadeAllToBlack,
             (ONE_SECOND / 2) as SIZE,

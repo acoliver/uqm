@@ -33,20 +33,20 @@ const fn rgb15(r: u8, g: u8, b: u8) -> Color {
 /// Status graphics, frames and the active context must be initialized.
 #[no_mangle]
 pub unsafe extern "C" fn DrawCrewFuelString(y: COORD, state: SIZE) {
-    use crate::engine::Kernel;
+    let kernel = crate::engine::Kernel::current();
     let mut stamp: STAMP = mem::zeroed();
     stamp.origin.y = y + GAUGE_YOFFS + STARCON_TEXT_HEIGHT;
     if state == 0 {
         stamp.origin.x = CREW_XOFFS + (STAT_WIDTH >> 1) + 6;
         stamp.frame = SetAbsFrameIndex(
-            (*Kernel::current()).status_frame,
+            (*kernel).status_frame,
             if optWhichMenu == OPT_PC { 4 } else { 0 },
         );
         DrawStamp(&mut stamp);
     }
     stamp.origin.x = ENERGY_XOFFS + (STAT_WIDTH >> 1) - 5;
     stamp.frame = SetAbsFrameIndex(
-        (*Kernel::current()).status_frame,
+        (*kernel).status_frame,
         if optWhichMenu == OPT_PC { 5 } else { 1 },
     );
     if state >= 0 {
@@ -58,8 +58,8 @@ pub unsafe extern "C" fn DrawCrewFuelString(y: COORD, state: SIZE) {
 }
 
 unsafe fn draw_ship_name_string(p_str: *mut UNICODE, char_count: COUNT, y: COORD) {
-    use crate::engine::Kernel;
-    let old_font = SetContextFont((*Kernel::current()).star_con_font);
+    let kernel = crate::engine::Kernel::current();
+    let old_font = SetContextFont((*kernel).star_con_font);
     let mut text: TEXT = mem::zeroed();
     text.pStr = p_str;
     text.CharCount = char_count;
@@ -128,7 +128,7 @@ pub(crate) unsafe fn init_ship_status(
     starship: Option<ShipId>,
     clip_rect: *mut RECT,
 ) {
-    use crate::engine::Kernel;
+    let kernel = crate::engine::Kernel::current();
     let starship = starship.map(|id| {
         let ships = link_queue::ships(id.side() as usize);
         ships.get(ships.link(id))
@@ -139,9 +139,9 @@ pub(crate) unsafe fn init_ship_status(
     let mut old_origin = POINT { x: 0, y: 0 };
     if let Some(ship) = starship {
         assert!(ship.player >= 0);
-        y = (*Kernel::current()).status_offsets[ship.player as usize];
+        y = (*kernel).status_offsets[ship.player as usize];
     }
-    let old_context = SetContext((*Kernel::current()).status_context);
+    let old_context = SetContext((*kernel).status_context);
     if !clip_rect.is_null() {
         GetContextClipRect(&mut old_clip);
         let mut r = old_clip;
@@ -183,12 +183,13 @@ unsafe fn draw_status_title(
     starship: Option<crate::engine::battle::link_queue::PickShip>,
     y: COORD,
 ) {
-    use crate::engine::{Kernel, WorldData};
+    let kernel = crate::engine::Kernel::current();
+    let world = crate::engine::WorldData::current();
     if starship.is_none_or(|ship| ship.captain != 0) {
         DrawCrewFuelString(y, 0);
         let loc = SetAbsStringTableIndex((*siptr).race_strings, 1);
         draw_ship_name_string(GetStringAddress(loc).cast(), GetStringLength(loc), y);
-        let old_font = SetContextFont((*Kernel::current()).tiny_font);
+        let old_font = SetContextFont((*kernel).tiny_font);
         let mut buf = [0u8; 30];
         let (name, count) = if let Some(ship) = starship {
             let name = SetAbsStringTableIndex((*siptr).race_strings, ship.captain as COUNT);
@@ -217,7 +218,7 @@ unsafe fn draw_status_title(
     {
         DrawCrewFuelString(y, 0);
         draw_ship_name_string(
-            std::ptr::addr_of_mut!((*WorldData::current()).flagship.ship_name).cast(),
+            std::ptr::addr_of_mut!((*world).flagship.ship_name).cast(),
             !0,
             y,
         );

@@ -88,11 +88,11 @@ mod live {
             self.talk_segue(track);
         }
         fn date(&self) -> (i16, u8) {
-            use crate::engine::WorldData;
             unsafe {
+                let world = crate::engine::WorldData::current();
                 (
-                    (*WorldData::current()).game.game_clock.year_index as i16,
-                    (*WorldData::current()).game.game_clock.month_index,
+                    (*world).game.game_clock.year_index as i16,
+                    (*world).game.game_clock.month_index,
                 )
             }
         }

@@ -126,19 +126,19 @@ pub(crate) mod live {
     /// Game-thread access to initialized input, graphics and audio state.
     #[no_mangle]
     pub unsafe extern "C" fn PauseGame() -> BOOLEAN {
-        use crate::engine::{Kernel, WorldData};
-        if (*Kernel::current()).activity_frame.is_null()
-            || (*WorldData::current()).game.current_activity & (CHECK_ABORT | CHECK_PAUSE) as u16
-                != 0
-            || (*Kernel::current()).last_activity & (CHECK_LOAD | CHECK_RESTART) as u16 != 0
+        let kernel = crate::engine::Kernel::current();
+        let world = crate::engine::WorldData::current();
+        if (*kernel).activity_frame.is_null()
+            || (*world).game.current_activity & (CHECK_ABORT | CHECK_PAUSE) as u16 != 0
+            || (*kernel).last_activity & (CHECK_LOAD | CHECK_RESTART) as u16 != 0
         {
             return 0;
         }
-        (*WorldData::current()).game.current_activity |= CHECK_PAUSE as u16;
+        (*world).game.current_activity |= CHECK_PAUSE as u16;
         if PlayingTrack() != 0 {
             PauseTrack();
         }
-        let old_context = SetContext((*Kernel::current()).screen_context);
+        let old_context = SetContext((*kernel).screen_context);
         let old_origin = SetContextOrigin(POINT { x: 0, y: 0 });
         let mut old_rect: RECT = mem::zeroed();
         GetContextClipRect(&mut old_rect);
@@ -146,13 +146,13 @@ pub(crate) mod live {
         let mut context_rect: RECT = mem::zeroed();
         GetContextClipRect(&mut context_rect);
         let mut rect: RECT = mem::zeroed();
-        GetFrameRect((*Kernel::current()).activity_frame, &mut rect);
+        GetFrameRect((*kernel).activity_frame, &mut rect);
         rect.corner.x = (context_rect.extent.width - rect.extent.width) >> 1;
         rect.corner.y = (context_rect.extent.height - rect.extent.height) >> 1;
         let mut saved = SaveContextFrame(&rect);
         let mut stamp = STAMP {
             origin: rect.corner,
-            frame: (*Kernel::current()).activity_frame,
+            frame: (*kernel).activity_frame,
         };
         SetSystemRect(&rect);
         DrawStamp(&mut stamp);
@@ -181,16 +181,16 @@ pub(crate) mod live {
             ResumeTrack();
         }
         TaskSwitch();
-        (*WorldData::current()).game.current_activity &= !(CHECK_PAUSE as u16);
+        (*world).game.current_activity &= !(CHECK_PAUSE as u16);
         1
     }
 
     unsafe fn wait_until(released: bool, timeout: TimeCount, reset: BOOLEAN) -> BOOLEAN {
-        use crate::engine::WorldData;
+        let world = crate::engine::WorldData::current();
         let mut pressed = AnyButtonPress(1);
         while (pressed != 0) == released
             && (timeout == TimePeriod::MAX || GetTimeCounter() < timeout)
-            && (*WorldData::current()).game.current_activity & CHECK_ABORT as u16 == 0
+            && (*world).game.current_activity & CHECK_ABORT as u16 == 0
             && QuitPosted == 0
         {
             let Some(sampled) = crate::automation::input_ffi::nested_input(|| {

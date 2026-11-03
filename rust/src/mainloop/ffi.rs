@@ -102,11 +102,13 @@ mod c_ffi {
 #[must_use]
 pub fn get_current_activity() -> ActivityValue {
     #[cfg(not(test))]
-    use crate::engine::WorldData;
     #[cfg(not(test))]
     {
         // SAFETY: reads CurrentActivity from C GlobData global.
-        let raw = unsafe { (*WorldData::current()).game.current_activity };
+        let raw = unsafe {
+            let world = crate::engine::WorldData::current();
+            (*world).game.current_activity
+        };
         ActivityValue(raw)
     }
     #[cfg(test)]
@@ -125,11 +127,13 @@ pub fn get_current_activity() -> ActivityValue {
 #[inline]
 pub fn set_current_activity(val: ActivityValue) {
     #[cfg(not(test))]
-    use crate::engine::WorldData;
     #[cfg(not(test))]
     {
         // SAFETY: writes CurrentActivity to C GlobData global.
-        unsafe { (*WorldData::current()).game.current_activity = val.0 };
+        unsafe {
+            let world = crate::engine::WorldData::current();
+            (*world).game.current_activity = val.0
+        };
     }
     #[cfg(test)]
     {
@@ -193,9 +197,11 @@ pub fn set_next_activity(val: ActivityValue) {
 #[inline]
 #[must_use]
 pub fn get_last_activity() -> ActivityValue {
-    use crate::engine::Kernel;
     // SAFETY: reads a C global, no preconditions.
-    let raw = unsafe { (*Kernel::current()).last_activity };
+    let raw = unsafe {
+        let kernel = crate::engine::Kernel::current();
+        (*kernel).last_activity
+    };
     ActivityValue(raw)
 }
 
@@ -204,9 +210,11 @@ pub fn get_last_activity() -> ActivityValue {
 /// @plan PLAN-20260707-MAINLOOP.P03
 #[inline]
 pub fn set_last_activity(val: ActivityValue) {
-    use crate::engine::Kernel;
     // SAFETY: writes a u16 to a C global.
-    unsafe { (*Kernel::current()).last_activity = val.0 };
+    unsafe {
+        let kernel = crate::engine::Kernel::current();
+        (*kernel).last_activity = val.0
+    };
 }
 
 // ---------------------------------------------------------------------------
@@ -282,11 +290,13 @@ pub fn get_kohr_ah_killed_all() -> u8 {
 #[must_use]
 pub fn get_crew_enlisted() -> u16 {
     #[cfg(not(test))]
-    use crate::engine::WorldData;
     #[cfg(not(test))]
     {
         // SAFETY: reads a u16 field from the C GlobData global.
-        unsafe { (*WorldData::current()).flagship.crew_enlisted }
+        unsafe {
+            let world = crate::engine::WorldData::current();
+            (*world).flagship.crew_enlisted
+        }
     }
     #[cfg(test)]
     0
@@ -304,12 +314,12 @@ pub fn get_crew_enlisted() -> u16 {
 #[inline]
 pub fn zero_global_velocity() {
     #[cfg(not(test))]
-    use crate::engine::WorldData;
     #[cfg(not(test))]
     {
         // SAFETY: zeroes the velocity field in the C GlobData global.
         unsafe {
-            let velocity_ptr = std::ptr::addr_of_mut!((*WorldData::current()).game.velocity);
+            let world = crate::engine::WorldData::current();
+            let velocity_ptr = std::ptr::addr_of_mut!((*world).game.velocity);
             std::ptr::write_bytes(velocity_ptr, 0, 1);
         }
     }

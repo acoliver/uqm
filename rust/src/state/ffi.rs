@@ -637,9 +637,8 @@ pub fn named_state_value(name: &str) -> Option<u8> {
 }
 
 fn world() -> *mut crate::engine::World {
-    use crate::engine::World as GameWorld;
     // SAFETY: these transitional exports run only on the published game thread.
-    unsafe { GameWorld::current() }
+    unsafe { crate::engine::World::current() }
 }
 
 fn read_story<R: Default>(f: impl FnOnce(&GameState) -> R) -> R {

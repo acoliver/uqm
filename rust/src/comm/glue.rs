@@ -37,7 +37,7 @@ unsafe fn ptr_to_string(ptr: *const u8) -> Option<String> {
 /// `phrases_handle` must be a valid conversation phrases handle or null.
 #[cfg(not(test))]
 pub unsafe fn resolve_phrase(phrases_handle: *const c_void, index: i32) -> Option<String> {
-    use crate::engine::WorldData;
+    let world = crate::engine::WorldData::current();
     use crate::strings::string_table::SetAbsStringTableIndex;
 
     use crate::strings::string_table::GetStringAddress;
@@ -49,10 +49,10 @@ pub unsafe fn resolve_phrase(phrases_handle: *const c_void, index: i32) -> Optio
     unsafe {
         let ptr = if index == GLOBAL_PLAYER_NAME {
             // Direct GlobData.flagship.commander_name access
-            std::ptr::addr_of_mut!((*WorldData::current()).flagship.commander_name) as *const u8
+            std::ptr::addr_of_mut!((*world).flagship.commander_name) as *const u8
         } else if index == GLOBAL_SHIP_NAME {
             // Direct GlobData.flagship.ship_name access
-            std::ptr::addr_of_mut!((*WorldData::current()).flagship.ship_name) as *const u8
+            std::ptr::addr_of_mut!((*world).flagship.ship_name) as *const u8
         } else if index < 0 {
             crate::comm::ffi::get_alliance_name(index)
         } else if !phrases_handle.is_null() {

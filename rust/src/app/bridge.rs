@@ -119,13 +119,15 @@ pub unsafe fn with_game<R>(game: &mut crate::engine::Game, call: impl FnOnce() -
     unsafe { publish(&mut cx, call) }
 }
 
-/// # Safety
-/// Game-thread legacy boundary only. No owner reference may survive a callback.
-pub unsafe fn world() -> *mut crate::engine::World {
-    let pointer = unsafe { ptr::read(&raw const CONTEXT) }
-        .world
-        .unwrap_or_else(|| panic!("world access without a lifecycle context"));
-    pointer.as_ptr()
+impl crate::engine::World {
+    /// # Safety
+    /// Game-thread legacy boundary only. No owner reference may survive a callback.
+    pub unsafe fn current() -> *mut Self {
+        let pointer = unsafe { ptr::read(&raw const CONTEXT) }
+            .world
+            .unwrap_or_else(|| panic!("world access without a lifecycle context"));
+        pointer.as_ptr()
+    }
 }
 
 impl Kernel {
@@ -152,7 +154,7 @@ mod tests {
         // SAFETY: this serialized test owns the records and projected storage for the scope.
         let mut battle = Battle::new();
         let mut kernel = crate::engine::battle::record::Kernel::new();
-        kernel.elements.reset_capacity(3);
+        kernel.reset_element_capacity(3);
         // SAFETY: this serialized test owns the records and projected storage for the scope.
         let mut world = { World::new() };
         world.set_activity(7);

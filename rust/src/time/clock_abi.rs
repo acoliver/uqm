@@ -99,8 +99,8 @@ pub(crate) mod live {
     /// Game-thread access to the live global state.
     #[no_mangle]
     pub unsafe extern "C" fn GetGameClock() -> *mut ClockState {
-        use crate::engine::WorldData;
-        ptr::addr_of_mut!((*WorldData::current()).game.game_clock).cast()
+        let world = crate::engine::WorldData::current();
+        ptr::addr_of_mut!((*world).game.game_clock).cast()
     }
 
     pub(crate) unsafe fn finish_clock_day() {

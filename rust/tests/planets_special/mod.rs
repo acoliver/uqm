@@ -16,7 +16,6 @@ mod sol_resources;
 
 use uqm_rust::savegame::runtime::star::{CStarDesc, CATALOG_LEN};
 
-use std::ffi::c_void;
 use std::fmt::Write as _;
 
 use crate::planets_common::special_gen::{self, desc_of, Desc, SpecialOps};

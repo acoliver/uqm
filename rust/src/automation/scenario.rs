@@ -353,12 +353,12 @@ impl SceneEntryOps for LinkedSceneEntry {
     }
 
     fn clear_screen(&mut self) {
-        use crate::engine::Kernel;
         use crate::mainloop::restart_menu::c_extern;
         // SAFETY: the screen context exists once game initialization is
         // complete, and scene activation runs on the main thread.
         unsafe {
-            c_extern::SetContext((*Kernel::current()).screen_context);
+            let kernel = crate::engine::Kernel::current();
+            c_extern::SetContext((*kernel).screen_context);
             c_extern::ClearDrawable();
         }
     }
