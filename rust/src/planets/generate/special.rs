@@ -110,10 +110,8 @@ fn get_game_state_byte(start: u32) -> u32 {
 
 fn set_game_state_byte(start: u32, value: u8) {
     // SAFETY: writes the Rust-owned game state.
-    {
-        WorldOwner::current()
-            .write(|world| rust_set_game_state_bits(world, start as i32, start as i32 + 7, value))
-    };
+    WorldOwner::current()
+        .write(|world| rust_set_game_state_bits(world, start as i32, start as i32 + 7, value));
 }
 
 /// Re-place `planet` on a circle of `EARTH_RADIUS * percent / 100`, keeping

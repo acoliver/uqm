@@ -3,7 +3,7 @@
 #![allow(non_snake_case)]
 
 use super::ffi::*;
-#[cfg(not(test))]
+#[cfg(test)]
 use crate::engine::World as WorldOwner;
 use std::ffi::{c_char, c_int, c_long, c_void};
 use std::ptr;

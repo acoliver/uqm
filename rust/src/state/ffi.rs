@@ -1174,7 +1174,7 @@ mod tests {
                 WorldOwner::current()
                     .write(|world| rust_set_game_state_bits(world, 0, 7, test_value));
 
-                let ptr = WorldOwner::current().read(|world| rust_get_game_state_bytes(world));
+                let ptr = WorldOwner::current().read(rust_get_game_state_bytes);
                 assert!(!ptr.is_null());
 
                 {
@@ -1207,7 +1207,7 @@ mod tests {
                 WorldOwner::current().write(rust_init_game_state);
 
                 WorldOwner::current().write(|world| rust_set_game_state_bits(world, 0, 7, 0xAB));
-                let ptr = WorldOwner::current().read(|world| rust_get_game_state_bytes(world));
+                let ptr = WorldOwner::current().read(rust_get_game_state_bytes);
                 let size = rust_get_game_state_size();
 
                 let mut buffer = vec![0u8; size];

@@ -36,9 +36,7 @@ fn game() -> Box<CGameState> {
 /// A fresh game state and empty group files, as `InitGlobData` leaves them.
 fn fresh_game() -> Box<CGameState> {
     // SAFETY: no requirements.
-    {
-        WorldOwner::current().write(rust_init_game_state)
-    };
+    WorldOwner::current().write(rust_init_game_state);
     init_group_info(true).unwrap();
     WorldOwner::current()
         .write(|world| {

@@ -594,11 +594,9 @@ impl PlanetNames for LiveGame {
     }
     fn set_battle_planet(&mut self, value: u8) {
         // SAFETY: writes the Rust-owned game state.
-        {
-            WorldOwner::current().write(|world| {
-                rust_set_game_state_bits(world, BATTLE_PLANET.0, BATTLE_PLANET.1, value)
-            })
-        };
+        WorldOwner::current().write(|world| {
+            rust_set_game_state_bits(world, BATTLE_PLANET.0, BATTLE_PLANET.1, value)
+        });
     }
 }
 

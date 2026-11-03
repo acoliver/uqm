@@ -131,9 +131,7 @@ fn set_planetary_change() {
 /// (`InitPlanetInfo`: one zero offset each).
 fn fresh_starinfo(stars: usize) {
     // SAFETY: no requirements.
-    {
-        WorldOwner::current().write(rust_init_game_state)
-    };
+    WorldOwner::current().write(rust_init_game_state);
     WorldOwner::current()
         .write(|world| {
             with_state_files(world, |files| {
