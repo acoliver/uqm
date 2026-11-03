@@ -207,7 +207,7 @@ pub fn SetPlayerInput(kernel: &mut crate::engine::Kernel, player: u16) -> bool {
     {
         let slot = &mut kernel.player_input[player as usize];
         assert!(slot.is_none());
-        *slot = Some(crate::battle::battle_controls::InputContext::new(
+        *slot = Some(crate::engine::battle::input::InputContext::new(
             player,
             kernel.player_control[player as usize],
         ));

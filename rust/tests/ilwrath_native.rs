@@ -183,7 +183,7 @@ fn flame_inherits_the_ship_velocity_and_starts_on_the_first_frame() {
                 (400 + 29 * 4 - 25 - (160 >> 5), 500 + (64 >> 5))
             );
             let (velocity_x, velocity_y) = ((*flame).velocity).get_current_components();
-            let (mut dx, mut dy) = (velocity_x as i16, velocity_y as i16);
+            let (dx, dy) = (velocity_x as i16, velocity_y as i16);
             assert_eq!((dx, dy), (25 * 32 + 160, -64));
         }
     })

@@ -50,7 +50,7 @@ fn descriptor_saw_launch_hold_release_decelerate_and_tracking() {
             for speed in [1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1, 0] {
                 hooks::invoke_element_pointer(decelerate, saw);
                 let (velocity_x, velocity_y) = ((*saw).velocity).get_current_components();
-                let (mut dx, mut dy) = (velocity_x as i16, velocity_y as i16);
+                let (dx, dy) = (velocity_x as i16, velocity_y as i16);
                 assert_eq!((dx, dy), (speed, 0));
                 ship.descriptor_mut().characteristics.special_wait = 0;
             }

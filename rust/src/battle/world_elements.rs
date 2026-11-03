@@ -66,7 +66,6 @@ pub(crate) mod engine {
     use crate::engine::battle::views::SharedFrames;
     use crate::engine::battle::{Cx, ElementId, Parent};
     use crate::ships::native::{angle_to_facing, cosine, normalize_facing, sine};
-    use std::mem;
 
     pub(crate) fn gravity_postprocess(cx: &mut Cx<'_>, e: ElementId) {
         cx.gravity(e);
@@ -278,16 +277,14 @@ pub(crate) mod engine {
         cx.element_mut(crew).flags |= (COLLISION | DISAPPEARING | NONSOLID) as u16;
     }
 
-    /// # Safety
-    /// Ship/target elements, descriptors and intersect frames must be live.
-    pub unsafe fn abandon_ship(cx: &mut Cx<'_>, ship: ElementId, target: ElementId, mut loss: u16) {
+    pub fn abandon_ship(cx: &mut Cx<'_>, ship: ElementId, target: ElementId, mut loss: u16) {
         let mut owner = cx.owner(ship);
         if cx.race_stats(owner).ship_info.ship_flags & CREW_IMMUNE as u16 != 0 {
             return;
         }
-        let mut intersect = cx.weapon_origin(ship).intersection();
-        let mut rect: RECT = mem::zeroed();
-        GetFrameRect(intersect.IntersectStamp.frame, &mut rect);
+        let source = cx.weapon_origin(ship);
+        let mut intersect = source.intersection();
+        let rect = cx.frame_rect(cx.subject_intersect_frame(&source));
         let direction = cx.element(ship).velocity.travel_angle;
         let (dx, dy) = if direction == FULL_CIRCLE as u16 {
             (0, 0)
@@ -318,9 +315,11 @@ pub(crate) mod engine {
             intersect.IntersectStamp.origin = cx.weapon_origin(ship).intersection().EndPoint;
             let w = (i32::from(cx.random() as u16) % i32::from(rect.extent.width)) as i16;
             let h = (i32::from(cx.random() as u16) % i32::from(rect.extent.height)) as i16;
-            let mut crew_intersect: INTERSECT_CONTROL = mem::zeroed();
-            crew_intersect.EndPoint = intersect.EndPoint;
-            image!(frame; crew_intersect.IntersectStamp.frame, DecFrameIndex(cx.kernel.stars_in_space));
+            let frame = cx.element(crew).current.image.frame;
+            let mut crew_intersect = intersect;
+            crew_intersect.last_time_val = 0;
+            crew_intersect.IntersectStamp.origin = POINT { x: 0, y: 0 };
+            image!(frame; crew_intersect.IntersectStamp.frame, frame.raw());
             if dx == 0 && dy == 0 {
                 crew_intersect.EndPoint.x = crew_intersect
                     .EndPoint
@@ -350,7 +349,7 @@ pub(crate) mod engine {
                 crew_intersect.IntersectStamp.origin.x = crew_intersect.EndPoint.x.wrapping_add(dx);
                 crew_intersect.IntersectStamp.origin.y = crew_intersect.EndPoint.y.wrapping_add(dy);
             }
-            DrawablesIntersect(&mut crew_intersect, &mut intersect, MAX_TIME_VALUE as u16);
+            cx.projected_intersect(&mut crew_intersect, &mut intersect, MAX_TIME_VALUE as u16);
             cx.element_mut(crew).current.location.x =
                 (i32::from(crew_intersect.EndPoint.x) << ONE_SHIFT) as i16;
             cx.element_mut(crew).current.location.y =

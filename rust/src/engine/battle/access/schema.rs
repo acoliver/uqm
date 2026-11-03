@@ -1,6 +1,6 @@
 //! Unchanged ABI storage declarations used at the Stage B boundary.
 #![allow(non_snake_case, non_camel_case_types)]
-use super::super::record::{ShipRecord, QUEUE, VELOCITY_DESC};
+use super::super::record::{QUEUE, VELOCITY_DESC};
 pub use crate::collections::queue::HLink as HLINK;
 use crate::graphics::native_abi::*;
 use crate::graphics::native_abi::{DWORD as TimeCount, UWORD as ACTIVITY};

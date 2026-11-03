@@ -58,25 +58,6 @@ impl InputContext {
             InputSource::Network(_) => self.network().end_ready(usize::from(self.player)),
         }
     }
-
-    #[cfg(not(test))]
-    pub(crate) fn frame_input(
-        &self,
-        cx: &mut crate::engine::battle::Cx<'_>,
-        ship: Option<crate::engine::battle::ShipId>,
-    ) -> u8 {
-        match self.source {
-            InputSource::Human => cx.human_input(self.player),
-            InputSource::Computer => {
-                crate::battle::context_access::ai_legacy::computer_intelligence(
-                    cx,
-                    self.player,
-                    ship,
-                )
-            }
-            InputSource::Network(_) => self.network().remote_input(usize::from(self.player)),
-        }
-    }
 }
 
 #[cfg(test)]

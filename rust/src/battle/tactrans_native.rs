@@ -128,7 +128,7 @@ pub fn flee_cycle(index: u8, thrust: u8) -> (u8, u8, u8) {
 #[cfg(not(test))]
 pub(crate) mod engine {
     use super::*;
-    use crate::battle::battle_native::engine::{activity, player_input, rgb15, set_activity};
+    use crate::battle::battle_native::engine::{activity, rgb15, set_activity};
     use crate::battle::battle_native::BattleSong;
     use crate::battle::encount_native::FleetIsInfinite;
     use crate::engine::battle::views::SharedFrames;
@@ -178,32 +178,26 @@ pub(crate) mod engine {
         (**KernelOwner::current()).ditty_playing = 0;
     }
 
-    unsafe fn ditty_playing() -> bool {
-        if KernelOwner::current().read(|owner| owner.ditty_playing) == 0 {
+    fn ditty_playing(kernel: &mut crate::engine::Kernel) -> bool {
+        if kernel.ditty_playing == 0 {
             return false;
         }
-        (**KernelOwner::current()).ditty_playing = PLRPlaying(usize::MAX as MUSIC_REF);
-        KernelOwner::current().read(|owner| owner.ditty_playing) != 0
+        kernel.ditty_playing = u32::from(crate::sound::music::plr_playing_current());
+        kernel.ditty_playing != 0
     }
 
-    /// # Safety
-    /// The game thread must exclusively own battle winner state.
-    #[no_mangle]
-    pub unsafe extern "C" fn ResetWinnerStarShip() {
-        (**KernelOwner::current()).winner = None;
+    pub fn reset_winner(kernel: &mut crate::engine::Kernel) {
+        kernel.winner = None;
     }
 
-    unsafe fn ready_for_battle_end() -> bool {
-        if ditty_playing() {
-            return false;
-        }
-        for side in 0..NUM_PLAYERS as usize {
-            let context = player_input(side).expect("missing player input");
-            if !context.battle_end_ready() {
-                return false;
-            }
-        }
-        true
+    fn ready_for_battle_end(kernel: &mut crate::engine::Kernel) -> bool {
+        !ditty_playing(kernel)
+            && kernel.player_input.iter().all(|input| {
+                input
+                    .as_ref()
+                    .expect("missing player input")
+                    .battle_end_ready()
+            })
     }
 
     pub(crate) fn preprocess_dead_ship(cx: &mut Cx<'_>, _ship: ElementId) {
@@ -306,7 +300,7 @@ pub(crate) mod engine {
     ) {
         let net = cx.b.net.clone();
         let ship = cx.owner(dead);
-        if !ready_for_battle_end() {
+        if !ready_for_battle_end(cx.kernel) {
             cx.element_mut(dead).flags &= !(DISAPPEARING as u16);
             cx.element_mut(dead).life = cx.element(dead).life.wrapping_add(1);
             check_other_ship_life_span(cx, dead);

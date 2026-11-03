@@ -851,7 +851,7 @@ mod kernel_tests {
         let address = kernel.star_planes[0].points.as_ptr();
         kernel.instant_victory = 1;
         kernel.status_offsets = [7, 11];
-        let mut moved = Box::new(kernel);
+        let moved = Box::new(kernel);
         assert_eq!(moved.star_planes[0].points.as_ptr(), address);
         assert_eq!(
             moved.star_planes.each_ref().map(|p| p.points.len()),

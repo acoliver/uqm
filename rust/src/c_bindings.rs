@@ -97,7 +97,7 @@ pub(crate) use assert_c_layout;
 /// `PlayerControls` concurrently.
 #[cfg(not(test))]
 pub unsafe fn player_control_template(player: usize) -> Option<controller_input::CONTROL_TEMPLATE> {
-    if player >= crate::battle::battle_controls::NUM_PLAYERS {
+    if player >= crate::engine::battle::input::NUM_PLAYERS {
         return None;
     }
     let controls = std::ptr::addr_of!(crate::mainloop::input_abi::live::PlayerControls)

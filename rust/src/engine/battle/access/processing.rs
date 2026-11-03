@@ -1,5 +1,8 @@
 //! Checked mutations used by the ordered element processing pass.
+
+#[cfg(not(test))]
 use crate::engine::battle::{Cx, ElementId};
+#[cfg(not(test))]
 use crate::graphics::native_abi::POINT;
 
 #[cfg(not(test))]

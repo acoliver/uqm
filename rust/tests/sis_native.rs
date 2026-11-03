@@ -171,7 +171,7 @@ fn hyperspace_fuel_brakes_and_quasispace_allows_thrust_without_fuel() {
             });
             ship.preprocess();
             let (velocity_x, velocity_y) = ((*ship.ptr()).velocity).get_current_components();
-            let (mut x, mut y) = (velocity_x as i16, velocity_y as i16);
+            let (x, y) = (velocity_x as i16, velocity_y as i16);
             assert_eq!((x, y), (128, 0));
             assert_eq!(ship.ship_mut().cur_status_flags & THRUST as u16, 0);
             assert_eq!(ship.ship_mut().weapon_counter, 1);
@@ -217,7 +217,7 @@ fn autopilot_accelerates_toward_target_and_cancels_on_manual_turn() {
             ship.ship_mut().ship_facing = 4;
             ship.preprocess();
             let (velocity_x, velocity_y) = ((*ship.ptr()).velocity).get_current_components();
-            let (mut x, mut y) = (velocity_x as i16, velocity_y as i16);
+            let (x, y) = (velocity_x as i16, velocity_y as i16);
             assert_eq!((x, y), (128, 0));
             assert_ne!(
                 ship.ship_mut().cur_status_flags & SHIP_AT_MAX_SPEED as u16,

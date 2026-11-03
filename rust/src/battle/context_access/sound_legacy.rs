@@ -21,24 +21,3 @@ pub unsafe fn play_sound(
         });
     }
 }
-
-/// # Safety
-/// Called on the owning game thread with a published battle context.
-#[cfg(not(test))]
-#[no_mangle]
-pub unsafe extern "C" fn UpdateSoundPositions() {
-    // SAFETY: the legacy entry lends the context to the native sound pass.
-    unsafe {
-        crate::app::bridge::enter(|cx| engine::update_positions(cx));
-    }
-}
-/// # Safety
-/// Called on the owning game thread with a published battle context.
-#[cfg(not(test))]
-#[no_mangle]
-pub unsafe extern "C" fn FlushSounds() {
-    // SAFETY: the legacy entry lends the context to the native sound pass.
-    unsafe {
-        crate::app::bridge::enter(|cx| engine::flush_sounds(cx));
-    }
-}

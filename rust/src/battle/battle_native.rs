@@ -1,7 +1,7 @@
 //! Battle entry, ordered input processing, and frame scheduling from `battle.c`.
 
 #[cfg(not(test))]
-use crate::battle::battle_controls::InputContext;
+use crate::engine::battle::input::InputContext;
 #[cfg(not(test))]
 use crate::engine::World as WorldOwner;
 #[cfg(not(test))]
@@ -108,7 +108,7 @@ unsafe fn battle_network() -> BattleNetwork {
 #[cfg(not(test))]
 pub(crate) mod engine {
     use super::*;
-    use crate::battle::tactrans_native::{flee_preprocess, ResetWinnerStarShip, StopDitty};
+    use crate::battle::tactrans_native::{flee_preprocess, reset_winner, StopDitty};
     use abi::*;
     use std::{mem, ptr};
 
@@ -245,7 +245,21 @@ pub(crate) mod engine {
                     let context = cx.kernel.player_input[side]
                         .clone()
                         .expect("missing player input");
-                    let mut input = context.frame_input(cx, Some(ship));
+                    let mut input = match context.source() {
+                        crate::engine::battle::input::InputSource::Human => {
+                            cx.human_input(context.player())
+                        }
+                        crate::engine::battle::input::InputSource::Computer => {
+                            crate::battle::context_access::ai_legacy::computer_intelligence(
+                                cx,
+                                context.player(),
+                                Some(ship),
+                            )
+                        }
+                        crate::engine::battle::input::InputSource::Network(_) => {
+                            context.network().remote_input(side)
+                        }
+                    };
                     if player_control(side) & NETWORK_CONTROL == 0 {
                         input = net.local_input(side, input);
                     }
@@ -441,7 +455,7 @@ pub(crate) mod engine {
             bs.battle = battle;
             bs.net = Some(net.clone());
             net.begin((&raw mut bs).cast());
-            ResetWinnerStarShip();
+            crate::app::bridge::enter(|cx| reset_winner(cx.kernel));
             crate::log_abi::log_message(
                 5,
                 &format!(

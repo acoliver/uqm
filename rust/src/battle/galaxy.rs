@@ -223,53 +223,56 @@ pub(crate) mod engine {
 
     /// # Safety
     /// InitGalaxy must have completed; all display primitives and frames remain live.
+    fn change_star_frames(cx: &mut Cx<'_>, step: bool, reduction: u16) {
+        let star_frame =
+            crate::engine::battle::frames::FrameSelection::retain(cx.kernel.stars_in_space);
+        if cx.world.activity() as u8 == 3 {
+            let mut p = 0;
+            for (plane, offset) in [58, 26].into_iter().enumerate() {
+                for index in 0..COUNTS[plane] {
+                    let random = cx.random();
+                    let frame = cx.absolute_frame(star_frame.view(), (random & 31) as u16 + offset);
+                    cx.display_primitive(p as u16).Object.Stamp.frame = frame.raw();
+                    cx.kernel.star_planes[plane].frames[index] = frame;
+                    p += 1;
+                }
+            }
+        } else {
+            let mut frames = [cx.advance_frame(star_frame.view()), star_frame];
+            let types = if step {
+                if reduction > 0 {
+                    frames[0] = frames[1].clone();
+                    [gfx_object_STAMP_PRIM, gfx_object_POINT_PRIM]
+                } else {
+                    [gfx_object_STAMP_PRIM; 2]
+                }
+            } else if reduction > 1 << ZOOM_SHIFT {
+                [gfx_object_POINT_PRIM; 2]
+            } else {
+                [gfx_object_STAMP_PRIM, gfx_object_POINT_PRIM]
+            };
+            let mut p = 0;
+            for plane in 0..2 {
+                for index in 0..COUNTS[plane] {
+                    cx.display_primitive(p as u16).Type = types[plane] as u8;
+                    cx.display_primitive(p as u16).Object.Stamp.frame = frames[plane].raw();
+                    cx.kernel.star_planes[plane].frames[index] = frames[plane].clone();
+                    p += 1;
+                }
+            }
+        }
+    }
+
     pub fn move_galaxy(cx: &mut Cx<'_>, view: u32, mut dx: i16, mut dy: i16, scale: i32) {
         let (screen_width, screen_height) = cx.screen_dimensions();
         let width = (screen_width - 64) << (ONE_SHIFT + MAX_REDUCTION);
         let height = screen_height << (ONE_SHIFT + MAX_REDUCTION);
         // VIEW_STABLE=0, VIEW_CHANGE=2; TFB_SCALE_STEP=0.
         if view != 0 {
-            let star_frame =
-                crate::engine::battle::frames::FrameSelection::retain(cx.kernel.stars_in_space);
             let mut reduction = cx.b.zoom_out as u16;
             let step = scale == 0;
             if view == 2 {
-                if cx.world.activity() as u8 == 3 {
-                    let mut p = 0;
-                    for (plane, offset) in [58, 26].into_iter().enumerate() {
-                        for index in 0..COUNTS[plane] {
-                            let random = cx.random();
-                            let frame =
-                                cx.absolute_frame(star_frame.view(), (random & 31) as u16 + offset);
-                            cx.display_primitive(p as u16).Object.Stamp.frame = frame.raw();
-                            cx.kernel.star_planes[plane].frames[index] = frame;
-                            p += 1;
-                        }
-                    }
-                } else {
-                    let mut frames = [cx.advance_frame(star_frame.view()), star_frame];
-                    let types = if step {
-                        if reduction > 0 {
-                            frames[0] = frames[1].clone();
-                            [gfx_object_STAMP_PRIM, gfx_object_POINT_PRIM]
-                        } else {
-                            [gfx_object_STAMP_PRIM; 2]
-                        }
-                    } else if reduction > 1 << ZOOM_SHIFT {
-                        [gfx_object_POINT_PRIM; 2]
-                    } else {
-                        [gfx_object_STAMP_PRIM, gfx_object_POINT_PRIM]
-                    };
-                    let mut p = 0;
-                    for plane in 0..2 {
-                        for index in 0..COUNTS[plane] {
-                            cx.display_primitive(p as u16).Type = types[plane] as u8;
-                            cx.display_primitive(p as u16).Object.Stamp.frame = frames[plane].raw();
-                            cx.kernel.star_planes[plane].frames[index] = frames[plane].clone();
-                            p += 1;
-                        }
-                    }
-                }
+                change_star_frames(cx, step, reduction);
             }
             if cx.world.activity() as u8 == 3 {
                 for (plane, count) in COUNTS.into_iter().enumerate().take(2) {

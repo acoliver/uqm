@@ -137,10 +137,10 @@ pub mod live {
         1
     }
     pub fn select_ship(
-        context: &crate::battle::battle_controls::InputContext,
+        context: &crate::engine::battle::input::InputContext,
         state: &mut GETMELEE_STATE,
     ) -> u32 {
-        use crate::battle::battle_controls::InputSource;
+        use crate::engine::battle::input::InputSource;
         let player = context.player();
         match context.source() {
             InputSource::Human => {
@@ -148,7 +148,7 @@ pub mod live {
                 unsafe { process(state, usize::from(player), PulsedInputToBattleInput(player)) }
             }
             InputSource::Computer => {
-                if crate::time::counter_abi::GetTimeCounter()
+                if GetTimeCounter()
                     < state.player[usize::from(player)]
                         .timeIn
                         .wrapping_add(840 >> 1)

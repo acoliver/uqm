@@ -337,6 +337,22 @@ pub(crate) mod engine {
     /// # Safety
     /// Elements must belong to the initialized display queue on the game thread,
     /// with live collision images and callbacks on every solid element.
+    fn align_contact_frame(
+        cx: &mut Cx<'_>,
+        id: ElementId,
+        current: &crate::engine::battle::frames::FrameSelection,
+        next: &crate::engine::battle::frames::FrameSelection,
+    ) {
+        if cx.frame_number(current.view()) != cx.frame_number(next.view()) {
+            cx.set_frame(id, true, cx.equivalent_frame(next.view(), current.view()));
+        } else if next != current {
+            cx.copy_current_image_to_next(id);
+            if cx.element(id).life > NORMAL_LIFE as COUNT {
+                cx.element_mut(id).life = NORMAL_LIFE as COUNT;
+            }
+        }
+    }
+
     pub fn process_collisions(
         cx: &mut Cx<'_>,
         mut next_test: Option<ElementId>,
@@ -426,30 +442,8 @@ pub(crate) mod engine {
                                 }
                                 time_value = 0;
                             } else {
-                                if cx.frame_number(cur.view()) != cx.frame_number(next.view()) {
-                                    cx.set_frame(
-                                        el,
-                                        true,
-                                        cx.equivalent_frame(next.view(), cur.view()),
-                                    );
-                                } else if next != cur {
-                                    cx.copy_current_image_to_next(el);
-                                    if cx.elements()[el].life > NORMAL_LIFE as COUNT {
-                                        cx.element_mut(el).life = NORMAL_LIFE as COUNT;
-                                    }
-                                }
-                                if cx.frame_number(tcur.view()) != cx.frame_number(tnext.view()) {
-                                    cx.set_frame(
-                                        test,
-                                        true,
-                                        cx.equivalent_frame(tnext.view(), tcur.view()),
-                                    );
-                                } else if tnext != tcur {
-                                    cx.copy_current_image_to_next(test);
-                                    if cx.elements()[test].life > NORMAL_LIFE as COUNT {
-                                        cx.element_mut(test).life = NORMAL_LIFE as COUNT;
-                                    }
-                                }
+                                align_contact_frame(cx, el, &cur, &next);
+                                align_contact_frame(cx, test, &tcur, &tnext);
                                 cx.init_intersect_start(el);
                                 cx.init_intersect_end(el);
                                 cx.refresh_intersect_frame(el);
@@ -705,8 +699,7 @@ pub(crate) mod engine {
         let mut handle = cx.elements().head();
         while let Some(e) = handle {
             let mut flags = cx.elements()[e].state_flags;
-            let (delta_x, delta_y);
-            let next_handle;
+            let (delta_x, delta_y, next_handle);
             if flags & PRE_PROCESS_BIT != 0 {
                 if flags & COLLISION_BIT == 0 {
                     cx.element_mut(e).flags &= !(DEFY_PHYSICS as ELEMENT_FLAGS);
@@ -781,14 +774,11 @@ pub(crate) mod engine {
                                 } else {
                                     calc_zoom_stuff(cx.b.zoom_out)
                                 };
-                                cx.set_frame(
-                                    e,
-                                    true,
-                                    cx.equivalent_frame(
-                                        cx.elements()[e].next.image.frames.view(usize::from(index)),
-                                        cx.elements()[e].next.image.frame.view(),
-                                    ),
+                                let frame = cx.equivalent_frame(
+                                    cx.elements()[e].next.image.frames.view(usize::from(index)),
+                                    cx.elements()[e].next.image.frame.view(),
                                 );
+                                cx.set_frame(e, true, frame);
                                 if optMeleeScale == SCALE_TRILINEAR
                                     && index < 2
                                     && scale != GSCALE_IDENTITY as COUNT

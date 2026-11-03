@@ -34,7 +34,7 @@ impl Battle {
         ScreenHeight = 240;
         _GraphicsStatusFlags &= !4;
         uqm_rust::app::bridge::battle(|b| b.counters = [10, 10]);
-        ResetWinnerStarShip();
+        uqm_rust::engine::Kernel::current().write(reset_winner);
         Self {
             inner,
             globals,
@@ -47,7 +47,7 @@ impl Battle {
 impl Drop for Battle {
     fn drop(&mut self) {
         unsafe {
-            ResetWinnerStarShip();
+            uqm_rust::engine::Kernel::current().write(reset_winner);
             uqm_rust::engine::WorldData::current().write(|world| *world = self.globals);
             (ScreenWidth, ScreenHeight) = self.screen;
             _GraphicsStatusFlags = self.graphics_flags;
@@ -380,7 +380,7 @@ fn darts_use_next_location_exact_facing_offset_speed_and_failure_count() {
             let vx = cosine(angle as i32, 96 << VELOCITY_SHIFT);
             let vy = sine(angle as i32, 96 << VELOCITY_SHIFT);
             let (velocity_x, velocity_y) = ((*dart).velocity).get_current_components();
-            let (mut x, mut y) = (velocity_x as i16, velocity_y as i16);
+            let (x, y) = (velocity_x as i16, velocity_y as i16);
             assert_eq!((x, y), (vx, vy));
             let origin_x =
                 ((i32::from(i16::MAX) - 5) + i32::from(cosine(angle as i32, 60))) as COORD;
@@ -819,7 +819,7 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                     other.inner.ship_mut().SpeciesID = SPECIES_ID_SHOFIXTI_ID;
                     let mut reserves = [PoolShip::new(0), PoolShip::new(1)];
                     let inputs = std::array::from_fn::<_, 2, _>(|side| {
-                        uqm_rust::battle::battle_controls::InputContext::new(
+                        uqm_rust::engine::battle::input::InputContext::new(
                             side as u16,
                             if computer && side == 1 { 2 } else { 1 },
                         )

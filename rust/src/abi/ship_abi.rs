@@ -1591,11 +1591,7 @@ pub type MENU_SOUND_FLAGS = UWORD;
 #[cfg(not(test))]
 pub use crate::mainloop::input_abi::live::SetMenuSounds;
 
-#[cfg(not(test))]
-pub use crate::battle::sounds::engine::UpdateSoundPositions;
 
-#[cfg(not(test))]
-pub use crate::battle::sounds::engine::FlushSounds;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct LASER_BLOCK {
@@ -3077,7 +3073,7 @@ pub use crate::battle::tactrans_native::engine::flee_preprocess;
 pub use crate::battle::tactrans_native::engine::StopDitty;
 
 #[cfg(not(test))]
-pub use crate::battle::tactrans_native::engine::ResetWinnerStarShip;
+pub use crate::battle::tactrans_native::engine::reset_winner;
 
 #[cfg(not(test))]
 pub use crate::battle::tactrans_native::engine::StopAllBattleMusic;
