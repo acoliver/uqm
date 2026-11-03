@@ -4,7 +4,10 @@ mod battle;
 mod battle_context;
 use battle::*;
 
+#[path = "support/special_hooks.rs"]
+mod special_hooks;
 use std::{ffi::CStr, mem};
+use uqm_rust::collections::observation;
 use uqm_rust::ships::native::abi::*;
 
 use battle::Battle as Battlefield;
@@ -104,7 +107,10 @@ fn furnace_burns_one_crew_and_adds_sixteen_energy_at_boundaries() {
             (*ship.el()).hits = 2;
             ship.descriptor_mut().ship_info.energy_level = 15;
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
+            observation::enable();
+            observation::drain();
             ship.preprocess();
+            assert_eq!(special_hooks::count(&observation::drain(), "druuge"), 1);
             assert_eq!((*ship.el()).hits, 1);
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 31);
             assert_eq!(ship.ship_mut().special_counter, 30);
@@ -113,6 +119,8 @@ fn furnace_burns_one_crew_and_adds_sixteen_energy_at_boundaries() {
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
             ship.ship_mut().special_counter = 0;
             ship.preprocess();
+            // Full energy ends the burn before it starts, so nothing activates.
+            assert_eq!(special_hooks::count(&observation::drain(), "druuge"), 0);
             assert_eq!((*ship.el()).hits, 1);
             assert_eq!(ship.ship_mut().cur_status_flags & SPECIAL as u16, 0);
         }

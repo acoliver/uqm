@@ -6,8 +6,11 @@ mod battle;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 use battle::{prim, Battle, PoolElement, Ship};
+#[path = "support/special_hooks.rs"]
+mod special_hooks;
 
 use std::{ffi::CStr, ptr};
+use uqm_rust::collections::observation;
 use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, frame_index, sine};
 
 // FRAME_DESC and DRAWABLE_DESC layouts from drawable.h.
@@ -583,7 +586,10 @@ fn retropropulsion_adds_the_exact_reverse_vector_for_every_facing_then_stops_all
                 let mut expected = (*ship.ptr()).velocity;
                 let a = facing_to_angle(i32::from(facing)) + 32;
                 DeltaVelocityComponents(&mut expected, cosine(a, 160 * 32), sine(a, 160 * 32));
+                observation::enable();
+                observation::drain();
                 with_rng(8, 0, || ship.preprocess());
+                assert_eq!(special_hooks::count(&observation::drain(), "umgah"), 1);
                 assert_eq!(
                     velocity_fields(&(*ship.ptr()).velocity),
                     velocity_fields(&expected)
@@ -605,7 +611,9 @@ fn retropropulsion_adds_the_exact_reverse_vector_for_every_facing_then_stops_all
             }
             ship.ship_mut().ShipFacing = 0;
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
+            observation::drain();
             ship.preprocess();
+            assert_eq!(special_hooks::count(&observation::drain(), "umgah"), 1);
             assert_eq!(velocity(ship.ptr()), (0, 160 * 32));
         }
     })
@@ -634,7 +642,10 @@ fn retropropulsion_gates_on_appearance_thrust_wait_key_and_energy() {
                 ship.descriptor_mut().ship_info.energy_level = energy;
                 SetVelocityComponents(&raw mut (*ship.ptr()).velocity, 333, -555);
                 let before = velocity_fields(&(*ship.ptr()).velocity);
+                observation::enable();
+                observation::drain();
                 with_rng(4, 0, || ship.preprocess());
+                assert_eq!(special_hooks::count(&observation::drain(), "umgah"), 0);
                 assert_eq!(velocity_fields(&(*ship.ptr()).velocity), before);
                 assert_eq!(ship.descriptor_mut().ship_info.energy_level, energy);
                 assert_eq!(ship.ship_mut().special_counter, 0);

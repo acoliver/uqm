@@ -202,6 +202,9 @@ pub(crate) mod engine {
         collision(cx, a, pa, b, pb);
     }
 
+    /// Names the shield in the parity trace; observed inline, never called.
+    pub(crate) fn special_hook(_cx: &mut Cx<'_>, _ss: ShipId) {}
+
     pub(crate) fn utwig_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let e = cx.ship_element(ss);
         if cx.element(e).flags & APPEARING as u16 != 0 {
@@ -221,6 +224,7 @@ pub(crate) mod engine {
                 cx.race_stats_mut(ss).ship_info.ship_flags &=
                     !((POINT_DEFENSE | SHIELD_DEFENSE) as u16);
             } else if cx.ship_state(ss).special_counter == 0 {
+                cx.observe_special(ss, special_hook);
                 cx.ship_state_mut(ss).special_counter =
                     cx.race_stats(ss).characteristics.special_wait;
                 cx.process_ship_sound(ss, 2, e);

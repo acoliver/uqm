@@ -325,6 +325,9 @@ pub(crate) mod engine {
         }
     }
 
+    /// Names the form change in the parity trace; observed inline, never called.
+    pub(crate) fn special_hook(_cx: &mut Cx<'_>, _ss: ShipId) {}
+
     pub(crate) fn mmrnmhrm_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let ship = cx.ship_element(ss);
         if cx.element(ship).flags & APPEARING as u16 == 0
@@ -335,6 +338,7 @@ pub(crate) mod engine {
                 -i16::from(cx.race_stats(ss).characteristics.special_energy_cost),
             )
         {
+            cx.observe_special(ss, special_hook);
             if cx.element(ship).next.image.frames == cx.ship_frame_set(ss, 0) {
                 cx.set_frames(ship, true, cx.ship_frame_set(ss, 2));
             } else {

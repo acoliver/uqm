@@ -16,10 +16,12 @@ pub enum FixtureName {
     PoolFull,
     FrameSets,
     StarContact,
+    DruugeFurnace,
+    SlylandroHarvest,
 }
 
 impl FixtureName {
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 10] = [
         Self::AndrosynthBlazer,
         Self::PkunkRebirth,
         Self::ChmmrSatellites,
@@ -28,6 +30,8 @@ impl FixtureName {
         Self::PoolFull,
         Self::FrameSets,
         Self::StarContact,
+        Self::DruugeFurnace,
+        Self::SlylandroHarvest,
     ];
 
     pub const fn name(self) -> &'static str {
@@ -40,6 +44,8 @@ impl FixtureName {
             Self::PoolFull => "pool-full",
             Self::FrameSets => "frame-sets",
             Self::StarContact => "star-contact",
+            Self::DruugeFurnace => "druuge-furnace",
+            Self::SlylandroHarvest => "slylandro-harvest",
         }
     }
 
@@ -53,6 +59,8 @@ impl FixtureName {
             Self::PoolFull => [20, 20],
             Self::FrameSets => [1, 5],
             Self::StarContact => [255, 255],
+            Self::DruugeFurnace => [4, 5],
+            Self::SlylandroHarvest => [14, 5],
         }
     }
 }
@@ -87,11 +95,13 @@ impl MeleeSetupRequest {
 }
 
 /// Four groups of seven. The last group repeats three ships, never a sentinel.
+/// The last group's order is chosen so the Zoq-Fot-Pik tongue and the Yehat
+/// shield both fire in melee-cyborg-d (#830).
 pub(crate) const FLEETS: [[u8; 7]; 4] = [
     [0, 1, 2, 3, 4, 5, 6],
     [7, 8, 9, 10, 11, 12, 13],
     [14, 15, 16, 17, 18, 19, 20],
-    [21, 22, 23, 24, 0, 7, 14],
+    [21, 7, 14, 24, 23, 0, 22],
 ];
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
@@ -221,6 +231,10 @@ impl FixtureRun {
                 "system-exit",
                 "save-reload",
             ],
+            FixtureName::DruugeFurnace => &["counter-armed", "crew-burned", "energy-restored"],
+            FixtureName::SlylandroHarvest => {
+                &["counter-armed", "junk-harvested", "energy-restored"]
+            }
         };
         let missing: Vec<_> = expected
             .iter()
@@ -457,7 +471,9 @@ mod tests {
             include_str!("../../scripts/parity-androsynth-blazer.json"),
             include_str!("../../scripts/parity-chmmr-satellites.json"),
             include_str!("../../scripts/parity-death-spawn.json"),
+            include_str!("../../scripts/parity-druuge-furnace.json"),
             include_str!("../../scripts/parity-frame-sets.json"),
+            include_str!("../../scripts/parity-slylandro-harvest.json"),
             include_str!("../../scripts/parity-melee-cyborg-a.json"),
             include_str!("../../scripts/parity-melee-cyborg-b.json"),
             include_str!("../../scripts/parity-melee-cyborg-c.json"),
@@ -469,7 +485,7 @@ mod tests {
             include_str!("../../scripts/parity-samatra.json"),
             include_str!("../../scripts/parity-star-contact.json"),
         ];
-        assert_eq!(scripts.len(), 14);
+        assert_eq!(scripts.len(), 16);
         let mut names = BTreeSet::new();
         let mut fixture_names = BTreeSet::new();
         let mut fleets = BTreeSet::new();

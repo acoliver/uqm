@@ -61,11 +61,11 @@ pub(super) fn corpus_text() -> String {
 }
 
 #[test]
-fn registry_manifest_requires_twelve_corpus_eight_fixtures_and_real_mappings() {
+fn registry_manifest_requires_twelve_corpus_ten_fixtures_and_real_mappings() {
     let text = corpus_text();
     let registry = manifest::parse(&text).unwrap();
-    assert_eq!(registry.entries.len(), 20);
-    assert_eq!(registry.select(None).unwrap().len(), 20);
+    assert_eq!(registry.entries.len(), 22);
+    assert_eq!(registry.select(None).unwrap().len(), 22);
     assert_eq!(
         registry.select(Some("samatra")).unwrap()[0].scenario,
         "parity-samatra"
@@ -129,17 +129,17 @@ fn coverage_requires_live_opponents_and_matching_death_events() {
             coverage.observe(&format!("S 1 0 crc digest [spawn 0 {species}] [spawn 1 {opponent}] [hook {species} ships::races::arilou_native::arilou_intelligence] [hook {opponent} ships::races::human_native::initialize_missile] [death 0 {species}] [death 1 {opponent}]\n")).unwrap();
         }
     }
-    coverage.validate().unwrap();
+    coverage.validate_bilateral().unwrap();
     let mut menu_only = coverage::Coverage::default();
     menu_only
         .observe("S 1 0 crc digest [spawn 0 1] [spawn 1 2]\n")
         .unwrap();
-    assert!(menu_only.validate().is_err());
+    assert!(menu_only.validate_bilateral().is_err());
     let mut missing_death = coverage::Coverage::default();
     missing_death
         .observe("S 1 0 c d [spawn 0 1] [spawn 0 2]\n")
         .unwrap();
-    assert!(missing_death.validate().is_err());
+    assert!(missing_death.validate_bilateral().is_err());
     assert!(missing_death.observe("S 1 0 c d [death 0 1]\n").is_err());
     assert!(missing_death.observe("I 1 512 1\n").is_err());
     assert!(missing_death.observe("S 1 0 c d [spawn 3 1]\n").is_err());

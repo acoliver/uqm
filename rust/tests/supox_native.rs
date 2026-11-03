@@ -4,9 +4,12 @@
 mod battle;
 #[path = "support/battle_context.rs"]
 mod battle_context;
+#[path = "support/special_hooks.rs"]
+mod special_hooks;
 use battle::*;
 
 use std::{ffi::CStr, mem};
+use uqm_rust::collections::observation;
 use uqm_rust::ships::native::abi::*;
 
 /// The element queue and RNG are process-wide engine state.
@@ -155,6 +158,7 @@ unsafe fn thrust_heading(_battle: &Battle, heading: COUNT, flags: u16) -> ([i32;
 fn special_thrusts_laterally_and_in_reverse_then_restores_the_facing() {
     battle_context::run(|| {
         let _battle = Battlefield::new(8);
+        observation::enable();
         unsafe {
             // (held controls, ship facing, heading the thrust is applied along)
             let cases: [(u32, COUNT, COUNT); 8] = [
@@ -171,7 +175,9 @@ fn special_thrusts_laterally_and_in_reverse_then_restores_the_facing() {
                 let mut ship = Ship::bare(&_battle, SPECIES_ID_SUPOX_ID, 0);
                 ship.ship_mut().ShipFacing = facing;
                 ship.ship_mut().cur_status_flags = held as u16;
+                observation::drain();
                 ship.preprocess();
+                assert_eq!(special_hooks::count(&observation::drain(), "supox"), 1);
 
                 let (velocity, status) = thrust_heading(&_battle, heading, held as u16);
                 assert_ne!(velocity, [0; 9], "case {held:#x}/{facing}");
@@ -198,6 +204,7 @@ fn special_thrusts_laterally_and_in_reverse_then_restores_the_facing() {
 fn special_arms_the_wait_counters_and_normal_flight_is_untouched() {
     battle_context::run(|| {
         let _battle = Battlefield::new(8);
+        observation::enable();
         unsafe {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_SUPOX_ID, 0);
             ship.ship_mut().ShipFacing = 4;
@@ -219,7 +226,13 @@ fn special_arms_the_wait_counters_and_normal_flight_is_untouched() {
                 let mut ship = Ship::bare(&_battle, SPECIES_ID_SUPOX_ID, 0);
                 ship.ship_mut().ShipFacing = 4;
                 ship.ship_mut().cur_status_flags = held as u16;
+                observation::drain();
                 ship.preprocess();
+                let activated = usize::from(held == SPECIAL);
+                assert_eq!(
+                    special_hooks::count(&observation::drain(), "supox"),
+                    activated
+                );
                 assert_eq!(velocity_fields(&ship.element_mut().velocity), [0; 9]);
                 assert_eq!(ship.ship_mut().cur_status_flags, held as u16);
                 assert_eq!(ship.ship_mut().ShipFacing, 4);

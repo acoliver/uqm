@@ -4,10 +4,13 @@
 mod battle;
 #[path = "support/battle_context.rs"]
 mod battle_context;
+#[path = "support/special_hooks.rs"]
+mod special_hooks;
 use battle::{Battle, Ship};
 
 use std::ffi::CStr;
 use std::ptr;
+use uqm_rust::collections::observation;
 use uqm_rust::ships::native::abi::*;
 
 /// Mirrors `FRAME_DESC` from `drawable.h` so the engine's frame functions can
@@ -610,9 +613,12 @@ fn special_key_starts_the_teleport() {
         (*ship).thrust = 3;
         skiff.fleet.fixture.ship_mut().cur_status_flags =
             (SHIP_AT_MAX_SPEED | LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as u16;
+        observation::enable();
+        observation::drain();
 
         skiff.preprocess();
 
+        assert_eq!(special_hooks::count(&observation::drain(), "arilou"), 1);
         assert_eq!(
             skiff.fleet.fixture.descriptor_mut().ship_info.energy_level,
             17
@@ -646,13 +652,16 @@ fn teleport_needs_the_key_a_ready_counter_and_energy() {
         let mut skiff = Skiff::new(&_battle);
         let ship = skiff.ship;
 
+        observation::enable();
         for (flags, counter, energy) in
             [(0, 0, 20), (SPECIAL as u16, 1, 20), (SPECIAL as u16, 0, 2)]
         {
             skiff.fleet.fixture.ship_mut().cur_status_flags = flags;
             skiff.fleet.fixture.ship_mut().special_counter = counter;
             skiff.fleet.fixture.descriptor_mut().ship_info.energy_level = energy;
+            observation::drain();
             skiff.preprocess();
+            assert_eq!(special_hooks::count(&observation::drain(), "arilou"), 0);
             assert_eq!((*ship).state_flags, PLAYER_SHIP as u16);
             assert_eq!(
                 skiff.fleet.fixture.descriptor_mut().ship_info.energy_level,

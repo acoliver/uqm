@@ -59,7 +59,7 @@ fn execute(root: &Path, command: &str, args: &[String]) -> Result<()> {
     inventory::verify(root, &recorded, &manifest, options.entry.as_deref())?;
     compare::tree(&recorded, &root.join(GOLDEN), &manifest, &selected)?;
     if options.entry.is_none() {
-        coverage::check(&recorded)?;
+        coverage::check(&recorded, &manifest.entries)?;
     }
     Ok(())
 }

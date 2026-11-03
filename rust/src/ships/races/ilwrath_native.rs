@@ -315,6 +315,9 @@ pub(crate) mod engine {
         cx.set_target(ship, None);
     }
 
+    /// Names the cloak in the parity trace; observed inline, never called.
+    pub(crate) fn special_hook(_cx: &mut Cx<'_>, _ss: ShipId) {}
+
     pub(crate) fn ilwrath_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let ship = cx.ship_element(ss);
         // Local copy: clearing SPECIAL below must not touch cur_status_flags.
@@ -366,6 +369,7 @@ pub(crate) mod engine {
             && cx.ship_state(ss).special_counter == 0
             && cx.delta_energy(ship, -(SPECIAL_ENERGY_COST as SIZE))
         {
+            cx.observe_special(ss, special_hook);
             cx.primitive_style_mut(ship).color = WHITE_COLOR;
             cx.primitive_style_mut(ship).kind = gfx_object_STAMPFILL_PRIM as u8;
 

@@ -5,8 +5,11 @@ use uqm_rust::engine::battle::schema::HLINK;
 mod battle;
 #[path = "support/battle_context.rs"]
 mod battle_context;
+#[path = "support/special_hooks.rs"]
+mod special_hooks;
 use battle::{prim, Battle, FrameSet, PoolElement, PoolShip, Ship};
 use std::{ffi::CStr, mem, ptr};
+use uqm_rust::collections::observation;
 use uqm_rust::graphics::context_abi::_GraphicsStatusFlags;
 use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, frame_index, sine};
 
@@ -281,9 +284,13 @@ fn afterburner_inserts_owned_invisible_napalm_at_the_head_in_newest_first_order(
                 Ship::with_frames(&_battle, SPECIES_ID_THRADDASH_ID, 1, [16, 16, 10], [4, 4]);
             ship.ship_mut().ShipFacing = 7;
             (*ship.ptr()).next.location = POINT { x: -9, y: 13 };
+            observation::enable();
+            observation::drain();
             let first = with_rng(31, 0, || burn(&mut ship));
+            assert_eq!(special_hooks::count(&observation::drain(), "thraddash"), 1);
             assert_eq!(queued(), vec![first.cast(), ship.handle]);
             let second = with_rng(31, 0, || burn(&mut ship));
+            assert_eq!(special_hooks::count(&observation::drain(), "thraddash"), 1);
             assert_eq!(queued(), vec![second.cast(), first.cast(), ship.handle]);
             for e in [first, second] {
                 assert_eq!(
@@ -425,6 +432,7 @@ fn no_key_and_exhausted_energy_leave_velocity_and_queue_alone() {
                 Ship::with_frames(&_battle, SPECIES_ID_THRADDASH_ID, 0, [16, 16, 10], [4, 4]);
             SetVelocityComponents(&raw mut (*ship.ptr()).velocity, 123, -456);
             let v = velocity_fields(&(*ship.ptr()).velocity);
+            observation::enable();
             for (current, old, expected) in [
                 (0, SPECIAL, 0),
                 (SHIP_AT_MAX_SPEED, 0, SHIP_AT_MAX_SPEED),
@@ -436,14 +444,19 @@ fn no_key_and_exhausted_energy_leave_velocity_and_queue_alone() {
             ] {
                 ship.ship_mut().cur_status_flags = current as u16;
                 ship.ship_mut().old_status_flags = old as u16;
+                observation::drain();
                 ship.preprocess();
+                assert_eq!(special_hooks::count(&observation::drain(), "thraddash"), 0);
                 assert_eq!(ship.ship_mut().cur_status_flags, expected as u16);
                 assert_eq!(ship.descriptor_mut().ship_info.energy_level, 24);
             }
             ship.descriptor_mut().ship_info.energy_level = 0;
             ship.ship_mut().energy_counter = 17;
             ship.ship_mut().cur_status_flags = (SPECIAL | SHIP_AT_MAX_SPEED) as u16;
+            observation::drain();
             with_rng(8, 0, || ship.preprocess());
+            // Held SPECIAL with no energy to pay for it does not activate the afterburner.
+            assert_eq!(special_hooks::count(&observation::drain(), "thraddash"), 0);
             assert_eq!(
                 ship.ship_mut().cur_status_flags,
                 (SPECIAL | SHIP_AT_MAX_SPEED | (1 << 5)) as u16

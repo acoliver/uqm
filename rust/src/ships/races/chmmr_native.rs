@@ -227,6 +227,9 @@ pub(crate) mod engine {
         }
     }
 
+    /// Names the tractor in the parity trace; observed inline, never called.
+    pub(crate) fn special_hook(_cx: &mut Cx<'_>, _ss: ShipId) {}
+
     pub(crate) fn chmmr_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let ship = cx.ship_element(ss);
         if cx.ship_state(ss).status & WEAPON as u16 != 0 {
@@ -261,6 +264,7 @@ pub(crate) mod engine {
             }
         }
         if cx.ship_state(ss).status & SPECIAL as u16 != 0 && cx.delta_energy(ship, -1) {
+            cx.observe_special(ss, special_hook);
             // C plays the sound at the old target before TrackShip selects one.
             cx.process_ship_sound(ss, 1, cx.target(ship));
             let mut facing: COUNT = 0;

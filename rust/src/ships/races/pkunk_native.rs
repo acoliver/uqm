@@ -511,6 +511,9 @@ pub(crate) mod engine {
         }
     }
 
+    /// Names the energy burst in the parity trace; observed inline, never called.
+    pub(crate) fn special_hook(_cx: &mut Cx<'_>, _ss: ShipId) {}
+
     pub(crate) fn pkunk_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let e = cx.ship_element(ss);
         if cx.race_stats(ss).characteristics.special_wait != 0 {
@@ -518,6 +521,7 @@ pub(crate) mod engine {
         } else if cx.ship_state(ss).status & SPECIAL as STATUS_FLAGS != 0
             && cx.race_stats(ss).ship_info.energy_level < cx.race_stats(ss).ship_info.max_energy
         {
+            cx.observe_special(ss, special_hook);
             let mut sound;
             loop {
                 let count = i32::from(cx.ship_sound_count(ss));

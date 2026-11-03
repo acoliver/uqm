@@ -24,6 +24,8 @@ pub(super) const FIXTURES: &[&str] = &[
     "pool-full",
     "frame-sets",
     "star-contact",
+    "druuge-furnace",
+    "slylandro-harvest",
 ];
 
 #[derive(Debug, Clone)]
@@ -95,7 +97,7 @@ pub(super) fn parse(text: &str) -> Result<Manifest> {
     let required: BTreeSet<_> = CORPUS.iter().chain(FIXTURES).copied().collect();
     if names.iter().map(String::as_str).collect::<BTreeSet<_>>() != required {
         return Err(
-            "manifest must register all 12 corpus entries and 8 fixtures exactly once".into(),
+            "manifest must register all 12 corpus entries and 10 fixtures exactly once".into(),
         );
     }
     validate_mappings(&entries)?;

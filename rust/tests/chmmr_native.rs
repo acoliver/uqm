@@ -5,7 +5,10 @@ use uqm_rust::engine::battle::schema::HLINK;
 mod battle;
 #[path = "support/battle_context.rs"]
 mod battle_context;
+#[path = "support/special_hooks.rs"]
+mod special_hooks;
 use battle::{prim, PoolElement, Ship};
+use uqm_rust::collections::observation;
 
 use std::{ffi::CStr, mem, ptr};
 use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, frame_index, sine};
@@ -816,8 +819,11 @@ fn tractor_applies_mass_division_speed_flags_and_head_inserted_blue_shadows() {
                 let mut ship = ship;
                 ship.ship_mut().cur_status_flags = SPECIAL as u16;
                 ship.ship_mut().special_counter = 3;
+                observation::enable();
+                observation::drain();
                 TFB_SeedRandom(99);
                 ship.postprocess();
+                assert_eq!(special_hooks::count(&observation::drain(), "chmmr"), 1);
                 let vx = initial_vx + (384 / i32::from(mass)) as i16;
                 assert_eq!(velocity(enemy.ptr()), (vx, 0));
                 assert_eq!(
@@ -893,8 +899,15 @@ fn tractor_energy_target_gravity_and_allocation_boundaries() {
                 ship.ship_mut().special_counter = 3;
                 let held = if exhaust_queue { exhaust() } else { Vec::new() };
                 let tail = battle::tail();
+                observation::enable();
+                observation::drain();
                 TFB_SeedRandom(22);
                 ship.postprocess();
+                // Energy is paid before TrackShip, so a targetless tractor still fires.
+                assert_eq!(
+                    special_hooks::count(&observation::drain(), "chmmr"),
+                    usize::from(energy != 0)
+                );
                 assert_eq!(ship.ship_mut().special_counter, 0);
                 assert_eq!(ship.descriptor_mut().ship_info.energy_level, 0);
                 assert_eq!({ battle::tail() }, tail);

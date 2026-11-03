@@ -4,8 +4,11 @@ mod battle_context;
 
 #[path = "support/battle.rs"]
 mod battle;
+#[path = "support/special_hooks.rs"]
+mod special_hooks;
 use battle::*;
 use std::mem;
+use uqm_rust::collections::observation;
 use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, frame_index, sine};
 
 #[test]
@@ -88,7 +91,10 @@ fn shield_absorbs_damage_before_collision_and_recharges_on_next_preprocess() {
             let e = ship.ptr();
             (*e).state_flags |= APPEARING as u16;
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
+            observation::enable();
+            observation::drain();
             with_rng(1, 0, || ship.preprocess());
+            assert_eq!(special_hooks::count(&observation::drain(), "utwig"), 1);
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 9);
             assert_eq!(ship.ship_mut().special_counter, 12);
             assert_eq!((*e).life, 2);
@@ -115,6 +121,8 @@ fn shield_absorbs_damage_before_collision_and_recharges_on_next_preprocess() {
             assert_eq!(ship.descriptor_mut().ship_info.crew_level, 20);
             ship.ship_mut().special_counter = 11;
             ship.preprocess();
+            // The shield is already running, so its pulse does not start again.
+            assert_eq!(special_hooks::count(&observation::drain(), "utwig"), 0);
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 15);
             assert_eq!((*e).life, 2);
             for index in [3, 4, 5, 6, 7, 1] {
@@ -138,6 +146,8 @@ fn failed_shield_removes_defense_flags_and_half_period_drains_energy() {
             let mut ship = Ship::new(&_battle, SPECIES_ID_UTWIG_ID, 0);
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
             ship.descriptor_mut().ship_info.energy_level = 0;
+            observation::enable();
+            observation::drain();
             ship.preprocess();
             assert_eq!(
                 ship.descriptor_mut().ship_info.ship_flags,
@@ -147,6 +157,8 @@ fn failed_shield_removes_defense_flags_and_half_period_drains_energy() {
             ship.descriptor_mut().ship_info.energy_level = 3;
             ship.ship_mut().special_counter = 6;
             ship.preprocess();
+            // Neither a failed payment nor a half-period drain activates the shield.
+            assert_eq!(special_hooks::count(&observation::drain(), "utwig"), 0);
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 2);
             assert_eq!(ship.ship_mut().special_counter, 6);
             assert_eq!(ship.ship_mut().weapon_counter, 1);

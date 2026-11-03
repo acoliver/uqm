@@ -223,6 +223,9 @@ pub(crate) mod engine {
         }
     }
 
+    /// Names the crew burn in the parity trace; observed inline, never called.
+    pub(crate) fn special_hook(_cx: &mut Cx<'_>, _ss: ShipId) {}
+
     pub(crate) fn druuge_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let ship = cx.ship_element(ss);
         if cx.ship_state(ss).status & SPECIAL as u16 == 0 {
@@ -235,6 +238,7 @@ pub(crate) mod engine {
             cx.ship_state_mut(ss).status &= !(SPECIAL as u16);
             return;
         }
+        cx.observe_special(ss, special_hook);
         cx.process_ship_sound(ss, 1, ship);
         cx.delta_crew(ship, -1);
         cx.delta_energy(ship, i16::from(SPECIAL_ENERGY_COST));

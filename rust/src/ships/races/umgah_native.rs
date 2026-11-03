@@ -139,6 +139,9 @@ pub(crate) mod engine {
         vec![out]
     }
 
+    /// Names the jump in the parity trace; observed inline, never called.
+    pub(crate) fn special_hook(_cx: &mut Cx<'_>, _ss: ShipId) {}
+
     pub(crate) fn umgah_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let e = cx.ship_element(ss);
         if cx.element(e).flags & APPEARING as u16 != 0 {
@@ -149,6 +152,7 @@ pub(crate) mod engine {
             && cx.ship_state(ss).status & SPECIAL as u16 != 0
             && cx.delta_energy(e, -1)
         {
+            cx.observe_special(ss, special_hook);
             cx.process_ship_sound(ss, 1, e);
             let facing = facing_to_angle(i32::from(cx.ship_state(ss).facing)) + HALF_CIRCLE as i32;
             let speed = JUMP_DIST << VELOCITY_SHIFT;

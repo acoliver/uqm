@@ -282,6 +282,9 @@ pub(crate) mod engine {
         found
     }
 
+    /// Names the junk harvest in the parity trace; observed inline, never called.
+    pub(crate) fn special_hook(_cx: &mut Cx<'_>, _ss: ShipId) {}
+
     pub(crate) fn slylandro_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let ship = cx.ship_element(ss);
         if cx.ship_state(ss).weapon_counter != 0 && cx.ship_state(ss).weapon_counter < WEAPON_WAIT {
@@ -293,6 +296,7 @@ pub(crate) mod engine {
             && cx.ship_state(ss).status & SPECIAL as u16 != 0
             && harvest_space_junk(cx, ship)
         {
+            cx.observe_special(ss, special_hook);
             cx.ship_state_mut(ss).special_counter = cx.race_stats(ss).characteristics.special_wait;
         }
     }

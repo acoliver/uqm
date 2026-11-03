@@ -63,7 +63,10 @@ pub(super) fn record(
             ),
         );
         collect_error(&mut errors, saves::capture(&context));
-        collect_error(&mut errors, coverage::check(&context.out));
+        collect_error(
+            &mut errors,
+            coverage::check(&context.out, &manifest.entries),
+        );
     }
     collect_error(&mut errors, inventory::create(&context.out));
     collect_error(
