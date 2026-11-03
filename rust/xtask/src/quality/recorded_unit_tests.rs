@@ -122,3 +122,32 @@ fn recording_mixed_growth_and_reduction_satisfies_exact_approval_checks() {
     check(&measured, &baseline.entries, &Entries::new()).unwrap();
     check_measured(&measured, &baseline.entries, &entries(&[(key, 227)])).unwrap();
 }
+
+#[test]
+fn approved_budget_keeps_workspace_unsafe_movement_without_new_allowances() {
+    for metric in [
+        "unsafe_lines",
+        "unsafe_fn_lines",
+        "unsafe_block_lines",
+        "unsafe_blocks",
+    ] {
+        let a = format!("unsafe|{metric}|uqm::battle");
+        let b = format!("unsafe|{metric}|uqm::engine");
+        let before = entries(&[(&a, 100), (&b, 10)]);
+        let measured = entries(&[(&a, 80), (&b, 25)]);
+        check(&measured, &before, &before).unwrap();
+        check_measured(&measured, &before, &before).unwrap();
+    }
+}
+
+#[test]
+fn workspace_unsafe_growth_still_requires_an_exact_record() {
+    let a = "unsafe|unsafe_lines|uqm::battle";
+    let b = "unsafe|unsafe_lines|uqm::engine";
+    let before = entries(&[(a, 100), (b, 10)]);
+    let measured = entries(&[(a, 80), (b, 40)]);
+    assert!(check(&measured, &before, &before).is_err());
+    assert!(check_measured(&measured, &before, &before).is_err());
+    assert!(check(&measured, &entries(&[(a, 80), (b, 41)]), &before).is_err());
+    check(&measured, &measured, &before).unwrap();
+}

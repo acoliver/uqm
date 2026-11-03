@@ -43,7 +43,15 @@ fn limit(entries: &Entries, key: &str) -> u64 {
 
 /// A label approves exact recorded values, not an unrecorded or inflated allowance.
 pub fn check(measured: &Entries, recorded: &Entries, before: &Entries) -> Result<(), String> {
-    check_values(measured.iter().chain(recorded), measured, recorded, before)
+    let measured = approval_entries(measured);
+    let recorded = approval_entries(recorded);
+    let before = approval_entries(before);
+    check_values(
+        measured.iter().chain(&recorded),
+        &measured,
+        &recorded,
+        &before,
+    )
 }
 
 pub fn check_measured(
@@ -51,7 +59,24 @@ pub fn check_measured(
     recorded: &Entries,
     before: &Entries,
 ) -> Result<(), String> {
-    check_values(measured.iter(), measured, recorded, before)
+    let measured = approval_entries(measured);
+    let recorded = approval_entries(recorded);
+    let before = approval_entries(before);
+    check_values(measured.iter(), &measured, &recorded, &before)
+}
+
+fn approval_entries(entries: &Entries) -> Entries {
+    let mut totals = Entries::new();
+    for (key, value) in entries {
+        let identity = if key.starts_with("unsafe|") {
+            let metric = key.split('|').take(2).collect::<Vec<_>>().join("|");
+            format!("{metric}|workspace")
+        } else {
+            key.clone()
+        };
+        *totals.entry(identity).or_default() += value;
+    }
+    totals
 }
 
 fn check_values<'a>(
