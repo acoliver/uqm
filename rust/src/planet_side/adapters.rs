@@ -7,6 +7,7 @@ use super::simulation::FrameInput;
 use crate::c_bindings::controller_input::{CurrentInputState, CONTROL_TEMPLATE_NUM_TEMPLATES};
 #[cfg(not(test))]
 use crate::c_bindings::player_control_template;
+#[cfg(not(test))]
 use crate::engine::World as WorldOwner;
 #[cfg(not(test))]
 use crate::engine::WorldData as WorldFields;

@@ -1,5 +1,4 @@
 //! Stage B resource and record projections. Borrows end before legacy handoffs.
-use crate::engine::Kernel as KernelOwner;
 #[cfg(not(test))]
 impl Cx<'_> {
     pub fn alloc_element(&mut self) -> Option<ElementId> {
@@ -659,7 +658,7 @@ mod intersection_projection_tests {
         // SAFETY: a zeroed group queue has no allocated storage.
 
         // SAFETY: the local queue authorities and their pool remain exclusive for this test.
-        unsafe {
+        {
             let mut battle = Battle::new();
             let mut kernel = KernelOwner::new();
             kernel.elements.reset_capacity(1);

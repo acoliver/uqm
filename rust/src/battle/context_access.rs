@@ -1,7 +1,6 @@
 //! Game and resource operations wired to the explicit battle context.
 #[cfg(not(test))]
 use crate::engine::battle::{Cx, ElementId, ShipId, Subject};
-use crate::engine::StoryKey;
 #[cfg(not(test))]
 use crate::ships::native::abi::*;
 
@@ -475,12 +474,12 @@ mod sounds_access {
 }
 
 mod star_access {
-    use crate::engine::StoryKey;
     #[cfg(not(test))]
-    use crate::navigation::abi::*;
+    use crate::engine::StoryKey;
     #[cfg(not(test))]
     #[cfg(not(test))]
     use crate::navigation::hyper_transition::{element_universe, init_transition};
+    #[cfg(not(test))]
     use crate::planets::starmap::{current_catalog, find_star_in};
     #[cfg(not(test))]
     #[cfg(not(test))]

@@ -3,7 +3,9 @@
 //! @plan PLAN-20260707-MAINLOOP.P06
 //! @requirement REQ-ML-001, REQ-ML-007, REQ-ML-008
 
+#[cfg(not(test))]
 use crate::engine::Kernel as KernelOwner;
+#[cfg(not(test))]
 use crate::engine::World as WorldOwner;
 use std::os::raw::c_int;
 

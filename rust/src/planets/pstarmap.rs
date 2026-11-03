@@ -9,6 +9,7 @@ use crate::c_bindings::global_state::{Color, EXTENT, FRAME, MENU_STATE, POINT, R
 #[cfg(not(test))]
 use crate::c_bindings::global_state::{FLEET_INFO, QUEUE, TEXT};
 use crate::engine::Kernel as KernelOwner;
+#[cfg(not(test))]
 use crate::engine::StoryKey;
 #[cfg(not(test))]
 use crate::engine::{World as WorldOwner, WorldData as WorldFields};

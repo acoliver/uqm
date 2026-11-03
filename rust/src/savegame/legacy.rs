@@ -1,6 +1,7 @@
 //! Pre-UMS save layout, including its 32-bit pointer padding and packed groups.
 use super::format::*;
 use super::{decode_save, decode_summary_from, SaveFile, Summary, GAME_STATE_BYTES};
+#[cfg(not(test))]
 use crate::engine::World as WorldOwner;
 use crate::state::game_state::{copy_state_bits_raw, get_state_32_raw, set_state_32_raw};
 use std::io::{self, Read};

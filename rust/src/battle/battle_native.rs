@@ -2,6 +2,7 @@
 
 #[cfg(not(test))]
 use crate::engine::battle::schema::InputContext;
+#[cfg(not(test))]
 use crate::engine::World as WorldOwner;
 #[cfg(not(test))]
 use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

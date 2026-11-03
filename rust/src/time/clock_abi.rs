@@ -4,6 +4,7 @@
 
 use super::clock_bridge::{days_in_month, CEvent};
 use crate::collections::queue::{AllocLink, HLink, InitQueue, InsertQueue, Queue, UninitQueue};
+#[cfg(not(test))]
 use crate::engine::World as WorldOwner;
 #[cfg(not(test))]
 use crate::engine::WorldData as WorldFields;

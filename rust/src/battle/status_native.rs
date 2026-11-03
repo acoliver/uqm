@@ -294,7 +294,6 @@ pub(crate) mod engine {
     /// # Safety
     /// Ship, captain assets, and the active status context must be live.
     pub unsafe fn draw_captains_window(cx: &mut Cx<'_>, ship: crate::engine::battle::ShipId) {
-        use crate::engine::{Kernel, WorldData};
         let mut captain = (*cx.captain_pointer(ship)).clone();
         let mut frame = captain.background;
         if !frame.is_null() {

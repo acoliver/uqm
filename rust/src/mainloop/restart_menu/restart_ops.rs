@@ -5,6 +5,7 @@
 
 #[cfg(not(test))]
 use crate::engine::Kernel as KernelOwner;
+#[cfg(not(test))]
 use crate::engine::World as WorldOwner;
 #[cfg(not(test))]
 use std::ffi::CString;

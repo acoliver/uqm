@@ -3,6 +3,7 @@
 #![allow(non_snake_case)]
 
 use super::ffi::*;
+#[cfg(not(test))]
 use crate::engine::World as WorldOwner;
 use std::ffi::{c_char, c_int, c_long, c_void};
 use std::ptr;
@@ -209,7 +210,7 @@ mod tests {
         // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
             crate::app::bridge::with_game(&mut game, || {
-                WorldOwner::current().write(|world| rust_init_game_state(world));
+                WorldOwner::current().write(rust_init_game_state);
                 assert!(WorldOwner::current()
                     .write(|world| OpenStateFile(world, -1, c"wb".as_ptr()))
                     .is_null());

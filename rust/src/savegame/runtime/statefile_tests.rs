@@ -36,7 +36,9 @@ fn game() -> Box<CGameState> {
 /// A fresh game state and empty group files, as `InitGlobData` leaves them.
 fn fresh_game() -> Box<CGameState> {
     // SAFETY: no requirements.
-    unsafe { WorldOwner::current().write(|world| rust_init_game_state(world)) };
+    {
+        WorldOwner::current().write(rust_init_game_state)
+    };
     init_group_info(true).unwrap();
     WorldOwner::current()
         .write(|world| {
@@ -843,7 +845,7 @@ fn canned_nodes_capture_restore_and_old_save_clear_are_atomic() {
             WorldOwner::current()
                 .write(|world| with_state_files(world, |files| files.can_node(node)))
                 .unwrap();
-            WorldOwner::current().write(|world| rust_init_game_state(world));
+            WorldOwner::current().write(rust_init_game_state);
             assert!(WorldOwner::current()
                 .write(|world| with_state_files(world, |files| files.canned_node(node.key())))
                 .unwrap()

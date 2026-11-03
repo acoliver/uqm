@@ -1,7 +1,7 @@
 //! Ship runtime operations formerly supplied by rust_bridge_ships.c.
 
+#[cfg(not(test))]
 use crate::engine::Kernel as KernelOwner;
-use crate::engine::World as WorldOwner;
 #[cfg(not(test))]
 fn remaining_battle_crew(cx: &crate::engine::battle::Cx<'_>) -> u16 {
     let mut crew = 0u16;

@@ -1,5 +1,6 @@
 //! Shared battle record layouts during the storage transition.
 pub use crate::battle::velocity::VelocityDesc as VELOCITY_DESC;
+#[cfg(test)]
 use crate::engine::World as WorldOwner;
 use crate::graphics::native_abi::{
     BYTE, COUNT, FRAME, POINT, RESOURCE, SIZE, STRING, STRING as SOUND, UWORD,
@@ -941,6 +942,7 @@ impl Kernel {
 }
 
 impl Kernel {
+    #[cfg(not(test))]
     pub(crate) fn element_sound_source(
         &self,
         token: usize,

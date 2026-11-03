@@ -2,7 +2,6 @@
 
 use crate::engine::battle::kernel::MasterCatalog;
 use crate::engine::Kernel as KernelOwner;
-use crate::engine::World as WorldOwner;
 
 fn find(queue: &MasterCatalog, species: u32) -> i32 {
     let mut next = queue.head();

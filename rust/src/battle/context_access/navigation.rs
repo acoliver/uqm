@@ -209,7 +209,9 @@ impl Cx<'_> {
     }
     pub(crate) fn navigation_stars(&self) -> crate::engine::battle::views::FrameSelection {
         // SAFETY: the loaded navigation resource is retained throughout the context borrow.
-        unsafe { crate::engine::battle::views::FrameSelection::retain(self.kernel.stars_in_space) }
+        {
+            crate::engine::battle::views::FrameSelection::retain(self.kernel.stars_in_space)
+        }
     }
     pub(crate) fn group_icon(
         &self,

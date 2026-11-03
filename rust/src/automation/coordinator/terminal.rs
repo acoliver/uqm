@@ -1,6 +1,7 @@
 //! First-terminal publication and propagation to the game loop.
 
 use super::*;
+#[cfg(not(test))]
 use crate::engine::World as WorldOwner;
 
 impl Coordinator {

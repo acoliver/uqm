@@ -1,6 +1,7 @@
 //! Frame-array identity and shared ownership of its loaded drawables.
 
 use super::ShipId;
+#[cfg(test)]
 use crate::engine::Kernel as KernelOwner;
 use crate::graphics::drawable_abi::{retain_frame_allocations, DrawableLease};
 use crate::graphics::native_abi::FRAME;

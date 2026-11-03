@@ -1,6 +1,7 @@
 //! Alliance and mission effects used by the Supox, Utwig and Zoq-Fot-Pik scripts.
 use super::encounter::EncounterApi;
 use crate::comm::dispatch::ship;
+#[cfg(not(test))]
 use crate::engine::World as WorldOwner;
 pub(super) const SUPOX_SHIP: u16 = ship::SUPOX_SHIP as u16;
 pub(super) const UTWIG_SHIP: u16 = ship::UTWIG_SHIP as u16;

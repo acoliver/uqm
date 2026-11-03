@@ -186,7 +186,7 @@ pub(crate) mod engine {
     /// # Safety
     /// Called on the game thread before releasing an element's storage.
     pub(crate) unsafe fn remove_sounds(object: Option<ElementId>) {
-        let mut lease = KernelOwner::current();
+        let lease = KernelOwner::current();
         let kernel = &mut **lease;
         for i in FIRST_SFX_CHANNEL..=LAST_SFX_CHANNEL {
             if kernel.element_sound_source(get_positional_object(i)) == object {

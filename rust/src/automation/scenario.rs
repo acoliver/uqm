@@ -8,6 +8,7 @@
 #[cfg(not(test))]
 use crate::engine::Kernel as KernelOwner;
 use crate::engine::StoryKey;
+#[cfg(not(test))]
 use crate::engine::World as WorldOwner;
 use serde::Deserialize;
 use std::fmt;

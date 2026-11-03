@@ -9,6 +9,7 @@
 //! @plan PLAN-20260724-MAINLOOP-AND-COMM.P11
 //! @requirement REQ-ML-007, REQ-COMM-DISPATCH
 
+#[cfg(not(test))]
 use crate::engine::StoryKey;
 use crate::engine::World as WorldOwner;
 #[cfg(not(test))]

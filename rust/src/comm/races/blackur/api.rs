@@ -1,5 +1,6 @@
 use super::Handler;
 use crate::comm::races::encounter::EncounterApi;
+#[cfg(not(test))]
 use crate::engine::World as WorldOwner;
 #[cfg(not(test))]
 use crate::engine::WorldData as WorldFields;
@@ -17,7 +18,7 @@ impl BlackurApi for super::super::script::live::LiveScript<Handler> {
     fn battle_group(&self) -> (u32, u32) {
         let (start, _) = crate::state::game_state_keys::bit_range("SAMATRA_GRPOFFS0")
             .expect("missing Samatra group-offset state");
-        let offset = unsafe {
+        let offset = {
             WorldOwner::current()
                 .read(|world| crate::state::ffi::rust_get_game_state_32(world, start as i32))
         };

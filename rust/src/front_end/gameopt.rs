@@ -1,8 +1,6 @@
 //! Game options, naming, and save/load selection, ported from `uqm/gameopt.c`.
 #![allow(non_snake_case)]
 
-use crate::engine::StoryKey;
-use crate::engine::World as WorldOwner;
 const MAX_SAVED_GAMES: usize = 50;
 const SAVES_PER_PAGE: u16 = 5;
 

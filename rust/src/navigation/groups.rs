@@ -3,6 +3,7 @@
 #![allow(non_snake_case)]
 
 use super::abi::{GROUP_HEADER, IP_GROUP, SHIP_FRAGMENT};
+#[cfg(not(test))]
 use crate::engine::StoryKey;
 use crate::engine::World as WorldOwner;
 #[cfg(not(test))]
@@ -657,7 +658,7 @@ mod tests {
         // SAFETY: the serialized fixture owns this published lifecycle.
         unsafe {
             crate::app::bridge::with_game(&mut game_owner, || {
-                WorldOwner::current().write(|world| crate::state::ffi::rust_init_game_state(world));
+                WorldOwner::current().write(crate::state::ffi::rust_init_game_state);
                 let file =
                     WorldOwner::current().write(|world| OpenStateFile(world, 1, c"wb".as_ptr()));
                 let mut group: IP_GROUP = std::mem::zeroed();

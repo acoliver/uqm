@@ -4,7 +4,9 @@
 //! lander sprite, shield indicators, and cargo capacity bar. Called by
 //! `PickPlanetSide` in `scan.c` before the landing-site selection menu.
 
+#[cfg(not(test))]
 use crate::engine::StoryKey;
+#[cfg(not(test))]
 use crate::engine::World as WorldOwner;
 #[cfg(not(test))]
 use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

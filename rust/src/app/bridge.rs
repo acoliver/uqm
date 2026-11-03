@@ -1,6 +1,7 @@
 //! LIFO handoff between legacy entry points and the one owned battle context.
 
 use crate::engine::battle::{record::Kernel, Cx};
+#[cfg(test)]
 use crate::engine::World as WorldOwner;
 use parking_lot::Mutex;
 use std::ptr::NonNull;

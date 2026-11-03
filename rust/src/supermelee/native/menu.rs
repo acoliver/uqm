@@ -1,6 +1,4 @@
 //! Super Melee setup lifecycle and menu dispatch.
-use crate::engine::Kernel as KernelOwner;
-use crate::engine::World as WorldOwner;
 mod rules;
 #[cfg(not(test))]
 pub(crate) mod live {

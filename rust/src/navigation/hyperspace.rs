@@ -5,6 +5,7 @@ use super::abi::*;
 #[cfg(not(test))]
 #[cfg(not(test))]
 use crate::engine::world::FuelDistance;
+#[cfg(not(test))]
 use crate::engine::StoryKey;
 #[cfg(not(test))]
 use crate::engine::{World as WorldOwner, WorldData as WorldFields};

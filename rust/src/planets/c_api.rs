@@ -550,7 +550,7 @@ impl Npcs for LiveGame {
     }
     fn yehat_civil_war(&self) -> bool {
         // SAFETY: reads the Rust-owned game state.
-        unsafe {
+        {
             WorldOwner::current()
                 .read(|world| rust_get_game_state_bits(world, YEHAT_CIVIL_WAR.0, YEHAT_CIVIL_WAR.1))
                 != 0
@@ -594,7 +594,7 @@ impl PlanetNames for LiveGame {
     }
     fn set_battle_planet(&mut self, value: u8) {
         // SAFETY: writes the Rust-owned game state.
-        unsafe {
+        {
             WorldOwner::current().write(|world| {
                 rust_set_game_state_bits(world, BATTLE_PLANET.0, BATTLE_PLANET.1, value)
             })

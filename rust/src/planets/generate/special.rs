@@ -100,7 +100,7 @@ use crate::state::ffi::{rust_get_game_state_bits, rust_set_game_state_bits};
 
 fn get_game_state_byte(start: u32) -> u32 {
     // SAFETY: reads the Rust-owned game state.
-    unsafe {
+    {
         u32::from(
             WorldOwner::current()
                 .read(|world| rust_get_game_state_bits(world, start as i32, start as i32 + 7)),
@@ -110,7 +110,7 @@ fn get_game_state_byte(start: u32) -> u32 {
 
 fn set_game_state_byte(start: u32, value: u8) {
     // SAFETY: writes the Rust-owned game state.
-    unsafe {
+    {
         WorldOwner::current()
             .write(|world| rust_set_game_state_bits(world, start as i32, start as i32 + 7, value))
     };

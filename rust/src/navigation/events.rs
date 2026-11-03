@@ -1,6 +1,7 @@
 //! Campaign events and daily fleet movement, ported from gameev.c.
 
 use super::abi::*;
+#[cfg(not(test))]
 use crate::engine::StoryKey;
 #[cfg(not(test))]
 use crate::engine::World;

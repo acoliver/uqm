@@ -7,7 +7,9 @@
 //! @plan PLAN-20260326-COMMPT2.P07
 //! @requirement REQ-HL-001
 
+#[cfg(not(test))]
 use crate::engine::StoryKey;
+#[cfg(not(test))]
 use crate::engine::World as WorldOwner;
 // ============================================================================
 // C bridge declarations (not compiled in test builds)

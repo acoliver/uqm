@@ -338,8 +338,7 @@ mod tests {
                     false
                 }
                 {
-                    WorldOwner::current()
-                        .write(|world| crate::state::ffi::rust_init_game_state(world));
+                    WorldOwner::current().write(crate::state::ffi::rust_init_game_state);
                 }
                 let mut functions: Box<GenerateFunctions> = Box::new(std::mem::zeroed());
                 functions.pickupMinerals = Some(accept);

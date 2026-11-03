@@ -151,7 +151,7 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
                     path.display()
                 );
                 {
-                    WorldOwner::current().write(|world| rust_init_game_state(world));
+                    WorldOwner::current().write(rust_init_game_state);
                 }
                 let mut game = super::queue_tests::LiveGame::new();
                 assert!({
