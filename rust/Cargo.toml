@@ -98,6 +98,7 @@ required-features = ["debug-process"]
 [[test]]
 name = "planets_parity"
 path = "tests/planets_parity.rs"
+required-features = ["debug-process"]
 
 [[test]]
 name = "linked_provider_fixture"
