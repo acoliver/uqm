@@ -126,17 +126,13 @@ impl<'a, T: QueueRecord, const N: usize> LinkQueue<'a, T, N> {
                 .id_at(id.slot)
                 .is_some_and(|key| key.generation() == id.generation)
     }
-    pub fn id(&self, raw: *mut std::ffi::c_void) -> Option<LinkId<T>> {
-        if raw.is_null() {
+    pub fn id(&self, address: usize) -> Option<LinkId<T>> {
+        if address == 0 {
             return None;
         }
         let id = (0..N).find_map(|slot| {
             let id = self.queue.id_at(slot)?;
-            (std::ptr::from_ref(self.queue.get(id))
-                .cast_mut()
-                .cast::<std::ffi::c_void>()
-                == raw)
-                .then(|| self.identify(id))
+            (std::ptr::from_ref(self.queue.get(id)) as usize == address).then(|| self.identify(id))
         });
         assert!(id.is_some(), "ship link addresses free or foreign storage");
         id
@@ -294,7 +290,7 @@ mod tests {
         assert_eq!(ships.count(), 2);
         ships.put(a);
         assert_eq!(ships.tail(), Some(a));
-        assert_eq!(ships.id(ships.raw(a)), Some(a));
+        assert_eq!(ships.id(ships.raw(a) as usize), Some(a));
         ships.reinit();
         assert_eq!(ships.count(), 0);
         assert!(ships.head().is_none());
@@ -330,8 +326,8 @@ mod tests {
         let raw = ships.raw(id);
         ships.free(id);
         assert!(catch_unwind(AssertUnwindSafe(|| ships.get(id))).is_err());
-        assert!(catch_unwind(AssertUnwindSafe(|| ships.id(raw))).is_err());
-        assert!(ships.id(std::ptr::null_mut()).is_none());
+        assert!(catch_unwind(AssertUnwindSafe(|| ships.id(raw as usize))).is_err());
+        assert!(ships.id(0).is_none());
         let replacement = ships.alloc().unwrap();
         assert_eq!(replacement.slot, id.slot);
         assert_ne!(replacement.generation, id.generation);
@@ -515,7 +511,6 @@ mod pool_view_tests {
         assert_eq!(replacement.slot, b.slot);
         assert_eq!(*view.get_mut(replacement), 0);
         assert_eq!(*view.record(a), 17);
-        drop(view);
         let view = LinkQueue::<Value, 4>::borrow_pool(&pool);
         assert_eq!(view.head(), Some(a));
         assert_eq!(view.tail(), Some(c));

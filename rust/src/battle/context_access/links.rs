@@ -23,7 +23,9 @@ impl LinkQueue<'_, Starship> {
         with_fleet(id.side() as usize, |queue| queue.get(queue.link(id)))
     }
     pub(crate) fn identify_ship(side: usize, raw: *mut c_void) -> Option<ShipId> {
-        with_fleet(side, |queue| queue.id(raw).map(|id| queue.ship_id(id)))
+        with_fleet(side, |queue| {
+            queue.id(raw as usize).map(|id| queue.ship_id(id))
+        })
     }
     pub(crate) fn ship_raw(id: Option<ShipId>) -> *mut c_void {
         id.map_or(std::ptr::null_mut(), |id| {

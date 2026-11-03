@@ -453,8 +453,6 @@ fn queue_ship(pool: &RacePool, slot: usize) -> ShipId {
     use crate::engine::battle::link_queue::{LinkQueue, Starship};
     let queue = LinkQueue::<Starship>::borrow(pool);
     let key = pool.fixture_records().id_at(slot).unwrap();
-    let address = std::ptr::from_ref(pool.fixture_records().get(key))
-        .cast_mut()
-        .cast();
+    let address = std::ptr::from_ref(pool.fixture_records().get(key)) as usize;
     queue.ship_id(queue.id(address).unwrap())
 }
