@@ -1729,34 +1729,6 @@ impl Coordinator {
         true
     }
 
-    fn transit_budget(action: Option<&Action>) -> Option<u64> {
-        use super::script::PatrolPolicy;
-        match action {
-            Some(Action::NavigateToHyperspace(step)) if step.encounter_response.is_none() => {
-                Some(step.max_ticks)
-            }
-            Some(Action::NavigateToMoon(step))
-                if World::current()
-                    .read(|world| world.story_value(StoryKey::GLOBAL_FLAGS_AND_DATA))
-                    == Some(0) =>
-            {
-                Some(step.max_ticks)
-            }
-            Some(Action::NavigateToPlanet(step)) if step.patrol_policy != PatrolPolicy::Stop => {
-                Some(step.max_ticks)
-            }
-            Some(Action::NavigateToOrbit(step))
-                if step.patrol_policy != PatrolPolicy::Stop
-                    && World::current()
-                        .read(|world| world.story_value(StoryKey::GLOBAL_FLAGS_AND_DATA))
-                        == Some(0) =>
-            {
-                Some(step.max_ticks)
-            }
-            _ => None,
-        }
-    }
-
     /// Derive real player controls for whichever navigation the current step
     /// is running, and report arrival.
     fn service_navigation(
