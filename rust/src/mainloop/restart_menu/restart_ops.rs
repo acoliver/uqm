@@ -34,10 +34,7 @@ pub const RESTART_PMAP_ANIM: &str = "graphics.newgame";
 /// campaign replays; outside automation the coordinator returns the `0`
 /// sentinel and `clock_seed` seeds from the wall clock as before.
 pub fn seed_new_campaign(clock_seed: impl FnOnce()) {
-    let automation_seed = crate::automation::coordinator::rust_automation_seed_value(
-        crate::automation::trace::SeedDomain::NEW_GAME_ID,
-        0,
-    );
+    let automation_seed = crate::app::observe::seed(3, 0);
     if automation_seed != 0 {
         crate::math::seed_random(automation_seed);
     } else {

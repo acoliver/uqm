@@ -4,7 +4,7 @@ use super::*;
 #[cfg(not(test))]
 use crate::engine::World;
 
-impl Coordinator {
+impl AutomationObserver {
     /// Set a terminal outcome on both the coordinator and the runtime mirror.
     /// Also propagates the stop to the game loop by setting CHECK_ABORT
     /// and MainExited to force the game loop to exit.

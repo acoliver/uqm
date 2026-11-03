@@ -12,7 +12,7 @@
 
 use crate::engine::World;
 use std::fmt;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::Ordering;
 
 use serde::{Deserialize, Serialize};
 
@@ -350,16 +350,6 @@ pub fn label_satisfies(label: &str, prefix: &str, predicate: &StatePredicate) ->
     conditions.next().is_none()
 }
 
-static FLAGSHIP_DESTROYED: AtomicBool = AtomicBool::new(false);
-
-/// Record that the main loop ended a game because the flagship died.
-///
-/// The restart menu that follows tears the game structures down, so the
-/// crew word is gone by the time a script could read it; this flag outlives it.
-pub fn record_flagship_destroyed() {
-    FLAGSHIP_DESTROYED.store(true, Ordering::SeqCst);
-}
-
 /// The running game, read on the game thread.
 pub struct LiveCampaign;
 
@@ -454,9 +444,10 @@ impl StateSource for LiveCampaign {
             StateKey::DateDay => input_ffi::game_date().map(|(day, _, _)| u32::from(day)),
             StateKey::DateMonth => input_ffi::game_date().map(|(_, month, _)| u32::from(month)),
             StateKey::DateYear => input_ffi::game_date().map(|(_, _, year)| u32::from(year)),
-            StateKey::FlagshipDestroyed => {
-                Some(u32::from(FLAGSHIP_DESTROYED.load(Ordering::SeqCst)))
-            }
+            StateKey::FlagshipDestroyed => Some(u32::from(
+                super::AutomationObserver::get()
+                    .is_some_and(|observer| observer.flagship_destroyed.load(Ordering::SeqCst)),
+            )),
             StateKey::BattleShipsP1 => input_ffi::battle_fleets().map(|(p1, _)| u32::from(p1)),
             StateKey::BattleShipsP2 => input_ffi::battle_fleets().map(|(_, p2)| u32::from(p2)),
         }

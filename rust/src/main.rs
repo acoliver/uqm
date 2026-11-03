@@ -103,7 +103,7 @@ fn main() {
         ("USE_RUST_RESTART", true),
     ]);
 
-    match uqm_rust::automation::setup_automation(&auto_opts, &caps) {
+    let observer = match uqm_rust::automation::setup_automation(&auto_opts, &caps) {
         Ok(Some(setup)) => {
             #[cfg(feature = "debug-process")]
             if let Some(config) = parsed.native_window_proof.as_deref() {
@@ -116,7 +116,10 @@ fn main() {
                 }
             }
             // Active automation validated — initialize the coordinator.
-            uqm_rust::automation::Coordinator::init(setup.script, setup.output_root);
+            Some(uqm_rust::automation::AutomationObserver::new(
+                setup.script,
+                setup.output_root,
+            ))
         }
         Ok(None) => {
             if parsed.native_window_proof.is_some() {
@@ -124,12 +127,14 @@ fn main() {
                 exit(1);
             }
             // Inactive — proceed normally
+            None
         }
         Err(e) => {
             eprintln!("Automation setup failed: {e}");
             exit(1);
         }
-    }
+    };
+    let _application = uqm_rust::app::Application::new(observer);
 
     let mut game = uqm_rust::engine::Game::new();
     // SAFETY: main owns the game until shutdown and the final state summary have completed.
@@ -147,7 +152,7 @@ fn main() {
 
 fn finish_automation(exit_code: i32, replay_summary: Option<&str>) -> i32 {
     // Finalize automation after teardown and propagate its terminal/evidence status.
-    let exit_code = match uqm_rust::automation::Coordinator::finalize(exit_code) {
+    let exit_code = match uqm_rust::automation::AutomationObserver::finalize(exit_code) {
         Ok(status) => status,
         Err(error) => {
             eprintln!("Automation finalization failed: {error}");
@@ -156,9 +161,9 @@ fn finish_automation(exit_code: i32, replay_summary: Option<&str>) -> i32 {
     };
 
     if let Some(path) = replay_summary {
-        if let Err(error) =
-            uqm_rust::automation::Coordinator::write_replay_summary(std::path::Path::new(path))
-        {
+        if let Err(error) = uqm_rust::automation::AutomationObserver::write_replay_summary(
+            std::path::Path::new(path),
+        ) {
             eprintln!("Replay summary failed: {error}");
             return 1;
         }

@@ -131,7 +131,7 @@ impl CorpusRequest {
     }
 }
 
-/// Returned only after live predicates hold. Coordinator retains this receipt.
+/// Returned only after live predicates hold. AutomationObserver retains this receipt.
 #[derive(Debug)]
 pub(crate) struct FixtureRun {
     pub fixture: FixtureName,

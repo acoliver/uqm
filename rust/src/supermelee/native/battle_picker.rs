@@ -427,7 +427,7 @@ pub mod live {
         value(frame, ship.player as usize);
     }
 
-    use crate::automation::input_ffi::nested_input;
+    use crate::app::observe::nested_input;
 
     use crate::mainloop::input_abi::live::UpdateInputState;
     /// # Safety

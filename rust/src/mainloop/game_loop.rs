@@ -364,11 +364,15 @@ mod cffi {
         }
 
         fn activate_automation_start_scene(&self) {
-            crate::automation::coordinator::Coordinator::activate_start_scene();
+            crate::app::observe::checkpoint(
+                crate::engine::observe::CheckpointView::GameInitialized,
+            );
         }
 
         fn note_flagship_destroyed(&self) {
-            crate::automation::campaign_state::record_flagship_destroyed();
+            crate::app::observe::checkpoint(
+                crate::engine::observe::CheckpointView::FlagshipDestroyed,
+            );
         }
 
         fn set_status_message_mode_default(&self) {

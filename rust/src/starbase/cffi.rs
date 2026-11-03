@@ -954,7 +954,9 @@ impl Platform for CffiPlatform {
     }
 
     fn observe_starbase_menu(&self, active: bool) {
-        crate::automation::ui_observation::observe_starbase_menu(active);
+        crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::StarbaseMenu(
+            active,
+        ));
     }
 
     fn run_commander_conversation(&self) {

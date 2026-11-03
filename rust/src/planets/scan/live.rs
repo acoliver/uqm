@@ -397,10 +397,10 @@ unsafe fn pick_side() -> bool {
     save_location_image();
     InitLander(0);
     base::SetMenuSounds(0, 16);
-    crate::automation::ui_observation::rust_automation_observe_planet_menu(4);
+    crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::PlanetMenu(4));
     menu.InputFunc = Some(pick_input);
     base::DoInput((&mut menu as *mut MENU_STATE).cast(), 1);
-    crate::automation::ui_observation::rust_automation_observe_planet_menu(3);
+    crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::PlanetMenu(3));
     DrawStatusMessage(std::ptr::null());
     let mut result = true;
     if state.success {
@@ -585,7 +585,7 @@ unsafe extern "C" fn scan_input(menu: *mut MENU_STATE) -> u32 {
         crate::app::bridge::enter(|cx| scan_planet(cx, u16::from((*menu).CurState)));
         if (*menu).CurState == 4 {
             (*menu).CurState = 5;
-            crate::automation::ui_observation::rust_automation_observe_planet_menu(3);
+            crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::PlanetMenu(3));
             DrawMenuStateStrings(7, i16::from((*menu).CurState));
         }
     } else if optWhichMenu == 2 || !unavailable() {
@@ -651,9 +651,9 @@ pub unsafe extern "C" fn ScanSystem() {
     display::coarse();
     base::SetMenuSounds(15, 16);
     menu.InputFunc = Some(scan_input);
-    crate::automation::ui_observation::rust_automation_observe_planet_menu(2);
+    crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::PlanetMenu(2));
     base::DoInput((&mut menu as *mut MENU_STATE).cast(), 0);
-    crate::automation::ui_observation::rust_automation_observe_planet_menu(0);
+    crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::PlanetMenu(0));
     CffiPlatform.set_flash(FlashTarget::Off);
     CffiPlatform.batch();
     SetContext(SCAN_CONTEXT);

@@ -382,7 +382,9 @@ pub(crate) mod runtime {
             }
             CREDITS_RUNNING = (CREDITS_RATE != 0) as BOOLEAN;
             if CREDITS_RUNNING == 0 && VICTORY_CREDITS_ACTIVE {
-                crate::automation::ending::credits_completed();
+                crate::app::observe::checkpoint(
+                    crate::engine::observe::CheckpointView::CreditsCompleted,
+                );
             }
         } else if CREDITS_RUNNING == 0 {
             CREDITS_RUNNING = 1;
@@ -594,7 +596,7 @@ pub(crate) mod runtime {
         DrawStamp(&mut stamp);
         FadeScreen(ScreenFadeType_FadeAllToColor, (ONE_SECOND / 2) as SIZE);
         if with_outtakes != 0 {
-            crate::automation::ending::credits_started();
+            crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::CreditsStarted);
         }
         CommWndRect.corner.x =
             ((screen_rect.extent.width as c_int - CommWndRect.width as c_int) / 2) as COORD;
@@ -610,7 +612,9 @@ pub(crate) mod runtime {
         if WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16 == 0
         {
             if with_outtakes != 0 {
-                crate::automation::ending::credits_controls_ready();
+                crate::app::observe::checkpoint(
+                    crate::engine::observe::CheckpointView::CreditsReady,
+                );
             }
             if !music.is_null() {
                 PlayMusic((music).cast(), 1, 1);

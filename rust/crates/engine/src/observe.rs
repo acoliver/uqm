@@ -105,3 +105,13 @@ mod tests {
         assert!(!presented.stop);
     }
 }
+
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct DeviceObservation {
+    pub in_orbit: bool,
+    pub pc_menu: bool,
+    pub list: Option<Vec<u8>>,
+    pub selected: usize,
+    /// Successful invocation published by the device owner, with actual state effects.
+    pub activation: Option<(u64, u8, String, bool)>,
+}

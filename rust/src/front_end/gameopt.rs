@@ -1280,9 +1280,9 @@ pub(crate) mod runtime {
         SetFlashRect(SFR_MENU_3DO);
         SetMenuSounds(MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
         menu_state.InputFunc = Some(do_game_options);
-        crate::automation::ui_observation::rust_automation_observe_game_options(1);
+        crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::GameOptions(true));
         DoInput(ptr::addr_of_mut!(menu_state).cast(), 1);
-        crate::automation::ui_observation::rust_automation_observe_game_options(0);
+        crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::GameOptions(false));
         SetFlashRect(ptr::null());
         u32::from(
             WorldData::current().read(|owner| owner.game.current_activity)

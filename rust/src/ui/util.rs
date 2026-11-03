@@ -201,7 +201,7 @@ pub(crate) mod live {
                 == 0
             && QuitPosted == 0
         {
-            let Some(sampled) = crate::automation::input_ffi::nested_input(|| {
+            let Some(sampled) = crate::app::observe::nested_input(|| {
                 SleepThread(ONE_SECOND / 40);
                 AnyButtonPress(1)
             }) else {

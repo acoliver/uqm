@@ -130,11 +130,7 @@ pub(crate) mod engine {
     // gfx_common.h SCALE enum starts with the stepped scaler.
     pub const SCALE_STEP: i32 = 0;
 
-    use crate::automation::battle_observer::rust_battle_frame_reset;
-
-    use crate::automation::battle_observer::rust_battle_frame_advance;
-
-    use crate::automation::coordinator::rust_automation_seed_value;
+    use crate::app::observe::seed as rust_automation_seed_value;
 
     use crate::battle::process_native::engine::RedrawQueue;
 
@@ -227,7 +223,7 @@ pub(crate) mod engine {
             cx.primitive_style_mut(e).color = rgb15(0x0b, 0, 0);
             cx.primitive_style_mut(e).kind = gfx_object_STAMPFILL_PRIM as u8;
             cx.ship_state_mut(ship).input = 0;
-            crate::automation::ui_observation::record_ship_escape();
+            crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::ShipEscaped);
         }
     }
 
@@ -390,7 +386,7 @@ pub(crate) mod engine {
         if activity() & IN_BATTLE as u16 == 0 {
             return 0;
         }
-        rust_battle_frame_advance();
+        crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::BattleAdvanced);
         net.set_frame(frame.wrapping_add(1));
         1
     }
@@ -414,10 +410,7 @@ pub(crate) mod engine {
     pub unsafe extern "C" fn Battle(callback: BattleFrameCallback) -> BOOLEAN {
         let (battle, net, had_net) = battle_network();
         if activity() as u8 != SUPER_MELEE as u8 {
-            crate::math::seed_random(rust_automation_seed_value(
-                crate::automation::trace::SeedDomain::CAMPAIGN_BATTLE_ID,
-                GetTimeCounter(),
-            ));
+            crate::math::seed_random(rust_automation_seed_value(4, GetTimeCounter()));
         } else {
             let seed = rust_automation_seed_value(2, 0);
             if seed != 0 {
@@ -436,7 +429,7 @@ pub(crate) mod engine {
             set_activity(activity() | IN_BATTLE as u16);
             (*battle).counters[0] = crate::engine::battle::link_queue::ships(0).count() as u8;
             (*battle).counters[1] = crate::engine::battle::link_queue::ships(1).count() as u8;
-            rust_battle_frame_reset();
+            crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::BattleReset);
             if optMeleeScale != SCALE_STEP {
                 SetGraphicScaleMode(optMeleeScale);
             }

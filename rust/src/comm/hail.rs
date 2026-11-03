@@ -401,9 +401,13 @@ pub unsafe fn hail_alien() {
                 use crate::mainloop::restart_menu::c_extern::DoInput;
                 c_bridge::c_SetCurInputState(&mut es as *mut _ as *mut std::ffi::c_void);
                 c_bridge::SetMenuSounds(MENU_SOUND_UP | MENU_SOUND_DOWN, MENU_SOUND_SELECT);
-                crate::automation::ui_observation::begin_communication();
+                crate::app::observe::checkpoint(
+                    crate::engine::observe::CheckpointView::CommunicationStarted,
+                );
                 DoInput(&mut es as *mut _ as *mut std::ffi::c_void, 0);
-                crate::automation::ui_observation::complete_communication();
+                crate::app::observe::checkpoint(
+                    crate::engine::observe::CheckpointView::CommunicationEnded,
+                );
                 c_bridge::c_SetCurInputState(std::ptr::null_mut());
             }
         }
@@ -497,7 +501,7 @@ pub unsafe fn hail_alien() {
         // Clear Rust-side comm_data (resources already destroyed above)
         super::state::COMM_STATE.write().clear_comm_data();
         // pCurInputState was already cleared by c_RunEncounterDoInput.
-        crate::automation::coordinator::Coordinator::service_communication_completion_boundary();
+        crate::app::observe::input(crate::engine::observe::InputView::CommunicationCompleted).stop;
     }
 }
 

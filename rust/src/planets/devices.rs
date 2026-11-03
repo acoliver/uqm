@@ -14,13 +14,13 @@ use crate::mainloop::{
 
 use std::sync::Mutex;
 
-use crate::automation::story_actions::DeviceObservation;
 use crate::c_bindings::global_state::{CHMMR_DEFINED, ILWRATH_DEFINED, SAMATRA_DEFINED};
 use crate::collections::queue::{CountLinks, Queue, ReinitQueue};
 use crate::comm::{
     dispatch::ship,
     locdata::{CColor, CRect},
 };
+use crate::engine::observe::DeviceObservation;
 
 use crate::starbase::{
     cffi::CffiPlatform,
@@ -329,18 +329,17 @@ unsafe fn invoke(id: u8) -> u8 {
 }
 
 fn effect_state() -> std::collections::BTreeMap<String, u32> {
-    let mut state: std::collections::BTreeMap<_, _> =
-        crate::automation::story_actions::DEVICE_STORY_KEYS
-            .iter()
-            .copied()
-            .map(|key| {
-                (
-                    key.to_owned(),
-                    StoryKey::from_name(key)
-                        .map_or(0, |key| WorldOwner::current().read(|world| get(world, key))),
-                )
-            })
-            .collect();
+    let mut state: std::collections::BTreeMap<_, _> = super::device_effects::DEVICE_STORY_KEYS
+        .iter()
+        .copied()
+        .map(|key| {
+            (
+                key.to_owned(),
+                StoryKey::from_name(key)
+                    .map_or(0, |key| WorldOwner::current().read(|world| get(world, key))),
+            )
+        })
+        .collect();
     {
         state.insert(
             "activity".into(),
@@ -375,8 +374,7 @@ unsafe extern "C" fn frame(menu: *mut Menu) -> i32 {
         }
         if status != 0 {
             let after = effect_state();
-            let verified =
-                crate::automation::story_actions::device_effect_holds(id, &before, &after);
+            let verified = super::device_effects::device_effect_holds(id, &before, &after);
             let state = before
                 .iter()
                 .map(|(key, value)| format!("before_{key}={value},after_{key}={}", after[key]))

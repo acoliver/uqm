@@ -2,7 +2,7 @@
 
 use super::*;
 
-impl Coordinator {
+impl AutomationObserver {
     pub(super) fn trace_initialization_failed<T, E: std::fmt::Display>(
         result: &Result<T, E>,
         name: &str,
@@ -141,8 +141,11 @@ mod tests {
         )
         .unwrap();
         let directory = tempfile::tempdir().unwrap();
-        Coordinator::init(script, directory.path().into());
-        let coord = Coordinator::get().unwrap();
+        let _app = crate::app::Application::new(Some(AutomationObserver::new(
+            script,
+            directory.path().into(),
+        )));
+        let coord = AutomationObserver::get().unwrap();
         let mut inner = coord.inner.lock();
         coord.parity_failure(
             "fixture",
@@ -156,6 +159,6 @@ mod tests {
         assert_eq!(inner.terminal_class, Some(TerminalClass::TraceFailure));
         assert!(coord.admit_boundary(&mut inner, CallbackKind::Input));
         drop(inner);
-        assert_ne!(Coordinator::finalize(0).unwrap(), 0);
+        assert_ne!(AutomationObserver::finalize(0).unwrap(), 0);
     }
 }

@@ -687,7 +687,7 @@ pub unsafe extern "C" fn rust_race_communication() {
                 crate::mainloop::ffi::set_current_activity(crate::mainloop::types::ActivityValue(
                     WON_LAST_BATTLE,
                 ));
-                crate::automation::ending::won();
+                crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::Won);
             }
         }
         return;
@@ -756,7 +756,9 @@ pub unsafe extern "C" fn rust_race_communication() {
     } else {
         conv::INVALID
     };
-    crate::automation::scenario::observe_encounter_dispatch(conv_id);
+    crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::EncounterDispatch(
+        conv_id,
+    ));
 
     let status = init_communication(conv_id);
 
@@ -908,9 +910,13 @@ unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
     if World::current().read(|world| world.story_state(StoryKey::BATTLE_SEGUE)) == 0 {
         status = HAIL;
     } else {
-        crate::automation::ui_observation::observe_encounter_menu(true);
+        crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::EncounterMenu(
+            true,
+        ));
         status = ffi::InitEncounter();
-        crate::automation::ui_observation::observe_encounter_menu(false);
+        crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::EncounterMenu(
+            false,
+        ));
         if status == HAIL && !descriptor.is_null() {
             World::current().write(|world| world.set_story_state(StoryKey::BATTLE_SEGUE, 0));
         } else {
@@ -1178,7 +1184,9 @@ unsafe fn name_captain(
 /// The returned pointer is a raw C LOCDATA pointer and must not be freed by
 /// the caller — it points to static C data.
 pub unsafe extern "C" fn rust_init_race_dispatch(comm_id: u32) -> *mut c_void {
-    crate::automation::scenario::observe_dialogue_dispatch(comm_id);
+    crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::DialogueDispatch(
+        comm_id,
+    ));
 
     // Initialize Rust dialogue state (callbacks, phrase state, etc.)
     ffi::rust_init_race_dialogue(comm_id as i32);

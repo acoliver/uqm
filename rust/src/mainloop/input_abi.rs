@@ -254,11 +254,11 @@ pub(crate) mod live {
             crate::graphics::sdl::lifecycle_abi::TFB_ProcessEvents();
             crate::mainloop::lifecycle_abi::process_utility_keys();
             super::yield_input_loop(|| crate::threading::legacy_abi::TaskSwitch());
-            if crate::automation::input_ffi::rust_automation_service_do_input() != 0 {
+            if crate::app::observe::input(crate::engine::observe::InputView::BeforeUpdate).stop {
                 break;
             }
             UpdateInputState();
-            if crate::automation::input_ffi::rust_automation_after_input_update() != 0 {
+            if crate::app::observe::input(crate::engine::observe::InputView::AfterUpdate).stop {
                 break;
             }
             let flags = menu_sound_flags(&ptr::addr_of!(PulsedInputState).read());

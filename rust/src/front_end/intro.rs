@@ -224,7 +224,9 @@ pub(crate) mod runtime {
         let state = &mut *raw.cast::<PresentationState>();
         let activity = WorldData::current().read(|owner| owner.game.current_activity);
         if menu(KEY_MENU_CANCEL) || activity & CHECK_ABORT as u16 != 0 {
-            crate::automation::ending::presentation_cancelled();
+            crate::app::observe::checkpoint(
+                crate::engine::observe::CheckpointView::PresentationCancelled,
+            );
             return 0;
         }
         if state.time_out != 0 {
@@ -661,7 +663,9 @@ pub(crate) mod runtime {
             }
         }
         if state.ending {
-            crate::automation::ending::presentation_completed();
+            crate::app::observe::checkpoint(
+                crate::engine::observe::CheckpointView::PresentationCompleted,
+            );
         }
         0
     }
@@ -670,12 +674,16 @@ pub(crate) mod runtime {
         let mut state: PresentationState = std::mem::zeroed();
         state.slide_show = table;
         if state.slide_show.is_null() {
-            crate::automation::ending::presentation_cancelled();
+            crate::app::observe::checkpoint(
+                crate::engine::observe::CheckpointView::PresentationCancelled,
+            );
             return 0;
         }
         state.ending = ending;
         if ending {
-            crate::automation::ending::presentation_started();
+            crate::app::observe::checkpoint(
+                crate::engine::observe::CheckpointView::PresentationStarted,
+            );
         }
         state.slide_show = SetAbsStringTableIndex(state.slide_show, 0);
         state.oper_index = 0;

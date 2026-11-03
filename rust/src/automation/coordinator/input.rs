@@ -17,7 +17,7 @@ pub(super) fn discard_held_repeat(
     held.is_none_or(|key| discard(i32::from(crate::automation::input::menu_key_to_index(key))))
 }
 
-impl Coordinator {
+impl AutomationObserver {
     #[must_use]
     pub fn start_scene_replaces_introduction() -> bool {
         Self::get().is_some_and(|coord| {
@@ -29,11 +29,8 @@ impl Coordinator {
         })
     }
 
-    pub(super) fn activate_input_runtime() -> &'static RuntimeModel {
-        input_ffi::init_automation_runtime();
-        let Some(runtime) = input_ffi::get_runtime() else {
-            panic!("automation runtime initialization did not publish its runtime");
-        };
+    pub(super) fn activate_input_runtime() -> Arc<RuntimeModel> {
+        let runtime = Arc::new(RuntimeModel::new());
         runtime.activate();
         runtime
     }
@@ -318,8 +315,9 @@ mod tests {
             "test.json",
         )?;
         let temp = tempfile::tempdir()?;
-        Coordinator::init(script, temp.path().into());
-        let coord = Coordinator::get().ok_or("coordinator not initialized")?;
+        let _app =
+            crate::app::Application::new(Some(AutomationObserver::new(script, temp.path().into())));
+        let coord = AutomationObserver::get().ok_or("coordinator not initialized")?;
         if case == "watchdog" {
             let mut stopped = false;
             for _ in 0..11 {
@@ -344,7 +342,7 @@ mod tests {
                 Some(TerminalClass::SemanticMismatch)
             );
         }
-        assert!(Coordinator::finalize(0)? != 0);
+        assert!(AutomationObserver::finalize(0)? != 0);
         Ok(())
     }
 }

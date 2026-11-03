@@ -2,7 +2,7 @@
 
 use super::*;
 
-impl Coordinator {
+impl AutomationObserver {
     /// Called by the existing post-InitGameStructures start-scene hook.
     pub(super) fn activate_save_capture() {
         let Some(coord) = Self::get() else {

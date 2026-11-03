@@ -292,10 +292,12 @@ unsafe fn exit_star_base(menu: *mut MENU_STATE) -> BOOLEAN {
     }
     (*menu).Initialized = 0;
     if (*menu).CurState == TALK_COMMANDER {
-        crate::automation::ui_observation::observe_starbase_menu(false);
+        crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::StarbaseMenu(
+            false,
+        ));
         FlushInput();
         InitCommunication(CONVERSATION_COMMANDER_CONVERSATION);
-        crate::automation::ui_observation::observe_starbase_menu(true);
+        crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::StarbaseMenu(true));
         World::current().write(|world| {
             world.set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, BYTE::MAX as u32)
         });
@@ -419,9 +421,9 @@ pub unsafe fn visit_star_base() {
         });
     }
     if World::current().read(|world| world.story_state(StoryKey::STARBASE_AVAILABLE)) == 0 {
-        crate::automation::scenario::observe_encounter_dispatch(
+        crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::EncounterDispatch(
             CONVERSATION_COMMANDER_CONVERSATION,
-        );
+        ));
         SetCommIntroMode(CROSSFADE_SCREEN, 0);
         InitCommunication(CONVERSATION_COMMANDER_CONVERSATION);
         if World::current().read(|world| world.story_state(StoryKey::PROBE_ILWRATH_ENCOUNTER)) == 0
@@ -462,9 +464,9 @@ pub unsafe fn visit_star_base() {
         if (**WorldData::current()).flagship.crew_enlisted == COUNT::MAX {
             return;
         }
-        crate::automation::scenario::observe_encounter_dispatch(
+        crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::EncounterDispatch(
             CONVERSATION_COMMANDER_CONVERSATION,
-        );
+        ));
         SetCommIntroMode(FADE_IN_SCREEN, ONE_SECOND * 2);
         InitCommunication(CONVERSATION_COMMANDER_CONVERSATION);
         if (**WorldData::current()).game.current_activity & CHECK_ABORT as u16 != 0 {
@@ -477,9 +479,9 @@ pub unsafe fn visit_star_base() {
     let mut menu: MENU_STATE = mem::zeroed();
     menu.InputFunc = Some(DoStarBase);
     let old = SetContext(Kernel::current().read(|owner| owner.screen_context));
-    crate::automation::ui_observation::observe_starbase_menu(true);
+    crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::StarbaseMenu(true));
     DoInput(ptr::addr_of_mut!(menu).cast(), 1);
-    crate::automation::ui_observation::observe_starbase_menu(false);
+    crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::StarbaseMenu(false));
     SetContext(old);
     SetStatusMessageMode(previous);
     cleanup_after_star_base();

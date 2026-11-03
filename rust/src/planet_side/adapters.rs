@@ -34,14 +34,14 @@ impl PlanetSideInput for CffiPlanetSideInput {
     fn poll(&mut self) -> Result<FrameInput, AdapterError> {
         #[cfg(not(test))]
         unsafe {
-            if crate::automation::input_ffi::rust_automation_service_do_input() != 0 {
+            if crate::app::observe::input(crate::engine::observe::InputView::BeforeUpdate).stop {
                 return Ok(FrameInput {
                     abort: true,
                     ..FrameInput::default()
                 });
             }
             UpdateInputState();
-            if crate::automation::input_ffi::rust_automation_after_input_update() != 0 {
+            if crate::app::observe::input(crate::engine::observe::InputView::AfterUpdate).stop {
                 return Ok(FrameInput {
                     abort: true,
                     ..FrameInput::default()

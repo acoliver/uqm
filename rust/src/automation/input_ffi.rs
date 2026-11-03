@@ -17,7 +17,7 @@
 //! @plan PLAN-20260723-RUNTIME-AUTOMATION.P06
 //! @requirement REQ-INJECT-001..007, REQ-FFI-001
 
-use crate::automation::coordinator::Coordinator;
+use crate::automation::coordinator::AutomationObserver;
 use crate::automation::runtime::RuntimeModel;
 #[cfg(not(test))]
 use crate::c_bindings::controller_input::{CurrentInputState, PulsedInputState};
@@ -606,17 +606,6 @@ pub(crate) fn navigation_snapshot(
     }
 }
 
-/// The global runtime model for automation.
-///
-/// In production this is initialized by `setup_automation()`. In tests and
-/// inactive mode it stays `None` (inactive fast path).
-static AUTOMATION_RT: std::sync::OnceLock<RuntimeModel> = std::sync::OnceLock::new();
-
-/// Initialize the automation runtime model. Called by `setup_automation()`.
-pub fn init_automation_runtime() {
-    let _ = AUTOMATION_RT.get_or_init(RuntimeModel::new);
-}
-
 pub(crate) fn graphics_options(
     renderer: Option<std::ffi::CString>,
 ) -> crate::graphics::sdl::lifecycle_abi::GraphicsOptions {
@@ -641,7 +630,7 @@ fn present_hook(presented: bool) -> i32 {
 }
 
 fn readback_hook() -> Option<u64> {
-    if Coordinator::is_active() {
+    if AutomationObserver::is_active() {
         get_runtime().map(|runtime| runtime.mirror.capture_generation())
     } else {
         None
@@ -650,7 +639,7 @@ fn readback_hook() -> Option<u64> {
 
 /// Check if automation is active.
 fn is_automation_active() -> bool {
-    if let Some(rt) = AUTOMATION_RT.get() {
+    if let Some(rt) = get_runtime() {
         rt.mirror.is_active()
     } else {
         false
@@ -658,13 +647,13 @@ fn is_automation_active() -> bool {
 }
 
 /// Get the runtime model if it exists.
-fn with_runtime() -> Option<&'static RuntimeModel> {
-    AUTOMATION_RT.get()
+fn with_runtime() -> Option<std::sync::Arc<RuntimeModel>> {
+    get_runtime()
 }
 
 /// Get the runtime model if it exists (public for coordinator).
-pub fn get_runtime() -> Option<&'static RuntimeModel> {
-    AUTOMATION_RT.get()
+pub fn get_runtime() -> Option<std::sync::Arc<RuntimeModel>> {
+    AutomationObserver::get().map(|observer| observer.runtime.clone())
 }
 
 // ===========================================================================
@@ -683,10 +672,12 @@ pub fn get_runtime() -> Option<&'static RuntimeModel> {
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P06
 /// @requirement REQ-INJECT-001, REQ-INJECT-002
 pub extern "C" fn rust_automation_service_do_input() -> i32 {
-    service_input(false)
+    crate::app::observe::input(crate::engine::observe::InputView::BeforeUpdate)
+        .stop
+        .into()
 }
 
-fn service_input(button_wait: bool) -> i32 {
+pub(crate) fn service_input(button_wait: bool) -> i32 {
     // Step 1: ABI entry (saturating).
     if let Some(rt) = with_runtime() {
         rt.record_abi_entry();
@@ -723,11 +714,11 @@ fn service_input(button_wait: bool) -> i32 {
     }
 
     // Step 4: Feed the input callback to the coordinator (scheduler+watchdog).
-    if Coordinator::is_active() {
+    if AutomationObserver::is_active() {
         let stop = if button_wait {
-            Coordinator::process_button_wait()
+            AutomationObserver::process_button_wait()
         } else {
-            Coordinator::process_input()
+            AutomationObserver::process_input()
         };
         if stop {
             return 1;
@@ -749,6 +740,12 @@ fn service_input(button_wait: bool) -> i32 {
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P06
 /// @requirement REQ-INJECT-006, REQ-INJECT-007
 pub extern "C" fn rust_automation_after_input_update() -> i32 {
+    crate::app::observe::input(crate::engine::observe::InputView::AfterUpdate)
+        .stop
+        .into()
+}
+
+pub(crate) fn after_input_update() -> i32 {
     // Step 1: ABI entry (saturating).
     if let Some(rt) = with_runtime() {
         rt.record_abi_entry();
@@ -773,19 +770,10 @@ pub extern "C" fn rust_automation_after_input_update() -> i32 {
 
     // Step 3: Commit the scripted player-input observation at the exact
     // production boundary that follows UpdateInputState.
-    Coordinator::parity_input();
-    Coordinator::process_player_input_observation().into()
+    AutomationObserver::parity_input();
+    AutomationObserver::process_player_input_observation().into()
 }
 
-/// Admit and observe one nested input sample without changing its polling order.
-pub fn nested_input<R>(sample: impl FnOnce() -> R) -> Option<R> {
-    if service_input(true) != 0 {
-        return None;
-    }
-    let sampled = sample();
-    Coordinator::parity_input();
-    Some(sampled)
-}
 // ===========================================================================
 //  Bounds-checked production setter (REQ-INJECT-003)
 // ===========================================================================
@@ -911,11 +899,13 @@ pub extern "C" fn rust_automation_present_callback() -> i32 {
 /// Commit one frame after the graphics backend has actually presented it.
 #[no_mangle]
 pub extern "C" fn rust_automation_presented_frame() -> i32 {
-    if !Coordinator::is_active() {
+    if !AutomationObserver::is_active() {
         return 0;
     }
     let frame = crate::graphics::ffi::take_presented_frame();
-    Coordinator::process_present(frame).into()
+    let mut presented = crate::engine::observe::Presented { frame, stop: false };
+    crate::app::observe::presented(&mut presented);
+    presented.stop.into()
 }
 
 // ===========================================================================

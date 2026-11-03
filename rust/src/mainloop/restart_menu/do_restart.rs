@@ -187,8 +187,8 @@ fn init_first_frame<O: RestartMenuOps + ?Sized>(ops: &O, state: &mut DoRestartSt
     );
     ops.sleep_thread_until(fade_result);
     state.scene_replaces_introduction =
-        crate::automation::coordinator::Coordinator::start_scene_replaces_introduction();
-    let _stop = crate::automation::coordinator::Coordinator::process_main_menu_ready();
+        crate::app::observe::input(crate::engine::observe::InputView::ReplacesIntroduction).stop;
+    let _stop = crate::app::observe::input(crate::engine::observe::InputView::MainMenuReady).stop;
 }
 
 /// Handle menu selection dispatch.
@@ -249,8 +249,8 @@ fn handle_select<O: RestartMenuOps + ?Sized>(ops: &O, state: &mut DoRestartState
             );
             ops.sleep_thread_until(fade_result);
             ops.set_current_activity(CHECK_ABORT);
-            if crate::automation::coordinator::Coordinator::is_active() {
-                crate::automation::coordinator::Coordinator::observe_quit_selected();
+            if crate::app::observe::input(crate::engine::observe::InputView::Active).stop {
+                crate::app::observe::input(crate::engine::observe::InputView::QuitSelected).stop;
             }
             ops.flash_pause(state.flash_context);
             false
@@ -286,20 +286,17 @@ fn handle_navigate<O: RestartMenuOps + ?Sized>(
         ops.sync_cur_state(state.cur_state);
 
         // Typed observer: returns Continue or Stop.
-        let _control = crate::automation::input::observe_main_menu_transition(
-            cur_item.as_u8(),
-            new_item.as_u8(),
-            None,
-        );
 
         // Feed the menu transition to the automation coordinator if active.
         // This drives the scheduler's WaitingSemantic state and semantic
         // assertion matching.
-        if crate::automation::coordinator::Coordinator::is_active() {
-            let _stop = crate::automation::coordinator::Coordinator::process_menu_transition(
-                cur_item.as_u8(),
-                new_item.as_u8(),
-            );
+        if crate::app::observe::input(crate::engine::observe::InputView::Active).stop {
+            let _stop =
+                crate::app::observe::input(crate::engine::observe::InputView::MenuTransition {
+                    from: cur_item.as_u8(),
+                    to: new_item.as_u8(),
+                })
+                .stop;
         }
         // In full integration, Stop would propagate through do_restart_frame
         // and rust_do_restart_frame before sleep/later work.

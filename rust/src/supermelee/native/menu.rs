@@ -2,7 +2,7 @@
 mod rules;
 #[cfg(not(test))]
 pub(crate) mod live {
-    use crate::automation::coordinator::rust_automation_seed_value;
+    use crate::app::observe::seed as rust_automation_seed_value;
     use crate::battle::{COMPUTER_CONTROL, HUMAN_CONTROL, NETWORK_CONTROL, PSYTRON_CONTROL};
     use crate::comm::hail::game_string;
     use crate::engine::{Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields};

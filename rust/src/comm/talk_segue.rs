@@ -444,7 +444,9 @@ pub mod dinput {
         };
 
         if wait_track == 0 {
-            crate::automation::ui_observation::observe_communication_replay(true);
+            crate::app::observe::checkpoint(
+                crate::engine::observe::CheckpointView::CommunicationReplay(true),
+            );
         } else if c_bridge::PlayingTrack() == 0 {
             c_bridge::PlayTrack();
         }
@@ -454,7 +456,9 @@ pub mod dinput {
             DoInput(&mut ts as *mut _ as *mut c_void, 0);
         }
         if wait_track == 0 {
-            crate::automation::ui_observation::observe_communication_replay(false);
+            crate::app::observe::checkpoint(
+                crate::engine::observe::CheckpointView::CommunicationReplay(false),
+            );
         }
         unsafe { c_bridge::comm_ClearSubtitles() };
 
@@ -849,8 +853,12 @@ pub fn select_response(state: &mut CommState) -> Option<(ResponseFunc, u32)> {
 
     state.set_talking_finished(false);
     state.responses_mut().clear();
-    crate::automation::ui_observation::observe_communication_responses(0);
-    crate::automation::ui_observation::set_communication_responses_ready(false);
+    crate::app::observe::checkpoint(
+        crate::engine::observe::CheckpointView::CommunicationResponses(0),
+    );
+    crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::ResponsesReady(
+        false,
+    ));
     state.top_response = None;
 
     Some((func, response_ref))

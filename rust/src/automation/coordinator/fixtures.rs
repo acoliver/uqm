@@ -3,7 +3,7 @@
 use super::*;
 use crate::automation::melee_fixture;
 
-impl Coordinator {
+impl AutomationObserver {
     pub(super) fn parity_fixture_input(
         &self,
         inner: &mut CoordInner,

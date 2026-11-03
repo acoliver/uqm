@@ -10,7 +10,7 @@ pub(super) struct Departure {
     pub(super) native_frame_pending: bool,
 }
 
-impl Coordinator {
+impl AutomationObserver {
     pub(super) fn transit_budget(action: Option<&Action>) -> Option<u64> {
         use crate::automation::script::PatrolPolicy;
         match action {
@@ -74,7 +74,7 @@ impl Coordinator {
             solar_system_active,
             activity,
         ) {
-            if !Self::set_navigation_controls(
+            if !self.set_navigation_controls(
                 crate::automation::navigation::NavigationControl::default(),
             ) {
                 self.reject_input(inner, "navigation", -1, -1);
@@ -106,14 +106,14 @@ impl Coordinator {
                 target_guard_active: false,
             },
         );
-        if !Self::set_navigation_controls(control) {
+        if !self.set_navigation_controls(control) {
             self.reject_input(inner, "navigation", -1, -1);
         }
         scheduler_event
     }
 }
 
-impl Coordinator {
+impl AutomationObserver {
     pub(super) fn service_orbit_navigation(
         &self,
         inner: &mut CoordInner,
@@ -159,7 +159,7 @@ impl Coordinator {
             navigation.planet,
         );
         if reached || contact {
-            if !Self::set_navigation_controls(
+            if !self.set_navigation_controls(
                 crate::automation::navigation::NavigationControl::default(),
             ) {
                 self.reject_input(inner, "navigation", -1, -1);
@@ -180,7 +180,7 @@ impl Coordinator {
                     navigation.planet
                 ),
             );
-        } else if !Self::set_navigation_controls(control) {
+        } else if !self.set_navigation_controls(control) {
             self.reject_input(inner, "navigation", -1, -1);
             return scheduler_event;
         }

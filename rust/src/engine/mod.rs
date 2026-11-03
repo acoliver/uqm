@@ -1,3 +1,4 @@
+pub use uqm_engine::observe;
 pub mod battle;
 
 pub mod kernel;

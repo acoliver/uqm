@@ -2,11 +2,9 @@
 pub use crate::collections::observation::{assert_progress, current_frame};
 #[no_mangle]
 pub extern "C" fn rust_battle_frame_reset() {
-    crate::collections::observation::reset();
+    crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::BattleReset);
 }
 #[no_mangle]
 pub extern "C" fn rust_battle_frame_advance() {
-    crate::collections::observation::advance();
-    super::Coordinator::native_battle_frame_completed(crate::mainloop::ffi::get_current_activity());
-    super::Coordinator::parity_checkpoint("battle");
+    crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::BattleAdvanced);
 }

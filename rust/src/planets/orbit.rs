@@ -427,10 +427,10 @@ pub(crate) mod live {
         menu.CurState = 0;
         base::SetMenuSounds(15, 16);
         let old = SetInputCallback(Some(input_frame));
-        crate::automation::ui_observation::rust_automation_observe_planet_menu(1);
+        crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::PlanetMenu(1));
         menu.InputFunc = Some(do_orbit);
         base::DoInput((&mut menu as *mut MENU_STATE).cast(), 1);
-        crate::automation::ui_observation::rust_automation_observe_planet_menu(0);
+        crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::PlanetMenu(0));
         SetInputCallback(old);
         CffiPlatform.set_flash(FlashTarget::Off);
         DrawMenuStateStrings(1, -6);
