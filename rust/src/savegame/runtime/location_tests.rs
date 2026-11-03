@@ -23,10 +23,10 @@ use super::solar::SolarError;
 use super::solar_tests::System;
 use crate::c_bindings::global_state::{EXTENT, FRAME_DESC, PLANET_DESC, POINT};
 use crate::comm::locdata::CGameState;
+use crate::engine::world::state_file::{StateFileError, STARINFO_FILE};
 use crate::state::ffi::{
     replace_game_state, rust_init_game_state, snapshot_game_state, with_state_files,
 };
-use crate::state::state_file::{StateFileError, STARINFO_FILE};
 
 /// A frame as C lays it out: the generated `FRAME_DESC`, so the tests read and
 /// write the same `Index` the code under test does.

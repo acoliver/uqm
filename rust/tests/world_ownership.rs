@@ -1,5 +1,5 @@
+use uqm_rust::engine::world::state_file::FileMode;
 use uqm_rust::engine::{Game, StoryKey};
-use uqm_rust::state::state_file::FileMode;
 
 #[test]
 fn separate_games_own_story_state_files_and_kernel_resources() {

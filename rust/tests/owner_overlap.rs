@@ -1,5 +1,5 @@
 //! Legacy callers may borrow disjoint fields without reacquiring their owner.
-use std::{mem, ptr};
+use std::mem;
 use uqm_rust::{
     app::bridge,
     engine::{Game, World},
@@ -80,17 +80,17 @@ fn restored_star_lookup_finishes_before_selecting_the_owned_star() {
         let previous = uqm_rust::planets::starmap::star_array;
         uqm_rust::planets::starmap::star_array = catalog.as_mut_ptr().cast();
         bridge::with_game(&mut game, || {
-            let mut point = POINT { x: 1752, y: 1450 };
+            let point = POINT { x: 1752, y: 1450 };
             World::current().write(|world| {
-                let selected = uqm_rust::planets::starmap::find_star_in(
-                    world,
-                    ptr::null_mut(),
-                    &mut point,
-                    0,
-                    0,
-                );
+                let selected = uqm_rust::planets::starmap::find_star_in(world, None, point, 0, 0);
                 assert_eq!(selected.cast::<CStarDesc>(), catalog.as_mut_ptr());
                 world.select_star(selected.cast::<CStarDesc>().as_ref(), Some(&catalog));
+                let foreign = *selected;
+                let rejected = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    uqm_rust::planets::starmap::find_star_in(world, Some(&foreign), point, 0, 0)
+                }));
+                assert!(rejected.is_err());
+                assert_eq!(world.star_pointer(Some(&catalog)), selected);
             });
         });
         uqm_rust::planets::starmap::star_array = previous;

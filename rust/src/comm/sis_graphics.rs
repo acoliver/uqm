@@ -182,7 +182,7 @@ mod c_bridge {
 
     pub use crate::graphics::pixmap_abi::SetAbsFrameIndex;
 
-    pub use crate::mainloop::input_abi::live::DoInput;
+    pub use crate::mainloop::input_abi::live::{DoInput, PulsedInputState};
     pub use crate::sound::heart_ffi::get_first_track_subtitle as GetFirstTrackSubtitle;
     pub use crate::sound::heart_ffi::get_next_track_subtitle as GetNextTrackSubtitle;
     pub use crate::sound::heart_ffi::get_track_subtitle_text as GetTrackSubtitleText;
@@ -191,22 +191,8 @@ mod c_bridge {
 
     pub use crate::strings::string_table::SetAbsStringTableIndex;
 
-    extern "C" {
-        #[allow(dead_code)]
-        pub static mut PulsedInputState:
-            crate::c_bindings::controller_input::_controller_input_state;
-
-    }
     pub use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
     pub use crate::threading::pacing::linked::sleep_thread as SleepThread;
-}
-
-/// C `INPUT_STATE` struct — just the menu array we need.
-/// The real struct is larger but we only access `menu[16]`.
-#[repr(C)]
-#[allow(dead_code)]
-struct CInputState {
-    menu: [u8; 16],
 }
 
 // ============================================================================

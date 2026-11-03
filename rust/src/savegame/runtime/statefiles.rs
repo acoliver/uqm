@@ -40,6 +40,9 @@ use std::fmt;
 
 use super::RuntimeError;
 use crate::comm::locdata::CGameState;
+use crate::engine::world::state_file::{
+    StateFileManager, DEFGRPINFO_FILE, RANDGRPINFO_FILE, STARINFO_FILE,
+};
 use crate::savegame::types::{
     BattleFleet, BattleGroup, BattleShip, GroupList, GroupListEntry, IpGroup, Point,
     GAME_STATE_BYTES,
@@ -49,9 +52,6 @@ use crate::state::game_state::{
     get_state_32_raw, set_state_32_raw, GameState, NUM_GAME_STATE_BITS,
 };
 use crate::state::game_state_keys::bit_range;
-use crate::state::state_file::{
-    StateFileManager, DEFGRPINFO_FILE, RANDGRPINFO_FILE, STARINFO_FILE,
-};
 
 /// `NUM_SAVED_BATTLE_GROUPS` (grpinfo.h).
 pub const NUM_SAVED_BATTLE_GROUPS: usize = 64;

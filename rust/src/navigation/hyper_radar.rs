@@ -59,7 +59,7 @@ fn radar(point: POINT, ox: i16, oy: i16) -> POINT {
 /// Hyperspace resources, contexts and queues must be initialized on the game thread.
 pub unsafe fn SeedUniverse() {
     crate::app::bridge::enter(|cx| {
-        let mut universe = POINT {
+        let universe = POINT {
             x: universe_x(cx.world.data.flagship.log_x),
             y: universe_y(cx.world.data.flagship.log_y),
         };
@@ -75,9 +75,9 @@ pub unsafe fn SeedUniverse() {
             origin: POINT { x: 0, y: 0 },
             frame: ptr::null_mut(),
         };
-        let mut star = ptr::null_mut();
+        let mut star: *mut crate::engine::world::CStarDesc = ptr::null_mut();
         loop {
-            star = find_star_in(cx.world, star, &mut universe, XOFFS, YOFFS);
+            star = find_star_in(cx.world, star.as_ref(), universe, XOFFS, YOFFS);
             if star.is_null() {
                 break;
             }
@@ -173,7 +173,7 @@ pub unsafe fn SeedUniverse() {
         }
         star = ptr::null_mut();
         loop {
-            star = find_star_in(cx.world, star, &mut universe, XOFFS, YOFFS);
+            star = find_star_in(cx.world, star.as_ref(), universe, XOFFS, YOFFS);
             if star.is_null() {
                 break;
             }

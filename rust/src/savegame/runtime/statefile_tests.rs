@@ -10,6 +10,7 @@ use serial_test::serial;
 
 use super::statefiles::*;
 use crate::comm::locdata::CGameState;
+use crate::engine::world::state_file::{DEFGRPINFO_FILE, RANDGRPINFO_FILE, STARINFO_FILE};
 use crate::savegame::decode::decode_save;
 use crate::savegame::types::{
     BattleFleet, BattleGroup, BattleShip, GroupListEntry, IpGroup, Point, GAME_STATE_BYTES,
@@ -18,7 +19,6 @@ use crate::state::ffi::{
     replace_game_state, rust_init_game_state, snapshot_game_state, with_state_files,
 };
 use crate::state::game_state::{get_state_32_raw, set_state_32_raw};
-use crate::state::state_file::{DEFGRPINFO_FILE, RANDGRPINFO_FILE, STARINFO_FILE};
 
 const C_WRITTEN_SAVE: &[u8] = include_bytes!("../../../tests/fixtures/savegame/legacy-save.00");
 

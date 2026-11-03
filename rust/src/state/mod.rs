@@ -6,8 +6,6 @@ pub mod ffi;
 pub mod game_state;
 pub mod game_state_keys;
 pub mod planet_info;
-pub mod state_file;
 
 pub use game_state::*;
 pub use planet_info::*;
-pub use state_file::*;

@@ -11,7 +11,7 @@ use super::game_state::{
     set_state_bits_raw, GameState, NUM_GAME_STATE_BITS, NUM_GAME_STATE_BYTES,
 };
 use super::planet_info::{PlanetInfoManager, ScanRetrieveMask, NUM_SCAN_TYPES};
-use super::state_file::{FileMode, StateFileManager};
+use crate::engine::world::state_file::{FileMode, StateFileManager};
 
 pub fn rust_init_game_state(world: &mut crate::engine::World) {
     world.story = Some(GameState::new());
@@ -231,7 +231,7 @@ pub fn rust_seek_state_file(
     offset: i64,
     whence: c_int,
 ) -> c_int {
-    use super::state_file::SeekWhence;
+    use crate::engine::world::state_file::SeekWhence;
 
     let seek_whence = match whence {
         0 => SeekWhence::Set,

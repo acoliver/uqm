@@ -1,7 +1,5 @@
 //! Star catalog lookup and cluster naming, ported from starmap.c.
 
-#![allow(non_snake_case)]
-
 use crate::comm::dispatch::CPoint;
 #[cfg(not(test))]
 use crate::engine::Kernel as KernelOwner;
@@ -87,27 +85,39 @@ pub unsafe extern "C" fn FindStar(
     xb: i16,
     yb: i16,
 ) -> *mut CStarDesc {
-    WorldOwner::current().read(|world| find_star_in(world, last, point, xb, yb))
+    WorldOwner::current().read(|world| {
+        // SAFETY: the caller retains the catalog and supplies valid optional last and point addresses.
+        unsafe { find_star_in(world, last.as_ref(), *point, xb, yb) }
+    })
 }
 
 /// # Safety
-/// The game thread retains the catalog; `last` and `point` obey FindStar's contract.
+/// The game thread retains the initialized catalog throughout this lookup.
 pub unsafe fn find_star_in(
     world: &crate::engine::World,
-    last: *mut CStarDesc,
-    point: *mut CPoint,
+    last: Option<&CStarDesc>,
+    point: CPoint,
     xb: i16,
     yb: i16,
 ) -> *mut CStarDesc {
+    // SAFETY: the caller retains the initialized game-thread catalog.
+    let catalog =
+        unsafe { current_catalog() }.unwrap_or_else(|| panic!("star lookup without a catalog"));
+    let last = last.map_or(ptr::null_mut(), |star| {
+        let id = world.identify_star(star, catalog);
+        std::ptr::from_ref(&catalog[id.0]).cast_mut()
+    });
     let (base, hi) = if world.story_state(crate::engine::StoryKey::ARILOU_SPACE_SIDE) <= 1 {
         (star_array, NUM_SOLAR_SYSTEMS as i16 - 1)
     } else {
         (
-            star_array.add(NUM_SOLAR_SYSTEMS + 1),
+            // SAFETY: this is the retained catalog's quasispace segment.
+            unsafe { star_array.add(NUM_SOLAR_SYSTEMS + 1) },
             NUM_HYPER_VORTICES as i16,
         )
     };
-    find_star(base, last, *point, xb, yb, hi)
+    // SAFETY: last was validated against this catalog; all search bounds preserve the legacy segments.
+    unsafe { find_star(base, last, point, xb, yb, hi) }
 }
 
 #[cfg(not(test))]

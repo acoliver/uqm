@@ -124,7 +124,7 @@ pub fn check(h: &mut Harness) {
                 .write(|world| {
                     uqm_rust::state::ffi::with_state_files(world, |files| {
                         files
-                            .get_file(uqm_rust::state::state_file::DEFGRPINFO_FILE)
+                            .get_file(uqm_rust::engine::world::state_file::DEFGRPINFO_FILE)
                             .unwrap()
                             .contents()
                             .to_vec()

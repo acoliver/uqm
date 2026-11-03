@@ -309,8 +309,8 @@ mod tests {
 
     #[test]
     fn retrieval_bits_survive_planet_reentry_and_save_load() {
+        use crate::engine::world::state_file::{StateFileManager, STARINFO_FILE};
         use crate::state::planet_info::{PlanetInfoManager, ScanRetrieveMask};
-        use crate::state::state_file::{StateFileManager, STARINFO_FILE};
         let mut files = StateFileManager::new();
         let mut manager = PlanetInfoManager::new(&mut files);
         manager.init_planet_info(2).unwrap();

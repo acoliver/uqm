@@ -6,7 +6,7 @@ use crate::navigation::abi::*;
 
 use crate::navigation::hyperspace::live::{logx, logy};
 use crate::planets::starmap::find_star_in;
-use std::ptr::{self, NonNull};
+use std::ptr::NonNull;
 impl Cx<'_> {
     pub(crate) fn navigation(&self) -> &crate::engine::WorldData {
         &self.world.data
@@ -81,7 +81,7 @@ const PORTALS: [(i16, i16); 15] = [
     (9735, 3153),
     (5850, 6213),
 ];
-pub(crate) unsafe fn interplanetary(world: &mut crate::engine::World, mut point: POINT) {
+pub(crate) unsafe fn interplanetary(world: &mut crate::engine::World, point: POINT) {
     world.data.game.ip_planet = 0;
     world.data.game.in_orbit = 0;
     world.data.game.ship_facing = 0;
@@ -93,7 +93,7 @@ pub(crate) unsafe fn interplanetary(world: &mut crate::engine::World, mut point:
             world.set_story_state(StoryKey::ESCAPE_COUNTER, 0);
         } else {
             world.data.game.autopilot = POINT { x: -1, y: -1 };
-            let star = find_star_in(world, ptr::null_mut(), &mut point, 5, 5);
+            let star = find_star_in(world, None, point, 5, 5);
             world.select_star(
                 (star.cast::<crate::engine::world::CStarDesc>()).as_ref(),
                 crate::planets::starmap::current_catalog(),

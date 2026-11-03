@@ -602,17 +602,13 @@ fn encounter_queue() -> *mut Queue {
     #[cfg(test)]
     std::ptr::null_mut()
 }
+#[cfg(not(test))]
 #[inline]
-#[allow(dead_code)]
 fn built_ship_queue() -> *mut Queue {
-    #[cfg(not(test))]
-    #[cfg(not(test))]
     unsafe {
         let world = WorldFields::current();
         std::ptr::addr_of_mut!((**world).game.built_ship_q)
     }
-    #[cfg(test)]
-    std::ptr::null_mut()
 }
 
 /// C: `_GetSuccLink(lp)` — returns the succ field of a link.

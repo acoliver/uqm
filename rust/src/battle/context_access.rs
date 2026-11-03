@@ -301,7 +301,6 @@ mod tactrans_native_access {
     use crate::battle::tactrans_native::engine::*;
     #[cfg(not(test))]
     #[cfg(not(test))]
-    #[cfg(not(test))]
     use crate::ships::native::{cosine, facing_to_angle, sine};
     #[cfg(not(test))]
     impl Cx<'_> {
@@ -461,7 +460,6 @@ mod sounds_access {
     #[cfg(not(test))]
     use super::*;
     #[cfg(not(test))]
-    #[cfg(not(test))]
     impl crate::engine::battle::Cx<'_> {
         pub(in crate::battle::context_access) fn queue_sound(
             &mut self,
@@ -477,13 +475,9 @@ mod star_access {
     #[cfg(not(test))]
     use crate::engine::StoryKey;
     #[cfg(not(test))]
-    #[cfg(not(test))]
     use crate::navigation::hyper_transition::{element_universe, init_transition};
     #[cfg(not(test))]
     use crate::planets::starmap::{current_catalog, find_star_in};
-    #[cfg(not(test))]
-    #[cfg(not(test))]
-    use std::ptr;
     #[cfg(not(test))]
     #[derive(Clone, Copy)]
     pub(crate) struct StarContact {
@@ -502,10 +496,10 @@ mod star_access {
             self.world.data.game.autopilot
         }
         pub(crate) fn star_contact(&self, id: crate::engine::battle::ElementId) -> StarContact {
-            let mut point = element_universe(self, id);
+            let point = element_universe(self, id);
             // SAFETY: lookup reads the checked element and loaded star catalog synchronously.
             let (descriptor, catalog) = unsafe {
-                let star = find_star_in(self.world, ptr::null_mut(), &mut point, 5, 5);
+                let star = find_star_in(self.world, None, point, 5, 5);
                 assert!(!star.is_null(), "star collision has no catalog entry");
                 (&*star.cast(), current_catalog())
             };
