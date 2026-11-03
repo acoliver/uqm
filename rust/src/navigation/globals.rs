@@ -180,7 +180,7 @@ pub unsafe extern "C" fn InitGameStructures() -> BOOLEAN {
         set_race_allied(cx.world, HUMAN_SHIP as u16, 1);
         {
             CloneShipFragment(
-                &raw mut (*state).avail_race_q,
+                &mut (*state).avail_race_q,
                 HUMAN_SHIP as u16,
                 &mut (*state).built_ship_q,
                 0,

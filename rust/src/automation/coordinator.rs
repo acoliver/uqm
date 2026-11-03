@@ -15,7 +15,7 @@
 //! @plan PLAN-20260723-RUNTIME-AUTOMATION.P08
 //! @requirement REQ-FFI-001..005, REQ-SCHED-001, REQ-WATCH-001
 
-use crate::engine::World;
+use crate::engine::{StoryKey, World};
 mod fixtures;
 mod input;
 mod navigation;
@@ -1676,8 +1676,7 @@ impl Coordinator {
             );
         }
         // A homeworld is the destination, not a patrol to dismiss.
-        if World::current()
-            .read(|world| crate::state::ffi::named_state_value(world, "GLOBAL_FLAGS_AND_DATA"))
+        if World::current().read(|world| world.story_value(StoryKey::GLOBAL_FLAGS_AND_DATA))
             == Some(128)
         {
             return false;
@@ -1747,9 +1746,9 @@ impl Coordinator {
                 Some(step.max_ticks)
             }
             Some(Action::NavigateToMoon(step))
-                if World::current().read(|world| {
-                    crate::state::ffi::named_state_value(world, "GLOBAL_FLAGS_AND_DATA")
-                }) == Some(0) =>
+                if World::current()
+                    .read(|world| world.story_value(StoryKey::GLOBAL_FLAGS_AND_DATA))
+                    == Some(0) =>
             {
                 Some(step.max_ticks)
             }
@@ -1758,9 +1757,9 @@ impl Coordinator {
             }
             Some(Action::NavigateToOrbit(step))
                 if step.patrol_policy != PatrolPolicy::Stop
-                    && World::current().read(|world| {
-                        crate::state::ffi::named_state_value(world, "GLOBAL_FLAGS_AND_DATA")
-                    }) == Some(0) =>
+                    && World::current()
+                        .read(|world| world.story_value(StoryKey::GLOBAL_FLAGS_AND_DATA))
+                        == Some(0) =>
             {
                 Some(step.max_ticks)
             }

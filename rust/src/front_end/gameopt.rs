@@ -1,5 +1,7 @@
 //! Game options, naming, and save/load selection, ported from `uqm/gameopt.c`.
 
+mod preview;
+
 const MAX_SAVED_GAMES: usize = 50;
 const SAVES_PER_PAGE: u16 = 5;
 
@@ -216,6 +218,7 @@ pub(crate) mod runtime {
     }
 
     unsafe fn feedback_setting(which_setting: BYTE) {
+        let flags = WorldData::current().read(|world| world.game.glob_flags);
         let mut buf: [UNICODE; 128] = [0; 128];
         match which_setting {
             SOUND_ON_SETTING | SOUND_OFF_SETTING => {
@@ -226,10 +229,7 @@ pub(crate) mod runtime {
                     game_string(OPTION_STRING_BASE),
                     game_string(
                         OPTION_STRING_BASE
-                            + if WorldData::current().read(|owner| owner.game.glob_flags)
-                                & SOUND_DISABLED as u8
-                                != 0
-                            {
+                            + if flags & SOUND_DISABLED as u8 != 0 {
                                 3
                             } else {
                                 4
@@ -245,10 +245,7 @@ pub(crate) mod runtime {
                     game_string(OPTION_STRING_BASE + 1),
                     game_string(
                         OPTION_STRING_BASE
-                            + if WorldData::current().read(|owner| owner.game.glob_flags)
-                                & MUSIC_DISABLED as u8
-                                != 0
-                            {
+                            + if flags & MUSIC_DISABLED as u8 != 0 {
                                 3
                             } else {
                                 4
@@ -277,10 +274,7 @@ pub(crate) mod runtime {
                     game_string(OPTION_STRING_BASE + 2),
                     game_string(
                         OPTION_STRING_BASE
-                            + if WorldData::current().read(|owner| owner.game.glob_flags)
-                                & CYBORG_ENABLED as u8
-                                == 0
-                            {
+                            + if flags & CYBORG_ENABLED as u8 == 0 {
                                 3
                             } else {
                                 4
@@ -793,8 +787,7 @@ pub(crate) mod runtime {
         } else {
             let mut old_rect: RECT = mem::zeroed();
             let mut buf: [UNICODE; 256] = [0; 256];
-            let save_ss = WorldData::current().read(|world| world.flagship);
-            let player_q = WorldData::current().read(|world| world.game.built_ship_q);
+            let saved = WorldData::current().read(super::preview::SavedState::capture);
             let old_context = SetContext(Kernel::current().read(|owner| owner.status_context));
             GetContextClipRect(&mut old_rect);
             r.corner.x = (SIS_ORG_X as i32
@@ -806,23 +799,7 @@ pub(crate) mod runtime {
             r.extent.width = STATUS_WIDTH as COORD;
             r.extent.height = (ScreenHeight - (SAFE_Y as i32 * 2)) as COORD;
             SetContextClipRect(&mut r);
-            WorldData::current().write(|world| {
-                world.flagship = (*p_sd).SS;
-                let queue = &raw mut world.game.built_ship_q;
-                InitQueue(
-                    queue,
-                    MAX_BUILT_SHIPS as COUNT,
-                    mem::size_of::<SHIP_FRAGMENT>() as OBJ_SIZE,
-                );
-                for i in 0..(*p_sd).NumShips as usize {
-                    CloneShipFragment(
-                        &raw mut world.game.avail_race_q,
-                        (*p_sd).ShipList[i] as COUNT,
-                        queue,
-                        0,
-                    );
-                }
-            });
+            WorldData::current().write(|world| super::preview::install(world, &*p_sd));
             DateToString(
                 buf.as_mut_ptr(),
                 buf.len(),
@@ -987,10 +964,7 @@ pub(crate) mod runtime {
             t.CharCount = COUNT::MAX;
             font_DrawText(&mut t);
             SetContext(old_context);
-            WorldData::current().write(|world| {
-                world.game.built_ship_q = player_q;
-                world.flagship = save_ss;
-            });
+            WorldData::current().write(|world| saved.restore(world));
         }
         UnbatchGraphics();
     }

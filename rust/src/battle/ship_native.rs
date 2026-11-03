@@ -222,8 +222,8 @@ pub(crate) mod engine {
             let crew = cx.desc(ship).ship_info.crew_level;
             cx.element_mut(e).set_hit_points(crew);
             let activity = cx.world.activity() as BYTE;
-            if cx.element(e).player == NPC_PLAYER_NUM as SIZE && activity == IN_LAST_BATTLE as BYTE
-            {
+            let player = cx.element(e).player;
+            if player == NPC_PLAYER_NUM as SIZE && activity == IN_LAST_BATTLE as BYTE {
                 cx.draw_final_battle_captain(ship);
             } else if activity <= IN_ENCOUNTER as BYTE {
                 cx.init_ship_status(ship);

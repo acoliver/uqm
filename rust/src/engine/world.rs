@@ -13,6 +13,25 @@ pub struct WorldData {
 }
 
 impl WorldData {
+    pub(crate) fn ship_fragments(&self, player: bool) -> &crate::collections::queue::Queue {
+        if player {
+            &self.game.built_ship_q
+        } else {
+            &self.game.npc_built_ship_q
+        }
+    }
+
+    pub(crate) fn ship_fragments_mut(
+        &mut self,
+        player: bool,
+    ) -> &mut crate::collections::queue::Queue {
+        if player {
+            &mut self.game.built_ship_q
+        } else {
+            &mut self.game.npc_built_ship_q
+        }
+    }
+
     pub(crate) fn new() -> Self {
         // SAFETY: these retained save/queue records contain only integers and nullable pointers.
         unsafe { std::mem::zeroed() }
@@ -63,10 +82,14 @@ impl World {
         self.data.game.current_activity = activity;
     }
 
-    pub fn story_state(&self, key: StoryKey) -> u32 {
+    pub fn story_value(&self, key: StoryKey) -> Option<u8> {
         self.story
             .as_ref()
-            .map_or(0, |story| story.get_state(key.start(), key.end()) as u32)
+            .map(|story| story.get_state(key.start(), key.end()))
+    }
+
+    pub fn story_state(&self, key: StoryKey) -> u32 {
+        self.story_value(key).map_or(0, u32::from)
     }
 
     pub fn set_story_state(&mut self, key: StoryKey, value: u32) {
@@ -206,4 +229,36 @@ pub struct CStarDesc {
     pub index: u8,
     pub prefix: u8,
     pub postfix: u8,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn absent_story_is_distinct_from_an_initialized_zero_value() {
+        let mut world = World::new();
+        assert_eq!(world.story_value(StoryKey::GLOBAL_FLAGS_AND_DATA), None);
+        assert_eq!(world.story_state(StoryKey::GLOBAL_FLAGS_AND_DATA), 0);
+        world.story = Some(GameState::new());
+        assert_eq!(world.story_value(StoryKey::GLOBAL_FLAGS_AND_DATA), Some(0));
+        world.set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, 3);
+        assert_eq!(world.story_value(StoryKey::GLOBAL_FLAGS_AND_DATA), Some(3));
+    }
+
+    #[test]
+    fn fragment_queue_borrows_only_the_selected_header() {
+        let mut world = World::new();
+        assert!(std::ptr::eq(
+            world.data.ship_fragments(true),
+            &world.data.game.built_ship_q
+        ));
+        assert!(std::ptr::eq(
+            world.data.ship_fragments(false),
+            &world.data.game.npc_built_ship_q
+        ));
+        world.data.ship_fragments_mut(true).object_size = 42;
+        assert_eq!(world.data.game.built_ship_q.object_size, 42);
+        assert_eq!(world.data.game.npc_built_ship_q.object_size, 0);
+    }
 }

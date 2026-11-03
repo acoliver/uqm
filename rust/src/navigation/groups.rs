@@ -378,7 +378,14 @@ pub(crate) mod live {
                 let makeup = ENCOUNTER_MAKEUP[best_index];
                 for ships in (1..=makeup >> 4).rev() {
                     if ships <= makeup & 15 || (TFB_Random() as u16 % 100) < 50 {
-                        CloneShipFragment(fleet_queue(), best_index as u16, npc_queue(), 0);
+                        WorldFields::current().write(|world| {
+                            CloneShipFragment(
+                                &mut world.game.avail_race_q,
+                                best_index as u16,
+                                &raw mut world.game.npc_built_ship_q,
+                                0,
+                            )
+                        });
                     }
                 }
                 which += 1;
@@ -602,7 +609,14 @@ pub(crate) mod live {
             let mut number = read::<1>(file)[0];
             while number != 0 {
                 let race = read::<1>(file)[0];
-                let handle = CloneShipFragment(fleet_queue(), race as u16, npc_queue(), 0);
+                let handle = WorldFields::current().write(|world| {
+                    CloneShipFragment(
+                        &mut world.game.avail_race_q,
+                        race as u16,
+                        &raw mut world.game.npc_built_ship_q,
+                        0,
+                    )
+                });
                 super::ReadShipFragment(file, handle.cast());
                 number -= 1;
             }

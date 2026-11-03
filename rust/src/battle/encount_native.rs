@@ -145,13 +145,14 @@ pub(crate) mod engine {
         1
     }
 
-    pub(crate) unsafe fn get_ship_frag_queue_for_player(player: COUNT) -> *mut QUEUE {
-        let world = WorldFields::current();
-        if player == RPG_PLAYER_NUM as u16 {
-            &raw mut (**world).game.built_ship_q
-        } else {
-            &raw mut (**world).game.npc_built_ship_q
-        }
+    unsafe fn encounter_star() -> *mut crate::engine::world::CStarDesc {
+        WorldOwner::current()
+            .read(|world| world.star_pointer(crate::planets::starmap::current_catalog()))
+    }
+
+    unsafe fn encounter_race_exists(race: COUNT) -> bool {
+        WorldFields::current()
+            .write(|world| !GetStarShipFromIndex(&raw mut world.game.avail_race_q, race).is_null())
     }
 
     /// # Safety
@@ -184,9 +185,9 @@ pub(crate) mod engine {
                 }
             }
         }
-        let q = get_ship_frag_queue_for_player(player);
         link_queue::ships(player as usize).reinit();
-        let mut h = (*q).head;
+        let mut h = WorldFields::current()
+            .read(|world| world.ship_fragments(player == RPG_PLAYER_NUM as COUNT).head);
         while !h.is_null() {
             let frag = &*h.cast::<SHIP_FRAGMENT>();
             h = frag.succ;
@@ -236,7 +237,8 @@ pub(crate) mod engine {
     /// `player` must be a valid side with an initialized ship-fragment queue on the game thread.
     #[no_mangle]
     pub unsafe extern "C" fn FleetIsInfinite(player: COUNT) -> BOOLEAN {
-        let h = (*get_ship_frag_queue_for_player(player)).head;
+        let h = WorldFields::current()
+            .read(|world| world.ship_fragments(player == RPG_PLAYER_NUM as COUNT).head);
         if h.is_null() {
             return 0;
         }
@@ -283,12 +285,7 @@ pub(crate) mod engine {
             let mut buf = [0 as UNICODE; 256];
             draw_text(&mut t, game_string(ENCOUNTER_STRING_BASE + 2));
             t.baseline.y += 12;
-            GetClusterName(
-                ((**WorldOwner::current())
-                    .star_pointer(crate::planets::starmap::current_catalog()))
-                .cast(),
-                buf.as_mut_ptr(),
-            );
+            GetClusterName(encounter_star(), buf.as_mut_ptr());
             draw_text(&mut t, buf.as_ptr());
             t.baseline.y += 12;
             draw_text(&mut t, planet_name());
@@ -438,12 +435,7 @@ pub(crate) mod engine {
             .head
             .cast::<SHIP_FRAGMENT>();
         EncounterRace = (*frag).race_id as i16;
-        if GetStarShipFromIndex(
-            &raw mut (**WorldFields::current()).game.avail_race_q,
-            EncounterRace as COUNT,
-        )
-        .is_null()
-        {
+        if !encounter_race_exists(EncounterRace as COUNT) {
             victory = -1;
             KernelOwner::current().write(|kernel| init_siscontexts(kernel));
         }
@@ -459,11 +451,7 @@ pub(crate) mod engine {
                     if WorldOwner::current().read(in_hqspace) != 0 {
                         DrawHyperCoords((**WorldFields::current()).game.ship_stamp.origin);
                     } else if (**WorldFields::current()).game.ip_planet == 0 {
-                        DrawHyperCoords(
-                            (*(**WorldOwner::current())
-                                .star_pointer(crate::planets::starmap::current_catalog()))
-                            .star_pt,
-                        );
+                        DrawHyperCoords((*encounter_star()).star_pt);
                     } else {
                         DrawSISTitle(planet_name());
                     }
@@ -474,13 +462,7 @@ pub(crate) mod engine {
                 }
             }
             link_queue::ships(NUM_SIDES as usize - 1 - side).reinit();
-            let mut h = WorldFields::current().read(|world| {
-                if side == 0 {
-                    world.game.built_ship_q.head
-                } else {
-                    world.game.npc_built_ship_q.head
-                }
-            });
+            let mut h = WorldFields::current().read(|world| world.ship_fragments(side == 0).head);
             while !h.is_null() {
                 let frag = h.cast::<SHIP_FRAGMENT>();
                 let next = (*frag).succ;
@@ -577,11 +559,7 @@ pub(crate) mod engine {
                         }
                     }
                     WorldFields::current().write(|world| {
-                        let queue = if side == 0 {
-                            &raw mut world.game.built_ship_q
-                        } else {
-                            &raw mut world.game.npc_built_ship_q
-                        };
+                        let queue = world.ship_fragments_mut(side == 0);
                         RemoveQueue(queue, h);
                         FreeLink(queue, h);
                     });

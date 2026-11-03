@@ -437,7 +437,7 @@ pub unsafe fn visit_star_base() {
         }
         let ship = WorldData::current().write(|world| {
             CloneShipFragment(
-                &raw mut world.game.avail_race_q,
+                &mut world.game.avail_race_q,
                 ILWRATH_SHIP as COUNT,
                 &raw mut world.game.npc_built_ship_q,
                 7,

@@ -22,7 +22,7 @@ pub(in crate::savegame) unsafe fn finish_load(star: &super::super::StarDesc, act
     };
     let selected =
         FindStar(std::ptr::null_mut(), &mut point, 0, 0).cast::<crate::engine::world::CStarDesc>();
-    (**World::current()).select_star(selected.as_ref(), Some(runtime::live::live_catalog()));
+    World::current().write(|world| runtime::live::select_live_star(world, selected.as_ref()));
     NextActivity = activity;
     if activity & START_ENCOUNTER == 0 && activity & 0xff == IN_INTERPLANETARY {
         NextActivity |= START_INTERPLANETARY;

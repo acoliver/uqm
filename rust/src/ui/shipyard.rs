@@ -630,7 +630,7 @@ unsafe fn dms_try_add_escort_ship(menu: *mut MENU_STATE) {
     let index = GetIndexFromStarShip(ptr::addr_of_mut!((**world).game.avail_race_q), info);
     let added = (**world).flagship.res_units >= SHIP_COST[index as usize] as DWORD
         && !CloneShipFragment(
-            &raw mut (**world).game.avail_race_q,
+            &mut (**world).game.avail_race_q,
             index,
             ptr::addr_of_mut!((**world).game.built_ship_q),
             1,

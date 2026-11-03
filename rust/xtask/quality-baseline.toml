@@ -5488,6 +5488,7 @@ u6_04_world_projection = { limit = 143, ends = "U6-04", scopes = { "ffi|owner_pr
 "uqm::savegame::runtime::star::CStarDesc" = "uqm::engine::world::CStarDesc"
 "uqm::sound" = "uqm-engine::sound"
 "uqm::state::c_api::planets::GetPlanetInfo" = "uqm::state::c_api::planets::get_planet_info"
+"uqm::state::c_api::planets::InitPlanetInfo" = "uqm::state::c_api::planets::init_planet_info"
 "uqm::state::c_api::planets::PutPlanetInfo" = "uqm::state::c_api::planets::put_planet_info"
 "uqm::state::game_state::GameState" = "uqm::engine::world::story::GameState"
 "uqm::state::planet_info" = "uqm::engine::world::planet_info"

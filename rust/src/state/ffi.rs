@@ -623,11 +623,8 @@ unsafe fn normalize_state_bytes_mut<'a>(bytes: *mut u8, bit_count: usize) -> Opt
 /// Unlike `rust_get_game_state`, an uninitialized state is not read as zero.
 #[must_use]
 pub fn named_state_value(world: &crate::engine::World, name: &str) -> Option<u8> {
-    let (start_bit, end_bit) = super::game_state_keys::bit_range(name)?;
-    world
-        .story
-        .as_ref()
-        .map(|state| state.get_state(start_bit as usize, end_bit as usize))
+    let key = super::game_state_keys::StoryKey::from_name(name)?;
+    world.story_value(key)
 }
 
 fn read_story<R: Default>(world: &crate::engine::World, f: impl FnOnce(&GameState) -> R) -> R {

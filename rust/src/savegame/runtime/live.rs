@@ -80,10 +80,18 @@ pub unsafe fn capture_live_summary(name: &[u8]) -> Result<Summary, SummaryError>
 ///
 /// # Safety
 /// `star_array` must point at the `CATALOG_LEN` entries of `starmap_array`.
-pub(in crate::savegame) unsafe fn live_catalog<'a>() -> &'a [CStarDesc; CATALOG_LEN] {
+unsafe fn live_catalog<'a>() -> &'a [CStarDesc; CATALOG_LEN] {
     let table = std::ptr::addr_of!(STAR_ARRAY).read();
     assert!(!table.is_null(), "the star catalog is not set up");
     &*table.cast::<[CStarDesc; CATALOG_LEN]>()
+}
+
+/// # Safety
+/// Game-thread access with the live star catalog retained for this selection.
+pub unsafe fn select_live_star(world: &mut World, star: Option<&CStarDesc>) {
+    // SAFETY: the caller retains the initialized catalog for this game-thread selection.
+    let catalog = unsafe { live_catalog() };
+    world.select_star(star, Some(catalog));
 }
 
 /// The "Star" chunk for the live `CurStarDescPtr`.

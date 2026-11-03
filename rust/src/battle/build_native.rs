@@ -237,10 +237,10 @@ pub(crate) mod engine {
     }
 
     /// # Safety
-    /// Destination must be a fragment queue; global race templates must be live.
+    /// The destination must be a fragment queue, distinct from the live race-template queue.
     #[no_mangle]
     pub unsafe extern "C" fn CloneShipFragment(
-        races: *mut QUEUE,
+        races: &mut QUEUE,
         ship_index: COUNT,
         destination: *mut QUEUE,
         crew_level: COUNT,
@@ -286,7 +286,7 @@ pub(crate) mod engine {
     #[no_mangle]
     pub unsafe extern "C" fn AddEscortShips(race: COUNT, count: SIZE) -> COUNT {
         let world = WorldFields::current();
-        let races = &raw mut (**world).game.avail_race_q;
+        let races = &mut (**world).game.avail_race_q;
         if GetStarShipFromIndex(races, race).is_null() {
             return 0;
         }

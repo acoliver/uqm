@@ -213,30 +213,16 @@ pub(super) unsafe fn load_solar_sys() -> *mut c::PLANET_DESC {
 
     let state = system();
     let mut orbital = ptr::null_mut();
-    (*SysGenRNG).reseed(GetRandomSeedForStar(
-        (**World::current())
-            .star_pointer(crate::planets::starmap::current_catalog())
-            .cast(),
-    ));
-    SUN_FRAME = SetAbsFrameIndex(
-        SUN_FRAME.cast(),
-        u16::from(
-            ((*(**World::current()).star_pointer(crate::planets::starmap::current_catalog()))
-                .star_type
-                & 0x18)
-                >> 3,
-        ),
-    )
-    .cast();
+    let star = World::current()
+        .read(|world| *world.star_pointer(crate::planets::starmap::current_catalog()));
+    (*SysGenRNG).reseed(GetRandomSeedForStar(ptr::from_ref(&star).cast()));
+    let sun_type = (star.star_type & 0x18) >> 3;
+    SUN_FRAME = SetAbsFrameIndex(SUN_FRAME.cast(), u16::from(sun_type)).cast();
 
     let sun = (*state).SunDesc.as_mut_ptr();
     (*sun).pPrevDesc = ptr::null_mut();
     (*sun).rand_seed = (*SysGenRNG).next_random();
-    (*sun).data_index = ((*(**World::current())
-        .star_pointer(crate::planets::starmap::current_catalog()))
-    .star_type
-        & 0x18)
-        >> 3;
+    (*sun).data_index = sun_type;
     (*sun).location = c::POINT { x: 0, y: 0 };
     (*sun).image.origin = (*sun).location;
     (*sun).image.frame = SUN_FRAME;

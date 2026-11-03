@@ -45,7 +45,7 @@ fn summary_picker_clones_from_the_already_borrowed_race_queue() {
     unsafe {
         bridge::with_game(&mut game, || {
             World::current().write(|world| {
-                let races = &raw mut world.data.game.avail_race_q;
+                let races = &mut world.data.game.avail_race_q;
                 let destination = &raw mut world.data.game.built_ship_q;
                 assert_ne!(InitQueue(races, 1, mem::size_of::<FLEET_INFO>() as u16), 0);
                 assert_ne!(

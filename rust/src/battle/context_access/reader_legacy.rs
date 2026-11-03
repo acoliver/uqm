@@ -3,7 +3,7 @@ use crate::engine::battle::link_queue;
 #[cfg(not(test))]
 use crate::engine::battle::ShipId;
 #[cfg(not(test))]
-use crate::ships::native::abi::{COUNT, SHIP_FRAGMENT};
+use crate::ships::native::abi::{COUNT, RPG_PLAYER_NUM, SHIP_FRAGMENT};
 #[cfg(not(test))]
 use std::ffi::c_void;
 
@@ -69,17 +69,18 @@ pub(crate) unsafe fn human_frame(
 /// # Safety
 /// The owner's fragment queue matches battle ship link order on the game thread.
 pub(crate) unsafe fn update_ship_frag_crew(owner: ShipId) {
+    let player = {
+        // SAFETY: the typed owner identifies its initialized battle side.
+        let ships = unsafe { link_queue::ships(owner.side() as usize) };
+        ships.get(ships.link(owner)).player
+    };
+    let mut hf = crate::engine::WorldData::current()
+        .read(|world| world.ship_fragments(player == RPG_PLAYER_NUM as i16).head);
+    // SAFETY: this player was read from the live owner's battle record above.
+    let ships = unsafe { link_queue::ships(player as usize) };
+    let mut hs = ships.head();
     // SAFETY: the caller retains the initialized operands on the published game thread.
     unsafe {
-        let player = {
-            let ships = link_queue::ships(owner.side() as usize);
-            ships.get(ships.link(owner)).player
-        };
-        let frag_q =
-            crate::battle::encount_native::engine::get_ship_frag_queue_for_player(player as COUNT);
-        let mut hf = (*frag_q).head;
-        let ships = link_queue::ships(player as usize);
-        let mut hs = ships.head();
         while let Some(id) = hs.filter(|_| !hf.is_null()) {
             let frag = hf.cast::<SHIP_FRAGMENT>();
             hs = ships.succ(id);

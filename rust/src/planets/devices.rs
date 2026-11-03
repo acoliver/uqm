@@ -273,7 +273,7 @@ unsafe fn invoke(id: u8) -> u8 {
                 reset_groups();
                 WorldFields::current().write(|world| {
                     crate::battle::build_native::CloneShipFragment(
-                        &raw mut world.game.avail_race_q,
+                        &mut world.game.avail_race_q,
                         ship::CHMMR_SHIP.into(),
                         &raw mut world.game.npc_built_ship_q,
                         0,

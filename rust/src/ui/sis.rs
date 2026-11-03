@@ -453,13 +453,11 @@ pub unsafe extern "C" fn DrawStatusMessage(p_str: *const UNICODE) {
                 );
             }
         } else {
-            DateToString(
-                buf.as_mut_ptr().cast(),
-                buf.len(),
-                WorldData::current().read(|owner| owner.game.game_clock.month_index),
-                WorldData::current().read(|owner| owner.game.game_clock.day_index),
-                WorldData::current().read(|owner| owner.game.game_clock.year_index),
-            );
+            let (month, day, year) = WorldData::current().read(|world| {
+                let clock = &world.game.game_clock;
+                (clock.month_index, clock.day_index, clock.year_index)
+            });
+            DateToString(buf.as_mut_ptr().cast(), buf.len(), month, day, year);
         }
         text = buf.as_ptr().cast();
     }
