@@ -29,8 +29,8 @@ pub(crate) mod live {
     #[no_mangle]
     static mut PlanetContext: *mut crate::graphics::native_abi::context_desc = std::ptr::null_mut();
 
-    use crate::ui::border::DrawSISFrame;
-    use crate::ui::sis::RepairSISBorder;
+    use crate::ui::border::draw_sisframe;
+    use crate::ui::sis::repair_sisborder;
 
     #[cfg(feature = "debug-process")]
     use crate::graphics::context_abi::CreateContextAux;
@@ -211,7 +211,7 @@ pub(crate) mod live {
         g.batch();
         if mode != UPDATE {
             base::SetTransitionSource(std::ptr::null_mut());
-            DrawSISFrame();
+            draw_sisframe();
             DrawSISMessage(std::ptr::null());
             DrawSISTitle(planet_name.as_ptr().cast());
             DrawStarBackGround();
@@ -259,7 +259,7 @@ pub(crate) mod live {
         if wait {
             draw_display(WAIT);
         }
-        base::StopMusic();
+        base::stop_music();
         let planet = (*system).pOrbitalDesc;
         GeneratePlanetSurface(planet, surface);
         orbit_music::set_planet_music((*planet).data_index & !0x80);
@@ -283,7 +283,7 @@ pub(crate) mod live {
         let system = solar_system::current();
         let orbit = std::ptr::addr_of_mut!((*system).Orbit);
         UninitSphereRotation();
-        base::StopMusic();
+        base::stop_music();
         for i in 0..(*system).PlanetSideFrame.len() {
             base::DestroyDrawable(base::ReleaseDrawable((*system).PlanetSideFrame[i].cast()));
             (*system).PlanetSideFrame[i] = std::ptr::null_mut();
@@ -388,7 +388,7 @@ pub(crate) mod live {
             }
             1 => {
                 let old = SetInputCallback(None);
-                RepairSISBorder();
+                repair_sisborder();
                 let autopilot = StarMap();
                 if WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT
                     != 0

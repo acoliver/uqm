@@ -1,6 +1,5 @@
 //! Starbase encounters, menus and flagship-piece rendering, ported from starbase.c.
 #![cfg(not(test))]
-#![allow(non_snake_case)]
 
 use super::{outfit::DoOutfit, shipyard::DoShipyard};
 use crate::comm::comm_abi::{InitCommunication, SetCommIntroMode};
@@ -43,7 +42,7 @@ unsafe fn game_string(index: u32) -> *mut UNICODE {
     .cast()
 }
 
-unsafe fn DrawBaseStateStrings(mut old: BYTE, new: BYTE) {
+unsafe fn draw_base_state_strings(mut old: BYTE, new: BYTE) {
     SetContext(KernelOwner::current().read(|owner| owner.screen_context));
     SetContextFont(KernelOwner::current().read(|owner| owner.star_con_font));
     SetContextForeGroundColor(BLACK);
@@ -259,7 +258,7 @@ pub unsafe extern "C" fn DrawShipPiece(
     }
 }
 
-unsafe fn rotateStarbase(menu: *mut MENU_STATE, frame: FRAME) {
+unsafe fn rotate_starbase(menu: *mut MENU_STATE, frame: FRAME) {
     let now = GetTimeCounter();
     if !frame.is_null() {
         (*menu).flash_frame0 = frame;
@@ -281,10 +280,10 @@ unsafe fn rotateStarbase(menu: *mut MENU_STATE, frame: FRAME) {
     }
 }
 
-unsafe fn ExitStarBase(menu: *mut MENU_STATE) -> BOOLEAN {
+unsafe fn exit_star_base(menu: *mut MENU_STATE) -> BOOLEAN {
     DestroyDrawable(ReleaseDrawable((*menu).CurFrame));
     (*menu).CurFrame = ptr::null_mut();
-    StopMusic();
+    stop_music();
     if !(*menu).hMusic.is_null() {
         DestroyMusic((*menu).hMusic);
         (*menu).hMusic = ptr::null_mut();
@@ -336,7 +335,7 @@ pub unsafe extern "C" fn DoStarBase(menu: *mut MENU_STATE) -> BOOLEAN {
         != 0
     {
         (*menu).CurState = DEPART_BASE;
-        return ExitStarBase(menu);
+        return exit_star_base(menu);
     }
     SetMenuSounds(SOUND_ARROWS, SOUND_SELECT);
     if (*menu).Initialized == 0 {
@@ -344,7 +343,7 @@ pub unsafe extern "C" fn DoStarBase(menu: *mut MENU_STATE) -> BOOLEAN {
         (*menu).InputFunc = Some(DoStarBase);
         SetFlashRect(ptr::null());
         if !(*menu).hMusic.is_null() {
-            StopMusic();
+            stop_music();
             DestroyMusic((*menu).hMusic);
             (*menu).hMusic = ptr::null_mut();
         }
@@ -357,13 +356,13 @@ pub unsafe extern "C" fn DoStarBase(menu: *mut MENU_STATE) -> BOOLEAN {
         BatchGraphics();
         SetContextBackGroundColor(BLACK);
         ClearDrawable();
-        rotateStarbase(menu, (*menu).CurFrame);
-        DrawBaseStateStrings(BYTE::MAX, (*menu).CurState);
+        rotate_starbase(menu, (*menu).CurFrame);
+        draw_base_state_strings(BYTE::MAX, (*menu).CurState);
         ScreenTransition(3, ptr::null());
         PlayMusic((*menu).hMusic, 1, 1);
         UnbatchGraphics();
     } else if PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0 {
-        return ExitStarBase(menu);
+        return exit_star_base(menu);
     } else {
         let mut state = (*menu).CurState;
         if PulsedInputState.menu[KEY_MENU_LEFT as usize] != 0
@@ -386,17 +385,17 @@ pub unsafe extern "C" fn DoStarBase(menu: *mut MENU_STATE) -> BOOLEAN {
         BatchGraphics();
         SetContext(KernelOwner::current().read(|owner| owner.screen_context));
         if state != (*menu).CurState {
-            DrawBaseStateStrings((*menu).CurState, state);
+            draw_base_state_strings((*menu).CurState, state);
             (*menu).CurState = state;
         }
-        rotateStarbase(menu, ptr::null_mut());
+        rotate_starbase(menu, ptr::null_mut());
         UnbatchGraphics();
         SleepThread(ONE_SECOND / 30);
     }
     1
 }
 
-unsafe fn DoTimePassage() {
+unsafe fn do_time_passage() {
     SleepThreadUntil(FadeScreen(
         ScreenFadeType_FadeAllToBlack,
         (ONE_SECOND * 2) as SIZE,
@@ -404,7 +403,7 @@ unsafe fn DoTimePassage() {
     MoveGameClockDays(14);
 }
 
-unsafe fn CleanupAfterStarBase() {
+unsafe fn cleanup_after_star_base() {
     if WorldFields::current().read(|owner| owner.game.current_activity)
         & (CHECK_LOAD | CHECK_ABORT) as u16
         == 0
@@ -421,7 +420,7 @@ unsafe fn CleanupAfterStarBase() {
 /// # Safety
 /// World queues, game clock, communication, input, graphics and audio must be
 /// initialized and exclusively accessed by the calling game thread.
-pub unsafe fn VisitStarBase() {
+pub unsafe fn visit_star_base() {
     if WorldOwner::current().read(|world| get_game_state(world, StoryKey::CHMMR_BOMB_STATE)) == 2 {
         (**WorldOwner::current()).select_star(None, crate::planets::starmap::current_catalog());
         WorldOwner::current().write(|world| {
@@ -440,7 +439,7 @@ pub unsafe fn VisitStarBase() {
             == 0
             || (**WorldFields::current()).game.current_activity & CHECK_ABORT as u16 != 0
         {
-            CleanupAfterStarBase();
+            cleanup_after_star_base();
             return;
         }
         let ship = WorldFields::current().write(|world| {
@@ -472,7 +471,7 @@ pub unsafe fn VisitStarBase() {
         || WorldOwner::current().read(|world| get_game_state(world, StoryKey::CHMMR_BOMB_STATE))
             == 2
     {
-        DoTimePassage();
+        do_time_passage();
         if (**WorldFields::current()).flagship.crew_enlisted == COUNT::MAX {
             return;
         }
@@ -496,7 +495,7 @@ pub unsafe fn VisitStarBase() {
     crate::automation::ui_observation::observe_starbase_menu(false);
     SetContext(old);
     SetStatusMessageMode(previous);
-    CleanupAfterStarBase();
+    cleanup_after_star_base();
 }
 
 /// Advance fourteen days, finish bomb installation and force a SolarSys reload.
@@ -504,8 +503,8 @@ pub unsafe fn VisitStarBase() {
 /// # Safety
 /// The game clock, live world and graphics must be exclusively accessed on
 /// the initialized game thread.
-pub unsafe fn InstallBombAtEarth() {
-    DoTimePassage();
+pub unsafe fn install_bomb_at_earth() {
+    do_time_passage();
     SetContext(KernelOwner::current().read(|owner| owner.screen_context));
     SetTransitionSource(ptr::null());
     SetContextBackGroundColor(BLACK);

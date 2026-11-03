@@ -60,8 +60,7 @@ impl GameStrings for LiveGameStrings {
 pub unsafe fn capture_live_summary(name: &[u8]) -> Result<Summary, SummaryError> {
     let glob = **WorldFields::current();
     let state = solar_system::current();
-    let current =
-        (**WorldOwner::current()).star_pointer(crate::planets::starmap::current_catalog());
+    let current = (**WorldOwner::current()).star_pointer(Some(live_catalog()));
     let solar = SolarSystem::new(
         state.as_ref(),
         current.as_ref().map(|star| star.index),
@@ -81,10 +80,10 @@ pub unsafe fn capture_live_summary(name: &[u8]) -> Result<Summary, SummaryError>
 ///
 /// # Safety
 /// `star_array` must point at the `CATALOG_LEN` entries of `starmap_array`.
-unsafe fn live_catalog<'a>() -> &'a [CStarDesc] {
+pub(in crate::savegame) unsafe fn live_catalog<'a>() -> &'a [CStarDesc; CATALOG_LEN] {
     let table = std::ptr::addr_of!(STAR_ARRAY).read();
     assert!(!table.is_null(), "the star catalog is not set up");
-    std::slice::from_raw_parts(table, CATALOG_LEN)
+    &*table.cast::<[CStarDesc; CATALOG_LEN]>()
 }
 
 /// The "Star" chunk for the live `CurStarDescPtr`.
@@ -93,7 +92,7 @@ unsafe fn live_catalog<'a>() -> &'a [CStarDesc] {
 /// Game thread only; the star map must be initialised.
 pub unsafe fn capture_live_star() -> Result<StarDesc, StarError> {
     // SAFETY: this game-thread operation retains the initialized star catalog.
-    let catalog = unsafe { crate::planets::starmap::current_catalog() };
+    let catalog = unsafe { Some(live_catalog()) };
     let current = (**WorldOwner::current()).star_pointer(catalog);
     star::capture_star(live_catalog(), current)
 }
@@ -148,7 +147,7 @@ pub unsafe fn prepare_live_solar_location() -> Result<(), LiveLocationError> {
     let state = solar_system::current();
     assert!(!state.is_null(), "not in a solar system");
     // SAFETY: this game-thread operation retains the initialized star catalog.
-    let catalog = unsafe { crate::planets::starmap::current_catalog() };
+    let catalog = unsafe { Some(live_catalog()) };
     let current = (**WorldOwner::current()).star_pointer(catalog);
     let star_index =
         star::catalog_index(live_catalog(), current).map_err(LiveLocationError::Star)?;

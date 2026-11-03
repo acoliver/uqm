@@ -1,5 +1,4 @@
 //! Setup menus and persistent options, ported from uqm/setupmenu.c.
-#![allow(non_snake_case)]
 
 #[cfg(not(test))]
 use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
@@ -87,10 +86,10 @@ pub(crate) mod runtime {
 
     #[repr(C)]
     struct SetupMenuState {
-        InputFunc: Option<unsafe extern "C" fn(*mut SetupMenuState) -> BOOLEAN>,
+        input_func: Option<unsafe extern "C" fn(*mut SetupMenuState) -> BOOLEAN>,
         initialized: BOOLEAN,
         anim_frame_count: c_int,
-        NextTime: DWORD,
+        next_time: DWORD,
     }
     static mut SETUP_TAB: STRING = ptr::null_mut();
     static mut DONE: BOOLEAN = 0;
@@ -119,7 +118,7 @@ pub(crate) mod runtime {
         }
     }
 
-    unsafe fn number_res_options() -> c_int {
+    fn number_res_options() -> c_int {
         if TFB_SupportsHardwareScaling() != 0 {
             6
         } else {
@@ -241,7 +240,7 @@ pub(crate) mod runtime {
             $opts.$field = CHOICES[$i].selected as _
         };
     }
-    unsafe fn SetDefaults() {
+    unsafe fn set_defaults() {
         let mut opts: GLOBALOPTS = mem::zeroed();
         GetGlobalOptions(&mut opts);
         CHOICES[0].numopts =
@@ -253,7 +252,7 @@ pub(crate) mod runtime {
         SLIDERS[2].value = opts.speechvol;
         SLIDERS[3].value = opts.gamma;
     }
-    unsafe fn PropagateResults() {
+    unsafe fn propagate_results() {
         let mut opts: GLOBALOPTS = mem::zeroed();
         option_choices!(opts, from_choice);
         opts.musicvol = SLIDERS[0].value;
@@ -262,12 +261,12 @@ pub(crate) mod runtime {
         opts.gamma = SLIDERS[3].value;
         SetGlobalOptions(&mut opts);
     }
-    unsafe extern "C" fn DoSetupMenu(state: *mut SetupMenuState) -> BOOLEAN {
+    unsafe extern "C" fn do_setup_menu(state: *mut SetupMenuState) -> BOOLEAN {
         GamePaused = 0;
         if (*state).initialized == 0 {
             SetDefaultMenuRepeatDelay();
-            (*state).NextTime = GetTimeCounter();
-            SetDefaults();
+            (*state).next_time = GetTimeCounter();
+            set_defaults();
             Widget_SetFont(KernelOwner::current().read(|owner| owner.star_con_font));
             Widget_SetWindowColors(
                 rgb15(0x14, 0x14, 0x14),
@@ -309,8 +308,8 @@ pub(crate) mod runtime {
                 Widget_Event(event as c_int);
             }
         }
-        SleepThreadUntil((*state).NextTime.wrapping_add(MENU_FRAME_RATE));
-        (*state).NextTime = GetTimeCounter();
+        SleepThreadUntil((*state).next_time.wrapping_add(MENU_FRAME_RATE));
+        (*state).next_time = GetTimeCounter();
         BOOLEAN::from(
             WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
                 == 0
@@ -322,7 +321,7 @@ pub(crate) mod runtime {
         ((*NEXT).draw.unwrap())(NEXT, 0, 0);
         UnbatchGraphics();
     }
-    unsafe extern "C" fn OnTextEntryChange(state: *mut TEXTENTRY_STATE) -> BOOLEAN {
+    unsafe extern "C" fn on_text_entry_change(state: *mut TEXTENTRY_STATE) -> BOOLEAN {
         let widget = (*state).CbParam.cast::<WIDGET_TEXTENTRY>();
         (*widget).cursor_pos = (*state).CursorPos;
         if (*state).JoystickMode != 0 {
@@ -332,13 +331,13 @@ pub(crate) mod runtime {
         }
         1
     }
-    unsafe extern "C" fn OnTextEntryFrame(state: *mut TEXTENTRY_STATE) -> BOOLEAN {
+    unsafe extern "C" fn on_text_entry_frame(state: *mut TEXTENTRY_STATE) -> BOOLEAN {
         redraw_menu();
         SleepThreadUntil((*state).NextTime);
         (*state).NextTime = GetTimeCounter().wrapping_add(MENU_FRAME_RATE);
         1
     }
-    unsafe extern "C" fn OnTextEntryEvent(widget: *mut WIDGET_TEXTENTRY) -> c_int {
+    unsafe extern "C" fn on_text_entry_event(widget: *mut WIDGET_TEXTENTRY) -> c_int {
         (*widget).cursor_pos = utf8StringCount(((*widget).value.as_ptr()).cast()) as c_int;
         (*widget).state = WIDGET_TEXTENTRY_STATE_WTE_EDITING;
         redraw_menu();
@@ -355,8 +354,8 @@ pub(crate) mod runtime {
         state.MaxSize = (*widget).maxlen;
         state.CursorPos = (*widget).cursor_pos;
         state.CbParam = widget.cast();
-        state.ChangeCallback = Some(OnTextEntryChange);
-        state.FrameCallback = Some(OnTextEntryFrame);
+        state.ChangeCallback = Some(on_text_entry_change);
+        state.FrameCallback = Some(on_text_entry_frame);
         SetMenuSounds(0, MENU_SOUND_SELECT);
         if DoTextEntry(&mut state) == 0 {
             utf8StringCopy(
@@ -372,7 +371,7 @@ pub(crate) mod runtime {
         redraw_menu();
         1
     }
-    unsafe extern "C" fn gamma_HandleEventSlider(widget: *mut WIDGET, event: c_int) -> c_int {
+    unsafe extern "C" fn gamma_handle_event_slider(widget: *mut WIDGET, event: c_int) -> c_int {
         let slider = widget.cast::<WIDGET_SLIDER>();
         let previous = (*slider).value;
         if event == WIDGET_EVENT_LEFT as c_int {
@@ -400,7 +399,7 @@ pub(crate) mod runtime {
         }
         1
     }
-    unsafe extern "C" fn gamma_DrawValue(slider: *mut WIDGET_SLIDER, x: c_int, y: c_int) {
+    unsafe extern "C" fn gamma_draw_value(slider: *mut WIDGET_SLIDER, x: c_int, y: c_int) {
         let gamma = (&*ptr::addr_of!(GAMMA)).slider_to_gamma((*slider).value);
         let mut buffer = [0 as c_char; 16];
         libc::snprintf(
@@ -658,8 +657,8 @@ pub(crate) mod runtime {
             (*s).tooltip = [c"".as_ptr(); 3];
         }
         SLIDERS[3].step = 1;
-        SLIDERS[3].handleEvent = Some(gamma_HandleEventSlider);
-        SLIDERS[3].draw_value = Some(gamma_DrawValue);
+        SLIDERS[3].handleEvent = Some(gamma_handle_event_slider);
+        SLIDERS[3].draw_value = Some(gamma_draw_value);
         for slider in
             std::slice::from_raw_parts_mut(ptr::addr_of_mut!(SLIDERS).cast::<WIDGET_SLIDER>(), 4)
         {
@@ -776,7 +775,7 @@ pub(crate) mod runtime {
             Widget_DrawTextEntry,
             Widget_HeightOneLine
         );
-        (*t).handleEventSelect = Some(OnTextEntryEvent);
+        (*t).handleEventSelect = Some(on_text_entry_event);
         (*t).category = buffer[0];
         (*t).value[0] = 0;
         (*t).maxlen = WIDGET_TEXTENTRY_WIDTH as c_int - 1;
@@ -865,7 +864,7 @@ pub(crate) mod runtime {
     #[no_mangle]
     pub unsafe extern "C" fn SetupMenu() {
         let mut state: SetupMenuState = mem::zeroed();
-        state.InputFunc = Some(DoSetupMenu);
+        state.input_func = Some(do_setup_menu);
         state.initialized = 0;
         SetMenuSounds(MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
         SETUP_TAB = CaptureStringTable(LoadStringTableInstance(SETUP_MENU_STRTAB.as_ptr().cast()));
@@ -877,7 +876,7 @@ pub(crate) mod runtime {
         DONE = 0;
         DoInput(ptr::addr_of_mut!(state).cast(), 1);
         (**WorldFields::current()).game.current_activity &= !(CHECK_ABORT as u16);
-        PropagateResults();
+        propagate_results();
         if !SETUP_TAB.is_null() {
             clean_up_widgets();
         }

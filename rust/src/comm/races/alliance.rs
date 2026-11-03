@@ -18,20 +18,21 @@ mod live {
     use super::*;
     use crate::comm::races::script::live::LiveScript;
 
-    use crate::battle::build_native::engine::SetRaceAllied;
+    use crate::battle::build_native::engine::set_race_allied;
 
-    use crate::battle::build_native::engine::StartSphereTracking;
+    use crate::battle::build_native::engine::start_sphere_tracking;
 
     use crate::time::clock_abi::live::AddEvent;
     impl<H> AllianceApi<H> for LiveScript<H> {
         fn set_allied(&mut self, race: u16, allied: bool) {
             unsafe {
-                WorldOwner::current().write(|world| SetRaceAllied(world, race, u32::from(allied)));
+                WorldOwner::current()
+                    .write(|world| set_race_allied(world, race, u32::from(allied)));
             }
         }
         fn track(&mut self, race: u16) {
             unsafe {
-                WorldOwner::current().write(|world| StartSphereTracking(world, race));
+                WorldOwner::current().write(|world| start_sphere_tracking(world, race));
             }
         }
         fn event(&mut self, kind: i32, month: u16, day: u16, year: u16, selector: u8) {

@@ -1,5 +1,4 @@
 //! Main-thread lifecycle callbacks, ported from starcon.c (GPL-2.0-or-later).
-#![allow(non_snake_case)]
 
 use crate::engine::Kernel as KernelOwner;
 use crate::engine::StoryKey;
@@ -30,7 +29,7 @@ unsafe extern "C" fn on_battle_frame() {
         & (CHECK_ABORT | CHECK_LOAD) as u16
         == 0
     {
-        crate::navigation::hyper_radar::SeedUniverse();
+        crate::navigation::hyper_radar::seed_universe();
     }
     crate::ui::sis::DrawAutoPilotMessage(0);
 }
@@ -76,7 +75,7 @@ pub unsafe fn uqm_battle_with_frame_callback() {
 
 /// # Safety
 /// Called on the game thread while live state and input are initialized.
-pub unsafe extern "C" fn SignalStopMainThread() {
+pub unsafe extern "C" fn signal_stop_main_thread() {
     ptr::addr_of_mut!(GamePaused).write_volatile(0);
     (**WorldFields::current()).game.current_activity |= CHECK_ABORT as u16;
     crate::threading::legacy_abi::TaskSwitch();
@@ -84,7 +83,7 @@ pub unsafe extern "C" fn SignalStopMainThread() {
 
 /// # Safety
 /// Called by the game thread after immediate input has been sampled.
-pub unsafe extern "C" fn ProcessUtilityKeys() {
+pub unsafe extern "C" fn process_utility_keys() {
     let state = ptr::addr_of!(ImmediateInputState).read_volatile();
     if state.menu[KEY_ABORT as usize] != 0 {
         crate::log_abi::log_showBox(false, false);
@@ -105,12 +104,12 @@ pub unsafe extern "C" fn ProcessUtilityKeys() {
         static mut DEBUG_KEY_STATE: i32 = 0;
         let pressed = state.menu[KEY_DEBUG as usize];
         if pressed != 0 && DEBUG_KEY_STATE == 0 {
-            crate::front_end::uqmdebug::debugKeyPressed();
+            crate::front_end::uqmdebug::debug_key_pressed();
         }
         DEBUG_KEY_STATE = pressed;
     }
 }
 
-pub extern "C" fn Starcon2Main(_arg: *mut c_void) -> i32 {
+pub extern "C" fn starcon2_main(_arg: *mut c_void) -> i32 {
     super::game_loop::rust_game_loop()
 }

@@ -108,12 +108,11 @@ pub unsafe fn free_image(frames: *mut [*mut frame_desc; 3], role: &str) -> u32 {
 
 #[cfg(not(test))]
 pub(crate) mod live {
-    #![allow(non_snake_case)]
     use super::*;
 
     /// # Safety
     /// Game thread only, after graphics and resource initialization.
-    pub unsafe fn InitSpace(kernel: &mut crate::engine::Kernel, activity: u16) -> u32 {
+    pub unsafe fn init_space(kernel: &mut crate::engine::Kernel, activity: u16) -> u32 {
         {
             let old = kernel.space_init_count;
             kernel.space_init_count = kernel.space_init_count.wrapping_add(1);
@@ -154,7 +153,7 @@ pub(crate) mod live {
 
     /// # Safety
     /// Game thread only; pairs with InitSpace while graphics is live.
-    pub unsafe fn UninitSpace(kernel: &mut crate::engine::Kernel) {
+    pub unsafe fn uninit_space(kernel: &mut crate::engine::Kernel) {
         {
             if kernel.space_init_count != 0 {
                 kernel.space_init_count -= 1;

@@ -45,22 +45,22 @@ const SFR_MENU_ANY: usize = usize::MAX - 1;
 const UNDEFINED_DELTA: i16 = 0x7FFF;
 
 #[cfg(not(test))]
-use crate::ui::border::DrawSISFrame;
+use crate::ui::border::draw_sisframe;
 #[cfg(test)]
 extern "C" {
-    fn DrawSISFrame();
+    fn draw_sisframe();
 }
 #[cfg(not(test))]
-use crate::ui::sis::PostUpdateFlashRect;
+use crate::ui::sis::post_update_flash_rect;
 #[cfg(test)]
 extern "C" {
-    fn PostUpdateFlashRect();
+    fn post_update_flash_rect();
 }
 #[cfg(not(test))]
-use crate::ui::sis::PreUpdateFlashRect;
+use crate::ui::sis::pre_update_flash_rect;
 #[cfg(test)]
 extern "C" {
-    fn PreUpdateFlashRect();
+    fn pre_update_flash_rect();
 }
 
 use crate::graphics::context_abi::SetContextForeGroundColor;
@@ -508,12 +508,12 @@ impl Gfx for CffiPlatform {
 
     fn pre_update_flash(&self) {
         // SAFETY: balanced with `post_update_flash` by the callers.
-        unsafe { PreUpdateFlashRect() };
+        unsafe { pre_update_flash_rect() };
     }
 
     fn post_update_flash(&self) {
         // SAFETY: balanced with `pre_update_flash` by the callers.
-        unsafe { PostUpdateFlashRect() };
+        unsafe { post_update_flash_rect() };
     }
 
     fn game_string(&self, index: i32) -> String {
@@ -795,7 +795,7 @@ impl Platform for CffiPlatform {
 
     fn draw_sis_frame(&self) {
         // SAFETY: plain call.
-        unsafe { DrawSISFrame() };
+        unsafe { draw_sisframe() };
     }
 
     fn draw_sis_message(&self, text: &str) {
@@ -921,7 +921,7 @@ impl Platform for CffiPlatform {
 
     fn stop_music(&self) {
         // SAFETY: plain call.
-        unsafe { base::StopMusic() };
+        unsafe { base::stop_music() };
     }
 
     fn destroy_music(&self, music: MusicId) {

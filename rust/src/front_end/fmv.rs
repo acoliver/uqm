@@ -1,5 +1,4 @@
 //! Splash, introduction, victory and ship-spin presentations, ported from uqm/fmv.c.
-#![allow(non_snake_case)]
 
 #[cfg(not(test))]
 pub(crate) mod runtime {
@@ -24,9 +23,9 @@ pub(crate) mod runtime {
         let mut old_rect: RECT = std::mem::zeroed();
         LoadIntoExtraScreen(ptr::null_mut());
         if !music.is_null() {
-            StopMusic();
+            stop_music();
         }
-        FreeHyperData();
+        free_hyper_data();
         libc::sprintf(
             name.as_mut_ptr(),
             c"slides.spins.%02u".as_ptr(),

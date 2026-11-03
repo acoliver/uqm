@@ -1,6 +1,5 @@
 //! Hyperspace graphics resources and entry/exit lifecycle.
 #![cfg(not(test))]
-#![allow(non_snake_case)]
 use super::abi::*;
 use crate::engine::StoryKey;
 use crate::engine::World as WorldOwner;
@@ -11,7 +10,7 @@ use std::ptr;
 
 /// # Safety
 /// Game-thread access, after hyperspace users release their frames and maps.
-pub unsafe fn FreeHyperData() {
+pub unsafe fn free_hyper_data() {
     let kernel = KernelOwner::current();
     let frames = std::slice::from_raw_parts_mut(ptr::addr_of_mut!((**kernel).hyperstars).cast(), 3);
     for frame in frames {
@@ -57,12 +56,12 @@ pub unsafe extern "C" fn LoadHyperspace() -> BOOLEAN {
         );
     });
     if KernelOwner::current().read(|kernel| kernel.last_activity) & CHECK_LOAD as u16 == 0 {
-        RepairSISBorder();
+        repair_sisborder();
     } else if KernelOwner::current().read(|kernel| kernel.last_activity) as u8 == 0 {
-        DrawSISFrame();
+        draw_sisframe();
     } else {
         ClearSISRect(DRAW_SIS_DISPLAY as u8);
-        RepairSISBorder();
+        repair_sisborder();
     }
     if WorldFields::current().read(|owner| owner.game.autopilot.x) == -1
         || WorldFields::current().read(|owner| owner.game.autopilot.y) == -1

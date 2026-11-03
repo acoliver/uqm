@@ -29,7 +29,6 @@ fn navigate(ship: u32, left: bool, right: bool, up: bool, down: bool) -> u32 {
 }
 
 #[cfg(not(test))]
-#[allow(non_snake_case)]
 pub(super) mod live {
     use super::navigate;
     use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
@@ -51,7 +50,7 @@ pub(super) mod live {
 
     /// # Safety
     /// Game thread, with the melee graphics and master ship list loaded.
-    pub unsafe extern "C" fn BuildBuildPickFrame() {
+    pub unsafe extern "C" fn build_build_pick_frame() {
         let old = SetContext(KernelOwner::current().read(|owner| owner.off_screen_context));
         let mut stamp = STAMP {
             origin: POINT { x: 0, y: 0 },
@@ -65,19 +64,19 @@ pub(super) mod live {
         hot(stamp.frame, 0, 0);
         DrawStamp(&mut stamp);
         for ship in 0..25 {
-            DrawPickIcon(ship, true);
+            draw_pick_icon(ship, true);
         }
         SetContext(old);
     }
     /// # Safety
     /// Game thread; the popup drawable must not be referenced elsewhere.
-    pub unsafe extern "C" fn DestroyBuildPickFrame() {
+    pub unsafe extern "C" fn destroy_build_pick_frame() {
         DestroyDrawable(ReleaseDrawable(BUILD_PICK_FRAME));
         BUILD_PICK_FRAME = ptr::null_mut();
     }
     /// # Safety
     /// Game thread, with the popup drawable and ship icons loaded.
-    pub unsafe extern "C" fn DrawPickIcon(ship: MeleeShip, draw: bool) {
+    pub unsafe extern "C" fn draw_pick_icon(ship: MeleeShip, draw: bool) {
         let rect = frame_rect(BUILD_PICK_FRAME);
         let mut stamp = STAMP {
             origin: POINT {
@@ -101,7 +100,7 @@ pub(super) mod live {
     }
     /// # Safety
     /// State must be the active fleet editor on the game thread.
-    pub unsafe extern "C" fn DrawPickFrame(state: *mut MELEE_STATE) {
+    pub unsafe extern "C" fn draw_pick_frame(state: *mut MELEE_STATE) {
         let mut first: RECT = mem::zeroed();
         let mut last: RECT = mem::zeroed();
         let mut ships: RECT = mem::zeroed();
@@ -129,7 +128,7 @@ pub(super) mod live {
     }
     /// # Safety
     /// Rect must be writable and the popup must be initialized.
-    pub unsafe extern "C" fn GetBuildPickFrameRect(rect: *mut RECT) {
+    pub unsafe extern "C" fn get_build_pick_frame_rect(rect: *mut RECT) {
         GetFrameRect(BUILD_PICK_FRAME, rect);
     }
 
@@ -160,7 +159,7 @@ pub(super) mod live {
             keys[KEY_MENU_DOWN as usize] != 0,
         );
         if selected != (*state).current_ship {
-            DrawPickIcon((*state).current_ship, true);
+            draw_pick_icon((*state).current_ship, true);
             (*state).current_ship = selected;
             DrawMeleeShipStrings(state, selected);
         }
@@ -170,12 +169,12 @@ pub(super) mod live {
     }
     /// # Safety
     /// State must be the active fleet editor on the game thread.
-    pub unsafe extern "C" fn BuildPickShip(state: *mut MELEE_STATE) -> bool {
+    pub unsafe extern "C" fn build_pick_ship(state: *mut MELEE_STATE) -> bool {
         FlushInput();
         if (*state).current_ship == 255 {
             (*state).current_ship = 0;
         }
-        DrawPickFrame(state);
+        draw_pick_frame(state);
         (*state).input_func = Some(pick);
         DoInput(state.cast(), 0);
         (*state).build_pick_confirmed != 0

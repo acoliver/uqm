@@ -132,7 +132,7 @@ pub unsafe extern "C" fn RepairMeleeFrame(rect: *const RECT) {
     DrawMeleeIcon(26);
     teams();
     if (*P_MELEE_STATE).melee_option == 11 {
-        crate::supermelee::native::build_picker::live::DrawPickFrame(P_MELEE_STATE);
+        crate::supermelee::native::build_picker::live::draw_pick_frame(P_MELEE_STATE);
     }
     UnbatchGraphics();
     set_context_origin(origin);
@@ -362,7 +362,7 @@ pub(super) unsafe fn highlight(option: u8, on: bool) {
                 }
             }
         }
-        11 => crate::supermelee::native::build_picker::live::DrawPickIcon(
+        11 => crate::supermelee::native::build_picker::live::draw_pick_icon(
             (*P_MELEE_STATE).current_ship,
             !on,
         ),

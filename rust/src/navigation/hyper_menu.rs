@@ -1,6 +1,5 @@
 //! Hyperspace menu dispatch.
 #![cfg(not(test))]
-#![allow(non_snake_case)]
 use super::abi::*;
 use super::get;
 use crate::engine::StoryKey;
@@ -65,7 +64,7 @@ unsafe extern "C" fn input(state: *mut MENU_STATE) -> BOOLEAN {
 }
 /// # Safety
 /// Input, graphics and world state must be initialized on the game thread.
-pub unsafe fn HyperspaceMenu() {
+pub unsafe fn hyperspace_menu() {
     UnbatchGraphics();
     let old_context = SetContext(KernelOwner::current().read(|owner| owner.space_context));
     let old_color = SetContextBackGroundColor(super::color(0, 0, 0));

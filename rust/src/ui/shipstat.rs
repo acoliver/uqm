@@ -1,5 +1,4 @@
 #![cfg(not(test))]
-#![allow(non_snake_case)]
 
 use crate::engine::battle::{link_queue, ShipId};
 use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

@@ -1,5 +1,4 @@
 #![cfg(not(test))]
-#![allow(non_snake_case)]
 
 use crate::callback::ffi::{AlarmId, Alarm_addAbsoluteMs, Alarm_remove};
 use crate::engine::battle::schema::FlashContext;
@@ -39,7 +38,7 @@ unsafe fn game_string(index: u32) -> *mut UNICODE {
     .cast()
 }
 
-unsafe fn game_state(name: &str) -> u8 {
+fn game_state(name: &str) -> u8 {
     let (start, end) =
         crate::state::game_state::lookup_game_state_bits(name).expect("known SIS game-state key");
     World::current()
@@ -141,7 +140,7 @@ fn pilot_color(i: usize) -> Color {
     rgb15(r, g, b)
 }
 #[inline]
-unsafe fn sis() -> crate::app::bridge::Projection<SIS_STATE> {
+fn sis() -> crate::engine::Projection<SIS_STATE> {
     // SAFETY: flagship is a field of the leased World; map keeps its thread
     // assertion and exclusive borrow flag until the SIS projection is dropped.
     unsafe { WorldFields::current().map(|world| &raw mut (*world).flagship) }
@@ -153,7 +152,7 @@ unsafe fn set_color(color: Color) {
 
 /// # Safety
 /// The graphics system and screen contexts must be initialized on the game thread.
-pub unsafe fn RepairSISBorder() {
+pub unsafe fn repair_sisborder() {
     let old = SetContext(KernelOwner::current().read(|owner| owner.screen_context));
     BatchGraphics();
     let mut r: RECT = mem::zeroed();
@@ -200,12 +199,12 @@ pub unsafe extern "C" fn ClearSISRect(clear_flags: BYTE) {
 /// # Safety
 /// pStr must be a valid NUL-terminated UTF-8 string and graphics state initialized.
 #[no_mangle]
-pub unsafe extern "C" fn DrawSISTitle(pStr: *const UNICODE) {
+pub unsafe extern "C" fn DrawSISTitle(p_str: *const UNICODE) {
     let mut t: TEXT = mem::zeroed();
     t.baseline.x = SIS_TITLE_WIDTH >> 1;
     t.baseline.y = SIS_TITLE_HEIGHT - 2;
     t.align = TEXT_ALIGN_ALIGN_CENTER;
-    t.pStr = pStr;
+    t.pStr = p_str;
     t.CharCount = !0;
     let old = SetContext(KernelOwner::current().read(|owner| owner.off_screen_context));
     let mut r: RECT = mem::zeroed();
@@ -247,15 +246,15 @@ pub unsafe extern "C" fn DrawHyperCoords(universe: POINT) {
 /// # Safety
 /// pStr must be null or a valid NUL-terminated string; UI graphics state must be initialized.
 #[no_mangle]
-pub unsafe extern "C" fn DrawSISMessage(pStr: *const UNICODE) {
-    DrawSISMessageEx(pStr, -1, -1, DSME_NONE as COUNT);
+pub unsafe extern "C" fn DrawSISMessage(p_str: *const UNICODE) {
+    DrawSISMessageEx(p_str, -1, -1, DSME_NONE as COUNT);
 }
 
 /// # Safety
 /// pStr must be null or valid UTF-8 and graphics state must be initialized on the game thread.
 #[no_mangle]
 pub unsafe extern "C" fn DrawSISMessageEx(
-    pStr: *const UNICODE,
+    p_str: *const UNICODE,
     cur_pos: SIZE,
     ex_pos: SIZE,
     flags: COUNT,
@@ -271,7 +270,7 @@ pub unsafe extern "C" fn DrawSISMessageEx(
     BatchGraphics();
     SetContextBackGroundColor(rgb15(0, 0, 0x14));
     let mut buf = [0u8; 256];
-    let mut text = pStr;
+    let mut text = p_str;
     if text.is_null() {
         text = match u32::from(
             WorldFields::current().read(|owner| owner.game.current_activity) as BYTE,
@@ -285,7 +284,7 @@ pub unsafe extern "C" fn DrawSISMessageEx(
                 );
                 buf.as_ptr().cast()
             }
-            IN_HYPERSPACE => game_string(if World::current().read(inHyperSpace) != 0 {
+            IN_HYPERSPACE => game_string(if World::current().read(in_hyper_space) != 0 {
                 NAVIGATION_STRING_BASE
             } else {
                 NAVIGATION_STRING_BASE + 1
@@ -405,7 +404,7 @@ pub unsafe extern "C" fn GetStatusMessageRect(r: *mut RECT) {
 /// # Safety
 /// pStr must be null or a valid NUL-terminated string; status graphics must be initialized.
 #[no_mangle]
-pub unsafe extern "C" fn DrawStatusMessage(pStr: *const UNICODE) {
+pub unsafe extern "C" fn DrawStatusMessage(p_str: *const UNICODE) {
     let old = SetContext(KernelOwner::current().read(|owner| owner.status_context));
     let mut ctx: RECT = mem::zeroed();
     GetContextClipRect(&mut ctx);
@@ -420,7 +419,7 @@ pub unsafe extern "C" fn DrawStatusMessage(pStr: *const UNICODE) {
     SetContextBackGroundColor(rgb15(0, 8, 0));
     ClearDrawable();
     let mut buf = [0u8; 128];
-    let mut text = pStr;
+    let mut text = p_str;
     if text.is_null() {
         if CUR_MSG_MODE == StatMsgMode_SMM_CREDITS {
             let credits = u16::from(game_state("MELNORME_CREDIT0"))
@@ -490,7 +489,7 @@ pub unsafe extern "C" fn SetStatusMessageMode(new_mode: StatMsgMode) -> StatMsgM
 
 /// # Safety
 /// Status graphics and SIS state must be initialized.
-pub unsafe fn DrawCaptainsName() {
+pub unsafe fn draw_captains_name() {
     let old = SetContext(KernelOwner::current().read(|owner| owner.status_context));
     let old_font = SetContextFont(KernelOwner::current().read(|owner| owner.tiny_font));
     let old_color = SetContextForeGroundColor(rgb15(0, 0, 0x14));
@@ -582,7 +581,7 @@ pub unsafe extern "C" fn DrawFlagshipName(in_status_area: BOOLEAN) {
 
 /// # Safety
 /// Graphics, fonts, game strings and SIS inventory must be initialized.
-pub unsafe fn DrawFlagshipStats() {
+pub unsafe fn draw_flagship_stats() {
     let s = sis();
     let mut energy_regen: u8 = 1;
     let mut energy_wait: u8 = 10;
@@ -726,7 +725,7 @@ unsafe fn weapon_name(module: BYTE, out: *mut u8) {
 
 /// # Safety
 /// Status graphics and flagship frame must be initialized.
-pub unsafe fn DrawLanders() {
+pub unsafe fn draw_landers() {
     let old = SetContext(KernelOwner::current().read(|owner| owner.status_context));
     let mut stamp: STAMP = mem::zeroed();
     stamp.frame = IncFrameIndex(KernelOwner::current().read(|owner| owner.flag_stat_frame));
@@ -1040,8 +1039,8 @@ pub unsafe extern "C" fn DeltaSISGauges(crew_delta: SIZE, fuel_delta: SIZE, resu
     delta_fuel(fuel_delta);
     if crew_delta == UNDEFINED_DELTA_LOCAL {
         DrawFlagshipName(1);
-        DrawCaptainsName();
-        DrawLanders();
+        draw_captains_name();
+        draw_landers();
         DrawStorageBays(0);
     }
     delta_res(resunit_delta as SIZE);
@@ -1156,7 +1155,7 @@ pub unsafe extern "C" fn SetFlashRect(p_rect: *const RECT) {
 }
 /// # Safety
 /// Flash alarm and context state must be accessed on the game thread.
-pub unsafe fn PreUpdateFlashRect() {
+pub unsafe fn pre_update_flash_rect() {
     let alarm = FLASH_ALARM;
     if alarm.is_some() {
         UPDATE_FLASH_RECT_RECURSION = UPDATE_FLASH_RECT_RECURSION.wrapping_add(1);
@@ -1168,7 +1167,7 @@ pub unsafe fn PreUpdateFlashRect() {
 }
 /// # Safety
 /// Flash alarm and context state must be accessed on the game thread.
-pub unsafe fn PostUpdateFlashRect() {
+pub unsafe fn post_update_flash_rect() {
     let alarm = FLASH_ALARM;
     if alarm.is_some() {
         UPDATE_FLASH_RECT_RECURSION = UPDATE_FLASH_RECT_RECURSION.wrapping_sub(1);
@@ -1180,7 +1179,7 @@ pub unsafe fn PostUpdateFlashRect() {
 }
 /// # Safety
 /// Flash alarm system must be initialized on the game thread.
-pub unsafe fn PauseFlash() {
+pub unsafe fn pause_flash() {
     if !FLASH_CONTEXT.is_null() {
         Alarm_remove(FLASH_ALARM);
         FLASH_ALARM = None;
@@ -1189,7 +1188,7 @@ pub unsafe fn PauseFlash() {
 }
 /// # Safety
 /// Flash alarm system must be initialized on the game thread.
-pub unsafe fn ContinueFlash() {
+pub unsafe fn continue_flash() {
     if FLASH_PAUSED != 0 {
         schedule_flash_alarm();
         FLASH_PAUSED = 0;

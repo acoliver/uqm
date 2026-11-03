@@ -111,12 +111,12 @@ fn space_queries_use_the_world_of_the_entered_context() {
     unsafe {
         bridge::with_game(&mut game, || {
             bridge::enter(|cx| {
-                assert_ne!(uqm_rust::navigation::globals::inHQSpace(cx.world), 0);
-                assert_ne!(uqm_rust::navigation::globals::inHyperSpace(cx.world), 0);
+                assert_ne!(uqm_rust::navigation::globals::in_hqspace(cx.world), 0);
+                assert_ne!(uqm_rust::navigation::globals::in_hyper_space(cx.world), 0);
                 cx.world
                     .set_story_state(uqm_rust::engine::StoryKey::ARILOU_SPACE_SIDE, 2);
-                assert_ne!(uqm_rust::navigation::globals::inQuasiSpace(cx.world), 0);
-                assert_eq!(uqm_rust::navigation::globals::inHyperSpace(cx.world), 0);
+                assert_ne!(uqm_rust::navigation::globals::in_quasi_space(cx.world), 0);
+                assert_eq!(uqm_rust::navigation::globals::in_hyper_space(cx.world), 0);
             });
         });
     }
@@ -144,7 +144,7 @@ fn starbase_releases_world_before_communication_and_cleanup() {
     unsafe {
         let previous = uqm_rust::front_end::uqmdebug::DISABLE_INTERACTIVITY;
         uqm_rust::front_end::uqmdebug::DISABLE_INTERACTIVITY = 1;
-        bridge::with_game(&mut game, || uqm_rust::ui::starbase::VisitStarBase());
+        bridge::with_game(&mut game, || uqm_rust::ui::starbase::visit_star_base());
         uqm_rust::front_end::uqmdebug::DISABLE_INTERACTIVITY = previous;
     }
     assert_eq!(game.world.activity(), CHECK_ABORT as u16);

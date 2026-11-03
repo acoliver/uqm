@@ -26,10 +26,10 @@ use crate::planets::universe_units::{universe_to_logx, universe_to_logy};
 use crate::state::ffi::{rust_get_game_state_bits, rust_set_game_state_bits};
 
 #[cfg(not(test))]
-use crate::ui::sis::RepairSISBorder;
+use crate::ui::sis::repair_sisborder;
 #[cfg(test)]
 extern "C" {
-    fn RepairSISBorder();
+    fn repair_sisborder();
 }
 #[cfg(all(not(test), feature = "debug-process"))]
 pub use crate::front_end::uqmdebug::DISABLE_INTERACTIVITY;
@@ -41,9 +41,9 @@ use crate::navigation::groups::live::GetGroupInfo;
 
 use crate::navigation::groups::live::PutGroupInfo;
 
-pub use crate::navigation::groups::live::InitGroupInfo;
+pub use crate::navigation::groups::live::init_group_info;
 
-pub use crate::navigation::groups::live::UninitGroupInfo;
+pub use crate::navigation::groups::live::uninit_group_info;
 
 use crate::navigation::groups::live::BuildGroups;
 
@@ -98,8 +98,6 @@ pub use crate::graphics::dcqueue_abi::TFB_FlushGraphicsEx;
 pub use crate::strings::string_table::CaptureStringTable;
 
 use crate::strings::string_table::SetAbsStringTableIndex;
-
-use crate::battle::build_native::engine::StartSphereTracking;
 
 use crate::navigation::interplanetary::live::notify_others_abi as NotifyOthers;
 
@@ -213,7 +211,9 @@ const INFINITE_FLEET: u16 = !0;
 /// # Safety
 /// Game thread, with the fleet queue initialised.
 pub unsafe fn start_sphere_tracking(race: u16) -> bool {
-    WorldOwner::current().write(|world| StartSphereTracking(world, race)) != 0
+    WorldOwner::current()
+        .write(|world| crate::battle::build_native::engine::start_sphere_tracking(world, race))
+        != 0
 }
 
 /// `RepairSISBorder ()`.
@@ -221,7 +221,7 @@ pub unsafe fn start_sphere_tracking(race: u16) -> bool {
 /// # Safety
 /// Game thread, inside a planet orbit.
 pub unsafe fn repair_sis_border() {
-    RepairSISBorder();
+    repair_sisborder();
 }
 
 /// `NotifyOthers (race, IPNL_ALL_CLEAR)`.
@@ -475,7 +475,7 @@ pub unsafe fn current_star_point() -> (i16, i16) {
 ///
 /// # Safety
 /// Game thread; `GlobData` is initialised.
-pub unsafe fn fuel_on_board() -> u32 {
+pub fn fuel_on_board() -> u32 {
     glob().read(|owner| owner.flagship.fuel_on_board)
 }
 
@@ -506,7 +506,7 @@ pub unsafe fn draw_hyper_coords(loc: (i16, i16)) {
 /// The live game, through `GlobData` and the C group functions.
 pub struct LiveGame;
 
-fn glob() -> crate::app::bridge::Projection<crate::engine::WorldData> {
+fn glob() -> crate::engine::Projection<crate::engine::WorldData> {
     {
         WorldFields::current()
     }

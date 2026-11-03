@@ -27,7 +27,6 @@ mod tests {
     }
 }
 #[cfg(not(test))]
-#[allow(non_snake_case)]
 pub mod live {
     use super::move_cursor;
     use crate::battle::sounds::PlayMenuSound;
@@ -37,22 +36,22 @@ pub mod live {
     use crate::mainloop::restart_menu::c_extern as flash;
 
     const FADE_ALL_TO_COLOR: u32 = 253;
-    unsafe fn Flash_process(context: *mut FlashContext) {
+    unsafe fn flash_process(context: *mut FlashContext) {
         flash::Flash_process(context.cast());
     }
-    unsafe fn Flash_terminate(context: *mut FlashContext) {
+    unsafe fn flash_terminate(context: *mut FlashContext) {
         flash::Flash_terminate(context.cast());
     }
-    unsafe fn Flash_setMergeFactors(context: *mut FlashContext, a: i32, b: i32, c: i32) {
+    unsafe fn flash_set_merge_factors(context: *mut FlashContext, a: i32, b: i32, c: i32) {
         flash::Flash_setMergeFactors(context.cast(), a, b, c);
     }
-    unsafe fn Flash_setFrameTime(context: *mut FlashContext, t: u32) {
+    unsafe fn flash_set_frame_time(context: *mut FlashContext, t: u32) {
         flash::Flash_setFrameTime(context.cast(), t);
     }
-    unsafe fn Flash_setSpeed(context: *mut FlashContext, a: u32, b: u32, c: u32, d: u32) {
+    unsafe fn flash_set_speed(context: *mut FlashContext, a: u32, b: u32, c: u32, d: u32) {
         flash::Flash_setSpeed(context.cast(), a, b, c, d);
     }
-    unsafe fn Flash_start(context: *mut FlashContext) {
+    unsafe fn flash_start(context: *mut FlashContext) {
         flash::Flash_start(context.cast());
     }
 
@@ -85,7 +84,7 @@ pub mod live {
     }
     /// # Safety
     /// The selection and live ship queues belong to the game thread.
-    pub unsafe extern "C" fn setShipSelected(
+    pub unsafe extern "C" fn set_ship_selected(
         state: *mut GETMELEE_STATE,
         player: u16,
         choice: u16,
@@ -117,13 +116,13 @@ pub mod live {
         if input & 8 != 0 {
             let s = &(*state).player[player];
             if s.col == 7 && s.row == 0 {
-                setShipSelected(state, player as u16, u16::MAX, true);
+                set_ship_selected(state, player as u16, u16::MAX, true);
             } else if s.col == 7 && s.row == 1 {
                 if ConfirmExit() != 0 {
                     return 0;
                 }
             } else {
-                setShipSelected(state, player as u16, s.row * 7 + s.col, true);
+                set_ship_selected(state, player as u16, s.row * 7 + s.col, true);
             }
         } else {
             let s = &mut (*state).player[player];
@@ -186,7 +185,7 @@ pub mod live {
         }
         for p in &(*state).player {
             if p.selecting != 0 && p.done == 0 {
-                Flash_process(p.flashContext);
+                flash_process(p.flashContext);
             }
         }
         SleepThread(840 / 120);
@@ -216,7 +215,7 @@ pub mod live {
                 }
                 let p = &mut (*state).player[player];
                 if p.done != 0 {
-                    Flash_terminate(p.flashContext);
+                    flash_terminate(p.flashContext);
                     p.flashContext = ptr::null_mut();
                 } else {
                     done = false;
@@ -489,17 +488,17 @@ pub mod live {
                 KernelOwner::current().read(|owner| owner.screen_context),
                 ptr::null_mut(),
             );
-            Flash_setMergeFactors(p.flashContext, 2, 3, 2);
-            Flash_setFrameTime(p.flashContext, 840 / 16);
+            flash_set_merge_factors(p.flashContext, 2, 3, 2);
+            flash_set_frame_time(p.flashContext, 840 / 16);
             if KernelOwner::current().read(|owner| owner.player_control[player]) & NETWORK_CONTROL
                 != 0
             {
-                Flash_setSpeed(p.flashContext, 840 / 2, 0, 840 / 2, 0);
+                flash_set_speed(p.flashContext, 840 / 2, 0, 840 / 2, 0);
             } else {
-                Flash_setSpeed(p.flashContext, 0, 840 / 16, 0, 840 / 16);
+                flash_set_speed(p.flashContext, 0, 840 / 16, 0, 840 / 16);
             }
             changed(&mut state, player);
-            Flash_start(state.player[player].flashContext);
+            flash_start(state.player[player].flashContext);
         }
         let mut ok = net.negotiate(true, NetState_NetState_selectShip);
         SetDefaultMenuRepeatDelay();
@@ -516,7 +515,7 @@ pub mod live {
             if p.done != 0 {
                 *ships.add(player) = p.hBattleShip;
             } else {
-                Flash_terminate(p.flashContext);
+                flash_terminate(p.flashContext);
                 p.flashContext = ptr::null_mut();
                 ok = false;
             }
@@ -576,7 +575,7 @@ pub mod live {
             log::warn!("Unexpected ship selection packet received");
             return false;
         }
-        if !setShipSelected(state, player, ship, false) {
+        if !set_ship_selected(state, player, ship, false) {
             log::warn!("Invalid ship selection received from remote party");
             return false;
         }

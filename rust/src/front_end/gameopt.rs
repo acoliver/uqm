@@ -1,5 +1,4 @@
 //! Game options, naming, and save/load selection, ported from `uqm/gameopt.c`.
-#![allow(non_snake_case)]
 
 const MAX_SAVED_GAMES: usize = 50;
 const SAVES_PER_PAGE: u16 = 5;
@@ -71,7 +70,7 @@ pub fn picker_action(
 }
 
 #[cfg(not(test))]
-pub use runtime::{ConfirmSaveLoad, GameOptions, LoadGameDescriptions, SetNamingCallback};
+pub use runtime::{load_game_descriptions, ConfirmSaveLoad, GameOptions, SetNamingCallback};
 
 #[cfg(not(test))]
 pub(crate) mod runtime {
@@ -184,7 +183,7 @@ pub(crate) mod runtime {
     /// Call on the game thread with a live graphics context. A non-null stamp
     /// must be writable; its captured drawable belongs to the caller.
     #[no_mangle]
-    pub unsafe extern "C" fn ConfirmSaveLoad(MsgStamp: *mut STAMP) {
+    pub unsafe extern "C" fn ConfirmSaveLoad(msg_stamp: *mut STAMP) {
         let mut r: RECT = mem::zeroed();
         let mut clip_r: RECT = mem::zeroed();
         SetContextFont(KernelOwner::current().read(|owner| owner.star_con_font));
@@ -196,15 +195,15 @@ pub(crate) mod runtime {
             },
             align: TEXT_ALIGN_ALIGN_CENTER,
             CharCount: COUNT::MAX,
-            pStr: game_string(SAVEGAME_STRING_BASE + u32::from(MsgStamp.is_null())),
+            pStr: game_string(SAVEGAME_STRING_BASE + u32::from(msg_stamp.is_null())),
         };
         TextRect(&mut t, &mut r, ptr::null_mut());
         r.corner.x -= 4;
         r.corner.y -= 4;
         r.extent.width += 8;
         r.extent.height += 8;
-        if !MsgStamp.is_null() {
-            MsgStamp.write(SaveContextFrame(&r));
+        if !msg_stamp.is_null() {
+            msg_stamp.write(SaveContextFrame(&r));
         }
         DrawStarConBox(
             &mut r,
@@ -218,7 +217,7 @@ pub(crate) mod runtime {
         font_DrawText(&mut t);
     }
 
-    unsafe fn FeedbackSetting(which_setting: BYTE) {
+    unsafe fn feedback_setting(which_setting: BYTE) {
         let mut buf: [UNICODE; 128] = [0; 128];
         match which_setting {
             SOUND_ON_SETTING | SOUND_OFF_SETTING => {
@@ -304,13 +303,13 @@ pub(crate) mod runtime {
         DrawStatusMessage(buf.as_ptr());
     }
 
-    unsafe fn DrawNameString(
-        nameCaptain: bool,
-        Str: *mut UNICODE,
-        CursorPos: COUNT,
+    unsafe fn draw_name_string(
+        name_captain: bool,
+        str: *mut UNICODE,
+        cursor_pos: COUNT,
         state: COUNT,
     ) -> BOOLEAN {
-        let (Font, mut r, BackGround, ForeGround) = if nameCaptain {
+        let (font, mut r, back_ground, fore_ground) = if name_captain {
             (
                 KernelOwner::current().read(|owner| owner.tiny_font),
                 CAPTAIN_NAME_RECT,
@@ -327,18 +326,18 @@ pub(crate) mod runtime {
         };
         let mut lf = TEXT {
             baseline: POINT {
-                x: r.corner.x + (r.extent.width >> 1) - i16::from(nameCaptain),
+                x: r.corner.x + (r.extent.width >> 1) - i16::from(name_captain),
                 y: r.corner.y + r.extent.height - 1,
             },
             align: TEXT_ALIGN_ALIGN_CENTER,
-            pStr: Str,
+            pStr: str,
             CharCount: COUNT::MAX,
         };
         SetContext(KernelOwner::current().read(|owner| owner.status_context));
-        SetContextFont(Font);
+        SetContextFont(font);
         if state & DDSHS_EDIT == 0 {
-            if nameCaptain {
-                DrawCaptainsName();
+            if name_captain {
+                draw_captains_name();
             } else {
                 DrawFlagshipName(1);
             }
@@ -349,21 +348,21 @@ pub(crate) mod runtime {
             if i32::from(text_r.extent.width) + 2 >= i32::from(r.extent.width) {
                 return 0;
             }
-            PreUpdateFlashRect();
-            SetContextForeGroundColor(BackGround);
+            pre_update_flash_rect();
+            SetContextForeGroundColor(back_ground);
             DrawFilledRectangle(&mut r);
             let mut pchar_deltas = char_deltas.as_ptr();
-            for _ in 0..CursorPos {
+            for _ in 0..cursor_pos {
                 text_r.corner.x = text_r.corner.x.wrapping_add(*pchar_deltas as i16);
                 pchar_deltas = pchar_deltas.add(1);
             }
-            if CursorPos < lf.CharCount {
+            if cursor_pos < lf.CharCount {
                 text_r.corner.x -= 1;
             }
             if state & DDSHS_BLOCKCUR != 0 {
-                if CursorPos == lf.CharCount {
+                if cursor_pos == lf.CharCount {
                     text_r.extent.width = 1;
-                } else if i32::from(CursorPos) + 1 == i32::from(lf.CharCount) {
+                } else if i32::from(cursor_pos) + 1 == i32::from(lf.CharCount) {
                     text_r.extent.width = *pchar_deltas as SIZE + 2;
                 } else {
                     text_r.extent.width = *pchar_deltas as SIZE + 1;
@@ -375,35 +374,40 @@ pub(crate) mod runtime {
             text_r.extent.height = r.extent.height;
             SetContextForeGroundColor(BLACK_COLOR);
             DrawFilledRectangle(&mut text_r);
-            SetContextForeGroundColor(ForeGround);
+            SetContextForeGroundColor(fore_ground);
             font_DrawText(&mut lf);
-            PostUpdateFlashRect();
+            post_update_flash_rect();
         }
         1
     }
 
-    unsafe extern "C" fn OnNameChange(pTES: *mut TEXTENTRY_STATE) -> BOOLEAN {
-        let nameCaptain = !(*pTES).CbParam.is_null();
+    unsafe extern "C" fn on_name_change(p_tes: *mut TEXTENTRY_STATE) -> BOOLEAN {
+        let name_captain = !(*p_tes).CbParam.is_null();
         let mut hl = DDSHS_EDIT;
-        if (*pTES).JoystickMode != 0 {
+        if (*p_tes).JoystickMode != 0 {
             hl |= DDSHS_BLOCKCUR;
         }
-        DrawNameString(nameCaptain, (*pTES).BaseStr, (*pTES).CursorPos as COUNT, hl)
+        draw_name_string(
+            name_captain,
+            (*p_tes).BaseStr,
+            (*p_tes).CursorPos as COUNT,
+            hl,
+        )
     }
 
-    unsafe fn NameCaptainOrShip(nameCaptain: bool) {
+    unsafe fn name_captain_or_ship(name_captain: bool) {
         let world = WorldFields::current();
         let mut buf: [UNICODE; MAX_NAME_SIZE] = [0; MAX_NAME_SIZE];
         let mut tes: TEXTENTRY_STATE = mem::zeroed();
         SetContext(KernelOwner::current().read(|owner| owner.status_context));
-        SetFlashRect(if nameCaptain {
+        SetFlashRect(if name_captain {
             &CAPTAIN_NAME_RECT
         } else {
             &SHIP_NAME_RECT
         });
-        DrawNameString(nameCaptain, buf.as_mut_ptr(), 0, DDSHS_EDIT);
+        draw_name_string(name_captain, buf.as_mut_ptr(), 0, DDSHS_EDIT);
         DrawStatusMessage(game_string(NAMING_STRING_BASE));
-        let Setting = if nameCaptain {
+        let setting = if name_captain {
             tes.MaxSize = mem::size_of::<[UNICODE; MAX_NAME_SIZE]>() as i32;
             ptr::addr_of_mut!((**world).flagship.commander_name).cast::<UNICODE>()
         } else {
@@ -413,57 +417,57 @@ pub(crate) mod runtime {
         tes.Initialized = 0;
         tes.BaseStr = buf.as_mut_ptr();
         tes.CursorPos = 0;
-        tes.CbParam = usize::from(nameCaptain) as *mut std::ffi::c_void;
-        tes.ChangeCallback = Some(OnNameChange);
+        tes.CbParam = usize::from(name_captain) as *mut std::ffi::c_void;
+        tes.ChangeCallback = Some(on_name_change);
         tes.FrameCallback = None;
         if DoTextEntry(&mut tes) != 0 {
             utf8StringCopy(
-                (Setting).cast(),
+                (setting).cast(),
                 tes.MaxSize as usize,
                 (buf.as_ptr()).cast(),
             );
         } else {
-            utf8StringCopy((buf.as_mut_ptr()).cast(), buf.len(), (Setting).cast());
+            utf8StringCopy((buf.as_mut_ptr()).cast(), buf.len(), (setting).cast());
         }
         SetFlashRect(SFR_MENU_3DO);
-        DrawNameString(nameCaptain, buf.as_mut_ptr(), 0, DDSHS_NORMAL);
+        draw_name_string(name_captain, buf.as_mut_ptr(), 0, DDSHS_NORMAL);
         if let Some(callback) = NAMING_CB {
             callback();
         }
     }
 
-    unsafe fn DrawSaveNameString(
-        Str: *mut UNICODE,
-        CursorPos: COUNT,
+    unsafe fn draw_save_name_string(
+        str: *mut UNICODE,
+        cursor_pos: COUNT,
         state: COUNT,
-        gameIndex: COUNT,
+        game_index: COUNT,
     ) -> BOOLEAN {
-        let mut fullStr: [UNICODE; 256] = [0; 256];
-        let mut dateStr: [UNICODE; 80] = [0; 80];
+        let mut full_str: [UNICODE; 256] = [0; 256];
+        let mut date_str: [UNICODE; 80] = [0; 80];
         DateToString(
-            dateStr.as_mut_ptr(),
-            dateStr.len(),
+            date_str.as_mut_ptr(),
+            date_str.len(),
             WorldFields::current().read(|owner| owner.game.game_clock.month_index),
             WorldFields::current().read(|owner| owner.game.game_clock.day_index),
             WorldFields::current().read(|owner| owner.game.game_clock.year_index),
         );
         libc::strncat(
-            dateStr.as_mut_ptr(),
+            date_str.as_mut_ptr(),
             c": ".as_ptr(),
-            dateStr.len() - libc::strlen(dateStr.as_ptr()) - 1,
+            date_str.len() - libc::strlen(date_str.as_ptr()) - 1,
         );
         libc::snprintf(
-            fullStr.as_mut_ptr(),
-            fullStr.len(),
+            full_str.as_mut_ptr(),
+            full_str.len(),
             c"%s%s".as_ptr(),
-            dateStr.as_ptr(),
-            Str,
+            date_str.as_ptr(),
+            str,
         );
         SetContextForeGroundColor(rgb15(0x1b, 0, 0x1b));
         let mut r = RECT {
             corner: POINT {
                 x: 8,
-                y: (160 + ((gameIndex % SAVES_PER_PAGE) * 13)) as COORD,
+                y: (160 + ((game_index % SAVES_PER_PAGE) * 13)) as COORD,
             },
             extent: EXTENT {
                 width: 15 + if MAX_SAVED_GAMES > 99 { 5 } else { 0 },
@@ -480,11 +484,11 @@ pub(crate) mod runtime {
                 y: r.corner.y + 8,
             },
             align: TEXT_ALIGN_ALIGN_LEFT,
-            pStr: fullStr.as_ptr(),
+            pStr: full_str.as_ptr(),
             CharCount: COUNT::MAX,
         };
-        let BackGround = rgb15(0x1b, 0, 0x1b);
-        let ForeGround = rgb15(0, 0, 0x14);
+        let back_ground = rgb15(0x1b, 0, 0x1b);
+        let fore_ground = rgb15(0, 0, 0x14);
         SetContextFont(KernelOwner::current().read(|owner| owner.tiny_font));
         if state & DDSHS_EDIT == 0 {
             SetContextForeGroundColor(BLACK_COLOR);
@@ -499,22 +503,23 @@ pub(crate) mod runtime {
             if i32::from(text_r.extent.width) + 2 >= i32::from(r.extent.width) {
                 return 0;
             }
-            PreUpdateFlashRect();
-            SetContextForeGroundColor(BackGround);
+            pre_update_flash_rect();
+            SetContextForeGroundColor(back_ground);
             DrawFilledRectangle(&mut r);
             let mut pchar_deltas = char_deltas.as_ptr();
-            let FullCursorPos = (CursorPos as usize + libc::strlen(dateStr.as_ptr()) - 1) as COUNT;
-            for _ in 0..FullCursorPos {
+            let full_cursor_pos =
+                (cursor_pos as usize + libc::strlen(date_str.as_ptr()) - 1) as COUNT;
+            for _ in 0..full_cursor_pos {
                 text_r.corner.x = text_r.corner.x.wrapping_add(*pchar_deltas as i16);
                 pchar_deltas = pchar_deltas.add(1);
             }
-            if FullCursorPos < lf.CharCount {
+            if full_cursor_pos < lf.CharCount {
                 text_r.corner.x -= 1;
             }
             if state & DDSHS_BLOCKCUR != 0 {
-                if FullCursorPos == lf.CharCount {
+                if full_cursor_pos == lf.CharCount {
                     text_r.extent.width = 1;
-                } else if i32::from(FullCursorPos) + 1 == i32::from(lf.CharCount) {
+                } else if i32::from(full_cursor_pos) + 1 == i32::from(lf.CharCount) {
                     text_r.extent.width = *pchar_deltas as SIZE + 2;
                 } else {
                     text_r.extent.width = *pchar_deltas as SIZE + 1;
@@ -526,34 +531,39 @@ pub(crate) mod runtime {
             text_r.extent.height = r.extent.height;
             SetContextForeGroundColor(BLACK_COLOR);
             DrawFilledRectangle(&mut text_r);
-            SetContextForeGroundColor(ForeGround);
+            SetContextForeGroundColor(fore_ground);
             font_DrawText(&mut lf);
-            PostUpdateFlashRect();
+            post_update_flash_rect();
         }
         1
     }
 
-    unsafe extern "C" fn OnSaveNameChange(pTES: *mut TEXTENTRY_STATE) -> BOOLEAN {
+    unsafe extern "C" fn on_save_name_change(p_tes: *mut TEXTENTRY_STATE) -> BOOLEAN {
         let mut hl = DDSHS_EDIT;
-        let gameIndex = (*pTES).CbParam.cast::<COUNT>();
-        if (*pTES).JoystickMode != 0 {
+        let game_index = (*p_tes).CbParam.cast::<COUNT>();
+        if (*p_tes).JoystickMode != 0 {
             hl |= DDSHS_BLOCKCUR;
         }
-        DrawSaveNameString((*pTES).BaseStr, (*pTES).CursorPos as COUNT, hl, *gameIndex)
+        draw_save_name_string(
+            (*p_tes).BaseStr,
+            (*p_tes).CursorPos as COUNT,
+            hl,
+            *game_index,
+        )
     }
 
-    unsafe fn NameSaveGame(gameIndex: COUNT, buf: *mut UNICODE) -> BOOLEAN {
+    unsafe fn name_save_game(game_index: COUNT, buf: *mut UNICODE) -> BOOLEAN {
         let mut tes: TEXTENTRY_STATE = mem::zeroed();
-        let CursPos = libc::strlen(buf) as COUNT;
-        let gIndex = rust_hmalloc(mem::size_of::<COUNT>()).cast::<COUNT>();
-        *gIndex = gameIndex;
-        DrawSaveNameString(buf, CursPos, DDSHS_EDIT, gameIndex);
+        let curs_pos = libc::strlen(buf) as COUNT;
+        let g_index = rust_hmalloc(mem::size_of::<COUNT>()).cast::<COUNT>();
+        *g_index = game_index;
+        draw_save_name_string(buf, curs_pos, DDSHS_EDIT, game_index);
         tes.MaxSize = SAVE_NAME_SIZE as i32;
         tes.Initialized = 0;
         tes.BaseStr = buf;
-        tes.CursorPos = CursPos as i32;
-        tes.CbParam = gIndex.cast();
-        tes.ChangeCallback = Some(OnSaveNameChange);
+        tes.CursorPos = curs_pos as i32;
+        tes.CbParam = g_index.cast();
+        tes.ChangeCallback = Some(on_save_name_change);
         tes.FrameCallback = None;
         let r = RECT {
             extent: EXTENT {
@@ -562,7 +572,7 @@ pub(crate) mod runtime {
             },
             corner: POINT {
                 x: (30 + SAFE_X) as COORD,
-                y: (160 + ((gameIndex % SAVES_PER_PAGE) * 13)) as COORD,
+                y: (160 + ((game_index % SAVES_PER_PAGE) * 13)) as COORD,
             },
         };
         SetFlashRect(&r);
@@ -570,12 +580,12 @@ pub(crate) mod runtime {
             *buf = 0;
         }
         SetFlashRect(ptr::null());
-        DrawSaveNameString(buf, CursPos, DDSHS_NORMAL, gameIndex);
+        draw_save_name_string(buf, curs_pos, DDSHS_NORMAL, game_index);
         if let Some(callback) = NAMING_CB {
             callback();
         }
         SetMenuSounds(MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
-        rust_hfree(gIndex.cast());
+        rust_hfree(g_index.cast());
         SetFlashRect(ptr::null());
         u32::from(tes.Success != 0)
     }
@@ -588,7 +598,7 @@ pub(crate) mod runtime {
         NAMING_CB = callback;
     }
 
-    unsafe extern "C" fn DoSettings(pMS: *mut MENU_STATE) -> BOOLEAN {
+    unsafe extern "C" fn do_settings(p_ms: *mut MENU_STATE) -> BOOLEAN {
         if WorldFields::current().read(|owner| owner.game.current_activity)
             & CHECK_ABORT as ACTIVITY
             != 0
@@ -598,22 +608,23 @@ pub(crate) mod runtime {
         let mut cur_speed = (WorldFields::current().read(|owner| owner.game.glob_flags)
             & COMBAT_SPEED_MASK as u8)
             >> COMBAT_SPEED_SHIFT;
-        if key(KEY_MENU_CANCEL) || (key(KEY_MENU_SELECT) && (*pMS).CurState == EXIT_SETTINGS_MENU) {
+        if key(KEY_MENU_CANCEL) || (key(KEY_MENU_SELECT) && (*p_ms).CurState == EXIT_SETTINGS_MENU)
+        {
             return 0;
         } else if key(KEY_MENU_SELECT) {
-            match (*pMS).CurState {
+            match (*p_ms).CurState {
                 SOUND_ON_SETTING | SOUND_OFF_SETTING => {
-                    ToggleSoundEffect();
-                    (*pMS).CurState ^= 1;
-                    DrawMenuStateStrings(PM_SOUND_ON as BYTE, (*pMS).CurState as SWORD);
+                    toggle_sound_effect();
+                    (*p_ms).CurState ^= 1;
+                    DrawMenuStateStrings(PM_SOUND_ON as BYTE, (*p_ms).CurState as SWORD);
                 }
                 MUSIC_ON_SETTING | MUSIC_OFF_SETTING => {
-                    ToggleMusic();
-                    (*pMS).CurState ^= 1;
-                    DrawMenuStateStrings(PM_SOUND_ON as BYTE, (*pMS).CurState as SWORD);
+                    toggle_music();
+                    (*p_ms).CurState ^= 1;
+                    DrawMenuStateStrings(PM_SOUND_ON as BYTE, (*p_ms).CurState as SWORD);
                 }
                 CHANGE_CAPTAIN_SETTING | CHANGE_SHIP_SETTING => {
-                    NameCaptainOrShip((*pMS).CurState == CHANGE_CAPTAIN_SETTING);
+                    name_captain_or_ship((*p_ms).CurState == CHANGE_CAPTAIN_SETTING);
                 }
                 _ => {
                     let previous_speed = cur_speed;
@@ -628,24 +639,24 @@ pub(crate) mod runtime {
                         .read(|owner| owner.game.glob_flags)
                         & !(COMBAT_SPEED_MASK as BYTE))
                         | (cur_speed << COMBAT_SPEED_SHIFT);
-                    (*pMS).CurState = CYBORG_OFF_SETTING + cur_speed;
-                    DrawMenuStateStrings(PM_SOUND_ON as BYTE, (*pMS).CurState as SWORD);
+                    (*p_ms).CurState = CYBORG_OFF_SETTING + cur_speed;
+                    DrawMenuStateStrings(PM_SOUND_ON as BYTE, (*p_ms).CurState as SWORD);
                 }
             }
-            FeedbackSetting((*pMS).CurState);
-        } else if DoMenuChooser(pMS, PM_SOUND_ON as BYTE) != 0 {
-            FeedbackSetting((*pMS).CurState);
+            feedback_setting((*p_ms).CurState);
+        } else if DoMenuChooser(p_ms, PM_SOUND_ON as BYTE) != 0 {
+            feedback_setting((*p_ms).CurState);
         }
         1
     }
 
-    unsafe fn SettingsMenu() {
-        let mut MenuState: MENU_STATE = mem::zeroed();
-        MenuState.CurState = SOUND_ON_SETTING;
-        DrawMenuStateStrings(PM_SOUND_ON as BYTE, MenuState.CurState as SWORD);
-        FeedbackSetting(MenuState.CurState);
-        MenuState.InputFunc = Some(DoSettings);
-        DoInput(ptr::addr_of_mut!(MenuState).cast(), 0);
+    unsafe fn settings_menu() {
+        let mut menu_state: MENU_STATE = mem::zeroed();
+        menu_state.CurState = SOUND_ON_SETTING;
+        DrawMenuStateStrings(PM_SOUND_ON as BYTE, menu_state.CurState as SWORD);
+        feedback_setting(menu_state.CurState);
+        menu_state.InputFunc = Some(do_settings);
+        DoInput(ptr::addr_of_mut!(menu_state).cast(), 0);
         DrawStatusMessage(ptr::null());
     }
 
@@ -655,38 +666,38 @@ pub(crate) mod runtime {
         summary: [SUMMARY_DESC; MAX_SAVED_GAMES],
         saving: BOOLEAN,
         success: BOOLEAN,
-        SummaryFrame: FRAME,
+        summary_frame: FRAME,
     }
 
-    unsafe fn DrawBlankSavegameDisplay(pickState: *mut PickGameState) {
+    unsafe fn draw_blank_savegame_display(pick_state: *mut PickGameState) {
         let mut s = STAMP {
             origin: POINT { x: 0, y: 0 },
             frame: SetAbsFrameIndex(
-                (*pickState).SummaryFrame,
-                GetFrameCount((*pickState).SummaryFrame).wrapping_sub(1),
+                (*pick_state).summary_frame,
+                GetFrameCount((*pick_state).summary_frame).wrapping_sub(1),
             ),
         };
         DrawStamp(&mut s);
     }
 
-    unsafe fn DrawSaveLoad(pickState: *mut PickGameState) {
+    unsafe fn draw_save_load(pick_state: *mut PickGameState) {
         let mut s = STAMP {
             origin: POINT {
                 x: SUMMARY_X_OFFS + 1,
                 y: 0,
             },
             frame: SetAbsFrameIndex(
-                (*pickState).SummaryFrame,
-                GetFrameCount((*pickState).SummaryFrame).wrapping_sub(2),
+                (*pick_state).summary_frame,
+                GetFrameCount((*pick_state).summary_frame).wrapping_sub(2),
             ),
         };
-        if (*pickState).saving != 0 {
+        if (*pick_state).saving != 0 {
             s.frame = DecFrameIndex(s.frame);
         }
         DrawStamp(&mut s);
     }
 
-    unsafe fn DrawSavegameCargo(sisState: *mut SIS_STATE) {
+    unsafe fn draw_savegame_cargo(sis_state: *mut SIS_STATE) {
         const CARGO_COLORS: [Color; 9] = [
             rgb15(0x02, 0x0e, 0x13),
             rgb15(0x19, 0, 0),
@@ -743,7 +754,7 @@ pub(crate) mod runtime {
                 buf.as_mut_ptr(),
                 buf.len(),
                 c"%u".as_ptr(),
-                (*sisState).element_amounts[i] as u32,
+                (*sis_state).element_amounts[i] as u32,
             );
             t.CharCount = COUNT::MAX;
             font_DrawText(&mut t);
@@ -760,35 +771,35 @@ pub(crate) mod runtime {
             buf.as_mut_ptr(),
             buf.len(),
             c"%u".as_ptr(),
-            (*sisState).total_bio_mass as u32,
+            (*sis_state).total_bio_mass as u32,
         );
         t.CharCount = COUNT::MAX;
         font_DrawText(&mut t);
         UnbatchGraphics();
     }
 
-    unsafe fn DrawSavegameSummary(pickState: *mut PickGameState, gameIndex: COUNT) {
-        let pSD = ptr::addr_of_mut!((*pickState).summary)
+    unsafe fn draw_savegame_summary(pick_state: *mut PickGameState, game_index: COUNT) {
+        let p_sd = ptr::addr_of_mut!((*pick_state).summary)
             .cast::<SUMMARY_DESC>()
-            .add(gameIndex as usize);
+            .add(game_index as usize);
         let mut r: RECT = mem::zeroed();
         let mut s: STAMP = mem::zeroed();
         BatchGraphics();
-        if (*pSD).year_index == 0 {
+        if (*p_sd).year_index == 0 {
             s.origin.x = 0;
             s.origin.y = 0;
             s.frame = SetAbsFrameIndex(
-                (*pickState).SummaryFrame,
-                GetFrameCount((*pickState).SummaryFrame).wrapping_sub(4),
+                (*pick_state).summary_frame,
+                GetFrameCount((*pick_state).summary_frame).wrapping_sub(4),
             );
             DrawStamp(&mut s);
         } else {
-            let mut OldRect: RECT = mem::zeroed();
+            let mut old_rect: RECT = mem::zeroed();
             let mut buf: [UNICODE; 256] = [0; 256];
-            let SaveSS = WorldFields::current().read(|world| world.flagship);
+            let save_ss = WorldFields::current().read(|world| world.flagship);
             let player_q = WorldFields::current().read(|world| world.game.built_ship_q);
-            let OldContext = SetContext(KernelOwner::current().read(|owner| owner.status_context));
-            GetContextClipRect(&mut OldRect);
+            let old_context = SetContext(KernelOwner::current().read(|owner| owner.status_context));
+            GetContextClipRect(&mut old_rect);
             r.corner.x = (SIS_ORG_X as i32
                 + ((sis_screen_width() - STATUS_WIDTH as i32) >> 1)
                 + SAFE_X as i32
@@ -799,17 +810,17 @@ pub(crate) mod runtime {
             r.extent.height = (ScreenHeight - (SAFE_Y as i32 * 2)) as COORD;
             SetContextClipRect(&mut r);
             WorldFields::current().write(|world| {
-                world.flagship = (*pSD).SS;
+                world.flagship = (*p_sd).SS;
                 let queue = &raw mut world.game.built_ship_q;
                 InitQueue(
                     queue,
                     MAX_BUILT_SHIPS as COUNT,
                     mem::size_of::<SHIP_FRAGMENT>() as OBJ_SIZE,
                 );
-                for i in 0..(*pSD).NumShips as usize {
+                for i in 0..(*p_sd).NumShips as usize {
                     CloneShipFragment(
                         &raw mut world.game.avail_race_q,
-                        (*pSD).ShipList[i] as COUNT,
+                        (*p_sd).ShipList[i] as COUNT,
                         queue,
                         0,
                     );
@@ -818,24 +829,24 @@ pub(crate) mod runtime {
             DateToString(
                 buf.as_mut_ptr(),
                 buf.len(),
-                (*pSD).month_index,
-                (*pSD).day_index,
-                (*pSD).year_index,
+                (*p_sd).month_index,
+                (*p_sd).day_index,
+                (*p_sd).year_index,
             );
             ClearSISRect(DRAW_SIS_DISPLAY as BYTE);
             DrawStatusMessage(buf.as_ptr());
             WorldFields::current().write(|world| UninitQueue(&raw mut world.game.built_ship_q));
-            SetContextClipRect(&mut OldRect);
+            SetContextClipRect(&mut old_rect);
             SetContext(KernelOwner::current().read(|owner| owner.space_context));
             s.origin.y = 13;
             for i in 0..4 {
                 s.origin.x = 140 + SUMMARY_X_OFFS + SUMMARY_SIDE_OFFS;
                 for j in 0..4 {
-                    let devIndex = i * 4 + j;
-                    if devIndex < (*pSD).NumDevices as usize {
+                    let dev_index = i * 4 + j;
+                    if dev_index < (*p_sd).NumDevices as usize {
                         s.frame = SetAbsFrameIndex(
                             KernelOwner::current().read(|owner| owner.misc_data_frame),
-                            77 + (*pSD).DeviceList[devIndex] as COUNT,
+                            77 + (*p_sd).DeviceList[dev_index] as COUNT,
                         );
                         DrawStamp(&mut s);
                     }
@@ -853,30 +864,30 @@ pub(crate) mod runtime {
                 CharCount: COUNT::MAX,
                 pStr: buf.as_ptr(),
             };
-            if (*pSD).Flags & AFTER_BOMB_INSTALLED as BYTE != 0 {
+            if (*p_sd).Flags & AFTER_BOMB_INSTALLED as BYTE != 0 {
                 s.origin.x = SUMMARY_X_OFFS - SUMMARY_SIDE_OFFS + 6;
                 s.origin.y = 0;
-                s.frame = SetRelFrameIndex((*pickState).SummaryFrame, 0);
+                s.frame = SetRelFrameIndex((*pick_state).summary_frame, 0);
                 DrawStamp(&mut s);
                 s.origin.x = SUMMARY_X_OFFS + SUMMARY_SIDE_OFFS;
                 s.frame = IncFrameIndex(s.frame);
                 DrawStamp(&mut s);
             } else {
-                DrawSavegameCargo(ptr::addr_of_mut!((*pSD).SS));
+                draw_savegame_cargo(ptr::addr_of_mut!((*p_sd).SS));
                 SetContext(KernelOwner::current().read(|owner| owner.radar_context));
-                GetContextClipRect(&mut OldRect);
+                GetContextClipRect(&mut old_rect);
                 r.corner.x = SIS_ORG_X as COORD + 10 + SUMMARY_X_OFFS - SUMMARY_SIDE_OFFS;
                 r.corner.y = SIS_ORG_Y as COORD + 84;
-                r.extent = OldRect.extent;
+                r.extent = old_rect.extent;
                 SetContextClipRect(&mut r);
-                InitLander((*pSD).Flags | OVERRIDE_LANDER_FLAGS as BYTE);
-                SetContextClipRect(&mut OldRect);
+                InitLander((*p_sd).Flags | OVERRIDE_LANDER_FLAGS as BYTE);
+                SetContextClipRect(&mut old_rect);
                 SetContext(KernelOwner::current().read(|owner| owner.space_context));
                 libc::snprintf(
                     buf.as_mut_ptr(),
                     buf.len(),
                     c"%u".as_ptr(),
-                    (*pSD).SS.res_units,
+                    (*p_sd).SS.res_units,
                 );
                 t.baseline.y = 102;
                 SetContextForeGroundColor(rgb15(0x10, 0, 0x10));
@@ -888,7 +899,7 @@ pub(crate) mod runtime {
                 buf.as_mut_ptr(),
                 buf.len(),
                 c"%u".as_ptr(),
-                ((*pSD).MCreditLo as u32) | ((*pSD).MCreditHi as u32) << 8,
+                ((*p_sd).MCreditLo as u32) | ((*p_sd).MCreditHi as u32) << 8,
             );
             SetContextForeGroundColor(rgb15(0x10, 0, 0x10));
             font_DrawText(&mut t);
@@ -896,23 +907,23 @@ pub(crate) mod runtime {
             t.baseline.y = 139 + 6;
             t.align = TEXT_ALIGN_ALIGN_LEFT;
             t.pStr = buf.as_ptr();
-            let mut starPt = POINT {
-                x: logx_to_universe((*pSD).SS.log_x),
-                y: logy_to_universe((*pSD).SS.log_y),
+            let mut star_pt = POINT {
+                x: logx_to_universe((*p_sd).SS.log_x),
+                y: logy_to_universe((*p_sd).SS.log_y),
             };
-            match (*pSD).Activity as u32 {
+            match (*p_sd).Activity as u32 {
                 IN_LAST_BATTLE | IN_INTERPLANETARY | IN_PLANET_ORBIT | IN_STARBASE => {
-                    let QuasiState = WorldOwner::current()
+                    let quasi_state = WorldOwner::current()
                         .read(|world| get_game_state(world, StoryKey::ARILOU_SPACE_SIDE));
                     WorldOwner::current()
                         .write(|world| set_game_state(world, StoryKey::ARILOU_SPACE_SIDE, 0));
-                    let SDPtr = FindStar(ptr::null_mut(), &mut starPt, 1, 1);
+                    let sdptr = FindStar(ptr::null_mut(), &mut star_pt, 1, 1);
                     WorldOwner::current().write(|world| {
-                        set_game_state(world, StoryKey::ARILOU_SPACE_SIDE, QuasiState)
+                        set_game_state(world, StoryKey::ARILOU_SPACE_SIDE, quasi_state)
                     });
-                    if !SDPtr.is_null() {
-                        GetClusterName(SDPtr, buf.as_mut_ptr());
-                        starPt = (*SDPtr).star_pt;
+                    if !sdptr.is_null() {
+                        GetClusterName(sdptr, buf.as_mut_ptr());
+                        star_pt = (*sdptr).star_pt;
                     } else {
                         buf[0] = 0;
                     }
@@ -942,7 +953,7 @@ pub(crate) mod runtime {
             t.align = TEXT_ALIGN_ALIGN_CENTER;
             t.baseline.x = (sis_screen_width() - SIS_TITLE_BOX_WIDTH as i32 - 4
                 + (SIS_TITLE_WIDTH >> 1) as i32) as COORD;
-            match (*pSD).Activity as u32 {
+            match (*p_sd).Activity as u32 {
                 IN_STARBASE => {
                     utf8StringCopy(
                         (buf.as_mut_ptr()).cast(),
@@ -961,7 +972,7 @@ pub(crate) mod runtime {
                     utf8StringCopy(
                         (buf.as_mut_ptr()).cast(),
                         buf.len(),
-                        ptr::addr_of!((*pSD).SS.planet_name).cast(),
+                        ptr::addr_of!((*p_sd).SS.planet_name).cast(),
                     );
                 }
                 _ => {
@@ -969,25 +980,25 @@ pub(crate) mod runtime {
                         buf.as_mut_ptr(),
                         buf.len(),
                         c"%03u.%01u : %03u.%01u".as_ptr(),
-                        (starPt.x as i32 / 10) as u32,
-                        (starPt.x as i32 % 10) as u32,
-                        (starPt.y as i32 / 10) as u32,
-                        (starPt.y as i32 % 10) as u32,
+                        (star_pt.x as i32 / 10) as u32,
+                        (star_pt.x as i32 % 10) as u32,
+                        (star_pt.y as i32 / 10) as u32,
+                        (star_pt.y as i32 % 10) as u32,
                     );
                 }
             }
             t.CharCount = COUNT::MAX;
             font_DrawText(&mut t);
-            SetContext(OldContext);
+            SetContext(old_context);
             WorldFields::current().write(|world| {
                 world.game.built_ship_q = player_q;
-                world.flagship = SaveSS;
+                world.flagship = save_ss;
             });
         }
         UnbatchGraphics();
     }
 
-    unsafe fn DrawGameSelection(pickState: *mut PickGameState, selSlot: COUNT) {
+    unsafe fn draw_game_selection(pick_state: *mut PickGameState, sel_slot: COUNT) {
         let mut buf: [UNICODE; 256] = [0; 256];
         let mut buf2: [UNICODE; 80] = [0; 80];
         BatchGraphics();
@@ -1007,13 +1018,13 @@ pub(crate) mod runtime {
             align: TEXT_ALIGN_ALIGN_LEFT,
             baseline: POINT { x: 0, y: 0 },
         };
-        let mut curSlot = selSlot - (selSlot % SAVES_PER_PAGE);
+        let mut cur_slot = sel_slot - (sel_slot % SAVES_PER_PAGE);
         let mut i = 0;
-        while i < SAVES_PER_PAGE && curSlot < MAX_SAVED_GAMES as COUNT {
-            let desc = ptr::addr_of_mut!((*pickState).summary)
+        while i < SAVES_PER_PAGE && cur_slot < MAX_SAVED_GAMES as COUNT {
+            let desc = ptr::addr_of_mut!((*pick_state).summary)
                 .cast::<SUMMARY_DESC>()
-                .add(curSlot as usize);
-            SetContextForeGroundColor(if curSlot == selSlot {
+                .add(cur_slot as usize);
+            SetContextForeGroundColor(if cur_slot == sel_slot {
                 rgb15(0x1b, 0, 0x1b)
             } else {
                 rgb15(0, 0, 0x14)
@@ -1036,7 +1047,7 @@ pub(crate) mod runtime {
                 } else {
                     c"%02u".as_ptr()
                 },
-                curSlot as u32,
+                cur_slot as u32,
             );
             font_DrawText(&mut t);
             r.extent.width = (204 - SAFE_X) as COORD;
@@ -1072,16 +1083,16 @@ pub(crate) mod runtime {
             }
             font_DrawText(&mut t);
             i += 1;
-            curSlot += 1;
+            cur_slot += 1;
         }
         UnbatchGraphics();
     }
 
-    unsafe fn RedrawPickDisplay(pickState: *mut PickGameState, selSlot: COUNT) {
+    unsafe fn redraw_pick_display(pick_state: *mut PickGameState, sel_slot: COUNT) {
         BatchGraphics();
-        DrawBlankSavegameDisplay(pickState);
-        DrawSavegameSummary(pickState, selSlot);
-        DrawGameSelection(pickState, selSlot);
+        draw_blank_savegame_display(pick_state);
+        draw_savegame_summary(pick_state, sel_slot);
+        draw_game_selection(pick_state, sel_slot);
         UnbatchGraphics();
     }
 
@@ -1089,39 +1100,39 @@ pub(crate) mod runtime {
     ///
     /// # Safety
     /// Game-thread caller supplies 50 writable summaries and owns the save directory.
-    pub unsafe fn LoadGameDescriptions(mut pSD: *mut SUMMARY_DESC) {
+    pub unsafe fn load_game_descriptions(mut p_sd: *mut SUMMARY_DESC) {
         for i in 0..MAX_SAVED_GAMES as COUNT {
-            if LoadGame(i, (pSD).cast()) == 0 {
-                (*pSD).year_index = 0;
+            if LoadGame(i, (p_sd).cast()) == 0 {
+                (*p_sd).year_index = 0;
             }
             log::info!(
                 "RUST_PICKER: enumerated slot={i} state={}",
-                if (*pSD).year_index == 0 {
+                if (*p_sd).year_index == 0 {
                     "unavailable"
                 } else {
                     "occupied"
                 },
             );
-            pSD = pSD.add(1);
+            p_sd = p_sd.add(1);
         }
     }
 
-    unsafe extern "C" fn DoPickGame(pMS: *mut MENU_STATE) -> BOOLEAN {
-        let pickState = (*pMS).privData.cast::<PickGameState>();
-        let TimeIn = GetTimeCounter();
-        let occupied = (*pickState).summary[(*pMS).CurState as usize].year_index != 0;
+    unsafe extern "C" fn do_pick_game(p_ms: *mut MENU_STATE) -> BOOLEAN {
+        let pick_state = (*p_ms).privData.cast::<PickGameState>();
+        let time_in = GetTimeCounter();
+        let occupied = (*pick_state).summary[(*p_ms).CurState as usize].year_index != 0;
         let activity = WorldFields::current().read(|owner| owner.game.current_activity);
         let action = picker_action(
             activity & CHECK_ABORT as ACTIVITY != 0,
             key(KEY_MENU_CANCEL),
             key(KEY_MENU_SELECT),
-            (*pickState).saving != 0,
+            (*pick_state).saving != 0,
             occupied,
         );
         if action != PickerAction::Continue {
             log::info!(
                 "RUST_PICKER: action={action:?} slot={} select={} cancel={} activity={:#x}",
-                (*pMS).CurState,
+                (*p_ms).CurState,
                 key(KEY_MENU_SELECT),
                 key(KEY_MENU_CANCEL),
                 activity,
@@ -1130,117 +1141,117 @@ pub(crate) mod runtime {
         match action {
             PickerAction::Abort => return 0,
             PickerAction::Cancel => {
-                (*pickState).success = 0;
+                (*pick_state).success = 0;
                 return 0;
             }
             PickerAction::Select => {
                 PlayMenuSound(MENU_SOUND_EFFECT_MENU_SOUND_SUCCESS);
-                (*pickState).success = 1;
+                (*pick_state).success = 1;
                 return 0;
             }
             PickerAction::EmptySlot => PlayMenuSound(MENU_SOUND_EFFECT_MENU_SOUND_FAILURE),
             PickerAction::Continue => {
-                let NewState = picker_slot(
-                    (*pMS).CurState,
+                let new_state = picker_slot(
+                    (*p_ms).CurState,
                     key(KEY_MENU_LEFT) || key(KEY_MENU_PAGE_UP),
                     key(KEY_MENU_RIGHT) || key(KEY_MENU_PAGE_DOWN),
                     key(KEY_MENU_UP),
                     key(KEY_MENU_DOWN),
                 );
-                if NewState != (*pMS).CurState {
-                    (*pMS).CurState = NewState;
+                if new_state != (*p_ms).CurState {
+                    (*p_ms).CurState = new_state;
                     SetContext(KernelOwner::current().read(|owner| owner.space_context));
-                    RedrawPickDisplay(pickState, (*pMS).CurState as COUNT);
+                    redraw_pick_display(pick_state, (*p_ms).CurState as COUNT);
                 }
-                SleepThreadUntil(TimeIn.wrapping_add(ONE_SECOND / 30));
+                SleepThreadUntil(time_in.wrapping_add(ONE_SECOND / 30));
             }
         }
         1
     }
 
-    unsafe fn SaveLoadGame(
-        pickState: *mut PickGameState,
-        gameIndex: COUNT,
+    unsafe fn save_load_game(
+        pick_state: *mut PickGameState,
+        game_index: COUNT,
         canceled_by_user: *mut BOOLEAN,
     ) -> BOOLEAN {
-        let desc = ptr::addr_of_mut!((*pickState).summary)
+        let desc = ptr::addr_of_mut!((*pick_state).summary)
             .cast::<SUMMARY_DESC>()
-            .add(gameIndex as usize);
-        let mut nameBuf: [UNICODE; 256] = [0; 256];
-        let mut saveStamp: STAMP = mem::zeroed();
-        saveStamp.frame = ptr::null_mut();
+            .add(game_index as usize);
+        let mut name_buf: [UNICODE; 256] = [0; 256];
+        let mut save_stamp: STAMP = mem::zeroed();
+        save_stamp.frame = ptr::null_mut();
         let success;
-        if (*pickState).saving != 0 {
+        if (*pick_state).saving != 0 {
             libc::strncpy(
-                nameBuf.as_mut_ptr(),
+                name_buf.as_mut_ptr(),
                 ptr::addr_of!((*desc).SaveName).cast(),
                 SAVE_NAME_SIZE as usize,
             );
-            nameBuf[SAVE_NAME_SIZE as usize] = 0;
-            if NameSaveGame(gameIndex, nameBuf.as_mut_ptr()) != 0 {
+            name_buf[SAVE_NAME_SIZE as usize] = 0;
+            if name_save_game(game_index, name_buf.as_mut_ptr()) != 0 {
                 PlayMenuSound(MENU_SOUND_EFFECT_MENU_SOUND_SUCCESS);
-                ConfirmSaveLoad(if (*pickState).saving != 0 {
-                    &mut saveStamp
+                ConfirmSaveLoad(if (*pick_state).saving != 0 {
+                    &mut save_stamp
                 } else {
                     ptr::null_mut()
                 });
-                success = SaveGame(gameIndex, (desc).cast(), nameBuf.as_ptr());
+                success = SaveGame(game_index, (desc).cast(), name_buf.as_ptr());
             } else {
                 success = 0;
                 *canceled_by_user = 1;
             }
         } else {
-            ConfirmSaveLoad(if (*pickState).saving != 0 {
-                &mut saveStamp
+            ConfirmSaveLoad(if (*pick_state).saving != 0 {
+                &mut save_stamp
             } else {
                 ptr::null_mut()
             });
-            success = LoadGame(gameIndex, ptr::null_mut());
+            success = LoadGame(game_index, ptr::null_mut());
         }
-        if (*pickState).saving != 0 {
-            DrawStamp(&mut saveStamp);
+        if (*pick_state).saving != 0 {
+            DrawStamp(&mut save_stamp);
         }
-        DestroyDrawable(ReleaseDrawable(saveStamp.frame));
+        DestroyDrawable(ReleaseDrawable(save_stamp.frame));
         success
     }
 
-    unsafe fn PickGame(saving: BOOLEAN, fromMainMenu: BOOLEAN) -> BOOLEAN {
+    unsafe fn pick_game(saving: BOOLEAN, from_main_menu: BOOLEAN) -> BOOLEAN {
         let activity = WorldFields::current().read(|owner| owner.game.current_activity);
         log::info!(
-            "RUST_PICKER: enter saving={saving} main_menu={fromMainMenu} activity={:#x}",
+            "RUST_PICKER: enter saving={saving} main_menu={from_main_menu} activity={:#x}",
             activity,
         );
-        let mut pickState: PickGameState = mem::zeroed();
-        pickState.saving = saving;
-        pickState.SummaryFrame =
+        let mut pick_state: PickGameState = mem::zeroed();
+        pick_state.saving = saving;
+        pick_state.summary_frame =
             SetAbsFrameIndex(KernelOwner::current().read(|owner| owner.play_frame), 39);
-        let mut MenuState: MENU_STATE = mem::zeroed();
-        MenuState.privData = ptr::addr_of_mut!(pickState).cast();
-        MenuState.CurState = LAST_USED_SLOT as BYTE;
-        let TimeOut = FadeMusic(0, (ONE_SECOND / 2) as SIZE);
-        let oldCallback = SetInputCallback(None);
-        LoadGameDescriptions(ptr::addr_of_mut!(pickState.summary).cast());
-        let OldContext = SetContext(KernelOwner::current().read(|owner| owner.space_context));
-        let mut DlgStamp = SaveContextFrame(ptr::null());
-        let mut DlgRect: RECT = mem::zeroed();
-        GetContextClipRect(&mut DlgRect);
-        SleepThreadUntil(TimeOut);
-        PauseMusic();
+        let mut menu_state: MENU_STATE = mem::zeroed();
+        menu_state.privData = ptr::addr_of_mut!(pick_state).cast();
+        menu_state.CurState = LAST_USED_SLOT as BYTE;
+        let time_out = FadeMusic(0, (ONE_SECOND / 2) as SIZE);
+        let old_callback = SetInputCallback(None);
+        load_game_descriptions(ptr::addr_of_mut!(pick_state.summary).cast());
+        let old_context = SetContext(KernelOwner::current().read(|owner| owner.space_context));
+        let mut dlg_stamp = SaveContextFrame(ptr::null());
+        let mut dlg_rect: RECT = mem::zeroed();
+        GetContextClipRect(&mut dlg_rect);
+        SleepThreadUntil(time_out);
+        pause_music();
         StopSound();
         FadeMusic(NORMAL_VOLUME as BYTE, 0);
         SetTransitionSource(ptr::null());
         BatchGraphics();
         SetContextBackGroundColor(BLACK_COLOR);
         ClearDrawable();
-        RedrawPickDisplay(&mut pickState, MenuState.CurState as COUNT);
-        DrawSaveLoad(&mut pickState);
-        if fromMainMenu != 0 {
+        redraw_pick_display(&mut pick_state, menu_state.CurState as COUNT);
+        draw_save_load(&mut pick_state);
+        if from_main_menu != 0 {
             UnbatchGraphics();
             FadeScreen(ScreenFadeType_FadeAllToColor, (ONE_SECOND / 2) as SIZE);
         } else {
-            let mut ctxRect: RECT = mem::zeroed();
-            GetContextClipRect(&mut ctxRect);
-            ScreenTransition(3, &ctxRect);
+            let mut ctx_rect: RECT = mem::zeroed();
+            GetContextClipRect(&mut ctx_rect);
+            ScreenTransition(3, &ctx_rect);
             UnbatchGraphics();
         }
         SetMenuSounds(
@@ -1248,18 +1259,18 @@ pub(crate) mod runtime {
             0,
         );
         log::info!("RUST_PICKER: list_drawn slots=50");
-        MenuState.InputFunc = Some(DoPickGame);
+        menu_state.InputFunc = Some(do_pick_game);
         loop {
             let mut canceled_by_user: BOOLEAN = 0;
-            pickState.success = 0;
-            DoInput(ptr::addr_of_mut!(MenuState).cast(), 1);
-            if pickState.success == 0 {
+            pick_state.success = 0;
+            DoInput(ptr::addr_of_mut!(menu_state).cast(), 1);
+            if pick_state.success == 0 {
                 break;
             }
-            LAST_USED_SLOT = MenuState.CurState as COUNT;
-            if SaveLoadGame(
-                &mut pickState,
-                MenuState.CurState as COUNT,
+            LAST_USED_SLOT = menu_state.CurState as COUNT;
+            if save_load_game(
+                &mut pick_state,
+                menu_state.CurState as COUNT,
                 &mut canceled_by_user,
             ) != 0
             {
@@ -1277,45 +1288,45 @@ pub(crate) mod runtime {
             if saving != 0 && canceled_by_user == 0 {
                 SaveProblem();
             }
-            LoadGameDescriptions(ptr::addr_of_mut!(pickState.summary).cast());
-            RedrawPickDisplay(&mut pickState, MenuState.CurState as COUNT);
+            load_game_descriptions(ptr::addr_of_mut!(pick_state.summary).cast());
+            redraw_pick_display(&mut pick_state, menu_state.CurState as COUNT);
         }
         SetMenuSounds(MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
-        if pickState.success != 0 && saving == 0 {
+        if pick_state.success != 0 && saving == 0 {
             (**WorldFields::current()).game.current_activity |= CHECK_LOAD as ACTIVITY;
         }
         if WorldFields::current().read(|owner| owner.game.current_activity)
             & CHECK_ABORT as ACTIVITY
             == 0
-            && (saving != 0 || (pickState.success == 0 && fromMainMenu == 0))
+            && (saving != 0 || (pick_state.success == 0 && from_main_menu == 0))
         {
-            SetTransitionSource(&DlgRect);
+            SetTransitionSource(&dlg_rect);
             BatchGraphics();
-            DrawStamp(&mut DlgStamp);
-            ScreenTransition(3, &DlgRect);
+            DrawStamp(&mut dlg_stamp);
+            ScreenTransition(3, &dlg_rect);
             UnbatchGraphics();
         }
-        DestroyDrawable(ReleaseDrawable(DlgStamp.frame));
-        SetContext(OldContext);
-        ResumeMusic();
-        SetInputCallback(oldCallback);
-        pickState.success
+        DestroyDrawable(ReleaseDrawable(dlg_stamp.frame));
+        SetContext(old_context);
+        resume_music();
+        SetInputCallback(old_callback);
+        pick_state.success
     }
 
-    unsafe extern "C" fn DoGameOptions(pMS: *mut MENU_STATE) -> BOOLEAN {
+    unsafe extern "C" fn do_game_options(p_ms: *mut MENU_STATE) -> BOOLEAN {
         if WorldFields::current().read(|owner| owner.game.current_activity)
             & CHECK_ABORT as ACTIVITY
             != 0
         {
             return 0;
         }
-        if key(KEY_MENU_CANCEL) || (key(KEY_MENU_SELECT) && (*pMS).CurState == EXIT_GAME_MENU) {
+        if key(KEY_MENU_CANCEL) || (key(KEY_MENU_SELECT) && (*p_ms).CurState == EXIT_GAME_MENU) {
             return 0;
         } else if key(KEY_MENU_SELECT) {
-            match (*pMS).CurState {
+            match (*p_ms).CurState {
                 SAVE_GAME | LOAD_GAME => {
                     SetFlashRect(ptr::null());
-                    if PickGame(u32::from((*pMS).CurState == SAVE_GAME), 0) != 0 {
+                    if pick_game(u32::from((*p_ms).CurState == SAVE_GAME), 0) != 0 {
                         return 0;
                     }
                     SetFlashRect(SFR_MENU_3DO);
@@ -1326,13 +1337,13 @@ pub(crate) mod runtime {
                     }
                 }
                 SETTINGS => {
-                    SettingsMenu();
-                    DrawMenuStateStrings(PM_SAVE_GAME as BYTE, (*pMS).CurState as SWORD);
+                    settings_menu();
+                    DrawMenuStateStrings(PM_SAVE_GAME as BYTE, (*p_ms).CurState as SWORD);
                 }
                 _ => {}
             }
         } else {
-            DoMenuChooser(pMS, PM_SAVE_GAME as BYTE);
+            DoMenuChooser(p_ms, PM_SAVE_GAME as BYTE);
         }
         1
     }
@@ -1342,22 +1353,22 @@ pub(crate) mod runtime {
     /// contexts. Runs the modal menu and may replace the live game on load.
     #[no_mangle]
     pub unsafe extern "C" fn GameOptions() -> BOOLEAN {
-        let mut MenuState: MENU_STATE = mem::zeroed();
+        let mut menu_state: MENU_STATE = mem::zeroed();
         if KernelOwner::current().read(|owner| owner.last_activity) == CHECK_LOAD as ACTIVITY {
             DrawMenuStateStrings(PM_SAVE_GAME as BYTE, LOAD_GAME as SWORD);
-            let success = PickGame(0, 1);
+            let success = pick_game(0, 1);
             if success == 0 {
                 (**WorldFields::current()).game.current_activity |= CHECK_ABORT as ACTIVITY;
             }
             return 0;
         }
-        MenuState.CurState = SAVE_GAME;
-        DrawMenuStateStrings(PM_SAVE_GAME as BYTE, MenuState.CurState as SWORD);
+        menu_state.CurState = SAVE_GAME;
+        DrawMenuStateStrings(PM_SAVE_GAME as BYTE, menu_state.CurState as SWORD);
         SetFlashRect(SFR_MENU_3DO);
         SetMenuSounds(MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
-        MenuState.InputFunc = Some(DoGameOptions);
+        menu_state.InputFunc = Some(do_game_options);
         crate::automation::ui_observation::rust_automation_observe_game_options(1);
-        DoInput(ptr::addr_of_mut!(MenuState).cast(), 1);
+        DoInput(ptr::addr_of_mut!(menu_state).cast(), 1);
         crate::automation::ui_observation::rust_automation_observe_game_options(0);
         SetFlashRect(ptr::null());
         u32::from(

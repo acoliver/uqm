@@ -99,9 +99,9 @@ extern "C" {
 
     // --- Menu drawing (de-staticized in restart.c under USE_RUST_RESTART) ---
     #[cfg(test)]
-    pub fn DrawRestartMenuGraphic(pms: *mut c_void);
+    pub fn draw_restart_menu_graphic(pms: *mut c_void);
     #[cfg(test)]
-    pub fn DrawRestartMenu(pms: *mut c_void, new_state: u8, frame: *mut c_void);
+    pub fn draw_restart_menu(pms: *mut c_void, new_state: u8, frame: *mut c_void);
 }
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
@@ -263,14 +263,14 @@ pub unsafe fn uqm_destroy_menu_state(pms: *mut c_void) {
 /// Called on the game thread with the live resources required by the Rust provider.
 #[cfg(not(test))]
 pub unsafe fn draw_restart_menu_graphic(pms: *mut c_void) {
-    crate::mainloop::restart_menu::render_abi::DrawRestartMenuGraphic(pms as _);
+    crate::mainloop::restart_menu::render_abi::draw_restart_menu_graphic(pms as _);
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
 #[cfg(not(test))]
 pub unsafe fn draw_restart_menu(pms: *mut c_void, new_state: u8, frame: *mut c_void) {
-    crate::mainloop::restart_menu::render_abi::DrawRestartMenu(
+    crate::mainloop::restart_menu::render_abi::draw_restart_menu(
         pms as _,
         new_state as _,
         frame as _,
@@ -345,16 +345,16 @@ pub unsafe fn set_main_exited(b: c_int) {
 // ===========================================================================
 
 #[cfg(not(test))]
-pub use crate::game_init::cleanup::FreeGameData;
+pub use crate::game_init::cleanup::free_game_data;
 #[cfg(test)]
 extern "C" {
-    pub fn FreeGameData();
+    pub fn free_game_data();
 }
 #[cfg(not(test))]
-pub use crate::ui::settings::StopMusic;
+pub use crate::ui::settings::stop_music;
 #[cfg(test)]
 extern "C" {
-    pub fn StopMusic();
+    pub fn stop_music();
 }
 pub use crate::sound::heart_ffi::fade_music as FadeMusic;
 
@@ -453,9 +453,3 @@ pub use crate::ui::confirm::DoPopupWindow;
 extern "C" {}
 pub use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 pub use crate::sound::heart_ffi::DestroyMusic;
-
-#[cfg(not(test))]
-pub use draw_restart_menu_graphic as DrawRestartMenuGraphic;
-
-#[cfg(not(test))]
-pub use draw_restart_menu as DrawRestartMenu;

@@ -80,11 +80,11 @@ mod c_ffi {
     #[allow(non_snake_case, dead_code)]
     pub unsafe fn SetFlashRect(_p_rect: *const c_void) {}
     #[allow(non_snake_case, dead_code)]
-    pub unsafe fn SetPlayerInputAll() -> i32 {
+    pub fn SetPlayerInputAll() -> i32 {
         1
     }
     #[allow(non_snake_case, dead_code)]
-    pub unsafe fn initAudio(_driver: i32, _flags: i32) -> i32 {
+    pub fn initAudio(_driver: i32, _flags: i32) -> i32 {
         0
     }
     #[allow(dead_code, non_upper_case_globals)]
@@ -351,7 +351,7 @@ pub fn set_player_input_all_or_explode() {
     #[cfg(not(test))]
     {
         // SAFETY: Kernel input state is initialized and accessed on the game thread.
-        let ok = unsafe { KernelOwner::current().write(|kernel| c_ffi::SetPlayerInputAll(kernel)) };
+        let ok = { KernelOwner::current().write(c_ffi::SetPlayerInputAll) };
         if !ok {
             unsafe {
                 crate::logging::log_add(

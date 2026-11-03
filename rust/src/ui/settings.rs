@@ -1,5 +1,4 @@
 #![cfg(not(test))]
-#![allow(non_snake_case)]
 
 use crate::engine::WorldData as WorldFields;
 use crate::navigation::abi::*;
@@ -10,7 +9,7 @@ static mut LAST_PRIORITY: BYTE = 0;
 
 /// # Safety
 /// The game settings and music player must be initialized on the game thread.
-pub unsafe fn ToggleMusic() {
+pub unsafe fn toggle_music() {
     (**WorldFields::current()).game.glob_flags ^= MUSIC_DISABLED as u8;
     if LAST_PRIORITY <= 1 {
         if WorldFields::current().read(|owner| owner.game.glob_flags) & (MUSIC_DISABLED as u8) != 0
@@ -40,26 +39,26 @@ pub unsafe extern "C" fn PlayMusic(music_ref: MUSIC_REF, continuous: BOOLEAN, pr
 
 /// # Safety
 /// The music player must be initialized on the game thread.
-pub unsafe fn StopMusic() {
+pub unsafe fn stop_music() {
     PLRStop((LAST_MUSIC_REF).cast());
     LAST_MUSIC_REF = std::ptr::null_mut();
 }
 
 /// # Safety
 /// The music player must be initialized on the game thread.
-pub unsafe fn ResumeMusic() {
+pub unsafe fn resume_music() {
     PLRResume((LAST_MUSIC_REF).cast());
 }
 
 /// # Safety
 /// The music player must be initialized on the game thread.
-pub unsafe fn PauseMusic() {
+pub unsafe fn pause_music() {
     PLRPause((LAST_MUSIC_REF).cast());
 }
 
 /// # Safety
 /// Game settings must be accessed on the game thread.
-pub unsafe fn ToggleSoundEffect() {
+pub unsafe fn toggle_sound_effect() {
     (**WorldFields::current()).game.glob_flags ^= SOUND_DISABLED as u8;
 }
 

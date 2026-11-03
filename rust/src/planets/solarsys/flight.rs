@@ -56,7 +56,7 @@ unsafe fn system() -> *mut c::SOLARSYS_STATE {
 }
 
 #[inline]
-unsafe fn glob() -> crate::app::bridge::Projection<crate::engine::WorldData> {
+fn glob() -> crate::engine::Projection<crate::engine::WorldData> {
     WorldFields::current()
 }
 

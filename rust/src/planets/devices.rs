@@ -39,15 +39,15 @@ extern "C" {
     fn save_sis_hyper_state();
 }
 
-use crate::battle::build_native::engine::StartSphereTracking;
+use crate::battle::build_native::engine::start_sphere_tracking;
 
 use crate::battle::sounds::engine::PlayMenuSound;
 
 use crate::mainloop::input_abi::live::SetMenuSounds;
 
-use crate::navigation::globals::inHQSpace;
+use crate::navigation::globals::in_hqspace;
 
-use crate::navigation::globals::inHyperSpace;
+use crate::navigation::globals::in_hyper_space;
 
 use crate::navigation::groups::live::PutGroupInfo;
 
@@ -183,7 +183,7 @@ unsafe fn orbit_is(planet: u8) -> bool {
 }
 
 unsafe fn use_caster() -> bool {
-    if WorldOwner::current().read(inHQSpace) != 0 {
+    if WorldOwner::current().read(in_hqspace) != 0 {
         if WorldOwner::current().read(|world| get(world, StoryKey::ARILOU_SPACE_SIDE)) <= 1 {
             WorldOwner::current().write(|world| set(world, StoryKey::USED_BROADCASTER, 1));
             return true;
@@ -212,7 +212,7 @@ unsafe fn use_caster() -> bool {
     ) == ILWRATH_DEFINED;
     let mut found = home
         && WorldOwner::current()
-            .write(|world| StartSphereTracking(world, u16::from(ship::ILWRATH_SHIP)))
+            .write(|world| start_sphere_tracking(world, u16::from(ship::ILWRATH_SHIP)))
             != 0;
     if !found {
         let queue = std::ptr::addr_of!((**WorldFields::current()).game.ip_group_q);
@@ -309,7 +309,7 @@ unsafe fn invoke(id: u8) -> u8 {
             NextActivity |= CHECK_LOAD;
             (**WorldFields::current()).game.current_activity |= START_ENCOUNTER;
             WorldOwner::current().write(|world| set(world, StoryKey::GLOBAL_FLAGS_AND_DATA, 0));
-            if WorldOwner::current().read(inHQSpace) != 0 {
+            if WorldOwner::current().read(in_hqspace) != 0 {
                 if !(**WorldFields::current()).game.encounter_q.head.is_null() {
                     WorldOwner::current().write(|world| set(world, StoryKey::SHIP_TO_COMPEL, 1));
                 }
@@ -341,7 +341,7 @@ unsafe fn invoke(id: u8) -> u8 {
         }
         12 | 13 => u8::from(use_caster()),
         0 => {
-            if WorldOwner::current().read(inHyperSpace) == 0
+            if WorldOwner::current().read(in_hyper_space) == 0
                 || (**WorldFields::current()).flagship.fuel_on_board < 1000
             {
                 return 0;

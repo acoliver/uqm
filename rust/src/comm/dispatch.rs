@@ -410,16 +410,16 @@ mod ffi {
     pub use crate::comm::locdata::COMM_DATA as CommData;
 
     #[cfg(not(test))]
-    pub use crate::ui::border::DrawSISFrame;
+    pub use crate::ui::border::draw_sisframe;
     #[cfg(test)]
     extern "C" {
-        pub fn DrawSISFrame();
+        pub fn draw_sisframe();
     }
     #[cfg(not(test))]
-    pub use crate::ui::sis::RepairSISBorder;
+    pub use crate::ui::sis::repair_sisborder;
     #[cfg(test)]
     extern "C" {
-        pub fn RepairSISBorder();
+        pub fn repair_sisborder();
     }
 
     #[cfg(not(test))]
@@ -540,7 +540,7 @@ mod ffi {
 /// C: `PickCaptainName()` = `((COUNT)random() & (NUM_CAPTAINS_NAMES - 1)) + NAME_OFFSET`
 /// where NUM_CAPTAINS_NAMES=16, NAME_OFFSET=5. Ported to pure Rust.
 #[inline]
-unsafe fn pick_captain_name() -> u8 {
+fn pick_captain_name() -> u8 {
     ((crate::math::random() & 0x0F) + 5) as u8
 }
 
@@ -555,7 +555,7 @@ fn lobyte(x: u16) -> u16 {
 ///
 /// # Safety
 /// Calls C FFI to read CurrentActivity from global state.
-unsafe fn in_hq_space() -> bool {
+fn in_hq_space() -> bool {
     let activity = crate::mainloop::ffi::get_current_activity().0;
     lobyte(activity) == IN_HYPERSPACE
 }
@@ -882,10 +882,10 @@ pub unsafe fn init_communication(which_comm: u32) -> u16 {
         ));
         if which_comm != conv::COMMANDER {
             if lobyte(last_activity) == 0 {
-                ffi::DrawSISFrame();
+                ffi::draw_sisframe();
             } else {
                 ffi::ClearSISRect((DRAW_SIS_DISPLAY) as u8);
-                ffi::RepairSISBorder();
+                ffi::repair_sisborder();
             }
             ffi::DrawSISMessage(std::ptr::null());
             if in_hq_space() {
@@ -1020,7 +1020,9 @@ pub(crate) unsafe fn clone_ship_fragment(
 pub(crate) fn production_captain_name() -> u8 {
     // SAFETY: `random` takes no arguments and touches only the game's
     // random state.
-    unsafe { pick_captain_name() }
+    {
+        pick_captain_name()
+    }
 }
 
 /// `CloneShipFragment` against an explicit fleet queue and captain-name draw.

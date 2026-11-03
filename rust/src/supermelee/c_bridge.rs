@@ -15,10 +15,10 @@ pub const SUPER_MELEE: u8 = 1;
 // ---------------------------------------------------------------------------
 
 #[cfg(not(test))]
-pub use crate::ui::settings::StopMusic;
+pub use crate::ui::settings::stop_music;
 #[cfg(test)]
 extern "C" {
-    pub fn StopMusic();
+    pub fn stop_music();
 }
 pub use crate::sound::heart_ffi::stop_sound as StopSound;
 

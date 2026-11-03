@@ -105,7 +105,7 @@ use crate::graphics::drawable_abi::GetFrameRect;
 use crate::planets::starmap::naming::GetClusterName;
 
 #[cfg(not(test))]
-use crate::navigation::globals::inHQSpace;
+use crate::navigation::globals::in_hqspace;
 
 #[cfg(not(test))]
 use crate::mainloop::input_abi::live::FlushInput;
@@ -188,13 +188,13 @@ unsafe fn height() -> i32 {
     ScreenHeight - 13
 }
 #[cfg(not(test))]
-unsafe fn which_space() -> u8 {
+fn which_space() -> u8 {
     WorldOwner::current().read(|world| {
         crate::state::game_state_keys::get_game_state(world, StoryKey::ARILOU_SPACE_SIDE)
     }) as u8
 }
 #[cfg(not(test))]
-unsafe fn portal_open() -> bool {
+fn portal_open() -> bool {
     WorldOwner::current()
         .read(|world| crate::state::game_state_keys::get_game_state(world, StoryKey::ARILOU_SPACE))
         != 0
@@ -299,7 +299,7 @@ unsafe fn uy(y: i16) -> i16 {
 
 #[cfg(not(test))]
 unsafe fn current_location() -> POINT {
-    if WorldOwner::current().read(inHQSpace) == 0 {
+    if WorldOwner::current().read(in_hqspace) == 0 {
         point(
             (*(**WorldOwner::current()).star_pointer(crate::planets::starmap::current_catalog()))
                 .star_pt,

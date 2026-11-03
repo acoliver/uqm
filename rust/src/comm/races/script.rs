@@ -69,7 +69,7 @@ pub(super) mod live {
     use crate::comm::locdata::COMM_DATA;
     use std::ffi::{c_char, CStr};
 
-    use crate::ui::sis::DrawLanders;
+    use crate::ui::sis::draw_landers;
 
     use crate::strings::string_table::SetAbsStringTableIndex;
 
@@ -193,7 +193,7 @@ pub(super) mod live {
         fn add_lander(&mut self) {
             unsafe {
                 (**WorldFields::current()).flagship.num_landers += 1;
-                DrawLanders();
+                draw_landers();
             }
         }
 

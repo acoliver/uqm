@@ -49,7 +49,7 @@ pub unsafe fn uninit_ships() {
     use crate::ships::native::abi::*;
 
     StopSound();
-    KernelOwner::current().write(|kernel| crate::game_init::space_resources::UninitSpace(kernel));
+    KernelOwner::current().write(|kernel| crate::game_init::space_resources::uninit_space(kernel));
     crate::app::bridge::enter(|cx| {
         let mut ships = [None; 2];
         let crew = remaining_battle_crew(cx);
@@ -84,7 +84,7 @@ pub unsafe fn uninit_ships() {
         if cx.world.activity() as u8 != IN_ENCOUNTER as u8 {
             cx.reset_ships(0);
             cx.reset_ships(1);
-            if inHQSpace(cx.world) != 0 {
+            if in_hqspace(cx.world) != 0 {
                 crate::navigation::hyper_data::FreeHyperspace();
             }
         }
@@ -94,7 +94,6 @@ pub unsafe fn uninit_ships() {
 
 #[cfg(not(test))]
 mod live {
-    #![allow(non_snake_case)]
     use crate::engine::World as WorldOwner;
     use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
     use crate::ships::native::abi::*;
@@ -109,10 +108,10 @@ mod live {
     operation!(uqm_get_current_activity_lobyte() -> u8 { (**WorldFields::current()).game.current_activity as u8 });
 
     operation!(rust_bridge_init_battle_arena() -> i16 {
-        if KernelOwner::current().write(|kernel| crate::game_init::space_resources::InitSpace(kernel, WorldOwner::current().read(|world|world.activity()))) == 0 { return 0; }
+        if KernelOwner::current().write(|kernel| crate::game_init::space_resources::init_space(kernel, WorldOwner::current().read(|world|world.activity()))) == 0 { return 0; }
         SetContext((**KernelOwner::current()).status_context); SetContext((**KernelOwner::current()).space_context);
         InitDisplayList(); crate::battle::galaxy::InitGalaxy();
-        if WorldOwner::current().read(inHQSpace) != 0 {
+        if WorldOwner::current().read(in_hqspace) != 0 {
             crate::app::bridge::enter(|cx| {
                 cx.reset_ships(0); cx.reset_ships(1);
                 let mut ships = crate::engine::battle::link_queue::ships(0);

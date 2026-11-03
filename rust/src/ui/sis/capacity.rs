@@ -46,7 +46,7 @@ pub unsafe extern "C" fn GetCPodCapacity(ppt: *mut POINT) -> COUNT {
     GetCrewPodCapacity()
 }
 #[inline]
-unsafe fn element_mass() -> COUNT {
+fn element_mass() -> COUNT {
     sis().read(|owner| owner.total_element_mass)
 }
 /// # Safety

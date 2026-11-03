@@ -198,7 +198,9 @@ impl Default for CffiOps {
 impl RestartMenuOps for CffiOps {
     fn get_current_activity(&self) -> u16 {
         // SAFETY: Reads a global activity variable.
-        unsafe { WorldOwner::current().read(|world| c_extern::get_current_activity(world)) }
+        {
+            WorldOwner::current().read(c_extern::get_current_activity)
+        }
     }
     fn set_current_activity(&self, v: u16) {
         // SAFETY: Writes a global activity variable.
@@ -421,13 +423,13 @@ impl RestartMenuOps for CffiOps {
         // SAFETY: pMS must be set by the caller via set_menu_state_ptr before calling.
         // This calls the de-staticized DrawRestartMenuGraphic in restart.c.
         let pms = self.get_menu_state_ptr();
-        unsafe { c_extern::DrawRestartMenuGraphic(pms as *mut c_void) }
+        unsafe { c_extern::draw_restart_menu_graphic(pms as *mut c_void) }
     }
     fn draw_restart_menu_state(&self, state: u8) {
         // SAFETY: pMS must be set by the caller. Frame comes from pMS->CurFrame.
         let pms = self.get_menu_state_ptr();
         let frame = self.get_menu_frame();
-        unsafe { c_extern::DrawRestartMenu(pms as *mut c_void, state, frame as *mut c_void) }
+        unsafe { c_extern::draw_restart_menu(pms as *mut c_void, state, frame as *mut c_void) }
     }
     fn set_menu_sounds(&self, s0: u16, s1: u16) {
         // SAFETY: SetMenuSounds configures menu sound effects.
@@ -459,7 +461,7 @@ impl RestartMenuOps for CffiOps {
     }
     fn stop_music(&self) {
         // SAFETY: StopMusic is safe to call any time.
-        unsafe { c_extern::StopMusic() }
+        unsafe { c_extern::stop_music() }
     }
     fn destroy_music(&self, handle: usize) {
         if handle != 0 {
@@ -556,7 +558,7 @@ impl RestartMenuOps for CffiOps {
     }
     fn free_game_data(&self) {
         // SAFETY: FreeGameData releases game session resources.
-        unsafe { crate::app::bridge::enter(|cx| c_extern::FreeGameData(cx)) }
+        unsafe { crate::app::bridge::enter(|cx| c_extern::free_game_data(cx)) }
     }
     fn credits(&self, victory: bool) {
         // SAFETY: Credits displays the credits screen.

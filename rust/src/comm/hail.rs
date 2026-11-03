@@ -39,8 +39,8 @@ pub(super) mod c_bridge {
         CaptureStringTable, DestroyStringTable, GetStringAddress, ReleaseStringTable,
         SetAbsStringTableIndex,
     };
-    pub use crate::ui::border::DrawSISFrame;
-    pub use crate::ui::settings::StopMusic;
+    pub use crate::ui::border::draw_sisframe;
+    pub use crate::ui::settings::stop_music;
     pub use crate::ui::sis::DrawSISTitle;
 
     pub use crate::graphics::resgfx::LoadGraphicInstance;
@@ -118,7 +118,7 @@ impl super::player_font::FontRelease for CFontRelease {
 /// Check if this is a starbase conversation by reading C game state.
 /// Matches: GET_GAME_STATE(GLOBAL_FLAGS_AND_DATA) == 0xFF && GET_GAME_STATE(STARBASE_AVAILABLE)
 #[cfg(not(test))]
-unsafe fn is_starbase_conversation() -> bool {
+fn is_starbase_conversation() -> bool {
     // Direct game state access (replaces c_IsStarbaseConversation)
     let global_flags = WorldOwner::current().read(|world| {
         crate::state::game_state_keys::get_game_state(world, StoryKey::GLOBAL_FLAGS_AND_DATA)
@@ -131,7 +131,7 @@ unsafe fn is_starbase_conversation() -> bool {
 
 /// Draw the player communication panel using the shared C-parity renderer.
 #[cfg(not(test))]
-unsafe fn draw_sis_com_window() {
+fn draw_sis_com_window() {
     super::sis_graphics::draw_sis_com_window();
 }
 
@@ -358,7 +358,7 @@ pub unsafe fn hail_alien() {
                 SetContextClipRect((&raw mut c_bridge::CommWndRect).cast());
             }
 
-            DrawSISFrame();
+            draw_sisframe();
 
             if is_starbase_conversation() {
                 // Talking to allied Starbase
@@ -431,7 +431,7 @@ pub unsafe fn hail_alien() {
         super::ffi::rust_clear_subtitles();
 
         // Stop audio, fade music (C lines 1133–1136)
-        StopMusic();
+        stop_music();
         StopSound();
         StopTrack();
         let fade_end = FadeMusic(NORMAL_VOLUME as u8, 0);

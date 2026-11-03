@@ -185,7 +185,7 @@ unsafe fn init_kernel(kernel: &mut crate::engine::Kernel, activity: u16) -> u32 
         return 0;
     }
     InitStatusOffsets(kernel);
-    super::space_resources::InitSpace(kernel, activity)
+    super::space_resources::init_space(kernel, activity)
 }
 
 /// # Safety
@@ -203,7 +203,7 @@ pub fn UninitPlayerInput() {}
 
 /// # Safety
 /// Player index is below NUM_PLAYERS and its input context is not already installed.
-pub unsafe fn SetPlayerInput(kernel: &mut crate::engine::Kernel, player: u16) -> bool {
+pub fn SetPlayerInput(kernel: &mut crate::engine::Kernel, player: u16) -> bool {
     {
         let slot = &mut kernel.player_input[player as usize];
         assert!((*slot).is_null());
@@ -222,7 +222,7 @@ pub unsafe fn SetPlayerInput(kernel: &mut crate::engine::Kernel, player: u16) ->
 
 /// # Safety
 /// Both player input contexts must be uninstalled.
-pub unsafe fn SetPlayerInputAll(kernel: &mut crate::engine::Kernel) -> bool {
+pub fn SetPlayerInputAll(kernel: &mut crate::engine::Kernel) -> bool {
     for player in 0..2 {
         if !SetPlayerInput(kernel, player) {
             return false;

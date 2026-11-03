@@ -399,7 +399,7 @@ pub(crate) mod engine {
             cx.element_mut(id).life += 1;
         } else {
             cx.ship_state_mut(ship).facing = normalize_facing(cx.random() as i32);
-            if inHQSpace(cx.world) != 0 {
+            if in_hqspace(cx.world) != 0 {
                 let facing = cx.world.data.game.ship_facing;
                 cx.ship_state_mut(ship).facing = if facing > 0 { facing - 1 } else { facing };
             }

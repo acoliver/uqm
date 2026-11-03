@@ -173,7 +173,7 @@ pub(crate) mod engine {
     #[no_mangle]
     pub unsafe extern "C" fn StopDitty() {
         if KernelOwner::current().read(|owner| owner.ditty_playing) != 0 {
-            StopMusic();
+            stop_music();
         }
         (**KernelOwner::current()).ditty_playing = 0;
     }
@@ -337,7 +337,7 @@ pub(crate) mod engine {
         }
         cx.set_winner_slot(None);
         StopDitty();
-        StopMusic();
+        stop_music();
         StopSound();
         cx.set_parent(dead, None);
         let restart = opponent_alive(cx, ship);
@@ -426,7 +426,7 @@ pub(crate) mod engine {
     #[no_mangle]
     pub unsafe extern "C" fn StopAllBattleMusic() {
         StopDitty();
-        StopMusic();
+        stop_music();
     }
 
     pub(crate) fn find_alive_ship(

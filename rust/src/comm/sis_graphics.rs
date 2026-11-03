@@ -719,7 +719,7 @@ impl CommWindowGfx for CommWindow {
 
 /// Draw the SIS communication window background.
 #[cfg(not(test))]
-pub unsafe fn draw_sis_com_window() {
+pub fn draw_sis_com_window() {
     draw_sis_com_window_with(&mut CommWindow);
 }
 

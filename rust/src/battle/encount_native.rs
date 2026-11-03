@@ -58,7 +58,6 @@ fn text(x: i16, y: i16, align: TEXT_ALIGN, string: *const UNICODE) -> TEXT {
 }
 
 #[cfg(not(test))]
-#[allow(non_snake_case)]
 pub(crate) mod engine {
     use super::*;
     use crate::battle::battle_native::engine::{
@@ -113,7 +112,7 @@ pub(crate) mod engine {
         font_DrawText(t);
     }
 
-    unsafe extern "C" fn DoSelectAction(ms: *mut MENU_STATE) -> BOOLEAN {
+    unsafe extern "C" fn do_select_action(ms: *mut MENU_STATE) -> BOOLEAN {
         SetMenuSounds(0x0f, 1 << 4);
         if activity() & CHECK_ABORT as u16 != 0 {
             (*ms).CurState = ATTACK as u8 + 1;
@@ -121,7 +120,7 @@ pub(crate) mod engine {
         }
         if (*ms).Initialized == 0 {
             (*ms).Initialized = 1;
-            (*ms).InputFunc = Some(DoSelectAction);
+            (*ms).InputFunc = Some(do_select_action);
         } else if PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0 {
             match (*ms).CurState as u32 {
                 HAIL | ATTACK => {
@@ -146,7 +145,7 @@ pub(crate) mod engine {
         1
     }
 
-    pub(crate) unsafe fn GetShipFragQueueForPlayer(player: COUNT) -> *mut QUEUE {
+    pub(crate) unsafe fn get_ship_frag_queue_for_player(player: COUNT) -> *mut QUEUE {
         let world = WorldFields::current();
         if player == RPG_PLAYER_NUM as u16 {
             &raw mut (**world).game.built_ship_q
@@ -185,7 +184,7 @@ pub(crate) mod engine {
                 }
             }
         }
-        let q = GetShipFragQueueForPlayer(player);
+        let q = get_ship_frag_queue_for_player(player);
         link_queue::ships(player as usize).reinit();
         let mut h = (*q).head;
         while !h.is_null() {
@@ -237,7 +236,7 @@ pub(crate) mod engine {
     /// `player` must be a valid side with an initialized ship-fragment queue on the game thread.
     #[no_mangle]
     pub unsafe extern "C" fn FleetIsInfinite(player: COUNT) -> BOOLEAN {
-        let h = (*GetShipFragQueueForPlayer(player)).head;
+        let h = (*get_ship_frag_queue_for_player(player)).head;
         if h.is_null() {
             return 0;
         }
@@ -257,7 +256,7 @@ pub(crate) mod engine {
         PlayMusic(music, 0, 1);
         let segue = CaptureDrawable(LoadGraphicInstance(SEGUE_PMAP_ANIM.as_ptr().cast()).cast());
         WaitForSoundEnd(COUNT::MAX);
-        StopMusic();
+        stop_music();
         DestroyMusic(music);
         let mut stamp = STAMP {
             origin: POINT { x: 0, y: 0 },
@@ -276,7 +275,7 @@ pub(crate) mod engine {
         );
         SetContextFont(KernelOwner::current().read(|owner| owner.micro_font));
         SetContextForeGroundColor(rgb15(0, 0, 20));
-        if WorldOwner::current().read(inHQSpace) != 0 {
+        if WorldOwner::current().read(in_hqspace) != 0 {
             draw_text(&mut t, game_string(ENCOUNTER_STRING_BASE));
             t.baseline.y += 12;
             draw_text(&mut t, game_string(ENCOUNTER_STRING_BASE + 1));
@@ -338,7 +337,7 @@ pub(crate) mod engine {
         DestroyDrawable(ReleaseDrawable(segue));
         ScreenTransition(3, ptr::null());
         let mut menu: MENU_STATE = mem::zeroed();
-        menu.InputFunc = Some(DoSelectAction);
+        menu.InputFunc = Some(do_select_action);
         menu.Initialized = 0;
         menu.CurState = HAIL as u8;
         DrawMenuStateStrings(PM_CONVERSE as u8, menu.CurState as i16);
@@ -348,7 +347,7 @@ pub(crate) mod engine {
         menu.CurState as COUNT
     }
 
-    unsafe fn DrawFadeText(
+    unsafe fn draw_fade_text(
         str1: *const UNICODE,
         str2: *const UNICODE,
         fade_in: BOOLEAN,
@@ -446,7 +445,7 @@ pub(crate) mod engine {
         .is_null()
         {
             victory = -1;
-            KernelOwner::current().write(|kernel| InitSISContexts(kernel));
+            KernelOwner::current().write(|kernel| init_siscontexts(kernel));
         }
         let previous_mode = SetStatusMessageMode(StatMsgMode_SMM_RES_UNITS);
         let mut sleepy = true;
@@ -455,9 +454,9 @@ pub(crate) mod engine {
                 if victory < 0 {
                     victory = 0;
                 } else {
-                    DrawSISFrame();
+                    draw_sisframe();
                     DrawSISMessage(ptr::null());
-                    if WorldOwner::current().read(inHQSpace) != 0 {
+                    if WorldOwner::current().read(in_hqspace) != 0 {
                         DrawHyperCoords((**WorldFields::current()).game.ship_stamp.origin);
                     } else if (**WorldFields::current()).game.ip_planet == 0 {
                         DrawHyperCoords(
@@ -525,7 +524,7 @@ pub(crate) mod engine {
                                 );
                                 str1 = game_string(ENCOUNTER_STRING_BASE + 4);
                                 str2 = game_string(ENCOUNTER_STRING_BASE + 5);
-                                DrawFadeText(str1, str2, 1, &mut salvage_rect);
+                                draw_fade_text(str1, str2, 1, &mut salvage_rect);
                             }
                             rect.corner.y = salvage_rect.corner.y.wrapping_add(9);
                             rect.extent.height = 22;
@@ -596,7 +595,7 @@ pub(crate) mod engine {
         if victory != 0 {
             WaitForAnyButton(1, ONE_SECOND * 3, 0);
             if !escape_pressed() {
-                DrawFadeText(str1, str2, 0, &mut salvage_rect);
+                draw_fade_text(str1, str2, 0, &mut salvage_rect);
                 if !escape_pressed() {
                     SetContextForeGroundColor(rgb15(0, 0, 0));
                     rect.corner.x = salvage_rect.corner.x.wrapping_add(10);
@@ -618,10 +617,10 @@ pub(crate) mod engine {
                     font_DrawText(&mut t);
                     str1 = game_string(ENCOUNTER_STRING_BASE + 6);
                     str2 = game_string(ENCOUNTER_STRING_BASE + 7);
-                    DrawFadeText(str1, str2, 1, &mut salvage_rect);
+                    draw_fade_text(str1, str2, 1, &mut salvage_rect);
                     WaitForAnyButton(1, ONE_SECOND * 2, 0);
                     if !escape_pressed() {
-                        DrawFadeText(str1, str2, 0, &mut salvage_rect);
+                        draw_fade_text(str1, str2, 0, &mut salvage_rect);
                     }
                 }
             }

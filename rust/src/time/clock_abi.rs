@@ -1,7 +1,5 @@
 //! C clock API, including the save-compatible intrusive event queue.
 
-#![allow(non_snake_case)]
-
 use super::clock_bridge::{days_in_month, CEvent};
 use crate::collections::queue::{AllocLink, HLink, InitQueue, InsertQueue, Queue, UninitQueue};
 #[cfg(not(test))]
@@ -9,7 +7,11 @@ use crate::engine::World as WorldOwner;
 #[cfg(not(test))]
 use crate::engine::WorldData as WorldFields;
 
-fn event_date(now: (u16, u16, u16), relative: bool, date: (u16, u16, u16)) -> (u16, u16, u16) {
+pub(crate) fn event_date(
+    now: (u16, u16, u16),
+    relative: bool,
+    date: (u16, u16, u16),
+) -> (u16, u16, u16) {
     let (mut year, mut month, mut day) = date;
     if relative {
         month = month.wrapping_add(now.1 - 1);
@@ -28,7 +30,7 @@ fn event_date(now: (u16, u16, u16), relative: bool, date: (u16, u16, u16)) -> (u
     (year, month, day)
 }
 
-unsafe fn insert_event(queue: *mut Queue, date: (u16, u16, u16), selector: u8) -> HLink {
+pub(crate) unsafe fn insert_event(queue: *mut Queue, date: (u16, u16, u16), selector: u8) -> HLink {
     let new = AllocLink(queue);
     if new.is_null() {
         return new;
@@ -152,32 +154,9 @@ pub(crate) mod live {
         year: u16,
         selector: u8,
     ) -> HLink {
-        WorldOwner::current().write(|world| add_event(world, kind, month, day, year, selector))
-    }
-
-    pub(crate) unsafe fn add_event(
-        world: &mut crate::engine::World,
-        kind: u32,
-        month: u16,
-        day: u16,
-        year: u16,
-        selector: u8,
-    ) -> HLink {
-        if kind == 1 && month == 0 && day == 0 && year == 0 {
-            dispatch_event(world, selector);
-        } else {
-            let clock = &world.data.game.game_clock;
-            let now = (
-                clock.year_index,
-                u16::from(clock.month_index),
-                u16::from(clock.day_index),
-            );
-            let date = event_date(now, kind == 1, (year, month, day));
-            if date >= now {
-                return insert_event(&raw mut world.data.game.game_clock.event_q, date, selector);
-            }
-        }
-        ptr::null_mut()
+        WorldOwner::current().write(|world| {
+            crate::navigation::events::live::add_event(world, kind, month, day, year, selector)
+        })
     }
 
     /// # Safety

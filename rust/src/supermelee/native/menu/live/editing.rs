@@ -54,7 +54,7 @@ pub(super) unsafe extern "C" fn edit(state: *mut MELEE_STATE) -> u32 {
     } else if row < 2 && key(KEY_MENU_SELECT) {
         highlight(10, false);
         (*state).melee_option = 11;
-        let ok = crate::supermelee::native::build_picker::live::BuildPickShip(state);
+        let ok = crate::supermelee::native::build_picker::live::build_pick_ship(state);
         if ok {
             Melee_LocalChange_ship(
                 state,
@@ -66,7 +66,7 @@ pub(super) unsafe extern "C" fn edit(state: *mut MELEE_STATE) -> u32 {
         }
         (*state).melee_option = 10;
         let mut r = mem::zeroed();
-        crate::supermelee::native::build_picker::live::GetBuildPickFrameRect(&mut r);
+        crate::supermelee::native::build_picker::live::get_build_pick_frame_rect(&mut r);
         RepairMeleeFrame(&r);
         current(state);
         (*state).input_func = Some(edit);

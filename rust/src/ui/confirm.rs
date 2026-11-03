@@ -1,5 +1,4 @@
 #![cfg(not(test))]
-#![allow(non_snake_case)]
 
 use super::palette::*;
 use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
@@ -71,7 +70,7 @@ pub unsafe extern "C" fn DoConfirmExit() -> BOOLEAN {
     if PlayingTrack() != 0 {
         PauseTrack();
     }
-    PauseFlash();
+    pause_flash();
     let mut rect: RECT = mem::zeroed();
     let mut context_rect: RECT = mem::zeroed();
     let mut old_rect: RECT = mem::zeroed();
@@ -131,7 +130,7 @@ pub unsafe extern "C" fn DoConfirmExit() -> BOOLEAN {
     FlushInput();
     SetContextClipRect(&mut old_rect);
     SetContext(old_context);
-    ContinueFlash();
+    continue_flash();
     if PlayingTrack() != 0 {
         ResumeTrack();
     }
@@ -140,7 +139,7 @@ pub unsafe extern "C" fn DoConfirmExit() -> BOOLEAN {
 
 #[repr(C)]
 struct PopupState {
-    InputFunc: unsafe extern "C" fn(*mut PopupState) -> BOOLEAN,
+    input_func: unsafe extern "C" fn(*mut PopupState) -> BOOLEAN,
 }
 unsafe extern "C" fn do_popup(_state: *mut PopupState) -> BOOLEAN {
     SleepThread(ONE_SECOND / 20);
@@ -182,7 +181,7 @@ pub unsafe extern "C" fn DoPopupWindow(msg: *const ::std::ffi::c_char) {
         bank,
     );
     label.lines = lines.as_mut_ptr();
-    PauseFlash();
+    pause_flash();
     let old_context = SetContext(KernelOwner::current().read(|owner| owner.screen_context));
     let mut old_rect: RECT = mem::zeroed();
     GetContextClipRect(&mut old_rect);
@@ -203,7 +202,7 @@ pub unsafe extern "C" fn DoPopupWindow(msg: *const ::std::ffi::c_char) {
     SetMenuSounds(0, 0);
     let old_callback = SetInputCallback(None);
     let mut state = PopupState {
-        InputFunc: do_popup,
+        input_func: do_popup,
     };
     DoInput((&mut state as *mut PopupState).cast(), 1);
     SetInputCallback(old_callback);
@@ -212,7 +211,7 @@ pub unsafe extern "C" fn DoPopupWindow(msg: *const ::std::ffi::c_char) {
     DestroyDrawable(ReleaseDrawable(saved.frame));
     SetContextClipRect(&mut old_rect);
     SetContext(old_context);
-    ContinueFlash();
+    continue_flash();
     SetMenuSounds(sound0, sound1);
     StringBank_Free(bank);
 }

@@ -76,7 +76,7 @@ pub(crate) unsafe fn update_ship_frag_crew(owner: ShipId) {
             ships.get(ships.link(owner)).player
         };
         let frag_q =
-            crate::battle::encount_native::engine::GetShipFragQueueForPlayer(player as COUNT);
+            crate::battle::encount_native::engine::get_ship_frag_queue_for_player(player as COUNT);
         let mut hf = (*frag_q).head;
         let ships = link_queue::ships(player as usize);
         let mut hs = ships.head();

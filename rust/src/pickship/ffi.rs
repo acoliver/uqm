@@ -78,7 +78,7 @@ use crate::ui::sis::capacity::GetCrewPodCapacity;
 
 use crate::battle::encount_native::engine::FleetIsInfinite;
 
-use crate::navigation::globals::inHQSpace;
+use crate::navigation::globals::in_hqspace;
 
 fn color(color: Rgba) -> CColor {
     CColor {
@@ -184,7 +184,7 @@ fn pulsed_directions() -> (Direction, bool) {
 ///
 /// # Safety
 /// `state` is the picker's state, which `DoInput` is running.
-unsafe fn change_selection(state: &mut PickerState) {
+fn change_selection(state: &mut PickerState) {
     crate::automation::ui_observation::observe_ship_picker_cursor(state.cursor);
     let area = highlight(state.frame, state.cursor);
     state.flash = CRect {
@@ -288,7 +288,7 @@ unsafe extern "C" fn do_pick_battle_ship(state: *mut PickerState) -> c_int {
         // injected after this observation confirms a real choice.
         crate::automation::ui_observation::observe_ship_picker(true);
         // SAFETY: `state` is the running picker.
-        unsafe { change_selection(state) };
+        change_selection(state);
     } else {
         let (keys, select) = pulsed_directions();
         if select {
@@ -302,7 +302,7 @@ unsafe extern "C" fn do_pick_battle_ship(state: *mut PickerState) -> c_int {
             unsafe { PlayMenuSound((MENU_SOUND_MOVE) as u32) };
             state.cursor = cursor;
             // SAFETY: `state` is the running picker.
-            unsafe { change_selection(state) };
+            change_selection(state);
         }
     }
 
@@ -389,7 +389,7 @@ pub(crate) unsafe fn encounter_ship(
     let last_id = last;
 
     // SAFETY: plain call.
-    if { WorldOwner::current().read(inHQSpace) } != 0 {
+    if { WorldOwner::current().read(in_hqspace) } != 0 {
         assert_eq!(side, RPG_PLAYER_NUM);
         // SIS for the Hyperspace flight
         // SAFETY: `queue` is `race_q[side]`.

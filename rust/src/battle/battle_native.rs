@@ -102,7 +102,6 @@ unsafe fn battle_network() -> BattleNetwork {
 }
 
 #[cfg(not(test))]
-#[allow(non_snake_case)]
 pub(crate) mod engine {
     use super::*;
     use crate::battle::tactrans_native::{flee_preprocess, ResetWinnerStarShip, StopDitty};
@@ -133,7 +132,7 @@ pub(crate) mod engine {
 
     /// # Safety
     /// Game state must be initialized and accessed only on the game thread.
-    pub unsafe fn activity() -> u16 {
+    pub fn activity() -> u16 {
         WorldFields::current().read(|owner| owner.game.current_activity)
     }
     /// # Safety
@@ -143,12 +142,12 @@ pub(crate) mod engine {
     }
     /// # Safety
     /// `start..=end` must name a valid game-state bit field on the game thread.
-    pub unsafe fn game_state(start: u32, end: u32) -> u8 {
+    pub fn game_state(start: u32, end: u32) -> u8 {
         WorldOwner::current().read(|world| getGameState(world, start as i32, end as i32))
     }
     /// # Safety
     /// `start..=end` must name a valid game-state bit field owned by the game thread.
-    pub unsafe fn set_game_state(start: u32, end: u32, value: u8) {
+    pub fn set_game_state(start: u32, end: u32, value: u8) {
         WorldOwner::current().write(|world| setGameState(world, start as i32, end as i32, value));
     }
     /// # Safety
@@ -199,7 +198,7 @@ pub(crate) mod engine {
         ScreenHeight - 13
     }
 
-    unsafe fn RunAwayAllowed() -> bool {
+    fn run_away_allowed() -> bool {
         (activity() as u8 == IN_ENCOUNTER as u8 || activity() as u8 == IN_LAST_BATTLE as u8)
             && game_state(STARBASE_AVAILABLE, END_STARBASE_AVAILABLE) != 0
             && game_state(BOMB_CARRIER, END_BOMB_CARRIER) == 0
@@ -241,7 +240,7 @@ pub(crate) mod engine {
         order: [usize; 2],
     ) {
         net.poll();
-        let can_run = RunAwayAllowed();
+        let can_run = run_away_allowed();
         for side in order {
             let mut next = cx.first_ship(side);
             while let Some(ship) = next {
@@ -282,9 +281,9 @@ pub(crate) mod engine {
             .read(|owner| owner.battle_music)
             .is_null()
         {
-            let resource = if WorldOwner::current().read(inHyperSpace) != 0 {
+            let resource = if WorldOwner::current().read(in_hyper_space) != 0 {
                 HYPERSPACE_MUSIC.as_ptr()
-            } else if WorldOwner::current().read(inQuasiSpace) != 0 {
+            } else if WorldOwner::current().read(in_quasi_space) != 0 {
                 QUASISPACE_MUSIC.as_ptr()
             } else {
                 BATTLE_MUSIC.as_ptr()
@@ -309,7 +308,7 @@ pub(crate) mod engine {
         (**KernelOwner::current()).battle_music = ptr::null_mut();
     }
 
-    unsafe extern "C" fn DoBattle(bs: *mut battlestate_struct) -> BOOLEAN {
+    unsafe extern "C" fn do_battle(bs: *mut battlestate_struct) -> BOOLEAN {
         crate::log_abi::log_message(
             5,
             &format!(
@@ -401,7 +400,7 @@ pub(crate) mod engine {
         1u16.wrapping_sub(i)
     }
 
-    unsafe fn selectAllShips(count: SIZE) -> BOOLEAN {
+    unsafe fn select_all_ships(count: SIZE) -> BOOLEAN {
         if count == 1 {
             return crate::app::bridge::enter(|cx| {
                 crate::battle::ship_native::engine::next_star_ship(cx, None, 0)
@@ -458,7 +457,7 @@ pub(crate) mod engine {
                     (activity() & IN_BATTLE as u16 != 0) as i32
                 ),
             );
-            if selectAllShips(count) == 0 {
+            if select_all_ships(count) == 0 {
                 set_activity(activity() | CHECK_ABORT as u16);
             } else {
                 crate::log_abi::log_message(
@@ -471,9 +470,9 @@ pub(crate) mod engine {
                 if !net.negotiate(true, NetState_NetState_inBattle) {
                     set_activity(activity() | CHECK_ABORT as u16);
                 } else {
-                    bs.InputFunc = Some(DoBattle);
+                    bs.InputFunc = Some(do_battle);
                     bs.frame_cb = callback;
-                    bs.first_time = WorldOwner::current().read(inHQSpace);
+                    bs.first_time = WorldOwner::current().read(in_hqspace);
                     crate::log_abi::log_message(
                         5,
                         "BATTLE_DEBUG: About to call DoInput for battle loop",
@@ -498,7 +497,7 @@ pub(crate) mod engine {
             }
             net.finish();
             StopDitty();
-            StopMusic();
+            stop_music();
             StopSound();
         }
         crate::app::bridge::enter(|cx| cx.finish_battle());

@@ -3,9 +3,10 @@
 use crate::engine::battle::{record::Kernel, Cx};
 #[cfg(test)]
 use crate::engine::World as WorldOwner;
+use crate::engine::{Owner, Projection};
 use parking_lot::Mutex;
 use std::ptr::NonNull;
-use std::{marker::PhantomData, rc::Rc, thread::ThreadId};
+use std::{marker::PhantomData, thread::ThreadId};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Slot {
@@ -78,20 +79,6 @@ static CONTEXT: Mutex<BridgeState> = Mutex::new(BridgeState {
     world_borrowed: false,
     kernel_borrowed: false,
 });
-
-#[derive(Clone, Copy)]
-enum Owner {
-    World,
-    Kernel,
-}
-
-/// A raw legacy projection whose borrow ends on drop. It cannot cross threads.
-/// No owner or field reference or pointer may outlive this lease.
-pub struct Projection<T> {
-    pointer: *mut T,
-    owner: Owner,
-    not_send: PhantomData<Rc<()>>,
-}
 
 impl<T> std::ops::Deref for Projection<T> {
     type Target = *mut T;

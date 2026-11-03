@@ -183,7 +183,7 @@ pub(crate) mod live {
         }
         #[cfg(feature = "debug-process")]
         if PulsedInputState.menu[KEY_DEBUG as usize] != 0 {
-            crate::front_end::uqmdebug::debugKeyPressedSynchronous();
+            crate::front_end::uqmdebug::debug_key_pressed_synchronous();
         }
     }
 
@@ -252,7 +252,7 @@ pub(crate) mod live {
         loop {
             crate::callback::ffi::Async_process();
             crate::graphics::sdl::lifecycle_abi::TFB_ProcessEvents();
-            crate::mainloop::lifecycle_abi::ProcessUtilityKeys();
+            crate::mainloop::lifecycle_abi::process_utility_keys();
             super::yield_input_loop(|| crate::threading::legacy_abi::TaskSwitch());
             if crate::automation::input_ffi::rust_automation_service_do_input() != 0 {
                 break;

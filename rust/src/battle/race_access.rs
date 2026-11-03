@@ -132,7 +132,7 @@ impl Cx<'_> {
     pub fn hyperspace_menu(&mut self) {
         // SAFETY: publication suspends the context while menu callbacks run.
         unsafe {
-            crate::app::bridge::publish(self, || HyperspaceMenu());
+            crate::app::bridge::publish(self, || hyperspace_menu());
         }
     }
 }

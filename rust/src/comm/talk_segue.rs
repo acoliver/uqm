@@ -952,7 +952,7 @@ use crate::comm::ffi::{rust_init_speech_graphics, rust_update_speech_graphics};
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-pub unsafe fn fade_music_to_foreground_bridge() {
+pub fn fade_music_to_foreground_bridge() {
     #[cfg(not(test))]
     {
         c_bridge::FadeMusic(

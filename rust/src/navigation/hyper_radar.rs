@@ -1,6 +1,5 @@
 //! Hyperspace radar, nearby star and portal elements.
 #![cfg(not(test))]
-#![allow(non_snake_case)]
 use super::abi::*;
 use crate::engine::StoryKey;
 
@@ -57,7 +56,7 @@ fn radar(point: POINT, ox: i16, oy: i16) -> POINT {
 
 /// # Safety
 /// Hyperspace resources, contexts and queues must be initialized on the game thread.
-pub unsafe fn SeedUniverse() {
+pub unsafe fn seed_universe() {
     crate::app::bridge::enter(|cx| {
         let universe = POINT {
             x: universe_x(cx.world.data.flagship.log_x),

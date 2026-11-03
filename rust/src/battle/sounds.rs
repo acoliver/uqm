@@ -68,7 +68,6 @@ use crate::sound::heart_ffi::{
 };
 
 #[cfg(not(test))]
-#[allow(non_snake_case)]
 pub(crate) mod engine {
     pub use super::*;
     use crate::ships::native::abi::*;

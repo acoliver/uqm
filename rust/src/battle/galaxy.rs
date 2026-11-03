@@ -173,7 +173,6 @@ impl STAR_BLOCK {
 }
 
 #[cfg(not(test))]
-#[allow(non_snake_case)]
 pub(crate) mod engine {
     use super::*;
     use crate::engine::battle::Cx;
@@ -242,7 +241,7 @@ pub(crate) mod engine {
 
     /// # Safety
     /// InitGalaxy must have completed; all display primitives and frames remain live.
-    pub unsafe fn MoveGalaxy(cx: &mut Cx<'_>, view: u32, mut dx: i16, mut dy: i16) {
+    pub unsafe fn move_galaxy(cx: &mut Cx<'_>, view: u32, mut dx: i16, mut dy: i16) {
         // VIEW_STABLE=0, VIEW_CHANGE=2; TFB_SCALE_STEP=0.
         if view != 0 {
             let mut reduction = cx.b.zoom_out as u16;
@@ -353,7 +352,7 @@ pub(crate) mod engine {
 }
 
 #[cfg(not(test))]
-pub use engine::{InitGalaxy, MoveGalaxy};
+pub use engine::{move_galaxy, InitGalaxy};
 
 #[cfg(test)]
 mod tests {

@@ -1,82 +1,45 @@
 //! Save-compatible battle-group records and encounter group construction.
 
-#![allow(non_snake_case)]
-
 use super::abi::{GROUP_HEADER, IP_GROUP, SHIP_FRAGMENT};
 #[cfg(not(test))]
 use crate::engine::StoryKey;
 use crate::engine::World as WorldOwner;
 #[cfg(not(test))]
 use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
-use crate::state::c_api::{GameStateFile, ReadStateFile, WriteStateFile};
+use crate::state::c_api::{read_state_file, write_state_file, GameStateFile};
 
 unsafe fn read<const N: usize>(file: *mut GameStateFile) -> [u8; N] {
     let mut bytes = [0; N];
     WorldOwner::current()
-        .write(|world| ReadStateFile(world, bytes.as_mut_ptr().cast(), 1, N as u16, file));
+        .write(|world| read_state_file(world, bytes.as_mut_ptr().cast(), 1, N as u16, file));
     bytes
 }
 unsafe fn write(file: *mut GameStateFile, bytes: &[u8]) {
     WorldOwner::current()
-        .write(|world| WriteStateFile(world, bytes.as_ptr().cast(), 1, bytes.len() as u16, file));
+        .write(|world| write_state_file(world, bytes.as_ptr().cast(), 1, bytes.len() as u16, file));
 }
 
 /// # Safety
 /// `file` is an open state-file handle and `header` is writable.
 #[no_mangle]
 pub unsafe extern "C" fn ReadGroupHeader(file: *mut GameStateFile, header: *mut GROUP_HEADER) {
-    let bytes = read::<268>(file);
-    (*header).NumGroups = bytes[0];
-    (*header).day_index = bytes[1];
-    (*header).month_index = bytes[2];
-    (*header).star_index = u16::from_ne_bytes([bytes[4], bytes[5]]);
-    (*header).year_index = u16::from_ne_bytes([bytes[6], bytes[7]]);
-    for (offset, bytes) in (*header)
-        .GroupOffset
-        .iter_mut()
-        .zip(bytes[8..].as_chunks::<4>().0)
-    {
-        *offset = u32::from_ne_bytes(*bytes);
-    }
+    decode_header(&read::<268>(file), &mut *header);
 }
 /// # Safety
 /// `file` is an open state-file handle and `header` is readable.
-pub unsafe fn WriteGroupHeader(
+pub unsafe fn write_group_header(
     world: &mut crate::engine::World,
     file: *mut GameStateFile,
     header: *const GROUP_HEADER,
 ) {
-    let mut write = |file: *mut GameStateFile, bytes: &[u8]| {
-        WriteStateFile(world, bytes.as_ptr().cast(), 1, bytes.len() as u16, file);
-    };
-
-    write(
-        file,
-        &[
-            (*header).NumGroups,
-            (*header).day_index,
-            (*header).month_index,
-            0,
-        ],
-    );
-    write(file, &(*header).star_index.to_ne_bytes());
-    write(file, &(*header).year_index.to_ne_bytes());
-    for offset in (*header).GroupOffset {
-        write(file, &offset.to_ne_bytes());
-    }
+    let bytes = encode_header(&*header);
+    write_state_file(world, bytes.as_ptr().cast(), 1, bytes.len() as u16, file);
 }
 /// # Safety
 /// `file` is an open state-file handle and `fragment` is writable.
 #[no_mangle]
 pub unsafe extern "C" fn ReadShipFragment(file: *mut GameStateFile, fragment: *mut SHIP_FRAGMENT) {
-    let bytes = read::<16>(file);
-    (*fragment).captains_name_index = bytes[2];
-    (*fragment).race_id = bytes[6];
-    (*fragment).index = bytes[7];
-    (*fragment).crew_level = bytes[8] as u16;
-    (*fragment).max_crew = bytes[9] as u16;
-    (*fragment).energy_level = bytes[10];
-    (*fragment).max_energy = bytes[11];
+    decode_fragment(&read::<16>(file), &mut *fragment);
 }
 /// # Safety
 /// `file` is an open state-file handle and `fragment` is readable.
@@ -85,65 +48,112 @@ pub unsafe extern "C" fn WriteShipFragment(
     file: *mut GameStateFile,
     fragment: *const SHIP_FRAGMENT,
 ) {
-    write(
-        file,
-        &[
-            0,
-            0,
-            (*fragment).captains_name_index,
-            0,
-            0,
-            0,
-            (*fragment).race_id,
-            (*fragment).index,
-            (*fragment).crew_level as u8,
-            (*fragment).max_crew as u8,
-            (*fragment).energy_level,
-            (*fragment).max_energy,
-            0,
-            0,
-            0,
-            0,
-        ],
-    );
+    write(file, &encode_fragment(&*fragment));
 }
 /// # Safety
 /// `file` is an open state-file handle and `group` is writable.
 #[no_mangle]
 pub unsafe extern "C" fn ReadIpGroup(file: *mut GameStateFile, group: *mut IP_GROUP) {
-    let bytes = read::<16>(file);
-    (*group).group_counter = u16::from_ne_bytes([bytes[4], bytes[5]]);
-    (*group).race_id = bytes[6];
-    (*group).sys_loc = bytes[7] & 15;
-    (*group).task = bytes[7] >> 4;
-    (*group).in_system = bytes[8];
-    (*group).dest_loc = bytes[10] & 15;
-    (*group).orbit_pos = bytes[10] >> 4;
-    (*group).group_id = bytes[11];
-    (*group).loc.x = i16::from_ne_bytes([bytes[12], bytes[13]]);
-    (*group).loc.y = i16::from_ne_bytes([bytes[14], bytes[15]]);
+    decode_group(&read::<16>(file), &mut *group);
 }
 /// # Safety
 /// `file` is an open state-file handle and `group` is readable, with four-bit task/location fields.
 #[no_mangle]
 pub unsafe extern "C" fn WriteIpGroup(file: *mut GameStateFile, group: *const IP_GROUP) {
-    assert!((*group).sys_loc < 16 && (*group).task < 16);
-    assert!((*group).dest_loc < 16 && (*group).orbit_pos < 16);
-    write(file, &[0, 0, 0, 0]);
-    write(file, &(*group).group_counter.to_ne_bytes());
-    write(
-        file,
-        &[
-            (*group).race_id,
-            (*group).sys_loc | ((*group).task << 4),
-            (*group).in_system,
-            0,
-            (*group).dest_loc | ((*group).orbit_pos << 4),
-            (*group).group_id,
-        ],
-    );
-    write(file, &(*group).loc.x.to_ne_bytes());
-    write(file, &(*group).loc.y.to_ne_bytes());
+    write(file, &encode_group(&*group));
+}
+
+fn decode_header(bytes: &[u8; 268], header: &mut GROUP_HEADER) {
+    header.NumGroups = bytes[0];
+    header.day_index = bytes[1];
+    header.month_index = bytes[2];
+    header.star_index = u16::from_ne_bytes([bytes[4], bytes[5]]);
+    header.year_index = u16::from_ne_bytes([bytes[6], bytes[7]]);
+    for (offset, bytes) in header
+        .GroupOffset
+        .iter_mut()
+        .zip(bytes[8..].as_chunks::<4>().0)
+    {
+        *offset = u32::from_ne_bytes(*bytes);
+    }
+}
+
+fn encode_header(header: &GROUP_HEADER) -> [u8; 268] {
+    let mut bytes = [0; 268];
+    bytes[..3].copy_from_slice(&[header.NumGroups, header.day_index, header.month_index]);
+    bytes[4..6].copy_from_slice(&header.star_index.to_ne_bytes());
+    bytes[6..8].copy_from_slice(&header.year_index.to_ne_bytes());
+    for (bytes, offset) in bytes[8..]
+        .as_chunks_mut::<4>()
+        .0
+        .iter_mut()
+        .zip(header.GroupOffset)
+    {
+        *bytes = offset.to_ne_bytes();
+    }
+    bytes
+}
+
+fn decode_fragment(bytes: &[u8; 16], fragment: &mut SHIP_FRAGMENT) {
+    fragment.captains_name_index = bytes[2];
+    fragment.race_id = bytes[6];
+    fragment.index = bytes[7];
+    fragment.crew_level = bytes[8] as u16;
+    fragment.max_crew = bytes[9] as u16;
+    fragment.energy_level = bytes[10];
+    fragment.max_energy = bytes[11];
+}
+
+fn encode_fragment(fragment: &SHIP_FRAGMENT) -> [u8; 16] {
+    [
+        0,
+        0,
+        fragment.captains_name_index,
+        0,
+        0,
+        0,
+        fragment.race_id,
+        fragment.index,
+        fragment.crew_level as u8,
+        fragment.max_crew as u8,
+        fragment.energy_level,
+        fragment.max_energy,
+        0,
+        0,
+        0,
+        0,
+    ]
+}
+
+fn decode_group(bytes: &[u8; 16], group: &mut IP_GROUP) {
+    group.group_counter = u16::from_ne_bytes([bytes[4], bytes[5]]);
+    group.race_id = bytes[6];
+    group.sys_loc = bytes[7] & 15;
+    group.task = bytes[7] >> 4;
+    group.in_system = bytes[8];
+    group.dest_loc = bytes[10] & 15;
+    group.orbit_pos = bytes[10] >> 4;
+    group.group_id = bytes[11];
+    group.loc.x = i16::from_ne_bytes([bytes[12], bytes[13]]);
+    group.loc.y = i16::from_ne_bytes([bytes[14], bytes[15]]);
+}
+
+fn encode_group(group: &IP_GROUP) -> [u8; 16] {
+    assert!(group.sys_loc < 16 && group.task < 16);
+    assert!(group.dest_loc < 16 && group.orbit_pos < 16);
+    let mut bytes = [0; 16];
+    bytes[4..6].copy_from_slice(&group.group_counter.to_ne_bytes());
+    bytes[6..12].copy_from_slice(&[
+        group.race_id,
+        group.sys_loc | (group.task << 4),
+        group.in_system,
+        0,
+        group.dest_loc | (group.orbit_pos << 4),
+        group.group_id,
+    ]);
+    bytes[12..14].copy_from_slice(&group.loc.x.to_ne_bytes());
+    bytes[14..16].copy_from_slice(&group.loc.y.to_ne_bytes());
+    bytes
 }
 
 fn sine(angle: u32, magnitude: i32) -> i32 {
@@ -161,7 +171,7 @@ pub(crate) mod live {
 
     use crate::planets::starmap::star_array;
     use crate::state::c_api::{
-        CloseStateFile, DeleteStateFile, LengthStateFile, OpenStateFile, SeekStateFile,
+        close_state_file, delete_state_file, length_state_file, open_state_file, seek_state_file,
     };
     use std::{mem, ptr};
 
@@ -195,7 +205,7 @@ pub(crate) mod live {
     }
     unsafe fn open(offset: u32, group: u8) -> *mut GameStateFile {
         WorldOwner::current().write(|world| {
-            OpenStateFile(
+            open_state_file(
                 world,
                 if offset != 0 && group != 0 { 2 } else { 1 },
                 c"r+b".as_ptr(),
@@ -208,30 +218,31 @@ pub(crate) mod live {
         header
     }
     unsafe fn seek(file: *mut GameStateFile, offset: u32) {
-        WorldOwner::current().write(|world| SeekStateFile(world, file, offset as libc::c_long, 0));
+        WorldOwner::current()
+            .write(|world| seek_state_file(world, file, offset as libc::c_long, 0));
     }
 
     /// # Safety
     /// State storage is initialized; game-thread access only.
-    pub unsafe fn InitGroupInfo(world: &mut crate::engine::World, first: u32) {
-        let file = OpenStateFile(world, 1, c"wb".as_ptr());
+    pub unsafe fn init_group_info(world: &mut crate::engine::World, first: u32) {
+        let file = open_state_file(world, 1, c"wb".as_ptr());
         if !file.is_null() {
-            super::WriteGroupHeader(world, file, &empty_header());
-            CloseStateFile(world, file);
+            super::write_group_header(world, file, &empty_header());
+            close_state_file(world, file);
         }
         if first != 0 {
-            let file = OpenStateFile(world, 2, c"wb".as_ptr());
+            let file = open_state_file(world, 2, c"wb".as_ptr());
             if !file.is_null() {
-                WriteStateFile(world, [0u8].as_ptr().cast(), 1, 1, file);
-                CloseStateFile(world, file);
+                write_state_file(world, [0u8].as_ptr().cast(), 1, 1, file);
+                close_state_file(world, file);
             }
         }
     }
     /// # Safety
     /// State files must no longer be in use.
-    pub unsafe fn UninitGroupInfo(world: &mut crate::engine::World) {
-        DeleteStateFile(world, 2);
-        DeleteStateFile(world, 1);
+    pub fn uninit_group_info(world: &mut crate::engine::World) {
+        delete_state_file(world, 2);
+        delete_state_file(world, 1);
     }
 
     /// # Safety
@@ -383,7 +394,7 @@ pub(crate) mod live {
         if which == 0 {
             if (*header).GroupOffset[0] == 0 {
                 (*header).GroupOffset[0] =
-                    WorldOwner::current().read(|world| LengthStateFile(world, file));
+                    WorldOwner::current().read(|world| length_state_file(world, file));
             }
             assert!((*npc_queue()).head.is_null());
             let mut handle = (*ip_queue()).head;
@@ -409,10 +420,10 @@ pub(crate) mod live {
         } else if which > (*header).NumGroups {
             (*header).NumGroups = which;
             (*header).GroupOffset[which as usize] =
-                WorldOwner::current().read(|world| LengthStateFile(world, file));
+                WorldOwner::current().read(|world| length_state_file(world, file));
         }
         seek(file, offset);
-        WorldOwner::current().write(|world| super::WriteGroupHeader(world, file, header));
+        WorldOwner::current().write(|world| super::write_group_header(world, file, header));
         if which == 0 {
             let mut number = count(ip_queue());
             seek(file, (*header).GroupOffset[0]);
@@ -472,12 +483,12 @@ pub(crate) mod live {
                     || ValidateEvent(EVENT_TYPE_ABSOLUTE_EVENT, &mut month, &mut day, &mut year)
                         == 0)
             {
-                WorldOwner::current().write(|world| CloseStateFile(world, file));
+                WorldOwner::current().write(|world| close_state_file(world, file));
                 let file =
-                    WorldOwner::current().write(|world| OpenStateFile(world, 1, c"wb".as_ptr()));
+                    WorldOwner::current().write(|world| open_state_file(world, 1, c"wb".as_ptr()));
                 WorldOwner::current()
-                    .write(|world| super::WriteGroupHeader(world, file, &empty_header()));
-                WorldOwner::current().write(|world| CloseStateFile(world, file));
+                    .write(|world| super::write_group_header(world, file, &empty_header()));
+                WorldOwner::current().write(|world| close_state_file(world, file));
                 return 0;
             }
             for which in 1..=header.NumGroups {
@@ -526,17 +537,17 @@ pub(crate) mod live {
                 (*group).sys_loc = location;
             }
             if offset != 0 {
-                WorldOwner::current().write(|world| InitGroupInfo(world, 0));
+                WorldOwner::current().write(|world| init_group_info(world, 0));
             } else if ValidateEvent(EVENT_TYPE_ABSOLUTE_EVENT, &mut month, &mut day, &mut year) != 0
             {
-                WorldOwner::current().write(|world| CloseStateFile(world, file));
+                WorldOwner::current().write(|world| close_state_file(world, file));
                 return 1;
             }
-            WorldOwner::current().write(|world| CloseStateFile(world, file));
+            WorldOwner::current().write(|world| close_state_file(world, file));
             return u32::from(!(*ip_queue()).head.is_null());
         }
         if header.GroupOffset[which as usize] == 0 {
-            WorldOwner::current().write(|world| CloseStateFile(world, file));
+            WorldOwner::current().write(|world| close_state_file(world, file));
             return 0;
         }
         if which == 0 {
@@ -576,7 +587,7 @@ pub(crate) mod live {
                 }
                 number -= 1;
             }
-            WorldOwner::current().write(|world| CloseStateFile(world, file));
+            WorldOwner::current().write(|world| close_state_file(world, file));
             u32::from(!(*ip_queue()).head.is_null())
         } else {
             (**KernelOwner::current()).last_encounter_group = which;
@@ -595,7 +606,7 @@ pub(crate) mod live {
                 super::ReadShipFragment(file, handle.cast());
                 number -= 1;
             }
-            WorldOwner::current().write(|world| CloseStateFile(world, file));
+            WorldOwner::current().write(|world| close_state_file(world, file));
             u32::from(!(*npc_queue()).head.is_null())
         }
     }
@@ -610,10 +621,10 @@ pub(crate) mod live {
         }
         let mut header: GROUP_HEADER = mem::zeroed();
         if offset == u32::MAX {
-            offset = WorldOwner::current().read(|world| LengthStateFile(world, file));
+            offset = WorldOwner::current().read(|world| length_state_file(world, file));
             seek(file, offset);
             header = empty_header();
-            WorldOwner::current().write(|world| super::WriteGroupHeader(world, file, &header));
+            WorldOwner::current().write(|world| super::write_group_header(world, file, &header));
         }
         if which != 0 {
             seek(file, offset);
@@ -634,7 +645,7 @@ pub(crate) mod live {
             .star_pointer(crate::planets::starmap::current_catalog())
             .offset_from(star_array) as u16;
         flush(&mut header, offset, which, file);
-        WorldOwner::current().write(|world| CloseStateFile(world, file));
+        WorldOwner::current().write(|world| close_state_file(world, file));
         offset
     }
 }
@@ -660,7 +671,7 @@ mod tests {
             crate::app::bridge::with_game(&mut game_owner, || {
                 WorldOwner::current().write(crate::state::ffi::rust_init_game_state);
                 let file =
-                    WorldOwner::current().write(|world| OpenStateFile(world, 1, c"wb".as_ptr()));
+                    WorldOwner::current().write(|world| open_state_file(world, 1, c"wb".as_ptr()));
                 let mut group: IP_GROUP = std::mem::zeroed();
                 group.group_counter = 0x1234;
                 group.race_id = 4;
@@ -674,16 +685,16 @@ mod tests {
                 group.loc.y = 456;
                 super::WriteIpGroup(file, &group);
                 assert_eq!(
-                    WorldOwner::current().read(|world| LengthStateFile(world, file)),
+                    WorldOwner::current().read(|world| length_state_file(world, file)),
                     16
                 );
-                WorldOwner::current().write(|world| SeekStateFile(world, file, 0, 0));
+                WorldOwner::current().write(|world| seek_state_file(world, file, 0, 0));
                 let bytes = read::<16>(file);
                 assert_eq!(
                     &bytes[..12],
                     &[0, 0, 0, 0, 0x34, 0x12, 4, 0x92, 7, 0, 0xf3, 12]
                 );
-                WorldOwner::current().write(|world| SeekStateFile(world, file, 0, 0));
+                WorldOwner::current().write(|world| seek_state_file(world, file, 0, 0));
                 let mut restored: IP_GROUP = std::mem::zeroed();
                 super::ReadIpGroup(file, &mut restored);
                 assert_eq!(
@@ -695,18 +706,97 @@ mod tests {
                     ),
                     (-123, 456, 9, 15)
                 );
-                WorldOwner::current().write(|world| SeekStateFile(world, file, 0, 0));
+                WorldOwner::current().write(|world| seek_state_file(world, file, 0, 0));
                 let mut ship: SHIP_FRAGMENT = std::mem::zeroed();
                 ship.crew_level = 300;
                 ship.max_crew = 511;
                 ship.race_id = 6;
                 super::WriteShipFragment(file, &ship);
-                WorldOwner::current().write(|world| SeekStateFile(world, file, 0, 0));
+                WorldOwner::current().write(|world| seek_state_file(world, file, 0, 0));
                 super::ReadShipFragment(file, &mut ship);
                 assert_eq!((ship.crew_level, ship.max_crew, ship.race_id), (44, 255, 6));
-                WorldOwner::current().write(|world| CloseStateFile(world, file));
-                WorldOwner::current().write(|world| DeleteStateFile(world, 1));
+                WorldOwner::current().write(|world| close_state_file(world, file));
+                WorldOwner::current().write(|world| delete_state_file(world, 1));
             })
         }
+    }
+}
+
+#[cfg(test)]
+mod record_tests {
+    use super::*;
+
+    #[test]
+    fn header_bytes_keep_native_endian_fields_and_zero_padding() {
+        let mut header: GROUP_HEADER = unsafe { std::mem::zeroed() };
+        header.NumGroups = 2;
+        header.day_index = 3;
+        header.month_index = 4;
+        header.star_index = 0x0506;
+        header.year_index = 0x0708;
+        for (i, offset) in header.GroupOffset.iter_mut().enumerate() {
+            *offset = 0x12340000 + i as u32;
+        }
+        let bytes = encode_header(&header);
+        assert_eq!(&bytes[..4], &[2, 3, 4, 0]);
+        assert_eq!(&bytes[4..6], &0x0506u16.to_ne_bytes());
+        assert_eq!(&bytes[6..8], &0x0708u16.to_ne_bytes());
+        for (i, chunk) in bytes[8..].as_chunks::<4>().0.iter().enumerate() {
+            assert_eq!(*chunk, (0x12340000 + i as u32).to_ne_bytes());
+        }
+        let mut restored: GROUP_HEADER = unsafe { std::mem::zeroed() };
+        decode_header(&bytes, &mut restored);
+        assert_eq!(restored.GroupOffset, header.GroupOffset);
+        assert_eq!(restored.star_index, header.star_index);
+        assert_eq!(restored.year_index, header.year_index);
+        assert_eq!(restored.NumGroups, header.NumGroups);
+    }
+
+    #[test]
+    fn fragment_bytes_keep_truncation_and_do_not_replace_link_or_resources() {
+        let mut fragment: SHIP_FRAGMENT = unsafe { std::mem::zeroed() };
+        fragment.captains_name_index = 3;
+        fragment.race_id = 4;
+        fragment.index = 5;
+        fragment.crew_level = 300;
+        fragment.max_crew = 511;
+        fragment.energy_level = 6;
+        fragment.max_energy = 7;
+        let bytes = encode_fragment(&fragment);
+        assert_eq!(bytes, [0, 0, 3, 0, 0, 0, 4, 5, 44, 255, 6, 7, 0, 0, 0, 0]);
+        let previous = fragment.pred;
+        decode_fragment(&bytes, &mut fragment);
+        assert_eq!(fragment.pred, previous);
+        assert_eq!(fragment.crew_level, 44);
+        assert_eq!(fragment.max_crew, 255);
+        assert_eq!(fragment.captains_name_index, 3);
+    }
+
+    #[test]
+    fn ip_group_bytes_pack_nibbles_and_signed_coordinates() {
+        let mut group: IP_GROUP = unsafe { std::mem::zeroed() };
+        group.group_counter = 0x1234;
+        group.race_id = 2;
+        group.sys_loc = 12;
+        group.task = 3;
+        group.in_system = 4;
+        group.dest_loc = 5;
+        group.orbit_pos = 15;
+        group.group_id = 6;
+        group.loc.x = -123;
+        group.loc.y = 456;
+        let bytes = encode_group(&group);
+        assert_eq!(&bytes[..4], &[0; 4]);
+        assert_eq!(&bytes[4..6], &0x1234u16.to_ne_bytes());
+        assert_eq!(&bytes[6..12], &[2, 0x3c, 4, 0, 0xf5, 6]);
+        assert_eq!(&bytes[12..14], &(-123i16).to_ne_bytes());
+        assert_eq!(&bytes[14..16], &456i16.to_ne_bytes());
+        let mut restored: IP_GROUP = unsafe { std::mem::zeroed() };
+        decode_group(&bytes, &mut restored);
+        assert_eq!(restored.sys_loc, group.sys_loc);
+        assert_eq!(restored.task, group.task);
+        assert_eq!(restored.orbit_pos, group.orbit_pos);
+        assert_eq!(restored.loc.x, group.loc.x);
+        assert_eq!(restored.loc.y, group.loc.y);
     }
 }

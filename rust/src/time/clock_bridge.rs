@@ -28,17 +28,21 @@ pub struct CEvent {
 /// pool `InitGameClock` allocates for `ClockState::event_q`.
 pub const NUM_EVENTS: usize = global_state::NUM_EVENTS as usize;
 
-assert_c_layout!(
-    CEvent,
-    global_state::EVENT {
-        pred: pred,
-        succ: succ,
-        day_index: day_index,
-        month_index: month_index,
-        year_index: year_index,
-        func_index: func_index,
-    }
-);
+mod layout {
+    use super::*;
+
+    assert_c_layout!(
+        CEvent,
+        global_state::EVENT {
+            pred: pred,
+            succ: succ,
+            day_index: day_index,
+            month_index: month_index,
+            year_index: year_index,
+            func_index: func_index,
+        }
+    );
+}
 
 // Access the C GameClock global variable via GetGameClock() function
 

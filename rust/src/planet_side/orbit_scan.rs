@@ -96,7 +96,7 @@ mod production {
         }
     }
 
-    pub(super) unsafe fn sync_positions(
+    pub(super) fn sync_positions(
         cx: &mut Cx<'_>,
         surface: &crate::planet_side::assembly::SurfaceAssembly,
     ) {
@@ -409,7 +409,7 @@ mod retrieval_tests {
 }
 
 #[cfg(not(test))]
-pub(crate) unsafe fn sync_positions(
+pub(crate) fn sync_positions(
     cx: &mut crate::engine::battle::Cx<'_>,
     surface: &super::assembly::SurfaceAssembly,
 ) {

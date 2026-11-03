@@ -32,7 +32,6 @@ unsafe fn escort_window(queue: *mut QUEUE, window: &mut BYTE) -> HLINK {
 }
 
 #[cfg(not(test))]
-#[allow(non_snake_case)]
 pub(crate) mod engine {
     use super::*;
 
@@ -162,7 +161,7 @@ pub(crate) mod engine {
 
     /// # Safety
     /// Global race queues and their records are initialized.
-    pub unsafe fn SetRaceAllied(
+    pub unsafe fn set_race_allied(
         world: &mut crate::engine::World,
         race: COUNT,
         allied: BOOLEAN,
@@ -184,7 +183,7 @@ pub(crate) mod engine {
 
     /// # Safety
     /// Race queue and its fleet records must be initialized on the game thread.
-    pub unsafe fn StartSphereTracking(world: &mut crate::engine::World, race: COUNT) -> COUNT {
+    pub unsafe fn start_sphere_tracking(world: &mut crate::engine::World, race: COUNT) -> COUNT {
         let queue = &raw mut world.data.game.avail_race_q;
         let fleet = GetStarShipFromIndex(queue, race);
         if fleet.is_null() {
@@ -336,10 +335,10 @@ pub(crate) mod engine {
 
 #[cfg(not(test))]
 pub use engine::{
-    AddEscortShips, CalculateEscortsWorth, CheckAlliance, CloneShipFragment, CountEscortShips,
-    EscortFeasibilityStudy, GetEscortByStarShipIndex, GetStarShipFromIndex, HaveEscortShip,
-    RemoveEscortShips, RemoveSomeEscortShips, SetEscortCrewComplement, SetRaceAllied,
-    StartSphereTracking,
+    set_race_allied, start_sphere_tracking, AddEscortShips, CalculateEscortsWorth, CheckAlliance,
+    CloneShipFragment, CountEscortShips, EscortFeasibilityStudy, GetEscortByStarShipIndex,
+    GetStarShipFromIndex, HaveEscortShip, RemoveEscortShips, RemoveSomeEscortShips,
+    SetEscortCrewComplement,
 };
 
 #[cfg(test)]

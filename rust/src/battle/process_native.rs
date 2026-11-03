@@ -630,11 +630,11 @@ pub(crate) mod engine {
             width(ScreenWidth),
             height(ScreenHeight),
         );
-        if (dx != 0 || dy != 0) && inHQSpace(cx.world) != 0 {
+        if (dx != 0 || dy != 0) && in_hqspace(cx.world) != 0 {
             crate::app::bridge::publish(cx, || MoveSIS(&mut dx, &mut dy));
         }
         let state = if cx.b.zoom_out == next_reduction {
-            if dx == 0 && dy == 0 && inHQSpace(cx.world) == 0 {
+            if dx == 0 && dy == 0 && in_hqspace(cx.world) == 0 {
                 ViewState::Stable
             } else {
                 ViewState::Scroll
@@ -653,7 +653,7 @@ pub(crate) mod engine {
             ViewState::Change
         };
         if (cx.world.activity() as u8) <= IN_HYPERSPACE as u8 {
-            MoveGalaxy(cx, state as VIEW_STATE, dx, dy);
+            move_galaxy(cx, state as VIEW_STATE, dx, dy);
         }
         *scroll_x = dx;
         *scroll_y = dy;

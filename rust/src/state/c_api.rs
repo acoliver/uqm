@@ -1,7 +1,5 @@
 //! Remaining state.c entry points. File storage stays in `ffi`'s sole manager.
 
-#![allow(non_snake_case)]
-
 use super::ffi::*;
 #[cfg(test)]
 use crate::engine::World as WorldOwner;
@@ -22,7 +20,7 @@ static FILES: [GameStateFile; 3] = [
 
 /// # Safety
 /// `mode` must be a NUL-terminated C string.
-pub unsafe fn OpenStateFile(
+pub unsafe fn open_state_file(
     world: &mut crate::engine::World,
     index: c_int,
     mode: *const c_char,
@@ -38,25 +36,25 @@ pub unsafe fn OpenStateFile(
 
 /// # Safety
 /// `file` must be a handle returned by `OpenStateFile`.
-pub unsafe fn CloseStateFile(world: &mut crate::engine::World, file: *mut GameStateFile) {
+pub unsafe fn close_state_file(world: &mut crate::engine::World, file: *mut GameStateFile) {
     rust_close_state_file(world, (*file).index);
 }
 
 /// # Safety
 /// Called on the game thread, without concurrent state-file access.
-pub unsafe fn DeleteStateFile(world: &mut crate::engine::World, index: c_int) {
+pub fn delete_state_file(world: &mut crate::engine::World, index: c_int) {
     rust_delete_state_file(world, index);
 }
 
 /// # Safety
 /// `file` must be a handle returned by `OpenStateFile`.
-pub unsafe fn LengthStateFile(world: &crate::engine::World, file: *mut GameStateFile) -> u32 {
+pub unsafe fn length_state_file(world: &crate::engine::World, file: *mut GameStateFile) -> u32 {
     rust_length_state_file(world, (*file).index) as u32
 }
 
 /// # Safety
 /// `buffer` must hold `size * count` writable bytes; `file` must be a live handle.
-pub unsafe fn ReadStateFile(
+pub unsafe fn read_state_file(
     world: &mut crate::engine::World,
     buffer: *mut c_void,
     size: u16,
@@ -76,7 +74,7 @@ pub unsafe fn ReadStateFile(
 
 /// # Safety
 /// `buffer` must hold `size * count` readable bytes; `file` must be a live handle.
-pub unsafe fn WriteStateFile(
+pub unsafe fn write_state_file(
     world: &mut crate::engine::World,
     buffer: *const c_void,
     size: u16,
@@ -96,7 +94,7 @@ pub unsafe fn WriteStateFile(
 
 /// # Safety
 /// `file` must be a handle returned by `OpenStateFile`.
-pub unsafe fn SeekStateFile(
+pub unsafe fn seek_state_file(
     world: &mut crate::engine::World,
     file: *mut GameStateFile,
     offset: c_long,
@@ -116,8 +114,9 @@ pub(crate) mod planets {
         system: *mut SOLARSYS_STATE,
     ) -> (c_int, c_int, c_int) {
         let star = world
-            .star_pointer(crate::planets::starmap::current_catalog())
-            .offset_from(star_array) as u16;
+            .current_star
+            .expect("planet info requires a selected star")
+            .0 as u16;
         let planet = (*(*system).pBaseDesc)
             .pPrevDesc
             .offset_from((*system).PlanetDesc.as_ptr()) as u16;
@@ -141,7 +140,7 @@ pub(crate) mod planets {
 
     /// # Safety
     /// The star catalog must be initialized and terminated by its sentinel.
-    pub unsafe fn InitPlanetInfo(world: &mut crate::engine::World) {
+    pub unsafe fn init_planet_info(world: &mut crate::engine::World) {
         let mut star = star_array;
         let mut count = 0;
         while (*star).star_pt.x <= 9999 && (*star).star_pt.y <= 9999 {
@@ -153,13 +152,13 @@ pub(crate) mod planets {
 
     /// # Safety
     /// Called on the game thread, without concurrent state-file access.
-    pub unsafe fn UninitPlanetInfo(world: &mut crate::engine::World) {
+    pub fn uninit_planet_info(world: &mut crate::engine::World) {
         rust_uninit_planet_info(world);
     }
 
     /// # Safety
     /// A live solar system and current orbital descriptor must be selected.
-    pub unsafe fn GetPlanetInfo(world: &mut crate::engine::World) {
+    pub unsafe fn get_planet_info(world: &mut crate::engine::World) {
         let system = solar_system::current();
         (*system).SysInfo.PlanetInfo.ScanRetrieveMask = [0; 3];
         let (star, planet, moon) = location(world, system);
@@ -183,7 +182,7 @@ pub(crate) mod planets {
 
     /// # Safety
     /// A live solar system and current orbital descriptor must be selected.
-    pub unsafe fn PutPlanetInfo(world: &mut crate::engine::World) {
+    pub unsafe fn put_planet_info(world: &mut crate::engine::World) {
         let system = solar_system::current();
         let (star, planet, moon) = location(world, system);
         let (moons, count) = moons(system);
@@ -212,17 +211,17 @@ mod tests {
             crate::app::bridge::with_game(&mut game, || {
                 WorldOwner::current().write(rust_init_game_state);
                 assert!(WorldOwner::current()
-                    .write(|world| OpenStateFile(world, -1, c"wb".as_ptr()))
+                    .write(|world| open_state_file(world, -1, c"wb".as_ptr()))
                     .is_null());
                 assert!(WorldOwner::current()
-                    .write(|world| OpenStateFile(world, 3, c"wb".as_ptr()))
+                    .write(|world| open_state_file(world, 3, c"wb".as_ptr()))
                     .is_null());
                 let file =
-                    WorldOwner::current().write(|world| OpenStateFile(world, 1, c"wb".as_ptr()));
+                    WorldOwner::current().write(|world| open_state_file(world, 1, c"wb".as_ptr()));
                 assert!(!file.is_null());
                 let data = [11u8, 22, 33, 44];
                 assert_eq!(
-                    WorldOwner::current().write(|world| WriteStateFile(
+                    WorldOwner::current().write(|world| write_state_file(
                         world,
                         data.as_ptr().cast(),
                         2,
@@ -232,7 +231,7 @@ mod tests {
                     2
                 );
                 assert_eq!(
-                    WorldOwner::current().read(|world| LengthStateFile(world, file)),
+                    WorldOwner::current().read(|world| length_state_file(world, file)),
                     4
                 );
                 assert_eq!(
@@ -240,12 +239,12 @@ mod tests {
                     4
                 );
                 assert_eq!(
-                    WorldOwner::current().write(|world| SeekStateFile(world, file, -2, 2)),
+                    WorldOwner::current().write(|world| seek_state_file(world, file, -2, 2)),
                     1
                 );
                 let mut output = [0u8; 2];
                 assert_eq!(
-                    WorldOwner::current().write(|world| ReadStateFile(
+                    WorldOwner::current().write(|world| read_state_file(
                         world,
                         output.as_mut_ptr().cast(),
                         1,
@@ -255,13 +254,13 @@ mod tests {
                     2
                 );
                 assert_eq!(output, [33, 44]);
-                WorldOwner::current().write(|world| CloseStateFile(world, file));
+                WorldOwner::current().write(|world| close_state_file(world, file));
                 assert_eq!(
-                    WorldOwner::current().write(|world| OpenStateFile(world, 1, c"rb".as_ptr())),
+                    WorldOwner::current().write(|world| open_state_file(world, 1, c"rb".as_ptr())),
                     file
                 );
-                WorldOwner::current().write(|world| CloseStateFile(world, file));
-                WorldOwner::current().write(|world| DeleteStateFile(world, 1));
+                WorldOwner::current().write(|world| close_state_file(world, file));
+                WorldOwner::current().write(|world| delete_state_file(world, 1));
             })
         }
     }

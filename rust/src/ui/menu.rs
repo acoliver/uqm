@@ -1,5 +1,4 @@
 #![cfg(not(test))]
-#![allow(non_snake_case)]
 
 use super::palette::*;
 use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
@@ -19,7 +18,7 @@ const OPT_PC: i32 = 2;
 
 /// # Safety
 /// Menu state and game settings must be valid on the game thread.
-pub unsafe extern "C" fn PreviousMenuState(base: BYTE, current: BYTE) -> BYTE {
+pub unsafe extern "C" fn previous_menu_state(base: BYTE, current: BYTE) -> BYTE {
     super::menu_state::previous_state(
         base,
         current,
@@ -112,7 +111,7 @@ unsafe fn draw_pc_menu(begin: u8, end: u8, selected: u8, highlight: u8, rect: &m
     SetContextFont(old_font);
 }
 
-unsafe fn alternate(base: &mut u8, current: &mut u8) -> bool {
+fn alternate(base: &mut u8, current: &mut u8) -> bool {
     let adj = u8::from(*base == PM_STARMAP);
     let adjusted_base = base.wrapping_sub(adj);
     if *current & 0x80 != 0 {
@@ -201,7 +200,7 @@ pub unsafe extern "C" fn DoMenuChooser(menu: *mut MENU_STATE, base_state: BYTE) 
     if PulsedInputState.menu[KEY_MENU_LEFT as usize] != 0
         || PulsedInputState.menu[KEY_MENU_UP as usize] != 0
     {
-        new_state = PreviousMenuState(base, new_state);
+        new_state = previous_menu_state(base, new_state);
     } else if PulsedInputState.menu[KEY_MENU_RIGHT as usize] != 0
         || PulsedInputState.menu[KEY_MENU_DOWN as usize] != 0
     {
@@ -276,7 +275,7 @@ pub unsafe extern "C" fn DrawMenuStateStrings(begin: BYTE, state: SWORD) {
             (i16::from(begin) + state) as u16,
         );
     }
-    PreUpdateFlashRect();
+    pre_update_flash_rect();
     let old_context = SetContext(KernelOwner::current().read(|owner| owner.status_context));
     let mut rect: RECT = mem::zeroed();
     GetContextClipRect(&mut rect);
@@ -351,7 +350,7 @@ pub unsafe extern "C" fn DrawMenuStateStrings(begin: BYTE, state: SWORD) {
     }
     UnbatchGraphics();
     SetContext(old_context);
-    PostUpdateFlashRect();
+    post_update_flash_rect();
 }
 
 use std::{mem, ptr};

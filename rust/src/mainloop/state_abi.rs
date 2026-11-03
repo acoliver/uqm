@@ -45,7 +45,7 @@ accessor!(uqm_set_flash_rect_null() -> () = crate::ui::sis::SetFlashRect(ptr::nu
 accessor!(uqm_set_player_input_all_or_explode() -> () = {
     let initialized = KernelOwner::current().write(|kernel| {
         // SAFETY: this game-thread entry owns the initialized input contexts for this short mutation.
-        unsafe { crate::game_init::kernel_abi::SetPlayerInputAll(kernel) }
+        crate::game_init::kernel_abi::SetPlayerInputAll(kernel)
     });
     if !initialized { log::error!("Could not set player input."); std::process::abort(); }
 });

@@ -689,7 +689,7 @@ pub unsafe fn rust_alien_talk_segue(wait: c_uint) -> c_int {
             wait,
             || super::talk_segue::alien_talk_first_call_init(),
             super::talk_segue::dinput::run_talk_segue_dinput,
-            || super::talk_segue::fade_music_to_foreground_bridge(),
+            super::talk_segue::fade_music_to_foreground_bridge,
         )
     }
     #[cfg(test)]
@@ -738,7 +738,7 @@ fn run_alien_talk_unlocked(
 ///
 /// Matches C `TalkSegue(wait_track)`.
 /// Returns 1 if playback ended naturally, 0 if aborted.
-pub unsafe fn rust_talk_segue(wait: c_int) -> c_int {
+pub fn rust_talk_segue(wait: c_int) -> c_int {
     let wait_track = if wait <= 0 { 0 } else { wait as u32 };
     #[cfg(not(test))]
     {
@@ -1096,7 +1096,7 @@ pub fn rust_redraw_subtitles() {
 /// @requirement REQ-CS-002
 /// @pseudocode 004-summary-guard-stale-markers lines 01-24
 #[cfg(not(test))]
-pub unsafe fn rust_show_conversation_summary() -> c_int {
+pub fn rust_show_conversation_summary() -> c_int {
     super::response_ui::select_conversation_summary_production();
     1
 }
@@ -1113,7 +1113,7 @@ pub unsafe fn rust_show_conversation_summary() -> c_int {
 /// @requirement REQ-CS-002, REQ-CS-003, REQ-SM-001
 /// @pseudocode 004-summary-guard-stale-markers lines 01-47
 #[cfg(test)]
-pub unsafe fn rust_show_conversation_summary() -> c_int {
+pub fn rust_show_conversation_summary() -> c_int {
     use super::summary::SummaryResult;
     use super::summary::SummaryView;
 

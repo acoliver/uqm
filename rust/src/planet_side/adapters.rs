@@ -62,9 +62,9 @@ use crate::time::counter_abi::GetTimeCounter;
 #[cfg(not(test))]
 use crate::ui::sis::capacity::GetStorageBayCapacity;
 #[cfg(not(test))]
-use crate::ui::sis::DeltaSISGauges;
+use crate::ui::sis::draw_landers;
 #[cfg(not(test))]
-use crate::ui::sis::DrawLanders;
+use crate::ui::sis::DeltaSISGauges;
 #[cfg(not(test))]
 use crate::ui::sis::DrawStorageBays;
 
@@ -86,8 +86,7 @@ fn read_player_one_input() -> FrameInput {
             thrust: key[KEY_UP] != 0,
             fire: key[KEY_WEAPON] != 0,
             takeoff: key[KEY_ESCAPE] != 0 || key[KEY_SPECIAL] != 0,
-            abort: WorldOwner::current()
-                .read(|world| crate::mainloop::c_extern::get_current_activity(world))
+            abort: WorldOwner::current().read(crate::mainloop::c_extern::get_current_activity)
                 & 0x4000
                 != 0,
         }
@@ -188,7 +187,7 @@ impl ShipStatusPort for CffiShipStatus {
                 }
             });
             if delta.landers != 0 {
-                DrawLanders();
+                draw_landers();
             }
             WorldFields::current().write(|world| {
                 let sis = &mut world.flagship;

@@ -717,8 +717,7 @@ fn service_input(button_wait: bool) -> i32 {
         #[cfg(not(test))]
         unsafe {
             crate::mainloop::c_extern::set_current_activity(
-                WorldOwner::current()
-                    .read(|world| crate::mainloop::c_extern::get_current_activity(world))
+                WorldOwner::current().read(crate::mainloop::c_extern::get_current_activity)
                     | 0x4000,
             );
         }

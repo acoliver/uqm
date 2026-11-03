@@ -72,9 +72,9 @@ mod ffi {
 
     pub(super) use crate::graphics::drawable_abi::SetContextFGFrame;
     pub(super) use crate::time::counter_abi::GetTimeCounter;
-    pub(super) use crate::ui::border::DrawSISFrame;
-    pub(super) use crate::ui::settings::StopMusic;
-    pub(super) use crate::ui::sis::RepairSISBorder;
+    pub(super) use crate::ui::border::draw_sisframe;
+    pub(super) use crate::ui::settings::stop_music;
+    pub(super) use crate::ui::sis::repair_sisborder;
 
     pub(super) use crate::graphics::drawable_abi::DestroyDrawable;
 
@@ -102,9 +102,9 @@ mod ffi {
 
     pub(super) use crate::navigation::interplanetary::live::do_missions as DoMissions;
 
-    pub(super) use crate::state::c_api::planets::GetPlanetInfo;
+    pub(super) use crate::state::c_api::planets::get_planet_info;
 
-    pub(super) use crate::state::c_api::planets::PutPlanetInfo;
+    pub(super) use crate::state::c_api::planets::put_planet_info;
 
     pub(super) use crate::planets::orbit::live::PlanetOrbitMenu;
 
@@ -136,7 +136,7 @@ mod ffi {
 
 #[inline]
 #[track_caller]
-pub(super) unsafe fn glob() -> crate::app::bridge::Projection<crate::engine::WorldData> {
+pub(super) fn glob() -> crate::engine::Projection<crate::engine::WorldData> {
     WorldFields::current()
 }
 
@@ -245,7 +245,7 @@ pub(super) unsafe fn load_solar_sys() -> *mut c::PLANET_DESC {
 
     ((*(*state).genFuncs).generatePlanets.unwrap())(state);
     if WorldOwner::current().read(|world| get_game_state(world, StoryKey::PLANETARY_CHANGE)) != 0 {
-        WorldOwner::current().write(|world| ffi::PutPlanetInfo(world));
+        WorldOwner::current().write(|world| ffi::put_planet_info(world));
         WorldOwner::current().write(|world| set_game_state(world, StoryKey::PLANETARY_CHANGE, 0));
     }
 
@@ -328,7 +328,7 @@ pub(super) unsafe fn free_solar_sys() {
     }
     ffi::DestroyDrawable(ReleaseDrawable(SOLAR_SYS_FRAME.cast()).cast());
     SOLAR_SYS_FRAME = ptr::null_mut();
-    ffi::StopMusic();
+    ffi::stop_music();
 }
 
 pub(super) unsafe fn reset_solar_sys() {
@@ -360,7 +360,7 @@ pub(super) unsafe fn enter_planet_orbit() {
         }
     }
 
-    WorldOwner::current().write(|world| ffi::GetPlanetInfo(world));
+    WorldOwner::current().write(|world| ffi::get_planet_info(world));
     ((*(*state).genFuncs).generateOrbital.unwrap())(state, (*state).pOrbitalDesc);
     (**KernelOwner::current()).last_activity &= !(CHECK_LOAD | CHECK_RESTART);
     if glob().read(|owner| owner.game.current_activity)
@@ -387,7 +387,7 @@ pub(super) unsafe fn enter_planet_orbit() {
         validate_orbits();
         validate_inner_orbits();
         reset_solar_sys();
-        ffi::RepairSISBorder();
+        ffi::repair_sisborder();
         ffi::SetContext(KernelOwner::current().read(|owner| owner.space_context));
         draw_system_transition(playerInInnerSystem());
     }
@@ -438,7 +438,7 @@ pub(super) unsafe fn init_solar_sys() {
         ffi::SetContext(KernelOwner::current().read(|owner| owner.space_context));
         ffi::SetTransitionSource(ptr::null_mut());
         ffi::BatchGraphics();
-        ffi::DrawSISFrame();
+        ffi::draw_sisframe();
         ffi::DrawSISMessage(ptr::null());
         reset_solar_sys();
         if KernelOwner::current().read(|owner| owner.last_activity) == CHECK_LOAD | CHECK_RESTART {
@@ -643,7 +643,7 @@ pub unsafe extern "C" fn SaveSolarSysLocation() {
         if WorldOwner::current().read(|world| get_game_state(world, StoryKey::PLANETARY_CHANGE))
             != 0
         {
-            WorldOwner::current().write(|world| ffi::PutPlanetInfo(world));
+            WorldOwner::current().write(|world| ffi::put_planet_info(world));
             WorldOwner::current()
                 .write(|world| set_game_state(world, StoryKey::PLANETARY_CHANGE, 0));
         }

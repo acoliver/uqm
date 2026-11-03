@@ -1,5 +1,4 @@
 //! Presentation scripts and legacy-video input, ported from uqm/intro.c.
-#![allow(non_snake_case)]
 
 #[cfg(not(test))]
 use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
@@ -72,41 +71,41 @@ pub(crate) mod runtime {
 
     #[repr(C)]
     struct PresentationState {
-        InputFunc: Option<unsafe extern "C" fn(*mut c_void) -> BOOLEAN>,
-        StartTime: TimeCount,
-        LastSyncTime: TimeCount,
-        TimeOut: TimeCount,
-        TimeOutOnSkip: c_int,
-        SlideShow: STRING,
-        Fonts: [FONT; MAX_FONTS],
-        Frame: FRAME,
-        MusicRef: MUSIC_REF,
-        Batched: BOOLEAN,
-        SisFrame: FRAME,
-        RotatedFrame: FRAME,
-        LastDrawKind: c_int,
-        Ending: bool,
-        LastAngle: c_int,
-        OperIndex: COUNT,
-        TextFadeColor: Color,
-        TextColor: Color,
-        TextBackColor: Color,
-        TextVPos: c_int,
-        TextEffect: c_int,
+        input_func: Option<unsafe extern "C" fn(*mut c_void) -> BOOLEAN>,
+        start_time: TimeCount,
+        last_sync_time: TimeCount,
+        time_out: TimeCount,
+        time_out_on_skip: c_int,
+        slide_show: STRING,
+        fonts: [FONT; MAX_FONTS],
+        frame: FRAME,
+        music_ref: MUSIC_REF,
+        batched: BOOLEAN,
+        sis_frame: FRAME,
+        rotated_frame: FRAME,
+        last_draw_kind: c_int,
+        ending: bool,
+        last_angle: c_int,
+        oper_index: COUNT,
+        text_fade_color: Color,
+        text_color: Color,
+        text_back_color: Color,
+        text_vpos: c_int,
+        text_effect: c_int,
         clip_r: RECT,
         tfade_r: RECT,
-        TextLines: [TEXT; MAX_TEXT_LINES],
-        LinesCount: COUNT,
-        Buffer: [c_char; 512],
-        MovieFrame: c_int,
-        MovieEndFrame: c_int,
-        InterframeDelay: c_int,
+        text_lines: [TEXT; MAX_TEXT_LINES],
+        lines_count: COUNT,
+        buffer: [c_char; 512],
+        movie_frame: c_int,
+        movie_end_frame: c_int,
+        interframe_delay: c_int,
     }
 
     #[repr(C)]
     struct VideoState {
-        InputFunc: Option<unsafe extern "C" fn(*mut c_void) -> BOOLEAN>,
-        CurVideo: *mut LegacyVideoRef,
+        input_func: Option<unsafe extern "C" fn(*mut c_void) -> BOOLEAN>,
+        cur_video: *mut LegacyVideoRef,
     }
 
     unsafe fn menu(key: u32) -> bool {
@@ -114,9 +113,9 @@ pub(crate) mod runtime {
     }
 
     unsafe fn unbatch(state: &mut PresentationState, yield_task: bool) {
-        if state.Batched != 0 {
+        if state.batched != 0 {
             UnbatchGraphics();
-            state.Batched = 0;
+            state.batched = 0;
             if yield_task {
                 TaskSwitch();
             }
@@ -200,13 +199,13 @@ pub(crate) mod runtime {
         );
         SetContext(old_context);
         FlushGraphics();
-        state.SisFrame = sis;
+        state.sis_frame = sis;
     }
 
     unsafe fn draw_movie_frame(state: &PresentationState) {
         let mut stamp = STAMP {
             origin: POINT { x: 0, y: 0 },
-            frame: SetAbsFrameIndex(state.Frame, state.MovieFrame as COUNT),
+            frame: SetAbsFrameIndex(state.frame, state.movie_frame as COUNT),
         };
         DrawStamp(&mut stamp);
     }
@@ -218,9 +217,9 @@ pub(crate) mod runtime {
     ) -> BOOLEAN {
         let mut msecs = 0;
         if libc::sscanf(src, c"%d".as_ptr(), ptr::addr_of_mut!(msecs)) == 1 {
-            state.TimeOut = FadeScreen(kind, (msecs * ONE_SECOND as c_int / 1000) as SIZE)
+            state.time_out = FadeScreen(kind, (msecs * ONE_SECOND as c_int / 1000) as SIZE)
                 .wrapping_add(ONE_SECOND / 10);
-            state.TimeOutOnSkip = 0;
+            state.time_out_on_skip = 0;
         }
         1
     }
@@ -241,36 +240,36 @@ pub(crate) mod runtime {
             crate::automation::ending::presentation_cancelled();
             return 0;
         }
-        if state.TimeOut != 0 {
+        if state.time_out != 0 {
             let mut delay = ONE_SECOND / 84;
-            if GetTimeCounter() >= state.TimeOut {
-                if state.MovieFrame >= 0 {
+            if GetTimeCounter() >= state.time_out {
+                if state.movie_frame >= 0 {
                     draw_movie_frame(state);
-                    state.MovieFrame += 1;
-                    if state.MovieFrame > state.MovieEndFrame {
-                        state.MovieFrame = -1;
+                    state.movie_frame += 1;
+                    if state.movie_frame > state.movie_end_frame {
+                        state.movie_frame = -1;
                     }
-                    delay = state.InterframeDelay as TimePeriod;
+                    delay = state.interframe_delay as TimePeriod;
                 } else {
-                    state.TimeOut = 0;
+                    state.time_out = 0;
                     return 1;
                 }
             }
-            if state.TimeOutOnSkip != 0
+            if state.time_out_on_skip != 0
                 && (menu(KEY_MENU_SELECT) || menu(KEY_MENU_SPECIAL) || menu(KEY_MENU_RIGHT))
             {
-                state.TimeOut = 0;
-                state.MovieFrame = -1;
+                state.time_out = 0;
+                state.movie_frame = -1;
                 return 1;
             }
             SleepThread(delay);
             return 1;
         }
-        while state.OperIndex < GetStringTableCount(state.SlideShow) {
+        while state.oper_index < GetStringTableCount(state.slide_show) {
             let mut opcode = [0 as c_char; 16];
-            let mut src = GetStringAddress(state.SlideShow);
-            state.OperIndex = state.OperIndex.wrapping_add(1);
-            state.SlideShow = SetRelStringTableIndex(state.SlideShow, 1);
+            let mut src = GetStringAddress(state.slide_show);
+            state.oper_index = state.oper_index.wrapping_add(1);
+            state.slide_show = SetRelStringTableIndex(state.slide_show, 1);
             if src.is_null() || libc::sscanf(src, c"%15s".as_ptr(), opcode.as_mut_ptr()) != 1 {
                 continue;
             }
@@ -300,12 +299,12 @@ pub(crate) mod runtime {
                 }
                 b"FONT" => {
                     let mut index = 0;
-                    state.Buffer[0] = 0;
+                    state.buffer[0] = 0;
                     if libc::sscanf(
                         src,
                         c"%d %255[^\n]".as_ptr(),
                         ptr::addr_of_mut!(index),
-                        state.Buffer.as_mut_ptr(),
+                        state.buffer.as_mut_ptr(),
                     ) < 1
                         || index < 0
                         || index >= MAX_FONTS as c_int
@@ -319,38 +318,38 @@ pub(crate) mod runtime {
                         );
                         continue;
                     }
-                    let font = &mut state.Fonts[index as usize];
-                    if state.Buffer[0] != 0 {
+                    let font = &mut state.fonts[index as usize];
+                    if state.buffer[0] != 0 {
                         if !font.is_null() {
                             DestroyFont(*font);
                         }
-                        *font = LoadFontFile(state.Buffer.as_ptr());
+                        *font = LoadFontFile(state.buffer.as_ptr());
                     }
                     SetContextFont(*font);
                 }
                 b"ANI" => {
                     utf8StringCopy(
-                        (state.Buffer.as_mut_ptr()).cast(),
-                        state.Buffer.len(),
+                        (state.buffer.as_mut_ptr()).cast(),
+                        state.buffer.len(),
                         (src).cast(),
                     );
-                    if !state.Frame.is_null() {
-                        DestroyDrawable(ReleaseDrawable(state.Frame));
+                    if !state.frame.is_null() {
+                        DestroyDrawable(ReleaseDrawable(state.frame));
                     }
-                    state.Frame = CaptureDrawable(LoadGraphicFile(state.Buffer.as_ptr()));
+                    state.frame = CaptureDrawable(LoadGraphicFile(state.buffer.as_ptr()));
                 }
                 b"MUSIC" => {
                     utf8StringCopy(
-                        (state.Buffer.as_mut_ptr()).cast(),
-                        state.Buffer.len(),
+                        (state.buffer.as_mut_ptr()).cast(),
+                        state.buffer.len(),
                         (src).cast(),
                     );
-                    if !state.MusicRef.is_null() {
-                        StopMusic();
-                        DestroyMusic(state.MusicRef);
+                    if !state.music_ref.is_null() {
+                        stop_music();
+                        DestroyMusic(state.music_ref);
                     }
-                    state.MusicRef = (LoadMusicFile(state.Buffer.as_ptr())).cast();
-                    PlayMusic(state.MusicRef, 0, 1);
+                    state.music_ref = (LoadMusicFile(state.buffer.as_ptr())).cast();
+                    PlayMusic(state.music_ref, 0, 1);
                 }
                 b"WAIT" | b"SYNC" | b"DSYNC" => {
                     let mut msecs = 0;
@@ -359,40 +358,40 @@ pub(crate) mod runtime {
                         let ticks = (msecs * ONE_SECOND as c_int / 1000) as TimeCount;
                         match CStr::from_ptr(opcode.as_ptr()).to_bytes() {
                             b"WAIT" => {
-                                state.TimeOut = GetTimeCounter().wrapping_add(ticks);
-                                state.TimeOutOnSkip = 1;
+                                state.time_out = GetTimeCounter().wrapping_add(ticks);
+                                state.time_out_on_skip = 1;
                             }
                             b"SYNC" => {
-                                state.LastSyncTime = state.StartTime.wrapping_add(ticks);
-                                state.TimeOut = state.LastSyncTime;
-                                state.TimeOutOnSkip = 0;
+                                state.last_sync_time = state.start_time.wrapping_add(ticks);
+                                state.time_out = state.last_sync_time;
+                                state.time_out_on_skip = 0;
                             }
                             _ => {
-                                state.TimeOut = state.LastSyncTime.wrapping_add(ticks);
-                                state.TimeOutOnSkip = 0;
+                                state.time_out = state.last_sync_time.wrapping_add(ticks);
+                                state.time_out_on_skip = 0;
                             }
                         }
                         return 1;
                     }
                 }
                 b"RESYNC" => {
-                    state.StartTime = GetTimeCounter();
-                    state.LastSyncTime = state.StartTime;
+                    state.start_time = GetTimeCounter();
+                    state.last_sync_time = state.start_time;
                 }
                 b"TC" => {
-                    parse_color(src, &mut state.TextColor);
+                    parse_color(src, &mut state.text_color);
                 }
                 b"TBC" => {
-                    parse_color(src, &mut state.TextBackColor);
+                    parse_color(src, &mut state.text_back_color);
                 }
                 b"TFC" => {
-                    parse_color(src, &mut state.TextFadeColor);
+                    parse_color(src, &mut state.text_fade_color);
                 }
                 b"TVA" => {
-                    state.TextVPos = libc::toupper(*src as u8 as c_int);
+                    state.text_vpos = libc::toupper(*src as u8 as c_int);
                 }
                 b"TE" => {
-                    state.TextEffect = libc::toupper(*src as u8 as c_int);
+                    state.text_effect = libc::toupper(*src as u8 as c_int);
                 }
                 b"TEXT" => {
                     let (mut x, mut y) = (0, 0);
@@ -401,12 +400,12 @@ pub(crate) mod runtime {
                         c"%d %d %255[^\n]".as_ptr(),
                         ptr::addr_of_mut!(x),
                         ptr::addr_of_mut!(y),
-                        state.Buffer.as_mut_ptr(),
+                        state.buffer.as_mut_ptr(),
                     ) == 3
                     {
                         let mut text = TEXT {
                             align: TEXT_ALIGN_ALIGN_CENTER,
-                            pStr: state.Buffer.as_ptr(),
+                            pStr: state.buffer.as_ptr(),
                             CharCount: COUNT::MAX,
                             baseline: POINT {
                                 x: x as COORD,
@@ -415,28 +414,28 @@ pub(crate) mod runtime {
                         };
                         draw_text(
                             &mut text,
-                            state.TextColor,
-                            state.TextBackColor,
-                            state.TextEffect,
+                            state.text_color,
+                            state.text_back_color,
+                            state.text_effect,
                         );
                     }
                 }
                 b"TFI" => {
                     utf8StringCopy(
-                        (state.Buffer.as_mut_ptr()).cast(),
-                        state.Buffer.len(),
+                        (state.buffer.as_mut_ptr()).cast(),
+                        state.buffer.len(),
                         (src).cast(),
                     );
-                    state.LinesCount = parse_text_lines(
-                        state.TextLines.as_mut_ptr(),
+                    state.lines_count = parse_text_lines(
+                        state.text_lines.as_mut_ptr(),
                         MAX_TEXT_LINES,
-                        state.Buffer.as_mut_ptr(),
+                        state.buffer.as_mut_ptr(),
                     ) as COUNT;
                     unbatch(state, true);
                     let mut leading: SIZE = 0;
                     GetContextFontLeading(&mut leading);
-                    let height = state.LinesCount as c_int * leading as c_int;
-                    let mut y = match state.TextVPos {
+                    let height = state.lines_count as c_int * leading as c_int;
+                    let mut y = match state.text_vpos {
                         84 => leading,
                         77 => ((state.clip_r.extent.height as c_int - height) / 2) as COORD,
                         _ => (state.clip_r.extent.height as c_int - height) as COORD,
@@ -445,25 +444,30 @@ pub(crate) mod runtime {
                     state.tfade_r.corner.y =
                         (state.tfade_r.corner.y as c_int + y as c_int - leading as c_int) as COORD;
                     state.tfade_r.extent.height =
-                        ((state.LinesCount as c_int + 1) * leading as c_int) as COORD;
-                    for text in &mut state.TextLines[..state.LinesCount as usize] {
+                        ((state.lines_count as c_int + 1) * leading as c_int) as COORD;
+                    for text in &mut state.text_lines[..state.lines_count as usize] {
                         text.align = TEXT_ALIGN_ALIGN_CENTER;
                         text.baseline.x = (ScreenWidth / 2) as COORD;
                         text.baseline.y = y;
                         y = (y as c_int + leading as c_int) as COORD;
                     }
-                    for text in &mut state.TextLines[..state.LinesCount as usize] {
+                    for text in &mut state.text_lines[..state.lines_count as usize] {
                         draw_text(
                             text,
-                            state.TextFadeColor,
-                            state.TextFadeColor,
-                            state.TextEffect,
+                            state.text_fade_color,
+                            state.text_fade_color,
+                            state.text_effect,
                         );
                     }
                     SetTransitionSource(&state.tfade_r);
                     BatchGraphics();
-                    for text in &mut state.TextLines[..state.LinesCount as usize] {
-                        draw_text(text, state.TextColor, state.TextBackColor, state.TextEffect);
+                    for text in &mut state.text_lines[..state.lines_count as usize] {
+                        draw_text(
+                            text,
+                            state.text_color,
+                            state.text_back_color,
+                            state.text_effect,
+                        );
                     }
                     ScreenTransition(3, &state.tfade_r);
                     UnbatchGraphics();
@@ -472,12 +476,12 @@ pub(crate) mod runtime {
                     unbatch(state, true);
                     SetTransitionSource(&state.tfade_r);
                     BatchGraphics();
-                    for text in &mut state.TextLines[..state.LinesCount as usize] {
+                    for text in &mut state.text_lines[..state.lines_count as usize] {
                         draw_text(
                             text,
-                            state.TextFadeColor,
-                            state.TextFadeColor,
-                            state.TextEffect,
+                            state.text_fade_color,
+                            state.text_fade_color,
+                            state.text_effect,
                         );
                     }
                     ScreenTransition(3, &state.tfade_r);
@@ -560,21 +564,21 @@ pub(crate) mod runtime {
                         frame: ptr::null_mut(),
                     };
                     if draw_kind == 0 {
-                        stamp.frame = SetAbsFrameIndex(state.Frame, index as COUNT);
+                        stamp.frame = SetAbsFrameIndex(state.frame, index as COUNT);
                     } else {
-                        if state.SisFrame.is_null() {
+                        if state.sis_frame.is_null() {
                             generate_sis(state);
                         }
-                        stamp.frame = SetAbsFrameIndex(state.SisFrame, 0);
+                        stamp.frame = SetAbsFrameIndex(state.sis_frame, 0);
                     }
                     if angle != 0 {
-                        if angle != state.LastAngle || draw_kind != state.LastDrawKind {
-                            DestroyDrawable(ReleaseDrawable(state.RotatedFrame));
-                            state.RotatedFrame = CaptureDrawable(RotateFrame(stamp.frame, -angle));
-                            state.LastAngle = angle;
-                            state.LastDrawKind = draw_kind;
+                        if angle != state.last_angle || draw_kind != state.last_draw_kind {
+                            DestroyDrawable(ReleaseDrawable(state.rotated_frame));
+                            state.rotated_frame = CaptureDrawable(RotateFrame(stamp.frame, -angle));
+                            state.last_angle = angle;
+                            state.last_draw_kind = draw_kind;
                         }
-                        stamp.frame = state.RotatedFrame;
+                        stamp.frame = state.rotated_frame;
                     }
                     let old_mode = SetGraphicScaleMode(scale_mode as c_int);
                     let old_scale = SetGraphicScale(scale);
@@ -583,8 +587,8 @@ pub(crate) mod runtime {
                     SetGraphicScaleMode(old_mode);
                 }
                 b"BATCH" => {
-                    if state.Batched == 0 {
-                        state.Batched = 1;
+                    if state.batched == 0 {
+                        state.batched = 1;
                         BatchGraphics();
                     }
                 }
@@ -605,11 +609,11 @@ pub(crate) mod runtime {
                 b"CALL" => {
                     unbatch(state, true);
                     utf8StringCopy(
-                        (state.Buffer.as_mut_ptr()).cast(),
-                        state.Buffer.len(),
+                        (state.buffer.as_mut_ptr()).cast(),
+                        state.buffer.len(),
                         (src).cast(),
                     );
-                    show_file(state.Buffer.as_ptr());
+                    show_file(state.buffer.as_ptr());
                 }
                 b"LINE" => {
                     let (mut x1, mut y1, mut x2, mut y2) = (0, 0, 0, 0);
@@ -632,7 +636,7 @@ pub(crate) mod runtime {
                                 y: y2 as COORD,
                             },
                         };
-                        SetContextForeGroundColor(state.TextColor);
+                        SetContextForeGroundColor(state.text_color);
                         DrawLine(&mut line);
                     } else {
                         crate::log_abi::log_message(
@@ -659,11 +663,11 @@ pub(crate) mod runtime {
                         && to >= from
                     {
                         unbatch(state, true);
-                        state.MovieFrame = from;
-                        state.MovieEndFrame = to;
-                        state.InterframeDelay = ONE_SECOND as c_int / fps;
-                        state.TimeOut = GetTimeCounter();
-                        state.TimeOutOnSkip = 1;
+                        state.movie_frame = from;
+                        state.movie_end_frame = to;
+                        state.interframe_delay = ONE_SECOND as c_int / fps;
+                        state.time_out = GetTimeCounter();
+                        state.time_out_on_skip = 1;
                         return 1;
                     } else {
                         crate::log_abi::log_message(
@@ -679,7 +683,7 @@ pub(crate) mod runtime {
                 _ => (),
             }
         }
-        if state.Ending {
+        if state.ending {
             crate::automation::ending::presentation_completed();
         }
         0
@@ -687,37 +691,37 @@ pub(crate) mod runtime {
 
     unsafe fn show_slides(table: STRING, ending: bool) -> BOOLEAN {
         let mut state: PresentationState = std::mem::zeroed();
-        state.SlideShow = table;
-        if state.SlideShow.is_null() {
+        state.slide_show = table;
+        if state.slide_show.is_null() {
             crate::automation::ending::presentation_cancelled();
             return 0;
         }
-        state.Ending = ending;
+        state.ending = ending;
         if ending {
             crate::automation::ending::presentation_started();
         }
-        state.SlideShow = SetAbsStringTableIndex(state.SlideShow, 0);
-        state.OperIndex = 0;
+        state.slide_show = SetAbsStringTableIndex(state.slide_show, 0);
+        state.oper_index = 0;
         let old_context = SetContext(KernelOwner::current().read(|owner| owner.screen_context));
         let mut old_rect: RECT = std::mem::zeroed();
         GetContextClipRect(&mut old_rect);
         let old_font = SetContextFont(ptr::null_mut());
         SetContextBackGroundColor(BLACK_COLOR);
         SetMenuSounds(0, 0);
-        state.InputFunc = Some(do_presentation);
-        state.LastDrawKind = -1;
-        state.TextVPos = b'B' as c_int;
-        state.MovieFrame = -1;
-        state.StartTime = GetTimeCounter();
-        state.LastSyncTime = state.StartTime;
+        state.input_func = Some(do_presentation);
+        state.last_draw_kind = -1;
+        state.text_vpos = b'B' as c_int;
+        state.movie_frame = -1;
+        state.start_time = GetTimeCounter();
+        state.last_sync_time = state.start_time;
         DoInput(ptr::addr_of_mut!(state).cast(), 1);
         SleepThreadUntil(FadeMusic(0, ONE_SECOND as SIZE));
-        StopMusic();
+        stop_music();
         FadeMusic(NORMAL_VOLUME as BYTE, 0);
-        DestroyMusic(state.MusicRef);
-        DestroyDrawable(ReleaseDrawable(state.RotatedFrame));
-        DestroyDrawable(ReleaseDrawable(state.Frame));
-        for font in state.Fonts {
+        DestroyMusic(state.music_ref);
+        DestroyDrawable(ReleaseDrawable(state.rotated_frame));
+        DestroyDrawable(ReleaseDrawable(state.frame));
+        for font in state.fonts {
             DestroyFont(font);
         }
         SetContextFont(old_font);
@@ -728,7 +732,7 @@ pub(crate) mod runtime {
 
     unsafe extern "C" fn video_input(raw: *mut c_void) -> BOOLEAN {
         let state = &mut *raw.cast::<VideoState>();
-        if PlayingLegacyVideo(state.CurVideo) == 0 {
+        if PlayingLegacyVideo(state.cur_video) == 0 {
             return 0;
         }
         if menu(KEY_MENU_SELECT)
@@ -777,8 +781,8 @@ pub(crate) mod runtime {
             return 0;
         }
         let mut state = VideoState {
-            InputFunc: Some(video_input),
-            CurVideo: reference,
+            input_func: Some(video_input),
+            cur_video: reference,
         };
         SetMenuSounds(0, 0);
         DoInput(ptr::addr_of_mut!(state).cast(), 1);

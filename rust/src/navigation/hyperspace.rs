@@ -26,7 +26,6 @@ fn move_axis(position: &mut i32, delta: i16, maximum: i32) -> i16 {
 }
 
 #[cfg(not(test))]
-#[allow(non_snake_case)]
 pub(crate) mod live {
     use super::*;
 
@@ -54,11 +53,11 @@ pub(crate) mod live {
     pub(crate) unsafe fn universe_y(value: i32) -> i16 {
         crate::navigation::hyper_units::universe_y(value, ScreenHeight)
     }
-    pub(crate) unsafe fn sine(angle: u16, magnitude: i32) -> i16 {
+    pub(crate) fn sine(angle: u16, magnitude: i32) -> i16 {
         ((crate::math::sinetab[(angle & 63) as usize] as i64 * magnitude as i64) >> SIN_SHIFT)
             as i16
     }
-    pub(crate) unsafe fn cosine(angle: u16, magnitude: i32) -> i16 {
+    pub(crate) fn cosine(angle: u16, magnitude: i32) -> i16 {
         sine(angle.wrapping_add(16), magnitude)
     }
     /// # Safety

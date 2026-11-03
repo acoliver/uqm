@@ -65,7 +65,6 @@ fn box_rectangles(
 }
 
 #[cfg(not(test))]
-#[allow(non_snake_case)]
 pub(crate) mod live {
     use super::*;
     use crate::navigation::abi::*;
@@ -272,13 +271,13 @@ pub(crate) mod live {
         if PlayingTrack() != 0 {
             PauseTrack();
         }
-        PauseMusic();
+        pause_music();
         while GameActive == 0 && QuitPosted == 0 {
             SleepThread(ONE_SECOND / 2);
         }
         log::debug!("Game is waking up");
         WaitForNoInput(ONE_SECOND / 10, 1);
-        ResumeMusic();
+        resume_music();
         if PlayingTrack() != 0 {
             ResumeTrack();
         }

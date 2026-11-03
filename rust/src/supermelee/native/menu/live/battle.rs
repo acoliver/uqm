@@ -91,7 +91,7 @@ pub(super) unsafe fn start(state: *mut MELEE_STATE) {
     FadeMusic(0, 840 / 2);
     SleepThreadUntil(FadeScreen(FADE_ALL_TO_BLACK, 840 / 2).wrapping_add(840 / 60));
     FlushColorXForms();
-    StopMusic();
+    stop_music();
     FadeMusic(NORMAL_VOLUME as u8, 0);
     if !(*state).h_music.is_null() {
         DestroyMusic((*state).h_music);

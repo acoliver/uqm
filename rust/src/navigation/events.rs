@@ -94,8 +94,37 @@ fn grow_fleet(fleet: &mut FLEET_INFO) -> Option<u8> {
 
 #[cfg(not(test))]
 pub(crate) mod live {
+    pub(crate) unsafe fn add_event(
+        world: &mut crate::engine::World,
+        kind: u32,
+        month: u16,
+        day: u16,
+        year: u16,
+        selector: u8,
+    ) -> crate::collections::queue::HLink {
+        if kind == 1 && month == 0 && day == 0 && year == 0 {
+            dispatch_event(world, selector);
+        } else {
+            let clock = &world.data.game.game_clock;
+            let now = (
+                clock.year_index,
+                u16::from(clock.month_index),
+                u16::from(clock.day_index),
+            );
+            let date = crate::time::clock_abi::event_date(now, kind == 1, (year, month, day));
+            if date >= now {
+                return crate::time::clock_abi::insert_event(
+                    &raw mut world.data.game.game_clock.event_q,
+                    date,
+                    selector,
+                );
+            }
+        }
+        ptr::null_mut()
+    }
+
     use super::*;
-    use crate::navigation::globals::inHyperSpace;
+    use crate::navigation::globals::in_hyper_space;
     use crate::navigation::{get, set};
 
     use std::ptr;
@@ -104,7 +133,7 @@ pub(crate) mod live {
         GetStarShipFromIndex(ptr::addr_of_mut!(world.data.game.avail_race_q), race as u16).cast()
     }
     unsafe fn relative(world: &mut World, month: u16, day: u16, year: u16, selector: u32) {
-        crate::time::clock_abi::live::add_event(
+        crate::navigation::events::live::add_event(
             world,
             EVENT_TYPE_RELATIVE_EVENT,
             month,
@@ -124,7 +153,7 @@ pub(crate) mod live {
     /// Game-thread access to initialized game-clock and fleet queues.
     pub unsafe fn schedule_initial_events(world: &mut World) {
         relative(world, 0, 1, 0, HYPERSPACE_ENCOUNTER_EVENT);
-        crate::time::clock_abi::live::add_event(
+        crate::navigation::events::live::add_event(
             world,
             EVENT_TYPE_ABSOLUTE_EVENT,
             3,
@@ -146,7 +175,7 @@ pub(crate) mod live {
     /// Game-thread access to initialized game-clock and fleet queues.
     pub unsafe fn dispatch_event(world: &mut World, selector: u8) {
         if let Some(event) = apply_story_event(world, selector) {
-            crate::time::clock_abi::live::add_event(
+            crate::navigation::events::live::add_event(
                 world,
                 event.kind,
                 event.month,
@@ -166,7 +195,7 @@ pub(crate) mod live {
                         dispatch_event(world, callback);
                     }
                 }
-                if inHyperSpace(world) != 0 {
+                if in_hyper_space(world) != 0 {
                     check_hyperspace_encounter(world);
                 }
                 relative(world, 0, 1, 0, HYPERSPACE_ENCOUNTER_EVENT);
@@ -202,7 +231,7 @@ pub(crate) mod live {
                 }
             }
             SHOFIXTI_RETURN_EVENT => {
-                SetRaceAllied(world, SHOFIXTI_SHIP as u16, 1);
+                set_race_allied(world, SHOFIXTI_SHIP as u16, 1);
                 world.data.game.crew_cost = world.data.game.crew_cost.wrapping_sub(2);
                 set(world, StoryKey::CREW_PURCHASED0, 0);
                 set(world, StoryKey::CREW_PURCHASED1, 0);
@@ -214,7 +243,7 @@ pub(crate) mod live {
                 } else {
                     let race = fleet(world, SPATHI_SHIP);
                     if (*race).actual_strength != 0 {
-                        SetRaceAllied(world, SPATHI_SHIP as u16, 0);
+                        set_race_allied(world, SPATHI_SHIP as u16, 0);
                         set(world, StoryKey::SPATHI_SHIELDED_SELVES, 1);
                         (*race).actual_strength = 0;
                     }
@@ -228,7 +257,7 @@ pub(crate) mod live {
                 (*royal).actual_strength = ((*royal).actual_strength as u32 * 2 / 3) as u16;
                 (*rebel).actual_strength = (*royal).actual_strength;
                 (*rebel).loc = POINT { x: 5150, y: 0 };
-                StartSphereTracking(world, YEHAT_REBEL_SHIP as u16);
+                start_sphere_tracking(world, YEHAT_REBEL_SHIP as u16);
             }
             SLYLANDRO_RAMP_DOWN => {
                 let factor = get(world, StoryKey::SLYLANDRO_MULTIPLIER).wrapping_sub(1);
@@ -341,7 +370,7 @@ pub(crate) mod live {
         if (*race).actual_strength == 0 {
             set(world, StoryKey::YEHAT_ABSORBED_PKUNK, 1);
             (*race).allied_state = DEAD_GUY as u16;
-            StartSphereTracking(world, YEHAT_SHIP as u16);
+            start_sphere_tracking(world, YEHAT_SHIP as u16);
         } else {
             let (x, y) = if mission & 1 == 0 {
                 (4970, 400)
@@ -436,7 +465,7 @@ pub(crate) mod live {
                     (*thradd).growth_fract = (((loss % 128) << 8) / 128) as u8;
                     set(world, StoryKey::THRADD_VISITS, 0);
                     if (*thradd).allied_state == GOOD_GUY as u16 {
-                        SetRaceAllied(world, THRADDASH_SHIP as u16, 0);
+                        set_race_allied(world, THRADDASH_SHIP as u16, 0);
                     }
                 }
                 let mission = get(world, StoryKey::THRADD_MISSION);

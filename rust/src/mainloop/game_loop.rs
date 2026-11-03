@@ -312,13 +312,13 @@ mod cffi {
         }
 
         fn start_game(&self) -> bool {
-            unsafe { c_extern::StartGame() != 0 }
+            {
+                c_extern::start_game() != 0
+            }
         }
 
         fn get_current_activity(&self) -> ActivityValue {
-            ActivityValue::new(unsafe {
-                WorldOwner::current().read(|world| c_extern::get_current_activity(world))
-            })
+            ActivityValue::new(WorldOwner::current().read(c_extern::get_current_activity))
         }
 
         fn set_current_activity(&self, activity: ActivityValue) {
@@ -386,11 +386,11 @@ mod cffi {
         }
 
         fn install_bomb_at_earth(&self) {
-            unsafe { c_extern::InstallBombAtEarth() }
+            unsafe { c_extern::install_bomb_at_earth() }
         }
 
         fn visit_starbase(&self) -> Result<(), MainLoopError> {
-            unsafe { crate::ui::starbase::VisitStarBase() };
+            unsafe { crate::ui::starbase::visit_star_base() };
             Ok(())
         }
 
@@ -427,7 +427,7 @@ mod cffi {
         }
 
         fn uninit_game_structures(&self) {
-            unsafe { c_extern::UninitGameStructures() }
+            unsafe { c_extern::uninit_game_structures() }
         }
 
         fn clear_player_input_all(&self) {
@@ -445,7 +445,7 @@ mod cffi {
         }
 
         fn uninit_game_kernel(&self) {
-            unsafe { crate::app::bridge::enter(|cx| c_extern::UninitGameKernel(cx)) }
+            unsafe { crate::app::bridge::enter(|cx| c_extern::uninit_game_kernel(cx)) }
         }
 
         fn free_master_ship_list(&self) {
@@ -453,7 +453,7 @@ mod cffi {
         }
 
         fn free_kernel(&self) {
-            unsafe { KernelOwner::current().write(|kernel| c_extern::FreeKernel(kernel)) }
+            unsafe { KernelOwner::current().write(|kernel| c_extern::free_kernel(kernel)) }
         }
 
         fn log_show_box(&self, b: bool, c: bool) {

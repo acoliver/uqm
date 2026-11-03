@@ -1719,10 +1719,10 @@ pub use crate::battle::build_native::engine::AddEscortShips;
 pub use crate::battle::build_native::engine::CalculateEscortsWorth;
 
 #[cfg(not(test))]
-pub use crate::battle::build_native::engine::SetRaceAllied;
+pub use crate::battle::build_native::engine::set_race_allied;
 
 #[cfg(not(test))]
-pub use crate::battle::build_native::engine::StartSphereTracking;
+pub use crate::battle::build_native::engine::start_sphere_tracking;
 
 #[cfg(not(test))]
 pub use crate::battle::build_native::engine::CountEscortShips;
@@ -1748,10 +1748,10 @@ pub use crate::ships::loader_native::engine::load_ship;
 #[cfg(not(test))]
 pub use crate::ships::loader_native::engine::unload_ship;
 #[cfg(not(test))]
-pub use crate::ui::settings::StopMusic;
+pub use crate::ui::settings::stop_music;
 #[cfg(test)]
 extern "C" {
-    pub fn StopMusic();
+    pub fn stop_music();
 }
 #[cfg(not(test))]
 pub unsafe fn PlaySoundEffect(
@@ -1965,16 +1965,16 @@ pub const NUM_MODULES: _bindgen_ty_10 = 20;
 pub type _bindgen_ty_10 = ::std::os::raw::c_uint;
 pub use crate::engine::world::SisState as SIS_STATE;
 #[cfg(not(test))]
-pub use crate::ui::border::InitSISContexts;
+pub use crate::ui::border::init_siscontexts;
 #[cfg(test)]
 extern "C" {
-    pub fn InitSISContexts();
+    pub fn init_siscontexts();
 }
 #[cfg(not(test))]
-pub use crate::ui::border::DrawSISFrame;
+pub use crate::ui::border::draw_sisframe;
 #[cfg(test)]
 extern "C" {
-    pub fn DrawSISFrame();
+    pub fn draw_sisframe();
 }
 #[cfg(not(test))]
 pub unsafe fn DrawHyperCoords(puniverse: POINT) {
@@ -3031,7 +3031,7 @@ pub const NUM_DEFGRPS: _bindgen_ty_14 = 15;
 pub type _bindgen_ty_14 = ::std::os::raw::c_uint;
 
 #[cfg(not(test))]
-pub use crate::navigation::globals::inQuasiSpace;
+pub use crate::navigation::globals::in_quasi_space;
 
 
 
@@ -3092,10 +3092,10 @@ unsafe extern "C" {
 #[cfg(not(test))]
 pub use crate::navigation::hyperspace::live::MoveSIS;
 #[cfg(not(test))]
-pub use crate::navigation::hyper_menu::HyperspaceMenu;
+pub use crate::navigation::hyper_menu::hyperspace_menu;
 #[cfg(test)]
 extern "C" {
-    pub fn HyperspaceMenu();
+    pub fn hyperspace_menu();
 }
 
 #[cfg(not(test))]

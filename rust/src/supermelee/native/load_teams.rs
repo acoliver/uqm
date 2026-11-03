@@ -33,7 +33,6 @@ fn page(top: u16, bottom: u16, current: u16, count: u16, keys: [bool; 4]) -> (u1
 }
 
 #[cfg(not(test))]
-#[allow(non_snake_case)]
 pub(crate) mod live {
     use super::page;
     use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};

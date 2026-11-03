@@ -8,7 +8,7 @@ use super::super::runtime::{self, groups, live, queues, statefiles};
 use super::super::{SaveFile, SaveSlots};
 use crate::mainloop::dir_prep::saveDir;
 
-use crate::navigation::globals::inHQSpace;
+use crate::navigation::globals::in_hqspace;
 
 use crate::planets::solarsys::playerInSolarSystem;
 
@@ -17,7 +17,7 @@ use crate::navigation::groups::live::PutGroupInfo;
 pub(crate) unsafe fn capture(name: &[u8]) -> anyhow::Result<SaveFile> {
     let star = live::capture_live_star()?;
     let point = WorldFields::current().read(|world| world.game.ip_location);
-    if WorldOwner::current().read(inHQSpace) != 0 {
+    if WorldOwner::current().read(in_hqspace) != 0 {
         live::prepare_live_hyper_state()?;
     } else if playerInSolarSystem() {
         live::prepare_live_solar_location()?;

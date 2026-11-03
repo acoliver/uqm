@@ -109,11 +109,11 @@ pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> u32 {
         if crate::front_end::uqmdebug::INSTANT_MOVE != 0 {
             PlayMenuSound(3);
             if hyper {
-                crate::front_end::uqmdebug::doInstantMove();
+                crate::front_end::uqmdebug::do_instant_move();
             } else if activity & 0xff == 4 {
                 (**WorldFields::current()).game.current_activity |= 0x0800;
                 crate::front_end::uqmdebug::DEBUG_HOOK =
-                    Some(crate::front_end::uqmdebug::doInstantMove);
+                    Some(crate::front_end::uqmdebug::do_instant_move);
             }
             ACTIVE = false;
             return 0;
