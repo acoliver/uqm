@@ -279,8 +279,16 @@ unsafe fn think(
     input: u8,
 ) -> u8 {
     fleet.fixture.ship_mut().ship_input_state = input;
-    let mut subject = (*ship).clone();
-    fleet.fixture.intelligence(&mut subject, concerns, 0);
+    let mut subject = uqm_rust::app::bridge::enter(|cx| {
+        cx.weapon_origin(
+            cx.elements()
+                .id(ship.cast())
+                .unwrap_or_else(|| panic!("fixture subject is absent")),
+        )
+    });
+    fleet
+        .fixture
+        .intelligence_subject(&mut subject, concerns, 0);
     fleet.fixture.ship_mut().ship_input_state
 }
 
@@ -530,8 +538,8 @@ impl<'a> Skiff<'a> {
         let ship_array = fleet.fixture.frame_set(0);
         (*ship).current.image.frames = ship_array.clone();
         (*ship).next.image.frames = ship_array.clone();
-        (*ship).current.image.frame = ship_frames.frame(6);
-        (*ship).next.image.frame = ship_frames.frame(6);
+        (*ship).current.image.frame = ship_frames.selection(6);
+        (*ship).next.image.frame = ship_frames.selection(6);
         Self {
             fleet,
             ship,
@@ -622,9 +630,9 @@ fn special_key_starts_the_teleport() {
         );
         assert_eq!((*ship).life, 5);
         assert_eq!((*ship).next.image.frames, skiff.warp_array());
-        assert_eq!(index_of((*ship).next.image.frame), 0);
+        assert_eq!(index_of((*ship).next.image.frame.raw()), 0);
         assert_eq!(
-            (*ship).next.image.frame,
+            (*ship).next.image.frame.raw(),
             skiff.warp_frames.frame(0),
             "the warp animation starts on its first frame"
         );
@@ -678,13 +686,17 @@ fn teleport_animates_jumps_at_life_three_and_returns_at_life_one() {
             let ship = skiff.ship;
             start_teleport(&mut skiff);
             let warp = skiff.warp_frames.frame(0);
-            assert_eq!((*ship).next.image.frame, warp);
+            assert_eq!((*ship).next.image.frame.raw(), warp);
 
             // Lives 5 and 4 play the warp frames forward.
             for (life, frame) in [(5, 1), (4, 2)] {
                 set_life(ship, life);
                 skiff.preprocess();
-                assert_eq!(index_of((*ship).next.image.frame), frame, "life {life}");
+                assert_eq!(
+                    index_of((*ship).next.image.frame.raw()),
+                    frame,
+                    "life {life}"
+                );
                 // The decrement is only applied to a local; the engine owns it.
                 assert_eq!((*ship).life, life);
                 assert_ne!((*ship).state_flags & CHANGING as u16, 0);
@@ -711,7 +723,7 @@ fn teleport_animates_jumps_at_life_three_and_returns_at_life_one() {
                 (expect_x as i16, expect_y as i16)
             );
             assert_eq!(TFB_Random(), sequence[2], "two draws, x before y");
-            assert_eq!(index_of((*ship).next.image.frame), 2);
+            assert_eq!(index_of((*ship).next.image.frame.raw()), 2);
             assert_eq!((*ship).life, 3);
             assert_ne!((*ship).state_flags & CHANGING as u16, 0);
             (*ship).state_flags &= !(CHANGING as u16);
@@ -719,7 +731,7 @@ fn teleport_animates_jumps_at_life_three_and_returns_at_life_one() {
             // Life 2: the local count is one, below two, so the frames run back.
             set_life(ship, 2);
             skiff.preprocess();
-            assert_eq!(index_of((*ship).next.image.frame), 1);
+            assert_eq!(index_of((*ship).next.image.frame.raw()), 1);
             assert_eq!(
                 ((*ship).next.location.x, (*ship).next.location.y),
                 (expect_x as i16, expect_y as i16)
@@ -738,9 +750,15 @@ fn teleport_animates_jumps_at_life_three_and_returns_at_life_one() {
             );
             assert_eq!((*ship).current.image.frames, ship_array);
             assert_eq!((*ship).next.image.frames, ship_array);
-            assert_eq!(index_of((*ship).current.image.frame), 6);
-            assert_eq!((*ship).current.image.frame, (*ship).next.image.frame);
-            assert_eq!((*ship).current.image.frame, skiff.ship_frames.frame(6));
+            assert_eq!(index_of((*ship).current.image.frame.raw()), 6);
+            assert_eq!(
+                (*ship).current.image.frame.raw(),
+                (*ship).next.image.frame.raw()
+            );
+            assert_eq!(
+                (*ship).current.image.frame.raw(),
+                skiff.ship_frames.frame(6)
+            );
             // InitIntersectStartPoint: WORLD_TO_DISPLAY is an arithmetic >> 2.
             let origin = (*ship).IntersectControl.IntersectStamp.origin;
             assert_eq!((origin.x, origin.y), (-3, 3));
@@ -857,7 +875,7 @@ fn nonsolid_skiff_off_the_warp_frames_is_left_alone() {
 
         assert_eq!(skiff.fleet.fixture.ship_mut().weapon_counter, 4);
         assert_eq!((*ship).state_flags, (PLAYER_SHIP | NONSOLID) as u16);
-        assert_eq!(index_of((*ship).next.image.frame), 6);
+        assert_eq!(index_of((*ship).next.image.frame.raw()), 6);
     })
 }
 

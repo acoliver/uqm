@@ -175,7 +175,7 @@ pub(crate) mod engine {
             cx.set_frame(
                 flame,
                 true,
-                cx.advance_frame(cx.element(flame).current.image.frame),
+                cx.advance_frame(cx.element(flame).current.image.frame.view()),
             );
             cx.element_mut(flame).flags |= CHANGING as u16;
 
@@ -306,7 +306,10 @@ pub(crate) mod engine {
             cx.set_frame(
                 ship,
                 true,
-                cx.absolute_frame(cx.element(ship).next.image.frame, cx.ship_state(ss).facing),
+                cx.absolute_frame(
+                    cx.element(ship).next.image.frame.view(),
+                    cx.ship_state(ss).facing,
+                ),
             );
         }
         cx.set_target(ship, None);

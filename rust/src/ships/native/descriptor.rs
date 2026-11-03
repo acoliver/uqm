@@ -45,7 +45,7 @@ impl RaceDescriptor {
                 turn: std::ptr::null_mut(),
                 thrust: std::ptr::null_mut(),
                 weapon: std::ptr::null_mut(),
-                special: std::ptr::null_mut(),
+                special: crate::engine::battle::frames::FrameSelection::ABSENT,
             },
             victory_ditty_rsc: std::ptr::null(),
             ship_sounds_rsc: std::ptr::null(),

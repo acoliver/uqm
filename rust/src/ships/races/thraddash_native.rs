@@ -91,23 +91,27 @@ pub(crate) mod engine {
             cx.init_intersect(e);
             let frame = cx.equivalent_frame(
                 cx.element_frame_set_first(e, true),
-                cx.element(e).next.image.frame,
+                cx.element(e).next.image.frame.view(),
             );
             cx.set_intersect_frame(e, frame);
         } else if cx.element(e).turn > 0 {
             cx.element_mut(e).turn -= 1;
         } else {
             if cx.element(e).life <= NUM_NAPALM_FADES * (NAPALM_DECAY_RATE as u16 + 1)
-                || cx.frame_number(cx.element(e).current.image.frame) != NUM_NAPALM_FADES
+                || cx.frame_number(cx.element(e).current.image.frame.view()) != NUM_NAPALM_FADES
             {
-                cx.set_frame(e, true, cx.retreat_frame(cx.element(e).current.image.frame));
+                cx.set_frame(
+                    e,
+                    true,
+                    cx.retreat_frame(cx.element(e).current.image.frame.view()),
+                );
             } else if cx.element(e).life > NUM_NAPALM_FADES * (NAPALM_DECAY_RATE as u16 + 1) {
                 cx.set_frame(
                     e,
                     true,
                     cx.absolute_frame(
-                        cx.element(e).current.image.frame,
-                        cx.frame_count(cx.element(e).current.image.frame)
+                        cx.element(e).current.image.frame.view(),
+                        cx.frame_count(cx.element(e).current.image.frame.view())
                             .wrapping_sub(1),
                     ),
                 );

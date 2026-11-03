@@ -127,7 +127,7 @@ fn descriptor_matches_the_entire_c_template_and_init_reinstalls_callbacks() {
                 assert!(d.ship_data.weapon.view(i).is_absent());
                 assert!(d.ship_data.special.view(i).is_absent());
             }
-            let captain = d.ship_data.captain_control;
+            let captain = &d.ship_data.captain_control;
             assert_eq!(
                 CStr::from_ptr(captain.captain_rsc),
                 c"ship.chmmr.graphics.captain"
@@ -137,7 +137,7 @@ fn descriptor_matches_the_entire_c_template_and_init_reinstalls_callbacks() {
                 captain.turn,
                 captain.thrust,
                 captain.weapon,
-                captain.special
+                captain.special.raw()
             ]
             .iter()
             .all(|p| p.is_null()));
@@ -274,7 +274,7 @@ fn laser_death_obeys_range_byte_gate_count_draw_and_animation() {
                             point((*spot).current.location),
                             (origin.x + magnitude as i16, origin.y)
                         );
-                        assert_eq!(frame_index((*spot).current.image.frame), 32);
+                        assert_eq!(frame_index((*spot).current.image.frame.raw()), 32);
                         assert_eq!((*spot).current.image.frames, ship.frame_set(1));
                         assert_eq!((*spot).life, 9);
                         assert_eq!((*spot).thrust, 0);
@@ -288,9 +288,9 @@ fn laser_death_obeys_range_byte_gate_count_draw_and_animation() {
                         (*spot).thrust = 3;
                         hooks::invoke_element_pointer(animate, spot);
                         assert_eq!((*spot).turn, 0);
-                        assert!((*spot).next.image.frame.is_null());
+                        assert!((*spot).next.image.frame.is_absent());
                         hooks::invoke_element_pointer(animate, spot);
-                        assert_eq!(frame_index((*spot).next.image.frame), 33);
+                        assert_eq!(frame_index((*spot).next.image.frame.raw()), 33);
                         assert_eq!((*spot).turn, 3);
                         assert_ne!((*spot).state_flags & CHANGING as u16, 0);
                         assert_rng_after(seed, 2);
@@ -360,7 +360,7 @@ fn muzzle_flash_requires_friendly_appearing_tail_line_and_even_cycle() {
                         point((*flash).current.location),
                         point((*ship.ptr()).next.location)
                     );
-                    assert_eq!(frame_index((*flash).current.image.frame), 21);
+                    assert_eq!(frame_index((*flash).current.image.frame.raw()), 21);
                     assert_eq!((*flash).life, 1);
                     assert_eq!((*prim(flash)).Type, gfx_object_STAMP_PRIM as u8);
                     assert_eq!(
@@ -424,7 +424,7 @@ fn delayed_satellites_spawn_around_live_ship_with_three_ordered_rng_draws() {
                     point((*s).current.location),
                     (7000 + cosine(angle, 256), 6000 + sine(angle, 256))
                 );
-                assert_eq!(frame_index((*s).current.image.frame), index);
+                assert_eq!(frame_index((*s).current.image.frame.raw()), index);
                 assert_eq!((*prim(s)).Type, gfx_object_STAMP_PRIM as u8);
                 assert!((*s).preprocess_func.is_some());
                 assert!((*s).postprocess_func.is_some());
@@ -495,7 +495,7 @@ fn satellites_wrap_space_cap_speed_and_preserve_half_space_ties() {
             ] {
                 (*s).turn = 63;
                 (*s).life = u16::MAX;
-                (*s).current.image.frame = ship.raw_frame(2, 7);
+                (*s).current.image.frame = ship.frame(2, 7);
                 let desired_x =
                     i32::from((*ship.ptr()).next.location.x) + i32::from(cosine(0, 256));
                 let desired_y = i32::from((*ship.ptr()).next.location.y) + i32::from(sine(0, 256));
@@ -507,7 +507,7 @@ fn satellites_wrap_space_cap_speed_and_preserve_half_space_ties() {
                 hooks::invoke_element_pointer(preprocess, s);
                 assert_eq!((*s).life, 0);
                 assert_eq!((*s).turn, 0);
-                assert_eq!(frame_index((*s).next.image.frame), 0);
+                assert_eq!(frame_index((*s).next.image.frame.raw()), 0);
                 assert_ne!(
                     ship.descriptor_mut().ship_info.ship_flags & POINT_DEFENSE as u16,
                     0
@@ -567,16 +567,16 @@ fn satellite_collision_is_noop_and_death_installs_four_tick_animation() {
             assert_eq!((*s).life, 4);
             assert_eq!((*s).turn, 1);
             assert_eq!((*s).thrust, 0);
-            assert_eq!(frame_index((*s).next.image.frame), 8);
+            assert_eq!(frame_index((*s).next.image.frame.raw()), 8);
             assert!((*s).postprocess_func.is_none());
             assert!((*s).collision_func.is_none());
             assert!((*s).death_func.is_none());
             (*s).current = (*s).next.clone();
             let animate = (*s).preprocess_func.unwrap();
             hooks::invoke_element_pointer(animate, s);
-            assert_eq!(frame_index((*s).next.image.frame), 8);
+            assert_eq!(frame_index((*s).next.image.frame.raw()), 8);
             hooks::invoke_element_pointer(animate, s);
-            assert_eq!(frame_index((*s).next.image.frame), 9);
+            assert_eq!(frame_index((*s).next.image.frame.raw()), 9);
             // A surviving satellite restores point defense on its next preprocess.
             let survivor = battle::element(satellites[1]);
             hooks::invoke_element_pointer((*survivor).preprocess_func.unwrap(), survivor);
@@ -847,8 +847,8 @@ fn tractor_applies_mass_division_speed_flags_and_head_inserted_blue_shadows() {
                         point((*shadow).current.location)
                     );
                     assert_eq!(
-                        (*shadow).current.image.frame,
-                        (*enemy.ptr()).next.image.frame
+                        (*shadow).current.image.frame.raw(),
+                        (*enemy.ptr()).next.image.frame.raw()
                     );
                     assert_eq!(velocity(shadow), (vx, 0));
                     assert_eq!((*prim(shadow)).Type, gfx_object_STAMPFILL_PRIM as u8);

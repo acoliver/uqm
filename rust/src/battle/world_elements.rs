@@ -83,7 +83,7 @@ pub(crate) mod engine {
         cx.primitive_style_mut(e).kind = gfx_object_STAMP_PRIM as u8;
         let frames = cx.planet_frames();
         cx.set_frames(e, false, frames.clone());
-        cx.set_frame(e, false, cx.frames_first(&frames));
+        cx.set_frame(e, false, cx.frames_first(&frames).to_owned());
         cx.element_mut(e).collide = Some(CollisionHook::Native(collision));
         cx.element_mut(e).post = Some(ElementHook::Native(gravity_postprocess));
         // SAFETY: the legacy velocity record admits the zero state.
@@ -114,7 +114,7 @@ pub(crate) mod engine {
         let array = cx.shared_frame_set(SharedFrames::Asteroid);
         cx.set_frames(e, false, array);
         let frame = cx.absolute_frame(
-            cx.first_shared_frame(SharedFrames::Asteroid),
+            cx.shared_frame_selection(SharedFrames::Asteroid).view(),
             angle_to_facing(FULL_CIRCLE as i32) as u16,
         );
         cx.set_frame(e, false, frame);
@@ -128,14 +128,14 @@ pub(crate) mod engine {
         if wait > 0 {
             cx.element_mut(e).set_turn_wait(wait - 1);
         } else {
-            let index = cx.frame_number(cx.element(e).current.image.frame);
+            let index = cx.frame_number(cx.element(e).current.image.frame.view());
             let index = if cx.element(e).thrust_wait() & 128 != 0 {
                 index.wrapping_sub(1)
             } else {
                 index.wrapping_add(1)
             };
             let frame = cx.absolute_frame(
-                cx.element(e).current.image.frame,
+                cx.element(e).current.image.frame.view(),
                 normalize_facing(index as i32),
             );
             cx.set_frame(e, true, frame);
@@ -182,7 +182,10 @@ pub(crate) mod engine {
         let array = cx.shared_frame_set(SharedFrames::Asteroid);
         cx.set_frames(e, false, array);
         let facing = cx.random() as u16 & ((1 << FACING_SHIFT) - 1) as u16;
-        let frame = cx.absolute_frame(cx.first_shared_frame(SharedFrames::Asteroid), facing);
+        let frame = cx.absolute_frame(
+            cx.shared_frame_selection(SharedFrames::Asteroid).view(),
+            facing,
+        );
         cx.set_frame(e, false, frame);
         let wait = cx.random() as u8 & 3;
         cx.element_mut(e).set_turn_wait(wait);
@@ -364,27 +367,26 @@ pub use engine::{
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::mem;
 
     #[test]
     fn damage_preserves_gravity_objects_and_byte_truncation() {
-        unsafe {
-            let mut e: ElementRecord = mem::zeroed();
-            e.hits = 200;
-            e.mass = 100;
-            e.life = 7;
-            damage_object(e.mass, &mut e.hits, &mut e.life, &mut e.state_flags, 257);
-            assert_eq!(e.hits, 199);
-            e.mass = 101;
-            damage_object(e.mass, &mut e.hits, &mut e.life, &mut e.state_flags, 255);
-            assert_eq!(e.hits, 199);
-            assert_eq!(e.life, 7);
-            e.mass = 3;
-            damage_object(e.mass, &mut e.hits, &mut e.life, &mut e.state_flags, 199);
-            assert_eq!(e.hits, 0);
-            assert_eq!(e.life, 0);
-            assert_eq!(e.state_flags, NONSOLID as u16);
-        }
+        let mut e = ElementRecord {
+            hits: 200,
+            mass: 100,
+            life: 7,
+            ..ElementRecord::default()
+        };
+        damage_object(e.mass, &mut e.hits, &mut e.life, &mut e.state_flags, 257);
+        assert_eq!(e.hits, 199);
+        e.mass = 101;
+        damage_object(e.mass, &mut e.hits, &mut e.life, &mut e.state_flags, 255);
+        assert_eq!(e.hits, 199);
+        assert_eq!(e.life, 7);
+        e.mass = 3;
+        damage_object(e.mass, &mut e.hits, &mut e.life, &mut e.state_flags, 199);
+        assert_eq!(e.hits, 0);
+        assert_eq!(e.life, 0);
+        assert_eq!(e.state_flags, NONSOLID as u16);
     }
 
     #[test]

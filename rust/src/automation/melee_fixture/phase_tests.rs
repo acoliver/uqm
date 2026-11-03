@@ -23,15 +23,8 @@ fn world(
 ) -> World {
     let mut world = World::new((SUPER_MELEE | IN_BATTLE) as u16, [2; 2], 0);
     for (side, ((element, state), race)) in elements.iter_mut().zip(states).zip(races).enumerate() {
-        let id = ElementId {
-            slot: side as u8,
-            gen: 0,
-        };
-        let owner = ShipId {
-            side: side as u8,
-            slot: 0,
-            gen: 0,
-        };
+        let id = ElementId::fixture(side as u8, 0);
+        let owner = crate::engine::battle::ShipId::fixture(side as u8, 0, 0);
         element.parent = Parent::Ship(owner);
         element.player = side as i16;
         element.flags = ElementFlags::PLAYER_SHIP.bits();
@@ -117,7 +110,7 @@ fn outgoing_descriptor_is_retained_until_frame_users_retire_and_zoom_restores_sc
     run.stage = 9;
     run.array = Some(Frames::shared(
         crate::engine::battle::frames::SharedFrames::Fixture(0),
-        crate::engine::battle::frames::FrameArray::retain([Frame::ABSENT; 3], ()),
+        crate::engine::battle::frames::FrameArray::fixture([std::ptr::null_mut(); 3], ()),
     ));
     let effects = frames::advance(&mut run, &mut world, &hooks)
         .unwrap()
@@ -259,7 +252,13 @@ fn mutual_loss_captain_effect_comes_from_the_live_shofixti_descriptor() {
     races[1].ship_info.crew_level = 6;
     let mut world = world(&mut elements, &mut states, &mut races);
     let mut run = run(&world, FixtureName::MixedCollision);
-    let captain = world.ship(run.a()).data.as_ref().unwrap().captain_special;
+    let captain = world
+        .ship(run.a())
+        .data
+        .as_ref()
+        .unwrap()
+        .captain_special
+        .clone();
     let effects = combat::mutual_loss(&mut run, &mut world).unwrap().unwrap();
     assert!(
         matches!(effects.as_slice(), [Effect::Intersect(a), Effect::Intersect(b), Effect::Captain(frame)]

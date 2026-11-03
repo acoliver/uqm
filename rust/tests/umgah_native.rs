@@ -155,7 +155,7 @@ fn descriptor_matches_all_c_initializer_fields_and_resources() {
                 c"ship.umgah.graphics.spritz"
             );
             assert!(d.ship_data.weapon_rsc[1].is_null() && d.ship_data.weapon_rsc[2].is_null());
-            let captain = d.ship_data.captain_control;
+            let captain = &d.ship_data.captain_control;
             assert_eq!(
                 CStr::from_ptr(captain.captain_rsc),
                 c"ship.umgah.graphics.captain"
@@ -165,7 +165,7 @@ fn descriptor_matches_all_c_initializer_fields_and_resources() {
                     && captain.turn.is_null()
                     && captain.thrust.is_null()
                     && captain.weapon.is_null()
-                    && captain.special.is_null()
+                    && captain.special.is_absent()
             );
             assert_eq!(
                 CStr::from_ptr(d.ship_data.victory_ditty_rsc),
@@ -292,8 +292,11 @@ fn cone_initialization_fixes_intersection_and_does_not_inherit_velocity() {
                 (-9, 13)
             );
             assert_eq!(((*cone).next.location.x, (*cone).next.location.y), (-9, 13));
-            assert_eq!((*cone).current.image.frame, ship.raw_frame(2, 5));
-            assert_eq!((*cone).next.image.frame, (*cone).current.image.frame);
+            assert_eq!((*cone).current.image.frame.raw(), ship.raw_frame(2, 5));
+            assert_eq!(
+                (*cone).next.image.frame.raw(),
+                (*cone).current.image.frame.raw()
+            );
             assert_eq!((*cone).next.image.frames, ship.frame_set(2));
             let i = (*cone).IntersectControl;
             assert_eq!(
@@ -325,8 +328,8 @@ fn held_cone_advances_by_16_preserves_phase_and_resets_only_when_facing_changes(
                 let data = previous_facing(&mut ship);
                 assert!(data.is_some());
                 assert_eq!(data, Some(5));
-                assert_eq!(frame_index((*cone).current.image.frame), index);
-                let old_frame = (*cone).next.image.frame;
+                assert_eq!(frame_index((*cone).current.image.frame.raw()), index);
+                let old_frame = (*cone).next.image.frame.raw();
                 with_rng(3, 0, || {
                     hooks::invoke_element_pointer((*cone).preprocess_func.unwrap(), cone)
                 });
@@ -334,7 +337,7 @@ fn held_cone_advances_by_16_preserves_phase_and_resets_only_when_facing_changes(
                     frame_index(ship.descriptor_mut().ship_data.special.view(0).raw()),
                     (index + 16) % 48
                 );
-                assert_eq!((*cone).next.image.frame, old_frame);
+                assert_eq!((*cone).next.image.frame.raw(), old_frame);
                 assert_eq!(
                     (*cone).state_flags,
                     (APPEARING | FINITE_LIFE | IGNORE_SIMILAR) as u16
@@ -346,7 +349,7 @@ fn held_cone_advances_by_16_preserves_phase_and_resets_only_when_facing_changes(
                     "holding facing keeps the saved facing"
                 );
                 assert_eq!(
-                    frame_index((*battle::element(next)).current.image.frame),
+                    frame_index((*battle::element(next)).current.image.frame.raw()),
                     (index + 16) % 48
                 );
                 battle_context::dispose(next);
@@ -355,7 +358,10 @@ fn held_cone_advances_by_16_preserves_phase_and_resets_only_when_facing_changes(
             ship.ship_mut().ShipFacing = 9;
             let h = fire(&mut ship);
             assert_eq!(previous_facing(&mut ship).unwrap(), 9);
-            assert_eq!(frame_index((*battle::element(h)).current.image.frame), 9);
+            assert_eq!(
+                frame_index((*battle::element(h)).current.image.frame.raw()),
+                9
+            );
             assert_eq!(
                 (*battle::element(h)).IntersectControl.IntersectStamp.frame,
                 ship.raw_frame(2, 9)
@@ -765,7 +771,7 @@ fn ai_rng_follows_shared_steering_and_uses_old_turn_flags_for_alignment() {
                 let seed =
                     seed_where(|d| (d[0] & 1 != 0) == first_odd && (d[1] & 1 != 0) != first_odd);
                 ship.ship_mut().ShipFacing = 0;
-                (*ship.ptr()).current.image.frame = ship.raw_frame(0, 0);
+                (*ship.ptr()).current.image.frame = ship.frame(0, 0);
                 (*ship.ptr()).next = (*ship.ptr()).current.clone();
                 let mut c = enemy_concern(&enemy, 8);
                 let input = with_rng(seed, 2, || think(&mut ship, &mut c, 0, 1));

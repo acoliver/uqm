@@ -177,29 +177,27 @@ pub(crate) mod engine {
         link_queue::ships(player as usize).reinit();
         let mut h = (*q).head;
         while !h.is_null() {
-            let frag = h.cast::<SHIP_FRAGMENT>();
-            h = (*frag).succ;
-            let built = link_queue::ships(player as usize).build(
-                if (*frag).race_id == SAMATRA_SHIP as u8 {
+            let frag = &*h.cast::<SHIP_FRAGMENT>();
+            h = frag.succ;
+            let built =
+                link_queue::ships(player as usize).build(if frag.race_id == SAMATRA_SHIP as u8 {
                     SPECIES_ID_SA_MATRA_ID
                 } else {
-                    (*frag).SpeciesID
-                },
-            );
+                    frag.SpeciesID
+                });
             if let Some(id) = built {
                 let mut ships = link_queue::ships(player as usize);
                 let mut ship = ships.get(id);
-                ship.captain = (*frag).captains_name_index;
+                ship.captain = frag.captains_name_index;
                 ship.player = player as i16;
-                ship.crew = if (*frag).crew_level != COUNT::MAX {
-                    (*frag).crew_level
+                ship.crew = if frag.crew_level != COUNT::MAX {
+                    frag.crew_level
                 } else {
-                    (*frag).max_crew
+                    frag.max_crew
                 };
-                ship.max_crew = (*frag).max_crew;
-                ship.strings = (*frag).race_strings as usize;
-                ship.icons = (*frag).icons as usize;
-                ship.index = (*frag).index as u16;
+                ship.max_crew = frag.max_crew;
+                ships.set_picker_resources(id, frag.race_strings, frag.icons);
+                ship.index = frag.index as u16;
                 ship.cost = 0;
                 ships.set(id, ship);
                 ships.clear_descriptor(id);
@@ -214,8 +212,6 @@ pub(crate) mod engine {
                 ship.player = RPG_PLAYER_NUM as i16;
                 ship.crew = 0;
                 ship.max_crew = 0;
-                ship.strings = 0;
-                ship.icons = 0;
                 ship.index = COUNT::MAX;
                 ship.cost = 0;
                 ship.energy_counter = MAX_ENERGY_SIZE as u8;

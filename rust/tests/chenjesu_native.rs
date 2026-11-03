@@ -130,7 +130,7 @@ fn descriptor_matches_every_c_initializer_field() {
                 assert!(d.ship_data.weapon.view(i).is_absent());
                 assert!(d.ship_data.special.view(i).is_absent());
             }
-            let captain = d.ship_data.captain_control;
+            let captain = &d.ship_data.captain_control;
             assert_eq!(
                 CStr::from_ptr(captain.captain_rsc),
                 c"ship.chenjesu.graphics.captain"
@@ -139,7 +139,7 @@ fn descriptor_matches_every_c_initializer_field() {
             assert!(captain.turn.is_null());
             assert!(captain.thrust.is_null());
             assert!(captain.weapon.is_null());
-            assert!(captain.special.is_null());
+            assert!(captain.special.is_absent());
             assert_eq!(
                 CStr::from_ptr(d.ship_data.victory_ditty_rsc),
                 c"ship.chenjesu.ditty"
@@ -192,7 +192,7 @@ fn crystal_launch_hold_release_and_count_truncation_match_c() {
             );
             assert_eq!((*crystal).playerNr, 0);
             assert_eq!(
-                (*crystal).current.image.frame,
+                (*crystal).current.image.frame.raw(),
                 SetAbsFrameIndex(ship.descriptor_mut().ship_data.weapon.view(0).raw(), 0)
             );
             assert_eq!((*crystal).current.image.frames, ship.frame_set(1));
@@ -267,7 +267,7 @@ fn released_crystal_queues_eight_fragments_in_facing_order() {
                 assert_eq!((*fragment).mass, 2);
                 assert_eq!((*fragment).thrust, 2);
                 assert_eq!(
-                    (*fragment).current.image.frame,
+                    (*fragment).current.image.frame.raw(),
                     SetAbsFrameIndex(ship.descriptor_mut().ship_data.weapon.view(0).raw(), 1)
                 );
                 assert_eq!(
@@ -371,7 +371,7 @@ fn crystal_collision_creates_sparkles_at_the_target_and_animates_current_frame()
                 (*crystal).next.image.frames
             );
             assert_eq!(
-                (*sparkle).current.image.frame,
+                (*sparkle).current.image.frame.raw(),
                 SetAbsFrameIndex(ship.descriptor_mut().ship_data.weapon.view(0).raw(), 2)
             );
             assert_eq!((*crystal).life, 0);
@@ -381,10 +381,9 @@ fn crystal_collision_creates_sparkles_at_the_target_and_animates_current_frame()
                 (COLLISION | NONSOLID | DISAPPEARING) as u16
             );
             let animate = (*sparkle).preprocess_func.unwrap();
-            (*sparkle).next.image.frame =
-                SetAbsFrameIndex(ship.descriptor_mut().ship_data.weapon.view(0).raw(), 8);
+            (*sparkle).next.image.frame = ship.frame(1, 8);
             with_rng(17, 0, || hooks::invoke_element_pointer(animate, sparkle));
-            assert_eq!(frame_index((*sparkle).next.image.frame), 3);
+            assert_eq!(frame_index((*sparkle).next.image.frame.raw()), 3);
             assert_ne!((*sparkle).state_flags & CHANGING as u16, 0);
             (*sparkle).turn = 2;
             (*sparkle).thrust = 3;
@@ -394,11 +393,10 @@ fn crystal_collision_creates_sparkles_at_the_target_and_animates_current_frame()
             assert_eq!((*sparkle).state_flags & CHANGING as u16, 0);
             hooks::invoke_element_pointer(animate, sparkle);
             assert_eq!((*sparkle).turn, 0);
-            (*sparkle).current.image.frame =
-                SetAbsFrameIndex(ship.descriptor_mut().ship_data.weapon.view(0).raw(), 9);
+            (*sparkle).current.image.frame = ship.frame(1, 9);
             hooks::invoke_element_pointer(animate, sparkle);
             assert_eq!(
-                (*sparkle).next.image.frame,
+                (*sparkle).next.image.frame.raw(),
                 SetAbsFrameIndex(ship.descriptor_mut().ship_data.weapon.view(0).raw(), 0)
             );
             assert_eq!((*sparkle).turn, 3);
@@ -443,7 +441,7 @@ fn doggy_spawns_behind_ship_with_exact_state_and_coordinate_truncation() {
                 assert_eq!((*prim(dog)).Type, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
                 assert_eq!((*dog).current.image.frames, ship.frame_set(2));
                 assert_eq!(
-                    (*dog).current.image.frame,
+                    (*dog).current.image.frame.raw(),
                     SetAbsFrameIndex(ship.descriptor_mut().ship_data.special.view(0).raw(), 0)
                 );
                 assert_eq!(
@@ -683,7 +681,7 @@ fn doggy_death_preserves_unrelated_fields_and_starts_six_frame_animation() {
             let animate = (*dog).preprocess_func.unwrap();
             for frame in 1..=6 {
                 with_rng(88, 0, || hooks::invoke_element_pointer(animate, dog));
-                assert_eq!(frame_index((*dog).next.image.frame), frame % 6);
+                assert_eq!(frame_index((*dog).next.image.frame.raw()), frame % 6);
                 (*dog).current = (*dog).next.clone();
             }
             assert_eq!(
@@ -738,18 +736,14 @@ fn doggy_steering_uses_exact_rear_facing_boundaries_not_trackships_single_step()
         unsafe {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_CHENJESU_ID, 0, [16, 10, 6], [4, 4]);
-            let mut enemy =
-                Ship::with_frames(&_battle, SPECIES_ID_CHENJESU_ID, 1, [16, 10, 6], [4, 4]);
+            let enemy = Ship::with_frames(&_battle, SPECIES_ID_CHENJESU_ID, 1, [16, 10, 6], [4, 4]);
             let dog = doggy(&mut ship);
             let preprocess = (*dog).preprocess_func.unwrap();
             (*dog).current.location = POINT { x: 4000, y: 4500 };
             (*dog).next.location = (*dog).current.location;
             // Enemy due north: raw facing 0, TrackShip's one-step result is 3.
             for (delta, expected) in [(6, 0), (7, 4), (8, 12), (9, 12), (10, 0)] {
-                (*enemy.ptr()).current.image.frame = SetAbsFrameIndex(
-                    enemy.descriptor_mut().ship_data.ship.view(0).raw(),
-                    (16 - delta) as u16,
-                );
+                (*enemy.ptr()).current.image.frame = enemy.frame(0, (16 - delta) as u16);
                 (*dog).target = None;
                 SetVelocityVector(&raw mut (*dog).velocity, 11, 4);
                 let original = velocity_fields(&(*dog).velocity);
@@ -767,8 +761,7 @@ fn doggy_steering_uses_exact_rear_facing_boundaries_not_trackships_single_step()
             }
             // TrackShip itself draws once for a half-circle tie. DOGI recomputes
             // its heading afterward, so the random tie-break does not choose it.
-            (*enemy.ptr()).current.image.frame =
-                SetAbsFrameIndex(enemy.descriptor_mut().ship_data.ship.view(0).raw(), 0);
+            (*enemy.ptr()).current.image.frame = enemy.frame(0, 0);
             for seed in 1..17 {
                 SetVelocityVector(&raw mut (*dog).velocity, 32, 8);
                 (*dog).target = Some(battle::id((enemy.handle).cast()));
@@ -797,10 +790,7 @@ fn doggy_uses_current_unwrapped_coordinates_and_truncates_arctan_arguments() {
                 (*dog).next.location = POINT { x: 1000, y: 4000 };
                 at(&mut enemy, enemy_x, 4000);
                 (*enemy.ptr()).next.location = POINT { x: 2000, y: 4000 };
-                (*enemy.ptr()).current.image.frame = SetAbsFrameIndex(
-                    enemy.descriptor_mut().ship_data.ship.view(0).raw(),
-                    (expected as usize) as u16,
-                );
+                (*enemy.ptr()).current.image.frame = enemy.frame(0, (expected as usize) as u16);
                 (*dog).target = Some(battle::id((enemy.handle).cast()));
                 SetVelocityVector(&raw mut (*dog).velocity, 32, 0);
                 assert_eq!(

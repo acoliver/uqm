@@ -17,8 +17,9 @@ unsafe fn parent_address(parent: super::super::Parent, groups: Option<&QUEUE>) -
         Parent::None => return std::ptr::null_mut(),
         Parent::Ship(id) => {
             // SAFETY: the observation retains the live ship authority.
-            let queue = unsafe { super::super::record::ship_queue(usize::from(id.side)).as_ref() };
-            return queue.retired_address(usize::from(id.slot)) as *mut c_void;
+            let queue =
+                unsafe { super::super::record::ship_queue(usize::from(id.side())).as_ref() };
+            return queue.pool.retired_address(usize::from(id.slot())) as *mut c_void;
         }
         Parent::IpGroup(slot) => (
             groups.unwrap_or_else(|| panic!("missing IP-group authority")),
@@ -133,7 +134,7 @@ pub(crate) unsafe fn ship<'a>(
     elements: &ElementTable,
 ) -> ShipRecordObservation<'a> {
     let ships = LinkQueue::<Starship>::borrow(pool);
-    let s = pool.get(ships.key(id));
+    let s = pool.pool.get(ships.key(id));
     ShipRecordObservation {
         state: ShipState::decode(s),
         pick: ships.get(id),

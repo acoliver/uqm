@@ -134,7 +134,7 @@ pub(crate) mod engine {
             cx.element_mut(cone).flags &= !(APPEARING as u16);
             cx.copy_visual_to_next(cone, cx.element(cone).current);
             cx.init_intersect(cone);
-            cx.set_intersect_frame(cone, cx.ship_frame(ss, 2));
+            cx.set_intersect_frame(cone, cx.ship_frame(ss, 2).to_owned());
         }
         vec![out]
     }

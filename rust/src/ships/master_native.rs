@@ -175,7 +175,7 @@ mod tests {
         let id = queue
             .alloc(CatalogEntry {
                 species,
-                descriptor: RaceDesc::from_storage(Box::new(descriptor)),
+                descriptor: RaceDesc::fixture(Box::new(descriptor)),
             })
             .unwrap();
         queue.put(id);
@@ -217,7 +217,7 @@ mod tests {
         assert!(ships
             .alloc(CatalogEntry {
                 species: 26,
-                descriptor: RaceDesc::from_storage(Box::new(RaceDescriptor::EMPTY)),
+                descriptor: RaceDesc::fixture(Box::new(RaceDescriptor::EMPTY)),
             })
             .is_none());
     }

@@ -3,7 +3,7 @@
 use super::*;
 use crate::battle::context_access::fixture::{Element, Phoenix, Ship};
 use crate::battle::element::ElementFlags;
-use crate::engine::battle::views::{Frame, Frames};
+use crate::engine::battle::views::{FrameSelection, Frames};
 #[cfg(not(test))]
 use crate::engine::battle::Cx;
 use crate::engine::battle::{Concern, ElementId, Parent, ShipId};
@@ -149,7 +149,7 @@ enum Effect {
     Scale(i32),
     RestoreScale,
     ZoomProof(Frames, ElementId, usize, u16),
-    Captain(Frame),
+    Captain(FrameSelection),
     ClearStar,
 }
 
@@ -170,7 +170,7 @@ struct Battle {
     phoenix: Option<Phoenix>,
     star: usize,
     velocity: crate::battle::velocity::VelocityDesc,
-    captain: Frame,
+    captain: FrameSelection,
 }
 
 impl Battle {
@@ -218,7 +218,7 @@ impl Battle {
             phoenix: None,
             star: 0,
             velocity: crate::battle::velocity::VelocityDesc::new(),
-            captain: Frame::ABSENT,
+            captain: FrameSelection::ABSENT,
         }
     }
 
@@ -486,7 +486,7 @@ mod tests {
         assert!(task
             .reply(production::Reply::Check("not-observed", false))
             .is_err());
-        task.reply(production::Reply::Captain(Frame::ABSENT))
+        task.reply(production::Reply::Captain(FrameSelection::ABSENT))
             .unwrap();
     }
 

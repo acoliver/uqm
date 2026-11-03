@@ -126,7 +126,7 @@ pub(crate) mod engine {
             let ss = cx.owner(other);
             cx.ship_state_mut(ss).status &= !((SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16);
             let angle = facing_to_angle(i32::from(
-                cx.frame_number(cx.element(cannon).next.image.frame),
+                cx.frame_number(cx.element(cannon).next.image.frame.view()),
             ));
             cx.element_mut(other).velocity.delta_components(
                 i32::from(cosine(angle, RECOIL_VELOCITY) as SIZE),

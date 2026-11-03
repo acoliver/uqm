@@ -136,12 +136,12 @@ pub(crate) mod engine {
         if cx.element(missile).turn > 0 {
             cx.element_mut(missile).turn -= 1;
         } else {
-            let mut facing = cx.frame_number(cx.element(missile).next.image.frame);
+            let mut facing = cx.frame_number(cx.element(missile).next.image.frame.view());
             if cx.track_ship(missile, &mut facing) > 0 {
                 cx.set_frame(
                     missile,
                     true,
-                    cx.absolute_frame(cx.element(missile).next.image.frame, facing),
+                    cx.absolute_frame(cx.element(missile).next.image.frame.view(), facing),
                 );
                 cx.element_mut(missile).flags |= CHANGING as u16;
 

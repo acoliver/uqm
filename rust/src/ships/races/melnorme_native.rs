@@ -103,7 +103,7 @@ pub(crate) mod engine {
     pub(crate) fn pump_up_preprocess(cx: &mut Cx<'_>, e: ElementId) {
         cx.element_mut(e).thrust = cx.element(e).thrust.wrapping_sub(1);
         if cx.element(e).thrust & 1 != 0 {
-            let mut idx = cx.frame_number(cx.element(e).current.image.frame);
+            let mut idx = cx.frame_number(cx.element(e).current.image.frame.view());
             let turning_back = cx.element(e).turn & REVERSE_DIR != 0;
             if (turning_back && !idx.is_multiple_of(NUM_PUMP_ANIMS))
                 || (!turning_back && (i32::from(idx) + 1) % i32::from(NUM_PUMP_ANIMS) == 0)
@@ -117,7 +117,7 @@ pub(crate) mod engine {
             cx.set_frame(
                 e,
                 true,
-                cx.absolute_frame(cx.element(e).current.image.frame, idx),
+                cx.absolute_frame(cx.element(e).current.image.frame.view(), idx),
             );
             cx.element_mut(e).flags |= CHANGING as u16;
         }
@@ -144,7 +144,10 @@ pub(crate) mod engine {
                 cx.set_frame(
                     p,
                     false,
-                    cx.relative_frame(cx.element(p).current.image.frame, NUM_PUMP_ANIMS as i16),
+                    cx.relative_frame(
+                        cx.element(p).current.image.frame.view(),
+                        NUM_PUMP_ANIMS as i16,
+                    ),
                 );
                 cx.process_ship_sound(ss, 2, p);
             }
@@ -156,7 +159,7 @@ pub(crate) mod engine {
         cx.element_mut(p).mass = cx.element(p).hits as BYTE;
         cx.set_parent(p, Some(ss));
         if cx.element(p).thrust & 1 != 0 {
-            let mut idx = cx.frame_number(cx.element(p).current.image.frame);
+            let mut idx = cx.frame_number(cx.element(p).current.image.frame.view());
             let back = cx.element(p).turn & REVERSE_DIR != 0;
             if (back && !idx.is_multiple_of(NUM_PUMP_ANIMS))
                 || (!back && (i32::from(idx) + 1) % i32::from(NUM_PUMP_ANIMS) == 0)
@@ -170,7 +173,7 @@ pub(crate) mod engine {
             cx.set_frame(
                 p,
                 false,
-                cx.absolute_frame(cx.element(p).current.image.frame, idx),
+                cx.absolute_frame(cx.element(p).current.image.frame.view(), idx),
             );
         }
         if cx.ship_state(ss).status & cx.ship_state(ss).old_status & WEAPON as u16 != 0 {
@@ -204,7 +207,7 @@ pub(crate) mod engine {
         b: ElementId,
         pb: &mut POINT,
     ) {
-        let rect = cx.frame_rect(cx.element(a).next.image.frame);
+        let rect = cx.frame_rect(cx.element(a).next.image.frame.view());
         let wait = cx.element(a).thrust;
         cx.element_mut(a).thrust = (i32::from(rect.extent.width) >> 1) as BYTE;
         let blast = cx.weapon_collision(a, pa, b, pb);
@@ -263,8 +266,8 @@ pub(crate) mod engine {
                 e,
                 true,
                 cx.absolute_frame(
-                    cx.element(e).current.image.frame,
-                    (cx.frame_number(cx.element(e).current.image.frame)
+                    cx.element(e).current.image.frame.view(),
+                    (cx.frame_number(cx.element(e).current.image.frame.view())
                         .wrapping_add(1))
                         & 7,
                 ),
@@ -279,9 +282,9 @@ pub(crate) mod engine {
                 .unwrap_or_else(|| panic!("Melnorme confusion target"));
             cx.element_mut(e).next.location = cx.element(target).next.location;
             if cx.element(e).turn != 0 {
-                let mut next = cx.advance_frame(cx.element(e).current.image.frame);
-                if cx.frame_number(next) == 0 {
-                    next = cx.relative_frame(next, -8);
+                let mut next = cx.advance_frame(cx.element(e).current.image.frame.view());
+                if cx.frame_number(next.view()) == 0 {
+                    next = cx.relative_frame(next.view(), -8);
                 }
                 cx.set_frame(e, true, next);
                 let target_ss = cx.owner(target);
@@ -339,7 +342,7 @@ pub(crate) mod engine {
                 cx.set_frame(
                     p,
                     false,
-                    cx.absolute_frame(cx.element(p).current.image.frame, 8),
+                    cx.absolute_frame(cx.element(p).current.image.frame.view(), 8),
                 );
                 cx.copy_visual_to_next(p, cx.element(p).current);
                 cx.element_mut(p).player = cx.element(a).player;

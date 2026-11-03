@@ -9,6 +9,8 @@ type SlotIx = u16;
 
 pub struct Id<T> {
     ix: SlotIx,
+    owner: u64,
+    token: u64,
     generation: u32,
     marker: PhantomData<fn() -> T>,
 }
@@ -20,7 +22,7 @@ impl<T> Clone for Id<T> {
 }
 impl<T> PartialEq for Id<T> {
     fn eq(&self, other: &Self) -> bool {
-        (self.ix, self.generation) == (other.ix, other.generation)
+        (self.owner, self.ix, self.generation) == (other.owner, other.ix, other.generation)
     }
 }
 impl<T> Eq for Id<T> {}
@@ -31,11 +33,12 @@ impl<T> PartialOrd for Id<T> {
 }
 impl<T> Ord for Id<T> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        (self.ix, self.generation).cmp(&(other.ix, other.generation))
+        (self.owner, self.ix, self.generation).cmp(&(other.owner, other.ix, other.generation))
     }
 }
 impl<T> std::hash::Hash for Id<T> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.owner.hash(state);
         self.ix.hash(state);
         self.generation.hash(state);
     }
@@ -52,6 +55,9 @@ impl<T> Id<T> {
     pub fn index(self) -> usize {
         usize::from(self.ix)
     }
+    pub fn token(self) -> u64 {
+        self.token
+    }
     pub fn generation(self) -> u32 {
         self.generation
     }
@@ -61,6 +67,7 @@ struct Slot<T> {
     pred: Option<SlotIx>,
     succ: Option<SlotIx>,
     generation: u32,
+    token: u64,
     value: Option<T>,
     linked: bool,
     retired_address: usize,
@@ -68,6 +75,7 @@ struct Slot<T> {
 
 pub struct OrderedPool<T, const N: usize> {
     slots: Box<[Slot<T>; N]>,
+    identity: u64,
     head: Option<SlotIx>,
     tail: Option<SlotIx>,
     free: Option<SlotIx>,
@@ -94,6 +102,7 @@ impl<T, const N: usize> OrderedPool<T, N> {
                 pred: None,
                 succ: (ix + 1 < capacity).then_some((ix + 1) as SlotIx),
                 generation: 0,
+                token: 0,
                 value: None,
                 linked: false,
                 retired_address: 0,
@@ -104,6 +113,7 @@ impl<T, const N: usize> OrderedPool<T, N> {
             .unwrap_or_else(|_| unreachable!("pool capacity"));
         Self {
             slots,
+            identity: super::observation::next_pool_identity(),
             head: None,
             tail: None,
             free: (capacity != 0).then_some(0),
@@ -112,8 +122,8 @@ impl<T, const N: usize> OrderedPool<T, N> {
         }
     }
 
-    pub fn storage_identity(&self) -> usize {
-        self.slots.as_ptr() as usize
+    pub fn storage_identity(&self) -> u64 {
+        self.identity
     }
 
     /// Identity only: a retired value must never be dereferenced through this address.
@@ -126,6 +136,8 @@ impl<T, const N: usize> OrderedPool<T, N> {
     fn id(&self, ix: SlotIx) -> Id<T> {
         Id {
             ix,
+            owner: self.identity,
+            token: self.slots[usize::from(ix)].token,
             generation: self.slots[usize::from(ix)].generation,
             marker: PhantomData,
         }
@@ -139,9 +151,11 @@ impl<T, const N: usize> OrderedPool<T, N> {
         &mut self.slots[id.index()]
     }
     pub fn contains(&self, id: Id<T>) -> bool {
-        self.slots
-            .get(id.index())
-            .is_some_and(|s| s.generation == id.generation && s.value.is_some())
+        id.owner == self.identity
+            && self
+                .slots
+                .get(id.index())
+                .is_some_and(|s| s.generation == id.generation && s.value.is_some())
     }
     pub fn get(&self, id: Id<T>) -> &T {
         self.slot(id)
@@ -186,6 +200,7 @@ impl<T, const N: usize> OrderedPool<T, N> {
         self.free = slot.succ;
         slot.pred = None;
         slot.succ = None;
+        slot.token = super::observation::next_pool_identity();
         slot.retired_address = std::ptr::from_mut(slot.value.insert(value)) as usize;
         Some(self.id(ix))
     }

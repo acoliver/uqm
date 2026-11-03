@@ -7,7 +7,7 @@ fn owning_frame_slots_reject_foreign_drawables_without_mutation() {
             let ship = Ship::new(&owner, SPECIES_ID_VUX_ID, 0);
             let other = Ship::new(&owner, SPECIES_ID_VUX_ID, 1);
             let original = ship.frame(2, 0);
-            for foreign in [ship.frame(0, 0), other.frame(2, 0), Frame::ABSENT] {
+            for foreign in [ship.frame(0, 0), other.frame(2, 0), FrameSelection::ABSENT] {
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     uqm_rust::app::bridge::enter(|cx| {
                         cx.set_ship_frame(ship.ship_id, 2, 0, foreign);
@@ -359,19 +359,19 @@ fn frames_keep_wrapping_bounds_absence_and_ship_view_identity() {
             let set = ship.frame_set(2);
             uqm_rust::app::bridge::enter(|cx| {
                 assert!(!first.is_absent());
-                assert!(Frame::ABSENT.is_absent());
-                assert_eq!(cx.frame_count(Frame::ABSENT), 0);
-                assert_eq!(cx.frame_count(first), 16);
-                let last = cx.retreat_frame(first);
-                assert_eq!(cx.frame_number(last), 15);
-                assert_eq!(cx.advance_frame(last), first);
-                assert_eq!(cx.relative_frame(first, -1), last);
-                let bounds = cx.frame_rect(first);
+                assert!(FrameSelection::ABSENT.is_absent());
+                assert_eq!(cx.frame_count(FrameSelection::ABSENT.view()), 0);
+                assert_eq!(cx.frame_count(first.view()), 16);
+                let last = cx.retreat_frame(first.view());
+                assert_eq!(cx.frame_number(last.view()), 15);
+                assert_eq!(cx.advance_frame(last.view()), first);
+                assert_eq!(cx.relative_frame(first.view(), -1), last);
+                let bounds = cx.frame_rect(first.view());
                 assert_eq!((bounds.corner.x, bounds.corner.y), (0, 0));
                 assert_eq!((bounds.extent.width, bounds.extent.height), (4, 4));
                 uqm_rust::collections::observation::enable();
                 uqm_rust::collections::observation::drain();
-                cx.set_ship_frame(ship.ship_id, 2, 0, last);
+                cx.set_ship_frame(ship.ship_id, 2, 0, last.clone());
                 assert!(matches!(
                     uqm_rust::collections::observation::drain().as_slice(),
                     [uqm_rust::collections::observation::Event::ImageFrame {
@@ -379,10 +379,10 @@ fn frames_keep_wrapping_bounds_absence_and_ship_view_identity() {
                         ..
                     }]
                 ));
-                assert_eq!(cx.ship_frame(ship.ship_id, 2), last);
+                assert_eq!(cx.ship_frame(ship.ship_id, 2).to_owned(), last);
                 assert_eq!(cx.ship_frame_set(ship.ship_id, 2), set);
-                cx.set_captain_special(ship.ship_id, last);
-                assert_eq!(cx.captain_special(ship.ship_id), last);
+                cx.set_captain_special(ship.ship_id, last.clone());
+                assert_eq!(cx.captain_special(ship.ship_id).to_owned(), last);
             });
         }
     });
@@ -413,8 +413,8 @@ fn allocated_copy_keeps_primitive_identity_parent_target_and_observations() {
                 assert_eq!(cx.owner(dest), ship.ship_id);
                 assert_eq!(cx.target(dest), Some(ship.id));
                 assert_eq!(
-                    cx.element(dest).current.image.frame,
-                    cx.element(ship.id).current.image.frame
+                    cx.element(dest).current.image.frame.raw(),
+                    cx.element(ship.id).current.image.frame.raw()
                 );
                 assert_eq!(cx.primitive_style(dest).kind, gfx_object_STAMP_PRIM as u8);
                 assert_eq!(cx.primitive_style(dest).color.g, 2);

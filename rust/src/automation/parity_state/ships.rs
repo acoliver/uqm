@@ -244,9 +244,9 @@ mod tests {
         state.playerNr = 1;
         state.ShipFacing = 31;
         state.crew_level = 17;
-        let mut queue = crate::engine::battle::link_queue::RacePool::with_capacity(1);
-        let id = queue.alloc(state).unwrap();
-        queue.put(id);
+        let mut queue = crate::engine::battle::link_queue::RacePool::with_capacity(1, 1);
+        let id = queue.fixture_pool().alloc(state).unwrap();
+        queue.fixture_pool().put(id);
         // SAFETY: the local pool remains live and immutable until ships is dropped.
         let ships = unsafe {
             Ship::queue(

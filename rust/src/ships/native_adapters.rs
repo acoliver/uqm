@@ -1,19 +1,5 @@
 //! Ship runtime operations formerly supplied by rust_bridge_ships.c.
 
-fn recover_ship_crew(descriptor: &mut crate::ships::native::abi::SHIP_INFO, crew: u16) -> u16 {
-    let mut remaining = descriptor.crew_level;
-    let maximum = descriptor.max_crew;
-    if remaining != 0 {
-        remaining = if i32::from(crew) >= i32::from(maximum) - i32::from(remaining) {
-            maximum
-        } else {
-            remaining.wrapping_add(crew)
-        };
-    }
-    descriptor.crew_level = remaining;
-    remaining
-}
-
 #[cfg(not(test))]
 fn remaining_battle_crew(cx: &crate::engine::battle::Cx<'_>) -> u16 {
     let mut crew = 0u16;
@@ -50,7 +36,7 @@ fn retire_element_ship(
         return None;
     };
     let mut descriptor = cx.take_descriptor(ship)?;
-    cx.ship_state_mut(ship).crew = recover_ship_crew(descriptor.info_mut(), crew);
+    cx.ship_state_mut(ship).crew = descriptor.recover_crew(crew);
     Some((ship, descriptor))
 }
 
@@ -148,7 +134,7 @@ pub use live::*;
 
 #[cfg(test)]
 mod crew_writeback_tests {
-    use super::recover_ship_crew;
+    use crate::engine::battle::record::recover_ship_crew;
     use crate::ships::native::abi::RaceDescriptor;
 
     #[test]
@@ -156,11 +142,32 @@ mod crew_writeback_tests {
         let mut descriptor: RaceDescriptor = unsafe { std::mem::zeroed() };
         descriptor.ship_info.crew_level = 7;
         descriptor.ship_info.max_crew = 18;
-        assert_eq!(recover_ship_crew(&mut descriptor.ship_info, 3), 10);
+        assert_eq!(
+            recover_ship_crew(
+                &mut descriptor.ship_info.crew_level,
+                descriptor.ship_info.max_crew,
+                3
+            ),
+            10
+        );
         assert_eq!(descriptor.ship_info.crew_level, 10);
         assert_eq!(descriptor.ship_info.max_crew, 18);
-        assert_eq!(recover_ship_crew(&mut descriptor.ship_info, 20), 18);
+        assert_eq!(
+            recover_ship_crew(
+                &mut descriptor.ship_info.crew_level,
+                descriptor.ship_info.max_crew,
+                20
+            ),
+            18
+        );
         descriptor.ship_info.crew_level = 0;
-        assert_eq!(recover_ship_crew(&mut descriptor.ship_info, 20), 0);
+        assert_eq!(
+            recover_ship_crew(
+                &mut descriptor.ship_info.crew_level,
+                descriptor.ship_info.max_crew,
+                20
+            ),
+            0
+        );
     }
 }

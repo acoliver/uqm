@@ -118,7 +118,7 @@ impl<'a> Ship<'a> {
         let frames = inner.frame_set(0);
         let el = inner.element_mut();
         el.current.image.frames = frames;
-        el.current.image.frame = ship_frames.frame(0);
+        el.current.image.frame = ship_frames.selection(0);
         el.next = el.current.clone();
         el.IntersectControl.IntersectStamp.frame = ship_frames.frame(0);
         el.IntersectControl.EndPoint = POINT { x: 1000, y: 1000 };
@@ -165,10 +165,10 @@ impl<'a> Ship<'a> {
         }
     }
     unsafe fn intelligence(&mut self, concerns: &mut [EVALUATE_DESC; 4]) {
-        let mut subject = (*self.ptr()).clone();
+        let mut subject = self.inner.subject();
         // The AI operand is a value copy, not a member of the live queue.
         // Its phoenix predecessor may be disposed during intelligence.
-        self.inner.intelligence(&mut subject, concerns, 0);
+        self.inner.intelligence_subject(&mut subject, concerns, 0);
     }
 
     unsafe fn at(&mut self, x: COORD, y: COORD) {
@@ -362,8 +362,8 @@ unsafe fn check_trail(ship: &mut Ship, trail: *mut ElementRecord, at: POINT, ang
     assert_eq!(color_bytes((*prim(trail)).color), [0xFF, 0xAD, 0x00, 0xFF]);
     assert_eq!((*trail).colorCycleIndex, 0);
     assert_eq!(
-        (*trail).current.image.frame,
-        (*ship.ptr()).current.image.frame
+        (*trail).current.image.frame.raw(),
+        (*ship.ptr()).current.image.frame.raw()
     );
     assert_eq!(
         (*trail).current.image.frames,
@@ -446,7 +446,7 @@ fn descriptor_matches_every_c_initializer_field() {
                 assert!(d.ship_data.weapon.view(i).is_absent());
                 assert!(d.ship_data.special.view(i).is_absent());
             }
-            let captain = d.ship_data.captain_control;
+            let captain = &d.ship_data.captain_control;
             assert_eq!(
                 CStr::from_ptr(captain.captain_rsc),
                 c"ship.pkunk.graphics.captain"
@@ -455,7 +455,7 @@ fn descriptor_matches_every_c_initializer_field() {
             assert!(captain.turn.is_null());
             assert!(captain.thrust.is_null());
             assert!(captain.weapon.is_null());
-            assert!(captain.special.is_null());
+            assert!(captain.special.is_absent());
             assert_eq!(
                 CStr::from_ptr(d.ship_data.victory_ditty_rsc),
                 c"ship.pkunk.ditty"
@@ -590,7 +590,7 @@ fn bug_missiles_launch_fore_left_and_right_inheriting_ship_velocity() {
                             (APPEARING | FINITE_LIFE | IGNORE_SIMILAR) as u16
                         );
                         assert_eq!((*m).playerNr, 1);
-                        assert_eq!((*m).current.image.frame, ship.weapon_frames.frame(0));
+                        assert_eq!((*m).current.image.frame.raw(), ship.weapon_frames.frame(0));
                         assert_eq!((*m).current.image.frames, ship.inner.frame_set(1));
                         assert_eq!((*prim(m)).Type, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
                         assert!((*m).collision_func.is_some());
@@ -648,7 +648,7 @@ fn bug_missile_allocation_failure_leaves_null_slots_but_still_reports_three() {
             assert!(out[1].is_null());
             assert!(out[2].is_null());
             assert_eq!(
-                frame_index((*shared::element(out[0])).current.image.frame),
+                frame_index((*shared::element(out[0])).current.image.frame.raw()),
                 0,
                 "the first missile is the forward one"
             );
@@ -667,25 +667,25 @@ fn bug_missiles_animate_one_frame_per_blast_offset_delay() {
             ship.fire(&mut out);
             let m = shared::element(out[0]);
             let animate = (*m).preprocess_func.unwrap();
-            (*m).current.image.frame = ship.weapon_frames.frame(2);
+            (*m).current.image.frame = ship.weapon_frames.selection(2);
             (*m).state_flags &= !(CHANGING as u16);
             assert_eq!((*m).turn, 0);
             hooks::invoke_element_pointer(animate, m);
-            assert_eq!(frame_index((*m).next.image.frame), 3);
+            assert_eq!(frame_index((*m).next.image.frame.raw()), 3);
             assert_ne!((*m).state_flags & CHANGING as u16, 0);
             // next_turn shares its byte with the missile's blast offset (1).
             assert_eq!((*m).turn, 1);
 
             (*m).state_flags &= !(CHANGING as u16);
-            (*m).next.image.frame = ship.weapon_frames.frame(6);
+            (*m).next.image.frame = ship.weapon_frames.selection(6);
             hooks::invoke_element_pointer(animate, m);
             assert_eq!((*m).turn, 0);
             assert_eq!((*m).state_flags & CHANGING as u16, 0);
-            assert_eq!(frame_index((*m).next.image.frame), 6);
+            assert_eq!(frame_index((*m).next.image.frame.raw()), 6);
 
-            (*m).current.image.frame = ship.weapon_frames.frame(7);
+            (*m).current.image.frame = ship.weapon_frames.selection(7);
             hooks::invoke_element_pointer(animate, m);
-            assert_eq!(frame_index((*m).next.image.frame), 0);
+            assert_eq!(frame_index((*m).next.image.frame.raw()), 0);
             assert_ne!((*m).state_flags & CHANGING as u16, 0);
             assert_eq!((*m).turn, 1);
             for h in out {
@@ -891,8 +891,8 @@ fn reincarnation_ends_when_life_span_returns_to_normal() {
 
             // At NORMAL_LIFE the ship becomes solid again.
             (*el).life = NORMAL_LIFE as COUNT;
-            (*el).current.image.frame = ship.ship_frames.frame(5);
-            (*el).next.image.frame = ship.ship_frames.frame(9);
+            (*el).current.image.frame = ship.ship_frames.selection(5);
+            (*el).next.image.frame = ship.ship_frames.selection(9);
             (*el).next.image.frames = ship.inner.frame_set(0);
             (*el).current.location = POINT { x: 400, y: -800 };
             (*el).next.location = POINT { x: 1201, y: 77 };
@@ -900,8 +900,8 @@ fn reincarnation_ends_when_life_span_returns_to_normal() {
             SetVelocityVector(&raw mut (*el).velocity, 9, 6);
             ship.inner.ship_mut().cur_status_flags = 0x3ff;
             ship.preprocess();
-            assert_eq!(frame_index((*el).current.image.frame), 5);
-            assert_eq!(frame_index((*el).next.image.frame), 5);
+            assert_eq!(frame_index((*el).current.image.frame.raw()), 5);
+            assert_eq!(frame_index((*el).next.image.frame.raw()), 5);
             assert_eq!((*prim(el)).Type, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
             let control = (*el).IntersectControl;
             assert_eq!(
@@ -1287,7 +1287,7 @@ fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
             assert_eq!((*el).life, 1);
             assert_eq!(ship.inner.ship_mut().ShipFacing, facing);
             assert_eq!((*el).current.image.frames, ship.inner.frame_set(0));
-            assert_eq!(frame_index((*el).current.image.frame), facing);
+            assert_eq!(frame_index((*el).current.image.frame.raw()), facing);
             assert_eq!((*prim(el)).Type, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
             assert_eq!(((*el).current.location.x, (*el).current.location.y), (x, y));
             assert_eq!(
@@ -1345,7 +1345,7 @@ fn new_pkunk_redraws_its_position_while_a_planet_pulls_on_it() {
             (*planet).current.location = POINT { x: x1, y: y1 };
             (*planet).next = (*planet).current.clone();
             (*planet).current.image.frames = ship.inner.frame_set(0);
-            (*planet).current.image.frame = ship.ship_frames.frame(0);
+            (*planet).current.image.frame = ship.ship_frames.selection(0);
             (*prim(planet)).Type = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
             shared::put(planet_handle);
 

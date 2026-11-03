@@ -303,7 +303,7 @@ pub(crate) mod engine {
                     cx.set_frame(
                         b,
                         false,
-                        cx.absolute_frame(cx.element(e).current.image.frame, 0),
+                        cx.absolute_frame(cx.element(e).current.image.frame.view(), 0),
                     );
                     cx.element_mut(b).pre = None;
                 }
@@ -312,7 +312,7 @@ pub(crate) mod engine {
                     cx.set_frame(
                         b,
                         false,
-                        cx.advance_frame(cx.element(e).current.image.frame),
+                        cx.advance_frame(cx.element(e).current.image.frame.view()),
                     );
                 }
                 6 => {
@@ -320,7 +320,7 @@ pub(crate) mod engine {
                     cx.set_frame(
                         b,
                         false,
-                        cx.absolute_frame(cx.element(e).current.image.frame, 20),
+                        cx.absolute_frame(cx.element(e).current.image.frame.view(), 20),
                     );
                 }
                 _ => {}
@@ -328,10 +328,14 @@ pub(crate) mod engine {
         }
     }
     pub(crate) fn blaster_preprocess(cx: &mut Cx<'_>, e: ElementId) {
-        let frame = cx.frame_number(cx.element(e).current.image.frame);
+        let frame = cx.frame_number(cx.element(e).current.image.frame.view());
         match cx.element(e).mass {
             2 if frame < 8 => {
-                cx.set_frame(e, true, cx.advance_frame(cx.element(e).current.image.frame));
+                cx.set_frame(
+                    e,
+                    true,
+                    cx.advance_frame(cx.element(e).current.image.frame.view()),
+                );
                 cx.element_mut(e).flags |= CHANGING as u16;
             }
             6 => {
@@ -339,9 +343,9 @@ pub(crate) mod engine {
                     e,
                     true,
                     if frame < 19 {
-                        cx.advance_frame(cx.element(e).current.image.frame)
+                        cx.advance_frame(cx.element(e).current.image.frame.view())
                     } else {
-                        cx.absolute_frame(cx.element(e).current.image.frame, 16)
+                        cx.absolute_frame(cx.element(e).current.image.frame.view(), 16)
                     },
                 );
                 cx.element_mut(e).flags |= CHANGING as u16;

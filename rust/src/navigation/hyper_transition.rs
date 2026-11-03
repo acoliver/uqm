@@ -32,14 +32,14 @@ pub(super) fn cleanup(cx: &mut Cx<'_>) {
 pub(crate) fn unhyper(cx: &mut Cx<'_>, element: ElementId) {
     cx.element_mut(element).flags |= CHANGING as u16;
     let current = cx.element(element).current.image.frame;
-    let mut index = cx.frame_number(current);
+    let mut index = cx.frame_number(current.view());
     if index == 0 {
         index += 16;
     } else if index < 16 {
         index = (index + 1) & 15;
     } else {
         index += 1;
-        if index == cx.frame_count(current) {
+        if index == cx.frame_count(current.view()) {
             cleanup(cx);
             cx.set_activity(cx.world.activity() & !(IN_BATTLE as u16));
             match cx.element(element).turn {
@@ -58,7 +58,7 @@ pub(crate) fn unhyper(cx: &mut Cx<'_>, element: ElementId) {
             return;
         }
     }
-    let frame = cx.absolute_frame(current, index);
+    let frame = cx.absolute_frame(current.view(), index);
     cx.set_frame(element, true, frame);
 }
 pub(crate) fn init_transition(cx: &mut Cx<'_>, source: ElementId, ship: ElementId, kind: u8) {
@@ -70,7 +70,7 @@ pub(crate) fn init_transition(cx: &mut Cx<'_>, source: ElementId, ship: ElementI
     cx.element_mut(ship).pre = Some(ElementHook::Native(unhyper));
     cx.element_mut(ship).post = None;
     cx.element_mut(ship).turn = kind;
-    let mut turns = (i32::from(cx.frame_count(cx.element(ship).next.image.frame)) - 16
+    let mut turns = (i32::from(cx.frame_count(cx.element(ship).next.image.frame.view())) - 16
         + ((16 - i32::from(cx.ship_state(cx.owner(ship)).facing)) & 15)) as i16;
     if turns == 0 {
         turns = 1;
@@ -103,12 +103,12 @@ pub fn hyper_transition(
             cx.element_mut(element).post = None;
             cx.element_mut(element).flags |= NONSOLID as u16;
             let current = cx.element(element).current.image.frame;
-            let frame = cx.absolute_frame(current, cx.frame_count(current) - 1);
+            let frame = cx.absolute_frame(current.view(), cx.frame_count(current.view()) - 1);
             cx.set_frame(element, true, frame);
         }
     } else {
         let current = cx.element(element).current.image.frame;
-        let old = cx.frame_number(current);
+        let old = cx.frame_number(current.view());
         let mut index = old.wrapping_sub(1);
         if old <= 16 {
             if index == 15 {
@@ -123,7 +123,7 @@ pub fn hyper_transition(
             }
         }
         cx.element_mut(element).flags |= CHANGING as u16;
-        let frame = cx.absolute_frame(current, index);
+        let frame = cx.absolute_frame(current.view(), index);
         cx.set_frame(element, true, frame);
         if cx.element(element).flags & NONSOLID as u16 == 0 {
             cx.copy_next_to_current(element);

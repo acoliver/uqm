@@ -99,7 +99,7 @@ pub(crate) mod engine {
         if thrust_wait > 0 {
             thrust_wait -= 1;
         } else {
-            let frame = cx.advance_frame(cx.element(missile).current.image.frame);
+            let frame = cx.advance_frame(cx.element(missile).current.image.frame.view());
             cx.set_frame(missile, true, frame);
             cx.element_mut(missile).flags |= CHANGING as u16;
             thrust_wait = (cx.random() as u16 & 3) as u8;
@@ -292,8 +292,10 @@ pub(crate) mod engine {
                     flags &= !(WEAPON as u16);
                     let frames = cx.ship_frame_set(ss, 2);
                     cx.set_frames(ship, true, frames);
-                    let frame = cx
-                        .equivalent_frame(cx.ship_frame(ss, 2), cx.element(ship).next.image.frame);
+                    let frame = cx.equivalent_frame(
+                        cx.ship_frame(ss, 2),
+                        cx.element(ship).next.image.frame.view(),
+                    );
                     cx.set_frame(ship, true, frame);
                     cx.element_mut(ship).flags |= CHANGING as u16;
                 }
@@ -320,8 +322,10 @@ pub(crate) mod engine {
                 cx.element_mut(ship).collide = collision;
                 let frames = cx.ship_frame_set(ss, 0);
                 cx.set_frames(ship, true, frames);
-                let frame =
-                    cx.equivalent_frame(cx.ship_frame(ss, 0), cx.element(ship).next.image.frame);
+                let frame = cx.equivalent_frame(
+                    cx.ship_frame(ss, 0),
+                    cx.element(ship).next.image.frame.view(),
+                );
                 cx.set_frame(ship, true, frame);
                 cx.element_mut(ship).flags |= CHANGING as u16;
             } else if cx.element(ship).thrust_wait() != 0 {

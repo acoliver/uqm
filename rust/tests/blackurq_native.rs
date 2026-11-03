@@ -41,7 +41,7 @@ fn descriptor_saw_launch_hold_release_decelerate_and_tracking() {
                 hooks::invoke_element_pointer((*saw).preprocess_func.unwrap(), saw)
             });
             assert_eq!((*saw).life, 65);
-            assert_eq!(frame_index((*saw).next.image.frame), 1);
+            assert_eq!(frame_index((*saw).next.image.frame.raw()), 1);
             ship.ship_mut().cur_status_flags = 0;
             hooks::invoke_element_pointer((*saw).preprocess_func.unwrap(), saw);
             assert_eq!((*saw).life, 33);
@@ -134,7 +134,7 @@ fn fried_launches_sixteen_clouds_in_facing_order_with_inherited_velocity() {
                 hooks::invoke_element_pointer((*e).preprocess_func.unwrap(), e);
                 assert_eq!((*e).turn, 0);
                 hooks::invoke_element_pointer((*e).preprocess_func.unwrap(), e);
-                assert_eq!(frame_index((*e).next.image.frame), 1);
+                assert_eq!(frame_index((*e).next.image.frame.raw()), 1);
                 assert_eq!((*e).turn, 2);
                 assert!((*e).target.is_none());
             }
@@ -164,7 +164,7 @@ fn saw_collision_splinters_and_cloud_damage_depends_on_ship_flag() {
                 hooks::CollisionCall::Hook,
             );
             assert_eq!((*saw).life, 5);
-            assert_eq!(frame_index((*saw).next.image.frame), 2);
+            assert_eq!(frame_index((*saw).next.image.frame.raw()), 2);
             assert_eq!((*saw).state_flags & DISAPPEARING as u16, 0);
             assert_ne!((*saw).state_flags & NONSOLID as u16, 0);
             battle_context::dispose(h);

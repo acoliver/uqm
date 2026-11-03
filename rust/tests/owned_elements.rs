@@ -6,7 +6,7 @@ fn owned_storage_preserves_order_reuse_and_reset_generations() {
     let a = elements.alloc().unwrap();
     let b = elements.alloc().unwrap();
     let c = elements.alloc().unwrap();
-    assert_eq!([a.slot, b.slot, c.slot], [0, 1, 2]);
+    assert_eq!([a.slot(), b.slot(), c.slot()], [0, 1, 2]);
     assert!(elements.alloc().is_none());
     elements.put(b);
     elements.put(a);
@@ -18,14 +18,14 @@ fn owned_storage_preserves_order_reuse_and_reset_generations() {
     elements.remove(c);
     elements.free(c);
     let reused = elements.alloc().unwrap();
-    assert_eq!(reused.slot, c.slot);
+    assert_eq!(reused.slot(), c.slot());
     assert_ne!(reused, c);
     assert!(!elements.contains(c));
     elements.reinit();
     assert!(elements.head().is_none());
     assert!(!elements.contains(a));
     let reset = elements.alloc().unwrap();
-    assert_eq!(reset.slot, a.slot);
+    assert_eq!(reset.slot(), a.slot());
     assert_ne!(reset, a);
 }
 
@@ -52,8 +52,8 @@ fn resizing_invalidates_old_ids_and_preserves_slot_addresses() {
     assert!(elements.alloc().is_none());
     elements.reset_capacity(1);
     let replacement = elements.alloc().unwrap();
-    assert_eq!(replacement.slot, old.slot);
-    assert_ne!(replacement.gen, old.gen);
+    assert_eq!(replacement.slot(), old.slot());
+    assert_ne!(replacement.generation(), old.generation());
     assert_eq!(elements.raw(replacement), address);
     assert!(elements.alloc().is_none());
 }

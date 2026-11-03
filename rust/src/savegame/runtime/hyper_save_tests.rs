@@ -26,22 +26,24 @@ const SENTINEL_FACING: u16 = 0x5555;
 
 fn allocate(queue: &mut RacePool, record: ShipRecord) -> *mut ShipRecord {
     let id = queue
+        .fixture_pool()
         .alloc(record)
         .unwrap_or_else(|| panic!("fixture capacity"));
-    std::ptr::from_mut(queue.get_mut(id))
+    std::ptr::from_mut(queue.fixture_pool().get_mut(id))
 }
 
 fn push(queue: &mut RacePool, record: ShipRecord) -> *mut ShipRecord {
     let id = queue
+        .fixture_pool()
         .alloc(record)
         .unwrap_or_else(|| panic!("fixture capacity"));
-    queue.put(id);
-    std::ptr::from_mut(queue.get_mut(id))
+    queue.fixture_pool().put(id);
+    std::ptr::from_mut(queue.fixture_pool().get_mut(id))
 }
 
 fn allocate_element(elements: &mut ElementTable, value: ElementRecord) -> *mut ElementRecord {
     let id = elements.alloc().expect("fixture capacity");
-    elements[id] = value;
+    *elements.fixture_record_mut(id) = value;
     elements.raw(id).cast()
 }
 
@@ -79,7 +81,7 @@ struct Queues {
 
 impl Queues {
     fn new() -> Self {
-        let ships = RacePool::with_capacity(usize::from(SHIP_SLOTS));
+        let ships = RacePool::with_capacity(0, usize::from(SHIP_SLOTS));
         let display = ElementTable::with_capacity(usize::from(ELEMENT_SLOTS));
         Self { ships, display }
     }
@@ -95,11 +97,7 @@ impl Queues {
             &mut queues.display,
             element(
                 PLAYER_SHIP_BIT | APPEARING_BIT,
-                Parent::Ship(ShipId {
-                    side: 0,
-                    slot: 0,
-                    gen: 0,
-                }),
+                Parent::Ship(queue_ship(&queues.ships, 0)),
             ),
         );
         push_element(&mut queues.display, element(0, Parent::None));
@@ -109,9 +107,12 @@ impl Queues {
     }
 
     fn head_ship(&self) -> *mut ShipRecord {
-        self.ships.head().map_or(std::ptr::null_mut(), |id| {
-            std::ptr::from_ref(self.ships.get(id)).cast_mut()
-        })
+        self.ships
+            .fixture_records()
+            .head()
+            .map_or(std::ptr::null_mut(), |id| {
+                std::ptr::from_ref(self.ships.fixture_records().get(id)).cast_mut()
+            })
     }
 
     fn flagship_element(&self) -> *mut ElementRecord {
@@ -156,14 +157,14 @@ fn bytes_of<T>(value: &T) -> Vec<u8> {
 fn queues_snapshot(queues: &Queues) -> (Vec<String>, Vec<String>) {
     (
         (0..32)
-            .filter_map(|slot| queues.ships.id_at(slot))
+            .filter_map(|slot| queues.ships.fixture_records().id_at(slot))
             .map(|id| {
                 format!(
                     "{id:?}:{:?}:{:?}:{:?}:{:?}",
-                    queues.ships.get(id),
-                    queues.ships.pred(id),
-                    queues.ships.succ(id),
-                    queues.ships.linked(id)
+                    queues.ships.fixture_records().get(id),
+                    queues.ships.fixture_records().pred(id),
+                    queues.ships.fixture_records().succ(id),
+                    queues.ships.fixture_records().linked(id)
                 )
             })
             .collect(),
@@ -256,13 +257,7 @@ fn the_owner_is_the_elements_parent_even_when_it_is_not_the_queue_head() {
     let mut queues = Queues::flight(3);
     push(&mut queues.ships, starship(11, None));
     // SAFETY: the flagship element is a slot of the display pool.
-    unsafe {
-        (*queues.flagship_element()).parent = Parent::Ship(ShipId {
-            side: 0,
-            slot: 1,
-            gen: 0,
-        })
-    };
+    unsafe { (*queues.flagship_element()).parent = Parent::Ship(queue_ship(&queues.ships, 1)) };
     // SAFETY: the head is a slot of the ship pool.
     assert_eq!(unsafe { (*queues.head_ship()).ShipFacing }, 3);
 
@@ -278,14 +273,7 @@ fn only_the_head_ship_names_the_element_and_later_ships_are_not_consulted() {
     let other_owner = push(&mut queues.ships, starship(14, None));
     let other_element = push_element(
         &mut queues.display,
-        element(
-            PLAYER_SHIP_BIT,
-            Parent::Ship(ShipId {
-                side: 0,
-                slot: 1,
-                gen: 0,
-            }),
-        ),
+        element(PLAYER_SHIP_BIT, Parent::Ship(queue_ship(&queues.ships, 1))),
     );
     // SAFETY: `other_owner` is a slot of the ship pool.
     unsafe { (*other_owner).hShip = queues.display.id(other_element.cast()) };
@@ -326,14 +314,7 @@ fn a_handle_that_is_not_a_link_of_the_display_list_is_refused() {
     // A slot of the pool that was allocated but never queued.
     let loose = allocate_element(
         &mut queues.display,
-        element(
-            PLAYER_SHIP_BIT,
-            Parent::Ship(ShipId {
-                side: 0,
-                slot: 0,
-                gen: 0,
-            }),
-        ),
+        element(PLAYER_SHIP_BIT, Parent::Ship(queue_ship(&queues.ships, 0))),
     );
     // SAFETY: the head is a slot of the ship pool.
     unsafe { (*queues.head_ship()).hShip = queues.display.id(loose.cast()) };
@@ -351,14 +332,8 @@ fn a_stale_generation_or_slot_outside_the_pool_is_refused() {
     let queues = Queues::flight(5);
     let flagship = queues.display.id(queues.flagship_element().cast()).unwrap();
     for id in [
-        ElementId {
-            gen: flagship.gen + 1,
-            ..flagship
-        },
-        ElementId {
-            slot: u8::MAX,
-            gen: 0,
-        },
+        ElementId::fixture(flagship.slot(), flagship.generation() + 1),
+        ElementId::fixture(u8::MAX, 0),
     ] {
         // SAFETY: the head is a slot of the ship pool.
         unsafe { (*queues.head_ship()).hShip = Some(id) };
@@ -399,16 +374,8 @@ fn an_owner_that_is_not_a_link_of_the_player_queue_is_refused() {
     let free_slot = allocate(&mut queues.ships, starship(1, None));
     assert_ne!(free_slot, queues.head_ship());
     for owner in [
-        Parent::Ship(ShipId {
-            side: 0,
-            slot: 1,
-            gen: 0,
-        }),
-        Parent::Ship(ShipId {
-            side: 1,
-            slot: 0,
-            gen: 0,
-        }),
+        Parent::Ship(queue_ship(&queues.ships, 1)),
+        Parent::Ship(crate::engine::battle::ShipId::fixture(1, 0, 0)),
         Parent::IpGroup(0),
     ] {
         // SAFETY: the flagship element is a slot of the display pool.
@@ -426,7 +393,7 @@ fn an_owner_that_is_not_a_link_of_the_player_queue_is_refused() {
 fn a_disabled_ship_pool_has_no_flagship_and_writes_nothing() {
     let queues = Queues::new();
     let mut game = game();
-    let disabled = RacePool::with_capacity(0);
+    let disabled = RacePool::with_capacity(0, 0);
     // SAFETY: both owned pools remain immutable for this read.
     let saved = unsafe { save_hyper_facing(&mut game, &disabled, &queues.display) };
     assert_eq!(saved, Ok(HyperFlagship::Absent));
@@ -480,4 +447,14 @@ fn reading_the_facing_of_a_flight_without_a_flagship_is_none() {
     // SAFETY: both queues are pools made by `InitQueue` for these records.
     let facing = unsafe { read_flagship_facing(&queues.ships, &queues.display) };
     assert_eq!(facing, Ok(None));
+}
+
+fn queue_ship(pool: &RacePool, slot: usize) -> ShipId {
+    use crate::engine::battle::link_queue::{LinkQueue, Starship};
+    let queue = LinkQueue::<Starship>::borrow(pool);
+    let key = pool.fixture_records().id_at(slot).unwrap();
+    let address = std::ptr::from_ref(pool.fixture_records().get(key))
+        .cast_mut()
+        .cast();
+    queue.ship_id(queue.id(address).unwrap())
 }

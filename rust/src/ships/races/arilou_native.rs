@@ -244,7 +244,7 @@ pub(crate) mod engine {
                 cx.element_mut(ship).flags |= (NONSOLID | FINITE_LIFE | CHANGING) as u16;
                 cx.element_mut(ship).life = HYPER_LIFE;
                 cx.set_frames(ship, true, special);
-                cx.set_frame(ship, true, cx.ship_frame(ss, 2));
+                cx.set_frame(ship, true, cx.ship_frame(ss, 2).to_owned());
                 cx.process_ship_sound(ss, 1, ship);
                 cx.ship_state_mut(ss).special_counter =
                     cx.race_stats(ss).characteristics.special_wait;
@@ -271,7 +271,7 @@ pub(crate) mod engine {
                 cx.set_frames(ship, false, frames.clone());
                 cx.set_frames(ship, true, frames);
                 let frame = cx.absolute_frame(cx.ship_frame(ss, 0), cx.ship_state(ss).facing);
-                cx.set_frame(ship, false, frame);
+                cx.set_frame(ship, false, frame.clone());
                 cx.set_frame(ship, true, frame);
                 cx.init_intersect_start(ship);
             } else {
@@ -279,9 +279,9 @@ pub(crate) mod engine {
                 if life != 2 {
                     let frame = cx.element(ship).next.image.frame;
                     let frame = if life < 2 {
-                        cx.retreat_frame(frame)
+                        cx.retreat_frame(frame.view())
                     } else {
-                        cx.advance_frame(frame)
+                        cx.advance_frame(frame.view())
                     };
                     cx.set_frame(ship, true, frame);
                 } else {

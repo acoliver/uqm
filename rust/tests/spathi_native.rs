@@ -145,7 +145,7 @@ fn forward_missile_leaves_the_nose_along_the_ship_facing() {
                 (APPEARING | FINITE_LIFE | IGNORE_SIMILAR) as u16
             );
             assert!((*m).preprocess_func.is_none());
-            assert_eq!(index_of((*m).current.image.frame), 4);
+            assert_eq!(index_of((*m).current.image.frame.raw()), 4);
             // Facing 4 is angle 16, along +x (angle 0 points up the screen): the nose offset of
             // 16 display pixels, pulled back by one frame of travel at speed 120.
             assert_eq!((*m).velocity.travel_angle, 16);
@@ -183,7 +183,7 @@ fn butt_leaves_the_tail_not_the_nose() {
                 (*butt).parent,
                 uqm_rust::engine::battle::Parent::Ship(fleet.ship_id)
             );
-            assert_eq!(index_of((*butt).current.image.frame), 12);
+            assert_eq!(index_of((*butt).current.image.frame.raw()), 12);
             assert_eq!((*butt).velocity.travel_angle, 48);
             assert_eq!((*butt).state_flags, (APPEARING | FINITE_LIFE) as u16);
             assert_eq!((*butt).life, 30);
@@ -220,7 +220,7 @@ fn butt_rear_facing_wraps_through_sixteen_facings() {
             fleet.descriptor_mut().ship_info.energy_level = 10;
             fleet.postprocess();
             let butt = battle::element(queue_tail());
-            assert_eq!(index_of((*butt).current.image.frame), rear);
+            assert_eq!(index_of((*butt).current.image.frame.raw()), rear);
         }
     })
 }
@@ -285,13 +285,13 @@ fn butt_homes_one_facing_step_per_tracking_pass() {
             assert_eq!((*butt).turn, 1);
             hooks::invoke_element_pointer(preprocess, butt);
             assert_eq!((*butt).turn, 0);
-            assert_eq!(index_of((*butt).next.image.frame), 12);
+            assert_eq!(index_of((*butt).next.image.frame.raw()), 12);
             assert_eq!((*butt).state_flags & CHANGING as u16, 0);
 
             // With no enemy to track, the delay is reloaded and nothing turns.
             hooks::invoke_element_pointer(preprocess, butt);
             assert_eq!((*butt).turn, 1);
-            assert_eq!(index_of((*butt).next.image.frame), 12);
+            assert_eq!(index_of((*butt).next.image.frame.raw()), 12);
             assert_eq!((*butt).state_flags & CHANGING as u16, 0);
 
             // An enemy straight up the screen is four facings away from facing 12, so
@@ -312,7 +312,7 @@ fn butt_homes_one_facing_step_per_tracking_pass() {
 
             hooks::invoke_element_pointer(preprocess, butt);
             hooks::invoke_element_pointer(preprocess, butt);
-            assert_eq!(index_of((*butt).next.image.frame), 13);
+            assert_eq!(index_of((*butt).next.image.frame.raw()), 13);
             assert_ne!((*butt).state_flags & CHANGING as u16, 0);
             assert_eq!((*butt).velocity.travel_angle, 52);
             assert_eq!((*butt).turn, 1);

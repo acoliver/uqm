@@ -212,7 +212,6 @@ pub(crate) mod engine {
     use super::*;
     use crate::collections::observation::image;
     use crate::engine::battle::{Cx, ElementId};
-    use crate::ships::native::frame_index;
 
     extern "C" {}
 
@@ -394,10 +393,10 @@ pub(crate) mod engine {
                             cx.init_intersect_start(test);
                         }
                         if time_value == 1 {
-                            let cur = cx.elements()[el].current.image.frame;
-                            let next = cx.elements()[el].next.image.frame;
-                            let tcur = cx.elements()[test].current.image.frame;
-                            let tnext = cx.elements()[test].next.image.frame;
+                            let cur = cx.elements()[el].current.image.frame.clone();
+                            let next = cx.elements()[el].next.image.frame.clone();
+                            let tcur = cx.elements()[test].current.image.frame.clone();
+                            let tnext = cx.elements()[test].next.image.frame.clone();
                             if next == cur && tnext == tcur {
                                 if test_state_flags & APPEARING as ELEMENT_FLAGS != 0 {
                                     damage(cx, test);
@@ -428,16 +427,16 @@ pub(crate) mod engine {
                                 }
                                 time_value = 0;
                             } else {
-                                if frame_index(cur) != frame_index(next) {
-                                    image!(frame; cx.records()[el].next.image.frame, SetEquFrameIndex(next, cur));
+                                if cx.frame_number(cur.view()) != cx.frame_number(next.view()) {
+                                    image!(frame; cx.records()[el].next.image.frame, cx.equivalent_frame(next.view(), cur.view()));
                                 } else if next != cur {
                                     image!(copy; cx.records()[el].next.image, cx.elements()[el].current.image);
                                     if cx.elements()[el].life > NORMAL_LIFE as COUNT {
                                         cx.records()[el].life = NORMAL_LIFE as COUNT;
                                     }
                                 }
-                                if frame_index(tcur) != frame_index(tnext) {
-                                    image!(frame; cx.records()[test].next.image.frame, SetEquFrameIndex(tnext, tcur));
+                                if cx.frame_number(tcur.view()) != cx.frame_number(tnext.view()) {
+                                    image!(frame; cx.records()[test].next.image.frame, cx.equivalent_frame(tnext.view(), tcur.view()));
                                 } else if tnext != tcur {
                                     image!(copy; cx.records()[test].next.image, cx.elements()[test].current.image);
                                     if cx.elements()[test].life > NORMAL_LIFE as COUNT {
@@ -450,15 +449,15 @@ pub(crate) mod engine {
                                 if state_flags & PLAYER_SHIP as ELEMENT_FLAGS != 0 {
                                     let owner = cx.owner(el);
                                     cx.ship_state_mut(owner).facing =
-                                        frame_index(cx.elements()[el].next.image.frame);
+                                        cx.frame_number(cx.elements()[el].next.image.frame.view());
                                 }
                                 cx.init_intersect_start(test);
                                 cx.init_intersect_end(test);
                                 cx.refresh_intersect_frame(test);
                                 if test_state_flags & PLAYER_SHIP as ELEMENT_FLAGS != 0 {
                                     let owner = cx.owner(test);
-                                    cx.ship_state_mut(owner).facing =
-                                        frame_index(cx.elements()[test].next.image.frame);
+                                    cx.ship_state_mut(owner).facing = cx
+                                        .frame_number(cx.elements()[test].next.image.frame.view());
                                 }
                             }
                         }
@@ -710,13 +709,11 @@ pub(crate) mod engine {
                 } else {
                     cx.records()[e].state_flags &= !COLLISION_BIT;
                 }
-                if flags & POST_PROCESS_BIT != 0 {
-                    delta_x = 0;
-                    delta_y = 0;
+                (delta_x, delta_y) = if flags & POST_PROCESS_BIT != 0 {
+                    (0, 0)
                 } else {
-                    delta_x = scroll_x;
-                    delta_y = scroll_y;
-                }
+                    (scroll_x, scroll_y)
+                };
             } else {
                 let mut pending = handle;
                 while let Some(post) = pending {
@@ -780,15 +777,15 @@ pub(crate) mod engine {
                                 } else {
                                     calc_zoom_stuff(cx.b.zoom_out)
                                 };
-                                image!(frame; cx.records()[e].next.image.frame, SetEquFrameIndex(
-                                    cx.elements()[e].next.image.frames.view(usize::from(index)).raw(),
-                                    cx.elements()[e].next.image.frame,
+                                image!(frame; cx.records()[e].next.image.frame, cx.equivalent_frame(
+                                    cx.elements()[e].next.image.frames.view(usize::from(index)),
+                                    cx.elements()[e].next.image.frame.view(),
                                 ));
                                 if optMeleeScale == SCALE_TRILINEAR
                                     && index < 2
                                     && scale != GSCALE_IDENTITY as COUNT
                                 {
-                                    let frame = cx.elements()[e].next.image.frame;
+                                    let frame = cx.elements()[e].next.image.frame.raw();
                                     let mmframe = SetEquFrameIndex(
                                         cx.elements()[e]
                                             .next
@@ -809,7 +806,8 @@ pub(crate) mod engine {
                                     }
                                 }
                             }
-                            (*primitive).Object.Stamp.frame = cx.elements()[e].next.image.frame;
+                            (*primitive).Object.Stamp.frame =
+                                cx.elements()[e].next.image.frame.raw();
                         }
                     }
                     cx.records()[e].next.location = next;

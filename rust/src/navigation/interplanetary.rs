@@ -443,7 +443,7 @@ pub(crate) mod live {
         cx.element_mut(element).flags = (CHANGING | FINITE_LIFE | IGNORE_VELOCITY) as u16;
         cx.primitive_style_mut(element).kind = gfx_object_STAMP_PRIM as u8;
         cx.set_group_image(element, group);
-        let frame = cx.absolute_frame(cx.group_icon(group), 1);
+        let frame = cx.absolute_frame(cx.group_icon(group).view(), 1);
         cx.set_frame(element, false, frame);
         cx.element_mut(element).death = Some(ElementHook::Native(group_preprocess));
         cx.element_mut(element).collide = Some(CollisionHook::Native(group_collision));
@@ -466,7 +466,7 @@ pub(crate) mod live {
         );
         cx.setup_element(element);
         let stars = cx.navigation_stars();
-        let frame = cx.retreat_frame(stars);
+        let frame = cx.retreat_frame(stars.view());
         cx.set_intersect_frame(element, frame);
         cx.put(element);
     }

@@ -63,7 +63,7 @@ impl Cx<'_> {
                 element,
                 self.equivalent_frame(
                     self.element_frame_set_first(element, false),
-                    self.element(element).current.image.frame,
+                    self.element(element).current.image.frame.view(),
                 ),
             )
         };
@@ -104,7 +104,7 @@ impl Cx<'_> {
     pub(crate) fn silhouette(
         &mut self,
         source: ElementId,
-        frame: crate::engine::battle::views::Frame,
+        frame: crate::engine::battle::views::FrameSelection,
         flags: u8,
     ) {
         self.silhouette_at(source, POINT { x: 0, y: 0 }, frame, flags);
@@ -114,7 +114,7 @@ impl Cx<'_> {
         &mut self,
         source: ElementId,
         origin: POINT,
-        frame: crate::engine::battle::views::Frame,
+        frame: crate::engine::battle::views::FrameSelection,
         flags: u8,
     ) {
         let mut stamp = STAMP {
@@ -158,15 +158,13 @@ impl Cx<'_> {
     }
 
     pub fn init_ship_status(&mut self, ship: ShipId) {
-        let info = &raw mut *self.ship_info_mut(ship);
         // SAFETY: the descriptor retains its owned status data while graphics are drawn.
         unsafe {
-            {
-                crate::ui::shipstat::init_ship_status(info, Some(ship), std::ptr::null_mut());
-                let old = SetContext(StatusContext);
-                crate::battle::status_native::draw_captains_window(self, ship);
-                SetContext(old);
-            }
+            let info = self.ship_info_pointer(ship);
+            crate::ui::shipstat::init_ship_status(info, Some(ship), std::ptr::null_mut());
+            let old = SetContext(StatusContext);
+            crate::battle::status_native::draw_captains_window(self, ship);
+            SetContext(old);
         }
     }
 
@@ -186,7 +184,7 @@ impl Cx<'_> {
             self.init_intersect(id);
             let frame = self.equivalent_frame(
                 self.element_frame_set_first(id, true),
-                self.element(id).next.image.frame,
+                self.element(id).next.image.frame.view(),
             );
             self.set_intersect_frame(id, frame);
         }
@@ -321,7 +319,7 @@ mod tactrans_native_access {
                     height: 0,
                 },
             };
-            let frame = self.ship_frame(owner, 0).raw();
+            let frame = self.ship_frame(owner, 0).to_owned().raw();
             // SAFETY: the ship owns the loaded frame; the rectangle is local output.
             unsafe {
                 GetFrameRect(frame, &mut rect);
@@ -604,7 +602,7 @@ impl Cx<'_> {
 impl Cx<'_> {
     pub(crate) fn draw_statistics(&mut self, ship: ShipId, crew: i16, energy: i16) {
         let y = self.status_offset(ship);
-        let info = &raw mut *self.ship_info_mut(ship);
+        let info = self.ship_info_pointer(ship);
         // SAFETY: the checked descriptor and status resources remain live during drawing.
         unsafe {
             crate::ships::native::abi::DeltaStatistics(info, y, crew, energy);
@@ -636,7 +634,7 @@ impl Cx<'_> {
         // SAFETY: the shared stars frame and its frame set remain loaded throughout the battle.
         unsafe {
             let frame =
-                crate::engine::battle::views::Frame::from_native(DecFrameIndex(stars_in_space));
+                crate::engine::battle::views::FrameSelection::retain(DecFrameIndex(stars_in_space));
             let frames = crate::engine::battle::views::Frames::native_shared(
                 crate::engine::battle::views::SharedFrames::Stars,
                 std::ptr::NonNull::new_unchecked(&raw mut stars_in_space),

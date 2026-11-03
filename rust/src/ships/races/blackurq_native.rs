@@ -82,10 +82,10 @@ pub(crate) mod engine {
                 cx.set_frame(
                     e,
                     true,
-                    if cx.frame_number(cx.element(e).current.image.frame) < 1 {
-                        cx.advance_frame(cx.element(e).current.image.frame)
+                    if cx.frame_number(cx.element(e).current.image.frame.view()) < 1 {
+                        cx.advance_frame(cx.element(e).current.image.frame.view())
                     } else {
-                        cx.absolute_frame(cx.element(e).current.image.frame, 0)
+                        cx.absolute_frame(cx.element(e).current.image.frame.view(), 0)
                     },
                 );
                 cx.element_mut(e).flags |= CHANGING as u16;
@@ -160,7 +160,11 @@ pub(crate) mod engine {
         spin_preprocess(cx, e);
     }
     pub(crate) fn splinter_preprocess(cx: &mut Cx<'_>, e: ElementId) {
-        cx.set_frame(e, true, cx.advance_frame(cx.element(e).current.image.frame));
+        cx.set_frame(
+            e,
+            true,
+            cx.advance_frame(cx.element(e).current.image.frame.view()),
+        );
         cx.element_mut(e).flags |= CHANGING as u16;
     }
     pub(crate) fn buzzsaw_collision(
@@ -178,7 +182,7 @@ pub(crate) mod engine {
             cx.set_frame(
                 a,
                 true,
-                cx.absolute_frame(cx.element(a).current.image.frame, 2),
+                cx.absolute_frame(cx.element(a).current.image.frame.view(), 2),
             );
             cx.element_mut(a).pre = Some(ElementHook::Native(splinter_preprocess));
         }
@@ -317,7 +321,11 @@ pub(crate) mod engine {
         if cx.element(e).turn != 0 {
             cx.element_mut(e).turn -= 1;
         } else {
-            cx.set_frame(e, true, cx.advance_frame(cx.element(e).current.image.frame));
+            cx.set_frame(
+                e,
+                true,
+                cx.advance_frame(cx.element(e).current.image.frame.view()),
+            );
             cx.element_mut(e).flags |= CHANGING as u16;
             cx.element_mut(e).turn = 2;
         }

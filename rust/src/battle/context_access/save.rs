@@ -28,9 +28,7 @@ pub(crate) unsafe fn read_flagship_facing(
     }
     let mut next = ships.head();
     while let Some(id) = next {
-        if record.parent
-            == Parent::Ship(ships.ship_id(id, crate::ships::native::abi::RPG_PLAYER_NUM as u8))
-        {
+        if record.parent == Parent::Ship(ships.ship_id(id)) {
             return Ok(Some(ships.facing(id)));
         }
         next = ships.succ(id);

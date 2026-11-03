@@ -129,7 +129,7 @@ pub(crate) mod engine {
             let mut enroute = true;
             let mut dx = cx.race_stats(ss).ship_info.crew_level as SIZE;
             let mut dy = cx.element(e).life as SIZE;
-            let orig = cx.frame_number(cx.element(e).current.image.frame);
+            let orig = cx.frame_number(cx.element(e).current.image.frame.view());
             let mut face = orig;
             if (dy & 1 != 0 || cx.target(e).is_some() || cx.track_ship(e, &mut face) >= 0)
                 && (dx == 0 || dy >= 125)
@@ -180,7 +180,7 @@ pub(crate) mod engine {
                     cx.element_mut(e).post = Some(ElementHook::Native(fighter_postprocess));
                 }
                 if enroute {
-                    face = cx.frame_number(cx.element(target).current.image.frame);
+                    face = cx.frame_number(cx.element(target).current.image.frame.view());
                     let offset_face = if cx.element(e).turn & LEFT as u8 != 0 {
                         i32::from(face) - 4
                     } else {
@@ -197,7 +197,7 @@ pub(crate) mod engine {
                 cx.set_frame(
                     e,
                     true,
-                    cx.absolute_frame(cx.element(e).next.image.frame, face),
+                    cx.absolute_frame(cx.element(e).next.image.frame.view(), face),
                 );
             }
             cx.element_mut(e).velocity.set_vector(8 << ONE_SHIFT, face);
@@ -237,7 +237,7 @@ pub(crate) mod engine {
                 cx.set_frame(
                     fighter,
                     true,
-                    cx.absolute_frame(cx.element(fighter).next.image.frame, travel),
+                    cx.absolute_frame(cx.element(fighter).next.image.frame.view(), travel),
                 );
                 cx.element_mut(fighter)
                     .velocity

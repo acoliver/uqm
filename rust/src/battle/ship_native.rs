@@ -185,7 +185,7 @@ pub(crate) mod engine {
         if wait > 0 {
             cx.element_mut(e).set_turn_wait(wait - 1);
         } else {
-            let frame = cx.advance_frame(cx.element(e).current.image.frame);
+            let frame = cx.advance_frame(cx.element(e).current.image.frame.view());
             cx.set_frame(e, true, frame);
             cx.element_mut(e).flags |= CHANGING as u16;
             let wait = cx.element(e).thrust_wait();
@@ -266,7 +266,7 @@ pub(crate) mod engine {
                 i32::from(cx.ship(ship).ShipFacing) + if flags & LEFT as u16 != 0 { -1 } else { 1 },
             );
             cx.ship_state_mut(ship).facing = facing;
-            let frame = cx.absolute_frame(cx.element(e).next.image.frame, facing);
+            let frame = cx.absolute_frame(cx.element(e).next.image.frame.view(), facing);
             cx.set_frame(e, true, frame);
             cx.element_mut(e).flags |= CHANGING as u16;
             let wait = cx.desc(ship).characteristics.turn_wait;

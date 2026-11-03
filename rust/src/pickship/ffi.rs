@@ -240,7 +240,7 @@ unsafe fn change_selection(state: &mut PickerState) {
             // SAFETY: `race_strings` is the ship's name table.
             let entry = unsafe {
                 SetAbsStringTableIndex(
-                    (ship.strings as *mut c_void).cast(),
+                    LinkQueue::with_ship_resources(chosen, |r| r.strings()).cast(),
                     u16::from(ship.captain),
                 )
             };
@@ -584,7 +584,7 @@ pub unsafe extern "C" fn draw_armada_pick_ship(draw_salvage_frame: c_int, pick_r
         }
         let (x, y) = icon_origin((pick.corner.x, pick.corner.y), ship.index);
         stamp.origin = CPoint { x, y };
-        stamp.frame = ship.icons as *mut c_void;
+        stamp.frame = LinkQueue::with_ship_resources(id, |r| r.icon().raw()).cast();
         set_color(Rgba::BLACK);
         fill(Area {
             x,

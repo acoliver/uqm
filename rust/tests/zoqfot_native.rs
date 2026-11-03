@@ -50,7 +50,7 @@ fn descriptor_and_spit_animation_preserve_jitter_rng_and_speed() {
             with_rng(19, 1, || {
                 hooks::invoke_element_pointer((*e).preprocess_func.unwrap(), e)
             });
-            assert_eq!(frame_index((*e).next.image.frame), 1);
+            assert_eq!(frame_index((*e).next.image.frame.raw()), 1);
             assert_eq!((*e).turn, 2);
             let mut v: VELOCITY_DESC = mem::zeroed();
             let speed = (15 << ONE_SHIFT) << 1 << VELOCITY_SHIFT;
@@ -65,12 +65,12 @@ fn descriptor_and_spit_animation_preserve_jitter_rng_and_speed() {
                     hooks::invoke_element_pointer((*e).preprocess_func.unwrap(), e)
                 });
                 assert_eq!((*e).turn, expected);
-                assert_eq!(frame_index((*e).next.image.frame), 1);
+                assert_eq!(frame_index((*e).next.image.frame.raw()), 1);
             }
             with_rng(19, 0, || {
                 hooks::invoke_element_pointer((*e).preprocess_func.unwrap(), e)
             });
-            assert_eq!(frame_index((*e).next.image.frame), 2);
+            assert_eq!(frame_index((*e).next.image.frame.raw()), 2);
             assert_eq!((*e).turn, 2);
             battle_context::dispose(h);
         }

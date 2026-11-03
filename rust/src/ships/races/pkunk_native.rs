@@ -193,7 +193,7 @@ pub(crate) mod engine {
         if cx.element(e).turn > 0 {
             cx.element_mut(e).turn -= 1;
         } else {
-            let frame = cx.advance_frame(cx.element(e).current.image.frame);
+            let frame = cx.advance_frame(cx.element(e).current.image.frame.view());
             cx.set_frame(e, true, frame);
             cx.element_mut(e).flags |= CHANGING as ELEMENT_FLAGS;
             cx.element_mut(e).turn = cx.element(e).thrust;
@@ -330,7 +330,7 @@ pub(crate) mod engine {
         cx.ship_state_mut(ss).facing = normalize_facing(cx.random() as i32);
         cx.set_frames(e, false, cx.ship_frame_set(ss, 0));
         let frame = cx.absolute_frame(cx.ship_frame(ss, 0), cx.ship_state(ss).facing);
-        cx.set_frame(e, false, frame);
+        cx.set_frame(e, false, frame.clone());
         cx.primitive_style_mut(e).kind = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
         let (width, height) = logical_dimensions(cx);
         loop {
@@ -492,15 +492,15 @@ pub(crate) mod engine {
             if cx.element(e).life == NORMAL_LIFE as COUNT {
                 let frame = cx.equivalent_frame(
                     cx.element_frame_set_first(e, false),
-                    cx.element(e).current.image.frame,
+                    cx.element(e).current.image.frame.view(),
                 );
-                cx.set_frame(e, false, frame);
+                cx.set_frame(e, false, frame.clone());
                 cx.set_frame(e, true, frame);
                 cx.primitive_style_mut(e).kind = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
                 cx.init_intersect(e);
                 let frame = cx.equivalent_frame(
                     cx.element_frame_set_first(e, true),
-                    cx.element(e).next.image.frame,
+                    cx.element(e).next.image.frame.view(),
                 );
                 cx.set_intersect_frame(e, frame);
                 cx.element_mut(e).velocity = VELOCITY_DESC::default();

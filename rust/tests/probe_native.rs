@@ -62,13 +62,13 @@ fn drone_descriptor_preserves_resources_stats_and_absent_callbacks() {
             .views()
             .into_iter()
             .all(|p| p.is_absent()));
-        let captain = d.ship_data.captain_control;
+        let captain = &d.ship_data.captain_control;
         assert!(captain.captain_rsc.is_null());
         assert!(captain.background.is_null());
         assert!(captain.turn.is_null());
         assert!(captain.thrust.is_null());
         assert!(captain.weapon.is_null());
-        assert!(captain.special.is_null());
+        assert!(captain.special.is_absent());
         assert!(d.ship_data.victory_ditty_rsc.is_null());
         assert!(d.ship_data.ship_sounds_rsc.is_null());
         assert!(d.ship_data.victory_ditty.is_null());

@@ -3,12 +3,12 @@ pub mod context;
 pub(crate) mod display;
 pub mod frames;
 pub mod hooks;
-pub mod link_queue;
+pub use access::link_queue;
 pub mod net;
 pub mod race;
-pub mod record;
+pub use access::record;
 
-pub mod table;
+pub use access::table;
 pub use context::{Battle, Cx, World};
 pub use hooks::{CollisionFn, CollisionHook, ElementFn, ElementHook, ElementHooks};
 pub use race::{
@@ -16,15 +16,17 @@ pub use race::{
 };
 pub use table::{ElementId, ElementTable, Parent, ShipId};
 
-pub mod views;
+pub use access::views;
 
 pub use race::{Callbacks, Selection};
 
-pub(crate) mod androsynth_template;
-pub(crate) mod vux_template;
+#[cfg(not(test))]
+pub(crate) use access::androsynth_template;
+#[cfg(not(test))]
+pub(crate) use access::vux_template;
 
 pub(crate) mod kernel;
-pub mod template;
+pub use access::template;
 pub use template::{RaceResources, RaceTemplate};
 
 pub use access::RaceDescLayout;

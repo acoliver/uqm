@@ -168,7 +168,7 @@ pub(crate) mod engine {
         origin: WeaponOrigin,
     ) -> WeaponSpawn {
         let face = cx.ship_state(ss).facing;
-        let rect = cx.frame_rect(cx.absolute_frame(cx.ship_frame(ss, 1), face));
+        let rect = cx.frame_rect(cx.absolute_frame(cx.ship_frame(ss, 1), face).view());
         let block = Laser {
             origin: POINT {
                 x: ((i32::from(origin.next.location.x) & !((1 << ONE_SHIFT) - 1))
@@ -345,8 +345,8 @@ pub(crate) mod engine {
     pub(crate) fn satellite_preprocess(cx: &mut Cx<'_>, e: ElementId) {
         cx.element_mut(e).life = cx.element(e).life.wrapping_add(1);
         let frame = cx.absolute_frame(
-            cx.element(e).current.image.frame,
-            (cx.frame_number(cx.element(e).current.image.frame)
+            cx.element(e).current.image.frame.view(),
+            (cx.frame_number(cx.element(e).current.image.frame.view())
                 .wrapping_add(1))
                 & 7,
         );
@@ -519,7 +519,7 @@ pub(crate) mod engine {
         cx.element_mut(e).life = 4;
         cx.element_mut(e).turn = 1;
         cx.element_mut(e).thrust = 0;
-        let frame = cx.absolute_frame(cx.element(e).current.image.frame, 8);
+        let frame = cx.absolute_frame(cx.element(e).current.image.frame.view(), 8);
         cx.set_frame(e, true, frame);
         cx.element_mut(e).pre = Some(ElementHook::Native(animation_preprocess));
         cx.element_mut(e).death = None;

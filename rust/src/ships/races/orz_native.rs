@@ -301,7 +301,7 @@ pub(crate) mod engine {
         cx: &mut Cx<'_>,
         ship: ElementId,
         marine: ElementId,
-        frame: crate::engine::battle::views::Frame,
+        frame: crate::engine::battle::views::FrameSelection,
         flags: BYTE,
     ) {
         let origin = POINT {
@@ -336,13 +336,8 @@ pub(crate) mod engine {
                 if cx.element(e).thrust == MARINE_WAIT {
                     cx.element_mut(e).thrust -= 1;
                     let frame = cx.element_frame_set_first(e, true);
-                    silhouette(
-                        cx,
-                        ship,
-                        e,
-                        cx.absolute_frame(frame, cx.frame_count(frame).wrapping_sub(2)),
-                        0,
-                    );
+                    let frame = cx.absolute_frame(frame, cx.frame_count(frame).wrapping_sub(2));
+                    silhouette(cx, ship, e, frame, 0);
                 }
                 cx.element_mut(e).next.location = cx.element(ship).next.location;
                 let mut left_ship = cx.element(ship).hits == 0 || cx.element(e).life == 0;
@@ -362,13 +357,8 @@ pub(crate) mod engine {
                         }
                         cx.element_mut(e).thrust = cx.element(e).thrust.wrapping_add(1);
                         let frame = cx.element_frame_set_first(e, true);
-                        silhouette(
-                            cx,
-                            ship,
-                            e,
-                            cx.absolute_frame(frame, cx.frame_count(frame).wrapping_sub(1)),
-                            0,
-                        );
+                        let frame = cx.absolute_frame(frame, cx.frame_count(frame).wrapping_sub(1));
+                        silhouette(cx, ship, e, frame, 0);
                         cx.process_ship_sound(ss, 3, e);
                     }
                 }
@@ -390,7 +380,7 @@ pub(crate) mod engine {
             cx.element_mut(e).flags |= (CHANGING | CREW_OBJECT) as u16;
             cx.primitive_style_mut(e).kind = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
             let frame = cx.absolute_frame(cx.ship_frame(ss, 2), 21);
-            cx.set_frame(e, false, frame);
+            cx.set_frame(e, false, frame.clone());
             cx.set_frame(e, true, frame);
             cx.element_mut(e).thrust = 0;
             cx.element_mut(e).turn =
@@ -727,7 +717,7 @@ pub(crate) mod engine {
             cx.set_frame(
                 turret,
                 false,
-                cx.absolute_frame(cx.element(turret).current.image.frame, facing),
+                cx.absolute_frame(cx.element(turret).current.image.frame.view(), facing),
             );
             facing = facing_to_angle(i32::from(facing)) as COUNT;
             if cx.ship_state(ss).status & WEAPON as u16 != 0 {

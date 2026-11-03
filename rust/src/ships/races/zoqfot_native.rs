@@ -65,13 +65,17 @@ pub(crate) mod engine {
         if cx.element(e).turn > 0 {
             cx.element_mut(e).turn -= 1;
         } else {
-            cx.set_frame(e, true, cx.advance_frame(cx.element(e).next.image.frame));
+            cx.set_frame(
+                e,
+                true,
+                cx.advance_frame(cx.element(e).next.image.frame.view()),
+            );
             let mut angle = cx.element(e).velocity.travel_angle;
-            let index = cx.frame_number(cx.element(e).next.image.frame);
+            let index = cx.frame_number(cx.element(e).next.image.frame.view());
             if index == 1 {
                 angle = (i32::from(angle) + (i32::from(cx.random() as COUNT) % 3) - 1) as COUNT;
             }
-            let speed = (((i32::from(cx.frame_count(cx.element(e).next.image.frame))
+            let speed = (((i32::from(cx.frame_count(cx.element(e).next.image.frame.view()))
                 - i32::from(index))
                 << ONE_SHIFT)
                 << 1)
@@ -159,7 +163,7 @@ pub(crate) mod engine {
                 cx.element_mut(tongue).turn = cx.ship_state(ss).special_counter;
             } else {
                 cx.element_mut(tongue).turn = cx.element(e).turn.wrapping_sub(1);
-                let r = cx.frame_rect(cx.element(tongue).current.image.frame);
+                let r = cx.frame_rect(cx.element(tongue).current.image.frame.view());
                 let x = ((i32::from(r.extent.width) >> 1) << ONE_SHIFT) as SIZE;
                 let y = ((i32::from(r.extent.height) >> 1) << ONE_SHIFT) as SIZE;
                 let angle = facing_to_angle(i32::from(cx.ship_state(ss).facing)) as COUNT;

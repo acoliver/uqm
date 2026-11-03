@@ -319,11 +319,11 @@ pub(crate) fn turn_ship(cx: &mut Cx<'_>, ship: &mut Subject, angle: COUNT) -> BO
     if delta < angle_to_facing(HALF_CIRCLE as i32) as u16 {
         cx.ship_state_mut(starship).input |= RIGHT as u8;
         f += 1;
-        ship.next.image.frame = cx.advance_frame(ship.current.image.frame);
+        ship.next.image.frame = cx.advance_frame(ship.current.image.frame.view());
     } else {
         cx.ship_state_mut(starship).input |= LEFT as u8;
         f -= 1;
-        ship.next.image.frame = cx.retreat_frame(ship.current.image.frame);
+        ship.next.image.frame = cx.retreat_frame(ship.current.image.frame.view());
     }
     cx.ship_state_mut(starship).facing = normalize_facing(f);
     1
@@ -394,7 +394,7 @@ pub(crate) fn weapons(
             cx.init_intersect(id);
             let frame = cx.equivalent_frame(
                 cx.element_frame_set_first(id, true),
-                cx.element(id).next.image.frame,
+                cx.element(id).next.image.frame.view(),
             );
             cx.set_intersect_frame(id, frame);
         }
@@ -851,7 +851,7 @@ pub fn tactical(cx: &mut Cx<'_>, owner: ShipId) -> BATTLE_INPUT_STATE {
                 };
 
                 let frame = cx.absolute_frame(cx.subject_intersect_frame(&ship_copy), 0);
-                let rect = cx.frame_rect(frame);
+                let rect = cx.frame_rect(frame.view());
                 let bounds = (i32::from(rect.extent.width) + i32::from(rect.extent.height)) as u16;
                 let mut intercept_turn = 0;
                 if !moved {

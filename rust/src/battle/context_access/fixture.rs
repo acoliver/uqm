@@ -5,7 +5,7 @@ fn ship_detachment_is_an_explicit_fixture_command() {
     // SAFETY: zero is valid for the native record's scalars and optional pointers.
     let record: ShipRecord = unsafe { std::mem::zeroed() };
     let descriptor = RaceDescriptor::EMPTY;
-    let id = ElementId { slot: 0, gen: 1 };
+    let id = ElementId::fixture(0, 1);
     let mut ship = Ship::for_test(&record, &descriptor, id);
     assert!(!ship.clear_element);
     assert_eq!(ship.element, Some(id));
@@ -56,7 +56,7 @@ pub(crate) struct ShipFrames {
     pub ship: Frames,
     pub weapon: Frames,
     pub special: Frames,
-    pub captain_special: Frame,
+    pub captain_special: FrameSelection,
 }
 #[derive(Clone, Copy)]
 pub(crate) struct Phoenix {
@@ -114,8 +114,7 @@ impl Cx<'_> {
             ship: self.ship_frame_set(id, 0),
             weapon: self.ship_frame_set(id, 1),
             special: self.ship_frame_set(id, 2),
-            // SAFETY: the descriptor retains this loaded captain frame.
-            captain_special: unsafe { Frame::from_native(d.ship_data.captain_control.special) },
+            captain_special: d.ship_data.captain_control.special.clone(),
         });
         view.phoenix = match d.race_state {
             crate::engine::battle::RaceState::Pkunk {
@@ -141,7 +140,7 @@ impl Cx<'_> {
             self.race_stats_mut(id).ship_info = info;
         }
         if let Some(data) = &ship.data {
-            self.set_captain_special(id, data.captain_special);
+            self.set_captain_special(id, data.captain_special.clone());
         }
     }
     pub(crate) fn ship_address(&self, id: ShipId) -> usize {
@@ -235,7 +234,7 @@ impl Element {
     pub(crate) fn new() -> Self {
         let record = crate::engine::battle::record::ElementRecord::default();
         Self {
-            state: crate::engine::battle::access::observe_element_record(&record),
+            state: crate::engine::battle::access::fixture_element_state(&record),
             parent: Parent::None,
             target: None,
             pred: None,
@@ -269,8 +268,7 @@ impl Ship {
                     crate::engine::battle::frames::SharedFrames::Fixture(2),
                     d.ship_data.special.clone(),
                 ),
-                // SAFETY: the descriptor retains this loaded captain frame.
-                captain_special: unsafe { Frame::from_native(d.ship_data.captain_control.special) },
+                captain_special: d.ship_data.captain_control.special.clone(),
             }),
             characteristics: Some(d.characteristics),
             phoenix: None,
