@@ -1,10 +1,16 @@
 //! Native ship motion and collision callbacks ported from ship.c.
 
+#[cfg(not(test))]
+use crate::engine::WorldData as WorldFields;
 use crate::ships::native::abi::*;
 
 fn velocity_squared(dx: i16, dy: i16) -> u32 {
     (i64::from(dx) * i64::from(dx) + i64::from(dy) * i64::from(dy)) as u32
 }
+
+const MAX_SPEED: u16 = SHIP_AT_MAX_SPEED as u16;
+const BEYOND_SPEED: u16 = SHIP_BEYOND_MAX_SPEED as u16;
+const GRAVITY: u16 = SHIP_IN_GRAVITY_WELL as u16;
 
 const INPUT_FLAGS: STATUS_FLAGS = (LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as STATUS_FLAGS;
 
@@ -72,9 +78,6 @@ pub(crate) fn thrust(
     increment: u16,
     maximum: u16,
 ) -> u16 {
-    const MAX_SPEED: u16 = 1 << 7;
-    const BEYOND_SPEED: u16 = 1 << 6;
-    const GRAVITY: u16 = 1 << 8;
     let current_angle = (i32::from(facing) << 2) as u16 as i32;
     let travel_angle = velocity.travel_angle;
     let mut thrust = increment;
@@ -220,8 +223,8 @@ pub(crate) mod engine {
             let crew = cx.desc(ship).ship_info.crew_level;
             cx.element_mut(e).set_hit_points(crew);
             let activity = cx.world.activity() as BYTE;
-            if cx.element(e).player == NPC_PLAYER_NUM as SIZE && activity == IN_LAST_BATTLE as BYTE
-            {
+            let player = cx.element(e).player;
+            if player == NPC_PLAYER_NUM as SIZE && activity == IN_LAST_BATTLE as BYTE {
                 cx.draw_final_battle_captain(ship);
             } else if activity <= IN_ENCOUNTER as BYTE {
                 cx.init_ship_status(ship);
@@ -263,7 +266,8 @@ pub(crate) mod engine {
             cx.element_mut(e).set_turn_wait(wait);
         } else if flags & (LEFT | RIGHT) as u16 != 0 {
             let facing = normalize_facing(
-                i32::from(cx.ship(ship).ShipFacing) + if flags & LEFT as u16 != 0 { -1 } else { 1 },
+                i32::from(cx.ship(ship).ship_facing)
+                    + if flags & LEFT as u16 != 0 { -1 } else { 1 },
             );
             cx.ship_state_mut(ship).facing = facing;
             let frame = cx.absolute_frame(cx.element(e).next.image.frame.view(), facing);
@@ -276,7 +280,7 @@ pub(crate) mod engine {
             let wait = cx.element(e).thrust_wait() - 1;
             cx.element_mut(e).set_thrust_wait(wait);
         } else if flags & THRUST as u16 != 0 {
-            let facing = cx.ship(ship).ShipFacing;
+            let facing = cx.ship(ship).ship_facing;
             let status = cx.ship(ship).cur_status_flags;
             let characteristics = cx.desc(ship).characteristics;
             let result = thrust(
@@ -286,8 +290,7 @@ pub(crate) mod engine {
                 characteristics.thrust_increment,
                 characteristics.max_thrust,
             );
-            cx.ship_state_mut(ship).status &=
-                !((SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED | SHIP_IN_GRAVITY_WELL) as u16);
+            cx.ship_state_mut(ship).status &= !(MAX_SPEED | BEYOND_SPEED | GRAVITY);
             cx.ship_state_mut(ship).status |= result;
             cx.element_mut(e)
                 .set_thrust_wait(characteristics.thrust_wait);
@@ -342,7 +345,7 @@ pub(crate) mod engine {
     /// # Safety
     /// The game thread retains the initialized battle context and all resources used by this call.
     pub unsafe fn spawn_ship(cx: &mut Cx<'_>, ship: ShipId) -> BOOLEAN {
-        let Some(descriptor) = load_ship(cx.ship(ship).SpeciesID, 1) else {
+        let Some(descriptor) = load_ship(cx.world, cx.ship(ship).SpeciesID, 1) else {
             return 0;
         };
         cx.attach_descriptor(ship, descriptor);
@@ -396,8 +399,8 @@ pub(crate) mod engine {
             cx.element_mut(id).life += 1;
         } else {
             cx.ship_state_mut(ship).facing = normalize_facing(cx.random() as i32);
-            if inHQSpace() != 0 {
-                let facing = GlobData.Game_state.ShipFacing;
+            if in_hqspace(cx.world) != 0 {
+                let facing = cx.world.data.game.ship_facing;
                 cx.ship_state_mut(ship).facing = if facing > 0 { facing - 1 } else { facing };
             }
             let frame = cx.absolute_frame(cx.ship_frame(ship, 0), cx.ship_state(ship).facing);
@@ -446,7 +449,9 @@ pub(crate) mod engine {
     /// Player queues and encounter/melee selection state must be initialized.
     #[no_mangle]
     pub unsafe extern "C" fn GetInitialStarShips() -> BOOLEAN {
-        if GlobData.Game_state.CurrentActivity as BYTE == SUPER_MELEE as BYTE {
+        if WorldFields::current().read(|owner| owner.game.current_activity) as BYTE
+            == SUPER_MELEE as BYTE
+        {
             let mut ships = [ptr::null_mut(); NUM_PLAYERS as usize];
             if GetInitialMeleeStarShips(ships.as_mut_ptr()) == 0 {
                 return 0;

@@ -1,5 +1,9 @@
 use super::Handler;
 use crate::comm::races::alliance::AllianceApi;
+#[cfg(not(test))]
+use crate::engine::World;
+#[cfg(not(test))]
+use crate::engine::WorldData;
 
 pub(super) trait TalkpetApi: AllianceApi<Handler> {
     fn flags(&self) -> u8;
@@ -10,20 +14,24 @@ pub(super) trait TalkpetApi: AllianceApi<Handler> {
 #[cfg(not(test))]
 impl TalkpetApi for super::super::script::live::LiveScript<Handler> {
     fn flags(&self) -> u8 {
-        extern "C" {
-            static mut GlobData: crate::ships::native::abi::GLOBDATA;
+        {
+            WorldData::current().read(|owner| owner.game.glob_flags)
         }
-        unsafe { GlobData.Game_state.glob_flags }
     }
     fn npc_ships(&self) -> bool {
-        extern "C" {
-            static mut GlobData: crate::ships::native::abi::GLOBDATA;
+        {
+            !WorldData::current()
+                .read(|owner| owner.game.npc_built_ship_q.head)
+                .is_null()
         }
-        unsafe { !GlobData.Game_state.npc_built_ship_q.head.is_null() }
     }
     fn umgah_alive(&mut self) -> bool {
-        use crate::battle::build_native::engine::StartSphereTracking;
-        unsafe { StartSphereTracking(crate::comm::dispatch::ship::UMGAH_SHIP as u16) != 0 }
+        use crate::battle::build_native::engine::start_sphere_tracking;
+        unsafe {
+            World::current().write(|world| {
+                start_sphere_tracking(world, crate::comm::dispatch::ship::UMGAH_SHIP as u16)
+            }) != 0
+        }
     }
     fn strobe(&mut self) {
         unsafe {

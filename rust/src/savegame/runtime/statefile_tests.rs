@@ -5,10 +5,12 @@
 //! `load.c`, not produced by the code under test. The seed save is a file the
 //! C game wrote; its chunk values below were decoded with a separate script.
 
+use crate::engine::World;
 use serial_test::serial;
 
 use super::statefiles::*;
 use crate::comm::locdata::CGameState;
+use crate::engine::world::state_file::{DEFGRPINFO_FILE, RANDGRPINFO_FILE, STARINFO_FILE};
 use crate::savegame::decode::decode_save;
 use crate::savegame::types::{
     BattleFleet, BattleGroup, BattleShip, GroupListEntry, IpGroup, Point, GAME_STATE_BYTES,
@@ -17,7 +19,6 @@ use crate::state::ffi::{
     replace_game_state, rust_init_game_state, snapshot_game_state, with_state_files,
 };
 use crate::state::game_state::{get_state_32_raw, set_state_32_raw};
-use crate::state::state_file::{DEFGRPINFO_FILE, RANDGRPINFO_FILE, STARINFO_FILE};
 
 const C_WRITTEN_SAVE: &[u8] = include_bytes!("../../../tests/fixtures/savegame/legacy-save.00");
 
@@ -35,14 +36,26 @@ fn game() -> Box<CGameState> {
 /// A fresh game state and empty group files, as `InitGlobData` leaves them.
 fn fresh_game() -> Box<CGameState> {
     // SAFETY: no requirements.
-    unsafe { rust_init_game_state() };
+    World::current().write(rust_init_game_state);
     init_group_info(true).unwrap();
-    with_state_files(|files| files.replace_contents(STARINFO_FILE, &[]).unwrap()).unwrap();
+    World::current()
+        .write(|world| {
+            with_state_files(world, |files| {
+                files.replace_contents(STARINFO_FILE, &[]).unwrap()
+            })
+        })
+        .unwrap();
     game()
 }
 
 fn file(index: usize) -> Vec<u8> {
-    with_state_files(|files| files.get_file(index).unwrap().contents().to_vec()).unwrap()
+    World::current()
+        .write(|world| {
+            with_state_files(world, |files| {
+                files.get_file(index).unwrap().contents().to_vec()
+            })
+        })
+        .unwrap()
 }
 
 fn header(num: u8, day: u8, month: u8, star: u16, year: u16, offsets: &[(usize, u32)]) -> Vec<u8> {
@@ -119,68 +132,106 @@ fn seed_defined_image() -> Vec<u8> {
 #[test]
 #[serial]
 fn seed_restores_to_the_images_the_c_loader_builds() {
-    let mut game = fresh_game();
-    replace_game_state(&seed().game_state).unwrap();
-    restore_state_files(&mut game, &seed_sections()).unwrap();
+    let mut game_owner = crate::engine::Game::new();
+    // SAFETY: the serialized fixture owns this published lifecycle.
+    unsafe {
+        crate::app::bridge::with_game(&mut game_owner, || {
+            let mut game = fresh_game();
+            World::current()
+                .write(|world| replace_game_state(world, &seed().game_state))
+                .unwrap();
+            World::current()
+                .write(|world| {
+                    super::statefiles::restore_state_files(
+                        &mut game,
+                        &mut world.story,
+                        &mut world.files,
+                        &seed_sections(),
+                    )
+                })
+                .unwrap();
 
-    assert_eq!(file(STARINFO_FILE), vec![0u8; 2008]);
-    assert_eq!(file(RANDGRPINFO_FILE), seed_random_image());
-    assert_eq!(file(DEFGRPINFO_FILE), seed_defined_image());
-    assert_eq!(game.battle_group_ref, 1);
-    let state = snapshot_game_state().unwrap();
-    assert_eq!(get_state_32_raw(&state, PROBE_OFFSET_BIT), 1);
+            assert_eq!(file(STARINFO_FILE), vec![0u8; 2008]);
+            assert_eq!(file(RANDGRPINFO_FILE), seed_random_image());
+            assert_eq!(file(DEFGRPINFO_FILE), seed_defined_image());
+            assert_eq!(game.battle_group_ref, 1);
+            let state = World::current().read(snapshot_game_state).unwrap();
+            assert_eq!(get_state_32_raw(&state, PROBE_OFFSET_BIT), 1);
+        })
+    }
 }
 
 #[test]
 #[serial]
 fn capture_after_restore_gives_back_the_seed_sections() {
-    let mut game = fresh_game();
-    replace_game_state(&seed().game_state).unwrap();
-    restore_state_files(&mut game, &seed_sections()).unwrap();
+    let mut game_owner = crate::engine::Game::new();
+    // SAFETY: the serialized fixture owns this published lifecycle.
+    unsafe {
+        crate::app::bridge::with_game(&mut game_owner, || {
+            let mut game = fresh_game();
+            World::current()
+                .write(|world| replace_game_state(world, &seed().game_state))
+                .unwrap();
+            World::current()
+                .write(|world| {
+                    super::statefiles::restore_state_files(
+                        &mut game,
+                        &mut world.story,
+                        &mut world.files,
+                        &seed_sections(),
+                    )
+                })
+                .unwrap();
 
-    let captured = capture_state_files(&game).unwrap();
-    assert_eq!(captured, seed_sections());
+            let captured = World::current()
+                .write(|world| {
+                    super::statefiles::capture_state_files(&game, &world.story, &world.files)
+                })
+                .unwrap();
+            assert_eq!(captured, seed_sections());
 
-    let list = captured.group_list.as_ref().unwrap();
-    assert_eq!(list.last_encounter, 0);
-    assert_eq!(
-        list.entries,
-        vec![GroupListEntry {
-            race_outer: 0x17,
-            group: IpGroup {
-                group_counter: 0,
-                race_id: 0x17,
-                sys_loc: 3,
-                task: 0,
-                in_system: 1,
-                dest_loc: 3,
-                orbit_pos: 13,
-                group_id: 1,
-                loc: Point { x: -2185, y: -969 },
-            },
-        }]
-    );
-    let random = &captured.battle_groups[0];
-    assert_eq!((random.encounter_id, random.current), (0, false));
-    assert_eq!(
-        (
-            random.star_index,
-            random.day_index,
-            random.month_index,
-            random.year_index
-        ),
-        (82, 24, 2, 2155)
-    );
-    assert!(random.fleets.is_empty());
-    let probe = &captured.battle_groups[1];
-    assert_eq!((probe.encounter_id, probe.current), (12, true));
-    assert_eq!(
-        probe.fleets,
-        vec![BattleFleet {
-            icon: 0x17,
-            ships: vec![typed_ship(0x17, [0, 0x17, 0, 1, 1, 0, 1])],
-        }]
-    );
+            let list = captured.group_list.as_ref().unwrap();
+            assert_eq!(list.last_encounter, 0);
+            assert_eq!(
+                list.entries,
+                vec![GroupListEntry {
+                    race_outer: 0x17,
+                    group: IpGroup {
+                        group_counter: 0,
+                        race_id: 0x17,
+                        sys_loc: 3,
+                        task: 0,
+                        in_system: 1,
+                        dest_loc: 3,
+                        orbit_pos: 13,
+                        group_id: 1,
+                        loc: Point { x: -2185, y: -969 },
+                    },
+                }]
+            );
+            let random = &captured.battle_groups[0];
+            assert_eq!((random.encounter_id, random.current), (0, false));
+            assert_eq!(
+                (
+                    random.star_index,
+                    random.day_index,
+                    random.month_index,
+                    random.year_index
+                ),
+                (82, 24, 2, 2155)
+            );
+            assert!(random.fleets.is_empty());
+            let probe = &captured.battle_groups[1];
+            assert_eq!((probe.encounter_id, probe.current), (12, true));
+            assert_eq!(
+                probe.fleets,
+                vec![BattleFleet {
+                    icon: 0x17,
+                    ships: vec![typed_ship(0x17, [0, 0x17, 0, 1, 1, 0, 1])],
+                }]
+            );
+        })
+    }
 }
 
 #[test]
@@ -341,293 +392,462 @@ fn random_group(fleets: usize) -> BattleGroup {
 #[test]
 #[serial]
 fn rejected_restore_leaves_files_and_state_alone() {
-    let mut game = fresh_game();
-    replace_game_state(&seed().game_state).unwrap();
-    restore_state_files(&mut game, &seed_sections()).unwrap();
-    let before = (
-        file(STARINFO_FILE),
-        file(RANDGRPINFO_FILE),
-        file(DEFGRPINFO_FILE),
-        snapshot_game_state().unwrap(),
-        game.battle_group_ref,
-    );
+    let mut game_owner = crate::engine::Game::new();
+    // SAFETY: the serialized fixture owns this published lifecycle.
+    unsafe {
+        crate::app::bridge::with_game(&mut game_owner, || {
+            let mut game = fresh_game();
+            World::current()
+                .write(|world| replace_game_state(world, &seed().game_state))
+                .unwrap();
+            World::current()
+                .write(|world| {
+                    super::statefiles::restore_state_files(
+                        &mut game,
+                        &mut world.story,
+                        &mut world.files,
+                        &seed_sections(),
+                    )
+                })
+                .unwrap();
+            let before = (
+                file(STARINFO_FILE),
+                file(RANDGRPINFO_FILE),
+                file(DEFGRPINFO_FILE),
+                World::current().read(snapshot_game_state).unwrap(),
+                game.battle_group_ref,
+            );
 
-    let mut too_much_crew = probe_group(false);
-    too_much_crew.fleets[0].ships[0].crew_level = 256;
-    let mut duplicate = vec![probe_group(false), probe_group(false)];
-    duplicate.insert(0, random_group(2));
-    let mut two_current = vec![probe_group(true)];
-    let mut other = probe_group(true);
-    other.encounter_id = 3;
-    two_current.push(other);
-    let mut bad_nibble_list = seed_sections().group_list.unwrap();
-    bad_nibble_list.entries[0].group.task = 16;
+            let mut too_much_crew = probe_group(false);
+            too_much_crew.fleets[0].ships[0].crew_level = 256;
+            let mut duplicate = vec![probe_group(false), probe_group(false)];
+            duplicate.insert(0, random_group(2));
+            let mut two_current = vec![probe_group(true)];
+            let mut other = probe_group(true);
+            other.encounter_id = 3;
+            two_current.push(other);
+            let mut bad_nibble_list = seed_sections().group_list.unwrap();
+            bad_nibble_list.entries[0].group.task = 16;
 
-    let bad: Vec<(StateFileSections, StateSectionError)> = vec![
-        (
-            StateFileSections {
-                scan: Some(vec![9; 4]),
-                battle_groups: vec![too_much_crew],
-                ..Default::default()
-            },
-            StateSectionError::ValueTooWide {
-                field: "crew_level",
-                value: 256,
-            },
-        ),
-        (
-            StateFileSections {
-                scan: Some(vec![9; 4]),
-                battle_groups: duplicate,
-                ..Default::default()
-            },
-            StateSectionError::DuplicateEncounter { encounter_id: 12 },
-        ),
-        (
-            StateFileSections {
-                scan: Some(vec![9; 4]),
-                battle_groups: two_current,
-                ..Default::default()
-            },
-            StateSectionError::MultipleCurrentGroups,
-        ),
-        (
-            StateFileSections {
-                scan: Some(vec![9; 4]),
-                battle_groups: vec![BattleGroup {
-                    encounter_id: 15,
-                    ..probe_group(false)
-                }],
-                ..Default::default()
-            },
-            StateSectionError::EncounterOutOfRange {
-                encounter_id: 15,
-                slots: 14,
-            },
-        ),
-        (
-            StateFileSections {
-                scan: Some(vec![9; 4]),
-                group_list: Some(bad_nibble_list),
-                ..Default::default()
-            },
-            StateSectionError::ValueTooWide {
-                field: "task",
-                value: 16,
-            },
-        ),
-        (
-            StateFileSections {
-                scan: Some(vec![9; 4]),
-                battle_groups: vec![random_group(65)],
-                ..Default::default()
-            },
-            StateSectionError::TooManyGroups { count: 65 },
-        ),
-        // The game state still names group 12, but the save holds none: the
-        // offset would point at nothing in the new defined file.
-        (
-            StateFileSections {
-                scan: Some(vec![9; 4]),
-                battle_groups: vec![random_group(1)],
-                ..Default::default()
-            },
-            StateSectionError::StaleDefinedGroupOffset {
-                encounter_id: 12,
-                offset: 1,
-            },
-        ),
-    ];
-    for (sections, expected) in bad {
-        assert_eq!(restore_state_files(&mut game, &sections), Err(expected));
-        let after = (
-            file(STARINFO_FILE),
-            file(RANDGRPINFO_FILE),
-            file(DEFGRPINFO_FILE),
-            snapshot_game_state().unwrap(),
-            game.battle_group_ref,
-        );
-        assert_eq!(after, before, "state changed after {expected:?}");
+            let bad: Vec<(StateFileSections, StateSectionError)> = vec![
+                (
+                    StateFileSections {
+                        scan: Some(vec![9; 4]),
+                        battle_groups: vec![too_much_crew],
+                        ..Default::default()
+                    },
+                    StateSectionError::ValueTooWide {
+                        field: "crew_level",
+                        value: 256,
+                    },
+                ),
+                (
+                    StateFileSections {
+                        scan: Some(vec![9; 4]),
+                        battle_groups: duplicate,
+                        ..Default::default()
+                    },
+                    StateSectionError::DuplicateEncounter { encounter_id: 12 },
+                ),
+                (
+                    StateFileSections {
+                        scan: Some(vec![9; 4]),
+                        battle_groups: two_current,
+                        ..Default::default()
+                    },
+                    StateSectionError::MultipleCurrentGroups,
+                ),
+                (
+                    StateFileSections {
+                        scan: Some(vec![9; 4]),
+                        battle_groups: vec![BattleGroup {
+                            encounter_id: 15,
+                            ..probe_group(false)
+                        }],
+                        ..Default::default()
+                    },
+                    StateSectionError::EncounterOutOfRange {
+                        encounter_id: 15,
+                        slots: 14,
+                    },
+                ),
+                (
+                    StateFileSections {
+                        scan: Some(vec![9; 4]),
+                        group_list: Some(bad_nibble_list),
+                        ..Default::default()
+                    },
+                    StateSectionError::ValueTooWide {
+                        field: "task",
+                        value: 16,
+                    },
+                ),
+                (
+                    StateFileSections {
+                        scan: Some(vec![9; 4]),
+                        battle_groups: vec![random_group(65)],
+                        ..Default::default()
+                    },
+                    StateSectionError::TooManyGroups { count: 65 },
+                ),
+                // The game state still names group 12, but the save holds none: the
+                // offset would point at nothing in the new defined file.
+                (
+                    StateFileSections {
+                        scan: Some(vec![9; 4]),
+                        battle_groups: vec![random_group(1)],
+                        ..Default::default()
+                    },
+                    StateSectionError::StaleDefinedGroupOffset {
+                        encounter_id: 12,
+                        offset: 1,
+                    },
+                ),
+            ];
+            for (sections, expected) in bad {
+                assert_eq!(
+                    World::current().write(|world| {
+                        super::statefiles::restore_state_files(
+                            &mut game,
+                            &mut world.story,
+                            &mut world.files,
+                            &sections,
+                        )
+                    }),
+                    Err(expected)
+                );
+                let after = (
+                    file(STARINFO_FILE),
+                    file(RANDGRPINFO_FILE),
+                    file(DEFGRPINFO_FILE),
+                    World::current().read(snapshot_game_state).unwrap(),
+                    game.battle_group_ref,
+                );
+                assert_eq!(after, before, "state changed after {expected:?}");
+            }
+        })
     }
 }
 
 #[test]
 #[serial]
 fn repeated_loads_start_from_the_initial_group_files() {
-    let mut game = fresh_game();
-    replace_game_state(&seed().game_state).unwrap();
-    restore_state_files(&mut game, &seed_sections()).unwrap();
+    let mut game_owner = crate::engine::Game::new();
+    // SAFETY: the serialized fixture owns this published lifecycle.
+    unsafe {
+        crate::app::bridge::with_game(&mut game_owner, || {
+            let mut game = fresh_game();
+            World::current()
+                .write(|world| replace_game_state(world, &seed().game_state))
+                .unwrap();
+            World::current()
+                .write(|world| {
+                    super::statefiles::restore_state_files(
+                        &mut game,
+                        &mut world.story,
+                        &mut world.files,
+                        &seed_sections(),
+                    )
+                })
+                .unwrap();
 
-    // A second save: three random fleets, no defined groups, game state clean.
-    replace_game_state(&[0; GAME_STATE_BYTES]).unwrap();
-    let mut random = random_group(3);
-    random.current = true; // LoadBattleGroup forces this off for the random group
-    let second = StateFileSections {
-        canned_nodes: Vec::new(),
-        scan: Some(vec![0xdead_beef]),
-        group_list: None,
-        battle_groups: vec![random],
-    };
-    restore_state_files(&mut game, &second).unwrap();
+            // A second save: three random fleets, no defined groups, game state clean.
+            World::current()
+                .write(|world| replace_game_state(world, &[0; GAME_STATE_BYTES]))
+                .unwrap();
+            let mut random = random_group(3);
+            random.current = true; // LoadBattleGroup forces this off for the random group
+            let second = StateFileSections {
+                canned_nodes: Vec::new(),
+                scan: Some(vec![0xdead_beef]),
+                group_list: None,
+                battle_groups: vec![random],
+            };
+            World::current()
+                .write(|world| {
+                    super::statefiles::restore_state_files(
+                        &mut game,
+                        &mut world.story,
+                        &mut world.files,
+                        &second,
+                    )
+                })
+                .unwrap();
 
-    assert_eq!(file(STARINFO_FILE), vec![0xef, 0xbe, 0xad, 0xde]);
-    assert_eq!(
-        file(DEFGRPINFO_FILE),
-        vec![0],
-        "defined groups restart from InitGroupInfo(TRUE)"
-    );
-    assert_eq!(game.battle_group_ref, 0);
-    let random_file = file(RANDGRPINFO_FILE);
-    // Fleet n holds n+1 ships of 17 bytes after a 2 byte header: 268, then
-    // 2+17, 2+34, 2+51 further on.
-    let expected_offsets = [(1, 268u32), (2, 287), (3, 323)];
-    let mut expected = header(3, 7, 8, 33, 2160, &expected_offsets);
-    for n in 0..3u8 {
-        expected.extend_from_slice(&[n + 1, n + 1]);
-        for _ in 0..=n {
-            expected.extend_from_slice(&ship(1, [0, n, 0, 1, 2, 3, 4]));
-        }
+            assert_eq!(file(STARINFO_FILE), vec![0xef, 0xbe, 0xad, 0xde]);
+            assert_eq!(
+                file(DEFGRPINFO_FILE),
+                vec![0],
+                "defined groups restart from InitGroupInfo(TRUE)"
+            );
+            assert_eq!(game.battle_group_ref, 0);
+            let random_file = file(RANDGRPINFO_FILE);
+            // Fleet n holds n+1 ships of 17 bytes after a 2 byte header: 268, then
+            // 2+17, 2+34, 2+51 further on.
+            let expected_offsets = [(1, 268u32), (2, 287), (3, 323)];
+            let mut expected = header(3, 7, 8, 33, 2160, &expected_offsets);
+            for n in 0..3u8 {
+                expected.extend_from_slice(&[n + 1, n + 1]);
+                for _ in 0..=n {
+                    expected.extend_from_slice(&ship(1, [0, n, 0, 1, 2, 3, 4]));
+                }
+            }
+            assert_eq!(random_file, expected);
+            assert_eq!(
+                World::current()
+                    .write(|world| super::statefiles::capture_state_files(
+                        &game,
+                        &world.story,
+                        &world.files
+                    ))
+                    .unwrap()
+                    .battle_groups,
+                vec![{
+                    let mut g = random_group(3);
+                    g.current = false;
+                    g
+                }]
+            );
+
+            // A save with only a Scan chunk touches nothing else.
+            World::current()
+                .write(|world| {
+                    super::statefiles::restore_state_files(
+                        &mut game,
+                        &mut world.story,
+                        &mut world.files,
+                        &StateFileSections {
+                            scan: Some(vec![]),
+                            ..Default::default()
+                        },
+                    )
+                })
+                .unwrap();
+            assert!(file(STARINFO_FILE).is_empty());
+            assert_eq!(file(RANDGRPINFO_FILE), expected);
+        })
     }
-    assert_eq!(random_file, expected);
-    assert_eq!(
-        capture_state_files(&game).unwrap().battle_groups,
-        vec![{
-            let mut g = random_group(3);
-            g.current = false;
-            g
-        }]
-    );
-
-    // A save with only a Scan chunk touches nothing else.
-    restore_state_files(
-        &mut game,
-        &StateFileSections {
-            scan: Some(vec![]),
-            ..Default::default()
-        },
-    )
-    .unwrap();
-    assert!(file(STARINFO_FILE).is_empty());
-    assert_eq!(file(RANDGRPINFO_FILE), expected);
 }
 
 #[test]
 #[serial]
 fn several_defined_groups_get_their_own_offsets() {
-    let mut game = fresh_game();
-    replace_game_state(&[0; GAME_STATE_BYTES]).unwrap();
-    let mut first = probe_group(false);
-    first.encounter_id = 1;
-    let mut last = probe_group(true);
-    last.encounter_id = 14;
-    let sections = StateFileSections {
-        scan: None,
-        canned_nodes: Vec::new(),
-        group_list: None,
-        battle_groups: vec![random_group(0), last.clone(), first.clone()],
-    };
-    restore_state_files(&mut game, &sections).unwrap();
+    let mut game_owner = crate::engine::Game::new();
+    // SAFETY: the serialized fixture owns this published lifecycle.
+    unsafe {
+        crate::app::bridge::with_game(&mut game_owner, || {
+            let mut game = fresh_game();
+            World::current()
+                .write(|world| replace_game_state(world, &[0; GAME_STATE_BYTES]))
+                .unwrap();
+            let mut first = probe_group(false);
+            first.encounter_id = 1;
+            let mut last = probe_group(true);
+            last.encounter_id = 14;
+            let sections = StateFileSections {
+                scan: None,
+                canned_nodes: Vec::new(),
+                group_list: None,
+                battle_groups: vec![random_group(0), last.clone(), first.clone()],
+            };
+            World::current()
+                .write(|world| {
+                    super::statefiles::restore_state_files(
+                        &mut game,
+                        &mut world.story,
+                        &mut world.files,
+                        &sections,
+                    )
+                })
+                .unwrap();
 
-    // Group 14 came first in the save, so it sits at 1; group 1 follows the
-    // 268 byte header and the 2 + 17 byte fleet.
-    let second_offset = 1 + 268 + 19;
-    let state = snapshot_game_state().unwrap();
-    assert_eq!(get_state_32_raw(&state, SAMATRA_OFFSET_BIT), 1);
-    assert_eq!(get_state_32_raw(&state, FIRST_OFFSET_BIT), second_offset);
-    assert_eq!(game.battle_group_ref, 1);
+            // Group 14 came first in the save, so it sits at 1; group 1 follows the
+            // 268 byte header and the 2 + 17 byte fleet.
+            let second_offset = 1 + 268 + 19;
+            let state = World::current().read(snapshot_game_state).unwrap();
+            assert_eq!(get_state_32_raw(&state, SAMATRA_OFFSET_BIT), 1);
+            assert_eq!(get_state_32_raw(&state, FIRST_OFFSET_BIT), second_offset);
+            assert_eq!(game.battle_group_ref, 1);
 
-    let captured = capture_state_files(&game).unwrap();
-    assert_eq!(captured.scan, Some(Vec::new()));
-    assert_eq!(captured.battle_groups[1], first);
-    assert_eq!(captured.battle_groups[2], last);
+            let captured = World::current()
+                .write(|world| {
+                    super::statefiles::capture_state_files(&game, &world.story, &world.files)
+                })
+                .unwrap();
+            assert_eq!(captured.scan, Some(Vec::new()));
+            assert_eq!(captured.battle_groups[1], first);
+            assert_eq!(captured.battle_groups[2], last);
+        })
+    }
 }
 
 #[test]
 #[serial]
 fn init_group_info_matches_the_c_initialiser() {
-    let mut game = fresh_game();
-    replace_game_state(&seed().game_state).unwrap();
-    restore_state_files(&mut game, &seed_sections()).unwrap();
+    let mut game_owner = crate::engine::Game::new();
+    // SAFETY: the serialized fixture owns this published lifecycle.
+    unsafe {
+        crate::app::bridge::with_game(&mut game_owner, || {
+            let mut game = fresh_game();
+            World::current()
+                .write(|world| replace_game_state(world, &seed().game_state))
+                .unwrap();
+            World::current()
+                .write(|world| {
+                    super::statefiles::restore_state_files(
+                        &mut game,
+                        &mut world.story,
+                        &mut world.files,
+                        &seed_sections(),
+                    )
+                })
+                .unwrap();
 
-    init_group_info(false).unwrap();
-    let mut empty_random = vec![0, 0, 0, 0, 0xff, 0xff, 0, 0];
-    empty_random.extend_from_slice(&[0; 260]);
-    assert_eq!(file(RANDGRPINFO_FILE), empty_random);
-    assert_eq!(
-        file(DEFGRPINFO_FILE),
-        seed_defined_image(),
-        "FirstTime FALSE keeps defined groups"
-    );
+            init_group_info(false).unwrap();
+            let mut empty_random = vec![0, 0, 0, 0, 0xff, 0xff, 0, 0];
+            empty_random.extend_from_slice(&[0; 260]);
+            assert_eq!(file(RANDGRPINFO_FILE), empty_random);
+            assert_eq!(
+                file(DEFGRPINFO_FILE),
+                seed_defined_image(),
+                "FirstTime FALSE keeps defined groups"
+            );
 
-    init_group_info(true).unwrap();
-    assert_eq!(file(DEFGRPINFO_FILE), vec![0]);
+            init_group_info(true).unwrap();
+            assert_eq!(file(DEFGRPINFO_FILE), vec![0]);
 
-    // An initialised but empty random file still saves its header as a group.
-    replace_game_state(&[0; GAME_STATE_BYTES]).unwrap();
-    let captured = capture_state_files(&game).unwrap();
-    assert!(captured.group_list.is_none());
-    assert_eq!(captured.battle_groups.len(), 1);
-    assert_eq!(captured.battle_groups[0].star_index, u16::MAX);
+            // An initialised but empty random file still saves its header as a group.
+            World::current()
+                .write(|world| replace_game_state(world, &[0; GAME_STATE_BYTES]))
+                .unwrap();
+            let captured = World::current()
+                .write(|world| {
+                    super::statefiles::capture_state_files(&game, &world.story, &world.files)
+                })
+                .unwrap();
+            assert!(captured.group_list.is_none());
+            assert_eq!(captured.battle_groups.len(), 1);
+            assert_eq!(captured.battle_groups[0].star_index, u16::MAX);
+        })
+    }
 }
 
 #[test]
 #[serial]
 fn deleted_files_capture_as_empty_storage() {
-    let game = fresh_game();
-    with_state_files(|files| {
-        for index in [STARINFO_FILE, RANDGRPINFO_FILE, DEFGRPINFO_FILE] {
-            files.delete(index).unwrap();
-        }
-    })
-    .unwrap();
-    let captured = capture_state_files(&game).unwrap();
-    assert_eq!(captured.scan, Some(Vec::new()));
-    assert!(captured.group_list.is_none() && captured.battle_groups.is_empty());
+    let mut game_owner = crate::engine::Game::new();
+    // SAFETY: the serialized fixture owns this published lifecycle.
+    unsafe {
+        crate::app::bridge::with_game(&mut game_owner, || {
+            let game = fresh_game();
+            World::current()
+                .write(|world| {
+                    with_state_files(world, |files| {
+                        for index in [STARINFO_FILE, RANDGRPINFO_FILE, DEFGRPINFO_FILE] {
+                            files.delete(index).unwrap();
+                        }
+                    })
+                })
+                .unwrap();
+            let captured = World::current()
+                .write(|world| {
+                    super::statefiles::capture_state_files(&game, &world.story, &world.files)
+                })
+                .unwrap();
+            assert_eq!(captured.scan, Some(Vec::new()));
+            assert!(captured.group_list.is_none() && captured.battle_groups.is_empty());
+        })
+    }
 }
 
 #[test]
 #[serial]
 fn canned_nodes_capture_restore_and_old_save_clear_are_atomic() {
-    let mut game = fresh_game();
-    let node = crate::state::planet_info::CannedNode {
-        star: 1,
-        planet: 2,
-        moon: 1,
-        node: 31,
-        value: 15,
-        x: 967,
-        y: 299,
-    };
-    with_state_files(|files| files.can_node(node)).unwrap();
-    let captured = capture_state_files(&game).unwrap();
-    assert_eq!(captured.canned_nodes, [node]);
-    with_state_files(|files| files.remove_canned_node(node.key())).unwrap();
-    restore_state_files(&mut game, &captured).unwrap();
-    assert_eq!(
-        with_state_files(|files| files.canned_node(node.key())).unwrap(),
-        Some(node)
-    );
-    let mut invalid_group = probe_group(false);
-    invalid_group.fleets[0].ships[0].crew_level = 256;
-    assert!(restore_state_files(
-        &mut game,
-        &StateFileSections {
-            battle_groups: vec![invalid_group],
-            ..Default::default()
-        }
-    )
-    .is_err());
-    assert_eq!(
-        with_state_files(|files| files.canned_node(node.key())).unwrap(),
-        Some(node)
-    );
-    restore_state_files(&mut game, &StateFileSections::default()).unwrap();
-    assert!(with_state_files(|files| files.canned_node(node.key()))
-        .unwrap()
-        .is_none());
-    with_state_files(|files| files.can_node(node)).unwrap();
-    unsafe { rust_init_game_state() };
-    assert!(with_state_files(|files| files.canned_node(node.key()))
-        .unwrap()
-        .is_none());
+    let mut game_owner = crate::engine::Game::new();
+    // SAFETY: the serialized fixture owns this published lifecycle.
+    unsafe {
+        crate::app::bridge::with_game(&mut game_owner, || {
+            let mut game = fresh_game();
+            let node = crate::engine::world::planet_info::CannedNode {
+                star: 1,
+                planet: 2,
+                moon: 1,
+                node: 31,
+                value: 15,
+                x: 967,
+                y: 299,
+            };
+            World::current()
+                .write(|world| with_state_files(world, |files| files.can_node(node)))
+                .unwrap();
+            let captured = World::current()
+                .write(|world| {
+                    super::statefiles::capture_state_files(&game, &world.story, &world.files)
+                })
+                .unwrap();
+            assert_eq!(captured.canned_nodes, [node]);
+            World::current()
+                .write(|world| {
+                    with_state_files(world, |files| files.remove_canned_node(node.key()))
+                })
+                .unwrap();
+            World::current()
+                .write(|world| {
+                    super::statefiles::restore_state_files(
+                        &mut game,
+                        &mut world.story,
+                        &mut world.files,
+                        &captured,
+                    )
+                })
+                .unwrap();
+            assert_eq!(
+                World::current()
+                    .write(|world| with_state_files(world, |files| files.canned_node(node.key())))
+                    .unwrap(),
+                Some(node)
+            );
+            let mut invalid_group = probe_group(false);
+            invalid_group.fleets[0].ships[0].crew_level = 256;
+            assert!(World::current()
+                .write(|world| super::statefiles::restore_state_files(
+                    &mut game,
+                    &mut world.story,
+                    &mut world.files,
+                    &StateFileSections {
+                        battle_groups: vec![invalid_group],
+                        ..Default::default()
+                    }
+                ))
+                .is_err());
+            assert_eq!(
+                World::current()
+                    .write(|world| with_state_files(world, |files| files.canned_node(node.key())))
+                    .unwrap(),
+                Some(node)
+            );
+            World::current()
+                .write(|world| {
+                    super::statefiles::restore_state_files(
+                        &mut game,
+                        &mut world.story,
+                        &mut world.files,
+                        &StateFileSections::default(),
+                    )
+                })
+                .unwrap();
+            assert!(World::current()
+                .write(|world| with_state_files(world, |files| files.canned_node(node.key())))
+                .unwrap()
+                .is_none());
+            World::current()
+                .write(|world| with_state_files(world, |files| files.can_node(node)))
+                .unwrap();
+            World::current().write(rust_init_game_state);
+            assert!(World::current()
+                .write(|world| with_state_files(world, |files| files.canned_node(node.key())))
+                .unwrap()
+                .is_none());
+        })
+    }
 }

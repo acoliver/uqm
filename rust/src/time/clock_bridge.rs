@@ -6,25 +6,9 @@ use std::ffi::c_int;
 
 use crate::bridge_log::rust_bridge_log_msg;
 use crate::c_bindings::{assert_c_layout, global_state};
-use crate::collections::queue::{HLink, Queue};
+use crate::collections::queue::HLink;
 
-// CLOCK_STATE layout must match C struct exactly
-// C layout (from clock.h):
-//   BYTE day_index, month_index;  // 2 bytes
-//   COUNT year_index;             // 2 bytes (unsigned short)
-//   SIZE tick_count, day_in_ticks; // 4 bytes (2x signed short)
-//   QUEUE event_q;                // 40 bytes (inline struct, element is EVENT)
-// Total: 48 bytes. The build checks every field against bindgen's reading of
-// clock.h, so a layout drift is a compile error.
-#[repr(C)]
-pub struct ClockState {
-    pub day_index: u8,
-    pub month_index: u8,
-    pub year_index: u16,   // COUNT = unsigned short
-    pub tick_count: i16,   // SIZE = signed short
-    pub day_in_ticks: i16, // SIZE = signed short
-    pub event_q: Queue,
-}
+pub use crate::engine::battle::schema::CLOCK_STATE as ClockState;
 
 /// C `EVENT` (clock.h): a scheduled game-clock event, the element type of
 /// `ClockState::event_q`.
@@ -44,34 +28,26 @@ pub struct CEvent {
 /// pool `InitGameClock` allocates for `ClockState::event_q`.
 pub const NUM_EVENTS: usize = global_state::NUM_EVENTS as usize;
 
-assert_c_layout!(
-    ClockState,
-    crate::engine::battle::schema::CLOCK_STATE {
-        day_index: day_index,
-        month_index: month_index,
-        year_index: year_index,
-        tick_count: tick_count,
-        day_in_ticks: day_in_ticks,
-        event_q: event_q,
-    }
-);
+mod layout {
+    use super::*;
 
-assert_c_layout!(
-    CEvent,
-    global_state::EVENT {
-        pred: pred,
-        succ: succ,
-        day_index: day_index,
-        month_index: month_index,
-        year_index: year_index,
-        func_index: func_index,
-    }
-);
+    assert_c_layout!(
+        CEvent,
+        global_state::EVENT {
+            pred: pred,
+            succ: succ,
+            day_index: day_index,
+            month_index: month_index,
+            year_index: year_index,
+            func_index: func_index,
+        }
+    );
+}
 
 // Access the C GameClock global variable via GetGameClock() function
 
 #[cfg(not(test))]
-use crate::time::clock_abi::live::GetGameClock as get_game_clock;
+use crate::engine::World;
 
 // Constants from clock.h
 #[cfg(not(test))]
@@ -108,7 +84,6 @@ pub(crate) fn days_in_month(month: u8, year: u16) -> u8 {
 }
 
 // Helper: Advance to next day (internal version that takes &mut ClockState)
-#[cfg(not(test))]
 fn next_clock_day_internal(clock: &mut ClockState) {
     clock.day_index += 1;
 
@@ -129,18 +104,12 @@ fn with_game_clock<F, R>(f: F) -> R
 where
     F: FnOnce(&mut ClockState) -> R,
 {
-    unsafe {
-        let ptr = get_game_clock();
-        f(&mut *ptr)
-    }
+    World::current().write(|world| f(&mut world.data.game.game_clock))
 }
 
 // Initialize the game clock
 #[cfg(not(test))]
-/// # Safety
-///
-/// This is an FFI function called from C. The caller must ensure pointers are valid.
-pub unsafe extern "C" fn rust_clock_init() -> c_int {
+pub extern "C" fn rust_clock_init() -> c_int {
     log_clock_bridge("RUST_CLOCK_INIT");
 
     with_game_clock(|clock| {
@@ -158,10 +127,7 @@ pub unsafe extern "C" fn rust_clock_init() -> c_int {
 
 // Uninitialize the game clock
 #[cfg(not(test))]
-/// # Safety
-///
-/// This is an FFI function called from C. The caller must ensure pointers are valid.
-pub unsafe extern "C" fn rust_clock_uninit() -> c_int {
+pub extern "C" fn rust_clock_uninit() -> c_int {
     log_clock_bridge("RUST_CLOCK_UNINIT");
 
     with_game_clock(|clock| {
@@ -175,10 +141,7 @@ pub unsafe extern "C" fn rust_clock_uninit() -> c_int {
 
 // Set game clock rate (seconds per day)
 #[cfg(not(test))]
-/// # Safety
-///
-/// This is an FFI function called from C. The caller must ensure pointers are valid.
-pub unsafe extern "C" fn rust_clock_set_rate(seconds_per_day: c_int) {
+pub extern "C" fn rust_clock_set_rate(seconds_per_day: c_int) {
     log_clock_bridge("RUST_CLOCK_RATE");
 
     let new_day_in_ticks = seconds_per_day * (CLOCK_BASE_FRAMERATE as i32);
@@ -204,6 +167,19 @@ pub unsafe extern "C" fn rust_clock_set_rate(seconds_per_day: c_int) {
     });
 }
 
+fn tick(clock: &mut ClockState) -> bool {
+    if clock.tick_count > 0 {
+        clock.tick_count -= 1;
+    }
+    if clock.tick_count <= 0 && clock.day_in_ticks > 0 {
+        clock.tick_count = clock.day_in_ticks;
+        next_clock_day_internal(clock);
+        true
+    } else {
+        false
+    }
+}
+
 // Tick the game clock forward one tick
 #[cfg(not(test))]
 /// # Safety
@@ -212,18 +188,7 @@ pub unsafe extern "C" fn rust_clock_set_rate(seconds_per_day: c_int) {
 pub unsafe extern "C" fn rust_clock_tick() {
     // Don't log every tick - too noisy
 
-    let changed_day = with_game_clock(|clock| {
-        if clock.tick_count > 0 {
-            clock.tick_count -= 1;
-        }
-        if clock.tick_count <= 0 && clock.day_in_ticks > 0 {
-            clock.tick_count = clock.day_in_ticks;
-            next_clock_day_internal(clock);
-            true
-        } else {
-            false
-        }
-    });
+    let changed_day = with_game_clock(tick);
     if changed_day {
         #[cfg(not(test))]
         crate::time::clock_abi::live::finish_clock_day();
@@ -247,29 +212,20 @@ pub unsafe extern "C" fn rust_clock_advance_days(days: c_int) {
 }
 
 // Lock the game clock (for debugging)
-/// # Safety
-///
-/// This is an FFI function called from C. The caller must ensure pointers are valid.
-pub unsafe extern "C" fn rust_clock_lock() {
+pub extern "C" fn rust_clock_lock() {
     log_clock_bridge("RUST_CLOCK_LOCK");
     // Note: The mutex lock is handled by C code
 }
 
 // Unlock the game clock (for debugging)
-/// # Safety
-///
-/// This is an FFI function called from C. The caller must ensure pointers are valid.
-pub unsafe extern "C" fn rust_clock_unlock() {
+pub extern "C" fn rust_clock_unlock() {
     log_clock_bridge("RUST_CLOCK_UNLOCK");
     // Note: The mutex unlock is handled by C code
 }
 
 // Check if game clock is running
 #[cfg(not(test))]
-/// # Safety
-///
-/// This is an FFI function called from C. The caller must ensure pointers are valid.
-pub unsafe extern "C" fn rust_clock_is_running() -> c_int {
+pub extern "C" fn rust_clock_is_running() -> c_int {
     log_clock_bridge("RUST_CLOCK_RUNNING");
 
     with_game_clock(|clock| {
@@ -284,6 +240,32 @@ pub unsafe extern "C" fn rust_clock_is_running() -> c_int {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ticking_preserves_pauses_and_rolls_the_calendar_once() {
+        let mut world = crate::engine::World::new();
+        let clock = &mut world.data.game.game_clock;
+        clock.year_index = 2000;
+        clock.month_index = 2;
+        clock.day_index = 28;
+        clock.day_in_ticks = 2;
+        clock.tick_count = 2;
+        assert!(!tick(clock));
+        assert_eq!(clock.tick_count, 1);
+        assert!(tick(clock));
+        assert_eq!(
+            (clock.year_index, clock.month_index, clock.day_index),
+            (2000, 2, 29)
+        );
+        assert_eq!(clock.tick_count, 2);
+        clock.day_in_ticks = 0;
+        clock.tick_count = 0;
+        assert!(!tick(clock));
+        assert_eq!(clock.day_index, 29);
+        clock.day_in_ticks = 1;
+        assert!(tick(clock));
+        assert_eq!((clock.month_index, clock.day_index), (3, 1));
+    }
 
     #[test]
     fn test_is_leap_year() {

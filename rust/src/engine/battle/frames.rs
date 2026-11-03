@@ -1,6 +1,8 @@
 //! Frame-array identity and shared ownership of its loaded drawables.
 
 use super::ShipId;
+#[cfg(test)]
+use crate::engine::Kernel as KernelOwner;
 use crate::graphics::drawable_abi::{retain_frame_allocations, DrawableLease};
 use crate::graphics::native_abi::FRAME;
 use std::{cell::Cell, rc::Rc};
@@ -442,9 +444,9 @@ mod tests {
 
     #[test]
     fn replacement_descriptor_has_distinct_frames_even_for_the_same_ship_and_role() {
-        let mut battle = crate::engine::battle::Battle::new(0);
-        battle.reset_ship_capacity(0, 1);
-        let mut ships = battle.ships(0);
+        let mut kernel = KernelOwner::new();
+        kernel.reset_ship_capacity(0, 1);
+        let mut ships = kernel.ships(0);
         let link = ships.alloc().unwrap();
         let ship = ships.ship_id(link);
         let old = Frames::ship(
@@ -462,6 +464,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn native_sources_snapshot_views_without_borrowing_source_storage() {
         let frames = {
             let mut source = [std::ptr::null_mut(); 3];

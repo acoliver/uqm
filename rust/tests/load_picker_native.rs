@@ -4,7 +4,7 @@ use uqm_rust::engine::battle::schema::FlashContext;
 mod battle_context;
 use std::{ffi::CString, ptr};
 use uqm_rust::{
-    front_end::gameopt::{picker_action, LoadGameDescriptions, PickerAction},
+    front_end::gameopt::{load_game_descriptions, picker_action, PickerAction},
     graphics::dcqueue_abi::{Init_DrawCommandQueue, Uninit_DrawCommandQueue},
     input::ffi::*,
     io::uio_bridge as uio,
@@ -155,7 +155,7 @@ fn first_load_entry_flushes_held_keys_and_enumeration_cannot_exit_the_picker() {
             let mut summaries: [SUMMARY_DESC; 50] = std::mem::zeroed();
             saveDir = ptr::null_mut();
             assert!(!profile.path().join("save").exists());
-            LoadGameDescriptions(summaries.as_mut_ptr());
+            load_game_descriptions(summaries.as_mut_ptr());
             assert!(summaries.iter().all(|summary| summary.year_index == 0));
             open_from_restart_while_select_is_held(false);
 
@@ -178,7 +178,7 @@ fn first_load_entry_flushes_held_keys_and_enumeration_cannot_exit_the_picker() {
             .is_null());
             let dir = uio::uio_openDir(repo, c"/".as_ptr(), 0);
             saveDir = dir.cast();
-            LoadGameDescriptions(summaries.as_mut_ptr());
+            load_game_descriptions(summaries.as_mut_ptr());
             assert!(summaries.iter().all(|summary| summary.year_index == 0));
             let slots = SaveSlots::new(saveDir.cast()).unwrap();
             let save = decode_save(include_bytes!("fixtures/savegame/legacy-save.00")).unwrap();
@@ -201,7 +201,7 @@ fn first_load_entry_flushes_held_keys_and_enumeration_cannot_exit_the_picker() {
             std::fs::write(saves.join("starcon2.47"), b"bad").unwrap();
             for _ in 0..10 {
                 ffi::set_current_activity(ActivityValue(4));
-                LoadGameDescriptions(summaries.as_mut_ptr());
+                load_game_descriptions(summaries.as_mut_ptr());
                 assert_eq!(
                     ffi::get_current_activity().0,
                     4,

@@ -131,10 +131,21 @@ fn main() {
         }
     }
 
-    // Run the full UQM lifecycle: init -> game loop -> teardown
-    // SAFETY: the main thread keeps all argument CStrings and argv storage alive through shutdown.
-    let exit_code = unsafe { init_sequence::run_uqm(args.len() as c_int, c_argv.as_mut_ptr()) };
+    let mut game = uqm_rust::engine::Game::new();
+    // SAFETY: main owns the game until shutdown and the final state summary have completed.
+    let exit_code = unsafe {
+        uqm_rust::app::bridge::with_game(&mut game, || {
+            // Run the full UQM lifecycle: init -> game loop -> teardown
+            // SAFETY: the main thread keeps all argument CStrings and argv storage alive through shutdown.
+            let exit_code = init_sequence::run_uqm(args.len() as c_int, c_argv.as_mut_ptr());
 
+            finish_automation(exit_code, parsed.replay_summary.as_deref())
+        })
+    };
+    exit(exit_code);
+}
+
+fn finish_automation(exit_code: i32, replay_summary: Option<&str>) -> i32 {
     // Finalize automation after teardown and propagate its terminal/evidence status.
     let exit_code = match uqm_rust::automation::Coordinator::finalize(exit_code) {
         Ok(status) => status,
@@ -144,15 +155,15 @@ fn main() {
         }
     };
 
-    if let Some(path) = &parsed.replay_summary {
+    if let Some(path) = replay_summary {
         if let Err(error) =
             uqm_rust::automation::Coordinator::write_replay_summary(std::path::Path::new(path))
         {
             eprintln!("Replay summary failed: {error}");
-            exit(1);
+            return 1;
         }
     }
-    exit(exit_code);
+    exit_code
 }
 
 fn print_usage() {

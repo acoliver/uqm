@@ -9,6 +9,13 @@
 //! @plan PLAN-20260724-MAINLOOP-AND-COMM.P11
 //! @requirement REQ-ML-007, REQ-COMM-DISPATCH
 
+mod routing;
+
+#[cfg(not(test))]
+use crate::engine::StoryKey;
+use crate::engine::World;
+#[cfg(not(test))]
+use crate::engine::WorldData;
 use std::os::raw::c_void;
 
 use crate::c_bindings::{assert_c_layout, global_state};
@@ -19,8 +26,6 @@ use crate::collections::queue::{AllocLink, HLink, PutQueue, Queue, ReinitQueue};
 use crate::comm::locdata::{read_locdata, set_comm_data};
 #[cfg(not(test))]
 use crate::mainloop::c_extern;
-#[cfg(not(test))]
-use crate::state::game_state_keys;
 
 // ---------------------------------------------------------------------------
 // C type mirrors for queue elements (#[repr(C)] matching C struct layout)
@@ -405,16 +410,16 @@ mod ffi {
     pub use crate::comm::locdata::COMM_DATA as CommData;
 
     #[cfg(not(test))]
-    pub use crate::ui::border::DrawSISFrame;
+    pub use crate::ui::border::draw_sisframe;
     #[cfg(test)]
     extern "C" {
-        pub fn DrawSISFrame();
+        pub fn draw_sisframe();
     }
     #[cfg(not(test))]
-    pub use crate::ui::sis::RepairSISBorder;
+    pub use crate::ui::sis::repair_sisborder;
     #[cfg(test)]
     extern "C" {
-        pub fn RepairSISBorder();
+        pub fn repair_sisborder();
     }
 
     #[cfg(not(test))]
@@ -526,13 +531,6 @@ mod ffi {
 
     #[cfg(not(test))]
     pub use crate::comm::races::rust_init_race_dialogue;
-
-    extern "C" {
-        #[link_name = "CurStarDescPtr"]
-        pub static mut CurStarDescPtr: *mut crate::savegame::runtime::star::CStarDesc;
-        #[link_name = "GlobData"]
-        pub static mut GLOB_DATA: crate::ships::native::abi::GLOBDATA;
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -542,7 +540,7 @@ mod ffi {
 /// C: `PickCaptainName()` = `((COUNT)random() & (NUM_CAPTAINS_NAMES - 1)) + NAME_OFFSET`
 /// where NUM_CAPTAINS_NAMES=16, NAME_OFFSET=5. Ported to pure Rust.
 #[inline]
-unsafe fn pick_captain_name() -> u8 {
+fn pick_captain_name() -> u8 {
     ((crate::math::random() & 0x0F) + 5) as u8
 }
 
@@ -557,7 +555,7 @@ fn lobyte(x: u16) -> u16 {
 ///
 /// # Safety
 /// Calls C FFI to read CurrentActivity from global state.
-unsafe fn in_hq_space() -> bool {
+fn in_hq_space() -> bool {
     let activity = crate::mainloop::ffi::get_current_activity().0;
     lobyte(activity) == IN_HYPERSPACE
 }
@@ -574,8 +572,10 @@ unsafe fn get_head_link(pq: *const Queue) -> HLink {
 #[inline]
 fn avail_race_queue() -> *mut Queue {
     #[cfg(not(test))]
+    #[cfg(not(test))]
     unsafe {
-        std::ptr::addr_of_mut!(ffi::GLOB_DATA.Game_state.avail_race_q)
+        let world = WorldData::current();
+        std::ptr::addr_of_mut!((**world).game.avail_race_q)
     }
     #[cfg(test)]
     std::ptr::null_mut()
@@ -583,8 +583,10 @@ fn avail_race_queue() -> *mut Queue {
 #[inline]
 fn npc_built_ship_queue() -> *mut Queue {
     #[cfg(not(test))]
+    #[cfg(not(test))]
     unsafe {
-        std::ptr::addr_of_mut!(ffi::GLOB_DATA.Game_state.npc_built_ship_q)
+        let world = WorldData::current();
+        std::ptr::addr_of_mut!((**world).game.npc_built_ship_q)
     }
     #[cfg(test)]
     std::ptr::null_mut()
@@ -594,20 +596,19 @@ fn npc_built_ship_queue() -> *mut Queue {
 fn encounter_queue() -> *mut Queue {
     #[cfg(not(test))]
     unsafe {
-        std::ptr::addr_of_mut!(ffi::GLOB_DATA.Game_state.encounter_q)
+        let world = WorldData::current();
+        std::ptr::addr_of_mut!((**world).game.encounter_q)
     }
     #[cfg(test)]
     std::ptr::null_mut()
 }
+#[cfg(not(test))]
 #[inline]
-#[allow(dead_code)]
 fn built_ship_queue() -> *mut Queue {
-    #[cfg(not(test))]
     unsafe {
-        std::ptr::addr_of_mut!(ffi::GLOB_DATA.Game_state.built_ship_q)
+        let world = WorldData::current();
+        std::ptr::addr_of_mut!((**world).game.built_ship_q)
     }
-    #[cfg(test)]
-    std::ptr::null_mut()
 }
 
 /// C: `_GetSuccLink(lp)` — returns the succ field of a link.
@@ -662,20 +663,6 @@ unsafe fn lock_encounter(_h: HLink) -> *mut CEncounter {
 }
 
 // ---------------------------------------------------------------------------
-// Pure helper: get game state bit (C: GET_GAME_STATE)
-// ---------------------------------------------------------------------------
-
-#[cfg(not(test))]
-fn get_game_state(key: &str) -> u32 {
-    game_state_keys::get_game_state(key)
-}
-
-#[cfg(not(test))]
-fn set_game_state(key: &str, value: u32) {
-    game_state_keys::set_game_state(key, value)
-}
-
-// ---------------------------------------------------------------------------
 // RaceCommunication — ported from comm.c:1503
 // ---------------------------------------------------------------------------
 
@@ -686,9 +673,7 @@ fn set_game_state(key: &str, value: u32) {
 /// # Safety
 /// Calls C FFI functions that access global state.
 pub unsafe extern "C" fn rust_race_communication() {
-    let current_activity = crate::mainloop::ffi::get_current_activity().0;
-
-    if lobyte(current_activity) == IN_LAST_BATTLE {
+    if lobyte(crate::mainloop::ffi::get_current_activity().0) == IN_LAST_BATTLE {
         // Going into talking pet conversation
         let npc_q = npc_built_ship_queue();
         ReinitQueue(npc_q);
@@ -708,19 +693,10 @@ pub unsafe extern "C" fn rust_race_communication() {
         return;
     }
 
-    let next_activity = crate::mainloop::ffi::get_next_activity().0;
-    if (next_activity & CHECK_LOAD) != 0 {
-        let ec = get_game_state("ESCAPE_COUNTER") as u8;
+    if crate::mainloop::ffi::get_next_activity().0 & CHECK_LOAD != 0 {
+        let ec = World::current().read(|world| world.story_state(StoryKey::ESCAPE_COUNTER)) as u8;
 
-        if get_game_state("FOUND_PLUTO_SPATHI") == 1 {
-            init_communication(conv::SPATHI);
-        } else if get_game_state("GLOBAL_FLAGS_AND_DATA") == 0 {
-            init_communication(conv::TALKING_PET);
-        } else if (get_game_state("GLOBAL_FLAGS_AND_DATA") & ((1 << 4) | (1 << 5))) != 0 {
-            init_communication(conv::ILWRATH);
-        } else {
-            init_communication(conv::CHMMR);
-        }
+        init_communication(World::current().read(routing::restored_conversation));
 
         let crew = crate::mainloop::ffi::get_crew_enlisted();
         if crew != 0xFFFF {
@@ -735,7 +711,7 @@ pub unsafe extern "C" fn rust_race_communication() {
             ));
         }
 
-        set_game_state("ESCAPE_COUNTER", ec as u32);
+        World::current().write(|world| world.set_story_state(StoryKey::ESCAPE_COUNTER, ec as u32));
         return;
     }
 
@@ -745,7 +721,7 @@ pub unsafe extern "C" fn rust_race_communication() {
         let npc_q = npc_built_ship_queue();
         ReinitQueue(npc_q);
 
-        if get_game_state("ARILOU_SPACE_SIDE") >= 2 {
+        if World::current().read(|world| world.story_state(StoryKey::ARILOU_SPACE_SIDE)) >= 2 {
             init_communication(conv::ARILOU);
             return;
         }
@@ -868,27 +844,29 @@ pub unsafe fn init_communication(which_comm: u32) -> u16 {
         ));
         if which_comm != conv::COMMANDER {
             if lobyte(last_activity) == 0 {
-                ffi::DrawSISFrame();
+                ffi::draw_sisframe();
             } else {
                 ffi::ClearSISRect((DRAW_SIS_DISPLAY) as u8);
-                ffi::RepairSISBorder();
+                ffi::repair_sisborder();
             }
             ffi::DrawSISMessage(std::ptr::null());
             if in_hq_space() {
-                let point = ffi::GLOB_DATA.Game_state.ShipStamp.origin;
+                let point = WorldData::current().read(|world| world.game.ship_stamp.origin);
                 ffi::DrawHyperCoords(CPoint {
                     x: point.x,
                     y: point.y,
                 });
-            } else if ffi::GLOB_DATA.Game_state.ip_planet == 0 {
-                let star =
-                    &*ffi::CurStarDescPtr.cast::<crate::savegame::runtime::star::CStarDesc>();
+            } else if WorldData::current().read(|world| world.game.ip_planet) == 0 {
+                let star = &*(**World::current())
+                    .star_pointer(crate::planets::starmap::current_catalog())
+                    .cast::<crate::savegame::runtime::star::CStarDesc>();
                 ffi::DrawHyperCoords(CPoint {
                     x: star.star_pt.x,
                     y: star.star_pt.y,
                 });
             } else {
-                ffi::DrawSISTitle(std::ptr::addr_of!(ffi::GLOB_DATA.SIS_state.PlanetName).cast());
+                let name = WorldData::current().read(|world| world.flagship.planet_name);
+                ffi::DrawSISTitle(name.as_ptr().cast());
             }
         }
     }
@@ -903,7 +881,9 @@ unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
         start_sphere_tracking(ship_type as u8);
         if which_comm == conv::ORZ
             || (which_comm == conv::TALKING_PET
-                && (get_game_state("TALKING_PET_ON_SHIP") == 0
+                && (World::current()
+                    .read(|world| world.story_state(StoryKey::TALKING_PET_ON_SHIP))
+                    == 0
                     || lobyte(crate::mainloop::ffi::get_current_activity().0) == IN_LAST_BATTLE))
             || (which_comm != conv::CHMMR && which_comm != conv::SYREEN)
         {
@@ -925,17 +905,17 @@ unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
         set_comm_data(read_locdata(&*descriptor.cast()));
     }
     let mut status;
-    if get_game_state("BATTLE_SEGUE") == 0 {
+    if World::current().read(|world| world.story_state(StoryKey::BATTLE_SEGUE)) == 0 {
         status = HAIL;
     } else {
         crate::automation::ui_observation::observe_encounter_menu(true);
         status = ffi::InitEncounter();
         crate::automation::ui_observation::observe_encounter_menu(false);
         if status == HAIL && !descriptor.is_null() {
-            set_game_state("BATTLE_SEGUE", 0);
+            World::current().write(|world| world.set_story_state(StoryKey::BATTLE_SEGUE, 0));
         } else {
             status = ATTACK;
-            set_game_state("BATTLE_SEGUE", 1);
+            World::current().write(|world| world.set_story_state(StoryKey::BATTLE_SEGUE, 1));
         }
     }
     if status == HAIL {
@@ -955,17 +935,20 @@ unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
     if activity & (CHECK_ABORT | CHECK_LOAD) == 0 {
         let npc = npc_built_ship_queue();
         if lobyte(activity) == IN_LAST_BATTLE
-            && ffi::GLOB_DATA.Game_state.glob_flags & CYBORG_ENABLED != 0
+            && WorldData::current().read(|owner| owner.game.glob_flags) & CYBORG_ENABLED != 0
         {
             ReinitQueue(npc);
         }
-        set_game_state("GLOBAL_FLAGS_AND_DATA", 0);
-        status = u16::from(get_game_state("BATTLE_SEGUE") != 0 && !get_head_link(npc).is_null());
+        World::current().write(|world| world.set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, 0));
+        status = u16::from(
+            World::current().read(|world| world.story_state(StoryKey::BATTLE_SEGUE)) != 0
+                && !get_head_link(npc).is_null(),
+        );
         if status != 0 {
             ffi::BuildBattle(RPG_PLAYER_NUM);
             ffi::EncounterBattle();
         } else {
-            set_game_state("BATTLE_SEGUE", 0);
+            World::current().write(|world| world.set_story_state(StoryKey::BATTLE_SEGUE, 0));
         }
     }
     ffi::UninitEncounter();
@@ -998,7 +981,8 @@ pub(crate) unsafe fn clone_ship_fragment(
 pub(crate) fn production_captain_name() -> u8 {
     // SAFETY: `random` takes no arguments and touches only the game's
     // random state.
-    unsafe { pick_captain_name() }
+
+    pick_captain_name()
 }
 
 /// `CloneShipFragment` against an explicit fleet queue and captain-name draw.
@@ -1095,14 +1079,16 @@ pub(crate) unsafe fn prepare_samatra_dev_fixture() -> Result<(), &'static str> {
     if crate::battle::build_native::AddEscortShips(4, 12) != 12 {
         return Err("boss fixture could not allocate Pkunk escorts");
     }
-    let sis = &mut (*std::ptr::addr_of_mut!(ffi::GLOB_DATA)).SIS_state;
-    sis.CrewEnlisted = 50;
-    sis.FuelOnBoard = 1000;
-    sis.DriveSlots.fill(1);
-    sis.JetSlots.fill(2);
-    // Bomb conversion removes the flagship weapons; this is a steering ship.
-    sis.ModuleSlots.fill(0xff);
-    ffi::GLOB_DATA.Game_state.glob_flags &= !(1 << 5);
+    WorldData::current().write(|world| {
+        let sis = &mut world.flagship;
+        sis.crew_enlisted = 50;
+        sis.fuel_on_board = 1000;
+        sis.drive_slots.fill(1);
+        sis.jet_slots.fill(2);
+        // Bomb conversion removes the flagship weapons; this is a steering ship.
+        sis.module_slots.fill(0xff);
+        world.game.glob_flags &= !(1 << 5);
+    });
     Ok(())
 }
 
@@ -1124,7 +1110,10 @@ pub unsafe fn place_flagship_at_star(location: (i16, i16)) -> Result<(), &'stati
     if star.is_null() {
         return Err("no star at the scene location");
     }
-    ffi::CurStarDescPtr = (star).cast();
+    (**World::current()).select_star(
+        ((star).cast::<crate::engine::world::CStarDesc>()).as_ref(),
+        crate::planets::starmap::current_catalog(),
+    );
     Ok(())
 }
 
@@ -1200,7 +1189,7 @@ pub unsafe extern "C" fn rust_init_race_dispatch(comm_id: u32) -> *mut c_void {
         conv::BLACKURQ => ffi::init_blackurq_comm().cast(),
         conv::CHMMR => ffi::init_chmmr_comm().cast(),
         conv::COMMANDER => {
-            if get_game_state("STARBASE_AVAILABLE") == 0 {
+            if World::current().read(|world| world.story_state(StoryKey::STARBASE_AVAILABLE)) == 0 {
                 (ffi::init_commander_comm()).cast()
             } else {
                 (ffi::init_starbase_comm()).cast()
@@ -1216,7 +1205,10 @@ pub unsafe extern "C" fn rust_init_race_dispatch(comm_id: u32) -> *mut c_void {
         conv::SLYLANDRO => ffi::init_slyland_comm().cast(),
         conv::SLYLANDRO_HOME => ffi::init_slylandro_comm().cast(),
         conv::SPATHI => {
-            if (get_game_state("GLOBAL_FLAGS_AND_DATA") & (1 << 7)) == 0 {
+            if (World::current().read(|world| world.story_state(StoryKey::GLOBAL_FLAGS_AND_DATA))
+                & (1 << 7))
+                == 0
+            {
                 (ffi::init_spathi_comm()).cast()
             } else {
                 (ffi::init_spahome_comm()).cast()

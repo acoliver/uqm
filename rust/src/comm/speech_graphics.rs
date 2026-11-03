@@ -7,6 +7,8 @@
 //! @plan PLAN-20260314-COMM.P10
 
 use super::oscilloscope::Oscilloscope;
+#[cfg(not(test))]
+use crate::engine::Kernel;
 
 // Host-time rate limiting otherwise changes whether a speech frame queues a
 // drawing command, which changes replay presentation counts.
@@ -120,9 +122,10 @@ impl SpeechGraphics {
 
         #[cfg(not(test))]
         unsafe {
-            let old_context = c_bridge::SetContext(c_bridge::RadarContext);
+            let old_context =
+                c_bridge::SetContext(Kernel::current().read(|owner| owner.radar_context));
             c_bridge::DrawOscilloscope();
-            c_bridge::SetContext(c_bridge::SpaceContext);
+            c_bridge::SetContext(Kernel::current().read(|owner| owner.space_context));
             c_bridge::DrawSlider();
             c_bridge::SetContext(old_context);
         }
@@ -151,7 +154,11 @@ impl SpeechGraphics {
 // ============================================================================
 #[cfg(not(test))]
 unsafe fn activity_frame(index: u16) -> *mut std::ffi::c_void {
-    (c_bridge::SetAbsFrameIndex((c_bridge::ActivityFrame).cast(), index)).cast()
+    (c_bridge::SetAbsFrameIndex(
+        (Kernel::current().read(|owner| owner.activity_frame)).cast(),
+        index,
+    ))
+    .cast()
 }
 
 #[cfg(not(test))]
@@ -170,12 +177,6 @@ mod c_bridge {
     pub use crate::comm::oscill_abi::runtime::DrawOscilloscope;
 
     pub use crate::comm::oscill_abi::runtime::DrawSlider;
-
-    extern "C" {
-        pub static mut ActivityFrame: *mut crate::graphics::native_abi::frame_desc;
-        pub static mut RadarContext: *mut crate::graphics::native_abi::context_desc;
-        pub static mut SpaceContext: *mut crate::graphics::native_abi::context_desc;
-    }
 }
 
 // ============================================================================

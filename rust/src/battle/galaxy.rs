@@ -1,5 +1,7 @@
 //! Three live parallax star planes, with the original sort and wrap order.
 
+#[cfg(not(test))]
+use crate::engine::Kernel as KernelOwner;
 use crate::ships::native::abi::{Color, POINT};
 
 pub use crate::engine::battle::kernel::StarPlane as STAR_BLOCK;
@@ -171,7 +173,6 @@ impl STAR_BLOCK {
 }
 
 #[cfg(not(test))]
-#[allow(non_snake_case)]
 pub(crate) mod engine {
     use super::*;
     use crate::engine::battle::Cx;
@@ -183,10 +184,13 @@ pub(crate) mod engine {
         std::ptr::from_mut(cx.display_primitive(index as u16))
     }
     unsafe fn stars(index: usize) -> *mut POINT {
-        Kernel::current().log_stars.as_mut_ptr().add(index)
+        (**KernelOwner::current()).log_stars.as_mut_ptr().add(index)
     }
     unsafe fn blocks(index: usize) -> *mut super::STAR_BLOCK {
-        Kernel::current().star_planes.as_mut_ptr().add(index)
+        (**KernelOwner::current())
+            .star_planes
+            .as_mut_ptr()
+            .add(index)
     }
     unsafe fn width() -> i32 {
         (ScreenWidth - 64) << (ONE_SHIFT + MAX_REDUCTION)
@@ -213,12 +217,14 @@ pub(crate) mod engine {
                 if i < 90 {
                     (*prim(cx, i)).Type = gfx_object_STAMP_PRIM as u8;
                     (*prim(cx, i)).color = color(11, 11, 31);
-                    (*prim(cx, i)).Object.Stamp.frame = stars_in_space;
+                    (*prim(cx, i)).Object.Stamp.frame = cx.kernel.stars_in_space;
                 } else {
                     (*prim(cx, i)).Type = gfx_object_POINT_PRIM as u8;
-                    (*prim(cx, i)).color = if inHQSpace() == 0 {
+                    (*prim(cx, i)).color = if cx.world.activity() as u8 != 3 {
                         color(21, 21, 21)
-                    } else if crate::state::ffi::rust_get_game_state(c"ARILOU_SPACE_SIDE".as_ptr())
+                    } else if cx
+                        .world
+                        .story_state(crate::engine::StoryKey::ARILOU_SPACE_SIDE)
                         <= 1
                     {
                         color(20, 0, 0)
@@ -235,25 +241,24 @@ pub(crate) mod engine {
 
     /// # Safety
     /// InitGalaxy must have completed; all display primitives and frames remain live.
-    pub unsafe fn MoveGalaxy(cx: &mut Cx<'_>, view: u32, mut dx: i16, mut dy: i16) {
+    pub unsafe fn move_galaxy(cx: &mut Cx<'_>, view: u32, mut dx: i16, mut dy: i16) {
         // VIEW_STABLE=0, VIEW_CHANGE=2; TFB_SCALE_STEP=0.
         if view != 0 {
+            let star_frame = cx.kernel.stars_in_space;
             let mut reduction = cx.b.zoom_out as u16;
             let step = optMeleeScale == 0;
             if view == 2 {
-                if inHQSpace() != 0 {
+                if cx.world.activity() as u8 == 3 {
                     let mut p = 0;
                     for (plane, offset) in [58, 26].into_iter().enumerate() {
                         for _ in 0..COUNTS[plane] {
-                            (*prim(cx, p)).Object.Stamp.frame = SetAbsFrameIndex(
-                                stars_in_space,
-                                (TFB_Random() & 31) as u16 + offset,
-                            );
+                            (*prim(cx, p)).Object.Stamp.frame =
+                                SetAbsFrameIndex(star_frame, (TFB_Random() & 31) as u16 + offset);
                             p += 1;
                         }
                     }
                 } else {
-                    let mut frames = [IncFrameIndex(stars_in_space), stars_in_space];
+                    let mut frames = [IncFrameIndex(star_frame), star_frame];
                     let types = if step {
                         if reduction > 0 {
                             frames[0] = frames[1];
@@ -276,7 +281,7 @@ pub(crate) mod engine {
                     }
                 }
             }
-            if inHQSpace() != 0 {
+            if cx.world.activity() as u8 == 3 {
                 for i in 0..90 {
                     let frame = (*prim(cx, i)).Object.Stamp.frame;
                     let base = frame_index(frame).wrapping_sub(26);
@@ -291,9 +296,9 @@ pub(crate) mod engine {
             for plane in (0..3).rev() {
                 (*blocks(plane)).wrap(plane as i16, dx, dy, height());
             }
-            if inHQSpace() == 0 {
-                dx = Kernel::current().space_origin.x;
-                dy = Kernel::current().space_origin.y;
+            if cx.world.activity() as u8 != 3 {
+                dx = cx.kernel.space_origin.x;
+                dy = cx.kernel.space_origin.y;
                 if step {
                     reduction = reduction.wrapping_add(ONE_SHIFT as u16);
                 } else {
@@ -343,7 +348,7 @@ pub(crate) mod engine {
 }
 
 #[cfg(not(test))]
-pub use engine::{InitGalaxy, MoveGalaxy};
+pub use engine::{move_galaxy, InitGalaxy};
 
 #[cfg(test)]
 mod tests {

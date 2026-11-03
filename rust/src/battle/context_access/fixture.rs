@@ -161,11 +161,11 @@ impl Cx<'_> {
 pub(crate) struct Descriptor(Option<crate::engine::battle::RaceDesc>);
 #[cfg(not(test))]
 impl Descriptor {
-    pub(crate) fn free(self) {
+    pub(crate) fn free(self, world: &mut crate::engine::World) {
         if let Some(descriptor) = self.0 {
             // SAFETY: the caller retires the detached descriptor only after its last frame user.
             unsafe {
-                crate::ships::loader_native::unload_ship(descriptor, 1, 1);
+                crate::ships::loader_native::unload_ship(world, descriptor, 1, 1);
             }
         }
     }

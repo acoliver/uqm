@@ -68,3 +68,11 @@ pub(super) fn next_control(control: u8) -> u8 {
         human
     }
 }
+
+pub(super) fn network_status_side(side: usize, control: u8) -> isize {
+    if control & crate::battle::NETWORK_CONTROL != 0 {
+        side as isize
+    } else {
+        -1
+    }
+}

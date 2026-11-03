@@ -1,7 +1,5 @@
-use crate::engine::battle::schema::{BattleInputHandlers, FlashContext, GAME_STATE};
+use crate::engine::battle::schema::{BattleInputHandlers, FlashContext};
 pub use crate::engine::battle::{ElementHook, CollisionHook};
-#[cfg(not(test))]
-pub(crate) use crate::engine::battle::record::Kernel;
 pub use crate::engine::battle::record::{
     captain_stuff, state, state__bindgen_ty_1,
     tfb_soundsample, TFB_SoundSample,
@@ -1014,9 +1012,7 @@ pub use crate::graphics::frame_abi::ClearDrawable;
 pub use crate::graphics::cmap_abi::FadeScreen;
 
 pub use crate::graphics::cmap_abi::FlushColorXForms;
-unsafe extern "C" {
-    pub static mut stars_in_space: FRAME;
-}
+
 
 #[cfg(not(test))]
 pub use crate::game_init::space_resources::live::InitShips;
@@ -1154,10 +1150,8 @@ pub struct battlestate_struct {
     pub net: Option<std::rc::Rc<dyn crate::engine::battle::net::BattleNet>>,
     pub battle: *mut crate::engine::battle::Battle,
 }
-unsafe extern "C" {
-}
-unsafe extern "C" {
-}
+
+
 
 #[cfg(not(test))]
 pub use crate::battle::battle_native::engine::GetPlayerOrder;
@@ -1590,7 +1584,7 @@ pub struct NetworkInputContext {
     pub playerNr: COUNT,
     pub net: Option<std::rc::Rc<dyn crate::engine::battle::net::BattleNet>>,
 }
-unsafe extern "C" {}
+
 pub const ENEMY_SHIP_INDEX: _bindgen_ty_5 = 0;
 pub const CREW_OBJECT_INDEX: _bindgen_ty_5 = 1;
 pub const ENEMY_WEAPON_INDEX: _bindgen_ty_5 = 2;
@@ -1604,7 +1598,7 @@ pub type _bindgen_ty_5 = ::std::os::raw::c_uint;
 
 #[cfg(not(test))]
 
-unsafe extern "C" {}
+
 
 #[cfg(not(test))]
 pub use crate::battle::status_native::engine::InitStatusOffsets;
@@ -1631,10 +1625,8 @@ pub use crate::battle::status_native::engine::DrawBattleCrewAmount;
 
 #[cfg(not(test))]
 pub use crate::battle::status_native::engine::PostProcessStatus;
-unsafe extern "C" {
-}
-unsafe extern "C" {
-}
+
+
 pub type MENU_SOUND_FLAGS = UWORD;
 
 #[cfg(not(test))]
@@ -1727,10 +1719,10 @@ pub use crate::battle::build_native::engine::AddEscortShips;
 pub use crate::battle::build_native::engine::CalculateEscortsWorth;
 
 #[cfg(not(test))]
-pub use crate::battle::build_native::engine::SetRaceAllied;
+pub use crate::battle::build_native::engine::set_race_allied;
 
 #[cfg(not(test))]
-pub use crate::battle::build_native::engine::StartSphereTracking;
+pub use crate::battle::build_native::engine::start_sphere_tracking;
 
 #[cfg(not(test))]
 pub use crate::battle::build_native::engine::CountEscortShips;
@@ -1756,10 +1748,10 @@ pub use crate::ships::loader_native::engine::load_ship;
 #[cfg(not(test))]
 pub use crate::ships::loader_native::engine::unload_ship;
 #[cfg(not(test))]
-pub use crate::ui::settings::StopMusic;
+pub use crate::ui::settings::stop_music;
 #[cfg(test)]
 extern "C" {
-    pub fn StopMusic();
+    pub fn stop_music();
 }
 #[cfg(not(test))]
 pub unsafe fn PlaySoundEffect(
@@ -1971,36 +1963,18 @@ pub const BOMB_MODULE_4: _bindgen_ty_10 = 18;
 pub const BOMB_MODULE_5: _bindgen_ty_10 = 19;
 pub const NUM_MODULES: _bindgen_ty_10 = 20;
 pub type _bindgen_ty_10 = ::std::os::raw::c_uint;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct SIS_STATE {
-    pub log_x: SDWORD,
-    pub log_y: SDWORD,
-    pub ResUnits: DWORD,
-    pub FuelOnBoard: DWORD,
-    pub CrewEnlisted: COUNT,
-    pub TotalElementMass: COUNT,
-    pub TotalBioMass: COUNT,
-    pub ModuleSlots: [BYTE; 16usize],
-    pub DriveSlots: [BYTE; 11usize],
-    pub JetSlots: [BYTE; 8usize],
-    pub NumLanders: BYTE,
-    pub ElementAmounts: [COUNT; 8usize],
-    pub ShipName: [UNICODE; 16usize],
-    pub CommanderName: [UNICODE; 16usize],
-    pub PlanetName: [UNICODE; 16usize],
-}
+pub use crate::engine::world::SisState as SIS_STATE;
 #[cfg(not(test))]
-pub use crate::ui::border::InitSISContexts;
+pub use crate::ui::border::init_siscontexts;
 #[cfg(test)]
 extern "C" {
-    pub fn InitSISContexts();
+    pub fn init_siscontexts();
 }
 #[cfg(not(test))]
-pub use crate::ui::border::DrawSISFrame;
+pub use crate::ui::border::draw_sisframe;
 #[cfg(test)]
 extern "C" {
-    pub fn DrawSISFrame();
+    pub fn draw_sisframe();
 }
 #[cfg(not(test))]
 pub unsafe fn DrawHyperCoords(puniverse: POINT) {
@@ -3022,7 +2996,7 @@ pub type _bindgen_ty_12 = ::std::os::raw::c_uint;
 pub const SUPER_MELEE: _bindgen_ty_13 = 0;
 pub const IN_LAST_BATTLE: _bindgen_ty_13 = 1;
 pub const IN_ENCOUNTER: _bindgen_ty_13 = 2;
-pub const IN_HYPERSPACE: _bindgen_ty_13 = 3;
+pub use crate::engine::world::IN_HYPERSPACE;
 pub const IN_INTERPLANETARY: _bindgen_ty_13 = 4;
 pub const WON_LAST_BATTLE: _bindgen_ty_13 = 5;
 pub const IN_QUASISPACE: _bindgen_ty_13 = 6;
@@ -3038,15 +3012,6 @@ pub const CHECK_ABORT: _bindgen_ty_13 = 16384;
 pub type _bindgen_ty_13 = ::std::os::raw::c_uint;
 pub type ACTIVITY = UWORD;
 
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct GLOBDATA {
-    pub SIS_state: SIS_STATE,
-    pub Game_state: GAME_STATE,
-}
-unsafe extern "C" {
-    pub static mut GlobData: GLOBDATA;
-}
 pub const DEFGRP_NONE: _bindgen_ty_14 = 0;
 pub const DEFGRP_SHOFIXTI: _bindgen_ty_14 = 1;
 pub const DEFGRP_ZOQFOT: _bindgen_ty_14 = 2;
@@ -3066,64 +3031,26 @@ pub const NUM_DEFGRPS: _bindgen_ty_14 = 15;
 pub type _bindgen_ty_14 = ::std::os::raw::c_uint;
 
 #[cfg(not(test))]
-pub use crate::navigation::globals::inQuasiSpace;
-unsafe extern "C" {
-    pub static mut hResIndex: *mut std::ffi::c_void;
-}
-unsafe extern "C" {
-    pub static mut Screen: FRAME;
-}
-unsafe extern "C" {
-    pub static mut ActivityFrame: FRAME;
-}
-unsafe extern "C" {
-    pub static mut StatusFrame: FRAME;
-}
-unsafe extern "C" {
-    pub static mut FlagStatFrame: FRAME;
-}
-unsafe extern "C" {
-    pub static mut MiscDataFrame: FRAME;
-}
-unsafe extern "C" {
-    pub static mut FontGradFrame: FRAME;
-}
-unsafe extern "C" {
-    pub static mut OffScreenContext: CONTEXT;
-}
-unsafe extern "C" {
-    pub static mut ScreenContext: CONTEXT;
-}
-unsafe extern "C" {
-    pub static mut SpaceContext: CONTEXT;
-}
-unsafe extern "C" {
-    pub static mut StatusContext: CONTEXT;
-}
-unsafe extern "C" {
-    pub static mut screen_width: SIZE;
-}
-unsafe extern "C" {
-    pub static mut screen_height: SIZE;
-}
-unsafe extern "C" {
-    pub static mut StarConFont: FONT;
-}
-unsafe extern "C" {
-    pub static mut MicroFont: FONT;
-}
-unsafe extern "C" {
-    pub static mut TinyFont: FONT;
-}
-unsafe extern "C" {
-    pub static mut LastActivity: ACTIVITY;
-}
-unsafe extern "C" {
-    pub static mut PlayerControl: [u8;2];
-}
-unsafe extern "C" {
-    pub static mut usingSpeech: BOOLEAN;
-}
+pub use crate::navigation::globals::in_quasi_space;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #[cfg(not(test))]
 pub use crate::game_init::kernel_abi::SetPlayerInput;
@@ -3165,10 +3092,10 @@ unsafe extern "C" {
 #[cfg(not(test))]
 pub use crate::navigation::hyperspace::live::MoveSIS;
 #[cfg(not(test))]
-pub use crate::navigation::hyper_menu::HyperspaceMenu;
+pub use crate::navigation::hyper_menu::hyperspace_menu;
 #[cfg(test)]
 extern "C" {
-    pub fn HyperspaceMenu();
+    pub fn hyperspace_menu();
 }
 
 #[cfg(not(test))]
@@ -3631,9 +3558,7 @@ pub const MAINMENU_STRING_BASE: _bindgen_ty_27 = 505;
 pub const NETMELEE_STRING_BASE: _bindgen_ty_27 = 560;
 pub const GAMESTR_COUNT: _bindgen_ty_27 = 579;
 pub type _bindgen_ty_27 = ::std::os::raw::c_uint;
-unsafe extern "C" {
-    pub static mut GameStrings: STRING;
-}
+
 #[cfg(not(test))]
 pub unsafe fn ConfirmSaveLoad(MsgStamp: *mut STAMP) {
     crate::front_end::gameopt::ConfirmSaveLoad(MsgStamp.cast());

@@ -20,9 +20,13 @@ struct Battle {
 }
 impl Battle {
     unsafe fn new(capacity: COUNT) -> Self {
-        let activity = GlobData.Game_state.CurrentActivity;
+        let activity = (**uqm_rust::engine::WorldData::current())
+            .game
+            .current_activity;
         let pool = PoolBattle::new(capacity);
-        GlobData.Game_state.CurrentActivity = 0;
+        (**uqm_rust::engine::WorldData::current())
+            .game
+            .current_activity = 0;
         Self {
             _pool: pool,
             activity,
@@ -32,7 +36,9 @@ impl Battle {
 impl Drop for Battle {
     fn drop(&mut self) {
         unsafe {
-            GlobData.Game_state.CurrentActivity = self.activity;
+            (**uqm_rust::engine::WorldData::current())
+                .game
+                .current_activity = self.activity;
         }
     }
 }
@@ -295,7 +301,7 @@ fn root_bolts_have_exact_random_color_length_angle_and_folded_chain_length() {
         let _battle = Battle::new(8);
         let mut ship =
             Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 0, [16; 3], [4, 4]);
-        ship.ship_mut().ShipFacing = 15;
+        ship.ship_mut().ship_facing = 15;
         (*ship.ptr()).next.location = POINT { x: 321, y: -654 };
         let mut colors_seen = [false; 4];
         for seed in 1..65 {
@@ -688,7 +694,7 @@ fn movement_reverses_on_thrust_press_turns_with_left_priority_and_animates_next_
             (0, 0, RIGHT, 0, 2, 1),
             (u16::MAX, 0, 0, 2, 2, 15),
         ] {
-            ship.ship_mut().ShipFacing = initial;
+            ship.ship_mut().ship_facing = initial;
             ship.ship_mut().old_status_flags = old as u16;
             ship.ship_mut().cur_status_flags = (current | SHIP_IN_GRAVITY_WELL) as u16;
             (*ship.ptr()).state_flags = PLAYER_SHIP as u16;
@@ -698,7 +704,7 @@ fn movement_reverses_on_thrust_press_turns_with_left_priority_and_animates_next_
             (*ship.ptr()).current.image.frame = ship.frame(0, 3);
             (*ship.ptr()).next.image.frame = ship.frame(0, 15);
             with_rng(64, 0, || ship.preprocess());
-            assert_eq!(ship.ship_mut().ShipFacing, facing);
+            assert_eq!(ship.ship_mut().ship_facing, facing);
             assert_eq!(
                 (*ship.ptr()).turn,
                 if turn_wait == 0 { 1 } else { turn_wait }
@@ -736,11 +742,11 @@ fn movement_reverses_on_thrust_press_turns_with_left_priority_and_animates_next_
         assert_eq!((*ship.ptr()).thrust, 0);
         for flags in [APPEARING, NONSOLID, APPEARING | NONSOLID] {
             (*ship.ptr()).state_flags = flags as u16;
-            let facing = ship.ship_mut().ShipFacing;
+            let facing = ship.ship_mut().ship_facing;
             let frame = (*ship.ptr()).next.image.frame.raw();
             let v = velocity(&(*ship.ptr()).velocity);
             with_rng(64, 0, || ship.preprocess());
-            assert_eq!(ship.ship_mut().ShipFacing, facing);
+            assert_eq!(ship.ship_mut().ship_facing, facing);
             assert_eq!((*ship.ptr()).next.image.frame.raw(), frame);
             assert_eq!(velocity(&(*ship.ptr()).velocity), v);
             assert_eq!((*ship.ptr()).state_flags, flags as u16);
@@ -916,7 +922,9 @@ fn ai_encounter_weapon_range_recharge_range_and_close_pursuit_boundaries() {
             (0, 15, 20, 14, MOVEMENT_STATE_PURSUE, MOVEMENT_STATE_PURSUE),
             (0, 6, 19, 14, MOVEMENT_STATE_AVOID, MOVEMENT_STATE_AVOID),
         ] {
-            GlobData.Game_state.CurrentActivity = activity;
+            (**uqm_rust::engine::WorldData::current())
+                .game
+                .current_activity = activity;
             concerns[0].which_turn = turns;
             concerns[0].MoveState = move_state;
             concerns[2].ObjectPtr = enemy.ptr();
@@ -972,13 +980,13 @@ fn empty_energy_expands_concerns_only_without_gravity_and_cooldown_and_suppresse
             ship.descriptor_mut().ship_info.energy_level = energy;
             ship.ship_mut().special_counter = cooldown;
             ship.ship_mut().ship_input_state = 0;
-            ship.ship_mut().ShipFacing = 0;
+            ship.ship_mut().ship_facing = 0;
             (*ship.ptr()).turn = 0;
             (*ship.ptr()).thrust = 0;
             concerns[3].ObjectPtr = if gravity { e } else { ptr::null_mut() };
             with_rng(8, 0, || think(&mut ship, &mut concerns, 0));
             assert_eq!(ship.ship_mut().ship_input_state & RIGHT as u8 != 0, turns);
-            assert_eq!(ship.ship_mut().ShipFacing, if turns { 1 } else { 0 });
+            assert_eq!(ship.ship_mut().ship_facing, if turns { 1 } else { 0 });
             assert_eq!(ship.ship_mut().ship_input_state & THRUST as u8, 0);
             assert_eq!((*ship.ptr()).thrust, 0);
             assert_eq!(
@@ -1047,7 +1055,7 @@ fn shared_ai_turns_toward_a_ship_without_applying_generic_thrust() {
         ship.descriptor_mut().ship_info.energy_level = 1;
         let before = velocity(&(*ship.ptr()).velocity);
         with_rng(71, 0, || think(&mut ship, &mut concerns, 1));
-        assert_eq!(ship.ship_mut().ShipFacing, 1);
+        assert_eq!(ship.ship_mut().ship_facing, 1);
         assert_ne!(ship.ship_mut().ship_input_state & RIGHT as u8, 0);
         assert_eq!(ship.ship_mut().ship_input_state & THRUST as u8, 0);
         assert_eq!((*ship.ptr()).thrust, 0);

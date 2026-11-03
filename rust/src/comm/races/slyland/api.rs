@@ -1,5 +1,7 @@
 use super::Handler;
 use crate::comm::races::encounter::EncounterApi;
+#[cfg(not(test))]
+use crate::engine::WorldData;
 
 pub(super) trait SlylandApi: EncounterApi<Handler> {
     fn choices(&self) -> [u16; 5];
@@ -20,7 +22,7 @@ mod live {
     use crate::comm::commglue_abi::runtime::NPCNumber;
 
     extern "C" {
-        static mut GlobData: crate::ships::native::abi::GLOBDATA;
+
         static mut ScreenWidth: i32;
         static mut ScreenHeight: i32;
     }
@@ -36,8 +38,8 @@ mod live {
         fn position(&self) -> (i32, i32, i32, i32) {
             unsafe {
                 (
-                    GlobData.SIS_state.log_x,
-                    GlobData.SIS_state.log_y,
+                    WorldData::current().read(|owner| owner.flagship.log_x),
+                    WorldData::current().read(|owner| owner.flagship.log_y),
                     ScreenWidth,
                     ScreenHeight,
                 )

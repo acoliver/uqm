@@ -1,4 +1,6 @@
 use super::{CSisState, EncounterApi, Handler};
+#[cfg(not(test))]
+use crate::engine::WorldData;
 
 pub(super) trait MelnormApi: EncounterApi<Handler> {
     fn ship(&self) -> CSisState;
@@ -31,31 +33,32 @@ mod live {
 
     use crate::ui::sis::ClearSISRect;
 
-    extern "C" {
-        static mut GlobData: crate::ships::native::abi::GLOBDATA;
-    }
     use crate::threading::pacing::linked::sleep_thread as SleepThread;
     impl MelnormApi for LiveScript<Handler> {
         fn ship(&self) -> CSisState {
             unsafe {
-                std::ptr::addr_of!(GlobData.SIS_state)
+                let world = WorldData::current();
+                std::ptr::addr_of!((**world).flagship)
                     .cast::<CSisState>()
                     .read()
             }
         }
         fn set_ship(&mut self, ship: CSisState) {
             unsafe {
-                std::ptr::addr_of_mut!(GlobData.SIS_state)
+                let world = WorldData::current();
+                std::ptr::addr_of_mut!((**world).flagship)
                     .cast::<CSisState>()
                     .write(ship);
             }
         }
         fn module_cost(&self, id: usize) -> u8 {
-            unsafe { GlobData.Game_state.ModuleCost[id] }
+            {
+                WorldData::current().read(|owner| owner.game.module_cost[id])
+            }
         }
         fn set_module_cost(&mut self, id: usize, cost: u8) {
             unsafe {
-                GlobData.Game_state.ModuleCost[id] = cost;
+                (**WorldData::current()).game.module_cost[id] = cost;
             }
         }
         fn number(&mut self, number: i32) {

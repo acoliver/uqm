@@ -29,7 +29,7 @@ fn descriptor_saw_launch_hold_release_decelerate_and_tracking() {
                 (6000, 6250)
             );
             assert_eq!(ship.descriptor_mut().cyborg_control.WeaponRange, 200);
-            ship.ship_mut().ShipFacing = 4;
+            ship.ship_mut().ship_facing = 4;
             let h = with_rng(9, 0, || ship.weapon(1))[0];
             let saw = ship.weapon_record(h);
             let h = saw.cast();

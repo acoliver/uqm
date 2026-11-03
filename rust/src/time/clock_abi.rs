@@ -1,11 +1,17 @@
 //! C clock API, including the save-compatible intrusive event queue.
 
-#![allow(non_snake_case)]
-
 use super::clock_bridge::{days_in_month, CEvent};
 use crate::collections::queue::{AllocLink, HLink, InitQueue, InsertQueue, Queue, UninitQueue};
+#[cfg(not(test))]
+use crate::engine::World as WorldOwner;
+#[cfg(not(test))]
+use crate::engine::WorldData as WorldFields;
 
-fn event_date(now: (u16, u16, u16), relative: bool, date: (u16, u16, u16)) -> (u16, u16, u16) {
+pub(crate) fn event_date(
+    now: (u16, u16, u16),
+    relative: bool,
+    date: (u16, u16, u16),
+) -> (u16, u16, u16) {
     let (mut year, mut month, mut day) = date;
     if relative {
         month = month.wrapping_add(now.1 - 1);
@@ -24,7 +30,7 @@ fn event_date(now: (u16, u16, u16), relative: bool, date: (u16, u16, u16)) -> (u
     (year, month, day)
 }
 
-unsafe fn insert_event(queue: *mut Queue, date: (u16, u16, u16), selector: u8) -> HLink {
+pub(crate) unsafe fn insert_event(queue: *mut Queue, date: (u16, u16, u16), selector: u8) -> HLink {
     let new = AllocLink(queue);
     if new.is_null() {
         return new;
@@ -87,22 +93,20 @@ pub(crate) mod live {
     use std::ffi::c_void;
     use std::ptr;
 
-    use crate::navigation::events::live::EventHandler;
+    use crate::navigation::events::live::dispatch_event;
 
     use crate::threading::legacy_abi::CreateMutex_Core;
 
     use crate::threading::legacy_abi::DestroyMutex;
 
-    extern "C" {
-        static mut GlobData: crate::ships::native::abi::GLOBDATA;
-    }
     static mut CLOCK_MUTEX: *mut c_void = ptr::null_mut();
 
     /// # Safety
     /// Game-thread access to the live global state.
     #[no_mangle]
     pub unsafe extern "C" fn GetGameClock() -> *mut ClockState {
-        ptr::addr_of_mut!(GlobData.Game_state.GameClock).cast()
+        let world = WorldFields::current();
+        ptr::addr_of_mut!((**world).game.game_clock).cast()
     }
 
     pub(crate) unsafe fn finish_clock_day() {
@@ -114,7 +118,7 @@ pub(crate) mod live {
             u16::from((*clock).day_index),
         );
         process_day_events(ptr::addr_of_mut!((*clock).event_q), today, |selector| {
-            EventHandler(selector)
+            WorldOwner::current().write(|world| dispatch_event(world, selector))
         });
     }
 
@@ -145,21 +149,14 @@ pub(crate) mod live {
     #[no_mangle]
     pub unsafe extern "C" fn AddEvent(
         kind: u32,
-        mut month: u16,
-        mut day: u16,
-        mut year: u16,
+        month: u16,
+        day: u16,
+        year: u16,
         selector: u8,
     ) -> HLink {
-        if kind == 1 && month == 0 && day == 0 && year == 0 {
-            EventHandler(selector);
-        } else if ValidateEvent(kind, &mut month, &mut day, &mut year) != 0 {
-            return insert_event(
-                ptr::addr_of_mut!((*GetGameClock()).event_q),
-                (year, month, day),
-                selector,
-            );
-        }
-        ptr::null_mut()
+        WorldOwner::current().write(|world| {
+            crate::navigation::events::live::add_event(world, kind, month, day, year, selector)
+        })
     }
 
     /// # Safety
@@ -190,7 +187,7 @@ pub(crate) mod live {
     /// # Safety
     /// Game-thread access to the initialized clock.
     #[no_mangle]
-    pub unsafe extern "C" fn SetGameClockRate(seconds: u16) {
+    pub extern "C" fn SetGameClockRate(seconds: u16) {
         rust_clock_set_rate(seconds as i32);
     }
     /// # Safety
@@ -208,19 +205,19 @@ pub(crate) mod live {
     /// # Safety
     /// Called with the initialized clock.
     #[no_mangle]
-    pub unsafe extern "C" fn LockGameClock() {
+    pub extern "C" fn LockGameClock() {
         rust_clock_lock();
     }
     /// # Safety
     /// Called with the initialized clock.
     #[no_mangle]
-    pub unsafe extern "C" fn UnlockGameClock() {
+    pub extern "C" fn UnlockGameClock() {
         rust_clock_unlock();
     }
     /// # Safety
     /// Called with the initialized clock.
     #[no_mangle]
-    pub unsafe extern "C" fn GameClockRunning() -> u32 {
+    pub extern "C" fn GameClockRunning() -> u32 {
         rust_clock_is_running() as u32
     }
 }

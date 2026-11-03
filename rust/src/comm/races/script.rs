@@ -1,6 +1,10 @@
 //! Shared boundary for dialogue scripts while the surrounding engine still uses C.
 
 use crate::comm::locdata::{CAnimationDesc, CLocData};
+#[cfg(not(test))]
+use crate::engine::World;
+#[cfg(not(test))]
+use crate::engine::WorldData;
 
 pub(super) const ANIM_DISABLED: u8 = 1 << 7;
 pub(super) const ONE_SECOND: u16 = 840;
@@ -65,7 +69,7 @@ pub(super) mod live {
     use crate::comm::locdata::COMM_DATA;
     use std::ffi::{c_char, CStr};
 
-    use crate::ui::sis::DrawLanders;
+    use crate::ui::sis::draw_landers;
 
     use crate::strings::string_table::SetAbsStringTableIndex;
 
@@ -80,7 +84,7 @@ pub(super) mod live {
     use crate::comm::comm_abi::AlienTalkSegue;
 
     extern "C" {
-        static mut GlobData: crate::ships::native::abi::GLOBDATA;
+
         static mut shared_phrase_buf: [c_char; 2048];
     }
 
@@ -93,13 +97,26 @@ pub(super) mod live {
         fn get(&self, key: &str) -> u8 {
             let (start, end) = crate::state::game_state_keys::bit_range(key)
                 .expect("dialogue uses an unknown game-state key");
-            unsafe { crate::state::ffi::rust_get_game_state_bits(start as i32, end as i32) }
+            {
+                World::current().read(|world| {
+                    crate::state::ffi::rust_get_game_state_bits(world, start as i32, end as i32)
+                })
+            }
         }
 
         fn set(&mut self, key: &str, value: u8) {
             let (start, end) = crate::state::game_state_keys::bit_range(key)
                 .expect("dialogue uses an unknown game-state key");
-            unsafe { crate::state::ffi::rust_set_game_state_bits(start as i32, end as i32, value) }
+            {
+                World::current().write(|world| {
+                    crate::state::ffi::rust_set_game_state_bits(
+                        world,
+                        start as i32,
+                        end as i32,
+                        value,
+                    )
+                })
+            }
         }
 
         fn npc(&mut self, phrase: i32) {
@@ -108,6 +125,7 @@ pub(super) mod live {
 
         fn response(&mut self, phrase: u16, handler: H, fragments: &[i32]) {
             unsafe {
+                let world = WorldData::current();
                 let text = if fragments.is_empty() {
                     GetStringAddress(SetAbsStringTableIndex(
                         (COMM_DATA.conversation_phrases).cast(),
@@ -120,10 +138,10 @@ pub(super) mod live {
                     for &fragment in fragments {
                         let ptr = match fragment {
                             GLOBAL_PLAYER_NAME => {
-                                std::ptr::addr_of!(GlobData.SIS_state.CommanderName).cast()
+                                std::ptr::addr_of!((**world).flagship.commander_name).cast()
                             }
                             GLOBAL_SHIP_NAME => {
-                                std::ptr::addr_of!(GlobData.SIS_state.ShipName).cast()
+                                std::ptr::addr_of!((**world).flagship.ship_name).cast()
                             }
                             _ => {
                                 let index =
@@ -162,19 +180,20 @@ pub(super) mod live {
         }
 
         fn supplies(&self) -> Supplies {
-            unsafe {
+            {
                 Supplies {
-                    landers: GlobData.SIS_state.NumLanders,
-                    fuel: GlobData.SIS_state.FuelOnBoard,
-                    radioactives: GlobData.SIS_state.ElementAmounts[6],
+                    landers: WorldData::current().read(|owner| owner.flagship.num_landers),
+                    fuel: WorldData::current().read(|owner| owner.flagship.fuel_on_board),
+                    radioactives: WorldData::current()
+                        .read(|owner| owner.flagship.element_amounts[6]),
                 }
             }
         }
 
         fn add_lander(&mut self) {
             unsafe {
-                GlobData.SIS_state.NumLanders += 1;
-                DrawLanders();
+                (**WorldData::current()).flagship.num_landers += 1;
+                draw_landers();
             }
         }
 

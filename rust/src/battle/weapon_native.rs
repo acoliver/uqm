@@ -218,7 +218,7 @@ pub(crate) mod engine {
             object.IntersectStamp.origin.y = object.IntersectStamp.origin.y.wrapping_add(31);
         }
         object.IntersectStamp.origin.y = object.IntersectStamp.origin.y.wrapping_add(
-            *(&raw const Kernel::current().status_offsets)
+            *(&raw const cx.kernel.status_offsets)
                 .cast::<i16>()
                 .offset(cx.element(e).player as isize),
         );
@@ -237,7 +237,7 @@ pub(crate) mod engine {
                 &mut object_rect,
             );
         } else {
-            let old = SetContext(StatusContext);
+            let old = SetContext(cx.kernel.status_context);
             DrawStamp(&mut object.IntersectStamp);
             SetContext(old);
         }

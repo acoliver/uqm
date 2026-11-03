@@ -797,7 +797,7 @@ mod tests {
     }
 
     struct PersistentGenerator {
-        files: std::rc::Rc<std::cell::RefCell<crate::state::state_file::StateFileManager>>,
+        files: std::rc::Rc<std::cell::RefCell<crate::engine::world::state_file::StateFileManager>>,
     }
     impl SurfaceGenerator for PersistentGenerator {
         fn node_count(
@@ -846,7 +846,7 @@ mod tests {
         ) -> Result<(), AdapterError> {
             self.files
                 .borrow_mut()
-                .can_node(crate::state::planet_info::CannedNode {
+                .can_node(crate::engine::world::planet_info::CannedNode {
                     star: 1,
                     planet: 2,
                     moon: 1,
@@ -862,7 +862,7 @@ mod tests {
     #[test]
     fn lethal_shot_survives_relanding_save_load_and_collection_retires_node() {
         use super::super::generation::*;
-        use crate::state::state_file::StateFileManager;
+        use crate::engine::world::state_file::StateFileManager;
         let _guard = telemetry_guard();
         let files = std::rc::Rc::new(std::cell::RefCell::new(StateFileManager::new()));
         let mut generator = PersistentGenerator {

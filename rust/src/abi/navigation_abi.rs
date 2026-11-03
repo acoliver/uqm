@@ -1063,7 +1063,7 @@ pub use crate::time::clock_abi::live::ValidateEvent;
 pub use crate::time::clock_abi::live::AddEvent;
 
 #[cfg(not(test))]
-pub use crate::navigation::events::live::EventHandler;
+pub use crate::navigation::events::live::dispatch_event;
 
 #[cfg(not(test))]
 pub use crate::time::clock_abi::live::MoveGameClockDays;
@@ -1617,52 +1617,52 @@ pub const NUM_MODULES: _bindgen_ty_5 = 20;
 pub type _bindgen_ty_5 = ::std::os::raw::c_uint;
 pub use crate::ships::native::abi::SIS_STATE;
 #[cfg(not(test))]
-pub use crate::ui::sis::RepairSISBorder;
+pub use crate::ui::sis::repair_sisborder;
 #[cfg(test)]
 extern "C" {
-    pub fn RepairSISBorder();
+    pub fn repair_sisborder();
 }
 #[cfg(not(test))]
-pub use crate::ui::border::InitSISContexts;
+pub use crate::ui::border::init_siscontexts;
 #[cfg(test)]
 extern "C" {
-    pub fn InitSISContexts();
+    pub fn init_siscontexts();
 }
 #[cfg(not(test))]
-pub use crate::ui::border::DrawSISFrame;
+pub use crate::ui::border::draw_sisframe;
 #[cfg(test)]
 extern "C" {
-    pub fn DrawSISFrame();
+    pub fn draw_sisframe();
 }
 
 #[cfg(not(test))]
 pub use crate::ui::sis::ClearSISRect;
 
 #[cfg(not(test))]
-pub use crate::ui::sis::PreUpdateFlashRect;
+pub use crate::ui::sis::pre_update_flash_rect;
 #[cfg(not(test))]
 pub use crate::ui::sis::SetFlashRect;
 #[cfg(test)]
 extern "C" {
-    pub fn PreUpdateFlashRect();
+    pub fn pre_update_flash_rect();
 }
 #[cfg(not(test))]
-pub use crate::ui::sis::PostUpdateFlashRect;
+pub use crate::ui::sis::post_update_flash_rect;
 #[cfg(test)]
 extern "C" {
-    pub fn PostUpdateFlashRect();
+    pub fn post_update_flash_rect();
 }
 #[cfg(not(test))]
-pub use crate::ui::sis::PauseFlash;
+pub use crate::ui::sis::pause_flash;
 #[cfg(test)]
 extern "C" {
-    pub fn PauseFlash();
+    pub fn pause_flash();
 }
 #[cfg(not(test))]
-pub use crate::ui::sis::ContinueFlash;
+pub use crate::ui::sis::continue_flash;
 #[cfg(test)]
 extern "C" {
-    pub fn ContinueFlash();
+    pub fn continue_flash();
 }
 
 #[cfg(not(test))]
@@ -1693,24 +1693,24 @@ pub const StatMsgMode_SMM_DEFAULT: StatMsgMode = 1;
 pub type StatMsgMode = ::std::os::raw::c_uint;
 
 #[cfg(not(test))]
-pub use crate::ui::sis::DrawLanders;
+pub use crate::ui::sis::draw_landers;
 #[cfg(not(test))]
 pub use crate::ui::sis::SetStatusMessageMode;
 #[cfg(test)]
 extern "C" {
-    pub fn DrawLanders();
+    pub fn draw_landers();
 }
 
 #[cfg(not(test))]
 pub use crate::ui::sis::DrawStorageBays;
 
 #[cfg(not(test))]
-pub use crate::ui::sis::DrawFlagshipStats;
+pub use crate::ui::sis::draw_flagship_stats;
 #[cfg(not(test))]
 pub use crate::ui::sis::GetGaugeRect;
 #[cfg(test)]
 extern "C" {
-    pub fn DrawFlagshipStats();
+    pub fn draw_flagship_stats();
 }
 
 #[cfg(not(test))]
@@ -1753,12 +1753,12 @@ pub use crate::ui::sis::capacity::GetFTankCapacity;
 pub use crate::ui::sis::capacity::CountSISPieces;
 
 #[cfg(not(test))]
-pub use crate::ui::sis::DrawCaptainsName;
+pub use crate::ui::sis::draw_captains_name;
 #[cfg(not(test))]
 pub use crate::ui::sis::DrawFlagshipName;
 #[cfg(test)]
 extern "C" {
-    pub fn DrawCaptainsName();
+    pub fn draw_captains_name();
 }
 pub use crate::ships::native::abi::velocity_desc;
 pub type VELOCITY_DESC = velocity_desc;
@@ -2725,10 +2725,8 @@ pub const CHECK_ABORT: _bindgen_ty_8 = 16384;
 pub type _bindgen_ty_8 = ::std::os::raw::c_uint;
 pub type ACTIVITY = UWORD;
 
-pub use crate::ships::native::abi::GLOBDATA;
-extern "C" {
-    pub static mut GlobData: GLOBDATA;
-}
+
+
 pub const DEFGRP_NONE: _bindgen_ty_9 = 0;
 pub const DEFGRP_SHOFIXTI: _bindgen_ty_9 = 1;
 pub const DEFGRP_ZOQFOT: _bindgen_ty_9 = 2;
@@ -2748,45 +2746,43 @@ pub const NUM_DEFGRPS: _bindgen_ty_9 = 15;
 pub type _bindgen_ty_9 = ::std::os::raw::c_uint;
 
 #[cfg(not(test))]
-pub use crate::navigation::globals::getGameState;
+pub use crate::state::ffi::rust_get_game_state_bits as getGameState;
 
 #[cfg(not(test))]
-pub use crate::navigation::globals::setGameState;
-extern "C" {
-    pub static mut RadarContext: CONTEXT;
-}
+pub use crate::state::ffi::rust_set_game_state_bits as setGameState;
+
 #[cfg(not(test))]
-pub use crate::navigation::globals::FreeSC2Data;
+pub use crate::navigation::globals::free_sc2_data;
 #[cfg(test)]
 extern "C" {
-    pub fn FreeSC2Data();
+    pub fn free_sc2_data();
 }
 
 #[cfg(not(test))]
-pub use crate::navigation::globals::InitGlobData;
+pub use crate::navigation::globals::init_glob_data;
 #[cfg(not(test))]
-pub use crate::navigation::globals::LoadSC2Data;
+pub use crate::navigation::globals::load_sc2_data;
 #[cfg(test)]
 extern "C" {
-    pub fn InitGlobData();
+    pub fn init_glob_data();
 }
 
 #[cfg(not(test))]
-pub use crate::navigation::globals::inHQSpace;
+pub use crate::navigation::globals::in_hqspace;
 
 #[cfg(not(test))]
-pub use crate::navigation::globals::inHyperSpace;
+pub use crate::navigation::globals::in_hyper_space;
 
 #[cfg(not(test))]
-pub use crate::navigation::globals::inQuasiSpace;
+pub use crate::navigation::globals::in_quasi_space;
 
 #[cfg(not(test))]
 pub use crate::navigation::globals::InitGameStructures;
 #[cfg(not(test))]
-pub use crate::navigation::globals::UninitGameStructures;
+pub use crate::navigation::globals::uninit_game_structures;
 #[cfg(test)]
 extern "C" {
-    pub fn UninitGameStructures();
+    pub fn uninit_game_structures();
 }
 
 #[cfg(not(test))]
@@ -3528,97 +3524,97 @@ pub const SAMATRA_SHIP: _bindgen_ty_21 = 23;
 pub const NUM_AVAILABLE_RACES: _bindgen_ty_21 = 24;
 pub type _bindgen_ty_21 = ::std::os::raw::c_uint;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::activateAllShips;
+pub use crate::front_end::uqmdebug::activate_all_ships;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::atmosphereString;
+pub use crate::front_end::uqmdebug::atmosphere_string;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::bodyColorString;
+pub use crate::front_end::uqmdebug::body_color_string;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::calculateBioValue;
+pub use crate::front_end::uqmdebug::calculate_bio_value;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::calculateMineralValue;
+pub use crate::front_end::uqmdebug::calculate_mineral_value;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::clearEscorts;
+pub use crate::front_end::uqmdebug::clear_escorts;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::debugContexts;
+pub use crate::front_end::uqmdebug::debug_contexts;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::debugKeyPressed;
+pub use crate::front_end::uqmdebug::debug_key_pressed;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::debugKeyPressedSynchronous;
+pub use crate::front_end::uqmdebug::debug_key_pressed_synchronous;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::densityString;
+pub use crate::front_end::uqmdebug::density_string;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::depositQualityString;
+pub use crate::front_end::uqmdebug::deposit_quality_string;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::doInstantMove;
+pub use crate::front_end::uqmdebug::do_instant_move;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::dumpEvent;
+pub use crate::front_end::uqmdebug::dump_event;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::dumpEvents;
+pub use crate::front_end::uqmdebug::dump_events;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::dumpMoon;
+pub use crate::front_end::uqmdebug::dump_moon;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::dumpPlanet;
+pub use crate::front_end::uqmdebug::dump_planet;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::dumpPlanetType;
+pub use crate::front_end::uqmdebug::dump_planet_type;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::dumpPlanetTypes;
+pub use crate::front_end::uqmdebug::dump_planet_types;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::dumpStrings;
+pub use crate::front_end::uqmdebug::dump_strings;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::dumpSystem;
+pub use crate::front_end::uqmdebug::dump_system;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::dumpUniverse;
+pub use crate::front_end::uqmdebug::dump_universe;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::dumpUniverseToFile;
+pub use crate::front_end::uqmdebug::dump_universe_to_file;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::equipShip;
+pub use crate::front_end::uqmdebug::equip_ship;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::eventName;
+pub use crate::front_end::uqmdebug::event_name;
 #[cfg(all(not(test), feature = "debug-process"))]
 pub use crate::front_end::uqmdebug::find_player_ship;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::forAllMoons;
+pub use crate::front_end::uqmdebug::for_all_moons;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::forAllPlanetTypes;
+pub use crate::front_end::uqmdebug::for_all_planet_types;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::forAllPlanets;
+pub use crate::front_end::uqmdebug::for_all_planets;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::forAllStars;
+pub use crate::front_end::uqmdebug::for_all_stars;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::forwardToNextEvent;
+pub use crate::front_end::uqmdebug::forward_to_next_event;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::generateBioIndex;
+pub use crate::front_end::uqmdebug::generate_bio_index;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::generateMineralIndex;
+pub use crate::front_end::uqmdebug::generate_mineral_index;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::giveDevices;
+pub use crate::front_end::uqmdebug::give_devices;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::planetTypeString;
+pub use crate::front_end::uqmdebug::planet_type_string;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::resetCrewBattle;
+pub use crate::front_end::uqmdebug::reset_crew_battle;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::resetEnergyBattle;
+pub use crate::front_end::uqmdebug::reset_energy_battle;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::showSpheres;
+pub use crate::front_end::uqmdebug::show_spheres;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::starPresenceString;
+pub use crate::front_end::uqmdebug::star_presence_string;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::starTypeString;
+pub use crate::front_end::uqmdebug::star_type_string;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::tallyResources;
+pub use crate::front_end::uqmdebug::tally_resources;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::tallyResourcesToFile;
+pub use crate::front_end::uqmdebug::tally_resources_to_file;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::tectonicsString;
+pub use crate::front_end::uqmdebug::tectonics_string;
 #[cfg(all(not(test), feature = "debug-process"))]
 pub use crate::front_end::uqmdebug::uqm_debug_creature_bio_value;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::worldGenAlgoString;
+pub use crate::front_end::uqmdebug::world_gen_algo_string;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::worldSizeString;
+pub use crate::front_end::uqmdebug::world_size_string;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::UniverseRecurse;
+pub use crate::front_end::uqmdebug::universe_recurse;
 #[cfg(all(not(test), feature = "debug-process"))]
 pub use crate::front_end::uqmdebug::DEBUG_HOOK;
 #[cfg(all(not(test), feature = "debug-process"))]
@@ -3768,9 +3764,7 @@ extern "C" {
 extern "C" {
     pub static mut EncounterGroup: BYTE;
 }
-extern "C" {
-    pub static mut CurStarDescPtr: *mut crate::savegame::runtime::star::CStarDesc;
-}
+
 extern "C" {
     pub static mut star_array: *mut crate::savegame::runtime::star::CStarDesc;
 }
@@ -3788,55 +3782,25 @@ pub use crate::ships::master_native::engine::FindMasterShipIndex;
 
 #[cfg(not(test))]
 pub use crate::ships::master_native::engine::GetShipMeleeIconsFromIndex;
-extern "C" {
-    pub static mut Screen: FRAME;
-}
-extern "C" {
-    pub static mut ActivityFrame: FRAME;
-}
-extern "C" {
-    pub static mut StatusFrame: FRAME;
-}
-extern "C" {
-    pub static mut FlagStatFrame: FRAME;
-}
-extern "C" {
-    pub static mut MiscDataFrame: FRAME;
-}
-extern "C" {
-    pub static mut FontGradFrame: FRAME;
-}
-extern "C" {
-    pub static mut OffScreenContext: CONTEXT;
-}
-extern "C" {
-    pub static mut ScreenContext: CONTEXT;
-}
-extern "C" {
-    pub static mut SpaceContext: CONTEXT;
-}
-extern "C" {
-    pub static mut StatusContext: CONTEXT;
-}
-extern "C" {
-    pub static mut StarConFont: FONT;
-}
-extern "C" {
-    pub static mut MicroFont: FONT;
-}
-extern "C" {
-    pub static mut TinyFont: FONT;
-}
-extern "C" {
-    pub static mut LastActivity: ACTIVITY;
-}
-extern "C" {
-    pub static mut PlayerControl: [u8;2];
-}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 #[cfg(not(test))]
-pub use crate::game_init::cleanup::FreeKernel;
+pub use crate::game_init::cleanup::free_kernel;
 #[cfg(not(test))]
-pub use crate::game_init::cleanup::UninitGameKernel;
+pub use crate::game_init::cleanup::uninit_game_kernel;
 #[cfg(not(test))]
 pub use crate::game_init::kernel_abi::uninitIO;
 #[cfg(not(test))]
@@ -3864,24 +3828,24 @@ extern "C" {
 }
 
 #[cfg(not(test))]
-pub use crate::navigation::hyper_data::FreeHyperData;
+pub use crate::navigation::hyper_data::free_hyper_data;
 #[cfg(not(test))]
 pub use crate::navigation::hyperspace::live::MoveSIS;
 #[cfg(test)]
 extern "C" {
-    pub fn FreeHyperData();
+    pub fn free_hyper_data();
 }
 
 #[cfg(not(test))]
 pub use crate::navigation::hyperspace::live::check_hyperspace_encounter;
 
 #[cfg(not(test))]
-pub use crate::navigation::hyper_menu::HyperspaceMenu;
+pub use crate::navigation::hyper_menu::hyperspace_menu;
 #[cfg(not(test))]
 pub use crate::navigation::hyper_transition::hyper_transition;
 #[cfg(test)]
 extern "C" {
-    pub fn HyperspaceMenu();
+    pub fn hyperspace_menu();
 }
 #[cfg(not(test))]
 pub use crate::navigation::hyper_transition::save_sis_hyper_state;
@@ -3909,10 +3873,10 @@ pub use crate::battle::build_native::engine::GetIndexFromStarShip;
 pub use crate::battle::build_native::engine::AddEscortShips;
 
 #[cfg(not(test))]
-pub use crate::battle::build_native::engine::SetRaceAllied;
+pub use crate::battle::build_native::engine::set_race_allied;
 
 #[cfg(not(test))]
-pub use crate::battle::build_native::engine::StartSphereTracking;
+pub use crate::battle::build_native::engine::start_sphere_tracking;
 
 #[cfg(not(test))]
 pub use crate::battle::build_native::engine::CheckAlliance;
@@ -3924,16 +3888,13 @@ pub use crate::ships::loader_native::engine::load_ship;
 pub use crate::ships::loader_native::engine::unload_ship;
 
 #[cfg(not(test))]
-pub use crate::state::c_api::planets::InitPlanetInfo;
+pub use crate::state::c_api::planets::uninit_planet_info;
 
 #[cfg(not(test))]
-pub use crate::state::c_api::planets::UninitPlanetInfo;
+pub use crate::navigation::groups::live::init_group_info;
 
 #[cfg(not(test))]
-pub use crate::navigation::groups::live::InitGroupInfo;
-
-#[cfg(not(test))]
-pub use crate::navigation::groups::live::UninitGroupInfo;
+pub use crate::navigation::groups::live::uninit_group_info;
 
 #[cfg(not(test))]
 pub use crate::navigation::groups::live::GetGroupInfo;
@@ -3953,19 +3914,19 @@ pub const INFO_TYPE_RANDGRPINFO: INFO_TYPE = 1;
 pub const INFO_TYPE_DEFGRPINFO: INFO_TYPE = 2;
 pub type INFO_TYPE = ::std::os::raw::c_uint;
 
-pub use crate::state::c_api::OpenStateFile;
+pub use crate::state::c_api::open_state_file;
 
-pub use crate::state::c_api::CloseStateFile;
+pub use crate::state::c_api::close_state_file;
 
-pub use crate::state::c_api::DeleteStateFile;
+pub use crate::state::c_api::delete_state_file;
 
-pub use crate::state::c_api::LengthStateFile;
+pub use crate::state::c_api::length_state_file;
 
-pub use crate::state::c_api::ReadStateFile;
+pub use crate::state::c_api::read_state_file;
 
-pub use crate::state::c_api::WriteStateFile;
+pub use crate::state::c_api::write_state_file;
 
-pub use crate::state::c_api::SeekStateFile;
+pub use crate::state::c_api::seek_state_file;
 pub type HIPGROUP = HLINK;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -4006,7 +3967,7 @@ pub struct GROUP_HEADER {
 
 pub use crate::navigation::groups::ReadGroupHeader;
 
-pub use crate::navigation::groups::WriteGroupHeader;
+pub use crate::navigation::groups::write_group_header;
 
 pub use crate::navigation::groups::ReadShipFragment;
 
@@ -4039,9 +4000,7 @@ pub const MAINMENU_STRING_BASE: _bindgen_ty_25 = 505;
 pub const NETMELEE_STRING_BASE: _bindgen_ty_25 = 560;
 pub const GAMESTR_COUNT: _bindgen_ty_25 = 579;
 pub type _bindgen_ty_25 = ::std::os::raw::c_uint;
-extern "C" {
-    pub static mut GameStrings: STRING;
-}
+
 pub const ARILOU_ENTRANCE_EVENT: _bindgen_ty_26 = 0;
 pub const ARILOU_EXIT_EVENT: _bindgen_ty_26 = 1;
 pub const HYPERSPACE_ENCOUNTER_EVENT: _bindgen_ty_26 = 2;
@@ -4067,10 +4026,10 @@ pub const ARILOU_GATE_STATE_OPENING: ARILOU_GATE_STATE = 1;
 pub type ARILOU_GATE_STATE = ::std::os::raw::c_uint;
 
 #[cfg(not(test))]
-pub use crate::navigation::events::live::AddInitialGameEvents;
+pub use crate::navigation::events::live::schedule_initial_events;
 
 #[cfg(not(test))]
-pub use crate::navigation::events::live::SetRaceDest;
+pub use crate::navigation::events::live::set_race_destination;
 
 #[cfg(not(test))]
 pub use crate::battle::gendef::getGenerateFunctions;
@@ -4124,15 +4083,13 @@ pub type _bindgen_ty_27 = ::std::os::raw::c_uint;
 pub use crate::ships::native::abi::MeleeSetup;
 pub use crate::ships::native::abi::MeleeTeam;
 pub type FleetShipIndex = COUNT;
-extern "C" {
-    pub static mut stars_in_space: FRAME;
-}
+
 
 #[cfg(not(test))]
-pub use crate::game_init::space_resources::live::InitSpace;
+pub use crate::game_init::space_resources::live::init_space;
 
 #[cfg(not(test))]
-pub use crate::game_init::space_resources::live::UninitSpace;
+pub use crate::game_init::space_resources::live::uninit_space;
 pub const PacketType_PACKET_INIT: PacketType = 0;
 pub const PacketType_PACKET_PING: PacketType = 1;
 pub const PacketType_PACKET_ACK: PacketType = 2;
@@ -4512,10 +4469,8 @@ pub const MENU_SOUND_EFFECT_MENU_SOUND_SUCCESS: MENU_SOUND_EFFECT = 1;
 pub const MENU_SOUND_EFFECT_MENU_SOUND_FAILURE: MENU_SOUND_EFFECT = 2;
 pub const MENU_SOUND_EFFECT_MENU_SOUND_INVOKED: MENU_SOUND_EFFECT = 3;
 pub type MENU_SOUND_EFFECT = ::std::os::raw::c_uint;
-extern "C" {
-}
-extern "C" {
-}
+
+
 pub type MENU_SOUND_FLAGS = UWORD;
 
 #[cfg(not(test))]
@@ -4534,16 +4489,16 @@ pub const DEPART_BASE: _bindgen_ty_29 = 3;
 pub type _bindgen_ty_29 = ::std::os::raw::c_uint;
 pub type STARBASE_STATE = BYTE;
 #[cfg(not(test))]
-pub use crate::ui::starbase::InstallBombAtEarth;
+pub use crate::ui::starbase::install_bomb_at_earth;
 #[cfg(test)]
 extern "C" {
-    pub fn InstallBombAtEarth();
+    pub fn install_bomb_at_earth();
 }
 #[cfg(not(test))]
-pub use crate::ui::starbase::VisitStarBase;
+pub use crate::ui::starbase::visit_star_base;
 #[cfg(test)]
 extern "C" {
-    pub fn VisitStarBase();
+    pub fn visit_star_base();
 }
 
 #[cfg(not(test))]
@@ -4557,7 +4512,7 @@ pub use crate::ui::shipyard::DoShipyard;
 
 #[cfg(not(test))]
 pub use crate::ui::starbase::DrawShipPiece;
-extern "C" {}
+
 
 #[cfg(not(test))]
 pub use crate::ui::shipstat::DrawCrewFuelString;
@@ -4618,36 +4573,36 @@ pub use crate::ui::util::live::DrawStarConBox;
 pub use crate::ui::util::live::SeedRandomNumbers;
 
 #[cfg(not(test))]
-pub use crate::ui::settings::ToggleMusic;
+pub use crate::ui::settings::toggle_music;
 #[cfg(not(test))]
 pub use crate::ui::util::live::SaveContextFrame;
 #[cfg(test)]
 extern "C" {
-    pub fn ToggleMusic();
+    pub fn toggle_music();
 }
 #[cfg(not(test))]
-pub use crate::ui::settings::StopMusic;
+pub use crate::ui::settings::stop_music;
 #[cfg(test)]
 extern "C" {
-    pub fn StopMusic();
+    pub fn stop_music();
 }
 #[cfg(not(test))]
-pub use crate::ui::settings::ResumeMusic;
+pub use crate::ui::settings::resume_music;
 #[cfg(test)]
 extern "C" {
-    pub fn ResumeMusic();
+    pub fn resume_music();
 }
 #[cfg(not(test))]
-pub use crate::ui::settings::PauseMusic;
+pub use crate::ui::settings::pause_music;
 #[cfg(test)]
 extern "C" {
-    pub fn PauseMusic();
+    pub fn pause_music();
 }
 #[cfg(not(test))]
-pub use crate::ui::settings::ToggleSoundEffect;
+pub use crate::ui::settings::toggle_sound_effect;
 #[cfg(test)]
 extern "C" {
-    pub fn ToggleSoundEffect();
+    pub fn toggle_sound_effect();
 }
 
 #[cfg(not(test))]

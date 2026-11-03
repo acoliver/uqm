@@ -107,7 +107,7 @@ pub(crate) mod engine {
                     let (x, y) = cx.element(e).velocity.get_current_components();
                     dx = x as SIZE;
                     dy = y as SIZE;
-                    if (config.fuel != 0 || cx.story_state(StoryKey::ArilouSpaceSide) > 1)
+                    if (config.fuel != 0 || cx.story_state(StoryKey::ARILOU_SPACE_SIDE) > 1)
                         && facing == cx.ship_state(ss).facing
                     {
                         cx.ship_state_mut(ss).status |= SHIP_AT_MAX_SPEED as u16;
@@ -123,7 +123,7 @@ pub(crate) mod engine {
         if leave {
             cx.set_autopilot(POINT { x: -1, y: -1 });
             if cx.ship_state(ss).status & THRUST as u16 == 0
-                || (config.fuel == 0 && cx.story_state(StoryKey::ArilouSpaceSide) <= 1)
+                || (config.fuel == 0 && cx.story_state(StoryKey::ARILOU_SPACE_SIDE) <= 1)
             {
                 accelerate = -1;
                 let (x, y) = cx.element(e).velocity.get_current_components();
@@ -579,8 +579,8 @@ pub(crate) mod engine {
             d.characteristics.max_thrust -= 4;
             &SIS_HYPER
         } else {
-            if world.story_state(StoryKey::ChmmrBombState) == 3 {
-                world.set_story_state(StoryKey::BombCarrier, 1);
+            if world.story_state(StoryKey::CHMMR_BOMB_STATE) == 3 {
+                world.set_story_state(StoryKey::BOMB_CARRIER, 1);
             }
             &SIS
         };

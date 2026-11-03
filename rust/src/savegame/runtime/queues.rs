@@ -49,13 +49,13 @@ use crate::comm::dispatch::{
     clone_ship_fragment_from, production_captain_name, CFleetInfo, CPoint, CShipFragment,
     INFINITE_FLEET, START_ENCOUNTER, START_INTERPLANETARY,
 };
-use crate::comm::locdata::{CGameState, CQueue};
+use crate::comm::locdata::CGameState;
 use crate::savegame::types::{Point, RaceEntry, ShipFragmentEntry};
 use crate::time::clock_bridge::NUM_EVENTS;
 
 const _: () = {
-    assert!(size_of::<CQueue>() == size_of::<Queue>());
-    assert!(align_of::<CQueue>() == align_of::<Queue>());
+    assert!(size_of::<Queue>() == size_of::<Queue>());
+    assert!(align_of::<Queue>() == align_of::<Queue>());
 };
 
 /// `MAX_BUILT_SHIPS` (sis.h): hangar slots, so the bound of an escort's index.
@@ -175,13 +175,13 @@ impl QueueElement for CShipFragment {
 
 /// Slots of a queue that really is a pool of `T`.
 pub(super) fn pool_slots<T: QueueElement>(
-    queue: &CQueue,
+    queue: &Queue,
     kind: QueueKind,
 ) -> Result<usize, QueueError> {
     pool_slots_layout(queue, kind, size_of::<T>(), align_of::<T>())
 }
 fn pool_slots_layout(
-    queue: &CQueue,
+    queue: &Queue,
     kind: QueueKind,
     size: usize,
     align: usize,
@@ -207,7 +207,7 @@ fn pool_slots_layout(
 /// Every link is checked against the pool, so a queue the game corrupted is an
 /// error and not a save of whatever the pointers reach.
 pub(crate) fn walk<T: QueueElement>(
-    queue: &CQueue,
+    queue: &Queue,
     kind: QueueKind,
 ) -> Result<Vec<*mut T>, QueueError> {
     let layout = LinkLayout {
@@ -223,7 +223,7 @@ pub(crate) fn walk<T: QueueElement>(
 }
 
 pub(crate) fn walk_layout(
-    queue: &CQueue,
+    queue: &Queue,
     kind: QueueKind,
     layout: LinkLayout,
 ) -> Result<Vec<*mut c_void>, QueueError> {
@@ -385,7 +385,7 @@ fn validate_ships(
 }
 
 fn capture_ships(
-    queue: &CQueue,
+    queue: &Queue,
     kind: QueueKind,
     race_count: usize,
 ) -> Result<Vec<ShipFragmentEntry>, QueueError> {

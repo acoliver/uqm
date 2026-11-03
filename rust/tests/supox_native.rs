@@ -114,7 +114,7 @@ fn gob_is_launched_with_the_c_missile_block() {
         let _battle = Battlefield::new(8);
         unsafe {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_SUPOX_ID, 0);
-            ship.ship_mut().ShipFacing = 4;
+            ship.ship_mut().ship_facing = 4;
             ship.element_mut().next.location = POINT { x: 100, y: 200 };
             let slots = ship.weapon(1);
             let horns = [ship.weapon_record(slots[0]).cast()];
@@ -140,7 +140,7 @@ unsafe fn thrust_heading(_battle: &Battle, heading: COUNT, flags: u16) -> ([i32;
     let mut oracle = Ship::bare(_battle, SPECIES_ID_SUPOX_ID, 0);
     // SAFETY: the caller holds the serialized battle through these fixture projections.
     unsafe {
-        oracle.ship_mut().ShipFacing = heading;
+        oracle.ship_mut().ship_facing = heading;
         oracle.ship_mut().cur_status_flags = flags;
         let status = uqm_rust::app::bridge::enter(|cx| {
             inertial_thrust(
@@ -173,7 +173,7 @@ fn special_thrusts_laterally_and_in_reverse_then_restores_the_facing() {
             ];
             for (held, facing, heading) in cases {
                 let mut ship = Ship::bare(&_battle, SPECIES_ID_SUPOX_ID, 0);
-                ship.ship_mut().ShipFacing = facing;
+                ship.ship_mut().ship_facing = facing;
                 ship.ship_mut().cur_status_flags = held as u16;
                 observation::drain();
                 ship.preprocess();
@@ -187,7 +187,7 @@ fn special_thrusts_laterally_and_in_reverse_then_restores_the_facing() {
                     "case {held:#x}/{facing}"
                 );
                 assert_eq!(
-                    ship.ship_mut().ShipFacing,
+                    ship.ship_mut().ship_facing,
                     facing,
                     "the real facing is restored"
                 );
@@ -207,7 +207,7 @@ fn special_arms_the_wait_counters_and_normal_flight_is_untouched() {
         observation::enable();
         unsafe {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_SUPOX_ID, 0);
-            ship.ship_mut().ShipFacing = 4;
+            ship.ship_mut().ship_facing = 4;
             ship.ship_mut().cur_status_flags = (SPECIAL | THRUST | LEFT) as u16;
             ship.preprocess();
             assert_eq!(ship.element_mut().thrust, 1);
@@ -224,7 +224,7 @@ fn special_arms_the_wait_counters_and_normal_flight_is_untouched() {
             // Without SPECIAL, or with SPECIAL alone, nothing is changed.
             for held in [THRUST | LEFT, SPECIAL] {
                 let mut ship = Ship::bare(&_battle, SPECIES_ID_SUPOX_ID, 0);
-                ship.ship_mut().ShipFacing = 4;
+                ship.ship_mut().ship_facing = 4;
                 ship.ship_mut().cur_status_flags = held as u16;
                 observation::drain();
                 ship.preprocess();
@@ -235,7 +235,7 @@ fn special_arms_the_wait_counters_and_normal_flight_is_untouched() {
                 );
                 assert_eq!(velocity_fields(&ship.element_mut().velocity), [0; 9]);
                 assert_eq!(ship.ship_mut().cur_status_flags, held as u16);
-                assert_eq!(ship.ship_mut().ShipFacing, 4);
+                assert_eq!(ship.ship_mut().ship_facing, 4);
                 assert_eq!(ship.element_mut().thrust, 0);
                 assert_eq!(ship.element_mut().turn, 0);
             }
@@ -332,7 +332,7 @@ fn ai_lines_up_the_reverse_burst_with_the_c_conditions() {
             assert_eq!(chase.enemy_state(), MOVEMENT_STATE_AVOID);
             drop(chase);
             let mut chase = Chase::new(&_battle, 10, 32);
-            chase.ship.ship_mut().ShipFacing = 8;
+            chase.ship.ship_mut().ship_facing = 8;
             chase.ship.ship_mut().ship_input_state = special;
             chase.run();
             assert_eq!(chase.input(), 0);

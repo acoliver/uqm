@@ -1,19 +1,27 @@
 //! LIFO handoff between legacy entry points and the one owned battle context.
 
 use crate::engine::battle::{record::Kernel, Cx};
-use std::ptr::{self, NonNull};
+#[cfg(test)]
+use crate::engine::World as WorldOwner;
+use crate::engine::{Owner, Projection};
+use parking_lot::Mutex;
+use std::ptr::NonNull;
+use std::{marker::PhantomData, thread::ThreadId};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Slot {
     published: Option<NonNull<Cx<'static>>>,
     kernel: Option<NonNull<crate::engine::battle::record::Kernel>>,
+    world: Option<NonNull<crate::engine::World>>,
 }
 impl Slot {
     fn published(cx: &mut Cx<'_>) -> Self {
         let kernel = NonNull::new(cx.kernel());
+        let world = NonNull::new(&raw mut *cx.world);
         Self {
             published: Some(NonNull::from(cx).cast()),
             kernel,
+            world,
         }
     }
     fn entered(self) -> Self {
@@ -33,10 +41,109 @@ impl Slot {
     }
 }
 
-static mut CONTEXT: Slot = Slot {
-    published: None,
-    kernel: None,
-};
+// SAFETY: the mutex serializes slot access, and every projection checks the
+// publishing thread before its pointer can be dereferenced. Pointers never move
+// their owners or permit use on a different thread.
+unsafe impl Send for Slot {}
+
+struct BridgeState {
+    slot: Slot,
+    thread: Option<ThreadId>,
+    world_borrowed: bool,
+    kernel_borrowed: bool,
+}
+
+impl BridgeState {
+    fn assert_thread(&self) {
+        assert_eq!(
+            self.thread,
+            Some(std::thread::current().id()),
+            "owner projection outside the game thread"
+        );
+    }
+    fn assert_unborrowed(&self) {
+        assert!(
+            !self.world_borrowed && !self.kernel_borrowed,
+            "owner projection overlaps a context handoff"
+        );
+    }
+}
+
+static CONTEXT: Mutex<BridgeState> = Mutex::new(BridgeState {
+    slot: Slot {
+        published: None,
+        kernel: None,
+        world: None,
+    },
+    thread: None,
+    world_borrowed: false,
+    kernel_borrowed: false,
+});
+
+impl<T> std::ops::Deref for Projection<T> {
+    type Target = *mut T;
+    fn deref(&self) -> &Self::Target {
+        &self.pointer
+    }
+}
+impl<T> Drop for Projection<T> {
+    fn drop(&mut self) {
+        let mut state = CONTEXT.lock();
+        state.assert_thread();
+        let flag = match self.owner {
+            Owner::World => &mut state.world_borrowed,
+            Owner::Kernel => &mut state.kernel_borrowed,
+        };
+        assert!(*flag, "owner projection released twice");
+        *flag = false;
+    }
+}
+impl<T> Projection<T> {
+    /// Copy values from this lease without holding it across the caller's next operation.
+    pub fn read<R>(self, read: impl FnOnce(&T) -> R) -> R {
+        // SAFETY: publication pins the owner for this game thread, the exclusive
+        // flag excludes other leases, and the callback cannot return a borrowed T.
+        read(unsafe { &*self.pointer })
+    }
+
+    /// Apply a scoped mutation, releasing the owner before the caller continues.
+    pub fn write<R>(self, write: impl FnOnce(&mut T) -> R) -> R {
+        // SAFETY: publication pins the owner on the asserted game thread; this
+        // lease excludes other projections and handoffs for the callback's borrow.
+        write(unsafe { &mut *self.pointer })
+    }
+
+    /// # Safety
+    /// The pointer must name an inline field of this owner; no pointer or
+    /// reference from the original projection may be retained.
+    #[cfg(not(test))]
+    pub(crate) unsafe fn map<U>(self, project: impl FnOnce(*mut T) -> *mut U) -> Projection<U> {
+        let this = std::mem::ManuallyDrop::new(self);
+        Projection {
+            pointer: project(this.pointer),
+            owner: this.owner,
+            not_send: PhantomData,
+        }
+    }
+}
+
+#[track_caller]
+fn project<T>(owner: Owner, pointer: impl FnOnce(Slot) -> *mut T) -> Projection<T> {
+    let mut state = CONTEXT.lock();
+    state.assert_thread();
+    let value = pointer(state.slot);
+    let flag = match owner {
+        Owner::World => &mut state.world_borrowed,
+        Owner::Kernel => &mut state.kernel_borrowed,
+    };
+    assert!(!*flag, "overlapping mutable owner projection");
+    *flag = true;
+    Projection {
+        pointer: value,
+        owner,
+        not_send: PhantomData,
+    }
+}
 
 struct Restore {
     before: Slot,
@@ -45,10 +152,13 @@ struct Restore {
 
 impl Drop for Restore {
     fn drop(&mut self) {
-        // SAFETY: every bridge operation runs synchronously on the game thread.
-        unsafe {
-            let current = ptr::replace(&raw mut CONTEXT, self.before);
-            assert_eq!(current, self.during, "bridge handoff returned out of order");
+        let mut state = CONTEXT.lock();
+        state.assert_thread();
+        state.assert_unborrowed();
+        let current = std::mem::replace(&mut state.slot, self.before);
+        assert_eq!(current, self.during, "bridge handoff returned out of order");
+        if self.before.world.is_none() {
+            state.thread = None;
         }
     }
 }
@@ -57,23 +167,27 @@ impl Drop for Restore {
 /// Game thread only. The caller must suspend all access to cx and its records
 /// until the legacy call returns. The published pointer cannot escape the call.
 pub unsafe fn publish<R>(cx: &mut Cx<'_>, call: impl FnOnce() -> R) -> R {
-    // SAFETY: publication transfers exclusive access for this synchronous call.
-    unsafe {
-        let before = ptr::read(&raw const CONTEXT);
-        assert!(
-            before.published.is_none(),
-            "bridge already has a published context"
-        );
-        let published = Slot::published(cx);
-        let restore = Restore {
-            before,
-            during: published,
-        };
-        ptr::write(&raw mut CONTEXT, published);
-        let result = call();
-        drop(restore);
-        result
+    let mut state = CONTEXT.lock();
+    if state.thread.is_some() {
+        state.assert_thread();
     }
+    state.assert_unborrowed();
+    let before = state.slot;
+    assert!(
+        before.published.is_none(),
+        "bridge already has a published context"
+    );
+    let published = Slot::published(cx);
+    let restore = Restore {
+        before,
+        during: published,
+    };
+    state.slot = published;
+    state.thread = Some(std::thread::current().id());
+    drop(state);
+    let result = call();
+    drop(restore);
+    result
 }
 
 /// # Safety
@@ -82,10 +196,14 @@ pub unsafe fn publish<R>(cx: &mut Cx<'_>, call: impl FnOnce() -> R) -> R {
 pub unsafe fn enter<R>(call: impl FnOnce(&mut Cx<'_>) -> R) -> R {
     // SAFETY: taking the slot suspends publication while the unique borrow is live.
     unsafe {
-        let before = ptr::read(&raw const CONTEXT);
+        let mut state = CONTEXT.lock();
+        state.assert_thread();
+        state.assert_unborrowed();
+        let before = state.slot;
         let mut context = before.context();
         let during = before.entered();
-        ptr::write(&raw mut CONTEXT, during);
+        state.slot = during;
+        drop(state);
         let restore = Restore { before, during };
         let result = call(context.as_mut());
         drop(restore);
@@ -100,76 +218,148 @@ pub unsafe fn battle<R>(call: impl FnOnce(&mut crate::engine::battle::Battle) ->
     unsafe { enter(|cx| call(cx.b)) }
 }
 
-/// Own the battle context across the existing synchronous game lifecycle.
+/// Run legacy mode entry points inside the app-owned game lifecycle.
 ///
 /// # Safety
-/// Run only on the game thread. The legacy queue and GlobData authorities must
-/// outlive the call; initialization and cleanup occur inside this boundary.
-pub unsafe fn with_battle<R>(
-    frame_source: fn(
-        crate::engine::battle::views::SharedFrames,
-    ) -> NonNull<crate::graphics::native_abi::FRAME>,
-    call: impl FnOnce() -> R,
-) -> R {
-    use crate::engine::battle::{Battle, Cx, World};
-    use crate::ships::native::abi::GlobData;
-    // SAFETY: all pointers derive directly from the authority's raw address.
-    unsafe {
-        let mut battle = Battle::for_lifecycle();
-        let mut world = World::new(
-            NonNull::new_unchecked(&raw mut GlobData.Game_state.CurrentActivity),
-            NonNull::new_unchecked(&raw mut GlobData.Game_state.ip_group_q),
-            frame_source,
-        );
-        let mut cx = Cx::new(&mut battle, &mut world, crate::math::random);
-        publish(&mut cx, call)
+/// Game thread only; the call must not retain any owner borrow after returning.
+pub unsafe fn with_game<R>(game: &mut crate::engine::Game, call: impl FnOnce() -> R) -> R {
+    let mut battle = crate::engine::battle::Battle::new();
+    let mut cx = Cx::new(
+        &mut battle,
+        &mut game.world,
+        &mut game.kernel,
+        crate::math::random,
+    );
+    // SAFETY: this lifecycle owns both owners and suspends direct access until publication ends.
+    unsafe { publish(&mut cx, call) }
+}
+
+impl crate::engine::World {
+    /// Reserve the published owner on its game thread, panicking on overlap.
+    /// Dereferencing the raw pointer remains unsafe; derived pointers and references
+    /// must end before the lease is dropped or a callback is invoked.
+    #[track_caller]
+    pub fn current() -> Projection<Self> {
+        project(Owner::World, |slot| {
+            slot.world
+                .unwrap_or_else(|| panic!("world access without a lifecycle context"))
+                .as_ptr()
+        })
+    }
+}
+
+impl crate::engine::WorldData {
+    /// Reserve data under the World's game-thread assertion and borrow flag.
+    #[track_caller]
+    pub fn current() -> Projection<Self> {
+        project(Owner::World, |slot| {
+            let Some(world) = slot.world else {
+                panic!("world access without a lifecycle context");
+            };
+            // SAFETY: project asserts the publishing thread and excludes owner
+            // leases; the lifecycle pins World, and data is its inline field.
+            unsafe { &raw mut (*world.as_ptr()).data }
+        })
     }
 }
 
 impl Kernel {
-    /// # Safety
-    /// Game-thread lifecycle only. No kernel reference may survive a callback or handoff.
-    pub(crate) unsafe fn current<'a>() -> &'a mut Self {
-        // SAFETY: the lifecycle retains this owner projection while Cx is entered.
-        unsafe { &mut *ptr::read(&raw const CONTEXT).owner() }
+    /// Reserve the published owner on its game thread, panicking on overlap.
+    /// Dereferencing the raw pointer remains unsafe; derived pointers and references
+    /// must end before the lease is dropped or a callback is invoked.
+    #[track_caller]
+    pub fn current() -> Projection<Self> {
+        project(Owner::Kernel, Slot::owner)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::battle::record::QUEUE;
+
     use crate::engine::battle::{Battle, World};
 
     #[test]
     #[serial_test::serial]
+    fn owner_projection_rejects_overlap_and_the_wrong_thread() {
+        let mut game = crate::engine::Game::new();
+        // SAFETY: this serialized test owns the published lifecycle and all projections.
+        unsafe {
+            with_game(&mut game, || {
+                let first = World::current();
+                assert!(std::panic::catch_unwind(|| World::current()).is_err());
+                std::hint::black_box(first);
+                let wrong_thread = std::thread::spawn(|| {
+                    std::panic::catch_unwind(|| {
+                        World::current();
+                    })
+                    .is_err()
+                })
+                .join()
+                .unwrap();
+                assert!(wrong_thread);
+            })
+        };
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn mapped_leases_share_world_flag_and_handoffs_require_release() {
+        let mut game = crate::engine::Game::new();
+        // SAFETY: this serialized test owns the lifecycle and retains no derived owner references.
+        unsafe {
+            with_game(&mut game, || {
+                let fields = crate::engine::WorldData::current();
+                assert!(std::panic::catch_unwind(WorldOwner::current).is_err());
+                assert!(std::panic::catch_unwind(|| enter(|_| ())).is_err());
+                drop(fields);
+                let kernel = Kernel::current();
+                assert!(std::panic::catch_unwind(Kernel::current).is_err());
+                drop(kernel);
+                let panic = std::panic::catch_unwind(|| {
+                    let _lease = WorldOwner::current();
+                    panic!("body failed");
+                });
+                assert!(panic.is_err());
+                enter(|cx| {
+                    cx.world.set_activity(19);
+                    publish(cx, || {
+                        let world = WorldOwner::current();
+                        assert_eq!((**world).activity(), 19);
+                    });
+                });
+            });
+        }
+        assert_eq!(game.world.activity(), 19);
+        assert!(std::panic::catch_unwind(WorldOwner::current).is_err());
+    }
+
+    #[test]
+    #[serial_test::serial]
     fn empty_entry_panics_and_nested_handoffs_restore_lifo() {
+        use crate::engine::Kernel;
         // SAFETY: this serialized test owns the records and projected storage for the scope.
         assert!(std::panic::catch_unwind(|| unsafe { enter(|_| ()) }).is_err());
-        let mut groups = QUEUE::default();
-        let mut activity = 7;
         // SAFETY: this serialized test owns the records and projected storage for the scope.
-        let mut battle = Battle::new(3);
+        let mut battle = Battle::new();
+        let mut kernel = crate::engine::battle::record::Kernel::new();
+        kernel.reset_element_capacity(3);
         // SAFETY: this serialized test owns the records and projected storage for the scope.
-        let mut world = unsafe {
-            World::new(
-                NonNull::from(&mut activity),
-                NonNull::from(&mut groups),
-                |_| panic!("unused shared frame source"),
-            )
-        };
-        let mut cx = Cx::new(&mut battle, &mut world, crate::math::random);
+        let mut world = { World::new() };
+        world.set_activity(7);
+        let mut cx = Cx::new(&mut battle, &mut world, &mut kernel, crate::math::random);
         // SAFETY: this serialized test owns the records and projected storage for the scope.
         unsafe {
             publish(&mut cx, || {
                 enter(|cx| {
-                    let owner = ptr::from_mut(Kernel::current());
-                    assert_eq!(owner, cx.kernel());
-                    (*owner).instant_victory = 1;
+                    let owner = Kernel::current();
+                    assert_eq!(*owner, cx.kernel());
+                    (**owner).instant_victory = 1;
+                    drop(owner);
                     publish(cx, || {
                         enter(|cx| {
-                            assert_eq!(ptr::from_mut(Kernel::current()), cx.kernel());
-                            assert_eq!(Kernel::current().instant_victory, 1);
+                            assert_eq!(*Kernel::current(), cx.kernel());
+                            assert_eq!((**Kernel::current()).instant_victory, 1);
                         })
                     });
                     cx.b.counters = [3, 4];

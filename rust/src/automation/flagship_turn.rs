@@ -1,6 +1,6 @@
 //! A verified turn of the hyperspace flagship.
 //!
-//! `turn_flagship` holds a turn key until the live `STARSHIP.ShipFacing` has
+//! `turn_flagship` holds a turn key until the live `STARSHIP.ship_facing` has
 //! changed by exactly the requested number of the sixteen facings. The ship
 //! turns one facing per `turn_wait` expiry (`ship.c`), and how many input
 //! ticks that takes is not a constant a script can guess: a 60 tick hold

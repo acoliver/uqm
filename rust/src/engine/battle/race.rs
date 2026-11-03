@@ -18,14 +18,7 @@ pub struct Race {
     pub uninit: Option<fn(&mut super::World, &mut super::views::RaceStats)>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum StoryKey {
-    ShofixtiRecruited,
-    ProbeIlwrathEncounter,
-    ArilouSpaceSide,
-    ChmmrBombState,
-    BombCarrier,
-}
+pub use crate::engine::world::StoryKey;
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Default)]

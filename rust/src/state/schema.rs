@@ -15,6 +15,18 @@ macro_rules! game_state_fields {
             )*
         };
 
+        pub use crate::engine::world::StoryKey;
+        impl StoryKey {
+            $(pub const $name: Self = Self::new($start, $end);)*
+            pub fn from_name(name: &str) -> Option<Self> {
+                lookup_game_state_bits(name).map(|(start, end)| Self::new(start, end))
+            }
+        }
+
+        pub const STATE_KEYS: &[(&str, u32, u32)] = &[
+            $((stringify!($name), $start, $end - $start + 1),)*
+        ];
+
         pub const GAME_STATE_FIELDS: &[(&str, usize, usize)] = &[
             $((stringify!($name), $start, $end),)*
         ];

@@ -81,21 +81,21 @@ pub struct CLOCK_STATE {
 #[derive(Debug, Copy, Clone)]
 pub struct GAME_STATE {
     pub glob_flags: BYTE,
-    pub CrewCost: BYTE,
-    pub FuelCost: BYTE,
-    pub ModuleCost: [BYTE; 20usize],
-    pub ElementWorth: [BYTE; 8usize],
+    pub crew_cost: BYTE,
+    pub fuel_cost: BYTE,
+    pub module_cost: [BYTE; 20usize],
+    pub element_worth: [BYTE; 8usize],
     pub _display_array: *mut PRIMITIVE,
-    pub CurrentActivity: ACTIVITY,
-    pub GameClock: CLOCK_STATE,
+    pub current_activity: ACTIVITY,
+    pub game_clock: CLOCK_STATE,
     pub autopilot: POINT,
     pub ip_location: POINT,
-    pub ShipStamp: STAMP,
-    pub ShipFacing: UWORD,
+    pub ship_stamp: STAMP,
+    pub ship_facing: UWORD,
     pub ip_planet: BYTE,
     pub in_orbit: BYTE,
     pub velocity: VELOCITY_DESC,
-    pub BattleGroupRef: DWORD,
+    pub battle_group_ref: DWORD,
     pub avail_race_q: QUEUE,
     pub npc_built_ship_q: QUEUE,
     pub ip_group_q: QUEUE,
@@ -152,5 +152,3 @@ pub struct FlashContext__bindgen_ty_1__bindgen_ty_1 {
 pub struct FlashContext__bindgen_ty_1__bindgen_ty_2 {
     pub frame: FRAME,
 }
-
-pub(crate) const DISPLAY_ARRAY_OFFSET: usize = std::mem::offset_of!(GAME_STATE, _display_array);

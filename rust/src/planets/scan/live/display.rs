@@ -1,6 +1,7 @@
 use super::super::{planet_mass, scan_value};
 use super::*;
 use crate::comm::sis_graphics::CText;
+use crate::engine::Kernel as KernelOwner;
 use crate::starbase::gfx::{Align, TextDraw};
 use std::ffi::CStr;
 
@@ -66,9 +67,9 @@ unsafe fn pc() {
     let g = CffiPlatform;
     SetContext(PlanetContext);
     g.set_fg_color(Rgba::rgb15(0, 0, 21));
-    SetContextFont((MicroFont).cast());
+    SetContextFont((KernelOwner::current().read(|owner| owner.micro_font)).cast());
     text(width() >> 1, 13, Align::Center, title());
-    SetContextFont((TinyFont).cast());
+    SetContextFont((KernelOwner::current().read(|owner| owner.tiny_font)).cast());
     let orbit = (i64::from(info.PlanetToSunDist) * 100 + 256) / 512;
     pc_value(5, 40, 0, scan_value(orbit, &g.game_string(487)));
     let atmosphere = if info.AtmoDensity == u16::MAX {
@@ -147,7 +148,7 @@ unsafe fn three_do() {
     let g = CffiPlatform;
     SetContext(PlanetContext);
     g.set_fg_color(Rgba::rgb15(15, 0, 25));
-    SetContextFont((MicroFont).cast());
+    SetContextFont((KernelOwner::current().read(|owner| owner.micro_font)).cast());
     text(width() >> 1, 13, Align::Center, title());
     draw(
         (base::SetAbsFrameIndex((SpaceJunkFrame).cast(), 20)).cast(),

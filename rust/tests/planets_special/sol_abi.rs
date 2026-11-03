@@ -3,12 +3,11 @@
 use super::Harness;
 use uqm_rust::battle::gendef::{getGenerateFunctions, SOL_DEFINED};
 use uqm_rust::collections::queue::Queue;
-use uqm_rust::planets::c_api::GLOB_DATA as GlobData;
+
 use uqm_rust::planets::c_api::{self, CapturedSurface};
 use uqm_rust::planets::consts::{MAP_HEIGHT, MAP_WIDTH};
 use uqm_rust::planets::generate::sol_exports::GENERATE_SOL_FUNCTIONS;
 use uqm_rust::planets::generate::vtable::DEFAULT_HOOKS;
-use uqm_rust::state::game_state_keys::{get_game_state, set_game_state};
 
 pub fn check() {
     let table = unsafe { &super::sol::generateSolFunctions };
@@ -64,30 +63,48 @@ pub fn check() {
 
 fn check_bomb_queue(h: &mut Harness) {
     // This uses the real live queue adapter, not a recording FleetGroups host.
-    let old_bomb = get_game_state("CHMMR_BOMB_STATE");
-    let old_probe = get_game_state("PROBE_MESSAGE_DELIVERED");
-    set_game_state("CHMMR_BOMB_STATE", 3);
-    set_game_state("PROBE_MESSAGE_DELIVERED", 1);
+    let old_bomb = uqm_rust::engine::World::current()
+        .read(|world| (world).story_state(uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE));
+    let old_probe = uqm_rust::engine::World::current()
+        .read(|world| (world).story_state(uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED));
+    uqm_rust::engine::World::current()
+        .write(|world| (world).set_story_state(uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE, 3));
+    uqm_rust::engine::World::current().write(|world| {
+        (world).set_story_state(uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED, 1)
+    });
     unsafe {
-        let ip = &raw mut GlobData.Game_state.ip_group_q;
-        let npc = &raw mut GlobData.Game_state.npc_built_ship_q;
-        let reference = &raw mut GlobData.Game_state.BattleGroupRef;
-        let saved = (ip.read(), npc.read(), reference.read());
-        ip.write(Queue::default());
-        npc.write(Queue::default());
-        reference.write(0x12345678);
+        let saved = uqm_rust::engine::WorldData::current().write(|world| {
+            let saved = (
+                world.game.ip_group_q,
+                world.game.npc_built_ship_q,
+                world.game.battle_group_ref,
+            );
+            world.game.ip_group_q = Queue::default();
+            world.game.npc_built_ship_q = Queue::default();
+            world.game.battle_group_ref = 0x12345678;
+            saved
+        });
         assert!(GENERATE_SOL_FUNCTIONS.reinit_npcs.unwrap()(
             &raw mut *h.state
         ));
-        assert_eq!(reference.read(), 0);
-        assert!(ip.read().head.is_null());
-        assert!(npc.read().head.is_null());
-        ip.write(saved.0);
-        npc.write(saved.1);
-        reference.write(saved.2);
+        uqm_rust::engine::WorldData::current().write(|world| {
+            assert_eq!(world.game.battle_group_ref, 0);
+            assert!(world.game.ip_group_q.head.is_null());
+            assert!(world.game.npc_built_ship_q.head.is_null());
+            world.game.ip_group_q = saved.0;
+            world.game.npc_built_ship_q = saved.1;
+            world.game.battle_group_ref = saved.2;
+        });
     }
-    set_game_state("CHMMR_BOMB_STATE", old_bomb);
-    set_game_state("PROBE_MESSAGE_DELIVERED", old_probe);
+    uqm_rust::engine::World::current().write(|world| {
+        (world).set_story_state(uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE, old_bomb)
+    });
+    uqm_rust::engine::World::current().write(|world| {
+        (world).set_story_state(
+            uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED,
+            old_probe,
+        )
+    });
 }
 
 fn allocations() -> i32 {

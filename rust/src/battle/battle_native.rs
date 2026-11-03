@@ -2,6 +2,10 @@
 
 #[cfg(not(test))]
 use crate::engine::battle::schema::InputContext;
+#[cfg(not(test))]
+use crate::engine::World as WorldOwner;
+#[cfg(not(test))]
+use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
 use crate::ships::native::abi;
 
 const BATTLE_LEFT: u8 = 1 << 0;
@@ -66,8 +70,9 @@ type BattleNetwork = (
     bool,
 );
 #[cfg(not(test))]
-fn initialize_battle(battle: &mut crate::engine::battle::Battle) -> BattleNetwork {
-    battle.initialize();
+fn initialize_battle(cx: &mut crate::engine::battle::Cx<'_>) -> BattleNetwork {
+    cx.b.initialize(cx.kernel);
+    let battle = &mut *cx.b;
     let had_net = battle.net.is_some();
     battle
         .net
@@ -86,7 +91,7 @@ fn finish_battle_network(battle: &mut crate::engine::battle::Battle, had_net: bo
 unsafe fn battle_network() -> BattleNetwork {
     use abi::NetworkInputContext;
     use engine::{player_control, player_input, NETWORK_CONTROL};
-    let (battle, net, had_net) = crate::app::bridge::battle(initialize_battle);
+    let (battle, net, had_net) = crate::app::bridge::enter(initialize_battle);
     for side in 0..2 {
         if player_control(side) & NETWORK_CONTROL != 0 {
             let context = player_input(side).cast::<NetworkInputContext>();
@@ -97,7 +102,6 @@ unsafe fn battle_network() -> BattleNetwork {
 }
 
 #[cfg(not(test))]
-#[allow(non_snake_case)]
 pub(crate) mod engine {
     use super::*;
     use crate::battle::tactrans_native::{flee_preprocess, ResetWinnerStarShip, StopDitty};
@@ -122,49 +126,57 @@ pub(crate) mod engine {
 
     use crate::battle::process_native::engine::RedrawQueue;
 
-    use crate::navigation::globals::getGameState;
+    use crate::state::ffi::rust_get_game_state_bits as getGameState;
 
-    use crate::navigation::globals::setGameState;
+    use crate::state::ffi::rust_set_game_state_bits as setGameState;
 
     /// # Safety
     /// Game state must be initialized and accessed only on the game thread.
-    pub unsafe fn activity() -> u16 {
-        GlobData.Game_state.CurrentActivity
+    pub fn activity() -> u16 {
+        WorldFields::current().read(|owner| owner.game.current_activity)
     }
     /// # Safety
     /// The caller must exclusively own game-thread activity state.
     pub unsafe fn set_activity(value: u16) {
-        GlobData.Game_state.CurrentActivity = value;
+        (**WorldFields::current()).game.current_activity = value;
     }
     /// # Safety
     /// `start..=end` must name a valid game-state bit field on the game thread.
-    pub unsafe fn game_state(start: u32, end: u32) -> u8 {
-        getGameState(start as i32, end as i32)
+    pub fn game_state(start: u32, end: u32) -> u8 {
+        WorldOwner::current().read(|world| getGameState(world, start as i32, end as i32))
     }
     /// # Safety
     /// `start..=end` must name a valid game-state bit field owned by the game thread.
-    pub unsafe fn set_game_state(start: u32, end: u32, value: u8) {
-        setGameState(start as i32, end as i32, value);
+    pub fn set_game_state(start: u32, end: u32, value: u8) {
+        WorldOwner::current().write(|world| setGameState(world, start as i32, end as i32, value));
     }
     /// # Safety
     /// `side` must be a valid player index with initialized input state.
     pub unsafe fn player_input(side: usize) -> *mut InputContext {
-        Kernel::current().player_input[side].cast()
+        KernelOwner::current()
+            .read(|owner| owner.player_input[side])
+            .cast()
     }
     /// # Safety
     /// `side` must be valid and `input` must remain live while installed, or be null during input replacement.
     pub unsafe fn set_player_input(side: usize, input: *mut InputContext) {
-        Kernel::current().player_input[side] = input.cast();
+        (**KernelOwner::current()).player_input[side] = input.cast();
     }
     /// # Safety
     /// `side` must be a valid player index on the game thread.
     pub unsafe fn player_control(side: usize) -> u8 {
-        *(&raw const PlayerControl).cast::<BYTE>().add(side)
+        let kernel = KernelOwner::current();
+        *(&raw const (**kernel).player_control)
+            .cast::<BYTE>()
+            .add(side)
     }
     /// # Safety
     /// `side` must be a valid player index owned by the game thread.
     pub unsafe fn set_player_control(side: usize, value: u8) {
-        *(&raw mut PlayerControl).cast::<BYTE>().add(side) = value;
+        let kernel = KernelOwner::current();
+        *(&raw mut (**kernel).player_control)
+            .cast::<BYTE>()
+            .add(side) = value;
     }
 
     pub const fn rgb15(r: u8, g: u8, b: u8) -> Color {
@@ -186,7 +198,7 @@ pub(crate) mod engine {
         ScreenHeight - 13
     }
 
-    unsafe fn RunAwayAllowed() -> bool {
+    fn run_away_allowed() -> bool {
         (activity() as u8 == IN_ENCOUNTER as u8 || activity() as u8 == IN_LAST_BATTLE as u8)
             && game_state(STARBASE_AVAILABLE, END_STARBASE_AVAILABLE) != 0
             && game_state(BOMB_CARRIER, END_BOMB_CARRIER) == 0
@@ -228,7 +240,7 @@ pub(crate) mod engine {
         order: [usize; 2],
     ) {
         net.poll();
-        let can_run = RunAwayAllowed();
+        let can_run = run_away_allowed();
         for side in order {
             let mut next = cx.first_ship(side);
             while let Some(ship) = next {
@@ -265,19 +277,26 @@ pub(crate) mod engine {
     /// The game thread must own initialized audio, activity, and resource state.
     #[no_mangle]
     pub unsafe extern "C" fn BattleSong(play: BOOLEAN) {
-        if Kernel::current().battle_music.is_null() {
-            let resource = if inHyperSpace() != 0 {
+        if KernelOwner::current()
+            .read(|owner| owner.battle_music)
+            .is_null()
+        {
+            let resource = if WorldOwner::current().read(in_hyper_space) != 0 {
                 HYPERSPACE_MUSIC.as_ptr()
-            } else if inQuasiSpace() != 0 {
+            } else if WorldOwner::current().read(in_quasi_space) != 0 {
                 QUASISPACE_MUSIC.as_ptr()
             } else {
                 BATTLE_MUSIC.as_ptr()
             };
-            Kernel::current().battle_music =
+            (**KernelOwner::current()).battle_music =
                 crate::sound::resource_types::LoadMusicInstance(resource.cast()).cast();
         }
         if play != 0 {
-            PlayMusic(Kernel::current().battle_music, 1, 1);
+            PlayMusic(
+                KernelOwner::current().read(|owner| owner.battle_music),
+                1,
+                1,
+            );
         }
     }
 
@@ -285,11 +304,11 @@ pub(crate) mod engine {
     /// The game thread must own the battle music handle and initialized audio state.
     #[no_mangle]
     pub unsafe extern "C" fn FreeBattleSong() {
-        DestroyMusic(Kernel::current().battle_music);
-        Kernel::current().battle_music = ptr::null_mut();
+        DestroyMusic(KernelOwner::current().read(|owner| owner.battle_music));
+        (**KernelOwner::current()).battle_music = ptr::null_mut();
     }
 
-    unsafe extern "C" fn DoBattle(bs: *mut battlestate_struct) -> BOOLEAN {
+    unsafe extern "C" fn do_battle(bs: *mut battlestate_struct) -> BOOLEAN {
         crate::log_abi::log_message(
             5,
             &format!(
@@ -381,7 +400,7 @@ pub(crate) mod engine {
         1u16.wrapping_sub(i)
     }
 
-    unsafe fn selectAllShips(count: SIZE) -> BOOLEAN {
+    unsafe fn select_all_ships(count: SIZE) -> BOOLEAN {
         if count == 1 {
             return crate::app::bridge::enter(|cx| {
                 crate::battle::ship_native::engine::next_star_ship(cx, None, 0)
@@ -412,10 +431,10 @@ pub(crate) mod engine {
         }
         BattleSong(0);
         let mut count = InitShips();
-        if Kernel::current().instant_victory != 0 {
+        if KernelOwner::current().read(|owner| owner.instant_victory) != 0 {
             count = 0;
             (*battle).counters = [1, 0];
-            Kernel::current().instant_victory = 0;
+            (**KernelOwner::current()).instant_victory = 0;
         }
         if count != 0 {
             let mut bs: battlestate_struct = mem::zeroed();
@@ -438,7 +457,7 @@ pub(crate) mod engine {
                     (activity() & IN_BATTLE as u16 != 0) as i32
                 ),
             );
-            if selectAllShips(count) == 0 {
+            if select_all_ships(count) == 0 {
                 set_activity(activity() | CHECK_ABORT as u16);
             } else {
                 crate::log_abi::log_message(
@@ -451,9 +470,9 @@ pub(crate) mod engine {
                 if !net.negotiate(true, NetState_NetState_inBattle) {
                     set_activity(activity() | CHECK_ABORT as u16);
                 } else {
-                    bs.InputFunc = Some(DoBattle);
+                    bs.InputFunc = Some(do_battle);
                     bs.frame_cb = callback;
-                    bs.first_time = inHQSpace();
+                    bs.first_time = WorldOwner::current().read(in_hqspace);
                     crate::log_abi::log_message(
                         5,
                         "BATTLE_DEBUG: About to call DoInput for battle loop",
@@ -478,7 +497,7 @@ pub(crate) mod engine {
             }
             net.finish();
             StopDitty();
-            StopMusic();
+            stop_music();
             StopSound();
         }
         crate::app::bridge::enter(|cx| cx.finish_battle());

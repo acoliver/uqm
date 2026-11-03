@@ -1,12 +1,11 @@
 //! Starbase encounters, menus and flagship-piece rendering, ported from starbase.c.
 #![cfg(not(test))]
-#![allow(non_snake_case)]
 
 use super::{outfit::DoOutfit, shipyard::DoShipyard};
 use crate::comm::comm_abi::{InitCommunication, SetCommIntroMode};
+use crate::engine::{Kernel, StoryKey, World, WorldData};
 use crate::navigation::abi::*;
-use crate::navigation::globals::GlobData;
-use crate::state::game_state_keys::{get_game_state, set_game_state};
+
 use std::{mem, ptr};
 extern "C" {
     static mut NextActivity: ACTIVITY;
@@ -34,12 +33,16 @@ const fn rgb15(r: u8, g: u8, b: u8) -> Color {
 const BLACK: Color = rgb15(0, 0, 0);
 
 unsafe fn game_string(index: u32) -> *mut UNICODE {
-    GetStringAddress(SetAbsStringTableIndex(GameStrings, index as COUNT)).cast()
+    GetStringAddress(SetAbsStringTableIndex(
+        Kernel::current().read(|owner| owner.game_strings),
+        index as COUNT,
+    ))
+    .cast()
 }
 
-unsafe fn DrawBaseStateStrings(mut old: BYTE, new: BYTE) {
-    SetContext(ScreenContext);
-    SetContextFont(StarConFont);
+unsafe fn draw_base_state_strings(mut old: BYTE, new: BYTE) {
+    SetContext(Kernel::current().read(|owner| owner.screen_context));
+    SetContextFont(Kernel::current().read(|owner| owner.star_con_font));
     SetContextForeGroundColor(BLACK);
     let mut text = TEXT {
         baseline: POINT {
@@ -109,12 +112,11 @@ pub unsafe extern "C" fn DrawShipPiece(
             y: JET_TOP_Y as i16,
         };
     } else {
+        let slots = WorldData::current().read(|world| world.flagship.module_slots);
         if which_piece < EMPTY_SLOT + 2 {
             repair = 1;
             if which_piece < EMPTY_SLOT
-                && (which_slot == 0
-                    || GlobData.SIS_state.ModuleSlots[(which_slot - 1) as usize]
-                        < EMPTY_SLOT as BYTE)
+                && (which_slot == 0 || slots[(which_slot - 1) as usize] < EMPTY_SLOT as BYTE)
             {
                 repair += 1;
             }
@@ -123,7 +125,7 @@ pub unsafe extern "C" fn DrawShipPiece(
                 which_piece += 1;
             }
             if which_slot < NUM_MODULE_SLOTS as COUNT - 1
-                && GlobData.SIS_state.ModuleSlots[(which_slot + 1) as usize] < EMPTY_SLOT as BYTE
+                && slots[(which_slot + 1) as usize] < EMPTY_SLOT as BYTE
             {
                 repair = -1;
                 if which_piece == EMPTY_SLOT + 3 || which_slot + 1 == NUM_MODULE_SLOTS as COUNT - 3
@@ -236,7 +238,8 @@ pub unsafe extern "C" fn DrawShipPiece(
             top.origin.x += SHIP_PIECE_OFFSET as i16;
             side.origin.x += SHIP_PIECE_OFFSET as i16;
             which_slot += 1;
-            which_piece = GlobData.SIS_state.ModuleSlots[which_slot as usize] as COUNT;
+            let slot = which_slot as usize;
+            which_piece = WorldData::current().read(|w| w.flagship.module_slots[slot]) as COUNT;
             if which_piece == EMPTY_SLOT + 2 && which_slot >= NUM_MODULE_SLOTS as COUNT - 3 {
                 which_piece += 1;
             }
@@ -248,7 +251,7 @@ pub unsafe extern "C" fn DrawShipPiece(
     }
 }
 
-unsafe fn rotateStarbase(menu: *mut MENU_STATE, frame: FRAME) {
+unsafe fn rotate_starbase(menu: *mut MENU_STATE, frame: FRAME) {
     let now = GetTimeCounter();
     if !frame.is_null() {
         (*menu).flash_frame0 = frame;
@@ -270,17 +273,20 @@ unsafe fn rotateStarbase(menu: *mut MENU_STATE, frame: FRAME) {
     }
 }
 
-unsafe fn ExitStarBase(menu: *mut MENU_STATE) -> BOOLEAN {
+unsafe fn exit_star_base(menu: *mut MENU_STATE) -> BOOLEAN {
     DestroyDrawable(ReleaseDrawable((*menu).CurFrame));
     (*menu).CurFrame = ptr::null_mut();
-    StopMusic();
+    stop_music();
     if !(*menu).hMusic.is_null() {
         DestroyMusic((*menu).hMusic);
         (*menu).hMusic = ptr::null_mut();
     }
     if (*menu).CurState == DEPART_BASE {
-        if GlobData.Game_state.CurrentActivity & (CHECK_ABORT | CHECK_LOAD) as u16 == 0 {
-            set_game_state("STARBASE_VISITED", 0);
+        if WorldData::current().read(|owner| owner.game.current_activity)
+            & (CHECK_ABORT | CHECK_LOAD) as u16
+            == 0
+        {
+            World::current().write(|world| world.set_story_state(StoryKey::STARBASE_VISITED, 0));
         }
         return 0;
     }
@@ -290,7 +296,9 @@ unsafe fn ExitStarBase(menu: *mut MENU_STATE) -> BOOLEAN {
         FlushInput();
         InitCommunication(CONVERSATION_COMMANDER_CONVERSATION);
         crate::automation::ui_observation::observe_starbase_menu(true);
-        set_game_state("GLOBAL_FLAGS_AND_DATA", BYTE::MAX as u32);
+        World::current().write(|world| {
+            world.set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, BYTE::MAX as u32)
+        });
     } else {
         let old = (*menu).CurState;
         match old {
@@ -314,17 +322,20 @@ unsafe fn ExitStarBase(menu: *mut MENU_STATE) -> BOOLEAN {
 /// and input systems must be initialized and accessed only on that thread.
 #[no_mangle]
 pub unsafe extern "C" fn DoStarBase(menu: *mut MENU_STATE) -> BOOLEAN {
-    if GlobData.Game_state.CurrentActivity & (CHECK_ABORT | CHECK_LOAD) as u16 != 0 {
+    if WorldData::current().read(|owner| owner.game.current_activity)
+        & (CHECK_ABORT | CHECK_LOAD) as u16
+        != 0
+    {
         (*menu).CurState = DEPART_BASE;
-        return ExitStarBase(menu);
+        return exit_star_base(menu);
     }
     SetMenuSounds(SOUND_ARROWS, SOUND_SELECT);
     if (*menu).Initialized == 0 {
-        LastActivity &= !(CHECK_LOAD as u16);
+        (**Kernel::current()).last_activity &= !(CHECK_LOAD as u16);
         (*menu).InputFunc = Some(DoStarBase);
         SetFlashRect(ptr::null());
         if !(*menu).hMusic.is_null() {
-            StopMusic();
+            stop_music();
             DestroyMusic((*menu).hMusic);
             (*menu).hMusic = ptr::null_mut();
         }
@@ -332,18 +343,18 @@ pub unsafe extern "C" fn DoStarBase(menu: *mut MENU_STATE) -> BOOLEAN {
         (*menu).CurFrame =
             CaptureDrawable(LoadGraphicInstance(c"graphics.starbase".as_ptr()).cast());
         (*menu).hMusic = (LoadMusicInstance(c"music.starbase".as_ptr())).cast();
-        SetContext(ScreenContext);
+        SetContext(Kernel::current().read(|owner| owner.screen_context));
         SetTransitionSource(ptr::null());
         BatchGraphics();
         SetContextBackGroundColor(BLACK);
         ClearDrawable();
-        rotateStarbase(menu, (*menu).CurFrame);
-        DrawBaseStateStrings(BYTE::MAX, (*menu).CurState);
+        rotate_starbase(menu, (*menu).CurFrame);
+        draw_base_state_strings(BYTE::MAX, (*menu).CurState);
         ScreenTransition(3, ptr::null());
         PlayMusic((*menu).hMusic, 1, 1);
         UnbatchGraphics();
     } else if PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0 {
-        return ExitStarBase(menu);
+        return exit_star_base(menu);
     } else {
         let mut state = (*menu).CurState;
         if PulsedInputState.menu[KEY_MENU_LEFT as usize] != 0
@@ -364,19 +375,19 @@ pub unsafe extern "C" fn DoStarBase(menu: *mut MENU_STATE) -> BOOLEAN {
             }
         }
         BatchGraphics();
-        SetContext(ScreenContext);
+        SetContext(Kernel::current().read(|owner| owner.screen_context));
         if state != (*menu).CurState {
-            DrawBaseStateStrings((*menu).CurState, state);
+            draw_base_state_strings((*menu).CurState, state);
             (*menu).CurState = state;
         }
-        rotateStarbase(menu, ptr::null_mut());
+        rotate_starbase(menu, ptr::null_mut());
         UnbatchGraphics();
         SleepThread(ONE_SECOND / 30);
     }
     1
 }
 
-unsafe fn DoTimePassage() {
+unsafe fn do_time_passage() {
     SleepThreadUntil(FadeScreen(
         ScreenFadeType_FadeAllToBlack,
         (ONE_SECOND * 2) as SIZE,
@@ -384,10 +395,13 @@ unsafe fn DoTimePassage() {
     MoveGameClockDays(14);
 }
 
-unsafe fn CleanupAfterStarBase() {
-    if GlobData.Game_state.CurrentActivity & (CHECK_LOAD | CHECK_ABORT) as u16 == 0 {
-        set_game_state("GLOBAL_FLAGS_AND_DATA", 0);
-        GlobData.Game_state.CurrentActivity = CHECK_LOAD as u16;
+unsafe fn cleanup_after_star_base() {
+    if WorldData::current().read(|owner| owner.game.current_activity)
+        & (CHECK_LOAD | CHECK_ABORT) as u16
+        == 0
+    {
+        World::current().write(|world| world.set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, 0));
+        (**WorldData::current()).game.current_activity = CHECK_LOAD as u16;
         NextActivity = IN_INTERPLANETARY as u16 | START_INTERPLANETARY as u16;
     }
 }
@@ -397,46 +411,55 @@ unsafe fn CleanupAfterStarBase() {
 /// # Safety
 /// World queues, game clock, communication, input, graphics and audio must be
 /// initialized and exclusively accessed by the calling game thread.
-pub unsafe fn VisitStarBase() {
-    if get_game_state("CHMMR_BOMB_STATE") == 2 {
-        CurStarDescPtr = ptr::null_mut();
-        set_game_state("GLOBAL_FLAGS_AND_DATA", BYTE::MAX as u32);
+pub unsafe fn visit_star_base() {
+    if World::current().read(|world| world.story_state(StoryKey::CHMMR_BOMB_STATE)) == 2 {
+        (**World::current()).select_star(None, crate::planets::starmap::current_catalog());
+        World::current().write(|world| {
+            world.set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, BYTE::MAX as u32)
+        });
     }
-    if get_game_state("STARBASE_AVAILABLE") == 0 {
+    if World::current().read(|world| world.story_state(StoryKey::STARBASE_AVAILABLE)) == 0 {
         crate::automation::scenario::observe_encounter_dispatch(
             CONVERSATION_COMMANDER_CONVERSATION,
         );
         SetCommIntroMode(CROSSFADE_SCREEN, 0);
         InitCommunication(CONVERSATION_COMMANDER_CONVERSATION);
-        if get_game_state("PROBE_ILWRATH_ENCOUNTER") == 0
-            || GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 != 0
+        if World::current().read(|world| world.story_state(StoryKey::PROBE_ILWRATH_ENCOUNTER)) == 0
+            || (**WorldData::current()).game.current_activity & CHECK_ABORT as u16 != 0
         {
-            CleanupAfterStarBase();
+            cleanup_after_star_base();
             return;
         }
-        let ship = CloneShipFragment(
-            ILWRATH_SHIP as COUNT,
-            ptr::addr_of_mut!(GlobData.Game_state.npc_built_ship_q),
-            7,
-        );
+        let ship = WorldData::current().write(|world| {
+            CloneShipFragment(
+                &mut world.game.avail_race_q,
+                ILWRATH_SHIP as COUNT,
+                &raw mut world.game.npc_built_ship_q,
+                7,
+            )
+        });
         (*ship.cast::<SHIP_FRAGMENT>()).race_id = BYTE::MAX;
         InitCommunication(CONVERSATION_ILWRATH_CONVERSATION);
-        if GlobData.SIS_state.CrewEnlisted == COUNT::MAX
-            || GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 != 0
+        if (**WorldData::current()).flagship.crew_enlisted == COUNT::MAX
+            || (**WorldData::current()).game.current_activity & CHECK_ABORT as u16 != 0
         {
             return;
         }
         SetCommIntroMode(CROSSFADE_SCREEN, 0);
         InitCommunication(CONVERSATION_COMMANDER_CONVERSATION);
-        if GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 != 0 {
+        if (**WorldData::current()).game.current_activity & CHECK_ABORT as u16 != 0 {
             return;
         }
-        set_game_state("GLOBAL_FLAGS_AND_DATA", BYTE::MAX as u32);
+        World::current().write(|world| {
+            world.set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, BYTE::MAX as u32)
+        });
     }
     let previous = SetStatusMessageMode(StatMsgMode_SMM_RES_UNITS);
-    if get_game_state("MOONBASE_ON_SHIP") != 0 || get_game_state("CHMMR_BOMB_STATE") == 2 {
-        DoTimePassage();
-        if GlobData.SIS_state.CrewEnlisted == COUNT::MAX {
+    if World::current().read(|world| world.story_state(StoryKey::MOONBASE_ON_SHIP)) != 0
+        || World::current().read(|world| world.story_state(StoryKey::CHMMR_BOMB_STATE)) == 2
+    {
+        do_time_passage();
+        if (**WorldData::current()).flagship.crew_enlisted == COUNT::MAX {
             return;
         }
         crate::automation::scenario::observe_encounter_dispatch(
@@ -444,20 +467,22 @@ pub unsafe fn VisitStarBase() {
         );
         SetCommIntroMode(FADE_IN_SCREEN, ONE_SECOND * 2);
         InitCommunication(CONVERSATION_COMMANDER_CONVERSATION);
-        if GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 != 0 {
+        if (**WorldData::current()).game.current_activity & CHECK_ABORT as u16 != 0 {
             return;
         }
-        set_game_state("GLOBAL_FLAGS_AND_DATA", BYTE::MAX as u32);
+        World::current().write(|world| {
+            world.set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, BYTE::MAX as u32)
+        });
     }
     let mut menu: MENU_STATE = mem::zeroed();
     menu.InputFunc = Some(DoStarBase);
-    let old = SetContext(ScreenContext);
+    let old = SetContext(Kernel::current().read(|owner| owner.screen_context));
     crate::automation::ui_observation::observe_starbase_menu(true);
     DoInput(ptr::addr_of_mut!(menu).cast(), 1);
     crate::automation::ui_observation::observe_starbase_menu(false);
     SetContext(old);
     SetStatusMessageMode(previous);
-    CleanupAfterStarBase();
+    cleanup_after_star_base();
 }
 
 /// Advance fourteen days, finish bomb installation and force a SolarSys reload.
@@ -465,15 +490,15 @@ pub unsafe fn VisitStarBase() {
 /// # Safety
 /// The game clock, live world and graphics must be exclusively accessed on
 /// the initialized game thread.
-pub unsafe fn InstallBombAtEarth() {
-    DoTimePassage();
-    SetContext(ScreenContext);
+pub unsafe fn install_bomb_at_earth() {
+    do_time_passage();
+    SetContext(Kernel::current().read(|owner| owner.screen_context));
     SetTransitionSource(ptr::null());
     SetContextBackGroundColor(BLACK);
     ClearDrawable();
     SleepThreadUntil(FadeScreen(ScreenFadeType_FadeAllToColor, 0));
-    set_game_state("CHMMR_BOMB_STATE", 3);
-    GlobData.Game_state.CurrentActivity = CHECK_LOAD as u16;
+    World::current().write(|world| world.set_story_state(StoryKey::CHMMR_BOMB_STATE, 3));
+    (**WorldData::current()).game.current_activity = CHECK_LOAD as u16;
     NextActivity = IN_INTERPLANETARY as u16 | START_INTERPLANETARY as u16;
-    CurStarDescPtr = ptr::null_mut();
+    (**World::current()).select_star(None, crate::planets::starmap::current_catalog());
 }

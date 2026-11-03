@@ -1,11 +1,13 @@
 #![cfg(not(test))]
-#![allow(non_snake_case)]
 
 //! Shipyard menu, crew transactions and hangar animation, ported from shipyard.c.
 
+use super::shipyard_hangar as hangar;
+use super::sis::game_string;
+
+use crate::engine::{Kernel, StoryKey, World, WorldData};
 use crate::navigation::abi::*;
-use crate::navigation::globals::GlobData;
-use crate::state::game_state_keys::{get_game_state, set_game_state};
+
 use std::{mem, ptr};
 
 use crate::front_end::fmv::runtime::DoShipSpin;
@@ -56,7 +58,7 @@ static mut POWER_STAMP: STAMP = STAMP {
 static mut POWER_COLORMAP: COLORMAP = ptr::null_mut();
 static mut POWER_NEXT_TIME: TimeCount = 0;
 
-unsafe fn animatePowerLines(menu: *mut MENU_STATE) {
+unsafe fn animate_power_lines(menu: *mut MENU_STATE) {
     let now = GetTimeCounter();
     if !menu.is_null() {
         POWER_STAMP.origin.x = 0;
@@ -73,12 +75,12 @@ unsafe fn animatePowerLines(menu: *mut MENU_STATE) {
 }
 
 unsafe extern "C" fn on_input_frame() {
-    let old = SetContext(SpaceContext);
-    animatePowerLines(ptr::null_mut());
+    let old = SetContext(Kernel::current().read(|owner| owner.space_context));
+    animate_power_lines(ptr::null_mut());
     SetContext(old);
 }
 
-unsafe fn SpinStarShip(menu: *mut MENU_STATE, ship: HFLEETINFO) {
+unsafe fn spin_star_ship(menu: *mut MENU_STATE, ship: HFLEETINFO) {
     let fleet = ship.cast::<FLEET_INFO>();
     let index = FindMasterShipIndex((*fleet).SpeciesID);
     if index >= 0 && index < (MeleeShip_MELEE_ZOQFOTPIK + 1) as i32 {
@@ -86,9 +88,9 @@ unsafe fn SpinStarShip(menu: *mut MENU_STATE, ship: HFLEETINFO) {
     }
 }
 
-unsafe fn GetAvailableRaceCount() -> COUNT {
+unsafe fn get_available_race_count() -> COUNT {
     let mut index: COUNT = 0;
-    let mut ship = GlobData.Game_state.avail_race_q.head;
+    let mut ship = WorldData::current().read(|owner| owner.game.avail_race_q.head);
     while !ship.is_null() {
         let fleet = ship.cast::<FLEET_INFO>();
         if (*fleet).allied_state == GOOD_GUY as u16 {
@@ -99,8 +101,8 @@ unsafe fn GetAvailableRaceCount() -> COUNT {
     index
 }
 
-unsafe fn GetAvailableRaceFromIndex(mut index: BYTE) -> HFLEETINFO {
-    let mut ship = GlobData.Game_state.avail_race_q.head;
+unsafe fn get_available_race_from_index(mut index: BYTE) -> HFLEETINFO {
+    let mut ship = WorldData::current().read(|owner| owner.game.avail_race_q.head);
     while !ship.is_null() {
         let fleet = ship.cast::<FLEET_INFO>();
         if (*fleet).allied_state == GOOD_GUY as u16 {
@@ -115,8 +117,9 @@ unsafe fn GetAvailableRaceFromIndex(mut index: BYTE) -> HFLEETINFO {
     ptr::null_mut()
 }
 
-unsafe fn DrawRaceStrings(menu: *mut MENU_STATE, mut race: BYTE) {
-    let old = SetContext(StatusContext);
+unsafe fn draw_race_strings(menu: *mut MENU_STATE, mut race: BYTE) {
+    let mut world = WorldData::current().read(|world| *world);
+    let old = SetContext(Kernel::current().read(|owner| owner.status_context));
     let mut r: RECT = mem::zeroed();
     GetContextClipRect(&mut r);
     let mut stamp = STAMP {
@@ -142,9 +145,8 @@ unsafe fn DrawRaceStrings(menu: *mut MENU_STATE, mut race: BYTE) {
     SetContextForeGroundColor(BLACK);
     DrawFilledRectangle(&mut r);
     if race != BYTE::MAX {
-        let ship = GetAvailableRaceFromIndex(race);
-        race =
-            GetIndexFromStarShip(ptr::addr_of_mut!(GlobData.Game_state.avail_race_q), ship) as BYTE;
+        let ship = get_available_race_from_index(race);
+        race = GetIndexFromStarShip(ptr::addr_of_mut!(world.game.avail_race_q), ship) as BYTE;
         stamp.frame = SetAbsFrameIndex((*menu).ModuleFrame, 3 + race as COUNT);
         DrawStamp(&mut stamp);
         stamp.frame = (*ship.cast::<FLEET_INFO>()).melee_icon;
@@ -162,7 +164,7 @@ unsafe fn DrawRaceStrings(menu: *mut MENU_STATE, mut race: BYTE) {
         DrawStamp(&mut stamp);
         let cost = format!("{}\0", SHIP_COST[race as usize]);
         text.pStr = cost.as_ptr().cast();
-        SetContextFont(TinyFont);
+        SetContextFont(Kernel::current().read(|owner| owner.tiny_font));
         SetContextForeGroundColor(rgb15(0, 0x1f, 0));
         font_DrawText(&mut text);
     }
@@ -170,9 +172,10 @@ unsafe fn DrawRaceStrings(menu: *mut MENU_STATE, mut race: BYTE) {
     SetContext(old);
 }
 
-unsafe fn ShowShipCrew(ship: *mut SHIP_FRAGMENT, rect: *const RECT) {
+unsafe fn show_ship_crew(ship: *mut SHIP_FRAGMENT, rect: *const RECT) {
+    let world = WorldData::current();
     let template = GetStarShipFromIndex(
-        ptr::addr_of_mut!(GlobData.Game_state.avail_race_q),
+        ptr::addr_of_mut!((**world).game.avail_race_q),
         (*ship).race_id as COUNT,
     );
     let max_crew = (*template.cast::<FLEET_INFO>()).crew_level;
@@ -208,79 +211,15 @@ unsafe fn ShowShipCrew(ship: *mut SHIP_FRAGMENT, rect: *const RECT) {
     font_DrawText(&mut text);
 }
 
-#[derive(Clone, Copy)]
-struct ShipWindow {
-    ship: *mut SHIP_FRAGMENT,
-    finished: POINT,
-    image: STAMP,
-    left_door: STAMP,
-    right_door: STAMP,
-}
-
-unsafe fn ShowCombatShip(menu: *mut MENU_STATE, mut window: COUNT, yanked: *mut SHIP_FRAGMENT) {
-    let mut windows: [ShipWindow; MAX_BUILT_SHIPS as usize] = mem::zeroed();
-    let mut num_ships: COUNT = 1;
-    if !yanked.is_null() {
-        let info = &mut windows[0];
-        info.ship = yanked;
-        info.left_door.origin = POINT {
-            x: -(SHIP_WIN_WIDTH >> 1),
-            y: 0,
-        };
-        info.right_door.origin = POINT {
-            x: SHIP_WIN_WIDTH >> 1,
-            y: 0,
-        };
-        info.left_door.frame = IncFrameIndex((*menu).ModuleFrame);
-        info.right_door.frame = IncFrameIndex(info.left_door.frame);
-        info.image.origin = POINT {
-            x: (SHIP_WIN_WIDTH >> 1) + 1,
-            y: SHIP_WIN_WIDTH >> 1,
-        };
-        info.image.frame = (*yanked).melee_icon;
-        info.finished.x = HANGAR_X_COORDS[window as usize % HANGAR_SHIPS_ROW as usize];
-        info.finished.y = HANGAR_Y + HANGAR_DY * (window / HANGAR_SHIPS_ROW as COUNT) as i16;
-    } else {
-        let queue = ptr::addr_of_mut!(GlobData.Game_state.built_ship_q);
-        let mut handle;
-        if window == COUNT::MAX {
-            handle = (*queue).head;
-            num_ships = CountLinks(queue);
-        } else {
-            let tail = (*queue).tail;
-            RemoveQueue(queue, tail);
-            handle = (*queue).head;
-            while !handle.is_null() {
-                let ship = handle.cast::<SHIP_FRAGMENT>();
-                if (*ship).index as COUNT > window {
-                    break;
-                }
-                handle = (*ship).succ;
-            }
-            InsertQueue(queue, tail, handle);
-            handle = tail;
-            (*handle.cast::<SHIP_FRAGMENT>()).index = window as BYTE;
-        }
-        for i in 0..num_ships {
-            let ship = handle.cast::<SHIP_FRAGMENT>();
-            let next = (*ship).succ;
-            let info = &mut windows[i as usize];
-            info.ship = ship;
-            info.left_door.origin = POINT { x: -1, y: 0 };
-            info.right_door.origin = POINT { x: 1, y: 0 };
-            info.left_door.frame = IncFrameIndex((*menu).ModuleFrame);
-            info.right_door.frame = IncFrameIndex(info.left_door.frame);
-            info.image.origin = POINT {
-                x: (SHIP_WIN_WIDTH >> 1) + 1,
-                y: SHIP_WIN_WIDTH >> 1,
-            };
-            info.image.frame = (*ship).melee_icon;
-            window = (*ship).index as COUNT;
-            info.finished.x = HANGAR_X_COORDS[window as usize % HANGAR_SHIPS_ROW as usize];
-            info.finished.y = HANGAR_Y + HANGAR_DY * (window / HANGAR_SHIPS_ROW as COUNT) as i16;
-            handle = next;
-        }
-    }
+unsafe fn show_combat_ship(menu: *mut MENU_STATE, window: COUNT, yanked: *mut SHIP_FRAGMENT) {
+    let (mut windows, num_ships) = WorldData::current().write(|world| {
+        hangar::prepare_windows(
+            world.ship_fragments_mut(true),
+            &*menu,
+            window,
+            yanked.as_mut(),
+        )
+    });
     if num_ships != 0 {
         let mut all_finished = false;
         let r = RECT {
@@ -303,7 +242,7 @@ unsafe fn ShowCombatShip(menu: *mut MENU_STATE, mut window: COUNT, yanked: *mut 
                 }
                 all_finished = true;
             }
-            let old = SetContext(SpaceContext);
+            let old = SetContext(Kernel::current().read(|owner| owner.space_context));
             let mut old_clip: RECT = mem::zeroed();
             GetContextClipRect(&mut old_clip);
             SetContextBackGroundColor(BLACK);
@@ -323,7 +262,7 @@ unsafe fn ShowCombatShip(menu: *mut MENU_STATE, mut window: COUNT, yanked: *mut 
                 SetContextClipRect(&mut clip);
                 ClearDrawable();
                 DrawStamp(&mut info.image);
-                ShowShipCrew(info.ship, &r);
+                show_ship_crew(info.ship, &r);
                 if !all_finished || !yanked.is_null() {
                     DrawStamp(&mut info.left_door);
                     DrawStamp(&mut info.right_door);
@@ -338,7 +277,7 @@ unsafe fn ShowCombatShip(menu: *mut MENU_STATE, mut window: COUNT, yanked: *mut 
             }
             SetContextClipRect(&mut old_clip);
             if !USE_3DO_HANGAR {
-                animatePowerLines(ptr::null_mut());
+                animate_power_lines(ptr::null_mut());
             }
             UnbatchGraphics();
             SetContext(old);
@@ -349,12 +288,12 @@ unsafe fn ShowCombatShip(menu: *mut MENU_STATE, mut window: COUNT, yanked: *mut 
 
 fn purchased_crew() -> SIZE {
     u16::from_le_bytes([
-        get_game_state("CREW_PURCHASED0") as BYTE,
-        get_game_state("CREW_PURCHASED1") as BYTE,
+        World::current().read(|world| world.story_state(StoryKey::CREW_PURCHASED0)) as BYTE,
+        World::current().read(|world| world.story_state(StoryKey::CREW_PURCHASED1)) as BYTE,
     ]) as SIZE
 }
 
-unsafe fn CrewTransaction(delta: SIZE) {
+unsafe fn crew_transaction(delta: SIZE) {
     if delta != 0 {
         let mut bought = purchased_crew().wrapping_add(delta);
         if bought < 0 {
@@ -363,23 +302,27 @@ unsafe fn CrewTransaction(delta: SIZE) {
             if bought as i32 >= CREW_EXPENSE_THRESHOLD as i32
                 && (bought as i32 - delta as i32) < CREW_EXPENSE_THRESHOLD as i32
             {
-                GlobData.Game_state.CrewCost += 2;
+                (**WorldData::current()).game.crew_cost += 2;
                 DrawMenuStateStrings(PM_CREW as BYTE, SHIPYARD_CREW as i16);
             }
         } else if (bought as i32) < CREW_EXPENSE_THRESHOLD as i32
             && bought as i32 - delta as i32 >= CREW_EXPENSE_THRESHOLD as i32
         {
-            GlobData.Game_state.CrewCost -= 2;
+            (**WorldData::current()).game.crew_cost -= 2;
             DrawMenuStateStrings(PM_CREW as BYTE, SHIPYARD_CREW as i16);
         }
         if CheckAlliance(SHOFIXTI_SHIP as COUNT) != GOOD_GUY as COUNT {
-            set_game_state("CREW_PURCHASED0", bought as BYTE as u32);
-            set_game_state("CREW_PURCHASED1", ((bought as u16) >> 8) as u32);
+            World::current().write(|world| {
+                world.set_story_state(StoryKey::CREW_PURCHASED0, bought as BYTE as u32)
+            });
+            World::current().write(|world| {
+                world.set_story_state(StoryKey::CREW_PURCHASED1, ((bought as u16) >> 8) as u32)
+            });
         }
     }
 }
 
-unsafe fn DMS_FlashFlagShip() {
+unsafe fn dms_flash_flag_ship() {
     let r = RECT {
         corner: POINT { x: 0, y: 0 },
         extent: EXTENT {
@@ -390,19 +333,19 @@ unsafe fn DMS_FlashFlagShip() {
     SetFlashRect(&r);
 }
 
-unsafe fn DMS_FlashEscortShip(slot: BYTE) {
+unsafe fn dms_flash_escort_ship(slot: BYTE) {
     SetFlashRect(&DMS_GetEscortShipRect(slot));
 }
 
-unsafe fn DMS_FlashFlagShipCrewCount() {
+unsafe fn dms_flash_flag_ship_crew_count() {
     let mut r: RECT = mem::zeroed();
-    SetContext(StatusContext);
+    SetContext(Kernel::current().read(|owner| owner.status_context));
     GetGaugeRect(&mut r, 1);
     SetFlashRect(&r);
-    SetContext(SpaceContext);
+    SetContext(Kernel::current().read(|owner| owner.space_context));
 }
 
-unsafe fn DMS_FlashEscortShipCrewCount(slot: BYTE) {
+unsafe fn dms_flash_escort_ship_crew_count(slot: BYTE) {
     let row = slot / HANGAR_SHIPS_ROW;
     let col = slot % HANGAR_SHIPS_ROW;
     let r = RECT {
@@ -415,23 +358,23 @@ unsafe fn DMS_FlashEscortShipCrewCount(slot: BYTE) {
             height: 5,
         },
     };
-    SetContext(SpaceContext);
+    SetContext(Kernel::current().read(|owner| owner.space_context));
     SetFlashRect(&r);
 }
 
-unsafe fn DMS_FlashActiveShip(menu: *mut MENU_STATE) {
+unsafe fn dms_flash_active_ship(menu: *mut MENU_STATE) {
     if (*menu).CurState >> 4 != 0 {
-        DMS_FlashFlagShip();
+        dms_flash_flag_ship();
     } else {
-        DMS_FlashEscortShip((*menu).CurState);
+        dms_flash_escort_ship((*menu).CurState);
     }
 }
 
-unsafe fn DMS_SetMode(menu: *mut MENU_STATE, mode: ModifyMode) {
+unsafe fn dms_set_mode(menu: *mut MENU_STATE, mode: ModifyMode) {
     match mode {
         ModifyMode::Navigate => {
             SetMenuSounds(SOUND_ARROWS, SOUND_SELECT);
-            DMS_FlashActiveShip(menu);
+            dms_flash_active_ship(menu);
         }
         ModifyMode::AddEscort => {
             SetMenuSounds(SOUND_ARROWS, SOUND_SELECT);
@@ -440,9 +383,9 @@ unsafe fn DMS_SetMode(menu: *mut MENU_STATE, mode: ModifyMode) {
         ModifyMode::EditCrew => {
             SetMenuSounds(SOUND_UP | SOUND_DOWN, SOUND_SELECT | SOUND_CANCEL);
             if (*menu).CurState >> 4 != 0 {
-                DMS_FlashFlagShipCrewCount();
+                dms_flash_flag_ship_crew_count();
             } else {
-                DMS_FlashEscortShipCrewCount((*menu).CurState);
+                dms_flash_escort_ship_crew_count((*menu).CurState);
             }
         }
         ModifyMode::Exit => {
@@ -452,7 +395,8 @@ unsafe fn DMS_SetMode(menu: *mut MENU_STATE, mode: ModifyMode) {
     }
 }
 
-unsafe fn DMS_SpinShip(menu: *mut MENU_STATE, ship: HSHIPFRAG) -> bool {
+unsafe fn dms_spin_ship(menu: *mut MENU_STATE, ship: HSHIPFRAG) -> bool {
+    let mut world = WorldData::current().read(|world| *world);
     if (*menu).CurState >> 4 != 0 {
         return false;
     }
@@ -460,7 +404,7 @@ unsafe fn DMS_SpinShip(menu: *mut MENU_STATE, ship: HSHIPFRAG) -> bool {
         return false;
     }
     let spin_ship = if ship.is_null() {
-        let spin_ship = GetAvailableRaceFromIndex((*menu).delta_item as BYTE);
+        let spin_ship = get_available_race_from_index((*menu).delta_item as BYTE);
         if spin_ship.is_null() {
             return false;
         }
@@ -468,52 +412,58 @@ unsafe fn DMS_SpinShip(menu: *mut MENU_STATE, ship: HSHIPFRAG) -> bool {
     } else {
         let fragment = ship.cast::<SHIP_FRAGMENT>();
         GetStarShipFromIndex(
-            ptr::addr_of_mut!(GlobData.Game_state.avail_race_q),
+            ptr::addr_of_mut!(world.game.avail_race_q),
             (*fragment).race_id as COUNT,
         )
     };
     SetFlashRect(ptr::null());
-    let old = SetContext(ScreenContext);
+    let old = SetContext(Kernel::current().read(|owner| owner.screen_context));
     let mut old_clip: RECT = mem::zeroed();
     GetContextClipRect(&mut old_clip);
-    SpinStarShip(menu, spin_ship);
+    spin_star_ship(menu, spin_ship);
     SetContextClipRect(&mut old_clip);
     SetContext(old);
     true
 }
 
-unsafe fn DMS_HireFlagShipCrew() -> SIZE {
+unsafe fn dms_hire_flag_ship_crew() -> SIZE {
     let mut point: POINT = mem::zeroed();
     if GetCPodCapacity(&mut point) <= GetCrewCount() {
         return 0;
     }
-    if GlobData.SIS_state.ResUnits < GlobData.Game_state.CrewCost as DWORD {
+    if WorldData::current().read(|owner| owner.flagship.res_units)
+        < WorldData::current().read(|owner| owner.game.crew_cost) as DWORD
+    {
         return 0;
     }
     DrawPoint(&mut point);
-    PreUpdateFlashRect();
-    DeltaSISGauges(1, 0, -(GlobData.Game_state.CrewCost as i32));
-    PostUpdateFlashRect();
+    pre_update_flash_rect();
+    DeltaSISGauges(
+        1,
+        0,
+        -(WorldData::current().read(|owner| owner.game.crew_cost) as i32),
+    );
+    post_update_flash_rect();
     1
 }
 
-unsafe fn DMS_DismissFlagShipCrew() -> SIZE {
+unsafe fn dms_dismiss_flag_ship_crew() -> SIZE {
     if GetCrewCount() == 0 {
         return 0;
     }
     let bought = purchased_crew();
-    PreUpdateFlashRect();
+    pre_update_flash_rect();
     DeltaSISGauges(
         -1,
         0,
-        GlobData.Game_state.CrewCost as i32
+        WorldData::current().read(|owner| owner.game.crew_cost) as i32
             - if bought == CREW_EXPENSE_THRESHOLD as SIZE {
                 2
             } else {
                 0
             },
     );
-    PostUpdateFlashRect();
+    post_update_flash_rect();
     let mut point: POINT = mem::zeroed();
     GetCPodCapacity(&mut point);
     SetContextForeGroundColor(BLACK);
@@ -521,13 +471,14 @@ unsafe fn DMS_DismissFlagShipCrew() -> SIZE {
     -1
 }
 
-unsafe fn DMS_HireEscortShipCrew(ship: *mut SHIP_FRAGMENT) -> SIZE {
+unsafe fn dms_hire_escort_ship_crew(ship: *mut SHIP_FRAGMENT) -> SIZE {
+    let mut world = WorldData::current().read(|world| *world);
     let template = GetStarShipFromIndex(
-        ptr::addr_of_mut!(GlobData.Game_state.avail_race_q),
+        ptr::addr_of_mut!(world.game.avail_race_q),
         (*ship).race_id as COUNT,
     );
     let max_crew = (*template.cast::<FLEET_INFO>()).crew_level;
-    if GlobData.SIS_state.ResUnits < GlobData.Game_state.CrewCost as DWORD {
+    if world.flagship.res_units < world.game.crew_cost as DWORD {
         return 0;
     }
     if (*ship).crew_level >= (*ship).max_crew {
@@ -537,19 +488,19 @@ unsafe fn DMS_HireEscortShipCrew(ship: *mut SHIP_FRAGMENT) -> SIZE {
         return 0;
     }
     if (*ship).crew_level > 0 {
-        DeltaSISGauges(0, 0, -(GlobData.Game_state.CrewCost as i32));
+        DeltaSISGauges(0, 0, -(world.game.crew_cost as i32));
     } else {
         DeltaSISGauges(0, 0, -(SHIP_COST[(*ship).race_id as usize] as i32));
     }
     (*ship).crew_level += 1;
-    PreUpdateFlashRect();
+    pre_update_flash_rect();
     let r = DMS_GetEscortShipRect((*ship).index);
-    ShowShipCrew(ship, &r);
-    PostUpdateFlashRect();
+    show_ship_crew(ship, &r);
+    post_update_flash_rect();
     1
 }
 
-unsafe fn DMS_DismissEscortShipCrew(ship: *mut SHIP_FRAGMENT) -> SIZE {
+unsafe fn dms_dismiss_escort_ship_crew(ship: *mut SHIP_FRAGMENT) -> SIZE {
     let mut delta = 0;
     if (*ship).crew_level > 0 {
         if (*ship).crew_level > 1 {
@@ -557,7 +508,7 @@ unsafe fn DMS_DismissEscortShipCrew(ship: *mut SHIP_FRAGMENT) -> SIZE {
             DeltaSISGauges(
                 0,
                 0,
-                GlobData.Game_state.CrewCost as i32
+                WorldData::current().read(|owner| owner.game.crew_cost) as i32
                     - if bought == CREW_EXPENSE_THRESHOLD as SIZE {
                         2
                     } else {
@@ -572,33 +523,33 @@ unsafe fn DMS_DismissEscortShipCrew(ship: *mut SHIP_FRAGMENT) -> SIZE {
     } else {
         PlayMenuSound(MENU_SOUND_EFFECT_MENU_SOUND_FAILURE);
     }
-    PreUpdateFlashRect();
+    pre_update_flash_rect();
     let r = DMS_GetEscortShipRect((*ship).index);
-    ShowShipCrew(ship, &r);
-    PostUpdateFlashRect();
+    show_ship_crew(ship, &r);
+    post_update_flash_rect();
     delta
 }
 
-unsafe fn DMS_ModifyCrew(menu: *mut MENU_STATE, handle: HSHIPFRAG, dy: SBYTE) {
+unsafe fn dms_modify_crew(menu: *mut MENU_STATE, handle: HSHIPFRAG, dy: SBYTE) {
     let delta;
     let ship = handle.cast::<SHIP_FRAGMENT>();
     if handle.is_null() {
         delta = if dy < 0 {
-            DMS_HireFlagShipCrew()
+            dms_hire_flag_ship_crew()
         } else {
-            DMS_DismissFlagShipCrew()
+            dms_dismiss_flag_ship_crew()
         };
         if delta != 0 {
-            DMS_FlashFlagShipCrewCount();
+            dms_flash_flag_ship_crew_count();
         }
     } else {
         delta = if dy < 0 {
-            DMS_HireEscortShipCrew(ship)
+            dms_hire_escort_ship_crew(ship)
         } else {
-            DMS_DismissEscortShipCrew(ship)
+            dms_dismiss_escort_ship_crew(ship)
         };
         if delta != 0 {
-            DMS_FlashEscortShipCrewCount((*ship).index);
+            dms_flash_escort_ship_crew_count((*ship).index);
         }
     }
     if delta == 0 {
@@ -607,34 +558,37 @@ unsafe fn DMS_ModifyCrew(menu: *mut MENU_STATE, handle: HSHIPFRAG, dy: SBYTE) {
     if !handle.is_null() {
         (*menu).delta_item &= MODIFY_CREW_FLAG;
     }
-    CrewTransaction(delta);
+    crew_transaction(delta);
 }
 
-unsafe fn DMS_TryAddEscortShip(menu: *mut MENU_STATE) {
-    let info = GetAvailableRaceFromIndex((*menu).delta_item as BYTE);
-    let index = GetIndexFromStarShip(ptr::addr_of_mut!(GlobData.Game_state.avail_race_q), info);
-    if GlobData.SIS_state.ResUnits >= SHIP_COST[index as usize] as DWORD
+unsafe fn dms_try_add_escort_ship(menu: *mut MENU_STATE) {
+    let info = get_available_race_from_index((*menu).delta_item as BYTE);
+    let world = WorldData::current();
+    let index = GetIndexFromStarShip(ptr::addr_of_mut!((**world).game.avail_race_q), info);
+    let added = (**world).flagship.res_units >= SHIP_COST[index as usize] as DWORD
         && !CloneShipFragment(
+            &mut (**world).game.avail_race_q,
             index,
-            ptr::addr_of_mut!(GlobData.Game_state.built_ship_q),
+            ptr::addr_of_mut!((**world).game.built_ship_q),
             1,
         )
-        .is_null()
-    {
-        ShowCombatShip(menu, (*menu).CurState as COUNT, ptr::null_mut());
+        .is_null();
+    drop(world);
+    if added {
+        show_combat_ship(menu, (*menu).CurState as COUNT, ptr::null_mut());
         DrawMenuStateStrings(PM_CREW as BYTE, SHIPYARD_CREW as i16);
         DeltaSISGauges(
             UNDEFINED_DELTA as SIZE,
             UNDEFINED_DELTA as SIZE,
             -(SHIP_COST[index as usize] as i32),
         );
-        DMS_SetMode(menu, ModifyMode::EditCrew);
+        dms_set_mode(menu, ModifyMode::EditCrew);
     } else {
         PlayMenuSound(MENU_SOUND_EFFECT_MENU_SOUND_FAILURE);
     }
 }
 
-unsafe fn DMS_AddEscortShip(
+unsafe fn dms_add_escort_ship(
     menu: *mut MENU_STATE,
     special: bool,
     select: bool,
@@ -645,8 +599,8 @@ unsafe fn DMS_AddEscortShip(
     assert!((*menu).delta_item & MODIFY_CREW_FLAG != 0);
     if special {
         let ship = GetEscortByStarShipIndex((*menu).delta_item as COUNT);
-        if DMS_SpinShip(menu, ship) {
-            DMS_SetMode(menu, ModifyMode::AddEscort);
+        if dms_spin_ship(menu, ship) {
+            dms_set_mode(menu, ModifyMode::AddEscort);
         }
         return;
     }
@@ -654,11 +608,11 @@ unsafe fn DMS_AddEscortShip(
         (*menu).delta_item &= !MODIFY_CREW_FLAG;
         SetFlashRect(ptr::null());
         DrawMenuStateStrings(PM_CREW as BYTE, SHIPYARD_CREW as i16);
-        DMS_SetMode(menu, ModifyMode::Navigate);
+        dms_set_mode(menu, ModifyMode::Navigate);
     } else if select {
-        DMS_TryAddEscortShip(menu);
+        dms_try_add_escort_ship(menu);
     } else if dx != 0 || dy != 0 {
-        let available = GetAvailableRaceCount();
+        let available = get_available_race_count();
         let mut current = (*menu).delta_item as BYTE;
         if dx < 0 || dy < 0 {
             let old = current;
@@ -673,31 +627,33 @@ unsafe fn DMS_AddEscortShip(
             }
         }
         if current != (*menu).delta_item as BYTE {
-            PreUpdateFlashRect();
-            DrawRaceStrings(menu, current);
-            PostUpdateFlashRect();
+            pre_update_flash_rect();
+            draw_race_strings(menu, current);
+            post_update_flash_rect();
             (*menu).delta_item = current as SIZE | MODIFY_CREW_FLAG;
         }
     }
 }
 
-unsafe fn DMS_ScrapEscortShip(menu: *mut MENU_STATE, handle: HSHIPFRAG) {
+unsafe fn dms_scrap_escort_ship(menu: *mut MENU_STATE, handle: HSHIPFRAG) {
     let ship = handle.cast::<SHIP_FRAGMENT>();
     SetFlashRect(ptr::null());
-    ShowCombatShip(menu, (*menu).CurState as COUNT, ship);
-    let queue = ptr::addr_of_mut!(GlobData.Game_state.built_ship_q);
+    show_combat_ship(menu, (*menu).CurState as COUNT, ship);
+    let world = WorldData::current();
+    let queue = ptr::addr_of_mut!((**world).game.built_ship_q);
     RemoveQueue(queue, handle);
     FreeLink(queue, handle);
+    drop(world);
     DeltaSISGauges(
         UNDEFINED_DELTA as SIZE,
         UNDEFINED_DELTA as SIZE,
         UNDEFINED_DELTA as i32,
     );
-    SetContext(SpaceContext);
-    DMS_SetMode(menu, ModifyMode::Navigate);
+    SetContext(Kernel::current().read(|owner| owner.space_context));
+    dms_set_mode(menu, ModifyMode::Navigate);
 }
 
-unsafe fn DMS_EditCrewMode(
+unsafe fn dms_edit_crew_mode(
     menu: *mut MENU_STATE,
     ship: HSHIPFRAG,
     select: bool,
@@ -708,17 +664,17 @@ unsafe fn DMS_EditCrewMode(
         if !ship.is_null() {
             let crew = (*ship.cast::<SHIP_FRAGMENT>()).crew_level;
             if crew == 0 {
-                DMS_ScrapEscortShip(menu, ship);
+                dms_scrap_escort_ship(menu, ship);
             }
         }
         (*menu).delta_item &= !MODIFY_CREW_FLAG;
-        DMS_SetMode(menu, ModifyMode::Navigate);
+        dms_set_mode(menu, ModifyMode::Navigate);
     } else if dy != 0 {
-        DMS_ModifyCrew(menu, ship, dy);
+        dms_modify_crew(menu, ship, dy);
     }
 }
 
-unsafe fn DMS_NavigateShipSlots(
+unsafe fn dms_navigate_ship_slots(
     menu: *mut MENU_STATE,
     special: bool,
     select: bool,
@@ -731,42 +687,42 @@ unsafe fn DMS_NavigateShipSlots(
         let new_state = DMS_MoveCursor((*menu).CurState, dx, dy);
         if new_state != (*menu).CurState {
             (*menu).CurState = new_state;
-            DMS_FlashActiveShip(menu);
+            dms_flash_active_ship(menu);
         }
     }
     if special {
-        if DMS_SpinShip(menu, ship) {
-            DMS_SetMode(menu, ModifyMode::Navigate);
+        if dms_spin_ship(menu, ship) {
+            dms_set_mode(menu, ModifyMode::Navigate);
         }
     } else if select {
         if ship.is_null() && (*menu).CurState >> 4 == 0 {
             (*menu).delta_item = MODIFY_CREW_FLAG;
-            DrawRaceStrings(menu, 0);
-            DMS_SetMode(menu, ModifyMode::AddEscort);
+            draw_race_strings(menu, 0);
+            dms_set_mode(menu, ModifyMode::AddEscort);
         } else {
             (*menu).delta_item |= MODIFY_CREW_FLAG;
-            DMS_SetMode(menu, ModifyMode::EditCrew);
+            dms_set_mode(menu, ModifyMode::EditCrew);
         }
     } else if cancel {
         (*menu).InputFunc = Some(DoShipyard);
         (*menu).CurState = SHIPYARD_CREW;
         DrawMenuStateStrings(PM_CREW as BYTE, (*menu).CurState as i16);
-        DMS_SetMode(menu, ModifyMode::Exit);
+        dms_set_mode(menu, ModifyMode::Exit);
     }
 }
 
-unsafe extern "C" fn DoModifyShips(menu: *mut MENU_STATE) -> BOOLEAN {
-    if GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 != 0 {
+unsafe extern "C" fn do_modify_ships(menu: *mut MENU_STATE) -> BOOLEAN {
+    if WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16 != 0 {
         (*menu).InputFunc = Some(DoShipyard);
         return 1;
     }
     if (*menu).Initialized == 0 {
-        (*menu).InputFunc = Some(DoModifyShips);
+        (*menu).InputFunc = Some(do_modify_ships);
         (*menu).Initialized = 1;
         (*menu).CurState = 0xf0;
         (*menu).delta_item = 0;
-        SetContext(SpaceContext);
-        DMS_SetMode(menu, ModifyMode::Navigate);
+        SetContext(Kernel::current().read(|owner| owner.space_context));
+        dms_set_mode(menu, ModifyMode::Navigate);
     } else {
         let special = PulsedInputState.menu[KEY_MENU_SPECIAL as usize] != 0;
         let select = PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0;
@@ -786,13 +742,13 @@ unsafe extern "C" fn DoModifyShips(menu: *mut MENU_STATE) -> BOOLEAN {
             dy = 1;
         }
         if (*menu).delta_item & MODIFY_CREW_FLAG == 0 {
-            DMS_NavigateShipSlots(menu, special, select, cancel, dx, dy);
+            dms_navigate_ship_slots(menu, special, select, cancel, dx, dy);
         } else {
             let ship = GetEscortByStarShipIndex((*menu).CurState as COUNT);
             if ship.is_null() && (*menu).CurState >> 4 == 0 {
-                DMS_AddEscortShip(menu, special, select, cancel, dx, dy);
+                dms_add_escort_ship(menu, special, select, cancel, dx, dy);
             } else {
-                DMS_EditCrewMode(menu, ship, select, cancel, dy);
+                dms_edit_crew_mode(menu, ship, select, cancel, dy);
             }
         }
     }
@@ -800,7 +756,7 @@ unsafe extern "C" fn DoModifyShips(menu: *mut MENU_STATE) -> BOOLEAN {
     1
 }
 
-unsafe fn DrawBluePrint(menu: *mut MENU_STATE) {
+unsafe fn draw_blue_print(menu: *mut MENU_STATE) {
     let frame = CaptureDrawable(LoadGraphicInstance(c"graphics.blueprints".as_ptr()).cast());
     let mut stamp = STAMP {
         origin: POINT { x: 0, y: 0 },
@@ -809,36 +765,28 @@ unsafe fn DrawBluePrint(menu: *mut MENU_STATE) {
     SetContextForeGroundColor(rgb15(0, 0, 0x16));
     DrawFilledStamp(&mut stamp);
     for slot in 0..NUM_DRIVE_SLOTS {
-        DrawShipPiece(
-            frame,
-            GlobData.SIS_state.DriveSlots[slot as usize] as COUNT,
-            slot as COUNT,
-            1,
-        );
+        let piece = WorldData::current().read(|owner| owner.flagship.drive_slots[slot as usize]);
+        DrawShipPiece(frame, piece as COUNT, slot as COUNT, 1);
     }
     for slot in 0..NUM_JET_SLOTS {
-        DrawShipPiece(
-            frame,
-            GlobData.SIS_state.JetSlots[slot as usize] as COUNT,
-            slot as COUNT,
-            1,
-        );
+        let piece = WorldData::current().read(|owner| owner.flagship.jet_slots[slot as usize]);
+        DrawShipPiece(frame, piece as COUNT, slot as COUNT, 1);
     }
     for slot in 0..NUM_MODULE_SLOTS {
-        let piece = GlobData.SIS_state.ModuleSlots[slot as usize];
+        let piece = WorldData::current().read(|owner| owner.flagship.module_slots[slot as usize]);
         if !((*menu).CurState as u32 == SHIPYARD && piece as u32 == CREW_POD) {
             DrawShipPiece(frame, piece as COUNT, slot as COUNT, 1);
         }
     }
     SetContextForeGroundColor(rgb15(0x0a, 0x0a, 0x1f));
     for slot in 0..NUM_MODULE_SLOTS {
-        let piece = GlobData.SIS_state.ModuleSlots[slot as usize];
+        let piece = WorldData::current().read(|owner| owner.flagship.module_slots[slot as usize]);
         if (*menu).CurState as u32 == SHIPYARD && piece as u32 == CREW_POD {
             DrawShipPiece(frame, piece as COUNT, slot as COUNT, 1);
         }
     }
-    let mut frames = GlobData.SIS_state.CrewEnlisted;
-    GlobData.SIS_state.CrewEnlisted = 0;
+    let mut frames = WorldData::current().read(|owner| owner.flagship.crew_enlisted);
+    (**WorldData::current()).flagship.crew_enlisted = 0;
     loop {
         let old = frames;
         frames = frames.wrapping_sub(1);
@@ -848,10 +796,10 @@ unsafe fn DrawBluePrint(menu: *mut MENU_STATE) {
         let mut point: POINT = mem::zeroed();
         GetCPodCapacity(&mut point);
         DrawPoint(&mut point);
-        GlobData.SIS_state.CrewEnlisted += 1;
+        (**WorldData::current()).flagship.crew_enlisted += 1;
     }
-    frames = GlobData.SIS_state.TotalElementMass;
-    GlobData.SIS_state.TotalElementMass = 0;
+    frames = WorldData::current().read(|owner| owner.flagship.total_element_mass);
+    (**WorldData::current()).flagship.total_element_mass = 0;
     let mut r = RECT {
         corner: POINT { x: 0, y: 0 },
         extent: EXTENT {
@@ -865,14 +813,15 @@ unsafe fn DrawBluePrint(menu: *mut MENU_STATE) {
         } else {
             SBAY_MASS_PER_ROW as COUNT
         };
-        GlobData.SIS_state.TotalElementMass += mass;
+        (**WorldData::current()).flagship.total_element_mass += mass;
         GetSBayCapacity(&mut r.corner);
         DrawFilledRectangle(&mut r);
         frames -= mass;
     }
-    if GlobData.SIS_state.FuelOnBoard > FUEL_RESERVE {
-        let mut volume = GlobData.SIS_state.FuelOnBoard - FUEL_RESERVE;
-        GlobData.SIS_state.FuelOnBoard = FUEL_RESERVE;
+    if WorldData::current().read(|owner| owner.flagship.fuel_on_board) > FUEL_RESERVE {
+        let mut volume =
+            WorldData::current().read(|owner| owner.flagship.fuel_on_board) - FUEL_RESERVE;
+        (**WorldData::current()).flagship.fuel_on_board = FUEL_RESERVE;
         r.extent.width = 3;
         r.extent.height = 1;
         while volume != 0 {
@@ -889,14 +838,14 @@ unsafe fn DrawBluePrint(menu: *mut MENU_STATE) {
             } else {
                 FUEL_VOLUME_PER_ROW as COUNT
             };
-            GlobData.SIS_state.FuelOnBoard += mass as DWORD;
+            (**WorldData::current()).flagship.fuel_on_board += mass as DWORD;
             volume -= mass as DWORD;
         }
     }
     DestroyDrawable(ReleaseDrawable(frame));
 }
 
-unsafe fn ExitShipyard(menu: *mut MENU_STATE) -> BOOLEAN {
+unsafe fn exit_shipyard(menu: *mut MENU_STATE) -> BOOLEAN {
     SetInputCallback(None);
     DestroyDrawable(ReleaseDrawable((*menu).ModuleFrame));
     (*menu).ModuleFrame = ptr::null_mut();
@@ -913,8 +862,8 @@ unsafe fn ExitShipyard(menu: *mut MENU_STATE) -> BOOLEAN {
 /// callbacks and this function must run exclusively on that same thread.
 #[no_mangle]
 pub unsafe extern "C" fn DoShipyard(menu: *mut MENU_STATE) -> BOOLEAN {
-    if GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 != 0 {
-        return ExitShipyard(menu);
+    if WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16 != 0 {
+        return exit_shipyard(menu);
     }
     let select = PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0;
     let cancel = PulsedInputState.menu[KEY_MENU_CANCEL as usize] != 0;
@@ -928,26 +877,14 @@ pub unsafe extern "C" fn DoShipyard(menu: *mut MENU_STATE) -> BOOLEAN {
         (*menu).hMusic = (LoadMusicInstance(c"music.shipyard".as_ptr())).cast();
         SetTransitionSource(ptr::null());
         BatchGraphics();
-        DrawSISFrame();
-        DrawSISMessage(
-            GetStringAddress(SetAbsStringTableIndex(
-                GameStrings,
-                STARBASE_STRING_BASE as COUNT + 3,
-            ))
-            .cast(),
-        );
-        DrawSISTitle(
-            GetStringAddress(SetAbsStringTableIndex(
-                GameStrings,
-                STARBASE_STRING_BASE as COUNT,
-            ))
-            .cast(),
-        );
-        SetContext(SpaceContext);
-        DrawBluePrint(menu);
+        draw_sisframe();
+        DrawSISMessage(game_string(STARBASE_STRING_BASE + 3));
+        DrawSISTitle(game_string(STARBASE_STRING_BASE));
+        SetContext(Kernel::current().read(|owner| owner.space_context));
+        draw_blue_print(menu);
         (*menu).CurState = SHIPYARD_CREW;
         DrawMenuStateStrings(PM_CREW as BYTE, (*menu).CurState as i16);
-        SetContext(SpaceContext);
+        SetContext(Kernel::current().read(|owner| owner.space_context));
         let mut stamp = STAMP {
             origin: POINT { x: 0, y: 0 },
             frame: SetAbsFrameIndex((*menu).ModuleFrame, 0),
@@ -964,25 +901,25 @@ pub unsafe extern "C" fn DoShipyard(menu: *mut MENU_STATE) -> BOOLEAN {
             SetContextClipRect(&mut r);
             DrawStamp(&mut stamp);
             SetContextClipRect(&mut old_r);
-            animatePowerLines(menu);
+            animate_power_lines(menu);
         }
-        SetContextFont(TinyFont);
+        SetContextFont(Kernel::current().read(|owner| owner.tiny_font));
         ScreenTransition(3, ptr::null());
         UnbatchGraphics();
         PlayMusic((*menu).hMusic, 1, 1);
-        ShowCombatShip(menu, COUNT::MAX, ptr::null_mut());
+        show_combat_ship(menu, COUNT::MAX, ptr::null_mut());
         SetInputCallback(Some(on_input_frame));
         SetFlashRect(MENU_3DO);
         (*menu).Initialized = 1;
     } else if cancel || (select && (*menu).CurState == SHIPYARD_EXIT) {
-        return ExitShipyard(menu);
+        return exit_shipyard(menu);
     } else if select {
         if (*menu).CurState != SHIPYARD_SAVELOAD {
             (*menu).Initialized = 0;
-            DoModifyShips(menu);
+            do_modify_ships(menu);
         } else {
             if GameOptions() == 0 {
-                return ExitShipyard(menu);
+                return exit_shipyard(menu);
             }
             DrawMenuStateStrings(PM_CREW as BYTE, (*menu).CurState as i16);
             SetFlashRect(MENU_3DO);

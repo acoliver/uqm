@@ -111,7 +111,7 @@ fn dagger_is_launched_with_the_c_missile_block() {
         let _battle = Battlefield::new(QUEUE_SLOTS + 5);
         unsafe {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_SYREEN_ID, 0);
-            ship.ship_mut().ShipFacing = 4;
+            ship.ship_mut().ship_facing = 4;
             ship.element_mut().next.location = POINT { x: 1000, y: 2000 };
             let slots = ship.weapon(1);
             let daggers = [ship.weapon_record(slots[0]).cast()];

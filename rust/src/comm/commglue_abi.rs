@@ -2,7 +2,9 @@
 
 use crate::c_bindings::global_state::NUMBER_SPEECH_DESC;
 #[cfg(not(test))]
-use crate::engine::battle::record::Kernel;
+use crate::engine::World;
+#[cfg(not(test))]
+use crate::engine::{Kernel, WorldData};
 
 /// Collect one-based phrase indices in the same recursive order as NPCNumberPhrase.
 unsafe fn number_phrases(
@@ -71,20 +73,23 @@ pub(crate) mod runtime {
 
     use crate::strings::string_table::SetRelStringTableIndex;
 
-    extern "C" {
-        static mut GlobData: crate::ships::native::abi::GLOBDATA;
-
-    }
-
     fn get(key: &str) -> u8 {
         let (first, last) =
             crate::state::game_state_keys::bit_range(key).expect("known comm state");
-        unsafe { crate::state::ffi::rust_get_game_state_bits(first as i32, last as i32) }
+        {
+            World::current().read(|world| {
+                crate::state::ffi::rust_get_game_state_bits(world, first as i32, last as i32)
+            })
+        }
     }
     fn set(key: &str, value: u8) {
         let (first, last) =
             crate::state::game_state_keys::bit_range(key).expect("known comm state");
-        unsafe { crate::state::ffi::rust_set_game_state_bits(first as i32, last as i32, value) }
+        {
+            World::current().write(|world| {
+                crate::state::ffi::rust_set_game_state_bits(world, first as i32, last as i32, value)
+            })
+        }
     }
 
     /// # Safety
@@ -123,6 +128,7 @@ pub(crate) mod runtime {
     /// Buffer must hold the complete alliance name, including commander and suffix.
     #[no_mangle]
     pub unsafe extern "C" fn GetAllianceName(buffer: *mut c_char, first: u16) {
+        let world = WorldData::current();
         let variant = get("NEW_ALLIANCE_NAME");
         let entry = SetAbsStringTableIndex(
             (COMM_DATA.conversation_phrases).cast(),
@@ -130,7 +136,10 @@ pub(crate) mod runtime {
         );
         libc::strcpy(buffer, GetStringAddress(entry));
         if variant == 3 {
-            libc::strcat(buffer, (&raw const GlobData.SIS_state.CommanderName).cast());
+            libc::strcat(
+                buffer,
+                (&raw const (**world).flagship.commander_name).cast(),
+            );
             libc::strcat(buffer, GetStringAddress(SetRelStringTableIndex(entry, 1)));
         }
     }
@@ -143,13 +152,13 @@ pub(crate) mod runtime {
             0 => set("BATTLE_SEGUE", 0),
             1 => set("BATTLE_SEGUE", 1),
             2 => {
-                Kernel::current().instant_victory = 1;
+                (**Kernel::current()).instant_victory = 1;
                 set("BATTLE_SEGUE", 1);
             }
             3 => {
                 set("BATTLE_SEGUE", 0);
-                GlobData.SIS_state.CrewEnlisted = u16::MAX;
-                GlobData.Game_state.CurrentActivity |= 0x2000;
+                (**WorldData::current()).flagship.crew_enlisted = u16::MAX;
+                (**WorldData::current()).game.current_activity |= 0x2000;
             }
             _ => unreachable!("invalid Segue"),
         }
@@ -160,14 +169,14 @@ pub(crate) mod runtime {
     #[no_mangle]
     pub unsafe extern "C" fn getSegue() -> i32 {
         if get("BATTLE_SEGUE") == 0 {
-            if GlobData.SIS_state.CrewEnlisted == u16::MAX
-                && GlobData.Game_state.CurrentActivity & 0x2000 != 0
+            if WorldData::current().read(|owner| owner.flagship.crew_enlisted) == u16::MAX
+                && WorldData::current().read(|owner| owner.game.current_activity) & 0x2000 != 0
             {
                 3
             } else {
                 0
             }
-        } else if Kernel::current().instant_victory != 0 {
+        } else if Kernel::current().read(|owner| owner.instant_victory) != 0 {
             2
         } else {
             1

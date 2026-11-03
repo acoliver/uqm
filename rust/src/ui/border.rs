@@ -1,6 +1,6 @@
 //! Flagship screen border, ported from uqm/border.c.
-#![allow(non_snake_case)]
 use super::util::live::DrawStarConBox;
+use crate::engine::Kernel;
 use crate::navigation::abi::*;
 fn color(r: u8, g: u8, b: u8) -> Color {
     Color {
@@ -12,13 +12,13 @@ fn color(r: u8, g: u8, b: u8) -> Color {
 }
 /// # Safety
 /// Initialized graphics and SIS contexts must be accessed on the game thread.
-pub unsafe fn InitSISContexts() {
+pub unsafe fn init_siscontexts(kernel: &mut crate::engine::Kernel) {
     let mut r: RECT = std::mem::zeroed();
 
-    SetContext(StatusContext);
+    SetContext(kernel.status_context);
 
-    SetContext(SpaceContext);
-    SetContextFGFrame(Screen);
+    SetContext(kernel.space_context);
+    SetContextFGFrame(kernel.screen);
 
     r.corner.x = 7;
     r.corner.y = 10;
@@ -29,10 +29,10 @@ pub unsafe fn InitSISContexts() {
 
 /// # Safety
 /// Initialized graphics and SIS contexts must be accessed on the game thread.
-pub unsafe fn DrawSISFrame() {
+pub unsafe fn draw_sisframe() {
     let mut r: RECT = std::mem::zeroed();
 
-    SetContext(ScreenContext);
+    SetContext(Kernel::current().read(|owner| owner.screen_context));
 
     BatchGraphics();
     {
@@ -185,7 +185,7 @@ pub unsafe fn DrawSISFrame() {
         DrawFilledRectangle(&mut r);
     }
 
-    InitSISContexts();
+    Kernel::current().write(|kernel| init_siscontexts(kernel));
     ClearSISRect(DRAW_SIS_DISPLAY as u8);
 
     UnbatchGraphics();

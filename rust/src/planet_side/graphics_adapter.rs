@@ -1,5 +1,7 @@
 //! Production surface drawing adapter over low-level graphics services.
 
+#[cfg(not(test))]
+use crate::engine::Kernel as KernelOwner;
 use std::collections::HashMap;
 use std::ffi::c_void;
 
@@ -140,13 +142,14 @@ use crate::planets::scan::live::RedrawSurfaceScan;
 #[cfg(not(test))]
 extern "C" {
     static mut PlanetContext: *mut crate::graphics::native_abi::context_desc;
-    static mut RadarContext: *mut crate::graphics::native_abi::context_desc;
+
 }
 #[cfg(not(test))]
 use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 
 impl<A: PlanetSideAssetAccess> PlanetSideGraphics for CffiPlanetSideGraphics<'_, A> {
     fn render(&mut self, snapshot: &RenderSnapshot) -> Result<(), AdapterError> {
+        #[cfg(not(test))]
         #[cfg(not(test))]
         unsafe {
             {
@@ -203,7 +206,8 @@ impl<A: PlanetSideAssetAccess> PlanetSideGraphics for CffiPlanetSideGraphics<'_,
             let lander_base_for_meters =
                 self.assets.graphic(super::resources::LanderGraphic::Lander);
             if !lander_base_for_meters.is_null() {
-                let old_radar_ctx = SetContext(RadarContext);
+                let old_radar_ctx =
+                    SetContext(KernelOwner::current().read(|owner| owner.radar_context));
                 BatchGraphics();
                 draw_cargo_meters(lander_base_for_meters, snapshot);
                 draw_crew_meter(lander_base_for_meters, snapshot.lander.crew.get());

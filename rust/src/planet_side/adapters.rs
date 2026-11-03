@@ -7,6 +7,10 @@ use super::simulation::FrameInput;
 use crate::c_bindings::controller_input::{CurrentInputState, CONTROL_TEMPLATE_NUM_TEMPLATES};
 #[cfg(not(test))]
 use crate::c_bindings::player_control_template;
+#[cfg(not(test))]
+use crate::engine::World as WorldOwner;
+#[cfg(not(test))]
+use crate::engine::WorldData as WorldFields;
 
 #[cfg(not(test))]
 const KEY_UP: usize = 0;
@@ -51,22 +55,18 @@ impl PlanetSideInput for CffiPlanetSideInput {
 #[cfg(not(test))]
 use crate::mainloop::input_abi::live::UpdateInputState;
 #[cfg(not(test))]
+#[cfg(not(test))]
+use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
+#[cfg(not(test))]
 use crate::time::counter_abi::GetTimeCounter;
 #[cfg(not(test))]
 use crate::ui::sis::capacity::GetStorageBayCapacity;
 #[cfg(not(test))]
+use crate::ui::sis::draw_landers;
+#[cfg(not(test))]
 use crate::ui::sis::DeltaSISGauges;
 #[cfg(not(test))]
-use crate::ui::sis::DrawLanders;
-#[cfg(not(test))]
 use crate::ui::sis::DrawStorageBays;
-#[cfg(not(test))]
-extern "C" {
-    #[link_name = "GlobData"]
-    static mut GLOB_DATA: crate::ships::native::abi::GLOBDATA;
-}
-#[cfg(not(test))]
-use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
 
 #[cfg(not(test))]
 fn read_player_one_input() -> FrameInput {
@@ -86,7 +86,9 @@ fn read_player_one_input() -> FrameInput {
             thrust: key[KEY_UP] != 0,
             fire: key[KEY_WEAPON] != 0,
             takeoff: key[KEY_ESCAPE] != 0 || key[KEY_SPECIAL] != 0,
-            abort: crate::mainloop::c_extern::get_current_activity() & 0x4000 != 0,
+            abort: WorldOwner::current().read(crate::mainloop::c_extern::get_current_activity)
+                & 0x4000
+                != 0,
         }
     }
 }
@@ -130,14 +132,16 @@ impl CffiShipStatus {
     #[must_use]
     pub fn snapshot(&self) -> ShipStatus {
         #[cfg(not(test))]
+        #[cfg(not(test))]
         unsafe {
-            let sis = std::ptr::addr_of!(GLOB_DATA.SIS_state).read();
+            let world = WorldFields::current();
+            let sis = std::ptr::addr_of!((**world).flagship).read();
             ShipStatus {
-                crew_enlisted: sis.CrewEnlisted,
-                landers: sis.NumLanders,
-                total_element_mass: sis.TotalElementMass,
-                element_amounts: sis.ElementAmounts,
-                total_bio_mass: sis.TotalBioMass,
+                crew_enlisted: sis.crew_enlisted,
+                landers: sis.num_landers,
+                total_element_mass: sis.total_element_mass,
+                element_amounts: sis.element_amounts,
+                total_bio_mass: sis.total_bio_mass,
             }
         }
         #[cfg(test)]
@@ -156,7 +160,7 @@ impl CffiShipStatus {
     #[must_use]
     pub fn storage_capacity(&self) -> u16 {
         #[cfg(not(test))]
-        unsafe {
+        {
             GetStorageBayCapacity()
         }
         #[cfg(test)]
@@ -169,27 +173,30 @@ impl CffiShipStatus {
 impl ShipStatusPort for CffiShipStatus {
     fn apply(&mut self, delta: &ShipDelta) -> Result<(), AdapterError> {
         #[cfg(not(test))]
+        #[cfg(not(test))]
         unsafe {
             if delta.crew != 0 {
                 DeltaSISGauges(delta.crew, 0, 0);
             }
-
-            let sis = std::ptr::addr_of_mut!(GLOB_DATA.SIS_state);
-            if delta.landers < 0 {
-                (*sis).NumLanders = (*sis)
-                    .NumLanders
-                    .saturating_sub(delta.landers.unsigned_abs());
-                DrawLanders();
-            } else if delta.landers > 0 {
-                (*sis).NumLanders = (*sis).NumLanders.saturating_add(delta.landers as u8);
-                DrawLanders();
+            WorldFields::current().write(|world| {
+                let sis = &mut world.flagship;
+                if delta.landers < 0 {
+                    sis.num_landers = sis.num_landers.saturating_sub(delta.landers.unsigned_abs());
+                } else if delta.landers > 0 {
+                    sis.num_landers = sis.num_landers.saturating_add(delta.landers as u8);
+                }
+            });
+            if delta.landers != 0 {
+                draw_landers();
             }
-
-            for (current, added) in (*sis).ElementAmounts.iter_mut().zip(delta.element_amounts) {
-                *current = current.saturating_add(added);
-            }
-            (*sis).TotalElementMass = (*sis).TotalElementMass.saturating_add(delta.element_mass);
-            (*sis).TotalBioMass = (*sis).TotalBioMass.saturating_add(delta.biological_mass);
+            WorldFields::current().write(|world| {
+                let sis = &mut world.flagship;
+                for (current, added) in sis.element_amounts.iter_mut().zip(delta.element_amounts) {
+                    *current = current.saturating_add(added);
+                }
+                sis.total_element_mass = sis.total_element_mass.saturating_add(delta.element_mass);
+                sis.total_bio_mass = sis.total_bio_mass.saturating_add(delta.biological_mass);
+            });
             if delta.element_mass != 0 {
                 DrawStorageBays(0);
             }

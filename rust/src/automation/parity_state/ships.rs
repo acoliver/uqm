@@ -242,7 +242,7 @@ mod tests {
         let mut state: ShipRecord = unsafe { std::mem::zeroed() };
         state.SpeciesID = SPECIES_ID_EARTHLING_ID;
         state.playerNr = 1;
-        state.ShipFacing = 31;
+        state.ship_facing = 31;
         state.crew_level = 17;
         let mut queue = crate::engine::battle::link_queue::RacePool::with_capacity(1, 1);
         let id = queue.fixture_pool().alloc(state).unwrap();

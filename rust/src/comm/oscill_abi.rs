@@ -8,6 +8,7 @@ fn button_y(y: i32, button_height: i16, slider_height: i16) -> i16 {
 pub(crate) mod runtime {
     use super::button_y;
     use crate::comm::locdata::{CColor, CPoint, CStamp};
+    use crate::engine::Kernel;
     use crate::graphics::context_abi::SetContextClipRect;
     use crate::graphics::drawable_abi::SetContextFGFrame;
     use crate::graphics::native_abi::frame_desc;
@@ -39,10 +40,6 @@ pub(crate) mod runtime {
 
     use crate::sound::heart_ffi::GraphForegroundStream;
 
-    extern "C" {
-        static mut OffScreenContext: *mut crate::graphics::native_abi::context_desc;
-        static mut usingSpeech: u32;
-    }
     use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 
     static mut SCOPE_FRAME: *mut frame_desc = null_mut();
@@ -116,10 +113,10 @@ pub(crate) mod runtime {
             data.as_mut_ptr(),
             SCOPE_WIDTH.into(),
             SCOPE_HEIGHT.into(),
-            usingSpeech as i32,
+            Kernel::current().read(|owner| owner.using_speech) as i32,
         ) != 0
         {
-            let old = SetContext(OffScreenContext);
+            let old = SetContext(Kernel::current().read(|owner| owner.off_screen_context));
             SetContextFGFrame(SCOPE_WORK);
             SetContextClipRect(std::ptr::null_mut());
             stamp.frame = SCOPE_FRAME.cast();

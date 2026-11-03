@@ -26,19 +26,16 @@ pub mod hyper_units;
 pub mod hyperspace;
 pub mod initial_state;
 pub mod interplanetary;
+mod portal;
 
 #[cfg(not(test))]
-pub(crate) fn get(name: &str) -> u8 {
-    let (start, end) = crate::state::game_state::lookup_game_state_bits(name)
-        .expect("navigation state key exists");
-    unsafe { crate::state::ffi::rust_get_game_state_bits(start as i32, end as i32) }
+pub(crate) fn get(world: &crate::engine::World, key: crate::engine::StoryKey) -> u8 {
+    world.story_state(key) as u8
 }
 
 #[cfg(not(test))]
-pub(crate) fn set(name: &str, value: u8) {
-    let (start, end) = crate::state::game_state::lookup_game_state_bits(name)
-        .expect("navigation state key exists");
-    unsafe { crate::state::ffi::rust_set_game_state_bits(start as i32, end as i32, value) }
+pub(crate) fn set(world: &mut crate::engine::World, key: crate::engine::StoryKey, value: u8) {
+    world.set_story_state(key, u32::from(value));
 }
 
 fn color(r: u8, g: u8, b: u8) -> crate::graphics::native_abi::Color {

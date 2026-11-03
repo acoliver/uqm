@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use super::metrics::Measurement;
 
+mod projection;
 mod scoped;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -16,7 +17,9 @@ pub fn phase(name: &str) -> Result<&'static str, String> {
         "bridge_calls" => Ok("phase-6"),
         "legacy_hooks" | "stage_b_raw" => Ok("phase-2"),
         "planned_engine_core" => Ok("phase-4"),
-        _ => access_phase(name).ok_or_else(|| format!("unknown transition budget {name}")),
+        _ => access_phase(name)
+            .or_else(|| projection::ends(name))
+            .ok_or_else(|| format!("unknown transition budget {name}")),
     }
 }
 
@@ -358,3 +361,7 @@ mod access_budget_tests;
 #[cfg(test)]
 #[path = "owner_budget_tests.rs"]
 mod owner_budget_tests;
+
+#[cfg(test)]
+#[path = "projection_budget_tests.rs"]
+mod projection_budget_tests;

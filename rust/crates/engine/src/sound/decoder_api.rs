@@ -29,7 +29,6 @@ struct Registry {
     formats: TFB_DecoderFormats,
     flags: c_int,
 }
-unsafe impl Send for Registry {}
 static REGISTRY: OnceLock<Mutex<Registry>> = OnceLock::new();
 fn registry() -> &'static Mutex<Registry> {
     REGISTRY.get_or_init(|| {
@@ -134,6 +133,12 @@ pub unsafe extern "C" fn SoundDecoder_Rewind(d: *mut TFB_SoundDecoder) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn registry_is_send_through_its_field_types() {
+        fn assert_send<T: Send>() {}
+        assert_send::<Registry>();
+    }
 
     #[test]
     fn registry_lifecycle_accepts_shared_formats_with_rust_signatures() {

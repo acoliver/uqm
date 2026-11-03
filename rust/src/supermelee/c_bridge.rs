@@ -15,21 +15,16 @@ pub const SUPER_MELEE: u8 = 1;
 // ---------------------------------------------------------------------------
 
 #[cfg(not(test))]
-pub use crate::ui::settings::StopMusic;
+pub use crate::ui::settings::stop_music;
 #[cfg(test)]
 extern "C" {
-    pub fn StopMusic();
+    pub fn stop_music();
 }
 pub use crate::sound::heart_ffi::stop_sound as StopSound;
 
 // ---------------------------------------------------------------------------
 // Global state (from globdata.h)
 // ---------------------------------------------------------------------------
-
-extern "C" {
-    /// PlayerControl array — `BYTE PlayerControl[NUM_PLAYERS]`
-    pub static mut PlayerControl: [u8; 2];
-}
 
 // ---------------------------------------------------------------------------
 // UIO directory for melee files

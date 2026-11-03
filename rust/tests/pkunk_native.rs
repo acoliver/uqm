@@ -192,7 +192,7 @@ impl<'a> Ship<'a> {
     /// The ship `new_pkunk` leaves behind: appearing with hTarget set.
     unsafe fn reincarnating(&mut self, x: COORD, y: COORD, facing: COUNT) {
         self.at(x, y);
-        self.inner.ship_mut().ShipFacing = facing;
+        self.inner.ship_mut().ship_facing = facing;
         (*self.ptr()).state_flags = (PLAYER_SHIP | APPEARING) as u16;
         (*self.ptr()).life = NORMAL_LIFE as COUNT;
         (*self.ptr()).target = Some(shared::id((self.handle).cast()));
@@ -561,7 +561,7 @@ fn bug_missiles_launch_fore_left_and_right_inheriting_ship_velocity() {
             let mut ship = Ship::new(&_battle, 1);
             for facing in 0..16u16 {
                 for ship_speed in [0i16, 14] {
-                    ship.inner.ship_mut().ShipFacing = facing;
+                    ship.inner.ship_mut().ship_facing = facing;
                     ship.at(321, -654);
                     SetVelocityVector(
                         &raw mut (*ship.ptr()).velocity,
@@ -643,7 +643,7 @@ fn bug_missile_allocation_failure_leaves_null_slots_but_still_reports_three() {
         let _battle = Battle::with_capacity(2);
         unsafe {
             let mut ship = Ship::new(&_battle, 0);
-            ship.inner.ship_mut().ShipFacing = 6;
+            ship.inner.ship_mut().ship_facing = 6;
             let mut out = [1usize as HLINK; 3];
             let count = ship.fire(&mut out);
             assert_eq!(count, 3);
@@ -819,7 +819,7 @@ fn reincarnation_preprocess_queues_four_trails_around_the_ship() {
                     (PLAYER_SHIP | APPEARING | NONSOLID | FINITE_LIFE | CHANGING) as u16
                 );
                 assert_eq!(
-                    ship.inner.ship_mut().ShipFacing,
+                    ship.inner.ship_mut().ship_facing,
                     facing,
                     "facing is restored"
                 );
@@ -1208,7 +1208,7 @@ fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
             ship.inner.ship_mut().energy_counter = 9;
             ship.inner.ship_mut().weapon_counter = 9;
             ship.inner.ship_mut().special_counter = 9;
-            ship.inner.ship_mut().ShipFacing = 3;
+            ship.inner.ship_mut().ship_facing = 3;
             (*el).hits = 7;
             (*el).turn = 9;
             (*el).thrust = 9;
@@ -1288,7 +1288,7 @@ fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
             assert_eq!((*el).turn, 0);
             assert_eq!((*el).thrust, 0);
             assert_eq!((*el).life, 1);
-            assert_eq!(ship.inner.ship_mut().ShipFacing, facing);
+            assert_eq!(ship.inner.ship_mut().ship_facing, facing);
             assert_eq!((*el).current.image.frames, ship.inner.frame_set(0));
             assert_eq!(frame_index((*el).current.image.frame.raw()), facing);
             assert_eq!((*prim(el)).Type, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
@@ -1359,7 +1359,7 @@ fn new_pkunk_redraws_its_position_while_a_planet_pulls_on_it() {
                 (x2, y2),
                 "the candidate on top of the planet is rejected"
             );
-            assert_eq!(ship.inner.ship_mut().ShipFacing, (draws[0] & 15) as u16);
+            assert_eq!(ship.inner.ship_mut().ship_facing, (draws[0] & 15) as u16);
         }
     })
 }

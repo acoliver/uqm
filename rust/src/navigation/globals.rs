@@ -1,43 +1,21 @@
 //! Ownership and lifecycle of the live navigation world, ported from globdata.c.
 
-#![allow(non_snake_case)]
-
 use super::abi::*;
-use crate::state::ffi;
+use crate::engine::StoryKey;
 use std::{mem, ptr};
 
-#[no_mangle]
-pub static mut GlobData: crate::ships::native::abi::GLOBDATA = unsafe { mem::zeroed() };
-#[no_mangle]
-pub static mut RadarContext: CONTEXT = ptr::null_mut();
-#[no_mangle]
-pub static mut PlayFrame: FRAME = ptr::null_mut();
-
-/// # Safety
-/// Game-thread access to the initialized state singleton.
-#[no_mangle]
-pub unsafe extern "C" fn getGameState(start: i32, end: i32) -> u8 {
-    ffi::rust_get_game_state_bits(start, end)
-}
-/// # Safety
-/// Game-thread access to the initialized state singleton.
-#[no_mangle]
-pub unsafe extern "C" fn setGameState(start: i32, end: i32, value: u8) {
-    ffi::rust_set_game_state_bits(start, end, value);
-}
-
-unsafe fn create_radar() {
-    if RadarContext.is_null() {
+unsafe fn create_radar(kernel: &mut crate::engine::Kernel) {
+    if kernel.radar_context.is_null() {
         #[cfg(feature = "debug-process")]
         {
-            RadarContext = CreateContextAux(c"RadarContext".as_ptr());
+            kernel.radar_context = CreateContextAux(c"RadarContext".as_ptr());
         }
         #[cfg(not(feature = "debug-process"))]
         {
-            RadarContext = CreateContextAux();
+            (*kernel).radar_context = CreateContextAux();
         }
-        let old = SetContext(RadarContext);
-        SetContextFGFrame(Screen);
+        let old = SetContext(kernel.radar_context);
+        SetContextFGFrame(kernel.screen);
         let mut rect = RECT {
             corner: POINT {
                 x: (4 + ScreenWidth - STATUS_WIDTH as i32 - SAFE_X as i32) as i16,
@@ -55,25 +33,27 @@ unsafe fn create_radar() {
 
 /// # Safety
 /// Resource system and screen contexts must be initialized on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn LoadSC2Data() -> BOOLEAN {
-    if FlagStatFrame.is_null() {
-        FlagStatFrame =
+pub unsafe fn load_sc2_data(cx: &mut crate::engine::battle::Cx<'_>) -> BOOLEAN {
+    let kernel = cx.kernel();
+    let world = &raw mut cx.world.data;
+    if (*kernel).flag_stat_frame.is_null() {
+        (*kernel).flag_stat_frame =
             CaptureDrawable(LoadGraphicInstance(c"graphics.flagshipstatus".as_ptr()).cast());
-        if FlagStatFrame.is_null() {
+        if (*kernel).flag_stat_frame.is_null() {
             return 0;
         }
-        MiscDataFrame = CaptureDrawable(LoadGraphicInstance(c"graphics.miscdata".as_ptr()).cast());
-        if MiscDataFrame.is_null() {
+        (*kernel).misc_data_frame =
+            CaptureDrawable(LoadGraphicInstance(c"graphics.miscdata".as_ptr()).cast());
+        if (*kernel).misc_data_frame.is_null() {
             return 0;
         }
-        FontGradFrame =
+        (*kernel).font_grad_frame =
             CaptureDrawable(LoadGraphicInstance(c"graphics.fontgradient".as_ptr()).cast());
     }
-    create_radar();
-    if GlobData.Game_state.CurrentActivity as u8 == IN_HYPERSPACE as u8 {
-        GlobData.Game_state.ShipStamp.origin.x = -1;
-        GlobData.Game_state.ShipStamp.origin.y = -1;
+    create_radar(cx.kernel);
+    if (*world).game.current_activity as u8 == IN_HYPERSPACE as u8 {
+        (*world).game.ship_stamp.origin.x = -1;
+        (*world).game.ship_stamp.origin.y = -1;
     }
     1
 }
@@ -89,16 +69,14 @@ unsafe fn copy_fleet(dst: *mut FLEET_INFO, src: *const SHIP_INFO, fleet: *const 
     (*dst).known_loc = (*fleet).known_loc;
 }
 
-/// # Safety
-/// Game-thread initialization, before any world queues have been allocated.
-#[no_mangle]
-pub unsafe extern "C" fn InitGameStructures() -> BOOLEAN {
-    InitGlobData();
-    PlayFrame = CaptureDrawable(LoadGraphicInstance(c"graphics.playmenu".as_ptr()).cast());
+unsafe fn initialize_races(cx: &mut crate::engine::battle::Cx<'_>) {
     let mut species = SPECIES_ID_ARILOU_ID;
     let count = SPECIES_ID_KOHR_AH_ID - species + 1 + 2;
-    let queue = ptr::addr_of_mut!(GlobData.Game_state.avail_race_q);
-    InitQueue(queue, count as u16, mem::size_of::<FLEET_INFO>() as u16);
+    InitQueue(
+        &raw mut cx.world.data.game.avail_race_q,
+        count as u16,
+        mem::size_of::<FLEET_INFO>() as u16,
+    );
     for i in 0..count {
         let ship = if i < count - 2 {
             let value = species;
@@ -109,19 +87,20 @@ pub unsafe extern "C" fn InitGameStructures() -> BOOLEAN {
         } else {
             SPECIES_ID_UR_QUAN_PROBE_ID
         };
-        let handle = AllocLink(queue);
+        let handle = AllocLink(&raw mut cx.world.data.game.avail_race_q);
         if handle.is_null() {
             continue;
         }
         let fleet = handle.cast::<FLEET_INFO>();
         (*fleet).SpeciesID = ship;
         if i < count - 1 {
-            let master = find_master_ship(ship).unwrap_or_else(|| panic!("master species {ship}"));
+            let master = find_master_ship(cx.kernel, ship)
+                .unwrap_or_else(|| panic!("master species {ship}"));
             copy_fleet(fleet, &master.info, &master.fleet);
         } else {
-            if let Some(desc) = load_ship(ship, 0) {
+            if let Some(desc) = load_ship(cx.world, ship, 0) {
                 copy_fleet(fleet, desc.info(), desc.fleet());
-                unload_ship(desc, 0, 0);
+                unload_ship(cx.world, desc, 0, 0);
             }
         }
         (*fleet).allied_state = BAD_GUY as u16;
@@ -135,128 +114,157 @@ pub unsafe extern "C" fn InitGameStructures() -> BOOLEAN {
         (*fleet).growth_err_term = 127;
         (*fleet).days_left = 0;
         (*fleet).func_index = u8::MAX;
-        PutQueue(queue, handle);
+        PutQueue(&raw mut cx.world.data.game.avail_race_q, handle);
     }
-    InitSISContexts();
-    LoadSC2Data();
-    InitPlanetInfo();
-    InitGroupInfo(1);
-    let state = ptr::addr_of_mut!(GlobData.Game_state);
-    let sis = ptr::addr_of_mut!(GlobData.SIS_state);
-    (*state).glob_flags = 0;
-    (*state).ElementWorth = [1, 2, 3, 4, 5, 6, 8, 25];
-    (*sis).ElementAmounts = [0; 8];
-    super::initial_state::equipment(&mut *sis);
-    InitQueue(
-        &mut (*state).built_ship_q,
-        MAX_BUILT_SHIPS as u16,
-        mem::size_of::<SHIP_FRAGMENT>() as u16,
-    );
-    InitQueue(
-        &mut (*state).npc_built_ship_q,
-        MAX_SHIPS_PER_SIDE as u16,
-        mem::size_of::<SHIP_FRAGMENT>() as u16,
-    );
-    InitQueue(
-        &mut (*state).ip_group_q,
-        MAX_BATTLE_GROUPS as u16,
-        mem::size_of::<IP_GROUP>() as u16,
-    );
-    InitQueue(
-        &mut (*state).encounter_q,
-        MAX_ENCOUNTERS as u16,
-        mem::size_of::<ENCOUNTER>() as u16,
-    );
-    (*state).CurrentActivity = (IN_INTERPLANETARY | START_INTERPLANETARY) as u16;
-    super::initial_state::prices(&mut *sis, &mut *state);
-    utf8StringCopy(
-        ((*sis).ShipName.as_mut_ptr()).cast(),
-        mem::size_of_val(&(*sis).ShipName),
-        (GetStringAddress(SetAbsStringTableIndex(
-            GameStrings,
-            (NAMING_STRING_BASE + 2) as u16,
-        )))
-        .cast(),
-    );
-    utf8StringCopy(
-        ((*sis).CommanderName.as_mut_ptr()).cast(),
-        mem::size_of_val(&(*sis).CommanderName),
-        (GetStringAddress(SetAbsStringTableIndex(
-            GameStrings,
-            (NAMING_STRING_BASE + 3) as u16,
-        )))
-        .cast(),
-    );
-    SetRaceAllied(HUMAN_SHIP as u16, 1);
-    CloneShipFragment(HUMAN_SHIP as u16, &mut (*state).built_ship_q, 0);
-    (*sis).log_x = crate::planets::universe_units::universe_to_logx(SOL_X as i16);
-    (*sis).log_y = crate::planets::universe_units::universe_to_logy(SOL_Y as i16);
-    crate::planets::starmap::CurStarDescPtr = ptr::null_mut();
-    (*state).autopilot = POINT { x: -1, y: -1 };
-    1
+}
+
+/// # Safety
+/// Game-thread initialization, before any world queues have been allocated.
+#[no_mangle]
+pub unsafe extern "C" fn InitGameStructures() -> BOOLEAN {
+    // SAFETY: the lifecycle borrows owners from Cx; callbacks republish it synchronously.
+    crate::app::bridge::enter(|cx| {
+        init_glob_data(cx.world);
+        cx.kernel.play_frame =
+            CaptureDrawable(LoadGraphicInstance(c"graphics.playmenu".as_ptr()).cast());
+        // SAFETY: initialized master templates and the owned World remain live through construction.
+        unsafe {
+            initialize_races(cx);
+        }
+        init_siscontexts(cx.kernel);
+        load_sc2_data(cx);
+        let catalog = crate::planets::starmap::current_catalog()
+            .unwrap_or_else(|| panic!("planet state initialization requires the star catalog"));
+        crate::state::ffi::rust_init_planet_info(
+            cx.world,
+            crate::planets::starmap::catalog_star_count(catalog) as i32,
+        );
+        init_group_info(cx.world, 1);
+        let strings = cx.kernel.game_strings;
+        let state = &raw mut cx.world.data.game;
+        let sis = &raw mut cx.world.data.flagship;
+        (*state).glob_flags = 0;
+        (*state).element_worth = [1, 2, 3, 4, 5, 6, 8, 25];
+        (*sis).element_amounts = [0; 8];
+        super::initial_state::equipment(&mut *sis);
+        InitQueue(
+            &mut (*state).built_ship_q,
+            MAX_BUILT_SHIPS as u16,
+            mem::size_of::<SHIP_FRAGMENT>() as u16,
+        );
+        InitQueue(
+            &mut (*state).npc_built_ship_q,
+            MAX_SHIPS_PER_SIDE as u16,
+            mem::size_of::<SHIP_FRAGMENT>() as u16,
+        );
+        InitQueue(
+            &mut (*state).ip_group_q,
+            MAX_BATTLE_GROUPS as u16,
+            mem::size_of::<IP_GROUP>() as u16,
+        );
+        InitQueue(
+            &mut (*state).encounter_q,
+            MAX_ENCOUNTERS as u16,
+            mem::size_of::<ENCOUNTER>() as u16,
+        );
+        (*state).current_activity = (IN_INTERPLANETARY | START_INTERPLANETARY) as u16;
+        super::initial_state::prices(&mut *sis, &mut *state);
+        utf8StringCopy(
+            ((*sis).ship_name.as_mut_ptr()).cast(),
+            mem::size_of_val(&(*sis).ship_name),
+            (GetStringAddress(SetAbsStringTableIndex(
+                strings,
+                (NAMING_STRING_BASE + 2) as u16,
+            )))
+            .cast(),
+        );
+        utf8StringCopy(
+            ((*sis).commander_name.as_mut_ptr()).cast(),
+            mem::size_of_val(&(*sis).commander_name),
+            (GetStringAddress(SetAbsStringTableIndex(
+                strings,
+                (NAMING_STRING_BASE + 3) as u16,
+            )))
+            .cast(),
+        );
+        set_race_allied(cx.world, HUMAN_SHIP as u16, 1);
+        let state = &raw mut cx.world.data.game;
+        let sis = &raw mut cx.world.data.flagship;
+        {
+            CloneShipFragment(
+                &mut (*state).avail_race_q,
+                HUMAN_SHIP as u16,
+                &mut (*state).built_ship_q,
+                0,
+            );
+        }
+        (*sis).log_x = crate::planets::universe_units::universe_to_logx(SOL_X as i16);
+        (*sis).log_y = crate::planets::universe_units::universe_to_logy(SOL_Y as i16);
+        cx.world
+            .select_star(None, crate::planets::starmap::current_catalog());
+        cx.world.data.game.autopilot = POINT { x: -1, y: -1 };
+        1
+    })
 }
 
 /// # Safety
 /// No renderer may be using these contexts or resources.
-pub unsafe fn FreeSC2Data() {
-    DestroyContext(RadarContext);
-    RadarContext = ptr::null_mut();
-    DestroyDrawable(ReleaseDrawable(FontGradFrame));
-    FontGradFrame = ptr::null_mut();
-    DestroyDrawable(ReleaseDrawable(MiscDataFrame));
-    MiscDataFrame = ptr::null_mut();
-    DestroyDrawable(ReleaseDrawable(FlagStatFrame));
-    FlagStatFrame = ptr::null_mut();
+pub unsafe fn free_sc2_data(kernel: &mut crate::engine::Kernel) {
+    DestroyContext(kernel.radar_context);
+    kernel.radar_context = ptr::null_mut();
+    DestroyDrawable(ReleaseDrawable(kernel.font_grad_frame));
+    kernel.font_grad_frame = ptr::null_mut();
+    DestroyDrawable(ReleaseDrawable(kernel.misc_data_frame));
+    kernel.misc_data_frame = ptr::null_mut();
+    DestroyDrawable(ReleaseDrawable(kernel.flag_stat_frame));
+    kernel.flag_stat_frame = ptr::null_mut();
 }
 
 /// # Safety
 /// The initialized game structures must no longer be in use.
-pub unsafe fn UninitGameStructures() {
-    let state = ptr::addr_of_mut!(GlobData.Game_state);
-    UninitQueue(ptr::addr_of_mut!((*state).encounter_q));
-    UninitQueue(ptr::addr_of_mut!((*state).ip_group_q));
-    UninitQueue(ptr::addr_of_mut!((*state).npc_built_ship_q));
-    UninitQueue(ptr::addr_of_mut!((*state).built_ship_q));
-    UninitGroupInfo();
-    UninitPlanetInfo();
-    let probe = (*state).avail_race_q.tail.cast::<FLEET_INFO>();
-    if !probe.is_null() {
-        DestroyDrawable(ReleaseDrawable((*probe).melee_icon));
-        DestroyDrawable(ReleaseDrawable((*probe).icons));
-        DestroyStringTable(ReleaseStringTable((*probe).race_strings));
-    }
-    UninitQueue(ptr::addr_of_mut!((*state).avail_race_q));
-    DestroyDrawable(ReleaseDrawable(PlayFrame));
-    PlayFrame = ptr::null_mut();
+pub unsafe fn uninit_game_structures() {
+    // SAFETY: the lifecycle borrows owners from Cx; callbacks republish it synchronously.
+    crate::app::bridge::enter(|cx| {
+        let kernel = cx.kernel();
+        let world = &raw mut cx.world.data;
+        let state = ptr::addr_of_mut!((*world).game);
+        UninitQueue(ptr::addr_of_mut!((*state).encounter_q));
+        UninitQueue(ptr::addr_of_mut!((*state).ip_group_q));
+        UninitQueue(ptr::addr_of_mut!((*state).npc_built_ship_q));
+        UninitQueue(ptr::addr_of_mut!((*state).built_ship_q));
+        uninit_group_info(cx.world);
+        uninit_planet_info(cx.world);
+        let probe = (*state).avail_race_q.tail.cast::<FLEET_INFO>();
+        if !probe.is_null() {
+            DestroyDrawable(ReleaseDrawable((*probe).melee_icon));
+            DestroyDrawable(ReleaseDrawable((*probe).icons));
+            DestroyStringTable(ReleaseStringTable((*probe).race_strings));
+        }
+        UninitQueue(ptr::addr_of_mut!((*state).avail_race_q));
+        DestroyDrawable(ReleaseDrawable((*kernel).play_frame));
+        (*kernel).play_frame = ptr::null_mut();
+    })
 }
 
-/// # Safety
-/// Existing world resources must have been released before resetting their owner.
-pub unsafe fn InitGlobData() {
-    let flags = GlobData.Game_state.glob_flags;
-    ptr::write_bytes(ptr::addr_of_mut!(GlobData), 0, 1);
-    GlobData.Game_state.glob_flags = flags;
-    ffi::rust_init_game_state();
-    crate::engine::battle::access::lifecycle::bind_display_array(&mut *ptr::addr_of_mut!(
-        GlobData.Game_state
-    ));
+/// Reset campaign values, retaining the caller’s global flags. Queue/resource
+/// teardown is a separate lifecycle step; this does not release those handles.
+pub fn init_glob_data(world: &mut crate::engine::World) {
+    let flags = world.data.game.glob_flags;
+    world.data = crate::engine::WorldData::new();
+    world.data.game.glob_flags = flags;
+    world.story = Some(crate::engine::world::story::GameState::new());
+    world.files.canned_nodes.clear();
+    crate::engine::battle::access::lifecycle::bind_display_array(&mut world.data.game);
 }
 
-/// # Safety
-/// Game-thread access to the live activity.
-#[no_mangle]
-pub unsafe extern "C" fn inHQSpace() -> BOOLEAN {
-    u32::from(GlobData.Game_state.CurrentActivity as u8 as u32 == IN_HYPERSPACE)
+pub fn in_hqspace(world: &crate::engine::World) -> BOOLEAN {
+    u32::from(world.activity() as u8 as u32 == IN_HYPERSPACE)
 }
-/// # Safety
-/// Game-thread access to the live activity and game-state bits.
-#[no_mangle]
-pub unsafe extern "C" fn inHyperSpace() -> BOOLEAN {
-    u32::from(inHQSpace() != 0 && ffi::rust_get_game_state_bits(42, 43) <= 1)
+
+pub fn in_hyper_space(world: &crate::engine::World) -> BOOLEAN {
+    u32::from(in_hqspace(world) != 0 && world.story_state(StoryKey::ARILOU_SPACE_SIDE) <= 1)
 }
-/// # Safety
-/// Game-thread access to the live activity and game-state bits.
-#[no_mangle]
-pub unsafe extern "C" fn inQuasiSpace() -> BOOLEAN {
-    u32::from(inHQSpace() != 0 && ffi::rust_get_game_state_bits(42, 43) > 1)
+
+pub fn in_quasi_space(world: &crate::engine::World) -> BOOLEAN {
+    u32::from(in_hqspace(world) != 0 && world.story_state(StoryKey::ARILOU_SPACE_SIDE) > 1)
 }

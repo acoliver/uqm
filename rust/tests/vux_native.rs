@@ -30,7 +30,7 @@ fn descriptor_laser_and_limpet_launch() {
                 ),
                 (4412, 1558)
             );
-            ship.ship_mut().ShipFacing = 4;
+            ship.ship_mut().ship_facing = 4;
             let h = with_rng(11, 0, || ship.weapon(1))[0];
             let laser = ship.weapon_record(h);
             assert_eq!((*prim(laser)).Type, gfx_object_LINE_PRIM as GRAPHICS_PRIM);
@@ -132,13 +132,19 @@ fn warp_in_is_disabled_in_encounters_and_one_shot_in_melee() {
             (*enemy.ptr()).current.location = POINT { x: 5000, y: 5000 };
             (*enemy.ptr()).next = (*enemy.ptr()).current.clone();
             (*ship.ptr()).state_flags |= APPEARING as u16;
-            let previous = GlobData.Game_state.CurrentActivity;
-            GlobData.Game_state.CurrentActivity = IN_ENCOUNTER as _;
+            let previous = (**uqm_rust::engine::WorldData::current())
+                .game
+                .current_activity;
+            (**uqm_rust::engine::WorldData::current())
+                .game
+                .current_activity = IN_ENCOUNTER as _;
             with_rng(42, 0, || ship.preprocess());
             assert_eq!((*ship.ptr()).current.location.x, 4000);
             assert_eq!(ship.descriptor_mut().callbacks()[1], 0);
             ship.descriptor_mut().race_callbacks.pre = uqm_rust::engine::battle::Selection::Default;
-            GlobData.Game_state.CurrentActivity = 0;
+            (**uqm_rust::engine::WorldData::current())
+                .game
+                .current_activity = 0;
             TFB_SeedRandom(42);
             let raw_x = 5000 - 832 + (TFB_Random() as COUNT) % 1664;
             let raw_y = 5000 - 832 + (TFB_Random() as COUNT) % 1664;
@@ -156,7 +162,7 @@ fn warp_in_is_disabled_in_encounters_and_one_shot_in_melee() {
                 (5000 - i32::from(raw_x)) as SIZE,
                 (5000 - i32::from(raw_y)) as SIZE,
             ))));
-            assert_eq!(ship.ship_mut().ShipFacing, face);
+            assert_eq!(ship.ship_mut().ship_facing, face);
             assert_eq!(frame_index((*ship.ptr()).current.image.frame.raw()), face);
             assert!((*ship.ptr()).target.is_none());
             assert_eq!(ship.descriptor_mut().callbacks()[1], 0);
@@ -164,7 +170,9 @@ fn warp_in_is_disabled_in_encounters_and_one_shot_in_melee() {
                 (*ship.ptr()).IntersectControl.EndPoint.x,
                 (x >> ONE_SHIFT) as i16
             );
-            GlobData.Game_state.CurrentActivity = previous;
+            (**uqm_rust::engine::WorldData::current())
+                .game
+                .current_activity = previous;
         }
     })
 }

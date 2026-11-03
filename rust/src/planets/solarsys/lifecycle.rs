@@ -3,6 +3,7 @@
 use super::drawing::*;
 use super::flight::*;
 use super::*;
+use crate::engine::{Kernel, StoryKey, World, WorldData};
 
 use crate::battle::gendef::getGenerateFunctions;
 use crate::c_bindings::controller_input as input;
@@ -16,7 +17,6 @@ use crate::planets::devices::DevicesMenu;
 use crate::planets::ffi::do_planetary_analysis_c;
 use crate::planets::starmap::FindStar;
 use crate::sound::heart_ffi::PLRPlaying;
-use crate::state::game_state_keys::{get_game_state, set_game_state};
 use crate::strings::string_table::{GetStringAddress, SetAbsStringTableIndex};
 use std::ffi::c_char;
 use std::mem::MaybeUninit;
@@ -70,9 +70,9 @@ mod ffi {
 
     pub(super) use crate::graphics::drawable_abi::SetContextFGFrame;
     pub(super) use crate::time::counter_abi::GetTimeCounter;
-    pub(super) use crate::ui::border::DrawSISFrame;
-    pub(super) use crate::ui::settings::StopMusic;
-    pub(super) use crate::ui::sis::RepairSISBorder;
+    pub(super) use crate::ui::border::draw_sisframe;
+    pub(super) use crate::ui::settings::stop_music;
+    pub(super) use crate::ui::sis::repair_sisborder;
 
     pub(super) use crate::graphics::drawable_abi::DestroyDrawable;
 
@@ -100,9 +100,9 @@ mod ffi {
 
     pub(super) use crate::navigation::interplanetary::live::do_missions as DoMissions;
 
-    pub(super) use crate::state::c_api::planets::GetPlanetInfo;
+    pub(super) use crate::state::c_api::planets::get_planet_info;
 
-    pub(super) use crate::state::c_api::planets::PutPlanetInfo;
+    pub(super) use crate::state::c_api::planets::put_planet_info;
 
     pub(super) use crate::planets::orbit::live::PlanetOrbitMenu;
 
@@ -123,13 +123,9 @@ mod ffi {
     pub(super) use crate::planets::pstarmap::StarMap;
 
     extern "C" {
-        pub(super) static mut GlobData: crate::ships::native::abi::GLOBDATA;
-        pub(super) static mut CurStarDescPtr: *mut crate::savegame::runtime::star::CStarDesc;
-        pub(super) static mut LastActivity: c::ACTIVITY;
+
         pub(super) static mut NextActivity: c::ACTIVITY;
-        pub(super) static mut SpaceContext: *mut crate::graphics::native_abi::context_desc;
-        pub(super) static mut Screen: *mut c::FRAME_DESC;
-        pub(super) static mut GameStrings: c::STRING;
+
         pub(super) static mut optWhichMenu: i32;
     }
     pub(super) use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
@@ -137,8 +133,9 @@ mod ffi {
 }
 
 #[inline]
-pub(super) unsafe fn glob() -> *mut crate::ships::native::abi::GLOBDATA {
-    ptr::addr_of_mut!(ffi::GlobData)
+#[track_caller]
+pub(super) fn glob() -> crate::engine::Projection<crate::engine::WorldData> {
+    WorldData::current()
 }
 
 #[inline]
@@ -192,14 +189,14 @@ pub(super) unsafe fn init_solar_sys_sis_characteristics() {
     let state = system();
     let mut num_thrusters = 0_u8;
     for i in 0..11 {
-        if (*glob()).SIS_state.DriveSlots[i] == FUSION_THRUSTER {
+        if glob().read(|owner| owner.flagship.drive_slots[i]) == FUSION_THRUSTER {
             num_thrusters += 1;
         }
     }
     (*state).max_ship_speed = (num_thrusters + 5) * IP_SHIP_THRUST_INCREMENT;
     (*state).turn_wait = IP_SHIP_TURN_WAIT;
     for i in 0..8 {
-        if (*glob()).SIS_state.JetSlots[i] == TURNING_JETS {
+        if glob().read(|owner| owner.flagship.jet_slots[i]) == TURNING_JETS {
             (*state).turn_wait = (*state).turn_wait.wrapping_sub(IP_SHIP_TURN_DECREMENT);
         }
     }
@@ -216,25 +213,24 @@ pub(super) unsafe fn load_solar_sys() -> *mut c::PLANET_DESC {
 
     let state = system();
     let mut orbital = ptr::null_mut();
-    (*SysGenRNG).reseed(GetRandomSeedForStar(ffi::CurStarDescPtr.cast()));
-    SUN_FRAME = SetAbsFrameIndex(
-        SUN_FRAME.cast(),
-        u16::from(((*ffi::CurStarDescPtr).star_type & 0x18) >> 3),
-    )
-    .cast();
+    let star = World::current()
+        .read(|world| *world.star_pointer(crate::planets::starmap::current_catalog()));
+    (*SysGenRNG).reseed(GetRandomSeedForStar(ptr::from_ref(&star).cast()));
+    let sun_type = (star.star_type & 0x18) >> 3;
+    SUN_FRAME = SetAbsFrameIndex(SUN_FRAME.cast(), u16::from(sun_type)).cast();
 
     let sun = (*state).SunDesc.as_mut_ptr();
     (*sun).pPrevDesc = ptr::null_mut();
     (*sun).rand_seed = (*SysGenRNG).next_random();
-    (*sun).data_index = ((*ffi::CurStarDescPtr).star_type & 0x18) >> 3;
+    (*sun).data_index = sun_type;
     (*sun).location = c::POINT { x: 0, y: 0 };
     (*sun).image.origin = (*sun).location;
     (*sun).image.frame = SUN_FRAME;
 
     ((*(*state).genFuncs).generatePlanets.unwrap())(state);
-    if get_game_state("PLANETARY_CHANGE") != 0 {
-        ffi::PutPlanetInfo();
-        set_game_state("PLANETARY_CHANGE", 0);
+    if World::current().read(|world| world.story_state(StoryKey::PLANETARY_CHANGE)) != 0 {
+        World::current().write(|world| ffi::put_planet_info(world));
+        World::current().write(|world| world.set_story_state(StoryKey::PLANETARY_CHANGE, 0));
     }
 
     for i in 0..(*state).PlanetDesc.len() {
@@ -257,52 +253,52 @@ pub(super) unsafe fn load_solar_sys() -> *mut c::PLANET_DESC {
     }
     sort_planet_positions();
 
-    if (*glob()).Game_state.ip_planet == 0 {
+    if glob().read(|owner| owner.game.ip_planet) == 0 {
         (*state).pBaseDesc = (*state).PlanetDesc.as_mut_ptr();
         (*state).pOrbitalDesc = ptr::null_mut();
     } else {
-        (*sun).location = c_point((*glob()).Game_state.ip_location);
-        (*glob()).Game_state.ip_location = saved_point(displayToLocation(
-            c_point((*glob()).Game_state.ShipStamp.origin),
+        (*sun).location = c_point(glob().read(|owner| owner.game.ip_location));
+        (**glob()).game.ip_location = saved_point(displayToLocation(
+            c_point(glob().read(|owner| owner.game.ship_stamp.origin)),
             MAX_ZOOM_RADIUS,
         ));
-        let i = usize::from((*glob()).Game_state.ip_planet - 1);
+        let i = usize::from(glob().read(|owner| owner.game.ip_planet) - 1);
         (*state).pOrbitalDesc = (*state).PlanetDesc.as_mut_ptr().add(i);
         generate_moons(state, (*state).pOrbitalDesc);
         (*state).pBaseDesc = (*state).MoonDesc.as_mut_ptr();
-        set_game_state("PLANETARY_LANDING", 0);
+        World::current().write(|world| world.set_story_state(StoryKey::PLANETARY_LANDING, 0));
     }
 
     init_solar_sys_sis_characteristics();
-    if (*glob()).Game_state.in_orbit != 0 {
-        let i = usize::from((*glob()).Game_state.in_orbit - 1);
+    if glob().read(|owner| owner.game.in_orbit) != 0 {
+        let i = usize::from(glob().read(|owner| owner.game.in_orbit) - 1);
         orbital = if i == 0 {
             (*(*state).pBaseDesc).pPrevDesc
         } else {
             (*state).MoonDesc.as_mut_ptr().add(i - 1)
         };
-        (*glob()).Game_state.ip_location = saved_point((*sun).location);
-        (*glob()).Game_state.in_orbit = 0;
+        (**glob()).game.ip_location = saved_point((*sun).location);
+        (**glob()).game.in_orbit = 0;
     } else {
-        let mut i = (*glob()).Game_state.ShipFacing;
+        let mut i = glob().read(|owner| owner.game.ship_facing);
         if i == 0 {
             i += 1;
         }
-        (*glob()).Game_state.ShipStamp.frame = SetAbsFrameIndex(SISIPFRAME.cast(), i - 1).cast();
+        (**glob()).game.ship_stamp.frame = SetAbsFrameIndex(SISIPFRAME.cast(), i - 1).cast();
     }
     orbital
 }
 
 pub(super) unsafe fn save_non_orbital_location() {
-    (*glob()).Game_state.ShipFacing =
-        GetFrameIndex((*glob()).Game_state.ShipStamp.frame.cast()).wrapping_add(1);
-    (*glob()).Game_state.in_orbit = 0;
+    (**glob()).game.ship_facing =
+        GetFrameIndex(glob().read(|owner| owner.game.ship_stamp.frame).cast()).wrapping_add(1);
+    (**glob()).game.in_orbit = 0;
     if !playerInInnerSystem() {
-        (*glob()).Game_state.ip_planet = 0;
+        (**glob()).game.ip_planet = 0;
     } else {
         let state = system();
-        (*glob()).Game_state.ip_planet = (1 + planetIndex(state, (*state).pOrbitalDesc)) as u8;
-        (*glob()).Game_state.ip_location = saved_point((*state).SunDesc[0].location);
+        (**glob()).game.ip_planet = (1 + planetIndex(state, (*state).pOrbitalDesc)) as u8;
+        (**glob()).game.ip_location = saved_point((*state).SunDesc[0].location);
     }
 }
 
@@ -310,13 +306,13 @@ pub(super) unsafe fn free_solar_sys() {
     let state = system();
     if (*state).InIpFlight != 0 {
         (*state).InIpFlight = 0;
-        if (*glob()).Game_state.CurrentActivity & (CHECK_ABORT | CHECK_LOAD) == 0 {
+        if glob().read(|owner| owner.game.current_activity) & (CHECK_ABORT | CHECK_LOAD) == 0 {
             save_non_orbital_location();
         }
     }
     ffi::DestroyDrawable(ReleaseDrawable(SOLAR_SYS_FRAME.cast()).cast());
     SOLAR_SYS_FRAME = ptr::null_mut();
-    ffi::StopMusic();
+    ffi::stop_music();
 }
 
 pub(super) unsafe fn reset_solar_sys() {
@@ -328,7 +324,8 @@ pub(super) unsafe fn reset_solar_sys() {
     check_intersect();
     (*state).InIpFlight = 1;
     if PLRPlaying(usize::MAX as *mut c_void) == 0
-        && (ffi::LastActivity != CHECK_LOAD || ffi::NextActivity != 0)
+        && (Kernel::current().read(|owner| owner.last_activity) != CHECK_LOAD
+            || ffi::NextActivity != 0)
     {
         PlayMusic((SpaceMusic).cast(), 1, 1);
     }
@@ -339,21 +336,22 @@ pub(super) unsafe fn enter_planet_orbit() {
     if (*state).InIpFlight != 0 {
         free_solar_sys();
         if worldIsMoon(state, (*state).pOrbitalDesc) {
-            (*glob()).Game_state.ShipStamp.origin =
-                saved_point((*(*state).pOrbitalDesc).image.origin);
+            (**glob()).game.ship_stamp.origin = saved_point((*(*state).pOrbitalDesc).image.origin);
         } else {
             let (width, height) = sis_dimensions();
-            (*glob()).Game_state.ShipStamp.origin.x = (width >> 1) as _;
-            (*glob()).Game_state.ShipStamp.origin.y = (height >> 1) as _;
+            (**glob()).game.ship_stamp.origin.x = (width >> 1) as _;
+            (**glob()).game.ship_stamp.origin.y = (height >> 1) as _;
         }
     }
 
-    ffi::GetPlanetInfo();
+    World::current().write(|world| ffi::get_planet_info(world));
     ((*(*state).genFuncs).generateOrbital.unwrap())(state, (*state).pOrbitalDesc);
-    ffi::LastActivity &= !(CHECK_LOAD | CHECK_RESTART);
-    if (*glob()).Game_state.CurrentActivity & (CHECK_ABORT | CHECK_LOAD | START_ENCOUNTER) != 0
-        || (*glob()).SIS_state.CrewEnlisted == c::COUNT::MAX
-        || get_game_state("CHMMR_BOMB_STATE") == 2
+    (**Kernel::current()).last_activity &= !(CHECK_LOAD | CHECK_RESTART);
+    if glob().read(|owner| owner.game.current_activity)
+        & (CHECK_ABORT | CHECK_LOAD | START_ENCOUNTER)
+        != 0
+        || glob().read(|owner| owner.flagship.crew_enlisted) == c::COUNT::MAX
+        || World::current().read(|world| world.story_state(StoryKey::CHMMR_BOMB_STATE)) == 2
     {
         return;
     }
@@ -361,8 +359,10 @@ pub(super) unsafe fn enter_planet_orbit() {
         ffi::PlanetOrbitMenu();
         ffi::FreePlanet();
     }
-    if (*glob()).Game_state.CurrentActivity & (START_ENCOUNTER | CHECK_ABORT | CHECK_LOAD) == 0
-        && (*glob()).SIS_state.CrewEnlisted != c::COUNT::MAX
+    if glob().read(|owner| owner.game.current_activity)
+        & (START_ENCOUNTER | CHECK_ABORT | CHECK_LOAD)
+        == 0
+        && glob().read(|owner| owner.flagship.crew_enlisted) != c::COUNT::MAX
     {
         let orbital = load_solar_sys();
         assert!(orbital.is_null());
@@ -370,8 +370,8 @@ pub(super) unsafe fn enter_planet_orbit() {
         validate_orbits();
         validate_inner_orbits();
         reset_solar_sys();
-        ffi::RepairSISBorder();
-        ffi::SetContext(ffi::SpaceContext);
+        ffi::repair_sisborder();
+        ffi::SetContext(Kernel::current().read(|owner| owner.space_context));
         draw_system_transition(playerInInnerSystem());
     }
 }
@@ -381,21 +381,21 @@ pub(super) unsafe fn init_solar_sys() {
     load_lander_data();
 
     let state = system();
-    let reentry = (*glob()).Game_state.ShipFacing != 0;
+    let reentry = glob().read(|owner| owner.game.ship_facing) != 0;
     if !reentry {
-        (*glob()).Game_state.autopilot = CPoint { x: -1, y: -1 };
+        (**glob()).game.autopilot = CPoint { x: -1, y: -1 };
         let (width, height) = sis_dimensions();
-        (*glob()).Game_state.ShipStamp.origin.x = (width >> 1) as _;
-        (*glob()).Game_state.ShipStamp.origin.y = (height - 2) as _;
-        (*glob()).Game_state.ip_location = saved_point(displayToLocation(
-            c_point((*glob()).Game_state.ShipStamp.origin),
+        (**glob()).game.ship_stamp.origin.x = (width >> 1) as _;
+        (**glob()).game.ship_stamp.origin.y = (height - 2) as _;
+        (**glob()).game.ip_location = saved_point(displayToLocation(
+            c_point(glob().read(|owner| owner.game.ship_stamp.origin)),
             MAX_ZOOM_RADIUS,
         ));
     }
 
     STARS_FRAME = create_star_background();
-    ffi::SetContext(ffi::SpaceContext);
-    ffi::SetContextFGFrame(ffi::Screen.cast());
+    ffi::SetContext(Kernel::current().read(|owner| owner.space_context));
+    ffi::SetContextFGFrame(Kernel::current().read(|owner| owner.screen).cast());
     ffi::SetContextBackGroundColor(rgb15(0, 0, 0));
 
     let orbital = load_solar_sys();
@@ -409,28 +409,30 @@ pub(super) unsafe fn init_solar_sys() {
     } else {
         ENCOUNTER_RACE = -1;
         EncounterGroup = 0;
-        (*glob()).Game_state.BattleGroupRef = 0;
-        ReinitQueue(ptr::addr_of_mut!((*glob()).Game_state.ip_group_q).cast());
-        ReinitQueue(ptr::addr_of_mut!((*glob()).Game_state.npc_built_ship_q).cast());
+        (**glob()).game.battle_group_ref = 0;
+        ReinitQueue(ptr::addr_of_mut!((**glob()).game.ip_group_q).cast());
+        ReinitQueue(ptr::addr_of_mut!((**glob()).game.npc_built_ship_q).cast());
         ((*(*state).genFuncs).initNpcs.unwrap())(state);
     }
 
     if !orbital.is_null() {
         enter_orbital(orbital);
     } else {
-        ffi::SetContext(ffi::SpaceContext);
+        ffi::SetContext(Kernel::current().read(|owner| owner.space_context));
         ffi::SetTransitionSource(ptr::null_mut());
         ffi::BatchGraphics();
-        ffi::DrawSISFrame();
+        ffi::draw_sisframe();
         ffi::DrawSISMessage(ptr::null());
         reset_solar_sys();
-        if ffi::LastActivity == CHECK_LOAD | CHECK_RESTART {
+        if Kernel::current().read(|owner| owner.last_activity) == CHECK_LOAD | CHECK_RESTART {
             draw_outer_system();
             ffi::RedrawQueue(0);
             ffi::UnbatchGraphics();
             ffi::FadeScreen(FADE_ALL_TO_COLOR, (ONE_SECOND / 2) as c::SIZE);
-            ffi::LastActivity = 0;
-        } else if ffi::LastActivity == CHECK_LOAD && ffi::NextActivity == 0 {
+            (**Kernel::current()).last_activity = 0;
+        } else if Kernel::current().read(|owner| owner.last_activity) == CHECK_LOAD
+            && ffi::NextActivity == 0
+        {
             ffi::UnbatchGraphics();
         } else {
             if inner_system {
@@ -441,17 +443,17 @@ pub(super) unsafe fn init_solar_sys() {
             ffi::RedrawQueue(0);
             ffi::ScreenTransition(3, ptr::null());
             ffi::UnbatchGraphics();
-            ffi::LastActivity &= !CHECK_LOAD;
+            (**Kernel::current()).last_activity &= !CHECK_LOAD;
         }
     }
 }
 
 pub(super) unsafe fn end_interplanetary() {
-    (*glob()).Game_state.CurrentActivity &= !END_INTERPLANETARY;
-    if (*glob()).Game_state.CurrentActivity & (CHECK_ABORT | CHECK_LOAD) == 0 {
+    (**glob()).game.current_activity &= !END_INTERPLANETARY;
+    if glob().read(|owner| owner.game.current_activity) & (CHECK_ABORT | CHECK_LOAD) == 0 {
         let state = system();
         ((*(*state).genFuncs).uninitNpcs.unwrap())(state);
-        set_game_state("USED_BROADCASTER", 0);
+        World::current().write(|world| world.set_story_state(StoryKey::USED_BROADCASTER, 0));
     }
 }
 
@@ -479,14 +481,19 @@ pub(super) unsafe fn uninit_solar_sys() {
     free_solar_sys();
     ffi::DestroyDrawable(ReleaseDrawable(STARS_FRAME.cast()).cast());
     STARS_FRAME = ptr::null_mut();
-    if (*glob()).Game_state.CurrentActivity & END_INTERPLANETARY != 0 {
+    if glob().read(|owner| owner.game.current_activity) & END_INTERPLANETARY != 0 {
         end_interplanetary();
         return;
     }
-    if (*glob()).Game_state.CurrentActivity & START_ENCOUNTER != 0 && EncounterGroup != 0 {
-        ffi::GetGroupInfo((*glob()).Game_state.BattleGroupRef, EncounterGroup);
-        if (*glob()).Game_state.ip_planet == 0 {
-            let point = c_point((*glob()).Game_state.ShipStamp.origin);
+    if glob().read(|owner| owner.game.current_activity) & START_ENCOUNTER != 0
+        && EncounterGroup != 0
+    {
+        ffi::GetGroupInfo(
+            glob().read(|owner| owner.game.battle_group_ref),
+            EncounterGroup,
+        );
+        if glob().read(|owner| owner.game.ip_planet) == 0 {
+            let point = c_point(glob().read(|owner| owner.game.ship_stamp.origin));
             let planet = closest_planet_interplanetary(&point);
             let state = system();
             ((*(*state).genFuncs).generateName.unwrap())(state, planet);
@@ -506,15 +513,25 @@ pub(super) unsafe fn hyperspace_unit_factors() -> (i32, i32) {
 /// their pointers must remain valid through any input or generator callbacks.
 pub unsafe extern "C" fn ExploreSolarSys() {
     let mut solar_sys_state = MaybeUninit::<c::SOLARSYS_STATE>::uninit();
-    if ffi::CurStarDescPtr.is_null() {
+    if (**World::current())
+        .star_pointer(crate::planets::starmap::current_catalog())
+        .is_null()
+    {
         let (log_units_x, log_units_y) = hyperspace_unit_factors();
         let mut universe = c::POINT {
-            x: (((*glob()).SIS_state.log_x * 6250 + (log_units_x >> 1)) / log_units_x) as _,
-            y: (9999 - ((*glob()).SIS_state.log_y * 625 + (log_units_y >> 1)) / log_units_y) as _,
+            x: ((glob().read(|owner| owner.flagship.log_x) * 6250 + (log_units_x >> 1))
+                / log_units_x) as _,
+            y: (9999
+                - (glob().read(|owner| owner.flagship.log_y) * 625 + (log_units_y >> 1))
+                    / log_units_y) as _,
         };
-        ffi::CurStarDescPtr =
-            FindStar(ptr::null_mut(), ptr::addr_of_mut!(universe).cast(), 1, 1).cast();
-        if ffi::CurStarDescPtr.is_null() {
+        let star = FindStar(ptr::null_mut(), ptr::addr_of_mut!(universe).cast(), 1, 1)
+            .cast::<crate::engine::world::CStarDesc>();
+        (**World::current()).select_star(star.as_ref(), crate::planets::starmap::current_catalog());
+        if (**World::current())
+            .star_pointer(crate::planets::starmap::current_catalog())
+            .is_null()
+        {
             crate::log_abi::log_message(1, "ExploreSolarSys(): do not know where you are!");
             #[cfg(feature = "debug-process")]
             libc::abort();
@@ -523,15 +540,19 @@ pub unsafe extern "C" fn ExploreSolarSys() {
         }
     }
     let (log_units_x, log_units_y) = hyperspace_unit_factors();
-    (*glob()).SIS_state.log_x =
-        (i32::from((*ffi::CurStarDescPtr).star_pt.x) * log_units_x + (6250 >> 1)) / 6250;
-    (*glob()).SIS_state.log_y =
-        ((9999 - i32::from((*ffi::CurStarDescPtr).star_pt.y)) * log_units_y + (625 >> 1)) / 625;
+    World::current().write(|world| {
+        let star = &*world.star_pointer(crate::planets::starmap::current_catalog());
+        world.data.flagship.log_x = (i32::from(star.star_pt.x) * log_units_x + (6250 >> 1)) / 6250;
+        world.data.flagship.log_y =
+            ((9999 - i32::from(star.star_pt.y)) * log_units_y + (625 >> 1)) / 625;
+    });
 
     // DoInput runs callbacks synchronously; this storage stays live through teardown.
     P_SOLAR_SYS_STATE = solar_sys_state.as_mut_ptr();
     ptr::write_bytes(P_SOLAR_SYS_STATE, 0, 1);
-    (*P_SOLAR_SYS_STATE).genFuncs = getGenerateFunctions((*ffi::CurStarDescPtr).index).cast();
+    let index = World::current()
+        .read(|world| (*world.star_pointer(crate::planets::starmap::current_catalog())).index);
+    (*P_SOLAR_SYS_STATE).genFuncs = getGenerateFunctions(index).cast();
     init_solar_sys();
     ffi::SetMenuSounds(MENU_SOUND_NONE, MENU_SOUND_NONE);
     (*P_SOLAR_SYS_STATE).InputFunc = Some(do_ip_flight);
@@ -541,18 +562,26 @@ pub unsafe extern "C" fn ExploreSolarSys() {
 }
 
 pub(super) unsafe fn game_string(index: c::COUNT) -> *mut c_char {
-    GetStringAddress(SetAbsStringTableIndex(ffi::GameStrings.cast(), index))
+    GetStringAddress(SetAbsStringTableIndex(
+        Kernel::current().read(|owner| owner.game_strings).cast(),
+        index,
+    ))
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn GetNamedPlanetaryBody() -> *mut c::UNICODE {
-    if ffi::CurStarDescPtr.is_null() || !playerInSolarSystem() || !playerInInnerSystem() {
+    if (**World::current())
+        .star_pointer(crate::planets::starmap::current_catalog())
+        .is_null()
+        || !playerInSolarSystem()
+        || !playerInInnerSystem()
+    {
         return ptr::null_mut();
     }
     let state = system();
     let orbital = (*state).pOrbitalDesc;
     assert!(!orbital.is_null());
-    match (*ffi::CurStarDescPtr).index {
+    match (*(**World::current()).star_pointer(crate::planets::starmap::current_catalog())).index {
         SOL_DEFINED => {
             let planet = planetIndex(state, orbital);
             if worldIsPlanet(state, orbital) {
@@ -589,32 +618,32 @@ pub unsafe extern "C" fn SaveSolarSysLocation() {
     if !playerInPlanetOrbit() {
         save_non_orbital_location();
     } else {
-        if get_game_state("PLANETARY_CHANGE") != 0 {
-            ffi::PutPlanetInfo();
-            set_game_state("PLANETARY_CHANGE", 0);
+        if World::current().read(|world| world.story_state(StoryKey::PLANETARY_CHANGE)) != 0 {
+            World::current().write(|world| ffi::put_planet_info(world));
+            World::current().write(|world| world.set_story_state(StoryKey::PLANETARY_CHANGE, 0));
         }
-        assert!((*glob()).Game_state.ip_planet != 0);
+        assert!((**glob()).game.ip_planet != 0);
         let mut moon = 1_u8;
         let state = system();
         if worldIsMoon(state, (*state).pOrbitalDesc) {
             moon = (u16::from(moon) + moonIndex(state, (*state).pOrbitalDesc)) as u8;
             moon = moon.wrapping_add(1);
         }
-        (*glob()).Game_state.in_orbit = moon;
+        (**glob()).game.in_orbit = moon;
     }
 }
 
 pub(super) unsafe extern "C" fn do_solar_sys_menu(menu: *mut c::MENU_STATE) -> c::BOOLEAN {
     let mut select = input::PulsedInputState.menu[KEY_MENU_SELECT] as c::BOOLEAN;
-    if (*glob()).Game_state.CurrentActivity & (CHECK_ABORT | CHECK_LOAD) != 0
-        || (*glob()).SIS_state.CrewEnlisted == c::COUNT::MAX
+    if glob().read(|owner| owner.game.current_activity) & (CHECK_ABORT | CHECK_LOAD) != 0
+        || glob().read(|owner| owner.flagship.crew_enlisted) == c::COUNT::MAX
     {
         return 0;
     }
     if ffi::DoMenuChooser(menu, PM_STARMAP) != 0 {
         return 1;
     }
-    if ffi::LastActivity == CHECK_LOAD {
+    if Kernel::current().read(|owner| owner.last_activity) == CHECK_LOAD {
         select = 1;
     }
     if select == 0 {
@@ -624,7 +653,7 @@ pub(super) unsafe extern "C" fn do_solar_sys_menu(menu: *mut c::MENU_STATE) -> c
     match (*menu).CurState {
         EQUIP_DEVICE => {
             select = DevicesMenu() as c::BOOLEAN;
-            if (*glob()).Game_state.CurrentActivity & START_ENCOUNTER != 0 {
+            if glob().read(|owner| owner.game.current_activity) & START_ENCOUNTER != 0 {
                 return 0;
             }
         }
@@ -637,17 +666,17 @@ pub(super) unsafe extern "C" fn do_solar_sys_menu(menu: *mut c::MENU_STATE) -> c
         }
         STARMAP => {
             ffi::StarMap();
-            if (*glob()).Game_state.CurrentActivity & CHECK_ABORT != 0 {
+            if glob().read(|owner| owner.game.current_activity) & CHECK_ABORT != 0 {
                 return 0;
             }
-            ffi::SetContext(ffi::SpaceContext);
+            ffi::SetContext(Kernel::current().read(|owner| owner.space_context));
             draw_system_transition(playerInInnerSystem());
             return 0;
         }
         NAVIGATION => return 0,
         _ => {}
     }
-    if (*glob()).Game_state.CurrentActivity & CHECK_ABORT == 0 {
+    if glob().read(|owner| owner.game.current_activity) & CHECK_ABORT == 0 {
         if select != 0 {
             if ffi::optWhichMenu != OPT_PC {
                 (*menu).CurState = NAVIGATION;
@@ -661,7 +690,7 @@ pub(super) unsafe extern "C" fn do_solar_sys_menu(menu: *mut c::MENU_STATE) -> c
 
 pub(super) unsafe fn solar_sys_menu() {
     let mut menu: c::MENU_STATE = std::mem::zeroed();
-    if ffi::LastActivity == CHECK_LOAD {
+    if Kernel::current().read(|owner| owner.last_activity) == CHECK_LOAD {
         menu.CurState = GAME_MENU;
     } else {
         ffi::DrawMenuStateStrings(PM_STARMAP, i16::from(STARMAP));
@@ -681,7 +710,7 @@ pub(super) unsafe extern "C" fn do_ip_flight(state: *mut c::SOLARSYS_STATE) -> c
         enter_planet_orbit();
         ffi::SetMenuSounds(MENU_SOUND_NONE, MENU_SOUND_NONE);
         (*state).InOrbit = 0;
-    } else if cancel != 0 || ffi::LastActivity == CHECK_LOAD {
+    } else if cancel != 0 || Kernel::current().read(|owner| owner.last_activity) == CHECK_LOAD {
         solar_sys_menu();
         ffi::SetMenuSounds(MENU_SOUND_NONE, MENU_SOUND_NONE);
     } else {
@@ -690,8 +719,8 @@ pub(super) unsafe extern "C" fn do_ip_flight(state: *mut c::SOLARSYS_STATE) -> c
         ffi::SleepThreadUntil(NEXT_TIME);
         NEXT_TIME = ffi::GetTimeCounter().wrapping_add(IP_FRAME_RATE);
     }
-    ((*glob()).Game_state.CurrentActivity
+    (glob().read(|owner| owner.game.current_activity)
         & (START_ENCOUNTER | END_INTERPLANETARY | CHECK_ABORT | CHECK_LOAD)
         == 0
-        && (*glob()).SIS_state.CrewEnlisted != c::COUNT::MAX) as c::BOOLEAN
+        && glob().read(|owner| owner.flagship.crew_enlisted) != c::COUNT::MAX) as c::BOOLEAN
 }

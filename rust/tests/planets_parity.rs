@@ -15,10 +15,13 @@ mod planets_common;
 #[path = "planets_special/mod.rs"]
 mod planets_special;
 
+#[path = "support/battle_context.rs"]
+mod battle_context;
 #[path = "planets_render/sphere_geometry.rs"]
 mod sphere_geometry_parity;
 #[path = "planets_render/topography.rs"]
 mod topography_parity;
+
 use std::ffi::c_void;
 use std::fmt::Write as _;
 use std::path::PathBuf;
@@ -41,7 +44,7 @@ use uqm_rust::savegame::runtime::star::{CStarDesc, CATALOG_LEN};
 unsafe extern "C" {
     static mut SysGenRNG: *mut RandomContext;
     static mut pSolarSysState: *mut SOLARSYS_STATE;
-    static mut CurStarDescPtr: *mut c_void;
+
     static mut ScreenWidth: i32;
     static planet_array: [PlanetFrame; 59];
     static element_array: [u8; 133];
@@ -170,27 +173,51 @@ fn exported_topography_reproduces_the_fixture(table: &[PlanetFrame]) {
 
 struct ExportedGenerators {
     state: Box<SOLARSYS_STATE>,
-    /// Fake `STAR_DESC`: `POINT` then `Type`.
-    star: Box<[u8; 8]>,
+    /// The fixture star occupies slot zero of this retained catalog.
+    star: Box<[CStarDesc; CATALOG_LEN]>,
+    previous_catalog: *mut CStarDesc,
+    previous_star: Option<uqm_rust::engine::StarId>,
 }
 
 impl ExportedGenerators {
     fn new() -> Self {
         let mut state: Box<SOLARSYS_STATE> = Box::new(unsafe { std::mem::zeroed() });
-        let star = Box::new([0u8; 8]);
+
         unsafe {
             SysGenRNG = uqm_rust::math::new_context();
             // `MAP_WIDTH` derives from the screen width the graphics init sets.
             ScreenWidth = 320;
             pSolarSysState = &mut *state;
         }
-        Self { state, star }
+        // SAFETY: the serialized harness saves the catalog it restores before its backing storage is dropped.
+        let previous_catalog = unsafe { uqm_rust::planets::starmap::star_array };
+        let previous_star = uqm_rust::engine::World::current().read(|world| world.current_star);
+        // SAFETY: the serialized harness copies the initialized integer-only catalog.
+        let mut star = Box::new(unsafe { starmap_array });
+        // SAFETY: a star record contains only integer fields; zero initializes its fixture values.
+        star[0] = unsafe { std::mem::zeroed() };
+        Self {
+            state,
+            star,
+            previous_catalog,
+            previous_star,
+        }
     }
 
     fn set_star(&mut self, size: u8, star_type: u8) {
         self.state.SunDesc[0].data_index = size;
-        self.star[4] = star_type;
-        unsafe { CurStarDescPtr = self.star.as_mut_ptr().cast() };
+        self.star[0].star_type = star_type;
+        unsafe {
+            uqm_rust::planets::starmap::star_array = self.star.as_mut_ptr();
+            (**uqm_rust::engine::World::current()).select_star(
+                (self
+                    .star
+                    .as_mut_ptr()
+                    .cast::<uqm_rust::engine::world::CStarDesc>())
+                .as_ref(),
+                uqm_rust::planets::starmap::current_catalog(),
+            );
+        }
     }
 }
 
@@ -398,34 +425,36 @@ fn check_fixture(name: &str, text: &str) {
 /// `SysGenRNG`), so the comparisons must not run in parallel.
 #[test]
 fn exported_symbols_reproduce_the_c_fixtures() {
-    let table = unsafe { &planet_array }.as_slice();
-    let mut exports = ExportedGenerators::new();
-    let base = table.as_ptr() as usize;
-    gravity_and_random_locations_agree();
+    battle_context::run(|| {
+        let table = unsafe { &planet_array }.as_slice();
+        let mut exports = ExportedGenerators::new();
+        let base = table.as_ptr() as usize;
+        gravity_and_random_locations_agree();
 
-    // The planet-frame table the fixtures carry must be the C table.
-    check_fixture("plan_data.txt", &render_plan_data(table));
-    exported_topography_reproduces_the_fixture(table);
+        // The planet-frame table the fixtures carry must be the C table.
+        check_fixture("plan_data.txt", &render_plan_data(table));
+        exported_topography_reproduces_the_fixture(table);
 
-    let worlds = collect(world_cases(false), world_cases(true), |case| {
-        world_line(&mut exports, case, base)
-    });
-    let orbits = collect(orbit_cases(false), orbit_cases(true), |case| {
-        orbit_line(&mut exports, case)
-    });
-    check_fixture("worlds.txt", &render_fixture(&worlds));
-    check_fixture("orbits.txt", &render_fixture(&orbits));
-    exported_default_generator_reproduces_the_fixtures(&mut exports);
-    planets_special::special_generators_match_the_c_originals();
-    planets_special::mycon_matches_the_c_original(table);
-    planets_special::late_generators_match(table);
-    planets_special::sol_matches_the_c_original(table);
-    oval_parity::exported_ovals_match_original_c_full_offscreen_buffers();
-    topography_parity::full_c_fixture_core_and_host_parity();
-    sphere_geometry_parity::original_c_and_rust_match_fixture_without_rng_effects();
-    assert!(unsafe {
-        GenerateDefault_pickupMinerals(&mut *exports.state, std::ptr::null_mut(), 0)
-            && GenerateDefault_pickupLife(&mut *exports.state, std::ptr::null_mut(), 0)
+        let worlds = collect(world_cases(false), world_cases(true), |case| {
+            world_line(&mut exports, case, base)
+        });
+        let orbits = collect(orbit_cases(false), orbit_cases(true), |case| {
+            orbit_line(&mut exports, case)
+        });
+        check_fixture("worlds.txt", &render_fixture(&worlds));
+        check_fixture("orbits.txt", &render_fixture(&orbits));
+        exported_default_generator_reproduces_the_fixtures(&mut exports);
+        planets_special::special_generators_match_the_c_originals();
+        planets_special::mycon_matches_the_c_original(table);
+        planets_special::late_generators_match(table);
+        planets_special::sol_matches_the_c_original(table);
+        oval_parity::exported_ovals_match_original_c_full_offscreen_buffers();
+        topography_parity::full_c_fixture_core_and_host_parity();
+        sphere_geometry_parity::original_c_and_rust_match_fixture_without_rng_effects();
+        assert!(unsafe {
+            GenerateDefault_pickupMinerals(&mut *exports.state, std::ptr::null_mut(), 0)
+                && GenerateDefault_pickupLife(&mut *exports.state, std::ptr::null_mut(), 0)
+        });
     });
 }
 
@@ -518,5 +547,15 @@ fn plandata_tables_equal_the_c_originals() {
         ("plan_data.txt", render_plan_data(frames)),
     ] {
         check_fixture(name, &text);
+    }
+}
+
+impl Drop for ExportedGenerators {
+    fn drop(&mut self) {
+        // SAFETY: the enclosing serialized test retains the published game.
+        unsafe {
+            uqm_rust::planets::starmap::star_array = self.previous_catalog;
+            (**uqm_rust::engine::World::current()).current_star = self.previous_star;
+        }
     }
 }

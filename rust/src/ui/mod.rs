@@ -19,7 +19,11 @@ pub mod shipstat;
 pub mod sis;
 pub(crate) mod sis_capacity_math;
 
+mod flagship_stats;
 pub mod outfit;
+mod outfit_state;
 pub mod shipyard;
+#[path = "shipyard/hangar.rs"]
+mod shipyard_hangar;
 pub(crate) mod shipyard_layout;
 pub mod starbase;

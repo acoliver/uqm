@@ -28,27 +28,17 @@
 
 use std::fmt;
 
-use crate::comm::dispatch::CPoint;
 use crate::savegame::types::{Point, StarDesc};
 
-/// `NUM_SOLAR_SYSTEMS` (starmap.h).
-pub const NUM_SOLAR_SYSTEMS: usize = 502;
+/// The systems, a sentinel, the quasispace portals and a second sentinel.
+pub use crate::engine::world::CATALOG_LEN;
 /// `NUM_HYPER_VORTICES` (starmap.c, inside `FindStar`): the index of the last
 /// quasispace portal, so the portals number one more.
-pub const NUM_HYPER_VORTICES: usize = 15;
-/// The systems, a sentinel, the quasispace portals and a second sentinel.
-pub const CATALOG_LEN: usize = NUM_SOLAR_SYSTEMS + 1 + (NUM_HYPER_VORTICES + 1) + 1;
+pub use crate::engine::world::NUM_HYPER_VORTICES;
+/// `NUM_SOLAR_SYSTEMS` (starmap.h).
+pub use crate::engine::world::NUM_SOLAR_SYSTEMS;
 
-/// C: `STAR_DESC` (planets.h).
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct CStarDesc {
-    pub star_pt: CPoint,
-    pub star_type: u8,
-    pub index: u8,
-    pub prefix: u8,
-    pub postfix: u8,
-}
+pub use crate::engine::world::CStarDesc;
 
 const _: () = {
     assert!(std::mem::size_of::<CStarDesc>() == 8);

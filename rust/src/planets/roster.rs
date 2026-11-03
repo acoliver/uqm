@@ -81,6 +81,7 @@ pub(crate) mod live {
     use crate::collections::queue::{CountLinks, Queue};
     use crate::comm::dispatch::{get_star_ship_from_index, CFleetInfo, CShipFragment};
     use crate::comm::locdata::CRect;
+    use crate::engine::WorldData as WorldFields;
     use crate::mainloop::restart_menu::c_extern::DoInput;
     use crate::starbase::cffi::CffiPlatform;
     use crate::starbase::gfx::{ContextId, FlashTarget, Gfx, Point, Rect, Rgba, Stamp};
@@ -100,10 +101,6 @@ pub(crate) mod live {
 
     use crate::battle::sounds::engine::PlayMenuSound;
 
-    extern "C" {
-        static mut GlobData: crate::ships::native::abi::GLOBDATA;
-    }
-
     #[repr(C)]
     struct Menu {
         input: unsafe extern "C" fn(*mut Menu) -> i32,
@@ -115,7 +112,7 @@ pub(crate) mod live {
     }
 
     unsafe fn support_ship(menu: &Menu) -> *mut CShipFragment {
-        let mut link = GlobData.Game_state.built_ship_q.head;
+        let mut link = WorldFields::current().read(|owner| owner.game.built_ship_q.head);
         let mut index = 0;
         while !link.is_null() {
             let ship = link.cast::<CShipFragment>();
@@ -165,8 +162,13 @@ pub(crate) mod live {
         if ship.is_null() {
             return false;
         }
-        let queue = std::ptr::addr_of!(GlobData.Game_state.avail_race_q).cast::<Queue>();
-        let template = get_star_ship_from_index(queue, (*ship).race_id).cast::<CFleetInfo>();
+        let template = WorldFields::current().read(|world| {
+            get_star_ship_from_index(
+                std::ptr::addr_of!(world.game.avail_race_q).cast::<Queue>(),
+                (*ship).race_id,
+            )
+            .cast::<CFleetInfo>()
+        });
         if !transfer_crew(&mut (*ship).crew_level, (*template).crew_level, delta) {
             return false;
         }
@@ -216,7 +218,7 @@ pub(crate) mod live {
 
     unsafe extern "C" fn modify(menu: *mut Menu) -> i32 {
         let menu = &mut *menu;
-        if GlobData.Game_state.CurrentActivity & (1 << 14) != 0 {
+        if WorldFields::current().read(|owner| owner.game.current_activity) & (1 << 14) != 0 {
             return 0;
         }
         let pulse = std::ptr::addr_of!(PulsedInputState).read();
@@ -245,13 +247,15 @@ pub(crate) mod live {
             let mut delta = 0;
             let mut failed = false;
             if up {
-                if GlobData.SIS_state.CrewEnlisted != 0 {
+                if WorldFields::current().read(|owner| owner.flagship.crew_enlisted) != 0 {
                     delta = 1;
                 } else {
                     failed = true;
                 }
             } else if down {
-                if GlobData.SIS_state.CrewEnlisted < GetCrewPodCapacity() {
+                if WorldFields::current().read(|owner| owner.flagship.crew_enlisted)
+                    < GetCrewPodCapacity()
+                {
                     delta = -1;
                 } else {
                     failed = true;
@@ -283,8 +287,10 @@ pub(crate) mod live {
     /// # Safety
     /// Call on the game thread with campaign globals and screen resources initialized.
     pub unsafe extern "C" fn RosterMenu() -> i32 {
-        let count = CountLinks(std::ptr::addr_of!(GlobData.Game_state.built_ship_q).cast::<Queue>())
-            as usize;
+        let world = WorldFields::current();
+        let count =
+            CountLinks(std::ptr::addr_of!((**world).game.built_ship_q).cast::<Queue>()) as usize;
+        drop(world);
         if count == 0 {
             return 0;
         }

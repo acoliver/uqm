@@ -2,6 +2,8 @@
 // @plan PLAN-20260314-COMM.P04
 // @requirement DS-REQ-005, DS-REQ-006, DS-REQ-007, DS-REQ-008, DS-REQ-009, DS-REQ-010
 
+#[cfg(not(test))]
+use crate::engine::WorldData;
 use std::ffi::c_void;
 
 /// Callback type for phrase completion notification.
@@ -37,13 +39,10 @@ unsafe fn ptr_to_string(ptr: *const u8) -> Option<String> {
 /// `phrases_handle` must be a valid conversation phrases handle or null.
 #[cfg(not(test))]
 pub unsafe fn resolve_phrase(phrases_handle: *const c_void, index: i32) -> Option<String> {
+    let world = WorldData::current();
     use crate::strings::string_table::SetAbsStringTableIndex;
 
     use crate::strings::string_table::GetStringAddress;
-
-    extern "C" {
-        static mut GlobData: crate::ships::native::abi::GLOBDATA;
-    }
 
     if index == PHRASE_NOOP {
         return None;
@@ -51,11 +50,11 @@ pub unsafe fn resolve_phrase(phrases_handle: *const c_void, index: i32) -> Optio
 
     unsafe {
         let ptr = if index == GLOBAL_PLAYER_NAME {
-            // Direct GlobData.SIS_state.CommanderName access
-            std::ptr::addr_of_mut!(GlobData.SIS_state.CommanderName) as *const u8
+            // Direct GlobData.flagship.commander_name access
+            std::ptr::addr_of_mut!((**world).flagship.commander_name) as *const u8
         } else if index == GLOBAL_SHIP_NAME {
-            // Direct GlobData.SIS_state.ShipName access
-            std::ptr::addr_of_mut!(GlobData.SIS_state.ShipName) as *const u8
+            // Direct GlobData.flagship.ship_name access
+            std::ptr::addr_of_mut!((**world).flagship.ship_name) as *const u8
         } else if index < 0 {
             crate::comm::ffi::get_alliance_name(index)
         } else if !phrases_handle.is_null() {

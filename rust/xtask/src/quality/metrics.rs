@@ -85,6 +85,7 @@ const REPORT_METRICS: &[&str] = &[
     "hook_calls",
     "queue_calls",
     "bridge_calls",
+    "owner_projections",
     "legacy_hooks",
     "unsafe_fn",
     "unsafe_fn_lines",

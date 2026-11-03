@@ -5,7 +5,7 @@ use uqm_rust::battle::gendef::*;
 use uqm_rust::planets::generate::late_exports::*;
 use uqm_rust::planets::generate::vtable::{GenerateFunctions, DEFAULT_HOOKS};
 use uqm_rust::planets::surface::BIOLOGICAL_SCAN;
-use uqm_rust::state::game_state_keys::{get_game_state, set_game_state};
+use uqm_rust::state::game_state_keys::get_game_state;
 
 fn slots(table: &GenerateFunctions) -> [usize; 13] {
     [
@@ -83,9 +83,15 @@ pub fn check() {
     let world = std::ptr::addr_of_mut!(harness.state.PlanetDesc[0]);
     let pickup = GENERATE_SPATHI_FUNCTIONS.pickup_life.unwrap();
     for retrieved in 0..=32 {
-        set_game_state("SPATHI_CREATURES_ELIMINATED", 0);
-        set_game_state("SPATHI_SHIELDED_SELVES", 0);
-        set_game_state("SPATHI_CREATURES_EXAMINED", 0);
+        uqm_rust::engine::World::current().write(|world| {
+            (world).set_story_state(uqm_rust::engine::StoryKey::SPATHI_CREATURES_ELIMINATED, 0)
+        });
+        uqm_rust::engine::World::current().write(|world| {
+            (world).set_story_state(uqm_rust::engine::StoryKey::SPATHI_SHIELDED_SELVES, 0)
+        });
+        uqm_rust::engine::World::current().write(|world| {
+            (world).set_story_state(uqm_rust::engine::StoryKey::SPATHI_CREATURES_EXAMINED, 0)
+        });
         harness.state.SysInfo.PlanetInfo.ScanRetrieveMask[BIOLOGICAL_SCAN] = if retrieved == 32 {
             u32::MAX
         } else {
@@ -93,9 +99,18 @@ pub fn check() {
         };
         let before = format!("{:?}", harness.state);
         assert!(unsafe { pickup(&mut *harness.state, world, 0) });
-        assert_eq!(get_game_state("SPATHI_CREATURES_EXAMINED"), 1);
         assert_eq!(
-            get_game_state("SPATHI_CREATURES_ELIMINATED"),
+            uqm_rust::engine::World::current().read(|world| get_game_state(
+                world,
+                uqm_rust::engine::StoryKey::SPATHI_CREATURES_EXAMINED
+            )),
+            1
+        );
+        assert_eq!(
+            uqm_rust::engine::World::current().read(|world| get_game_state(
+                world,
+                uqm_rust::engine::StoryKey::SPATHI_CREATURES_ELIMINATED
+            )),
             u32::from(retrieved == 31)
         );
         assert_eq!(format!("{:?}", harness.state), before);
@@ -103,9 +118,17 @@ pub fn check() {
     }
     harness.state.PlanetDesc[1].pPrevDesc = sun;
     let other = std::ptr::addr_of_mut!(harness.state.PlanetDesc[1]);
-    set_game_state("SPATHI_CREATURES_EXAMINED", 0);
+    uqm_rust::engine::World::current().write(|world| {
+        (world).set_story_state(uqm_rust::engine::StoryKey::SPATHI_CREATURES_EXAMINED, 0)
+    });
     assert!(unsafe { pickup(&mut *harness.state, other, u16::MAX) });
-    assert_eq!(get_game_state("SPATHI_CREATURES_EXAMINED"), 0);
+    assert_eq!(
+        uqm_rust::engine::World::current().read(|world| get_game_state(
+            world,
+            uqm_rust::engine::StoryKey::SPATHI_CREATURES_EXAMINED
+        )),
+        0
+    );
 
     // Mycon's life callback does not read any pointer or consume RNG.
     assert_eq!(
@@ -130,7 +153,7 @@ fn check_live_queues(harness: &mut Harness) {
     use uqm_rust::c_bindings::global_state::IP_GROUP;
     use uqm_rust::collections::queue::Queue;
     use uqm_rust::planets::c_api::LiveGame;
-    use uqm_rust::planets::c_api::GLOB_DATA as GlobData;
+
     use uqm_rust::planets::generate::sam::GuardSite;
     extern "C" {
         static mut ScreenHeight: i32;
@@ -156,12 +179,12 @@ fn check_live_queues(harness: &mut Harness) {
     };
     // No references into GlobData or the group array cross either callback.
     unsafe {
-        let ip = std::ptr::addr_of_mut!(GlobData.Game_state.ip_group_q);
-        let npc = std::ptr::addr_of_mut!(GlobData.Game_state.npc_built_ship_q);
-        let saved_ip = ip.read();
-        let saved_npc = npc.read();
-        ip.write(queue);
-        npc.write(Queue::default());
+        let (saved_ip, saved_npc) = uqm_rust::engine::WorldData::current().write(|world| {
+            let saved = (world.game.ip_group_q, world.game.npc_built_ship_q);
+            world.game.ip_group_q = queue;
+            world.game.npc_built_ship_q = Queue::default();
+            saved
+        });
         let mut visited = Vec::new();
         GuardSite::for_each_ip_group(&mut LiveGame, &mut |group| {
             visited.push(group.group_id);
@@ -171,21 +194,29 @@ fn check_live_queues(harness: &mut Harness) {
         assert!(groups.iter().all(|group| group.task == 0));
         harness.star_index = BOMB_DEFINED;
         harness.set_star(0, 0);
-        set_game_state("UTWIG_BOMB", 0);
+        uqm_rust::engine::World::current()
+            .write(|world| (world).set_story_state(uqm_rust::engine::StoryKey::UTWIG_BOMB, 0));
         let before = format!("{:?}", harness.state);
         assert!(GENERATE_UTWIG_FUNCTIONS.init_npcs.unwrap()(
             &mut *harness.state
         ));
-        assert!(ip.read().head.is_null() && ip.read().tail.is_null());
-        assert_eq!(ip.read().free_list, first.cast());
+        let current_ip = uqm_rust::engine::WorldData::current().read(|world| world.game.ip_group_q);
+        assert!(current_ip.head.is_null() && current_ip.tail.is_null());
+        assert_eq!(current_ip.free_list, first.cast());
         assert_eq!(groups[0].succ, first.add(1).cast());
         assert_eq!(groups[1].succ, first.add(2).cast());
         assert!(groups[2].succ.is_null());
         assert_eq!(format!("{:?}", harness.state), before);
-        assert_eq!(get_game_state("UTWIG_BOMB"), 0);
+        assert_eq!(
+            uqm_rust::engine::World::current()
+                .read(|world| get_game_state(world, uqm_rust::engine::StoryKey::UTWIG_BOMB)),
+            0
+        );
         assert_eq!(harness.rng_position(), 104729);
-        ip.write(saved_ip);
-        npc.write(saved_npc);
+        uqm_rust::engine::WorldData::current().write(|world| {
+            world.game.ip_group_q = saved_ip;
+            world.game.npc_built_ship_q = saved_npc;
+        });
 
         use uqm_rust::c_bindings::global_state::{EncounterGroup, EncounterRace, POINT};
         let saved_race = std::ptr::addr_of!(EncounterRace).read();
@@ -198,8 +229,15 @@ fn check_live_queues(harness: &mut Harness) {
         std::ptr::addr_of_mut!(EncounterRace).write(saved_race);
         std::ptr::addr_of_mut!(EncounterGroup).write(saved_group);
 
-        let saved_location = std::ptr::addr_of!(GlobData.Game_state.ip_location).read();
-        let saved_origin = std::ptr::addr_of!(GlobData.Game_state.ShipStamp.origin).read();
+        let saved_location =
+            std::ptr::addr_of!((**uqm_rust::engine::WorldData::current()).game.ip_location).read();
+        let saved_origin = std::ptr::addr_of!(
+            (**uqm_rust::engine::WorldData::current())
+                .game
+                .ship_stamp
+                .origin
+        )
+        .read();
         let saved_sun = harness.state.SunDesc[0];
         let saved_planet = harness.state.PlanetDesc[4];
         // units.h and solarsys.c: SIS height = screen height - 13;
@@ -217,13 +255,26 @@ fn check_live_queues(harness: &mut Harness) {
         GuardSite::set_and_transform_ip_location(&mut LiveGame, outer);
         let location = GuardSite::ip_location(&LiveGame);
         assert_eq!((location.x, location.y), (120, -90));
-        let origin = std::ptr::addr_of!(GlobData.Game_state.ShipStamp.origin).read();
+        let origin = std::ptr::addr_of!(
+            (**uqm_rust::engine::WorldData::current())
+                .game
+                .ship_stamp
+                .origin
+        )
+        .read();
         assert_eq!(
             (i32::from(origin.x), i32::from(origin.y)),
             (half_width + 12, half_height - 9)
         );
-        std::ptr::addr_of_mut!(GlobData.Game_state.ip_location).write(saved_location);
-        std::ptr::addr_of_mut!(GlobData.Game_state.ShipStamp.origin).write(saved_origin);
+        std::ptr::addr_of_mut!((**uqm_rust::engine::WorldData::current()).game.ip_location)
+            .write(saved_location);
+        std::ptr::addr_of_mut!(
+            (**uqm_rust::engine::WorldData::current())
+                .game
+                .ship_stamp
+                .origin
+        )
+        .write(saved_origin);
         harness.state.SunDesc[0] = saved_sun;
         harness.state.PlanetDesc[4] = saved_planet;
         println!("live adapter checks: guard traversal, bomb queue reset, encounter reset and coordinate ABI");

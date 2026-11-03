@@ -124,7 +124,7 @@ fn forward_missile_leaves_the_nose_along_the_ship_facing() {
             (*fleet.ptr()).current.location = POINT { x: 400, y: 500 };
             (*fleet.ptr()).next.location = POINT { x: 400, y: 500 };
             let ship = fleet.ptr();
-            fleet.ship_mut().ShipFacing = 4;
+            fleet.ship_mut().ship_facing = 4;
 
             let mut out = [ptr::null_mut()];
             assert_eq!(
@@ -171,7 +171,7 @@ fn butt_leaves_the_tail_not_the_nose() {
             (*fleet.ptr()).next.location = POINT { x: 400, y: 500 };
             let ship = fleet.ptr();
             fleet.ship_mut().cur_status_flags = SPECIAL as u16;
-            fleet.ship_mut().ShipFacing = 4;
+            fleet.ship_mut().ship_facing = 4;
 
             fleet.postprocess();
 
@@ -215,7 +215,7 @@ fn butt_rear_facing_wraps_through_sixteen_facings() {
         (*fleet.ptr()).next.location = POINT { x: 0, y: 0 };
         fleet.ship_mut().cur_status_flags = SPECIAL as u16;
         for (ship_facing, rear) in [(0, 8), (3, 11), (8, 0), (15, 7)] {
-            fleet.ship_mut().ShipFacing = ship_facing;
+            fleet.ship_mut().ship_facing = ship_facing;
             fleet.ship_mut().special_counter = 0;
             fleet.descriptor_mut().ship_info.energy_level = 10;
             fleet.postprocess();
@@ -274,7 +274,7 @@ fn butt_homes_one_facing_step_per_tracking_pass() {
             (*spathi.ptr()).current.location = POINT { x: 400, y: 500 };
             (*spathi.ptr()).next.location = POINT { x: 400, y: 500 };
             spathi.ship_mut().cur_status_flags = SPECIAL as u16;
-            spathi.ship_mut().ShipFacing = 4;
+            spathi.ship_mut().ship_facing = 4;
             spathi.postprocess();
             let butt = battle::element(queue_tail());
             // The engine starts each frame with `next` equal to `current`.
@@ -360,7 +360,7 @@ fn intelligence_fires_the_butt_only_at_targets_behind_the_ship() {
             (*other.ptr()).current.location = POINT { x: 2000, y: 3000 };
             (*other.ptr()).next.location = (*other.ptr()).current.location;
             let ahead = ahead_fixture.ptr();
-            fleet.ship_mut().ShipFacing = 0;
+            fleet.ship_mut().ship_facing = 0;
 
             assert!(intelligence_sets_special(&mut fleet, ship, behind, 8));
             assert!(!intelligence_sets_special(&mut fleet, ship, ahead, 8));
@@ -372,7 +372,7 @@ fn intelligence_fires_the_butt_only_at_targets_behind_the_ship() {
             ));
 
             // The enemy lies ahead of the ship's tail only after it turns around.
-            fleet.ship_mut().ShipFacing = 8;
+            fleet.ship_mut().ship_facing = 8;
             assert!(intelligence_sets_special(&mut fleet, ship, ahead, 8));
             assert!(!intelligence_sets_special(&mut fleet, ship, behind, 8));
         }
@@ -395,7 +395,7 @@ fn intelligence_respects_counter_and_arrival_time() {
         (*other.ptr()).current.location = POINT { x: 2000, y: 3000 };
         (*other.ptr()).next.location = POINT { x: 2000, y: 3000 };
         let behind = other.ptr();
-        fleet.ship_mut().ShipFacing = 0;
+        fleet.ship_mut().ship_facing = 0;
 
         assert!(intelligence_sets_special(&mut fleet, ship, behind, 24));
         assert!(!intelligence_sets_special(&mut fleet, ship, behind, 25));
@@ -421,7 +421,7 @@ fn intelligence_beyond_eight_turns_needs_the_enemy_to_be_closing() {
             (*other.ptr()).current.location = POINT { x: 2000, y: 3000 };
             (*other.ptr()).next.location = POINT { x: 2000, y: 3000 };
             let behind = other.ptr();
-            fleet.ship_mut().ShipFacing = 0;
+            fleet.ship_mut().ship_facing = 0;
 
             // Enemy drifting up the screen (angle 0): facing 8 + 8 - 0 + 4 wraps to 4.
             (*behind).velocity.travel_angle = 0;
@@ -452,7 +452,7 @@ fn intelligence_while_fast_or_in_gravity_needs_the_tail_along_travel() {
             (*other.ptr()).current.location = POINT { x: 2000, y: 3000 };
             (*other.ptr()).next.location = POINT { x: 2000, y: 3000 };
             let behind = other.ptr();
-            fleet.ship_mut().ShipFacing = 0;
+            fleet.ship_mut().ship_facing = 0;
 
             for flag in [SHIP_BEYOND_MAX_SPEED, SHIP_IN_GRAVITY_WELL] {
                 fleet.ship_mut().cur_status_flags = flag as u16;

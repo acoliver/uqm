@@ -4,7 +4,7 @@ use crate::planets_common::late_gen::{self, Kind, Layout, Ops, Scan};
 use uqm_rust::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC, SYSTEM_INFO};
 use uqm_rust::planets::generate::special::Body;
 use uqm_rust::planets::generate::vtable::GenerateFunctions;
-use uqm_rust::state::game_state_keys::{get_game_state, set_game_state};
+use uqm_rust::state::game_state_keys::get_game_state;
 
 unsafe extern "C" {
     static generateVuxFunctions: GenerateFunctions;
@@ -26,7 +26,12 @@ impl Ops for Harness {
         self.set_star(case.size, case.color);
         self.state.PlanetDesc.copy_from_slice(planets);
         self.state.SunDesc[0].NumPlanets = 0;
-        set_game_state("SPATHI_SHIELDED_SELVES", u32::from(case.shielded));
+        uqm_rust::engine::World::current().write(|world| {
+            (world).set_story_state(
+                uqm_rust::engine::StoryKey::SPATHI_SHIELDED_SELVES,
+                u32::from(case.shielded),
+            )
+        });
         self.seed(case.seed);
         let hook = table(case.kind).generate_planets.unwrap();
         let mut expected = *self.state;
@@ -68,8 +73,12 @@ impl Ops for Harness {
     fn scan(&mut self, case: Scan, info: &SYSTEM_INFO, node: &mut NODE_INFO) -> (u16, u32) {
         self.star_index = case.star;
         self.set_star(0, 0);
-        for name in ["SHOFIXTI_MAIDENS", "UMGAH_BROADCASTERS"] {
-            set_game_state(name, u32::from(case.taken));
+        for key in [
+            uqm_rust::engine::StoryKey::SHOFIXTI_MAIDENS,
+            uqm_rust::engine::StoryKey::UMGAH_BROADCASTERS,
+        ] {
+            uqm_rust::engine::World::current()
+                .write(|world| (world).set_story_state(key, u32::from(case.taken)));
         }
         self.state.PlanetDesc = unsafe { std::mem::zeroed() };
         self.state.MoonDesc = unsafe { std::mem::zeroed() };
@@ -106,8 +115,14 @@ impl Ops for Harness {
             before,
             "scan input changed: {case:?}"
         );
-        for name in ["SHOFIXTI_MAIDENS", "UMGAH_BROADCASTERS"] {
-            assert_eq!(get_game_state(name), u32::from(case.taken));
+        for key in [
+            uqm_rust::engine::StoryKey::SHOFIXTI_MAIDENS,
+            uqm_rust::engine::StoryKey::UMGAH_BROADCASTERS,
+        ] {
+            assert_eq!(
+                uqm_rust::engine::World::current().read(|world| get_game_state(world, key)),
+                u32::from(case.taken)
+            );
         }
         (result, self.rng_position())
     }

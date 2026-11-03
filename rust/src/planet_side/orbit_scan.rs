@@ -42,22 +42,20 @@ mod production {
     use super::super::scan_frames::{
         mineral_scan_dot, mineral_surface_sprite, ScanFrameError, BIO_SCAN_DOT, ENERGY_SCAN_DOT,
     };
-    use crate::c_bindings::global_state::SOLARSYS_STATE;
-    use crate::c_bindings::solar_system;
-    use crate::engine::battle::views::FrameSelection as Frame;
-    use crate::engine::battle::{Cx, ElementId};
+    use crate::c_bindings::{global_state::SOLARSYS_STATE, solar_system};
+
+    use crate::engine::battle::{views::FrameSelection as Frame, Cx, ElementId};
+
     const MAG_SHIFT: i32 = 2;
     const MAX_SCROUNGED: u8 = 50;
     const STAMP_PRIM: u8 = 1;
     const PS_NON_PLAYER: i16 = 1;
     use crate::graphics::pixmap_abi::SetAbsFrameIndex;
-    extern "C" {
-        static mut MiscDataFrame: *mut crate::graphics::native_abi::frame_desc;
-    }
 
     pub unsafe fn generate(cx: &mut Cx<'_>) {
         let solar = solar_system::current();
-        if solar.is_null() || (*solar).pOrbitalDesc.is_null() || MiscDataFrame.is_null() {
+        if solar.is_null() || (*solar).pOrbitalDesc.is_null() || cx.kernel.misc_data_frame.is_null()
+        {
             return;
         }
         let persistence = ScanPersistence::from_masks((*solar).SysInfo.PlanetInfo.ScanRetrieveMask);
@@ -98,7 +96,7 @@ mod production {
         }
     }
 
-    pub(super) unsafe fn sync_positions(
+    pub(super) fn sync_positions(
         cx: &mut Cx<'_>,
         surface: &crate::planet_side::assembly::SurfaceAssembly,
     ) {
@@ -149,6 +147,7 @@ mod production {
         cx.element_mut(element).flags = 0;
 
         cx.primitive_style_mut(element).kind = STAMP_PRIM;
+        let misc_frame = cx.kernel.misc_data_frame.cast();
         let mut stamp = crate::graphics::native_abi::STAMP {
             origin: crate::graphics::native_abi::POINT { x: 0, y: 0 },
             frame: std::ptr::null_mut(),
@@ -167,31 +166,25 @@ mod production {
                 cx.set_frame(
                     element,
                     false,
-                    Frame::retain(SetAbsFrameIndex((MiscDataFrame).cast(), dot.current)),
+                    Frame::retain(SetAbsFrameIndex(misc_frame, dot.current)),
                 );
                 cx.set_frame(
                     element,
                     true,
-                    Frame::retain(SetAbsFrameIndex((MiscDataFrame).cast(), dot.next)),
+                    Frame::retain(SetAbsFrameIndex(misc_frame, dot.next)),
                 );
-                stamp.frame = (SetAbsFrameIndex((MiscDataFrame).cast(), surface)).cast();
+                stamp.frame = (SetAbsFrameIndex(misc_frame, surface)).cast();
             }
             super::super::generation::GeneratedNodeKind::Energy => {
                 cx.set_frame(
                     element,
                     false,
-                    Frame::retain(SetAbsFrameIndex(
-                        (MiscDataFrame).cast(),
-                        ENERGY_SCAN_DOT.current,
-                    )),
+                    Frame::retain(SetAbsFrameIndex(misc_frame, ENERGY_SCAN_DOT.current)),
                 );
                 cx.set_frame(
                     element,
                     true,
-                    Frame::retain(SetAbsFrameIndex(
-                        (MiscDataFrame).cast(),
-                        ENERGY_SCAN_DOT.next,
-                    )),
+                    Frame::retain(SetAbsFrameIndex(misc_frame, ENERGY_SCAN_DOT.next)),
                 );
                 cx.element_mut(element).turn = 0x44;
                 cx.element_mut(element).mass = MAX_SCROUNGED;
@@ -201,15 +194,12 @@ mod production {
                 cx.set_frame(
                     element,
                     false,
-                    Frame::retain(SetAbsFrameIndex(
-                        (MiscDataFrame).cast(),
-                        BIO_SCAN_DOT.current,
-                    )),
+                    Frame::retain(SetAbsFrameIndex(misc_frame, BIO_SCAN_DOT.current)),
                 );
                 cx.set_frame(
                     element,
                     true,
-                    Frame::retain(SetAbsFrameIndex((MiscDataFrame).cast(), BIO_SCAN_DOT.next)),
+                    Frame::retain(SetAbsFrameIndex(misc_frame, BIO_SCAN_DOT.next)),
                 );
                 cx.element_mut(element).mass = value as u8;
                 cx.element_mut(element).hits = 0;
@@ -223,15 +213,12 @@ mod production {
                 cx.set_frame(
                     element,
                     false,
-                    Frame::retain(SetAbsFrameIndex(
-                        (MiscDataFrame).cast(),
-                        BIO_SCAN_DOT.current,
-                    )),
+                    Frame::retain(SetAbsFrameIndex(misc_frame, BIO_SCAN_DOT.current)),
                 );
                 cx.set_frame(
                     element,
                     true,
-                    Frame::retain(SetAbsFrameIndex((MiscDataFrame).cast(), BIO_SCAN_DOT.next)),
+                    Frame::retain(SetAbsFrameIndex(misc_frame, BIO_SCAN_DOT.next)),
                 );
                 cx.element_mut(element).turn = 0x44;
                 cx.element_mut(element).mass = creature.index();
@@ -398,7 +385,7 @@ mod retrieval_tests {
 }
 
 #[cfg(not(test))]
-pub(crate) unsafe fn sync_positions(
+pub(crate) fn sync_positions(
     cx: &mut crate::engine::battle::Cx<'_>,
     surface: &super::assembly::SurfaceAssembly,
 ) {

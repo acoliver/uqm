@@ -190,7 +190,7 @@ fn laser_uses_frame_hotspot_alignment_facing_rgba_and_cycle() {
                 [255, 24, 0, 255],
             ];
             for face in 0..16u16 {
-                ship.ship_mut().ShipFacing = face;
+                ship.ship_mut().ship_facing = face;
                 ship.set_hot_spot(1, face as usize, [3, -5]);
                 (*ship.ptr()).next.location = POINT { x: -101, y: 32767 };
                 for counter in 0..4u8 {
@@ -331,7 +331,7 @@ fn muzzle_flash_requires_friendly_appearing_tail_line_and_even_cycle() {
         unsafe {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_CHMMR_ID, 0, [16, 41, 12], [16, 12]);
-            ship.ship_mut().ShipFacing = 5;
+            ship.ship_mut().ship_facing = 5;
             ship.ship_mut().cur_status_flags = WEAPON as u16;
             ship.postprocess(); // tail is the ship itself
             assert_eq!({ battle::tail() }, ship.handle);

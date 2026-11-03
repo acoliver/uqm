@@ -30,25 +30,31 @@ const SCRIPT: &str = r#"{
 
 #[test]
 fn waiting_for_the_conversation_to_end_skips_the_closing_speech() {
-    let document = parse_script(SCRIPT.as_bytes(), "closing-speech-decision.json")
-        .expect("the script fixture must parse");
-    let script =
-        validate_script(document, "closing-speech-decision.json").expect("and must validate");
-    let output_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("closing-speech-decision");
-    std::fs::create_dir_all(&output_root).expect("evidence root");
-    Coordinator::init(script, output_root);
+    battle_context::run(|| {
+        let document = parse_script(SCRIPT.as_bytes(), "closing-speech-decision.json")
+            .expect("the script fixture must parse");
+        let script =
+            validate_script(document, "closing-speech-decision.json").expect("and must validate");
+        let output_root =
+            PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("closing-speech-decision");
+        std::fs::create_dir_all(&output_root).expect("evidence root");
+        Coordinator::init(script, output_root);
 
-    assert!(
-        Coordinator::is_active(),
-        "a validated script must activate the coordinator"
-    );
-    assert!(
-        Coordinator::should_skip_communication_closing_speech(),
-        "a wait-for-end step means the run is only waiting for the conversation to close"
-    );
-    // The same step is not a response selection, so nothing is pending there.
-    assert!(
-        !Coordinator::pending_communication_response_action(4),
-        "a wait-for-end step selects no response, whatever the list offers"
-    );
+        assert!(
+            Coordinator::is_active(),
+            "a validated script must activate the coordinator"
+        );
+        assert!(
+            Coordinator::should_skip_communication_closing_speech(),
+            "a wait-for-end step means the run is only waiting for the conversation to close"
+        );
+        // The same step is not a response selection, so nothing is pending there.
+        assert!(
+            !Coordinator::pending_communication_response_action(4),
+            "a wait-for-end step selects no response, whatever the list offers"
+        );
+    });
 }
+
+#[path = "support/battle_context.rs"]
+mod battle_context;

@@ -204,7 +204,7 @@ fn per_init_descriptor_copies_isolate_energy_resources_animation_and_custom_data
         unsafe {
             let mut first =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
-            first.ship_mut().ShipFacing = 5;
+            first.ship_mut().ship_facing = 5;
             let h = fire(&mut first);
             let data = previous_facing(&mut first);
             assert!(data.is_some());
@@ -231,7 +231,7 @@ fn per_init_descriptor_copies_isolate_energy_resources_animation_and_custom_data
                 frame_index(second.descriptor_mut().ship_data.special.view(0).raw()),
                 0
             );
-            second.ship_mut().ShipFacing = 9;
+            second.ship_mut().ship_facing = 9;
             let other = fire(&mut second);
             assert_ne!(previous_facing(&mut first), previous_facing(&mut second));
             assert_eq!(previous_facing(&mut first), data);
@@ -277,7 +277,7 @@ fn cone_initialization_fixes_intersection_and_does_not_inherit_velocity() {
         unsafe {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 1, [16, 16, 48], [4, 4]);
-            ship.ship_mut().ShipFacing = 5;
+            ship.ship_mut().ship_facing = 5;
             (*ship.ptr()).next.location = POINT { x: -9, y: 13 };
             SetVelocityComponents(&raw mut (*ship.ptr()).velocity, 321, -654);
             let h = with_rng(8, 0, || fire(&mut ship));
@@ -324,7 +324,7 @@ fn held_cone_advances_by_16_preserves_phase_and_resets_only_when_facing_changes(
         unsafe {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
-            ship.ship_mut().ShipFacing = 5;
+            ship.ship_mut().ship_facing = 5;
             for index in [5, 21, 37, 5] {
                 let h = with_rng(3, 0, || fire(&mut ship));
                 let cone = battle::element(h);
@@ -358,7 +358,7 @@ fn held_cone_advances_by_16_preserves_phase_and_resets_only_when_facing_changes(
                 battle_context::dispose(next);
                 battle_context::dispose(h);
             }
-            ship.ship_mut().ShipFacing = 9;
+            ship.ship_mut().ship_facing = 9;
             let h = fire(&mut ship);
             assert_eq!(previous_facing(&mut ship).unwrap(), 9);
             assert_eq!(
@@ -414,7 +414,7 @@ fn failed_cone_allocation_still_updates_private_facing_and_returns_one_slot() {
         unsafe {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
-            ship.ship_mut().ShipFacing = 15;
+            ship.ship_mut().ship_facing = 15;
             assert!(with_rng(5, 0, || fire(&mut ship)).is_null());
             assert!(!previous_facing(&mut ship).is_none());
             assert_eq!(previous_facing(&mut ship).unwrap(), 15);
@@ -423,7 +423,7 @@ fn failed_cone_allocation_still_updates_private_facing_and_returns_one_slot() {
                 15
             );
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 30);
-            ship.ship_mut().ShipFacing = 4;
+            ship.ship_mut().ship_facing = 4;
             assert!(fire(&mut ship).is_null());
             assert_eq!(previous_facing(&mut ship).unwrap(), 4);
             assert_eq!(
@@ -574,7 +574,7 @@ fn retropropulsion_adds_the_exact_reverse_vector_for_every_facing_then_stops_all
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 0, [16, 16, 48], [4, 4]);
             for facing in 0..16 {
-                ship.ship_mut().ShipFacing = facing;
+                ship.ship_mut().ship_facing = facing;
                 ship.ship_mut().cur_status_flags = (SPECIAL
                     | SHIP_AT_MAX_SPEED
                     | SHIP_BEYOND_MAX_SPEED
@@ -609,7 +609,7 @@ fn retropropulsion_adds_the_exact_reverse_vector_for_every_facing_then_stops_all
                 assert_eq!(ship.ship_mut().special_counter, 0);
                 assert_eq!(velocity_fields(&(*ship.ptr()).velocity), [0; 9]);
             }
-            ship.ship_mut().ShipFacing = 0;
+            ship.ship_mut().ship_facing = 0;
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
             observation::drain();
             ship.preprocess();
@@ -781,12 +781,12 @@ fn ai_rng_follows_shared_steering_and_uses_old_turn_flags_for_alignment() {
             for first_odd in [false, true] {
                 let seed =
                     seed_where(|d| (d[0] & 1 != 0) == first_odd && (d[1] & 1 != 0) != first_odd);
-                ship.ship_mut().ShipFacing = 0;
+                ship.ship_mut().ship_facing = 0;
                 (*ship.ptr()).current.image.frame = ship.frame(0, 0);
                 (*ship.ptr()).next = (*ship.ptr()).current.clone();
                 let mut c = enemy_concern(&enemy, 8);
                 let input = with_rng(seed, 2, || think(&mut ship, &mut c, 0, 1));
-                assert_eq!(ship.ship_mut().ShipFacing, if first_odd { 15 } else { 1 });
+                assert_eq!(ship.ship_mut().ship_facing, if first_odd { 15 } else { 1 });
                 assert_eq!(
                     input,
                     (SPECIAL | LEFT | RIGHT) as u8,
@@ -794,7 +794,7 @@ fn ai_rng_follows_shared_steering_and_uses_old_turn_flags_for_alignment() {
                 );
                 assert_eq!(ship.descriptor_mut().characteristics.special_wait, 8);
             }
-            ship.ship_mut().ShipFacing = 0;
+            ship.ship_mut().ship_facing = 0;
             ship.ship_mut().old_status_flags = LEFT as u16;
             let mut c = enemy_concern(&enemy, 8);
             assert_eq!(
@@ -972,7 +972,7 @@ fn rear_arc_uses_unwrapped_next_location_difference_and_inclusive_angle_bounds()
             let enemy = Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 1, [16, 16, 48], [4, 4]);
             (*ship.ptr()).turn = 1;
             for facing in 0..16 {
-                ship.ship_mut().ShipFacing = facing;
+                ship.ship_mut().ship_facing = facing;
                 for angle in 0..64 {
                     let dx = cosine(angle, 1000);
                     let dy = sine(angle, 1000);
@@ -993,7 +993,7 @@ fn rear_arc_uses_unwrapped_next_location_difference_and_inclusive_angle_bounds()
                     assert_eq!(input & WEAPON as u8 != 0, !rear);
                 }
             }
-            ship.ship_mut().ShipFacing = 0;
+            ship.ship_mut().ship_facing = 0;
             (*ship.ptr()).next.location = POINT {
                 x: 4000,
                 y: i16::MAX - 1,

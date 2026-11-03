@@ -1,9 +1,8 @@
 #![cfg(not(test))]
-#![allow(non_snake_case)]
 
 use super::palette::*;
+use crate::engine::{Kernel, WorldData};
 use crate::navigation::abi::*;
-use crate::navigation::globals::{GlobData, PlayFrame};
 
 use super::menu_state::{
     end_state, next_state, ALT_EXIT_MANIFEST, ALT_MANIFEST, PM_ALT_ASCAN, PM_ALT_BSCAN,
@@ -19,8 +18,12 @@ const OPT_PC: i32 = 2;
 
 /// # Safety
 /// Menu state and game settings must be valid on the game thread.
-pub unsafe extern "C" fn PreviousMenuState(base: BYTE, current: BYTE) -> BYTE {
-    super::menu_state::previous_state(base, current, GlobData.Game_state.glob_flags)
+pub unsafe extern "C" fn previous_menu_state(base: BYTE, current: BYTE) -> BYTE {
+    super::menu_state::previous_state(
+        base,
+        current,
+        WorldData::current().read(|owner| owner.game.glob_flags),
+    )
 }
 
 unsafe fn draw_pc_frame(rect: &mut RECT) {
@@ -55,7 +58,7 @@ unsafe fn draw_pc_menu(begin: u8, end: u8, selected: u8, highlight: u8, rect: &m
     }
     rect.extent.height = i16::from(count) * ITEM_HEIGHT + 4;
     draw_pc_frame(rect);
-    let old_font = SetContextFont(StarConFont);
+    let old_font = SetContextFont(Kernel::current().read(|owner| owner.star_con_font));
     let mut text: TEXT = mem::zeroed();
     let mut buffer = [0 as UNICODE; 256];
     text.align = TEXT_ALIGN_ALIGN_LEFT;
@@ -69,9 +72,9 @@ unsafe fn draw_pc_menu(begin: u8, end: u8, selected: u8, highlight: u8, rect: &m
         let label = game_string(MAINMENU_STRING_BASE + item as u32);
         if item == PM_FUEL || item == PM_CREW {
             let cost = if item == PM_FUEL {
-                GlobData.Game_state.FuelCost
+                WorldData::current().read(|owner| owner.game.fuel_cost)
             } else {
-                GlobData.Game_state.CrewCost
+                WorldData::current().read(|owner| owner.game.crew_cost)
             };
             let mut rendered = [0 as UNICODE; 128];
             libc::snprintf(
@@ -108,7 +111,7 @@ unsafe fn draw_pc_menu(begin: u8, end: u8, selected: u8, highlight: u8, rect: &m
     SetContextFont(old_font);
 }
 
-unsafe fn alternate(base: &mut u8, current: &mut u8) -> bool {
+fn alternate(base: &mut u8, current: &mut u8) -> bool {
     let adj = u8::from(*base == PM_STARMAP);
     let adjusted_base = base.wrapping_sub(adj);
     if *current & 0x80 != 0 {
@@ -197,11 +200,15 @@ pub unsafe extern "C" fn DoMenuChooser(menu: *mut MENU_STATE, base_state: BYTE) 
     if PulsedInputState.menu[KEY_MENU_LEFT as usize] != 0
         || PulsedInputState.menu[KEY_MENU_UP as usize] != 0
     {
-        new_state = PreviousMenuState(base, new_state);
+        new_state = previous_menu_state(base, new_state);
     } else if PulsedInputState.menu[KEY_MENU_RIGHT as usize] != 0
         || PulsedInputState.menu[KEY_MENU_DOWN as usize] != 0
     {
-        new_state = next_state(base, new_state, GlobData.Game_state.glob_flags);
+        new_state = next_state(
+            base,
+            new_state,
+            WorldData::current().read(|owner| owner.game.glob_flags),
+        );
     } else if use_alt && PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0 {
         new_state = convert_alternate(base, new_state);
         if new_state == ALT_MANIFEST {
@@ -245,9 +252,7 @@ pub unsafe extern "C" fn DoMenuChooser(menu: *mut MENU_STATE, base_state: BYTE) 
 /// # Safety
 /// The status context, graphics resources, and menu string tables must be initialized.
 #[no_mangle]
-pub unsafe extern "C" fn DrawMenuStateStrings(begin: BYTE, state: SWORD) {
-    let mut begin = begin;
-    let mut state = state;
+pub unsafe extern "C" fn DrawMenuStateStrings(mut begin: BYTE, mut state: SWORD) {
     let mut highlight = 1;
     if state < 0 {
         state = -state;
@@ -263,10 +268,11 @@ pub unsafe extern "C" fn DrawMenuStateStrings(begin: BYTE, state: SWORD) {
     }
     let mut frame: FRAME = ptr::null_mut();
     if state <= i16::from(end_state(begin)) - i16::from(begin) {
-        frame = SetAbsFrameIndex(PlayFrame, (i16::from(begin) + state) as u16);
+        let play_frame = Kernel::current().read(|owner| owner.play_frame);
+        frame = SetAbsFrameIndex(play_frame, (i16::from(begin) + state) as u16);
     }
-    PreUpdateFlashRect();
-    let old_context = SetContext(StatusContext);
+    pre_update_flash_rect();
+    let old_context = SetContext(Kernel::current().read(|owner| owner.status_context));
     let mut rect: RECT = mem::zeroed();
     GetContextClipRect(&mut rect);
     let mut stamp = STAMP {
@@ -318,9 +324,9 @@ pub unsafe extern "C" fn DrawMenuStateStrings(begin: BYTE, state: SWORD) {
         DrawStamp(&mut stamp);
         if begin == PM_CREW || begin == PM_FUEL {
             let value = if begin == PM_CREW {
-                GlobData.Game_state.CrewCost
+                WorldData::current().read(|owner| owner.game.crew_cost)
             } else {
-                GlobData.Game_state.FuelCost
+                WorldData::current().read(|owner| owner.game.fuel_cost)
             };
             let mut cost = [0 as UNICODE; 20];
             let rendered = format!("{value}");
@@ -333,18 +339,22 @@ pub unsafe extern "C" fn DrawMenuStateStrings(begin: BYTE, state: SWORD) {
             text.align = TEXT_ALIGN_ALIGN_RIGHT;
             text.CharCount = COUNT::MAX;
             text.pStr = cost.as_mut_ptr();
-            SetContextFont(TinyFont);
+            SetContextFont(Kernel::current().read(|owner| owner.tiny_font));
             SetContextForeGroundColor(THREEDOMENU_TEXT_COLOR);
             font_DrawText(&mut text);
         }
     }
     UnbatchGraphics();
     SetContext(old_context);
-    PostUpdateFlashRect();
+    post_update_flash_rect();
 }
 
 use std::{mem, ptr};
 
 unsafe fn game_string(index: u32) -> *mut UNICODE {
-    GetStringAddress(SetAbsStringTableIndex(GameStrings, index as u16)).cast()
+    GetStringAddress(SetAbsStringTableIndex(
+        Kernel::current().read(|owner| owner.game_strings),
+        index as u16,
+    ))
+    .cast()
 }

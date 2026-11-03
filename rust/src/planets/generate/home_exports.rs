@@ -179,7 +179,9 @@ impl UrquanEncounterSite for RaceHome {
     }
     fn fuel_on_board(&self) -> u32 {
         // SAFETY: game thread; `GlobData` is initialised.
-        unsafe { fuel_on_board() }
+        {
+            fuel_on_board()
+        }
     }
     fn delta_fuel(&mut self, delta: i16) {
         // SAFETY: game thread.

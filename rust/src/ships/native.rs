@@ -23,15 +23,15 @@ pub mod abi {
         draw_filled_rectangle as DrawFilledRectangle, draw_filled_stamp as DrawFilledStamp,
         draw_sis_title as DrawSISTitle, draw_stamp as DrawStamp, draw_text as font_DrawText,
         drawables_intersect as DrawablesIntersect, equ_frame_index as SetEquFrameIndex,
-        frame_hot as GetFrameHot, frame_rect as GetFrameRect, in_hq_space as inHQSpace,
-        in_hyper_space as inHyperSpace, inc_frame_index as IncFrameIndex,
-        insert_queue as InsertQueue, music_playing as PLRPlaying, play_music as PlayMusic,
-        release_drawable as ReleaseDrawable, release_string_table as ReleaseStringTable,
-        screen_transition as ScreenTransition, set_context as SetContext,
-        set_context_font as SetContextFont, set_flash_rect as SetFlashRect,
-        set_mipmap as TFB_DrawScreen_SetMipmap, set_status_mode as SetStatusMessageMode,
-        set_transition_source as SetTransitionSource, set_velocity_vector as SetVelocityVector,
-        string_address as GetStringAddress, utf8_string_copy as utf8StringCopy,
+        frame_hot as GetFrameHot, frame_rect as GetFrameRect, in_hq_space as in_hqspace,
+        in_hyper_space, inc_frame_index as IncFrameIndex, insert_queue as InsertQueue,
+        music_playing as PLRPlaying, play_music as PlayMusic, release_drawable as ReleaseDrawable,
+        release_string_table as ReleaseStringTable, screen_transition as ScreenTransition,
+        set_context as SetContext, set_context_font as SetContextFont,
+        set_flash_rect as SetFlashRect, set_mipmap as TFB_DrawScreen_SetMipmap,
+        set_status_mode as SetStatusMessageMode, set_transition_source as SetTransitionSource,
+        set_velocity_vector as SetVelocityVector, string_address as GetStringAddress,
+        utf8_string_copy as utf8StringCopy,
     };
 
     #[cfg(not(test))]
@@ -62,7 +62,7 @@ pub mod abi {
     #[cfg(not(test))]
     pub use crate::battle::encount_native::FleetIsInfinite;
     #[cfg(not(test))]
-    pub use crate::battle::galaxy::MoveGalaxy;
+    pub use crate::battle::galaxy::move_galaxy;
     #[cfg(not(test))]
     #[cfg(not(test))]
     #[cfg(not(test))]
@@ -95,8 +95,6 @@ mod engine {
     use crate::graphics::font_abi::font_DrawText;
 
     use crate::graphics::font_abi::SetContextFont;
-
-    use crate::navigation::globals::inHyperSpace;
 
     use crate::ui::sis::SetFlashRect;
 
@@ -252,8 +250,8 @@ mod engine {
 
     /// # Safety
     /// Activity state must be initialized and accessed only on the game thread.
-    pub unsafe fn in_hq_space() -> abi::BOOLEAN {
-        crate::battle::c_bridge::inHQSpace() as abi::BOOLEAN
+    pub fn in_hq_space(world: &crate::engine::World) -> abi::BOOLEAN {
+        crate::battle::c_bridge::in_hqspace(world) as abi::BOOLEAN
     }
 
     /// # Safety
@@ -294,8 +292,8 @@ mod engine {
 
     /// # Safety
     /// Activity state must be initialized and accessed only on the game thread.
-    pub unsafe fn in_hyper_space() -> abi::BOOLEAN {
-        inHyperSpace() as abi::BOOLEAN
+    pub fn in_hyper_space(world: &crate::engine::World) -> abi::BOOLEAN {
+        crate::navigation::globals::in_hyper_space(world) as abi::BOOLEAN
     }
 
     /// # Safety

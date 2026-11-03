@@ -1,5 +1,7 @@
 //! Ship death, replacement, warp transitions, and battle-end synchronization.
 
+#[cfg(not(test))]
+use crate::engine::Kernel as KernelOwner;
 use crate::ships::native::abi;
 
 pub const fn minimum_ditty_frames(ticks_per_second: u32) -> u16 {
@@ -144,8 +146,6 @@ pub(crate) mod engine {
 
     use crate::battle::ship_native::engine::ship_postprocess;
 
-    extern "C" {}
-
     fn same_callback(a: Option<crate::engine::battle::ElementHook>, b: ElementFn) -> bool {
         a.map(|f| f.address()) == Some(b as usize)
     }
@@ -172,25 +172,25 @@ pub(crate) mod engine {
     /// The game thread must own initialized audio and battle music state.
     #[no_mangle]
     pub unsafe extern "C" fn StopDitty() {
-        if Kernel::current().ditty_playing != 0 {
-            StopMusic();
+        if KernelOwner::current().read(|owner| owner.ditty_playing) != 0 {
+            stop_music();
         }
-        Kernel::current().ditty_playing = 0;
+        (**KernelOwner::current()).ditty_playing = 0;
     }
 
     unsafe fn ditty_playing() -> bool {
-        if Kernel::current().ditty_playing == 0 {
+        if KernelOwner::current().read(|owner| owner.ditty_playing) == 0 {
             return false;
         }
-        Kernel::current().ditty_playing = PLRPlaying(usize::MAX as MUSIC_REF);
-        Kernel::current().ditty_playing != 0
+        (**KernelOwner::current()).ditty_playing = PLRPlaying(usize::MAX as MUSIC_REF);
+        KernelOwner::current().read(|owner| owner.ditty_playing) != 0
     }
 
     /// # Safety
     /// The game thread must exclusively own battle winner state.
     #[no_mangle]
     pub unsafe extern "C" fn ResetWinnerStarShip() {
-        Kernel::current().winner = None;
+        (**KernelOwner::current()).winner = None;
     }
 
     /// # Safety
@@ -337,16 +337,14 @@ pub(crate) mod engine {
         }
         cx.set_winner_slot(None);
         StopDitty();
-        StopMusic();
+        stop_music();
         StopSound();
         cx.set_parent(dead, None);
         let restart = opponent_alive(cx, ship);
-        unload_ship(
-            cx.take_descriptor(ship)
-                .unwrap_or_else(|| panic!("dead ship descriptor")),
-            1,
-            1,
-        );
+        let descriptor = cx
+            .take_descriptor(ship)
+            .unwrap_or_else(|| panic!("dead ship descriptor"));
+        unload_ship(cx.world, descriptor, 1, 1);
 
         UnbatchGraphics();
         if let Some(net) = &net {
@@ -428,7 +426,7 @@ pub(crate) mod engine {
     #[no_mangle]
     pub unsafe extern "C" fn StopAllBattleMusic() {
         StopDitty();
-        StopMusic();
+        stop_music();
     }
 
     pub(crate) fn find_alive_ship(
@@ -554,7 +552,7 @@ pub(crate) mod engine {
             cx.element_mut(e).pre = None;
         } else if let Some(image) = cx.alloc_element() {
             cx.put(image);
-            let angle = facing_to_angle(cx.ship(owner).ShipFacing as i32);
+            let angle = facing_to_angle(cx.ship(owner).ship_facing as i32);
             cx.element_mut(image).player = NEUTRAL_PLAYER_NUM as i16;
             cx.element_mut(image).flags = (APPEARING | FINITE_LIFE | NONSOLID) as u16;
             cx.element_mut(image).set_thrust_wait(1);

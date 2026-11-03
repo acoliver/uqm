@@ -4,11 +4,11 @@
 
 use crate::battle::battle_types::{arctan, cosine, sine};
 use crate::c_bindings::global_state::{PlanetFrame, IP_GROUP, PLANET_DESC, SYSTEM_INFO};
+use crate::engine::{StoryKey, World};
 use crate::math::RandomContext;
 use crate::planets::calc::{AnalysisSite, StarDescription};
 use crate::planets::consts::{EARTH_RADIUS, PLANET_SHIELDED};
 use crate::planets::generate::default::{self, Npcs};
-use crate::state::game_state_keys::{get_game_state, set_game_state};
 
 /// `planets.h`/`plandata.h` values the generators use.
 pub const RAINBOW_WORLD: u8 = 32;
@@ -57,10 +57,14 @@ pub struct LiveStory;
 
 impl Story for LiveStory {
     fn flag(&self, name: &'static str) -> u32 {
-        get_game_state(name)
+        StoryKey::from_name(name).map_or(0, |key| {
+            World::current().read(|world| world.story_state(key))
+        })
     }
     fn set_flag(&mut self, name: &'static str, value: u32) {
-        set_game_state(name, value);
+        if let Some(key) = StoryKey::from_name(name) {
+            World::current().write(|world| world.set_story_state(key, value));
+        }
     }
     fn word(&self, name: &'static str) -> u32 {
         read_word(word_start(name), get_game_state_byte)
@@ -94,12 +98,18 @@ use crate::state::ffi::{rust_get_game_state_bits, rust_set_game_state_bits};
 
 fn get_game_state_byte(start: u32) -> u32 {
     // SAFETY: reads the Rust-owned game state.
-    unsafe { u32::from(rust_get_game_state_bits(start as i32, start as i32 + 7)) }
+    {
+        u32::from(
+            World::current()
+                .read(|world| rust_get_game_state_bits(world, start as i32, start as i32 + 7)),
+        )
+    }
 }
 
 fn set_game_state_byte(start: u32, value: u8) {
     // SAFETY: writes the Rust-owned game state.
-    unsafe { rust_set_game_state_bits(start as i32, start as i32 + 7, value) };
+    World::current()
+        .write(|world| rust_set_game_state_bits(world, start as i32, start as i32 + 7, value));
 }
 
 /// Re-place `planet` on a circle of `EARTH_RADIUS * percent / 100`, keeping

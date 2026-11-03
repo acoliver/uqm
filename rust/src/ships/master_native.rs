@@ -1,6 +1,7 @@
 //! Master metadata owns its descriptors in the game lifecycle's typed ship queue.
 
 use crate::engine::battle::kernel::MasterCatalog;
+use crate::engine::Kernel as KernelOwner;
 
 fn find(queue: &MasterCatalog, species: u32) -> i32 {
     let mut next = queue.head();
@@ -18,7 +19,7 @@ fn find(queue: &MasterCatalog, species: u32) -> i32 {
 /// # Safety
 /// The game thread owns the initialized catalog throughout this synchronous lookup.
 pub(crate) unsafe fn cost(index: u32) -> u16 {
-    let queue = &crate::engine::battle::record::Kernel::current().master_queue;
+    let queue = &(**KernelOwner::current()).master_queue;
     cost_in(queue, index as u16)
 }
 
@@ -37,6 +38,7 @@ pub(crate) mod engine {
         kernel::{CatalogEntry, MasterCatalog},
         record::{FLEET_STUFF, SHIP_INFO},
     };
+    use crate::engine::{Kernel as KernelOwner, World as WorldOwner};
     use crate::ships::native::abi::*;
     use std::{ffi::CStr, ptr};
 
@@ -48,7 +50,7 @@ pub(crate) mod engine {
     }
 
     unsafe fn with_catalog<R>(call: impl FnOnce(&mut MasterCatalog) -> R) -> R {
-        crate::app::bridge::enter(|cx| call(cx.master_queue()))
+        KernelOwner::current().write(|kernel| call(&mut kernel.master_queue))
     }
 
     fn entry(queue: &MasterCatalog, id: crate::collections::pool::Id<CatalogEntry>) -> MasterShip {
@@ -68,7 +70,8 @@ pub(crate) mod engine {
             if let Some(yield_processing) = yield_processing {
                 yield_processing();
             }
-            let descriptor = crate::ships::load_ship(species, 0)
+            let descriptor = WorldOwner::current()
+                .write(|world| crate::ships::load_ship(world, species, 0))
                 .unwrap_or_else(|| panic!("master species {species}"));
             let name = CStr::from_ptr(GetStringAddress(SetAbsStringTableIndex(
                 descriptor.info().race_strings,
@@ -107,7 +110,7 @@ pub(crate) mod engine {
             queue.remove(id);
             Some(queue.free(id).descriptor)
         }) {
-            crate::ships::unload_ship(descriptor, 1, 0);
+            WorldOwner::current().write(|world| crate::ships::unload_ship(world, descriptor, 1, 0));
         }
         with_catalog(MasterCatalog::reinit);
     }
@@ -115,20 +118,36 @@ pub(crate) mod engine {
     /// # Safety
     /// The initialized master catalog is owned by the calling game thread.
     pub unsafe fn master(index: u16) -> Option<MasterShip> {
-        with_catalog(|queue| {
-            let mut next = queue.head();
-            for _ in 0..index {
-                next = queue.succ(next?);
-            }
-            next.map(|id| entry(queue, id))
-        })
+        with_catalog(|queue| master_in_catalog(queue, index))
+    }
+
+    pub fn master_in(kernel: &crate::engine::Kernel, index: u16) -> Option<MasterShip> {
+        master_in_catalog(&kernel.master_queue, index)
+    }
+
+    fn master_in_catalog(queue: &MasterCatalog, index: u16) -> Option<MasterShip> {
+        let mut next = queue.head();
+        for _ in 0..index {
+            next = queue.succ(next?);
+        }
+        next.map(|id| entry(queue, id))
     }
 
     /// # Safety
     /// The initialized master catalog is owned by the calling game thread.
-    pub unsafe fn find_master_ship(species: u32) -> Option<MasterShip> {
-        let index = FindMasterShipIndex(species);
-        (index >= 0).then(|| master(index as u16).unwrap_or_else(|| panic!("master index")))
+    pub unsafe fn find_master_ship(
+        kernel: &crate::engine::Kernel,
+        species: u32,
+    ) -> Option<MasterShip> {
+        let queue = &kernel.master_queue;
+        let mut next = queue.head();
+        while let Some(id) = next {
+            if queue.get(id).species == species {
+                return Some(entry(queue, id));
+            }
+            next = queue.succ(id);
+        }
+        None
     }
 
     /// # Safety
@@ -160,8 +179,8 @@ pub(crate) mod engine {
 
 #[cfg(not(test))]
 pub use engine::{
-    find_master_ship, master, FindMasterShipIndex, FreeMasterShipList, GetShipCostFromIndex,
-    GetShipIconsFromIndex, GetShipMeleeIconsFromIndex, LoadMasterShipList,
+    find_master_ship, master, master_in, FindMasterShipIndex, FreeMasterShipList,
+    GetShipCostFromIndex, GetShipIconsFromIndex, GetShipMeleeIconsFromIndex, LoadMasterShipList,
 };
 
 #[cfg(test)]

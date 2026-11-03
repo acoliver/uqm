@@ -1,11 +1,11 @@
 //! Splash, introduction, victory and ship-spin presentations, ported from uqm/fmv.c.
-#![allow(non_snake_case)]
 
 #[cfg(not(test))]
 pub(crate) mod runtime {
     use super::super::intro::ShowPresentation;
+    use crate::engine::{Kernel, WorldData};
     use crate::navigation::abi::*;
-    use crate::navigation::globals::GlobData;
+
     use std::ptr;
 
     // uqm/fmv.h defines WANT_SHIP_SPINS unconditionally in this configuration.
@@ -23,9 +23,9 @@ pub(crate) mod runtime {
         let mut old_rect: RECT = std::mem::zeroed();
         LoadIntoExtraScreen(ptr::null_mut());
         if !music.is_null() {
-            StopMusic();
+            stop_music();
         }
-        FreeHyperData();
+        free_hyper_data();
         libc::sprintf(
             name.as_mut_ptr(),
             c"slides.spins.%02u".as_ptr(),
@@ -60,7 +60,7 @@ pub(crate) mod runtime {
             ScreenFadeType_FadeAllToBlack,
             (ONE_SECOND / 120) as SIZE,
         ));
-        SetContext(ScreenContext);
+        SetContext(Kernel::current().read(|owner| owner.screen_context));
         let mut stamp = STAMP {
             origin: POINT { x: 0, y: 0 },
             frame: CaptureDrawable(LoadGraphicInstance(TITLE_ANIM.as_ptr().cast()).cast()),
@@ -71,14 +71,16 @@ pub(crate) mod runtime {
         if let Some(callback) = process {
             callback(timeout);
         }
-        if GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 != 0 {
+        if WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16 != 0
+        {
             return;
         }
         WaitForAnyButton(0, ONE_SECOND * 3, 1);
-        if GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 != 0 {
+        if WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16 != 0
+        {
             return;
         }
-        GlobData.Game_state.CurrentActivity &= !(CHECK_ABORT as u16);
+        (**WorldData::current()).game.current_activity &= !(CHECK_ABORT as u16);
         SleepThreadUntil(FadeScreen(
             ScreenFadeType_FadeAllToBlack,
             (ONE_SECOND / 2) as SIZE,

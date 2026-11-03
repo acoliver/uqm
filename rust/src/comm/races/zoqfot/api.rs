@@ -1,4 +1,6 @@
 use super::*;
+#[cfg(not(test))]
+use crate::engine::WorldData;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Speaker {
@@ -54,9 +56,7 @@ mod live {
     use crate::comm::locdata::COMM_DATA;
     use crate::comm::races::script::{live::LiveScript, ScriptApi};
     static mut LAST_ALIEN: u8 = 1;
-    extern "C" {
-        static mut GlobData: crate::ships::native::abi::GLOBDATA;
-    }
+
     unsafe fn select(speaker: Speaker) {
         select_speaker(
             &mut *std::ptr::addr_of_mut!(COMM_DATA),
@@ -90,10 +90,10 @@ mod live {
             self.talk_segue(track);
         }
         fn date(&self) -> (i16, u8) {
-            unsafe {
+            {
                 (
-                    GlobData.Game_state.GameClock.year_index as i16,
-                    GlobData.Game_state.GameClock.month_index,
+                    WorldData::current().read(|owner| owner.game.game_clock.year_index) as i16,
+                    WorldData::current().read(|owner| owner.game.game_clock.month_index),
                 )
             }
         }

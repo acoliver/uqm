@@ -24,59 +24,47 @@ fn needs_page_marker(row: i32, rows: i32, remaining: u16, columns: i32, lf_remai
 pub(crate) mod live {
     use super::{character_delay, needs_page_marker};
     use crate::c_bindings::solar_system;
-    use crate::comm::locdata::CRect;
-    use crate::comm::sis_graphics::CText;
-    use crate::mainloop::restart_menu::c_extern::SetContext;
+    use crate::comm::{locdata::CRect, sis_graphics::CText};
 
-    use crate::starbase::cffi::CffiPlatform;
-    use crate::starbase::gfx::{Gfx, Point, Rgba, Stamp};
-    use crate::strings::unicode::{
-        get_char_from_string as getCharFromString, uni_char_is_graph as UniChar_isGraph,
-        utf8_string_count as utf8StringCount, utf8_string_count_n as utf8StringCountN,
+    use crate::engine::WorldData as WorldFields;
+    use crate::mainloop::{input_abi::live::FlushInput, restart_menu::c_extern::SetContext};
+
+    use crate::starbase::{
+        cffi::CffiPlatform,
+        gfx::{Gfx, Point, Rgba, Stamp},
+    };
+
+    use crate::strings::{
+        string_table::{GetStringAddress, GetStringLength},
+        unicode::{
+            get_char_from_string as getCharFromString, uni_char_is_graph as UniChar_isGraph,
+            utf8_string_count as utf8StringCount, utf8_string_count_n as utf8StringCountN,
+        },
     };
     use std::ffi::{c_void, CString};
 
     use crate::time::counter_abi::GetTimeCounter;
 
-    use crate::graphics::pixmap_abi::SetAbsFrameIndex;
+    use crate::graphics::{
+        context_abi::SetContextFontEffect,
+        drawable_abi::{DestroyDrawable, GetFrameRect},
+        font_abi::{font_DrawText, SetContextFont},
+        pixmap_abi::{ReleaseDrawable, SetAbsFrameIndex},
+    };
 
-    use crate::graphics::drawable_abi::GetFrameRect;
+    use crate::planets::scan::live::{DestroyScanContext, GetScanContext};
 
-    use crate::planets::scan::live::GetScanContext;
-
-    use crate::planets::scan::live::DestroyScanContext;
-
-    use crate::ui::util::live::SaveContextFrame;
-
-    use crate::graphics::font_abi::SetContextFont;
-
-    use crate::graphics::context_abi::SetContextFontEffect;
-
-    use crate::strings::string_table::GetStringAddress;
-
-    use crate::strings::string_table::GetStringLength;
-
-    use crate::graphics::font_abi::font_DrawText;
-
-    use crate::mainloop::input_abi::live::FlushInput;
-
-    use crate::ui::util::live::WaitForAnyButtonUntil;
-
-    use crate::ui::util::live::WaitForAnyButton;
-
-    use crate::ui::util::live::WaitForNoInput;
+    use crate::ui::util::live::{
+        SaveContextFrame, WaitForAnyButton, WaitForAnyButtonUntil, WaitForNoInput,
+    };
 
     use crate::battle::sounds::engine::NotPositional;
-
-    use crate::graphics::pixmap_abi::ReleaseDrawable;
-
-    use crate::graphics::drawable_abi::DestroyDrawable;
 
     extern "C" {
         static mut SpaceJunkFrame: *mut crate::graphics::native_abi::frame_desc;
         static mut optWhichFonts: i32;
         static mut ScreenWidth: i32;
-        static mut GlobData: crate::ships::native::abi::GLOBDATA;
+
     }
 
     unsafe fn clear() {
@@ -111,6 +99,8 @@ pub(crate) mod live {
         }
         g.unbatch();
     }
+
+    use crate::battle::sounds::play_sound;
 
     unsafe fn make_report(sounds: *mut c_void, text: *const u8, mut remaining: u16) {
         let g = CffiPlatform;
@@ -166,13 +156,12 @@ pub(crate) mod live {
                         next = t.p_str.cast();
                         let c = getCharFromString(&mut next);
                         font_DrawText(std::ptr::from_mut(&mut t).cast());
-                        if sleepy && GlobData.Game_state.CurrentActivity & (1 << 14) == 0 {
-                            crate::battle::sounds::play_sound(
-                                (sounds).cast(),
-                                NotPositional(),
-                                None,
-                                2,
-                            );
+                        if sleepy
+                            && WorldFields::current().read(|owner| owner.game.current_activity)
+                                & (1 << 14)
+                                == 0
+                        {
+                            play_sound(sounds.cast(), NotPositional(), None, 2);
                             timeout = timeout.wrapping_add(character_delay(c, word_chars == 0));
                             if WaitForAnyButtonUntil(1, timeout, 0) != 0 {
                                 sleepy = false;

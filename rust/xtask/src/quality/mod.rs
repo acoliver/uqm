@@ -37,6 +37,7 @@ struct Options {
     tighten: bool,
     record: bool,
     defs: bool,
+    details: bool,
     prefix: bool,
     allow_growth: bool,
     allow_engine_os: bool,
@@ -109,6 +110,7 @@ impl Options {
                 "--tighten" => options.tighten = true,
                 "--record" => options.record = true,
                 "--defs" => options.defs = true,
+                "--details" => options.details = true,
                 "--prefix" => options.prefix = true,
                 "--allow-growth" => options.allow_growth = true,
                 "--allow-engine-os" => options.allow_engine_os = true,
@@ -492,6 +494,22 @@ fn compare_base(
 
 fn report(value: u64, findings: &[Finding], options: &Options) -> Result<(), String> {
     println!("{value}");
+    if options.details {
+        let scope = options
+            .positional
+            .get(1)
+            .and_then(|spec| spec.split_once(':').map(|(_, scope)| scope));
+        let mut totals = BTreeMap::<String, u64>::new();
+        for finding in findings
+            .iter()
+            .filter(|finding| scope.is_none_or(|scope| finding.in_scope(scope)))
+        {
+            *totals.entry(finding.key()).or_default() += finding.value;
+        }
+        for (scope, value) in totals {
+            println!("{scope}={value}");
+        }
+    }
     if let Some(expected) = options.expect {
         if value != expected {
             return Err(format!("expected {expected}, measured {value}"));

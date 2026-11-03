@@ -51,38 +51,41 @@ pub(in crate::automation::melee_fixture) fn execute(
     let hooks = hooks();
     let mut registry = crate::ships::hook_registry::hooks();
     registry.extend(crate::automation::parity_hooks::hooks());
-    // SAFETY: automation admits operations on the game thread after initialization.
-    let (activity, position) = unsafe {
-        (
-            GlobData.Game_state.CurrentActivity,
-            SavedPosition {
-                slot: 0,
-                log_x: GlobData.SIS_state.log_x,
-                log_y: GlobData.SIS_state.log_y,
-                star: crate::planets::starmap::CurStarDescPtr
-                    .as_ref()
-                    .map(|s| (s.star_pt.x, s.star_pt.y)),
-            },
-        )
-    };
-    let task = match admit(operation, activity, position, registry)? {
-        Admission::Configure(request) => return configure(request).map(|_| None),
-        Admission::Complete(proof) => return Ok(proof),
-        Admission::Task(task) => task,
-    };
-    // SAFETY: the catalog was loaded before this admitted fixture action.
-    let catalog = unsafe {
-        task.needed_species()
+    let run = |cx: &mut Cx<'_>| {
+        // SAFETY: automation admits operations on the game thread after initialization.
+        let (activity, position) = unsafe {
+            (
+                cx.world.data.game.current_activity,
+                SavedPosition {
+                    slot: 0,
+                    log_x: cx.world.data.flagship.log_x,
+                    log_y: cx.world.data.flagship.log_y,
+                    star: cx
+                        .world
+                        .star_pointer(crate::planets::starmap::current_catalog())
+                        .as_ref()
+                        .map(|s| (s.star_pt.x, s.star_pt.y)),
+                },
+            )
+        };
+        let task = match admit(operation, activity, position, registry)? {
+            Admission::Configure(request) => return configure(cx, request).map(|_| None),
+            Admission::Complete(proof) => return Ok(proof),
+            Admission::Task(task) => task,
+        };
+        let catalog = task
+            .needed_species()
             .into_iter()
             .map(|index| {
-                let master = crate::ships::master_native::master(u16::from(index))
+                let master = crate::ships::master_native::master_in(cx.kernel, u16::from(index))
                     .unwrap_or_else(|| panic!("loaded fixture catalog"));
                 (index, master.species)
             })
-            .collect()
+            .collect();
+        drive(cx, *task, &hooks, &catalog)
     };
-    // SAFETY: this admitted operation owns the game thread; legacy callbacks republish Cx.
-    unsafe { crate::app::bridge::enter(|cx| drive(cx, *task, &hooks, &catalog)) }
+    // SAFETY: the admitted fixture exclusively borrows the published game context.
+    unsafe { crate::app::bridge::enter(run) }
 }
 
 #[cfg(not(test))]
@@ -126,7 +129,7 @@ fn drive(
                         retained
                             .take()
                             .unwrap_or_else(|| panic!("retained fixture descriptor"))
-                            .free();
+                            .free(cx.world);
                         Reply::None
                     }
                     Effect::Reset => {
@@ -135,7 +138,7 @@ fn drive(
                         cx.b.counters = [7, 7];
                         apply(cx, Effect::Remove(elements.clone()))?;
                         for &owner in &ships {
-                            cx.detach_descriptor(owner).free();
+                            cx.detach_descriptor(owner).free(cx.world);
                         }
                         Reply::None
                     }
@@ -163,7 +166,10 @@ fn borrow_world(cx: &Cx<'_>) -> World {
         cx.world.activity(),
         cx.b.counters,
         // SAFETY: the catalog selection is read on its owning game thread.
-        unsafe { crate::planets::starmap::CurStarDescPtr as usize },
+        unsafe {
+            cx.world
+                .star_pointer(crate::planets::starmap::current_catalog()) as usize
+        },
     );
     let mut next = cx.elements().head();
     while let Some(id) = next {
@@ -203,7 +209,7 @@ unsafe fn apply(cx: &mut Cx<'_>, effect: Effect) -> Result<Reply, String> {
                 return Ok(Reply::None);
             }
             Effect::ClearStar => {
-                crate::planets::starmap::CurStarDescPtr = ptr::null_mut();
+                cx.world.select_star(None, None);
                 return Ok(Reply::None);
             }
             Effect::Remove(_) | Effect::ZoomProof(..) => {
@@ -317,9 +323,8 @@ unsafe fn apply(cx: &mut Cx<'_>, effect: Effect) -> Result<Reply, String> {
 }
 
 #[cfg(not(test))]
-fn configure(request: &MeleeSetupRequest) -> Result<(), String> {
+fn configure(cx: &mut Cx<'_>, request: &MeleeSetupRequest) -> Result<(), String> {
     use crate::supermelee::native::menu::live::drawing::P_MELEE_STATE;
-    let controls = &raw mut crate::supermelee::c_bridge::PlayerControl;
     let ships = request.ships.iter().enumerate().flat_map(|(side, fleet)| {
         fleet
             .iter()
@@ -335,8 +340,8 @@ fn configure(request: &MeleeSetupRequest) -> Result<(), String> {
             .ok_or("configure_parity_melee requires the live Super Melee menu")?;
         configure_menu(
             state.melee_started != 0,
-            &mut *controls,
-            GlobData.Game_state.CurrentActivity,
+            &mut cx.kernel.player_control,
+            cx.world.data.game.current_activity,
             request.cyborg,
         )?;
         state.melee_option = 4;

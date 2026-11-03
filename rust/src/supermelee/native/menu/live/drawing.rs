@@ -1,5 +1,6 @@
 //! Super Melee menu rendering and selection feedback.
 use super::*;
+use crate::engine::Kernel as KernelOwner;
 
 #[no_mangle]
 pub static mut MeleeFrame: FRAME = ptr::null_mut();
@@ -71,7 +72,7 @@ pub(super) unsafe fn ship_box(side: u16, index: usize, ship: u32, highlight: boo
     UnbatchGraphics();
 }
 pub(super) unsafe fn controls(side: usize, highlight: bool) {
-    let control = PlayerControl[side];
+    let control = KernelOwner::current().read(|owner| owner.player_control[side]);
     let icon = if control & NETWORK_CONTROL != 0 {
         31 + u16::from(highlight) + 2 * (1 - side as u16)
     } else {
@@ -116,7 +117,7 @@ pub unsafe extern "C" fn RepairMeleeFrame(rect: *const RECT) {
         r.corner.y -= 1;
         r.extent.height += 1;
     }
-    let old = SetContext(SpaceContext);
+    let old = SetContext(KernelOwner::current().read(|owner| owner.space_context));
     let mut clip = mem::zeroed();
     get_context_clip_rect(&mut clip);
     set_context_clip_rect(&mut r);
@@ -131,7 +132,7 @@ pub unsafe extern "C" fn RepairMeleeFrame(rect: *const RECT) {
     DrawMeleeIcon(26);
     teams();
     if (*P_MELEE_STATE).melee_option == 11 {
-        crate::supermelee::native::build_picker::live::DrawPickFrame(P_MELEE_STATE);
+        crate::supermelee::native::build_picker::live::draw_pick_frame(P_MELEE_STATE);
     }
     UnbatchGraphics();
     set_context_origin(origin);
@@ -175,7 +176,7 @@ pub(super) unsafe fn worth(state: *mut MELEE_STATE, side: u16, highlight: u16) {
         RepairMeleeFrame(&r);
         return;
     }
-    SetContextFont(MicroFont);
+    SetContextFont(KernelOwner::current().read(|owner| owner.micro_font));
     let value =
         CString::new(MeleeSetup_getFleetValue((*state).melee_setup, side as usize).to_string())
             .unwrap();
@@ -203,7 +204,7 @@ pub(super) unsafe fn name(
         RepairMeleeFrame(&r);
         return 1;
     }
-    SetContextFont(MicroFont);
+    SetContextFont(KernelOwner::current().read(|owner| owner.micro_font));
     let value = if value.is_null() {
         MeleeSetup_getTeamName((*state).melee_setup, side as usize)
     } else {
@@ -264,7 +265,7 @@ pub(super) unsafe fn name(
     1
 }
 pub(super) unsafe fn status(message: *const c_char) {
-    let old = SetContext(SpaceContext);
+    let old = SetContext(KernelOwner::current().read(|owner| owner.space_context));
     let mut r = RECT {
         corner: POINT { x: 1, y: 201 },
         extent: EXTENT {
@@ -274,7 +275,7 @@ pub(super) unsafe fn status(message: *const c_char) {
     };
     RepairMeleeFrame(&r);
     if *message != 0 {
-        SetContextFont(MicroFont);
+        SetContextFont(KernelOwner::current().read(|owner| owner.micro_font));
         SetContextForeGroundColor(rgb(0, 20, 0));
         BatchGraphics();
         let mut clip = mem::zeroed();
@@ -361,7 +362,7 @@ pub(super) unsafe fn highlight(option: u8, on: bool) {
                 }
             }
         }
-        11 => crate::supermelee::native::build_picker::live::DrawPickIcon(
+        11 => crate::supermelee::native::build_picker::live::draw_pick_icon(
             (*P_MELEE_STATE).current_ship,
             !on,
         ),
@@ -379,14 +380,14 @@ pub unsafe extern "C" fn Melee_flashSelection(state: *mut MELEE_STATE) {
     if now >= NEXT {
         NEXT = now.wrapping_add(840 / 9);
         SELECT = !SELECT;
-        let old = SetContext(SpaceContext);
+        let old = SetContext(KernelOwner::current().read(|owner| owner.space_context));
         highlight((*state).melee_option, SELECT);
         SetContext(old);
     }
 }
 pub(super) unsafe fn init_screen() {
-    SetContext(SpaceContext);
-    drawable_abi::SetContextFGFrame(Screen.cast());
+    SetContext(KernelOwner::current().read(|owner| owner.space_context));
+    drawable_abi::SetContextFGFrame(KernelOwner::current().read(|owner| owner.screen).cast());
     set_context_clip_rect(ptr::null_mut());
     SetContextBackGroundColor(rgb(0, 0, 0));
     ClearDrawable();
@@ -408,7 +409,7 @@ pub(super) unsafe fn init_screen() {
 /// Call on the graphics thread with loaded melee resources. Pointer arguments
 /// must be valid for the call, and player, row, column and ship indices must be in range.
 pub unsafe extern "C" fn DrawMeleeShipStrings(state: *mut MELEE_STATE, ship: u32) {
-    let old = SetContext(StatusContext);
+    let old = SetContext(KernelOwner::current().read(|owner| owner.status_context));
     let mut clip = mem::zeroed();
     get_context_clip_rect(&mut clip);
     let mut r = clip;
@@ -419,7 +420,7 @@ pub unsafe extern "C" fn DrawMeleeShipStrings(state: *mut MELEE_STATE, ship: u32
     BatchGraphics();
     if ship == 255 {
         ClearShipStatus(0);
-        SetContextFont(StarConFont);
+        SetContextFont(KernelOwner::current().read(|owner| owner.star_con_font));
         let mut rect = RECT {
             corner: POINT { x: 3, y: 4 },
             extent: EXTENT {

@@ -1,9 +1,12 @@
 //! Debug cheats, universe inspection and graphics-context diagnostics.
-#![allow(non_snake_case)]
 #![cfg(feature = "debug-process")]
 
+#[cfg(not(test))]
+use crate::engine::{Kernel, StoryKey, WorldData};
 use crate::navigation::abi::*;
 use std::ffi::{c_char, c_int};
+
+mod equipment;
 
 unsafe fn clear_escort_queue(queue: *mut crate::collections::queue::Queue) {
     let mut handle = (*queue).head;
@@ -15,7 +18,7 @@ unsafe fn clear_escort_queue(queue: *mut crate::collections::queue::Queue) {
     }
 }
 
-fn hsvaToRgba(hue: f64, sat: f64, val: f64, alpha: BYTE) -> Color {
+fn hsva_to_rgba(hue: f64, sat: f64, val: f64, alpha: BYTE) -> Color {
     let hi = (hue / 60.0) as c_int as u32;
     let f = hue / 60.0 - (hue / 60.0) as c_int as f64;
     let p = val * (1.0 - sat);
@@ -40,7 +43,7 @@ fn hsvaToRgba(hue: f64, sat: f64, val: f64, alpha: BYTE) -> Color {
     };
     Color { r, g, b, a: alpha }
 }
-pub fn eventName(value: BYTE) -> *const c_char {
+pub fn event_name(value: BYTE) -> *const c_char {
     match value as u32 {
         ARILOU_ENTRANCE_EVENT => c"ARILOU_ENTRANCE_EVENT".as_ptr(),
         ARILOU_EXIT_EVENT => c"ARILOU_EXIT_EVENT".as_ptr(),
@@ -64,7 +67,7 @@ pub fn eventName(value: BYTE) -> *const c_char {
     }
 }
 
-pub fn bodyColorString(value: BYTE) -> *const c_char {
+pub fn body_color_string(value: BYTE) -> *const c_char {
     match value as u32 {
         BLUE_BODY => c"blue".as_ptr(),
         GREEN_BODY => c"green".as_ptr(),
@@ -79,7 +82,7 @@ pub fn bodyColorString(value: BYTE) -> *const c_char {
     }
 }
 
-pub fn starTypeString(value: BYTE) -> *const c_char {
+pub fn star_type_string(value: BYTE) -> *const c_char {
     match value as u32 {
         DWARF_STAR => c"dwarf".as_ptr(),
         GIANT_STAR => c"giant".as_ptr(),
@@ -88,7 +91,7 @@ pub fn starTypeString(value: BYTE) -> *const c_char {
     }
 }
 
-pub fn starPresenceString(value: BYTE) -> *const c_char {
+pub fn star_presence_string(value: BYTE) -> *const c_char {
     match value as u32 {
         0 => c"".as_ptr(),
         SOL_DEFINED => c"Sol".as_ptr(),
@@ -140,7 +143,7 @@ pub fn starPresenceString(value: BYTE) -> *const c_char {
     }
 }
 
-pub fn worldSizeString(value: BYTE) -> *const c_char {
+pub fn world_size_string(value: BYTE) -> *const c_char {
     match value as u32 {
         SMALL_ROCKY_WORLD => c"small rocky world".as_ptr(),
         LARGE_ROCKY_WORLD => c"large rocky world".as_ptr(),
@@ -149,7 +152,7 @@ pub fn worldSizeString(value: BYTE) -> *const c_char {
     }
 }
 
-pub fn worldGenAlgoString(value: BYTE) -> *const c_char {
+pub fn world_gen_algo_string(value: BYTE) -> *const c_char {
     match value as u32 {
         TOPO_ALGO => c"TOPO_ALGO".as_ptr(),
         CRATERED_ALGO => c"CRATERED_ALGO".as_ptr(),
@@ -158,7 +161,7 @@ pub fn worldGenAlgoString(value: BYTE) -> *const c_char {
     }
 }
 
-pub fn atmosphereString(value: BYTE) -> *const c_char {
+pub fn atmosphere_string(value: BYTE) -> *const c_char {
     match value as u32 {
         LIGHT => c"thin".as_ptr(),
         MEDIUM => c"normal".as_ptr(),
@@ -167,7 +170,7 @@ pub fn atmosphereString(value: BYTE) -> *const c_char {
     }
 }
 
-pub fn densityString(value: BYTE) -> *const c_char {
+pub fn density_string(value: BYTE) -> *const c_char {
     match value as u32 {
         GAS_DENSITY => c"gaseous".as_ptr(),
         LIGHT_DENSITY => c"light".as_ptr(),
@@ -179,7 +182,7 @@ pub fn densityString(value: BYTE) -> *const c_char {
     }
 }
 
-pub fn depositQualityString(value: BYTE) -> *const c_char {
+pub fn deposit_quality_string(value: BYTE) -> *const c_char {
     match value as u32 {
         LIGHT => c"low".as_ptr(),
         MEDIUM => c"medium".as_ptr(),
@@ -192,20 +195,20 @@ type SystemVisitor<T> = unsafe fn(*const STAR_DESC, *const SOLARSYS_STATE, &mut 
 type WorldVisitor<T> = unsafe fn(*const PLANET_DESC, &mut T);
 
 pub struct UniverseRecurseArg<'a, T> {
-    pub systemFuncPre: Option<SystemVisitor<T>>,
-    pub systemFuncPost: Option<SystemVisitor<T>>,
-    pub planetFuncPre: Option<WorldVisitor<T>>,
-    pub planetFuncPost: Option<WorldVisitor<T>>,
-    pub moonFunc: Option<WorldVisitor<T>>,
+    pub system_func_pre: Option<SystemVisitor<T>>,
+    pub system_func_post: Option<SystemVisitor<T>>,
+    pub planet_func_pre: Option<WorldVisitor<T>>,
+    pub planet_func_post: Option<WorldVisitor<T>>,
+    pub moon_func: Option<WorldVisitor<T>>,
     pub arg: &'a mut T,
 }
 
 #[cfg(not(test))]
 mod runtime {
     use super::*;
-    use crate::navigation::globals::GlobData;
+    use crate::engine::World;
+
     use crate::planets::tables::{PLANET_ARRAY as planet_array, STARMAP_ARRAY as starmap_array};
-    use crate::state::game_state_keys::{get_game_state, set_game_state};
     use libc::FILE;
     use std::{mem, ptr};
     extern "C" {
@@ -223,7 +226,7 @@ mod runtime {
         static mut output_stream: *mut FILE;
     }
 
-    unsafe fn callGenerateForScanType(
+    unsafe fn call_generate_for_scan_type(
         system: *const SOLARSYS_STATE,
         world: *const PLANET_DESC,
         node: COUNT,
@@ -247,10 +250,10 @@ mod runtime {
 
     /// # Safety
     /// Must run synchronously on the game thread with initialized game state.
-    pub unsafe fn debugKeyPressedSynchronous() {
-        equipShip();
-        giveDevices();
-        clearEscorts();
+    pub unsafe fn debug_key_pressed_synchronous() {
+        equip_ship();
+        give_devices();
+        clear_escorts();
         for race in [
             ARILOU_SHIP,
             PKUNK_SHIP,
@@ -267,26 +270,27 @@ mod runtime {
         ] {
             AddEscortShips(race as COUNT, 1);
         }
-        resetCrewBattle();
-        resetEnergyBattle();
+        reset_crew_battle();
+        reset_energy_battle();
         INSTANT_MOVE = BOOLEAN::from(INSTANT_MOVE == 0);
-        showSpheres();
-        activateAllShips();
+        show_spheres();
+        activate_all_ships();
     }
 
     // The asynchronous C debug-key hook contains no enabled operations.
-    pub fn debugKeyPressed() {}
+    pub fn debug_key_pressed() {}
 
     /// # Safety
     /// Must run on the game thread. The game clock and event queue must be live.
-    pub unsafe fn forwardToNextEvent(skipHEE: BOOLEAN) {
+    pub unsafe fn forward_to_next_event(skip_hee: BOOLEAN) {
+        let world = WorldData::current();
         if GameClockRunning() == 0 {
             return;
         }
         LockGameClock();
-        let mut done = skipHEE == 0;
+        let mut done = skip_hee == 0;
         loop {
-            let handle = GlobData.Game_state.GameClock.event_q.head;
+            let handle = (**world).game.game_clock.event_q.head;
             if handle.is_null() {
                 return;
             }
@@ -300,7 +304,7 @@ mod runtime {
                 event.day_index as COUNT,
             );
             loop {
-                let clock = &*ptr::addr_of!(GlobData.Game_state.GameClock);
+                let clock = &*ptr::addr_of!((**world).game.game_clock);
                 if clock.year_index > year
                     || (clock.year_index == year
                         && (clock.month_index as COUNT > month
@@ -319,134 +323,42 @@ mod runtime {
     }
     /// # Safety
     /// `out` must be an open C stream and `event` a readable event record.
-    pub unsafe fn dumpEvent(out: *mut FILE, event: *const EVENT) {
+    pub unsafe fn dump_event(out: *mut FILE, event: *const EVENT) {
         libc::fprintf(
             out,
             c"%4u/%02u/%02u: %s\n".as_ptr(),
             (*event).year_index as u32,
             (*event).month_index as u32,
             (*event).day_index as u32,
-            eventName((*event).func_index),
+            event_name((*event).func_index),
         );
     }
     /// # Safety
     /// Must run with a live game clock and an open output stream.
-    pub unsafe fn dumpEvents(out: *mut FILE) {
+    pub unsafe fn dump_events(out: *mut FILE) {
+        let world = WorldData::current();
         LockGameClock();
         crate::collections::queue::for_all_links(
-            ptr::addr_of_mut!(GlobData.Game_state.GameClock.event_q).cast(),
-            |event| dumpEvent(out, ptr::from_mut(event).cast()),
+            ptr::addr_of_mut!((**world).game.game_clock.event_q).cast(),
+            |event| dump_event(out, ptr::from_mut(event).cast()),
         );
         UnlockGameClock();
     }
 
     /// # Safety
     /// Must run on the game thread with initialized SIS and optional solar system.
-    pub unsafe fn equipShip() {
-        if GlobData.Game_state.CurrentActivity as u8 as u32 == SUPER_MELEE {
+    pub unsafe fn equip_ship() {
+        if !World::current().write(super::equipment::equip_flagship) {
             return;
         }
-        for i in 0..NUM_DRIVE_SLOTS as usize {
-            GlobData.SIS_state.DriveSlots[i] = FUSION_THRUSTER as BYTE;
+        if let Some(system) = pSolarSysState.as_mut() {
+            World::current().read(|world| {
+                super::equipment::update_flight(&world.data.flagship, system);
+            });
         }
-        for i in 0..NUM_JET_SLOTS as usize {
-            GlobData.SIS_state.JetSlots[i] = TURNING_JETS as BYTE;
-        }
-        set_game_state(
-            "LANDER_SHIELDS",
-            (1 << EARTHQUAKE_DISASTER)
-                | (1 << BIOLOGICAL_DISASTER)
-                | (1 << LIGHTNING_DISASTER)
-                | (1 << LAVASPOT_DISASTER),
-        );
-        set_game_state("IMPROVED_LANDER_SPEED", 1);
-        set_game_state("IMPROVED_LANDER_CARGO", 1);
-        set_game_state("IMPROVED_LANDER_SHOT", 1);
-        let mut i;
-        if get_game_state("CHMMR_BOMB_STATE") < 2 {
-            i = 0;
-            for module in [
-                HIGHEFF_FUELSYS,
-                HIGHEFF_FUELSYS,
-                CREW_POD,
-                CREW_POD,
-                CREW_POD,
-                CREW_POD,
-                CREW_POD,
-                STORAGE_BAY,
-                SHIVA_FURNACE,
-                SHIVA_FURNACE,
-                DYNAMO_UNIT,
-                TRACKING_SYSTEM,
-                TRACKING_SYSTEM,
-                SHIVA_FURNACE,
-                CANNON_WEAPON,
-                CANNON_WEAPON,
-            ] {
-                GlobData.SIS_state.ModuleSlots[i] = module as BYTE;
-                i += 1;
-            }
-            GlobData.SIS_state.NumLanders = MAX_LANDERS as BYTE;
-        } else {
-            i = NUM_BOMB_MODULES as usize;
-            for module in [
-                HIGHEFF_FUELSYS,
-                CREW_POD,
-                SHIVA_FURNACE,
-                SHIVA_FURNACE,
-                CANNON_WEAPON,
-                SHIVA_FURNACE,
-            ] {
-                GlobData.SIS_state.ModuleSlots[i] = module as BYTE;
-                i += 1;
-            }
-        }
-        assert!(i <= NUM_MODULE_SLOTS as usize);
-        GlobData.SIS_state.FuelOnBoard = FUEL_RESERVE as _;
-        GlobData.SIS_state.CrewEnlisted = 0;
-        for i in 0..NUM_MODULE_SLOTS as usize {
-            match GlobData.SIS_state.ModuleSlots[i] as u32 {
-                CREW_POD => {
-                    GlobData.SIS_state.CrewEnlisted = GlobData
-                        .SIS_state
-                        .CrewEnlisted
-                        .wrapping_add(CREW_POD_CAPACITY as _)
-                }
-                FUEL_TANK => {
-                    GlobData.SIS_state.FuelOnBoard = GlobData
-                        .SIS_state
-                        .FuelOnBoard
-                        .wrapping_add(FUEL_TANK_CAPACITY as _)
-                }
-                HIGHEFF_FUELSYS => {
-                    GlobData.SIS_state.FuelOnBoard = GlobData
-                        .SIS_state
-                        .FuelOnBoard
-                        .wrapping_add(HEFUEL_TANK_CAPACITY as _)
-                }
-                _ => {}
-            }
-        }
-        if !pSolarSysState.is_null() {
-            (*pSolarSysState).max_ship_speed = (5 * IP_SHIP_THRUST_INCREMENT) as BYTE;
-            for i in 0..NUM_DRIVE_SLOTS as usize {
-                // Preserve the original C subscript: DriveSlots[i == FUSION_THRUSTER].
-                if GlobData.SIS_state.DriveSlots[usize::from(i == FUSION_THRUSTER as usize)] != 0 {
-                    (*pSolarSysState).max_ship_speed = (*pSolarSysState)
-                        .max_ship_speed
-                        .wrapping_add(IP_SHIP_THRUST_INCREMENT as BYTE);
-                }
-            }
-            (*pSolarSysState).turn_wait = IP_SHIP_TURN_WAIT as BYTE;
-            for i in 0..NUM_JET_SLOTS as usize {
-                if GlobData.SIS_state.JetSlots[i] == TURNING_JETS as BYTE {
-                    (*pSolarSysState).turn_wait = (*pSolarSysState)
-                        .turn_wait
-                        .wrapping_sub(IP_SHIP_TURN_DECREMENT as BYTE);
-                }
-            }
-        }
-        if inHQSpace() != 0 || GlobData.Game_state.CurrentActivity as u8 as u32 == IN_INTERPLANETARY
+        if World::current().read(in_hqspace) != 0
+            || WorldData::current().read(|owner| owner.game.current_activity) as u8 as u32
+                == IN_INTERPLANETARY
         {
             DeltaSISGauges(
                 UNDEFINED_DELTA as _,
@@ -458,38 +370,39 @@ mod runtime {
 
     /// # Safety
     /// Must run with the game-state singleton initialized.
-    pub unsafe fn giveDevices() {
+    pub fn give_devices() {
         for key in [
-            "ROSY_SPHERE_ON_SHIP",
-            "ARTIFACT_2_ON_SHIP",
-            "ARTIFACT_3_ON_SHIP",
-            "SUN_DEVICE_ON_SHIP",
-            "UTWIG_BOMB_ON_SHIP",
-            "ULTRON_CONDITION",
-            "MAIDENS_ON_SHIP",
-            "TALKING_PET_ON_SHIP",
-            "AQUA_HELIX_ON_SHIP",
-            "CLEAR_SPINDLE_ON_SHIP",
-            "UMGAH_BROADCASTERS_ON_SHIP",
-            "TAALO_PROTECTOR_ON_SHIP",
-            "EGG_CASE0_ON_SHIP",
-            "EGG_CASE1_ON_SHIP",
-            "EGG_CASE2_ON_SHIP",
-            "SYREEN_SHUTTLE_ON_SHIP",
-            "VUX_BEAST_ON_SHIP",
-            "PORTAL_SPAWNER_ON_SHIP",
-            "PORTAL_KEY_ON_SHIP",
-            "BURV_BROADCASTERS_ON_SHIP",
-            "MOONBASE_ON_SHIP",
-            "DESTRUCT_CODE_ON_SHIP",
+            StoryKey::ROSY_SPHERE_ON_SHIP,
+            StoryKey::ARTIFACT_2_ON_SHIP,
+            StoryKey::ARTIFACT_3_ON_SHIP,
+            StoryKey::SUN_DEVICE_ON_SHIP,
+            StoryKey::UTWIG_BOMB_ON_SHIP,
+            StoryKey::ULTRON_CONDITION,
+            StoryKey::MAIDENS_ON_SHIP,
+            StoryKey::TALKING_PET_ON_SHIP,
+            StoryKey::AQUA_HELIX_ON_SHIP,
+            StoryKey::CLEAR_SPINDLE_ON_SHIP,
+            StoryKey::UMGAH_BROADCASTERS_ON_SHIP,
+            StoryKey::TAALO_PROTECTOR_ON_SHIP,
+            StoryKey::EGG_CASE0_ON_SHIP,
+            StoryKey::EGG_CASE1_ON_SHIP,
+            StoryKey::EGG_CASE2_ON_SHIP,
+            StoryKey::SYREEN_SHUTTLE_ON_SHIP,
+            StoryKey::VUX_BEAST_ON_SHIP,
+            StoryKey::PORTAL_SPAWNER_ON_SHIP,
+            StoryKey::PORTAL_KEY_ON_SHIP,
+            StoryKey::BURV_BROADCASTERS_ON_SHIP,
+            StoryKey::MOONBASE_ON_SHIP,
+            StoryKey::DESTRUCT_CODE_ON_SHIP,
         ] {
-            set_game_state(key, 1);
+            World::current().write(|world| world.set_story_state(key, 1));
         }
     }
     /// # Safety
     /// Must run on the game thread with the escort queue initialized.
-    pub unsafe fn clearEscorts() {
-        let queue = ptr::addr_of_mut!(GlobData.Game_state.built_ship_q);
+    pub unsafe fn clear_escorts() {
+        let world = WorldData::current();
+        let queue = ptr::addr_of_mut!((**world).game.built_ship_q);
         clear_escort_queue(queue.cast());
         DeltaSISGauges(
             UNDEFINED_DELTA as _,
@@ -511,12 +424,13 @@ mod runtime {
     }
     /// # Safety
     /// Must run on the game thread in HyperSpace or QuasiSpace.
-    pub unsafe fn doInstantMove() {
+    pub unsafe fn do_instant_move() {
+        let owned_world = WorldData::current();
         let (log_x, log_y) = log_units();
         let universe_x = ((MAX_X_UNIVERSE as i32 + 1) >> 4) * 10;
         let universe_y = (MAX_Y_UNIVERSE as i32 + 1) >> 4;
-        let game = ptr::addr_of_mut!(GlobData.Game_state);
-        let sis = ptr::addr_of_mut!(GlobData.SIS_state);
+        let game = ptr::addr_of_mut!((**owned_world).game);
+        let sis = ptr::addr_of_mut!((**owned_world).flagship);
         if (*game).autopilot.x == -1 || (*game).autopilot.y == -1 {
             (*game).autopilot.x =
                 (((*sis).log_x.wrapping_mul(universe_x) + (log_x >> 1)) / log_x) as COORD;
@@ -529,16 +443,24 @@ mod runtime {
                 + (universe_y >> 1))
                 / universe_y;
         }
-        if get_game_state("ARILOU_SPACE_SIDE") <= 1 {
-            CurStarDescPtr =
-                (FindStar(ptr::null_mut(), ptr::addr_of_mut!((*game).autopilot), 0, 0)).cast();
-            if !CurStarDescPtr.is_null() {
-                set_game_state("USED_BROADCASTER", 0);
-                (*game).CurrentActivity &= !(IN_BATTLE as ACTIVITY);
-                (*game).ShipFacing = 0;
+        if World::current().read(|world| world.story_state(StoryKey::ARILOU_SPACE_SIDE)) <= 1 {
+            (**World::current()).select_star(
+                ((FindStar(ptr::null_mut(), ptr::addr_of_mut!((*game).autopilot), 0, 0))
+                    .cast::<crate::engine::world::CStarDesc>())
+                .as_ref(),
+                crate::planets::starmap::current_catalog(),
+            );
+            if !(**World::current())
+                .star_pointer(crate::planets::starmap::current_catalog())
+                .is_null()
+            {
+                World::current()
+                    .write(|world| world.set_story_state(StoryKey::USED_BROADCASTER, 0));
+                (*game).current_activity &= !(IN_BATTLE as ACTIVITY);
+                (*game).ship_facing = 0;
                 (*game).ip_planet = 0;
                 (*game).in_orbit = 0;
-                (*game).CurrentActivity |= START_INTERPLANETARY as ACTIVITY;
+                (*game).current_activity |= START_INTERPLANETARY as ACTIVITY;
             }
         }
         (*game).autopilot.x = -1;
@@ -546,8 +468,8 @@ mod runtime {
     }
     /// # Safety
     /// Must run on the game thread with the race queue initialized.
-    pub unsafe fn showSpheres() {
-        let mut handle = GlobData.Game_state.avail_race_q.head;
+    pub unsafe fn show_spheres() {
+        let mut handle = WorldData::current().read(|owner| owner.game.avail_race_q.head);
         while !handle.is_null() {
             let fleet = handle.cast::<FLEET_INFO>();
             let next = (*fleet).succ;
@@ -562,8 +484,8 @@ mod runtime {
     }
     /// # Safety
     /// Must run on the game thread with the race queue initialized.
-    pub unsafe fn activateAllShips() {
-        let mut handle = GlobData.Game_state.avail_race_q.head;
+    pub unsafe fn activate_all_ships() {
+        let mut handle = WorldData::current().read(|owner| owner.game.avail_race_q.head);
         while !handle.is_null() {
             let fleet = handle.cast::<FLEET_INFO>();
             let next = (*fleet).succ;
@@ -576,7 +498,7 @@ mod runtime {
 
     /// # Safety
     /// Must run on the game thread. The callback must accept every star and its context.
-    pub unsafe fn forAllStars<T>(callback: unsafe fn(*mut STAR_DESC, &mut T), arg: &mut T) {
+    pub unsafe fn for_all_stars<T>(callback: unsafe fn(*mut STAR_DESC, &mut T), arg: &mut T) {
         for i in 0..NUM_SOLAR_SYSTEMS as usize {
             callback(
                 ptr::addr_of_mut!(starmap_array).cast::<STAR_DESC>().add(i),
@@ -586,13 +508,16 @@ mod runtime {
     }
     /// # Safety
     /// `system` and `star` must be the active system. Callback and context must be valid.
-    pub unsafe fn forAllPlanets<T>(
+    pub unsafe fn for_all_planets<T>(
         star: *mut STAR_DESC,
         system: *mut SOLARSYS_STATE,
         callback: unsafe fn(*mut STAR_DESC, *mut SOLARSYS_STATE, *mut PLANET_DESC, &mut T),
         arg: &mut T,
     ) {
-        assert!(CurStarDescPtr == star.cast());
+        assert!(
+            (**World::current()).star_pointer(crate::planets::starmap::current_catalog())
+                == star.cast()
+        );
         assert!(pSolarSysState == system);
         for i in 0..(*system).SunDesc[0].NumPlanets as usize {
             callback(
@@ -605,7 +530,7 @@ mod runtime {
     }
     /// # Safety
     /// The planet and system must be active and their generated moon records valid.
-    pub unsafe fn forAllMoons<T>(
+    pub unsafe fn for_all_moons<T>(
         star: *mut STAR_DESC,
         system: *mut SOLARSYS_STATE,
         planet: *mut PLANET_DESC,
@@ -632,27 +557,31 @@ mod runtime {
     /// # Safety
     /// Must run on the game thread. All supplied callbacks and their context must
     /// remain valid throughout universe generation, which can change game state.
-    pub unsafe fn UniverseRecurse<T>(arg: &mut UniverseRecurseArg<'_, T>) {
-        if arg.systemFuncPre.is_none()
-            && arg.systemFuncPost.is_none()
-            && arg.planetFuncPre.is_none()
-            && arg.planetFuncPost.is_none()
-            && arg.moonFunc.is_none()
+    pub unsafe fn universe_recurse<T>(arg: &mut UniverseRecurseArg<'_, T>) {
+        if arg.system_func_pre.is_none()
+            && arg.system_func_post.is_none()
+            && arg.planet_func_pre.is_none()
+            && arg.planet_func_post.is_none()
+            && arg.moon_func.is_none()
         {
             return;
         }
         LockGameClock();
-        let saved_activity = GlobData.Game_state.CurrentActivity;
+        let saved_activity = WorldData::current().read(|owner| owner.game.current_activity);
         DISABLE_INTERACTIVITY = 1;
-        forAllStars(starRecurse, arg);
+        for_all_stars(star_recurse, arg);
         DISABLE_INTERACTIVITY = 0;
-        GlobData.Game_state.CurrentActivity = saved_activity;
+        (**WorldData::current()).game.current_activity = saved_activity;
         UnlockGameClock();
     }
-    unsafe fn starRecurse<T>(star: *mut STAR_DESC, recurse: &mut UniverseRecurseArg<'_, T>) {
+    unsafe fn star_recurse<T>(star: *mut STAR_DESC, recurse: &mut UniverseRecurseArg<'_, T>) {
         let old_system = pSolarSysState;
-        let old_star = CurStarDescPtr;
-        CurStarDescPtr = star.cast();
+        let old_star =
+            (**World::current()).star_pointer(crate::planets::starmap::current_catalog());
+        (**World::current()).select_star(
+            (star.cast::<crate::engine::world::CStarDesc>()).as_ref(),
+            crate::planets::starmap::current_catalog(),
+        );
         (*SysGenRNG).reseed(GetRandomSeedForStar(star));
         let mut system: SOLARSYS_STATE = mem::zeroed();
         system.SunDesc[0].pPrevDesc = ptr::null_mut();
@@ -664,59 +593,68 @@ mod runtime {
         system.genFuncs = (getGenerateFunctions((*star).Index)).cast();
         pSolarSysState = &mut system;
         ((*system.genFuncs).generatePlanets.unwrap())(&mut system);
-        if let Some(cb) = recurse.systemFuncPre {
+        if let Some(cb) = recurse.system_func_pre {
             cb(star, &system, recurse.arg);
         }
-        if recurse.planetFuncPre.is_some()
-            || recurse.planetFuncPost.is_some()
-            || recurse.moonFunc.is_some()
+        if recurse.planet_func_pre.is_some()
+            || recurse.planet_func_post.is_some()
+            || recurse.moon_func.is_some()
         {
-            forAllPlanets(star, &mut system, planetRecurse, recurse);
+            for_all_planets(star, &mut system, planet_recurse, recurse);
         }
-        if let Some(cb) = recurse.systemFuncPost {
+        if let Some(cb) = recurse.system_func_post {
             cb(star, &system, recurse.arg);
         }
         pSolarSysState = old_system;
-        CurStarDescPtr = old_star;
+        (**World::current()).select_star(
+            (old_star).as_ref(),
+            crate::planets::starmap::current_catalog(),
+        );
     }
-    unsafe fn planetRecurse<T>(
+    unsafe fn planet_recurse<T>(
         star: *mut STAR_DESC,
         system: *mut SOLARSYS_STATE,
         planet: *mut PLANET_DESC,
         recurse: &mut UniverseRecurseArg<'_, T>,
     ) {
-        assert!(CurStarDescPtr == star.cast());
+        assert!(
+            (**World::current()).star_pointer(crate::planets::starmap::current_catalog())
+                == star.cast()
+        );
         assert!(pSolarSysState == system);
         (*planet).pPrevDesc = ptr::addr_of_mut!((*system).SunDesc[0]);
-        if let Some(cb) = recurse.planetFuncPre {
+        if let Some(cb) = recurse.planet_func_pre {
             (*system).pOrbitalDesc = planet;
             DoPlanetaryAnalysis(ptr::addr_of_mut!((*system).SysInfo), planet);
             ((*(*system).genFuncs).generateOrbital.unwrap())(system, planet);
             cb(planet, recurse.arg);
         }
-        if recurse.moonFunc.is_some() {
+        if recurse.moon_func.is_some() {
             (*SysGenRNG).reseed((*planet).rand_seed);
             ((*(*system).genFuncs).generateMoons.unwrap())(system, planet);
-            forAllMoons(star, system, planet, moonRecurse, recurse);
+            for_all_moons(star, system, planet, moon_recurse, recurse);
         }
-        if let Some(cb) = recurse.planetFuncPost {
+        if let Some(cb) = recurse.planet_func_post {
             (*system).pOrbitalDesc = planet;
             DoPlanetaryAnalysis(ptr::addr_of_mut!((*system).SysInfo), planet);
             ((*(*system).genFuncs).generateOrbital.unwrap())(system, planet);
             cb(planet, recurse.arg);
         }
     }
-    unsafe fn moonRecurse<T>(
+    unsafe fn moon_recurse<T>(
         star: *mut STAR_DESC,
         system: *mut SOLARSYS_STATE,
         planet: *mut PLANET_DESC,
         moon: *mut PLANET_DESC,
         recurse: &mut UniverseRecurseArg<'_, T>,
     ) {
-        assert!(CurStarDescPtr == star.cast());
+        assert!(
+            (**World::current()).star_pointer(crate::planets::starmap::current_catalog())
+                == star.cast()
+        );
         assert!(pSolarSysState == system);
         (*moon).pPrevDesc = planet;
-        if let Some(cb) = recurse.moonFunc {
+        if let Some(cb) = recurse.moon_func {
             (*system).pOrbitalDesc = moon;
             if (*moon).data_index != HIERARCHY_STARBASE as BYTE
                 && (*moon).data_index != SA_MATRA as BYTE
@@ -733,17 +671,17 @@ mod runtime {
     }
     /// # Safety
     /// Must run on the game thread with an open output stream.
-    pub unsafe fn dumpUniverse(out: *mut FILE) {
+    pub unsafe fn dump_universe(out: *mut FILE) {
         let mut context = DumpUniverseArg { out };
         let mut recurse = UniverseRecurseArg {
-            systemFuncPre: Some(dumpSystemCallback),
-            systemFuncPost: None,
-            planetFuncPre: Some(dumpPlanetCallback),
-            planetFuncPost: None,
-            moonFunc: Some(dumpMoonCallback),
+            system_func_pre: Some(dump_system_callback),
+            system_func_post: None,
+            planet_func_pre: Some(dump_planet_callback),
+            planet_func_post: None,
+            moon_func: Some(dump_moon_callback),
             arg: &mut context,
         };
-        UniverseRecurse(&mut recurse);
+        universe_recurse(&mut recurse);
     }
     unsafe fn write_generation_file(
         name: *const c_char,
@@ -767,23 +705,23 @@ mod runtime {
     }
     /// # Safety
     /// Must run on the game thread; generation can change game state.
-    pub unsafe fn dumpUniverseToFile() {
+    pub unsafe fn dump_universe_to_file() {
         write_generation_file(
             c"PlanetInfo".as_ptr(),
-            dumpUniverse,
+            dump_universe,
             c"*** Star dump complete. The game may be in an undefined state.\n".as_ptr(),
         );
     }
-    unsafe fn dumpSystemCallback(
+    unsafe fn dump_system_callback(
         star: *const STAR_DESC,
         system: *const SOLARSYS_STATE,
         arg: &mut DumpUniverseArg,
     ) {
-        dumpSystem(arg.out, star, system);
+        dump_system(arg.out, star, system);
     }
     /// # Safety
     /// Star and system records must be readable, and `out` an open stream.
-    pub unsafe fn dumpSystem(
+    pub unsafe fn dump_system(
         out: *mut FILE,
         star: *const STAR_DESC,
         _system: *const SOLARSYS_STATE,
@@ -795,11 +733,11 @@ mod runtime {
             buffer.as_mut_ptr(),
             buffer.len(),
             c"%s %s".as_ptr(),
-            bodyColorString(
+            body_color_string(
                 (((*star).Type as u32 & ((0xff << STAR_COLOR_SHIFT) as BYTE as u32))
                     >> STAR_COLOR_SHIFT) as BYTE,
             ),
-            starTypeString(
+            star_type_string(
                 (((*star).Type as u32
                     & (((0xff << STAR_TYPE_SHIFT) & !(0xff << STAR_COLOR_SHIFT)) as BYTE as u32))
                     >> STAR_TYPE_SHIFT) as BYTE,
@@ -814,36 +752,37 @@ mod runtime {
             (*star).star_pt.y as c_int / 10,
             (*star).star_pt.y as c_int % 10,
             buffer.as_ptr(),
-            starPresenceString((*star).Index),
+            star_presence_string((*star).Index),
         );
     }
-    unsafe fn dumpPlanetCallback(planet: *const PLANET_DESC, arg: &mut DumpUniverseArg) {
-        dumpPlanet(arg.out, planet);
+    unsafe fn dump_planet_callback(planet: *const PLANET_DESC, arg: &mut DumpUniverseArg) {
+        dump_planet(arg.out, planet);
     }
     /// # Safety
     /// Planet must belong to the active system, and `out` be an open stream.
-    pub unsafe fn dumpPlanet(out: *mut FILE, planet: *const PLANET_DESC) {
+    pub unsafe fn dump_planet(out: *mut FILE, planet: *const PLANET_DESC) {
+        let world = WorldData::current();
         ((*(*pSolarSysState).genFuncs).generateName.unwrap())(pSolarSysState, planet);
         libc::fprintf(
             out,
             c"- %-37s  %s\n".as_ptr(),
-            ptr::addr_of!(GlobData.SIS_state.PlanetName).cast::<c_char>(),
-            planetTypeString(((*planet).data_index & !(PLANET_SHIELDED as BYTE)) as c_int),
+            ptr::addr_of!((**world).flagship.planet_name).cast::<c_char>(),
+            planet_type_string(((*planet).data_index & !(PLANET_SHIELDED as BYTE)) as c_int),
         );
-        dumpWorld(out, planet);
+        dump_world(out, planet);
     }
-    unsafe fn dumpMoonCallback(moon: *const PLANET_DESC, arg: &mut DumpUniverseArg) {
-        dumpMoon(arg.out, moon);
+    unsafe fn dump_moon_callback(moon: *const PLANET_DESC, arg: &mut DumpUniverseArg) {
+        dump_moon(arg.out, moon);
     }
     /// # Safety
     /// Moon must belong to the active system, and `out` be an open stream.
-    pub unsafe fn dumpMoon(out: *mut FILE, moon: *const PLANET_DESC) {
+    pub unsafe fn dump_moon(out: *mut FILE, moon: *const PLANET_DESC) {
         let kind = if (*moon).data_index == HIERARCHY_STARBASE as BYTE {
             c"StarBase".as_ptr()
         } else if (*moon).data_index == SA_MATRA as BYTE {
             c"Sa-Matra".as_ptr()
         } else {
-            planetTypeString(((*moon).data_index & !(PLANET_SHIELDED as BYTE)) as c_int)
+            planet_type_string(((*moon).data_index & !(PLANET_SHIELDED as BYTE)) as c_int)
         };
         libc::fprintf(
             out,
@@ -851,9 +790,9 @@ mod runtime {
             b'a' as c_int + moon.offset_from(ptr::addr_of!((*pSolarSysState).MoonDesc[0])) as c_int,
             kind,
         );
-        dumpWorld(out, moon);
+        dump_world(out, moon);
     }
-    unsafe fn dumpWorld(out: *mut FILE, world: *const PLANET_DESC) {
+    unsafe fn dump_world(out: *mut FILE, world: *const PLANET_DESC) {
         if (*world).data_index == HIERARCHY_STARBASE as BYTE {
             return;
         }
@@ -922,8 +861,8 @@ mod runtime {
         libc::fprintf(
             out,
             c"          Bio: %4d    Min: %4d\n".as_ptr(),
-            calculateBioValue(pSolarSysState, world) as c_int,
-            calculateMineralValue(pSolarSysState, world) as c_int,
+            calculate_bio_value(pSolarSysState, world) as c_int,
+            calculate_mineral_value(pSolarSysState, world) as c_int,
         );
     }
     pub fn uqm_debug_creature_bio_value(kind: BYTE) -> c_int {
@@ -931,12 +870,12 @@ mod runtime {
     }
     /// # Safety
     /// World must be the active orbital descriptor and its generation functions live.
-    pub unsafe fn calculateBioValue(
+    pub unsafe fn calculate_bio_value(
         system: *const SOLARSYS_STATE,
         world: *const PLANET_DESC,
     ) -> COUNT {
         assert_eq!((*system).pOrbitalDesc.cast_const(), world);
-        let count = callGenerateForScanType(
+        let count = call_generate_for_scan_type(
             system,
             world,
             COUNT::MAX,
@@ -946,7 +885,7 @@ mod runtime {
         let mut result: COUNT = 0;
         for i in 0..count {
             let mut info: NODE_INFO = mem::zeroed();
-            callGenerateForScanType(
+            call_generate_for_scan_type(
                 system,
                 world,
                 i,
@@ -963,13 +902,13 @@ mod runtime {
     }
     /// # Safety
     /// World must be active, and `bio` writable for all creature-type counters.
-    pub unsafe fn generateBioIndex(
+    pub unsafe fn generate_bio_index(
         system: *const SOLARSYS_STATE,
         world: *const PLANET_DESC,
         bio: *mut COUNT,
     ) {
         assert_eq!((*system).pOrbitalDesc.cast_const(), world);
-        let count = callGenerateForScanType(
+        let count = call_generate_for_scan_type(
             system,
             world,
             COUNT::MAX,
@@ -981,7 +920,7 @@ mod runtime {
         }
         for i in 0..count {
             let mut info: NODE_INFO = mem::zeroed();
-            callGenerateForScanType(
+            call_generate_for_scan_type(
                 system,
                 world,
                 i,
@@ -997,12 +936,12 @@ mod runtime {
     }
     /// # Safety
     /// World must be the active orbital descriptor and its generation functions live.
-    pub unsafe fn calculateMineralValue(
+    pub unsafe fn calculate_mineral_value(
         system: *const SOLARSYS_STATE,
         world: *const PLANET_DESC,
     ) -> COUNT {
         assert_eq!((*system).pOrbitalDesc.cast_const(), world);
-        let count = callGenerateForScanType(
+        let count = call_generate_for_scan_type(
             system,
             world,
             COUNT::MAX,
@@ -1012,7 +951,7 @@ mod runtime {
         let mut result: COUNT = 0;
         for i in 0..count {
             let mut info: NODE_INFO = mem::zeroed();
-            callGenerateForScanType(
+            call_generate_for_scan_type(
                 system,
                 world,
                 i,
@@ -1021,21 +960,22 @@ mod runtime {
             );
             result = result.wrapping_add(
                 ((info.density >> 8) as u32
-                    * GlobData.Game_state.ElementWorth[element_category(info.type_ as usize)]
-                        as u32) as COUNT,
+                    * WorldData::current().read(|owner| {
+                        owner.game.element_worth[element_category(info.type_ as usize)]
+                    }) as u32) as COUNT,
             );
         }
         result
     }
     /// # Safety
     /// World must be active, and `minerals` writable for all element-category counters.
-    pub unsafe fn generateMineralIndex(
+    pub unsafe fn generate_mineral_index(
         system: *const SOLARSYS_STATE,
         world: *const PLANET_DESC,
         minerals: *mut COUNT,
     ) {
         assert_eq!((*system).pOrbitalDesc.cast_const(), world);
-        let count = callGenerateForScanType(
+        let count = call_generate_for_scan_type(
             system,
             world,
             COUNT::MAX,
@@ -1047,7 +987,7 @@ mod runtime {
         }
         for i in 0..count {
             let mut info: NODE_INFO = mem::zeroed();
-            callGenerateForScanType(
+            call_generate_for_scan_type(
                 system,
                 world,
                 i,
@@ -1060,46 +1000,46 @@ mod runtime {
     }
     struct TallyResourcesArg {
         out: *mut FILE,
-        mineralCount: COUNT,
-        bioCount: COUNT,
+        mineral_count: COUNT,
+        bio_count: COUNT,
     }
     /// # Safety
     /// Must run on the game thread with an open output stream.
-    pub unsafe fn tallyResources(out: *mut FILE) {
+    pub unsafe fn tally_resources(out: *mut FILE) {
         let mut context = TallyResourcesArg {
             out,
-            mineralCount: 0,
-            bioCount: 0,
+            mineral_count: 0,
+            bio_count: 0,
         };
         let mut recurse = UniverseRecurseArg {
-            systemFuncPre: Some(tallySystemPreCallback),
-            systemFuncPost: Some(tallySystemPostCallback),
-            planetFuncPre: Some(tallyPlanetCallback),
-            planetFuncPost: None,
-            moonFunc: Some(tallyMoonCallback),
+            system_func_pre: Some(tally_system_pre_callback),
+            system_func_post: Some(tally_system_post_callback),
+            planet_func_pre: Some(tally_planet_callback),
+            planet_func_post: None,
+            moon_func: Some(tally_moon_callback),
             arg: &mut context,
         };
-        UniverseRecurse(&mut recurse);
+        universe_recurse(&mut recurse);
     }
     /// # Safety
     /// Must run on the game thread; generation can change game state.
-    pub unsafe fn tallyResourcesToFile() {
+    pub unsafe fn tally_resources_to_file() {
         write_generation_file(
             c"ResourceTally".as_ptr(),
-            tallyResources,
+            tally_resources,
             c"*** Resource tally complete. The game may be in an undefined state.\n".as_ptr(),
         );
     }
-    unsafe fn tallySystemPreCallback(
+    unsafe fn tally_system_pre_callback(
         _: *const STAR_DESC,
         _: *const SOLARSYS_STATE,
         arg: &mut TallyResourcesArg,
     ) {
         let context = arg;
-        context.mineralCount = 0;
-        context.bioCount = 0;
+        context.mineral_count = 0;
+        context.bio_count = 0;
     }
-    unsafe fn tallySystemPostCallback(
+    unsafe fn tally_system_post_callback(
         star: *const STAR_DESC,
         _: *const SOLARSYS_STATE,
         arg: &mut TallyResourcesArg,
@@ -1111,34 +1051,34 @@ mod runtime {
             context.out,
             c"%s\t%d\t%d\n".as_ptr(),
             name.as_ptr(),
-            context.mineralCount as c_int,
-            context.bioCount as c_int,
+            context.mineral_count as c_int,
+            context.bio_count as c_int,
         );
     }
-    unsafe fn tallyPlanetCallback(world: *const PLANET_DESC, arg: &mut TallyResourcesArg) {
-        tallyResourcesWorld(arg, world);
+    unsafe fn tally_planet_callback(world: *const PLANET_DESC, arg: &mut TallyResourcesArg) {
+        tally_resources_world(arg, world);
     }
-    unsafe fn tallyMoonCallback(world: *const PLANET_DESC, arg: &mut TallyResourcesArg) {
-        tallyResourcesWorld(arg, world);
+    unsafe fn tally_moon_callback(world: *const PLANET_DESC, arg: &mut TallyResourcesArg) {
+        tally_resources_world(arg, world);
     }
-    unsafe fn tallyResourcesWorld(arg: &mut TallyResourcesArg, world: *const PLANET_DESC) {
+    unsafe fn tally_resources_world(arg: &mut TallyResourcesArg, world: *const PLANET_DESC) {
         if (*world).data_index == HIERARCHY_STARBASE as BYTE {
             return;
         }
         if (*world).data_index == SA_MATRA as BYTE {
             return;
         }
-        arg.bioCount = arg
-            .bioCount
-            .wrapping_add(calculateBioValue(pSolarSysState, world));
-        arg.mineralCount = arg
-            .mineralCount
-            .wrapping_add(calculateMineralValue(pSolarSysState, world));
+        arg.bio_count = arg
+            .bio_count
+            .wrapping_add(calculate_bio_value(pSolarSysState, world));
+        arg.mineral_count = arg
+            .mineral_count
+            .wrapping_add(calculate_mineral_value(pSolarSysState, world));
     }
 
     /// # Safety
     /// The callback must accept every immutable planet-type record and its context.
-    pub unsafe fn forAllPlanetTypes<T>(
+    pub unsafe fn for_all_planet_types<T>(
         callback: unsafe fn(c_int, *const PlanetFrame, &mut T),
         arg: &mut T,
     ) {
@@ -1155,27 +1095,30 @@ mod runtime {
     }
     /// # Safety
     /// `out` must be an open output stream, with game strings initialized.
-    pub unsafe fn dumpPlanetTypes(out: *mut FILE) {
+    pub unsafe fn dump_planet_types(out: *mut FILE) {
         let mut context = DumpPlanetTypesArg { out };
-        forAllPlanetTypes(dumpPlanetTypeCallback, &mut context);
+        for_all_planet_types(dump_planet_type_callback, &mut context);
     }
-    unsafe fn dumpPlanetTypeCallback(
+    unsafe fn dump_planet_type_callback(
         index: c_int,
         planet: *const PlanetFrame,
         arg: &mut DumpPlanetTypesArg,
     ) {
-        dumpPlanetType(arg.out, index, planet);
+        dump_planet_type(arg.out, index, planet);
     }
     unsafe fn game_string(index: usize) -> *const c_char {
-        GetStringAddress(SetAbsStringTableIndex(GameStrings, index as COUNT))
+        GetStringAddress(SetAbsStringTableIndex(
+            Kernel::current().read(|owner| owner.game_strings),
+            index as COUNT,
+        ))
     }
     /// # Safety
     /// Planet type must be readable, game strings initialized, and stream open.
-    pub unsafe fn dumpPlanetType(out: *mut FILE, index: c_int, planet: *const PlanetFrame) {
+    pub unsafe fn dump_planet_type(out: *mut FILE, index: c_int, planet: *const PlanetFrame) {
         libc::fprintf(out,c"%s\n\tType: %s\n\tColor: %s\n\tSurface generation algoritm: %s\n\tTectonics: %s\n\tAtmosphere: %s\n\tDensity: %s\n\tElements:\n".as_ptr(),
-        planetTypeString(index),worldSizeString((*planet).Type & PLAN_SIZE_MASK as BYTE),
-        bodyColorString((*planet).Type >> 4),worldGenAlgoString((*planet).Type & PLAN_ALGO_MASK as BYTE),
-        tectonicsString((*planet).BaseTectonics),atmosphereString((*planet).AtmoAndDensity >> 4),densityString((*planet).AtmoAndDensity & 15));
+        planet_type_string(index),world_size_string((*planet).Type & PLAN_SIZE_MASK as BYTE),
+        body_color_string((*planet).Type >> 4),world_gen_algo_string((*planet).Type & PLAN_ALGO_MASK as BYTE),
+        tectonics_string((*planet).BaseTectonics),atmosphere_string((*planet).AtmoAndDensity >> 4),density_string((*planet).AtmoAndDensity & 15));
         for i in 0..NUM_USEFUL_ELEMENTS as usize {
             let entry = &(*planet).UsefulElements[i];
             if entry.Density == 0 {
@@ -1186,7 +1129,7 @@ mod runtime {
                 out,
                 c"\t\t0 to %d %s-quality (+%d) deposits of %s (%s)\n".as_ptr(),
                 (entry.Density & 15) as c_int,
-                depositQualityString(quality),
+                deposit_quality_string(quality),
                 quality as c_int * 5,
                 game_string(ELEMENTS_STRING_BASE as usize + entry.ElementType as usize),
                 game_string(
@@ -1196,9 +1139,117 @@ mod runtime {
         }
         libc::fprintf(out, c"\n".as_ptr());
     }
+    macro_rules! category {
+        ($name:literal,$base:ident,$count:ident) => {
+            (
+                concat!($name, "\0").as_ptr().cast::<c_char>(),
+                $base as usize,
+                $count as usize,
+            )
+        };
+    }
+    const STRING_CATEGORIES: &[(*const c_char, usize, usize)] = &[
+        (c"0".as_ptr(), 0, 0),
+        category!("STAR_STRING_BASE", STAR_STRING_BASE, STAR_STRING_COUNT),
+        category!(
+            "DEVICE_STRING_BASE",
+            DEVICE_STRING_BASE,
+            DEVICE_STRING_COUNT
+        ),
+        category!("CARGO_STRING_BASE", CARGO_STRING_BASE, CARGO_STRING_COUNT),
+        category!(
+            "ELEMENTS_STRING_BASE",
+            ELEMENTS_STRING_BASE,
+            ELEMENTS_STRING_COUNT
+        ),
+        category!("SCAN_STRING_BASE", SCAN_STRING_BASE, SCAN_STRING_COUNT),
+        category!("STAR_NUMBER_BASE", STAR_NUMBER_BASE, STAR_NUMBER_COUNT),
+        category!(
+            "PLANET_NUMBER_BASE",
+            PLANET_NUMBER_BASE,
+            PLANET_NUMBER_COUNT
+        ),
+        category!(
+            "MONTHS_STRING_BASE",
+            MONTHS_STRING_BASE,
+            MONTHS_STRING_COUNT
+        ),
+        category!(
+            "FEEDBACK_STRING_BASE",
+            FEEDBACK_STRING_BASE,
+            FEEDBACK_STRING_COUNT
+        ),
+        category!(
+            "STARBASE_STRING_BASE",
+            STARBASE_STRING_BASE,
+            STARBASE_STRING_COUNT
+        ),
+        category!(
+            "ENCOUNTER_STRING_BASE",
+            ENCOUNTER_STRING_BASE,
+            ENCOUNTER_STRING_COUNT
+        ),
+        category!(
+            "NAVIGATION_STRING_BASE",
+            NAVIGATION_STRING_BASE,
+            NAVIGATION_STRING_COUNT
+        ),
+        category!(
+            "NAMING_STRING_BASE",
+            NAMING_STRING_BASE,
+            NAMING_STRING_COUNT
+        ),
+        category!("MELEE_STRING_BASE", MELEE_STRING_BASE, MELEE_STRING_COUNT),
+        category!(
+            "SAVEGAME_STRING_BASE",
+            SAVEGAME_STRING_BASE,
+            SAVEGAME_STRING_COUNT
+        ),
+        category!(
+            "OPTION_STRING_BASE",
+            OPTION_STRING_BASE,
+            OPTION_STRING_COUNT
+        ),
+        category!(
+            "QUITMENU_STRING_BASE",
+            QUITMENU_STRING_BASE,
+            QUITMENU_STRING_COUNT
+        ),
+        category!(
+            "STATUS_STRING_BASE",
+            STATUS_STRING_BASE,
+            STATUS_STRING_COUNT
+        ),
+        category!(
+            "FLAGSHIP_STRING_BASE",
+            FLAGSHIP_STRING_BASE,
+            FLAGSHIP_STRING_COUNT
+        ),
+        category!(
+            "ORBITSCAN_STRING_BASE",
+            ORBITSCAN_STRING_BASE,
+            ORBITSCAN_STRING_COUNT
+        ),
+        category!(
+            "MAINMENU_STRING_BASE",
+            MAINMENU_STRING_BASE,
+            MAINMENU_STRING_COUNT
+        ),
+        category!(
+            "NETMELEE_STRING_BASE",
+            NETMELEE_STRING_BASE,
+            NETMELEE_STRING_COUNT
+        ),
+        (
+            c"GAMESTR_COUNT".as_ptr(),
+            GAMESTR_COUNT as usize,
+            usize::MAX,
+        ),
+    ];
+
     /// # Safety
     /// Game strings must be initialized. Returned storage is shared and non-reentrant.
-    pub unsafe fn planetTypeString(index: c_int) -> *const c_char {
+    pub unsafe fn planet_type_string(index: c_int) -> *const c_char {
         static mut BUFFER: [c_char; 40] = [0; 40];
         let buffer = ptr::addr_of_mut!(BUFFER).cast();
         if index >= FIRST_GAS_GIANT as c_int {
@@ -1221,7 +1272,7 @@ mod runtime {
     }
     /// # Safety
     /// Returned fallback-number storage is shared and must not be accessed concurrently.
-    pub unsafe fn tectonicsString(value: BYTE) -> *const c_char {
+    pub unsafe fn tectonics_string(value: BYTE) -> *const c_char {
         static mut BUFFER: [c_char; 5] = [0; 5];
         match value as u32 {
             NO_TECTONICS => c"none".as_ptr(),
@@ -1253,8 +1304,11 @@ mod runtime {
     }
     /// # Safety
     /// Must run on the game thread with battle and status context initialized.
-    pub unsafe fn resetCrewBattle() {
-        if GlobData.Game_state.CurrentActivity & IN_BATTLE as ACTIVITY == 0 || inHQSpace() != 0 {
+    pub unsafe fn reset_crew_battle() {
+        if WorldData::current().read(|owner| owner.game.current_activity) & IN_BATTLE as ACTIVITY
+            == 0
+            || World::current().read(in_hqspace) != 0
+        {
             return;
         }
         crate::app::bridge::enter(|cx| {
@@ -1266,15 +1320,18 @@ mod runtime {
             }
             let info = cx.race_stats(ship).ship_info;
             let delta = (info.max_crew as c_int - info.crew_level as c_int) as COUNT;
-            let old = SetContext(StatusContext);
+            let old = SetContext(cx.kernel.status_context);
             cx.delta_crew(cx.ship_element(ship), delta as SIZE);
             SetContext(old);
         });
     }
     /// # Safety
     /// Must run on the game thread with battle and status context initialized.
-    pub unsafe fn resetEnergyBattle() {
-        if GlobData.Game_state.CurrentActivity & IN_BATTLE as ACTIVITY == 0 || inHQSpace() != 0 {
+    pub unsafe fn reset_energy_battle() {
+        if WorldData::current().read(|owner| owner.game.current_activity) & IN_BATTLE as ACTIVITY
+            == 0
+            || World::current().read(in_hqspace) != 0
+        {
             return;
         }
         crate::app::bridge::enter(|cx| {
@@ -1286,7 +1343,7 @@ mod runtime {
             }
             let info = cx.race_stats(ship).ship_info;
             let delta = (info.max_energy as c_int - info.energy_level as c_int) as COUNT;
-            let old = SetContext(StatusContext);
+            let old = SetContext(cx.kernel.status_context);
             cx.delta_energy(cx.ship_element(ship), delta as SIZE);
             SetContext(old);
         });
@@ -1294,115 +1351,10 @@ mod runtime {
 
     /// # Safety
     /// Game strings must be initialized and `out` an open C stream.
-    pub unsafe fn dumpStrings(out: *mut FILE) {
-        macro_rules! category {
-            ($name:literal,$base:ident,$count:ident) => {
-                (
-                    concat!($name, "\0").as_ptr().cast::<c_char>(),
-                    $base as usize,
-                    $count as usize,
-                )
-            };
-        }
-        let categories = [
-            (c"0".as_ptr(), 0, 0),
-            category!("STAR_STRING_BASE", STAR_STRING_BASE, STAR_STRING_COUNT),
-            category!(
-                "DEVICE_STRING_BASE",
-                DEVICE_STRING_BASE,
-                DEVICE_STRING_COUNT
-            ),
-            category!("CARGO_STRING_BASE", CARGO_STRING_BASE, CARGO_STRING_COUNT),
-            category!(
-                "ELEMENTS_STRING_BASE",
-                ELEMENTS_STRING_BASE,
-                ELEMENTS_STRING_COUNT
-            ),
-            category!("SCAN_STRING_BASE", SCAN_STRING_BASE, SCAN_STRING_COUNT),
-            category!("STAR_NUMBER_BASE", STAR_NUMBER_BASE, STAR_NUMBER_COUNT),
-            category!(
-                "PLANET_NUMBER_BASE",
-                PLANET_NUMBER_BASE,
-                PLANET_NUMBER_COUNT
-            ),
-            category!(
-                "MONTHS_STRING_BASE",
-                MONTHS_STRING_BASE,
-                MONTHS_STRING_COUNT
-            ),
-            category!(
-                "FEEDBACK_STRING_BASE",
-                FEEDBACK_STRING_BASE,
-                FEEDBACK_STRING_COUNT
-            ),
-            category!(
-                "STARBASE_STRING_BASE",
-                STARBASE_STRING_BASE,
-                STARBASE_STRING_COUNT
-            ),
-            category!(
-                "ENCOUNTER_STRING_BASE",
-                ENCOUNTER_STRING_BASE,
-                ENCOUNTER_STRING_COUNT
-            ),
-            category!(
-                "NAVIGATION_STRING_BASE",
-                NAVIGATION_STRING_BASE,
-                NAVIGATION_STRING_COUNT
-            ),
-            category!(
-                "NAMING_STRING_BASE",
-                NAMING_STRING_BASE,
-                NAMING_STRING_COUNT
-            ),
-            category!("MELEE_STRING_BASE", MELEE_STRING_BASE, MELEE_STRING_COUNT),
-            category!(
-                "SAVEGAME_STRING_BASE",
-                SAVEGAME_STRING_BASE,
-                SAVEGAME_STRING_COUNT
-            ),
-            category!(
-                "OPTION_STRING_BASE",
-                OPTION_STRING_BASE,
-                OPTION_STRING_COUNT
-            ),
-            category!(
-                "QUITMENU_STRING_BASE",
-                QUITMENU_STRING_BASE,
-                QUITMENU_STRING_COUNT
-            ),
-            category!(
-                "STATUS_STRING_BASE",
-                STATUS_STRING_BASE,
-                STATUS_STRING_COUNT
-            ),
-            category!(
-                "FLAGSHIP_STRING_BASE",
-                FLAGSHIP_STRING_BASE,
-                FLAGSHIP_STRING_COUNT
-            ),
-            category!(
-                "ORBITSCAN_STRING_BASE",
-                ORBITSCAN_STRING_BASE,
-                ORBITSCAN_STRING_COUNT
-            ),
-            category!(
-                "MAINMENU_STRING_BASE",
-                MAINMENU_STRING_BASE,
-                MAINMENU_STRING_COUNT
-            ),
-            category!(
-                "NETMELEE_STRING_BASE",
-                NETMELEE_STRING_BASE,
-                NETMELEE_STRING_COUNT
-            ),
-            (
-                c"GAMESTR_COUNT".as_ptr(),
-                GAMESTR_COUNT as usize,
-                usize::MAX,
-            ),
-        ];
-        let num_strings = GetStringTableCount(GameStrings) as usize;
+    pub unsafe fn dump_strings(out: *mut FILE) {
+        let categories = STRING_CATEGORIES;
+        let num_strings =
+            GetStringTableCount(Kernel::current().read(|owner| owner.game_strings)) as usize;
         for i in 0..categories.len() - 1 {
             if categories[i].1 + categories[i].2 != categories[i + 1].1 {
                 libc::fprintf(
@@ -1435,27 +1387,27 @@ mod runtime {
         }
     }
 
-    unsafe fn isContextVisible(context: CONTEXT) -> bool {
+    unsafe fn is_context_visible(context: CONTEXT) -> bool {
         let old = SetContext(context);
         let frame = GetContextFGFrame();
         SetContext(old);
-        frame == Screen
+        frame == Kernel::current().read(|owner| owner.screen)
     }
-    unsafe fn countVisibleContexts() -> usize {
+    unsafe fn count_visible_contexts() -> usize {
         let mut count = 0;
         let mut context = GetFirstContext();
         while !context.is_null() {
-            if isContextVisible(context) {
+            if is_context_visible(context) {
                 count += 1;
             }
             context = GetNextContext(context);
         }
         count
     }
-    unsafe fn drawContext(context: CONTEXT, hue: f64) {
+    unsafe fn draw_context(context: CONTEXT, hue: f64) {
         let _draw_frame = GetContextFGFrame();
-        let rectangle_color = hsvaToRgba(hue, 1.0, 0.5, 100);
-        let line_color = hsvaToRgba(hue, 1.0, 1.0, 90);
+        let rectangle_color = hsva_to_rgba(hue, 1.0, 0.5, 100);
+        let line_color = hsva_to_rgba(hue, 1.0, 1.0, 90);
         let text_color = line_color;
         let old_context = SetContext(context);
         let mut rect: RECT = mem::zeroed();
@@ -1477,7 +1429,7 @@ mod runtime {
         for (first, second) in [(p1, p2), (p2, p4), (p1, p3), (p3, p4), (p1, p4), (p2, p3)] {
             DrawLine(&mut LINE { first, second });
         }
-        let old_font = SetContextFont(TinyFont);
+        let old_font = SetContextFont(Kernel::current().read(|owner| owner.tiny_font));
         SetContextForeGroundColor(text_color);
         let old_mode = SetContextDrawMode(DrawMode {
             kind: DrawKind_DRAW_ALPHA as BYTE,
@@ -1494,7 +1446,7 @@ mod runtime {
         SetContextForeGroundColor(old_color);
         SetContextFont(old_font);
     }
-    unsafe fn describeContext(out: *mut FILE, context: CONTEXT) {
+    unsafe fn describe_context(out: *mut FILE, context: CONTEXT) {
         let old = SetContext(context);
         let mut rect: RECT = mem::zeroed();
         GetContextClipRect(&mut rect);
@@ -1513,9 +1465,9 @@ mod runtime {
     }
     #[repr(C)]
     struct WaitState {
-        InputFunc: Option<unsafe fn(*mut WaitState) -> BOOLEAN>,
+        input_func: Option<unsafe fn(*mut WaitState) -> BOOLEAN>,
     }
-    unsafe fn waitForKey(_: *mut WaitState) -> BOOLEAN {
+    unsafe fn wait_for_key(_: *mut WaitState) -> BOOLEAN {
         if PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0
             || PulsedInputState.menu[KEY_MENU_CANCEL as usize] != 0
         {
@@ -1524,8 +1476,8 @@ mod runtime {
         SleepThread(ONE_SECOND / 20);
         1
     }
-    unsafe fn getScreen() -> FRAME {
-        let old = SetContext(ScreenContext);
+    unsafe fn get_screen() -> FRAME {
+        let old = SetContext(Kernel::current().read(|owner| owner.screen_context));
         let rectangle = RECT {
             corner: POINT { x: 0, y: 0 },
             extent: EXTENT {
@@ -1537,8 +1489,8 @@ mod runtime {
         SetContext(old);
         frame
     }
-    unsafe fn putScreen(frame: FRAME) {
-        let old = SetContext(ScreenContext);
+    unsafe fn put_screen(frame: FRAME) {
+        let old = SetContext(Kernel::current().read(|owner| owner.screen_context));
         DrawStamp(&mut STAMP {
             origin: POINT { x: 0, y: 0 },
             frame,
@@ -1547,15 +1499,15 @@ mod runtime {
     }
     /// # Safety
     /// Must run on the main thread with live graphics and input systems.
-    pub unsafe fn debugContexts() {
+    pub unsafe fn debug_contexts() {
         static mut IN_DEBUG_CONTEXTS: bool = false;
         if ptr::read_volatile(ptr::addr_of!(IN_DEBUG_CONTEXTS)) {
             return;
         }
         ptr::write_volatile(ptr::addr_of_mut!(IN_DEBUG_CONTEXTS), true);
-        let count = countVisibleContexts();
+        let count = count_visible_contexts();
         if count != 0 {
-            let saved = getScreen();
+            let saved = get_screen();
             FlushGraphics();
             let debug_context = CreateContextAux(c"debugDrawContext".as_ptr());
             let debug_frame = CaptureDrawable(CloneFrame(saved));
@@ -1566,23 +1518,23 @@ mod runtime {
             let mut context = GetFirstContext();
             while !context.is_null() {
                 if context != debug_context {
-                    if isContextVisible(context) {
-                        drawContext(context, visible as f64 * increment);
+                    if is_context_visible(context) {
+                        draw_context(context, visible as f64 * increment);
                         visible += 1;
                     }
-                    describeContext(error_stream, context);
+                    describe_context(error_stream, context);
                 }
                 context = GetNextContext(context);
             }
-            putScreen(debug_frame);
+            put_screen(debug_frame);
             let mut state = WaitState {
-                InputFunc: Some(waitForKey),
+                input_func: Some(wait_for_key),
             };
             DoInput(ptr::addr_of_mut!(state).cast(), 1);
             SetContext(old);
             DestroyContext(debug_context);
             DestroyDrawable(ReleaseDrawable(debug_frame));
-            putScreen(saved);
+            put_screen(saved);
             DestroyDrawable(ReleaseDrawable(saved));
         }
         ptr::write_volatile(ptr::addr_of_mut!(IN_DEBUG_CONTEXTS), false);
@@ -1591,14 +1543,15 @@ mod runtime {
 
 #[cfg(not(test))]
 pub use runtime::{
-    activateAllShips, calculateBioValue, calculateMineralValue, clearEscorts, debugContexts,
-    debugKeyPressed, debugKeyPressedSynchronous, doInstantMove, dumpEvent, dumpEvents, dumpMoon,
-    dumpPlanet, dumpPlanetType, dumpPlanetTypes, dumpStrings, dumpSystem, dumpUniverse,
-    dumpUniverseToFile, equipShip, find_player_ship, forAllMoons, forAllPlanetTypes, forAllPlanets,
-    forAllStars, forwardToNextEvent, generateBioIndex, generateMineralIndex, giveDevices,
-    planetTypeString, resetCrewBattle, resetEnergyBattle, showSpheres, tallyResources,
-    tallyResourcesToFile, tectonicsString, uqm_debug_creature_bio_value, UniverseRecurse,
-    DEBUG_HOOK, DISABLE_INTERACTIVITY, INSTANT_MOVE,
+    activate_all_ships, calculate_bio_value, calculate_mineral_value, clear_escorts,
+    debug_contexts, debug_key_pressed, debug_key_pressed_synchronous, do_instant_move, dump_event,
+    dump_events, dump_moon, dump_planet, dump_planet_type, dump_planet_types, dump_strings,
+    dump_system, dump_universe, dump_universe_to_file, equip_ship, find_player_ship, for_all_moons,
+    for_all_planet_types, for_all_planets, for_all_stars, forward_to_next_event,
+    generate_bio_index, generate_mineral_index, give_devices, planet_type_string,
+    reset_crew_battle, reset_energy_battle, show_spheres, tally_resources, tally_resources_to_file,
+    tectonics_string, universe_recurse, uqm_debug_creature_bio_value, DEBUG_HOOK,
+    DISABLE_INTERACTIVITY, INSTANT_MOVE,
 };
 
 #[cfg(test)]
@@ -1616,20 +1569,20 @@ mod tests {
         }
         let mut events = Vec::new();
         let visitor = UniverseRecurseArg {
-            systemFuncPre: Some(system),
-            systemFuncPost: None,
-            planetFuncPre: Some(world),
-            planetFuncPost: None,
-            moonFunc: None,
+            system_func_pre: Some(system),
+            system_func_post: None,
+            planet_func_pre: Some(world),
+            planet_func_post: None,
+            moon_func: None,
             arg: &mut events,
         };
         // These callbacks do not inspect the records; only their typed context.
         unsafe {
-            visitor.systemFuncPre.unwrap()(std::ptr::null(), std::ptr::null(), visitor.arg);
-            visitor.planetFuncPre.unwrap()(std::ptr::null(), visitor.arg);
+            visitor.system_func_pre.unwrap()(std::ptr::null(), std::ptr::null(), visitor.arg);
+            visitor.planet_func_pre.unwrap()(std::ptr::null(), visitor.arg);
         }
         assert_eq!(events, ["system", "world"]);
-        let _: fn(u8) -> *const c_char = eventName;
+        let _: fn(u8) -> *const c_char = event_name;
     }
 
     #[test]
@@ -1664,25 +1617,25 @@ mod tests {
     fn debug_names_use_header_indices_and_unknown_fallbacks() {
         unsafe {
             assert_eq!(
-                std::ffi::CStr::from_ptr(eventName(HYPERSPACE_ENCOUNTER_EVENT as BYTE)),
+                std::ffi::CStr::from_ptr(event_name(HYPERSPACE_ENCOUNTER_EVENT as BYTE)),
                 c"HYPERSPACE_ENCOUNTER_EVENT"
             );
             assert_eq!(
-                std::ffi::CStr::from_ptr(starPresenceString(MELNORME8_DEFINED as BYTE)),
+                std::ffi::CStr::from_ptr(star_presence_string(MELNORME8_DEFINED as BYTE)),
                 c"Melnorme trader #8"
             );
-            assert_eq!(std::ffi::CStr::from_ptr(starPresenceString(0)), c"");
+            assert_eq!(std::ffi::CStr::from_ptr(star_presence_string(0)), c"");
             assert_eq!(
-                std::ffi::CStr::from_ptr(bodyColorString(CYAN_BODY as BYTE)),
+                std::ffi::CStr::from_ptr(body_color_string(CYAN_BODY as BYTE)),
                 c"cyan"
             );
             assert_eq!(
-                std::ffi::CStr::from_ptr(worldGenAlgoString(CRATERED_ALGO as BYTE)),
+                std::ffi::CStr::from_ptr(world_gen_algo_string(CRATERED_ALGO as BYTE)),
                 c"CRATERED_ALGO"
             );
-            assert_eq!(std::ffi::CStr::from_ptr(eventName(BYTE::MAX)), c"???");
+            assert_eq!(std::ffi::CStr::from_ptr(event_name(BYTE::MAX)), c"???");
             assert_eq!(
-                std::ffi::CStr::from_ptr(atmosphereString(BYTE::MAX)),
+                std::ffi::CStr::from_ptr(atmosphere_string(BYTE::MAX)),
                 c"super thick"
             );
         }
@@ -1698,11 +1651,11 @@ mod tests {
             (300.0, (255, 0, 255)),
         ];
         for (hue, (r, g, b)) in cases {
-            let color = hsvaToRgba(hue, 1.0, 1.0, 90);
+            let color = hsva_to_rgba(hue, 1.0, 1.0, 90);
             assert_eq!((color.r, color.g, color.b, color.a), (r, g, b, 90));
         }
         // The C t expression intentionally differs from the usual HSV formula.
-        let color = hsvaToRgba(30.0, 0.5, 1.0, 100);
+        let color = hsva_to_rgba(30.0, 0.5, 1.0, 100);
         assert_eq!((color.r, color.g, color.b, color.a), (255, 64, 128, 100));
     }
 }

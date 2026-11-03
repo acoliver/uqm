@@ -1,5 +1,7 @@
 //! Rust communication facade for state, playback and dialogue orchestration.
 
+#[cfg(not(test))]
+use crate::engine::{StoryKey, World, WorldData};
 use std::cell::RefCell;
 use std::ffi::{c_char, c_int, c_uint, CStr};
 
@@ -683,7 +685,7 @@ pub unsafe fn rust_alien_talk_segue(wait: c_uint) -> c_int {
             wait,
             || super::talk_segue::alien_talk_first_call_init(),
             super::talk_segue::dinput::run_talk_segue_dinput,
-            || super::talk_segue::fade_music_to_foreground_bridge(),
+            super::talk_segue::fade_music_to_foreground_bridge,
         )
     }
     #[cfg(test)]
@@ -732,7 +734,7 @@ fn run_alien_talk_unlocked(
 ///
 /// Matches C `TalkSegue(wait_track)`.
 /// Returns 1 if playback ended naturally, 0 if aborted.
-pub unsafe fn rust_talk_segue(wait: c_int) -> c_int {
+pub fn rust_talk_segue(wait: c_int) -> c_int {
     let wait_track = if wait <= 0 { 0 } else { wait as u32 };
     #[cfg(not(test))]
     {
@@ -1090,7 +1092,7 @@ pub fn rust_redraw_subtitles() {
 /// @requirement REQ-CS-002
 /// @pseudocode 004-summary-guard-stale-markers lines 01-24
 #[cfg(not(test))]
-pub unsafe fn rust_show_conversation_summary() -> c_int {
+pub fn rust_show_conversation_summary() -> c_int {
     super::response_ui::select_conversation_summary_production();
     1
 }
@@ -1107,7 +1109,7 @@ pub unsafe fn rust_show_conversation_summary() -> c_int {
 /// @requirement REQ-CS-002, REQ-CS-003, REQ-SM-001
 /// @pseudocode 004-summary-guard-stale-markers lines 01-47
 #[cfg(test)]
-pub unsafe fn rust_show_conversation_summary() -> c_int {
+pub fn rust_show_conversation_summary() -> c_int {
     use super::summary::SummaryResult;
     use super::summary::SummaryView;
 
@@ -1177,6 +1179,9 @@ const GLOBAL_ALLIANCE_NAME: c_int = -999_998;
 const ALLIANCE_NAME_BUF_SIZE: usize = 400;
 
 // C bridge declarations used only by NPCPhrase (not test-compiled).
+// Splice one or more voice clips with text (used by npcphrase_splice when clip exists).
+#[cfg(not(test))]
+use crate::sound::heart_ffi::splice_multi_track as SpliceMultiTrack;
 #[cfg(not(test))]
 use crate::sound::heart_ffi::splice_track as SpliceTrack;
 #[cfg(not(test))]
@@ -1187,26 +1192,33 @@ use crate::strings::string_table::GetStringSoundClip;
 use crate::strings::string_table::GetStringTimeStamp;
 #[cfg(not(test))]
 use crate::strings::string_table::SetAbsStringTableIndex;
-#[cfg(not(test))]
-extern "C" {
-    pub static mut GlobData: crate::ships::native::abi::GLOBDATA;
-}
-
-// Splice one or more voice clips with text (used by npcphrase_splice when clip exists).
-#[cfg(not(test))]
-use crate::sound::heart_ffi::splice_multi_track as SpliceMultiTrack;
 
 /// Ported from C's c_get_alliance_name: returns alliance name phrase text.
 /// Uses CommData.ConversationPhrases + GET_GAME_STATE(NEW_ALLIANCE_NAME).
 #[cfg(not(test))]
 pub(crate) unsafe fn get_alliance_name(index: c_int) -> *const u8 {
-    let i = crate::state::game_state_keys::get_game_state("NEW_ALLIANCE_NAME") as c_int;
+    let i = World::current().read(|world| world.story_state(StoryKey::NEW_ALLIANCE_NAME)) as c_int;
     let phrases = std::ptr::addr_of_mut!(CommData.conversation_phrases) as *mut std::ffi::c_void;
     if phrases.is_null() {
         return std::ptr::null();
     }
     let s = SetAbsStringTableIndex((phrases).cast(), (index + i) as u16);
     GetStringAddress(s).cast::<u8>()
+}
+
+fn format_alliance_name(buffer: &mut [u8], phrase: &[u8], commander: Option<&[u8]>) {
+    let mut used = phrase.len().min(buffer.len() - 1);
+    buffer[..used].copy_from_slice(&phrase[..used]);
+    if let Some(name) = commander {
+        let end = name
+            .iter()
+            .position(|&byte| byte == 0)
+            .unwrap_or(name.len());
+        let count = end.min(buffer.len() - used - 1);
+        buffer[used..used + count].copy_from_slice(&name[..count]);
+        used += count;
+    }
+    buffer[used] = 0;
 }
 
 /// Ported from C's c_get_alliance_name_full: full alliance name with CommanderName append.
@@ -1223,52 +1235,21 @@ unsafe fn get_alliance_name_full(
         return std::ptr::null();
     }
 
-    let i = crate::state::game_state_keys::get_game_state("NEW_ALLIANCE_NAME") as c_int;
+    let i = World::current().read(|world| world.story_state(StoryKey::NEW_ALLIANCE_NAME)) as c_int;
     let s = SetAbsStringTableIndex((phrases).cast(), ((adjusted_index - 1) + i) as u16);
     let src = GetStringAddress(s);
     if src.is_null() {
         return std::ptr::null();
     }
 
-    // Copy src into buf (strncpy equivalent)
-    let src_cstr = CStr::from_ptr(src);
-    let src_bytes = src_cstr.to_bytes();
-    let copy_len = (buf_len as usize - 1).min(src_bytes.len());
-    std::ptr::copy_nonoverlapping(src_bytes.as_ptr(), buf.cast::<u8>(), copy_len);
-    *buf.add(copy_len) = 0;
-
-    // If state==3, append CommanderName
-    if i == 3 {
-        let cname_ptr =
-            std::ptr::addr_of_mut!(GlobData.SIS_state.CommanderName) as *const std::ffi::c_char;
-        if !cname_ptr.is_null() {
-            let cname = CStr::from_ptr(cname_ptr);
-            let cname_bytes = cname.to_bytes();
-            let used = libc_strlen(buf);
-            let remaining = (buf_len as usize).saturating_sub(used + 1);
-            let append_len = remaining.min(cname_bytes.len());
-            if append_len > 0 {
-                std::ptr::copy_nonoverlapping(
-                    cname_bytes.as_ptr(),
-                    buf.add(used).cast::<u8>(),
-                    append_len,
-                );
-                *buf.add(used + append_len) = 0;
-            }
-        }
-    }
+    let name = (i == 3).then(|| WorldData::current().read(|world| world.flagship.commander_name));
+    format_alliance_name(
+        std::slice::from_raw_parts_mut(buf.cast(), buf_len as usize),
+        CStr::from_ptr(src).to_bytes(),
+        name.as_ref().map(|name| name.as_slice()),
+    );
 
     buf as *const std::ffi::c_char
-}
-
-/// Minimal strlen for C strings (avoids linking libc's strlen).
-#[cfg(not(test))]
-unsafe fn libc_strlen(s: *const std::ffi::c_char) -> usize {
-    let mut len = 0;
-    while *s.add(len) != 0 {
-        len += 1;
-    }
-    len
 }
 
 /// NPCPhrase with callback — the Rust replacement for C's npcphrase_cb.
@@ -1309,15 +1290,15 @@ pub unsafe fn rust_npc_phrase_cb(index: c_int, cb: super::glue::PhraseCallback) 
         use std::ffi::c_void;
         use std::ptr;
 
-        if index == GLOBAL_PLAYER_NAME {
-            // Branch 2: commander name — direct GlobData.SIS_state access
-            let name =
-                std::ptr::addr_of_mut!(GlobData.SIS_state.CommanderName) as *mut std::ffi::c_char;
-            SpliceTrack(ptr::null_mut(), name, ptr::null_mut(), cb);
-        } else if index == GLOBAL_SHIP_NAME {
-            // Branch 3: ship name — direct GlobData.SIS_state access
-            let name = std::ptr::addr_of_mut!(GlobData.SIS_state.ShipName) as *mut std::ffi::c_char;
-            SpliceTrack(ptr::null_mut(), name, ptr::null_mut(), cb);
+        if index == GLOBAL_PLAYER_NAME || index == GLOBAL_SHIP_NAME {
+            let name = WorldData::current().read(|world| {
+                if index == GLOBAL_PLAYER_NAME {
+                    world.flagship.commander_name
+                } else {
+                    world.flagship.ship_name
+                }
+            });
+            SpliceTrack(ptr::null_mut(), name.as_ptr().cast(), ptr::null_mut(), cb);
         } else if index < 0 {
             // Branch 4: alliance-name variant
             let adjusted = index - GLOBAL_ALLIANCE_NAME;
@@ -1435,6 +1416,21 @@ mod tests {
     use super::*;
     use serial_test::serial;
     use std::ffi::CString;
+
+    #[test]
+    fn alliance_name_truncates_and_terminates_each_buffer_size() {
+        for size in 1..12 {
+            let mut buffer = vec![255; size];
+            format_alliance_name(&mut buffer, b"Alliance ", Some(b"Zelnik\0ignored"));
+            let expected = b"Alliance Zelnik";
+            let length = expected.len().min(size - 1);
+            assert_eq!(&buffer[..length], &expected[..length]);
+            assert_eq!(buffer[length], 0);
+        }
+        let mut buffer = [255; 32];
+        format_alliance_name(&mut buffer, b"Alliance", None);
+        assert_eq!(&buffer[..9], b"Alliance\0");
+    }
 
     fn reset_state() {
         rust_uninit_communication();

@@ -41,7 +41,9 @@ fn teardown_receives_final_crew_and_owned_state() {
         let owner = Battle::new(2);
         // SAFETY: the serialized fixture owns the enlisted-crew authority and restores it after teardown.
         unsafe {
-            let saved_crew = GlobData.SIS_state.CrewEnlisted;
+            let saved_crew = (**uqm_rust::engine::WorldData::current())
+                .flagship
+                .crew_enlisted;
             let mut ship = Ship::native(&owner, &RACE, 0);
             uqm_rust::app::bridge::enter(|cx| {
                 cx.race_stats_mut(ship.ship_id).ship_info.crew_level = 23;
@@ -55,7 +57,9 @@ fn teardown_receives_final_crew_and_owned_state() {
                 assert!(matches!(cx.race_stats(ship.ship_id).state, RaceState::None));
             });
             drop(ship);
-            GlobData.SIS_state.CrewEnlisted = saved_crew;
+            (**uqm_rust::engine::WorldData::current())
+                .flagship
+                .crew_enlisted = saved_crew;
         }
     });
 }
@@ -69,8 +73,9 @@ fn abandonment_keeps_allocation_rng_parent_and_target_order() {
             let a = Ship::new(&owner, SPECIES_ID_VUX_ID, 0);
             let b = Ship::new(&owner, SPECIES_ID_VUX_ID, 1);
             let frames = battle::NativeFrameSet::new(4);
-            let old = stars_in_space;
-            stars_in_space = frames.frame(0);
+            let old = (**uqm_rust::engine::battle::record::Kernel::current()).stars_in_space;
+            (**uqm_rust::engine::battle::record::Kernel::current()).stars_in_space =
+                frames.frame(0);
             uqm_rust::app::bridge::enter(|cx| {
                 let crew = cx.race_stats(a.ship_id).ship_info.crew_level;
                 battle::with_rng(1234, 4, || cx.abandon_ship(a.id, b.id, 3));
@@ -88,7 +93,7 @@ fn abandonment_keeps_allocation_rng_parent_and_target_order() {
                     cx.dispose(id);
                 }
             });
-            stars_in_space = old;
+            (**uqm_rust::engine::battle::record::Kernel::current()).stars_in_space = old;
         }
     });
 }
@@ -219,11 +224,13 @@ fn navigation_world_projections_write_the_single_authority() {
         let _owner = Battle::new(2);
         // SAFETY: this test serializes and restores every modified world value.
         unsafe {
-            let activity = GlobData.Game_state.CurrentActivity;
-            let autopilot = GlobData.Game_state.autopilot;
-            let velocity = GlobData.Game_state.velocity;
-            let sis = GlobData.SIS_state;
-            uqm_rust::state::ffi::rust_init_game_state();
+            let activity = (**uqm_rust::engine::WorldData::current())
+                .game
+                .current_activity;
+            let autopilot = (**uqm_rust::engine::WorldData::current()).game.autopilot;
+            let velocity = (**uqm_rust::engine::WorldData::current()).game.velocity;
+            let sis = (**uqm_rust::engine::WorldData::current()).flagship;
+            uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
             uqm_rust::app::bridge::enter(|cx| {
                 cx.set_activity(42);
                 assert_eq!(cx.world.activity(), 42);
@@ -232,23 +239,23 @@ fn navigation_world_projections_write_the_single_authority() {
                 cx.set_flagship_crew(23);
                 let config = cx.flagship_config();
                 assert_eq!(config.crew, 23);
-                assert_eq!(config.modules, sis.ModuleSlots);
-                assert_eq!(config.drives, sis.DriveSlots);
-                assert_eq!(config.jets, sis.JetSlots);
-                assert_eq!(config.fuel, sis.FuelOnBoard);
+                assert_eq!(config.modules, sis.module_slots);
+                assert_eq!(config.drives, sis.drive_slots);
+                assert_eq!(config.jets, sis.jet_slots);
+                assert_eq!(config.fuel, sis.fuel_on_board);
                 assert_eq!(config.position, (sis.log_x, sis.log_y));
                 let mut next = cx.flagship_velocity();
                 next.set_components(25, -31);
                 cx.set_flagship_velocity(next);
                 assert_eq!(cx.flagship_velocity().get_current_components(), (25, -31));
-                let flag = cx.story_state(StoryKey::ShofixtiRecruited);
-                cx.set_story_state(StoryKey::ShofixtiRecruited, 1);
-                assert_eq!(cx.story_state(StoryKey::ShofixtiRecruited), 1);
-                cx.set_story_state(StoryKey::ShofixtiRecruited, flag);
+                let flag = cx.story_state(StoryKey::SHOFIXTI_RECRUITED);
+                cx.set_story_state(StoryKey::SHOFIXTI_RECRUITED, 1);
+                assert_eq!(cx.story_state(StoryKey::SHOFIXTI_RECRUITED), 1);
+                cx.set_story_state(StoryKey::SHOFIXTI_RECRUITED, flag);
                 cx.set_activity(activity);
                 cx.set_autopilot(autopilot);
                 cx.set_flagship_velocity(velocity);
-                cx.set_flagship_crew(sis.CrewEnlisted);
+                cx.set_flagship_crew(sis.crew_enlisted);
             });
         }
     });
@@ -519,12 +526,12 @@ fn descriptor_world_observes_activity_and_typed_story_and_writes_the_same_author
         let mut template = RaceTemplate::default();
         template.info.crew_level = world.flagship_config().crew;
         if world.activity() as u8 == IN_ENCOUNTER as u8
-            && world.story_state(StoryKey::ShofixtiRecruited) == 0
+            && world.story_state(StoryKey::SHOFIXTI_RECRUITED) == 0
         {
             template.resources.captain = Some(c"ship.synthetic.oldcaptain");
         }
-        if world.story_state(StoryKey::ChmmrBombState) == 3 {
-            world.set_story_state(StoryKey::BombCarrier, 1);
+        if world.story_state(StoryKey::CHMMR_BOMB_STATE) == 3 {
+            world.set_story_state(StoryKey::BOMB_CARRIER, 1);
         }
         template.descriptor(&RACE)
     }
@@ -535,18 +542,22 @@ fn descriptor_world_observes_activity_and_typed_story_and_writes_the_same_author
     battle_context::run(|| {
         // SAFETY: the serialized fixture owns and restores the world authorities.
         unsafe {
-            let activity = GlobData.Game_state.CurrentActivity;
-            let crew = GlobData.SIS_state.CrewEnlisted;
-            uqm_rust::state::ffi::rust_init_game_state();
+            let activity = (**uqm_rust::engine::WorldData::current())
+                .game
+                .current_activity;
+            let crew = (**uqm_rust::engine::WorldData::current())
+                .flagship
+                .crew_enlisted;
+            uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
             uqm_rust::app::bridge::enter(|cx| {
                 cx.world.set_activity(IN_ENCOUNTER as u16);
                 cx.world.set_flagship_crew(17);
                 let keys = [
-                    (StoryKey::ShofixtiRecruited, 0),
-                    (StoryKey::ProbeIlwrathEncounter, 1),
-                    (StoryKey::ArilouSpaceSide, 2),
-                    (StoryKey::ChmmrBombState, 3),
-                    (StoryKey::BombCarrier, 0),
+                    (StoryKey::SHOFIXTI_RECRUITED, 0),
+                    (StoryKey::PROBE_ILWRATH_ENCOUNTER, 1),
+                    (StoryKey::ARILOU_SPACE_SIDE, 2),
+                    (StoryKey::CHMMR_BOMB_STATE, 3),
+                    (StoryKey::BOMB_CARRIER, 0),
                 ];
                 for &(key, value) in &keys {
                     cx.world.set_story_state(key, value);
@@ -558,15 +569,15 @@ fn descriptor_world_observes_activity_and_typed_story_and_writes_the_same_author
                     d.ship_data.captain_control.captain_rsc,
                     c"ship.synthetic.oldcaptain".as_ptr()
                 );
-                assert_eq!(cx.world.story_state(StoryKey::BombCarrier), 1);
-                cx.set_story_state(StoryKey::ShofixtiRecruited, 1);
+                assert_eq!(cx.world.story_state(StoryKey::BOMB_CARRIER), 1);
+                cx.set_story_state(StoryKey::SHOFIXTI_RECRUITED, 1);
                 assert!((RACE.descriptor)(cx.world)
                     .into_legacy()
                     .ship_data
                     .captain_control
                     .captain_rsc
                     .is_null());
-                cx.set_story_state(StoryKey::ShofixtiRecruited, 0);
+                cx.set_story_state(StoryKey::SHOFIXTI_RECRUITED, 0);
                 cx.set_activity(SUPER_MELEE as u16);
                 assert!((RACE.descriptor)(cx.world)
                     .into_legacy()
@@ -578,8 +589,12 @@ fn descriptor_world_observes_activity_and_typed_story_and_writes_the_same_author
                     cx.world.set_story_state(key, 0);
                 }
             });
-            GlobData.Game_state.CurrentActivity = activity;
-            GlobData.SIS_state.CrewEnlisted = crew;
+            (**uqm_rust::engine::WorldData::current())
+                .game
+                .current_activity = activity;
+            (**uqm_rust::engine::WorldData::current())
+                .flagship
+                .crew_enlisted = crew;
         }
     });
 }

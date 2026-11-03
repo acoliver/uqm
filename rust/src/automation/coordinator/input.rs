@@ -2,6 +2,21 @@
 
 use super::*;
 
+pub(super) fn inject_menu_key(index: i32, value: i32) -> bool {
+    input_ffi::inject_menu_key(index, value);
+    !input_ffi::injection_rejected()
+}
+
+/// Discard the repeat pulse of a menu key that a scripted tap only holds.
+///
+/// Returns `false` when the native owner has no such key.
+pub(super) fn discard_held_repeat(
+    held: Option<crate::automation::script::MenuKey>,
+    discard: impl FnOnce(i32) -> bool,
+) -> bool {
+    held.is_none_or(|key| discard(i32::from(crate::automation::input::menu_key_to_index(key))))
+}
+
 impl Coordinator {
     #[must_use]
     pub fn start_scene_replaces_introduction() -> bool {

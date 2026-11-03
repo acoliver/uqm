@@ -1,11 +1,9 @@
 //! The element-loop owner and borrowed views needed while legacy code remains.
 
 use super::{record::QUEUE, table::ElementTable};
-use std::ptr::NonNull;
 
 pub struct Battle {
     pub(super) terminal_outcome: Option<super::RaceState>,
-    pub(super) kernel: super::record::Kernel,
     pub zoom_out: i16,
     pub nth_frame: u16,
     pub max_zoom_out: i16,
@@ -14,13 +12,8 @@ pub struct Battle {
 }
 
 impl Battle {
-    pub fn reset_element_capacity(&mut self, capacity: usize) {
-        self.kernel.elements.reset_capacity(capacity);
-    }
-
-    /// Start a battle, including encounters with no Sa-Matra descriptor.
-    pub fn initialize(&mut self) {
-        self.kernel.begin_battle();
+    pub fn initialize(&mut self, kernel: &mut super::record::Kernel) {
+        kernel.begin_battle();
         self.terminal_outcome = None;
     }
 
@@ -34,27 +27,9 @@ impl Battle {
         self.counters[side] = self.counters[side].wrapping_sub(1);
     }
 
-    #[cfg(not(test))]
-    pub(crate) fn master_queue(&mut self) -> &mut super::kernel::MasterCatalog {
-        &mut self.kernel.master_queue
-    }
-
-    #[cfg(not(test))]
-    pub(crate) fn kernel_channels(&mut self) -> &mut super::record::Channels {
-        &mut self.kernel.channels
-    }
-
-    #[cfg(not(test))]
-    pub(crate) fn kernel_sounds(&mut self) -> &mut super::record::SoundQueue {
-        &mut self.kernel.sounds
-    }
-
-    pub fn new(capacity: usize) -> Self {
-        let mut kernel = super::record::Kernel::new();
-        kernel.elements.reset_capacity(capacity);
+    pub fn new() -> Self {
         Self {
             terminal_outcome: None,
-            kernel,
             zoom_out: 1 << 8,
             nth_frame: 0,
             max_zoom_out: 0,
@@ -64,43 +39,27 @@ impl Battle {
     }
 }
 
-/// Projections into the single GlobData authority, not copies of world state.
-/// Phase 4 replaces these projections with the owned World.
-pub struct World {
-    pub(super) activity: NonNull<u16>,
-    pub(super) groups: NonNull<QUEUE>,
-    pub(super) frame_source:
-        fn(super::views::SharedFrames) -> NonNull<crate::graphics::native_abi::FRAME>,
-}
-
-impl World {
-    /// # Safety
-    /// Pointers must project the game-thread-owned GlobData authority, remain live,
-    /// and never have a Rust reference held across a legacy call. The caller must
-    /// also retain exclusive game-thread access to GlobData, input, and story
-    /// authorities until this World is dropped or its use is suspended. The frame
-    /// resolver must return three live source slots for each requested shared role.
-    pub unsafe fn new(
-        activity: NonNull<u16>,
-        groups: NonNull<QUEUE>,
-        frame_source: fn(super::views::SharedFrames) -> NonNull<crate::graphics::native_abi::FRAME>,
-    ) -> Self {
-        Self {
-            activity,
-            groups,
-            frame_source,
-        }
+impl super::record::Kernel {
+    pub fn ships(
+        &mut self,
+        side: usize,
+    ) -> super::link_queue::LinkQueue<'_, super::link_queue::Starship> {
+        super::link_queue::LinkQueue::new(&mut self.races[side])
     }
-
-    pub fn activity(&self) -> u16 {
-        // SAFETY: construction guarantees the projection's validity and exclusivity.
-        unsafe { self.activity.as_ptr().read() }
+    pub fn reset_ship_capacity(&mut self, side: usize, capacity: usize) {
+        self.races[side].reset_capacity(capacity);
+    }
+    pub fn reset_element_capacity(&mut self, capacity: usize) {
+        self.elements.reset_capacity(capacity);
     }
 }
+
+pub use crate::engine::world::World;
 
 pub struct Cx<'a> {
     pub(crate) b: &'a mut Battle,
     pub world: &'a mut World,
+    pub(crate) kernel: &'a mut super::record::Kernel,
     /// The existing global stream. No seed is copied at context boundaries.
     pub(crate) rng: fn() -> u32,
 }
@@ -109,26 +68,41 @@ impl Cx<'_> {
     pub fn random(&mut self) -> u32 {
         (self.rng)()
     }
+    pub fn kernel_mut(&mut self) -> &mut super::record::Kernel {
+        self.kernel
+    }
     pub fn elements(&self) -> &ElementTable {
-        &self.b.kernel.elements
+        &self.kernel.elements
+    }
+    pub(crate) fn groups(&self) -> &QUEUE {
+        &self.world.data.game.ip_group_q
     }
 }
 
 impl<'a> Cx<'a> {
-    pub(crate) fn new(b: &'a mut Battle, world: &'a mut World, rng: fn() -> u32) -> Self {
-        Self { b, world, rng }
+    pub(crate) fn new(
+        b: &'a mut Battle,
+        world: &'a mut World,
+        kernel: &'a mut super::record::Kernel,
+        rng: fn() -> u32,
+    ) -> Self {
+        Self {
+            b,
+            world,
+            kernel,
+            rng,
+        }
     }
 }
 
 impl Cx<'_> {
     pub(crate) fn kernel(&mut self) -> *mut super::record::Kernel {
-        &raw mut self.b.kernel
+        &raw mut *self.kernel
     }
 }
 
-impl Cx<'_> {
-    #[cfg(not(test))]
-    pub(crate) fn master_queue(&mut self) -> &mut super::kernel::MasterCatalog {
-        self.b.master_queue()
+impl Default for Battle {
+    fn default() -> Self {
+        Self::new()
     }
 }

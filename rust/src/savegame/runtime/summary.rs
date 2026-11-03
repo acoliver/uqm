@@ -2,7 +2,7 @@
 //!
 //! This is `PrepareSummary` (save.c) reading the same owners the C code reads:
 //!
-//! * `GlobData.SIS_state`: the flagship fields and the three name strings,
+//! * `GlobData.flagship`: the flagship fields and the three name strings,
 //!   copied as they stand;
 //! * the Rust game-state singleton: the Melnorme credit, the lander flags, the
 //!   device list, the quasispace side and the "global flags and data" byte
@@ -29,6 +29,7 @@
 //! `SUMMARY_DESC` held, and more escorts than a summary lists is an error where
 //! C would write past `ShipList`.
 
+use crate::engine::World;
 use std::fmt;
 
 use super::queues::{walk, QueueError, QueueKind};
@@ -181,7 +182,7 @@ pub(crate) fn inventory_devices(state: &GameState, limit: usize) -> Vec<u8> {
     devices
 }
 
-/// The flagship state as `SummPtr->SS = GlobData.SIS_state` copies it.
+/// The flagship state as `SummPtr->SS = GlobData.flagship` copies it.
 fn sis_state(sis: &CSisState) -> SisState {
     SisState {
         log_x: sis.log_x,
@@ -228,7 +229,7 @@ pub fn utf8_string_copy(source: &[u8]) -> [u8; SIS_NAME_SIZE] {
 
 /// `PrepareSummary`, reading the live owners.
 ///
-/// `sis` and `game` are `GlobData.SIS_state` and `GlobData.Game_state`;
+/// `sis` and `game` are `GlobData.flagship` and `GlobData.game`;
 /// `solar` is the solar-system owner; `name` is what the player typed.
 pub fn capture_summary(
     sis: &CSisState,
@@ -236,7 +237,7 @@ pub fn capture_summary(
     solar: &dyn SolarSystemOwner,
     name: &[u8],
 ) -> Result<Summary, SummaryError> {
-    let state = GameState::from_bytes(&snapshot_game_state()?);
+    let state = GameState::from_bytes(&World::current().read(snapshot_game_state)?);
 
     let mut sis_copy = sis_state(sis);
     let mut activity = (game.current_activity & 0x00ff) as u8;

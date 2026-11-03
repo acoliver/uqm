@@ -38,7 +38,7 @@ fn descriptor_and_six_lance_order_and_coordinates() {
                 (8534, 8797)
             );
             for facing in [0, 4, 7, 15] {
-                ship.ship_mut().ShipFacing = facing;
+                ship.ship_mut().ship_facing = facing;
                 let handles = with_rng(19, 0, || {
                     ship.weapon(6)
                         .into_iter()

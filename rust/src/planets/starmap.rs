@@ -1,15 +1,33 @@
 //! Star catalog lookup and cluster naming, ported from starmap.c.
 
-#![allow(non_snake_case)]
-
 use crate::comm::dispatch::CPoint;
+#[cfg(not(test))]
+use crate::engine::Kernel as KernelOwner;
+use crate::engine::World as WorldOwner;
 use crate::savegame::runtime::star::{CStarDesc, NUM_HYPER_VORTICES, NUM_SOLAR_SYSTEMS};
 use std::ptr;
 
 #[no_mangle]
 pub static mut star_array: *mut CStarDesc = ptr::null_mut();
-#[no_mangle]
-pub static mut CurStarDescPtr: *mut CStarDesc = ptr::null_mut();
+
+/// Borrow the current catalog without retaining it across a catalog replacement.
+/// # Safety
+/// Game thread only. A non-null catalog must contain CATALOG_LEN live entries.
+pub unsafe fn current_catalog<'a>() -> Option<&'a [CStarDesc; crate::engine::world::CATALOG_LEN]> {
+    // SAFETY: the caller retains the initialized catalog on the game thread.
+    unsafe {
+        star_array
+            .cast::<[CStarDesc; crate::engine::world::CATALOG_LEN]>()
+            .as_ref()
+    }
+}
+
+pub(crate) fn catalog_star_count(catalog: &[CStarDesc]) -> usize {
+    catalog
+        .iter()
+        .take_while(|star| star.star_pt.x <= 9999 && star.star_pt.y <= 9999)
+        .count()
+}
 
 unsafe fn find_star(
     base: *mut CStarDesc,
@@ -74,15 +92,39 @@ pub unsafe extern "C" fn FindStar(
     xb: i16,
     yb: i16,
 ) -> *mut CStarDesc {
-    let (base, hi) = if crate::state::ffi::rust_get_game_state_bits(42, 43) <= 1 {
+    WorldOwner::current().read(|world| {
+        // SAFETY: the caller retains the catalog and supplies valid optional last and point addresses.
+        unsafe { find_star_in(world, last.as_ref(), *point, xb, yb) }
+    })
+}
+
+/// # Safety
+/// The game thread retains the initialized catalog throughout this lookup.
+pub unsafe fn find_star_in(
+    world: &crate::engine::World,
+    last: Option<&CStarDesc>,
+    point: CPoint,
+    xb: i16,
+    yb: i16,
+) -> *mut CStarDesc {
+    // SAFETY: the caller retains the initialized game-thread catalog.
+    let catalog =
+        unsafe { current_catalog() }.unwrap_or_else(|| panic!("star lookup without a catalog"));
+    let last = last.map_or(ptr::null_mut(), |star| {
+        let id = world.identify_star(star, catalog);
+        std::ptr::from_ref(&catalog[id.0]).cast_mut()
+    });
+    let (base, hi) = if world.story_state(crate::engine::StoryKey::ARILOU_SPACE_SIDE) <= 1 {
         (star_array, NUM_SOLAR_SYSTEMS as i16 - 1)
     } else {
         (
-            star_array.add(NUM_SOLAR_SYSTEMS + 1),
+            // SAFETY: this is the retained catalog's quasispace segment.
+            unsafe { star_array.add(NUM_SOLAR_SYSTEMS + 1) },
             NUM_HYPER_VORTICES as i16,
         )
     };
-    find_star(base, last, *point, xb, yb, hi)
+    // SAFETY: last was validated against this catalog; all search bounds preserve the legacy segments.
+    unsafe { find_star(base, last, point, xb, yb, hi) }
 }
 
 #[cfg(not(test))]
@@ -94,10 +136,6 @@ pub(crate) mod naming {
 
     use crate::strings::string_table::GetStringAddress;
 
-    extern "C" {
-        static mut GameStrings: *mut crate::strings::string_table::StringTableEntry;
-    }
-
     /// # Safety
     /// `star` is readable, and `buffer` has space for the prefix and cluster name.
     #[no_mangle]
@@ -105,7 +143,7 @@ pub(crate) mod naming {
         let mut out = buffer;
         if (*star).prefix != 0 {
             let mut text = GetStringAddress(SetAbsStringTableIndex(
-                (GameStrings).cast(),
+                (KernelOwner::current().read(|owner| owner.game_strings)).cast(),
                 crate::c_bindings::global_state::STAR_NUMBER_BASE as u16 + (*star).prefix as u16
                     - 1,
             ));
@@ -123,7 +161,7 @@ pub(crate) mod naming {
             }
         }
         let mut text = GetStringAddress(SetAbsStringTableIndex(
-            (GameStrings).cast(),
+            (KernelOwner::current().read(|owner| owner.game_strings)).cast(),
             (*star).postfix as u16,
         ));
         if text.is_null() {
@@ -154,6 +192,19 @@ mod tests {
             prefix: 0,
             postfix: 0,
         }
+    }
+
+    #[test]
+    fn catalog_count_stops_at_the_first_out_of_bounds_coordinate() {
+        let mut stars = [star(0, 0); 4];
+        stars[1] = star(9999, 9999);
+        stars[2] = star(10000, 0);
+        stars[3] = star(1, 1);
+        assert_eq!(catalog_star_count(&stars), 2);
+        stars[2] = star(0, 10000);
+        assert_eq!(catalog_star_count(&stars), 2);
+        stars[0] = star(0, 10000);
+        assert_eq!(catalog_star_count(&stars), 0);
     }
 
     #[test]

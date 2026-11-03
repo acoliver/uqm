@@ -1,4 +1,6 @@
 //! Input repeat, nested input loops and battle controls, ported from gameinp.c.
+#[cfg(not(test))]
+use crate::engine::Kernel;
 #[derive(Clone, Copy)]
 struct Repeat {
     delay: u32,
@@ -181,7 +183,7 @@ pub(crate) mod live {
         }
         #[cfg(feature = "debug-process")]
         if PulsedInputState.menu[KEY_DEBUG as usize] != 0 {
-            crate::front_end::uqmdebug::debugKeyPressedSynchronous();
+            crate::front_end::uqmdebug::debug_key_pressed_synchronous();
         }
     }
 
@@ -250,7 +252,7 @@ pub(crate) mod live {
         loop {
             crate::callback::ffi::Async_process();
             crate::graphics::sdl::lifecycle_abi::TFB_ProcessEvents();
-            crate::mainloop::lifecycle_abi::ProcessUtilityKeys();
+            crate::mainloop::lifecycle_abi::process_utility_keys();
             super::yield_input_loop(|| crate::threading::legacy_abi::TaskSwitch());
             if crate::automation::input_ffi::rust_automation_service_do_input() != 0 {
                 break;
@@ -260,7 +262,7 @@ pub(crate) mod live {
                 break;
             }
             let flags = menu_sound_flags(&ptr::addr_of!(PulsedInputState).read());
-            let mut sound = Kernel::current().menu_sounds;
+            let mut sound = Kernel::current().read(|owner| owner.menu_sounds);
             if !sound.is_null() && flags & (SOUND_0 | SOUND_1) != 0 {
                 if flags & SOUND_1 != 0 {
                     sound = crate::strings::string_table::SetAbsStringTableIndex(sound.cast(), 1)

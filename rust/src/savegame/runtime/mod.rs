@@ -22,7 +22,8 @@ use std::fmt;
 
 use super::types::{EventEntry, GlobalState, Summary, GAME_STATE_BYTES};
 use crate::comm::locdata::CGameState;
-use crate::state::ffi::{replace_game_state, snapshot_game_state, GameStateOwnerError};
+use crate::engine::world::story::GameState;
+use crate::state::ffi::GameStateOwnerError;
 
 pub use events::EventError;
 
@@ -100,10 +101,16 @@ impl From<GameStateOwnerError> for RuntimeError {
 /// Read "GlSt" from `game`, "GmSt" from the Rust game-state singleton (the
 /// owner of those bits; the array in `game` is only a shadow) and "Evts" from
 /// the clock's event queue.
-pub fn capture_runtime(game: &CGameState) -> Result<RuntimeSections, RuntimeError> {
+pub fn capture_runtime(
+    game: &CGameState,
+    story: &Option<GameState>,
+) -> Result<RuntimeSections, RuntimeError> {
     Ok(RuntimeSections {
         global: global::capture_global_state(game),
-        game_state: snapshot_game_state()?,
+        game_state: *story
+            .as_ref()
+            .ok_or(GameStateOwnerError::NotInitialized)?
+            .as_bytes(),
         events: events::capture_events(&game.game_clock.event_q)?,
     })
 }
@@ -115,12 +122,13 @@ pub fn capture_runtime(game: &CGameState) -> Result<RuntimeSections, RuntimeErro
 /// before the first write to `game`. The singleton owns all story-state bits.
 pub fn restore_runtime(
     game: &mut CGameState,
+    story: &mut Option<GameState>,
     global: &GlobalState,
     game_state: &[u8; GAME_STATE_BYTES],
     events: &[EventEntry],
 ) -> Result<Restored, RuntimeError> {
     events::validate_restore(&game.game_clock.event_q, events)?;
-    replace_game_state(game_state)?;
+    *story = Some(GameState::from_bytes(game_state));
 
     events::install_events(&mut game.game_clock.event_q, events);
     Ok(Restored {

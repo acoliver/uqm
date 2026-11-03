@@ -160,7 +160,7 @@ fn every_thrust_leg_is_bracketed_by_a_position_record_and_a_displacement_proof()
 
 /// A key hold cannot say how far the ship turned: 60 input ticks turned the
 /// flagship five facings (112.5 degrees), not four. A `turn_flagship` step
-/// holds the key until the live `STARSHIP.ShipFacing` has changed by exactly
+/// holds the key until the live `STARSHIP.ship_facing` has changed by exactly
 /// the stated number of facings and fails otherwise, so a right angle is four
 /// facings of sixteen and every turn in every scenario is that proof.
 #[test]
@@ -939,8 +939,8 @@ impl DerivedPreparation {
         let mut state = unsafe { std::mem::zeroed() };
         uqm_rust::navigation::initial_state::equipment(&mut sis);
         uqm_rust::navigation::initial_state::prices(&mut sis, &mut state);
-        let opening_fuel = sis.FuelOnBoard;
-        let fuel_price = state.FuelCost;
+        let opening_fuel = sis.fuel_on_board;
+        let fuel_price = state.fuel_cost;
 
         // Derive fuel cost from the production Sol physical owner.
         let mut lunar_info = unsafe { std::mem::zeroed() };

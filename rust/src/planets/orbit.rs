@@ -16,6 +16,7 @@ pub(crate) mod live {
         solar_system,
     };
     use crate::comm::locdata::CRect;
+    use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
     use crate::graphics::drawable_abi::SetContextFGFrame;
     use crate::mainloop::restart_menu::c_extern::{self as base, SetContext};
     use crate::mainloop::types::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER};
@@ -28,8 +29,8 @@ pub(crate) mod live {
     #[no_mangle]
     static mut PlanetContext: *mut crate::graphics::native_abi::context_desc = std::ptr::null_mut();
 
-    use crate::ui::border::DrawSISFrame;
-    use crate::ui::sis::RepairSISBorder;
+    use crate::ui::border::draw_sisframe;
+    use crate::ui::sis::repair_sisborder;
 
     #[cfg(feature = "debug-process")]
     use crate::graphics::context_abi::CreateContextAux;
@@ -90,10 +91,7 @@ pub(crate) mod live {
     use crate::mainloop::input_abi::live::SetInputCallback;
 
     extern "C" {
-        static mut GlobData: crate::ships::native::abi::GLOBDATA;
-        static mut LastActivity: u16;
-        static mut SpaceContext: *mut crate::graphics::native_abi::context_desc;
-        static mut Screen: *mut crate::graphics::native_abi::frame_desc;
+
         static mut optWhichMenu: i32;
     }
 
@@ -108,11 +106,11 @@ pub(crate) mod live {
 
     unsafe fn create_context() {
         assert!(PlanetContext.is_null());
-        let old = SetContext(SpaceContext);
+        let old = SetContext(KernelOwner::current().read(|owner| owner.space_context));
         let mut r = CffiPlatform.context_clip_rect();
         PlanetContext = (new_context(c"PlanetContext".as_ptr())).cast();
         SetContext(PlanetContext);
-        SetContextFGFrame(Screen.cast());
+        SetContextFGFrame(KernelOwner::current().read(|owner| owner.screen).cast());
         r.height -= 75 + 5;
         CffiPlatform.set_context_clip_rect(r);
         SetContext(old);
@@ -198,6 +196,7 @@ pub(crate) mod live {
     const UPDATE: u8 = 2;
 
     unsafe fn draw_display(mode: u8) {
+        let planet_name = WorldFields::current().read(|world| world.flagship.planet_name);
         let g = CffiPlatform;
         g.set_context(ContextId::Space);
         let clip = g.context_clip_rect();
@@ -212,9 +211,9 @@ pub(crate) mod live {
         g.batch();
         if mode != UPDATE {
             base::SetTransitionSource(std::ptr::null_mut());
-            DrawSISFrame();
+            draw_sisframe();
             DrawSISMessage(std::ptr::null());
-            DrawSISTitle(std::ptr::addr_of!(GlobData.SIS_state.PlanetName).cast());
+            DrawSISTitle(planet_name.as_ptr().cast());
             DrawStarBackGround();
             DrawPlanetSurfaceBorder();
         }
@@ -254,13 +253,13 @@ pub(crate) mod live {
             return;
         }
         let system = solar_system::current();
-        let wait = LastActivity & CHECK_LOAD == 0;
+        let wait = KernelOwner::current().read(|owner| owner.last_activity) & CHECK_LOAD == 0;
         assert!((*system).InOrbit != 0 && (*system).TopoFrame.is_null());
         create_context();
         if wait {
             draw_display(WAIT);
         }
-        base::StopMusic();
+        base::stop_music();
         let planet = (*system).pOrbitalDesc;
         GeneratePlanetSurface(planet, surface);
         orbit_music::set_planet_music((*planet).data_index & !0x80);
@@ -284,7 +283,7 @@ pub(crate) mod live {
         let system = solar_system::current();
         let orbit = std::ptr::addr_of_mut!((*system).Orbit);
         UninitSphereRotation();
-        base::StopMusic();
+        base::stop_music();
         for i in 0..(*system).PlanetSideFrame.len() {
             base::DestroyDrawable(base::ReleaseDrawable((*system).PlanetSideFrame[i].cast()));
             (*system).PlanetSideFrame[i] = std::ptr::null_mut();
@@ -322,7 +321,7 @@ pub(crate) mod live {
         ));
         (*system).SysInfo.PlanetInfo.DiscoveryString = std::ptr::null_mut();
         FreeLanderFont(std::ptr::addr_of_mut!((*system).SysInfo.PlanetInfo));
-        SetContext(SpaceContext);
+        SetContext(KernelOwner::current().read(|owner| owner.space_context));
         if !PlanetContext.is_null() {
             DestroyContext(PlanetContext);
             PlanetContext = std::ptr::null_mut();
@@ -350,8 +349,10 @@ pub(crate) mod live {
     unsafe extern "C" fn do_orbit(menu: *mut MENU_STATE) -> u32 {
         use crate::c_bindings::controller_input::{PulsedInputState, KEY_MENU_SELECT};
         let mut selected = PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0;
-        if GlobData.Game_state.CurrentActivity & (CHECK_ABORT | CHECK_LOAD) != 0
-            || GlobData.SIS_state.CrewEnlisted == u16::MAX
+        if WorldFields::current().read(|owner| owner.game.current_activity)
+            & (CHECK_ABORT | CHECK_LOAD)
+            != 0
+            || WorldFields::current().read(|owner| owner.flagship.crew_enlisted) == u16::MAX
         {
             return 0;
         }
@@ -362,13 +363,19 @@ pub(crate) mod live {
         match (*menu).CurState {
             0 => {
                 ScanSystem();
-                if GlobData.Game_state.CurrentActivity & START_ENCOUNTER != 0 {
+                if WorldFields::current().read(|owner| owner.game.current_activity)
+                    & START_ENCOUNTER
+                    != 0
+                {
                     return 0;
                 }
             }
             2 => {
                 selected = DevicesMenu() != 0;
-                if GlobData.Game_state.CurrentActivity & START_ENCOUNTER != 0 {
+                if WorldFields::current().read(|owner| owner.game.current_activity)
+                    & START_ENCOUNTER
+                    != 0
+                {
                     return 0;
                 }
             }
@@ -381,9 +388,11 @@ pub(crate) mod live {
             }
             1 => {
                 let old = SetInputCallback(None);
-                RepairSISBorder();
+                repair_sisborder();
                 let autopilot = StarMap();
-                if GlobData.Game_state.CurrentActivity & CHECK_ABORT != 0 {
+                if WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT
+                    != 0
+                {
                     return 0;
                 }
                 SetInputCallback(old);
@@ -396,7 +405,7 @@ pub(crate) mod live {
             6 => return 0,
             _ => {}
         }
-        if GlobData.Game_state.CurrentActivity & CHECK_ABORT == 0 {
+        if WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT == 0 {
             if selected {
                 (*menu).CurState = submenu_selection((*menu).CurState, selected, optWhichMenu == 2);
                 DrawMenuStateStrings(0, i16::from((*menu).CurState));

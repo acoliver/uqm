@@ -3,6 +3,10 @@
 //! @plan PLAN-20260707-MAINLOOP.P06
 //! @requirement REQ-ML-001, REQ-ML-007, REQ-ML-008
 
+#[cfg(not(test))]
+use crate::engine::Kernel;
+#[cfg(not(test))]
+use crate::engine::World;
 use std::os::raw::c_int;
 
 use super::state_machine::{self, ActivityDecision, BreakAction, GameStateInfo};
@@ -295,7 +299,12 @@ mod cffi {
         fn load_kernel(&self) -> bool {
             // SAFETY: LoadKernel reads content packages; the null argv is the
             // documented call pattern in starcon.c.
-            unsafe { c_extern::LoadKernel(0, std::ptr::null_mut()) != 0 }
+            unsafe {
+                Kernel::current().write(|kernel| {
+                    World::current()
+                        .write(|world| c_extern::LoadKernel(kernel, world, 0, std::ptr::null_mut()))
+                }) != 0
+            }
         }
 
         fn splash(&self) {
@@ -303,11 +312,13 @@ mod cffi {
         }
 
         fn start_game(&self) -> bool {
-            unsafe { c_extern::StartGame() != 0 }
+            {
+                c_extern::start_game() != 0
+            }
         }
 
         fn get_current_activity(&self) -> ActivityValue {
-            ActivityValue::new(unsafe { c_extern::get_current_activity() })
+            ActivityValue::new(World::current().read(c_extern::get_current_activity))
         }
 
         fn set_current_activity(&self, activity: ActivityValue) {
@@ -349,7 +360,7 @@ mod cffi {
         }
 
         fn add_initial_game_events(&self) {
-            unsafe { c_extern::AddInitialGameEvents() }
+            unsafe { World::current().write(|world| c_extern::schedule_initial_events(world)) }
         }
 
         fn activate_automation_start_scene(&self) {
@@ -375,11 +386,11 @@ mod cffi {
         }
 
         fn install_bomb_at_earth(&self) {
-            unsafe { c_extern::InstallBombAtEarth() }
+            unsafe { c_extern::install_bomb_at_earth() }
         }
 
         fn visit_starbase(&self) -> Result<(), MainLoopError> {
-            unsafe { crate::ui::starbase::VisitStarBase() };
+            unsafe { crate::ui::starbase::visit_star_base() };
             Ok(())
         }
 
@@ -402,7 +413,7 @@ mod cffi {
         }
 
         fn set_game_clock_rate(&self, rate: u16) {
-            unsafe { c_extern::SetGameClockRate(rate) }
+            c_extern::SetGameClockRate(rate)
         }
 
         fn stop_sound(&self) {
@@ -416,11 +427,11 @@ mod cffi {
         }
 
         fn uninit_game_structures(&self) {
-            unsafe { c_extern::UninitGameStructures() }
+            unsafe { c_extern::uninit_game_structures() }
         }
 
         fn clear_player_input_all(&self) {
-            unsafe { c_extern::ClearPlayerInputAll() }
+            unsafe { Kernel::current().write(|kernel| c_extern::ClearPlayerInputAll(kernel)) }
         }
 
         fn init_communication(&self, conversation: u32) {
@@ -434,7 +445,7 @@ mod cffi {
         }
 
         fn uninit_game_kernel(&self) {
-            unsafe { c_extern::UninitGameKernel() }
+            unsafe { crate::app::bridge::enter(|cx| c_extern::uninit_game_kernel(cx)) }
         }
 
         fn free_master_ship_list(&self) {
@@ -442,7 +453,7 @@ mod cffi {
         }
 
         fn free_kernel(&self) {
-            unsafe { c_extern::FreeKernel() }
+            unsafe { Kernel::current().write(|kernel| c_extern::free_kernel(kernel)) }
         }
 
         fn log_show_box(&self, b: bool, c: bool) {
@@ -469,13 +480,7 @@ pub extern "C" fn rust_game_loop() -> c_int {
 
 #[cfg(not(test))]
 pub extern "C" fn rust_game_loop() -> c_int {
-    // SAFETY: this is the synchronous game-thread lifecycle and storage boundary.
-    match unsafe {
-        crate::app::bridge::with_battle(
-            crate::game_init::world_resources::shared_frame_source,
-            || run_game_lifecycle_impl(&cffi::CffiOps),
-        )
-    } {
+    match run_game_lifecycle_impl(&cffi::CffiOps) {
         Ok(_) => 0,
         Err(e) => {
             eprintln!("rust_game_loop: fatal error: {e}");

@@ -2,8 +2,8 @@
 #![cfg(not(test))]
 use super::abi::*;
 use super::get;
-use super::globals::GlobData;
-use super::hyper_data::HYPERSTARS;
+use crate::engine::StoryKey;
+
 use super::hyper_transition::{init_transition, sis_element};
 use super::hyperspace::live::{cosine, height, logx, logy, sine, universe_x, universe_y, width};
 use crate::engine::battle::views::{FrameSelection as Frame, Frames};
@@ -27,20 +27,22 @@ pub(super) unsafe fn allocate(cx: &mut Cx<'_>, point: POINT) -> Option<ElementId
     cx.element_mut(element).flags = (CHANGING | FINITE_LIFE) as u16;
     cx.element_mut(element).life = 1;
     cx.element_mut(element).mass = 1;
-    let lx = logx(point.x) + (width() >> 1) - GlobData.SIS_state.log_x;
-    let ly = logy(point.y) + (height() >> 1) - GlobData.SIS_state.log_y;
+    let lx = logx(point.x) + (width() >> 1) - cx.world.data.flagship.log_x;
+    let ly = logy(point.y) + (height() >> 1) - cx.world.data.flagship.log_y;
     cx.element_mut(element).current.location = POINT {
         x: wrap(lx, width()),
         y: wrap(ly, height()),
     };
     cx.primitive_style_mut(element).kind = gfx_object_STAMP_PRIM as u8;
-    let frames = ptr::addr_of_mut!(HYPERSTARS)
+    let frames = ptr::addr_of_mut!(cx.kernel.hyperstars)
         .cast::<FRAME>()
-        .wrapping_add(1 + (get("ARILOU_SPACE_SIDE") >> 1) as usize);
+        .wrapping_add(1 + (get(cx.world, StoryKey::ARILOU_SPACE_SIDE) >> 1) as usize);
     cx.set_single_frames(
         element,
         Frames::native_shared(
-            crate::engine::battle::views::SharedFrames::Hyperspace(get("ARILOU_SPACE_SIDE") >> 1),
+            crate::engine::battle::views::SharedFrames::Hyperspace(
+                get(cx.world, StoryKey::ARILOU_SPACE_SIDE) >> 1,
+            ),
             NonNull::new(frames).unwrap_or_else(|| panic!("retained navigation authority")),
             1,
         ),
@@ -73,15 +75,11 @@ pub(super) unsafe fn ambient(cx: &mut Cx<'_>) {
         x: ((width() >> 1) + (dx << 2)) as i16,
         y: ((height() >> 1) + (dy << 2)) as i16,
     };
-    let stars = stars_in_space;
+    let stars = cx.kernel.stars_in_space;
+    let source = NonNull::from(&mut cx.kernel.stars_in_space);
     cx.set_single_frames(
         element,
-        Frames::native_shared(
-            crate::engine::battle::views::SharedFrames::Stars,
-            NonNull::new(&raw mut stars_in_space)
-                .unwrap_or_else(|| panic!("retained navigation authority")),
-            1,
-        ),
+        Frames::native_shared(crate::engine::battle::views::SharedFrames::Stars, source, 1),
         Frame::retain(stars),
     );
     if (random >> 16) & 7 != 0 {
@@ -131,7 +129,7 @@ pub(crate) fn collision(
         return;
     }
     init_transition(cx, source, ship, 0);
-    let mut handle = cx.navigation().Game_state.encounter_q.head;
+    let mut handle = cx.navigation().game.encounter_q.head;
     while let Some(encounter) = NonNull::new(handle.cast::<ENCOUNTER>()) {
         let encounter = *cx.encounter_record(encounter);
         handle = encounter.succ;
@@ -144,7 +142,7 @@ pub(crate) fn collision(
     cx.element_mut(source).velocity.zero();
 }
 unsafe fn add(cx: &mut Cx<'_>, encounter: *mut ENCOUNTER, universe: POINT) -> Option<ElementId> {
-    if get("ARILOU_SPACE_SIDE") >= 2 {
+    if get(cx.world, StoryKey::ARILOU_SPACE_SIDE) >= 2 {
         return None;
     }
     if (*encounter).flags & ENCOUNTER_REFORMING as u8 != 0 {
@@ -168,11 +166,8 @@ unsafe fn add(cx: &mut Cx<'_>, encounter: *mut ENCOUNTER, universe: POINT) -> Op
         ships = ships.min(MAX_HYPER_SHIPS as u8);
         (*encounter).num_ships = ships;
         for i in 0..ships as usize {
-            let fleet = GetStarShipFromIndex(
-                ptr::addr_of_mut!(GlobData.Game_state.avail_race_q),
-                race as u16,
-            )
-            .cast::<FLEET_INFO>();
+            let races = &raw mut cx.world.data.game.avail_race_q;
+            let fleet = GetStarShipFromIndex(races, race as u16).cast::<FLEET_INFO>();
             let brief = &mut (*encounter).ShipList[i];
             brief.race_id = race as u8;
             brief.crew_level = (*fleet).crew_level;
@@ -231,7 +226,10 @@ unsafe fn add(cx: &mut Cx<'_>, encounter: *mut ENCOUNTER, universe: POINT) -> Op
         cx.element_mut(element).post = None;
         cx.element_mut(element).collide = Some(CollisionHook::Native(collision));
         cx.setup_element(element);
-        cx.set_intersect_frame(element, Frame::retain(DecFrameIndex(stars_in_space)));
+        cx.set_intersect_frame(
+            element,
+            Frame::retain(DecFrameIndex(cx.kernel.stars_in_space)),
+        );
         cx.primitive_style_mut(element).kind = gfx_object_NUM_PRIMS as u8;
         cx.element_mut(element).flags |= (NONSOLID | IGNORE_VELOCITY) as u16;
         let tail = cx.elements().tail();
@@ -344,9 +342,9 @@ unsafe fn process(
     let dy = point.y as i32 - universe.y as i32;
     if (-63..=63).contains(&dx) && (-50..=50).contains(&dy) {
         cx.element_mut(element).next.location = POINT {
-            x: (((*encounter).log_x - GlobData.SIS_state.log_x) as i16 as i32 + (width() >> 1))
+            x: (((*encounter).log_x - cx.world.data.flagship.log_x) as i16 as i32 + (width() >> 1))
                 as i16,
-            y: (((*encounter).log_y - GlobData.SIS_state.log_y) as i16 as i32 + (height() >> 1))
+            y: (((*encounter).log_y - cx.world.data.flagship.log_y) as i16 as i32 + (height() >> 1))
                 as i16,
         };
         if cx.element_mut(element).flags & NONSOLID as u16 != 0
@@ -379,9 +377,9 @@ unsafe fn process(
 pub(super) unsafe fn process_all(cx: &mut Cx<'_>, universe: POINT, ox: i16, oy: i16) {
     let mut stamp = STAMP {
         origin: POINT { x: 0, y: 0 },
-        frame: SetAbsFrameIndex(stars_in_space, 91),
+        frame: SetAbsFrameIndex(cx.kernel.stars_in_space, 91),
     };
-    let queue = ptr::addr_of_mut!(GlobData.Game_state.encounter_q);
+    let queue = ptr::addr_of_mut!(cx.world.data.game.encounter_q);
     let mut handle = (*queue).head;
     while !handle.is_null() {
         let encounter = handle.cast::<ENCOUNTER>();

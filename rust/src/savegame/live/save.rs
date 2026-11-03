@@ -1,13 +1,14 @@
 //! The SaveGame ABI and live-state capture.
+use crate::engine::World;
+use crate::engine::WorldData;
 use std::ffi::{c_char, CStr};
 
 use super::super::abi::SummaryDesc;
 use super::super::runtime::{self, groups, live, queues, statefiles};
 use super::super::{SaveFile, SaveSlots};
 use crate::mainloop::dir_prep::saveDir;
-use crate::planets::c_api::GLOB_DATA;
 
-use crate::navigation::globals::inHQSpace;
+use crate::navigation::globals::in_hqspace;
 
 use crate::planets::solarsys::playerInSolarSystem;
 
@@ -15,25 +16,28 @@ use crate::navigation::groups::live::PutGroupInfo;
 
 pub(crate) unsafe fn capture(name: &[u8]) -> anyhow::Result<SaveFile> {
     let star = live::capture_live_star()?;
-    let point = GLOB_DATA.Game_state.ip_location;
-    if inHQSpace() != 0 {
+    let point = WorldData::current().read(|world| world.game.ip_location);
+    if World::current().read(in_hqspace) != 0 {
         live::prepare_live_hyper_state()?;
     } else if playerInSolarSystem() {
         live::prepare_live_solar_location()?;
     }
-    if groups::saves_ip_group_queue(GLOB_DATA.Game_state.CurrentActivity) {
+    if groups::saves_ip_group_queue(WorldData::current().read(|world| world.game.current_activity))
+    {
         PutGroupInfo(0, u8::MAX);
     }
     let summary = live::capture_live_summary(name)?;
+    let lease = World::current();
+    let world = &mut **lease;
     // SAFETY: CGameState's size, alignment and every field offset are asserted against GAME_STATE.
-    let game = &mut *std::ptr::addr_of_mut!(GLOB_DATA.Game_state)
-        .cast::<crate::comm::locdata::CGameState>();
-    let runtime = runtime::capture_runtime(game)?;
+    let game =
+        &mut *std::ptr::addr_of_mut!(world.data.game).cast::<crate::comm::locdata::CGameState>();
+    let runtime = runtime::capture_runtime(game, &world.story)?;
     game.ip_location = point;
     game.in_orbit = 0;
     let queues = queues::capture_queues_for_activity(game)?;
     let groups = groups::capture_groups(game)?;
-    let files = statefiles::capture_state_files(game)?;
+    let files = statefiles::capture_state_files(game, &world.story, &world.files)?;
     Ok(SaveFile {
         summary,
         global: runtime.global,

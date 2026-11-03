@@ -1,12 +1,13 @@
 //! Restart-menu rendering, ported from restart.c (GPL-2.0-or-later).
-#![allow(non_snake_case)]
+#[cfg(not(test))]
+use crate::engine::Kernel;
 #[cfg(not(test))]
 use crate::ships::native::abi::*;
 
 /// # Safety
 /// Menu and its frame are live; the SDL game thread owns the current context.
 #[cfg(not(test))]
-pub unsafe fn DrawRestartMenuGraphic(menu: *mut MENU_STATE) {
+pub unsafe fn draw_restart_menu_graphic(menu: *mut MENU_STATE) {
     let mut rect: RECT = std::mem::zeroed();
     GetFrameRect((*menu).CurFrame, &mut rect);
     let mut stamp = STAMP {
@@ -26,7 +27,7 @@ pub unsafe fn DrawRestartMenuGraphic(menu: *mut MENU_STATE) {
     ClearDrawable();
     crate::graphics::cmap_abi::FlushColorXForms();
     DrawStamp(&mut stamp);
-    SetContextFont(TinyFont);
+    SetContextFont(Kernel::current().read(|owner| owner.tiny_font));
     let version = std::ffi::CString::new(concat!("v", env!("CARGO_PKG_VERSION"))).unwrap();
     let mut text = TEXT {
         baseline: POINT {
@@ -50,7 +51,7 @@ pub unsafe fn DrawRestartMenuGraphic(menu: *mut MENU_STATE) {
 /// # Safety
 /// The menu's flash context and frame must be live on the graphics owner thread.
 #[cfg(not(test))]
-pub unsafe fn DrawRestartMenu(menu: *mut MENU_STATE, state: u8, frame: FRAME) {
+pub unsafe fn draw_restart_menu(menu: *mut MENU_STATE, state: u8, frame: FRAME) {
     let origin = crate::navigation::abi::POINT { x: 0, y: 0 };
     crate::ui::flash::Flash_setOverlay(
         (*menu).flashContext.cast(),
@@ -60,7 +61,7 @@ pub unsafe fn DrawRestartMenu(menu: *mut MENU_STATE, state: u8, frame: FRAME) {
 }
 
 #[cfg(not(test))]
-pub fn StartGame() -> u32 {
+pub fn start_game() -> u32 {
     super::orchestration::rust_start_game() as u32
 }
 

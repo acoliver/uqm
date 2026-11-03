@@ -43,15 +43,16 @@
 //! written, and `ip_location` only takes the sun's location, which is where
 //! the inner system puts the ship's saved position.
 
+use crate::engine::World as GameWorld;
 use std::fmt;
 
 use super::solar::{position_in, SolarError, SolarSystem, World};
 use crate::c_bindings::global_state::{FRAME_DESC, MAX_PLANETS, SOLARSYS_STATE};
 use crate::comm::locdata::{CGameState, CPoint};
+use crate::engine::world::planet_info::{PlanetInfoManager, ScanRetrieveMask};
+use crate::engine::world::state_file::StateFileError;
 use crate::state::ffi::{with_state_owners, GameStateOwnerError};
 use crate::state::game_state::GameState;
-use crate::state::planet_info::{PlanetInfoManager, ScanRetrieveMask};
-use crate::state::state_file::StateFileError;
 
 /// `GetFrameIndex (frame)`: 0 for NULL, else the frame's `Index`.
 ///
@@ -155,19 +156,22 @@ fn persist_planet_change(
     let mask = ScanRetrieveMask::from_array(&state.SysInfo.PlanetInfo.ScanRetrieveMask);
     let (start, end) =
         GameState::lookup_bits("PLANETARY_CHANGE").expect("PLANETARY_CHANGE is a game-state key");
-    with_state_owners(|bits, files| {
-        if bits.get_state(start, end) == 0 {
-            return Ok(());
-        }
-        // Every input is built before the first write.
-        let moons = moons_per_planet(state)?;
-        PlanetInfoManager::new(files)
-            .put_planet_info(star_index, target.planet, target.scan_moon, &mask, &moons)
-            .map_err(LocationError::PlanetInfo)?;
-        bits.set_state(start, end, 0);
-        Ok(())
-    })
-    .map_err(LocationError::Owners)?
+    GameWorld::current()
+        .write(|world| {
+            with_state_owners(world, |bits, files| {
+                if bits.get_state(start, end) == 0 {
+                    return Ok(());
+                }
+                // Every input is built before the first write.
+                let moons = moons_per_planet(state)?;
+                PlanetInfoManager::new(files)
+                    .put_planet_info(star_index, target.planet, target.scan_moon, &mask, &moons)
+                    .map_err(LocationError::PlanetInfo)?;
+                bits.set_state(start, end, 0);
+                Ok(())
+            })
+        })
+        .map_err(LocationError::Owners)?
 }
 
 /// `SaveSolarSysLocation ()` for a flagship that is in a solar system.

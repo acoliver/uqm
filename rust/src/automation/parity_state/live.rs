@@ -7,7 +7,6 @@ use crate::engine::battle::access::observe::ElementObservation;
 #[cfg(not(test))]
 use crate::{
     automation::battle_fight::ShipState, battle::netplay::CrcState, comm::locdata::CGameState,
-    ships::native::abi::GlobData,
 };
 
 #[cfg(not(test))]
@@ -30,17 +29,12 @@ fn checkpoint_with_context(
     // queue pools and their linked records. No callback runs before it returns.
     let (game, queues, elements) = unsafe {
         (
-            &*(&raw const GlobData.Game_state).cast::<CGameState>(),
-            std::array::from_fn::<_, 2, _>(|side| {
-                Ship::queue(
-                    &*crate::engine::battle::access::live_queues::player_ships(side),
-                    cx.elements(),
-                )
-            }),
+            &*(&raw const cx.world.data.game).cast::<CGameState>(),
+            std::array::from_fn::<_, 2, _>(|side| Ship::queue(cx.race_pool(side), cx.elements())),
             display_elements(cx.elements(), Some(cx.groups())),
         )
     };
-    crate::automation::parity_mode::capture(&mut fields, game, journal);
+    crate::automation::parity_mode::capture(&mut fields, game, cx.world.story.as_ref(), journal);
     let ships: [_; 2] = std::array::from_fn(|side| {
         queues[side]
             .iter()

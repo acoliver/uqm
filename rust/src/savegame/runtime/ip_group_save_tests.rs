@@ -5,9 +5,9 @@ use super::ip_group_save::{expiry_date, plan_save_ip_groups, save_ip_groups, Dat
 use super::statefiles::{
     capture_from_images, initial_defined_image, initial_random_image, StateSectionError,
 };
+use crate::engine::world::state_file::{StateFileManager, DEFGRPINFO_FILE, RANDGRPINFO_FILE};
 use crate::savegame::decode_save;
 use crate::savegame::types::{IpGroup, Point, GAME_STATE_BYTES};
-use crate::state::state_file::{StateFileManager, DEFGRPINFO_FILE, RANDGRPINFO_FILE};
 
 const C_WRITTEN_SAVE: &[u8] = include_bytes!("../../../tests/fixtures/savegame/legacy-save.00");
 

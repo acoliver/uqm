@@ -1,8 +1,6 @@
 // State File Management
 // Handles in-memory state file operations for starinfo, randgrpinfo, and defgrpinfo
 
-use std::sync::Mutex;
-
 pub const STARINFO_FILE: usize = 0;
 pub const RANDGRPINFO_FILE: usize = 1;
 pub const DEFGRPINFO_FILE: usize = 2;
@@ -208,7 +206,7 @@ pub enum SeekWhence {
 
 /// State file manager - handles all state files
 pub struct StateFileManager {
-    pub(crate) canned_nodes: Vec<super::planet_info::CannedNode>,
+    pub(crate) canned_nodes: Vec<uqm_save::CannedNode>,
     files: [StateFile; NUM_STATE_FILES],
 }
 
@@ -315,22 +313,6 @@ impl Default for StateFileManager {
     fn default() -> Self {
         Self::new()
     }
-}
-
-/// Global state file manager (thread-safe)
-static GLOBAL_STATE_FILES: Mutex<Option<StateFileManager>> = Mutex::new(None);
-
-/// Initialize the global state file manager
-pub fn init_global_state_files() {
-    let mut global = GLOBAL_STATE_FILES.lock().unwrap();
-    if global.is_none() {
-        *global = Some(StateFileManager::new());
-    }
-}
-
-/// Get access to the global state file manager
-pub fn get_global_state_manager<'a>() -> Option<&'a Mutex<Option<StateFileManager>>> {
-    Some(&GLOBAL_STATE_FILES)
 }
 
 /// Read a 32-bit little-endian value from a state file

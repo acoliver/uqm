@@ -5,6 +5,7 @@
 //! dispatch. Runtime setup then drives the normal game-loop encounter path;
 //! it does not invoke communication recursively from an input callback.
 
+use crate::engine::StoryKey;
 use serde::Deserialize;
 use std::fmt;
 use std::sync::OnceLock;
@@ -58,7 +59,7 @@ pub struct ScenePlan {
     /// must establish it as the real game does.
     pub star_location: (i16, i16),
     /// Named game-state values the scene's circumstances require.
-    pub game_state: &'static [(&'static str, u32)],
+    pub game_state: &'static [(crate::engine::StoryKey, u32)],
 }
 
 /// Scene activation or verification failure.
@@ -143,10 +144,10 @@ pub fn scene_plan(
                     | crate::comm::dispatch::START_ENCOUNTER,
                 star_location: (6200, 5935),
                 game_state: &[
-                    ("CHMMR_BOMB_STATE", 3),
-                    ("UTWIG_BOMB_ON_SHIP", 1),
-                    ("STARBASE_AVAILABLE", 1),
-                    ("BOMB_CARRIER", 0),
+                    (StoryKey::CHMMR_BOMB_STATE, 3),
+                    (StoryKey::UTWIG_BOMB_ON_SHIP, 1),
+                    (StoryKey::STARBASE_AVAILABLE, 1),
+                    (StoryKey::BOMB_CARRIER, 0),
                 ],
             })
         }
@@ -158,7 +159,7 @@ pub fn scene_plan(
             current_activity: crate::comm::dispatch::IN_ENCOUNTER
                 | crate::comm::dispatch::START_ENCOUNTER,
             star_location: SOL_UNIVERSE_LOCATION,
-            game_state: &[("PROBE_MESSAGE_DELIVERED", 0)],
+            game_state: &[(StoryKey::PROBE_MESSAGE_DELIVERED, 0)],
         }),
         AutomationScene::StarbaseCommander => Ok(ScenePlan {
             scene,
@@ -169,13 +170,13 @@ pub fn scene_plan(
                 | crate::comm::dispatch::START_ENCOUNTER,
             star_location: SOL_UNIVERSE_LOCATION,
             game_state: &[
-                ("GLOBAL_FLAGS_AND_DATA", 0xFF),
-                ("STARBASE_AVAILABLE", 1),
-                ("PROBE_ILWRATH_ENCOUNTER", 0),
+                (StoryKey::GLOBAL_FLAGS_AND_DATA, 0xFF),
+                (StoryKey::STARBASE_AVAILABLE, 1),
+                (StoryKey::PROBE_ILWRATH_ENCOUNTER, 0),
                 // The visit goes straight into the Commander conversation only
                 // when the moon base is on the ship (or Chmmr installed the
                 // bomb); otherwise it falls through to the starbase menu.
-                ("MOONBASE_ON_SHIP", 1),
+                (StoryKey::MOONBASE_ON_SHIP, 1),
             ],
         }),
     }
@@ -339,7 +340,9 @@ pub fn enter_scene(plan: &ScenePlan, ops: &mut impl SceneEntryOps) {
 }
 
 #[cfg(not(test))]
-struct LinkedSceneEntry;
+pub(super) struct LinkedSceneEntry {
+    pub(super) screen_context: crate::graphics::native_abi::CONTEXT,
+}
 
 #[cfg(not(test))]
 impl SceneEntryOps for LinkedSceneEntry {
@@ -357,7 +360,7 @@ impl SceneEntryOps for LinkedSceneEntry {
         // SAFETY: the screen context exists once game initialization is
         // complete, and scene activation runs on the main thread.
         unsafe {
-            c_extern::SetContext(c_extern::ScreenContext);
+            c_extern::SetContext(self.screen_context);
             c_extern::ClearDrawable();
         }
     }
@@ -382,6 +385,7 @@ impl SceneEntryOps for LinkedSceneEntry {
 pub fn activate(
     scene: AutomationScene,
     boundary: SceneActivationBoundary,
+    enter: impl FnOnce(&ScenePlan),
 ) -> Result<ScenePlan, SceneError> {
     let plan = scene_plan(scene, boundary)?;
     observation().lock().begin(scene);
@@ -402,15 +406,12 @@ pub fn activate(
             *observation().lock() = SceneObservation::default();
             return Err(SceneError::SetupFailed(reason));
         }
-        for (name, value) in plan.game_state {
-            crate::state::game_state_keys::set_game_state(name, *value);
-        }
-        enter_scene(&plan, &mut LinkedSceneEntry);
+        enter(&plan);
     }
 
     #[cfg(test)]
     {
-        let _ = plan;
+        let _ = (plan, enter);
         *observation().lock() = SceneObservation::default();
         return Err(SceneError::SetupFailed(
             "runtime scene activation is unavailable in isolated unit tests",
@@ -545,15 +546,15 @@ mod tests {
             SceneActivationBoundary::GameInitialized,
         )
         .unwrap();
-        let state = |name: &str| {
+        let state = |name: crate::engine::StoryKey| {
             plan.game_state
                 .iter()
                 .find(|(key, _)| *key == name)
                 .map(|(_, value)| *value)
         };
-        assert_eq!(state("STARBASE_AVAILABLE"), Some(1));
-        assert_eq!(state("MOONBASE_ON_SHIP"), Some(1));
-        assert_eq!(state("PROBE_ILWRATH_ENCOUNTER"), Some(0));
+        assert_eq!(state(StoryKey::STARBASE_AVAILABLE), Some(1));
+        assert_eq!(state(StoryKey::MOONBASE_ON_SHIP), Some(1));
+        assert_eq!(state(StoryKey::PROBE_ILWRATH_ENCOUNTER), Some(0));
     }
 
     #[test]
@@ -568,7 +569,7 @@ mod tests {
         assert!(plan
             .game_state
             .iter()
-            .all(|(key, _)| *key != "BATTLE_SEGUE"));
+            .all(|(key, _)| *key != StoryKey::BATTLE_SEGUE));
     }
 
     #[derive(Default)]

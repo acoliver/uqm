@@ -320,7 +320,7 @@ pub(crate) mod engine {
             let h = (i32::from(cx.random() as u16) % i32::from(rect.extent.height)) as i16;
             let mut crew_intersect: INTERSECT_CONTROL = mem::zeroed();
             crew_intersect.EndPoint = intersect.EndPoint;
-            image!(frame; crew_intersect.IntersectStamp.frame, DecFrameIndex(stars_in_space));
+            image!(frame; crew_intersect.IntersectStamp.frame, DecFrameIndex(cx.kernel.stars_in_space));
             if dx == 0 && dy == 0 {
                 crew_intersect.EndPoint.x = crew_intersect
                     .EndPoint

@@ -33,9 +33,9 @@ fn page(top: u16, bottom: u16, current: u16, count: u16, keys: [bool; 4]) -> (u1
 }
 
 #[cfg(not(test))]
-#[allow(non_snake_case)]
 pub(crate) mod live {
     use super::page;
+    use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
 
     use crate::io::uio_bridge::{uio_fclose, uio_fopen, uio_unlink};
     use crate::memory::{rust_hfree, rust_hmalloc};
@@ -165,8 +165,8 @@ pub(crate) mod live {
     }
     unsafe fn select(state: *mut MELEE_STATE, highlighted: bool) {
         let index = (*state).load.cur - (*state).load.top;
-        let old = SetContext(SpaceContext);
-        SetContextFont(MicroFont);
+        let old = SetContext(KernelOwner::current().read(|owner| owner.space_context));
+        SetContextFont(KernelOwner::current().read(|owner| owner.micro_font));
         BatchGraphics();
         draw_entry(
             (*state).load.view[index as usize],
@@ -181,8 +181,8 @@ pub(crate) mod live {
         SetContext(old);
     }
     unsafe fn draw(state: *mut MELEE_STATE) {
-        let old = SetContext(SpaceContext);
-        SetContextFont(MicroFont);
+        let old = SetContext(KernelOwner::current().read(|owner| owner.space_context));
+        SetContextFont(KernelOwner::current().read(|owner| owner.micro_font));
         BatchGraphics();
         DrawMeleeIcon(28);
         if fill_view(state) {
@@ -209,7 +209,7 @@ pub(crate) mod live {
         if now >= NEXT_FLASH {
             NEXT_FLASH = now.wrapping_add(840 / 9);
             HIGHLIGHTED = !HIGHLIGHTED;
-            let old = SetContext(SpaceContext);
+            let old = SetContext(KernelOwner::current().read(|owner| owner.space_context));
             select(state, HIGHLIGHTED);
             SetContext(old);
         }
@@ -220,7 +220,9 @@ pub(crate) mod live {
     pub unsafe extern "C" fn DoLoadTeam(state: *mut MELEE_STATE) -> u32 {
         let time = GetTimeCounter();
         GamePaused = 0;
-        if GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 != 0 {
+        if WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
+            != 0
+        {
             return 0;
         }
         SetMenuSounds(1 | 2 | 128 | 256, 16);
@@ -310,7 +312,7 @@ pub(crate) mod live {
         filename.extend(b".mle");
         filename.truncate(254);
         let filename = CString::new(filename).unwrap();
-        let old = SetContext(ScreenContext);
+        let old = SetContext(KernelOwner::current().read(|owner| owner.screen_context));
         let mut saved = mem::zeroed();
         ConfirmSaveLoad(&mut saved);
         let stream = uio_fopen(meleeDir.cast(), filename.as_ptr(), c"wb".as_ptr());

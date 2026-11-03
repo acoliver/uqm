@@ -5,10 +5,10 @@ pub(super) unsafe fn clear_queues() {
     // SAFETY: the caller owns the idle global queues and detaches all test
     // records before releasing their stack storage; there are no active readers.
     unsafe {
-        uqm_rust::app::bridge::battle(|battle| {
-            battle.reset_element_capacity(150);
+        uqm_rust::app::bridge::enter(|cx| {
+            cx.kernel_mut().reset_element_capacity(150);
             for side in 0..2 {
-                battle.reset_ship_capacity(side, 32);
+                cx.kernel_mut().reset_ship_capacity(side, 32);
             }
         });
         uqm_rust::battle::process_native::InitDisplayList();
@@ -31,7 +31,7 @@ pub(super) fn elements_and_fighters(directory: &Path) {
     // SAFETY: STARSHIP contains integers, pointers and optional callbacks.
     let mut owner = unsafe { battle::PoolShip::new(0) };
     owner.SpeciesID = SPECIES_ID_EARTHLING_ID;
-    owner.ShipFacing = 31;
+    owner.ship_facing = 31;
     first.player_nr = 0;
     first.state_flags = ElementFlags::PLAYER_SHIP;
     first.parent = uqm_rust::engine::battle::Parent::Ship(owner.ship_id);
@@ -66,7 +66,9 @@ pub(super) fn elements_and_fighters(directory: &Path) {
     // SAFETY: stack graph remains live; no renderer or pool allocator is running.
     unsafe {
         install_ship(&mut owner);
-        GlobData.Game_state.CurrentActivity = IN_BATTLE as u16;
+        (**uqm_rust::engine::WorldData::current())
+            .game
+            .current_activity = IN_BATTLE as u16;
     }
     uqm_rust::math::seed_random(654321);
     let fighters = BattleSnapshot::live();
@@ -226,7 +228,7 @@ pub(super) fn fighters_without_journal(directory: &Path) {
     // SAFETY: zero is valid for all native ship scalar/optional pointer fields.
     let mut ship = unsafe { battle::PoolShip::new(0) };
     ship.descriptor = Some(Box::new(RaceDescriptor::EMPTY));
-    ship.ShipFacing = 31;
+    ship.ship_facing = 31;
     element.state_flags = ElementFlags::PLAYER_SHIP;
     element.player_nr = 0;
     element.crew_or_hp = 19;
@@ -237,7 +239,9 @@ pub(super) fn fighters_without_journal(directory: &Path) {
     ));
     // SAFETY: this child has not initialized Coordinator, and it alone owns the graph.
     unsafe {
-        GlobData.Game_state.CurrentActivity = IN_BATTLE as u16;
+        (**uqm_rust::engine::WorldData::current())
+            .game
+            .current_activity = IN_BATTLE as u16;
         install_ship(&mut ship);
         attach_elements(std::slice::from_mut(&mut element));
     }
@@ -342,26 +346,28 @@ pub(super) fn event_queue_fields(directory: &Path) {
     };
     // SAFETY: this test owns the idle game clock queue until it is uninitialized.
     unsafe {
-        let queue = &raw mut GlobData.Game_state.GameClock.event_q;
-        assert!(InitQueue(
-            queue,
-            NUM_EVENTS as u16,
-            std::mem::size_of::<CEvent>() as u16
-        ));
-        let first = EventEntry {
-            day_index: 8,
-            month_index: 9,
-            year_index: 2161,
-            func_index: 1,
-        };
-        let second = EventEntry {
-            day_index: 10,
-            month_index: 9,
-            year_index: 2161,
-            func_index: 2,
-        };
-        restore_events(&mut *queue, &[first, second])
-            .unwrap_or_else(|error| panic!("restore test events: {error}"));
+        uqm_rust::engine::WorldData::current().write(|world| {
+            let queue = &raw mut world.game.game_clock.event_q;
+            assert!(InitQueue(
+                queue,
+                NUM_EVENTS as u16,
+                std::mem::size_of::<CEvent>() as u16
+            ));
+            let first = EventEntry {
+                day_index: 8,
+                month_index: 9,
+                year_index: 2161,
+                func_index: 1,
+            };
+            let second = EventEntry {
+                day_index: 10,
+                month_index: 9,
+                year_index: 2161,
+                func_index: 2,
+            };
+            restore_events(&mut *queue, &[first, second])
+                .unwrap_or_else(|error| panic!("restore test events: {error}"));
+        });
         let (fields, _) = snapshot(directory);
         assert_eq!(fields["mode.events.initialized"], "true");
         assert_eq!(fields["mode.events.count"], "2");
@@ -374,7 +380,9 @@ pub(super) fn event_queue_fields(directory: &Path) {
                 function.to_string()
             );
         }
-        assert!(UninitQueue(queue));
+        uqm_rust::engine::WorldData::current().write(|world| {
+            assert!(UninitQueue(&raw mut world.game.game_clock.event_q));
+        });
     }
 }
 
@@ -386,18 +394,21 @@ pub(super) fn non_ship_parent_fields(directory: &Path) {
     let mut element = ElementRecord::new();
     // SAFETY: no game loop is running; this test owns both queues and the group pool.
     unsafe {
-        let queue = &raw mut GlobData.Game_state.ip_group_q;
-        assert!(InitQueue(queue, 4, std::mem::size_of::<CIpGroup>() as u16));
-        let handle = AllocLink(queue);
-        assert!(!handle.is_null());
-        handle.cast::<CIpGroup>().write(std::mem::zeroed());
-        let group = &mut *handle.cast::<CIpGroup>();
-        group.group_id = 31;
-        group.race_id = 4;
-        group.group_counter = 123;
-        group.loc.x = -71;
-        group.task = 2;
-        PutQueue(queue, handle);
+        let handle = uqm_rust::engine::WorldData::current().write(|world| {
+            let queue = &raw mut world.game.ip_group_q;
+            assert!(InitQueue(queue, 4, std::mem::size_of::<CIpGroup>() as u16));
+            let handle = AllocLink(queue);
+            assert!(!handle.is_null());
+            handle.cast::<CIpGroup>().write(std::mem::zeroed());
+            let group = &mut *handle.cast::<CIpGroup>();
+            group.group_id = 31;
+            group.race_id = 4;
+            group.group_counter = 123;
+            group.loc.x = -71;
+            group.task = 2;
+            PutQueue(queue, handle);
+            handle
+        });
         element.parent = uqm_rust::engine::battle::Parent::IpGroup(0);
         attach_elements(std::slice::from_mut(&mut element));
         observation::record(Event::Allocate(element.pointer() as usize));
@@ -420,6 +431,8 @@ pub(super) fn non_ship_parent_fields(directory: &Path) {
         assert_eq!(fields["elements.0.parent"], "group:32");
         assert_eq!(fields["mode.groups.32.counter"], "123");
         clear_queues();
-        assert!(UninitQueue(queue));
+        uqm_rust::engine::WorldData::current().write(|world| {
+            assert!(UninitQueue(&raw mut world.game.ip_group_q));
+        });
     }
 }

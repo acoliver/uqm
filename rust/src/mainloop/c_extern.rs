@@ -36,10 +36,6 @@ use super::types::CBoolean;
 
 #[cfg(not(test))]
 pub use crate::game_init::macro_abi::get_current_activity;
-#[cfg(test)]
-extern "C" {
-    pub fn get_current_activity() -> u16;
-}
 extern "C" {
 
     /// Write `GLOBAL(CurrentActivity)`.
@@ -264,16 +260,16 @@ pub unsafe fn set_main_exited(b: CBoolean) {
 // ---------------------------------------------------------------------------
 
 #[cfg(not(test))]
-pub use crate::ui::starbase::InstallBombAtEarth;
+pub use crate::ui::starbase::install_bomb_at_earth;
 #[cfg(test)]
 extern "C" {
-    pub fn InstallBombAtEarth();
+    pub fn install_bomb_at_earth();
 }
 #[cfg(not(test))]
-pub use crate::ui::starbase::VisitStarBase;
+pub use crate::ui::starbase::visit_star_base;
 #[cfg(test)]
 extern "C" {
-    pub fn VisitStarBase();
+    pub fn visit_star_base();
 }
 
 #[cfg(not(test))]
@@ -303,16 +299,16 @@ pub use crate::game_init::kernel_abi::LoadKernel;
 // ---------------------------------------------------------------------------
 
 #[cfg(not(test))]
-pub use crate::game_init::cleanup::FreeKernel;
+pub use crate::game_init::cleanup::free_kernel;
 #[cfg(test)]
 extern "C" {
-    pub fn FreeKernel();
+    pub fn free_kernel();
 }
 #[cfg(not(test))]
-pub use crate::game_init::cleanup::UninitGameKernel;
+pub use crate::game_init::cleanup::uninit_game_kernel;
 #[cfg(test)]
 extern "C" {
-    pub fn UninitGameKernel();
+    pub fn uninit_game_kernel();
 }
 #[cfg(not(test))]
 pub use crate::game_init::kernel_abi::ClearPlayerInputAll;
@@ -321,10 +317,10 @@ extern "C" {
     pub fn ClearPlayerInputAll();
 }
 #[cfg(not(test))]
-pub use crate::navigation::globals::UninitGameStructures;
+pub use crate::navigation::globals::uninit_game_structures;
 #[cfg(test)]
 extern "C" {
-    pub fn UninitGameStructures();
+    pub fn uninit_game_structures();
 }
 pub use crate::sound::heart_ffi::stop_sound as StopSound;
 
@@ -335,7 +331,7 @@ pub use crate::navigation::globals::InitGameStructures;
 pub use crate::time::clock_abi::live::InitGameClock;
 
 #[cfg(not(test))]
-pub use crate::navigation::events::live::AddInitialGameEvents;
+pub use crate::navigation::events::live::schedule_initial_events;
 
 #[cfg(not(test))]
 pub use crate::ui::sis::SetStatusMessageMode;
@@ -360,13 +356,13 @@ extern "C" {
     /// Returns non-zero (true) to start/load a game, zero to quit.
     /// @plan PLAN-20260707-MAINLOOP.P06
     #[cfg(test)]
-    pub fn StartGame() -> CBoolean;
+    pub fn start_game() -> CBoolean;
 }
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
 #[cfg(not(test))]
-pub unsafe fn start_game() -> CBoolean {
-    (crate::mainloop::restart_menu::render_abi::StartGame()) as _
+pub fn start_game() -> CBoolean {
+    (crate::mainloop::restart_menu::render_abi::start_game()) as _
 }
 
 // ---------------------------------------------------------------------------
@@ -380,7 +376,7 @@ static TEST_CURRENT_ACTIVITY: AtomicU16 = AtomicU16::new(0);
 /// Test shim: set the test-local current activity.
 ///
 /// This writes to a **test-local** global,
-/// NOT to the real `GlobData.Game_state.CurrentActivity`.
+/// NOT to the real `GlobData.game.current_activity`.
 ///
 /// @plan PLAN-20260707-MAINLOOP.P03
 #[cfg(test)]
@@ -395,6 +391,3 @@ pub fn test_set_activity(val: u16) {
 pub fn test_get_activity() -> u16 {
     TEST_CURRENT_ACTIVITY.load(Ordering::SeqCst)
 }
-
-#[cfg(not(test))]
-pub use start_game as StartGame;

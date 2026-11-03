@@ -126,10 +126,7 @@ fn exercise_live_callers(directory: &Path) {
             .unwrap_or_else(|error| panic!("validate state test script: {error}")),
         directory.into(),
     );
-    // SAFETY: this process has one game thread and no running game or renderer.
-    unsafe {
-        uqm_rust::state::ffi::rust_init_game_state();
-    }
+    uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
     observation::record(Event::SpaceActive(true));
     descriptor_fields(directory);
     elements_and_fighters(directory);
@@ -262,7 +259,7 @@ fn update_descriptor(descriptor: &mut RaceDescriptor, ship: &mut ShipRecord) {
     ship.ship_input_state = 8;
     ship.cur_status_flags = 10;
     ship.old_status_flags = 12;
-    ship.ShipFacing = 14;
+    ship.ship_facing = 14;
     ship.control = 16;
 }
 
@@ -313,8 +310,8 @@ unsafe fn install_ship(ship: &mut ShipRecord) {
     // SAFETY: the caller owns the idle queues and keeps ship at this address
     // until the synchronous snapshot finishes and the queue is detached.
     unsafe {
-        uqm_rust::app::bridge::battle(|owner| {
-            let mut ships = owner.ships(0);
+        uqm_rust::app::bridge::enter(|cx| {
+            let mut ships = cx.kernel_mut().ships(0);
             let link = ships
                 .id(ptr::from_mut(ship).cast())
                 .unwrap_or_else(|| panic!("fixture ship is missing"));
@@ -355,8 +352,8 @@ fn race_custom_fields(directory: &Path) {
                 saved_death: human,
             };
             let ship = ptr::from_mut(owner.ship_mut());
-            uqm_rust::app::bridge::battle(|battle| {
-                let mut ships = battle.ships(0);
+            uqm_rust::app::bridge::enter(|cx| {
+                let mut ships = cx.kernel_mut().ships(0);
                 let link = ships.link(owner.ship_id);
                 ships.put(link);
             });
@@ -398,8 +395,8 @@ fn race_custom_fields(directory: &Path) {
                 fields["ships.0.0.custom.phoenix"]
             );
             uqm_rust::app::bridge::enter(|cx| cx.unlink(reused.id));
-            uqm_rust::app::bridge::battle(|battle| {
-                let mut ships = battle.ships(0);
+            uqm_rust::app::bridge::enter(|cx| {
+                let mut ships = cx.kernel_mut().ships(0);
                 let link = ships.link(owner.ship_id);
                 ships.remove(link);
             });
@@ -469,22 +466,19 @@ fn known_collision() -> uqm_rust::engine::battle::CollisionFn {
 }
 
 unsafe fn sis_fields(directory: &Path, ship: &mut ShipRecord) {
-    // SAFETY: this child process has no running game; no other references to SIS
-    // state exist while this short exclusive borrow initializes its module slots.
-    unsafe {
-        let sis = &raw mut GlobData.SIS_state;
-        let sis = &mut *sis;
-        sis.ModuleSlots
+    uqm_rust::engine::WorldData::current().write(|world| {
+        let sis = &mut world.flagship;
+        sis.module_slots
             .fill(uqm_rust::starbase::sis_modules::EMPTY_SLOT);
-        sis.ModuleSlots[15] = GUN_WEAPON as u8;
-        sis.ModuleSlots[14] = CANNON_WEAPON as u8;
-        sis.ModuleSlots[4] = TRACKING_SYSTEM as u8;
-        sis.DriveSlots
+        sis.module_slots[15] = GUN_WEAPON as u8;
+        sis.module_slots[14] = CANNON_WEAPON as u8;
+        sis.module_slots[4] = TRACKING_SYSTEM as u8;
+        sis.drive_slots
             .fill(uqm_rust::starbase::sis_modules::EMPTY_SLOT);
-        sis.JetSlots
+        sis.jet_slots
             .fill(uqm_rust::starbase::sis_modules::EMPTY_SLOT);
-        GlobData.Game_state.CurrentActivity = SUPER_MELEE as u16;
-    }
+        world.game.current_activity = SUPER_MELEE as u16;
+    });
     ship.SpeciesID = SPECIES_ID_SIS_SHIP_ID;
     // SAFETY: the caller runs native initialization on the sole game thread.
     let descriptor =
@@ -550,12 +544,28 @@ fn campaign_fields(directory: &Path) {
     let (before, _) = snapshot(directory);
     // SAFETY: the game is idle and this is its sole thread.
     unsafe {
-        GlobData.Game_state.GameClock.day_index = 7;
-        GlobData.Game_state.GameClock.month_index = 9;
-        GlobData.Game_state.GameClock.year_index = 2161;
-        GlobData.Game_state.GameClock.tick_count = -17;
-        GlobData.Game_state.BattleGroupRef = 123;
-        uqm_rust::state::ffi::rust_set_game_state(c"BOMB_CARRIER".as_ptr(), 1);
+        (**uqm_rust::engine::WorldData::current())
+            .game
+            .game_clock
+            .day_index = 7;
+        (**uqm_rust::engine::WorldData::current())
+            .game
+            .game_clock
+            .month_index = 9;
+        (**uqm_rust::engine::WorldData::current())
+            .game
+            .game_clock
+            .year_index = 2161;
+        (**uqm_rust::engine::WorldData::current())
+            .game
+            .game_clock
+            .tick_count = -17;
+        (**uqm_rust::engine::WorldData::current())
+            .game
+            .battle_group_ref = 123;
+        uqm_rust::engine::World::current().write(|world| {
+            uqm_rust::state::ffi::rust_set_game_state(world, c"BOMB_CARRIER".as_ptr(), 1)
+        });
     }
     let (after, _) = snapshot(directory);
     assert_eq!(after["mode.clock.day"], "7");

@@ -7,10 +7,16 @@
 //! @plan PLAN-20260326-COMMPT2.P07
 //! @requirement REQ-HL-001
 
+#[cfg(not(test))]
+use crate::engine::StoryKey;
+#[cfg(not(test))]
+use crate::engine::World;
 // ============================================================================
 // C bridge declarations (not compiled in test builds)
 // ============================================================================
 
+#[cfg(not(test))]
+use crate::engine::{Kernel, WorldData};
 #[cfg(not(test))]
 pub(super) mod c_bridge {
     use std::ffi::c_int;
@@ -33,8 +39,8 @@ pub(super) mod c_bridge {
         CaptureStringTable, DestroyStringTable, GetStringAddress, ReleaseStringTable,
         SetAbsStringTableIndex,
     };
-    pub use crate::ui::border::DrawSISFrame;
-    pub use crate::ui::settings::StopMusic;
+    pub use crate::ui::border::draw_sisframe;
+    pub use crate::ui::settings::stop_music;
     pub use crate::ui::sis::DrawSISTitle;
 
     pub use crate::graphics::resgfx::LoadGraphicInstance;
@@ -64,16 +70,13 @@ pub(super) mod c_bridge {
     pub use crate::comm::comm_abi::c_ClearPhraseBuf;
 
     extern "C" {
-        pub static mut LastActivity: u16;
-        pub static mut Screen: *mut crate::graphics::native_abi::frame_desc;
-        pub static mut SpaceContext: *mut crate::graphics::native_abi::context_desc;
+
         pub static mut ScreenWidth: c_int;
         pub static mut ScreenHeight: c_int;
         #[allow(dead_code)]
         pub static mut optSmoothScroll: c_int;
         pub static mut CommWndRect: crate::comm::locdata::CRect;
-        pub static mut GameStrings: *mut crate::strings::string_table::StringTableEntry;
-        pub static mut GlobData: crate::ships::native::abi::GLOBDATA;
+
     }
     pub use crate::graphics::gfx_common_abi::BatchGraphics;
     pub use crate::sound::heart_ffi::DestroyMusic;
@@ -115,32 +118,38 @@ impl super::player_font::FontRelease for CFontRelease {
 /// Check if this is a starbase conversation by reading C game state.
 /// Matches: GET_GAME_STATE(GLOBAL_FLAGS_AND_DATA) == 0xFF && GET_GAME_STATE(STARBASE_AVAILABLE)
 #[cfg(not(test))]
-unsafe fn is_starbase_conversation() -> bool {
+fn is_starbase_conversation() -> bool {
     // Direct game state access (replaces c_IsStarbaseConversation)
-    let global_flags = crate::state::game_state_keys::get_game_state("GLOBAL_FLAGS_AND_DATA");
-    let starbase_available = crate::state::game_state_keys::get_game_state("STARBASE_AVAILABLE");
+    let global_flags =
+        World::current().read(|world| world.story_state(StoryKey::GLOBAL_FLAGS_AND_DATA));
+    let starbase_available =
+        World::current().read(|world| world.story_state(StoryKey::STARBASE_AVAILABLE));
     global_flags == 0xFF && starbase_available != 0
 }
 
 /// Draw the player communication panel using the shared C-parity renderer.
 #[cfg(not(test))]
-unsafe fn draw_sis_com_window() {
+fn draw_sis_com_window() {
     super::sis_graphics::draw_sis_com_window();
 }
 
-/// Get the planet name from GlobData.SIS_state.PlanetName.
+/// Get the planet name from GlobData.flagship.planet_name.
 #[cfg(not(test))]
 unsafe fn planet_name() -> *const std::ffi::c_char {
-    // GlobData.SIS_state.PlanetName is a char[16] array
+    let world = WorldData::current();
+    // GlobData.flagship.planet_name is a char[16] array
     // Use addr_of_mut! to avoid creating a shared reference to mutable static
-    let planet_name_ptr = std::ptr::addr_of_mut!(c_bridge::GlobData.SIS_state.PlanetName);
+    let planet_name_ptr = std::ptr::addr_of_mut!((**world).flagship.planet_name);
     planet_name_ptr as *const std::ffi::c_char
 }
 
 /// Get a game string via GAME_STRING macro: SetAbsStringTableIndex(GameStrings, i) → GetStringAddress.
 #[cfg(not(test))]
 pub(crate) unsafe fn game_string(index: i32) -> *const std::ffi::c_char {
-    let s = c_bridge::SetAbsStringTableIndex(c_bridge::GameStrings.cast(), index as u16);
+    let s = c_bridge::SetAbsStringTableIndex(
+        Kernel::current().read(|owner| owner.game_strings).cast(),
+        index as u16,
+    );
     c_bridge::GetStringAddress(s)
 }
 
@@ -165,6 +174,7 @@ const NORMAL_VOLUME: i32 = 128;
 /// @plan PLAN-20260326-COMMPT2.P07
 /// @requirement REQ-HL-001
 pub unsafe fn hail_alien() {
+    #[cfg(not(test))]
     #[cfg(not(test))]
     {
         use super::player_font::CONVERSATION_PLAYER_FONT;
@@ -297,18 +307,17 @@ pub unsafe fn hail_alien() {
         // ----------------------------------------------------------------
         // Step 7: Set SpaceContext and save old font
         // ----------------------------------------------------------------
-        let space_ctx = unsafe { SpaceContext };
+        let space_ctx = { Kernel::current().read(|owner| owner.space_context) };
         SetContext(space_ctx.cast());
         let old_font = SetContextFont(player_font.cast());
 
         // ----------------------------------------------------------------
         // Step 8: Create AnimContext and configure
         // ----------------------------------------------------------------
-        let anim_ctx_name = c"AnimContext".as_ptr() as *const _;
-        let anim_ctx = create_named_context(anim_ctx_name);
+        let anim_ctx = create_named_context(c"AnimContext".as_ptr().cast());
         c_SetAnimContext(anim_ctx.cast());
         SetContext(anim_ctx);
-        let screen = unsafe { Screen };
+        let screen = { Kernel::current().read(|owner| owner.screen) };
         SetContextFGFrame(screen.cast());
 
         let mut frame_rect = crate::comm::locdata::CRect::default();
@@ -344,7 +353,7 @@ pub unsafe fn hail_alien() {
                 SetContextClipRect((&raw mut c_bridge::CommWndRect).cast());
             }
 
-            DrawSISFrame();
+            draw_sisframe();
 
             if is_starbase_conversation() {
                 // Talking to allied Starbase
@@ -367,7 +376,7 @@ pub unsafe fn hail_alien() {
         // Step 11: Set CHECK_LOAD flag, call encounter funcs, run DoInput
         // ----------------------------------------------------------------
         // LastActivity |= CHECK_LOAD (0x1000)
-        LastActivity |= 0x1000;
+        (**Kernel::current()).last_activity |= 0x1000;
         if let Some(callback) = c_bridge::CommData.init_encounter_func {
             callback();
         }
@@ -417,7 +426,7 @@ pub unsafe fn hail_alien() {
         super::ffi::rust_clear_subtitles();
 
         // Stop audio, fade music (C lines 1133–1136)
-        StopMusic();
+        stop_music();
         StopSound();
         StopTrack();
         let fade_end = FadeMusic(NORMAL_VOLUME as u8, 0);

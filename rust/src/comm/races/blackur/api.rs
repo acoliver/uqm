@@ -1,5 +1,9 @@
 use super::Handler;
 use crate::comm::races::encounter::EncounterApi;
+#[cfg(not(test))]
+use crate::engine::World;
+#[cfg(not(test))]
+use crate::engine::WorldData;
 
 pub(super) trait BlackurApi: EncounterApi<Handler> {
     fn battle_group(&self) -> (u32, u32);
@@ -12,13 +16,16 @@ pub(super) trait BlackurApi: EncounterApi<Handler> {
 #[cfg(not(test))]
 impl BlackurApi for super::super::script::live::LiveScript<Handler> {
     fn battle_group(&self) -> (u32, u32) {
-        extern "C" {
-            static mut GlobData: crate::ships::native::abi::GLOBDATA;
-        }
         let (start, _) = crate::state::game_state_keys::bit_range("SAMATRA_GRPOFFS0")
             .expect("missing Samatra group-offset state");
-        let offset = unsafe { crate::state::ffi::rust_get_game_state_32(start as i32) };
-        (unsafe { GlobData.Game_state.BattleGroupRef }, offset)
+        let offset = {
+            World::current()
+                .read(|world| crate::state::ffi::rust_get_game_state_32(world, start as i32))
+        };
+        (
+            { WorldData::current().read(|owner| owner.game.battle_group_ref) },
+            offset,
+        )
     }
 }
 #[cfg(test)]

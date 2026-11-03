@@ -82,7 +82,7 @@ pub(crate) mod engine {
             ..Default::default()
         };
         if world.activity() as u8 == IN_ENCOUNTER as u8
-            && world.story_state(crate::engine::battle::race::StoryKey::ShofixtiRecruited) == 0
+            && world.story_state(crate::engine::battle::race::StoryKey::SHOFIXTI_RECRUITED) == 0
         {
             configure_old_scout(&mut d);
         }

@@ -53,7 +53,7 @@ pub fn new_game_crew_cost() -> u8 {
     let mut sis = unsafe { std::mem::zeroed() };
     let mut state = unsafe { std::mem::zeroed() };
     crate::navigation::initial_state::prices(&mut sis, &mut state);
-    state.CrewCost
+    state.crew_cost
 }
 
 /// Frames in an `.ani` file: one line per frame.
@@ -90,15 +90,15 @@ impl NewGameFlagship {
         crate::navigation::initial_state::equipment(&mut sis);
         crate::navigation::initial_state::prices(&mut sis, &mut state);
         Self {
-            drive_slots: sis.DriveSlots,
-            jet_slots: sis.JetSlots,
-            module_slots: sis.ModuleSlots,
-            module_cost: state.ModuleCost,
-            num_landers: sis.NumLanders,
-            crew_enlisted: sis.CrewEnlisted,
-            fuel_on_board: sis.FuelOnBoard,
-            res_units: sis.ResUnits,
-            fuel_cost: state.FuelCost,
+            drive_slots: sis.drive_slots,
+            jet_slots: sis.jet_slots,
+            module_slots: sis.module_slots,
+            module_cost: state.module_cost,
+            num_landers: sis.num_landers,
+            crew_enlisted: sis.crew_enlisted,
+            fuel_on_board: sis.fuel_on_board,
+            res_units: sis.res_units,
+            fuel_cost: state.fuel_cost,
         }
     }
 

@@ -15,20 +15,22 @@ use uqm_rust::graphics::context_abi::_GraphicsStatusFlags;
 
 struct Battle {
     inner: shared::Battle,
-    globals: GLOBDATA,
+    globals: uqm_rust::engine::WorldData,
     screen: (i32, i32),
     graphics_flags: BYTE,
     counters: [BYTE; 2],
 }
 impl Battle {
     unsafe fn new(capacity: COUNT) -> Self {
-        let globals = GlobData;
+        let globals = uqm_rust::engine::WorldData::current().read(|world| *world);
         let screen = (ScreenWidth, ScreenHeight);
         let graphics_flags = _GraphicsStatusFlags;
         let counters = uqm_rust::app::bridge::battle(|b| b.counters);
         let inner = shared::Battle::new(capacity);
-        GlobData.Game_state.CurrentActivity = IN_ENCOUNTER as _;
-        uqm_rust::state::ffi::rust_init_game_state();
+        (**uqm_rust::engine::WorldData::current())
+            .game
+            .current_activity = IN_ENCOUNTER as _;
+        uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
         set_recruited(true);
         ScreenWidth = 320;
         ScreenHeight = 240;
@@ -48,7 +50,7 @@ impl Drop for Battle {
     fn drop(&mut self) {
         unsafe {
             ResetWinnerStarShip();
-            GlobData = self.globals;
+            uqm_rust::engine::WorldData::current().write(|world| *world = self.globals);
             (ScreenWidth, ScreenHeight) = self.screen;
             _GraphicsStatusFlags = self.graphics_flags;
             uqm_rust::app::bridge::battle(|b| b.counters = self.counters);
@@ -57,11 +59,14 @@ impl Drop for Battle {
 }
 
 unsafe fn set_recruited(value: bool) {
-    uqm_rust::state::ffi::rust_set_game_state_bits(
-        SHOFIXTI_RECRUITED as i32,
-        END_SHOFIXTI_RECRUITED as i32,
-        value as BYTE,
-    );
+    uqm_rust::engine::World::current().write(|world| {
+        uqm_rust::state::ffi::rust_set_game_state_bits(
+            world,
+            SHOFIXTI_RECRUITED as i32,
+            END_SHOFIXTI_RECRUITED as i32,
+            value as BYTE,
+        )
+    });
 }
 
 use shared::FrameSet;
@@ -201,7 +206,9 @@ fn complete_descriptor_and_damaged_tanaka_katana_variant_are_fresh_each_call() {
             (2, false, true),
             (0, false, false),
         ] {
-            GlobData.Game_state.CurrentActivity = activity;
+            (**uqm_rust::engine::WorldData::current())
+                .game
+                .current_activity = activity;
             set_recruited(recruited);
             let mut original = shared::descriptor(SPECIES_ID_SHOFIXTI_ID);
             let p = &raw mut original;
@@ -338,7 +345,7 @@ fn darts_use_next_location_exact_facing_offset_speed_and_failure_count() {
         let _battle = Battle::new(2);
         let mut ship = Ship::new(&_battle, 1);
         for facing in [0, 4, 7, 15, u16::MAX] {
-            ship.inner.ship_mut().ShipFacing = facing;
+            ship.inner.ship_mut().ship_facing = facing;
             (*ship.ptr()).next.location = POINT {
                 x: i16::MAX - 5,
                 y: i16::MIN + 5,
@@ -801,12 +808,15 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                     let saved_inputs = std::array::from_fn::<_, 2, _>(|side| {
                         uqm_rust::battle::battle_native::player_input(side)
                     });
-                    let saved_offscreen = OffScreenContext;
+                    let saved_offscreen =
+                        (**uqm_rust::engine::Kernel::current()).off_screen_context;
                     let saved_controls = PlayerControls;
                     let saved_pulsed = PulsedInputState;
                     let mut context = mem::zeroed();
-                    OffScreenContext = &mut context;
-                    GlobData.Game_state.CurrentActivity = (SUPER_MELEE | IN_BATTLE) as u16;
+                    (**uqm_rust::engine::Kernel::current()).off_screen_context = &mut context;
+                    (**uqm_rust::engine::WorldData::current())
+                        .game
+                        .current_activity = (SUPER_MELEE | IN_BATTLE) as u16;
                     uqm_rust::app::bridge::battle(|b| b.counters = initial);
                     let mut ship = Ship::new(&_battle, 0);
                     let mut other = Ship::new(&_battle, 1);
@@ -834,8 +844,8 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                         reserves[side].SpeciesID = SPECIES_ID_SHOFIXTI_ID;
                         reserves[side].index = 1;
                         reserves[side].playerNr = side as SIZE;
-                        uqm_rust::app::bridge::battle(|battle| {
-                            let mut ships = battle.ships(side);
+                        uqm_rust::app::bridge::battle(|_| {
+                            let mut ships = (**uqm_rust::engine::Kernel::current()).ships(side);
                             let active = ships.id(active.cast()).unwrap();
                             ships.put(active);
                             if initial[side] > 1 {
@@ -933,15 +943,25 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                     assert_eq!(selected, [expected_selection; 2]);
                     let remaining = uqm_rust::app::bridge::battle(|b| b.counters);
                     assert_eq!(remaining, [initial[0] - 1, initial[1] - 1]);
-                    assert_eq!(GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16, 0);
                     assert_eq!(
-                        GlobData.Game_state.CurrentActivity & IN_BATTLE as u16 != 0,
+                        (**uqm_rust::engine::WorldData::current())
+                            .game
+                            .current_activity
+                            & CHECK_ABORT as u16,
+                        0
+                    );
+                    assert_eq!(
+                        (**uqm_rust::engine::WorldData::current())
+                            .game
+                            .current_activity
+                            & IN_BATTLE as u16
+                            != 0,
                         expected_selection
                     );
                     for (side, input) in saved_inputs.into_iter().enumerate() {
                         uqm_rust::battle::battle_native::set_player_input(side, input);
                     }
-                    OffScreenContext = saved_offscreen;
+                    (**uqm_rust::engine::Kernel::current()).off_screen_context = saved_offscreen;
                     PlayerControls = saved_controls;
                     PulsedInputState = saved_pulsed;
                 }

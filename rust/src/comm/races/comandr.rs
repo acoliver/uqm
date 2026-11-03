@@ -6,6 +6,7 @@ use super::script::{
 };
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
+use crate::engine::{StoryKey, World};
 
 const GLAD_WHEN_YOU_COME_BACK: u16 = 1;
 const GIVE_FUEL: u16 = 2;
@@ -635,7 +636,7 @@ impl super::RaceDialogue for ComandrDialogue {
         let mut desc = descriptor();
         configure(
             &mut desc,
-            crate::state::game_state_keys::get_game_state("RADIOACTIVES_PROVIDED") != 0,
+            World::current().read(|world| world.story_state(StoryKey::RADIOACTIVES_PROVIDED)) != 0,
         );
         as_comm_data(&desc)
     }

@@ -1,5 +1,5 @@
 //! Capture and restore of the fixed "GlSt" section against the live
-//! `GAME_STATE` record (`GlobData.Game_state`).
+//! `GAME_STATE` record (`GlobData.game`).
 //!
 //! Field order and widths are `SaveGameState` (save.c) and `LoadGameState`
 //! (load.c). Only the fields those write are touched: `DisplayArray`,

@@ -82,7 +82,7 @@ fn cannon_launch_uses_mass_driver_missile_parameters() {
         let _battle = Battlefield::new(8);
         unsafe {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_DRUUGE_ID, 0);
-            ship.ship_mut().ShipFacing = 5;
+            ship.ship_mut().ship_facing = 5;
             ship.element_mut().next.location = POINT { x: 100, y: 200 };
             let slots = ship.weapon(1);
             let out = [ship.weapon_record(slots[0]).cast()];
@@ -164,7 +164,7 @@ fn cannon_recoil_is_applied_only_on_the_firing_frame_and_caps_speed() {
         let _battle = Battlefield::new(8);
         unsafe {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_DRUUGE_ID, 0);
-            ship.ship_mut().ShipFacing = 4;
+            ship.ship_mut().ship_facing = 4;
             ship.ship_mut().cur_status_flags = (WEAPON | SHIP_AT_MAX_SPEED) as u16;
             ship.ship_mut().weapon_counter = 9;
             ship.postprocess();

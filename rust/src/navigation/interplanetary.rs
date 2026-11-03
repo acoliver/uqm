@@ -1,5 +1,7 @@
 //! Interplanetary group display, pursuit, collision and flagship movement.
 
+#[cfg(not(test))]
+use crate::engine::StoryKey;
 const MAX_ZOOM: i16 = 128 << 6;
 const MIN_ZOOM: i16 = MAX_ZOOM >> 3;
 
@@ -62,7 +64,7 @@ pub(crate) mod live {
     }
 
     fn notify_others(cx: &mut crate::engine::battle::Cx<'_>, race: u16, target: u8) {
-        let mut handle = cx.navigation().Game_state.ip_group_q.head;
+        let mut handle = cx.navigation().game.ip_group_q.head;
         while !handle.is_null() {
             let pointer = std::ptr::NonNull::new(handle.cast::<IP_GROUP>())
                 .unwrap_or_else(|| panic!("linked group"));
@@ -135,13 +137,13 @@ pub(crate) mod live {
                 }
                 let dx = cx
                     .navigation_mut()
-                    .Game_state
+                    .game
                     .ip_location
                     .x
                     .wrapping_sub(cx.ip_group_mut(element).loc.x) as i64;
                 let dy = cx
                     .navigation_mut()
-                    .Game_state
+                    .game
                     .ip_location
                     .y
                     .wrapping_sub(cx.ip_group_mut(element).loc.y) as i64;
@@ -174,7 +176,7 @@ pub(crate) mod live {
                     && location == 0)
             {
                 if cx.ip_group_mut(element).dest_loc == 0 {
-                    destination = cx.navigation().Game_state.ip_location;
+                    destination = cx.navigation().game.ip_location;
                 } else {
                     let (distance, origin) = if task != ON_STATION as u8 {
                         (ORBIT_RADIUS as i32, POINT { x: 0, y: 0 })
@@ -385,7 +387,7 @@ pub(crate) mod live {
             cx.element_mut(first).flags |= (COLLISION | NONSOLID) as u16;
         } else {
             cx.element_mut(second).flags &= !(COLLISION as u16);
-            cx.navigation_mut().Game_state.CurrentActivity |= START_ENCOUNTER as u16;
+            cx.navigation_mut().game.current_activity |= START_ENCOUNTER as u16;
         }
     }
     pub(crate) fn flagship_collision(
@@ -452,7 +454,7 @@ pub(crate) mod live {
             cx,
             locationToDisplay(record.loc, radius(cx, record.sys_loc)),
         );
-        let queue = &cx.navigation().Game_state.ip_group_q;
+        let queue = &cx.navigation().game.ip_group_q;
         let offset = (group.as_ptr() as usize)
             .checked_sub(queue.pq_tab as usize)
             .unwrap_or_else(|| panic!("group belongs to pool"));
@@ -485,31 +487,23 @@ pub(crate) mod live {
             }
             cx.element_mut(element).thrust = 42;
         }
-        let (vx, vy) = cx.navigation().Game_state.velocity.get_current_components();
+        let (vx, vy) = cx.navigation().game.velocity.get_current_components();
         let (mut vx, mut vy) = (vx as i16, vy as i16);
         let flagship = flagship_location(cx);
         let zoom = radius(cx, flagship);
         adjust_zoom(zoom, &mut vx, &mut vy);
         cx.element_mut(element).current.location = world(
             cx,
-            locationToDisplay(cx.navigation().Game_state.ip_location, zoom),
+            locationToDisplay(cx.navigation().game.ip_location, zoom),
         );
         cx.init_intersect_start(element);
-        cx.navigation_mut().Game_state.ip_location.x = cx
-            .navigation_mut()
-            .Game_state
-            .ip_location
-            .x
-            .wrapping_add(vx);
-        cx.navigation_mut().Game_state.ip_location.y = cx
-            .navigation_mut()
-            .Game_state
-            .ip_location
-            .y
-            .wrapping_add(vy);
-        let point = locationToDisplay(cx.navigation_mut().Game_state.ip_location, zoom);
+        cx.navigation_mut().game.ip_location.x =
+            cx.navigation_mut().game.ip_location.x.wrapping_add(vx);
+        cx.navigation_mut().game.ip_location.y =
+            cx.navigation_mut().game.ip_location.y.wrapping_add(vy);
+        let point = locationToDisplay(cx.navigation_mut().game.ip_location, zoom);
         cx.element_mut(element).next.location = world(cx, point);
-        cx.navigation_mut().Game_state.ShipStamp.origin = point;
+        cx.navigation_mut().game.ship_stamp.origin = point;
         let frame = cx.flagship_stamp_frame();
         cx.set_frame(element, true, frame);
         if cx.element_mut(element).turn == flagship {
@@ -518,12 +512,10 @@ pub(crate) mod live {
             cx.element_mut(element).flags |= NONSOLID as u16;
             cx.element_mut(element).turn = flagship;
         }
-        let escape = get("ESCAPE_COUNTER");
-        if escape != 0
-            && cx.navigation_mut().Game_state.CurrentActivity & START_ENCOUNTER as u16 == 0
-        {
+        let escape = get(cx.world, StoryKey::ESCAPE_COUNTER);
+        if escape != 0 && cx.navigation_mut().game.current_activity & START_ENCOUNTER as u16 == 0 {
             cx.element_mut(element).flags |= NONSOLID as u16;
-            set("ESCAPE_COUNTER", escape - 1);
+            set(cx.world, StoryKey::ESCAPE_COUNTER, escape - 1);
         }
         cx.element_mut(element).flags |= CHANGING as u16;
     }
@@ -536,7 +528,7 @@ pub(crate) mod live {
         let location = flagship_location(cx);
         cx.element_mut(element).turn = location;
         cx.element_mut(element).flags = (APPEARING | IGNORE_VELOCITY) as u16;
-        if get("ESCAPE_COUNTER") != 0 {
+        if get(cx.world, StoryKey::ESCAPE_COUNTER) != 0 {
             cx.element_mut(element).flags |= NONSOLID as u16;
         }
         cx.element_mut(element).life = NORMAL_LIFE as u16;
@@ -546,7 +538,7 @@ pub(crate) mod live {
         cx.element_mut(element).pre = Some(ElementHook::Native(flagship_preprocess));
         cx.element_mut(element).collide = Some(CollisionHook::Native(flagship_collision));
         cx.element_mut(element).current.location =
-            world(cx, cx.navigation().Game_state.ShipStamp.origin);
+            world(cx, cx.navigation().game.ship_stamp.origin);
         cx.put(element);
     }
 
@@ -559,7 +551,7 @@ pub(crate) mod live {
                 notify_others(cx, EncounterRace as u16, 0);
                 EncounterRace = -1;
             }
-            let mut handle = cx.navigation().Game_state.ip_group_q.head;
+            let mut handle = cx.navigation().game.ip_group_q.head;
             while let Some(group) = std::ptr::NonNull::new(handle.cast::<IP_GROUP>()) {
                 handle = cx.group_record(group).succ;
                 if cx.group_record(group).in_system != 0 {

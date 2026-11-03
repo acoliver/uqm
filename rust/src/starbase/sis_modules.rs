@@ -13,7 +13,7 @@
 /// `NUM_MODULE_SLOTS` (`sis.h:36`). Tied to `CSisState::module_slots` by a
 /// layout test below.
 pub const NUM_MODULE_SLOTS: usize = 16;
-/// `NUM_MODULES` (`sis.h:89`), also the length of `GlobData.ModuleCost`.
+/// `NUM_MODULES` (`sis.h:89`), also the length of `GlobData.module_cost`.
 pub const NUM_MODULES: usize = 20;
 /// `EMPTY_SLOT` (`sis.h:92`): first byte past the module numbers. The C code
 /// adds a kind to it to mark an empty slot: `+ 0` in a drive slot, `+ 1` in a
@@ -109,7 +109,7 @@ impl ModuleType {
     }
 }
 
-/// One entry of `SIS_STATE.ModuleSlots`.
+/// One entry of `SIS_STATE.module_slots`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ModuleSlot {
     Empty,

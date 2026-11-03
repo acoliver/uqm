@@ -15,52 +15,58 @@
 //! @plan PLAN-20260723-RUNTIME-AUTOMATION.P08
 //! @requirement REQ-FFI-001..005, REQ-SCHED-001, REQ-WATCH-001
 
+use crate::engine::{StoryKey, World};
 mod fixtures;
 mod input;
+use input::{discard_held_repeat, inject_menu_key};
 mod navigation;
 mod parity;
 mod save_capture;
 mod terminal;
 
-use crate::automation::battle_fight::{
-    BattleFightTracker, BattleSnapshot, FightControl, FightProgress,
+use crate::automation::{
+    battle_fight::{BattleFightTracker, BattleSnapshot, FightControl, FightProgress},
+    battle_outcome::{self, BattleLossTracker},
+    campaign_state,
+    flagship_turn::{self, FlagshipTurnTracker, TurnProgress},
+    flight_position::{self, FlightPositionTracker},
+    input_ffi, mode,
+    outcome::TerminalClass,
+    planet_minerals::{self, CollectProgress, PlanetMineralsTracker},
+    runtime::{FinalizationResult, RuntimeModel},
+    scenario::{self, PendingStartScene, SceneActivationBoundary},
+    scheduler::{
+        scheduler_reduce, ActionPhase, CaptureGeneration, EffectPlan, SchedulerConfig,
+        SchedulerEvent, SchedulerState, TerminalOutcome,
+    },
+    script::{Action, ActivityAssertion, ValidatedScript},
+    ship_element, ship_resources,
+    trace::{
+        ActivityEvidence, ReadinessEvidence, RecordKind, SeedApplication, SeedDomain, TraceRecord,
+    },
+    watchdog::{
+        watchdog_reduce, CallbackKind, ClockSample, WatchdogEntry, WatchdogLimits, WatchdogOutcome,
+    },
 };
-use crate::automation::battle_outcome::{self, BattleLossTracker};
-use crate::automation::campaign_state;
-use crate::automation::flagship_turn::{self, FlagshipTurnTracker, TurnProgress};
-use crate::automation::flight_position::{self, FlightPositionTracker};
-use crate::automation::input_ffi;
-use crate::automation::mode;
-use crate::automation::outcome::TerminalClass;
-use crate::automation::planet_minerals::{self, CollectProgress, PlanetMineralsTracker};
-use crate::automation::runtime::{FinalizationResult, RuntimeModel};
-use crate::automation::scenario::{self, PendingStartScene, SceneActivationBoundary};
-use crate::automation::scheduler::{
-    scheduler_reduce, ActionPhase, CaptureGeneration, EffectPlan, SchedulerConfig, SchedulerEvent,
-    SchedulerState, TerminalOutcome,
-};
-use crate::automation::script::{Action, ActivityAssertion, ValidatedScript};
-use crate::automation::ship_element;
-use crate::automation::ship_resources;
-use crate::automation::trace::{
-    ActivityEvidence, ReadinessEvidence, RecordKind, SeedApplication, SeedDomain, TraceRecord,
-};
-use crate::automation::watchdog::{
-    watchdog_reduce, CallbackKind, ClockSample, WatchdogEntry, WatchdogLimits, WatchdogOutcome,
-};
+
 use crate::graphics::presented_frame::PresentedFrame;
 use parking_lot::Mutex;
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::OnceLock;
-use std::time::{Duration, Instant};
+use std::{
+    path::PathBuf,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        OnceLock,
+    },
+    time::{Duration, Instant},
+};
 
 #[cfg(not(test))]
-use crate::c_bindings::controller_input::{
-    CurrentInputState, PulsedInputState, CONTROL_TEMPLATE_NUM_TEMPLATES, NUM_KEYS,
+use crate::c_bindings::{
+    controller_input::{
+        CurrentInputState, PulsedInputState, CONTROL_TEMPLATE_NUM_TEMPLATES, NUM_KEYS,
+    },
+    player_control_template,
 };
-#[cfg(not(test))]
-use crate::c_bindings::player_control_template;
 
 #[cfg(not(test))]
 const NUM_PLAYER_KEYS: usize = NUM_KEYS as usize;
@@ -78,21 +84,6 @@ enum PlayerInputObservation {
     Matched { current: i32, pulsed: i32 },
     Missing,
     Contradictory { current: i32, pulsed: i32 },
-}
-
-fn inject_menu_key(index: i32, value: i32) -> bool {
-    input_ffi::inject_menu_key(index, value);
-    !input_ffi::injection_rejected()
-}
-
-/// Discard the repeat pulse of a menu key that a scripted tap only holds.
-///
-/// Returns `false` when the native owner has no such key.
-fn discard_held_repeat(
-    held: Option<crate::automation::script::MenuKey>,
-    discard: impl FnOnce(i32) -> bool,
-) -> bool {
-    held.is_none_or(|key| discard(i32::from(crate::automation::input::menu_key_to_index(key))))
 }
 
 fn prepare_player_input(index: i32, value: i32) -> Option<PendingPlayerInput> {
@@ -609,7 +600,21 @@ impl Coordinator {
             return;
         };
 
-        match scenario::activate(scene, SceneActivationBoundary::GameInitialized) {
+        match scenario::activate(scene, SceneActivationBoundary::GameInitialized, |plan| {
+            World::current().write(|world| {
+                for &(key, value) in plan.game_state {
+                    world.set_story_state(key, value);
+                }
+            });
+            #[cfg(not(test))]
+            scenario::enter_scene(
+                plan,
+                &mut scenario::LinkedSceneEntry {
+                    screen_context: crate::engine::Kernel::current()
+                        .read(|kernel| kernel.screen_context),
+                },
+            );
+        }) {
             Ok(plan) => {
                 let mut inner = coord.inner.lock();
                 coord.write_trace_labeled(
@@ -1324,7 +1329,11 @@ impl Coordinator {
         let (nodes, retrieved) = crate::planet_side::telemetry::energy_snapshot();
         let flags = ARTIFACT_FLAGS
             .iter()
-            .map(|key| crate::state::ffi::named_state_value(key).map(u32::from))
+            .map(|key| {
+                World::current()
+                    .read(|world| crate::state::ffi::named_state_value(world, key))
+                    .map(u32::from)
+            })
             .collect::<Option<Vec<_>>>();
         let Some(flags) = flags else {
             self.set_terminal(inner, TerminalClass::SemanticMismatch);
@@ -1335,7 +1344,9 @@ impl Coordinator {
             lander: planet_minerals::PlanetSnapshot::live(),
             nodes,
             retrieved,
-            vault_unlocked: crate::state::ffi::named_state_value("SHIP_VAULT_UNLOCKED") == Some(1),
+            vault_unlocked: World::current()
+                .read(|world| crate::state::ffi::named_state_value(world, "SHIP_VAULT_UNLOCKED"))
+                == Some(1),
             flags,
         };
         let progress = inner.energy.observe(step, &observation);
@@ -1655,7 +1666,9 @@ impl Coordinator {
             );
         }
         // A homeworld is the destination, not a patrol to dismiss.
-        if crate::state::ffi::named_state_value("GLOBAL_FLAGS_AND_DATA") == Some(128) {
+        if World::current().read(|world| world.story_value(StoryKey::GLOBAL_FLAGS_AND_DATA))
+            == Some(128)
+        {
             return false;
         }
         let preview = crate::automation::ui_observation::encounter_menu_active();
@@ -1718,26 +1731,7 @@ impl Coordinator {
             Some(Action::NavigateToOrbit(step)) => step.patrol_policy,
             _ => PatrolPolicy::Fight,
         };
-        let transit_budget = match self.actions.get(inner.sched_state.step_index) {
-            Some(Action::NavigateToHyperspace(step)) if step.encounter_response.is_none() => {
-                Some(step.max_ticks)
-            }
-            Some(Action::NavigateToMoon(step))
-                if crate::state::ffi::named_state_value("GLOBAL_FLAGS_AND_DATA") == Some(0) =>
-            {
-                Some(step.max_ticks)
-            }
-            Some(Action::NavigateToPlanet(step)) if step.patrol_policy != PatrolPolicy::Stop => {
-                Some(step.max_ticks)
-            }
-            Some(Action::NavigateToOrbit(step))
-                if step.patrol_policy != PatrolPolicy::Stop
-                    && crate::state::ffi::named_state_value("GLOBAL_FLAGS_AND_DATA") == Some(0) =>
-            {
-                Some(step.max_ticks)
-            }
-            _ => None,
-        };
+        let transit_budget = Self::transit_budget(self.actions.get(inner.sched_state.step_index));
         if let Some(max_ticks) = transit_budget {
             if inner.sched_state.phase == ActionPhase::WaitingForInput {
                 inner.star_encounter_active = false;

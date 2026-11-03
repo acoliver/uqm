@@ -3,6 +3,8 @@
 #[cfg(not(test))]
 use crate::engine::battle::Cx;
 use crate::engine::battle::ElementId;
+#[cfg(not(test))]
+use crate::engine::Kernel as KernelOwner;
 use crate::ships::native::abi::SOUND;
 use std::ptr;
 
@@ -66,7 +68,6 @@ use crate::sound::heart_ffi::{
 };
 
 #[cfg(not(test))]
-#[allow(non_snake_case)]
 pub(crate) mod engine {
     pub use super::*;
     use crate::ships::native::abi::*;
@@ -83,7 +84,7 @@ pub(crate) mod engine {
         if sound.is_null() {
             return;
         }
-        let channels = cx.b.kernel_channels();
+        let channels = &mut cx.kernel.channels;
         let channel = channels.select(sound, |c| {
             ChannelPlaying((c + MIN_FX_CHANNEL as usize) as u32) != 0
         });
@@ -101,7 +102,10 @@ pub(crate) mod engine {
     #[no_mangle]
     pub unsafe extern "C" fn PlayMenuSound(sound: u32) {
         PlaySoundEffect(
-            SetAbsStringTableIndex(Kernel::current().menu_sounds, sound as u16),
+            SetAbsStringTableIndex(
+                KernelOwner::current().read(|owner| owner.menu_sounds),
+                sound as u16,
+            ),
             0,
             NotPositional(),
             ptr::null_mut(),
@@ -168,22 +172,23 @@ pub(crate) mod engine {
     /// Called on the game thread while queued elements and sounds remain live.
     pub(crate) unsafe fn flush_sounds(cx: &mut Cx<'_>) {
         let mut i = 0;
-        while Kernel::current().sounds.count > 0 {
-            let sound = Kernel::current().sounds.sounds[i];
-            let object = Kernel::current().sounds.objects[i];
+        while cx.kernel.sounds.count > 0 {
+            let sound = cx.kernel.sounds.sounds[i];
+            let object = cx.kernel.sounds.objects[i];
             let pos = position(cx, object);
             play_sound_in_context(cx, sound, pos, object, GAME_SOUND_PRIORITY as u8);
             i += 1;
-            Kernel::current().sounds.count -= 1;
+            cx.kernel.sounds.count -= 1;
         }
     }
 
     /// # Safety
     /// Called on the game thread before releasing an element's storage.
     pub(crate) unsafe fn remove_sounds(object: Option<ElementId>) {
-        let kernel = Kernel::current();
+        let lease = KernelOwner::current();
+        let kernel = &mut **lease;
         for i in FIRST_SFX_CHANNEL..=LAST_SFX_CHANNEL {
-            if kernel.elements.sound_source(get_positional_object(i)) == object {
+            if kernel.element_sound_source(get_positional_object(i)) == object {
                 set_positional_object(i, 0);
             }
         }

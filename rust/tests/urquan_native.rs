@@ -33,7 +33,7 @@ fn descriptor_and_fusion_match_c() {
                 ),
                 (5750, 6000)
             );
-            ship.ship_mut().ShipFacing = 11;
+            ship.ship_mut().ship_facing = 11;
             let h = with_rng(8, 0, || {
                 ship.weapon(1)
                     .into_iter()

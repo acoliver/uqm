@@ -1,7 +1,7 @@
 //! Discovery-report ownership at the PlanetSide runtime boundary.
 
 #[cfg(not(test))]
-use crate::engine::battle::record::Kernel;
+use crate::engine::Kernel as KernelOwner;
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -55,11 +55,9 @@ use crate::strings::string_table::GetStringTableIndex;
 use crate::strings::string_table::ReleaseStringTable;
 #[cfg(not(test))]
 use crate::strings::string_table::SetRelStringTableIndex;
-#[cfg(not(test))]
-extern "C" {}
-
 impl DiscoveryReportPort for CffiDiscoveryReport {
     fn present(&mut self, disposition: ReportDisposition) -> Result<bool, AdapterError> {
+        #[cfg(not(test))]
         #[cfg(not(test))]
         unsafe {
             let string = self.discovery_string.read();
@@ -73,7 +71,11 @@ impl DiscoveryReportPort for CffiDiscoveryReport {
             // re-acquiring one level was an assumption of the retired native
             // lander loop and leaked a level against a Rust caller.
             REPORT_ACTIVE.store(true, Ordering::Release);
-            DoDiscoveryReport(Kernel::current().menu_sounds.cast());
+            DoDiscoveryReport(
+                KernelOwner::current()
+                    .read(|owner| owner.menu_sounds)
+                    .cast(),
+            );
             REPORT_ACTIVE.store(false, Ordering::Release);
 
             match disposition {

@@ -35,7 +35,7 @@ unsafe fn parent_address(parent: super::super::Parent, groups: Option<&QUEUE>) -
 impl super::super::Cx<'_> {
     pub(crate) fn element_parent_address(&self, id: ElementId) -> *mut c_void {
         // SAFETY: this context retains the source identity pools during observation.
-        unsafe { parent_address(self.b.kernel.elements[id].parent, Some(self.groups())) }
+        unsafe { parent_address(self.kernel.elements[id].parent, Some(self.groups())) }
     }
 }
 #[derive(Clone)]
@@ -94,7 +94,7 @@ pub(crate) fn element(
 #[cfg(not(test))]
 pub(crate) unsafe fn retired_element_address(id: ElementId) -> usize {
     // SAFETY: the caller retains the published Kernel while taking the snapshot.
-    unsafe { super::super::record::Kernel::current() }
+    unsafe { &**super::super::record::Kernel::current() }
         .elements
         .journal_address(id)
 }

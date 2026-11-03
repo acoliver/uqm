@@ -1,5 +1,6 @@
 //! Fleet-slot and team-name editing.
 use super::*;
+use crate::engine::WorldData as WorldFields;
 unsafe extern "C" fn changed(entry: *mut TEXTENTRY_STATE) -> u32 {
     // SAFETY: the function contract requires live, game-thread-owned records
     // and callback arguments for all legacy accesses in this operation.
@@ -29,7 +30,7 @@ unsafe fn advance(state: *mut MELEE_STATE) {
 pub(super) unsafe extern "C" fn edit(state: *mut MELEE_STATE) -> u32 {
     let time = GetTimeCounter();
     GamePaused = 0;
-    if GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 != 0 {
+    if WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16 != 0 {
         return 0;
     }
     SetMenuSounds(15, 16 | 512);
@@ -53,7 +54,7 @@ pub(super) unsafe extern "C" fn edit(state: *mut MELEE_STATE) -> u32 {
     } else if row < 2 && key(KEY_MENU_SELECT) {
         highlight(10, false);
         (*state).melee_option = 11;
-        let ok = crate::supermelee::native::build_picker::live::BuildPickShip(state);
+        let ok = crate::supermelee::native::build_picker::live::build_pick_ship(state);
         if ok {
             Melee_LocalChange_ship(
                 state,
@@ -65,7 +66,7 @@ pub(super) unsafe extern "C" fn edit(state: *mut MELEE_STATE) -> u32 {
         }
         (*state).melee_option = 10;
         let mut r = mem::zeroed();
-        crate::supermelee::native::build_picker::live::GetBuildPickFrameRect(&mut r);
+        crate::supermelee::native::build_picker::live::get_build_pick_frame_rect(&mut r);
         RepairMeleeFrame(&r);
         current(state);
         (*state).input_func = Some(edit);

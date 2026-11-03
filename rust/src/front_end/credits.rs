@@ -1,6 +1,7 @@
 //! Bidirectional credits scrolling and communication outtakes, ported from uqm/credits.c.
-#![allow(non_snake_case)]
 
+#[cfg(not(test))]
+use crate::engine::{Kernel, WorldData};
 use crate::navigation::abi::*;
 use std::ffi::c_int;
 
@@ -30,7 +31,7 @@ fn scroll_step(rate: c_int) -> (c_int, c_int, TimePeriod) {
 pub(crate) mod runtime {
     use super::super::intro::{parse_text_lines, rgb15, BLACK_COLOR, WANT_PIXMAP};
     use super::*;
-    use crate::navigation::globals::GlobData;
+
     use std::ffi::{c_char, c_void};
     use std::ptr;
 
@@ -54,11 +55,11 @@ pub(crate) mod runtime {
     #[derive(Clone, Copy)]
     struct CreditTextFrame {
         frame: FRAME,
-        strIndex: c_int,
+        str_index: c_int,
     }
     const EMPTY_FRAME: CreditTextFrame = CreditTextFrame {
         frame: ptr::null_mut(),
-        strIndex: 0,
+        str_index: 0,
     };
 
     #[derive(Clone, Copy)]
@@ -69,11 +70,11 @@ pub(crate) mod runtime {
 
     #[repr(C)]
     struct CreditsInputState {
-        InputFunc: Option<unsafe extern "C" fn(*mut c_void) -> BOOLEAN>,
-        AllowCancel: BOOLEAN,
-        AllowSpeedChange: BOOLEAN,
-        CloseWhenDone: BOOLEAN,
-        CloseTimeOut: DWORD,
+        input_func: Option<unsafe extern "C" fn(*mut c_void) -> BOOLEAN>,
+        allow_cancel: BOOLEAN,
+        allow_speed_change: BOOLEAN,
+        close_when_done: BOOLEAN,
+        close_time_out: DWORD,
     }
 
     static mut CREDITS_RATE: c_int = 0;
@@ -309,7 +310,7 @@ pub(crate) mod runtime {
         );
         SetContextFGFrame(CREDITS_FRAME);
         TEXT_FRAMES[0].frame = transparent_frame(1, CREDITS_EXTENT.height as c_int, TRANS_COLOR);
-        TEXT_FRAMES[0].strIndex = -1;
+        TEXT_FRAMES[0].str_index = -1;
         FIRST_FRAME = 0;
         LAST_FRAME = FIRST_FRAME + 1;
         TOTAL_HEIGHT = (*TEXT_FRAMES[0].frame).Bounds.height as c_int;
@@ -410,7 +411,7 @@ pub(crate) mod runtime {
         if direction > 0 {
             let mut next = 0;
             if FIRST_FRAME != LAST_FRAME {
-                next = TEXT_FRAMES[frame_index(LAST_FRAME as c_int - 1)].strIndex + 1;
+                next = TEXT_FRAMES[frame_index(LAST_FRAME as c_int - 1)].str_index + 1;
             }
             while TOTAL_HEIGHT - CUR_FRAME_OFS < CREDITS_EXTENT.height as c_int
                 && next < GetStringTableCount(CREDITS_TAB) as c_int
@@ -423,7 +424,7 @@ pub(crate) mod runtime {
                     BLACK_COLOR,
                     CREDITS_TEXT_COLOR,
                 );
-                TEXT_FRAMES[index].strIndex = next - 1;
+                TEXT_FRAMES[index].str_index = next - 1;
                 if !TEXT_FRAMES[index].frame.is_null() {
                     GetFrameRect(TEXT_FRAMES[index].frame, &mut rect);
                     TOTAL_HEIGHT += rect.extent.height as c_int;
@@ -433,7 +434,7 @@ pub(crate) mod runtime {
         } else if direction < 0 {
             let mut next = GetStringTableCount(CREDITS_TAB) as c_int - 1;
             if FIRST_FRAME != LAST_FRAME {
-                next = TEXT_FRAMES[FIRST_FRAME].strIndex - 1;
+                next = TEXT_FRAMES[FIRST_FRAME].str_index - 1;
             }
             while CUR_FRAME_OFS < 0 && next >= 0 {
                 let index = frame_index(FIRST_FRAME as c_int - 1);
@@ -444,7 +445,7 @@ pub(crate) mod runtime {
                     BLACK_COLOR,
                     CREDITS_TEXT_COLOR,
                 );
-                TEXT_FRAMES[index].strIndex = next + 1;
+                TEXT_FRAMES[index].str_index = next + 1;
                 if !TEXT_FRAMES[index].frame.is_null() {
                     GetFrameRect(TEXT_FRAMES[index].frame, &mut rect);
                     TOTAL_HEIGHT += rect.extent.height as c_int;
@@ -513,7 +514,8 @@ pub(crate) mod runtime {
         oscillDisabled = 1;
         let mut i = 0;
         while i < CONVERSATIONS.len()
-            && GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 == 0
+            && WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
+                == 0
         {
             SetCommIntroMode((CIM_CROSSFADE_WINDOW) as u32, 0);
             InitCommunication(CONVERSATIONS[i]);
@@ -531,14 +533,14 @@ pub(crate) mod runtime {
     unsafe extern "C" fn credits_input(raw: *mut c_void) -> BOOLEAN {
         let state = &mut *raw.cast::<CreditsInputState>();
         if CREDITS_RUNNING != 0 {
-            state.CloseTimeOut = 0;
+            state.close_time_out = 0;
         }
-        if GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 != 0
-            || (state.AllowCancel != 0 && (menu(KEY_MENU_SELECT) || menu(KEY_MENU_CANCEL)))
+        if WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16 != 0
+            || (state.allow_cancel != 0 && (menu(KEY_MENU_SELECT) || menu(KEY_MENU_CANCEL)))
         {
             return 0;
         }
-        if state.AllowSpeedChange != 0 && (menu(KEY_MENU_UP) || menu(KEY_MENU_DOWN)) {
+        if state.allow_speed_change != 0 && (menu(KEY_MENU_UP) || menu(KEY_MENU_DOWN)) {
             let mut new_rate = CREDITS_RATE;
             let step = CREDITS_RATE.abs() / 5 + 1;
             if menu(KEY_MENU_DOWN) {
@@ -550,12 +552,12 @@ pub(crate) mod runtime {
             CREDITS_RATE = new_rate;
         }
         if CREDITS_RUNNING == 0 {
-            state.AllowCancel = 1;
+            state.allow_cancel = 1;
         }
-        if CREDITS_RUNNING == 0 && state.CloseWhenDone != 0 {
-            if state.CloseTimeOut == 0 {
-                state.CloseTimeOut = GetTimeCounter().wrapping_add(CREDITS_TIMEOUT);
-            } else if GetTimeCounter() > state.CloseTimeOut {
+        if CREDITS_RUNNING == 0 && state.close_when_done != 0 {
+            if state.close_time_out == 0 {
+                state.close_time_out = GetTimeCounter().wrapping_add(CREDITS_TIMEOUT);
+            } else if GetTimeCounter() > state.close_time_out {
                 return 0;
             }
         }
@@ -576,7 +578,7 @@ pub(crate) mod runtime {
     #[no_mangle]
     pub unsafe extern "C" fn Credits(with_outtakes: BOOLEAN) {
         let music = LoadMusicInstance(CREDITS_MUSIC.as_ptr().cast());
-        SetContext(ScreenContext);
+        SetContext(Kernel::current().read(|owner| owner.screen_context));
         SetContextClipRect(ptr::null_mut());
         let mut screen_rect: RECT = std::mem::zeroed();
         GetContextClipRect(&mut screen_rect);
@@ -605,7 +607,8 @@ pub(crate) mod runtime {
             outtakes();
             OUT_TAKES_RUNNING = 0;
         }
-        if GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 == 0 {
+        if WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16 == 0
+        {
             if with_outtakes != 0 {
                 crate::automation::ending::credits_controls_ready();
             }
@@ -613,11 +616,11 @@ pub(crate) mod runtime {
                 PlayMusic((music).cast(), 1, 1);
             }
             let mut state = CreditsInputState {
-                InputFunc: Some(credits_input),
-                AllowCancel: (with_outtakes == 0) as BOOLEAN,
-                AllowSpeedChange: 1,
-                CloseWhenDone: (with_outtakes == 0) as BOOLEAN,
-                CloseTimeOut: 0,
+                input_func: Some(credits_input),
+                allow_cancel: (with_outtakes == 0) as BOOLEAN,
+                allow_speed_change: 1,
+                close_when_done: (with_outtakes == 0) as BOOLEAN,
+                close_time_out: 0,
             };
             SetMenuSounds(0, 0);
             DoInput(ptr::addr_of_mut!(state).cast(), 1);
@@ -625,14 +628,14 @@ pub(crate) mod runtime {
         SetInputCallback(None);
         FadeMusic(0, (ONE_SECOND / 2) as SIZE);
         uninit_credits();
-        SetContext(ScreenContext);
+        SetContext(Kernel::current().read(|owner| owner.screen_context));
         SleepThreadUntil(FadeScreen(
             ScreenFadeType_FadeAllToBlack,
             (ONE_SECOND / 2) as SIZE,
         ));
         FlushColorXForms();
         if !music.is_null() {
-            StopMusic();
+            stop_music();
             DestroyMusic((music).cast());
         }
         FadeMusic(NORMAL_VOLUME as BYTE, 0);

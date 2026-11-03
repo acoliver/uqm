@@ -212,6 +212,19 @@ impl<'a> Visit<'a> for Walker {
     }
     fn visit_item_fn(&mut self, item: &'a syn::ItemFn) {
         self.exported_symbol(&item.attrs, &item.sig.ident);
+        if let syn::ReturnType::Type(_, ty) = &item.sig.output {
+            if let syn::Type::Path(ty) = &**ty {
+                if ty
+                    .path
+                    .segments
+                    .last()
+                    .is_some_and(|part| part.ident == "Projection")
+                {
+                    self.owner_projectors
+                        .insert(self.projection_key(&self.context.module));
+                }
+            }
+        }
         visit::visit_item_fn(self, item);
         self.function(&item.sig, &item.block);
     }
@@ -549,6 +562,7 @@ impl<'a> Visit<'a> for Walker {
             if resolved.contains("app::bridge::") {
                 self.add("ffi", "bridge_calls", expr.span(), 1);
             }
+            self.record_owner_call(&resolved, expr.span());
             if resolved.ends_with("Hook::Legacy") {
                 self.add("ffi", "legacy_hooks", expr.span(), 1);
             }

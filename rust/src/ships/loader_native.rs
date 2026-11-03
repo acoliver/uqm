@@ -31,10 +31,13 @@ pub(crate) mod engine {
 
     /// # Safety
     /// The caller owns the resource system on the game thread.
-    pub unsafe fn load_ship(species: u32, battle: u32) -> Option<RaceDesc> {
+    pub unsafe fn load_ship(
+        world: &mut crate::engine::World,
+        species: u32,
+        battle: u32,
+    ) -> Option<RaceDesc> {
         let race = crate::ships::races::race(species)?;
-        let mut owned =
-            (race.descriptor)(&mut crate::engine::battle::World::for_legacy_lifecycle());
+        let mut owned = (race.descriptor)(world);
         let info = &mut *owned.info_pointer();
         if !info.icons_rsc.is_null() {
             info.icons = CaptureDrawable((LoadGraphicInstance(info.icons_rsc)).cast()).cast();
@@ -48,7 +51,7 @@ pub(crate) mod engine {
                 CaptureStringTable(LoadStringTableInstance(info.race_strings_rsc)).cast();
         }
         if battle != 0 && !load_battle(&mut owned) {
-            unload_ship(owned, 1, 1);
+            unload_ship(world, owned, 1, 1);
             return None;
         }
         Some(owned)
@@ -58,8 +61,8 @@ pub(crate) mod engine {
         let load_animation_set = |keys: [_; 3]| {
             use crate::engine::battle::frames::FrameArray;
             let mut raw = [std::ptr::null_mut(); 3];
-            if load_animation(raw.as_mut_ptr(), keys[0], keys[1], keys[2]) == 0 {
-                free_image(&raw mut raw);
+            if load_animation(raw.as_mut_ptr(), keys[0], keys[1], keys[2], "animation") == 0 {
+                free_image(&raw mut raw, "animation");
                 return None;
             }
             let array = FrameArray::from_native(raw);
@@ -109,15 +112,20 @@ pub(crate) mod engine {
 
     /// # Safety
     /// The descriptor resources are exclusively owned by this value.
-    pub unsafe fn unload_ship(mut owned: RaceDesc, icons: u32, battle: u32) {
+    pub unsafe fn unload_ship(
+        world: &mut crate::engine::World,
+        mut owned: RaceDesc,
+        icons: u32,
+        battle: u32,
+    ) {
         let release_animation_set = |array: &crate::engine::battle::frames::FrameArray| {
             let mut raw = array.views().map(|frame| frame.raw());
-            free_image(&raw mut raw);
+            free_image(&raw mut raw, "animation");
             array.retire_views();
         };
 
         let descriptor = &mut owned;
-        descriptor.cleanup(&mut crate::engine::battle::World::for_legacy_lifecycle());
+        descriptor.cleanup(world);
         crate::collections::observation::record(
             crate::collections::observation::Event::ResourcesFree {
                 descriptor: descriptor.address(),

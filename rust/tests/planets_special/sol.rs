@@ -5,7 +5,7 @@ use crate::planets_common::sol::{self, Layout, Ops, Scan};
 use uqm_rust::c_bindings::global_state::{NODE_INFO, PLANET_DESC, SYSTEM_INFO};
 use uqm_rust::planets::generate::special::Body;
 use uqm_rust::planets::generate::vtable::GenerateFunctions;
-use uqm_rust::state::game_state_keys::{get_game_state, set_game_state};
+use uqm_rust::state::game_state_keys::get_game_state;
 
 unsafe extern "C" {
     pub(super) static generateSolFunctions: GenerateFunctions;
@@ -71,8 +71,18 @@ impl Ops for Harness {
 
     fn scan(&mut self, case: Scan, info: &SYSTEM_INFO, node: &mut NODE_INFO) -> (u16, u32) {
         self.set_star(0, 0);
-        set_game_state("FOUND_PLUTO_SPATHI", u32::from(case.pluto));
-        set_game_state("MOONBASE_DESTROYED", u32::from(case.destroyed));
+        uqm_rust::engine::World::current().write(|world| {
+            (world).set_story_state(
+                uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI,
+                u32::from(case.pluto),
+            )
+        });
+        uqm_rust::engine::World::current().write(|world| {
+            (world).set_story_state(
+                uqm_rust::engine::StoryKey::MOONBASE_DESTROYED,
+                u32::from(case.destroyed),
+            )
+        });
         self.state.SysInfo = *info;
         self.state.PlanetDesc = unsafe { std::mem::zeroed() };
         self.state.MoonDesc = unsafe { std::mem::zeroed() };
@@ -116,9 +126,18 @@ impl Ops for Harness {
             before,
             "scan changed solar system: {case:?}"
         );
-        assert_eq!(get_game_state("FOUND_PLUTO_SPATHI"), u32::from(case.pluto));
         assert_eq!(
-            get_game_state("MOONBASE_DESTROYED"),
+            uqm_rust::engine::World::current().read(|world| get_game_state(
+                world,
+                uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI
+            )),
+            u32::from(case.pluto)
+        );
+        assert_eq!(
+            uqm_rust::engine::World::current().read(|world| get_game_state(
+                world,
+                uqm_rust::engine::StoryKey::MOONBASE_DESTROYED
+            )),
             u32::from(case.destroyed)
         );
         // The count-only query above must leave the same post-call seed.

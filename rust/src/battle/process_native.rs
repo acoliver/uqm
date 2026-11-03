@@ -213,8 +213,6 @@ pub(crate) mod engine {
     use crate::collections::observation::image;
     use crate::engine::battle::{Cx, ElementId};
 
-    extern "C" {}
-
     unsafe fn damage(cx: &mut Cx<'_>, id: ElementId) {
         let amount = cx.element(id).hits as SIZE;
         cx.damage(id, amount);
@@ -632,11 +630,11 @@ pub(crate) mod engine {
             width(ScreenWidth),
             height(ScreenHeight),
         );
-        if (dx != 0 || dy != 0) && inHQSpace() != 0 {
+        if (dx != 0 || dy != 0) && in_hqspace(cx.world) != 0 {
             crate::app::bridge::publish(cx, || MoveSIS(&mut dx, &mut dy));
         }
         let state = if cx.b.zoom_out == next_reduction {
-            if dx == 0 && dy == 0 && inHQSpace() == 0 {
+            if dx == 0 && dy == 0 && in_hqspace(cx.world) == 0 {
                 ViewState::Stable
             } else {
                 ViewState::Scroll
@@ -655,7 +653,7 @@ pub(crate) mod engine {
             ViewState::Change
         };
         if (cx.world.activity() as u8) <= IN_HYPERSPACE as u8 {
-            MoveGalaxy(cx, state as VIEW_STATE, dx, dy);
+            move_galaxy(cx, state as VIEW_STATE, dx, dy);
         }
         *scroll_x = dx;
         *scroll_y = dy;
@@ -825,14 +823,14 @@ pub(crate) mod engine {
     /// # Safety
     /// Engine contexts, element/display pools and sound system are initialized on the game thread.
     unsafe fn redraw_queue(cx: &mut Cx<'_>, clear: BOOLEAN) {
-        SetContext(StatusContext);
+        SetContext(cx.kernel.status_context);
         let (mut sx, mut sy) = (0, 0);
         let state = preprocess_queue(cx, &mut sx, &mut sy);
         postprocess_queue(cx, state, sx, sy);
         if optStereoSFX != 0 {
             crate::battle::sounds::engine::update_positions(cx);
         }
-        SetContext(SpaceContext);
+        SetContext(cx.kernel.space_context);
         let activity = cx.world.activity();
         if activity as u8 == SUPER_MELEE as u8
             || activity & (CHECK_ABORT | CHECK_LOAD) as UWORD == 0
@@ -859,7 +857,7 @@ pub(crate) mod engine {
             }
             crate::battle::sounds::engine::flush_sounds(cx);
         } else {
-            cx.b.kernel_sounds().push(usize::MAX as SOUND, None);
+            cx.kernel.sounds.push(usize::MAX as SOUND, None);
             crate::battle::sounds::engine::flush_sounds(cx);
         }
         cx.clear_display_order();

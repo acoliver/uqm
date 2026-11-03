@@ -41,8 +41,8 @@
 use super::statefiles::{
     group_list_bytes, GroupHeader, Reader, StateSectionError, NUM_SAVED_BATTLE_GROUPS,
 };
+use crate::engine::world::state_file::{StateFileManager, DEFGRPINFO_FILE, RANDGRPINFO_FILE};
 use crate::savegame::types::{ClockState, GroupList, GroupListEntry, IpGroup};
-use crate::state::state_file::{StateFileManager, DEFGRPINFO_FILE, RANDGRPINFO_FILE};
 use crate::time::clock_bridge::days_in_month;
 
 /// How long the groups of a system stay good, in days (`PutGroupInfo`).

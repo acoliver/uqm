@@ -3,7 +3,14 @@
 //! the order the C made them. The rules they apply are in the parent module.
 
 use crate::comm::dispatch::production_captain_name;
-use crate::engine::battle::link_queue::{LinkQueue, Starship};
+use crate::engine::{
+    battle::{
+        link_queue::{LinkQueue, Starship},
+        ShipId,
+    },
+    Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields,
+};
+
 use std::ffi::{c_char, c_int, c_void};
 
 use super::{
@@ -14,14 +21,14 @@ use crate::c_bindings::controller_input::{
     PulsedInputState, KEY_MENU_DOWN, KEY_MENU_LEFT, KEY_MENU_RIGHT, KEY_MENU_SELECT, KEY_MENU_UP,
 };
 
-use crate::comm::locdata::{CColor, CPoint, CRect, CStamp};
-use crate::comm::sis_graphics::CText;
-use crate::engine::battle::ShipId;
-use crate::mainloop::restart_menu::c_extern as base;
-use crate::mainloop::types::activity_flags::CHECK_ABORT;
-use crate::starbase::gfx::Rgba;
-use crate::starbase::platform::ONE_SECOND;
-use crate::starbase::sis_modules::FUEL_TANK_SCALE;
+use crate::comm::{
+    locdata::{CColor, CPoint, CRect, CStamp},
+    sis_graphics::CText,
+};
+
+use crate::mainloop::{restart_menu::c_extern as base, types::activity_flags::CHECK_ABORT};
+
+use crate::starbase::{gfx::Rgba, platform::ONE_SECOND, sis_modules::FUEL_TANK_SCALE};
 
 /// `RPG_PLAYER_NUM`.
 const RPG_PLAYER_NUM: usize = 0;
@@ -42,49 +49,21 @@ const RUN_AWAY_FUEL_COST: u32 = 5 * FUEL_TANK_SCALE;
 
 use crate::sound::heart_ffi::wait_for_sound_end as WaitForSoundEnd;
 
-use crate::graphics::context_abi::SetContextForeGroundColor;
+use crate::graphics::{
+    context_abi::SetContextForeGroundColor,
+    drawable_abi::SetFrameHot,
+    font_abi::{font_DrawText, SetContextFont},
+    frame_abi::{DrawFilledRectangle, DrawFilledStamp, DrawStamp},
+    pixmap_abi::{DecFrameIndex, IncFrameIndex, SetAbsFrameIndex},
+};
 
-use crate::graphics::font_abi::SetContextFont;
+use crate::ui::sis::{capacity::GetCrewPodCapacity, SetFlashRect};
 
-use crate::graphics::font_abi::font_DrawText;
+use crate::battle::{encount_native::engine::FleetIsInfinite, sounds::engine::PlayMenuSound};
 
-use crate::graphics::frame_abi::DrawFilledRectangle;
+use crate::strings::string_table::{GetStringAddress, GetStringLength, SetAbsStringTableIndex};
 
-use crate::graphics::frame_abi::DrawStamp;
-
-use crate::graphics::frame_abi::DrawFilledStamp;
-
-use crate::graphics::drawable_abi::SetFrameHot;
-
-use crate::graphics::pixmap_abi::IncFrameIndex;
-
-use crate::graphics::pixmap_abi::DecFrameIndex;
-
-use crate::graphics::pixmap_abi::SetAbsFrameIndex;
-
-use crate::ui::sis::SetFlashRect;
-
-use crate::battle::sounds::engine::PlayMenuSound;
-
-use crate::strings::string_table::SetAbsStringTableIndex;
-
-use crate::strings::string_table::GetStringAddress;
-
-use crate::strings::string_table::GetStringLength;
-
-use crate::ui::sis::capacity::GetCrewPodCapacity;
-
-use crate::battle::encount_native::engine::FleetIsInfinite;
-
-use crate::navigation::globals::inHQSpace;
-
-extern "C" {
-    static mut SpaceContext: *mut crate::graphics::native_abi::context_desc;
-    static mut StatusFrame: *mut crate::graphics::native_abi::frame_desc;
-    static mut StarConFont: *mut crate::graphics::native_abi::font_desc;
-    static mut TinyFont: *mut crate::graphics::native_abi::font_desc;
-    static mut GlobData: crate::ships::native::abi::GLOBDATA;
-}
+use crate::navigation::globals::in_hqspace;
 
 fn color(color: Rgba) -> CColor {
     CColor {
@@ -220,22 +199,20 @@ unsafe fn change_selection(state: &mut PickerState) {
 
     let (crew, max_crew) = if let Some(chosen) = state.chosen {
         // SAFETY: font globals are set at startup.
-        unsafe { SetContextFont((std::ptr::addr_of!(TinyFont).read()).cast()) };
+        unsafe { SetContextFont((KernelOwner::current().read(|kernel| kernel.tiny_font)).cast()) };
         let baseline_x = name.x + (name.width >> 1);
         let baseline_y = name.y + (name.height - 1);
         // SAFETY: `chosen` is a link of `race_q`.
         let ship = LinkQueue::<Starship>::ship_value(chosen);
         let (text, length, crew, max_crew) = if ship.captain == 0 {
-            // SAFETY: the game thread owns `GlobData`.
-            let sis = unsafe { &*std::ptr::addr_of!(GlobData) }.SIS_state;
+            // The legacy picker left the flagship captain strip empty: its name
+            // pointer escaped a temporary SIS copy. Preserve that presentation
+            // without keeping the dangling pointer; crew still comes from World.
+            // SAFETY: the published lifecycle owns the flagship on this thread.
+            let crew = WorldFields::current().read(|world| world.flagship.crew_enlisted);
             // SAFETY: plain call.
-            let capacity = unsafe { GetCrewPodCapacity() };
-            (
-                sis.CommanderName.as_ptr().cast::<c_char>(),
-                u16::MAX,
-                sis.CrewEnlisted,
-                capacity,
-            )
+            let capacity = GetCrewPodCapacity();
+            (c"".as_ptr(), 0, crew, capacity)
         } else {
             // SAFETY: `race_strings` is the ship's name table.
             let entry = unsafe {
@@ -335,7 +312,8 @@ unsafe fn get_armada_star_ship() -> *mut c_void {
     }
 
     // SAFETY: the context global is set at startup.
-    let old_context = unsafe { base::SetContext(std::ptr::addr_of!(SpaceContext).read()) };
+    let old_context =
+        unsafe { base::SetContext(KernelOwner::current().read(|kernel| kernel.space_context)) };
     let mut pick = CRect::default();
     // SAFETY: `pick` is valid for the call.
     unsafe { draw_armada_pick_ship(0, &mut pick) };
@@ -396,7 +374,7 @@ pub(crate) unsafe fn encounter_ship(
     let last_id = last;
 
     // SAFETY: plain call.
-    if unsafe { inHQSpace() } != 0 {
+    if { WorldOwner::current().read(in_hqspace) } != 0 {
         assert_eq!(side, RPG_PLAYER_NUM);
         // SIS for the Hyperspace flight
         // SAFETY: `queue` is `race_q[side]`.
@@ -442,7 +420,7 @@ pub(crate) unsafe fn encounter_ship(
             // SAFETY: `last` is a live `STARSHIP` and `GlobData` is owned by
             // the game thread.
             unsafe {
-                let sis = &mut (*std::ptr::addr_of_mut!(GlobData)).SIS_state;
+                let sis = &mut (**WorldFields::current()).flagship;
                 if LinkQueue::<Starship>::ship_value(
                     last_id.unwrap_or_else(|| panic!("missing checked battle value")),
                 )
@@ -450,12 +428,12 @@ pub(crate) unsafe fn encounter_ship(
                     == 0
                 {
                     // Died in the line of duty
-                    sis.CrewEnlisted = u16::MAX;
-                } else if sis.FuelOnBoard > RUN_AWAY_FUEL_COST {
+                    sis.crew_enlisted = u16::MAX;
+                } else if sis.fuel_on_board > RUN_AWAY_FUEL_COST {
                     // Player ran away
-                    sis.FuelOnBoard -= RUN_AWAY_FUEL_COST;
+                    sis.fuel_on_board -= RUN_AWAY_FUEL_COST;
                 } else {
-                    sis.FuelOnBoard = 0;
+                    sis.fuel_on_board = 0;
                 }
             }
         }
@@ -502,7 +480,8 @@ pub(crate) unsafe fn encounter_ship(
 #[export_name = "DrawArmadaPickShip"]
 pub unsafe extern "C" fn draw_armada_pick_ship(draw_salvage_frame: c_int, pick_rect: *mut CRect) {
     // SAFETY: the context global is set at startup.
-    let old_context = unsafe { base::SetContext(std::ptr::addr_of!(SpaceContext).read()) };
+    let old_context =
+        unsafe { base::SetContext(KernelOwner::current().read(|kernel| kernel.space_context)) };
     // SAFETY: `PICK_GRAPHIC` is NUL terminated.
     let pick_frame = unsafe {
         base::CaptureDrawable((base::LoadGraphicInstance(PICK_GRAPHIC.as_ptr().cast())).cast())
@@ -564,14 +543,14 @@ pub unsafe extern "C" fn draw_armada_pick_ship(draw_salvage_frame: c_int, pick_r
     unsafe { DrawStamp(std::ptr::from_mut(&mut stamp).cast()) };
 
     // SAFETY: the game thread owns `GlobData`; the name is a C string.
-    let ship_name = unsafe { (*std::ptr::addr_of!(GlobData)).SIS_state.ShipName.as_ptr() };
+    let ship_name = WorldFields::current().read(|world| world.flagship.ship_name);
     set_color(Rgba::rgb15(0x12, 0x12, 0x12));
     // SAFETY: font globals are set at startup.
-    unsafe { SetContextFont((std::ptr::addr_of!(StarConFont).read()).cast()) };
+    unsafe { SetContextFont((KernelOwner::current().read(|kernel| kernel.star_con_font)).cast()) };
     draw_text(
         pick.corner.x + (pick.width >> 1),
         pick.corner.y + pick.height - 5,
-        ship_name.cast(),
+        ship_name.as_ptr().cast(),
         u16::MAX,
     );
 
@@ -601,9 +580,8 @@ pub unsafe extern "C" fn draw_armada_pick_ship(draw_salvage_frame: c_int, pick_r
                 stamp.origin.x -= 1;
                 // SAFETY: `StatusFrame` is loaded at startup.
                 unsafe {
-                    stamp.frame =
-                        (SetAbsFrameIndex((std::ptr::addr_of!(StatusFrame).read()).cast(), 3))
-                            .cast();
+                    let status_frame = KernelOwner::current().read(|kernel| kernel.status_frame);
+                    stamp.frame = SetAbsFrameIndex(status_frame.cast(), 3).cast();
                     DrawStamp(std::ptr::from_mut(&mut stamp).cast());
                 }
             }
