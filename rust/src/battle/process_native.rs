@@ -210,7 +210,6 @@ mod helpers {
 pub(crate) mod engine {
     use super::invoke_element::invoke_element;
     use super::*;
-    use crate::collections::observation::image;
     use crate::engine::battle::{Cx, ElementId};
 
     fn damage(cx: &mut Cx<'_>, id: ElementId) {
@@ -233,7 +232,7 @@ pub(crate) mod engine {
             if cx.elements()[e].parent != crate::engine::battle::Parent::None {
                 untarget(cx, e);
             }
-            cx.records()[e].state_flags |= DISAPPEARING as ELEMENT_FLAGS;
+            cx.element_mut(e).flags |= DISAPPEARING as ELEMENT_FLAGS;
             if let Some(death) = cx.elements()[e].death_func {
                 invoke_element(cx, death, e);
             }
@@ -241,7 +240,7 @@ pub(crate) mod engine {
         let mut flags = cx.elements()[e].state_flags;
         if flags & DISAPPEARING as ELEMENT_FLAGS == 0 {
             if flags & APPEARING as ELEMENT_FLAGS != 0 {
-                image!(copy; cx.records()[e].next, cx.elements()[e].current);
+                cx.copy_current_to_next(e);
                 if colliding(cx.element(e).flags) {
                     cx.init_intersect_start(e);
                     cx.init_intersect_end(e);
@@ -261,13 +260,13 @@ pub(crate) mod engine {
                 }
             }
             if flags & IGNORE_VELOCITY as ELEMENT_FLAGS == 0 {
-                let (velocity_x, velocity_y) = (cx.records()[e].velocity).get_next_components(1);
+                let (velocity_x, velocity_y) = (cx.element_mut(e).velocity).get_next_components(1);
                 let (dx, dy) = (velocity_x as i16, velocity_y as i16);
                 if dx != 0 || dy != 0 {
                     flags |= CHANGING as ELEMENT_FLAGS;
-                    cx.records()[e].next.location.x =
+                    cx.element_mut(e).next.location.x =
                         cx.elements()[e].next.location.x.wrapping_add(dx);
-                    cx.records()[e].next.location.y =
+                    cx.element_mut(e).next.location.y =
                         cx.elements()[e].next.location.y.wrapping_add(dy);
                 }
             }
@@ -275,10 +274,10 @@ pub(crate) mod engine {
                 cx.init_intersect_end(e);
             }
             if flags & FINITE_LIFE as ELEMENT_FLAGS != 0 {
-                cx.records()[e].life = cx.elements()[e].life.wrapping_sub(1);
+                cx.element_mut(e).life = cx.elements()[e].life.wrapping_sub(1);
             }
         }
-        cx.records()[e].state_flags =
+        cx.element_mut(e).flags =
             (flags & !((POST_PROCESS | COLLISION) as ELEMENT_FLAGS)) | PRE_PROCESS as ELEMENT_FLAGS;
     }
     fn collide_native(cx: &mut Cx<'_>, a: ElementId, b: ElementId) {
@@ -352,7 +351,7 @@ pub(crate) mod engine {
             // A death callback can retire every element owned by its ship,
             // including the active projectile, and clear their callbacks.
             if !colliding(cx.element(el).flags) {
-                cx.records()[el].state_flags |= COLLISION as ELEMENT_FLAGS;
+                cx.element_mut(el).flags |= COLLISION as ELEMENT_FLAGS;
                 return COLLISION as ELEMENT_FLAGS;
             }
             next_test = cx.elements().succ(test);
@@ -385,8 +384,10 @@ pub(crate) mod engine {
                         }
                         if state_flags & COLLISION_BIT as ELEMENT_FLAGS != 0 {
                             cx.init_intersect_end(test);
-                            cx.records()[test].IntersectControl.IntersectStamp.origin =
-                                cx.elements()[test].IntersectControl.EndPoint;
+                            cx.set_intersect_origin(
+                                test,
+                                cx.elements()[test].IntersectControl.EndPoint,
+                            );
                             time_value = cx.intersect_elements(el, test, 1);
                             cx.init_intersect_start(test);
                         }
@@ -403,7 +404,7 @@ pub(crate) mod engine {
                                     {
                                         untarget(cx, test);
                                     }
-                                    cx.records()[test].state_flags |=
+                                    cx.element_mut(test).flags |=
                                         (COLLISION | DISAPPEARING) as ELEMENT_FLAGS;
                                     if let Some(death) = cx.elements()[test].death_func {
                                         invoke_element(cx, death, test);
@@ -416,7 +417,7 @@ pub(crate) mod engine {
                                     {
                                         untarget(cx, el);
                                     }
-                                    cx.records()[el].state_flags |=
+                                    cx.element_mut(el).flags |=
                                         (COLLISION | DISAPPEARING) as ELEMENT_FLAGS;
                                     if let Some(death) = cx.elements()[el].death_func {
                                         invoke_element(cx, death, el);
@@ -426,19 +427,27 @@ pub(crate) mod engine {
                                 time_value = 0;
                             } else {
                                 if cx.frame_number(cur.view()) != cx.frame_number(next.view()) {
-                                    image!(frame; cx.records()[el].next.image.frame, cx.equivalent_frame(next.view(), cur.view()));
+                                    cx.set_frame(
+                                        el,
+                                        true,
+                                        cx.equivalent_frame(next.view(), cur.view()),
+                                    );
                                 } else if next != cur {
-                                    image!(copy; cx.records()[el].next.image, cx.elements()[el].current.image);
+                                    cx.copy_current_image_to_next(el);
                                     if cx.elements()[el].life > NORMAL_LIFE as COUNT {
-                                        cx.records()[el].life = NORMAL_LIFE as COUNT;
+                                        cx.element_mut(el).life = NORMAL_LIFE as COUNT;
                                     }
                                 }
                                 if cx.frame_number(tcur.view()) != cx.frame_number(tnext.view()) {
-                                    image!(frame; cx.records()[test].next.image.frame, cx.equivalent_frame(tnext.view(), tcur.view()));
+                                    cx.set_frame(
+                                        test,
+                                        true,
+                                        cx.equivalent_frame(tnext.view(), tcur.view()),
+                                    );
                                 } else if tnext != tcur {
-                                    image!(copy; cx.records()[test].next.image, cx.elements()[test].current.image);
+                                    cx.copy_current_image_to_next(test);
                                     if cx.elements()[test].life > NORMAL_LIFE as COUNT {
-                                        cx.records()[test].life = NORMAL_LIFE as COUNT;
+                                        cx.element_mut(test).life = NORMAL_LIFE as COUNT;
                                     }
                                 }
                                 cx.init_intersect_start(el);
@@ -508,16 +517,16 @@ pub(crate) mod engine {
                         if cx.elements()[test].state_flags & COLLISION_BIT as ELEMENT_FLAGS != 0
                             && test_state_flags & COLLISION_BIT as ELEMENT_FLAGS == 0
                         {
-                            cx.records()[test].IntersectControl.IntersectStamp.origin = test_save;
-                            cx.records()[test].next.location.x = test_save.x << ONE_SHIFT;
-                            cx.records()[test].next.location.y = test_save.y << ONE_SHIFT;
+                            cx.set_intersect_origin(test, test_save);
+                            cx.element_mut(test).next.location.x = test_save.x << ONE_SHIFT;
+                            cx.element_mut(test).next.location.y = test_save.y << ONE_SHIFT;
                             cx.init_intersect_end(test);
                         }
                         if cx.elements()[el].state_flags & COLLISION_BIT as ELEMENT_FLAGS != 0 {
                             if state_flags & COLLISION_BIT as ELEMENT_FLAGS == 0 {
-                                cx.records()[el].IntersectControl.IntersectStamp.origin = save;
-                                cx.records()[el].next.location.x = save.x << ONE_SHIFT;
-                                cx.records()[el].next.location.y = save.y << ONE_SHIFT;
+                                cx.set_intersect_origin(el, save);
+                                cx.element_mut(el).next.location.x = save.x << ONE_SHIFT;
+                                cx.element_mut(el).next.location.y = save.y << ONE_SHIFT;
                                 cx.init_intersect_end(el);
                                 if state_flags & finite_life == 0
                                     && test_state_flags & finite_life == 0
@@ -542,7 +551,7 @@ pub(crate) mod engine {
                             return COLLISION_BIT as ELEMENT_FLAGS;
                         }
                         if !colliding(cx.element(el).flags) {
-                            cx.records()[el].state_flags |= COLLISION_BIT as ELEMENT_FLAGS;
+                            cx.element_mut(el).flags |= COLLISION_BIT as ELEMENT_FLAGS;
                             return COLLISION_BIT as ELEMENT_FLAGS;
                         }
                     }
@@ -606,12 +615,12 @@ pub(crate) mod engine {
         if let Some(post) = cx.elements()[e].postprocess_func {
             invoke_element(cx, post, e);
         }
-        image!(copy; cx.records()[e].current, cx.elements()[e].next);
+        cx.copy_next_to_current(e);
         if colliding(cx.element(e).flags) {
             cx.init_intersect_start(e);
             cx.init_intersect_end(e);
         }
-        cx.records()[e].state_flags = (cx.elements()[e].state_flags
+        cx.element_mut(e).flags = (cx.elements()[e].state_flags
             & !((PRE_PROCESS | CHANGING | APPEARING) as ELEMENT_FLAGS))
             | POST_PROCESS_BIT;
     }
@@ -653,7 +662,7 @@ pub(crate) mod engine {
             ViewState::Change
         };
         if (cx.world.activity() as u8) <= IN_HYPERSPACE as u8 {
-            move_galaxy(cx, state as VIEW_STATE, dx, dy);
+            move_galaxy(cx, state as VIEW_STATE, dx, dy, optMeleeScale);
         }
         *scroll_x = dx;
         *scroll_y = dy;
@@ -672,10 +681,7 @@ pub(crate) mod engine {
                 cx.b.zoom_out = (MAX_ZOOM_OUT + (1 << ZOOM_SHIFT)) as SIZE;
                 cx.b.max_zoom_out = MAX_ZOOM_OUT as SIZE;
             }
-            crate::collections::observation::record(
-                crate::collections::observation::Event::ResetPool,
-            );
-            cx.records().reinit();
+            cx.reset_elements();
             cx.reset_display();
         });
     }
@@ -703,9 +709,9 @@ pub(crate) mod engine {
             let next_handle;
             if flags & PRE_PROCESS_BIT != 0 {
                 if flags & COLLISION_BIT == 0 {
-                    cx.records()[e].state_flags &= !(DEFY_PHYSICS as ELEMENT_FLAGS);
+                    cx.element_mut(e).flags &= !(DEFY_PHYSICS as ELEMENT_FLAGS);
                 } else {
-                    cx.records()[e].state_flags &= !COLLISION_BIT;
+                    cx.element_mut(e).flags &= !COLLISION_BIT;
                 }
                 (delta_x, delta_y) = if flags & POST_PROCESS_BIT != 0 {
                     (0, 0)
@@ -775,10 +781,14 @@ pub(crate) mod engine {
                                 } else {
                                     calc_zoom_stuff(cx.b.zoom_out)
                                 };
-                                image!(frame; cx.records()[e].next.image.frame, cx.equivalent_frame(
-                                    cx.elements()[e].next.image.frames.view(usize::from(index)),
-                                    cx.elements()[e].next.image.frame.view(),
-                                ));
+                                cx.set_frame(
+                                    e,
+                                    true,
+                                    cx.equivalent_frame(
+                                        cx.elements()[e].next.image.frames.view(usize::from(index)),
+                                        cx.elements()[e].next.image.frame.view(),
+                                    ),
+                                );
                                 if optMeleeScale == SCALE_TRILINEAR
                                     && index < 2
                                     && scale != GSCALE_IDENTITY as COUNT
@@ -808,7 +818,7 @@ pub(crate) mod engine {
                                 cx.elements()[e].next.image.frame.raw();
                         }
                     }
-                    cx.records()[e].next.location = next;
+                    cx.element_mut(e).next.location = next;
                 }
                 postprocess(cx, e);
                 if kind < gfx_object_NUM_PRIMS as GRAPHICS_PRIM {

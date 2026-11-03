@@ -853,3 +853,6 @@ impl super::RaceDesc {
         &raw mut self.raw.ship_data
     }
 }
+
+#[path = "access/processing.rs"]
+mod processing;

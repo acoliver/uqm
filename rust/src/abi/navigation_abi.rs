@@ -3436,7 +3436,7 @@ pub use crate::battle::world_elements::engine::spawn_planet;
 pub use crate::battle::world_elements::engine::spawn_asteroid;
 
 #[cfg(not(test))]
-pub use crate::battle::galaxy::engine::InitGalaxy;
+
 
 pub type STATUS_FLAGS = UWORD;
 pub const SPECIES_ID_NO_ID: SPECIES_ID = 0;

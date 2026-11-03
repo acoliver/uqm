@@ -110,7 +110,7 @@ mod live {
     operation!(rust_bridge_init_battle_arena() -> i16 {
         if KernelOwner::current().write(|kernel| crate::game_init::space_resources::init_space(kernel, WorldOwner::current().read(|world|world.activity()))) == 0 { return 0; }
         SetContext((**KernelOwner::current()).status_context); SetContext((**KernelOwner::current()).space_context);
-        InitDisplayList(); crate::battle::galaxy::InitGalaxy();
+        InitDisplayList(); crate::app::bridge::enter(crate::battle::galaxy::init_galaxy);
         if WorldOwner::current().read(in_hqspace) != 0 {
             crate::app::bridge::enter(|cx| {
                 cx.reset_ships(0); cx.reset_ships(1);

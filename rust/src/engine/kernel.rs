@@ -56,7 +56,6 @@ pub struct Kernel {
     pub(crate) game_sounds: SOUND,
     pub(crate) sounds: SoundQueue,
     pub(crate) channels: Channels,
-    pub(crate) log_stars: Box<[POINT; 180]>,
     pub(crate) space_origin: POINT,
     pub(crate) star_planes: Box<[StarPlane; 3]>,
 }
@@ -94,20 +93,7 @@ impl Kernel {
     }
 
     pub(crate) fn new() -> Self {
-        let mut log_stars = Box::new([POINT { x: 0, y: 0 }; 180]);
-        let array = log_stars.as_mut_ptr();
-        let mut offset = 0;
-        let star_planes = Box::new([30, 60, 90].map(|count| {
-            let plane = StarPlane {
-                min_star_index: 0,
-                num_stars: count,
-                star_array: array.wrapping_add(offset),
-                pmin_star: ptr::null_mut(),
-                plast_star: ptr::null_mut(),
-            };
-            offset += usize::from(count);
-            plane
-        }));
+        let star_planes = Box::new([30, 60, 90].map(StarPlane::new));
         Self {
             last_activity: 0,
             player_control: [0; 2],
@@ -159,7 +145,6 @@ impl Kernel {
             game_sounds: ptr::null_mut(),
             sounds: SoundQueue::new(),
             channels: Channels::new(),
-            log_stars,
             space_origin: POINT { x: 0, y: 0 },
             star_planes,
         }

@@ -11,8 +11,7 @@ use bitflags::bitflags;
 bitflags! {
     /// Element state flags matching C ELEMENT_FLAGS from element.h
     /// These flags control element lifecycle, collision behavior, and processing.
-    #[repr(C)]
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct ElementFlags: u16 {
         const PLAYER_SHIP       = 1 << 2;  // REQ-BAT-014
         const APPEARING         = 1 << 3;  // REQ-BAT-007
@@ -36,7 +35,6 @@ bitflags! {
 // ---------------------------------------------------------------------------
 
 /// Point in 2D space (display coordinates)
-#[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Point {
     pub x: i16,
@@ -60,7 +58,6 @@ pub use super::velocity::Extent;
 pub type FrameHandle = *mut std::ffi::c_void;
 
 /// Stamp (visual representation with position and frame)
-#[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct Stamp {
     pub origin: Point,
@@ -68,7 +65,6 @@ pub struct Stamp {
 }
 
 /// Intersection control for collision detection
-#[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct IntersectControl {
     pub last_time_val: u16,
@@ -76,22 +72,12 @@ pub struct IntersectControl {
     pub intersect_stamp: Stamp,
 }
 
-crate::c_bindings::assert_c_layout!(
-    IntersectControl,
-    crate::ships::native::abi::INTERSECT_CONTROL {
-        last_time_val: last_time_val,
-        end_point: EndPoint,
-        intersect_stamp: IntersectStamp,
-    }
-);
-
 // ---------------------------------------------------------------------------
 // Element Visual State
 // ---------------------------------------------------------------------------
 
 /// Visual state (current or next frame)
 /// Matches C's STATE struct from element.h
-#[repr(C)]
 #[derive(Debug, Clone)]
 pub struct ElementVisualState {
     pub location: Point,
@@ -130,7 +116,6 @@ use super::velocity::VelocityDesc;
 pub type HElement = *mut Element;
 
 /// Element processing function (preprocess, postprocess, death)
-#[repr(C)]
 #[derive(Debug, Clone)]
 pub struct Element {
     // -- Link fields (must be first for QUEUE compatibility) --
@@ -187,6 +172,50 @@ pub struct Element {
     // -- Tracking target reference --
     pub target: Option<crate::engine::battle::ElementId>,
     pub intersect_frame: crate::engine::battle::frames::FrameSelection,
+}
+
+impl From<&crate::engine::battle::record::ElementRecord> for Element {
+    fn from(record: &crate::engine::battle::record::ElementRecord) -> Self {
+        fn point(p: crate::graphics::native_abi::POINT) -> Point {
+            Point::new(p.x, p.y)
+        }
+        fn visual(s: &crate::engine::battle::record::STATE) -> ElementVisualState {
+            ElementVisualState {
+                location: point(s.location),
+                frame: s.image.frame.clone(),
+                frames: s.image.frames.clone(),
+            }
+        }
+        Self {
+            preprocess_func: record.preprocess_func,
+            postprocess_func: record.postprocess_func,
+            collision_func: record.collision_func,
+            death_func: record.death_func,
+            player_nr: record.playerNr,
+            state_flags: ElementFlags::from_bits_retain(record.state_flags),
+            life_span: record.life,
+            crew_or_hp: record.hits,
+            mass_points: record.mass,
+            turn_wait: record.turn,
+            thrust_or_blast: record.thrust,
+            color_cycle_index: record.colorCycleIndex,
+            velocity: record.velocity,
+            intersect_control: IntersectControl {
+                last_time_val: record.IntersectControl.last_time_val,
+                end_point: point(record.IntersectControl.EndPoint),
+                intersect_stamp: Stamp {
+                    origin: point(record.IntersectControl.IntersectStamp.origin),
+                    frame: record.IntersectControl.IntersectStamp.frame.cast(),
+                },
+            },
+            prim_index: record.PrimIndex,
+            current: visual(&record.current),
+            next: visual(&record.next),
+            parent: record.parent,
+            target: record.target,
+            intersect_frame: record.intersect_frame.clone(),
+        }
+    }
 }
 
 impl Element {
@@ -945,7 +974,7 @@ mod tests {
         native.IntersectControl.EndPoint = crate::graphics::native_abi::POINT { x: 31, y: -47 };
         native.IntersectControl.IntersectStamp.origin =
             crate::graphics::native_abi::POINT { x: -3, y: 91 };
-        let model = unsafe { &*std::ptr::from_ref(&native).cast::<Element>() };
+        let model = Element::from(&native);
         assert_eq!(model.intersect_control.last_time_val, 17);
         assert_eq!(model.intersect_control.end_point, Point::new(31, -47));
         assert_eq!(
@@ -955,51 +984,25 @@ mod tests {
     }
 
     #[test]
-    fn element_layout_matches_native_hook_record() {
-        use crate::ships::native::abi::ElementRecord;
+    fn snapshot_preserves_native_state_without_layout_aliasing() {
+        let native = crate::ships::native::abi::ElementRecord {
+            playerNr: 1,
+            state_flags: 0x1234,
+            life: 12,
+            hits: 9,
+            PrimIndex: 17,
+            ..Default::default()
+        };
+        let model = Element::from(&native);
         assert_eq!(
-            std::mem::size_of::<Element>(),
-            std::mem::size_of::<ElementRecord>()
-        );
-        assert_eq!(
-            std::mem::offset_of!(Element, preprocess_func),
-            std::mem::offset_of!(ElementRecord, preprocess_func)
-        );
-        assert_eq!(
-            std::mem::offset_of!(Element, player_nr),
-            std::mem::offset_of!(ElementRecord, playerNr)
-        );
-        assert_eq!(
-            std::mem::offset_of!(Element, state_flags),
-            std::mem::offset_of!(ElementRecord, state_flags)
-        );
-        assert_eq!(
-            std::mem::offset_of!(Element, life_span),
-            std::mem::offset_of!(ElementRecord, life)
-        );
-        assert_eq!(
-            std::mem::offset_of!(Element, crew_or_hp),
-            std::mem::offset_of!(ElementRecord, hits)
-        );
-        assert_eq!(
-            std::mem::offset_of!(Element, prim_index),
-            std::mem::offset_of!(ElementRecord, PrimIndex)
-        );
-        assert_eq!(
-            std::mem::offset_of!(Element, current),
-            std::mem::offset_of!(ElementRecord, current)
-        );
-        assert_eq!(
-            std::mem::offset_of!(Element, next),
-            std::mem::offset_of!(ElementRecord, next)
-        );
-        assert_eq!(
-            std::mem::offset_of!(Element, parent),
-            std::mem::offset_of!(ElementRecord, parent)
-        );
-        assert_eq!(
-            std::mem::offset_of!(Element, target),
-            std::mem::offset_of!(ElementRecord, target)
+            (
+                model.player_nr,
+                model.state_flags.bits(),
+                model.life_span,
+                model.crew_or_hp,
+                model.prim_index
+            ),
+            (1, 0x1234, 12, 9, 17)
         );
     }
 }

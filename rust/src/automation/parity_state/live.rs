@@ -159,7 +159,7 @@ fn visuals(fields: &mut Fields, prefix: &str, element: &ElementObservation, jour
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::battle::element::Element;
+    use crate::engine::battle::record::ElementRecord as Element;
 
     fn observed_set<T>(views: &[*mut T]) -> crate::engine::battle::frames::Frames {
         use crate::engine::battle::frames::{FrameArray, Frames, SharedFrames};
@@ -178,8 +178,7 @@ mod tests {
 
     fn visuals(fields: &mut Fields, prefix: &str, element: &Element, journal: &mut Journal) {
         // SAFETY: the test owns a layout-compatible source record.
-        let observation =
-            unsafe { ElementObservation::decode(&*std::ptr::from_ref(element).cast(), None, 0) };
+        let observation = unsafe { ElementObservation::decode(element, None, 0) };
         super::visuals(fields, prefix, &observation, journal);
     }
 
@@ -197,16 +196,16 @@ mod tests {
             .unwrap_or_else(|error| panic!("create visual test journal: {error}"));
         let mut storage = 0u8;
         let views = [std::ptr::from_mut(&mut storage).cast::<std::ffi::c_void>()];
-        let mut element = Element::new();
-        element.current.frame = observed_frame(views[0]);
-        element.current.frames = observed_set(&views);
+        let mut element = Element::default();
+        element.current.image.frame = observed_frame(views[0]);
+        element.current.image.frames = observed_set(&views);
         journal.register_frame(views[0] as usize, 0, 7);
         journal.allocate(std::ptr::from_ref(&element) as usize);
         let mut fields = Fields::new();
         visuals(&mut fields, "element", &element, &mut journal);
-        assert_eq!(fields["element.current.frame.index"], "7");
+        assert_eq!(fields["element.current.image.frame.index"], "7");
         assert_eq!(fields["element.current.farray.0.index"], "7");
-        assert_eq!(fields["element.next.frame.owner"], "none");
+        assert_eq!(fields["element.next.image.frame.owner"], "none");
     }
 
     #[test]
@@ -216,9 +215,9 @@ mod tests {
         let mut storage = 0u8;
         let pointer = std::ptr::from_mut(&mut storage).cast::<std::ffi::c_void>();
         let views = [pointer];
-        let mut element = Element::new();
-        element.current.frame = observed_frame(pointer);
-        element.current.frames = observed_set(&views);
+        let mut element = Element::default();
+        element.current.image.frame = observed_frame(pointer);
+        element.current.image.frames = observed_set(&views);
         journal.allocate(std::ptr::from_ref(&element) as usize);
         let owner = journal.register_resource(100, "drawable");
         journal.register_frame(pointer as usize, 100, 7);
@@ -238,15 +237,15 @@ mod tests {
             "new-set".into(),
         );
         visuals(&mut fields, "element", &element, &mut journal);
-        assert_eq!(fields["element.current.frame.owner"], owner);
-        assert_eq!(fields["element.current.frame.index"], "7");
-        assert_eq!(fields["element.current.frame.retired"], "true");
+        assert_eq!(fields["element.current.image.frame.owner"], owner);
+        assert_eq!(fields["element.current.image.frame.index"], "7");
+        assert_eq!(fields["element.current.image.frame.retired"], "true");
         assert_eq!(fields["element.current.farray.0.owner"], owner);
         assert_eq!(fields["element.current.farray.role"], "old-set");
         journal.allocate(std::ptr::from_ref(&element) as usize);
         visuals(&mut fields, "element", &element, &mut journal);
-        assert_eq!(fields["element.current.frame.index"], "99");
-        assert_eq!(fields["element.current.frame.retired"], "false");
+        assert_eq!(fields["element.current.image.frame.index"], "99");
+        assert_eq!(fields["element.current.image.frame.retired"], "false");
         assert_eq!(fields["element.current.farray.role"], "new-set");
     }
 
@@ -261,7 +260,7 @@ mod tests {
             let directory = super::super::test_directory();
             let mut journal = Journal::create(directory.path()).expect("journal");
             let mut views = [std::ptr::null_mut(); 3];
-            let mut element = Element::new();
+            let mut element = Element::default();
             journal.allocate(std::ptr::from_ref(&element) as usize);
             let generation = journal.identity(std::ptr::from_ref(&element) as usize);
             for cycle in 0..2 {
@@ -281,10 +280,13 @@ mod tests {
                 observe_views(&views, "engine-global:test-animation", |frame| {
                     *frame as usize
                 });
-                observation::assign_frame(&mut element.current.frame, observed_frame(views[0]));
+                observation::assign_frame(
+                    &mut element.current.image.frame,
+                    observed_frame(views[0]),
+                );
                 if cycle == 0 {
                     observation::assign_set(
-                        &mut element.current.frames,
+                        &mut element.current.image.frames,
                         observed_set(&views),
                         None,
                     );
@@ -313,7 +315,7 @@ mod tests {
                 });
                 journal.drain_events(&[]);
                 visuals(&mut fields, "element", &element, &mut journal);
-                assert_eq!(fields["element.current.frame.retired"], "true");
+                assert_eq!(fields["element.current.image.frame.retired"], "true");
                 for view in 0..3 {
                     assert_eq!(
                         fields[&format!("element.current.farray.{view}.owner")],
