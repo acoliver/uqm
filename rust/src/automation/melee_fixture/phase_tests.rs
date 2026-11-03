@@ -290,3 +290,148 @@ fn blazer_setup_dispatches_pre_then_post_for_the_same_ship() {
     assert_eq!(world.ship(run.a()).info.as_ref().unwrap().energy_level, 100);
     assert_ne!(world.ship(run.a()).state.status & SPECIAL as u16, 0);
 }
+
+fn special_records() -> ([Element; 2], [ShipRecord; 2], [RaceDescriptor; 2]) {
+    let (elements, states, mut races) = records();
+    races[0].characteristics.special_wait = 30;
+    races[0].characteristics.special_energy_cost = 16;
+    (elements, states, races)
+}
+
+fn neutral_junk(world: &mut World, mass: u8) -> ElementId {
+    let id = ElementId::fixture(2, 0);
+    let mut junk = Element::new();
+    junk.player = crate::ships::native::abi::NEUTRAL_PLAYER_NUM as i16;
+    junk.mass = mass;
+    junk.life = 1;
+    world.order.push(id);
+    world.elements.insert(id, junk);
+    id
+}
+
+fn failure(result: Result<Option<Vec<Effect>>, String>) -> String {
+    result.err().expect("the fixture stage should fail")
+}
+
+fn drive(
+    stage: fn(&mut Battle, &mut World) -> Result<Option<Vec<Effect>>, String>,
+    run: &mut Battle,
+    world: &mut World,
+) {
+    while stage(run, world).unwrap().is_some() {}
+}
+
+#[test]
+fn druuge_furnace_holds_special_until_the_race_arms_then_checks_the_burn() {
+    let (mut elements, mut states, mut races) = special_records();
+    let mut world = world(&mut elements, &mut states, &mut races);
+    let mut run = run(&world, FixtureName::DruugeFurnace);
+    let (a, b) = (run.a(), run.b());
+    specials::furnace(&mut run, &mut world).unwrap();
+    assert_eq!(
+        world.ship(a).state.control,
+        crate::battle::ai::HUMAN_CONTROL
+    );
+    assert_eq!(world.ship(b).state.input, 0);
+    assert_eq!(world.ship(a).info.as_ref().unwrap().energy_level, 0);
+    assert!(specials::furnace(&mut run, &mut world).unwrap().is_some());
+    assert_eq!(world.ship(a).state.input, SPECIAL as u8);
+    world.ship_mut(a).state.special_counter = 29;
+    world.ship_mut(a).info.as_mut().unwrap().crew_level = 9;
+    world.ship_mut(a).info.as_mut().unwrap().energy_level = 16;
+    specials::furnace(&mut run, &mut world).unwrap();
+    assert_eq!(world.ship(a).state.input, 0);
+    assert_eq!(run.stage, 2);
+    drive(specials::furnace, &mut run, &mut world);
+    run.proof.verify().unwrap();
+}
+
+#[test]
+fn druuge_furnace_fails_when_the_crew_is_not_burned() {
+    let (mut elements, mut states, mut races) = special_records();
+    let mut world = world(&mut elements, &mut states, &mut races);
+    let mut run = run(&world, FixtureName::DruugeFurnace);
+    let a = run.a();
+    specials::furnace(&mut run, &mut world).unwrap();
+    world.ship_mut(a).state.special_counter = 29;
+    world.ship_mut(a).info.as_mut().unwrap().energy_level = 16;
+    let error = failure(specials::furnace(&mut run, &mut world));
+    assert!(error.contains("crew-burned"), "{error}");
+}
+
+#[test]
+fn druuge_furnace_fails_when_the_held_special_never_arms_the_race() {
+    let (mut elements, mut states, mut races) = special_records();
+    let mut world = world(&mut elements, &mut states, &mut races);
+    let mut run = run(&world, FixtureName::DruugeFurnace);
+    specials::furnace(&mut run, &mut world).unwrap();
+    for _ in 0..specials::HOLD_FRAMES {
+        specials::furnace(&mut run, &mut world).unwrap();
+    }
+    let error = failure(specials::furnace(&mut run, &mut world));
+    assert!(error.contains("special did not fire"), "{error}");
+}
+
+#[test]
+fn druuge_furnace_needs_a_crew_to_burn() {
+    let (mut elements, mut states, mut races) = special_records();
+    races[0].ship_info.crew_level = 1;
+    let mut world = world(&mut elements, &mut states, &mut races);
+    let mut run = run(&world, FixtureName::DruugeFurnace);
+    let error = failure(specials::furnace(&mut run, &mut world));
+    assert!(error.contains("at least two crew"), "{error}");
+}
+
+#[test]
+fn slylandro_harvest_places_junk_in_range_holds_special_then_checks_the_harvest() {
+    let (mut elements, mut states, mut races) = special_records();
+    let mut world = world(&mut elements, &mut states, &mut races);
+    let junk = neutral_junk(&mut world, 3);
+    let mut run = run(&world, FixtureName::SlylandroHarvest);
+    let (a, b) = (run.a(), run.b());
+    specials::harvest(&mut run, &mut world).unwrap();
+    assert_eq!(run.object(), junk);
+    let ship_x = i32::from(world.elements[&a].current.location.x);
+    assert_eq!(
+        i32::from(world.elements[&junk].current.location.x) - ship_x,
+        specials::JUNK_OFFSET << ONE_SHIFT
+    );
+    assert_eq!(world.ship(a).info.as_ref().unwrap().energy_level, 0);
+    assert_eq!(world.ship(b).state.input, 0);
+    assert!(specials::harvest(&mut run, &mut world).unwrap().is_some());
+    assert_eq!(world.ship(a).state.input, SPECIAL as u8);
+    world.ship_mut(a).state.special_counter = 29;
+    world.ship_mut(a).info.as_mut().unwrap().energy_level = 100;
+    world.elements.get_mut(&junk).unwrap().life = 0;
+    specials::harvest(&mut run, &mut world).unwrap();
+    assert_eq!(run.stage, 2);
+    drive(specials::harvest, &mut run, &mut world);
+    run.proof.verify().unwrap();
+}
+
+#[test]
+fn slylandro_harvest_has_no_junk_to_place_without_arrived_neutral_junk_in_mass_range() {
+    let (mut elements, mut states, mut races) = special_records();
+    let mut world = world(&mut elements, &mut states, &mut races);
+    let mut run = run(&world, FixtureName::SlylandroHarvest);
+    let error = failure(specials::harvest(&mut run, &mut world));
+    assert!(error.contains("neutral space junk"), "{error}");
+    neutral_junk(&mut world, 200);
+    let error = failure(specials::harvest(&mut run, &mut world));
+    assert!(error.contains("neutral space junk"), "{error}");
+}
+
+#[test]
+fn slylandro_harvest_fails_when_the_junk_survives_the_held_special() {
+    let (mut elements, mut states, mut races) = special_records();
+    let mut world = world(&mut elements, &mut states, &mut races);
+    let junk = neutral_junk(&mut world, 3);
+    let mut run = run(&world, FixtureName::SlylandroHarvest);
+    let a = run.a();
+    specials::harvest(&mut run, &mut world).unwrap();
+    world.ship_mut(a).state.special_counter = 29;
+    world.ship_mut(a).info.as_mut().unwrap().energy_level = 100;
+    let error = failure(specials::harvest(&mut run, &mut world));
+    assert!(error.contains("junk-harvested"), "{error}");
+    assert_eq!(world.elements[&junk].life, 1);
+}

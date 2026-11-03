@@ -8,9 +8,9 @@ use crate::battle::ai::HUMAN_CONTROL;
 use crate::engine::battle::{record::CHARACTERISTIC_STUFF, views::Info};
 
 /// Frames a held SPECIAL may take to activate before the fixture fails.
-const HOLD_FRAMES: u16 = 8;
+pub(super) const HOLD_FRAMES: u16 = 8;
 /// Distance from the harvesting ship to the junk, inside the race's harvest range.
-const JUNK_OFFSET: i32 = 40;
+pub(super) const JUNK_OFFSET: i32 = 40;
 const DESCRIPTOR: &str = "fixture requires loaded descriptor fields";
 
 pub(super) fn furnace(run: &mut Battle, world: &mut World) -> Result<Option<Vec<Effect>>, String> {
