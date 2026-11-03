@@ -30,8 +30,8 @@
       "sha256": "78a236657693c58438475eaaaa18f514f3ea0b61a19df8bfdac5fcc6ca2dd9fc"
     },
     "parity/chmmr-satellites/parity.trace": {
-      "bytes": 222078,
-      "sha256": "68fb51eb7534bc30ab3d1368cda8e1f0855aab6b6be2cf2efa02eb46d75c2cab"
+      "bytes": 222708,
+      "sha256": "50a4ee0720ef82c61d1b8642725439541f20514b3a9c2168342b6c4ede2119c1"
     },
     "parity/chmmr-satellites/summary.json": {
       "bytes": 131549,
@@ -609,6 +609,10 @@
       "bytes": 19663,
       "sha256": "5333d6d8d100bcba47aacc617a7559213f69b4d328fa3aad4a9785cf153cab12"
     },
+    "parity/counts/parity-druuge-furnace.toml": {
+      "bytes": 19666,
+      "sha256": "b8e9ff5d2cb348d1e3250c14326e2017a94cc6592d4e8c613795ad13e466d295"
+    },
     "parity/counts/parity-frame-sets.toml": {
       "bytes": 19662,
       "sha256": "8e4e395d3a3ddcc52f9f9893817ac6132b0979f203a0fdaeaf99a1c3e1b1dfa3"
@@ -648,6 +652,10 @@
     "parity/counts/parity-samatra.toml": {
       "bytes": 474161,
       "sha256": "bdd0a9995cb5de2f31128637ab32286546372e80c2ccac72c81b921faf0b5a8a"
+    },
+    "parity/counts/parity-slylandro-harvest.toml": {
+      "bytes": 19669,
+      "sha256": "1b4655b05dadeef2400ed20a64327884050d450c899b47a8e3bd449fbb2850d3"
     },
     "parity/counts/parity-star-contact.toml": {
       "bytes": 62686,
@@ -813,6 +821,18 @@
       "bytes": 131549,
       "sha256": "f6348a507cf747fb51de29c0e4a1e4b7f4baac7f84376d64d6740de011062318"
     },
+    "parity/druuge-furnace/parity.fields": {
+      "bytes": 9739941,
+      "sha256": "91d2157a781683d95f4c85f82f10d88eaa2eefa986db74cdc7ba9cdfd1a8715c"
+    },
+    "parity/druuge-furnace/parity.trace": {
+      "bytes": 193568,
+      "sha256": "7fad2b5daaad48b2d9d13b6729e88fd9842dc1520daa8ee415676f770f95ed1d"
+    },
+    "parity/druuge-furnace/summary.json": {
+      "bytes": 131549,
+      "sha256": "f6348a507cf747fb51de29c0e4a1e4b7f4baac7f84376d64d6740de011062318"
+    },
     "parity/frame-sets/parity.fields": {
       "bytes": 12813311,
       "sha256": "d9b8713511eec84fdfc97c11a520941bd71e26b06e584bd2615d0da6cbdc712e"
@@ -854,8 +874,8 @@
       "sha256": "6eca99b0b6ce16471b70b325277f0bdf4c13e1658e6849defcbfd0aebf261824"
     },
     "parity/melee-cyborg-a/parity.trace": {
-      "bytes": 2049339,
-      "sha256": "30691de6a05506a290b8d735f7f616fd6e147af6032ed858ed4ea7147817b12d"
+      "bytes": 2053502,
+      "sha256": "7bc8d972f9f34a1612c55db888205d18f1100012a1d04fff904877efeb163960"
     },
     "parity/melee-cyborg-a/summary.json": {
       "bytes": 131032,
@@ -866,8 +886,8 @@
       "sha256": "7895b2aa082b17373a6975040e3e9171d14f3501901f66a5b97f1e7c07eb5bab"
     },
     "parity/melee-cyborg-b/parity.trace": {
-      "bytes": 1994056,
-      "sha256": "bb913e4f270d8984bfb6e454faf100c1d04ceda0607ff8b27ebad7ce40c9985f"
+      "bytes": 1994297,
+      "sha256": "f00abb75f8bdd6609cb42c475262f02da10d26d1e8e20ff48c5d71e2d159eb1e"
     },
     "parity/melee-cyborg-b/summary.json": {
       "bytes": 131032,
@@ -878,20 +898,20 @@
       "sha256": "181ded0eca05aaf98cbcf5319fc31d661d691d4c7ba8d6d012baf8e204832538"
     },
     "parity/melee-cyborg-c/parity.trace": {
-      "bytes": 1937118,
-      "sha256": "4fdcb3bb3249538567a7d2626d083ab7084c89c6888c17fc2675b0b6a8103caf"
+      "bytes": 1945171,
+      "sha256": "c165cae86adfac7aa9c055f2e80257e9c3ef67d87cc44464d84222d5df857969"
     },
     "parity/melee-cyborg-c/summary.json": {
       "bytes": 131032,
       "sha256": "06ea88c56bee068faf03ba2337869a005ca788e998e138f029d1fc7f81b67274"
     },
     "parity/melee-cyborg-d/parity.fields": {
-      "bytes": 92883603,
-      "sha256": "d0416a7b058f00f59da311cb84caa39edcf64aeb54ee631992b4f5726c41f18b"
+      "bytes": 93256524,
+      "sha256": "476fa7b5c1f8d7f6c05d9832adff6d590fc62baf0feb8262f621e9aa0928b30b"
     },
     "parity/melee-cyborg-d/parity.trace": {
-      "bytes": 1991917,
-      "sha256": "2b499ec893bbfb9b66163dbe230abc76b1d308d597cad13052b1353431db3e3d"
+      "bytes": 1975067,
+      "sha256": "c8e140aff1c32e6e44316ef24a064fb72b1ef524a19a68ea8ea2575d64f25f26"
     },
     "parity/melee-cyborg-d/summary.json": {
       "bytes": 131032,
@@ -968,6 +988,18 @@
     "parity/samatra/summary.json": {
       "bytes": 2879477,
       "sha256": "60a3ea6fb4133f9f15c575e10eab0b593039d1f0ba63957e330787913a6fd723"
+    },
+    "parity/slylandro-harvest/parity.fields": {
+      "bytes": 9437613,
+      "sha256": "10bb9de8e42ab2af08f433f49e5abf0c84444777f3b413b988f6df3bf2092ec5"
+    },
+    "parity/slylandro-harvest/parity.trace": {
+      "bytes": 190227,
+      "sha256": "f22726869352caed032c8074a8b73be0c457cbad93f799ee1439e23d3435f5ca"
+    },
+    "parity/slylandro-harvest/summary.json": {
+      "bytes": 131549,
+      "sha256": "f6348a507cf747fb51de29c0e4a1e4b7f4baac7f84376d64d6740de011062318"
     },
     "parity/solar-flight/parity.fields": {
       "bytes": 18672270,
