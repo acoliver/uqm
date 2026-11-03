@@ -19,10 +19,10 @@ pub(in crate::savegame) unsafe fn finish_load(star: &super::super::StarDesc, act
         x: star.star_pt.x,
         y: star.star_pt.y,
     };
+    let selected =
+        FindStar(std::ptr::null_mut(), &mut point, 0, 0).cast::<crate::engine::world::CStarDesc>();
     (**WorldOwner::current()).select_star(
-        (FindStar(std::ptr::null_mut(), &mut point, 0, 0)
-            .cast::<crate::engine::world::CStarDesc>())
-        .as_ref(),
+        selected.as_ref(),
         crate::planets::starmap::current_catalog(),
     );
     NextActivity = activity;
@@ -32,11 +32,18 @@ pub(in crate::savegame) unsafe fn finish_load(star: &super::super::StarDesc, act
 }
 
 unsafe fn install(save: SaveFile) -> anyhow::Result<()> {
-    let world = WorldFields::current();
+    let lease = WorldOwner::current();
+    let world = &mut **lease;
     // SAFETY: CGameState's size, alignment and every field offset are asserted against GAME_STATE.
     let game =
-        &mut *std::ptr::addr_of_mut!((**world).game).cast::<crate::comm::locdata::CGameState>();
-    let restored = runtime::restore_runtime(game, &save.global, &save.game_state, &save.events)?;
+        &mut *std::ptr::addr_of_mut!(world.data.game).cast::<crate::comm::locdata::CGameState>();
+    let restored = runtime::restore_runtime(
+        game,
+        &mut world.story,
+        &save.global,
+        &save.game_state,
+        &save.events,
+    )?;
     queues::restore_queues(
         game,
         &queues::QueueSections {
@@ -54,6 +61,8 @@ unsafe fn install(save: SaveFile) -> anyhow::Result<()> {
     )?;
     statefiles::restore_state_files(
         game,
+        &mut world.story,
+        &mut world.files,
         &statefiles::StateFileSections {
             scan: save.scan,
             canned_nodes: save.canned_nodes,
@@ -61,9 +70,10 @@ unsafe fn install(save: SaveFile) -> anyhow::Result<()> {
             battle_groups: save.battle_groups,
         },
     )?;
-    std::ptr::addr_of_mut!((**world).flagship)
+    std::ptr::addr_of_mut!(world.data.flagship)
         .cast::<crate::comm::locdata::CSisState>()
         .write((&save.summary.sis).into());
+    drop(lease);
     finish_load(&save.star, restored.next_activity);
     Ok(())
 }
@@ -95,4 +105,4 @@ pub unsafe extern "C" fn LoadGame(slot: u16, summary: *mut SummaryDesc) -> u32 {
     )
 }
 
-use crate::engine::{Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields};
+use crate::engine::{Kernel as KernelOwner, World as WorldOwner};

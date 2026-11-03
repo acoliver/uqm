@@ -196,7 +196,7 @@ pub(crate) mod live {
     const UPDATE: u8 = 2;
 
     unsafe fn draw_display(mode: u8) {
-        let world = WorldFields::current();
+        let planet_name = WorldFields::current().read(|world| world.flagship.planet_name);
         let g = CffiPlatform;
         g.set_context(ContextId::Space);
         let clip = g.context_clip_rect();
@@ -213,7 +213,7 @@ pub(crate) mod live {
             base::SetTransitionSource(std::ptr::null_mut());
             DrawSISFrame();
             DrawSISMessage(std::ptr::null());
-            DrawSISTitle(std::ptr::addr_of!((**world).flagship.planet_name).cast());
+            DrawSISTitle(planet_name.as_ptr().cast());
             DrawStarBackGround();
             DrawPlanetSurfaceBorder();
         }

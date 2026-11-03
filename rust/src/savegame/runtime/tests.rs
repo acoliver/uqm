@@ -769,6 +769,29 @@ fn game_state_bits(seed: u8) -> [u8; GAME_STATE_BYTES] {
 
 #[test]
 #[serial]
+fn restore_uses_the_already_borrowed_story_owner() {
+    let mut owner = crate::engine::Game::new();
+    // SAFETY: the serialized fixture owns the lifecycle and releases every lease.
+    unsafe {
+        crate::app::bridge::with_game(&mut owner, || {
+            let mut game = LiveGame::new();
+            crate::engine::World::current().write(|world| {
+                super::restore_runtime(
+                    &mut game,
+                    &mut world.story,
+                    &sentinel_global(),
+                    &game_state_bits(7),
+                    &[],
+                )
+                .unwrap();
+            });
+        });
+    }
+    assert_eq!(*owner.world.story.unwrap().as_bytes(), game_state_bits(7));
+}
+
+#[test]
+#[serial]
 fn restore_then_capture_returns_the_sections_that_were_restored() {
     let mut game_owner = crate::engine::Game::new();
     // SAFETY: the serialized fixture owns this published lifecycle.
@@ -780,7 +803,11 @@ fn restore_then_capture_returns_the_sections_that_were_restored() {
             let bits = game_state_bits(9);
             let events = [event(18, 2, 2155, 2), event(1, 6, 2156, 5)];
 
-            let restored = restore_runtime(&mut game, &global, &bits, &events).unwrap();
+            let restored = crate::engine::World::current()
+                .write(|world| {
+                    restore_runtime(&mut game, &mut world.story, &global, &bits, &events)
+                })
+                .unwrap();
 
             assert_eq!(restored.next_activity, global.current_activity);
             assert_eq!(game.current_activity, 0x0100);
@@ -799,7 +826,9 @@ fn restore_then_capture_returns_the_sections_that_were_restored() {
             );
 
             game.current_activity = global.current_activity;
-            let captured = capture_runtime(&game).unwrap();
+            let captured = crate::engine::World::current()
+                .write(|world| capture_runtime(&game, &world.story))
+                .unwrap();
             assert_eq!(captured.global, global);
             assert_eq!(captured.game_state, bits);
             assert_eq!(captured.events, events);
@@ -816,9 +845,25 @@ fn capture_reads_game_state_from_the_singleton() {
         crate::app::bridge::with_game(&mut game_owner, || {
             let mut game = LiveGame::new();
             let singleton = game_state_bits(40);
-            restore_runtime(&mut game, &sentinel_global(), &singleton, &[]).unwrap();
+            crate::engine::World::current()
+                .write(|world| {
+                    restore_runtime(
+                        &mut game,
+                        &mut world.story,
+                        &sentinel_global(),
+                        &singleton,
+                        &[],
+                    )
+                })
+                .unwrap();
 
-            assert_eq!(capture_runtime(&game).unwrap().game_state, singleton);
+            assert_eq!(
+                crate::engine::World::current()
+                    .write(|world| capture_runtime(&game, &world.story))
+                    .unwrap()
+                    .game_state,
+                singleton
+            );
         })
     }
 }
@@ -835,22 +880,36 @@ fn a_rejected_restore_changes_nothing() {
             let original_events = [event(4, 4, 2155, 4)];
             let mut original_global = sentinel_global();
             original_global.current_activity = 0x0100;
-            restore_runtime(
-                &mut game,
-                &original_global,
-                &original_bits,
-                &original_events,
-            )
-            .unwrap();
+            crate::engine::World::current()
+                .write(|world| {
+                    restore_runtime(
+                        &mut game,
+                        &mut world.story,
+                        &original_global,
+                        &original_bits,
+                        &original_events,
+                    )
+                })
+                .unwrap();
             game.current_activity = 0x0100;
-            let before_sections = capture_runtime(&game).unwrap();
+            let before_sections = crate::engine::World::current()
+                .write(|world| capture_runtime(&game, &world.story))
+                .unwrap();
             let before_queue = queue_state(&game.game_clock.event_q);
 
             let mut other_global = sentinel_global();
             other_global.glob_flags = 0xff;
             other_global.clock.year_index = 3000;
             let bad = [event(1, 1, 2155, 0), event(30, 2, 2155, 1)];
-            let result = restore_runtime(&mut game, &other_global, &game_state_bits(200), &bad);
+            let result = crate::engine::World::current().write(|world| {
+                restore_runtime(
+                    &mut game,
+                    &mut world.story,
+                    &other_global,
+                    &game_state_bits(200),
+                    &bad,
+                )
+            });
 
             assert_eq!(
                 result,
@@ -861,7 +920,12 @@ fn a_rejected_restore_changes_nothing() {
                     year_index: 2155
                 }))
             );
-            assert_eq!(capture_runtime(&game).unwrap(), before_sections);
+            assert_eq!(
+                crate::engine::World::current()
+                    .write(|world| capture_runtime(&game, &world.story))
+                    .unwrap(),
+                before_sections
+            );
             assert_eq!(queue_state(&game.game_clock.event_q), before_queue);
 
             assert_eq!(
@@ -896,8 +960,17 @@ fn restoring_a_c_written_save_puts_its_bytes_at_the_c_offsets() {
             let save = decode_save(C_WRITTEN_SAVE).unwrap();
             let mut game = LiveGame::new();
             game.current_activity = 0x0100;
-            let restored =
-                restore_runtime(&mut game, &save.global, &save.game_state, &save.events).unwrap();
+            let restored = crate::engine::World::current()
+                .write(|world| {
+                    restore_runtime(
+                        &mut game,
+                        &mut world.story,
+                        &save.global,
+                        &save.game_state,
+                        &save.events,
+                    )
+                })
+                .unwrap();
 
             // GlSt: every chunk byte lands where the C compiler puts that field.
             let layout = glst_layout();
@@ -941,7 +1014,9 @@ fn restoring_a_c_written_save_puts_its_bytes_at_the_c_offsets() {
 
             // Capturing the restored game gives back what the file held.
             game.current_activity = restored.next_activity;
-            let captured = capture_runtime(&game).unwrap();
+            let captured = crate::engine::World::current()
+                .write(|world| capture_runtime(&game, &world.story))
+                .unwrap();
             assert_eq!(captured.global, save.global);
             assert_eq!(captured.game_state, save.game_state);
             assert_eq!(captured.events, save.events);

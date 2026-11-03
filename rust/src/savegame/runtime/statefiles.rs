@@ -43,7 +43,7 @@ use crate::savegame::types::{
     BattleFleet, BattleGroup, BattleShip, GroupList, GroupListEntry, IpGroup, Point,
     GAME_STATE_BYTES,
 };
-use crate::state::ffi::{with_state_files, with_state_owners, GameStateOwnerError};
+use crate::state::ffi::{with_state_files, GameStateOwnerError};
 use crate::state::game_state::{
     get_state_32_raw, set_state_32_raw, GameState, NUM_GAME_STATE_BITS,
 };
@@ -498,26 +498,27 @@ pub fn capture_from_images(
 /// Read "Scan", "Grps" and "BtGp" from the live state files, with the
 /// defined-group offsets taken from the live game-state singleton and the
 /// current group from `game`.
-pub fn capture_state_files(game: &CGameState) -> Result<StateFileSections, StateSectionError> {
-    crate::engine::World::current().write(|world| {
-        with_state_owners(world, |state, files| {
-            let contents = |index: usize| {
-                files
-                    .get_file(index)
-                    .expect("the three state files always exist")
-                    .contents()
-            };
-            let mut sections = capture_from_images(
-                contents(STARINFO_FILE),
-                contents(RANDGRPINFO_FILE),
-                contents(DEFGRPINFO_FILE),
-                state.as_bytes(),
-                game.battle_group_ref,
-            )?;
-            sections.canned_nodes = files.canned_nodes.clone();
-            Ok(sections)
-        })
-    })?
+pub fn capture_state_files(
+    game: &CGameState,
+    story: &Option<GameState>,
+    files: &StateFileManager,
+) -> Result<StateFileSections, StateSectionError> {
+    let state = story.as_ref().ok_or(GameStateOwnerError::NotInitialized)?;
+    let contents = |index: usize| {
+        files
+            .get_file(index)
+            .expect("the three state files always exist")
+            .contents()
+    };
+    let mut sections = capture_from_images(
+        contents(STARINFO_FILE),
+        contents(RANDGRPINFO_FILE),
+        contents(DEFGRPINFO_FILE),
+        state.as_bytes(),
+        game.battle_group_ref,
+    )?;
+    sections.canned_nodes = files.canned_nodes.clone();
+    Ok(sections)
 }
 
 // ---------------------------------------------------------------------------
@@ -741,17 +742,14 @@ fn commit(plan: &RestorePlan, state: &mut GameState, files: &mut StateFileManage
 /// `BattleGroupRef` follows in the live game record.
 pub fn restore_state_files(
     game: &mut CGameState,
+    story: &mut Option<GameState>,
+    files: &mut StateFileManager,
     sections: &StateFileSections,
 ) -> Result<(), StateSectionError> {
-    let plan = crate::engine::World::current().write(|world| {
-        with_state_owners(world, |state, files| {
-            let plan = plan_restore(sections, state.as_bytes())?;
-            commit(&plan, state, files);
-            files.canned_nodes.clone_from(&sections.canned_nodes);
-            Ok::<_, StateSectionError>(plan)
-        })
-    })??;
-
+    let state = story.as_mut().ok_or(GameStateOwnerError::NotInitialized)?;
+    let plan = plan_restore(sections, state.as_bytes())?;
+    commit(&plan, state, files);
+    files.canned_nodes.clone_from(&sections.canned_nodes);
     if let Some(reference) = plan.battle_group_ref {
         game.battle_group_ref = reference;
     }

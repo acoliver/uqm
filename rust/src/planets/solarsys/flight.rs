@@ -200,9 +200,11 @@ pub(super) unsafe fn check_intersect() -> *mut c::PLANET_DESC {
     ptr::null_mut()
 }
 
-pub(super) unsafe fn flagship_inertial_thrust(current_angle: c::COUNT) -> c::UWORD {
-    let max_speed = (*system()).max_ship_speed;
-    let velocity = ptr::addr_of_mut!((**glob()).game.velocity);
+pub(super) unsafe fn flagship_inertial_thrust(
+    velocity: &mut crate::battle::velocity::VelocityDesc,
+    current_angle: c::COUNT,
+    max_speed: c::COUNT,
+) -> c::UWORD {
     let mut current_dx: c::SIZE = 0;
     let mut current_dy: c::SIZE = 0;
     GetCurrentVelocityComponents(velocity, &mut current_dx, &mut current_dy);
@@ -297,14 +299,19 @@ pub(super) unsafe fn process_ship_controls() {
     if (*state).thrust_counter != 0 {
         (*state).thrust_counter -= 1;
     } else if dy < 0 {
-        flagship_inertial_thrust(facing_to_angle(index));
+        flagship_inertial_thrust(
+            &mut (*game).velocity,
+            facing_to_angle(index),
+            (*state).max_ship_speed.into(),
+        );
         (*state).thrust_counter = THRUST_WAIT;
     }
 }
 
 pub(super) unsafe fn enter_inner_system(planet: *mut c::PLANET_DESC) {
     let state = system();
-    let game = ptr::addr_of_mut!((**glob()).game);
+    let lease = glob();
+    let game = ptr::addr_of_mut!((**lease).game);
     let angle =
         facing_to_angle(GetFrameIndex(((*game).ship_stamp.frame).cast())).wrapping_add(HALF_CIRCLE);
     let (width, height) = sis_dimensions();
@@ -324,6 +331,7 @@ pub(super) unsafe fn enter_inner_system(planet: *mut c::PLANET_DESC) {
     (*state).SunDesc[0].location = planetOuterLocation(planetIndex(state, planet));
     (*game).velocity.zero();
 
+    drop(lease);
     super::lifecycle::generate_moons(state, planet);
     (*state).pBaseDesc = (*state).MoonDesc.as_mut_ptr();
     (*state).pOrbitalDesc = planet;
@@ -331,7 +339,8 @@ pub(super) unsafe fn enter_inner_system(planet: *mut c::PLANET_DESC) {
 
 pub(super) unsafe fn leave_inner_system(planet: *mut c::PLANET_DESC) {
     let state = system();
-    let game = ptr::addr_of_mut!((**glob()).game);
+    let lease = glob();
+    let game = ptr::addr_of_mut!((**lease).game);
     (*state).pBaseDesc = (*state).PlanetDesc.as_mut_ptr();
     (*state).pOrbitalDesc = ptr::null_mut();
 
@@ -349,6 +358,7 @@ pub(super) unsafe fn leave_inner_system(planet: *mut c::PLANET_DESC) {
     );
     (*game).velocity.zero();
 
+    drop(lease);
     (*state).WaitIntersect = outer_planet_wait;
     check_intersect();
     if (*state).WaitIntersect != outer_planet_wait {
@@ -365,37 +375,35 @@ pub(super) unsafe fn enter_orbital(planet: *mut c::PLANET_DESC) {
 
 pub(super) unsafe fn check_ship_location(new_radius: *mut c::SIZE) -> c::BOOLEAN {
     let state = system();
-    let game = ptr::addr_of_mut!((**glob()).game);
+    let game = glob().read(|world| world.game);
     let radius = (*state).SunDesc[0].radius;
     *new_radius = (*state).SunDesc[0].radius;
 
     let (width, height) = sis_dimensions();
-    if (*game).ship_stamp.origin.x < 0
-        || i32::from((*game).ship_stamp.origin.x) >= width
-        || (*game).ship_stamp.origin.y < 0
-        || i32::from((*game).ship_stamp.origin.y) >= height
+    if game.ship_stamp.origin.x < 0
+        || i32::from(game.ship_stamp.origin.x) >= width
+        || game.ship_stamp.origin.y < 0
+        || i32::from(game.ship_stamp.origin.y) >= height
     {
         if !playerInInnerSystem() {
             if radius == MAX_ZOOM_RADIUS {
-                (*game).current_activity |= END_INTERPLANETARY;
+                glob().write(|world| world.game.current_activity |= END_INTERPLANETARY);
                 return 0;
             }
-            *new_radius = find_radius(
-                i32::from(MAX_ZOOM_RADIUS) << 1,
-                c_point((*game).ip_location),
-            ) as c::SIZE;
+            *new_radius =
+                find_radius(i32::from(MAX_ZOOM_RADIUS) << 1, c_point(game.ip_location)) as c::SIZE;
         } else {
             leave_inner_system((*state).pOrbitalDesc);
         }
         return 1;
     }
 
-    if !playerInInnerSystem() && point_within_rect(SCALE_RECT, c_point((*game).ship_stamp.origin)) {
-        *new_radius = find_radius(i32::from(radius), c_point((*game).ip_location)) as c::SIZE;
+    if !playerInInnerSystem() && point_within_rect(SCALE_RECT, c_point(game.ship_stamp.origin)) {
+        *new_radius = find_radius(i32::from(radius), c_point(game.ip_location)) as c::SIZE;
         return 1;
     }
 
-    if (*game).autopilot.x == -1 && (*game).autopilot.y == -1 {
+    if game.autopilot.x == -1 && game.autopilot.y == -1 {
         let planet = check_intersect();
         if !planet.is_null() {
             if playerInInnerSystem() {
@@ -411,7 +419,8 @@ pub(super) unsafe fn check_ship_location(new_radius: *mut c::SIZE) -> c::BOOLEAN
 }
 
 pub(super) unsafe fn scale_system(new_radius: c::SIZE) {
-    let game = ptr::addr_of_mut!((**glob()).game);
+    let lease = glob();
+    let game = ptr::addr_of_mut!((**lease).game);
     (*system()).SunDesc[0].radius = new_radius;
     XFormIPLoc(
         ptr::addr_of_mut!((*game).ip_location).cast(),
@@ -419,6 +428,7 @@ pub(super) unsafe fn scale_system(new_radius: c::SIZE) {
         1,
     );
 
+    drop(lease);
     // SMOOTH_SYSTEM_ZOOM is disabled in the C source; use its crossfade path.
     let mut rect: c::RECT = std::mem::zeroed();
     c::GetContextClipRect(&mut rect);

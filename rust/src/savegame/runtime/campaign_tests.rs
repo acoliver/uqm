@@ -162,9 +162,17 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
                     )
                 });
 
-                let restored =
-                    restore_runtime(&mut game, &saved.global, &saved.game_state, &saved.events)
-                        .unwrap();
+                let restored = crate::engine::World::current()
+                    .write(|world| {
+                        restore_runtime(
+                            &mut game,
+                            &mut world.story,
+                            &saved.global,
+                            &saved.game_state,
+                            &saved.events,
+                        )
+                    })
+                    .unwrap();
                 assert_eq!(restored.next_activity, saved.global.current_activity);
                 game.current_activity = restored.next_activity;
                 let q = queues::QueueSections {
@@ -185,17 +193,24 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
                 };
                 groups::restore_groups(&mut game, &g).unwrap();
                 assert_eq!(groups::capture_groups(&game).unwrap(), g);
-                statefiles::restore_state_files(
-                    &mut game,
-                    &statefiles::StateFileSections {
-                        scan: saved.scan.clone(),
-                        canned_nodes: saved.canned_nodes.clone(),
-                        group_list: saved.group_list.clone(),
-                        battle_groups: saved.battle_groups.clone(),
-                    },
-                )
-                .unwrap();
-                let actual = capture_runtime(&game).unwrap();
+                crate::engine::World::current()
+                    .write(|world| {
+                        statefiles::restore_state_files(
+                            &mut game,
+                            &mut world.story,
+                            &mut world.files,
+                            &statefiles::StateFileSections {
+                                scan: saved.scan.clone(),
+                                canned_nodes: saved.canned_nodes.clone(),
+                                group_list: saved.group_list.clone(),
+                                battle_groups: saved.battle_groups.clone(),
+                            },
+                        )
+                    })
+                    .unwrap();
+                let actual = crate::engine::World::current()
+                    .write(|world| capture_runtime(&game, &world.story))
+                    .unwrap();
                 assert_eq!(actual.global, saved.global);
                 assert_eq!(actual.events, saved.events);
                 // Defined-group offsets are rebuilt while all story bits remain equal.
