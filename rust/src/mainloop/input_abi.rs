@@ -1,6 +1,6 @@
 //! Input repeat, nested input loops and battle controls, ported from gameinp.c.
 #[cfg(not(test))]
-use crate::engine::Kernel as KernelOwner;
+use crate::engine::Kernel;
 #[derive(Clone, Copy)]
 struct Repeat {
     delay: u32,
@@ -262,7 +262,7 @@ pub(crate) mod live {
                 break;
             }
             let flags = menu_sound_flags(&ptr::addr_of!(PulsedInputState).read());
-            let mut sound = KernelOwner::current().read(|owner| owner.menu_sounds);
+            let mut sound = Kernel::current().read(|owner| owner.menu_sounds);
             if !sound.is_null() && flags & (SOUND_0 | SOUND_1) != 0 {
                 if flags & SOUND_1 != 0 {
                     sound = crate::strings::string_table::SetAbsStringTableIndex(sound.cast(), 1)

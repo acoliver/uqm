@@ -8,11 +8,9 @@
 use crate::c_bindings::global_state::{Color, EXTENT, FRAME, MENU_STATE, POINT, RECT, STAMP};
 #[cfg(not(test))]
 use crate::c_bindings::global_state::{FLEET_INFO, QUEUE, TEXT};
-use crate::engine::Kernel as KernelOwner;
+use crate::engine::Kernel;
 #[cfg(not(test))]
-use crate::engine::StoryKey;
-#[cfg(not(test))]
-use crate::engine::{World as WorldOwner, WorldData as WorldFields};
+use crate::engine::{StoryKey, World, WorldData};
 #[cfg(not(test))]
 use crate::graphics::context_abi::SetContextClipRect;
 #[cfg(not(test))]
@@ -189,22 +187,16 @@ unsafe fn height() -> i32 {
 }
 #[cfg(not(test))]
 fn which_space() -> u8 {
-    WorldOwner::current().read(|world| {
-        crate::state::game_state_keys::get_game_state(world, StoryKey::ARILOU_SPACE_SIDE)
-    }) as u8
+    World::current().read(|world| world.story_state(StoryKey::ARILOU_SPACE_SIDE)) as u8
 }
 #[cfg(not(test))]
 fn portal_open() -> bool {
-    WorldOwner::current()
-        .read(|world| crate::state::game_state_keys::get_game_state(world, StoryKey::ARILOU_SPACE))
-        != 0
+    World::current().read(|world| world.story_state(StoryKey::ARILOU_SPACE)) != 0
 }
 #[cfg(not(test))]
 unsafe fn game_string(index: u16) -> *const c_char {
     string_table::GetStringAddress(string_table::SetAbsStringTableIndex(
-        KernelOwner::current()
-            .read(|owner| owner.game_strings)
-            .cast(),
+        Kernel::current().read(|owner| owner.game_strings).cast(),
         index,
     ))
 }
@@ -299,20 +291,20 @@ unsafe fn uy(y: i16) -> i16 {
 
 #[cfg(not(test))]
 unsafe fn current_location() -> POINT {
-    if WorldOwner::current().read(in_hqspace) == 0 {
+    if World::current().read(in_hqspace) == 0 {
         point(
-            (*(**WorldOwner::current()).star_pointer(crate::planets::starmap::current_catalog()))
+            (*(**World::current()).star_pointer(crate::planets::starmap::current_catalog()))
                 .star_pt,
         )
     } else {
         let lx = (((ScreenWidth - 64) << 5) >> 4) * 195;
         let ly = ((ScreenHeight << 5) >> 4) * 25;
         POINT {
-            x: ((WorldFields::current().read(|owner| owner.flagship.log_x) * 6250 + (lx >> 1)) / lx)
+            x: ((WorldData::current().read(|owner| owner.flagship.log_x) * 6250 + (lx >> 1)) / lx)
                 as i16,
             y: (9999
-                - (WorldFields::current().read(|owner| owner.flagship.log_y) * 625 + (ly >> 1))
-                    / ly) as i16,
+                - (WorldData::current().read(|owner| owner.flagship.log_y) * 625 + (ly >> 1)) / ly)
+                as i16,
         }
     }
 }
@@ -330,7 +322,7 @@ pub unsafe extern "C" fn flashCurrentLocation(where_: *const POINT) {
     }
     if GetTimeCounter() >= NEXT_TIME {
         NEXT_TIME = GetTimeCounter().wrapping_add(ONE_SECOND / 16);
-        let old_context = SetContext(KernelOwner::current().read(|owner| owner.space_context));
+        let old_context = SetContext(Kernel::current().read(|owner| owner.space_context));
         if COLOR == 0 || COLOR == 0x1a {
             DELTA = -DELTA;
         }
@@ -455,7 +447,7 @@ fn box_union(a: RECT, b: RECT) -> RECT {
 }
 #[cfg(not(test))]
 unsafe fn fleet_queue() -> *mut QUEUE {
-    let world = WorldFields::current();
+    let world = WorldData::current();
     ptr::addr_of_mut!((**world).game.avail_race_q)
 }
 #[cfg(not(test))]
@@ -484,7 +476,7 @@ unsafe fn unlock_fleet(handle: *mut c_void) {
 }
 #[cfg(not(test))]
 unsafe fn sphere_text(fleet: *const FLEET_INFO, r: RECT) -> TEXT {
-    font_abi::SetContextFont(KernelOwner::current().read(|owner| owner.tiny_font).cast());
+    font_abi::SetContextFont(Kernel::current().read(|owner| owner.tiny_font).cast());
     let string = string_table::SetAbsStringTableIndex((*fleet).race_strings.cast(), 1);
     TEXT {
         baseline: POINT {
@@ -566,7 +558,7 @@ pub unsafe extern "C" fn DrawStarMap(race_update: u16, clip: *mut RECT) {
     };
     let mut old_r = zero_rect();
     let mut old_origin = POINT { x: 0, y: 0 };
-    SetContext(KernelOwner::current().read(|owner| owner.space_context));
+    SetContext(Kernel::current().read(|owner| owner.space_context));
     if !clip.is_null() {
         GetContextClipRect(&mut old_r);
         (*clip).corner.x = (*clip).corner.x.wrapping_add(old_r.corner.x);
@@ -593,9 +585,9 @@ pub unsafe extern "C" fn DrawStarMap(race_update: u16, clip: *mut RECT) {
         SetContextBackGroundColor(rgb15(0, 8, 0));
     }
     ClearDrawable();
-    let mut diameter =
-        (i64::from(WorldFields::current().read(|owner| owner.flagship.fuel_on_board)) << 1)
-            .min(i64::from(MAX_X_UNIVERSE * 4)) as c_long;
+    let mut diameter = (i64::from(WorldData::current().read(|owner| owner.flagship.fuel_on_board))
+        << 1)
+        .min(i64::from(MAX_X_UNIVERSE * 4)) as c_long;
     if race_update == 0 && space < 2 && diameter != 0 {
         let location = current_location();
         if diameter > c_long::from(MAX_X_UNIVERSE * 4) {
@@ -740,7 +732,7 @@ pub unsafe extern "C" fn DrawStarMap(race_update: u16, clip: *mut RECT) {
         };
         frame_abi::DrawStamp(ptr::from_mut(&mut stamp).cast());
     }
-    let destination = WorldFields::current().read(|owner| owner.game.autopilot);
+    let destination = WorldData::current().read(|owner| owner.game.autopilot);
     if race_update == 0 && destination.x != -1 && destination.y != -1 {
         draw_autopilot(destination);
     }
@@ -1140,14 +1132,12 @@ pub unsafe extern "C" fn StarMap() -> u32 {
     ZOOM_LEVEL = 0;
     MAP_ORIGIN = POINT { x: 4999, y: 4999 };
     STAR_MAP_FRAME = pixmap_abi::SetAbsFrameIndex(
-        KernelOwner::current()
-            .read(|owner| owner.misc_data_frame)
-            .cast(),
+        Kernel::current().read(|owner| owner.misc_data_frame).cast(),
         48,
     )
     .cast();
     let universe = current_location();
-    cursorLoc = WorldFields::current().read(|owner| owner.game.autopilot);
+    cursorLoc = WorldData::current().read(|owner| owner.game.autopilot);
     if cursorLoc.x == -1 && cursorLoc.y == -1 {
         cursorLoc = universe;
     }
@@ -1160,7 +1150,7 @@ pub unsafe extern "C" fn StarMap() -> u32 {
     DrawStarMap(0, (-1isize) as *mut RECT);
     TRANSITION_PENDING = false;
     BatchGraphics();
-    let old_context = SetContext(KernelOwner::current().read(|owner| owner.space_context));
+    let old_context = SetContext(Kernel::current().read(|owner| owner.space_context));
     let mut clip = zero_rect();
     GetContextClipRect(&mut clip);
     SetContext(old_context);
@@ -1175,14 +1165,14 @@ pub unsafe extern "C" fn StarMap() -> u32 {
     DrawHyperCoords(universe);
     DrawSISMessage(ptr::null());
     DrawStatusMessage(ptr::null());
-    if WorldFields::current().read(|owner| owner.game.autopilot.x) == universe.x
-        && WorldFields::current().read(|owner| owner.game.autopilot.y) == universe.y
+    if WorldData::current().read(|owner| owner.game.autopilot.x) == universe.x
+        && WorldData::current().read(|owner| owner.game.autopilot.y) == universe.y
     {
-        (**WorldFields::current()).game.autopilot = POINT { x: -1, y: -1 };
+        (**WorldData::current()).game.autopilot = POINT { x: -1, y: -1 };
     }
     u32::from(
-        WorldFields::current().read(|owner| owner.game.autopilot.x) != -1
-            && WorldFields::current().read(|owner| owner.game.autopilot.y) != -1,
+        WorldData::current().read(|owner| owner.game.autopilot.x) != -1
+            && WorldData::current().read(|owner| owner.game.autopilot.y) != -1,
     )
 }
 

@@ -245,29 +245,12 @@ unsafe fn use_caster() -> bool {
 /// Returns the original DeviceStatus (failure, success, success without sound).
 unsafe fn invoke(id: u8) -> u8 {
     match id {
-        4..=6 => {
-            let condition =
-                WorldOwner::current().read(|world| get(world, StoryKey::ULTRON_CONDITION));
-            if condition == 0 {
-                return 0;
-            }
-            WorldOwner::current()
-                .write(|world| set(world, StoryKey::ULTRON_CONDITION, condition + 1));
-            WorldOwner::current().write(|world| {
-                set(
-                    world,
-                    [
-                        StoryKey::ROSY_SPHERE_ON_SHIP,
-                        StoryKey::AQUA_HELIX_ON_SHIP,
-                        StoryKey::CLEAR_SPINDLE_ON_SHIP,
-                    ][usize::from(id - 4)],
-                    0,
-                )
-            });
-            WorldOwner::current().write(|world| set(world, StoryKey::DISCUSSED_ULTRON, 0));
-            WorldOwner::current().write(|world| set(world, StoryKey::SUPOX_ULTRON_HELP, 0));
-            1
-        }
+        4..=6 => WorldOwner::current().write(|world| {
+            super::device_effects::repair_ultron(
+                world,
+                super::device_effects::ULTRON_COMPONENTS[usize::from(id - 4)],
+            )
+        }),
         3 => {
             if (**WorldFields::current()).game.current_activity & 0xff != 4
                 || !playerInPlanetOrbit()

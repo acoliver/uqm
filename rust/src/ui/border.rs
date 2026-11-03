@@ -1,6 +1,6 @@
 //! Flagship screen border, ported from uqm/border.c.
 use super::util::live::DrawStarConBox;
-use crate::engine::Kernel as KernelOwner;
+use crate::engine::Kernel;
 use crate::navigation::abi::*;
 fn color(r: u8, g: u8, b: u8) -> Color {
     Color {
@@ -32,7 +32,7 @@ pub unsafe fn init_siscontexts(kernel: &mut crate::engine::Kernel) {
 pub unsafe fn draw_sisframe() {
     let mut r: RECT = std::mem::zeroed();
 
-    SetContext(KernelOwner::current().read(|owner| owner.screen_context));
+    SetContext(Kernel::current().read(|owner| owner.screen_context));
 
     BatchGraphics();
     {
@@ -185,7 +185,7 @@ pub unsafe fn draw_sisframe() {
         DrawFilledRectangle(&mut r);
     }
 
-    KernelOwner::current().write(|kernel| init_siscontexts(kernel));
+    Kernel::current().write(|kernel| init_siscontexts(kernel));
     ClearSISRect(DRAW_SIS_DISPLAY as u8);
 
     UnbatchGraphics();

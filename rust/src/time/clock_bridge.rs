@@ -84,7 +84,6 @@ pub(crate) fn days_in_month(month: u8, year: u16) -> u8 {
 }
 
 // Helper: Advance to next day (internal version that takes &mut ClockState)
-#[cfg(not(test))]
 fn next_clock_day_internal(clock: &mut ClockState) {
     clock.day_index += 1;
 
@@ -168,6 +167,19 @@ pub extern "C" fn rust_clock_set_rate(seconds_per_day: c_int) {
     });
 }
 
+fn tick(clock: &mut ClockState) -> bool {
+    if clock.tick_count > 0 {
+        clock.tick_count -= 1;
+    }
+    if clock.tick_count <= 0 && clock.day_in_ticks > 0 {
+        clock.tick_count = clock.day_in_ticks;
+        next_clock_day_internal(clock);
+        true
+    } else {
+        false
+    }
+}
+
 // Tick the game clock forward one tick
 #[cfg(not(test))]
 /// # Safety
@@ -176,18 +188,7 @@ pub extern "C" fn rust_clock_set_rate(seconds_per_day: c_int) {
 pub unsafe extern "C" fn rust_clock_tick() {
     // Don't log every tick - too noisy
 
-    let changed_day = with_game_clock(|clock| {
-        if clock.tick_count > 0 {
-            clock.tick_count -= 1;
-        }
-        if clock.tick_count <= 0 && clock.day_in_ticks > 0 {
-            clock.tick_count = clock.day_in_ticks;
-            next_clock_day_internal(clock);
-            true
-        } else {
-            false
-        }
-    });
+    let changed_day = with_game_clock(tick);
     if changed_day {
         #[cfg(not(test))]
         crate::time::clock_abi::live::finish_clock_day();
@@ -239,6 +240,32 @@ pub extern "C" fn rust_clock_is_running() -> c_int {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ticking_preserves_pauses_and_rolls_the_calendar_once() {
+        let mut world = crate::engine::World::new();
+        let clock = &mut world.data.game.game_clock;
+        clock.year_index = 2000;
+        clock.month_index = 2;
+        clock.day_index = 28;
+        clock.day_in_ticks = 2;
+        clock.tick_count = 2;
+        assert!(!tick(clock));
+        assert_eq!(clock.tick_count, 1);
+        assert!(tick(clock));
+        assert_eq!(
+            (clock.year_index, clock.month_index, clock.day_index),
+            (2000, 2, 29)
+        );
+        assert_eq!(clock.tick_count, 2);
+        clock.day_in_ticks = 0;
+        clock.tick_count = 0;
+        assert!(!tick(clock));
+        assert_eq!(clock.day_index, 29);
+        clock.day_in_ticks = 1;
+        assert!(tick(clock));
+        assert_eq!((clock.month_index, clock.day_index), (3, 1));
+    }
 
     #[test]
     fn test_is_leap_year() {

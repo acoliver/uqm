@@ -4,9 +4,9 @@
 //! @requirement REQ-RM-005
 
 #[cfg(not(test))]
-use crate::engine::Kernel as KernelOwner;
+use crate::engine::Kernel;
 #[cfg(not(test))]
-use crate::engine::World as WorldOwner;
+use crate::engine::World;
 #[cfg(not(test))]
 use std::ffi::CString;
 #[cfg(not(test))]
@@ -199,7 +199,7 @@ impl RestartMenuOps for CffiOps {
     fn get_current_activity(&self) -> u16 {
         // SAFETY: Reads a global activity variable.
         {
-            WorldOwner::current().read(c_extern::get_current_activity)
+            World::current().read(c_extern::get_current_activity)
         }
     }
     fn set_current_activity(&self, v: u16) {
@@ -346,7 +346,7 @@ impl RestartMenuOps for CffiOps {
     fn set_screen_context(&self) {
         // SAFETY: ScreenContext is a global initialized during game startup.
         unsafe {
-            let _ = c_extern::SetContext(KernelOwner::current().read(|owner| owner.screen_context));
+            let _ = c_extern::SetContext(Kernel::current().read(|owner| owner.screen_context));
         }
     }
 
@@ -480,7 +480,7 @@ impl RestartMenuOps for CffiOps {
         // SAFETY: ScreenContext is a global initialized during game startup.
         unsafe {
             c_extern::Flash_createOverlay(
-                KernelOwner::current().read(|owner| owner.screen_context),
+                Kernel::current().read(|owner| owner.screen_context),
                 std::ptr::null_mut(),
                 std::ptr::null_mut(),
             ) as usize

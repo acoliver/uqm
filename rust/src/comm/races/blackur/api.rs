@@ -1,9 +1,9 @@
 use super::Handler;
 use crate::comm::races::encounter::EncounterApi;
 #[cfg(not(test))]
-use crate::engine::World as WorldOwner;
+use crate::engine::World;
 #[cfg(not(test))]
-use crate::engine::WorldData as WorldFields;
+use crate::engine::WorldData;
 
 pub(super) trait BlackurApi: EncounterApi<Handler> {
     fn battle_group(&self) -> (u32, u32);
@@ -19,11 +19,11 @@ impl BlackurApi for super::super::script::live::LiveScript<Handler> {
         let (start, _) = crate::state::game_state_keys::bit_range("SAMATRA_GRPOFFS0")
             .expect("missing Samatra group-offset state");
         let offset = {
-            WorldOwner::current()
+            World::current()
                 .read(|world| crate::state::ffi::rust_get_game_state_32(world, start as i32))
         };
         (
-            { WorldFields::current().read(|owner| owner.game.battle_group_ref) },
+            { WorldData::current().read(|owner| owner.game.battle_group_ref) },
             offset,
         )
     }

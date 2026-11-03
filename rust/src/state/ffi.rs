@@ -1,5 +1,5 @@
 #[cfg(test)]
-use crate::engine::World as WorldOwner;
+use crate::engine::World;
 // FFI bindings for state management.
 
 use std::ffi::CStr;
@@ -667,9 +667,9 @@ mod tests {
         // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
             crate::app::bridge::with_game(&mut game, || {
-                WorldOwner::current().write(rust_init_game_state);
+                World::current().write(rust_init_game_state);
 
-                assert!(WorldOwner::current().read(|world| read_story(world, |_| true)));
+                assert!(World::current().read(|world| read_story(world, |_| true)));
             })
         }
     }
@@ -687,29 +687,29 @@ mod tests {
                 // the moon base never generate, because the game believes both are
                 // already done.
                 {
-                    WorldOwner::current().write(rust_init_game_state);
-                    WorldOwner::current().write(|world| {
+                    World::current().write(rust_init_game_state);
+                    World::current().write(|world| {
                         rust_set_game_state(
                             world,
                             c"MOONBASE_DESTROYED".as_ptr() as *const c_char,
                             1,
                         )
                     });
-                    WorldOwner::current().write(|world| {
+                    World::current().write(|world| {
                         rust_set_game_state(world, c"MOONBASE_ON_SHIP".as_ptr() as *const c_char, 1)
                     });
                     assert_eq!(
-                        WorldOwner::current().read(|world| rust_get_game_state(
+                        World::current().read(|world| rust_get_game_state(
                             world,
                             c"MOONBASE_DESTROYED".as_ptr() as *const c_char
                         )),
                         1
                     );
 
-                    WorldOwner::current().write(rust_init_game_state);
+                    World::current().write(rust_init_game_state);
 
                     assert_eq!(
-                        WorldOwner::current().read(|world| rust_get_game_state(
+                        World::current().read(|world| rust_get_game_state(
                             world,
                             c"MOONBASE_DESTROYED".as_ptr() as *const c_char
                         )),
@@ -717,7 +717,7 @@ mod tests {
                         "a new game must start with the moon base intact"
                     );
                     assert_eq!(
-                        WorldOwner::current().read(|world| rust_get_game_state(
+                        World::current().read(|world| rust_get_game_state(
                             world,
                             c"MOONBASE_ON_SHIP".as_ptr() as *const c_char
                         )),
@@ -756,23 +756,23 @@ mod tests {
                     .collect();
 
                 {
-                    WorldOwner::current().write(rust_init_game_state);
+                    World::current().write(rust_init_game_state);
                     for (start, end, value) in &ranges {
-                        WorldOwner::current()
+                        World::current()
                             .write(|world| rust_set_game_state_bits(world, *start, *end, *value));
                         assert_eq!(
-                            WorldOwner::current()
+                            World::current()
                                 .read(|world| rust_get_game_state_bits(world, *start, *end)),
                             *value,
                             "bit range {start}..={end} did not accept its value"
                         );
                     }
 
-                    WorldOwner::current().write(rust_init_game_state);
+                    World::current().write(rust_init_game_state);
 
                     for (start, end, _) in &ranges {
                         assert_eq!(
-                            WorldOwner::current()
+                            World::current()
                                 .read(|world| rust_get_game_state_bits(world, *start, *end)),
                             0,
                             "bit range {start}..={end} survived a new game"
@@ -795,46 +795,46 @@ mod tests {
         // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
             crate::app::bridge::with_game(&mut game, || {
-                WorldOwner::current().write(rust_init_game_state);
+                World::current().write(rust_init_game_state);
 
                 {
-                    WorldOwner::current().write(|world| {
+                    World::current().write(|world| {
                         rust_set_game_state(world, c"SHOFIXTI_VISITS".as_ptr() as *const c_char, 5)
                     });
-                    WorldOwner::current().write(|world| {
+                    World::current().write(|world| {
                         rust_set_game_state(
                             world,
                             c"SHOFIXTI_RECRUITED".as_ptr() as *const c_char,
                             1,
                         )
                     });
-                    WorldOwner::current().write(|world| {
+                    World::current().write(|world| {
                         rust_set_game_state(world, c"SPATHI_VISITS".as_ptr() as *const c_char, 3)
                     });
 
                     assert_eq!(
-                        WorldOwner::current().read(|world| rust_get_game_state(
+                        World::current().read(|world| rust_get_game_state(
                             world,
                             c"SHOFIXTI_VISITS".as_ptr() as *const c_char
                         )),
                         5
                     );
                     assert_eq!(
-                        WorldOwner::current().read(|world| rust_get_game_state(
+                        World::current().read(|world| rust_get_game_state(
                             world,
                             c"SHOFIXTI_RECRUITED".as_ptr() as *const c_char
                         )),
                         1
                     );
                     assert_eq!(
-                        WorldOwner::current().read(|world| rust_get_game_state(
+                        World::current().read(|world| rust_get_game_state(
                             world,
                             c"SPATHI_VISITS".as_ptr() as *const c_char
                         )),
                         3
                     );
                     assert_eq!(
-                        WorldOwner::current().read(|world| rust_get_game_state(
+                        World::current().read(|world| rust_get_game_state(
                             world,
                             c"NOT_A_REAL_STATE".as_ptr() as *const c_char
                         )),
@@ -852,10 +852,9 @@ mod tests {
         // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
             crate::app::bridge::with_game(&mut game, || {
-                WorldOwner::current().write(rust_init_game_state);
-                WorldOwner::current().write(|world| rust_set_game_state_bits(world, 0, 2, 5));
-                let result =
-                    WorldOwner::current().read(|world| rust_get_game_state_bits(world, 0, 2));
+                World::current().write(rust_init_game_state);
+                World::current().write(|world| rust_set_game_state_bits(world, 0, 2, 5));
+                let result = World::current().read(|world| rust_get_game_state_bits(world, 0, 2));
                 assert_eq!(result, 5);
             })
         }
@@ -868,12 +867,12 @@ mod tests {
         // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
             crate::app::bridge::with_game(&mut game, || {
-                WorldOwner::current().write(rust_init_game_state);
+                World::current().write(rust_init_game_state);
 
                 let test_value = 0xDEADBEEF;
-                WorldOwner::current().write(|world| rust_set_game_state_32(world, 0, test_value));
+                World::current().write(|world| rust_set_game_state_32(world, 0, test_value));
 
-                let result = WorldOwner::current().read(|world| rust_get_game_state_32(world, 0));
+                let result = World::current().read(|world| rust_get_game_state_32(world, 0));
                 assert_eq!(result, test_value);
             })
         }
@@ -960,13 +959,12 @@ mod tests {
         // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
             crate::app::bridge::with_game(&mut game, || {
-                WorldOwner::current().write(rust_init_game_state);
+                World::current().write(rust_init_game_state);
 
-                WorldOwner::current().write(|world| rust_set_game_state_bits(world, 0, 7, 0xFF));
-                WorldOwner::current().write(rust_reset_game_state);
+                World::current().write(|world| rust_set_game_state_bits(world, 0, 7, 0xFF));
+                World::current().write(rust_reset_game_state);
 
-                let result =
-                    WorldOwner::current().read(|world| rust_get_game_state_bits(world, 0, 7));
+                let result = World::current().read(|world| rust_get_game_state_bits(world, 0, 7));
                 assert_eq!(result, 0);
             })
         }
@@ -979,7 +977,7 @@ mod tests {
         // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
             crate::app::bridge::with_game(&mut game, || {
-                WorldOwner::current().write(rust_init_game_state);
+                World::current().write(rust_init_game_state);
 
                 let moon_counts = [2u8, 0u8];
                 let input_mask = [0x11u32, 0x22u32, 0x33u32];
@@ -987,11 +985,11 @@ mod tests {
 
                 {
                     assert_eq!(
-                        WorldOwner::current().write(|world| rust_init_planet_info(world, 8)),
+                        World::current().write(|world| rust_init_planet_info(world, 8)),
                         1
                     );
                     assert_eq!(
-                        WorldOwner::current().write(|world| rust_put_planet_info(
+                        World::current().write(|world| rust_put_planet_info(
                             world,
                             1,
                             0,
@@ -1003,7 +1001,7 @@ mod tests {
                         1
                     );
                     assert_eq!(
-                        WorldOwner::current().write(|world| rust_get_planet_info(
+                        World::current().write(|world| rust_get_planet_info(
                             world,
                             1,
                             0,
@@ -1028,10 +1026,10 @@ mod tests {
         // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
             crate::app::bridge::with_game(&mut game, || {
-                WorldOwner::current().write(rust_init_game_state);
+                World::current().write(rust_init_game_state);
 
                 {
-                    let result = WorldOwner::current().write(|world| {
+                    let result = World::current().write(|world| {
                         rust_open_state_file(world, 0, c"wb".as_ptr() as *const c_char)
                     });
                     assert_eq!(result, 1);
@@ -1047,23 +1045,23 @@ mod tests {
         // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
             crate::app::bridge::with_game(&mut game, || {
-                WorldOwner::current().write(rust_init_game_state);
+                World::current().write(rust_init_game_state);
 
                 let test_data = b"Hello, World!";
 
                 {
-                    WorldOwner::current().write(|world| {
+                    World::current().write(|world| {
                         rust_open_state_file(world, 0, c"wb".as_ptr() as *const c_char)
                     });
-                    let written = WorldOwner::current().write(|world| {
+                    let written = World::current().write(|world| {
                         rust_write_state_file(world, 0, test_data.as_ptr(), 1, test_data.len())
                     });
                     assert_eq!(written, test_data.len());
 
-                    WorldOwner::current().write(|world| rust_seek_state_file(world, 0, 0, 0));
+                    World::current().write(|world| rust_seek_state_file(world, 0, 0, 0));
 
                     let mut buf = vec![0u8; test_data.len()];
-                    let read = WorldOwner::current().write(|world| {
+                    let read = World::current().write(|world| {
                         rust_read_state_file(world, 0, buf.as_mut_ptr(), 1, test_data.len())
                     });
                     assert_eq!(read, test_data.len());
@@ -1080,20 +1078,20 @@ mod tests {
         // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
             crate::app::bridge::with_game(&mut game, || {
-                WorldOwner::current().write(rust_init_game_state);
+                World::current().write(rust_init_game_state);
 
                 let test_data = b"Test";
 
                 {
-                    WorldOwner::current().write(|world| {
+                    World::current().write(|world| {
                         rust_open_state_file(world, 1, c"wb".as_ptr() as *const c_char)
                     });
-                    WorldOwner::current().write(|world| {
+                    World::current().write(|world| {
                         rust_write_state_file(world, 1, test_data.as_ptr(), 1, test_data.len())
                     });
                 }
 
-                let length = WorldOwner::current().read(|world| rust_length_state_file(world, 1));
+                let length = World::current().read(|world| rust_length_state_file(world, 1));
                 assert_eq!(length, test_data.len());
             })
         }
@@ -1106,21 +1104,21 @@ mod tests {
         // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
             crate::app::bridge::with_game(&mut game, || {
-                WorldOwner::current().write(rust_init_game_state);
+                World::current().write(rust_init_game_state);
 
                 let test_data = b"Test";
 
                 {
-                    WorldOwner::current().write(|world| {
+                    World::current().write(|world| {
                         rust_open_state_file(world, 2, c"wb".as_ptr() as *const c_char)
                     });
-                    WorldOwner::current().write(|world| {
+                    World::current().write(|world| {
                         rust_write_state_file(world, 2, test_data.as_ptr(), 1, test_data.len())
                     });
                 }
 
-                WorldOwner::current().write(|world| rust_delete_state_file(world, 2));
-                let length = WorldOwner::current().read(|world| rust_length_state_file(world, 2));
+                World::current().write(|world| rust_delete_state_file(world, 2));
+                let length = World::current().read(|world| rust_length_state_file(world, 2));
                 assert_eq!(length, 0);
             })
         }
@@ -1133,26 +1131,25 @@ mod tests {
         // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
             crate::app::bridge::with_game(&mut game, || {
-                WorldOwner::current().write(rust_init_game_state);
+                World::current().write(rust_init_game_state);
 
                 let test_data = b"HelloWorld";
 
                 {
-                    WorldOwner::current().write(|world| {
+                    World::current().write(|world| {
                         rust_open_state_file(world, 0, c"wb".as_ptr() as *const c_char)
                     });
-                    WorldOwner::current().write(|world| {
+                    World::current().write(|world| {
                         rust_write_state_file(world, 0, test_data.as_ptr(), 1, test_data.len())
                     });
                 }
 
-                let result =
-                    WorldOwner::current().write(|world| rust_seek_state_file(world, 0, 5, 0));
+                let result = World::current().write(|world| rust_seek_state_file(world, 0, 5, 0));
                 assert_eq!(result, 1);
 
                 let mut buf = vec![0u8; 5];
                 {
-                    let read = WorldOwner::current()
+                    let read = World::current()
                         .write(|world| rust_read_state_file(world, 0, buf.as_mut_ptr(), 1, 5));
                     assert_eq!(read, 5);
                 }
@@ -1168,13 +1165,12 @@ mod tests {
         // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
             crate::app::bridge::with_game(&mut game, || {
-                WorldOwner::current().write(rust_init_game_state);
+                World::current().write(rust_init_game_state);
 
                 let test_value: u8 = 0xAB;
-                WorldOwner::current()
-                    .write(|world| rust_set_game_state_bits(world, 0, 7, test_value));
+                World::current().write(|world| rust_set_game_state_bits(world, 0, 7, test_value));
 
-                let ptr = WorldOwner::current().read(rust_get_game_state_bytes);
+                let ptr = World::current().read(rust_get_game_state_bytes);
                 assert!(!ptr.is_null());
 
                 {
@@ -1204,10 +1200,10 @@ mod tests {
         // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
             crate::app::bridge::with_game(&mut game, || {
-                WorldOwner::current().write(rust_init_game_state);
+                World::current().write(rust_init_game_state);
 
-                WorldOwner::current().write(|world| rust_set_game_state_bits(world, 0, 7, 0xAB));
-                let ptr = WorldOwner::current().read(rust_get_game_state_bytes);
+                World::current().write(|world| rust_set_game_state_bits(world, 0, 7, 0xAB));
+                let ptr = World::current().read(rust_get_game_state_bytes);
                 let size = rust_get_game_state_size();
 
                 let mut buffer = vec![0u8; size];
@@ -1215,22 +1211,22 @@ mod tests {
                     std::ptr::copy_nonoverlapping(ptr, buffer.as_mut_ptr(), size);
                 }
 
-                WorldOwner::current().write(rust_reset_game_state);
-                WorldOwner::current().write(rust_init_game_state);
+                World::current().write(rust_reset_game_state);
+                World::current().write(rust_init_game_state);
 
                 assert_eq!(
-                    WorldOwner::current().read(|world| rust_get_game_state_bits(world, 0, 7)),
+                    World::current().read(|world| rust_get_game_state_bits(world, 0, 7)),
                     0
                 );
 
                 {
-                    WorldOwner::current().write(|world| {
+                    World::current().write(|world| {
                         rust_restore_game_state_from_bytes(world, buffer.as_ptr(), size)
                     });
                 }
 
                 assert_eq!(
-                    WorldOwner::current().read(|world| rust_get_game_state_bits(world, 0, 7)),
+                    World::current().read(|world| rust_get_game_state_bits(world, 0, 7)),
                     0xAB
                 );
             })

@@ -236,8 +236,8 @@ pub unsafe fn uninit_game_structures() {
     })
 }
 
-/// # Safety
-/// Existing world resources must have been released before resetting their owner.
+/// Reset campaign values, retaining the caller’s global flags. Queue/resource
+/// teardown is a separate lifecycle step; this does not release those handles.
 pub fn init_glob_data(world: &mut crate::engine::World) {
     {
         let flags = world.data.game.glob_flags;

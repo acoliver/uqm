@@ -5,11 +5,7 @@
 //! `PickPlanetSide` in `scan.c` before the landing-site selection menu.
 
 #[cfg(not(test))]
-use crate::engine::StoryKey;
-#[cfg(not(test))]
-use crate::engine::World as WorldOwner;
-#[cfg(not(test))]
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
+use crate::engine::{Kernel, StoryKey, World, WorldData};
 use std::ffi::c_void;
 use std::sync::Mutex;
 
@@ -204,7 +200,7 @@ pub fn borrowed_assets(
 #[cfg(not(test))]
 fn sis_num_landers() -> u8 {
     unsafe {
-        let world = WorldFields::current();
+        let world = WorldData::current();
         std::ptr::addr_of!((**world).flagship.num_landers).read()
     }
 }
@@ -213,7 +209,7 @@ fn sis_num_landers() -> u8 {
 #[cfg(not(test))]
 fn sis_total_element_mass() -> u16 {
     unsafe {
-        let world = WorldFields::current();
+        let world = WorldData::current();
         std::ptr::addr_of!((**world).flagship.total_element_mass).read()
     }
 }
@@ -221,7 +217,7 @@ fn sis_total_element_mass() -> u16 {
 /// Read a game state bit-field via the FFI singleton.
 #[cfg(not(test))]
 fn get_game_state(world: &crate::engine::World, name: crate::engine::StoryKey) -> u32 {
-    crate::state::game_state_keys::get_game_state(world, name)
+    world.story_state(name)
 }
 
 /// Rust port of C `InitLander(BYTE LanderFlags)`.
@@ -243,7 +239,7 @@ pub extern "C" fn InitLander(lander_flags: u8) {
         }
         let lander_frame_0 = state.frames[0];
 
-        let old_context = SetContext(KernelOwner::current().read(|owner| owner.radar_context));
+        let old_context = SetContext(Kernel::current().read(|owner| owner.radar_context));
         BatchGraphics();
 
         let mut r = CRect {
@@ -280,10 +276,9 @@ unsafe fn draw_lander_status(lander_frame_0: *mut c_void, lander_flags: u8) {
 
     let (shield_flags, capacity_shift);
     if lander_flags == 0 {
-        shield_flags = WorldOwner::current()
-            .read(|world| get_game_state(world, StoryKey::LANDER_SHIELDS))
-            as u8;
-        capacity_shift = WorldOwner::current()
+        shield_flags =
+            World::current().read(|world| get_game_state(world, StoryKey::LANDER_SHIELDS)) as u8;
+        capacity_shift = World::current()
             .read(|world| get_game_state(world, StoryKey::IMPROVED_LANDER_CARGO))
             as u8;
     } else {

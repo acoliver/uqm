@@ -1,7 +1,7 @@
 use super::Handler;
 use crate::comm::races::encounter::EncounterApi;
 #[cfg(not(test))]
-use crate::engine::WorldData as WorldFields;
+use crate::engine::WorldData;
 pub(super) trait UmgahApi: EncounterApi<Handler> {
     fn add_biomass(&mut self, amount: u16);
 }
@@ -9,7 +9,7 @@ pub(super) trait UmgahApi: EncounterApi<Handler> {
 impl UmgahApi for super::super::script::live::LiveScript<Handler> {
     fn add_biomass(&mut self, amount: u16) {
         unsafe {
-            (**WorldFields::current()).flagship.total_bio_mass = WorldFields::current()
+            (**WorldData::current()).flagship.total_bio_mass = WorldData::current()
                 .read(|owner| owner.flagship.total_bio_mass)
                 .wrapping_add(amount);
         }

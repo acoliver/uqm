@@ -1,7 +1,7 @@
 #![cfg(not(test))]
 
 use crate::engine::battle::{link_queue, ShipId};
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
+use crate::engine::{Kernel, WorldData};
 use crate::navigation::abi::*;
 use std::mem;
 
@@ -38,14 +38,14 @@ pub unsafe extern "C" fn DrawCrewFuelString(y: COORD, state: SIZE) {
     if state == 0 {
         stamp.origin.x = CREW_XOFFS + (STAT_WIDTH >> 1) + 6;
         stamp.frame = SetAbsFrameIndex(
-            KernelOwner::current().read(|owner| owner.status_frame),
+            Kernel::current().read(|owner| owner.status_frame),
             if optWhichMenu == OPT_PC { 4 } else { 0 },
         );
         DrawStamp(&mut stamp);
     }
     stamp.origin.x = ENERGY_XOFFS + (STAT_WIDTH >> 1) - 5;
     stamp.frame = SetAbsFrameIndex(
-        KernelOwner::current().read(|owner| owner.status_frame),
+        Kernel::current().read(|owner| owner.status_frame),
         if optWhichMenu == OPT_PC { 5 } else { 1 },
     );
     if state >= 0 {
@@ -57,7 +57,7 @@ pub unsafe extern "C" fn DrawCrewFuelString(y: COORD, state: SIZE) {
 }
 
 unsafe fn draw_ship_name_string(p_str: *mut UNICODE, char_count: COUNT, y: COORD) {
-    let old_font = SetContextFont(KernelOwner::current().read(|owner| owner.star_con_font));
+    let old_font = SetContextFont(Kernel::current().read(|owner| owner.star_con_font));
     let mut text: TEXT = mem::zeroed();
     text.pStr = p_str;
     text.CharCount = char_count;
@@ -136,9 +136,9 @@ pub(crate) unsafe fn init_ship_status(
     let mut old_origin = POINT { x: 0, y: 0 };
     if let Some(ship) = starship {
         assert!(ship.player >= 0);
-        y = KernelOwner::current().read(|owner| owner.status_offsets[ship.player as usize]);
+        y = Kernel::current().read(|owner| owner.status_offsets[ship.player as usize]);
     }
-    let old_context = SetContext(KernelOwner::current().read(|owner| owner.status_context));
+    let old_context = SetContext(Kernel::current().read(|owner| owner.status_context));
     if !clip_rect.is_null() {
         GetContextClipRect(&mut old_clip);
         let mut r = old_clip;
@@ -180,12 +180,12 @@ unsafe fn draw_status_title(
     starship: Option<crate::engine::battle::link_queue::PickShip>,
     y: COORD,
 ) {
-    let world = WorldFields::current();
+    let world = WorldData::current();
     if starship.is_none_or(|ship| ship.captain != 0) {
         DrawCrewFuelString(y, 0);
         let loc = SetAbsStringTableIndex((*siptr).race_strings, 1);
         draw_ship_name_string(GetStringAddress(loc).cast(), GetStringLength(loc), y);
-        let old_font = SetContextFont(KernelOwner::current().read(|owner| owner.tiny_font));
+        let old_font = SetContextFont(Kernel::current().read(|owner| owner.tiny_font));
         let mut buf = [0u8; 30];
         let (name, count) = if let Some(ship) = starship {
             let name = SetAbsStringTableIndex((*siptr).race_strings, ship.captain as COUNT);

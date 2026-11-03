@@ -5,7 +5,7 @@ use uqm_rust::battle::gendef::*;
 use uqm_rust::planets::generate::late_exports::*;
 use uqm_rust::planets::generate::vtable::{GenerateFunctions, DEFAULT_HOOKS};
 use uqm_rust::planets::surface::BIOLOGICAL_SCAN;
-use uqm_rust::state::game_state_keys::{get_game_state, set_game_state};
+use uqm_rust::state::game_state_keys::get_game_state;
 
 fn slots(table: &GenerateFunctions) -> [usize; 13] {
     [
@@ -84,21 +84,13 @@ pub fn check() {
     let pickup = GENERATE_SPATHI_FUNCTIONS.pickup_life.unwrap();
     for retrieved in 0..=32 {
         uqm_rust::engine::World::current().write(|world| {
-            set_game_state(
-                world,
-                uqm_rust::engine::StoryKey::SPATHI_CREATURES_ELIMINATED,
-                0,
-            )
+            (world).set_story_state(uqm_rust::engine::StoryKey::SPATHI_CREATURES_ELIMINATED, 0)
         });
         uqm_rust::engine::World::current().write(|world| {
-            set_game_state(world, uqm_rust::engine::StoryKey::SPATHI_SHIELDED_SELVES, 0)
+            (world).set_story_state(uqm_rust::engine::StoryKey::SPATHI_SHIELDED_SELVES, 0)
         });
         uqm_rust::engine::World::current().write(|world| {
-            set_game_state(
-                world,
-                uqm_rust::engine::StoryKey::SPATHI_CREATURES_EXAMINED,
-                0,
-            )
+            (world).set_story_state(uqm_rust::engine::StoryKey::SPATHI_CREATURES_EXAMINED, 0)
         });
         harness.state.SysInfo.PlanetInfo.ScanRetrieveMask[BIOLOGICAL_SCAN] = if retrieved == 32 {
             u32::MAX
@@ -127,11 +119,7 @@ pub fn check() {
     harness.state.PlanetDesc[1].pPrevDesc = sun;
     let other = std::ptr::addr_of_mut!(harness.state.PlanetDesc[1]);
     uqm_rust::engine::World::current().write(|world| {
-        set_game_state(
-            world,
-            uqm_rust::engine::StoryKey::SPATHI_CREATURES_EXAMINED,
-            0,
-        )
+        (world).set_story_state(uqm_rust::engine::StoryKey::SPATHI_CREATURES_EXAMINED, 0)
     });
     assert!(unsafe { pickup(&mut *harness.state, other, u16::MAX) });
     assert_eq!(
@@ -207,7 +195,7 @@ fn check_live_queues(harness: &mut Harness) {
         harness.star_index = BOMB_DEFINED;
         harness.set_star(0, 0);
         uqm_rust::engine::World::current()
-            .write(|world| set_game_state(world, uqm_rust::engine::StoryKey::UTWIG_BOMB, 0));
+            .write(|world| (world).set_story_state(uqm_rust::engine::StoryKey::UTWIG_BOMB, 0));
         let before = format!("{:?}", harness.state);
         assert!(GENERATE_UTWIG_FUNCTIONS.init_npcs.unwrap()(
             &mut *harness.state

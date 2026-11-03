@@ -4,8 +4,7 @@
 //! movement and destination selection still go through the menu callback.
 
 use crate::comm::dispatch::CPoint;
-use crate::engine::StoryKey;
-use crate::engine::{World as WorldOwner, WorldData as WorldFields};
+use crate::engine::{StoryKey, World, WorldData};
 
 #[no_mangle]
 pub static mut cursorLoc: CPoint = CPoint { x: 0, y: 0 };
@@ -70,7 +69,7 @@ pub unsafe fn cursor() -> Option<(i16, i16)> {
 pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> u32 {
     use crate::c_bindings::controller_input::PulsedInputState;
     let time_in = crate::time::counter_abi::GetTimeCounter();
-    let activity = WorldFields::current().read(|owner| owner.game.current_activity);
+    let activity = WorldData::current().read(|owner| owner.game.current_activity);
     let hyper = activity & 0xff == 3;
     let last = std::ptr::addr_of_mut!(LAST_BUF).cast::<u8>();
     if (*menu).Initialized == 0 {
@@ -78,7 +77,7 @@ pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> u32 {
         (*menu).InputFunc = Some(DoMoveCursor);
         ACTIVE = true;
         let universe = if hyper {
-            let sis = &(**WorldFields::current()).flagship;
+            let sis = &(**WorldData::current()).flagship;
             let log_units_x = (((ScreenWidth - 64) << 5) >> 4) * 195;
             let log_units_y = ((ScreenHeight << 5) >> 4) * 25;
             CPoint {
@@ -86,8 +85,7 @@ pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> u32 {
                 y: (9999 - (sis.log_y * 625 + (log_units_y >> 1)) / log_units_y) as i16,
             }
         } else {
-            (*(**WorldOwner::current()).star_pointer(crate::planets::starmap::current_catalog()))
-                .star_pt
+            (*(**World::current()).star_pointer(crate::planets::starmap::current_catalog())).star_pt
         };
         flashCurrentLocation(&universe);
         *last = 0;
@@ -101,7 +99,7 @@ pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> u32 {
         return 0;
     } else if keys[9] != 0 {
         let selected = std::ptr::addr_of!(cursorLoc).read();
-        (**WorldFields::current()).game.autopilot = crate::comm::locdata::CPoint {
+        (**WorldData::current()).game.autopilot = crate::comm::locdata::CPoint {
             x: selected.x,
             y: selected.y,
         };
@@ -111,7 +109,7 @@ pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> u32 {
             if hyper {
                 crate::front_end::uqmdebug::do_instant_move();
             } else if activity & 0xff == 4 {
-                (**WorldFields::current()).game.current_activity |= 0x0800;
+                (**WorldData::current()).game.current_activity |= 0x0800;
                 crate::front_end::uqmdebug::DEBUG_HOOK =
                     Some(crate::front_end::uqmdebug::do_instant_move);
             }
@@ -120,10 +118,7 @@ pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> u32 {
         }
         DrawStarMap(0, std::ptr::null_mut());
     } else if keys[21] != 0 {
-        if WorldOwner::current().read(|world| {
-            crate::state::game_state_keys::get_game_state(world, StoryKey::ARILOU_SPACE_SIDE)
-        }) <= 1
-        {
+        if World::current().read(|world| world.story_state(StoryKey::ARILOU_SPACE_SIDE)) <= 1 {
             let old = std::ptr::addr_of!(cursorLoc).read();
             if DoStarSearch(menu) == 0 {
                 UpdateCursorLocation(0, 0, &old);
@@ -168,7 +163,7 @@ pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> u32 {
         SleepThreadUntil(time_in.wrapping_add(14));
     }
     flashCurrentLocation(std::ptr::null());
-    let keep_going = WorldFields::current().read(|owner| owner.game.current_activity) & 0x4000 == 0;
+    let keep_going = WorldData::current().read(|owner| owner.game.current_activity) & 0x4000 == 0;
     if !keep_going {
         ACTIVE = false;
     }

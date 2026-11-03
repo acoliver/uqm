@@ -1,6 +1,6 @@
 use super::{EncounterApi, Handler};
 #[cfg(not(test))]
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
+use crate::engine::{Kernel, WorldData};
 
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) struct Date {
@@ -66,7 +66,7 @@ mod live {
     impl StarbaseApi for LiveScript<Handler> {
         fn date(&self) -> Date {
             unsafe {
-                let clock = &(**WorldFields::current()).game.game_clock;
+                let clock = &(**WorldData::current()).game.game_clock;
                 Date {
                     year: clock.year_index,
                     month: clock.month_index,
@@ -76,7 +76,7 @@ mod live {
         }
         fn ship(&self) -> Ship {
             unsafe {
-                let sis = &(**WorldFields::current()).flagship;
+                let sis = &(**WorldData::current()).flagship;
                 Ship {
                     drives: sis.drive_slots,
                     jets: sis.jet_slots,
@@ -94,7 +94,7 @@ mod live {
         }
         fn using_speech(&self) -> bool {
             {
-                KernelOwner::current().read(|owner| owner.using_speech) != 0
+                Kernel::current().read(|owner| owner.using_speech) != 0
             }
         }
         fn random(&mut self) -> u32 {
@@ -107,18 +107,18 @@ mod live {
         }
         fn mineral_amount(&self, category: usize) -> u16 {
             {
-                WorldFields::current().read(|owner| owner.flagship.element_amounts[category])
+                WorldData::current().read(|owner| owner.flagship.element_amounts[category])
             }
         }
         fn mineral_worth(&self, category: usize) -> u8 {
             {
-                WorldFields::current().read(|owner| owner.game.element_worth[category])
+                WorldData::current().read(|owner| owner.game.element_worth[category])
             }
         }
         fn remove_minerals(&mut self, category: usize, amount: u16) {
             unsafe {
-                (**WorldFields::current()).flagship.element_amounts[category] -= amount;
-                (**WorldFields::current()).flagship.total_element_mass -= amount;
+                (**WorldData::current()).flagship.element_amounts[category] -= amount;
+                (**WorldData::current()).flagship.total_element_mass -= amount;
             }
         }
         fn draw_cargo(&mut self, old: u8, new: u8) {
@@ -157,7 +157,7 @@ mod live {
         fn skip_sale(&mut self) -> bool {
             unsafe {
                 AnyButtonPress(1) != 0
-                    || WorldFields::current().read(|owner| owner.game.current_activity) & (1 << 14)
+                    || WorldData::current().read(|owner| owner.game.current_activity) & (1 << 14)
                         != 0
             }
         }

@@ -2,7 +2,7 @@ use super::Handler;
 use crate::comm::locdata::CSisState;
 use crate::comm::races::encounter::EncounterApi;
 #[cfg(not(test))]
-use crate::engine::WorldData as WorldFields;
+use crate::engine::WorldData;
 
 pub(super) trait DruugeApi: EncounterApi<Handler> {
     fn ship(&self) -> CSisState;
@@ -16,7 +16,7 @@ pub(super) trait DruugeApi: EncounterApi<Handler> {
 impl DruugeApi for crate::comm::races::script::live::LiveScript<Handler> {
     fn ship(&self) -> CSisState {
         unsafe {
-            let world = WorldFields::current();
+            let world = WorldData::current();
             std::ptr::addr_of!((**world).flagship)
                 .cast::<CSisState>()
                 .read()
@@ -24,19 +24,19 @@ impl DruugeApi for crate::comm::races::script::live::LiveScript<Handler> {
     }
     fn has_escorts(&self) -> bool {
         {
-            !WorldFields::current()
+            !WorldData::current()
                 .read(|owner| owner.game.built_ship_q.head)
                 .is_null()
         }
     }
     fn crew_cost(&self) -> u8 {
         {
-            WorldFields::current().read(|owner| owner.game.crew_cost)
+            WorldData::current().read(|owner| owner.game.crew_cost)
         }
     }
     fn set_crew_cost(&mut self, value: u8) {
         unsafe {
-            (**WorldFields::current()).game.crew_cost = value;
+            (**WorldData::current()).game.crew_cost = value;
         }
     }
     fn number(&mut self, value: i32) {

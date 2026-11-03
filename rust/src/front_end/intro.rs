@@ -1,7 +1,7 @@
 //! Presentation scripts and legacy-video input, ported from uqm/intro.c.
 
 #[cfg(not(test))]
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
+use crate::engine::{Kernel, WorldData};
 use crate::navigation::abi::*;
 use std::ffi::{c_char, c_int};
 use std::ptr;
@@ -132,8 +132,8 @@ pub(crate) mod runtime {
     }
 
     unsafe fn generate_sis(state: &mut PresentationState) {
-        let world = WorldFields::current();
-        let old_context = SetContext(KernelOwner::current().read(|owner| owner.off_screen_context));
+        let world = WorldData::current();
+        let old_context = SetContext(Kernel::current().read(|owner| owner.off_screen_context));
         let skeleton =
             CaptureDrawable(LoadGraphicInstance(SISSKEL_MASK_PMAP_ANIM.as_ptr().cast()).cast());
         let modules =
@@ -234,7 +234,7 @@ pub(crate) mod runtime {
     unsafe extern "C" fn do_presentation(raw: *mut c_void) -> BOOLEAN {
         let state = &mut *raw.cast::<PresentationState>();
         if menu(KEY_MENU_CANCEL)
-            || WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
+            || WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
                 != 0
         {
             crate::automation::ending::presentation_cancelled();
@@ -702,7 +702,7 @@ pub(crate) mod runtime {
         }
         state.slide_show = SetAbsStringTableIndex(state.slide_show, 0);
         state.oper_index = 0;
-        let old_context = SetContext(KernelOwner::current().read(|owner| owner.screen_context));
+        let old_context = SetContext(Kernel::current().read(|owner| owner.screen_context));
         let mut old_rect: RECT = std::mem::zeroed();
         GetContextClipRect(&mut old_rect);
         let old_font = SetContextFont(ptr::null_mut());
@@ -738,7 +738,7 @@ pub(crate) mod runtime {
         if menu(KEY_MENU_SELECT)
             || menu(KEY_MENU_CANCEL)
             || menu(KEY_MENU_SPECIAL)
-            || WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
+            || WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
                 != 0
         {
             return 0;
@@ -768,7 +768,7 @@ pub(crate) mod runtime {
             ScreenFadeType_FadeAllToBlack,
             (ONE_SECOND / 2) as SIZE,
         ));
-        SetContext(KernelOwner::current().read(|owner| owner.screen_context));
+        SetContext(Kernel::current().read(|owner| owner.screen_context));
         SetContextBackGroundColor(BLACK_COLOR);
         ClearDrawable();
         FadeScreen(ScreenFadeType_FadeAllToColor, 0);

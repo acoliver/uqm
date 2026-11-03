@@ -35,7 +35,7 @@
 //! Not checked here: race ids against the available-race queue, which belongs
 //! to the unported "RacQ" owner.
 
-use crate::engine::World as WorldOwner;
+use crate::engine::World;
 use std::fmt;
 
 use super::RuntimeError;
@@ -760,7 +760,7 @@ pub fn restore_state_files(
 /// `InitGroupInfo` on the live files: empty the random groups and, when
 /// `first_time`, restart the defined groups.
 pub fn init_group_info(first_time: bool) -> Result<(), StateSectionError> {
-    WorldOwner::current()
+    World::current()
         .write(|world| {
             with_state_files(world, |files| {
                 files

@@ -1,6 +1,6 @@
 use super::{CSisState, EncounterApi, Handler};
 #[cfg(not(test))]
-use crate::engine::WorldData as WorldFields;
+use crate::engine::WorldData;
 
 pub(super) trait MelnormApi: EncounterApi<Handler> {
     fn ship(&self) -> CSisState;
@@ -37,7 +37,7 @@ mod live {
     impl MelnormApi for LiveScript<Handler> {
         fn ship(&self) -> CSisState {
             unsafe {
-                let world = WorldFields::current();
+                let world = WorldData::current();
                 std::ptr::addr_of!((**world).flagship)
                     .cast::<CSisState>()
                     .read()
@@ -45,7 +45,7 @@ mod live {
         }
         fn set_ship(&mut self, ship: CSisState) {
             unsafe {
-                let world = WorldFields::current();
+                let world = WorldData::current();
                 std::ptr::addr_of_mut!((**world).flagship)
                     .cast::<CSisState>()
                     .write(ship);
@@ -53,12 +53,12 @@ mod live {
         }
         fn module_cost(&self, id: usize) -> u8 {
             {
-                WorldFields::current().read(|owner| owner.game.module_cost[id])
+                WorldData::current().read(|owner| owner.game.module_cost[id])
             }
         }
         fn set_module_cost(&mut self, id: usize, cost: u8) {
             unsafe {
-                (**WorldFields::current()).game.module_cost[id] = cost;
+                (**WorldData::current()).game.module_cost[id] = cost;
             }
         }
         fn number(&mut self, number: i32) {

@@ -1,7 +1,7 @@
 use super::Handler;
 use crate::comm::races::alliance::AllianceApi;
 #[cfg(not(test))]
-use crate::engine::WorldData as WorldFields;
+use crate::engine::WorldData;
 
 pub(super) trait PkunkApi: AllianceApi<Handler> {
     fn date(&self) -> (u16, u16, u16);
@@ -12,7 +12,7 @@ pub(super) trait PkunkApi: AllianceApi<Handler> {
 impl PkunkApi for crate::comm::races::script::live::LiveScript<Handler> {
     fn date(&self) -> (u16, u16, u16) {
         unsafe {
-            let date = &(**WorldFields::current()).game.game_clock;
+            let date = &(**WorldData::current()).game.game_clock;
             (
                 date.year_index,
                 u16::from(date.month_index),

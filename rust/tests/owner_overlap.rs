@@ -300,6 +300,19 @@ fn campaign_events_schedule_and_dispatch_using_the_existing_world() {
                 2
             );
         });
+        bridge::with_game(&mut game, || {
+            World::current().write(|world| {
+                world.set_story_state(StoryKey::ARILOU_CHECKED_UMGAH, 0);
+                world.data.game.game_clock.tick_count = 1;
+                world.data.game.game_clock.day_in_ticks = 1;
+            });
+            AddEvent(1, 0, 1, 0, ARILOU_UMGAH_CHECK as u8);
+            uqm_rust::time::clock_bridge::rust_clock_tick();
+            World::current().read(|world| {
+                assert_eq!(world.data.game.game_clock.day_index, 2);
+                assert_eq!(world.story_state(StoryKey::ARILOU_CHECKED_UMGAH), 2);
+            });
+        });
         UninitQueue(&raw mut game.world.data.game.game_clock.event_q);
     }
 }

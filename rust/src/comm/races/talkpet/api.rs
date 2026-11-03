@@ -1,9 +1,9 @@
 use super::Handler;
 use crate::comm::races::alliance::AllianceApi;
 #[cfg(not(test))]
-use crate::engine::World as WorldOwner;
+use crate::engine::World;
 #[cfg(not(test))]
-use crate::engine::WorldData as WorldFields;
+use crate::engine::WorldData;
 
 pub(super) trait TalkpetApi: AllianceApi<Handler> {
     fn flags(&self) -> u8;
@@ -15,12 +15,12 @@ pub(super) trait TalkpetApi: AllianceApi<Handler> {
 impl TalkpetApi for super::super::script::live::LiveScript<Handler> {
     fn flags(&self) -> u8 {
         {
-            WorldFields::current().read(|owner| owner.game.glob_flags)
+            WorldData::current().read(|owner| owner.game.glob_flags)
         }
     }
     fn npc_ships(&self) -> bool {
         {
-            !WorldFields::current()
+            !WorldData::current()
                 .read(|owner| owner.game.npc_built_ship_q.head)
                 .is_null()
         }
@@ -28,7 +28,7 @@ impl TalkpetApi for super::super::script::live::LiveScript<Handler> {
     fn umgah_alive(&mut self) -> bool {
         use crate::battle::build_native::engine::start_sphere_tracking;
         unsafe {
-            WorldOwner::current().write(|world| {
+            World::current().write(|world| {
                 start_sphere_tracking(world, crate::comm::dispatch::ship::UMGAH_SHIP as u16)
             }) != 0
         }

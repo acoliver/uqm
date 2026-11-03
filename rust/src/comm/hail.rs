@@ -10,13 +10,13 @@
 #[cfg(not(test))]
 use crate::engine::StoryKey;
 #[cfg(not(test))]
-use crate::engine::World as WorldOwner;
+use crate::engine::World;
 // ============================================================================
 // C bridge declarations (not compiled in test builds)
 // ============================================================================
 
 #[cfg(not(test))]
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
+use crate::engine::{Kernel, WorldData};
 #[cfg(not(test))]
 pub(super) mod c_bridge {
     use std::ffi::c_int;
@@ -120,12 +120,10 @@ impl super::player_font::FontRelease for CFontRelease {
 #[cfg(not(test))]
 fn is_starbase_conversation() -> bool {
     // Direct game state access (replaces c_IsStarbaseConversation)
-    let global_flags = WorldOwner::current().read(|world| {
-        crate::state::game_state_keys::get_game_state(world, StoryKey::GLOBAL_FLAGS_AND_DATA)
-    });
-    let starbase_available = WorldOwner::current().read(|world| {
-        crate::state::game_state_keys::get_game_state(world, StoryKey::STARBASE_AVAILABLE)
-    });
+    let global_flags =
+        World::current().read(|world| world.story_state(StoryKey::GLOBAL_FLAGS_AND_DATA));
+    let starbase_available =
+        World::current().read(|world| world.story_state(StoryKey::STARBASE_AVAILABLE));
     global_flags == 0xFF && starbase_available != 0
 }
 
@@ -138,7 +136,7 @@ fn draw_sis_com_window() {
 /// Get the planet name from GlobData.flagship.planet_name.
 #[cfg(not(test))]
 unsafe fn planet_name() -> *const std::ffi::c_char {
-    let world = WorldFields::current();
+    let world = WorldData::current();
     // GlobData.flagship.planet_name is a char[16] array
     // Use addr_of_mut! to avoid creating a shared reference to mutable static
     let planet_name_ptr = std::ptr::addr_of_mut!((**world).flagship.planet_name);
@@ -149,9 +147,7 @@ unsafe fn planet_name() -> *const std::ffi::c_char {
 #[cfg(not(test))]
 pub(crate) unsafe fn game_string(index: i32) -> *const std::ffi::c_char {
     let s = c_bridge::SetAbsStringTableIndex(
-        KernelOwner::current()
-            .read(|owner| owner.game_strings)
-            .cast(),
+        Kernel::current().read(|owner| owner.game_strings).cast(),
         index as u16,
     );
     c_bridge::GetStringAddress(s)
@@ -311,7 +307,7 @@ pub unsafe fn hail_alien() {
         // ----------------------------------------------------------------
         // Step 7: Set SpaceContext and save old font
         // ----------------------------------------------------------------
-        let space_ctx = { KernelOwner::current().read(|owner| owner.space_context) };
+        let space_ctx = { Kernel::current().read(|owner| owner.space_context) };
         SetContext(space_ctx.cast());
         let old_font = SetContextFont(player_font.cast());
 
@@ -322,7 +318,7 @@ pub unsafe fn hail_alien() {
         let anim_ctx = create_named_context(anim_ctx_name);
         c_SetAnimContext(anim_ctx.cast());
         SetContext(anim_ctx);
-        let screen = { KernelOwner::current().read(|owner| owner.screen) };
+        let screen = { Kernel::current().read(|owner| owner.screen) };
         SetContextFGFrame(screen.cast());
 
         let mut frame_rect = crate::comm::locdata::CRect::default();
@@ -381,7 +377,7 @@ pub unsafe fn hail_alien() {
         // Step 11: Set CHECK_LOAD flag, call encounter funcs, run DoInput
         // ----------------------------------------------------------------
         // LastActivity |= CHECK_LOAD (0x1000)
-        (**KernelOwner::current()).last_activity |= 0x1000;
+        (**Kernel::current()).last_activity |= 0x1000;
         if let Some(callback) = c_bridge::CommData.init_encounter_func {
             callback();
         }

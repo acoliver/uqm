@@ -1,7 +1,7 @@
 use super::Handler;
 use crate::comm::races::alliance::AllianceApi;
 #[cfg(not(test))]
-use crate::engine::WorldData as WorldFields;
+use crate::engine::WorldData;
 use crate::planets::universe_units::{universe_to_logx, universe_to_logy};
 use crate::starbase::sis_modules::{ModuleType, EMPTY_MODULE_SLOT, FUEL_RESERVE};
 
@@ -85,7 +85,7 @@ impl ChmmrApi for super::super::script::live::LiveScript<Handler> {
         let starbase = self.get("STARBASE_AVAILABLE") != 0;
 
         unsafe {
-            refit(&mut **WorldFields::current(), starbase);
+            refit(&mut **WorldData::current(), starbase);
         }
     }
     fn intro_mode(&mut self, mode: i32, duration: i32) {

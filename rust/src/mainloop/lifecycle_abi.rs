@@ -1,9 +1,9 @@
 //! Main-thread lifecycle callbacks, ported from starcon.c (GPL-2.0-or-later).
 
-use crate::engine::Kernel as KernelOwner;
+use crate::engine::Kernel;
 use crate::engine::StoryKey;
-use crate::engine::World as WorldOwner;
-use crate::engine::WorldData as WorldFields;
+use crate::engine::World;
+use crate::engine::WorldData;
 use crate::ships::native::abi::*;
 use std::{ffi::c_void, ptr};
 
@@ -12,7 +12,7 @@ pub static mut MainExited: i32 = 0;
 
 unsafe extern "C" fn on_battle_frame() {
     crate::time::clock_abi::live::GameClockTick();
-    WorldOwner::current().write(|world| {
+    World::current().write(|world| {
         let opening = crate::navigation::get(world, StoryKey::ARILOU_SPACE) == 1;
         let counter = crate::navigation::get(world, StoryKey::ARILOU_SPACE_COUNTER);
         crate::navigation::set(
@@ -25,7 +25,7 @@ unsafe extern "C" fn on_battle_frame() {
             },
         );
     });
-    if WorldFields::current().read(|owner| owner.game.current_activity)
+    if WorldData::current().read(|owner| owner.game.current_activity)
         & (CHECK_ABORT | CHECK_LOAD) as u16
         == 0
     {
@@ -37,15 +37,14 @@ unsafe extern "C" fn on_battle_frame() {
 unsafe extern "C" fn background_init_kernel(timeout: u32) {
     crate::ships::master_native::LoadMasterShipList(Some(crate::threading::legacy_abi::TaskSwitch));
     crate::threading::legacy_abi::TaskSwitch();
-    KernelOwner::current().write(|kernel| {
+    Kernel::current().write(|kernel| {
         crate::game_init::kernel_abi::InitGameKernel(
             kernel,
-            WorldOwner::current().read(|world| world.activity()),
+            World::current().read(|world| world.activity()),
         )
     });
     while crate::time::counter_abi::GetTimeCounter() <= timeout
-        && WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
-            == 0
+        && WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16 == 0
     {
         super::input_abi::UpdateInputState();
         if crate::time::source::is_replay() {
@@ -77,7 +76,7 @@ pub unsafe fn uqm_battle_with_frame_callback() {
 /// Called on the game thread while live state and input are initialized.
 pub unsafe extern "C" fn signal_stop_main_thread() {
     ptr::addr_of_mut!(GamePaused).write_volatile(0);
-    (**WorldFields::current()).game.current_activity |= CHECK_ABORT as u16;
+    (**WorldData::current()).game.current_activity |= CHECK_ABORT as u16;
     crate::threading::legacy_abi::TaskSwitch();
 }
 

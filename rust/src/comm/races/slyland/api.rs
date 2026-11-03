@@ -1,7 +1,7 @@
 use super::Handler;
 use crate::comm::races::encounter::EncounterApi;
 #[cfg(not(test))]
-use crate::engine::WorldData as WorldFields;
+use crate::engine::WorldData;
 
 pub(super) trait SlylandApi: EncounterApi<Handler> {
     fn choices(&self) -> [u16; 5];
@@ -38,8 +38,8 @@ mod live {
         fn position(&self) -> (i32, i32, i32, i32) {
             unsafe {
                 (
-                    WorldFields::current().read(|owner| owner.flagship.log_x),
-                    WorldFields::current().read(|owner| owner.flagship.log_y),
+                    WorldData::current().read(|owner| owner.flagship.log_x),
+                    WorldData::current().read(|owner| owner.flagship.log_y),
                     ScreenWidth,
                     ScreenHeight,
                 )

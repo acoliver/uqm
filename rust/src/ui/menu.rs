@@ -1,7 +1,7 @@
 #![cfg(not(test))]
 
 use super::palette::*;
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
+use crate::engine::{Kernel, WorldData};
 use crate::navigation::abi::*;
 
 use super::menu_state::{
@@ -22,7 +22,7 @@ pub unsafe extern "C" fn previous_menu_state(base: BYTE, current: BYTE) -> BYTE 
     super::menu_state::previous_state(
         base,
         current,
-        WorldFields::current().read(|owner| owner.game.glob_flags),
+        WorldData::current().read(|owner| owner.game.glob_flags),
     )
 }
 
@@ -58,7 +58,7 @@ unsafe fn draw_pc_menu(begin: u8, end: u8, selected: u8, highlight: u8, rect: &m
     }
     rect.extent.height = i16::from(count) * ITEM_HEIGHT + 4;
     draw_pc_frame(rect);
-    let old_font = SetContextFont(KernelOwner::current().read(|owner| owner.star_con_font));
+    let old_font = SetContextFont(Kernel::current().read(|owner| owner.star_con_font));
     let mut text: TEXT = mem::zeroed();
     let mut buffer = [0 as UNICODE; 256];
     text.align = TEXT_ALIGN_ALIGN_LEFT;
@@ -72,9 +72,9 @@ unsafe fn draw_pc_menu(begin: u8, end: u8, selected: u8, highlight: u8, rect: &m
         let label = game_string(MAINMENU_STRING_BASE + item as u32);
         if item == PM_FUEL || item == PM_CREW {
             let cost = if item == PM_FUEL {
-                WorldFields::current().read(|owner| owner.game.fuel_cost)
+                WorldData::current().read(|owner| owner.game.fuel_cost)
             } else {
-                WorldFields::current().read(|owner| owner.game.crew_cost)
+                WorldData::current().read(|owner| owner.game.crew_cost)
             };
             let mut rendered = [0 as UNICODE; 128];
             libc::snprintf(
@@ -207,7 +207,7 @@ pub unsafe extern "C" fn DoMenuChooser(menu: *mut MENU_STATE, base_state: BYTE) 
         new_state = next_state(
             base,
             new_state,
-            WorldFields::current().read(|owner| owner.game.glob_flags),
+            WorldData::current().read(|owner| owner.game.glob_flags),
         );
     } else if use_alt && PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0 {
         new_state = convert_alternate(base, new_state);
@@ -271,12 +271,12 @@ pub unsafe extern "C" fn DrawMenuStateStrings(begin: BYTE, state: SWORD) {
     let mut frame: FRAME = ptr::null_mut();
     if state <= i16::from(end_state(begin)) - i16::from(begin) {
         frame = SetAbsFrameIndex(
-            KernelOwner::current().read(|owner| owner.play_frame),
+            Kernel::current().read(|owner| owner.play_frame),
             (i16::from(begin) + state) as u16,
         );
     }
     pre_update_flash_rect();
-    let old_context = SetContext(KernelOwner::current().read(|owner| owner.status_context));
+    let old_context = SetContext(Kernel::current().read(|owner| owner.status_context));
     let mut rect: RECT = mem::zeroed();
     GetContextClipRect(&mut rect);
     let mut stamp = STAMP {
@@ -328,9 +328,9 @@ pub unsafe extern "C" fn DrawMenuStateStrings(begin: BYTE, state: SWORD) {
         DrawStamp(&mut stamp);
         if begin == PM_CREW || begin == PM_FUEL {
             let value = if begin == PM_CREW {
-                WorldFields::current().read(|owner| owner.game.crew_cost)
+                WorldData::current().read(|owner| owner.game.crew_cost)
             } else {
-                WorldFields::current().read(|owner| owner.game.fuel_cost)
+                WorldData::current().read(|owner| owner.game.fuel_cost)
             };
             let mut cost = [0 as UNICODE; 20];
             let rendered = format!("{value}");
@@ -343,7 +343,7 @@ pub unsafe extern "C" fn DrawMenuStateStrings(begin: BYTE, state: SWORD) {
             text.align = TEXT_ALIGN_ALIGN_RIGHT;
             text.CharCount = COUNT::MAX;
             text.pStr = cost.as_mut_ptr();
-            SetContextFont(KernelOwner::current().read(|owner| owner.tiny_font));
+            SetContextFont(Kernel::current().read(|owner| owner.tiny_font));
             SetContextForeGroundColor(THREEDOMENU_TEXT_COLOR);
             font_DrawText(&mut text);
         }
@@ -357,7 +357,7 @@ use std::{mem, ptr};
 
 unsafe fn game_string(index: u32) -> *mut UNICODE {
     GetStringAddress(SetAbsStringTableIndex(
-        KernelOwner::current().read(|owner| owner.game_strings),
+        Kernel::current().read(|owner| owner.game_strings),
         index as u16,
     ))
     .cast()

@@ -2,9 +2,9 @@
 
 use crate::comm::locdata::{CAnimationDesc, CLocData};
 #[cfg(not(test))]
-use crate::engine::World as WorldOwner;
+use crate::engine::World;
 #[cfg(not(test))]
-use crate::engine::WorldData as WorldFields;
+use crate::engine::WorldData;
 
 pub(super) const ANIM_DISABLED: u8 = 1 << 7;
 pub(super) const ONE_SECOND: u16 = 840;
@@ -98,7 +98,7 @@ pub(super) mod live {
             let (start, end) = crate::state::game_state_keys::bit_range(key)
                 .expect("dialogue uses an unknown game-state key");
             {
-                WorldOwner::current().read(|world| {
+                World::current().read(|world| {
                     crate::state::ffi::rust_get_game_state_bits(world, start as i32, end as i32)
                 })
             }
@@ -108,7 +108,7 @@ pub(super) mod live {
             let (start, end) = crate::state::game_state_keys::bit_range(key)
                 .expect("dialogue uses an unknown game-state key");
             {
-                WorldOwner::current().write(|world| {
+                World::current().write(|world| {
                     crate::state::ffi::rust_set_game_state_bits(
                         world,
                         start as i32,
@@ -125,7 +125,7 @@ pub(super) mod live {
 
         fn response(&mut self, phrase: u16, handler: H, fragments: &[i32]) {
             unsafe {
-                let world = WorldFields::current();
+                let world = WorldData::current();
                 let text = if fragments.is_empty() {
                     GetStringAddress(SetAbsStringTableIndex(
                         (COMM_DATA.conversation_phrases).cast(),
@@ -182,9 +182,9 @@ pub(super) mod live {
         fn supplies(&self) -> Supplies {
             {
                 Supplies {
-                    landers: WorldFields::current().read(|owner| owner.flagship.num_landers),
-                    fuel: WorldFields::current().read(|owner| owner.flagship.fuel_on_board),
-                    radioactives: WorldFields::current()
+                    landers: WorldData::current().read(|owner| owner.flagship.num_landers),
+                    fuel: WorldData::current().read(|owner| owner.flagship.fuel_on_board),
+                    radioactives: WorldData::current()
                         .read(|owner| owner.flagship.element_amounts[6]),
                 }
             }
@@ -192,7 +192,7 @@ pub(super) mod live {
 
         fn add_lander(&mut self) {
             unsafe {
-                (**WorldFields::current()).flagship.num_landers += 1;
+                (**WorldData::current()).flagship.num_landers += 1;
                 draw_landers();
             }
         }

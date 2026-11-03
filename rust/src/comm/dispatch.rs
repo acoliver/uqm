@@ -11,9 +11,9 @@
 
 #[cfg(not(test))]
 use crate::engine::StoryKey;
-use crate::engine::World as WorldOwner;
+use crate::engine::World;
 #[cfg(not(test))]
-use crate::engine::WorldData as WorldFields;
+use crate::engine::WorldData;
 use std::os::raw::c_void;
 
 use crate::c_bindings::{assert_c_layout, global_state};
@@ -24,8 +24,6 @@ use crate::collections::queue::{AllocLink, HLink, PutQueue, Queue, ReinitQueue};
 use crate::comm::locdata::{read_locdata, set_comm_data};
 #[cfg(not(test))]
 use crate::mainloop::c_extern;
-#[cfg(not(test))]
-use crate::state::game_state_keys;
 
 // ---------------------------------------------------------------------------
 // C type mirrors for queue elements (#[repr(C)] matching C struct layout)
@@ -574,7 +572,7 @@ fn avail_race_queue() -> *mut Queue {
     #[cfg(not(test))]
     #[cfg(not(test))]
     unsafe {
-        let world = WorldFields::current();
+        let world = WorldData::current();
         std::ptr::addr_of_mut!((**world).game.avail_race_q)
     }
     #[cfg(test)]
@@ -585,7 +583,7 @@ fn npc_built_ship_queue() -> *mut Queue {
     #[cfg(not(test))]
     #[cfg(not(test))]
     unsafe {
-        let world = WorldFields::current();
+        let world = WorldData::current();
         std::ptr::addr_of_mut!((**world).game.npc_built_ship_q)
     }
     #[cfg(test)]
@@ -596,7 +594,7 @@ fn npc_built_ship_queue() -> *mut Queue {
 fn encounter_queue() -> *mut Queue {
     #[cfg(not(test))]
     unsafe {
-        let world = WorldFields::current();
+        let world = WorldData::current();
         std::ptr::addr_of_mut!((**world).game.encounter_q)
     }
     #[cfg(test)]
@@ -606,7 +604,7 @@ fn encounter_queue() -> *mut Queue {
 #[inline]
 fn built_ship_queue() -> *mut Queue {
     unsafe {
-        let world = WorldFields::current();
+        let world = WorldData::current();
         std::ptr::addr_of_mut!((**world).game.built_ship_q)
     }
 }
@@ -663,20 +661,6 @@ unsafe fn lock_encounter(_h: HLink) -> *mut CEncounter {
 }
 
 // ---------------------------------------------------------------------------
-// Pure helper: get game state bit (C: GET_GAME_STATE)
-// ---------------------------------------------------------------------------
-
-#[cfg(not(test))]
-fn get_game_state(world: &crate::engine::World, key: crate::engine::StoryKey) -> u32 {
-    game_state_keys::get_game_state(world, key)
-}
-
-#[cfg(not(test))]
-fn set_game_state(world: &mut crate::engine::World, key: crate::engine::StoryKey, value: u32) {
-    game_state_keys::set_game_state(world, key, value)
-}
-
-// ---------------------------------------------------------------------------
 // RaceCommunication — ported from comm.c:1503
 // ---------------------------------------------------------------------------
 
@@ -711,20 +695,16 @@ pub unsafe extern "C" fn rust_race_communication() {
 
     let next_activity = crate::mainloop::ffi::get_next_activity().0;
     if (next_activity & CHECK_LOAD) != 0 {
-        let ec = WorldOwner::current().read(|world| get_game_state(world, StoryKey::ESCAPE_COUNTER))
-            as u8;
+        let ec = World::current().read(|world| world.story_state(StoryKey::ESCAPE_COUNTER)) as u8;
 
-        if WorldOwner::current().read(|world| get_game_state(world, StoryKey::FOUND_PLUTO_SPATHI))
-            == 1
-        {
+        if World::current().read(|world| world.story_state(StoryKey::FOUND_PLUTO_SPATHI)) == 1 {
             init_communication(conv::SPATHI);
-        } else if WorldOwner::current()
-            .read(|world| get_game_state(world, StoryKey::GLOBAL_FLAGS_AND_DATA))
+        } else if World::current().read(|world| world.story_state(StoryKey::GLOBAL_FLAGS_AND_DATA))
             == 0
         {
             init_communication(conv::TALKING_PET);
-        } else if (WorldOwner::current()
-            .read(|world| get_game_state(world, StoryKey::GLOBAL_FLAGS_AND_DATA))
+        } else if (World::current()
+            .read(|world| world.story_state(StoryKey::GLOBAL_FLAGS_AND_DATA))
             & ((1 << 4) | (1 << 5)))
             != 0
         {
@@ -746,8 +726,7 @@ pub unsafe extern "C" fn rust_race_communication() {
             ));
         }
 
-        WorldOwner::current()
-            .write(|world| set_game_state(world, StoryKey::ESCAPE_COUNTER, ec as u32));
+        World::current().write(|world| world.set_story_state(StoryKey::ESCAPE_COUNTER, ec as u32));
         return;
     }
 
@@ -757,9 +736,7 @@ pub unsafe extern "C" fn rust_race_communication() {
         let npc_q = npc_built_ship_queue();
         ReinitQueue(npc_q);
 
-        if WorldOwner::current().read(|world| get_game_state(world, StoryKey::ARILOU_SPACE_SIDE))
-            >= 2
-        {
+        if World::current().read(|world| world.story_state(StoryKey::ARILOU_SPACE_SIDE)) >= 2 {
             init_communication(conv::ARILOU);
             return;
         }
@@ -889,13 +866,13 @@ pub unsafe fn init_communication(which_comm: u32) -> u16 {
             }
             ffi::DrawSISMessage(std::ptr::null());
             if in_hq_space() {
-                let point = WorldFields::current().read(|world| world.game.ship_stamp.origin);
+                let point = WorldData::current().read(|world| world.game.ship_stamp.origin);
                 ffi::DrawHyperCoords(CPoint {
                     x: point.x,
                     y: point.y,
                 });
-            } else if WorldFields::current().read(|world| world.game.ip_planet) == 0 {
-                let star = &*(**WorldOwner::current())
+            } else if WorldData::current().read(|world| world.game.ip_planet) == 0 {
+                let star = &*(**World::current())
                     .star_pointer(crate::planets::starmap::current_catalog())
                     .cast::<crate::savegame::runtime::star::CStarDesc>();
                 ffi::DrawHyperCoords(CPoint {
@@ -903,7 +880,7 @@ pub unsafe fn init_communication(which_comm: u32) -> u16 {
                     y: star.star_pt.y,
                 });
             } else {
-                let name = WorldFields::current().read(|world| world.flagship.planet_name);
+                let name = WorldData::current().read(|world| world.flagship.planet_name);
                 ffi::DrawSISTitle(name.as_ptr().cast());
             }
         }
@@ -919,8 +896,8 @@ unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
         start_sphere_tracking(ship_type as u8);
         if which_comm == conv::ORZ
             || (which_comm == conv::TALKING_PET
-                && (WorldOwner::current()
-                    .read(|world| get_game_state(world, StoryKey::TALKING_PET_ON_SHIP))
+                && (World::current()
+                    .read(|world| world.story_state(StoryKey::TALKING_PET_ON_SHIP))
                     == 0
                     || lobyte(crate::mainloop::ffi::get_current_activity().0) == IN_LAST_BATTLE))
             || (which_comm != conv::CHMMR && which_comm != conv::SYREEN)
@@ -943,17 +920,17 @@ unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
         set_comm_data(read_locdata(&*descriptor.cast()));
     }
     let mut status;
-    if WorldOwner::current().read(|world| get_game_state(world, StoryKey::BATTLE_SEGUE)) == 0 {
+    if World::current().read(|world| world.story_state(StoryKey::BATTLE_SEGUE)) == 0 {
         status = HAIL;
     } else {
         crate::automation::ui_observation::observe_encounter_menu(true);
         status = ffi::InitEncounter();
         crate::automation::ui_observation::observe_encounter_menu(false);
         if status == HAIL && !descriptor.is_null() {
-            WorldOwner::current().write(|world| set_game_state(world, StoryKey::BATTLE_SEGUE, 0));
+            World::current().write(|world| world.set_story_state(StoryKey::BATTLE_SEGUE, 0));
         } else {
             status = ATTACK;
-            WorldOwner::current().write(|world| set_game_state(world, StoryKey::BATTLE_SEGUE, 1));
+            World::current().write(|world| world.set_story_state(StoryKey::BATTLE_SEGUE, 1));
         }
     }
     if status == HAIL {
@@ -973,21 +950,20 @@ unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
     if activity & (CHECK_ABORT | CHECK_LOAD) == 0 {
         let npc = npc_built_ship_queue();
         if lobyte(activity) == IN_LAST_BATTLE
-            && WorldFields::current().read(|owner| owner.game.glob_flags) & CYBORG_ENABLED != 0
+            && WorldData::current().read(|owner| owner.game.glob_flags) & CYBORG_ENABLED != 0
         {
             ReinitQueue(npc);
         }
-        WorldOwner::current()
-            .write(|world| set_game_state(world, StoryKey::GLOBAL_FLAGS_AND_DATA, 0));
+        World::current().write(|world| world.set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, 0));
         status = u16::from(
-            WorldOwner::current().read(|world| get_game_state(world, StoryKey::BATTLE_SEGUE)) != 0
+            World::current().read(|world| world.story_state(StoryKey::BATTLE_SEGUE)) != 0
                 && !get_head_link(npc).is_null(),
         );
         if status != 0 {
             ffi::BuildBattle(RPG_PLAYER_NUM);
             ffi::EncounterBattle();
         } else {
-            WorldOwner::current().write(|world| set_game_state(world, StoryKey::BATTLE_SEGUE, 0));
+            World::current().write(|world| world.set_story_state(StoryKey::BATTLE_SEGUE, 0));
         }
     }
     ffi::UninitEncounter();
@@ -1119,7 +1095,7 @@ pub(crate) unsafe fn prepare_samatra_dev_fixture() -> Result<(), &'static str> {
     if crate::battle::build_native::AddEscortShips(4, 12) != 12 {
         return Err("boss fixture could not allocate Pkunk escorts");
     }
-    WorldFields::current().write(|world| {
+    WorldData::current().write(|world| {
         let sis = &mut world.flagship;
         sis.crew_enlisted = 50;
         sis.fuel_on_board = 1000;
@@ -1150,7 +1126,7 @@ pub unsafe fn place_flagship_at_star(location: (i16, i16)) -> Result<(), &'stati
     if star.is_null() {
         return Err("no star at the scene location");
     }
-    (**WorldOwner::current()).select_star(
+    (**World::current()).select_star(
         ((star).cast::<crate::engine::world::CStarDesc>()).as_ref(),
         crate::planets::starmap::current_catalog(),
     );
@@ -1229,10 +1205,7 @@ pub unsafe extern "C" fn rust_init_race_dispatch(comm_id: u32) -> *mut c_void {
         conv::BLACKURQ => ffi::init_blackurq_comm().cast(),
         conv::CHMMR => ffi::init_chmmr_comm().cast(),
         conv::COMMANDER => {
-            if WorldOwner::current()
-                .read(|world| get_game_state(world, StoryKey::STARBASE_AVAILABLE))
-                == 0
-            {
+            if World::current().read(|world| world.story_state(StoryKey::STARBASE_AVAILABLE)) == 0 {
                 (ffi::init_commander_comm()).cast()
             } else {
                 (ffi::init_starbase_comm()).cast()
@@ -1248,8 +1221,7 @@ pub unsafe extern "C" fn rust_init_race_dispatch(comm_id: u32) -> *mut c_void {
         conv::SLYLANDRO => ffi::init_slyland_comm().cast(),
         conv::SLYLANDRO_HOME => ffi::init_slylandro_comm().cast(),
         conv::SPATHI => {
-            if (WorldOwner::current()
-                .read(|world| get_game_state(world, StoryKey::GLOBAL_FLAGS_AND_DATA))
+            if (World::current().read(|world| world.story_state(StoryKey::GLOBAL_FLAGS_AND_DATA))
                 & (1 << 7))
                 == 0
             {

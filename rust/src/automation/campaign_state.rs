@@ -10,7 +10,7 @@
 //! read is reported as unavailable and never compares as zero, so
 //! `story:X eq 0` cannot pass before the game state exists.
 
-use crate::engine::World as WorldOwner;
+use crate::engine::World;
 use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -414,7 +414,7 @@ impl StateSource for LiveCampaign {
                 input_ffi::hyperspace_position().and_then(|(_, y)| u32::try_from(y).ok())
             }
             StateKey::HyperStopped => input_ffi::hyperspace_stopped().map(u32::from),
-            StateKey::Story(name) => WorldOwner::current()
+            StateKey::Story(name) => World::current()
                 .read(|world| crate::state::ffi::named_state_value(world, name))
                 .map(u32::from),
             StateKey::Activity => Some(u32::from(crate::mainloop::ffi::get_current_activity().0)),

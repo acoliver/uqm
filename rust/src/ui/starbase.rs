@@ -3,11 +3,9 @@
 
 use super::{outfit::DoOutfit, shipyard::DoShipyard};
 use crate::comm::comm_abi::{InitCommunication, SetCommIntroMode};
-use crate::engine::StoryKey;
-use crate::engine::{Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields};
+use crate::engine::{Kernel, StoryKey, World, WorldData};
 use crate::navigation::abi::*;
 
-use crate::state::game_state_keys::{get_game_state, set_game_state};
 use std::{mem, ptr};
 extern "C" {
     static mut NextActivity: ACTIVITY;
@@ -36,15 +34,15 @@ const BLACK: Color = rgb15(0, 0, 0);
 
 unsafe fn game_string(index: u32) -> *mut UNICODE {
     GetStringAddress(SetAbsStringTableIndex(
-        KernelOwner::current().read(|owner| owner.game_strings),
+        Kernel::current().read(|owner| owner.game_strings),
         index as COUNT,
     ))
     .cast()
 }
 
 unsafe fn draw_base_state_strings(mut old: BYTE, new: BYTE) {
-    SetContext(KernelOwner::current().read(|owner| owner.screen_context));
-    SetContextFont(KernelOwner::current().read(|owner| owner.star_con_font));
+    SetContext(Kernel::current().read(|owner| owner.screen_context));
+    SetContextFont(Kernel::current().read(|owner| owner.star_con_font));
     SetContextForeGroundColor(BLACK);
     let mut text = TEXT {
         baseline: POINT {
@@ -118,7 +116,7 @@ pub unsafe extern "C" fn DrawShipPiece(
             repair = 1;
             if which_piece < EMPTY_SLOT
                 && (which_slot == 0
-                    || WorldFields::current()
+                    || WorldData::current()
                         .read(|owner| owner.flagship.module_slots[(which_slot - 1) as usize])
                         < EMPTY_SLOT as BYTE)
             {
@@ -129,7 +127,7 @@ pub unsafe extern "C" fn DrawShipPiece(
                 which_piece += 1;
             }
             if which_slot < NUM_MODULE_SLOTS as COUNT - 1
-                && WorldFields::current()
+                && WorldData::current()
                     .read(|owner| owner.flagship.module_slots[(which_slot + 1) as usize])
                     < EMPTY_SLOT as BYTE
             {
@@ -244,7 +242,7 @@ pub unsafe extern "C" fn DrawShipPiece(
             top.origin.x += SHIP_PIECE_OFFSET as i16;
             side.origin.x += SHIP_PIECE_OFFSET as i16;
             which_slot += 1;
-            which_piece = WorldFields::current()
+            which_piece = WorldData::current()
                 .read(|owner| owner.flagship.module_slots[which_slot as usize])
                 as COUNT;
             if which_piece == EMPTY_SLOT + 2 && which_slot >= NUM_MODULE_SLOTS as COUNT - 3 {
@@ -289,12 +287,11 @@ unsafe fn exit_star_base(menu: *mut MENU_STATE) -> BOOLEAN {
         (*menu).hMusic = ptr::null_mut();
     }
     if (*menu).CurState == DEPART_BASE {
-        if WorldFields::current().read(|owner| owner.game.current_activity)
+        if WorldData::current().read(|owner| owner.game.current_activity)
             & (CHECK_ABORT | CHECK_LOAD) as u16
             == 0
         {
-            WorldOwner::current()
-                .write(|world| set_game_state(world, StoryKey::STARBASE_VISITED, 0));
+            World::current().write(|world| world.set_story_state(StoryKey::STARBASE_VISITED, 0));
         }
         return 0;
     }
@@ -304,8 +301,8 @@ unsafe fn exit_star_base(menu: *mut MENU_STATE) -> BOOLEAN {
         FlushInput();
         InitCommunication(CONVERSATION_COMMANDER_CONVERSATION);
         crate::automation::ui_observation::observe_starbase_menu(true);
-        WorldOwner::current().write(|world| {
-            set_game_state(world, StoryKey::GLOBAL_FLAGS_AND_DATA, BYTE::MAX as u32)
+        World::current().write(|world| {
+            world.set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, BYTE::MAX as u32)
         });
     } else {
         let old = (*menu).CurState;
@@ -330,7 +327,7 @@ unsafe fn exit_star_base(menu: *mut MENU_STATE) -> BOOLEAN {
 /// and input systems must be initialized and accessed only on that thread.
 #[no_mangle]
 pub unsafe extern "C" fn DoStarBase(menu: *mut MENU_STATE) -> BOOLEAN {
-    if WorldFields::current().read(|owner| owner.game.current_activity)
+    if WorldData::current().read(|owner| owner.game.current_activity)
         & (CHECK_ABORT | CHECK_LOAD) as u16
         != 0
     {
@@ -339,7 +336,7 @@ pub unsafe extern "C" fn DoStarBase(menu: *mut MENU_STATE) -> BOOLEAN {
     }
     SetMenuSounds(SOUND_ARROWS, SOUND_SELECT);
     if (*menu).Initialized == 0 {
-        (**KernelOwner::current()).last_activity &= !(CHECK_LOAD as u16);
+        (**Kernel::current()).last_activity &= !(CHECK_LOAD as u16);
         (*menu).InputFunc = Some(DoStarBase);
         SetFlashRect(ptr::null());
         if !(*menu).hMusic.is_null() {
@@ -351,7 +348,7 @@ pub unsafe extern "C" fn DoStarBase(menu: *mut MENU_STATE) -> BOOLEAN {
         (*menu).CurFrame =
             CaptureDrawable(LoadGraphicInstance(c"graphics.starbase".as_ptr()).cast());
         (*menu).hMusic = (LoadMusicInstance(c"music.starbase".as_ptr())).cast();
-        SetContext(KernelOwner::current().read(|owner| owner.screen_context));
+        SetContext(Kernel::current().read(|owner| owner.screen_context));
         SetTransitionSource(ptr::null());
         BatchGraphics();
         SetContextBackGroundColor(BLACK);
@@ -383,7 +380,7 @@ pub unsafe extern "C" fn DoStarBase(menu: *mut MENU_STATE) -> BOOLEAN {
             }
         }
         BatchGraphics();
-        SetContext(KernelOwner::current().read(|owner| owner.screen_context));
+        SetContext(Kernel::current().read(|owner| owner.screen_context));
         if state != (*menu).CurState {
             draw_base_state_strings((*menu).CurState, state);
             (*menu).CurState = state;
@@ -404,13 +401,12 @@ unsafe fn do_time_passage() {
 }
 
 unsafe fn cleanup_after_star_base() {
-    if WorldFields::current().read(|owner| owner.game.current_activity)
+    if WorldData::current().read(|owner| owner.game.current_activity)
         & (CHECK_LOAD | CHECK_ABORT) as u16
         == 0
     {
-        WorldOwner::current()
-            .write(|world| set_game_state(world, StoryKey::GLOBAL_FLAGS_AND_DATA, 0));
-        (**WorldFields::current()).game.current_activity = CHECK_LOAD as u16;
+        World::current().write(|world| world.set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, 0));
+        (**WorldData::current()).game.current_activity = CHECK_LOAD as u16;
         NextActivity = IN_INTERPLANETARY as u16 | START_INTERPLANETARY as u16;
     }
 }
@@ -421,28 +417,25 @@ unsafe fn cleanup_after_star_base() {
 /// World queues, game clock, communication, input, graphics and audio must be
 /// initialized and exclusively accessed by the calling game thread.
 pub unsafe fn visit_star_base() {
-    if WorldOwner::current().read(|world| get_game_state(world, StoryKey::CHMMR_BOMB_STATE)) == 2 {
-        (**WorldOwner::current()).select_star(None, crate::planets::starmap::current_catalog());
-        WorldOwner::current().write(|world| {
-            set_game_state(world, StoryKey::GLOBAL_FLAGS_AND_DATA, BYTE::MAX as u32)
+    if World::current().read(|world| world.story_state(StoryKey::CHMMR_BOMB_STATE)) == 2 {
+        (**World::current()).select_star(None, crate::planets::starmap::current_catalog());
+        World::current().write(|world| {
+            world.set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, BYTE::MAX as u32)
         });
     }
-    if WorldOwner::current().read(|world| get_game_state(world, StoryKey::STARBASE_AVAILABLE)) == 0
-    {
+    if World::current().read(|world| world.story_state(StoryKey::STARBASE_AVAILABLE)) == 0 {
         crate::automation::scenario::observe_encounter_dispatch(
             CONVERSATION_COMMANDER_CONVERSATION,
         );
         SetCommIntroMode(CROSSFADE_SCREEN, 0);
         InitCommunication(CONVERSATION_COMMANDER_CONVERSATION);
-        if WorldOwner::current()
-            .read(|world| get_game_state(world, StoryKey::PROBE_ILWRATH_ENCOUNTER))
-            == 0
-            || (**WorldFields::current()).game.current_activity & CHECK_ABORT as u16 != 0
+        if World::current().read(|world| world.story_state(StoryKey::PROBE_ILWRATH_ENCOUNTER)) == 0
+            || (**WorldData::current()).game.current_activity & CHECK_ABORT as u16 != 0
         {
             cleanup_after_star_base();
             return;
         }
-        let ship = WorldFields::current().write(|world| {
+        let ship = WorldData::current().write(|world| {
             CloneShipFragment(
                 &raw mut world.game.avail_race_q,
                 ILWRATH_SHIP as COUNT,
@@ -452,27 +445,26 @@ pub unsafe fn visit_star_base() {
         });
         (*ship.cast::<SHIP_FRAGMENT>()).race_id = BYTE::MAX;
         InitCommunication(CONVERSATION_ILWRATH_CONVERSATION);
-        if (**WorldFields::current()).flagship.crew_enlisted == COUNT::MAX
-            || (**WorldFields::current()).game.current_activity & CHECK_ABORT as u16 != 0
+        if (**WorldData::current()).flagship.crew_enlisted == COUNT::MAX
+            || (**WorldData::current()).game.current_activity & CHECK_ABORT as u16 != 0
         {
             return;
         }
         SetCommIntroMode(CROSSFADE_SCREEN, 0);
         InitCommunication(CONVERSATION_COMMANDER_CONVERSATION);
-        if (**WorldFields::current()).game.current_activity & CHECK_ABORT as u16 != 0 {
+        if (**WorldData::current()).game.current_activity & CHECK_ABORT as u16 != 0 {
             return;
         }
-        WorldOwner::current().write(|world| {
-            set_game_state(world, StoryKey::GLOBAL_FLAGS_AND_DATA, BYTE::MAX as u32)
+        World::current().write(|world| {
+            world.set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, BYTE::MAX as u32)
         });
     }
     let previous = SetStatusMessageMode(StatMsgMode_SMM_RES_UNITS);
-    if WorldOwner::current().read(|world| get_game_state(world, StoryKey::MOONBASE_ON_SHIP)) != 0
-        || WorldOwner::current().read(|world| get_game_state(world, StoryKey::CHMMR_BOMB_STATE))
-            == 2
+    if World::current().read(|world| world.story_state(StoryKey::MOONBASE_ON_SHIP)) != 0
+        || World::current().read(|world| world.story_state(StoryKey::CHMMR_BOMB_STATE)) == 2
     {
         do_time_passage();
-        if (**WorldFields::current()).flagship.crew_enlisted == COUNT::MAX {
+        if (**WorldData::current()).flagship.crew_enlisted == COUNT::MAX {
             return;
         }
         crate::automation::scenario::observe_encounter_dispatch(
@@ -480,16 +472,16 @@ pub unsafe fn visit_star_base() {
         );
         SetCommIntroMode(FADE_IN_SCREEN, ONE_SECOND * 2);
         InitCommunication(CONVERSATION_COMMANDER_CONVERSATION);
-        if (**WorldFields::current()).game.current_activity & CHECK_ABORT as u16 != 0 {
+        if (**WorldData::current()).game.current_activity & CHECK_ABORT as u16 != 0 {
             return;
         }
-        WorldOwner::current().write(|world| {
-            set_game_state(world, StoryKey::GLOBAL_FLAGS_AND_DATA, BYTE::MAX as u32)
+        World::current().write(|world| {
+            world.set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, BYTE::MAX as u32)
         });
     }
     let mut menu: MENU_STATE = mem::zeroed();
     menu.InputFunc = Some(DoStarBase);
-    let old = SetContext(KernelOwner::current().read(|owner| owner.screen_context));
+    let old = SetContext(Kernel::current().read(|owner| owner.screen_context));
     crate::automation::ui_observation::observe_starbase_menu(true);
     DoInput(ptr::addr_of_mut!(menu).cast(), 1);
     crate::automation::ui_observation::observe_starbase_menu(false);
@@ -505,13 +497,13 @@ pub unsafe fn visit_star_base() {
 /// the initialized game thread.
 pub unsafe fn install_bomb_at_earth() {
     do_time_passage();
-    SetContext(KernelOwner::current().read(|owner| owner.screen_context));
+    SetContext(Kernel::current().read(|owner| owner.screen_context));
     SetTransitionSource(ptr::null());
     SetContextBackGroundColor(BLACK);
     ClearDrawable();
     SleepThreadUntil(FadeScreen(ScreenFadeType_FadeAllToColor, 0));
-    WorldOwner::current().write(|world| set_game_state(world, StoryKey::CHMMR_BOMB_STATE, 3));
-    (**WorldFields::current()).game.current_activity = CHECK_LOAD as u16;
+    World::current().write(|world| world.set_story_state(StoryKey::CHMMR_BOMB_STATE, 3));
+    (**WorldData::current()).game.current_activity = CHECK_LOAD as u16;
     NextActivity = IN_INTERPLANETARY as u16 | START_INTERPLANETARY as u16;
-    (**WorldOwner::current()).select_star(None, crate::planets::starmap::current_catalog());
+    (**World::current()).select_star(None, crate::planets::starmap::current_catalog());
 }

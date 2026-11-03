@@ -4,8 +4,7 @@
 //! system generator is ported, this adapter calls only the selected generator
 //! hook and immediately converts its output into typed Rust data.
 
-use crate::engine::StoryKey;
-use crate::engine::World as WorldOwner;
+use crate::engine::{StoryKey, World};
 use std::ffi::c_void;
 
 #[cfg(not(test))]
@@ -104,7 +103,7 @@ impl CffiSurfaceGenerator {
     #[cfg(not(test))]
     fn node_key(&self, node: ScanNodeId) -> (u16, u8, u8, u8) {
         let (star, planet, moon) = unsafe {
-            WorldOwner::current().read(|world| {
+            World::current().read(|world| {
                 crate::state::c_api::planets::location(world, self.solar_system.cast())
             })
         };
@@ -157,7 +156,7 @@ impl SurfaceGenerator for CffiSurfaceGenerator {
         unsafe {
             if scan == ScanType::Biological {
                 let key = self.node_key(node);
-                if let Some(canned) = WorldOwner::current()
+                if let Some(canned) = World::current()
                     .write(|world| {
                         crate::state::ffi::with_state_files(world, |files| files.canned_node(key))
                     })
@@ -234,7 +233,7 @@ impl SurfaceGenerator for CffiSurfaceGenerator {
             x: position.x as i16,
             y: position.y as i16,
         };
-        WorldOwner::current()
+        World::current()
             .write(|world| {
                 crate::state::ffi::with_state_files(world, |files| files.can_node(canned))
             })
@@ -289,7 +288,7 @@ impl SurfaceGenerator for CffiSurfaceGenerator {
                 #[cfg(not(test))]
                 if scan == ScanType::Biological {
                     let key = self.node_key(node);
-                    WorldOwner::current()
+                    World::current()
                         .write(|world| {
                             crate::state::ffi::with_state_files(world, |files| {
                                 files.remove_canned_node(key)
@@ -297,13 +296,8 @@ impl SurfaceGenerator for CffiSurfaceGenerator {
                         })
                         .map_err(|_| AdapterError::new("canned_node_state"))?;
                 }
-                WorldOwner::current().write(|world| {
-                    crate::state::game_state_keys::set_game_state(
-                        world,
-                        StoryKey::PLANETARY_CHANGE,
-                        1,
-                    )
-                });
+                World::current()
+                    .write(|world| world.set_story_state(StoryKey::PLANETARY_CHANGE, 1));
             }
             Ok(retrieved)
         }
@@ -322,7 +316,7 @@ mod tests {
         unsafe {
             crate::app::bridge::with_game(&mut game_owner, || {
                 use crate::c_bindings::global_state::{GenerateFunctions, SOLARSYS_STATE};
-                use crate::state::game_state_keys::{get_game_state, set_game_state};
+                use crate::state::game_state_keys::get_game_state;
                 unsafe extern "C" fn accept(
                     _: *mut SOLARSYS_STATE,
                     _: *mut crate::c_bindings::global_state::PLANET_DESC,
@@ -338,7 +332,7 @@ mod tests {
                     false
                 }
                 {
-                    WorldOwner::current().write(crate::state::ffi::rust_init_game_state);
+                    World::current().write(crate::state::ffi::rust_init_game_state);
                 }
                 let mut functions: Box<GenerateFunctions> = Box::new(std::mem::zeroed());
                 functions.pickupMinerals = Some(accept);
@@ -357,8 +351,8 @@ mod tests {
                     (ScanType::Energy, 0),
                     (ScanType::Biological, 9),
                 ] {
-                    WorldOwner::current()
-                        .write(|world| set_game_state(world, StoryKey::PLANETARY_CHANGE, 0));
+                    World::current()
+                        .write(|world| world.set_story_state(StoryKey::PLANETARY_CHANGE, 0));
                     assert!(generator
                         .pickup(scan, ScanNodeId::new(index).unwrap())
                         .unwrap());
@@ -367,20 +361,20 @@ mod tests {
                         1 << index
                     );
                     assert_eq!(
-                        WorldOwner::current()
+                        World::current()
                             .read(|world| get_game_state(world, StoryKey::PLANETARY_CHANGE)),
                         1
                     );
                 }
                 functions.pickupEnergy = Some(reject);
-                WorldOwner::current()
-                    .write(|world| set_game_state(world, StoryKey::PLANETARY_CHANGE, 0));
+                World::current()
+                    .write(|world| world.set_story_state(StoryKey::PLANETARY_CHANGE, 0));
                 assert!(!generator
                     .pickup(ScanType::Energy, ScanNodeId::new(1).unwrap())
                     .unwrap());
                 assert_eq!(system.SysInfo.PlanetInfo.ScanRetrieveMask[1], 1);
                 assert_eq!(
-                    WorldOwner::current()
+                    World::current()
                         .read(|world| get_game_state(world, StoryKey::PLANETARY_CHANGE)),
                     0
                 );

@@ -4,9 +4,9 @@
 //! @requirement REQ-ML-001, REQ-ML-007, REQ-ML-008
 
 #[cfg(not(test))]
-use crate::engine::Kernel as KernelOwner;
+use crate::engine::Kernel;
 #[cfg(not(test))]
-use crate::engine::World as WorldOwner;
+use crate::engine::World;
 use std::os::raw::c_int;
 
 use super::state_machine::{self, ActivityDecision, BreakAction, GameStateInfo};
@@ -300,8 +300,8 @@ mod cffi {
             // SAFETY: LoadKernel reads content packages; the null argv is the
             // documented call pattern in starcon.c.
             unsafe {
-                KernelOwner::current().write(|kernel| {
-                    WorldOwner::current()
+                Kernel::current().write(|kernel| {
+                    World::current()
                         .write(|world| c_extern::LoadKernel(kernel, world, 0, std::ptr::null_mut()))
                 }) != 0
             }
@@ -318,7 +318,7 @@ mod cffi {
         }
 
         fn get_current_activity(&self) -> ActivityValue {
-            ActivityValue::new(WorldOwner::current().read(c_extern::get_current_activity))
+            ActivityValue::new(World::current().read(c_extern::get_current_activity))
         }
 
         fn set_current_activity(&self, activity: ActivityValue) {
@@ -360,7 +360,7 @@ mod cffi {
         }
 
         fn add_initial_game_events(&self) {
-            unsafe { WorldOwner::current().write(|world| c_extern::schedule_initial_events(world)) }
+            unsafe { World::current().write(|world| c_extern::schedule_initial_events(world)) }
         }
 
         fn activate_automation_start_scene(&self) {
@@ -431,7 +431,7 @@ mod cffi {
         }
 
         fn clear_player_input_all(&self) {
-            unsafe { KernelOwner::current().write(|kernel| c_extern::ClearPlayerInputAll(kernel)) }
+            unsafe { Kernel::current().write(|kernel| c_extern::ClearPlayerInputAll(kernel)) }
         }
 
         fn init_communication(&self, conversation: u32) {
@@ -453,7 +453,7 @@ mod cffi {
         }
 
         fn free_kernel(&self) {
-            unsafe { KernelOwner::current().write(|kernel| c_extern::free_kernel(kernel)) }
+            unsafe { Kernel::current().write(|kernel| c_extern::free_kernel(kernel)) }
         }
 
         fn log_show_box(&self, b: bool, c: bool) {

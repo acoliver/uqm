@@ -1,7 +1,7 @@
 //! Setup menus and persistent options, ported from uqm/setupmenu.c.
 
 #[cfg(not(test))]
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
+use crate::engine::{Kernel, WorldData};
 use crate::navigation::abi::*;
 use std::ffi::c_int;
 
@@ -267,7 +267,7 @@ pub(crate) mod runtime {
             SetDefaultMenuRepeatDelay();
             (*state).next_time = GetTimeCounter();
             set_defaults();
-            Widget_SetFont(KernelOwner::current().read(|owner| owner.star_con_font));
+            Widget_SetFont(Kernel::current().read(|owner| owner.star_con_font));
             Widget_SetWindowColors(
                 rgb15(0x14, 0x14, 0x14),
                 rgb15(8, 8, 8),
@@ -311,7 +311,7 @@ pub(crate) mod runtime {
         SleepThreadUntil((*state).next_time.wrapping_add(MENU_FRAME_RATE));
         (*state).next_time = GetTimeCounter();
         BOOLEAN::from(
-            WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
+            WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
                 == 0
                 && !NEXT.is_null(),
         )
@@ -875,7 +875,7 @@ pub(crate) mod runtime {
         }
         DONE = 0;
         DoInput(ptr::addr_of_mut!(state).cast(), 1);
-        (**WorldFields::current()).game.current_activity &= !(CHECK_ABORT as u16);
+        (**WorldData::current()).game.current_activity &= !(CHECK_ABORT as u16);
         propagate_results();
         if !SETUP_TAB.is_null() {
             clean_up_widgets();

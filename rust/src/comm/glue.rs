@@ -3,7 +3,7 @@
 // @requirement DS-REQ-005, DS-REQ-006, DS-REQ-007, DS-REQ-008, DS-REQ-009, DS-REQ-010
 
 #[cfg(not(test))]
-use crate::engine::WorldData as WorldFields;
+use crate::engine::WorldData;
 use std::ffi::c_void;
 
 /// Callback type for phrase completion notification.
@@ -39,7 +39,7 @@ unsafe fn ptr_to_string(ptr: *const u8) -> Option<String> {
 /// `phrases_handle` must be a valid conversation phrases handle or null.
 #[cfg(not(test))]
 pub unsafe fn resolve_phrase(phrases_handle: *const c_void, index: i32) -> Option<String> {
-    let world = WorldFields::current();
+    let world = WorldData::current();
     use crate::strings::string_table::SetAbsStringTableIndex;
 
     use crate::strings::string_table::GetStringAddress;

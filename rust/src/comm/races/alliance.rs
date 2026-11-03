@@ -2,7 +2,7 @@
 use super::encounter::EncounterApi;
 use crate::comm::dispatch::ship;
 #[cfg(not(test))]
-use crate::engine::World as WorldOwner;
+use crate::engine::World;
 pub(super) const SUPOX_SHIP: u16 = ship::SUPOX_SHIP as u16;
 pub(super) const UTWIG_SHIP: u16 = ship::UTWIG_SHIP as u16;
 pub(super) const ZOQFOTPIK_SHIP: u16 = ship::ZOQFOTPIK_SHIP as u16;
@@ -26,13 +26,12 @@ mod live {
     impl<H> AllianceApi<H> for LiveScript<H> {
         fn set_allied(&mut self, race: u16, allied: bool) {
             unsafe {
-                WorldOwner::current()
-                    .write(|world| set_race_allied(world, race, u32::from(allied)));
+                World::current().write(|world| set_race_allied(world, race, u32::from(allied)));
             }
         }
         fn track(&mut self, race: u16) {
             unsafe {
-                WorldOwner::current().write(|world| start_sphere_tracking(world, race));
+                World::current().write(|world| start_sphere_tracking(world, race));
             }
         }
         fn event(&mut self, kind: i32, month: u16, day: u16, year: u16, selector: u8) {

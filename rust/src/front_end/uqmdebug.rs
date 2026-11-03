@@ -2,11 +2,7 @@
 #![cfg(feature = "debug-process")]
 
 #[cfg(not(test))]
-use crate::engine::StoryKey;
-#[cfg(not(test))]
-use crate::engine::World as WorldOwner;
-#[cfg(not(test))]
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
+use crate::engine::{Kernel, StoryKey, WorldData};
 use crate::navigation::abi::*;
 use std::ffi::{c_char, c_int};
 
@@ -213,7 +209,6 @@ mod runtime {
     use crate::engine::World;
 
     use crate::planets::tables::{PLANET_ARRAY as planet_array, STARMAP_ARRAY as starmap_array};
-    use crate::state::game_state_keys::{get_game_state, set_game_state};
     use libc::FILE;
     use std::{mem, ptr};
     extern "C" {
@@ -288,7 +283,7 @@ mod runtime {
     /// # Safety
     /// Must run on the game thread. The game clock and event queue must be live.
     pub unsafe fn forward_to_next_event(skip_hee: BOOLEAN) {
-        let world = WorldFields::current();
+        let world = WorldData::current();
         if GameClockRunning() == 0 {
             return;
         }
@@ -341,7 +336,7 @@ mod runtime {
     /// # Safety
     /// Must run with a live game clock and an open output stream.
     pub unsafe fn dump_events(out: *mut FILE) {
-        let world = WorldFields::current();
+        let world = WorldData::current();
         LockGameClock();
         crate::collections::queue::for_all_links(
             ptr::addr_of_mut!((**world).game.game_clock.event_q).cast(),
@@ -353,16 +348,16 @@ mod runtime {
     /// # Safety
     /// Must run on the game thread with initialized SIS and optional solar system.
     pub unsafe fn equip_ship() {
-        if !WorldOwner::current().write(super::equipment::equip_flagship) {
+        if !World::current().write(super::equipment::equip_flagship) {
             return;
         }
         if let Some(system) = pSolarSysState.as_mut() {
-            WorldOwner::current().read(|world| {
+            World::current().read(|world| {
                 super::equipment::update_flight(&world.data.flagship, system);
             });
         }
-        if WorldOwner::current().read(in_hqspace) != 0
-            || WorldFields::current().read(|owner| owner.game.current_activity) as u8 as u32
+        if World::current().read(in_hqspace) != 0
+            || WorldData::current().read(|owner| owner.game.current_activity) as u8 as u32
                 == IN_INTERPLANETARY
         {
             DeltaSISGauges(
@@ -400,13 +395,13 @@ mod runtime {
             StoryKey::MOONBASE_ON_SHIP,
             StoryKey::DESTRUCT_CODE_ON_SHIP,
         ] {
-            WorldOwner::current().write(|world| set_game_state(world, key, 1));
+            World::current().write(|world| world.set_story_state(key, 1));
         }
     }
     /// # Safety
     /// Must run on the game thread with the escort queue initialized.
     pub unsafe fn clear_escorts() {
-        let world = WorldFields::current();
+        let world = WorldData::current();
         let queue = ptr::addr_of_mut!((**world).game.built_ship_q);
         clear_escort_queue(queue.cast());
         DeltaSISGauges(
@@ -430,7 +425,7 @@ mod runtime {
     /// # Safety
     /// Must run on the game thread in HyperSpace or QuasiSpace.
     pub unsafe fn do_instant_move() {
-        let owned_world = WorldFields::current();
+        let owned_world = WorldData::current();
         let (log_x, log_y) = log_units();
         let universe_x = ((MAX_X_UNIVERSE as i32 + 1) >> 4) * 10;
         let universe_y = (MAX_Y_UNIVERSE as i32 + 1) >> 4;
@@ -448,9 +443,7 @@ mod runtime {
                 + (universe_y >> 1))
                 / universe_y;
         }
-        if WorldOwner::current().read(|world| get_game_state(world, StoryKey::ARILOU_SPACE_SIDE))
-            <= 1
-        {
+        if World::current().read(|world| world.story_state(StoryKey::ARILOU_SPACE_SIDE)) <= 1 {
             (**World::current()).select_star(
                 ((FindStar(ptr::null_mut(), ptr::addr_of_mut!((*game).autopilot), 0, 0))
                     .cast::<crate::engine::world::CStarDesc>())
@@ -461,8 +454,8 @@ mod runtime {
                 .star_pointer(crate::planets::starmap::current_catalog())
                 .is_null()
             {
-                WorldOwner::current()
-                    .write(|world| set_game_state(world, StoryKey::USED_BROADCASTER, 0));
+                World::current()
+                    .write(|world| world.set_story_state(StoryKey::USED_BROADCASTER, 0));
                 (*game).current_activity &= !(IN_BATTLE as ACTIVITY);
                 (*game).ship_facing = 0;
                 (*game).ip_planet = 0;
@@ -476,7 +469,7 @@ mod runtime {
     /// # Safety
     /// Must run on the game thread with the race queue initialized.
     pub unsafe fn show_spheres() {
-        let mut handle = WorldFields::current().read(|owner| owner.game.avail_race_q.head);
+        let mut handle = WorldData::current().read(|owner| owner.game.avail_race_q.head);
         while !handle.is_null() {
             let fleet = handle.cast::<FLEET_INFO>();
             let next = (*fleet).succ;
@@ -492,7 +485,7 @@ mod runtime {
     /// # Safety
     /// Must run on the game thread with the race queue initialized.
     pub unsafe fn activate_all_ships() {
-        let mut handle = WorldFields::current().read(|owner| owner.game.avail_race_q.head);
+        let mut handle = WorldData::current().read(|owner| owner.game.avail_race_q.head);
         while !handle.is_null() {
             let fleet = handle.cast::<FLEET_INFO>();
             let next = (*fleet).succ;
@@ -574,11 +567,11 @@ mod runtime {
             return;
         }
         LockGameClock();
-        let saved_activity = WorldFields::current().read(|owner| owner.game.current_activity);
+        let saved_activity = WorldData::current().read(|owner| owner.game.current_activity);
         DISABLE_INTERACTIVITY = 1;
         for_all_stars(star_recurse, arg);
         DISABLE_INTERACTIVITY = 0;
-        (**WorldFields::current()).game.current_activity = saved_activity;
+        (**WorldData::current()).game.current_activity = saved_activity;
         UnlockGameClock();
     }
     unsafe fn star_recurse<T>(star: *mut STAR_DESC, recurse: &mut UniverseRecurseArg<'_, T>) {
@@ -768,7 +761,7 @@ mod runtime {
     /// # Safety
     /// Planet must belong to the active system, and `out` be an open stream.
     pub unsafe fn dump_planet(out: *mut FILE, planet: *const PLANET_DESC) {
-        let world = WorldFields::current();
+        let world = WorldData::current();
         ((*(*pSolarSysState).genFuncs).generateName.unwrap())(pSolarSysState, planet);
         libc::fprintf(
             out,
@@ -967,7 +960,7 @@ mod runtime {
             );
             result = result.wrapping_add(
                 ((info.density >> 8) as u32
-                    * WorldFields::current().read(|owner| {
+                    * WorldData::current().read(|owner| {
                         owner.game.element_worth[element_category(info.type_ as usize)]
                     }) as u32) as COUNT,
             );
@@ -1115,7 +1108,7 @@ mod runtime {
     }
     unsafe fn game_string(index: usize) -> *const c_char {
         GetStringAddress(SetAbsStringTableIndex(
-            KernelOwner::current().read(|owner| owner.game_strings),
+            Kernel::current().read(|owner| owner.game_strings),
             index as COUNT,
         ))
     }
@@ -1204,9 +1197,9 @@ mod runtime {
     /// # Safety
     /// Must run on the game thread with battle and status context initialized.
     pub unsafe fn reset_crew_battle() {
-        if WorldFields::current().read(|owner| owner.game.current_activity) & IN_BATTLE as ACTIVITY
+        if WorldData::current().read(|owner| owner.game.current_activity) & IN_BATTLE as ACTIVITY
             == 0
-            || WorldOwner::current().read(in_hqspace) != 0
+            || World::current().read(in_hqspace) != 0
         {
             return;
         }
@@ -1227,9 +1220,9 @@ mod runtime {
     /// # Safety
     /// Must run on the game thread with battle and status context initialized.
     pub unsafe fn reset_energy_battle() {
-        if WorldFields::current().read(|owner| owner.game.current_activity) & IN_BATTLE as ACTIVITY
+        if WorldData::current().read(|owner| owner.game.current_activity) & IN_BATTLE as ACTIVITY
             == 0
-            || WorldOwner::current().read(in_hqspace) != 0
+            || World::current().read(in_hqspace) != 0
         {
             return;
         }
@@ -1359,7 +1352,7 @@ mod runtime {
             ),
         ];
         let num_strings =
-            GetStringTableCount(KernelOwner::current().read(|owner| owner.game_strings)) as usize;
+            GetStringTableCount(Kernel::current().read(|owner| owner.game_strings)) as usize;
         for i in 0..categories.len() - 1 {
             if categories[i].1 + categories[i].2 != categories[i + 1].1 {
                 libc::fprintf(
@@ -1396,7 +1389,7 @@ mod runtime {
         let old = SetContext(context);
         let frame = GetContextFGFrame();
         SetContext(old);
-        frame == KernelOwner::current().read(|owner| owner.screen)
+        frame == Kernel::current().read(|owner| owner.screen)
     }
     unsafe fn count_visible_contexts() -> usize {
         let mut count = 0;
@@ -1434,7 +1427,7 @@ mod runtime {
         for (first, second) in [(p1, p2), (p2, p4), (p1, p3), (p3, p4), (p1, p4), (p2, p3)] {
             DrawLine(&mut LINE { first, second });
         }
-        let old_font = SetContextFont(KernelOwner::current().read(|owner| owner.tiny_font));
+        let old_font = SetContextFont(Kernel::current().read(|owner| owner.tiny_font));
         SetContextForeGroundColor(text_color);
         let old_mode = SetContextDrawMode(DrawMode {
             kind: DrawKind_DRAW_ALPHA as BYTE,
@@ -1482,7 +1475,7 @@ mod runtime {
         1
     }
     unsafe fn get_screen() -> FRAME {
-        let old = SetContext(KernelOwner::current().read(|owner| owner.screen_context));
+        let old = SetContext(Kernel::current().read(|owner| owner.screen_context));
         let rectangle = RECT {
             corner: POINT { x: 0, y: 0 },
             extent: EXTENT {
@@ -1495,7 +1488,7 @@ mod runtime {
         frame
     }
     unsafe fn put_screen(frame: FRAME) {
-        let old = SetContext(KernelOwner::current().read(|owner| owner.screen_context));
+        let old = SetContext(Kernel::current().read(|owner| owner.screen_context));
         DrawStamp(&mut STAMP {
             origin: POINT { x: 0, y: 0 },
             frame,

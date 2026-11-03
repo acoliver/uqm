@@ -1,7 +1,7 @@
 //! Netplay connection dialog, ported from uqm/cnctdlg.c.
 #![cfg(not(test))]
 
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
+use crate::engine::{Kernel, WorldData};
 use crate::navigation::abi::*;
 
 use std::{
@@ -44,7 +44,7 @@ const MENU_HIGHLIGHT_COLOR: Color = rgb15(31, 31, 0);
 const MENU_CURSOR_COLOR: Color = rgb15(31, 31, 31);
 unsafe fn game_string(index: usize) -> *const c_char {
     GetStringAddress(SetAbsStringTableIndex(
-        KernelOwner::current().read(|owner| owner.game_strings),
+        Kernel::current().read(|owner| owner.game_strings),
         index as COUNT,
     ))
 }
@@ -59,7 +59,7 @@ unsafe extern "C" fn mcd_draw_menu_screen(widget: *mut WIDGET, x: c_int, y: c_in
 }
 unsafe extern "C" fn mcd_draw_button(widget: *mut WIDGET, _x: c_int, y: c_int) {
     let button = widget.cast::<WIDGET_BUTTON>();
-    let old_font = SetContextFont(KernelOwner::current().read(|owner| owner.star_con_font));
+    let old_font = SetContextFont(Kernel::current().read(|owner| owner.star_con_font));
     let old_effect = SetContextFontEffect(ptr::null_mut());
     let mut text: TEXT = mem::zeroed();
     text.baseline = POINT {
@@ -448,7 +448,7 @@ unsafe extern "C" fn do_melee_connect_dialog(state: *mut ConnectDialogState) -> 
     SleepThreadUntil((*state).next_time.wrapping_add(MENU_FRAME_RATE));
     (*state).next_time = GetTimeCounter();
     BOOLEAN::from(
-        WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as ACTIVITY
+        WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as ACTIVITY
             == 0
             && DONE == 0,
     )

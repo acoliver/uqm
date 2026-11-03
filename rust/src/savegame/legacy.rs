@@ -2,7 +2,7 @@
 use super::format::*;
 use super::{decode_save, decode_summary_from, SaveFile, Summary, GAME_STATE_BYTES};
 #[cfg(not(test))]
-use crate::engine::World as WorldOwner;
+use crate::engine::World;
 use crate::state::game_state::{copy_state_bits_raw, get_state_32_raw, set_state_32_raw};
 use std::io::{self, Read};
 
@@ -228,7 +228,7 @@ mod live {
     /// # Safety
     /// Game thread; summary is null for loading or a writable SUMMARY_DESC.
     pub unsafe fn load_legacy_game(
-        world: &mut WorldOwner,
+        world: &mut World,
         slot: u16,
         summary: *mut SummaryDesc,
     ) -> anyhow::Result<Option<(super::super::StarDesc, u16)>> {

@@ -4,9 +4,7 @@ use crate::c_bindings::{controller_input::*, global_state::MENU_STATE, solar_sys
 use crate::collections::queue::{CountLinks, Queue, ReinitQueue};
 use crate::comm::dispatch::{clone_ship_fragment, CShipFragment};
 use crate::comm::locdata::{CColor, CPoint, CRect};
-use crate::engine::StoryKey;
-use crate::engine::World as WorldOwner;
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
+use crate::engine::{Kernel, StoryKey, World, WorldData};
 use crate::graphics::drawable_abi::SetContextFGFrame;
 use crate::mainloop::restart_menu::c_extern::{
     self as base, uqm_sleep_thread_until as SleepThreadUntil, SetContext,
@@ -134,7 +132,7 @@ unsafe fn bounds(frame: *mut c_void) -> CRect {
 }
 unsafe fn cursor_frame() -> *mut c_void {
     (base::SetAbsFrameIndex(
-        (KernelOwner::current().read(|owner| owner.misc_data_frame)).cast(),
+        (Kernel::current().read(|owner| owner.misc_data_frame)).cast(),
         105,
     ))
     .cast()
@@ -241,7 +239,7 @@ unsafe fn fuel() -> u16 {
 }
 
 unsafe fn spawn_fwiffo() {
-    let world = WorldFields::current();
+    let world = WorldData::current();
     crate::planets::c_api::set_encounter_group(0);
     PutGroupInfo(0, u8::MAX);
     ReinitQueue(std::ptr::addr_of_mut!((**world).game.ip_group_q).cast::<Queue>());
@@ -265,9 +263,7 @@ unsafe fn dispatch_lander() -> bool {
     let mut context = PlanetSideRunContext {
         solar_system: system.cast(),
         world: (*system).pOrbitalDesc.cast(),
-        misc_data_frame: KernelOwner::current()
-            .read(|owner| owner.misc_data_frame)
-            .cast(),
+        misc_data_frame: Kernel::current().read(|owner| owner.misc_data_frame).cast(),
         energy_frame: (*system).PlanetSideFrame[1].cast(),
         life_frames: std::array::from_fn(|i| (*system).PlanetSideFrame[i + 3].cast()),
         landing_x: i32::from(PLANET_LOCATION.x),
@@ -293,7 +289,7 @@ unsafe fn dispatch_lander() -> bool {
             crate::logging::LogLevel::Fatal,
             &format!("Rust PlanetSide failed with status {}", reply.status),
         );
-        (**WorldFields::current()).game.current_activity |= CHECK_ABORT;
+        (**WorldData::current()).game.current_activity |= CHECK_ABORT;
     } else {
         (*system).SysInfo.PlanetInfo.ScanRetrieveMask = context.retrieval_masks;
         if reply.detail == 4 {
@@ -311,16 +307,13 @@ unsafe fn dispatch_lander() -> bool {
             );
         }
     }
-    if WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT != 0 {
+    if WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT != 0 {
         return false;
     }
-    if WorldOwner::current().read(|world| {
-        crate::state::game_state_keys::get_game_state(world, StoryKey::FOUND_PLUTO_SPATHI)
-    }) == 1
-    {
+    if World::current().read(|world| world.story_state(StoryKey::FOUND_PLUTO_SPATHI)) == 1 {
         spawn_fwiffo();
         NextActivity |= CHECK_LOAD;
-        (**WorldFields::current()).game.current_activity |= START_ENCOUNTER;
+        (**WorldData::current()).game.current_activity |= START_ENCOUNTER;
         SaveSolarSysLocation();
         return false;
     }
@@ -338,7 +331,7 @@ unsafe extern "C" fn pick_input(menu: *mut MENU_STATE) -> u32 {
     let state = &mut *((*menu).privData.cast::<PickState>());
     let time_in = GetTimeCounter();
     let pulse = std::ptr::addr_of!(PulsedInputState).read();
-    if WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT != 0
+    if WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT != 0
         || pulse.menu[KEY_MENU_CANCEL as usize] != 0
     {
         state.success = false;
@@ -506,7 +499,7 @@ unsafe fn scan_planet(cx: &mut crate::engine::battle::Cx<'_>, scan_type: u16) {
             height: 11,
         };
         RepairBackRect(&mut repair);
-        SetContextFont((KernelOwner::current().read(|owner| owner.micro_font)).cast());
+        SetContextFont((Kernel::current().read(|owner| owner.micro_font)).cast());
         CffiPlatform.set_fg_color(text_colors[usize::from(scan)]);
         display::text(
             width() >> 1,
@@ -558,7 +551,7 @@ unsafe fn unavailable() -> bool {
 unsafe extern "C" fn scan_input(menu: *mut MENU_STATE) -> u32 {
     let pulse = std::ptr::addr_of!(PulsedInputState).read();
     let selected = pulse.menu[KEY_MENU_SELECT as usize] != 0;
-    if WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT != 0 {
+    if WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT != 0 {
         return 0;
     }
     if pulse.menu[KEY_MENU_CANCEL as usize] != 0 || (selected && (*menu).CurState == 3) {
@@ -570,10 +563,9 @@ unsafe extern "C" fn scan_input(menu: *mut MENU_STATE) -> u32 {
                 return 1;
             }
             let required = fuel();
-            if WorldFields::current().read(|owner| owner.flagship.fuel_on_board)
-                < u32::from(required)
-                || WorldFields::current().read(|owner| owner.flagship.num_landers) == 0
-                || WorldFields::current().read(|owner| owner.flagship.crew_enlisted) == 0
+            if WorldData::current().read(|owner| owner.flagship.fuel_on_board) < u32::from(required)
+                || WorldData::current().read(|owner| owner.flagship.num_landers) == 0
+                || WorldData::current().read(|owner| owner.flagship.crew_enlisted) == 0
             {
                 PlayMenuSound(2);
                 return 1;
@@ -612,11 +604,11 @@ pub unsafe extern "C" fn GetScanContext(owner: *mut i32) -> *mut c_void {
         if !owner.is_null() {
             *owner = 1;
         }
-        let old = SetContext(KernelOwner::current().read(|owner| owner.space_context));
+        let old = SetContext(Kernel::current().read(|owner| owner.space_context));
         let mut rect = CffiPlatform.context_clip_rect();
         let context = new_context(c"ScanContext".as_ptr());
         SetContext((context).cast());
-        SetContextFGFrame(KernelOwner::current().read(|owner| owner.screen).cast());
+        SetContextFGFrame(Kernel::current().read(|owner| owner.screen).cast());
         rect.corner.x += rect.width - width();
         rect.corner.y += rect.height - 75;
         rect.width = width();

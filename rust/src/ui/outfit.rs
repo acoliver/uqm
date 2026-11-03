@@ -2,8 +2,8 @@
 #![cfg(not(test))]
 
 use crate::engine::StoryKey;
-use crate::engine::World as WorldOwner;
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
+use crate::engine::World;
+use crate::engine::{Kernel, WorldData};
 use crate::navigation::abi::*;
 
 use crate::state::game_state_keys::get_game_state;
@@ -37,14 +37,14 @@ const BLACK: Color = rgb15(0, 0, 0);
 
 unsafe fn game_string(index: u32) -> *mut UNICODE {
     GetStringAddress(SetAbsStringTableIndex(
-        KernelOwner::current().read(|owner| owner.game_strings),
+        Kernel::current().read(|owner| owner.game_strings),
         index as COUNT,
     ))
     .cast()
 }
 
 unsafe fn draw_module_strings(menu: *mut MENU_STATE, module: BYTE) {
-    let old = SetContext(KernelOwner::current().read(|owner| owner.status_context));
+    let old = SetContext(Kernel::current().read(|owner| owner.status_context));
     let mut r: RECT = mem::zeroed();
     GetContextClipRect(&mut r);
     let mut s = STAMP {
@@ -74,7 +74,7 @@ unsafe fn draw_module_strings(menu: *mut MENU_STATE, module: BYTE) {
         DrawStamp(&mut s);
         let buffer = format!(
             "{}\0",
-            (**WorldFields::current()).game.module_cost[module as usize] as u32 * MODULE_COST_SCALE
+            (**WorldData::current()).game.module_cost[module as usize] as u32 * MODULE_COST_SCALE
         );
         let mut text = TEXT {
             baseline: POINT {
@@ -85,7 +85,7 @@ unsafe fn draw_module_strings(menu: *mut MENU_STATE, module: BYTE) {
             CharCount: COUNT::MAX,
             pStr: buffer.as_ptr().cast(),
         };
-        SetContextFont(KernelOwner::current().read(|owner| owner.tiny_font));
+        SetContextFont(Kernel::current().read(|owner| owner.tiny_font));
         SetContextForeGroundColor(rgb15(0, 0x1f, 0));
         font_DrawText(&mut text);
     }
@@ -94,16 +94,16 @@ unsafe fn draw_module_strings(menu: *mut MENU_STATE, module: BYTE) {
 }
 
 unsafe fn redistribute_fuel() {
-    let volume = WorldFields::current().read(|owner| owner.flagship.fuel_on_board);
-    let old = SetContext(KernelOwner::current().read(|owner| owner.space_context));
+    let volume = WorldData::current().read(|owner| owner.flagship.fuel_on_board);
+    let old = SetContext(Kernel::current().read(|owner| owner.space_context));
     let mut r: RECT = mem::zeroed();
     r.extent.height = 1;
     BatchGraphics();
-    (**WorldFields::current()).flagship.fuel_on_board = FUEL_RESERVE;
-    while WorldFields::current().read(|owner| owner.flagship.fuel_on_board)
+    (**WorldData::current()).flagship.fuel_on_board = FUEL_RESERVE;
+    while WorldData::current().read(|owner| owner.flagship.fuel_on_board)
         < GetFTankCapacity(&mut r.corner)
     {
-        if WorldFields::current().read(|owner| owner.flagship.fuel_on_board) < volume {
+        if WorldData::current().read(|owner| owner.flagship.fuel_on_board) < volume {
             r.extent.width = 3;
             DrawPoint(&mut r.corner);
             r.corner.x += r.extent.width + 1;
@@ -116,11 +116,11 @@ unsafe fn redistribute_fuel() {
             SetContextForeGroundColor(rgb15(0x0b, 0, 0));
         }
         DrawFilledRectangle(&mut r);
-        (**WorldFields::current()).flagship.fuel_on_board += FUEL_VOLUME_PER_ROW;
+        (**WorldData::current()).flagship.fuel_on_board += FUEL_VOLUME_PER_ROW;
     }
     UnbatchGraphics();
     SetContext(old);
-    (**WorldFields::current()).flagship.fuel_on_board = volume;
+    (**WorldData::current()).flagship.fuel_on_board = volume;
 }
 
 unsafe fn display_landers(menu: *mut MENU_STATE) {
@@ -128,7 +128,7 @@ unsafe fn display_landers(menu: *mut MENU_STATE) {
         origin: POINT { x: 0, y: 0 },
         frame: (*menu).ModuleFrame,
     };
-    if WorldOwner::current().read(|world| get_game_state(world, StoryKey::CHMMR_BOMB_STATE)) == 3 {
+    if World::current().read(|world| get_game_state(world, StoryKey::CHMMR_BOMB_STATE)) == 3 {
         s.frame = DecFrameIndex(s.frame);
         DrawStamp(&mut s);
     } else {
@@ -137,7 +137,7 @@ unsafe fn display_landers(menu: *mut MENU_STATE) {
             y: LANDER_Y,
         };
         let mut i = 0;
-        while i < WorldFields::current().read(|owner| owner.flagship.num_landers) as COUNT {
+        while i < WorldData::current().read(|owner| owner.flagship.num_landers) as COUNT {
             DrawStamp(&mut s);
             s.origin.x += LANDER_WIDTH;
             i += 1;
@@ -153,17 +153,17 @@ unsafe fn display_landers(menu: *mut MENU_STATE) {
 
 fn slot_piece(state: BYTE, item: SIZE) -> BYTE {
     if state == PLANET_LANDER as BYTE || state == EMPTY_SLOT + 3 {
-        if item < WorldFields::current().read(|owner| owner.flagship.num_landers) as SIZE {
+        if item < WorldData::current().read(|owner| owner.flagship.num_landers) as SIZE {
             PLANET_LANDER as BYTE
         } else {
             EMPTY_SLOT + 3
         }
     } else if state == FUSION_THRUSTER as BYTE || state == EMPTY_SLOT {
-        WorldFields::current().read(|owner| owner.flagship.drive_slots[item as usize])
+        WorldData::current().read(|owner| owner.flagship.drive_slots[item as usize])
     } else if state == TURNING_JETS as BYTE || state == EMPTY_SLOT + 1 {
-        WorldFields::current().read(|owner| owner.flagship.jet_slots[item as usize])
+        WorldData::current().read(|owner| owner.flagship.jet_slots[item as usize])
     } else {
-        WorldFields::current().read(|owner| owner.flagship.module_slots[item as usize])
+        WorldData::current().read(|owner| owner.flagship.module_slots[item as usize])
     }
 }
 
@@ -229,7 +229,7 @@ unsafe fn init_flash(menu: *mut MENU_STATE, piece: BYTE) {
 }
 
 unsafe extern "C" fn do_install_module(menu: *mut MENU_STATE) -> BOOLEAN {
-    if WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16 != 0 {
+    if WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16 != 0 {
         (*menu).InputFunc = Some(DoOutfit);
         return 1;
     }
@@ -250,9 +250,7 @@ unsafe extern "C" fn do_install_module(menu: *mut MENU_STATE) -> BOOLEAN {
     } else if state == TURNING_JETS as BYTE || state == EMPTY_SLOT + 1 {
         NUM_JET_SLOTS as SIZE - 1
     } else {
-        if WorldOwner::current().read(|world| get_game_state(world, StoryKey::CHMMR_BOMB_STATE))
-            == 3
-        {
+        if World::current().read(|world| get_game_state(world, StoryKey::CHMMR_BOMB_STATE)) == 3 {
             first = NUM_BOMB_MODULES as SIZE;
         }
         NUM_MODULE_SLOTS as SIZE - 1
@@ -267,17 +265,17 @@ unsafe extern "C" fn do_install_module(menu: *mut MENU_STATE) -> BOOLEAN {
     if (*menu).Initialized == 0 {
         (*menu).Initialized = 1;
         (*menu).InputFunc = Some(do_install_module);
-        SetContext(KernelOwner::current().read(|owner| owner.space_context));
+        SetContext(Kernel::current().read(|owner| owner.space_context));
         ClearSISRect(CLEAR_SIS_RADAR as BYTE);
         SetFlashRect(ptr::null());
         init_flash(menu, old_piece);
     } else if select || cancel {
         let mut new_piece = (*menu).CurState;
-        if select && !WorldOwner::current().read(|world| can_install(world, new_piece, old_piece)) {
+        if select && !World::current().read(|world| can_install(world, new_piece, old_piece)) {
             PlayMenuSound(MENU_SOUND_EFFECT_MENU_SOUND_FAILURE);
             return 1;
         }
-        SetContext(KernelOwner::current().read(|owner| owner.space_context));
+        SetContext(Kernel::current().read(|owner| owner.space_context));
         SetFlashRect(ptr::null());
         if select {
             if new_piece >= EMPTY_SLOT && old_piece >= EMPTY_SLOT {
@@ -286,7 +284,7 @@ unsafe extern "C" fn do_install_module(menu: *mut MENU_STATE) -> BOOLEAN {
                     new_piece = PLANET_LANDER as BYTE;
                 }
             } else {
-                let cost = WorldOwner::current().write(|world| {
+                let cost = World::current().write(|world| {
                     apply_piece(
                         world,
                         (*menu).CurState,
@@ -330,7 +328,7 @@ unsafe extern "C" fn do_install_module(menu: *mut MENU_STATE) -> BOOLEAN {
             (*menu).CurState = new_piece;
             init_flash(menu, new_piece);
         } else {
-            SetContext(KernelOwner::current().read(|owner| owner.status_context));
+            SetContext(Kernel::current().read(|owner| owner.status_context));
             (*menu).CurState = OUTFIT_MODULES;
             DrawMenuStateStrings(PM_FUEL as BYTE, (*menu).CurState as i16);
             SetFlashRect(MENU_3DO);
@@ -359,8 +357,7 @@ unsafe extern "C" fn do_install_module(menu: *mut MENU_STATE) -> BOOLEAN {
                     }
                 }
                 item = 0;
-                if WorldOwner::current()
-                    .read(|world| get_game_state(world, StoryKey::CHMMR_BOMB_STATE))
+                if World::current().read(|world| get_game_state(world, StoryKey::CHMMR_BOMB_STATE))
                     == 3
                 {
                     if state == EMPTY_SLOT + 3 {
@@ -385,8 +382,7 @@ unsafe extern "C" fn do_install_module(menu: *mut MENU_STATE) -> BOOLEAN {
                 }
             }
             if !(state < EMPTY_SLOT
-                && (WorldFields::current().read(|owner| owner.game.module_cost[item as usize])
-                    == 0
+                && (WorldData::current().read(|owner| owner.game.module_cost[item as usize]) == 0
                     || (item >= GUN_WEAPON as SIZE
                         && item <= CANNON_WEAPON as SIZE
                         && (*menu).delta_item > 0
@@ -404,7 +400,7 @@ unsafe extern "C" fn do_install_module(menu: *mut MENU_STATE) -> BOOLEAN {
             }
         } else if item != (*menu).delta_item || state != (*menu).CurState {
             let piece = slot_piece(state, item);
-            SetContext(KernelOwner::current().read(|owner| owner.space_context));
+            SetContext(Kernel::current().read(|owner| owner.space_context));
             if state == (*menu).CurState {
                 let width = if state == PLANET_LANDER as BYTE || state == EMPTY_SLOT + 3 {
                     LANDER_WIDTH
@@ -437,12 +433,12 @@ unsafe fn change_fuel_quantity() {
         return;
     };
     let max_fit = GetFuelTankCapacity()
-        .wrapping_sub(WorldFields::current().read(|owner| owner.flagship.fuel_on_board))
+        .wrapping_sub(WorldData::current().read(|owner| owner.flagship.fuel_on_board))
         as i32;
-    let max_afford = (WorldFields::current().read(|owner| owner.flagship.res_units)
-        / WorldFields::current().read(|owner| owner.game.fuel_cost) as DWORD)
+    let max_afford = (WorldData::current().read(|owner| owner.flagship.res_units)
+        / WorldData::current().read(|owner| owner.game.fuel_cost) as DWORD)
         as i32;
-    let min_fit = -(WorldFields::current().read(|owner| owner.flagship.fuel_on_board) as i32);
+    let min_fit = -(WorldData::current().read(|owner| owner.flagship.fuel_on_board) as i32);
     if incr > max_fit {
         incr = max_fit;
     }
@@ -456,14 +452,14 @@ unsafe fn change_fuel_quantity() {
         PlayMenuSound(MENU_SOUND_EFFECT_MENU_SOUND_FAILURE);
     } else {
         let cost = incr / FUEL_TANK_SCALE as i32
-            * WorldFields::current().read(|owner| owner.game.fuel_cost) as i32;
+            * WorldData::current().read(|owner| owner.game.fuel_cost) as i32;
         pre_update_flash_rect();
         DeltaSISGauges(0, incr as SIZE, -cost);
         post_update_flash_rect();
         redistribute_fuel();
     }
     let mut r: RECT = mem::zeroed();
-    let old = SetContext(KernelOwner::current().read(|owner| owner.status_context));
+    let old = SetContext(Kernel::current().read(|owner| owner.status_context));
     GetGaugeRect(&mut r, 0);
     SetFlashRect(&r);
     SetContext(old);
@@ -489,7 +485,7 @@ unsafe fn exit_outfit(menu: *mut MENU_STATE) -> BOOLEAN {
 /// and audio must be initialized and exclusively accessed on that thread.
 #[no_mangle]
 pub unsafe extern "C" fn DoOutfit(menu: *mut MENU_STATE) -> BOOLEAN {
-    if WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16 != 0 {
+    if WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16 != 0 {
         return exit_outfit(menu);
     }
     if (*menu).Initialized == 0 {
@@ -511,36 +507,34 @@ pub unsafe extern "C" fn DoOutfit(menu: *mut MENU_STATE) -> BOOLEAN {
         draw_sisframe();
         DrawSISMessage(game_string(STARBASE_STRING_BASE + 2));
         DrawSISTitle(game_string(STARBASE_STRING_BASE));
-        SetContext(KernelOwner::current().read(|owner| owner.space_context));
+        SetContext(Kernel::current().read(|owner| owner.space_context));
         DrawStamp(&mut s);
         DestroyDrawable(ReleaseDrawable(s.frame));
         for slot in 0..NUM_DRIVE_SLOTS {
             let piece =
-                WorldFields::current().read(|owner| owner.flagship.drive_slots[slot as usize]);
+                WorldData::current().read(|owner| owner.flagship.drive_slots[slot as usize]);
             if piece < EMPTY_SLOT {
                 DrawShipPiece((*menu).ModuleFrame, piece as COUNT, slot as COUNT, 0);
             }
         }
         for slot in 0..NUM_JET_SLOTS {
-            let piece =
-                WorldFields::current().read(|owner| owner.flagship.jet_slots[slot as usize]);
+            let piece = WorldData::current().read(|owner| owner.flagship.jet_slots[slot as usize]);
             if piece < EMPTY_SLOT {
                 DrawShipPiece((*menu).ModuleFrame, piece as COUNT, slot as COUNT, 0);
             }
         }
         for slot in 0..NUM_MODULE_SLOTS {
             let piece =
-                WorldFields::current().read(|owner| owner.flagship.module_slots[slot as usize]);
+                WorldData::current().read(|owner| owner.flagship.module_slots[slot as usize]);
             if piece < EMPTY_SLOT {
                 DrawShipPiece((*menu).ModuleFrame, piece as COUNT, slot as COUNT, 0);
             }
         }
         redistribute_fuel();
         display_landers(menu);
-        if WorldOwner::current().read(|world| get_game_state(world, StoryKey::CHMMR_BOMB_STATE)) < 3
-        {
+        if World::current().read(|world| get_game_state(world, StoryKey::CHMMR_BOMB_STATE)) < 3 {
             let shields =
-                WorldOwner::current().read(|world| get_game_state(world, StoryKey::LANDER_SHIELDS));
+                World::current().read(|world| get_game_state(world, StoryKey::LANDER_SHIELDS));
             s.frame = SetAbsFrameIndex((*menu).ModuleFrame, GetFrameCount((*menu).ModuleFrame) - 5);
             if shields & (1 << EARTHQUAKE_DISASTER) != 0 {
                 DrawStamp(&mut s);
@@ -567,12 +561,12 @@ pub unsafe extern "C" fn DoOutfit(menu: *mut MENU_STATE) -> BOOLEAN {
         PlayMusic((*menu).hMusic, 1, 1);
         UnbatchGraphics();
         SetFlashRect(MENU_3DO);
-        (**WorldFields::current()).flagship.fuel_on_board = WorldFields::current()
+        (**WorldData::current()).flagship.fuel_on_board = WorldData::current()
             .read(|owner| owner.flagship.fuel_on_board)
             .wrapping_add(FUEL_TANK_SCALE >> 1)
             / FUEL_TANK_SCALE;
-        (**WorldFields::current()).flagship.fuel_on_board *= FUEL_TANK_SCALE;
-        SetContext(KernelOwner::current().read(|owner| owner.status_context));
+        (**WorldData::current()).flagship.fuel_on_board *= FUEL_TANK_SCALE;
+        SetContext(Kernel::current().read(|owner| owner.status_context));
     } else if PulsedInputState.menu[KEY_MENU_CANCEL as usize] != 0
         || (PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0 && (*menu).CurState == OUTFIT_EXIT)
     {
@@ -586,7 +580,7 @@ pub unsafe extern "C" fn DoOutfit(menu: *mut MENU_STATE) -> BOOLEAN {
         match (*menu).CurState {
             OUTFIT_FUEL => {
                 (*menu).CurState = OUTFIT_DOFUEL;
-                SetContext(KernelOwner::current().read(|owner| owner.status_context));
+                SetContext(Kernel::current().read(|owner| owner.status_context));
                 let mut r: RECT = mem::zeroed();
                 GetGaugeRect(&mut r, 0);
                 SetFlashRect(&r);
@@ -597,7 +591,7 @@ pub unsafe extern "C" fn DoOutfit(menu: *mut MENU_STATE) -> BOOLEAN {
             }
             OUTFIT_MODULES => {
                 (*menu).CurState = EMPTY_SLOT + 2;
-                (*menu).delta_item = if WorldOwner::current()
+                (*menu).delta_item = if World::current()
                     .read(|world| get_game_state(world, StoryKey::CHMMR_BOMB_STATE))
                     != 3
                 {

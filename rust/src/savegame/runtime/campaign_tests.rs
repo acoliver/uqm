@@ -1,5 +1,5 @@
 use super::{groups, queues, statefiles, *};
-use crate::engine::World as WorldOwner;
+use crate::engine::World;
 use crate::savegame::{decode_save, encode_save};
 use crate::state::ffi::{rust_init_game_state, with_state_owners};
 use crate::state::game_state_keys::STATE_KEYS;
@@ -151,7 +151,7 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
                     path.display()
                 );
                 {
-                    WorldOwner::current().write(rust_init_game_state);
+                    World::current().write(rust_init_game_state);
                 }
                 let mut game = super::queue_tests::LiveGame::new();
                 assert!({
@@ -163,7 +163,7 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
                     )
                 });
 
-                let restored = WorldOwner::current()
+                let restored = World::current()
                     .write(|world| {
                         restore_runtime(
                             &mut game,
@@ -194,7 +194,7 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
                 };
                 groups::restore_groups(&mut game, &g).unwrap();
                 assert_eq!(groups::capture_groups(&game).unwrap(), g);
-                WorldOwner::current()
+                World::current()
                     .write(|world| {
                         statefiles::restore_state_files(
                             &mut game,
@@ -209,7 +209,7 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
                         )
                     })
                     .unwrap();
-                let actual = WorldOwner::current()
+                let actual = World::current()
                     .write(|world| capture_runtime(&game, &world.story))
                     .unwrap();
                 assert_eq!(actual.global, saved.global);
@@ -310,7 +310,7 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
                     ),
                     expected
                 );
-                WorldOwner::current()
+                World::current()
                     .write(|world| {
                         with_state_owners(world, |game, _| {
                             for (name, value) in state.as_object().into_iter().flatten() {

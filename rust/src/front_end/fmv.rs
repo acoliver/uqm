@@ -3,7 +3,7 @@
 #[cfg(not(test))]
 pub(crate) mod runtime {
     use super::super::intro::ShowPresentation;
-    use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
+    use crate::engine::{Kernel, WorldData};
     use crate::navigation::abi::*;
 
     use std::ptr;
@@ -60,7 +60,7 @@ pub(crate) mod runtime {
             ScreenFadeType_FadeAllToBlack,
             (ONE_SECOND / 120) as SIZE,
         ));
-        SetContext(KernelOwner::current().read(|owner| owner.screen_context));
+        SetContext(Kernel::current().read(|owner| owner.screen_context));
         let mut stamp = STAMP {
             origin: POINT { x: 0, y: 0 },
             frame: CaptureDrawable(LoadGraphicInstance(TITLE_ANIM.as_ptr().cast()).cast()),
@@ -71,18 +71,16 @@ pub(crate) mod runtime {
         if let Some(callback) = process {
             callback(timeout);
         }
-        if WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
-            != 0
+        if WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16 != 0
         {
             return;
         }
         WaitForAnyButton(0, ONE_SECOND * 3, 1);
-        if WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
-            != 0
+        if WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16 != 0
         {
             return;
         }
-        (**WorldFields::current()).game.current_activity &= !(CHECK_ABORT as u16);
+        (**WorldData::current()).game.current_activity &= !(CHECK_ABORT as u16);
         SleepThreadUntil(FadeScreen(
             ScreenFadeType_FadeAllToBlack,
             (ONE_SECOND / 2) as SIZE,

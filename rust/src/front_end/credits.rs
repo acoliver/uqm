@@ -1,7 +1,7 @@
 //! Bidirectional credits scrolling and communication outtakes, ported from uqm/credits.c.
 
 #[cfg(not(test))]
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
+use crate::engine::{Kernel, WorldData};
 use crate::navigation::abi::*;
 use std::ffi::c_int;
 
@@ -514,7 +514,7 @@ pub(crate) mod runtime {
         oscillDisabled = 1;
         let mut i = 0;
         while i < CONVERSATIONS.len()
-            && WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
+            && WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
                 == 0
         {
             SetCommIntroMode((CIM_CROSSFADE_WINDOW) as u32, 0);
@@ -535,8 +535,7 @@ pub(crate) mod runtime {
         if CREDITS_RUNNING != 0 {
             state.close_time_out = 0;
         }
-        if WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
-            != 0
+        if WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16 != 0
             || (state.allow_cancel != 0 && (menu(KEY_MENU_SELECT) || menu(KEY_MENU_CANCEL)))
         {
             return 0;
@@ -579,7 +578,7 @@ pub(crate) mod runtime {
     #[no_mangle]
     pub unsafe extern "C" fn Credits(with_outtakes: BOOLEAN) {
         let music = LoadMusicInstance(CREDITS_MUSIC.as_ptr().cast());
-        SetContext(KernelOwner::current().read(|owner| owner.screen_context));
+        SetContext(Kernel::current().read(|owner| owner.screen_context));
         SetContextClipRect(ptr::null_mut());
         let mut screen_rect: RECT = std::mem::zeroed();
         GetContextClipRect(&mut screen_rect);
@@ -608,8 +607,7 @@ pub(crate) mod runtime {
             outtakes();
             OUT_TAKES_RUNNING = 0;
         }
-        if WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
-            == 0
+        if WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16 == 0
         {
             if with_outtakes != 0 {
                 crate::automation::ending::credits_controls_ready();
@@ -630,7 +628,7 @@ pub(crate) mod runtime {
         SetInputCallback(None);
         FadeMusic(0, (ONE_SECOND / 2) as SIZE);
         uninit_credits();
-        SetContext(KernelOwner::current().read(|owner| owner.screen_context));
+        SetContext(Kernel::current().read(|owner| owner.screen_context));
         SleepThreadUntil(FadeScreen(
             ScreenFadeType_FadeAllToBlack,
             (ONE_SECOND / 2) as SIZE,

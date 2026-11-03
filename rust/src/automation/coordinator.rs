@@ -15,7 +15,7 @@
 //! @plan PLAN-20260723-RUNTIME-AUTOMATION.P08
 //! @requirement REQ-FFI-001..005, REQ-SCHED-001, REQ-WATCH-001
 
-use crate::engine::World as WorldOwner;
+use crate::engine::World;
 mod fixtures;
 mod input;
 mod navigation;
@@ -611,7 +611,7 @@ impl Coordinator {
         };
 
         match scenario::activate(scene, SceneActivationBoundary::GameInitialized, |plan| {
-            WorldOwner::current().write(|world| {
+            World::current().write(|world| {
                 for &(key, value) in plan.game_state {
                     world.set_story_state(key, value);
                 }
@@ -1340,7 +1340,7 @@ impl Coordinator {
         let flags = ARTIFACT_FLAGS
             .iter()
             .map(|key| {
-                WorldOwner::current()
+                World::current()
                     .read(|world| crate::state::ffi::named_state_value(world, key))
                     .map(u32::from)
             })
@@ -1354,7 +1354,7 @@ impl Coordinator {
             lander: planet_minerals::PlanetSnapshot::live(),
             nodes,
             retrieved,
-            vault_unlocked: WorldOwner::current()
+            vault_unlocked: World::current()
                 .read(|world| crate::state::ffi::named_state_value(world, "SHIP_VAULT_UNLOCKED"))
                 == Some(1),
             flags,
@@ -1676,7 +1676,7 @@ impl Coordinator {
             );
         }
         // A homeworld is the destination, not a patrol to dismiss.
-        if WorldOwner::current()
+        if World::current()
             .read(|world| crate::state::ffi::named_state_value(world, "GLOBAL_FLAGS_AND_DATA"))
             == Some(128)
         {
@@ -1747,7 +1747,7 @@ impl Coordinator {
                 Some(step.max_ticks)
             }
             Some(Action::NavigateToMoon(step))
-                if WorldOwner::current().read(|world| {
+                if World::current().read(|world| {
                     crate::state::ffi::named_state_value(world, "GLOBAL_FLAGS_AND_DATA")
                 }) == Some(0) =>
             {
@@ -1758,7 +1758,7 @@ impl Coordinator {
             }
             Some(Action::NavigateToOrbit(step))
                 if step.patrol_policy != PatrolPolicy::Stop
-                    && WorldOwner::current().read(|world| {
+                    && World::current().read(|world| {
                         crate::state::ffi::named_state_value(world, "GLOBAL_FLAGS_AND_DATA")
                     }) == Some(0) =>
             {

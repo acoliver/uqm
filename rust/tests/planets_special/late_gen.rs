@@ -4,7 +4,7 @@ use crate::planets_common::late_gen::{self, Kind, Layout, Ops, Scan};
 use uqm_rust::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC, SYSTEM_INFO};
 use uqm_rust::planets::generate::special::Body;
 use uqm_rust::planets::generate::vtable::GenerateFunctions;
-use uqm_rust::state::game_state_keys::{get_game_state, set_game_state};
+use uqm_rust::state::game_state_keys::get_game_state;
 
 unsafe extern "C" {
     static generateVuxFunctions: GenerateFunctions;
@@ -27,8 +27,7 @@ impl Ops for Harness {
         self.state.PlanetDesc.copy_from_slice(planets);
         self.state.SunDesc[0].NumPlanets = 0;
         uqm_rust::engine::World::current().write(|world| {
-            set_game_state(
-                world,
+            (world).set_story_state(
                 uqm_rust::engine::StoryKey::SPATHI_SHIELDED_SELVES,
                 u32::from(case.shielded),
             )
@@ -79,7 +78,7 @@ impl Ops for Harness {
             uqm_rust::engine::StoryKey::UMGAH_BROADCASTERS,
         ] {
             uqm_rust::engine::World::current()
-                .write(|world| set_game_state(world, key, u32::from(case.taken)));
+                .write(|world| (world).set_story_state(key, u32::from(case.taken)));
         }
         self.state.PlanetDesc = unsafe { std::mem::zeroed() };
         self.state.MoonDesc = unsafe { std::mem::zeroed() };

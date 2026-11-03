@@ -8,7 +8,6 @@ use uqm_rust::planets::c_api::{self, CapturedSurface};
 use uqm_rust::planets::consts::{MAP_HEIGHT, MAP_WIDTH};
 use uqm_rust::planets::generate::sol_exports::GENERATE_SOL_FUNCTIONS;
 use uqm_rust::planets::generate::vtable::DEFAULT_HOOKS;
-use uqm_rust::state::game_state_keys::{get_game_state, set_game_state};
 
 pub fn check() {
     let table = unsafe { &super::sol::generateSolFunctions };
@@ -65,17 +64,13 @@ pub fn check() {
 fn check_bomb_queue(h: &mut Harness) {
     // This uses the real live queue adapter, not a recording FleetGroups host.
     let old_bomb = uqm_rust::engine::World::current()
-        .read(|world| get_game_state(world, uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE));
+        .read(|world| (world).story_state(uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE));
     let old_probe = uqm_rust::engine::World::current()
-        .read(|world| get_game_state(world, uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED));
+        .read(|world| (world).story_state(uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED));
     uqm_rust::engine::World::current()
-        .write(|world| set_game_state(world, uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE, 3));
+        .write(|world| (world).set_story_state(uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE, 3));
     uqm_rust::engine::World::current().write(|world| {
-        set_game_state(
-            world,
-            uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED,
-            1,
-        )
+        (world).set_story_state(uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED, 1)
     });
     unsafe {
         let saved = uqm_rust::engine::WorldData::current().write(|world| {
@@ -102,15 +97,10 @@ fn check_bomb_queue(h: &mut Harness) {
         });
     }
     uqm_rust::engine::World::current().write(|world| {
-        set_game_state(
-            world,
-            uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE,
-            old_bomb,
-        )
+        (world).set_story_state(uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE, old_bomb)
     });
     uqm_rust::engine::World::current().write(|world| {
-        set_game_state(
-            world,
+        (world).set_story_state(
             uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED,
             old_probe,
         )

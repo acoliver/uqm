@@ -8,7 +8,7 @@
 
 use super::oscilloscope::Oscilloscope;
 #[cfg(not(test))]
-use crate::engine::Kernel as KernelOwner;
+use crate::engine::Kernel;
 
 // Host-time rate limiting otherwise changes whether a speech frame queues a
 // drawing command, which changes replay presentation counts.
@@ -123,9 +123,9 @@ impl SpeechGraphics {
         #[cfg(not(test))]
         unsafe {
             let old_context =
-                c_bridge::SetContext(KernelOwner::current().read(|owner| owner.radar_context));
+                c_bridge::SetContext(Kernel::current().read(|owner| owner.radar_context));
             c_bridge::DrawOscilloscope();
-            c_bridge::SetContext(KernelOwner::current().read(|owner| owner.space_context));
+            c_bridge::SetContext(Kernel::current().read(|owner| owner.space_context));
             c_bridge::DrawSlider();
             c_bridge::SetContext(old_context);
         }
@@ -155,7 +155,7 @@ impl SpeechGraphics {
 #[cfg(not(test))]
 unsafe fn activity_frame(index: u16) -> *mut std::ffi::c_void {
     (c_bridge::SetAbsFrameIndex(
-        (KernelOwner::current().read(|owner| owner.activity_frame)).cast(),
+        (Kernel::current().read(|owner| owner.activity_frame)).cast(),
         index,
     ))
     .cast()

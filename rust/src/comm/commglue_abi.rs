@@ -2,9 +2,9 @@
 
 use crate::c_bindings::global_state::NUMBER_SPEECH_DESC;
 #[cfg(not(test))]
-use crate::engine::World as WorldOwner;
+use crate::engine::World;
 #[cfg(not(test))]
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
+use crate::engine::{Kernel, WorldData};
 
 /// Collect one-based phrase indices in the same recursive order as NPCNumberPhrase.
 unsafe fn number_phrases(
@@ -77,7 +77,7 @@ pub(crate) mod runtime {
         let (first, last) =
             crate::state::game_state_keys::bit_range(key).expect("known comm state");
         {
-            WorldOwner::current().read(|world| {
+            World::current().read(|world| {
                 crate::state::ffi::rust_get_game_state_bits(world, first as i32, last as i32)
             })
         }
@@ -86,7 +86,7 @@ pub(crate) mod runtime {
         let (first, last) =
             crate::state::game_state_keys::bit_range(key).expect("known comm state");
         {
-            WorldOwner::current().write(|world| {
+            World::current().write(|world| {
                 crate::state::ffi::rust_set_game_state_bits(world, first as i32, last as i32, value)
             })
         }
@@ -128,7 +128,7 @@ pub(crate) mod runtime {
     /// Buffer must hold the complete alliance name, including commander and suffix.
     #[no_mangle]
     pub unsafe extern "C" fn GetAllianceName(buffer: *mut c_char, first: u16) {
-        let world = WorldFields::current();
+        let world = WorldData::current();
         let variant = get("NEW_ALLIANCE_NAME");
         let entry = SetAbsStringTableIndex(
             (COMM_DATA.conversation_phrases).cast(),
@@ -152,13 +152,13 @@ pub(crate) mod runtime {
             0 => set("BATTLE_SEGUE", 0),
             1 => set("BATTLE_SEGUE", 1),
             2 => {
-                (**KernelOwner::current()).instant_victory = 1;
+                (**Kernel::current()).instant_victory = 1;
                 set("BATTLE_SEGUE", 1);
             }
             3 => {
                 set("BATTLE_SEGUE", 0);
-                (**WorldFields::current()).flagship.crew_enlisted = u16::MAX;
-                (**WorldFields::current()).game.current_activity |= 0x2000;
+                (**WorldData::current()).flagship.crew_enlisted = u16::MAX;
+                (**WorldData::current()).game.current_activity |= 0x2000;
             }
             _ => unreachable!("invalid Segue"),
         }
@@ -169,14 +169,14 @@ pub(crate) mod runtime {
     #[no_mangle]
     pub unsafe extern "C" fn getSegue() -> i32 {
         if get("BATTLE_SEGUE") == 0 {
-            if WorldFields::current().read(|owner| owner.flagship.crew_enlisted) == u16::MAX
-                && WorldFields::current().read(|owner| owner.game.current_activity) & 0x2000 != 0
+            if WorldData::current().read(|owner| owner.flagship.crew_enlisted) == u16::MAX
+                && WorldData::current().read(|owner| owner.game.current_activity) & 0x2000 != 0
             {
                 3
             } else {
                 0
             }
-        } else if KernelOwner::current().read(|owner| owner.instant_victory) != 0 {
+        } else if Kernel::current().read(|owner| owner.instant_victory) != 0 {
             2
         } else {
             1

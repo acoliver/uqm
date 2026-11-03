@@ -1,7 +1,7 @@
 //! Rust communication facade for state, playback and dialogue orchestration.
 
 #[cfg(not(test))]
-use crate::engine::{StoryKey, World as WorldOwner, WorldData as WorldFields};
+use crate::engine::{StoryKey, World, WorldData};
 use std::cell::RefCell;
 use std::ffi::{c_char, c_int, c_uint, CStr};
 
@@ -1197,14 +1197,28 @@ use crate::strings::string_table::SetAbsStringTableIndex;
 /// Uses CommData.ConversationPhrases + GET_GAME_STATE(NEW_ALLIANCE_NAME).
 #[cfg(not(test))]
 pub(crate) unsafe fn get_alliance_name(index: c_int) -> *const u8 {
-    let i =
-        WorldOwner::current().read(|world| world.story_state(StoryKey::NEW_ALLIANCE_NAME)) as c_int;
+    let i = World::current().read(|world| world.story_state(StoryKey::NEW_ALLIANCE_NAME)) as c_int;
     let phrases = std::ptr::addr_of_mut!(CommData.conversation_phrases) as *mut std::ffi::c_void;
     if phrases.is_null() {
         return std::ptr::null();
     }
     let s = SetAbsStringTableIndex((phrases).cast(), (index + i) as u16);
     GetStringAddress(s).cast::<u8>()
+}
+
+fn format_alliance_name(buffer: &mut [u8], phrase: &[u8], commander: Option<&[u8]>) {
+    let mut used = phrase.len().min(buffer.len() - 1);
+    buffer[..used].copy_from_slice(&phrase[..used]);
+    if let Some(name) = commander {
+        let end = name
+            .iter()
+            .position(|&byte| byte == 0)
+            .unwrap_or(name.len());
+        let count = end.min(buffer.len() - used - 1);
+        buffer[used..used + count].copy_from_slice(&name[..count]);
+        used += count;
+    }
+    buffer[used] = 0;
 }
 
 /// Ported from C's c_get_alliance_name_full: full alliance name with CommanderName append.
@@ -1221,30 +1235,19 @@ unsafe fn get_alliance_name_full(
         return std::ptr::null();
     }
 
-    let i =
-        WorldOwner::current().read(|world| world.story_state(StoryKey::NEW_ALLIANCE_NAME)) as c_int;
+    let i = World::current().read(|world| world.story_state(StoryKey::NEW_ALLIANCE_NAME)) as c_int;
     let s = SetAbsStringTableIndex((phrases).cast(), ((adjusted_index - 1) + i) as u16);
     let src = GetStringAddress(s);
     if src.is_null() {
         return std::ptr::null();
     }
 
-    // Copy src into buf (strncpy equivalent)
-    let src_cstr = CStr::from_ptr(src);
-    let src_bytes = src_cstr.to_bytes();
-    let copy_len = (buf_len as usize - 1).min(src_bytes.len());
-    std::ptr::copy_nonoverlapping(src_bytes.as_ptr(), buf.cast::<u8>(), copy_len);
-    *buf.add(copy_len) = 0;
-
-    // If state==3, append CommanderName
-    if i == 3 {
-        let name = WorldFields::current().read(|world| world.flagship.commander_name);
-        let cname_bytes = CStr::from_ptr(name.as_ptr().cast()).to_bytes();
-        let remaining = (buf_len as usize).saturating_sub(copy_len + 1);
-        let append_len = remaining.min(cname_bytes.len());
-        std::ptr::copy_nonoverlapping(cname_bytes.as_ptr(), buf.add(copy_len).cast(), append_len);
-        *buf.add(copy_len + append_len) = 0;
-    }
+    let name = (i == 3).then(|| WorldData::current().read(|world| world.flagship.commander_name));
+    format_alliance_name(
+        std::slice::from_raw_parts_mut(buf.cast(), buf_len as usize),
+        CStr::from_ptr(src).to_bytes(),
+        name.as_ref().map(|name| name.as_slice()),
+    );
 
     buf as *const std::ffi::c_char
 }
@@ -1287,13 +1290,14 @@ pub unsafe fn rust_npc_phrase_cb(index: c_int, cb: super::glue::PhraseCallback) 
         use std::ffi::c_void;
         use std::ptr;
 
-        if index == GLOBAL_PLAYER_NAME {
-            // Branch 2: commander name — direct GlobData.flagship access
-            let name = WorldFields::current().read(|world| world.flagship.commander_name);
-            SpliceTrack(ptr::null_mut(), name.as_ptr().cast(), ptr::null_mut(), cb);
-        } else if index == GLOBAL_SHIP_NAME {
-            // Branch 3: ship name — direct GlobData.flagship access
-            let name = WorldFields::current().read(|world| world.flagship.ship_name);
+        if index == GLOBAL_PLAYER_NAME || index == GLOBAL_SHIP_NAME {
+            let name = WorldData::current().read(|world| {
+                if index == GLOBAL_PLAYER_NAME {
+                    world.flagship.commander_name
+                } else {
+                    world.flagship.ship_name
+                }
+            });
             SpliceTrack(ptr::null_mut(), name.as_ptr().cast(), ptr::null_mut(), cb);
         } else if index < 0 {
             // Branch 4: alliance-name variant
@@ -1412,6 +1416,21 @@ mod tests {
     use super::*;
     use serial_test::serial;
     use std::ffi::CString;
+
+    #[test]
+    fn alliance_name_truncates_and_terminates_each_buffer_size() {
+        for size in 1..12 {
+            let mut buffer = vec![255; size];
+            format_alliance_name(&mut buffer, b"Alliance ", Some(b"Zelnik\0ignored"));
+            let expected = b"Alliance Zelnik";
+            let length = expected.len().min(size - 1);
+            assert_eq!(&buffer[..length], &expected[..length]);
+            assert_eq!(buffer[length], 0);
+        }
+        let mut buffer = [255; 32];
+        format_alliance_name(&mut buffer, b"Alliance", None);
+        assert_eq!(&buffer[..9], b"Alliance\0");
+    }
 
     fn reset_state() {
         rust_uninit_communication();

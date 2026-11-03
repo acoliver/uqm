@@ -1,6 +1,6 @@
 #![cfg(not(test))]
 
-use crate::engine::WorldData as WorldFields;
+use crate::engine::WorldData;
 use crate::navigation::abi::*;
 
 static mut LAST_MUSIC_REF: MUSIC_REF = std::ptr::null_mut();
@@ -10,10 +10,9 @@ static mut LAST_PRIORITY: BYTE = 0;
 /// # Safety
 /// The game settings and music player must be initialized on the game thread.
 pub unsafe fn toggle_music() {
-    (**WorldFields::current()).game.glob_flags ^= MUSIC_DISABLED as u8;
+    (**WorldData::current()).game.glob_flags ^= MUSIC_DISABLED as u8;
     if LAST_PRIORITY <= 1 {
-        if WorldFields::current().read(|owner| owner.game.glob_flags) & (MUSIC_DISABLED as u8) != 0
-        {
+        if WorldData::current().read(|owner| owner.game.glob_flags) & (MUSIC_DISABLED as u8) != 0 {
             PLRStop((LAST_MUSIC_REF).cast());
         } else if !LAST_MUSIC_REF.is_null() {
             PLRPlaySong(
@@ -32,7 +31,7 @@ pub unsafe extern "C" fn PlayMusic(music_ref: MUSIC_REF, continuous: BOOLEAN, pr
     LAST_MUSIC_REF = music_ref;
     LAST_CONTINUOUS = continuous;
     LAST_PRIORITY = priority;
-    if WorldFields::current().read(|owner| owner.game.glob_flags) & (MUSIC_DISABLED as u8) == 0 {
+    if WorldData::current().read(|owner| owner.game.glob_flags) & (MUSIC_DISABLED as u8) == 0 {
         PLRPlaySong(music_ref.cast(), continuous as i32, priority.into());
     }
 }
@@ -59,7 +58,7 @@ pub unsafe fn pause_music() {
 /// # Safety
 /// Game settings must be accessed on the game thread.
 pub unsafe fn toggle_sound_effect() {
-    (**WorldFields::current()).game.glob_flags ^= SOUND_DISABLED as u8;
+    (**WorldData::current()).game.glob_flags ^= SOUND_DISABLED as u8;
 }
 
 /// # Safety
@@ -76,9 +75,9 @@ pub unsafe extern "C" fn PlaySoundEffect(
         "[PlaySoundEffect] S={sound:p} ch={} pri={} sound_disabled={}",
         channel,
         priority,
-        u8::from((**WorldFields::current()).game.glob_flags & (SOUND_DISABLED as u8) != 0)
+        u8::from((**WorldData::current()).game.glob_flags & (SOUND_DISABLED as u8) != 0)
     );
-    if WorldFields::current().read(|owner| owner.game.glob_flags) & (SOUND_DISABLED as u8) == 0 {
+    if WorldData::current().read(|owner| owner.game.glob_flags) & (SOUND_DISABLED as u8) == 0 {
         SetChannelVolume(
             u32::from(channel),
             (MAX_VOLUME >> 1) as i32,

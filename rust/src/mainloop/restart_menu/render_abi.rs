@@ -1,6 +1,6 @@
 //! Restart-menu rendering, ported from restart.c (GPL-2.0-or-later).
 #[cfg(not(test))]
-use crate::engine::Kernel as KernelOwner;
+use crate::engine::Kernel;
 #[cfg(not(test))]
 use crate::ships::native::abi::*;
 
@@ -27,7 +27,7 @@ pub unsafe fn draw_restart_menu_graphic(menu: *mut MENU_STATE) {
     ClearDrawable();
     crate::graphics::cmap_abi::FlushColorXForms();
     DrawStamp(&mut stamp);
-    SetContextFont(KernelOwner::current().read(|owner| owner.tiny_font));
+    SetContextFont(Kernel::current().read(|owner| owner.tiny_font));
     let version = std::ffi::CString::new(concat!("v", env!("CARGO_PKG_VERSION"))).unwrap();
     let mut text = TEXT {
         baseline: POINT {

@@ -1,7 +1,7 @@
 #![cfg(not(test))]
 #![allow(non_snake_case)]
 
-use crate::engine::WorldData as WorldFields;
+use crate::engine::WorldData;
 use crate::memory::{rust_hfree as HFree, rust_hmalloc as HMalloc};
 use crate::navigation::abi::*;
 
@@ -49,7 +49,7 @@ unsafe fn switch_case(ch: &mut JoyChar, from: *const JoyChar, to: *const JoyChar
 /// pTES and its strings, callbacks, and input subsystem must remain valid for the duration of the call.
 #[no_mangle]
 pub unsafe extern "C" fn DoTextEntry(pTES: *mut TEXTENTRY_STATE) -> BOOLEAN {
-    if WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16 != 0 {
+    if WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16 != 0 {
         return 0;
     }
     if (*pTES).Initialized == 0 {

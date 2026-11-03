@@ -1,7 +1,7 @@
 //! UI drawing and nested input waits, ported from uqm/util.c.
 
 #[cfg(not(test))]
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
+use crate::engine::{Kernel, WorldData};
 use crate::navigation::abi::{Color, RECT};
 
 fn box_rectangles(
@@ -127,23 +127,23 @@ pub(crate) mod live {
     /// Game-thread access to initialized input, graphics and audio state.
     #[no_mangle]
     pub unsafe extern "C" fn PauseGame() -> BOOLEAN {
-        if KernelOwner::current()
+        if Kernel::current()
             .read(|owner| owner.activity_frame)
             .is_null()
-            || WorldFields::current().read(|owner| owner.game.current_activity)
+            || WorldData::current().read(|owner| owner.game.current_activity)
                 & (CHECK_ABORT | CHECK_PAUSE) as u16
                 != 0
-            || KernelOwner::current().read(|owner| owner.last_activity)
+            || Kernel::current().read(|owner| owner.last_activity)
                 & (CHECK_LOAD | CHECK_RESTART) as u16
                 != 0
         {
             return 0;
         }
-        (**WorldFields::current()).game.current_activity |= CHECK_PAUSE as u16;
+        (**WorldData::current()).game.current_activity |= CHECK_PAUSE as u16;
         if PlayingTrack() != 0 {
             PauseTrack();
         }
-        let old_context = SetContext(KernelOwner::current().read(|owner| owner.screen_context));
+        let old_context = SetContext(Kernel::current().read(|owner| owner.screen_context));
         let old_origin = SetContextOrigin(POINT { x: 0, y: 0 });
         let mut old_rect: RECT = mem::zeroed();
         GetContextClipRect(&mut old_rect);
@@ -152,7 +152,7 @@ pub(crate) mod live {
         GetContextClipRect(&mut context_rect);
         let mut rect: RECT = mem::zeroed();
         GetFrameRect(
-            KernelOwner::current().read(|owner| owner.activity_frame),
+            Kernel::current().read(|owner| owner.activity_frame),
             &mut rect,
         );
         rect.corner.x = (context_rect.extent.width - rect.extent.width) >> 1;
@@ -160,7 +160,7 @@ pub(crate) mod live {
         let mut saved = SaveContextFrame(&rect);
         let mut stamp = STAMP {
             origin: rect.corner,
-            frame: KernelOwner::current().read(|owner| owner.activity_frame),
+            frame: Kernel::current().read(|owner| owner.activity_frame),
         };
         SetSystemRect(&rect);
         DrawStamp(&mut stamp);
@@ -189,7 +189,7 @@ pub(crate) mod live {
             ResumeTrack();
         }
         TaskSwitch();
-        (**WorldFields::current()).game.current_activity &= !(CHECK_PAUSE as u16);
+        (**WorldData::current()).game.current_activity &= !(CHECK_PAUSE as u16);
         1
     }
 
@@ -197,7 +197,7 @@ pub(crate) mod live {
         let mut pressed = AnyButtonPress(1);
         while (pressed != 0) == released
             && (timeout == TimePeriod::MAX || GetTimeCounter() < timeout)
-            && WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
+            && WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
                 == 0
             && QuitPosted == 0
         {

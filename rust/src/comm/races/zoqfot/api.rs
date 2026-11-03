@@ -1,6 +1,6 @@
 use super::*;
 #[cfg(not(test))]
-use crate::engine::WorldData as WorldFields;
+use crate::engine::WorldData;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Speaker {
@@ -92,8 +92,8 @@ mod live {
         fn date(&self) -> (i16, u8) {
             {
                 (
-                    WorldFields::current().read(|owner| owner.game.game_clock.year_index) as i16,
-                    WorldFields::current().read(|owner| owner.game.game_clock.month_index),
+                    WorldData::current().read(|owner| owner.game.game_clock.year_index) as i16,
+                    WorldData::current().read(|owner| owner.game.game_clock.month_index),
                 )
             }
         }

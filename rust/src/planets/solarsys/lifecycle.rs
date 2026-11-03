@@ -3,8 +3,7 @@
 use super::drawing::*;
 use super::flight::*;
 use super::*;
-use crate::engine::StoryKey;
-use crate::engine::{Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields};
+use crate::engine::{Kernel, StoryKey, World, WorldData};
 
 use crate::battle::gendef::getGenerateFunctions;
 use crate::c_bindings::controller_input as input;
@@ -18,7 +17,6 @@ use crate::planets::devices::DevicesMenu;
 use crate::planets::ffi::do_planetary_analysis_c;
 use crate::planets::starmap::FindStar;
 use crate::sound::heart_ffi::PLRPlaying;
-use crate::state::game_state_keys::{get_game_state, set_game_state};
 use crate::strings::string_table::{GetStringAddress, SetAbsStringTableIndex};
 use std::ffi::c_char;
 use std::mem::MaybeUninit;
@@ -137,7 +135,7 @@ mod ffi {
 #[inline]
 #[track_caller]
 pub(super) fn glob() -> crate::engine::Projection<crate::engine::WorldData> {
-    WorldFields::current()
+    WorldData::current()
 }
 
 #[inline]
@@ -216,14 +214,14 @@ pub(super) unsafe fn load_solar_sys() -> *mut c::PLANET_DESC {
     let state = system();
     let mut orbital = ptr::null_mut();
     (*SysGenRNG).reseed(GetRandomSeedForStar(
-        (**WorldOwner::current())
+        (**World::current())
             .star_pointer(crate::planets::starmap::current_catalog())
             .cast(),
     ));
     SUN_FRAME = SetAbsFrameIndex(
         SUN_FRAME.cast(),
         u16::from(
-            ((*(**WorldOwner::current()).star_pointer(crate::planets::starmap::current_catalog()))
+            ((*(**World::current()).star_pointer(crate::planets::starmap::current_catalog()))
                 .star_type
                 & 0x18)
                 >> 3,
@@ -234,7 +232,7 @@ pub(super) unsafe fn load_solar_sys() -> *mut c::PLANET_DESC {
     let sun = (*state).SunDesc.as_mut_ptr();
     (*sun).pPrevDesc = ptr::null_mut();
     (*sun).rand_seed = (*SysGenRNG).next_random();
-    (*sun).data_index = ((*(**WorldOwner::current())
+    (*sun).data_index = ((*(**World::current())
         .star_pointer(crate::planets::starmap::current_catalog()))
     .star_type
         & 0x18)
@@ -244,9 +242,9 @@ pub(super) unsafe fn load_solar_sys() -> *mut c::PLANET_DESC {
     (*sun).image.frame = SUN_FRAME;
 
     ((*(*state).genFuncs).generatePlanets.unwrap())(state);
-    if WorldOwner::current().read(|world| get_game_state(world, StoryKey::PLANETARY_CHANGE)) != 0 {
-        WorldOwner::current().write(|world| ffi::put_planet_info(world));
-        WorldOwner::current().write(|world| set_game_state(world, StoryKey::PLANETARY_CHANGE, 0));
+    if World::current().read(|world| world.story_state(StoryKey::PLANETARY_CHANGE)) != 0 {
+        World::current().write(|world| ffi::put_planet_info(world));
+        World::current().write(|world| world.set_story_state(StoryKey::PLANETARY_CHANGE, 0));
     }
 
     for i in 0..(*state).PlanetDesc.len() {
@@ -282,7 +280,7 @@ pub(super) unsafe fn load_solar_sys() -> *mut c::PLANET_DESC {
         (*state).pOrbitalDesc = (*state).PlanetDesc.as_mut_ptr().add(i);
         generate_moons(state, (*state).pOrbitalDesc);
         (*state).pBaseDesc = (*state).MoonDesc.as_mut_ptr();
-        WorldOwner::current().write(|world| set_game_state(world, StoryKey::PLANETARY_LANDING, 0));
+        World::current().write(|world| world.set_story_state(StoryKey::PLANETARY_LANDING, 0));
     }
 
     init_solar_sys_sis_characteristics();
@@ -340,7 +338,7 @@ pub(super) unsafe fn reset_solar_sys() {
     check_intersect();
     (*state).InIpFlight = 1;
     if PLRPlaying(usize::MAX as *mut c_void) == 0
-        && (KernelOwner::current().read(|owner| owner.last_activity) != CHECK_LOAD
+        && (Kernel::current().read(|owner| owner.last_activity) != CHECK_LOAD
             || ffi::NextActivity != 0)
     {
         PlayMusic((SpaceMusic).cast(), 1, 1);
@@ -360,15 +358,14 @@ pub(super) unsafe fn enter_planet_orbit() {
         }
     }
 
-    WorldOwner::current().write(|world| ffi::get_planet_info(world));
+    World::current().write(|world| ffi::get_planet_info(world));
     ((*(*state).genFuncs).generateOrbital.unwrap())(state, (*state).pOrbitalDesc);
-    (**KernelOwner::current()).last_activity &= !(CHECK_LOAD | CHECK_RESTART);
+    (**Kernel::current()).last_activity &= !(CHECK_LOAD | CHECK_RESTART);
     if glob().read(|owner| owner.game.current_activity)
         & (CHECK_ABORT | CHECK_LOAD | START_ENCOUNTER)
         != 0
         || glob().read(|owner| owner.flagship.crew_enlisted) == c::COUNT::MAX
-        || WorldOwner::current().read(|world| get_game_state(world, StoryKey::CHMMR_BOMB_STATE))
-            == 2
+        || World::current().read(|world| world.story_state(StoryKey::CHMMR_BOMB_STATE)) == 2
     {
         return;
     }
@@ -388,7 +385,7 @@ pub(super) unsafe fn enter_planet_orbit() {
         validate_inner_orbits();
         reset_solar_sys();
         ffi::repair_sisborder();
-        ffi::SetContext(KernelOwner::current().read(|owner| owner.space_context));
+        ffi::SetContext(Kernel::current().read(|owner| owner.space_context));
         draw_system_transition(playerInInnerSystem());
     }
 }
@@ -411,8 +408,8 @@ pub(super) unsafe fn init_solar_sys() {
     }
 
     STARS_FRAME = create_star_background();
-    ffi::SetContext(KernelOwner::current().read(|owner| owner.space_context));
-    ffi::SetContextFGFrame(KernelOwner::current().read(|owner| owner.screen).cast());
+    ffi::SetContext(Kernel::current().read(|owner| owner.space_context));
+    ffi::SetContextFGFrame(Kernel::current().read(|owner| owner.screen).cast());
     ffi::SetContextBackGroundColor(rgb15(0, 0, 0));
 
     let orbital = load_solar_sys();
@@ -435,19 +432,19 @@ pub(super) unsafe fn init_solar_sys() {
     if !orbital.is_null() {
         enter_orbital(orbital);
     } else {
-        ffi::SetContext(KernelOwner::current().read(|owner| owner.space_context));
+        ffi::SetContext(Kernel::current().read(|owner| owner.space_context));
         ffi::SetTransitionSource(ptr::null_mut());
         ffi::BatchGraphics();
         ffi::draw_sisframe();
         ffi::DrawSISMessage(ptr::null());
         reset_solar_sys();
-        if KernelOwner::current().read(|owner| owner.last_activity) == CHECK_LOAD | CHECK_RESTART {
+        if Kernel::current().read(|owner| owner.last_activity) == CHECK_LOAD | CHECK_RESTART {
             draw_outer_system();
             ffi::RedrawQueue(0);
             ffi::UnbatchGraphics();
             ffi::FadeScreen(FADE_ALL_TO_COLOR, (ONE_SECOND / 2) as c::SIZE);
-            (**KernelOwner::current()).last_activity = 0;
-        } else if KernelOwner::current().read(|owner| owner.last_activity) == CHECK_LOAD
+            (**Kernel::current()).last_activity = 0;
+        } else if Kernel::current().read(|owner| owner.last_activity) == CHECK_LOAD
             && ffi::NextActivity == 0
         {
             ffi::UnbatchGraphics();
@@ -460,7 +457,7 @@ pub(super) unsafe fn init_solar_sys() {
             ffi::RedrawQueue(0);
             ffi::ScreenTransition(3, ptr::null());
             ffi::UnbatchGraphics();
-            (**KernelOwner::current()).last_activity &= !CHECK_LOAD;
+            (**Kernel::current()).last_activity &= !CHECK_LOAD;
         }
     }
 }
@@ -470,7 +467,7 @@ pub(super) unsafe fn end_interplanetary() {
     if glob().read(|owner| owner.game.current_activity) & (CHECK_ABORT | CHECK_LOAD) == 0 {
         let state = system();
         ((*(*state).genFuncs).uninitNpcs.unwrap())(state);
-        WorldOwner::current().write(|world| set_game_state(world, StoryKey::USED_BROADCASTER, 0));
+        World::current().write(|world| world.set_story_state(StoryKey::USED_BROADCASTER, 0));
     }
 }
 
@@ -530,7 +527,7 @@ pub(super) unsafe fn hyperspace_unit_factors() -> (i32, i32) {
 /// their pointers must remain valid through any input or generator callbacks.
 pub unsafe extern "C" fn ExploreSolarSys() {
     let mut solar_sys_state = MaybeUninit::<c::SOLARSYS_STATE>::uninit();
-    if (**WorldOwner::current())
+    if (**World::current())
         .star_pointer(crate::planets::starmap::current_catalog())
         .is_null()
     {
@@ -544,9 +541,8 @@ pub unsafe extern "C" fn ExploreSolarSys() {
         };
         let star = FindStar(ptr::null_mut(), ptr::addr_of_mut!(universe).cast(), 1, 1)
             .cast::<crate::engine::world::CStarDesc>();
-        (**WorldOwner::current())
-            .select_star(star.as_ref(), crate::planets::starmap::current_catalog());
-        if (**WorldOwner::current())
+        (**World::current()).select_star(star.as_ref(), crate::planets::starmap::current_catalog());
+        if (**World::current())
             .star_pointer(crate::planets::starmap::current_catalog())
             .is_null()
         {
@@ -558,7 +554,7 @@ pub unsafe extern "C" fn ExploreSolarSys() {
         }
     }
     let (log_units_x, log_units_y) = hyperspace_unit_factors();
-    WorldOwner::current().write(|world| {
+    World::current().write(|world| {
         let star = &*world.star_pointer(crate::planets::starmap::current_catalog());
         world.data.flagship.log_x = (i32::from(star.star_pt.x) * log_units_x + (6250 >> 1)) / 6250;
         world.data.flagship.log_y =
@@ -568,7 +564,7 @@ pub unsafe extern "C" fn ExploreSolarSys() {
     // DoInput runs callbacks synchronously; this storage stays live through teardown.
     P_SOLAR_SYS_STATE = solar_sys_state.as_mut_ptr();
     ptr::write_bytes(P_SOLAR_SYS_STATE, 0, 1);
-    let index = WorldOwner::current()
+    let index = World::current()
         .read(|world| (*world.star_pointer(crate::planets::starmap::current_catalog())).index);
     (*P_SOLAR_SYS_STATE).genFuncs = getGenerateFunctions(index).cast();
     init_solar_sys();
@@ -581,16 +577,14 @@ pub unsafe extern "C" fn ExploreSolarSys() {
 
 pub(super) unsafe fn game_string(index: c::COUNT) -> *mut c_char {
     GetStringAddress(SetAbsStringTableIndex(
-        KernelOwner::current()
-            .read(|owner| owner.game_strings)
-            .cast(),
+        Kernel::current().read(|owner| owner.game_strings).cast(),
         index,
     ))
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn GetNamedPlanetaryBody() -> *mut c::UNICODE {
-    if (**WorldOwner::current())
+    if (**World::current())
         .star_pointer(crate::planets::starmap::current_catalog())
         .is_null()
         || !playerInSolarSystem()
@@ -601,9 +595,7 @@ pub unsafe extern "C" fn GetNamedPlanetaryBody() -> *mut c::UNICODE {
     let state = system();
     let orbital = (*state).pOrbitalDesc;
     assert!(!orbital.is_null());
-    match (*(**WorldOwner::current()).star_pointer(crate::planets::starmap::current_catalog()))
-        .index
-    {
+    match (*(**World::current()).star_pointer(crate::planets::starmap::current_catalog())).index {
         SOL_DEFINED => {
             let planet = planetIndex(state, orbital);
             if worldIsPlanet(state, orbital) {
@@ -640,12 +632,9 @@ pub unsafe extern "C" fn SaveSolarSysLocation() {
     if !playerInPlanetOrbit() {
         save_non_orbital_location();
     } else {
-        if WorldOwner::current().read(|world| get_game_state(world, StoryKey::PLANETARY_CHANGE))
-            != 0
-        {
-            WorldOwner::current().write(|world| ffi::put_planet_info(world));
-            WorldOwner::current()
-                .write(|world| set_game_state(world, StoryKey::PLANETARY_CHANGE, 0));
+        if World::current().read(|world| world.story_state(StoryKey::PLANETARY_CHANGE)) != 0 {
+            World::current().write(|world| ffi::put_planet_info(world));
+            World::current().write(|world| world.set_story_state(StoryKey::PLANETARY_CHANGE, 0));
         }
         assert!((**glob()).game.ip_planet != 0);
         let mut moon = 1_u8;
@@ -668,7 +657,7 @@ pub(super) unsafe extern "C" fn do_solar_sys_menu(menu: *mut c::MENU_STATE) -> c
     if ffi::DoMenuChooser(menu, PM_STARMAP) != 0 {
         return 1;
     }
-    if KernelOwner::current().read(|owner| owner.last_activity) == CHECK_LOAD {
+    if Kernel::current().read(|owner| owner.last_activity) == CHECK_LOAD {
         select = 1;
     }
     if select == 0 {
@@ -694,7 +683,7 @@ pub(super) unsafe extern "C" fn do_solar_sys_menu(menu: *mut c::MENU_STATE) -> c
             if glob().read(|owner| owner.game.current_activity) & CHECK_ABORT != 0 {
                 return 0;
             }
-            ffi::SetContext(KernelOwner::current().read(|owner| owner.space_context));
+            ffi::SetContext(Kernel::current().read(|owner| owner.space_context));
             draw_system_transition(playerInInnerSystem());
             return 0;
         }
@@ -715,7 +704,7 @@ pub(super) unsafe extern "C" fn do_solar_sys_menu(menu: *mut c::MENU_STATE) -> c
 
 pub(super) unsafe fn solar_sys_menu() {
     let mut menu: c::MENU_STATE = std::mem::zeroed();
-    if KernelOwner::current().read(|owner| owner.last_activity) == CHECK_LOAD {
+    if Kernel::current().read(|owner| owner.last_activity) == CHECK_LOAD {
         menu.CurState = GAME_MENU;
     } else {
         ffi::DrawMenuStateStrings(PM_STARMAP, i16::from(STARMAP));
@@ -735,8 +724,7 @@ pub(super) unsafe extern "C" fn do_ip_flight(state: *mut c::SOLARSYS_STATE) -> c
         enter_planet_orbit();
         ffi::SetMenuSounds(MENU_SOUND_NONE, MENU_SOUND_NONE);
         (*state).InOrbit = 0;
-    } else if cancel != 0 || KernelOwner::current().read(|owner| owner.last_activity) == CHECK_LOAD
-    {
+    } else if cancel != 0 || Kernel::current().read(|owner| owner.last_activity) == CHECK_LOAD {
         solar_sys_menu();
         ffi::SetMenuSounds(MENU_SOUND_NONE, MENU_SOUND_NONE);
     } else {
