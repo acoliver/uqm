@@ -4,7 +4,6 @@
 pub mod c_bridge;
 pub mod catalog;
 pub(crate) mod code_resources;
-pub mod ffi_contract;
 pub mod lifecycle;
 pub mod loader;
 pub(crate) mod loader_native;

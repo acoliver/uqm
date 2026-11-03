@@ -443,8 +443,12 @@ fn race_custom_fields(observer: &AutomationObserver, directory: &Path) {
         let (fields, _) = snapshot(observer, directory);
         assert!(fields["ships.0.0.custom.collision"].ends_with("::collision"));
         ship.SpeciesID = SPECIES_ID_MMRNMHRM_ID;
-        let mut mmrnmhrm =
-            Box::new(uqm_rust::ships::races::descriptor(SPECIES_ID_MMRNMHRM_ID).into_legacy());
+        let mut mmrnmhrm = Box::new(
+            uqm_rust::app::bridge::enter(|cx| {
+                uqm_rust::ships::races::descriptor(cx.world, SPECIES_ID_MMRNMHRM_ID)
+            })
+            .into_legacy(),
+        );
         mmrnmhrm.race_state = uqm_rust::engine::battle::RaceState::Mmrnmhrm {
             alternate: sample_characteristics(),
         };
@@ -486,8 +490,12 @@ unsafe fn sis_fields(observer: &AutomationObserver, directory: &Path, ship: &mut
     });
     ship.SpeciesID = SPECIES_ID_SIS_SHIP_ID;
     // SAFETY: the caller runs native initialization on the sole game thread.
-    let descriptor =
-        unsafe { uqm_rust::ships::races::descriptor(SPECIES_ID_SIS_SHIP_ID).into_legacy() };
+    let descriptor = unsafe {
+        uqm_rust::app::bridge::enter(|cx| {
+            uqm_rust::ships::races::descriptor(cx.world, SPECIES_ID_SIS_SHIP_ID)
+        })
+        .into_legacy()
+    };
     let descriptor = install_descriptor(ship, descriptor);
     let (fields, _) = snapshot(observer, directory);
     assert_eq!(fields["ships.0.0.custom.num_trackers"], "1");

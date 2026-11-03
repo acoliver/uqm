@@ -106,7 +106,7 @@ pub unsafe extern "C" fn rust_uninit_contexts() -> c_int {
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
 pub unsafe extern "C" fn rust_load_master_ship_list() -> c_int {
-    crate::ships::ffi::rust_ships_load_catalog() as c_int
+    i32::from(crate::ships::catalog::load_master_ship_list().is_ok())
 }
 
 /// Free the master ship list (FFI wrapper - delegates to ships::ffi)
@@ -114,7 +114,7 @@ pub unsafe extern "C" fn rust_load_master_ship_list() -> c_int {
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
 pub unsafe extern "C" fn rust_free_master_ship_list() -> c_int {
-    crate::ships::ffi::rust_ships_free_catalog();
+    crate::ships::catalog::free_master_ship_list();
     1
 }
 

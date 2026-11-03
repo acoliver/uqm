@@ -625,7 +625,11 @@ impl Drop for Ship<'_> {
 }
 pub fn descriptor(species: u32) -> RaceDescriptor {
     // SAFETY: the caller owns the serialized test context.
-    unsafe { uqm_rust::ships::races::descriptor(species).into_legacy() }
+    unsafe {
+        uqm_rust::app::bridge::enter(|cx| {
+            uqm_rust::ships::races::descriptor(cx.world, species).into_legacy()
+        })
+    }
 }
 
 pub unsafe fn call_element(name: &str, id: ElementId) {
