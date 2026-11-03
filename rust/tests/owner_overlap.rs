@@ -255,7 +255,7 @@ fn hyperspace_movement_releases_world_before_fuel_queries() {
 fn campaign_events_schedule_and_dispatch_using_the_existing_world() {
     use uqm_rust::engine::StoryKey;
     use uqm_rust::navigation::abi::{
-        AddEvent, EventHandler, ARILOU_ENTRANCE_EVENT, ARILOU_EXIT_EVENT, ARILOU_UMGAH_CHECK,
+        dispatch_event, AddEvent, ARILOU_ENTRANCE_EVENT, ARILOU_EXIT_EVENT, ARILOU_UMGAH_CHECK,
     };
     use uqm_rust::time::clock_bridge::CEvent;
     let mut game = Game::new();
@@ -272,7 +272,7 @@ fn campaign_events_schedule_and_dispatch_using_the_existing_world() {
         );
         bridge::with_game(&mut game, || {
             World::current().write(|world| {
-                EventHandler(world, ARILOU_ENTRANCE_EVENT as u8);
+                dispatch_event(world, ARILOU_ENTRANCE_EVENT as u8);
                 assert_eq!(world.story_state(StoryKey::ARILOU_SPACE), 1);
                 let next = world.data.game.game_clock.event_q.head.cast::<CEvent>();
                 assert!(!next.is_null());

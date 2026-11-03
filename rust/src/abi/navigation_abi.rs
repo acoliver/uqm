@@ -1063,7 +1063,7 @@ pub use crate::time::clock_abi::live::ValidateEvent;
 pub use crate::time::clock_abi::live::AddEvent;
 
 #[cfg(not(test))]
-pub use crate::navigation::events::live::EventHandler;
+pub use crate::navigation::events::live::dispatch_event;
 
 #[cfg(not(test))]
 pub use crate::time::clock_abi::live::MoveGameClockDays;
@@ -4029,10 +4029,10 @@ pub const ARILOU_GATE_STATE_OPENING: ARILOU_GATE_STATE = 1;
 pub type ARILOU_GATE_STATE = ::std::os::raw::c_uint;
 
 #[cfg(not(test))]
-pub use crate::navigation::events::live::AddInitialGameEvents;
+pub use crate::navigation::events::live::schedule_initial_events;
 
 #[cfg(not(test))]
-pub use crate::navigation::events::live::SetRaceDest;
+pub use crate::navigation::events::live::set_race_destination;
 
 #[cfg(not(test))]
 pub use crate::battle::gendef::getGenerateFunctions;

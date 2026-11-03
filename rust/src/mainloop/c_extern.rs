@@ -331,7 +331,7 @@ pub use crate::navigation::globals::InitGameStructures;
 pub use crate::time::clock_abi::live::InitGameClock;
 
 #[cfg(not(test))]
-pub use crate::navigation::events::live::AddInitialGameEvents;
+pub use crate::navigation::events::live::schedule_initial_events;
 
 #[cfg(not(test))]
 pub use crate::ui::sis::SetStatusMessageMode;

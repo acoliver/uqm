@@ -360,7 +360,7 @@ mod cffi {
         }
 
         fn add_initial_game_events(&self) {
-            unsafe { WorldOwner::current().write(|world| c_extern::AddInitialGameEvents(world)) }
+            unsafe { WorldOwner::current().write(|world| c_extern::schedule_initial_events(world)) }
         }
 
         fn activate_automation_start_scene(&self) {

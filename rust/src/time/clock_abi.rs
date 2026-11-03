@@ -91,7 +91,7 @@ pub(crate) mod live {
     use std::ffi::c_void;
     use std::ptr;
 
-    use crate::navigation::events::live::EventHandler;
+    use crate::navigation::events::live::dispatch_event;
 
     use crate::threading::legacy_abi::CreateMutex_Core;
 
@@ -116,7 +116,7 @@ pub(crate) mod live {
             u16::from((*clock).day_index),
         );
         process_day_events(ptr::addr_of_mut!((*clock).event_q), today, |selector| {
-            WorldOwner::current().write(|world| EventHandler(world, selector))
+            WorldOwner::current().write(|world| dispatch_event(world, selector))
         });
     }
 
@@ -164,7 +164,7 @@ pub(crate) mod live {
         selector: u8,
     ) -> HLink {
         if kind == 1 && month == 0 && day == 0 && year == 0 {
-            EventHandler(world, selector);
+            dispatch_event(world, selector);
         } else {
             let clock = &world.data.game.game_clock;
             let now = (

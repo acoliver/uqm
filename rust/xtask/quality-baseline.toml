@@ -2382,7 +2382,7 @@ u6_04_world_projection = { limit = 143, ends = "U6-04", scopes = { "ffi|owner_pr
 "complexity|cognitive|uqm::front_end::setupmenu::runtime::GetGlobalOptions" = 39
 "complexity|cognitive|uqm::front_end::setupmenu::runtime::SetGlobalOptions" = 31
 "complexity|cognitive|uqm::mainloop::dir_prep::expand_dollar_vars" = 32
-"complexity|cognitive|uqm::navigation::events::live::EventHandler" = 37
+"complexity|cognitive|uqm::navigation::events::live::dispatch_event" = 37
 "complexity|cognitive|uqm::navigation::groups::live::BuildGroups" = 56
 "complexity|cognitive|uqm::navigation::groups::live::GetGroupInfo" = 54
 "complexity|cognitive|uqm::navigation::hyper_encounters::process" = 59
@@ -2547,7 +2547,7 @@ u6_04_world_projection = { limit = 143, ends = "U6-04", scopes = { "ffi|owner_pr
 "complexity|cyclomatic|uqm::front_end::setupmenu::runtime::init_widgets" = 27
 "complexity|cyclomatic|uqm::front_end::uqmdebug::starPresenceString" = 48
 "complexity|cyclomatic|uqm::mainloop::options::apply_boolean_config" = 28
-"complexity|cyclomatic|uqm::navigation::events::live::EventHandler" = 35
+"complexity|cyclomatic|uqm::navigation::events::live::dispatch_event" = 35
 "complexity|cyclomatic|uqm::navigation::groups::live::BuildGroups" = 28
 "complexity|cyclomatic|uqm::navigation::hyper_encounters::process" = 29
 "complexity|cyclomatic|uqm::navigation::hyper_radar::SeedUniverse" = 31
@@ -2763,7 +2763,7 @@ u6_04_world_projection = { limit = 143, ends = "U6-04", scopes = { "ffi|owner_pr
 "complexity|loc|uqm::front_end::uqmdebug::runtime::equipShip" = 112
 "complexity|loc|uqm::mainloop::options::build_command" = 245
 "complexity|loc|uqm::mainloop::startup::live::initialize" = 129
-"complexity|loc|uqm::navigation::events::live::EventHandler" = 114
+"complexity|loc|uqm::navigation::events::live::dispatch_event" = 114
 "complexity|loc|uqm::navigation::globals::InitGameStructures" = 103
 "complexity|loc|uqm::navigation::groups::live::BuildGroups" = 109
 "complexity|loc|uqm::navigation::groups::live::GetGroupInfo" = 132
@@ -5461,6 +5461,9 @@ u6_04_world_projection = { limit = 143, ends = "U6-04", scopes = { "ffi|owner_pr
 "uqm::graphics" = "uqm-engine::graphics"
 "uqm::input" = "uqm-engine::input"
 "uqm::io" = "uqm-engine::io"
+"uqm::navigation::events::live::AddInitialGameEvents" = "uqm::navigation::events::live::schedule_initial_events"
+"uqm::navigation::events::live::EventHandler" = "uqm::navigation::events::live::dispatch_event"
+"uqm::navigation::events::live::SetRaceDest" = "uqm::navigation::events::live::set_race_destination"
 "uqm::network" = "uqm-engine::network"
 "uqm::resource" = "uqm-engine::resource"
 "uqm::savegame::runtime::star::CStarDesc" = "uqm::engine::world::CStarDesc"
