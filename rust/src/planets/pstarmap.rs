@@ -3,7 +3,7 @@
 //! All graphics handles here are native FRAME/CONTEXT pointers. The game
 //! thread owns the map state; callbacks may reenter drawing and input code.
 
-#![allow(non_snake_case, non_upper_case_globals)]
+#![allow(non_snake_case)]
 
 use crate::c_bindings::global_state::{Color, EXTENT, FRAME, MENU_STATE, POINT, RECT, STAMP};
 #[cfg(not(test))]
@@ -50,11 +50,11 @@ const ARILOU_SPACE: POINT = POINT { x: 438, y: 6372 };
 const QUASI_SPACE: POINT = POINT { x: 5000, y: 5000 };
 const ARILOU_HOME: POINT = POINT { x: 6134, y: 5900 };
 
-static mut mapOrigin: POINT = POINT { x: 0, y: 0 };
-static mut zoomLevel: i32 = 0;
-static mut StarMapFrame: FRAME = ptr::null_mut();
+static mut MAP_ORIGIN: POINT = POINT { x: 0, y: 0 };
+static mut ZOOM_LEVEL: i32 = 0;
+static mut STAR_MAP_FRAME: FRAME = ptr::null_mut();
 #[cfg(not(test))]
-static mut transition_pending: bool = false;
+static mut TRANSITION_PENDING: bool = false;
 
 use crate::time::counter_abi::GetTimeCounter;
 
@@ -271,8 +271,8 @@ impl Projection {
 }
 unsafe fn projection() -> Projection {
     Projection {
-        origin: mapOrigin,
-        zoom: zoomLevel,
+        origin: MAP_ORIGIN,
+        zoom: ZOOM_LEVEL,
         width: width(),
         height: height(),
     }
@@ -341,7 +341,7 @@ pub unsafe extern "C" fn flashCurrentLocation(where_: *const POINT) {
                 x: ux(UNIVERSE.x),
                 y: uy(UNIVERSE.y),
             },
-            frame: pixmap_abi::IncFrameIndex(StarMapFrame.cast()).cast(),
+            frame: pixmap_abi::IncFrameIndex(STAR_MAP_FRAME.cast()).cast(),
         };
         frame_abi::DrawFilledStamp(ptr::from_mut(&mut stamp).cast());
         SetContextForeGroundColor(old_color);
@@ -352,7 +352,7 @@ pub unsafe extern "C" fn flashCurrentLocation(where_: *const POINT) {
 unsafe fn draw_cursor(x: i16, y: i16) {
     let mut stamp = STAMP {
         origin: POINT { x, y },
-        frame: StarMapFrame,
+        frame: STAR_MAP_FRAME,
     };
     frame_abi::DrawStamp(ptr::from_mut(&mut stamp).cast());
 }
@@ -579,7 +579,7 @@ pub unsafe extern "C" fn DrawStarMap(race_update: u16, clip: *mut RECT) {
             y: (*clip).corner.y.wrapping_neg(),
         });
     }
-    if transition_pending {
+    if TRANSITION_PENDING {
         SetTransitionSource(ptr::null_mut());
     }
     BatchGraphics();
@@ -631,14 +631,14 @@ pub unsafe extern "C" fn DrawStarMap(race_update: u16, clip: *mut RECT) {
                 y: universeToDispy(c_long::from(i)),
             },
             extent: EXTENT {
-                width: (width() << zoomLevel) as i16,
+                width: (width() << ZOOM_LEVEL) as i16,
                 height: 1,
             },
         };
         frame_abi::DrawFilledRectangle(ptr::from_mut(&mut r).cast());
         r.corner.y = universeToDispy(c_long::from(MAX_Y_UNIVERSE + 1));
         r.extent.width = 1;
-        r.extent.height = (height() << zoomLevel) as i16;
+        r.extent.height = (height() << ZOOM_LEVEL) as i16;
         let mut j = MAX_X_UNIVERSE + 1;
         while j >= 0 {
             r.corner.x = universeToDispx(c_long::from(j));
@@ -647,7 +647,7 @@ pub unsafe extern "C" fn DrawStarMap(race_update: u16, clip: *mut RECT) {
         }
         i -= 500;
     }
-    let star_frame = pixmap_abi::SetRelFrameIndex(StarMapFrame.cast(), 2);
+    let star_frame = pixmap_abi::SetRelFrameIndex(STAR_MAP_FRAME.cast(), 2);
     if space <= 1 {
         let mut index = 0;
         let mut handle = (*fleet_queue()).head;
@@ -744,11 +744,11 @@ pub unsafe extern "C" fn DrawStarMap(race_update: u16, clip: *mut RECT) {
     if race_update == 0 && destination.x != -1 && destination.y != -1 {
         draw_autopilot(destination);
     }
-    if transition_pending {
+    if TRANSITION_PENDING {
         let mut r = zero_rect();
         GetContextClipRect(&mut r);
         ScreenTransition(3, ptr::from_ref(&r).cast());
-        transition_pending = false;
+        TRANSITION_PENDING = false;
     }
     UnbatchGraphics();
     if !clip.is_null() {
@@ -766,7 +766,7 @@ pub unsafe extern "C" fn DrawStarMap(race_update: u16, clip: *mut RECT) {
 #[cfg(not(test))]
 unsafe fn erase_cursor(x: i16, y: i16) {
     let mut r = zero_rect();
-    GetFrameRect(StarMapFrame.cast(), ptr::from_mut(&mut r).cast());
+    GetFrameRect(STAR_MAP_FRAME.cast(), ptr::from_mut(&mut r).cast());
     r.corner.x = r.corner.x.wrapping_add(x);
     if r.corner.x < 0 {
         r.extent.width = r.extent.width.wrapping_add(r.corner.x);
@@ -788,18 +788,18 @@ unsafe fn erase_cursor(x: i16, y: i16) {
 /// # Safety
 /// Game-thread only, with the star-map UI active.
 pub unsafe fn ZoomStarMap(direction: i16) {
-    if direction > 0 && zoomLevel < MAX_ZOOM_SHIFT {
-        zoomLevel += 1;
-        mapOrigin = cursorLoc;
+    if direction > 0 && ZOOM_LEVEL < MAX_ZOOM_SHIFT {
+        ZOOM_LEVEL += 1;
+        MAP_ORIGIN = cursorLoc;
         DrawStarMap(0, ptr::null_mut());
         SleepThread(ONE_SECOND / 8);
-    } else if direction < 0 && zoomLevel > 0 {
-        mapOrigin = if zoomLevel > 1 {
+    } else if direction < 0 && ZOOM_LEVEL > 0 {
+        MAP_ORIGIN = if ZOOM_LEVEL > 1 {
             cursorLoc
         } else {
             POINT { x: 4999, y: 4999 }
         };
-        zoomLevel -= 1;
+        ZOOM_LEVEL -= 1;
         DrawStarMap(0, ptr::null_mut());
         SleepThread(ONE_SECOND / 8);
     }
@@ -850,7 +850,7 @@ pub unsafe extern "C" fn UpdateCursorLocation(mut sx: i32, mut sy: i32, newpt: *
         || i32::from(screen.x) >= width()
         || i32::from(screen.y) >= height()
     {
-        mapOrigin = cursorLoc;
+        MAP_ORIGIN = cursorLoc;
         DrawStarMap(0, ptr::null_mut());
     } else {
         erase_cursor(old.x, old.y);
@@ -1137,9 +1137,9 @@ unsafe fn update_map() {
 #[no_mangle]
 pub unsafe extern "C" fn StarMap() -> u32 {
     let mut menu: MENU_STATE = std::mem::zeroed();
-    zoomLevel = 0;
-    mapOrigin = POINT { x: 4999, y: 4999 };
-    StarMapFrame = pixmap_abi::SetAbsFrameIndex(
+    ZOOM_LEVEL = 0;
+    MAP_ORIGIN = POINT { x: 4999, y: 4999 };
+    STAR_MAP_FRAME = pixmap_abi::SetAbsFrameIndex(
         KernelOwner::current()
             .read(|owner| owner.misc_data_frame)
             .cast(),
@@ -1153,12 +1153,12 @@ pub unsafe extern "C" fn StarMap() -> u32 {
     }
     menu.InputFunc = Some(DoMoveCursor);
     menu.Initialized = 0;
-    transition_pending = true;
+    TRANSITION_PENDING = true;
     if which_space() <= 1 {
         update_map();
     }
     DrawStarMap(0, (-1isize) as *mut RECT);
-    transition_pending = false;
+    TRANSITION_PENDING = false;
     BatchGraphics();
     let old_context = SetContext(KernelOwner::current().read(|owner| owner.space_context));
     let mut clip = zero_rect();

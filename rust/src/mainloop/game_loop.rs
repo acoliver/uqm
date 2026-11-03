@@ -413,7 +413,7 @@ mod cffi {
         }
 
         fn set_game_clock_rate(&self, rate: u16) {
-            unsafe { c_extern::SetGameClockRate(rate) }
+            c_extern::SetGameClockRate(rate)
         }
 
         fn stop_sound(&self) {

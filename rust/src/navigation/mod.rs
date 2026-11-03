@@ -26,6 +26,7 @@ pub mod hyper_units;
 pub mod hyperspace;
 pub mod initial_state;
 pub mod interplanetary;
+mod portal;
 
 #[cfg(not(test))]
 pub(crate) fn get(world: &crate::engine::World, key: crate::engine::StoryKey) -> u8 {

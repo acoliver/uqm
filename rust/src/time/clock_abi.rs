@@ -187,7 +187,7 @@ pub(crate) mod live {
     /// # Safety
     /// Game-thread access to the initialized clock.
     #[no_mangle]
-    pub unsafe extern "C" fn SetGameClockRate(seconds: u16) {
+    pub extern "C" fn SetGameClockRate(seconds: u16) {
         rust_clock_set_rate(seconds as i32);
     }
     /// # Safety
@@ -205,19 +205,19 @@ pub(crate) mod live {
     /// # Safety
     /// Called with the initialized clock.
     #[no_mangle]
-    pub unsafe extern "C" fn LockGameClock() {
+    pub extern "C" fn LockGameClock() {
         rust_clock_lock();
     }
     /// # Safety
     /// Called with the initialized clock.
     #[no_mangle]
-    pub unsafe extern "C" fn UnlockGameClock() {
+    pub extern "C" fn UnlockGameClock() {
         rust_clock_unlock();
     }
     /// # Safety
     /// Called with the initialized clock.
     #[no_mangle]
-    pub unsafe extern "C" fn GameClockRunning() -> u32 {
+    pub extern "C" fn GameClockRunning() -> u32 {
         rust_clock_is_running() as u32
     }
 }

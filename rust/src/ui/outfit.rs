@@ -14,7 +14,7 @@ const OUTFIT_MODULES: BYTE = 1;
 const OUTFIT_SAVELOAD: BYTE = 2;
 const OUTFIT_EXIT: BYTE = 3;
 const OUTFIT_DOFUEL: BYTE = 4;
-const EMPTY_SLOT: BYTE = NUM_MODULES as BYTE;
+use super::outfit_state::{apply_piece, can_install, EMPTY_SLOT};
 const LANDER_X: i16 = 24;
 const LANDER_Y: i16 = 67;
 const LANDER_WIDTH: i16 = 15;
@@ -273,49 +273,9 @@ unsafe extern "C" fn do_install_module(menu: *mut MENU_STATE) -> BOOLEAN {
         init_flash(menu, old_piece);
     } else if select || cancel {
         let mut new_piece = (*menu).CurState;
-        if select {
-            if new_piece < EMPTY_SLOT {
-                if WorldFields::current().read(|owner| owner.flagship.res_units)
-                    < WorldFields::current()
-                        .read(|owner| owner.game.module_cost[new_piece as usize])
-                        as u32
-                        * MODULE_COST_SCALE
-                {
-                    PlayMenuSound(MENU_SOUND_EFFECT_MENU_SOUND_FAILURE);
-                    return 1;
-                }
-            } else if new_piece == EMPTY_SLOT + 2 {
-                if old_piece == CREW_POD as BYTE {
-                    if WorldFields::current().read(|owner| owner.flagship.crew_enlisted) as i32
-                        > CREW_POD_CAPACITY as i32 * (CountSISPieces(CREW_POD as BYTE) as i32 - 1)
-                    {
-                        PlayMenuSound(MENU_SOUND_EFFECT_MENU_SOUND_FAILURE);
-                        return 1;
-                    }
-                } else if old_piece == FUEL_TANK as BYTE || old_piece == HIGHEFF_FUELSYS as BYTE {
-                    let mut volume = CountSISPieces(FUEL_TANK as BYTE) as DWORD
-                        * FUEL_TANK_CAPACITY
-                        + CountSISPieces(HIGHEFF_FUELSYS as BYTE) as DWORD * HEFUEL_TANK_CAPACITY;
-                    volume -= if old_piece == FUEL_TANK as BYTE {
-                        FUEL_TANK_CAPACITY
-                    } else {
-                        HEFUEL_TANK_CAPACITY
-                    };
-                    if WorldFields::current().read(|owner| owner.flagship.fuel_on_board)
-                        > volume + FUEL_RESERVE
-                    {
-                        PlayMenuSound(MENU_SOUND_EFFECT_MENU_SOUND_FAILURE);
-                        return 1;
-                    }
-                } else if old_piece == STORAGE_BAY as BYTE
-                    && WorldFields::current().read(|owner| owner.flagship.total_element_mass) as i32
-                        > STORAGE_BAY_CAPACITY as i32
-                            * (CountSISPieces(STORAGE_BAY as BYTE) as i32 - 1)
-                {
-                    PlayMenuSound(MENU_SOUND_EFFECT_MENU_SOUND_FAILURE);
-                    return 1;
-                }
-            }
+        if select && !WorldOwner::current().read(|world| can_install(world, new_piece, old_piece)) {
+            PlayMenuSound(MENU_SOUND_EFFECT_MENU_SOUND_FAILURE);
+            return 1;
         }
         SetContext(KernelOwner::current().read(|owner| owner.space_context));
         SetFlashRect(ptr::null());
@@ -326,42 +286,15 @@ unsafe extern "C" fn do_install_module(menu: *mut MENU_STATE) -> BOOLEAN {
                     new_piece = PLANET_LANDER as BYTE;
                 }
             } else {
-                match (*menu).CurState as u32 {
-                    PLANET_LANDER => (**WorldFields::current()).flagship.num_landers += 1,
-                    s if s == (EMPTY_SLOT + 3) as u32 => {
-                        (**WorldFields::current()).flagship.num_landers -= 1
-                    }
-                    FUSION_THRUSTER => {
-                        (**WorldFields::current()).flagship.drive_slots
-                            [(*menu).delta_item as usize] = new_piece
-                    }
-                    s if s == EMPTY_SLOT as u32 => {
-                        (**WorldFields::current()).flagship.drive_slots
-                            [(*menu).delta_item as usize] = new_piece
-                    }
-                    TURNING_JETS => {
-                        (**WorldFields::current()).flagship.jet_slots[(*menu).delta_item as usize] =
-                            new_piece
-                    }
-                    s if s == (EMPTY_SLOT + 1) as u32 => {
-                        (**WorldFields::current()).flagship.jet_slots[(*menu).delta_item as usize] =
-                            new_piece
-                    }
-                    _ => {
-                        (**WorldFields::current()).flagship.module_slots
-                            [(*menu).delta_item as usize] = new_piece
-                    }
-                }
-                let cost = if new_piece < EMPTY_SLOT {
-                    -(WorldFields::current()
-                        .read(|owner| owner.game.module_cost[new_piece as usize])
-                        as i32
-                        * MODULE_COST_SCALE as i32)
-                } else {
-                    WorldFields::current().read(|owner| owner.game.module_cost[old_piece as usize])
-                        as i32
-                        * MODULE_COST_SCALE as i32
-                };
+                let cost = WorldOwner::current().write(|world| {
+                    apply_piece(
+                        world,
+                        (*menu).CurState,
+                        (*menu).delta_item,
+                        new_piece,
+                        old_piece,
+                    )
+                });
                 DeltaSISGauges(UNDEFINED_DELTA as SIZE, UNDEFINED_DELTA as SIZE, cost);
                 if (*menu).CurState == PLANET_LANDER as BYTE || (*menu).CurState == EMPTY_SLOT + 3 {
                     display_landers(menu);

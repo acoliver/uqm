@@ -138,6 +138,7 @@ mod equipment_tests {
     #[test]
     fn flight_updates_preserve_the_original_boolean_drive_subscript() {
         let mut world = world();
+        // SAFETY: this record contains only integers, nullable pointers and optional callbacks.
         let mut system: SOLARSYS_STATE = unsafe { std::mem::zeroed() };
         world.data.flagship.drive_slots.fill(0);
         world.data.flagship.drive_slots[2] = 255;

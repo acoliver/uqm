@@ -2,27 +2,23 @@
 
 use super::*;
 
-/// # Safety
-/// Game state must be initialized.
 #[no_mangle]
-pub unsafe extern "C" fn GetCrewCount() -> COUNT {
+pub extern "C" fn GetCrewCount() -> COUNT {
     sis().read(|owner| owner.crew_enlisted)
 }
-/// # Safety
-/// None; moduleType is an SIS module identifier.
 #[no_mangle]
-pub unsafe extern "C" fn GetModuleCrewCapacity(module_type: BYTE) -> COUNT {
+pub extern "C" fn GetModuleCrewCapacity(module_type: BYTE) -> COUNT {
     crate::ui::sis_capacity_math::module_crew_capacity(module_type)
 }
-/// # Safety
-/// SIS state must be initialized.
 #[no_mangle]
-pub unsafe extern "C" fn GetCrewPodCapacity() -> COUNT {
-    (**sis())
-        .module_slots
-        .iter()
-        .map(|&m| GetModuleCrewCapacity(m))
-        .sum()
+pub extern "C" fn GetCrewPodCapacity() -> COUNT {
+    sis().read(|state| {
+        state
+            .module_slots
+            .iter()
+            .map(|&m| GetModuleCrewCapacity(m))
+            .sum()
+    })
 }
 /// # Safety
 /// ppt must be writable; SIS state and graphics context must be initialized.
@@ -49,21 +45,19 @@ pub unsafe extern "C" fn GetCPodCapacity(ppt: *mut POINT) -> COUNT {
 fn element_mass() -> COUNT {
     sis().read(|owner| owner.total_element_mass)
 }
-/// # Safety
-/// None; moduleType is an SIS module identifier.
 #[no_mangle]
-pub unsafe extern "C" fn GetModuleStorageCapacity(module_type: BYTE) -> COUNT {
+pub extern "C" fn GetModuleStorageCapacity(module_type: BYTE) -> COUNT {
     crate::ui::sis_capacity_math::module_storage_capacity(module_type)
 }
-/// # Safety
-/// SIS state must be initialized.
 #[no_mangle]
-pub unsafe extern "C" fn GetStorageBayCapacity() -> COUNT {
-    (**sis())
-        .module_slots
-        .iter()
-        .map(|&m| GetModuleStorageCapacity(m))
-        .sum()
+pub extern "C" fn GetStorageBayCapacity() -> COUNT {
+    sis().read(|state| {
+        state
+            .module_slots
+            .iter()
+            .map(|&m| GetModuleStorageCapacity(m))
+            .sum()
+    })
 }
 /// # Safety
 /// ppt must be writable; SIS state and graphics context must be initialized.
@@ -86,23 +80,21 @@ pub unsafe extern "C" fn GetSBayCapacity(ppt: *mut POINT) -> COUNT {
     (*ppt).y = (34 - row * 2) as SIZE;
     GetStorageBayCapacity()
 }
-/// # Safety
-/// None; moduleType is an SIS module identifier.
 #[no_mangle]
-pub unsafe extern "C" fn GetModuleFuelCapacity(module_type: BYTE) -> DWORD {
+pub extern "C" fn GetModuleFuelCapacity(module_type: BYTE) -> DWORD {
     use crate::starbase::sis_modules::ModuleType;
     ModuleType::from_u8(module_type).map_or(0, ModuleType::fuel_capacity)
 }
-/// # Safety
-/// SIS state must be initialized.
 #[no_mangle]
-pub unsafe extern "C" fn GetFuelTankCapacity() -> DWORD {
-    (**sis())
-        .module_slots
-        .iter()
-        .fold(FUEL_RESERVE, |cap, &m| cap + GetModuleFuelCapacity(m))
+pub extern "C" fn GetFuelTankCapacity() -> DWORD {
+    sis().read(|state| {
+        state
+            .module_slots
+            .iter()
+            .fold(FUEL_RESERVE, |cap, &m| cap + GetModuleFuelCapacity(m))
+    })
 }
-unsafe fn fuel_slot_for(amount: DWORD) -> Option<(COUNT, DWORD)> {
+fn fuel_slot_for(amount: DWORD) -> Option<(COUNT, DWORD)> {
     assert!(amount >= FUEL_RESERVE);
     let mut cap = FUEL_RESERVE;
     for slot in (0..NUM_MODULE_SLOTS as COUNT).rev() {
@@ -141,17 +133,16 @@ pub unsafe extern "C" fn GetFTankCapacity(ppt: *mut POINT) -> DWORD {
     capacity
 }
 
-/// # Safety
-/// SIS state must be initialized.
 #[no_mangle]
-pub unsafe extern "C" fn CountSISPieces(piece_type: BYTE) -> COUNT {
-    let s = sis();
-    let slots: &[BYTE] = if u32::from(piece_type) == FUSION_THRUSTER {
-        &(**s).drive_slots
-    } else if u32::from(piece_type) == TURNING_JETS {
-        &(**s).jet_slots
-    } else {
-        &(**s).module_slots
-    };
-    slots.iter().filter(|&&v| v == piece_type).count() as COUNT
+pub extern "C" fn CountSISPieces(piece_type: BYTE) -> COUNT {
+    sis().read(|state| {
+        let slots: &[BYTE] = if u32::from(piece_type) == FUSION_THRUSTER {
+            &state.drive_slots
+        } else if u32::from(piece_type) == TURNING_JETS {
+            &state.jet_slots
+        } else {
+            &state.module_slots
+        };
+        slots.iter().filter(|&&v| v == piece_type).count() as COUNT
+    })
 }

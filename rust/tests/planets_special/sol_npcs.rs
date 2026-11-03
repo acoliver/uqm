@@ -225,7 +225,7 @@ pub fn check(h: &mut Harness) {
             (saved_star).as_ref(),
             uqm_rust::planets::starmap::current_catalog(),
         );
-        uqm_rust::engine::World::current().write(|world| c_api::uninit_group_info(world));
+        uqm_rust::engine::World::current().write(c_api::uninit_group_info);
         assert_ne!(uqm_rust::time::clock_bridge::rust_clock_uninit(), 0);
         uqm_rust::engine::WorldData::current().write(|world| {
             UninitQueue(&raw mut world.game.ip_group_q);

@@ -8,6 +8,18 @@ use uqm_rust::{
 
 #[test]
 #[serial_test::serial]
+fn empty_npc_phrase_does_not_acquire_an_owner() {
+    let mut game = Game::new();
+    // SAFETY: this serialized fixture publishes its game, and phrase zero is a no-op.
+    unsafe {
+        bridge::with_game(&mut game, || {
+            World::current().write(|_| uqm_rust::comm::ffi::rust_npc_phrase_cb(0, None));
+        });
+    }
+}
+
+#[test]
+#[serial_test::serial]
 fn sis_slot_snapshot_releases_world_before_support_ship_drawing() {
     let mut game = Game::new();
     game.world.data.flagship.module_slots.fill(255);

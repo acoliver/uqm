@@ -47,7 +47,7 @@ mod layout {
 // Access the C GameClock global variable via GetGameClock() function
 
 #[cfg(not(test))]
-use crate::time::clock_abi::live::GetGameClock as get_game_clock;
+use crate::engine::World;
 
 // Constants from clock.h
 #[cfg(not(test))]
@@ -105,18 +105,12 @@ fn with_game_clock<F, R>(f: F) -> R
 where
     F: FnOnce(&mut ClockState) -> R,
 {
-    unsafe {
-        let ptr = get_game_clock();
-        f(&mut *ptr)
-    }
+    World::current().write(|world| f(&mut world.data.game.game_clock))
 }
 
 // Initialize the game clock
 #[cfg(not(test))]
-/// # Safety
-///
-/// This is an FFI function called from C. The caller must ensure pointers are valid.
-pub unsafe extern "C" fn rust_clock_init() -> c_int {
+pub extern "C" fn rust_clock_init() -> c_int {
     log_clock_bridge("RUST_CLOCK_INIT");
 
     with_game_clock(|clock| {
@@ -134,10 +128,7 @@ pub unsafe extern "C" fn rust_clock_init() -> c_int {
 
 // Uninitialize the game clock
 #[cfg(not(test))]
-/// # Safety
-///
-/// This is an FFI function called from C. The caller must ensure pointers are valid.
-pub unsafe extern "C" fn rust_clock_uninit() -> c_int {
+pub extern "C" fn rust_clock_uninit() -> c_int {
     log_clock_bridge("RUST_CLOCK_UNINIT");
 
     with_game_clock(|clock| {
@@ -151,10 +142,7 @@ pub unsafe extern "C" fn rust_clock_uninit() -> c_int {
 
 // Set game clock rate (seconds per day)
 #[cfg(not(test))]
-/// # Safety
-///
-/// This is an FFI function called from C. The caller must ensure pointers are valid.
-pub unsafe extern "C" fn rust_clock_set_rate(seconds_per_day: c_int) {
+pub extern "C" fn rust_clock_set_rate(seconds_per_day: c_int) {
     log_clock_bridge("RUST_CLOCK_RATE");
 
     let new_day_in_ticks = seconds_per_day * (CLOCK_BASE_FRAMERATE as i32);
@@ -223,29 +211,20 @@ pub unsafe extern "C" fn rust_clock_advance_days(days: c_int) {
 }
 
 // Lock the game clock (for debugging)
-/// # Safety
-///
-/// This is an FFI function called from C. The caller must ensure pointers are valid.
-pub unsafe extern "C" fn rust_clock_lock() {
+pub extern "C" fn rust_clock_lock() {
     log_clock_bridge("RUST_CLOCK_LOCK");
     // Note: The mutex lock is handled by C code
 }
 
 // Unlock the game clock (for debugging)
-/// # Safety
-///
-/// This is an FFI function called from C. The caller must ensure pointers are valid.
-pub unsafe extern "C" fn rust_clock_unlock() {
+pub extern "C" fn rust_clock_unlock() {
     log_clock_bridge("RUST_CLOCK_UNLOCK");
     // Note: The mutex unlock is handled by C code
 }
 
 // Check if game clock is running
 #[cfg(not(test))]
-/// # Safety
-///
-/// This is an FFI function called from C. The caller must ensure pointers are valid.
-pub unsafe extern "C" fn rust_clock_is_running() -> c_int {
+pub extern "C" fn rust_clock_is_running() -> c_int {
     log_clock_bridge("RUST_CLOCK_RUNNING");
 
     with_game_clock(|clock| {

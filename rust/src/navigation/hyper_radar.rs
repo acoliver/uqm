@@ -1,12 +1,13 @@
 //! Hyperspace radar, nearby star and portal elements.
 #![cfg(not(test))]
+#![allow(non_snake_case)]
 use super::abi::*;
 use crate::engine::StoryKey;
 
 use super::hyper_encounters::{allocate, ambient, process_all, XOFFS, YOFFS};
 use super::hyper_transition::{portal_collision, portal_death, star_collision, star_death};
 use super::hyperspace::live::{universe_x, universe_y};
-use super::{color, get, set};
+use super::{color, get};
 use crate::engine::battle::views::FrameSelection as Frame;
 use crate::planets::starmap::find_star_in;
 use std::ptr;
@@ -56,7 +57,7 @@ fn radar(point: POINT, ox: i16, oy: i16) -> POINT {
 
 /// # Safety
 /// Hyperspace resources, contexts and queues must be initialized on the game thread.
-pub unsafe fn seed_universe() {
+pub unsafe fn SeedUniverse() {
     crate::app::bridge::enter(|cx| {
         let universe = POINT {
             x: universe_x(cx.world.data.flagship.log_x),
@@ -67,7 +68,6 @@ pub unsafe fn seed_universe() {
         BatchGraphics();
         let ox = (universe.x as i32 * 56 / 756 - 28) as i16;
         let oy = ((9999 - universe.y as i32) * 53 / 600 - 26) as i16;
-        let counter = get(cx.world, StoryKey::ARILOU_SPACE_COUNTER);
         let side = get(cx.world, StoryKey::ARILOU_SPACE_SIDE);
         grid(universe.x, universe.y, ox, oy);
         let mut stamp = STAMP {
@@ -89,43 +89,8 @@ pub unsafe fn seed_universe() {
             stamp.frame = SetRelFrameIndex(blip, kind as i16 + 2);
             DrawStamp(&mut stamp);
         }
-        let mut portal = get(cx.world, StoryKey::PORTAL_COUNTER);
-        if portal != 0 || counter != 0 {
-            let mut portals = [(POINT { x: 0, y: 0 }, 0u16); 2];
-            let mut count = 0usize;
-            if portal != 0 {
-                if portal == 1 {
-                    cx.kernel.portal_point = universe;
-                }
-                portals[count] = (cx.kernel.portal_point, ((portal as u16 - 1) >> 1) + 18);
-                count += 1;
-                portal += 1;
-                if portal == 11 {
-                    portal = 10;
-                }
-                set(cx.world, StoryKey::PORTAL_COUNTER, portal);
-            }
-            if counter != 0 {
-                let (point, index) = if side <= 1 {
-                    (
-                        POINT {
-                            x: ARILOU_SPACE_X as i16,
-                            y: ARILOU_SPACE_Y as i16,
-                        },
-                        (counter as u16 >> 1) + 18,
-                    )
-                } else {
-                    (
-                        POINT {
-                            x: QUASI_SPACE_X as i16,
-                            y: QUASI_SPACE_Y as i16,
-                        },
-                        counter as u16 >> 1,
-                    )
-                };
-                portals[count] = (point, index);
-                count += 1;
-            }
+        let (portals, count) = super::portal::portals(cx.world, cx.kernel, universe);
+        if count != 0 {
             for i in (0..count).rev() {
                 let (point, index) = portals[i];
                 let sx = point.x.wrapping_sub(universe.x).wrapping_add(XOFFS);

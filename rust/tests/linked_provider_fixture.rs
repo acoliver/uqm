@@ -34,7 +34,7 @@ fn a_second_new_game_starts_from_zero_state() {
     // SAFETY: this fixture owns the synchronous lifecycle through both initializations.
     unsafe {
         uqm_rust::app::bridge::with_game(&mut game, || {
-            uqm_rust::engine::World::current().write(|world| init_glob_data(world));
+            uqm_rust::engine::World::current().write(init_glob_data);
             uqm_rust::engine::World::current()
                 .write(|world| rust_set_game_state(world, moonbase.as_ptr(), 1));
             uqm_rust::engine::World::current()
@@ -46,7 +46,7 @@ fn a_second_new_game_starts_from_zero_state() {
                 "precondition: the first game recorded the moon base as taken"
             );
 
-            uqm_rust::engine::World::current().write(|world| init_glob_data(world));
+            uqm_rust::engine::World::current().write(init_glob_data);
 
             assert_eq!(
                 uqm_rust::engine::World::current()

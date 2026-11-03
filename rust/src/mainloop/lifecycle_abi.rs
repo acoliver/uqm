@@ -29,7 +29,7 @@ unsafe extern "C" fn on_battle_frame() {
         & (CHECK_ABORT | CHECK_LOAD) as u16
         == 0
     {
-        crate::navigation::hyper_radar::seed_universe();
+        crate::navigation::hyper_radar::SeedUniverse();
     }
     crate::ui::sis::DrawAutoPilotMessage(0);
 }

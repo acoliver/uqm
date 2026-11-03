@@ -160,7 +160,7 @@ impl CffiShipStatus {
     #[must_use]
     pub fn storage_capacity(&self) -> u16 {
         #[cfg(not(test))]
-        unsafe {
+        {
             GetStorageBayCapacity()
         }
         #[cfg(test)]

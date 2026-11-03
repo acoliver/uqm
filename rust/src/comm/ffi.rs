@@ -1,11 +1,7 @@
 //! Rust communication facade for state, playback and dialogue orchestration.
 
 #[cfg(not(test))]
-use crate::engine::StoryKey;
-#[cfg(not(test))]
-use crate::engine::World as WorldOwner;
-#[cfg(not(test))]
-use crate::engine::WorldData as WorldFields;
+use crate::engine::{StoryKey, World as WorldOwner, WorldData as WorldFields};
 use std::cell::RefCell;
 use std::ffi::{c_char, c_int, c_uint, CStr};
 
@@ -1183,7 +1179,6 @@ const GLOBAL_ALLIANCE_NAME: c_int = -999_998;
 const ALLIANCE_NAME_BUF_SIZE: usize = 400;
 
 // C bridge declarations used only by NPCPhrase (not test-compiled).
-#[cfg(not(test))]
 // Splice one or more voice clips with text (used by npcphrase_splice when clip exists).
 #[cfg(not(test))]
 use crate::sound::heart_ffi::splice_multi_track as SpliceMultiTrack;
@@ -1202,9 +1197,8 @@ use crate::strings::string_table::SetAbsStringTableIndex;
 /// Uses CommData.ConversationPhrases + GET_GAME_STATE(NEW_ALLIANCE_NAME).
 #[cfg(not(test))]
 pub(crate) unsafe fn get_alliance_name(index: c_int) -> *const u8 {
-    let i = WorldOwner::current().read(|world| {
-        crate::state::game_state_keys::get_game_state(world, StoryKey::NEW_ALLIANCE_NAME)
-    }) as c_int;
+    let i =
+        WorldOwner::current().read(|world| world.story_state(StoryKey::NEW_ALLIANCE_NAME)) as c_int;
     let phrases = std::ptr::addr_of_mut!(CommData.conversation_phrases) as *mut std::ffi::c_void;
     if phrases.is_null() {
         return std::ptr::null();
@@ -1220,7 +1214,6 @@ unsafe fn get_alliance_name_full(
     buf: *mut std::ffi::c_char,
     buf_len: c_int,
 ) -> *const std::ffi::c_char {
-    let world = WorldFields::current();
     use std::ffi::CStr;
 
     let phrases = std::ptr::addr_of_mut!(CommData.conversation_phrases) as *mut std::ffi::c_void;
@@ -1228,9 +1221,8 @@ unsafe fn get_alliance_name_full(
         return std::ptr::null();
     }
 
-    let i = WorldOwner::current().read(|world| {
-        crate::state::game_state_keys::get_game_state(world, StoryKey::NEW_ALLIANCE_NAME)
-    }) as c_int;
+    let i =
+        WorldOwner::current().read(|world| world.story_state(StoryKey::NEW_ALLIANCE_NAME)) as c_int;
     let s = SetAbsStringTableIndex((phrases).cast(), ((adjusted_index - 1) + i) as u16);
     let src = GetStringAddress(s);
     if src.is_null() {
@@ -1246,36 +1238,15 @@ unsafe fn get_alliance_name_full(
 
     // If state==3, append CommanderName
     if i == 3 {
-        let cname_ptr =
-            std::ptr::addr_of_mut!((**world).flagship.commander_name) as *const std::ffi::c_char;
-        if !cname_ptr.is_null() {
-            let cname = CStr::from_ptr(cname_ptr);
-            let cname_bytes = cname.to_bytes();
-            let used = libc_strlen(buf);
-            let remaining = (buf_len as usize).saturating_sub(used + 1);
-            let append_len = remaining.min(cname_bytes.len());
-            if append_len > 0 {
-                std::ptr::copy_nonoverlapping(
-                    cname_bytes.as_ptr(),
-                    buf.add(used).cast::<u8>(),
-                    append_len,
-                );
-                *buf.add(used + append_len) = 0;
-            }
-        }
+        let name = WorldFields::current().read(|world| world.flagship.commander_name);
+        let cname_bytes = CStr::from_ptr(name.as_ptr().cast()).to_bytes();
+        let remaining = (buf_len as usize).saturating_sub(copy_len + 1);
+        let append_len = remaining.min(cname_bytes.len());
+        std::ptr::copy_nonoverlapping(cname_bytes.as_ptr(), buf.add(copy_len).cast(), append_len);
+        *buf.add(copy_len + append_len) = 0;
     }
 
     buf as *const std::ffi::c_char
-}
-
-/// Minimal strlen for C strings (avoids linking libc's strlen).
-#[cfg(not(test))]
-unsafe fn libc_strlen(s: *const std::ffi::c_char) -> usize {
-    let mut len = 0;
-    while *s.add(len) != 0 {
-        len += 1;
-    }
-    len
 }
 
 /// NPCPhrase with callback — the Rust replacement for C's npcphrase_cb.
@@ -1296,9 +1267,6 @@ unsafe fn libc_strlen(s: *const std::ffi::c_char) -> usize {
 /// @plan PLAN-20260326-COMMPT2.P04
 /// @requirement REQ-NP-001, REQ-NP-002, REQ-NP-003, REQ-NP-004
 pub unsafe fn rust_npc_phrase_cb(index: c_int, cb: super::glue::PhraseCallback) {
-    #[cfg(not(test))]
-    #[cfg(not(test))]
-    let world = WorldFields::current();
     eprintln!(
         "[DBG] rust_NPCPhrase_cb: index={} cb={}",
         index,
@@ -1321,14 +1289,12 @@ pub unsafe fn rust_npc_phrase_cb(index: c_int, cb: super::glue::PhraseCallback) 
 
         if index == GLOBAL_PLAYER_NAME {
             // Branch 2: commander name — direct GlobData.flagship access
-            let name =
-                std::ptr::addr_of_mut!((**world).flagship.commander_name) as *mut std::ffi::c_char;
-            SpliceTrack(ptr::null_mut(), name, ptr::null_mut(), cb);
+            let name = WorldFields::current().read(|world| world.flagship.commander_name);
+            SpliceTrack(ptr::null_mut(), name.as_ptr().cast(), ptr::null_mut(), cb);
         } else if index == GLOBAL_SHIP_NAME {
             // Branch 3: ship name — direct GlobData.flagship access
-            let name =
-                std::ptr::addr_of_mut!((**world).flagship.ship_name) as *mut std::ffi::c_char;
-            SpliceTrack(ptr::null_mut(), name, ptr::null_mut(), cb);
+            let name = WorldFields::current().read(|world| world.flagship.ship_name);
+            SpliceTrack(ptr::null_mut(), name.as_ptr().cast(), ptr::null_mut(), cb);
         } else if index < 0 {
             // Branch 4: alliance-name variant
             let adjusted = index - GLOBAL_ALLIANCE_NAME;

@@ -728,6 +728,7 @@ mod record_tests {
 
     #[test]
     fn header_bytes_keep_native_endian_fields_and_zero_padding() {
+        // SAFETY: this record contains only integers, nullable pointers and optional callbacks.
         let mut header: GROUP_HEADER = unsafe { std::mem::zeroed() };
         header.NumGroups = 2;
         header.day_index = 3;
@@ -744,6 +745,7 @@ mod record_tests {
         for (i, chunk) in bytes[8..].as_chunks::<4>().0.iter().enumerate() {
             assert_eq!(*chunk, (0x12340000 + i as u32).to_ne_bytes());
         }
+        // SAFETY: this record contains only integers, nullable pointers and optional callbacks.
         let mut restored: GROUP_HEADER = unsafe { std::mem::zeroed() };
         decode_header(&bytes, &mut restored);
         assert_eq!(restored.GroupOffset, header.GroupOffset);
@@ -754,6 +756,7 @@ mod record_tests {
 
     #[test]
     fn fragment_bytes_keep_truncation_and_do_not_replace_link_or_resources() {
+        // SAFETY: this record contains only integers, nullable pointers and optional callbacks.
         let mut fragment: SHIP_FRAGMENT = unsafe { std::mem::zeroed() };
         fragment.captains_name_index = 3;
         fragment.race_id = 4;
@@ -774,6 +777,7 @@ mod record_tests {
 
     #[test]
     fn ip_group_bytes_pack_nibbles_and_signed_coordinates() {
+        // SAFETY: this record contains only integers, nullable pointers and optional callbacks.
         let mut group: IP_GROUP = unsafe { std::mem::zeroed() };
         group.group_counter = 0x1234;
         group.race_id = 2;
@@ -791,6 +795,7 @@ mod record_tests {
         assert_eq!(&bytes[6..12], &[2, 0x3c, 4, 0, 0xf5, 6]);
         assert_eq!(&bytes[12..14], &(-123i16).to_ne_bytes());
         assert_eq!(&bytes[14..16], &456i16.to_ne_bytes());
+        // SAFETY: this record contains only integers, nullable pointers and optional callbacks.
         let mut restored: IP_GROUP = unsafe { std::mem::zeroed() };
         decode_group(&bytes, &mut restored);
         assert_eq!(restored.sys_loc, group.sys_loc);

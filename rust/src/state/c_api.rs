@@ -115,7 +115,7 @@ pub(crate) mod planets {
     ) -> (c_int, c_int, c_int) {
         let star = world
             .current_star
-            .expect("planet info requires a selected star")
+            .unwrap_or_else(|| panic!("planet info requires a selected star"))
             .0 as u16;
         let planet = (*(*system).pBaseDesc)
             .pPrevDesc

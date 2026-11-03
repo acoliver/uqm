@@ -3821,10 +3821,10 @@ pub use crate::navigation::hyper_data::LoadHyperspace;
 #[cfg(not(test))]
 pub use crate::navigation::hyper_data::FreeHyperspace;
 #[cfg(not(test))]
-pub use crate::navigation::hyper_radar::seed_universe;
+pub use crate::navigation::hyper_radar::SeedUniverse;
 #[cfg(test)]
 extern "C" {
-    pub fn seed_universe();
+    pub fn SeedUniverse();
 }
 
 #[cfg(not(test))]

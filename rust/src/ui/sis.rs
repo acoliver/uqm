@@ -582,31 +582,14 @@ pub unsafe extern "C" fn DrawFlagshipName(in_status_area: BOOLEAN) {
 /// # Safety
 /// Graphics, fonts, game strings and SIS inventory must be initialized.
 pub unsafe fn draw_flagship_stats() {
-    let s = sis();
-    let mut energy_regen: u8 = 1;
-    let mut energy_wait: u8 = 10;
-    let mut thrust: u16 = 10;
-    let mut turn_wait: u8 = 17;
-    let mut fuel: u32 = 10 * FUEL_TANK_SCALE;
-    for &m in &(**s).module_slots {
-        match u32::from(m) {
-            FUEL_TANK => fuel += FUEL_TANK_CAPACITY,
-            HIGHEFF_FUELSYS => fuel += HEFUEL_TANK_CAPACITY,
-            DYNAMO_UNIT => energy_wait = ((i32::from(energy_wait) - 2) as BYTE).max(4),
-            SHIVA_FURNACE => energy_regen += 1,
-            _ => {}
-        }
-    }
-    for &d in &(**s).drive_slots {
-        if u32::from(d) == FUSION_THRUSTER {
-            thrust += 2;
-        }
-    }
-    for &j in &(**s).jet_slots {
-        if u32::from(j) == TURNING_JETS {
-            turn_wait -= 2;
-        }
-    }
+    let s = sis().read(|state| *state);
+    let super::flagship_stats::Stats {
+        energy_regen,
+        energy_wait,
+        thrust,
+        turn_wait,
+        fuel,
+    } = super::flagship_stats::calculate(&s);
     let old = SetContext(KernelOwner::current().read(|owner| owner.space_context));
     let old_font = SetContextFont(KernelOwner::current().read(|owner| owner.star_con_font));
     let effect = SetContextFontEffect(ptr::null_mut());
@@ -641,7 +624,7 @@ pub unsafe fn draw_flagship_stats() {
     t.align = TEXT_ALIGN_ALIGN_LEFT;
     t.pStr = b.as_mut_ptr().cast();
     for (n, slot) in [15usize, 14, 13, 0].iter().enumerate() {
-        weapon_name((**s).module_slots[*slot], b.as_mut_ptr());
+        weapon_name(s.module_slots[*slot], b.as_mut_ptr());
         font_DrawText(&mut t);
         if n != 3 {
             t.baseline.y = (i32::from(t.baseline.y) + i32::from(leading)) as SIZE;

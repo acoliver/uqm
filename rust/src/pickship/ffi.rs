@@ -226,7 +226,7 @@ fn change_selection(state: &mut PickerState) {
             // SAFETY: the published lifecycle owns the flagship on this thread.
             let crew = WorldFields::current().read(|world| world.flagship.crew_enlisted);
             // SAFETY: plain call.
-            let capacity = unsafe { GetCrewPodCapacity() };
+            let capacity = GetCrewPodCapacity();
             (c"".as_ptr(), 0, crew, capacity)
         } else {
             // SAFETY: `race_strings` is the ship's name table.
