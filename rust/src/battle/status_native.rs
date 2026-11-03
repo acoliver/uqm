@@ -513,6 +513,32 @@ mod tests {
     }
 
     #[test]
+    fn battle_end_status_box_changes_from_dark_red_to_pink_on_successive_flash_phases() {
+        for (life, expected) in [(35, (123, 0, 0)), (34, (255, 206, 206))] {
+            let mut draws = Vec::new();
+            explosion_flash(life, 120, |color, rect, fill| {
+                draws.push((color, rect, fill));
+            });
+            assert_eq!(draws.len(), 1);
+            let (color, rect, fill) = draws[0];
+            assert!(fill);
+            assert_eq!(
+                (color.r, color.g, color.b, color.a),
+                (expected.0, expected.1, expected.2, 255,)
+            );
+            assert_eq!(
+                (
+                    rect.corner.x,
+                    rect.corner.y,
+                    rect.extent.width,
+                    rect.extent.height,
+                ),
+                (4, 189, 55, 30),
+            );
+        }
+    }
+
+    #[test]
     fn explosion_flash_renders_each_phase_and_the_two_pixel_center() {
         let capture = |life| {
             let mut ops = Vec::new();
