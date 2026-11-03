@@ -1,7 +1,6 @@
 //! The save menu persistence entry points, called on the game thread.
 pub(crate) mod load;
 pub(crate) mod save;
-pub(super) use load::finish_load;
 
 fn complete(result: anyhow::Result<()>, operation: &str, witness: Option<(u16, bool)>) -> u32 {
     match result {

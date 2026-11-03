@@ -129,3 +129,25 @@ fn battle_and_ship_projection_budgets_retire_at_the_phase_two_exit() {
         assert!(check_growth(&budgets, &BTreeMap::new()).is_err());
     }
 }
+
+#[test]
+fn remaining_mode_helpers_retire_with_their_reserved_crate_move() {
+    for scope in [
+        "uqm::planets::cargo::live::display",
+        "uqm::planets::report::live::make_report",
+        "uqm::planets::sphere::live::tint_frame",
+        "uqm::comm::glue::resolve_phrase",
+        "uqm::comm::speech_graphics::activity_frame",
+    ] {
+        let mut budgets = BTreeMap::new();
+        set_scoped(
+            &mut budgets,
+            "u6_04_world_projection",
+            1,
+            [(format!("ffi|owner_projections|{scope}"), 1)].into(),
+            false,
+        )
+        .unwrap();
+        assert_eq!(budgets["u6_04_world_projection"].ends, "U6-04");
+    }
+}

@@ -6,23 +6,25 @@ The 18 previously unassigned calls in navigation events and its string-key helpe
 
 Battle and ship scopes follow the latest #839 orchestrator assignment. Both budgets end at phase 2. Other references below are line numbers in work-items.md. U6-04 assignments cite the front-end/Game conversion and deletion of the remaining bridge, not a battle or ship exemption.
 
+The #839 review identified 16 unsupported assignments. Fixture execution now borrows Cx owners (8 calls removed); scene entry receives coordinator-owned wiring (2 calls relocated); the legacy loader receives World from the live loader (1 call relocated). The nine cargo/report/sphere and glue/speech scopes belong to U6-04: its reserved src/planets/ and src/comm/ paths (line 1967) move to forbid(unsafe_code) modes (line 1974), so these raw-owner users must convert before that move.
+
 | Retirement | Budget | Calls | Scopes | Work-item Change/Deletes |
 | --- | --- | ---: | ---: | --- |
 | U2-10a | `u2_10a_projection` | 75 | 35 | #837; #839 orchestrator scope decision |
 | U2-10b | `u2_10b_projection` | 15 | 8 | #838; #839 orchestrator scope decision |
 | U3-02 | `u3_02_world_projection` | 91 | 42 | 1379, 1383 |
 | U4-02 | `u4_02_world_projection` | 45 | 14 | 1479–1481 |
-| U4-03 | `u4_03_world_projection` | 35 | 25 | 1530–1532 |
-| U4-04 | `u4_04_world_projection` | 69 | 57 | 1576–1578 |
+| U4-03 | `u4_03_world_projection` | 27 | 20 | 1526, 1530–1532 |
+| U4-04 | `u4_04_world_projection` | 69 | 57 | 1572, 1576–1578 |
 | U5-01 | `u5_01_world_projection` | 4 | 4 | 1631–1632 |
-| U5-02 | `u5_02_world_projection` | 273 | 106 | 1680–1682 |
+| U5-02 | `u5_02_world_projection` | 263 | 100 | 1680–1682 |
 | U5-03 | `u5_03_world_projection` | 20 | 14 | 1730–1731 |
 | U5-04 | `u5_04_world_projection` | 44 | 8 | 1775 |
-| U6-01 | `u6_01_world_projection` | 64 | 35 | 1824–1827 |
+| U6-01 | `u6_01_world_projection` | 60 | 32 | 1824–1827 |
 | U6-02 | `u6_02_world_projection` | 44 | 35 | 1875–1876 |
 | U6-03 | `u6_03_world_projection` | 281 | 107 | 1925 |
-| U6-04 | `u6_04_world_projection` | 129 | 54 | 1971–1974 |
-| Total | | 1189 | 544 | |
+| U6-04 | `u6_04_world_projection` | 143 | 63 | 1967, 1971–1974 |
+| Total | | 1181 | 539 | |
 
 Each row below is a `ffi|owner_projections` identity with the exact proposed ceiling.
 
@@ -155,11 +157,12 @@ Work-items.md Change/Deletes: 1479–1481.
 
 ## U4-03: `u4_03_world_projection`
 
-Work-items.md Change/Deletes: 1530–1532.
+Work-items.md Change/Deletes: 1526, 1530–1532.
 
 | Caller identity | Ceiling |
 | --- | ---: |
 | `uqm::automation::campaign_state::<LiveCampaign as StateSource>::read` | 1 |
+| `uqm::automation::coordinator::<Coordinator>::activate_start_scene` | 2 |
 | `uqm::automation::coordinator::<Coordinator>::service_energy` | 2 |
 | `uqm::automation::coordinator::<Coordinator>::service_navigation` | 2 |
 | `uqm::automation::coordinator::<Coordinator>::service_patrol_contact` | 1 |
@@ -178,16 +181,10 @@ Work-items.md Change/Deletes: 1530–1532.
 | `uqm::automation::input_ffi::sis_crew_and_landers` | 1 |
 | `uqm::automation::input_ffi::sis_fittings` | 1 |
 | `uqm::automation::input_ffi::star_flight_observation` | 4 |
-| `uqm::automation::melee_fixture::live::production::apply` | 1 |
-| `uqm::automation::melee_fixture::live::production::borrow_world` | 1 |
-| `uqm::automation::melee_fixture::live::production::configure` | 2 |
-| `uqm::automation::melee_fixture::live::production::execute` | 4 |
-| `uqm::automation::scenario::<LinkedSceneEntry as SceneEntryOps>::clear_screen` | 1 |
-| `uqm::automation::scenario::activate` | 1 |
 
 ## U4-04: `u4_04_world_projection`
 
-Work-items.md Change/Deletes: 1576–1578.
+Work-items.md Change/Deletes: 1572, 1576–1578.
 
 | Caller identity | Ceiling |
 | --- | ---: |
@@ -237,7 +234,7 @@ Work-items.md Change/Deletes: 1576–1578.
 | `uqm::mainloop::state_abi::uqm_set_chmmr_bomb_state` | 1 |
 | `uqm::mainloop::state_abi::uqm_set_player_input_all_or_explode` | 1 |
 | `uqm::mainloop::state_abi::uqm_zero_global_velocity` | 1 |
-| `uqm::savegame::legacy::live::LoadLegacyGame` | 1 |
+| `uqm::savegame::live::load::LoadGame` | 1 |
 | `uqm::savegame::live::load::finish_load` | 2 |
 | `uqm::savegame::live::load::install` | 1 |
 | `uqm::savegame::live::save::capture` | 4 |
@@ -291,10 +288,6 @@ Work-items.md Change/Deletes: 1680–1682.
 | `uqm::planets::c_api::star_indexes_before_current` | 1 |
 | `uqm::planets::c_api::start_sphere_tracking` | 1 |
 | `uqm::planets::c_api::take_encounter` | 1 |
-| `uqm::planets::cargo::live::ShowRemainingCapacity` | 1 |
-| `uqm::planets::cargo::live::discard` | 3 |
-| `uqm::planets::cargo::live::display` | 1 |
-| `uqm::planets::cargo::live::element_amount` | 3 |
 | `uqm::planets::devices::DevicesMenu` | 5 |
 | `uqm::planets::devices::InventoryDevices` | 1 |
 | `uqm::planets::devices::draw` | 1 |
@@ -322,7 +315,6 @@ Work-items.md Change/Deletes: 1680–1682.
 | `uqm::planets::pstarmap::universeToDispx` | 1 |
 | `uqm::planets::pstarmap::universeToDispy` | 1 |
 | `uqm::planets::pstarmap::which_space` | 1 |
-| `uqm::planets::report::live::make_report` | 1 |
 | `uqm::planets::roster::live::RosterMenu` | 1 |
 | `uqm::planets::roster::live::delta_crew` | 1 |
 | `uqm::planets::roster::live::modify` | 3 |
@@ -368,7 +360,6 @@ Work-items.md Change/Deletes: 1680–1682.
 | `uqm::planets::solarsys::lifecycle::save_non_orbital_location` | 6 |
 | `uqm::planets::solarsys::lifecycle::solar_sys_menu` | 1 |
 | `uqm::planets::solarsys::lifecycle::uninit_solar_sys` | 5 |
-| `uqm::planets::sphere::live::tint_frame` | 1 |
 | `uqm::planets::starmap::FindStar` | 1 |
 | `uqm::planets::starmap::naming::GetClusterName` | 2 |
 | `uqm::planets::starmap_cursor::DoMoveCursor` | 7 |
@@ -433,7 +424,6 @@ Work-items.md Change/Deletes: 1824–1827.
 | `uqm::comm::ffi::get_alliance_name` | 1 |
 | `uqm::comm::ffi::get_alliance_name_full` | 2 |
 | `uqm::comm::ffi::rust_npc_phrase_cb` | 1 |
-| `uqm::comm::glue::resolve_phrase` | 1 |
 | `uqm::comm::hail::game_string` | 1 |
 | `uqm::comm::hail::hail_alien` | 3 |
 | `uqm::comm::hail::is_starbase_conversation` | 2 |
@@ -443,8 +433,6 @@ Work-items.md Change/Deletes: 1824–1827.
 | `uqm::comm::sis_graphics::<CommWindow as CommWindowGfx>::space_context` | 1 |
 | `uqm::comm::sis_graphics::draw_summary_page_contents` | 2 |
 | `uqm::comm::sis_graphics::game_string` | 1 |
-| `uqm::comm::speech_graphics::<SpeechGraphics>::update` | 2 |
-| `uqm::comm::speech_graphics::activity_frame` | 1 |
 | `uqm::comm::talk_segue::c_bridge::clear_last_activity_load_flag` | 1 |
 | `uqm::comm::talk_segue::dinput::do_last_replay_cb` | 2 |
 | `uqm::comm::talk_segue::init_speech_graphics` | 1 |
@@ -609,10 +597,13 @@ Work-items.md Change/Deletes: 1925.
 
 ## U6-04: `u6_04_world_projection`
 
-Work-items.md Change/Deletes: 1971–1974.
+Work-items.md Change/Deletes: 1967, 1971–1974.
 
 | Caller identity | Ceiling |
 | --- | ---: |
+| `uqm::comm::glue::resolve_phrase` | 1 |
+| `uqm::comm::speech_graphics::<SpeechGraphics>::update` | 2 |
+| `uqm::comm::speech_graphics::activity_frame` | 1 |
 | `uqm::front_end::cnctdlg::do_melee_connect_dialog` | 1 |
 | `uqm::front_end::cnctdlg::game_string` | 1 |
 | `uqm::front_end::cnctdlg::mcd_draw_button` | 1 |
@@ -667,4 +658,10 @@ Work-items.md Change/Deletes: 1971–1974.
 | `uqm::mainloop::restart_menu::menu_abi::uqm_get_utwig_bomb` | 1 |
 | `uqm::mainloop::restart_menu::menu_abi::uqm_get_utwig_bomb_on_ship` | 1 |
 | `uqm::mainloop::restart_menu::menu_abi::uqm_set_utwig_bomb_on_ship` | 1 |
+| `uqm::planets::cargo::live::ShowRemainingCapacity` | 1 |
+| `uqm::planets::cargo::live::discard` | 3 |
+| `uqm::planets::cargo::live::display` | 1 |
+| `uqm::planets::cargo::live::element_amount` | 3 |
+| `uqm::planets::report::live::make_report` | 1 |
+| `uqm::planets::sphere::live::tint_frame` | 1 |
 

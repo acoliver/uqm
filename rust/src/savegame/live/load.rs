@@ -87,11 +87,12 @@ pub unsafe extern "C" fn LoadGame(slot: u16, summary: *mut SummaryDesc) -> u32 {
         let slots = SaveSlots::new(saveDir.cast())?;
         // C tries the old filename when opening or decoding the summary fails.
         let Ok(saved_summary) = slots.read_summary(usize::from(slot)) else {
-            return if super::super::legacy::LoadLegacyGame(slot, summary) != 0 {
-                Ok(())
-            } else {
-                anyhow::bail!("no readable save in slot {slot}")
-            };
+            let loaded = WorldOwner::current()
+                .write(|world| super::super::legacy::load_legacy_game(world, slot, summary))?;
+            if let Some((star, activity)) = loaded {
+                finish_load(&star, activity);
+            }
+            return Ok(());
         };
         if !summary.is_null() {
             summary.write(SummaryDesc::from(&saved_summary));

@@ -5,11 +5,7 @@
 //! dispatch. Runtime setup then drives the normal game-loop encounter path;
 //! it does not invoke communication recursively from an input callback.
 
-#[cfg(not(test))]
-use crate::engine::Kernel as KernelOwner;
 use crate::engine::StoryKey;
-#[cfg(not(test))]
-use crate::engine::World as WorldOwner;
 use serde::Deserialize;
 use std::fmt;
 use std::sync::OnceLock;
@@ -344,7 +340,9 @@ pub fn enter_scene(plan: &ScenePlan, ops: &mut impl SceneEntryOps) {
 }
 
 #[cfg(not(test))]
-struct LinkedSceneEntry;
+pub(super) struct LinkedSceneEntry {
+    pub(super) screen_context: crate::graphics::native_abi::CONTEXT,
+}
 
 #[cfg(not(test))]
 impl SceneEntryOps for LinkedSceneEntry {
@@ -362,7 +360,7 @@ impl SceneEntryOps for LinkedSceneEntry {
         // SAFETY: the screen context exists once game initialization is
         // complete, and scene activation runs on the main thread.
         unsafe {
-            c_extern::SetContext(KernelOwner::current().read(|owner| owner.screen_context));
+            c_extern::SetContext(self.screen_context);
             c_extern::ClearDrawable();
         }
     }
@@ -387,6 +385,7 @@ impl SceneEntryOps for LinkedSceneEntry {
 pub fn activate(
     scene: AutomationScene,
     boundary: SceneActivationBoundary,
+    enter: impl FnOnce(&ScenePlan),
 ) -> Result<ScenePlan, SceneError> {
     let plan = scene_plan(scene, boundary)?;
     observation().lock().begin(scene);
@@ -407,16 +406,12 @@ pub fn activate(
             *observation().lock() = SceneObservation::default();
             return Err(SceneError::SetupFailed(reason));
         }
-        for (name, value) in plan.game_state {
-            WorldOwner::current()
-                .write(|world| crate::state::game_state_keys::set_game_state(world, *name, *value));
-        }
-        enter_scene(&plan, &mut LinkedSceneEntry);
+        enter(&plan);
     }
 
     #[cfg(test)]
     {
-        let _ = plan;
+        let _ = (plan, enter);
         *observation().lock() = SceneObservation::default();
         return Err(SceneError::SetupFailed(
             "runtime scene activation is unavailable in isolated unit tests",

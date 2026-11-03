@@ -60,6 +60,11 @@ pub(super) fn identity(name: &str, identity: &str) -> bool {
             "mainloop::restart_menu::",
             "mainloop::state_abi::",
             "mainloop::input_abi::",
+            "planets::cargo::",
+            "planets::report::",
+            "planets::sphere::",
+            "comm::glue::",
+            "comm::speech_graphics::",
         ],
         _ => &[],
     };

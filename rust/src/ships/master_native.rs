@@ -118,13 +118,19 @@ pub(crate) mod engine {
     /// # Safety
     /// The initialized master catalog is owned by the calling game thread.
     pub unsafe fn master(index: u16) -> Option<MasterShip> {
-        with_catalog(|queue| {
-            let mut next = queue.head();
-            for _ in 0..index {
-                next = queue.succ(next?);
-            }
-            next.map(|id| entry(queue, id))
-        })
+        with_catalog(|queue| master_in_catalog(queue, index))
+    }
+
+    pub fn master_in(kernel: &crate::engine::Kernel, index: u16) -> Option<MasterShip> {
+        master_in_catalog(&kernel.master_queue, index)
+    }
+
+    fn master_in_catalog(queue: &MasterCatalog, index: u16) -> Option<MasterShip> {
+        let mut next = queue.head();
+        for _ in 0..index {
+            next = queue.succ(next?);
+        }
+        next.map(|id| entry(queue, id))
     }
 
     /// # Safety
@@ -173,8 +179,8 @@ pub(crate) mod engine {
 
 #[cfg(not(test))]
 pub use engine::{
-    find_master_ship, master, FindMasterShipIndex, FreeMasterShipList, GetShipCostFromIndex,
-    GetShipIconsFromIndex, GetShipMeleeIconsFromIndex, LoadMasterShipList,
+    find_master_ship, master, master_in, FindMasterShipIndex, FreeMasterShipList,
+    GetShipCostFromIndex, GetShipIconsFromIndex, GetShipMeleeIconsFromIndex, LoadMasterShipList,
 };
 
 #[cfg(test)]

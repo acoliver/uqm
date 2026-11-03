@@ -610,7 +610,21 @@ impl Coordinator {
             return;
         };
 
-        match scenario::activate(scene, SceneActivationBoundary::GameInitialized) {
+        match scenario::activate(scene, SceneActivationBoundary::GameInitialized, |plan| {
+            WorldOwner::current().write(|world| {
+                for &(key, value) in plan.game_state {
+                    world.set_story_state(key, value);
+                }
+            });
+            #[cfg(not(test))]
+            scenario::enter_scene(
+                plan,
+                &mut scenario::LinkedSceneEntry {
+                    screen_context: crate::engine::Kernel::current()
+                        .read(|kernel| kernel.screen_context),
+                },
+            );
+        }) {
             Ok(plan) => {
                 let mut inner = coord.inner.lock();
                 coord.write_trace_labeled(
