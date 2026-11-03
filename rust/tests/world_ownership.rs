@@ -122,3 +122,18 @@ fn new_campaign_resets_story_without_discarding_owned_state_files() {
     assert_eq!(game.world.story_state(StoryKey::SHOFIXTI_RECRUITED), 0);
     assert_eq!(game.world.files.get_file(0).unwrap().length(), 8);
 }
+
+#[test]
+fn owned_story_operations_need_no_published_legacy_context() {
+    use uqm_rust::state::ffi::*;
+    let mut game = uqm_rust::engine::Game::new();
+    rust_init_game_state(&mut game.world);
+    rust_set_game_state_bits(&mut game.world, 0, 2, 5);
+    assert_eq!(rust_get_game_state_bits(&game.world, 0, 2), 5);
+    rust_set_game_state_32(&mut game.world, 32, 0x1234_abcd);
+    assert_eq!(rust_get_game_state_32(&game.world, 32), 0x1234_abcd);
+    rust_copy_game_state(&mut game.world, 8, 0, 2);
+    assert_eq!(rust_get_game_state_bits(&game.world, 8, 10), 5);
+    rust_reset_game_state(&mut game.world);
+    assert_eq!(rust_get_game_state_32(&game.world, 32), 0);
+}

@@ -12,11 +12,7 @@ use super::game_state::{
 use super::planet_info::{PlanetInfoManager, ScanRetrieveMask, NUM_SCAN_TYPES};
 use super::state_file::{FileMode, StateFileManager};
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe fn rust_init_game_state(world: &mut crate::engine::World) {
+pub fn rust_init_game_state(world: &mut crate::engine::World) {
     world.story = Some(GameState::new());
     world.files.canned_nodes.clear();
 }
@@ -51,11 +47,7 @@ pub unsafe fn rust_set_game_state(
     });
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe fn rust_get_game_state_bits(
+pub fn rust_get_game_state_bits(
     world: &crate::engine::World,
     start_bit: c_int,
     end_bit: c_int,
@@ -67,11 +59,7 @@ pub unsafe fn rust_get_game_state_bits(
     }
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe fn rust_set_game_state_bits(
+pub fn rust_set_game_state_bits(
     world: &mut crate::engine::World,
     start_bit: c_int,
     end_bit: c_int,
@@ -84,11 +72,7 @@ pub unsafe fn rust_set_game_state_bits(
     }
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe fn rust_get_game_state_32(world: &crate::engine::World, start_bit: c_int) -> u32 {
+pub fn rust_get_game_state_32(world: &crate::engine::World, start_bit: c_int) -> u32 {
     let Some(start_bit) = normalize_start_bit_32(start_bit) else {
         return 0;
     };
@@ -96,15 +80,7 @@ pub unsafe fn rust_get_game_state_32(world: &crate::engine::World, start_bit: c_
     read_story(world, |state| state.get_state_32(start_bit))
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe fn rust_set_game_state_32(
-    world: &mut crate::engine::World,
-    start_bit: c_int,
-    value: u32,
-) {
+pub fn rust_set_game_state_32(world: &mut crate::engine::World, start_bit: c_int, value: u32) {
     let Some(start_bit) = normalize_start_bit_32(start_bit) else {
         return;
     };
@@ -114,11 +90,7 @@ pub unsafe fn rust_set_game_state_32(
     });
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe fn rust_copy_game_state(
+pub fn rust_copy_game_state(
     world: &mut crate::engine::World,
     dest_bit: c_int,
     src_start_bit: c_int,
@@ -136,11 +108,7 @@ pub unsafe fn rust_copy_game_state(
     });
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe fn rust_reset_game_state(world: &mut crate::engine::World) {
+pub fn rust_reset_game_state(world: &mut crate::engine::World) {
     write_story(world, |state| {
         state.reset();
     });
@@ -180,31 +148,19 @@ pub unsafe fn rust_open_state_file(
     }
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe fn rust_close_state_file(world: &mut crate::engine::World, file_index: c_int) {
+pub fn rust_close_state_file(world: &mut crate::engine::World, file_index: c_int) {
     write_files(world, |files| {
         let _ = files.close(file_index as usize);
     });
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe fn rust_delete_state_file(world: &mut crate::engine::World, file_index: c_int) {
+pub fn rust_delete_state_file(world: &mut crate::engine::World, file_index: c_int) {
     write_files(world, |files| {
         let _ = files.delete(file_index as usize);
     });
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe fn rust_length_state_file(world: &crate::engine::World, file_index: c_int) -> usize {
+pub fn rust_length_state_file(world: &crate::engine::World, file_index: c_int) -> usize {
     read_files(world, |files| {
         files
             .get_file(file_index as usize)
@@ -268,11 +224,7 @@ pub unsafe fn rust_write_state_file(
     })
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe fn rust_seek_state_file(
+pub fn rust_seek_state_file(
     world: &mut crate::engine::World,
     file_index: c_int,
     offset: i64,
@@ -298,11 +250,7 @@ pub unsafe fn rust_seek_state_file(
     })
 }
 
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe fn rust_get_game_state_bytes(world: &crate::engine::World) -> *const u8 {
+pub fn rust_get_game_state_bytes(world: &crate::engine::World) -> *const u8 {
     read_story(world, |state| state.as_bytes().as_ptr())
 }
 
@@ -484,11 +432,7 @@ pub unsafe fn rust_copy_game_state_bits_between_bytes(
     copy_state_bits_raw(dest_state, target, src_state, begin, end);
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe fn rust_init_planet_info(world: &mut crate::engine::World, num_stars: c_int) -> c_int {
+pub fn rust_init_planet_info(world: &mut crate::engine::World, num_stars: c_int) -> c_int {
     if num_stars < 0 {
         return 0;
     }
@@ -502,11 +446,7 @@ pub unsafe fn rust_init_planet_info(world: &mut crate::engine::World, num_stars:
     }
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe fn rust_uninit_planet_info(world: &mut crate::engine::World) {
+pub fn rust_uninit_planet_info(world: &mut crate::engine::World) {
     write_files(world, |files| {
         let mut manager = PlanetInfoManager::new(files);
         let _ = manager.uninit_planet_info();
