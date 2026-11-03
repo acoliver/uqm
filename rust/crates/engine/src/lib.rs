@@ -12,6 +12,7 @@ pub mod logging;
 pub mod math;
 pub mod memory;
 pub mod network;
+pub mod observe;
 pub mod platform;
 pub mod resource;
 pub mod sound;

@@ -1,0 +1,107 @@
+//! Ordered observation boundaries shared by modes and their host.
+
+use crate::graphics::presented_frame::PresentedFrame;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InputView {
+    BeforeUpdate,
+    Nested,
+    AfterUpdate,
+    Active,
+    MainMenuReady,
+    MenuTransition { from: u8, to: u8 },
+    QuitSelected,
+    ReplacesIntroduction,
+    Seed { domain: u32, fallback: u32 },
+    PendingSpeech,
+    PendingResponse { count: usize },
+    ClosingSpeech,
+    CommunicationCompleted,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CheckpointView<'a> {
+    Simulation(&'a str),
+    BattleReset,
+    BattleAdvanced,
+    InputSampled,
+    GameInitialized,
+    FlagshipDestroyed,
+    ShipEscaped,
+    EncounterDispatch(u32),
+    DialogueDispatch(u32),
+    EncounterMenu(bool),
+    CommunicationResponses(usize),
+    ResponsesReady(bool),
+    CommunicationStarted,
+    CommunicationEnded,
+    CommunicationReplay(bool),
+    GameOptions(bool),
+    PlanetMenu(usize),
+    StarbaseMenu(bool),
+    Won,
+    PresentationStarted,
+    PresentationCancelled,
+    PresentationCompleted,
+    CreditsStarted,
+    CreditsReady,
+    CreditsCompleted,
+}
+
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Injected {
+    pub stop: bool,
+    pub seed: Option<u32>,
+}
+
+pub struct Presented {
+    pub frame: Option<PresentedFrame>,
+    pub stop: bool,
+}
+
+pub trait Observer {
+    fn input_admitted(&mut self, view: &InputView) -> Injected;
+    fn checkpoint(&mut self, view: &CheckpointView<'_>);
+    fn presented(&mut self, presented: &mut Presented);
+}
+
+pub struct Io<'a> {
+    pub observer: &'a mut dyn Observer,
+}
+
+#[derive(Default)]
+pub struct Unobserved;
+
+impl Observer for Unobserved {
+    fn input_admitted(&mut self, _: &InputView) -> Injected {
+        Injected::default()
+    }
+
+    fn checkpoint(&mut self, _: &CheckpointView<'_>) {}
+
+    fn presented(&mut self, _: &mut Presented) {}
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unobserved_boundaries_do_not_inject_or_stop() {
+        let mut observer = Unobserved;
+        let io = Io {
+            observer: &mut observer,
+        };
+        assert_eq!(
+            io.observer.input_admitted(&InputView::BeforeUpdate),
+            Injected::default()
+        );
+        io.observer.checkpoint(&CheckpointView::BattleAdvanced);
+        let mut presented = Presented {
+            frame: None,
+            stop: false,
+        };
+        io.observer.presented(&mut presented);
+        assert!(!presented.stop);
+    }
+}
