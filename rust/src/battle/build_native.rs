@@ -160,10 +160,12 @@ pub(crate) mod engine {
 
     /// # Safety
     /// Global race queues and their records are initialized.
-    #[no_mangle]
-    pub unsafe extern "C" fn SetRaceAllied(race: COUNT, allied: BOOLEAN) -> COUNT {
-        let world = WorldFields::current();
-        let fleet = GetStarShipFromIndex(&raw mut (**world).game.avail_race_q, race);
+    pub unsafe fn SetRaceAllied(
+        world: &mut crate::engine::World,
+        race: COUNT,
+        allied: BOOLEAN,
+    ) -> COUNT {
+        let fleet = GetStarShipFromIndex(&raw mut world.data.game.avail_race_q, race);
         if fleet.is_null() {
             return 0;
         }

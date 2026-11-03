@@ -218,9 +218,8 @@ pub(crate) mod engine {
 
     /// # Safety
     /// Status rendering runs on the game thread after screen initialization.
-    #[no_mangle]
-    pub unsafe extern "C" fn InitStatusOffsets() {
-        (**KernelOwner::current()).status_offsets = status_offsets(ScreenHeight);
+    pub unsafe fn InitStatusOffsets(kernel: &mut crate::engine::Kernel) {
+        kernel.status_offsets = status_offsets(ScreenHeight);
     }
 
     unsafe fn filled(color: Color, mut r: RECT) {

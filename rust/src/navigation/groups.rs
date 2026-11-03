@@ -36,8 +36,15 @@ pub unsafe extern "C" fn ReadGroupHeader(file: *mut GameStateFile, header: *mut 
 }
 /// # Safety
 /// `file` is an open state-file handle and `header` is readable.
-#[no_mangle]
-pub unsafe extern "C" fn WriteGroupHeader(file: *mut GameStateFile, header: *const GROUP_HEADER) {
+pub unsafe fn WriteGroupHeader(
+    world: &mut crate::engine::World,
+    file: *mut GameStateFile,
+    header: *const GROUP_HEADER,
+) {
+    let mut write = |file: *mut GameStateFile, bytes: &[u8]| {
+        WriteStateFile(world, bytes.as_ptr().cast(), 1, bytes.len() as u16, file);
+    };
+
     write(
         file,
         &[
@@ -202,29 +209,25 @@ pub(crate) mod live {
 
     /// # Safety
     /// State storage is initialized; game-thread access only.
-    #[no_mangle]
-    pub unsafe extern "C" fn InitGroupInfo(first: u32) {
-        let file =
-            crate::engine::World::current().write(|world| OpenStateFile(world, 1, c"wb".as_ptr()));
+    pub unsafe fn InitGroupInfo(world: &mut crate::engine::World, first: u32) {
+        let file = OpenStateFile(world, 1, c"wb".as_ptr());
         if !file.is_null() {
-            super::WriteGroupHeader(file, &empty_header());
-            crate::engine::World::current().write(|world| CloseStateFile(world, file));
+            super::WriteGroupHeader(world, file, &empty_header());
+            CloseStateFile(world, file);
         }
         if first != 0 {
-            let file = crate::engine::World::current()
-                .write(|world| OpenStateFile(world, 2, c"wb".as_ptr()));
+            let file = OpenStateFile(world, 2, c"wb".as_ptr());
             if !file.is_null() {
-                write(file, &[0]);
-                crate::engine::World::current().write(|world| CloseStateFile(world, file));
+                WriteStateFile(world, [0u8].as_ptr().cast(), 1, 1, file);
+                CloseStateFile(world, file);
             }
         }
     }
     /// # Safety
     /// State files must no longer be in use.
-    #[no_mangle]
-    pub unsafe extern "C" fn UninitGroupInfo() {
-        crate::engine::World::current().write(|world| DeleteStateFile(world, 2));
-        crate::engine::World::current().write(|world| DeleteStateFile(world, 1));
+    pub unsafe fn UninitGroupInfo(world: &mut crate::engine::World) {
+        DeleteStateFile(world, 2);
+        DeleteStateFile(world, 1);
     }
 
     /// # Safety
@@ -404,7 +407,7 @@ pub(crate) mod live {
                 crate::engine::World::current().read(|world| LengthStateFile(world, file));
         }
         seek(file, offset);
-        super::WriteGroupHeader(file, header);
+        crate::engine::World::current().write(|world| super::WriteGroupHeader(world, file, header));
         if which == 0 {
             let mut number = count(ip_queue());
             seek(file, (*header).GroupOffset[0]);
@@ -467,7 +470,8 @@ pub(crate) mod live {
                 crate::engine::World::current().write(|world| CloseStateFile(world, file));
                 let file = crate::engine::World::current()
                     .write(|world| OpenStateFile(world, 1, c"wb".as_ptr()));
-                super::WriteGroupHeader(file, &empty_header());
+                crate::engine::World::current()
+                    .write(|world| super::WriteGroupHeader(world, file, &empty_header()));
                 crate::engine::World::current().write(|world| CloseStateFile(world, file));
                 return 0;
             }
@@ -517,7 +521,7 @@ pub(crate) mod live {
                 (*group).sys_loc = location;
             }
             if offset != 0 {
-                InitGroupInfo(0);
+                crate::engine::World::current().write(|world| InitGroupInfo(world, 0));
             } else if ValidateEvent(EVENT_TYPE_ABSOLUTE_EVENT, &mut month, &mut day, &mut year) != 0
             {
                 crate::engine::World::current().write(|world| CloseStateFile(world, file));
@@ -604,7 +608,8 @@ pub(crate) mod live {
             offset = crate::engine::World::current().read(|world| LengthStateFile(world, file));
             seek(file, offset);
             header = empty_header();
-            super::WriteGroupHeader(file, &header);
+            crate::engine::World::current()
+                .write(|world| super::WriteGroupHeader(world, file, &header));
         }
         if which != 0 {
             seek(file, offset);

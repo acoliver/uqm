@@ -630,11 +630,11 @@ pub(crate) mod engine {
             width(ScreenWidth),
             height(ScreenHeight),
         );
-        if (dx != 0 || dy != 0) && inHQSpace() != 0 {
+        if (dx != 0 || dy != 0) && inHQSpace(cx.world) != 0 {
             crate::app::bridge::publish(cx, || MoveSIS(&mut dx, &mut dy));
         }
         let state = if cx.b.zoom_out == next_reduction {
-            if dx == 0 && dy == 0 && inHQSpace() == 0 {
+            if dx == 0 && dy == 0 && inHQSpace(cx.world) == 0 {
                 ViewState::Stable
             } else {
                 ViewState::Scroll

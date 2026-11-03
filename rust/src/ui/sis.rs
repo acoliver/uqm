@@ -284,11 +284,13 @@ pub unsafe extern "C" fn DrawSISMessageEx(
                 );
                 buf.as_ptr().cast()
             }
-            IN_HYPERSPACE => game_string(if inHyperSpace() != 0 {
-                NAVIGATION_STRING_BASE
-            } else {
-                NAVIGATION_STRING_BASE + 1
-            }),
+            IN_HYPERSPACE => game_string(
+                if crate::engine::World::current().read(|world| inHyperSpace(world)) != 0 {
+                    NAVIGATION_STRING_BASE
+                } else {
+                    NAVIGATION_STRING_BASE + 1
+                },
+            ),
             _ => c"".as_ptr().cast(),
         };
     }

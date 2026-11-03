@@ -872,7 +872,6 @@ fn conversation_setup(conversation: u32) -> (u32, u16) {
 /// # Safety
 /// Called on the game thread with initialized game state and resources.
 pub unsafe fn init_communication(which_comm: u32) -> u16 {
-    let world = WorldFields::current();
     #[cfg(all(not(test), feature = "debug-process"))]
     {
         if crate::front_end::uqmdebug::DISABLE_INTERACTIVITY != 0 {
@@ -893,12 +892,12 @@ pub unsafe fn init_communication(which_comm: u32) -> u16 {
             }
             ffi::DrawSISMessage(std::ptr::null());
             if in_hq_space() {
-                let point = (**world).game.ship_stamp.origin;
+                let point = WorldFields::current().read(|world| world.game.ship_stamp.origin);
                 ffi::DrawHyperCoords(CPoint {
                     x: point.x,
                     y: point.y,
                 });
-            } else if (**world).game.ip_planet == 0 {
+            } else if WorldFields::current().read(|world| world.game.ip_planet) == 0 {
                 let star = &*(**WorldOwner::current())
                     .star_pointer(crate::planets::starmap::current_catalog())
                     .cast::<crate::savegame::runtime::star::CStarDesc>();
@@ -907,7 +906,8 @@ pub unsafe fn init_communication(which_comm: u32) -> u16 {
                     y: star.star_pt.y,
                 });
             } else {
-                ffi::DrawSISTitle(std::ptr::addr_of!((**world).flagship.planet_name).cast());
+                let name = WorldFields::current().read(|world| world.flagship.planet_name);
+                ffi::DrawSISTitle(name.as_ptr().cast());
             }
         }
     }

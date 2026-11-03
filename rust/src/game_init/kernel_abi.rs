@@ -37,12 +37,15 @@ unsafe fn context(name: &CStr) -> CONTEXT {
 
 /// # Safety
 /// SDL, IO and resource registration prerequisites must be initialized on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn LoadKernel(argc: i32, argv: *mut *mut c_char) -> u32 {
-    // SAFETY: this lifecycle entry borrows Cx owners only until it returns.
-    crate::app::bridge::enter(|cx| {
-        let kernel = &mut *cx.kernel;
-        let world = &mut cx.world.data;
+
+pub unsafe fn LoadKernel(
+    kernel: &mut crate::engine::Kernel,
+    world: &mut crate::engine::World,
+    argc: i32,
+    argv: *mut *mut c_char,
+) -> u32 {
+    {
+        let world = &mut world.data;
         crate::sound::heart_ffi::InitSound(argc, argv.cast());
         crate::video::control::InitVideoPlayer(1);
         (*kernel).screen_context = context(c"ScreenContext");
@@ -93,16 +96,14 @@ pub unsafe extern "C" fn LoadKernel(argc: i32, argv: *mut *mut c_char) -> u32 {
         DestroyStringTable(ReleaseStringTable(map));
         (*world).game.current_activity = u16::MAX;
         1
-    })
+    }
 }
 
 /// # Safety
 /// Game-thread context creation after LoadKernel.
-#[no_mangle]
-pub unsafe extern "C" fn InitContexts() -> u32 {
-    // SAFETY: this lifecycle entry borrows Cx owners only until it returns.
-    crate::app::bridge::enter(|cx| {
-        let kernel = &mut *cx.kernel;
+
+pub unsafe fn InitContexts(kernel: &mut crate::engine::Kernel) -> u32 {
+    {
         (*kernel).status_context = context(c"StatusContext");
         if (*kernel).status_context.is_null() {
             return 0;
@@ -132,13 +133,12 @@ pub unsafe extern "C" fn InitContexts() -> u32 {
             &mut *kernel,
             MAX_DISPLAY_ELEMENTS as u16,
         ))
-    })
+    }
 }
 
-unsafe fn init_kernel() -> u32 {
+unsafe fn init_kernel(kernel: &mut crate::engine::Kernel, activity: u16) -> u32 {
     // SAFETY: only resource loaders run during the owner borrow.
-    let loaded = crate::app::bridge::enter(|cx| {
-        let kernel = &mut *cx.kernel;
+    let loaded = {
         crate::battle::context_access::lifecycle::init_ships(&mut *kernel);
         (*kernel).star_con_font =
             crate::graphics::resgfx::LoadGraphicInstance(c"font.starcon".as_ptr()).cast();
@@ -182,21 +182,21 @@ unsafe fn init_kernel() -> u32 {
             return 0;
         }
         1
-    });
+    };
     if loaded == 0 {
         return 0;
     }
-    InitStatusOffsets();
-    super::space_resources::InitSpace()
+    InitStatusOffsets(kernel);
+    super::space_resources::InitSpace(kernel, activity)
 }
 
 /// # Safety
 /// Called on the game thread with base resources and graphics initialized.
-#[no_mangle]
-pub unsafe extern "C" fn InitGameKernel() -> u32 {
+
+pub unsafe fn InitGameKernel(kernel: &mut crate::engine::Kernel, activity: u16) -> u32 {
     // SAFETY: the copied resource handle retains no owner borrow.
-    let needs_init = crate::app::bridge::enter(|cx| cx.kernel.activity_frame.is_null());
-    if needs_init && (init_kernel() == 0 || InitContexts() == 0) {
+    let needs_init = kernel.activity_frame.is_null();
+    if needs_init && (init_kernel(kernel, activity) == 0 || InitContexts(kernel) == 0) {
         return 0;
     }
     1
@@ -206,11 +206,9 @@ pub fn UninitPlayerInput() {}
 
 /// # Safety
 /// Player index is below NUM_PLAYERS and its input context is not already installed.
-#[no_mangle]
-pub unsafe extern "C" fn SetPlayerInput(player: u16) -> bool {
-    // SAFETY: this lifecycle entry borrows Cx owners only until it returns.
-    crate::app::bridge::enter(|cx| {
-        let kernel = &mut *cx.kernel;
+
+pub unsafe fn SetPlayerInput(kernel: &mut crate::engine::Kernel, player: u16) -> bool {
+    {
         let slot = &mut (*kernel).player_input[player as usize];
         assert!((*slot).is_null());
         *slot = match (*kernel).player_control[player as usize] & 15 {
@@ -223,15 +221,15 @@ pub unsafe extern "C" fn SetPlayerInput(player: u16) -> bool {
             }
         };
         !(*slot).is_null()
-    })
+    }
 }
 
 /// # Safety
 /// Both player input contexts must be uninstalled.
-#[no_mangle]
-pub unsafe extern "C" fn SetPlayerInputAll() -> bool {
+
+pub unsafe fn SetPlayerInputAll(kernel: &mut crate::engine::Kernel) -> bool {
     for player in 0..2 {
-        if !SetPlayerInput(player) {
+        if !SetPlayerInput(kernel, player) {
             return false;
         }
     }
@@ -240,11 +238,9 @@ pub unsafe extern "C" fn SetPlayerInputAll() -> bool {
 
 /// # Safety
 /// Player index is below NUM_PLAYERS and context is null or owned by this player.
-#[no_mangle]
-pub unsafe extern "C" fn ClearPlayerInput(player: u16) {
-    // SAFETY: this lifecycle entry borrows Cx owners only until it returns.
-    crate::app::bridge::enter(|cx| {
-        let kernel = &mut *cx.kernel;
+
+pub unsafe fn ClearPlayerInput(kernel: &mut crate::engine::Kernel, player: u16) {
+    {
         let input = (*kernel).player_input[player as usize]
             .cast::<crate::battle::battle_controls::InputContext>();
         if input.is_null() {
@@ -253,14 +249,14 @@ pub unsafe extern "C" fn ClearPlayerInput(player: u16) {
         }
         ((*(*input).handlers).delete_context.unwrap())(input);
         (*kernel).player_input[player as usize] = ptr::null_mut();
-    })
+    }
 }
 
 /// # Safety
 /// Called on the game thread when the contexts are no longer in use.
-pub unsafe fn ClearPlayerInputAll() {
+pub unsafe fn ClearPlayerInputAll(kernel: &mut crate::engine::Kernel) {
     for player in 0..2 {
-        ClearPlayerInput(player);
+        ClearPlayerInput(kernel, player);
     }
 }
 

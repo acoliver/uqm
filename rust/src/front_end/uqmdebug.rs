@@ -464,7 +464,7 @@ mod runtime {
                 }
             }
         }
-        if inHQSpace() != 0
+        if crate::engine::World::current().read(|world| inHQSpace(world)) != 0
             || WorldFields::current().read(|owner| owner.game.current_activity) as u8 as u32
                 == IN_INTERPLANETARY
         {
@@ -1311,7 +1311,7 @@ mod runtime {
     pub unsafe fn resetCrewBattle() {
         if WorldFields::current().read(|owner| owner.game.current_activity) & IN_BATTLE as ACTIVITY
             == 0
-            || inHQSpace() != 0
+            || crate::engine::World::current().read(|world| inHQSpace(world)) != 0
         {
             return;
         }
@@ -1334,7 +1334,7 @@ mod runtime {
     pub unsafe fn resetEnergyBattle() {
         if WorldFields::current().read(|owner| owner.game.current_activity) & IN_BATTLE as ACTIVITY
             == 0
-            || inHQSpace() != 0
+            || crate::engine::World::current().read(|world| inHQSpace(world)) != 0
         {
             return;
         }

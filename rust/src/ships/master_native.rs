@@ -48,7 +48,7 @@ pub(crate) mod engine {
     }
 
     unsafe fn with_catalog<R>(call: impl FnOnce(&mut MasterCatalog) -> R) -> R {
-        crate::app::bridge::enter(|cx| call(cx.master_queue()))
+        crate::engine::Kernel::current().write(|kernel| call(&mut kernel.master_queue))
     }
 
     fn entry(queue: &MasterCatalog, id: crate::collections::pool::Id<CatalogEntry>) -> MasterShip {
@@ -68,7 +68,8 @@ pub(crate) mod engine {
             if let Some(yield_processing) = yield_processing {
                 yield_processing();
             }
-            let descriptor = crate::ships::load_ship(species, 0)
+            let descriptor = crate::engine::World::current()
+                .write(|world| crate::ships::load_ship(world, species, 0))
                 .unwrap_or_else(|| panic!("master species {species}"));
             let name = CStr::from_ptr(GetStringAddress(SetAbsStringTableIndex(
                 descriptor.info().race_strings,
@@ -107,7 +108,8 @@ pub(crate) mod engine {
             queue.remove(id);
             Some(queue.free(id).descriptor)
         }) {
-            crate::ships::unload_ship(descriptor, 1, 0);
+            crate::engine::World::current()
+                .write(|world| crate::ships::unload_ship(world, descriptor, 1, 0));
         }
         with_catalog(MasterCatalog::reinit);
     }
@@ -126,9 +128,17 @@ pub(crate) mod engine {
 
     /// # Safety
     /// The initialized master catalog is owned by the calling game thread.
-    pub unsafe fn find_master_ship(species: u32) -> Option<MasterShip> {
-        let index = FindMasterShipIndex(species);
-        (index >= 0).then(|| master(index as u16).unwrap_or_else(|| panic!("master index")))
+    pub unsafe fn find_master_ship(
+        kernel: &crate::engine::Kernel,
+        species: u32,
+    ) -> Option<MasterShip> {
+        let queue = &kernel.master_queue;
+        let index = super::find(queue, species);
+        let mut id = queue.head();
+        for _ in 0..index {
+            id = queue.succ(id.expect("master index"));
+        }
+        (index >= 0).then(|| entry(queue, id.expect("master index")))
     }
 
     /// # Safety

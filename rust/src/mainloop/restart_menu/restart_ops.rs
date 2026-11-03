@@ -194,7 +194,9 @@ impl Default for CffiOps {
 impl RestartMenuOps for CffiOps {
     fn get_current_activity(&self) -> u16 {
         // SAFETY: Reads a global activity variable.
-        unsafe { c_extern::get_current_activity() }
+        unsafe {
+            crate::engine::World::current().read(|world| c_extern::get_current_activity(world))
+        }
     }
     fn set_current_activity(&self, v: u16) {
         // SAFETY: Writes a global activity variable.
@@ -552,7 +554,7 @@ impl RestartMenuOps for CffiOps {
     }
     fn free_game_data(&self) {
         // SAFETY: FreeGameData releases game session resources.
-        unsafe { c_extern::FreeGameData() }
+        unsafe { crate::app::bridge::enter(|cx| c_extern::FreeGameData(cx)) }
     }
     fn credits(&self, victory: bool) {
         // SAFETY: Credits displays the credits screen.

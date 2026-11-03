@@ -252,8 +252,8 @@ mod engine {
 
     /// # Safety
     /// Activity state must be initialized and accessed only on the game thread.
-    pub unsafe fn in_hq_space() -> abi::BOOLEAN {
-        crate::battle::c_bridge::inHQSpace() as abi::BOOLEAN
+    pub fn in_hq_space(world: &crate::engine::World) -> abi::BOOLEAN {
+        crate::battle::c_bridge::inHQSpace(world) as abi::BOOLEAN
     }
 
     /// # Safety
@@ -294,8 +294,8 @@ mod engine {
 
     /// # Safety
     /// Activity state must be initialized and accessed only on the game thread.
-    pub unsafe fn in_hyper_space() -> abi::BOOLEAN {
-        inHyperSpace() as abi::BOOLEAN
+    pub fn in_hyper_space(world: &crate::engine::World) -> abi::BOOLEAN {
+        inHyperSpace(world) as abi::BOOLEAN
     }
 
     /// # Safety

@@ -94,3 +94,52 @@ fn restored_star_lookup_finishes_before_selecting_the_owned_star() {
         catalog.as_mut_ptr()
     );
 }
+
+#[test]
+#[serial_test::serial]
+fn space_queries_use_the_world_of_the_entered_context() {
+    let mut game = Game::new();
+    game.world.set_activity(IN_HYPERSPACE as u16);
+    game.world.story = Some(uqm_rust::state::game_state::GameState::new());
+    // SAFETY: the serialized fixture suspends publication while Cx is borrowed.
+    unsafe {
+        bridge::with_game(&mut game, || {
+            bridge::enter(|cx| {
+                assert_ne!(uqm_rust::navigation::globals::inHQSpace(cx.world), 0);
+                assert_ne!(uqm_rust::navigation::globals::inHyperSpace(cx.world), 0);
+                cx.world
+                    .set_story_state(uqm_rust::engine::StoryKey::ARILOU_SPACE_SIDE, 2);
+                assert_ne!(uqm_rust::navigation::globals::inQuasiSpace(cx.world), 0);
+                assert_eq!(uqm_rust::navigation::globals::inHyperSpace(cx.world), 0);
+            });
+        });
+    }
+}
+
+#[test]
+#[serial_test::serial]
+fn status_offsets_use_the_already_borrowed_kernel() {
+    let mut game = Game::new();
+    // SAFETY: the serialized fixture owns the lifecycle; status initialization only writes offsets.
+    unsafe {
+        bridge::with_game(&mut game, || {
+            uqm_rust::engine::Kernel::current().write(|kernel| InitStatusOffsets(kernel));
+        });
+    }
+}
+
+#[test]
+#[serial_test::serial]
+fn starbase_releases_world_before_communication_and_cleanup() {
+    let mut game = Game::new();
+    game.world.story = Some(uqm_rust::state::game_state::GameState::new());
+    game.world.set_activity(CHECK_ABORT as u16);
+    // SAFETY: this serialized fixture restores the developer flag and owns the lifecycle.
+    unsafe {
+        let previous = uqm_rust::front_end::uqmdebug::DISABLE_INTERACTIVITY;
+        uqm_rust::front_end::uqmdebug::DISABLE_INTERACTIVITY = 1;
+        bridge::with_game(&mut game, || uqm_rust::ui::starbase::VisitStarBase());
+        uqm_rust::front_end::uqmdebug::DISABLE_INTERACTIVITY = previous;
+    }
+    assert_eq!(game.world.activity(), CHECK_ABORT as u16);
+}

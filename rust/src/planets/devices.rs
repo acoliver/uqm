@@ -182,7 +182,7 @@ unsafe fn orbit_is(planet: u8) -> bool {
 
 unsafe fn use_caster() -> bool {
     let world = WorldFields::current();
-    if inHQSpace() != 0 {
+    if crate::engine::World::current().read(|world| inHQSpace(world)) != 0 {
         if crate::engine::World::current()
             .read(|world| get(world, crate::engine::StoryKey::ARILOU_SPACE_SIDE))
             <= 1
@@ -323,7 +323,7 @@ unsafe fn invoke(id: u8) -> u8 {
             (**world).game.current_activity |= START_ENCOUNTER;
             crate::engine::World::current()
                 .write(|world| set(world, crate::engine::StoryKey::GLOBAL_FLAGS_AND_DATA, 0));
-            if inHQSpace() != 0 {
+            if crate::engine::World::current().read(|world| inHQSpace(world)) != 0 {
                 if !(**world).game.encounter_q.head.is_null() {
                     crate::engine::World::current()
                         .write(|world| set(world, crate::engine::StoryKey::SHIP_TO_COMPEL, 1));
@@ -358,7 +358,9 @@ unsafe fn invoke(id: u8) -> u8 {
         }
         12 | 13 => u8::from(use_caster()),
         0 => {
-            if inHyperSpace() == 0 || (**world).flagship.fuel_on_board < 1000 {
+            if crate::engine::World::current().read(|world| inHyperSpace(world)) == 0
+                || (**world).flagship.fuel_on_board < 1000
+            {
                 return 0;
             }
             (**world).flagship.fuel_on_board -= 1000;

@@ -360,7 +360,9 @@ pub fn set_player_input_all_or_explode() {
     #[cfg(not(test))]
     {
         // SAFETY: Kernel input state is initialized and accessed on the game thread.
-        let ok = unsafe { c_ffi::SetPlayerInputAll() };
+        let ok = unsafe {
+            crate::engine::Kernel::current().write(|kernel| c_ffi::SetPlayerInputAll(kernel))
+        };
         if !ok {
             unsafe {
                 crate::logging::log_add(
@@ -453,7 +455,12 @@ pub unsafe fn load_kernel(
     argc: i32,
     argv: *mut *mut std::ffi::c_char,
 ) -> Result<(), super::MainLoopError> {
-    let result = unsafe { prod::LoadKernel(argc, argv) };
+    let result = unsafe {
+        crate::engine::Kernel::current().write(|kernel| {
+            crate::engine::World::current()
+                .write(|world| prod::LoadKernel(kernel, world, argc, argv))
+        })
+    };
     if result != 0 {
         Ok(())
     } else {

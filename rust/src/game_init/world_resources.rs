@@ -92,11 +92,9 @@ pub(crate) mod live {
 
     /// # Safety
     /// Called on the game thread with a valid planet selector and initialized resources.
-    #[no_mangle]
-    pub unsafe extern "C" fn load_gravity_well(selector: u8) {
-        // SAFETY: the synchronous resource operation borrows its Kernel from Cx.
-        crate::app::bridge::enter(|cx| {
-            let kernel = &mut *cx.kernel;
+
+    pub unsafe fn load_gravity_well(kernel: &mut crate::engine::Kernel, selector: u8) {
+        {
             let frames =
                 std::slice::from_raw_parts_mut(ptr::addr_of_mut!((*kernel).planet).cast(), 3);
             for (frame, key) in frames.iter_mut().zip(gravity_keys(selector)) {
@@ -112,16 +110,14 @@ pub(crate) mod live {
                 "engine-global:planet",
                 |frame| *frame as usize,
             );
-        })
+        }
     }
 
     /// # Safety
     /// Called on the game thread while the graphics resource system is live.
-    #[no_mangle]
-    pub unsafe extern "C" fn free_gravity_well() {
-        // SAFETY: the synchronous resource operation borrows its Kernel from Cx.
-        crate::app::bridge::enter(|cx| {
-            let kernel = &mut *cx.kernel;
+
+    pub unsafe fn free_gravity_well(kernel: &mut crate::engine::Kernel) {
+        {
             let frames =
                 std::slice::from_raw_parts_mut(ptr::addr_of_mut!((*kernel).planet).cast(), 3);
             for frame in frames.iter_mut() {
@@ -133,7 +129,7 @@ pub(crate) mod live {
                 "engine-global:planet",
                 |frame| *frame as usize,
             );
-        })
+        }
     }
 
     /// # Safety

@@ -279,9 +279,10 @@ pub(crate) mod engine {
             .read(|owner| owner.battle_music)
             .is_null()
         {
-            let resource = if inHyperSpace() != 0 {
+            let resource = if crate::engine::World::current().read(|world| inHyperSpace(world)) != 0
+            {
                 HYPERSPACE_MUSIC.as_ptr()
-            } else if inQuasiSpace() != 0 {
+            } else if crate::engine::World::current().read(|world| inQuasiSpace(world)) != 0 {
                 QUASISPACE_MUSIC.as_ptr()
             } else {
                 BATTLE_MUSIC.as_ptr()
@@ -470,7 +471,7 @@ pub(crate) mod engine {
                 } else {
                     bs.InputFunc = Some(DoBattle);
                     bs.frame_cb = callback;
-                    bs.first_time = inHQSpace();
+                    bs.first_time = crate::engine::World::current().read(|world| inHQSpace(world));
                     crate::log_abi::log_message(
                         5,
                         "BATTLE_DEBUG: About to call DoInput for battle loop",

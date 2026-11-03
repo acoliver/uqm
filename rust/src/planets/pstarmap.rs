@@ -297,7 +297,7 @@ unsafe fn uy(y: i16) -> i16 {
 
 #[cfg(not(test))]
 unsafe fn current_location() -> POINT {
-    if inHQSpace() == 0 {
+    if crate::engine::World::current().read(|world| inHQSpace(world)) == 0 {
         point(
             (*(**WorldOwner::current()).star_pointer(crate::planets::starmap::current_catalog()))
                 .star_pt,

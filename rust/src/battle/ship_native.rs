@@ -343,7 +343,7 @@ pub(crate) mod engine {
     /// # Safety
     /// The game thread retains the initialized battle context and all resources used by this call.
     pub unsafe fn spawn_ship(cx: &mut Cx<'_>, ship: ShipId) -> BOOLEAN {
-        let Some(descriptor) = load_ship(cx.ship(ship).SpeciesID, 1) else {
+        let Some(descriptor) = load_ship(cx.world, cx.ship(ship).SpeciesID, 1) else {
             return 0;
         };
         cx.attach_descriptor(ship, descriptor);
@@ -397,7 +397,7 @@ pub(crate) mod engine {
             cx.element_mut(id).life += 1;
         } else {
             cx.ship_state_mut(ship).facing = normalize_facing(cx.random() as i32);
-            if inHQSpace() != 0 {
+            if inHQSpace(cx.world) != 0 {
                 let facing = cx.world.data.game.ship_facing;
                 cx.ship_state_mut(ship).facing = if facing > 0 { facing - 1 } else { facing };
             }

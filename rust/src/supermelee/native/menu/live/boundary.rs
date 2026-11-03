@@ -62,7 +62,10 @@ pub(super) unsafe fn release_sound(sound: SOUND) -> *mut std::ffi::c_void {
     crate::game_init::macro_abi::ReleaseSound(sound.cast()).cast()
 }
 pub(super) unsafe fn set_player_input_all() -> i32 {
-    i32::from(crate::navigation::abi::SetPlayerInputAll())
+    i32::from(
+        crate::engine::Kernel::current()
+            .write(|kernel| crate::navigation::abi::SetPlayerInputAll(kernel)),
+    )
 }
 
 pub(super) use crate::battle::sounds::engine::PlayMenuSound;

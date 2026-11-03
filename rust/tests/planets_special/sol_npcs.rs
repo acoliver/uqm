@@ -64,7 +64,7 @@ pub fn check(h: &mut Harness) {
             PutQueue(fleets.cast(), handle);
         }
         assert_ne!(uqm_rust::time::clock_bridge::rust_clock_init(), 0);
-        c_api::InitGroupInfo(1);
+        crate::engine::World::current().write(|world| c_api::InitGroupInfo(world, 1));
         h.set_star(0, 0);
         h.state.SunDesc[0].NumPlanets = 9;
         let saved_star = (*uqm_rust::engine::World::current())
@@ -198,7 +198,7 @@ pub fn check(h: &mut Harness) {
             (saved_star).as_ref(),
             uqm_rust::planets::starmap::current_catalog(),
         );
-        c_api::UninitGroupInfo();
+        crate::engine::World::current().write(|world| c_api::UninitGroupInfo(world));
         assert_ne!(uqm_rust::time::clock_bridge::rust_clock_uninit(), 0);
         UninitQueue(ip.cast::<Queue>());
         UninitQueue(built.cast::<Queue>());

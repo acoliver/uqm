@@ -236,7 +236,7 @@ pub(crate) mod live {
     /// Call on the game thread after kernel/resource initialization. Any state
     /// pointer must remain exclusively accessible through the nested input loop.
     pub unsafe extern "C" fn Melee() {
-        InitGlobData();
+        crate::engine::World::current().write(|world| InitGlobData(world));
         let mut state = MELEE_STATE {
             input_func: None,
             initialized: 0,
@@ -269,7 +269,12 @@ pub(crate) mod live {
         crate::supermelee::native::battle_picker::live::BuildPickMeleeFrame();
         MeleeFrame = CaptureDrawable(LoadGraphic(MELEE_SCREEN_PMAP_ANIM.as_ptr().cast()).cast());
         crate::supermelee::native::build_picker::live::BuildBuildPickFrame();
-        InitSpace();
+        crate::engine::Kernel::current().write(|kernel| {
+            InitSpace(
+                kernel,
+                crate::engine::World::current().read(|world| world.activity()),
+            )
+        });
         LoadTeamList(&mut state);
         if !load_config(&mut state) {
             (**KernelOwner::current()).player_control[0] = HUMAN_CONTROL | 16;
@@ -292,7 +297,7 @@ pub(crate) mod live {
             DestroyMusic(state.h_music);
             state.h_music = ptr::null_mut();
         }
-        UninitSpace();
+        crate::engine::Kernel::current().write(|kernel| UninitSpace(kernel));
         crate::supermelee::native::battle_picker::live::DestroyPickMeleeFrame();
         DestroyDrawable(ReleaseDrawable(MeleeFrame));
         MeleeFrame = ptr::null_mut();

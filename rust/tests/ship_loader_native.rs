@@ -125,8 +125,12 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
             for (i, key) in keys.iter().enumerate() {
                 let key = CString::new(format!("ship.{key}.code")).unwrap();
                 let species = i as u32 + 1;
-                let first = load_ship(species, 0).unwrap();
-                let second = load_ship(species, 0).unwrap();
+                let first = crate::engine::World::current()
+                    .write(|world| load_ship(world, species, 0))
+                    .unwrap();
+                let second = crate::engine::World::current()
+                    .write(|world| load_ship(world, species, 0))
+                    .unwrap();
                 assert_ne!(first.address(), second.address(), "{key:?}");
                 let original = first.info().ship_cost;
                 // SAFETY: this fixture exclusively owns the live descriptor; only its scalar cost changes.
@@ -134,24 +138,34 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
                     .ship_info
                     .ship_cost = 254;
                 assert_eq!(second.info().ship_cost, original);
-                let loaded = load_ship(species, 0).unwrap();
+                let loaded = crate::engine::World::current()
+                    .write(|world| load_ship(world, species, 0))
+                    .unwrap();
                 assert_eq!(loaded.info().ship_cost, original);
                 assert!(loaded.race().is_some());
                 assert_eq!(loaded.callbacks(), first.callbacks());
-                unload_ship(first, 1, 0);
-                unload_ship(second, 1, 0);
-                unload_ship(loaded, 1, 0);
+                crate::engine::World::current().write(|world| unload_ship(world, first, 1, 0));
+                crate::engine::World::current().write(|world| unload_ship(world, second, 1, 0));
+                crate::engine::World::current().write(|world| unload_ship(world, loaded, 1, 0));
             }
-            assert!(load_ship(SPECIES_ID_NUM_SPECIES_ID, 0).is_none());
-            assert!(load_ship(u32::MAX, 0).is_none());
+            assert!(crate::engine::World::current()
+                .write(|world| load_ship(world, SPECIES_ID_NUM_SPECIES_ID, 0))
+                .is_none());
+            assert!(crate::engine::World::current()
+                .write(|world| load_ship(world, u32::MAX, 0))
+                .is_none());
             // No graphics are registered in the fixture, so required battle art fails.
-            assert!(load_ship(SPECIES_ID_ARILOU_ID, 1).is_none());
-            let mut loaded = load_ship(SPECIES_ID_ARILOU_ID, 0).unwrap();
+            assert!(crate::engine::World::current()
+                .write(|world| load_ship(world, SPECIES_ID_ARILOU_ID, 1))
+                .is_none());
+            let mut loaded = crate::engine::World::current()
+                .write(|world| load_ship(world, SPECIES_ID_ARILOU_ID, 0))
+                .unwrap();
             assert!(loaded.race().is_some());
             loaded.set_race(&TEARDOWN_RACE);
             uqm_rust::collections::observation::enable();
             uqm_rust::collections::observation::drain();
-            unload_ship(loaded, 1, 1);
+            crate::engine::World::current().write(|world| unload_ship(world, loaded, 1, 1));
             assert_eq!(UNINIT.load(Ordering::SeqCst), 1);
             assert!(uqm_rust::collections::observation::drain()
                 .iter()

@@ -82,7 +82,10 @@ fn read_player_one_input() -> FrameInput {
             thrust: key[KEY_UP] != 0,
             fire: key[KEY_WEAPON] != 0,
             takeoff: key[KEY_ESCAPE] != 0 || key[KEY_SPECIAL] != 0,
-            abort: crate::mainloop::c_extern::get_current_activity() & 0x4000 != 0,
+            abort: crate::engine::World::current()
+                .read(|world| crate::mainloop::c_extern::get_current_activity(world))
+                & 0x4000
+                != 0,
         }
     }
 }

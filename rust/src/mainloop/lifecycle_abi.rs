@@ -31,7 +31,12 @@ unsafe extern "C" fn on_battle_frame() {
 unsafe extern "C" fn background_init_kernel(timeout: u32) {
     crate::ships::master_native::LoadMasterShipList(Some(crate::threading::legacy_abi::TaskSwitch));
     crate::threading::legacy_abi::TaskSwitch();
-    crate::game_init::kernel_abi::InitGameKernel();
+    crate::engine::Kernel::current().write(|kernel| {
+        crate::game_init::kernel_abi::InitGameKernel(
+            kernel,
+            crate::engine::World::current().read(|world| world.activity()),
+        )
+    });
     while crate::time::counter_abi::GetTimeCounter() <= timeout
         && WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
             == 0

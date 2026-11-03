@@ -295,7 +295,12 @@ mod cffi {
         fn load_kernel(&self) -> bool {
             // SAFETY: LoadKernel reads content packages; the null argv is the
             // documented call pattern in starcon.c.
-            unsafe { c_extern::LoadKernel(0, std::ptr::null_mut()) != 0 }
+            unsafe {
+                crate::engine::Kernel::current().write(|kernel| {
+                    crate::engine::World::current()
+                        .write(|world| c_extern::LoadKernel(kernel, world, 0, std::ptr::null_mut()))
+                }) != 0
+            }
         }
 
         fn splash(&self) {
@@ -307,7 +312,9 @@ mod cffi {
         }
 
         fn get_current_activity(&self) -> ActivityValue {
-            ActivityValue::new(unsafe { c_extern::get_current_activity() })
+            ActivityValue::new(unsafe {
+                crate::engine::World::current().read(|world| c_extern::get_current_activity(world))
+            })
         }
 
         fn set_current_activity(&self, activity: ActivityValue) {
@@ -420,7 +427,10 @@ mod cffi {
         }
 
         fn clear_player_input_all(&self) {
-            unsafe { c_extern::ClearPlayerInputAll() }
+            unsafe {
+                crate::engine::Kernel::current()
+                    .write(|kernel| c_extern::ClearPlayerInputAll(kernel))
+            }
         }
 
         fn init_communication(&self, conversation: u32) {
@@ -434,7 +444,7 @@ mod cffi {
         }
 
         fn uninit_game_kernel(&self) {
-            unsafe { c_extern::UninitGameKernel() }
+            unsafe { crate::app::bridge::enter(|cx| c_extern::UninitGameKernel(cx)) }
         }
 
         fn free_master_ship_list(&self) {
@@ -442,7 +452,7 @@ mod cffi {
         }
 
         fn free_kernel(&self) {
-            unsafe { c_extern::FreeKernel() }
+            unsafe { crate::engine::Kernel::current().write(|kernel| c_extern::FreeKernel(kernel)) }
         }
 
         fn log_show_box(&self, b: bool, c: bool) {

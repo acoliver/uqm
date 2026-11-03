@@ -47,7 +47,8 @@ pub unsafe fn uninit_ships() {
     use crate::ships::native::abi::*;
 
     StopSound();
-    crate::game_init::space_resources::UninitSpace();
+    crate::engine::Kernel::current()
+        .write(|kernel| crate::game_init::space_resources::UninitSpace(kernel));
     crate::app::bridge::enter(|cx| {
         let mut ships = [None; 2];
         let crew = remaining_battle_crew(cx);
@@ -58,7 +59,7 @@ pub unsafe fn uninit_ships() {
             next = cx.elements().succ(id);
             if let Some((ship, descriptor)) = retire_element_ship(cx, id, crew, replacement) {
                 ships[cx.ship_state(ship).player as usize] = Some(ship);
-                crate::ships::loader_native::unload_ship(descriptor, 1, 1);
+                crate::ships::loader_native::unload_ship(cx.world, descriptor, 1, 1);
             }
         }
         let activity = cx.world.activity() & !(IN_BATTLE as u16);
@@ -75,14 +76,14 @@ pub unsafe fn uninit_ships() {
             while let Some(ship) = next {
                 next = cx.next_ship(ship);
                 if let Some(descriptor) = cx.take_descriptor(ship) {
-                    crate::ships::loader_native::unload_ship(descriptor, 1, 1);
+                    crate::ships::loader_native::unload_ship(cx.world, descriptor, 1, 1);
                 }
             }
         }
         if cx.world.activity() as u8 != IN_ENCOUNTER as u8 {
             cx.reset_ships(0);
             cx.reset_ships(1);
-            if inHQSpace() != 0 {
+            if inHQSpace(cx.world) != 0 {
                 crate::navigation::hyper_data::FreeHyperspace();
             }
         }
@@ -106,10 +107,10 @@ mod live {
     operation!(uqm_get_current_activity_lobyte() -> u8 { (**WorldFields::current()).game.current_activity as u8 });
 
     operation!(rust_bridge_init_battle_arena() -> i16 {
-        if crate::game_init::space_resources::InitSpace() == 0 { return 0; }
+        if crate::engine::Kernel::current().write(|kernel| crate::game_init::space_resources::InitSpace(kernel, crate::engine::World::current().read(|world|world.activity()))) == 0 { return 0; }
         SetContext((**KernelOwner::current()).status_context); SetContext((**KernelOwner::current()).space_context);
         InitDisplayList(); crate::battle::galaxy::InitGalaxy();
-        if inHQSpace() != 0 {
+        if crate::engine::World::current().read(|world| inHQSpace(world)) != 0 {
             crate::app::bridge::enter(|cx| {
                 cx.reset_ships(0); cx.reset_ships(1);
                 let mut ships = crate::engine::battle::link_queue::ships(0);
@@ -124,8 +125,8 @@ mod live {
             SetContextBackGroundColor(Color {r:0,g:0,b:0,a:255});
             let old = SetContext((**KernelOwner::current()).screen_context);
             SetContextBackGroundColor(Color {r:0,g:0,b:0,a:255}); ClearDrawable(); SetContext(old);
-            if uqm_get_current_activity_lobyte() == IN_LAST_BATTLE as u8 { crate::game_init::world_resources::free_gravity_well(); }
-            else { for _ in 0..5 { crate::app::bridge::enter(|cx| crate::battle::world_elements::create_asteroid(cx, None)); } crate::app::bridge::enter(crate::battle::world_elements::spawn_planet); }
+            if uqm_get_current_activity_lobyte() == IN_LAST_BATTLE as u8 { crate::engine::Kernel::current().write(|kernel| crate::game_init::world_resources::free_gravity_well(kernel)); }
+            else { crate::app::bridge::enter(|cx| { for _ in 0..5 { crate::battle::world_elements::create_asteroid(cx, None); } crate::battle::world_elements::spawn_planet(cx); }); }
             2
         }
     });

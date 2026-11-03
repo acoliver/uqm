@@ -339,12 +339,10 @@ pub(crate) mod engine {
         StopSound();
         cx.set_parent(dead, None);
         let restart = opponent_alive(cx, ship);
-        unload_ship(
-            cx.take_descriptor(ship)
-                .unwrap_or_else(|| panic!("dead ship descriptor")),
-            1,
-            1,
-        );
+        let descriptor = cx
+            .take_descriptor(ship)
+            .unwrap_or_else(|| panic!("dead ship descriptor"));
+        unload_ship(cx.world, descriptor, 1, 1);
 
         UnbatchGraphics();
         if let Some(net) = &net {

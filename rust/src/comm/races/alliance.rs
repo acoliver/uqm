@@ -24,7 +24,8 @@ mod live {
     impl<H> AllianceApi<H> for LiveScript<H> {
         fn set_allied(&mut self, race: u16, allied: bool) {
             unsafe {
-                SetRaceAllied(race, u32::from(allied));
+                crate::engine::World::current()
+                    .write(|world| SetRaceAllied(world, race, u32::from(allied)));
             }
         }
         fn track(&mut self, race: u16) {

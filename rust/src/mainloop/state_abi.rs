@@ -41,7 +41,7 @@ accessor!(uqm_get_crew_enlisted() -> u16 = (**WorldFields::current()).flagship.c
 accessor!(uqm_zero_global_velocity() -> () = { (**WorldFields::current()).game.velocity = std::mem::zeroed(); });
 accessor!(uqm_set_flash_rect_null() -> () = crate::ui::sis::SetFlashRect(ptr::null()));
 accessor!(uqm_set_player_input_all_or_explode() -> () = {
-    if !crate::game_init::kernel_abi::SetPlayerInputAll() { log::error!("Could not set player input."); std::process::abort(); }
+    if !crate::engine::Kernel::current().write(|kernel| crate::game_init::kernel_abi::SetPlayerInputAll(kernel)) { log::error!("Could not set player input."); std::process::abort(); }
 });
 accessor!(set_main_exited(value: i32) = ptr::addr_of_mut!(super::lifecycle_abi::MainExited).write_volatile(value));
 accessor!(uqm_init_audio() -> () = { crate::sound::audio_init::initAudio(crate::sound::volume_globals::snddriver, crate::sound::volume_globals::soundflags); });

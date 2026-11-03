@@ -15,7 +15,7 @@ use crate::navigation::groups::live::PutGroupInfo;
 pub(crate) unsafe fn capture(name: &[u8]) -> anyhow::Result<SaveFile> {
     let star = live::capture_live_star()?;
     let point = WorldFields::current().read(|world| world.game.ip_location);
-    if inHQSpace() != 0 {
+    if crate::engine::World::current().read(|world| inHQSpace(world)) != 0 {
         live::prepare_live_hyper_state()?;
     } else if playerInSolarSystem() {
         live::prepare_live_solar_location()?;

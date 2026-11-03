@@ -127,7 +127,7 @@ fn drive(
                         retained
                             .take()
                             .unwrap_or_else(|| panic!("retained fixture descriptor"))
-                            .free();
+                            .free(cx.world);
                         Reply::None
                     }
                     Effect::Reset => {
@@ -136,7 +136,7 @@ fn drive(
                         cx.b.counters = [7, 7];
                         apply(cx, Effect::Remove(elements.clone()))?;
                         for &owner in &ships {
-                            cx.detach_descriptor(owner).free();
+                            cx.detach_descriptor(owner).free(cx.world);
                         }
                         Reply::None
                     }

@@ -3,13 +3,10 @@
 #![allow(non_snake_case)]
 
 use super::abi::*;
-use crate::state::ffi;
 use std::{mem, ptr};
 
-unsafe fn create_radar() {
-    // SAFETY: the lifecycle borrows owners from Cx; callbacks republish it synchronously.
-    crate::app::bridge::enter(|cx| {
-        let kernel = cx.kernel();
+unsafe fn create_radar(kernel: &mut crate::engine::Kernel) {
+    {
         if (*kernel).radar_context.is_null() {
             #[cfg(feature = "debug-process")]
             {
@@ -34,15 +31,14 @@ unsafe fn create_radar() {
             SetContextClipRect(&mut rect);
             SetContext(old);
         }
-    })
+    }
 }
 
 /// # Safety
 /// Resource system and screen contexts must be initialized on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn LoadSC2Data() -> BOOLEAN {
-    // SAFETY: the lifecycle borrows owners from Cx; callbacks republish it synchronously.
-    crate::app::bridge::enter(|cx| {
+
+pub unsafe fn LoadSC2Data(cx: &mut crate::engine::battle::Cx<'_>) -> BOOLEAN {
+    {
         let kernel = cx.kernel();
         let world = &raw mut cx.world.data;
         if (*kernel).flag_stat_frame.is_null() {
@@ -59,13 +55,13 @@ pub unsafe extern "C" fn LoadSC2Data() -> BOOLEAN {
             (*kernel).font_grad_frame =
                 CaptureDrawable(LoadGraphicInstance(c"graphics.fontgradient".as_ptr()).cast());
         }
-        crate::app::bridge::publish(cx, || create_radar());
+        create_radar(cx.kernel);
         if (*world).game.current_activity as u8 == IN_HYPERSPACE as u8 {
             (*world).game.ship_stamp.origin.x = -1;
             (*world).game.ship_stamp.origin.y = -1;
         }
         1
-    })
+    }
 }
 
 unsafe fn copy_fleet(dst: *mut FLEET_INFO, src: *const SHIP_INFO, fleet: *const FLEET_STUFF) {
@@ -87,7 +83,7 @@ pub unsafe extern "C" fn InitGameStructures() -> BOOLEAN {
     crate::app::bridge::enter(|cx| {
         let kernel = cx.kernel();
         let world = &raw mut cx.world.data;
-        crate::app::bridge::publish(cx, || InitGlobData());
+        InitGlobData(cx.world);
         (*kernel).play_frame =
             CaptureDrawable(LoadGraphicInstance(c"graphics.playmenu".as_ptr()).cast());
         let mut species = SPECIES_ID_ARILOU_ID;
@@ -111,13 +107,13 @@ pub unsafe extern "C" fn InitGameStructures() -> BOOLEAN {
             let fleet = handle.cast::<FLEET_INFO>();
             (*fleet).SpeciesID = ship;
             if i < count - 1 {
-                let master = crate::app::bridge::publish(cx, || find_master_ship(ship))
+                let master = find_master_ship(cx.kernel, ship)
                     .unwrap_or_else(|| panic!("master species {ship}"));
                 copy_fleet(fleet, &master.info, &master.fleet);
             } else {
-                if let Some(desc) = crate::app::bridge::publish(cx, || load_ship(ship, 0)) {
+                if let Some(desc) = load_ship(cx.world, ship, 0) {
                     copy_fleet(fleet, desc.info(), desc.fleet());
-                    crate::app::bridge::publish(cx, || unload_ship(desc, 0, 0));
+                    unload_ship(cx.world, desc, 0, 0);
                 }
             }
             (*fleet).allied_state = BAD_GUY as u16;
@@ -133,10 +129,10 @@ pub unsafe extern "C" fn InitGameStructures() -> BOOLEAN {
             (*fleet).func_index = u8::MAX;
             PutQueue(queue, handle);
         }
-        crate::app::bridge::publish(cx, || InitSISContexts());
-        crate::app::bridge::publish(cx, || LoadSC2Data());
+        InitSISContexts(cx.kernel);
+        LoadSC2Data(cx);
         InitPlanetInfo(cx.world);
-        crate::app::bridge::publish(cx, || InitGroupInfo(1));
+        InitGroupInfo(cx.world, 1);
         let state = ptr::addr_of_mut!((*world).game);
         let sis = ptr::addr_of_mut!((*world).flagship);
         (*state).glob_flags = 0;
@@ -183,15 +179,15 @@ pub unsafe extern "C" fn InitGameStructures() -> BOOLEAN {
             )))
             .cast(),
         );
-        crate::app::bridge::publish(cx, || SetRaceAllied(HUMAN_SHIP as u16, 1));
-        crate::app::bridge::publish(cx, || {
+        SetRaceAllied(cx.world, HUMAN_SHIP as u16, 1);
+        {
             CloneShipFragment(
                 &raw mut (*state).avail_race_q,
                 HUMAN_SHIP as u16,
                 &mut (*state).built_ship_q,
                 0,
-            )
-        });
+            );
+        }
         (*sis).log_x = crate::planets::universe_units::universe_to_logx(SOL_X as i16);
         (*sis).log_y = crate::planets::universe_units::universe_to_logy(SOL_Y as i16);
         cx.world
@@ -203,10 +199,8 @@ pub unsafe extern "C" fn InitGameStructures() -> BOOLEAN {
 
 /// # Safety
 /// No renderer may be using these contexts or resources.
-pub unsafe fn FreeSC2Data() {
-    // SAFETY: the lifecycle borrows owners from Cx; callbacks republish it synchronously.
-    crate::app::bridge::enter(|cx| {
-        let kernel = cx.kernel();
+pub unsafe fn FreeSC2Data(kernel: &mut crate::engine::Kernel) {
+    {
         DestroyContext((*kernel).radar_context);
         (*kernel).radar_context = ptr::null_mut();
         DestroyDrawable(ReleaseDrawable((*kernel).font_grad_frame));
@@ -215,7 +209,7 @@ pub unsafe fn FreeSC2Data() {
         (*kernel).misc_data_frame = ptr::null_mut();
         DestroyDrawable(ReleaseDrawable((*kernel).flag_stat_frame));
         (*kernel).flag_stat_frame = ptr::null_mut();
-    })
+    }
 }
 
 /// # Safety
@@ -230,7 +224,7 @@ pub unsafe fn UninitGameStructures() {
         UninitQueue(ptr::addr_of_mut!((*state).ip_group_q));
         UninitQueue(ptr::addr_of_mut!((*state).npc_built_ship_q));
         UninitQueue(ptr::addr_of_mut!((*state).built_ship_q));
-        crate::app::bridge::publish(cx, || UninitGroupInfo());
+        UninitGroupInfo(cx.world);
         UninitPlanetInfo(cx.world);
         let probe = (*state).avail_race_q.tail.cast::<FLEET_INFO>();
         if !probe.is_null() {
@@ -246,50 +240,29 @@ pub unsafe fn UninitGameStructures() {
 
 /// # Safety
 /// Existing world resources must have been released before resetting their owner.
-pub unsafe fn InitGlobData() {
-    // SAFETY: the lifecycle borrows owners from Cx; callbacks republish it synchronously.
-    crate::app::bridge::enter(|cx| {
-        let world = &raw mut cx.world.data;
-        let flags = (*world).game.glob_flags;
-        cx.world.data = crate::engine::WorldData::new();
-        (*world).game.glob_flags = flags;
-        cx.world.story = Some(crate::engine::world::story::GameState::new());
-        cx.world.files.canned_nodes.clear();
-        crate::engine::battle::access::lifecycle::bind_display_array(&mut *ptr::addr_of_mut!(
-            (*world).game
-        ));
-    })
+pub unsafe fn InitGlobData(world: &mut crate::engine::World) {
+    {
+        let flags = world.data.game.glob_flags;
+        world.data = crate::engine::WorldData::new();
+        world.data.game.glob_flags = flags;
+        world.story = Some(crate::engine::world::story::GameState::new());
+        world.files.canned_nodes.clear();
+        crate::engine::battle::access::lifecycle::bind_display_array(&mut world.data.game);
+    }
 }
 
-/// # Safety
-/// Game-thread access to the live activity.
-#[no_mangle]
-pub unsafe extern "C" fn inHQSpace() -> BOOLEAN {
-    // SAFETY: the lifecycle borrows owners from Cx; callbacks republish it synchronously.
-    crate::app::bridge::enter(|cx| {
-        let world = &raw mut cx.world.data;
-        u32::from((*world).game.current_activity as u8 as u32 == IN_HYPERSPACE)
-    })
+pub fn inHQSpace(world: &crate::engine::World) -> BOOLEAN {
+    u32::from(world.activity() as u8 as u32 == IN_HYPERSPACE)
 }
-/// # Safety
-/// Game-thread access to the live activity and game-state bits.
-#[no_mangle]
-pub unsafe extern "C" fn inHyperSpace() -> BOOLEAN {
+
+pub fn inHyperSpace(world: &crate::engine::World) -> BOOLEAN {
     u32::from(
-        inHQSpace() != 0
-            && crate::engine::World::current()
-                .read(|world| ffi::rust_get_game_state_bits(world, 42, 43))
-                <= 1,
+        inHQSpace(world) != 0 && world.story_state(crate::engine::StoryKey::ARILOU_SPACE_SIDE) <= 1,
     )
 }
-/// # Safety
-/// Game-thread access to the live activity and game-state bits.
-#[no_mangle]
-pub unsafe extern "C" fn inQuasiSpace() -> BOOLEAN {
+
+pub fn inQuasiSpace(world: &crate::engine::World) -> BOOLEAN {
     u32::from(
-        inHQSpace() != 0
-            && crate::engine::World::current()
-                .read(|world| ffi::rust_get_game_state_bits(world, 42, 43))
-                > 1,
+        inHQSpace(world) != 0 && world.story_state(crate::engine::StoryKey::ARILOU_SPACE_SIDE) > 1,
     )
 }

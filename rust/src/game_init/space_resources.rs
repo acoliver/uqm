@@ -113,16 +113,12 @@ pub(crate) mod live {
 
     /// # Safety
     /// Game thread only, after graphics and resource initialization.
-    #[no_mangle]
-    pub unsafe extern "C" fn InitSpace() -> u32 {
-        // SAFETY: this entry borrows owners from Cx and retains no owner borrow.
-        crate::app::bridge::enter(|cx| {
-            let kernel = &mut *cx.kernel;
+
+    pub unsafe fn InitSpace(kernel: &mut crate::engine::Kernel, activity: u16) -> u32 {
+        {
             let old = (*kernel).space_init_count;
             (*kernel).space_init_count = (*kernel).space_init_count.wrapping_add(1);
-            if old == 0
-                && cx.world.activity() as u8 <= crate::ships::native::abi::IN_ENCOUNTER as u8
-            {
+            if old == 0 && activity as u8 <= crate::ships::native::abi::IN_ENCOUNTER as u8 {
                 let stars = &mut *ptr::addr_of_mut!((*kernel).stars_in_space);
                 *stars = CaptureDrawable(LoadGraphicInstance(c"graphics.stars".as_ptr()).cast());
                 if stars.is_null() {
@@ -154,16 +150,14 @@ pub(crate) mod live {
                 crate::collections::observation::Event::SpaceActive(true),
             );
             1
-        })
+        }
     }
 
     /// # Safety
     /// Game thread only; pairs with InitSpace while graphics is live.
-    #[no_mangle]
-    pub unsafe extern "C" fn UninitSpace() {
-        // SAFETY: this entry borrows owners from Cx and retains no owner borrow.
-        crate::app::bridge::enter(|cx| {
-            let kernel = &mut *cx.kernel;
+
+    pub unsafe fn UninitSpace(kernel: &mut crate::engine::Kernel) {
+        {
             if (*kernel).space_init_count != 0 {
                 (*kernel).space_init_count -= 1;
                 if (*kernel).space_init_count == 0 {
@@ -187,7 +181,7 @@ pub(crate) mod live {
                     });
                 }
             }
-        })
+        }
     }
 
     #[no_mangle]

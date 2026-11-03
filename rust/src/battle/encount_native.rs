@@ -167,13 +167,19 @@ pub(crate) mod engine {
         }
         if player != RPG_PLAYER_NUM as u16 {
             match activity() as u8 as u32 {
-                IN_LAST_BATTLE => load_gravity_well(NUMBER_OF_PLANET_TYPES as u8),
-                IN_HYPERSPACE => load_gravity_well(
-                    ((TFB_Random() as COUNT) % NUMBER_OF_PLANET_TYPES as COUNT) as u8,
-                ),
+                IN_LAST_BATTLE => crate::engine::Kernel::current()
+                    .write(|kernel| load_gravity_well(kernel, NUMBER_OF_PLANET_TYPES as u8)),
+                IN_HYPERSPACE => crate::engine::Kernel::current().write(|kernel| {
+                    load_gravity_well(
+                        kernel,
+                        ((TFB_Random() as COUNT) % NUMBER_OF_PLANET_TYPES as COUNT) as u8,
+                    )
+                }),
                 _ => {
                     set_game_state(ESCAPE_COUNTER, END_ESCAPE_COUNTER, 110);
-                    load_gravity_well(game_state(BATTLE_PLANET, END_BATTLE_PLANET));
+                    crate::engine::Kernel::current().write(|kernel| {
+                        load_gravity_well(kernel, game_state(BATTLE_PLANET, END_BATTLE_PLANET))
+                    });
                 }
             }
         }
@@ -268,7 +274,7 @@ pub(crate) mod engine {
         );
         SetContextFont(KernelOwner::current().read(|owner| owner.micro_font));
         SetContextForeGroundColor(rgb15(0, 0, 20));
-        if inHQSpace() != 0 {
+        if crate::engine::World::current().read(|world| inHQSpace(world)) != 0 {
             draw_text(&mut t, game_string(ENCOUNTER_STRING_BASE));
             t.baseline.y += 12;
             draw_text(&mut t, game_string(ENCOUNTER_STRING_BASE + 1));
@@ -397,7 +403,7 @@ pub(crate) mod engine {
     pub unsafe extern "C" fn UninitEncounter() -> COUNT {
         let world = WorldFields::current();
         let mut killed = 0u16;
-        free_gravity_well();
+        crate::engine::Kernel::current().write(|kernel| free_gravity_well(kernel));
         if activity() & (CHECK_ABORT | CHECK_LOAD) as u16 != 0
             || (**world).flagship.crew_enlisted == COUNT::MAX
             || activity() as u8 == IN_LAST_BATTLE as u8
@@ -432,7 +438,7 @@ pub(crate) mod engine {
             .is_null()
         {
             victory = -1;
-            InitSISContexts();
+            crate::engine::Kernel::current().write(|kernel| InitSISContexts(kernel));
         }
         let previous_mode = SetStatusMessageMode(StatMsgMode_SMM_RES_UNITS);
         let mut sleepy = true;
@@ -445,7 +451,7 @@ pub(crate) mod engine {
                 } else {
                     DrawSISFrame();
                     DrawSISMessage(ptr::null());
-                    if inHQSpace() != 0 {
+                    if crate::engine::World::current().read(|world| inHQSpace(world)) != 0 {
                         DrawHyperCoords((**world).game.ship_stamp.origin);
                     } else if (**world).game.ip_planet == 0 {
                         DrawHyperCoords(
@@ -639,7 +645,7 @@ pub(crate) mod engine {
             set_player_control(0, CYBORG_CONTROL | AWESOME_RATING);
             saved = player_input(0);
             set_player_input(0, ptr::null_mut());
-            if !SetPlayerInput(0) {
+            if !crate::engine::Kernel::current().write(|kernel| SetPlayerInput(kernel, 0)) {
                 crate::log_abi::log_message(1, "Could not set cyborg player input.");
                 // misc.h explode(): abort in DEBUG, exit(EXIT_FAILURE) otherwise.
                 if cfg!(feature = "debug-process") {
@@ -664,7 +670,7 @@ pub(crate) mod engine {
         if WorldFields::current().read(|owner| owner.game.glob_flags) & CYBORG_ENABLED as u8 != 0 {
             crate::app::bridge::battle(|b| b.nth_frame = 0);
             set_player_control(0, HUMAN_CONTROL | STANDARD_RATING);
-            ClearPlayerInput(0);
+            crate::engine::Kernel::current().write(|kernel| ClearPlayerInput(kernel, 0));
             set_player_input(0, saved);
         }
         set_activity(old);

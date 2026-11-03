@@ -425,7 +425,6 @@ unsafe fn CleanupAfterStarBase() {
 /// World queues, game clock, communication, input, graphics and audio must be
 /// initialized and exclusively accessed by the calling game thread.
 pub unsafe fn VisitStarBase() {
-    let world = WorldFields::current();
     if crate::engine::World::current()
         .read(|world| get_game_state(world, crate::engine::StoryKey::CHMMR_BOMB_STATE))
         == 2
@@ -451,27 +450,29 @@ pub unsafe fn VisitStarBase() {
         if crate::engine::World::current()
             .read(|world| get_game_state(world, crate::engine::StoryKey::PROBE_ILWRATH_ENCOUNTER))
             == 0
-            || (**world).game.current_activity & CHECK_ABORT as u16 != 0
+            || (**WorldFields::current()).game.current_activity & CHECK_ABORT as u16 != 0
         {
             CleanupAfterStarBase();
             return;
         }
-        let ship = CloneShipFragment(
-            &raw mut (**world).game.avail_race_q,
-            ILWRATH_SHIP as COUNT,
-            ptr::addr_of_mut!((**world).game.npc_built_ship_q),
-            7,
-        );
+        let ship = WorldFields::current().write(|world| {
+            CloneShipFragment(
+                &raw mut world.game.avail_race_q,
+                ILWRATH_SHIP as COUNT,
+                &raw mut world.game.npc_built_ship_q,
+                7,
+            )
+        });
         (*ship.cast::<SHIP_FRAGMENT>()).race_id = BYTE::MAX;
         InitCommunication(CONVERSATION_ILWRATH_CONVERSATION);
-        if (**world).flagship.crew_enlisted == COUNT::MAX
-            || (**world).game.current_activity & CHECK_ABORT as u16 != 0
+        if (**WorldFields::current()).flagship.crew_enlisted == COUNT::MAX
+            || (**WorldFields::current()).game.current_activity & CHECK_ABORT as u16 != 0
         {
             return;
         }
         SetCommIntroMode(CROSSFADE_SCREEN, 0);
         InitCommunication(CONVERSATION_COMMANDER_CONVERSATION);
-        if (**world).game.current_activity & CHECK_ABORT as u16 != 0 {
+        if (**WorldFields::current()).game.current_activity & CHECK_ABORT as u16 != 0 {
             return;
         }
         crate::engine::World::current().write(|world| {
@@ -491,7 +492,7 @@ pub unsafe fn VisitStarBase() {
             == 2
     {
         DoTimePassage();
-        if (**world).flagship.crew_enlisted == COUNT::MAX {
+        if (**WorldFields::current()).flagship.crew_enlisted == COUNT::MAX {
             return;
         }
         crate::automation::scenario::observe_encounter_dispatch(
@@ -499,7 +500,7 @@ pub unsafe fn VisitStarBase() {
         );
         SetCommIntroMode(FADE_IN_SCREEN, ONE_SECOND * 2);
         InitCommunication(CONVERSATION_COMMANDER_CONVERSATION);
-        if (**world).game.current_activity & CHECK_ABORT as u16 != 0 {
+        if (**WorldFields::current()).game.current_activity & CHECK_ABORT as u16 != 0 {
             return;
         }
         crate::engine::World::current().write(|world| {

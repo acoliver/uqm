@@ -122,7 +122,7 @@ pub(crate) mod live {
                         EventHandler(callback);
                     }
                 }
-                if inHyperSpace() != 0 {
+                if crate::engine::World::current().read(|world| inHyperSpace(world)) != 0 {
                     check_hyperspace_encounter();
                 }
                 relative(0, 1, 0, HYPERSPACE_ENCOUNTER_EVENT);
@@ -158,7 +158,8 @@ pub(crate) mod live {
                 }
             }
             SHOFIXTI_RETURN_EVENT => {
-                SetRaceAllied(SHOFIXTI_SHIP as u16, 1);
+                crate::engine::World::current()
+                    .write(|world| SetRaceAllied(world, SHOFIXTI_SHIP as u16, 1));
                 (**WorldFields::current()).game.crew_cost = WorldFields::current()
                     .read(|owner| owner.game.crew_cost)
                     .wrapping_sub(2);
@@ -172,7 +173,8 @@ pub(crate) mod live {
                 } else {
                     let race = fleet(SPATHI_SHIP);
                     if (*race).actual_strength != 0 {
-                        SetRaceAllied(SPATHI_SHIP as u16, 0);
+                        crate::engine::World::current()
+                            .write(|world| SetRaceAllied(world, SPATHI_SHIP as u16, 0));
                         set("SPATHI_SHIELDED_SELVES", 1);
                         (*race).actual_strength = 0;
                     }
@@ -385,7 +387,8 @@ pub(crate) mod live {
                     (*thradd).growth_fract = (((loss % 128) << 8) / 128) as u8;
                     set("THRADD_VISITS", 0);
                     if (*thradd).allied_state == GOOD_GUY as u16 {
-                        SetRaceAllied(THRADDASH_SHIP as u16, 0);
+                        crate::engine::World::current()
+                            .write(|world| SetRaceAllied(world, THRADDASH_SHIP as u16, 0));
                     }
                 }
                 let mission = get("THRADD_MISSION");
