@@ -177,7 +177,7 @@ mod tests {
     }
 
     fn visuals(fields: &mut Fields, prefix: &str, element: &Element, journal: &mut Journal) {
-        // SAFETY: the test owns a layout-compatible source record.
+        // SAFETY: the test owns the source record and retained fixture frame views.
         let observation = unsafe { ElementObservation::decode(element, None, 0) };
         super::visuals(fields, prefix, &observation, journal);
     }
@@ -203,9 +203,9 @@ mod tests {
         journal.allocate(std::ptr::from_ref(&element) as usize);
         let mut fields = Fields::new();
         visuals(&mut fields, "element", &element, &mut journal);
-        assert_eq!(fields["element.current.image.frame.index"], "7");
+        assert_eq!(fields["element.current.frame.index"], "7");
         assert_eq!(fields["element.current.farray.0.index"], "7");
-        assert_eq!(fields["element.next.image.frame.owner"], "none");
+        assert_eq!(fields["element.next.frame.owner"], "none");
     }
 
     #[test]
@@ -237,15 +237,15 @@ mod tests {
             "new-set".into(),
         );
         visuals(&mut fields, "element", &element, &mut journal);
-        assert_eq!(fields["element.current.image.frame.owner"], owner);
-        assert_eq!(fields["element.current.image.frame.index"], "7");
-        assert_eq!(fields["element.current.image.frame.retired"], "true");
+        assert_eq!(fields["element.current.frame.owner"], owner);
+        assert_eq!(fields["element.current.frame.index"], "7");
+        assert_eq!(fields["element.current.frame.retired"], "true");
         assert_eq!(fields["element.current.farray.0.owner"], owner);
         assert_eq!(fields["element.current.farray.role"], "old-set");
         journal.allocate(std::ptr::from_ref(&element) as usize);
         visuals(&mut fields, "element", &element, &mut journal);
-        assert_eq!(fields["element.current.image.frame.index"], "99");
-        assert_eq!(fields["element.current.image.frame.retired"], "false");
+        assert_eq!(fields["element.current.frame.index"], "99");
+        assert_eq!(fields["element.current.frame.retired"], "false");
         assert_eq!(fields["element.current.farray.role"], "new-set");
     }
 
@@ -315,7 +315,7 @@ mod tests {
                 });
                 journal.drain_events(&[]);
                 visuals(&mut fields, "element", &element, &mut journal);
-                assert_eq!(fields["element.current.image.frame.retired"], "true");
+                assert_eq!(fields["element.current.frame.retired"], "true");
                 for view in 0..3 {
                     assert_eq!(
                         fields[&format!("element.current.farray.{view}.owner")],
