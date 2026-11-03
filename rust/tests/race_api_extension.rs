@@ -41,7 +41,7 @@ fn teardown_receives_final_crew_and_owned_state() {
         let owner = Battle::new(2);
         // SAFETY: the serialized fixture owns the enlisted-crew authority and restores it after teardown.
         unsafe {
-            let saved_crew = (*uqm_rust::engine::WorldData::current())
+            let saved_crew = (**uqm_rust::engine::WorldData::current())
                 .flagship
                 .crew_enlisted;
             let mut ship = Ship::native(&owner, &RACE, 0);
@@ -57,7 +57,7 @@ fn teardown_receives_final_crew_and_owned_state() {
                 assert!(matches!(cx.race_stats(ship.ship_id).state, RaceState::None));
             });
             drop(ship);
-            (*uqm_rust::engine::WorldData::current())
+            (**uqm_rust::engine::WorldData::current())
                 .flagship
                 .crew_enlisted = saved_crew;
         }
@@ -73,8 +73,9 @@ fn abandonment_keeps_allocation_rng_parent_and_target_order() {
             let a = Ship::new(&owner, SPECIES_ID_VUX_ID, 0);
             let b = Ship::new(&owner, SPECIES_ID_VUX_ID, 1);
             let frames = battle::NativeFrameSet::new(4);
-            let old = (*uqm_rust::engine::battle::record::Kernel::current()).stars_in_space;
-            (*uqm_rust::engine::battle::record::Kernel::current()).stars_in_space = frames.frame(0);
+            let old = (**uqm_rust::engine::battle::record::Kernel::current()).stars_in_space;
+            (**uqm_rust::engine::battle::record::Kernel::current()).stars_in_space =
+                frames.frame(0);
             uqm_rust::app::bridge::enter(|cx| {
                 let crew = cx.race_stats(a.ship_id).ship_info.crew_level;
                 battle::with_rng(1234, 4, || cx.abandon_ship(a.id, b.id, 3));
@@ -92,7 +93,7 @@ fn abandonment_keeps_allocation_rng_parent_and_target_order() {
                     cx.dispose(id);
                 }
             });
-            (*uqm_rust::engine::battle::record::Kernel::current()).stars_in_space = old;
+            (**uqm_rust::engine::battle::record::Kernel::current()).stars_in_space = old;
         }
     });
 }
@@ -223,13 +224,13 @@ fn navigation_world_projections_write_the_single_authority() {
         let _owner = Battle::new(2);
         // SAFETY: this test serializes and restores every modified world value.
         unsafe {
-            let activity = (*uqm_rust::engine::WorldData::current())
+            let activity = (**uqm_rust::engine::WorldData::current())
                 .game
                 .current_activity;
-            let autopilot = (*uqm_rust::engine::WorldData::current()).game.autopilot;
-            let velocity = (*uqm_rust::engine::WorldData::current()).game.velocity;
-            let sis = (*uqm_rust::engine::WorldData::current()).flagship;
-            crate::engine::World::current()
+            let autopilot = (**uqm_rust::engine::WorldData::current()).game.autopilot;
+            let velocity = (**uqm_rust::engine::WorldData::current()).game.velocity;
+            let sis = (**uqm_rust::engine::WorldData::current()).flagship;
+            uqm_rust::engine::World::current()
                 .write(|world| uqm_rust::state::ffi::rust_init_game_state(world));
             uqm_rust::app::bridge::enter(|cx| {
                 cx.set_activity(42);
@@ -542,13 +543,13 @@ fn descriptor_world_observes_activity_and_typed_story_and_writes_the_same_author
     battle_context::run(|| {
         // SAFETY: the serialized fixture owns and restores the world authorities.
         unsafe {
-            let activity = (*uqm_rust::engine::WorldData::current())
+            let activity = (**uqm_rust::engine::WorldData::current())
                 .game
                 .current_activity;
-            let crew = (*uqm_rust::engine::WorldData::current())
+            let crew = (**uqm_rust::engine::WorldData::current())
                 .flagship
                 .crew_enlisted;
-            crate::engine::World::current()
+            uqm_rust::engine::World::current()
                 .write(|world| uqm_rust::state::ffi::rust_init_game_state(world));
             uqm_rust::app::bridge::enter(|cx| {
                 cx.world.set_activity(IN_ENCOUNTER as u16);
@@ -590,10 +591,10 @@ fn descriptor_world_observes_activity_and_typed_story_and_writes_the_same_author
                     cx.world.set_story_state(key, 0);
                 }
             });
-            (*uqm_rust::engine::WorldData::current())
+            (**uqm_rust::engine::WorldData::current())
                 .game
                 .current_activity = activity;
-            (*uqm_rust::engine::WorldData::current())
+            (**uqm_rust::engine::WorldData::current())
                 .flagship
                 .crew_enlisted = crew;
         }

@@ -65,15 +65,17 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
         let path = CString::new(fixture.path().to_str().unwrap()).unwrap();
         unsafe {
             log_init(100);
-            crate::engine::World::current()
+            uqm_rust::engine::World::current()
                 .write(|world| uqm_rust::state::ffi::rust_init_game_state(world));
-            (*uqm_rust::engine::WorldData::current())
+            (**uqm_rust::engine::WorldData::current())
                 .flagship
                 .module_slots = [255; 16];
-            (*uqm_rust::engine::WorldData::current())
+            (**uqm_rust::engine::WorldData::current())
                 .flagship
                 .drive_slots = [255; 11];
-            (*uqm_rust::engine::WorldData::current()).flagship.jet_slots = [255; 8];
+            (**uqm_rust::engine::WorldData::current())
+                .flagship
+                .jet_slots = [255; 8];
             uio_bridge::uio_init();
             let repository = uio_bridge::uio_openRepository(0);
             let mount = uio_bridge::uio_mountDir(
@@ -125,10 +127,10 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
             for (i, key) in keys.iter().enumerate() {
                 let key = CString::new(format!("ship.{key}.code")).unwrap();
                 let species = i as u32 + 1;
-                let first = crate::engine::World::current()
+                let first = uqm_rust::engine::World::current()
                     .write(|world| load_ship(world, species, 0))
                     .unwrap();
-                let second = crate::engine::World::current()
+                let second = uqm_rust::engine::World::current()
                     .write(|world| load_ship(world, species, 0))
                     .unwrap();
                 assert_ne!(first.address(), second.address(), "{key:?}");
@@ -138,34 +140,34 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
                     .ship_info
                     .ship_cost = 254;
                 assert_eq!(second.info().ship_cost, original);
-                let loaded = crate::engine::World::current()
+                let loaded = uqm_rust::engine::World::current()
                     .write(|world| load_ship(world, species, 0))
                     .unwrap();
                 assert_eq!(loaded.info().ship_cost, original);
                 assert!(loaded.race().is_some());
                 assert_eq!(loaded.callbacks(), first.callbacks());
-                crate::engine::World::current().write(|world| unload_ship(world, first, 1, 0));
-                crate::engine::World::current().write(|world| unload_ship(world, second, 1, 0));
-                crate::engine::World::current().write(|world| unload_ship(world, loaded, 1, 0));
+                uqm_rust::engine::World::current().write(|world| unload_ship(world, first, 1, 0));
+                uqm_rust::engine::World::current().write(|world| unload_ship(world, second, 1, 0));
+                uqm_rust::engine::World::current().write(|world| unload_ship(world, loaded, 1, 0));
             }
-            assert!(crate::engine::World::current()
+            assert!(uqm_rust::engine::World::current()
                 .write(|world| load_ship(world, SPECIES_ID_NUM_SPECIES_ID, 0))
                 .is_none());
-            assert!(crate::engine::World::current()
+            assert!(uqm_rust::engine::World::current()
                 .write(|world| load_ship(world, u32::MAX, 0))
                 .is_none());
             // No graphics are registered in the fixture, so required battle art fails.
-            assert!(crate::engine::World::current()
+            assert!(uqm_rust::engine::World::current()
                 .write(|world| load_ship(world, SPECIES_ID_ARILOU_ID, 1))
                 .is_none());
-            let mut loaded = crate::engine::World::current()
+            let mut loaded = uqm_rust::engine::World::current()
                 .write(|world| load_ship(world, SPECIES_ID_ARILOU_ID, 0))
                 .unwrap();
             assert!(loaded.race().is_some());
             loaded.set_race(&TEARDOWN_RACE);
             uqm_rust::collections::observation::enable();
             uqm_rust::collections::observation::drain();
-            crate::engine::World::current().write(|world| unload_ship(world, loaded, 1, 1));
+            uqm_rust::engine::World::current().write(|world| unload_ship(world, loaded, 1, 1));
             assert_eq!(UNINIT.load(Ordering::SeqCst), 1);
             assert!(uqm_rust::collections::observation::drain()
                 .iter()

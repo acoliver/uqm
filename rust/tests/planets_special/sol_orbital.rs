@@ -50,14 +50,14 @@ impl Ops for Harness {
             "orbital wrote unrelated state: {case:?}"
         );
         assert_eq!(
-            crate::engine::World::current().read(|world| get_game_state(
+            uqm_rust::engine::World::current().read(|world| get_game_state(
                 world,
                 uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI
             )),
             1
         );
         assert_eq!(
-            crate::engine::World::current().read(|world| get_game_state(
+            uqm_rust::engine::World::current().read(|world| get_game_state(
                 world,
                 uqm_rust::engine::StoryKey::MOONBASE_DESTROYED
             )),
@@ -73,20 +73,20 @@ impl DebugTraversal {
     fn enter() -> Self {
         let saved = Self(
             unsafe { DISABLE_INTERACTIVITY },
-            crate::engine::World::current().read(|world| {
+            uqm_rust::engine::World::current().read(|world| {
                 get_game_state(world, uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI)
             }),
-            crate::engine::World::current().read(|world| {
+            uqm_rust::engine::World::current().read(|world| {
                 get_game_state(world, uqm_rust::engine::StoryKey::MOONBASE_DESTROYED)
             }),
         );
         unsafe {
             DISABLE_INTERACTIVITY = 1;
         }
-        crate::engine::World::current().write(|world| {
+        uqm_rust::engine::World::current().write(|world| {
             set_game_state(world, uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI, 1)
         });
-        crate::engine::World::current().write(|world| {
+        uqm_rust::engine::World::current().write(|world| {
             set_game_state(world, uqm_rust::engine::StoryKey::MOONBASE_DESTROYED, 1)
         });
         saved
@@ -98,14 +98,14 @@ impl Drop for DebugTraversal {
         unsafe {
             DISABLE_INTERACTIVITY = self.0;
         }
-        crate::engine::World::current().write(|world| {
+        uqm_rust::engine::World::current().write(|world| {
             set_game_state(
                 world,
                 uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI,
                 self.1,
             )
         });
-        crate::engine::World::current().write(|world| {
+        uqm_rust::engine::World::current().write(|world| {
             set_game_state(
                 world,
                 uqm_rust::engine::StoryKey::MOONBASE_DESTROYED,

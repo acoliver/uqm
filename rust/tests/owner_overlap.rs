@@ -143,3 +143,16 @@ fn starbase_releases_world_before_communication_and_cleanup() {
     }
     assert_eq!(game.world.activity(), CHECK_ABORT as u16);
 }
+
+#[test]
+#[serial_test::serial]
+fn encounter_teardown_releases_world_before_activity_queries() {
+    let mut game = Game::new();
+    game.world.set_activity(CHECK_ABORT as u16);
+    // SAFETY: the serialized fixture owns empty resources and the published lifecycle.
+    unsafe {
+        bridge::with_game(&mut game, || {
+            assert_eq!(uqm_rust::battle::encount_native::UninitEncounter(), 0)
+        });
+    }
+}

@@ -18,19 +18,19 @@ pub fn check(h: &mut Harness) {
         "GLOBAL_FLAGS_AND_DATA",
     ];
     let story = keys.map(|key| {
-        crate::engine::World::current().read(|world| {
+        uqm_rust::engine::World::current().read(|world| {
             get_game_state(world, uqm_rust::engine::StoryKey::from_name(key).unwrap())
         })
     });
     let word = LiveStory.word("URQUAN_PROBE_GRPOFFS0");
     let activity = uqm_rust::mainloop::ffi::get_current_activity();
     unsafe {
-        let ip = &raw mut (*uqm_rust::engine::WorldData::current()).game.ip_group_q;
-        let built = &raw mut (*uqm_rust::engine::WorldData::current())
+        let ip = &raw mut (**uqm_rust::engine::WorldData::current()).game.ip_group_q;
+        let built = &raw mut (**uqm_rust::engine::WorldData::current())
             .game
             .npc_built_ship_q;
-        let fleets = &raw mut (*uqm_rust::engine::WorldData::current()).game.avail_race_q;
-        let reference = &raw mut (*uqm_rust::engine::WorldData::current())
+        let fleets = &raw mut (**uqm_rust::engine::WorldData::current()).game.avail_race_q;
+        let reference = &raw mut (**uqm_rust::engine::WorldData::current())
             .game
             .battle_group_ref;
         let saved = (ip.read(), built.read(), fleets.read(), reference.read());
@@ -64,10 +64,10 @@ pub fn check(h: &mut Harness) {
             PutQueue(fleets.cast(), handle);
         }
         assert_ne!(uqm_rust::time::clock_bridge::rust_clock_init(), 0);
-        crate::engine::World::current().write(|world| c_api::InitGroupInfo(world, 1));
+        uqm_rust::engine::World::current().write(|world| c_api::InitGroupInfo(world, 1));
         h.set_star(0, 0);
         h.state.SunDesc[0].NumPlanets = 9;
-        let saved_star = (*uqm_rust::engine::World::current())
+        let saved_star = (**uqm_rust::engine::World::current())
             .star_pointer(uqm_rust::planets::starmap::current_catalog());
         let saved_catalog = std::ptr::addr_of!(c_api::STAR_ARRAY).read();
         // The ordinary game restart installs this same Rust catalog.
@@ -81,7 +81,7 @@ pub fn check(h: &mut Harness) {
             uqm_rust::planets::tables::STAR_CATALOG_LEN,
         );
         let sol = catalog.iter().position(|star| star.index == 1).unwrap();
-        (*uqm_rust::engine::World::current()).select_star(
+        (**uqm_rust::engine::World::current()).select_star(
             (c_api::STAR_ARRAY
                 .add(sol)
                 .cast::<uqm_rust::engine::world::CStarDesc>())
@@ -89,9 +89,9 @@ pub fn check(h: &mut Harness) {
             uqm_rust::planets::starmap::current_catalog(),
         );
         LiveStory.set_word("URQUAN_PROBE_GRPOFFS0", 0);
-        crate::engine::World::current()
+        uqm_rust::engine::World::current()
             .write(|world| set_game_state(world, uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE, 0));
-        crate::engine::World::current().write(|world| {
+        uqm_rust::engine::World::current().write(|world| {
             set_game_state(
                 world,
                 uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED,
@@ -115,7 +115,7 @@ pub fn check(h: &mut Harness) {
             (0, 0, 0)
         );
         let file = || {
-            crate::engine::World::current()
+            uqm_rust::engine::World::current()
                 .write(|world| {
                     uqm_rust::state::ffi::with_state_files(world, |files| {
                         files
@@ -152,7 +152,7 @@ pub fn check(h: &mut Harness) {
                 | uqm_rust::planets::generate::default::IGNORE_FLAGSHIP
         );
         assert_eq!((*probe).dest_loc, 0);
-        crate::engine::World::current().write(|world| {
+        uqm_rust::engine::World::current().write(|world| {
             set_game_state(
                 world,
                 uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED,
@@ -173,7 +173,7 @@ pub fn check(h: &mut Harness) {
                 uqm_rust::mainloop::types::ActivityValue(activity),
             );
             c_api::set_encounter_group(17);
-            crate::engine::World::current().write(|world| {
+            uqm_rust::engine::World::current().write(|world| {
                 set_game_state(world, uqm_rust::engine::StoryKey::GLOBAL_FLAGS_AND_DATA, 0)
             });
             assert!(GENERATE_SOL_FUNCTIONS.generate_orbital.unwrap()(
@@ -184,7 +184,7 @@ pub fn check(h: &mut Harness) {
                 activity | START_ENCOUNTER
             );
             assert_eq!(
-                crate::engine::World::current().read(|world| get_game_state(
+                uqm_rust::engine::World::current().read(|world| get_game_state(
                     world,
                     uqm_rust::engine::StoryKey::GLOBAL_FLAGS_AND_DATA
                 )),
@@ -194,11 +194,11 @@ pub fn check(h: &mut Harness) {
             assert_eq!(LiveStory.word("URQUAN_PROBE_GRPOFFS0"), probe_ref);
         }
         std::ptr::addr_of_mut!(c_api::STAR_ARRAY).write(saved_catalog);
-        (*uqm_rust::engine::World::current()).select_star(
+        (**uqm_rust::engine::World::current()).select_star(
             (saved_star).as_ref(),
             uqm_rust::planets::starmap::current_catalog(),
         );
-        crate::engine::World::current().write(|world| c_api::UninitGroupInfo(world));
+        uqm_rust::engine::World::current().write(|world| c_api::UninitGroupInfo(world));
         assert_ne!(uqm_rust::time::clock_bridge::rust_clock_uninit(), 0);
         UninitQueue(ip.cast::<Queue>());
         UninitQueue(built.cast::<Queue>());
@@ -209,7 +209,7 @@ pub fn check(h: &mut Harness) {
         reference.write(saved.3);
     }
     for (key, value) in keys.into_iter().zip(story) {
-        crate::engine::World::current().write(|world| {
+        uqm_rust::engine::World::current().write(|world| {
             set_game_state(
                 world,
                 uqm_rust::engine::StoryKey::from_name(key).unwrap(),

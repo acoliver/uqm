@@ -183,7 +183,6 @@ fn pulsed_directions() -> (Direction, bool) {
 /// # Safety
 /// `state` is the picker's state, which `DoInput` is running.
 unsafe fn change_selection(state: &mut PickerState) {
-    let kernel = KernelOwner::current();
     crate::automation::ui_observation::observe_ship_picker_cursor(state.cursor);
     let area = highlight(state.frame, state.cursor);
     state.flash = CRect {
@@ -213,7 +212,7 @@ unsafe fn change_selection(state: &mut PickerState) {
 
     let (crew, max_crew) = if let Some(chosen) = state.chosen {
         // SAFETY: font globals are set at startup.
-        unsafe { SetContextFont((std::ptr::addr_of!((**kernel).tiny_font).read()).cast()) };
+        unsafe { SetContextFont((KernelOwner::current().read(|kernel| kernel.tiny_font)).cast()) };
         let baseline_x = name.x + (name.width >> 1);
         let baseline_y = name.y + (name.height - 1);
         // SAFETY: `chosen` is a link of `race_q`.
@@ -223,10 +222,10 @@ unsafe fn change_selection(state: &mut PickerState) {
             // pointer escaped a temporary SIS copy. Preserve that presentation
             // without keeping the dangling pointer; crew still comes from World.
             // SAFETY: the published lifecycle owns the flagship on this thread.
-            let sis = unsafe { &(**WorldFields::current()).flagship };
+            let crew = WorldFields::current().read(|world| world.flagship.crew_enlisted);
             // SAFETY: plain call.
             let capacity = unsafe { GetCrewPodCapacity() };
-            (c"".as_ptr(), 0, sis.crew_enlisted, capacity)
+            (c"".as_ptr(), 0, crew, capacity)
         } else {
             // SAFETY: `race_strings` is the ship's name table.
             let entry = unsafe {
@@ -319,7 +318,6 @@ fn base_activity_aborted() -> bool {
 /// # Safety
 /// Game thread, inside a full-game battle.
 unsafe fn get_armada_star_ship() -> *mut c_void {
-    let kernel = KernelOwner::current();
     // SAFETY: `battle_counter` has a slot for each side.
     if unsafe { crate::app::bridge::battle(|b| b.counters[1]) } == 0 {
         // No opponents left.
@@ -328,7 +326,7 @@ unsafe fn get_armada_star_ship() -> *mut c_void {
 
     // SAFETY: the context global is set at startup.
     let old_context =
-        unsafe { base::SetContext(std::ptr::addr_of!((**kernel).space_context).read()) };
+        unsafe { base::SetContext(KernelOwner::current().read(|kernel| kernel.space_context)) };
     let mut pick = CRect::default();
     // SAFETY: `pick` is valid for the call.
     unsafe { draw_armada_pick_ship(0, &mut pick) };
@@ -494,10 +492,9 @@ pub(crate) unsafe fn encounter_ship(
 /// `pick_rect` is valid for writing; game thread only.
 #[export_name = "DrawArmadaPickShip"]
 pub unsafe extern "C" fn draw_armada_pick_ship(draw_salvage_frame: c_int, pick_rect: *mut CRect) {
-    let kernel = KernelOwner::current();
     // SAFETY: the context global is set at startup.
     let old_context =
-        unsafe { base::SetContext(std::ptr::addr_of!((**kernel).space_context).read()) };
+        unsafe { base::SetContext(KernelOwner::current().read(|kernel| kernel.space_context)) };
     // SAFETY: `PICK_GRAPHIC` is NUL terminated.
     let pick_frame = unsafe {
         base::CaptureDrawable((base::LoadGraphicInstance(PICK_GRAPHIC.as_ptr().cast())).cast())
@@ -559,14 +556,14 @@ pub unsafe extern "C" fn draw_armada_pick_ship(draw_salvage_frame: c_int, pick_r
     unsafe { DrawStamp(std::ptr::from_mut(&mut stamp).cast()) };
 
     // SAFETY: the game thread owns `GlobData`; the name is a C string.
-    let ship_name = unsafe { (**WorldFields::current()).flagship.ship_name.as_ptr() };
+    let ship_name = WorldFields::current().read(|world| world.flagship.ship_name);
     set_color(Rgba::rgb15(0x12, 0x12, 0x12));
     // SAFETY: font globals are set at startup.
-    unsafe { SetContextFont((std::ptr::addr_of!((**kernel).star_con_font).read()).cast()) };
+    unsafe { SetContextFont((KernelOwner::current().read(|kernel| kernel.star_con_font)).cast()) };
     draw_text(
         pick.corner.x + (pick.width >> 1),
         pick.corner.y + pick.height - 5,
-        ship_name.cast(),
+        ship_name.as_ptr().cast(),
         u16::MAX,
     );
 
@@ -597,7 +594,7 @@ pub unsafe extern "C" fn draw_armada_pick_ship(draw_salvage_frame: c_int, pick_r
                 // SAFETY: `StatusFrame` is loaded at startup.
                 unsafe {
                     stamp.frame = (SetAbsFrameIndex(
-                        (std::ptr::addr_of!((**kernel).status_frame).read()).cast(),
+                        (KernelOwner::current().read(|kernel| kernel.status_frame)).cast(),
                         3,
                     ))
                     .cast();

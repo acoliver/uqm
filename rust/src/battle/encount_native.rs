@@ -401,11 +401,10 @@ pub(crate) mod engine {
     /// The game thread must own initialized encounter fleet queues, game state, display, and salvage resources.
     #[no_mangle]
     pub unsafe extern "C" fn UninitEncounter() -> COUNT {
-        let world = WorldFields::current();
         let mut killed = 0u16;
         crate::engine::Kernel::current().write(|kernel| free_gravity_well(kernel));
         if activity() & (CHECK_ABORT | CHECK_LOAD) as u16 != 0
-            || (**world).flagship.crew_enlisted == COUNT::MAX
+            || (**WorldFields::current()).flagship.crew_enlisted == COUNT::MAX
             || activity() as u8 == IN_LAST_BATTLE as u8
             || activity() as u8 == WON_LAST_BATTLE as u8
         {
@@ -432,10 +431,17 @@ pub(crate) mod engine {
             counters[0],
             game_state(URQUAN_PROTECTING_SAMATRA, END_URQUAN_PROTECTING_SAMATRA) != 0,
         );
-        let frag = (**world).game.npc_built_ship_q.head.cast::<SHIP_FRAGMENT>();
+        let frag = (**WorldFields::current())
+            .game
+            .npc_built_ship_q
+            .head
+            .cast::<SHIP_FRAGMENT>();
         EncounterRace = (*frag).race_id as i16;
-        if GetStarShipFromIndex(&raw mut (**world).game.avail_race_q, EncounterRace as COUNT)
-            .is_null()
+        if GetStarShipFromIndex(
+            &raw mut (**WorldFields::current()).game.avail_race_q,
+            EncounterRace as COUNT,
+        )
+        .is_null()
         {
             victory = -1;
             crate::engine::Kernel::current().write(|kernel| InitSISContexts(kernel));
@@ -443,17 +449,15 @@ pub(crate) mod engine {
         let previous_mode = SetStatusMessageMode(StatMsgMode_SMM_RES_UNITS);
         let mut sleepy = true;
         for side in 0..NUM_SIDES as usize {
-            let q = if side == 0 {
-                &raw mut (**world).game.built_ship_q
-            } else {
+            if side != 0 {
                 if victory < 0 {
                     victory = 0;
                 } else {
                     DrawSISFrame();
                     DrawSISMessage(ptr::null());
                     if crate::engine::World::current().read(|world| inHQSpace(world)) != 0 {
-                        DrawHyperCoords((**world).game.ship_stamp.origin);
-                    } else if (**world).game.ip_planet == 0 {
+                        DrawHyperCoords((**WorldFields::current()).game.ship_stamp.origin);
+                    } else if (**WorldFields::current()).game.ip_planet == 0 {
                         DrawHyperCoords(
                             (*(**WorldOwner::current())
                                 .star_pointer(crate::planets::starmap::current_catalog()))
@@ -467,10 +471,15 @@ pub(crate) mod engine {
                         DrawArmadaPickShip(1, &mut salvage_rect);
                     }
                 }
-                &raw mut (**world).game.npc_built_ship_q
-            };
+            }
             link_queue::ships(NUM_SIDES as usize - 1 - side).reinit();
-            let mut h = (*q).head;
+            let mut h = WorldFields::current().read(|world| {
+                if side == 0 {
+                    world.game.built_ship_q.head
+                } else {
+                    world.game.npc_built_ship_q.head
+                }
+            });
             while !h.is_null() {
                 let frag = h.cast::<SHIP_FRAGMENT>();
                 let next = (*frag).succ;
@@ -566,8 +575,15 @@ pub(crate) mod engine {
                             DrawStamp(&mut stamp);
                         }
                     }
-                    RemoveQueue(q, h);
-                    FreeLink(q, h);
+                    WorldFields::current().write(|world| {
+                        let queue = if side == 0 {
+                            &raw mut world.game.built_ship_q
+                        } else {
+                            &raw mut world.game.npc_built_ship_q
+                        };
+                        RemoveQueue(queue, h);
+                        FreeLink(queue, h);
+                    });
                     h = next;
                     continue;
                 }

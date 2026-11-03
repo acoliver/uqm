@@ -66,7 +66,7 @@ pub(super) fn elements_and_fighters(directory: &Path) {
     // SAFETY: stack graph remains live; no renderer or pool allocator is running.
     unsafe {
         install_ship(&mut owner);
-        (*uqm_rust::engine::WorldData::current())
+        (**uqm_rust::engine::WorldData::current())
             .game
             .current_activity = IN_BATTLE as u16;
     }
@@ -239,7 +239,7 @@ pub(super) fn fighters_without_journal(directory: &Path) {
     ));
     // SAFETY: this child has not initialized Coordinator, and it alone owns the graph.
     unsafe {
-        (*uqm_rust::engine::WorldData::current())
+        (**uqm_rust::engine::WorldData::current())
             .game
             .current_activity = IN_BATTLE as u16;
         install_ship(&mut ship);
@@ -346,7 +346,7 @@ pub(super) fn event_queue_fields(directory: &Path) {
     };
     // SAFETY: this test owns the idle game clock queue until it is uninitialized.
     unsafe {
-        let queue = &raw mut (*uqm_rust::engine::WorldData::current())
+        let queue = &raw mut (**uqm_rust::engine::WorldData::current())
             .game
             .game_clock
             .event_q;
@@ -393,7 +393,7 @@ pub(super) fn non_ship_parent_fields(directory: &Path) {
     let mut element = ElementRecord::new();
     // SAFETY: no game loop is running; this test owns both queues and the group pool.
     unsafe {
-        let queue = &raw mut (*uqm_rust::engine::WorldData::current()).game.ip_group_q;
+        let queue = &raw mut (**uqm_rust::engine::WorldData::current()).game.ip_group_q;
         assert!(InitQueue(queue, 4, std::mem::size_of::<CIpGroup>() as u16));
         let handle = AllocLink(queue);
         assert!(!handle.is_null());

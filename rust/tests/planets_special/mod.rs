@@ -75,13 +75,13 @@ impl Harness {
         let mut state: Box<SOLARSYS_STATE> = Box::new(unsafe { std::mem::zeroed() });
         unsafe {
             // `set_game_state` is a no-op until the game state exists.
-            crate::engine::World::current().write(|world| rust_init_game_state(world));
+            uqm_rust::engine::World::current().write(|world| rust_init_game_state(world));
             SysGenRNG = uqm_rust::math::new_context();
             ScreenWidth = 320;
             pSolarSysState = &mut *state;
         }
         let previous_catalog = unsafe { uqm_rust::planets::starmap::star_array };
-        let previous_star = unsafe { (*uqm_rust::engine::World::current()).current_star };
+        let previous_star = unsafe { (**uqm_rust::engine::World::current()).current_star };
         let mut star = Box::new(unsafe { super::starmap_array });
         star[0] = unsafe { std::mem::zeroed() };
         Self {
@@ -99,7 +99,7 @@ impl Harness {
         self.star[0].index = self.star_index;
         unsafe {
             uqm_rust::planets::starmap::star_array = self.star.as_mut_ptr();
-            (*uqm_rust::engine::World::current()).select_star(
+            (**uqm_rust::engine::World::current()).select_star(
                 (self
                     .star
                     .as_mut_ptr()
@@ -258,7 +258,7 @@ fn c_table(system: &str) -> &'static GenerateFunctions {
 impl SpecialOps for Harness {
     fn layout(&mut self, system: &str, case: (u8, u8, u32)) -> (Vec<Desc>, u8, u32) {
         if let Some(unleashed) = system.strip_prefix("chmmr") {
-            crate::engine::World::current().write(|world| {
+            uqm_rust::engine::World::current().write(|world| {
                 set_game_state(
                     world,
                     uqm_rust::engine::StoryKey::CHMMR_UNLEASHED,
@@ -281,7 +281,7 @@ impl SpecialOps for Harness {
 
     fn energy(&mut self, system: &str, body: Body, seed: u32) -> String {
         if let Some(taken) = system.strip_prefix("burv") {
-            crate::engine::World::current().write(|world| {
+            uqm_rust::engine::World::current().write(|world| {
                 set_game_state(
                     world,
                     uqm_rust::engine::StoryKey::BURVIXESE_BROADCASTERS,
@@ -290,7 +290,7 @@ impl SpecialOps for Harness {
             });
         }
         if let Some(taken) = system.strip_prefix("aqua") {
-            crate::engine::World::current().write(|world| {
+            uqm_rust::engine::World::current().write(|world| {
                 set_game_state(
                     world,
                     uqm_rust::engine::StoryKey::AQUA_HELIX,
@@ -299,7 +299,7 @@ impl SpecialOps for Harness {
             });
         }
         if let Some(taken) = system.strip_prefix("bomb") {
-            crate::engine::World::current().write(|world| {
+            uqm_rust::engine::World::current().write(|world| {
                 set_game_state(
                     world,
                     uqm_rust::engine::StoryKey::UTWIG_BOMB,
@@ -308,7 +308,7 @@ impl SpecialOps for Harness {
             });
         }
         if let Some(taken) = system.strip_prefix("sun") {
-            crate::engine::World::current().write(|world| {
+            uqm_rust::engine::World::current().write(|world| {
                 set_game_state(
                     world,
                     uqm_rust::engine::StoryKey::SUN_DEVICE,
@@ -317,7 +317,7 @@ impl SpecialOps for Harness {
             });
         }
         if let Some(taken) = system.strip_prefix("taalo") {
-            crate::engine::World::current().write(|world| {
+            uqm_rust::engine::World::current().write(|world| {
                 set_game_state(
                     world,
                     uqm_rust::engine::StoryKey::TAALO_PROTECTOR,
@@ -361,7 +361,7 @@ impl Drop for Harness {
         // SAFETY: the enclosing serialized test retains the published game.
         unsafe {
             uqm_rust::planets::starmap::star_array = self.previous_catalog;
-            (*uqm_rust::engine::World::current()).current_star = self.previous_star;
+            (**uqm_rust::engine::World::current()).current_star = self.previous_star;
         }
     }
 }

@@ -190,7 +190,7 @@ impl ExportedGenerators {
             pSolarSysState = &mut *state;
         }
         let previous_catalog = unsafe { uqm_rust::planets::starmap::star_array };
-        let previous_star = unsafe { (*uqm_rust::engine::World::current()).current_star };
+        let previous_star = unsafe { (**uqm_rust::engine::World::current()).current_star };
         let mut star = Box::new(unsafe { starmap_array });
         star[0] = unsafe { std::mem::zeroed() };
         Self {
@@ -206,7 +206,7 @@ impl ExportedGenerators {
         self.star[0].star_type = star_type;
         unsafe {
             uqm_rust::planets::starmap::star_array = self.star.as_mut_ptr();
-            (*uqm_rust::engine::World::current()).select_star(
+            (**uqm_rust::engine::World::current()).select_star(
                 (self
                     .star
                     .as_mut_ptr()
@@ -552,7 +552,7 @@ impl Drop for ExportedGenerators {
         // SAFETY: the enclosing serialized test retains the published game.
         unsafe {
             uqm_rust::planets::starmap::star_array = self.previous_catalog;
-            (*uqm_rust::engine::World::current()).current_star = self.previous_star;
+            (**uqm_rust::engine::World::current()).current_star = self.previous_star;
         }
     }
 }

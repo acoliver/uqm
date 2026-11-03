@@ -101,13 +101,6 @@ impl Cx<'_> {
     }
 }
 
-impl Cx<'_> {
-    #[cfg(not(test))]
-    pub(crate) fn master_queue(&mut self) -> &mut super::kernel::MasterCatalog {
-        &mut self.kernel.master_queue
-    }
-}
-
 impl Default for Battle {
     fn default() -> Self {
         Self::new()

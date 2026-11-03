@@ -64,13 +64,13 @@ pub fn check() {
 
 fn check_bomb_queue(h: &mut Harness) {
     // This uses the real live queue adapter, not a recording FleetGroups host.
-    let old_bomb = crate::engine::World::current()
+    let old_bomb = uqm_rust::engine::World::current()
         .read(|world| get_game_state(world, uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE));
-    let old_probe = crate::engine::World::current()
+    let old_probe = uqm_rust::engine::World::current()
         .read(|world| get_game_state(world, uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED));
-    crate::engine::World::current()
+    uqm_rust::engine::World::current()
         .write(|world| set_game_state(world, uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE, 3));
-    crate::engine::World::current().write(|world| {
+    uqm_rust::engine::World::current().write(|world| {
         set_game_state(
             world,
             uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED,
@@ -78,11 +78,11 @@ fn check_bomb_queue(h: &mut Harness) {
         )
     });
     unsafe {
-        let ip = &raw mut (*uqm_rust::engine::WorldData::current()).game.ip_group_q;
-        let npc = &raw mut (*uqm_rust::engine::WorldData::current())
+        let ip = &raw mut (**uqm_rust::engine::WorldData::current()).game.ip_group_q;
+        let npc = &raw mut (**uqm_rust::engine::WorldData::current())
             .game
             .npc_built_ship_q;
-        let reference = &raw mut (*uqm_rust::engine::WorldData::current())
+        let reference = &raw mut (**uqm_rust::engine::WorldData::current())
             .game
             .battle_group_ref;
         let saved = (ip.read(), npc.read(), reference.read());
@@ -99,14 +99,14 @@ fn check_bomb_queue(h: &mut Harness) {
         npc.write(saved.1);
         reference.write(saved.2);
     }
-    crate::engine::World::current().write(|world| {
+    uqm_rust::engine::World::current().write(|world| {
         set_game_state(
             world,
             uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE,
             old_bomb,
         )
     });
-    crate::engine::World::current().write(|world| {
+    uqm_rust::engine::World::current().write(|world| {
         set_game_state(
             world,
             uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED,

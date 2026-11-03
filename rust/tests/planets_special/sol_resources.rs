@@ -142,8 +142,8 @@ unsafe fn names(h: &mut Harness) {
     let strings =
         c_api::CaptureStringTable(c_api::LoadStringTableInstance(c"text.starcon".as_ptr()));
     assert!(!strings.is_null());
-    let saved = std::ptr::addr_of!((*uqm_rust::engine::Kernel::current()).game_strings).read();
-    std::ptr::addr_of_mut!((*uqm_rust::engine::Kernel::current()).game_strings)
+    let saved = std::ptr::addr_of!((**uqm_rust::engine::Kernel::current()).game_strings).read();
+    std::ptr::addr_of_mut!((**uqm_rust::engine::Kernel::current()).game_strings)
         .write(strings.cast());
     let system = &raw mut *h.state;
     for (index, expected) in [(0, "Mercury"), (2, "Earth"), (8, "Pluto")] {
@@ -154,14 +154,14 @@ unsafe fn names(h: &mut Harness) {
             system, parent
         ));
         let name = std::ptr::addr_of!(
-            (*uqm_rust::engine::WorldData::current())
+            (**uqm_rust::engine::WorldData::current())
                 .flagship
                 .planet_name
         )
         .cast::<std::ffi::c_char>();
         assert_eq!(std::ffi::CStr::from_ptr(name).to_str().unwrap(), expected);
         assert_eq!(
-            crate::engine::World::current().read(|world| {
+            uqm_rust::engine::World::current().read(|world| {
                 uqm_rust::state::game_state_keys::get_game_state(
                     world,
                     uqm_rust::engine::StoryKey::BATTLE_PLANET,
@@ -175,7 +175,7 @@ unsafe fn names(h: &mut Harness) {
         assert!(GENERATE_SOL_FUNCTIONS.generate_name.unwrap()(system, moon));
         assert_eq!(std::ffi::CStr::from_ptr(name).to_str().unwrap(), expected);
         assert_eq!(
-            crate::engine::World::current().read(|world| {
+            uqm_rust::engine::World::current().read(|world| {
                 uqm_rust::state::game_state_keys::get_game_state(
                     world,
                     uqm_rust::engine::StoryKey::BATTLE_PLANET,
@@ -184,7 +184,7 @@ unsafe fn names(h: &mut Harness) {
             index as u32 + 128
         );
     }
-    std::ptr::addr_of_mut!((*uqm_rust::engine::Kernel::current()).game_strings).write(saved);
+    std::ptr::addr_of_mut!((**uqm_rust::engine::Kernel::current()).game_strings).write(saved);
     // Reuse the production discovery-table cleanup boundary for this captured
     // table after restoring the global that borrowed it.
     (*system).SysInfo.PlanetInfo.DiscoveryString = strings.cast();
@@ -216,10 +216,10 @@ unsafe fn scenes(h: &mut Harness) {
             moon
         };
         (*world).rand_seed = 104729;
-        crate::engine::World::current().write(|world| {
+        uqm_rust::engine::World::current().write(|world| {
             set_game_state(world, uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI, 0)
         });
-        crate::engine::World::current().write(|world| {
+        uqm_rust::engine::World::current().write(|world| {
             set_game_state(world, uqm_rust::engine::StoryKey::MOONBASE_DESTROYED, 0)
         });
         assert!(GENERATE_SOL_FUNCTIONS.generate_orbital.unwrap()(

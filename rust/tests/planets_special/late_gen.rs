@@ -26,7 +26,7 @@ impl Ops for Harness {
         self.set_star(case.size, case.color);
         self.state.PlanetDesc.copy_from_slice(planets);
         self.state.SunDesc[0].NumPlanets = 0;
-        crate::engine::World::current().write(|world| {
+        uqm_rust::engine::World::current().write(|world| {
             set_game_state(
                 world,
                 uqm_rust::engine::StoryKey::SPATHI_SHIELDED_SELVES,
@@ -75,7 +75,7 @@ impl Ops for Harness {
         self.star_index = case.star;
         self.set_star(0, 0);
         for name in ["SHOFIXTI_MAIDENS", "UMGAH_BROADCASTERS"] {
-            crate::engine::World::current().write(|world| {
+            uqm_rust::engine::World::current().write(|world| {
                 set_game_state(
                     world,
                     uqm_rust::engine::StoryKey::from_name(name).unwrap(),
@@ -120,7 +120,7 @@ impl Ops for Harness {
         );
         for name in ["SHOFIXTI_MAIDENS", "UMGAH_BROADCASTERS"] {
             assert_eq!(
-                crate::engine::World::current().read(|world| get_game_state(
+                uqm_rust::engine::World::current().read(|world| get_game_state(
                     world,
                     uqm_rust::engine::StoryKey::from_name(name).unwrap()
                 )),

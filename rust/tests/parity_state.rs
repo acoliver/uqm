@@ -128,7 +128,7 @@ fn exercise_live_callers(directory: &Path) {
     );
     // SAFETY: this process has one game thread and no running game or renderer.
     unsafe {
-        crate::engine::World::current()
+        uqm_rust::engine::World::current()
             .write(|world| uqm_rust::state::ffi::rust_init_game_state(world));
     }
     observation::record(Event::SpaceActive(true));
@@ -473,7 +473,7 @@ unsafe fn sis_fields(directory: &Path, ship: &mut ShipRecord) {
     // SAFETY: this child process has no running game; no other references to SIS
     // state exist while this short exclusive borrow initializes its module slots.
     unsafe {
-        let sis = &raw mut (*uqm_rust::engine::WorldData::current()).flagship;
+        let sis = &raw mut (**uqm_rust::engine::WorldData::current()).flagship;
         let sis = &mut *sis;
         sis.module_slots
             .fill(uqm_rust::starbase::sis_modules::EMPTY_SLOT);
@@ -484,7 +484,7 @@ unsafe fn sis_fields(directory: &Path, ship: &mut ShipRecord) {
             .fill(uqm_rust::starbase::sis_modules::EMPTY_SLOT);
         sis.jet_slots
             .fill(uqm_rust::starbase::sis_modules::EMPTY_SLOT);
-        (*uqm_rust::engine::WorldData::current())
+        (**uqm_rust::engine::WorldData::current())
             .game
             .current_activity = SUPER_MELEE as u16;
     }
@@ -553,26 +553,26 @@ fn campaign_fields(directory: &Path) {
     let (before, _) = snapshot(directory);
     // SAFETY: the game is idle and this is its sole thread.
     unsafe {
-        (*uqm_rust::engine::WorldData::current())
+        (**uqm_rust::engine::WorldData::current())
             .game
             .game_clock
             .day_index = 7;
-        (*uqm_rust::engine::WorldData::current())
+        (**uqm_rust::engine::WorldData::current())
             .game
             .game_clock
             .month_index = 9;
-        (*uqm_rust::engine::WorldData::current())
+        (**uqm_rust::engine::WorldData::current())
             .game
             .game_clock
             .year_index = 2161;
-        (*uqm_rust::engine::WorldData::current())
+        (**uqm_rust::engine::WorldData::current())
             .game
             .game_clock
             .tick_count = -17;
-        (*uqm_rust::engine::WorldData::current())
+        (**uqm_rust::engine::WorldData::current())
             .game
             .battle_group_ref = 123;
-        crate::engine::World::current().write(|world| {
+        uqm_rust::engine::World::current().write(|world| {
             uqm_rust::state::ffi::rust_set_game_state(world, c"BOMB_CARRIER".as_ptr(), 1)
         });
     }

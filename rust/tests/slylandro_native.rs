@@ -20,11 +20,11 @@ struct Battle {
 }
 impl Battle {
     unsafe fn new(capacity: COUNT) -> Self {
-        let activity = (*uqm_rust::engine::WorldData::current())
+        let activity = (**uqm_rust::engine::WorldData::current())
             .game
             .current_activity;
         let pool = PoolBattle::new(capacity);
-        (*uqm_rust::engine::WorldData::current())
+        (**uqm_rust::engine::WorldData::current())
             .game
             .current_activity = 0;
         Self {
@@ -36,7 +36,7 @@ impl Battle {
 impl Drop for Battle {
     fn drop(&mut self) {
         unsafe {
-            (*uqm_rust::engine::WorldData::current())
+            (**uqm_rust::engine::WorldData::current())
                 .game
                 .current_activity = self.activity;
         }
@@ -922,7 +922,7 @@ fn ai_encounter_weapon_range_recharge_range_and_close_pursuit_boundaries() {
             (0, 15, 20, 14, MOVEMENT_STATE_PURSUE, MOVEMENT_STATE_PURSUE),
             (0, 6, 19, 14, MOVEMENT_STATE_AVOID, MOVEMENT_STATE_AVOID),
         ] {
-            (*uqm_rust::engine::WorldData::current())
+            (**uqm_rust::engine::WorldData::current())
                 .game
                 .current_activity = activity;
             concerns[0].which_turn = turns;

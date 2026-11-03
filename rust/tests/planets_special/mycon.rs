@@ -31,7 +31,7 @@ impl MyconOps for Harness {
     fn scan(&mut self, case: ScanCase, node: &mut NODE_INFO) -> (u16, u32) {
         self.star_index = case.star;
         self.set_star(0, 0);
-        crate::engine::World::current().write(|world| {
+        uqm_rust::engine::World::current().write(|world| {
             set_game_state(
                 world,
                 uqm_rust::engine::StoryKey::SUN_DEVICE,
@@ -76,7 +76,7 @@ impl MyconOps for Harness {
             "scan mutated its solar-system input: {case:?}"
         );
         assert_eq!(
-            crate::engine::World::current().read(|world| {
+            uqm_rust::engine::World::current().read(|world| {
                 uqm_rust::state::game_state_keys::get_game_state(
                     world,
                     uqm_rust::engine::StoryKey::SUN_DEVICE,
