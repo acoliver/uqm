@@ -17,14 +17,13 @@
 //! @plan PLAN-20260723-RUNTIME-AUTOMATION.P06
 //! @requirement REQ-INJECT-001..007, REQ-FFI-001
 
+use super::campaign_state::CampaignView;
 use crate::automation::coordinator::AutomationObserver;
 use crate::automation::runtime::RuntimeModel;
 #[cfg(not(test))]
 use crate::c_bindings::controller_input::{CurrentInputState, PulsedInputState};
 #[cfg(not(test))]
 use crate::c_bindings::global_state::{PLANET_DESC, SOLARSYS_STATE};
-#[cfg(not(test))]
-use crate::engine::{World, WorldData};
 
 // ===========================================================================
 //  C global input state — FFI access to ImmediateInputState.menu[]
@@ -87,8 +86,6 @@ extern "C" {
     fn c_automation_set_immediate_menu_key(index: i32, value: i32) -> i32;
     fn c_automation_set_immediate_player_key(index: i32, value: i32) -> i32;
 
-    #[allow(non_snake_case)]
-    fn GetFrameIndex(frame: *mut std::ffi::c_void) -> u16;
     /// Live orbit predicate: `playerInSolarSystem() && pSolarSysState->InOrbit`.
     #[allow(non_snake_case)]
     fn playerInPlanetOrbit() -> bool;
@@ -174,8 +171,11 @@ const DEFAULT_SCREEN_HEIGHT: i32 = 240;
 /// Must run on the game thread while `solar_system` is the live
 /// `pSolarSysState`, as the automation input hook does.
 #[cfg(not(test))]
-unsafe fn read_flight_state(solar_system: &SOLARSYS_STATE, snapshot: &mut NavigationSnapshot) {
-    let world = WorldData::current();
+unsafe fn read_flight_state(
+    world: &CampaignView,
+    solar_system: &SOLARSYS_STATE,
+    snapshot: &mut NavigationSnapshot,
+) {
     snapshot.active = 1;
     snapshot.in_ip_flight = i32::from(solar_system.InIpFlight != 0);
     // Ask the game for live orbit state rather than inferring it. The
@@ -187,15 +187,10 @@ unsafe fn read_flight_state(solar_system: &SOLARSYS_STATE, snapshot: &mut Naviga
     // would report orbit during encounters.
     snapshot.in_orbit = i32::from(playerInPlanetOrbit());
     snapshot.wait_intersect = solar_system.WaitIntersect;
-    let game_state = std::ptr::addr_of!((**world).game);
-    let ship_stamp = std::ptr::addr_of!((*game_state).ship_stamp).read();
-    snapshot.ship_x = i32::from(ship_stamp.origin.x);
-    snapshot.ship_y = i32::from(ship_stamp.origin.y);
-    if !ship_stamp.frame.is_null() {
-        snapshot.ship_facing = i32::from(GetFrameIndex(ship_stamp.frame.cast()));
-    }
-    let velocity = std::ptr::addr_of!((*game_state).velocity).read();
-    (snapshot.velocity_x, snapshot.velocity_y) = velocity.get_current_components();
+    snapshot.ship_x = i32::from(world.ship_position.0);
+    snapshot.ship_y = i32::from(world.ship_position.1);
+    snapshot.ship_facing = world.ship_facing;
+    (snapshot.velocity_x, snapshot.velocity_y) = world.velocity;
 
     if !solar_system.pOrbitalDesc.is_null() {
         snapshot.orbital_data_index = i32::from((*solar_system.pOrbitalDesc).data_index);
@@ -226,20 +221,20 @@ unsafe fn read_flight_state(solar_system: &SOLARSYS_STATE, snapshot: &mut Naviga
 /// Hyperspace flight moves exactly these fields (`hyper.c`), so they are the
 /// position a movement assertion must read.
 #[cfg(not(test))]
-pub(crate) fn hyperspace_position() -> Option<(i32, i32)> {
-    Some(WorldData::current().read(|world| (world.flagship.log_x, world.flagship.log_y)))
+pub(crate) fn hyperspace_position(world: &CampaignView) -> Option<(i32, i32)> {
+    Some((world.flagship.log_x, world.flagship.log_y))
 }
 
 /// Without the linked game there is no position to read.
 #[cfg(test)]
-pub(crate) fn hyperspace_position() -> Option<(i32, i32)> {
+pub(crate) fn hyperspace_position(_world: &CampaignView) -> Option<(i32, i32)> {
     None
 }
 
 /// The flight velocity published by `sis_hyper_postprocess` has stopped.
 /// Unavailable outside hyperspace flight or while a conversation is active.
 #[cfg(not(test))]
-pub(crate) fn hyperspace_stopped() -> Option<bool> {
+pub(crate) fn hyperspace_stopped(world: &CampaignView) -> Option<bool> {
     if crate::mainloop::ffi::get_current_activity().kind()
         != crate::mainloop::types::ActivityKind::InHyperspace
         || super::ui_observation::conversation_snapshot().active
@@ -247,15 +242,12 @@ pub(crate) fn hyperspace_stopped() -> Option<bool> {
         return None;
     }
     // SAFETY: the input hook runs synchronously on the game thread.
-    let velocity = unsafe {
-        let world = WorldData::current();
-        std::ptr::addr_of!((**world).game.velocity).read()
-    };
-    Some(velocity.get_current_components() == (0, 0))
+    let velocity = world.velocity;
+    Some(velocity == (0, 0))
 }
 
 #[cfg(test)]
-pub(crate) fn hyperspace_stopped() -> Option<bool> {
+pub(crate) fn hyperspace_stopped(_world: &CampaignView) -> Option<bool> {
     None
 }
 
@@ -284,72 +276,54 @@ pub(crate) fn hyperspace_facing() -> Option<u8> {
 /// `DeltaSISGauges` changes exactly these `SIS_STATE` fields, so a reward or
 /// a purchase is visible here only after the game applied it.
 #[cfg(not(test))]
-pub(crate) fn ship_resources() -> Option<(u32, u32)> {
-    Some(
-        WorldData::current().read(|world| (world.flagship.fuel_on_board, world.flagship.res_units)),
-    )
+pub(crate) fn ship_resources(world: &CampaignView) -> Option<(u32, u32)> {
+    Some((world.flagship.fuel_on_board, world.flagship.res_units))
 }
 
 /// Without the linked game there is no flagship state to read.
 #[cfg(test)]
-pub(crate) fn ship_resources() -> Option<(u32, u32)> {
+pub(crate) fn ship_resources(_world: &CampaignView) -> Option<(u32, u32)> {
     None
 }
 
 /// The flagship's `CrewEnlisted` and `NumLanders`, in that order.
 #[cfg(not(test))]
-pub(crate) fn sis_crew_and_landers() -> Option<(u16, u8)> {
-    Some(
-        WorldData::current()
-            .read(|world| (world.flagship.crew_enlisted, world.flagship.num_landers)),
-    )
+pub(crate) fn sis_crew_and_landers(world: &CampaignView) -> Option<(u16, u8)> {
+    Some((world.flagship.crew_enlisted, world.flagship.num_landers))
 }
 
 /// Without the linked game there is no flagship state to read.
 #[cfg(test)]
-pub(crate) fn sis_crew_and_landers() -> Option<(u16, u8)> {
+pub(crate) fn sis_crew_and_landers(_world: &CampaignView) -> Option<(u16, u8)> {
     None
 }
 
 type SisFittings = ([u8; 11], [u8; 8], [u8; 16], u16);
 
 #[cfg(not(test))]
-pub(crate) fn sis_fittings() -> Option<SisFittings> {
-    unsafe {
-        let world = WorldData::current();
-        let sis = std::ptr::addr_of!((**world).flagship).read();
-        Some((
-            sis.drive_slots,
-            sis.jet_slots,
-            sis.module_slots,
-            sis.total_element_mass,
-        ))
-    }
+pub(crate) fn sis_fittings(world: &CampaignView) -> Option<SisFittings> {
+    let sis = world.flagship;
+    Some((
+        sis.drive_slots,
+        sis.jet_slots,
+        sis.module_slots,
+        sis.total_element_mass,
+    ))
 }
 #[cfg(test)]
-pub(crate) fn sis_fittings() -> Option<SisFittings> {
+pub(crate) fn sis_fittings(_world: &CampaignView) -> Option<SisFittings> {
     None
 }
 
 /// The game clock's `(day, month, year)` indices.
 #[cfg(not(test))]
-pub(crate) fn game_date() -> Option<(u8, u8, u16)> {
-    // SAFETY: the production game invokes the automation hooks synchronously
-    // on the game thread, so `GlobData` cannot change during this read.
-    unsafe {
-        let world = WorldData::current();
-        let clock = std::ptr::addr_of!((**world).game.game_clock);
-        Some((
-            std::ptr::addr_of!((*clock).day_index).read(),
-            std::ptr::addr_of!((*clock).month_index).read(),
-            std::ptr::addr_of!((*clock).year_index).read(),
-        ))
-    }
+pub(crate) fn game_date(world: &CampaignView) -> Option<(u8, u8, u16)> {
+    Some(world.date)
 }
 
 /// Without the linked game there is no clock to read.
 #[cfg(test)]
-pub(crate) fn game_date() -> Option<(u8, u8, u16)> {
+pub(crate) fn game_date(_world: &CampaignView) -> Option<(u8, u8, u16)> {
     None
 }
 
@@ -358,18 +332,13 @@ pub(crate) fn game_date() -> Option<(u8, u8, u16)> {
 /// The lander hold is added to these when it returns to the ship, so they
 /// change only after the trip. Nothing is written.
 #[cfg(not(test))]
-pub(crate) fn ship_element_amounts() -> Option<[u16; 8]> {
-    // SAFETY: the production game invokes the automation hooks synchronously
-    // on the game thread, so `GlobData` cannot change during this read.
-    unsafe {
-        let sis_state = std::ptr::addr_of!((**WorldData::current()).flagship);
-        Some(std::ptr::addr_of!((*sis_state).element_amounts).read())
-    }
+pub(crate) fn ship_element_amounts(world: &CampaignView) -> Option<[u16; 8]> {
+    Some(world.flagship.element_amounts)
 }
 
 /// Without the linked game there is no flagship state to read.
 #[cfg(test)]
-pub(crate) fn ship_element_amounts() -> Option<[u16; 8]> {
+pub(crate) fn ship_element_amounts(_world: &CampaignView) -> Option<[u16; 8]> {
     None
 }
 
@@ -395,7 +364,7 @@ pub(crate) fn battle_fleets() -> Option<(u8, u8)> {
 /// `active` is 0 whenever no solar system is live, which is how a departure
 /// observes that production has torn interplanetary flight down.
 #[cfg(not(test))]
-pub(crate) fn departure_snapshot() -> NavigationSnapshot {
+pub(crate) fn departure_snapshot(world: &CampaignView) -> NavigationSnapshot {
     let geometry = ViewGeometry::current();
     let mut snapshot = NavigationSnapshot {
         inner_planet: -1,
@@ -410,41 +379,38 @@ pub(crate) fn departure_snapshot() -> NavigationSnapshot {
     // thread, so the solar-system pointer and its state cannot change here.
     unsafe {
         if let Some(solar_system) = crate::c_bindings::solar_system::current().as_ref() {
-            read_flight_state(solar_system, &mut snapshot);
+            read_flight_state(world, solar_system, &mut snapshot);
         }
     }
     snapshot
 }
 
 #[cfg(test)]
-pub(crate) fn departure_snapshot() -> NavigationSnapshot {
-    navigation_snapshot(0, None)
+pub(crate) fn departure_snapshot(world: &CampaignView) -> NavigationSnapshot {
+    navigation_snapshot(world, 0, None)
 }
 
 /// Copy a live group's target geometry without moving it or invoking contact.
 #[cfg(not(test))]
-pub(crate) fn contact_snapshot(race: u8) -> Option<(NavigationSnapshot, bool)> {
+pub(crate) fn contact_snapshot(
+    world: &CampaignView,
+    race: u8,
+) -> Option<(NavigationSnapshot, bool)> {
     use crate::c_bindings::global_state::POINT;
-    use crate::savegame::runtime::groups::CIpGroup;
-    use crate::savegame::runtime::queues::{walk, QueueKind};
     extern "C" {
         fn locationToDisplay(location: POINT, radius: i16) -> POINT;
     }
     unsafe {
         let solar = crate::c_bindings::solar_system::current().as_ref()?;
-        let (system, location) = WorldData::current().read(|world| {
-            let queue = &*std::ptr::addr_of!(world.game.ip_group_q)
-                .cast::<crate::collections::queue::Queue>();
-            let group = walk::<CIpGroup>(queue, QueueKind::IpGroups)
-                .expect("live IP group queue")
-                .into_iter()
-                .find(|group| (**group).race_id == race && (**group).in_system != 0)?;
-            Some(((*group).sys_loc, ((*group).loc.x, (*group).loc.y)))
-        })?;
+        let (_, system, location) = world
+            .groups
+            .iter()
+            .copied()
+            .find(|(id, _, _)| *id == race)?;
         let mut snapshot = if system == 0 {
-            departure_snapshot()
+            departure_snapshot(world)
         } else {
-            navigation_snapshot(i32::from(system) - 1, None)
+            navigation_snapshot(world, i32::from(system) - 1, None)
         };
         let same_view = (snapshot.inner_planet + 1) as u8 == system;
         if same_view {
@@ -470,24 +436,20 @@ pub(crate) fn contact_snapshot(race: u8) -> Option<(NavigationSnapshot, bool)> {
 }
 
 #[cfg(test)]
-pub(crate) fn contact_snapshot(_race: u8) -> Option<(NavigationSnapshot, bool)> {
+pub(crate) fn contact_snapshot(
+    _world: &CampaignView,
+    _race: u8,
+) -> Option<(NavigationSnapshot, bool)> {
     None
 }
 
 #[cfg(not(test))]
-pub(crate) fn contact_race() -> Option<u8> {
-    unsafe {
-        let world = WorldData::current();
-        std::ptr::addr_of!((**world).game.npc_built_ship_q.head)
-            .read()
-            .cast::<crate::comm::dispatch::CShipFragment>()
-            .as_ref()
-            .map(|ship| ship.race_id)
-    }
+pub(crate) fn contact_race(world: &CampaignView) -> Option<u8> {
+    world.contact_race
 }
 
 #[cfg(test)]
-pub(crate) fn contact_race() -> Option<u8> {
+pub(crate) fn contact_race(_world: &CampaignView) -> Option<u8> {
     None
 }
 
@@ -525,6 +487,7 @@ fn planet_display_target(
 
 #[cfg(not(test))]
 pub(crate) fn navigation_snapshot(
+    world: &CampaignView,
     target_planet: i32,
     target_moon: Option<i32>,
 ) -> NavigationSnapshot {
@@ -549,7 +512,7 @@ pub(crate) fn navigation_snapshot(
         return snapshot;
     }
     // SAFETY: the live synchronous solar borrow also keeps its global flight state live.
-    unsafe { read_flight_state(solar_system, &mut snapshot) };
+    unsafe { read_flight_state(world, solar_system, &mut snapshot) };
 
     if let Some(moon) = target_moon {
         if snapshot.inner_planet == target_planet
@@ -592,6 +555,7 @@ pub(crate) fn navigation_snapshot(
 
 #[cfg(test)]
 pub(crate) fn navigation_snapshot(
+    _world: &CampaignView,
     _target_planet: i32,
     _target_moon: Option<i32>,
 ) -> NavigationSnapshot {
@@ -705,10 +669,10 @@ pub(crate) fn service_input(button_wait: bool) -> i32 {
         // state machine's should_continue() check sees CHECK_ABORT and
         // exits the inner loop.
         #[cfg(not(test))]
-        unsafe {
-            crate::mainloop::c_extern::set_current_activity(
-                World::current().read(crate::mainloop::c_extern::get_current_activity) | 0x4000,
-            );
+        {
+            crate::mainloop::ffi::set_current_activity(crate::mainloop::types::ActivityValue(
+                crate::mainloop::ffi::get_current_activity().0 | 0x4000,
+            ));
         }
         return 1; // Terminal: stop the DoInput loop.
     }
@@ -978,9 +942,9 @@ pub extern "C" fn rust_automation_get_pulsed_menu_key(index: i32) -> i32 {
 /// Read-only interstellar observations, copied at the automation game-thread boundary.
 #[cfg(not(test))]
 pub(crate) fn star_flight_observation(
+    world: &CampaignView,
     target: super::star_flight::StarTarget,
 ) -> super::star_flight::Observation {
-    use crate::savegame::runtime::star::{CStarDesc, CATALOG_LEN};
     extern "C" {
 
         fn universeToDispx(x: std::ffi::c_long) -> i16;
@@ -988,13 +952,7 @@ pub(crate) fn star_flight_observation(
     }
     // SAFETY: the coordinator is called synchronously on the game thread.
     unsafe {
-        let current =
-            (**World::current()).star_pointer(crate::planets::starmap::current_catalog()) as usize;
-        let base = std::ptr::addr_of!(crate::planets::tables::STARMAP_ARRAY) as usize;
-        let offset = current.wrapping_sub(base);
-        let entry_size = std::mem::size_of::<CStarDesc>();
-        let current_star = (offset < CATALOG_LEN * entry_size && offset.is_multiple_of(entry_size))
-            .then_some((offset / entry_size) as u16);
+        let current_star = world.current_star.map(|id| id.0 as u16);
         let cursor = crate::planets::starmap_cursor::cursor();
         let (tx, ty) = target.coordinates();
         let cursor_delta = cursor.map_or((0, 0), |(x, y)| {
@@ -1003,23 +961,21 @@ pub(crate) fn star_flight_observation(
                 universeToDispy(ty.into()) - universeToDispy(y.into()),
             )
         });
-        let autopilot = WorldData::current().read(|world| world.game.autopilot);
+        let autopilot = world.autopilot;
         super::star_flight::Observation {
             activity: crate::mainloop::ffi::get_current_activity().0,
             current_star,
-            space_side: World::current()
-                .read(|world| crate::state::ffi::named_state_value(world, "ARILOU_SPACE_SIDE"))
+            space_side: world
+                .named_state_value("ARILOU_SPACE_SIDE")
                 .expect("initialized state"),
             conversation_active: crate::automation::ui_observation::conversation_snapshot().active,
-            portal_open: World::current()
-                .read(|world| crate::state::ffi::named_state_value(world, "ARILOU_SPACE"))
-                == Some(1),
-            solar_active: departure_snapshot().active != 0,
+            portal_open: world.named_state_value("ARILOU_SPACE") == Some(1),
+            solar_active: departure_snapshot(world).active != 0,
             cursor,
             cursor_delta,
-            autopilot: (autopilot.x >= 0 && autopilot.y >= 0).then_some((autopilot.x, autopilot.y)),
-            position: hyperspace_position(),
-            fuel: ship_resources().map(|(fuel, _)| fuel),
+            autopilot: (autopilot.0 >= 0 && autopilot.1 >= 0).then_some(autopilot),
+            position: hyperspace_position(world),
+            fuel: ship_resources(world).map(|(fuel, _)| fuel),
             instant_move: {
                 #[cfg(feature = "debug-process")]
                 {
@@ -1036,6 +992,7 @@ pub(crate) fn star_flight_observation(
 
 #[cfg(test)]
 pub(crate) fn star_flight_observation(
+    _world: &CampaignView,
     _target: super::star_flight::StarTarget,
 ) -> super::star_flight::Observation {
     super::star_flight::Observation::default()
@@ -1043,47 +1000,29 @@ pub(crate) fn star_flight_observation(
 
 /// Player-selected combat settings: enabled flag and speed selector.
 #[cfg(not(test))]
-pub(crate) fn cyborg_settings() -> Option<(bool, u8)> {
-    // Game thread, read only while the input callback owns the live game.
-    let flags = unsafe {
-        let world = WorldData::current();
-        std::ptr::addr_of!((**world).game.glob_flags).read()
-    };
+pub(crate) fn cyborg_settings(world: &CampaignView) -> Option<(bool, u8)> {
+    let flags = world.combat_flags;
     Some((flags & (1 << 5) != 0, flags >> 6))
 }
 
 #[cfg(test)]
-pub(crate) fn cyborg_settings() -> Option<(bool, u8)> {
+pub(crate) fn cyborg_settings(_world: &CampaignView) -> Option<(bool, u8)> {
     None
 }
 
 #[cfg(not(test))]
-pub(crate) fn escort_roster() -> Option<Vec<(u8, u16)>> {
-    World::current()
-        .read(|world| crate::state::ffi::named_state_value(world, "STARBASE_AVAILABLE"))?;
-    use crate::comm::dispatch::CShipFragment;
-    use crate::savegame::runtime::queues::{walk, QueueKind};
-    unsafe {
-        let world = WorldData::current();
-        let queue = &*std::ptr::addr_of!((**world).game.built_ship_q)
-            .cast::<crate::collections::queue::Queue>();
-        Some(
-            walk::<CShipFragment>(queue, QueueKind::BuiltShips)
-                .expect("live escort queue")
-                .into_iter()
-                .map(|ship| ((*ship).race_id, (*ship).crew_level))
-                .collect(),
-        )
-    }
+pub(crate) fn escort_roster(world: &CampaignView) -> Option<Vec<(u8, u16)>> {
+    world.named_state_value("STARBASE_AVAILABLE")?;
+    Some(world.escorts.clone())
 }
 
 #[cfg(test)]
-pub(crate) fn escort_roster() -> Option<Vec<(u8, u16)>> {
+pub(crate) fn escort_roster(_world: &CampaignView) -> Option<Vec<(u8, u16)>> {
     None
 }
 
-pub(crate) fn fleet_fight_observation() -> super::fleet_fight::Observation {
-    let (cyborg, speed) = cyborg_settings().unwrap_or((false, 0));
+pub(crate) fn fleet_fight_observation(world: &CampaignView) -> super::fleet_fight::Observation {
+    let (cyborg, speed) = cyborg_settings(world).unwrap_or((false, 0));
     let (player, enemy) = battle_fleets().unwrap_or((0, 0));
     #[cfg(not(test))]
     let picker = {
@@ -1101,7 +1040,7 @@ pub(crate) fn fleet_fight_observation() -> super::fleet_fight::Observation {
         cyborg,
         speed,
         counters: [player, enemy],
-        flagship_crew: sis_crew_and_landers().map(|(crew, _)| crew),
+        flagship_crew: sis_crew_and_landers(world).map(|(crew, _)| crew),
         picker,
         encounter_menu: super::ui_observation::encounter_menu_active(),
         escape_generation: super::ui_observation::ship_escape_generation(),

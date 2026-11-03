@@ -104,6 +104,17 @@ pub(crate) fn uninstall_observer(observer: &std::sync::Arc<crate::automation::Au
     state.observer = std::sync::Weak::new();
 }
 
+#[cfg(not(test))]
+pub(crate) fn campaign_view() -> crate::automation::campaign_state::CampaignView {
+    crate::engine::World::current()
+        .read(crate::automation::campaign_state::CampaignView::from_world)
+}
+
+#[cfg(test)]
+pub(crate) fn campaign_view() -> crate::automation::campaign_state::CampaignView {
+    crate::automation::campaign_state::CampaignView::empty()
+}
+
 impl<T> std::ops::Deref for Projection<T> {
     type Target = *mut T;
     fn deref(&self) -> &Self::Target {

@@ -9,7 +9,7 @@ use uqm_rust::{
     automation::{
         battle_fight::BattleSnapshot,
         script::{parse_script, validate_script},
-        Coordinator,
+        AutomationObserver,
     },
     battle::{
         element::{Element, ElementFlags},
@@ -121,11 +121,11 @@ fn exercise_live_callers(directory: &Path) {
         "state-test.json",
     )
     .unwrap_or_else(|error| panic!("parse state test script: {error}"));
-    Coordinator::init(
+    let _application = uqm_rust::app::Application::new(Some(AutomationObserver::new(
         validate_script(document, "state-test.json")
             .unwrap_or_else(|error| panic!("validate state test script: {error}")),
         directory.into(),
-    );
+    )));
     uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
     observation::record(Event::SpaceActive(true));
     descriptor_fields(directory);
@@ -142,13 +142,13 @@ fn exercise_live_callers(directory: &Path) {
 
 fn snapshot(directory: &Path) -> (Fields, String) {
     uqm_rust::math::seed_random(123456);
-    Coordinator::parity_checkpoint("integration");
+    AutomationObserver::parity_checkpoint("integration");
     assert_eq!(
         uqm_rust::math::seed_random(123456),
         123456,
         "checkpoint changed RNG"
     );
-    Coordinator::write_replay_summary(&directory.join("summary.json"))
+    AutomationObserver::write_replay_summary(&directory.join("summary.json"))
         .unwrap_or_else(|error| panic!("write state test summary: {error}"));
     let text = fs::read_to_string(directory.join("parity.fields"))
         .unwrap_or_else(|error| panic!("read checkpoint fields: {error}"));

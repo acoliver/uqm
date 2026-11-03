@@ -20,12 +20,7 @@ pub fn presented(presented: &mut Presented) {
 }
 
 pub fn nested_input<R>(sample: impl FnOnce() -> R) -> Option<R> {
-    if input(InputView::Nested).stop {
-        return None;
-    }
-    let result = sample();
-    checkpoint(CheckpointView::InputSampled);
-    Some(result)
+    with_io(|io| io.nested_input(sample))
 }
 
 pub fn seed(domain: u32, fallback: u32) -> u32 {

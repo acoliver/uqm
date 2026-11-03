@@ -11,16 +11,17 @@ pub(super) struct Departure {
 }
 
 impl AutomationObserver {
-    pub(super) fn transit_budget(action: Option<&Action>) -> Option<u64> {
+    pub(super) fn transit_budget(
+        world: &campaign_state::CampaignView,
+        action: Option<&Action>,
+    ) -> Option<u64> {
         use crate::automation::script::PatrolPolicy;
         match action {
             Some(Action::NavigateToHyperspace(step)) if step.encounter_response.is_none() => {
                 Some(step.max_ticks)
             }
             Some(Action::NavigateToMoon(step))
-                if World::current()
-                    .read(|world| world.story_value(StoryKey::GLOBAL_FLAGS_AND_DATA))
-                    == Some(0) =>
+                if world.story_value(StoryKey::GLOBAL_FLAGS_AND_DATA) == Some(0) =>
             {
                 Some(step.max_ticks)
             }
@@ -29,9 +30,7 @@ impl AutomationObserver {
             }
             Some(Action::NavigateToOrbit(step))
                 if step.patrol_policy != PatrolPolicy::Stop
-                    && World::current()
-                        .read(|world| world.story_value(StoryKey::GLOBAL_FLAGS_AND_DATA))
-                        == Some(0) =>
+                    && world.story_value(StoryKey::GLOBAL_FLAGS_AND_DATA) == Some(0) =>
             {
                 Some(step.max_ticks)
             }
@@ -51,10 +50,11 @@ impl AutomationObserver {
 
     pub(super) fn service_hyperspace_departure(
         &self,
+        world: &campaign_state::CampaignView,
         inner: &mut CoordInner,
         mut scheduler_event: SchedulerEvent,
     ) -> SchedulerEvent {
-        let snapshot = crate::automation::input_ffi::departure_snapshot();
+        let snapshot = crate::automation::input_ffi::departure_snapshot(world);
         let solar_system_active = snapshot.active != 0;
         if solar_system_active && snapshot.in_ip_flight != 0 && !inner.departure.flight_observed {
             inner.departure.flight_observed = true;
@@ -116,12 +116,16 @@ impl AutomationObserver {
 impl AutomationObserver {
     pub(super) fn service_orbit_navigation(
         &self,
+        world: &campaign_state::CampaignView,
         inner: &mut CoordInner,
         navigation: &crate::automation::script::NavigateToOrbitStep,
         mut scheduler_event: SchedulerEvent,
     ) -> SchedulerEvent {
-        let snapshot =
-            crate::automation::input_ffi::navigation_snapshot(i32::from(navigation.planet), None);
+        let snapshot = crate::automation::input_ffi::navigation_snapshot(
+            world,
+            i32::from(navigation.planet),
+            None,
+        );
         if inner.sched_state.phase == ActionPhase::WaitingForInput {
             inner.orbit = Default::default();
         }

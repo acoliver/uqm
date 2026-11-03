@@ -6,13 +6,12 @@
 //! into a labelled semantic assertion, so readiness was indistinguishable
 //! from any other assertion in retained evidence.
 //!
-//! The coordinator is a process-wide singleton, so this lives in its own
-//! test binary where it can be initialised once and driven deterministically.
+//! This test owns its observer; its binary isolates production UI observations.
 
 use std::path::Path;
 
 use uqm_rust::automation::coordinator::{
-    Coordinator, MAIN_MENU_READINESS_OBSERVATION, MAIN_MENU_READINESS_SUBJECT,
+    AutomationObserver, MAIN_MENU_READINESS_OBSERVATION, MAIN_MENU_READINESS_SUBJECT,
 };
 use uqm_rust::automation::script::{parse_script, validate_script};
 use uqm_rust::automation::trace::{RecordKind, TraceRecord};
@@ -31,24 +30,27 @@ const SCRIPT: &str = r#"{
   ]
 }"#;
 
-fn coordinator_started(output_root: &Path) -> bool {
+fn application_started(output_root: &Path) -> uqm_rust::app::Application {
     let document = parse_script(SCRIPT.as_bytes(), "readiness-trace.json")
         .expect("the script fixture must parse");
     let script = validate_script(document, "readiness-trace.json").expect("and must validate");
-    Coordinator::init(script, output_root.to_path_buf());
-    Coordinator::is_active()
+    uqm_rust::app::Application::new(Some(AutomationObserver::new(
+        script,
+        output_root.to_path_buf(),
+    )))
 }
 
 #[test]
 fn main_menu_ready_emits_readiness_record() {
     let evidence = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).expect("fresh evidence root");
+    let _application = application_started(evidence.path());
     assert!(
-        coordinator_started(evidence.path()),
+        AutomationObserver::is_active(),
         "a validated script must activate the coordinator"
     );
 
     assert!(
-        !Coordinator::process_main_menu_ready(),
+        !AutomationObserver::process_main_menu_ready(),
         "readiness advances to the non-terminal finish step"
     );
 

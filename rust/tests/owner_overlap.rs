@@ -178,13 +178,17 @@ fn encounter_teardown_releases_world_before_activity_queries() {
 #[test]
 #[serial_test::serial]
 fn campaign_star_observation_releases_world_between_field_reads() {
-    use uqm_rust::automation::campaign_state::{LiveCampaign, StateKey, StateSource};
+    use uqm_rust::automation::campaign_state::{CampaignView, LiveCampaign, StateKey, StateSource};
     let mut game = Game::new();
     game.world.story = Some(uqm_rust::state::game_state::GameState::new());
+    let view = CampaignView::from_world(&game.world);
     // SAFETY: the serialized fixture owns the lifecycle and has no selected star.
     unsafe {
         bridge::with_game(&mut game, || {
-            assert_eq!(LiveCampaign.read(StateKey::StarCurrent), None);
+            assert_eq!(
+                LiveCampaign { world: &view }.read(StateKey::StarCurrent),
+                None
+            );
         });
     }
 }

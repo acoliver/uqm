@@ -351,13 +351,112 @@ pub fn label_satisfies(label: &str, prefix: &str, predicate: &StatePredicate) ->
 }
 
 /// The running game, read on the game thread.
-pub struct LiveCampaign;
+pub struct LiveCampaign<'a> {
+    pub world: &'a CampaignView,
+}
 
-fn read_star_state(key: StateKey) -> Option<u32> {
+/// Values copied for one observer call; this view never outlives its input boundary.
+pub struct CampaignView {
+    pub(crate) flagship: crate::engine::world::SisState,
+    pub(crate) velocity: (i32, i32),
+    pub(crate) ship_position: (i16, i16),
+    pub(crate) ship_facing: i32,
+    pub(crate) autopilot: (i16, i16),
+    pub(crate) combat_flags: u8,
+    pub(crate) date: (u8, u8, u16),
+    pub(crate) story: Option<crate::engine::world::story::GameState>,
+    pub(crate) current_star: Option<crate::engine::StarId>,
+    pub(crate) contact_race: Option<u8>,
+    pub(crate) escorts: Vec<(u8, u16)>,
+    pub(crate) groups: Vec<(u8, u8, (i16, i16))>,
+}
+
+impl CampaignView {
+    pub fn from_world(world: &World) -> Self {
+        let game = &world.data.game;
+        let view = Self {
+            flagship: world.data.flagship,
+            velocity: game.velocity.get_current_components(),
+            ship_position: (game.ship_stamp.origin.x, game.ship_stamp.origin.y),
+            ship_facing: 0,
+            autopilot: (game.autopilot.x, game.autopilot.y),
+            combat_flags: game.glob_flags,
+            date: (
+                game.game_clock.day_index,
+                game.game_clock.month_index,
+                game.game_clock.year_index,
+            ),
+            story: world.story.clone(),
+            current_star: world.current_star,
+            contact_race: None,
+            escorts: Vec::new(),
+            groups: Vec::new(),
+        };
+        #[cfg(not(test))]
+        // SAFETY: the app copies these records while it exclusively borrows World on the game thread.
+        let view = unsafe {
+            let mut view = view;
+            use crate::comm::dispatch::CShipFragment;
+            use crate::savegame::runtime::groups::CIpGroup;
+            use crate::savegame::runtime::queues::{walk, QueueKind};
+            if !game.ship_stamp.frame.is_null() {
+                view.ship_facing = i32::from(crate::graphics::pixmap_abi::GetFrameIndex(
+                    game.ship_stamp.frame.cast(),
+                ));
+            }
+            view.contact_race = game
+                .npc_built_ship_q
+                .head
+                .cast::<CShipFragment>()
+                .as_ref()
+                .map(|ship| ship.race_id);
+            if !game.built_ship_q.head.is_null() {
+                view.escorts = walk::<CShipFragment>(&game.built_ship_q, QueueKind::BuiltShips)
+                    .unwrap_or_else(|error| panic!("live escort queue: {error}"))
+                    .into_iter()
+                    .map(|ship| ((*ship).race_id, (*ship).crew_level))
+                    .collect();
+            }
+            if !game.ip_group_q.head.is_null() {
+                view.groups = walk::<CIpGroup>(&game.ip_group_q, QueueKind::IpGroups)
+                    .unwrap_or_else(|error| panic!("live IP group queue: {error}"))
+                    .into_iter()
+                    .filter_map(|group| {
+                        let group = &*group;
+                        (group.in_system != 0).then_some((
+                            group.race_id,
+                            group.sys_loc,
+                            (group.loc.x, group.loc.y),
+                        ))
+                    })
+                    .collect();
+            }
+            view
+        };
+        view
+    }
+
+    pub(crate) fn story_value(&self, key: crate::engine::StoryKey) -> Option<u8> {
+        self.story
+            .as_ref()
+            .map(|story| story.get_state(key.start(), key.end()))
+    }
+
+    pub(crate) fn named_state_value(&self, name: &str) -> Option<u8> {
+        self.story_value(crate::engine::StoryKey::from_name(name)?)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn empty() -> Self {
+        Self::from_world(&World::new())
+    }
+}
+
+fn read_star_state(world: &CampaignView, key: StateKey) -> Option<u32> {
     use crate::automation::input_ffi;
 
     let target = super::star_flight::StarTarget::resolve("Sol").expect("Sol in catalog");
-    let observation = input_ffi::star_flight_observation(target);
+    let observation = input_ffi::star_flight_observation(world, target);
     match key {
         StateKey::StarCurrent => observation.current_star.map(u32::from),
         StateKey::StarmapCursorX => observation.cursor.and_then(|(x, _)| u32::try_from(x).ok()),
@@ -366,9 +465,10 @@ fn read_star_state(key: StateKey) -> Option<u32> {
     }
 }
 
-impl StateSource for LiveCampaign {
+impl StateSource for LiveCampaign<'_> {
     fn read(&self, key: StateKey) -> Option<u32> {
         use crate::automation::{input_ffi, samatra::observe as boss_observation};
+        let world = self.world;
         match key {
             StateKey::Ending(index) => {
                 let e = super::ending::snapshot();
@@ -396,54 +496,57 @@ impl StateSource for LiveCampaign {
                 _ => unreachable!(),
             }),
             StateKey::StarCurrent | StateKey::StarmapCursorX | StateKey::StarmapCursorY => {
-                read_star_state(key)
+                read_star_state(world, key)
             }
             StateKey::HyperX => {
-                input_ffi::hyperspace_position().and_then(|(x, _)| u32::try_from(x).ok())
+                input_ffi::hyperspace_position(world).and_then(|(x, _)| u32::try_from(x).ok())
             }
             StateKey::HyperY => {
-                input_ffi::hyperspace_position().and_then(|(_, y)| u32::try_from(y).ok())
+                input_ffi::hyperspace_position(world).and_then(|(_, y)| u32::try_from(y).ok())
             }
-            StateKey::HyperStopped => input_ffi::hyperspace_stopped().map(u32::from),
-            StateKey::Story(name) => World::current()
-                .read(|world| crate::state::ffi::named_state_value(world, name))
-                .map(u32::from),
+            StateKey::HyperStopped => input_ffi::hyperspace_stopped(world).map(u32::from),
+            StateKey::Story(name) => world.named_state_value(name).map(u32::from),
             StateKey::Activity => Some(u32::from(crate::mainloop::ffi::get_current_activity().0)),
-            StateKey::SisDrive(slot) => input_ffi::sis_fittings()
+            StateKey::SisDrive(slot) => input_ffi::sis_fittings(world)
                 .map(|(drives, _, _, _)| u32::from(drives[usize::from(slot)])),
-            StateKey::SisJet(slot) => {
-                input_ffi::sis_fittings().map(|(_, jets, _, _)| u32::from(jets[usize::from(slot)]))
-            }
-            StateKey::SisModule(slot) => input_ffi::sis_fittings()
+            StateKey::SisJet(slot) => input_ffi::sis_fittings(world)
+                .map(|(_, jets, _, _)| u32::from(jets[usize::from(slot)])),
+            StateKey::SisModule(slot) => input_ffi::sis_fittings(world)
                 .map(|(_, _, modules, _)| u32::from(modules[usize::from(slot)])),
             StateKey::SisMineralMass => {
-                input_ffi::sis_fittings().map(|(_, _, _, mass)| u32::from(mass))
+                input_ffi::sis_fittings(world).map(|(_, _, _, mass)| u32::from(mass))
             }
             StateKey::EncounterMenu => {
                 Some(u32::from(super::ui_observation::encounter_menu_active()))
             }
-            StateKey::EscortCount => input_ffi::escort_roster().map(|ships| ships.len() as u32),
-            StateKey::EscortSpecies(race) => input_ffi::escort_roster().map(|ships| {
+            StateKey::EscortCount => {
+                input_ffi::escort_roster(world).map(|ships| ships.len() as u32)
+            }
+            StateKey::EscortSpecies(race) => input_ffi::escort_roster(world).map(|ships| {
                 ships
                     .iter()
                     .filter(|(id, crew)| *id == race && *crew > 0)
                     .count() as u32
             }),
             StateKey::CyborgEnabled => {
-                input_ffi::cyborg_settings().map(|(enabled, _)| u32::from(enabled))
+                input_ffi::cyborg_settings(world).map(|(enabled, _)| u32::from(enabled))
             }
             StateKey::CombatSpeed => {
-                input_ffi::cyborg_settings().map(|(_, speed)| u32::from(speed))
+                input_ffi::cyborg_settings(world).map(|(_, speed)| u32::from(speed))
             }
-            StateKey::SisFuel => input_ffi::ship_resources().map(|(fuel, _)| fuel),
-            StateKey::SisRu => input_ffi::ship_resources().map(|(_, ru)| ru),
-            StateKey::SisCrew => input_ffi::sis_crew_and_landers().map(|(crew, _)| u32::from(crew)),
+            StateKey::SisFuel => input_ffi::ship_resources(world).map(|(fuel, _)| fuel),
+            StateKey::SisRu => input_ffi::ship_resources(world).map(|(_, ru)| ru),
+            StateKey::SisCrew => {
+                input_ffi::sis_crew_and_landers(world).map(|(crew, _)| u32::from(crew))
+            }
             StateKey::SisLanders => {
-                input_ffi::sis_crew_and_landers().map(|(_, landers)| u32::from(landers))
+                input_ffi::sis_crew_and_landers(world).map(|(_, landers)| u32::from(landers))
             }
-            StateKey::DateDay => input_ffi::game_date().map(|(day, _, _)| u32::from(day)),
-            StateKey::DateMonth => input_ffi::game_date().map(|(_, month, _)| u32::from(month)),
-            StateKey::DateYear => input_ffi::game_date().map(|(_, _, year)| u32::from(year)),
+            StateKey::DateDay => input_ffi::game_date(world).map(|(day, _, _)| u32::from(day)),
+            StateKey::DateMonth => {
+                input_ffi::game_date(world).map(|(_, month, _)| u32::from(month))
+            }
+            StateKey::DateYear => input_ffi::game_date(world).map(|(_, _, year)| u32::from(year)),
             StateKey::FlagshipDestroyed => Some(u32::from(
                 super::AutomationObserver::get()
                     .is_some_and(|observer| observer.flagship_destroyed.load(Ordering::SeqCst)),
@@ -457,6 +560,31 @@ impl StateSource for LiveCampaign {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn each_boundary_copies_current_typed_campaign_values() {
+        let mut world = World::new();
+        world.story = Some(crate::engine::world::story::GameState::new());
+        world.data.flagship.fuel_on_board = 100;
+        world.set_story_state(crate::engine::StoryKey::STARBASE_AVAILABLE, 1);
+        let first = CampaignView::from_world(&world);
+        world.data.flagship.fuel_on_board = 200;
+        world.set_story_state(crate::engine::StoryKey::STARBASE_AVAILABLE, 0);
+        let second = CampaignView::from_world(&world);
+        assert_eq!(first.flagship.fuel_on_board, 100);
+        assert_eq!(first.named_state_value("STARBASE_AVAILABLE"), Some(1));
+        assert_eq!(second.flagship.fuel_on_board, 200);
+        assert_eq!(second.named_state_value("STARBASE_AVAILABLE"), Some(0));
+        assert!(first.escorts.is_empty() && first.groups.is_empty());
+        assert_eq!(first.velocity, (0, 0));
+        assert_eq!(first.ship_position, (0, 0));
+        assert_eq!(first.ship_facing, 0);
+        assert_eq!(first.autopilot, (0, 0));
+        assert_eq!(first.combat_flags, 0);
+        assert_eq!(first.date, (0, 0, 0));
+        assert_eq!(first.current_star, None);
+        assert_eq!(first.contact_race, None);
+    }
     use std::collections::HashMap;
 
     #[test]
@@ -686,7 +814,13 @@ mod tests {
         assert!(!evaluate(&stopped, &fake(&[("sis:fuel", 0), ("hyper:stopped", 0)])).held);
         assert!(!evaluate(&stopped, &fake(&[("sis:fuel", 1), ("hyper:stopped", 1)])).held);
         assert!(evaluate(&stopped, &fake(&[("sis:fuel", 0), ("hyper:stopped", 1)])).held);
-        assert_eq!(LiveCampaign.read(StateKey::HyperStopped), None);
+        assert_eq!(
+            LiveCampaign {
+                world: &CampaignView::empty()
+            }
+            .read(StateKey::HyperStopped),
+            None
+        );
     }
 
     #[test]

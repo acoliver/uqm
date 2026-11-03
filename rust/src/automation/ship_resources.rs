@@ -156,10 +156,12 @@ pub fn assert_ship_resources(
 
 /// The live flagship resources, when this build links the game.
 #[must_use]
-pub fn live_resources() -> Option<ShipResources> {
-    crate::automation::input_ffi::ship_resources().map(|(fuel_on_board, res_units)| ShipResources {
-        fuel_on_board,
-        res_units,
+pub(crate) fn live_resources(world: &super::campaign_state::CampaignView) -> Option<ShipResources> {
+    crate::automation::input_ffi::ship_resources(world).map(|(fuel_on_board, res_units)| {
+        ShipResources {
+            fuel_on_board,
+            res_units,
+        }
     })
 }
 

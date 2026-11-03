@@ -107,7 +107,9 @@ impl AutomationObserver {
             inner.pending_main_menu_ready = false;
             return self.apply_main_menu_ready(&mut inner);
         }
-        if self.verify_runtime_assertions(&mut inner) || self.verify_activity_assertion(&mut inner)
+        let world = &crate::app::bridge::campaign_view();
+        if self.verify_runtime_assertions(world, &mut inner)
+            || self.verify_activity_assertion(&mut inner)
         {
             return true;
         }
@@ -115,6 +117,7 @@ impl AutomationObserver {
         // Step 2: Feed to scheduler. Runtime waits are satisfied only by
         // observed production state, never by injected input.
         let mut scheduler_event = self.service_semantic_waits(
+            world,
             &mut inner,
             released_semantic_select,
             orbit_transition_pending,
@@ -123,7 +126,7 @@ impl AutomationObserver {
             return true;
         }
 
-        scheduler_event = self.service_navigation(&mut inner, scheduler_event);
+        scheduler_event = self.service_navigation(world, &mut inner, scheduler_event);
 
         if inner.terminal_class.is_some() {
             return true;

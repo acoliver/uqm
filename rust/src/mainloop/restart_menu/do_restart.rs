@@ -250,7 +250,7 @@ fn handle_select<O: RestartMenuOps + ?Sized>(ops: &O, state: &mut DoRestartState
             ops.sleep_thread_until(fade_result);
             ops.set_current_activity(CHECK_ABORT);
             if crate::app::observe::input(crate::engine::observe::InputView::Active).stop {
-                crate::app::observe::input(crate::engine::observe::InputView::QuitSelected).stop;
+                crate::app::observe::input(crate::engine::observe::InputView::QuitSelected);
             }
             ops.flash_pause(state.flash_context);
             false

@@ -501,7 +501,7 @@ pub unsafe fn hail_alien() {
         // Clear Rust-side comm_data (resources already destroyed above)
         super::state::COMM_STATE.write().clear_comm_data();
         // pCurInputState was already cleared by c_RunEncounterDoInput.
-        crate::app::observe::input(crate::engine::observe::InputView::CommunicationCompleted).stop;
+        crate::app::observe::input(crate::engine::observe::InputView::CommunicationCompleted);
     }
 }
 
