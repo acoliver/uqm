@@ -2773,7 +2773,7 @@ planned_engine_core = { limit = 12, ends = "phase-4" }
 "complexity|loc|uqm::savegame::legacy::decode_legacy_payload" = 92
 "complexity|loc|uqm::savegame::runtime::groups::restore_groups_with_icons" = 95
 "complexity|loc|uqm::ships::loader::load_ship" = 224
-"complexity|loc|uqm::ships::races::chmmr_native::engine::chmmr_postprocess" = 113
+"complexity|loc|uqm::ships::races::chmmr_native::engine::chmmr_postprocess" = 114
 "complexity|loc|uqm::ships::races::chmmr_native::engine::spawn_point_defense" = 86
 "complexity|loc|uqm::ships::races::orz_native::engine::marine_preprocess" = 133
 "complexity|loc|uqm::ships::races::orz_native::engine::turret_postprocess" = 102
@@ -2809,16 +2809,16 @@ planned_engine_core = { limit = 12, ends = "phase-4" }
 "ffi|abi_includes|uqm::navigation" = 1
 "ffi|abi_includes|uqm::ships" = 1
 "ffi|abi_includes|uqm::supermelee" = 1
-"ffi|bridge_calls|uqm::automation" = 6
-"ffi|bridge_calls|uqm::battle" = 21
-"ffi|bridge_calls|uqm::front_end" = 2
-"ffi|bridge_calls|uqm::mainloop" = 1
-"ffi|bridge_calls|uqm::navigation" = 5
-"ffi|bridge_calls|uqm::pickship" = 5
-"ffi|bridge_calls|uqm::planet_side" = 2
-"ffi|bridge_calls|uqm::planets" = 5
-"ffi|bridge_calls|uqm::ships" = 5
-"ffi|bridge_calls|uqm::supermelee" = 4
+"ffi|bridge_calls|uqm::automation" = 0
+"ffi|bridge_calls|uqm::battle" = 0
+"ffi|bridge_calls|uqm::front_end" = 0
+"ffi|bridge_calls|uqm::mainloop" = 0
+"ffi|bridge_calls|uqm::navigation" = 0
+"ffi|bridge_calls|uqm::pickship" = 0
+"ffi|bridge_calls|uqm::planet_side" = 0
+"ffi|bridge_calls|uqm::planets" = 0
+"ffi|bridge_calls|uqm::ships" = 0
+"ffi|bridge_calls|uqm::supermelee" = 0
 "ffi|export_name|uqm::pickship" = 1
 "ffi|export_name|uqm::planets" = 64
 "ffi|extern_c_fn|uqm-engine::uqm-engine" = 552
@@ -5273,10 +5273,10 @@ planned_engine_core = { limit = 12, ends = "phase-4" }
 "layers|planned.uqm-modes|uqm::ui::starbase::ExitStarBase::@file" = 2
 "layers|planned.uqm-modes|uqm::ui::starbase::VisitStarBase::@file" = 4
 "layers|planned.uqm-modes|uqm::ui::util::live::wait_until::@file" = 1
-"layers|planned_engine_core|uqm::engine::battle::access::record::<ElementRecord as Default>::default::@file" = 1
-"layers|planned_engine_core|uqm::engine::battle::access::record::@file" = 1
-"layers|planned_engine_core|uqm::engine::battle::access::record::abi::ElementRecord::velocity::@file" = 1
-"layers|planned_engine_core|uqm::engine::battle::access::record::abi::_#1::@file" = 9
+"layers|planned_engine_core|uqm::engine::battle::access::record::<ElementRecord as Default>::default::@file" = 0
+"layers|planned_engine_core|uqm::engine::battle::access::record::@file" = 0
+"layers|planned_engine_core|uqm::engine::battle::access::record::abi::ElementRecord::velocity::@file" = 0
+"layers|planned_engine_core|uqm::engine::battle::access::record::abi::_#1::@file" = 0
 "loc|loc|uqm-engine::graphics::native_abi::@file" = 964
 "loc|loc|uqm-engine::graphics::scaling::@file" = 1176
 "loc|loc|uqm-engine::graphics::software_scalers::hq_rules::@file" = 1701
@@ -5295,7 +5295,7 @@ planned_engine_core = { limit = 12, ends = "phase-4" }
 "loc|loc|uqm::automation::native_window::@file" = 3623
 "loc|loc|uqm::automation::scheduler::@file" = 1429
 "loc|loc|uqm::automation::script::@file" = 1793
-"loc|loc|uqm::automation::suite::@file" = 906
+"loc|loc|uqm::automation::suite::@file" = 908
 "loc|loc|uqm::battle::cyborg_native::@file" = 1009
 "loc|loc|uqm::battle::process_native::@file" = 834
 "loc|loc|uqm::comm::dispatch::@file" = 933
@@ -5443,7 +5443,6 @@ planned_engine_core = { limit = 12, ends = "phase-4" }
 "unsafe|unsafe_lines|uqm::uqm" = 1
 
 [moved]
-"uqm::engine::battle::record::abi" = "uqm::engine::battle::access::record::abi"
 "uqm::graphics" = "uqm-engine::graphics"
 "uqm::input" = "uqm-engine::input"
 "uqm::io" = "uqm-engine::io"
