@@ -313,11 +313,9 @@ fn failure(result: Result<Option<Vec<Effect>>, String>) -> String {
     result.err().expect("the fixture stage should fail")
 }
 
-fn drive(
-    stage: fn(&mut Battle, &mut World) -> Result<Option<Vec<Effect>>, String>,
-    run: &mut Battle,
-    world: &mut World,
-) {
+type Stage = fn(&mut Battle, &mut World) -> Result<Option<Vec<Effect>>, String>;
+
+fn drive(stage: Stage, run: &mut Battle, world: &mut World) {
     while stage(run, world).unwrap().is_some() {}
 }
 
