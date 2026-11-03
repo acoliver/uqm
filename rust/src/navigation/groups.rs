@@ -1,11 +1,10 @@
 //! Save-compatible battle-group records and encounter group construction.
 
 use super::abi::{GROUP_HEADER, IP_GROUP, SHIP_FRAGMENT};
-#[cfg(not(test))]
-use crate::engine::StoryKey;
 use crate::engine::World as WorldOwner;
 #[cfg(not(test))]
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
+use crate::engine::{Kernel as KernelOwner, StoryKey, WorldData as WorldFields};
+
 use crate::state::c_api::{read_state_file, write_state_file, GameStateFile};
 
 unsafe fn read<const N: usize>(file: *mut GameStateFile) -> [u8; N] {

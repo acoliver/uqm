@@ -69,18 +69,18 @@ pub(crate) unsafe fn human_frame(
 /// # Safety
 /// The owner's fragment queue matches battle ship link order on the game thread.
 pub(crate) unsafe fn update_ship_frag_crew(owner: ShipId) {
-    let player = {
-        // SAFETY: the typed owner identifies its initialized battle side.
-        let ships = unsafe { link_queue::ships(owner.side() as usize) };
-        ships.get(ships.link(owner)).player
-    };
-    let mut hf = crate::engine::WorldData::current()
-        .read(|world| world.ship_fragments(player == RPG_PLAYER_NUM as i16).head);
-    // SAFETY: this player was read from the live owner's battle record above.
-    let ships = unsafe { link_queue::ships(player as usize) };
-    let mut hs = ships.head();
     // SAFETY: the caller retains the initialized operands on the published game thread.
     unsafe {
+        let player = {
+            // SAFETY: the typed owner identifies its initialized battle side.
+            let ships = link_queue::ships(owner.side() as usize);
+            ships.get(ships.link(owner)).player
+        };
+        let mut hf = crate::engine::WorldData::current()
+            .read(|world| world.ship_fragments(player == RPG_PLAYER_NUM as i16).head);
+        // SAFETY: this player was read from the live owner's battle record above.
+        let ships = link_queue::ships(player as usize);
+        let mut hs = ships.head();
         while let Some(id) = hs.filter(|_| !hf.is_null()) {
             let frag = hf.cast::<SHIP_FRAGMENT>();
             hs = ships.succ(id);

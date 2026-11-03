@@ -23,45 +23,49 @@ mod parity;
 mod save_capture;
 mod terminal;
 
-use crate::automation::battle_fight::{
-    BattleFightTracker, BattleSnapshot, FightControl, FightProgress,
+use crate::automation::{
+    battle_fight::{BattleFightTracker, BattleSnapshot, FightControl, FightProgress},
+    battle_outcome::{self, BattleLossTracker},
+    campaign_state,
+    flagship_turn::{self, FlagshipTurnTracker, TurnProgress},
+    flight_position::{self, FlightPositionTracker},
+    input_ffi, mode,
+    outcome::TerminalClass,
+    planet_minerals::{self, CollectProgress, PlanetMineralsTracker},
+    runtime::{FinalizationResult, RuntimeModel},
+    scenario::{self, PendingStartScene, SceneActivationBoundary},
+    scheduler::{
+        scheduler_reduce, ActionPhase, CaptureGeneration, EffectPlan, SchedulerConfig,
+        SchedulerEvent, SchedulerState, TerminalOutcome,
+    },
+    script::{Action, ActivityAssertion, ValidatedScript},
+    ship_element, ship_resources,
+    trace::{
+        ActivityEvidence, ReadinessEvidence, RecordKind, SeedApplication, SeedDomain, TraceRecord,
+    },
+    watchdog::{
+        watchdog_reduce, CallbackKind, ClockSample, WatchdogEntry, WatchdogLimits, WatchdogOutcome,
+    },
 };
-use crate::automation::battle_outcome::{self, BattleLossTracker};
-use crate::automation::campaign_state;
-use crate::automation::flagship_turn::{self, FlagshipTurnTracker, TurnProgress};
-use crate::automation::flight_position::{self, FlightPositionTracker};
-use crate::automation::input_ffi;
-use crate::automation::mode;
-use crate::automation::outcome::TerminalClass;
-use crate::automation::planet_minerals::{self, CollectProgress, PlanetMineralsTracker};
-use crate::automation::runtime::{FinalizationResult, RuntimeModel};
-use crate::automation::scenario::{self, PendingStartScene, SceneActivationBoundary};
-use crate::automation::scheduler::{
-    scheduler_reduce, ActionPhase, CaptureGeneration, EffectPlan, SchedulerConfig, SchedulerEvent,
-    SchedulerState, TerminalOutcome,
-};
-use crate::automation::script::{Action, ActivityAssertion, ValidatedScript};
-use crate::automation::ship_element;
-use crate::automation::ship_resources;
-use crate::automation::trace::{
-    ActivityEvidence, ReadinessEvidence, RecordKind, SeedApplication, SeedDomain, TraceRecord,
-};
-use crate::automation::watchdog::{
-    watchdog_reduce, CallbackKind, ClockSample, WatchdogEntry, WatchdogLimits, WatchdogOutcome,
-};
+
 use crate::graphics::presented_frame::PresentedFrame;
 use parking_lot::Mutex;
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::OnceLock;
-use std::time::{Duration, Instant};
+use std::{
+    path::PathBuf,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        OnceLock,
+    },
+    time::{Duration, Instant},
+};
 
 #[cfg(not(test))]
-use crate::c_bindings::controller_input::{
-    CurrentInputState, PulsedInputState, CONTROL_TEMPLATE_NUM_TEMPLATES, NUM_KEYS,
+use crate::c_bindings::{
+    controller_input::{
+        CurrentInputState, PulsedInputState, CONTROL_TEMPLATE_NUM_TEMPLATES, NUM_KEYS,
+    },
+    player_control_template,
 };
-#[cfg(not(test))]
-use crate::c_bindings::player_control_template;
 
 #[cfg(not(test))]
 const NUM_PLAYER_KEYS: usize = NUM_KEYS as usize;

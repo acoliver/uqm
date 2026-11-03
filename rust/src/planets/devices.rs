@@ -1,20 +1,31 @@
 //! Devices menu, ported from `planets/devices.c`.
 
 use crate::battle::c_bridge::SleepThread;
-use crate::engine::StoryKey;
-use crate::engine::{Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields};
-use crate::mainloop::restart_menu::c_extern::uqm_sleep_thread_until as SleepThreadUntil;
-use crate::mainloop::restart_menu::c_extern::{DoInput, FadeScreen};
+use crate::engine::{
+    Kernel as KernelOwner, StoryKey, World as WorldOwner, WorldData as WorldFields,
+};
+
+use crate::mainloop::{
+    input_abi::live::SetMenuSounds,
+    restart_menu::c_extern::{uqm_sleep_thread_until as SleepThreadUntil, DoInput, FadeScreen},
+    types::activity_flags::{CHECK_LOAD, START_ENCOUNTER},
+};
+
 use std::sync::Mutex;
 
 use crate::automation::story_actions::DeviceObservation;
 use crate::c_bindings::global_state::{CHMMR_DEFINED, ILWRATH_DEFINED, SAMATRA_DEFINED};
 use crate::collections::queue::{CountLinks, Queue, ReinitQueue};
-use crate::comm::dispatch::ship;
-use crate::comm::locdata::{CColor, CRect};
-use crate::mainloop::types::activity_flags::{CHECK_LOAD, START_ENCOUNTER};
-use crate::starbase::cffi::CffiPlatform;
-use crate::starbase::gfx::{Align, ContextId, FontId, Gfx, Point, Rect, Rgba, Stamp, TextDraw};
+use crate::comm::{
+    dispatch::ship,
+    locdata::{CColor, CRect},
+};
+
+use crate::starbase::{
+    cffi::CffiPlatform,
+    gfx::{Align, ContextId, FontId, Gfx, Point, Rect, Rgba, Stamp, TextDraw},
+};
+
 use crate::state::game_state_keys::{get_game_state as get, set_game_state as set};
 
 static OBSERVATION: Mutex<DeviceObservation> = Mutex::new(DeviceObservation {
@@ -39,29 +50,19 @@ extern "C" {
     fn save_sis_hyper_state();
 }
 
-use crate::battle::build_native::engine::start_sphere_tracking;
+use crate::battle::{build_native::engine::start_sphere_tracking, sounds::engine::PlayMenuSound};
 
-use crate::battle::sounds::engine::PlayMenuSound;
+use crate::navigation::{
+    globals::{in_hqspace, in_hyper_space},
+    groups::live::PutGroupInfo,
+};
 
-use crate::mainloop::input_abi::live::SetMenuSounds;
+use crate::planets::solarsys::{
+    lifecycle::SaveSolarSysLocation, matchWorld, playerInPlanetOrbit, playerInSolarSystem,
+};
 
-use crate::navigation::globals::in_hqspace;
+use crate::ui::{sis::ClearSISRect, util::live::DrawStarConBox};
 
-use crate::navigation::globals::in_hyper_space;
-
-use crate::navigation::groups::live::PutGroupInfo;
-
-use crate::planets::solarsys::lifecycle::SaveSolarSysLocation;
-
-use crate::planets::solarsys::matchWorld;
-
-use crate::planets::solarsys::playerInPlanetOrbit;
-
-use crate::planets::solarsys::playerInSolarSystem;
-
-use crate::ui::sis::ClearSISRect;
-
-use crate::ui::util::live::DrawStarConBox;
 #[allow(non_snake_case)]
 extern "C" {
 

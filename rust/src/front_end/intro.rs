@@ -3,8 +3,10 @@
 #[cfg(not(test))]
 use crate::engine::{Kernel, WorldData};
 use crate::navigation::abi::*;
-use std::ffi::{c_char, c_int};
-use std::ptr;
+use std::{
+    ffi::{c_char, c_int},
+    ptr,
+};
 
 #[cfg(not(test))]
 pub(super) const WANT_PIXMAP: CREATE_FLAGS = 1 << 1;
@@ -58,11 +60,14 @@ pub(super) unsafe fn parse_text_lines(
 pub(crate) mod runtime {
     use super::*;
 
-    use crate::video::control::{VidGetPosition, VidProcessFrame, VidSeek};
-    use crate::video::legacy::{
-        DestroyLegacyVideo, LegacyVideo, LegacyVideoRef, LoadLegacyVideoInstance, PlayLegacyVideo,
-        PlayingLegacyVideo, StopLegacyVideo,
+    use crate::video::{
+        control::{VidGetPosition, VidProcessFrame, VidSeek},
+        legacy::{
+            DestroyLegacyVideo, LegacyVideo, LegacyVideoRef, LoadLegacyVideoInstance,
+            PlayLegacyVideo, PlayingLegacyVideo, StopLegacyVideo,
+        },
     };
+
     use std::ffi::{c_void, CStr};
 
     const LOG_WARNING: c_int = 3;

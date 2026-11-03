@@ -1,8 +1,8 @@
 #![cfg(not(test))]
 
 use crate::callback::ffi::{AlarmId, Alarm_addAbsoluteMs, Alarm_remove};
-use crate::engine::battle::schema::FlashContext;
-use crate::engine::{Kernel, World, WorldData};
+use crate::engine::{battle::schema::FlashContext, Kernel, StoryKey, World, WorldData};
+
 use crate::navigation::abi::*;
 
 use std::{mem, ptr};
@@ -37,11 +37,8 @@ unsafe fn game_string(index: u32) -> *mut UNICODE {
     .cast()
 }
 
-fn game_state(name: &str) -> u8 {
-    let (start, end) =
-        crate::state::game_state::lookup_game_state_bits(name).expect("known SIS game-state key");
-    World::current()
-        .read(|world| crate::state::ffi::rust_get_game_state_bits(world, start as i32, end as i32))
+fn game_state(key: StoryKey) -> u8 {
+    World::current().read(|world| world.story_state(key) as u8)
 }
 
 const fn rgb15(r: u8, g: u8, b: u8) -> Color {
@@ -421,8 +418,8 @@ pub unsafe extern "C" fn DrawStatusMessage(p_str: *const UNICODE) {
     let mut text = p_str;
     if text.is_null() {
         if CUR_MSG_MODE == StatMsgMode_SMM_CREDITS {
-            let credits = u16::from(game_state("MELNORME_CREDIT0"))
-                | (u16::from(game_state("MELNORME_CREDIT1")) << 8);
+            let credits = u16::from(game_state(StoryKey::MELNORME_CREDIT0))
+                | (u16::from(game_state(StoryKey::MELNORME_CREDIT1)) << 8);
             libc::snprintf(
                 buf.as_mut_ptr().cast(),
                 buf.len(),
@@ -431,7 +428,7 @@ pub unsafe extern "C" fn DrawStatusMessage(p_str: *const UNICODE) {
                 game_string(STATUS_STRING_BASE),
             );
         } else if CUR_MSG_MODE == StatMsgMode_SMM_RES_UNITS {
-            if game_state("CHMMR_BOMB_STATE") < 2 {
+            if game_state(StoryKey::CHMMR_BOMB_STATE) < 2 {
                 libc::snprintf(
                     buf.as_mut_ptr().cast(),
                     buf.len(),

@@ -996,9 +996,8 @@ pub(crate) unsafe fn clone_ship_fragment(
 pub(crate) fn production_captain_name() -> u8 {
     // SAFETY: `random` takes no arguments and touches only the game's
     // random state.
-    {
-        pick_captain_name()
-    }
+
+    pick_captain_name()
 }
 
 /// `CloneShipFragment` against an explicit fleet queue and captain-name draw.

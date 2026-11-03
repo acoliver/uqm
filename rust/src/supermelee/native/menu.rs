@@ -5,16 +5,19 @@ pub(crate) mod live {
     use crate::automation::coordinator::rust_automation_seed_value;
     use crate::battle::{COMPUTER_CONTROL, HUMAN_CONTROL, NETWORK_CONTROL, PSYTRON_CONTROL};
     use crate::comm::hail::game_string;
-    use crate::engine::World as WorldOwner;
-    use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
+    use crate::engine::{Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields};
+
     use crate::game_init::macro_abi::{LoadMusic, LoadSound};
-    use crate::graphics::drawable_abi;
-    use crate::graphics::resgfx::LoadGraphicInstance as LoadGraphic;
+    use crate::graphics::{drawable_abi, resgfx::LoadGraphicInstance as LoadGraphic};
+
     use crate::io::uio_bridge;
     use crate::mainloop::restart_menu::c_extern::{DoPopupWindow, FadeMusic, SeedRandomNumbers};
     use crate::math::{delete_context, new_context};
-    use crate::navigation::abi::{init_space, uninit_space, MeleeConnectDialog, TEXTENTRY_STATE};
-    use crate::navigation::globals::init_glob_data;
+    use crate::navigation::{
+        abi::{init_space, uninit_space, MeleeConnectDialog, TEXTENTRY_STATE},
+        globals::init_glob_data,
+    };
+
     use crate::ships::native::abi::*;
 
     use crate::ui::shipstat::ClearShipStatus;

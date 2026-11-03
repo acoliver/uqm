@@ -3888,9 +3888,6 @@ pub use crate::ships::loader_native::engine::load_ship;
 pub use crate::ships::loader_native::engine::unload_ship;
 
 #[cfg(not(test))]
-pub use crate::state::c_api::planets::init_planet_info;
-
-#[cfg(not(test))]
 pub use crate::state::c_api::planets::uninit_planet_info;
 
 #[cfg(not(test))]

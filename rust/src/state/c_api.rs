@@ -107,7 +107,6 @@ pub unsafe fn seek_state_file(
 pub(crate) mod planets {
     use super::*;
     use crate::c_bindings::{global_state::SOLARSYS_STATE, solar_system};
-    use crate::planets::starmap::star_array;
 
     pub(crate) unsafe fn location(
         world: &crate::engine::World,
@@ -136,18 +135,6 @@ pub(crate) mod planets {
             *moon = (*system).PlanetDesc[i].NumPlanets;
         }
         (moons, count as c_int)
-    }
-
-    /// # Safety
-    /// The star catalog must be initialized and terminated by its sentinel.
-    pub unsafe fn init_planet_info(world: &mut crate::engine::World) {
-        let mut star = star_array;
-        let mut count = 0;
-        while (*star).star_pt.x <= 9999 && (*star).star_pt.y <= 9999 {
-            count += 1;
-            star = star.add(1);
-        }
-        rust_init_planet_info(world, count);
     }
 
     /// # Safety

@@ -12,23 +12,40 @@ use crate::engine::Kernel;
 #[cfg(not(test))]
 use crate::engine::{StoryKey, World, WorldData};
 #[cfg(not(test))]
-use crate::graphics::context_abi::SetContextClipRect;
+use crate::graphics::{
+    context_abi::{
+        GetContextClipRect, SetContextBackGroundColor, SetContextClipRect, SetContextOrigin,
+    },
+    drawable_abi::GetFrameRect,
+    font_abi,
+    frame_abi::ClearDrawable,
+    gfx_common_abi::{
+        BatchGraphics, LoadIntoExtraScreen, ScreenTransition, SetTransitionSource, UnbatchGraphics,
+    },
+};
+
+use crate::graphics::{
+    context_abi::{SetContext, SetContextForeGroundColor},
+    frame_abi, pixmap_abi,
+};
 #[cfg(not(test))]
-use crate::graphics::font_abi;
-use crate::graphics::{frame_abi, pixmap_abi};
-#[cfg(not(test))]
-use crate::planets::render::c_api::{draw_filled_oval as DrawFilledOval, draw_oval as DrawOval};
-#[cfg(not(test))]
-use crate::planets::starmap::FindStar;
+use crate::planets::{
+    render::c_api::{draw_filled_oval as DrawFilledOval, draw_oval as DrawOval},
+    scan::live::RepairBackRect,
+    starmap::{naming::GetClusterName, FindStar},
+    starmap_cursor::DoMoveCursor,
+};
+
 use crate::savegame::runtime::star::{CStarDesc, NUM_SOLAR_SYSTEMS};
 #[cfg(not(test))]
-use crate::strings::string_table;
-#[cfg(not(test))]
-use crate::strings::unicode;
+use crate::strings::{string_table, unicode};
+
 #[cfg(not(test))]
 use std::ffi::c_void;
-use std::ffi::{c_char, c_long};
-use std::ptr;
+use std::{
+    ffi::{c_char, c_long},
+    ptr,
+};
 
 #[path = "pstarmap/search.rs"]
 pub(crate) mod search;
@@ -56,78 +73,20 @@ static mut TRANSITION_PENDING: bool = false;
 
 use crate::time::counter_abi::GetTimeCounter;
 
-use crate::graphics::context_abi::SetContext;
-
-use crate::graphics::context_abi::SetContextForeGroundColor;
-
 #[cfg(not(test))]
-use crate::graphics::context_abi::SetContextBackGroundColor;
-
-#[cfg(not(test))]
-use crate::graphics::context_abi::GetContextClipRect;
-
-#[cfg(not(test))]
-use crate::graphics::context_abi::SetContextOrigin;
-
-#[cfg(not(test))]
-use crate::graphics::frame_abi::ClearDrawable;
-
-#[cfg(not(test))]
-use crate::ui::sis::DrawHyperCoords;
-
-#[cfg(not(test))]
-use crate::ui::sis::DrawSISMessage;
-
-#[cfg(not(test))]
-use crate::ui::sis::DrawStatusMessage;
-
-#[cfg(not(test))]
-use crate::ui::sis::DrawSISMessageEx;
-
-#[cfg(not(test))]
-use crate::graphics::gfx_common_abi::LoadIntoExtraScreen;
-
-#[cfg(not(test))]
-use crate::planets::scan::live::RepairBackRect;
-
-#[cfg(not(test))]
-use crate::graphics::gfx_common_abi::SetTransitionSource;
-
-#[cfg(not(test))]
-use crate::graphics::gfx_common_abi::ScreenTransition;
-
-#[cfg(not(test))]
-use crate::graphics::drawable_abi::GetFrameRect;
-
-#[cfg(not(test))]
-use crate::planets::starmap::naming::GetClusterName;
+use crate::ui::sis::{DrawHyperCoords, DrawSISMessage, DrawSISMessageEx, DrawStatusMessage};
 
 #[cfg(not(test))]
 use crate::navigation::globals::in_hqspace;
 
 #[cfg(not(test))]
-use crate::mainloop::input_abi::live::FlushInput;
-
-#[cfg(not(test))]
-use crate::mainloop::input_abi::live::AnyButtonPress;
-
-#[cfg(not(test))]
-use crate::mainloop::input_abi::live::SetMenuSounds;
+use crate::mainloop::input_abi::live::{
+    AnyButtonPress, DoInput, FlushInput, SetDefaultMenuRepeatDelay, SetMenuRepeatDelay,
+    SetMenuSounds,
+};
 
 #[cfg(not(test))]
 use crate::battle::sounds::engine::PlayMenuSound;
-
-#[cfg(not(test))]
-use crate::mainloop::input_abi::live::SetMenuRepeatDelay;
-
-#[cfg(not(test))]
-use crate::mainloop::input_abi::live::SetDefaultMenuRepeatDelay;
-
-#[cfg(not(test))]
-use crate::mainloop::input_abi::live::DoInput;
-
-#[cfg(not(test))]
-use crate::planets::starmap_cursor::DoMoveCursor;
 
 extern "C" {
     #[cfg(not(test))]
@@ -139,8 +98,7 @@ extern "C" {
     #[cfg(not(test))]
     fn sprintf(dst: *mut c_char, fmt: *const c_char, ...) -> i32;
 }
-#[cfg(not(test))]
-use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
+
 #[cfg(not(test))]
 use crate::threading::pacing::linked::sleep_thread as SleepThread;
 

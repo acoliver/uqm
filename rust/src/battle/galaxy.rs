@@ -222,10 +222,10 @@ pub(crate) mod engine {
                     (*prim(cx, i)).Type = gfx_object_POINT_PRIM as u8;
                     (*prim(cx, i)).color = if cx.world.activity() as u8 != 3 {
                         color(21, 21, 21)
-                    } else if crate::state::ffi::rust_get_game_state(
-                        cx.world,
-                        c"ARILOU_SPACE_SIDE".as_ptr(),
-                    ) <= 1
+                    } else if cx
+                        .world
+                        .story_state(crate::engine::StoryKey::ARILOU_SPACE_SIDE)
+                        <= 1
                     {
                         color(20, 0, 0)
                     } else {
@@ -244,6 +244,7 @@ pub(crate) mod engine {
     pub unsafe fn move_galaxy(cx: &mut Cx<'_>, view: u32, mut dx: i16, mut dy: i16) {
         // VIEW_STABLE=0, VIEW_CHANGE=2; TFB_SCALE_STEP=0.
         if view != 0 {
+            let star_frame = cx.kernel.stars_in_space;
             let mut reduction = cx.b.zoom_out as u16;
             let step = optMeleeScale == 0;
             if view == 2 {
@@ -251,18 +252,13 @@ pub(crate) mod engine {
                     let mut p = 0;
                     for (plane, offset) in [58, 26].into_iter().enumerate() {
                         for _ in 0..COUNTS[plane] {
-                            (*prim(cx, p)).Object.Stamp.frame = SetAbsFrameIndex(
-                                cx.kernel.stars_in_space,
-                                (TFB_Random() & 31) as u16 + offset,
-                            );
+                            (*prim(cx, p)).Object.Stamp.frame =
+                                SetAbsFrameIndex(star_frame, (TFB_Random() & 31) as u16 + offset);
                             p += 1;
                         }
                     }
                 } else {
-                    let mut frames = [
-                        IncFrameIndex(cx.kernel.stars_in_space),
-                        cx.kernel.stars_in_space,
-                    ];
+                    let mut frames = [IncFrameIndex(star_frame), star_frame];
                     let types = if step {
                         if reduction > 0 {
                             frames[0] = frames[1];

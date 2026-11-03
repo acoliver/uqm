@@ -3,9 +3,14 @@
 //! the order the C made them. The rules they apply are in the parent module.
 
 use crate::comm::dispatch::production_captain_name;
-use crate::engine::battle::link_queue::{LinkQueue, Starship};
-use crate::engine::World as WorldOwner;
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
+use crate::engine::{
+    battle::{
+        link_queue::{LinkQueue, Starship},
+        ShipId,
+    },
+    Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields,
+};
+
 use std::ffi::{c_char, c_int, c_void};
 
 use super::{
@@ -16,14 +21,14 @@ use crate::c_bindings::controller_input::{
     PulsedInputState, KEY_MENU_DOWN, KEY_MENU_LEFT, KEY_MENU_RIGHT, KEY_MENU_SELECT, KEY_MENU_UP,
 };
 
-use crate::comm::locdata::{CColor, CPoint, CRect, CStamp};
-use crate::comm::sis_graphics::CText;
-use crate::engine::battle::ShipId;
-use crate::mainloop::restart_menu::c_extern as base;
-use crate::mainloop::types::activity_flags::CHECK_ABORT;
-use crate::starbase::gfx::Rgba;
-use crate::starbase::platform::ONE_SECOND;
-use crate::starbase::sis_modules::FUEL_TANK_SCALE;
+use crate::comm::{
+    locdata::{CColor, CPoint, CRect, CStamp},
+    sis_graphics::CText,
+};
+
+use crate::mainloop::{restart_menu::c_extern as base, types::activity_flags::CHECK_ABORT};
+
+use crate::starbase::{gfx::Rgba, platform::ONE_SECOND, sis_modules::FUEL_TANK_SCALE};
 
 /// `RPG_PLAYER_NUM`.
 const RPG_PLAYER_NUM: usize = 0;
@@ -44,39 +49,19 @@ const RUN_AWAY_FUEL_COST: u32 = 5 * FUEL_TANK_SCALE;
 
 use crate::sound::heart_ffi::wait_for_sound_end as WaitForSoundEnd;
 
-use crate::graphics::context_abi::SetContextForeGroundColor;
+use crate::graphics::{
+    context_abi::SetContextForeGroundColor,
+    drawable_abi::SetFrameHot,
+    font_abi::{font_DrawText, SetContextFont},
+    frame_abi::{DrawFilledRectangle, DrawFilledStamp, DrawStamp},
+    pixmap_abi::{DecFrameIndex, IncFrameIndex, SetAbsFrameIndex},
+};
 
-use crate::graphics::font_abi::SetContextFont;
+use crate::ui::sis::{capacity::GetCrewPodCapacity, SetFlashRect};
 
-use crate::graphics::font_abi::font_DrawText;
+use crate::battle::{encount_native::engine::FleetIsInfinite, sounds::engine::PlayMenuSound};
 
-use crate::graphics::frame_abi::DrawFilledRectangle;
-
-use crate::graphics::frame_abi::DrawStamp;
-
-use crate::graphics::frame_abi::DrawFilledStamp;
-
-use crate::graphics::drawable_abi::SetFrameHot;
-
-use crate::graphics::pixmap_abi::IncFrameIndex;
-
-use crate::graphics::pixmap_abi::DecFrameIndex;
-
-use crate::graphics::pixmap_abi::SetAbsFrameIndex;
-
-use crate::ui::sis::SetFlashRect;
-
-use crate::battle::sounds::engine::PlayMenuSound;
-
-use crate::strings::string_table::SetAbsStringTableIndex;
-
-use crate::strings::string_table::GetStringAddress;
-
-use crate::strings::string_table::GetStringLength;
-
-use crate::ui::sis::capacity::GetCrewPodCapacity;
-
-use crate::battle::encount_native::engine::FleetIsInfinite;
+use crate::strings::string_table::{GetStringAddress, GetStringLength, SetAbsStringTableIndex};
 
 use crate::navigation::globals::in_hqspace;
 

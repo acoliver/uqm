@@ -22,6 +22,13 @@ pub unsafe fn current_catalog<'a>() -> Option<&'a [CStarDesc; crate::engine::wor
     }
 }
 
+pub(crate) fn catalog_star_count(catalog: &[CStarDesc]) -> usize {
+    catalog
+        .iter()
+        .take_while(|star| star.star_pt.x <= 9999 && star.star_pt.y <= 9999)
+        .count()
+}
+
 unsafe fn find_star(
     base: *mut CStarDesc,
     last: *mut CStarDesc,
@@ -185,6 +192,19 @@ mod tests {
             prefix: 0,
             postfix: 0,
         }
+    }
+
+    #[test]
+    fn catalog_count_stops_at_the_first_out_of_bounds_coordinate() {
+        let mut stars = [star(0, 0); 4];
+        stars[1] = star(9999, 9999);
+        stars[2] = star(10000, 0);
+        stars[3] = star(1, 1);
+        assert_eq!(catalog_star_count(&stars), 2);
+        stars[2] = star(0, 10000);
+        assert_eq!(catalog_star_count(&stars), 2);
+        stars[0] = star(0, 10000);
+        assert_eq!(catalog_star_count(&stars), 0);
     }
 
     #[test]
