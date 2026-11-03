@@ -5,8 +5,7 @@ fn terminal_outcome_survives_descriptor_teardown_until_the_next_battle() {
         // SAFETY: this fixture owns the published battle, descriptors and activity.
         unsafe {
             use uqm_rust::automation::samatra::observe;
-            uqm_rust::engine::World::current()
-                .write(|world| uqm_rust::state::ffi::rust_init_game_state(world));
+            uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
             (**uqm_rust::engine::WorldData::current())
                 .game
                 .current_activity = IN_LAST_BATTLE as u16;
@@ -55,8 +54,7 @@ fn live_observation_projects_owned_events_generators_hazards_and_player() {
         // SAFETY: the serialized fixture publishes the live context for observation.
         unsafe {
             use uqm_rust::automation::samatra::observe;
-            uqm_rust::engine::World::current()
-                .write(|world| uqm_rust::state::ffi::rust_init_game_state(world));
+            uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
             assert_eq!(observe().0.generation, 0);
             assert!(observe().1.is_none());
             let mut ship = boss(&battle);
@@ -158,8 +156,7 @@ fn lifecycle_counts_each_identity_once_and_retains_gate_entry() {
         let battle = Battle::new(64);
         // SAFETY: the fixture serializes the live element and ship pools.
         unsafe {
-            uqm_rust::engine::World::current()
-                .write(|world| uqm_rust::state::ffi::rust_init_game_state(world));
+            uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
             let mut ship = boss(&battle);
             let mut other = Ship::with_frames(
                 &battle,
@@ -382,8 +379,7 @@ fn only_player_ship_bomb_carrier_through_open_gate_finishes_battle() {
     battle_context::run(|| {
         let _battle = Battle::new(64);
         unsafe {
-            uqm_rust::engine::World::current()
-                .write(|world| uqm_rust::state::ffi::rust_init_game_state(world));
+            uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
             let mut ship = boss(&_battle);
             let gate = battle::element(
                 *queued()

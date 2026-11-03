@@ -9,8 +9,7 @@ use uqm_rust::{
     state::game_state_keys::{get_game_state, set_game_state},
 };
 unsafe fn modules() {
-    uqm_rust::engine::World::current()
-        .write(|world| uqm_rust::state::ffi::rust_init_game_state(world));
+    uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
     (**uqm_rust::engine::WorldData::current())
         .flagship
         .module_slots = [255; 16];

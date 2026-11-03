@@ -230,8 +230,7 @@ fn navigation_world_projections_write_the_single_authority() {
             let autopilot = (**uqm_rust::engine::WorldData::current()).game.autopilot;
             let velocity = (**uqm_rust::engine::WorldData::current()).game.velocity;
             let sis = (**uqm_rust::engine::WorldData::current()).flagship;
-            uqm_rust::engine::World::current()
-                .write(|world| uqm_rust::state::ffi::rust_init_game_state(world));
+            uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
             uqm_rust::app::bridge::enter(|cx| {
                 cx.set_activity(42);
                 assert_eq!(cx.world.activity(), 42);
@@ -549,8 +548,7 @@ fn descriptor_world_observes_activity_and_typed_story_and_writes_the_same_author
             let crew = (**uqm_rust::engine::WorldData::current())
                 .flagship
                 .crew_enlisted;
-            uqm_rust::engine::World::current()
-                .write(|world| uqm_rust::state::ffi::rust_init_game_state(world));
+            uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
             uqm_rust::app::bridge::enter(|cx| {
                 cx.world.set_activity(IN_ENCOUNTER as u16);
                 cx.world.set_flagship_crew(17);

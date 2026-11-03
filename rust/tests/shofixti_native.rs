@@ -30,8 +30,7 @@ impl Battle {
         (**uqm_rust::engine::WorldData::current())
             .game
             .current_activity = IN_ENCOUNTER as _;
-        uqm_rust::engine::World::current()
-            .write(|world| uqm_rust::state::ffi::rust_init_game_state(world));
+        uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
         set_recruited(true);
         ScreenWidth = 320;
         ScreenHeight = 240;
