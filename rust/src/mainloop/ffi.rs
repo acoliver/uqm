@@ -24,6 +24,8 @@
 use super::c_extern as prod;
 use super::types::{ActivityValue, CBoolean};
 use crate::engine::Kernel as KernelOwner;
+use crate::engine::StoryKey;
+use crate::engine::World as WorldOwner;
 #[cfg(not(test))]
 use crate::engine::WorldData as WorldFields;
 
@@ -222,11 +224,8 @@ pub fn set_last_activity(val: ActivityValue) {
 #[inline]
 #[must_use]
 pub fn get_chmmr_bomb_state() -> u8 {
-    crate::engine::World::current().read(|world| {
-        crate::state::game_state_keys::get_game_state(
-            world,
-            crate::engine::StoryKey::CHMMR_BOMB_STATE,
-        )
+    WorldOwner::current().read(|world| {
+        crate::state::game_state_keys::get_game_state(world, StoryKey::CHMMR_BOMB_STATE)
     }) as u8
 }
 
@@ -236,12 +235,8 @@ pub fn get_chmmr_bomb_state() -> u8 {
 /// @requirement REQ-ML-010
 #[inline]
 pub fn set_chmmr_bomb_state(val: u8) {
-    crate::engine::World::current().write(|world| {
-        crate::state::game_state_keys::set_game_state(
-            world,
-            crate::engine::StoryKey::CHMMR_BOMB_STATE,
-            val as u32,
-        )
+    WorldOwner::current().write(|world| {
+        crate::state::game_state_keys::set_game_state(world, StoryKey::CHMMR_BOMB_STATE, val as u32)
     });
 }
 
@@ -252,11 +247,8 @@ pub fn set_chmmr_bomb_state(val: u8) {
 #[inline]
 #[must_use]
 pub fn get_starbase_available() -> u8 {
-    crate::engine::World::current().read(|world| {
-        crate::state::game_state_keys::get_game_state(
-            world,
-            crate::engine::StoryKey::STARBASE_AVAILABLE,
-        )
+    WorldOwner::current().read(|world| {
+        crate::state::game_state_keys::get_game_state(world, StoryKey::STARBASE_AVAILABLE)
     }) as u8
 }
 
@@ -267,11 +259,8 @@ pub fn get_starbase_available() -> u8 {
 #[inline]
 #[must_use]
 pub fn get_global_flags_and_data() -> u8 {
-    crate::engine::World::current().read(|world| {
-        crate::state::game_state_keys::get_game_state(
-            world,
-            crate::engine::StoryKey::GLOBAL_FLAGS_AND_DATA,
-        )
+    WorldOwner::current().read(|world| {
+        crate::state::game_state_keys::get_game_state(world, StoryKey::GLOBAL_FLAGS_AND_DATA)
     }) as u8
 }
 
@@ -282,11 +271,8 @@ pub fn get_global_flags_and_data() -> u8 {
 #[inline]
 #[must_use]
 pub fn get_kohr_ah_killed_all() -> u8 {
-    crate::engine::World::current().read(|world| {
-        crate::state::game_state_keys::get_game_state(
-            world,
-            crate::engine::StoryKey::KOHR_AH_KILLED_ALL,
-        )
+    WorldOwner::current().read(|world| {
+        crate::state::game_state_keys::get_game_state(world, StoryKey::KOHR_AH_KILLED_ALL)
     }) as u8
 }
 
@@ -365,9 +351,7 @@ pub fn set_player_input_all_or_explode() {
     #[cfg(not(test))]
     {
         // SAFETY: Kernel input state is initialized and accessed on the game thread.
-        let ok = unsafe {
-            crate::engine::Kernel::current().write(|kernel| c_ffi::SetPlayerInputAll(kernel))
-        };
+        let ok = unsafe { KernelOwner::current().write(|kernel| c_ffi::SetPlayerInputAll(kernel)) };
         if !ok {
             unsafe {
                 crate::logging::log_add(
@@ -461,9 +445,8 @@ pub unsafe fn load_kernel(
     argv: *mut *mut std::ffi::c_char,
 ) -> Result<(), super::MainLoopError> {
     let result = unsafe {
-        crate::engine::Kernel::current().write(|kernel| {
-            crate::engine::World::current()
-                .write(|world| prod::LoadKernel(kernel, world, argc, argv))
+        KernelOwner::current().write(|kernel| {
+            WorldOwner::current().write(|world| prod::LoadKernel(kernel, world, argc, argv))
         })
     };
     if result != 0 {

@@ -213,7 +213,7 @@ const INFINITE_FLEET: u16 = !0;
 /// # Safety
 /// Game thread, with the fleet queue initialised.
 pub unsafe fn start_sphere_tracking(race: u16) -> bool {
-    StartSphereTracking(race) != 0
+    WorldOwner::current().write(|world| StartSphereTracking(world, race)) != 0
 }
 
 /// `RepairSISBorder ()`.
@@ -233,7 +233,7 @@ pub unsafe fn notify_others_all_clear(race: u16) {
 }
 
 unsafe fn clone_npc_ship(ship: u8, crew: u16) -> crate::collections::queue::HLink {
-    crate::engine::World::current().write(|world| {
+    WorldOwner::current().write(|world| {
         // SAFETY: these are disjoint queues in the leased World, and the name
         // draw only consumes RNG, without re-entering campaign state.
         crate::comm::dispatch::clone_ship_fragment_from(
@@ -551,7 +551,7 @@ impl Npcs for LiveGame {
     fn yehat_civil_war(&self) -> bool {
         // SAFETY: reads the Rust-owned game state.
         unsafe {
-            crate::engine::World::current()
+            WorldOwner::current()
                 .read(|world| rust_get_game_state_bits(world, YEHAT_CIVIL_WAR.0, YEHAT_CIVIL_WAR.1))
                 != 0
         }
@@ -595,7 +595,7 @@ impl PlanetNames for LiveGame {
     fn set_battle_planet(&mut self, value: u8) {
         // SAFETY: writes the Rust-owned game state.
         unsafe {
-            crate::engine::World::current().write(|world| {
+            WorldOwner::current().write(|world| {
                 rust_set_game_state_bits(world, BATTLE_PLANET.0, BATTLE_PLANET.1, value)
             })
         };

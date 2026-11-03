@@ -2,6 +2,7 @@
 
 use crate::engine::battle::kernel::MasterCatalog;
 use crate::engine::Kernel as KernelOwner;
+use crate::engine::World as WorldOwner;
 
 fn find(queue: &MasterCatalog, species: u32) -> i32 {
     let mut next = queue.head();
@@ -38,6 +39,7 @@ pub(crate) mod engine {
         kernel::{CatalogEntry, MasterCatalog},
         record::{FLEET_STUFF, SHIP_INFO},
     };
+    use crate::engine::{Kernel as KernelOwner, World as WorldOwner};
     use crate::ships::native::abi::*;
     use std::{ffi::CStr, ptr};
 
@@ -49,7 +51,7 @@ pub(crate) mod engine {
     }
 
     unsafe fn with_catalog<R>(call: impl FnOnce(&mut MasterCatalog) -> R) -> R {
-        crate::engine::Kernel::current().write(|kernel| call(&mut kernel.master_queue))
+        KernelOwner::current().write(|kernel| call(&mut kernel.master_queue))
     }
 
     fn entry(queue: &MasterCatalog, id: crate::collections::pool::Id<CatalogEntry>) -> MasterShip {
@@ -69,7 +71,7 @@ pub(crate) mod engine {
             if let Some(yield_processing) = yield_processing {
                 yield_processing();
             }
-            let descriptor = crate::engine::World::current()
+            let descriptor = WorldOwner::current()
                 .write(|world| crate::ships::load_ship(world, species, 0))
                 .unwrap_or_else(|| panic!("master species {species}"));
             let name = CStr::from_ptr(GetStringAddress(SetAbsStringTableIndex(
@@ -109,8 +111,7 @@ pub(crate) mod engine {
             queue.remove(id);
             Some(queue.free(id).descriptor)
         }) {
-            crate::engine::World::current()
-                .write(|world| crate::ships::unload_ship(world, descriptor, 1, 0));
+            WorldOwner::current().write(|world| crate::ships::unload_ship(world, descriptor, 1, 0));
         }
         with_catalog(MasterCatalog::reinit);
     }

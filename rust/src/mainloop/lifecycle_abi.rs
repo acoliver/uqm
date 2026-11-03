@@ -1,6 +1,9 @@
 //! Main-thread lifecycle callbacks, ported from starcon.c (GPL-2.0-or-later).
 #![allow(non_snake_case)]
 
+use crate::engine::Kernel as KernelOwner;
+use crate::engine::StoryKey;
+use crate::engine::World as WorldOwner;
 use crate::engine::WorldData as WorldFields;
 use crate::ships::native::abi::*;
 use std::{ffi::c_void, ptr};
@@ -10,16 +13,19 @@ pub static mut MainExited: i32 = 0;
 
 unsafe extern "C" fn on_battle_frame() {
     crate::time::clock_abi::live::GameClockTick();
-    let opening = crate::navigation::get("ARILOU_SPACE") == 1;
-    let counter = crate::navigation::get("ARILOU_SPACE_COUNTER");
-    crate::navigation::set(
-        "ARILOU_SPACE_COUNTER",
-        if opening {
-            counter + u8::from(counter < 9)
-        } else {
-            counter - u8::from(counter > 0)
-        },
-    );
+    WorldOwner::current().write(|world| {
+        let opening = crate::navigation::get(world, StoryKey::ARILOU_SPACE) == 1;
+        let counter = crate::navigation::get(world, StoryKey::ARILOU_SPACE_COUNTER);
+        crate::navigation::set(
+            world,
+            StoryKey::ARILOU_SPACE_COUNTER,
+            if opening {
+                counter + u8::from(counter < 9)
+            } else {
+                counter - u8::from(counter > 0)
+            },
+        );
+    });
     if WorldFields::current().read(|owner| owner.game.current_activity)
         & (CHECK_ABORT | CHECK_LOAD) as u16
         == 0
@@ -32,10 +38,10 @@ unsafe extern "C" fn on_battle_frame() {
 unsafe extern "C" fn background_init_kernel(timeout: u32) {
     crate::ships::master_native::LoadMasterShipList(Some(crate::threading::legacy_abi::TaskSwitch));
     crate::threading::legacy_abi::TaskSwitch();
-    crate::engine::Kernel::current().write(|kernel| {
+    KernelOwner::current().write(|kernel| {
         crate::game_init::kernel_abi::InitGameKernel(
             kernel,
-            crate::engine::World::current().read(|world| world.activity()),
+            WorldOwner::current().read(|world| world.activity()),
         )
     });
     while crate::time::counter_abi::GetTimeCounter() <= timeout

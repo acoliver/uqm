@@ -6,6 +6,8 @@ use super::model::{LanderUpgrades, ShieldSet, SurfacePoint};
 use super::runtime::{AdapterError, ShipStatusPort};
 use super::session::{dispatch_crew, PlanetSideSession};
 use super::simulation::LanderState;
+use crate::engine::StoryKey;
+use crate::engine::World as WorldOwner;
 
 /// Production-independent session inputs captured at the dispatch boundary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -70,18 +72,17 @@ fn production_upgrades() -> LanderUpgrades {
     use crate::state::game_state_keys::get_game_state;
 
     LanderUpgrades {
-        improved_speed: crate::engine::World::current()
-            .read(|world| get_game_state(world, crate::engine::StoryKey::IMPROVED_LANDER_SPEED))
+        improved_speed: WorldOwner::current()
+            .read(|world| get_game_state(world, StoryKey::IMPROVED_LANDER_SPEED))
             != 0,
-        improved_cargo: crate::engine::World::current()
-            .read(|world| get_game_state(world, crate::engine::StoryKey::IMPROVED_LANDER_CARGO))
+        improved_cargo: WorldOwner::current()
+            .read(|world| get_game_state(world, StoryKey::IMPROVED_LANDER_CARGO))
             != 0,
-        improved_shot: crate::engine::World::current()
-            .read(|world| get_game_state(world, crate::engine::StoryKey::IMPROVED_LANDER_SHOT))
+        improved_shot: WorldOwner::current()
+            .read(|world| get_game_state(world, StoryKey::IMPROVED_LANDER_SHOT))
             != 0,
         shields: ShieldSet::from_bits(
-            crate::engine::World::current()
-                .read(|world| get_game_state(world, crate::engine::StoryKey::LANDER_SHIELDS))
+            WorldOwner::current().read(|world| get_game_state(world, StoryKey::LANDER_SHIELDS))
                 as u8,
         ),
     }

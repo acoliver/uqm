@@ -5,6 +5,7 @@
 use crate::comm::dispatch::CPoint;
 #[cfg(not(test))]
 use crate::engine::Kernel as KernelOwner;
+use crate::engine::World as WorldOwner;
 use crate::savegame::runtime::star::{CStarDesc, NUM_HYPER_VORTICES, NUM_SOLAR_SYSTEMS};
 use std::ptr;
 
@@ -86,7 +87,7 @@ pub unsafe extern "C" fn FindStar(
     xb: i16,
     yb: i16,
 ) -> *mut CStarDesc {
-    let (base, hi) = if crate::engine::World::current()
+    let (base, hi) = if WorldOwner::current()
         .read(|world| crate::state::ffi::rust_get_game_state_bits(world, 42, 43))
         <= 1
     {

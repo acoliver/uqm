@@ -6,6 +6,8 @@
 //! purchase costs, which bars to draw) are made by the Rust models in this
 //! module's siblings, not here.
 
+use crate::engine::StoryKey;
+use crate::engine::World as WorldOwner;
 use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
 use crate::graphics::context_abi::SetContextClipRect;
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
@@ -535,15 +537,15 @@ impl Gfx for CffiPlatform {
 
 fn state_key_name(key: StateKey) -> crate::engine::StoryKey {
     match key {
-        StateKey::StarbaseVisited => crate::engine::StoryKey::STARBASE_VISITED,
-        StateKey::StarbaseAvailable => crate::engine::StoryKey::STARBASE_AVAILABLE,
-        StateKey::ProbeIlwrathEncounter => crate::engine::StoryKey::PROBE_ILWRATH_ENCOUNTER,
-        StateKey::GlobalFlagsAndData => crate::engine::StoryKey::GLOBAL_FLAGS_AND_DATA,
-        StateKey::MoonbaseOnShip => crate::engine::StoryKey::MOONBASE_ON_SHIP,
-        StateKey::ChmmrBombState => crate::engine::StoryKey::CHMMR_BOMB_STATE,
-        StateKey::LanderShields => crate::engine::StoryKey::LANDER_SHIELDS,
-        StateKey::CrewPurchased0 => crate::engine::StoryKey::CREW_PURCHASED0,
-        StateKey::CrewPurchased1 => crate::engine::StoryKey::CREW_PURCHASED1,
+        StateKey::StarbaseVisited => StoryKey::STARBASE_VISITED,
+        StateKey::StarbaseAvailable => StoryKey::STARBASE_AVAILABLE,
+        StateKey::ProbeIlwrathEncounter => StoryKey::PROBE_ILWRATH_ENCOUNTER,
+        StateKey::GlobalFlagsAndData => StoryKey::GLOBAL_FLAGS_AND_DATA,
+        StateKey::MoonbaseOnShip => StoryKey::MOONBASE_ON_SHIP,
+        StateKey::ChmmrBombState => StoryKey::CHMMR_BOMB_STATE,
+        StateKey::LanderShields => StoryKey::LANDER_SHIELDS,
+        StateKey::CrewPurchased0 => StoryKey::CREW_PURCHASED0,
+        StateKey::CrewPurchased1 => StoryKey::CREW_PURCHASED1,
     }
 }
 
@@ -601,12 +603,12 @@ impl Platform for CffiPlatform {
     }
 
     fn game_state(&self, key: StateKey) -> u32 {
-        crate::engine::World::current()
+        WorldOwner::current()
             .read(|world| crate::state::game_state_keys::get_game_state(world, state_key_name(key)))
     }
 
     fn set_game_state(&self, key: StateKey, value: u32) {
-        crate::engine::World::current().write(|world| {
+        WorldOwner::current().write(|world| {
             crate::state::game_state_keys::set_game_state(world, state_key_name(key), value)
         });
     }

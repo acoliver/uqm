@@ -42,7 +42,7 @@ unsafe fn game_string(index: u32) -> *mut UNICODE {
 unsafe fn game_state(name: &str) -> u8 {
     let (start, end) =
         crate::state::game_state::lookup_game_state_bits(name).expect("known SIS game-state key");
-    crate::engine::World::current()
+    World::current()
         .read(|world| crate::state::ffi::rust_get_game_state_bits(world, start as i32, end as i32))
 }
 
@@ -285,13 +285,11 @@ pub unsafe extern "C" fn DrawSISMessageEx(
                 );
                 buf.as_ptr().cast()
             }
-            IN_HYPERSPACE => {
-                game_string(if crate::engine::World::current().read(inHyperSpace) != 0 {
-                    NAVIGATION_STRING_BASE
-                } else {
-                    NAVIGATION_STRING_BASE + 1
-                })
-            }
+            IN_HYPERSPACE => game_string(if World::current().read(inHyperSpace) != 0 {
+                NAVIGATION_STRING_BASE
+            } else {
+                NAVIGATION_STRING_BASE + 1
+            }),
             _ => c"".as_ptr().cast(),
         };
     }

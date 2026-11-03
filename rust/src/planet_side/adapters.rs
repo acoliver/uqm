@@ -7,6 +7,7 @@ use super::simulation::FrameInput;
 use crate::c_bindings::controller_input::{CurrentInputState, CONTROL_TEMPLATE_NUM_TEMPLATES};
 #[cfg(not(test))]
 use crate::c_bindings::player_control_template;
+use crate::engine::World as WorldOwner;
 #[cfg(not(test))]
 use crate::engine::WorldData as WorldFields;
 
@@ -84,7 +85,7 @@ fn read_player_one_input() -> FrameInput {
             thrust: key[KEY_UP] != 0,
             fire: key[KEY_WEAPON] != 0,
             takeoff: key[KEY_ESCAPE] != 0 || key[KEY_SPECIAL] != 0,
-            abort: crate::engine::World::current()
+            abort: WorldOwner::current()
                 .read(|world| crate::mainloop::c_extern::get_current_activity(world))
                 & 0x4000
                 != 0,

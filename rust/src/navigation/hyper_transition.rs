@@ -2,6 +2,7 @@
 #![cfg(not(test))]
 use super::abi::*;
 use super::{get, set};
+use crate::engine::StoryKey;
 use std::ptr;
 
 pub(crate) fn element_universe(cx: &Cx<'_>, element: ElementId) -> POINT {
@@ -182,10 +183,17 @@ pub(crate) fn portal_death(
     cx: &mut crate::engine::battle::Cx<'_>,
     element: crate::engine::battle::ElementId,
 ) {
-    if cx.element(element).flags & DEFY_PHYSICS as u16 == 0 || get("ARILOU_SPACE_COUNTER") == 0 {
+    if cx.element(element).flags & DEFY_PHYSICS as u16 == 0
+        || get(cx.world, StoryKey::ARILOU_SPACE_COUNTER) == 0
+    {
         set(
-            "ARILOU_SPACE_SIDE",
-            if get("ARILOU_SPACE_SIDE") <= 1 { 0 } else { 3 },
+            cx.world,
+            StoryKey::ARILOU_SPACE_SIDE,
+            if get(cx.world, StoryKey::ARILOU_SPACE_SIDE) <= 1 {
+                0
+            } else {
+                3
+            },
         );
     }
 }
@@ -199,10 +207,10 @@ pub(crate) fn portal_collision(
     if cx.element(ship).flags & PLAYER_SHIP as u16 == 0 {
         return;
     }
-    let side = get("ARILOU_SPACE_SIDE");
+    let side = get(cx.world, StoryKey::ARILOU_SPACE_SIDE);
     if side == 0 || side == 3 {
         if cx.element(ship).flags & DEFY_PHYSICS as u16 != 0 {
-            set("ARILOU_SPACE_SIDE", side ^ 1);
+            set(cx.world, StoryKey::ARILOU_SPACE_SIDE, side ^ 1);
         } else {
             cx.init_hyper_transition(source, ship, 2);
         }

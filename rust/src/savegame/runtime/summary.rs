@@ -29,6 +29,7 @@
 //! `SUMMARY_DESC` held, and more escorts than a summary lists is an error where
 //! C would write past `ShipList`.
 
+use crate::engine::World as WorldOwner;
 use std::fmt;
 
 use super::queues::{walk, QueueError, QueueKind};
@@ -236,7 +237,7 @@ pub fn capture_summary(
     solar: &dyn SolarSystemOwner,
     name: &[u8],
 ) -> Result<Summary, SummaryError> {
-    let state = GameState::from_bytes(&crate::engine::World::current().read(snapshot_game_state)?);
+    let state = GameState::from_bytes(&WorldOwner::current().read(snapshot_game_state)?);
 
     let mut sis_copy = sis_state(sis);
     let mut activity = (game.current_activity & 0x00ff) as u8;

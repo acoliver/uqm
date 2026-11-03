@@ -2,6 +2,7 @@
 #![cfg(not(test))]
 use super::abi::*;
 use super::get;
+use crate::engine::StoryKey;
 
 use super::hyper_transition::{init_transition, sis_element};
 use super::hyperspace::live::{cosine, height, logx, logy, sine, universe_x, universe_y, width};
@@ -35,11 +36,13 @@ pub(super) unsafe fn allocate(cx: &mut Cx<'_>, point: POINT) -> Option<ElementId
     cx.primitive_style_mut(element).kind = gfx_object_STAMP_PRIM as u8;
     let frames = ptr::addr_of_mut!(cx.kernel.hyperstars)
         .cast::<FRAME>()
-        .wrapping_add(1 + (get("ARILOU_SPACE_SIDE") >> 1) as usize);
+        .wrapping_add(1 + (get(cx.world, StoryKey::ARILOU_SPACE_SIDE) >> 1) as usize);
     cx.set_single_frames(
         element,
         Frames::native_shared(
-            crate::engine::battle::views::SharedFrames::Hyperspace(get("ARILOU_SPACE_SIDE") >> 1),
+            crate::engine::battle::views::SharedFrames::Hyperspace(
+                get(cx.world, StoryKey::ARILOU_SPACE_SIDE) >> 1,
+            ),
             NonNull::new(frames).unwrap_or_else(|| panic!("retained navigation authority")),
             1,
         ),
@@ -139,7 +142,7 @@ pub(crate) fn collision(
     cx.element_mut(source).velocity.zero();
 }
 unsafe fn add(cx: &mut Cx<'_>, encounter: *mut ENCOUNTER, universe: POINT) -> Option<ElementId> {
-    if get("ARILOU_SPACE_SIDE") >= 2 {
+    if get(cx.world, StoryKey::ARILOU_SPACE_SIDE) >= 2 {
         return None;
     }
     if (*encounter).flags & ENCOUNTER_REFORMING as u8 != 0 {

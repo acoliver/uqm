@@ -184,10 +184,8 @@ pub(crate) mod engine {
 
     /// # Safety
     /// Race queue and its fleet records must be initialized on the game thread.
-    #[no_mangle]
-    pub unsafe extern "C" fn StartSphereTracking(race: COUNT) -> COUNT {
-        let world = WorldFields::current();
-        let queue = &raw mut (**world).game.avail_race_q;
+    pub unsafe fn StartSphereTracking(world: &mut crate::engine::World, race: COUNT) -> COUNT {
+        let queue = &raw mut world.data.game.avail_race_q;
         let fleet = GetStarShipFromIndex(queue, race);
         if fleet.is_null() {
             return 0;

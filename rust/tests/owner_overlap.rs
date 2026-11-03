@@ -210,7 +210,8 @@ fn hyperspace_encounter_updates_story_in_the_borrowed_world() {
         let old_size = (ScreenWidth, ScreenHeight);
         (ScreenWidth, ScreenHeight) = (320, 240);
         bridge::with_game(&mut game, || {
-            uqm_rust::navigation::abi::check_hyperspace_encounter();
+            uqm_rust::engine::World::current()
+                .write(|world| uqm_rust::navigation::abi::check_hyperspace_encounter(world));
         });
         (ScreenWidth, ScreenHeight) = old_size;
     }
@@ -241,4 +242,46 @@ fn hyperspace_movement_releases_world_before_fuel_queries() {
     }
     assert_eq!((dx, dy), (0, 0));
     assert_eq!(game.world.data.flagship.fuel_on_board, 100);
+}
+
+#[test]
+#[serial_test::serial]
+fn campaign_events_schedule_and_dispatch_using_the_existing_world() {
+    use uqm_rust::engine::StoryKey;
+    use uqm_rust::navigation::abi::{
+        AddEvent, EventHandler, ARILOU_ENTRANCE_EVENT, ARILOU_EXIT_EVENT, ARILOU_UMGAH_CHECK,
+    };
+    use uqm_rust::time::clock_bridge::CEvent;
+    let mut game = Game::new();
+    game.world.story = Some(uqm_rust::state::game_state::GameState::new());
+    let clock = &mut game.world.data.game.game_clock;
+    clock.year_index = 2155;
+    clock.month_index = 1;
+    clock.day_index = 1;
+    // SAFETY: this fixture owns the event pool and World throughout dispatch and cleanup.
+    unsafe {
+        assert_ne!(
+            InitQueue(&raw mut clock.event_q, 18, mem::size_of::<CEvent>() as u16),
+            0
+        );
+        bridge::with_game(&mut game, || {
+            World::current().write(|world| {
+                EventHandler(world, ARILOU_ENTRANCE_EVENT as u8);
+                assert_eq!(world.story_state(StoryKey::ARILOU_SPACE), 1);
+                let next = world.data.game.game_clock.event_q.head.cast::<CEvent>();
+                assert!(!next.is_null());
+                assert_eq!(
+                    ((*next).year_index, (*next).month_index, (*next).day_index),
+                    (2155, 1, 4)
+                );
+                assert_eq!((*next).func_index, ARILOU_EXIT_EVENT as u8);
+            });
+            AddEvent(1, 0, 0, 0, ARILOU_UMGAH_CHECK as u8);
+            assert_eq!(
+                World::current().read(|world| world.story_state(StoryKey::ARILOU_CHECKED_UMGAH)),
+                2
+            );
+        });
+        UninitQueue(&raw mut game.world.data.game.game_clock.event_q);
+    }
 }

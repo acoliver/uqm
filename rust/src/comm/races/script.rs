@@ -1,6 +1,7 @@
 //! Shared boundary for dialogue scripts while the surrounding engine still uses C.
 
 use crate::comm::locdata::{CAnimationDesc, CLocData};
+use crate::engine::World as WorldOwner;
 #[cfg(not(test))]
 use crate::engine::WorldData as WorldFields;
 
@@ -96,7 +97,7 @@ pub(super) mod live {
             let (start, end) = crate::state::game_state_keys::bit_range(key)
                 .expect("dialogue uses an unknown game-state key");
             unsafe {
-                crate::engine::World::current().read(|world| {
+                WorldOwner::current().read(|world| {
                     crate::state::ffi::rust_get_game_state_bits(world, start as i32, end as i32)
                 })
             }
@@ -106,7 +107,7 @@ pub(super) mod live {
             let (start, end) = crate::state::game_state_keys::bit_range(key)
                 .expect("dialogue uses an unknown game-state key");
             unsafe {
-                crate::engine::World::current().write(|world| {
+                WorldOwner::current().write(|world| {
                     crate::state::ffi::rust_set_game_state_bits(
                         world,
                         start as i32,

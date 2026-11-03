@@ -3,6 +3,7 @@
 use super::drawing::*;
 use super::flight::*;
 use super::*;
+use crate::engine::StoryKey;
 use crate::engine::{Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields};
 
 use crate::battle::gendef::getGenerateFunctions;
@@ -243,13 +244,9 @@ pub(super) unsafe fn load_solar_sys() -> *mut c::PLANET_DESC {
     (*sun).image.frame = SUN_FRAME;
 
     ((*(*state).genFuncs).generatePlanets.unwrap())(state);
-    if crate::engine::World::current()
-        .read(|world| get_game_state(world, crate::engine::StoryKey::PLANETARY_CHANGE))
-        != 0
-    {
-        crate::engine::World::current().write(|world| ffi::PutPlanetInfo(world));
-        crate::engine::World::current()
-            .write(|world| set_game_state(world, crate::engine::StoryKey::PLANETARY_CHANGE, 0));
+    if WorldOwner::current().read(|world| get_game_state(world, StoryKey::PLANETARY_CHANGE)) != 0 {
+        WorldOwner::current().write(|world| ffi::PutPlanetInfo(world));
+        WorldOwner::current().write(|world| set_game_state(world, StoryKey::PLANETARY_CHANGE, 0));
     }
 
     for i in 0..(*state).PlanetDesc.len() {
@@ -285,8 +282,7 @@ pub(super) unsafe fn load_solar_sys() -> *mut c::PLANET_DESC {
         (*state).pOrbitalDesc = (*state).PlanetDesc.as_mut_ptr().add(i);
         generate_moons(state, (*state).pOrbitalDesc);
         (*state).pBaseDesc = (*state).MoonDesc.as_mut_ptr();
-        crate::engine::World::current()
-            .write(|world| set_game_state(world, crate::engine::StoryKey::PLANETARY_LANDING, 0));
+        WorldOwner::current().write(|world| set_game_state(world, StoryKey::PLANETARY_LANDING, 0));
     }
 
     init_solar_sys_sis_characteristics();
@@ -364,15 +360,14 @@ pub(super) unsafe fn enter_planet_orbit() {
         }
     }
 
-    crate::engine::World::current().write(|world| ffi::GetPlanetInfo(world));
+    WorldOwner::current().write(|world| ffi::GetPlanetInfo(world));
     ((*(*state).genFuncs).generateOrbital.unwrap())(state, (*state).pOrbitalDesc);
     (**KernelOwner::current()).last_activity &= !(CHECK_LOAD | CHECK_RESTART);
     if glob().read(|owner| owner.game.current_activity)
         & (CHECK_ABORT | CHECK_LOAD | START_ENCOUNTER)
         != 0
         || glob().read(|owner| owner.flagship.crew_enlisted) == c::COUNT::MAX
-        || crate::engine::World::current()
-            .read(|world| get_game_state(world, crate::engine::StoryKey::CHMMR_BOMB_STATE))
+        || WorldOwner::current().read(|world| get_game_state(world, StoryKey::CHMMR_BOMB_STATE))
             == 2
     {
         return;
@@ -475,8 +470,7 @@ pub(super) unsafe fn end_interplanetary() {
     if glob().read(|owner| owner.game.current_activity) & (CHECK_ABORT | CHECK_LOAD) == 0 {
         let state = system();
         ((*(*state).genFuncs).uninitNpcs.unwrap())(state);
-        crate::engine::World::current()
-            .write(|world| set_game_state(world, crate::engine::StoryKey::USED_BROADCASTER, 0));
+        WorldOwner::current().write(|world| set_game_state(world, StoryKey::USED_BROADCASTER, 0));
     }
 }
 
@@ -646,13 +640,12 @@ pub unsafe extern "C" fn SaveSolarSysLocation() {
     if !playerInPlanetOrbit() {
         save_non_orbital_location();
     } else {
-        if crate::engine::World::current()
-            .read(|world| get_game_state(world, crate::engine::StoryKey::PLANETARY_CHANGE))
+        if WorldOwner::current().read(|world| get_game_state(world, StoryKey::PLANETARY_CHANGE))
             != 0
         {
-            crate::engine::World::current().write(|world| ffi::PutPlanetInfo(world));
-            crate::engine::World::current()
-                .write(|world| set_game_state(world, crate::engine::StoryKey::PLANETARY_CHANGE, 0));
+            WorldOwner::current().write(|world| ffi::PutPlanetInfo(world));
+            WorldOwner::current()
+                .write(|world| set_game_state(world, StoryKey::PLANETARY_CHANGE, 0));
         }
         assert!((**glob()).game.ip_planet != 0);
         let mut moon = 1_u8;

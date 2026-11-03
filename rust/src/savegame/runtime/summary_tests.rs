@@ -14,6 +14,7 @@
 //! solar tests runs the real Rust computation (`solar`) over a wired
 //! `SOLARSYS_STATE` and checks what ends up in the summary.
 
+use crate::engine::World as WorldOwner;
 use std::cell::Cell;
 
 use serial_test::serial;
@@ -74,7 +75,7 @@ fn set_key(bytes: &mut StateBytes, name: &str, value: u8) {
 }
 
 fn install(bytes: &StateBytes) {
-    crate::engine::World::current()
+    WorldOwner::current()
         .write(|world| replace_game_state(world, bytes))
         .expect("the singleton is not poisoned");
 }

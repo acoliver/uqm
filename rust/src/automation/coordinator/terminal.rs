@@ -1,6 +1,7 @@
 //! First-terminal publication and propagation to the game loop.
 
 use super::*;
+use crate::engine::World as WorldOwner;
 
 impl Coordinator {
     /// Set a terminal outcome on both the coordinator and the runtime mirror.
@@ -22,7 +23,7 @@ impl Coordinator {
         #[cfg(not(test))]
         unsafe {
             crate::mainloop::c_extern::set_current_activity(
-                crate::engine::World::current()
+                WorldOwner::current()
                     .read(|world| crate::mainloop::c_extern::get_current_activity(world))
                     | 0x4000,
             );

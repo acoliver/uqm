@@ -4,6 +4,8 @@
 
 use crate::battle::battle_types::{arctan, cosine, sine};
 use crate::c_bindings::global_state::{PlanetFrame, IP_GROUP, PLANET_DESC, SYSTEM_INFO};
+use crate::engine::StoryKey;
+use crate::engine::World as WorldOwner;
 use crate::math::RandomContext;
 use crate::planets::calc::{AnalysisSite, StarDescription};
 use crate::planets::consts::{EARTH_RADIUS, PLANET_SHIELDED};
@@ -57,13 +59,13 @@ pub struct LiveStory;
 
 impl Story for LiveStory {
     fn flag(&self, name: &'static str) -> u32 {
-        crate::engine::StoryKey::from_name(name).map_or(0, |key| {
-            crate::engine::World::current().read(|world| get_game_state(world, key))
+        StoryKey::from_name(name).map_or(0, |key| {
+            WorldOwner::current().read(|world| get_game_state(world, key))
         })
     }
     fn set_flag(&mut self, name: &'static str, value: u32) {
-        if let Some(key) = crate::engine::StoryKey::from_name(name) {
-            crate::engine::World::current().write(|world| set_game_state(world, key, value));
+        if let Some(key) = StoryKey::from_name(name) {
+            WorldOwner::current().write(|world| set_game_state(world, key, value));
         }
     }
     fn word(&self, name: &'static str) -> u32 {
@@ -100,7 +102,7 @@ fn get_game_state_byte(start: u32) -> u32 {
     // SAFETY: reads the Rust-owned game state.
     unsafe {
         u32::from(
-            crate::engine::World::current()
+            WorldOwner::current()
                 .read(|world| rust_get_game_state_bits(world, start as i32, start as i32 + 7)),
         )
     }
@@ -109,7 +111,7 @@ fn get_game_state_byte(start: u32) -> u32 {
 fn set_game_state_byte(start: u32, value: u8) {
     // SAFETY: writes the Rust-owned game state.
     unsafe {
-        crate::engine::World::current()
+        WorldOwner::current()
             .write(|world| rust_set_game_state_bits(world, start as i32, start as i32 + 7, value))
     };
 }

@@ -1,6 +1,7 @@
 //! Devices menu, ported from `planets/devices.c`.
 
 use crate::battle::c_bridge::SleepThread;
+use crate::engine::StoryKey;
 use crate::engine::{Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields};
 use crate::mainloop::restart_menu::c_extern::uqm_sleep_thread_until as SleepThreadUntil;
 use crate::mainloop::restart_menu::c_extern::{DoInput, FadeScreen};
@@ -182,13 +183,9 @@ unsafe fn orbit_is(planet: u8) -> bool {
 }
 
 unsafe fn use_caster() -> bool {
-    if crate::engine::World::current().read(inHQSpace) != 0 {
-        if crate::engine::World::current()
-            .read(|world| get(world, crate::engine::StoryKey::ARILOU_SPACE_SIDE))
-            <= 1
-        {
-            crate::engine::World::current()
-                .write(|world| set(world, crate::engine::StoryKey::USED_BROADCASTER, 1));
+    if WorldOwner::current().read(inHQSpace) != 0 {
+        if WorldOwner::current().read(|world| get(world, StoryKey::ARILOU_SPACE_SIDE)) <= 1 {
+            WorldOwner::current().write(|world| set(world, StoryKey::USED_BROADCASTER, 1));
             return true;
         }
         return false;
@@ -201,27 +198,22 @@ unsafe fn use_caster() -> bool {
             (*(**WorldOwner::current()).star_pointer(crate::planets::starmap::current_catalog()))
                 .index,
         ) == CHMMR_DEFINED
-        && crate::engine::World::current()
-            .read(|world| get(world, crate::engine::StoryKey::CHMMR_UNLEASHED))
-            == 0
+        && WorldOwner::current().read(|world| get(world, StoryKey::CHMMR_UNLEASHED)) == 0
     {
         NextActivity |= CHECK_LOAD;
         (**WorldFields::current()).game.current_activity |= START_ENCOUNTER;
         reset_groups();
-        crate::engine::World::current().write(|world| {
-            set(
-                world,
-                crate::engine::StoryKey::GLOBAL_FLAGS_AND_DATA,
-                1 << 7,
-            )
-        });
+        WorldOwner::current().write(|world| set(world, StoryKey::GLOBAL_FLAGS_AND_DATA, 1 << 7));
         SaveSolarSysLocation();
         return true;
     }
     let home = u32::from(
         (*(**WorldOwner::current()).star_pointer(crate::planets::starmap::current_catalog())).index,
     ) == ILWRATH_DEFINED;
-    let mut found = home && StartSphereTracking(u16::from(ship::ILWRATH_SHIP)) != 0;
+    let mut found = home
+        && WorldOwner::current()
+            .write(|world| StartSphereTracking(world, u16::from(ship::ILWRATH_SHIP)))
+            != 0;
     if !found {
         let queue = std::ptr::addr_of!((**WorldFields::current()).game.ip_group_q);
         let group = (*queue)
@@ -237,10 +229,10 @@ unsafe fn use_caster() -> bool {
     NextActivity |= CHECK_LOAD;
     (**WorldFields::current()).game.current_activity |= START_ENCOUNTER;
     reset_groups();
-    crate::engine::World::current().write(|world| {
+    WorldOwner::current().write(|world| {
         set(
             world,
-            crate::engine::StoryKey::GLOBAL_FLAGS_AND_DATA,
+            StoryKey::GLOBAL_FLAGS_AND_DATA,
             if home { 1 << 4 } else { 1 << 5 },
         )
     });
@@ -254,33 +246,26 @@ unsafe fn use_caster() -> bool {
 unsafe fn invoke(id: u8) -> u8 {
     match id {
         4..=6 => {
-            let condition = crate::engine::World::current()
-                .read(|world| get(world, crate::engine::StoryKey::ULTRON_CONDITION));
+            let condition =
+                WorldOwner::current().read(|world| get(world, StoryKey::ULTRON_CONDITION));
             if condition == 0 {
                 return 0;
             }
-            crate::engine::World::current().write(|world| {
-                set(
-                    world,
-                    crate::engine::StoryKey::ULTRON_CONDITION,
-                    condition + 1,
-                )
-            });
-            crate::engine::World::current().write(|world| {
+            WorldOwner::current()
+                .write(|world| set(world, StoryKey::ULTRON_CONDITION, condition + 1));
+            WorldOwner::current().write(|world| {
                 set(
                     world,
                     [
-                        crate::engine::StoryKey::ROSY_SPHERE_ON_SHIP,
-                        crate::engine::StoryKey::AQUA_HELIX_ON_SHIP,
-                        crate::engine::StoryKey::CLEAR_SPINDLE_ON_SHIP,
+                        StoryKey::ROSY_SPHERE_ON_SHIP,
+                        StoryKey::AQUA_HELIX_ON_SHIP,
+                        StoryKey::CLEAR_SPINDLE_ON_SHIP,
                     ][usize::from(id - 4)],
                     0,
                 )
             });
-            crate::engine::World::current()
-                .write(|world| set(world, crate::engine::StoryKey::DISCUSSED_ULTRON, 0));
-            crate::engine::World::current()
-                .write(|world| set(world, crate::engine::StoryKey::SUPOX_ULTRON_HELP, 0));
+            WorldOwner::current().write(|world| set(world, StoryKey::DISCUSSED_ULTRON, 0));
+            WorldOwner::current().write(|world| set(world, StoryKey::SUPOX_ULTRON_HELP, 0));
             1
         }
         3 => {
@@ -300,8 +285,7 @@ unsafe fn invoke(id: u8) -> u8 {
             {
                 FadeScreen(253, 1680);
             } else {
-                crate::engine::World::current()
-                    .write(|world| set(world, crate::engine::StoryKey::CHMMR_EMERGING, 1));
+                WorldOwner::current().write(|world| set(world, StoryKey::CHMMR_EMERGING, 1));
                 (**WorldFields::current()).game.current_activity |= START_ENCOUNTER;
                 reset_groups();
                 WorldFields::current().write(|world| {
@@ -316,8 +300,7 @@ unsafe fn invoke(id: u8) -> u8 {
             2
         }
         2 => {
-            crate::engine::World::current()
-                .write(|world| set(world, crate::engine::StoryKey::UTWIG_BOMB, 0));
+            WorldOwner::current().write(|world| set(world, StoryKey::UTWIG_BOMB, 0));
             (**WorldFields::current()).game.current_activity &= !0x0200;
             (**WorldFields::current()).flagship.crew_enlisted = u16::MAX;
             1
@@ -325,12 +308,10 @@ unsafe fn invoke(id: u8) -> u8 {
         1 => {
             NextActivity |= CHECK_LOAD;
             (**WorldFields::current()).game.current_activity |= START_ENCOUNTER;
-            crate::engine::World::current()
-                .write(|world| set(world, crate::engine::StoryKey::GLOBAL_FLAGS_AND_DATA, 0));
-            if crate::engine::World::current().read(inHQSpace) != 0 {
+            WorldOwner::current().write(|world| set(world, StoryKey::GLOBAL_FLAGS_AND_DATA, 0));
+            if WorldOwner::current().read(inHQSpace) != 0 {
                 if !(**WorldFields::current()).game.encounter_q.head.is_null() {
-                    crate::engine::World::current()
-                        .write(|world| set(world, crate::engine::StoryKey::SHIP_TO_COMPEL, 1));
+                    WorldOwner::current().write(|world| set(world, StoryKey::SHIP_TO_COMPEL, 1));
                 }
                 (**WorldFields::current()).game.current_activity &= !0x0200;
                 #[cfg(not(test))]
@@ -340,8 +321,7 @@ unsafe fn invoke(id: u8) -> u8 {
             } else {
                 crate::c_bindings::global_state::EncounterGroup = 0;
                 if !(**WorldFields::current()).game.ip_group_q.head.is_null() {
-                    crate::engine::World::current()
-                        .write(|world| set(world, crate::engine::StoryKey::SHIP_TO_COMPEL, 1));
+                    WorldOwner::current().write(|world| set(world, StoryKey::SHIP_TO_COMPEL, 1));
                     reset_groups();
                 }
                 if u32::from(
@@ -350,9 +330,8 @@ unsafe fn invoke(id: u8) -> u8 {
                     .index,
                 ) == SAMATRA_DEFINED
                 {
-                    crate::engine::World::current().write(|world| {
-                        set(world, crate::engine::StoryKey::READY_TO_CONFUSE_URQUAN, 1)
-                    });
+                    WorldOwner::current()
+                        .write(|world| set(world, StoryKey::READY_TO_CONFUSE_URQUAN, 1));
                 }
                 if playerInPlanetOrbit() {
                     SaveSolarSysLocation();
@@ -362,14 +341,13 @@ unsafe fn invoke(id: u8) -> u8 {
         }
         12 | 13 => u8::from(use_caster()),
         0 => {
-            if crate::engine::World::current().read(inHyperSpace) == 0
+            if WorldOwner::current().read(inHyperSpace) == 0
                 || (**WorldFields::current()).flagship.fuel_on_board < 1000
             {
                 return 0;
             }
             (**WorldFields::current()).flagship.fuel_on_board -= 1000;
-            crate::engine::World::current()
-                .write(|world| set(world, crate::engine::StoryKey::PORTAL_COUNTER, 1));
+            WorldOwner::current().write(|world| set(world, StoryKey::PORTAL_COUNTER, 1));
             1
         }
         _ => 0,
@@ -384,9 +362,8 @@ fn effect_state() -> std::collections::BTreeMap<String, u32> {
             .map(|key| {
                 (
                     key.to_owned(),
-                    crate::engine::StoryKey::from_name(key).map_or(0, |key| {
-                        crate::engine::World::current().read(|world| get(world, key))
-                    }),
+                    StoryKey::from_name(key)
+                        .map_or(0, |key| WorldOwner::current().read(|world| get(world, key))),
                 )
             })
             .collect();
@@ -470,7 +447,7 @@ unsafe extern "C" fn frame(menu: *mut Menu) -> i32 {
 /// `map` must have room for `size` device IDs. Called on the game thread.
 #[no_mangle]
 pub unsafe extern "C" fn InventoryDevices(map: *mut u8, size: u16) -> i16 {
-    let state = crate::engine::World::current()
+    let state = WorldOwner::current()
         .read(crate::state::ffi::snapshot_game_state)
         .expect("initialized device inventory");
     let state = crate::state::game_state::GameState::from_bytes(&state);
@@ -508,9 +485,7 @@ pub unsafe extern "C" fn DevicesMenu() -> i32 {
         && WorldFields::current().read(|owner| owner.game.current_activity) & 0x4000 == 0
     {
         ClearSISRect(8);
-        if crate::engine::World::current()
-            .read(|world| get(world, crate::engine::StoryKey::PORTAL_COUNTER))
-            == 0
+        if WorldOwner::current().read(|world| get(world, StoryKey::PORTAL_COUNTER)) == 0
             && WorldFields::current().read(|owner| owner.game.current_activity) & START_ENCOUNTER
                 == 0
             && WorldFields::current().read(|owner| owner.flagship.crew_enlisted) != u16::MAX

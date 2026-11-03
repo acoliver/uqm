@@ -2,6 +2,8 @@
 #![allow(non_snake_case)]
 #![cfg(feature = "debug-process")]
 
+use crate::engine::StoryKey;
+use crate::engine::World as WorldOwner;
 #[cfg(not(test))]
 use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
 use crate::navigation::abi::*;
@@ -359,28 +361,24 @@ mod runtime {
         for i in 0..NUM_JET_SLOTS as usize {
             (**WorldFields::current()).flagship.jet_slots[i] = TURNING_JETS as BYTE;
         }
-        crate::engine::World::current().write(|world| {
+        WorldOwner::current().write(|world| {
             set_game_state(
                 world,
-                crate::engine::StoryKey::LANDER_SHIELDS,
+                StoryKey::LANDER_SHIELDS,
                 (1 << EARTHQUAKE_DISASTER)
                     | (1 << BIOLOGICAL_DISASTER)
                     | (1 << LIGHTNING_DISASTER)
                     | (1 << LAVASPOT_DISASTER),
             )
         });
-        crate::engine::World::current().write(|world| {
-            set_game_state(world, crate::engine::StoryKey::IMPROVED_LANDER_SPEED, 1)
-        });
-        crate::engine::World::current().write(|world| {
-            set_game_state(world, crate::engine::StoryKey::IMPROVED_LANDER_CARGO, 1)
-        });
-        crate::engine::World::current()
-            .write(|world| set_game_state(world, crate::engine::StoryKey::IMPROVED_LANDER_SHOT, 1));
+        WorldOwner::current()
+            .write(|world| set_game_state(world, StoryKey::IMPROVED_LANDER_SPEED, 1));
+        WorldOwner::current()
+            .write(|world| set_game_state(world, StoryKey::IMPROVED_LANDER_CARGO, 1));
+        WorldOwner::current()
+            .write(|world| set_game_state(world, StoryKey::IMPROVED_LANDER_SHOT, 1));
         let mut i;
-        if crate::engine::World::current()
-            .read(|world| get_game_state(world, crate::engine::StoryKey::CHMMR_BOMB_STATE))
-            < 2
+        if WorldOwner::current().read(|world| get_game_state(world, StoryKey::CHMMR_BOMB_STATE)) < 2
         {
             i = 0;
             for module in [
@@ -466,7 +464,7 @@ mod runtime {
                 }
             }
         }
-        if crate::engine::World::current().read(inHQSpace) != 0
+        if WorldOwner::current().read(inHQSpace) != 0
             || WorldFields::current().read(|owner| owner.game.current_activity) as u8 as u32
                 == IN_INTERPLANETARY
         {
@@ -482,30 +480,30 @@ mod runtime {
     /// Must run with the game-state singleton initialized.
     pub unsafe fn giveDevices() {
         for key in [
-            crate::engine::StoryKey::ROSY_SPHERE_ON_SHIP,
-            crate::engine::StoryKey::ARTIFACT_2_ON_SHIP,
-            crate::engine::StoryKey::ARTIFACT_3_ON_SHIP,
-            crate::engine::StoryKey::SUN_DEVICE_ON_SHIP,
-            crate::engine::StoryKey::UTWIG_BOMB_ON_SHIP,
-            crate::engine::StoryKey::ULTRON_CONDITION,
-            crate::engine::StoryKey::MAIDENS_ON_SHIP,
-            crate::engine::StoryKey::TALKING_PET_ON_SHIP,
-            crate::engine::StoryKey::AQUA_HELIX_ON_SHIP,
-            crate::engine::StoryKey::CLEAR_SPINDLE_ON_SHIP,
-            crate::engine::StoryKey::UMGAH_BROADCASTERS_ON_SHIP,
-            crate::engine::StoryKey::TAALO_PROTECTOR_ON_SHIP,
-            crate::engine::StoryKey::EGG_CASE0_ON_SHIP,
-            crate::engine::StoryKey::EGG_CASE1_ON_SHIP,
-            crate::engine::StoryKey::EGG_CASE2_ON_SHIP,
-            crate::engine::StoryKey::SYREEN_SHUTTLE_ON_SHIP,
-            crate::engine::StoryKey::VUX_BEAST_ON_SHIP,
-            crate::engine::StoryKey::PORTAL_SPAWNER_ON_SHIP,
-            crate::engine::StoryKey::PORTAL_KEY_ON_SHIP,
-            crate::engine::StoryKey::BURV_BROADCASTERS_ON_SHIP,
-            crate::engine::StoryKey::MOONBASE_ON_SHIP,
-            crate::engine::StoryKey::DESTRUCT_CODE_ON_SHIP,
+            StoryKey::ROSY_SPHERE_ON_SHIP,
+            StoryKey::ARTIFACT_2_ON_SHIP,
+            StoryKey::ARTIFACT_3_ON_SHIP,
+            StoryKey::SUN_DEVICE_ON_SHIP,
+            StoryKey::UTWIG_BOMB_ON_SHIP,
+            StoryKey::ULTRON_CONDITION,
+            StoryKey::MAIDENS_ON_SHIP,
+            StoryKey::TALKING_PET_ON_SHIP,
+            StoryKey::AQUA_HELIX_ON_SHIP,
+            StoryKey::CLEAR_SPINDLE_ON_SHIP,
+            StoryKey::UMGAH_BROADCASTERS_ON_SHIP,
+            StoryKey::TAALO_PROTECTOR_ON_SHIP,
+            StoryKey::EGG_CASE0_ON_SHIP,
+            StoryKey::EGG_CASE1_ON_SHIP,
+            StoryKey::EGG_CASE2_ON_SHIP,
+            StoryKey::SYREEN_SHUTTLE_ON_SHIP,
+            StoryKey::VUX_BEAST_ON_SHIP,
+            StoryKey::PORTAL_SPAWNER_ON_SHIP,
+            StoryKey::PORTAL_KEY_ON_SHIP,
+            StoryKey::BURV_BROADCASTERS_ON_SHIP,
+            StoryKey::MOONBASE_ON_SHIP,
+            StoryKey::DESTRUCT_CODE_ON_SHIP,
         ] {
-            crate::engine::World::current().write(|world| set_game_state(world, key, 1));
+            WorldOwner::current().write(|world| set_game_state(world, key, 1));
         }
     }
     /// # Safety
@@ -553,8 +551,7 @@ mod runtime {
                 + (universe_y >> 1))
                 / universe_y;
         }
-        if crate::engine::World::current()
-            .read(|world| get_game_state(world, crate::engine::StoryKey::ARILOU_SPACE_SIDE))
+        if WorldOwner::current().read(|world| get_game_state(world, StoryKey::ARILOU_SPACE_SIDE))
             <= 1
         {
             (**World::current()).select_star(
@@ -567,9 +564,8 @@ mod runtime {
                 .star_pointer(crate::planets::starmap::current_catalog())
                 .is_null()
             {
-                crate::engine::World::current().write(|world| {
-                    set_game_state(world, crate::engine::StoryKey::USED_BROADCASTER, 0)
-                });
+                WorldOwner::current()
+                    .write(|world| set_game_state(world, StoryKey::USED_BROADCASTER, 0));
                 (*game).current_activity &= !(IN_BATTLE as ACTIVITY);
                 (*game).ship_facing = 0;
                 (*game).ip_planet = 0;
@@ -1313,7 +1309,7 @@ mod runtime {
     pub unsafe fn resetCrewBattle() {
         if WorldFields::current().read(|owner| owner.game.current_activity) & IN_BATTLE as ACTIVITY
             == 0
-            || crate::engine::World::current().read(inHQSpace) != 0
+            || WorldOwner::current().read(inHQSpace) != 0
         {
             return;
         }
@@ -1336,7 +1332,7 @@ mod runtime {
     pub unsafe fn resetEnergyBattle() {
         if WorldFields::current().read(|owner| owner.game.current_activity) & IN_BATTLE as ACTIVITY
             == 0
-            || crate::engine::World::current().read(inHQSpace) != 0
+            || WorldOwner::current().read(inHQSpace) != 0
         {
             return;
         }

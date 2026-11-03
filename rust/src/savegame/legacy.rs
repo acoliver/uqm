@@ -1,6 +1,7 @@
 //! Pre-UMS save layout, including its 32-bit pointer padding and packed groups.
 use super::format::*;
 use super::{decode_save, decode_summary_from, SaveFile, Summary, GAME_STATE_BYTES};
+use crate::engine::World as WorldOwner;
 use crate::state::game_state::{copy_state_bits_raw, get_state_32_raw, set_state_32_raw};
 use std::io::{self, Read};
 
@@ -252,7 +253,7 @@ mod live {
             let mut len = 0;
             cfilelength(decoder.0, &mut len);
             let legacy = decode_legacy_payload(&saved_summary, decoder, len)?;
-            let lease = crate::engine::World::current();
+            let lease = WorldOwner::current();
             let world = &mut **lease;
             // SAFETY: CGameState's size, alignment and every field offset are asserted against GAME_STATE.
             let game = &mut *std::ptr::addr_of_mut!(world.data.game)

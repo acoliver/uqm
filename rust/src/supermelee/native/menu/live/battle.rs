@@ -100,7 +100,7 @@ pub(super) unsafe fn start(state: *mut MELEE_STATE) {
     if set_player_input_all() != 0 {
         crate::supermelee::native::battle_picker::live::FillPickMeleeFrame((*state).melee_setup);
         WaitForSoundEnd(u16::MAX);
-        crate::engine::Kernel::current().write(|kernel| {
+        KernelOwner::current().write(|kernel| {
             load_gravity_well(
                 kernel,
                 (TFB_Random() as u16 % NUMBER_OF_PLANET_TYPES as u16) as u8,
@@ -114,8 +114,8 @@ pub(super) unsafe fn start(state: *mut MELEE_STATE) {
         (*battle).net = Some((*state).netplay.battle_net());
         Battle(None);
         (*battle).net = None;
-        crate::engine::Kernel::current().write(|kernel| free_gravity_well(kernel));
-        crate::engine::Kernel::current().write(|kernel| ClearPlayerInputAll(kernel));
+        KernelOwner::current().write(|kernel| free_gravity_well(kernel));
+        KernelOwner::current().write(|kernel| ClearPlayerInputAll(kernel));
         if WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
             != 0
         {

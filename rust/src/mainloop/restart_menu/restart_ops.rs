@@ -5,6 +5,7 @@
 
 #[cfg(not(test))]
 use crate::engine::Kernel as KernelOwner;
+use crate::engine::World as WorldOwner;
 #[cfg(not(test))]
 use std::ffi::CString;
 #[cfg(not(test))]
@@ -196,9 +197,7 @@ impl Default for CffiOps {
 impl RestartMenuOps for CffiOps {
     fn get_current_activity(&self) -> u16 {
         // SAFETY: Reads a global activity variable.
-        unsafe {
-            crate::engine::World::current().read(|world| c_extern::get_current_activity(world))
-        }
+        unsafe { WorldOwner::current().read(|world| c_extern::get_current_activity(world)) }
     }
     fn set_current_activity(&self, v: u16) {
         // SAFETY: Writes a global activity variable.

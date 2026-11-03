@@ -717,7 +717,7 @@ fn service_input(button_wait: bool) -> i32 {
         #[cfg(not(test))]
         unsafe {
             crate::mainloop::c_extern::set_current_activity(
-                crate::engine::World::current()
+                WorldOwner::current()
                     .read(|world| crate::mainloop::c_extern::get_current_activity(world))
                     | 0x4000,
             );
@@ -1021,11 +1021,11 @@ pub(crate) fn star_flight_observation(
         super::star_flight::Observation {
             activity: crate::mainloop::ffi::get_current_activity().0,
             current_star,
-            space_side: crate::engine::World::current()
+            space_side: WorldOwner::current()
                 .read(|world| crate::state::ffi::named_state_value(world, "ARILOU_SPACE_SIDE"))
                 .expect("initialized state"),
             conversation_active: crate::automation::ui_observation::conversation_snapshot().active,
-            portal_open: crate::engine::World::current()
+            portal_open: WorldOwner::current()
                 .read(|world| crate::state::ffi::named_state_value(world, "ARILOU_SPACE"))
                 == Some(1),
             solar_active: departure_snapshot().active != 0,
@@ -1073,7 +1073,7 @@ pub(crate) fn cyborg_settings() -> Option<(bool, u8)> {
 
 #[cfg(not(test))]
 pub(crate) fn escort_roster() -> Option<Vec<(u8, u16)>> {
-    crate::engine::World::current()
+    WorldOwner::current()
         .read(|world| crate::state::ffi::named_state_value(world, "STARBASE_AVAILABLE"))?;
     use crate::comm::dispatch::CShipFragment;
     use crate::savegame::runtime::queues::{walk, QueueKind};

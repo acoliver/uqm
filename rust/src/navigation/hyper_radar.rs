@@ -2,6 +2,7 @@
 #![cfg(not(test))]
 #![allow(non_snake_case)]
 use super::abi::*;
+use crate::engine::StoryKey;
 
 use super::hyper_encounters::{allocate, ambient, process_all, XOFFS, YOFFS};
 use super::hyper_transition::{portal_collision, portal_death, star_collision, star_death};
@@ -66,8 +67,8 @@ pub unsafe fn SeedUniverse() {
         BatchGraphics();
         let ox = (universe.x as i32 * 56 / 756 - 28) as i16;
         let oy = ((9999 - universe.y as i32) * 53 / 600 - 26) as i16;
-        let counter = get("ARILOU_SPACE_COUNTER");
-        let side = get("ARILOU_SPACE_SIDE");
+        let counter = get(cx.world, StoryKey::ARILOU_SPACE_COUNTER);
+        let side = get(cx.world, StoryKey::ARILOU_SPACE_SIDE);
         grid(universe.x, universe.y, ox, oy);
         let mut stamp = STAMP {
             origin: POINT { x: 0, y: 0 },
@@ -88,7 +89,7 @@ pub unsafe fn SeedUniverse() {
             stamp.frame = SetRelFrameIndex(blip, kind as i16 + 2);
             DrawStamp(&mut stamp);
         }
-        let mut portal = get("PORTAL_COUNTER");
+        let mut portal = get(cx.world, StoryKey::PORTAL_COUNTER);
         if portal != 0 || counter != 0 {
             let mut portals = [(POINT { x: 0, y: 0 }, 0u16); 2];
             let mut count = 0usize;
@@ -102,7 +103,7 @@ pub unsafe fn SeedUniverse() {
                 if portal == 11 {
                     portal = 10;
                 }
-                set("PORTAL_COUNTER", portal);
+                set(cx.world, StoryKey::PORTAL_COUNTER, portal);
             }
             if counter != 0 {
                 let (point, index) = if side <= 1 {
@@ -147,7 +148,8 @@ pub unsafe fn SeedUniverse() {
                     element,
                     false,
                     Frame::retain(SetAbsFrameIndex(
-                        cx.kernel.hyperstars[1 + (get("ARILOU_SPACE_SIDE") >> 1) as usize],
+                        cx.kernel.hyperstars
+                            [1 + (get(cx.world, StoryKey::ARILOU_SPACE_SIDE) >> 1) as usize],
                         index,
                     )),
                 );
@@ -188,7 +190,8 @@ pub unsafe fn SeedUniverse() {
                 element,
                 false,
                 Frame::retain(SetAbsFrameIndex(
-                    cx.kernel.hyperstars[1 + (get("ARILOU_SPACE_SIDE") >> 1) as usize],
+                    cx.kernel.hyperstars
+                        [1 + (get(cx.world, StoryKey::ARILOU_SPACE_SIDE) >> 1) as usize],
                     (((kind >> 3) & 3) as u16 * NUM_STAR_COLORS as u16) + (kind >> 5) as u16,
                 )),
             );
@@ -200,7 +203,7 @@ pub unsafe fn SeedUniverse() {
                 == cx
                     .world
                     .star_pointer(crate::planets::starmap::current_catalog())
-                && get("PORTAL_COUNTER") == 0
+                && get(cx.world, StoryKey::PORTAL_COUNTER) == 0
             {
                 cx.element_mut(element).death = Some(ElementHook::Native(star_death));
             } else {

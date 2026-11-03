@@ -4,6 +4,8 @@ use crate::c_bindings::{controller_input::*, global_state::MENU_STATE, solar_sys
 use crate::collections::queue::{CountLinks, Queue, ReinitQueue};
 use crate::comm::dispatch::{clone_ship_fragment, CShipFragment};
 use crate::comm::locdata::{CColor, CPoint, CRect};
+use crate::engine::StoryKey;
+use crate::engine::World as WorldOwner;
 use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
 use crate::graphics::drawable_abi::SetContextFGFrame;
 use crate::mainloop::restart_menu::c_extern::{
@@ -312,11 +314,8 @@ unsafe fn dispatch_lander() -> bool {
     if WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT != 0 {
         return false;
     }
-    if crate::engine::World::current().read(|world| {
-        crate::state::game_state_keys::get_game_state(
-            world,
-            crate::engine::StoryKey::FOUND_PLUTO_SPATHI,
-        )
+    if WorldOwner::current().read(|world| {
+        crate::state::game_state_keys::get_game_state(world, StoryKey::FOUND_PLUTO_SPATHI)
     }) == 1
     {
         spawn_fwiffo();

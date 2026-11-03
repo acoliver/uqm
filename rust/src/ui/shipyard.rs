@@ -3,6 +3,8 @@
 
 //! Shipyard menu, crew transactions and hangar animation, ported from shipyard.c.
 
+use crate::engine::StoryKey;
+use crate::engine::World as WorldOwner;
 use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
 use crate::navigation::abi::*;
 
@@ -353,11 +355,9 @@ unsafe fn ShowCombatShip(menu: *mut MENU_STATE, mut window: COUNT, yanked: *mut 
 
 fn purchased_crew() -> SIZE {
     u16::from_le_bytes([
-        crate::engine::World::current()
-            .read(|world| get_game_state(world, crate::engine::StoryKey::CREW_PURCHASED0))
+        WorldOwner::current().read(|world| get_game_state(world, StoryKey::CREW_PURCHASED0))
             as BYTE,
-        crate::engine::World::current()
-            .read(|world| get_game_state(world, crate::engine::StoryKey::CREW_PURCHASED1))
+        WorldOwner::current().read(|world| get_game_state(world, StoryKey::CREW_PURCHASED1))
             as BYTE,
     ]) as SIZE
 }
@@ -381,17 +381,13 @@ unsafe fn CrewTransaction(delta: SIZE) {
             DrawMenuStateStrings(PM_CREW as BYTE, SHIPYARD_CREW as i16);
         }
         if CheckAlliance(SHOFIXTI_SHIP as COUNT) != GOOD_GUY as COUNT {
-            crate::engine::World::current().write(|world| {
-                set_game_state(
-                    world,
-                    crate::engine::StoryKey::CREW_PURCHASED0,
-                    bought as BYTE as u32,
-                )
+            WorldOwner::current().write(|world| {
+                set_game_state(world, StoryKey::CREW_PURCHASED0, bought as BYTE as u32)
             });
-            crate::engine::World::current().write(|world| {
+            WorldOwner::current().write(|world| {
                 set_game_state(
                     world,
-                    crate::engine::StoryKey::CREW_PURCHASED1,
+                    StoryKey::CREW_PURCHASED1,
                     ((bought as u16) >> 8) as u32,
                 )
             });

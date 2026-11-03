@@ -9,6 +9,7 @@ use crate::c_bindings::global_state::{Color, EXTENT, FRAME, MENU_STATE, POINT, R
 #[cfg(not(test))]
 use crate::c_bindings::global_state::{FLEET_INFO, QUEUE, TEXT};
 use crate::engine::Kernel as KernelOwner;
+use crate::engine::StoryKey;
 #[cfg(not(test))]
 use crate::engine::{World as WorldOwner, WorldData as WorldFields};
 #[cfg(not(test))]
@@ -187,18 +188,15 @@ unsafe fn height() -> i32 {
 }
 #[cfg(not(test))]
 unsafe fn which_space() -> u8 {
-    crate::engine::World::current().read(|world| {
-        crate::state::game_state_keys::get_game_state(
-            world,
-            crate::engine::StoryKey::ARILOU_SPACE_SIDE,
-        )
+    WorldOwner::current().read(|world| {
+        crate::state::game_state_keys::get_game_state(world, StoryKey::ARILOU_SPACE_SIDE)
     }) as u8
 }
 #[cfg(not(test))]
 unsafe fn portal_open() -> bool {
-    crate::engine::World::current().read(|world| {
-        crate::state::game_state_keys::get_game_state(world, crate::engine::StoryKey::ARILOU_SPACE)
-    }) != 0
+    WorldOwner::current()
+        .read(|world| crate::state::game_state_keys::get_game_state(world, StoryKey::ARILOU_SPACE))
+        != 0
 }
 #[cfg(not(test))]
 unsafe fn game_string(index: u16) -> *const c_char {
@@ -300,7 +298,7 @@ unsafe fn uy(y: i16) -> i16 {
 
 #[cfg(not(test))]
 unsafe fn current_location() -> POINT {
-    if crate::engine::World::current().read(inHQSpace) == 0 {
+    if WorldOwner::current().read(inHQSpace) == 0 {
         point(
             (*(**WorldOwner::current()).star_pointer(crate::planets::starmap::current_catalog()))
                 .star_pt,

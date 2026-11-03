@@ -2,6 +2,8 @@
 #![cfg(not(test))]
 #![allow(non_snake_case)]
 
+use crate::engine::StoryKey;
+use crate::engine::World as WorldOwner;
 use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
 use crate::navigation::abi::*;
 
@@ -127,10 +129,7 @@ unsafe fn DisplayLanders(menu: *mut MENU_STATE) {
         origin: POINT { x: 0, y: 0 },
         frame: (*menu).ModuleFrame,
     };
-    if crate::engine::World::current()
-        .read(|world| get_game_state(world, crate::engine::StoryKey::CHMMR_BOMB_STATE))
-        == 3
-    {
+    if WorldOwner::current().read(|world| get_game_state(world, StoryKey::CHMMR_BOMB_STATE)) == 3 {
         s.frame = DecFrameIndex(s.frame);
         DrawStamp(&mut s);
     } else {
@@ -252,8 +251,7 @@ unsafe extern "C" fn DoInstallModule(menu: *mut MENU_STATE) -> BOOLEAN {
     } else if state == TURNING_JETS as BYTE || state == EMPTY_SLOT + 1 {
         NUM_JET_SLOTS as SIZE - 1
     } else {
-        if crate::engine::World::current()
-            .read(|world| get_game_state(world, crate::engine::StoryKey::CHMMR_BOMB_STATE))
+        if WorldOwner::current().read(|world| get_game_state(world, StoryKey::CHMMR_BOMB_STATE))
             == 3
         {
             first = NUM_BOMB_MODULES as SIZE;
@@ -429,8 +427,8 @@ unsafe extern "C" fn DoInstallModule(menu: *mut MENU_STATE) -> BOOLEAN {
                     }
                 }
                 item = 0;
-                if crate::engine::World::current()
-                    .read(|world| get_game_state(world, crate::engine::StoryKey::CHMMR_BOMB_STATE))
+                if WorldOwner::current()
+                    .read(|world| get_game_state(world, StoryKey::CHMMR_BOMB_STATE))
                     == 3
                 {
                     if state == EMPTY_SLOT + 3 {
@@ -607,12 +605,10 @@ pub unsafe extern "C" fn DoOutfit(menu: *mut MENU_STATE) -> BOOLEAN {
         }
         RedistributeFuel();
         DisplayLanders(menu);
-        if crate::engine::World::current()
-            .read(|world| get_game_state(world, crate::engine::StoryKey::CHMMR_BOMB_STATE))
-            < 3
+        if WorldOwner::current().read(|world| get_game_state(world, StoryKey::CHMMR_BOMB_STATE)) < 3
         {
-            let shields = crate::engine::World::current()
-                .read(|world| get_game_state(world, crate::engine::StoryKey::LANDER_SHIELDS));
+            let shields =
+                WorldOwner::current().read(|world| get_game_state(world, StoryKey::LANDER_SHIELDS));
             s.frame = SetAbsFrameIndex((*menu).ModuleFrame, GetFrameCount((*menu).ModuleFrame) - 5);
             if shields & (1 << EARTHQUAKE_DISASTER) != 0 {
                 DrawStamp(&mut s);
@@ -669,8 +665,8 @@ pub unsafe extern "C" fn DoOutfit(menu: *mut MENU_STATE) -> BOOLEAN {
             }
             OUTFIT_MODULES => {
                 (*menu).CurState = EMPTY_SLOT + 2;
-                (*menu).delta_item = if crate::engine::World::current()
-                    .read(|world| get_game_state(world, crate::engine::StoryKey::CHMMR_BOMB_STATE))
+                (*menu).delta_item = if WorldOwner::current()
+                    .read(|world| get_game_state(world, StoryKey::CHMMR_BOMB_STATE))
                     != 3
                 {
                     0

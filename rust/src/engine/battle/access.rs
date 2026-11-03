@@ -1,4 +1,5 @@
 //! Stage B resource and record projections. Borrows end before legacy handoffs.
+use crate::engine::Kernel as KernelOwner;
 #[cfg(not(test))]
 impl Cx<'_> {
     pub fn alloc_element(&mut self) -> Option<ElementId> {
@@ -649,6 +650,7 @@ impl Cx<'_> {
 
 #[cfg(test)]
 mod intersection_projection_tests {
+    use crate::engine::Kernel as KernelOwner;
     #[test]
     #[serial_test::serial]
     fn live_helpers_preserve_record_coordinates_and_pool_addresses() {
@@ -659,7 +661,7 @@ mod intersection_projection_tests {
         // SAFETY: the local queue authorities and their pool remain exclusive for this test.
         unsafe {
             let mut battle = Battle::new();
-            let mut kernel = crate::engine::Kernel::new();
+            let mut kernel = KernelOwner::new();
             kernel.elements.reset_capacity(1);
             let id = kernel.elements.alloc().unwrap();
             kernel.elements.record_mut(id).current.location = POINT { x: 44, y: 52 };

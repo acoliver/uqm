@@ -3,6 +3,8 @@
 #![allow(non_snake_case)]
 use super::abi::*;
 use super::get;
+use crate::engine::StoryKey;
+use crate::engine::World as WorldOwner;
 use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
 
 use super::hyper_transition::cleanup;
@@ -24,7 +26,7 @@ unsafe extern "C" fn input(state: *mut MENU_STATE) -> BOOLEAN {
     match (*state).CurState {
         2 => {
             select = DevicesMenu() != 0;
-            if get("PORTAL_COUNTER") != 0
+            if WorldOwner::current().read(|world| get(world, StoryKey::PORTAL_COUNTER)) != 0
                 || WorldFields::current().read(|owner| owner.game.current_activity)
                     & START_ENCOUNTER as u16
                     != 0

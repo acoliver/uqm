@@ -1,6 +1,8 @@
 //! Restart-menu state operations formerly supplied by rust_bridge_restart.c.
 use crate::engine::battle::schema::FlashContext;
 use crate::engine::Kernel as KernelOwner;
+use crate::engine::StoryKey;
+use crate::engine::World as WorldOwner;
 use crate::ships::native::abi::*;
 use std::{ffi::c_void, ptr};
 
@@ -11,9 +13,9 @@ macro_rules! operation {
         pub unsafe fn $name($($arg: $ty),*) $(-> $ret)? $body
     };
 }
-operation!(uqm_get_utwig_bomb_on_ship() -> u8 { super::super::state_abi::game_byte("UTWIG_BOMB_ON_SHIP") });
-operation!(uqm_set_utwig_bomb_on_ship(value: u8) { super::super::state_abi::set_game_byte("UTWIG_BOMB_ON_SHIP", value); });
-operation!(uqm_get_utwig_bomb() -> u8 { super::super::state_abi::game_byte("UTWIG_BOMB") });
+operation!(uqm_get_utwig_bomb_on_ship() -> u8 { WorldOwner::current().read(|world| super::super::state_abi::game_byte(world, StoryKey::UTWIG_BOMB_ON_SHIP)) });
+operation!(uqm_set_utwig_bomb_on_ship(value: u8) { WorldOwner::current().write(|world| super::super::state_abi::set_game_byte(world, StoryKey::UTWIG_BOMB_ON_SHIP, value)); });
+operation!(uqm_get_utwig_bomb() -> u8 { WorldOwner::current().read(|world| super::super::state_abi::game_byte(world, StoryKey::UTWIG_BOMB)) });
 operation!(uqm_set_player_control(player: u8, control: u16) { (**KernelOwner::current()).player_control[player as usize] = control as u8; });
 operation!(uqm_get_pulsed_menu_key(index: u8) -> u32 { super::super::input_abi::PulsedInputState.menu[index as usize] as u32 });
 operation!(uqm_get_mouse_button_down() -> u32 { crate::input::sdl_input::MouseButtonDown as u32 });

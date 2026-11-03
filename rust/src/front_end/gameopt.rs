@@ -1,6 +1,8 @@
 //! Game options, naming, and save/load selection, ported from `uqm/gameopt.c`.
 #![allow(non_snake_case)]
 
+use crate::engine::StoryKey;
+use crate::engine::World as WorldOwner;
 const MAX_SAVED_GAMES: usize = 50;
 const SAVES_PER_PAGE: u16 = 5;
 
@@ -77,6 +79,7 @@ pub use runtime::{ConfirmSaveLoad, GameOptions, LoadGameDescriptions, SetNamingC
 pub(crate) mod runtime {
     use super::{picker_action, picker_slot, PickerAction, MAX_SAVED_GAMES, SAVES_PER_PAGE};
     use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
+    use crate::engine::{StoryKey, World as WorldOwner};
     use crate::navigation::abi::*;
 
     use crate::state::game_state_keys::{get_game_state, set_game_state};
@@ -901,19 +904,13 @@ pub(crate) mod runtime {
             };
             match (*pSD).Activity as u32 {
                 IN_LAST_BATTLE | IN_INTERPLANETARY | IN_PLANET_ORBIT | IN_STARBASE => {
-                    let QuasiState = crate::engine::World::current().read(|world| {
-                        get_game_state(world, crate::engine::StoryKey::ARILOU_SPACE_SIDE)
-                    });
-                    crate::engine::World::current().write(|world| {
-                        set_game_state(world, crate::engine::StoryKey::ARILOU_SPACE_SIDE, 0)
-                    });
+                    let QuasiState = WorldOwner::current()
+                        .read(|world| get_game_state(world, StoryKey::ARILOU_SPACE_SIDE));
+                    WorldOwner::current()
+                        .write(|world| set_game_state(world, StoryKey::ARILOU_SPACE_SIDE, 0));
                     let SDPtr = FindStar(ptr::null_mut(), &mut starPt, 1, 1);
-                    crate::engine::World::current().write(|world| {
-                        set_game_state(
-                            world,
-                            crate::engine::StoryKey::ARILOU_SPACE_SIDE,
-                            QuasiState,
-                        )
+                    WorldOwner::current().write(|world| {
+                        set_game_state(world, StoryKey::ARILOU_SPACE_SIDE, QuasiState)
                     });
                     if !SDPtr.is_null() {
                         GetClusterName(SDPtr, buf.as_mut_ptr());

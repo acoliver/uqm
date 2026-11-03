@@ -1,4 +1,5 @@
 use super::{groups, queues, statefiles, *};
+use crate::engine::World as WorldOwner;
 use crate::savegame::{decode_save, encode_save};
 use crate::state::ffi::{rust_init_game_state, with_state_owners};
 use crate::state::game_state_keys::STATE_KEYS;
@@ -150,7 +151,7 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
                     path.display()
                 );
                 {
-                    crate::engine::World::current().write(|world| rust_init_game_state(world));
+                    WorldOwner::current().write(|world| rust_init_game_state(world));
                 }
                 let mut game = super::queue_tests::LiveGame::new();
                 assert!({
@@ -162,7 +163,7 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
                     )
                 });
 
-                let restored = crate::engine::World::current()
+                let restored = WorldOwner::current()
                     .write(|world| {
                         restore_runtime(
                             &mut game,
@@ -193,7 +194,7 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
                 };
                 groups::restore_groups(&mut game, &g).unwrap();
                 assert_eq!(groups::capture_groups(&game).unwrap(), g);
-                crate::engine::World::current()
+                WorldOwner::current()
                     .write(|world| {
                         statefiles::restore_state_files(
                             &mut game,
@@ -208,7 +209,7 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
                         )
                     })
                     .unwrap();
-                let actual = crate::engine::World::current()
+                let actual = WorldOwner::current()
                     .write(|world| capture_runtime(&game, &world.story))
                     .unwrap();
                 assert_eq!(actual.global, saved.global);
@@ -309,7 +310,7 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
                     ),
                     expected
                 );
-                crate::engine::World::current()
+                WorldOwner::current()
                     .write(|world| {
                         with_state_owners(world, |game, _| {
                             for (name, value) in state.as_object().into_iter().flatten() {

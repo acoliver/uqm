@@ -2,6 +2,8 @@
 #![cfg(not(test))]
 #![allow(non_snake_case)]
 use super::abi::*;
+use crate::engine::StoryKey;
+use crate::engine::World as WorldOwner;
 use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
 
 use super::{color, get, set};
@@ -70,7 +72,7 @@ pub unsafe extern "C" fn LoadHyperspace() -> BOOLEAN {
     SetContext(KernelOwner::current().read(|kernel| kernel.radar_context));
     SetContextBackGroundColor(color(0, 14, 0));
     SetContext(KernelOwner::current().read(|kernel| kernel.space_context));
-    if get("ARILOU_SPACE_SIDE") <= 1 {
+    if WorldOwner::current().read(|world| get(world, StoryKey::ARILOU_SPACE_SIDE)) <= 1 {
         SetContextBackGroundColor(color(7, 0, 0));
         SetColorMap(GetColorMapAddress(
             KernelOwner::current().read(|kernel| kernel.cmaps[0]),
@@ -80,8 +82,8 @@ pub unsafe extern "C" fn LoadHyperspace() -> BOOLEAN {
         SetColorMap(GetColorMapAddress(
             KernelOwner::current().read(|kernel| kernel.cmaps[1]),
         ));
-        set("USED_BROADCASTER", 0);
-        set("BROADCASTER_RESPONSE", 0);
+        WorldOwner::current().write(|world| set(world, StoryKey::USED_BROADCASTER, 0));
+        WorldOwner::current().write(|world| set(world, StoryKey::BROADCASTER_RESPONSE, 0));
     }
     ClearSISRect(CLEAR_SIS_RADAR as u8);
     1

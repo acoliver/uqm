@@ -1,5 +1,6 @@
 use super::Handler;
 use crate::comm::races::encounter::EncounterApi;
+use crate::engine::World as WorldOwner;
 #[cfg(not(test))]
 use crate::engine::WorldData as WorldFields;
 
@@ -14,7 +15,7 @@ impl UrquanApi for super::super::script::live::LiveScript<Handler> {
         let (start, _) = crate::state::game_state_keys::bit_range(state_key)
             .expect("Ur-Quan group offset state is missing");
         let offset = unsafe {
-            crate::engine::World::current()
+            WorldOwner::current()
                 .read(|world| crate::state::ffi::rust_get_game_state_32(world, start as i32))
         };
         {

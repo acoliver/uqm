@@ -1,5 +1,7 @@
 //! Rust communication facade for state, playback and dialogue orchestration.
 
+use crate::engine::StoryKey;
+use crate::engine::World as WorldOwner;
 #[cfg(not(test))]
 use crate::engine::WorldData as WorldFields;
 use std::cell::RefCell;
@@ -1198,11 +1200,8 @@ use crate::strings::string_table::SetAbsStringTableIndex;
 /// Uses CommData.ConversationPhrases + GET_GAME_STATE(NEW_ALLIANCE_NAME).
 #[cfg(not(test))]
 pub(crate) unsafe fn get_alliance_name(index: c_int) -> *const u8 {
-    let i = crate::engine::World::current().read(|world| {
-        crate::state::game_state_keys::get_game_state(
-            world,
-            crate::engine::StoryKey::NEW_ALLIANCE_NAME,
-        )
+    let i = WorldOwner::current().read(|world| {
+        crate::state::game_state_keys::get_game_state(world, StoryKey::NEW_ALLIANCE_NAME)
     }) as c_int;
     let phrases = std::ptr::addr_of_mut!(CommData.conversation_phrases) as *mut std::ffi::c_void;
     if phrases.is_null() {
@@ -1227,11 +1226,8 @@ unsafe fn get_alliance_name_full(
         return std::ptr::null();
     }
 
-    let i = crate::engine::World::current().read(|world| {
-        crate::state::game_state_keys::get_game_state(
-            world,
-            crate::engine::StoryKey::NEW_ALLIANCE_NAME,
-        )
+    let i = WorldOwner::current().read(|world| {
+        crate::state::game_state_keys::get_game_state(world, StoryKey::NEW_ALLIANCE_NAME)
     }) as c_int;
     let s = SetAbsStringTableIndex((phrases).cast(), ((adjusted_index - 1) + i) as u16);
     let src = GetStringAddress(s);

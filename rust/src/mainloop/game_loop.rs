@@ -3,6 +3,8 @@
 //! @plan PLAN-20260707-MAINLOOP.P06
 //! @requirement REQ-ML-001, REQ-ML-007, REQ-ML-008
 
+use crate::engine::Kernel as KernelOwner;
+use crate::engine::World as WorldOwner;
 use std::os::raw::c_int;
 
 use super::state_machine::{self, ActivityDecision, BreakAction, GameStateInfo};
@@ -296,8 +298,8 @@ mod cffi {
             // SAFETY: LoadKernel reads content packages; the null argv is the
             // documented call pattern in starcon.c.
             unsafe {
-                crate::engine::Kernel::current().write(|kernel| {
-                    crate::engine::World::current()
+                KernelOwner::current().write(|kernel| {
+                    WorldOwner::current()
                         .write(|world| c_extern::LoadKernel(kernel, world, 0, std::ptr::null_mut()))
                 }) != 0
             }
@@ -313,7 +315,7 @@ mod cffi {
 
         fn get_current_activity(&self) -> ActivityValue {
             ActivityValue::new(unsafe {
-                crate::engine::World::current().read(|world| c_extern::get_current_activity(world))
+                WorldOwner::current().read(|world| c_extern::get_current_activity(world))
             })
         }
 
@@ -356,7 +358,7 @@ mod cffi {
         }
 
         fn add_initial_game_events(&self) {
-            unsafe { c_extern::AddInitialGameEvents() }
+            unsafe { WorldOwner::current().write(|world| c_extern::AddInitialGameEvents(world)) }
         }
 
         fn activate_automation_start_scene(&self) {
@@ -427,10 +429,7 @@ mod cffi {
         }
 
         fn clear_player_input_all(&self) {
-            unsafe {
-                crate::engine::Kernel::current()
-                    .write(|kernel| c_extern::ClearPlayerInputAll(kernel))
-            }
+            unsafe { KernelOwner::current().write(|kernel| c_extern::ClearPlayerInputAll(kernel)) }
         }
 
         fn init_communication(&self, conversation: u32) {
@@ -452,7 +451,7 @@ mod cffi {
         }
 
         fn free_kernel(&self) {
-            unsafe { crate::engine::Kernel::current().write(|kernel| c_extern::FreeKernel(kernel)) }
+            unsafe { KernelOwner::current().write(|kernel| c_extern::FreeKernel(kernel)) }
         }
 
         fn log_show_box(&self, b: bool, c: bool) {

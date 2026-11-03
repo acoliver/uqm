@@ -4,6 +4,7 @@
 
 use crate::comm::dispatch::production_captain_name;
 use crate::engine::battle::link_queue::{LinkQueue, Starship};
+use crate::engine::World as WorldOwner;
 use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
 use std::ffi::{c_char, c_int, c_void};
 
@@ -388,7 +389,7 @@ pub(crate) unsafe fn encounter_ship(
     let last_id = last;
 
     // SAFETY: plain call.
-    if { crate::engine::World::current().read(inHQSpace) } != 0 {
+    if { WorldOwner::current().read(inHQSpace) } != 0 {
         assert_eq!(side, RPG_PLAYER_NUM);
         // SIS for the Hyperspace flight
         // SAFETY: `queue` is `race_q[side]`.

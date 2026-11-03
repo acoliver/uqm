@@ -1,6 +1,7 @@
 //! LIFO handoff between legacy entry points and the one owned battle context.
 
 use crate::engine::battle::{record::Kernel, Cx};
+use crate::engine::World as WorldOwner;
 use parking_lot::Mutex;
 use std::ptr::NonNull;
 use std::{marker::PhantomData, rc::Rc, thread::ThreadId};
@@ -321,28 +322,28 @@ mod tests {
         unsafe {
             with_game(&mut game, || {
                 let fields = crate::engine::WorldData::current();
-                assert!(std::panic::catch_unwind(crate::engine::World::current).is_err());
+                assert!(std::panic::catch_unwind(WorldOwner::current).is_err());
                 assert!(std::panic::catch_unwind(|| enter(|_| ())).is_err());
                 drop(fields);
                 let kernel = Kernel::current();
                 assert!(std::panic::catch_unwind(Kernel::current).is_err());
                 drop(kernel);
                 let panic = std::panic::catch_unwind(|| {
-                    let _lease = crate::engine::World::current();
+                    let _lease = WorldOwner::current();
                     panic!("body failed");
                 });
                 assert!(panic.is_err());
                 enter(|cx| {
                     cx.world.set_activity(19);
                     publish(cx, || {
-                        let world = crate::engine::World::current();
+                        let world = WorldOwner::current();
                         assert_eq!((**world).activity(), 19);
                     });
                 });
             });
         }
         assert_eq!(game.world.activity(), 19);
-        assert!(std::panic::catch_unwind(crate::engine::World::current).is_err());
+        assert!(std::panic::catch_unwind(WorldOwner::current).is_err());
     }
 
     #[test]

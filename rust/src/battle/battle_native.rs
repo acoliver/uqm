@@ -2,6 +2,7 @@
 
 #[cfg(not(test))]
 use crate::engine::battle::schema::InputContext;
+use crate::engine::World as WorldOwner;
 #[cfg(not(test))]
 use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
 use crate::ships::native::abi;
@@ -142,13 +143,12 @@ pub(crate) mod engine {
     /// # Safety
     /// `start..=end` must name a valid game-state bit field on the game thread.
     pub unsafe fn game_state(start: u32, end: u32) -> u8 {
-        crate::engine::World::current().read(|world| getGameState(world, start as i32, end as i32))
+        WorldOwner::current().read(|world| getGameState(world, start as i32, end as i32))
     }
     /// # Safety
     /// `start..=end` must name a valid game-state bit field owned by the game thread.
     pub unsafe fn set_game_state(start: u32, end: u32, value: u8) {
-        crate::engine::World::current()
-            .write(|world| setGameState(world, start as i32, end as i32, value));
+        WorldOwner::current().write(|world| setGameState(world, start as i32, end as i32, value));
     }
     /// # Safety
     /// `side` must be a valid player index with initialized input state.
@@ -281,9 +281,9 @@ pub(crate) mod engine {
             .read(|owner| owner.battle_music)
             .is_null()
         {
-            let resource = if crate::engine::World::current().read(inHyperSpace) != 0 {
+            let resource = if WorldOwner::current().read(inHyperSpace) != 0 {
                 HYPERSPACE_MUSIC.as_ptr()
-            } else if crate::engine::World::current().read(inQuasiSpace) != 0 {
+            } else if WorldOwner::current().read(inQuasiSpace) != 0 {
                 QUASISPACE_MUSIC.as_ptr()
             } else {
                 BATTLE_MUSIC.as_ptr()
@@ -472,7 +472,7 @@ pub(crate) mod engine {
                 } else {
                     bs.InputFunc = Some(DoBattle);
                     bs.frame_cb = callback;
-                    bs.first_time = crate::engine::World::current().read(inHQSpace);
+                    bs.first_time = WorldOwner::current().read(inHQSpace);
                     crate::log_abi::log_message(
                         5,
                         "BATTLE_DEBUG: About to call DoInput for battle loop",

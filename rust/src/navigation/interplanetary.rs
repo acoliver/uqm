@@ -1,5 +1,6 @@
 //! Interplanetary group display, pursuit, collision and flagship movement.
 
+use crate::engine::StoryKey;
 const MAX_ZOOM: i16 = 128 << 6;
 const MIN_ZOOM: i16 = MAX_ZOOM >> 3;
 
@@ -510,10 +511,10 @@ pub(crate) mod live {
             cx.element_mut(element).flags |= NONSOLID as u16;
             cx.element_mut(element).turn = flagship;
         }
-        let escape = get("ESCAPE_COUNTER");
+        let escape = get(cx.world, StoryKey::ESCAPE_COUNTER);
         if escape != 0 && cx.navigation_mut().game.current_activity & START_ENCOUNTER as u16 == 0 {
             cx.element_mut(element).flags |= NONSOLID as u16;
-            set("ESCAPE_COUNTER", escape - 1);
+            set(cx.world, StoryKey::ESCAPE_COUNTER, escape - 1);
         }
         cx.element_mut(element).flags |= CHANGING as u16;
     }
@@ -526,7 +527,7 @@ pub(crate) mod live {
         let location = flagship_location(cx);
         cx.element_mut(element).turn = location;
         cx.element_mut(element).flags = (APPEARING | IGNORE_VELOCITY) as u16;
-        if get("ESCAPE_COUNTER") != 0 {
+        if get(cx.world, StoryKey::ESCAPE_COUNTER) != 0 {
             cx.element_mut(element).flags |= NONSOLID as u16;
         }
         cx.element_mut(element).life = NORMAL_LIFE as u16;

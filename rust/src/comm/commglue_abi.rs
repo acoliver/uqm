@@ -1,6 +1,7 @@
 //! Script glue, ported from commglue.c (GPL-2.0-or-later).
 
 use crate::c_bindings::global_state::NUMBER_SPEECH_DESC;
+use crate::engine::World as WorldOwner;
 #[cfg(not(test))]
 use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
 
@@ -75,7 +76,7 @@ pub(crate) mod runtime {
         let (first, last) =
             crate::state::game_state_keys::bit_range(key).expect("known comm state");
         unsafe {
-            crate::engine::World::current().read(|world| {
+            WorldOwner::current().read(|world| {
                 crate::state::ffi::rust_get_game_state_bits(world, first as i32, last as i32)
             })
         }
@@ -84,7 +85,7 @@ pub(crate) mod runtime {
         let (first, last) =
             crate::state::game_state_keys::bit_range(key).expect("known comm state");
         unsafe {
-            crate::engine::World::current().write(|world| {
+            WorldOwner::current().write(|world| {
                 crate::state::ffi::rust_set_game_state_bits(world, first as i32, last as i32, value)
             })
         }

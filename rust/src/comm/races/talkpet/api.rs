@@ -1,5 +1,6 @@
 use super::Handler;
 use crate::comm::races::alliance::AllianceApi;
+use crate::engine::World as WorldOwner;
 #[cfg(not(test))]
 use crate::engine::WorldData as WorldFields;
 
@@ -25,7 +26,11 @@ impl TalkpetApi for super::super::script::live::LiveScript<Handler> {
     }
     fn umgah_alive(&mut self) -> bool {
         use crate::battle::build_native::engine::StartSphereTracking;
-        unsafe { StartSphereTracking(crate::comm::dispatch::ship::UMGAH_SHIP as u16) != 0 }
+        unsafe {
+            WorldOwner::current().write(|world| {
+                StartSphereTracking(world, crate::comm::dispatch::ship::UMGAH_SHIP as u16)
+            }) != 0
+        }
     }
     fn strobe(&mut self) {
         unsafe {

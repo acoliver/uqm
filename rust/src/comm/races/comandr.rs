@@ -6,6 +6,8 @@ use super::script::{
 };
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
+use crate::engine::StoryKey;
+use crate::engine::World as WorldOwner;
 
 const GLAD_WHEN_YOU_COME_BACK: u16 = 1;
 const GIVE_FUEL: u16 = 2;
@@ -635,10 +637,10 @@ impl super::RaceDialogue for ComandrDialogue {
         let mut desc = descriptor();
         configure(
             &mut desc,
-            crate::engine::World::current().read(|world| {
+            WorldOwner::current().read(|world| {
                 crate::state::game_state_keys::get_game_state(
                     world,
-                    crate::engine::StoryKey::RADIOACTIVES_PROVIDED,
+                    StoryKey::RADIOACTIVES_PROVIDED,
                 )
             }) != 0,
         );

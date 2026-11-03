@@ -5,6 +5,7 @@
 //! `load.c`, not produced by the code under test. The seed save is a file the
 //! C game wrote; its chunk values below were decoded with a separate script.
 
+use crate::engine::World as WorldOwner;
 use serial_test::serial;
 
 use super::statefiles::*;
@@ -35,9 +36,9 @@ fn game() -> Box<CGameState> {
 /// A fresh game state and empty group files, as `InitGlobData` leaves them.
 fn fresh_game() -> Box<CGameState> {
     // SAFETY: no requirements.
-    unsafe { crate::engine::World::current().write(|world| rust_init_game_state(world)) };
+    unsafe { WorldOwner::current().write(|world| rust_init_game_state(world)) };
     init_group_info(true).unwrap();
-    crate::engine::World::current()
+    WorldOwner::current()
         .write(|world| {
             with_state_files(world, |files| {
                 files.replace_contents(STARINFO_FILE, &[]).unwrap()
@@ -48,7 +49,7 @@ fn fresh_game() -> Box<CGameState> {
 }
 
 fn file(index: usize) -> Vec<u8> {
-    crate::engine::World::current()
+    WorldOwner::current()
         .write(|world| {
             with_state_files(world, |files| {
                 files.get_file(index).unwrap().contents().to_vec()
@@ -136,10 +137,10 @@ fn seed_restores_to_the_images_the_c_loader_builds() {
     unsafe {
         crate::app::bridge::with_game(&mut game_owner, || {
             let mut game = fresh_game();
-            crate::engine::World::current()
+            WorldOwner::current()
                 .write(|world| replace_game_state(world, &seed().game_state))
                 .unwrap();
-            crate::engine::World::current()
+            WorldOwner::current()
                 .write(|world| {
                     super::statefiles::restore_state_files(
                         &mut game,
@@ -154,9 +155,7 @@ fn seed_restores_to_the_images_the_c_loader_builds() {
             assert_eq!(file(RANDGRPINFO_FILE), seed_random_image());
             assert_eq!(file(DEFGRPINFO_FILE), seed_defined_image());
             assert_eq!(game.battle_group_ref, 1);
-            let state = crate::engine::World::current()
-                .read(snapshot_game_state)
-                .unwrap();
+            let state = WorldOwner::current().read(snapshot_game_state).unwrap();
             assert_eq!(get_state_32_raw(&state, PROBE_OFFSET_BIT), 1);
         })
     }
@@ -170,10 +169,10 @@ fn capture_after_restore_gives_back_the_seed_sections() {
     unsafe {
         crate::app::bridge::with_game(&mut game_owner, || {
             let mut game = fresh_game();
-            crate::engine::World::current()
+            WorldOwner::current()
                 .write(|world| replace_game_state(world, &seed().game_state))
                 .unwrap();
-            crate::engine::World::current()
+            WorldOwner::current()
                 .write(|world| {
                     super::statefiles::restore_state_files(
                         &mut game,
@@ -184,7 +183,7 @@ fn capture_after_restore_gives_back_the_seed_sections() {
                 })
                 .unwrap();
 
-            let captured = crate::engine::World::current()
+            let captured = WorldOwner::current()
                 .write(|world| {
                     super::statefiles::capture_state_files(&game, &world.story, &world.files)
                 })
@@ -398,10 +397,10 @@ fn rejected_restore_leaves_files_and_state_alone() {
     unsafe {
         crate::app::bridge::with_game(&mut game_owner, || {
             let mut game = fresh_game();
-            crate::engine::World::current()
+            WorldOwner::current()
                 .write(|world| replace_game_state(world, &seed().game_state))
                 .unwrap();
-            crate::engine::World::current()
+            WorldOwner::current()
                 .write(|world| {
                     super::statefiles::restore_state_files(
                         &mut game,
@@ -415,9 +414,7 @@ fn rejected_restore_leaves_files_and_state_alone() {
                 file(STARINFO_FILE),
                 file(RANDGRPINFO_FILE),
                 file(DEFGRPINFO_FILE),
-                crate::engine::World::current()
-                    .read(snapshot_game_state)
-                    .unwrap(),
+                WorldOwner::current().read(snapshot_game_state).unwrap(),
                 game.battle_group_ref,
             );
 
@@ -509,7 +506,7 @@ fn rejected_restore_leaves_files_and_state_alone() {
             ];
             for (sections, expected) in bad {
                 assert_eq!(
-                    crate::engine::World::current().write(|world| {
+                    WorldOwner::current().write(|world| {
                         super::statefiles::restore_state_files(
                             &mut game,
                             &mut world.story,
@@ -523,9 +520,7 @@ fn rejected_restore_leaves_files_and_state_alone() {
                     file(STARINFO_FILE),
                     file(RANDGRPINFO_FILE),
                     file(DEFGRPINFO_FILE),
-                    crate::engine::World::current()
-                        .read(snapshot_game_state)
-                        .unwrap(),
+                    WorldOwner::current().read(snapshot_game_state).unwrap(),
                     game.battle_group_ref,
                 );
                 assert_eq!(after, before, "state changed after {expected:?}");
@@ -542,10 +537,10 @@ fn repeated_loads_start_from_the_initial_group_files() {
     unsafe {
         crate::app::bridge::with_game(&mut game_owner, || {
             let mut game = fresh_game();
-            crate::engine::World::current()
+            WorldOwner::current()
                 .write(|world| replace_game_state(world, &seed().game_state))
                 .unwrap();
-            crate::engine::World::current()
+            WorldOwner::current()
                 .write(|world| {
                     super::statefiles::restore_state_files(
                         &mut game,
@@ -557,7 +552,7 @@ fn repeated_loads_start_from_the_initial_group_files() {
                 .unwrap();
 
             // A second save: three random fleets, no defined groups, game state clean.
-            crate::engine::World::current()
+            WorldOwner::current()
                 .write(|world| replace_game_state(world, &[0; GAME_STATE_BYTES]))
                 .unwrap();
             let mut random = random_group(3);
@@ -568,7 +563,7 @@ fn repeated_loads_start_from_the_initial_group_files() {
                 group_list: None,
                 battle_groups: vec![random],
             };
-            crate::engine::World::current()
+            WorldOwner::current()
                 .write(|world| {
                     super::statefiles::restore_state_files(
                         &mut game,
@@ -599,7 +594,7 @@ fn repeated_loads_start_from_the_initial_group_files() {
             }
             assert_eq!(random_file, expected);
             assert_eq!(
-                crate::engine::World::current()
+                WorldOwner::current()
                     .write(|world| super::statefiles::capture_state_files(
                         &game,
                         &world.story,
@@ -615,7 +610,7 @@ fn repeated_loads_start_from_the_initial_group_files() {
             );
 
             // A save with only a Scan chunk touches nothing else.
-            crate::engine::World::current()
+            WorldOwner::current()
                 .write(|world| {
                     super::statefiles::restore_state_files(
                         &mut game,
@@ -642,7 +637,7 @@ fn several_defined_groups_get_their_own_offsets() {
     unsafe {
         crate::app::bridge::with_game(&mut game_owner, || {
             let mut game = fresh_game();
-            crate::engine::World::current()
+            WorldOwner::current()
                 .write(|world| replace_game_state(world, &[0; GAME_STATE_BYTES]))
                 .unwrap();
             let mut first = probe_group(false);
@@ -655,7 +650,7 @@ fn several_defined_groups_get_their_own_offsets() {
                 group_list: None,
                 battle_groups: vec![random_group(0), last.clone(), first.clone()],
             };
-            crate::engine::World::current()
+            WorldOwner::current()
                 .write(|world| {
                     super::statefiles::restore_state_files(
                         &mut game,
@@ -669,14 +664,12 @@ fn several_defined_groups_get_their_own_offsets() {
             // Group 14 came first in the save, so it sits at 1; group 1 follows the
             // 268 byte header and the 2 + 17 byte fleet.
             let second_offset = 1 + 268 + 19;
-            let state = crate::engine::World::current()
-                .read(snapshot_game_state)
-                .unwrap();
+            let state = WorldOwner::current().read(snapshot_game_state).unwrap();
             assert_eq!(get_state_32_raw(&state, SAMATRA_OFFSET_BIT), 1);
             assert_eq!(get_state_32_raw(&state, FIRST_OFFSET_BIT), second_offset);
             assert_eq!(game.battle_group_ref, 1);
 
-            let captured = crate::engine::World::current()
+            let captured = WorldOwner::current()
                 .write(|world| {
                     super::statefiles::capture_state_files(&game, &world.story, &world.files)
                 })
@@ -696,10 +689,10 @@ fn init_group_info_matches_the_c_initialiser() {
     unsafe {
         crate::app::bridge::with_game(&mut game_owner, || {
             let mut game = fresh_game();
-            crate::engine::World::current()
+            WorldOwner::current()
                 .write(|world| replace_game_state(world, &seed().game_state))
                 .unwrap();
-            crate::engine::World::current()
+            WorldOwner::current()
                 .write(|world| {
                     super::statefiles::restore_state_files(
                         &mut game,
@@ -724,10 +717,10 @@ fn init_group_info_matches_the_c_initialiser() {
             assert_eq!(file(DEFGRPINFO_FILE), vec![0]);
 
             // An initialised but empty random file still saves its header as a group.
-            crate::engine::World::current()
+            WorldOwner::current()
                 .write(|world| replace_game_state(world, &[0; GAME_STATE_BYTES]))
                 .unwrap();
-            let captured = crate::engine::World::current()
+            let captured = WorldOwner::current()
                 .write(|world| {
                     super::statefiles::capture_state_files(&game, &world.story, &world.files)
                 })
@@ -747,7 +740,7 @@ fn deleted_files_capture_as_empty_storage() {
     unsafe {
         crate::app::bridge::with_game(&mut game_owner, || {
             let game = fresh_game();
-            crate::engine::World::current()
+            WorldOwner::current()
                 .write(|world| {
                     with_state_files(world, |files| {
                         for index in [STARINFO_FILE, RANDGRPINFO_FILE, DEFGRPINFO_FILE] {
@@ -756,7 +749,7 @@ fn deleted_files_capture_as_empty_storage() {
                     })
                 })
                 .unwrap();
-            let captured = crate::engine::World::current()
+            let captured = WorldOwner::current()
                 .write(|world| {
                     super::statefiles::capture_state_files(&game, &world.story, &world.files)
                 })
@@ -784,21 +777,21 @@ fn canned_nodes_capture_restore_and_old_save_clear_are_atomic() {
                 x: 967,
                 y: 299,
             };
-            crate::engine::World::current()
+            WorldOwner::current()
                 .write(|world| with_state_files(world, |files| files.can_node(node)))
                 .unwrap();
-            let captured = crate::engine::World::current()
+            let captured = WorldOwner::current()
                 .write(|world| {
                     super::statefiles::capture_state_files(&game, &world.story, &world.files)
                 })
                 .unwrap();
             assert_eq!(captured.canned_nodes, [node]);
-            crate::engine::World::current()
+            WorldOwner::current()
                 .write(|world| {
                     with_state_files(world, |files| files.remove_canned_node(node.key()))
                 })
                 .unwrap();
-            crate::engine::World::current()
+            WorldOwner::current()
                 .write(|world| {
                     super::statefiles::restore_state_files(
                         &mut game,
@@ -809,14 +802,14 @@ fn canned_nodes_capture_restore_and_old_save_clear_are_atomic() {
                 })
                 .unwrap();
             assert_eq!(
-                crate::engine::World::current()
+                WorldOwner::current()
                     .write(|world| with_state_files(world, |files| files.canned_node(node.key())))
                     .unwrap(),
                 Some(node)
             );
             let mut invalid_group = probe_group(false);
             invalid_group.fleets[0].ships[0].crew_level = 256;
-            assert!(crate::engine::World::current()
+            assert!(WorldOwner::current()
                 .write(|world| super::statefiles::restore_state_files(
                     &mut game,
                     &mut world.story,
@@ -828,12 +821,12 @@ fn canned_nodes_capture_restore_and_old_save_clear_are_atomic() {
                 ))
                 .is_err());
             assert_eq!(
-                crate::engine::World::current()
+                WorldOwner::current()
                     .write(|world| with_state_files(world, |files| files.canned_node(node.key())))
                     .unwrap(),
                 Some(node)
             );
-            crate::engine::World::current()
+            WorldOwner::current()
                 .write(|world| {
                     super::statefiles::restore_state_files(
                         &mut game,
@@ -843,15 +836,15 @@ fn canned_nodes_capture_restore_and_old_save_clear_are_atomic() {
                     )
                 })
                 .unwrap();
-            assert!(crate::engine::World::current()
+            assert!(WorldOwner::current()
                 .write(|world| with_state_files(world, |files| files.canned_node(node.key())))
                 .unwrap()
                 .is_none());
-            crate::engine::World::current()
+            WorldOwner::current()
                 .write(|world| with_state_files(world, |files| files.can_node(node)))
                 .unwrap();
-            crate::engine::World::current().write(|world| rust_init_game_state(world));
-            assert!(crate::engine::World::current()
+            WorldOwner::current().write(|world| rust_init_game_state(world));
+            assert!(WorldOwner::current()
                 .write(|world| with_state_files(world, |files| files.canned_node(node.key())))
                 .unwrap()
                 .is_none());

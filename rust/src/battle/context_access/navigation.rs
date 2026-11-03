@@ -63,6 +63,23 @@ impl Cx<'_> {
         )
     }
 }
+const PORTALS: [(i16, i16); 15] = [
+    (4091, 7748),
+    (3184, 4906),
+    (9211, 6104),
+    (5673, 1207),
+    (1910, 926),
+    (8607, 151),
+    (50, 1647),
+    (6117, 4131),
+    (5658, 9712),
+    (2302, 3988),
+    (112, 9409),
+    (7752, 8906),
+    (368, 6332),
+    (9735, 3153),
+    (5850, 6213),
+];
 pub(crate) unsafe fn interplanetary(world: &mut crate::engine::World, mut point: POINT) {
     world.data.game.ip_planet = 0;
     world.data.game.in_orbit = 0;
@@ -85,23 +102,6 @@ pub(crate) unsafe fn interplanetary(world: &mut crate::engine::World, mut point:
             {
                 world.data.game.current_activity |= START_ENCOUNTER as u16;
             } else {
-                const PORTALS: [(i16, i16); 15] = [
-                    (4091, 7748),
-                    (3184, 4906),
-                    (9211, 6104),
-                    (5673, 1207),
-                    (1910, 926),
-                    (8607, 151),
-                    (50, 1647),
-                    (6117, 4131),
-                    (5658, 9712),
-                    (2302, 3988),
-                    (112, 9409),
-                    (7752, 8906),
-                    (368, 6332),
-                    (9735, 3153),
-                    (5850, 6213),
-                ];
                 let Some(portal) = world.current_star else {
                     panic!("portal transition without a selected star");
                 };
@@ -121,22 +121,20 @@ pub(crate) unsafe fn arilou(world: &mut crate::engine::World) {
     world.data.game.ship_facing = 0;
     world.set_story_state(StoryKey::USED_BROADCASTER, 0);
     world.data.game.autopilot = POINT { x: -1, y: -1 };
-    if world.story_state(StoryKey::ARILOU_SPACE_SIDE) <= 1 {
-        // SAFETY: the navigation caller owns the game thread and initialized screen geometry.
-        let (x, y) = unsafe { (logx(QUASI_SPACE_X as i16), logy(QUASI_SPACE_Y as i16)) };
-        world.data.flagship.log_x = x;
-        world.data.flagship.log_y = y;
-        if world.story_state(StoryKey::PORTAL_COUNTER) != 0 {
-            world.set_story_state(StoryKey::PORTAL_COUNTER, 0);
-        }
-        world.set_story_state(StoryKey::ARILOU_SPACE_SIDE, 3);
+    let entering = world.story_state(StoryKey::ARILOU_SPACE_SIDE) <= 1;
+    let (x, y) = if entering {
+        (QUASI_SPACE_X as i16, QUASI_SPACE_Y as i16)
     } else {
-        // SAFETY: the navigation caller owns the game thread and initialized screen geometry.
-        let (x, y) = unsafe { (logx(ARILOU_SPACE_X as i16), logy(ARILOU_SPACE_Y as i16)) };
-        world.data.flagship.log_x = x;
-        world.data.flagship.log_y = y;
-        world.set_story_state(StoryKey::ARILOU_SPACE_SIDE, 0);
+        (ARILOU_SPACE_X as i16, ARILOU_SPACE_Y as i16)
+    };
+    // SAFETY: the navigation caller owns the game thread and initialized screen geometry.
+    let (x, y) = unsafe { (logx(x), logy(y)) };
+    world.data.flagship.log_x = x;
+    world.data.flagship.log_y = y;
+    if entering && world.story_state(StoryKey::PORTAL_COUNTER) != 0 {
+        world.set_story_state(StoryKey::PORTAL_COUNTER, 0);
     }
+    world.set_story_state(StoryKey::ARILOU_SPACE_SIDE, if entering { 3 } else { 0 });
     world.select_star(None, None);
 }
 

@@ -186,7 +186,7 @@ pub unsafe fn DrawSISFrame() {
         DrawFilledRectangle(&mut r);
     }
 
-    crate::engine::Kernel::current().write(|kernel| InitSISContexts(kernel));
+    KernelOwner::current().write(|kernel| InitSISContexts(kernel));
     ClearSISRect(DRAW_SIS_DISPLAY as u8);
 
     UnbatchGraphics();

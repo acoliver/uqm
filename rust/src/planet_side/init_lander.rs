@@ -4,6 +4,8 @@
 //! lander sprite, shield indicators, and cargo capacity bar. Called by
 //! `PickPlanetSide` in `scan.c` before the landing-site selection menu.
 
+use crate::engine::StoryKey;
+use crate::engine::World as WorldOwner;
 #[cfg(not(test))]
 use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
 use std::ffi::c_void;
@@ -276,11 +278,11 @@ unsafe fn draw_lander_status(lander_frame_0: *mut c_void, lander_flags: u8) {
 
     let (shield_flags, capacity_shift);
     if lander_flags == 0 {
-        shield_flags = crate::engine::World::current()
-            .read(|world| get_game_state(world, crate::engine::StoryKey::LANDER_SHIELDS))
+        shield_flags = WorldOwner::current()
+            .read(|world| get_game_state(world, StoryKey::LANDER_SHIELDS))
             as u8;
-        capacity_shift = crate::engine::World::current()
-            .read(|world| get_game_state(world, crate::engine::StoryKey::IMPROVED_LANDER_CARGO))
+        capacity_shift = WorldOwner::current()
+            .read(|world| get_game_state(world, StoryKey::IMPROVED_LANDER_CARGO))
             as u8;
     } else {
         shield_flags = lander_flags

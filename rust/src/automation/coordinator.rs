@@ -15,6 +15,7 @@
 //! @plan PLAN-20260723-RUNTIME-AUTOMATION.P08
 //! @requirement REQ-FFI-001..005, REQ-SCHED-001, REQ-WATCH-001
 
+use crate::engine::World as WorldOwner;
 mod fixtures;
 mod input;
 mod navigation;
@@ -1325,7 +1326,7 @@ impl Coordinator {
         let flags = ARTIFACT_FLAGS
             .iter()
             .map(|key| {
-                crate::engine::World::current()
+                WorldOwner::current()
                     .read(|world| crate::state::ffi::named_state_value(world, key))
                     .map(u32::from)
             })
@@ -1339,7 +1340,7 @@ impl Coordinator {
             lander: planet_minerals::PlanetSnapshot::live(),
             nodes,
             retrieved,
-            vault_unlocked: crate::engine::World::current()
+            vault_unlocked: WorldOwner::current()
                 .read(|world| crate::state::ffi::named_state_value(world, "SHIP_VAULT_UNLOCKED"))
                 == Some(1),
             flags,
@@ -1661,7 +1662,7 @@ impl Coordinator {
             );
         }
         // A homeworld is the destination, not a patrol to dismiss.
-        if crate::engine::World::current()
+        if WorldOwner::current()
             .read(|world| crate::state::ffi::named_state_value(world, "GLOBAL_FLAGS_AND_DATA"))
             == Some(128)
         {
@@ -1732,7 +1733,7 @@ impl Coordinator {
                 Some(step.max_ticks)
             }
             Some(Action::NavigateToMoon(step))
-                if crate::engine::World::current().read(|world| {
+                if WorldOwner::current().read(|world| {
                     crate::state::ffi::named_state_value(world, "GLOBAL_FLAGS_AND_DATA")
                 }) == Some(0) =>
             {
@@ -1743,7 +1744,7 @@ impl Coordinator {
             }
             Some(Action::NavigateToOrbit(step))
                 if step.patrol_policy != PatrolPolicy::Stop
-                    && crate::engine::World::current().read(|world| {
+                    && WorldOwner::current().read(|world| {
                         crate::state::ffi::named_state_value(world, "GLOBAL_FLAGS_AND_DATA")
                     }) == Some(0) =>
             {

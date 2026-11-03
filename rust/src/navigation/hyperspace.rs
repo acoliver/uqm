@@ -5,6 +5,7 @@ use super::abi::*;
 #[cfg(not(test))]
 #[cfg(not(test))]
 use crate::engine::world::FuelDistance;
+use crate::engine::StoryKey;
 #[cfg(not(test))]
 use crate::engine::{World as WorldOwner, WorldData as WorldFields};
 
@@ -105,7 +106,7 @@ pub(crate) mod live {
             });
         }
         if WorldFields::current().read(|world| world.flagship.fuel_on_board) != 0
-            && get("ARILOU_SPACE_SIDE") <= 1
+            && WorldOwner::current().read(|world| get(world, StoryKey::ARILOU_SPACE_SIDE)) <= 1
         {
             x = x.wrapping_abs();
             y = y.wrapping_abs();
@@ -153,17 +154,15 @@ pub(crate) mod live {
 
     /// # Safety
     /// Game-thread access to initialized world fleet and encounter queues.
-    #[no_mangle]
-    pub unsafe extern "C" fn check_hyperspace_encounter() {
-        let world = WorldOwner::current();
+    pub unsafe fn check_hyperspace_encounter(world: &mut crate::engine::World) {
         let universe = POINT {
-            x: universe_x((**world).data.flagship.log_x),
-            y: universe_y((**world).data.flagship.log_y),
+            x: universe_x(world.data.flagship.log_x),
+            y: universe_y(world.data.flagship.log_y),
         };
-        let queue = ptr::addr_of_mut!((**world).data.game.encounter_q);
-        let mut handle = (**world).data.game.avail_race_q.head;
+        let queue = ptr::addr_of_mut!(world.data.game.encounter_q);
+        let mut handle = world.data.game.avail_race_q.head;
         let mut race = 0usize;
-        while !handle.is_null() && (**world).data.game.current_activity & IN_BATTLE as u16 != 0 {
+        while !handle.is_null() && world.data.game.current_activity & IN_BATTLE as u16 != 0 {
             let fleet = handle.cast::<FLEET_INFO>();
             handle = (*fleet).succ;
             let mut radius = (*fleet).actual_strength;
@@ -176,31 +175,18 @@ pub(crate) mod live {
                     radius = 20000;
                     if race == SLYLANDRO_SHIP as usize {
                         flags = ONE_SHOT_ENCOUNTER as u8;
-                        percent = if ((**world)
-                            .story_state(crate::engine::StoryKey::STARBASE_AVAILABLE)
-                            as u8)
-                            == 0
-                        {
+                        percent = if (world.story_state(StoryKey::STARBASE_AVAILABLE) as u8) == 0 {
                             100
                         } else {
                             percent
-                                * ((**world)
-                                    .story_state(crate::engine::StoryKey::SLYLANDRO_MULTIPLIER)
-                                    as u8) as u16
+                                * (world.story_state(StoryKey::SLYLANDRO_MULTIPLIER) as u8) as u16
                         };
                     } else if race == MELNORME_SHIP as usize
-                        && ((**world).data.flagship.fuel_on_board == 0
-                            || ((**world).story_state(crate::engine::StoryKey::USED_BROADCASTER)
-                                as u8)
-                                != 0)
-                        && ((**world).story_state(crate::engine::StoryKey::MELNORME_ANGER) as u8)
-                            < 3
+                        && (world.data.flagship.fuel_on_board == 0
+                            || (world.story_state(StoryKey::USED_BROADCASTER) as u8) != 0)
+                        && (world.story_state(StoryKey::MELNORME_ANGER) as u8) < 3
                     {
-                        percent = if ((**world)
-                            .story_state(crate::engine::StoryKey::USED_BROADCASTER)
-                            as u8)
-                            == 0
-                        {
+                        percent = if (world.story_state(StoryKey::USED_BROADCASTER) as u8) == 0 {
                             30
                         } else {
                             100
@@ -217,7 +203,7 @@ pub(crate) mod live {
                         }
                     }
                     if percent == 100 && race == MELNORME_SHIP as usize {
-                        (**world).set_story_state(crate::engine::StoryKey::BROADCASTER_RESPONSE, 1);
+                        world.set_story_state(StoryKey::BROADCASTER_RESPONSE, 1);
                     }
                 }
                 let dx = universe.x.wrapping_sub((*fleet).loc.x).wrapping_abs() as u16;
@@ -242,7 +228,7 @@ pub(crate) mod live {
             }
             race += 1;
         }
-        (**world).set_story_state(crate::engine::StoryKey::USED_BROADCASTER, 0);
+        world.set_story_state(StoryKey::USED_BROADCASTER, 0);
     }
 }
 

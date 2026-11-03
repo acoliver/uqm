@@ -4,6 +4,7 @@
 //! movement and destination selection still go through the menu callback.
 
 use crate::comm::dispatch::CPoint;
+use crate::engine::StoryKey;
 use crate::engine::{World as WorldOwner, WorldData as WorldFields};
 
 #[no_mangle]
@@ -119,11 +120,8 @@ pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> u32 {
         }
         DrawStarMap(0, std::ptr::null_mut());
     } else if keys[21] != 0 {
-        if crate::engine::World::current().read(|world| {
-            crate::state::game_state_keys::get_game_state(
-                world,
-                crate::engine::StoryKey::ARILOU_SPACE_SIDE,
-            )
+        if WorldOwner::current().read(|world| {
+            crate::state::game_state_keys::get_game_state(world, StoryKey::ARILOU_SPACE_SIDE)
         }) <= 1
         {
             let old = std::ptr::addr_of!(cursorLoc).read();

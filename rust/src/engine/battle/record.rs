@@ -1,5 +1,6 @@
 //! Shared battle record layouts during the storage transition.
 pub use crate::battle::velocity::VelocityDesc as VELOCITY_DESC;
+use crate::engine::World as WorldOwner;
 use crate::graphics::native_abi::{
     BYTE, COUNT, FRAME, POINT, RESOURCE, SIZE, STRING, STRING as SOUND, UWORD,
     UWORD as ELEMENT_FLAGS, UWORD as STATUS_FLAGS,
@@ -681,7 +682,7 @@ mod projection_tests {
             (ships.ship_id(link), ships.raw(link).cast::<ShipRecord>())
         };
         // SAFETY: this test retains both local world authorities for the context's lifetime.
-        let mut world = { crate::engine::World::new() };
+        let mut world = { WorldOwner::new() };
         let cx = Cx {
             b: &mut battle,
             world: &mut world,

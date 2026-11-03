@@ -9,6 +9,7 @@
 //! @plan PLAN-20260724-MAINLOOP-AND-COMM.P11
 //! @requirement REQ-ML-007, REQ-COMM-DISPATCH
 
+use crate::engine::StoryKey;
 use crate::engine::World as WorldOwner;
 #[cfg(not(test))]
 use crate::engine::WorldData as WorldFields;
@@ -713,22 +714,20 @@ pub unsafe extern "C" fn rust_race_communication() {
 
     let next_activity = crate::mainloop::ffi::get_next_activity().0;
     if (next_activity & CHECK_LOAD) != 0 {
-        let ec = crate::engine::World::current()
-            .read(|world| get_game_state(world, crate::engine::StoryKey::ESCAPE_COUNTER))
+        let ec = WorldOwner::current().read(|world| get_game_state(world, StoryKey::ESCAPE_COUNTER))
             as u8;
 
-        if crate::engine::World::current()
-            .read(|world| get_game_state(world, crate::engine::StoryKey::FOUND_PLUTO_SPATHI))
+        if WorldOwner::current().read(|world| get_game_state(world, StoryKey::FOUND_PLUTO_SPATHI))
             == 1
         {
             init_communication(conv::SPATHI);
-        } else if crate::engine::World::current()
-            .read(|world| get_game_state(world, crate::engine::StoryKey::GLOBAL_FLAGS_AND_DATA))
+        } else if WorldOwner::current()
+            .read(|world| get_game_state(world, StoryKey::GLOBAL_FLAGS_AND_DATA))
             == 0
         {
             init_communication(conv::TALKING_PET);
-        } else if (crate::engine::World::current()
-            .read(|world| get_game_state(world, crate::engine::StoryKey::GLOBAL_FLAGS_AND_DATA))
+        } else if (WorldOwner::current()
+            .read(|world| get_game_state(world, StoryKey::GLOBAL_FLAGS_AND_DATA))
             & ((1 << 4) | (1 << 5)))
             != 0
         {
@@ -750,9 +749,8 @@ pub unsafe extern "C" fn rust_race_communication() {
             ));
         }
 
-        crate::engine::World::current().write(|world| {
-            set_game_state(world, crate::engine::StoryKey::ESCAPE_COUNTER, ec as u32)
-        });
+        WorldOwner::current()
+            .write(|world| set_game_state(world, StoryKey::ESCAPE_COUNTER, ec as u32));
         return;
     }
 
@@ -762,8 +760,7 @@ pub unsafe extern "C" fn rust_race_communication() {
         let npc_q = npc_built_ship_queue();
         ReinitQueue(npc_q);
 
-        if crate::engine::World::current()
-            .read(|world| get_game_state(world, crate::engine::StoryKey::ARILOU_SPACE_SIDE))
+        if WorldOwner::current().read(|world| get_game_state(world, StoryKey::ARILOU_SPACE_SIDE))
             >= 2
         {
             init_communication(conv::ARILOU);
@@ -925,9 +922,9 @@ unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
         start_sphere_tracking(ship_type as u8);
         if which_comm == conv::ORZ
             || (which_comm == conv::TALKING_PET
-                && (crate::engine::World::current().read(|world| {
-                    get_game_state(world, crate::engine::StoryKey::TALKING_PET_ON_SHIP)
-                }) == 0
+                && (WorldOwner::current()
+                    .read(|world| get_game_state(world, StoryKey::TALKING_PET_ON_SHIP))
+                    == 0
                     || lobyte(crate::mainloop::ffi::get_current_activity().0) == IN_LAST_BATTLE))
             || (which_comm != conv::CHMMR && which_comm != conv::SYREEN)
         {
@@ -949,22 +946,17 @@ unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
         set_comm_data(read_locdata(&*descriptor.cast()));
     }
     let mut status;
-    if crate::engine::World::current()
-        .read(|world| get_game_state(world, crate::engine::StoryKey::BATTLE_SEGUE))
-        == 0
-    {
+    if WorldOwner::current().read(|world| get_game_state(world, StoryKey::BATTLE_SEGUE)) == 0 {
         status = HAIL;
     } else {
         crate::automation::ui_observation::observe_encounter_menu(true);
         status = ffi::InitEncounter();
         crate::automation::ui_observation::observe_encounter_menu(false);
         if status == HAIL && !descriptor.is_null() {
-            crate::engine::World::current()
-                .write(|world| set_game_state(world, crate::engine::StoryKey::BATTLE_SEGUE, 0));
+            WorldOwner::current().write(|world| set_game_state(world, StoryKey::BATTLE_SEGUE, 0));
         } else {
             status = ATTACK;
-            crate::engine::World::current()
-                .write(|world| set_game_state(world, crate::engine::StoryKey::BATTLE_SEGUE, 1));
+            WorldOwner::current().write(|world| set_game_state(world, StoryKey::BATTLE_SEGUE, 1));
         }
     }
     if status == HAIL {
@@ -988,21 +980,17 @@ unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
         {
             ReinitQueue(npc);
         }
-        crate::engine::World::current().write(|world| {
-            set_game_state(world, crate::engine::StoryKey::GLOBAL_FLAGS_AND_DATA, 0)
-        });
+        WorldOwner::current()
+            .write(|world| set_game_state(world, StoryKey::GLOBAL_FLAGS_AND_DATA, 0));
         status = u16::from(
-            crate::engine::World::current()
-                .read(|world| get_game_state(world, crate::engine::StoryKey::BATTLE_SEGUE))
-                != 0
+            WorldOwner::current().read(|world| get_game_state(world, StoryKey::BATTLE_SEGUE)) != 0
                 && !get_head_link(npc).is_null(),
         );
         if status != 0 {
             ffi::BuildBattle(RPG_PLAYER_NUM);
             ffi::EncounterBattle();
         } else {
-            crate::engine::World::current()
-                .write(|world| set_game_state(world, crate::engine::StoryKey::BATTLE_SEGUE, 0));
+            WorldOwner::current().write(|world| set_game_state(world, StoryKey::BATTLE_SEGUE, 0));
         }
     }
     ffi::UninitEncounter();
@@ -1242,8 +1230,8 @@ pub unsafe extern "C" fn rust_init_race_dispatch(comm_id: u32) -> *mut c_void {
         conv::BLACKURQ => ffi::init_blackurq_comm().cast(),
         conv::CHMMR => ffi::init_chmmr_comm().cast(),
         conv::COMMANDER => {
-            if crate::engine::World::current()
-                .read(|world| get_game_state(world, crate::engine::StoryKey::STARBASE_AVAILABLE))
+            if WorldOwner::current()
+                .read(|world| get_game_state(world, StoryKey::STARBASE_AVAILABLE))
                 == 0
             {
                 (ffi::init_commander_comm()).cast()
@@ -1261,9 +1249,9 @@ pub unsafe extern "C" fn rust_init_race_dispatch(comm_id: u32) -> *mut c_void {
         conv::SLYLANDRO => ffi::init_slyland_comm().cast(),
         conv::SLYLANDRO_HOME => ffi::init_slylandro_comm().cast(),
         conv::SPATHI => {
-            if (crate::engine::World::current().read(|world| {
-                get_game_state(world, crate::engine::StoryKey::GLOBAL_FLAGS_AND_DATA)
-            }) & (1 << 7))
+            if (WorldOwner::current()
+                .read(|world| get_game_state(world, StoryKey::GLOBAL_FLAGS_AND_DATA))
+                & (1 << 7))
                 == 0
             {
                 (ffi::init_spathi_comm()).cast()

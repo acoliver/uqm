@@ -3,6 +3,7 @@
 #![allow(non_snake_case)]
 
 use super::abi::*;
+use crate::engine::StoryKey;
 use std::{mem, ptr};
 
 unsafe fn create_radar(kernel: &mut crate::engine::Kernel) {
@@ -255,13 +256,9 @@ pub fn inHQSpace(world: &crate::engine::World) -> BOOLEAN {
 }
 
 pub fn inHyperSpace(world: &crate::engine::World) -> BOOLEAN {
-    u32::from(
-        inHQSpace(world) != 0 && world.story_state(crate::engine::StoryKey::ARILOU_SPACE_SIDE) <= 1,
-    )
+    u32::from(inHQSpace(world) != 0 && world.story_state(StoryKey::ARILOU_SPACE_SIDE) <= 1)
 }
 
 pub fn inQuasiSpace(world: &crate::engine::World) -> BOOLEAN {
-    u32::from(
-        inHQSpace(world) != 0 && world.story_state(crate::engine::StoryKey::ARILOU_SPACE_SIDE) > 1,
-    )
+    u32::from(inHQSpace(world) != 0 && world.story_state(StoryKey::ARILOU_SPACE_SIDE) > 1)
 }

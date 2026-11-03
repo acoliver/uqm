@@ -43,6 +43,7 @@
 //! written, and `ip_location` only takes the sun's location, which is where
 //! the inner system puts the ship's saved position.
 
+use crate::engine::World as WorldOwner;
 use std::fmt;
 
 use super::solar::{position_in, SolarError, SolarSystem, World};
@@ -155,7 +156,7 @@ fn persist_planet_change(
     let mask = ScanRetrieveMask::from_array(&state.SysInfo.PlanetInfo.ScanRetrieveMask);
     let (start, end) =
         GameState::lookup_bits("PLANETARY_CHANGE").expect("PLANETARY_CHANGE is a game-state key");
-    crate::engine::World::current()
+    WorldOwner::current()
         .write(|world| {
             with_state_owners(world, |bits, files| {
                 if bits.get_state(start, end) == 0 {

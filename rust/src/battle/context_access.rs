@@ -1,6 +1,7 @@
 //! Game and resource operations wired to the explicit battle context.
 #[cfg(not(test))]
 use crate::engine::battle::{Cx, ElementId, ShipId, Subject};
+use crate::engine::StoryKey;
 #[cfg(not(test))]
 use crate::ships::native::abi::*;
 
@@ -474,6 +475,7 @@ mod sounds_access {
 }
 
 mod star_access {
+    use crate::engine::StoryKey;
     #[cfg(not(test))]
     use crate::navigation::abi::*;
     #[cfg(not(test))]
@@ -493,8 +495,7 @@ mod star_access {
     impl crate::engine::battle::Cx<'_> {
         pub(crate) fn portal_counter(&self) -> u8 {
             // SAFETY: story state is accessed only on the game thread.
-            self.world
-                .story_state(crate::engine::StoryKey::PORTAL_COUNTER) as u8
+            self.world.story_state(StoryKey::PORTAL_COUNTER) as u8
         }
         pub fn autopilot(&self) -> crate::graphics::native_abi::POINT {
             // SAFETY: this is a value projection of the game-thread-owned world.
@@ -503,17 +504,15 @@ mod star_access {
         pub(crate) fn star_contact(&self, id: crate::engine::battle::ElementId) -> StarContact {
             let mut point = element_universe(self, id);
             // SAFETY: lookup reads the checked element and loaded star catalog synchronously.
-            let (star, position) = unsafe {
+            let (descriptor, catalog) = unsafe {
                 let star = FindStar(ptr::null_mut(), &mut point, 5, 5);
                 assert!(!star.is_null(), "star collision has no catalog entry");
-                let Some(catalog) = crate::planets::starmap::current_catalog() else {
-                    panic!("star collision without a catalog");
-                };
-                (
-                    self.world.identify_star(&*star.cast(), catalog),
-                    (*star).star_pt,
-                )
+                let catalog = crate::planets::starmap::current_catalog()
+                    .expect("star collision without a catalog");
+                (&*star.cast(), catalog)
             };
+            let star = self.world.identify_star(descriptor, catalog);
+            let position = descriptor.star_pt;
             StarContact {
                 star,
                 position,

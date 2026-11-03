@@ -7,6 +7,8 @@
 //! @plan PLAN-20260326-COMMPT2.P07
 //! @requirement REQ-HL-001
 
+use crate::engine::StoryKey;
+use crate::engine::World as WorldOwner;
 // ============================================================================
 // C bridge declarations (not compiled in test builds)
 // ============================================================================
@@ -116,17 +118,11 @@ impl super::player_font::FontRelease for CFontRelease {
 #[cfg(not(test))]
 unsafe fn is_starbase_conversation() -> bool {
     // Direct game state access (replaces c_IsStarbaseConversation)
-    let global_flags = crate::engine::World::current().read(|world| {
-        crate::state::game_state_keys::get_game_state(
-            world,
-            crate::engine::StoryKey::GLOBAL_FLAGS_AND_DATA,
-        )
+    let global_flags = WorldOwner::current().read(|world| {
+        crate::state::game_state_keys::get_game_state(world, StoryKey::GLOBAL_FLAGS_AND_DATA)
     });
-    let starbase_available = crate::engine::World::current().read(|world| {
-        crate::state::game_state_keys::get_game_state(
-            world,
-            crate::engine::StoryKey::STARBASE_AVAILABLE,
-        )
+    let starbase_available = WorldOwner::current().read(|world| {
+        crate::state::game_state_keys::get_game_state(world, StoryKey::STARBASE_AVAILABLE)
     });
     global_flags == 0xFF && starbase_available != 0
 }

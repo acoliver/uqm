@@ -4,6 +4,7 @@
 
 use super::clock_bridge::{days_in_month, CEvent};
 use crate::collections::queue::{AllocLink, HLink, InitQueue, InsertQueue, Queue, UninitQueue};
+use crate::engine::World as WorldOwner;
 #[cfg(not(test))]
 use crate::engine::WorldData as WorldFields;
 
@@ -114,7 +115,7 @@ pub(crate) mod live {
             u16::from((*clock).day_index),
         );
         process_day_events(ptr::addr_of_mut!((*clock).event_q), today, |selector| {
-            EventHandler(selector)
+            WorldOwner::current().write(|world| EventHandler(world, selector))
         });
     }
 
@@ -145,19 +146,35 @@ pub(crate) mod live {
     #[no_mangle]
     pub unsafe extern "C" fn AddEvent(
         kind: u32,
-        mut month: u16,
-        mut day: u16,
-        mut year: u16,
+        month: u16,
+        day: u16,
+        year: u16,
+        selector: u8,
+    ) -> HLink {
+        WorldOwner::current().write(|world| add_event(world, kind, month, day, year, selector))
+    }
+
+    pub(crate) unsafe fn add_event(
+        world: &mut crate::engine::World,
+        kind: u32,
+        month: u16,
+        day: u16,
+        year: u16,
         selector: u8,
     ) -> HLink {
         if kind == 1 && month == 0 && day == 0 && year == 0 {
-            EventHandler(selector);
-        } else if ValidateEvent(kind, &mut month, &mut day, &mut year) != 0 {
-            return insert_event(
-                ptr::addr_of_mut!((*GetGameClock()).event_q),
-                (year, month, day),
-                selector,
+            EventHandler(world, selector);
+        } else {
+            let clock = &world.data.game.game_clock;
+            let now = (
+                clock.year_index,
+                u16::from(clock.month_index),
+                u16::from(clock.day_index),
             );
+            let date = event_date(now, kind == 1, (year, month, day));
+            if date >= now {
+                return insert_event(&raw mut world.data.game.game_clock.event_q, date, selector);
+            }
         }
         ptr::null_mut()
     }

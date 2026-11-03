@@ -15,6 +15,7 @@
 //! The solar-system state is the real `SOLARSYS_STATE` layout wired as
 //! `ExploreSolarSys` wires it (see `solar_tests`).
 
+use crate::engine::World as WorldOwner;
 use serial_test::serial;
 
 use super::location::*;
@@ -113,19 +114,15 @@ const PLANETARY_CHANGE_BYTE: usize = 17 / 8;
 const PLANETARY_CHANGE_MASK: u8 = 1 << (17 % 8);
 
 fn planetary_change() -> bool {
-    crate::engine::World::current()
-        .read(snapshot_game_state)
-        .unwrap()[PLANETARY_CHANGE_BYTE]
+    WorldOwner::current().read(snapshot_game_state).unwrap()[PLANETARY_CHANGE_BYTE]
         & PLANETARY_CHANGE_MASK
         != 0
 }
 
 fn set_planetary_change() {
-    let mut bytes = crate::engine::World::current()
-        .read(snapshot_game_state)
-        .unwrap();
+    let mut bytes = WorldOwner::current().read(snapshot_game_state).unwrap();
     bytes[PLANETARY_CHANGE_BYTE] |= PLANETARY_CHANGE_MASK;
-    crate::engine::World::current()
+    WorldOwner::current()
         .write(|world| replace_game_state(world, &bytes))
         .unwrap();
 }
@@ -134,8 +131,8 @@ fn set_planetary_change() {
 /// (`InitPlanetInfo`: one zero offset each).
 fn fresh_starinfo(stars: usize) {
     // SAFETY: no requirements.
-    unsafe { crate::engine::World::current().write(|world| rust_init_game_state(world)) };
-    crate::engine::World::current()
+    unsafe { WorldOwner::current().write(|world| rust_init_game_state(world)) };
+    WorldOwner::current()
         .write(|world| {
             with_state_files(world, |files| {
                 files
@@ -147,7 +144,7 @@ fn fresh_starinfo(stars: usize) {
 }
 
 fn starinfo() -> Vec<u8> {
-    crate::engine::World::current()
+    WorldOwner::current()
         .write(|world| {
             with_state_files(world, |files| {
                 files.get_file(STARINFO_FILE).unwrap().contents().to_vec()

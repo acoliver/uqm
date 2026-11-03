@@ -1,5 +1,6 @@
 //! Typed access to engine owners shared with the melee menu.
 use super::*;
+use crate::engine::Kernel as KernelOwner;
 pub(super) use crate::mainloop::c_extern::ClearPlayerInputAll;
 use crate::supermelee::netplay as net;
 pub(super) unsafe fn connection(player: usize) -> *mut NetConnection {
@@ -63,8 +64,7 @@ pub(super) unsafe fn release_sound(sound: SOUND) -> *mut std::ffi::c_void {
 }
 pub(super) unsafe fn set_player_input_all() -> i32 {
     i32::from(
-        crate::engine::Kernel::current()
-            .write(|kernel| crate::navigation::abi::SetPlayerInputAll(kernel)),
+        KernelOwner::current().write(|kernel| crate::navigation::abi::SetPlayerInputAll(kernel)),
     )
 }
 

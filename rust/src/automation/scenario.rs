@@ -7,6 +7,8 @@
 
 #[cfg(not(test))]
 use crate::engine::Kernel as KernelOwner;
+use crate::engine::StoryKey;
+use crate::engine::World as WorldOwner;
 use serde::Deserialize;
 use std::fmt;
 use std::sync::OnceLock;
@@ -145,10 +147,10 @@ pub fn scene_plan(
                     | crate::comm::dispatch::START_ENCOUNTER,
                 star_location: (6200, 5935),
                 game_state: &[
-                    (crate::engine::StoryKey::CHMMR_BOMB_STATE, 3),
-                    (crate::engine::StoryKey::UTWIG_BOMB_ON_SHIP, 1),
-                    (crate::engine::StoryKey::STARBASE_AVAILABLE, 1),
-                    (crate::engine::StoryKey::BOMB_CARRIER, 0),
+                    (StoryKey::CHMMR_BOMB_STATE, 3),
+                    (StoryKey::UTWIG_BOMB_ON_SHIP, 1),
+                    (StoryKey::STARBASE_AVAILABLE, 1),
+                    (StoryKey::BOMB_CARRIER, 0),
                 ],
             })
         }
@@ -160,7 +162,7 @@ pub fn scene_plan(
             current_activity: crate::comm::dispatch::IN_ENCOUNTER
                 | crate::comm::dispatch::START_ENCOUNTER,
             star_location: SOL_UNIVERSE_LOCATION,
-            game_state: &[(crate::engine::StoryKey::PROBE_MESSAGE_DELIVERED, 0)],
+            game_state: &[(StoryKey::PROBE_MESSAGE_DELIVERED, 0)],
         }),
         AutomationScene::StarbaseCommander => Ok(ScenePlan {
             scene,
@@ -171,13 +173,13 @@ pub fn scene_plan(
                 | crate::comm::dispatch::START_ENCOUNTER,
             star_location: SOL_UNIVERSE_LOCATION,
             game_state: &[
-                (crate::engine::StoryKey::GLOBAL_FLAGS_AND_DATA, 0xFF),
-                (crate::engine::StoryKey::STARBASE_AVAILABLE, 1),
-                (crate::engine::StoryKey::PROBE_ILWRATH_ENCOUNTER, 0),
+                (StoryKey::GLOBAL_FLAGS_AND_DATA, 0xFF),
+                (StoryKey::STARBASE_AVAILABLE, 1),
+                (StoryKey::PROBE_ILWRATH_ENCOUNTER, 0),
                 // The visit goes straight into the Commander conversation only
                 // when the moon base is on the ship (or Chmmr installed the
                 // bomb); otherwise it falls through to the starbase menu.
-                (crate::engine::StoryKey::MOONBASE_ON_SHIP, 1),
+                (StoryKey::MOONBASE_ON_SHIP, 1),
             ],
         }),
     }
@@ -405,7 +407,7 @@ pub fn activate(
             return Err(SceneError::SetupFailed(reason));
         }
         for (name, value) in plan.game_state {
-            crate::engine::World::current()
+            WorldOwner::current()
                 .write(|world| crate::state::game_state_keys::set_game_state(world, *name, *value));
         }
         enter_scene(&plan, &mut LinkedSceneEntry);
@@ -554,12 +556,9 @@ mod tests {
                 .find(|(key, _)| *key == name)
                 .map(|(_, value)| *value)
         };
-        assert_eq!(state(crate::engine::StoryKey::STARBASE_AVAILABLE), Some(1));
-        assert_eq!(state(crate::engine::StoryKey::MOONBASE_ON_SHIP), Some(1));
-        assert_eq!(
-            state(crate::engine::StoryKey::PROBE_ILWRATH_ENCOUNTER),
-            Some(0)
-        );
+        assert_eq!(state(StoryKey::STARBASE_AVAILABLE), Some(1));
+        assert_eq!(state(StoryKey::MOONBASE_ON_SHIP), Some(1));
+        assert_eq!(state(StoryKey::PROBE_ILWRATH_ENCOUNTER), Some(0));
     }
 
     #[test]
@@ -574,7 +573,7 @@ mod tests {
         assert!(plan
             .game_state
             .iter()
-            .all(|(key, _)| *key != crate::engine::StoryKey::BATTLE_SEGUE));
+            .all(|(key, _)| *key != StoryKey::BATTLE_SEGUE));
     }
 
     #[derive(Default)]
