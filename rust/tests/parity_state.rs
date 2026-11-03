@@ -17,7 +17,7 @@ use uqm_rust::{
     },
     collections::observation::{self, Event},
     engine::battle::{frames::FrameArray, views::Frame},
-    graphics::native_abi::{drawable_desc, frame_desc},
+    graphics::native_abi::frame_desc,
     ships::native::abi::*,
 };
 
@@ -382,8 +382,8 @@ fn race_custom_fields(directory: &Path) {
                 fields["ships.0.0.custom.phoenix"]
             );
             let mut reused = battle::Object::new(&pool);
-            assert_eq!(reused.id.slot, phoenix_object.id.slot);
-            assert_ne!(reused.id.gen, phoenix_object.id.gen);
+            assert_eq!(reused.id.slot(), phoenix_object.id.slot());
+            assert_ne!(reused.id.generation(), phoenix_object.id.generation());
             assert!(!uqm_rust::app::bridge::enter(|cx| cx
                 .elements()
                 .contains(phoenix_object.id)));
@@ -575,9 +575,12 @@ fn descriptor_assets(directory: &Path) {
     // SAFETY: STARSHIP contains integers, pointers and optional callbacks; zero is valid.
     let mut ship = unsafe { battle::PoolShip::new(0) };
     // SAFETY: drawable_desc contains integers, pointers and optional callbacks.
-    let mut drawable: drawable_desc = unsafe { std::mem::zeroed() };
-    // SAFETY: frame_desc contains integers, pointers and optional callbacks.
-    let mut frame: frame_desc = unsafe { std::mem::zeroed() };
+    let native = battle::NativeFrameSet::new(16);
+    // SAFETY: the fixture retains this registered allocation throughout every snapshot.
+    let (drawable, frame) = unsafe {
+        let frame = &mut *native.frame(9).cast::<frame_desc>();
+        (&mut *frame.parent, frame)
+    };
     let mut strings = uqm_rust::strings::string_table::StringTableEntry {
         data: ptr::null_mut(),
         length: 0,
@@ -585,9 +588,9 @@ fn descriptor_assets(directory: &Path) {
         parent: ptr::null_mut(),
     };
     let mut music = ptr::null_mut();
-    frame.parent = &mut drawable;
+    frame.parent = ptr::from_mut(drawable);
     frame.Index = 9;
-    let frame_pointer = ptr::from_mut(&mut frame).cast();
+    let frame_pointer = ptr::from_mut(frame).cast();
     descriptor.ship_info.race_strings_rsc = c"test.strings".as_ptr();
     descriptor.ship_info.icons_rsc = c"test.icons".as_ptr();
     descriptor.ship_info.melee_icon_rsc = c"test.melee".as_ptr();
@@ -597,15 +600,11 @@ fn descriptor_assets(directory: &Path) {
     descriptor.ship_data.ship_rsc = [c"test.ship".as_ptr(); 3];
     descriptor.ship_data.weapon_rsc = [c"test.weapon".as_ptr(); 3];
     descriptor.ship_data.special_rsc = [c"test.special".as_ptr(); 3];
-    // SAFETY: this fixture detaches every consumer before its stack drawable is dropped.
-    descriptor.ship_data.ship =
-        FrameArray::retain([unsafe { Frame::from_native(frame_pointer) }; 3], ());
-    // SAFETY: this fixture detaches every consumer before its stack drawable is dropped.
-    descriptor.ship_data.weapon =
-        FrameArray::retain([unsafe { Frame::from_native(frame_pointer) }; 3], ());
-    // SAFETY: this fixture detaches every consumer before its stack drawable is dropped.
-    descriptor.ship_data.special =
-        FrameArray::retain([unsafe { Frame::from_native(frame_pointer) }; 3], ());
+    // SAFETY: native retains this registered drawable through every snapshot.
+    let view = unsafe { Frame::from_native(frame_pointer) };
+    descriptor.ship_data.ship = FrameArray::retain([view; 3]);
+    descriptor.ship_data.weapon = FrameArray::retain([view; 3]);
+    descriptor.ship_data.special = FrameArray::retain([view; 3]);
     descriptor.ship_data.captain_control = CAPTAIN_STUFF {
         captain_rsc: c"test.captain".as_ptr(),
         background: frame_pointer,
@@ -627,10 +626,10 @@ fn descriptor_assets(directory: &Path) {
     unsafe {
         install_ship(&mut ship);
     }
-    observation::record(Event::Drawable(ptr::from_mut(&mut drawable) as usize));
+    observation::record(Event::Drawable(ptr::from_mut(drawable) as usize));
     observation::record(Event::Frame {
-        address: ptr::from_mut(&mut frame) as usize,
-        owner: ptr::from_mut(&mut drawable) as usize,
+        address: ptr::from_mut(frame) as usize,
+        owner: ptr::from_mut(drawable) as usize,
         index: frame.Index,
     });
     let (fields, _) = snapshot(directory);
@@ -743,21 +742,16 @@ fn frameset_and_media_identity(directory: &Path) {
     let mut descriptor: RaceDescriptor = unsafe { std::mem::zeroed() };
     // SAFETY: STARSHIP contains integers, pointers and optional callbacks; zero is valid.
     let mut ship = unsafe { battle::PoolShip::new(0) };
-    // SAFETY: drawable_desc contains integers, pointers and optional callbacks.
-    let mut drawable: drawable_desc = unsafe { std::mem::zeroed() };
-    // SAFETY: frame_desc contains integers, pointers and optional callbacks.
-    let mut first: frame_desc = unsafe { std::mem::zeroed() };
-    // SAFETY: frame_desc contains integers, pointers and optional callbacks.
-    let mut second: frame_desc = unsafe { std::mem::zeroed() };
-    first.parent = &mut drawable;
-    second.parent = &mut drawable;
-    first.Index = 1;
-    second.Index = 2;
-    // SAFETY: all array consumers are detached before these stack frames are dropped.
-    descriptor.ship_data.ship = FrameArray::retain(
-        [unsafe { Frame::from_native(ptr::from_mut(&mut first).cast()) }; 3],
-        (),
-    );
+    let native = battle::NativeFrameSet::new(3);
+    // SAFETY: the registered drawable owns these distinct frame slots throughout all snapshots.
+    let (drawable, first, second) = unsafe {
+        let first = &mut *native.frame(1).cast::<frame_desc>();
+        let second = &mut *native.frame(2).cast::<frame_desc>();
+        (&mut *first.parent, first, second)
+    };
+    // SAFETY: native owns the registered first frame throughout this fixture.
+    let view = unsafe { Frame::from_native(ptr::from_mut(first).cast()) };
+    descriptor.ship_data.ship = FrameArray::retain([view; 3]);
     let mut element = graph::ElementRecord::new();
     ship.SpeciesID = SPECIES_ID_EARTHLING_ID;
     let descriptor = install_descriptor(&mut ship, descriptor);
@@ -768,11 +762,11 @@ fn frameset_and_media_identity(directory: &Path) {
         install_ship(&mut ship);
     }
     observation::record(Event::Allocate(element.pointer() as usize));
-    observation::record(Event::Drawable(ptr::from_mut(&mut drawable) as usize));
-    for frame in [&mut first, &mut second] {
+    observation::record(Event::Drawable(ptr::from_mut(drawable) as usize));
+    for frame in [&mut *first, &mut *second] {
         observation::record(Event::Frame {
             address: ptr::from_mut(frame) as usize,
-            owner: ptr::from_mut(&mut drawable) as usize,
+            owner: ptr::from_mut(drawable) as usize,
             index: frame.Index,
         });
     }
@@ -790,7 +784,7 @@ fn frameset_and_media_identity(directory: &Path) {
     unsafe {
         observation::assign_view(
             &mut *descriptor.ship_data.ship.as_ptr().add(1),
-            ptr::from_mut(&mut second).cast(),
+            ptr::from_mut(second).cast(),
         );
     }
     let (after, _) = snapshot(directory);
@@ -799,7 +793,7 @@ fn frameset_and_media_identity(directory: &Path) {
     assert_eq!(before["elements.0.current.farray.1.index"], "1");
     assert_eq!(after["elements.0.current.farray.1.index"], "2");
     let mut replacement = RaceDescriptor::EMPTY;
-    replacement.ship_data.ship = FrameArray::retain(descriptor.ship_data.ship.views(), ());
+    replacement.ship_data.ship = FrameArray::retain(descriptor.ship_data.ship.views());
     let ship = &mut ship;
     let _outgoing_descriptor = ship
         .descriptor

@@ -186,3 +186,21 @@ fn randomized_queue_equivalence() {
         queue::UninitQueue(&mut raw);
     }
 }
+
+#[test]
+fn foreign_owner_ids_are_rejected_for_reads_writes_and_links() {
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+    let mut a = OrderedPool::<u8, 1>::new();
+    let mut b = OrderedPool::<u8, 1>::new();
+    let foreign = a.alloc(1).unwrap();
+    let local = b.alloc(2).unwrap();
+    assert!(!b.contains(foreign));
+    assert_ne!(foreign, local);
+    assert!(catch_unwind(|| b.get(foreign)).is_err());
+    assert!(catch_unwind(AssertUnwindSafe(|| {
+        *b.get_mut(foreign) = 9;
+    }))
+    .is_err());
+    assert!(catch_unwind(AssertUnwindSafe(|| b.put(foreign))).is_err());
+    assert_eq!(*b.get(local), 2);
+}

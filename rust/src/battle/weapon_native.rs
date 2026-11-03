@@ -232,7 +232,7 @@ pub(crate) mod engine {
                 .y
                 .wrapping_add(object.IntersectStamp.origin.y);
             crate::ui::shipstat::init_ship_status(
-                cx.ship_info_mut(ship),
+                cx.ship_info_pointer(ship),
                 Some(ship),
                 &mut object_rect,
             );

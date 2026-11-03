@@ -92,7 +92,8 @@ impl Cx<'_> {
     }
 
     pub fn set_parent(&mut self, element: ElementId, parent: Option<ShipId>) {
-        self.b.kernel.elements[element].parent = parent.map_or(Parent::None, Parent::Ship);
+        self.b.kernel.elements.record_mut(element).parent =
+            parent.map_or(Parent::None, Parent::Ship);
     }
 
     pub fn target(&self, element: ElementId) -> Option<ElementId> {
@@ -103,7 +104,7 @@ impl Cx<'_> {
         if let Some(id) = target {
             assert!(self.b.kernel.elements.contains(id), "stale target {id:?}");
         }
-        self.b.kernel.elements[element].target = target;
+        self.b.kernel.elements.record_mut(element).target = target;
     }
 
     pub(crate) fn set_ip_group_parent(&mut self, id: ElementId, slot: u8) {
@@ -111,7 +112,7 @@ impl Cx<'_> {
             slot < self.groups().num_objects,
             "IP-group slot outside pool"
         );
-        self.b.kernel.elements[id].parent = Parent::IpGroup(slot);
+        self.b.kernel.elements.record_mut(id).parent = Parent::IpGroup(slot);
     }
 
     pub fn put(&mut self, id: ElementId) {
@@ -149,27 +150,27 @@ impl Cx<'_> {
 #[cfg(not(test))]
 impl Cx<'_> {
     pub fn weapon_origin(&self, id: ElementId) -> super::Subject {
-        Subject::from(&self.b.kernel.elements[id])
+        Subject::decode(&self.b.kernel.elements[id])
     }
 
     pub fn set_frame(&mut self, id: ElementId, next: bool, frame: Frame) {
         use crate::collections::observation::image;
         if next {
-            image!(frame;self.b.kernel.elements[id].next.image.frame,frame.0);
+            image!(frame;self.b.kernel.elements.record_mut(id).next.image.frame,frame.0);
         } else {
-            image!(frame;self.b.kernel.elements[id].current.image.frame,frame.0);
+            image!(frame;self.b.kernel.elements.record_mut(id).current.image.frame,frame.0);
         }
     }
     pub fn set_single_frames(&mut self, id: ElementId, frames: Frames, frame: Frame) {
-        crate::collections::observation::image!(single; self.b.kernel.elements[id].current.image.frames, frames, frame.0);
+        crate::collections::observation::image!(single; self.b.kernel.elements.record_mut(id).current.image.frames, frames, frame.0);
     }
 
     pub fn set_frames(&mut self, id: ElementId, next: bool, frames: Frames) {
         use crate::collections::observation::image;
         if next {
-            image!(set;self.b.kernel.elements[id].next.image.frames,frames);
+            image!(set;self.b.kernel.elements.record_mut(id).next.image.frames,frames);
         } else {
-            image!(set;self.b.kernel.elements[id].current.image.frames,frames);
+            image!(set;self.b.kernel.elements.record_mut(id).current.image.frames,frames);
         }
     }
 }
@@ -177,7 +178,7 @@ impl Cx<'_> {
 #[cfg(not(test))]
 impl Cx<'_> {
     pub fn copy_visual_to_next(&mut self, id: ElementId, visual: Visual) {
-        self.b.kernel.elements[id].next.location = visual.location;
+        self.b.kernel.elements.record_mut(id).next.location = visual.location;
         self.set_frame(id, true, visual.image.frame);
         self.set_frames(id, true, visual.image.frames);
     }
@@ -186,7 +187,7 @@ impl Cx<'_> {
     }
     pub fn set_intersect_frame(&mut self, id: ElementId, frame: Frame) {
         use crate::collections::observation::image;
-        image!(frame;self.b.kernel.elements[id].IntersectControl.IntersectStamp.frame,frame.0);
+        image!(frame;self.b.kernel.elements.record_mut(id).IntersectControl.IntersectStamp.frame,frame.0);
     }
 }
 
@@ -215,7 +216,7 @@ impl Cx<'_> {
 }
 
 impl Cx<'_> {
-    pub(super) fn project<T>(&self, pointer: std::ptr::NonNull<T>) -> &T {
+    fn project<T>(&self, pointer: std::ptr::NonNull<T>) -> &T {
         // SAFETY: record decoders supply checked pointers retained by this context.
         unsafe { &*pointer.as_ptr() }
     }
@@ -312,13 +313,13 @@ impl Cx<'_> {
     }
 
     pub fn init_intersect_start(&mut self, id: ElementId) {
-        let e = &mut self.b.kernel.elements[id];
+        let e = self.b.kernel.elements.record_mut(id);
         e.IntersectControl.IntersectStamp.origin.x = e.current.location.x >> 2;
         e.IntersectControl.IntersectStamp.origin.y = e.current.location.y >> 2;
     }
 
     pub fn init_intersect_end(&mut self, id: ElementId) {
-        let e = &mut self.b.kernel.elements[id];
+        let e = self.b.kernel.elements.record_mut(id);
         e.IntersectControl.EndPoint.x = e.next.location.x >> 2;
         e.IntersectControl.EndPoint.y = e.next.location.y >> 2;
     }
@@ -380,16 +381,7 @@ impl Cx<'_> {
     pub fn set_ship_frame(&mut self, ship: ShipId, role: usize, resolution: usize, frame: Frame) {
         assert!(resolution < 3, "invalid frame resolution {resolution}");
         let array = self.ship_array(ship, role);
-        let previous = array.view(resolution);
-        // SAFETY: the checked descriptor retains both opaque drawable handles.
-        unsafe {
-            assert_eq!(
-                crate::graphics::pixmap_abi::GetFrameParentDrawable(previous.raw().cast()),
-                crate::graphics::pixmap_abi::GetFrameParentDrawable(frame.0.cast()),
-                "owning frame slot cannot change drawable"
-            );
-        }
-        array.set_view(resolution, frame);
+        array.replace_view(resolution, frame);
     }
     pub fn captain_special(&self, ship: ShipId) -> Frame {
         Frame(self.desc(ship).ship_data.captain_control.special)
@@ -418,11 +410,11 @@ impl Cx<'_> {
         let value = self.b.kernel.elements[source].clone();
         let address = std::ptr::from_ref(&self.b.kernel.elements[source]) as usize;
         crate::collections::observation::copy_image(
-            &mut self.b.kernel.elements[destination],
+            self.b.kernel.elements.record_mut(destination),
             value,
             address,
         );
-        self.b.kernel.elements[destination].PrimIndex = index;
+        self.b.kernel.elements.record_mut(destination).PrimIndex = index;
         *self.primitive(destination) = primitive;
     }
 }
@@ -455,7 +447,7 @@ impl Cx<'_> {
         let mut result = Vec::new();
         let mut next = queue.head();
         while let Some(id) = next {
-            result.push(queue.ship_id(id, side));
+            result.push(queue.ship_id(id));
             next = queue.succ(id);
         }
         result
@@ -463,7 +455,7 @@ impl Cx<'_> {
 
     pub(crate) fn first_ship(&self, side: usize) -> Option<ShipId> {
         let ships = super::link_queue::LinkQueue::borrow(&self.b.kernel.races[side]);
-        ships.head().map(|id| ships.ship_id(id, side as u8))
+        ships.head().map(|id| ships.ship_id(id))
     }
 
     pub(crate) fn pick_ship(
@@ -471,7 +463,7 @@ impl Cx<'_> {
         id: crate::engine::battle::ShipId,
     ) -> crate::engine::battle::link_queue::PickShip {
         let ships =
-            super::link_queue::LinkQueue::borrow(&self.b.kernel.races[usize::from(id.side)]);
+            super::link_queue::LinkQueue::borrow(&self.b.kernel.races[usize::from(id.side())]);
         ships.get(ships.link(id))
     }
     pub(crate) fn subject_style(
@@ -492,7 +484,12 @@ impl Cx<'_> {
     }
 }
 
-pub(super) mod links;
+#[path = "link_queue.rs"]
+pub mod link_queue;
+#[path = "record.rs"]
+pub mod record;
+#[path = "table.rs"]
+pub mod table;
 
 #[cfg(not(test))]
 impl Cx<'_> {
@@ -526,12 +523,12 @@ impl Cx<'_> {
     }
 
     pub fn copy_current_to_next(&mut self, id: ElementId) {
-        let record = &mut self.b.kernel.elements[id];
+        let record = self.b.kernel.elements.record_mut(id);
         crate::collections::observation::image!(copy; record.next, record.current);
     }
 
     pub fn copy_next_to_current(&mut self, id: ElementId) {
-        let record = &mut self.b.kernel.elements[id];
+        let record = self.b.kernel.elements.record_mut(id);
         crate::collections::observation::image!(copy; record.current, record.next);
     }
 }
@@ -543,7 +540,7 @@ impl Cx<'_> {
     }
 }
 
-pub(crate) fn observe_element_record(record: &super::record::ElementRecord) -> ElementState {
+fn observe_element_record(record: &super::record::ElementRecord) -> ElementState {
     ElementState::decode(record)
 }
 
@@ -571,7 +568,7 @@ impl Cx<'_> {
     }
 
     pub(crate) fn copy_next_frame_set(&mut self, destination: ElementId, source: ElementId) {
-        crate::collections::observation::image!(copy; self.b.kernel.elements[destination].current.image.frames, self.b.kernel.elements[source].next.image.frames);
+        crate::collections::observation::image!(copy; self.b.kernel.elements.record_mut(destination).current.image.frames, self.b.kernel.elements[source].next.image.frames);
     }
 }
 
@@ -614,10 +611,8 @@ impl Cx<'_> {
 
     pub(crate) fn next_ship(&self, ship: ShipId) -> Option<ShipId> {
         let queue =
-            super::link_queue::LinkQueue::borrow(&self.b.kernel.races[usize::from(ship.side)]);
-        queue
-            .succ(queue.link(ship))
-            .map(|id| queue.ship_id(id, ship.side))
+            super::link_queue::LinkQueue::borrow(&self.b.kernel.races[usize::from(ship.side())]);
+        queue.succ(queue.link(ship)).map(|id| queue.ship_id(id))
     }
     pub(crate) fn reset_ships(&mut self, side: usize) {
         self.b.kernel.races[side].reinit();
@@ -629,19 +624,16 @@ impl Cx<'_> {
 
 #[cfg(not(test))]
 impl Cx<'_> {
-    pub(crate) fn captain_data(&self, ship: ShipId) -> super::record::CAPTAIN_STUFF {
-        self.desc(ship).ship_data.captain_control
+    pub(crate) fn captain_pointer(&mut self, ship: ShipId) -> *mut super::record::CAPTAIN_STUFF {
+        &raw mut self.desc_mut(ship).ship_data.captain_control
     }
-    pub(crate) fn set_captain_data(&mut self, ship: ShipId, captain: super::record::CAPTAIN_STUFF) {
-        self.desc_mut(ship).ship_data.captain_control = captain;
-    }
-    pub(crate) fn ship_info_mut(&mut self, ship: ShipId) -> &mut super::record::SHIP_INFO {
-        &mut self.desc_mut(ship).ship_info
+    pub(crate) fn ship_info_pointer(&mut self, ship: ShipId) -> *mut super::record::SHIP_INFO {
+        &raw mut self.desc_mut(ship).ship_info
     }
 }
 impl Cx<'_> {
     pub(crate) fn refresh_intersect_frame(&mut self, id: ElementId) {
-        let e = &mut self.b.kernel.elements[id];
+        let e = self.b.kernel.elements.record_mut(id);
         // SAFETY: the allocated element retains its loaded frame array during this projection.
         unsafe {
             crate::collections::observation::image!(frame; e.IntersectControl.IntersectStamp.frame, crate::graphics::pixmap_abi::SetEquFrameIndex(e.next.image.frames.view(0).raw(), e.next.image.frame));
@@ -679,12 +671,12 @@ mod intersection_projection_tests {
         unsafe {
             let mut battle = Battle::new(1);
             let id = battle.kernel.elements.alloc().unwrap();
-            battle.kernel.elements[id].current.location = POINT { x: 44, y: 52 };
-            battle.kernel.elements[id].next.location = POINT { x: 60, y: 68 };
-            battle.kernel.elements[id].next.image.frames =
+            battle.kernel.elements.record_mut(id).current.location = POINT { x: 44, y: 52 };
+            battle.kernel.elements.record_mut(id).next.location = POINT { x: 60, y: 68 };
+            battle.kernel.elements.record_mut(id).next.image.frames =
                 crate::engine::battle::views::Frames::shared(
                     crate::engine::battle::frames::SharedFrames::Fixture(0),
-                    crate::engine::battle::frames::FrameArray::retain(
+                    crate::engine::battle::frames::FrameArray::fixture(
                         [crate::engine::battle::views::Frame::ABSENT; 3],
                         (),
                     ),
@@ -733,7 +725,7 @@ mod intersection_projection_tests {
 #[cfg(not(test))]
 impl Cx<'_> {
     pub(crate) fn assign_primitive(&mut self, id: ElementId) {
-        self.b.kernel.elements[id].PrimIndex = self
+        self.b.kernel.elements.record_mut(id).PrimIndex = self
             .b
             .kernel
             .display
@@ -832,5 +824,61 @@ impl Cx<'_> {
     }
     pub(crate) fn display_batch(&self) -> Vec<super::record::PRIMITIVE> {
         self.b.kernel.display.batch()
+    }
+}
+
+impl super::Battle {
+    pub fn ships(
+        &mut self,
+        side: usize,
+    ) -> super::link_queue::LinkQueue<'_, super::link_queue::Starship> {
+        super::link_queue::LinkQueue::new(&mut self.kernel.races[side])
+    }
+    pub fn reset_ship_capacity(&mut self, side: usize, capacity: usize) {
+        self.kernel.races[side].reset_capacity(capacity);
+    }
+}
+impl Cx<'_> {
+    /// # Safety
+    /// Legacy game-thread access must not retain record borrows across callbacks.
+    #[cfg(not(test))]
+    pub(crate) unsafe fn records(&mut self) -> &mut super::table::Records {
+        self.b.kernel.elements.records_mut()
+    }
+}
+
+#[path = "androsynth_template.rs"]
+pub(crate) mod androsynth_template;
+#[path = "template.rs"]
+pub mod template;
+#[path = "views.rs"]
+pub mod views;
+#[path = "vux_template.rs"]
+pub(crate) mod vux_template;
+
+#[cfg(test)]
+pub(crate) fn fixture_element_state(record: &super::record::ElementRecord) -> ElementState {
+    observe_element_record(record)
+}
+
+pub(super) mod links;
+
+#[cfg(not(test))]
+impl super::RaceDesc {
+    pub(crate) fn info_pointer(&mut self) -> *mut super::record::SHIP_INFO {
+        &raw mut self.raw.ship_info
+    }
+}
+
+impl Cx<'_> {
+    pub(crate) fn groups(&self) -> &super::record::QUEUE {
+        self.project(self.world.groups)
+    }
+}
+
+#[cfg(not(test))]
+impl super::RaceDesc {
+    pub(crate) fn data_pointer(&mut self) -> *mut super::record::DATA_STUFF {
+        &raw mut self.raw.ship_data
     }
 }

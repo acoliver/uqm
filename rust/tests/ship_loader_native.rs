@@ -120,11 +120,14 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
             for (i, key) in keys.iter().enumerate() {
                 let key = CString::new(format!("ship.{key}.code")).unwrap();
                 let species = i as u32 + 1;
-                let mut first = load_ship(species, 0).unwrap();
+                let first = load_ship(species, 0).unwrap();
                 let second = load_ship(species, 0).unwrap();
                 assert_ne!(first.address(), second.address(), "{key:?}");
                 let original = first.info().ship_cost;
-                first.info_mut().ship_cost = 254;
+                // SAFETY: this fixture exclusively owns the live descriptor; only its scalar cost changes.
+                (*(first.address() as *mut uqm_rust::engine::battle::record::RaceDescriptor))
+                    .ship_info
+                    .ship_cost = 254;
                 assert_eq!(second.info().ship_cost, original);
                 let loaded = load_ship(species, 0).unwrap();
                 assert_eq!(loaded.info().ship_cost, original);

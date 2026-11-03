@@ -1,6 +1,6 @@
 //! Descriptor construction from static resource tokens, inside the accessor boundary.
 #[cfg(not(test))]
-use super::record::*;
+use crate::engine::battle::record::*;
 #[cfg(not(test))]
 use crate::graphics::native_abi::POINT;
 #[cfg(not(test))]
@@ -36,7 +36,7 @@ const INFINITE_RADIUS: u16 = u16::MAX;
 #[cfg(not(test))]
 const MAX_UNIVERSE: i32 = 9999;
 #[cfg(not(test))]
-pub fn descriptor(race: &'static super::Race) -> crate::engine::battle::RaceDesc {
+pub fn descriptor(race: &'static crate::engine::battle::Race) -> crate::engine::battle::RaceDesc {
     // All zero fields are null handles, absent callbacks, or zero counters.
     let mut desc = RaceDescriptor::EMPTY;
     desc.ship_info.ship_flags = (128 | 4) as u16;

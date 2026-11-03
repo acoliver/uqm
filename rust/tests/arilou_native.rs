@@ -279,8 +279,16 @@ unsafe fn think(
     input: u8,
 ) -> u8 {
     fleet.fixture.ship_mut().ship_input_state = input;
-    let mut subject = (*ship).clone();
-    fleet.fixture.intelligence(&mut subject, concerns, 0);
+    let mut subject = uqm_rust::app::bridge::enter(|cx| {
+        cx.weapon_origin(
+            cx.elements()
+                .id(ship.cast())
+                .unwrap_or_else(|| panic!("fixture subject is absent")),
+        )
+    });
+    fleet
+        .fixture
+        .intelligence_subject(&mut subject, concerns, 0);
     fleet.fixture.ship_mut().ship_input_state
 }
 

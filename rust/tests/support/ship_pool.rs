@@ -23,11 +23,7 @@ impl PoolShip {
                     .alloc()
                     .unwrap_or_else(|| panic!("fixture ship pool exhausted"));
                 ships.edit(link, |ship| ship.player = player);
-                (
-                    ships.raw(link).cast(),
-                    link,
-                    ships.ship_id(link, side as u8),
-                )
+                (ships.raw(link).cast(), link, ships.ship_id(link))
             })
         };
         Self {

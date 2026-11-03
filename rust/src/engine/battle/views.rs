@@ -1,7 +1,7 @@
 //! Pointer-free Native values. Legacy record decoding stays in accessors.
-use super::record::CHARACTERISTIC_STUFF;
-use super::record::VELOCITY_DESC as VelocityDesc;
-use super::{CollisionHook, ElementHook};
+use crate::engine::battle::record::CHARACTERISTIC_STUFF;
+use crate::engine::battle::record::VELOCITY_DESC as VelocityDesc;
+use crate::engine::battle::{CollisionHook, ElementHook};
 use crate::graphics::native_abi::{FRAME, POINT};
 
 #[derive(Clone, Copy, Debug)]
@@ -29,7 +29,7 @@ pub struct FlagshipConfig {
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Frame(pub(super) FRAME);
-pub use super::frames::{Frames, SharedFrames};
+pub use crate::engine::battle::frames::{Frames, SharedFrames};
 impl Frame {
     pub const ABSENT: Self = Self(std::ptr::null_mut());
     pub fn is_absent(self) -> bool {
@@ -39,6 +39,22 @@ impl Frame {
 impl Frame {
     pub fn raw(self) -> FRAME {
         self.0
+    }
+}
+impl Frame {
+    pub(in crate::engine::battle) fn retained(
+        self,
+        leases: &[crate::graphics::drawable_abi::DrawableLease],
+    ) -> Self {
+        if self.is_absent() {
+            return Self::ABSENT;
+        }
+        Self(
+            leases
+                .iter()
+                .find_map(|lease| lease.frame_at_address(self.0))
+                .unwrap_or_else(|| panic!("frame has no owning drawable lease")),
+        )
     }
 }
 impl Frame {
@@ -140,7 +156,7 @@ pub struct RaceStats {
     pub ship_info: Info,
     pub characteristics: CHARACTERISTIC_STUFF,
     pub intelligence: Intelligence,
-    pub state: super::RaceState,
+    pub state: crate::engine::battle::RaceState,
 }
 
 pub struct Edit<'a, T: Clone, R> {
@@ -179,17 +195,17 @@ pub struct Missile {
     pub index: u16,
     pub life: u16,
     pub frames: Frames,
-    pub preprocess: Option<super::ElementFn>,
+    pub preprocess: Option<crate::engine::battle::ElementFn>,
     pub blast_offs: i16,
 }
 
-use super::ElementId;
+use crate::engine::battle::ElementId;
 #[derive(Clone)]
 pub struct Subject {
     pub state: ElementState,
     pub target: Option<ElementId>,
-    pub parent: super::Parent,
-    pub(super) intersect: super::record::INTERSECT_CONTROL,
+    pub parent: crate::engine::battle::Parent,
+    pub(super) intersect: crate::engine::battle::record::INTERSECT_CONTROL,
     pub(super) primitive: u16,
 }
 impl std::ops::Deref for Subject {

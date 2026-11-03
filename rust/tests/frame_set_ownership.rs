@@ -1,54 +1,52 @@
-use std::{cell::Cell, rc::Rc};
 use uqm_rust::engine::battle::{
-    frames::{FrameArray, FrameOwner, FrameSetRef, Role},
+    frames::{FrameArray, FrameOwner, FrameSetRef, Frames, Role, SharedFrames},
     views::Frame,
-    ShipId,
+    Battle,
+};
+use uqm_rust::graphics::{
+    drawable_abi::{retain_frame_allocations, AllocDrawable, DestroyDrawable},
+    pixmap_abi::CaptureDrawable,
 };
 
-struct Lease {
-    drops: Rc<Cell<usize>>,
-}
-impl Drop for Lease {
-    fn drop(&mut self) {
-        self.drops.set(self.drops.get() + 1);
-    }
-}
-
 #[test]
+#[serial_test::serial]
 fn parentless_image_retains_frames_after_descriptor_and_owner_are_gone() {
-    let releases = Rc::new(Cell::new(0));
-    let lease = Rc::new(Lease {
-        drops: releases.clone(),
-    });
-    let mut descriptor = uqm_rust::engine::battle::record::RaceDescriptor::EMPTY;
-    descriptor.ship_data.weapon = FrameArray::retain([Frame::ABSENT; 3], lease.clone());
-    let ship = ShipId {
-        side: 0,
-        slot: 2,
-        gen: 3,
-    };
-    let image = FrameSetRef::ship(ship, Role::Weapon, descriptor.ship_data.weapon.clone());
-    drop(descriptor);
-    drop(lease);
-    assert_eq!(releases.get(), 0);
-    for index in 0..3 {
-        assert!(image.view(index).is_absent());
+    // SAFETY: the fixture owns the registered drawable and serializes its graphics calls.
+    unsafe {
+        let drawable = AllocDrawable(1);
+        let frame = Frame::from_native(CaptureDrawable(drawable));
+        let mut owner = Battle::new(0);
+        owner.reset_ship_capacity(0, 1);
+        let mut ships = owner.ships(0);
+        let link = ships.alloc().unwrap();
+        let ship = ships.ship_id(link);
+        let mut descriptor = uqm_rust::engine::battle::record::RaceDescriptor::EMPTY;
+        descriptor.ship_data.weapon = FrameArray::retain([frame; 3]);
+        let image = FrameSetRef::ship(ship, Role::Weapon, descriptor.ship_data.weapon.clone());
+        drop(descriptor);
+        drop(owner);
+        assert_ne!(DestroyDrawable(drawable), 0);
+        assert_eq!((*image.view(0).raw()).parent, drawable);
+        let copy = image.clone();
+        drop(image);
+        assert_eq!((*copy.view(2).raw()).parent, drawable);
+        drop(copy);
+        assert!(std::panic::catch_unwind(|| retain_frame_allocations(&[frame.raw()])).is_err());
     }
-    let copy = image.clone();
-    drop(image);
-    assert_eq!(releases.get(), 0);
-    drop(copy);
-    assert_eq!(releases.get(), 1);
 }
 
 #[test]
 fn ownership_distinguishes_role_ship_and_reused_slot_generation() {
-    let ship = ShipId {
-        side: 0,
-        slot: 2,
-        gen: 3,
-    };
-    let other = ShipId { gen: 4, ..ship };
+    let mut owner = Battle::new(0);
+    owner.reset_ship_capacity(0, 1);
+    let mut ships = owner.ships(0);
+    let link = ships.alloc().unwrap();
+    let ship = ships.ship_id(link);
+    ships.free(link);
+    let next = ships.alloc().unwrap();
+    let other = ships.ship_id(next);
+    assert_eq!(ship.slot(), other.slot());
+    assert_ne!(ship.generation(), other.generation());
     let set = FrameSetRef::ship(ship, Role::Special, FrameArray::EMPTY);
     assert_eq!(set.owner, FrameOwner::Ship(ship, Role::Special));
     assert_ne!(set.owner, FrameOwner::Ship(ship, Role::Weapon));
@@ -57,38 +55,29 @@ fn ownership_distinguishes_role_ship_and_reused_slot_generation() {
 
 #[test]
 #[serial_test::serial]
-fn native_drawable_survives_array_and_logical_release_until_the_last_image_drops() {
-    use uqm_rust::engine::battle::frames::{Frames, SharedFrames};
-    use uqm_rust::graphics::drawable_abi::{
-        retain_frame_allocations, AllocDrawable, DestroyDrawable,
-    };
-    use uqm_rust::graphics::pixmap_abi::CaptureDrawable;
-    let releases = Rc::new(Cell::new(0));
-    // SAFETY: the test retains native allocations through serialized graphics-thread leases.
+fn copy_view_then_release_owner_keeps_each_drawable_alive() {
+    // SAFETY: every native address comes from one of the serialized registered allocations.
     unsafe {
-        let drawable = AllocDrawable(1);
-        assert!(!drawable.is_null());
-        let frame = CaptureDrawable(drawable);
-        let leases = retain_frame_allocations(&[frame]);
-        let array = FrameArray::retain(
-            [Frame::from_native(frame); 3],
-            (
-                leases,
-                Lease {
-                    drops: releases.clone(),
-                },
-            ),
-        );
-        let image = Frames::shared(SharedFrames::Fixture(0), array.clone());
-        assert_ne!(DestroyDrawable(drawable), 0);
-        drop(array);
-        assert_eq!(releases.get(), 0);
-        assert_eq!((*image.view(0).raw()).parent, drawable);
-        let copy = image.clone();
+        let drawables = std::array::from_fn::<_, 3, _>(|_| AllocDrawable(1));
+        let views = drawables.map(|d| Frame::from_native(CaptureDrawable(d)));
+        let owner = FrameArray::retain(views);
+        for drawable in drawables {
+            assert_ne!(DestroyDrawable(drawable), 0);
+        }
+        // Logical release has already removed the original resource owners. The copied views
+        // must acquire the real allocations through the still-live leases, without an Any owner.
+        let copied = FrameArray::retain(owner.views());
+        let image = Frames::shared(SharedFrames::Fixture(0), copied);
+        drop(owner);
+        for (i, drawable) in drawables.into_iter().enumerate() {
+            assert_eq!((*image.view(i).raw()).parent, drawable);
+        }
+        let last = image.clone();
         drop(image);
-        assert_eq!(releases.get(), 0);
-        assert_eq!((*copy.view(2).raw()).parent, drawable);
-        drop(copy);
-        assert_eq!(releases.get(), 1);
+        assert_eq!((*last.view(2).raw()).parent, drawables[2]);
+        drop(last);
+        for view in views {
+            assert!(std::panic::catch_unwind(|| retain_frame_allocations(&[view.raw()])).is_err());
+        }
     }
 }

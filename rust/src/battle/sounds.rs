@@ -146,9 +146,8 @@ pub(crate) mod engine {
             if ChannelPlaying(i) == 0 {
                 continue;
             }
-            let object = decode_object(get_positional_object(i));
-            if object.is_some() {
-                let pos = position(cx, object);
+            if let Some(object) = cx.elements().sound_source(get_positional_object(i)) {
+                let pos = position(cx, Some(object));
                 if pos.positional != 0 {
                     update_sound_position(
                         i,
@@ -182,12 +181,13 @@ pub(crate) mod engine {
     /// # Safety
     /// Called on the game thread before releasing an element's storage.
     pub(crate) unsafe fn remove_sounds(object: Option<ElementId>) {
+        let kernel = Kernel::current();
         for i in FIRST_SFX_CHANNEL..=LAST_SFX_CHANNEL {
-            if decode_object(get_positional_object(i)) == object {
+            if kernel.elements.sound_source(get_positional_object(i)) == object {
                 set_positional_object(i, 0);
             }
         }
-        Kernel::current().sounds.remove_object(object);
+        kernel.sounds.remove_object(object);
     }
 }
 
@@ -197,15 +197,7 @@ pub use crate::battle::context_access::sound_legacy::*;
 pub use engine::{NotPositional, PlayMenuSound};
 
 fn encode_object(object: Option<ElementId>) -> usize {
-    object.map_or(0, |id| {
-        (((u64::from(id.gen) << 8) | u64::from(id.slot)) + 1) as usize
-    })
-}
-fn decode_object(token: usize) -> Option<ElementId> {
-    token.checked_sub(1).map(|value| ElementId {
-        slot: value as u8,
-        gen: (value >> 8) as u32,
-    })
+    object.map_or(0, ElementId::sound_token)
 }
 
 #[cfg(test)]
@@ -213,18 +205,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn positional_tokens_keep_generation_and_slot_without_pointer_identity() {
-        assert_eq!(decode_object(encode_object(None)), None);
-        for id in [
-            ElementId { slot: 0, gen: 0 },
-            ElementId {
-                slot: 255,
-                gen: u32::MAX,
-            },
-        ] {
-            assert_eq!(decode_object(encode_object(Some(id))), Some(id));
-            assert_ne!(encode_object(Some(id)), 0);
-        }
+    fn positional_tokens_keep_generation_and_owner_without_pointer_identity() {
+        let mut elements = crate::engine::battle::ElementTable::with_capacity(1);
+        assert_eq!(elements.sound_source(encode_object(None)), None);
+        let old = elements.alloc().unwrap();
+        let token = encode_object(Some(old));
+        assert_ne!(token, 0);
+        assert_eq!(elements.sound_source(token), Some(old));
+        elements.free(old);
+        let replacement = elements.alloc().unwrap();
+        assert_eq!(elements.sound_source(token), None);
+        assert_ne!(encode_object(Some(replacement)), token);
+        let mut other = crate::engine::battle::ElementTable::with_capacity(1);
+        other.alloc().unwrap();
+        assert_eq!(other.sound_source(token), None);
     }
 
     #[test]
@@ -248,13 +242,7 @@ mod tests {
     fn queue_preserves_order_caps_at_eight_and_sentinel_suppresses_sounds() {
         let mut queue = SoundQueue::new();
         for i in 1..=10 {
-            queue.push(
-                i as SOUND,
-                Some(ElementId {
-                    slot: i as u8,
-                    gen: 0,
-                }),
-            );
+            queue.push(i as SOUND, Some(ElementId::fixture(i as u8, 0)));
         }
         assert_eq!(queue.count, 8);
         assert_eq!(queue.sounds[7] as usize, 8);
@@ -266,8 +254,8 @@ mod tests {
     }
     #[test]
     fn freeing_a_source_detaches_only_its_generation_without_removing_sounds() {
-        let old = ElementId { slot: 2, gen: 7 };
-        let replacement = ElementId { slot: 2, gen: 8 };
+        let old = ElementId::fixture(2, 7);
+        let replacement = ElementId::fixture(2, 8);
         let mut queue = SoundQueue::new();
         queue.push(1 as SOUND, Some(old));
         queue.push(2 as SOUND, Some(replacement));

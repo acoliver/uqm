@@ -1,6 +1,6 @@
 //! Plain descriptor inputs; legacy resource pointer construction stays in the engine.
 
-use super::{record::*, views::*, Race, RaceDesc, RaceState};
+use crate::engine::battle::{record::*, views::*, Race, RaceDesc, RaceState};
 use crate::graphics::native_abi::POINT;
 use std::ffi::CStr;
 

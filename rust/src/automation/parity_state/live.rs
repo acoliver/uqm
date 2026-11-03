@@ -174,7 +174,7 @@ mod tests {
         };
         Frames::shared(
             SharedFrames::Fixture(0),
-            FrameArray::with_source(
+            FrameArray::fixture_source(
                 std::array::from_fn(|index| {
                     // SAFETY: journal fixtures use these retained handles only as opaque identities.
                     unsafe { Frame::from_native(views[index.min(views.len() - 1)].cast()) }

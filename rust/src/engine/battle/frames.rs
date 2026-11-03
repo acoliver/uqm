@@ -1,12 +1,15 @@
 //! Frame-array identity and shared ownership of its loaded drawables.
 
 use super::{views::Frame, ShipId};
+use crate::graphics::drawable_abi::{retain_frame_allocations, DrawableLease};
 use crate::graphics::native_abi::FRAME;
-use std::{any::Any, cell::Cell, rc::Rc};
+use std::{cell::Cell, rc::Rc};
 
 struct Array {
     views: [Cell<Frame>; 3],
-    _resource: Box<dyn Any>,
+    leases: Vec<DrawableLease>,
+    #[cfg(test)]
+    _fixture: Option<Box<dyn std::any::Any>>,
     source: Option<usize>,
 }
 
@@ -15,18 +18,18 @@ pub struct FrameArray(Option<Rc<Array>>);
 impl FrameArray {
     pub const EMPTY: Self = Self(None);
 
-    pub fn retain(views: [Frame; 3], resource: impl Any) -> Self {
-        Self::with_source(views, resource, None)
+    pub fn retain(views: [Frame; 3]) -> Self {
+        let leases = retain_frame_allocations(&views.map(Frame::raw));
+        Self::with_source(views, leases, None)
     }
 
-    pub(crate) fn with_source(
-        views: [Frame; 3],
-        resource: impl Any,
-        source: Option<usize>,
-    ) -> Self {
+    fn with_source(views: [Frame; 3], leases: Vec<DrawableLease>, source: Option<usize>) -> Self {
         Self(Some(Rc::new(Array {
-            views: views.map(Cell::new),
-            _resource: Box::new(resource),
+            // Recover pointers from the retained allocation, including after address reuse.
+            views: views.map(|view| Cell::new(view.retained(&leases))),
+            leases,
+            #[cfg(test)]
+            _fixture: None,
             source,
         })))
     }
@@ -41,7 +44,7 @@ impl FrameArray {
         })
     }
 
-    pub(crate) fn set_view(&self, index: usize, frame: Frame) {
+    fn set_view(&self, index: usize, frame: Frame) {
         let array = self
             .0
             .as_ref()
@@ -55,6 +58,41 @@ impl FrameArray {
             },
         );
         view.set(frame);
+    }
+
+    pub(crate) fn replace_view(&self, index: usize, frame: Frame) {
+        let array = self
+            .0
+            .as_ref()
+            .unwrap_or_else(|| panic!("absent frame array"));
+        let previous = array.views[index].get();
+        assert!(
+            (previous.is_absent() && frame.is_absent())
+                || array
+                    .leases
+                    .iter()
+                    .any(|lease| lease.owns_frame(previous.raw()) && lease.owns_frame(frame.raw())),
+            "owning frame slot cannot change drawable"
+        );
+        self.set_view(index, frame.retained(&array.leases));
+    }
+
+    #[cfg(test)]
+    pub(crate) fn fixture(views: [Frame; 3], resource: impl std::any::Any) -> Self {
+        Self::fixture_source(views, resource, None)
+    }
+    #[cfg(test)]
+    pub(crate) fn fixture_source(
+        views: [Frame; 3],
+        resource: impl std::any::Any,
+        source: Option<usize>,
+    ) -> Self {
+        Self(Some(Rc::new(Array {
+            views: views.map(Cell::new),
+            leases: Vec::new(),
+            _fixture: Some(Box::new(resource)),
+            source,
+        })))
     }
 
     pub(crate) fn observe(&self, role: &str) {
@@ -243,20 +281,20 @@ mod tests {
 
     #[test]
     fn replacement_descriptor_has_distinct_frames_even_for_the_same_ship_and_role() {
-        let ship = ShipId {
-            side: 0,
-            slot: 0,
-            gen: 1,
-        };
+        let mut battle = crate::engine::battle::Battle::new(0);
+        battle.reset_ship_capacity(0, 1);
+        let mut ships = battle.ships(0);
+        let link = ships.alloc().unwrap();
+        let ship = ships.ship_id(link);
         let old = Frames::ship(
             ship,
             Role::Weapon,
-            FrameArray::retain([Frame::ABSENT; 3], ()),
+            FrameArray::fixture([Frame::ABSENT; 3], ()),
         );
         let replacement = Frames::ship(
             ship,
             Role::Weapon,
-            FrameArray::retain([Frame::ABSENT; 3], ()),
+            FrameArray::fixture([Frame::ABSENT; 3], ()),
         );
         assert_eq!(old, old.clone());
         assert_ne!(old, replacement);
@@ -298,7 +336,7 @@ mod tests {
     fn array_edits_and_retirement_observe_storage_without_releasing_clones() {
         observation::enable();
         observation::drain();
-        let array = FrameArray::retain([Frame::ABSENT; 3], ());
+        let array = FrameArray::fixture([Frame::ABSENT; 3], ());
         let copied = array.clone();
         array.observe("test-array");
         array.set_view(1, Frame::ABSENT);
@@ -319,5 +357,34 @@ mod tests {
             matches!(&events[2], Event::FrameSet { frames, role, .. } if frames == &[0; 3] && role == "animation")
         );
         assert_eq!(copied.views(), [Frame::ABSENT; 3]);
+    }
+}
+
+#[cfg(test)]
+mod replacement_tests {
+    use super::*;
+    #[test]
+    #[serial_test::serial]
+    fn replacement_rejects_a_foreign_drawable_but_accepts_a_sibling_frame() {
+        use crate::graphics::drawable_abi::{AllocDrawable, DestroyDrawable};
+        // SAFETY: the test owns both serialized native allocations and their frame slots.
+        unsafe {
+            let a = AllocDrawable(2);
+            let b = AllocDrawable(1);
+            (*a).MaxIndex = 1;
+            let first = Frame::from_native((*a).Frame.cast());
+            let sibling = Frame::from_native((*a).Frame.add(1).cast());
+            let foreign = Frame::from_native((*b).Frame.cast());
+            let array = FrameArray::retain([first; 3]);
+            assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+                || array.replace_view(0, foreign)
+            ))
+            .is_err());
+            assert_eq!(array.view(0), first);
+            array.replace_view(0, sibling);
+            assert_eq!(array.view(0), sibling);
+            DestroyDrawable(a);
+            DestroyDrawable(b);
+        }
     }
 }

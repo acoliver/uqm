@@ -106,9 +106,12 @@ mod tests {
         journal.allocate(first_address);
         journal.allocate(second_address);
         journal.register_parent(second_address, "ship:0:3:5".into());
-        elements[first].target = Some(second);
-        elements[first].velocity.error.width = -23;
-        elements[first].IntersectControl.last_time_val = 19;
+        elements.fixture_record_mut(first).target = Some(second);
+        elements.fixture_record_mut(first).velocity.error.width = -23;
+        elements
+            .fixture_record_mut(first)
+            .IntersectControl
+            .last_time_val = 19;
         let mut view = crate::engine::battle::access::observe::element(&elements, first, None);
         let mut fields = Fields::new();
         element(&mut fields, "first", &view, &journal, &[]);

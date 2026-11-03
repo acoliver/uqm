@@ -120,8 +120,9 @@ impl<'a> Ship<'a> {
         self.handle.cast()
     }
     unsafe fn ai(&mut self, concerns: &mut [EVALUATE_DESC; 5]) {
-        let mut subject = (*self.ptr()).clone();
-        self.inner.intelligence(&mut subject, &mut concerns[..4], 0);
+        let mut subject = self.inner.subject();
+        self.inner
+            .intelligence_subject(&mut subject, &mut concerns[..4], 0);
     }
     unsafe fn arm(&mut self) -> Option<uqm_rust::engine::battle::ElementHook> {
         self.inner

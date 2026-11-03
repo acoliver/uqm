@@ -72,7 +72,7 @@ pub(crate) unsafe fn update_ship_frag_crew(owner: ShipId) {
     // SAFETY: the caller retains the initialized operands on the published game thread.
     unsafe {
         let player = {
-            let ships = link_queue::ships(owner.side as usize);
+            let ships = link_queue::ships(owner.side() as usize);
             ships.get(ships.link(owner)).player
         };
         let frag_q =
@@ -84,7 +84,7 @@ pub(crate) unsafe fn update_ship_frag_crew(owner: ShipId) {
             let frag = hf.cast::<SHIP_FRAGMENT>();
             hs = ships.succ(id);
             hf = (*frag).succ;
-            if ships.ship_id(id, player as u8) == owner {
+            if ships.ship_id(id) == owner {
                 assert_ne!((*frag).crew_level, COUNT::MAX);
                 (*frag).crew_level = ships.get(id).crew;
                 break;

@@ -165,10 +165,10 @@ impl<'a> Ship<'a> {
         }
     }
     unsafe fn intelligence(&mut self, concerns: &mut [EVALUATE_DESC; 4]) {
-        let mut subject = (*self.ptr()).clone();
+        let mut subject = self.inner.subject();
         // The AI operand is a value copy, not a member of the live queue.
         // Its phoenix predecessor may be disposed during intelligence.
-        self.inner.intelligence(&mut subject, concerns, 0);
+        self.inner.intelligence_subject(&mut subject, concerns, 0);
     }
 
     unsafe fn at(&mut self, x: COORD, y: COORD) {

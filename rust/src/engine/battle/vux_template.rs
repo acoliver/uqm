@@ -1,10 +1,10 @@
 //! Descriptor construction from static resource tokens, inside the accessor boundary.
 #[cfg(not(test))]
-use super::record::*;
+use crate::engine::battle::record::*;
 #[cfg(not(test))]
 use crate::graphics::native_abi::POINT;
 #[cfg(not(test))]
-pub fn descriptor(race: &'static super::Race) -> crate::engine::battle::RaceDesc {
+pub fn descriptor(race: &'static crate::engine::battle::Race) -> crate::engine::battle::RaceDesc {
     let mut d = RaceDescriptor::EMPTY;
     d.ship_info.ship_flags = (128 | 8 | 32) as _;
     d.ship_info.ship_cost = 12;

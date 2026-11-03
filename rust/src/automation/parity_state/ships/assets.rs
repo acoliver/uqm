@@ -163,7 +163,7 @@ mod tests {
         let mut journal = Journal::create(directory.path())
             .unwrap_or_else(|error| panic!("create frame-source journal: {error}"));
         let mut descriptor = RaceDescriptor::EMPTY;
-        descriptor.ship_data.ship = FrameArray::retain([views::Frame::ABSENT; 3], ());
+        descriptor.ship_data.ship = FrameArray::fixture([views::Frame::ABSENT; 3], ());
         // SAFETY: the local descriptor retains all its null resources and the present ship array.
         let assets = unsafe { Assets::borrow(&descriptor.ship_info, &descriptor.ship_data) };
         assets.register(&mut journal, "test");

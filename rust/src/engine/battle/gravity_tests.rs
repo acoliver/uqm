@@ -14,7 +14,7 @@ fn with_elements(call: impl FnOnce(&mut Cx<'_>, [ElementId; 3])) {
                 .elements
                 .alloc()
                 .unwrap_or_else(|| panic!("fixture slot"));
-            battle.kernel.elements[id] = Default::default();
+
             battle.kernel.elements.put(id);
             id
         });

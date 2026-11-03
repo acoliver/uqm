@@ -5,7 +5,7 @@ fn ship_detachment_is_an_explicit_fixture_command() {
     // SAFETY: zero is valid for the native record's scalars and optional pointers.
     let record: ShipRecord = unsafe { std::mem::zeroed() };
     let descriptor = RaceDescriptor::EMPTY;
-    let id = ElementId { slot: 0, gen: 1 };
+    let id = ElementId::fixture(0, 1);
     let mut ship = Ship::for_test(&record, &descriptor, id);
     assert!(!ship.clear_element);
     assert_eq!(ship.element, Some(id));
@@ -235,7 +235,7 @@ impl Element {
     pub(crate) fn new() -> Self {
         let record = crate::engine::battle::record::ElementRecord::default();
         Self {
-            state: crate::engine::battle::access::observe_element_record(&record),
+            state: crate::engine::battle::access::fixture_element_state(&record),
             parent: Parent::None,
             target: None,
             pred: None,

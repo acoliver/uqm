@@ -35,7 +35,7 @@ pub(crate) mod engine {
         let race = crate::ships::races::race(species)?;
         let mut owned =
             (race.descriptor)(&mut crate::engine::battle::World::for_legacy_lifecycle());
-        let info = owned.info_mut();
+        let info = &mut *owned.info_pointer();
         if !info.icons_rsc.is_null() {
             info.icons = CaptureDrawable((LoadGraphicInstance(info.icons_rsc)).cast()).cast();
         }
@@ -62,12 +62,11 @@ pub(crate) mod engine {
                 free_image(&raw mut raw);
                 return None;
             }
-            let leases = crate::graphics::drawable_abi::retain_frame_allocations(&raw);
-            let array = FrameArray::retain(raw.map(|frame| Frame::from_native(frame)), leases);
+            let array = FrameArray::retain(raw.map(|frame| Frame::from_native(frame)));
             array.observe("animation");
             Some(array)
         };
-        let data = d.data_mut();
+        let data = &mut *d.data_pointer();
         let Some(ship) = load_animation_set(data.ship_rsc) else {
             return false;
         };
@@ -127,7 +126,7 @@ pub(crate) mod engine {
             },
         );
         if battle != 0 {
-            let data = descriptor.data_mut();
+            let data = &mut *descriptor.data_pointer();
             release_animation_set(&data.special);
             data.special = crate::engine::battle::frames::FrameArray::EMPTY;
             release_animation_set(&data.weapon);
@@ -139,7 +138,7 @@ pub(crate) mod engine {
             DestroySound((ReleaseStringTable(data.ship_sounds.cast())).cast());
         }
         if icons != 0 {
-            let info = descriptor.info_mut();
+            let info = &mut *descriptor.info_pointer();
             DestroyDrawable(ReleaseDrawable(info.melee_icon.cast()));
             DestroyDrawable(ReleaseDrawable(info.icons.cast()));
             DestroyStringTable(ReleaseStringTable(info.race_strings.cast()));

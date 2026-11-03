@@ -122,7 +122,7 @@ pub(crate) unsafe fn init_ship_status(
     clip_rect: *mut RECT,
 ) {
     let starship = starship.map(|id| {
-        let ships = link_queue::ships(id.side as usize);
+        let ships = link_queue::ships(id.side() as usize);
         ships.get(ships.link(id))
     });
     let mut y: COORD = 0;

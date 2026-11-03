@@ -2,7 +2,7 @@
     dead_code,
     reason = "shared fixture API used by independent race test binaries"
 )]
-use std::{cell::RefCell, ffi::c_void, mem, ptr, rc::Rc};
+use std::{mem, ptr, rc::Rc};
 use uqm_rust::battle::process_native::InitDisplayList;
 use uqm_rust::engine::battle::schema::HLINK;
 use uqm_rust::{
@@ -12,14 +12,13 @@ use uqm_rust::{
 
 unsafe fn invoke_intelligence(
     ship: ShipId,
-    element: *mut ElementRecord,
+    subject: &mut uqm_rust::engine::battle::Subject,
     raw: &mut [EVALUATE_DESC],
     count: u16,
 ) {
     // SAFETY: fixtures serialize the context and retain their subject and concern operands.
     unsafe {
         uqm_rust::app::bridge::enter(|cx| {
-            let mut subject = uqm_rust::engine::battle::Subject::from(&*element);
             let mut concerns = raw
                 .iter()
                 .map(|item| uqm_rust::engine::battle::Concern {
@@ -29,8 +28,7 @@ unsafe fn invoke_intelligence(
                     movement: item.MoveState,
                 })
                 .collect::<Vec<_>>();
-            cx.invoke_intelligence(ship, &mut subject, &mut concerns, count);
-            *element = subject.into();
+            cx.invoke_intelligence(ship, subject, &mut concerns, count);
             for (raw, item) in raw.iter_mut().zip(concerns) {
                 *raw = EVALUATE_DESC {
                     ObjectPtr: item
@@ -211,10 +209,7 @@ impl<'a> Ship<'a> {
                 let link = ships
                     .alloc()
                     .unwrap_or_else(|| panic!("fixture ship pool exhausted"));
-                (
-                    ships.raw(link).cast::<ShipRecord>(),
-                    ships.ship_id(link, player as u8),
-                )
+                (ships.raw(link).cast::<ShipRecord>(), ships.ship_id(link))
             });
             (*raw_ship).descriptor = Some(desc);
             (*raw_ship).playerNr = player;
@@ -315,13 +310,16 @@ impl<'a> Ship<'a> {
             .make_opaque();
     }
     pub fn set_frame_bounds(&mut self, role: usize, index: usize, bounds: [i16; 2]) {
-        self.frames
-            .as_mut()
-            .unwrap_or_else(|| panic!("fixture frames"))[role]
-            .0
-            .borrow_mut()
-            .frames[index]
-            .bounds = bounds;
+        // SAFETY: this fixture retains the registered frame throughout its bounds update.
+        unsafe {
+            (*self
+                .raw_frame(role, index)
+                .cast::<uqm_rust::graphics::native_abi::frame_desc>())
+            .Bounds = uqm_rust::graphics::native_abi::EXTENT {
+                width: bounds[0],
+                height: bounds[1],
+            };
+        }
     }
     pub fn weapon_handles(&mut self, expected: COUNT) -> Vec<HLINK> {
         // SAFETY: the owning battle and ship remain live throughout weapon creation.
@@ -346,17 +344,27 @@ impl<'a> Ship<'a> {
     ) {
         // SAFETY: callers supply this fixture's live subject, without retaining a record borrow.
         unsafe {
-            invoke_intelligence(self.ship_id, subject, concerns, count);
+            let id = uqm_rust::app::bridge::enter(|cx| {
+                cx.elements()
+                    .id(subject.cast())
+                    .unwrap_or_else(|| panic!("fixture subject is absent"))
+            });
+            let mut value = uqm_rust::app::bridge::enter(|cx| cx.weapon_origin(id));
+            invoke_intelligence(self.ship_id, &mut value, concerns, count);
+            *subject = value.into();
         }
     }
     pub fn set_hot_spot(&mut self, role: usize, index: usize, hot_spot: [i16; 2]) {
-        self.frames
-            .as_mut()
-            .unwrap_or_else(|| panic!("loaded fixture frames"))[role]
-            .0
-            .borrow_mut()
-            .frames[index]
-            .hot_spot = hot_spot;
+        // SAFETY: this fixture retains the registered frame throughout its hotspot update.
+        unsafe {
+            (*self
+                .raw_frame(role, index)
+                .cast::<uqm_rust::graphics::native_abi::frame_desc>())
+            .HotSpot = uqm_rust::graphics::native_abi::POINT {
+                x: hot_spot[0],
+                y: hot_spot[1],
+            };
+        }
     }
     /// # Safety
     /// The source must be a live element in this fixture's retained battle pool.
@@ -526,7 +534,30 @@ impl<'a> Ship<'a> {
         concerns: &mut [EVALUATE_DESC],
         count: u16,
     ) {
-        // SAFETY: subject and the supplied concerns live through this synchronous callback.
+        // SAFETY: subject is a live fixture slot and its concerns remain live during dispatch.
+        unsafe {
+            let id = uqm_rust::app::bridge::enter(|cx| {
+                cx.elements()
+                    .id((subject as *mut ElementRecord).cast())
+                    .unwrap_or_else(|| panic!("fixture subject is absent"))
+            });
+            let mut value = uqm_rust::app::bridge::enter(|cx| cx.weapon_origin(id));
+            invoke_intelligence(self.ship_id, &mut value, concerns, count);
+            *subject = value.into();
+        }
+    }
+    pub fn subject(&self) -> uqm_rust::engine::battle::Subject {
+        self.assert_live();
+        // SAFETY: this fixture retains its live slot and all resources through projection.
+        unsafe { uqm_rust::app::bridge::enter(|cx| cx.weapon_origin(self.id)) }
+    }
+    pub unsafe fn intelligence_subject(
+        &mut self,
+        subject: &mut uqm_rust::engine::battle::Subject,
+        concerns: &mut [EVALUATE_DESC],
+        count: u16,
+    ) {
+        // SAFETY: the fixture retains the value's resources and concern operands during dispatch.
         unsafe {
             invoke_intelligence(self.ship_id, subject, concerns, count);
         }
@@ -569,7 +600,7 @@ impl Drop for Ship<'_> {
                 }
             });
             uqm_rust::app::bridge::battle(|owner| {
-                let mut ships = owner.ships(self.ship_id.side as usize);
+                let mut ships = owner.ships(self.ship_id.side() as usize);
                 let link = ships.link(self.ship_id);
                 if ships.linked(link) {
                     ships.remove(link);
@@ -641,60 +672,30 @@ pub unsafe fn id(pointer: *mut ElementRecord) -> ElementId {
     }
 }
 
-#[repr(C)]
-struct FrameDesc {
-    kind: u16,
-    index: u16,
-    hot_spot: [i16; 2],
-    bounds: [i16; 2],
-    image: *mut c_void,
-    parent: *mut DrawableDesc,
-}
-#[repr(C)]
-struct DrawableDesc {
-    flags: u8,
-    max_index: u16,
-    frame: *mut FrameDesc,
-}
 #[derive(Clone)]
-pub struct FrameSet(Rc<RefCell<FrameSetData>>);
-struct FrameSetData {
-    _drawable: Box<DrawableDesc>,
-    frames: Vec<FrameDesc>,
-    image: *mut c_void,
-}
+pub struct FrameSet(Rc<NativeFrameSet>);
 impl FrameSet {
     pub fn new(count: u16) -> Self {
         Self::with_bounds(count, [4, 4])
     }
     pub fn with_bounds(count: u16, bounds: [i16; 2]) -> Self {
-        let mut drawable = Box::new(DrawableDesc {
-            flags: 0,
-            max_index: count - 1,
-            frame: ptr::null_mut(),
-        });
-        let parent = &raw mut *drawable;
-        let mut frames: Vec<_> = (0..count)
-            .map(|index| FrameDesc {
-                kind: 0,
-                index,
-                hot_spot: [0, 0],
-                bounds,
-                image: ptr::null_mut(),
-                parent,
-            })
-            .collect();
-        drawable.frame = frames.as_mut_ptr();
-        Self(Rc::new(RefCell::new(FrameSetData {
-            _drawable: drawable,
-            frames,
-            image: ptr::null_mut(),
-        })))
+        let native = NativeFrameSet::new(count);
+        // SAFETY: the fixture owns all frame slots in this registered drawable.
+        unsafe {
+            for index in 0..count {
+                (*native
+                    .frame(index as usize)
+                    .cast::<uqm_rust::graphics::native_abi::frame_desc>())
+                .Bounds = uqm_rust::graphics::native_abi::EXTENT {
+                    width: bounds[0],
+                    height: bounds[1],
+                };
+            }
+        }
+        Self(Rc::new(native))
     }
     pub fn array(&self) -> uqm_rust::engine::battle::frames::FrameArray {
-        // SAFETY: the cloned fixture owner retains the drawables until the last array drops.
-        let first = unsafe { uqm_rust::engine::battle::views::Frame::from_native(self.frame(0)) };
-        uqm_rust::engine::battle::frames::FrameArray::retain([first; 3], self.clone())
+        self.0.array()
     }
     pub fn make_opaque(&mut self) {
         use uqm_rust::graphics::{
@@ -703,38 +704,26 @@ impl FrameSet {
             },
             tfb_draw_abi::{TFB_DrawImage_Delete, TFB_DrawImage_New},
         };
-        let mut data = self.0.borrow_mut();
-        // SAFETY: the fixture owns these small SDL canvas/image resources and frees them on drop.
+        // SAFETY: each registered frame owns a separate canvas and image; allocation leases retain them.
         unsafe {
-            let canvas = TFB_DrawCanvas_New_Paletted(4, 4, ptr::null_mut(), -1);
-            assert!(!canvas.is_null());
-            assert_ne!(
-                TFB_DrawCanvas_SetPixelIndexes(canvas, [1u8; 16].as_ptr(), 4, 4),
-                0
-            );
-            if !data.image.is_null() {
-                TFB_DrawImage_Delete(data.image.cast());
-            }
-            data.image = TFB_DrawImage_New(canvas).cast();
-            assert!(!data.image.is_null());
-            let image = data.image;
-            for frame in &mut data.frames {
-                frame.image = image;
+            for index in 0..=(*self.0 .0).MaxIndex {
+                let frame = &mut *(*self.0 .0).Frame.add(index as usize);
+                let canvas = TFB_DrawCanvas_New_Paletted(4, 4, ptr::null_mut(), -1);
+                assert!(!canvas.is_null());
+                assert_ne!(
+                    TFB_DrawCanvas_SetPixelIndexes(canvas, [1u8; 16].as_ptr(), 4, 4),
+                    0
+                );
+                if !frame.image.is_null() {
+                    TFB_DrawImage_Delete(frame.image);
+                }
+                frame.image = TFB_DrawImage_New(canvas);
+                assert!(!frame.image.is_null());
             }
         }
     }
     pub fn frame(&self, index: usize) -> FRAME {
-        (&raw const self.0.borrow().frames[index]).cast_mut().cast()
-    }
-}
-impl Drop for FrameSetData {
-    fn drop(&mut self) {
-        if !self.image.is_null() {
-            // SAFETY: this frame set uniquely owns the image and its canvas.
-            unsafe {
-                uqm_rust::graphics::tfb_draw_abi::TFB_DrawImage_Delete(self.image.cast());
-            }
-        }
+        self.0.frame(index)
     }
 }
 pub unsafe fn prim(e: *mut ElementRecord) -> *mut PRIMITIVE {
@@ -955,11 +944,8 @@ impl NativeFrameSet {
         // SAFETY: these leases retain the drawable after the fixture's logical release.
         unsafe {
             let frame = self.frame(0);
-            let leases =
-                uqm_rust::graphics::drawable_abi::retain_frame_allocations(&[frame.cast()]);
             uqm_rust::engine::battle::frames::FrameArray::retain(
                 [uqm_rust::engine::battle::views::Frame::from_native(frame.cast()); 3],
-                leases,
             )
         }
     }

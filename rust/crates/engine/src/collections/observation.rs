@@ -15,12 +15,14 @@ use std::sync::atomic::Ordering;
 /// Read by Rust automation/proof code to assert battle progress.
 struct Observation {
     frames: AtomicU64,
+    pool_identity: AtomicU64,
     enabled: std::sync::atomic::AtomicBool,
     events: parking_lot::Mutex<Vec<Event>>,
     saves: parking_lot::Mutex<Vec<(u16, bool)>>,
 }
 static BATTLE_FRAME_COUNT: Observation = Observation {
     frames: AtomicU64::new(0),
+    pool_identity: AtomicU64::new(1),
     enabled: std::sync::atomic::AtomicBool::new(false),
     events: parking_lot::Mutex::new(Vec::new()),
     saves: parking_lot::Mutex::new(Vec::new()),
@@ -234,6 +236,13 @@ pub fn assert_progress(min_frames: u64) -> Result<u64, String> {
             "battle frame assertion failed: expected >= {min_frames}, got {actual}"
         ))
     }
+}
+
+pub(super) fn next_pool_identity() -> u64 {
+    BATTLE_FRAME_COUNT
+        .pool_identity
+        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |id| id.checked_add(1))
+        .unwrap_or_else(|_| panic!("pool identities exhausted"))
 }
 
 #[cfg(test)]

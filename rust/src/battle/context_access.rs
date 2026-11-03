@@ -158,15 +158,13 @@ impl Cx<'_> {
     }
 
     pub fn init_ship_status(&mut self, ship: ShipId) {
-        let info = &raw mut *self.ship_info_mut(ship);
         // SAFETY: the descriptor retains its owned status data while graphics are drawn.
         unsafe {
-            {
-                crate::ui::shipstat::init_ship_status(info, Some(ship), std::ptr::null_mut());
-                let old = SetContext(StatusContext);
-                crate::battle::status_native::draw_captains_window(self, ship);
-                SetContext(old);
-            }
+            let info = self.ship_info_pointer(ship);
+            crate::ui::shipstat::init_ship_status(info, Some(ship), std::ptr::null_mut());
+            let old = SetContext(StatusContext);
+            crate::battle::status_native::draw_captains_window(self, ship);
+            SetContext(old);
         }
     }
 
@@ -604,7 +602,7 @@ impl Cx<'_> {
 impl Cx<'_> {
     pub(crate) fn draw_statistics(&mut self, ship: ShipId, crew: i16, energy: i16) {
         let y = self.status_offset(ship);
-        let info = &raw mut *self.ship_info_mut(ship);
+        let info = self.ship_info_pointer(ship);
         // SAFETY: the checked descriptor and status resources remain live during drawing.
         unsafe {
             crate::ships::native::abi::DeltaStatistics(info, y, crew, energy);

@@ -66,7 +66,7 @@ pub mod live {
     #[no_mangle]
     pub static mut PickMeleeFrame: FRAME = ptr::null_mut();
     unsafe fn by_index(player: usize, index: u16, used: bool) -> Option<ShipId> {
-        link_queue::ships(player).by_index(player as u8, index, used)
+        link_queue::ships(player).by_index(index, used)
     }
     unsafe fn changed(state: *mut GETMELEE_STATE, player: usize) {
         let s = &(*state).player[player];
@@ -395,8 +395,6 @@ pub mod live {
                     ship.captain = captain;
                     ship.crew = 0;
                     ship.max_crew = 0;
-                    ship.strings = 0;
-                    ship.icons = 0;
                 });
                 queue.clear_descriptor(built);
             }

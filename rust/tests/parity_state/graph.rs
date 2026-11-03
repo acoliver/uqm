@@ -148,24 +148,24 @@ pub(super) fn frame_fields(
     second: &mut ElementRecord,
     neutral: &mut ElementRecord,
 ) {
-    // SAFETY: drawable_desc contains integers, pointers and optional callbacks.
-    let mut drawable: drawable_desc = unsafe { std::mem::zeroed() };
-    // SAFETY: frame_desc contains integers, pointers and optional callbacks.
-    let mut frame: frame_desc = unsafe { std::mem::zeroed() };
-    frame.parent = &mut drawable;
-    frame.Index = 7;
-    let pointer: *mut std::ffi::c_void = ptr::from_mut(&mut frame).cast();
-    // SAFETY: the observer fixture retains this frame and drawable through all image uses.
+    let native = battle::NativeFrameSet::new(8);
+    // SAFETY: the fixture retains this registered drawable through every image observation.
+    let (drawable, frame) = unsafe {
+        let frame = &mut *native.frame(7).cast::<frame_desc>();
+        (&mut *frame.parent, frame)
+    };
+    let pointer: *mut std::ffi::c_void = ptr::from_mut(frame).cast();
+    // SAFETY: native retains this registered drawable through every image observation.
     let view = unsafe { uqm_rust::engine::battle::views::Frame::from_native(pointer.cast()) };
-    let array = uqm_rust::engine::battle::frames::FrameArray::retain([view; 3], ());
+    let array = uqm_rust::engine::battle::frames::FrameArray::retain([view; 3]);
     let set = uqm_rust::engine::battle::frames::Frames::shared(
         uqm_rust::engine::battle::frames::SharedFrames::Fixture(0),
         array.clone(),
     );
-    observation::record(Event::Drawable(ptr::from_mut(&mut drawable) as usize));
+    observation::record(Event::Drawable(ptr::from_mut(drawable) as usize));
     observation::record(Event::Frame {
-        address: ptr::from_mut(&mut frame) as usize,
-        owner: ptr::from_mut(&mut drawable) as usize,
+        address: ptr::from_mut(frame) as usize,
+        owner: ptr::from_mut(drawable) as usize,
         index: frame.Index,
     });
     observation::record(Event::FrameSet {
@@ -249,11 +249,7 @@ pub(super) fn fighters_without_journal(directory: &Path) {
     let element = &mut element;
     for side in [-1, 2, i16::MAX] {
         element.player_nr = side;
-        element.parent = uqm_rust::engine::battle::Parent::Ship(uqm_rust::engine::battle::ShipId {
-            side: 0,
-            slot: 255,
-            gen: 0,
-        });
+        element.parent = uqm_rust::engine::battle::Parent::Ship(ship.ship_id);
         let snapshot = BattleSnapshot::live();
         assert!(snapshot.player.is_none());
         assert!(snapshot.enemy.is_none());

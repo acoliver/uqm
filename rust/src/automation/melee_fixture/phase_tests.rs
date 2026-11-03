@@ -23,15 +23,8 @@ fn world(
 ) -> World {
     let mut world = World::new((SUPER_MELEE | IN_BATTLE) as u16, [2; 2], 0);
     for (side, ((element, state), race)) in elements.iter_mut().zip(states).zip(races).enumerate() {
-        let id = ElementId {
-            slot: side as u8,
-            gen: 0,
-        };
-        let owner = ShipId {
-            side: side as u8,
-            slot: 0,
-            gen: 0,
-        };
+        let id = ElementId::fixture(side as u8, 0);
+        let owner = crate::engine::battle::ShipId::fixture(side as u8, 0, 0);
         element.parent = Parent::Ship(owner);
         element.player = side as i16;
         element.flags = ElementFlags::PLAYER_SHIP.bits();
@@ -117,7 +110,7 @@ fn outgoing_descriptor_is_retained_until_frame_users_retire_and_zoom_restores_sc
     run.stage = 9;
     run.array = Some(Frames::shared(
         crate::engine::battle::frames::SharedFrames::Fixture(0),
-        crate::engine::battle::frames::FrameArray::retain([Frame::ABSENT; 3], ()),
+        crate::engine::battle::frames::FrameArray::fixture([Frame::ABSENT; 3], ()),
     ));
     let effects = frames::advance(&mut run, &mut world, &hooks)
         .unwrap()

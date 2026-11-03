@@ -293,7 +293,7 @@ pub(crate) mod engine {
     /// # Safety
     /// Ship, captain assets, and the active status context must be live.
     pub unsafe fn draw_captains_window(cx: &mut Cx<'_>, ship: crate::engine::battle::ShipId) {
-        let mut captain = cx.captain_data(ship);
+        let mut captain = *cx.captain_pointer(ship);
         let mut frame = captain.background;
         if !frame.is_null() {
             frame = SetAbsFrameIndex(frame, 0);
@@ -307,7 +307,7 @@ pub(crate) mod engine {
             frame = rel_frame_index(frame, 3);
             captain.special = frame;
         }
-        cx.set_captain_data(ship, captain);
+        *cx.captain_pointer(ship) = captain;
         BatchGraphics();
         let y = cx.status_offset(ship);
         let height = (ScreenHeight >> 1) as SIZE;
@@ -370,7 +370,7 @@ pub(crate) mod engine {
         if cx.race_stats(ship).ship_info.max_crew > MAX_CREW_SIZE as COUNT
             || cx.race_stats(ship).ship_info.ship_flags & PLAYER_CAPTAIN as u16 != 0
         {
-            DrawBattleCrewAmount(cx.ship_info_mut(ship), y);
+            DrawBattleCrewAmount(cx.ship_info_pointer(ship), y);
         }
         UnbatchGraphics();
     }

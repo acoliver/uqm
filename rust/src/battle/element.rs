@@ -573,11 +573,8 @@ mod tests {
         e0.mass_points = 1;
         e1.mass_points = 1;
 
-        let parent = crate::engine::battle::Parent::Ship(crate::engine::battle::ShipId {
-            side: 0,
-            slot: 0,
-            gen: 0,
-        });
+        let parent =
+            crate::engine::battle::Parent::Ship(crate::engine::battle::ShipId::fixture(0, 0, 0));
         e0.parent = parent;
         e1.parent = parent;
 
@@ -745,11 +742,8 @@ mod tests {
         e1.mass_points = 3;
 
         // Set same parent
-        let parent = crate::engine::battle::Parent::Ship(crate::engine::battle::ShipId {
-            side: 0,
-            slot: 0,
-            gen: 0,
-        });
+        let parent =
+            crate::engine::battle::Parent::Ship(crate::engine::battle::ShipId::fixture(0, 0, 0));
         e0.parent = parent;
         e1.parent = parent;
 
@@ -770,16 +764,10 @@ mod tests {
         e1.mass_points = 3;
 
         // Different parents
-        let parent0 = crate::engine::battle::Parent::Ship(crate::engine::battle::ShipId {
-            side: 0,
-            slot: 0,
-            gen: 0,
-        });
-        let parent1 = crate::engine::battle::Parent::Ship(crate::engine::battle::ShipId {
-            side: 0,
-            slot: 1,
-            gen: 0,
-        });
+        let parent0 =
+            crate::engine::battle::Parent::Ship(crate::engine::battle::ShipId::fixture(0, 0, 0));
+        let parent1 =
+            crate::engine::battle::Parent::Ship(crate::engine::battle::ShipId::fixture(0, 1, 0));
         e0.parent = parent0;
         e1.parent = parent1;
 

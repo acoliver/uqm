@@ -1,19 +1,36 @@
 //! Typed link order over the transitional battle ship pool.
 
-use super::ShipId;
 use crate::collections::pool::{Id, OrderedPool};
 use crate::collections::queue::HLink;
+use crate::engine::battle::ShipId;
 pub const NAME_OFFSET: u32 = 5;
 pub const NUM_CAPTAINS_NAMES: u32 = 16;
-pub type RacePool = OrderedPool<super::record::ShipRecord, 32>;
+pub struct RacePool {
+    pub(super) pool: OrderedPool<crate::engine::battle::record::ShipRecord, 32>,
+    side: u8,
+}
+impl RacePool {
+    pub fn with_capacity(side: u8, capacity: usize) -> Self {
+        assert!(side < 2, "invalid ship side {side}");
+        Self {
+            pool: OrderedPool::with_capacity(capacity),
+            side,
+        }
+    }
+    pub fn reset_capacity(&mut self, capacity: usize) {
+        self.pool.reset_capacity(capacity);
+    }
+    pub fn reinit(&mut self) {
+        self.pool.reinit();
+    }
+}
+
 /// Storage mapping for typed views over the transitional intrusive queues.
 mod queue_record {
     pub trait Sealed {}
     impl Sealed for super::Starship {}
 }
-pub trait QueueRecord: queue_record::Sealed + Eq {
-    type Storage: Default;
-}
+pub trait QueueRecord: queue_record::Sealed + Eq {}
 
 use std::marker::PhantomData;
 
@@ -22,10 +39,10 @@ pub enum Starship {}
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct LinkId<T> {
-    pub(crate) slot: u8,
-    pub(crate) pool: usize,
-    pub(crate) generation: u32,
-    pub(crate) marker: PhantomData<T>,
+    slot: u8,
+    pool: u64,
+    generation: u32,
+    marker: PhantomData<T>,
 }
 impl<T> Copy for LinkId<T> {}
 impl<T> Clone for LinkId<T> {
@@ -35,28 +52,36 @@ impl<T> Clone for LinkId<T> {
 }
 
 pub struct LinkQueue<'a, T: QueueRecord> {
-    pub(crate) queue: QueueBorrow<'a, T>,
-    pub(crate) marker: PhantomData<T>,
+    queue: QueueBorrow<'a>,
+    marker: PhantomData<T>,
 }
 
-pub(crate) enum QueueBorrow<'a, T: QueueRecord> {
-    Shared(&'a OrderedPool<T::Storage, 32>),
-    Exclusive(&'a mut OrderedPool<T::Storage, 32>),
+enum QueueBorrow<'a> {
+    Shared(&'a RacePool),
+    Exclusive(&'a mut RacePool),
 }
-impl<T: QueueRecord> std::ops::Deref for QueueBorrow<'_, T> {
-    type Target = OrderedPool<T::Storage, 32>;
+impl std::ops::Deref for QueueBorrow<'_> {
+    type Target = OrderedPool<crate::engine::battle::record::ShipRecord, 32>;
     fn deref(&self) -> &Self::Target {
         match self {
-            Self::Shared(q) => q,
-            Self::Exclusive(q) => q,
+            Self::Shared(q) => &q.pool,
+            Self::Exclusive(q) => &q.pool,
         }
     }
 }
-impl<T: QueueRecord> std::ops::DerefMut for QueueBorrow<'_, T> {
+impl std::ops::DerefMut for QueueBorrow<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         match self {
-            Self::Exclusive(q) => q,
+            Self::Exclusive(q) => &mut q.pool,
             Self::Shared(_) => panic!("cannot mutate a read-only queue view"),
+        }
+    }
+}
+impl QueueBorrow<'_> {
+    fn side(&self) -> u8 {
+        match self {
+            Self::Shared(q) => q.side,
+            Self::Exclusive(q) => q.side,
         }
     }
 }
@@ -70,15 +95,13 @@ pub struct PickShip {
     pub max_crew: u16,
     pub cost: u8,
     pub index: u16,
-    pub strings: usize,
-    pub icons: usize,
     pub energy_counter: u8,
     pub player: i16,
     pub control: u8,
 }
 
 impl<'a, T: QueueRecord> LinkQueue<'a, T> {
-    pub(crate) fn identify(&self, id: Id<T::Storage>) -> LinkId<T> {
+    fn identify(&self, id: Id<crate::engine::battle::record::ShipRecord>) -> LinkId<T> {
         LinkId {
             slot: id.index() as u8,
             generation: id.generation(),
@@ -86,7 +109,7 @@ impl<'a, T: QueueRecord> LinkQueue<'a, T> {
             marker: PhantomData,
         }
     }
-    pub(crate) fn key(&self, id: LinkId<T>) -> Id<T::Storage> {
+    pub(super) fn key(&self, id: LinkId<T>) -> Id<crate::engine::battle::record::ShipRecord> {
         assert_eq!(
             id.pool,
             self.queue.storage_identity(),
@@ -167,14 +190,14 @@ impl LinkQueue<'_, Starship> {
             }
         }
     }
-    pub fn by_index(&self, side: u8, mut index: u16, used: bool) -> Option<ShipId> {
+    pub fn by_index(&self, mut index: u16, used: bool) -> Option<ShipId> {
         let mut link = self.head();
         while let Some(id) = link {
             let ship = self.get(id);
             if used {
                 if ship.species != 0 {
                     if index == 0 {
-                        return Some(self.ship_id(id, side));
+                        return Some(self.ship_id(id));
                     }
                     index = index.wrapping_sub(1);
                 }
@@ -182,7 +205,7 @@ impl LinkQueue<'_, Starship> {
                 return if ship.species == 0 {
                     None
                 } else {
-                    Some(self.ship_id(id, side))
+                    Some(self.ship_id(id))
                 };
             }
             link = self.succ(id);
@@ -204,8 +227,6 @@ impl LinkQueue<'_, Starship> {
             max_crew: s.max_crew,
             cost: s.ship_cost,
             index: s.index,
-            strings: s.race_strings as usize,
-            icons: s.icons as usize,
             energy_counter: s.energy_counter,
             player: s.playerNr,
             control: s.control,
@@ -219,8 +240,6 @@ impl LinkQueue<'_, Starship> {
         s.max_crew = value.max_crew;
         s.ship_cost = value.cost;
         s.index = value.index;
-        s.race_strings = value.strings as _;
-        s.icons = value.icons as _;
         s.energy_counter = value.energy_counter;
         s.playerNr = value.player;
         s.control = value.control;
@@ -233,15 +252,22 @@ impl LinkQueue<'_, Starship> {
     pub fn clear_descriptor(&mut self, id: LinkId<Starship>) {
         self.record_mut(id).descriptor = None;
     }
-    pub fn ship_id(&self, id: LinkId<Starship>, side: u8) -> ShipId {
+    pub fn ship_id(&self, id: LinkId<Starship>) -> ShipId {
         self.raw(id);
         ShipId {
-            side,
+            side: self.queue.side(),
             slot: id.slot,
             gen: id.generation,
+            owner: id.pool,
         }
     }
     pub fn link(&self, id: ShipId) -> LinkId<Starship> {
+        assert_eq!(id.side, self.queue.side(), "ship belongs to another side");
+        assert_eq!(
+            id.owner,
+            self.queue.storage_identity(),
+            "ship belongs to another pool"
+        );
         let key = self
             .queue
             .id_at(usize::from(id.slot))
@@ -251,15 +277,12 @@ impl LinkQueue<'_, Starship> {
     }
 }
 
-#[cfg(not(test))]
-pub(crate) use super::access::links::{identify, ships};
-
 #[cfg(test)]
 mod tests {
     use super::*;
     #[test]
     fn links_preserve_append_remove_reverse_order_and_exhaustion() {
-        let mut pool = RacePool::with_capacity(3);
+        let mut pool = RacePool::with_capacity(0, 3);
         let mut ships = LinkQueue::<Starship>::new(&mut pool);
         assert_eq!(ships.count(), 0);
         let a = ships.alloc().unwrap();
@@ -288,7 +311,7 @@ mod tests {
     }
     #[test]
     fn build_sets_species_and_edits_picker_fields_without_touching_links() {
-        let mut pool = RacePool::with_capacity(2);
+        let mut pool = RacePool::with_capacity(0, 2);
         let mut ships = LinkQueue::<Starship>::new(&mut pool);
         let a = ships.build(11).unwrap();
         let b = ships.build(2).unwrap();
@@ -305,7 +328,7 @@ mod tests {
     #[test]
     fn invalid_lifecycle_operations_fail_before_touching_links() {
         use std::panic::{catch_unwind, AssertUnwindSafe};
-        let mut pool = RacePool::with_capacity(2);
+        let mut pool = RacePool::with_capacity(0, 2);
         let mut ships = LinkQueue::<Starship>::new(&mut pool);
         let id = ships.alloc().unwrap();
         assert!(catch_unwind(AssertUnwindSafe(|| ships.remove(id))).is_err());
@@ -325,9 +348,134 @@ mod tests {
         assert!(catch_unwind(AssertUnwindSafe(|| ships.raw(id))).is_err());
         assert_eq!(ships.get(replacement).species, 0);
         ships.clear_descriptor(replacement);
-        let ship_id = ships.ship_id(replacement, 1);
+        let ship_id = ships.ship_id(replacement);
         assert_eq!(ships.link(ship_id), replacement);
         ships.reinit();
         assert!(catch_unwind(AssertUnwindSafe(|| ships.raw(replacement))).is_err());
+    }
+}
+
+use std::ptr;
+impl<'a, T: QueueRecord> LinkQueue<'a, T> {
+    pub fn new(queue: &'a mut RacePool) -> Self {
+        Self {
+            queue: QueueBorrow::Exclusive(queue),
+            marker: PhantomData,
+        }
+    }
+    pub fn borrow(queue: &'a RacePool) -> Self {
+        Self {
+            queue: QueueBorrow::Shared(queue),
+            marker: PhantomData,
+        }
+    }
+    pub fn raw(&self, id: LinkId<T>) -> HLink {
+        ptr::from_ref(self.record(id)).cast_mut().cast()
+    }
+    fn record(&self, id: LinkId<T>) -> &crate::engine::battle::record::ShipRecord {
+        self.queue.get(self.key(id))
+    }
+    pub(super) fn record_mut(
+        &mut self,
+        id: LinkId<T>,
+    ) -> &mut crate::engine::battle::record::ShipRecord {
+        let key = self.key(id);
+        self.queue.get_mut(key)
+    }
+    pub fn alloc(&mut self) -> Option<LinkId<T>> {
+        let key = self
+            .queue
+            .alloc(crate::engine::battle::record::ShipRecord::default())?;
+        Some(self.identify(key))
+    }
+    pub fn put(&mut self, id: LinkId<T>) {
+        let key = self.key(id);
+        self.queue.put(key);
+    }
+    pub fn remove(&mut self, id: LinkId<T>) {
+        let key = self.key(id);
+        self.queue.remove(key);
+    }
+    pub fn free(&mut self, id: LinkId<T>) {
+        let key = self.key(id);
+        self.queue.free(key);
+    }
+    pub fn reinit(&mut self) {
+        self.queue.reinit();
+    }
+}
+
+impl LinkQueue<'_, Starship> {
+    pub fn facing(&self, id: LinkId<Starship>) -> u16 {
+        self.record(id).ShipFacing
+    }
+    pub(crate) fn element_handle(
+        &self,
+        id: LinkId<Starship>,
+    ) -> Option<crate::engine::battle::ElementId> {
+        self.record(id).hShip
+    }
+}
+
+/// Read-only resource projection borrowed from its owning ship queue.
+pub struct PickerResources<'a> {
+    owner: &'a crate::engine::battle::record::ShipRecord,
+}
+impl PickerResources<'_> {
+    pub fn strings(&self) -> crate::graphics::native_abi::STRING {
+        self.owner.race_strings
+    }
+    pub fn icon(&self) -> crate::engine::battle::views::Frame {
+        crate::engine::battle::views::Frame(self.owner.icons)
+    }
+}
+impl LinkQueue<'_, Starship> {
+    pub fn resources(&self, id: LinkId<Starship>) -> PickerResources<'_> {
+        PickerResources {
+            owner: self.record(id),
+        }
+    }
+}
+
+#[cfg(test)]
+impl RacePool {
+    pub(crate) fn fixture_pool(
+        &mut self,
+    ) -> &mut OrderedPool<crate::engine::battle::record::ShipRecord, 32> {
+        &mut self.pool
+    }
+    pub(crate) fn fixture_records(
+        &self,
+    ) -> &OrderedPool<crate::engine::battle::record::ShipRecord, 32> {
+        &self.pool
+    }
+}
+
+#[cfg(not(test))]
+pub(crate) use crate::engine::battle::access::links::{identify, ships};
+
+#[cfg(test)]
+mod identity_tests {
+    use super::*;
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+    #[test]
+    fn foreign_pools_and_sides_are_rejected_before_record_access() {
+        let mut a = RacePool::with_capacity(0, 1);
+        let mut b = RacePool::with_capacity(0, 1);
+        let mut c = RacePool::with_capacity(1, 1);
+        let mut a = LinkQueue::<Starship>::new(&mut a);
+        let mut b = LinkQueue::<Starship>::new(&mut b);
+        let mut c = LinkQueue::<Starship>::new(&mut c);
+        let foreign = a.alloc().unwrap();
+        let ship = a.ship_id(foreign);
+        let local = b.alloc().unwrap();
+        let other_side = c.alloc().unwrap();
+        assert_eq!(c.ship_id(other_side).side(), 1);
+        assert!(!b.contains(foreign));
+        assert!(catch_unwind(AssertUnwindSafe(|| b.get(foreign))).is_err());
+        assert!(catch_unwind(AssertUnwindSafe(|| b.link(ship))).is_err());
+        assert!(catch_unwind(AssertUnwindSafe(|| c.link(ship))).is_err());
+        assert!(catch_unwind(AssertUnwindSafe(|| b.edit(foreign, |pick| pick.crew = 9))).is_err());
+        assert_eq!(b.get(local).crew, 0);
     }
 }
