@@ -106,8 +106,7 @@ pub(crate) fn uninstall_observer(observer: &std::sync::Arc<crate::automation::Au
 
 #[cfg(not(test))]
 pub(crate) fn campaign_view() -> crate::automation::campaign_state::CampaignView {
-    crate::engine::World::current()
-        .read(crate::automation::campaign_state::CampaignView::from_world)
+    crate::engine::World::current().read(crate::automation::campaign_state::CampaignView::capture)
 }
 
 #[cfg(test)]

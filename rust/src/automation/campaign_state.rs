@@ -374,7 +374,7 @@ pub struct CampaignView {
 impl CampaignView {
     pub fn from_world(world: &World) -> Self {
         let game = &world.data.game;
-        let view = Self {
+        Self {
             flagship: world.data.flagship,
             velocity: game.velocity.get_current_components(),
             ship_position: (game.ship_stamp.origin.x, game.ship_stamp.origin.y),
@@ -391,11 +391,15 @@ impl CampaignView {
             contact_race: None,
             escorts: Vec::new(),
             groups: Vec::new(),
-        };
-        #[cfg(not(test))]
-        // SAFETY: the app copies these records while it exclusively borrows World on the game thread.
-        let view = unsafe {
-            let mut view = view;
+        }
+    }
+
+    #[cfg(not(test))]
+    pub(crate) fn capture(world: &World) -> Self {
+        let game = &world.data.game;
+        let mut view = Self::from_world(world);
+        // SAFETY: app capture owns the game-thread read guard and these records remain live through the copy.
+        unsafe {
             use crate::comm::dispatch::CShipFragment;
             use crate::savegame::runtime::groups::CIpGroup;
             use crate::savegame::runtime::queues::{walk, QueueKind};
@@ -431,8 +435,7 @@ impl CampaignView {
                     })
                     .collect();
             }
-            view
-        };
+        }
         view
     }
 

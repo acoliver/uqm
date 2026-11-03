@@ -7,6 +7,22 @@ use uqm_rust::{
 };
 
 #[test]
+fn public_campaign_copy_does_not_traverse_live_records() {
+    use uqm_rust::automation::campaign_state::{CampaignView, LiveCampaign, StateKey, StateSource};
+    let mut world = World::new();
+    world.story = Some(uqm_rust::state::game_state::GameState::new());
+    world.data.game.ship_stamp.frame = std::ptr::dangling_mut();
+    world.data.game.npc_built_ship_q.head = std::ptr::dangling_mut();
+    world.data.game.built_ship_q.head = std::ptr::dangling_mut();
+    world.data.game.ip_group_q.head = std::ptr::dangling_mut();
+    let view = CampaignView::from_world(&world);
+    assert_eq!(
+        LiveCampaign { world: &view }.read(StateKey::Story("STARBASE_AVAILABLE")),
+        Some(0)
+    );
+}
+
+#[test]
 #[serial_test::serial]
 fn empty_npc_phrase_does_not_acquire_an_owner() {
     let mut game = Game::new();
