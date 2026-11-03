@@ -2,7 +2,7 @@
 
 //! Shipyard menu, crew transactions and hangar animation, ported from shipyard.c.
 
-use super::shipyard_hangar::{self as hangar, ShipWindow};
+use super::shipyard_hangar as hangar;
 use super::sis::game_string;
 
 use crate::engine::{Kernel, StoryKey, World, WorldData};
