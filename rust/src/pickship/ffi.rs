@@ -580,11 +580,8 @@ pub unsafe extern "C" fn draw_armada_pick_ship(draw_salvage_frame: c_int, pick_r
                 stamp.origin.x -= 1;
                 // SAFETY: `StatusFrame` is loaded at startup.
                 unsafe {
-                    stamp.frame = (SetAbsFrameIndex(
-                        (KernelOwner::current().read(|kernel| kernel.status_frame)).cast(),
-                        3,
-                    ))
-                    .cast();
+                    let status_frame = KernelOwner::current().read(|kernel| kernel.status_frame);
+                    stamp.frame = SetAbsFrameIndex(status_frame.cast(), 3).cast();
                     DrawStamp(std::ptr::from_mut(&mut stamp).cast());
                 }
             }

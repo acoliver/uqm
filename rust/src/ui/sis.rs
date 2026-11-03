@@ -2,6 +2,7 @@
 
 use crate::callback::ffi::{AlarmId, Alarm_addAbsoluteMs, Alarm_remove};
 use crate::engine::{battle::schema::FlashContext, Kernel, StoryKey, World, WorldData};
+use crate::planets::starmap::current_catalog;
 
 use crate::navigation::abi::*;
 
@@ -29,7 +30,7 @@ const OPT_PC: i32 = crate::navigation::abi::OPT_PC as i32;
 const SIS_MESSAGE_HEIGHT: SIZE = crate::navigation::abi::SIS_MESSAGE_HEIGHT as SIZE;
 const STORAGE_BAY_CAPACITY: COUNT = crate::navigation::abi::STORAGE_BAY_CAPACITY as COUNT;
 
-unsafe fn game_string(index: u32) -> *mut UNICODE {
+pub(super) unsafe fn game_string(index: u32) -> *mut UNICODE {
     GetStringAddress(SetAbsStringTableIndex(
         Kernel::current().read(|owner| owner.game_strings),
         index as u16,
@@ -268,25 +269,20 @@ pub unsafe extern "C" fn DrawSISMessageEx(
     let mut buf = [0u8; 256];
     let mut text = p_str;
     if text.is_null() {
-        text =
-            match u32::from(WorldData::current().read(|owner| owner.game.current_activity) as BYTE)
-            {
-                IN_LAST_BATTLE | IN_INTERPLANETARY => {
-                    GetClusterName(
-                        (**World::current())
-                            .star_pointer(crate::planets::starmap::current_catalog())
-                            .cast(),
-                        buf.as_mut_ptr().cast(),
-                    );
-                    buf.as_ptr().cast()
-                }
-                IN_HYPERSPACE => game_string(if World::current().read(in_hyper_space) != 0 {
-                    NAVIGATION_STRING_BASE
-                } else {
-                    NAVIGATION_STRING_BASE + 1
-                }),
-                _ => c"".as_ptr().cast(),
-            };
+        let activity = WorldData::current().read(|owner| owner.game.current_activity) as BYTE;
+        text = match u32::from(activity) {
+            IN_LAST_BATTLE | IN_INTERPLANETARY => {
+                let star = World::current().read(|world| world.star_pointer(current_catalog()));
+                GetClusterName(star.cast(), buf.as_mut_ptr().cast());
+                buf.as_ptr().cast()
+            }
+            IN_HYPERSPACE => game_string(if World::current().read(in_hyper_space) != 0 {
+                NAVIGATION_STRING_BASE
+            } else {
+                NAVIGATION_STRING_BASE + 1
+            }),
+            _ => c"".as_ptr().cast(),
+        };
     }
     if flags & DSME_MYCOLOR as COUNT == 0 {
         SetContextForeGroundColor(rgb15(0x1b, 0, 0x1b));
@@ -450,10 +446,7 @@ pub unsafe extern "C" fn DrawStatusMessage(p_str: *const UNICODE) {
                 );
             }
         } else {
-            let (month, day, year) = WorldData::current().read(|world| {
-                let clock = &world.game.game_clock;
-                (clock.month_index, clock.day_index, clock.year_index)
-            });
+            let (month, day, year) = WorldData::current().read(WorldData::calendar_date);
             DateToString(buf.as_mut_ptr().cast(), buf.len(), month, day, year);
         }
         text = buf.as_ptr().cast();

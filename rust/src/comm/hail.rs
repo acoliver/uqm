@@ -314,8 +314,7 @@ pub unsafe fn hail_alien() {
         // ----------------------------------------------------------------
         // Step 8: Create AnimContext and configure
         // ----------------------------------------------------------------
-        let anim_ctx_name = c"AnimContext".as_ptr() as *const _;
-        let anim_ctx = create_named_context(anim_ctx_name);
+        let anim_ctx = create_named_context(c"AnimContext".as_ptr().cast());
         c_SetAnimContext(anim_ctx.cast());
         SetContext(anim_ctx);
         let screen = { Kernel::current().read(|owner| owner.screen) };

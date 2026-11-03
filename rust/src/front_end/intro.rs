@@ -1,5 +1,7 @@
 //! Presentation scripts and legacy-video input, ported from uqm/intro.c.
 
+mod text;
+
 #[cfg(not(test))]
 use crate::engine::{Kernel, WorldData};
 use crate::navigation::abi::*;
@@ -35,25 +37,10 @@ unsafe fn parse_color(src: *const c_char, color: &mut Color) -> BOOLEAN {
     1
 }
 
-pub(super) unsafe fn parse_text_lines(
-    lines: *mut TEXT,
-    max: usize,
-    mut buffer: *mut c_char,
-) -> usize {
-    let end = buffer.add(libc::strlen(buffer));
-    let mut count = 0;
-    while count < max && buffer < end {
-        let mut term = libc::strchr(buffer, b'\n' as c_int);
-        if term.is_null() {
-            term = buffer.add(libc::strlen(buffer));
-        }
-        *term = 0;
-        (*lines.add(count)).pStr = buffer;
-        (*lines.add(count)).CharCount = COUNT::MAX;
-        buffer = term.add(1);
-        count += 1;
-    }
-    count
+pub(super) unsafe fn parse_text_lines(lines: *mut TEXT, max: usize, buffer: *mut c_char) -> usize {
+    let buffer = std::slice::from_raw_parts_mut(buffer.cast::<u8>(), libc::strlen(buffer) + 1);
+    let lines = std::slice::from_raw_parts_mut(lines, max);
+    text::split_lines(lines, buffer)
 }
 
 #[cfg(not(test))]
@@ -238,10 +225,8 @@ pub(crate) mod runtime {
 
     unsafe extern "C" fn do_presentation(raw: *mut c_void) -> BOOLEAN {
         let state = &mut *raw.cast::<PresentationState>();
-        if menu(KEY_MENU_CANCEL)
-            || WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
-                != 0
-        {
+        let activity = WorldData::current().read(|owner| owner.game.current_activity);
+        if menu(KEY_MENU_CANCEL) || activity & CHECK_ABORT as u16 != 0 {
             crate::automation::ending::presentation_cancelled();
             return 0;
         }
@@ -439,17 +424,13 @@ pub(crate) mod runtime {
                     unbatch(state, true);
                     let mut leading: SIZE = 0;
                     GetContextFontLeading(&mut leading);
-                    let height = state.lines_count as c_int * leading as c_int;
-                    let mut y = match state.text_vpos {
-                        84 => leading,
-                        77 => ((state.clip_r.extent.height as c_int - height) / 2) as COORD,
-                        _ => (state.clip_r.extent.height as c_int - height) as COORD,
-                    };
-                    state.tfade_r = state.clip_r;
-                    state.tfade_r.corner.y =
-                        (state.tfade_r.corner.y as c_int + y as c_int - leading as c_int) as COORD;
-                    state.tfade_r.extent.height =
-                        ((state.lines_count as c_int + 1) * leading as c_int) as COORD;
+                    let (fade, mut y) = text::layout(
+                        state.clip_r,
+                        state.lines_count as c_int,
+                        leading,
+                        state.text_vpos,
+                    );
+                    state.tfade_r = fade;
                     for text in &mut state.text_lines[..state.lines_count as usize] {
                         text.align = TEXT_ALIGN_ALIGN_CENTER;
                         text.baseline.x = (ScreenWidth / 2) as COORD;

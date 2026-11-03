@@ -177,6 +177,31 @@ pub(crate) mod live {
     const ENCOUNTER_PERCENT: [u8; 24] = [
         0, 0, 0, 20, 20, 0, 10, 20, 20, 20, 20, 40, 0, 20, 60, 20, 5, 20, 40, 0, 0, 40, 40, 0,
     ];
+    const HOME_SYSTEMS: [u32; 23] = [
+        0,
+        0,
+        0,
+        ORZ_DEFINED,
+        PKUNK_DEFINED,
+        0,
+        SPATHI_DEFINED,
+        SUPOX_DEFINED,
+        THRADD_DEFINED,
+        UTWIG_DEFINED,
+        VUX_DEFINED,
+        YEHAT_DEFINED,
+        0,
+        DRUUGE_DEFINED,
+        ILWRATH_DEFINED,
+        MYCON_DEFINED,
+        0,
+        TALKING_PET_DEFINED,
+        0,
+        ZOQFOT_DEFINED,
+        0,
+        0,
+        0,
+    ];
     const ENCOUNTER_MAKEUP: [u8; 23] = [
         0x51, 0, 0, 0x51, 0x51, 0, 0x51, 0x51, 0x51, 0x51, 0x51, 0x51, 0x11, 0x51, 0x51, 0x51,
         0x11, 0x51, 0x51, 0x51, 0, 0x51, 0x51,
@@ -269,31 +294,7 @@ pub(crate) mod live {
     /// A current star, solar system, and initialized world queues are required.
     #[no_mangle]
     pub unsafe extern "C" fn BuildGroups() {
-        let mut home = [
-            0,
-            0,
-            0,
-            ORZ_DEFINED,
-            PKUNK_DEFINED,
-            0,
-            SPATHI_DEFINED,
-            SUPOX_DEFINED,
-            THRADD_DEFINED,
-            UTWIG_DEFINED,
-            VUX_DEFINED,
-            YEHAT_DEFINED,
-            0,
-            DRUUGE_DEFINED,
-            ILWRATH_DEFINED,
-            MYCON_DEFINED,
-            0,
-            TALKING_PET_DEFINED,
-            0,
-            ZOQFOT_DEFINED,
-            0,
-            0,
-            0,
-        ];
+        let mut home = HOME_SYSTEMS;
         let mut percent = ENCOUNTER_PERCENT;
         percent[SLYLANDRO_SHIP as usize] = percent[SLYLANDRO_SHIP as usize].wrapping_mul(
             WorldOwner::current().read(|world| get(world, StoryKey::SLYLANDRO_MULTIPLIER)),
@@ -394,6 +395,41 @@ pub(crate) mod live {
             }
         }
         GetGroupInfo(0, u8::MAX);
+    }
+
+    /// # Safety
+    /// The game thread retains the active solar system and the group's queue record.
+    unsafe fn initialize_group(group: &mut IP_GROUP, which: u8) {
+        group.group_id = which;
+        group.in_system = 1;
+        let random = TFB_Random();
+        let mut task = random as u8 % ON_STATION as u8;
+        if task == FLEE as u8 {
+            task = ON_STATION as u8;
+        }
+        group.orbit_pos = (random >> 16) as u8 & 15;
+        let mut location = (*pSolarSysState).SunDesc[0].NumPlanets;
+        if location == 1 && task == EXPLORE as u8 {
+            task = IN_ORBIT as u8;
+        } else {
+            location = ((random >> 8) as u8 % location) + 1;
+        }
+        group.dest_loc = location;
+        let random = TFB_Random();
+        group.loc.x = ((random as u16 % 10000) as i32 - 5000) as i16;
+        group.loc.y = (((random >> 16) % 10000) as i32 - 5000) as i16;
+        group.group_counter = 0;
+        if task == EXPLORE as u8 {
+            group.group_counter = (TFB_Random() as u16 % MAX_REVOLUTIONS as u16) << FACING_SHIFT;
+        } else if task == ON_STATION as u8 {
+            let origin = planetOuterLocation(location as u16 - 1);
+            let angle = (group.orbit_pos as u32 + 1) << (CIRCLE_SHIFT - FACING_SHIFT);
+            group.loc.x = (origin.x as i32 + cosine(angle, STATION_RADIUS as i32)) as i16;
+            group.loc.y = (origin.y as i32 + sine(angle, STATION_RADIUS as i32)) as i16;
+            location = 0;
+        }
+        group.task = task;
+        group.sys_loc = location;
     }
 
     unsafe fn flush(header: *mut GROUP_HEADER, offset: u32, which: u8, file: *mut GameStateFile) {
@@ -509,38 +545,7 @@ pub(crate) mod live {
                 }
                 let handle = BuildGroup(ip_queue(), race);
                 let group = handle.cast::<IP_GROUP>();
-                (*group).group_id = which;
-                (*group).in_system = 1;
-                let random = TFB_Random();
-                let mut task = random as u8 % ON_STATION as u8;
-                if task == FLEE as u8 {
-                    task = ON_STATION as u8;
-                }
-                (*group).orbit_pos = (random >> 16) as u8 & 15;
-                let mut location = (*pSolarSysState).SunDesc[0].NumPlanets;
-                if location == 1 && task == EXPLORE as u8 {
-                    task = IN_ORBIT as u8;
-                } else {
-                    location = ((random >> 8) as u8 % location) + 1;
-                }
-                (*group).dest_loc = location;
-                let random = TFB_Random();
-                (*group).loc.x = ((random as u16 % 10000) as i32 - 5000) as i16;
-                (*group).loc.y = (((random >> 16) % 10000) as i32 - 5000) as i16;
-                (*group).group_counter = 0;
-                if task == EXPLORE as u8 {
-                    (*group).group_counter =
-                        (TFB_Random() as u16 % MAX_REVOLUTIONS as u16) << FACING_SHIFT;
-                } else if task == ON_STATION as u8 {
-                    let origin = planetOuterLocation(location as u16 - 1);
-                    let angle = ((*group).orbit_pos as u32 + 1) << (CIRCLE_SHIFT - FACING_SHIFT);
-                    (*group).loc.x =
-                        (origin.x as i32 + cosine(angle, STATION_RADIUS as i32)) as i16;
-                    (*group).loc.y = (origin.y as i32 + sine(angle, STATION_RADIUS as i32)) as i16;
-                    location = 0;
-                }
-                (*group).task = task;
-                (*group).sys_loc = location;
+                initialize_group(&mut *group, which);
             }
             if offset != 0 {
                 WorldOwner::current().write(|world| init_group_info(world, 0));

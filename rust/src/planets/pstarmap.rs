@@ -543,9 +543,8 @@ pub unsafe extern "C" fn DrawStarMap(race_update: u16, clip: *mut RECT) {
         SetContextBackGroundColor(rgb15(0, 8, 0));
     }
     ClearDrawable();
-    let mut diameter = (i64::from(WorldData::current().read(|owner| owner.flagship.fuel_on_board))
-        << 1)
-        .min(i64::from(MAX_X_UNIVERSE * 4)) as c_long;
+    let fuel = WorldData::current().read(|owner| owner.flagship.fuel_on_board);
+    let mut diameter = (i64::from(fuel) << 1).min(i64::from(MAX_X_UNIVERSE * 4)) as c_long;
     if race_update == 0 && space < 2 && diameter != 0 {
         let location = current_location();
         if diameter > c_long::from(MAX_X_UNIVERSE * 4) {

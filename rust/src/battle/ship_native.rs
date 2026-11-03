@@ -8,6 +8,10 @@ fn velocity_squared(dx: i16, dy: i16) -> u32 {
     (i64::from(dx) * i64::from(dx) + i64::from(dy) * i64::from(dy)) as u32
 }
 
+const MAX_SPEED: u16 = SHIP_AT_MAX_SPEED as u16;
+const BEYOND_SPEED: u16 = SHIP_BEYOND_MAX_SPEED as u16;
+const GRAVITY: u16 = SHIP_IN_GRAVITY_WELL as u16;
+
 const INPUT_FLAGS: STATUS_FLAGS = (LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as STATUS_FLAGS;
 
 fn input_flags(old: STATUS_FLAGS, input: BYTE, appearing: bool) -> STATUS_FLAGS {
@@ -74,9 +78,6 @@ pub(crate) fn thrust(
     increment: u16,
     maximum: u16,
 ) -> u16 {
-    const MAX_SPEED: u16 = 1 << 7;
-    const BEYOND_SPEED: u16 = 1 << 6;
-    const GRAVITY: u16 = 1 << 8;
     let current_angle = (i32::from(facing) << 2) as u16 as i32;
     let travel_angle = velocity.travel_angle;
     let mut thrust = increment;
@@ -289,8 +290,7 @@ pub(crate) mod engine {
                 characteristics.thrust_increment,
                 characteristics.max_thrust,
             );
-            cx.ship_state_mut(ship).status &=
-                !((SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED | SHIP_IN_GRAVITY_WELL) as u16);
+            cx.ship_state_mut(ship).status &= !(MAX_SPEED | BEYOND_SPEED | GRAVITY);
             cx.ship_state_mut(ship).status |= result;
             cx.element_mut(e)
                 .set_thrust_wait(characteristics.thrust_wait);

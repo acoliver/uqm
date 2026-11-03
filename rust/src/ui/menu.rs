@@ -252,9 +252,7 @@ pub unsafe extern "C" fn DoMenuChooser(menu: *mut MENU_STATE, base_state: BYTE) 
 /// # Safety
 /// The status context, graphics resources, and menu string tables must be initialized.
 #[no_mangle]
-pub unsafe extern "C" fn DrawMenuStateStrings(begin: BYTE, state: SWORD) {
-    let mut begin = begin;
-    let mut state = state;
+pub unsafe extern "C" fn DrawMenuStateStrings(mut begin: BYTE, mut state: SWORD) {
     let mut highlight = 1;
     if state < 0 {
         state = -state;
@@ -270,10 +268,8 @@ pub unsafe extern "C" fn DrawMenuStateStrings(begin: BYTE, state: SWORD) {
     }
     let mut frame: FRAME = ptr::null_mut();
     if state <= i16::from(end_state(begin)) - i16::from(begin) {
-        frame = SetAbsFrameIndex(
-            Kernel::current().read(|owner| owner.play_frame),
-            (i16::from(begin) + state) as u16,
-        );
+        let play_frame = Kernel::current().read(|owner| owner.play_frame);
+        frame = SetAbsFrameIndex(play_frame, (i16::from(begin) + state) as u16);
     }
     pre_update_flash_rect();
     let old_context = SetContext(Kernel::current().read(|owner| owner.status_context));

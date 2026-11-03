@@ -363,6 +363,19 @@ pub fn record_flagship_destroyed() {
 /// The running game, read on the game thread.
 pub struct LiveCampaign;
 
+fn read_star_state(key: StateKey) -> Option<u32> {
+    use crate::automation::input_ffi;
+
+    let target = super::star_flight::StarTarget::resolve("Sol").expect("Sol in catalog");
+    let observation = input_ffi::star_flight_observation(target);
+    match key {
+        StateKey::StarCurrent => observation.current_star.map(u32::from),
+        StateKey::StarmapCursorX => observation.cursor.and_then(|(x, _)| u32::try_from(x).ok()),
+        StateKey::StarmapCursorY => observation.cursor.and_then(|(_, y)| u32::try_from(y).ok()),
+        _ => unreachable!(),
+    }
+}
+
 impl StateSource for LiveCampaign {
     fn read(&self, key: StateKey) -> Option<u32> {
         use crate::automation::{input_ffi, samatra::observe as boss_observation};
@@ -393,19 +406,7 @@ impl StateSource for LiveCampaign {
                 _ => unreachable!(),
             }),
             StateKey::StarCurrent | StateKey::StarmapCursorX | StateKey::StarmapCursorY => {
-                let target =
-                    super::star_flight::StarTarget::resolve("Sol").expect("Sol in catalog");
-                let observation = input_ffi::star_flight_observation(target);
-                match key {
-                    StateKey::StarCurrent => observation.current_star.map(u32::from),
-                    StateKey::StarmapCursorX => {
-                        observation.cursor.and_then(|(x, _)| u32::try_from(x).ok())
-                    }
-                    StateKey::StarmapCursorY => {
-                        observation.cursor.and_then(|(_, y)| u32::try_from(y).ok())
-                    }
-                    _ => unreachable!(),
-                }
+                read_star_state(key)
             }
             StateKey::HyperX => {
                 input_ffi::hyperspace_position().and_then(|(x, _)| u32::try_from(x).ok())

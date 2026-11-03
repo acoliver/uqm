@@ -100,6 +100,8 @@ pub(crate) mod live {
         g.unbatch();
     }
 
+    use crate::battle::sounds::play_sound;
+
     unsafe fn make_report(sounds: *mut c_void, text: *const u8, mut remaining: u16) {
         let g = CffiPlatform;
         let end_page = CString::new(format!("{}\n", g.game_string(305 + 3))).unwrap();
@@ -159,12 +161,7 @@ pub(crate) mod live {
                                 & (1 << 14)
                                 == 0
                         {
-                            crate::battle::sounds::play_sound(
-                                (sounds).cast(),
-                                NotPositional(),
-                                None,
-                                2,
-                            );
+                            play_sound(sounds.cast(), NotPositional(), None, 2);
                             timeout = timeout.wrapping_add(character_delay(c, word_chars == 0));
                             if WaitForAnyButtonUntil(1, timeout, 0) != 0 {
                                 sleepy = false;

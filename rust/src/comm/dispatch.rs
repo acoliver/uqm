@@ -9,6 +9,8 @@
 //! @plan PLAN-20260724-MAINLOOP-AND-COMM.P11
 //! @requirement REQ-ML-007, REQ-COMM-DISPATCH
 
+mod routing;
+
 #[cfg(not(test))]
 use crate::engine::StoryKey;
 use crate::engine::World;
@@ -697,21 +699,7 @@ pub unsafe extern "C" fn rust_race_communication() {
     if (next_activity & CHECK_LOAD) != 0 {
         let ec = World::current().read(|world| world.story_state(StoryKey::ESCAPE_COUNTER)) as u8;
 
-        if World::current().read(|world| world.story_state(StoryKey::FOUND_PLUTO_SPATHI)) == 1 {
-            init_communication(conv::SPATHI);
-        } else if World::current().read(|world| world.story_state(StoryKey::GLOBAL_FLAGS_AND_DATA))
-            == 0
-        {
-            init_communication(conv::TALKING_PET);
-        } else if (World::current()
-            .read(|world| world.story_state(StoryKey::GLOBAL_FLAGS_AND_DATA))
-            & ((1 << 4) | (1 << 5)))
-            != 0
-        {
-            init_communication(conv::ILWRATH);
-        } else {
-            init_communication(conv::CHMMR);
-        }
+        init_communication(World::current().read(routing::restored_conversation));
 
         let crew = crate::mainloop::ffi::get_crew_enlisted();
         if crew != 0xFFFF {

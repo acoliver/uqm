@@ -1139,6 +1139,114 @@ mod runtime {
         }
         libc::fprintf(out, c"\n".as_ptr());
     }
+    macro_rules! category {
+        ($name:literal,$base:ident,$count:ident) => {
+            (
+                concat!($name, "\0").as_ptr().cast::<c_char>(),
+                $base as usize,
+                $count as usize,
+            )
+        };
+    }
+    const STRING_CATEGORIES: &[(*const c_char, usize, usize)] = &[
+        (c"0".as_ptr(), 0, 0),
+        category!("STAR_STRING_BASE", STAR_STRING_BASE, STAR_STRING_COUNT),
+        category!(
+            "DEVICE_STRING_BASE",
+            DEVICE_STRING_BASE,
+            DEVICE_STRING_COUNT
+        ),
+        category!("CARGO_STRING_BASE", CARGO_STRING_BASE, CARGO_STRING_COUNT),
+        category!(
+            "ELEMENTS_STRING_BASE",
+            ELEMENTS_STRING_BASE,
+            ELEMENTS_STRING_COUNT
+        ),
+        category!("SCAN_STRING_BASE", SCAN_STRING_BASE, SCAN_STRING_COUNT),
+        category!("STAR_NUMBER_BASE", STAR_NUMBER_BASE, STAR_NUMBER_COUNT),
+        category!(
+            "PLANET_NUMBER_BASE",
+            PLANET_NUMBER_BASE,
+            PLANET_NUMBER_COUNT
+        ),
+        category!(
+            "MONTHS_STRING_BASE",
+            MONTHS_STRING_BASE,
+            MONTHS_STRING_COUNT
+        ),
+        category!(
+            "FEEDBACK_STRING_BASE",
+            FEEDBACK_STRING_BASE,
+            FEEDBACK_STRING_COUNT
+        ),
+        category!(
+            "STARBASE_STRING_BASE",
+            STARBASE_STRING_BASE,
+            STARBASE_STRING_COUNT
+        ),
+        category!(
+            "ENCOUNTER_STRING_BASE",
+            ENCOUNTER_STRING_BASE,
+            ENCOUNTER_STRING_COUNT
+        ),
+        category!(
+            "NAVIGATION_STRING_BASE",
+            NAVIGATION_STRING_BASE,
+            NAVIGATION_STRING_COUNT
+        ),
+        category!(
+            "NAMING_STRING_BASE",
+            NAMING_STRING_BASE,
+            NAMING_STRING_COUNT
+        ),
+        category!("MELEE_STRING_BASE", MELEE_STRING_BASE, MELEE_STRING_COUNT),
+        category!(
+            "SAVEGAME_STRING_BASE",
+            SAVEGAME_STRING_BASE,
+            SAVEGAME_STRING_COUNT
+        ),
+        category!(
+            "OPTION_STRING_BASE",
+            OPTION_STRING_BASE,
+            OPTION_STRING_COUNT
+        ),
+        category!(
+            "QUITMENU_STRING_BASE",
+            QUITMENU_STRING_BASE,
+            QUITMENU_STRING_COUNT
+        ),
+        category!(
+            "STATUS_STRING_BASE",
+            STATUS_STRING_BASE,
+            STATUS_STRING_COUNT
+        ),
+        category!(
+            "FLAGSHIP_STRING_BASE",
+            FLAGSHIP_STRING_BASE,
+            FLAGSHIP_STRING_COUNT
+        ),
+        category!(
+            "ORBITSCAN_STRING_BASE",
+            ORBITSCAN_STRING_BASE,
+            ORBITSCAN_STRING_COUNT
+        ),
+        category!(
+            "MAINMENU_STRING_BASE",
+            MAINMENU_STRING_BASE,
+            MAINMENU_STRING_COUNT
+        ),
+        category!(
+            "NETMELEE_STRING_BASE",
+            NETMELEE_STRING_BASE,
+            NETMELEE_STRING_COUNT
+        ),
+        (
+            c"GAMESTR_COUNT".as_ptr(),
+            GAMESTR_COUNT as usize,
+            usize::MAX,
+        ),
+    ];
+
     /// # Safety
     /// Game strings must be initialized. Returned storage is shared and non-reentrant.
     pub unsafe fn planet_type_string(index: c_int) -> *const c_char {
@@ -1244,113 +1352,7 @@ mod runtime {
     /// # Safety
     /// Game strings must be initialized and `out` an open C stream.
     pub unsafe fn dump_strings(out: *mut FILE) {
-        macro_rules! category {
-            ($name:literal,$base:ident,$count:ident) => {
-                (
-                    concat!($name, "\0").as_ptr().cast::<c_char>(),
-                    $base as usize,
-                    $count as usize,
-                )
-            };
-        }
-        let categories = [
-            (c"0".as_ptr(), 0, 0),
-            category!("STAR_STRING_BASE", STAR_STRING_BASE, STAR_STRING_COUNT),
-            category!(
-                "DEVICE_STRING_BASE",
-                DEVICE_STRING_BASE,
-                DEVICE_STRING_COUNT
-            ),
-            category!("CARGO_STRING_BASE", CARGO_STRING_BASE, CARGO_STRING_COUNT),
-            category!(
-                "ELEMENTS_STRING_BASE",
-                ELEMENTS_STRING_BASE,
-                ELEMENTS_STRING_COUNT
-            ),
-            category!("SCAN_STRING_BASE", SCAN_STRING_BASE, SCAN_STRING_COUNT),
-            category!("STAR_NUMBER_BASE", STAR_NUMBER_BASE, STAR_NUMBER_COUNT),
-            category!(
-                "PLANET_NUMBER_BASE",
-                PLANET_NUMBER_BASE,
-                PLANET_NUMBER_COUNT
-            ),
-            category!(
-                "MONTHS_STRING_BASE",
-                MONTHS_STRING_BASE,
-                MONTHS_STRING_COUNT
-            ),
-            category!(
-                "FEEDBACK_STRING_BASE",
-                FEEDBACK_STRING_BASE,
-                FEEDBACK_STRING_COUNT
-            ),
-            category!(
-                "STARBASE_STRING_BASE",
-                STARBASE_STRING_BASE,
-                STARBASE_STRING_COUNT
-            ),
-            category!(
-                "ENCOUNTER_STRING_BASE",
-                ENCOUNTER_STRING_BASE,
-                ENCOUNTER_STRING_COUNT
-            ),
-            category!(
-                "NAVIGATION_STRING_BASE",
-                NAVIGATION_STRING_BASE,
-                NAVIGATION_STRING_COUNT
-            ),
-            category!(
-                "NAMING_STRING_BASE",
-                NAMING_STRING_BASE,
-                NAMING_STRING_COUNT
-            ),
-            category!("MELEE_STRING_BASE", MELEE_STRING_BASE, MELEE_STRING_COUNT),
-            category!(
-                "SAVEGAME_STRING_BASE",
-                SAVEGAME_STRING_BASE,
-                SAVEGAME_STRING_COUNT
-            ),
-            category!(
-                "OPTION_STRING_BASE",
-                OPTION_STRING_BASE,
-                OPTION_STRING_COUNT
-            ),
-            category!(
-                "QUITMENU_STRING_BASE",
-                QUITMENU_STRING_BASE,
-                QUITMENU_STRING_COUNT
-            ),
-            category!(
-                "STATUS_STRING_BASE",
-                STATUS_STRING_BASE,
-                STATUS_STRING_COUNT
-            ),
-            category!(
-                "FLAGSHIP_STRING_BASE",
-                FLAGSHIP_STRING_BASE,
-                FLAGSHIP_STRING_COUNT
-            ),
-            category!(
-                "ORBITSCAN_STRING_BASE",
-                ORBITSCAN_STRING_BASE,
-                ORBITSCAN_STRING_COUNT
-            ),
-            category!(
-                "MAINMENU_STRING_BASE",
-                MAINMENU_STRING_BASE,
-                MAINMENU_STRING_COUNT
-            ),
-            category!(
-                "NETMELEE_STRING_BASE",
-                NETMELEE_STRING_BASE,
-                NETMELEE_STRING_COUNT
-            ),
-            (
-                c"GAMESTR_COUNT".as_ptr(),
-                GAMESTR_COUNT as usize,
-                usize::MAX,
-            ),
-        ];
+        let categories = STRING_CATEGORIES;
         let num_strings =
             GetStringTableCount(Kernel::current().read(|owner| owner.game_strings)) as usize;
         for i in 0..categories.len() - 1 {

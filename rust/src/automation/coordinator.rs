@@ -1729,23 +1729,9 @@ impl Coordinator {
         true
     }
 
-    /// Derive real player controls for whichever navigation the current step
-    /// is running, and report arrival.
-    fn service_navigation(
-        &self,
-        inner: &mut CoordInner,
-        mut scheduler_event: SchedulerEvent,
-    ) -> SchedulerEvent {
+    fn transit_budget(action: Option<&Action>) -> Option<u64> {
         use super::script::PatrolPolicy;
-        let policy = match self.actions.get(inner.sched_state.step_index) {
-            Some(Action::NavigateToHyperspace(step)) if step.retreat_encounters => {
-                PatrolPolicy::Retreat
-            }
-            Some(Action::NavigateToPlanet(step)) => step.patrol_policy,
-            Some(Action::NavigateToOrbit(step)) => step.patrol_policy,
-            _ => PatrolPolicy::Fight,
-        };
-        let transit_budget = match self.actions.get(inner.sched_state.step_index) {
+        match action {
             Some(Action::NavigateToHyperspace(step)) if step.encounter_response.is_none() => {
                 Some(step.max_ticks)
             }
@@ -1768,7 +1754,26 @@ impl Coordinator {
                 Some(step.max_ticks)
             }
             _ => None,
+        }
+    }
+
+    /// Derive real player controls for whichever navigation the current step
+    /// is running, and report arrival.
+    fn service_navigation(
+        &self,
+        inner: &mut CoordInner,
+        mut scheduler_event: SchedulerEvent,
+    ) -> SchedulerEvent {
+        use super::script::PatrolPolicy;
+        let policy = match self.actions.get(inner.sched_state.step_index) {
+            Some(Action::NavigateToHyperspace(step)) if step.retreat_encounters => {
+                PatrolPolicy::Retreat
+            }
+            Some(Action::NavigateToPlanet(step)) => step.patrol_policy,
+            Some(Action::NavigateToOrbit(step)) => step.patrol_policy,
+            _ => PatrolPolicy::Fight,
         };
+        let transit_budget = Self::transit_budget(self.actions.get(inner.sched_state.step_index));
         if let Some(max_ticks) = transit_budget {
             if inner.sched_state.phase == ActionPhase::WaitingForInput {
                 inner.star_encounter_active = false;

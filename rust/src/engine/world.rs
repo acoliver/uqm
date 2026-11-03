@@ -13,6 +13,11 @@ pub struct WorldData {
 }
 
 impl WorldData {
+    pub(crate) fn calendar_date(&self) -> (u8, u8, u16) {
+        let clock = &self.game.game_clock;
+        (clock.month_index, clock.day_index, clock.year_index)
+    }
+
     pub(crate) fn ship_fragments(&self, player: bool) -> &crate::collections::queue::Queue {
         if player {
             &self.game.built_ship_q
@@ -244,6 +249,18 @@ mod tests {
         assert_eq!(world.story_value(StoryKey::GLOBAL_FLAGS_AND_DATA), Some(0));
         world.set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, 3);
         assert_eq!(world.story_value(StoryKey::GLOBAL_FLAGS_AND_DATA), Some(3));
+    }
+
+    #[test]
+    fn calendar_date_is_a_detached_month_day_year_snapshot() {
+        let mut world = World::new();
+        world.data.game.game_clock.month_index = 3;
+        world.data.game.game_clock.day_index = 6;
+        world.data.game.game_clock.year_index = 2156;
+        let date = world.data.calendar_date();
+        world.data.game.game_clock.day_index = 7;
+        assert_eq!(date, (3, 6, 2156));
+        assert_eq!(world.data.calendar_date(), (3, 7, 2156));
     }
 
     #[test]

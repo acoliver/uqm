@@ -2,6 +2,7 @@
 
 //! Shipyard menu, crew transactions and hangar animation, ported from shipyard.c.
 
+use super::sis::game_string;
 use crate::engine::{Kernel, StoryKey, World, WorldData};
 use crate::navigation::abi::*;
 
@@ -828,20 +829,12 @@ unsafe fn draw_blue_print(menu: *mut MENU_STATE) {
     SetContextForeGroundColor(rgb15(0, 0, 0x16));
     DrawFilledStamp(&mut stamp);
     for slot in 0..NUM_DRIVE_SLOTS {
-        DrawShipPiece(
-            frame,
-            WorldData::current().read(|owner| owner.flagship.drive_slots[slot as usize]) as COUNT,
-            slot as COUNT,
-            1,
-        );
+        let piece = WorldData::current().read(|owner| owner.flagship.drive_slots[slot as usize]);
+        DrawShipPiece(frame, piece as COUNT, slot as COUNT, 1);
     }
     for slot in 0..NUM_JET_SLOTS {
-        DrawShipPiece(
-            frame,
-            WorldData::current().read(|owner| owner.flagship.jet_slots[slot as usize]) as COUNT,
-            slot as COUNT,
-            1,
-        );
+        let piece = WorldData::current().read(|owner| owner.flagship.jet_slots[slot as usize]);
+        DrawShipPiece(frame, piece as COUNT, slot as COUNT, 1);
     }
     for slot in 0..NUM_MODULE_SLOTS {
         let piece = WorldData::current().read(|owner| owner.flagship.module_slots[slot as usize]);
@@ -949,20 +942,8 @@ pub unsafe extern "C" fn DoShipyard(menu: *mut MENU_STATE) -> BOOLEAN {
         SetTransitionSource(ptr::null());
         BatchGraphics();
         draw_sisframe();
-        DrawSISMessage(
-            GetStringAddress(SetAbsStringTableIndex(
-                Kernel::current().read(|owner| owner.game_strings),
-                STARBASE_STRING_BASE as COUNT + 3,
-            ))
-            .cast(),
-        );
-        DrawSISTitle(
-            GetStringAddress(SetAbsStringTableIndex(
-                Kernel::current().read(|owner| owner.game_strings),
-                STARBASE_STRING_BASE as COUNT,
-            ))
-            .cast(),
-        );
+        DrawSISMessage(game_string(STARBASE_STRING_BASE + 3));
+        DrawSISTitle(game_string(STARBASE_STRING_BASE));
         SetContext(Kernel::current().read(|owner| owner.space_context));
         draw_blue_print(menu);
         (*menu).CurState = SHIPYARD_CREW;

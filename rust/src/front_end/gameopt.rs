@@ -436,13 +436,8 @@ pub(crate) mod runtime {
     ) -> BOOLEAN {
         let mut full_str: [UNICODE; 256] = [0; 256];
         let mut date_str: [UNICODE; 80] = [0; 80];
-        DateToString(
-            date_str.as_mut_ptr(),
-            date_str.len(),
-            WorldData::current().read(|owner| owner.game.game_clock.month_index),
-            WorldData::current().read(|owner| owner.game.game_clock.day_index),
-            WorldData::current().read(|owner| owner.game.game_clock.year_index),
-        );
+        let (month, day, year) = WorldData::current().read(WorldData::calendar_date);
+        DateToString(date_str.as_mut_ptr(), date_str.len(), month, day, year);
         libc::strncat(
             date_str.as_mut_ptr(),
             c": ".as_ptr(),
@@ -1189,8 +1184,7 @@ pub(crate) mod runtime {
     unsafe fn pick_game(saving: BOOLEAN, from_main_menu: BOOLEAN) -> BOOLEAN {
         let activity = WorldData::current().read(|owner| owner.game.current_activity);
         log::info!(
-            "RUST_PICKER: enter saving={saving} main_menu={from_main_menu} activity={:#x}",
-            activity,
+            "RUST_PICKER: enter saving={saving} main_menu={from_main_menu} activity={activity:#x}"
         );
         let mut pick_state: PickGameState = mem::zeroed();
         pick_state.saving = saving;
@@ -1266,8 +1260,8 @@ pub(crate) mod runtime {
         if pick_state.success != 0 && saving == 0 {
             (**WorldData::current()).game.current_activity |= CHECK_LOAD as ACTIVITY;
         }
-        if WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as ACTIVITY
-            == 0
+        let activity = WorldData::current().read(|owner| owner.game.current_activity);
+        if activity & CHECK_ABORT as ACTIVITY == 0
             && (saving != 0 || (pick_state.success == 0 && from_main_menu == 0))
         {
             SetTransitionSource(&dlg_rect);

@@ -1,5 +1,6 @@
 //! Devices menu, ported from `planets/devices.c`.
 
+use super::device_effects::{repair_ultron, ULTRON_COMPONENTS};
 use crate::battle::c_bridge::SleepThread;
 use crate::engine::{
     Kernel as KernelOwner, StoryKey, World as WorldOwner, WorldData as WorldFields,
@@ -246,12 +247,8 @@ unsafe fn use_caster() -> bool {
 /// Returns the original DeviceStatus (failure, success, success without sound).
 unsafe fn invoke(id: u8) -> u8 {
     match id {
-        4..=6 => WorldOwner::current().write(|world| {
-            super::device_effects::repair_ultron(
-                world,
-                super::device_effects::ULTRON_COMPONENTS[usize::from(id - 4)],
-            )
-        }),
+        4..=6 => WorldOwner::current()
+            .write(|world| repair_ultron(world, ULTRON_COMPONENTS[usize::from(id - 4)])),
         3 => {
             if (**WorldFields::current()).game.current_activity & 0xff != 4
                 || !playerInPlanetOrbit()
@@ -260,13 +257,9 @@ unsafe fn invoke(id: u8) -> u8 {
             }
             PlayMenuSound(3);
             SleepThreadUntil(FadeScreen(250, 840).wrapping_add(1680));
-            if u32::from(
-                (*(**WorldOwner::current())
-                    .star_pointer(crate::planets::starmap::current_catalog()))
-                .index,
-            ) != CHMMR_DEFINED
-                || !orbit_is(1)
-            {
+            let catalog = crate::planets::starmap::current_catalog();
+            let star = (**WorldOwner::current()).star_pointer(catalog);
+            if u32::from((*star).index) != CHMMR_DEFINED || !orbit_is(1) {
                 FadeScreen(253, 1680);
             } else {
                 WorldOwner::current().write(|world| set(world, StoryKey::CHMMR_EMERGING, 1));
@@ -308,12 +301,9 @@ unsafe fn invoke(id: u8) -> u8 {
                     WorldOwner::current().write(|world| set(world, StoryKey::SHIP_TO_COMPEL, 1));
                     reset_groups();
                 }
-                if u32::from(
-                    (*(**WorldOwner::current())
-                        .star_pointer(crate::planets::starmap::current_catalog()))
-                    .index,
-                ) == SAMATRA_DEFINED
-                {
+                let catalog = crate::planets::starmap::current_catalog();
+                let star = (**WorldOwner::current()).star_pointer(catalog);
+                if u32::from((*star).index) == SAMATRA_DEFINED {
                     WorldOwner::current()
                         .write(|world| set(world, StoryKey::READY_TO_CONFUSE_URQUAN, 1));
                 }
