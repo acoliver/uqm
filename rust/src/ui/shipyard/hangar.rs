@@ -1,4 +1,17 @@
-use super::*;
+use super::shipyard_layout::{
+    HANGAR_DY, HANGAR_SHIPS_ROW, HANGAR_X_COORDS, HANGAR_Y, SHIP_WIN_WIDTH,
+};
+use crate::navigation::abi::*;
+use std::{mem, ptr};
+
+#[derive(Clone, Copy)]
+pub(super) struct ShipWindow {
+    pub(super) ship: *mut SHIP_FRAGMENT,
+    pub(super) finished: POINT,
+    pub(super) image: STAMP,
+    pub(super) left_door: STAMP,
+    pub(super) right_door: STAMP,
+}
 
 /// # Safety
 /// The game thread retains the menu drawable and initialized fragment records.
@@ -78,4 +91,93 @@ pub(super) unsafe fn prepare_windows(
         }
     }
     (windows, num_ships)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn menu() -> MENU_STATE {
+        // SAFETY: menu records contain nullable handles and integers; null frames are supported.
+        unsafe { mem::zeroed() }
+    }
+
+    #[test]
+    fn empty_hangar_has_no_ship_windows() {
+        let mut queue = QUEUE::default();
+        // SAFETY: this fixture owns its empty queue and menu; no drawable is dereferenced.
+        let (windows, count) = unsafe { prepare_windows(&mut queue, &menu(), COUNT::MAX, None) };
+        assert_eq!(count, 0);
+        assert!(windows.iter().all(|w| w.ship.is_null()));
+    }
+
+    #[test]
+    fn existing_ships_keep_queue_order_and_row_positions() {
+        // SAFETY: ship fragments contain nullable handles and integers.
+        let mut ships: [SHIP_FRAGMENT; 2] = unsafe { mem::zeroed() };
+        ships[0].index = 1;
+        ships[1].index = 7;
+        ships[0].succ = ptr::from_mut(&mut ships[1]).cast();
+        ships[1].pred = ptr::from_mut(&mut ships[0]).cast();
+        let mut queue = QUEUE {
+            head: ptr::from_mut(&mut ships[0]).cast(),
+            tail: ptr::from_mut(&mut ships[1]).cast(),
+            ..QUEUE::default()
+        };
+        // SAFETY: the fixture retains both linked records throughout preparation.
+        let (windows, count) = unsafe { prepare_windows(&mut queue, &menu(), COUNT::MAX, None) };
+        assert_eq!(count, 2);
+        assert_eq!(windows[0].ship, ptr::from_mut(&mut ships[0]));
+        assert_eq!(windows[1].ship, ptr::from_mut(&mut ships[1]));
+        assert_eq!(windows[0].finished.x, HANGAR_X_COORDS[1]);
+        assert_eq!(windows[0].finished.y, HANGAR_Y);
+        assert_eq!(windows[1].finished.y, HANGAR_Y + HANGAR_DY);
+        assert_eq!(windows[0].left_door.origin.x, -1);
+        assert_eq!(windows[1].right_door.origin.x, 1);
+    }
+
+    #[test]
+    fn new_tail_ship_is_inserted_before_the_next_occupied_slot() {
+        // SAFETY: ship fragments contain nullable handles and integers.
+        let mut ships: [SHIP_FRAGMENT; 3] = unsafe { mem::zeroed() };
+        for (ship, slot) in ships.iter_mut().zip([1, 6, 0]) {
+            ship.index = slot;
+        }
+        for i in 0..2 {
+            ships[i].succ = ptr::from_mut(&mut ships[i + 1]).cast();
+            ships[i + 1].pred = ptr::from_mut(&mut ships[i]).cast();
+        }
+        let mut queue = QUEUE {
+            head: ptr::from_mut(&mut ships[0]).cast(),
+            tail: ptr::from_mut(&mut ships[2]).cast(),
+            ..QUEUE::default()
+        };
+        // SAFETY: the fixture retains all records and the mutable queue header.
+        let (windows, count) = unsafe { prepare_windows(&mut queue, &menu(), 3, None) };
+        assert_eq!(count, 1);
+        assert_eq!(windows[0].ship, ptr::from_mut(&mut ships[2]));
+        assert_eq!(ships[2].index, 3);
+        assert_eq!(ships[0].succ, ptr::from_ref(&ships[2]).cast_mut().cast());
+        assert_eq!(ships[2].succ, ptr::from_ref(&ships[1]).cast_mut().cast());
+        assert_eq!(queue.tail, ptr::from_mut(&mut ships[1]).cast());
+        assert_eq!(windows[0].finished.x, HANGAR_X_COORDS[3]);
+    }
+
+    #[test]
+    fn removed_ship_uses_open_doors_without_touching_the_queue() {
+        let mut queue = QUEUE::default();
+        // SAFETY: ship fragments contain nullable handles and integers.
+        let mut removed: SHIP_FRAGMENT = unsafe { mem::zeroed() };
+        let ship = ptr::from_mut(&mut removed);
+        // SAFETY: the fixture retains the removed record and menu until preparation returns.
+        let (windows, count) =
+            unsafe { prepare_windows(&mut queue, &menu(), 7, Some(&mut removed)) };
+        assert_eq!(count, 1);
+        assert_eq!(windows[0].ship, ship);
+        assert_eq!(windows[0].left_door.origin.x, -(SHIP_WIN_WIDTH >> 1));
+        assert_eq!(windows[0].right_door.origin.x, SHIP_WIN_WIDTH >> 1);
+        assert_eq!(windows[0].finished.x, HANGAR_X_COORDS[1]);
+        assert_eq!(windows[0].finished.y, HANGAR_Y + HANGAR_DY);
+        assert!(queue.head.is_null());
+    }
 }

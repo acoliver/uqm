@@ -2,8 +2,8 @@
 
 //! Shipyard menu, crew transactions and hangar animation, ported from shipyard.c.
 
+use super::shipyard_hangar::{self as hangar, ShipWindow};
 use super::sis::game_string;
-mod hangar;
 
 use crate::engine::{Kernel, StoryKey, World, WorldData};
 use crate::navigation::abi::*;
@@ -209,15 +209,6 @@ unsafe fn show_ship_crew(ship: *mut SHIP_FRAGMENT, rect: *const RECT) {
         rgb15(0x12, 0, 0)
     });
     font_DrawText(&mut text);
-}
-
-#[derive(Clone, Copy)]
-struct ShipWindow {
-    ship: *mut SHIP_FRAGMENT,
-    finished: POINT,
-    image: STAMP,
-    left_door: STAMP,
-    right_door: STAMP,
 }
 
 unsafe fn show_combat_ship(menu: *mut MENU_STATE, window: COUNT, yanked: *mut SHIP_FRAGMENT) {
