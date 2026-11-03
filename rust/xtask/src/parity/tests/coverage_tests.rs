@@ -1,4 +1,45 @@
 use super::*;
+use coverage::{Absence, Coverage, Kind, SpeciesCallbacks, MELEE_SPECIES};
+
+fn observed(trace: &str) -> Coverage {
+    let mut coverage = Coverage::default();
+    coverage.observe(trace).unwrap();
+    coverage
+}
+
+fn fixture(absent_special: &[u32]) -> Vec<SpeciesCallbacks> {
+    (1..=25)
+        .map(|species| SpeciesCallbacks {
+            species,
+            weapon: Some("fixture_native::weapon"),
+            special: (!absent_special.contains(&species)).then_some("fixture_native::special"),
+        })
+        .collect()
+}
+
+/// Every species fights both neighbours. `keep` selects which of each ship's declared
+/// callbacks fire during those fights.
+fn corpus(table: &[SpeciesCallbacks], keep: impl Fn(u32, Kind) -> bool) -> String {
+    let callbacks = |species: u32| -> String {
+        let entry = table.iter().find(|entry| entry.species == species).unwrap();
+        [(Kind::Weapon, entry.weapon), (Kind::Special, entry.special)]
+            .into_iter()
+            .filter_map(|(kind, name)| name.filter(|_| keep(species, kind)))
+            .map(|name| format!(" [hook {species} ships::races::{name}]"))
+            .collect()
+    };
+    let mut trace = String::new();
+    for species in 1..=25 {
+        for opponent in [species % 25 + 1, (species + 1) % 25 + 1] {
+            trace.push_str(&format!(
+                "S 1 512 crc digest [spawn 0 {species}] [spawn 1 {opponent}] [hook {species} ships::races::fixture_native::intelligence] [hook {opponent} ships::races::fixture_native::intelligence]{}{}\n",
+                callbacks(species),
+                callbacks(opponent)
+            ));
+        }
+    }
+    trace
+}
 
 #[test]
 fn bounded_engagements_require_both_live_races_and_allow_real_cleanup_without_deaths() {
@@ -14,7 +55,7 @@ fn bounded_engagements_require_both_live_races_and_allow_real_cleanup_without_de
     }
     let mut observed = coverage::Coverage::default();
     observed.observe(&trace).unwrap();
-    observed.validate().unwrap();
+    observed.validate_bilateral().unwrap();
 }
 
 #[test]
@@ -38,7 +79,7 @@ fn spawns_deaths_one_sided_generic_stale_and_cross_bout_hooks_never_prove_engage
                 )).unwrap();
             }
         }
-        assert!(observed.validate().is_err(), "accepted {hooks}");
+        assert!(observed.validate_bilateral().is_err(), "accepted {hooks}");
     }
 }
 
@@ -73,7 +114,7 @@ fn journal_cleanup_events_preserve_spawn_and_death_coverage() {
                 .unwrap();
         }
     }
-    observed.validate().unwrap();
+    observed.validate_bilateral().unwrap();
 }
 
 #[test]
@@ -88,11 +129,11 @@ fn journal_cleanup_does_not_count_as_death_or_opponent_evidence() {
                 .unwrap();
         }
     }
-    assert!(observed.validate().is_err());
+    assert!(observed.validate_bilateral().is_err());
     observed
         .observe("S 1 512 00001234 abc [spawn 0 1] [free 0:1] [spawn 0 2]\n")
         .unwrap();
-    assert!(observed.validate().is_err());
+    assert!(observed.validate_bilateral().is_err());
     assert!(observed
         .observe("S 1 512 00001234 abc [free 0:1] [death 0 1]\n")
         .is_err());
@@ -132,4 +173,76 @@ fn malformed_cleanup_and_unknown_events_still_fail() {
     assert!(coverage::Coverage::default()
         .observe("S 1 512 00001234 abc [free 0:1\n")
         .is_err());
+}
+
+#[test]
+fn species_callbacks_require_weapon_and_special_evidence_for_every_species() {
+    let table = fixture(&[]);
+    observed(&corpus(&table, |_, _| true))
+        .validate_with(&table, &[])
+        .unwrap();
+    for kind in [Kind::Weapon, Kind::Special] {
+        let trace = corpus(&table, |_, removed| removed != kind);
+        assert!(
+            observed(&trace).validate_with(&table, &[]).is_err(),
+            "accepted corpus without any {kind:?} callback"
+        );
+    }
+    for species in 1..=25 {
+        for kind in [Kind::Weapon, Kind::Special] {
+            let trace = corpus(&table, |id, removed| !(id == species && removed == kind));
+            assert!(
+                observed(&trace).validate_with(&table, &[]).is_err(),
+                "accepted species {species} without {kind:?} callback"
+            );
+        }
+    }
+}
+
+#[test]
+fn intelligence_only_engagements_fail_the_callback_requirement() {
+    let table = fixture(&[]);
+    let trace = corpus(&table, |_, _| false);
+    observed(&trace).validate_bilateral().unwrap();
+    assert!(observed(&trace).validate_with(&table, &[]).is_err());
+}
+
+#[test]
+fn only_plan_approved_absences_may_omit_a_special_callback() {
+    let table = fixture(&[3]);
+    let trace = corpus(&table, |_, _| true);
+    assert!(
+        observed(&trace).validate_with(&table, &[]).is_err(),
+        "accepted an undeclared absence"
+    );
+    let approved = [Absence {
+        species: 3,
+        kind: Kind::Special,
+        plan: "plan.md:113",
+    }];
+    observed(&trace).validate_with(&table, &approved).unwrap();
+    let stale = [Absence {
+        species: 4,
+        kind: Kind::Special,
+        plan: "plan.md:113",
+    }];
+    let full = fixture(&[]);
+    assert!(
+        observed(&corpus(&full, |_, _| true))
+            .validate_with(&full, &stale)
+            .is_err(),
+        "accepted an approval for a species that declares its special"
+    );
+    let unknown = [Absence {
+        species: 26,
+        kind: Kind::Special,
+        plan: "plan.md:113",
+    }];
+    assert!(observed(&trace).validate_with(&table, &unknown).is_err());
+}
+
+#[test]
+fn melee_callback_table_names_each_species_once_in_order() {
+    let species: Vec<u32> = MELEE_SPECIES.iter().map(|entry| entry.species).collect();
+    assert_eq!(species, (1..=25).collect::<Vec<_>>());
 }
