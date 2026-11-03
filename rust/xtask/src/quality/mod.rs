@@ -412,6 +412,7 @@ fn compare_base(
 ) -> Result<Option<Baseline>, String> {
     let measured = budgets::scoped_entries(measurement, &baseline.budget);
     let (base, recorded) = baseline::archived_measurement(root, reference)?;
+    baseline.retire_moves(&base);
     let base_budgets = recorded
         .as_ref()
         .map(|b| b.budget.clone())
@@ -486,9 +487,6 @@ fn compare_base(
         before.len(),
         current.len()
     );
-    if options.tighten {
-        baseline.retire_moves(&base);
-    }
     Ok(recorded)
 }
 
