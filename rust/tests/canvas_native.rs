@@ -1,6 +1,6 @@
 //! Canvas/image integration against the production linked providers.
 use sdl2_sys::{SDL_CreateRGBSurface, SDL_FreeSurface, SDL_Surface};
-use std::ptr;
+use std::{ptr, sync::Once};
 use uqm_rust::graphics::{
     native_abi::{Color, DrawMode, TFB_Image, EXTENT, HOT_SPOT},
     native_canvas::{
@@ -15,7 +15,19 @@ use uqm_rust::graphics::{
 use uqm_rust::threading::legacy_abi::{CreateMutex_Core, DestroyMutex};
 const RGBA_MASKS: (u32, u32, u32, u32) = (0xff, 0xff00, 0xff_0000, 0xff00_0000);
 
+fn init_surface_allocator() {
+    static INIT: Once = Once::new();
+    INIT.call_once(|| {
+        // Production creates its screen surfaces before publishing graphics state.
+        // Do the same cold SIMD allocator setup here: parallel first use can expose
+        // SDL's uninitialized 0xffffffff alignment. Surface operations stay parallel.
+        let _surface = sdl2::surface::Surface::new(1, 1, sdl2::pixels::PixelFormatEnum::RGBA32)
+            .unwrap_or_else(|error| panic!("surface allocator initialization: {error}"));
+    });
+}
+
 unsafe fn surface(w: i32, h: i32, alpha: bool) -> *mut SDL_Surface {
+    init_surface_allocator();
     let amask = if alpha { RGBA_MASKS.3 } else { 0 };
     let s = SDL_CreateRGBSurface(0, w, h, 32, RGBA_MASKS.0, RGBA_MASKS.1, RGBA_MASKS.2, amask);
     assert!(!s.is_null());
@@ -23,6 +35,7 @@ unsafe fn surface(w: i32, h: i32, alpha: bool) -> *mut SDL_Surface {
 }
 
 unsafe fn paletted(w: i32, h: i32) -> *mut SDL_Surface {
+    init_surface_allocator();
     let s = SDL_CreateRGBSurface(0, w, h, 8, 0, 0, 0, 0);
     assert!(!s.is_null());
     s
@@ -288,4 +301,35 @@ fn palette_round_trip_and_transparency_copy_follow_indexed_surface_rules() {
         SDL_FreeSurface(src);
         SDL_FreeSurface(dst);
     }
+}
+
+#[test]
+fn parallel_surface_allocations_keep_independent_pixels_and_formats() {
+    let barrier = std::sync::Barrier::new(8);
+    std::thread::scope(|scope| {
+        for worker in 0..8 {
+            let barrier = &barrier;
+            scope.spawn(move || {
+                barrier.wait();
+                for iteration in 0..32 {
+                    // SAFETY: each worker owns its surfaces through their final free.
+                    unsafe {
+                        let rgba = surface(2, 2, iteration % 2 == 0);
+                        let indexed = paletted(2, 2);
+                        assert!(
+                            ((*rgba).pixels as usize).is_multiple_of(std::mem::align_of::<u32>())
+                        );
+                        let value = rgb(worker, iteration, 42);
+                        put(rgba, 0, 0, value);
+                        assert_eq!(px(rgba, 0, 0), value);
+                        assert_eq!((*(*rgba).format).BytesPerPixel, 4);
+                        assert_eq!((*(*indexed).format).BitsPerPixel, 8);
+                        assert_eq!((*(*(*indexed).format).palette).ncolors, 256);
+                        SDL_FreeSurface(indexed);
+                        SDL_FreeSurface(rgba);
+                    }
+                }
+            });
+        }
+    });
 }
