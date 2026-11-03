@@ -34,6 +34,8 @@ pub const MATRIX: &[ScenarioRow] = &[
     fixture("parity-pool-full", FixtureKind::DevelopmentSetup),
     fixture("parity-frame-sets", FixtureKind::DevelopmentSetup),
     fixture("parity-star-contact", FixtureKind::DevelopmentSetup),
+    fixture("parity-druuge-furnace", FixtureKind::DevelopmentSetup),
+    fixture("parity-slylandro-harvest", FixtureKind::DevelopmentSetup),
     fixture("parity-samatra", FixtureKind::DevelopmentSetup),
     row("load-war-cleared-v1", &[Domain::SaveLoad]),
     row(

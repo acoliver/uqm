@@ -204,6 +204,7 @@ fn special_thrusts_laterally_and_in_reverse_then_restores_the_facing() {
 fn special_arms_the_wait_counters_and_normal_flight_is_untouched() {
     battle_context::run(|| {
         let _battle = Battlefield::new(8);
+        observation::enable();
         unsafe {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_SUPOX_ID, 0);
             ship.ship_mut().ShipFacing = 4;
