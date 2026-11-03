@@ -112,13 +112,11 @@ pub unsafe extern "C" fn DrawShipPiece(
             y: JET_TOP_Y as i16,
         };
     } else {
+        let slots = WorldData::current().read(|world| world.flagship.module_slots);
         if which_piece < EMPTY_SLOT + 2 {
             repair = 1;
             if which_piece < EMPTY_SLOT
-                && (which_slot == 0
-                    || WorldData::current()
-                        .read(|owner| owner.flagship.module_slots[(which_slot - 1) as usize])
-                        < EMPTY_SLOT as BYTE)
+                && (which_slot == 0 || slots[(which_slot - 1) as usize] < EMPTY_SLOT as BYTE)
             {
                 repair += 1;
             }
@@ -127,9 +125,7 @@ pub unsafe extern "C" fn DrawShipPiece(
                 which_piece += 1;
             }
             if which_slot < NUM_MODULE_SLOTS as COUNT - 1
-                && WorldData::current()
-                    .read(|owner| owner.flagship.module_slots[(which_slot + 1) as usize])
-                    < EMPTY_SLOT as BYTE
+                && slots[(which_slot + 1) as usize] < EMPTY_SLOT as BYTE
             {
                 repair = -1;
                 if which_piece == EMPTY_SLOT + 3 || which_slot + 1 == NUM_MODULE_SLOTS as COUNT - 3

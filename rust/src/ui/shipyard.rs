@@ -3,6 +3,8 @@
 //! Shipyard menu, crew transactions and hangar animation, ported from shipyard.c.
 
 use super::sis::game_string;
+mod hangar;
+
 use crate::engine::{Kernel, StoryKey, World, WorldData};
 use crate::navigation::abi::*;
 
@@ -218,72 +220,9 @@ struct ShipWindow {
     right_door: STAMP,
 }
 
-unsafe fn show_combat_ship(menu: *mut MENU_STATE, mut window: COUNT, yanked: *mut SHIP_FRAGMENT) {
-    let world = WorldData::current();
-    let mut windows: [ShipWindow; MAX_BUILT_SHIPS as usize] = mem::zeroed();
-    let mut num_ships: COUNT = 1;
-    if !yanked.is_null() {
-        let info = &mut windows[0];
-        info.ship = yanked;
-        info.left_door.origin = POINT {
-            x: -(SHIP_WIN_WIDTH >> 1),
-            y: 0,
-        };
-        info.right_door.origin = POINT {
-            x: SHIP_WIN_WIDTH >> 1,
-            y: 0,
-        };
-        info.left_door.frame = IncFrameIndex((*menu).ModuleFrame);
-        info.right_door.frame = IncFrameIndex(info.left_door.frame);
-        info.image.origin = POINT {
-            x: (SHIP_WIN_WIDTH >> 1) + 1,
-            y: SHIP_WIN_WIDTH >> 1,
-        };
-        info.image.frame = (*yanked).melee_icon;
-        info.finished.x = HANGAR_X_COORDS[window as usize % HANGAR_SHIPS_ROW as usize];
-        info.finished.y = HANGAR_Y + HANGAR_DY * (window / HANGAR_SHIPS_ROW as COUNT) as i16;
-    } else {
-        let queue = ptr::addr_of_mut!((**world).game.built_ship_q);
-        let mut handle;
-        if window == COUNT::MAX {
-            handle = (*queue).head;
-            num_ships = CountLinks(queue);
-        } else {
-            let tail = (*queue).tail;
-            RemoveQueue(queue, tail);
-            handle = (*queue).head;
-            while !handle.is_null() {
-                let ship = handle.cast::<SHIP_FRAGMENT>();
-                if (*ship).index as COUNT > window {
-                    break;
-                }
-                handle = (*ship).succ;
-            }
-            InsertQueue(queue, tail, handle);
-            handle = tail;
-            (*handle.cast::<SHIP_FRAGMENT>()).index = window as BYTE;
-        }
-        for i in 0..num_ships {
-            let ship = handle.cast::<SHIP_FRAGMENT>();
-            let next = (*ship).succ;
-            let info = &mut windows[i as usize];
-            info.ship = ship;
-            info.left_door.origin = POINT { x: -1, y: 0 };
-            info.right_door.origin = POINT { x: 1, y: 0 };
-            info.left_door.frame = IncFrameIndex((*menu).ModuleFrame);
-            info.right_door.frame = IncFrameIndex(info.left_door.frame);
-            info.image.origin = POINT {
-                x: (SHIP_WIN_WIDTH >> 1) + 1,
-                y: SHIP_WIN_WIDTH >> 1,
-            };
-            info.image.frame = (*ship).melee_icon;
-            window = (*ship).index as COUNT;
-            info.finished.x = HANGAR_X_COORDS[window as usize % HANGAR_SHIPS_ROW as usize];
-            info.finished.y = HANGAR_Y + HANGAR_DY * (window / HANGAR_SHIPS_ROW as COUNT) as i16;
-            handle = next;
-        }
-    }
-    drop(world);
+unsafe fn show_combat_ship(menu: *mut MENU_STATE, window: COUNT, yanked: *mut SHIP_FRAGMENT) {
+    let (mut windows, num_ships) =
+        WorldData::current().read(|world| hangar::prepare_windows(world, &*menu, window, yanked));
     if num_ships != 0 {
         let mut all_finished = false;
         let r = RECT {

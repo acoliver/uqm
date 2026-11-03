@@ -673,9 +673,7 @@ unsafe fn lock_encounter(_h: HLink) -> *mut CEncounter {
 /// # Safety
 /// Calls C FFI functions that access global state.
 pub unsafe extern "C" fn rust_race_communication() {
-    let current_activity = crate::mainloop::ffi::get_current_activity().0;
-
-    if lobyte(current_activity) == IN_LAST_BATTLE {
+    if lobyte(crate::mainloop::ffi::get_current_activity().0) == IN_LAST_BATTLE {
         // Going into talking pet conversation
         let npc_q = npc_built_ship_queue();
         ReinitQueue(npc_q);
@@ -695,8 +693,7 @@ pub unsafe extern "C" fn rust_race_communication() {
         return;
     }
 
-    let next_activity = crate::mainloop::ffi::get_next_activity().0;
-    if (next_activity & CHECK_LOAD) != 0 {
+    if crate::mainloop::ffi::get_next_activity().0 & CHECK_LOAD != 0 {
         let ec = World::current().read(|world| world.story_state(StoryKey::ESCAPE_COUNTER)) as u8;
 
         init_communication(World::current().read(routing::restored_conversation));

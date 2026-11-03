@@ -1,4 +1,4 @@
-use super::rules::{advance_cursor, move_cursor, next_control, next_option};
+use super::rules::{advance_cursor, move_cursor, network_status_side, next_control, next_option};
 
 #[test]
 fn slot_advance_wraps_first_row_and_clamps_at_last_slot() {
@@ -40,4 +40,13 @@ fn controls_cycle_through_all_computer_ratings() {
     assert_eq!(next_control(computer | 32), computer | 64);
     assert_eq!(next_control(computer | 64), human);
     assert_eq!(next_control(NETWORK_CONTROL | 16), human);
+}
+
+#[test]
+fn network_status_selects_only_the_highlighted_network_player() {
+    use crate::battle::{HUMAN_CONTROL, NETWORK_CONTROL};
+    for side in [0, 1] {
+        assert_eq!(network_status_side(side, HUMAN_CONTROL), -1);
+        assert_eq!(network_status_side(side, NETWORK_CONTROL), side as isize);
+    }
 }

@@ -310,11 +310,8 @@ pub(crate) mod runtime {
         }
         SleepThreadUntil((*state).next_time.wrapping_add(MENU_FRAME_RATE));
         (*state).next_time = GetTimeCounter();
-        BOOLEAN::from(
-            WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
-                == 0
-                && !NEXT.is_null(),
-        )
+        let activity = WorldData::current().read(|owner| owner.game.current_activity);
+        BOOLEAN::from(activity & CHECK_ABORT as u16 == 0 && !NEXT.is_null())
     }
     unsafe fn redraw_menu() {
         BatchGraphics();

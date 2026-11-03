@@ -888,10 +888,7 @@ unsafe fn delta_crew(delta: SIZE) {
         if delta < 0 && (**st).crew_enlisted <= (-i32::from(delta)) as COUNT {
             (**st).crew_enlisted = 0;
         } else {
-            (**st).crew_enlisted = ((**st).crew_enlisted as i32 + delta as i32) as COUNT;
-            if (**st).crew_enlisted > cap {
-                (**st).crew_enlisted = cap;
-            }
+            (**st).crew_enlisted = (((**st).crew_enlisted as i32 + delta as i32) as COUNT).min(cap);
         }
     }
     let mut b = [0u8; 60];
@@ -929,10 +926,10 @@ unsafe fn delta_fuel(delta: SIZE) {
         if delta < 0 && (**st).fuel_on_board <= (-i32::from(delta)) as DWORD {
             (**st).fuel_on_board = 0;
         } else {
-            (**st).fuel_on_board = (**st).fuel_on_board.wrapping_add(i32::from(delta) as DWORD);
-            if (**st).fuel_on_board > cap {
-                (**st).fuel_on_board = cap;
-            }
+            (**st).fuel_on_board = (**st)
+                .fuel_on_board
+                .wrapping_add(i32::from(delta) as DWORD)
+                .min(cap);
         }
     }
     let new = ((**st).fuel_on_board / FUEL_TANK_SCALE) as COUNT;

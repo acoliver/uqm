@@ -1218,16 +1218,9 @@ pub(crate) mod runtime {
             (**WorldData::current()).game.current_activity |= CHECK_LOAD as ACTIVITY;
         }
         let activity = WorldData::current().read(|owner| owner.game.current_activity);
-        if activity & CHECK_ABORT as ACTIVITY == 0
-            && (saving != 0 || (pick_state.success == 0 && from_main_menu == 0))
-        {
-            SetTransitionSource(&dlg_rect);
-            BatchGraphics();
-            DrawStamp(&mut dlg_stamp);
-            ScreenTransition(3, &dlg_rect);
-            UnbatchGraphics();
-        }
-        DestroyDrawable(ReleaseDrawable(dlg_stamp.frame));
+        let restore = activity & CHECK_ABORT as ACTIVITY == 0
+            && (saving != 0 || (pick_state.success == 0 && from_main_menu == 0));
+        save_load::restore_display(&mut dlg_stamp, &dlg_rect, restore);
         SetContext(old_context);
         resume_music();
         SetInputCallback(old_callback);

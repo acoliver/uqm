@@ -510,24 +510,16 @@ pub unsafe extern "C" fn DoOutfit(menu: *mut MENU_STATE) -> BOOLEAN {
         SetContext(Kernel::current().read(|owner| owner.space_context));
         DrawStamp(&mut s);
         DestroyDrawable(ReleaseDrawable(s.frame));
-        for slot in 0..NUM_DRIVE_SLOTS {
-            let piece =
-                WorldData::current().read(|owner| owner.flagship.drive_slots[slot as usize]);
-            if piece < EMPTY_SLOT {
-                DrawShipPiece((*menu).ModuleFrame, piece as COUNT, slot as COUNT, 0);
-            }
-        }
-        for slot in 0..NUM_JET_SLOTS {
-            let piece = WorldData::current().read(|owner| owner.flagship.jet_slots[slot as usize]);
-            if piece < EMPTY_SLOT {
-                DrawShipPiece((*menu).ModuleFrame, piece as COUNT, slot as COUNT, 0);
-            }
-        }
-        for slot in 0..NUM_MODULE_SLOTS {
-            let piece =
-                WorldData::current().read(|owner| owner.flagship.module_slots[slot as usize]);
-            if piece < EMPTY_SLOT {
-                DrawShipPiece((*menu).ModuleFrame, piece as COUNT, slot as COUNT, 0);
+        let slots = WorldData::current().read(|world| world.flagship);
+        for pieces in [
+            slots.drive_slots.as_slice(),
+            slots.jet_slots.as_slice(),
+            slots.module_slots.as_slice(),
+        ] {
+            for (slot, &piece) in pieces.iter().enumerate() {
+                if piece < EMPTY_SLOT {
+                    DrawShipPiece((*menu).ModuleFrame, piece as COUNT, slot as COUNT, 0);
+                }
             }
         }
         redistribute_fuel();

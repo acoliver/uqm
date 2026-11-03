@@ -166,11 +166,8 @@ unsafe fn add(cx: &mut Cx<'_>, encounter: *mut ENCOUNTER, universe: POINT) -> Op
         ships = ships.min(MAX_HYPER_SHIPS as u8);
         (*encounter).num_ships = ships;
         for i in 0..ships as usize {
-            let fleet = GetStarShipFromIndex(
-                ptr::addr_of_mut!(cx.world.data.game.avail_race_q),
-                race as u16,
-            )
-            .cast::<FLEET_INFO>();
+            let races = &raw mut cx.world.data.game.avail_race_q;
+            let fleet = GetStarShipFromIndex(races, race as u16).cast::<FLEET_INFO>();
             let brief = &mut (*encounter).ShipList[i];
             brief.race_id = race as u8;
             brief.crew_level = (*fleet).crew_level;

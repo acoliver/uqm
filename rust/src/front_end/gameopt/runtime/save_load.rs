@@ -45,3 +45,16 @@ pub(super) unsafe fn save_load_game(
     DestroyDrawable(ReleaseDrawable(save_stamp.frame));
     success
 }
+
+/// # Safety
+/// The game thread retains the picker drawable and its initialized graphics context.
+pub(super) unsafe fn restore_display(stamp: &mut STAMP, rect: &RECT, restore: bool) {
+    if restore {
+        SetTransitionSource(rect);
+        BatchGraphics();
+        DrawStamp(stamp);
+        ScreenTransition(3, rect);
+        UnbatchGraphics();
+    }
+    DestroyDrawable(ReleaseDrawable(stamp.frame));
+}

@@ -209,8 +209,7 @@ unsafe fn apply(cx: &mut Cx<'_>, effect: Effect) -> Result<Reply, String> {
                 return Ok(Reply::None);
             }
             Effect::ClearStar => {
-                let catalog = crate::planets::starmap::current_catalog();
-                cx.world.select_star(None, catalog);
+                cx.world.select_star(None, None);
                 return Ok(Reply::None);
             }
             Effect::Remove(_) | Effect::ZoomProof(..) => {

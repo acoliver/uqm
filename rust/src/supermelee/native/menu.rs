@@ -85,9 +85,8 @@ pub(crate) mod live {
     pub unsafe extern "C" fn DoMelee(state: *mut MELEE_STATE) -> u32 {
         let time = GetTimeCounter();
         GamePaused = 0;
-        if WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
-            != 0
-        {
+        let activity = WorldFields::current().read(|owner| owner.game.current_activity);
+        if activity & CHECK_ABORT as u16 != 0 {
             return 0;
         }
         SetMenuSounds(15, 16);
@@ -131,10 +130,8 @@ pub(crate) mod live {
                 (*state).last_input_time = GetTimeCounter();
                 next = super::rules::next_option(next, false, true);
             }
-            if KernelOwner::current().read(|owner| owner.player_control[0])
-                & KernelOwner::current().read(|owner| owner.player_control[1])
-                & PSYTRON_CONTROL
-                != 0
+            let controls = KernelOwner::current().read(|owner| owner.player_control);
+            if controls[0] & controls[1] & PSYTRON_CONTROL != 0
                 && GetTimeCounter().wrapping_sub((*state).last_input_time) > 840 * 10
             {
                 force = true;
@@ -149,24 +146,14 @@ pub(crate) mod live {
                 highlight(next, true);
                 if next == 1 || next == 7 {
                     let side = usize::from(next == 1);
-                    status_player(
-                        if KernelOwner::current().read(|owner| owner.player_control[side])
-                            & NETWORK_CONTROL
-                            != 0
-                        {
-                            side as isize
-                        } else {
-                            -1
-                        },
-                    );
+                    let control = KernelOwner::current().read(|owner| owner.player_control[side]);
+                    status_player(super::rules::network_status_side(side, control));
                 }
             }
             if key(KEY_MENU_SELECT) || force {
                 select_option(state);
-                if WorldFields::current().read(|owner| owner.game.current_activity)
-                    & CHECK_ABORT as u16
-                    != 0
-                {
+                let activity = WorldFields::current().read(|owner| owner.game.current_activity);
+                if activity & CHECK_ABORT as u16 != 0 {
                     return 0;
                 }
             }

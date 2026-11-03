@@ -424,19 +424,13 @@ pub(crate) mod runtime {
                     unbatch(state, true);
                     let mut leading: SIZE = 0;
                     GetContextFontLeading(&mut leading);
-                    let (fade, mut y) = text::layout(
+                    state.tfade_r = text::position_lines(
+                        &mut state.text_lines[..state.lines_count as usize],
                         state.clip_r,
-                        state.lines_count as c_int,
                         leading,
                         state.text_vpos,
+                        ScreenWidth,
                     );
-                    state.tfade_r = fade;
-                    for text in &mut state.text_lines[..state.lines_count as usize] {
-                        text.align = TEXT_ALIGN_ALIGN_CENTER;
-                        text.baseline.x = (ScreenWidth / 2) as COORD;
-                        text.baseline.y = y;
-                        y = (y as c_int + leading as c_int) as COORD;
-                    }
                     for text in &mut state.text_lines[..state.lines_count as usize] {
                         draw_text(
                             text,
