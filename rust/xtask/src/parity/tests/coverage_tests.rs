@@ -242,6 +242,107 @@ fn only_plan_approved_absences_may_omit_a_special_callback() {
 }
 
 #[test]
+fn focused_entries_supply_callbacks_only_for_the_species_they_name() {
+    let table = fixture(&[]);
+    let cyborg = corpus(&table, |species, kind| {
+        !(species == 4 && kind == Kind::Special)
+    });
+    let mut covered = observed(&cyborg);
+    covered
+        .observe_callbacks(
+            "S 1 512 crc digest [hook 4 ships::races::fixture_native::special]
+",
+        )
+        .unwrap();
+    covered.validate_with(&table, &[]).unwrap();
+    for focused in [
+        "S 1 512 crc digest [hook 5 ships::races::fixture_native::special]
+",
+        "S 1 512 crc digest [hook 4 ships::races::fixture_native::weapon]
+",
+        "S 1 512 crc digest [hook 4 ships::races::fixture_native::special_missing]
+",
+    ] {
+        let mut coverage = observed(&cyborg);
+        coverage.observe_callbacks(focused).unwrap();
+        assert!(
+            coverage.validate_with(&table, &[]).is_err(),
+            "accepted focused callback {focused}"
+        );
+    }
+}
+
+#[test]
+fn callback_scans_of_other_entries_ignore_their_non_hook_events() {
+    let table = fixture(&[]);
+    let mut coverage = observed(&corpus(&table, |_, _| true));
+    coverage
+        .observe_callbacks(
+            "S 1 512 crc digest [spawn 0 26] [spawn 1 26] [free 0:1] [hook 26 ships::races::fixture_native::special]
+",
+        )
+        .unwrap();
+    coverage.validate_bilateral().unwrap();
+    assert!(coverage
+        .observe(
+            "S 1 512 crc digest [spawn 0 26]
+"
+        )
+        .is_err());
+}
+
+#[test]
+fn focused_callbacks_never_prove_spawns_or_two_opponents() {
+    let mut coverage = coverage::Coverage::default();
+    for species in 1..=25 {
+        for opponent in [species % 25 + 1, (species + 1) % 25 + 1] {
+            coverage
+                .observe_callbacks(&format!(
+                    "S 1 512 crc digest [spawn 0 {species}] [spawn 1 {opponent}] [hook {species} ships::races::fixture_native::intelligence] [hook {opponent} ships::races::fixture_native::intelligence]
+"
+                ))
+                .unwrap();
+        }
+    }
+    assert!(coverage.validate_bilateral().is_err());
+}
+
+#[test]
+fn every_callback_present_still_fails_when_one_species_lacks_two_opponents() {
+    let table = fixture(&[]);
+    let engagements: String = corpus(&table, |_, _| true)
+        .lines()
+        .filter(|line| !line.contains("[spawn 0 7] ") && !line.contains("[spawn 1 7]"))
+        .map(|line| {
+            format!(
+                "{line}
+"
+            )
+        })
+        .collect();
+    let callbacks: String = table
+        .iter()
+        .flat_map(|entry| {
+            [entry.weapon, entry.special]
+                .into_iter()
+                .flatten()
+                .map(move |name| format!(" [hook {} ships::races::{name}]", entry.species))
+        })
+        .collect();
+    let mut coverage = coverage::Coverage::default();
+    coverage.observe(&engagements).unwrap();
+    coverage
+        .observe_callbacks(&format!(
+            "S 1 512 crc digest{callbacks}
+"
+        ))
+        .unwrap();
+    let error = coverage.validate_with(&table, &[]).unwrap_err();
+    assert!(error.contains("25-ship coverage failed"), "{error}");
+    assert!(error.contains("species [7]"), "{error}");
+}
+
+#[test]
 fn melee_callback_table_names_each_species_once_in_order() {
     let species: Vec<u32> = MELEE_SPECIES.iter().map(|entry| entry.species).collect();
     assert_eq!(species, (1..=25).collect::<Vec<_>>());

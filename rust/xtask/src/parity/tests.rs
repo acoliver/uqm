@@ -61,11 +61,11 @@ pub(super) fn corpus_text() -> String {
 }
 
 #[test]
-fn registry_manifest_requires_twelve_corpus_eight_fixtures_and_real_mappings() {
+fn registry_manifest_requires_twelve_corpus_ten_fixtures_and_real_mappings() {
     let text = corpus_text();
     let registry = manifest::parse(&text).unwrap();
-    assert_eq!(registry.entries.len(), 20);
-    assert_eq!(registry.select(None).unwrap().len(), 20);
+    assert_eq!(registry.entries.len(), 22);
+    assert_eq!(registry.select(None).unwrap().len(), 22);
     assert_eq!(
         registry.select(Some("samatra")).unwrap()[0].scenario,
         "parity-samatra"

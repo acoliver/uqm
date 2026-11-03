@@ -165,34 +165,65 @@ pub(super) struct Coverage {
 
 #[derive(Default)]
 struct Battle {
+    /// Whether this trace's spawns and hooks may prove a bilateral engagement.
+    fights: bool,
     live: [Option<u32>; 2],
     fought: [bool; 2],
 }
 
-pub(super) fn check(recording: &Path) -> Result<()> {
+/// Two-opponent evidence comes only from the cyborg fleets. Callback evidence
+/// comes from every corpus entry, because a species' special may fire only in a
+/// focused fixture.
+pub(super) fn check(recording: &Path, entries: &[manifest::Entry]) -> Result<()> {
     let mut coverage = Coverage::default();
     for fleet in ["a", "b", "c", "d"] {
-        let path = recording.join(format!("parity/melee-cyborg-{fleet}/{TRACE}"));
-        coverage.observe(std::str::from_utf8(&read(&path)?).map_err(|error| error.to_string())?)?;
+        coverage.observe(&trace_text(recording, &format!("melee-cyborg-{fleet}"))?)?;
+    }
+    for entry in entries {
+        coverage.observe_callbacks(&trace_text(recording, &entry.name)?)?;
     }
     coverage.validate()
 }
 
+fn trace_text(recording: &Path, entry: &str) -> Result<String> {
+    let path = recording.join(format!("parity/{entry}/{TRACE}"));
+    String::from_utf8(read(&path)?).map_err(|error| error.to_string())
+}
+
 impl Coverage {
     pub fn observe(&mut self, text: &str) -> Result<()> {
-        let mut battle = Battle::default();
+        let steps = self.scan(
+            text,
+            Battle {
+                fights: true,
+                ..Battle::default()
+            },
+        )?;
+        if steps == 0 {
+            return Err("cyborg recording contains no S checkpoints".into());
+        }
+        Ok(())
+    }
+
+    pub fn observe_callbacks(&mut self, text: &str) -> Result<()> {
+        self.scan(text, Battle::default()).map(|_| ())
+    }
+
+    /// Callback-only scans read `hook` events and nothing else: spawns and deaths
+    /// are cyborg identities, which only the melee fleets are required to have.
+    fn scan(&mut self, text: &str, mut battle: Battle) -> Result<usize> {
         let mut steps = 0;
         for line in text.lines().filter(|line| line.starts_with("S ")) {
             steps += 1;
             for fragment in line.split('[').skip(1) {
                 let (event, _) = fragment.split_once(']').ok_or("unclosed parity event")?;
-                self.event(&mut battle, &event.split_whitespace().collect::<Vec<_>>())?;
+                let words = event.split_whitespace().collect::<Vec<_>>();
+                if battle.fights || words.first() == Some(&"hook") {
+                    self.event(&mut battle, &words)?;
+                }
             }
         }
-        if steps == 0 {
-            return Err("cyborg recording contains no S checkpoints".into());
-        }
-        Ok(())
+        Ok(steps)
     }
 
     fn event(&mut self, battle: &mut Battle, words: &[&str]) -> Result<()> {
@@ -233,7 +264,8 @@ impl Coverage {
         if let Some(callback) = name.strip_prefix(RACE_PREFIX) {
             self.record_callback(species, callback);
         }
-        if !name.starts_with("ships::")
+        if !battle.fights
+            || !name.starts_with("ships::")
             || !(name.ends_with("intelligence")
                 || name.contains("::initialize_")
                 || name.ends_with("postprocess"))

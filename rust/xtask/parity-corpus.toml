@@ -98,6 +98,16 @@ name = "star-contact"
 scenario = "parity-star-contact"
 outcome = "success"
 
+[[entry]]
+name = "druuge-furnace"
+scenario = "parity-druuge-furnace"
+outcome = "success"
+
+[[entry]]
+name = "slylandro-harvest"
+scenario = "parity-slylandro-harvest"
+outcome = "success"
+
 # This existing development replay fails in the controller, not by test design.
 [[expectation]]
 scenario = "samatra-dev-fixture-v1"

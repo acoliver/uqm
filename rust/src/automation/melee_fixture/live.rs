@@ -21,6 +21,8 @@ mod frames;
 mod production;
 #[path = "rebirth.rs"]
 mod rebirth;
+#[path = "specials.rs"]
+mod specials;
 #[path = "star.rs"]
 mod star;
 
@@ -249,6 +251,8 @@ impl Battle {
             FixtureName::MixedCollision => combat::mixed(self, world, hooks),
             FixtureName::PoolFull => combat::pool(self, world, hooks),
             FixtureName::FrameSets => frames::advance(self, world, hooks),
+            FixtureName::DruugeFurnace => specials::furnace(self, world),
+            FixtureName::SlylandroHarvest => specials::harvest(self, world),
             FixtureName::StarContact => unreachable!(),
         }
     }

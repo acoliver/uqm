@@ -104,10 +104,10 @@ fn inventory_covers_trace_fields_summaries_counts_and_all_74_save_pairs() {
     let root = directory.path();
     let manifest = fixture(root);
     let expected = manifest.expected_files(root, None).unwrap();
-    assert_eq!(expected.len(), 20 * 3 + 1 + 74 * 2);
+    assert_eq!(expected.len(), 22 * 3 + 1 + 74 * 2);
     inventory::verify(root, &root.join(GOLDEN), &manifest, None).unwrap();
     let value: serde_json::Value = json(&root.join(GOLDEN).join(INVENTORY)).unwrap();
-    assert_eq!(value["files"].as_object().unwrap().len(), 209);
+    assert_eq!(value["files"].as_object().unwrap().len(), 215);
     assert_eq!(
         value["files"]["parity/comm/parity.trace"]["sha256"]
             .as_str()
