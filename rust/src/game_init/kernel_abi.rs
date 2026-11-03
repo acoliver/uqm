@@ -113,7 +113,7 @@ pub unsafe extern "C" fn LoadKernel(argc: i32, argv: *mut *mut c_char) -> u32 {
         map.cast(),
     ));
     DestroyStringTable(ReleaseStringTable(map));
-    crate::navigation::globals::GlobData
+    (*crate::ships::native::abi::GLOBDATA::current())
         .Game_state
         .CurrentActivity = u16::MAX;
     1

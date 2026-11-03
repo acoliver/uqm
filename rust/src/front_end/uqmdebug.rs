@@ -203,7 +203,7 @@ pub struct UniverseRecurseArg<'a, T> {
 #[cfg(not(test))]
 mod runtime {
     use super::*;
-    use crate::navigation::globals::GlobData;
+
     use crate::planets::tables::{PLANET_ARRAY as planet_array, STARMAP_ARRAY as starmap_array};
     use crate::state::game_state_keys::{get_game_state, set_game_state};
     use libc::FILE;
@@ -286,7 +286,11 @@ mod runtime {
         LockGameClock();
         let mut done = skipHEE == 0;
         loop {
-            let handle = GlobData.Game_state.GameClock.event_q.head;
+            let handle = (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .GameClock
+                .event_q
+                .head;
             if handle.is_null() {
                 return;
             }
@@ -300,7 +304,11 @@ mod runtime {
                 event.day_index as COUNT,
             );
             loop {
-                let clock = &*ptr::addr_of!(GlobData.Game_state.GameClock);
+                let clock = &*ptr::addr_of!(
+                    (*crate::ships::native::abi::GLOBDATA::current())
+                        .Game_state
+                        .GameClock
+                );
                 if clock.year_index > year
                     || (clock.year_index == year
                         && (clock.month_index as COUNT > month
@@ -334,7 +342,13 @@ mod runtime {
     pub unsafe fn dumpEvents(out: *mut FILE) {
         LockGameClock();
         crate::collections::queue::for_all_links(
-            ptr::addr_of_mut!(GlobData.Game_state.GameClock.event_q).cast(),
+            ptr::addr_of_mut!(
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .Game_state
+                    .GameClock
+                    .event_q
+            )
+            .cast(),
             |event| dumpEvent(out, ptr::from_mut(event).cast()),
         );
         UnlockGameClock();
@@ -343,14 +357,22 @@ mod runtime {
     /// # Safety
     /// Must run on the game thread with initialized SIS and optional solar system.
     pub unsafe fn equipShip() {
-        if GlobData.Game_state.CurrentActivity as u8 as u32 == SUPER_MELEE {
+        if (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity as u8 as u32
+            == SUPER_MELEE
+        {
             return;
         }
         for i in 0..NUM_DRIVE_SLOTS as usize {
-            GlobData.SIS_state.DriveSlots[i] = FUSION_THRUSTER as BYTE;
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .SIS_state
+                .DriveSlots[i] = FUSION_THRUSTER as BYTE;
         }
         for i in 0..NUM_JET_SLOTS as usize {
-            GlobData.SIS_state.JetSlots[i] = TURNING_JETS as BYTE;
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .SIS_state
+                .JetSlots[i] = TURNING_JETS as BYTE;
         }
         set_game_state(
             "LANDER_SHIELDS",
@@ -383,10 +405,14 @@ mod runtime {
                 CANNON_WEAPON,
                 CANNON_WEAPON,
             ] {
-                GlobData.SIS_state.ModuleSlots[i] = module as BYTE;
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .SIS_state
+                    .ModuleSlots[i] = module as BYTE;
                 i += 1;
             }
-            GlobData.SIS_state.NumLanders = MAX_LANDERS as BYTE;
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .SIS_state
+                .NumLanders = MAX_LANDERS as BYTE;
         } else {
             i = NUM_BOMB_MODULES as usize;
             for module in [
@@ -397,29 +423,44 @@ mod runtime {
                 CANNON_WEAPON,
                 SHIVA_FURNACE,
             ] {
-                GlobData.SIS_state.ModuleSlots[i] = module as BYTE;
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .SIS_state
+                    .ModuleSlots[i] = module as BYTE;
                 i += 1;
             }
         }
         assert!(i <= NUM_MODULE_SLOTS as usize);
-        GlobData.SIS_state.FuelOnBoard = FUEL_RESERVE as _;
-        GlobData.SIS_state.CrewEnlisted = 0;
+        (*crate::ships::native::abi::GLOBDATA::current())
+            .SIS_state
+            .FuelOnBoard = FUEL_RESERVE as _;
+        (*crate::ships::native::abi::GLOBDATA::current())
+            .SIS_state
+            .CrewEnlisted = 0;
         for i in 0..NUM_MODULE_SLOTS as usize {
-            match GlobData.SIS_state.ModuleSlots[i] as u32 {
+            match (*crate::ships::native::abi::GLOBDATA::current())
+                .SIS_state
+                .ModuleSlots[i] as u32
+            {
                 CREW_POD => {
-                    GlobData.SIS_state.CrewEnlisted = GlobData
+                    (*crate::ships::native::abi::GLOBDATA::current())
+                        .SIS_state
+                        .CrewEnlisted = (*crate::ships::native::abi::GLOBDATA::current())
                         .SIS_state
                         .CrewEnlisted
                         .wrapping_add(CREW_POD_CAPACITY as _)
                 }
                 FUEL_TANK => {
-                    GlobData.SIS_state.FuelOnBoard = GlobData
+                    (*crate::ships::native::abi::GLOBDATA::current())
+                        .SIS_state
+                        .FuelOnBoard = (*crate::ships::native::abi::GLOBDATA::current())
                         .SIS_state
                         .FuelOnBoard
                         .wrapping_add(FUEL_TANK_CAPACITY as _)
                 }
                 HIGHEFF_FUELSYS => {
-                    GlobData.SIS_state.FuelOnBoard = GlobData
+                    (*crate::ships::native::abi::GLOBDATA::current())
+                        .SIS_state
+                        .FuelOnBoard = (*crate::ships::native::abi::GLOBDATA::current())
                         .SIS_state
                         .FuelOnBoard
                         .wrapping_add(HEFUEL_TANK_CAPACITY as _)
@@ -431,7 +472,11 @@ mod runtime {
             (*pSolarSysState).max_ship_speed = (5 * IP_SHIP_THRUST_INCREMENT) as BYTE;
             for i in 0..NUM_DRIVE_SLOTS as usize {
                 // Preserve the original C subscript: DriveSlots[i == FUSION_THRUSTER].
-                if GlobData.SIS_state.DriveSlots[usize::from(i == FUSION_THRUSTER as usize)] != 0 {
+                if (*crate::ships::native::abi::GLOBDATA::current())
+                    .SIS_state
+                    .DriveSlots[usize::from(i == FUSION_THRUSTER as usize)]
+                    != 0
+                {
                     (*pSolarSysState).max_ship_speed = (*pSolarSysState)
                         .max_ship_speed
                         .wrapping_add(IP_SHIP_THRUST_INCREMENT as BYTE);
@@ -439,14 +484,22 @@ mod runtime {
             }
             (*pSolarSysState).turn_wait = IP_SHIP_TURN_WAIT as BYTE;
             for i in 0..NUM_JET_SLOTS as usize {
-                if GlobData.SIS_state.JetSlots[i] == TURNING_JETS as BYTE {
+                if (*crate::ships::native::abi::GLOBDATA::current())
+                    .SIS_state
+                    .JetSlots[i]
+                    == TURNING_JETS as BYTE
+                {
                     (*pSolarSysState).turn_wait = (*pSolarSysState)
                         .turn_wait
                         .wrapping_sub(IP_SHIP_TURN_DECREMENT as BYTE);
                 }
             }
         }
-        if inHQSpace() != 0 || GlobData.Game_state.CurrentActivity as u8 as u32 == IN_INTERPLANETARY
+        if inHQSpace() != 0
+            || (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity as u8 as u32
+                == IN_INTERPLANETARY
         {
             DeltaSISGauges(
                 UNDEFINED_DELTA as _,
@@ -489,7 +542,11 @@ mod runtime {
     /// # Safety
     /// Must run on the game thread with the escort queue initialized.
     pub unsafe fn clearEscorts() {
-        let queue = ptr::addr_of_mut!(GlobData.Game_state.built_ship_q);
+        let queue = ptr::addr_of_mut!(
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .built_ship_q
+        );
         clear_escort_queue(queue.cast());
         DeltaSISGauges(
             UNDEFINED_DELTA as _,
@@ -515,8 +572,8 @@ mod runtime {
         let (log_x, log_y) = log_units();
         let universe_x = ((MAX_X_UNIVERSE as i32 + 1) >> 4) * 10;
         let universe_y = (MAX_Y_UNIVERSE as i32 + 1) >> 4;
-        let game = ptr::addr_of_mut!(GlobData.Game_state);
-        let sis = ptr::addr_of_mut!(GlobData.SIS_state);
+        let game = ptr::addr_of_mut!((*crate::ships::native::abi::GLOBDATA::current()).Game_state);
+        let sis = ptr::addr_of_mut!((*crate::ships::native::abi::GLOBDATA::current()).SIS_state);
         if (*game).autopilot.x == -1 || (*game).autopilot.y == -1 {
             (*game).autopilot.x =
                 (((*sis).log_x.wrapping_mul(universe_x) + (log_x >> 1)) / log_x) as COORD;
@@ -547,7 +604,10 @@ mod runtime {
     /// # Safety
     /// Must run on the game thread with the race queue initialized.
     pub unsafe fn showSpheres() {
-        let mut handle = GlobData.Game_state.avail_race_q.head;
+        let mut handle = (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .avail_race_q
+            .head;
         while !handle.is_null() {
             let fleet = handle.cast::<FLEET_INFO>();
             let next = (*fleet).succ;
@@ -563,7 +623,10 @@ mod runtime {
     /// # Safety
     /// Must run on the game thread with the race queue initialized.
     pub unsafe fn activateAllShips() {
-        let mut handle = GlobData.Game_state.avail_race_q.head;
+        let mut handle = (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .avail_race_q
+            .head;
         while !handle.is_null() {
             let fleet = handle.cast::<FLEET_INFO>();
             let next = (*fleet).succ;
@@ -642,11 +705,15 @@ mod runtime {
             return;
         }
         LockGameClock();
-        let saved_activity = GlobData.Game_state.CurrentActivity;
+        let saved_activity = (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity;
         DISABLE_INTERACTIVITY = 1;
         forAllStars(starRecurse, arg);
         DISABLE_INTERACTIVITY = 0;
-        GlobData.Game_state.CurrentActivity = saved_activity;
+        (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity = saved_activity;
         UnlockGameClock();
     }
     unsafe fn starRecurse<T>(star: *mut STAR_DESC, recurse: &mut UniverseRecurseArg<'_, T>) {
@@ -827,7 +894,12 @@ mod runtime {
         libc::fprintf(
             out,
             c"- %-37s  %s\n".as_ptr(),
-            ptr::addr_of!(GlobData.SIS_state.PlanetName).cast::<c_char>(),
+            ptr::addr_of!(
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .SIS_state
+                    .PlanetName
+            )
+            .cast::<c_char>(),
             planetTypeString(((*planet).data_index & !(PLANET_SHIELDED as BYTE)) as c_int),
         );
         dumpWorld(out, planet);
@@ -1021,7 +1093,9 @@ mod runtime {
             );
             result = result.wrapping_add(
                 ((info.density >> 8) as u32
-                    * GlobData.Game_state.ElementWorth[element_category(info.type_ as usize)]
+                    * (*crate::ships::native::abi::GLOBDATA::current())
+                        .Game_state
+                        .ElementWorth[element_category(info.type_ as usize)]
                         as u32) as COUNT,
             );
         }
@@ -1254,7 +1328,13 @@ mod runtime {
     /// # Safety
     /// Must run on the game thread with battle and status context initialized.
     pub unsafe fn resetCrewBattle() {
-        if GlobData.Game_state.CurrentActivity & IN_BATTLE as ACTIVITY == 0 || inHQSpace() != 0 {
+        if (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity
+            & IN_BATTLE as ACTIVITY
+            == 0
+            || inHQSpace() != 0
+        {
             return;
         }
         crate::app::bridge::enter(|cx| {
@@ -1274,7 +1354,13 @@ mod runtime {
     /// # Safety
     /// Must run on the game thread with battle and status context initialized.
     pub unsafe fn resetEnergyBattle() {
-        if GlobData.Game_state.CurrentActivity & IN_BATTLE as ACTIVITY == 0 || inHQSpace() != 0 {
+        if (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity
+            & IN_BATTLE as ACTIVITY
+            == 0
+            || inHQSpace() != 0
+        {
             return;
         }
         crate::app::bridge::enter(|cx| {

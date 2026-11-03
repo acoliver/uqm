@@ -76,7 +76,7 @@ pub(crate) mod live {
         static mut SpaceJunkFrame: *mut crate::graphics::native_abi::frame_desc;
         static mut optWhichFonts: i32;
         static mut ScreenWidth: i32;
-        static mut GlobData: crate::ships::native::abi::GLOBDATA;
+
     }
 
     unsafe fn clear() {
@@ -166,7 +166,13 @@ pub(crate) mod live {
                         next = t.p_str.cast();
                         let c = getCharFromString(&mut next);
                         font_DrawText(std::ptr::from_mut(&mut t).cast());
-                        if sleepy && GlobData.Game_state.CurrentActivity & (1 << 14) == 0 {
+                        if sleepy
+                            && (*crate::ships::native::abi::GLOBDATA::current())
+                                .Game_state
+                                .CurrentActivity
+                                & (1 << 14)
+                                == 0
+                        {
                             crate::battle::sounds::play_sound(
                                 (sounds).cast(),
                                 NotPositional(),

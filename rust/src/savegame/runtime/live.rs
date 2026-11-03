@@ -27,8 +27,7 @@ use crate::engine::battle::access::live_queues;
 use crate::savegame::types::{StarDesc, Summary};
 
 extern "C" {
-    #[link_name = "GlobData"]
-    static mut GLOB_DATA: crate::ships::native::abi::GLOBDATA;
+
     #[link_name = "CurStarDescPtr"]
     static mut CUR_STAR_DESC_PTR: *mut crate::savegame::runtime::star::CStarDesc;
     #[link_name = "star_array"]
@@ -60,7 +59,7 @@ impl GameStrings for LiveGameStrings {
 /// NULL or point at the live solar-system state, and `CurStarDescPtr` must be
 /// NULL or point at a catalog entry.
 pub unsafe fn capture_live_summary(name: &[u8]) -> Result<Summary, SummaryError> {
-    let glob = &*std::ptr::addr_of!(GLOB_DATA);
+    let glob = &*std::ptr::addr_of!((*crate::ships::native::abi::GLOBDATA::current()));
     let state = solar_system::current();
     let current = std::ptr::addr_of!(CUR_STAR_DESC_PTR).read();
     let solar = SolarSystem::new(
@@ -149,7 +148,7 @@ pub unsafe fn prepare_live_solar_location() -> Result<(), LiveLocationError> {
     let current = std::ptr::addr_of!(CUR_STAR_DESC_PTR).read();
     let star_index =
         star::catalog_index(live_catalog(), current).map_err(LiveLocationError::Star)?;
-    let glob = &mut *std::ptr::addr_of_mut!(GLOB_DATA);
+    let glob = &mut *std::ptr::addr_of_mut!((*crate::ships::native::abi::GLOBDATA::current()));
     location::save_solar_location(
         &mut *std::ptr::addr_of_mut!(glob.Game_state).cast::<crate::comm::locdata::CGameState>(),
         &*state,
@@ -171,7 +170,7 @@ pub unsafe fn prepare_live_hyper_state() -> Result<HyperFlagship, HyperSaveError
     let player_ships = &*live_queues::player_ships(RPG_PLAYER_NUM as usize);
     // SAFETY: the save operation retains the published game-thread Kernel.
     let display_list = unsafe { &*live_queues::display_list() };
-    let glob = &mut *std::ptr::addr_of_mut!(GLOB_DATA);
+    let glob = &mut *std::ptr::addr_of_mut!((*crate::ships::native::abi::GLOBDATA::current()));
     hyper_save::save_hyper_facing(
         &mut *std::ptr::addr_of_mut!(glob.Game_state).cast::<crate::comm::locdata::CGameState>(),
         player_ships,

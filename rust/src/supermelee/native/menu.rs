@@ -58,7 +58,11 @@ pub(crate) mod live {
                     PlayMenuSound(2);
                 }
             }
-            9 => GlobData.Game_state.CurrentActivity |= CHECK_ABORT as u16,
+            9 => {
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .Game_state
+                    .CurrentActivity |= CHECK_ABORT as u16
+            }
             0 | 8 => {
                 let side = u16::from((*state).melee_option == 0);
                 let confirmed = MeleeConnectDialog(&mut (*state).netplay, side as i32);
@@ -80,7 +84,12 @@ pub(crate) mod live {
     pub unsafe extern "C" fn DoMelee(state: *mut MELEE_STATE) -> u32 {
         let time = GetTimeCounter();
         GamePaused = 0;
-        if GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 != 0 {
+        if (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity
+            & CHECK_ABORT as u16
+            != 0
+        {
             return 0;
         }
         SetMenuSounds(15, 16);
@@ -148,7 +157,12 @@ pub(crate) mod live {
             }
             if key(KEY_MENU_SELECT) || force {
                 select_option(state);
-                if GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 != 0 {
+                if (*crate::ships::native::abi::GLOBDATA::current())
+                    .Game_state
+                    .CurrentActivity
+                    & CHECK_ABORT as u16
+                    != 0
+                {
                     return 0;
                 }
             }
@@ -247,7 +261,9 @@ pub(crate) mod live {
         state.current_ship = 255;
         state.cur_index = u16::MAX;
         InitMeleeLoadState(&mut state);
-        GlobData.Game_state.CurrentActivity = SUPER_MELEE as u16;
+        (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity = SUPER_MELEE as u16;
         Kernel::current().game_sounds = capture_sound(LoadSound(GAME_SOUNDS.as_ptr().cast()));
         crate::supermelee::native::battle_picker::live::BuildPickMeleeFrame();
         MeleeFrame = CaptureDrawable(LoadGraphic(MELEE_SCREEN_PMAP_ANIM.as_ptr().cast()).cast());

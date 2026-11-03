@@ -1,7 +1,6 @@
 //! Main-thread lifecycle callbacks, ported from starcon.c (GPL-2.0-or-later).
 #![allow(non_snake_case)]
 
-use crate::navigation::globals::GlobData;
 use crate::ships::native::abi::*;
 use std::{ffi::c_void, ptr};
 
@@ -20,7 +19,12 @@ unsafe extern "C" fn on_battle_frame() {
             counter - u8::from(counter > 0)
         },
     );
-    if GlobData.Game_state.CurrentActivity & (CHECK_ABORT | CHECK_LOAD) as u16 == 0 {
+    if (*crate::ships::native::abi::GLOBDATA::current())
+        .Game_state
+        .CurrentActivity
+        & (CHECK_ABORT | CHECK_LOAD) as u16
+        == 0
+    {
         crate::navigation::hyper_radar::SeedUniverse();
     }
     crate::ui::sis::DrawAutoPilotMessage(0);
@@ -31,7 +35,11 @@ unsafe extern "C" fn background_init_kernel(timeout: u32) {
     crate::threading::legacy_abi::TaskSwitch();
     crate::game_init::kernel_abi::InitGameKernel();
     while crate::time::counter_abi::GetTimeCounter() <= timeout
-        && GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 == 0
+        && (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity
+            & CHECK_ABORT as u16
+            == 0
     {
         super::input_abi::UpdateInputState();
         if crate::time::source::is_replay() {
@@ -63,7 +71,9 @@ pub unsafe fn uqm_battle_with_frame_callback() {
 /// Called on the game thread while live state and input are initialized.
 pub unsafe extern "C" fn SignalStopMainThread() {
     ptr::addr_of_mut!(GamePaused).write_volatile(0);
-    GlobData.Game_state.CurrentActivity |= CHECK_ABORT as u16;
+    (*crate::ships::native::abi::GLOBDATA::current())
+        .Game_state
+        .CurrentActivity |= CHECK_ABORT as u16;
     crate::threading::legacy_abi::TaskSwitch();
 }
 

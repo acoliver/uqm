@@ -31,31 +31,35 @@ mod live {
 
     use crate::ui::sis::ClearSISRect;
 
-    extern "C" {
-        static mut GlobData: crate::ships::native::abi::GLOBDATA;
-    }
+    extern "C" {}
     use crate::threading::pacing::linked::sleep_thread as SleepThread;
     impl MelnormApi for LiveScript<Handler> {
         fn ship(&self) -> CSisState {
             unsafe {
-                std::ptr::addr_of!(GlobData.SIS_state)
+                std::ptr::addr_of!((*crate::ships::native::abi::GLOBDATA::current()).SIS_state)
                     .cast::<CSisState>()
                     .read()
             }
         }
         fn set_ship(&mut self, ship: CSisState) {
             unsafe {
-                std::ptr::addr_of_mut!(GlobData.SIS_state)
+                std::ptr::addr_of_mut!((*crate::ships::native::abi::GLOBDATA::current()).SIS_state)
                     .cast::<CSisState>()
                     .write(ship);
             }
         }
         fn module_cost(&self, id: usize) -> u8 {
-            unsafe { GlobData.Game_state.ModuleCost[id] }
+            unsafe {
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .Game_state
+                    .ModuleCost[id]
+            }
         }
         fn set_module_cost(&mut self, id: usize, cost: u8) {
             unsafe {
-                GlobData.Game_state.ModuleCost[id] = cost;
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .Game_state
+                    .ModuleCost[id] = cost;
             }
         }
         fn number(&mut self, number: i32) {

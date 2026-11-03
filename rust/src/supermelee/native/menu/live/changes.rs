@@ -289,5 +289,7 @@ pub unsafe extern "C" fn resetFeedback(conn: *mut NetConnection, reason: u32, re
             false,
         );
     }
-    GlobData.Game_state.CurrentActivity |= CHECK_ABORT as u16;
+    (*crate::ships::native::abi::GLOBDATA::current())
+        .Game_state
+        .CurrentActivity |= CHECK_ABORT as u16;
 }

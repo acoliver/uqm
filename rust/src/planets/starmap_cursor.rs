@@ -45,7 +45,7 @@ use crate::planets::pstarmap::UpdateCursorLocation;
 extern "C" {
     static mut ScreenWidth: i32;
     static mut ScreenHeight: i32;
-    static mut GlobData: crate::ships::native::abi::GLOBDATA;
+
     static mut CurStarDescPtr: *mut crate::savegame::runtime::star::CStarDesc;
 }
 use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
@@ -69,7 +69,7 @@ pub unsafe fn cursor() -> Option<(i16, i16)> {
 pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> u32 {
     use crate::c_bindings::controller_input::PulsedInputState;
     let time_in = crate::time::counter_abi::GetTimeCounter();
-    let glob = std::ptr::addr_of_mut!(GlobData);
+    let glob = std::ptr::addr_of_mut!((*crate::ships::native::abi::GLOBDATA::current()));
     let activity = (*glob).Game_state.CurrentActivity;
     let hyper = activity & 0xff == 3;
     let last = std::ptr::addr_of_mut!(LAST_BUF).cast::<u8>();

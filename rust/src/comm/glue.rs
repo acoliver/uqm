@@ -41,9 +41,7 @@ pub unsafe fn resolve_phrase(phrases_handle: *const c_void, index: i32) -> Optio
 
     use crate::strings::string_table::GetStringAddress;
 
-    extern "C" {
-        static mut GlobData: crate::ships::native::abi::GLOBDATA;
-    }
+    extern "C" {}
 
     if index == PHRASE_NOOP {
         return None;
@@ -52,10 +50,18 @@ pub unsafe fn resolve_phrase(phrases_handle: *const c_void, index: i32) -> Optio
     unsafe {
         let ptr = if index == GLOBAL_PLAYER_NAME {
             // Direct GlobData.SIS_state.CommanderName access
-            std::ptr::addr_of_mut!(GlobData.SIS_state.CommanderName) as *const u8
+            std::ptr::addr_of_mut!(
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .SIS_state
+                    .CommanderName
+            ) as *const u8
         } else if index == GLOBAL_SHIP_NAME {
             // Direct GlobData.SIS_state.ShipName access
-            std::ptr::addr_of_mut!(GlobData.SIS_state.ShipName) as *const u8
+            std::ptr::addr_of_mut!(
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .SIS_state
+                    .ShipName
+            ) as *const u8
         } else if index < 0 {
             crate::comm::ffi::get_alliance_name(index)
         } else if !phrases_handle.is_null() {

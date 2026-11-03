@@ -199,7 +199,11 @@ pub mod live {
             .as_ref()
             .unwrap_or_else(|| panic!("missing net"))
             .all_connected()
-            || GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 != 0;
+            || (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity
+                & CHECK_ABORT as u16
+                != 0;
         let mut done = true;
         if !abort {
             for player in 0..2 {
@@ -232,7 +236,9 @@ pub mod live {
                     p.hBattleShip = ptr::null_mut();
                 }
             }
-            GlobData.Game_state.CurrentActivity &= !(CHECK_ABORT as u16);
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity &= !(CHECK_ABORT as u16);
             0
         } else {
             u32::from(!done)
@@ -448,7 +454,11 @@ pub mod live {
             }
             Async_process();
             SleepThread(840 / 40);
-            if GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 != 0
+            if (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity
+                & CHECK_ABORT as u16
+                != 0
                 || button
                 || (PlayerControl[0] & PlayerControl[1] & PSYTRON_CONTROL != 0
                     && GetTimeCounter() >= timeout)
@@ -517,7 +527,9 @@ pub mod live {
             net.set_state(NetState_NetState_interBattle);
         }
         if !ok {
-            GlobData.Game_state.CurrentActivity &= !(IN_BATTLE as u16);
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity &= !(IN_BATTLE as u16);
         }
         net.bind_picker(mask, ptr::null_mut());
         u32::from(ok)

@@ -20,9 +20,13 @@ struct Battle {
 }
 impl Battle {
     unsafe fn new(capacity: COUNT) -> Self {
-        let activity = GlobData.Game_state.CurrentActivity;
+        let activity = (*uqm_rust::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity;
         let pool = PoolBattle::new(capacity);
-        GlobData.Game_state.CurrentActivity = 0;
+        (*uqm_rust::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity = 0;
         Self {
             _pool: pool,
             activity,
@@ -32,7 +36,9 @@ impl Battle {
 impl Drop for Battle {
     fn drop(&mut self) {
         unsafe {
-            GlobData.Game_state.CurrentActivity = self.activity;
+            (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity = self.activity;
         }
     }
 }
@@ -916,7 +922,9 @@ fn ai_encounter_weapon_range_recharge_range_and_close_pursuit_boundaries() {
             (0, 15, 20, 14, MOVEMENT_STATE_PURSUE, MOVEMENT_STATE_PURSUE),
             (0, 6, 19, 14, MOVEMENT_STATE_AVOID, MOVEMENT_STATE_AVOID),
         ] {
-            GlobData.Game_state.CurrentActivity = activity;
+            (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity = activity;
             concerns[0].which_turn = turns;
             concerns[0].MoveState = move_state;
             concerns[2].ObjectPtr = enemy.ptr();

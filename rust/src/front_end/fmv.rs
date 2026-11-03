@@ -5,7 +5,7 @@
 pub(crate) mod runtime {
     use super::super::intro::ShowPresentation;
     use crate::navigation::abi::*;
-    use crate::navigation::globals::GlobData;
+
     use std::ptr;
 
     // uqm/fmv.h defines WANT_SHIP_SPINS unconditionally in this configuration.
@@ -71,14 +71,26 @@ pub(crate) mod runtime {
         if let Some(callback) = process {
             callback(timeout);
         }
-        if GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 != 0 {
+        if (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity
+            & CHECK_ABORT as u16
+            != 0
+        {
             return;
         }
         WaitForAnyButton(0, ONE_SECOND * 3, 1);
-        if GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 != 0 {
+        if (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity
+            & CHECK_ABORT as u16
+            != 0
+        {
             return;
         }
-        GlobData.Game_state.CurrentActivity &= !(CHECK_ABORT as u16);
+        (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity &= !(CHECK_ABORT as u16);
         SleepThreadUntil(FadeScreen(
             ScreenFadeType_FadeAllToBlack,
             (ONE_SECOND / 2) as SIZE,

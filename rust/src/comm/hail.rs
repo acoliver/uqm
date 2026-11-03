@@ -73,7 +73,7 @@ pub(super) mod c_bridge {
         pub static mut optSmoothScroll: c_int;
         pub static mut CommWndRect: crate::comm::locdata::CRect;
         pub static mut GameStrings: *mut crate::strings::string_table::StringTableEntry;
-        pub static mut GlobData: crate::ships::native::abi::GLOBDATA;
+
     }
     pub use crate::graphics::gfx_common_abi::BatchGraphics;
     pub use crate::sound::heart_ffi::DestroyMusic;
@@ -133,7 +133,11 @@ unsafe fn draw_sis_com_window() {
 unsafe fn planet_name() -> *const std::ffi::c_char {
     // GlobData.SIS_state.PlanetName is a char[16] array
     // Use addr_of_mut! to avoid creating a shared reference to mutable static
-    let planet_name_ptr = std::ptr::addr_of_mut!(c_bridge::GlobData.SIS_state.PlanetName);
+    let planet_name_ptr = std::ptr::addr_of_mut!(
+        (*crate::ships::native::abi::GLOBDATA::current())
+            .SIS_state
+            .PlanetName
+    );
     planet_name_ptr as *const std::ffi::c_char
 }
 

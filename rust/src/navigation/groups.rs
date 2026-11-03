@@ -144,7 +144,7 @@ pub(crate) mod live {
     use super::*;
     use crate::navigation::abi::*;
     use crate::navigation::get;
-    use crate::navigation::globals::GlobData;
+
     use crate::planets::starmap::{star_array, CurStarDescPtr};
     use crate::state::c_api::{
         CloseStateFile, DeleteStateFile, LengthStateFile, OpenStateFile, SeekStateFile,
@@ -160,13 +160,25 @@ pub(crate) mod live {
         0x11, 0x51, 0x51, 0x51, 0, 0x51, 0x51,
     ];
     unsafe fn ip_queue() -> *mut QUEUE {
-        ptr::addr_of_mut!(GlobData.Game_state.ip_group_q)
+        ptr::addr_of_mut!(
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .ip_group_q
+        )
     }
     unsafe fn npc_queue() -> *mut QUEUE {
-        ptr::addr_of_mut!(GlobData.Game_state.npc_built_ship_q)
+        ptr::addr_of_mut!(
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .npc_built_ship_q
+        )
     }
     unsafe fn fleet_queue() -> *mut QUEUE {
-        ptr::addr_of_mut!(GlobData.Game_state.avail_race_q)
+        ptr::addr_of_mut!(
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .avail_race_q
+        )
     }
     unsafe fn count(queue: *const QUEUE) -> u8 {
         let mut handle = (*queue).head;
@@ -363,8 +375,17 @@ pub(crate) mod live {
                 let next = group.succ;
                 let id = group.group_id;
                 if group.in_system == 0 {
-                    if GlobData.Game_state.BattleGroupRef != 0 {
-                        PutGroupInfo(GlobData.Game_state.BattleGroupRef, id);
+                    if (*crate::ships::native::abi::GLOBDATA::current())
+                        .Game_state
+                        .BattleGroupRef
+                        != 0
+                    {
+                        PutGroupInfo(
+                            (*crate::ships::native::abi::GLOBDATA::current())
+                                .Game_state
+                                .BattleGroupRef,
+                            id,
+                        );
                     } else {
                         flush(header, 0, id, file);
                     }
@@ -503,8 +524,17 @@ pub(crate) mod live {
             seek(file, header.GroupOffset[0]);
             LAST_ENCOUNTER_GROUP = read::<1>(file)[0];
             if LAST_ENCOUNTER_GROUP != 0 {
-                if GlobData.Game_state.BattleGroupRef != 0 {
-                    PutGroupInfo(GlobData.Game_state.BattleGroupRef, LAST_ENCOUNTER_GROUP);
+                if (*crate::ships::native::abi::GLOBDATA::current())
+                    .Game_state
+                    .BattleGroupRef
+                    != 0
+                {
+                    PutGroupInfo(
+                        (*crate::ships::native::abi::GLOBDATA::current())
+                            .Game_state
+                            .BattleGroupRef,
+                        LAST_ENCOUNTER_GROUP,
+                    );
                 } else {
                     flush(&mut header, offset, LAST_ENCOUNTER_GROUP, file);
                 }

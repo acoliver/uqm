@@ -2,7 +2,7 @@
 #![cfg(not(test))]
 
 use crate::navigation::abi::*;
-use crate::navigation::globals::GlobData;
+
 use std::{
     ffi::{c_char, c_int},
     mem, ptr,
@@ -443,7 +443,14 @@ unsafe extern "C" fn do_melee_connect_dialog(state: *mut ConnectDialogState) -> 
     }
     SleepThreadUntil((*state).next_time.wrapping_add(MENU_FRAME_RATE));
     (*state).next_time = GetTimeCounter();
-    BOOLEAN::from(GlobData.Game_state.CurrentActivity & CHECK_ABORT as ACTIVITY == 0 && DONE == 0)
+    BOOLEAN::from(
+        (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity
+            & CHECK_ABORT as ACTIVITY
+            == 0
+            && DONE == 0,
+    )
 }
 
 /// # Safety

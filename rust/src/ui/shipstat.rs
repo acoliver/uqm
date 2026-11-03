@@ -208,7 +208,12 @@ unsafe fn draw_status_title(
     {
         DrawCrewFuelString(y, 0);
         draw_ship_name_string(
-            std::ptr::addr_of_mut!(crate::navigation::globals::GlobData.SIS_state.ShipName).cast(),
+            std::ptr::addr_of_mut!(
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .SIS_state
+                    .ShipName
+            )
+            .cast(),
             !0,
             y,
         );

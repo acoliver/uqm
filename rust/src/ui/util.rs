@@ -67,7 +67,7 @@ fn box_rectangles(
 pub(crate) mod live {
     use super::*;
     use crate::navigation::abi::*;
-    use crate::navigation::globals::GlobData;
+
     use std::{mem, ptr};
 
     /// # Safety
@@ -127,12 +127,18 @@ pub(crate) mod live {
     #[no_mangle]
     pub unsafe extern "C" fn PauseGame() -> BOOLEAN {
         if ActivityFrame.is_null()
-            || GlobData.Game_state.CurrentActivity & (CHECK_ABORT | CHECK_PAUSE) as u16 != 0
+            || (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity
+                & (CHECK_ABORT | CHECK_PAUSE) as u16
+                != 0
             || LastActivity & (CHECK_LOAD | CHECK_RESTART) as u16 != 0
         {
             return 0;
         }
-        GlobData.Game_state.CurrentActivity |= CHECK_PAUSE as u16;
+        (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity |= CHECK_PAUSE as u16;
         if PlayingTrack() != 0 {
             PauseTrack();
         }
@@ -179,7 +185,9 @@ pub(crate) mod live {
             ResumeTrack();
         }
         TaskSwitch();
-        GlobData.Game_state.CurrentActivity &= !(CHECK_PAUSE as u16);
+        (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity &= !(CHECK_PAUSE as u16);
         1
     }
 
@@ -187,7 +195,11 @@ pub(crate) mod live {
         let mut pressed = AnyButtonPress(1);
         while (pressed != 0) == released
             && (timeout == TimePeriod::MAX || GetTimeCounter() < timeout)
-            && GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 == 0
+            && (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity
+                & CHECK_ABORT as u16
+                == 0
             && QuitPosted == 0
         {
             let Some(sampled) = crate::automation::input_ffi::nested_input(|| {

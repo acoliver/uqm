@@ -59,7 +59,7 @@ mod live {
     use crate::mainloop::input_abi::live::AnyButtonPress;
 
     extern "C" {
-        static mut GlobData: crate::ships::native::abi::GLOBDATA;
+
         static mut usingSpeech: u32;
     }
     use crate::threading::pacing::linked::sleep_thread as SleepThread;
@@ -68,7 +68,10 @@ mod live {
     impl StarbaseApi for LiveScript<Handler> {
         fn date(&self) -> Date {
             unsafe {
-                let clock = &(*std::ptr::addr_of!(GlobData)).Game_state.GameClock;
+                let clock =
+                    &(*std::ptr::addr_of!((*crate::ships::native::abi::GLOBDATA::current())))
+                        .Game_state
+                        .GameClock;
                 Date {
                     year: clock.year_index,
                     month: clock.month_index,
@@ -78,7 +81,8 @@ mod live {
         }
         fn ship(&self) -> Ship {
             unsafe {
-                let sis = &(*std::ptr::addr_of!(GlobData)).SIS_state;
+                let sis = &(*std::ptr::addr_of!((*crate::ships::native::abi::GLOBDATA::current())))
+                    .SIS_state;
                 Ship {
                     drives: sis.DriveSlots,
                     jets: sis.JetSlots,
@@ -106,15 +110,27 @@ mod live {
             }
         }
         fn mineral_amount(&self, category: usize) -> u16 {
-            unsafe { GlobData.SIS_state.ElementAmounts[category] }
+            unsafe {
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .SIS_state
+                    .ElementAmounts[category]
+            }
         }
         fn mineral_worth(&self, category: usize) -> u8 {
-            unsafe { GlobData.Game_state.ElementWorth[category] }
+            unsafe {
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .Game_state
+                    .ElementWorth[category]
+            }
         }
         fn remove_minerals(&mut self, category: usize, amount: u16) {
             unsafe {
-                GlobData.SIS_state.ElementAmounts[category] -= amount;
-                GlobData.SIS_state.TotalElementMass -= amount;
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .SIS_state
+                    .ElementAmounts[category] -= amount;
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .SIS_state
+                    .TotalElementMass -= amount;
             }
         }
         fn draw_cargo(&mut self, old: u8, new: u8) {
@@ -152,7 +168,12 @@ mod live {
         }
         fn skip_sale(&mut self) -> bool {
             unsafe {
-                AnyButtonPress(1) != 0 || GlobData.Game_state.CurrentActivity & (1 << 14) != 0
+                AnyButtonPress(1) != 0
+                    || (*crate::ships::native::abi::GLOBDATA::current())
+                        .Game_state
+                        .CurrentActivity
+                        & (1 << 14)
+                        != 0
             }
         }
     }

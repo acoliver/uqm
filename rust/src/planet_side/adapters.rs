@@ -61,10 +61,7 @@ use crate::ui::sis::DrawLanders;
 #[cfg(not(test))]
 use crate::ui::sis::DrawStorageBays;
 #[cfg(not(test))]
-extern "C" {
-    #[link_name = "GlobData"]
-    static mut GLOB_DATA: crate::ships::native::abi::GLOBDATA;
-}
+extern "C" {}
 #[cfg(not(test))]
 use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
 
@@ -131,7 +128,9 @@ impl CffiShipStatus {
     pub fn snapshot(&self) -> ShipStatus {
         #[cfg(not(test))]
         unsafe {
-            let sis = std::ptr::addr_of!(GLOB_DATA.SIS_state).read();
+            let sis =
+                std::ptr::addr_of!((*crate::ships::native::abi::GLOBDATA::current()).SIS_state)
+                    .read();
             ShipStatus {
                 crew_enlisted: sis.CrewEnlisted,
                 landers: sis.NumLanders,
@@ -174,7 +173,8 @@ impl ShipStatusPort for CffiShipStatus {
                 DeltaSISGauges(delta.crew, 0, 0);
             }
 
-            let sis = std::ptr::addr_of_mut!(GLOB_DATA.SIS_state);
+            let sis =
+                std::ptr::addr_of_mut!((*crate::ships::native::abi::GLOBDATA::current()).SIS_state);
             if delta.landers < 0 {
                 (*sis).NumLanders = (*sis)
                     .NumLanders

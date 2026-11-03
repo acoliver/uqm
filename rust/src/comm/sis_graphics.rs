@@ -191,7 +191,6 @@ mod c_bridge {
 
     extern "C" {
         #[allow(dead_code)]
-        pub static mut GlobData: crate::ships::native::abi::GLOBDATA;
         pub static mut SpaceContext: *mut crate::graphics::native_abi::context_desc;
         pub static mut ActivityFrame: *mut crate::graphics::native_abi::frame_desc;
         pub static mut TinyFont: *mut crate::graphics::native_abi::font_desc;

@@ -2,22 +2,22 @@
 #![cfg(not(test))]
 use crate::engine::battle::{Cx, ElementId, Parent};
 use crate::navigation::abi::*;
-use crate::navigation::globals::GlobData;
+
 use crate::navigation::hyperspace::live::{logx, logy};
 use crate::navigation::{get, set};
 use crate::planets::starmap::{star_array, CurStarDescPtr};
 use std::ptr::{self, NonNull};
 impl Cx<'_> {
     pub(crate) fn navigation(&self) -> &GLOBDATA {
-        let pointer =
-            NonNull::new(&raw mut GlobData).unwrap_or_else(|| panic!("navigation authority"));
+        let pointer = NonNull::new(&raw mut (*crate::ships::native::abi::GLOBDATA::current()))
+            .unwrap_or_else(|| panic!("navigation authority"));
         // SAFETY: Cx retains the game-thread navigation authority for this borrow.
         unsafe { pointer.as_ref() }
     }
 
     pub(crate) fn navigation_mut(&mut self) -> &mut GLOBDATA {
-        let mut pointer =
-            NonNull::new(&raw mut GlobData).unwrap_or_else(|| panic!("navigation authority"));
+        let mut pointer = NonNull::new(&raw mut (*crate::ships::native::abi::GLOBDATA::current()))
+            .unwrap_or_else(|| panic!("navigation authority"));
         // SAFETY: the exclusive Cx borrow serializes navigation mutations.
         unsafe { pointer.as_mut() }
     }
@@ -75,21 +75,33 @@ impl Cx<'_> {
 pub(crate) unsafe fn interplanetary(mut point: POINT) {
     // SAFETY: the caller holds exclusive game-thread navigation state and its loaded catalog.
     unsafe {
-        GlobData.Game_state.ip_planet = 0;
-        GlobData.Game_state.in_orbit = 0;
-        GlobData.Game_state.ShipFacing = 0;
+        (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .ip_planet = 0;
+        (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .in_orbit = 0;
+        (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .ShipFacing = 0;
         set("USED_BROADCASTER", 0);
         if get("ARILOU_SPACE_SIDE") <= 1 {
-            GlobData.Game_state.CurrentActivity |= START_INTERPLANETARY as u16;
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity |= START_INTERPLANETARY as u16;
             set("ESCAPE_COUNTER", 0);
         } else {
-            GlobData.Game_state.autopilot = POINT { x: -1, y: -1 };
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .autopilot = POINT { x: -1, y: -1 };
             let star = FindStar(ptr::null_mut(), &mut point, 5, 5);
             CurStarDescPtr = star.cast();
             if (*star).star_pt.x == ARILOU_HOME_X as i16
                 && (*star).star_pt.y == ARILOU_HOME_Y as i16
             {
-                GlobData.Game_state.CurrentActivity |= START_ENCOUNTER as u16;
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .Game_state
+                    .CurrentActivity |= START_ENCOUNTER as u16;
             } else {
                 const PORTALS: [(i16, i16); 15] = [
                     (4091, 7748),
@@ -110,8 +122,12 @@ pub(crate) unsafe fn interplanetary(mut point: POINT) {
                 ];
                 let index = CurStarDescPtr.offset_from(star_array.add(503)) as usize;
                 let (x, y) = PORTALS[index];
-                GlobData.SIS_state.log_x = logx(x);
-                GlobData.SIS_state.log_y = logy(y);
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .SIS_state
+                    .log_x = logx(x);
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .SIS_state
+                    .log_y = logy(y);
                 set("ARILOU_SPACE_SIDE", 0);
                 // The source portal is not a star at the HyperSpace destination.
                 // Keeping it makes a save name a descriptor from the wrong catalog.
@@ -123,19 +139,31 @@ pub(crate) unsafe fn interplanetary(mut point: POINT) {
 pub(crate) unsafe fn arilou() {
     // SAFETY: the caller holds exclusive game-thread navigation state and its loaded catalog.
     unsafe {
-        GlobData.Game_state.ShipFacing = 0;
+        (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .ShipFacing = 0;
         set("USED_BROADCASTER", 0);
-        GlobData.Game_state.autopilot = POINT { x: -1, y: -1 };
+        (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .autopilot = POINT { x: -1, y: -1 };
         if get("ARILOU_SPACE_SIDE") <= 1 {
-            GlobData.SIS_state.log_x = logx(QUASI_SPACE_X as i16);
-            GlobData.SIS_state.log_y = logy(QUASI_SPACE_Y as i16);
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .SIS_state
+                .log_x = logx(QUASI_SPACE_X as i16);
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .SIS_state
+                .log_y = logy(QUASI_SPACE_Y as i16);
             if get("PORTAL_COUNTER") != 0 {
                 set("PORTAL_COUNTER", 0);
             }
             set("ARILOU_SPACE_SIDE", 3);
         } else {
-            GlobData.SIS_state.log_x = logx(ARILOU_SPACE_X as i16);
-            GlobData.SIS_state.log_y = logy(ARILOU_SPACE_Y as i16);
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .SIS_state
+                .log_x = logx(ARILOU_SPACE_X as i16);
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .SIS_state
+                .log_y = logy(ARILOU_SPACE_Y as i16);
             set("ARILOU_SPACE_SIDE", 0);
         }
         CurStarDescPtr = ptr::null_mut();

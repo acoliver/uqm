@@ -109,8 +109,7 @@ use crate::ui::sis::DrawSISMessage;
 use crate::ui::sis::DrawHyperCoords;
 
 extern "C" {
-    #[link_name = "GlobData"]
-    pub static mut GLOB_DATA: crate::ships::native::abi::GLOBDATA;
+
     #[link_name = "GameStrings"]
     pub static mut GAME_STRINGS: *mut crate::strings::string_table::StringTableEntry;
     #[link_name = "format_conv_surf"]
@@ -495,7 +494,7 @@ pub unsafe fn draw_hyper_coords(loc: (i16, i16)) {
 pub struct LiveGame;
 
 fn glob() -> *mut crate::ships::native::abi::GLOBDATA {
-    std::ptr::addr_of_mut!(GLOB_DATA)
+    std::ptr::addr_of_mut!((*crate::ships::native::abi::GLOBDATA::current()))
 }
 
 impl Npcs for LiveGame {

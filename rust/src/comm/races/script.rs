@@ -80,7 +80,7 @@ pub(super) mod live {
     use crate::comm::comm_abi::AlienTalkSegue;
 
     extern "C" {
-        static mut GlobData: crate::ships::native::abi::GLOBDATA;
+
         static mut shared_phrase_buf: [c_char; 2048];
     }
 
@@ -119,12 +119,18 @@ pub(super) mod live {
                     let mut text = Vec::new();
                     for &fragment in fragments {
                         let ptr = match fragment {
-                            GLOBAL_PLAYER_NAME => {
-                                std::ptr::addr_of!(GlobData.SIS_state.CommanderName).cast()
-                            }
-                            GLOBAL_SHIP_NAME => {
-                                std::ptr::addr_of!(GlobData.SIS_state.ShipName).cast()
-                            }
+                            GLOBAL_PLAYER_NAME => std::ptr::addr_of!(
+                                (*crate::ships::native::abi::GLOBDATA::current())
+                                    .SIS_state
+                                    .CommanderName
+                            )
+                            .cast(),
+                            GLOBAL_SHIP_NAME => std::ptr::addr_of!(
+                                (*crate::ships::native::abi::GLOBDATA::current())
+                                    .SIS_state
+                                    .ShipName
+                            )
+                            .cast(),
                             _ => {
                                 let index =
                                     u16::try_from(fragment - 1).expect("invalid response fragment");
@@ -164,16 +170,24 @@ pub(super) mod live {
         fn supplies(&self) -> Supplies {
             unsafe {
                 Supplies {
-                    landers: GlobData.SIS_state.NumLanders,
-                    fuel: GlobData.SIS_state.FuelOnBoard,
-                    radioactives: GlobData.SIS_state.ElementAmounts[6],
+                    landers: (*crate::ships::native::abi::GLOBDATA::current())
+                        .SIS_state
+                        .NumLanders,
+                    fuel: (*crate::ships::native::abi::GLOBDATA::current())
+                        .SIS_state
+                        .FuelOnBoard,
+                    radioactives: (*crate::ships::native::abi::GLOBDATA::current())
+                        .SIS_state
+                        .ElementAmounts[6],
                 }
             }
         }
 
         fn add_lander(&mut self) {
             unsafe {
-                GlobData.SIS_state.NumLanders += 1;
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .SIS_state
+                    .NumLanders += 1;
                 DrawLanders();
             }
         }

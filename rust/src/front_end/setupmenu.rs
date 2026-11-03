@@ -70,7 +70,7 @@ impl GammaRange {
 pub(crate) mod runtime {
     use super::*;
     use crate::memory::{rust_hfree as HFree, rust_hmalloc as HMalloc};
-    use crate::navigation::globals::GlobData;
+
     use crate::video::control::{InitVideoPlayer, UninitVideoPlayer};
     use std::{ffi::c_char, mem, ptr};
     const MENU_FRAME_RATE: DWORD = ONE_SECOND / 20;
@@ -310,7 +310,12 @@ pub(crate) mod runtime {
         SleepThreadUntil((*state).NextTime.wrapping_add(MENU_FRAME_RATE));
         (*state).NextTime = GetTimeCounter();
         BOOLEAN::from(
-            GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 == 0 && !NEXT.is_null(),
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity
+                & CHECK_ABORT as u16
+                == 0
+                && !NEXT.is_null(),
         )
     }
     unsafe fn redraw_menu() {
@@ -872,7 +877,9 @@ pub(crate) mod runtime {
         }
         DONE = 0;
         DoInput(ptr::addr_of_mut!(state).cast(), 1);
-        GlobData.Game_state.CurrentActivity &= !(CHECK_ABORT as u16);
+        (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity &= !(CHECK_ABORT as u16);
         PropagateResults();
         if !SETUP_TAB.is_null() {
             clean_up_widgets();

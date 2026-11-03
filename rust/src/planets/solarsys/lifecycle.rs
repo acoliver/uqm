@@ -123,7 +123,7 @@ mod ffi {
     pub(super) use crate::planets::pstarmap::StarMap;
 
     extern "C" {
-        pub(super) static mut GlobData: crate::ships::native::abi::GLOBDATA;
+
         pub(super) static mut CurStarDescPtr: *mut crate::savegame::runtime::star::CStarDesc;
         pub(super) static mut LastActivity: c::ACTIVITY;
         pub(super) static mut NextActivity: c::ACTIVITY;
@@ -138,7 +138,7 @@ mod ffi {
 
 #[inline]
 pub(super) unsafe fn glob() -> *mut crate::ships::native::abi::GLOBDATA {
-    ptr::addr_of_mut!(ffi::GlobData)
+    ptr::addr_of_mut!((*crate::ships::native::abi::GLOBDATA::current()))
 }
 
 #[inline]

@@ -83,7 +83,7 @@ extern "C" {
     static mut StatusFrame: *mut crate::graphics::native_abi::frame_desc;
     static mut StarConFont: *mut crate::graphics::native_abi::font_desc;
     static mut TinyFont: *mut crate::graphics::native_abi::font_desc;
-    static mut GlobData: crate::ships::native::abi::GLOBDATA;
+
 }
 
 fn color(color: Rgba) -> CColor {
@@ -227,7 +227,9 @@ unsafe fn change_selection(state: &mut PickerState) {
         let ship = LinkQueue::<Starship>::ship_value(chosen);
         let (text, length, crew, max_crew) = if ship.captain == 0 {
             // SAFETY: the game thread owns `GlobData`.
-            let sis = unsafe { &*std::ptr::addr_of!(GlobData) }.SIS_state;
+            let sis =
+                unsafe { &*std::ptr::addr_of!((*crate::ships::native::abi::GLOBDATA::current())) }
+                    .SIS_state;
             // SAFETY: plain call.
             let capacity = unsafe { GetCrewPodCapacity() };
             (
@@ -442,7 +444,10 @@ pub(crate) unsafe fn encounter_ship(
             // SAFETY: `last` is a live `STARSHIP` and `GlobData` is owned by
             // the game thread.
             unsafe {
-                let sis = &mut (*std::ptr::addr_of_mut!(GlobData)).SIS_state;
+                let sis = &mut (*std::ptr::addr_of_mut!(
+                    (*crate::ships::native::abi::GLOBDATA::current())
+                ))
+                .SIS_state;
                 if LinkQueue::<Starship>::ship_value(
                     last_id.unwrap_or_else(|| panic!("missing checked battle value")),
                 )
@@ -564,7 +569,12 @@ pub unsafe extern "C" fn draw_armada_pick_ship(draw_salvage_frame: c_int, pick_r
     unsafe { DrawStamp(std::ptr::from_mut(&mut stamp).cast()) };
 
     // SAFETY: the game thread owns `GlobData`; the name is a C string.
-    let ship_name = unsafe { (*std::ptr::addr_of!(GlobData)).SIS_state.ShipName.as_ptr() };
+    let ship_name = unsafe {
+        (*std::ptr::addr_of!((*crate::ships::native::abi::GLOBDATA::current())))
+            .SIS_state
+            .ShipName
+            .as_ptr()
+    };
     set_color(Rgba::rgb15(0x12, 0x12, 0x12));
     // SAFETY: font globals are set at startup.
     unsafe { SetContextFont((std::ptr::addr_of!(StarConFont).read()).cast()) };

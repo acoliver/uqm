@@ -136,19 +136,31 @@ extern "C" {
     static mut GameStrings: *mut crate::strings::string_table::StringTableEntry;
     static mut optWhichMenu: c_int;
     static mut optWhichFonts: c_int;
-    static mut GlobData: crate::ships::native::abi::GLOBDATA;
+
 }
 
 /// `&GLOBAL (built_ship_q)`.
 fn built_ship_queue() -> *mut Queue {
     // SAFETY: only the address of the game thread's `GlobData` is taken.
-    unsafe { std::ptr::addr_of_mut!(GlobData.Game_state.built_ship_q) }
+    unsafe {
+        std::ptr::addr_of_mut!(
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .built_ship_q
+        )
+    }
 }
 
 /// `&GLOBAL (avail_race_q)`.
 fn avail_race_queue() -> *mut Queue {
     // SAFETY: only the address of the game thread's `GlobData` is taken.
-    unsafe { std::ptr::addr_of_mut!(GlobData.Game_state.avail_race_q) }
+    unsafe {
+        std::ptr::addr_of_mut!(
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .avail_race_q
+        )
+    }
 }
 
 /// The links of a queue of `T` in queue order.
@@ -608,7 +620,8 @@ impl Platform for CffiPlatform {
     fn sis(&self) -> Result<SisView, StarbaseError> {
         // SAFETY: the game thread owns `GlobData`; no other thread writes it
         // while a screen runs.
-        let glob = unsafe { &*std::ptr::addr_of!(GlobData) };
+        let glob =
+            unsafe { &*std::ptr::addr_of!((*crate::ships::native::abi::GLOBDATA::current())) };
         let name = glob.SIS_state.ShipName.map(|byte| byte as u8);
         let name_bytes = name.split(|byte| *byte == 0).next().unwrap_or_default();
         let ship_name = std::str::from_utf8(name_bytes)
@@ -633,7 +646,11 @@ impl Platform for CffiPlatform {
 
     fn set_fuel_on_board(&self, fuel: u32) {
         // SAFETY: the game thread owns `GlobData`.
-        unsafe { (*std::ptr::addr_of_mut!(GlobData)).SIS_state.FuelOnBoard = fuel };
+        unsafe {
+            (*std::ptr::addr_of_mut!((*crate::ships::native::abi::GLOBDATA::current())))
+                .SIS_state
+                .FuelOnBoard = fuel
+        };
     }
 
     fn apply_gauge_delta(&self, delta: GaugeDelta) {
@@ -648,12 +665,20 @@ impl Platform for CffiPlatform {
 
     fn crew_cost(&self) -> u8 {
         // SAFETY: the game thread owns `GlobData`.
-        unsafe { (*std::ptr::addr_of!(GlobData)).Game_state.CrewCost }
+        unsafe {
+            (*std::ptr::addr_of!((*crate::ships::native::abi::GLOBDATA::current())))
+                .Game_state
+                .CrewCost
+        }
     }
 
     fn set_crew_cost(&self, cost: u8) {
         // SAFETY: the game thread owns `GlobData`.
-        unsafe { (*std::ptr::addr_of_mut!(GlobData)).Game_state.CrewCost = cost };
+        unsafe {
+            (*std::ptr::addr_of_mut!((*crate::ships::native::abi::GLOBDATA::current())))
+                .Game_state
+                .CrewCost = cost
+        };
     }
 
     fn race_templates(&self) -> Result<Vec<RaceTemplate>, StarbaseError> {
@@ -748,22 +773,38 @@ impl Platform for CffiPlatform {
     fn set_drive_slot(&self, index: usize, piece: u8) {
         // SAFETY: the game thread owns `GlobData`; the caller bounds `index`
         // by `NUM_DRIVE_SLOTS`, and the array index checks it again.
-        unsafe { (*std::ptr::addr_of_mut!(GlobData)).SIS_state.DriveSlots[index] = piece };
+        unsafe {
+            (*std::ptr::addr_of_mut!((*crate::ships::native::abi::GLOBDATA::current())))
+                .SIS_state
+                .DriveSlots[index] = piece
+        };
     }
 
     fn set_jet_slot(&self, index: usize, piece: u8) {
         // SAFETY: as for `set_drive_slot`.
-        unsafe { (*std::ptr::addr_of_mut!(GlobData)).SIS_state.JetSlots[index] = piece };
+        unsafe {
+            (*std::ptr::addr_of_mut!((*crate::ships::native::abi::GLOBDATA::current())))
+                .SIS_state
+                .JetSlots[index] = piece
+        };
     }
 
     fn set_module_slot(&self, index: usize, piece: u8) {
         // SAFETY: as for `set_drive_slot`.
-        unsafe { (*std::ptr::addr_of_mut!(GlobData)).SIS_state.ModuleSlots[index] = piece };
+        unsafe {
+            (*std::ptr::addr_of_mut!((*crate::ships::native::abi::GLOBDATA::current())))
+                .SIS_state
+                .ModuleSlots[index] = piece
+        };
     }
 
     fn set_num_landers(&self, count: u8) {
         // SAFETY: the game thread owns `GlobData`.
-        unsafe { (*std::ptr::addr_of_mut!(GlobData)).SIS_state.NumLanders = count };
+        unsafe {
+            (*std::ptr::addr_of_mut!((*crate::ships::native::abi::GLOBDATA::current())))
+                .SIS_state
+                .NumLanders = count
+        };
     }
 
     fn redraw_ship_status(&self, res_units: ResUnitsUpdate) {

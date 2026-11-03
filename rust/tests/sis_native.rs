@@ -10,11 +10,21 @@ use uqm_rust::{
 };
 unsafe fn modules() {
     uqm_rust::state::ffi::rust_init_game_state();
-    GlobData.SIS_state.ModuleSlots = [255; 16];
-    GlobData.SIS_state.DriveSlots = [255; 11];
-    GlobData.SIS_state.JetSlots = [255; 8];
-    GlobData.SIS_state.CrewEnlisted = 9;
-    GlobData.Game_state.CurrentActivity = IN_ENCOUNTER as u16;
+    (*uqm_rust::ships::native::abi::GLOBDATA::current())
+        .SIS_state
+        .ModuleSlots = [255; 16];
+    (*uqm_rust::ships::native::abi::GLOBDATA::current())
+        .SIS_state
+        .DriveSlots = [255; 11];
+    (*uqm_rust::ships::native::abi::GLOBDATA::current())
+        .SIS_state
+        .JetSlots = [255; 8];
+    (*uqm_rust::ships::native::abi::GLOBDATA::current())
+        .SIS_state
+        .CrewEnlisted = 9;
+    (*uqm_rust::ships::native::abi::GLOBDATA::current())
+        .Game_state
+        .CurrentActivity = IN_ENCOUNTER as u16;
     set_game_state("CHMMR_BOMB_STATE", 0);
 }
 #[test]
@@ -41,10 +51,16 @@ fn module_configuration_preserves_weapon_order_energy_caps_and_drive_rounding() 
                 (11, 7),
                 (12, 7),
             ] {
-                GlobData.SIS_state.ModuleSlots[i] = m;
+                (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                    .SIS_state
+                    .ModuleSlots[i] = m;
             }
-            GlobData.SIS_state.DriveSlots = [1; 11];
-            GlobData.SIS_state.JetSlots = [2; 8];
+            (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                .SIS_state
+                .DriveSlots = [1; 11];
+            (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                .SIS_state
+                .JetSlots = [2; 8];
             let mut ship = Ship::with_frames(
                 &_battle,
                 SPECIES_ID_SIS_SHIP_ID,
@@ -78,7 +94,14 @@ fn module_configuration_preserves_weapon_order_energy_caps_and_drive_rounding() 
             }
             ship.descriptor_mut().ship_info.crew_level = 4;
             ship.uninit();
-            assert_eq!({ GlobData.SIS_state.CrewEnlisted }, 3);
+            assert_eq!(
+                {
+                    (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                        .SIS_state
+                        .CrewEnlisted
+                },
+                3
+            );
         }
     })
 }
@@ -118,9 +141,15 @@ fn hyperspace_fuel_brakes_and_quasispace_allows_thrust_without_fuel() {
         let _battle = Battle::new(16);
         unsafe {
             modules();
-            GlobData.Game_state.CurrentActivity = IN_HYPERSPACE as u16;
-            GlobData.SIS_state.FuelOnBoard = 0;
-            GlobData.Game_state.autopilot = POINT { x: -1, y: -1 };
+            (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity = IN_HYPERSPACE as u16;
+            (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                .SIS_state
+                .FuelOnBoard = 0;
+            (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .autopilot = POINT { x: -1, y: -1 };
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_SIS_SHIP_ID, 0, [16, 32, 16], [4, 4]);
             assert!(ship.descriptor_mut().callbacks()[3] == 0);
@@ -143,7 +172,11 @@ fn hyperspace_fuel_brakes_and_quasispace_allows_thrust_without_fuel() {
             assert_ne!(ship.ship_mut().cur_status_flags & THRUST as u16, 0);
             ship.postprocess();
             assert_eq!(
-                velocity(&{ GlobData.Game_state.velocity }),
+                velocity(&{
+                    (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                        .Game_state
+                        .velocity
+                }),
                 velocity(&(*ship.ptr()).velocity)
             );
             ship.uninit();
@@ -157,11 +190,21 @@ fn autopilot_accelerates_toward_target_and_cancels_on_manual_turn() {
         let _battle = Battle::new(16);
         unsafe {
             modules();
-            GlobData.Game_state.CurrentActivity = IN_HYPERSPACE as u16;
-            GlobData.SIS_state.FuelOnBoard = 100;
-            GlobData.SIS_state.log_x = 0;
-            GlobData.SIS_state.log_y = 0;
-            GlobData.Game_state.autopilot = POINT { x: 100, y: 9999 };
+            (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity = IN_HYPERSPACE as u16;
+            (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                .SIS_state
+                .FuelOnBoard = 100;
+            (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                .SIS_state
+                .log_x = 0;
+            (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                .SIS_state
+                .log_y = 0;
+            (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .autopilot = POINT { x: 100, y: 9999 };
             set_game_state("ARILOU_SPACE_SIDE", 0);
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_SIS_SHIP_ID, 0, [16, 32, 16], [4, 4]);
@@ -179,8 +222,14 @@ fn autopilot_accelerates_toward_target_and_cancels_on_manual_turn() {
             ship.preprocess();
             assert_eq!(
                 (
-                    GlobData.Game_state.autopilot.x,
-                    GlobData.Game_state.autopilot.y
+                    (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                        .Game_state
+                        .autopilot
+                        .x,
+                    (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                        .Game_state
+                        .autopilot
+                        .y
                 ),
                 (-1, -1)
             );

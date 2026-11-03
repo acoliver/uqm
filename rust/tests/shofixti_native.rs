@@ -22,12 +22,14 @@ struct Battle {
 }
 impl Battle {
     unsafe fn new(capacity: COUNT) -> Self {
-        let globals = GlobData;
+        let globals = (*uqm_rust::ships::native::abi::GLOBDATA::current());
         let screen = (ScreenWidth, ScreenHeight);
         let graphics_flags = _GraphicsStatusFlags;
         let counters = uqm_rust::app::bridge::battle(|b| b.counters);
         let inner = shared::Battle::new(capacity);
-        GlobData.Game_state.CurrentActivity = IN_ENCOUNTER as _;
+        (*uqm_rust::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity = IN_ENCOUNTER as _;
         uqm_rust::state::ffi::rust_init_game_state();
         set_recruited(true);
         ScreenWidth = 320;
@@ -48,7 +50,7 @@ impl Drop for Battle {
     fn drop(&mut self) {
         unsafe {
             ResetWinnerStarShip();
-            GlobData = self.globals;
+            (*uqm_rust::ships::native::abi::GLOBDATA::current()) = self.globals;
             (ScreenWidth, ScreenHeight) = self.screen;
             _GraphicsStatusFlags = self.graphics_flags;
             uqm_rust::app::bridge::battle(|b| b.counters = self.counters);
@@ -201,7 +203,9 @@ fn complete_descriptor_and_damaged_tanaka_katana_variant_are_fresh_each_call() {
             (2, false, true),
             (0, false, false),
         ] {
-            GlobData.Game_state.CurrentActivity = activity;
+            (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity = activity;
             set_recruited(recruited);
             let mut original = shared::descriptor(SPECIES_ID_SHOFIXTI_ID);
             let p = &raw mut original;
@@ -806,7 +810,9 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                     let saved_pulsed = PulsedInputState;
                     let mut context = mem::zeroed();
                     OffScreenContext = &mut context;
-                    GlobData.Game_state.CurrentActivity = (SUPER_MELEE | IN_BATTLE) as u16;
+                    (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                        .Game_state
+                        .CurrentActivity = (SUPER_MELEE | IN_BATTLE) as u16;
                     uqm_rust::app::bridge::battle(|b| b.counters = initial);
                     let mut ship = Ship::new(&_battle, 0);
                     let mut other = Ship::new(&_battle, 1);
@@ -933,9 +939,19 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                     assert_eq!(selected, [expected_selection; 2]);
                     let remaining = uqm_rust::app::bridge::battle(|b| b.counters);
                     assert_eq!(remaining, [initial[0] - 1, initial[1] - 1]);
-                    assert_eq!(GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16, 0);
                     assert_eq!(
-                        GlobData.Game_state.CurrentActivity & IN_BATTLE as u16 != 0,
+                        (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                            .Game_state
+                            .CurrentActivity
+                            & CHECK_ABORT as u16,
+                        0
+                    );
+                    assert_eq!(
+                        (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                            .Game_state
+                            .CurrentActivity
+                            & IN_BATTLE as u16
+                            != 0,
                         expected_selection
                     );
                     for (side, input) in saved_inputs.into_iter().enumerate() {

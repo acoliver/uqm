@@ -1188,9 +1188,7 @@ use crate::strings::string_table::GetStringTimeStamp;
 #[cfg(not(test))]
 use crate::strings::string_table::SetAbsStringTableIndex;
 #[cfg(not(test))]
-extern "C" {
-    pub static mut GlobData: crate::ships::native::abi::GLOBDATA;
-}
+extern "C" {}
 
 // Splice one or more voice clips with text (used by npcphrase_splice when clip exists).
 #[cfg(not(test))]
@@ -1239,8 +1237,11 @@ unsafe fn get_alliance_name_full(
 
     // If state==3, append CommanderName
     if i == 3 {
-        let cname_ptr =
-            std::ptr::addr_of_mut!(GlobData.SIS_state.CommanderName) as *const std::ffi::c_char;
+        let cname_ptr = std::ptr::addr_of_mut!(
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .SIS_state
+                .CommanderName
+        ) as *const std::ffi::c_char;
         if !cname_ptr.is_null() {
             let cname = CStr::from_ptr(cname_ptr);
             let cname_bytes = cname.to_bytes();
@@ -1311,12 +1312,19 @@ pub unsafe fn rust_npc_phrase_cb(index: c_int, cb: super::glue::PhraseCallback) 
 
         if index == GLOBAL_PLAYER_NAME {
             // Branch 2: commander name — direct GlobData.SIS_state access
-            let name =
-                std::ptr::addr_of_mut!(GlobData.SIS_state.CommanderName) as *mut std::ffi::c_char;
+            let name = std::ptr::addr_of_mut!(
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .SIS_state
+                    .CommanderName
+            ) as *mut std::ffi::c_char;
             SpliceTrack(ptr::null_mut(), name, ptr::null_mut(), cb);
         } else if index == GLOBAL_SHIP_NAME {
             // Branch 3: ship name — direct GlobData.SIS_state access
-            let name = std::ptr::addr_of_mut!(GlobData.SIS_state.ShipName) as *mut std::ffi::c_char;
+            let name = std::ptr::addr_of_mut!(
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .SIS_state
+                    .ShipName
+            ) as *mut std::ffi::c_char;
             SpliceTrack(ptr::null_mut(), name, ptr::null_mut(), cb);
         } else if index < 0 {
             // Branch 4: alliance-name variant

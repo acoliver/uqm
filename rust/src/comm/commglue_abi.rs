@@ -71,10 +71,7 @@ pub(crate) mod runtime {
 
     use crate::strings::string_table::SetRelStringTableIndex;
 
-    extern "C" {
-        static mut GlobData: crate::ships::native::abi::GLOBDATA;
-
-    }
+    extern "C" {}
 
     fn get(key: &str) -> u8 {
         let (first, last) =
@@ -130,7 +127,13 @@ pub(crate) mod runtime {
         );
         libc::strcpy(buffer, GetStringAddress(entry));
         if variant == 3 {
-            libc::strcat(buffer, (&raw const GlobData.SIS_state.CommanderName).cast());
+            libc::strcat(
+                buffer,
+                (&raw const (*crate::ships::native::abi::GLOBDATA::current())
+                    .SIS_state
+                    .CommanderName)
+                    .cast(),
+            );
             libc::strcat(buffer, GetStringAddress(SetRelStringTableIndex(entry, 1)));
         }
     }
@@ -148,8 +151,12 @@ pub(crate) mod runtime {
             }
             3 => {
                 set("BATTLE_SEGUE", 0);
-                GlobData.SIS_state.CrewEnlisted = u16::MAX;
-                GlobData.Game_state.CurrentActivity |= 0x2000;
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .SIS_state
+                    .CrewEnlisted = u16::MAX;
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .Game_state
+                    .CurrentActivity |= 0x2000;
             }
             _ => unreachable!("invalid Segue"),
         }
@@ -160,8 +167,15 @@ pub(crate) mod runtime {
     #[no_mangle]
     pub unsafe extern "C" fn getSegue() -> i32 {
         if get("BATTLE_SEGUE") == 0 {
-            if GlobData.SIS_state.CrewEnlisted == u16::MAX
-                && GlobData.Game_state.CurrentActivity & 0x2000 != 0
+            if (*crate::ships::native::abi::GLOBDATA::current())
+                .SIS_state
+                .CrewEnlisted
+                == u16::MAX
+                && (*crate::ships::native::abi::GLOBDATA::current())
+                    .Game_state
+                    .CurrentActivity
+                    & 0x2000
+                    != 0
             {
                 3
             } else {

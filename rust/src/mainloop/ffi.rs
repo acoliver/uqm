@@ -40,10 +40,7 @@ mod c_globals {
         pub static mut MAIN_EXITED: CBoolean;
     }
     pub mod globdata_ffi {
-        extern "C" {
-            #[link_name = "GlobData"]
-            pub static mut GlobData: crate::ships::native::abi::GLOBDATA;
-        }
+        extern "C" {}
     }
 }
 
@@ -112,7 +109,11 @@ pub fn get_current_activity() -> ActivityValue {
     #[cfg(not(test))]
     {
         // SAFETY: reads CurrentActivity from C GlobData global.
-        let raw = unsafe { c_globals::globdata_ffi::GlobData.Game_state.CurrentActivity };
+        let raw = unsafe {
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity
+        };
         ActivityValue(raw)
     }
     #[cfg(test)]
@@ -133,7 +134,11 @@ pub fn set_current_activity(val: ActivityValue) {
     #[cfg(not(test))]
     {
         // SAFETY: writes CurrentActivity to C GlobData global.
-        unsafe { c_globals::globdata_ffi::GlobData.Game_state.CurrentActivity = val.0 };
+        unsafe {
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity = val.0
+        };
     }
     #[cfg(test)]
     {
@@ -282,7 +287,11 @@ pub fn get_crew_enlisted() -> u16 {
     #[cfg(not(test))]
     {
         // SAFETY: reads a u16 field from the C GlobData global.
-        unsafe { c_globals::globdata_ffi::GlobData.SIS_state.CrewEnlisted }
+        unsafe {
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .SIS_state
+                .CrewEnlisted
+        }
     }
     #[cfg(test)]
     0
@@ -303,8 +312,11 @@ pub fn zero_global_velocity() {
     {
         // SAFETY: zeroes the velocity field in the C GlobData global.
         unsafe {
-            let velocity_ptr =
-                std::ptr::addr_of_mut!(c_globals::globdata_ffi::GlobData.Game_state.velocity);
+            let velocity_ptr = std::ptr::addr_of_mut!(
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .Game_state
+                    .velocity
+            );
             std::ptr::write_bytes(velocity_ptr, 0, 1);
         }
     }

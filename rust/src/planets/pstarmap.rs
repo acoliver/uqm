@@ -137,7 +137,6 @@ extern "C" {
     #[cfg(not(test))]
     static mut CurStarDescPtr: *mut crate::savegame::runtime::star::CStarDesc;
     #[cfg(not(test))]
-    static mut GlobData: crate::ships::native::abi::GLOBDATA;
     static mut SpaceContext: *mut crate::graphics::native_abi::context_desc;
     #[cfg(not(test))]
     static mut MiscDataFrame: FRAME;
@@ -308,8 +307,19 @@ unsafe fn current_location() -> POINT {
         let lx = (((ScreenWidth - 64) << 5) >> 4) * 195;
         let ly = ((ScreenHeight << 5) >> 4) * 25;
         POINT {
-            x: ((GlobData.SIS_state.log_x * 6250 + (lx >> 1)) / lx) as i16,
-            y: (9999 - (GlobData.SIS_state.log_y * 625 + (ly >> 1)) / ly) as i16,
+            x: (((*crate::ships::native::abi::GLOBDATA::current())
+                .SIS_state
+                .log_x
+                * 6250
+                + (lx >> 1))
+                / lx) as i16,
+            y: (9999
+                - ((*crate::ships::native::abi::GLOBDATA::current())
+                    .SIS_state
+                    .log_y
+                    * 625
+                    + (ly >> 1))
+                    / ly) as i16,
         }
     }
 }
@@ -452,7 +462,11 @@ fn box_union(a: RECT, b: RECT) -> RECT {
 }
 #[cfg(not(test))]
 unsafe fn fleet_queue() -> *mut QUEUE {
-    ptr::addr_of_mut!(GlobData.Game_state.avail_race_q)
+    ptr::addr_of_mut!(
+        (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .avail_race_q
+    )
 }
 #[cfg(not(test))]
 unsafe fn lock_fleet(handle: *mut c_void) -> *mut FLEET_INFO {
@@ -589,7 +603,11 @@ pub unsafe extern "C" fn DrawStarMap(race_update: u16, clip: *mut RECT) {
         SetContextBackGroundColor(rgb15(0, 8, 0));
     }
     ClearDrawable();
-    let mut diameter = (i64::from(GlobData.SIS_state.FuelOnBoard) << 1)
+    let mut diameter = (i64::from(
+        (*crate::ships::native::abi::GLOBDATA::current())
+            .SIS_state
+            .FuelOnBoard,
+    ) << 1)
         .min(i64::from(MAX_X_UNIVERSE * 4)) as c_long;
     if race_update == 0 && space < 2 && diameter != 0 {
         let location = current_location();
@@ -735,7 +753,9 @@ pub unsafe extern "C" fn DrawStarMap(race_update: u16, clip: *mut RECT) {
         };
         frame_abi::DrawStamp(ptr::from_mut(&mut stamp).cast());
     }
-    let destination = GlobData.Game_state.autopilot;
+    let destination = (*crate::ships::native::abi::GLOBDATA::current())
+        .Game_state
+        .autopilot;
     if race_update == 0 && destination.x != -1 && destination.y != -1 {
         draw_autopilot(destination);
     }
@@ -1136,7 +1156,9 @@ pub unsafe extern "C" fn StarMap() -> u32 {
     mapOrigin = POINT { x: 4999, y: 4999 };
     StarMapFrame = pixmap_abi::SetAbsFrameIndex(MiscDataFrame.cast(), 48).cast();
     let universe = current_location();
-    cursorLoc = GlobData.Game_state.autopilot;
+    cursorLoc = (*crate::ships::native::abi::GLOBDATA::current())
+        .Game_state
+        .autopilot;
     if cursorLoc.x == -1 && cursorLoc.y == -1 {
         cursorLoc = universe;
     }
@@ -1164,12 +1186,33 @@ pub unsafe extern "C" fn StarMap() -> u32 {
     DrawHyperCoords(universe);
     DrawSISMessage(ptr::null());
     DrawStatusMessage(ptr::null());
-    if GlobData.Game_state.autopilot.x == universe.x
-        && GlobData.Game_state.autopilot.y == universe.y
+    if (*crate::ships::native::abi::GLOBDATA::current())
+        .Game_state
+        .autopilot
+        .x
+        == universe.x
+        && (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .autopilot
+            .y
+            == universe.y
     {
-        GlobData.Game_state.autopilot = POINT { x: -1, y: -1 };
+        (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .autopilot = POINT { x: -1, y: -1 };
     }
-    u32::from(GlobData.Game_state.autopilot.x != -1 && GlobData.Game_state.autopilot.y != -1)
+    u32::from(
+        (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .autopilot
+            .x
+            != -1
+            && (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .autopilot
+                .y
+                != -1,
+    )
 }
 
 #[cfg(test)]

@@ -13,33 +13,37 @@ pub(super) trait DruugeApi: EncounterApi<Handler> {
 #[cfg(not(test))]
 impl DruugeApi for crate::comm::races::script::live::LiveScript<Handler> {
     fn ship(&self) -> CSisState {
-        extern "C" {
-            static mut GlobData: crate::ships::native::abi::GLOBDATA;
-        }
+        extern "C" {}
         unsafe {
-            std::ptr::addr_of!(GlobData.SIS_state)
+            std::ptr::addr_of!((*crate::ships::native::abi::GLOBDATA::current()).SIS_state)
                 .cast::<CSisState>()
                 .read()
         }
     }
     fn has_escorts(&self) -> bool {
-        extern "C" {
-            static mut GlobData: crate::ships::native::abi::GLOBDATA;
+        extern "C" {}
+        unsafe {
+            !(*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .built_ship_q
+                .head
+                .is_null()
         }
-        unsafe { !GlobData.Game_state.built_ship_q.head.is_null() }
     }
     fn crew_cost(&self) -> u8 {
-        extern "C" {
-            static mut GlobData: crate::ships::native::abi::GLOBDATA;
+        extern "C" {}
+        unsafe {
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CrewCost
         }
-        unsafe { GlobData.Game_state.CrewCost }
     }
     fn set_crew_cost(&mut self, value: u8) {
-        extern "C" {
-            static mut GlobData: crate::ships::native::abi::GLOBDATA;
-        }
+        extern "C" {}
         unsafe {
-            GlobData.Game_state.CrewCost = value;
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CrewCost = value;
         }
     }
     fn number(&mut self, value: i32) {

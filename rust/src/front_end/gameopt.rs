@@ -77,7 +77,7 @@ pub use runtime::{ConfirmSaveLoad, GameOptions, LoadGameDescriptions, SetNamingC
 pub(crate) mod runtime {
     use super::{picker_action, picker_slot, PickerAction, MAX_SAVED_GAMES, SAVES_PER_PAGE};
     use crate::navigation::abi::*;
-    use crate::navigation::globals::{GlobData, PlayFrame};
+    use crate::navigation::globals::PlayFrame;
     use crate::state::game_state_keys::{get_game_state, set_game_state};
     use std::{mem, ptr};
 
@@ -224,7 +224,12 @@ pub(crate) mod runtime {
                     game_string(OPTION_STRING_BASE),
                     game_string(
                         OPTION_STRING_BASE
-                            + if GlobData.Game_state.glob_flags & SOUND_DISABLED as u8 != 0 {
+                            + if (*crate::ships::native::abi::GLOBDATA::current())
+                                .Game_state
+                                .glob_flags
+                                & SOUND_DISABLED as u8
+                                != 0
+                            {
                                 3
                             } else {
                                 4
@@ -240,7 +245,12 @@ pub(crate) mod runtime {
                     game_string(OPTION_STRING_BASE + 1),
                     game_string(
                         OPTION_STRING_BASE
-                            + if GlobData.Game_state.glob_flags & MUSIC_DISABLED as u8 != 0 {
+                            + if (*crate::ships::native::abi::GLOBDATA::current())
+                                .Game_state
+                                .glob_flags
+                                & MUSIC_DISABLED as u8
+                                != 0
+                            {
                                 3
                             } else {
                                 4
@@ -269,7 +279,12 @@ pub(crate) mod runtime {
                     game_string(OPTION_STRING_BASE + 2),
                     game_string(
                         OPTION_STRING_BASE
-                            + if GlobData.Game_state.glob_flags & CYBORG_ENABLED as u8 == 0 {
+                            + if (*crate::ships::native::abi::GLOBDATA::current())
+                                .Game_state
+                                .glob_flags
+                                & CYBORG_ENABLED as u8
+                                == 0
+                            {
                                 3
                             } else {
                                 4
@@ -390,10 +405,20 @@ pub(crate) mod runtime {
         DrawStatusMessage(game_string(NAMING_STRING_BASE));
         let Setting = if nameCaptain {
             tes.MaxSize = mem::size_of::<[UNICODE; MAX_NAME_SIZE]>() as i32;
-            ptr::addr_of_mut!(GlobData.SIS_state.CommanderName).cast::<UNICODE>()
+            ptr::addr_of_mut!(
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .SIS_state
+                    .CommanderName
+            )
+            .cast::<UNICODE>()
         } else {
             tes.MaxSize = mem::size_of::<[UNICODE; MAX_NAME_SIZE]>() as i32;
-            ptr::addr_of_mut!(GlobData.SIS_state.ShipName).cast::<UNICODE>()
+            ptr::addr_of_mut!(
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .SIS_state
+                    .ShipName
+            )
+            .cast::<UNICODE>()
         };
         tes.Initialized = 0;
         tes.BaseStr = buf.as_mut_ptr();
@@ -428,9 +453,18 @@ pub(crate) mod runtime {
         DateToString(
             dateStr.as_mut_ptr(),
             dateStr.len(),
-            GlobData.Game_state.GameClock.month_index,
-            GlobData.Game_state.GameClock.day_index,
-            GlobData.Game_state.GameClock.year_index,
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .GameClock
+                .month_index,
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .GameClock
+                .day_index,
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .GameClock
+                .year_index,
         );
         libc::strncat(
             dateStr.as_mut_ptr(),
@@ -574,11 +608,19 @@ pub(crate) mod runtime {
     }
 
     unsafe extern "C" fn DoSettings(pMS: *mut MENU_STATE) -> BOOLEAN {
-        if GlobData.Game_state.CurrentActivity & CHECK_ABORT as ACTIVITY != 0 {
+        if (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity
+            & CHECK_ABORT as ACTIVITY
+            != 0
+        {
             return 0;
         }
-        let mut cur_speed =
-            (GlobData.Game_state.glob_flags & COMBAT_SPEED_MASK as u8) >> COMBAT_SPEED_SHIFT;
+        let mut cur_speed = ((*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .glob_flags
+            & COMBAT_SPEED_MASK as u8)
+            >> COMBAT_SPEED_SHIFT;
         if key(KEY_MENU_CANCEL) || (key(KEY_MENU_SELECT) && (*pMS).CurState == EXIT_SETTINGS_MENU) {
             return 0;
         } else if key(KEY_MENU_SELECT) {
@@ -600,12 +642,20 @@ pub(crate) mod runtime {
                     let previous_speed = cur_speed;
                     cur_speed += 1;
                     if previous_speed < (NUM_COMBAT_SPEEDS - 1) as BYTE {
-                        GlobData.Game_state.glob_flags |= CYBORG_ENABLED as BYTE;
+                        (*crate::ships::native::abi::GLOBDATA::current())
+                            .Game_state
+                            .glob_flags |= CYBORG_ENABLED as BYTE;
                     } else {
                         cur_speed = 0;
-                        GlobData.Game_state.glob_flags &= !(CYBORG_ENABLED as BYTE);
+                        (*crate::ships::native::abi::GLOBDATA::current())
+                            .Game_state
+                            .glob_flags &= !(CYBORG_ENABLED as BYTE);
                     }
-                    GlobData.Game_state.glob_flags = (GlobData.Game_state.glob_flags
+                    (*crate::ships::native::abi::GLOBDATA::current())
+                        .Game_state
+                        .glob_flags = ((*crate::ships::native::abi::GLOBDATA::current())
+                        .Game_state
+                        .glob_flags
                         & !(COMBAT_SPEED_MASK as BYTE))
                         | (cur_speed << COMBAT_SPEED_SHIFT);
                     (*pMS).CurState = CYBORG_OFF_SETTING + cur_speed;
@@ -762,8 +812,10 @@ pub(crate) mod runtime {
         } else {
             let mut OldRect: RECT = mem::zeroed();
             let mut buf: [UNICODE; 256] = [0; 256];
-            let SaveSS = GlobData.SIS_state;
-            let player_q = GlobData.Game_state.built_ship_q;
+            let SaveSS = (*crate::ships::native::abi::GLOBDATA::current()).SIS_state;
+            let player_q = (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .built_ship_q;
             let OldContext = SetContext(StatusContext);
             GetContextClipRect(&mut OldRect);
             r.corner.x = (SIS_ORG_X as i32
@@ -775,8 +827,12 @@ pub(crate) mod runtime {
             r.extent.width = STATUS_WIDTH as COORD;
             r.extent.height = (ScreenHeight - (SAFE_Y as i32 * 2)) as COORD;
             SetContextClipRect(&mut r);
-            GlobData.SIS_state = (*pSD).SS;
-            let queue = ptr::addr_of_mut!(GlobData.Game_state.built_ship_q);
+            (*crate::ships::native::abi::GLOBDATA::current()).SIS_state = (*pSD).SS;
+            let queue = ptr::addr_of_mut!(
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .Game_state
+                    .built_ship_q
+            );
             InitQueue(
                 queue,
                 MAX_BUILT_SHIPS as COUNT,
@@ -945,8 +1001,10 @@ pub(crate) mod runtime {
             t.CharCount = COUNT::MAX;
             font_DrawText(&mut t);
             SetContext(OldContext);
-            GlobData.Game_state.built_ship_q = player_q;
-            GlobData.SIS_state = SaveSS;
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .built_ship_q = player_q;
+            (*crate::ships::native::abi::GLOBDATA::current()).SIS_state = SaveSS;
         }
         UnbatchGraphics();
     }
@@ -1074,7 +1132,9 @@ pub(crate) mod runtime {
         let pickState = (*pMS).privData.cast::<PickGameState>();
         let TimeIn = GetTimeCounter();
         let occupied = (*pickState).summary[(*pMS).CurState as usize].year_index != 0;
-        let activity = GlobData.Game_state.CurrentActivity;
+        let activity = (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity;
         let action = picker_action(
             activity & CHECK_ABORT as ACTIVITY != 0,
             key(KEY_MENU_CANCEL),
@@ -1169,7 +1229,9 @@ pub(crate) mod runtime {
     }
 
     unsafe fn PickGame(saving: BOOLEAN, fromMainMenu: BOOLEAN) -> BOOLEAN {
-        let activity = GlobData.Game_state.CurrentActivity;
+        let activity = (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity;
         log::info!(
             "RUST_PICKER: enter saving={saving} main_menu={fromMainMenu} activity={:#x}",
             activity,
@@ -1245,9 +1307,15 @@ pub(crate) mod runtime {
         }
         SetMenuSounds(MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
         if pickState.success != 0 && saving == 0 {
-            GlobData.Game_state.CurrentActivity |= CHECK_LOAD as ACTIVITY;
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity |= CHECK_LOAD as ACTIVITY;
         }
-        if GlobData.Game_state.CurrentActivity & CHECK_ABORT as ACTIVITY == 0
+        if (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity
+            & CHECK_ABORT as ACTIVITY
+            == 0
             && (saving != 0 || (pickState.success == 0 && fromMainMenu == 0))
         {
             SetTransitionSource(&DlgRect);
@@ -1264,7 +1332,12 @@ pub(crate) mod runtime {
     }
 
     unsafe extern "C" fn DoGameOptions(pMS: *mut MENU_STATE) -> BOOLEAN {
-        if GlobData.Game_state.CurrentActivity & CHECK_ABORT as ACTIVITY != 0 {
+        if (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity
+            & CHECK_ABORT as ACTIVITY
+            != 0
+        {
             return 0;
         }
         if key(KEY_MENU_CANCEL) || (key(KEY_MENU_SELECT) && (*pMS).CurState == EXIT_GAME_MENU) {
@@ -1305,7 +1378,9 @@ pub(crate) mod runtime {
             DrawMenuStateStrings(PM_SAVE_GAME as BYTE, LOAD_GAME as SWORD);
             let success = PickGame(0, 1);
             if success == 0 {
-                GlobData.Game_state.CurrentActivity |= CHECK_ABORT as ACTIVITY;
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .Game_state
+                    .CurrentActivity |= CHECK_ABORT as ACTIVITY;
             }
             return 0;
         }
@@ -1318,7 +1393,13 @@ pub(crate) mod runtime {
         DoInput(ptr::addr_of_mut!(MenuState).cast(), 1);
         crate::automation::ui_observation::rust_automation_observe_game_options(0);
         SetFlashRect(ptr::null());
-        u32::from(GlobData.Game_state.CurrentActivity & (CHECK_ABORT | CHECK_LOAD) as ACTIVITY == 0)
+        u32::from(
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity
+                & (CHECK_ABORT | CHECK_LOAD) as ACTIVITY
+                == 0,
+        )
     }
 }
 

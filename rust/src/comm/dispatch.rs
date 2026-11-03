@@ -530,8 +530,7 @@ mod ffi {
     extern "C" {
         #[link_name = "CurStarDescPtr"]
         pub static mut CurStarDescPtr: *mut crate::savegame::runtime::star::CStarDesc;
-        #[link_name = "GlobData"]
-        pub static mut GLOB_DATA: crate::ships::native::abi::GLOBDATA;
+
     }
 }
 
@@ -575,7 +574,11 @@ unsafe fn get_head_link(pq: *const Queue) -> HLink {
 fn avail_race_queue() -> *mut Queue {
     #[cfg(not(test))]
     unsafe {
-        std::ptr::addr_of_mut!(ffi::GLOB_DATA.Game_state.avail_race_q)
+        std::ptr::addr_of_mut!(
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .avail_race_q
+        )
     }
     #[cfg(test)]
     std::ptr::null_mut()
@@ -584,7 +587,11 @@ fn avail_race_queue() -> *mut Queue {
 fn npc_built_ship_queue() -> *mut Queue {
     #[cfg(not(test))]
     unsafe {
-        std::ptr::addr_of_mut!(ffi::GLOB_DATA.Game_state.npc_built_ship_q)
+        std::ptr::addr_of_mut!(
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .npc_built_ship_q
+        )
     }
     #[cfg(test)]
     std::ptr::null_mut()
@@ -594,7 +601,11 @@ fn npc_built_ship_queue() -> *mut Queue {
 fn encounter_queue() -> *mut Queue {
     #[cfg(not(test))]
     unsafe {
-        std::ptr::addr_of_mut!(ffi::GLOB_DATA.Game_state.encounter_q)
+        std::ptr::addr_of_mut!(
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .encounter_q
+        )
     }
     #[cfg(test)]
     std::ptr::null_mut()
@@ -604,7 +615,11 @@ fn encounter_queue() -> *mut Queue {
 fn built_ship_queue() -> *mut Queue {
     #[cfg(not(test))]
     unsafe {
-        std::ptr::addr_of_mut!(ffi::GLOB_DATA.Game_state.built_ship_q)
+        std::ptr::addr_of_mut!(
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .built_ship_q
+        )
     }
     #[cfg(test)]
     std::ptr::null_mut()
@@ -875,12 +890,19 @@ pub unsafe fn init_communication(which_comm: u32) -> u16 {
             }
             ffi::DrawSISMessage(std::ptr::null());
             if in_hq_space() {
-                let point = ffi::GLOB_DATA.Game_state.ShipStamp.origin;
+                let point = (*crate::ships::native::abi::GLOBDATA::current())
+                    .Game_state
+                    .ShipStamp
+                    .origin;
                 ffi::DrawHyperCoords(CPoint {
                     x: point.x,
                     y: point.y,
                 });
-            } else if ffi::GLOB_DATA.Game_state.ip_planet == 0 {
+            } else if (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .ip_planet
+                == 0
+            {
                 let star =
                     &*ffi::CurStarDescPtr.cast::<crate::savegame::runtime::star::CStarDesc>();
                 ffi::DrawHyperCoords(CPoint {
@@ -888,7 +910,14 @@ pub unsafe fn init_communication(which_comm: u32) -> u16 {
                     y: star.star_pt.y,
                 });
             } else {
-                ffi::DrawSISTitle(std::ptr::addr_of!(ffi::GLOB_DATA.SIS_state.PlanetName).cast());
+                ffi::DrawSISTitle(
+                    std::ptr::addr_of!(
+                        (*crate::ships::native::abi::GLOBDATA::current())
+                            .SIS_state
+                            .PlanetName
+                    )
+                    .cast(),
+                );
             }
         }
     }
@@ -955,7 +984,11 @@ unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
     if activity & (CHECK_ABORT | CHECK_LOAD) == 0 {
         let npc = npc_built_ship_queue();
         if lobyte(activity) == IN_LAST_BATTLE
-            && ffi::GLOB_DATA.Game_state.glob_flags & CYBORG_ENABLED != 0
+            && (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .glob_flags
+                & CYBORG_ENABLED
+                != 0
         {
             ReinitQueue(npc);
         }
@@ -1095,14 +1128,17 @@ pub(crate) unsafe fn prepare_samatra_dev_fixture() -> Result<(), &'static str> {
     if crate::battle::build_native::AddEscortShips(4, 12) != 12 {
         return Err("boss fixture could not allocate Pkunk escorts");
     }
-    let sis = &mut (*std::ptr::addr_of_mut!(ffi::GLOB_DATA)).SIS_state;
+    let sis =
+        &mut (*std::ptr::addr_of_mut!((*crate::ships::native::abi::GLOBDATA::current()))).SIS_state;
     sis.CrewEnlisted = 50;
     sis.FuelOnBoard = 1000;
     sis.DriveSlots.fill(1);
     sis.JetSlots.fill(2);
     // Bomb conversion removes the flagship weapons; this is a steering ship.
     sis.ModuleSlots.fill(0xff);
-    ffi::GLOB_DATA.Game_state.glob_flags &= !(1 << 5);
+    (*crate::ships::native::abi::GLOBDATA::current())
+        .Game_state
+        .glob_flags &= !(1 << 5);
     Ok(())
 }
 

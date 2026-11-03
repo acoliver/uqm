@@ -2,7 +2,7 @@
 #![cfg(not(test))]
 #![allow(non_snake_case)]
 use super::abi::*;
-use super::globals::{GlobData, RadarContext};
+use super::globals::RadarContext;
 use super::{color, get, set};
 use std::ptr;
 
@@ -44,7 +44,10 @@ unsafe fn load() {
 #[no_mangle]
 pub unsafe extern "C" fn LoadHyperspace() -> BOOLEAN {
     super::hyperspace::live::rust_reset_hyper_distance();
-    GlobData.Game_state.ShipStamp.origin = POINT { x: -9999, y: -9999 };
+    (*crate::ships::native::abi::GLOBDATA::current())
+        .Game_state
+        .ShipStamp
+        .origin = POINT { x: -9999, y: -9999 };
     load();
     crate::collections::observation::swap_image_view(
         &mut *ptr::addr_of_mut!(HYPERSTARS[0]),
@@ -58,7 +61,17 @@ pub unsafe extern "C" fn LoadHyperspace() -> BOOLEAN {
         ClearSISRect(DRAW_SIS_DISPLAY as u8);
         RepairSISBorder();
     }
-    if GlobData.Game_state.autopilot.x == -1 || GlobData.Game_state.autopilot.y == -1 {
+    if (*crate::ships::native::abi::GLOBDATA::current())
+        .Game_state
+        .autopilot
+        .x
+        == -1
+        || (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .autopilot
+            .y
+            == -1
+    {
         DrawSISMessage(ptr::null());
     }
     SetContext(RadarContext);

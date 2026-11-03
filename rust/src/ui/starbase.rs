@@ -5,7 +5,7 @@
 use super::{outfit::DoOutfit, shipyard::DoShipyard};
 use crate::comm::comm_abi::{InitCommunication, SetCommIntroMode};
 use crate::navigation::abi::*;
-use crate::navigation::globals::GlobData;
+
 use crate::state::game_state_keys::{get_game_state, set_game_state};
 use std::{mem, ptr};
 extern "C" {
@@ -113,7 +113,9 @@ pub unsafe extern "C" fn DrawShipPiece(
             repair = 1;
             if which_piece < EMPTY_SLOT
                 && (which_slot == 0
-                    || GlobData.SIS_state.ModuleSlots[(which_slot - 1) as usize]
+                    || (*crate::ships::native::abi::GLOBDATA::current())
+                        .SIS_state
+                        .ModuleSlots[(which_slot - 1) as usize]
                         < EMPTY_SLOT as BYTE)
             {
                 repair += 1;
@@ -123,7 +125,10 @@ pub unsafe extern "C" fn DrawShipPiece(
                 which_piece += 1;
             }
             if which_slot < NUM_MODULE_SLOTS as COUNT - 1
-                && GlobData.SIS_state.ModuleSlots[(which_slot + 1) as usize] < EMPTY_SLOT as BYTE
+                && (*crate::ships::native::abi::GLOBDATA::current())
+                    .SIS_state
+                    .ModuleSlots[(which_slot + 1) as usize]
+                    < EMPTY_SLOT as BYTE
             {
                 repair = -1;
                 if which_piece == EMPTY_SLOT + 3 || which_slot + 1 == NUM_MODULE_SLOTS as COUNT - 3
@@ -236,7 +241,9 @@ pub unsafe extern "C" fn DrawShipPiece(
             top.origin.x += SHIP_PIECE_OFFSET as i16;
             side.origin.x += SHIP_PIECE_OFFSET as i16;
             which_slot += 1;
-            which_piece = GlobData.SIS_state.ModuleSlots[which_slot as usize] as COUNT;
+            which_piece = (*crate::ships::native::abi::GLOBDATA::current())
+                .SIS_state
+                .ModuleSlots[which_slot as usize] as COUNT;
             if which_piece == EMPTY_SLOT + 2 && which_slot >= NUM_MODULE_SLOTS as COUNT - 3 {
                 which_piece += 1;
             }
@@ -279,7 +286,12 @@ unsafe fn ExitStarBase(menu: *mut MENU_STATE) -> BOOLEAN {
         (*menu).hMusic = ptr::null_mut();
     }
     if (*menu).CurState == DEPART_BASE {
-        if GlobData.Game_state.CurrentActivity & (CHECK_ABORT | CHECK_LOAD) as u16 == 0 {
+        if (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity
+            & (CHECK_ABORT | CHECK_LOAD) as u16
+            == 0
+        {
             set_game_state("STARBASE_VISITED", 0);
         }
         return 0;
@@ -314,7 +326,12 @@ unsafe fn ExitStarBase(menu: *mut MENU_STATE) -> BOOLEAN {
 /// and input systems must be initialized and accessed only on that thread.
 #[no_mangle]
 pub unsafe extern "C" fn DoStarBase(menu: *mut MENU_STATE) -> BOOLEAN {
-    if GlobData.Game_state.CurrentActivity & (CHECK_ABORT | CHECK_LOAD) as u16 != 0 {
+    if (*crate::ships::native::abi::GLOBDATA::current())
+        .Game_state
+        .CurrentActivity
+        & (CHECK_ABORT | CHECK_LOAD) as u16
+        != 0
+    {
         (*menu).CurState = DEPART_BASE;
         return ExitStarBase(menu);
     }
@@ -385,9 +402,16 @@ unsafe fn DoTimePassage() {
 }
 
 unsafe fn CleanupAfterStarBase() {
-    if GlobData.Game_state.CurrentActivity & (CHECK_LOAD | CHECK_ABORT) as u16 == 0 {
+    if (*crate::ships::native::abi::GLOBDATA::current())
+        .Game_state
+        .CurrentActivity
+        & (CHECK_LOAD | CHECK_ABORT) as u16
+        == 0
+    {
         set_game_state("GLOBAL_FLAGS_AND_DATA", 0);
-        GlobData.Game_state.CurrentActivity = CHECK_LOAD as u16;
+        (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity = CHECK_LOAD as u16;
         NextActivity = IN_INTERPLANETARY as u16 | START_INTERPLANETARY as u16;
     }
 }
@@ -409,26 +433,46 @@ pub unsafe fn VisitStarBase() {
         SetCommIntroMode(CROSSFADE_SCREEN, 0);
         InitCommunication(CONVERSATION_COMMANDER_CONVERSATION);
         if get_game_state("PROBE_ILWRATH_ENCOUNTER") == 0
-            || GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 != 0
+            || (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity
+                & CHECK_ABORT as u16
+                != 0
         {
             CleanupAfterStarBase();
             return;
         }
         let ship = CloneShipFragment(
             ILWRATH_SHIP as COUNT,
-            ptr::addr_of_mut!(GlobData.Game_state.npc_built_ship_q),
+            ptr::addr_of_mut!(
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .Game_state
+                    .npc_built_ship_q
+            ),
             7,
         );
         (*ship.cast::<SHIP_FRAGMENT>()).race_id = BYTE::MAX;
         InitCommunication(CONVERSATION_ILWRATH_CONVERSATION);
-        if GlobData.SIS_state.CrewEnlisted == COUNT::MAX
-            || GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 != 0
+        if (*crate::ships::native::abi::GLOBDATA::current())
+            .SIS_state
+            .CrewEnlisted
+            == COUNT::MAX
+            || (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity
+                & CHECK_ABORT as u16
+                != 0
         {
             return;
         }
         SetCommIntroMode(CROSSFADE_SCREEN, 0);
         InitCommunication(CONVERSATION_COMMANDER_CONVERSATION);
-        if GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 != 0 {
+        if (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity
+            & CHECK_ABORT as u16
+            != 0
+        {
             return;
         }
         set_game_state("GLOBAL_FLAGS_AND_DATA", BYTE::MAX as u32);
@@ -436,7 +480,11 @@ pub unsafe fn VisitStarBase() {
     let previous = SetStatusMessageMode(StatMsgMode_SMM_RES_UNITS);
     if get_game_state("MOONBASE_ON_SHIP") != 0 || get_game_state("CHMMR_BOMB_STATE") == 2 {
         DoTimePassage();
-        if GlobData.SIS_state.CrewEnlisted == COUNT::MAX {
+        if (*crate::ships::native::abi::GLOBDATA::current())
+            .SIS_state
+            .CrewEnlisted
+            == COUNT::MAX
+        {
             return;
         }
         crate::automation::scenario::observe_encounter_dispatch(
@@ -444,7 +492,12 @@ pub unsafe fn VisitStarBase() {
         );
         SetCommIntroMode(FADE_IN_SCREEN, ONE_SECOND * 2);
         InitCommunication(CONVERSATION_COMMANDER_CONVERSATION);
-        if GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 != 0 {
+        if (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity
+            & CHECK_ABORT as u16
+            != 0
+        {
             return;
         }
         set_game_state("GLOBAL_FLAGS_AND_DATA", BYTE::MAX as u32);
@@ -473,7 +526,9 @@ pub unsafe fn InstallBombAtEarth() {
     ClearDrawable();
     SleepThreadUntil(FadeScreen(ScreenFadeType_FadeAllToColor, 0));
     set_game_state("CHMMR_BOMB_STATE", 3);
-    GlobData.Game_state.CurrentActivity = CHECK_LOAD as u16;
+    (*crate::ships::native::abi::GLOBDATA::current())
+        .Game_state
+        .CurrentActivity = CHECK_LOAD as u16;
     NextActivity = IN_INTERPLANETARY as u16 | START_INTERPLANETARY as u16;
     CurStarDescPtr = ptr::null_mut();
 }

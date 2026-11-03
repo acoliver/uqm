@@ -102,7 +102,7 @@ mod live {
         pub unsafe fn $name($($arg: $ty),*) $(-> $ret)? $body
     };
 }
-    operation!(uqm_get_current_activity_lobyte() -> u8 { crate::navigation::globals::GlobData.Game_state.CurrentActivity as u8 });
+    operation!(uqm_get_current_activity_lobyte() -> u8 { (*crate::ships::native::abi::GLOBDATA::current()).Game_state.CurrentActivity as u8 });
 
     operation!(rust_bridge_init_battle_arena() -> i16 {
         if crate::game_init::space_resources::InitSpace() == 0 { return 0; }

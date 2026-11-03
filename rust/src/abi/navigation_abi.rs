@@ -2727,7 +2727,7 @@ pub type ACTIVITY = UWORD;
 
 pub use crate::ships::native::abi::GLOBDATA;
 extern "C" {
-    pub static mut GlobData: GLOBDATA;
+    
 }
 pub const DEFGRP_NONE: _bindgen_ty_9 = 0;
 pub const DEFGRP_SHOFIXTI: _bindgen_ty_9 = 1;

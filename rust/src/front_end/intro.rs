@@ -56,7 +56,7 @@ pub(super) unsafe fn parse_text_lines(
 #[cfg(not(test))]
 pub(crate) mod runtime {
     use super::*;
-    use crate::navigation::globals::GlobData;
+
     use crate::video::control::{VidGetPosition, VidProcessFrame, VidSeek};
     use crate::video::legacy::{
         DestroyLegacyVideo, LegacyVideo, LegacyVideoRef, LoadLegacyVideoInstance, PlayLegacyVideo,
@@ -155,7 +155,7 @@ pub(crate) mod runtime {
             frame: SetAbsFrameIndex(skeleton, 0),
         };
         DrawStamp(&mut stamp);
-        let sis_state = ptr::addr_of!(GlobData.SIS_state);
+        let sis_state = ptr::addr_of!((*crate::ships::native::abi::GLOBDATA::current()).SIS_state);
         for (pieces, x, y, slots) in [
             (
                 ptr::addr_of!((*sis_state).DriveSlots).cast::<BYTE>(),
@@ -231,7 +231,13 @@ pub(crate) mod runtime {
 
     unsafe extern "C" fn do_presentation(raw: *mut c_void) -> BOOLEAN {
         let state = &mut *raw.cast::<PresentationState>();
-        if menu(KEY_MENU_CANCEL) || GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 != 0 {
+        if menu(KEY_MENU_CANCEL)
+            || (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity
+                & CHECK_ABORT as u16
+                != 0
+        {
             crate::automation::ending::presentation_cancelled();
             return 0;
         }
@@ -728,7 +734,11 @@ pub(crate) mod runtime {
         if menu(KEY_MENU_SELECT)
             || menu(KEY_MENU_CANCEL)
             || menu(KEY_MENU_SPECIAL)
-            || GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 != 0
+            || (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity
+                & CHECK_ABORT as u16
+                != 0
         {
             return 0;
         }

@@ -180,11 +180,14 @@ pub(super) unsafe fn draw_inner_system() {
     let planet = (*s).pOrbitalDesc;
     validate_inner_orbits();
     draw_system((*planet).radius, true);
-    extern "C" {
-        static mut GlobData: crate::ships::native::abi::GLOBDATA;
-    }
+    extern "C" {}
     DrawSISTitle(
-        std::ptr::addr_of_mut!((*std::ptr::addr_of_mut!(GlobData)).SIS_state.PlanetName).cast(),
+        std::ptr::addr_of_mut!(
+            (*std::ptr::addr_of_mut!((*crate::ships::native::abi::GLOBDATA::current())))
+                .SIS_state
+                .PlanetName
+        )
+        .cast(),
     );
 }
 

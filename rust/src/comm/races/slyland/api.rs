@@ -20,7 +20,7 @@ mod live {
     use crate::comm::commglue_abi::runtime::NPCNumber;
 
     extern "C" {
-        static mut GlobData: crate::ships::native::abi::GLOBDATA;
+
         static mut ScreenWidth: i32;
         static mut ScreenHeight: i32;
     }
@@ -36,8 +36,12 @@ mod live {
         fn position(&self) -> (i32, i32, i32, i32) {
             unsafe {
                 (
-                    GlobData.SIS_state.log_x,
-                    GlobData.SIS_state.log_y,
+                    (*crate::ships::native::abi::GLOBDATA::current())
+                        .SIS_state
+                        .log_x,
+                    (*crate::ships::native::abi::GLOBDATA::current())
+                        .SIS_state
+                        .log_y,
                     ScreenWidth,
                     ScreenHeight,
                 )

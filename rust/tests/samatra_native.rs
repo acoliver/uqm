@@ -6,7 +6,9 @@ fn terminal_outcome_survives_descriptor_teardown_until_the_next_battle() {
         unsafe {
             use uqm_rust::automation::samatra::observe;
             uqm_rust::state::ffi::rust_init_game_state();
-            GlobData.Game_state.CurrentActivity = IN_LAST_BATTLE as u16;
+            (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity = IN_LAST_BATTLE as u16;
             uqm_rust::app::bridge::battle(|battle| battle.initialize());
             let mut ship = boss(&battle);
             let expected = uqm_rust::ships::races::samatra::observation::Events {
@@ -23,13 +25,19 @@ fn terminal_outcome_survives_descriptor_teardown_until_the_next_battle() {
             assert!(matches!(ship.descriptor_mut().race_state, RaceState::None));
             drop(ship);
             uqm_rust::battle::process_native::InitDisplayList();
-            GlobData.Game_state.CurrentActivity = WON_LAST_BATTLE as u16;
+            (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity = WON_LAST_BATTLE as u16;
             assert_eq!(observe(), (expected, None));
             // A non-boss battle must clear the result too, before any ship spawns.
-            GlobData.Game_state.CurrentActivity = (IN_ENCOUNTER | IN_BATTLE) as u16;
+            (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity = (IN_ENCOUNTER | IN_BATTLE) as u16;
             uqm_rust::app::bridge::battle(|battle| battle.initialize());
             uqm_rust::app::bridge::enter(|cx| assert!(cx.terminal_outcome().is_none()));
-            GlobData.Game_state.CurrentActivity = IN_LAST_BATTLE as u16;
+            (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity = IN_LAST_BATTLE as u16;
             assert_eq!(observe(), (Default::default(), None));
         }
     });
@@ -56,7 +64,9 @@ fn live_observation_projects_owned_events_generators_hazards_and_player() {
             player.ship_mut().SpeciesID = SPECIES_ID_SIS_SHIP_ID;
             player.ship_mut().ShipFacing = 19;
             set_game_state("BOMB_CARRIER", 1);
-            GlobData.Game_state.CurrentActivity = (IN_LAST_BATTLE | IN_BATTLE) as u16;
+            (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity = (IN_LAST_BATTLE | IN_BATTLE) as u16;
             let (events, snapshot) = observe();
             let snapshot = snapshot.unwrap_or_else(|| panic!("live final battle"));
             assert_eq!(events.generation, 1);
@@ -170,7 +180,9 @@ fn lifecycle_counts_each_identity_once_and_retains_gate_entry() {
                 })
                 .unwrap_or_else(|| panic!("boss gate"));
             call_element("ships::races::samatra::gate_preprocess", id(gate.cast()));
-            GlobData.Game_state.CurrentActivity = IN_BATTLE as u16;
+            (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity = IN_BATTLE as u16;
             set_game_state("BOMB_CARRIER", 1);
             let mut pa = POINT { x: 0, y: 0 };
             let mut pb = pa;
@@ -385,7 +397,9 @@ fn only_player_ship_bomb_carrier_through_open_gate_finishes_battle() {
                 for bomb in [0, 1] {
                     for is_ship in [false, true] {
                         for owner in [RPG_PLAYER_NUM, NPC_PLAYER_NUM] {
-                            GlobData.Game_state.CurrentActivity = IN_BATTLE as u16;
+                            (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                                .Game_state
+                                .CurrentActivity = IN_BATTLE as u16;
                             set_game_state("BOMB_CARRIER", bomb);
                             (*player.ptr()).playerNr = owner as SIZE;
                             (*player.ptr()).state_flags = if is_ship {
@@ -402,7 +416,11 @@ fn only_player_ship_bomb_carrier_through_open_gate_finishes_battle() {
                                 hooks::CollisionCall::Hook,
                             );
                             assert_eq!(
-                                GlobData.Game_state.CurrentActivity & IN_BATTLE as u16 == 0,
+                                (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                                    .Game_state
+                                    .CurrentActivity
+                                    & IN_BATTLE as u16
+                                    == 0,
                                 generators == 0 && bomb == 1 && is_ship && owner == RPG_PLAYER_NUM
                             );
                         }

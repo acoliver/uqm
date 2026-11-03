@@ -30,7 +30,7 @@ fn scroll_step(rate: c_int) -> (c_int, c_int, TimePeriod) {
 pub(crate) mod runtime {
     use super::super::intro::{parse_text_lines, rgb15, BLACK_COLOR, WANT_PIXMAP};
     use super::*;
-    use crate::navigation::globals::GlobData;
+
     use std::ffi::{c_char, c_void};
     use std::ptr;
 
@@ -513,7 +513,11 @@ pub(crate) mod runtime {
         oscillDisabled = 1;
         let mut i = 0;
         while i < CONVERSATIONS.len()
-            && GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 == 0
+            && (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity
+                & CHECK_ABORT as u16
+                == 0
         {
             SetCommIntroMode((CIM_CROSSFADE_WINDOW) as u32, 0);
             InitCommunication(CONVERSATIONS[i]);
@@ -533,7 +537,11 @@ pub(crate) mod runtime {
         if CREDITS_RUNNING != 0 {
             state.CloseTimeOut = 0;
         }
-        if GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 != 0
+        if (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity
+            & CHECK_ABORT as u16
+            != 0
             || (state.AllowCancel != 0 && (menu(KEY_MENU_SELECT) || menu(KEY_MENU_CANCEL)))
         {
             return 0;
@@ -605,7 +613,12 @@ pub(crate) mod runtime {
             outtakes();
             OUT_TAKES_RUNNING = 0;
         }
-        if GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 == 0 {
+        if (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity
+            & CHECK_ABORT as u16
+            == 0
+        {
             if with_outtakes != 0 {
                 crate::automation::ending::credits_controls_ready();
             }

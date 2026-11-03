@@ -31,7 +31,7 @@ fn move_axis(position: &mut i32, delta: i16, maximum: i32) -> i16 {
 #[allow(non_snake_case)]
 pub(crate) mod live {
     use super::*;
-    use crate::navigation::globals::GlobData;
+
     use crate::navigation::{get, set};
     use std::ptr;
 
@@ -85,12 +85,20 @@ pub(crate) mod live {
     #[no_mangle]
     pub unsafe extern "C" fn MoveSIS(dx: *mut i16, dy: *mut i16) {
         let mut x = move_axis(
-            &mut *ptr::addr_of_mut!(GlobData.SIS_state.log_x),
+            &mut *ptr::addr_of_mut!(
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .SIS_state
+                    .log_x
+            ),
             *dx,
             maximum_x(),
         );
         let mut y = move_axis(
-            &mut *ptr::addr_of_mut!(GlobData.SIS_state.log_y),
+            &mut *ptr::addr_of_mut!(
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .SIS_state
+                    .log_y
+            ),
             *dy,
             maximum_y(),
         );
@@ -112,7 +120,12 @@ pub(crate) mod live {
                 }
             });
         }
-        if GlobData.SIS_state.FuelOnBoard != 0 && get("ARILOU_SPACE_SIDE") <= 1 {
+        if (*crate::ships::native::abi::GLOBDATA::current())
+            .SIS_state
+            .FuelOnBoard
+            != 0
+            && get("ARILOU_SPACE_SIDE") <= 1
+        {
             x = x.wrapping_abs();
             y = y.wrapping_abs();
             DISTANCE.dx = DISTANCE.dx.wrapping_add(x as u16);
@@ -150,13 +163,34 @@ pub(crate) mod live {
     #[no_mangle]
     pub unsafe extern "C" fn check_hyperspace_encounter() {
         let universe = POINT {
-            x: universe_x(GlobData.SIS_state.log_x),
-            y: universe_y(GlobData.SIS_state.log_y),
+            x: universe_x(
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .SIS_state
+                    .log_x,
+            ),
+            y: universe_y(
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .SIS_state
+                    .log_y,
+            ),
         };
-        let queue = ptr::addr_of_mut!(GlobData.Game_state.encounter_q);
-        let mut handle = GlobData.Game_state.avail_race_q.head;
+        let queue = ptr::addr_of_mut!(
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .encounter_q
+        );
+        let mut handle = (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .avail_race_q
+            .head;
         let mut race = 0usize;
-        while !handle.is_null() && GlobData.Game_state.CurrentActivity & IN_BATTLE as u16 != 0 {
+        while !handle.is_null()
+            && (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity
+                & IN_BATTLE as u16
+                != 0
+        {
             let fleet = handle.cast::<FLEET_INFO>();
             handle = (*fleet).succ;
             let mut radius = (*fleet).actual_strength;
@@ -175,7 +209,11 @@ pub(crate) mod live {
                             percent * get("SLYLANDRO_MULTIPLIER") as u16
                         };
                     } else if race == MELNORME_SHIP as usize
-                        && (GlobData.SIS_state.FuelOnBoard == 0 || get("USED_BROADCASTER") != 0)
+                        && ((*crate::ships::native::abi::GLOBDATA::current())
+                            .SIS_state
+                            .FuelOnBoard
+                            == 0
+                            || get("USED_BROADCASTER") != 0)
                         && get("MELNORME_ANGER") < 3
                     {
                         percent = if get("USED_BROADCASTER") == 0 {

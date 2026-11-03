@@ -3,14 +3,21 @@
 #![allow(non_snake_case)]
 use super::abi::*;
 use super::get;
-use super::globals::GlobData;
+
 use super::hyper_transition::cleanup;
 use std::{mem, ptr};
 
 unsafe extern "C" fn input(state: *mut MENU_STATE) -> BOOLEAN {
     let mut select = PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0;
-    if GlobData.Game_state.CurrentActivity & ((CHECK_ABORT | CHECK_LOAD) as u16) != 0
-        || GlobData.SIS_state.CrewEnlisted == u16::MAX
+    if (*crate::ships::native::abi::GLOBDATA::current())
+        .Game_state
+        .CurrentActivity
+        & ((CHECK_ABORT | CHECK_LOAD) as u16)
+        != 0
+        || (*crate::ships::native::abi::GLOBDATA::current())
+            .SIS_state
+            .CrewEnlisted
+            == u16::MAX
     {
         return 0;
     }
@@ -22,7 +29,11 @@ unsafe extern "C" fn input(state: *mut MENU_STATE) -> BOOLEAN {
         2 => {
             select = DevicesMenu() != 0;
             if get("PORTAL_COUNTER") != 0
-                || GlobData.Game_state.CurrentActivity & START_ENCOUNTER as u16 != 0
+                || (*crate::ships::native::abi::GLOBDATA::current())
+                    .Game_state
+                    .CurrentActivity
+                    & START_ENCOUNTER as u16
+                    != 0
             {
                 return 0;
             }
@@ -45,7 +56,12 @@ unsafe extern "C" fn input(state: *mut MENU_STATE) -> BOOLEAN {
         6 => return 0,
         _ => {}
     }
-    if GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 == 0 {
+    if (*crate::ships::native::abi::GLOBDATA::current())
+        .Game_state
+        .CurrentActivity
+        & CHECK_ABORT as u16
+        == 0
+    {
         if select {
             if optWhichMenu != 2 {
                 (*state).CurState = 6;
@@ -72,13 +88,23 @@ pub unsafe fn HyperspaceMenu() {
     DoInput(ptr::addr_of_mut!(state).cast(), 1);
     SetFlashRect(ptr::null());
     SetContext(SpaceContext);
-    if GlobData.Game_state.CurrentActivity & ((CHECK_ABORT | CHECK_LOAD) as u16) == 0 {
+    if (*crate::ships::native::abi::GLOBDATA::current())
+        .Game_state
+        .CurrentActivity
+        & ((CHECK_ABORT | CHECK_LOAD) as u16)
+        == 0
+    {
         ClearSISRect(CLEAR_SIS_RADAR as u8);
         WaitForNoInput(ONE_SECOND / 2, 0);
     }
     SetContextBackGroundColor(old_color);
     SetContext(old_context);
-    if GlobData.Game_state.CurrentActivity & IN_BATTLE as u16 == 0 {
+    if (*crate::ships::native::abi::GLOBDATA::current())
+        .Game_state
+        .CurrentActivity
+        & IN_BATTLE as u16
+        == 0
+    {
         crate::app::bridge::enter(cleanup);
     }
     BatchGraphics();

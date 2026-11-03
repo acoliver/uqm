@@ -359,7 +359,10 @@ pub(crate) mod engine {
                     x: 32,
                     y: cy.wrapping_add(6),
                 },
-                pStr: (&raw const GlobData.SIS_state.CommanderName).cast(),
+                pStr: (&raw const (*crate::ships::native::abi::GLOBDATA::current())
+                    .SIS_state
+                    .CommanderName)
+                    .cast(),
                 align: TEXT_ALIGN_ALIGN_CENTER,
                 CharCount: COUNT::MAX,
             };

@@ -83,7 +83,7 @@ use crate::graphics::context_abi::DestroyContext;
 use crate::graphics::font_abi::SetContextFont;
 
 extern "C" {
-    static mut GlobData: crate::ships::native::abi::GLOBDATA;
+
     static mut NextActivity: u16;
     static mut SpaceContext: *mut crate::graphics::native_abi::context_desc;
     static mut PlanetContext: *mut crate::graphics::native_abi::context_desc;
@@ -238,8 +238,20 @@ unsafe fn fuel() -> u16 {
 unsafe fn spawn_fwiffo() {
     crate::planets::c_api::set_encounter_group(0);
     PutGroupInfo(0, u8::MAX);
-    ReinitQueue(std::ptr::addr_of_mut!(GlobData.Game_state.ip_group_q).cast::<Queue>());
-    let queue = std::ptr::addr_of_mut!(GlobData.Game_state.npc_built_ship_q).cast::<Queue>();
+    ReinitQueue(
+        std::ptr::addr_of_mut!(
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .ip_group_q
+        )
+        .cast::<Queue>(),
+    );
+    let queue = std::ptr::addr_of_mut!(
+        (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .npc_built_ship_q
+    )
+    .cast::<Queue>();
     assert_eq!(CountLinks(queue), 0);
     let ship = clone_ship_fragment(crate::comm::dispatch::ship::SPATHI_SHIP, queue, 1)
         .cast::<CShipFragment>();
@@ -285,7 +297,9 @@ unsafe fn dispatch_lander() -> bool {
             crate::logging::LogLevel::Fatal,
             &format!("Rust PlanetSide failed with status {}", reply.status),
         );
-        GlobData.Game_state.CurrentActivity |= CHECK_ABORT;
+        (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity |= CHECK_ABORT;
     } else {
         (*system).SysInfo.PlanetInfo.ScanRetrieveMask = context.retrieval_masks;
         if reply.detail == 4 {
@@ -303,13 +317,20 @@ unsafe fn dispatch_lander() -> bool {
             );
         }
     }
-    if GlobData.Game_state.CurrentActivity & CHECK_ABORT != 0 {
+    if (*crate::ships::native::abi::GLOBDATA::current())
+        .Game_state
+        .CurrentActivity
+        & CHECK_ABORT
+        != 0
+    {
         return false;
     }
     if crate::state::game_state_keys::get_game_state("FOUND_PLUTO_SPATHI") == 1 {
         spawn_fwiffo();
         NextActivity |= CHECK_LOAD;
-        GlobData.Game_state.CurrentActivity |= START_ENCOUNTER;
+        (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity |= START_ENCOUNTER;
         SaveSolarSysLocation();
         return false;
     }
@@ -327,7 +348,11 @@ unsafe extern "C" fn pick_input(menu: *mut MENU_STATE) -> u32 {
     let state = &mut *((*menu).privData.cast::<PickState>());
     let time_in = GetTimeCounter();
     let pulse = std::ptr::addr_of!(PulsedInputState).read();
-    if GlobData.Game_state.CurrentActivity & CHECK_ABORT != 0
+    if (*crate::ships::native::abi::GLOBDATA::current())
+        .Game_state
+        .CurrentActivity
+        & CHECK_ABORT
+        != 0
         || pulse.menu[KEY_MENU_CANCEL as usize] != 0
     {
         state.success = false;
@@ -547,7 +572,12 @@ unsafe fn unavailable() -> bool {
 unsafe extern "C" fn scan_input(menu: *mut MENU_STATE) -> u32 {
     let pulse = std::ptr::addr_of!(PulsedInputState).read();
     let selected = pulse.menu[KEY_MENU_SELECT as usize] != 0;
-    if GlobData.Game_state.CurrentActivity & CHECK_ABORT != 0 {
+    if (*crate::ships::native::abi::GLOBDATA::current())
+        .Game_state
+        .CurrentActivity
+        & CHECK_ABORT
+        != 0
+    {
         return 0;
     }
     if pulse.menu[KEY_MENU_CANCEL as usize] != 0 || (selected && (*menu).CurState == 3) {
@@ -559,9 +589,18 @@ unsafe extern "C" fn scan_input(menu: *mut MENU_STATE) -> u32 {
                 return 1;
             }
             let required = fuel();
-            if GlobData.SIS_state.FuelOnBoard < u32::from(required)
-                || GlobData.SIS_state.NumLanders == 0
-                || GlobData.SIS_state.CrewEnlisted == 0
+            if (*crate::ships::native::abi::GLOBDATA::current())
+                .SIS_state
+                .FuelOnBoard
+                < u32::from(required)
+                || (*crate::ships::native::abi::GLOBDATA::current())
+                    .SIS_state
+                    .NumLanders
+                    == 0
+                || (*crate::ships::native::abi::GLOBDATA::current())
+                    .SIS_state
+                    .CrewEnlisted
+                    == 0
             {
                 PlayMenuSound(2);
                 return 1;

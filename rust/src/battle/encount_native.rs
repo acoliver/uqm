@@ -99,7 +99,10 @@ pub(crate) mod engine {
         GetStringAddress(SetAbsStringTableIndex(GameStrings, index as COUNT)).cast()
     }
     unsafe fn planet_name() -> *mut UNICODE {
-        (&raw mut GlobData.SIS_state.PlanetName).cast()
+        (&raw mut (*crate::ships::native::abi::GLOBDATA::current())
+            .SIS_state
+            .PlanetName)
+            .cast()
     }
     unsafe fn escape_pressed() -> bool {
         let template = *(&raw const PlayerControls).cast::<CONTROL_TEMPLATE>();
@@ -146,9 +149,13 @@ pub(crate) mod engine {
 
     pub(crate) unsafe fn GetShipFragQueueForPlayer(player: COUNT) -> *mut QUEUE {
         if player == RPG_PLAYER_NUM as u16 {
-            &raw mut GlobData.Game_state.built_ship_q
+            &raw mut (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .built_ship_q
         } else {
-            &raw mut GlobData.Game_state.npc_built_ship_q
+            &raw mut (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .npc_built_ship_q
         }
     }
 
@@ -157,7 +164,12 @@ pub(crate) mod engine {
     #[no_mangle]
     pub unsafe extern "C" fn BuildBattle(player: COUNT) {
         EncounterRace = -1;
-        if GlobData.Game_state.npc_built_ship_q.head.is_null() {
+        if (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .npc_built_ship_q
+            .head
+            .is_null()
+        {
             set_game_state(BATTLE_SEGUE, END_BATTLE_SEGUE, 0);
             return;
         }
@@ -285,7 +297,10 @@ pub(crate) mod engine {
         stamp.frame = planet[0];
         DrawStamp(&mut stamp);
         if activity() as u8 != IN_LAST_BATTLE as u8 {
-            let mut h = GlobData.Game_state.npc_built_ship_q.head;
+            let mut h = (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .npc_built_ship_q
+                .head;
             let mut i = 0usize;
             while !h.is_null() && i < 60 {
                 let frag = h.cast::<SHIP_FRAGMENT>();
@@ -389,7 +404,10 @@ pub(crate) mod engine {
         let mut killed = 0u16;
         free_gravity_well();
         if activity() & (CHECK_ABORT | CHECK_LOAD) as u16 != 0
-            || GlobData.SIS_state.CrewEnlisted == COUNT::MAX
+            || (*crate::ships::native::abi::GLOBDATA::current())
+                .SIS_state
+                .CrewEnlisted
+                == COUNT::MAX
             || activity() as u8 == IN_LAST_BATTLE as u8
             || activity() as u8 == WON_LAST_BATTLE as u8
         {
@@ -416,14 +434,16 @@ pub(crate) mod engine {
             counters[0],
             game_state(URQUAN_PROTECTING_SAMATRA, END_URQUAN_PROTECTING_SAMATRA) != 0,
         );
-        let frag = GlobData
+        let frag = (*crate::ships::native::abi::GLOBDATA::current())
             .Game_state
             .npc_built_ship_q
             .head
             .cast::<SHIP_FRAGMENT>();
         EncounterRace = (*frag).race_id as i16;
         if GetStarShipFromIndex(
-            &raw mut GlobData.Game_state.avail_race_q,
+            &raw mut (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .avail_race_q,
             EncounterRace as COUNT,
         )
         .is_null()
@@ -435,7 +455,9 @@ pub(crate) mod engine {
         let mut sleepy = true;
         for side in 0..NUM_SIDES as usize {
             let q = if side == 0 {
-                &raw mut GlobData.Game_state.built_ship_q
+                &raw mut (*crate::ships::native::abi::GLOBDATA::current())
+                    .Game_state
+                    .built_ship_q
             } else {
                 if victory < 0 {
                     victory = 0;
@@ -443,8 +465,17 @@ pub(crate) mod engine {
                     DrawSISFrame();
                     DrawSISMessage(ptr::null());
                     if inHQSpace() != 0 {
-                        DrawHyperCoords(GlobData.Game_state.ShipStamp.origin);
-                    } else if GlobData.Game_state.ip_planet == 0 {
+                        DrawHyperCoords(
+                            (*crate::ships::native::abi::GLOBDATA::current())
+                                .Game_state
+                                .ShipStamp
+                                .origin,
+                        );
+                    } else if (*crate::ships::native::abi::GLOBDATA::current())
+                        .Game_state
+                        .ip_planet
+                        == 0
+                    {
                         DrawHyperCoords((*CurStarDescPtr).star_pt);
                     } else {
                         DrawSISTitle(planet_name());
@@ -454,7 +485,9 @@ pub(crate) mod engine {
                         DrawArmadaPickShip(1, &mut salvage_rect);
                     }
                 }
-                &raw mut GlobData.Game_state.npc_built_ship_q
+                &raw mut (*crate::ships::native::abi::GLOBDATA::current())
+                    .Game_state
+                    .npc_built_ship_q
             };
             link_queue::ships(NUM_SIDES as usize - 1 - side).reinit();
             let mut h = (*q).head;
@@ -619,8 +652,19 @@ pub(crate) mod engine {
         });
         WaitForSoundEnd(COUNT::MAX);
         let mut saved = ptr::null_mut();
-        if GlobData.Game_state.glob_flags & CYBORG_ENABLED as u8 != 0 {
-            let speed = 1 | ((combat_speed(GlobData.Game_state.glob_flags) as u16) << 8);
+        if (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .glob_flags
+            & CYBORG_ENABLED as u8
+            != 0
+        {
+            let speed = 1
+                | ((combat_speed(
+                    (*crate::ships::native::abi::GLOBDATA::current())
+                        .Game_state
+                        .glob_flags,
+                ) as u16)
+                    << 8);
             crate::app::bridge::battle(|b| b.nth_frame = speed);
             set_player_control(0, CYBORG_CONTROL | AWESOME_RATING);
             saved = player_input(0);
@@ -643,9 +687,16 @@ pub(crate) mod engine {
         DestroySound(ReleaseStringTable(Kernel::current().game_sounds));
         Kernel::current().game_sounds = ptr::null_mut();
         if activity() & CHECK_ABORT as u16 != 0 {
-            GlobData.SIS_state.CrewEnlisted = COUNT::MAX;
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .SIS_state
+                .CrewEnlisted = COUNT::MAX;
         }
-        if GlobData.Game_state.glob_flags & CYBORG_ENABLED as u8 != 0 {
+        if (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .glob_flags
+            & CYBORG_ENABLED as u8
+            != 0
+        {
             crate::app::bridge::battle(|b| b.nth_frame = 0);
             set_player_control(0, HUMAN_CONTROL | STANDARD_RATING);
             ClearPlayerInput(0);

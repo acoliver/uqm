@@ -132,13 +132,19 @@ fn warp_in_is_disabled_in_encounters_and_one_shot_in_melee() {
             (*enemy.ptr()).current.location = POINT { x: 5000, y: 5000 };
             (*enemy.ptr()).next = (*enemy.ptr()).current.clone();
             (*ship.ptr()).state_flags |= APPEARING as u16;
-            let previous = GlobData.Game_state.CurrentActivity;
-            GlobData.Game_state.CurrentActivity = IN_ENCOUNTER as _;
+            let previous = (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity;
+            (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity = IN_ENCOUNTER as _;
             with_rng(42, 0, || ship.preprocess());
             assert_eq!((*ship.ptr()).current.location.x, 4000);
             assert_eq!(ship.descriptor_mut().callbacks()[1], 0);
             ship.descriptor_mut().race_callbacks.pre = uqm_rust::engine::battle::Selection::Default;
-            GlobData.Game_state.CurrentActivity = 0;
+            (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity = 0;
             TFB_SeedRandom(42);
             let raw_x = 5000 - 832 + (TFB_Random() as COUNT) % 1664;
             let raw_y = 5000 - 832 + (TFB_Random() as COUNT) % 1664;
@@ -164,7 +170,9 @@ fn warp_in_is_disabled_in_encounters_and_one_shot_in_melee() {
                 (*ship.ptr()).IntersectControl.EndPoint.x,
                 (x >> ONE_SHIFT) as i16
             );
-            GlobData.Game_state.CurrentActivity = previous;
+            (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity = previous;
         }
     })
 }

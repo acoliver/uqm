@@ -77,7 +77,13 @@ pub(super) unsafe extern "C" fn confirm(state: *mut MELEE_STATE) -> u32 {
     }
     (*state).input_func = Some(DoMelee);
     start(state);
-    u32::from(GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 == 0)
+    u32::from(
+        (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity
+            & CHECK_ABORT as u16
+            == 0,
+    )
 }
 pub(super) unsafe fn start(state: *mut MELEE_STATE) {
     FadeMusic(0, 840 / 2);
@@ -103,13 +109,20 @@ pub(super) unsafe fn start(state: *mut MELEE_STATE) {
         (*battle).net = None;
         free_gravity_well();
         ClearPlayerInputAll();
-        if GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 != 0 {
+        if (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity
+            & CHECK_ABORT as u16
+            != 0
+        {
             return;
         }
         SleepThreadUntil(FadeScreen(FADE_ALL_TO_BLACK, 840 / 2).wrapping_add(840 / 60));
         FlushColorXForms();
     }
-    GlobData.Game_state.CurrentActivity = SUPER_MELEE as u16;
+    (*crate::ships::native::abi::GLOBDATA::current())
+        .Game_state
+        .CurrentActivity = SUPER_MELEE as u16;
     (*state).initialized = 0;
 }
 pub(super) unsafe fn start_button(state: *mut MELEE_STATE) {
@@ -164,7 +177,12 @@ pub(super) unsafe extern "C" fn connecting(state: *mut MELEE_STATE) -> u32 {
         let time = GetTimeCounter();
         let side = usize::from((*state).melee_option == 0);
         GamePaused = 0;
-        if GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 != 0 {
+        if (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity
+            & CHECK_ABORT as u16
+            != 0
+        {
             return 0;
         }
         SetMenuSounds(0, 0);

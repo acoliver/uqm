@@ -475,7 +475,6 @@ mod sounds_access {
 
 mod star_access {
     #[cfg(not(test))]
-    use crate::navigation::globals::GlobData;
     #[cfg(not(test))]
     use crate::navigation::hyper_transition::{element_universe, init_transition};
     #[cfg(not(test))]
@@ -499,7 +498,11 @@ mod star_access {
         }
         pub fn autopilot(&self) -> crate::graphics::native_abi::POINT {
             // SAFETY: this is a value projection of the game-thread-owned world.
-            unsafe { GlobData.Game_state.autopilot }
+            unsafe {
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .Game_state
+                    .autopilot
+            }
         }
         pub(crate) fn star_contact(&self, id: crate::engine::battle::ElementId) -> StarContact {
             let mut point = element_universe(self, id);

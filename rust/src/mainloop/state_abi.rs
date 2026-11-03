@@ -1,6 +1,6 @@
 //! Shared state entry points formerly supplied by rust_bridge_mainloop.c.
 use crate::io::uio_bridge::{uio_DirHandle, uio_MountHandle, uio_Repository};
-use crate::navigation::globals::GlobData;
+
 use crate::ships::native::abi as options;
 use std::{ffi::c_char, ptr};
 extern "C" {
@@ -27,7 +27,7 @@ macro_rules! accessor {
         }
     };
 }
-accessor!(set_current_activity(value: u16) = GlobData.Game_state.CurrentActivity = value);
+accessor!(set_current_activity(value: u16) = (*crate::ships::native::abi::GLOBDATA::current()).Game_state.CurrentActivity = value);
 accessor!(get_next_activity() -> u16 = NEXT_ACTIVITY);
 accessor!(set_next_activity(value: u16) = NEXT_ACTIVITY = value);
 accessor!(get_last_activity() -> u16 = crate::game_init::kernel_abi::LastActivity);
@@ -37,8 +37,8 @@ accessor!(uqm_set_chmmr_bomb_state(value: u8) = set_game_byte("CHMMR_BOMB_STATE"
 accessor!(uqm_get_starbase_available() -> u8 = game_byte("STARBASE_AVAILABLE"));
 accessor!(uqm_get_global_flags_and_data() -> u8 = game_byte("GLOBAL_FLAGS_AND_DATA"));
 accessor!(uqm_get_kohr_ah_killed_all() -> u8 = game_byte("KOHR_AH_KILLED_ALL"));
-accessor!(uqm_get_crew_enlisted() -> u16 = GlobData.SIS_state.CrewEnlisted);
-accessor!(uqm_zero_global_velocity() -> () = { GlobData.Game_state.velocity = std::mem::zeroed(); });
+accessor!(uqm_get_crew_enlisted() -> u16 = (*crate::ships::native::abi::GLOBDATA::current()).SIS_state.CrewEnlisted);
+accessor!(uqm_zero_global_velocity() -> () = { (*crate::ships::native::abi::GLOBDATA::current()).Game_state.velocity = std::mem::zeroed(); });
 accessor!(uqm_set_flash_rect_null() -> () = crate::ui::sis::SetFlashRect(ptr::null()));
 accessor!(uqm_set_player_input_all_or_explode() -> () = {
     if !crate::game_init::kernel_abi::SetPlayerInputAll() { log::error!("Could not set player input."); std::process::abort(); }
@@ -61,11 +61,11 @@ accessor!(uqm_set_base_content_path(path: *const c_char) = {
 });
 
 type Queue = crate::navigation::abi::QUEUE;
-accessor!(rust_get_avail_race_queue() -> *mut Queue = ptr::addr_of_mut!(GlobData.Game_state.avail_race_q));
-accessor!(rust_get_npc_built_ship_queue() -> *mut Queue = ptr::addr_of_mut!(GlobData.Game_state.npc_built_ship_q));
-accessor!(rust_get_encounter_queue() -> *mut Queue = ptr::addr_of_mut!(GlobData.Game_state.encounter_q));
-accessor!(rust_get_built_ship_queue() -> *mut Queue = ptr::addr_of_mut!(GlobData.Game_state.built_ship_q));
-accessor!(rust_get_ip_group_queue() -> *mut Queue = ptr::addr_of_mut!(GlobData.Game_state.ip_group_q));
+accessor!(rust_get_avail_race_queue() -> *mut Queue = ptr::addr_of_mut!((*crate::ships::native::abi::GLOBDATA::current()).Game_state.avail_race_q));
+accessor!(rust_get_npc_built_ship_queue() -> *mut Queue = ptr::addr_of_mut!((*crate::ships::native::abi::GLOBDATA::current()).Game_state.npc_built_ship_q));
+accessor!(rust_get_encounter_queue() -> *mut Queue = ptr::addr_of_mut!((*crate::ships::native::abi::GLOBDATA::current()).Game_state.encounter_q));
+accessor!(rust_get_built_ship_queue() -> *mut Queue = ptr::addr_of_mut!((*crate::ships::native::abi::GLOBDATA::current()).Game_state.built_ship_q));
+accessor!(rust_get_ip_group_queue() -> *mut Queue = ptr::addr_of_mut!((*crate::ships::native::abi::GLOBDATA::current()).Game_state.ip_group_q));
 accessor!(rust_set_cur_star_desc_ptr_null() -> () = crate::planets::starmap::CurStarDescPtr = ptr::null_mut());
 
 /// # Safety

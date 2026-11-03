@@ -200,21 +200,29 @@ pub fn borrowed_assets(
 /// Read `GLOBAL_SIS(NumLanders)` from the global SIS state.
 #[cfg(not(test))]
 fn sis_num_landers() -> u8 {
-    extern "C" {
-        #[link_name = "GlobData"]
-        static mut GLOB_DATA: crate::ships::native::abi::GLOBDATA;
+    extern "C" {}
+    unsafe {
+        std::ptr::addr_of!(
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .SIS_state
+                .NumLanders
+        )
+        .read()
     }
-    unsafe { std::ptr::addr_of!(GLOB_DATA.SIS_state.NumLanders).read() }
 }
 
 /// Read `GLOBAL_SIS(TotalElementMass)` from the global SIS state.
 #[cfg(not(test))]
 fn sis_total_element_mass() -> u16 {
-    extern "C" {
-        #[link_name = "GlobData"]
-        static mut GLOB_DATA: crate::ships::native::abi::GLOBDATA;
+    extern "C" {}
+    unsafe {
+        std::ptr::addr_of!(
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .SIS_state
+                .TotalElementMass
+        )
+        .read()
     }
-    unsafe { std::ptr::addr_of!(GLOB_DATA.SIS_state.TotalElementMass).read() }
 }
 
 /// Read a game state bit-field via the FFI singleton.

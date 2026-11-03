@@ -42,14 +42,18 @@ fn grow_fleet(fleet: &mut FLEET_INFO) -> Option<u8> {
 #[allow(non_snake_case)]
 pub(crate) mod live {
     use super::*;
-    use crate::navigation::globals::{inHyperSpace, GlobData};
+    use crate::navigation::globals::inHyperSpace;
     use crate::navigation::{get, set};
     use crate::planets::starmap::CurStarDescPtr;
     use std::ptr;
 
     unsafe fn fleet(race: u32) -> *mut FLEET_INFO {
         GetStarShipFromIndex(
-            ptr::addr_of_mut!(GlobData.Game_state.avail_race_q),
+            ptr::addr_of_mut!(
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .Game_state
+                    .avail_race_q
+            ),
             race as u16,
         )
         .cast()
@@ -58,7 +62,10 @@ pub(crate) mod live {
         AddEvent(EVENT_TYPE_RELATIVE_EVENT, month, day, year, selector as u8);
     }
     unsafe fn at_star(index: u32) -> bool {
-        GlobData.Game_state.CurrentActivity as u8 as u32 == IN_INTERPLANETARY
+        (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity as u8 as u32
+            == IN_INTERPLANETARY
             && !CurStarDescPtr.is_null()
             && (*CurStarDescPtr).index as u32 == index
     }
@@ -94,8 +101,15 @@ pub(crate) mod live {
                 relative(0, 3, 0, ARILOU_EXIT_EVENT);
             }
             ARILOU_EXIT_EVENT => {
-                let mut year = GlobData.Game_state.GameClock.year_index;
-                let month = GlobData.Game_state.GameClock.month_index as u16 % 12;
+                let mut year = (*crate::ships::native::abi::GLOBDATA::current())
+                    .Game_state
+                    .GameClock
+                    .year_index;
+                let month = (*crate::ships::native::abi::GLOBDATA::current())
+                    .Game_state
+                    .GameClock
+                    .month_index as u16
+                    % 12;
                 if month == 0 {
                     year = year.wrapping_add(1);
                 }
@@ -109,7 +123,10 @@ pub(crate) mod live {
                 );
             }
             HYPERSPACE_ENCOUNTER_EVENT => {
-                let mut handle = GlobData.Game_state.avail_race_q.head;
+                let mut handle = (*crate::ships::native::abi::GLOBDATA::current())
+                    .Game_state
+                    .avail_race_q
+                    .head;
                 while !handle.is_null() {
                     let current = handle.cast::<FLEET_INFO>();
                     handle = (*current).succ;
@@ -154,7 +171,12 @@ pub(crate) mod live {
             }
             SHOFIXTI_RETURN_EVENT => {
                 SetRaceAllied(SHOFIXTI_SHIP as u16, 1);
-                GlobData.Game_state.CrewCost = GlobData.Game_state.CrewCost.wrapping_sub(2);
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .Game_state
+                    .CrewCost = (*crate::ships::native::abi::GLOBDATA::current())
+                    .Game_state
+                    .CrewCost
+                    .wrapping_sub(2);
                 set("CREW_PURCHASED0", 0);
                 set("CREW_PURCHASED1", 0);
             }
@@ -218,7 +240,10 @@ pub(crate) mod live {
         let mut best_dx = (SOL_X as i32 - (*black).loc.x as i32) as i16;
         let mut best_dy = (SOL_Y as i32 - (*black).loc.y as i32) as i16;
         let mut index = 0u8;
-        let mut handle = GlobData.Game_state.avail_race_q.head;
+        let mut handle = (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .avail_race_q
+            .head;
         while !handle.is_null() {
             let current = handle.cast::<FLEET_INFO>();
             handle = (*current).succ;
@@ -246,8 +271,12 @@ pub(crate) mod live {
             index = index.wrapping_add(1);
         }
         if best_dist < 0 && best_dx == 0 && best_dy == 0 {
-            GlobData.Game_state.CurrentActivity &= !(IN_BATTLE as u16);
-            GlobData.SIS_state.CrewEnlisted = u16::MAX;
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity &= !(IN_BATTLE as u16);
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .SIS_state
+                .CrewEnlisted = u16::MAX;
             set("KOHR_AH_KILLED_ALL", 1);
         } else {
             if best_dist < 0 {

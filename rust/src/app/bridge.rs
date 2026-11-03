@@ -112,13 +112,21 @@ pub unsafe fn with_battle<R>(
     call: impl FnOnce() -> R,
 ) -> R {
     use crate::engine::battle::{Battle, Cx, World};
-    use crate::ships::native::abi::GlobData;
+
     // SAFETY: all pointers derive directly from the authority's raw address.
     unsafe {
         let mut battle = Battle::for_lifecycle();
         let mut world = World::new(
-            NonNull::new_unchecked(&raw mut GlobData.Game_state.CurrentActivity),
-            NonNull::new_unchecked(&raw mut GlobData.Game_state.ip_group_q),
+            NonNull::new_unchecked(
+                &raw mut (*crate::ships::native::abi::GLOBDATA::current())
+                    .Game_state
+                    .CurrentActivity,
+            ),
+            NonNull::new_unchecked(
+                &raw mut (*crate::ships::native::abi::GLOBDATA::current())
+                    .Game_state
+                    .ip_group_q,
+            ),
             frame_source,
         );
         let mut cx = Cx::new(&mut battle, &mut world, crate::math::random);

@@ -43,7 +43,7 @@ use crate::time::clock_abi::live::GameClockTick;
 use crate::ui::sis::DrawAutoPilotMessage;
 
 extern "C" {
-    static mut GlobData: crate::ships::native::abi::GLOBDATA;
+
     static mut CurrentInputState: input::CONTROLLER_INPUT_STATE;
     static mut SpaceContext: *mut crate::graphics::native_abi::context_desc;
     static mut stars_in_space: *mut crate::graphics::native_abi::frame_desc;
@@ -57,7 +57,7 @@ unsafe fn system() -> *mut c::SOLARSYS_STATE {
 
 #[inline]
 unsafe fn glob() -> *mut crate::ships::native::abi::GLOBDATA {
-    ptr::addr_of_mut!(GlobData)
+    ptr::addr_of_mut!((*crate::ships::native::abi::GLOBDATA::current()))
 }
 
 #[inline]

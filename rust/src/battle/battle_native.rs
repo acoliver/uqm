@@ -129,12 +129,16 @@ pub(crate) mod engine {
     /// # Safety
     /// Game state must be initialized and accessed only on the game thread.
     pub unsafe fn activity() -> u16 {
-        GlobData.Game_state.CurrentActivity
+        (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity
     }
     /// # Safety
     /// The caller must exclusively own game-thread activity state.
     pub unsafe fn set_activity(value: u16) {
-        GlobData.Game_state.CurrentActivity = value;
+        (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity = value;
     }
     /// # Safety
     /// `start..=end` must name a valid game-state bit field on the game thread.

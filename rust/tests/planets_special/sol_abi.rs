@@ -3,7 +3,7 @@
 use super::Harness;
 use uqm_rust::battle::gendef::{getGenerateFunctions, SOL_DEFINED};
 use uqm_rust::collections::queue::Queue;
-use uqm_rust::planets::c_api::GLOB_DATA as GlobData;
+
 use uqm_rust::planets::c_api::{self, CapturedSurface};
 use uqm_rust::planets::consts::{MAP_HEIGHT, MAP_WIDTH};
 use uqm_rust::planets::generate::sol_exports::GENERATE_SOL_FUNCTIONS;
@@ -69,9 +69,15 @@ fn check_bomb_queue(h: &mut Harness) {
     set_game_state("CHMMR_BOMB_STATE", 3);
     set_game_state("PROBE_MESSAGE_DELIVERED", 1);
     unsafe {
-        let ip = &raw mut GlobData.Game_state.ip_group_q;
-        let npc = &raw mut GlobData.Game_state.npc_built_ship_q;
-        let reference = &raw mut GlobData.Game_state.BattleGroupRef;
+        let ip = &raw mut (*uqm_rust::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .ip_group_q;
+        let npc = &raw mut (*uqm_rust::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .npc_built_ship_q;
+        let reference = &raw mut (*uqm_rust::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .BattleGroupRef;
         let saved = (ip.read(), npc.read(), reference.read());
         ip.write(Queue::default());
         npc.write(Queue::default());

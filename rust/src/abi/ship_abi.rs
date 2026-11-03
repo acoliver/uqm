@@ -3044,8 +3044,16 @@ pub struct GLOBDATA {
     pub SIS_state: SIS_STATE,
     pub Game_state: GAME_STATE,
 }
+#[cfg(not(test))]
+impl GLOBDATA {
+    /// # Safety
+    /// Game thread only; no borrow may survive a call into the game lifecycle.
+    pub unsafe fn current<'a>() -> &'a mut Self {
+        unsafe { &mut *(&raw mut crate::navigation::globals::GlobData) }
+    }
+}
 unsafe extern "C" {
-    pub static mut GlobData: GLOBDATA;
+    
 }
 pub const DEFGRP_NONE: _bindgen_ty_14 = 0;
 pub const DEFGRP_SHOFIXTI: _bindgen_ty_14 = 1;

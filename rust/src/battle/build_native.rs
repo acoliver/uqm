@@ -47,7 +47,9 @@ pub(crate) mod engine {
     /// Fleet queue and fragment handle must be initialized.
     #[no_mangle]
     pub unsafe extern "C" fn GetEscortByStarShipIndex(index: COUNT) -> HSHIPFRAG {
-        let queue = &raw mut GlobData.Game_state.built_ship_q;
+        let queue = &raw mut (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .built_ship_q;
         let mut handle = (*queue).head;
         while !handle.is_null() {
             let frag = handle.cast::<SHIP_FRAGMENT>();
@@ -65,10 +67,19 @@ pub(crate) mod engine {
     /// Global queue state and fleet resources must be initialized.
     #[no_mangle]
     pub unsafe extern "C" fn CountEscortShips(race: COUNT) -> COUNT {
-        if GetStarShipFromIndex(&raw mut GlobData.Game_state.avail_race_q, race).is_null() {
+        if GetStarShipFromIndex(
+            &raw mut (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .avail_race_q,
+            race,
+        )
+        .is_null()
+        {
             return 0;
         }
-        let queue = &raw mut GlobData.Game_state.built_ship_q;
+        let queue = &raw mut (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .built_ship_q;
         let mut handle = (*queue).head;
         let mut count: COUNT = 0;
         while !handle.is_null() {
@@ -93,12 +104,20 @@ pub(crate) mod engine {
     /// Global queue state and fleet resources must be initialized.
     #[no_mangle]
     pub unsafe extern "C" fn EscortFeasibilityStudy(race: COUNT) -> COUNT {
-        let fleet = GetStarShipFromIndex(&raw mut GlobData.Game_state.avail_race_q, race);
+        let fleet = GetStarShipFromIndex(
+            &raw mut (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .avail_race_q,
+            race,
+        );
         if fleet.is_null() {
             return 0;
         }
-        (MAX_BUILT_SHIPS as COUNT)
-            .wrapping_sub(CountLinks(&raw mut GlobData.Game_state.built_ship_q))
+        (MAX_BUILT_SHIPS as COUNT).wrapping_sub(CountLinks(
+            &raw mut (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .built_ship_q,
+        ))
     }
 
     /// # Safety
@@ -108,7 +127,9 @@ pub(crate) mod engine {
         if count == 0 {
             return 0;
         }
-        let queue = &raw mut GlobData.Game_state.built_ship_q;
+        let queue = &raw mut (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .built_ship_q;
         let mut handle = (*queue).head;
         while !handle.is_null() {
             let frag = handle.cast::<SHIP_FRAGMENT>();
@@ -145,7 +166,12 @@ pub(crate) mod engine {
     /// Global race queues and their records are initialized.
     #[no_mangle]
     pub unsafe extern "C" fn CheckAlliance(race: COUNT) -> COUNT {
-        let fleet = GetStarShipFromIndex(&raw mut GlobData.Game_state.avail_race_q, race);
+        let fleet = GetStarShipFromIndex(
+            &raw mut (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .avail_race_q,
+            race,
+        );
         if fleet.is_null() {
             return 0;
         }
@@ -157,7 +183,12 @@ pub(crate) mod engine {
     /// Global race queues and their records are initialized.
     #[no_mangle]
     pub unsafe extern "C" fn SetRaceAllied(race: COUNT, allied: BOOLEAN) -> COUNT {
-        let fleet = GetStarShipFromIndex(&raw mut GlobData.Game_state.avail_race_q, race);
+        let fleet = GetStarShipFromIndex(
+            &raw mut (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .avail_race_q,
+            race,
+        );
         if fleet.is_null() {
             return 0;
         }
@@ -176,7 +207,9 @@ pub(crate) mod engine {
     /// Race queue and its fleet records must be initialized on the game thread.
     #[no_mangle]
     pub unsafe extern "C" fn StartSphereTracking(race: COUNT) -> COUNT {
-        let queue = &raw mut GlobData.Game_state.avail_race_q;
+        let queue = &raw mut (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .avail_race_q;
         let fleet = GetStarShipFromIndex(queue, race);
         if fleet.is_null() {
             return 0;
@@ -203,14 +236,18 @@ pub(crate) mod engine {
         crew_level: COUNT,
         captain: BYTE,
     ) -> i32 {
-        let races = &raw mut GlobData.Game_state.avail_race_q;
+        let races = &raw mut (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .avail_race_q;
         let fleet = GetStarShipFromIndex(races, which_ship);
         if fleet.is_null() {
             return -1;
         }
         let template = fleet.cast::<FLEET_INFO>();
         let full_crew = (*template).crew_level;
-        let queue = &raw mut GlobData.Game_state.built_ship_q;
+        let queue = &raw mut (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .built_ship_q;
         let mut handle = (*queue).head;
         let mut index: i32 = 0;
         while !handle.is_null() {
@@ -239,7 +276,9 @@ pub(crate) mod engine {
             (*destination).object_size as usize,
             std::mem::size_of::<SHIP_FRAGMENT>()
         );
-        let races = &raw mut GlobData.Game_state.avail_race_q;
+        let races = &raw mut (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .avail_race_q;
         let fleet = GetStarShipFromIndex(races, ship_index);
         if fleet.is_null() {
             return ptr::null_mut();
@@ -276,12 +315,16 @@ pub(crate) mod engine {
     /// Race and escort queues and SIS display must be initialized; count must be positive.
     #[no_mangle]
     pub unsafe extern "C" fn AddEscortShips(race: COUNT, count: SIZE) -> COUNT {
-        let races = &raw mut GlobData.Game_state.avail_race_q;
+        let races = &raw mut (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .avail_race_q;
         if GetStarShipFromIndex(races, race).is_null() {
             return 0;
         }
         assert!(count > 0);
-        let queue = &raw mut GlobData.Game_state.built_ship_q;
+        let queue = &raw mut (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .built_ship_q;
         let mut window: BYTE = 0;
         let mut added: COUNT = 0;
         while added < count as COUNT {
@@ -308,7 +351,9 @@ pub(crate) mod engine {
     /// Escort queue must contain live fragments with race IDs in RACE_SHIP_COST.
     #[no_mangle]
     pub unsafe extern "C" fn CalculateEscortsWorth() -> COUNT {
-        let queue = &raw mut GlobData.Game_state.built_ship_q;
+        let queue = &raw mut (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .built_ship_q;
         let mut handle = (*queue).head;
         let mut total: COUNT = 0;
         while !handle.is_null() {

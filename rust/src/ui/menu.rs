@@ -3,7 +3,7 @@
 
 use super::palette::*;
 use crate::navigation::abi::*;
-use crate::navigation::globals::{GlobData, PlayFrame};
+use crate::navigation::globals::PlayFrame;
 
 use super::menu_state::{
     end_state, next_state, ALT_EXIT_MANIFEST, ALT_MANIFEST, PM_ALT_ASCAN, PM_ALT_BSCAN,
@@ -20,7 +20,13 @@ const OPT_PC: i32 = 2;
 /// # Safety
 /// Menu state and game settings must be valid on the game thread.
 pub unsafe extern "C" fn PreviousMenuState(base: BYTE, current: BYTE) -> BYTE {
-    super::menu_state::previous_state(base, current, GlobData.Game_state.glob_flags)
+    super::menu_state::previous_state(
+        base,
+        current,
+        (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .glob_flags,
+    )
 }
 
 unsafe fn draw_pc_frame(rect: &mut RECT) {
@@ -69,9 +75,13 @@ unsafe fn draw_pc_menu(begin: u8, end: u8, selected: u8, highlight: u8, rect: &m
         let label = game_string(MAINMENU_STRING_BASE + item as u32);
         if item == PM_FUEL || item == PM_CREW {
             let cost = if item == PM_FUEL {
-                GlobData.Game_state.FuelCost
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .Game_state
+                    .FuelCost
             } else {
-                GlobData.Game_state.CrewCost
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .Game_state
+                    .CrewCost
             };
             let mut rendered = [0 as UNICODE; 128];
             libc::snprintf(
@@ -201,7 +211,13 @@ pub unsafe extern "C" fn DoMenuChooser(menu: *mut MENU_STATE, base_state: BYTE) 
     } else if PulsedInputState.menu[KEY_MENU_RIGHT as usize] != 0
         || PulsedInputState.menu[KEY_MENU_DOWN as usize] != 0
     {
-        new_state = next_state(base, new_state, GlobData.Game_state.glob_flags);
+        new_state = next_state(
+            base,
+            new_state,
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .glob_flags,
+        );
     } else if use_alt && PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0 {
         new_state = convert_alternate(base, new_state);
         if new_state == ALT_MANIFEST {
@@ -318,9 +334,13 @@ pub unsafe extern "C" fn DrawMenuStateStrings(begin: BYTE, state: SWORD) {
         DrawStamp(&mut stamp);
         if begin == PM_CREW || begin == PM_FUEL {
             let value = if begin == PM_CREW {
-                GlobData.Game_state.CrewCost
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .Game_state
+                    .CrewCost
             } else {
-                GlobData.Game_state.FuelCost
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .Game_state
+                    .FuelCost
             };
             let mut cost = [0 as UNICODE; 20];
             let rendered = format!("{value}");

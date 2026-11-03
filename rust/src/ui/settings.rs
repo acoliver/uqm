@@ -2,7 +2,6 @@
 #![allow(non_snake_case)]
 
 use crate::navigation::abi::*;
-use crate::navigation::globals::GlobData;
 
 static mut LAST_MUSIC_REF: MUSIC_REF = std::ptr::null_mut();
 static mut LAST_CONTINUOUS: BOOLEAN = 0;
@@ -11,9 +10,16 @@ static mut LAST_PRIORITY: BYTE = 0;
 /// # Safety
 /// The game settings and music player must be initialized on the game thread.
 pub unsafe fn ToggleMusic() {
-    GlobData.Game_state.glob_flags ^= MUSIC_DISABLED as u8;
+    (*crate::ships::native::abi::GLOBDATA::current())
+        .Game_state
+        .glob_flags ^= MUSIC_DISABLED as u8;
     if LAST_PRIORITY <= 1 {
-        if GlobData.Game_state.glob_flags & (MUSIC_DISABLED as u8) != 0 {
+        if (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .glob_flags
+            & (MUSIC_DISABLED as u8)
+            != 0
+        {
             PLRStop((LAST_MUSIC_REF).cast());
         } else if !LAST_MUSIC_REF.is_null() {
             PLRPlaySong(
@@ -32,7 +38,12 @@ pub unsafe extern "C" fn PlayMusic(music_ref: MUSIC_REF, continuous: BOOLEAN, pr
     LAST_MUSIC_REF = music_ref;
     LAST_CONTINUOUS = continuous;
     LAST_PRIORITY = priority;
-    if GlobData.Game_state.glob_flags & (MUSIC_DISABLED as u8) == 0 {
+    if (*crate::ships::native::abi::GLOBDATA::current())
+        .Game_state
+        .glob_flags
+        & (MUSIC_DISABLED as u8)
+        == 0
+    {
         PLRPlaySong(music_ref.cast(), continuous as i32, priority.into());
     }
 }
@@ -59,7 +70,9 @@ pub unsafe fn PauseMusic() {
 /// # Safety
 /// Game settings must be accessed on the game thread.
 pub unsafe fn ToggleSoundEffect() {
-    GlobData.Game_state.glob_flags ^= SOUND_DISABLED as u8;
+    (*crate::ships::native::abi::GLOBDATA::current())
+        .Game_state
+        .glob_flags ^= SOUND_DISABLED as u8;
 }
 
 /// # Safety
@@ -76,9 +89,20 @@ pub unsafe extern "C" fn PlaySoundEffect(
         "[PlaySoundEffect] S={sound:p} ch={} pri={} sound_disabled={}",
         channel,
         priority,
-        u8::from(GlobData.Game_state.glob_flags & (SOUND_DISABLED as u8) != 0)
+        u8::from(
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .glob_flags
+                & (SOUND_DISABLED as u8)
+                != 0
+        )
     );
-    if GlobData.Game_state.glob_flags & (SOUND_DISABLED as u8) == 0 {
+    if (*crate::ships::native::abi::GLOBDATA::current())
+        .Game_state
+        .glob_flags
+        & (SOUND_DISABLED as u8)
+        == 0
+    {
         SetChannelVolume(
             u32::from(channel),
             (MAX_VOLUME >> 1) as i32,

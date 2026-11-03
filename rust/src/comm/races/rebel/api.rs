@@ -47,11 +47,13 @@ pub(super) trait RebelApi: EncounterApi<Handler> {
 #[cfg(not(test))]
 impl RebelApi for super::super::script::live::LiveScript<Handler> {
     fn date(&self) -> Date {
-        extern "C" {
-            static mut GlobData: crate::ships::native::abi::GLOBDATA;
-        }
+        extern "C" {}
         unsafe {
-            let clock = std::ptr::addr_of!(GlobData.Game_state.GameClock);
+            let clock = std::ptr::addr_of!(
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .Game_state
+                    .GameClock
+            );
             Date {
                 year: (*clock).year_index,
                 month: (*clock).month_index,

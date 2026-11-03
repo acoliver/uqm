@@ -9,11 +9,11 @@ pub(super) trait PkunkApi: AllianceApi<Handler> {
 #[cfg(not(test))]
 impl PkunkApi for crate::comm::races::script::live::LiveScript<Handler> {
     fn date(&self) -> (u16, u16, u16) {
-        extern "C" {
-            static mut GlobData: crate::ships::native::abi::GLOBDATA;
-        }
+        extern "C" {}
         unsafe {
-            let date = &(*std::ptr::addr_of!(GlobData)).Game_state.GameClock;
+            let date = &(*std::ptr::addr_of!((*crate::ships::native::abi::GLOBDATA::current())))
+                .Game_state
+                .GameClock;
             (
                 date.year_index,
                 u16::from(date.month_index),

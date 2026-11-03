@@ -41,7 +41,9 @@ fn teardown_receives_final_crew_and_owned_state() {
         let owner = Battle::new(2);
         // SAFETY: the serialized fixture owns the enlisted-crew authority and restores it after teardown.
         unsafe {
-            let saved_crew = GlobData.SIS_state.CrewEnlisted;
+            let saved_crew = (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                .SIS_state
+                .CrewEnlisted;
             let mut ship = Ship::native(&owner, &RACE, 0);
             uqm_rust::app::bridge::enter(|cx| {
                 cx.race_stats_mut(ship.ship_id).ship_info.crew_level = 23;
@@ -55,7 +57,9 @@ fn teardown_receives_final_crew_and_owned_state() {
                 assert!(matches!(cx.race_stats(ship.ship_id).state, RaceState::None));
             });
             drop(ship);
-            GlobData.SIS_state.CrewEnlisted = saved_crew;
+            (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                .SIS_state
+                .CrewEnlisted = saved_crew;
         }
     });
 }
@@ -219,10 +223,16 @@ fn navigation_world_projections_write_the_single_authority() {
         let _owner = Battle::new(2);
         // SAFETY: this test serializes and restores every modified world value.
         unsafe {
-            let activity = GlobData.Game_state.CurrentActivity;
-            let autopilot = GlobData.Game_state.autopilot;
-            let velocity = GlobData.Game_state.velocity;
-            let sis = GlobData.SIS_state;
+            let activity = (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity;
+            let autopilot = (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .autopilot;
+            let velocity = (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .velocity;
+            let sis = (*uqm_rust::ships::native::abi::GLOBDATA::current()).SIS_state;
             uqm_rust::state::ffi::rust_init_game_state();
             uqm_rust::app::bridge::enter(|cx| {
                 cx.set_activity(42);
@@ -535,8 +545,12 @@ fn descriptor_world_observes_activity_and_typed_story_and_writes_the_same_author
     battle_context::run(|| {
         // SAFETY: the serialized fixture owns and restores the world authorities.
         unsafe {
-            let activity = GlobData.Game_state.CurrentActivity;
-            let crew = GlobData.SIS_state.CrewEnlisted;
+            let activity = (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity;
+            let crew = (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                .SIS_state
+                .CrewEnlisted;
             uqm_rust::state::ffi::rust_init_game_state();
             uqm_rust::app::bridge::enter(|cx| {
                 cx.world.set_activity(IN_ENCOUNTER as u16);
@@ -578,8 +592,12 @@ fn descriptor_world_observes_activity_and_typed_story_and_writes_the_same_author
                     cx.world.set_story_state(key, 0);
                 }
             });
-            GlobData.Game_state.CurrentActivity = activity;
-            GlobData.SIS_state.CrewEnlisted = crew;
+            (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity = activity;
+            (*uqm_rust::ships::native::abi::GLOBDATA::current())
+                .SIS_state
+                .CrewEnlisted = crew;
         }
     });
 }

@@ -81,11 +81,12 @@ impl ChmmrApi for super::super::script::live::LiveScript<Handler> {
     fn refit(&mut self) {
         use crate::comm::races::script::ScriptApi;
         let starbase = self.get("STARBASE_AVAILABLE") != 0;
-        extern "C" {
-            static mut GlobData: crate::ships::native::abi::GLOBDATA;
-        }
+        extern "C" {}
         unsafe {
-            refit(&mut *std::ptr::addr_of_mut!(GlobData), starbase);
+            refit(
+                &mut *std::ptr::addr_of_mut!((*crate::ships::native::abi::GLOBDATA::current())),
+                starbase,
+            );
         }
     }
     fn intro_mode(&mut self, mode: i32, duration: i32) {

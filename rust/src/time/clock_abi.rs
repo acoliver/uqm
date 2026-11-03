@@ -93,16 +93,19 @@ pub(crate) mod live {
 
     use crate::threading::legacy_abi::DestroyMutex;
 
-    extern "C" {
-        static mut GlobData: crate::ships::native::abi::GLOBDATA;
-    }
+    extern "C" {}
     static mut CLOCK_MUTEX: *mut c_void = ptr::null_mut();
 
     /// # Safety
     /// Game-thread access to the live global state.
     #[no_mangle]
     pub unsafe extern "C" fn GetGameClock() -> *mut ClockState {
-        ptr::addr_of_mut!(GlobData.Game_state.GameClock).cast()
+        ptr::addr_of_mut!(
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .GameClock
+        )
+        .cast()
     }
 
     pub(crate) unsafe fn finish_clock_day() {

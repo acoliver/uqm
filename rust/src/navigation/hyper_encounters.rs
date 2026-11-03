@@ -2,7 +2,7 @@
 #![cfg(not(test))]
 use super::abi::*;
 use super::get;
-use super::globals::GlobData;
+
 use super::hyper_data::HYPERSTARS;
 use super::hyper_transition::{init_transition, sis_element};
 use super::hyperspace::live::{cosine, height, logx, logy, sine, universe_x, universe_y, width};
@@ -27,8 +27,14 @@ pub(super) unsafe fn allocate(cx: &mut Cx<'_>, point: POINT) -> Option<ElementId
     cx.element_mut(element).flags = (CHANGING | FINITE_LIFE) as u16;
     cx.element_mut(element).life = 1;
     cx.element_mut(element).mass = 1;
-    let lx = logx(point.x) + (width() >> 1) - GlobData.SIS_state.log_x;
-    let ly = logy(point.y) + (height() >> 1) - GlobData.SIS_state.log_y;
+    let lx = logx(point.x) + (width() >> 1)
+        - (*crate::ships::native::abi::GLOBDATA::current())
+            .SIS_state
+            .log_x;
+    let ly = logy(point.y) + (height() >> 1)
+        - (*crate::ships::native::abi::GLOBDATA::current())
+            .SIS_state
+            .log_y;
     cx.element_mut(element).current.location = POINT {
         x: wrap(lx, width()),
         y: wrap(ly, height()),
@@ -169,7 +175,11 @@ unsafe fn add(cx: &mut Cx<'_>, encounter: *mut ENCOUNTER, universe: POINT) -> Op
         (*encounter).num_ships = ships;
         for i in 0..ships as usize {
             let fleet = GetStarShipFromIndex(
-                ptr::addr_of_mut!(GlobData.Game_state.avail_race_q),
+                ptr::addr_of_mut!(
+                    (*crate::ships::native::abi::GLOBDATA::current())
+                        .Game_state
+                        .avail_race_q
+                ),
                 race as u16,
             )
             .cast::<FLEET_INFO>();
@@ -344,10 +354,16 @@ unsafe fn process(
     let dy = point.y as i32 - universe.y as i32;
     if (-63..=63).contains(&dx) && (-50..=50).contains(&dy) {
         cx.element_mut(element).next.location = POINT {
-            x: (((*encounter).log_x - GlobData.SIS_state.log_x) as i16 as i32 + (width() >> 1))
-                as i16,
-            y: (((*encounter).log_y - GlobData.SIS_state.log_y) as i16 as i32 + (height() >> 1))
-                as i16,
+            x: (((*encounter).log_x
+                - (*crate::ships::native::abi::GLOBDATA::current())
+                    .SIS_state
+                    .log_x) as i16 as i32
+                + (width() >> 1)) as i16,
+            y: (((*encounter).log_y
+                - (*crate::ships::native::abi::GLOBDATA::current())
+                    .SIS_state
+                    .log_y) as i16 as i32
+                + (height() >> 1)) as i16,
         };
         if cx.element_mut(element).flags & NONSOLID as u16 != 0
             && (*encounter).transition_state == 0
@@ -381,7 +397,11 @@ pub(super) unsafe fn process_all(cx: &mut Cx<'_>, universe: POINT, ox: i16, oy: 
         origin: POINT { x: 0, y: 0 },
         frame: SetAbsFrameIndex(stars_in_space, 91),
     };
-    let queue = ptr::addr_of_mut!(GlobData.Game_state.encounter_q);
+    let queue = ptr::addr_of_mut!(
+        (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .encounter_q
+    );
     let mut handle = (*queue).head;
     while !handle.is_null() {
         let encounter = handle.cast::<ENCOUNTER>();

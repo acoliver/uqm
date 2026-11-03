@@ -44,7 +44,7 @@ pub(crate) mod live {
     use crate::ui::sis::ClearSISRect;
 
     extern "C" {
-        static mut GlobData: crate::ships::native::abi::GLOBDATA;
+
         static mut MiscDataFrame: *mut crate::graphics::native_abi::frame_desc;
     }
 
@@ -68,8 +68,11 @@ pub(crate) mod live {
         let g = CffiPlatform;
         let old = g.set_context(ContextId::Status);
         g.set_font(FontId::Tiny);
-        let free = u32::from(GetStorageBayCapacity())
-            .wrapping_sub(u32::from(GlobData.SIS_state.TotalElementMass));
+        let free = u32::from(GetStorageBayCapacity()).wrapping_sub(u32::from(
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .SIS_state
+                .TotalElementMass,
+        ));
         g.batch();
         g.set_fg_color(BACK);
         g.fill_rect(Rect {
@@ -97,16 +100,23 @@ pub(crate) mod live {
             height: 7,
         });
         let amount = if element == 8 {
-            GlobData.SIS_state.TotalBioMass
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .SIS_state
+                .TotalBioMass
         } else {
             g.set_fg_color(if selected { AMOUNT } else { WORTH });
             text(
                 32,
                 y + 6,
                 Align::Right,
-                GlobData.Game_state.ElementWorth[usize::from(element)].to_string(),
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .Game_state
+                    .ElementWorth[usize::from(element)]
+                .to_string(),
             );
-            GlobData.SIS_state.ElementAmounts[usize::from(element)]
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .SIS_state
+                .ElementAmounts[usize::from(element)]
         };
         g.set_fg_color(if selected { SELECTED } else { AMOUNT });
         text(58, y + 6, Align::Right, amount.to_string());
@@ -221,17 +231,25 @@ pub(crate) mod live {
     unsafe extern "C" fn discard(menu: *mut Menu) -> i32 {
         let menu = &mut *menu;
         let pulse = std::ptr::addr_of!(PulsedInputState).read();
-        if GlobData.Game_state.CurrentActivity & (1 << 14) != 0
+        if (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity
+            & (1 << 14)
+            != 0
             || pulse.menu[KEY_MENU_CANCEL as usize] != 0
         {
             return 0;
         }
         if pulse.menu[KEY_MENU_SELECT as usize] != 0 {
-            let amount = &mut GlobData.SIS_state.ElementAmounts[usize::from(menu.current)];
+            let amount = &mut (*crate::ships::native::abi::GLOBDATA::current())
+                .SIS_state
+                .ElementAmounts[usize::from(menu.current)];
             if *amount != 0 {
                 *amount -= 1;
                 DrawCargoStrings(menu.current, menu.current);
-                GlobData.SIS_state.TotalElementMass -= 1;
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .SIS_state
+                    .TotalElementMass -= 1;
                 ShowRemainingCapacity();
             } else {
                 PlayMenuSound(2);

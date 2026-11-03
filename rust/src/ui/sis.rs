@@ -4,7 +4,7 @@
 use crate::callback::ffi::{AlarmId, Alarm_addAbsoluteMs, Alarm_remove};
 use crate::engine::battle::schema::FlashContext;
 use crate::navigation::abi::*;
-use crate::navigation::globals::GlobData;
+
 use std::{mem, ptr};
 
 pub(crate) mod capacity;
@@ -135,7 +135,7 @@ fn pilot_color(i: usize) -> Color {
 }
 #[inline]
 unsafe fn sis() -> *mut SIS_STATE {
-    ptr::addr_of_mut!(GlobData.SIS_state)
+    ptr::addr_of_mut!((*crate::ships::native::abi::GLOBDATA::current()).SIS_state)
 }
 #[inline]
 unsafe fn set_color(color: Color) {
@@ -264,7 +264,11 @@ pub unsafe extern "C" fn DrawSISMessageEx(
     let mut buf = [0u8; 256];
     let mut text = pStr;
     if text.is_null() {
-        text = match u32::from(GlobData.Game_state.CurrentActivity as BYTE) {
+        text = match u32::from(
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity as BYTE,
+        ) {
             IN_LAST_BATTLE | IN_INTERPLANETARY => {
                 GetClusterName(
                     crate::planets::starmap::CurStarDescPtr.cast(),
@@ -445,9 +449,18 @@ pub unsafe extern "C" fn DrawStatusMessage(pStr: *const UNICODE) {
             DateToString(
                 buf.as_mut_ptr().cast(),
                 buf.len(),
-                GlobData.Game_state.GameClock.month_index,
-                GlobData.Game_state.GameClock.day_index,
-                GlobData.Game_state.GameClock.year_index,
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .Game_state
+                    .GameClock
+                    .month_index,
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .Game_state
+                    .GameClock
+                    .day_index,
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .Game_state
+                    .GameClock
+                    .year_index,
             );
         }
         text = buf.as_ptr().cast();
@@ -864,7 +877,11 @@ unsafe fn draw_support_ships() {
         (3, 110),
         (45, 110),
     ];
-    let q = ptr::addr_of_mut!(GlobData.Game_state.built_ship_q);
+    let q = ptr::addr_of_mut!(
+        (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .built_ship_q
+    );
     let mut h = (*q).head;
     let mut i = 0;
     while !h.is_null() {
@@ -1028,14 +1045,20 @@ pub unsafe extern "C" fn DrawAutoPilotMessage(reset: BOOLEAN) {
         LAST_PILOT = 0;
         return;
     }
-    let autopilot = GlobData.Game_state.autopilot;
+    let autopilot = (*crate::ships::native::abi::GLOBDATA::current())
+        .Game_state
+        .autopilot;
     let on = (autopilot.x != -1 && autopilot.y != -1) || (*sis()).FuelOnBoard == 0;
     if on || LAST_PILOT != 0 {
         if !on {
             DrawSISMessage(ptr::null());
             PILOT_CYCLE_INDEX = 0;
         } else if GetTimeCounter() >= NEXT_PILOT_TIME {
-            if GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 == 0
+            if (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity
+                & CHECK_ABORT as u16
+                == 0
                 && (*sis()).CrewEnlisted != COUNT::MAX
             {
                 let old = SetContext(OffScreenContext);

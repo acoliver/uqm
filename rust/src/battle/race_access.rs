@@ -109,7 +109,11 @@ impl Cx<'_> {
 
     pub fn flagship_velocity(&self) -> crate::engine::battle::record::VELOCITY_DESC {
         // SAFETY: this is a value copy of game-thread-owned navigation state.
-        unsafe { GlobData.Game_state.velocity }
+        unsafe {
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .velocity
+        }
     }
 
     pub fn set_flagship_velocity(
@@ -118,14 +122,18 @@ impl Cx<'_> {
     ) {
         // SAFETY: this context owns the navigation velocity authority.
         unsafe {
-            GlobData.Game_state.velocity = velocity;
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .velocity = velocity;
         }
     }
 
     pub fn set_autopilot(&mut self, point: POINT) {
         // SAFETY: this context owns the navigation autopilot authority.
         unsafe {
-            GlobData.Game_state.autopilot = point;
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .autopilot = point;
         }
     }
 
@@ -147,13 +155,20 @@ impl World {
     /// Legacy resource construction/teardown must run on the game thread, with
     /// every other World and GlobData borrow suspended until this value is dropped.
     pub(crate) unsafe fn for_legacy_lifecycle() -> Self {
-        use crate::navigation::globals::GlobData;
         // SAFETY: the legacy lifecycle caller suspends other authority access;
         // the resolver reads resource slots only when a loaded frame set is requested.
         unsafe {
             Self::new(
-                std::ptr::NonNull::new_unchecked(&raw mut GlobData.Game_state.CurrentActivity),
-                std::ptr::NonNull::new_unchecked(&raw mut GlobData.Game_state.ip_group_q),
+                std::ptr::NonNull::new_unchecked(
+                    &raw mut (*crate::ships::native::abi::GLOBDATA::current())
+                        .Game_state
+                        .CurrentActivity,
+                ),
+                std::ptr::NonNull::new_unchecked(
+                    &raw mut (*crate::ships::native::abi::GLOBDATA::current())
+                        .Game_state
+                        .ip_group_q,
+                ),
                 |_| unreachable!("descriptor lifecycle does not resolve battle frame sources"),
             )
         }
@@ -163,7 +178,7 @@ impl World {
         use crate::engine::battle::views::FlagshipConfig;
         // SAFETY: World construction retains exclusive game-thread access to GlobData.
         unsafe {
-            let state = GlobData.SIS_state;
+            let state = (*crate::ships::native::abi::GLOBDATA::current()).SIS_state;
             FlagshipConfig {
                 modules: state.ModuleSlots,
                 drives: state.DriveSlots,
@@ -179,7 +194,9 @@ impl World {
     pub fn set_flagship_crew(&mut self, crew: u16) {
         // SAFETY: World construction retains exclusive game-thread access to enlisted crew.
         unsafe {
-            GlobData.SIS_state.CrewEnlisted = crew;
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .SIS_state
+                .CrewEnlisted = crew;
         }
     }
 

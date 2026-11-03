@@ -220,7 +220,12 @@ pub(crate) mod live {
     pub unsafe extern "C" fn DoLoadTeam(state: *mut MELEE_STATE) -> u32 {
         let time = GetTimeCounter();
         GamePaused = 0;
-        if GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 != 0 {
+        if (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity
+            & CHECK_ABORT as u16
+            != 0
+        {
             return 0;
         }
         SetMenuSounds(1 | 2 | 128 | 256, 16);

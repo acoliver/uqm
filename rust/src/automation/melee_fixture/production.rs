@@ -54,11 +54,17 @@ pub(in crate::automation::melee_fixture) fn execute(
     // SAFETY: automation admits operations on the game thread after initialization.
     let (activity, position) = unsafe {
         (
-            GlobData.Game_state.CurrentActivity,
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity,
             SavedPosition {
                 slot: 0,
-                log_x: GlobData.SIS_state.log_x,
-                log_y: GlobData.SIS_state.log_y,
+                log_x: (*crate::ships::native::abi::GLOBDATA::current())
+                    .SIS_state
+                    .log_x,
+                log_y: (*crate::ships::native::abi::GLOBDATA::current())
+                    .SIS_state
+                    .log_y,
                 star: crate::planets::starmap::CurStarDescPtr
                     .as_ref()
                     .map(|s| (s.star_pt.x, s.star_pt.y)),
@@ -336,7 +342,9 @@ fn configure(request: &MeleeSetupRequest) -> Result<(), String> {
         configure_menu(
             state.melee_started != 0,
             &mut *controls,
-            GlobData.Game_state.CurrentActivity,
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity,
             request.cyborg,
         )?;
         state.melee_option = 4;

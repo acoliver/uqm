@@ -2,7 +2,7 @@
 #![cfg(not(test))]
 #![allow(non_snake_case)]
 use super::abi::*;
-use super::globals::{GlobData, RadarContext};
+use super::globals::RadarContext;
 use super::hyper_data::HYPERSTARS;
 use super::hyper_encounters::{allocate, ambient, process_all, XOFFS, YOFFS};
 use super::hyper_transition::{portal_collision, portal_death, star_collision, star_death};
@@ -61,8 +61,16 @@ pub unsafe fn SeedUniverse() {
     crate::app::bridge::enter(|cx| {
         static mut PORTAL_POINT: POINT = POINT { x: 0, y: 0 };
         let mut universe = POINT {
-            x: universe_x(GlobData.SIS_state.log_x),
-            y: universe_y(GlobData.SIS_state.log_y),
+            x: universe_x(
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .SIS_state
+                    .log_x,
+            ),
+            y: universe_y(
+                (*crate::ships::native::abi::GLOBDATA::current())
+                    .SIS_state
+                    .log_y,
+            ),
         };
         let blip = SetAbsFrameIndex(stars_in_space, 90);
         SetContext(RadarContext);
@@ -242,10 +250,23 @@ pub unsafe fn SeedUniverse() {
         if TFB_Random() as u16 & 7 == 0 {
             ambient(cx);
         }
-        if universe.x != GlobData.Game_state.ShipStamp.origin.x
-            || universe.y != GlobData.Game_state.ShipStamp.origin.y
+        if universe.x
+            != (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .ShipStamp
+                .origin
+                .x
+            || universe.y
+                != (*crate::ships::native::abi::GLOBDATA::current())
+                    .Game_state
+                    .ShipStamp
+                    .origin
+                    .y
         {
-            GlobData.Game_state.ShipStamp.origin = universe;
+            (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .ShipStamp
+                .origin = universe;
             DrawHyperCoords(universe);
         }
     });

@@ -3,7 +3,7 @@
 
 use super::palette::*;
 use crate::navigation::abi::*;
-use crate::navigation::globals::GlobData;
+
 use crate::ui::util::live::SaveContextFrame;
 use std::{mem, ptr};
 
@@ -93,7 +93,12 @@ pub unsafe extern "C" fn DoConfirmExit() -> BOOLEAN {
         ExitRequested = 0;
         GamePaused = 0;
         UpdateInputState();
-        if GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 != 0 {
+        if (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity
+            & CHECK_ABORT as u16
+            != 0
+        {
             done = true;
             response = 1;
         } else if PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0 {
@@ -114,8 +119,16 @@ pub unsafe extern "C" fn DoConfirmExit() -> BOOLEAN {
     DrawStamp(&mut saved);
     DestroyDrawable(ReleaseDrawable(saved.frame));
     ClearSystemRect();
-    let result = if response != 0 || GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 != 0 {
-        GlobData.Game_state.CurrentActivity |= CHECK_ABORT as u16;
+    let result = if response != 0
+        || (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity
+            & CHECK_ABORT as u16
+            != 0
+    {
+        (*crate::ships::native::abi::GLOBDATA::current())
+            .Game_state
+            .CurrentActivity |= CHECK_ABORT as u16;
         1
     } else {
         0
@@ -141,7 +154,11 @@ unsafe extern "C" fn do_popup(_state: *mut PopupState) -> BOOLEAN {
     u32::from(
         PulsedInputState.menu[KEY_MENU_SELECT as usize] == 0
             && PulsedInputState.menu[KEY_MENU_CANCEL as usize] == 0
-            && GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 == 0,
+            && (*crate::ships::native::abi::GLOBDATA::current())
+                .Game_state
+                .CurrentActivity
+                & CHECK_ABORT as u16
+                == 0,
     )
 }
 
