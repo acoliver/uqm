@@ -1,7 +1,6 @@
-//! Typed link order over the transitional battle ship pool.
+//! Typed link-order views over fixed-capacity owned pools.
 
 use crate::collections::pool::{Id, OrderedPool};
-use crate::collections::queue::HLink;
 use crate::engine::battle::ShipId;
 pub const NAME_OFFSET: u32 = 5;
 pub const NUM_CAPTAINS_NAMES: u32 = 16;
@@ -25,12 +24,17 @@ impl RacePool {
     }
 }
 
-/// Storage mapping for typed views over the transitional intrusive queues.
+/// Record mapping shared by the battle and campaign queue views.
 mod queue_record {
     pub trait Sealed {}
     impl Sealed for super::Starship {}
 }
-pub trait QueueRecord: queue_record::Sealed + Eq {}
+pub trait QueueRecord: queue_record::Sealed + Eq {
+    type Record;
+}
+impl QueueRecord for Starship {
+    type Record = crate::engine::battle::record::ShipRecord;
+}
 
 use std::marker::PhantomData;
 
@@ -39,7 +43,7 @@ pub enum Starship {}
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct LinkId<T> {
-    slot: u8,
+    slot: usize,
     pool: u64,
     generation: u32,
     marker: PhantomData<T>,
@@ -51,37 +55,30 @@ impl<T> Clone for LinkId<T> {
     }
 }
 
-pub struct LinkQueue<'a, T: QueueRecord> {
-    queue: QueueBorrow<'a>,
+pub struct LinkQueue<'a, T: QueueRecord, const N: usize = 32> {
+    queue: QueueBorrow<'a, T::Record, N>,
+    side: u8,
     marker: PhantomData<T>,
 }
 
-enum QueueBorrow<'a> {
-    Shared(&'a RacePool),
-    Exclusive(&'a mut RacePool),
+enum QueueBorrow<'a, T, const N: usize> {
+    Shared(&'a OrderedPool<T, N>),
+    Exclusive(&'a mut OrderedPool<T, N>),
 }
-impl std::ops::Deref for QueueBorrow<'_> {
-    type Target = OrderedPool<crate::engine::battle::record::ShipRecord, 32>;
+impl<T, const N: usize> std::ops::Deref for QueueBorrow<'_, T, N> {
+    type Target = OrderedPool<T, N>;
     fn deref(&self) -> &Self::Target {
         match self {
-            Self::Shared(q) => &q.pool,
-            Self::Exclusive(q) => &q.pool,
+            Self::Shared(q) => q,
+            Self::Exclusive(q) => q,
         }
     }
 }
-impl std::ops::DerefMut for QueueBorrow<'_> {
+impl<T, const N: usize> std::ops::DerefMut for QueueBorrow<'_, T, N> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         match self {
-            Self::Exclusive(q) => &mut q.pool,
+            Self::Exclusive(q) => q,
             Self::Shared(_) => panic!("cannot mutate a read-only queue view"),
-        }
-    }
-}
-impl QueueBorrow<'_> {
-    fn side(&self) -> u8 {
-        match self {
-            Self::Shared(q) => q.side,
-            Self::Exclusive(q) => q.side,
         }
     }
 }
@@ -100,16 +97,16 @@ pub struct PickShip {
     pub control: u8,
 }
 
-impl<'a, T: QueueRecord> LinkQueue<'a, T> {
-    fn identify(&self, id: Id<crate::engine::battle::record::ShipRecord>) -> LinkId<T> {
+impl<'a, T: QueueRecord, const N: usize> LinkQueue<'a, T, N> {
+    fn identify(&self, id: Id<T::Record>) -> LinkId<T> {
         LinkId {
-            slot: id.index() as u8,
+            slot: id.index(),
             generation: id.generation(),
             pool: self.queue.storage_identity(),
             marker: PhantomData,
         }
     }
-    pub(super) fn key(&self, id: LinkId<T>) -> Id<crate::engine::battle::record::ShipRecord> {
+    pub(super) fn key(&self, id: LinkId<T>) -> Id<T::Record> {
         assert_eq!(
             id.pool,
             self.queue.storage_identity(),
@@ -117,7 +114,7 @@ impl<'a, T: QueueRecord> LinkQueue<'a, T> {
         );
         let key = self
             .queue
-            .id_at(usize::from(id.slot))
+            .id_at(id.slot)
             .unwrap_or_else(|| panic!("ship link addresses free storage"));
         assert_eq!(key.generation(), id.generation, "stale ship link");
         key
@@ -126,14 +123,14 @@ impl<'a, T: QueueRecord> LinkQueue<'a, T> {
         id.pool == self.queue.storage_identity()
             && self
                 .queue
-                .id_at(usize::from(id.slot))
+                .id_at(id.slot)
                 .is_some_and(|key| key.generation() == id.generation)
     }
-    pub fn id(&self, raw: HLink) -> Option<LinkId<T>> {
+    pub fn id(&self, raw: *mut std::ffi::c_void) -> Option<LinkId<T>> {
         if raw.is_null() {
             return None;
         }
-        let id = (0..32).find_map(|slot| {
+        let id = (0..N).find_map(|slot| {
             let id = self.queue.id_at(slot)?;
             (std::ptr::from_ref(self.queue.get(id))
                 .cast_mut()
@@ -160,13 +157,7 @@ impl<'a, T: QueueRecord> LinkQueue<'a, T> {
         self.queue.linked(self.key(id))
     }
     pub fn count(&self) -> usize {
-        let mut count = 0;
-        let mut link = self.head();
-        while let Some(id) = link {
-            count += 1;
-            link = self.succ(id);
-        }
-        count
+        self.queue.count()
     }
 }
 
@@ -255,14 +246,14 @@ impl LinkQueue<'_, Starship> {
     pub fn ship_id(&self, id: LinkId<Starship>) -> ShipId {
         self.raw(id);
         ShipId {
-            side: self.queue.side(),
-            slot: id.slot,
+            side: self.side,
+            slot: id.slot as u8,
             gen: id.generation,
             owner: id.pool,
         }
     }
     pub fn link(&self, id: ShipId) -> LinkId<Starship> {
-        assert_eq!(id.side, self.queue.side(), "ship belongs to another side");
+        assert_eq!(id.side, self.side, "ship belongs to another side");
         assert_eq!(
             id.owner,
             self.queue.storage_identity(),
@@ -356,37 +347,45 @@ mod tests {
 }
 
 use std::ptr;
-impl<'a, T: QueueRecord> LinkQueue<'a, T> {
-    pub fn new(queue: &'a mut RacePool) -> Self {
+impl<'a, T: QueueRecord, const N: usize> LinkQueue<'a, T, N> {
+    pub fn from_pool(queue: &'a mut OrderedPool<T::Record, N>) -> Self {
         Self {
             queue: QueueBorrow::Exclusive(queue),
+            side: 0,
             marker: PhantomData,
         }
     }
-    pub fn borrow(queue: &'a RacePool) -> Self {
+    pub fn borrow_pool(queue: &'a OrderedPool<T::Record, N>) -> Self {
         Self {
             queue: QueueBorrow::Shared(queue),
+            side: 0,
             marker: PhantomData,
         }
     }
-    pub fn raw(&self, id: LinkId<T>) -> HLink {
+    pub fn raw(&self, id: LinkId<T>) -> *mut std::ffi::c_void {
         ptr::from_ref(self.record(id)).cast_mut().cast()
     }
-    fn record(&self, id: LinkId<T>) -> &crate::engine::battle::record::ShipRecord {
+    fn record(&self, id: LinkId<T>) -> &T::Record {
         self.queue.get(self.key(id))
     }
-    pub(super) fn record_mut(
-        &mut self,
-        id: LinkId<T>,
-    ) -> &mut crate::engine::battle::record::ShipRecord {
+    pub(super) fn record_mut(&mut self, id: LinkId<T>) -> &mut T::Record {
         let key = self.key(id);
         self.queue.get_mut(key)
     }
-    pub fn alloc(&mut self) -> Option<LinkId<T>> {
-        let key = self
-            .queue
-            .alloc(crate::engine::battle::record::ShipRecord::default())?;
+    pub fn alloc(&mut self) -> Option<LinkId<T>>
+    where
+        T::Record: Default,
+    {
+        let key = self.queue.alloc(T::Record::default())?;
         Some(self.identify(key))
+    }
+    pub fn get_mut(&mut self, id: LinkId<T>) -> &mut T::Record {
+        self.record_mut(id)
+    }
+    pub fn insert_before(&mut self, id: LinkId<T>, before: Option<LinkId<T>>) {
+        let key = self.key(id);
+        let before = before.map(|id| self.key(id));
+        self.queue.insert_before(key, before);
     }
     pub fn put(&mut self, id: LinkId<T>) {
         let key = self.key(id);
@@ -479,5 +478,64 @@ mod identity_tests {
         assert!(catch_unwind(AssertUnwindSafe(|| c.link(ship))).is_err());
         assert!(catch_unwind(AssertUnwindSafe(|| b.edit(foreign, |pick| pick.crew = 9))).is_err());
         assert_eq!(b.get(local).crew, 0);
+    }
+}
+
+#[cfg(test)]
+mod pool_view_tests {
+    use super::*;
+    #[derive(Debug, PartialEq, Eq)]
+    enum Value {}
+    impl queue_record::Sealed for Value {}
+    impl QueueRecord for Value {
+        type Record = u32;
+    }
+
+    #[test]
+    fn typed_pool_views_keep_order_capacity_and_generation_checks() {
+        let mut pool = OrderedPool::<u32, 4>::with_capacity(3);
+        let mut view = LinkQueue::<Value, 4>::from_pool(&mut pool);
+        let a = view.alloc().unwrap();
+        let b = view.alloc().unwrap();
+        let c = view.alloc().unwrap();
+        assert!(view.alloc().is_none());
+        *view.get_mut(a) = 17;
+        view.put(a);
+        view.put(c);
+        view.insert_before(b, Some(c));
+        assert_eq!(view.count(), 3);
+        assert_eq!(view.succ(a), Some(b));
+        assert_eq!(view.pred(c), Some(b));
+        view.remove(b);
+        assert_eq!(view.succ(b), Some(c));
+        view.free(b);
+        assert!(!view.contains(b));
+        let replacement = view.alloc().unwrap();
+        assert_ne!(replacement, b);
+        assert_eq!(replacement.slot, b.slot);
+        assert_eq!(*view.get_mut(replacement), 0);
+        assert_eq!(*view.record(a), 17);
+        drop(view);
+        let view = LinkQueue::<Value, 4>::borrow_pool(&pool);
+        assert_eq!(view.head(), Some(a));
+        assert_eq!(view.tail(), Some(c));
+        assert_eq!(view.count(), 2);
+    }
+}
+
+impl<'a> LinkQueue<'a, Starship> {
+    pub fn new(queue: &'a mut RacePool) -> Self {
+        Self {
+            side: queue.side,
+            queue: QueueBorrow::Exclusive(&mut queue.pool),
+            marker: PhantomData,
+        }
+    }
+    pub fn borrow(queue: &'a RacePool) -> Self {
+        Self {
+            side: queue.side,
+            queue: QueueBorrow::Shared(&queue.pool),
+            marker: PhantomData,
+        }
     }
 }

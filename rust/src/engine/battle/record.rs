@@ -874,9 +874,6 @@ mod kernel_tests {
     }
 }
 
-use crate::engine::battle::link_queue::QueueRecord;
-impl QueueRecord for crate::engine::battle::link_queue::Starship {}
-
 #[cfg(not(test))]
 impl RaceDesc {
     pub(crate) fn recover_crew(&mut self, crew: u16) -> u16 {
