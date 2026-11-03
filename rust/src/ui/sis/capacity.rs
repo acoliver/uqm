@@ -2,6 +2,44 @@
 
 use super::*;
 
+fn crew_color(i: usize) -> Color {
+    const RGB: [(u8, u8, u8); 10] = [
+        (10, 30, 9),
+        (0, 30, 0),
+        (0, 27, 0),
+        (0, 24, 0),
+        (0, 21, 0),
+        (0, 18, 0),
+        (0, 16, 0),
+        (0, 13, 0),
+        (0, 10, 0),
+        (0, 7, 0),
+    ];
+    let (r, g, b) = RGB[i];
+    rgb15(r, g, b)
+}
+fn storage_color(i: usize) -> Color {
+    const V: [u8; 10] = [31, 28, 24, 21, 18, 16, 13, 10, 8, 5];
+    rgb15(V[i], V[i], V[i])
+}
+fn fuel_color(i: usize) -> Color {
+    const RGB: [(u8, u8, u8); 11] = [
+        (15, 0, 0),
+        (19, 0, 0),
+        (23, 0, 0),
+        (27, 0, 0),
+        (31, 3, 0),
+        (31, 7, 0),
+        (31, 10, 0),
+        (31, 14, 0),
+        (31, 17, 0),
+        (31, 21, 0),
+        (31, 24, 0),
+    ];
+    let (r, g, b) = RGB[i];
+    rgb15(r, g, b)
+}
+
 #[no_mangle]
 pub extern "C" fn GetCrewCount() -> COUNT {
     sis().read(|owner| owner.crew_enlisted)

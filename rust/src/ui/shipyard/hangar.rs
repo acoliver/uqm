@@ -6,13 +6,13 @@ pub(super) unsafe fn prepare_windows(
     queue: &mut QUEUE,
     menu: &MENU_STATE,
     mut window: COUNT,
-    yanked: *mut SHIP_FRAGMENT,
+    yanked: Option<&mut SHIP_FRAGMENT>,
 ) -> ([ShipWindow; MAX_BUILT_SHIPS as usize], COUNT) {
     let mut windows: [ShipWindow; MAX_BUILT_SHIPS as usize] = mem::zeroed();
     let mut num_ships: COUNT = 1;
-    if !yanked.is_null() {
+    if let Some(yanked) = yanked {
         let info = &mut windows[0];
-        info.ship = yanked;
+        info.ship = ptr::from_mut(yanked);
         info.left_door.origin = POINT {
             x: -(SHIP_WIN_WIDTH >> 1),
             y: 0,
@@ -27,7 +27,7 @@ pub(super) unsafe fn prepare_windows(
             x: (SHIP_WIN_WIDTH >> 1) + 1,
             y: SHIP_WIN_WIDTH >> 1,
         };
-        info.image.frame = (*yanked).melee_icon;
+        info.image.frame = yanked.melee_icon;
         info.finished.x = HANGAR_X_COORDS[window as usize % HANGAR_SHIPS_ROW as usize];
         info.finished.y = HANGAR_Y + HANGAR_DY * (window / HANGAR_SHIPS_ROW as COUNT) as i16;
     } else {

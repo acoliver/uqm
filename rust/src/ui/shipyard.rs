@@ -221,8 +221,14 @@ struct ShipWindow {
 }
 
 unsafe fn show_combat_ship(menu: *mut MENU_STATE, window: COUNT, yanked: *mut SHIP_FRAGMENT) {
-    let (mut windows, num_ships) =
-        WorldData::current().read(|world| hangar::prepare_windows(world, &*menu, window, yanked));
+    let (mut windows, num_ships) = WorldData::current().write(|world| {
+        hangar::prepare_windows(
+            world.ship_fragments_mut(true),
+            &*menu,
+            window,
+            yanked.as_mut(),
+        )
+    });
     if num_ships != 0 {
         let mut all_finished = false;
         let r = RECT {

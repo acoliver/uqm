@@ -238,9 +238,8 @@ pub unsafe extern "C" fn DrawShipPiece(
             top.origin.x += SHIP_PIECE_OFFSET as i16;
             side.origin.x += SHIP_PIECE_OFFSET as i16;
             which_slot += 1;
-            which_piece = WorldData::current()
-                .read(|owner| owner.flagship.module_slots[which_slot as usize])
-                as COUNT;
+            let slot = which_slot as usize;
+            which_piece = WorldData::current().read(|w| w.flagship.module_slots[slot]) as COUNT;
             if which_piece == EMPTY_SLOT + 2 && which_slot >= NUM_MODULE_SLOTS as COUNT - 3 {
                 which_piece += 1;
             }
