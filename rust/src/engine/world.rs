@@ -2,9 +2,13 @@
 
 use crate::engine::battle::schema::GAME_STATE;
 pub mod planet_info;
+pub mod queues;
 pub mod state_file;
 pub mod story;
 use self::{state_file::StateFileManager, story::GameState};
+use crate::engine::battle::link_queue::LinkQueue;
+use queues::CampaignQueues;
+use queues::{Encounter, Fleet, Fragment, Group};
 
 #[derive(Clone, Copy)]
 pub struct WorldData {
@@ -58,6 +62,8 @@ pub struct World {
     #[cfg(not(test))]
     pub(crate) hyper_distance: FuelDistance,
     pub data: WorldData,
+    pub queues: CampaignQueues,
+    pub clock: super::clock::GameClock,
     pub story: Option<GameState>,
     pub files: StateFileManager,
     pub current_star: Option<StarId>,
@@ -67,6 +73,8 @@ impl World {
     pub fn new() -> Self {
         Self {
             data: WorldData::new(),
+            queues: CampaignQueues::new(),
+            clock: super::clock::GameClock::new(),
             #[cfg(not(test))]
             hyper_distance: FuelDistance {
                 dx: 0,
@@ -78,6 +86,37 @@ impl World {
             files: StateFileManager::new(),
             current_star: None,
         }
+    }
+
+    pub fn avail_races(&mut self) -> LinkQueue<'_, Fleet, 24> {
+        LinkQueue::from_pool(&mut self.queues.avail_races)
+    }
+    pub fn avail_races_ref(&self) -> LinkQueue<'_, Fleet, 24> {
+        LinkQueue::borrow_pool(&self.queues.avail_races)
+    }
+    pub fn built_ships(&mut self) -> LinkQueue<'_, Fragment, 12> {
+        LinkQueue::from_pool(&mut self.queues.built_ships)
+    }
+    pub fn built_ships_ref(&self) -> LinkQueue<'_, Fragment, 12> {
+        LinkQueue::borrow_pool(&self.queues.built_ships)
+    }
+    pub fn npc_built_ships(&mut self) -> LinkQueue<'_, Fragment, 14> {
+        LinkQueue::from_pool(&mut self.queues.npc_built_ships)
+    }
+    pub fn npc_built_ships_ref(&self) -> LinkQueue<'_, Fragment, 14> {
+        LinkQueue::borrow_pool(&self.queues.npc_built_ships)
+    }
+    pub fn ip_groups(&mut self) -> LinkQueue<'_, Group, 32> {
+        LinkQueue::from_pool(&mut self.queues.ip_groups)
+    }
+    pub fn ip_groups_ref(&self) -> LinkQueue<'_, Group, 32> {
+        LinkQueue::borrow_pool(&self.queues.ip_groups)
+    }
+    pub fn encounters(&mut self) -> LinkQueue<'_, Encounter, 16> {
+        LinkQueue::from_pool(&mut self.queues.encounters)
+    }
+    pub fn encounters_ref(&self) -> LinkQueue<'_, Encounter, 16> {
+        LinkQueue::borrow_pool(&self.queues.encounters)
     }
 
     pub fn activity(&self) -> u16 {
@@ -261,6 +300,27 @@ mod tests {
         world.data.game.game_clock.day_index = 7;
         assert_eq!(date, (3, 6, 2156));
         assert_eq!(world.data.calendar_date(), (3, 7, 2156));
+    }
+
+    #[test]
+    fn campaign_pools_have_fixed_capacities_and_independent_fragment_storage() {
+        let mut world = World::new();
+        let first = world.built_ships().alloc().unwrap();
+        world.built_ships().get_mut(first).crew_level = 7;
+        world.built_ships().put(first);
+        for _ in 1..12 {
+            let id = world.built_ships().alloc().unwrap();
+            world.built_ships().put(id);
+        }
+        assert!(world.built_ships().alloc().is_none());
+        assert_eq!(world.npc_built_ships().count(), 0);
+        assert!(!world.npc_built_ships().contains(first));
+        let view = world.built_ships_ref();
+        assert_eq!(view.count(), 12);
+        assert_eq!(view.get(first).crew_level, 7);
+        world.built_ships().reinit();
+        assert!(!world.built_ships_ref().contains(first));
+        assert_eq!(world.built_ships_ref().count(), 0);
     }
 
     #[test]

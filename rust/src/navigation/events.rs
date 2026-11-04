@@ -101,7 +101,8 @@ pub(crate) mod live {
         day: u16,
         year: u16,
         selector: u8,
-    ) -> crate::collections::queue::HLink {
+    ) -> Option<crate::engine::battle::link_queue::LinkId<crate::engine::clock::ScheduledEvent>>
+    {
         if kind == 1 && month == 0 && day == 0 && year == 0 {
             dispatch_event(world, selector);
         } else {
@@ -113,14 +114,10 @@ pub(crate) mod live {
             );
             let date = crate::time::clock_abi::event_date(now, kind == 1, (year, month, day));
             if date >= now {
-                return crate::time::clock_abi::insert_event(
-                    &raw mut world.data.game.game_clock.event_q,
-                    date,
-                    selector,
-                );
+                return crate::time::clock_abi::insert_event(&mut world.clock, date, selector);
             }
         }
-        ptr::null_mut()
+        None
     }
 
     use super::*;

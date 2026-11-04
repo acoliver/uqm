@@ -25,7 +25,7 @@ impl RacePool {
 }
 
 /// Record mapping shared by the battle and campaign queue views.
-mod queue_record {
+pub(crate) mod queue_record {
     pub trait Sealed {}
     impl Sealed for super::Starship {}
 }
@@ -151,6 +151,17 @@ impl<'a, T: QueueRecord, const N: usize> LinkQueue<'a, T, N> {
     }
     pub fn linked(&self, id: LinkId<T>) -> bool {
         self.queue.linked(self.key(id))
+    }
+    pub fn at(&self, mut index: usize) -> Option<LinkId<T>> {
+        let mut next = self.head();
+        while let Some(id) = next {
+            if index == 0 {
+                return Some(id);
+            }
+            index -= 1;
+            next = self.succ(id);
+        }
+        None
     }
     pub fn count(&self) -> usize {
         self.queue.count()
@@ -361,7 +372,7 @@ impl<'a, T: QueueRecord, const N: usize> LinkQueue<'a, T, N> {
     pub fn raw(&self, id: LinkId<T>) -> *mut std::ffi::c_void {
         ptr::from_ref(self.record(id)).cast_mut().cast()
     }
-    fn record(&self, id: LinkId<T>) -> &T::Record {
+    pub(crate) fn record(&self, id: LinkId<T>) -> &T::Record {
         self.queue.get(self.key(id))
     }
     pub(super) fn record_mut(&mut self, id: LinkId<T>) -> &mut T::Record {

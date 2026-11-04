@@ -72,11 +72,7 @@ unsafe fn copy_fleet(dst: *mut FLEET_INFO, src: *const SHIP_INFO, fleet: *const 
 unsafe fn initialize_races(cx: &mut crate::engine::battle::Cx<'_>) {
     let mut species = SPECIES_ID_ARILOU_ID;
     let count = SPECIES_ID_KOHR_AH_ID - species + 1 + 2;
-    InitQueue(
-        &raw mut cx.world.data.game.avail_race_q,
-        count as u16,
-        mem::size_of::<FLEET_INFO>() as u16,
-    );
+    cx.world.avail_races().reinit();
     for i in 0..count {
         let ship = if i < count - 2 {
             let value = species;
@@ -87,11 +83,9 @@ unsafe fn initialize_races(cx: &mut crate::engine::battle::Cx<'_>) {
         } else {
             SPECIES_ID_UR_QUAN_PROBE_ID
         };
-        let handle = AllocLink(&raw mut cx.world.data.game.avail_race_q);
-        if handle.is_null() {
-            continue;
-        }
-        let fleet = handle.cast::<FLEET_INFO>();
+        let handle = cx.world.avail_races().alloc().expect("fleet capacity");
+        let mut value = FLEET_INFO::default();
+        let fleet = &raw mut value;
         (*fleet).SpeciesID = ship;
         if i < count - 1 {
             let master = find_master_ship(cx.kernel, ship)
@@ -114,7 +108,8 @@ unsafe fn initialize_races(cx: &mut crate::engine::battle::Cx<'_>) {
         (*fleet).growth_err_term = 127;
         (*fleet).days_left = 0;
         (*fleet).func_index = u8::MAX;
-        PutQueue(&raw mut cx.world.data.game.avail_race_q, handle);
+        *cx.world.avail_races().get_mut(handle) = value;
+        cx.world.avail_races().put(handle);
     }
 }
 
@@ -147,26 +142,10 @@ pub unsafe extern "C" fn InitGameStructures() -> BOOLEAN {
         (*state).element_worth = [1, 2, 3, 4, 5, 6, 8, 25];
         (*sis).element_amounts = [0; 8];
         super::initial_state::equipment(&mut *sis);
-        InitQueue(
-            &mut (*state).built_ship_q,
-            MAX_BUILT_SHIPS as u16,
-            mem::size_of::<SHIP_FRAGMENT>() as u16,
-        );
-        InitQueue(
-            &mut (*state).npc_built_ship_q,
-            MAX_SHIPS_PER_SIDE as u16,
-            mem::size_of::<SHIP_FRAGMENT>() as u16,
-        );
-        InitQueue(
-            &mut (*state).ip_group_q,
-            MAX_BATTLE_GROUPS as u16,
-            mem::size_of::<IP_GROUP>() as u16,
-        );
-        InitQueue(
-            &mut (*state).encounter_q,
-            MAX_ENCOUNTERS as u16,
-            mem::size_of::<ENCOUNTER>() as u16,
-        );
+        cx.world.built_ships().reinit();
+        cx.world.npc_built_ships().reinit();
+        cx.world.ip_groups().reinit();
+        cx.world.encounters().reinit();
         (*state).current_activity = (IN_INTERPLANETARY | START_INTERPLANETARY) as u16;
         super::initial_state::prices(&mut *sis, &mut *state);
         utf8StringCopy(
@@ -187,17 +166,20 @@ pub unsafe extern "C" fn InitGameStructures() -> BOOLEAN {
             )))
             .cast(),
         );
-        set_race_allied(cx.world, HUMAN_SHIP as u16, 1);
-        let state = &raw mut cx.world.data.game;
         let sis = &raw mut cx.world.data.flagship;
-        {
-            CloneShipFragment(
-                &mut (*state).avail_race_q,
-                HUMAN_SHIP as u16,
-                &mut (*state).built_ship_q,
-                0,
-            );
-        }
+        let human = cx
+            .world
+            .avail_races_ref()
+            .at(HUMAN_SHIP as usize)
+            .expect("human fleet");
+        cx.world.avail_races().get_mut(human).allied_state = GOOD_GUY as u16;
+        let template = *cx.world.avail_races_ref().get(human);
+        cx.world.built_ships().clone_fragment(
+            &template,
+            HUMAN_SHIP as u8,
+            0,
+            crate::comm::dispatch::production_captain_name,
+        );
         (*sis).log_x = crate::planets::universe_units::universe_to_logx(SOL_X as i16);
         (*sis).log_y = crate::planets::universe_units::universe_to_logy(SOL_Y as i16);
         cx.world
@@ -226,21 +208,19 @@ pub unsafe fn uninit_game_structures() {
     // SAFETY: the lifecycle borrows owners from Cx; callbacks republish it synchronously.
     crate::app::bridge::enter(|cx| {
         let kernel = cx.kernel();
-        let world = &raw mut cx.world.data;
-        let state = ptr::addr_of_mut!((*world).game);
-        UninitQueue(ptr::addr_of_mut!((*state).encounter_q));
-        UninitQueue(ptr::addr_of_mut!((*state).ip_group_q));
-        UninitQueue(ptr::addr_of_mut!((*state).npc_built_ship_q));
-        UninitQueue(ptr::addr_of_mut!((*state).built_ship_q));
+        cx.world.encounters().reinit();
+        cx.world.ip_groups().reinit();
+        cx.world.npc_built_ships().reinit();
+        cx.world.built_ships().reinit();
         uninit_group_info(cx.world);
         uninit_planet_info(cx.world);
-        let probe = (*state).avail_race_q.tail.cast::<FLEET_INFO>();
-        if !probe.is_null() {
-            DestroyDrawable(ReleaseDrawable((*probe).melee_icon));
-            DestroyDrawable(ReleaseDrawable((*probe).icons));
-            DestroyStringTable(ReleaseStringTable((*probe).race_strings));
+        if let Some(probe) = cx.world.avail_races_ref().tail() {
+            let probe = *cx.world.avail_races_ref().get(probe);
+            DestroyDrawable(ReleaseDrawable(probe.melee_icon));
+            DestroyDrawable(ReleaseDrawable(probe.icons));
+            DestroyStringTable(ReleaseStringTable(probe.race_strings));
         }
-        UninitQueue(ptr::addr_of_mut!((*state).avail_race_q));
+        cx.world.avail_races().reinit();
         DestroyDrawable(ReleaseDrawable((*kernel).play_frame));
         (*kernel).play_frame = ptr::null_mut();
     })

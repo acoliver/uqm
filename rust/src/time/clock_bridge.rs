@@ -15,6 +15,7 @@ pub use crate::engine::battle::schema::CLOCK_STATE as ClockState;
 ///
 /// `pred` and `succ` are the queue's `LINK` and must stay first.
 #[repr(C)]
+#[derive(Default)]
 pub struct CEvent {
     pub pred: HLink,
     pub succ: HLink,

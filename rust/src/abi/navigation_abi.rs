@@ -3702,7 +3702,7 @@ pub const Segue_Segue_defeat: Segue = 3;
 pub type Segue = ::std::os::raw::c_uint;
 pub type HENCOUNTER = HLINK;
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Default)]
 pub struct brief_ship_info {
     pub race_id: BYTE,
     pub crew_level: COUNT,
@@ -3710,7 +3710,7 @@ pub struct brief_ship_info {
     pub max_energy: BYTE,
 }
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Default)]
 pub struct encounter {
     pub pred: HENCOUNTER,
     pub succ: HENCOUNTER,
@@ -3891,7 +3891,7 @@ pub use crate::state::c_api::write_state_file;
 pub use crate::state::c_api::seek_state_file;
 pub type HIPGROUP = HLINK;
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Default)]
 pub struct IP_GROUP {
     pub pred: HIPGROUP,
     pub succ: HIPGROUP,

@@ -1461,7 +1461,7 @@ pub struct SHIP_BASE {
 }
 pub type HSHIPFRAG = HLINK;
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Default)]
 pub struct SHIP_FRAGMENT {
     pub pred: HLINK,
     pub succ: HLINK,
@@ -1479,7 +1479,7 @@ pub struct SHIP_FRAGMENT {
 }
 pub type HFLEETINFO = HLINK;
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Default)]
 pub struct FLEET_INFO {
     pub pred: HFLEETINFO,
     pub succ: HFLEETINFO,
