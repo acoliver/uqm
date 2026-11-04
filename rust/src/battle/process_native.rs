@@ -555,16 +555,14 @@ pub(crate) mod engine {
         cx.elements()[el].state_flags & COLLISION_BIT as ELEMENT_FLAGS
     }
 
-    unsafe fn preprocess_queue(
-        cx: &mut Cx<'_>,
-        scroll_x: *mut SIZE,
-        scroll_y: *mut SIZE,
-    ) -> ViewState {
+    fn view_dimensions(cx: &Cx<'_>) -> (i32, i32) {
+        let (w, h) = cx.screen_dimensions();
+        (width(w), height(h))
+    }
+
+    fn preprocess_queue(cx: &mut Cx<'_>, scale: i32) -> (queue_view::CameraBounds, SIZE) {
         let active_sides = COUNT::from(cx.b.counters[0] != 0) + COUNT::from(cx.b.counters[1] != 0);
-        let mut bounds = queue_view::CameraBounds::new(
-            optMeleeScale == SCALE_STEP,
-            (width(ScreenWidth), height(ScreenHeight)),
-        );
+        let mut bounds = queue_view::CameraBounds::new(scale == SCALE_STEP, view_dimensions(cx));
         let mut handle = cx.elements().head();
         while let Some(e) = handle {
             if cx.elements()[e].state_flags & PRE_PROCESS_BIT == 0 {
@@ -582,27 +580,16 @@ pub(crate) mod engine {
                     &queue_view::ViewConfig {
                         limit: cx.b.max_zoom_out,
                         zoom: cx.b.zoom_out,
-                        step: optMeleeScale == SCALE_STEP,
+                        step: scale == SCALE_STEP,
                         activity: cx.world.activity() as BYTE,
-                        dimensions: (width(ScreenWidth), height(ScreenHeight)),
+                        dimensions: view_dimensions(cx),
                     },
                 );
             }
             handle = next;
         }
-        let minimum = bounds.finish(
-            cx.b.max_zoom_out,
-            cx.b.zoom_out,
-            optMeleeScale == SCALE_STEP,
-        );
-        calc_view_engine(
-            cx,
-            &mut bounds.origin,
-            minimum,
-            scroll_x,
-            scroll_y,
-            bounds.ships_alive,
-        )
+        let minimum = bounds.finish(cx.b.max_zoom_out, cx.b.zoom_out, scale == SCALE_STEP);
+        (bounds, minimum)
     }
 
     fn postprocess(cx: &mut Cx<'_>, e: ElementId) {
@@ -619,23 +606,14 @@ pub(crate) mod engine {
             | POST_PROCESS_BIT;
     }
 
-    unsafe fn calc_view_engine(
+    fn calc_view_engine(
         cx: &mut Cx<'_>,
-        origin: *mut POINT,
         next_reduction: SIZE,
-        scroll_x: *mut SIZE,
-        scroll_y: *mut SIZE,
+        scroll: (SIZE, SIZE),
         ships_alive: COUNT,
+        scale: i32,
     ) -> ViewState {
-        let (mut dx, mut dy) = view_scroll(
-            *origin,
-            ships_alive,
-            width(ScreenWidth),
-            height(ScreenHeight),
-        );
-        if (dx != 0 || dy != 0) && in_hqspace(cx.world) != 0 {
-            crate::app::bridge::publish(cx, || MoveSIS(&mut dx, &mut dy));
-        }
+        let (dx, dy) = scroll;
         let state = if cx.b.zoom_out == next_reduction {
             if dx == 0 && dy == 0 && in_hqspace(cx.world) == 0 {
                 ViewState::Stable
@@ -643,23 +621,22 @@ pub(crate) mod engine {
                 ViewState::Scroll
             }
         } else {
+            let (w, h) = view_dimensions(cx);
             let (new_origin, reduction) = view_origin(
                 cx.b.zoom_out,
                 next_reduction,
                 ships_alive,
-                optMeleeScale == SCALE_STEP,
-                width(ScreenWidth),
-                height(ScreenHeight),
+                scale == SCALE_STEP,
+                w,
+                h,
             );
-            (*cx.kernel()).space_origin = new_origin;
+            cx.kernel.space_origin = new_origin;
             cx.b.zoom_out = reduction;
             ViewState::Change
         };
         if (cx.world.activity() as u8) <= IN_HYPERSPACE as u8 {
-            move_galaxy(cx, state as VIEW_STATE, dx, dy, optMeleeScale);
+            move_galaxy(cx, state as VIEW_STATE, dx, dy, scale);
         }
-        *scroll_x = dx;
-        *scroll_y = dy;
         state
     }
 
@@ -824,8 +801,14 @@ pub(crate) mod engine {
     /// Engine contexts, element/display pools and sound system are initialized on the game thread.
     unsafe fn redraw_queue(cx: &mut Cx<'_>, clear: BOOLEAN) {
         SetContext(cx.kernel.status_context);
-        let (mut sx, mut sy) = (0, 0);
-        let state = preprocess_queue(cx, &mut sx, &mut sy);
+        let scale = optMeleeScale;
+        let (bounds, minimum) = preprocess_queue(cx, scale);
+        let (w, h) = view_dimensions(cx);
+        let (mut sx, mut sy) = view_scroll(bounds.origin, bounds.ships_alive, w, h);
+        if (sx != 0 || sy != 0) && in_hqspace(cx.world) != 0 {
+            crate::app::bridge::publish(cx, || MoveSIS(&mut sx, &mut sy));
+        }
+        let state = calc_view_engine(cx, minimum, (sx, sy), bounds.ships_alive, scale);
         postprocess_queue(cx, state, sx, sy);
         if optStereoSFX != 0 {
             crate::battle::sounds::engine::update_positions(cx);
