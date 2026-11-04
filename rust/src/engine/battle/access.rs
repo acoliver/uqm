@@ -301,9 +301,7 @@ impl Cx<'_> {
 
 impl Cx<'_> {
     pub fn shared_frame_set(&self, role: SharedFrames) -> Frames {
-        let source = self.kernel.shared_frame_source(role);
-        // SAFETY: World retains these source slots; the result leases their loaded allocations.
-        unsafe { Frames::native_shared(role, source, 3) }
+        Frames::retain_shared(role, self.kernel.shared_frame_source(role))
     }
     pub fn init_intersect(&mut self, id: ElementId) {
         self.init_intersect_start(id);

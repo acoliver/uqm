@@ -34,20 +34,14 @@ pub(super) unsafe fn allocate(cx: &mut Cx<'_>, point: POINT) -> Option<ElementId
         y: wrap(ly, height()),
     };
     cx.primitive_style_mut(element).kind = gfx_object_STAMP_PRIM as u8;
-    let frames = ptr::addr_of_mut!(cx.kernel.hyperstars)
-        .cast::<FRAME>()
-        .wrapping_add(1 + (get(cx.world, StoryKey::ARILOU_SPACE_SIDE) >> 1) as usize);
-    cx.set_single_frames(
-        element,
-        Frames::native_shared(
-            crate::engine::battle::views::SharedFrames::Hyperspace(
-                get(cx.world, StoryKey::ARILOU_SPACE_SIDE) >> 1,
-            ),
-            NonNull::new(frames).unwrap_or_else(|| panic!("retained navigation authority")),
-            1,
-        ),
-        Frame::retain(*frames),
+    let side = get(cx.world, StoryKey::ARILOU_SPACE_SIDE) >> 1;
+    let source = &cx.kernel.hyperstars[1 + usize::from(side)];
+    let frames = Frames::retain_shared(
+        crate::engine::battle::views::SharedFrames::Hyperspace(side),
+        std::slice::from_ref(source),
     );
+    let frame = Frame::retain(*source);
+    cx.set_single_frames(element, frames, frame);
     Some(element)
 }
 fn wrap(value: i32, limit: i32) -> i16 {
@@ -76,12 +70,11 @@ pub(super) unsafe fn ambient(cx: &mut Cx<'_>) {
         y: ((height() >> 1) + (dy << 2)) as i16,
     };
     let stars = cx.kernel.stars_in_space;
-    let source = NonNull::from(&mut cx.kernel.stars_in_space);
-    cx.set_single_frames(
-        element,
-        Frames::native_shared(crate::engine::battle::views::SharedFrames::Stars, source, 1),
-        Frame::retain(stars),
+    let frames = Frames::retain_shared(
+        crate::engine::battle::views::SharedFrames::Stars,
+        std::slice::from_ref(&cx.kernel.stars_in_space),
     );
+    cx.set_single_frames(element, frames, Frame::retain(stars));
     if (random >> 16) & 7 != 0 {
         cx.element_mut(element).life = 14;
         cx.set_frame(element, false, Frame::retain(stars));

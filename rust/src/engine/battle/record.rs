@@ -926,10 +926,10 @@ impl Kernel {
     pub(crate) fn shared_frame_source(
         &self,
         role: super::views::SharedFrames,
-    ) -> std::ptr::NonNull<crate::graphics::native_abi::FRAME> {
+    ) -> &[crate::graphics::native_abi::FRAME; 3] {
         match role {
-            super::views::SharedFrames::Asteroid => std::ptr::NonNull::from(&self.asteroid[0]),
-            super::views::SharedFrames::Explosion => std::ptr::NonNull::from(&self.explosion[0]),
+            super::views::SharedFrames::Asteroid => &self.asteroid,
+            super::views::SharedFrames::Explosion => &self.explosion,
             _ => panic!("not a battle shared frame role {role:?}"),
         }
     }

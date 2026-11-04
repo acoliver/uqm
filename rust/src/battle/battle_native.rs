@@ -193,22 +193,6 @@ pub(crate) mod engine {
     pub fn set_player_input(side: usize, input: Option<InputContext>) {
         KernelOwner::current().write(|owner| owner.player_input[side] = input);
     }
-    /// # Safety
-    /// `side` must be a valid player index on the game thread.
-    pub unsafe fn player_control(side: usize) -> u8 {
-        let kernel = KernelOwner::current();
-        *(&raw const (**kernel).player_control)
-            .cast::<BYTE>()
-            .add(side)
-    }
-    /// # Safety
-    /// `side` must be a valid player index owned by the game thread.
-    pub unsafe fn set_player_control(side: usize, value: u8) {
-        let kernel = KernelOwner::current();
-        *(&raw mut (**kernel).player_control)
-            .cast::<BYTE>()
-            .add(side) = value;
-    }
 
     pub const fn rgb15(r: u8, g: u8, b: u8) -> Color {
         Color {
@@ -450,13 +434,13 @@ pub(crate) mod engine {
         1
     }
 
-    unsafe fn select_all_ships(count: SIZE) -> BOOLEAN {
+    unsafe fn select_all_ships(count: SIZE, controls: [u8; 2]) -> BOOLEAN {
         if count == 1 {
             return crate::app::bridge::enter(|cx| {
                 crate::battle::ship_native::engine::next_star_ship(cx, None, 0)
             });
         }
-        if player_control(0) & NETWORK_CONTROL != 0 && player_control(1) & NETWORK_CONTROL != 0 {
+        if controls[0] & NETWORK_CONTROL != 0 && controls[1] & NETWORK_CONTROL != 0 {
             crate::log_abi::log_message(2, "Only one side at a time can be network controlled.\n");
             return 0;
         }
@@ -472,20 +456,30 @@ pub(crate) mod engine {
         cx.finish_battle();
     }
 
+    fn seed_battle_rng(
+        activity: u8,
+        campaign_domain: u32,
+        seed_value: impl FnOnce(u32, u32) -> u32,
+    ) {
+        if activity != SUPER_MELEE as u8 {
+            crate::math::seed_random(seed_value(campaign_domain, GetTimeCounter()));
+        } else {
+            let seed = seed_value(2, 0);
+            if seed != 0 {
+                crate::math::seed_random(seed);
+            }
+        }
+    }
+
     /// # Safety
     /// The game thread must own initialized battle, input, audio, and display state; any callback must remain valid for the battle.
     #[no_mangle]
     pub unsafe extern "C" fn Battle(callback: BattleFrameCallback) -> BOOLEAN {
         let (battle, net, had_net, mut observer) = battle_network();
         let mut io = battle_io(&mut observer);
-        if activity() as u8 != SUPER_MELEE as u8 {
-            crate::math::seed_random(seed(&mut io, 4, GetTimeCounter()));
-        } else {
-            let seed = seed(&mut io, 2, 0);
-            if seed != 0 {
-                crate::math::seed_random(seed);
-            }
-        }
+        seed_battle_rng(activity() as u8, 4, |domain, fallback| {
+            seed(&mut io, domain, fallback)
+        });
         BattleSong(0);
         let mut count = InitShips();
         if KernelOwner::current().read(|owner| owner.instant_victory) != 0 {
@@ -506,7 +500,10 @@ pub(crate) mod engine {
             bs.net = Some(net.clone());
             bs.observer = observer;
             net.begin((&raw mut bs).cast());
-            crate::app::bridge::enter(|cx| reset_winner(cx.kernel));
+            let controls = crate::app::bridge::enter(|cx| {
+                reset_winner(cx.kernel);
+                cx.kernel.player_control
+            });
             crate::log_abi::log_message(
                 5,
                 &format!(
@@ -515,7 +512,7 @@ pub(crate) mod engine {
                     (activity() & IN_BATTLE as u16 != 0) as i32
                 ),
             );
-            if select_all_ships(count) == 0 {
+            if select_all_ships(count, controls) == 0 {
                 set_activity(activity() | CHECK_ABORT as u16);
             } else {
                 crate::log_abi::log_message(

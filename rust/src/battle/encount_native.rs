@@ -61,9 +61,8 @@ fn text(x: i16, y: i16, align: TEXT_ALIGN, string: *const UNICODE) -> TEXT {
 pub(crate) mod engine {
     use super::*;
     use crate::battle::battle_native::engine::{
-        activity, game_state, player_input, rgb15, set_activity, set_game_state,
-        set_player_control, set_player_input, sis_height, sis_width, AWESOME_RATING,
-        CYBORG_CONTROL, HUMAN_CONTROL, STANDARD_RATING,
+        activity, game_state, rgb15, set_activity, set_game_state, sis_height, sis_width,
+        AWESOME_RATING, CYBORG_CONTROL, HUMAN_CONTROL, STANDARD_RATING,
     };
     use crate::battle::battle_native::Battle;
     use crate::battle::c_bridge::DoInput;
@@ -668,10 +667,12 @@ pub(crate) mod engine {
                     as u16)
                     << 8);
             crate::app::bridge::battle(|b| b.nth_frame = speed);
-            set_player_control(0, CYBORG_CONTROL | AWESOME_RATING);
-            saved = player_input(0);
-            set_player_input(0, None);
-            if !KernelOwner::current().write(|kernel| SetPlayerInput(kernel, 0)) {
+            let installed = KernelOwner::current().write(|kernel| {
+                kernel.player_control[0] = CYBORG_CONTROL | AWESOME_RATING;
+                saved = kernel.player_input[0].take();
+                SetPlayerInput(kernel, 0)
+            });
+            if !installed {
                 crate::log_abi::log_message(1, "Could not set cyborg player input.");
                 // misc.h explode(): abort in DEBUG, exit(EXIT_FAILURE) otherwise.
                 if cfg!(feature = "debug-process") {
@@ -695,9 +696,11 @@ pub(crate) mod engine {
         }
         if WorldFields::current().read(|owner| owner.game.glob_flags) & CYBORG_ENABLED as u8 != 0 {
             crate::app::bridge::battle(|b| b.nth_frame = 0);
-            set_player_control(0, HUMAN_CONTROL | STANDARD_RATING);
-            KernelOwner::current().write(|kernel| ClearPlayerInput(kernel, 0));
-            set_player_input(0, saved);
+            KernelOwner::current().write(|kernel| {
+                kernel.player_control[0] = HUMAN_CONTROL | STANDARD_RATING;
+                ClearPlayerInput(kernel, 0);
+                kernel.player_input[0] = saved;
+            });
         }
         set_activity(old);
     }

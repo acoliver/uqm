@@ -330,19 +330,6 @@ impl Frames {
             FrameArray::from_raw(raw, Some(source.as_ptr() as usize)),
         )
     }
-
-    /// # Safety
-    /// The source contains one or three live native frame slots on the graphics thread.
-    pub(crate) unsafe fn native_shared(
-        role: SharedFrames,
-        source: std::ptr::NonNull<FRAME>,
-        count: usize,
-    ) -> Self {
-        // SAFETY: the caller retains the source slots for this synchronous snapshot.
-        Self::retain_shared(role, unsafe {
-            std::slice::from_raw_parts(source.as_ptr(), count)
-        })
-    }
 }
 
 /// A view cannot outlive the array retaining its drawable allocation.
@@ -448,6 +435,7 @@ mod tests {
     use crate::collections::observation::{self, Event};
 
     #[test]
+    #[serial_test::serial]
     fn bounded_shared_sources_preserve_identity_and_snapshot_slots() {
         let mut source = [std::ptr::null_mut(); 3];
         let address = source.as_mut_ptr();
@@ -496,14 +484,7 @@ mod tests {
         let frames = {
             let mut source = [std::ptr::null_mut(); 3];
             let address = source.as_mut_ptr();
-            // SAFETY: the source contains three absent frame slots throughout construction.
-            let frames = unsafe {
-                Frames::native_shared(
-                    SharedFrames::Blast,
-                    std::ptr::NonNull::new(address).unwrap(),
-                    3,
-                )
-            };
+            let frames = Frames::retain_shared(SharedFrames::Blast, &source);
             assert_eq!(frames.raw(), address);
             frames
         };
