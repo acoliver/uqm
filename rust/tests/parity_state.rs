@@ -126,7 +126,10 @@ fn exercise_live_callers(directory: &Path) {
             .unwrap_or_else(|error| panic!("validate state test script: {error}")),
         directory.into(),
     )));
-    let observer = _application.observer().unwrap().as_ref();
+    let observer = _application
+        .observer()
+        .unwrap_or_else(|| panic!("state test application has no observer"))
+        .as_ref();
     uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
     observation::record(Event::SpaceActive(true));
     descriptor_fields(observer, directory);

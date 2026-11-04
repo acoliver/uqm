@@ -19,14 +19,11 @@ pub(super) fn discard_held_repeat(
 
 impl AutomationObserver {
     #[must_use]
-    pub fn start_scene_replaces_introduction() -> bool {
-        Self::get().is_some_and(|coord| {
-            coord
-                .inner
-                .lock()
-                .pending_start_scene
-                .replaces_introduction()
-        })
+    pub fn start_scene_replaces_introduction(&self) -> bool {
+        self.inner
+            .lock()
+            .pending_start_scene
+            .replaces_introduction()
     }
 
     pub(super) fn activate_input_runtime() -> Arc<RuntimeModel> {
@@ -66,7 +63,11 @@ impl AutomationObserver {
         false
     }
 
-    pub(super) fn process_input_at_boundary(&self, button_wait: bool) -> bool {
+    pub(super) fn process_input_at_boundary(
+        &self,
+        capture: &mut dyn FnMut() -> campaign_state::CampaignView,
+        button_wait: bool,
+    ) -> bool {
         let mut inner = self.inner.lock();
 
         if inner.terminal_class.is_some() {
@@ -107,7 +108,7 @@ impl AutomationObserver {
             inner.pending_main_menu_ready = false;
             return self.apply_main_menu_ready(&mut inner);
         }
-        let world = &crate::app::bridge::campaign_view();
+        let world = &capture();
         if self.verify_runtime_assertions(world, &mut inner)
             || self.verify_activity_assertion(&mut inner)
         {
@@ -277,6 +278,38 @@ mod tests {
     use super::*;
 
     #[test]
+    fn nested_and_terminal_admission_do_not_read_campaign_owners() {
+        let source = serde_json::to_vec(&serde_json::json!({
+            "version": 1, "name": "lazy-owner",
+            "steps": [
+                {"action": "select_planet_menu", "phase": "dispatch", "max_ticks": 2},
+                {"action": "finish"}
+            ],
+            "budgets": {"max_input_ticks": 10, "max_presentations": 100, "max_wallclock_seconds": 60}
+        })).unwrap();
+        let script = crate::automation::validate_script(
+            crate::automation::parse_script(&source, "test.json").unwrap(),
+            "test.json",
+        )
+        .unwrap();
+        let temp = tempfile::tempdir().unwrap();
+        let observer = AutomationObserver::new(script, temp.path().into());
+        let mut capture = || panic!("admission must not acquire a campaign owner");
+        assert!(!observer.process_input_at_boundary(&mut capture, true));
+        assert_eq!(observer.inner.lock().input_seen, 1);
+        assert_eq!(observer.inner.lock().sched_state, SchedulerState::initial());
+        observer
+            .runtime
+            .mirror
+            .terminal
+            .try_set(TerminalClass::SemanticMismatch);
+        assert_eq!(input_ffi::service_input(&observer, &mut capture, false), 1);
+        assert_eq!(input_ffi::after_input_update(&observer), 1);
+        assert!(observer.process_input_at_boundary(&mut capture, false));
+        assert_eq!(observer.inner.lock().input_seen, 1);
+    }
+
+    #[test]
     fn fixture_failures_and_button_wait_watchdog_are_terminal(
     ) -> Result<(), Box<dyn std::error::Error>> {
         const CHILD: &str = "UQM_INPUT_BOUNDARY_FAILURE";
@@ -324,7 +357,7 @@ mod tests {
         if case == "watchdog" {
             let mut stopped = false;
             for _ in 0..11 {
-                if coord.process_input_at_boundary(true) {
+                if coord.process_input_at_boundary(&mut campaign_state::CampaignView::empty, true) {
                     stopped = true;
                     break;
                 }
@@ -336,10 +369,10 @@ mod tests {
             assert_eq!(coord.inner.lock().sched_state, SchedulerState::initial());
         } else {
             if case != "melee" {
-                assert!(!coord.process_input_inner());
+                assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
                 assert_eq!(coord.inner.lock().sched_state.step_index, 1);
             }
-            assert!(coord.process_input_inner());
+            assert!(coord.process_input_inner(&mut campaign_state::CampaignView::empty));
             assert_eq!(
                 coord.inner.lock().terminal_class,
                 Some(TerminalClass::SemanticMismatch)

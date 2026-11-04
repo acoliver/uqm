@@ -601,15 +601,6 @@ fn readback_hook() -> Option<u64> {
     }
 }
 
-/// Check if automation is active.
-fn is_automation_active() -> bool {
-    if let Some(rt) = get_runtime() {
-        rt.mirror.is_active()
-    } else {
-        false
-    }
-}
-
 /// Get the runtime model if it exists.
 fn with_runtime() -> Option<std::sync::Arc<RuntimeModel>> {
     get_runtime()
@@ -641,26 +632,23 @@ pub extern "C" fn rust_automation_service_do_input() -> i32 {
         .into()
 }
 
-pub(crate) fn service_input(observer: &AutomationObserver, button_wait: bool) -> i32 {
+pub(crate) fn service_input(
+    observer: &AutomationObserver,
+    capture: &mut dyn FnMut() -> CampaignView,
+    button_wait: bool,
+) -> i32 {
     // Step 1: ABI entry (saturating).
-    if let Some(rt) = with_runtime() {
-        rt.record_abi_entry();
-    } else {
-        return 0; // No runtime → inactive fast path.
-    }
+    let rt = &observer.runtime;
+    rt.record_abi_entry();
 
     // Step 2: Acquire-load activation.
-    if !is_automation_active() {
+    if !rt.mirror.is_active() {
         return 0; // Inactive fast path: no stop.
     }
 
     // Step 2b: Check terminal — if already terminal, return stop to
     // break the DoInput loop. This is the key mechanism that makes
     // DoInput break out when the scheduler finishes.
-    let rt = match with_runtime() {
-        Some(rt) => rt,
-        None => return 0,
-    };
 
     if rt.mirror.is_terminal() {
         // Re-assert CHECK_ABORT every frame. Game logic (handle_select)
@@ -678,15 +666,13 @@ pub(crate) fn service_input(observer: &AutomationObserver, button_wait: bool) ->
     }
 
     // Step 4: Feed the input callback to the coordinator (scheduler+watchdog).
-    if AutomationObserver::is_active() {
-        let stop = if button_wait {
-            observer.process_button_wait()
-        } else {
-            observer.process_input()
-        };
-        if stop {
-            return 1;
-        }
+    let stop = if button_wait {
+        observer.process_button_wait(capture)
+    } else {
+        observer.process_input(capture)
+    };
+    if stop {
+        return 1;
     }
 
     0
@@ -711,21 +697,13 @@ pub extern "C" fn rust_automation_after_input_update() -> i32 {
 
 pub(crate) fn after_input_update(observer: &AutomationObserver) -> i32 {
     // Step 1: ABI entry (saturating).
-    if let Some(rt) = with_runtime() {
-        rt.record_abi_entry();
-    } else {
-        return 0; // No runtime → inactive fast path.
-    }
+    let rt = &observer.runtime;
+    rt.record_abi_entry();
 
     // Step 2: Acquire-load activation.
-    if !is_automation_active() {
+    if !rt.mirror.is_active() {
         return 0; // Inactive fast path: no stop.
     }
-
-    let rt = match with_runtime() {
-        Some(rt) => rt,
-        None => return 0,
-    };
 
     // Step 2b: Check terminal — if terminal, return stop to break DoInput.
     if rt.mirror.is_terminal() {

@@ -17,7 +17,11 @@ fn public_campaign_copy_does_not_traverse_live_records() {
     world.data.game.ip_group_q.head = std::ptr::dangling_mut();
     let view = CampaignView::from_world(&world);
     assert_eq!(
-        LiveCampaign { world: &view }.read(StateKey::Story("STARBASE_AVAILABLE")),
+        LiveCampaign {
+            world: &view,
+            flagship_destroyed: false
+        }
+        .read(StateKey::Story("STARBASE_AVAILABLE")),
         Some(0)
     );
 }
@@ -202,7 +206,11 @@ fn campaign_star_observation_releases_world_between_field_reads() {
     unsafe {
         bridge::with_game(&mut game, || {
             assert_eq!(
-                LiveCampaign { world: &view }.read(StateKey::StarCurrent),
+                LiveCampaign {
+                    world: &view,
+                    flagship_destroyed: false
+                }
+                .read(StateKey::StarCurrent),
                 None
             );
         });

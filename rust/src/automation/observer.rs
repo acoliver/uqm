@@ -4,13 +4,16 @@ use super::{coordinator::AutomationObserver, input_ffi, ui_observation as ui};
 use crate::engine::observe::{CheckpointView, Injected, InputView, Observer, Presented};
 use std::sync::Arc;
 
-pub(crate) struct Handle(pub(crate) Arc<AutomationObserver>);
+pub(crate) struct Handle<'a>(
+    pub(crate) Arc<AutomationObserver>,
+    pub(crate) &'a mut dyn FnMut() -> super::campaign_state::CampaignView,
+);
 
-impl Observer for Handle {
+impl Observer for Handle<'_> {
     fn input_admitted(&mut self, view: &InputView) -> Injected {
         let stop = match *view {
-            InputView::BeforeUpdate => input_ffi::service_input(&self.0, false) != 0,
-            InputView::Nested => input_ffi::service_input(&self.0, true) != 0,
+            InputView::BeforeUpdate => input_ffi::service_input(&self.0, self.1, false) != 0,
+            InputView::Nested => input_ffi::service_input(&self.0, self.1, true) != 0,
             InputView::AfterUpdate => input_ffi::after_input_update(&self.0) != 0,
             InputView::Active => true,
             InputView::MainMenuReady => self.0.process_main_menu_ready(),
@@ -19,23 +22,23 @@ impl Observer for Handle {
                 self.0.observe_quit_selected();
                 false
             }
-            InputView::ReplacesIntroduction => {
-                AutomationObserver::start_scene_replaces_introduction()
-            }
+            InputView::ReplacesIntroduction => self.0.start_scene_replaces_introduction(),
             InputView::Seed { domain, fallback } => {
                 return Injected {
                     stop: false,
-                    seed: Some(super::coordinator::seed_value(domain, fallback)),
+                    seed: Some(self.0.seed_value(domain, fallback)),
                 }
             }
             InputView::PendingSpeech => self
                 .0
-                .service_and_should_skip_pending_communication_speech(),
+                .service_and_should_skip_pending_communication_speech(self.1),
             InputView::PendingResponse { count } => {
                 self.0.pending_communication_response_action(count)
             }
             InputView::ClosingSpeech => self.0.should_skip_communication_closing_speech(),
-            InputView::CommunicationCompleted => self.0.service_communication_completion_boundary(),
+            InputView::CommunicationCompleted => {
+                self.0.service_communication_completion_boundary(self.1)
+            }
         };
         Injected { stop, seed: None }
     }

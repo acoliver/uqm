@@ -31,7 +31,8 @@ pub fn seed(domain: u32, fallback: u32) -> u32 {
 
 fn with_io<R>(call: impl FnOnce(&mut Io<'_>) -> R) -> R {
     if let Some(observer) = super::bridge::observer() {
-        let mut observer = crate::automation::observer::Handle(observer);
+        let mut capture = || crate::app::bridge::campaign_view();
+        let mut observer = crate::automation::observer::Handle(observer, &mut capture);
         call(&mut Io {
             observer: &mut observer,
         })

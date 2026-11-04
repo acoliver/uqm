@@ -647,15 +647,21 @@ impl AutomationObserver {
 
     /// Process an admitted input callback. Returns true if the game loop
     /// should stop (terminal condition or script finished).
-    pub(crate) fn process_input(&self) -> bool {
+    pub(crate) fn process_input(
+        &self,
+        capture: &mut dyn FnMut() -> campaign_state::CampaignView,
+    ) -> bool {
         let coord = self;
-        coord.process_input_inner()
+        coord.process_input_inner(capture)
     }
 
     /// Service a nested button wait, which cannot accept planet-menu selections.
-    pub(crate) fn process_button_wait(&self) -> bool {
+    pub(crate) fn process_button_wait(
+        &self,
+        capture: &mut dyn FnMut() -> campaign_state::CampaignView,
+    ) -> bool {
         let coord = self;
-        coord.process_input_at_boundary(true)
+        coord.process_input_at_boundary(capture, true)
     }
 
     /// Observe a scripted player input after production updates current and pulsed state.
@@ -781,7 +787,10 @@ impl AutomationObserver {
     /// Advance one scheduler callback at a synchronous boundary and report
     /// whether a pending semantic response action now requires speech skipping.
     #[must_use]
-    pub(crate) fn service_and_should_skip_pending_communication_speech(&self) -> bool {
+    pub(crate) fn service_and_should_skip_pending_communication_speech(
+        &self,
+        capture: &mut dyn FnMut() -> campaign_state::CampaignView,
+    ) -> bool {
         for _ in 0..4 {
             if self.should_skip_pending_communication_speech() {
                 return true;
@@ -789,7 +798,7 @@ impl AutomationObserver {
 
             let coord = self;
             let before = coord.inner.lock().sched_state.step_index;
-            if coord.process_input_inner() {
+            if coord.process_input_inner(capture) {
                 return false;
             }
             if self.should_skip_pending_communication_speech() {
@@ -805,11 +814,14 @@ impl AutomationObserver {
 
     /// Consume an already-observed communication completion after hail teardown
     /// and expose the next action before returning to the outer game loop.
-    pub(crate) fn service_communication_completion_boundary(&self) -> bool {
+    pub(crate) fn service_communication_completion_boundary(
+        &self,
+        capture: &mut dyn FnMut() -> campaign_state::CampaignView,
+    ) -> bool {
         for _ in 0..2 {
             let coord = self;
             let before = coord.inner.lock().sched_state.step_index;
-            if coord.process_input_inner() {
+            if coord.process_input_inner(capture) {
                 return true;
             }
             let after = coord.inner.lock().sched_state.step_index;
@@ -1085,8 +1097,13 @@ impl AutomationObserver {
         {
             let expired =
                 inner.sched_state.phase == (ActionPhase::WaitingCondition { remaining: 0 });
-            let evaluation =
-                campaign_state::evaluate(&wait.predicate, &campaign_state::LiveCampaign { world });
+            let evaluation = campaign_state::evaluate(
+                &wait.predicate,
+                &campaign_state::LiveCampaign {
+                    world,
+                    flagship_destroyed: self.flagship_destroyed.load(Ordering::SeqCst),
+                },
+            );
             if expired {
                 // The scheduler ends the proof on this tick; say what the
                 // game state was instead of leaving a bare mismatch.
@@ -2007,8 +2024,11 @@ impl AutomationObserver {
         }
     }
 
-    fn process_input_inner(&self) -> bool {
-        self.process_input_at_boundary(false)
+    fn process_input_inner(
+        &self,
+        capture: &mut dyn FnMut() -> campaign_state::CampaignView,
+    ) -> bool {
+        self.process_input_at_boundary(capture, false)
     }
 
     /// When a `wait_for_planet_side_end` ran out of ticks, record the last
@@ -2320,8 +2340,13 @@ impl AutomationObserver {
         }
         if let Some(Action::AssertState(predicate)) = self.actions.get(inner.sched_state.step_index)
         {
-            let evaluation =
-                campaign_state::evaluate(predicate, &campaign_state::LiveCampaign { world });
+            let evaluation = campaign_state::evaluate(
+                predicate,
+                &campaign_state::LiveCampaign {
+                    world,
+                    flagship_destroyed: self.flagship_destroyed.load(Ordering::SeqCst),
+                },
+            );
             if evaluation.held {
                 self.write_trace_labeled(
                     inner,
@@ -3347,47 +3372,47 @@ pub extern "C" fn rust_automation_seed_value(domain: u32, fallback: u32) -> u32 
     crate::app::observe::seed(domain, fallback)
 }
 
-pub(crate) fn seed_value(domain: u32, fallback: u32) -> u32 {
-    let Some(domain) = SeedDomain::from_ffi(domain) else {
-        return fallback;
-    };
-    let Some(coord) = AutomationObserver::get() else {
-        return fallback;
-    };
-    let mut inner = coord.inner.lock();
-    let reservation = coord.runtime.commit.reserve();
-    let seq = reservation.sequence();
-    let record = TraceRecord {
-        schema: TraceRecord::SCHEMA,
-        run: 1,
-        sequence: seq,
-        input_seen: inner.input_seen,
-        present_seen: inner.present_seen,
-        elapsed_ms: coord.elapsed_ms(),
-        kind: RecordKind::SeedApplication,
-        label: None,
-        from: None,
-        to: None,
-        terminal_reason: None,
-        seed_application: Some(SeedApplication {
-            domain,
-            seed: coord.seed,
-        }),
-        presentation: None,
-        activity: None,
-        readiness: None,
-        command_acknowledgement: None,
-        checkpoint: None,
-        failure: None,
-    };
-    match record.to_jsonl() {
-        Ok(jsonl) => reservation.commit_record(jsonl),
-        Err(_) => {
-            reservation.cancel();
-            coord.set_terminal(&mut inner, TerminalClass::TraceFailure);
+impl AutomationObserver {
+    pub(crate) fn seed_value(&self, domain: u32, fallback: u32) -> u32 {
+        let Some(domain) = SeedDomain::from_ffi(domain) else {
+            return fallback;
+        };
+        let coord = self;
+        let mut inner = coord.inner.lock();
+        let reservation = coord.runtime.commit.reserve();
+        let seq = reservation.sequence();
+        let record = TraceRecord {
+            schema: TraceRecord::SCHEMA,
+            run: 1,
+            sequence: seq,
+            input_seen: inner.input_seen,
+            present_seen: inner.present_seen,
+            elapsed_ms: coord.elapsed_ms(),
+            kind: RecordKind::SeedApplication,
+            label: None,
+            from: None,
+            to: None,
+            terminal_reason: None,
+            seed_application: Some(SeedApplication {
+                domain,
+                seed: coord.seed,
+            }),
+            presentation: None,
+            activity: None,
+            readiness: None,
+            command_acknowledgement: None,
+            checkpoint: None,
+            failure: None,
+        };
+        match record.to_jsonl() {
+            Ok(jsonl) => reservation.commit_record(jsonl),
+            Err(_) => {
+                reservation.cancel();
+                coord.set_terminal(&mut inner, TerminalClass::TraceFailure);
+            }
         }
+        coord.seed
     }
-    coord.seed
 }
 
 fn validate_runtime_finalization(result: FinalizationResult) -> Result<(), String> {
@@ -3751,7 +3776,9 @@ mod tests {
         // three scans of 84 lines. Dispatch cannot accept input yet.
         coord.inner.lock().release_semantic_select = true;
         for _ in 0..252 {
-            assert!(!coord.process_input_at_boundary(true));
+            assert!(
+                !coord.process_input_at_boundary(&mut campaign_state::CampaignView::empty, true)
+            );
         }
         {
             let inner = coord.inner.lock();
@@ -3766,9 +3793,9 @@ mod tests {
             rust_automation_observe_planet_menu, PlanetMenuPhase,
         };
         rust_automation_observe_planet_menu(PlanetMenuPhase::Dispatch as usize);
-        assert!(!coord.process_input_inner());
+        assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
         assert_eq!(coord.inner.lock().sched_state.step_index, 1);
-        assert!(coord.process_input_inner());
+        assert!(coord.process_input_inner(&mut campaign_state::CampaignView::empty));
         assert_eq!(_app.observer().unwrap().finalize(0).unwrap(), 0);
     }
 
@@ -3817,7 +3844,7 @@ mod tests {
                 .map(|line| TraceRecord::from_jsonl(line).unwrap())
                 .collect::<Vec<_>>()
         };
-        assert!(!coord.process_input_inner());
+        assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
         assert!(!_app.observer().unwrap().process_present(Some(frame(1, 1))));
         assert_eq!(
             coord.inner.lock().sched_state.step_index,
@@ -3825,16 +3852,16 @@ mod tests {
             "capture must leave activity awaiting its runtime verification"
         );
         assert_eq!(plan.committed(&records()).unwrap().len(), 1);
-        assert!(!coord.process_input_inner());
+        assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
         assert_eq!(coord.inner.lock().sched_state.step_index, 2);
-        assert!(!coord.process_input_inner());
+        assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
         assert!(coord.inner.lock().armed_capture_label.is_none());
         assert!(!_app.observer().unwrap().process_present(Some(frame(2, 1))));
         assert_eq!(plan.committed(&records()).unwrap().len(), 2);
-        assert!(!coord.process_input_inner());
+        assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
         assert!(!_app.observer().unwrap().process_present(Some(frame(3, 2))));
         assert_eq!(plan.committed(&records()).unwrap().len(), 3);
-        assert!(coord.process_input_inner());
+        assert!(coord.process_input_inner(&mut campaign_state::CampaignView::empty));
         assert_eq!(_app.observer().unwrap().finalize(0).unwrap(), 0);
         let trace = records();
         let counts: Vec<_> = trace
@@ -3907,7 +3934,10 @@ mod tests {
                 .map(|line| TraceRecord::from_jsonl(line).unwrap())
                 .collect();
             assert_eq!(plan.committed(&records).unwrap().len() as u64, count);
-            assert_eq!(coord.process_input_inner(), count == 2);
+            assert_eq!(
+                coord.process_input_inner(&mut campaign_state::CampaignView::empty),
+                count == 2
+            );
         }
         assert!(!coord.inner.lock().pending_main_menu_ready);
         assert_eq!(_app.observer().unwrap().finalize(0).unwrap(), 0);
@@ -3948,11 +3978,11 @@ mod tests {
             height: 1,
             rgba: vec![1, 2, 3, 255],
         };
-        assert!(!coord.process_input_inner());
+        assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
         assert!(!_app.observer().unwrap().process_present(Some(frame(1, 0))));
         let first = std::fs::read(temp.path().join("trace.jsonl")).unwrap();
         for count in 2..=8 {
-            assert!(!coord.process_input_inner());
+            assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
             assert!(!_app
                 .observer()
                 .unwrap()
@@ -3963,7 +3993,7 @@ mod tests {
             );
         }
         while coord.inner.lock().armed_capture_label.is_none() {
-            assert!(!coord.process_input_inner());
+            assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
         }
         assert!(!_app.observer().unwrap().process_present(Some(frame(9, 1))));
         let boundary = std::fs::read(temp.path().join("trace.jsonl")).unwrap();
@@ -3979,7 +4009,7 @@ mod tests {
             .map(|record| record.presentation.as_ref().unwrap().count)
             .collect();
         assert_eq!(presentations, (1..=9).collect::<Vec<_>>());
-        assert!(coord.process_input_inner());
+        assert!(coord.process_input_inner(&mut campaign_state::CampaignView::empty));
         assert_eq!(_app.observer().unwrap().finalize(0).unwrap(), 0);
         let finished = std::fs::read(temp.path().join("trace.jsonl")).unwrap();
         assert!(finished.starts_with(&boundary));
@@ -4089,7 +4119,7 @@ mod tests {
         let coord = AutomationObserver::get().unwrap();
         assert!(!_app.observer().unwrap().process_main_menu_ready());
         for _ in 0..3 {
-            assert!(!coord.process_input_inner());
+            assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
             assert_eq!(coord.inner.lock().sched_state.step_index, 1);
             assert!(coord.inner.lock().armed_capture_label.is_none());
         }
@@ -4117,23 +4147,23 @@ mod tests {
                 .0
         );
         assert_eq!(plan.committed(&live_records).unwrap().len(), 1);
-        assert!(!coord.process_input_inner());
+        assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
         assert_eq!(coord.inner.lock().sched_state.step_index, 2);
         assert_eq!(coord.inner.lock().pending_transitions.len(), 1);
-        assert!(!coord.process_input_inner());
+        assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
         assert_eq!(coord.inner.lock().sched_state.step_index, 2);
         assert!(!_app.observer().unwrap().process_present(Some(frame(2, 0))));
-        assert!(!coord.process_input_inner());
+        assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
         assert_eq!(coord.inner.lock().sched_state.step_index, 3);
         assert!(coord.inner.lock().pending_transitions.is_empty());
         assert!(!_app.observer().unwrap().process_present(Some(frame(3, 0))));
-        assert!(!coord.process_input_inner());
+        assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
         assert_eq!(
             coord.inner.lock().armed_capture_label.as_deref(),
             Some("menu")
         );
         assert!(!_app.observer().unwrap().process_present(Some(frame(4, 1))));
-        assert!(coord.process_input_inner());
+        assert!(coord.process_input_inner(&mut campaign_state::CampaignView::empty));
         assert_eq!(
             coord.inner.lock().terminal_class,
             Some(TerminalClass::Success)

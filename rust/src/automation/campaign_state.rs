@@ -12,7 +12,6 @@
 
 use crate::engine::World;
 use std::fmt;
-use std::sync::atomic::Ordering;
 
 use serde::{Deserialize, Serialize};
 
@@ -353,6 +352,7 @@ pub fn label_satisfies(label: &str, prefix: &str, predicate: &StatePredicate) ->
 /// The running game, read on the game thread.
 pub struct LiveCampaign<'a> {
     pub world: &'a CampaignView,
+    pub flagship_destroyed: bool,
 }
 
 /// Values copied for one observer call; this view never outlives its input boundary.
@@ -550,10 +550,7 @@ impl StateSource for LiveCampaign<'_> {
                 input_ffi::game_date(world).map(|(_, month, _)| u32::from(month))
             }
             StateKey::DateYear => input_ffi::game_date(world).map(|(_, _, year)| u32::from(year)),
-            StateKey::FlagshipDestroyed => Some(u32::from(
-                super::AutomationObserver::get()
-                    .is_some_and(|observer| observer.flagship_destroyed.load(Ordering::SeqCst)),
-            )),
+            StateKey::FlagshipDestroyed => Some(u32::from(self.flagship_destroyed)),
             StateKey::BattleShipsP1 => input_ffi::battle_fleets().map(|(p1, _)| u32::from(p1)),
             StateKey::BattleShipsP2 => input_ffi::battle_fleets().map(|(_, p2)| u32::from(p2)),
         }
@@ -563,6 +560,22 @@ impl StateSource for LiveCampaign<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn terminal_observation_comes_from_the_supplied_owner() {
+        let world = CampaignView::empty();
+        let running = LiveCampaign {
+            world: &world,
+            flagship_destroyed: false,
+        };
+        let destroyed = LiveCampaign {
+            world: &world,
+            flagship_destroyed: true,
+        };
+        assert_eq!(running.read(StateKey::FlagshipDestroyed), Some(0));
+        assert_eq!(destroyed.read(StateKey::FlagshipDestroyed), Some(1));
+        assert_eq!(running.read(StateKey::FlagshipDestroyed), Some(0));
+    }
 
     #[test]
     fn each_boundary_copies_current_typed_campaign_values() {
@@ -819,7 +832,8 @@ mod tests {
         assert!(evaluate(&stopped, &fake(&[("sis:fuel", 0), ("hyper:stopped", 1)])).held);
         assert_eq!(
             LiveCampaign {
-                world: &CampaignView::empty()
+                world: &CampaignView::empty(),
+                flagship_destroyed: false,
             }
             .read(StateKey::HyperStopped),
             None
