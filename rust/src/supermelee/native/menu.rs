@@ -281,7 +281,7 @@ pub(crate) mod live {
             crate::supermelee::native::battle_picker::live::BuildPickMeleeFrame();
             MeleeFrame =
                 CaptureDrawable(LoadGraphic(MELEE_SCREEN_PMAP_ANIM.as_ptr().cast()).cast());
-            crate::supermelee::native::build_picker::live::build_build_pick_frame();
+            crate::supermelee::native::build_picker::live::build_build_pick_frame(&state.catalog);
             KernelOwner::current().write(|kernel| {
                 init_space(kernel, WorldOwner::current().read(|world| world.activity()))
             });

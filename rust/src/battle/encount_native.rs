@@ -66,8 +66,8 @@ pub(crate) mod engine {
         CYBORG_CONTROL, HUMAN_CONTROL, STANDARD_RATING,
     };
     use crate::battle::battle_native::Battle;
+    use crate::battle::c_bridge::DoInput;
     use crate::engine::battle::link_queue;
-    use crate::mainloop::input_abi::live::DoInput;
     use crate::ships::native::abi::*;
     use crate::ships::native::{cosine, sine};
     use std::{mem, ptr};

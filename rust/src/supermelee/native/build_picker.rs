@@ -50,7 +50,7 @@ pub(super) mod live {
 
     /// # Safety
     /// Game thread, with the melee graphics and master ship list loaded.
-    pub unsafe extern "C" fn build_build_pick_frame() {
+    pub unsafe fn build_build_pick_frame(catalog: &[crate::ships::master_native::ShipChoice]) {
         let old = SetContext(KernelOwner::current().read(|owner| owner.off_screen_context));
         let mut stamp = STAMP {
             origin: POINT { x: 0, y: 0 },
@@ -64,11 +64,7 @@ pub(super) mod live {
         hot(stamp.frame, 0, 0);
         DrawStamp(&mut stamp);
         for ship in 0..25 {
-            draw_pick_icon(
-                &(*crate::supermelee::native::menu::live::drawing::P_MELEE_STATE).catalog,
-                ship,
-                true,
-            );
+            draw_pick_icon(catalog, ship, true);
         }
         SetContext(old);
     }

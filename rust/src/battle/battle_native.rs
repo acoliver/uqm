@@ -143,8 +143,8 @@ unsafe fn battle_network() -> BattleNetwork {
 #[cfg(not(test))]
 pub(crate) mod engine {
     use super::*;
+    use crate::battle::c_bridge::DoInput;
     use crate::battle::tactrans_native::{flee_preprocess, reset_winner, StopDitty};
-    use crate::mainloop::input_abi::live::DoInput;
     use abi::*;
     use std::{mem, ptr};
 
