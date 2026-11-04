@@ -658,7 +658,10 @@ impl RestartMenuOps for CffiOps<'_, '_, '_> {
 
     fn melee(&self) {
         // SAFETY: the restart session owns the game and its input/graphics resources.
-        self.owned(crate::supermelee::native::menu::live::melee)
+        self.owned(|cx, io| {
+            // SAFETY: restart dispatch owns the initialized game-thread menu resources.
+            unsafe { crate::supermelee::native::menu::live::melee(cx, io) }
+        })
     }
     fn setup_menu(&self) {
         // SAFETY: the restart session owns the initialized display and input runtime.
