@@ -114,7 +114,7 @@ pub(super) unsafe fn register(drawable: NonNull<drawable_desc>, count: u16) {
     super::ffi::native_allocations().insert(drawable, addresses);
 }
 
-pub(super) unsafe fn release(drawable: NonNull<drawable_desc>) {
+pub(super) fn release(drawable: NonNull<drawable_desc>) {
     let allocation = super::ffi::native_allocations()
         .entries
         .remove(&(drawable.as_ptr() as usize))
@@ -162,5 +162,27 @@ impl DrawableLease {
             .iter()
             .copied()
             .find(|owned| *owned == frame)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[serial_test::serial]
+    fn registry_release_validates_addresses_and_keeps_retained_frames_live() {
+        // SAFETY: this serialized fixture exclusively owns the newly allocated drawable.
+        let drawable = unsafe { super::super::drawable_abi::AllocDrawable(1) };
+        // SAFETY: drawable was just allocated and remains owned by this fixture.
+        let frame = unsafe { super::super::pixmap_abi::CaptureDrawable(drawable) };
+        let retained = retain_frame_allocations(&[frame]);
+        let drawable = NonNull::new(drawable).unwrap();
+        release(drawable);
+        assert_eq!(retained[0].frame(0), Some(frame));
+        assert!(std::panic::catch_unwind(|| release(drawable)).is_err());
+        assert!(std::panic::catch_unwind(|| release(NonNull::dangling())).is_err());
+        drop(retained);
+        assert!(std::panic::catch_unwind(|| retain_frame_allocations(&[frame])).is_err());
     }
 }

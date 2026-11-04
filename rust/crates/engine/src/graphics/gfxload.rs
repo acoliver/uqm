@@ -200,13 +200,10 @@ pub unsafe extern "C" fn get_cel_data(fp: *mut c_void, length: u32) -> *mut c_vo
 /// # Safety
 /// Handle must be null or an owned drawable, consumed here; queued image deletion remains deferred.
 pub unsafe extern "C" fn release_cel_data(handle: *mut c_void) -> i32 {
-    if handle.is_null() {
+    let Some(drawable) = std::ptr::NonNull::new(handle.cast()) else {
         return 0;
-    }
-    // SAFETY: the non-null handle denotes the caller's registered drawable ownership.
-    unsafe {
-        super::native_drawables::release(std::ptr::NonNull::new_unchecked(handle.cast()));
-    }
+    };
+    super::native_drawables::release(drawable);
     1
 }
 
