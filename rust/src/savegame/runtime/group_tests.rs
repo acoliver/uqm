@@ -7,8 +7,6 @@
 //! "Enct" chunk, so the encounter bytes are assembled by hand from
 //! `SaveEncounters`) and from `grpinfo.h` and `encount.h`, not from the codec.
 
-use std::mem::{offset_of, size_of};
-
 use super::groups::*;
 use super::queue_tests::{
     free_slots, handle, records, FixturePool, LiveGame, C_WRITTEN_SAVE, RACES,
@@ -131,7 +129,7 @@ fn push_encounter(game: &mut LiveGame, entry: &EncounterEntry, element: usize) {
     let mut queue = game.encounters();
     let id = queue.alloc().unwrap();
     *queue.get_mut(id) = crate::engine::world::queues::EncounterRecord {
-        hElement: element as _,
+        h_element: element as _,
         transition_state: entry.transition_state,
         origin: cp(entry.origin.x, entry.origin.y),
         radius: entry.radius,
@@ -139,7 +137,7 @@ fn push_encounter(game: &mut LiveGame, entry: &EncounterEntry, element: usize) {
         num_ships: entry.num_ships,
         flags: entry.flags,
         loc_pt: cp(entry.loc_pt.x, entry.loc_pt.y),
-        ShipList: std::array::from_fn(|i| crate::engine::world::queues::BriefShipInfo {
+        ship_list: std::array::from_fn(|i| crate::engine::world::queues::BriefShipInfo {
             race_id: entry.ship_list[i].race_id,
             crew_level: entry.ship_list[i].crew_level,
             max_crew: entry.ship_list[i].max_crew,
@@ -199,26 +197,12 @@ fn fingerprint(game: &mut LiveGame) -> Fingerprint {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn element_layouts_match_the_headers() {
-    // grpinfo.h IP_GROUP on LP64: two links, a count, seven bytes, a POINT and
-    // the icon handle.
-    assert_eq!(size_of::<CIpGroup>(), 40);
-    assert_eq!(offset_of!(CIpGroup, group_counter), 16);
-    assert_eq!(offset_of!(CIpGroup, race_id), 18);
-    assert_eq!(offset_of!(CIpGroup, group_id), 24);
-    assert_eq!(offset_of!(CIpGroup, loc), 26);
-    assert_eq!(offset_of!(CIpGroup, melee_icon), 32);
-    // encount.h ENCOUNTER: BRIEF_SHIP_INFO is 8 bytes with COUNT as 16 bits.
-    assert_eq!(size_of::<crate::engine::world::queues::BriefShipInfo>(), 8);
-    assert_eq!(size_of::<CEncounter>(), 104);
-    assert_eq!(offset_of!(CEncounter, hElement), 16);
-    assert_eq!(offset_of!(CEncounter, transition_state), 24);
-    assert_eq!(offset_of!(CEncounter, race_id), 32);
-    assert_eq!(offset_of!(CEncounter, loc_pt), 36);
-    assert_eq!(offset_of!(CEncounter, ShipList), 40);
-    assert_eq!(offset_of!(CEncounter, log_x), 96);
+fn group_pool_capacities_match_the_save_limits() {
+    let game = LiveGame::bare();
     assert_eq!(MAX_BATTLE_GROUPS as usize, MAX_GROUPS);
     assert_eq!(MAX_ENCOUNTERS as usize, MAX_ENCOUNTER_SLOTS);
+    assert_eq!(game.ip_groups_ref().count(), 0);
+    assert_eq!(game.encounters_ref().count(), 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -284,17 +268,17 @@ fn hand_assembled_encounter_bytes_restore_and_encode_back_unchanged() {
     assert_eq!((e.race_id, e.num_ships, e.flags), (18, 2, 0x80));
     assert_eq!(
         (
-            e.ShipList[0].race_id,
-            e.ShipList[0].crew_level,
-            e.ShipList[0].max_crew,
-            e.ShipList[0].max_energy
+            e.ship_list[0].race_id,
+            e.ship_list[0].crew_level,
+            e.ship_list[0].max_crew,
+            e.ship_list[0].max_energy
         ),
         (18, 30, 42, 40)
     );
-    assert_eq!(e.ShipList[1].crew_level, 20);
-    assert_eq!(e.ShipList[2].race_id, 0);
+    assert_eq!(e.ship_list[1].crew_level, 20);
+    assert_eq!(e.ship_list[2].race_id, 0);
     assert_eq!((e.log_x, e.log_y), (74565, -70000));
-    assert!(e.hElement.is_null());
+    assert!(e.h_element.is_null());
 
     let captured = capture_groups(&game).unwrap();
     let mut out = save.clone();
@@ -357,9 +341,9 @@ fn encounters_keep_their_order_and_fields_and_clear_the_element_handle() {
     let live = raw_encounters(&game.encounters_ref());
     let races: Vec<u8> = live.iter().map(|e| e.race_id).collect();
     assert_eq!(races, [18, 7, 2]);
-    assert!(live.iter().all(|e| e.hElement.is_null()));
+    assert!(live.iter().all(|e| e.h_element.is_null()));
     assert_eq!(live[1].num_ships, 7);
-    assert_eq!(live[1].ShipList[6].crew_level, 10 + 2 + 6);
+    assert_eq!(live[1].ship_list[6].crew_level, 10 + 2 + 6);
     assert_eq!(live[1].log_y, -80_002);
     assert_eq!(free_slots(&game.encounters_ref()), MAX_ENCOUNTER_SLOTS - 3);
 
@@ -374,7 +358,7 @@ fn restore_reads_but_never_changes_the_fleet_templates() {
         .map(|race| {
             let t = game.template(race);
             (
-                t.SpeciesID,
+                t.species_id,
                 t.crew_level,
                 t.race_strings as usize,
                 t.icons as usize,
@@ -391,7 +375,7 @@ fn restore_reads_but_never_changes_the_fleet_templates() {
         .map(|race| {
             let t = game.template(race);
             (
-                t.SpeciesID,
+                t.species_id,
                 t.crew_level,
                 t.race_strings as usize,
                 t.icons as usize,
@@ -466,7 +450,7 @@ fn seven_ships_is_the_most_an_encounter_lists_and_unused_entries_are_kept() {
     e.ship_list[3].race_id = 200;
     restore_groups(&mut game, &sections(Vec::new(), vec![e.clone()])).unwrap();
     assert_eq!(
-        raw_encounters(&game.encounters_ref())[0].ShipList[3].race_id,
+        raw_encounters(&game.encounters_ref())[0].ship_list[3].race_id,
         200
     );
 }
@@ -491,7 +475,7 @@ fn assert_rejected(game: &mut LiveGame, bad: GroupSections, expected: GroupError
         .collect();
     let elements: Vec<usize> = raw_encounters(&game.encounters_ref())
         .iter()
-        .map(|e| e.hElement as usize)
+        .map(|e| e.h_element as usize)
         .collect();
     assert_eq!(restore_groups(game, &bad), Err(expected));
     assert_eq!(fingerprint(game), before);
@@ -505,7 +489,7 @@ fn assert_rejected(game: &mut LiveGame, bad: GroupSections, expected: GroupError
     assert_eq!(
         raw_encounters(&game.encounters_ref())
             .iter()
-            .map(|e| e.hElement as usize)
+            .map(|e| e.h_element as usize)
             .collect::<Vec<_>>(),
         elements
     );

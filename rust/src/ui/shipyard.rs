@@ -84,7 +84,7 @@ unsafe fn on_input_frame(_io: &mut crate::engine::observe::Io<'_>) {
 }
 
 unsafe fn spin_star_ship(menu: *mut MENU_STATE, fleet: &FleetInfo) {
-    let index = FindMasterShipIndex(fleet.SpeciesID);
+    let index = FindMasterShipIndex(fleet.species_id);
     if index >= 0 && index < (MeleeShip_MELEE_ZOQFOTPIK + 1) as i32 {
         DoShipSpin(index as COUNT, (*menu).hMusic);
     }

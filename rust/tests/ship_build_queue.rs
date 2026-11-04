@@ -47,7 +47,7 @@ fn ship_construction_clears_payload_and_preserves_allocation_order() {
     let mut fragments = world.built_ships();
     let first = fragments.alloc().unwrap();
     fragments.get_mut(first).crew_level = 200;
-    fragments.get_mut(first).SpeciesID = 7;
+    fragments.get_mut(first).species_id = 7;
     fragments.get_mut(first).index = 5;
     fragments.put(first);
     fragments.remove(first);
@@ -56,7 +56,7 @@ fn ship_construction_clears_payload_and_preserves_allocation_order() {
     assert_ne!(reused, first);
     let fresh = fragments.get(reused);
     assert_eq!(fresh.crew_level, 0);
-    assert_eq!(fresh.SpeciesID, 0);
+    assert_eq!(fresh.species_id, 0);
     assert_eq!(fresh.index, 0);
     assert!(fresh.race_strings.is_null());
     assert!(fresh.icons.is_null());

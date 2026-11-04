@@ -86,7 +86,7 @@ unsafe fn initialize_races(cx: &mut crate::engine::battle::Cx<'_>) {
         let handle = cx.world.avail_races().alloc().expect("fleet capacity");
         let mut value = FLEET_INFO::default();
         let fleet = &raw mut value;
-        (*fleet).SpeciesID = ship;
+        (*fleet).species_id = ship;
         if i < count - 1 {
             let master = find_master_ship(cx.kernel, ship)
                 .unwrap_or_else(|| panic!("master species {ship}"));

@@ -69,7 +69,7 @@ fn summary_picker_clones_from_the_already_borrowed_race_queue() {
                     let mut races = world.avail_races();
                     let id = races.alloc().unwrap();
                     let template = races.get_mut(id);
-                    template.SpeciesID = SPECIES_ID_EARTHLING_ID;
+                    template.species_id = SPECIES_ID_EARTHLING_ID;
                     template.crew_level = 12;
                     template.max_crew = 18;
                     races.put(id);
@@ -80,7 +80,7 @@ fn summary_picker_clones_from_the_already_borrowed_race_queue() {
                 let cloned = destination.get(id);
                 assert_eq!(cloned.crew_level, 12);
                 assert_eq!(cloned.max_crew, 18);
-                assert_eq!(cloned.SpeciesID, SPECIES_ID_EARTHLING_ID);
+                assert_eq!(cloned.species_id, SPECIES_ID_EARTHLING_ID);
             });
         });
     }

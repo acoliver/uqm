@@ -6,12 +6,9 @@ use crate::graphics::native_abi::{FRAME, POINT, STRING};
 
 pub const SAMATRA_RACE: u8 = 23;
 
-#[repr(C)]
 #[derive(Debug, Copy, Clone, Default)]
 pub struct ShipFragment {
-    pub pred: *mut std::ffi::c_void,
-    pub succ: *mut std::ffi::c_void,
-    pub SpeciesID: u32,
+    pub species_id: u32,
     pub captains_name_index: u8,
     pub race_id: u8,
     pub index: u8,
@@ -24,12 +21,9 @@ pub struct ShipFragment {
     pub melee_icon: FRAME,
 }
 
-#[repr(C)]
 #[derive(Debug, Copy, Clone, Default)]
 pub struct FleetInfo {
-    pub pred: *mut std::ffi::c_void,
-    pub succ: *mut std::ffi::c_void,
-    pub SpeciesID: u32,
+    pub species_id: u32,
     pub allied_state: u16,
     pub days_left: u8,
     pub growth_fract: u8,
@@ -49,7 +43,6 @@ pub struct FleetInfo {
     pub dest_loc: POINT,
 }
 
-#[repr(C)]
 #[derive(Debug, Copy, Clone, Default)]
 pub struct BriefShipInfo {
     pub race_id: u8,
@@ -58,12 +51,9 @@ pub struct BriefShipInfo {
     pub max_energy: u8,
 }
 
-#[repr(C)]
 #[derive(Debug, Copy, Clone, Default)]
 pub struct EncounterRecord {
-    pub pred: *mut std::ffi::c_void,
-    pub succ: *mut std::ffi::c_void,
-    pub hElement: *mut std::ffi::c_void,
+    pub h_element: *mut std::ffi::c_void,
     pub transition_state: i16,
     pub origin: POINT,
     pub radius: u16,
@@ -71,16 +61,13 @@ pub struct EncounterRecord {
     pub num_ships: u8,
     pub flags: u8,
     pub loc_pt: POINT,
-    pub ShipList: [BriefShipInfo; 7usize],
+    pub ship_list: [BriefShipInfo; 7usize],
     pub log_x: i32,
     pub log_y: i32,
 }
 
-#[repr(C)]
 #[derive(Debug, Copy, Clone, Default)]
 pub struct IpGroup {
-    pub pred: *mut std::ffi::c_void,
-    pub succ: *mut std::ffi::c_void,
     pub group_counter: u16,
     pub race_id: u8,
     pub sys_loc: u8,
@@ -192,7 +179,7 @@ impl<const N: usize> LinkQueue<'_, Fragment, N> {
                 let mut used = false;
                 while let Some(id) = current {
                     let ship = self.get(id);
-                    if ship.SpeciesID == template.SpeciesID && ship.captains_name_index == name {
+                    if ship.species_id == template.species_id && ship.captains_name_index == name {
                         used = true;
                         break;
                     }
@@ -205,7 +192,7 @@ impl<const N: usize> LinkQueue<'_, Fragment, N> {
         };
         let id = self.alloc()?;
         let ship = self.get_mut(id);
-        ship.SpeciesID = template.SpeciesID;
+        ship.species_id = template.species_id;
         ship.captains_name_index = captain;
         ship.race_id = race;
         ship.crew_level = if crew == 0 { template.crew_level } else { crew };
@@ -226,7 +213,7 @@ mod tests {
     #[test]
     fn fragment_clones_preserve_template_fields_and_same_species_name_uniqueness() {
         let template = FleetInfo {
-            SpeciesID: 7,
+            species_id: 7,
             crew_level: 10,
             max_crew: 20,
             max_energy: 30,
@@ -248,7 +235,7 @@ mod tests {
         assert_eq!(ships.get(second).captains_name_index, 6);
         assert_eq!(ships.succ(first), Some(second));
         let other = FleetInfo {
-            SpeciesID: 8,
+            species_id: 8,
             ..template
         };
         let third = ships.clone_fragment(&other, 7, 0, || 5).unwrap();

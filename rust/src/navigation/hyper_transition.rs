@@ -24,7 +24,7 @@ pub(super) fn cleanup(cx: &mut Cx<'_>) {
     while let Some(encounter) = next {
         let queue = cx.world.encounters_ref();
         next = queue.succ(encounter);
-        let element = cx.elements().id(queue.get(encounter).hElement);
+        let element = cx.elements().id(queue.get(encounter).h_element);
         let promote = element.is_some_and(|id| cx.target(id).is_some());
         let mut queue = cx.world.encounters();
         if promote {
@@ -32,7 +32,7 @@ pub(super) fn cleanup(cx: &mut Cx<'_>) {
             let head = queue.head();
             queue.insert_before(encounter, head);
         }
-        queue.get_mut(encounter).hElement = ptr::null_mut();
+        queue.get_mut(encounter).h_element = ptr::null_mut();
     }
 }
 pub(crate) fn unhyper(cx: &mut Cx<'_>, element: ElementId) {

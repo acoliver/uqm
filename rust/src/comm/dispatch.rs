@@ -1,10 +1,8 @@
 //! Communication dispatch — ported from C `comm.c` RaceCommunication and
 //! InitCommunication.
 //!
-//! This module ports the encounter dispatch logic to Rust, operating on
-//! C-owned queues through the existing Rust queue API. Game state is read
-//! from the Rust-owned singleton (P09). CommData is populated through the
-//! existing `init_race` mechanism (P10).
+//! Encounter dispatch uses typed views of the campaign pools owned by World.
+//! CommData is populated through the existing `init_race` mechanism (P10).
 //!
 //! @plan PLAN-20260724-MAINLOOP-AND-COMM.P11
 //! @requirement REQ-ML-007, REQ-COMM-DISPATCH
@@ -32,15 +30,12 @@ use crate::collections::queue::{AllocLink, HLink, PutQueue, Queue, ReinitQueue};
 use crate::comm::locdata::{read_locdata, set_comm_data};
 
 // ---------------------------------------------------------------------------
-// C type mirrors for queue elements (#[repr(C)] matching C struct layout)
+// Resource and geometry types used by retained presentation calls
 // ---------------------------------------------------------------------------
 
 /// C: `typedef struct point { COORD x, y; } POINT;`
 /// COORD is `SIZE` which is `SWORD` = `i16`.
 pub use crate::graphics::native_abi::point as CPoint;
-
-/// C `SPECIES_ID` is an enum and therefore has C `int` layout.
-pub type CSpeciesId = i32;
 
 /// C: `typedef void* STRING` (STRING_TABLE_ENTRY_DESC*)
 pub type CStringHandle = *mut c_void;
@@ -48,154 +43,9 @@ pub type CStringHandle = *mut c_void;
 /// C: `typedef FRAME_DESC* FRAME`
 pub type CFrameHandle = *mut c_void;
 
-/// C: `struct brief_ship_info` — used inside ENCOUNTER.
-#[repr(C)]
-#[derive(Clone, Copy, Default)]
-pub struct BriefShipInfo {
-    pub race_id: u8,
-    pub crew_level: u16,
-    pub max_crew: u16,
-    pub max_energy: u8,
-}
-
-/// C: `MAX_HYPER_SHIPS` — max ships per encounter.
+pub use crate::engine::world::queues::BriefShipInfo;
 pub const MAX_HYPER_SHIPS: usize = 7;
 
-/// C: `struct encounter` — encounter queue element.
-#[repr(C)]
-pub struct CEncounter {
-    pub pred: *mut c_void,
-    pub succ: *mut c_void,
-    pub h_element: *mut c_void,
-    pub transition_state: i16,
-    pub origin: CPoint,
-    pub radius: u16,
-    pub race_id: u8,
-    pub num_ships: u8,
-    pub flags: u8,
-    pub loc_pt: CPoint,
-    pub ship_list: [BriefShipInfo; MAX_HYPER_SHIPS],
-    pub log_x: i32,
-    pub log_y: i32,
-}
-
-/// C: `SHIP_FRAGMENT` — queue element for built ship queues.
-#[repr(C)]
-#[derive(Default)]
-pub struct CShipFragment {
-    // SHIP_BASE_COMMON
-    pub pred: *mut c_void,
-    pub succ: *mut c_void,
-    pub species_id: CSpeciesId,
-    pub captains_name_index: u8,
-    // SHIP_FRAGMENT specific
-    pub race_id: u8,
-    pub index: u8,
-    pub crew_level: u16,
-    pub max_crew: u16,
-    pub energy_level: u8,
-    pub max_energy: u8,
-    pub race_strings: CStringHandle,
-    pub icons: CFrameHandle,
-    pub melee_icon: CFrameHandle,
-}
-
-/// C: `FLEET_INFO` — queue element for the avail_race_q (fleet roster).
-#[repr(C)]
-pub struct CFleetInfo {
-    // LINK elements
-    pub pred: *mut c_void,
-    pub succ: *mut c_void,
-    pub species_id: CSpeciesId,
-    pub allied_state: u16,
-    pub days_left: u8,
-    pub growth_fract: u8,
-    pub crew_level: u16,
-    pub max_crew: u16,
-    pub growth: u8,
-    pub max_energy: u8,
-    pub loc: CPoint,
-    pub race_strings: CStringHandle,
-    pub icons: CFrameHandle,
-    pub melee_icon: CFrameHandle,
-    pub actual_strength: u16,
-    pub known_strength: u16,
-    pub known_loc: CPoint,
-    pub growth_err_term: u8,
-    pub func_index: u8,
-    pub dest_loc: CPoint,
-}
-
-assert_c_layout!(
-    CShipFragment,
-    global_state::SHIP_FRAGMENT {
-        pred: pred,
-        succ: succ,
-        species_id: SpeciesID,
-        captains_name_index: captains_name_index,
-        race_id: race_id,
-        index: index,
-        crew_level: crew_level,
-        max_crew: max_crew,
-        energy_level: energy_level,
-        max_energy: max_energy,
-        race_strings: race_strings,
-        icons: icons,
-        melee_icon: melee_icon,
-    }
-);
-assert_c_layout!(
-    CFleetInfo,
-    global_state::FLEET_INFO {
-        pred: pred,
-        succ: succ,
-        species_id: SpeciesID,
-        allied_state: allied_state,
-        days_left: days_left,
-        growth_fract: growth_fract,
-        crew_level: crew_level,
-        max_crew: max_crew,
-        growth: growth,
-        max_energy: max_energy,
-        loc: loc,
-        race_strings: race_strings,
-        icons: icons,
-        melee_icon: melee_icon,
-        actual_strength: actual_strength,
-        known_strength: known_strength,
-        known_loc: known_loc,
-        growth_err_term: growth_err_term,
-        func_index: func_index,
-        dest_loc: dest_loc,
-    }
-);
-assert_c_layout!(
-    BriefShipInfo,
-    global_state::BRIEF_SHIP_INFO {
-        race_id: race_id,
-        crew_level: crew_level,
-        max_crew: max_crew,
-        max_energy: max_energy,
-    }
-);
-assert_c_layout!(
-    CEncounter,
-    global_state::ENCOUNTER {
-        pred: pred,
-        succ: succ,
-        h_element: hElement,
-        transition_state: transition_state,
-        origin: origin,
-        radius: radius,
-        race_id: race_id,
-        num_ships: num_ships,
-        flags: flags,
-        loc_pt: loc_pt,
-        ship_list: ShipList,
-        log_x: log_x,
-        log_y: log_y,
-    }
-);
 const _: () = assert!(MAX_HYPER_SHIPS == global_state::MAX_HYPER_SHIPS as usize);
 
 // ---------------------------------------------------------------------------
@@ -1036,15 +886,6 @@ mod tests {
     #[test]
     fn race_communication_maps_human_to_invalid() {
         assert_eq!(RACE_COMMUNICATION[ship::HUMAN_SHIP as usize], conv::INVALID);
-    }
-
-    #[test]
-    fn ship_fragment_matches_c_abi_layout() {
-        assert_eq!(std::mem::size_of::<CSpeciesId>(), 4);
-        assert_eq!(std::mem::offset_of!(CShipFragment, species_id), 16);
-        assert_eq!(std::mem::offset_of!(CShipFragment, race_id), 21);
-        assert_eq!(std::mem::offset_of!(CShipFragment, crew_level), 24);
-        assert_eq!(std::mem::size_of::<CShipFragment>(), 56);
     }
 
     #[test]

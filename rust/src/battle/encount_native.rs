@@ -223,7 +223,7 @@ pub(crate) mod engine {
                 link_queue::ships(player as usize).build(if frag.race_id == SAMATRA_SHIP as u8 {
                     SPECIES_ID_SA_MATRA_ID
                 } else {
-                    frag.SpeciesID
+                    frag.species_id
                 });
             if let Some(id) = built {
                 let mut ships = link_queue::ships(player as usize);

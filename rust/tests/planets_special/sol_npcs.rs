@@ -27,7 +27,7 @@ pub fn check(h: &mut Harness) {
             for index in 0..24 {
                 let id = fleets.alloc().unwrap();
                 let fleet = fleets.get_mut(id);
-                fleet.SpeciesID = index;
+                fleet.species_id = index;
                 fleet.crew_level = 12;
                 fleet.max_crew = 12;
                 fleet.max_energy = 20;

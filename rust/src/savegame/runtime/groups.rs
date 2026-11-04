@@ -32,7 +32,7 @@
 //! * `LoadEncounter` does not check what it reads. `num_ships` above
 //!   `MAX_HYPER_SHIPS` and races without a fleet are rejected.
 //!
-//! The not-saved `hElement` of an encounter is zero after a restore, as in
+//! The not-saved `h_element` of an encounter is zero after a restore, as in
 //! `LoadEncounter`. Fleet templates are only read, never written.
 //!
 //! Everything that can be rejected is checked before the first write, so a
@@ -44,13 +44,12 @@
 //! relation to this queue, and the `SaveGame`/`LoadGame` orchestration that
 //! decides, from the activity, which sections a file carries.
 
-use std::ffi::c_void;
 use std::fmt;
 
 use super::queues::{c_point, entries, point, QueueKind};
-use crate::c_bindings::{assert_c_layout, global_state};
+use crate::c_bindings::global_state;
 use crate::comm::dispatch::{
-    CFrameHandle, CPoint, IN_INTERPLANETARY, MAX_HYPER_SHIPS, START_ENCOUNTER, START_INTERPLANETARY,
+    IN_INTERPLANETARY, MAX_HYPER_SHIPS, START_ENCOUNTER, START_INTERPLANETARY,
 };
 use crate::engine::world::queues::{
     BriefShipInfo as ShipInfo, EncounterRecord, IpGroup as GroupRecord,
@@ -60,42 +59,6 @@ use crate::savegame::types::{self, BriefShipInfo, EncounterEntry, IpGroup};
 
 const _: () = assert!(MAX_HYPER_SHIPS == types::MAX_HYPER_SHIPS);
 
-/// C: `IP_GROUP` (grpinfo.h) — an element of `ip_group_q`.
-#[repr(C)]
-pub struct CIpGroup {
-    pub pred: *mut c_void,
-    pub succ: *mut c_void,
-    pub group_counter: u16,
-    pub race_id: u8,
-    pub sys_loc: u8,
-    pub task: u8,
-    pub in_system: u8,
-    pub dest_loc: u8,
-    pub orbit_pos: u8,
-    pub group_id: u8,
-    pub loc: CPoint,
-    pub melee_icon: CFrameHandle,
-}
-
-assert_c_layout!(
-    CIpGroup,
-    global_state::IP_GROUP {
-        pred: pred,
-        succ: succ,
-        group_counter: group_counter,
-        race_id: race_id,
-        sys_loc: sys_loc,
-        task: task,
-        in_system: in_system,
-        dest_loc: dest_loc,
-        orbit_pos: orbit_pos,
-        group_id: group_id,
-        loc: loc,
-        melee_icon: melee_icon,
-    }
-);
-
-/// `MAX_BATTLE_GROUPS` (globdata.h): slots of `ip_group_q`.
 pub const MAX_BATTLE_GROUPS: u8 = global_state::MAX_BATTLE_GROUPS as u8;
 /// `MAX_ENCOUNTERS` (globdata.h): slots of `encounter_q`.
 pub const MAX_ENCOUNTERS: u8 = global_state::MAX_ENCOUNTERS as u8;
@@ -165,7 +128,7 @@ fn encounter_entry(encounter: &EncounterRecord) -> EncounterEntry {
         num_ships: encounter.num_ships,
         flags: encounter.flags,
         ship_list: std::array::from_fn(|i| {
-            let ship = &encounter.ShipList[i];
+            let ship = &encounter.ship_list[i];
             BriefShipInfo {
                 race_id: ship.race_id,
                 crew_level: ship.crew_level,
@@ -322,7 +285,7 @@ fn restore_groups_with_icons(
             num_ships: entry.num_ships,
             flags: entry.flags,
             loc_pt: c_point(entry.loc_pt),
-            ShipList: std::array::from_fn(|i| {
+            ship_list: std::array::from_fn(|i| {
                 let ship = &entry.ship_list[i];
                 ShipInfo {
                     race_id: ship.race_id,

@@ -8,7 +8,6 @@
 //! (`C_WRITTEN_SAVE`, read with a separate script) and from `races.h`, not
 //! from the encoder.
 
-use std::mem::{offset_of, size_of};
 use std::ops::{Deref, DerefMut};
 
 use super::queues::*;
@@ -49,7 +48,7 @@ impl LiveGame {
             let mut queue = game.avail_races();
             let id = queue.alloc().unwrap();
             *queue.get_mut(id) = crate::engine::world::queues::FleetInfo {
-                SpeciesID: race as u32 + 1,
+                species_id: race as u32 + 1,
                 allied_state: 2,
                 days_left: 0xa1,
                 growth_fract: 0xa2,
@@ -206,32 +205,6 @@ fn empty_sections() -> QueueSections {
         npc_ship_queue: Vec::new(),
         ship_queue: Vec::new(),
     }
-}
-
-// ---------------------------------------------------------------------------
-// Layout
-// ---------------------------------------------------------------------------
-
-/// Offsets worked out by hand from `races.h` on LP64: two 8-byte links, a
-/// 4-byte `SPECIES_ID`, then the fields in declaration order.
-#[test]
-fn queue_elements_have_the_lp64_layout_races_h_gives_them() {
-    assert_eq!(size_of::<CFleetInfo>(), 80);
-    assert_eq!(offset_of!(CFleetInfo, SpeciesID), 16);
-    assert_eq!(offset_of!(CFleetInfo, allied_state), 20);
-    assert_eq!(offset_of!(CFleetInfo, crew_level), 24);
-    assert_eq!(offset_of!(CFleetInfo, loc), 30);
-    assert_eq!(offset_of!(CFleetInfo, race_strings), 40);
-    assert_eq!(offset_of!(CFleetInfo, actual_strength), 64);
-    assert_eq!(offset_of!(CFleetInfo, func_index), 73);
-    assert_eq!(offset_of!(CFleetInfo, dest_loc), 74);
-    assert_eq!(size_of::<CShipFragment>(), 56);
-    assert_eq!(offset_of!(CShipFragment, captains_name_index), 20);
-    assert_eq!(offset_of!(CShipFragment, race_id), 21);
-    assert_eq!(offset_of!(CShipFragment, index), 22);
-    assert_eq!(offset_of!(CShipFragment, crew_level), 24);
-    assert_eq!(offset_of!(CShipFragment, max_energy), 29);
-    assert_eq!(offset_of!(CShipFragment, race_strings), 32);
 }
 
 // ---------------------------------------------------------------------------
@@ -407,7 +380,7 @@ fn restoring_the_seed_overwrites_only_the_persisted_fleet_fields() {
     // What the save does not hold is the template's own.
     for race in 0..RACES {
         let t = game.template(race);
-        assert_eq!(t.SpeciesID, race as u32 + 1, "race {race}");
+        assert_eq!(t.species_id, race as u32 + 1, "race {race}");
         assert_eq!(t.race_strings, handle(race, 1).cast(), "race {race}");
         assert_eq!(t.icons, handle(race, 2).cast(), "race {race}");
         assert_eq!(t.melee_icon, handle(race, 3).cast(), "race {race}");
@@ -424,7 +397,7 @@ fn restoring_the_seed_overwrites_only_the_persisted_fleet_fields() {
     assert_eq!((ship.race_id, ship.index), (2, 0));
     assert_eq!((ship.crew_level, ship.max_crew), (18, 18));
     assert_eq!((ship.energy_level, ship.max_energy), (0, 18));
-    assert_eq!(ship.SpeciesID, 3);
+    assert_eq!(ship.species_id, 3);
     assert_eq!(ship.race_strings, handle(2, 1).cast());
     assert_eq!(ship.icons, handle(2, 2).cast());
     assert_eq!(ship.melee_icon, handle(2, 3).cast());
@@ -487,7 +460,7 @@ fn restore_keeps_entry_order_and_replaces_what_was_queued() {
         NPC_SLOTS as usize - 1
     );
     // The templates of races 2 and 5 were the source of each clone.
-    assert_eq!(game.built_fragments()[0].SpeciesID, 6);
+    assert_eq!(game.built_fragments()[0].species_id, 6);
     assert_eq!(game.built_fragments()[1].race_strings, handle(2, 1).cast());
     // The saved sections read back.
     assert_eq!(

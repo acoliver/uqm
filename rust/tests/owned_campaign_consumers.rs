@@ -12,7 +12,7 @@ fn starbase_and_probe_setup_use_owned_campaign_storage() {
         for species in 0..24 {
             let id = fleets.alloc().unwrap();
             let fleet = fleets.get_mut(id);
-            fleet.SpeciesID = species;
+            fleet.species_id = species;
             fleet.allied_state = 1;
             fleet.crew_level = 12;
             fleet.max_crew = 18;

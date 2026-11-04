@@ -535,6 +535,39 @@ mod pool_view_tests {
     }
 
     #[test]
+    fn consumed_views_keep_owner_lifetimes_and_reject_invalid_mutations() {
+        use std::panic::{catch_unwind, AssertUnwindSafe};
+        let mut pool = OrderedPool::<u32, 4>::new();
+        let mut view = LinkQueue::<Value, 4>::from_pool(&mut pool);
+        let id = view.alloc().unwrap();
+        let slot = view.slot(id);
+        assert_eq!(view.at_slot(slot), Some(id));
+        *view.into_record_mut(id) = 17;
+        let shared = LinkQueue::<Value, 4>::borrow_pool(&pool);
+        assert_eq!(*shared.into_record(id), 17);
+        assert!(catch_unwind(AssertUnwindSafe(|| {
+            LinkQueue::<Value, 4>::borrow_pool(&pool).into_record_mut(id);
+        }))
+        .is_err());
+        let mut other = OrderedPool::<u32, 4>::new();
+        let foreign = LinkQueue::<Value, 4>::from_pool(&mut other)
+            .alloc()
+            .unwrap();
+        assert!(catch_unwind(AssertUnwindSafe(|| {
+            LinkQueue::<Value, 4>::borrow_pool(&pool).into_record(foreign);
+        }))
+        .is_err());
+        LinkQueue::<Value, 4>::from_pool(&mut pool).free(id);
+        assert!(LinkQueue::<Value, 4>::borrow_pool(&pool)
+            .at_slot(slot)
+            .is_none());
+        assert!(catch_unwind(AssertUnwindSafe(|| {
+            LinkQueue::<Value, 4>::from_pool(&mut pool).into_record_mut(id);
+        }))
+        .is_err());
+    }
+
+    #[test]
     fn find_visits_link_order_and_ignores_unlinked_allocations() {
         let mut pool = OrderedPool::<u32, 4>::new();
         let mut view = LinkQueue::<Value, 4>::from_pool(&mut pool);

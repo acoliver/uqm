@@ -215,7 +215,7 @@ mod tests {
             let mut fleets = world.avail_races();
             let id = fleets.alloc().unwrap();
             let fleet = fleets.get_mut(id);
-            fleet.SpeciesID = 1;
+            fleet.species_id = 1;
             fleet.crew_level = 10;
             fleet.max_crew = 20;
             fleet.allied_state = 1;

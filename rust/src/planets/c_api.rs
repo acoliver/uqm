@@ -411,7 +411,7 @@ pub unsafe fn begin_urquan_encounter(loc: (i16, i16)) -> bool {
         encounter.race_id = ship::URQUAN_SHIP;
         encounter.num_ships = 1;
         encounter.flags = ONE_SHOT_ENCOUNTER;
-        encounter.ShipList[0] = crate::navigation::abi::brief_ship_info {
+        encounter.ship_list[0] = crate::navigation::abi::brief_ship_info {
             race_id: ship::URQUAN_SHIP,
             crew_level: template.crew_level,
             max_crew: template.max_crew,

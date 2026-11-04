@@ -773,8 +773,15 @@ mod record_tests {
 
     #[test]
     fn fragment_bytes_keep_truncation_and_do_not_replace_link_or_resources() {
-        // SAFETY: this record contains only integers, nullable pointers and optional callbacks.
-        let mut fragment: SHIP_FRAGMENT = unsafe { std::mem::zeroed() };
+        let mut world = crate::engine::World::new();
+        let mut queue = world.built_ships();
+        let first = queue.alloc().unwrap();
+        let middle = queue.alloc().unwrap();
+        let last = queue.alloc().unwrap();
+        queue.put(first);
+        queue.put(middle);
+        queue.put(last);
+        let fragment = queue.get_mut(middle);
         fragment.captains_name_index = 3;
         fragment.race_id = 4;
         fragment.index = 5;
@@ -782,14 +789,18 @@ mod record_tests {
         fragment.max_crew = 511;
         fragment.energy_level = 6;
         fragment.max_energy = 7;
-        let bytes = encode_fragment(&fragment);
+        fragment.race_strings = 0x100usize as crate::graphics::native_abi::STRING;
+        fragment.icons = 0x200usize as crate::graphics::native_abi::FRAME;
+        let bytes = encode_fragment(fragment);
         assert_eq!(bytes, [0, 0, 3, 0, 0, 0, 4, 5, 44, 255, 6, 7, 0, 0, 0, 0]);
-        let previous = fragment.pred;
-        decode_fragment(&bytes, &mut fragment);
-        assert_eq!(fragment.pred, previous);
+        decode_fragment(&bytes, fragment);
+        assert_eq!(fragment.race_strings as usize, 0x100);
+        assert_eq!(fragment.icons as usize, 0x200);
         assert_eq!(fragment.crew_level, 44);
         assert_eq!(fragment.max_crew, 255);
         assert_eq!(fragment.captains_name_index, 3);
+        assert_eq!(queue.pred(middle), Some(first));
+        assert_eq!(queue.succ(middle), Some(last));
     }
 
     #[test]
