@@ -257,7 +257,7 @@ fn native_races_cannot_escape_the_real_accessor_boundary() -> Result<(), Box<dyn
         ("element_operand", "fn probe() { let _ = crate::engine::battle::record::ElementOperand(std::ptr::null_mut::<u8>()); }", "E0425"),
         ("collision_operands", "fn probe() { let _ = crate::engine::battle::record::CollisionOperands(std::ptr::null_mut::<u8>(), std::ptr::null_mut::<u8>(), std::ptr::null_mut::<u8>(), std::ptr::null_mut::<u8>()); }", "E0425"),
         ("decoder", "fn probe(raw: &crate::engine::battle::record::ElementRecord) { let _ = crate::engine::battle::views::ElementState::decode(raw); }", "E0624"),
-        ("legacy_table", "fn probe(cx: &mut Cx<'_>, id: ElementId) { cx.records()[id].next.image.frames = crate::engine::battle::views::Frames::ABSENT; }", "E0133"),
+        ("legacy_table", "fn probe(cx: &mut Cx<'_>, id: ElementId) { cx.records()[id].next.image.frames = crate::engine::battle::views::Frames::ABSENT; }", "E0599"),
         ("legacy_subject", "fn probe(cx: &mut Cx<'_>, raw: &crate::engine::battle::record::ElementRecord) { let _ = cx.legacy_subject(raw); }", "E0599"),
         ("sound", "fn probe(cx: &mut Cx<'_>) { cx.queue_sound(1, None); }", "E0624"),
         ("subject", "fn probe(mut subject: crate::engine::battle::Subject) { subject.intersect.IntersectStamp.frame = std::ptr::NonNull::dangling().as_ptr(); }", "E0616"),
