@@ -4,10 +4,8 @@
 //!
 //! * `GlobData.flagship`: the flagship fields and the three name strings,
 //!   copied as they stand;
-//! * the Rust game-state singleton: the Melnorme credit, the lander flags, the
-//!   device list, the quasispace side and the "global flags and data" byte
-//!   (`snapshot_game_state`, one lock, so every game-state field of the summary
-//!   comes from the same snapshot);
+//! * the borrowed story state: the Melnorme credit, lander flags, device list,
+//!   quasispace side and the "global flags and data" byte;
 //! * `GLOBAL (GameClock)`: the date;
 //! * `GLOBAL (built_ship_q)`: the escorts' races.
 //!
@@ -26,20 +24,19 @@
 //!
 //! Where this differs from the C code on purpose: the unused tail of
 //! `ShipList` and `DeviceList` is zero, where C writes whatever the caller's
-//! `SUMMARY_DESC` held, and more escorts than a summary lists is an error where
-//! C would write past `ShipList`.
+//! `SUMMARY_DESC` held. The fixed escort pool cannot exceed `ShipList`.
 
-use crate::engine::World;
+use crate::engine::battle::link_queue::LinkQueue;
+use crate::engine::world::queues::Fragment;
 use std::fmt;
 
-use super::queues::{walk, QueueError, QueueKind};
 use super::solar::SolarError;
-use crate::comm::dispatch::{CShipFragment, IN_HYPERSPACE, IN_INTERPLANETARY, IN_LAST_BATTLE};
+use crate::comm::dispatch::{IN_HYPERSPACE, IN_INTERPLANETARY, IN_LAST_BATTLE};
 use crate::comm::locdata::{CGameState, CSisState};
 use crate::savegame::types::{
     SaveName, SisState, Summary, MAX_BUILT_SHIPS, MAX_EXCLUSIVE_DEVICES, SIS_NAME_SIZE,
 };
-use crate::state::ffi::{snapshot_game_state, GameStateOwnerError};
+use crate::state::ffi::GameStateOwnerError;
 use crate::state::game_state::GameState;
 
 /// `IN_QUASISPACE` (globdata.h): only ever stored in a summary.
@@ -121,12 +118,6 @@ pub enum SummaryError {
     GameState(GameStateOwnerError),
     /// The solar-system state is not the shape `ExploreSolarSys` leaves.
     Solar(SolarError),
-    /// The built-ship queue is corrupt.
-    Queue(QueueError),
-    /// The built-ship queue holds more escorts than `ShipList` has places.
-    TooManyShips {
-        count: usize,
-    },
 }
 
 impl fmt::Display for SummaryError {
@@ -149,13 +140,7 @@ impl From<SolarError> for SummaryError {
     }
 }
 
-impl From<QueueError> for SummaryError {
-    fn from(error: QueueError) -> Self {
-        Self::Queue(error)
-    }
-}
-
-/// `GET_GAME_STATE (key)` on a snapshot of the singleton. An unknown key is a
+/// `GET_GAME_STATE (key)` on borrowed story state. An unknown key is a
 /// bug in this module's tables, not a runtime condition.
 pub(super) fn state_value(state: &GameState, key: &str) -> u8 {
     let (start, end) = GameState::lookup_bits(key)
@@ -234,22 +219,24 @@ pub fn utf8_string_copy(source: &[u8]) -> [u8; SIS_NAME_SIZE] {
 pub fn capture_summary(
     sis: &CSisState,
     game: &CGameState,
+    escorts: LinkQueue<'_, Fragment, 12>,
+    story: &Option<GameState>,
     solar: &dyn SolarSystemOwner,
     name: &[u8],
 ) -> Result<Summary, SummaryError> {
-    let state = GameState::from_bytes(&World::current().read(snapshot_game_state)?);
+    let state = story.as_ref().ok_or(GameStateOwnerError::NotInitialized)?;
 
     let mut sis_copy = sis_state(sis);
     let mut activity = (game.current_activity & 0x00ff) as u8;
     match u16::from(activity) {
         IN_HYPERSPACE => {
-            if state_value(&state, "ARILOU_SPACE_SIDE") > 1 {
+            if state_value(state, "ARILOU_SPACE_SIDE") > 1 {
                 activity = IN_QUASISPACE;
             }
         }
         IN_INTERPLANETARY => {
             sis_copy.planet_name = solar.planet_or_moon_name()?;
-            if state_value(&state, "GLOBAL_FLAGS_AND_DATA") == IN_STARBASE_FLAGS {
+            if state_value(state, "GLOBAL_FLAGS_AND_DATA") == IN_STARBASE_FLAGS {
                 activity = IN_STARBASE;
             } else if solar.player_in_planet_orbit() {
                 activity = IN_PLANET_ORBIT;
@@ -259,27 +246,23 @@ pub fn capture_summary(
         _ => {}
     }
 
-    let escorts = walk::<CShipFragment>(&game.built_ship_q, QueueKind::BuiltShips)?;
-    if escorts.len() > MAX_BUILT_SHIPS {
-        return Err(SummaryError::TooManyShips {
-            count: escorts.len(),
-        });
-    }
     let mut ship_list = [0u8; MAX_BUILT_SHIPS];
-    for (slot, &link) in ship_list.iter_mut().zip(&escorts) {
-        // SAFETY: `walk` returned slots of the pool, which holds `SHIP_FRAGMENT`s.
-        *slot = unsafe { (*link).race_id };
+    let mut next = escorts.head();
+    for slot in ship_list.iter_mut().take(escorts.count()) {
+        let id = next.expect("escort count matches visit order");
+        *slot = escorts.get(id).race_id;
+        next = escorts.succ(id);
     }
 
-    let devices = inventory_devices(&state, MAX_EXCLUSIVE_DEVICES);
+    let devices = inventory_devices(state, MAX_EXCLUSIVE_DEVICES);
     let mut device_list = [0u8; MAX_EXCLUSIVE_DEVICES];
     device_list[..devices.len()].copy_from_slice(&devices);
 
-    let flags = state_value(&state, "LANDER_SHIELDS")
-        | (state_value(&state, "IMPROVED_LANDER_SPEED") << 4)
-        | (state_value(&state, "IMPROVED_LANDER_CARGO") << 5)
-        | (state_value(&state, "IMPROVED_LANDER_SHOT") << 6)
-        | (u8::from(state_value(&state, "CHMMR_BOMB_STATE") >= 2) << 7);
+    let flags = state_value(state, "LANDER_SHIELDS")
+        | (state_value(state, "IMPROVED_LANDER_SPEED") << 4)
+        | (state_value(state, "IMPROVED_LANDER_CARGO") << 5)
+        | (state_value(state, "IMPROVED_LANDER_SHOT") << 6)
+        | (u8::from(state_value(state, "CHMMR_BOMB_STATE") >= 2) << 7);
 
     Ok(Summary {
         sis: sis_copy,
@@ -288,10 +271,10 @@ pub fn capture_summary(
         day_index: game.game_clock.day_index,
         month_index: game.game_clock.month_index,
         year_index: game.game_clock.year_index,
-        mcredit_lo: state_value(&state, "MELNORME_CREDIT0"),
-        mcredit_hi: state_value(&state, "MELNORME_CREDIT1"),
-        // At most `MAX_BUILT_SHIPS` and `MAX_EXCLUSIVE_DEVICES`: checked above.
-        num_ships: escorts.len() as u8,
+        mcredit_lo: state_value(state, "MELNORME_CREDIT0"),
+        mcredit_hi: state_value(state, "MELNORME_CREDIT1"),
+        // Both lists are bounded by their fixed storage capacities.
+        num_ships: escorts.count() as u8,
         num_devices: devices.len() as u8,
         ship_list,
         device_list,

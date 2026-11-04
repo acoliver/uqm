@@ -40,7 +40,7 @@ const URQUAN_DRONE_SHIP: u8 = 23;
 pub fn init_npcs(story: &mut impl Story, host: &mut impl FleetGroups) -> bool {
     special::ensure_fleet(story, host, "URQUAN_PROBE_GRPOFFS0", URQUAN_DRONE_SHIP);
     if story.flag("PROBE_MESSAGE_DELIVERED") == 0 && host.init_ip_groups() {
-        if host.with_head_ip_group(&mut |group| {
+        if host.head_ip_group(&mut |group| {
             group.task = special::IN_ORBIT;
             group.sys_loc = 3;
             group.dest_loc = 3;
@@ -65,7 +65,7 @@ pub fn reinit_npcs<H: FleetGroups + orbital::Queues>(story: &impl Story, host: &
     } else {
         default::reinit_npcs(host);
         if host.battle_group_ref() != 0 {
-            host.with_head_ip_group(&mut |group| {
+            host.head_ip_group(&mut |group| {
                 if group.race_id == URQUAN_DRONE_SHIP && group.task & default::REFORM_GROUP != 0 {
                     group.task = default::FLEE | default::IGNORE_FLAGSHIP;
                     group.dest_loc = 0;

@@ -18,7 +18,7 @@ pub fn init_npcs(story: &mut impl Story, host: &mut impl FleetGroups) -> bool {
     special::ensure_fleet(story, host, "COLONY_GRPOFFS0", URQUAN_SHIP);
     default::init_npcs(host);
     if host.battle_group_ref() != 0 {
-        host.with_head_ip_group(&mut |group| {
+        host.head_ip_group(&mut |group| {
             group.task = IN_ORBIT;
             group.sys_loc = 1;
             group.dest_loc = 1;

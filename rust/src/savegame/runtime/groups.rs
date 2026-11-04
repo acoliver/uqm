@@ -2,10 +2,8 @@
 //! live queues: `GLOBAL (ip_group_q)` of `IP_GROUP`s and `GLOBAL (encounter_q)`
 //! of `ENCOUNTER`s.
 //!
-//! Both are `QUEUE_TABLE` pools driven by the Rust queue owner in
-//! `collections::queue` and created by `InitGameStructures` (still C), sized
-//! `MAX_BATTLE_GROUPS` and `MAX_ENCOUNTERS`. Their element layouts are checked
-//! against bindgen's reading of `grpinfo.h` and `encount.h` at compile time.
+//! World owns the fixed-capacity group and encounter pools. Capture traverses
+//! typed links; restore validates before replacing records in file order.
 //!
 //! Capture follows `SaveGroupQueue` and `SaveEncounters`:
 //!
@@ -49,14 +47,16 @@
 use std::ffi::c_void;
 use std::fmt;
 
-use super::queues::{c_point, point, pool_slots, walk, QueueElement, QueueError, QueueKind};
+use super::queues::{c_point, entries, point, QueueElement, QueueError, QueueKind};
 use crate::c_bindings::{assert_c_layout, global_state};
-use crate::collections::queue::{AllocLink, PutQueue, Queue, ReinitQueue};
 use crate::comm::dispatch::{
-    BriefShipInfo as CBriefShipInfo, CEncounter, CFleetInfo, CFrameHandle, CPoint,
-    IN_INTERPLANETARY, MAX_HYPER_SHIPS, START_ENCOUNTER, START_INTERPLANETARY,
+    CEncounter, CFrameHandle, CPoint, IN_INTERPLANETARY, MAX_HYPER_SHIPS, START_ENCOUNTER,
+    START_INTERPLANETARY,
 };
-use crate::comm::locdata::CGameState;
+use crate::engine::world::queues::{
+    BriefShipInfo as ShipInfo, EncounterRecord, IpGroup as GroupRecord,
+};
+use crate::engine::World;
 use crate::savegame::types::{self, BriefShipInfo, EncounterEntry, IpGroup};
 
 const _: () = assert!(MAX_HYPER_SHIPS == types::MAX_HYPER_SHIPS);
@@ -168,7 +168,7 @@ pub fn saves_ip_group_queue(activity: u16) -> bool {
         && activity & 0x00ff == IN_INTERPLANETARY
 }
 
-fn ip_group_entry(group: &CIpGroup) -> IpGroup {
+fn ip_group_entry(group: &GroupRecord) -> IpGroup {
     IpGroup {
         group_counter: group.group_counter,
         race_id: group.race_id,
@@ -182,7 +182,7 @@ fn ip_group_entry(group: &CIpGroup) -> IpGroup {
     }
 }
 
-fn encounter_entry(encounter: &CEncounter) -> EncounterEntry {
+fn encounter_entry(encounter: &EncounterRecord) -> EncounterEntry {
     EncounterEntry {
         transition_state: encounter.transition_state,
         origin: point(encounter.origin),
@@ -192,7 +192,7 @@ fn encounter_entry(encounter: &CEncounter) -> EncounterEntry {
         num_ships: encounter.num_ships,
         flags: encounter.flags,
         ship_list: std::array::from_fn(|i| {
-            let ship = &encounter.ship_list[i];
+            let ship = &encounter.ShipList[i];
             BriefShipInfo {
                 race_id: ship.race_id,
                 crew_level: ship.crew_level,
@@ -245,28 +245,18 @@ fn validate_encounters(entries: &[EncounterEntry], race_count: usize) -> Result<
 /// The group and encounter queues of `game`, head to tail, as a save writes
 /// them. The group queue is empty when `saves_ip_group_queue` is false for the
 /// game's activity.
-pub fn capture_groups(game: &CGameState) -> Result<GroupSections, GroupError> {
-    let race_count = walk::<CFleetInfo>(&game.avail_race_q, QueueKind::AvailableRaces)?.len();
-
-    let ip_group_queue = if saves_ip_group_queue(game.current_activity) {
-        walk::<CIpGroup>(&game.ip_group_q, QueueKind::IpGroups)?
-            .into_iter()
-            // SAFETY: `walk` returned slots of the pool, which holds `IP_GROUP`s.
-            .map(|link| ip_group_entry(unsafe { &*link }))
-            .collect()
+pub fn capture_groups(world: &World) -> Result<GroupSections, GroupError> {
+    let races = world.avail_races_ref().count();
+    let ip_group_queue = if saves_ip_group_queue(world.activity()) {
+        entries(world.ip_groups_ref(), |_, group| ip_group_entry(group))
     } else {
         Vec::new()
     };
-    validate_groups(&ip_group_queue, race_count)?;
-
-    let encounters: Vec<EncounterEntry> =
-        walk::<CEncounter>(&game.encounter_q, QueueKind::Encounters)?
-            .into_iter()
-            // SAFETY: `walk` returned slots of the pool, which holds `ENCOUNTER`s.
-            .map(|link| encounter_entry(unsafe { &*link }))
-            .collect();
-    validate_encounters(&encounters, race_count)?;
-
+    validate_groups(&ip_group_queue, races)?;
+    let encounters = entries(world.encounters_ref(), |_, encounter| {
+        encounter_entry(encounter)
+    });
+    validate_encounters(&encounters, races)?;
     Ok(GroupSections {
         ip_group_queue,
         encounters,
@@ -288,129 +278,91 @@ fn check_capacity(queue: QueueKind, count: usize, capacity: usize) -> Result<(),
 ///
 /// Both queues are emptied first, as `LoadGame` does, then filled in order from
 /// their own pools. On error the queues are untouched.
-pub fn restore_groups(game: &mut CGameState, sections: &GroupSections) -> Result<(), GroupError> {
+pub fn restore_groups(game: &mut World, sections: &GroupSections) -> Result<(), GroupError> {
     restore_groups_with_icons(game, sections, false)
 }
 
 /// LoadGame calls BuildGroup(queue, 0) before overwriting the saved race byte.
 /// Keep its fleet-zero icon at this ABI boundary.
 pub(crate) fn restore_loaded_groups(
-    game: &mut CGameState,
+    game: &mut World,
     sections: &GroupSections,
 ) -> Result<(), GroupError> {
     restore_groups_with_icons(game, sections, true)
 }
 
 fn restore_groups_with_icons(
-    game: &mut CGameState,
+    game: &mut World,
     sections: &GroupSections,
     first_fleet_icon: bool,
 ) -> Result<(), GroupError> {
-    let fleets = walk::<CFleetInfo>(&game.avail_race_q, QueueKind::AvailableRaces)?;
+    let templates = entries(game.avail_races_ref(), |_, fleet| *fleet);
     check_capacity(
         QueueKind::IpGroups,
         sections.ip_group_queue.len(),
-        pool_slots::<CIpGroup>(&game.ip_group_q, QueueKind::IpGroups)?,
+        MAX_BATTLE_GROUPS as usize,
     )?;
     check_capacity(
         QueueKind::Encounters,
         sections.encounters.len(),
-        pool_slots::<CEncounter>(&game.encounter_q, QueueKind::Encounters)?,
+        MAX_ENCOUNTERS as usize,
     )?;
-    validate_groups(&sections.ip_group_queue, fleets.len())?;
-    validate_encounters(&sections.encounters, fleets.len())?;
-
-    let group_queue = std::ptr::addr_of_mut!(game.ip_group_q).cast::<Queue>();
-    unsafe {
-        // SAFETY: The queue is initialized and exclusively borrowed; its previous links are discarded.
-        ReinitQueue(group_queue)
-    };
+    validate_groups(&sections.ip_group_queue, templates.len())?;
+    validate_encounters(&sections.encounters, templates.len())?;
+    let mut groups = game.ip_groups();
+    groups.reinit();
     for entry in &sections.ip_group_queue {
-        // SAFETY: `fleets` are the live slots of `avail_race_q` and the
-        // validation above bounded `race_id` by their number.
-        let icon_index = if first_fleet_icon {
+        let icon = if first_fleet_icon {
             0
         } else {
             usize::from(entry.race_id)
         };
-        let melee_icon = unsafe { (*fleets[icon_index]).melee_icon };
-        let link = unsafe {
-            // SAFETY: The initialized queue is exclusively borrowed and its free-list belongs to its pool.
-            AllocLink(group_queue)
+        let id = groups
+            .alloc()
+            .expect("group capacity validated before installation");
+        *groups.get_mut(id) = GroupRecord {
+            group_counter: entry.group_counter,
+            race_id: entry.race_id,
+            sys_loc: entry.sys_loc,
+            task: entry.task,
+            in_system: entry.in_system,
+            dest_loc: entry.dest_loc,
+            orbit_pos: entry.orbit_pos,
+            group_id: entry.group_id,
+            loc: c_point(entry.loc),
+            melee_icon: templates[icon].melee_icon,
+            ..Default::default()
         };
-        assert!(
-            !link.is_null(),
-            "group queue ran out of slots after validation"
-        );
-        // SAFETY: `link` is a free slot of the `IP_GROUP` pool. `PutQueue` sets
-        // the links.
-        unsafe {
-            link.cast::<CIpGroup>().write(CIpGroup {
-                pred: std::ptr::null_mut(),
-                succ: std::ptr::null_mut(),
-                group_counter: entry.group_counter,
-                race_id: entry.race_id,
-                sys_loc: entry.sys_loc,
-                task: entry.task,
-                in_system: entry.in_system,
-                dest_loc: entry.dest_loc,
-                orbit_pos: entry.orbit_pos,
-                group_id: entry.group_id,
-                loc: c_point(entry.loc),
-                melee_icon,
-            });
-        }
-        unsafe {
-            // SAFETY: The queue is exclusively borrowed and the element was allocated from this pool.
-            PutQueue(group_queue, link)
-        };
+        groups.put(id);
     }
-
-    let encounter_queue = std::ptr::addr_of_mut!(game.encounter_q).cast::<Queue>();
-    unsafe {
-        // SAFETY: The queue is initialized and exclusively borrowed; its previous links are discarded.
-        ReinitQueue(encounter_queue)
-    };
+    let mut encounters = game.encounters();
+    encounters.reinit();
     for entry in &sections.encounters {
-        let link = unsafe {
-            // SAFETY: The initialized queue is exclusively borrowed and its free-list belongs to its pool.
-            AllocLink(encounter_queue)
+        let id = encounters
+            .alloc()
+            .expect("encounter capacity validated before installation");
+        *encounters.get_mut(id) = EncounterRecord {
+            transition_state: entry.transition_state,
+            origin: c_point(entry.origin),
+            radius: entry.radius,
+            race_id: entry.race_id,
+            num_ships: entry.num_ships,
+            flags: entry.flags,
+            loc_pt: c_point(entry.loc_pt),
+            ShipList: std::array::from_fn(|i| {
+                let ship = &entry.ship_list[i];
+                ShipInfo {
+                    race_id: ship.race_id,
+                    crew_level: ship.crew_level,
+                    max_crew: ship.max_crew,
+                    max_energy: ship.max_energy,
+                }
+            }),
+            log_x: entry.log_x,
+            log_y: entry.log_y,
+            ..Default::default()
         };
-        assert!(
-            !link.is_null(),
-            "encounter queue ran out of slots after validation"
-        );
-        // SAFETY: `link` is a free slot of the `ENCOUNTER` pool. `PutQueue` sets
-        // the links.
-        unsafe {
-            link.cast::<CEncounter>().write(CEncounter {
-                pred: std::ptr::null_mut(),
-                succ: std::ptr::null_mut(),
-                h_element: std::ptr::null_mut(),
-                transition_state: entry.transition_state,
-                origin: c_point(entry.origin),
-                radius: entry.radius,
-                race_id: entry.race_id,
-                num_ships: entry.num_ships,
-                flags: entry.flags,
-                loc_pt: c_point(entry.loc_pt),
-                ship_list: std::array::from_fn(|i| {
-                    let ship = &entry.ship_list[i];
-                    CBriefShipInfo {
-                        race_id: ship.race_id,
-                        crew_level: ship.crew_level,
-                        max_crew: ship.max_crew,
-                        max_energy: ship.max_energy,
-                    }
-                }),
-                log_x: entry.log_x,
-                log_y: entry.log_y,
-            });
-        }
-        unsafe {
-            // SAFETY: The queue is exclusively borrowed and the element was allocated from this pool.
-            PutQueue(encounter_queue, link)
-        };
+        encounters.put(id);
     }
     Ok(())
 }

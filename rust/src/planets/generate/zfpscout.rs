@@ -26,7 +26,7 @@ pub fn reinit_npcs(host: &mut impl FleetGroups) -> bool {
     if host.battle_group_ref() == 0 {
         return true;
     }
-    host.with_head_ip_group(&mut |group| {
+    host.head_ip_group(&mut |group| {
         if group.race_id == ZOQFOTPIK_SHIP && group.task & REFORM_GROUP != 0 {
             group.task = FLEE | IGNORE_FLAGSHIP | REFORM_GROUP;
             group.dest_loc = 0;

@@ -154,28 +154,22 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
                     World::current().write(rust_init_game_state);
                 }
                 let mut game = super::queue_tests::LiveGame::new();
-                assert!({
-                    // SAFETY: The queue storage is exclusive and its element layout matches this pool.
-                    crate::collections::queue::InitQueue(
-                        std::ptr::addr_of_mut!(game.game_clock.event_q).cast(),
-                        crate::time::clock_bridge::NUM_EVENTS as u16,
-                        std::mem::size_of::<crate::time::clock_bridge::CEvent>() as u16,
-                    )
-                });
+                let mut clock = crate::engine::clock::GameClock::new();
 
                 let restored = World::current()
                     .write(|world| {
                         restore_runtime(
-                            &mut game,
+                            &mut game.data.game,
                             &mut world.story,
                             &saved.global,
                             &saved.game_state,
                             &saved.events,
+                            &mut clock,
                         )
                     })
                     .unwrap();
                 assert_eq!(restored.next_activity, saved.global.current_activity);
-                game.current_activity = restored.next_activity;
+                game.data.game.current_activity = restored.next_activity;
                 let q = queues::QueueSections {
                     race_queue: saved.race_queue.clone(),
                     npc_ship_queue: saved.npc_ship_queue.clone(),
@@ -197,7 +191,7 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
                 World::current()
                     .write(|world| {
                         statefiles::restore_state_files(
-                            &mut game,
+                            &mut game.data.game,
                             &mut world.story,
                             &mut world.files,
                             &statefiles::StateFileSections {
@@ -210,7 +204,7 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
                     })
                     .unwrap();
                 let actual = World::current()
-                    .write(|world| capture_runtime(&game, &world.story))
+                    .write(|world| capture_runtime(&game.data.game, &world.story, &clock))
                     .unwrap();
                 assert_eq!(actual.global, saved.global);
                 assert_eq!(actual.events, saved.events);
@@ -331,9 +325,6 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
                         })
                     })
                     .unwrap();
-                crate::collections::queue::UninitQueue(
-                    std::ptr::addr_of_mut!(game.game_clock.event_q).cast(),
-                );
             }
         })
     }

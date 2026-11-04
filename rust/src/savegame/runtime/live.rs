@@ -58,22 +58,25 @@ impl GameStrings for LiveGameStrings {
 /// NULL or point at the live solar-system state, and `CurStarDescPtr` must be
 /// NULL or point at a catalog entry.
 pub unsafe fn capture_live_summary(name: &[u8]) -> Result<Summary, SummaryError> {
-    let glob = **WorldData::current();
     let state = solar_system::current();
-    let current = (**World::current()).star_pointer(Some(live_catalog()));
-    let solar = SolarSystem::new(
-        state.as_ref(),
-        current.as_ref().map(|star| star.index),
-        glob.flagship.planet_name.map(|byte| byte),
-        &LiveGameStrings,
-    );
-    // SAFETY: the existing codec views assert all field offsets and alignments against these records.
-    summary::capture_summary(
-        &*std::ptr::addr_of!(glob.flagship).cast::<crate::comm::locdata::CSisState>(),
-        &*std::ptr::addr_of!(glob.game).cast::<crate::comm::locdata::CGameState>(),
-        &solar,
-        name,
-    )
+    World::current().read(|world| {
+        let current = world.star_pointer(Some(live_catalog()));
+        let solar = SolarSystem::new(
+            state.as_ref(),
+            current.as_ref().map(|star| star.index),
+            world.data.flagship.planet_name,
+            &LiveGameStrings,
+        );
+        // SAFETY: the flagship codec mirror asserts every field offset against SisState.
+        summary::capture_summary(
+            &*std::ptr::addr_of!(world.data.flagship).cast::<crate::comm::locdata::CSisState>(),
+            &world.data.game,
+            world.built_ships_ref(),
+            &world.story,
+            &solar,
+            name,
+        )
+    })
 }
 
 /// The live star catalog.

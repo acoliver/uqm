@@ -97,7 +97,7 @@ impl FleetGroups for Host {
     fn reinit_built_queue(&mut self) {
         self.calls.push(Call::ReinitBuiltQueue);
     }
-    fn with_head_ip_group(&mut self, visit: &mut dyn FnMut(&mut IP_GROUP)) -> bool {
+    fn head_ip_group(&mut self, visit: &mut dyn FnMut(&mut IP_GROUP)) -> bool {
         if let Some(group) = self.groups.first_mut() {
             visit(group);
             true

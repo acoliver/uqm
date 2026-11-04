@@ -104,6 +104,7 @@ impl From<GameStateOwnerError> for RuntimeError {
 pub fn capture_runtime(
     game: &CGameState,
     story: &Option<GameState>,
+    clock: &crate::engine::clock::GameClock,
 ) -> Result<RuntimeSections, RuntimeError> {
     Ok(RuntimeSections {
         global: global::capture_global_state(game),
@@ -111,7 +112,7 @@ pub fn capture_runtime(
             .as_ref()
             .ok_or(GameStateOwnerError::NotInitialized)?
             .as_bytes(),
-        events: events::capture_events(&game.game_clock.event_q)?,
+        events: events::capture_events(clock)?,
     })
 }
 
@@ -126,11 +127,12 @@ pub fn restore_runtime(
     global: &GlobalState,
     game_state: &[u8; GAME_STATE_BYTES],
     events: &[EventEntry],
+    clock: &mut crate::engine::clock::GameClock,
 ) -> Result<Restored, RuntimeError> {
-    events::validate_restore(&game.game_clock.event_q, events)?;
+    events::validate_restore(events)?;
     *story = Some(GameState::from_bytes(game_state));
 
-    events::install_events(&mut game.game_clock.event_q, events);
+    events::install_events(clock, events);
     Ok(Restored {
         next_activity: global::apply_global_state(game, global),
     })

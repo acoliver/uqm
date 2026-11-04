@@ -22,22 +22,21 @@ pub(crate) unsafe fn capture(name: &[u8]) -> anyhow::Result<SaveFile> {
     } else if playerInSolarSystem() {
         live::prepare_live_solar_location()?;
     }
-    if groups::saves_ip_group_queue(WorldData::current().read(|world| world.game.current_activity))
-    {
-        crate::engine::World::current().write(|world| put_group_info(world, 0, u8::MAX));
-    }
+    World::current().write(|world| {
+        if groups::saves_ip_group_queue(world.activity()) {
+            put_group_info(world, 0, u8::MAX);
+        }
+    });
     let summary = live::capture_live_summary(name)?;
     let lease = World::current();
     let world = &mut **lease;
-    // SAFETY: CGameState's size, alignment and every field offset are asserted against GAME_STATE.
-    let game =
-        &mut *std::ptr::addr_of_mut!(world.data.game).cast::<crate::comm::locdata::CGameState>();
-    let runtime = runtime::capture_runtime(game, &world.story)?;
+    let game = &mut world.data.game;
+    let runtime = runtime::capture_runtime(game, &world.story, &world.clock)?;
     game.ip_location = point;
     game.in_orbit = 0;
-    let queues = queues::capture_queues_for_activity(game)?;
-    let groups = groups::capture_groups(game)?;
-    let files = statefiles::capture_state_files(game, &world.story, &world.files)?;
+    let queues = queues::capture_queues_for_activity(world)?;
+    let groups = groups::capture_groups(world)?;
+    let files = statefiles::capture_state_files(&world.data.game, &world.story, &world.files)?;
     Ok(SaveFile {
         summary,
         global: runtime.global,

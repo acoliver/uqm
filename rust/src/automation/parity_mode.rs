@@ -6,17 +6,17 @@ use crate::savegame::types::GlobalState;
 #[cfg(not(test))]
 pub(super) fn capture(
     fields: &mut Fields,
-    game: &crate::comm::locdata::CGameState,
-    state: Option<&crate::state::game_state::GameState>,
+    world: &crate::engine::World,
     journal: &mut super::parity::Journal,
 ) {
+    let game = &world.data.game;
     global(
         fields,
         &crate::savegame::runtime::global::capture_global_state(game),
     );
     value(fields, "mode", "battle_group_ref", game.battle_group_ref);
-    story(fields, state);
-    events(fields, &game.game_clock.event_q);
+    story(fields, world.story.as_ref());
+    events(fields, &world.clock);
     groups(fields, &game.ip_group_q, journal);
 }
 
@@ -99,17 +99,12 @@ pub(super) fn story(fields: &mut Fields, state: Option<&crate::state::game_state
 }
 
 #[cfg(not(test))]
-fn events(fields: &mut Fields, queue: &crate::collections::queue::Queue) {
-    value(
-        fields,
-        "mode.events",
-        "initialized",
-        !queue.pq_tab.is_null(),
-    );
-    if queue.pq_tab.is_null() {
+fn events(fields: &mut Fields, clock: &crate::engine::clock::GameClock) {
+    value(fields, "mode.events", "initialized", clock.initialized());
+    if !clock.initialized() {
         return;
     }
-    let events = crate::savegame::runtime::events::capture_events(queue)
+    let events = crate::savegame::runtime::events::capture_events(clock)
         .unwrap_or_else(|error| panic!("live event queue: {error}"));
     value(fields, "mode.events", "count", events.len());
     for (index, event) in events.iter().enumerate() {

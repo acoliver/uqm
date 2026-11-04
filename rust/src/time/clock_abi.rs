@@ -153,7 +153,7 @@ pub(crate) mod live {
     /// Called once before accessing the game clock or event queue.
     #[no_mangle]
     pub unsafe extern "C" fn InitGameClock() -> u32 {
-        WorldOwner::current().write(|world| world.clock.clear());
+        WorldOwner::current().write(|world| world.clock.init());
         rust_clock_init() as u32
     }
 
@@ -161,7 +161,7 @@ pub(crate) mod live {
     /// The initialized clock must no longer be in use.
     #[no_mangle]
     pub unsafe extern "C" fn UninitGameClock() -> u32 {
-        WorldOwner::current().write(|world| world.clock.clear());
+        WorldOwner::current().write(|world| world.clock.uninit());
         rust_clock_uninit() as u32
     }
 

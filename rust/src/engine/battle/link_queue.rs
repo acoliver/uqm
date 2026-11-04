@@ -152,6 +152,17 @@ impl<'a, T: QueueRecord, const N: usize> LinkQueue<'a, T, N> {
     pub fn linked(&self, id: LinkId<T>) -> bool {
         self.queue.linked(self.key(id))
     }
+    pub fn find(&self, mut matches: impl FnMut(&T::Record) -> bool) -> Option<LinkId<T>> {
+        let mut next = self.head();
+        while let Some(id) = next {
+            if matches(self.record(id)) {
+                return Some(id);
+            }
+            next = self.succ(id);
+        }
+        None
+    }
+
     pub fn at(&self, mut index: usize) -> Option<LinkId<T>> {
         let mut next = self.head();
         while let Some(id) = next {
@@ -496,6 +507,34 @@ mod pool_view_tests {
     impl queue_record::Sealed for Value {}
     impl QueueRecord for Value {
         type Record = u32;
+    }
+
+    #[test]
+    fn find_visits_link_order_and_ignores_unlinked_allocations() {
+        let mut pool = OrderedPool::<u32, 4>::new();
+        let mut view = LinkQueue::<Value, 4>::from_pool(&mut pool);
+        assert!(view.find(|_| true).is_none());
+        let a = view.alloc().unwrap();
+        let b = view.alloc().unwrap();
+        let c = view.alloc().unwrap();
+        let unlinked = view.alloc().unwrap();
+        *view.get_mut(a) = 2;
+        *view.get_mut(b) = 2;
+        *view.get_mut(c) = 1;
+        *view.get_mut(unlinked) = 42;
+        view.put(c);
+        view.put(a);
+        view.put(b);
+        let mut visited = Vec::new();
+        assert_eq!(
+            view.find(|value| {
+                visited.push(*value);
+                *value == 2
+            }),
+            Some(a)
+        );
+        assert_eq!(visited, [1, 2]);
+        assert!(view.find(|value| *value == 42).is_none());
     }
 
     #[test]

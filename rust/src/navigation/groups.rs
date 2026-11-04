@@ -286,18 +286,31 @@ pub(crate) mod live {
         )
     }
 
-    /// # Safety
-    /// A current star, solar system, and initialized world queues are required.
-    pub unsafe fn build_groups(world: &mut World) {
-        let mut home = HOME_SYSTEMS;
-        let mut percent = ENCOUNTER_PERCENT;
-        percent[SLYLANDRO_SHIP as usize] = percent[SLYLANDRO_SHIP as usize]
-            .wrapping_mul(get(world, StoryKey::SLYLANDRO_MULTIPLIER));
-        let mission = get(world, StoryKey::UTWIG_SUPOX_MISSION);
-        if mission > 1 && mission < 5 {
-            home[UTWIG_SHIP as usize] = 0;
-            home[SUPOX_SHIP as usize] = 0;
+    fn encounter_chance(fleet: &FLEET_INFO, universe: POINT, base: u16) -> Option<u16> {
+        let infinite = fleet.actual_strength == u16::MAX;
+        let radius = if infinite {
+            20000
+        } else {
+            ((fleet.actual_strength as u32 * SPHERE_RADIUS_INCREMENT) >> 1) as u16
+        };
+        let dx = universe.x.wrapping_sub(fleet.loc.x).wrapping_abs() as u16;
+        let dy = universe.y.wrapping_sub(fleet.loc.y).wrapping_abs() as u16;
+        let squared = dx as u32 * dx as u32 + dy as u32 * dy as u32;
+        if dx >= radius || dy >= radius || squared >= radius as u32 * radius as u32 {
+            return None;
         }
+        Some(if infinite {
+            base
+        } else {
+            70 - (square_root(squared) as u32 * 60 / radius as u32) as u16
+        })
+    }
+
+    unsafe fn select_encounter(
+        world: &World,
+        home: &[u32; 23],
+        percent: &[u8; 24],
+    ) -> (usize, u16) {
         let universe = (*world.star_pointer(crate::planets::starmap::current_catalog())).star_pt;
         let mut best_index = 0usize;
         let mut best_percent = 0u16;
@@ -307,8 +320,8 @@ pub(crate) mod live {
             let fleets = world.avail_races_ref();
             let fleet = fleets.get(id);
             let next = fleets.succ(id);
-            let mut radius = fleet.actual_strength;
-            let mut chance = percent[index] as u16;
+            let radius = fleet.actual_strength;
+            let chance = percent[index] as u16;
             if radius != 0 && chance != 0 {
                 if home[index] != 0
                     && (*world.star_pointer(crate::planets::starmap::current_catalog())).index
@@ -324,18 +337,7 @@ pub(crate) mod live {
                     };
                     break;
                 }
-                if radius == u16::MAX {
-                    radius = 20000;
-                } else {
-                    radius = ((radius as u32 * SPHERE_RADIUS_INCREMENT) >> 1) as u16;
-                }
-                let dx = universe.x.wrapping_sub(fleet.loc.x).wrapping_abs() as u16;
-                let dy = universe.y.wrapping_sub(fleet.loc.y).wrapping_abs() as u16;
-                let squared = dx as u32 * dx as u32 + dy as u32 * dy as u32;
-                if dx < radius && dy < radius && squared < radius as u32 * radius as u32 {
-                    if fleet.actual_strength != u16::MAX {
-                        chance = 70 - (square_root(squared) as u32 * 60 / radius as u32) as u16;
-                    }
+                if let Some(mut chance) = encounter_chance(fleet, universe, chance) {
                     let random = TFB_Random();
                     if (random as u16 % 100) < chance
                         && (best_percent == 0
@@ -352,6 +354,22 @@ pub(crate) mod live {
             handle = next;
             index += 1;
         }
+        (best_index, best_percent)
+    }
+
+    /// # Safety
+    /// A current star, solar system, and initialized world queues are required.
+    pub unsafe fn build_groups(world: &mut World) {
+        let mut home = HOME_SYSTEMS;
+        let mut percent = ENCOUNTER_PERCENT;
+        percent[SLYLANDRO_SHIP as usize] = percent[SLYLANDRO_SHIP as usize]
+            .wrapping_mul(get(world, StoryKey::SLYLANDRO_MULTIPLIER));
+        let mission = get(world, StoryKey::UTWIG_SUPOX_MISSION);
+        if mission > 1 && mission < 5 {
+            home[UTWIG_SHIP as usize] = 0;
+            home[SUPOX_SHIP as usize] = 0;
+        }
+        let (best_index, best_percent) = select_encounter(world, &home, &percent);
         if best_percent != 0 {
             let mut number = ((TFB_Random() as u16 % (best_percent >> 1)) + 1) as u8;
             if number > MAX_BATTLE_GROUPS as u8 {
@@ -485,6 +503,52 @@ pub(crate) mod live {
         }
     }
 
+    unsafe fn initialize_saved_groups(
+        world: &mut World,
+        file: *mut GameStateFile,
+        offset: u32,
+        header: &GROUP_HEADER,
+    ) -> BOOLEAN {
+        world.ip_groups().reinit();
+        let mut day = header.day_index as u16;
+        let mut month = header.month_index as u16;
+        let mut year = header.year_index;
+        if offset == 0
+            && (header.star_index
+                != world
+                    .star_pointer(crate::planets::starmap::current_catalog())
+                    .offset_from(star_array) as u16
+                || !validate_date(world, false, &mut month, &mut day, &mut year))
+        {
+            close_state_file(world, file);
+            let file = open_state_file(world, 1, c"wb".as_ptr());
+            super::write_group_header(world, file, &empty_header());
+            close_state_file(world, file);
+            return 0;
+        }
+        for which in 1..=header.NumGroups {
+            if header.GroupOffset[which as usize] == 0 {
+                continue;
+            }
+            seek(world, file, header.GroupOffset[which as usize]);
+            let race = read::<1>(world, file)[0];
+            let ships = read::<1>(world, file)[0];
+            if ships == 0 {
+                continue;
+            }
+            let id = build_group(world, race).expect("IP group capacity");
+            initialize_group(world.ip_groups().get_mut(id), which);
+        }
+        if offset != 0 {
+            init_group_info(world, 0);
+        } else if validate_date(world, false, &mut month, &mut day, &mut year) {
+            close_state_file(world, file);
+            return 1;
+        }
+        close_state_file(world, file);
+        u32::from(world.ip_groups_ref().head().is_some())
+    }
+
     /// # Safety
     /// Current world and solar-system queues must be initialized and exclusively accessible.
     pub unsafe fn get_group_info(world: &mut World, offset: u32, which: u8) -> BOOLEAN {
@@ -496,44 +560,7 @@ pub(crate) mod live {
         let mut header: GROUP_HEADER = mem::zeroed();
         super::read_group_header(world, file, &mut header);
         if which == u8::MAX {
-            world.ip_groups().reinit();
-            let mut day = header.day_index as u16;
-            let mut month = header.month_index as u16;
-            let mut year = header.year_index;
-            if offset == 0
-                && (header.star_index
-                    != world
-                        .star_pointer(crate::planets::starmap::current_catalog())
-                        .offset_from(star_array) as u16
-                    || !validate_date(world, false, &mut month, &mut day, &mut year))
-            {
-                close_state_file(world, file);
-                let file = open_state_file(world, 1, c"wb".as_ptr());
-                super::write_group_header(world, file, &empty_header());
-                close_state_file(world, file);
-                return 0;
-            }
-            for which in 1..=header.NumGroups {
-                if header.GroupOffset[which as usize] == 0 {
-                    continue;
-                }
-                seek(world, file, header.GroupOffset[which as usize]);
-                let race = read::<1>(world, file)[0];
-                let ships = read::<1>(world, file)[0];
-                if ships == 0 {
-                    continue;
-                }
-                let id = build_group(world, race).expect("IP group capacity");
-                initialize_group(world.ip_groups().get_mut(id), which);
-            }
-            if offset != 0 {
-                init_group_info(world, 0);
-            } else if validate_date(world, false, &mut month, &mut day, &mut year) {
-                close_state_file(world, file);
-                return 1;
-            }
-            close_state_file(world, file);
-            return u32::from(world.ip_groups_ref().head().is_some());
+            return initialize_saved_groups(world, file, offset, &header);
         }
         if header.GroupOffset[which as usize] == 0 {
             close_state_file(world, file);

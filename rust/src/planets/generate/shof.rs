@@ -70,7 +70,7 @@ pub fn reinit_npcs(story: &impl Story, host: &mut impl FleetGroups) -> bool {
 pub fn uninit_npcs(story: &mut impl Story, host: &mut impl FleetGroups) -> bool {
     if host.battle_group_ref() != 0
         && story.flag("SHOFIXTI_RECRUITED") == 0
-        && !host.with_head_ip_group(&mut |_| {})
+        && !host.head_ip_group(&mut |_| {})
     {
         if story.flag("SHOFIXTI_KIA") == 0 {
             story.set_flag("SHOFIXTI_KIA", 1);
@@ -122,7 +122,7 @@ fn check_old_shofixti(story: &impl Story, host: &mut impl FleetGroups) {
         return;
     }
     let recruited = story.flag("SHOFIXTI_RECRUITED") != 0;
-    host.with_head_ip_group(&mut |group| {
+    host.head_ip_group(&mut |group| {
         if group.race_id == SHOFIXTI_SHIP && group.task & REFORM_GROUP != 0 && recruited {
             group.task = FLEE | IGNORE_FLAGSHIP | REFORM_GROUP;
             group.dest_loc = 0;

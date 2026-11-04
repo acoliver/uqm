@@ -196,15 +196,12 @@ pub(crate) mod live {
                         };
                         flags = ONE_SHOT_ENCOUNTER as u8;
                     }
-                    let encounters = world.encounters_ref();
-                    let mut next = encounters.head();
-                    while let Some(id) = next {
-                        let current = encounters.get(id);
-                        next = encounters.succ(id);
-                        if current.race_id as usize == race {
-                            percent = 0;
-                            break;
-                        }
+                    if world
+                        .encounters_ref()
+                        .find(|encounter| usize::from(encounter.race_id) == race)
+                        .is_some()
+                    {
+                        percent = 0;
                     }
                     if percent == 100 && race == MELNORME_SHIP as usize {
                         world.set_story_state(StoryKey::BROADCASTER_RESPONSE, 1);

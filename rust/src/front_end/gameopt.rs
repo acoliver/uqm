@@ -812,7 +812,7 @@ pub(crate) mod runtime {
             );
             ClearSISRect(DRAW_SIS_DISPLAY as BYTE);
             DrawStatusMessage(buf.as_ptr());
-            WorldData::current().write(|world| UninitQueue(&raw mut world.game.built_ship_q));
+            crate::engine::World::current().write(|world| world.built_ships().reinit());
             SetContextClipRect(&mut old_rect);
             SetContext(Kernel::current().read(|owner| owner.space_context));
             s.origin.y = 13;

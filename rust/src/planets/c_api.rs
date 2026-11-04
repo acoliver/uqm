@@ -607,7 +607,7 @@ impl FleetGroups for LiveGame {
     fn reinit_built_queue(&mut self) {
         self.reinit_npc_built_ship_q();
     }
-    fn with_head_ip_group(&mut self, visit: &mut dyn FnMut(&mut IP_GROUP)) -> bool {
+    fn head_ip_group(&mut self, visit: &mut dyn FnMut(&mut IP_GROUP)) -> bool {
         glob().write(|world| {
             let mut groups = world.ip_groups();
             if let Some(id) = groups.head() {

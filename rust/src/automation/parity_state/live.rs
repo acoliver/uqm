@@ -34,7 +34,7 @@ fn checkpoint_with_context(
             display_elements(cx.elements(), Some(cx.groups())),
         )
     };
-    crate::automation::parity_mode::capture(&mut fields, game, cx.world.story.as_ref(), journal);
+    crate::automation::parity_mode::capture(&mut fields, cx.world, journal);
     let ships: [_; 2] = std::array::from_fn(|side| {
         queues[side]
             .iter()

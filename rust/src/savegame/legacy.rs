@@ -256,9 +256,7 @@ mod live {
         let mut len = 0;
         cfilelength(decoder.0, &mut len);
         let legacy = decode_legacy_payload(&saved_summary, decoder, len)?;
-        // SAFETY: CGameState's size, alignment and every field offset are asserted against GAME_STATE.
-        let game = &mut *std::ptr::addr_of_mut!(world.data.game)
-            .cast::<crate::comm::locdata::CGameState>();
+        let game = &mut world.data.game;
         let save = legacy.save;
         super::super::runtime::restore_runtime(
             game,
@@ -266,9 +264,10 @@ mod live {
             &save.global,
             &save.game_state,
             &save.events,
+            &mut world.clock,
         )?;
         super::super::runtime::queues::restore_queues(
-            game,
+            world,
             &super::super::runtime::queues::QueueSections {
                 race_queue: save.race_queue,
                 npc_ship_queue: save.npc_ship_queue,
@@ -276,7 +275,7 @@ mod live {
             },
         )?;
         super::super::runtime::groups::restore_loaded_groups(
-            game,
+            world,
             &super::super::runtime::groups::GroupSections {
                 ip_group_queue: save.ip_group_queue,
                 encounters: save.encounters,
@@ -289,7 +288,7 @@ mod live {
                 .replace_contents(index, image)
                 .expect("three state files exist");
         }
-        game.battle_group_ref = legacy.battle_group_ref;
+        world.data.game.battle_group_ref = legacy.battle_group_ref;
         std::ptr::addr_of_mut!(world.data.flagship)
             .cast::<crate::comm::locdata::CSisState>()
             .write((&save.summary.sis).into());

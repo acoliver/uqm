@@ -31,18 +31,17 @@ pub(in crate::savegame) unsafe fn finish_load(star: &super::super::StarDesc, act
 
 unsafe fn install(save: SaveFile) -> anyhow::Result<()> {
     let next_activity = World::current().write(|world| -> anyhow::Result<u16> {
-        // SAFETY: CGameState's size, alignment and every field offset are asserted against GAME_STATE.
-        let game = &mut *std::ptr::addr_of_mut!(world.data.game)
-            .cast::<crate::comm::locdata::CGameState>();
+        let game = &mut world.data.game;
         let restored = runtime::restore_runtime(
             game,
             &mut world.story,
             &save.global,
             &save.game_state,
             &save.events,
+            &mut world.clock,
         )?;
         queues::restore_queues(
-            game,
+            world,
             &queues::QueueSections {
                 race_queue: save.race_queue,
                 npc_ship_queue: save.npc_ship_queue,
@@ -50,14 +49,14 @@ unsafe fn install(save: SaveFile) -> anyhow::Result<()> {
             },
         )?;
         groups::restore_loaded_groups(
-            game,
+            world,
             &groups::GroupSections {
                 ip_group_queue: save.ip_group_queue,
                 encounters: save.encounters,
             },
         )?;
         statefiles::restore_state_files(
-            game,
+            &mut world.data.game,
             &mut world.story,
             &mut world.files,
             &statefiles::StateFileSections {

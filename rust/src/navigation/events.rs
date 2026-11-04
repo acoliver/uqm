@@ -92,6 +92,16 @@ fn grow_fleet(fleet: &mut FLEET_INFO) -> Option<u8> {
     None
 }
 
+fn advance_fleets(world: &mut World, mut on_arrival: impl FnMut(&mut World, u8)) {
+    let mut next = world.avail_races_ref().head();
+    while let Some(id) = next {
+        next = world.avail_races_ref().succ(id);
+        if let Some(selector) = grow_fleet(world.avail_races().get_mut(id)) {
+            on_arrival(world, selector);
+        }
+    }
+}
+
 #[cfg(not(test))]
 pub(crate) mod live {
     pub(crate) unsafe fn add_event(
@@ -188,13 +198,7 @@ pub(crate) mod live {
         }
         match selector as u32 {
             HYPERSPACE_ENCOUNTER_EVENT => {
-                let mut handle = world.avail_races_ref().head();
-                while let Some(current) = handle {
-                    handle = world.avail_races_ref().succ(current);
-                    if let Some(callback) = grow_fleet(world.avail_races().get_mut(current)) {
-                        dispatch_event(world, callback);
-                    }
-                }
+                advance_fleets(world, |world, callback| dispatch_event(world, callback));
                 if in_hyper_space(world) != 0 {
                     check_hyperspace_encounter(world);
                 }
@@ -610,6 +614,39 @@ pub(crate) mod live {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn daily_fleet_walk_observes_callback_changes_before_reaching_later_fleets() {
+        let mut world = World::new();
+        let mut fleets = world.avail_races();
+        let first = fleets.alloc().unwrap();
+        let later = fleets.alloc().unwrap();
+        for (id, strength) in [(first, 10), (later, 20)] {
+            let fleet = fleets.get_mut(id);
+            fleet.actual_strength = strength;
+            fleet.growth_err_term = 127;
+            fleets.put(id);
+        }
+        fleets.get_mut(first).days_left = 1;
+        fleets.get_mut(first).func_index = 3;
+        let mut callbacks = Vec::new();
+        advance_fleets(&mut world, |world, selector| {
+            callbacks.push(selector);
+            let mut fleets = world.avail_races();
+            fleets.get_mut(later).growth = 2;
+            let appended = fleets.alloc().unwrap();
+            let fleet = fleets.get_mut(appended);
+            fleet.actual_strength = 30;
+            fleet.growth = 1;
+            fleet.growth_err_term = 127;
+            fleets.put(appended);
+        });
+        assert_eq!(callbacks, [3]);
+        let fleets = world.avail_races_ref();
+        assert_eq!(fleets.get(first).actual_strength, 10);
+        assert_eq!(fleets.get(later).actual_strength, 22);
+        assert_eq!(fleets.get(fleets.tail().unwrap()).actual_strength, 31);
+    }
 
     #[test]
     fn growth_fraction_and_destination_arrival_match_the_original_integer_math() {
