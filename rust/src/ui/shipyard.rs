@@ -397,13 +397,10 @@ unsafe fn dms_spin_ship(menu: *mut MENU_STATE, ship: Option<LinkId<Fragment>>) -
         return false;
     };
     SetFlashRect(ptr::null());
+    use crate::ships::master_native::find;
     let species = spin_ship.species_id;
-    let (context, index) = Kernel::current().read(|owner| {
-        (
-            owner.screen_context,
-            crate::ships::master_native::find(&owner.master_queue, species),
-        )
-    });
+    let (context, index) =
+        Kernel::current().read(|owner| (owner.screen_context, find(&owner.master_queue, species)));
     let old = SetContext(context);
     let mut old_clip: RECT = mem::zeroed();
     GetContextClipRect(&mut old_clip);

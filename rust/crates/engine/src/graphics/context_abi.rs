@@ -111,7 +111,8 @@ pub unsafe extern "C" fn DestroyContext(context: *mut context_desc) -> BOOLEAN {
     1
 }
 
-pub(super) unsafe fn free_context(context: *mut context_desc) {
+pub(super) unsafe fn free_context(context: std::ptr::NonNull<context_desc>) {
+    let context = context.as_ptr();
     // SAFETY: the final context lease owns this allocation on the serialized graphics thread.
     unsafe {
         if _pCurContext == context {
@@ -394,7 +395,7 @@ mod tests {
     #[serial_test::serial]
     fn retained_context_survives_native_owner_release() {
         let raw = allocated_context();
-        let context = ContextLease::retain(raw);
+        let context = ContextLease::retain(std::ptr::NonNull::new(raw).unwrap());
         // SAFETY: this consumes the allocation's native owner; the typed lease remains live.
         assert_eq!(unsafe { DestroyContext(raw) }, 1);
         context.set_background(Color {
@@ -413,23 +414,29 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn context_retention_rejects_unowned_and_retired_addresses() {
-        assert!(std::panic::catch_unwind(|| ContextLease::retain(ptr::dangling_mut())).is_err());
+        assert!(
+            std::panic::catch_unwind(|| ContextLease::retain(std::ptr::NonNull::dangling()))
+                .is_err()
+        );
         let raw = allocated_context();
         // SAFETY: the native owner is consumed without any retained lease.
         assert_eq!(unsafe { DestroyContext(raw) }, 1);
-        assert!(std::panic::catch_unwind(|| ContextLease::retain(raw)).is_err());
+        assert!(std::panic::catch_unwind(|| ContextLease::retain(
+            std::ptr::NonNull::new(raw).unwrap()
+        ))
+        .is_err());
     }
 
     #[test]
     #[serial_test::serial]
     fn a_context_target_retains_its_frame_after_native_drawable_release() {
         let raw = allocated_context();
-        let context = ContextLease::retain(raw);
+        let context = ContextLease::retain(std::ptr::NonNull::new(raw).unwrap());
         // SAFETY: the serial test exclusively owns the newly allocated drawable and context.
         let drawable = unsafe { super::super::drawable_abi::AllocDrawable(1) };
         // SAFETY: AllocDrawable initialized the drawable's first frame.
         let frame = unsafe { super::super::pixmap_abi::CaptureDrawable(drawable) };
-        context.set_frame(ContextFrame::retain(frame));
+        context.set_frame(ContextFrame::retain(std::ptr::NonNull::new(frame)));
         assert_eq!(
             // SAFETY: the context retains the allocation after its native owner is retired.
             unsafe { super::super::drawable_abi::DestroyDrawable(drawable) },

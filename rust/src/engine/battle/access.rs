@@ -826,6 +826,5 @@ impl super::RaceDesc {
 #[path = "access/processing.rs"]
 mod processing;
 
-#[cfg(not(test))]
 #[path = "ship_assets.rs"]
 mod ship_assets;

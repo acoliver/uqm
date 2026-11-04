@@ -110,12 +110,21 @@ mod live {
     impl ArenaGraphics {
         fn retain(kernel: &crate::engine::Kernel, hyperspace: bool) -> Self {
             Self {
-                status: ContextLease::retain(kernel.status_context),
-                space: ContextLease::retain(kernel.space_context),
+                status: ContextLease::retain(
+                    std::ptr::NonNull::new(kernel.status_context)
+                        .unwrap_or_else(|| panic!("missing status context")),
+                ),
+                space: ContextLease::retain(
+                    std::ptr::NonNull::new(kernel.space_context)
+                        .unwrap_or_else(|| panic!("missing space context")),
+                ),
                 viewport: (!hyperspace).then(|| {
                     (
-                        ContextLease::retain(kernel.screen_context),
-                        ContextFrame::retain(kernel.screen),
+                        ContextLease::retain(
+                            std::ptr::NonNull::new(kernel.screen_context)
+                                .unwrap_or_else(|| panic!("missing screen context")),
+                        ),
+                        ContextFrame::retain(std::ptr::NonNull::new(kernel.screen)),
                     )
                 }),
             }

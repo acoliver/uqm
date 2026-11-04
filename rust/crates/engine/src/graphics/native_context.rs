@@ -12,7 +12,7 @@ impl Drop for Allocation {
     fn drop(&mut self) {
         assert_eq!(*self.owner, std::thread::current().id());
         // SAFETY: this is the final graphics-thread owner of the registered allocation.
-        unsafe { context_abi::free_context(self.context.as_ptr()) };
+        unsafe { context_abi::free_context(self.context) };
     }
 }
 
@@ -21,7 +21,8 @@ pub struct ContextFrame {
     _allocations: Vec<native_drawables::DrawableLease>,
 }
 impl ContextFrame {
-    pub fn retain(frame: FRAME) -> Self {
+    pub fn retain(frame: Option<NonNull<frame_desc>>) -> Self {
+        let frame = frame.map_or(std::ptr::null_mut(), NonNull::as_ptr);
         Self {
             frame,
             _allocations: native_drawables::retain_frame_allocations(&[frame]),
@@ -34,10 +35,10 @@ pub struct ContextLease(Rc<Allocation>);
 
 impl ContextLease {
     /// Retain a registered context without dereferencing the supplied address.
-    pub fn retain(context: *mut context_desc) -> Self {
+    pub fn retain(context: NonNull<context_desc>) -> Self {
         let allocation = ffi::native_allocations()
             .contexts
-            .get(&(context as usize))
+            .get(&(context.as_ptr() as usize))
             .cloned();
         Self(allocation.unwrap_or_else(|| panic!("context is unowned or retired: {context:p}")))
     }
@@ -65,7 +66,7 @@ impl ContextLease {
     fn retain_target(&self) -> ContextFrame {
         // SAFETY: this reads a field of the retained context, not the referenced frame.
         let frame = unsafe { self.0.context.as_ref().ForeGroundFrame };
-        ContextFrame::retain(frame)
+        ContextFrame::retain(NonNull::new(frame))
     }
 
     pub fn set_clip(&self, mut rect: RECT) {
