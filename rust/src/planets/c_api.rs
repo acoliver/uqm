@@ -282,13 +282,12 @@ pub fn built_ship_count(world: &crate::engine::World) -> u16 {
 /// `for (SDPtr = &star_array[0]; SDPtr != CurStarDescPtr; ++SDPtr)`.
 ///
 /// # Safety
-/// `CurStarDescPtr` must be an entry of `star_array`.
-pub unsafe fn star_indexes_before_current() -> Vec<u8> {
+/// `world` must select an entry of the retained `star_array` catalog.
+pub unsafe fn star_indexes_before_current(world: &WorldOwner) -> Vec<u8> {
     let first = std::ptr::addr_of!(STAR_ARRAY).read();
-    let current =
-        (**WorldOwner::current()).star_pointer(crate::planets::starmap::current_catalog());
+    let current = world.star_pointer(crate::planets::starmap::current_catalog());
     let before = usize::try_from(current.offset_from(first))
-        .expect("(**WorldOwner::current()).star_pointer(crate::planets::starmap::current_catalog()) is an entry of star_array");
+        .expect("current star is an entry of star_array");
     std::slice::from_raw_parts(first, before)
         .iter()
         .map(|star| star.index)

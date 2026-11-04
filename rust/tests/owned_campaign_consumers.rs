@@ -144,3 +144,24 @@ fn scene_star_lookup_uses_the_unpublished_world() {
     assert_eq!(result, Ok(()));
     assert_eq!(world.star_pointer(Some(&catalog)), catalog.as_mut_ptr());
 }
+
+#[test]
+#[serial_test::serial]
+fn rainbow_ordinal_reads_the_unpublished_world_star() {
+    use uqm_rust::engine::world::{CStarDesc, CATALOG_LEN};
+    let mut world = World::new();
+    // SAFETY: catalog descriptors contain only integer fields.
+    let mut catalog: Box<[CStarDesc; CATALOG_LEN]> = Box::new(unsafe { std::mem::zeroed() });
+    catalog[0].index = 4;
+    catalog[1].index = 9;
+    world.select_star(Some(&catalog[2]), Some(&catalog));
+    // SAFETY: the serialized fixture retains the complete catalog during the query.
+    let indexes = unsafe {
+        let previous = uqm_rust::planets::starmap::star_array;
+        uqm_rust::planets::starmap::star_array = catalog.as_mut_ptr();
+        let indexes = uqm_rust::planets::c_api::star_indexes_before_current(&world);
+        uqm_rust::planets::starmap::star_array = previous;
+        indexes
+    };
+    assert_eq!(indexes, [4, 9]);
+}

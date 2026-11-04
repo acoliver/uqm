@@ -436,7 +436,7 @@ unsafe fn rainbow_orbital(
 
     orbit_world(owner, system, world, |orbit, body| {
         let which_rainbow = if body == Body::Planet(0) {
-            let before = star_indexes_before_current();
+            let before = star_indexes_before_current(owner.borrow().world);
             rainbow::rainbow_ordinal(&before, before.len())
         } else {
             0
