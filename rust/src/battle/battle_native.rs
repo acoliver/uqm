@@ -392,21 +392,6 @@ pub(crate) mod engine {
         1
     }
 
-    /// # Safety
-    /// Player controls and any network-controlled side connections must be initialized.
-    #[no_mangle]
-    pub unsafe extern "C" fn GetPlayerOrder(i: COUNT) -> COUNT {
-        for side in 0..2 {
-            if player_control(side) & NETWORK_CONTROL != 0 {
-                return player_input(side)
-                    .unwrap_or_else(|| panic!("missing player input"))
-                    .network()
-                    .player_order(i);
-            }
-        }
-        1u16.wrapping_sub(i)
-    }
-
     unsafe fn select_all_ships(count: SIZE) -> BOOLEAN {
         if count == 1 {
             return crate::app::bridge::enter(|cx| {
@@ -516,9 +501,7 @@ pub(crate) mod engine {
 }
 
 #[cfg(not(test))]
-pub use engine::{
-    player_input, set_player_input, Battle, BattleSong, FreeBattleSong, GetPlayerOrder,
-};
+pub use engine::{player_input, set_player_input, Battle, BattleSong, FreeBattleSong};
 
 #[cfg(test)]
 mod tests {

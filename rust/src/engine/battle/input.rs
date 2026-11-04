@@ -4,6 +4,22 @@ use crate::engine::battle::net::BattleNet;
 use std::rc::Rc;
 
 pub const NUM_PLAYERS: usize = 2;
+const NETWORK_CONTROL: u8 = 8;
+
+impl crate::engine::Kernel {
+    pub fn player_order(&self, rank: u16) -> u16 {
+        for side in 0..NUM_PLAYERS {
+            if self.player_control[side] & NETWORK_CONTROL != 0 {
+                return self.player_input[side]
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("missing player input"))
+                    .network()
+                    .player_order(rank);
+            }
+        }
+        1u16.wrapping_sub(rank)
+    }
+}
 
 #[derive(Clone)]
 pub enum InputSource {
@@ -24,7 +40,7 @@ impl InputContext {
         let source = match control & 15 {
             1 => InputSource::Human,
             2 | 6 => InputSource::Computer,
-            8 => InputSource::Network(None),
+            NETWORK_CONTROL => InputSource::Network(None),
             _ => panic!("invalid battle control method {control}"),
         };
         Self { player, source }
@@ -85,8 +101,8 @@ mod tests {
         fn peer_count(&self) -> usize {
             unreachable!()
         }
-        fn player_order(&self, _: u16) -> u16 {
-            unreachable!()
+        fn player_order(&self, rank: u16) -> u16 {
+            rank
         }
         fn input_delay(&self) -> usize {
             unreachable!()
@@ -153,6 +169,25 @@ mod tests {
         let copy = context.clone();
         net.ready.set(false);
         assert!(!copy.battle_end_ready());
+    }
+
+    #[test]
+    fn player_order_uses_the_borrowed_kernel_and_connected_network() {
+        let mut kernel = crate::engine::Kernel::new();
+        kernel.player_control = [1, 6];
+        assert_eq!([kernel.player_order(0), kernel.player_order(1)], [1, 0]);
+        for side in 0..2 {
+            kernel.player_control = [1, 6];
+            kernel.player_control[side] = 8;
+            let mut context = InputContext::new(side as u16, 8);
+            context.connect(Rc::new(TestNet {
+                ready: std::cell::Cell::new(false),
+                player: std::cell::Cell::new(None),
+            }));
+            kernel.player_input = [None, None];
+            kernel.player_input[side] = Some(context);
+            assert_eq!([kernel.player_order(0), kernel.player_order(1)], [0, 1]);
+        }
     }
 
     #[test]

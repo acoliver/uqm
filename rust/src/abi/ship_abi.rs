@@ -1153,8 +1153,6 @@ pub struct battlestate_struct {
 
 
 
-#[cfg(not(test))]
-pub use crate::battle::battle_native::engine::GetPlayerOrder;
 
 #[cfg(not(test))]
 pub use crate::battle::battle_native::engine::Battle;
