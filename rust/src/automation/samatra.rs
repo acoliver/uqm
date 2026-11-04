@@ -5,7 +5,7 @@ use super::fleet_fight::Picker;
 use super::script::MenuKey;
 use crate::battle::battle_types::shortest_path_delta;
 use crate::pickship::{Cursor, FLAGSHIP_COLUMN};
-use crate::ships::races::samatra::observation::{Events, Snapshot};
+use crate::ships::races::samatra::observation::{Events, Hazard, Snapshot};
 
 #[derive(Debug, Default, Clone, Copy, serde::Deserialize, serde::Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -103,7 +103,8 @@ impl Controller {
         if let Some(s) = snapshot {
             self.saw_eight |= s.remaining == 8 && s.generators.len() == 8;
             self.saw_open_gate |= s.remaining == 0 && s.gate_open;
-            self.hazards_cleared |= s.remaining == 0 && s.gate_open && s.hazards.is_empty();
+            self.hazards_cleared |=
+                s.remaining == 0 && s.gate_open && escort_hazards(s).next().is_none();
         }
         if until == Until::Ready
             && self.saw_eight
@@ -168,7 +169,7 @@ impl Controller {
             self.used_bomb = true;
         } else {
             self.used_escort = true;
-            if remaining == 0 && s.hazards.is_empty() {
+            if remaining == 0 && escort_hazards(s).next().is_none() {
                 // The ordinary escort retreat leaves the flagship available in
                 // the next picker. BOMB_CARRIER disables retreat for the SIS.
                 return Progress::Running(Controls {
@@ -187,9 +188,7 @@ impl Controller {
             )
         };
         if !s.bomb_carrier && s.selected_species == Some(2) && remaining != 0 {
-            if let Some(hazard) = s
-                .hazards
-                .iter()
+            if let Some(hazard) = escort_hazards(s)
                 .filter(|h| distance(h.x, h.y).2 < 600 * 600)
                 .min_by_key(|h| distance(h.x, h.y).2)
             {
@@ -208,9 +207,7 @@ impl Controller {
             }
         }
         if !s.bomb_carrier && remaining == 0 {
-            let hazard = s
-                .hazards
-                .iter()
+            let hazard = escort_hazards(s)
                 .min_by_key(|h| distance(h.x, h.y).2)
                 .expect("remaining hazards before escort retreat");
             let (dx, dy, squared) = distance(hazard.x, hazard.y);
@@ -296,6 +293,13 @@ impl Controller {
     }
 }
 
+fn escort_hazards(s: &Snapshot) -> impl Iterator<Item = &Hazard> {
+    // Replace Fury targeting without changing the other escorts' input policy.
+    s.hazards
+        .iter()
+        .filter(|h| s.selected_species != Some(5) || h.solid)
+}
+
 fn fury_engagement(s: &Snapshot, player: super::battle_fight::ShipState) -> FightControl {
     let px = f64::from(shortest_path_delta(s.gate.0, player.x, s.arena.0));
     let py = f64::from(shortest_path_delta(s.gate.1, player.y, s.arena.1));
@@ -349,9 +353,7 @@ fn fury_engagement(s: &Snapshot, player: super::battle_fight::ShipState) -> Figh
         .generators
         .iter()
         .any(|g| can_hit(s, firing, g.x, g.y, (0, 0)))
-        || s.hazards
-            .iter()
-            .any(|h| can_hit(s, firing, h.x, h.y, h.velocity));
+        || escort_hazards(s).any(|h| can_hit(s, firing, h.x, h.y, h.velocity));
     flight
 }
 
@@ -562,6 +564,39 @@ mod tests {
     }
 
     #[test]
+    fn fury_ignores_non_solid_comet_trails_when_clearing_the_gate() {
+        use crate::ships::races::samatra::observation::Hazard;
+        let mut controller = Controller::default();
+        let mut s = snapshot();
+        s.selected_species = Some(5);
+        let mut events = Events {
+            generation: 1,
+            ..Events::default()
+        };
+        controller.observe(100, Until::GateEntered, 0x201, events, Some(&s), None);
+        s.remaining = 0;
+        s.generators.clear();
+        s.gate_open = true;
+        events.destroyed = 255;
+        s.hazards.push(Hazard {
+            solid: false,
+            x: 4300,
+            y: 4000,
+            velocity: (0, 0),
+        });
+        let Progress::Running(keys) =
+            controller.observe(100, Until::GateEntered, 0x201, events, Some(&s), None)
+        else {
+            panic!()
+        };
+        assert!(
+            keys.escape,
+            "a non-colliding trail must not delay the bomb carrier"
+        );
+        assert!(!keys.flight.weapon);
+    }
+
+    #[test]
     fn fury_brakes_drift_in_generator_range_before_firing() {
         let mut s = snapshot();
         s.selected_species = Some(5);
@@ -595,6 +630,7 @@ mod tests {
         s.selected_species = Some(5);
         s.player.as_mut().unwrap().facing = 0;
         s.hazards.push(Hazard {
+            solid: true,
             x: 4000,
             y: 3800,
             velocity: (0, 32),
@@ -630,6 +666,7 @@ mod tests {
         player.facing = 0;
         s.player = Some(player);
         s.hazards.push(Hazard {
+            solid: true,
             x: 2907,
             y: 4008,
             velocity: (0, 32),
@@ -668,6 +705,7 @@ mod tests {
         s.generators.clear();
         s.gate_open = true;
         s.hazards.push(Hazard {
+            solid: true,
             x: 4300,
             y: 4000,
             velocity: (0, 0),
