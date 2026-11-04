@@ -597,39 +597,24 @@ impl Cx<'_> {
 #[cfg(not(test))]
 impl Cx<'_> {
     pub(crate) fn set_star_image(&mut self, id: ElementId) {
-        // SAFETY: the shared stars frame and its frame set remain loaded throughout the battle.
-        unsafe {
-            let frame = crate::engine::battle::views::FrameSelection::retain(DecFrameIndex(
-                self.kernel.stars_in_space,
-            ));
-            let frames = crate::engine::battle::views::Frames::native_shared(
-                crate::engine::battle::views::SharedFrames::Stars,
-                std::ptr::NonNull::new_unchecked(&raw mut self.kernel.stars_in_space),
-                1,
-            );
-            self.set_frame(id, false, frame);
-            self.set_frames(id, false, frames);
-        }
+        use crate::engine::battle::views::{Frames, SharedFrames};
+        let frames = Frames::retain_shared(
+            SharedFrames::Stars,
+            std::slice::from_ref(&self.kernel.stars_in_space),
+        );
+        let frame = self.retreat_frame(frames.view(0));
+        self.set_frame(id, false, frame);
+        self.set_frames(id, false, frames);
     }
     pub(crate) fn set_blast_frames(&mut self, id: ElementId) {
-        // SAFETY: the shared blast frames remain loaded throughout the battle.
-        unsafe {
-            let frames = crate::engine::battle::views::Frames::native_shared(
-                crate::engine::battle::views::SharedFrames::Blast,
-                std::ptr::NonNull::new_unchecked((&raw mut self.kernel.blast).cast()),
-                3,
-            );
-            self.set_frames(id, false, frames);
-        }
+        use crate::engine::battle::views::{Frames, SharedFrames};
+        let frames = Frames::retain_shared(SharedFrames::Blast, &self.kernel.blast);
+        self.set_frames(id, false, frames);
     }
     pub(crate) fn planet_frames(&self) -> crate::engine::battle::views::Frames {
-        // SAFETY: the current solar-system resources retain this frame set throughout the battle.
-        unsafe {
-            crate::engine::battle::views::Frames::native_shared(
-                crate::engine::battle::views::SharedFrames::Planet,
-                std::ptr::NonNull::from(&self.kernel.planet[0]),
-                3,
-            )
-        }
+        crate::engine::battle::views::Frames::retain_shared(
+            crate::engine::battle::views::SharedFrames::Planet,
+            &self.kernel.planet,
+        )
     }
 }
