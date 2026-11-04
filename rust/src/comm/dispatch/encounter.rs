@@ -51,9 +51,10 @@ pub(super) fn fight_if_selected(cx: &mut Cx<'_>) -> u16 {
             cx.with_legacy(|| unsafe { ReinitQueue(npc) });
         }
         cx.world.set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, 0);
-        // SAFETY: the queue remains live through this synchronous encounter.
-        let has_ships = unsafe { !get_head_link(npc).is_null() };
-        status = u16::from(cx.world.story_state(StoryKey::BATTLE_SEGUE) != 0 && has_ships);
+        status = u16::from(
+            cx.world.story_state(StoryKey::BATTLE_SEGUE) != 0
+                && !cx.world.data.game.npc_built_ship_q.head.is_null(),
+        );
         if status != 0 {
             // SAFETY: battle still consumes the published campaign until U2-10a.
             cx.with_legacy(|| unsafe {

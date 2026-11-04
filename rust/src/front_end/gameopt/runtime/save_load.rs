@@ -66,7 +66,7 @@ pub(super) unsafe fn restore_display(stamp: &mut STAMP, rect: &RECT, restore: bo
     }
 }
 
-pub(super) unsafe fn pick_game(
+pub(super) fn pick_game(
     cx: &mut Cx<'_>,
     io: &mut Io<'_>,
     saving: BOOLEAN,
