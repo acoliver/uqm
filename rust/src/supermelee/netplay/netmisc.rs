@@ -22,7 +22,7 @@ pub unsafe extern "C" fn NetMelee_connectCallback(conn: *mut NetConnection) {
     // end_frame_count is initialized separately before battle, as in C.
     (*data).release_function = Some(release_battle);
     (*data).melee_state = melee;
-    (*data).battle_state = ptr::null_mut();
+    (*data).battle_active = false;
     (*data).get_melee_state = ptr::null_mut();
     (*conn).stateData = data.cast();
     (*conn).extra = ptr::null_mut();

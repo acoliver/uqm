@@ -17,8 +17,16 @@ pub(super) unsafe fn net_connection_get_player_nr(conn: *mut NetConnection) -> i
 pub(super) unsafe fn is_server(conn: *mut NetConnection) -> bool {
     (*net::NetConnection_getPeerOptions(conn.cast())).isServer
 }
-pub(super) unsafe fn net_melee_get_battle_state(conn: *mut NetConnection) -> *mut std::ffi::c_void {
-    net::NetMelee_getBattleState(conn.cast()).cast()
+pub(super) unsafe fn battle_active(conn: *mut NetConnection) -> bool {
+    let conn = conn.cast::<crate::supermelee::netplay::abi::NetConnection>();
+    // SAFETY: connected session records own stateData until their close callback returns.
+    unsafe {
+        (*conn).state > crate::supermelee::netplay::abi::NetState_NetState_connecting
+            && (*(*conn)
+                .stateData
+                .cast::<crate::supermelee::netplay::session::BattleStateData>())
+            .battle_active
+    }
 }
 pub(super) unsafe fn netplay_notify_seed_random(conn: *mut NetConnection, seed: u32) {
     net::Netplay_Notify_seedRandom(conn.cast(), seed);

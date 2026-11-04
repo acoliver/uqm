@@ -115,7 +115,7 @@ impl NetplaySession {
 pub struct BattleStateData {
     pub release_function: NetConnectionStateData_ReleaseFunction,
     pub melee_state: *mut melee_state,
-    pub battle_state: *mut battlestate_struct,
+    pub battle_active: bool,
     pub get_melee_state: *mut getmelee_struct,
     pub end_frame_count: BattleFrameCounter,
 }

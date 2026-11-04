@@ -498,7 +498,9 @@ mod cffi {
         }
 
         fn battle_with_frame_callback(&self) {
-            self.legacy(|| unsafe { c_extern::uqm_battle_with_frame_callback() })
+            self.observed(|cx, io| unsafe {
+                crate::mainloop::lifecycle_abi::battle_with_frame_callback(cx, io)
+            })
         }
 
         fn draw_autopilot_message(&self, tf: bool) {

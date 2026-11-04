@@ -208,7 +208,7 @@ pub unsafe extern "C" fn confirmationCancelled(state: *mut MELEE_STATE, side: u1
     }
 }
 unsafe fn feedback(conn: *mut NetConnection, value: *const c_char, popup: bool) {
-    if net_melee_get_battle_state(conn).is_null() && !popup {
+    if !battle_active(conn) && !popup {
         status(value);
     } else {
         DoPopupWindow(value);

@@ -275,9 +275,6 @@ mod ffi {
     pub use crate::battle::encount_native::engine::BuildBattle;
 
     #[cfg(not(test))]
-    pub use crate::battle::encount_native::engine::InitEncounter;
-
-    #[cfg(not(test))]
     pub use crate::battle::encount_native::engine::UninitEncounter;
 
     #[cfg(not(test))]
@@ -605,13 +602,12 @@ fn run_encounter(cx: &mut Cx<'_>, io: &mut Io<'_>, which_comm: u32, ship_type: u
     let status = if cx.world.story_state(StoryKey::BATTLE_SEGUE) == 0 {
         HAIL
     } else {
-        let status = cx.with_legacy(|| {
-            io.observer.checkpoint(&CheckpointView::EncounterMenu(true));
-            // SAFETY: the legacy encounter loop runs under the same owner publication.
-            let status = unsafe { ffi::InitEncounter() };
+        cx.with_legacy(|| io.observer.checkpoint(&CheckpointView::EncounterMenu(true)));
+        // SAFETY: the encounter borrows this mode's initialized resources and input runtime.
+        let status = unsafe { crate::battle::encount_native::init_encounter(cx, io) };
+        cx.with_legacy(|| {
             io.observer
-                .checkpoint(&CheckpointView::EncounterMenu(false));
-            status
+                .checkpoint(&CheckpointView::EncounterMenu(false))
         });
         if status == HAIL && has_descriptor {
             cx.world.set_story_state(StoryKey::BATTLE_SEGUE, 0);

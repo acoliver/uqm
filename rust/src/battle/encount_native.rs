@@ -45,6 +45,50 @@ pub const fn combat_speed(flags: u8) -> u8 {
     }
 }
 
+struct EncounterSelection {
+    initialized: bool,
+    choice: u8,
+}
+
+#[derive(Debug, PartialEq)]
+enum SelectionAction {
+    Continue,
+    Finish,
+    Options,
+    Unknown(u8),
+}
+
+impl EncounterSelection {
+    fn new() -> Self {
+        Self {
+            initialized: false,
+            choice: 0,
+        }
+    }
+
+    fn advance(&mut self, aborted: bool, selected: bool, last_battle: bool) -> SelectionAction {
+        if aborted {
+            self.choice = 2;
+            return SelectionAction::Finish;
+        }
+        if !self.initialized {
+            self.initialized = true;
+        } else if selected {
+            return match self.choice {
+                0 | 1 => {
+                    if last_battle {
+                        self.choice = 0;
+                    }
+                    SelectionAction::Finish
+                }
+                2 => SelectionAction::Options,
+                choice => SelectionAction::Unknown(choice),
+            };
+        }
+        SelectionAction::Continue
+    }
+}
+
 #[cfg(not(test))]
 use crate::ships::native::abi::{COUNT, POINT, TEXT, TEXT_ALIGN, UNICODE};
 #[cfg(not(test))]
@@ -60,12 +104,11 @@ fn text(x: i16, y: i16, align: TEXT_ALIGN, string: *const UNICODE) -> TEXT {
 #[cfg(not(test))]
 pub(crate) mod engine {
     use super::*;
+    use crate::battle::battle_native::battle;
     use crate::battle::battle_native::engine::{
         activity, game_state, rgb15, set_activity, set_game_state, sis_height, sis_width,
         AWESOME_RATING, CYBORG_CONTROL, HUMAN_CONTROL, STANDARD_RATING,
     };
-    use crate::battle::battle_native::Battle;
-    use crate::battle::c_bridge::DoInput;
     use crate::engine::battle::link_queue;
     use crate::ships::native::abi::*;
     use crate::ships::native::{cosine, sine};
@@ -112,37 +155,36 @@ pub(crate) mod engine {
         font_DrawText(t);
     }
 
-    unsafe extern "C" fn do_select_action(ms: *mut MENU_STATE) -> BOOLEAN {
+    unsafe fn do_select_action(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        menu: &mut EncounterSelection,
+    ) -> bool {
         SetMenuSounds(0x0f, 1 << 4);
-        if activity() & CHECK_ABORT as u16 != 0 {
-            (*ms).CurState = ATTACK as u8 + 1;
-            return 0;
-        }
-        if (*ms).Initialized == 0 {
-            (*ms).Initialized = 1;
-            (*ms).InputFunc = Some(do_select_action);
-        } else if PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0 {
-            match (*ms).CurState as u32 {
-                HAIL | ATTACK => {
-                    if activity() as u8 == IN_LAST_BATTLE as u8 {
-                        (*ms).CurState = HAIL as u8;
-                    }
-                    return 0;
+        match menu.advance(
+            cx.world.activity() & CHECK_ABORT as u16 != 0,
+            PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0,
+            cx.world.activity() as u8 == IN_LAST_BATTLE as u8,
+        ) {
+            SelectionAction::Finish => return false,
+            SelectionAction::Options => {
+                if cx.with_legacy(|| GameOptions()) == 0 {
+                    return false;
                 }
-                option if option == ATTACK + 1 => {
-                    if GameOptions() == 0 {
-                        return 0;
-                    }
-                    DrawMenuStateStrings(PM_CONVERSE as u8, (*ms).CurState as i16);
+                cx.with_legacy(|| {
+                    DrawMenuStateStrings(PM_CONVERSE as u8, menu.choice as i16);
                     SetFlashRect(usize::MAX as *const RECT);
-                }
-                option => {
-                    printf(c"Unknown option: %d\n".as_ptr(), option as i32);
-                }
+                });
             }
+            SelectionAction::Unknown(choice) => {
+                printf(c"Unknown option: %d\n".as_ptr(), i32::from(choice));
+            }
+            SelectionAction::Continue => {}
         }
-        DoMenuChooser(ms, PM_CONVERSE as u8);
-        1
+        let flags = cx.world.data.game.glob_flags;
+        cx.with_legacy(|| {
+            crate::ui::menu::choose_menu_state(&mut menu.choice, PM_CONVERSE as u8, flags);
+        });
+        true
     }
 
     unsafe fn encounter_star() -> *mut crate::engine::world::CStarDesc {
@@ -295,8 +337,7 @@ pub(crate) mod engine {
 
     /// # Safety
     /// The game thread must own initialized encounter, display, input, resource, and audio state.
-    #[no_mangle]
-    pub unsafe extern "C" fn InitEncounter() -> COUNT {
+    unsafe fn prepare_encounter() {
         SetContext(KernelOwner::current().read(|owner| owner.space_context));
         SetContextFont(KernelOwner::current().read(|owner| owner.tiny_font));
         let music =
@@ -377,15 +418,23 @@ pub(crate) mod engine {
         UnbatchGraphics();
         DestroyDrawable(ReleaseDrawable(segue));
         ScreenTransition(3, ptr::null());
-        let mut menu: MENU_STATE = mem::zeroed();
-        menu.InputFunc = Some(do_select_action);
-        menu.Initialized = 0;
-        menu.CurState = HAIL as u8;
-        DrawMenuStateStrings(PM_CONVERSE as u8, menu.CurState as i16);
-        SetFlashRect(usize::MAX as *const RECT);
-        DoInput((&mut menu as *mut MENU_STATE).cast(), 1);
-        SetFlashRect(ptr::null());
-        menu.CurState as COUNT
+    }
+
+    /// # Safety
+    /// Native encounter resources and input are initialized on the game thread.
+    pub unsafe fn init_encounter(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        io: &mut crate::engine::observe::Io<'_>,
+    ) -> COUNT {
+        cx.with_legacy(|| prepare_encounter());
+        let mut menu = EncounterSelection::new();
+        cx.with_legacy(|| {
+            DrawMenuStateStrings(PM_CONVERSE as u8, menu.choice as i16);
+            SetFlashRect(usize::MAX as *const RECT);
+        });
+        cx.run_input(io, true, |cx, _| do_select_action(cx, &mut menu));
+        cx.with_legacy(|| SetFlashRect(ptr::null()));
+        COUNT::from(menu.choice)
     }
 
     unsafe fn draw_fade_text(
@@ -669,7 +718,7 @@ pub(crate) mod engine {
             crate::app::bridge::battle(|b| b.nth_frame = speed);
             let installed = KernelOwner::current().write(|kernel| {
                 kernel.player_control[0] = CYBORG_CONTROL | AWESOME_RATING;
-                saved = kernel.player_input[0].take();
+                saved = kernel.replace_player_input(0, None);
                 SetPlayerInput(kernel, 0)
             });
             if !installed {
@@ -686,7 +735,13 @@ pub(crate) mod engine {
             crate::sound::resource_types::LoadSoundInstance(GAME_SOUNDS.as_ptr().cast()).cast(),
         )
         .cast();
-        Battle(None);
+        crate::app::bridge::enter(|cx| {
+            let mut observer = cx.kernel.input_runtime().observer();
+            let mut io = crate::engine::observe::Io {
+                observer: observer.as_mut(),
+            };
+            battle(cx, &mut io, None)
+        });
         DestroySound(ReleaseStringTable(
             KernelOwner::current().read(|owner| owner.game_sounds),
         ));
@@ -699,7 +754,7 @@ pub(crate) mod engine {
             KernelOwner::current().write(|kernel| {
                 kernel.player_control[0] = HUMAN_CONTROL | STANDARD_RATING;
                 ClearPlayerInput(kernel, 0);
-                kernel.player_input[0] = saved;
+                kernel.replace_player_input(0, saved);
             });
         }
         set_activity(old);
@@ -712,6 +767,34 @@ pub use engine::*;
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn encounter_selection_ignores_initial_select_then_preserves_hail_attack_and_options() {
+        for choice in 0..=2 {
+            let mut menu = EncounterSelection::new();
+            menu.choice = choice;
+            assert_eq!(menu.advance(false, true, false), SelectionAction::Continue);
+            assert_eq!(menu.choice, choice);
+            assert_eq!(
+                menu.advance(false, true, false),
+                if choice == 2 {
+                    SelectionAction::Options
+                } else {
+                    SelectionAction::Finish
+                }
+            );
+        }
+        for choice in 0..=1 {
+            let mut menu = EncounterSelection::new();
+            menu.choice = choice;
+            menu.advance(false, false, true);
+            assert_eq!(menu.advance(false, true, true), SelectionAction::Finish);
+            assert_eq!(menu.choice, 0);
+        }
+        let mut menu = EncounterSelection::new();
+        assert_eq!(menu.advance(true, false, false), SelectionAction::Finish);
+        assert_eq!(menu.choice, 2);
+    }
+
     #[test]
     fn salvage_requires_surviving_player_without_samatra_protection() {
         assert_eq!(victory_state(0, 1, false), 1);

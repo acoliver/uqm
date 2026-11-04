@@ -1138,25 +1138,6 @@ pub struct _input_template {
 }
 pub type INPUT_TEMPLATE = _input_template;
 pub type BattleFrameCounter = DWORD;
-pub type BattleFrameCallback = ::std::option::Option<unsafe extern "C" fn()>;
-#[repr(C)]
-pub struct battlestate_struct {
-    pub InputFunc: ::std::option::Option<
-        unsafe extern "C" fn(pInputState: *mut battlestate_struct) -> BOOLEAN,
-    >,
-    pub first_time: BOOLEAN,
-    pub NextTime: DWORD,
-    pub frame_cb: BattleFrameCallback,
-    pub net: Option<std::rc::Rc<dyn crate::engine::battle::net::BattleNet>>,
-    pub battle: *mut crate::engine::battle::Battle,
-    pub observer: Option<crate::engine::input::InputObserver>,
-}
-
-
-
-
-#[cfg(not(test))]
-pub use crate::battle::battle_native::engine::Battle;
 
 #[cfg(not(test))]
 pub use crate::battle::battle_native::engine::BattleSong;

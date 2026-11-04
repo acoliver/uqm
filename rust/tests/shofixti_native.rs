@@ -825,10 +825,9 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                         )
                     });
                     for side in 0..2 {
-                        uqm_rust::battle::battle_native::set_player_input(
-                            side,
-                            Some(inputs[side].clone()),
-                        );
+                        uqm_rust::engine::Kernel::current().write(|kernel| {
+                            kernel.replace_player_input(side, Some(inputs[side].clone()));
+                        });
                         let active = if side == 0 {
                             &raw mut *ship.inner.ship_mut()
                         } else {
@@ -946,9 +945,11 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                             != 0,
                         expected_selection
                     );
-                    for (side, input) in saved_inputs.into_iter().enumerate() {
-                        uqm_rust::battle::battle_native::set_player_input(side, input);
-                    }
+                    uqm_rust::engine::Kernel::current().write(|kernel| {
+                        for (side, input) in saved_inputs.into_iter().enumerate() {
+                            kernel.replace_player_input(side, input);
+                        }
+                    });
                     (**uqm_rust::engine::Kernel::current()).off_screen_context = saved_offscreen;
                     PlayerControls = saved_controls;
                     PulsedInputState = saved_pulsed;

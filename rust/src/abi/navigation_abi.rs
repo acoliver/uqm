@@ -4069,12 +4069,7 @@ extern "C" {
     pub fn setGammaCorrection(gamma: f32) -> bool;
 }
 pub type BattleFrameCounter = DWORD;
-pub type BattleFrameCallback = ::std::option::Option<unsafe extern "C" fn()>;
-pub use crate::ships::native::abi::battlestate_struct;
-pub type BATTLE_STATE = battlestate_struct;
 
-#[cfg(not(test))]
-pub use crate::battle::battle_native::engine::Battle;
 pub type Checksum = uint32;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]

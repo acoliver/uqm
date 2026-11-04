@@ -57,6 +57,3 @@ pub(crate) use notify::Netplay_Notify_seedRandom;
 
 #[cfg(test)]
 mod test_runtime;
-
-#[cfg(not(test))]
-pub(crate) use netmelee::NetMelee_getBattleState;

@@ -228,8 +228,6 @@ pub type POINT = point;
 pub use crate::graphics::native_abi::stamp;
 pub type STAMP = stamp;
 pub use crate::ships::native::abi::INTERSECT_CONTROL;
-pub type BattleFrameCallback = ::std::option::Option<unsafe extern "C" fn()>;
-pub use crate::ships::native::abi::battlestate_struct;
 pub type Checksum = uint32;
 pub use crate::battle::netplay::CrcState as crc_State;
 pub use crate::ships::native::abi::velocity_desc;
@@ -583,7 +581,6 @@ pub type ForEachConnectionCallback = ::std::option::Option<
 
 pub use crate::supermelee::netplay::netmelee::NetMelee_getMeleeState;
 
-pub use crate::supermelee::netplay::netmelee::NetMelee_getBattleState;
 
 pub use crate::ships::native::abi::BattleStateData;
 

@@ -10,28 +10,35 @@ use std::ptr;
 #[no_mangle]
 pub static mut MainExited: i32 = 0;
 
-unsafe extern "C" fn on_battle_frame() {
-    crate::time::clock_abi::live::GameClockTick();
-    World::current().write(|world| {
-        let opening = crate::navigation::get(world, StoryKey::ARILOU_SPACE) == 1;
-        let counter = crate::navigation::get(world, StoryKey::ARILOU_SPACE_COUNTER);
-        crate::navigation::set(
-            world,
-            StoryKey::ARILOU_SPACE_COUNTER,
-            if opening {
-                counter + u8::from(counter < 9)
-            } else {
-                counter - u8::from(counter > 0)
-            },
-        );
+fn on_battle_frame(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    _io: &mut crate::engine::observe::Io<'_>,
+) {
+    cx.with_legacy(|| {
+        // SAFETY: the published campaign owner retains the live game clock.
+        unsafe { crate::time::clock_abi::live::GameClockTick() }
     });
-    if WorldData::current().read(|owner| owner.game.current_activity)
-        & (CHECK_ABORT | CHECK_LOAD) as u16
-        == 0
-    {
-        crate::navigation::hyper_radar::SeedUniverse();
+    let opening = crate::navigation::get(cx.world, StoryKey::ARILOU_SPACE) == 1;
+    let counter = crate::navigation::get(cx.world, StoryKey::ARILOU_SPACE_COUNTER);
+    crate::navigation::set(
+        cx.world,
+        StoryKey::ARILOU_SPACE_COUNTER,
+        if opening {
+            counter + u8::from(counter < 9)
+        } else {
+            counter - u8::from(counter > 0)
+        },
+    );
+    if cx.world.activity() & (CHECK_ABORT | CHECK_LOAD) as u16 == 0 {
+        cx.with_legacy(|| {
+            // SAFETY: the published campaign owner retains initialized radar state.
+            unsafe { crate::navigation::hyper_radar::SeedUniverse() }
+        });
     }
-    crate::ui::sis::DrawAutoPilotMessage(0);
+    cx.with_legacy(|| {
+        // SAFETY: the published campaign owner retains the active SIS display.
+        unsafe { crate::ui::sis::DrawAutoPilotMessage(0) }
+    });
 }
 
 unsafe extern "C" fn background_init_kernel(timeout: u32) {
@@ -79,8 +86,11 @@ pub unsafe fn uqm_splash_with_bg_init_kernel(
 
 /// # Safety
 /// The game kernel and battle state must be initialized on the SDL owner thread.
-pub unsafe fn uqm_battle_with_frame_callback() {
-    Battle(Some(on_battle_frame));
+pub unsafe fn battle_with_frame_callback(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    io: &mut crate::engine::observe::Io<'_>,
+) {
+    crate::battle::battle_native::battle(cx, io, Some(on_battle_frame));
 }
 
 /// # Safety
