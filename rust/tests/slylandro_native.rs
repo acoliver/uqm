@@ -61,7 +61,7 @@ fn velocity(v: &VELOCITY_DESC) -> [i32; 9] {
 }
 unsafe fn vector(speed: SIZE, facing: COUNT) -> [i32; 9] {
     let mut v = mem::zeroed();
-    SetVelocityVector(&mut v, speed, facing);
+    uqm_rust::battle::velocity::set_velocity_vector(&mut v, speed, facing);
     velocity(&v)
 }
 unsafe fn with_rng<T>(seed: DWORD, draws: usize, action: impl FnOnce() -> T) -> T {

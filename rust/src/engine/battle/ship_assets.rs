@@ -24,17 +24,11 @@ pub(crate) struct ShipAssets {
 }
 
 impl RaceDesc {
-    pub(crate) fn data_mut(&mut self) -> &mut DATA_STUFF {
-        &mut self.raw.ship_data
-    }
-
-    pub fn load(world: &mut crate::engine::World, species: u32, battle: bool) -> Option<Self> {
-        let race = crate::ships::races::race(species)?;
-        let mut descriptor = (race.descriptor)(world);
+    pub(crate) fn initialize_assets(&mut self, battle: bool) -> bool {
         // SAFETY: descriptors come from the fixed race table, whose resource keys are static C strings.
         // Loaded handles are captured here, not recovered from caller-mutable descriptor fields at teardown.
         let loaded = unsafe {
-            let info = &mut descriptor.raw.ship_info;
+            let info = &mut self.raw.ship_info;
             if !info.icons_rsc.is_null() {
                 info.icons = CaptureDrawable(LoadGraphicInstance(info.icons_rsc).cast()).cast();
             }
@@ -46,11 +40,72 @@ impl RaceDesc {
                 info.race_strings =
                     CaptureStringTable(LoadStringTableInstance(info.race_strings_rsc)).cast();
             }
-            !battle || crate::ships::loader_native::engine::load_battle(&mut descriptor)
+            !battle
+                || (|| {
+                    let load_animation_set = |keys: [*const std::ffi::c_char; 3]| {
+                        use crate::engine::battle::frames::FrameArray;
+                        let mut raw = [std::ptr::null_mut(); 3];
+                        let keys = keys.map(|key| {
+                            if key.is_null() {
+                                None
+                            } else {
+                                Some(std::ffi::CStr::from_ptr(key))
+                            }
+                        });
+                        if load_animation(&mut raw, keys, "animation") == 0 {
+                            free_image(&mut raw, "animation");
+                            return None;
+                        }
+                        let array = FrameArray::from_native(raw);
+                        array.observe("animation");
+                        Some(array)
+                    };
+                    let data = &mut self.raw.ship_data;
+                    let Some(ship) = load_animation_set(data.ship_rsc) else {
+                        return false;
+                    };
+                    data.ship = ship;
+                    if !data.weapon_rsc[0].is_null() {
+                        let Some(weapon) = load_animation_set(data.weapon_rsc) else {
+                            return false;
+                        };
+                        data.weapon = weapon;
+                    }
+                    if !data.special_rsc[0].is_null() {
+                        let Some(special) = load_animation_set(data.special_rsc) else {
+                            return false;
+                        };
+                        data.special = special;
+                    }
+                    if !data.captain_control.captain_rsc.is_null() {
+                        data.captain_control.background = CaptureDrawable(
+                            (LoadGraphicInstance(data.captain_control.captain_rsc)).cast(),
+                        )
+                        .cast();
+                        if data.captain_control.background.is_null() {
+                            return false;
+                        }
+                    }
+                    if !data.victory_ditty_rsc.is_null() {
+                        data.victory_ditty = LoadMusicInstance(data.victory_ditty_rsc).cast();
+                        if data.victory_ditty.is_null() {
+                            return false;
+                        }
+                    }
+                    if !data.ship_sounds_rsc.is_null() {
+                        data.ship_sounds =
+                            CaptureStringTable((LoadSoundInstance(data.ship_sounds_rsc)).cast())
+                                .cast();
+                        if data.ship_sounds.is_null() {
+                            return false;
+                        }
+                    }
+                    true
+                })()
         };
-        let data = &descriptor.raw.ship_data;
-        let info = descriptor.info();
-        descriptor.raw.assets = Some(Box::new(ShipAssets {
+        let data = &self.raw.ship_data;
+        let info = self.info();
+        self.raw.assets = Some(Box::new(ShipAssets {
             icons: info.icons,
             melee_icon: info.melee_icon,
             strings: info.race_strings,
@@ -59,11 +114,7 @@ impl RaceDesc {
             sounds: data.ship_sounds,
             animations: [data.special.clone(), data.weapon.clone(), data.ship.clone()],
         }));
-        if !loaded {
-            descriptor.unload(world, true, true);
-            return None;
-        }
-        Some(descriptor)
+        loaded
     }
 
     pub fn unload(mut self, world: &mut crate::engine::World, icons: bool, battle: bool) {
@@ -107,7 +158,7 @@ impl ShipAssets {
             if battle {
                 for array in &self.animations {
                     let mut raw = array.views().map(|frame| frame.raw());
-                    crate::game_init::space_resources::free_image(&mut raw, "animation");
+                    super::super::frames::free_image(&mut raw, "animation");
                     array.retire_views();
                 }
                 DestroyDrawable(ReleaseDrawable(self.captain.cast()));
@@ -122,3 +173,6 @@ impl ShipAssets {
         }
     }
 }
+
+use crate::engine::battle::frames::{free_image, load_animation};
+use crate::sound::resource_types::{LoadMusicInstance, LoadSoundInstance};

@@ -58,7 +58,7 @@ fn cruiser_descriptor_and_registered_weapon_and_defense_callbacks() {
             (*nuke).life = 50;
             call_element("ships::races::human_native::nuke_preprocess", id(nuke));
             let mut expected: VELOCITY_DESC = mem::zeroed();
-            SetVelocityVector(&raw mut expected, 80, 0);
+            uqm_rust::battle::velocity::set_velocity_vector(&mut expected, 80, 0);
             assert_eq!((*nuke).velocity.vector.width, expected.vector.width);
             assert_eq!((*nuke).velocity.vector.height, expected.vector.height);
             battle_context::dispose(nuke.cast());

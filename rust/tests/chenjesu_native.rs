@@ -702,7 +702,7 @@ fn doggy_wait_counts_before_tracking_and_random_roaming_consumes_one_draw() {
                 Ship::with_frames(&_battle, SPECIES_ID_CHENJESU_ID, 0, [16, 10, 6], [4, 4]);
             let dog = doggy(&mut ship);
             let preprocess = (*dog).preprocess_func.unwrap();
-            SetVelocityVector(&raw mut (*dog).velocity, 11, 3);
+            uqm_rust::battle::velocity::set_velocity_vector(&mut (*dog).velocity, 11, 3);
             let original = velocity_fields(&(*dog).velocity);
             (*dog).thrust = 1;
             ship.ship_mut().special_counter = 255;
@@ -711,7 +711,7 @@ fn doggy_wait_counts_before_tracking_and_random_roaming_consumes_one_draw() {
             assert_eq!((*dog).thrust, 0);
             assert_eq!(velocity_fields(&(*dog).velocity), original);
             for seed in 1..33 {
-                SetVelocityVector(&raw mut (*dog).velocity, 11, 3);
+                uqm_rust::battle::velocity::set_velocity_vector(&mut (*dog).velocity, 11, 3);
                 TFB_SeedRandom(seed);
                 let face = (TFB_Random() & 15) as u16;
                 with_rng(seed, 1, || hooks::invoke_element_pointer(preprocess, dog));
@@ -745,7 +745,7 @@ fn doggy_steering_uses_exact_rear_facing_boundaries_not_trackships_single_step()
             for (delta, expected) in [(6, 0), (7, 4), (8, 12), (9, 12), (10, 0)] {
                 (*enemy.ptr()).current.image.frame = enemy.frame(0, (16 - delta) as u16);
                 (*dog).target = None;
-                SetVelocityVector(&raw mut (*dog).velocity, 11, 4);
+                uqm_rust::battle::velocity::set_velocity_vector(&mut (*dog).velocity, 11, 4);
                 let original = velocity_fields(&(*dog).velocity);
                 with_rng(99, 0, || hooks::invoke_element_pointer(preprocess, dog));
                 assert_eq!((*dog).target, Some(battle::id((enemy.handle).cast())));
@@ -763,7 +763,7 @@ fn doggy_steering_uses_exact_rear_facing_boundaries_not_trackships_single_step()
             // its heading afterward, so the random tie-break does not choose it.
             (*enemy.ptr()).current.image.frame = enemy.frame(0, 0);
             for seed in 1..17 {
-                SetVelocityVector(&raw mut (*dog).velocity, 32, 8);
+                uqm_rust::battle::velocity::set_velocity_vector(&mut (*dog).velocity, 32, 8);
                 (*dog).target = Some(battle::id((enemy.handle).cast()));
                 with_rng(seed, 1, || hooks::invoke_element_pointer(preprocess, dog));
                 assert_eq!(velocity_fields(&(*dog).velocity), velocity_toward(32, 0));
@@ -792,7 +792,7 @@ fn doggy_uses_current_unwrapped_coordinates_and_truncates_arctan_arguments() {
                 (*enemy.ptr()).next.location = POINT { x: 2000, y: 4000 };
                 (*enemy.ptr()).current.image.frame = enemy.frame(0, (expected as usize) as u16);
                 (*dog).target = Some(battle::id((enemy.handle).cast()));
-                SetVelocityVector(&raw mut (*dog).velocity, 32, 0);
+                uqm_rust::battle::velocity::set_velocity_vector(&mut (*dog).velocity, 32, 0);
                 assert_eq!(
                     normalize_facing(angle_to_facing(i32::from(ARCTAN(
                         (i32::from(enemy_x) - i32::from(dog_x)) as SIZE,
@@ -827,12 +827,12 @@ fn doggy_acquires_nearest_visible_ship_but_retains_an_existing_cloaked_target() 
             at(&mut near, 4100, 4000);
             at(&mut far, 4000, 3500);
             let preprocess = (*dog).preprocess_func.unwrap();
-            SetVelocityVector(&raw mut (*dog).velocity, 32, 0);
+            uqm_rust::battle::velocity::set_velocity_vector(&mut (*dog).velocity, 32, 0);
             with_rng(4, 0, || hooks::invoke_element_pointer(preprocess, dog));
             assert_eq!((*dog).target, Some(battle::id((near.handle).cast())));
             assert_eq!(velocity_fields(&(*dog).velocity), velocity_toward(32, 4));
             (*prim(near.ptr())).Type = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
-            SetVelocityVector(&raw mut (*dog).velocity, 32, 0);
+            uqm_rust::battle::velocity::set_velocity_vector(&mut (*dog).velocity, 32, 0);
             with_rng(4, 0, || hooks::invoke_element_pointer(preprocess, dog));
             assert_eq!(
                 (*dog).target,
@@ -840,7 +840,7 @@ fn doggy_acquires_nearest_visible_ship_but_retains_an_existing_cloaked_target() 
                 "TrackShip retains a live prior target even when cloaked"
             );
             (*dog).target = None;
-            SetVelocityVector(&raw mut (*dog).velocity, 32, 0);
+            uqm_rust::battle::velocity::set_velocity_vector(&mut (*dog).velocity, 32, 0);
             with_rng(4, 0, || hooks::invoke_element_pointer(preprocess, dog));
             assert_eq!((*dog).target, Some(battle::id((far.handle).cast())));
             assert_eq!(velocity_fields(&(*dog).velocity), velocity_toward(32, 0));
@@ -1004,7 +1004,7 @@ fn ai_crystal_intercept_holds_or_releases_at_the_fragment_margin() {
             let crystal = battle::element(h);
             battle::put(h);
             (*crystal).current.location = POINT { x: 4000, y: 4000 };
-            SetVelocityVector(&raw mut (*crystal).velocity, 64, 0);
+            uqm_rust::battle::velocity::set_velocity_vector(&mut (*crystal).velocity, 64, 0);
             for (x, y, hold, immediate) in [
                 (4000, 3000, true, false),
                 (4320, 3000, true, false),
@@ -1050,12 +1050,12 @@ fn ai_scans_from_tail_skips_every_noncrystal_case_and_stops_at_the_first_match()
             let miss_h = crystal(&mut ship);
             let miss = battle::element(miss_h);
             (*miss).current.location = POINT { x: 1000, y: 4000 };
-            SetVelocityVector(&raw mut (*miss).velocity, 64, 0);
+            uqm_rust::battle::velocity::set_velocity_vector(&mut (*miss).velocity, 64, 0);
             battle::put(miss_h);
             let hit_h = crystal(&mut ship);
             let hit = battle::element(hit_h);
             (*hit).current.location = POINT { x: 4000, y: 4000 };
-            SetVelocityVector(&raw mut (*hit).velocity, 64, 0);
+            uqm_rust::battle::velocity::set_velocity_vector(&mut (*hit).velocity, 64, 0);
             battle::put(hit_h);
             let mut invalid_fixtures = Vec::new();
             for invalid in 0..5 {

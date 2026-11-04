@@ -1,6 +1,6 @@
 use std::{panic::AssertUnwindSafe, ptr};
 use uqm_rust::{
-    game_init::space_resources::free_image,
+    engine::battle::frames::free_image,
     graphics::{drawable_abi::AllocDrawable, pixmap_abi::CaptureDrawable},
 };
 

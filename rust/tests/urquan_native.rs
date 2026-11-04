@@ -176,7 +176,7 @@ fn fighter_planet_collision_clones_and_deflects_without_rng() {
             ship.postprocess();
             let e = battle::element(battle::tail());
             (*e).next = (*e).current.clone();
-            SetVelocityVector(&raw mut (*e).velocity, 8 << ONE_SHIFT, 0);
+            uqm_rust::battle::velocity::set_velocity_vector(&mut (*e).velocity, 8 << ONE_SHIFT, 0);
             let mut planet_fixture = Object::new(&_battle);
             let planet = planet_fixture.ptr();
             (*planet).mass = 101;

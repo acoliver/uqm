@@ -139,7 +139,7 @@ fn velocity_fields(v: &VELOCITY_DESC) -> [i32; 9] {
 
 unsafe fn velocity_toward(speed: SIZE, facing: COUNT) -> [i32; 9] {
     let mut v = mem::zeroed();
-    SetVelocityVector(&mut v, speed, facing);
+    uqm_rust::battle::velocity::set_velocity_vector(&mut v, speed, facing);
     velocity_fields(&v)
 }
 
@@ -1173,7 +1173,7 @@ fn marine_prediction_uses_wrapped_distance_but_unwrapped_future_position_with_si
             }
             ship.at(4000, 4000);
             (*marine).current.location = POINT { x: 4000, y: 4500 };
-            SetVelocityVector(&raw mut (*ship.ptr()).velocity, 64, 4);
+            uqm_rust::battle::velocity::set_velocity_vector(&mut (*ship.ptr()).velocity, 64, 4);
             (*marine).turn = 0;
             with_rng(4, 0, || hooks::invoke_element_pointer(preprocess, marine));
             // floor(500 / 64) = 7 turns of eastward target movement.
@@ -1208,7 +1208,7 @@ fn marine_gravity_avoidance_uses_mass_threshold_distance_and_one_draw_for_head_o
             for seed in 1..17 {
                 (*marine).turn = (face << 4) as BYTE;
                 (*marine).thrust = 0;
-                SetVelocityVector(&raw mut (*marine).velocity, 8, face);
+                uqm_rust::battle::velocity::set_velocity_vector(&mut (*marine).velocity, 8, face);
                 TFB_SeedRandom(seed);
                 let step = ((TFB_Random() as SIZE & 1) as i32) * 2 - 1;
                 with_rng(seed, 1, || {
@@ -1579,7 +1579,7 @@ fn marine_without_target_clears_stale_gravity_and_decelerates_only_when_overspee
                 (*marine).thrust = ((SHIP_IN_GRAVITY_WELL
                     | if overspeed { SHIP_BEYOND_MAX_SPEED } else { 0 })
                     >> 6) as BYTE;
-                SetVelocityVector(&raw mut (*marine).velocity, 40, 8);
+                uqm_rust::battle::velocity::set_velocity_vector(&mut (*marine).velocity, 40, 8);
                 let before = queued().len();
                 with_rng(9, 0, || hooks::invoke_element_pointer(preprocess, marine));
                 assert_eq!((*marine).thrust & (SHIP_IN_GRAVITY_WELL >> 6) as BYTE, 0);

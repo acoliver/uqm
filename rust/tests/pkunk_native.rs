@@ -562,8 +562,8 @@ fn bug_missiles_launch_fore_left_and_right_inheriting_ship_velocity() {
                 for ship_speed in [0i16, 14] {
                     ship.inner.ship_mut().ship_facing = facing;
                     ship.at(321, -654);
-                    SetVelocityVector(
-                        &raw mut (*ship.ptr()).velocity,
+                    uqm_rust::battle::velocity::set_velocity_vector(
+                        &mut (*ship.ptr()).velocity,
                         ship_speed,
                         (facing + 3) % 16,
                     );
@@ -900,7 +900,7 @@ fn reincarnation_ends_when_life_span_returns_to_normal() {
             (*el).current.location = POINT { x: 400, y: -800 };
             (*el).next.location = POINT { x: 1201, y: 77 };
             (*el).velocity = mem::zeroed();
-            SetVelocityVector(&raw mut (*el).velocity, 9, 6);
+            uqm_rust::battle::velocity::set_velocity_vector(&mut (*el).velocity, 9, 6);
             ship.inner.ship_mut().cur_status_flags = 0x3ff;
             ship.preprocess();
             assert_eq!(frame_index((*el).current.image.frame.raw()), 5);
@@ -1156,7 +1156,7 @@ fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
             // The armed death function explodes the ship (without ship_death).
             (*el).target = Some(shared::id((ship.handle).cast()));
             (*el).state_flags |= DISAPPEARING as u16;
-            SetVelocityVector(&raw mut (*el).velocity, 20, 3);
+            uqm_rust::battle::velocity::set_velocity_vector(&mut (*el).velocity, 20, 3);
             ship.inner.descriptor_mut().ship_info.energy_level = 9;
             hooks::invoke_element_pointer(reincarnation, el);
             assert_eq!((*el).life, 36);

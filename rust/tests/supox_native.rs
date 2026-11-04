@@ -32,7 +32,7 @@ fn velocity_fields(v: &VELOCITY_DESC) -> [i32; 9] {
 fn velocity_toward(speed: SIZE, facing: COUNT) -> [i32; 9] {
     unsafe {
         let mut v: VELOCITY_DESC = mem::zeroed();
-        SetVelocityVector(&mut v, speed, facing);
+        uqm_rust::battle::velocity::set_velocity_vector(&mut v, speed, facing);
         velocity_fields(&v)
     }
 }

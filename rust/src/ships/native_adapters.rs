@@ -95,9 +95,77 @@ pub unsafe fn uninit_ships() {
 
 #[cfg(not(test))]
 mod live {
+    use crate::engine::Kernel as KernelOwner;
     use crate::engine::World as WorldOwner;
-    use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
     use crate::ships::native::abi::*;
+
+    use crate::graphics::context_abi::{ContextFrame, ContextLease};
+
+    struct ArenaGraphics {
+        status: ContextLease,
+        space: ContextLease,
+        viewport: Option<(ContextLease, ContextFrame)>,
+    }
+
+    impl ArenaGraphics {
+        fn retain(kernel: &crate::engine::Kernel, hyperspace: bool) -> Self {
+            Self {
+                status: ContextLease::retain(kernel.status_context),
+                space: ContextLease::retain(kernel.space_context),
+                viewport: (!hyperspace).then(|| {
+                    (
+                        ContextLease::retain(kernel.screen_context),
+                        ContextFrame::retain(kernel.screen),
+                    )
+                }),
+            }
+        }
+
+        fn select(&self) {
+            self.status.select();
+            self.space.select();
+        }
+
+        fn show_viewport(&mut self, width: i16, height: i16) {
+            let Some((screen, frame)) = self.viewport.take() else {
+                return;
+            };
+            self.space.set_frame(frame);
+            self.space.set_clip(crate::graphics::native_abi::RECT {
+                corner: crate::graphics::native_abi::POINT { x: 0, y: 0 },
+                extent: crate::graphics::native_abi::EXTENT { width, height },
+            });
+            let black = crate::graphics::native_abi::Color {
+                r: 0,
+                g: 0,
+                b: 0,
+                a: 255,
+            };
+            self.space.set_background(black);
+            screen.set_background(black);
+            screen.clear();
+            self.space.select();
+        }
+    }
+
+    fn create_arena_ships(cx: &mut crate::engine::battle::Cx<'_>, hyperspace: bool, planet: bool) {
+        if hyperspace {
+            cx.reset_ships(0);
+            cx.reset_ships(1);
+            let mut ships = cx.kernel.ships(0);
+            if let Some(flagship) = ships.build(SPECIES_ID_SIS_SHIP_ID) {
+                ships.edit(flagship, |ship| {
+                    ship.player = RPG_PLAYER_NUM as i16;
+                    ship.captain = 0;
+                });
+            }
+        } else if planet {
+            for _ in 0..5 {
+                crate::battle::world_elements::create_asteroid(cx, None);
+            }
+            crate::battle::world_elements::spawn_planet(cx);
+        }
+    }
 
     macro_rules! operation {
     ($name:ident($($arg:ident: $ty:ty),*) $(-> $ret:ty)? $body:block) => {
@@ -106,31 +174,19 @@ mod live {
         pub unsafe fn $name($($arg: $ty),*) $(-> $ret)? $body
     };
 }
-    operation!(uqm_get_current_activity_lobyte() -> u8 { (**WorldFields::current()).game.current_activity as u8 });
-
     operation!(rust_bridge_init_battle_arena() -> i16 {
-        if KernelOwner::current().write(|kernel| crate::game_init::space_resources::init_space(kernel, WorldOwner::current().read(|world|world.activity()))) == 0 { return 0; }
-        SetContext((**KernelOwner::current()).status_context); SetContext((**KernelOwner::current()).space_context);
+        let (activity, hyperspace) = WorldOwner::current().read(|world| (world.activity(), in_hqspace(world) != 0));
+        let Some(mut graphics) = KernelOwner::current().write(|kernel| {
+            if crate::game_init::space_resources::init_space(kernel, activity) == 0 { None }
+            else { Some(ArenaGraphics::retain(kernel, hyperspace)) }
+        }) else { return 0; };
+        graphics.select();
         crate::app::bridge::enter(|cx| crate::battle::process_native::init_display_list(cx, optMeleeScale == 0)); crate::app::bridge::enter(crate::battle::galaxy::init_galaxy);
-        if WorldOwner::current().read(in_hqspace) != 0 {
-            crate::app::bridge::enter(|cx| {
-                cx.reset_ships(0); cx.reset_ships(1);
-                let mut ships = crate::engine::battle::link_queue::ships(0);
-                if let Some(flagship) = ships.build(SPECIES_ID_SIS_SHIP_ID) { ships.edit(flagship, |ship| { ship.player = RPG_PLAYER_NUM as i16; ship.captain = 0; }); }
-            });
-            crate::navigation::hyper_data::LoadHyperspace();
-            1
-        } else {
-            crate::graphics::drawable_abi::SetContextFGFrame((**KernelOwner::current()).screen.cast());
-            let mut rect = crate::graphics::native_abi::RECT { corner: crate::graphics::native_abi::POINT { x: 0, y: 0 }, extent: crate::graphics::native_abi::EXTENT { width: (ScreenWidth - 64) as i16, height: ScreenHeight as i16 } };
-            crate::graphics::context_abi::SetContextClipRect(&mut rect);
-            SetContextBackGroundColor(Color {r:0,g:0,b:0,a:255});
-            let old = SetContext((**KernelOwner::current()).screen_context);
-            SetContextBackGroundColor(Color {r:0,g:0,b:0,a:255}); ClearDrawable(); SetContext(old);
-            if uqm_get_current_activity_lobyte() == IN_LAST_BATTLE as u8 { KernelOwner::current().write(crate::game_init::world_resources::free_gravity_well); }
-            else { crate::app::bridge::enter(|cx| { for _ in 0..5 { crate::battle::world_elements::create_asteroid(cx, None); } crate::battle::world_elements::spawn_planet(cx); }); }
-            2
-        }
+        let planet = activity as u8 != IN_LAST_BATTLE as u8;
+        graphics.show_viewport((ScreenWidth - 64) as i16, ScreenHeight as i16);
+        if !hyperspace && !planet { KernelOwner::current().write(crate::game_init::world_resources::free_gravity_well); }
+        crate::app::bridge::enter(|cx| create_arena_ships(cx, hyperspace, planet));
+        if hyperspace { crate::navigation::hyper_data::LoadHyperspace(); 1 } else { 2 }
     });
 }
 #[cfg(not(test))]

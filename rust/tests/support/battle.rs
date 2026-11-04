@@ -2,7 +2,7 @@
     dead_code,
     reason = "shared fixture API used by independent race test binaries"
 )]
-use std::{mem, ptr, rc::Rc};
+use std::{ptr, rc::Rc};
 use uqm_rust::battle::process_native::init_display_list;
 
 use uqm_rust::{

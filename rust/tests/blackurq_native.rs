@@ -127,8 +127,8 @@ fn fried_launches_sixteen_clouds_in_facing_order_with_inherited_velocity() {
                 assert_eq!(((*e).life, (*e).hits, (*e).mass), (47, 100, 3));
                 assert_eq!((*e).turn, 1);
                 let mut expected: VELOCITY_DESC = mem::zeroed();
-                SetVelocityVector(&mut expected, 16, face as COUNT);
-                (expected).delta_components(41, -21);
+                uqm_rust::battle::velocity::set_velocity_vector(&mut expected, 16, face as COUNT);
+                expected.delta_components(41, -21);
                 assert_eq!(velocity(&(*e).velocity), velocity(&expected));
                 hooks::invoke_element_pointer((*e).preprocess_func.unwrap(), e);
                 assert_eq!((*e).turn, 0);

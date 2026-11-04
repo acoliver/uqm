@@ -430,8 +430,8 @@ mod tests {
         // SAFETY: AllocDrawable initialized the drawable's first frame.
         let frame = unsafe { super::super::pixmap_abi::CaptureDrawable(drawable) };
         context.set_frame(ContextFrame::retain(frame));
-        // SAFETY: the context now retains the drawable allocation after its native owner is retired.
         assert_eq!(
+            // SAFETY: the context retains the allocation after its native owner is retired.
             unsafe { super::super::drawable_abi::DestroyDrawable(drawable) },
             1
         );

@@ -522,13 +522,10 @@ pub(crate) mod engine {
                                 SetContextFont(
                                     KernelOwner::current().read(|owner| owner.tiny_font),
                                 );
-                                crate::ships::native::copy_display_name(
-                                    &mut buf,
-                                    std::ffi::CStr::from_ptr(
-                                        GetStringAddress(frag.race_strings).cast(),
-                                    )
-                                    .to_bytes(),
+                                let name = std::ffi::CStr::from_ptr(
+                                    GetStringAddress(frag.race_strings).cast(),
                                 );
+                                crate::ships::native::copy_display_name(&mut buf, name.to_bytes());
                                 strupr(buf.as_mut_ptr());
                                 t = text(
                                     salvage_rect.corner.x.wrapping_add(100),
