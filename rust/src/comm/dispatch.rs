@@ -26,7 +26,6 @@ use crate::engine::{
 use std::os::raw::c_void;
 
 use crate::c_bindings::{assert_c_layout, global_state};
-#[cfg(not(test))]
 use crate::collections::queue::CountLinks;
 use crate::collections::queue::{AllocLink, HLink, PutQueue, Queue, ReinitQueue};
 #[cfg(not(test))]
@@ -659,7 +658,6 @@ unsafe fn get_head_encounter() -> HLink {
     get_head_link(enc_q)
 }
 
-#[cfg(not(test))]
 /// C: `LockEncounter(h, &ptr)` = `*(ppe) = (ENCOUNTER*)LockLink(...)`
 #[inline]
 unsafe fn lock_encounter(_h: HLink) -> *mut CEncounter {

@@ -1,6 +1,5 @@
 //! Resource phases around the typed communication session.
 
-#[cfg(not(test))]
 use super::*;
 
 #[cfg(not(test))]
@@ -68,7 +67,6 @@ pub(super) fn fight_if_selected(cx: &mut Cx<'_>) -> u16 {
     status
 }
 
-#[cfg(not(test))]
 pub(super) unsafe fn update_fleet(h_encounter: HLink, npc_q: *mut Queue, status: u16) {
     // SAFETY: the caller retains this encounter and NPC queue throughout the update.
     let (enc_ptr, num_ships) = unsafe { (lock_encounter(h_encounter), CountLinks(npc_q)) };
@@ -95,6 +93,56 @@ pub(super) unsafe fn update_fleet(h_encounter: HLink, npc_q: *mut Queue, status:
             bsi.crew_level = (*frag_ptr).crew_level;
             bsi.max_crew = (*frag_ptr).max_crew;
             bsi.max_energy = (*frag_ptr).max_energy;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::collections::queue::{InitQueue, UninitQueue};
+
+    #[test]
+    fn surviving_ships_replace_the_encounter_fleet_in_queue_order() {
+        let mut queue = Queue::default();
+        // SAFETY: the fixture owns this queue and all records until teardown.
+        unsafe {
+            assert!(InitQueue(
+                &mut queue,
+                2,
+                std::mem::size_of::<CShipFragment>() as u16
+            ));
+            for (race_id, crew_level, max_crew, max_energy) in [(3, 4, 5, 6), (7, 8, 9, 10)] {
+                let link = AllocLink(&mut queue);
+                assert!(!link.is_null());
+                link.cast::<CShipFragment>().write(CShipFragment {
+                    race_id,
+                    crew_level,
+                    max_crew,
+                    max_energy,
+                    ..Default::default()
+                });
+                PutQueue(&mut queue, link);
+            }
+            let mut encounter: CEncounter = std::mem::zeroed();
+            encounter.flags = 1;
+            update_fleet(std::ptr::from_mut(&mut encounter).cast(), &mut queue, 0);
+            assert_eq!(encounter.num_ships, 2);
+            assert_eq!(
+                encounter.flags,
+                1 | ENCOUNTER_REFORMING | ONE_SHOT_ENCOUNTER
+            );
+            let copied: Vec<_> = encounter.ship_list[..2]
+                .iter()
+                .map(|s| (s.race_id, s.crew_level, s.max_crew, s.max_energy))
+                .collect();
+            assert_eq!(copied, [(3, 4, 5, 6), (7, 8, 9, 10)]);
+            encounter.flags = 1;
+            ReinitQueue(&mut queue);
+            update_fleet(std::ptr::from_mut(&mut encounter).cast(), &mut queue, 1);
+            assert_eq!(encounter.num_ships, 0);
+            assert_eq!(encounter.flags, 1 | ENCOUNTER_REFORMING);
+            UninitQueue(&mut queue);
         }
     }
 }
