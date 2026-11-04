@@ -1,4 +1,4 @@
-use super::{conv, ship, RACE_SHIP_FOR_COMM};
+use super::{RACE_SHIP_FOR_COMM, conv, ship};
 use crate::engine::{StoryKey, World};
 
 pub(super) fn restored_conversation(world: &World) -> u32 {

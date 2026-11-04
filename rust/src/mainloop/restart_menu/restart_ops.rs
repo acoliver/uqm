@@ -657,16 +657,12 @@ impl RestartMenuOps for CffiOps<'_, '_, '_> {
     }
 
     fn melee(&self) {
-        self.legacy(|| {
-            // SAFETY: Melee starts a Super Melee session on the main thread.
-            unsafe { c_extern::Melee() }
-        })
+        // SAFETY: the restart session owns the game and its input/graphics resources.
+        unsafe { self.owned(|cx, io| crate::supermelee::native::menu::live::run_melee(cx, io)) }
     }
     fn setup_menu(&self) {
-        self.legacy(|| {
-            // SAFETY: SetupMenu initializes menu infrastructure.
-            unsafe { c_extern::SetupMenu() }
-        })
+        // SAFETY: the restart session owns the initialized display and input runtime.
+        unsafe { self.owned(|cx, io| crate::front_end::setupmenu::runtime::setup_menu(cx, io)) }
     }
     fn free_game_data(&self) {
         // SAFETY: the stopped game session owns its resources and suspends itself for callbacks.
@@ -686,10 +682,8 @@ impl RestartMenuOps for CffiOps<'_, '_, '_> {
         self.owned(|cx, io| unsafe { crate::front_end::fmv::introduction(cx, io) });
     }
     fn splash_screen(&self) {
-        self.legacy(|| {
-            // SAFETY: SplashScreen with None callback is safe (null function pointer).
-            unsafe { c_extern::SplashScreen(None) }
-        })
+        // SAFETY: the restart session owns the initialized display and input runtime.
+        unsafe { self.owned(|cx, io| crate::front_end::fmv::runtime::splash_screen(cx, io, None)) }
     }
     fn do_popup_window_msg(&self, string_id: u16) {
         self.legacy(|| {

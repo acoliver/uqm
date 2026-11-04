@@ -30,24 +30,30 @@ const NUM_TEMPLATES: usize = CONTROL_TEMPLATE_NUM_TEMPLATES as usize;
 /// Input adapter reading the resolved player-one control template.
 pub struct CffiPlanetSideInput;
 
+impl CffiPlanetSideInput {
+    pub fn poll_observed(&mut self, cx: &mut crate::engine::battle::Cx<'_>, io: &mut crate::engine::observe::Io<'_>) -> Result<FrameInput, AdapterError> {
+        use crate::engine::observe::{CampaignView, InputView};
+        let campaign = CampaignView::for_input(InputView::BeforeUpdate, || CampaignView::from_world(cx.world));
+        if io.observer.input_admitted(&InputView::BeforeUpdate, &campaign).stop {
+                return Ok(FrameInput {
+                    abort: true,
+                    ..FrameInput::default()
+                });
+            }
+        #[cfg(not(test))]
+        cx.with_legacy(|| unsafe { UpdateInputState() });
+        if io.observer.input_admitted(&crate::engine::observe::InputView::AfterUpdate, &None).stop {
+                return Ok(FrameInput {
+                    abort: true,
+                    ..FrameInput::default()
+                });
+            }
+        cx.with_legacy(|| self.poll())
+    }
+}
+
 impl PlanetSideInput for CffiPlanetSideInput {
     fn poll(&mut self) -> Result<FrameInput, AdapterError> {
-        #[cfg(not(test))]
-        unsafe {
-            if crate::app::observe::input(crate::engine::observe::InputView::BeforeUpdate).stop {
-                return Ok(FrameInput {
-                    abort: true,
-                    ..FrameInput::default()
-                });
-            }
-            UpdateInputState();
-            if crate::app::observe::input(crate::engine::observe::InputView::AfterUpdate).stop {
-                return Ok(FrameInput {
-                    abort: true,
-                    ..FrameInput::default()
-                });
-            }
-        }
         Ok(read_player_one_input())
     }
 }

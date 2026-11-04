@@ -134,11 +134,6 @@ fn dispatch(request: PlanetSideRequest) -> PlanetSideReply {
             if request.context.is_null() {
                 return failure(STATUS_INVALID_ARGUMENT);
             }
-            #[cfg(not(test))]
-            unsafe {
-                run_session(request.context.cast::<PlanetSideRunContext>())
-            }
-            #[cfg(test)]
             failure(STATUS_RUNTIME_ERROR)
         }
         _ => failure(STATUS_UNKNOWN_OPERATION),
@@ -157,7 +152,7 @@ const fn failure(status: i32) -> PlanetSideReply {
 }
 
 #[cfg(not(test))]
-unsafe fn run_session(context: *mut PlanetSideRunContext) -> PlanetSideReply {
+pub unsafe fn run_session(cx: &mut crate::engine::battle::Cx<'_>, io: &mut crate::engine::observe::Io<'_>, context: &mut PlanetSideRunContext) -> PlanetSideReply {
     use super::adapters::{CffiPlanetSideClock, CffiPlanetSideInput, CffiShipStatus};
     use super::assembly::{assemble_surface, share_surface};
     use super::assets::CffiPlanetSideAudio;
@@ -169,12 +164,11 @@ unsafe fn run_session(context: *mut PlanetSideRunContext) -> PlanetSideReply {
     use super::mask_adapter::extract_lander_masks;
     use super::model::SurfacePoint;
     use super::resources::{LanderGraphic, PlanetSideAssetAccess};
-    use super::runtime::{RuntimeAdapters, ShipStatusPort};
+    use super::runtime::{PlanetSideClock, RuntimeAdapters, ShipStatusPort, Tick};
     use super::session::SessionOutcome;
     use super::session_factory::create_production_session;
     use super::visual_adapter::CffiSurfaceVisuals;
 
-    let context = unsafe { &mut *context };
     if context.solar_system.is_null()
         || context.world.is_null()
         || context.misc_data_frame.is_null()
@@ -185,7 +179,8 @@ unsafe fn run_session(context: *mut PlanetSideRunContext) -> PlanetSideReply {
     }
 
     let result = (|| {
-        let assets = super::init_lander::borrowed_assets()?;
+        let assets = cx.with_legacy(super::init_lander::borrowed_assets)?;
+        let (generator, mut visuals, persistence, surface, ship, session) = cx.with_legacy(|| {
         let mut generator =
             CffiSurfaceGenerator::for_planet_side(context.solar_system, context.world)?;
         let mut visuals = CffiSurfaceVisuals::new(
@@ -211,7 +206,11 @@ unsafe fn run_session(context: *mut PlanetSideRunContext) -> PlanetSideReply {
             context.weather_rating,
             context.temperature,
         ));
+        Ok::<_, super::runtime::AdapterError>((generator, visuals, persistence, surface, ship, session))
+        })?;
         let mut world_visuals = super::visual_adapter::CffiWorldVisuals::new(&assets, &mut visuals);
+        let automation_active = io.observer.input_admitted(&InputView::Active, &None).stop;
+        let (mut controller, _menu_silence) = cx.with_legacy(|| {
         // The issue #162 fixture is optional and explicitly requested.  Only the
         // `setup_planet_side_collision_fixture` script action queues the
         // request (the coordinator invokes
@@ -229,7 +228,7 @@ unsafe fn run_session(context: *mut PlanetSideRunContext) -> PlanetSideReply {
         // consumed under one observation and installed under another.  Ordinary
         // gameplay never consumes or fails from a stale queue: a request left
         // pending because no active owner tapped it stays queued.
-        let automation_active = crate::app::observe::input(InputView::Active).stop;
+
         let fixture_request = if automation_active {
             super::automation_fixture::tap_planet_side_fixture_request(session.lander.position)
         } else {
@@ -257,13 +256,13 @@ unsafe fn run_session(context: *mut PlanetSideRunContext) -> PlanetSideReply {
             },
         };
         let graphics = CffiPlanetSideGraphics {
-            surface,
+            surface: surface.clone(),
             assets: &assets,
             last_scan_position: None,
         };
         // The orbit/scan menu underneath stays resident, so silence its
         // navigation sounds for the trip. Restored on every exit path by Drop.
-        let _menu_silence = super::menu_sounds::MenuSoundSilence::acquire();
+        let menu_silence = super::menu_sounds::MenuSoundSilence::acquire();
         super::telemetry::begin(&session);
         let adapters = RuntimeAdapters {
             input: CffiPlanetSideInput,
@@ -273,9 +272,18 @@ unsafe fn run_session(context: *mut PlanetSideRunContext) -> PlanetSideReply {
             clock: CffiPlanetSideClock,
             ship,
         };
-        let mut controller =
+        let controller =
             PlanetSideController::new(session, adapters, context.tick_period, context.frame_budget);
-        let outcome = controller.run();
+        Ok::<_, super::runtime::AdapterError>((controller, menu_silence))
+        })?;
+        let outcome = controller.run_with_frame(|session, adapters, tick_period| {
+            let deadline = Tick(adapters.clock.now().0.wrapping_add(tick_period));
+            let input = if session.phase == super::session::SessionPhase::Active {
+                Some(adapters.input.poll_observed(cx, io)?)
+            } else { None };
+            cx.with_legacy(|| super::runtime::run_frame_at(session, adapters, deadline, input))
+        });
+        cx.with_legacy(|| {
         if outcome.is_ok() {
             // Pickup callbacks can also change other scan categories. Read the
             // live planet rather than replacing it with the trip's initial copy.
@@ -295,7 +303,9 @@ unsafe fn run_session(context: *mut PlanetSideRunContext) -> PlanetSideReply {
                 ..super::session::ShipDelta::default()
             })?;
         }
+        drop(surface);
         Ok::<_, super::runtime::AdapterError>(outcome)
+        })
     })();
 
     match result {

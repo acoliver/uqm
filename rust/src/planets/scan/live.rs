@@ -4,15 +4,14 @@ use crate::c_bindings::{controller_input::*, global_state::MENU_STATE, solar_sys
 use crate::collections::queue::{CountLinks, Queue, ReinitQueue};
 use crate::comm::dispatch::{clone_ship_fragment, CShipFragment};
 use crate::comm::locdata::{CColor, CPoint, CRect};
-use crate::engine::{Kernel, StoryKey, World, WorldData};
+use crate::engine::{battle::Cx, observe::{CheckpointView, Io}, Kernel, StoryKey, World, WorldData};
 use crate::graphics::drawable_abi::SetContextFGFrame;
 use crate::mainloop::restart_menu::c_extern::{
     self as base, uqm_sleep_thread_until as SleepThreadUntil, SetContext,
 };
 use crate::mainloop::types::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER};
 use crate::planet_side::ffi::{
-    uqm_rust_planet_side, PlanetSideReply, PlanetSideRequest, PlanetSideRunContext,
-    PLANET_SIDE_ABI_VERSION, STATUS_OK,
+    run_session, PlanetSideReply, PlanetSideRunContext, STATUS_OK,
 };
 use crate::starbase::cffi::CffiPlatform;
 use crate::starbase::gfx::{FlashTarget, Gfx, Point, Rgba, Stamp};
@@ -65,7 +64,7 @@ use crate::planets::solarsys::lifecycle::SaveSolarSysLocation;
 
 use crate::planet_side::init_lander::InitLander;
 
-use crate::ui::util::live::WaitForAnyButtonUntil;
+use crate::ui::util::live::wait_for_any_button_until;
 
 use crate::mainloop::input_abi::live::FlushInput;
 
@@ -252,7 +251,13 @@ unsafe fn spawn_fwiffo() {
     }
 }
 
-unsafe fn dispatch_lander() -> bool {
+unsafe fn dispatch_lander(cx: &mut Cx<'_>, io: &mut Io<'_>) -> bool {
+    let (mut context, old_callback) = cx.with_legacy(prepare_lander);
+    let reply = run_session(cx, io, &mut context);
+    cx.with_legacy(|| finish_lander(context, old_callback, reply))
+}
+
+unsafe fn prepare_lander() -> (PlanetSideRunContext, Option<crate::engine::input::InputFrameHook>) {
     let landing_fuel = fuel() as i16;
     erase_coarse();
     let old_callback = SetInputCallback(None);
@@ -260,7 +265,7 @@ unsafe fn dispatch_lander() -> bool {
     SetContext(SCAN_CONTEXT);
     draw_cursor(false);
     let system = solar_system::current();
-    let mut context = PlanetSideRunContext {
+    let context = PlanetSideRunContext {
         solar_system: system.cast(),
         world: (*system).pOrbitalDesc.cast(),
         misc_data_frame: Kernel::current().read(|owner| owner.misc_data_frame).cast(),
@@ -277,14 +282,12 @@ unsafe fn dispatch_lander() -> bool {
         temperature: i32::from((*system).SysInfo.PlanetInfo.SurfaceTemperature),
         ..PlanetSideRunContext::default()
     };
-    let request = PlanetSideRequest {
-        abi_version: PLANET_SIDE_ABI_VERSION,
-        operation: 3,
-        context: (&mut context as *mut PlanetSideRunContext).cast(),
-        ..PlanetSideRequest::default()
-    };
-    let mut reply = PlanetSideReply::default();
-    if uqm_rust_planet_side(&request, &mut reply) != STATUS_OK {
+    (context, old_callback)
+}
+
+unsafe fn finish_lander(context: PlanetSideRunContext, old_callback: Option<crate::engine::input::InputFrameHook>, reply: PlanetSideReply) -> bool {
+    let system = context.solar_system.cast::<crate::c_bindings::global_state::SOLARSYS_STATE>();
+    if reply.status != STATUS_OK {
         crate::logging::log_add(
             crate::logging::LogLevel::Fatal,
             &format!("Rust PlanetSide failed with status {}", reply.status),
@@ -327,8 +330,7 @@ struct PickState {
     success: bool,
 }
 
-unsafe extern "C" fn pick_input(menu: *mut MENU_STATE) -> u32 {
-    let state = &mut *((*menu).privData.cast::<PickState>());
+unsafe fn pick_input(state: &mut PickState) -> u32 {
     let time_in = GetTimeCounter();
     let pulse = std::ptr::addr_of!(PulsedInputState).read();
     if WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT != 0
@@ -373,10 +375,24 @@ unsafe extern "C" fn pick_input(menu: *mut MENU_STATE) -> u32 {
     1
 }
 
-unsafe fn pick_side() -> bool {
-    let mut menu: MENU_STATE = std::mem::zeroed();
+unsafe fn pick_side(cx: &mut Cx<'_>, io: &mut Io<'_>) -> bool {
     let mut state = PickState { success: false };
-    menu.privData = (&mut state as *mut PickState).cast();
+    cx.with_legacy(prepare_pick_side);
+    io.observer.checkpoint(&CheckpointView::PlanetMenu(4));
+    cx.run_input(io, true, |cx, _| cx.with_legacy(|| pick_input(&mut state) != 0));
+    io.observer.checkpoint(&CheckpointView::PlanetMenu(3));
+    cx.with_legacy(|| DrawStatusMessage(std::ptr::null()));
+    let result = if state.success {
+        dispatch_lander(cx, io)
+    } else {
+        cx.with_legacy(restore_location_image);
+        true
+    };
+    cx.with_legacy(|| base::SetMenuSounds(15, 16));
+    result
+}
+
+unsafe fn prepare_pick_side() {
     let fuel = fuel();
 
     use crate::ui::sis::ClearSISRect;
@@ -397,19 +413,6 @@ unsafe fn pick_side() -> bool {
     save_location_image();
     InitLander(0);
     base::SetMenuSounds(0, 16);
-    crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::PlanetMenu(4));
-    menu.InputFunc = Some(pick_input);
-    base::DoInput((&mut menu as *mut MENU_STATE).cast(), 1);
-    crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::PlanetMenu(3));
-    DrawStatusMessage(std::ptr::null());
-    let mut result = true;
-    if state.success {
-        result = dispatch_lander();
-    } else {
-        restore_location_image();
-    }
-    base::SetMenuSounds(15, 16);
-    result
 }
 
 unsafe fn scanned_stuff(cx: &mut crate::engine::battle::Cx<'_>, y: u16, scan: u16) {
@@ -470,7 +473,7 @@ unsafe fn scanned_stuff(cx: &mut crate::engine::battle::Cx<'_>, y: u16, scan: u1
     g.set_fg_color(old_color);
 }
 
-unsafe fn scan_planet(cx: &mut crate::engine::battle::Cx<'_>, scan_type: u16) {
+unsafe fn scan_planet(cx: &mut Cx<'_>, io: &mut Io<'_>, scan_type: u16) {
     let (start, end) = if scan_type == 4 {
         (0, 2)
     } else {
@@ -488,6 +491,7 @@ unsafe fn scan_planet(cx: &mut crate::engine::battle::Cx<'_>, scan_type: u16) {
     ];
     let mut repair = CRect::default();
     for scan in start..=end {
+        let (mut timeout, tint) = cx.with_legacy(|| {
         let baseline_y = ScreenHeight - 13 - 75 - 7;
         SetContext(PlanetContext);
         repair = CRect {
@@ -511,12 +515,12 @@ unsafe fn scan_planet(cx: &mut crate::engine::battle::Cx<'_>, scan_type: u16) {
         CffiPlatform.batch();
         DrawPlanet(0, black());
         CffiPlatform.unbatch();
-        let tint = color(tint_colors[usize::from(scan)]);
-        let mut timeout = GetTimeCounter();
+        (GetTimeCounter(), color(tint_colors[usize::from(scan)]))
+        });
         let mut line = 0;
         while line < 84 {
             timeout = timeout.wrapping_add((840 * 7 / 4) / 84);
-            if crate::app::bridge::publish(cx, || WaitForAnyButtonUntil(1, timeout, 0)) != 0 {
+            if wait_for_any_button_until(cx, io, 1, timeout, 0) != 0 {
                 break;
             }
             CffiPlatform.batch();
@@ -537,7 +541,7 @@ unsafe fn scan_planet(cx: &mut crate::engine::battle::Cx<'_>, scan_type: u16) {
     SetContext(SCAN_CONTEXT);
     if scan_type == 4 {
         DrawPlanet(0, black());
-        crate::app::bridge::publish(cx, || DrawScannedObjects(0));
+        cx.with_legacy(|| DrawScannedObjects(0));
     }
     FlushInput();
 }
@@ -548,10 +552,10 @@ unsafe fn unavailable() -> bool {
         || (*system).SysInfo.PlanetInfo.AtmoDensity == u16::MAX
 }
 
-unsafe extern "C" fn scan_input(menu: *mut MENU_STATE) -> u32 {
+unsafe fn scan_input(cx: &mut Cx<'_>, io: &mut Io<'_>, menu: &mut MENU_STATE) -> u32 {
     let pulse = std::ptr::addr_of!(PulsedInputState).read();
     let selected = pulse.menu[KEY_MENU_SELECT as usize] != 0;
-    if WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT != 0 {
+    if cx.world.activity() & CHECK_ABORT != 0 {
         return 0;
     }
     if pulse.menu[KEY_MENU_CANCEL as usize] != 0 || (selected && (*menu).CurState == 3) {
@@ -563,18 +567,18 @@ unsafe extern "C" fn scan_input(menu: *mut MENU_STATE) -> u32 {
                 return 1;
             }
             let required = fuel();
-            if WorldData::current().read(|owner| owner.flagship.fuel_on_board) < u32::from(required)
-                || WorldData::current().read(|owner| owner.flagship.num_landers) == 0
-                || WorldData::current().read(|owner| owner.flagship.crew_enlisted) == 0
+            if cx.world.data.flagship.fuel_on_board < u32::from(required)
+                || cx.world.data.flagship.num_landers == 0
+                || cx.world.data.flagship.crew_enlisted == 0
             {
                 PlayMenuSound(2);
                 return 1;
             }
             CffiPlatform.set_flash(FlashTarget::Off);
-            if !pick_side() {
+            if !pick_side(cx, io) {
                 return 0;
             }
-            DrawMenuStateStrings(7, i16::from((*menu).CurState));
+            cx.with_legacy(|| DrawMenuStateStrings(7, i16::from(menu.CurState)));
             CffiPlatform.set_flash(FlashTarget::Menu3do);
             return 1;
         }
@@ -582,14 +586,14 @@ unsafe extern "C" fn scan_input(menu: *mut MENU_STATE) -> u32 {
             PlayMenuSound(2);
             return 1;
         }
-        crate::app::bridge::enter(|cx| scan_planet(cx, u16::from((*menu).CurState)));
+        scan_planet(cx, io, u16::from(menu.CurState));
         if (*menu).CurState == 4 {
             (*menu).CurState = 5;
-            crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::PlanetMenu(3));
-            DrawMenuStateStrings(7, i16::from((*menu).CurState));
+            io.observer.checkpoint(&CheckpointView::PlanetMenu(3));
+            cx.with_legacy(|| DrawMenuStateStrings(7, i16::from(menu.CurState)));
         }
     } else if optWhichMenu == 2 || !unavailable() {
-        DoMenuChooser(menu, 7);
+        cx.with_legacy(|| DoMenuChooser(menu, 7));
     }
     1
 }
@@ -628,9 +632,16 @@ pub unsafe extern "C" fn DestroyScanContext() {
     }
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn ScanSystem() {
+pub unsafe fn scan_system(cx: &mut Cx<'_>, io: &mut Io<'_>) {
     let mut menu: MENU_STATE = std::mem::zeroed();
+    cx.with_legacy(|| prepare_scan_system(&mut menu));
+    io.observer.checkpoint(&CheckpointView::PlanetMenu(2));
+    cx.run_input(io, false, |cx, io| scan_input(cx, io, &mut menu) != 0);
+    io.observer.checkpoint(&CheckpointView::PlanetMenu(0));
+    cx.with_legacy(finish_scan_system);
+}
+
+unsafe fn prepare_scan_system(menu: &mut MENU_STATE) {
     GetScanContext(std::ptr::null_mut());
     if optWhichMenu == 1 && unavailable() {
         menu.CurState = 3;
@@ -650,10 +661,9 @@ pub unsafe extern "C" fn ScanSystem() {
     CffiPlatform.set_flash(FlashTarget::Menu3do);
     display::coarse();
     base::SetMenuSounds(15, 16);
-    menu.InputFunc = Some(scan_input);
-    crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::PlanetMenu(2));
-    base::DoInput((&mut menu as *mut MENU_STATE).cast(), 0);
-    crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::PlanetMenu(0));
+}
+
+unsafe fn finish_scan_system() {
     CffiPlatform.set_flash(FlashTarget::Off);
     CffiPlatform.batch();
     SetContext(SCAN_CONTEXT);

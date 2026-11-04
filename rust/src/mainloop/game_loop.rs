@@ -316,6 +316,17 @@ mod cffi {
         fn legacy<R>(&self, call: impl FnOnce() -> R) -> R {
             self.owned(|cx| cx.with_legacy(call))
         }
+
+        fn observed<R>(
+            &self,
+            call: impl FnOnce(&mut crate::engine::battle::Cx<'_>, &mut crate::engine::observe::Io<'_>) -> R,
+        ) -> R {
+            self.owned(|cx| {
+                let mut observer = cx.kernel.input_runtime().observer();
+                let mut io = crate::engine::observe::Io { observer: observer.as_mut() };
+                call(cx, &mut io)
+            })
+        }
     }
 
     impl GameLoopOps for CffiOps<'_> {
@@ -333,7 +344,7 @@ mod cffi {
         }
 
         fn splash(&self) {
-            self.legacy(|| unsafe { c_extern::uqm_splash_with_bg_init_kernel() })
+            self.observed(|cx, io| unsafe { crate::mainloop::lifecycle_abi::uqm_splash_with_bg_init_kernel(cx, io) })
         }
 
         fn start_game(&self) -> bool {
@@ -474,15 +485,11 @@ mod cffi {
         }
 
         fn race_communication(&self) {
-            self.legacy(|| {
-                // P11: Ported to Rust — operates on C-owned queues through
-                // the Rust queue API, reads game state from Rust singleton.
-                unsafe { crate::comm::dispatch::rust_race_communication() }
-            })
+            self.observed(|cx, io| unsafe { crate::comm::dispatch::race_communication(cx, io) })
         }
 
         fn explore_solar_sys(&self) {
-            self.legacy(|| unsafe { c_extern::ExploreSolarSys() })
+            self.observed(|cx, io| unsafe { crate::planets::solarsys::lifecycle::run_explore_solar_sys(cx, io) })
         }
 
         fn battle_with_frame_callback(&self) {
@@ -516,8 +523,8 @@ mod cffi {
         }
 
         fn init_communication(&self, conversation: u32) {
-            self.legacy(|| unsafe {
-                c_extern::InitCommunication(conversation);
+            self.observed(|cx, io| unsafe {
+                crate::comm::dispatch::init_communication(cx, io, conversation);
             })
         }
 

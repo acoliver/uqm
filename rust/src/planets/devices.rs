@@ -1,5 +1,6 @@
 //! Devices menu, ported from `planets/devices.c`.
 
+use crate::engine::{battle::Cx, observe::Io};
 use super::device_effects::{repair_ultron, ULTRON_COMPONENTS};
 use crate::battle::c_bridge::SleepThread;
 use crate::engine::{
@@ -8,7 +9,7 @@ use crate::engine::{
 
 use crate::mainloop::{
     input_abi::live::SetMenuSounds,
-    restart_menu::c_extern::{uqm_sleep_thread_until as SleepThreadUntil, DoInput, FadeScreen},
+    restart_menu::c_extern::{uqm_sleep_thread_until as SleepThreadUntil, FadeScreen},
     types::activity_flags::{CHECK_LOAD, START_ENCOUNTER},
 };
 
@@ -73,9 +74,7 @@ extern "C" {
 
 }
 
-#[repr(C)]
 struct Menu {
-    input: unsafe extern "C" fn(*mut Menu) -> i32,
     list: Vec<u8>,
     selected: usize,
     top: usize,
@@ -353,8 +352,7 @@ fn effect_state() -> std::collections::BTreeMap<String, u32> {
     state
 }
 
-unsafe extern "C" fn frame(menu: *mut Menu) -> i32 {
-    let menu = &mut *menu;
+unsafe fn frame(menu: &mut Menu) -> i32 {
     let keys = std::ptr::addr_of!(crate::c_bindings::controller_input::PulsedInputState)
         .read()
         .menu;
@@ -430,15 +428,19 @@ pub unsafe extern "C" fn InventoryDevices(map: *mut u8, size: u16) -> i16 {
 
 /// # Safety
 /// Requires the initialized UI and campaign on the owning game thread.
-#[no_mangle]
-pub unsafe extern "C" fn DevicesMenu() -> i32 {
+pub unsafe fn devices_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) -> i32 {
+    let Some(mut menu) = cx.with_legacy(prepare_devices_menu) else { return 0; };
+    cx.run_input(io, true, |cx, _| cx.with_legacy(|| frame(&mut menu) != 0));
+    cx.with_legacy(finish_devices_menu)
+}
+
+unsafe fn prepare_devices_menu() -> Option<Menu> {
     let mut list = [0; 28];
     let count = InventoryDevices(list.as_mut_ptr(), 28) as usize;
     if count == 0 {
-        return 0;
+        return None;
     }
-    let mut menu = Menu {
-        input: frame,
+    let menu = Menu {
         list: list[..count].to_vec(),
         selected: 0,
         top: 0,
@@ -450,7 +452,10 @@ pub unsafe extern "C" fn DevicesMenu() -> i32 {
     }
     draw(&menu, None, true);
     SetMenuSounds(0x000f | 0x0080 | 0x0100, 0x0010);
-    DoInput(std::ptr::addr_of_mut!(menu).cast(), 1);
+    Some(menu)
+}
+
+unsafe fn finish_devices_menu() -> i32 {
     SetMenuSounds(0x000f, 0x0010);
     OBSERVATION.lock().unwrap().list = None;
     if WorldFields::current().read(|owner| owner.flagship.crew_enlisted) != u16::MAX

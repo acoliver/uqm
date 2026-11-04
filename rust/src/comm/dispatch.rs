@@ -13,12 +13,14 @@ mod routing;
 use routing::conversation_setup;
 
 #[cfg(not(test))]
-use crate::engine::observe::CheckpointView;
-#[cfg(not(test))]
 use crate::engine::StoryKey;
-use crate::engine::World;
 #[cfg(not(test))]
 use crate::engine::WorldData;
+use crate::engine::{
+    World,
+    battle::Cx,
+    observe::{CheckpointView, Io},
+};
 use std::os::raw::c_void;
 
 use crate::c_bindings::{assert_c_layout, global_state};
@@ -675,13 +677,13 @@ unsafe fn lock_encounter(_h: HLink) -> *mut CEncounter {
 ///
 /// # Safety
 /// Calls C FFI functions that access global state.
-pub unsafe extern "C" fn rust_race_communication() {
+pub unsafe fn race_communication(cx: &mut Cx<'_>, io: &mut Io<'_>) {
     if lobyte(crate::mainloop::ffi::get_current_activity().0) == IN_LAST_BATTLE {
         // Going into talking pet conversation
         let npc_q = npc_built_ship_queue();
         ReinitQueue(npc_q);
         clone_ship_fragment(ship::SAMATRA_SHIP, npc_q, 0);
-        init_communication(conv::TALKING_PET);
+        init_communication(cx, io, conv::TALKING_PET);
 
         let activity = crate::mainloop::ffi::get_current_activity().0;
         if (activity & (CHECK_ABORT | CHECK_LOAD)) == 0 {
@@ -690,7 +692,7 @@ pub unsafe extern "C" fn rust_race_communication() {
                 crate::mainloop::ffi::set_current_activity(crate::mainloop::types::ActivityValue(
                     WON_LAST_BATTLE,
                 ));
-                crate::app::observe::checkpoint(CheckpointView::Won);
+                io.observer.checkpoint(&CheckpointView::Won);
             }
         }
         return;
@@ -699,7 +701,11 @@ pub unsafe extern "C" fn rust_race_communication() {
     if crate::mainloop::ffi::get_next_activity().0 & CHECK_LOAD != 0 {
         let ec = World::current().read(|world| world.story_state(StoryKey::ESCAPE_COUNTER)) as u8;
 
-        init_communication(World::current().read(routing::restored_conversation));
+        init_communication(
+            cx,
+            io,
+            World::current().read(routing::restored_conversation),
+        );
 
         let crew = crate::mainloop::ffi::get_crew_enlisted();
         if crew != 0xFFFF {
@@ -725,7 +731,7 @@ pub unsafe extern "C" fn rust_race_communication() {
         ReinitQueue(npc_q);
 
         if World::current().read(|world| world.story_state(StoryKey::ARILOU_SPACE_SIDE)) >= 2 {
-            init_communication(conv::ARILOU);
+            init_communication(cx, io, conv::ARILOU);
             return;
         }
 
@@ -759,9 +765,10 @@ pub unsafe extern "C" fn rust_race_communication() {
     } else {
         conv::INVALID
     };
-    crate::app::observe::checkpoint(CheckpointView::EncounterDispatch(conv_id));
+    io.observer
+        .checkpoint(&CheckpointView::EncounterDispatch(conv_id));
 
-    let status = init_communication(conv_id);
+    let status = init_communication(cx, io, conv_id);
 
     let activity = crate::mainloop::ffi::get_current_activity().0;
     if (activity & (CHECK_ABORT | CHECK_LOAD)) != 0 {
@@ -814,7 +821,7 @@ pub unsafe extern "C" fn rust_race_communication() {
 ///
 /// # Safety
 /// Called on the game thread with initialized game state and resources.
-pub unsafe fn init_communication(which_comm: u32) -> u16 {
+pub unsafe fn init_communication(cx: &mut Cx<'_>, io: &mut Io<'_>, which_comm: u32) -> u16 {
     #[cfg(all(not(test), feature = "debug-process"))]
     {
         if crate::front_end::uqmdebug::DISABLE_INTERACTIVITY != 0 {
@@ -855,12 +862,17 @@ pub unsafe fn init_communication(which_comm: u32) -> u16 {
         }
     }
     let (conversation, ship_type) = conversation_setup(which_comm);
-    init_communication_inner(conversation, ship_type)
+    init_communication_inner(cx, io, conversation, ship_type)
 }
 
 #[cfg(not(test))]
 /// Perform sphere tracking, battle setup, dialogue and teardown in C order.
-unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
+unsafe fn init_communication_inner(
+    cx: &mut Cx<'_>,
+    io: &mut Io<'_>,
+    which_comm: u32,
+    ship_type: u16,
+) -> u16 {
     if ship_type != u16::from(ship::URQUAN_DRONE_SHIP) {
         start_sphere_tracking(ship_type as u8);
         if which_comm == conv::ORZ
@@ -879,6 +891,8 @@ unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
     } else {
         conv::YEHAT_REBEL
     };
+    io.observer
+        .checkpoint(&CheckpointView::DialogueDispatch(comm_id));
     let descriptor = rust_init_race_dispatch(comm_id);
     if !descriptor.is_null() {
         std::ptr::copy_nonoverlapping(
@@ -892,9 +906,10 @@ unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
     if World::current().read(|world| world.story_state(StoryKey::BATTLE_SEGUE)) == 0 {
         status = HAIL;
     } else {
-        crate::app::observe::checkpoint(CheckpointView::EncounterMenu(true));
+        io.observer.checkpoint(&CheckpointView::EncounterMenu(true));
         status = ffi::InitEncounter();
-        crate::app::observe::checkpoint(CheckpointView::EncounterMenu(false));
+        io.observer
+            .checkpoint(&CheckpointView::EncounterMenu(false));
         if status == HAIL && !descriptor.is_null() {
             World::current().write(|world| world.set_story_state(StoryKey::BATTLE_SEGUE, 0));
         } else {
@@ -903,7 +918,7 @@ unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
         }
     }
     if status == HAIL {
-        crate::comm::ffi::rust_hail_alien();
+        crate::comm::hail::hail_alien(cx, io);
     } else if !descriptor.is_null() {
         if crate::mainloop::ffi::get_current_activity().0 & (CHECK_ABORT | CHECK_LOAD) == 0 {
             if let Some(callback) = ffi::CommData.post_encounter_func {
@@ -1162,8 +1177,6 @@ unsafe fn name_captain(
 /// The returned pointer is a raw C LOCDATA pointer and must not be freed by
 /// the caller — it points to static C data.
 pub unsafe extern "C" fn rust_init_race_dispatch(comm_id: u32) -> *mut c_void {
-    crate::app::observe::checkpoint(CheckpointView::DialogueDispatch(comm_id));
-
     // Initialize Rust dialogue state (callbacks, phrase state, etc.)
     ffi::rust_init_race_dialogue(comm_id as i32);
 

@@ -858,25 +858,35 @@ pub(crate) mod runtime {
 
     /// # Safety
     /// Must run on the game thread with graphics, input and resources initialized.
-    #[no_mangle]
-    pub unsafe extern "C" fn SetupMenu() {
+    pub unsafe fn setup_menu(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        io: &mut crate::engine::observe::Io<'_>,
+    ) {
         let mut state: SetupMenuState = mem::zeroed();
-        state.input_func = Some(do_setup_menu);
-        state.initialized = 0;
-        SetMenuSounds(MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
-        SETUP_TAB = CaptureStringTable(LoadStringTableInstance(SETUP_MENU_STRTAB.as_ptr().cast()));
-        if !SETUP_TAB.is_null() {
-            init_widgets();
-        } else {
-            fatal(c"PANIC: Could not find strings for the setup menu!");
-        }
-        DONE = 0;
-        DoInput(ptr::addr_of_mut!(state).cast(), 1);
-        (**WorldData::current()).game.current_activity &= !(CHECK_ABORT as u16);
-        propagate_results();
-        if !SETUP_TAB.is_null() {
-            clean_up_widgets();
-        }
+        cx.with_legacy(|| {
+            state.input_func = Some(do_setup_menu);
+            state.initialized = 0;
+            SetMenuSounds(MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
+            SETUP_TAB =
+                CaptureStringTable(LoadStringTableInstance(SETUP_MENU_STRTAB.as_ptr().cast()));
+            if !SETUP_TAB.is_null() {
+                init_widgets();
+            } else {
+                fatal(c"PANIC: Could not find strings for the setup menu!");
+            }
+            DONE = 0;
+        });
+        let callback = state.input_func.take().unwrap();
+        cx.run_input(io, true, |cx, _| unsafe {
+            cx.with_legacy(|| callback(ptr::addr_of_mut!(state))) != 0
+        });
+        cx.with_legacy(|| {
+            (**WorldData::current()).game.current_activity &= !(CHECK_ABORT as u16);
+            propagate_results();
+            if !SETUP_TAB.is_null() {
+                clean_up_widgets();
+            }
+        });
     }
 
     /// # Safety
@@ -1231,7 +1241,7 @@ pub(crate) mod runtime {
 }
 
 #[cfg(not(test))]
-pub use runtime::{GetGlobalOptions, SetGlobalOptions, SetupMenu};
+pub use runtime::{GetGlobalOptions, SetGlobalOptions, setup_menu};
 
 #[cfg(test)]
 mod tests {

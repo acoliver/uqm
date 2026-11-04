@@ -193,17 +193,31 @@ pub(crate) mod live {
         1
     }
 
-    unsafe fn wait_until(released: bool, timeout: TimeCount, reset: BOOLEAN) -> BOOLEAN {
+    use crate::engine::{
+        battle::Cx,
+        observe::{CampaignView, InputView, Io},
+    };
+
+    unsafe fn wait_until(
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
+        released: bool,
+        timeout: TimeCount,
+        reset: BOOLEAN,
+    ) -> BOOLEAN {
         let mut pressed = AnyButtonPress(1);
         while (pressed != 0) == released
             && (timeout == TimePeriod::MAX || GetTimeCounter() < timeout)
-            && WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
-                == 0
+            && cx.world.activity() & CHECK_ABORT as u16 == 0
             && QuitPosted == 0
         {
-            let Some(sampled) = crate::app::observe::nested_input(|| {
-                SleepThread(ONE_SECOND / 40);
-                AnyButtonPress(1)
+            let campaign =
+                CampaignView::for_input(InputView::Nested, || CampaignView::from_world(cx.world));
+            let Some(sampled) = cx.with_legacy(|| {
+                io.nested_input(&campaign, || {
+                    SleepThread(ONE_SECOND / 40);
+                    AnyButtonPress(1)
+                })
             }) else {
                 break;
             };
@@ -215,21 +229,85 @@ pub(crate) mod live {
         u32::from((pressed != 0) != released)
     }
 
-    /// # Safety
-    /// Game-thread access to initialized input and automation state.
+    pub unsafe fn wait_for_any_button_until(
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
+        new_button: BOOLEAN,
+        timeout: TimeCount,
+        reset: BOOLEAN,
+    ) -> BOOLEAN {
+        if new_button != 0 && wait_for_no_input_until(cx, io, timeout, 0) == 0 {
+            return 0;
+        }
+        wait_until(cx, io, false, timeout, reset)
+    }
+
+    pub unsafe fn wait_for_any_button(
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
+        new_button: BOOLEAN,
+        duration: TimePeriod,
+        reset: BOOLEAN,
+    ) -> BOOLEAN {
+        let timeout = if duration == TimePeriod::MAX {
+            duration
+        } else {
+            duration.wrapping_add(GetTimeCounter())
+        };
+        wait_for_any_button_until(cx, io, new_button, timeout, reset)
+    }
+
+    pub unsafe fn wait_for_no_input_until(
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
+        timeout: TimeCount,
+        reset: BOOLEAN,
+    ) -> BOOLEAN {
+        wait_until(cx, io, true, timeout, reset)
+    }
+
+    pub unsafe fn wait_for_no_input(
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
+        duration: TimePeriod,
+        reset: BOOLEAN,
+    ) -> BOOLEAN {
+        let timeout = if duration == TimePeriod::MAX {
+            duration
+        } else {
+            duration.wrapping_add(GetTimeCounter())
+        };
+        wait_for_no_input_until(cx, io, timeout, reset)
+    }
+
+    unsafe fn legacy_wait_until(released: bool, timeout: TimeCount, reset: BOOLEAN) -> BOOLEAN {
+        let mut pressed = AnyButtonPress(1);
+        while (pressed != 0) == released
+            && (timeout == TimePeriod::MAX || GetTimeCounter() < timeout)
+            && WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
+                == 0
+            && QuitPosted == 0
+        {
+            SleepThread(ONE_SECOND / 40);
+            pressed = AnyButtonPress(1);
+        }
+        if reset != 0 {
+            FlushInput();
+        }
+        u32::from((pressed != 0) != released)
+    }
+
     #[no_mangle]
     pub unsafe extern "C" fn WaitForAnyButtonUntil(
         new_button: BOOLEAN,
         timeout: TimeCount,
         reset: BOOLEAN,
     ) -> BOOLEAN {
-        if new_button != 0 && WaitForNoInputUntil(timeout, 0) == 0 {
+        if new_button != 0 && legacy_wait_until(true, timeout, 0) == 0 {
             return 0;
         }
-        wait_until(false, timeout, reset)
+        legacy_wait_until(false, timeout, reset)
     }
-    /// # Safety
-    /// Game-thread access to initialized input and automation state.
     #[no_mangle]
     pub unsafe extern "C" fn WaitForAnyButton(
         new_button: BOOLEAN,
@@ -243,14 +321,10 @@ pub(crate) mod live {
         };
         WaitForAnyButtonUntil(new_button, timeout, reset)
     }
-    /// # Safety
-    /// Game-thread access to initialized input and automation state.
     #[no_mangle]
     pub unsafe extern "C" fn WaitForNoInputUntil(timeout: TimeCount, reset: BOOLEAN) -> BOOLEAN {
-        wait_until(true, timeout, reset)
+        legacy_wait_until(true, timeout, reset)
     }
-    /// # Safety
-    /// Game-thread access to initialized input and automation state.
     #[no_mangle]
     pub unsafe extern "C" fn WaitForNoInput(duration: TimePeriod, reset: BOOLEAN) -> BOOLEAN {
         let timeout = if duration == TimePeriod::MAX {

@@ -1,7 +1,7 @@
 //! Temporary flagship and escort state while rendering a saved-game summary.
 
 use crate::collections::queue::Queue;
-use crate::engine::{world::SisState, WorldData};
+use crate::engine::{WorldData, world::SisState};
 
 pub(super) struct SavedState {
     flagship: SisState,

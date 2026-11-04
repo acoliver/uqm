@@ -6,12 +6,10 @@ use crate::starbase::gfx::{Align, ContextId, FontId, Gfx, Point, Rgba, Stamp, Te
 
 use crate::graphics::font_abi::TextRect;
 
-use crate::ui::util::live::SaveContextFrame;
-
-use crate::ui::util::live::DrawStarConBox;
+use crate::engine::{battle::Cx, observe::Io};
+use crate::ui::util::live::{DrawStarConBox, SaveContextFrame, wait_for_any_button};
 
 use crate::graphics::gfx_common_abi::FlushGraphics;
-use crate::ui::util::live::WaitForAnyButton;
 
 fn color(v: u8) -> CColor {
     let c = Rgba::rgb15(v, v, v);
@@ -25,8 +23,7 @@ fn color(v: u8) -> CColor {
 
 /// # Safety
 /// Game thread with the SIS graphics contexts and string table initialized.
-#[no_mangle]
-pub unsafe extern "C" fn SaveProblem() {
+pub unsafe fn save_problem(cx: &mut Cx<'_>, io: &mut Io<'_>) {
     let g = CffiPlatform;
     let old = g.set_context(ContextId::Space);
     g.set_font(FontId::StarCon);
@@ -71,7 +68,7 @@ pub unsafe extern "C" fn SaveProblem() {
     }
     g.unbatch();
     FlushGraphics();
-    WaitForAnyButton(1, u32::MAX, 0);
+    wait_for_any_button(cx, io, 1, u32::MAX, 0);
     g.draw_stamp(Stamp {
         origin: Point {
             x: saved.origin.x,

@@ -50,8 +50,15 @@ where
     }
 
     pub fn run(&mut self) -> Result<SessionOutcome, ControllerError> {
+        self.run_with_frame(run_frame)
+    }
+
+    pub(crate) fn run_with_frame(
+        &mut self,
+        mut frame: impl FnMut(&mut PlanetSideSession, &mut RuntimeAdapters<I, C, G, A, K, S>, u32) -> Result<RuntimeStep, RuntimeError>,
+    ) -> Result<SessionOutcome, ControllerError> {
         for _ in 0..self.frame_budget {
-            match run_frame(&mut self.session, &mut self.adapters, self.tick_period)? {
+            match frame(&mut self.session, &mut self.adapters, self.tick_period)? {
                 RuntimeStep::Continue => crate::planet_side::telemetry::frame(&self.session),
                 RuntimeStep::Complete(outcome) => {
                     crate::planet_side::telemetry::frame(&self.session);

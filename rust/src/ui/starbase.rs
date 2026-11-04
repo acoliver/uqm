@@ -2,11 +2,11 @@
 #![cfg(not(test))]
 
 use super::{outfit::DoOutfit, shipyard::DoShipyard};
-use crate::comm::comm_abi::{InitCommunication, SetCommIntroMode};
+use crate::comm::comm_abi::SetCommIntroMode;
 use crate::engine::{
+    Kernel, StoryKey, World, WorldData,
     battle::Cx,
     observe::{CheckpointView, Io},
-    Kernel, StoryKey, World, WorldData,
 };
 use crate::navigation::abi::*;
 
@@ -308,10 +308,8 @@ unsafe fn activate_starbase_selection(
     }
     if menu.CurState == TALK_COMMANDER {
         io.observer.checkpoint(&CheckpointView::StarbaseMenu(false));
-        cx.with_legacy(|| {
-            FlushInput();
-            InitCommunication(CONVERSATION_COMMANDER_CONVERSATION);
-        });
+        cx.with_legacy(|| unsafe { FlushInput() });
+        crate::comm::dispatch::init_communication(cx, io, CONVERSATION_COMMANDER_CONVERSATION);
         io.observer.checkpoint(&CheckpointView::StarbaseMenu(true));
         cx.world
             .set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, BYTE::MAX as u32);
@@ -422,7 +420,7 @@ unsafe fn cleanup_after_star_base() {
     }
 }
 
-unsafe fn prepare_starbase_visit(io: &mut Io<'_>) -> Option<u32> {
+unsafe fn prepare_starbase_visit(cx: &mut Cx<'_>, io: &mut Io<'_>) -> Option<u32> {
     if World::current().read(|world| world.story_state(StoryKey::CHMMR_BOMB_STATE)) == 2 {
         (**World::current()).select_star(None, crate::planets::starmap::current_catalog());
         World::current().write(|world| {
@@ -434,7 +432,7 @@ unsafe fn prepare_starbase_visit(io: &mut Io<'_>) -> Option<u32> {
             CONVERSATION_COMMANDER_CONVERSATION,
         ));
         SetCommIntroMode(CROSSFADE_SCREEN, 0);
-        InitCommunication(CONVERSATION_COMMANDER_CONVERSATION);
+        crate::comm::dispatch::init_communication(cx, io, CONVERSATION_COMMANDER_CONVERSATION);
         if World::current().read(|world| world.story_state(StoryKey::PROBE_ILWRATH_ENCOUNTER)) == 0
             || (**WorldData::current()).game.current_activity & CHECK_ABORT as u16 != 0
         {
@@ -450,14 +448,14 @@ unsafe fn prepare_starbase_visit(io: &mut Io<'_>) -> Option<u32> {
             )
         });
         (*ship.cast::<SHIP_FRAGMENT>()).race_id = BYTE::MAX;
-        InitCommunication(CONVERSATION_ILWRATH_CONVERSATION);
+        crate::comm::dispatch::init_communication(cx, io, CONVERSATION_ILWRATH_CONVERSATION);
         if (**WorldData::current()).flagship.crew_enlisted == COUNT::MAX
             || (**WorldData::current()).game.current_activity & CHECK_ABORT as u16 != 0
         {
             return None;
         }
         SetCommIntroMode(CROSSFADE_SCREEN, 0);
-        InitCommunication(CONVERSATION_COMMANDER_CONVERSATION);
+        crate::comm::dispatch::init_communication(cx, io, CONVERSATION_COMMANDER_CONVERSATION);
         if (**WorldData::current()).game.current_activity & CHECK_ABORT as u16 != 0 {
             return None;
         }
@@ -477,7 +475,7 @@ unsafe fn prepare_starbase_visit(io: &mut Io<'_>) -> Option<u32> {
             CONVERSATION_COMMANDER_CONVERSATION,
         ));
         SetCommIntroMode(FADE_IN_SCREEN, ONE_SECOND * 2);
-        InitCommunication(CONVERSATION_COMMANDER_CONVERSATION);
+        crate::comm::dispatch::init_communication(cx, io, CONVERSATION_COMMANDER_CONVERSATION);
         if (**WorldData::current()).game.current_activity & CHECK_ABORT as u16 != 0 {
             return None;
         }
@@ -494,7 +492,7 @@ unsafe fn prepare_starbase_visit(io: &mut Io<'_>) -> Option<u32> {
 /// World queues, game clock, communication, input, graphics and audio must be
 /// initialized and exclusively accessed by the calling game thread.
 pub unsafe fn run_starbase_visit(cx: &mut Cx<'_>, io: &mut Io<'_>) {
-    let Some(previous) = cx.with_legacy(|| prepare_starbase_visit(io)) else {
+    let Some(previous) = prepare_starbase_visit(cx, io) else {
         return;
     };
     let mut menu: MENU_STATE = mem::zeroed();

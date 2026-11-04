@@ -26,7 +26,7 @@ pub(crate) mod live {
     use crate::c_bindings::solar_system;
     use crate::comm::{locdata::CRect, sis_graphics::CText};
 
-    use crate::engine::WorldData as WorldFields;
+    use crate::engine::{battle::Cx, observe::Io};
     use crate::mainloop::{input_abi::live::FlushInput, restart_menu::c_extern::SetContext};
 
     use crate::starbase::{
@@ -41,21 +41,21 @@ pub(crate) mod live {
             utf8_string_count as utf8StringCount, utf8_string_count_n as utf8StringCountN,
         },
     };
-    use std::ffi::{c_void, CString};
+    use std::ffi::{CString, c_void};
 
     use crate::time::counter_abi::GetTimeCounter;
 
     use crate::graphics::{
         context_abi::SetContextFontEffect,
         drawable_abi::{DestroyDrawable, GetFrameRect},
-        font_abi::{font_DrawText, SetContextFont},
+        font_abi::{SetContextFont, font_DrawText},
         pixmap_abi::{ReleaseDrawable, SetAbsFrameIndex},
     };
 
     use crate::planets::scan::live::{DestroyScanContext, GetScanContext};
 
     use crate::ui::util::live::{
-        SaveContextFrame, WaitForAnyButton, WaitForAnyButtonUntil, WaitForNoInput,
+        SaveContextFrame, wait_for_any_button, wait_for_any_button_until, wait_for_no_input,
     };
 
     use crate::battle::sounds::engine::NON_POSITIONAL;
@@ -102,7 +102,13 @@ pub(crate) mod live {
 
     use crate::battle::sounds::play_sound;
 
-    unsafe fn make_report(sounds: *mut c_void, text: *const u8, mut remaining: u16) {
+    unsafe fn make_report(
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
+        sounds: *mut c_void,
+        text: *const u8,
+        mut remaining: u16,
+    ) {
         let g = CffiPlatform;
         let end_page = CString::new(format!("{}\n", g.game_string(305 + 3))).unwrap();
         let end_len = utf8StringCount(end_page.as_ptr().cast()) as u16;
@@ -156,14 +162,10 @@ pub(crate) mod live {
                         next = t.p_str.cast();
                         let c = getCharFromString(&mut next);
                         font_DrawText(std::ptr::from_mut(&mut t).cast());
-                        if sleepy
-                            && WorldFields::current().read(|owner| owner.game.current_activity)
-                                & (1 << 14)
-                                == 0
-                        {
+                        if sleepy && cx.world.activity() & (1 << 14) == 0 {
                             play_sound(sounds.cast(), NON_POSITIONAL, None, 2);
                             timeout = timeout.wrapping_add(character_delay(c, word_chars == 0));
-                            if WaitForAnyButtonUntil(1, timeout, 0) != 0 {
+                            if wait_for_any_button_until(cx, io, 1, timeout, 0) != 0 {
                                 sleepy = false;
                                 g.batch();
                             }
@@ -188,7 +190,7 @@ pub(crate) mod live {
                 if !sleepy {
                     g.unbatch();
                 }
-                if WaitForAnyButton(1, u32::MAX, 0) == 0 {
+                if wait_for_any_button(cx, io, 1, u32::MAX, 0) == 0 {
                     break;
                 }
                 t.baseline.y = r.height + 1;
@@ -204,8 +206,7 @@ pub(crate) mod live {
         }
     }
 
-    #[no_mangle]
-    pub unsafe extern "C" fn DoDiscoveryReport(sounds: *mut c_void) {
+    pub unsafe fn do_discovery_report(cx: &mut Cx<'_>, io: &mut Io<'_>, sounds: *mut c_void) {
         #[cfg(feature = "debug-process")]
         if crate::front_end::uqmdebug::DISABLE_INTERACTIVITY != 0 {
             return;
@@ -222,6 +223,8 @@ pub(crate) mod live {
             std::ptr::null_mut()
         });
         make_report(
+            cx,
+            io,
             sounds,
             GetStringAddress((*info).DiscoveryString.cast()).cast(),
             GetStringLength((*info).DiscoveryString.cast()),
@@ -240,7 +243,7 @@ pub(crate) mod live {
             DestroyScanContext();
         }
         DestroyDrawable(ReleaseDrawable(saved.frame));
-        WaitForNoInput(u32::MAX, 1);
+        wait_for_no_input(cx, io, u32::MAX, 1);
     }
 }
 

@@ -3,7 +3,7 @@
 use super::drawing::*;
 use super::flight::*;
 use super::*;
-use crate::engine::{Kernel, StoryKey, World, WorldData};
+use crate::engine::{battle::Cx, observe::Io, Kernel, StoryKey, World, WorldData};
 use crate::ships::native::abi::optMeleeScale;
 
 use crate::battle::gendef::getGenerateFunctions;
@@ -11,10 +11,10 @@ use crate::c_bindings::controller_input as input;
 use crate::collections::queue::ReinitQueue;
 use crate::comm::locdata::CPoint;
 use crate::graphics::pixmap_abi::{GetFrameIndex, ReleaseDrawable, SetAbsFrameIndex};
-use crate::mainloop::restart_menu::c_extern::{DoInput, PlayMusic};
+use crate::mainloop::restart_menu::c_extern::PlayMusic;
 use crate::math::arctan;
 use crate::planet_side::orbit_music::load_lander_data;
-use crate::planets::devices::DevicesMenu;
+use crate::planets::devices::devices_menu;
 use crate::planets::ffi::do_planetary_analysis_c;
 use crate::planets::starmap::FindStar;
 use crate::sound::heart_ffi::PLRPlaying;
@@ -103,7 +103,7 @@ mod ffi {
 
     pub(super) use crate::state::c_api::planets::put_planet_info;
 
-    pub(super) use crate::planets::orbit::live::PlanetOrbitMenu;
+    pub(super) use crate::planets::orbit::live::planet_orbit_menu;
 
     pub(super) use crate::planets::orbit::live::FreePlanet;
 
@@ -113,13 +113,13 @@ mod ffi {
 
     pub(super) use crate::ui::menu::DoMenuChooser;
 
-    pub(super) use crate::planets::cargo::live::CargoMenu;
+    pub(super) use crate::planets::cargo::live::cargo_menu;
 
-    pub(super) use crate::planets::roster::live::RosterMenu;
+    pub(super) use crate::planets::roster::live::roster_menu;
 
-    pub(super) use crate::front_end::gameopt::runtime::GameOptions;
+    pub(super) use crate::front_end::gameopt::runtime::game_options;
 
-    pub(super) use crate::planets::pstarmap::StarMap;
+    pub(super) use crate::planets::pstarmap::star_map;
 
     extern "C" {
 
@@ -332,7 +332,16 @@ pub(super) unsafe fn reset_solar_sys() {
     }
 }
 
-pub(super) unsafe fn enter_planet_orbit() {
+unsafe fn enter_planet_orbit(cx: &mut Cx<'_>, io: &mut Io<'_>) {
+    if !cx.with_legacy(prepare_planet_orbit) { return; }
+    if !(*system()).TopoFrame.is_null() {
+        ffi::planet_orbit_menu(cx, io);
+        cx.with_legacy(ffi::FreePlanet);
+    }
+    cx.with_legacy(finish_planet_orbit);
+}
+
+unsafe fn prepare_planet_orbit() -> bool {
     let state = system();
     if (*state).InIpFlight != 0 {
         free_solar_sys();
@@ -354,12 +363,12 @@ pub(super) unsafe fn enter_planet_orbit() {
         || glob().read(|owner| owner.flagship.crew_enlisted) == c::COUNT::MAX
         || World::current().read(|world| world.story_state(StoryKey::CHMMR_BOMB_STATE)) == 2
     {
-        return;
+        return false;
     }
-    if !(*state).TopoFrame.is_null() {
-        ffi::PlanetOrbitMenu();
-        ffi::FreePlanet();
-    }
+    true
+}
+
+unsafe fn finish_planet_orbit() {
     if glob().read(|owner| owner.game.current_activity)
         & (START_ENCOUNTER | CHECK_ABORT | CHECK_LOAD)
         == 0
@@ -508,12 +517,20 @@ pub(super) unsafe fn hyperspace_unit_factors() -> (i32, i32) {
     ((((width - 64) << 5) >> 4) * 195, ((height << 5) >> 4) * 25)
 }
 
-#[no_mangle]
 /// # Safety
 /// Call on the game thread with campaign and solar-system globals initialized;
 /// their pointers must remain valid through any input or generator callbacks.
-pub unsafe extern "C" fn ExploreSolarSys() {
+pub unsafe fn run_explore_solar_sys(cx: &mut Cx<'_>, io: &mut Io<'_>) {
     let mut solar_sys_state = MaybeUninit::<c::SOLARSYS_STATE>::uninit();
+    cx.with_legacy(|| prepare_explore_solar_sys(solar_sys_state.as_mut_ptr()));
+    cx.run_input(io, false, |cx, io| do_ip_flight(cx, io, solar_sys_state.as_mut_ptr()) != 0);
+    cx.with_legacy(|| {
+        uninit_solar_sys();
+        P_SOLAR_SYS_STATE = ptr::null_mut();
+    });
+}
+
+unsafe fn prepare_explore_solar_sys(state: *mut c::SOLARSYS_STATE) {
     if (**World::current())
         .star_pointer(crate::planets::starmap::current_catalog())
         .is_null()
@@ -548,18 +565,13 @@ pub unsafe extern "C" fn ExploreSolarSys() {
             ((9999 - i32::from(star.star_pt.y)) * log_units_y + (625 >> 1)) / 625;
     });
 
-    // DoInput runs callbacks synchronously; this storage stays live through teardown.
-    P_SOLAR_SYS_STATE = solar_sys_state.as_mut_ptr();
+    P_SOLAR_SYS_STATE = state;
     ptr::write_bytes(P_SOLAR_SYS_STATE, 0, 1);
     let index = World::current()
         .read(|world| (*world.star_pointer(crate::planets::starmap::current_catalog())).index);
     (*P_SOLAR_SYS_STATE).genFuncs = getGenerateFunctions(index).cast();
     init_solar_sys();
     ffi::SetMenuSounds(MENU_SOUND_NONE, MENU_SOUND_NONE);
-    (*P_SOLAR_SYS_STATE).InputFunc = Some(do_ip_flight);
-    DoInput(P_SOLAR_SYS_STATE.cast(), 0);
-    uninit_solar_sys();
-    P_SOLAR_SYS_STATE = ptr::null_mut();
 }
 
 pub(super) unsafe fn game_string(index: c::COUNT) -> *mut c_char {
@@ -634,63 +646,66 @@ pub unsafe extern "C" fn SaveSolarSysLocation() {
     }
 }
 
-pub(super) unsafe extern "C" fn do_solar_sys_menu(menu: *mut c::MENU_STATE) -> c::BOOLEAN {
+unsafe fn do_solar_sys_menu(cx: &mut Cx<'_>, io: &mut Io<'_>, menu: &mut c::MENU_STATE) -> c::BOOLEAN {
     let mut select = input::PulsedInputState.menu[KEY_MENU_SELECT] as c::BOOLEAN;
-    if glob().read(|owner| owner.game.current_activity) & (CHECK_ABORT | CHECK_LOAD) != 0
-        || glob().read(|owner| owner.flagship.crew_enlisted) == c::COUNT::MAX
+    if cx.world.activity() & (CHECK_ABORT | CHECK_LOAD) != 0
+        || cx.world.data.flagship.crew_enlisted == c::COUNT::MAX
     {
         return 0;
     }
-    if ffi::DoMenuChooser(menu, PM_STARMAP) != 0 {
+    if cx.with_legacy(|| ffi::DoMenuChooser(menu, PM_STARMAP)) != 0 {
         return 1;
     }
-    if Kernel::current().read(|owner| owner.last_activity) == CHECK_LOAD {
+    if cx.kernel.last_activity == CHECK_LOAD {
         select = 1;
     }
     if select == 0 {
         return 1;
     }
-    ffi::SetFlashRect(ptr::null());
-    match (*menu).CurState {
+    cx.with_legacy(|| ffi::SetFlashRect(ptr::null()));
+    match menu.CurState {
         EQUIP_DEVICE => {
-            select = DevicesMenu() as c::BOOLEAN;
-            if glob().read(|owner| owner.game.current_activity) & START_ENCOUNTER != 0 {
+            select = devices_menu(cx, io) as c::BOOLEAN;
+            if cx.world.activity() & START_ENCOUNTER != 0 {
                 return 0;
             }
         }
-        CARGO => ffi::CargoMenu(),
-        ROSTER => select = ffi::RosterMenu() as c::BOOLEAN,
+        CARGO => ffi::cargo_menu(cx, io),
+        ROSTER => select = ffi::roster_menu(cx, io) as c::BOOLEAN,
         GAME_MENU => {
-            if ffi::GameOptions() == 0 {
+            if ffi::game_options(cx, io) == 0 {
                 return 0;
             }
         }
         STARMAP => {
-            ffi::StarMap();
-            if glob().read(|owner| owner.game.current_activity) & CHECK_ABORT != 0 {
+            ffi::star_map(cx, io);
+            if cx.world.activity() & CHECK_ABORT != 0 {
                 return 0;
             }
-            ffi::SetContext(Kernel::current().read(|owner| owner.space_context));
-            draw_system_transition(playerInInnerSystem());
+            cx.with_legacy(|| {
+                ffi::SetContext(Kernel::current().read(|owner| owner.space_context));
+                draw_system_transition(playerInInnerSystem());
+            });
             return 0;
         }
         NAVIGATION => return 0,
         _ => {}
     }
-    if glob().read(|owner| owner.game.current_activity) & CHECK_ABORT == 0 {
+    if cx.world.activity() & CHECK_ABORT == 0 {
         if select != 0 {
             if ffi::optWhichMenu != OPT_PC {
                 (*menu).CurState = NAVIGATION;
             }
-            ffi::DrawMenuStateStrings(PM_STARMAP, i16::from((*menu).CurState));
+            cx.with_legacy(|| ffi::DrawMenuStateStrings(PM_STARMAP, i16::from(menu.CurState)));
         }
-        ffi::SetFlashRect((usize::MAX as *const c_void).cast());
+        cx.with_legacy(|| ffi::SetFlashRect((usize::MAX as *const c_void).cast()));
     }
     1
 }
 
-pub(super) unsafe fn solar_sys_menu() {
+unsafe fn solar_sys_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) {
     let mut menu: c::MENU_STATE = std::mem::zeroed();
+    cx.with_legacy(|| {
     if Kernel::current().read(|owner| owner.last_activity) == CHECK_LOAD {
         menu.CurState = GAME_MENU;
     } else {
@@ -700,28 +715,30 @@ pub(super) unsafe fn solar_sys_menu() {
     ffi::DrawStatusMessage(ptr::null());
     ffi::SetFlashRect((usize::MAX as *const c_void).cast());
     ffi::SetMenuSounds(MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
-    menu.InputFunc = Some(do_solar_sys_menu);
-    DoInput(ptr::addr_of_mut!(menu).cast(), 1);
-    ffi::DrawMenuStateStrings(PM_STARMAP, -i16::from(NAVIGATION));
+    });
+    cx.run_input(io, true, |cx, io| do_solar_sys_menu(cx, io, &mut menu) != 0);
+    cx.with_legacy(|| ffi::DrawMenuStateStrings(PM_STARMAP, -i16::from(NAVIGATION)));
 }
 
-pub(super) unsafe extern "C" fn do_ip_flight(state: *mut c::SOLARSYS_STATE) -> c::BOOLEAN {
+unsafe fn do_ip_flight(cx: &mut Cx<'_>, io: &mut Io<'_>, state: *mut c::SOLARSYS_STATE) -> c::BOOLEAN {
     let cancel = input::PulsedInputState.menu[KEY_MENU_CANCEL];
     if (*state).InOrbit != 0 {
-        enter_planet_orbit();
-        ffi::SetMenuSounds(MENU_SOUND_NONE, MENU_SOUND_NONE);
+        enter_planet_orbit(cx, io);
+        cx.with_legacy(|| ffi::SetMenuSounds(MENU_SOUND_NONE, MENU_SOUND_NONE));
         (*state).InOrbit = 0;
-    } else if cancel != 0 || Kernel::current().read(|owner| owner.last_activity) == CHECK_LOAD {
-        solar_sys_menu();
-        ffi::SetMenuSounds(MENU_SOUND_NONE, MENU_SOUND_NONE);
+    } else if cancel != 0 || cx.kernel.last_activity == CHECK_LOAD {
+        solar_sys_menu(cx, io);
+        cx.with_legacy(|| ffi::SetMenuSounds(MENU_SOUND_NONE, MENU_SOUND_NONE));
     } else {
         assert!((*state).InIpFlight != 0);
-        ip_frame();
-        ffi::SleepThreadUntil(NEXT_TIME);
-        NEXT_TIME = ffi::GetTimeCounter().wrapping_add(IP_FRAME_RATE);
+        cx.with_legacy(|| {
+            ip_frame();
+            ffi::SleepThreadUntil(NEXT_TIME);
+            NEXT_TIME = ffi::GetTimeCounter().wrapping_add(IP_FRAME_RATE);
+        });
     }
-    (glob().read(|owner| owner.game.current_activity)
+    (cx.world.activity()
         & (START_ENCOUNTER | END_INTERPLANETARY | CHECK_ABORT | CHECK_LOAD)
         == 0
-        && glob().read(|owner| owner.flagship.crew_enlisted) != c::COUNT::MAX) as c::BOOLEAN
+        && cx.world.data.flagship.crew_enlisted != c::COUNT::MAX) as c::BOOLEAN
 }

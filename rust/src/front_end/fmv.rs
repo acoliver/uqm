@@ -3,9 +3,10 @@
 #[cfg(not(test))]
 pub(crate) mod runtime {
     use super::super::intro::runtime::show_presentation;
+    use crate::engine::Kernel;
     use crate::engine::{battle::Cx, observe::Io};
-    use crate::engine::{Kernel, WorldData};
     use crate::navigation::abi::*;
+    use crate::ui::util::live::wait_for_any_button;
 
     use std::ptr;
 
@@ -15,8 +16,7 @@ pub(crate) mod runtime {
     /// # Safety
     /// Graphics, resource and input systems must be initialized on the game thread;
     /// `music` must be null or a live music reference.
-    #[no_mangle]
-    pub unsafe extern "C" fn DoShipSpin(index: COUNT, music: MUSIC_REF) {
+    pub unsafe fn do_ship_spin(cx: &mut Cx<'_>, io: &mut Io<'_>, index: COUNT, music: MUSIC_REF) {
         if !WANT_SHIP_SPINS {
             return;
         }
@@ -32,14 +32,7 @@ pub(crate) mod runtime {
             c"slides.spins.%02u".as_ptr(),
             index as u32,
         );
-        crate::app::bridge::enter(|cx| {
-            let runtime = cx.kernel.input_runtime();
-            let mut observer = runtime.observer();
-            let mut io = Io {
-                observer: observer.as_mut(),
-            };
-            show_presentation(cx, &mut io, name.as_ptr())
-        });
+        show_presentation(cx, io, name.as_ptr());
         SleepThreadUntil(FadeScreen(
             ScreenFadeType_FadeAllToBlack,
             (ONE_SECOND / 4) as SIZE,
@@ -62,8 +55,11 @@ pub(crate) mod runtime {
     /// # Safety
     /// The game systems must be initialized on the game thread. A supplied
     /// processing callback must remain valid throughout this call.
-    #[no_mangle]
-    pub unsafe extern "C" fn SplashScreen(process: Option<unsafe extern "C" fn(DWORD)>) {
+    pub unsafe fn splash_screen(
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
+        process: Option<unsafe extern "C" fn(DWORD)>,
+    ) {
         SleepThreadUntil(FadeScreen(
             ScreenFadeType_FadeAllToBlack,
             (ONE_SECOND / 120) as SIZE,
@@ -77,18 +73,17 @@ pub(crate) mod runtime {
         DestroyDrawable(ReleaseDrawable(stamp.frame));
         let timeout = FadeScreen(ScreenFadeType_FadeAllToColor, (ONE_SECOND / 2) as SIZE);
         if let Some(callback) = process {
-            callback(timeout);
+            cx.with_legacy(|| callback(timeout));
         }
-        if WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16 != 0
-        {
+        if cx.world.activity() & CHECK_ABORT as u16 != 0 {
             return;
         }
-        WaitForAnyButton(0, ONE_SECOND * 3, 1);
-        if WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16 != 0
-        {
+        wait_for_any_button(cx, io, 0, ONE_SECOND * 3, 1);
+        if cx.world.activity() & CHECK_ABORT as u16 != 0 {
             return;
         }
-        (**WorldData::current()).game.current_activity &= !(CHECK_ABORT as u16);
+        cx.world
+            .set_activity(cx.world.activity() & !(CHECK_ABORT as u16));
         SleepThreadUntil(FadeScreen(
             ScreenFadeType_FadeAllToBlack,
             (ONE_SECOND / 2) as SIZE,
@@ -124,4 +119,4 @@ pub(crate) mod runtime {
 }
 
 #[cfg(not(test))]
-pub use runtime::{introduction, victory, DoShipSpin, SplashScreen};
+pub use runtime::{do_ship_spin, introduction, splash_screen, victory};

@@ -72,14 +72,14 @@ pub fn picker_action(
 }
 
 #[cfg(not(test))]
-pub use runtime::{load_game_descriptions, ConfirmSaveLoad, GameOptions, SetNamingCallback};
+pub use runtime::{ConfirmSaveLoad, SetNamingCallback, game_options, load_game_descriptions};
 
 #[cfg(not(test))]
 pub(crate) mod runtime {
     mod save_load;
     use save_load::save_load_game;
 
-    use super::{picker_action, picker_slot, PickerAction, MAX_SAVED_GAMES, SAVES_PER_PAGE};
+    use super::{MAX_SAVED_GAMES, PickerAction, SAVES_PER_PAGE, picker_action, picker_slot};
     use crate::engine::{Kernel, StoryKey, World, WorldData};
     use crate::navigation::abi::*;
 
@@ -639,14 +639,20 @@ pub(crate) mod runtime {
         1
     }
 
-    unsafe fn settings_menu() {
+    unsafe fn settings_menu(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        io: &mut crate::engine::observe::Io<'_>,
+    ) {
         let mut menu_state: MENU_STATE = mem::zeroed();
         menu_state.CurState = SOUND_ON_SETTING;
         DrawMenuStateStrings(PM_SOUND_ON as BYTE, menu_state.CurState as SWORD);
         feedback_setting(menu_state.CurState);
         menu_state.InputFunc = Some(do_settings);
-        DoInput(ptr::addr_of_mut!(menu_state).cast(), 0);
-        DrawStatusMessage(ptr::null());
+        let callback = menu_state.InputFunc.take().unwrap();
+        cx.run_input(io, false, |cx, _| unsafe {
+            cx.with_legacy(|| callback(ptr::addr_of_mut!(menu_state))) != 0
+        });
+        cx.with_legacy(|| DrawStatusMessage(ptr::null()));
     }
 
     // Private C-local state, containing only header-generated ABI records.
@@ -1138,7 +1144,12 @@ pub(crate) mod runtime {
         1
     }
 
-    unsafe fn pick_game(saving: BOOLEAN, from_main_menu: BOOLEAN) -> BOOLEAN {
+    unsafe fn pick_game(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        io: &mut crate::engine::observe::Io<'_>,
+        saving: BOOLEAN,
+        from_main_menu: BOOLEAN,
+    ) -> BOOLEAN {
         let activity = WorldData::current().read(|owner| owner.game.current_activity);
         log::info!(
             "RUST_PICKER: enter saving={saving} main_menu={from_main_menu} activity={activity:#x}"
@@ -1185,7 +1196,10 @@ pub(crate) mod runtime {
         loop {
             let mut canceled_by_user: BOOLEAN = 0;
             pick_state.success = 0;
-            DoInput(ptr::addr_of_mut!(menu_state).cast(), 1);
+            let callback = menu_state.InputFunc.unwrap();
+            cx.run_input(io, true, |cx, _| unsafe {
+                cx.with_legacy(|| callback(ptr::addr_of_mut!(menu_state))) != 0
+            });
             if pick_state.success == 0 {
                 break;
             }
@@ -1208,7 +1222,7 @@ pub(crate) mod runtime {
             }
             log::info!("RUST_PICKER: operation_failed picker_remains_open");
             if saving != 0 && canceled_by_user == 0 {
-                SaveProblem();
+                crate::savegame::problem::save_problem(cx, io);
             }
             load_game_descriptions(ptr::addr_of_mut!(pick_state.summary).cast());
             redraw_pick_display(&mut pick_state, menu_state.CurState as COUNT);
@@ -1227,7 +1241,11 @@ pub(crate) mod runtime {
         pick_state.success
     }
 
-    unsafe extern "C" fn do_game_options(p_ms: *mut MENU_STATE) -> BOOLEAN {
+    unsafe fn do_game_options(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        io: &mut crate::engine::observe::Io<'_>,
+        p_ms: *mut MENU_STATE,
+    ) -> BOOLEAN {
         if WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as ACTIVITY
             != 0
         {
@@ -1239,7 +1257,7 @@ pub(crate) mod runtime {
             match (*p_ms).CurState {
                 SAVE_GAME | LOAD_GAME => {
                     SetFlashRect(ptr::null());
-                    if pick_game(u32::from((*p_ms).CurState == SAVE_GAME), 0) != 0 {
+                    if pick_game(cx, io, u32::from((*p_ms).CurState == SAVE_GAME), 0) != 0 {
                         return 0;
                     }
                     SetFlashRect(SFR_MENU_3DO);
@@ -1250,7 +1268,7 @@ pub(crate) mod runtime {
                     }
                 }
                 SETTINGS => {
-                    settings_menu();
+                    settings_menu(cx, io);
                     DrawMenuStateStrings(PM_SAVE_GAME as BYTE, (*p_ms).CurState as SWORD);
                 }
                 _ => {}
@@ -1264,12 +1282,14 @@ pub(crate) mod runtime {
     /// # Safety
     /// The game thread must have initialized the game, input, audio, and SIS
     /// contexts. Runs the modal menu and may replace the live game on load.
-    #[no_mangle]
-    pub unsafe extern "C" fn GameOptions() -> BOOLEAN {
+    pub unsafe fn game_options(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        io: &mut crate::engine::observe::Io<'_>,
+    ) -> BOOLEAN {
         let mut menu_state: MENU_STATE = mem::zeroed();
         if Kernel::current().read(|owner| owner.last_activity) == CHECK_LOAD as ACTIVITY {
             DrawMenuStateStrings(PM_SAVE_GAME as BYTE, LOAD_GAME as SWORD);
-            let success = pick_game(0, 1);
+            let success = pick_game(cx, io, 0, 1);
             if success == 0 {
                 (**WorldData::current()).game.current_activity |= CHECK_ABORT as ACTIVITY;
             }
@@ -1279,16 +1299,19 @@ pub(crate) mod runtime {
         DrawMenuStateStrings(PM_SAVE_GAME as BYTE, menu_state.CurState as SWORD);
         SetFlashRect(SFR_MENU_3DO);
         SetMenuSounds(MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
-        menu_state.InputFunc = Some(do_game_options);
-        crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::GameOptions(true));
-        DoInput(ptr::addr_of_mut!(menu_state).cast(), 1);
-        crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::GameOptions(false));
-        SetFlashRect(ptr::null());
-        u32::from(
-            WorldData::current().read(|owner| owner.game.current_activity)
-                & (CHECK_ABORT | CHECK_LOAD) as ACTIVITY
-                == 0,
-        )
+        cx.with_legacy(|| {
+            io.observer
+                .checkpoint(&crate::engine::observe::CheckpointView::GameOptions(true));
+        });
+        cx.run_input(io, true, |cx, io| unsafe {
+            do_game_options(cx, io, ptr::addr_of_mut!(menu_state)) != 0
+        });
+        cx.with_legacy(|| {
+            io.observer
+                .checkpoint(&crate::engine::observe::CheckpointView::GameOptions(false));
+            SetFlashRect(ptr::null());
+        });
+        u32::from(cx.world.activity() & (CHECK_ABORT | CHECK_LOAD) as ACTIVITY == 0)
     }
 }
 

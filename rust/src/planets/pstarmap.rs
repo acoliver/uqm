@@ -81,7 +81,7 @@ use crate::navigation::globals::in_hqspace;
 
 #[cfg(not(test))]
 use crate::mainloop::input_abi::live::{
-    AnyButtonPress, DoInput, FlushInput, SetDefaultMenuRepeatDelay, SetMenuRepeatDelay,
+    AnyButtonPress, FlushInput, SetDefaultMenuRepeatDelay, SetMenuRepeatDelay,
     SetMenuSounds,
 };
 
@@ -1083,8 +1083,14 @@ unsafe fn update_map() {
 #[cfg(not(test))]
 /// # Safety
 /// Game-thread only, with game globals and native UI resources initialized.
-#[no_mangle]
-pub unsafe extern "C" fn StarMap() -> u32 {
+pub unsafe fn star_map(cx: &mut crate::engine::battle::Cx<'_>, io: &mut crate::engine::observe::Io<'_>) -> u32 {
+    let (mut menu, universe) = cx.with_legacy(prepare_star_map);
+    cx.run_input(io, false, |cx, _| cx.with_legacy(|| DoMoveCursor(&mut menu) != 0));
+    cx.with_legacy(|| finish_star_map(universe))
+}
+
+#[cfg(not(test))]
+unsafe fn prepare_star_map() -> (MENU_STATE, POINT) {
     let mut menu: MENU_STATE = std::mem::zeroed();
     ZOOM_LEVEL = 0;
     MAP_ORIGIN = POINT { x: 4999, y: 4999 };
@@ -1098,7 +1104,6 @@ pub unsafe extern "C" fn StarMap() -> u32 {
     if cursorLoc.x == -1 && cursorLoc.y == -1 {
         cursorLoc = universe;
     }
-    menu.InputFunc = Some(DoMoveCursor);
     menu.Initialized = 0;
     TRANSITION_PENDING = true;
     if which_space() <= 1 {
@@ -1116,7 +1121,11 @@ pub unsafe extern "C" fn StarMap() -> u32 {
     UnbatchGraphics();
     SetMenuSounds(0, 0);
     SetMenuRepeatDelay(ONE_SECOND / 60, ONE_SECOND / 8, ONE_SECOND / 120, 1);
-    DoInput(ptr::from_mut(&mut menu).cast(), 0);
+    (menu, universe)
+}
+
+#[cfg(not(test))]
+unsafe fn finish_star_map(universe: POINT) -> u32 {
     SetMenuSounds(15, 16);
     SetDefaultMenuRepeatDelay();
     DrawHyperCoords(universe);

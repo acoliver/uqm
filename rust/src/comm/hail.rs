@@ -8,11 +8,13 @@
 //! @requirement REQ-HL-001
 
 #[cfg(not(test))]
-use crate::engine::observe::CheckpointView;
-#[cfg(not(test))]
 use crate::engine::StoryKey;
 #[cfg(not(test))]
 use crate::engine::World;
+use crate::engine::{
+    battle::Cx,
+    observe::{CheckpointView, InputView, Io},
+};
 // ============================================================================
 // C bridge declarations (not compiled in test builds)
 // ============================================================================
@@ -175,7 +177,7 @@ const NORMAL_VOLUME: i32 = 128;
 ///
 /// @plan PLAN-20260326-COMMPT2.P07
 /// @requirement REQ-HL-001
-pub unsafe fn hail_alien() {
+pub unsafe fn hail_alien(cx: &mut Cx<'_>, io: &mut Io<'_>) {
     #[cfg(not(test))]
     #[cfg(not(test))]
     {
@@ -393,21 +395,19 @@ pub unsafe fn hail_alien() {
 
             type EncounterStateDInput = crate::comm::comm_abi::EncounterState;
 
-            unsafe extern "C" fn encounter_cb(_es: *mut EncounterStateDInput) -> std::ffi::c_int {
-                crate::comm::ffi::rust_do_communication()
-            }
-
             let mut es: EncounterStateDInput = std::mem::zeroed();
-            es.input = Some(encounter_cb);
+            es.input = None;
             unsafe {
-                use crate::mainloop::restart_menu::c_extern::DoInput;
                 c_bridge::c_SetCurInputState(&mut es as *mut _ as *mut std::ffi::c_void);
                 c_bridge::SetMenuSounds(MENU_SOUND_UP | MENU_SOUND_DOWN, MENU_SOUND_SELECT);
-                crate::app::observe::checkpoint(CheckpointView::CommunicationStarted);
-                DoInput(&mut es as *mut _ as *mut std::ffi::c_void, 0);
-                crate::app::observe::checkpoint(CheckpointView::CommunicationEnded);
-                c_bridge::c_SetCurInputState(std::ptr::null_mut());
             }
+            io.observer
+                .checkpoint(&CheckpointView::CommunicationStarted);
+            cx.run_input(io, false, |cx, io| unsafe {
+                crate::comm::ffi::rust_do_communication(cx, io) != 0
+            });
+            io.observer.checkpoint(&CheckpointView::CommunicationEnded);
+            unsafe { c_bridge::c_SetCurInputState(std::ptr::null_mut()) };
         }
 
         // ----------------------------------------------------------------
@@ -499,7 +499,9 @@ pub unsafe fn hail_alien() {
         // Clear Rust-side comm_data (resources already destroyed above)
         super::state::COMM_STATE.write().clear_comm_data();
         // pCurInputState was already cleared by c_RunEncounterDoInput.
-        crate::app::observe::input(crate::engine::observe::InputView::CommunicationCompleted);
+        let campaign = crate::engine::observe::CampaignView::from_world(cx.world);
+        io.observer
+            .input_admitted(&InputView::CommunicationCompleted, &Some(campaign));
     }
 }
 
@@ -516,10 +518,19 @@ mod tests {
         // Verify the function exists and is callable in test context.
         // The actual logic is gated behind cfg(not(test)) and requires
         // the full C game runtime, so we just confirm it compiles.
-        unsafe {
-            // In test mode this is a no-op — no C runtime needed.
-            super::hail_alien();
-        }
+        let mut game = crate::engine::Game::new();
+        let mut battle = crate::engine::battle::Battle::new();
+        let mut cx = crate::engine::battle::Cx::new(
+            &mut battle,
+            &mut game.world,
+            &mut game.kernel,
+            crate::math::random,
+        );
+        let mut observer = crate::engine::observe::Unobserved;
+        let mut io = crate::engine::observe::Io {
+            observer: &mut observer,
+        };
+        unsafe { super::hail_alien(&mut cx, &mut io) };
     }
 }
 

@@ -1,7 +1,7 @@
 //! Response mutations and their ordered observer notifications.
 
-use super::{CheckpointView, COMM_STATE};
-use std::ffi::{c_int, c_uint, CStr};
+use super::COMM_STATE;
+use std::ffi::{CStr, c_int, c_uint};
 
 /// Add a response option, rejecting absent or non-UTF-8 resource text.
 /// `func` receives `response_ref` when the response is selected.
@@ -27,23 +27,14 @@ pub fn do_response_phrase(
         .write()
         .add_response(response_ref, text_str, func);
     let response_count = COMM_STATE.read().responses().count();
-    if ok {
-        crate::app::observe::checkpoint(CheckpointView::CommunicationResponses(response_count));
-    }
     eprintln!(
         "[DBG] rust_DoResponsePhrase: added={}, count={}",
         ok, response_count
     );
-    if ok {
-        1
-    } else {
-        0
-    }
+    if ok { 1 } else { 0 }
 }
 
 /// Clear all responses
 pub fn rust_clear_responses() {
     COMM_STATE.write().clear_responses();
-    crate::app::observe::checkpoint(CheckpointView::CommunicationResponses(0));
-    crate::app::observe::checkpoint(CheckpointView::ResponsesReady(false));
 }

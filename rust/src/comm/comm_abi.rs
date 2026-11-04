@@ -1,7 +1,7 @@
 //! Remaining live dialogue API and subtitle cache, ported from comm.c.
 //! Copyright Paul Reiche, Fred Ford, 1992-2002. GPL-2.0-or-later.
 
-use super::locdata::{CPoint, CRect, CStamp, COMM_DATA};
+use super::locdata::{COMM_DATA, CPoint, CRect, CStamp};
 use super::sis_graphics::CText;
 use std::ffi::{c_char, c_void};
 use std::ptr::{null, null_mut};
@@ -213,72 +213,6 @@ pub unsafe extern "C" fn comm_RedrawSubtitles() {
 pub unsafe extern "C" fn c_SetTalkingFinished(finished: i32) {
     super::ffi::rust_set_talking_finished(finished);
 }
-/// # Safety
-/// CommData must be initialized on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn c_SetupSubtitleTextFromCommData() {
-    SUBTITLE.baseline = COMM_DATA.alien_text_baseline;
-    SUBTITLE.align = COMM_DATA.alien_text_align as i32;
-}
-/// # Safety
-/// State must be null or a live C encounter state until cleared.
-#[no_mangle]
-pub unsafe extern "C" fn c_SetCurInputState(state: *mut c_void) {
-    CURRENT_INPUT = state.cast();
-}
-/// # Safety
-/// Game thread only; the registered encounter state must still be live.
-#[no_mangle]
-pub unsafe extern "C" fn c_ClearPhraseBuf() {
-    if !CURRENT_INPUT.is_null() {
-        (*CURRENT_INPUT).phrase[0] = 0;
-    }
-}
-/// # Safety
-/// Context must remain live while registered; game thread only.
-#[no_mangle]
-pub unsafe extern "C" fn c_SetAnimContext(context: *mut c_void) {
-    ANIM_CONTEXT = context;
-}
-/// # Safety
-/// Context must remain live while registered; game thread only.
-#[no_mangle]
-pub unsafe extern "C" fn c_SetTextCacheContext(context: *mut c_void) {
-    TEXT_CACHE_CONTEXT = (context).cast();
-}
-/// # Safety
-/// Frame must remain live while registered; game thread only.
-#[no_mangle]
-pub unsafe extern "C" fn c_SetTextCacheFrame(frame: *mut c_void) {
-    TEXT_CACHE_FRAME = frame;
-}
-/// # Safety
-/// Game thread only.
-#[no_mangle]
-pub unsafe extern "C" fn c_GetAnimContext() -> *mut c_void {
-    ANIM_CONTEXT
-}
-/// # Safety
-/// Game thread only.
-#[no_mangle]
-pub unsafe extern "C" fn c_GetClearSubtitles() -> i32 {
-    i32::from(CLEAR_SUBTITLES)
-}
-/// # Safety
-/// Game thread only.
-#[no_mangle]
-pub unsafe extern "C" fn c_ResetClearSubtitles() {
-    CLEAR_SUBTITLES = false;
-}
-
-/// # Safety
-/// Called from the game thread with an initialized communication system.
-#[no_mangle]
-pub unsafe extern "C" fn AlienTalkSegue(track: u16) {
-    super::ffi::rust_alien_talk_segue(track.into());
-}
-/// # Safety
-/// CommData must be initialized on the game thread.
 #[no_mangle]
 pub unsafe extern "C" fn EnableTalkingAnim(enable: i32) {
     if enable != 0 {
@@ -290,16 +224,4 @@ pub unsafe extern "C" fn EnableTalkingAnim(enable: i32) {
 #[no_mangle]
 pub extern "C" fn SetCommIntroMode(mode: u32, duration: u32) {
     super::ffi::set_comm_intro_mode(mode, duration);
-}
-/// # Safety
-/// Game thread only, with game state and resources initialized.
-#[no_mangle]
-pub unsafe extern "C" fn InitCommunication(conversation: u32) -> u16 {
-    super::dispatch::init_communication(conversation)
-}
-/// # Safety
-/// Game thread only, with game state and resources initialized.
-#[no_mangle]
-pub unsafe extern "C" fn RaceCommunication() {
-    super::dispatch::rust_race_communication();
 }
