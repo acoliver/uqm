@@ -80,11 +80,7 @@ fn gravity_keys(selector: u8) -> [Option<String>; 3] {
 pub(crate) mod live {
     use super::gravity_keys;
     use crate::graphics::native_abi::frame_desc;
-    use crate::graphics::{
-        drawable_abi::DestroyDrawable,
-        pixmap_abi::{CaptureDrawable, ReleaseDrawable},
-        resgfx::LoadGraphicInstance,
-    };
+    use crate::graphics::{pixmap_abi::CaptureDrawable, resgfx::LoadGraphicInstance};
     use std::{
         ffi::{c_void, CString},
         ptr,
@@ -112,22 +108,7 @@ pub(crate) mod live {
     }
 
     pub fn free_gravity_well(kernel: &mut crate::engine::Kernel) {
-        {
-            let frames = &mut kernel.planet;
-            let _allocations = crate::graphics::drawable_abi::retain_frame_allocations(frames);
-            for frame in frames.iter_mut() {
-                // SAFETY: each non-null frame belongs to an allocation retained through release.
-                unsafe {
-                    DestroyDrawable(ReleaseDrawable(*frame));
-                }
-                *frame = ptr::null_mut();
-            }
-            crate::collections::observation::observe_views(
-                frames,
-                "engine-global:planet",
-                |frame| *frame as usize,
-            );
-        }
+        crate::engine::battle::frames::free_image(&mut kernel.planet, "engine-global:planet");
     }
 
     /// # Safety

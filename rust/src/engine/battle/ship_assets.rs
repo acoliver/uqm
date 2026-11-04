@@ -40,8 +40,7 @@ fn load_animation_set(keys: [*const std::ffi::c_char; 3]) -> Option<FrameArray> 
         free_image(&mut raw, "animation");
         return None;
     }
-    // SAFETY: load_animation produced live registered drawable frames.
-    let array = unsafe { FrameArray::from_native(raw) };
+    let array = FrameArray::from_native(raw);
     array.observe("animation");
     Some(array)
 }

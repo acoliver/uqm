@@ -24,9 +24,8 @@ impl FrameArray {
         Self::from_raw(views.map(FrameRef::raw), None)
     }
 
-    /// # Safety
-    /// The addresses name live registered drawable frames on the graphics thread.
-    pub unsafe fn from_native(views: [FRAME; 3]) -> Self {
+    /// Retain registered frames, rejecting unknown or retired addresses.
+    pub fn from_native(views: [FRAME; 3]) -> Self {
         Self::from_raw(views, None)
     }
 
@@ -586,13 +585,13 @@ use crate::{
 };
 use std::ptr;
 
-fn release_images(
-    frames: &mut [*mut frame_desc; 3],
+fn release_images<const N: usize>(
+    frames: &mut [*mut frame_desc; N],
     mut destroy: impl FnMut(*mut frame_desc) -> bool,
 ) -> bool {
-    let mut freed = [ptr::null_mut(); 3];
+    let mut freed = [ptr::null_mut(); N];
     let mut result = true;
-    for i in 0..3 {
+    for i in 0..N {
         let frame = frames[i];
         if !frame.is_null() {
             if !freed[..i].contains(&frame) && !destroy(frame) {
@@ -606,36 +605,38 @@ fn release_images(
 }
 
 #[cfg(not(test))]
+pub(crate) fn load_graphic(key: &std::ffi::CStr) -> FRAME {
+    // SAFETY: the borrowed key remains live through decoding; a successful load owns its frames.
+    unsafe { CaptureDrawable(LoadGraphicInstance(key.as_ptr()).cast()) }
+}
+
+#[cfg(not(test))]
 pub fn load_animation(
     frames: &mut [*mut frame_desc; 3],
     keys: [Option<&std::ffi::CStr>; 3],
     role: &str,
 ) -> u32 {
     let Some(big) = keys[0] else { return 0 };
-    // SAFETY: CStr keys remain borrowed through resource decoding; loaded drawables own their frames.
-    unsafe {
-        let mut drawable =
-            LoadGraphicInstance(big.as_ptr()).cast::<crate::graphics::native_abi::drawable_desc>();
-        if drawable.is_null() {
-            return 0;
-        }
-        frames[0] = CaptureDrawable(drawable);
-        for (index, key) in keys[1..].iter().enumerate() {
-            if let Some(key) = key {
-                drawable = LoadGraphicInstance(key.as_ptr()).cast();
-                if drawable.is_null() {
-                    return 0;
-                }
+    let mut frame = load_graphic(big);
+    if frame.is_null() {
+        return 0;
+    }
+    frames[0] = frame;
+    for (index, key) in keys[1..].iter().enumerate() {
+        if let Some(key) = key {
+            frame = load_graphic(key);
+            if frame.is_null() {
+                return 0;
             }
-            frames[index + 1] = CaptureDrawable(drawable);
         }
+        frames[index + 1] = frame;
     }
     observe_views(frames, role, |frame| *frame as usize);
     1
 }
 
 #[cfg(not(test))]
-pub fn free_image(frames: &mut [*mut frame_desc; 3], role: &str) -> u32 {
+pub fn free_image<const N: usize>(frames: &mut [*mut frame_desc; N], role: &str) -> u32 {
     let _allocations = crate::graphics::drawable_abi::retain_frame_allocations(frames);
     let freed = release_images(frames, |frame| {
         // SAFETY: every non-null address was validated and its allocation remains retained through release.
@@ -648,6 +649,20 @@ pub fn free_image(frames: &mut [*mut frame_desc; 3], role: &str) -> u32 {
 #[cfg(test)]
 mod animation_release_tests {
     use super::*;
+    #[test]
+    fn one_frame_and_empty_sets_use_the_same_release_contract() {
+        let frame = ptr::dangling_mut::<frame_desc>();
+        let mut frames = [frame];
+        let mut destroyed = vec![];
+        assert!(release_images(&mut frames, |frame| {
+            destroyed.push(frame);
+            true
+        }));
+        assert_eq!(destroyed, [frame]);
+        assert_eq!(frames, [ptr::null_mut()]);
+        let mut empty: [*mut frame_desc; 0] = [];
+        assert!(release_images(&mut empty, |_| panic!("empty frame set")));
+    }
     #[test]
     fn aliases_are_destroyed_once_and_all_slots_are_cleared() {
         let a = ptr::dangling_mut::<frame_desc>();

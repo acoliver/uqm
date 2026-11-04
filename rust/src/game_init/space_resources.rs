@@ -2,8 +2,6 @@
 
 #[cfg(not(test))]
 use crate::collections::observation::observe_views;
-#[cfg(not(test))]
-use std::ptr;
 
 const SPACE_ANIMATION_KEYS: [[&std::ffi::CStr; 3]; 3] = [
     [
@@ -24,14 +22,7 @@ const SPACE_ANIMATION_KEYS: [[&std::ffi::CStr; 3]; 3] = [
 ];
 
 #[cfg(not(test))]
-use crate::graphics::{
-    drawable_abi::DestroyDrawable,
-    pixmap_abi::{CaptureDrawable, ReleaseDrawable},
-    resgfx::LoadGraphicInstance,
-};
-
-#[cfg(not(test))]
-use crate::engine::battle::frames::{free_image, load_animation};
+use crate::engine::battle::frames::{free_image, load_animation, load_graphic};
 
 #[cfg(not(test))]
 pub(crate) mod live {
@@ -43,10 +34,7 @@ pub(crate) mod live {
             kernel.space_init_count = kernel.space_init_count.wrapping_add(1);
             if old == 0 && activity as u8 <= crate::ships::native::abi::IN_ENCOUNTER as u8 {
                 let stars = &mut kernel.stars_in_space;
-                // SAFETY: the resource key is static and the returned drawable supplies its captured frame.
-                *stars = unsafe {
-                    CaptureDrawable(LoadGraphicInstance(c"graphics.stars".as_ptr()).cast())
-                };
+                *stars = load_graphic(c"graphics.stars");
                 if stars.is_null() {
                     return 0;
                 }
@@ -90,22 +78,12 @@ pub(crate) mod live {
                     free_image(&mut kernel.explosion, "engine-global:explosion");
                     free_image(&mut kernel.asteroid, "engine-global:asteroid");
                     let stars = &mut kernel.stars_in_space;
-                    let _allocation = crate::graphics::drawable_abi::retain_frame_allocations(
-                        std::slice::from_ref(stars),
-                    );
                     for plane in kernel.star_planes.iter_mut() {
                         plane
                             .frames
                             .fill(crate::engine::battle::frames::FrameSelection::ABSENT);
                     }
-                    // SAFETY: the star frame is null or belongs to the retained registered allocation.
-                    unsafe {
-                        DestroyDrawable(ReleaseDrawable(*stars));
-                    }
-                    *stars = ptr::null_mut();
-                    observe_views(std::slice::from_ref(stars), "engine-global:stars", |f| {
-                        *f as usize
-                    });
+                    free_image(std::array::from_mut(stars), "engine-global:stars");
                 }
             }
         }
