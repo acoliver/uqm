@@ -39,7 +39,9 @@ fn termination_does_not_need_another_process() {
     };
     // SAFETY: this isolated helper changes only its own process limit.
     let limited = unsafe { libc::setrlimit(libc::RLIMIT_NPROC, &limit) };
-    let extra = Command::new("/bin/true").status();
+    let extra = Command::new(std::env::current_exe().unwrap())
+        .arg("--list")
+        .status();
     let started = Instant::now();
     let result = terminate(&mut child);
     let elapsed = started.elapsed();
