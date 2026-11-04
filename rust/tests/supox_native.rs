@@ -146,7 +146,7 @@ unsafe fn thrust_heading(_battle: &Battle, heading: COUNT, flags: u16) -> ([i32;
             inertial_thrust(
                 cx,
                 cx.elements()
-                    .id(oracle.el().cast())
+                    .id(std::ptr::NonNull::new(oracle.el().cast()))
                     .unwrap_or_else(|| panic!("fixture subject")),
             )
         });

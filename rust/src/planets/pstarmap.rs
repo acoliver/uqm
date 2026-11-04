@@ -944,6 +944,66 @@ fn enlarge(r: &mut RECT) {
 }
 
 #[cfg(not(test))]
+unsafe fn update_sphere_position(
+    id: LinkId<Fleet>,
+    index: u16,
+    button: &mut bool,
+    was_interrupted: &mut bool,
+    drawn: &mut bool,
+) {
+    let fleet = lock_fleet(id);
+    let dx = fleet.loc.x.wrapping_sub(fleet.known_loc.x);
+    let dy = fleet.loc.y.wrapping_sub(fleet.known_loc.y);
+    if dx != 0 || dy != 0 {
+        let mut walk = LineWalk::new(dx, dy);
+        if !*drawn {
+            DrawStarMap(u16::MAX, ptr::null_mut());
+            *drawn = true;
+        }
+        let (initial, mut last) = get_sphere_rect(&lock_fleet(id));
+        enlarge(&mut last);
+        let mut visible = false;
+        let mut final_r = zero_rect();
+        let mut canceled = false;
+        loop {
+            let (sphere, mut r) = loop {
+                fleet_queue(|queue| walk.step(&mut queue.get_mut(id).known_loc));
+                let pair = get_sphere_rect(&lock_fleet(id));
+                let before = walk.delta;
+                walk.delta = walk.delta.wrapping_sub(1);
+                if before == 0
+                    || (walk.delta & 0x1f == 0
+                        && (initial.corner.x != pair.0.corner.x
+                            || initial.corner.y != pair.0.corner.y))
+                {
+                    break pair;
+                }
+            };
+            if interrupted(button, was_interrupted, drawn) {
+                canceled = true;
+                break;
+            }
+            enlarge(&mut r);
+            if initial.corner.x != sphere.corner.x || initial.corner.y != sphere.corner.y {
+                visible = true;
+                repair_map(index, &mut last, r);
+            }
+            final_r = r;
+            if walk.delta < 0 {
+                break;
+            }
+        }
+        if !canceled && visible {
+            repair_map(u16::MAX, &mut last, final_r);
+        }
+        fleet_queue(|queue| {
+            let fleet = queue.get_mut(id);
+            fleet.known_loc = fleet.loc;
+        });
+    }
+}
+
+#[cfg(not(test))]
 unsafe fn update_map() {
     FlushInput();
     let mut button = true;
@@ -956,55 +1016,7 @@ unsafe fn update_map() {
         interrupted(&mut button, &mut was_interrupted, &mut drawn);
         let fleet = lock_fleet(id);
         if fleet.known_strength != 0 {
-            let dx = fleet.loc.x.wrapping_sub(fleet.known_loc.x);
-            let dy = fleet.loc.y.wrapping_sub(fleet.known_loc.y);
-            if dx != 0 || dy != 0 {
-                let mut walk = LineWalk::new(dx, dy);
-                if !drawn {
-                    DrawStarMap(u16::MAX, ptr::null_mut());
-                    drawn = true;
-                }
-                let (initial, mut last) = get_sphere_rect(&lock_fleet(id));
-                enlarge(&mut last);
-                let mut visible = false;
-                let mut final_r = zero_rect();
-                let mut canceled = false;
-                loop {
-                    let (sphere, mut r) = loop {
-                        fleet_queue(|queue| walk.step(&mut queue.get_mut(id).known_loc));
-                        let pair = get_sphere_rect(&lock_fleet(id));
-                        let before = walk.delta;
-                        walk.delta = walk.delta.wrapping_sub(1);
-                        if before == 0
-                            || (walk.delta & 0x1f == 0
-                                && (initial.corner.x != pair.0.corner.x
-                                    || initial.corner.y != pair.0.corner.y))
-                        {
-                            break pair;
-                        }
-                    };
-                    if interrupted(&mut button, &mut was_interrupted, &mut drawn) {
-                        canceled = true;
-                        break;
-                    }
-                    enlarge(&mut r);
-                    if initial.corner.x != sphere.corner.x || initial.corner.y != sphere.corner.y {
-                        visible = true;
-                        repair_map(index, &mut last, r);
-                    }
-                    final_r = r;
-                    if walk.delta < 0 {
-                        break;
-                    }
-                }
-                if !canceled && visible {
-                    repair_map(u16::MAX, &mut last, final_r);
-                }
-                fleet_queue(|queue| {
-                    let fleet = queue.get_mut(id);
-                    fleet.known_loc = fleet.loc;
-                });
-            }
+            update_sphere_position(id, index, &mut button, &mut was_interrupted, &mut drawn);
             let fleet = lock_fleet(id);
             let mut delta =
                 (i32::from(fleet.actual_strength) - i32::from(fleet.known_strength)) as i16;

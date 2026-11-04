@@ -4,6 +4,7 @@
 
 use super::script::as_comm_data;
 use crate::comm::types::CommData;
+use crate::engine::battle::Cx;
 
 mod phrases;
 use phrases::*;
@@ -513,38 +514,32 @@ use descriptor::descriptor;
 pub(crate) mod live {
     use super::super::script::live::LiveScript;
     use super::*;
-    fn run(
-        cx: &mut crate::engine::battle::Cx<'_>,
-        f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>),
-    ) {
-        let mut api = LiveScript {
-            callback,
-            cx: std::cell::RefCell::new(cx),
-        };
+    fn run(cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>)) {
+        let mut api = LiveScript::new(cx, callback);
         f(&mut Dialogue { api: &mut api });
     }
-    fn exit(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn exit(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| s.handle(Handler::Exit, r as i32));
     }
-    fn home(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn home(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| s.handle(Handler::Home, r as i32));
     }
-    fn human(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn human(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| s.handle(Handler::Human, r as i32));
     }
-    fn alien(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn alien(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| s.handle(Handler::Alien, r as i32));
     }
-    fn probe(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn probe(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| s.handle(Handler::Probe, r as i32));
     }
-    fn function(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn function(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| s.handle(Handler::Function, r as i32));
     }
-    fn bug(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn bug(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| s.handle(Handler::Bug, r as i32));
     }
-    fn fix(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn fix(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| s.handle(Handler::Fix, r as i32));
     }
     fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
@@ -559,16 +554,14 @@ pub(crate) mod live {
             Handler::Fix => fix,
         }
     }
-    pub(super) fn intro(cx: &mut crate::engine::battle::Cx<'_>) {
+    pub(super) fn intro(cx: &mut Cx<'_>) {
         run(cx, |s| s.intro());
     }
-    pub(super) fn post(_cx: &mut crate::engine::battle::Cx<'_>) {}
-    pub(super) fn uninit(_cx: &mut crate::engine::battle::Cx<'_>) -> u16 {
+    pub(super) fn post(_cx: &mut Cx<'_>) {}
+    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
         0
     }
-    pub unsafe fn init_slylandro_comm(
-        cx: &mut crate::engine::battle::Cx<'_>,
-    ) -> *mut crate::comm::locdata::CLocData {
+    pub unsafe fn init_slylandro_comm(cx: &mut Cx<'_>) -> *mut crate::comm::locdata::CLocData {
         static mut DESC: Option<crate::comm::locdata::CLocData> = None;
         extern "C" {
             static mut ScreenWidth: i32;
@@ -588,7 +581,7 @@ mod branch_tests;
 pub struct SlyhomeDialogue;
 
 impl super::RaceDialogue for SlyhomeDialogue {
-    fn init(&self, _cx: &mut crate::engine::battle::Cx<'_>) -> CommData {
+    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
         #[cfg(not(test))]
         {
             unsafe { as_comm_data(&*live::init_slylandro_comm(_cx)) }
@@ -599,14 +592,14 @@ impl super::RaceDialogue for SlyhomeDialogue {
         }
     }
 
-    fn intro(&self, _cx: &mut crate::engine::battle::Cx<'_>) {
+    fn intro(&self, _cx: &mut Cx<'_>) {
         #[cfg(not(test))]
         live::intro(_cx);
     }
 
-    fn post_encounter(&self, _cx: &mut crate::engine::battle::Cx<'_>) {}
+    fn post_encounter(&self, _cx: &mut Cx<'_>) {}
 
-    fn uninit(&self, _cx: &mut crate::engine::battle::Cx<'_>) -> u32 {
+    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
         0
     }
 }

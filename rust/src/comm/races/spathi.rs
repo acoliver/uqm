@@ -4,6 +4,7 @@ use super::encounter::EncounterApi;
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
+use crate::engine::battle::Cx;
 mod phrases;
 use phrases::*;
 const SPATHI_SHIP: u16 = 6;
@@ -614,14 +615,8 @@ fn descriptor() -> CLocData {
 pub(crate) mod live {
     use super::*;
     use crate::comm::races::script::live::LiveScript;
-    fn run(
-        cx: &mut crate::engine::battle::Cx<'_>,
-        f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>),
-    ) {
-        let mut api = LiveScript {
-            callback,
-            cx: std::cell::RefCell::new(cx),
-        };
+    fn run(cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>)) {
+        let mut api = LiveScript::new(cx, callback);
         static mut SESSION: Option<Session> = None;
         // Only the game thread dispatches these callbacks.
         let session =
@@ -631,7 +626,7 @@ pub(crate) mod live {
             session,
         });
     }
-    fn exit_conversation(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn exit_conversation(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| {
             s.handle(
                 Handler::ExitConversation,
@@ -639,7 +634,7 @@ pub(crate) mod live {
             )
         });
     }
-    fn spathi_on_pluto(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn spathi_on_pluto(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| {
             s.handle(
                 Handler::SpathiOnPluto,
@@ -647,7 +642,7 @@ pub(crate) mod live {
             )
         });
     }
-    fn spathi_must_grovel(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn spathi_must_grovel(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| {
             s.handle(
                 Handler::SpathiMustGrovel,
@@ -655,7 +650,7 @@ pub(crate) mod live {
             )
         });
     }
-    fn spathi_allies(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn spathi_allies(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| {
             s.handle(
                 Handler::SpathiAllies,
@@ -663,7 +658,7 @@ pub(crate) mod live {
             )
         });
     }
-    fn spathi_friendly(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn spathi_friendly(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| {
             s.handle(
                 Handler::SpathiFriendly,
@@ -671,7 +666,7 @@ pub(crate) mod live {
             )
         });
     }
-    fn spathi_befriend(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn spathi_befriend(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| {
             s.handle(
                 Handler::SpathiBefriend,
@@ -679,7 +674,7 @@ pub(crate) mod live {
             )
         });
     }
-    fn spathi_antagonize(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn spathi_antagonize(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| {
             s.handle(
                 Handler::SpathiAntagonize,
@@ -687,7 +682,7 @@ pub(crate) mod live {
             )
         });
     }
-    fn spathi_neutral(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn spathi_neutral(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| {
             s.handle(
                 Handler::SpathiNeutral,
@@ -707,20 +702,20 @@ pub(crate) mod live {
             Handler::SpathiNeutral => spathi_neutral,
         }
     }
-    pub(super) fn intro(cx: &mut crate::engine::battle::Cx<'_>) {
+    pub(super) fn intro(cx: &mut Cx<'_>) {
         run(cx, |s| s.intro());
     }
-    pub(super) fn post(cx: &mut crate::engine::battle::Cx<'_>) {
+    pub(super) fn post(cx: &mut Cx<'_>) {
         run(cx, |s| s.post_spathi_enc());
     }
-    pub(super) fn uninit(_cx: &mut crate::engine::battle::Cx<'_>) -> u16 {
+    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
         0
     }
     /// Initialize the encounter descriptor and initial battle segue.
     ///
     /// # Safety
     /// Game thread only. The caller must copy the descriptor before another encounter.
-    pub unsafe fn init_spathi_comm(cx: &mut crate::engine::battle::Cx<'_>) -> *mut CLocData {
+    pub unsafe fn init_spathi_comm(cx: &mut Cx<'_>) -> *mut CLocData {
         static mut DESC: Option<CLocData> = None;
         let desc = (&mut *std::ptr::addr_of_mut!(DESC)).get_or_insert_with(descriptor);
         run(cx, |s| s.initialize(desc));
@@ -729,7 +724,7 @@ pub(crate) mod live {
 }
 pub struct SpathiDialogue;
 impl super::RaceDialogue for SpathiDialogue {
-    fn init(&self, _cx: &mut crate::engine::battle::Cx<'_>) -> CommData {
+    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
         #[cfg(not(test))]
         {
             unsafe { as_comm_data(&*live::init_spathi_comm(_cx)) }
@@ -739,15 +734,15 @@ impl super::RaceDialogue for SpathiDialogue {
             as_comm_data(&descriptor())
         }
     }
-    fn intro(&self, _cx: &mut crate::engine::battle::Cx<'_>) {
+    fn intro(&self, _cx: &mut Cx<'_>) {
         #[cfg(not(test))]
         live::intro(_cx);
     }
-    fn post_encounter(&self, _cx: &mut crate::engine::battle::Cx<'_>) {
+    fn post_encounter(&self, _cx: &mut Cx<'_>) {
         #[cfg(not(test))]
         live::post(_cx);
     }
-    fn uninit(&self, _cx: &mut crate::engine::battle::Cx<'_>) -> u32 {
+    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
         0
     }
 }

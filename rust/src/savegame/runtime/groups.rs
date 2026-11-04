@@ -255,7 +255,7 @@ fn restore_groups_with_icons(
         };
         let id = groups
             .alloc()
-            .expect("group capacity validated before installation");
+            .unwrap_or_else(|| panic!("group capacity validated before installation"));
         *groups.get_mut(id) = GroupRecord {
             group_counter: entry.group_counter,
             race_id: entry.race_id,
@@ -275,7 +275,7 @@ fn restore_groups_with_icons(
     for entry in &sections.encounters {
         let id = encounters
             .alloc()
-            .expect("encounter capacity validated before installation");
+            .unwrap_or_else(|| panic!("encounter capacity validated before installation"));
         *encounters.get_mut(id) = EncounterRecord {
             transition_state: entry.transition_state,
             origin: c_point(entry.origin),

@@ -1,16 +1,17 @@
 use uqm_rust::engine::Game;
-use uqm_rust::planets::c_api::{built_ship_count, built_ship_queue_has_ships, LiveGame};
+use uqm_rust::planets::c_api::{built_ship_count, built_ship_queue_has_ships};
 use uqm_rust::planets::generate::special::Story;
 #[test]
-fn orbital_story_and_queue_hosts_share_the_unpublished_caller_owner() {
+fn orbital_story_and_queue_hosts_share_the_caller_owner() {
     let mut game = Game::new();
     game.world.story = Some(uqm_rust::state::game_state::GameState::new());
+    // SAFETY: the serialized fixture retains its game and uses only synchronous owner handoffs.
     unsafe {
         uqm_rust::app::bridge::with_game(&mut game, || {
             uqm_rust::app::bridge::enter(|cx| {
                 let owner = std::cell::RefCell::new(cx);
-                let host = LiveGame::new(&owner);
-                let mut story = LiveGame::new(&owner);
+                let host = &owner;
+                let mut story = &owner;
                 story.set_flag("YEHAT_CIVIL_WAR", 1);
                 assert_eq!(host.flag("YEHAT_CIVIL_WAR"), 1);
                 story.set_word("URQUAN_PROBE_GRPOFFS0", 0x12345678);

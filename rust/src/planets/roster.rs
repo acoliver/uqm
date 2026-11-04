@@ -154,7 +154,11 @@ pub(crate) mod live {
             let race = world.built_ships_ref().get(id).race_id;
             let fleets = world.avail_races_ref();
             let maximum = fleets
-                .get(fleets.at(usize::from(race)).expect("escort fleet"))
+                .get(
+                    fleets
+                        .at(usize::from(race))
+                        .unwrap_or_else(|| panic!("escort fleet")),
+                )
                 .crew_level;
             let mut ships = world.built_ships();
             let ship = ships.get_mut(id);

@@ -83,6 +83,7 @@ impl HomeContactSite for RaceHome<'_, '_, '_> {
         built_ship_count(self.game.cx.borrow().world)
     }
     fn clone_fleet_into_built_queue(&mut self) {
+        // SAFETY: the orbital host exclusively owns the live campaign context on the game thread.
         unsafe {
             clone_infinite_ship_into_built_queue(
                 self.game.cx.borrow_mut().world,
@@ -101,9 +102,13 @@ impl HomeContactSite for RaceHome<'_, '_, '_> {
     }
     fn set_global_flags_and_data(&mut self, value: u8) {
         self.game
+            .cx
+            .borrow_mut()
+            .world
             .set_flag("GLOBAL_FLAGS_AND_DATA", u32::from(value));
     }
     fn talk(&mut self) {
+        // SAFETY: the orbital host exclusively owns the live campaign context on the game thread.
         unsafe {
             init_communication(&mut self.game.cx.borrow_mut(), self.conversation);
         }
@@ -152,12 +157,11 @@ impl thrad::ThraddashSite for RaceHome<'_, '_, '_> {
 
 impl zoq::ZoqFotPikSite for RaceHome<'_, '_, '_> {
     fn clone_black_urquan_into_built_queue(&mut self) {
-        self.game.cx.borrow_mut().with_legacy(|| {
-            self.game
-                .clone_ship_into_built_queue(ship::BLACK_URQUAN_SHIP);
-        })
+        self.game
+            .clone_ship_into_built_queue(ship::BLACK_URQUAN_SHIP);
     }
     fn talk_black_urquan(&mut self) {
+        // SAFETY: the orbital host exclusively owns the live campaign context on the game thread.
         unsafe {
             init_communication(&mut self.game.cx.borrow_mut(), conv::BLACKURQ);
         }
@@ -172,6 +176,7 @@ impl TalkingPetSite for RaceHome<'_, '_, '_> {
         built_ship_queue_has_ships(self.game.cx.borrow().world)
     }
     fn talk_pet(&mut self) {
+        // SAFETY: the orbital host exclusively owns the live campaign context on the game thread.
         unsafe {
             init_communication(&mut self.game.cx.borrow_mut(), conv::TALKING_PET);
         }
@@ -180,6 +185,7 @@ impl TalkingPetSite for RaceHome<'_, '_, '_> {
 
 impl UrquanEncounterSite for RaceHome<'_, '_, '_> {
     fn begin_urquan_encounter(&mut self, loc: (i16, i16)) -> bool {
+        // SAFETY: the orbital host exclusively owns the live campaign context on the game thread.
         unsafe { begin_urquan_encounter(self.game.cx.borrow_mut().world, loc) }
     }
     fn fade_to_black(&mut self) {
@@ -412,7 +418,7 @@ unsafe fn pet_orbital(
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
-    let mut story = crate::planets::c_api::LiveGame { cx: owner };
+    let mut story = owner;
 
     orbit_world(owner, system, world, |orbit, body| {
         pet::generate_orbital(orbit, body, &mut story, &mut umgah(owner, system), || {
@@ -442,7 +448,7 @@ unsafe fn pku_orbital(
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
-    let story = crate::planets::c_api::LiveGame { cx: owner };
+    let story = owner;
 
     orbit_world(owner, system, world, |orbit, body| {
         pku::generate_orbital(orbit, body, &story, &mut pkunk(owner, system), || {
@@ -477,7 +483,7 @@ unsafe fn sup_orbital(
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
-    let story = crate::planets::c_api::LiveGame { cx: owner };
+    let story = owner;
 
     orbit_world(owner, system, world, |orbit, body| {
         sup::generate_orbital(orbit, body, &story, &mut supox(owner, system), || {
@@ -512,7 +518,7 @@ unsafe fn dru_orbital(
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
-    let story = crate::planets::c_api::LiveGame { cx: owner };
+    let story = owner;
 
     orbit_world(owner, system, world, |orbit, body| {
         dru::generate_orbital(orbit, body, &story, &mut druuge(owner, system), || {
@@ -560,7 +566,7 @@ unsafe fn burv_orbital(
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
-    let story = crate::planets::c_api::LiveGame { cx: owner };
+    let story = owner;
 
     orbit_world(owner, system, world, |orbit, body| {
         burv::generate_orbital(orbit, body, &story, &mut BurvScenes(system), || {
@@ -615,13 +621,19 @@ unsafe fn thrad_orbital(
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
-    let story = crate::planets::c_api::LiveGame { cx: owner };
+    let story = owner;
+    let star = owner
+        .borrow()
+        .world
+        .selected_star(crate::planets::starmap::current_catalog())
+        .unwrap_or_else(|| panic!("orbital generation requires a selected star"))
+        .index;
 
     orbit_world(owner, system, world, |orbit, body| {
         thrad::generate_orbital(
             orbit,
             body,
-            current_star_index(),
+            star,
             &story,
             &mut thraddash(owner, system),
             || {
@@ -679,13 +691,19 @@ unsafe fn orz_orbital(
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
-    let mut story = crate::planets::c_api::LiveGame { cx: owner };
+    let mut story = owner;
+    let star = owner
+        .borrow()
+        .world
+        .selected_star(crate::planets::starmap::current_catalog())
+        .unwrap_or_else(|| panic!("orbital generation requires a selected star"))
+        .index;
 
     orbit_world(owner, system, world, |orbit, body| {
         orz::generate_orbital(
             orbit,
             body,
-            current_star_index(),
+            star,
             &mut story,
             &mut orz_home(owner, system),
             || {
@@ -745,7 +763,7 @@ unsafe fn zoq_orbital(
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
-    let story = crate::planets::c_api::LiveGame { cx: owner };
+    let story = owner;
 
     orbit_world(owner, system, world, |orbit, body| {
         zoq::generate_orbital(orbit, body, &story, &mut zoq_home(owner, system), || {

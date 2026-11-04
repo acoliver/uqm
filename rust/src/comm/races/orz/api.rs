@@ -9,28 +9,22 @@ pub(super) trait OrzApi: AllianceApi<Handler> {
 #[cfg(not(test))]
 impl OrzApi for crate::comm::races::script::live::LiveScript<'_, '_, Handler> {
     fn remove_escorts(&mut self, race: u16) {
-        use crate::battle::build_native;
-        unsafe {
-            let remaining = {
-                let mut owner = self.cx.borrow_mut();
-                let cx = &mut **owner;
-                {
-                    build_native::remove_escort_ships(cx.world, race, u16::MAX)
-                }
-            };
-            if remaining > 0 {
+        use crate::engine::world::fleet;
+        let remaining = fleet::remove_escort_ships(self.cx.borrow_mut().world, race, u16::MAX);
+        if remaining > 0 {
+            // SAFETY: the campaign borrow ends before the game-thread display refresh.
+            unsafe {
                 self.cx
                     .borrow_mut()
-                    .with_legacy(|| build_native::refresh_escorts());
-            }
+                    .with_legacy(|| crate::battle::build_native::refresh_escorts())
+            };
         }
     }
     fn talking(&mut self, enabled: bool) {
         self.cx.borrow_mut().with_legacy(|| {
             use crate::comm::comm_abi::EnableTalkingAnim;
-            unsafe {
-                EnableTalkingAnim((u8::from(enabled)) as i32);
-            }
+            // SAFETY: this synchronous callback owns the initialized communication display.
+            unsafe { EnableTalkingAnim(i32::from(u8::from(enabled))) };
         })
     }
 }

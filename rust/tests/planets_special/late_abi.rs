@@ -160,7 +160,9 @@ fn check_live_queues(harness: &mut Harness) {
         let saved = std::mem::take(&mut world.queues);
         let mut groups = world.ip_groups();
         let ids = std::array::from_fn::<_, 3, _>(|i| {
-            let id = groups.alloc().unwrap();
+            let id = groups
+                .alloc()
+                .unwrap_or_else(|| panic!("fixture pool capacity"));
             groups.get_mut(id).group_id = i as u8 + 1;
             groups.get_mut(id).task = 8;
             groups.put(id);
@@ -195,7 +197,9 @@ fn check_live_queues(harness: &mut Harness) {
             let mut groups = world.ip_groups();
             assert!(groups.head().is_none() && groups.tail().is_none());
             assert!(ids.iter().all(|id| !groups.contains(*id)));
-            let reused = groups.alloc().unwrap();
+            let reused = groups
+                .alloc()
+                .unwrap_or_else(|| panic!("fixture pool capacity"));
             assert_eq!(groups.raw(reused), first);
             assert_ne!(reused, ids[0]);
             groups.free(reused);

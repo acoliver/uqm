@@ -441,7 +441,7 @@ unsafe fn prepare_starbase_visit(cx: &mut Cx<'_>, io: &mut Io<'_>) -> Option<u32
             return None;
         }
         let ship = crate::comm::dispatch::clone_npc_fragment(cx.world, ILWRATH_SHIP as u8, 7)
-            .expect("starbase Ilwrath fragment capacity");
+            .unwrap_or_else(|| panic!("starbase Ilwrath fragment capacity"));
         cx.world.npc_built_ships().get_mut(ship).race_id = BYTE::MAX;
         crate::comm::dispatch::init_communication(cx, io, CONVERSATION_ILWRATH_CONVERSATION);
         if cx.world.data.flagship.crew_enlisted == COUNT::MAX

@@ -1,6 +1,7 @@
 //! Campaign state owned by one game-thread lifecycle.
 
 use crate::engine::battle::schema::GAME_STATE;
+pub mod fleet;
 pub mod planet_info;
 pub mod queues;
 pub mod state_file;
@@ -146,9 +147,19 @@ impl World {
 
     /// Return the selected catalog address for legacy read-only callers.
     pub fn star_pointer(&self, catalog: Option<&[CStarDesc; CATALOG_LEN]>) -> *mut CStarDesc {
-        self.current_star.map_or(std::ptr::null_mut(), |id| {
+        self.selected_star(catalog)
+            .map_or(std::ptr::null_mut(), |star| {
+                std::ptr::from_ref(star).cast_mut()
+            })
+    }
+
+    pub fn selected_star<'a>(
+        &self,
+        catalog: Option<&'a [CStarDesc; CATALOG_LEN]>,
+    ) -> Option<&'a CStarDesc> {
+        self.current_star.map(|id| {
             let catalog = catalog.unwrap_or_else(|| panic!("selected star without a catalog"));
-            std::ptr::from_ref(&catalog[id.0]).cast_mut()
+            &catalog[id.0]
         })
     }
 

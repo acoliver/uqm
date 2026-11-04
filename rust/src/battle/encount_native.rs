@@ -154,6 +154,14 @@ pub(crate) mod engine {
         WorldOwner::current().read(|world| world.avail_races_ref().at(usize::from(race)).is_some())
     }
 
+    fn npc_race(world: &crate::engine::World) -> i16 {
+        let ships = world.npc_built_ships_ref();
+        let id = ships
+            .head()
+            .unwrap_or_else(|| panic!("encounter has an NPC fleet"));
+        i16::from(ships.get(id).race_id)
+    }
+
     type FragmentId =
         crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Fragment>;
 
@@ -178,6 +186,14 @@ pub(crate) mod engine {
             next = queue.succ(id);
         }
         records
+    }
+
+    fn remove_campaign_fragment(world: &mut crate::engine::World, escorts: bool, id: FragmentId) {
+        if escorts {
+            remove_fragment(world.built_ships(), id);
+        } else {
+            remove_fragment(world.npc_built_ships(), id);
+        }
     }
 
     fn remove_fragment<const N: usize>(
@@ -457,12 +473,7 @@ pub(crate) mod engine {
             counters[0],
             game_state(URQUAN_PROTECTING_SAMATRA, END_URQUAN_PROTECTING_SAMATRA) != 0,
         );
-        EncounterRace = WorldOwner::current().read(|world| {
-            let queue = world.npc_built_ships_ref();
-            queue
-                .get(queue.head().expect("encounter has an NPC fleet"))
-                .race_id as i16
-        });
+        EncounterRace = WorldOwner::current().read(npc_race);
         if !encounter_race_exists(EncounterRace as COUNT) {
             victory = -1;
             KernelOwner::current().write(|kernel| init_siscontexts(kernel));
@@ -584,13 +595,8 @@ pub(crate) mod engine {
                             DrawStamp(&mut stamp);
                         }
                     }
-                    WorldOwner::current().write(|world| {
-                        if side == 0 {
-                            remove_fragment(world.built_ships(), id);
-                        } else {
-                            remove_fragment(world.npc_built_ships(), id);
-                        }
-                    });
+                    WorldOwner::current()
+                        .write(|world| remove_campaign_fragment(world, side == 0, id));
                 }
             }
         }

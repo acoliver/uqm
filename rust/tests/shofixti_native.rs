@@ -888,7 +888,10 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                         desc.ship_data.special =
                             uqm_rust::engine::battle::frames::FrameArray::EMPTY;
                         uqm_rust::app::bridge::enter(|cx| {
-                            let outgoing = cx.elements().id(outgoing.cast()).unwrap();
+                            let outgoing = cx
+                                .elements()
+                                .id(std::ptr::NonNull::new(outgoing.cast()))
+                                .unwrap();
                             transitions::new_ship_with_picker(cx, outgoing, |cx, last, player| {
                                 uqm_rust::app::bridge::publish(cx, || {
                                     assert_eq!(player as usize, side);

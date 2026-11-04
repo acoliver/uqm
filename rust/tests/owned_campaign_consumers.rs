@@ -119,3 +119,28 @@ fn clock_helpers_work_with_an_unpublished_world() {
     assert_eq!(world.data.game.game_clock.tick_count, 0);
     assert_eq!(world.data.game.game_clock.day_in_ticks, 0);
 }
+
+#[test]
+#[serial_test::serial]
+fn scene_star_lookup_uses_the_unpublished_world() {
+    use uqm_rust::engine::world::{CStarDesc, CATALOG_LEN};
+    let mut world = World::new();
+    world.story = Some(uqm_rust::state::game_state::GameState::new());
+    // SAFETY: descriptors contain only integer fields; this fixture retains every catalog entry.
+    let mut catalog: Box<[CStarDesc; CATALOG_LEN]> = Box::new(unsafe { std::mem::zeroed() });
+    for star in catalog.iter_mut() {
+        star.star_pt.y = i16::MAX;
+    }
+    catalog[0].star_pt.x = 1752;
+    catalog[0].star_pt.y = 1450;
+    // SAFETY: the serialized fixture restores the catalog before releasing its backing storage.
+    let result = unsafe {
+        let previous = uqm_rust::planets::starmap::star_array;
+        uqm_rust::planets::starmap::star_array = catalog.as_mut_ptr();
+        let result = uqm_rust::comm::dispatch::place_flagship_at_star(&mut world, (1752, 1450));
+        uqm_rust::planets::starmap::star_array = previous;
+        result
+    };
+    assert_eq!(result, Ok(()));
+    assert_eq!(world.star_pointer(Some(&catalog)), catalog.as_mut_ptr());
+}

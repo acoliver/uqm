@@ -536,7 +536,7 @@ pub(crate) mod live {
             if ships == 0 {
                 continue;
             }
-            let id = build_group(world, race).expect("IP group capacity");
+            let id = build_group(world, race).unwrap_or_else(|| panic!("IP group capacity"));
             initialize_group(world.ip_groups().get_mut(id), which);
         }
         if offset != 0 {
@@ -587,7 +587,8 @@ pub(crate) mod live {
             let mut number = read::<1>(world, file)[0];
             while number != 0 {
                 let race = read::<1>(world, file)[0];
-                let id = build_group(world, race).expect("saved IP group capacity");
+                let id =
+                    build_group(world, race).unwrap_or_else(|| panic!("saved IP group capacity"));
                 let mut group = *world.ip_groups_ref().get(id);
                 super::read_ip_group(world, file, &mut group);
                 *world.ip_groups().get_mut(id) = group;
@@ -612,7 +613,8 @@ pub(crate) mod live {
             let mut number = read::<1>(world, file)[0];
             while number != 0 {
                 let race = read::<1>(world, file)[0];
-                let id = clone_npc(world, race).expect("saved NPC fragment capacity");
+                let id =
+                    clone_npc(world, race).unwrap_or_else(|| panic!("saved NPC fragment capacity"));
                 let mut fragment = *world.npc_built_ships_ref().get(id);
                 super::read_ship_fragment(world, file, &mut fragment);
                 *world.npc_built_ships().get_mut(id) = fragment;

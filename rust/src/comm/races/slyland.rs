@@ -4,6 +4,7 @@
 
 use super::script::as_comm_data;
 use crate::comm::types::CommData;
+use crate::engine::battle::Cx;
 
 // ---------------------------------------------------------------------------
 // String indices (from strings.h)
@@ -128,18 +129,12 @@ pub(crate) mod live {
     use super::super::script::live::LiveScript;
     use super::*;
 
-    fn run(
-        cx: &mut crate::engine::battle::Cx<'_>,
-        f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>),
-    ) {
-        let mut api = LiveScript {
-            callback,
-            cx: std::cell::RefCell::new(cx),
-        };
+    fn run(cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>)) {
+        let mut api = LiveScript::new(cx, callback);
         f(&mut Dialogue { api: &mut api });
     }
 
-    fn combat(cx: &mut crate::engine::battle::Cx<'_>, response: u32) {
+    fn combat(cx: &mut Cx<'_>, response: u32) {
         run(cx, |dialogue| {
             dialogue.handle(Handler::Combat, response as i32)
         });
@@ -149,16 +144,14 @@ pub(crate) mod live {
         combat
     }
 
-    pub(super) fn intro(cx: &mut crate::engine::battle::Cx<'_>) {
+    pub(super) fn intro(cx: &mut Cx<'_>) {
         run(cx, |dialogue| dialogue.intro());
     }
-    pub(super) fn post(_cx: &mut crate::engine::battle::Cx<'_>) {}
-    pub(super) fn uninit(_cx: &mut crate::engine::battle::Cx<'_>) -> u16 {
+    pub(super) fn post(_cx: &mut Cx<'_>) {}
+    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
         0
     }
-    pub unsafe fn init_slyland_comm(
-        cx: &mut crate::engine::battle::Cx<'_>,
-    ) -> *mut crate::comm::locdata::CLocData {
+    pub unsafe fn init_slyland_comm(cx: &mut Cx<'_>) -> *mut crate::comm::locdata::CLocData {
         static mut DESC: Option<crate::comm::locdata::CLocData> = None;
         extern "C" {
             static mut ScreenWidth: i32;
@@ -179,7 +172,7 @@ mod branch_tests;
 pub struct SlylandDialogue;
 
 impl super::RaceDialogue for SlylandDialogue {
-    fn init(&self, _cx: &mut crate::engine::battle::Cx<'_>) -> CommData {
+    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
         #[cfg(not(test))]
         {
             unsafe { as_comm_data(&*live::init_slyland_comm(_cx)) }
@@ -190,14 +183,14 @@ impl super::RaceDialogue for SlylandDialogue {
         }
     }
 
-    fn intro(&self, _cx: &mut crate::engine::battle::Cx<'_>) {
+    fn intro(&self, _cx: &mut Cx<'_>) {
         #[cfg(not(test))]
         live::intro(_cx);
     }
 
-    fn post_encounter(&self, _cx: &mut crate::engine::battle::Cx<'_>) {}
+    fn post_encounter(&self, _cx: &mut Cx<'_>) {}
 
-    fn uninit(&self, _cx: &mut crate::engine::battle::Cx<'_>) -> u32 {
+    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
         0
     }
 }

@@ -4,6 +4,7 @@ use super::encounter::EncounterApi;
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
+use crate::engine::battle::Cx;
 mod phrases;
 use super::script::{GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
 use phrases::*;
@@ -1511,14 +1512,8 @@ fn descriptor() -> CLocData {
 pub(crate) mod live {
     use super::*;
     use crate::comm::races::script::live::LiveScript;
-    fn run(
-        cx: &mut crate::engine::battle::Cx<'_>,
-        f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>),
-    ) {
-        let mut api = LiveScript {
-            callback,
-            cx: std::cell::RefCell::new(cx),
-        };
+    fn run(cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>)) {
+        let mut api = LiveScript::new(cx, callback);
         static mut SESSION: Option<Session> = None;
         // Only the game thread dispatches these callbacks.
         let session =
@@ -1528,7 +1523,7 @@ pub(crate) mod live {
             session,
         });
     }
-    fn bye_bye(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn bye_bye(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| {
             s.handle(
                 Handler::ByeBye,
@@ -1536,7 +1531,7 @@ pub(crate) mod live {
             )
         });
     }
-    fn alliance_info(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn alliance_info(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| {
             s.handle(
                 Handler::AllianceInfo,
@@ -1544,7 +1539,7 @@ pub(crate) mod live {
             )
         });
     }
-    fn hierarchy_info(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn hierarchy_info(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| {
             s.handle(
                 Handler::HierarchyInfo,
@@ -1552,7 +1547,7 @@ pub(crate) mod live {
             )
         });
     }
-    fn alien_races(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn alien_races(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| {
             s.handle(
                 Handler::AlienRaces,
@@ -1560,7 +1555,7 @@ pub(crate) mod live {
             )
         });
     }
-    fn war_info(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn war_info(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| {
             s.handle(
                 Handler::WarInfo,
@@ -1568,7 +1563,7 @@ pub(crate) mod live {
             )
         });
     }
-    fn ancient_history(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn ancient_history(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| {
             s.handle(
                 Handler::AncientHistory,
@@ -1576,7 +1571,7 @@ pub(crate) mod live {
             )
         });
     }
-    fn tell_history(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn tell_history(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| {
             s.handle(
                 Handler::TellHistory,
@@ -1584,7 +1579,7 @@ pub(crate) mod live {
             )
         });
     }
-    fn defeat_urquan(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn defeat_urquan(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| {
             s.handle(
                 Handler::DefeatUrquan,
@@ -1592,7 +1587,7 @@ pub(crate) mod live {
             )
         });
     }
-    fn tell_mission(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn tell_mission(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| {
             s.handle(
                 Handler::TellMission,
@@ -1600,7 +1595,7 @@ pub(crate) mod live {
             )
         });
     }
-    fn tell_star_base(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn tell_star_base(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| {
             s.handle(
                 Handler::TellStarBase,
@@ -1608,7 +1603,7 @@ pub(crate) mod live {
             )
         });
     }
-    fn need_info(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn need_info(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| {
             s.handle(
                 Handler::NeedInfo,
@@ -1616,7 +1611,7 @@ pub(crate) mod live {
             )
         });
     }
-    fn normal_starbase(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn normal_starbase(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| {
             s.handle(
                 Handler::NormalStarbase,
@@ -1624,7 +1619,7 @@ pub(crate) mod live {
             )
         });
     }
-    fn sell_minerals(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn sell_minerals(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| {
             s.handle(
                 Handler::SellMinerals,
@@ -1649,20 +1644,20 @@ pub(crate) mod live {
             Handler::SellMinerals => sell_minerals,
         }
     }
-    pub(super) fn intro(cx: &mut crate::engine::battle::Cx<'_>) {
+    pub(super) fn intro(cx: &mut Cx<'_>) {
         run(cx, |s| s.intro());
     }
-    pub(super) fn post(cx: &mut crate::engine::battle::Cx<'_>) {
+    pub(super) fn post(cx: &mut Cx<'_>) {
         run(cx, |s| s.post_starbase_enc());
     }
-    pub(super) fn uninit(_cx: &mut crate::engine::battle::Cx<'_>) -> u16 {
+    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
         0
     }
     /// Initialize the encounter descriptor and initial battle segue.
     ///
     /// # Safety
     /// Game thread only. The caller must copy the descriptor before another encounter.
-    pub unsafe fn init_starbase_comm(cx: &mut crate::engine::battle::Cx<'_>) -> *mut CLocData {
+    pub unsafe fn init_starbase_comm(cx: &mut Cx<'_>) -> *mut CLocData {
         static mut DESC: Option<CLocData> = None;
         let desc = (&mut *std::ptr::addr_of_mut!(DESC)).get_or_insert_with(descriptor);
         run(cx, |s| s.initialize(desc));
@@ -1671,7 +1666,7 @@ pub(crate) mod live {
 }
 pub struct StarbasDialogue;
 impl super::RaceDialogue for StarbasDialogue {
-    fn init(&self, _cx: &mut crate::engine::battle::Cx<'_>) -> CommData {
+    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
         #[cfg(not(test))]
         {
             unsafe { as_comm_data(&*live::init_starbase_comm(_cx)) }
@@ -1681,15 +1676,15 @@ impl super::RaceDialogue for StarbasDialogue {
             as_comm_data(&descriptor())
         }
     }
-    fn intro(&self, _cx: &mut crate::engine::battle::Cx<'_>) {
+    fn intro(&self, _cx: &mut Cx<'_>) {
         #[cfg(not(test))]
         live::intro(_cx);
     }
-    fn post_encounter(&self, _cx: &mut crate::engine::battle::Cx<'_>) {
+    fn post_encounter(&self, _cx: &mut Cx<'_>) {
         #[cfg(not(test))]
         live::post(_cx);
     }
-    fn uninit(&self, _cx: &mut crate::engine::battle::Cx<'_>) -> u32 {
+    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
         0
     }
 }

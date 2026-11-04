@@ -48,7 +48,7 @@ mod live {
 
     use crate::threading::legacy_abi::TaskSwitch;
 
-    use crate::battle::build_native::escorts_worth;
+    use crate::engine::world::fleet::escorts_worth;
 
     use crate::comm::comm_abi::EnableTalkingAnim;
 

@@ -51,9 +51,13 @@ impl orbital::Orbital for SolOrbit<'_, '_, '_> {
     }
     fn set_global_flags_and_data(&mut self, value: u8) {
         self.game
+            .cx
+            .borrow_mut()
+            .world
             .set_flag("GLOBAL_FLAGS_AND_DATA", u32::from(value));
     }
     fn with_orbit(&mut self, run: impl FnOnce(&mut Orbit<'_>)) {
+        // SAFETY: the host retains the live system and orbital descriptor for this synchronous call.
         unsafe {
             orbit_world(self.game.cx, self.system, self.world, |orbit, _| {
                 run(orbit);
@@ -168,7 +172,7 @@ unsafe fn orbital(
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
-    let story = crate::planets::c_api::LiveGame { cx: owner };
+    let story = owner;
 
     sol::generate_orbital(
         body_of(system, world),

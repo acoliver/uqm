@@ -698,8 +698,16 @@ mod intersection_projection_tests {
                 .IntersectStamp
                 .frame
                 .is_null());
-            assert_eq!(cx.elements().id(cx.elements().raw(id)), Some(id));
-            assert_eq!(cx.elements().id(std::ptr::null_mut()), None);
+            assert_eq!(
+                cx.elements()
+                    .id(std::ptr::NonNull::new(cx.elements().raw(id))),
+                Some(id)
+            );
+            assert_eq!(
+                cx.elements()
+                    .id(std::ptr::NonNull::new(std::ptr::null_mut())),
+                None
+            );
             let primitive = cx.display_pool().alloc().unwrap();
             cx.kernel.display.get_mut(primitive).Type = 3;
             assert_eq!(cx.display_primitive(primitive).Type, 3);

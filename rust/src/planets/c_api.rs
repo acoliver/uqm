@@ -144,7 +144,7 @@ pub unsafe fn set_encounter_group(value: u8) {
 /// Game thread, with the available-race and escort queues initialised.
 pub fn rebel_escort_feasible(world: &crate::engine::World) -> bool {
     {
-        crate::battle::build_native::escort_feasibility(world, u16::from(ship::YEHAT_REBEL_SHIP))
+        crate::engine::world::fleet::escort_feasibility(world, u16::from(ship::YEHAT_REBEL_SHIP))
             != 0
     }
 }
@@ -215,7 +215,7 @@ const INFINITE_FLEET: u16 = !0;
 /// # Safety
 /// Game thread, with the fleet queue initialised.
 pub fn start_sphere_tracking(world: &mut crate::engine::World, race: u16) -> bool {
-    crate::battle::build_native::start_sphere_tracking(world, race) != 0
+    crate::engine::world::fleet::start_sphere_tracking(world, race) != 0
 }
 
 /// `RepairSISBorder ()`.
@@ -539,20 +539,5 @@ impl<'a, 'b, 'c> LiveGame<'a, 'b, 'c> {
         unsafe {
             clone_npc_ship(self.cx.borrow_mut().world, ship, 0, None);
         }
-    }
-}
-
-impl crate::planets::generate::special::Story for LiveGame<'_, '_, '_> {
-    fn flag(&self, name: &'static str) -> u32 {
-        self.cx.borrow().world.flag(name)
-    }
-    fn set_flag(&mut self, name: &'static str, value: u32) {
-        self.cx.borrow_mut().world.set_flag(name, value);
-    }
-    fn word(&self, name: &'static str) -> u32 {
-        self.cx.borrow().world.word(name)
-    }
-    fn set_word(&mut self, name: &'static str, value: u32) {
-        self.cx.borrow_mut().world.set_word(name, value);
     }
 }

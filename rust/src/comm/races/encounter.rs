@@ -18,7 +18,7 @@ mod live {
     use super::*;
     use crate::comm::races::script::live::LiveScript;
 
-    use crate::battle::build_native;
+    use crate::engine::world::fleet;
 
     impl<H> EncounterApi<H> for LiveScript<'_, '_, H> {
         fn segue(&mut self, segue: u32) {
@@ -31,68 +31,38 @@ mod live {
                 .with_legacy(crate::comm::ffi::rust_get_segue)
         }
         fn activity(&self) -> u16 {
-            self.cx
-                .borrow_mut()
-                .with_legacy(|| crate::mainloop::ffi::get_current_activity().0)
+            self.cx.borrow().world.activity()
         }
         fn alliance(&self, race: u16) -> u16 {
-            // SAFETY: response callbacks run with the game-thread context published.
-            {
-                {
-                    let mut owner = self.cx.borrow_mut();
-                    let cx = &mut **owner;
-                    build_native::check_alliance(cx.world, race)
-                }
-            }
+            fleet::check_alliance(self.cx.borrow().world, race)
         }
         fn escort_feasibility(&self, race: u16) -> u16 {
-            // SAFETY: response callbacks run with the game-thread context published.
-            {
-                {
-                    let mut owner = self.cx.borrow_mut();
-                    let cx = &mut **owner;
-                    build_native::escort_feasibility(cx.world, race)
-                }
-            }
+            fleet::escort_feasibility(self.cx.borrow().world, race)
         }
         fn add_escorts(&mut self, race: u16, count: i16) {
-            unsafe {
-                let added = {
-                    let mut owner = self.cx.borrow_mut();
-                    let cx = &mut **owner;
-                    {
-                        build_native::add_escort_ships(
-                            cx.world,
-                            race,
-                            count,
-                            build_native::captain_name,
-                        )
-                    }
-                };
-                if added.is_some() {
+            let added = fleet::add_escort_ships(
+                self.cx.borrow_mut().world,
+                race,
+                count,
+                fleet::captain_name,
+            );
+            if added.is_some() {
+                // SAFETY: the campaign borrow ends before the game-thread display refresh.
+                unsafe {
                     self.cx
                         .borrow_mut()
-                        .with_legacy(|| build_native::refresh_escorts());
-                }
+                        .with_legacy(|| crate::battle::build_native::refresh_escorts())
+                };
             }
         }
         fn fwiffo_crew(&mut self) {
             use crate::ships::queue::{NAME_OFFSET, NUM_CAPTAINS_NAMES};
-            // SAFETY: response callbacks run with the game-thread context published.
-            {
-                {
-                    let mut owner = self.cx.borrow_mut();
-                    let cx = &mut **owner;
-                    {
-                        build_native::set_escort_crew(
-                            cx.world,
-                            6,
-                            1,
-                            NAME_OFFSET + NUM_CAPTAINS_NAMES,
-                        )
-                    }
-                };
-            }
+            fleet::set_escort_crew(
+                self.cx.borrow_mut().world,
+                6,
+                1,
+                NAME_OFFSET + NUM_CAPTAINS_NAMES,
+            );
         }
         fn advance_ilwrath(&mut self) {
             unsafe {

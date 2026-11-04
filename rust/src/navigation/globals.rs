@@ -83,7 +83,11 @@ unsafe fn initialize_races(cx: &mut crate::engine::battle::Cx<'_>) {
         } else {
             SPECIES_ID_UR_QUAN_PROBE_ID
         };
-        let handle = cx.world.avail_races().alloc().expect("fleet capacity");
+        let handle = cx
+            .world
+            .avail_races()
+            .alloc()
+            .unwrap_or_else(|| panic!("fleet capacity"));
         let mut value = FLEET_INFO::default();
         let fleet = &raw mut value;
         (*fleet).species_id = ship;
@@ -170,7 +174,7 @@ pub unsafe fn init_game_structures(cx: &mut crate::engine::battle::Cx<'_>) -> BO
             .world
             .avail_races_ref()
             .at(HUMAN_SHIP as usize)
-            .expect("human fleet");
+            .unwrap_or_else(|| panic!("human fleet"));
         cx.world.avail_races().get_mut(human).allied_state = GOOD_GUY as u16;
         let template = *cx.world.avail_races_ref().get(human);
         cx.world.built_ships().clone_fragment(

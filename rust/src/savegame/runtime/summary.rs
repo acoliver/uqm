@@ -249,7 +249,7 @@ pub fn capture_summary(
     let mut ship_list = [0u8; MAX_BUILT_SHIPS];
     let mut next = escorts.head();
     for slot in ship_list.iter_mut().take(escorts.count()) {
-        let id = next.expect("escort count matches visit order");
+        let id = next.unwrap_or_else(|| panic!("escort count matches visit order"));
         *slot = escorts.get(id).race_id;
         next = escorts.succ(id);
     }

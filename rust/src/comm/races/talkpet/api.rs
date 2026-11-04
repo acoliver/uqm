@@ -29,7 +29,7 @@ impl TalkpetApi for super::super::script::live::LiveScript<'_, '_, Handler> {
     }
     fn umgah_alive(&mut self) -> bool {
         self.cx.borrow_mut().with_legacy(|| {
-            use crate::battle::build_native::start_sphere_tracking;
+            use crate::engine::world::fleet::start_sphere_tracking;
             World::current().write(|world| {
                 start_sphere_tracking(world, crate::comm::dispatch::ship::UMGAH_SHIP as u16)
             }) != 0

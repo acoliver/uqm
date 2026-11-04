@@ -16,9 +16,9 @@ mod live {
     use super::*;
     use crate::comm::races::script::live::LiveScript;
 
-    use crate::battle::build_native::set_race_allied;
+    use crate::engine::world::fleet::set_race_allied;
 
-    use crate::battle::build_native::start_sphere_tracking;
+    use crate::engine::world::fleet::start_sphere_tracking;
 
     impl<H> AllianceApi<H> for LiveScript<'_, '_, H> {
         fn set_allied(&mut self, race: u16, allied: bool) {

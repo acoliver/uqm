@@ -134,6 +134,7 @@ struct Conversations<'a, 'b, 'c> {
 
 impl syreen::StarbaseSite for Conversations<'_, '_, '_> {
     fn talk_to_syreen(&mut self) {
+        // SAFETY: the orbital host exclusively owns the live campaign context on the game thread.
         unsafe {
             init_communication(&mut self.game.cx.borrow_mut(), SYREEN_CONVERSATION);
         }
@@ -142,6 +143,7 @@ impl syreen::StarbaseSite for Conversations<'_, '_, '_> {
 
 impl slylandro::HomeSite for Conversations<'_, '_, '_> {
     fn talk_to_slylandro(&mut self) {
+        // SAFETY: the orbital host exclusively owns the live campaign context on the game thread.
         unsafe {
             init_communication(&mut self.game.cx.borrow_mut(), SLYLANDRO_HOME_CONVERSATION);
         }
@@ -175,6 +177,7 @@ impl yehat::YehatSite for YehatCapital<'_, '_, '_> {
         built_ship_count(self.game.cx.borrow().world)
     }
     fn clone_yehat_fleet_into_built_queue(&mut self) {
+        // SAFETY: the orbital host exclusively owns the live campaign context on the game thread.
         unsafe {
             clone_infinite_ship_into_built_queue(self.game.cx.borrow_mut().world, YEHAT_SHIP)
         };
@@ -190,9 +193,13 @@ impl yehat::YehatSite for YehatCapital<'_, '_, '_> {
     }
     fn set_global_flags_and_data(&mut self, value: u8) {
         self.game
+            .cx
+            .borrow_mut()
+            .world
             .set_flag("GLOBAL_FLAGS_AND_DATA", u32::from(value));
     }
     fn talk_to_yehat(&mut self) {
+        // SAFETY: the orbital host exclusively owns the live campaign context on the game thread.
         unsafe {
             init_communication(&mut self.game.cx.borrow_mut(), YEHAT_CONVERSATION);
         }
@@ -240,7 +247,7 @@ unsafe fn vault_orbital(
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
-    let story = crate::planets::c_api::LiveGame { cx: owner };
+    let story = owner;
 
     orbit_world(owner, system, world, |orbit, body| {
         vault::generate_orbital(orbit, body, &story, &mut vault_scene(system), || {
@@ -288,7 +295,7 @@ unsafe fn wreck_orbital(
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
-    let story = crate::planets::c_api::LiveGame { cx: owner };
+    let story = owner;
 
     orbit_world(owner, system, world, |orbit, body| {
         wreck::generate_orbital(orbit, body, &story, &mut wreck_scene(system), || {
@@ -426,7 +433,7 @@ unsafe fn rainbow_orbital(
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
-    let mut story = crate::planets::c_api::LiveGame { cx: owner };
+    let mut story = owner;
 
     orbit_world(owner, system, world, |orbit, body| {
         let which_rainbow = if body == Body::Planet(0) {

@@ -143,7 +143,7 @@ pub(crate) mod live {
         world
             .avail_races_ref()
             .at(race as usize)
-            .expect("scheduled event fleet")
+            .unwrap_or_else(|| panic!("scheduled event fleet"))
     }
     unsafe fn relative(world: &mut World, month: u16, day: u16, year: u16, selector: u32) {
         crate::navigation::events::live::add_event(

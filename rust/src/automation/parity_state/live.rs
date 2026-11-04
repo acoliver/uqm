@@ -359,6 +359,6 @@ mod tests {
     #[should_panic(expected = "element address is not allocated")]
     fn pointer_outside_display_pool_fails_before_dereference() {
         let elements = crate::engine::battle::ElementTable::with_capacity(2);
-        elements.id(std::ptr::dangling_mut());
+        elements.id(std::ptr::NonNull::new(std::ptr::dangling_mut()));
     }
 }

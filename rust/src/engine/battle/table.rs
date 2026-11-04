@@ -87,10 +87,8 @@ impl ElementTable {
             .cast()
     }
 
-    pub fn id(&self, address: *mut c_void) -> Option<ElementId> {
-        if address.is_null() {
-            return None;
-        }
+    pub fn id(&self, address: Option<std::ptr::NonNull<c_void>>) -> Option<ElementId> {
+        let address = address?;
         let id = self.allocated_id(address);
         assert!(
             id.is_some(),
@@ -99,11 +97,12 @@ impl ElementTable {
         id
     }
 
-    pub(crate) fn allocated_id(&self, address: *mut c_void) -> Option<ElementId> {
+    pub(crate) fn allocated_id(&self, address: std::ptr::NonNull<c_void>) -> Option<ElementId> {
         (0..CAPACITY).find_map(|index| {
             let key = self.records.pool.id_at(index)?;
-            (std::ptr::from_ref(self.records.pool.get(key)).cast::<()>() == address.cast::<()>())
-                .then_some(self.identify(key))
+            (std::ptr::from_ref(self.records.pool.get(key)).cast::<()>()
+                == address.as_ptr().cast::<()>())
+            .then_some(self.identify(key))
         })
     }
 

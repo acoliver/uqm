@@ -3,6 +3,7 @@ use super::alliance::AllianceApi;
 use super::script::{animation, as_comm_data, GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
+use crate::engine::battle::Cx;
 mod phrases;
 use super::alliance::{SUPOX_SHIP, UTWIG_SHIP};
 use phrases::*;
@@ -587,17 +588,11 @@ pub(crate) mod live {
     use super::*;
     use crate::comm::races::script::live::LiveScript;
 
-    fn run(
-        cx: &mut crate::engine::battle::Cx<'_>,
-        f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>),
-    ) {
-        let mut api = LiveScript {
-            callback,
-            cx: std::cell::RefCell::new(cx),
-        };
+    fn run(cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>)) {
+        let mut api = LiveScript::new(cx, callback);
         f(&mut Dialogue { api: &mut api });
     }
-    fn allied_home(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn allied_home(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| {
             s.handle(
                 Handler::AlliedHome,
@@ -605,7 +600,7 @@ pub(crate) mod live {
             )
         });
     }
-    fn exit_conversation(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn exit_conversation(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| {
             s.handle(
                 Handler::ExitConversation,
@@ -613,7 +608,7 @@ pub(crate) mod live {
             )
         });
     }
-    fn before_kohr_ah(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn before_kohr_ah(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| {
             s.handle(
                 Handler::BeforeKohrAh,
@@ -621,7 +616,7 @@ pub(crate) mod live {
             )
         });
     }
-    fn after_kohr_ah(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn after_kohr_ah(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| {
             s.handle(
                 Handler::AfterKohrAh,
@@ -629,7 +624,7 @@ pub(crate) mod live {
             )
         });
     }
-    fn neutral_supox(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn neutral_supox(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| {
             s.handle(
                 Handler::NeutralSupox,
@@ -647,18 +642,18 @@ pub(crate) mod live {
             Handler::NeutralSupox => neutral_supox,
         }
     }
-    pub(super) fn intro(cx: &mut crate::engine::battle::Cx<'_>) {
+    pub(super) fn intro(cx: &mut Cx<'_>) {
         run(cx, |s| s.intro());
     }
-    pub(super) fn post(_cx: &mut crate::engine::battle::Cx<'_>) {}
-    pub(super) fn uninit(_cx: &mut crate::engine::battle::Cx<'_>) -> u16 {
+    pub(super) fn post(_cx: &mut Cx<'_>) {}
+    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
         0
     }
     /// Initialize the encounter on the game thread.
     ///
     /// # Safety
     /// The caller must copy the descriptor before another encounter initializes.
-    pub unsafe fn init_supox_comm(cx: &mut crate::engine::battle::Cx<'_>) -> *mut CLocData {
+    pub unsafe fn init_supox_comm(cx: &mut Cx<'_>) -> *mut CLocData {
         static mut DESC: Option<CLocData> = None;
         let desc = (&mut *std::ptr::addr_of_mut!(DESC)).get_or_insert_with(descriptor);
         run(cx, |s| s.initialize(desc));
@@ -667,7 +662,7 @@ pub(crate) mod live {
 }
 pub struct SupoxDialogue;
 impl super::RaceDialogue for SupoxDialogue {
-    fn init(&self, _cx: &mut crate::engine::battle::Cx<'_>) -> CommData {
+    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
         #[cfg(not(test))]
         {
             unsafe { as_comm_data(&*live::init_supox_comm(_cx)) }
@@ -677,15 +672,15 @@ impl super::RaceDialogue for SupoxDialogue {
             as_comm_data(&descriptor())
         }
     }
-    fn intro(&self, _cx: &mut crate::engine::battle::Cx<'_>) {
+    fn intro(&self, _cx: &mut Cx<'_>) {
         #[cfg(not(test))]
         live::intro(_cx);
     }
-    fn post_encounter(&self, _cx: &mut crate::engine::battle::Cx<'_>) {
+    fn post_encounter(&self, _cx: &mut Cx<'_>) {
         #[cfg(not(test))]
         live::post(_cx);
     }
-    fn uninit(&self, _cx: &mut crate::engine::battle::Cx<'_>) -> u32 {
+    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
         0
     }
 }

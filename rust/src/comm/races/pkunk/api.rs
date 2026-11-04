@@ -1,7 +1,5 @@
 use super::Handler;
 use crate::comm::races::alliance::AllianceApi;
-#[cfg(not(test))]
-use crate::engine::WorldData;
 
 pub(super) trait PkunkApi: AllianceApi<Handler> {
     fn date(&self) -> (u16, u16, u16);
@@ -11,39 +9,33 @@ pub(super) trait PkunkApi: AllianceApi<Handler> {
 #[cfg(not(test))]
 impl PkunkApi for crate::comm::races::script::live::LiveScript<'_, '_, Handler> {
     fn date(&self) -> (u16, u16, u16) {
-        self.cx.borrow_mut().with_legacy(|| unsafe {
-            let date = &(**WorldData::current()).game.game_clock;
-            (
-                date.year_index,
-                u16::from(date.month_index),
-                u16::from(date.day_index),
-            )
-        })
+        let owner = self.cx.borrow();
+        let date = &owner.world.data.game.game_clock;
+        (
+            date.year_index,
+            u16::from(date.month_index),
+            u16::from(date.day_index),
+        )
     }
     fn gift_ships(&mut self) -> u16 {
-        use crate::battle::build_native;
-        unsafe {
-            let added = {
-                let mut owner = self.cx.borrow_mut();
-                let cx = &mut **owner;
-                {
-                    build_native::add_escort_ships(
-                        cx.world,
-                        crate::comm::dispatch::ship::PKUNK_SHIP as u16,
-                        4,
-                        build_native::captain_name,
-                    )
-                }
-            };
-            match added {
-                Some(count) => {
+        use crate::engine::world::fleet;
+        let added = fleet::add_escort_ships(
+            self.cx.borrow_mut().world,
+            crate::comm::dispatch::ship::PKUNK_SHIP as u16,
+            4,
+            fleet::captain_name,
+        );
+        match added {
+            Some(count) => {
+                // SAFETY: the campaign borrow ends before the game-thread display refresh.
+                unsafe {
                     self.cx
                         .borrow_mut()
-                        .with_legacy(|| build_native::refresh_escorts());
-                    count
-                }
-                None => 0,
+                        .with_legacy(|| crate::battle::build_native::refresh_escorts())
+                };
+                count
             }
+            None => 0,
         }
     }
 }

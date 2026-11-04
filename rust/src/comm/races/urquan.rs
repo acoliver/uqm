@@ -5,6 +5,7 @@
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
+use crate::engine::battle::Cx;
 
 mod api;
 mod dialogue;
@@ -165,47 +166,44 @@ pub(crate) mod live {
     use super::*;
 
     fn run(
-        cx: &mut crate::engine::battle::Cx<'_>,
+        cx: &mut Cx<'_>,
         f: impl FnOnce(&mut dialogue::Dialogue<'_, LiveScript<'_, '_, Handler>>),
     ) {
-        let mut api = LiveScript {
-            callback,
-            cx: std::cell::RefCell::new(cx),
-        };
+        let mut api = LiveScript::new(cx, callback);
         f(&mut dialogue::Dialogue { api: &mut api });
     }
 
-    fn combat(cx: &mut crate::engine::battle::Cx<'_>, response: u32) {
+    fn combat(cx: &mut Cx<'_>, response: u32) {
         run(cx, |dialogue| {
             dialogue.handle(Handler::Combat, response as i32)
         });
     }
-    fn normal(cx: &mut crate::engine::battle::Cx<'_>, response: u32) {
+    fn normal(cx: &mut Cx<'_>, response: u32) {
         run(cx, |dialogue| {
             dialogue.handle(Handler::Normal, response as i32)
         });
     }
-    fn hypno(cx: &mut crate::engine::battle::Cx<'_>, response: u32) {
+    fn hypno(cx: &mut Cx<'_>, response: u32) {
         run(cx, |dialogue| {
             dialogue.handle(Handler::Hypno, response as i32)
         });
     }
-    fn mention_compulsion(cx: &mut crate::engine::battle::Cx<'_>, response: u32) {
+    fn mention_compulsion(cx: &mut Cx<'_>, response: u32) {
         run(cx, |dialogue| {
             dialogue.handle(Handler::MentionCompulsion, response as i32)
         });
     }
-    fn describe_pet(cx: &mut crate::engine::battle::Cx<'_>, response: u32) {
+    fn describe_pet(cx: &mut Cx<'_>, response: u32) {
         run(cx, |dialogue| {
             dialogue.handle(Handler::DescribePet, response as i32)
         });
     }
-    fn describe_compulsion(cx: &mut crate::engine::battle::Cx<'_>, response: u32) {
+    fn describe_compulsion(cx: &mut Cx<'_>, response: u32) {
         run(cx, |dialogue| {
             dialogue.handle(Handler::DescribeCompulsion, response as i32)
         });
     }
-    fn loser(cx: &mut crate::engine::battle::Cx<'_>, response: u32) {
+    fn loser(cx: &mut Cx<'_>, response: u32) {
         run(cx, |dialogue| {
             dialogue.handle(Handler::Loser, response as i32)
         });
@@ -223,17 +221,17 @@ pub(crate) mod live {
         }
     }
 
-    pub(super) fn intro(cx: &mut crate::engine::battle::Cx<'_>) {
+    pub(super) fn intro(cx: &mut Cx<'_>) {
         run(cx, |dialogue| dialogue.intro());
     }
-    pub(super) fn post(cx: &mut crate::engine::battle::Cx<'_>) {
+    pub(super) fn post(cx: &mut Cx<'_>) {
         run(cx, |dialogue| dialogue.post());
     }
-    pub(super) fn uninit(_cx: &mut crate::engine::battle::Cx<'_>) -> u16 {
+    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
         0
     }
 
-    pub unsafe fn init_urquan_comm(cx: &mut crate::engine::battle::Cx<'_>) -> *mut CLocData {
+    pub unsafe fn init_urquan_comm(cx: &mut Cx<'_>) -> *mut CLocData {
         static mut DESCRIPTOR: Option<CLocData> = None;
         extern "C" {
             static mut ScreenWidth: i32;
@@ -249,7 +247,7 @@ pub(crate) mod live {
 pub struct UrquanDialogue;
 
 impl super::RaceDialogue for UrquanDialogue {
-    fn init(&self, _cx: &mut crate::engine::battle::Cx<'_>) -> CommData {
+    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
         #[cfg(not(test))]
         {
             unsafe { as_comm_data(&*live::init_urquan_comm(_cx)) }
@@ -260,17 +258,17 @@ impl super::RaceDialogue for UrquanDialogue {
         }
     }
 
-    fn intro(&self, _cx: &mut crate::engine::battle::Cx<'_>) {
+    fn intro(&self, _cx: &mut Cx<'_>) {
         #[cfg(not(test))]
         live::intro(_cx);
     }
 
-    fn post_encounter(&self, _cx: &mut crate::engine::battle::Cx<'_>) {
+    fn post_encounter(&self, _cx: &mut Cx<'_>) {
         #[cfg(not(test))]
         live::post(_cx);
     }
 
-    fn uninit(&self, _cx: &mut crate::engine::battle::Cx<'_>) -> u32 {
+    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
         #[cfg(not(test))]
         return live::uninit(_cx) as u32;
         #[cfg(test)]

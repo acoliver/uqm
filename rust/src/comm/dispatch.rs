@@ -690,7 +690,7 @@ pub(crate) unsafe fn prepare_samatra_dev_fixture(
     cx: &mut crate::engine::battle::Cx<'_>,
 ) -> Result<(), &'static str> {
     cx.world.built_ships().reinit();
-    let added = crate::battle::build_native::add_escort_ships(cx.world, 4, 12, pick_captain_name);
+    let added = crate::engine::world::fleet::add_escort_ships(cx.world, 4, 12, pick_captain_name);
     if added.is_some() {
         cx.with_legacy(|| crate::battle::build_native::refresh_escorts());
     }
@@ -724,11 +724,11 @@ pub unsafe fn place_flagship_at_star(
     world: &mut World,
     location: (i16, i16),
 ) -> Result<(), &'static str> {
-    let mut universe = CPoint {
+    let universe = CPoint {
         x: location.0,
         y: location.1,
     };
-    let star = ffi::FindStar(std::ptr::null_mut(), &mut universe, 1, 1);
+    let star = crate::planets::starmap::find_star_in(world, None, universe, 1, 1);
     if star.is_null() {
         return Err("no star at the scene location");
     }

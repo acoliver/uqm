@@ -51,7 +51,8 @@ extern "C" {
     fn save_sis_hyper_state();
 }
 
-use crate::battle::{build_native::start_sphere_tracking, sounds::engine::PlayMenuSound};
+use crate::battle::sounds::engine::PlayMenuSound;
+use crate::engine::world::fleet::start_sphere_tracking;
 
 use crate::navigation::{
     globals::{in_hqspace, in_hyper_space},
@@ -260,20 +261,7 @@ unsafe fn invoke(id: u8) -> u8 {
                 (**WorldFields::current()).game.current_activity |= START_ENCOUNTER;
                 reset_groups();
                 WorldOwner::current().write(|world| {
-                    let template = {
-                        let fleets = world.avail_races_ref();
-                        fleets
-                            .at(usize::from(ship::CHMMR_SHIP))
-                            .map(|id| *fleets.get(id))
-                    };
-                    if let Some(template) = template {
-                        world.npc_built_ships().clone_fragment(
-                            &template,
-                            ship::CHMMR_SHIP,
-                            0,
-                            crate::comm::dispatch::production_captain_name,
-                        );
-                    }
+                    crate::comm::dispatch::clone_npc_fragment(world, ship::CHMMR_SHIP, 0);
                 });
             }
             2

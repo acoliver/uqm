@@ -92,6 +92,18 @@ pub(super) mod live {
         pub callback: fn(H) -> crate::comm::response::ResponseFunc,
     }
 
+    impl<'a, 'b, H> LiveScript<'a, 'b, H> {
+        pub fn new(
+            cx: &'a mut crate::engine::battle::Cx<'b>,
+            callback: fn(H) -> fn(&mut crate::engine::battle::Cx<'_>, u32),
+        ) -> Self {
+            Self {
+                callback,
+                cx: std::cell::RefCell::new(cx),
+            }
+        }
+    }
+
     impl<H> ScriptApi<H> for LiveScript<'_, '_, H> {
         fn get(&self, key: &str) -> u8 {
             let (start, end) =

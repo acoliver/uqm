@@ -118,7 +118,7 @@ pub(super) fn install_events(clock: &mut GameClock, events: &[EventEntry]) {
     for entry in events {
         let id = queue
             .alloc()
-            .expect("event capacity validated before installation");
+            .unwrap_or_else(|| panic!("event capacity validated before installation"));
         let event = queue.get_mut(id);
         event.day_index = entry.day_index;
         event.month_index = entry.month_index;

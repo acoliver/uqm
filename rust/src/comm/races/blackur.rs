@@ -2,6 +2,7 @@
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
+use crate::engine::battle::Cx;
 mod phrases;
 use phrases::*;
 mod api;
@@ -333,20 +334,14 @@ fn descriptor(screen_width: i32) -> CLocData {
 pub(crate) mod live {
     use super::super::script::live::LiveScript;
     use super::*;
-    fn run(
-        cx: &mut crate::engine::battle::Cx<'_>,
-        f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>),
-    ) {
-        let mut a = LiveScript {
-            callback,
-            cx: std::cell::RefCell::new(cx),
-        };
+    fn run(cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>)) {
+        let mut a = LiveScript::new(cx, callback);
         f(&mut Dialogue { api: &mut a });
     }
-    fn combat(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn combat(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| s.handle(Handler::Combat, r as i32));
     }
-    fn story(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn story(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| s.handle(Handler::Story, r as i32));
     }
     fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
@@ -355,14 +350,14 @@ pub(crate) mod live {
             Handler::Story => story,
         }
     }
-    pub(super) fn intro(cx: &mut crate::engine::battle::Cx<'_>) {
+    pub(super) fn intro(cx: &mut Cx<'_>) {
         run(cx, |s| s.intro());
     }
-    pub(super) fn post(_cx: &mut crate::engine::battle::Cx<'_>) {}
-    pub(super) fn uninit(_cx: &mut crate::engine::battle::Cx<'_>) -> u16 {
+    pub(super) fn post(_cx: &mut Cx<'_>) {}
+    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
         0
     }
-    pub unsafe fn init_blackurq_comm(cx: &mut crate::engine::battle::Cx<'_>) -> *mut CLocData {
+    pub unsafe fn init_blackurq_comm(cx: &mut Cx<'_>) -> *mut CLocData {
         static mut D: Option<CLocData> = None;
         extern "C" {
             static mut ScreenWidth: i32;
@@ -375,7 +370,7 @@ pub(crate) mod live {
 }
 pub struct BlackurDialogue;
 impl super::RaceDialogue for BlackurDialogue {
-    fn init(&self, _cx: &mut crate::engine::battle::Cx<'_>) -> CommData {
+    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
         #[cfg(not(test))]
         {
             unsafe { as_comm_data(&*live::init_blackurq_comm(_cx)) }
@@ -385,15 +380,15 @@ impl super::RaceDialogue for BlackurDialogue {
             as_comm_data(&descriptor(320))
         }
     }
-    fn intro(&self, _cx: &mut crate::engine::battle::Cx<'_>) {
+    fn intro(&self, _cx: &mut Cx<'_>) {
         #[cfg(not(test))]
         live::intro(_cx);
     }
-    fn post_encounter(&self, _cx: &mut crate::engine::battle::Cx<'_>) {
+    fn post_encounter(&self, _cx: &mut Cx<'_>) {
         #[cfg(not(test))]
         live::post(_cx);
     }
-    fn uninit(&self, _cx: &mut crate::engine::battle::Cx<'_>) -> u32 {
+    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
         0
     }
 }

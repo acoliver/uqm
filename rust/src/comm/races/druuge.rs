@@ -2,6 +2,7 @@
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
+use crate::engine::battle::Cx;
 mod phrases;
 use phrases::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -732,14 +733,8 @@ fn descriptor() -> CLocData {
 pub(crate) mod live {
     use super::*;
     use crate::comm::races::script::live::LiveScript;
-    fn run(
-        cx: &mut crate::engine::battle::Cx<'_>,
-        f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>),
-    ) {
-        let mut api = LiveScript {
-            callback,
-            cx: std::cell::RefCell::new(cx),
-        };
+    fn run(cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>)) {
+        let mut api = LiveScript::new(cx, callback);
         static mut SESSION: Session = Session {
             slavery_count: 0,
             attempted_salvage: false,
@@ -752,7 +747,7 @@ pub(crate) mod live {
             });
         }
     }
-    fn exit_conversation(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn exit_conversation(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| {
             s.handle(
                 Handler::ExitConversation,
@@ -760,7 +755,7 @@ pub(crate) mod live {
             )
         });
     }
-    fn buy(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn buy(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| {
             s.handle(
                 Handler::Buy,
@@ -768,7 +763,7 @@ pub(crate) mod live {
             )
         });
     }
-    fn trade(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn trade(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| {
             s.handle(
                 Handler::Trade,
@@ -776,7 +771,7 @@ pub(crate) mod live {
             )
         });
     }
-    fn sell(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn sell(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| {
             s.handle(
                 Handler::Sell,
@@ -784,7 +779,7 @@ pub(crate) mod live {
             )
         });
     }
-    fn explain_slave_trade(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn explain_slave_trade(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| {
             s.handle(
                 Handler::ExplainSlaveTrade,
@@ -792,7 +787,7 @@ pub(crate) mod live {
             )
         });
     }
-    fn trade_world(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn trade_world(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| {
             s.handle(
                 Handler::TradeWorld,
@@ -800,7 +795,7 @@ pub(crate) mod live {
             )
         });
     }
-    fn bomb_ambush(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn bomb_ambush(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| {
             s.handle(
                 Handler::BombAmbush,
@@ -808,7 +803,7 @@ pub(crate) mod live {
             )
         });
     }
-    fn space(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+    fn space(cx: &mut Cx<'_>, r: u32) {
         run(cx, |s| {
             s.handle(
                 Handler::Space,
@@ -828,20 +823,20 @@ pub(crate) mod live {
             Handler::Space => space,
         }
     }
-    pub(super) fn intro(cx: &mut crate::engine::battle::Cx<'_>) {
+    pub(super) fn intro(cx: &mut Cx<'_>) {
         run(cx, |s| s.intro());
     }
-    pub(super) fn post(cx: &mut crate::engine::battle::Cx<'_>) {
+    pub(super) fn post(cx: &mut Cx<'_>) {
         run(cx, |s| s.post_druuge_enc());
     }
-    pub(super) fn uninit(_cx: &mut crate::engine::battle::Cx<'_>) -> u16 {
+    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
         0
     }
     /// Initialize this encounter on the game thread.
     ///
     /// # Safety
     /// The caller must copy the descriptor before another encounter initializes.
-    pub unsafe fn init_druuge_comm(cx: &mut crate::engine::battle::Cx<'_>) -> *mut CLocData {
+    pub unsafe fn init_druuge_comm(cx: &mut Cx<'_>) -> *mut CLocData {
         static mut DESC: Option<CLocData> = None;
         let desc = (&mut *std::ptr::addr_of_mut!(DESC)).get_or_insert_with(descriptor);
         run(cx, |s| s.initialize());
@@ -850,7 +845,7 @@ pub(crate) mod live {
 }
 pub struct DruugeDialogue;
 impl super::RaceDialogue for DruugeDialogue {
-    fn init(&self, _cx: &mut crate::engine::battle::Cx<'_>) -> CommData {
+    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
         #[cfg(not(test))]
         {
             unsafe { as_comm_data(&*live::init_druuge_comm(_cx)) }
@@ -860,15 +855,15 @@ impl super::RaceDialogue for DruugeDialogue {
             as_comm_data(&descriptor())
         }
     }
-    fn intro(&self, _cx: &mut crate::engine::battle::Cx<'_>) {
+    fn intro(&self, _cx: &mut Cx<'_>) {
         #[cfg(not(test))]
         live::intro(_cx);
     }
-    fn post_encounter(&self, _cx: &mut crate::engine::battle::Cx<'_>) {
+    fn post_encounter(&self, _cx: &mut Cx<'_>) {
         #[cfg(not(test))]
         live::post(_cx);
     }
-    fn uninit(&self, _cx: &mut crate::engine::battle::Cx<'_>) -> u32 {
+    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
         0
     }
 }

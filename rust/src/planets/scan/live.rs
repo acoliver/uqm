@@ -249,7 +249,7 @@ unsafe fn spawn_fwiffo() {
         let template = *fleets.get(
             fleets
                 .at(crate::comm::dispatch::ship::SPATHI_SHIP as usize)
-                .expect("Spathi fleet"),
+                .unwrap_or_else(|| panic!("Spathi fleet")),
         );
         if let Some(id) = world.npc_built_ships().clone_fragment(
             &template,

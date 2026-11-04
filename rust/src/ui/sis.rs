@@ -826,13 +826,9 @@ unsafe fn draw_support_ships() {
     ];
     let icons = World::current().read(|world| {
         let ships = world.built_ships_ref();
-        let mut icons = Vec::new();
-        let mut next = ships.head();
-        while let Some(id) = next {
-            icons.push(ships.get(id).icons);
-            next = ships.succ(id);
-        }
-        icons
+        std::iter::successors(ships.head(), |&id| ships.succ(id))
+            .map(|id| ships.get(id).icons)
+            .collect::<Vec<_>>()
     });
     for (icon, (x, y)) in icons.into_iter().zip(points) {
         let mut stamp = STAMP {

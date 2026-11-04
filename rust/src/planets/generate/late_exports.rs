@@ -28,6 +28,7 @@ impl utw::UtwigSite for RaceHome<'_, '_, '_> {
         self.game.clone_ship_into_built_queue(ship::DRUUGE_SHIP);
     }
     fn talk_druuge(&mut self) {
+        // SAFETY: the orbital host exclusively owns the live campaign context on the game thread.
         unsafe {
             c_api::init_communication(&mut self.game.cx.borrow_mut(), conv::DRUUGE);
         }
@@ -42,13 +43,11 @@ impl utw::UtwigSite for RaceHome<'_, '_, '_> {
         })
     }
     fn load_scene(&mut self, bomb: bool) {
-        self.game.cx.borrow_mut().with_legacy(|| {
-            if bomb {
-                RaceHome::load_scene(self, c"graphics.utwigbomb", c"text.utwigbomb", 0);
-            } else {
-                RaceHome::load_scene(self, c"graphics.ruins", c"text.ruins", 0);
-            }
-        })
+        if bomb {
+            RaceHome::load_scene(self, c"graphics.utwigbomb", c"text.utwigbomb", 0);
+        } else {
+            RaceHome::load_scene(self, c"graphics.ruins", c"text.ruins", 0);
+        }
     }
 }
 
@@ -66,22 +65,17 @@ impl myc::MyconSite for RaceHome<'_, '_, '_> {
         })
     }
     fn load_scene(&mut self, scene: myc::Scene) {
-        self.game.cx.borrow_mut().with_legacy(|| {
-            let (graphics, text) = match scene {
-                myc::Scene::SunDevice => (c"graphics.sundevice", c"text.sundevice"),
-                myc::Scene::EggCase => (c"graphics.eggcase", c"text.eggcase"),
-            };
-            RaceHome::load_scene(self, graphics, text, 0);
-        })
+        let (graphics, text) = match scene {
+            myc::Scene::SunDevice => (c"graphics.sundevice", c"text.sundevice"),
+            myc::Scene::EggCase => (c"graphics.eggcase", c"text.eggcase"),
+        };
+        RaceHome::load_scene(self, graphics, text, 0);
     }
 }
 
 impl vux::VuxSite for RaceHome<'_, '_, '_> {
     fn zex_is_dead(&self) -> bool {
-        self.game
-            .cx
-            .borrow_mut()
-            .with_legacy(|| LiveStory.flag("ZEX_IS_DEAD") != 0)
+        self.game.cx.borrow().world.flag("ZEX_IS_DEAD") != 0
     }
     fn repair_sis_border(&mut self) {
         self.game.cx.borrow_mut().with_legacy(|| {
@@ -90,20 +84,16 @@ impl vux::VuxSite for RaceHome<'_, '_, '_> {
         })
     }
     fn load_scene(&mut self, scene: vux::Scene) {
-        self.game.cx.borrow_mut().with_legacy(|| {
-            match scene {
-                vux::Scene::Maidens => {
-                    RaceHome::load_scene(self, c"graphics.maidens", c"text.maidens", 0)
-                }
-                vux::Scene::Beast => {
-                    // SAFETY: live system, with no references into it held here.
-                    unsafe { c_api::load_beast_scene(self.system) };
-                }
-                vux::Scene::Ruins => {
-                    RaceHome::load_scene(self, c"graphics.ruins", c"text.ruins", 0)
-                }
+        match scene {
+            vux::Scene::Maidens => {
+                RaceHome::load_scene(self, c"graphics.maidens", c"text.maidens", 0)
             }
-        })
+            vux::Scene::Beast => self.game.cx.borrow_mut().with_legacy(|| {
+                // SAFETY: the live system is exclusive for the resource load.
+                unsafe { c_api::load_beast_scene(self.system) };
+            }),
+            vux::Scene::Ruins => RaceHome::load_scene(self, c"graphics.ruins", c"text.ruins", 0),
+        }
     }
 }
 
@@ -124,6 +114,7 @@ impl sam::SamatraSite for RaceHome<'_, '_, '_> {
         } else {
             ship::URQUAN_SHIP
         };
+        // SAFETY: the orbital host exclusively owns the live campaign context on the game thread.
         unsafe {
             c_api::clone_infinite_ship_into_built_queue(
                 self.game.cx.borrow_mut().world,
@@ -154,6 +145,7 @@ impl sam::SamatraSite for RaceHome<'_, '_, '_> {
         c_api::rebel_escort_feasible(self.game.cx.borrow().world)
     }
     fn talk_rebels(&mut self) {
+        // SAFETY: the orbital host exclusively owns the live campaign context on the game thread.
         unsafe {
             c_api::init_communication(&mut self.game.cx.borrow_mut(), conv::YEHAT_REBEL);
         }
@@ -248,12 +240,15 @@ unsafe fn utw_orbital(
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
-    let mut story = crate::planets::c_api::LiveGame { cx: owner };
+    let mut story = owner;
+    let star = owner
+        .borrow()
+        .world
+        .selected_star(crate::planets::starmap::current_catalog())
+        .unwrap_or_else(|| panic!("orbital generation requires a selected star"))
+        .index;
 
     let body = body_of(system, world);
-    let star = owner
-        .borrow_mut()
-        .with_legacy(|| c_api::current_star_index());
     if utw::prepare_orbital(
         body,
         star,
@@ -279,12 +274,15 @@ unsafe fn myc_orbital(
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
-    let mut story = crate::planets::c_api::LiveGame { cx: owner };
+    let mut story = owner;
+    let star = owner
+        .borrow()
+        .world
+        .selected_star(crate::planets::starmap::current_catalog())
+        .unwrap_or_else(|| panic!("orbital generation requires a selected star"))
+        .index;
 
     let body = body_of(system, world);
-    let star = owner
-        .borrow_mut()
-        .with_legacy(|| c_api::current_star_index());
     if myc::prepare_orbital(
         body,
         star,
@@ -307,14 +305,18 @@ unsafe fn vux_orbital(
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
-    let story = crate::planets::c_api::LiveGame { cx: owner };
+    let story = owner;
+    let star = owner
+        .borrow()
+        .world
+        .selected_star(crate::planets::starmap::current_catalog())
+        .unwrap_or_else(|| panic!("orbital generation requires a selected star"))
+        .index;
 
     let body = body_of(system, world);
     if vux::prepare_orbital(
         body,
-        owner
-            .borrow_mut()
-            .with_legacy(|| c_api::current_star_index()),
+        star,
         &story,
         &mut home(owner, system, ship::VUX_SHIP, conv::VUX),
     ) {
@@ -337,7 +339,7 @@ unsafe fn sam_orbital(
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
-    let mut story = crate::planets::c_api::LiveGame { cx: owner };
+    let mut story = owner;
 
     if body_of(system, world) == (Body::Moon { planet: 4, moon: 0 }) {
         return sam::encounter(
@@ -358,7 +360,7 @@ unsafe fn spa_orbital(
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
-    let story = crate::planets::c_api::LiveGame { cx: owner };
+    let story = owner;
 
     let body = body_of(system, world);
     let mut site = home(owner, system, ship::SPATHI_SHIP, conv::SPATHI);

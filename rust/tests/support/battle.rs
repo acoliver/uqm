@@ -22,7 +22,9 @@ unsafe fn invoke_intelligence(
             let mut concerns = raw
                 .iter()
                 .map(|item| uqm_rust::engine::battle::Concern {
-                    object: cx.elements().id(item.ObjectPtr.cast()),
+                    object: cx
+                        .elements()
+                        .id(std::ptr::NonNull::new(item.ObjectPtr.cast())),
                     facing: item.facing,
                     which_turn: item.which_turn,
                     movement: item.MoveState,
@@ -57,12 +59,12 @@ pub unsafe fn plot_intercept(
             cx.plot_intercept(
                 &cx.weapon_origin(
                     cx.elements()
-                        .id(a.cast())
+                        .id(std::ptr::NonNull::new(a.cast()))
                         .unwrap_or_else(|| panic!("fixture operand")),
                 ),
                 &cx.weapon_origin(
                     cx.elements()
-                        .id(b.cast())
+                        .id(std::ptr::NonNull::new(b.cast()))
                         .unwrap_or_else(|| panic!("fixture operand")),
                 ),
                 turns,
@@ -106,7 +108,7 @@ pub unsafe fn succ<T>(pointer: *mut T) -> *mut std::ffi::c_void {
         uqm_rust::app::bridge::enter(|cx| {
             let id = cx
                 .elements()
-                .id(pointer.cast())
+                .id(std::ptr::NonNull::new(pointer.cast()))
                 .unwrap_or_else(|| panic!("fixture operand"));
             cx.elements()
                 .succ(id)
@@ -123,7 +125,7 @@ pub unsafe fn pred<T>(pointer: *mut T) -> *mut std::ffi::c_void {
         uqm_rust::app::bridge::enter(|cx| {
             let id = cx
                 .elements()
-                .id(pointer.cast())
+                .id(std::ptr::NonNull::new(pointer.cast()))
                 .unwrap_or_else(|| panic!("fixture operand"));
             cx.elements()
                 .pred(id)
@@ -225,7 +227,7 @@ impl<'a> Ship<'a> {
             (*el).state_flags = PLAYER_SHIP as u16;
             let id = uqm_rust::app::bridge::enter(|cx| {
                 cx.elements()
-                    .id(handle)
+                    .id(std::ptr::NonNull::new(handle))
                     .unwrap_or_else(|| panic!("allocated element missing from pool"))
             });
             (*raw_ship).hShip = Some(id);
@@ -347,7 +349,7 @@ impl<'a> Ship<'a> {
         unsafe {
             let id = uqm_rust::app::bridge::enter(|cx| {
                 cx.elements()
-                    .id(subject.cast())
+                    .id(std::ptr::NonNull::new(subject.cast()))
                     .unwrap_or_else(|| panic!("fixture subject is absent"))
             });
             let mut value = uqm_rust::app::bridge::enter(|cx| cx.weapon_origin(id));
@@ -379,7 +381,7 @@ impl<'a> Ship<'a> {
             uqm_rust::app::bridge::enter(|cx| {
                 let source = cx
                     .elements()
-                    .id(source.cast())
+                    .id(std::ptr::NonNull::new(source.cast()))
                     .unwrap_or_else(|| panic!("weapon source"));
                 let origin = cx.weapon_origin(source);
                 let out = cx.spawn_weapons(self.ship_id, origin);
@@ -547,7 +549,9 @@ impl<'a> Ship<'a> {
         unsafe {
             let id = uqm_rust::app::bridge::enter(|cx| {
                 cx.elements()
-                    .id((subject as *mut ElementRecord).cast())
+                    .id(std::ptr::NonNull::new(
+                        (subject as *mut ElementRecord).cast(),
+                    ))
                     .unwrap_or_else(|| panic!("fixture subject is absent"))
             });
             let mut value = uqm_rust::app::bridge::enter(|cx| cx.weapon_origin(id));
@@ -675,7 +679,7 @@ pub unsafe fn id(pointer: *mut ElementRecord) -> ElementId {
     unsafe {
         uqm_rust::app::bridge::enter(|cx| {
             cx.elements()
-                .id(pointer.cast())
+                .id(std::ptr::NonNull::new(pointer.cast()))
                 .unwrap_or_else(|| panic!("{}", "pool record"))
         })
     }
@@ -810,7 +814,7 @@ impl<'a> Object<'a> {
             assert!(!handle.is_null());
             let id = uqm_rust::app::bridge::enter(|cx| {
                 cx.elements()
-                    .id(handle)
+                    .id(std::ptr::NonNull::new(handle))
                     .unwrap_or_else(|| panic!("allocated element missing from pool"))
             });
             Self {
@@ -914,7 +918,7 @@ pub unsafe fn put(handle: *mut std::ffi::c_void) {
         uqm_rust::app::bridge::enter(|cx| {
             let id = cx
                 .elements()
-                .id(handle)
+                .id(std::ptr::NonNull::new(handle))
                 .unwrap_or_else(|| panic!("fixture element"));
             cx.put(id);
         });

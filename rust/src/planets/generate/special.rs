@@ -52,6 +52,21 @@ pub trait Story {
     fn set_word(&mut self, name: &'static str, value: u32);
 }
 
+impl Story for &std::cell::RefCell<&mut crate::engine::battle::Cx<'_>> {
+    fn flag(&self, name: &'static str) -> u32 {
+        self.borrow().world.flag(name)
+    }
+    fn set_flag(&mut self, name: &'static str, value: u32) {
+        self.borrow_mut().world.set_flag(name, value);
+    }
+    fn word(&self, name: &'static str) -> u32 {
+        self.borrow().world.word(name)
+    }
+    fn set_word(&mut self, name: &'static str, value: u32) {
+        self.borrow_mut().world.set_word(name, value);
+    }
+}
+
 impl Story for World {
     fn flag(&self, name: &'static str) -> u32 {
         StoryKey::from_name(name).map_or(0, |key| self.story_state(key))

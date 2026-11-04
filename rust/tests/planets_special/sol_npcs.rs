@@ -25,7 +25,9 @@ pub fn check(h: &mut Harness) {
             );
             let mut fleets = world.avail_races();
             for index in 0..24 {
-                let id = fleets.alloc().unwrap();
+                let id = fleets
+                    .alloc()
+                    .unwrap_or_else(|| panic!("fixture pool capacity"));
                 let fleet = fleets.get_mut(id);
                 fleet.species_id = index;
                 fleet.crew_level = 12;

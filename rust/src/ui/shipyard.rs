@@ -92,35 +92,21 @@ unsafe fn spin_star_ship(menu: *mut MENU_STATE, fleet: &FleetInfo) {
 
 unsafe fn get_available_race_count() -> COUNT {
     avail_race_queue(|queue| {
-        let mut count = 0;
-        let mut next = queue.head();
-        while let Some(id) = next {
-            if queue.get(id).allied_state == GOOD_GUY as u16 {
-                count += 1;
-            }
-            next = queue.succ(id);
-        }
-        count
+        std::iter::successors(queue.head(), |&id| queue.succ(id))
+            .filter(|&id| queue.get(id).allied_state == GOOD_GUY as u16)
+            .count() as COUNT
     })
 }
 
 unsafe fn get_available_race_from_index(index: BYTE) -> Option<(COUNT, FleetInfo)> {
     avail_race_queue(|queue| {
-        let mut allied = 0;
-        let mut offset = 0;
-        let mut next = queue.head();
-        while let Some(id) = next {
-            let fleet = queue.get(id);
-            if fleet.allied_state == GOOD_GUY as u16 {
-                if allied == index {
-                    return Some((offset, *fleet));
-                }
-                allied += 1;
-            }
-            offset += 1;
-            next = queue.succ(id);
-        }
-        None
+        std::iter::successors(queue.head(), |&id| queue.succ(id))
+            .enumerate()
+            .filter_map(|(offset, id)| {
+                let fleet = queue.get(id);
+                (fleet.allied_state == GOOD_GUY as u16).then_some((offset as COUNT, *fleet))
+            })
+            .nth(usize::from(index))
     })
 }
 
@@ -318,7 +304,7 @@ unsafe fn crew_transaction(delta: SIZE) {
             DrawMenuStateStrings(PM_CREW as BYTE, SHIPYARD_CREW as i16);
         }
         World::current().write(|world| {
-            if crate::battle::build_native::check_alliance(world, SHOFIXTI_SHIP as COUNT)
+            if crate::engine::world::fleet::check_alliance(world, SHOFIXTI_SHIP as COUNT)
                 != GOOD_GUY as COUNT
             {
                 world.set_story_state(StoryKey::CREW_PURCHASED0, bought as BYTE as u32);

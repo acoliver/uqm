@@ -24,7 +24,9 @@ pub(super) fn cleanup(cx: &mut Cx<'_>) {
     while let Some(encounter) = next {
         let queue = cx.world.encounters_ref();
         next = queue.succ(encounter);
-        let element = cx.elements().id(queue.get(encounter).h_element);
+        let element = cx
+            .elements()
+            .id(std::ptr::NonNull::new(queue.get(encounter).h_element));
         let promote = element.is_some_and(|id| cx.target(id).is_some());
         let mut queue = cx.world.encounters();
         if promote {

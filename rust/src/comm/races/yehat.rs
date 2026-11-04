@@ -5,6 +5,7 @@
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
+use crate::engine::battle::Cx;
 
 mod api;
 mod dialogue;
@@ -206,37 +207,34 @@ pub(crate) mod live {
     use super::*;
 
     fn run(
-        cx: &mut crate::engine::battle::Cx<'_>,
+        cx: &mut Cx<'_>,
         f: impl FnOnce(&mut dialogue::Dialogue<'_, LiveScript<'_, '_, Handler>>),
     ) {
-        let mut api = LiveScript {
-            callback,
-            cx: std::cell::RefCell::new(cx),
-        };
+        let mut api = LiveScript::new(cx, callback);
         f(&mut dialogue::Dialogue { api: &mut api });
     }
 
-    fn exit(cx: &mut crate::engine::battle::Cx<'_>, response: u32) {
+    fn exit(cx: &mut Cx<'_>, response: u32) {
         run(cx, |dialogue| {
             dialogue.handle(Handler::Exit, response as i32)
         });
     }
-    fn royalists(cx: &mut crate::engine::battle::Cx<'_>, response: u32) {
+    fn royalists(cx: &mut Cx<'_>, response: u32) {
         run(cx, |dialogue| {
             dialogue.handle(Handler::Royalists, response as i32)
         });
     }
-    fn start_revolt(cx: &mut crate::engine::battle::Cx<'_>, response: u32) {
+    fn start_revolt(cx: &mut Cx<'_>, response: u32) {
         run(cx, |dialogue| {
             dialogue.handle(Handler::StartRevolt, response as i32)
         });
     }
-    fn home(cx: &mut crate::engine::battle::Cx<'_>, response: u32) {
+    fn home(cx: &mut Cx<'_>, response: u32) {
         run(cx, |dialogue| {
             dialogue.handle(Handler::Home, response as i32)
         });
     }
-    fn space(cx: &mut crate::engine::battle::Cx<'_>, response: u32) {
+    fn space(cx: &mut Cx<'_>, response: u32) {
         run(cx, |dialogue| {
             dialogue.handle(Handler::Space, response as i32)
         });
@@ -252,15 +250,15 @@ pub(crate) mod live {
         }
     }
 
-    pub(super) fn intro(cx: &mut crate::engine::battle::Cx<'_>) {
+    pub(super) fn intro(cx: &mut Cx<'_>) {
         run(cx, |dialogue| dialogue.intro());
     }
-    pub(super) fn post(_cx: &mut crate::engine::battle::Cx<'_>) {}
-    pub(super) fn uninit(_cx: &mut crate::engine::battle::Cx<'_>) -> u16 {
+    pub(super) fn post(_cx: &mut Cx<'_>) {}
+    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
         0
     }
 
-    pub unsafe fn init_yehat_comm(cx: &mut crate::engine::battle::Cx<'_>) -> *mut CLocData {
+    pub unsafe fn init_yehat_comm(cx: &mut Cx<'_>) -> *mut CLocData {
         static mut DESCRIPTOR: Option<CLocData> = None;
         extern "C" {
             static mut ScreenWidth: i32;
@@ -276,7 +274,7 @@ pub(crate) mod live {
 pub struct YehatDialogue;
 
 impl super::RaceDialogue for YehatDialogue {
-    fn init(&self, _cx: &mut crate::engine::battle::Cx<'_>) -> CommData {
+    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
         #[cfg(not(test))]
         {
             unsafe { as_comm_data(&*live::init_yehat_comm(_cx)) }
@@ -286,15 +284,15 @@ impl super::RaceDialogue for YehatDialogue {
             as_comm_data(&descriptor(320))
         }
     }
-    fn intro(&self, _cx: &mut crate::engine::battle::Cx<'_>) {
+    fn intro(&self, _cx: &mut Cx<'_>) {
         #[cfg(not(test))]
         live::intro(_cx);
     }
-    fn post_encounter(&self, _cx: &mut crate::engine::battle::Cx<'_>) {
+    fn post_encounter(&self, _cx: &mut Cx<'_>) {
         #[cfg(not(test))]
         live::post(_cx);
     }
-    fn uninit(&self, _cx: &mut crate::engine::battle::Cx<'_>) -> u32 {
+    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
         #[cfg(not(test))]
         return live::uninit(_cx) as u32;
         #[cfg(test)]

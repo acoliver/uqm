@@ -134,7 +134,10 @@ pub(crate) fn collision(
         let encounters = cx.world.encounters_ref();
         let encounter = *encounters.get(id);
         next = encounters.succ(id);
-        if let Some(element) = cx.elements().id(encounter.h_element) {
+        if let Some(element) = cx
+            .elements()
+            .id(std::ptr::NonNull::new(encounter.h_element))
+        {
             cx.element_mut(element).flags |= (NONSOLID | IGNORE_SIMILAR) as u16;
         }
     }
@@ -168,7 +171,10 @@ unsafe fn add(cx: &mut Cx<'_>, encounter: &mut ENCOUNTER, universe: POINT) -> Op
         encounter.num_ships = ships;
         for i in 0..ships as usize {
             let fleets = cx.world.avail_races_ref();
-            let fleet = fleets.get(fleets.at(race).expect("hyperspace encounter fleet"));
+            let id = fleets
+                .at(race)
+                .unwrap_or_else(|| panic!("hyperspace encounter fleet"));
+            let fleet = fleets.get(id);
             let brief = &mut encounter.ship_list[i];
             brief.race_id = race as u8;
             brief.crew_level = fleet.crew_level;
@@ -252,7 +258,7 @@ unsafe fn process(
     }
     let element = cx
         .elements()
-        .id(encounter.h_element)
+        .id(std::ptr::NonNull::new(encounter.h_element))
         .unwrap_or_else(|| panic!("encounter element"));
     if cx.element_mut(element).death.is_some() {
         if encounter.transition_state != 0 && cx.element_mut(element).turn == 0 {

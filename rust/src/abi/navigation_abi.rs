@@ -3756,10 +3756,10 @@ extern "C" {
 
 
 #[cfg(not(test))]
-pub use crate::battle::build_native::set_race_allied;
+pub use crate::engine::world::fleet::set_race_allied;
 
 #[cfg(not(test))]
-pub use crate::battle::build_native::start_sphere_tracking;
+pub use crate::engine::world::fleet::start_sphere_tracking;
 
 
 

@@ -15,7 +15,7 @@
 //! @plan PLAN-20260723-RUNTIME-AUTOMATION.P08
 //! @requirement REQ-FFI-001..005, REQ-SCHED-001, REQ-WATCH-001
 
-use crate::engine::StoryKey;
+use crate::engine::{battle::Cx, StoryKey};
 mod fixtures;
 mod initialization;
 mod input;
@@ -528,10 +528,7 @@ impl AutomationObserver {
 
     /// Activate the script's start scene after game structures and initial
     /// events are initialized, before the first activity dispatch.
-    pub(crate) fn prepare_start_scene(
-        &self,
-        cx: &mut crate::engine::battle::Cx<'_>,
-    ) -> Option<scenario::ScenePlan> {
+    pub(crate) fn prepare_start_scene(&self, cx: &mut Cx<'_>) -> Option<scenario::ScenePlan> {
         let coord = self;
 
         let scene = {

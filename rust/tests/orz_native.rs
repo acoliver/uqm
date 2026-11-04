@@ -145,8 +145,14 @@ unsafe fn velocity_toward(speed: SIZE, facing: COUNT) -> [i32; 9] {
 
 unsafe fn collide(marine: *mut ElementRecord, target: *mut ElementRecord) {
     uqm_rust::app::bridge::enter(|cx| {
-        let a = cx.elements().id(marine.cast()).unwrap();
-        let b = cx.elements().id(target.cast()).unwrap();
+        let a = cx
+            .elements()
+            .id(std::ptr::NonNull::new(marine.cast()))
+            .unwrap();
+        let b = cx
+            .elements()
+            .id(std::ptr::NonNull::new(target.cast()))
+            .unwrap();
         marine_collision(
             cx,
             a,
@@ -159,7 +165,7 @@ unsafe fn collide(marine: *mut ElementRecord, target: *mut ElementRecord) {
 
 unsafe fn intruder(e: *mut ElementRecord) {
     uqm_rust::app::bridge::enter(|cx| {
-        let id = cx.elements().id(e.cast()).unwrap();
+        let id = cx.elements().id(std::ptr::NonNull::new(e.cast())).unwrap();
         intruder_preprocess(cx, id);
     });
 }

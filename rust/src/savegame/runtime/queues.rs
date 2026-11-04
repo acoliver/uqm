@@ -343,7 +343,7 @@ pub fn restore_queues_with(
         let id = game
             .avail_races_ref()
             .at(usize::from(entry.index))
-            .expect("validated fleet index");
+            .unwrap_or_else(|| panic!("validated fleet index"));
         let mut fleets = game.avail_races();
         let fleet = fleets.get_mut(id);
         fleet.allied_state = entry.allied_state;
@@ -389,7 +389,7 @@ fn restore_ships<const N: usize>(
         let template = &templates[usize::from(entry.race_index)];
         let id = queue
             .clone_fragment(template, entry.race_index as u8, 0, &mut *pick_name)
-            .expect("ship capacity validated before installation");
+            .unwrap_or_else(|| panic!("ship capacity validated before installation"));
         let fragment = queue.get_mut(id);
         fragment.captains_name_index = entry.captains_name_index;
         fragment.race_id = entry.race_id;

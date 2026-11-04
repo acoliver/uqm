@@ -56,11 +56,11 @@ pub(super) fn elements_and_fighters(observer: &AutomationObserver, directory: &P
         uqm_rust::app::bridge::enter(|cx| {
             let source = cx
                 .elements()
-                .id(neutral.pointer().cast())
+                .id(std::ptr::NonNull::new(neutral.pointer().cast()))
                 .unwrap_or_else(|| panic!("fixture source"));
             let target = cx
                 .elements()
-                .id(first.pointer().cast())
+                .id(std::ptr::NonNull::new(first.pointer().cast()))
                 .unwrap_or_else(|| panic!("fixture target"));
             cx.set_target(source, Some(target));
         });
@@ -397,7 +397,9 @@ pub(super) fn non_ship_parent_fields(observer: &AutomationObserver, directory: &
     unsafe {
         let (group_id, handle) = uqm_rust::engine::World::current().write(|world| {
             let mut queue = world.ip_groups();
-            let id = queue.alloc().unwrap();
+            let id = queue
+                .alloc()
+                .unwrap_or_else(|| panic!("fixture pool capacity"));
             let group = queue.get_mut(id);
             group.group_id = 31;
             group.race_id = 4;

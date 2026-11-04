@@ -2,21 +2,13 @@
 #![cfg(feature = "debug-process")]
 
 #[cfg(not(test))]
+use crate::engine::battle::Cx;
+#[cfg(not(test))]
 use crate::engine::{Kernel, StoryKey, WorldData};
 use crate::navigation::abi::*;
 use std::ffi::{c_char, c_int};
 
 mod equipment;
-
-fn clear_escort_queue(world: &mut crate::engine::World) {
-    let mut ships = world.built_ships();
-    let mut next = ships.head();
-    while let Some(id) = next {
-        next = ships.succ(id);
-        ships.remove(id);
-        ships.free(id);
-    }
-}
 
 fn hsva_to_rgba(hue: f64, sat: f64, val: f64, alpha: BYTE) -> Color {
     let hi = (hue / 60.0) as c_int as u32;
@@ -242,8 +234,6 @@ mod runtime {
         )
     }
 
-    const INFINITE_RADIUS: COUNT = COUNT::MAX;
-
     pub static mut INSTANT_MOVE: BOOLEAN = 0;
     pub static mut DISABLE_INTERACTIVITY: BOOLEAN = 0;
     pub static mut DEBUG_HOOK: Option<unsafe fn()> = None;
@@ -269,11 +259,11 @@ mod runtime {
             BLACK_URQUAN_SHIP,
         ] {
             let added = crate::app::bridge::enter(|cx| {
-                crate::battle::build_native::add_escort_ships(
+                crate::engine::world::fleet::add_escort_ships(
                     cx.world,
                     race as COUNT,
                     1,
-                    crate::battle::build_native::captain_name,
+                    crate::engine::world::fleet::captain_name,
                 )
             });
             if added.is_some() {
@@ -292,36 +282,33 @@ mod runtime {
 
     /// # Safety
     /// Must run on the game thread. The game clock and event queue must be live.
-    pub unsafe fn forward_to_next_event(cx: &mut crate::engine::battle::Cx<'_>, skip_hee: BOOLEAN) {
+    pub unsafe fn forward_to_next_event(cx: &mut Cx<'_>, skip_hee: BOOLEAN) {
         if crate::time::clock_bridge::rust_clock_is_running(cx.world) == 0 {
             return;
         }
         LockGameClock();
         let mut done = skip_hee == 0;
-        let mut target = None;
         loop {
-            let current = (|| {
-                let world = &*cx.world;
-                if target.is_none() {
-                    let events = world.clock.events_ref();
-                    let event = events.get(events.head()?);
-                    if event.func_index as u32 != HYPERSPACE_ENCOUNTER_EVENT {
-                        done = true;
-                    }
-                    target = Some((event.year_index, event.month_index, event.day_index));
-                }
-                let clock = &world.data.game.game_clock;
-                Some((clock.year_index, clock.month_index, clock.day_index))
-            })();
-            let Some(current) = current else {
-                return;
+            let (date, selector) = {
+                let events = cx.world.clock.events_ref();
+                let Some(id) = events.head() else {
+                    return;
+                };
+                let event = events.get(id);
+                (
+                    (event.year_index, event.month_index, event.day_index),
+                    event.func_index,
+                )
             };
-            if current < target.expect("event selected before calendar comparison") {
+            done |= u32::from(selector) != HYPERSPACE_ENCOUNTER_EVENT;
+            while {
+                let clock = &cx.world.data.game.game_clock;
+                (clock.year_index, clock.month_index, clock.day_index) < date
+            } {
                 cx.with_legacy(|| MoveGameClockDays(1));
-            } else if done {
+            }
+            if done {
                 break;
-            } else {
-                target = None;
             }
         }
         UnlockGameClock();
@@ -410,7 +397,7 @@ mod runtime {
     /// # Safety
     /// Must run on the game thread with the escort queue initialized.
     pub unsafe fn clear_escorts() {
-        World::current().write(clear_escort_queue);
+        World::current().write(equipment::clear_escorts);
         DeltaSISGauges(
             UNDEFINED_DELTA as _,
             UNDEFINED_DELTA as _,
@@ -476,42 +463,19 @@ mod runtime {
     /// # Safety
     /// Must run on the game thread with the race queue initialized.
     pub unsafe fn show_spheres() {
-        World::current().write(|world| {
-            let mut fleets = world.avail_races();
-            let mut next = fleets.head();
-            while let Some(id) = next {
-                next = fleets.succ(id);
-                let fleet = fleets.get_mut(id);
-                if fleet.actual_strength != INFINITE_RADIUS as COUNT
-                    && fleet.known_strength != fleet.actual_strength
-                {
-                    fleet.known_strength = fleet.actual_strength;
-                    fleet.known_loc = fleet.loc;
-                }
-            }
-        });
+        World::current().write(equipment::reveal_spheres);
     }
     /// # Safety
     /// Must run on the game thread with the race queue initialized.
     pub unsafe fn activate_all_ships() {
-        World::current().write(|world| {
-            let mut fleets = world.avail_races();
-            let mut next = fleets.head();
-            while let Some(id) = next {
-                next = fleets.succ(id);
-                let fleet = fleets.get_mut(id);
-                if !fleet.icons.is_null() {
-                    fleet.allied_state = GOOD_GUY as _;
-                }
-            }
-        });
+        World::current().write(equipment::activate_fleets);
     }
 
     /// # Safety
     /// Must run on the game thread. The callback must accept every star and its context.
     pub unsafe fn for_all_stars<T>(
-        cx: &mut crate::engine::battle::Cx<'_>,
-        callback: unsafe fn(&mut crate::engine::battle::Cx<'_>, *mut STAR_DESC, &mut T),
+        cx: &mut Cx<'_>,
+        callback: unsafe fn(&mut Cx<'_>, *mut STAR_DESC, &mut T),
         arg: &mut T,
     ) {
         for i in 0..NUM_SOLAR_SYSTEMS as usize {
@@ -525,11 +489,11 @@ mod runtime {
     /// # Safety
     /// `system` and `star` must be the active system. Callback and context must be valid.
     pub unsafe fn for_all_planets<T>(
-        cx: &mut crate::engine::battle::Cx<'_>,
+        cx: &mut Cx<'_>,
         star: *mut STAR_DESC,
         system: *mut SOLARSYS_STATE,
         callback: unsafe fn(
-            &mut crate::engine::battle::Cx<'_>,
+            &mut Cx<'_>,
             *mut STAR_DESC,
             *mut SOLARSYS_STATE,
             *mut PLANET_DESC,
@@ -556,12 +520,12 @@ mod runtime {
     /// # Safety
     /// The planet and system must be active and their generated moon records valid.
     pub unsafe fn for_all_moons<T>(
-        cx: &mut crate::engine::battle::Cx<'_>,
+        cx: &mut Cx<'_>,
         star: *mut STAR_DESC,
         system: *mut SOLARSYS_STATE,
         planet: *mut PLANET_DESC,
         callback: unsafe fn(
-            &mut crate::engine::battle::Cx<'_>,
+            &mut Cx<'_>,
             *mut STAR_DESC,
             *mut SOLARSYS_STATE,
             *mut PLANET_DESC,
@@ -585,10 +549,7 @@ mod runtime {
     /// # Safety
     /// Must run on the game thread. All supplied callbacks and their context must
     /// remain valid throughout universe generation, which can change game state.
-    pub unsafe fn universe_recurse<T>(
-        cx: &mut crate::engine::battle::Cx<'_>,
-        arg: &mut UniverseRecurseArg<'_, T>,
-    ) {
+    pub unsafe fn universe_recurse<T>(cx: &mut Cx<'_>, arg: &mut UniverseRecurseArg<'_, T>) {
         if arg.system_func_pre.is_none()
             && arg.system_func_post.is_none()
             && arg.planet_func_pre.is_none()
@@ -606,7 +567,7 @@ mod runtime {
         UnlockGameClock();
     }
     unsafe fn star_recurse<T>(
-        cx: &mut crate::engine::battle::Cx<'_>,
+        cx: &mut Cx<'_>,
         star: *mut STAR_DESC,
         recurse: &mut UniverseRecurseArg<'_, T>,
     ) {
@@ -648,7 +609,7 @@ mod runtime {
         );
     }
     unsafe fn planet_recurse<T>(
-        cx: &mut crate::engine::battle::Cx<'_>,
+        cx: &mut Cx<'_>,
         star: *mut STAR_DESC,
         system: *mut SOLARSYS_STATE,
         planet: *mut PLANET_DESC,
@@ -680,7 +641,7 @@ mod runtime {
         }
     }
     unsafe fn moon_recurse<T>(
-        cx: &mut crate::engine::battle::Cx<'_>,
+        cx: &mut Cx<'_>,
         star: *mut STAR_DESC,
         system: *mut SOLARSYS_STATE,
         planet: *mut PLANET_DESC,
@@ -711,7 +672,7 @@ mod runtime {
     }
     /// # Safety
     /// Must run on the game thread with an open output stream.
-    pub unsafe fn dump_universe(cx: &mut crate::engine::battle::Cx<'_>, out: *mut FILE) {
+    pub unsafe fn dump_universe(cx: &mut Cx<'_>, out: *mut FILE) {
         let mut context = DumpUniverseArg { out };
         let mut recurse = UniverseRecurseArg {
             system_func_pre: Some(dump_system_callback),
@@ -745,7 +706,7 @@ mod runtime {
     }
     /// # Safety
     /// Must run on the game thread; generation can change game state.
-    pub unsafe fn dump_universe_to_file(cx: &mut crate::engine::battle::Cx<'_>) {
+    pub unsafe fn dump_universe_to_file(cx: &mut Cx<'_>) {
         write_generation_file(
             c"PlanetInfo".as_ptr(),
             |out| dump_universe(cx, out),
@@ -1045,7 +1006,7 @@ mod runtime {
     }
     /// # Safety
     /// Must run on the game thread with an open output stream.
-    pub unsafe fn tally_resources(cx: &mut crate::engine::battle::Cx<'_>, out: *mut FILE) {
+    pub unsafe fn tally_resources(cx: &mut Cx<'_>, out: *mut FILE) {
         let mut context = TallyResourcesArg {
             out,
             mineral_count: 0,
@@ -1063,7 +1024,7 @@ mod runtime {
     }
     /// # Safety
     /// Must run on the game thread; generation can change game state.
-    pub unsafe fn tally_resources_to_file(cx: &mut crate::engine::battle::Cx<'_>) {
+    pub unsafe fn tally_resources_to_file(cx: &mut Cx<'_>) {
         write_generation_file(
             c"ResourceTally".as_ptr(),
             |out| tally_resources(cx, out),
@@ -1328,10 +1289,7 @@ mod runtime {
         }
     }
 
-    pub fn find_player_ship(
-        cx: &crate::engine::battle::Cx<'_>,
-        player: SIZE,
-    ) -> Option<crate::engine::battle::ShipId> {
+    pub fn find_player_ship(cx: &Cx<'_>, player: SIZE) -> Option<crate::engine::battle::ShipId> {
         let mut handle = cx.elements().head();
         while let Some(element) = handle {
             let state = cx.element(element);
@@ -1636,7 +1594,7 @@ mod tests {
         }
         assert!(world.built_ships().alloc().is_none());
 
-        clear_escort_queue(&mut world);
+        equipment::clear_escorts(&mut world);
         assert!(world.built_ships_ref().head().is_none());
         assert!(world.built_ships_ref().tail().is_none());
         for id in original {

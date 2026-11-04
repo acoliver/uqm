@@ -85,7 +85,9 @@ pub(crate) mod live {
 
     use crate::navigation::events::live::dispatch_event;
 
-    pub(crate) unsafe fn finish_clock_day(world: &mut crate::engine::World) {
+    pub(crate) unsafe fn finish_clock_day(cx: &mut crate::engine::battle::Cx<'_>) {
+        cx.with_legacy(|| crate::ui::sis::DrawStatusMessage(ptr::null()));
+        let world = &mut *cx.world;
         let clock = &world.data.game.game_clock;
         let today = (
             clock.year_index,
@@ -104,8 +106,7 @@ pub(crate) mod live {
     pub unsafe extern "C" fn GameClockTick() {
         crate::app::bridge::enter(|cx| {
             if rust_clock_tick(cx.world) {
-                cx.with_legacy(|| crate::ui::sis::DrawStatusMessage(ptr::null()));
-                finish_clock_day(cx.world);
+                finish_clock_day(cx);
             }
         });
     }
@@ -123,8 +124,7 @@ pub(crate) mod live {
         crate::app::bridge::enter(|cx| {
             for _ in 0..days {
                 next_clock_day_internal(&mut cx.world.data.game.game_clock);
-                cx.with_legacy(|| crate::ui::sis::DrawStatusMessage(ptr::null()));
-                finish_clock_day(cx.world);
+                finish_clock_day(cx);
             }
             let clock = &mut cx.world.data.game.game_clock;
             clock.tick_count = clock.day_in_ticks;

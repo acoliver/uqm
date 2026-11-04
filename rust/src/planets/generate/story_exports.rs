@@ -98,6 +98,7 @@ struct ChmmrHome<'a, 'b, 'c> {
 
 impl ChmmrSite for ChmmrHome<'_, '_, '_> {
     fn talk_to_chmmr(&mut self) {
+        // SAFETY: the orbital host exclusively owns the live campaign context on the game thread.
         unsafe {
             init_communication(&mut self.game.cx.borrow_mut(), conv::CHMMR);
         }
@@ -118,6 +119,7 @@ impl ChmmrSite for ChmmrHome<'_, '_, '_> {
         built_ship_count(self.game.cx.borrow().world)
     }
     fn clone_ilwrath_fleet_into_built_queue(&mut self) {
+        // SAFETY: the orbital host exclusively owns the live campaign context on the game thread.
         unsafe {
             clone_infinite_ship_into_built_queue(
                 self.game.cx.borrow_mut().world,
@@ -136,9 +138,13 @@ impl ChmmrSite for ChmmrHome<'_, '_, '_> {
     }
     fn set_global_flags_and_data(&mut self, value: u8) {
         self.game
+            .cx
+            .borrow_mut()
+            .world
             .set_flag("GLOBAL_FLAGS_AND_DATA", u32::from(value));
     }
     fn talk_to_ilwrath(&mut self) {
+        // SAFETY: the orbital host exclusively owns the live campaign context on the game thread.
         unsafe {
             init_communication(&mut self.game.cx.borrow_mut(), conv::ILWRATH);
         }
@@ -200,7 +206,7 @@ unsafe fn chmmr_orbital(
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
-    let story = crate::planets::c_api::LiveGame { cx: owner };
+    let story = owner;
 
     orbit_world(owner, system, world, |orbit, body| {
         chmmr::generate_orbital(orbit, body, &story, &mut chmmr_home(owner, system), || {
