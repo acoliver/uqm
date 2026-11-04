@@ -1,6 +1,10 @@
 use super::*;
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::time::{Duration, Instant};
+#[cfg(test)]
+#[path = "tests/process_tests.rs"]
+mod tests;
+
 
 pub(super) struct Completion {
     pub status: ExitStatus,
