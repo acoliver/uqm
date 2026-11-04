@@ -210,10 +210,9 @@ mod helpers {
 pub(crate) mod engine {
     use super::invoke_element::invoke_element;
     use super::*;
-    use crate::collections::observation::image;
     use crate::engine::battle::{Cx, ElementId};
 
-    unsafe fn damage(cx: &mut Cx<'_>, id: ElementId) {
+    fn damage(cx: &mut Cx<'_>, id: ElementId) {
         let amount = cx.element(id).hits as SIZE;
         cx.damage(id, amount);
     }
@@ -228,12 +227,12 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe fn preprocess(cx: &mut Cx<'_>, e: ElementId) {
+    fn preprocess(cx: &mut Cx<'_>, e: ElementId) {
         if cx.elements()[e].life == 0 {
             if cx.elements()[e].parent != crate::engine::battle::Parent::None {
                 untarget(cx, e);
             }
-            cx.records()[e].state_flags |= DISAPPEARING as ELEMENT_FLAGS;
+            cx.element_mut(e).flags |= DISAPPEARING as ELEMENT_FLAGS;
             if let Some(death) = cx.elements()[e].death_func {
                 invoke_element(cx, death, e);
             }
@@ -241,7 +240,7 @@ pub(crate) mod engine {
         let mut flags = cx.elements()[e].state_flags;
         if flags & DISAPPEARING as ELEMENT_FLAGS == 0 {
             if flags & APPEARING as ELEMENT_FLAGS != 0 {
-                image!(copy; cx.records()[e].next, cx.elements()[e].current);
+                cx.copy_current_to_next(e);
                 if colliding(cx.element(e).flags) {
                     cx.init_intersect_start(e);
                     cx.init_intersect_end(e);
@@ -261,13 +260,13 @@ pub(crate) mod engine {
                 }
             }
             if flags & IGNORE_VELOCITY as ELEMENT_FLAGS == 0 {
-                let (mut dx, mut dy) = (0, 0);
-                GetNextVelocityComponents(&mut cx.records()[e].velocity, &mut dx, &mut dy, 1);
+                let (velocity_x, velocity_y) = (cx.element_mut(e).velocity).get_next_components(1);
+                let (dx, dy) = (velocity_x as i16, velocity_y as i16);
                 if dx != 0 || dy != 0 {
                     flags |= CHANGING as ELEMENT_FLAGS;
-                    cx.records()[e].next.location.x =
+                    cx.element_mut(e).next.location.x =
                         cx.elements()[e].next.location.x.wrapping_add(dx);
-                    cx.records()[e].next.location.y =
+                    cx.element_mut(e).next.location.y =
                         cx.elements()[e].next.location.y.wrapping_add(dy);
                 }
             }
@@ -275,10 +274,10 @@ pub(crate) mod engine {
                 cx.init_intersect_end(e);
             }
             if flags & FINITE_LIFE as ELEMENT_FLAGS != 0 {
-                cx.records()[e].life = cx.elements()[e].life.wrapping_sub(1);
+                cx.element_mut(e).life = cx.elements()[e].life.wrapping_sub(1);
             }
         }
-        cx.records()[e].state_flags =
+        cx.element_mut(e).flags =
             (flags & !((POST_PROCESS | COLLISION) as ELEMENT_FLAGS)) | PRE_PROCESS as ELEMENT_FLAGS;
     }
     fn collide_native(cx: &mut Cx<'_>, a: ElementId, b: ElementId) {
@@ -338,7 +337,23 @@ pub(crate) mod engine {
     /// # Safety
     /// Elements must belong to the initialized display queue on the game thread,
     /// with live collision images and callbacks on every solid element.
-    pub unsafe fn process_collisions(
+    fn align_contact_frame(
+        cx: &mut Cx<'_>,
+        id: ElementId,
+        current: &crate::engine::battle::frames::FrameSelection,
+        next: &crate::engine::battle::frames::FrameSelection,
+    ) {
+        if cx.frame_number(current.view()) != cx.frame_number(next.view()) {
+            cx.set_frame(id, true, cx.equivalent_frame(next.view(), current.view()));
+        } else if next != current {
+            cx.copy_current_image_to_next(id);
+            if cx.element(id).life > NORMAL_LIFE as COUNT {
+                cx.element_mut(id).life = NORMAL_LIFE as COUNT;
+            }
+        }
+    }
+
+    pub fn process_collisions(
         cx: &mut Cx<'_>,
         mut next_test: Option<ElementId>,
         el: ElementId,
@@ -352,7 +367,7 @@ pub(crate) mod engine {
             // A death callback can retire every element owned by its ship,
             // including the active projectile, and clear their callbacks.
             if !colliding(cx.element(el).flags) {
-                cx.records()[el].state_flags |= COLLISION as ELEMENT_FLAGS;
+                cx.element_mut(el).flags |= COLLISION as ELEMENT_FLAGS;
                 return COLLISION as ELEMENT_FLAGS;
             }
             next_test = cx.elements().succ(test);
@@ -385,8 +400,10 @@ pub(crate) mod engine {
                         }
                         if state_flags & COLLISION_BIT as ELEMENT_FLAGS != 0 {
                             cx.init_intersect_end(test);
-                            cx.records()[test].IntersectControl.IntersectStamp.origin =
-                                cx.elements()[test].IntersectControl.EndPoint;
+                            cx.set_intersect_origin(
+                                test,
+                                cx.elements()[test].IntersectControl.EndPoint,
+                            );
                             time_value = cx.intersect_elements(el, test, 1);
                             cx.init_intersect_start(test);
                         }
@@ -403,7 +420,7 @@ pub(crate) mod engine {
                                     {
                                         untarget(cx, test);
                                     }
-                                    cx.records()[test].state_flags |=
+                                    cx.element_mut(test).flags |=
                                         (COLLISION | DISAPPEARING) as ELEMENT_FLAGS;
                                     if let Some(death) = cx.elements()[test].death_func {
                                         invoke_element(cx, death, test);
@@ -416,7 +433,7 @@ pub(crate) mod engine {
                                     {
                                         untarget(cx, el);
                                     }
-                                    cx.records()[el].state_flags |=
+                                    cx.element_mut(el).flags |=
                                         (COLLISION | DISAPPEARING) as ELEMENT_FLAGS;
                                     if let Some(death) = cx.elements()[el].death_func {
                                         invoke_element(cx, death, el);
@@ -425,22 +442,8 @@ pub(crate) mod engine {
                                 }
                                 time_value = 0;
                             } else {
-                                if cx.frame_number(cur.view()) != cx.frame_number(next.view()) {
-                                    image!(frame; cx.records()[el].next.image.frame, cx.equivalent_frame(next.view(), cur.view()));
-                                } else if next != cur {
-                                    image!(copy; cx.records()[el].next.image, cx.elements()[el].current.image);
-                                    if cx.elements()[el].life > NORMAL_LIFE as COUNT {
-                                        cx.records()[el].life = NORMAL_LIFE as COUNT;
-                                    }
-                                }
-                                if cx.frame_number(tcur.view()) != cx.frame_number(tnext.view()) {
-                                    image!(frame; cx.records()[test].next.image.frame, cx.equivalent_frame(tnext.view(), tcur.view()));
-                                } else if tnext != tcur {
-                                    image!(copy; cx.records()[test].next.image, cx.elements()[test].current.image);
-                                    if cx.elements()[test].life > NORMAL_LIFE as COUNT {
-                                        cx.records()[test].life = NORMAL_LIFE as COUNT;
-                                    }
-                                }
+                                align_contact_frame(cx, el, &cur, &next);
+                                align_contact_frame(cx, test, &tcur, &tnext);
                                 cx.init_intersect_start(el);
                                 cx.init_intersect_end(el);
                                 cx.refresh_intersect_frame(el);
@@ -508,16 +511,16 @@ pub(crate) mod engine {
                         if cx.elements()[test].state_flags & COLLISION_BIT as ELEMENT_FLAGS != 0
                             && test_state_flags & COLLISION_BIT as ELEMENT_FLAGS == 0
                         {
-                            cx.records()[test].IntersectControl.IntersectStamp.origin = test_save;
-                            cx.records()[test].next.location.x = test_save.x << ONE_SHIFT;
-                            cx.records()[test].next.location.y = test_save.y << ONE_SHIFT;
+                            cx.set_intersect_origin(test, test_save);
+                            cx.element_mut(test).next.location.x = test_save.x << ONE_SHIFT;
+                            cx.element_mut(test).next.location.y = test_save.y << ONE_SHIFT;
                             cx.init_intersect_end(test);
                         }
                         if cx.elements()[el].state_flags & COLLISION_BIT as ELEMENT_FLAGS != 0 {
                             if state_flags & COLLISION_BIT as ELEMENT_FLAGS == 0 {
-                                cx.records()[el].IntersectControl.IntersectStamp.origin = save;
-                                cx.records()[el].next.location.x = save.x << ONE_SHIFT;
-                                cx.records()[el].next.location.y = save.y << ONE_SHIFT;
+                                cx.set_intersect_origin(el, save);
+                                cx.element_mut(el).next.location.x = save.x << ONE_SHIFT;
+                                cx.element_mut(el).next.location.y = save.y << ONE_SHIFT;
                                 cx.init_intersect_end(el);
                                 if state_flags & finite_life == 0
                                     && test_state_flags & finite_life == 0
@@ -542,7 +545,7 @@ pub(crate) mod engine {
                             return COLLISION_BIT as ELEMENT_FLAGS;
                         }
                         if !colliding(cx.element(el).flags) {
-                            cx.records()[el].state_flags |= COLLISION_BIT as ELEMENT_FLAGS;
+                            cx.element_mut(el).flags |= COLLISION_BIT as ELEMENT_FLAGS;
                             return COLLISION_BIT as ELEMENT_FLAGS;
                         }
                     }
@@ -552,16 +555,14 @@ pub(crate) mod engine {
         cx.elements()[el].state_flags & COLLISION_BIT as ELEMENT_FLAGS
     }
 
-    unsafe fn preprocess_queue(
-        cx: &mut Cx<'_>,
-        scroll_x: *mut SIZE,
-        scroll_y: *mut SIZE,
-    ) -> ViewState {
+    fn view_dimensions(cx: &Cx<'_>) -> (i32, i32) {
+        let (w, h) = cx.screen_dimensions();
+        (width(w), height(h))
+    }
+
+    fn preprocess_queue(cx: &mut Cx<'_>, scale: i32) -> (queue_view::CameraBounds, SIZE) {
         let active_sides = COUNT::from(cx.b.counters[0] != 0) + COUNT::from(cx.b.counters[1] != 0);
-        let mut bounds = queue_view::CameraBounds::new(
-            optMeleeScale == SCALE_STEP,
-            (width(ScreenWidth), height(ScreenHeight)),
-        );
+        let mut bounds = queue_view::CameraBounds::new(scale == SCALE_STEP, view_dimensions(cx));
         let mut handle = cx.elements().head();
         while let Some(e) = handle {
             if cx.elements()[e].state_flags & PRE_PROCESS_BIT == 0 {
@@ -579,60 +580,40 @@ pub(crate) mod engine {
                     &queue_view::ViewConfig {
                         limit: cx.b.max_zoom_out,
                         zoom: cx.b.zoom_out,
-                        step: optMeleeScale == SCALE_STEP,
+                        step: scale == SCALE_STEP,
                         activity: cx.world.activity() as BYTE,
-                        dimensions: (width(ScreenWidth), height(ScreenHeight)),
+                        dimensions: view_dimensions(cx),
                     },
                 );
             }
             handle = next;
         }
-        let minimum = bounds.finish(
-            cx.b.max_zoom_out,
-            cx.b.zoom_out,
-            optMeleeScale == SCALE_STEP,
-        );
-        calc_view_engine(
-            cx,
-            &mut bounds.origin,
-            minimum,
-            scroll_x,
-            scroll_y,
-            bounds.ships_alive,
-        )
+        let minimum = bounds.finish(cx.b.max_zoom_out, cx.b.zoom_out, scale == SCALE_STEP);
+        (bounds, minimum)
     }
 
-    unsafe fn postprocess(cx: &mut Cx<'_>, e: ElementId) {
+    fn postprocess(cx: &mut Cx<'_>, e: ElementId) {
         if let Some(post) = cx.elements()[e].postprocess_func {
             invoke_element(cx, post, e);
         }
-        image!(copy; cx.records()[e].current, cx.elements()[e].next);
+        cx.copy_next_to_current(e);
         if colliding(cx.element(e).flags) {
             cx.init_intersect_start(e);
             cx.init_intersect_end(e);
         }
-        cx.records()[e].state_flags = (cx.elements()[e].state_flags
+        cx.element_mut(e).flags = (cx.elements()[e].state_flags
             & !((PRE_PROCESS | CHANGING | APPEARING) as ELEMENT_FLAGS))
             | POST_PROCESS_BIT;
     }
 
-    unsafe fn calc_view_engine(
+    fn calc_view_engine(
         cx: &mut Cx<'_>,
-        origin: *mut POINT,
         next_reduction: SIZE,
-        scroll_x: *mut SIZE,
-        scroll_y: *mut SIZE,
+        scroll: (SIZE, SIZE),
         ships_alive: COUNT,
+        scale: i32,
     ) -> ViewState {
-        let (mut dx, mut dy) = view_scroll(
-            *origin,
-            ships_alive,
-            width(ScreenWidth),
-            height(ScreenHeight),
-        );
-        if (dx != 0 || dy != 0) && in_hqspace(cx.world) != 0 {
-            crate::app::bridge::publish(cx, || MoveSIS(&mut dx, &mut dy));
-        }
+        let (dx, dy) = scroll;
         let state = if cx.b.zoom_out == next_reduction {
             if dx == 0 && dy == 0 && in_hqspace(cx.world) == 0 {
                 ViewState::Stable
@@ -640,44 +621,35 @@ pub(crate) mod engine {
                 ViewState::Scroll
             }
         } else {
+            let (w, h) = view_dimensions(cx);
             let (new_origin, reduction) = view_origin(
                 cx.b.zoom_out,
                 next_reduction,
                 ships_alive,
-                optMeleeScale == SCALE_STEP,
-                width(ScreenWidth),
-                height(ScreenHeight),
+                scale == SCALE_STEP,
+                w,
+                h,
             );
-            (*cx.kernel()).space_origin = new_origin;
+            cx.kernel.space_origin = new_origin;
             cx.b.zoom_out = reduction;
             ViewState::Change
         };
         if (cx.world.activity() as u8) <= IN_HYPERSPACE as u8 {
-            move_galaxy(cx, state as VIEW_STATE, dx, dy);
+            move_galaxy(cx, state as VIEW_STATE, dx, dy, scale);
         }
-        *scroll_x = dx;
-        *scroll_y = dy;
         state
     }
 
-    /// # Safety
-    /// The element queue has been initialized; no elements may remain in use.
-    #[no_mangle]
-    pub unsafe extern "C" fn InitDisplayList() {
-        crate::app::bridge::enter(|cx| {
-            if optMeleeScale == SCALE_STEP {
-                cx.b.zoom_out = (MAX_VIS_REDUCTION + 1) as SIZE;
-                cx.b.max_zoom_out = MAX_VIS_REDUCTION as SIZE;
-            } else {
-                cx.b.zoom_out = (MAX_ZOOM_OUT + (1 << ZOOM_SHIFT)) as SIZE;
-                cx.b.max_zoom_out = MAX_ZOOM_OUT as SIZE;
-            }
-            crate::collections::observation::record(
-                crate::collections::observation::Event::ResetPool,
-            );
-            cx.records().reinit();
-            cx.reset_display();
-        });
+    pub fn init_display_list(cx: &mut Cx<'_>, step_zoom: bool) {
+        if step_zoom {
+            cx.b.zoom_out = (MAX_VIS_REDUCTION + 1) as SIZE;
+            cx.b.max_zoom_out = MAX_VIS_REDUCTION as SIZE;
+        } else {
+            cx.b.zoom_out = (MAX_ZOOM_OUT + (1 << ZOOM_SHIFT)) as SIZE;
+            cx.b.max_zoom_out = MAX_ZOOM_OUT as SIZE;
+        }
+        cx.reset_elements();
+        cx.reset_display();
     }
 
     fn retire(cx: &mut Cx<'_>, id: ElementId) {
@@ -699,13 +671,12 @@ pub(crate) mod engine {
         let mut handle = cx.elements().head();
         while let Some(e) = handle {
             let mut flags = cx.elements()[e].state_flags;
-            let (delta_x, delta_y);
-            let next_handle;
+            let (delta_x, delta_y, next_handle);
             if flags & PRE_PROCESS_BIT != 0 {
                 if flags & COLLISION_BIT == 0 {
-                    cx.records()[e].state_flags &= !(DEFY_PHYSICS as ELEMENT_FLAGS);
+                    cx.element_mut(e).flags &= !(DEFY_PHYSICS as ELEMENT_FLAGS);
                 } else {
-                    cx.records()[e].state_flags &= !COLLISION_BIT;
+                    cx.element_mut(e).flags &= !COLLISION_BIT;
                 }
                 (delta_x, delta_y) = if flags & POST_PROCESS_BIT != 0 {
                     (0, 0)
@@ -775,10 +746,11 @@ pub(crate) mod engine {
                                 } else {
                                     calc_zoom_stuff(cx.b.zoom_out)
                                 };
-                                image!(frame; cx.records()[e].next.image.frame, cx.equivalent_frame(
+                                let frame = cx.equivalent_frame(
                                     cx.elements()[e].next.image.frames.view(usize::from(index)),
                                     cx.elements()[e].next.image.frame.view(),
-                                ));
+                                );
+                                cx.set_frame(e, true, frame);
                                 if optMeleeScale == SCALE_TRILINEAR
                                     && index < 2
                                     && scale != GSCALE_IDENTITY as COUNT
@@ -808,7 +780,7 @@ pub(crate) mod engine {
                                 cx.elements()[e].next.image.frame.raw();
                         }
                     }
-                    cx.records()[e].next.location = next;
+                    cx.element_mut(e).next.location = next;
                 }
                 postprocess(cx, e);
                 if kind < gfx_object_NUM_PRIMS as GRAPHICS_PRIM {
@@ -824,8 +796,14 @@ pub(crate) mod engine {
     /// Engine contexts, element/display pools and sound system are initialized on the game thread.
     unsafe fn redraw_queue(cx: &mut Cx<'_>, clear: BOOLEAN) {
         SetContext(cx.kernel.status_context);
-        let (mut sx, mut sy) = (0, 0);
-        let state = preprocess_queue(cx, &mut sx, &mut sy);
+        let scale = optMeleeScale;
+        let (bounds, minimum) = preprocess_queue(cx, scale);
+        let (w, h) = view_dimensions(cx);
+        let (mut sx, mut sy) = view_scroll(bounds.origin, bounds.ships_alive, w, h);
+        if (sx != 0 || sy != 0) && in_hqspace(cx.world) != 0 {
+            crate::app::bridge::publish(cx, || MoveSIS(&mut sx, &mut sy));
+        }
+        let state = calc_view_engine(cx, minimum, (sx, sy), bounds.ships_alive, scale);
         postprocess_queue(cx, state, sx, sy);
         if optStereoSFX != 0 {
             crate::battle::sounds::engine::update_positions(cx);
@@ -871,7 +849,7 @@ pub(crate) mod engine {
 }
 
 #[cfg(not(test))]
-pub use engine::{process_collisions, InitDisplayList, RedrawQueue};
+pub use engine::{init_display_list, process_collisions, RedrawQueue};
 
 #[cfg(test)]
 mod tests {

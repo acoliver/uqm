@@ -1,7 +1,7 @@
 //! Battle entry, ordered input processing, and frame scheduling from `battle.c`.
 
 #[cfg(not(test))]
-use crate::engine::battle::schema::InputContext;
+use crate::engine::battle::input::InputContext;
 #[cfg(not(test))]
 use crate::engine::World as WorldOwner;
 #[cfg(not(test))]
@@ -63,6 +63,14 @@ pub fn ship_input(input: u8, crew: u16) -> u8 {
     state
 }
 
+fn run_away_allowed(world: &crate::engine::World) -> bool {
+    use crate::engine::StoryKey;
+    (world.activity() as u8 == abi::IN_ENCOUNTER as u8
+        || world.activity() as u8 == abi::IN_LAST_BATTLE as u8)
+        && world.story_state(StoryKey::STARBASE_AVAILABLE) != 0
+        && world.story_state(StoryKey::BOMB_CARRIER) == 0
+}
+
 #[cfg(not(test))]
 type BattleNetwork = (
     *mut crate::engine::battle::Battle,
@@ -89,22 +97,26 @@ fn finish_battle_network(battle: &mut crate::engine::battle::Battle, had_net: bo
 
 #[cfg(not(test))]
 unsafe fn battle_network() -> BattleNetwork {
-    use abi::NetworkInputContext;
-    use engine::{player_control, player_input, NETWORK_CONTROL};
-    let (battle, net, had_net) = crate::app::bridge::enter(initialize_battle);
-    for side in 0..2 {
-        if player_control(side) & NETWORK_CONTROL != 0 {
-            let context = player_input(side).cast::<NetworkInputContext>();
-            (*context).net = Some(net.clone());
+    use engine::NETWORK_CONTROL;
+    let (battle, net, had_net) = crate::app::bridge::enter(|cx| {
+        let result = initialize_battle(cx);
+        for side in 0..2 {
+            if cx.kernel.player_control[side] & NETWORK_CONTROL != 0 {
+                cx.kernel.player_input[side]
+                    .as_mut()
+                    .unwrap_or_else(|| panic!("missing player input"))
+                    .connect(result.1.clone());
+            }
         }
-    }
+        result
+    });
     (battle, net, had_net)
 }
 
 #[cfg(not(test))]
 pub(crate) mod engine {
     use super::*;
-    use crate::battle::tactrans_native::{flee_preprocess, ResetWinnerStarShip, StopDitty};
+    use crate::battle::tactrans_native::{flee_preprocess, reset_winner, StopDitty};
     use abi::*;
     use std::{mem, ptr};
 
@@ -152,15 +164,11 @@ pub(crate) mod engine {
     }
     /// # Safety
     /// `side` must be a valid player index with initialized input state.
-    pub unsafe fn player_input(side: usize) -> *mut InputContext {
-        KernelOwner::current()
-            .read(|owner| owner.player_input[side])
-            .cast()
+    pub fn player_input(side: usize) -> Option<InputContext> {
+        KernelOwner::current().read(|owner| owner.player_input[side].clone())
     }
-    /// # Safety
-    /// `side` must be valid and `input` must remain live while installed, or be null during input replacement.
-    pub unsafe fn set_player_input(side: usize, input: *mut InputContext) {
-        (**KernelOwner::current()).player_input[side] = input.cast();
+    pub fn set_player_input(side: usize, input: Option<InputContext>) {
+        KernelOwner::current().write(|owner| owner.player_input[side] = input);
     }
     /// # Safety
     /// `side` must be a valid player index on the game thread.
@@ -198,12 +206,6 @@ pub(crate) mod engine {
         ScreenHeight - 13
     }
 
-    fn run_away_allowed() -> bool {
-        (activity() as u8 == IN_ENCOUNTER as u8 || activity() as u8 == IN_LAST_BATTLE as u8)
-            && game_state(STARBASE_AVAILABLE, END_STARBASE_AVAILABLE) != 0
-            && game_state(BOMB_CARRIER, END_BOMB_CARRIER) == 0
-    }
-
     fn run_away(cx: &mut crate::engine::battle::Cx<'_>, ship: crate::engine::battle::ShipId) {
         let e = cx.ship_element(ship);
         let state = cx.element(e);
@@ -220,7 +222,7 @@ pub(crate) mod engine {
             cx.element_mut(e).pre = Some(ElementHook::Native(flee_preprocess));
             cx.element_mut(e).mass = (MAX_SHIP_MASS * 10) as u8;
             // SAFETY: the legacy velocity record admits the zero state.
-            cx.element_mut(e).velocity = unsafe { mem::zeroed() };
+            cx.element_mut(e).velocity = crate::battle::velocity::VelocityDesc::default();
             cx.ship_state_mut(ship).status &= !((SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16);
             cx.primitive_style_mut(e).color = rgb15(0x0b, 0, 0);
             cx.primitive_style_mut(e).kind = gfx_object_STAMPFILL_PRIM as u8;
@@ -229,30 +231,38 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn frame_input_human(context: &HumanInputContext) -> BATTLE_INPUT_STATE {
-        // SAFETY: the game thread owns the current input state.
-        unsafe { CurrentInputToBattleInput(context.playerNr) }
-    }
-
-    unsafe fn process_input(
+    fn process_input(
         cx: &mut crate::engine::battle::Cx<'_>,
         net: &dyn crate::engine::battle::net::BattleNet,
         order: [usize; 2],
     ) {
         net.poll();
-        let can_run = run_away_allowed();
+        let can_run = run_away_allowed(cx.world);
         for side in order {
             let mut next = cx.first_ship(side);
             while let Some(ship) = next {
                 next = cx.next_ship(ship);
                 if cx.optional_ship_element(ship).is_some() {
-                    cx.ship_state_mut(ship).control = player_control(side);
-                    let ctx = player_input(side);
-                    let pointer = cx.ship_pointer(ship).cast();
-                    let mut input = crate::app::bridge::publish(cx, || {
-                        ((*(*ctx).handlers).frameInput.unwrap())(ctx, pointer)
-                    });
-                    if player_control(side) & NETWORK_CONTROL == 0 {
+                    cx.ship_state_mut(ship).control = cx.kernel.player_control[side];
+                    let context = cx.kernel.player_input[side]
+                        .clone()
+                        .unwrap_or_else(|| panic!("missing player input"));
+                    let mut input = match context.source() {
+                        crate::engine::battle::input::InputSource::Human => {
+                            cx.human_input(context.player())
+                        }
+                        crate::engine::battle::input::InputSource::Computer => {
+                            crate::battle::context_access::ai_legacy::computer_intelligence(
+                                cx,
+                                context.player(),
+                                Some(ship),
+                            )
+                        }
+                        crate::engine::battle::input::InputSource::Network(_) => {
+                            context.network().remote_input(side)
+                        }
+                    };
+                    if cx.kernel.player_control[side] & NETWORK_CONTROL == 0 {
                         input = net.local_input(side, input);
                     }
                     cx.ship_state_mut(ship).input =
@@ -268,8 +278,9 @@ pub(crate) mod engine {
             }
         }
         net.flush();
-        if activity() & (CHECK_LOAD | CHECK_ABORT) as u16 != 0 {
-            set_activity(activity() & !(IN_BATTLE as u16));
+        if cx.world.activity() & (CHECK_LOAD | CHECK_ABORT) as u16 != 0 {
+            cx.world
+                .set_activity(cx.world.activity() & !(IN_BATTLE as u16));
         }
     }
 
@@ -330,7 +341,7 @@ pub(crate) mod engine {
             process_input(
                 cx,
                 &*net,
-                battle_input_order(&[player_control(0), player_control(1)], NETWORK_CONTROL),
+                battle_input_order(&cx.kernel.player_control, NETWORK_CONTROL),
             )
         });
         if net.peer_count() > 0 {
@@ -384,22 +395,6 @@ pub(crate) mod engine {
         1
     }
 
-    /// # Safety
-    /// Player controls and any network-controlled side connections must be initialized.
-    #[no_mangle]
-    pub unsafe extern "C" fn GetPlayerOrder(i: COUNT) -> COUNT {
-        for side in 0..2 {
-            if player_control(side) & NETWORK_CONTROL != 0 {
-                let context = &*player_input(side).cast::<NetworkInputContext>();
-                return match &context.net {
-                    Some(net) => net.player_order(i),
-                    None => panic!("network input has no session"),
-                };
-            }
-        }
-        1u16.wrapping_sub(i)
-    }
-
     unsafe fn select_all_ships(count: SIZE) -> BOOLEAN {
         if count == 1 {
             return crate::app::bridge::enter(|cx| {
@@ -448,7 +443,7 @@ pub(crate) mod engine {
             bs.battle = battle;
             bs.net = Some(net.clone());
             net.begin((&raw mut bs).cast());
-            ResetWinnerStarShip();
+            crate::app::bridge::enter(|cx| reset_winner(cx.kernel));
             crate::log_abi::log_message(
                 5,
                 &format!(
@@ -509,9 +504,7 @@ pub(crate) mod engine {
 }
 
 #[cfg(not(test))]
-pub use engine::{
-    player_input, set_player_input, Battle, BattleSong, FreeBattleSong, GetPlayerOrder,
-};
+pub use engine::{player_input, set_player_input, Battle, BattleSong, FreeBattleSong};
 
 #[cfg(test)]
 mod tests {
@@ -523,6 +516,31 @@ mod tests {
         assert_eq!(std::mem::size_of::<abi::BATTLE_INPUT_STATE>(), 1);
         assert_eq!(std::mem::size_of::<abi::COUNT>(), 2);
         assert_eq!(std::mem::size_of::<abi::SIZE>(), 2);
+    }
+
+    #[test]
+    fn retreat_permission_uses_the_supplied_world_and_low_activity_byte() {
+        use crate::engine::{StoryKey, World};
+        let mut world = World::new();
+        world.story = Some(crate::state::game_state::GameState::new());
+        for activity in 0..=4 {
+            for flags in [0, abi::IN_BATTLE as u16, abi::CHECK_ABORT as u16] {
+                world.set_activity(activity | flags);
+                for starbase in 0..=1 {
+                    world.set_story_state(StoryKey::STARBASE_AVAILABLE, starbase);
+                    for bomb in 0..=1 {
+                        world.set_story_state(StoryKey::BOMB_CARRIER, bomb);
+                        assert_eq!(
+                            run_away_allowed(&world),
+                            (activity == abi::IN_ENCOUNTER as u16
+                                || activity == abi::IN_LAST_BATTLE as u16)
+                                && starbase != 0
+                                && bomb == 0,
+                        );
+                    }
+                }
+            }
+        }
     }
 
     #[test]

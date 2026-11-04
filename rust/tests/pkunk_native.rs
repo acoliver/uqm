@@ -568,8 +568,9 @@ fn bug_missiles_launch_fore_left_and_right_inheriting_ship_velocity() {
                         ship_speed,
                         (facing + 3) % 16,
                     );
-                    let (mut dx, mut dy) = (0, 0);
-                    GetCurrentVelocityComponents(&raw mut (*ship.ptr()).velocity, &mut dx, &mut dy);
+                    let (velocity_x, velocity_y) =
+                        ((*ship.ptr()).velocity).get_current_components();
+                    let (dx, dy) = (velocity_x as i16, velocity_y as i16);
                     let mut out = [1usize as HLINK; 3];
                     let before = queued();
                     let count = with_rng(5, 0, || ship.fire(&mut out));
@@ -608,8 +609,8 @@ fn bug_missiles_launch_fore_left_and_right_inheriting_ship_velocity() {
                         let vx = cosine(angle, 96 << VELOCITY_SHIFT);
                         let vy = sine(angle, 96 << VELOCITY_SHIFT);
                         let mut expected: VELOCITY_DESC = mem::zeroed();
-                        SetVelocityComponents(&mut expected, vx, vy);
-                        DeltaVelocityComponents(&mut expected, dx, dy);
+                        (expected).set_components(i32::from(vx), i32::from(vy));
+                        (expected).delta_components(i32::from(dx), i32::from(dy));
                         assert_eq!(
                             velocity_fields(&(*m).velocity),
                             velocity_fields(&expected),

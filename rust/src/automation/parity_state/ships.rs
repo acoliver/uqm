@@ -18,8 +18,7 @@ impl<'a> Ship<'a> {
         queue: &'a crate::engine::battle::link_queue::RacePool,
         elements: &crate::engine::battle::ElementTable,
     ) -> Vec<Self> {
-        // SAFETY: the caller retains the immutable pool and every reachable resource.
-        unsafe { crate::battle::context_access::observe::ships(queue, elements) }
+        crate::battle::context_access::observe::ships(queue, elements)
             .into_iter()
             .map(|observation| Self { observation })
             .collect()

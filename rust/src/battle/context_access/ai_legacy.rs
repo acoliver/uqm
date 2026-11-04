@@ -18,15 +18,14 @@ impl Cx<'_> {
 }
 
 #[cfg(not(test))]
-pub(crate) unsafe fn computer_intelligence(
+pub(crate) fn computer_intelligence(
     cx: &mut Cx<'_>,
-    context: &crate::ships::native::abi::ComputerInputContext,
+    player: u16,
     id: Option<crate::engine::battle::ShipId>,
 ) -> u8 {
     if cx.world.activity() as u8 == crate::ships::native::abi::IN_LAST_BATTLE as u8 {
         return 0;
     }
-    let player = context.playerNr;
     let control = if id.is_none() {
         // SAFETY: player controls are retained on the game thread.
         cx.kernel.player_control[player as usize]

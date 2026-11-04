@@ -167,6 +167,11 @@ pub(crate) mod live {
                         "engine-global:explosion",
                     );
                     free_image(ptr::addr_of_mut!(kernel.asteroid), "engine-global:asteroid");
+                    for plane in kernel.star_planes.iter_mut() {
+                        plane
+                            .frames
+                            .fill(crate::engine::battle::frames::FrameSelection::ABSENT);
+                    }
                     let stars = &mut *ptr::addr_of_mut!(kernel.stars_in_space);
                     DestroyDrawable(ReleaseDrawable(*stars));
                     *stars = ptr::null_mut();

@@ -4,6 +4,7 @@ use super::drawing::*;
 use super::flight::*;
 use super::*;
 use crate::engine::{Kernel, StoryKey, World, WorldData};
+use crate::ships::native::abi::optMeleeScale;
 
 use crate::battle::gendef::getGenerateFunctions;
 use crate::c_bindings::controller_input as input;
@@ -95,8 +96,6 @@ mod ffi {
     pub(super) use crate::ui::sis::DrawSISMessage;
 
     pub(super) use crate::ui::sis::DrawStatusMessage;
-
-    pub(super) use crate::battle::process_native::engine::InitDisplayList;
 
     pub(super) use crate::navigation::interplanetary::live::do_missions as DoMissions;
 
@@ -319,7 +318,9 @@ pub(super) unsafe fn reset_solar_sys() {
     let state = system();
     assert!((*state).InIpFlight == 0);
     ffi::DrawMenuStateStrings(PM_STARMAP, -(PM_NAVIGATE - PM_SCAN));
-    ffi::InitDisplayList();
+    crate::app::bridge::enter(|cx| {
+        crate::battle::process_native::init_display_list(cx, optMeleeScale == 0);
+    });
     ffi::DoMissions();
     check_intersect();
     (*state).InIpFlight = 1;

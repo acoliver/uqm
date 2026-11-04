@@ -58,7 +58,7 @@ pub(crate) mod live {
         SaveContextFrame, WaitForAnyButton, WaitForAnyButtonUntil, WaitForNoInput,
     };
 
-    use crate::battle::sounds::engine::NotPositional;
+    use crate::battle::sounds::engine::NON_POSITIONAL;
 
     extern "C" {
         static mut SpaceJunkFrame: *mut crate::graphics::native_abi::frame_desc;
@@ -161,7 +161,7 @@ pub(crate) mod live {
                                 & (1 << 14)
                                 == 0
                         {
-                            play_sound(sounds.cast(), NotPositional(), None, 2);
+                            play_sound(sounds.cast(), NON_POSITIONAL, None, 2);
                             timeout = timeout.wrapping_add(character_delay(c, word_chars == 0));
                             if WaitForAnyButtonUntil(1, timeout, 0) != 0 {
                                 sleepy = false;

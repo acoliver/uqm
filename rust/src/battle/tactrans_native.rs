@@ -128,9 +128,9 @@ pub fn flee_cycle(index: u8, thrust: u8) -> (u8, u8, u8) {
 #[cfg(not(test))]
 pub(crate) mod engine {
     use super::*;
-    use crate::battle::battle_native::engine::{activity, player_input, rgb15, set_activity};
+    use crate::battle::battle_native::engine::{activity, rgb15, set_activity};
     use crate::battle::battle_native::BattleSong;
-    use crate::battle::encount_native::FleetIsInfinite;
+    use crate::battle::encount_native::fleet_is_infinite;
     use crate::engine::battle::views::SharedFrames;
     use crate::engine::battle::{Cx, ElementFn, ElementId, Parent};
     use crate::ships::native::{cosine, facing_to_angle, sine};
@@ -178,55 +178,26 @@ pub(crate) mod engine {
         (**KernelOwner::current()).ditty_playing = 0;
     }
 
-    unsafe fn ditty_playing() -> bool {
-        if KernelOwner::current().read(|owner| owner.ditty_playing) == 0 {
+    fn ditty_playing(kernel: &mut crate::engine::Kernel) -> bool {
+        if kernel.ditty_playing == 0 {
             return false;
         }
-        (**KernelOwner::current()).ditty_playing = PLRPlaying(usize::MAX as MUSIC_REF);
-        KernelOwner::current().read(|owner| owner.ditty_playing) != 0
+        kernel.ditty_playing = u32::from(crate::sound::music::plr_playing_current());
+        kernel.ditty_playing != 0
     }
 
-    /// # Safety
-    /// The game thread must exclusively own battle winner state.
-    #[no_mangle]
-    pub unsafe extern "C" fn ResetWinnerStarShip() {
-        (**KernelOwner::current()).winner = None;
+    pub fn reset_winner(kernel: &mut crate::engine::Kernel) {
+        kernel.winner = None;
     }
 
-    /// # Safety
-    /// The caller must run on the game thread as part of battle-end input processing.
-    #[no_mangle]
-    pub unsafe extern "C" fn battleEndReadyHuman(_context: *mut HumanInputContext) -> bool {
-        true
-    }
-    /// # Safety
-    /// The caller must run on the game thread as part of battle-end input processing.
-    #[no_mangle]
-    pub unsafe extern "C" fn battleEndReadyComputer(_context: *mut ComputerInputContext) -> bool {
-        true
-    }
-    /// # Safety
-    /// `context` and its player connection must be live on the game thread.
-    #[no_mangle]
-    pub unsafe extern "C" fn battleEndReadyNetwork(context: *mut NetworkInputContext) -> bool {
-        (*context)
-            .net
-            .as_ref()
-            .unwrap_or_else(|| panic!("network input has no session"))
-            .end_ready((*context).playerNr as usize)
-    }
-
-    unsafe fn ready_for_battle_end() -> bool {
-        if ditty_playing() {
-            return false;
-        }
-        for side in 0..NUM_PLAYERS as usize {
-            let ctx = player_input(side);
-            if !((*(*ctx).handlers).battleEndReady.unwrap())(ctx) {
-                return false;
-            }
-        }
-        true
+    fn ready_for_battle_end(kernel: &mut crate::engine::Kernel) -> bool {
+        !ditty_playing(kernel)
+            && kernel.player_input.iter().all(|input| {
+                input
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("missing player input"))
+                    .battle_end_ready()
+            })
     }
 
     pub(crate) fn preprocess_dead_ship(cx: &mut Cx<'_>, _ship: ElementId) {
@@ -329,7 +300,7 @@ pub(crate) mod engine {
     ) {
         let net = cx.b.net.clone();
         let ship = cx.owner(dead);
-        if !ready_for_battle_end() {
+        if !ready_for_battle_end(cx.kernel) {
             cx.element_mut(dead).flags &= !(DISAPPEARING as u16);
             cx.element_mut(dead).life = cx.element(dead).life.wrapping_add(1);
             check_other_ship_life_span(cx, dead);
@@ -358,8 +329,8 @@ pub(crate) mod engine {
             BatchGraphics();
             return;
         }
-        if FleetIsInfinite(cx.ship_state(ship).player as COUNT) == 0 {
-            crate::battle::encount_native::engine::update_ship_frag_crew(ship);
+        if fleet_is_infinite(cx.world, cx.ship_state(ship).player as COUNT) == 0 {
+            crate::battle::encount_native::engine::update_ship_frag_crew(cx, ship);
             cx.set_ship_species(ship, SPECIES_ID_NO_ID);
         }
         if pick(cx, ship, cx.ship_state(ship).player as COUNT) != 0 {

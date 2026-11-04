@@ -136,46 +136,41 @@ pub mod live {
         }
         1
     }
-    /// # Safety
-    /// Live input context and fleet selection, game thread only.
-    #[no_mangle]
-    pub unsafe extern "C" fn selectShipHuman(
-        context: *mut HumanInputContext,
-        state: *mut GETMELEE_STATE,
+    pub fn select_ship(
+        context: &crate::engine::battle::input::InputContext,
+        state: &mut GETMELEE_STATE,
     ) -> u32 {
-        let player = (*context).playerNr;
-        process(state, player as usize, PulsedInputToBattleInput(player))
-    }
-    /// # Safety
-    /// Live input context and fleet selection, game thread only.
-    #[no_mangle]
-    pub unsafe extern "C" fn selectShipComputer(
-        context: *mut ComputerInputContext,
-        state: *mut GETMELEE_STATE,
-    ) -> u32 {
-        let player = (*context).playerNr as usize;
-        if GetTimeCounter() < (*state).player[player].timeIn.wrapping_add(840 >> 1) {
-            return 1;
+        use crate::engine::battle::input::InputSource;
+        let player = context.player();
+        match context.source() {
+            InputSource::Human => {
+                // SAFETY: the picker owns its selection state and reads game-thread input.
+                unsafe { process(state, usize::from(player), PulsedInputToBattleInput(player)) }
+            }
+            InputSource::Computer => {
+                if GetTimeCounter()
+                    < state.player[usize::from(player)]
+                        .timeIn
+                        .wrapping_add(840 >> 1)
+                {
+                    return 1;
+                }
+                // SAFETY: the picker owns the initialized fleet selection for this player.
+                unsafe { process(state, usize::from(player), 8) }
+            }
+            InputSource::Network(_) => {
+                state
+                    .net
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("missing net"))
+                    .flush();
+                let p = &mut state.player[usize::from(player)];
+                if p.remoteSelected != 0 {
+                    p.done = 1;
+                }
+                1
+            }
         }
-        process(state, player, 8)
-    }
-    /// # Safety
-    /// Live network input context and fleet selection, game thread only.
-    #[no_mangle]
-    pub unsafe extern "C" fn selectShipNetwork(
-        context: *mut NetworkInputContext,
-        state: *mut GETMELEE_STATE,
-    ) -> u32 {
-        (*state)
-            .net
-            .as_ref()
-            .unwrap_or_else(|| panic!("missing net"))
-            .flush();
-        let p = &mut (*state).player[(*context).playerNr as usize];
-        if p.remoteSelected != 0 {
-            p.done = 1;
-        }
-        1
     }
     unsafe extern "C" fn choose(state: *mut GETMELEE_STATE) -> u32 {
         SetMenuSounds(0, 0);
@@ -209,7 +204,11 @@ pub mod live {
                 if (*state).player[player].selecting == 0 || (*state).player[player].done != 0 {
                     continue;
                 }
-                if ((*(*input).handlers).selectShip.unwrap())(input, state) == 0 {
+                if select_ship(
+                    &input.unwrap_or_else(|| panic!("missing player input")),
+                    &mut *state,
+                ) == 0
+                {
                     abort = true;
                     break;
                 }
@@ -331,9 +330,14 @@ pub mod live {
     /// The setup, master queue and empty battle queues must be initialized.
     #[no_mangle]
     pub unsafe extern "C" fn FillPickMeleeFrame(setup: *mut MeleeSetup) {
-        let old = SetContext(KernelOwner::current().read(|owner| owner.off_screen_context));
-        for i in 0..2 {
-            let side_i = GetPlayerOrder(i);
+        let (context, order) = KernelOwner::current().read(|kernel| {
+            (
+                kernel.off_screen_context,
+                [kernel.player_order(0), kernel.player_order(1)],
+            )
+        });
+        let old = SetContext(context);
+        for side_i in order {
             let side = usize::from(side_i == 0);
             let frame = SetAbsFrameIndex(PickMeleeFrame, side as u16);
             drawable_abi::SetContextFGFrame(frame.cast());
@@ -470,8 +474,14 @@ pub mod live {
         net.bind_picker(mask, (&raw mut state).cast());
         let now = GetTimeCounter();
         state.InputFunc = Some(choose);
-        for i in 0..2 {
-            let player = GetPlayerOrder(i) as usize;
+        let (screen_context, controls, order) = KernelOwner::current().read(|kernel| {
+            (
+                kernel.screen_context,
+                kernel.player_control,
+                [kernel.player_order(0), kernel.player_order(1)],
+            )
+        });
+        for player in order.map(usize::from) {
             let p = &mut state.player[player];
             p.selecting = u32::from(mask & (1 << player) != 0);
             p.ships_left = u16::from(counters[player]);
@@ -484,15 +494,10 @@ pub mod live {
             p.row = 0;
             p.col = 7;
             p.remoteSelected = 0;
-            p.flashContext = Flash_createHighlight(
-                KernelOwner::current().read(|owner| owner.screen_context),
-                ptr::null_mut(),
-            );
+            p.flashContext = Flash_createHighlight(screen_context, ptr::null_mut());
             flash_set_merge_factors(p.flashContext, 2, 3, 2);
             flash_set_frame_time(p.flashContext, 840 / 16);
-            if KernelOwner::current().read(|owner| owner.player_control[player]) & NETWORK_CONTROL
-                != 0
-            {
+            if controls[player] & NETWORK_CONTROL != 0 {
                 flash_set_speed(p.flashContext, 840 / 2, 0, 840 / 2, 0);
             } else {
                 flash_set_speed(p.flashContext, 0, 840 / 16, 0, 840 / 16);

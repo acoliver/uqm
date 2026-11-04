@@ -1,6 +1,7 @@
 //! Image assignments and copies retain the identity observed at the write boundary.
 use super::{Fields, Journal};
-use crate::battle::element::{Element, ElementVisualState, IntersectControl, Stamp};
+use crate::engine::battle::record::{state__bindgen_ty_1, ElementRecord as Element, STATE};
+use crate::graphics::native_abi::{INTERSECT_CONTROL, STAMP};
 use std::collections::BTreeMap;
 
 type Frame = (String, u16);
@@ -210,8 +211,10 @@ impl Journal {
             .unwrap_or_else(|| panic!("unobserved element identity {element}"));
         let current = std::mem::offset_of!(Element, current);
         let next = std::mem::offset_of!(Element, next);
-        let frame = std::mem::offset_of!(ElementVisualState, frame);
-        let set = std::mem::offset_of!(ElementVisualState, frames);
+        let frame =
+            std::mem::offset_of!(STATE, image) + std::mem::offset_of!(state__bindgen_ty_1, frame);
+        let set =
+            std::mem::offset_of!(STATE, image) + std::mem::offset_of!(state__bindgen_ty_1, frames);
         address
             + match name {
                 "current.frame" => current + frame,
@@ -219,9 +222,9 @@ impl Journal {
                 "current.farray" => current + set,
                 "next.farray" => next + set,
                 "intersect.frame" => {
-                    std::mem::offset_of!(Element, intersect_control)
-                        + std::mem::offset_of!(IntersectControl, intersect_stamp)
-                        + std::mem::offset_of!(Stamp, frame)
+                    std::mem::offset_of!(Element, IntersectControl)
+                        + std::mem::offset_of!(INTERSECT_CONTROL, IntersectStamp)
+                        + std::mem::offset_of!(STAMP, frame)
                 }
                 _ => panic!("unknown element image slot {name}"),
             }

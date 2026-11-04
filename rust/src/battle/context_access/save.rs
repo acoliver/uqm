@@ -5,7 +5,7 @@ use crate::savegame::runtime::hyper_save::HyperSaveError;
 
 /// # Safety
 /// The ship pool and its resources remain live and immutable for the call.
-pub(crate) unsafe fn read_flagship_facing(
+pub(crate) fn read_flagship_facing(
     player_ships: &RacePool,
     elements: &ElementTable,
 ) -> Result<Option<u16>, HyperSaveError> {

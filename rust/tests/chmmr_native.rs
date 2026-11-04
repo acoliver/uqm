@@ -26,8 +26,8 @@ fn point(p: POINT) -> (i16, i16) {
 }
 
 unsafe fn velocity(el: *mut ElementRecord) -> (SIZE, SIZE) {
-    let (mut x, mut y) = (0, 0);
-    GetCurrentVelocityComponents(&mut (*el).velocity, &mut x, &mut y);
+    let (velocity_x, velocity_y) = ((*el).velocity).get_current_components();
+    let (x, y) = (velocity_x as i16, velocity_y as i16);
     (x, y)
 }
 
@@ -813,7 +813,7 @@ fn tractor_applies_mass_division_speed_flags_and_head_inserted_blue_shadows() {
                 (*enemy.ptr()).current.location = POINT { x: 3000, y: 3728 };
                 (*enemy.ptr()).next = (*enemy.ptr()).current.clone();
                 (*ship.ptr()).target = Some(battle::id((enemy.handle).cast()));
-                SetVelocityComponents(&mut (*enemy.ptr()).velocity, initial_vx, 0);
+                ((*enemy.ptr()).velocity).set_components(i32::from(initial_vx), 0);
                 enemy.ship_mut().cur_status_flags =
                     (LEFT | SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16;
                 let mut ship = ship;

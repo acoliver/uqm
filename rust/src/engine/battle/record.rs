@@ -37,21 +37,6 @@ mod abi {
         pub frames: crate::engine::battle::frames::Frames,
     }
     pub type STATE = state;
-    const _: () = {
-        use crate::battle::element::{Element, ElementVisualState as Visual};
-        use std::mem::offset_of as offset;
-        assert!(size_of::<ElementRecord>() == size_of::<Element>());
-        assert!(align_of::<ElementRecord>() == align_of::<Element>());
-        assert!(offset!(ElementRecord, state_flags) == offset!(Element, state_flags));
-        assert!(offset!(ElementRecord, current) == offset!(Element, current));
-        assert!(offset!(STATE, location) == offset!(Visual, location));
-        assert!(
-            offset!(STATE, image) + offset!(state__bindgen_ty_1, frame) == offset!(Visual, frame)
-        );
-        assert!(
-            offset!(STATE, image) + offset!(state__bindgen_ty_1, frames) == offset!(Visual, frames)
-        );
-    };
     #[repr(C)]
     #[derive(Debug, Clone)]
     pub struct ElementRecord {
@@ -863,14 +848,15 @@ mod kernel_tests {
     #[test]
     fn separate_lifecycles_reset_state_and_keep_parallax_backing_stable_when_moved() {
         let mut kernel = Kernel::new();
-        let address = kernel.log_stars.as_mut_ptr();
+        let address = kernel.star_planes[0].points.as_ptr();
         kernel.instant_victory = 1;
         kernel.status_offsets = [7, 11];
-        let mut moved = Box::new(kernel);
-        assert_eq!(moved.log_stars.as_mut_ptr(), address);
-        assert_eq!(moved.star_planes[0].star_array, address);
-        assert_eq!(moved.star_planes[1].star_array, address.wrapping_add(30));
-        assert_eq!(moved.star_planes[2].star_array, address.wrapping_add(90));
+        let moved = Box::new(kernel);
+        assert_eq!(moved.star_planes[0].points.as_ptr(), address);
+        assert_eq!(
+            moved.star_planes.each_ref().map(|p| p.points.len()),
+            [30, 60, 90]
+        );
         assert_eq!(moved.status_offsets, [7, 11]);
         let fresh = Kernel::new();
         assert_eq!(fresh.instant_victory, 0);
@@ -879,7 +865,7 @@ mod kernel_tests {
         assert_eq!(fresh.space_origin.x, 0);
         assert_eq!(fresh.space_origin.y, 0);
         assert_eq!(fresh.status_offsets, [0; 2]);
-        assert!(fresh.player_input.iter().all(|input| input.is_null()));
+        assert!(fresh.player_input.iter().all(Option::is_none));
         assert!(fresh.menu_sounds.is_null());
         assert!(fresh.game_sounds.is_null());
         assert!(fresh.winner.is_none());

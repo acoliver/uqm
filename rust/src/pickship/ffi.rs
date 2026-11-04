@@ -59,11 +59,11 @@ use crate::graphics::{
 
 use crate::ui::sis::{capacity::GetCrewPodCapacity, SetFlashRect};
 
-use crate::battle::{encount_native::engine::FleetIsInfinite, sounds::engine::PlayMenuSound};
+use crate::battle::{encount_native::engine::fleet_is_infinite, sounds::engine::PlayMenuSound};
 
 use crate::strings::string_table::{GetStringAddress, GetStringLength, SetAbsStringTableIndex};
 
-use crate::navigation::globals::in_hqspace;
+use crate::engine::world::IN_HYPERSPACE;
 
 fn color(color: Rgba) -> CColor {
     CColor {
@@ -374,7 +374,7 @@ pub(crate) unsafe fn encounter_ship(
     let last_id = last;
 
     // SAFETY: plain call.
-    if { WorldOwner::current().read(in_hqspace) } != 0 {
+    if activity as u8 == IN_HYPERSPACE as u8 {
         assert_eq!(side, RPG_PLAYER_NUM);
         // SIS for the Hyperspace flight
         // SAFETY: `queue` is `race_q[side]`.
@@ -442,7 +442,7 @@ pub(crate) unsafe fn encounter_ship(
 
     // NPC player in a full game
     // SAFETY: plain call.
-    if unsafe { FleetIsInfinite(which_player) } != 0 {
+    if WorldOwner::current().read(|world| unsafe { fleet_is_infinite(world, which_player) }) != 0 {
         if last.is_some() {
             // The current STARSHIP is reused for the next one; update with new
             // info.

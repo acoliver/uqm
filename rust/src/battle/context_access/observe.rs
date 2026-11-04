@@ -8,7 +8,7 @@ use crate::engine::battle::{
 
 /// # Safety
 /// The ship and group authorities remain immutable during the observation.
-pub(crate) unsafe fn elements(
+pub(crate) fn elements(
     elements: &crate::engine::battle::ElementTable,
     groups: Option<&QUEUE>,
 ) -> Vec<ElementObservation> {
@@ -68,7 +68,7 @@ pub(crate) enum CustomData<'a> {
 }
 #[cfg(not(test))]
 impl<'a> CustomData<'a> {
-    unsafe fn decode(_species: u32, state: &'a crate::engine::battle::RaceState) -> Self {
+    fn decode(_species: u32, state: &'a crate::engine::battle::RaceState) -> Self {
         use crate::engine::battle::RaceState;
         match state {
             RaceState::Androsynth { collision } => return Self::Androsynth(*collision),
@@ -99,7 +99,7 @@ impl<'a> CustomData<'a> {
 }
 /// # Safety
 /// The queue, ship resources and descriptor allocations remain immutable for the borrow.
-pub(crate) unsafe fn ships<'a>(
+pub(crate) fn ships<'a>(
     queue: &'a crate::engine::battle::link_queue::RacePool,
     elements: &crate::engine::battle::ElementTable,
 ) -> Vec<ShipObservation<'a>> {
@@ -122,7 +122,7 @@ pub(crate) unsafe fn ships<'a>(
                 callbacks: d.callbacks,
                 code_loaded: d.code_loaded,
                 // SAFETY: the observation retains this live descriptor and its race state.
-                custom: unsafe { CustomData::decode(s.pick.species, d.state) },
+                custom: CustomData::decode(s.pick.species, d.state),
             });
             (race, s.icons, s.strings)
         };

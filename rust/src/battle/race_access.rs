@@ -37,10 +37,7 @@ impl Cx<'_> {
     }
 
     pub fn abandon_ship(&mut self, victim: ElementId, source: ElementId, count: u16) {
-        // SAFETY: the context retains the loaded ship images throughout crew placement.
-        unsafe {
-            crate::battle::world_elements::abandon_ship(self, victim, source, count);
-        }
+        crate::battle::world_elements::abandon_ship(self, victim, source, count);
     }
 
     pub fn apply_inertial_thrust(&mut self, id: ElementId) -> u16 {

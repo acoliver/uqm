@@ -17,13 +17,25 @@ pub(crate) struct Channels {
     pub(crate) sounds: [SOUND; 4],
 }
 
-#[repr(C)]
 pub struct StarPlane {
     pub(crate) min_star_index: u16,
-    pub(crate) num_stars: u16,
-    pub(crate) star_array: *mut POINT,
-    pub(crate) pmin_star: *mut POINT,
-    pub(crate) plast_star: *mut POINT,
+    pub(crate) points: Vec<POINT>,
+    #[cfg(not(test))]
+    pub(crate) displayed: Vec<POINT>,
+    #[cfg(not(test))]
+    pub(crate) frames: Vec<super::frames::FrameSelection>,
+}
+impl StarPlane {
+    pub(crate) fn new(count: usize) -> Self {
+        Self {
+            min_star_index: 0,
+            points: vec![POINT { x: 0, y: 0 }; count],
+            #[cfg(not(test))]
+            displayed: vec![POINT { x: 0, y: 0 }; count],
+            #[cfg(not(test))]
+            frames: vec![super::frames::FrameSelection::ABSENT; count],
+        }
+    }
 }
 
 pub(crate) type MasterCatalog = crate::collections::pool::OrderedPool<CatalogEntry, 25>;

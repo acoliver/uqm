@@ -54,10 +54,9 @@ fn descriptor_and_spit_animation_preserve_jitter_rng_and_speed() {
             assert_eq!((*e).turn, 2);
             let mut v: VELOCITY_DESC = mem::zeroed();
             let speed = (15 << ONE_SHIFT) << 1 << VELOCITY_SHIFT;
-            SetVelocityComponents(
-                &mut v,
-                cosine(i32::from(angle), speed),
-                sine(i32::from(angle), speed),
+            (v).set_components(
+                i32::from(cosine(i32::from(angle), speed)),
+                i32::from(sine(i32::from(angle), speed)),
             );
             assert_eq!(velocity(&(*e).velocity), velocity(&v));
             for expected in [1, 0] {

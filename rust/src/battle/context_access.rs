@@ -533,8 +533,7 @@ impl Cx<'_> {
         assert!(self.elements().linked(id), "element is not linked");
         // SAFETY: stereo configuration belongs to the game thread.
         if unsafe { optStereoSFX } != 0 {
-            // SAFETY: the live source is removed before this context releases its storage.
-            unsafe { crate::battle::sounds::engine::remove_sounds(Some(id)) };
+            crate::battle::sounds::engine::remove_sounds(self.kernel, Some(id));
         }
         self.unlink_storage(id);
     }

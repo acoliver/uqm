@@ -1,5 +1,4 @@
-use crate::engine::battle::schema::GETMELEE_STATE;
-use crate::engine::battle::schema::{FlashState, FlashType, InputContext};
+use crate::engine::battle::schema::{FlashState, FlashType};
 pub use crate::engine::battle::{CollisionHook, ElementHook};
 // Shared engine records used by the Rust runtime.
 
@@ -1763,11 +1762,8 @@ extern "C" {
 pub use crate::ships::native::abi::velocity_desc;
 pub type VELOCITY_DESC = velocity_desc;
 
-pub use crate::battle::velocity::GetCurrentVelocityComponents;
 
-pub use crate::battle::velocity::GetNextVelocityComponents;
 
-pub use crate::battle::velocity::SetVelocityComponents;
 pub use crate::ships::native::abi::ANIMATION_DESC;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -3439,7 +3435,7 @@ pub use crate::battle::world_elements::engine::spawn_planet;
 pub use crate::battle::world_elements::engine::spawn_asteroid;
 
 #[cfg(not(test))]
-pub use crate::battle::galaxy::engine::InitGalaxy;
+
 
 pub type STATUS_FLAGS = UWORD;
 pub const SPECIES_ID_NO_ID: SPECIES_ID = 0;
@@ -3755,7 +3751,7 @@ pub const ATTACK: _bindgen_ty_23 = 1;
 pub type _bindgen_ty_23 = ::std::os::raw::c_uint;
 
 #[cfg(not(test))]
-pub use crate::battle::encount_native::engine::FleetIsInfinite;
+pub use crate::battle::encount_native::engine::fleet_is_infinite;
 
 #[cfg(not(test))]
 extern "C" {
@@ -4426,18 +4422,6 @@ pub use crate::supermelee::native::battle_picker::live::DestroyPickMeleeFrame;
 
 #[cfg(not(test))]
 pub use crate::supermelee::native::battle_picker::live::FillPickMeleeFrame;
-pub type SelectShipFunction = ::std::option::Option<
-    unsafe extern "C" fn(context: *mut InputContext, gms: *mut GETMELEE_STATE) -> BOOLEAN,
->;
-pub type BattleEndReadyFunction =
-    ::std::option::Option<unsafe extern "C" fn(context: *mut InputContext) -> bool>;
-pub type DeleteInputContextFunction =
-    ::std::option::Option<unsafe extern "C" fn(context: *mut InputContext)>;
-
-pub use crate::ships::native::abi::ComputerInputContext;
-pub use crate::ships::native::abi::HumanInputContext;
-
-pub use crate::ships::native::abi::NetworkInputContext;
 pub const ENEMY_SHIP_INDEX: _bindgen_ty_28 = 0;
 pub const CREW_OBJECT_INDEX: _bindgen_ty_28 = 1;
 pub const ENEMY_WEAPON_INDEX: _bindgen_ty_28 = 2;
@@ -4454,7 +4438,6 @@ pub use crate::navigation::interplanetary::live::notify_others_abi as NotifyOthe
 pub use crate::navigation::interplanetary::live::do_missions as DoMissions;
 
 #[cfg(not(test))]
-pub use crate::battle::process_native::engine::InitDisplayList;
 
 #[cfg(not(test))]
 pub const SOUND_EFFECTS_GRAB_CREW: SOUND_EFFECTS = 0;

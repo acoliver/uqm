@@ -1,4 +1,4 @@
-use crate::engine::battle::schema::{BattleInputHandlers, FlashContext};
+use crate::engine::battle::schema::{FlashContext};
 pub use crate::engine::battle::{ElementHook, CollisionHook};
 pub use crate::engine::battle::record::{
     captain_stuff, state, state__bindgen_ty_1,
@@ -1153,8 +1153,6 @@ pub struct battlestate_struct {
 
 
 
-#[cfg(not(test))]
-pub use crate::battle::battle_native::engine::GetPlayerOrder;
 
 #[cfg(not(test))]
 pub use crate::battle::battle_native::engine::Battle;
@@ -1209,28 +1207,6 @@ unsafe extern "C" {
 
 pub use crate::battle::velocity::VelocityDesc as velocity_desc;
 pub type VELOCITY_DESC = velocity_desc;
-pub unsafe fn GetCurrentVelocityComponents(
-    velocityptr: *mut VELOCITY_DESC,
-    pdx: *mut SIZE,
-    pdy: *mut SIZE,
-) {
-    crate::battle::velocity::GetCurrentVelocityComponents(velocityptr.cast(), pdx, pdy);
-}
-pub unsafe fn GetNextVelocityComponents(
-    velocityptr: *mut VELOCITY_DESC,
-    pdx: *mut SIZE,
-    pdy: *mut SIZE,
-    num_frames: COUNT,
-) {
-    crate::battle::velocity::GetNextVelocityComponents(velocityptr.cast(), pdx, pdy, num_frames);
-}
-pub unsafe fn SetVelocityComponents(velocityptr: *mut VELOCITY_DESC, dx: SIZE, dy: SIZE) {
-    crate::battle::velocity::SetVelocityComponents(velocityptr.cast(), dx, dy);
-}
-pub unsafe fn DeltaVelocityComponents(velocityptr: *mut VELOCITY_DESC, dx: SIZE, dy: SIZE) {
-    crate::battle::velocity::DeltaVelocityComponents(velocityptr.cast(), dx, dy);
-}
-
 pub const VIEW_STATE_VIEW_STABLE: VIEW_STATE = 0;
 pub const VIEW_STATE_VIEW_SCROLL: VIEW_STATE = 1;
 pub const VIEW_STATE_VIEW_CHANGE: VIEW_STATE = 2;
@@ -1566,25 +1542,6 @@ pub use crate::supermelee::native::battle_picker::live::MeleeGameOver;
 #[cfg(not(test))]
 pub use crate::supermelee::native::battle_picker::live::GetInitialMeleeStarShips;
 
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct ComputerInputContext {
-    pub handlers: *mut BattleInputHandlers,
-    pub playerNr: COUNT,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct HumanInputContext {
-    pub handlers: *mut BattleInputHandlers,
-    pub playerNr: COUNT,
-}
-#[repr(C)]
-pub struct NetworkInputContext {
-    pub handlers: *mut BattleInputHandlers,
-    pub playerNr: COUNT,
-    pub net: Option<std::rc::Rc<dyn crate::engine::battle::net::BattleNet>>,
-}
-
 pub const ENEMY_SHIP_INDEX: _bindgen_ty_5 = 0;
 pub const CREW_OBJECT_INDEX: _bindgen_ty_5 = 1;
 pub const ENEMY_WEAPON_INDEX: _bindgen_ty_5 = 2;
@@ -1601,7 +1558,7 @@ pub type _bindgen_ty_5 = ::std::os::raw::c_uint;
 
 
 #[cfg(not(test))]
-pub use crate::battle::status_native::engine::InitStatusOffsets;
+pub use crate::battle::status_native::init_status_offsets;
 
 #[cfg(not(test))]
 pub use crate::ui::shipstat::DrawCrewFuelString;
@@ -1632,11 +1589,7 @@ pub type MENU_SOUND_FLAGS = UWORD;
 #[cfg(not(test))]
 pub use crate::mainloop::input_abi::live::SetMenuSounds;
 
-#[cfg(not(test))]
-pub use crate::battle::sounds::engine::UpdateSoundPositions;
 
-#[cfg(not(test))]
-pub use crate::battle::sounds::engine::FlushSounds;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct LASER_BLOCK {
@@ -3062,7 +3015,6 @@ pub use crate::game_init::kernel_abi::ClearPlayerInput;
 pub use crate::battle::process_native::engine::RedrawQueue;
 
 #[cfg(not(test))]
-pub use crate::battle::process_native::engine::InitDisplayList;
 
 #[cfg(not(test))]
 
@@ -3118,7 +3070,7 @@ pub use crate::battle::tactrans_native::engine::flee_preprocess;
 pub use crate::battle::tactrans_native::engine::StopDitty;
 
 #[cfg(not(test))]
-pub use crate::battle::tactrans_native::engine::ResetWinnerStarShip;
+pub use crate::battle::tactrans_native::engine::reset_winner;
 
 #[cfg(not(test))]
 pub use crate::battle::tactrans_native::engine::StopAllBattleMusic;
@@ -3647,14 +3599,16 @@ mod ship_abi_tests {
     fn velocity_adapters_preserve_signed_components_and_frame_steps() {
         unsafe {
             let mut velocity: VELOCITY_DESC = std::mem::zeroed();
-            SetVelocityComponents(&mut velocity, 96, -64);
-            let (mut dx, mut dy) = (0, 0);
-            GetCurrentVelocityComponents(&mut velocity, &mut dx, &mut dy);
+            (velocity).set_components(96, -64);
+            let (velocity_x, velocity_y) = (velocity).get_current_components();
+let (mut dx, mut dy) = (velocity_x as i16, velocity_y as i16);
             assert_eq!((dx, dy), (96, -64));
-            DeltaVelocityComponents(&mut velocity, 32, -32);
-            GetCurrentVelocityComponents(&mut velocity, &mut dx, &mut dy);
+            (velocity).delta_components(32, -32);
+            { let (velocity_x, velocity_y) = (velocity).get_current_components();
+(dx, dy) = (velocity_x as i16, velocity_y as i16); };
             assert_eq!((dx, dy), (128, -96));
-            GetNextVelocityComponents(&mut velocity, &mut dx, &mut dy, 2);
+            { let (velocity_x, velocity_y) = (velocity).get_next_components(2);
+(dx, dy) = (velocity_x as i16, velocity_y as i16); };
             assert_eq!((dx, dy), (8, -6));
         }
     }

@@ -26,7 +26,9 @@ fn terminal_outcome_survives_descriptor_teardown_until_the_next_battle() {
             uqm_rust::app::bridge::enter(|cx| cx.finish_battle());
             assert!(matches!(ship.descriptor_mut().race_state, RaceState::None));
             drop(ship);
-            uqm_rust::battle::process_native::InitDisplayList();
+            uqm_rust::app::bridge::enter(|cx| {
+                uqm_rust::battle::process_native::init_display_list(cx, optMeleeScale == 0);
+            });
             (**uqm_rust::engine::WorldData::current())
                 .game
                 .current_activity = WON_LAST_BATTLE as u16;
@@ -520,7 +522,7 @@ fn sentinel_recoil_stuns_live_player_caps_velocity_and_preserves_sentinel() {
             (*player.ptr()).hits = 20;
             (*player.ptr()).mass = 10;
             player.ship_mut().cur_status_flags = (SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16;
-            SetVelocityComponents(&raw mut (*player.ptr()).velocity, 5000, 0);
+            ((*player.ptr()).velocity).set_components(5000, 0);
             SetVelocityVector(&raw mut (*sentinel).velocity, 32, 4);
             let mut p = POINT { x: 0, y: 0 };
             let mut q = p;
@@ -544,9 +546,8 @@ fn sentinel_recoil_stuns_live_player_caps_velocity_and_preserves_sentinel() {
             );
             assert_eq!((*player.ptr()).turn, 1);
             assert_eq!((*player.ptr()).thrust, 3);
-            let mut dx = 0;
-            let mut dy = 0;
-            GetCurrentVelocityComponents(&raw mut (*player.ptr()).velocity, &mut dx, &mut dy);
+            let (velocity_x, velocity_y) = ((*player.ptr()).velocity).get_current_components();
+            let (dx, dy) = (velocity_x as i16, velocity_y as i16);
             assert_eq!((dx, dy), (5120, 0));
             assert_eq!(velocity(&(*sentinel).velocity), [0; 9]);
         }

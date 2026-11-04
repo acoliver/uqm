@@ -1,5 +1,5 @@
 //! Exercise Shofixti's live callbacks against the linked engine.
-use uqm_rust::engine::battle::schema::{BattleInputHandlers, InputContext, GETMELEE_STATE, HLINK};
+use uqm_rust::engine::battle::schema::{GETMELEE_STATE, HLINK};
 use uqm_rust::ships::races::{intruder_preprocess, marine_collision};
 #[path = "support/battle_context.rs"]
 mod battle_context;
@@ -8,8 +8,6 @@ mod shared;
 
 use std::{ffi::CStr, mem, ptr};
 use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, frame_index, sine};
-
-use uqm_rust::supermelee::native::battle_picker::live::{selectShipComputer, selectShipHuman};
 
 use uqm_rust::graphics::context_abi::_GraphicsStatusFlags;
 
@@ -36,7 +34,7 @@ impl Battle {
         ScreenHeight = 240;
         _GraphicsStatusFlags &= !4;
         uqm_rust::app::bridge::battle(|b| b.counters = [10, 10]);
-        ResetWinnerStarShip();
+        uqm_rust::engine::Kernel::current().write(reset_winner);
         Self {
             inner,
             globals,
@@ -49,7 +47,7 @@ impl Battle {
 impl Drop for Battle {
     fn drop(&mut self) {
         unsafe {
-            ResetWinnerStarShip();
+            uqm_rust::engine::Kernel::current().write(reset_winner);
             uqm_rust::engine::WorldData::current().write(|world| *world = self.globals);
             (ScreenWidth, ScreenHeight) = self.screen;
             _GraphicsStatusFlags = self.graphics_flags;
@@ -381,8 +379,8 @@ fn darts_use_next_location_exact_facing_offset_speed_and_failure_count() {
             let angle = facing_to_angle(facing as i32) as COUNT;
             let vx = cosine(angle as i32, 96 << VELOCITY_SHIFT);
             let vy = sine(angle as i32, 96 << VELOCITY_SHIFT);
-            let (mut x, mut y) = (0, 0);
-            GetCurrentVelocityComponents(&raw mut (*dart).velocity, &mut x, &mut y);
+            let (velocity_x, velocity_y) = ((*dart).velocity).get_current_components();
+            let (x, y) = (velocity_x as i16, velocity_y as i16);
             assert_eq!((x, y), (vx, vy));
             let origin_x =
                 ((i32::from(i16::MAX) - 5) + i32::from(cosine(angle as i32, 60))) as COORD;
@@ -798,9 +796,6 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
             battle::tactrans_native as transitions,
             pickship::ffi::get_encounter_star_ship_with_picker,
         };
-        unsafe extern "C" fn ready(_: *mut InputContext) -> bool {
-            true
-        }
         unsafe {
             for computer in [false, true] {
                 for initial in [[2, 2], [1, 2], [2, 1], [1, 1]] {
@@ -823,19 +818,17 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                     ship.inner.ship_mut().SpeciesID = SPECIES_ID_SHOFIXTI_ID;
                     other.inner.ship_mut().SpeciesID = SPECIES_ID_SHOFIXTI_ID;
                     let mut reserves = [PoolShip::new(0), PoolShip::new(1)];
-                    let mut handlers = BattleInputHandlers {
-                        frameInput: None,
-                        selectShip: None,
-                        battleEndReady: Some(ready),
-                        deleteContext: None,
-                    };
-                    let mut inputs = [InputContext {
-                        handlers: &mut handlers,
-                        playerNr: 0,
-                    }; 2];
-                    inputs[1].playerNr = 1;
+                    let inputs = std::array::from_fn::<_, 2, _>(|side| {
+                        uqm_rust::engine::battle::input::InputContext::new(
+                            side as u16,
+                            if computer && side == 1 { 2 } else { 1 },
+                        )
+                    });
                     for side in 0..2 {
-                        uqm_rust::battle::battle_native::set_player_input(side, &mut inputs[side]);
+                        uqm_rust::battle::battle_native::set_player_input(
+                            side,
+                            Some(inputs[side].clone()),
+                        );
                         let active = if side == 0 {
                             &raw mut *ship.inner.ship_mut()
                         } else {
@@ -911,19 +904,11 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                                             p.col = 1;
                                             // Expire the computer's display delay without a sleep.
                                             p.timeIn = u32::MAX - 419;
-                                            let result = if computer && side == 1 {
-                                                selectShipComputer(
-                                                    (&mut inputs[side] as *mut InputContext).cast(),
-                                                    &mut state,
-                                                )
-                                            } else {
+                                            if !(computer && side == 1) {
                                                 PlayerControls[side] = side as u32;
                                                 PulsedInputState.key[side][KEY_WEAPON as usize] = 1;
-                                                selectShipHuman(
-                                                    (&mut inputs[side] as *mut InputContext).cast(),
-                                                    &mut state,
-                                                )
-                                            };
+                                            }
+                                            let result = uqm_rust::supermelee::native::battle_picker::live::select_ship(&inputs[side], &mut state);
                                             assert_eq!(result, 1);
                                             assert_eq!(state.player[side].done, 1);
                                             assert_eq!(

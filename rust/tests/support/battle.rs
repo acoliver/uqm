@@ -3,7 +3,7 @@
     reason = "shared fixture API used by independent race test binaries"
 )]
 use std::{mem, ptr, rc::Rc};
-use uqm_rust::battle::process_native::InitDisplayList;
+use uqm_rust::battle::process_native::init_display_list;
 use uqm_rust::engine::battle::schema::HLINK;
 use uqm_rust::{
     engine::battle::{ElementId, RaceState, ShipId},
@@ -152,7 +152,7 @@ impl Battle {
                     cx.kernel_mut().reset_ship_capacity(side, 32);
                 }
             });
-            InitDisplayList();
+            uqm_rust::app::bridge::enter(|cx| init_display_list(cx, optMeleeScale == 0));
             ScreenWidth = 320;
             ScreenHeight = 240;
             Self {

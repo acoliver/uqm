@@ -457,8 +457,8 @@ pub(crate) mod engine {
                 return 0;
             }
             for i in 0..NUM_PLAYERS as COUNT {
-                let player = GetPlayerOrder(i);
                 if crate::app::bridge::enter(|cx| {
+                    let player = cx.kernel.player_order(i);
                     spawn_ship(
                         cx,
                         crate::engine::battle::link_queue::identify(

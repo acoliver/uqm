@@ -11,7 +11,9 @@ pub(super) unsafe fn clear_queues() {
                 cx.kernel_mut().reset_ship_capacity(side, 32);
             }
         });
-        uqm_rust::battle::process_native::InitDisplayList();
+        uqm_rust::app::bridge::enter(|cx| {
+            uqm_rust::battle::process_native::init_display_list(cx, optMeleeScale == 0);
+        });
     }
 }
 
@@ -32,23 +34,23 @@ pub(super) fn elements_and_fighters(directory: &Path) {
     let mut owner = unsafe { battle::PoolShip::new(0) };
     owner.SpeciesID = SPECIES_ID_EARTHLING_ID;
     owner.ship_facing = 31;
-    first.player_nr = 0;
-    first.state_flags = ElementFlags::PLAYER_SHIP;
+    first.playerNr = 0;
+    first.state_flags = ElementFlags::PLAYER_SHIP.bits();
     first.parent = uqm_rust::engine::battle::Parent::Ship(owner.ship_id);
     first.current.location.x = 17;
-    first.crew_or_hp = 11;
+    first.hits = 11;
 
-    second.player_nr = 0;
-    second.state_flags = ElementFlags::PLAYER_SHIP | ElementFlags::BACKGROUND_OBJECT;
+    second.playerNr = 0;
+    second.state_flags = (ElementFlags::PLAYER_SHIP | ElementFlags::BACKGROUND_OBJECT).bits();
     second.parent = first.parent;
     second.current.location.x = -91;
     second.current.location.y = 43;
-    second.crew_or_hp = 7;
+    second.hits = 7;
     second.preprocess_func = Some(uqm_rust::engine::battle::ElementHook::Native(
         unregistered_hook,
     ));
 
-    neutral.player_nr = -1;
+    neutral.playerNr = -1;
     // SAFETY: attachment publishes these allocated stack slots for this synchronous fixture.
     unsafe {
         uqm_rust::app::bridge::enter(|cx| {
@@ -88,7 +90,7 @@ pub(super) fn elements_and_fighters(directory: &Path) {
     let mut expected = CrcState::new();
     expected.process_u32(123456);
     for element in [&**first, &**second, &**neutral] {
-        expected.process_element(element);
+        expected.process_element(&Element::from(element));
     }
     assert_eq!(
         line.split_whitespace()
@@ -115,19 +117,19 @@ pub(super) fn element_mutations(
     neutral: &mut ElementRecord,
     before: &Fields,
 ) {
-    first.life_span = 19;
-    first.mass_points = 3;
-    first.turn_wait = 4;
-    first.thrust_or_blast = 5;
-    first.color_cycle_index = 6;
-    first.prim_index = 7;
+    first.life = 19;
+    first.mass = 3;
+    first.turn = 4;
+    first.thrust = 5;
+    first.colorCycleIndex = 6;
+    first.PrimIndex = 7;
     first.next.location.x = -13;
     first.next.location.y = 29;
-    first.intersect_control.last_time_val = 17;
-    first.intersect_control.intersect_stamp.origin.x = -23;
-    first.intersect_control.intersect_stamp.origin.y = 31;
-    first.intersect_control.end_point.x = -37;
-    first.intersect_control.end_point.y = 41;
+    first.IntersectControl.last_time_val = 17;
+    first.IntersectControl.IntersectStamp.origin.x = -23;
+    first.IntersectControl.IntersectStamp.origin.y = 31;
+    first.IntersectControl.EndPoint.x = -37;
+    first.IntersectControl.EndPoint.y = 41;
     first.velocity.travel_angle = 43;
     first.velocity.vector.width = -47;
     first.velocity.vector.height = 53;
@@ -175,11 +177,14 @@ pub(super) fn frame_fields(
         frames: vec![pointer as usize; 3],
         role: "test-views".into(),
     });
-    observation::assign_frame(&mut first.current.frame, view.clone());
-    observation::assign_set(&mut first.current.frames, set.clone(), None);
-    observation::assign_frame(&mut first.next.frame, view.clone());
-    observation::assign_set(&mut first.next.frames, set.clone(), None);
-    observation::assign_frame(&mut first.intersect_control.intersect_stamp.frame, pointer);
+    observation::assign_frame(&mut first.current.image.frame, view.clone());
+    observation::assign_set(&mut first.current.image.frames, set.clone(), None);
+    observation::assign_frame(&mut first.next.image.frame, view.clone());
+    observation::assign_set(&mut first.next.image.frames, set.clone(), None);
+    observation::assign_frame(
+        &mut first.IntersectControl.IntersectStamp.frame,
+        pointer.cast(),
+    );
     let (fields, _) = snapshot(directory);
     for name in [
         "current.frame",
@@ -197,25 +202,25 @@ pub(super) fn frame_fields(
     assert_eq!(fields["elements.1.current.frame.owner"], "none");
     assert_eq!(fields["elements.2.current.farray.index"], "0");
     observation::assign_frame(
-        &mut first.current.frame,
+        &mut first.current.image.frame,
         uqm_rust::engine::battle::frames::FrameSelection::ABSENT,
     );
     observation::assign_set(
-        &mut first.current.frames,
+        &mut first.current.image.frames,
         uqm_rust::engine::battle::frames::Frames::ABSENT,
         None,
     );
     observation::assign_frame(
-        &mut first.next.frame,
+        &mut first.next.image.frame,
         uqm_rust::engine::battle::frames::FrameSelection::ABSENT,
     );
     observation::assign_set(
-        &mut first.next.frames,
+        &mut first.next.image.frames,
         uqm_rust::engine::battle::frames::Frames::ABSENT,
         None,
     );
     observation::assign_frame(
-        &mut first.intersect_control.intersect_stamp.frame,
+        &mut first.IntersectControl.IntersectStamp.frame,
         ptr::null_mut(),
     );
     // SAFETY: both fixture owners retain their slots throughout this read.
@@ -229,9 +234,9 @@ pub(super) fn fighters_without_journal(directory: &Path) {
     let mut ship = unsafe { battle::PoolShip::new(0) };
     ship.descriptor = Some(Box::new(RaceDescriptor::EMPTY));
     ship.ship_facing = 31;
-    element.state_flags = ElementFlags::PLAYER_SHIP;
-    element.player_nr = 0;
-    element.crew_or_hp = 19;
+    element.state_flags = ElementFlags::PLAYER_SHIP.bits();
+    element.playerNr = 0;
+    element.hits = 19;
     element.current.location.x = -9;
     element.parent = uqm_rust::engine::battle::Parent::Ship(ship.ship_id);
     element.preprocess_func = Some(uqm_rust::engine::battle::ElementHook::Native(
@@ -258,7 +263,7 @@ pub(super) fn fighters_without_journal(directory: &Path) {
     assert!(!directory.join("parity.fields").exists());
     let element = &mut element;
     for side in [-1, 2, i16::MAX] {
-        element.player_nr = side;
+        element.playerNr = side;
         element.parent = uqm_rust::engine::battle::Parent::Ship(ship.ship_id);
         let snapshot = BattleSnapshot::live();
         assert!(snapshot.player.is_none());
@@ -281,7 +286,7 @@ pub(super) unsafe fn attach_elements(elements: &mut [ElementRecord]) {
 
 pub(super) struct ElementRecord {
     id: uqm_rust::engine::battle::ElementId,
-    pointer: *mut Element,
+    pointer: *mut uqm_rust::engine::battle::record::ElementRecord,
     primitive: u16,
 }
 impl ElementRecord {
@@ -292,10 +297,14 @@ impl ElementRecord {
                 let id = cx
                     .alloc_element()
                     .unwrap_or_else(|| panic!("fixture capacity"));
-                let pointer = cx.elements().raw(id).cast::<Element>();
-                let primitive = (*pointer).prim_index;
-                pointer.write(Element::new());
-                (*pointer).prim_index = primitive;
+                let pointer = cx
+                    .elements()
+                    .raw(id)
+                    .cast::<uqm_rust::engine::battle::record::ElementRecord>();
+                let primitive = (*pointer).PrimIndex;
+                pointer.write(uqm_rust::engine::battle::record::ElementRecord::default());
+                (*pointer).playerNr = -1;
+                (*pointer).PrimIndex = primitive;
                 Self {
                     id,
                     pointer,
@@ -304,19 +313,19 @@ impl ElementRecord {
             })
         }
     }
-    pub(super) fn pointer(&self) -> *mut Element {
+    pub(super) fn pointer(&self) -> *mut uqm_rust::engine::battle::record::ElementRecord {
         self.pointer
     }
 }
 impl std::ops::Deref for ElementRecord {
-    type Target = Element;
-    fn deref(&self) -> &Element {
+    type Target = uqm_rust::engine::battle::record::ElementRecord;
+    fn deref(&self) -> &Self::Target {
         // SAFETY: this fixture owner retains its slot, and the projection ends before a callback.
         unsafe { &*self.pointer }
     }
 }
 impl std::ops::DerefMut for ElementRecord {
-    fn deref_mut(&mut self) -> &mut Element {
+    fn deref_mut(&mut self) -> &mut Self::Target {
         // SAFETY: fixture edits and context callbacks do not overlap.
         unsafe { &mut *self.pointer }
     }
@@ -327,7 +336,7 @@ impl Drop for ElementRecord {
         unsafe {
             uqm_rust::app::bridge::enter(|cx| {
                 if cx.elements().contains(self.id) {
-                    (*self.pointer).prim_index = self.primitive;
+                    (*self.pointer).PrimIndex = self.primitive;
                     if cx.elements().linked(self.id) {
                         cx.unlink(self.id);
                     }

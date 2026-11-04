@@ -41,8 +41,8 @@ fn velocity_fields(v: &VELOCITY_DESC) -> [i32; 9] {
 }
 
 unsafe fn velocity(e: *mut ElementRecord) -> (SIZE, SIZE) {
-    let (mut x, mut y) = (0, 0);
-    GetCurrentVelocityComponents(&raw mut (*e).velocity, &mut x, &mut y);
+    let (velocity_x, velocity_y) = ((*e).velocity).get_current_components();
+    let (x, y) = (velocity_x as i16, velocity_y as i16);
     (x, y)
 }
 
@@ -279,7 +279,7 @@ fn cone_initialization_fixes_intersection_and_does_not_inherit_velocity() {
                 Ship::with_frames(&_battle, SPECIES_ID_UMGAH_ID, 1, [16, 16, 48], [4, 4]);
             ship.ship_mut().ship_facing = 5;
             (*ship.ptr()).next.location = POINT { x: -9, y: 13 };
-            SetVelocityComponents(&raw mut (*ship.ptr()).velocity, 321, -654);
+            ((*ship.ptr()).velocity).set_components(321, -654);
             let h = with_rng(8, 0, || fire(&mut ship));
             assert!(!h.is_null());
             let cone = battle::element(h);
@@ -384,7 +384,7 @@ fn appearance_and_uninit_free_only_the_instance_custom_data_and_are_repeatable()
             let h = fire(&mut ship);
             battle_context::dispose(h);
             assert!(!previous_facing(&mut ship).is_none());
-            SetVelocityComponents(&raw mut (*ship.ptr()).velocity, 123, -456);
+            ((*ship.ptr()).velocity).set_components(123, -456);
             let before = velocity_fields(&(*ship.ptr()).velocity);
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
             ship.ship_mut().special_counter = 9;
@@ -582,10 +582,11 @@ fn retropropulsion_adds_the_exact_reverse_vector_for_every_facing_then_stops_all
                     | WEAPON) as u16;
                 ship.ship_mut().special_counter = 17;
                 ship.descriptor_mut().ship_info.energy_level = 30;
-                SetVelocityComponents(&raw mut (*ship.ptr()).velocity, 123, -456);
+                ((*ship.ptr()).velocity).set_components(123, -456);
                 let mut expected = (*ship.ptr()).velocity;
                 let a = facing_to_angle(i32::from(facing)) + 32;
-                DeltaVelocityComponents(&mut expected, cosine(a, 160 * 32), sine(a, 160 * 32));
+                (expected)
+                    .delta_components(i32::from(cosine(a, 160 * 32)), i32::from(sine(a, 160 * 32)));
                 observation::enable();
                 observation::drain();
                 with_rng(8, 0, || ship.preprocess());
@@ -640,7 +641,7 @@ fn retropropulsion_gates_on_appearance_thrust_wait_key_and_energy() {
                 ship.ship_mut().special_counter = 0;
                 ship.ship_mut().energy_counter = 19;
                 ship.descriptor_mut().ship_info.energy_level = energy;
-                SetVelocityComponents(&raw mut (*ship.ptr()).velocity, 333, -555);
+                ((*ship.ptr()).velocity).set_components(333, -555);
                 let before = velocity_fields(&(*ship.ptr()).velocity);
                 observation::enable();
                 observation::drain();

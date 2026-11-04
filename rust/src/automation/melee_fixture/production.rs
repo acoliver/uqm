@@ -134,7 +134,7 @@ fn drive(
                     }
                     Effect::Reset => {
                         crate::mainloop::input_frame::drain_committed_draws();
-                        crate::battle::tactrans_native::ResetWinnerStarShip();
+                        crate::battle::tactrans_native::reset_winner(cx.kernel);
                         cx.b.counters = [7, 7];
                         apply(cx, Effect::Remove(elements.clone()))?;
                         for &owner in &ships {

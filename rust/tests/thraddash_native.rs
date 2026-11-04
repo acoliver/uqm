@@ -50,8 +50,8 @@ fn velocity_fields(v: &VELOCITY_DESC) -> [i32; 9] {
 }
 
 unsafe fn velocity(e: *mut ElementRecord) -> (SIZE, SIZE) {
-    let (mut x, mut y) = (0, 0);
-    GetCurrentVelocityComponents(&raw mut (*e).velocity, &mut x, &mut y);
+    let (velocity_x, velocity_y) = ((*e).velocity).get_current_components();
+    let (x, y) = (velocity_x as i16, velocity_y as i16);
     (x, y)
 }
 
@@ -196,7 +196,7 @@ fn horn_uses_next_location_exact_facing_speed_and_offsets_without_inheriting_vel
         unsafe {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_THRADDASH_ID, 1, [16, 16, 10], [4, 4]);
-            SetVelocityComponents(&raw mut (*ship.ptr()).velocity, 1000, -1000);
+            ((*ship.ptr()).velocity).set_components(1000, -1000);
             (*ship.ptr()).next.location = POINT {
                 x: i16::MAX - 5,
                 y: i16::MIN + 5,
@@ -430,7 +430,7 @@ fn no_key_and_exhausted_energy_leave_velocity_and_queue_alone() {
         unsafe {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_THRADDASH_ID, 0, [16, 16, 10], [4, 4]);
-            SetVelocityComponents(&raw mut (*ship.ptr()).velocity, 123, -456);
+            ((*ship.ptr()).velocity).set_components(123, -456);
             let v = velocity_fields(&(*ship.ptr()).velocity);
             observation::enable();
             for (current, old, expected) in [
@@ -485,7 +485,7 @@ fn napalm_materializes_without_decaying_and_initializes_the_intersection_from_ne
             (*e).next.image.frame = next_frames.selection(7);
             (*e).current.location = POINT { x: -9, y: 13 };
             (*e).next.location = POINT { x: 42, y: -5 };
-            SetVelocityComponents(&raw mut (*e).velocity, 1001, -4003);
+            ((*e).velocity).set_components(1001, -4003);
             (*e).velocity.error.width = 19;
             let callback = (*e)
                 .preprocess_func
@@ -524,7 +524,7 @@ fn napalm_decay_wait_and_loop_boundary_match_c_including_last_frame_wrap() {
             hooks::invoke_element_pointer(callback, e);
             (*e).state_flags &= !(APPEARING as u16);
             for wait in (0..5).rev() {
-                SetVelocityComponents(&raw mut (*e).velocity, 77, 99);
+                ((*e).velocity).set_components(77, 99);
                 with_rng(3, 0, || hooks::invoke_element_pointer(callback, e));
                 assert_eq!((*e).turn, wait);
                 assert_eq!((*e).next.image.frame.raw(), ship.raw_frame(2, 9));
@@ -573,7 +573,7 @@ fn intelligence_classifies_stationary_threshold_and_turn_limit_without_rng() {
                 (0, -513, 9, MOVEMENT_STATE_PURSUE),
                 (i16::MAX, i16::MIN, 8, MOVEMENT_STATE_ENTICE),
             ] {
-                SetVelocityComponents(&raw mut (*enemy.ptr()).velocity, x, y);
+                ((*enemy.ptr()).velocity).set_components(i32::from(x), i32::from(y));
                 let mut c = concerns();
                 c[0].ObjectPtr = enemy.ptr();
                 c[0].which_turn = turn;
@@ -687,7 +687,7 @@ fn entice_ship_geometry_uses_next_locations_and_size_truncation() {
                 Ship::with_frames(&_battle, SPECIES_ID_THRADDASH_ID, 0, [16, 16, 10], [4, 4]);
             let enemy =
                 Ship::with_frames(&_battle, SPECIES_ID_THRADDASH_ID, 1, [16, 16, 10], [4, 4]);
-            SetVelocityComponents(&raw mut (*enemy.ptr()).velocity, 513, 0);
+            ((*enemy.ptr()).velocity).set_components(513, 0);
             for (ship_y, enemy_y, boost) in [
                 (4000, 4400, true),
                 (4000, 3600, false),

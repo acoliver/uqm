@@ -107,7 +107,7 @@ pub(crate) mod engine {
                 sound as u16,
             ),
             0,
-            NotPositional(),
+            NON_POSITIONAL,
             ptr::null_mut(),
             GAME_SOUND_PRIORITY as u8,
         );
@@ -132,22 +132,15 @@ pub(crate) mod engine {
         }
     }
 
-    /// # Safety
-    /// Must run on the game thread like the positional variant.
-    #[no_mangle]
-    pub unsafe extern "C" fn NotPositional() -> SoundPosition {
-        SoundPosition {
-            positional: 0,
-            x: 0,
-            y: 0,
-        }
-    }
+    pub const NON_POSITIONAL: SoundPosition = SoundPosition {
+        positional: 0,
+        x: 0,
+        y: 0,
+    };
 
-    /// # Safety
-    /// Audio positional objects must still be live game elements.
-    pub(crate) unsafe fn update_positions(cx: &mut Cx<'_>) {
+    pub(crate) fn update_positions(cx: &mut Cx<'_>) {
         for i in FIRST_SFX_CHANNEL..=LAST_SFX_CHANNEL {
-            if ChannelPlaying(i) == 0 {
+            if crate::sound::heart_ffi::channel_playing(i) == 0 {
                 continue;
             }
             if let Some(object) = cx.elements().sound_source(get_positional_object(i)) {
@@ -182,11 +175,7 @@ pub(crate) mod engine {
         }
     }
 
-    /// # Safety
-    /// Called on the game thread before releasing an element's storage.
-    pub(crate) unsafe fn remove_sounds(object: Option<ElementId>) {
-        let lease = KernelOwner::current();
-        let kernel = &mut **lease;
+    pub(crate) fn remove_sounds(kernel: &mut crate::engine::Kernel, object: Option<ElementId>) {
         for i in FIRST_SFX_CHANNEL..=LAST_SFX_CHANNEL {
             if kernel.element_sound_source(get_positional_object(i)) == object {
                 set_positional_object(i, 0);
@@ -199,7 +188,7 @@ pub(crate) mod engine {
 #[cfg(not(test))]
 pub use crate::battle::context_access::sound_legacy::*;
 #[cfg(not(test))]
-pub use engine::{NotPositional, PlayMenuSound};
+pub use engine::{PlayMenuSound, NON_POSITIONAL};
 
 fn encode_object(object: Option<ElementId>) -> usize {
     object.map_or(0, ElementId::sound_token)

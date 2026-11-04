@@ -9,9 +9,6 @@ use super::battle_types::{arctan, cosine, sine};
 // ---------------------------------------------------------------------------
 
 /// VELOCITY_DESC — Bresenham-style fixed-point velocity system
-/// Matches C's VELOCITY_DESC from velocity.h exactly
-/// #[repr(C)] ensures binary compatibility with C code
-#[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VelocityDesc {
     /// Travel angle (0-63, FULL_CIRCLE = 64)
@@ -261,69 +258,9 @@ pub const fn world_to_velocity(l: i32) -> i32 {
     l << VELOCITY_SHIFT
 }
 
-// ---------------------------------------------------------------------------
-// C FFI Exports — #[no_mangle] functions matching C velocity.c signatures
-// These replace velocity.c when velocity.c is removed from Makeinfo.
-// ---------------------------------------------------------------------------
-
-/// C: void GetCurrentVelocityComponents(VELOCITY_DESC *, SIZE *, SIZE *)
-#[no_mangle]
-/// # Safety
-/// `velocityptr` must point to an initialized VelocityDesc; `pdx` and
-/// `pdy` must be writable, aligned i16 pointers that do not alias the velocity.
-pub unsafe extern "C" fn GetCurrentVelocityComponents(
-    velocityptr: *mut VelocityDesc,
-    pdx: *mut i16,
-    pdy: *mut i16,
-) {
-    let vel = unsafe { &*velocityptr };
-    let (dx, dy) = vel.get_current_components();
-    unsafe {
-        *pdx = dx as i16;
-        *pdy = dy as i16;
-    }
-}
-
-/// C: void GetNextVelocityComponents(VELOCITY_DESC *, SIZE *, SIZE *, COUNT)
-#[no_mangle]
-/// # Safety
-/// `velocityptr` must point to an exclusively owned VelocityDesc; `pdx`
-/// and `pdy` must be writable, aligned i16 pointers disjoint from the velocity.
-pub unsafe extern "C" fn GetNextVelocityComponents(
-    velocityptr: *mut VelocityDesc,
-    pdx: *mut i16,
-    pdy: *mut i16,
-    num_frames: u16,
-) {
-    let vel = unsafe { &mut *velocityptr };
-    let (dx, dy) = vel.get_next_components(num_frames);
-    unsafe {
-        *pdx = dx as i16;
-        *pdy = dy as i16;
-    }
-}
-
 /// Set velocity from a world-space magnitude and a ship facing.
 pub fn set_velocity_vector(velocity: &mut VelocityDesc, magnitude: i16, facing: u16) {
     velocity.set_vector(i32::from(magnitude), facing);
-}
-
-/// C: void SetVelocityComponents(VELOCITY_DESC *, SIZE dx, SIZE dy)
-#[no_mangle]
-/// # Safety
-/// `velocityptr` must point to an initialized, exclusively owned VelocityDesc.
-pub unsafe extern "C" fn SetVelocityComponents(velocityptr: *mut VelocityDesc, dx: i16, dy: i16) {
-    let vel = unsafe { &mut *velocityptr };
-    vel.set_components(dx as i32, dy as i32);
-}
-
-/// C: void DeltaVelocityComponents(VELOCITY_DESC *, SIZE dx, SIZE dy)
-#[no_mangle]
-/// # Safety
-/// `velocityptr` must point to an initialized, exclusively owned VelocityDesc.
-pub unsafe extern "C" fn DeltaVelocityComponents(velocityptr: *mut VelocityDesc, dx: i16, dy: i16) {
-    let vel = unsafe { &mut *velocityptr };
-    vel.delta_components(dx as i32, dy as i32);
 }
 
 // ---------------------------------------------------------------------------
