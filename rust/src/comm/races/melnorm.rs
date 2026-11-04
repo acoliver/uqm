@@ -923,8 +923,14 @@ pub(crate) mod live {
     use crate::comm::races::script::live::LiveScript;
     static mut SESSION: Session = Session::new();
 
-    fn run(f: impl FnOnce(&mut Dialogue<'_, LiveScript<Handler>>)) {
-        let mut api = LiveScript { callback };
+    fn run(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>),
+    ) {
+        let mut api = LiveScript {
+            callback,
+            cx: std::cell::RefCell::new(cx),
+        };
         unsafe {
             f(&mut Dialogue {
                 api: &mut api,
@@ -932,72 +938,72 @@ pub(crate) mod live {
             });
         }
     }
-    fn exit_conversation(r: u32) {
-        run(|s| {
+    fn exit_conversation(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::ExitConversation,
                 u16::try_from(r).expect("response exceeds COUNT"),
             )
         });
     }
-    fn do_rescue(r: u32) {
-        run(|s| {
+    fn do_rescue(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::DoRescue,
                 u16::try_from(r).expect("response exceeds COUNT"),
             )
         });
     }
-    fn do_buy(r: u32) {
-        run(|s| {
+    fn do_buy(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::DoBuy,
                 u16::try_from(r).expect("response exceeds COUNT"),
             )
         });
     }
-    fn do_sell(r: u32) {
-        run(|s| {
+    fn do_sell(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::DoSell,
                 u16::try_from(r).expect("response exceeds COUNT"),
             )
         });
     }
-    fn nature_of_conversation(r: u32) {
-        run(|s| {
+    fn nature_of_conversation(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::NatureOfConversation,
                 u16::try_from(r).expect("response exceeds COUNT"),
             )
         });
     }
-    fn do_bluster(r: u32) {
-        run(|s| {
+    fn do_bluster(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::DoBluster,
                 u16::try_from(r).expect("response exceeds COUNT"),
             )
         });
     }
-    fn do_first_meeting(r: u32) {
-        run(|s| {
+    fn do_first_meeting(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::DoFirstMeeting,
                 u16::try_from(r).expect("response exceeds COUNT"),
             )
         });
     }
-    fn do_melnorme_miffed(r: u32) {
-        run(|s| {
+    fn do_melnorme_miffed(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::DoMelnormeMiffed,
                 u16::try_from(r).expect("response exceeds COUNT"),
             )
         });
     }
-    fn do_melnorme_pissed(r: u32) {
-        run(|s| {
+    fn do_melnorme_pissed(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::DoMelnormePissed,
                 u16::try_from(r).expect("response exceeds COUNT"),
@@ -1018,48 +1024,47 @@ pub(crate) mod live {
             Handler::DoMelnormePissed => do_melnorme_pissed,
         }
     }
-    pub(super) fn intro() {
-        run(|s| s.intro());
+    pub(super) fn intro(cx: &mut crate::engine::battle::Cx<'_>) {
+        run(cx, |s| s.intro());
     }
-    pub(super) fn post() {
-        run(|s| s.post_melnorme_enc());
+    pub(super) fn post(cx: &mut crate::engine::battle::Cx<'_>) {
+        run(cx, |s| s.post_melnorme_enc());
     }
-    pub(super) fn uninit() -> u16 {
+    pub(super) fn uninit(_cx: &mut crate::engine::battle::Cx<'_>) -> u16 {
         0
     }
     /// Initialize the encounter on the game thread.
     ///
     /// # Safety
     /// The caller must copy the descriptor before another encounter initializes.
-    #[no_mangle]
-    pub unsafe extern "C" fn init_melnorme_comm() -> *mut CLocData {
+    pub unsafe fn init_melnorme_comm(cx: &mut crate::engine::battle::Cx<'_>) -> *mut CLocData {
         static mut DESC: Option<CLocData> = None;
         let desc = (&mut *std::ptr::addr_of_mut!(DESC)).get_or_insert_with(descriptor);
-        run(|s| s.initialize(desc));
+        run(cx, |s| s.initialize(desc));
         desc
     }
 }
 pub struct MelnormDialogue;
 impl super::RaceDialogue for MelnormDialogue {
-    fn init(&self) -> CommData {
+    fn init(&self, _cx: &mut crate::engine::battle::Cx<'_>) -> CommData {
         #[cfg(not(test))]
         {
-            unsafe { as_comm_data(&*live::init_melnorme_comm()) }
+            unsafe { as_comm_data(&*live::init_melnorme_comm(_cx)) }
         }
         #[cfg(test)]
         {
             as_comm_data(&descriptor())
         }
     }
-    fn intro(&self) {
+    fn intro(&self, _cx: &mut crate::engine::battle::Cx<'_>) {
         #[cfg(not(test))]
-        live::intro();
+        live::intro(_cx);
     }
-    fn post_encounter(&self) {
+    fn post_encounter(&self, _cx: &mut crate::engine::battle::Cx<'_>) {
         #[cfg(not(test))]
-        live::post();
+        live::post(_cx);
     }
-    fn uninit(&self) -> u32 {
+    fn uninit(&self, _cx: &mut crate::engine::battle::Cx<'_>) -> u32 {
         0
     }
 }

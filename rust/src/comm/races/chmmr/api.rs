@@ -1,7 +1,5 @@
 use super::Handler;
 use crate::comm::races::alliance::AllianceApi;
-#[cfg(not(test))]
-use crate::engine::WorldData;
 use crate::planets::universe_units::{universe_to_logx, universe_to_logy};
 use crate::starbase::sis_modules::{ModuleType, EMPTY_MODULE_SLOT, FUEL_RESERVE};
 
@@ -79,18 +77,20 @@ fn refit(glob: &mut crate::engine::WorldData, starbase: bool) {
     );
 }
 #[cfg(not(test))]
-impl ChmmrApi for super::super::script::live::LiveScript<Handler> {
+impl ChmmrApi for super::super::script::live::LiveScript<'_, '_, Handler> {
     fn refit(&mut self) {
         use crate::comm::races::script::ScriptApi;
         let starbase = self.get("STARBASE_AVAILABLE") != 0;
 
-        unsafe {
-            refit(&mut **WorldData::current(), starbase);
+        {
+            refit(&mut self.cx.borrow_mut().world.data, starbase);
         }
     }
     fn intro_mode(&mut self, mode: i32, duration: i32) {
-        use crate::comm::comm_abi::SetCommIntroMode;
-        SetCommIntroMode(mode as u32, duration as u32);
+        self.cx.borrow_mut().with_legacy(|| {
+            use crate::comm::comm_abi::SetCommIntroMode;
+            SetCommIntroMode(mode as u32, duration as u32);
+        })
     }
 }
 #[cfg(test)]

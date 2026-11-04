@@ -11,7 +11,7 @@ use super::gfx::{
 
 use crate::comm::locdata::{CColor, CPoint, CRect, CStamp};
 use crate::comm::sis_graphics::CText;
-use crate::engine::battle::link_queue::{LinkId, LinkQueue};
+use crate::engine::battle::link_queue::LinkQueue;
 use crate::engine::world::queues::{Fleet, Fragment};
 use crate::mainloop::restart_menu::c_extern as base;
 

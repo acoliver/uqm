@@ -7,11 +7,11 @@ pub(super) trait SyreenApi: AllianceApi<Handler> {
     fn using_speech(&self) -> bool;
 }
 #[cfg(not(test))]
-impl SyreenApi for super::super::script::live::LiveScript<Handler> {
+impl SyreenApi for super::super::script::live::LiveScript<'_, '_, Handler> {
     fn using_speech(&self) -> bool {
-        {
-            Kernel::current().read(|owner| owner.using_speech) != 0
-        }
+        self.cx
+            .borrow_mut()
+            .with_legacy(|| Kernel::current().read(|owner| owner.using_speech) != 0)
     }
 }
 #[cfg(test)]

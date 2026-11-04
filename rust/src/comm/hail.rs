@@ -101,7 +101,7 @@ pub(super) mod c_bridge {
     }
 
     impl HailResources {
-        pub(super) unsafe fn finish(self, activity: impl FnOnce() -> u16) {
+        pub(super) unsafe fn finish(self, cx: &mut crate::engine::battle::Cx<'_>) {
             let Self {
                 space_ctx,
                 anim_ctx,
@@ -114,86 +114,90 @@ pub(super) mod c_bridge {
                 text_cache_ctx,
                 text_cache_frame,
             } = self;
-            // AnimContext teardown (C lines 1126–1128)
-            SetContext(space_ctx.cast());
-            DestroyContext(anim_ctx);
+            cx.with_legacy(|| {
+                // AnimContext teardown (C lines 1126–1128)
+                SetContext(space_ctx.cast());
+                DestroyContext(anim_ctx);
 
-            // FlushColorXForms, ClearSubtitles (C lines 1130–1131)
-            FlushColorXForms();
-            crate::comm::ffi::rust_clear_subtitles();
+                // FlushColorXForms, ClearSubtitles (C lines 1130–1131)
+                FlushColorXForms();
+                crate::comm::ffi::rust_clear_subtitles();
 
-            // Stop audio, fade music (C lines 1133–1136)
-            stop_music();
-            StopSound();
-            StopTrack();
-            let fade_end = FadeMusic(NORMAL_VOLUME as u8, 0);
-            SleepThreadUntil(fade_end.wrapping_add(840 / 60));
+                // Stop audio, fade music (C lines 1133–1136)
+                stop_music();
+                StopSound();
+                StopTrack();
+                let fade_end = FadeMusic(NORMAL_VOLUME as u8, 0);
+                SleepThreadUntil(fade_end.wrapping_add(840 / 60));
 
-            // ----------------------------------------------------------------
-            // Step 16: Call post/uninit encounter funcs
-            // ----------------------------------------------------------------
-            let activity = activity();
+                // ----------------------------------------------------------------
+                // Step 16: Call post/uninit encounter funcs
+                // ----------------------------------------------------------------
+            });
+            let activity = cx.world.activity();
             if (activity & 0x4000) == 0 && (activity & 0x1000) == 0 {
                 if let Some(callback) = CommData.post_encounter_func {
-                    callback();
+                    callback(cx);
                 }
             }
             if let Some(callback) = CommData.uninit_encounter_func {
-                callback();
+                callback(cx);
             }
 
             // ----------------------------------------------------------------
             // Step 17: Restore context and font
             // ----------------------------------------------------------------
-            SetContext(space_ctx.cast());
-            SetContextFont(old_font);
+            cx.with_legacy(|| {
+                SetContext(space_ctx.cast());
+                SetContextFont(old_font);
 
-            // ----------------------------------------------------------------
-            // Step 18: Destroy all resources in exact C order
-            // Captured resources: Release first, then Destroy the raw handle.
-            // Non-captured resources: Destroy directly.
-            // Order: ConversationPhrases → AlienSong → AlienColorMap →
-            //        AlienFont → AlienFrame → TextCacheContext → TextCacheFrame
-            //        → PlayerFont
-            // ----------------------------------------------------------------
+                // ----------------------------------------------------------------
+                // Step 18: Destroy all resources in exact C order
+                // Captured resources: Release first, then Destroy the raw handle.
+                // Non-captured resources: Destroy directly.
+                // Order: ConversationPhrases → AlienSong → AlienColorMap →
+                //        AlienFont → AlienFrame → TextCacheContext → TextCacheFrame
+                //        → PlayerFont
+                // ----------------------------------------------------------------
 
-            // c_Destroy* for captured resources (Drawable, ColorMap, StringTable)
-            // already do Release+Destroy internally.  Non-captured resources
-            // (Font, Music) go straight to Destroy.
+                // c_Destroy* for captured resources (Drawable, ColorMap, StringTable)
+                // already do Release+Destroy internally.  Non-captured resources
+                // (Font, Music) go straight to Destroy.
 
-            // ConversationPhrases — captured; Release to get back STRING_TABLE, then Destroy
-            DestroyStringTable(ReleaseStringTable(phrases));
+                // ConversationPhrases — captured; Release to get back STRING_TABLE, then Destroy
+                DestroyStringTable(ReleaseStringTable(phrases));
 
-            // AlienSong — not captured, direct Destroy
-            DestroyMusic(alien_song);
+                // AlienSong — not captured, direct Destroy
+                DestroyMusic(alien_song);
 
-            // AlienColorMap — captured; release before destroying the table
-            DestroyStringTable(ReleaseStringTable(alien_cmap));
+                // AlienColorMap — captured; release before destroying the table
+                DestroyStringTable(ReleaseStringTable(alien_cmap));
 
-            // AlienFont — not captured, direct Destroy
-            DestroyFont(alien_font.cast());
+                // AlienFont — not captured, direct Destroy
+                DestroyFont(alien_font.cast());
 
-            // AlienFrame — captured; ReleaseDrawable to get back raw handle, then DestroyDrawable
-            DestroyDrawable(ReleaseDrawable(alien_frame));
+                // AlienFrame — captured; ReleaseDrawable to get back raw handle, then DestroyDrawable
+                DestroyDrawable(ReleaseDrawable(alien_frame));
 
-            // TextCacheContext — context, direct destroy
-            DestroyContext(text_cache_ctx);
+                // TextCacheContext — context, direct destroy
+                DestroyContext(text_cache_ctx);
 
-            // TextCacheFrame — captured; ReleaseDrawable to get back raw handle, then DestroyDrawable
-            DestroyDrawable(ReleaseDrawable(text_cache_frame));
+                // TextCacheFrame — captured; ReleaseDrawable to get back raw handle, then DestroyDrawable
+                DestroyDrawable(ReleaseDrawable(text_cache_frame));
 
-            // PlayerFont — not captured; queued response/feedback glyph draws may
-            // still read it, so the release drains the draw queue first.
-            CONVERSATION_PLAYER_FONT.release(&mut CFontRelease);
+                // PlayerFont — not captured; queued response/feedback glyph draws may
+                // still read it, so the release drains the draw queue first.
+                CONVERSATION_PLAYER_FONT.release(&mut CFontRelease);
 
-            // ----------------------------------------------------------------
-            // Steps 19–20: Clear CommData fields and pCurInputState
-            // ----------------------------------------------------------------
-            unsafe { CommData.conversation_phrases_res = std::ptr::null() };
-            unsafe { CommData.conversation_phrases = std::ptr::null_mut() };
-            // Clear Rust-side comm_data (resources already destroyed above)
-            crate::comm::state::COMM_STATE.write().clear_comm_data();
-            // pCurInputState was already cleared by c_RunEncounterDoInput.
+                // ----------------------------------------------------------------
+                // Steps 19–20: Clear CommData fields and pCurInputState
+                // ----------------------------------------------------------------
+                unsafe { CommData.conversation_phrases_res = std::ptr::null() };
+                unsafe { CommData.conversation_phrases = std::ptr::null_mut() };
+                // Clear Rust-side comm_data (resources already destroyed above)
+                crate::comm::state::COMM_STATE.write().clear_comm_data();
+                // pCurInputState was already cleared by c_RunEncounterDoInput.
+            });
         }
     }
 }
@@ -498,10 +502,6 @@ pub unsafe fn hail_alien(cx: &mut Cx<'_>, io: &mut Io<'_>) {
             // ----------------------------------------------------------------
             // LastActivity |= CHECK_LOAD (0x1000)
             (**Kernel::current()).last_activity |= 0x1000;
-            if let Some(callback) = c_bridge::CommData.init_encounter_func {
-                callback();
-                super::ffi::observe_responses(io);
-            }
 
             c_bridge::HailResources {
                 space_ctx,
@@ -516,6 +516,11 @@ pub unsafe fn hail_alien(cx: &mut Cx<'_>, io: &mut Io<'_>) {
                 text_cache_frame,
             }
         });
+
+        if let Some(callback) = c_bridge::CommData.init_encounter_func {
+            callback(cx);
+            super::ffi::observe_responses(io);
+        }
 
         // Run the encounter loop: DoInput with rust_do_communication as InputFunc.
         // Allocates ENCOUNTER_STATE, wires InputFunc, registers pCurInputState,
@@ -551,9 +556,7 @@ pub unsafe fn hail_alien(cx: &mut Cx<'_>, io: &mut Io<'_>) {
         // FlushColorXForms, ClearSubtitles, stop audio) is performed here.
         // ----------------------------------------------------------------
 
-        cx.with_legacy(|| {
-            resources.finish(|| crate::mainloop::ffi::get_current_activity().0);
-        });
+        resources.finish(cx);
         let campaign = crate::engine::observe::CampaignView::capture(cx.world);
         cx.with_legacy(|| {
             io.observer

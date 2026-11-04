@@ -128,28 +128,37 @@ pub(crate) mod live {
     use super::super::script::live::LiveScript;
     use super::*;
 
-    fn run(f: impl FnOnce(&mut Dialogue<'_, LiveScript<Handler>>)) {
-        let mut api = LiveScript { callback };
+    fn run(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>),
+    ) {
+        let mut api = LiveScript {
+            callback,
+            cx: std::cell::RefCell::new(cx),
+        };
         f(&mut Dialogue { api: &mut api });
     }
 
-    fn combat(response: u32) {
-        run(|dialogue| dialogue.handle(Handler::Combat, response as i32));
+    fn combat(cx: &mut crate::engine::battle::Cx<'_>, response: u32) {
+        run(cx, |dialogue| {
+            dialogue.handle(Handler::Combat, response as i32)
+        });
     }
 
     fn callback(_: Handler) -> crate::comm::response::ResponseFunc {
         combat
     }
 
-    pub(super) fn intro() {
-        run(|dialogue| dialogue.intro());
+    pub(super) fn intro(cx: &mut crate::engine::battle::Cx<'_>) {
+        run(cx, |dialogue| dialogue.intro());
     }
-    pub(super) fn post() {}
-    pub(super) fn uninit() -> u16 {
+    pub(super) fn post(_cx: &mut crate::engine::battle::Cx<'_>) {}
+    pub(super) fn uninit(_cx: &mut crate::engine::battle::Cx<'_>) -> u16 {
         0
     }
-    #[no_mangle]
-    pub unsafe extern "C" fn init_slyland_comm() -> *mut crate::comm::locdata::CLocData {
+    pub unsafe fn init_slyland_comm(
+        cx: &mut crate::engine::battle::Cx<'_>,
+    ) -> *mut crate::comm::locdata::CLocData {
         static mut DESC: Option<crate::comm::locdata::CLocData> = None;
         extern "C" {
             static mut ScreenWidth: i32;
@@ -157,7 +166,7 @@ pub(crate) mod live {
         let d = (&mut *std::ptr::addr_of_mut!(DESC)).get_or_insert_with(|| descriptor(ScreenWidth));
         d.alien_text_baseline.x = (1 + ((ScreenWidth - 80) >> 1)) as i16;
         d.alien_text_width = (ScreenWidth - 80 - 16) as u16;
-        run(|s| s.initialize());
+        run(cx, |s| s.initialize());
         d
     }
 }
@@ -170,10 +179,10 @@ mod branch_tests;
 pub struct SlylandDialogue;
 
 impl super::RaceDialogue for SlylandDialogue {
-    fn init(&self) -> CommData {
+    fn init(&self, _cx: &mut crate::engine::battle::Cx<'_>) -> CommData {
         #[cfg(not(test))]
         {
-            unsafe { as_comm_data(&*live::init_slyland_comm()) }
+            unsafe { as_comm_data(&*live::init_slyland_comm(_cx)) }
         }
         #[cfg(test)]
         {
@@ -181,14 +190,14 @@ impl super::RaceDialogue for SlylandDialogue {
         }
     }
 
-    fn intro(&self) {
+    fn intro(&self, _cx: &mut crate::engine::battle::Cx<'_>) {
         #[cfg(not(test))]
-        live::intro();
+        live::intro(_cx);
     }
 
-    fn post_encounter(&self) {}
+    fn post_encounter(&self, _cx: &mut crate::engine::battle::Cx<'_>) {}
 
-    fn uninit(&self) -> u32 {
+    fn uninit(&self, _cx: &mut crate::engine::battle::Cx<'_>) -> u32 {
         0
     }
 }

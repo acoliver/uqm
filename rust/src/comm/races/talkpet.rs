@@ -628,68 +628,74 @@ fn descriptor() -> CLocData {
 pub(crate) mod live {
     use super::super::script::live::LiveScript;
     use super::*;
-    fn run(f: impl FnOnce(&mut Dialogue<'_, LiveScript<Handler>>)) {
-        let mut api = LiveScript { callback };
+    fn run(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>),
+    ) {
+        let mut api = LiveScript {
+            callback,
+            cx: std::cell::RefCell::new(cx),
+        };
         f(&mut Dialogue { api: &mut api });
     }
-    fn exit_conversation(r: u32) {
-        run(|s| {
+    fn exit_conversation(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::ExitConversation,
                 i32::try_from(r).expect("invalid response"),
             )
         });
     }
-    fn mind_fuck_urquan(r: u32) {
-        run(|s| {
+    fn mind_fuck_urquan(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::MindFuckUrquan,
                 i32::try_from(r).expect("invalid response"),
             )
         });
     }
-    fn mind_control(r: u32) {
-        run(|s| {
+    fn mind_control(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::MindControl,
                 i32::try_from(r).expect("invalid response"),
             )
         });
     }
-    fn pet_info(r: u32) {
-        run(|s| {
+    fn pet_info(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::PetInfo,
                 i32::try_from(r).expect("invalid response"),
             )
         });
     }
-    fn pet_device(r: u32) {
-        run(|s| {
+    fn pet_device(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::PetDevice,
                 i32::try_from(r).expect("invalid response"),
             )
         });
     }
-    fn compel_player(r: u32) {
-        run(|s| {
+    fn compel_player(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::CompelPlayer,
                 i32::try_from(r).expect("invalid response"),
             )
         });
     }
-    fn kill_pet(r: u32) {
-        run(|s| {
+    fn kill_pet(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::KillPet,
                 i32::try_from(r).expect("invalid response"),
             )
         });
     }
-    fn pet_deal(r: u32) {
-        run(|s| {
+    fn pet_deal(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::PetDeal,
                 i32::try_from(r).expect("invalid response"),
@@ -708,48 +714,47 @@ pub(crate) mod live {
             Handler::PetDeal => pet_deal,
         }
     }
-    pub(super) fn intro() {
-        run(|s| s.intro());
+    pub(super) fn intro(cx: &mut crate::engine::battle::Cx<'_>) {
+        run(cx, |s| s.intro());
     }
-    pub(super) fn post() {
-        run(|s| s.post_talkpet_enc());
+    pub(super) fn post(cx: &mut crate::engine::battle::Cx<'_>) {
+        run(cx, |s| s.post_talkpet_enc());
     }
-    pub(super) fn uninit() -> u16 {
+    pub(super) fn uninit(_cx: &mut crate::engine::battle::Cx<'_>) -> u16 {
         0
     }
     /// Initialize the encounter on the game thread.
     ///
     /// # Safety
     /// The caller must copy the descriptor before another encounter initializes.
-    #[no_mangle]
-    pub unsafe extern "C" fn init_talkpet_comm() -> *mut CLocData {
+    pub unsafe fn init_talkpet_comm(cx: &mut crate::engine::battle::Cx<'_>) -> *mut CLocData {
         static mut DESC: Option<CLocData> = None;
         let desc = (&mut *std::ptr::addr_of_mut!(DESC)).get_or_insert_with(descriptor);
-        run(|s| s.initialize());
+        run(cx, |s| s.initialize());
         desc
     }
 }
 pub struct TalkpetDialogue;
 impl super::RaceDialogue for TalkpetDialogue {
-    fn init(&self) -> CommData {
+    fn init(&self, _cx: &mut crate::engine::battle::Cx<'_>) -> CommData {
         #[cfg(not(test))]
         {
-            unsafe { as_comm_data(&*live::init_talkpet_comm()) }
+            unsafe { as_comm_data(&*live::init_talkpet_comm(_cx)) }
         }
         #[cfg(test)]
         {
             as_comm_data(&descriptor())
         }
     }
-    fn intro(&self) {
+    fn intro(&self, _cx: &mut crate::engine::battle::Cx<'_>) {
         #[cfg(not(test))]
-        live::intro();
+        live::intro(_cx);
     }
-    fn post_encounter(&self) {
+    fn post_encounter(&self, _cx: &mut crate::engine::battle::Cx<'_>) {
         #[cfg(not(test))]
-        live::post();
+        live::post(_cx);
     }
-    fn uninit(&self) -> u32 {
+    fn uninit(&self, _cx: &mut crate::engine::battle::Cx<'_>) -> u32 {
         0
     }
 }

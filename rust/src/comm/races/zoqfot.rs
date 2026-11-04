@@ -732,52 +732,58 @@ pub(crate) mod live {
     use super::*;
     use crate::comm::races::script::live::LiveScript;
 
-    fn run(f: impl FnOnce(&mut Dialogue<'_, LiveScript<Handler>>)) {
-        let mut api = LiveScript { callback };
+    fn run(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>),
+    ) {
+        let mut api = LiveScript {
+            callback,
+            cx: std::cell::RefCell::new(cx),
+        };
         f(&mut Dialogue { api: &mut api });
     }
-    fn exit_conversation(r: u32) {
-        run(|s| {
+    fn exit_conversation(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::ExitConversation,
                 u16::try_from(r).expect("response exceeds COUNT"),
             )
         });
     }
-    fn zoq_fot_intro(r: u32) {
-        run(|s| {
+    fn zoq_fot_intro(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::ZoqFotIntro,
                 u16::try_from(r).expect("response exceeds COUNT"),
             )
         });
     }
-    fn form_alliance(r: u32) {
-        run(|s| {
+    fn form_alliance(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::FormAlliance,
                 u16::try_from(r).expect("response exceeds COUNT"),
             )
         });
     }
-    fn aquaint_zoq_fot(r: u32) {
-        run(|s| {
+    fn aquaint_zoq_fot(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::AquaintZoqFot,
                 u16::try_from(r).expect("response exceeds COUNT"),
             )
         });
     }
-    fn zoq_fot_info(r: u32) {
-        run(|s| {
+    fn zoq_fot_info(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::ZoqFotInfo,
                 u16::try_from(r).expect("response exceeds COUNT"),
             )
         });
     }
-    fn zoq_fot_home(r: u32) {
-        run(|s| {
+    fn zoq_fot_home(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::ZoqFotHome,
                 u16::try_from(r).expect("response exceeds COUNT"),
@@ -795,46 +801,45 @@ pub(crate) mod live {
             Handler::ZoqFotHome => zoq_fot_home,
         }
     }
-    pub(super) fn intro() {
-        run(|s| s.intro());
+    pub(super) fn intro(cx: &mut crate::engine::battle::Cx<'_>) {
+        run(cx, |s| s.intro());
     }
-    pub(super) fn post() {}
-    pub(super) fn uninit() -> u16 {
+    pub(super) fn post(_cx: &mut crate::engine::battle::Cx<'_>) {}
+    pub(super) fn uninit(_cx: &mut crate::engine::battle::Cx<'_>) -> u16 {
         0
     }
     /// Initialize the encounter on the game thread.
     ///
     /// # Safety
     /// The caller must copy the descriptor before another encounter initializes.
-    #[no_mangle]
-    pub unsafe extern "C" fn init_zoqfot_comm() -> *mut CLocData {
+    pub unsafe fn init_zoqfot_comm(cx: &mut crate::engine::battle::Cx<'_>) -> *mut CLocData {
         static mut DESC: Option<CLocData> = None;
         let desc = (&mut *std::ptr::addr_of_mut!(DESC)).get_or_insert_with(descriptor);
-        run(|s| s.initialize(desc));
+        run(cx, |s| s.initialize(desc));
         desc
     }
 }
 pub struct ZoqfotDialogue;
 impl super::RaceDialogue for ZoqfotDialogue {
-    fn init(&self) -> CommData {
+    fn init(&self, _cx: &mut crate::engine::battle::Cx<'_>) -> CommData {
         #[cfg(not(test))]
         {
-            unsafe { as_comm_data(&*live::init_zoqfot_comm()) }
+            unsafe { as_comm_data(&*live::init_zoqfot_comm(_cx)) }
         }
         #[cfg(test)]
         {
             as_comm_data(&descriptor())
         }
     }
-    fn intro(&self) {
+    fn intro(&self, _cx: &mut crate::engine::battle::Cx<'_>) {
         #[cfg(not(test))]
-        live::intro();
+        live::intro(_cx);
     }
-    fn post_encounter(&self) {
+    fn post_encounter(&self, _cx: &mut crate::engine::battle::Cx<'_>) {
         #[cfg(not(test))]
-        live::post();
+        live::post(_cx);
     }
-    fn uninit(&self) -> u32 {
+    fn uninit(&self, _cx: &mut crate::engine::battle::Cx<'_>) -> u32 {
         0
     }
 }

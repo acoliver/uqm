@@ -511,52 +511,58 @@ fn descriptor() -> CLocData {
 pub(crate) mod live {
     use super::*;
     use crate::comm::races::script::live::LiveScript;
-    fn run(f: impl FnOnce(&mut Dialogue<'_, LiveScript<Handler>>)) {
-        let mut api = LiveScript { callback };
+    fn run(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>),
+    ) {
+        let mut api = LiveScript {
+            callback,
+            cx: std::cell::RefCell::new(cx),
+        };
         f(&mut Dialogue { api: &mut api });
     }
-    fn combat_is_inevitable(r: u32) {
-        run(|s| {
+    fn combat_is_inevitable(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::CombatIsInevitable,
                 u16::try_from(r).expect("response reference exceeds COUNT"),
             )
         });
     }
-    fn ilwrath_gods(r: u32) {
-        run(|s| {
+    fn ilwrath_gods(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::IlwrathGods,
                 u16::try_from(r).expect("response reference exceeds COUNT"),
             )
         });
     }
-    fn ilwrath_info(r: u32) {
-        run(|s| {
+    fn ilwrath_info(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::IlwrathInfo,
                 u16::try_from(r).expect("response reference exceeds COUNT"),
             )
         });
     }
-    fn ilwrath_home(r: u32) {
-        run(|s| {
+    fn ilwrath_home(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::IlwrathHome,
                 u16::try_from(r).expect("response reference exceeds COUNT"),
             )
         });
     }
-    fn gods_order(r: u32) {
-        run(|s| {
+    fn gods_order(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::GodsOrder,
                 u16::try_from(r).expect("response reference exceeds COUNT"),
             )
         });
     }
-    fn gods_speak(r: u32) {
-        run(|s| {
+    fn gods_speak(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::GodsSpeak,
                 u16::try_from(r).expect("response reference exceeds COUNT"),
@@ -573,48 +579,47 @@ pub(crate) mod live {
             Handler::GodsSpeak => gods_speak,
         }
     }
-    pub(super) fn intro() {
-        run(|s| s.intro());
+    pub(super) fn intro(cx: &mut crate::engine::battle::Cx<'_>) {
+        run(cx, |s| s.intro());
     }
-    pub(super) fn post() {
-        run(|s| s.post_ilwrath_enc());
+    pub(super) fn post(cx: &mut crate::engine::battle::Cx<'_>) {
+        run(cx, |s| s.post_ilwrath_enc());
     }
-    pub(super) fn uninit() -> u16 {
+    pub(super) fn uninit(_cx: &mut crate::engine::battle::Cx<'_>) -> u16 {
         0
     }
     /// Initialize the encounter descriptor and initial battle segue.
     ///
     /// # Safety
     /// Game thread only. The caller must copy the descriptor before another encounter.
-    #[no_mangle]
-    pub unsafe extern "C" fn init_ilwrath_comm() -> *mut CLocData {
+    pub unsafe fn init_ilwrath_comm(cx: &mut crate::engine::battle::Cx<'_>) -> *mut CLocData {
         static mut DESC: Option<CLocData> = None;
         let desc = (&mut *std::ptr::addr_of_mut!(DESC)).get_or_insert_with(descriptor);
-        run(|s| s.initialize(desc));
+        run(cx, |s| s.initialize(desc));
         desc
     }
 }
 pub struct IlwrathDialogue;
 impl super::RaceDialogue for IlwrathDialogue {
-    fn init(&self) -> CommData {
+    fn init(&self, _cx: &mut crate::engine::battle::Cx<'_>) -> CommData {
         #[cfg(not(test))]
         {
-            unsafe { as_comm_data(&*live::init_ilwrath_comm()) }
+            unsafe { as_comm_data(&*live::init_ilwrath_comm(_cx)) }
         }
         #[cfg(test)]
         {
             as_comm_data(&descriptor())
         }
     }
-    fn intro(&self) {
+    fn intro(&self, _cx: &mut crate::engine::battle::Cx<'_>) {
         #[cfg(not(test))]
-        live::intro();
+        live::intro(_cx);
     }
-    fn post_encounter(&self) {
+    fn post_encounter(&self, _cx: &mut crate::engine::battle::Cx<'_>) {
         #[cfg(not(test))]
-        live::post();
+        live::post(_cx);
     }
-    fn uninit(&self) -> u32 {
+    fn uninit(&self, _cx: &mut crate::engine::battle::Cx<'_>) -> u32 {
         0
     }
 }

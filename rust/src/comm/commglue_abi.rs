@@ -59,7 +59,7 @@ unsafe fn number_phrases(
 pub(crate) mod runtime {
     use super::*;
     use crate::comm::locdata::COMM_DATA;
-    use std::ffi::{c_char, c_void};
+    use std::ffi::c_char;
     use std::ptr::null_mut;
 
     use crate::sound::heart_ffi::splice_multi_track as SpliceMultiTrack;
@@ -181,13 +181,6 @@ pub(crate) mod runtime {
         } else {
             1
         }
-    }
-
-    /// # Safety
-    /// Called on the game thread with initialized resources.
-    #[no_mangle]
-    pub unsafe extern "C" fn init_race(conversation: u32) -> *mut c_void {
-        crate::comm::dispatch::rust_init_race_dispatch(conversation)
     }
 }
 

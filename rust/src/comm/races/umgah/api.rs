@@ -6,13 +6,13 @@ pub(super) trait UmgahApi: EncounterApi<Handler> {
     fn add_biomass(&mut self, amount: u16);
 }
 #[cfg(not(test))]
-impl UmgahApi for super::super::script::live::LiveScript<Handler> {
+impl UmgahApi for super::super::script::live::LiveScript<'_, '_, Handler> {
     fn add_biomass(&mut self, amount: u16) {
-        unsafe {
+        self.cx.borrow_mut().with_legacy(|| unsafe {
             (**WorldData::current()).flagship.total_bio_mass = WorldData::current()
                 .read(|owner| owner.flagship.total_bio_mass)
                 .wrapping_add(amount);
-        }
+        })
     }
 }
 #[cfg(test)]

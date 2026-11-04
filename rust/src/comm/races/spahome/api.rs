@@ -5,14 +5,19 @@ pub(super) trait SpahomeApi: AllianceApi<Handler> {
     fn have_spathi_escort(&self) -> bool;
 }
 #[cfg(not(test))]
-impl SpahomeApi for crate::comm::races::script::live::LiveScript<Handler> {
+impl SpahomeApi for crate::comm::races::script::live::LiveScript<'_, '_, Handler> {
     fn have_spathi_escort(&self) -> bool {
         use crate::battle::build_native::count_escort_ships;
         // SAFETY: response callbacks run with the game-thread context published.
-        unsafe {
-            crate::app::bridge::enter(|cx| {
-                count_escort_ships(cx.world, crate::comm::dispatch::ship::SPATHI_SHIP as u16) != 0
-            })
+        {
+            {
+                let mut owner = self.cx.borrow_mut();
+                let cx = &mut **owner;
+                {
+                    count_escort_ships(cx.world, crate::comm::dispatch::ship::SPATHI_SHIP as u16)
+                        != 0
+                }
+            }
         }
     }
 }

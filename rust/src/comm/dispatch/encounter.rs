@@ -4,9 +4,9 @@ use super::*;
 
 #[cfg(not(test))]
 pub(super) fn load_descriptor(cx: &mut Cx<'_>, comm_id: u32) -> bool {
-    // SAFETY: dispatch runs synchronously with the initialized campaign published.
-    cx.with_legacy(|| unsafe {
-        let descriptor = rust_init_race_dispatch(comm_id);
+    // SAFETY: the returned descriptor is copied before any other encounter initializes.
+    unsafe {
+        let descriptor = rust_init_race_dispatch(cx, comm_id);
         if !descriptor.is_null() {
             std::ptr::copy_nonoverlapping(
                 descriptor.cast::<crate::comm::locdata::CLocData>(),
@@ -16,7 +16,7 @@ pub(super) fn load_descriptor(cx: &mut Cx<'_>, comm_id: u32) -> bool {
             set_comm_data(read_locdata(&*descriptor.cast()));
         }
         !descriptor.is_null()
-    })
+    }
 }
 
 #[cfg(not(test))]
@@ -27,13 +27,13 @@ pub(super) fn finish_unhailed(cx: &mut Cx<'_>, has_descriptor: bool) {
         let post = unsafe { ffi::CommData.post_encounter_func };
         if active {
             if let Some(callback) = post {
-                cx.with_legacy(callback);
+                callback(cx);
             }
         }
         // SAFETY: post-encounter dispatch has completed on the game thread.
         let uninit = unsafe { ffi::CommData.uninit_encounter_func };
         if let Some(callback) = uninit {
-            cx.with_legacy(callback);
+            callback(cx);
         }
     }
 }

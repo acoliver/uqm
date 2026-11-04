@@ -47,9 +47,9 @@ pub(super) trait RebelApi: EncounterApi<Handler> {
     }
 }
 #[cfg(not(test))]
-impl RebelApi for super::super::script::live::LiveScript<Handler> {
+impl RebelApi for super::super::script::live::LiveScript<'_, '_, Handler> {
     fn date(&self) -> Date {
-        unsafe {
+        self.cx.borrow_mut().with_legacy(|| unsafe {
             let world = WorldData::current();
             let clock = std::ptr::addr_of!((**world).game.game_clock);
             Date {
@@ -57,7 +57,7 @@ impl RebelApi for super::super::script::live::LiveScript<Handler> {
                 month: (*clock).month_index,
                 day: (*clock).day_index,
             }
-        }
+        })
     }
 }
 #[cfg(test)]

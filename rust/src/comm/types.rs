@@ -191,11 +191,11 @@ pub struct CommData {
     // Dialogue lifecycle callbacks
     // -----------------------------------------------------------------------
     /// Called when entering communications (`init_encounter_func`).
-    pub init_encounter_func: Option<fn()>,
+    pub init_encounter_func: Option<fn(&mut crate::engine::battle::Cx<'_>)>,
     /// Called when leaving communications normally (`post_encounter_func`).
-    pub post_encounter_func: Option<fn()>,
+    pub post_encounter_func: Option<fn(&mut crate::engine::battle::Cx<'_>)>,
     /// Called for cleanup after the encounter ends (`uninit_encounter_func`).
-    pub uninit_encounter_func: Option<fn() -> u16>,
+    pub uninit_encounter_func: Option<fn(&mut crate::engine::battle::Cx<'_>) -> u16>,
 
     // -----------------------------------------------------------------------
     // Resource IDs (C `RESOURCE` = `const char *`, stored as raw pointers)
@@ -318,17 +318,17 @@ impl CommData {
     }
 
     /// Set the initialization callback.
-    pub fn set_init_func(&mut self, func: fn()) {
+    pub fn set_init_func(&mut self, func: fn(&mut crate::engine::battle::Cx<'_>)) {
         self.init_encounter_func = Some(func);
     }
 
     /// Set the post-encounter callback.
-    pub fn set_post_func(&mut self, func: fn()) {
+    pub fn set_post_func(&mut self, func: fn(&mut crate::engine::battle::Cx<'_>)) {
         self.post_encounter_func = Some(func);
     }
 
     /// Set the cleanup callback.
-    pub fn set_uninit_func(&mut self, func: fn() -> u16) {
+    pub fn set_uninit_func(&mut self, func: fn(&mut crate::engine::battle::Cx<'_>) -> u16) {
         self.uninit_encounter_func = Some(func);
     }
 
@@ -431,18 +431,21 @@ mod tests {
     #[test]
     fn test_comm_data_set_callbacks() {
         let mut data = CommData::new();
-        fn init() {}
-        fn post() {}
-        fn uninit() -> u16 {
+        fn init(_cx: &mut crate::engine::battle::Cx<'_>) {}
+        fn post(_cx: &mut crate::engine::battle::Cx<'_>) {}
+        fn uninit(_cx: &mut crate::engine::battle::Cx<'_>) -> u16 {
             42
         }
         data.set_init_func(init);
         data.set_post_func(post);
         data.set_uninit_func(uninit);
 
-        data.init_encounter_func.unwrap()();
-        data.post_encounter_func.unwrap()();
-        assert_eq!(data.uninit_encounter_func.unwrap()(), 42);
+        crate::comm::with_test_context(data.init_encounter_func.unwrap());
+        crate::comm::with_test_context(data.post_encounter_func.unwrap());
+        assert_eq!(
+            crate::comm::with_test_context(data.uninit_encounter_func.unwrap()),
+            42
+        );
     }
 
     #[test]

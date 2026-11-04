@@ -1,8 +1,6 @@
 //! Alliance and mission effects used by the Supox, Utwig and Zoq-Fot-Pik scripts.
 use super::encounter::EncounterApi;
 use crate::comm::dispatch::ship;
-#[cfg(not(test))]
-use crate::engine::World;
 pub(super) const SUPOX_SHIP: u16 = ship::SUPOX_SHIP as u16;
 pub(super) const UTWIG_SHIP: u16 = ship::UTWIG_SHIP as u16;
 pub(super) const ZOQFOTPIK_SHIP: u16 = ship::ZOQFOTPIK_SHIP as u16;
@@ -22,17 +20,23 @@ mod live {
 
     use crate::battle::build_native::start_sphere_tracking;
 
-    use crate::time::clock_abi::live::add_event;
-    impl<H> AllianceApi<H> for LiveScript<H> {
+    impl<H> AllianceApi<H> for LiveScript<'_, '_, H> {
         fn set_allied(&mut self, race: u16, allied: bool) {
-            World::current().write(|world| set_race_allied(world, race, u32::from(allied)));
+            set_race_allied(self.cx.borrow_mut().world, race, u32::from(allied));
         }
         fn track(&mut self, race: u16) {
-            World::current().write(|world| start_sphere_tracking(world, race));
+            start_sphere_tracking(self.cx.borrow_mut().world, race);
         }
         fn event(&mut self, kind: i32, month: u16, day: u16, year: u16, selector: u8) {
             unsafe {
-                add_event((kind) as u32, month, day, year, selector);
+                crate::navigation::events::live::add_event(
+                    self.cx.borrow_mut().world,
+                    kind as u32,
+                    month,
+                    day,
+                    year,
+                    selector,
+                );
             }
         }
     }

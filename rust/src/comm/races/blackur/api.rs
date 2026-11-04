@@ -14,18 +14,20 @@ pub(super) trait BlackurApi: EncounterApi<Handler> {
     }
 }
 #[cfg(not(test))]
-impl BlackurApi for super::super::script::live::LiveScript<Handler> {
+impl BlackurApi for super::super::script::live::LiveScript<'_, '_, Handler> {
     fn battle_group(&self) -> (u32, u32) {
-        let (start, _) = crate::state::game_state_keys::bit_range("SAMATRA_GRPOFFS0")
-            .expect("missing Samatra group-offset state");
-        let offset = {
-            World::current()
-                .read(|world| crate::state::ffi::rust_get_game_state_32(world, start as i32))
-        };
-        (
-            { WorldData::current().read(|owner| owner.game.battle_group_ref) },
-            offset,
-        )
+        self.cx.borrow_mut().with_legacy(|| {
+            let (start, _) = crate::state::game_state_keys::bit_range("SAMATRA_GRPOFFS0")
+                .expect("missing Samatra group-offset state");
+            let offset = {
+                World::current()
+                    .read(|world| crate::state::ffi::rust_get_game_state_32(world, start as i32))
+            };
+            (
+                { WorldData::current().read(|owner| owner.game.battle_group_ref) },
+                offset,
+            )
+        })
     }
 }
 #[cfg(test)]

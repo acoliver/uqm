@@ -60,16 +60,16 @@ pub mod zoqfot;
 /// - `uninit()`: Cleanup after encounter (called as `uninit_encounter_func`)
 pub trait RaceDialogue: Send + Sync {
     /// Populate CommData for this race and set the initial segue.
-    fn init(&self) -> CommData;
+    fn init(&self, cx: &mut crate::engine::battle::Cx<'_>) -> CommData;
 
     /// Initial dialogue entry point. Called when the encounter starts.
-    fn intro(&self);
+    fn intro(&self, cx: &mut crate::engine::battle::Cx<'_>);
 
     /// Post-encounter processing. Called when the encounter ends normally.
-    fn post_encounter(&self);
+    fn post_encounter(&self, cx: &mut crate::engine::battle::Cx<'_>);
 
     /// Cleanup. Called after the encounter ends.
-    fn uninit(&self) -> u32;
+    fn uninit(&self, cx: &mut crate::engine::battle::Cx<'_>) -> u32;
 }
 
 // Conversation IDs from commglue.h enum
@@ -146,11 +146,13 @@ pub fn get_race_dialogue(comm_id: i32) -> Option<Box<dyn RaceDialogue>> {
 /// # Safety
 ///
 /// This is an FFI function called from C.
-#[no_mangle]
-pub unsafe extern "C" fn rust_init_race_dialogue(comm_id: c_int) -> c_int {
+pub unsafe fn rust_init_race_dialogue(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    comm_id: c_int,
+) -> c_int {
     match get_race_dialogue(comm_id) {
         Some(dialogue) => {
-            let data = dialogue.init();
+            let data = dialogue.init(cx);
             // Sync to the global CommData singleton
             crate::comm::locdata::set_comm_data(data);
             1

@@ -13,35 +13,39 @@ pub(super) trait DruugeApi: EncounterApi<Handler> {
 }
 
 #[cfg(not(test))]
-impl DruugeApi for crate::comm::races::script::live::LiveScript<Handler> {
+impl DruugeApi for crate::comm::races::script::live::LiveScript<'_, '_, Handler> {
     fn ship(&self) -> CSisState {
-        unsafe {
+        self.cx.borrow_mut().with_legacy(|| unsafe {
             let world = WorldData::current();
             std::ptr::addr_of!((**world).flagship)
                 .cast::<CSisState>()
                 .read()
-        }
+        })
     }
     fn has_escorts(&self) -> bool {
-        {
-            World::current().read(|world| world.built_ships_ref().head().is_some())
-        }
+        self.cx.borrow_mut().with_legacy(|| {
+            {
+                World::current().read(|world| world.built_ships_ref().head().is_some())
+            }
+        })
     }
     fn crew_cost(&self) -> u8 {
-        {
-            WorldData::current().read(|owner| owner.game.crew_cost)
-        }
+        self.cx
+            .borrow_mut()
+            .with_legacy(|| WorldData::current().read(|owner| owner.game.crew_cost))
     }
     fn set_crew_cost(&mut self, value: u8) {
-        unsafe {
+        self.cx.borrow_mut().with_legacy(|| unsafe {
             (**WorldData::current()).game.crew_cost = value;
-        }
+        })
     }
     fn number(&mut self, value: i32) {
-        use crate::comm::commglue_abi::runtime::NPCNumber;
-        unsafe {
-            NPCNumber(value, std::ptr::null());
-        }
+        self.cx.borrow_mut().with_legacy(|| {
+            use crate::comm::commglue_abi::runtime::NPCNumber;
+            unsafe {
+                NPCNumber(value, std::ptr::null());
+            }
+        })
     }
 }
 

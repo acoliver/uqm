@@ -405,6 +405,7 @@ fn in_hq_space() -> bool {
     lobyte(activity) == IN_HYPERSPACE
 }
 
+#[cfg(not(test))]
 fn avail_race_queue<R>(edit: impl FnOnce(&mut LinkQueue<'_, Fleet, 24>) -> R) -> R {
     World::current().write(|world| edit(&mut world.avail_races()))
 }
@@ -759,53 +760,50 @@ pub unsafe fn place_flagship_at_star(location: (i16, i16)) -> Result<(), &'stati
 /// Must be called from an initialized game context (after resource loading).
 /// The returned pointer is a raw C LOCDATA pointer and must not be freed by
 /// the caller — it points to static C data.
-pub unsafe extern "C" fn rust_init_race_dispatch(comm_id: u32) -> *mut c_void {
+pub unsafe fn rust_init_race_dispatch(cx: &mut Cx<'_>, comm_id: u32) -> *mut c_void {
     // Initialize Rust dialogue state (callbacks, phrase state, etc.)
-    ffi::rust_init_race_dialogue(comm_id as i32);
+    ffi::rust_init_race_dialogue(cx, comm_id as i32);
 
     // Dispatch to the correct C init_*_comm function
     match comm_id {
-        conv::ARILOU => (ffi::init_arilou_comm()).cast(),
-        conv::BLACKURQ => ffi::init_blackurq_comm().cast(),
-        conv::CHMMR => ffi::init_chmmr_comm().cast(),
+        conv::ARILOU => (ffi::init_arilou_comm(cx)).cast(),
+        conv::BLACKURQ => ffi::init_blackurq_comm(cx).cast(),
+        conv::CHMMR => ffi::init_chmmr_comm(cx).cast(),
         conv::COMMANDER => {
-            if World::current().read(|world| world.story_state(StoryKey::STARBASE_AVAILABLE)) == 0 {
-                (ffi::init_commander_comm()).cast()
+            if cx.world.story_state(StoryKey::STARBASE_AVAILABLE) == 0 {
+                (ffi::init_commander_comm(cx)).cast()
             } else {
-                (ffi::init_starbase_comm()).cast()
+                (ffi::init_starbase_comm(cx)).cast()
             }
         }
-        conv::DRUUGE => ffi::init_druuge_comm().cast(),
-        conv::ILWRATH => ffi::init_ilwrath_comm().cast(),
-        conv::MELNORME => ffi::init_melnorme_comm().cast(),
-        conv::MYCON => ffi::init_mycon_comm().cast(),
-        conv::ORZ => ffi::init_orz_comm().cast(),
-        conv::PKUNK => ffi::init_pkunk_comm().cast(),
-        conv::SHOFIXTI => ffi::init_shofixti_comm().cast(),
-        conv::SLYLANDRO => ffi::init_slyland_comm().cast(),
-        conv::SLYLANDRO_HOME => ffi::init_slylandro_comm().cast(),
+        conv::DRUUGE => ffi::init_druuge_comm(cx).cast(),
+        conv::ILWRATH => ffi::init_ilwrath_comm(cx).cast(),
+        conv::MELNORME => ffi::init_melnorme_comm(cx).cast(),
+        conv::MYCON => ffi::init_mycon_comm(cx).cast(),
+        conv::ORZ => ffi::init_orz_comm(cx).cast(),
+        conv::PKUNK => ffi::init_pkunk_comm(cx).cast(),
+        conv::SHOFIXTI => ffi::init_shofixti_comm(cx).cast(),
+        conv::SLYLANDRO => ffi::init_slyland_comm(cx).cast(),
+        conv::SLYLANDRO_HOME => ffi::init_slylandro_comm(cx).cast(),
         conv::SPATHI => {
-            if (World::current().read(|world| world.story_state(StoryKey::GLOBAL_FLAGS_AND_DATA))
-                & (1 << 7))
-                == 0
-            {
-                (ffi::init_spathi_comm()).cast()
+            if (cx.world.story_state(StoryKey::GLOBAL_FLAGS_AND_DATA) & (1 << 7)) == 0 {
+                (ffi::init_spathi_comm(cx)).cast()
             } else {
-                (ffi::init_spahome_comm()).cast()
+                (ffi::init_spahome_comm(cx)).cast()
             }
         }
-        conv::SUPOX => ffi::init_supox_comm().cast(),
-        conv::SYREEN => ffi::init_syreen_comm().cast(),
-        conv::TALKING_PET => ffi::init_talkpet_comm().cast(),
-        conv::THRADD => ffi::init_thradd_comm().cast(),
-        conv::UMGAH => ffi::init_umgah_comm().cast(),
-        conv::URQUAN => ffi::init_urquan_comm().cast(),
-        conv::UTWIG => ffi::init_utwig_comm().cast(),
-        conv::VUX => ffi::init_vux_comm().cast(),
-        conv::YEHAT_REBEL => ffi::init_rebel_yehat_comm().cast(),
-        conv::YEHAT => ffi::init_yehat_comm().cast(),
-        conv::ZOQFOTPIK => ffi::init_zoqfot_comm().cast(),
-        _ => ffi::init_chmmr_comm().cast(),
+        conv::SUPOX => ffi::init_supox_comm(cx).cast(),
+        conv::SYREEN => ffi::init_syreen_comm(cx).cast(),
+        conv::TALKING_PET => ffi::init_talkpet_comm(cx).cast(),
+        conv::THRADD => ffi::init_thradd_comm(cx).cast(),
+        conv::UMGAH => ffi::init_umgah_comm(cx).cast(),
+        conv::URQUAN => ffi::init_urquan_comm(cx).cast(),
+        conv::UTWIG => ffi::init_utwig_comm(cx).cast(),
+        conv::VUX => ffi::init_vux_comm(cx).cast(),
+        conv::YEHAT_REBEL => ffi::init_rebel_yehat_comm(cx).cast(),
+        conv::YEHAT => ffi::init_yehat_comm(cx).cast(),
+        conv::ZOQFOTPIK => ffi::init_zoqfot_comm(cx).cast(),
+        _ => ffi::init_chmmr_comm(cx).cast(),
     }
 }
 #[cfg(not(test))]

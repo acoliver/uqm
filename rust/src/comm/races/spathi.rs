@@ -614,8 +614,14 @@ fn descriptor() -> CLocData {
 pub(crate) mod live {
     use super::*;
     use crate::comm::races::script::live::LiveScript;
-    fn run(f: impl FnOnce(&mut Dialogue<'_, LiveScript<Handler>>)) {
-        let mut api = LiveScript { callback };
+    fn run(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>),
+    ) {
+        let mut api = LiveScript {
+            callback,
+            cx: std::cell::RefCell::new(cx),
+        };
         static mut SESSION: Option<Session> = None;
         // Only the game thread dispatches these callbacks.
         let session =
@@ -625,64 +631,64 @@ pub(crate) mod live {
             session,
         });
     }
-    fn exit_conversation(r: u32) {
-        run(|s| {
+    fn exit_conversation(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::ExitConversation,
                 u16::try_from(r).expect("response reference exceeds COUNT"),
             )
         });
     }
-    fn spathi_on_pluto(r: u32) {
-        run(|s| {
+    fn spathi_on_pluto(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::SpathiOnPluto,
                 u16::try_from(r).expect("response reference exceeds COUNT"),
             )
         });
     }
-    fn spathi_must_grovel(r: u32) {
-        run(|s| {
+    fn spathi_must_grovel(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::SpathiMustGrovel,
                 u16::try_from(r).expect("response reference exceeds COUNT"),
             )
         });
     }
-    fn spathi_allies(r: u32) {
-        run(|s| {
+    fn spathi_allies(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::SpathiAllies,
                 u16::try_from(r).expect("response reference exceeds COUNT"),
             )
         });
     }
-    fn spathi_friendly(r: u32) {
-        run(|s| {
+    fn spathi_friendly(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::SpathiFriendly,
                 u16::try_from(r).expect("response reference exceeds COUNT"),
             )
         });
     }
-    fn spathi_befriend(r: u32) {
-        run(|s| {
+    fn spathi_befriend(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::SpathiBefriend,
                 u16::try_from(r).expect("response reference exceeds COUNT"),
             )
         });
     }
-    fn spathi_antagonize(r: u32) {
-        run(|s| {
+    fn spathi_antagonize(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::SpathiAntagonize,
                 u16::try_from(r).expect("response reference exceeds COUNT"),
             )
         });
     }
-    fn spathi_neutral(r: u32) {
-        run(|s| {
+    fn spathi_neutral(cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::SpathiNeutral,
                 u16::try_from(r).expect("response reference exceeds COUNT"),
@@ -701,48 +707,47 @@ pub(crate) mod live {
             Handler::SpathiNeutral => spathi_neutral,
         }
     }
-    pub(super) fn intro() {
-        run(|s| s.intro());
+    pub(super) fn intro(cx: &mut crate::engine::battle::Cx<'_>) {
+        run(cx, |s| s.intro());
     }
-    pub(super) fn post() {
-        run(|s| s.post_spathi_enc());
+    pub(super) fn post(cx: &mut crate::engine::battle::Cx<'_>) {
+        run(cx, |s| s.post_spathi_enc());
     }
-    pub(super) fn uninit() -> u16 {
+    pub(super) fn uninit(_cx: &mut crate::engine::battle::Cx<'_>) -> u16 {
         0
     }
     /// Initialize the encounter descriptor and initial battle segue.
     ///
     /// # Safety
     /// Game thread only. The caller must copy the descriptor before another encounter.
-    #[no_mangle]
-    pub unsafe extern "C" fn init_spathi_comm() -> *mut CLocData {
+    pub unsafe fn init_spathi_comm(cx: &mut crate::engine::battle::Cx<'_>) -> *mut CLocData {
         static mut DESC: Option<CLocData> = None;
         let desc = (&mut *std::ptr::addr_of_mut!(DESC)).get_or_insert_with(descriptor);
-        run(|s| s.initialize(desc));
+        run(cx, |s| s.initialize(desc));
         desc
     }
 }
 pub struct SpathiDialogue;
 impl super::RaceDialogue for SpathiDialogue {
-    fn init(&self) -> CommData {
+    fn init(&self, _cx: &mut crate::engine::battle::Cx<'_>) -> CommData {
         #[cfg(not(test))]
         {
-            unsafe { as_comm_data(&*live::init_spathi_comm()) }
+            unsafe { as_comm_data(&*live::init_spathi_comm(_cx)) }
         }
         #[cfg(test)]
         {
             as_comm_data(&descriptor())
         }
     }
-    fn intro(&self) {
+    fn intro(&self, _cx: &mut crate::engine::battle::Cx<'_>) {
         #[cfg(not(test))]
-        live::intro();
+        live::intro(_cx);
     }
-    fn post_encounter(&self) {
+    fn post_encounter(&self, _cx: &mut crate::engine::battle::Cx<'_>) {
         #[cfg(not(test))]
-        live::post();
+        live::post(_cx);
     }
-    fn uninit(&self) -> u32 {
+    fn uninit(&self, _cx: &mut crate::engine::battle::Cx<'_>) -> u32 {
         0
     }
 }

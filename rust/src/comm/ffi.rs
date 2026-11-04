@@ -333,7 +333,7 @@ pub unsafe fn rust_get_response_text(index: c_int, buf: *mut c_char, buf_len: c_
 }
 
 /// Execute selected response callback — passes response_ref as argument (RS-REQ-011).
-pub fn rust_execute_response() -> c_uint {
+pub fn rust_execute_response(cx: &mut crate::engine::battle::Cx<'_>) -> c_uint {
     let state = COMM_STATE.read();
     let response = match state.responses().get_selected() {
         Some(r) => r,
@@ -351,7 +351,7 @@ pub fn rust_execute_response() -> c_uint {
     drop(state);
 
     // Call with response_ref per RS-REQ-011
-    func(response_ref);
+    func(cx, response_ref);
 
     response_ref
 }
