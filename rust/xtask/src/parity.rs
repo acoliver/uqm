@@ -11,7 +11,7 @@ mod inventory;
 mod manifest;
 mod options;
 mod parallel;
-mod process;
+pub(crate) mod process;
 mod recording;
 #[cfg(test)]
 mod tests;

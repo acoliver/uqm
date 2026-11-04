@@ -124,8 +124,7 @@ pub fn run(command: &mut Command, timeout: Option<Duration>) -> Captured {
             Ok(Some(status)) => break Some(status),
             Ok(None) if deadline.is_some_and(|deadline| Instant::now() >= deadline) => {
                 timed_out = true;
-                // SAFETY: signalling a process group this function created.
-                unsafe { libc::kill(-group, libc::SIGKILL) };
+                let _ = crate::parity::process::kill_group(&child);
                 break child.wait().ok();
             }
             Ok(None) => std::thread::sleep(Duration::from_millis(20)),
@@ -138,7 +137,7 @@ pub fn run(command: &mut Command, timeout: Option<Duration>) -> Captured {
     // SAFETY: probing and killing the process group created above.
     let survivors = !timed_out && unsafe { libc::kill(-group, 0) } == 0;
     if survivors {
-        unsafe { libc::kill(-group, libc::SIGKILL) };
+        let _ = crate::parity::process::kill_group(&child);
     }
     let (stdout, stdout_bytes_seen) =
         stdout.map_or_else(Default::default, |h| h.join().unwrap_or_default());
