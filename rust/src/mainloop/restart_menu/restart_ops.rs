@@ -674,10 +674,7 @@ impl RestartMenuOps for CffiOps<'_, '_, '_> {
     }
 
     fn credits(&self, victory: bool) {
-        self.legacy(|| {
-            // SAFETY: Credits displays the credits screen.
-            unsafe { c_extern::Credits(if victory { 1 } else { 0 }) }
-        })
+        self.owned(|cx, io| crate::front_end::credits::credits(cx, io, victory));
     }
     fn victory(&self) {
         self.legacy(|| {

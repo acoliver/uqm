@@ -2796,8 +2796,6 @@ pub use crate::front_end::fmv::runtime::DoShipSpin;
 #[cfg(not(test))]
 pub use crate::front_end::intro::runtime::ShowPresentation;
 
-#[cfg(not(test))]
-pub use crate::front_end::credits::runtime::Credits;
 pub const KEY_UP: _bindgen_ty_10 = 0;
 pub const KEY_DOWN: _bindgen_ty_10 = 1;
 pub const KEY_LEFT: _bindgen_ty_10 = 2;

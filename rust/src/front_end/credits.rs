@@ -1,7 +1,7 @@
 //! Bidirectional credits scrolling and communication outtakes, ported from uqm/credits.c.
 
 #[cfg(not(test))]
-use crate::engine::{Kernel, WorldData};
+use crate::engine::WorldData;
 use crate::navigation::abi::*;
 use std::ffi::c_int;
 
@@ -32,8 +32,11 @@ pub(crate) mod runtime {
     use super::super::intro::{parse_text_lines, rgb15, BLACK_COLOR, WANT_PIXMAP};
     use super::*;
 
-    use crate::engine::observe::CheckpointView;
-    use std::ffi::{c_char, c_void};
+    use crate::engine::{
+        battle::Cx,
+        observe::{CheckpointView, Io},
+    };
+    use std::ffi::c_char;
     use std::ptr;
 
     // uqm/comm.h is not included in navigation's generated ABI yet.
@@ -69,9 +72,7 @@ pub(crate) mod runtime {
         basex: COORD,
     }
 
-    #[repr(C)]
     struct CreditsInputState {
-        input_func: Option<unsafe extern "C" fn(*mut c_void) -> BOOLEAN>,
         allow_cancel: BOOLEAN,
         allow_speed_change: BOOLEAN,
         close_when_done: BOOLEAN,
@@ -356,7 +357,7 @@ pub(crate) mod runtime {
 
     static mut VICTORY_CREDITS_ACTIVE: bool = false;
 
-    unsafe fn process_frame(io: &mut crate::engine::observe::Io<'_>) {
+    unsafe fn process_frame(io: &mut Io<'_>) {
         let now = GetTimeCounter();
         if now < NEXT_TIME {
             return;
@@ -531,8 +532,7 @@ pub(crate) mod runtime {
         PulsedInputState.menu[key as usize] != 0
     }
 
-    unsafe extern "C" fn credits_input(raw: *mut c_void) -> BOOLEAN {
-        let state = &mut *raw.cast::<CreditsInputState>();
+    unsafe fn credits_input(state: &mut CreditsInputState) -> BOOLEAN {
         if CREDITS_RUNNING != 0 {
             state.close_time_out = 0;
         }
@@ -569,24 +569,24 @@ pub(crate) mod runtime {
         1
     }
 
-    unsafe fn on_input_frame(io: &mut crate::engine::observe::Io<'_>) {
+    unsafe fn on_input_frame(io: &mut Io<'_>) {
         process_frame(io);
     }
 
-    /// # Safety
-    /// Graphics, resources, audio, communication and input systems must be
-    /// initialized, and the game thread must exclusively own their state.
-    #[no_mangle]
-    pub unsafe extern "C" fn Credits(with_outtakes: BOOLEAN) {
-        let music = LoadMusicInstance(CREDITS_MUSIC.as_ptr().cast());
-        SetContext(Kernel::current().read(|owner| owner.screen_context));
+    unsafe fn prepare_credits(
+        context: CONTEXT,
+        with_outtakes: bool,
+        io: &mut Io<'_>,
+    ) -> Option<MUSIC_REF> {
+        let music = LoadMusicInstance(CREDITS_MUSIC.as_ptr().cast()).cast();
+        SetContext(context);
         SetContextClipRect(ptr::null_mut());
         let mut screen_rect: RECT = std::mem::zeroed();
         GetContextClipRect(&mut screen_rect);
         SetContextBackGroundColor(BLACK_COLOR);
         ClearDrawable();
         if load_credits() == 0 {
-            return;
+            return None;
         }
         let mut stamp = STAMP {
             origin: POINT { x: 0, y: 0 },
@@ -594,44 +594,28 @@ pub(crate) mod runtime {
         };
         DrawStamp(&mut stamp);
         FadeScreen(ScreenFadeType_FadeAllToColor, (ONE_SECOND / 2) as SIZE);
-        if with_outtakes != 0 {
-            crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::CreditsStarted);
+        if with_outtakes {
+            io.observer.checkpoint(&CheckpointView::CreditsStarted);
         }
         CommWndRect.corner.x =
             ((screen_rect.extent.width as c_int - CommWndRect.width as c_int) / 2) as COORD;
         CommWndRect.corner.y = 5;
         init_credits();
-        VICTORY_CREDITS_ACTIVE = with_outtakes != 0;
+        VICTORY_CREDITS_ACTIVE = with_outtakes;
         SetInputCallback(Some(on_input_frame));
-        if with_outtakes != 0 {
+        if with_outtakes {
             OUT_TAKES_RUNNING = 1;
             outtakes();
             OUT_TAKES_RUNNING = 0;
         }
-        if WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16 == 0
-        {
-            if with_outtakes != 0 {
-                crate::app::observe::checkpoint(
-                    crate::engine::observe::CheckpointView::CreditsReady,
-                );
-            }
-            if !music.is_null() {
-                PlayMusic((music).cast(), 1, 1);
-            }
-            let mut state = CreditsInputState {
-                input_func: Some(credits_input),
-                allow_cancel: (with_outtakes == 0) as BOOLEAN,
-                allow_speed_change: 1,
-                close_when_done: (with_outtakes == 0) as BOOLEAN,
-                close_time_out: 0,
-            };
-            SetMenuSounds(0, 0);
-            DoInput(ptr::addr_of_mut!(state).cast(), 1);
-        }
+        Some(music)
+    }
+
+    unsafe fn finish_credits(context: CONTEXT, music: MUSIC_REF) {
         SetInputCallback(None);
         FadeMusic(0, (ONE_SECOND / 2) as SIZE);
         uninit_credits();
-        SetContext(Kernel::current().read(|owner| owner.screen_context));
+        SetContext(context);
         SleepThreadUntil(FadeScreen(
             ScreenFadeType_FadeAllToBlack,
             (ONE_SECOND / 2) as SIZE,
@@ -639,16 +623,51 @@ pub(crate) mod runtime {
         FlushColorXForms();
         if !music.is_null() {
             stop_music();
-            DestroyMusic((music).cast());
+            DestroyMusic(music);
         }
         FadeMusic(NORMAL_VOLUME as BYTE, 0);
         free_credits();
         VICTORY_CREDITS_ACTIVE = false;
     }
+
+    pub fn credits(cx: &mut Cx<'_>, io: &mut Io<'_>, with_outtakes: bool) {
+        let context = cx.kernel.screen_context;
+        // SAFETY: the mode runs synchronously on the initialized game thread.
+        let Some(music) = cx.with_legacy(|| unsafe { prepare_credits(context, with_outtakes, io) })
+        else {
+            return;
+        };
+        if cx.world.activity() & CHECK_ABORT as u16 == 0 {
+            if with_outtakes {
+                cx.with_legacy(|| io.observer.checkpoint(&CheckpointView::CreditsReady));
+            }
+            // SAFETY: prepare_credits loaded this music and installed the input-frame hook.
+            cx.with_legacy(|| unsafe {
+                if !music.is_null() {
+                    PlayMusic(music, 1, 1);
+                }
+            });
+            let mut state = CreditsInputState {
+                allow_cancel: (!with_outtakes) as BOOLEAN,
+                allow_speed_change: 1,
+                close_when_done: (!with_outtakes) as BOOLEAN,
+                close_time_out: 0,
+            };
+            // SAFETY: the initialized menu sounds belong to this game-thread loop.
+            cx.with_legacy(|| unsafe { SetMenuSounds(0, 0) });
+            cx.run_input(io, true, |cx, _| {
+                // SAFETY: the state remains live for this synchronous callback.
+                cx.with_legacy(|| unsafe { credits_input(&mut state) != 0 })
+            });
+        }
+        let context = cx.kernel.screen_context;
+        // SAFETY: the loop and all outtakes have returned before their resources are freed.
+        cx.with_legacy(|| unsafe { finish_credits(context, music) });
+    }
 }
 
 #[cfg(not(test))]
-pub use runtime::Credits;
+pub use runtime::credits;
 
 #[cfg(test)]
 mod tests {

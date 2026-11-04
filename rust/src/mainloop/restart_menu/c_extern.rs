@@ -421,9 +421,6 @@ pub use crate::supermelee::native::menu::live::Melee;
 pub use crate::front_end::setupmenu::runtime::SetupMenu;
 
 #[cfg(not(test))]
-pub use crate::front_end::credits::runtime::Credits;
-
-#[cfg(not(test))]
 pub use crate::front_end::fmv::runtime::Victory;
 
 #[cfg(not(test))]
