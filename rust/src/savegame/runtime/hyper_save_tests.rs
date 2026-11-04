@@ -373,10 +373,12 @@ fn an_owner_that_is_not_a_link_of_the_player_queue_is_refused() {
     let mut queues = Queues::flight(5);
     let free_slot = allocate(&mut queues.ships, starship(1, None));
     assert_ne!(free_slot, queues.head_ship());
+    let mut world = crate::engine::World::new();
+    let group = world.ip_groups().alloc().unwrap();
     for owner in [
         Parent::Ship(queue_ship(&queues.ships, 1)),
         Parent::Ship(crate::engine::battle::ShipId::fixture(1, 0, 0)),
-        Parent::IpGroup(0),
+        Parent::IpGroup(group),
     ] {
         // SAFETY: the flagship element is a slot of the display pool.
         unsafe { (*queues.flagship_element()).parent = owner };

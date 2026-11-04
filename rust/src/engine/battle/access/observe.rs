@@ -18,7 +18,7 @@ unsafe fn parent_address(
     >,
 ) -> *mut c_void {
     use super::super::Parent;
-    let (queue, slot) = match parent {
+    let (queue, group) = match parent {
         Parent::None => return std::ptr::null_mut(),
         Parent::Ship(id) => {
             // SAFETY: the observation retains the live ship authority.
@@ -26,12 +26,12 @@ unsafe fn parent_address(
                 unsafe { super::super::record::ship_queue(usize::from(id.side())).as_ref() };
             return queue.pool.retired_address(usize::from(id.slot())) as *mut c_void;
         }
-        Parent::IpGroup(slot) => (
+        Parent::IpGroup(id) => (
             groups.unwrap_or_else(|| panic!("missing IP-group authority")),
-            slot,
+            id,
         ),
     };
-    queue.retired_address(slot) as *mut c_void
+    queue.journal_address(group) as *mut c_void
 }
 
 impl super::super::Cx<'_> {

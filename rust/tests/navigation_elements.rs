@@ -162,7 +162,7 @@ fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
             let old_stamp = (**uqm_rust::engine::WorldData::current()).game.ship_stamp;
             let old_location = (**uqm_rust::engine::WorldData::current()).game.ip_location;
             let old_stars = (**uqm_rust::engine::Kernel::current()).stars_in_space;
-            let group = uqm_rust::engine::World::current().write(|world| {
+            let (group_id, group) = uqm_rust::engine::World::current().write(|world| {
                 let mut queue = world.ip_groups();
                 queue.reinit();
                 let id = queue.alloc().unwrap();
@@ -175,7 +175,7 @@ fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
                 group.loc = POINT { x: 300, y: 400 };
                 group.melee_icon = frames.frame(0);
                 queue.put(id);
-                queue.raw(id).cast::<nav::IP_GROUP>()
+                (id, queue.raw(id).cast::<nav::IP_GROUP>())
             });
             nav::pSolarSysState = &mut *solar;
             nav::EncounterRace = -1;
@@ -190,7 +190,10 @@ fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
                 let flagship = cx.elements().head().expect("spawned flagship");
                 assert_eq!(cx.element(flagship).turn, 1);
                 let id = cx.elements().succ(flagship).expect("spawned group");
-                assert_eq!(cx.parent(id), uqm_rust::engine::battle::Parent::IpGroup(0));
+                assert_eq!(
+                    cx.parent(id),
+                    uqm_rust::engine::battle::Parent::IpGroup(group_id)
+                );
                 let state = cx.element(id);
                 assert_eq!(cx.frame_number(state.current.image.frame.view()), 1);
                 let hook = state.death.expect("group movement hook");
@@ -198,7 +201,10 @@ fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
                 uqm_rust::battle::process_native::invoke_element::invoke_element(cx, hook, id);
                 assert_eq!(cx.element(id).flags & CHANGING as u16, CHANGING as u16);
                 assert_eq!(cx.element(id).flags & NONSOLID as u16, NONSOLID as u16);
-                assert_eq!(cx.parent(id), uqm_rust::engine::battle::Parent::IpGroup(0));
+                assert_eq!(
+                    cx.parent(id),
+                    uqm_rust::engine::battle::Parent::IpGroup(group_id)
+                );
             });
             assert_ne!(((*group).loc.x, (*group).loc.y), (300, 400));
             assert_eq!((*group).sys_loc, 0);

@@ -140,13 +140,14 @@ impl<'a, T: QueueRecord, const N: usize> LinkQueue<'a, T, N> {
     pub fn slot(&self, id: LinkId<T>) -> u8 {
         self.key(id).index() as u8
     }
-    pub fn at_slot(&self, slot: u8) -> Option<LinkId<T>> {
-        self.queue
-            .id_at(usize::from(slot))
-            .map(|id| self.identify(id))
-    }
-    pub fn retired_address(&self, slot: u8) -> usize {
-        self.queue.retired_address(usize::from(slot))
+    /// Retired parents retain their journal identity, without reading a freed record.
+    pub(crate) fn journal_address(&self, id: LinkId<T>) -> usize {
+        assert_eq!(
+            id.pool,
+            self.queue.storage_identity(),
+            "foreign journal identity"
+        );
+        self.queue.retired_address(id.slot)
     }
     pub fn into_record(self, id: LinkId<T>) -> &'a T::Record {
         let key = self.key(id);
@@ -540,8 +541,9 @@ mod pool_view_tests {
         let mut pool = OrderedPool::<u32, 4>::new();
         let mut view = LinkQueue::<Value, 4>::from_pool(&mut pool);
         let id = view.alloc().unwrap();
-        let slot = view.slot(id);
-        assert_eq!(view.at_slot(slot), Some(id));
+        assert_eq!(view.slot(id), 0);
+        let address = view.raw(id) as usize;
+        assert_eq!(view.journal_address(id), address);
         *view.into_record_mut(id) = 17;
         let shared = LinkQueue::<Value, 4>::borrow_pool(&pool);
         assert_eq!(*shared.into_record(id), 17);
@@ -557,10 +559,14 @@ mod pool_view_tests {
             LinkQueue::<Value, 4>::borrow_pool(&pool).into_record(foreign);
         }))
         .is_err());
+        assert!(catch_unwind(AssertUnwindSafe(|| {
+            LinkQueue::<Value, 4>::borrow_pool(&pool).journal_address(foreign);
+        }))
+        .is_err());
         LinkQueue::<Value, 4>::from_pool(&mut pool).free(id);
-        assert!(LinkQueue::<Value, 4>::borrow_pool(&pool)
-            .at_slot(slot)
-            .is_none());
+        let view = LinkQueue::<Value, 4>::borrow_pool(&pool);
+        assert!(!view.contains(id));
+        assert_eq!(view.journal_address(id), address);
         assert!(catch_unwind(AssertUnwindSafe(|| {
             LinkQueue::<Value, 4>::from_pool(&mut pool).into_record_mut(id);
         }))

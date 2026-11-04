@@ -455,7 +455,7 @@ pub(crate) mod live {
             cx,
             locationToDisplay(record.loc, radius(cx, record.sys_loc)),
         );
-        cx.set_ip_group_parent(element, cx.world.ip_groups_ref().slot(group));
+        cx.set_ip_group_parent(element, group);
         cx.setup_element(element);
         let stars = cx.navigation_stars();
         let frame = cx.retreat_frame(stars.view());

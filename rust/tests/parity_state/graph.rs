@@ -395,7 +395,7 @@ pub(super) fn non_ship_parent_fields(observer: &AutomationObserver, directory: &
     let mut element = ElementRecord::new();
     // SAFETY: no game loop is running; this test owns both queues and the group pool.
     unsafe {
-        let handle = uqm_rust::engine::World::current().write(|world| {
+        let (group_id, handle) = uqm_rust::engine::World::current().write(|world| {
             let mut queue = world.ip_groups();
             let id = queue.alloc().unwrap();
             let group = queue.get_mut(id);
@@ -405,9 +405,9 @@ pub(super) fn non_ship_parent_fields(observer: &AutomationObserver, directory: &
             group.loc.x = -71;
             group.task = 2;
             queue.put(id);
-            queue.raw(id)
+            (id, queue.raw(id))
         });
-        element.parent = uqm_rust::engine::battle::Parent::IpGroup(0);
+        element.parent = uqm_rust::engine::battle::Parent::IpGroup(group_id);
         attach_elements(std::slice::from_mut(&mut element));
         observation::record(Event::Allocate(element.pointer() as usize));
         let callback = uqm_rust::ships::hook_registry::hooks()

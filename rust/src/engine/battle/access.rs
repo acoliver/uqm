@@ -97,12 +97,16 @@ impl Cx<'_> {
         self.kernel.elements.record_mut(element).target = target;
     }
 
-    pub(crate) fn set_ip_group_parent(&mut self, id: ElementId, slot: u8) {
+    pub(crate) fn set_ip_group_parent(
+        &mut self,
+        id: ElementId,
+        group: super::link_queue::LinkId<crate::engine::world::queues::Group>,
+    ) {
         assert!(
-            self.groups().at_slot(slot).is_some(),
-            "IP-group slot outside pool"
+            self.groups().contains(group),
+            "stale or foreign IP-group parent"
         );
-        self.kernel.elements.record_mut(id).parent = Parent::IpGroup(slot);
+        self.kernel.elements.record_mut(id).parent = Parent::IpGroup(group);
     }
 
     pub fn put(&mut self, id: ElementId) {

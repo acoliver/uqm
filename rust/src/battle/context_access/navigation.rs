@@ -29,13 +29,10 @@ impl Cx<'_> {
         &self,
         element: ElementId,
     ) -> crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Group> {
-        let Parent::IpGroup(slot) = self.parent(element) else {
+        let Parent::IpGroup(id) = self.parent(element) else {
             panic!("navigation element has no IP-group parent");
         };
-        self.world
-            .ip_groups_ref()
-            .at_slot(slot)
-            .expect("live IP-group parent")
+        id
     }
 
     pub(crate) fn ip_group(&self, element: ElementId) -> &IP_GROUP {

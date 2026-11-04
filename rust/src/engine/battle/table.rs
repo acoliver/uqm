@@ -27,7 +27,7 @@ pub struct ShipId {
 pub enum Parent {
     None,
     Ship(ShipId),
-    IpGroup(u8),
+    IpGroup(super::link_queue::LinkId<crate::engine::world::queues::Group>),
 }
 
 pub struct ElementTable {
