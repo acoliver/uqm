@@ -3,6 +3,18 @@
 
 mod descriptor;
 
+pub(crate) fn copy_display_name(target: &mut [std::ffi::c_char], source: &[u8]) {
+    target.fill(0);
+    let length = source
+        .iter()
+        .position(|byte| *byte == 0)
+        .unwrap_or(source.len());
+    let count = length.min(target.len().saturating_sub(1));
+    for (target, source) in target.iter_mut().zip(source).take(count) {
+        *target = *source as std::ffi::c_char;
+    }
+}
+
 #[allow(
     non_camel_case_types,
     non_snake_case,
@@ -30,8 +42,7 @@ pub mod abi {
         set_context as SetContext, set_context_font as SetContextFont,
         set_flash_rect as SetFlashRect, set_mipmap as TFB_DrawScreen_SetMipmap,
         set_status_mode as SetStatusMessageMode, set_transition_source as SetTransitionSource,
-        set_velocity_vector as SetVelocityVector, string_address as GetStringAddress,
-        utf8_string_copy as utf8StringCopy,
+        string_address as GetStringAddress,
     };
 
     #[cfg(not(test))]
@@ -104,15 +115,6 @@ mod engine {
 
     use crate::sound::heart_ffi::DestroySound;
 
-    /// # Safety
-    /// `dst` must hold `size` bytes and `src` must be NUL-terminated.
-    pub unsafe fn utf8_string_copy(
-        dst: *mut std::ffi::c_char,
-        size: usize,
-        src: *const std::ffi::c_char,
-    ) -> *mut u8 {
-        crate::strings::unicode::utf8_string_copy(dst.cast(), size, src.cast())
-    }
 
     /// # Safety
     /// `table` must be null or a live table no longer in use.
@@ -174,16 +176,6 @@ mod engine {
             x: point.x,
             y: point.y,
         }
-    }
-
-    /// # Safety
-    /// `velocity` must point to a live engine velocity record.
-    pub unsafe fn set_velocity_vector(
-        velocity: *mut abi::VELOCITY_DESC,
-        magnitude: abi::SIZE,
-        facing: abi::COUNT,
-    ) {
-        crate::battle::velocity::set_velocity_vector(&mut *velocity.cast(), magnitude, facing);
     }
 
     /// # Safety
@@ -438,5 +430,30 @@ mod tests {
         ] {
             assert_eq!(wrap_delta(delta, 8192), expected);
         }
+    }
+}
+
+#[cfg(test)]
+mod name_copy_tests {
+    use super::copy_display_name;
+
+    #[test]
+    fn display_names_are_terminated_padded_and_truncated_by_bytes() {
+        let mut target = [7; 8];
+        copy_display_name(&mut target, b"Orz");
+        assert_eq!(target, [b'O' as _, b'r' as _, b'z' as _, 0, 0, 0, 0, 0]);
+        copy_display_name(&mut target, b"abc\0ignored");
+        assert_eq!(target, [b'a' as _, b'b' as _, b'c' as _, 0, 0, 0, 0, 0]);
+        let mut target = [0; 3];
+        copy_display_name(&mut target, &[b'A', 0xc3, 0xa9]);
+        assert_eq!(target, [b'A' as _, 0xc3_u8 as _, 0]);
+    }
+
+    #[test]
+    fn empty_and_single_byte_destinations_do_not_copy_a_name() {
+        copy_display_name(&mut [], b"Orz");
+        let mut target = [7];
+        copy_display_name(&mut target, b"Orz");
+        assert_eq!(target, [0]);
     }
 }

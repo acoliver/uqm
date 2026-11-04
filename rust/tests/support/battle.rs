@@ -780,13 +780,10 @@ pub fn velocity(v: &VELOCITY_DESC) -> [i32; 9] {
         v.incr.height.into(),
     ]
 }
-pub unsafe fn toward(speed: SIZE, face: COUNT) -> [i32; 9] {
-    // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
-    unsafe {
-        let mut v = mem::zeroed();
-        SetVelocityVector(&mut v, speed, face);
-        velocity(&v)
-    }
+pub fn toward(speed: SIZE, face: COUNT) -> [i32; 9] {
+    let mut v = uqm_rust::battle::velocity::VelocityDesc::new();
+    uqm_rust::battle::velocity::set_velocity_vector(&mut v, speed, face);
+    velocity(&v)
 }
 pub unsafe fn with_rng<T>(seed: u32, draws: usize, run: impl FnOnce() -> T) -> T {
     // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.

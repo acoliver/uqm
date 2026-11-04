@@ -522,10 +522,12 @@ pub(crate) mod engine {
                                 SetContextFont(
                                     KernelOwner::current().read(|owner| owner.tiny_font),
                                 );
-                                utf8StringCopy(
-                                    buf.as_mut_ptr(),
-                                    buf.len(),
-                                    GetStringAddress(frag.race_strings).cast(),
+                                crate::ships::native::copy_display_name(
+                                    &mut buf,
+                                    std::ffi::CStr::from_ptr(
+                                        GetStringAddress(frag.race_strings).cast(),
+                                    )
+                                    .to_bytes(),
                                 );
                                 strupr(buf.as_mut_ptr());
                                 t = text(
