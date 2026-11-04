@@ -331,11 +331,7 @@ fn escort_approach(
     }
     .unwrap_or(player.facing);
     let correction = bearing_facing(ex.round() as i32, ey.round() as i32).unwrap_or(player.facing);
-    let bearing = if correcting && (s.selected_species == Some(2) || !in_range) {
-        correction
-    } else {
-        aim
-    };
+    let bearing = if correcting { correction } else { aim };
     let error = (i32::from(bearing) - i32::from(player.facing)).rem_euclid(16);
     let thrust_error = (i32::from(correction) - i32::from(player.facing)).rem_euclid(16);
     let aim_error = (i32::from(aim) - i32::from(player.facing)).rem_euclid(16);
@@ -415,6 +411,28 @@ mod tests {
             arena: (8192, 7680),
             velocity: (0, 0),
         }
+    }
+
+    #[test]
+    fn fury_brakes_drift_in_generator_range_before_firing() {
+        let mut s = snapshot();
+        s.selected_species = Some(5);
+        s.gate = (4036, 4136);
+        s.velocity = (32, 49);
+        let player = ShipState {
+            x: 4160,
+            y: 3548,
+            facing: 9,
+            crew: 3,
+        };
+        let target = Generator {
+            id: 2,
+            x: 4164,
+            y: 3864,
+            hit_points: 1,
+        };
+        let keys = escort_approach(&s, player, &target);
+        assert!(keys.left || keys.right, "turn to brake drift into the hull");
     }
 
     #[test]
