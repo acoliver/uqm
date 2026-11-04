@@ -126,7 +126,7 @@ pub fn flee_cycle(index: u8, thrust: u8) -> (u8, u8, u8) {
 #[cfg(not(test))]
 pub(crate) mod engine {
     use super::*;
-    use crate::battle::battle_native::engine::{activity, rgb15, set_activity};
+    use crate::battle::battle_native::engine::rgb15;
     use crate::battle::battle_native::BattleSong;
     use crate::battle::encount_native::fleet_is_infinite;
     use crate::engine::battle::views::SharedFrames;
@@ -325,7 +325,8 @@ pub(crate) mod engine {
             .as_ref()
             .is_some_and(|net| !cx.negotiate_battle(net.as_ref(), NetState_NetState_interBattle))
         {
-            set_activity(activity() & !(IN_BATTLE as u16));
+            cx.world
+                .set_activity(cx.world.activity() & !(IN_BATTLE as u16));
             BatchGraphics();
             return;
         }
@@ -338,7 +339,8 @@ pub(crate) mod engine {
                 .as_ref()
                 .is_some_and(|net| !cx.negotiate_battle(net.as_ref(), NetState_NetState_inBattle))
             {
-                set_activity(activity() & !(IN_BATTLE as u16));
+                cx.world
+                    .set_activity(cx.world.activity() & !(IN_BATTLE as u16));
                 BatchGraphics();
                 return;
             }
@@ -346,9 +348,11 @@ pub(crate) mod engine {
                 BattleSong(1);
             }
         } else if cx.b.counters.contains(&0) {
-            set_activity(activity() & !(IN_BATTLE as u16));
+            cx.world
+                .set_activity(cx.world.activity() & !(IN_BATTLE as u16));
         } else {
-            set_activity(activity() | CHECK_ABORT as u16);
+            cx.world
+                .set_activity(cx.world.activity() | CHECK_ABORT as u16);
         }
         BatchGraphics();
     }
