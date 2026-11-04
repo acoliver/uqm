@@ -227,7 +227,7 @@ pub(crate) mod engine {
             if player == NPC_PLAYER_NUM as SIZE && activity == IN_LAST_BATTLE as BYTE {
                 cx.draw_final_battle_captain(ship);
             } else if activity <= IN_ENCOUNTER as BYTE {
-                cx.init_ship_status(ship);
+                cx.init_ship_status(ship, None);
                 cx.invoke_ship_process(ship, false);
                 if cx.target(e).is_none() {
                     ship_transition(cx, e);

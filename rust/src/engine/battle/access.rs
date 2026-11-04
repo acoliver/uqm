@@ -824,12 +824,46 @@ impl Cx<'_> {
         &self,
         frame: super::frames::FrameRef<'_>,
         origin: crate::graphics::native_abi::POINT,
+        in_status_context: bool,
     ) {
         let mut stamp = crate::graphics::native_abi::STAMP {
             origin,
             frame: frame.raw(),
         };
         // SAFETY: the frame borrow retains its registered drawable through the synchronous draw.
-        unsafe { crate::graphics::frame_abi::DrawStamp(&mut stamp) }
+        unsafe {
+            let old = in_status_context
+                .then(|| crate::graphics::context_abi::SetContext(self.kernel.status_context));
+            crate::graphics::frame_abi::DrawStamp(&mut stamp);
+            if let Some(old) = old {
+                crate::graphics::context_abi::SetContext(old);
+            }
+        }
+    }
+}
+
+#[cfg(not(test))]
+impl Cx<'_> {
+    pub(crate) fn set_mipmap(
+        &self,
+        frame: super::frames::FrameRef<'_>,
+        mipmap: super::frames::FrameRef<'_>,
+    ) {
+        assert!(
+            !frame.is_absent() && !mipmap.is_absent(),
+            "mipmap requires two loaded frames"
+        );
+        let frame = frame.raw();
+        let mipmap = mipmap.raw();
+        // SAFETY: both non-absent frame borrows retain their allocations during the image update.
+        unsafe {
+            let hot = crate::graphics::drawable_abi::GetFrameHot(mipmap);
+            crate::graphics::tfb_draw_abi::TFB_DrawScreen_SetMipmap(
+                (*frame).image,
+                (*mipmap).image,
+                i32::from(hot.x),
+                i32::from(hot.y),
+            );
+        }
     }
 }

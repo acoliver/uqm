@@ -453,10 +453,10 @@ pub(crate) mod engine {
         GetInitialStarShips()
     }
 
-    unsafe fn finish_battle(cx: &mut crate::engine::battle::Cx<'_>, stop_audio: bool) {
+    fn finish_battle(cx: &mut crate::engine::battle::Cx<'_>, stop_audio: bool) {
         if stop_audio {
             stop_ditty(cx.kernel);
-            stop_music();
+            crate::ui::settings::stop_battle_music();
             StopSound();
         }
         cx.finish_battle();

@@ -239,7 +239,7 @@ pub(crate) mod engine {
         let (frames, count) = turn_frames(delta, current, pass);
         let turn = FrameSelection::retain(captain.turn);
         for &offset in &frames[..count] {
-            cx.draw_stamp(cx.relative_frame(turn.view(), offset).view(), origin);
+            cx.draw_stamp(cx.relative_frame(turn.view(), offset).view(), origin, false);
         }
         for (flag, base) in [
             (THRUST, FrameSelection::retain(captain.thrust)),
@@ -254,7 +254,7 @@ pub(crate) mod engine {
                 } else {
                     0
                 };
-                cx.draw_stamp(cx.relative_frame(base.view(), offset).view(), origin);
+                cx.draw_stamp(cx.relative_frame(base.view(), offset).view(), origin, false);
             }
         }
     }

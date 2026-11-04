@@ -117,14 +117,7 @@ impl Cx<'_> {
         frame: crate::engine::battle::views::FrameSelection,
         flags: u8,
     ) {
-        let mut stamp = STAMP {
-            origin,
-            frame: frame.raw(),
-        };
-        // SAFETY: the checked ship and supplied loaded frame remain live.
-        unsafe {
-            crate::battle::weapon_native::modify_silhouette(self, source, &mut stamp, flags);
-        }
+        crate::battle::weapon_native::modify_silhouette(self, source, origin, frame, flags);
     }
 
     pub fn missile(
@@ -156,14 +149,20 @@ impl Cx<'_> {
         }
     }
 
-    pub fn init_ship_status(&mut self, ship: ShipId) {
+    pub fn init_ship_status(&mut self, ship: ShipId, mut clip: Option<RECT>) {
+        let clipped = clip.is_some();
+        let clip = clip
+            .as_mut()
+            .map_or(std::ptr::null_mut(), std::ptr::from_mut);
+        let info = self.ship_info_pointer(ship);
         // SAFETY: the descriptor retains its owned status data while graphics are drawn.
         unsafe {
-            let info = self.ship_info_pointer(ship);
-            crate::ui::shipstat::init_ship_status(info, Some(ship), std::ptr::null_mut());
-            let old = SetContext(self.kernel.status_context);
-            crate::battle::status_native::draw_captains_window(self, ship);
-            SetContext(old);
+            crate::ui::shipstat::init_ship_status(info, Some(ship), clip);
+            if !clipped {
+                let old = SetContext(self.kernel.status_context);
+                crate::battle::status_native::draw_captains_window(self, ship);
+                SetContext(old);
+            }
         }
     }
 
