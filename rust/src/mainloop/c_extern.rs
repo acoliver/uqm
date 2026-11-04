@@ -265,12 +265,6 @@ pub use crate::ui::starbase::install_bomb_at_earth;
 extern "C" {
     pub fn install_bomb_at_earth();
 }
-#[cfg(not(test))]
-pub use crate::ui::starbase::visit_star_base;
-#[cfg(test)]
-extern "C" {
-    pub fn visit_star_base();
-}
 
 #[cfg(not(test))]
 pub use crate::planets::solarsys::lifecycle::ExploreSolarSys;

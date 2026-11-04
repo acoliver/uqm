@@ -461,8 +461,14 @@ mod cffi {
         }
 
         fn visit_starbase(&self) -> Result<(), MainLoopError> {
-            self.legacy(|| {
-                unsafe { crate::ui::starbase::visit_star_base() };
+            self.owned(|cx| {
+                let runtime = cx.kernel.input_runtime();
+                let mut observer = runtime.observer();
+                let mut io = crate::engine::observe::Io {
+                    observer: observer.as_mut(),
+                };
+                // SAFETY: the main loop owns the initialized campaign and display.
+                unsafe { crate::ui::starbase::run_starbase_visit(cx, &mut io) };
                 Ok(())
             })
         }

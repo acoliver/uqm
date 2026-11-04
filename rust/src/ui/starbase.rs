@@ -3,7 +3,11 @@
 
 use super::{outfit::DoOutfit, shipyard::DoShipyard};
 use crate::comm::comm_abi::{InitCommunication, SetCommIntroMode};
-use crate::engine::{Kernel, StoryKey, World, WorldData};
+use crate::engine::{
+    battle::Cx,
+    observe::{CheckpointView, Io},
+    Kernel, StoryKey, World, WorldData,
+};
 use crate::navigation::abi::*;
 
 use std::{mem, ptr};
@@ -273,7 +277,7 @@ unsafe fn rotate_starbase(menu: *mut MENU_STATE, frame: FRAME) {
     }
 }
 
-unsafe fn exit_star_base(menu: *mut MENU_STATE) -> BOOLEAN {
+unsafe fn finish_starbase_screen(menu: *mut MENU_STATE) -> BOOLEAN {
     DestroyDrawable(ReleaseDrawable((*menu).CurFrame));
     (*menu).CurFrame = ptr::null_mut();
     stop_music();
@@ -291,50 +295,60 @@ unsafe fn exit_star_base(menu: *mut MENU_STATE) -> BOOLEAN {
         return 0;
     }
     (*menu).Initialized = 0;
-    if (*menu).CurState == TALK_COMMANDER {
-        crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::StarbaseMenu(
-            false,
-        ));
-        FlushInput();
-        InitCommunication(CONVERSATION_COMMANDER_CONVERSATION);
-        crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::StarbaseMenu(true));
-        World::current().write(|world| {
-            world.set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, BYTE::MAX as u32)
+    1
+}
+
+unsafe fn activate_starbase_selection(
+    cx: &mut Cx<'_>,
+    io: &mut Io<'_>,
+    menu: &mut MENU_STATE,
+) -> BOOLEAN {
+    if cx.with_legacy(|| finish_starbase_screen(menu)) == 0 {
+        return 0;
+    }
+    if menu.CurState == TALK_COMMANDER {
+        io.observer.checkpoint(&CheckpointView::StarbaseMenu(false));
+        cx.with_legacy(|| {
+            FlushInput();
+            InitCommunication(CONVERSATION_COMMANDER_CONVERSATION);
         });
+        io.observer.checkpoint(&CheckpointView::StarbaseMenu(true));
+        cx.world
+            .set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, BYTE::MAX as u32);
     } else {
-        let old = (*menu).CurState;
-        match old {
-            OUTFIT_STARSHIP => (*menu).InputFunc = Some(DoOutfit),
-            SHIPYARD => (*menu).InputFunc = Some(DoShipyard),
-            _ => {}
-        }
-        SetMenuSounds(SOUND_ARROWS, SOUND_SELECT);
-        DoInput(menu.cast(), 1);
-        (*menu).Initialized = 0;
-        (*menu).CurState = old;
-        (*menu).InputFunc = Some(DoStarBase);
+        let old = menu.CurState;
+        menu.InputFunc = Some(match old {
+            OUTFIT_STARSHIP => DoOutfit,
+            SHIPYARD => DoShipyard,
+            _ => unreachable!("invalid Starbase submenu"),
+        });
+        cx.with_legacy(|| SetMenuSounds(SOUND_ARROWS, SOUND_SELECT));
+        cx.run_input(io, true, |cx, _| {
+            cx.with_legacy(|| {
+                let callback = menu
+                    .InputFunc
+                    .unwrap_or_else(|| panic!("missing Starbase submenu callback"));
+                callback(menu) != 0
+            })
+        });
+        menu.Initialized = 0;
+        menu.CurState = old;
+        menu.InputFunc = None;
     }
     1
 }
 
-/// Process one Starbase input frame and run the selected nested menu.
-///
-/// # Safety
-/// `menu` must be the live game-thread menu. Graphics, audio, communication
-/// and input systems must be initialized and accessed only on that thread.
-#[no_mangle]
-pub unsafe extern "C" fn DoStarBase(menu: *mut MENU_STATE) -> BOOLEAN {
+unsafe fn update_starbase_screen(menu: *mut MENU_STATE) -> bool {
     if WorldData::current().read(|owner| owner.game.current_activity)
         & (CHECK_ABORT | CHECK_LOAD) as u16
         != 0
     {
         (*menu).CurState = DEPART_BASE;
-        return exit_star_base(menu);
+        return false;
     }
     SetMenuSounds(SOUND_ARROWS, SOUND_SELECT);
     if (*menu).Initialized == 0 {
         (**Kernel::current()).last_activity &= !(CHECK_LOAD as u16);
-        (*menu).InputFunc = Some(DoStarBase);
         SetFlashRect(ptr::null());
         if !(*menu).hMusic.is_null() {
             stop_music();
@@ -356,7 +370,7 @@ pub unsafe extern "C" fn DoStarBase(menu: *mut MENU_STATE) -> BOOLEAN {
         PlayMusic((*menu).hMusic, 1, 1);
         UnbatchGraphics();
     } else if PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0 {
-        return exit_star_base(menu);
+        return false;
     } else {
         let mut state = (*menu).CurState;
         if PulsedInputState.menu[KEY_MENU_LEFT as usize] != 0
@@ -386,7 +400,7 @@ pub unsafe extern "C" fn DoStarBase(menu: *mut MENU_STATE) -> BOOLEAN {
         UnbatchGraphics();
         SleepThread(ONE_SECOND / 30);
     }
-    1
+    true
 }
 
 unsafe fn do_time_passage() {
@@ -408,12 +422,7 @@ unsafe fn cleanup_after_star_base() {
     }
 }
 
-/// Run the unallied/Ilwrath encounters, delivery dialogue and Starbase menus.
-///
-/// # Safety
-/// World queues, game clock, communication, input, graphics and audio must be
-/// initialized and exclusively accessed by the calling game thread.
-pub unsafe fn visit_star_base() {
+unsafe fn prepare_starbase_visit(io: &mut Io<'_>) -> Option<u32> {
     if World::current().read(|world| world.story_state(StoryKey::CHMMR_BOMB_STATE)) == 2 {
         (**World::current()).select_star(None, crate::planets::starmap::current_catalog());
         World::current().write(|world| {
@@ -421,7 +430,7 @@ pub unsafe fn visit_star_base() {
         });
     }
     if World::current().read(|world| world.story_state(StoryKey::STARBASE_AVAILABLE)) == 0 {
-        crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::EncounterDispatch(
+        io.observer.checkpoint(&CheckpointView::EncounterDispatch(
             CONVERSATION_COMMANDER_CONVERSATION,
         ));
         SetCommIntroMode(CROSSFADE_SCREEN, 0);
@@ -430,7 +439,7 @@ pub unsafe fn visit_star_base() {
             || (**WorldData::current()).game.current_activity & CHECK_ABORT as u16 != 0
         {
             cleanup_after_star_base();
-            return;
+            return None;
         }
         let ship = WorldData::current().write(|world| {
             CloneShipFragment(
@@ -445,12 +454,12 @@ pub unsafe fn visit_star_base() {
         if (**WorldData::current()).flagship.crew_enlisted == COUNT::MAX
             || (**WorldData::current()).game.current_activity & CHECK_ABORT as u16 != 0
         {
-            return;
+            return None;
         }
         SetCommIntroMode(CROSSFADE_SCREEN, 0);
         InitCommunication(CONVERSATION_COMMANDER_CONVERSATION);
         if (**WorldData::current()).game.current_activity & CHECK_ABORT as u16 != 0 {
-            return;
+            return None;
         }
         World::current().write(|world| {
             world.set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, BYTE::MAX as u32)
@@ -462,29 +471,49 @@ pub unsafe fn visit_star_base() {
     {
         do_time_passage();
         if (**WorldData::current()).flagship.crew_enlisted == COUNT::MAX {
-            return;
+            return None;
         }
-        crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::EncounterDispatch(
+        io.observer.checkpoint(&CheckpointView::EncounterDispatch(
             CONVERSATION_COMMANDER_CONVERSATION,
         ));
         SetCommIntroMode(FADE_IN_SCREEN, ONE_SECOND * 2);
         InitCommunication(CONVERSATION_COMMANDER_CONVERSATION);
         if (**WorldData::current()).game.current_activity & CHECK_ABORT as u16 != 0 {
-            return;
+            return None;
         }
         World::current().write(|world| {
             world.set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, BYTE::MAX as u32)
         });
     }
+    Some(previous)
+}
+
+/// Run the unallied/Ilwrath encounters, delivery dialogue and Starbase menus.
+///
+/// # Safety
+/// World queues, game clock, communication, input, graphics and audio must be
+/// initialized and exclusively accessed by the calling game thread.
+pub unsafe fn run_starbase_visit(cx: &mut Cx<'_>, io: &mut Io<'_>) {
+    let Some(previous) = cx.with_legacy(|| prepare_starbase_visit(io)) else {
+        return;
+    };
     let mut menu: MENU_STATE = mem::zeroed();
-    menu.InputFunc = Some(DoStarBase);
-    let old = SetContext(Kernel::current().read(|owner| owner.screen_context));
-    crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::StarbaseMenu(true));
-    DoInput(ptr::addr_of_mut!(menu).cast(), 1);
-    crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::StarbaseMenu(false));
-    SetContext(old);
-    SetStatusMessageMode(previous);
-    cleanup_after_star_base();
+    let context = cx.kernel.screen_context;
+    let old = cx.with_legacy(|| SetContext(context));
+    io.observer.checkpoint(&CheckpointView::StarbaseMenu(true));
+    cx.run_input(io, true, |cx, io| {
+        if cx.with_legacy(|| update_starbase_screen(&mut menu)) {
+            true
+        } else {
+            activate_starbase_selection(cx, io, &mut menu) != 0
+        }
+    });
+    io.observer.checkpoint(&CheckpointView::StarbaseMenu(false));
+    cx.with_legacy(|| {
+        SetContext(old);
+        SetStatusMessageMode(previous);
+        cleanup_after_star_base();
+    });
 }
 
 /// Advance fourteen days, finish bomb installation and force a SolarSys reload.
