@@ -68,6 +68,42 @@ impl RaceTemplate {
         raw.fleet.strength = self.fleet_strength;
         raw.fleet.known_loc = self.fleet_location;
         raw.race = Some(race);
-        RaceDesc::from_storage(raw)
+        let mut descriptor = RaceDesc::from_storage(raw);
+        descriptor.resources = r;
+        descriptor
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    static RACE: Race = Race {
+        descriptor: |_| unreachable!(),
+        preprocess: None,
+        postprocess: None,
+        init_weapon: None,
+        intelligence: None,
+        uninit: None,
+    };
+
+    #[test]
+    fn typed_resource_keys_survive_changes_to_legacy_mirrors() {
+        let resources = RaceResources {
+            strings: Some(c"race.names"),
+            icons: Some(c"race.icons"),
+            ship: [Some(c"race.big"), Some(c"race.medium"), None],
+            ..RaceResources::default()
+        };
+        let mut descriptor = RaceTemplate {
+            resources,
+            ..RaceTemplate::default()
+        }
+        .descriptor(&RACE);
+        descriptor.raw.ship_info.icons_rsc = std::ptr::null();
+        descriptor.raw.ship_data.ship_rsc = [std::ptr::null(); 3];
+        assert_eq!(descriptor.resources.strings, resources.strings);
+        assert_eq!(descriptor.resources.icons, resources.icons);
+        assert_eq!(descriptor.resources.ship, resources.ship);
     }
 }

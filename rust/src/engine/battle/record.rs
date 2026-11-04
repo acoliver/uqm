@@ -499,18 +499,20 @@ impl Cx<'_> {
 #[derive(Debug)]
 pub struct RaceDesc {
     pub(super) raw: Box<RaceDescriptor>,
+    pub(super) resources: super::template::RaceResources,
 }
 impl RaceDesc {
     pub(super) fn empty() -> Self {
-        Self {
-            raw: Box::new(RaceDescriptor::EMPTY),
-        }
+        Self::from_storage(Box::new(RaceDescriptor::EMPTY))
     }
     pub(super) fn from_legacy(raw: RaceDescriptor) -> Self {
-        Self { raw: Box::new(raw) }
+        Self::from_storage(Box::new(raw))
     }
     pub(super) fn from_storage(raw: Box<RaceDescriptor>) -> Self {
-        Self { raw }
+        Self {
+            raw,
+            resources: super::template::RaceResources::default(),
+        }
     }
     #[cfg(not(test))]
     pub(super) fn into_storage(self) -> Box<RaceDescriptor> {

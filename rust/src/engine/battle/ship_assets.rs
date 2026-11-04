@@ -4,11 +4,7 @@ use crate::engine::battle::{frames::FrameArray, record::*, RaceDesc};
 #[cfg(not(test))]
 use crate::graphics::native_abi::{FRAME, STRING, STRING as SOUND};
 #[cfg(not(test))]
-use crate::graphics::{
-    drawable_abi::DestroyDrawable,
-    pixmap_abi::{CaptureDrawable, ReleaseDrawable},
-    resgfx::LoadGraphicInstance,
-};
+use crate::graphics::{drawable_abi::DestroyDrawable, pixmap_abi::ReleaseDrawable};
 #[cfg(not(test))]
 use crate::sound::heart_ffi::{DestroyMusic, DestroySound};
 #[cfg(not(test))]
@@ -30,12 +26,8 @@ pub(crate) struct ShipAssets {
 }
 
 #[cfg(not(test))]
-fn load_animation_set(keys: [*const std::ffi::c_char; 3]) -> Option<FrameArray> {
+fn load_animation_set(keys: [Option<&'static std::ffi::CStr>; 3]) -> Option<FrameArray> {
     let mut raw = [std::ptr::null_mut(); 3];
-    let keys = keys.map(|key| {
-        // SAFETY: only the closed race factory supplies these static resource keys.
-        (!key.is_null()).then(|| unsafe { std::ffi::CStr::from_ptr(key) })
-    });
     if load_animation(&mut raw, keys, "animation") == 0 {
         free_image(&mut raw, "animation");
         return None;
@@ -66,34 +58,30 @@ impl RaceDesc {
 
     fn initialize_icons(&mut self) {
         let info = &mut self.raw.ship_info;
-        // SAFETY: the closed race factory supplies static resource keys. Each loader
-        // transfers its handle to this descriptor's private release authority.
-        unsafe {
-            if !info.icons_rsc.is_null() {
-                info.icons = CaptureDrawable(LoadGraphicInstance(info.icons_rsc).cast()).cast();
-            }
-            if !info.melee_icon_rsc.is_null() {
-                info.melee_icon =
-                    CaptureDrawable(LoadGraphicInstance(info.melee_icon_rsc).cast()).cast();
-            }
-            if !info.race_strings_rsc.is_null() {
-                info.race_strings =
-                    CaptureStringTable(LoadStringTableInstance(info.race_strings_rsc)).cast();
-            }
+        if let Some(key) = self.resources.icons {
+            info.icons = crate::engine::battle::frames::load_graphic(key);
+        }
+        if let Some(key) = self.resources.melee_icon {
+            info.melee_icon = crate::engine::battle::frames::load_graphic(key);
+        }
+        if let Some(key) = self.resources.strings {
+            // SAFETY: the retained static key is live; the captured table belongs to this descriptor.
+            info.race_strings =
+                unsafe { CaptureStringTable(LoadStringTableInstance(key.as_ptr())).cast() };
         }
     }
 
     fn initialize_battle_assets(&mut self) -> bool {
         let data = &mut self.raw.ship_data;
-        let Some(ship) = load_animation_set(data.ship_rsc) else {
+        let Some(ship) = load_animation_set(self.resources.ship) else {
             return false;
         };
         data.ship = ship;
         for (keys, frames) in [
-            (data.weapon_rsc, &mut data.weapon),
-            (data.special_rsc, &mut data.special),
+            (self.resources.weapon, &mut data.weapon),
+            (self.resources.special, &mut data.special),
         ] {
-            if !keys[0].is_null() {
+            if keys[0].is_some() {
                 let Some(loaded) = load_animation_set(keys) else {
                     return false;
                 };
@@ -105,26 +93,24 @@ impl RaceDesc {
 
     fn initialize_battle_audio_and_captain(&mut self) -> bool {
         let data = &mut self.raw.ship_data;
-        // SAFETY: only the closed race factory constructs these static keys, and
-        // captured handles remain privately owned even when a later load fails.
-        unsafe {
-            if !data.captain_control.captain_rsc.is_null() {
-                data.captain_control.background =
-                    CaptureDrawable(LoadGraphicInstance(data.captain_control.captain_rsc).cast())
-                        .cast();
-                if data.captain_control.background.is_null() {
-                    return false;
-                }
+        if let Some(key) = self.resources.captain {
+            data.captain_control.background = crate::engine::battle::frames::load_graphic(key);
+            if data.captain_control.background.is_null() {
+                return false;
             }
-            if !data.victory_ditty_rsc.is_null() {
-                data.victory_ditty = LoadMusicInstance(data.victory_ditty_rsc).cast();
+        }
+        // SAFETY: retained static keys are live, and captured handles remain privately
+        // owned even when a later load fails.
+        unsafe {
+            if let Some(key) = self.resources.victory {
+                data.victory_ditty = LoadMusicInstance(key.as_ptr()).cast();
                 if data.victory_ditty.is_null() {
                     return false;
                 }
             }
-            if !data.ship_sounds_rsc.is_null() {
+            if let Some(key) = self.resources.sounds {
                 data.ship_sounds =
-                    CaptureStringTable(LoadSoundInstance(data.ship_sounds_rsc).cast()).cast();
+                    CaptureStringTable(LoadSoundInstance(key.as_ptr()).cast()).cast();
                 if data.ship_sounds.is_null() {
                     return false;
                 }
