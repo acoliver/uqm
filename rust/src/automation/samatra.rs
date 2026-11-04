@@ -5,7 +5,7 @@ use super::fleet_fight::Picker;
 use super::script::MenuKey;
 use crate::battle::battle_types::shortest_path_delta;
 use crate::pickship::{Cursor, FLAGSHIP_COLUMN};
-use crate::ships::races::samatra::observation::{Events, Snapshot};
+use crate::ships::races::samatra::observation::{Events, Hazard, Snapshot};
 
 #[derive(Debug, Default, Clone, Copy, serde::Deserialize, serde::Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -103,7 +103,8 @@ impl Controller {
         if let Some(s) = snapshot {
             self.saw_eight |= s.remaining == 8 && s.generators.len() == 8;
             self.saw_open_gate |= s.remaining == 0 && s.gate_open;
-            self.hazards_cleared |= s.remaining == 0 && s.gate_open && s.hazards.is_empty();
+            self.hazards_cleared |=
+                s.remaining == 0 && s.gate_open && escort_hazards(s).next().is_none();
         }
         if until == Until::Ready
             && self.saw_eight
@@ -168,7 +169,7 @@ impl Controller {
             self.used_bomb = true;
         } else {
             self.used_escort = true;
-            if remaining == 0 && s.hazards.is_empty() {
+            if remaining == 0 && escort_hazards(s).next().is_none() {
                 // The ordinary escort retreat leaves the flagship available in
                 // the next picker. BOMB_CARRIER disables retreat for the SIS.
                 return Progress::Running(Controls {
@@ -187,9 +188,7 @@ impl Controller {
             )
         };
         if !s.bomb_carrier && s.selected_species == Some(2) && remaining != 0 {
-            if let Some(hazard) = s
-                .hazards
-                .iter()
+            if let Some(hazard) = escort_hazards(s)
                 .filter(|h| distance(h.x, h.y).2 < 600 * 600)
                 .min_by_key(|h| distance(h.x, h.y).2)
             {
@@ -208,9 +207,7 @@ impl Controller {
             }
         }
         if !s.bomb_carrier && remaining == 0 {
-            let hazard = s
-                .hazards
-                .iter()
+            let hazard = escort_hazards(s)
                 .min_by_key(|h| distance(h.x, h.y).2)
                 .expect("remaining hazards before escort retreat");
             let (dx, dy, squared) = distance(hazard.x, hazard.y);
@@ -241,26 +238,7 @@ impl Controller {
             });
         }
         if !s.bomb_carrier {
-            if !s
-                .generators
-                .iter()
-                .any(|g| Some(g.id) == self.target && g.hit_points > 0)
-            {
-                self.target = s
-                    .generators
-                    .iter()
-                    .filter(|g| g.hit_points > 0)
-                    .min_by_key(|g| distance(g.x, g.y).2)
-                    .map(|g| g.id);
-            }
-            let Some(target) = s.generators.iter().find(|g| Some(g.id) == self.target) else {
-                return Progress::Running(Controls::default());
-            };
-            return Progress::Running(Controls {
-                flight: escort_approach(s, player, target),
-                special: s.selected_species == Some(5),
-                ..Controls::default()
-            });
+            return Progress::Running(self.generator_engagement(s, player));
         }
         let (dx, dy, _) = distance(s.gate.0, s.gate.1);
         let bearing = bearing_facing(dx, dy).unwrap_or(player.facing);
@@ -277,6 +255,106 @@ impl Controller {
             ..Controls::default()
         })
     }
+    fn generator_engagement(
+        &mut self,
+        s: &Snapshot,
+        player: super::battle_fight::ShipState,
+    ) -> Controls {
+        if s.selected_species == Some(5) {
+            return Controls {
+                flight: fury_engagement(s, player),
+                special: true,
+                ..Controls::default()
+            };
+        }
+        if !s
+            .generators
+            .iter()
+            .any(|g| Some(g.id) == self.target && g.hit_points > 0)
+        {
+            self.target = s
+                .generators
+                .iter()
+                .filter(|g| g.hit_points > 0)
+                .min_by_key(|g| {
+                    let dx = i64::from(shortest_path_delta(player.x, g.x, s.arena.0));
+                    let dy = i64::from(shortest_path_delta(player.y, g.y, s.arena.1));
+                    dx * dx + dy * dy
+                })
+                .map(|g| g.id);
+        }
+        let Some(target) = s.generators.iter().find(|g| Some(g.id) == self.target) else {
+            return Controls::default();
+        };
+        Controls {
+            flight: escort_approach(s, player, target),
+            ..Controls::default()
+        }
+    }
+}
+
+fn escort_hazards(s: &Snapshot) -> impl Iterator<Item = &Hazard> {
+    // Replace Fury targeting without changing the other escorts' input policy.
+    s.hazards
+        .iter()
+        .filter(|h| s.selected_species != Some(5) || h.solid)
+}
+
+fn fury_engagement(s: &Snapshot, player: super::battle_fight::ShipState) -> FightControl {
+    let px = f64::from(shortest_path_delta(s.gate.0, player.x, s.arena.0));
+    let py = f64::from(shortest_path_delta(s.gate.1, player.y, s.arena.1));
+    let radius = px.hypot(py);
+    let (ux, uy) = if radius > 0.0 {
+        (px / radius, py / radius)
+    } else {
+        (0.0, -1.0)
+    };
+    // The generators extend about 610 world units from the gate. Keep moving
+    // outside that hull: a stationary Fury cannot replenish ammunition quickly
+    // enough to clear each new ten-hit-point sentinel and still hit generators.
+    let radial_speed = ((700.0 - radius) / 12.0).clamp(-48.0, 48.0);
+    let tangent_speed = if radius < 1000.0 { 48.0 } else { 0.0 };
+    let vx = ux * radial_speed - uy * tangent_speed;
+    let vy = uy * radial_speed + ux * tangent_speed;
+    let ex = vx - f64::from(s.velocity.0);
+    let ey = vy - f64::from(s.velocity.1);
+    let correcting = ex.hypot(ey) > 8.0;
+    let Some(target) = s
+        .generators
+        .iter()
+        .filter(|g| g.hit_points > 0)
+        .min_by_key(|g| {
+            let dx = i64::from(shortest_path_delta(player.x, g.x, s.arena.0));
+            let dy = i64::from(shortest_path_delta(player.y, g.y, s.arena.1));
+            dx * dx + dy * dy
+        })
+    else {
+        return FightControl::default();
+    };
+    let dx = shortest_path_delta(player.x, target.x, s.arena.0);
+    let dy = shortest_path_delta(player.y, target.y, s.arena.1);
+    let aim = missile_aim((dx, dy), s.velocity).unwrap_or(player.facing);
+    let bearing = if correcting {
+        bearing_facing(ex.round() as i32, ey.round() as i32).unwrap_or(player.facing)
+    } else {
+        aim
+    };
+    let error = (i32::from(bearing) - i32::from(player.facing)).rem_euclid(16);
+    let mut flight = FightControl {
+        left: error > 8,
+        right: (1..=8).contains(&error),
+        thrust: correcting && (error <= 1 || error >= 15),
+        weapon: false,
+    };
+    let mut firing = player;
+    firing.facing = ((i32::from(player.facing) + i32::from(flight.right) - i32::from(flight.left))
+        .rem_euclid(16)) as u8;
+    flight.weapon = s
+        .generators
+        .iter()
+        .any(|g| can_hit(s, firing, g.x, g.y, (0, 0)))
+        || escort_hazards(s).any(|h| can_hit(s, firing, h.x, h.y, h.velocity));
+    flight
 }
 
 fn escort_approach(
@@ -308,11 +386,7 @@ fn escort_approach(
         (rx + rx * 240.0 / radial - px, ry + ry * 240.0 / radial - py)
     };
     let distance = wx.hypot(wy);
-    let speed = if s.selected_species == Some(5) {
-        64.0
-    } else {
-        35.0
-    };
+    let speed = 35.0;
     let desired_speed = (distance / 8.0).min(speed);
     let (vx, vy) = if distance > 0.0 {
         (wx * desired_speed / distance, wy * desired_speed / distance)
@@ -322,14 +396,7 @@ fn escort_approach(
     let (ex, ey) = (vx - f64::from(s.velocity.0), vy - f64::from(s.velocity.1));
     let correcting = ex.hypot(ey) > 8.0;
     let in_range = i64::from(dx) * i64::from(dx) + i64::from(dy) * i64::from(dy) < 480 * 480;
-    // Fury missiles inherit the ship velocity. Aim against that drift rather
-    // than firing along the current bearing to a stationary generator.
-    let aim = if s.selected_species == Some(5) {
-        missile_aim((dx, dy), s.velocity)
-    } else {
-        bearing_facing(dx, dy)
-    }
-    .unwrap_or(player.facing);
+    let aim = bearing_facing(dx, dy).unwrap_or(player.facing);
     let correction = bearing_facing(ex.round() as i32, ey.round() as i32).unwrap_or(player.facing);
     let bearing = if correcting && (s.selected_species == Some(2) || !in_range) {
         correction
@@ -345,6 +412,30 @@ fn escort_approach(
         thrust: correcting && (thrust_error <= 1 || thrust_error >= 15),
         weapon: in_range && (aim_error == 0 || aim_error == 4 || aim_error == 12),
     }
+}
+
+fn can_hit(
+    s: &Snapshot,
+    player: super::battle_fight::ShipState,
+    x: i32,
+    y: i32,
+    velocity: (i32, i32),
+) -> bool {
+    let dx = shortest_path_delta(player.x, x, s.arena.0);
+    let dy = shortest_path_delta(player.y, y, s.arena.1);
+    let squared = i64::from(dx) * i64::from(dx) + i64::from(dy) * i64::from(dy);
+    let aim = missile_aim(
+        (dx, dy),
+        (s.velocity.0 - velocity.0, s.velocity.1 - velocity.1),
+    );
+    aim.is_some_and(|aim| {
+        let error = (i32::from(aim) - i32::from(player.facing)).rem_euclid(16);
+        squared < 480 * 480
+            && (error == 0
+                || error == 4
+                || error == 12
+                || (squared < 240 * 240 && matches!(error, 1 | 3 | 5 | 11 | 13 | 15)))
+    })
 }
 
 fn missile_aim(delta: (i32, i32), velocity: (i32, i32)) -> Option<u8> {
@@ -418,6 +509,154 @@ mod tests {
     }
 
     #[test]
+    fn fury_keeps_moving_outside_the_hull_while_tracking_a_generator() {
+        let mut s = snapshot();
+        s.selected_species = Some(5);
+        s.gate = (4000, 4000);
+        s.velocity = (0, 48);
+        let player = ShipState {
+            x: 4700,
+            y: 4000,
+            facing: 8,
+            crew: 8,
+        };
+        let keys = fury_engagement(&s, player);
+        assert!(
+            !keys.thrust,
+            "preserve the tangential velocity instead of stopping"
+        );
+        assert!(
+            keys.right && !keys.left,
+            "aim while the outside firing orbit is on course"
+        );
+    }
+
+    #[test]
+    fn fury_waits_for_generator_spawn_without_spending_ammunition() {
+        let mut s = snapshot();
+        s.selected_species = Some(5);
+        for generator in &mut s.generators {
+            generator.hit_points = 0;
+        }
+        assert_eq!(
+            fury_engagement(&s, s.player.unwrap()),
+            FightControl::default()
+        );
+    }
+
+    #[test]
+    fn fury_shot_is_evaluated_on_the_post_turn_gun_bearing() {
+        let mut s = snapshot();
+        s.selected_species = Some(5);
+        let mut player = ShipState {
+            x: 4000,
+            y: 4000,
+            facing: 3,
+            crew: 8,
+        };
+        assert!(!can_hit(&s, player, 4300, 4000, (0, 0)));
+        player.facing = 4;
+        assert!(can_hit(&s, player, 4300, 4000, (0, 0)));
+        assert!(
+            !can_hit(&s, player, 4600, 4000, (0, 0)),
+            "do not fire beyond missile lifetime"
+        );
+    }
+
+    #[test]
+    fn fury_ignores_non_solid_comet_trails_when_clearing_the_gate() {
+        use crate::ships::races::samatra::observation::Hazard;
+        let mut controller = Controller::default();
+        let mut s = snapshot();
+        s.selected_species = Some(5);
+        let mut events = Events {
+            generation: 1,
+            ..Events::default()
+        };
+        controller.observe(100, Until::GateEntered, 0x201, events, Some(&s), None);
+        s.remaining = 0;
+        s.generators.clear();
+        s.gate_open = true;
+        events.destroyed = 255;
+        s.hazards.push(Hazard {
+            solid: false,
+            x: 4300,
+            y: 4000,
+            velocity: (0, 0),
+        });
+        let Progress::Running(keys) =
+            controller.observe(100, Until::GateEntered, 0x201, events, Some(&s), None)
+        else {
+            panic!()
+        };
+        assert!(
+            keys.escape,
+            "a non-colliding trail must not delay the bomb carrier"
+        );
+        assert!(!keys.flight.weapon);
+    }
+
+    #[test]
+    fn fury_brakes_drift_in_generator_range_before_firing() {
+        let mut s = snapshot();
+        s.selected_species = Some(5);
+        s.gate = (4036, 4136);
+        s.velocity = (32, 49);
+        let player = ShipState {
+            x: 4160,
+            y: 3548,
+            facing: 9,
+            crew: 3,
+        };
+        let target = Generator {
+            id: 2,
+            x: 4164,
+            y: 3864,
+            hit_points: 1,
+        };
+        s.generators = vec![target];
+        let keys = fury_engagement(&s, player);
+        assert!(keys.left || keys.right, "turn to brake drift into the hull");
+        assert!(
+            !keys.weapon,
+            "do not spend ammunition on the pre-turn firing bearing"
+        );
+    }
+
+    #[test]
+    fn fury_uses_a_side_gun_for_a_hazard_without_abandoning_navigation() {
+        use crate::ships::races::samatra::observation::Hazard;
+        let mut s = snapshot();
+        s.selected_species = Some(5);
+        s.player.as_mut().unwrap().facing = 0;
+        s.hazards.push(Hazard {
+            solid: true,
+            x: 4000,
+            y: 3800,
+            velocity: (0, 32),
+        });
+        let Progress::Running(keys) = Controller::default().observe(
+            100,
+            Until::GateEntered,
+            0x201,
+            Events {
+                generation: 1,
+                ..Events::default()
+            },
+            Some(&s),
+            None,
+        ) else {
+            panic!()
+        };
+        assert!(
+            keys.flight.weapon,
+            "shoot the incoming hazard on an available gun bearing"
+        );
+        assert!(keys.special, "replenish Fury ammunition while defending");
+        assert!(!keys.flight.thrust);
+    }
+
+    #[test]
     fn avatar_clears_an_incoming_hazard_before_routing_to_a_generator() {
         use crate::ships::races::samatra::observation::Hazard;
         let mut s = snapshot();
@@ -427,6 +666,7 @@ mod tests {
         player.facing = 0;
         s.player = Some(player);
         s.hazards.push(Hazard {
+            solid: true,
             x: 2907,
             y: 4008,
             velocity: (0, 32),
@@ -465,6 +705,7 @@ mod tests {
         s.generators.clear();
         s.gate_open = true;
         s.hazards.push(Hazard {
+            solid: true,
             x: 4300,
             y: 4000,
             velocity: (0, 0),

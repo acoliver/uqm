@@ -2,6 +2,7 @@ use super::*;
 
 mod counts_tests;
 mod coverage_tests;
+mod ending_budget_tests;
 mod parallel_tests;
 mod protection_tests;
 mod quality_tests;
@@ -80,10 +81,11 @@ fn registry_manifest_requires_twelve_corpus_ten_fixtures_and_real_mappings() {
         text.replace("parity-new-game", "main-menu-v1"),
         text.replace("name = \"pool-full\"", "name = \"comm\""),
         text.replace("outcome = \"success\"", "outcome = \"observed\""),
-        text.replace("issue = 718", ""),
-        text.replace("terminal = \"semantic_mismatch\"", "terminal = \"bogus\""),
+        format!("{text}\n[[expectation]]\nscenario = \"missing-issue\"\nclassification = \"known_bug\"\nterminal = \"semantic_mismatch\"\n"),
+        format!("{text}\n[[expectation]]\nscenario = \"invalid-terminal\"\nclassification = \"known_bug\"\nterminal = \"bogus\"\nissue = 1\n"),
         text.replace("name = \"comm\"", "name = \"../comm\""),
     ] {
+        assert_ne!(wrong, text, "invalid manifest fixture must change the input");
         assert!(manifest::parse(&wrong).is_err(), "accepted {wrong}");
     }
 }

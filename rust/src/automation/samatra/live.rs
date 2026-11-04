@@ -80,6 +80,7 @@ fn snapshot(cx: &mut Cx<'_>) -> (Events, Option<Snapshot>) {
         {
             let (vx, vy) = e.velocity.preview_next_components(1);
             result.hazards.push(observation::Hazard {
+                solid: e.flags & NONSOLID as u16 == 0,
                 x: i32::from(e.current.location.x),
                 y: i32::from(e.current.location.y),
                 velocity: (i32::from(vx as SIZE), i32::from(vy as SIZE)),
