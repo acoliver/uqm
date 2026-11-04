@@ -1,6 +1,5 @@
 //! Linked callback checks against the Chmmr C rules, without a running renderer.
 
-use uqm_rust::engine::battle::schema::HLINK;
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]
@@ -54,7 +53,7 @@ unsafe fn assert_rng_after(seed: u32, draws: usize) {
     assert_eq!(actual, TFB_Random(), "RNG draws for seed {seed}");
 }
 
-unsafe fn exhaust() -> Vec<HLINK> {
+unsafe fn exhaust() -> Vec<*mut std::ffi::c_void> {
     let mut handles = Vec::new();
     loop {
         let h = uqm_rust::app::bridge::enter(|cx| {
@@ -612,7 +611,7 @@ unsafe fn target(satellite: *mut ElementRecord, dx: i16, dy: i16, hp: u16) -> Po
     fixture
 }
 
-unsafe fn defense(satellite: *mut ElementRecord) -> HLINK {
+unsafe fn defense(satellite: *mut ElementRecord) -> *mut std::ffi::c_void {
     hooks::invoke_element_pointer((*satellite).postprocess_func.unwrap(), satellite);
     let h = battle::tail();
     assert_eq!(
@@ -634,17 +633,17 @@ fn point_defense_uses_backward_weakest_nearest_and_stable_tie_order() {
             let s = battle::element(satellites[0]);
             (*s).next = (*s).current.clone();
             let mut strong_fixture = target(s, 4, 0, 3);
-            let strong: HLINK = (&raw mut *strong_fixture).cast();
+            let strong: *mut std::ffi::c_void = (&raw mut *strong_fixture).cast();
             let mut far_weak_fixture = target(s, 200, 0, 1);
-            let far_weak: HLINK = (&raw mut *far_weak_fixture).cast();
+            let far_weak: *mut std::ffi::c_void = (&raw mut *far_weak_fixture).cast();
             let mut near_weak_fixture = target(s, 40, 0, 1);
-            let near_weak: HLINK = (&raw mut *near_weak_fixture).cast();
+            let near_weak: *mut std::ffi::c_void = (&raw mut *near_weak_fixture).cast();
             let mut tie_fixture = target(s, -40, 0, 1);
-            let tie: HLINK = (&raw mut *tie_fixture).cast();
+            let tie: *mut std::ffi::c_void = (&raw mut *tie_fixture).cast();
             let d = defense(s);
             // An even weaker candidate appended after the defense is not traversed.
             let mut after_fixture = target(s, 0, 4, 0);
-            let after: HLINK = (&raw mut *after_fixture).cast();
+            let after: *mut std::ffi::c_void = (&raw mut *after_fixture).cast();
             let before = battle::tail();
             TFB_SeedRandom(12);
             hooks::invoke_element_pointer(
@@ -699,7 +698,7 @@ fn point_defense_respects_collision_cloak_range_and_full_width_hitpoints() {
                 let s = battle::element(satellites[0]);
                 (*s).next = (*s).current.clone();
                 let mut h_fixture = target(s, dx, dy, hp);
-                let h: HLINK = (&raw mut *h_fixture).cast();
+                let h: *mut std::ffi::c_void = (&raw mut *h_fixture).cast();
                 let obj = battle::element(h);
                 match exclusion {
                     1 => (*obj).playerNr = 0,
@@ -1102,18 +1101,18 @@ fn unrequested_special_and_failed_muzzle_allocation_only_reset_cycle() {
     })
 }
 
-unsafe fn laser(ship: &mut Ship<'_>) -> HLINK {
+unsafe fn laser(ship: &mut Ship<'_>) -> *mut std::ffi::c_void {
     let h = ship.initialize_from(ship.ptr(), 1)[0];
     if !h.is_null() {
         (*battle::element(h)).parent = (*ship.ptr()).parent;
     }
     h
 }
-unsafe fn delayed_spawn(ship: &mut Ship<'_>) -> HLINK {
+unsafe fn delayed_spawn(ship: &mut Ship<'_>) -> *mut std::ffi::c_void {
     ship.preprocess();
     battle::tail()
 }
-unsafe fn satellites(ship: &mut Ship<'_>) -> Vec<HLINK> {
+unsafe fn satellites(ship: &mut Ship<'_>) -> Vec<*mut std::ffi::c_void> {
     let delay = delayed_spawn(ship);
     let death = (*battle::element(delay)).death_func.unwrap();
     battle_context::unlink(delay);

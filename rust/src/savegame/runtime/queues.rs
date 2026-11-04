@@ -38,15 +38,10 @@
 //! templates. The "IGpQ" and "Enct" queues are in `groups`, which uses the same
 //! typed traversal order.
 
-use std::ffi::c_void;
 use std::fmt;
-use std::mem::{align_of, size_of};
-
-use crate::collections::queue::{LinkLayout, Queue};
 
 use crate::comm::dispatch::{
-    production_captain_name, CPoint, CShipFragment, INFINITE_FLEET, START_ENCOUNTER,
-    START_INTERPLANETARY,
+    production_captain_name, CPoint, INFINITE_FLEET, START_ENCOUNTER, START_INTERPLANETARY,
 };
 use crate::engine::battle::link_queue::{LinkQueue, QueueRecord};
 use crate::engine::clock::NUM_EVENTS;
@@ -80,19 +75,6 @@ pub enum QueueKind {
 /// Why the queue sections could not be captured or restored.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum QueueError {
-    /// The queue has no slot table, so it was never initialised.
-    PoolMissing { queue: QueueKind },
-    /// The queue's slots are not the size of its element.
-    WrongObjectSize {
-        queue: QueueKind,
-        found: u16,
-        expected: usize,
-    },
-    /// The slot table is not aligned for its element.
-    MisalignedPool { queue: QueueKind },
-    /// A link is outside the pool, off a slot boundary, repeated, or its
-    /// back-link, or the queue's tail, disagrees with the forward links.
-    CorruptQueue { queue: QueueKind, position: usize },
     /// More ships than the queue has slots.
     TooManyShips {
         queue: QueueKind,
@@ -143,106 +125,6 @@ pub struct QueueSections {
     pub race_queue: Vec<RaceEntry>,
     pub npc_ship_queue: Vec<ShipFragmentEntry>,
     pub ship_queue: Vec<ShipFragmentEntry>,
-}
-
-/// An element that starts with the `LINK` fields.
-pub(crate) trait QueueElement {
-    fn pred(&self) -> *mut c_void;
-    fn succ(&self) -> *mut c_void;
-}
-
-impl QueueElement for CShipFragment {
-    fn pred(&self) -> *mut c_void {
-        self.pred
-    }
-    fn succ(&self) -> *mut c_void {
-        self.succ
-    }
-}
-
-fn pool_slots_layout(
-    queue: &Queue,
-    kind: QueueKind,
-    size: usize,
-    align: usize,
-) -> Result<usize, QueueError> {
-    if queue.pq_tab.is_null() {
-        return Err(QueueError::PoolMissing { queue: kind });
-    }
-    if usize::from(queue.object_size) != size {
-        return Err(QueueError::WrongObjectSize {
-            queue: kind,
-            found: queue.object_size,
-            expected: size,
-        });
-    }
-    if !(queue.pq_tab as usize).is_multiple_of(align) {
-        return Err(QueueError::MisalignedPool { queue: kind });
-    }
-    Ok(usize::from(queue.num_objects))
-}
-
-/// The links of `queue`, head to tail.
-///
-/// Every link is checked against the pool, so a queue the game corrupted is an
-/// error and not a save of whatever the pointers reach.
-pub(crate) fn walk<T: QueueElement>(
-    queue: &Queue,
-    kind: QueueKind,
-) -> Result<Vec<*mut T>, QueueError> {
-    let layout = LinkLayout {
-        size: size_of::<T>(),
-        align: align_of::<T>(),
-        read: |pointer| {
-            // SAFETY: walk_layout checks each slot against this exact record layout before invoking the codec.
-            let record = unsafe { &*pointer.cast::<T>().as_ptr() };
-            (record.pred(), record.succ())
-        },
-    };
-    walk_layout(queue, kind, layout).map(|links| links.into_iter().map(|p| p.cast()).collect())
-}
-
-pub(crate) fn walk_layout(
-    queue: &Queue,
-    kind: QueueKind,
-    layout: LinkLayout,
-) -> Result<Vec<*mut c_void>, QueueError> {
-    let slots = pool_slots_layout(queue, kind, layout.size, layout.align)?;
-    let pool = queue.pq_tab as usize;
-    let slot_size = usize::from(queue.object_size);
-
-    let mut links: Vec<*mut c_void> = Vec::new();
-    let mut previous: *mut c_void = std::ptr::null_mut();
-    let mut link = queue.head;
-    while !link.is_null() {
-        let position = links.len();
-        let offset = (link as usize).wrapping_sub(pool);
-        // A queue holds each slot at most once, so more links than slots is a loop.
-        if position >= slots || offset >= slots * slot_size || !offset.is_multiple_of(slot_size) {
-            return Err(QueueError::CorruptQueue {
-                queue: kind,
-                position,
-            });
-        }
-        // SAFETY: link is non-null, aligned and inside the retained pool with the codec's exact record stride.
-        let (pred, succ) = unsafe { (layout.read)(std::ptr::NonNull::new_unchecked(link)) };
-        if pred != previous {
-            return Err(QueueError::CorruptQueue {
-                queue: kind,
-                position,
-            });
-        }
-        links.push(link);
-        previous = link;
-        link = succ;
-    }
-    if previous != queue.tail {
-        return Err(QueueError::CorruptQueue {
-            queue: kind,
-            position: links.len(),
-        });
-    }
-    Ok(links)
 }
 
 pub(super) fn point(p: CPoint) -> Point {

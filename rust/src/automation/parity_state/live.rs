@@ -31,7 +31,7 @@ fn checkpoint_with_context(
         (
             &*(&raw const cx.world.data.game).cast::<CGameState>(),
             std::array::from_fn::<_, 2, _>(|side| Ship::queue(cx.race_pool(side), cx.elements())),
-            display_elements(cx.elements(), Some(cx.groups())),
+            display_elements(cx.elements(), Some(&cx.groups())),
         )
     };
     crate::automation::parity_mode::capture(&mut fields, cx.world, journal);
@@ -110,7 +110,9 @@ pub(in crate::automation) fn fighters(
 /// The pool remains live and immutable throughout observation.
 unsafe fn display_elements(
     elements: &crate::engine::battle::ElementTable,
-    groups: Option<&crate::engine::battle::record::QUEUE>,
+    groups: Option<
+        &crate::engine::battle::link_queue::LinkQueue<'_, crate::engine::world::queues::Group, 32>,
+    >,
 ) -> Vec<ElementObservation> {
     crate::battle::context_access::observe::elements(elements, groups)
 }

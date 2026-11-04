@@ -852,7 +852,11 @@ pub unsafe fn prepare_automation_sol_probe_encounter() -> Result<(), &'static st
 #[cfg(not(test))]
 pub(crate) unsafe fn prepare_samatra_dev_fixture() -> Result<(), &'static str> {
     built_ship_queue(|queue| queue.reinit());
-    if crate::battle::build_native::AddEscortShips(4, 12) != 12 {
+    let added = crate::engine::World::current().write(|world| {
+        crate::battle::build_native::add_escort_ships(world, 4, 12, pick_captain_name)
+    });
+    crate::battle::build_native::refresh_escorts();
+    if added != 12 {
         return Err("boss fixture could not allocate Pkunk escorts");
     }
     WorldData::current().write(|world| {

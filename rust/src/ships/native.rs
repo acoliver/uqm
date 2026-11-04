@@ -24,8 +24,8 @@ pub mod abi {
         draw_sis_title as DrawSISTitle, draw_stamp as DrawStamp, draw_text as font_DrawText,
         drawables_intersect as DrawablesIntersect, equ_frame_index as SetEquFrameIndex,
         frame_hot as GetFrameHot, frame_rect as GetFrameRect, in_hq_space as in_hqspace,
-        in_hyper_space, inc_frame_index as IncFrameIndex, insert_queue as InsertQueue,
-        music_playing as PLRPlaying, play_music as PlayMusic, release_drawable as ReleaseDrawable,
+        in_hyper_space, inc_frame_index as IncFrameIndex, music_playing as PLRPlaying,
+        play_music as PlayMusic, release_drawable as ReleaseDrawable,
         release_string_table as ReleaseStringTable, screen_transition as ScreenTransition,
         set_context as SetContext, set_context_font as SetContextFont,
         set_flash_rect as SetFlashRect, set_mipmap as TFB_DrawScreen_SetMipmap,
@@ -103,12 +103,6 @@ mod engine {
     use crate::graphics::frame_abi::DrawRectangle;
 
     use crate::sound::heart_ffi::DestroySound;
-
-    /// # Safety
-    /// `queue` must be live; both handles must belong to its pool and `handle` must be unlinked.
-    pub unsafe fn insert_queue(queue: *mut abi::QUEUE, handle: abi::HLINK, before: abi::HLINK) {
-        crate::collections::queue::InsertQueue(queue.cast(), handle, before);
-    }
 
     /// # Safety
     /// `dst` must hold `size` bytes and `src` must be NUL-terminated.

@@ -151,8 +151,41 @@ pub(crate) mod engine {
     }
 
     unsafe fn encounter_race_exists(race: COUNT) -> bool {
-        WorldFields::current()
-            .write(|world| !GetStarShipFromIndex(&raw mut world.game.avail_race_q, race).is_null())
+        WorldOwner::current().read(|world| world.avail_races_ref().at(usize::from(race)).is_some())
+    }
+
+    type FragmentId =
+        crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Fragment>;
+
+    fn fragment_snapshot(
+        world: &crate::engine::World,
+        player: bool,
+    ) -> Vec<(FragmentId, SHIP_FRAGMENT)> {
+        if player {
+            copy_fragments(world.built_ships_ref())
+        } else {
+            copy_fragments(world.npc_built_ships_ref())
+        }
+    }
+
+    fn copy_fragments<const N: usize>(
+        queue: link_queue::LinkQueue<'_, crate::engine::world::queues::Fragment, N>,
+    ) -> Vec<(FragmentId, SHIP_FRAGMENT)> {
+        let mut records = Vec::new();
+        let mut next = queue.head();
+        while let Some(id) = next {
+            records.push((id, *queue.get(id)));
+            next = queue.succ(id);
+        }
+        records
+    }
+
+    fn remove_fragment<const N: usize>(
+        mut queue: link_queue::LinkQueue<'_, crate::engine::world::queues::Fragment, N>,
+        id: FragmentId,
+    ) {
+        queue.remove(id);
+        queue.free(id);
     }
 
     /// # Safety
@@ -160,10 +193,7 @@ pub(crate) mod engine {
     #[no_mangle]
     pub unsafe extern "C" fn BuildBattle(player: COUNT) {
         EncounterRace = -1;
-        if WorldFields::current()
-            .read(|owner| owner.game.npc_built_ship_q.head)
-            .is_null()
-        {
+        if WorldOwner::current().read(|world| world.npc_built_ships_ref().head().is_none()) {
             set_game_state(BATTLE_SEGUE, END_BATTLE_SEGUE, 0);
             return;
         }
@@ -186,11 +216,9 @@ pub(crate) mod engine {
             }
         }
         link_queue::ships(player as usize).reinit();
-        let mut h = WorldFields::current()
-            .read(|world| world.ship_fragments(player == RPG_PLAYER_NUM as COUNT).head);
-        while !h.is_null() {
-            let frag = &*h.cast::<SHIP_FRAGMENT>();
-            h = frag.succ;
+        let fragments = WorldOwner::current()
+            .read(|world| fragment_snapshot(world, player == RPG_PLAYER_NUM as COUNT));
+        for (_, frag) in fragments {
             let built =
                 link_queue::ships(player as usize).build(if frag.race_id == SAMATRA_SHIP as u8 {
                     SPECIES_ID_SA_MATRA_ID
@@ -233,15 +261,18 @@ pub(crate) mod engine {
         }
     }
 
-    /// # Safety
-    /// The supplied world's fragment queue must be initialized and retained for this read.
-    pub unsafe fn fleet_is_infinite(world: &crate::engine::World, player: COUNT) -> BOOLEAN {
-        let queue = world.data.ship_fragments(player == RPG_PLAYER_NUM as COUNT);
-        let h = queue.head;
-        if h.is_null() {
-            return 0;
+    pub fn fleet_is_infinite(world: &crate::engine::World, player: COUNT) -> BOOLEAN {
+        if player == RPG_PLAYER_NUM as COUNT {
+            let queue = world.built_ships_ref();
+            queue
+                .head()
+                .is_some_and(|id| queue.get(id).crew_level == COUNT::MAX) as BOOLEAN
+        } else {
+            let queue = world.npc_built_ships_ref();
+            queue
+                .head()
+                .is_some_and(|id| queue.get(id).crew_level == COUNT::MAX) as BOOLEAN
         }
-        ((*h.cast::<SHIP_FRAGMENT>()).crew_level == COUNT::MAX) as BOOLEAN
     }
 
     pub(crate) use crate::battle::context_access::reader_legacy::update_ship_frag_crew;
@@ -297,15 +328,14 @@ pub(crate) mod engine {
         stamp.frame = KernelOwner::current().read(|owner| owner.planet[0]);
         DrawStamp(&mut stamp);
         if activity() as u8 != IN_LAST_BATTLE as u8 {
-            let mut h = WorldFields::current().read(|owner| owner.game.npc_built_ship_q.head);
+            let fragments = WorldOwner::current().read(|world| fragment_snapshot(world, false));
+            let mut index = 0;
             let mut i = 0usize;
-            while !h.is_null() && i < 60 {
-                let frag = h.cast::<SHIP_FRAGMENT>();
-                let next = if (*frag).crew_level != COUNT::MAX {
-                    (*frag).succ
-                } else {
-                    h
-                };
+            while index < fragments.len() && i < 60 {
+                let frag = &fragments[index].1;
+                if frag.crew_level != COUNT::MAX {
+                    index += 1;
+                }
                 let (x, y) = ENCOUNTER_DISPLAY_POINTS[i % ENCOUNTER_DISPLAY_POINTS.len()];
                 stamp.origin = POINT { x, y };
                 if i >= ENCOUNTER_DISPLAY_POINTS.len() {
@@ -317,7 +347,7 @@ pub(crate) mod engine {
                     stamp.origin.x = cosine(angle as i32, radius as i32);
                     stamp.origin.y = sine(angle as i32, radius as i32);
                 }
-                stamp.frame = SetAbsFrameIndex((*frag).icons, 0);
+                stamp.frame = SetAbsFrameIndex(frag.icons, 0);
                 let mut rect: RECT = mem::zeroed();
                 GetFrameRect(stamp.frame, &mut rect);
                 stamp.origin.x = (stamp.origin.x as i32 + (sis_width() >> 1)
@@ -325,7 +355,6 @@ pub(crate) mod engine {
                 stamp.origin.y = (stamp.origin.y as i32 + (sis_height() >> 1)
                     - (rect.extent.height as i32 >> 1)) as i16;
                 DrawStamp(&mut stamp);
-                h = next;
                 i += 1;
             }
         }
@@ -428,12 +457,12 @@ pub(crate) mod engine {
             counters[0],
             game_state(URQUAN_PROTECTING_SAMATRA, END_URQUAN_PROTECTING_SAMATRA) != 0,
         );
-        let frag = (**WorldFields::current())
-            .game
-            .npc_built_ship_q
-            .head
-            .cast::<SHIP_FRAGMENT>();
-        EncounterRace = (*frag).race_id as i16;
+        EncounterRace = WorldOwner::current().read(|world| {
+            let queue = world.npc_built_ships_ref();
+            queue
+                .get(queue.head().expect("encounter has an NPC fleet"))
+                .race_id as i16
+        });
         if !encounter_race_exists(EncounterRace as COUNT) {
             victory = -1;
             KernelOwner::current().write(|kernel| init_siscontexts(kernel));
@@ -461,12 +490,10 @@ pub(crate) mod engine {
                 }
             }
             link_queue::ships(NUM_SIDES as usize - 1 - side).reinit();
-            let mut h = WorldFields::current().read(|world| world.ship_fragments(side == 0).head);
-            while !h.is_null() {
-                let frag = h.cast::<SHIP_FRAGMENT>();
-                let next = (*frag).succ;
+            let fragments = WorldOwner::current().read(|world| fragment_snapshot(world, side == 0));
+            for (id, frag) in fragments {
                 if fragment_is_removed(
-                    (*frag).crew_level,
+                    frag.crew_level,
                     victory != 0,
                     side == NUM_SIDES as usize - 1,
                 ) {
@@ -478,7 +505,7 @@ pub(crate) mod engine {
                                 DrawStatusMessage(ptr::null());
                                 stamp.origin.x = salvage_rect.corner.x.wrapping_add(32);
                                 stamp.origin.y = salvage_rect.corner.y.wrapping_add(56);
-                                stamp.frame = IncFrameIndex((*frag).icons);
+                                stamp.frame = IncFrameIndex(frag.icons);
                                 DrawStamp(&mut stamp);
                                 SetContextForeGroundColor(rgb15(8, 8, 8));
                                 SetContextFont(
@@ -487,7 +514,7 @@ pub(crate) mod engine {
                                 utf8StringCopy(
                                     buf.as_mut_ptr(),
                                     buf.len(),
-                                    GetStringAddress((*frag).race_strings).cast(),
+                                    GetStringAddress(frag.race_strings).cast(),
                                 );
                                 strupr(buf.as_mut_ptr());
                                 t = text(
@@ -499,7 +526,7 @@ pub(crate) mod engine {
                                 font_DrawText(&mut t);
                                 t.baseline.y = t.baseline.y.wrapping_add(6);
                                 draw_text(&mut t, game_string(ENCOUNTER_STRING_BASE + 3));
-                                stamp.frame = (*frag).icons;
+                                stamp.frame = frag.icons;
                                 SetContextFont(
                                     KernelOwner::current().read(|owner| owner.micro_font),
                                 );
@@ -557,15 +584,14 @@ pub(crate) mod engine {
                             DrawStamp(&mut stamp);
                         }
                     }
-                    WorldFields::current().write(|world| {
-                        let queue = world.ship_fragments_mut(side == 0);
-                        RemoveQueue(queue, h);
-                        FreeLink(queue, h);
+                    WorldOwner::current().write(|world| {
+                        if side == 0 {
+                            remove_fragment(world.built_ships(), id);
+                        } else {
+                            remove_fragment(world.npc_built_ships(), id);
+                        }
                     });
-                    h = next;
-                    continue;
                 }
-                h = next;
             }
         }
         SetStatusMessageMode(previous_mode);

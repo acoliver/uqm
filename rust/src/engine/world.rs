@@ -22,25 +22,6 @@ impl WorldData {
         (clock.month_index, clock.day_index, clock.year_index)
     }
 
-    pub(crate) fn ship_fragments(&self, player: bool) -> &crate::collections::queue::Queue {
-        if player {
-            &self.game.built_ship_q
-        } else {
-            &self.game.npc_built_ship_q
-        }
-    }
-
-    pub(crate) fn ship_fragments_mut(
-        &mut self,
-        player: bool,
-    ) -> &mut crate::collections::queue::Queue {
-        if player {
-            &mut self.game.built_ship_q
-        } else {
-            &mut self.game.npc_built_ship_q
-        }
-    }
-
     pub(crate) fn new() -> Self {
         // SAFETY: these retained save/queue records contain only integers and nullable pointers.
         unsafe { std::mem::zeroed() }
@@ -328,18 +309,15 @@ mod tests {
     }
 
     #[test]
-    fn fragment_queue_borrows_only_the_selected_header() {
+    fn fragment_views_mutate_only_the_selected_pool() {
         let mut world = World::new();
-        assert!(std::ptr::eq(
-            world.data.ship_fragments(true),
-            &world.data.game.built_ship_q
-        ));
-        assert!(std::ptr::eq(
-            world.data.ship_fragments(false),
-            &world.data.game.npc_built_ship_q
-        ));
-        world.data.ship_fragments_mut(true).object_size = 42;
-        assert_eq!(world.data.game.built_ship_q.object_size, 42);
-        assert_eq!(world.data.game.npc_built_ship_q.object_size, 0);
+        let escort = world.built_ships().alloc().unwrap();
+        let npc = world.npc_built_ships().alloc().unwrap();
+        world.built_ships().get_mut(escort).crew_level = 42;
+        assert_eq!(world.built_ships_ref().get(escort).crew_level, 42);
+        assert_eq!(world.npc_built_ships_ref().get(npc).crew_level, 0);
+        world.npc_built_ships().get_mut(npc).crew_level = 17;
+        assert_eq!(world.npc_built_ships_ref().get(npc).crew_level, 17);
+        assert_eq!(world.built_ships_ref().get(escort).crew_level, 42);
     }
 }

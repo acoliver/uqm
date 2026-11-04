@@ -1,5 +1,5 @@
 //! Chenjesu fixtures retain the original integer, order and RNG expectations.
-use uqm_rust::engine::battle::schema::HLINK;
+
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]
@@ -13,7 +13,7 @@ use uqm_rust::ships::native::{
     abi::*, angle_to_facing, cosine, facing_to_angle, frame_index, normalize_facing, sine,
 };
 
-unsafe fn crystal(ship: &mut Ship<'_>) -> HLINK {
+unsafe fn crystal(ship: &mut Ship<'_>) -> *mut std::ffi::c_void {
     // SAFETY: the fixture owns the published battle, ship and returned missile.
     unsafe {
         uqm_rust::app::bridge::enter(|cx| {

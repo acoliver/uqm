@@ -7,8 +7,10 @@ pub(super) trait SpahomeApi: AllianceApi<Handler> {
 #[cfg(not(test))]
 impl SpahomeApi for crate::comm::races::script::live::LiveScript<Handler> {
     fn have_spathi_escort(&self) -> bool {
-        use crate::battle::build_native::engine::HaveEscortShip;
-        unsafe { HaveEscortShip(crate::comm::dispatch::ship::SPATHI_SHIP as u16) != 0 }
+        use crate::battle::build_native::count_escort_ships;
+        crate::engine::World::current().read(|world| {
+            count_escort_ships(world, crate::comm::dispatch::ship::SPATHI_SHIP as u16) != 0
+        })
     }
 }
 #[cfg(test)]

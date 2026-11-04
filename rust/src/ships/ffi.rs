@@ -16,7 +16,6 @@ use super::catalog::{free_master_ship_list, get_ship_cost_from_index, load_maste
 use super::ffi_contract::*;
 use super::loader::{free_ship as loader_free_ship, load_ship, LoadTier};
 use super::types::{RaceDesc, SpeciesId};
-use crate::collections::queue::{AllocLink, PutQueue, Queue};
 use std::os::raw::c_void;
 use std::panic::catch_unwind;
 use std::ptr;
@@ -130,22 +129,6 @@ pub unsafe extern "C" fn rust_ships_free(
 // ===========================================================================
 // Queue/Build FFI
 // ===========================================================================
-
-/// Allocate, clear and append a ship record in the initialized queue.
-///
-/// # Safety
-/// The queue must own STARSHIP or SHIP_FRAGMENT slots and be exclusively used
-/// on the game thread. Returned records remain valid until queue teardown.
-pub unsafe fn build_ship(queue: &mut Queue, species: CSpeciesId) -> HStarship {
-    let handle = AllocLink(queue);
-    if handle.is_null() {
-        return handle;
-    }
-    ptr::write_bytes(handle.cast::<u8>(), 0, usize::from(queue.object_size));
-    (*handle.cast::<CStarship>()).species_id = species;
-    PutQueue(queue, handle);
-    handle
-}
 
 /// Clones a ship fragment from source to destination.
 ///

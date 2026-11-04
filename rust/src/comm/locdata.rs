@@ -364,10 +364,10 @@ mod tests {
         assert_eq!(std::mem::offset_of!(CSisState, drive_slots), 38);
         assert_eq!(std::mem::offset_of!(CSisState, ship_name), 74);
         assert_eq!(std::mem::size_of::<CStamp>(), 16);
-        assert_eq!(std::mem::size_of::<CGameState>(), 352);
+        assert_eq!(std::mem::size_of::<CGameState>(), 112);
         assert_eq!(std::mem::offset_of!(CGameState, current_activity), 40);
-        assert_eq!(std::mem::offset_of!(CGameState, ship_stamp), 104);
-        assert_eq!(std::mem::offset_of!(CGameState, avail_race_q), 152);
+        assert_eq!(std::mem::offset_of!(CGameState, ship_stamp), 64);
+        assert_eq!(std::mem::offset_of!(CGameState, battle_group_ref), 104);
     }
 
     #[test]

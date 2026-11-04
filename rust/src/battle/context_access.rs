@@ -574,8 +574,6 @@ impl Cx<'_> {
 
 pub(crate) mod links;
 
-pub(crate) mod fleet_legacy;
-
 mod navigation;
 
 pub(crate) mod lifecycle;

@@ -1,4 +1,3 @@
-use uqm_rust::engine::battle::schema::HLINK;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
@@ -42,7 +41,7 @@ fn descriptor_and_fusion_match_c() {
                             ship.weapon_record(Some(id)).cast()
                         })
                     })
-                    .collect::<Vec<HLINK>>()
+                    .collect::<Vec<*mut std::ffi::c_void>>()
             })[0];
             let e = battle::element(h);
             assert_eq!(((*e).life, (*e).hits, (*e).mass), (20, 10, 6));

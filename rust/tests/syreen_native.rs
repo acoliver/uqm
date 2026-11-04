@@ -1,6 +1,5 @@
 //! Exercise Syreen descriptor registration and callbacks against the linked engine.
 
-use uqm_rust::engine::battle::schema::HLINK;
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]
@@ -263,7 +262,7 @@ fn deferred_scan_requeues_nothing_and_leaves_out_of_range_crews_alone() {
     })
 }
 
-unsafe fn walk_queue() -> Vec<HLINK> {
+unsafe fn walk_queue() -> Vec<*mut std::ffi::c_void> {
     let mut handles = Vec::new();
     let mut handle = battle::head();
     while !handle.is_null() {

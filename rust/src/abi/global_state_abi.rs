@@ -257,10 +257,6 @@ pub use crate::ships::native::abi::PlanetFrame;
 pub use crate::ships::native::abi::ELEMENT_ENTRY;
 pub use crate::ships::native::abi::PLANET_INFO;
 pub use crate::ships::native::abi::SYSTEM_INFO;
-// The runtime providers are excluded from the isolated unit-test build.
-#[cfg(test)]
-#[cfg(not(test))]
-pub use crate::battle::build_native::engine::EscortFeasibilityStudy;
 #[cfg(test)]
 #[cfg(not(test))]
 pub use crate::planets::render::c_api::draw_filled_oval as DrawFilledOval;
@@ -356,8 +352,6 @@ pub type TFB_Image = tfb_image;
 pub use crate::graphics::geometry_ffi::BresenhamLine as bresenham_line;
 pub type BRESENHAM_LINE = bresenham_line;
 pub type DRAWABLE_TYPE = UWORD;
-#[cfg(not(test))]
-pub use crate::battle::build_native::EscortFeasibilityStudy;
 pub use crate::graphics::geometry_ffi::_clip_line;
 pub use crate::graphics::native_abi::drawable_desc;
 pub use crate::graphics::native_abi::frame_desc;

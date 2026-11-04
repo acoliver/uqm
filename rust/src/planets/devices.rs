@@ -51,7 +51,7 @@ extern "C" {
     fn save_sis_hyper_state();
 }
 
-use crate::battle::{build_native::engine::start_sphere_tracking, sounds::engine::PlayMenuSound};
+use crate::battle::{build_native::start_sphere_tracking, sounds::engine::PlayMenuSound};
 
 use crate::navigation::{
     globals::{in_hqspace, in_hyper_space},

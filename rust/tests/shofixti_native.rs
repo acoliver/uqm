@@ -1,5 +1,5 @@
 //! Exercise Shofixti's live callbacks against the linked engine.
-use uqm_rust::engine::battle::schema::{GETMELEE_STATE, HLINK};
+use uqm_rust::engine::battle::schema::GETMELEE_STATE;
 use uqm_rust::ships::races::{intruder_preprocess, marine_collision};
 #[path = "support/battle_context.rs"]
 mod battle_context;
@@ -72,7 +72,7 @@ use shared::FrameSet;
 use shared::PoolShip;
 struct Ship<'a> {
     inner: shared::Ship<'a>,
-    handle: HLINK,
+    handle: *mut std::ffi::c_void,
     ship_frames: FrameSet,
     weapon_frames: FrameSet,
     special_frames: FrameSet,
@@ -109,7 +109,7 @@ impl<'a> Ship<'a> {
         }
     }
 
-    unsafe fn fire(&mut self, out: &mut [HLINK]) -> COUNT {
+    unsafe fn fire(&mut self, out: &mut [*mut std::ffi::c_void]) -> COUNT {
         uqm_rust::app::bridge::enter(|cx| {
             let origin = cx.weapon_origin(self.inner.id);
             let weapons = cx.spawn_weapons(self.inner.ship_id, origin);
@@ -393,7 +393,7 @@ fn darts_use_next_location_exact_facing_offset_speed_and_failure_count() {
                 (*dart).current.location.y,
                 origin_y.wrapping_sub(vy >> VELOCITY_SHIFT)
             );
-            let mut failure = 1usize as HLINK;
+            let mut failure = 1usize as *mut std::ffi::c_void;
             with_rng(31, 0, || {
                 assert_eq!(ship.fire(std::slice::from_mut(&mut failure)), 1)
             });

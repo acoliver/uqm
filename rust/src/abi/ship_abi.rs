@@ -5,7 +5,7 @@ pub use crate::engine::battle::record::{
     tfb_soundsample, TFB_SoundSample,
     CAPTAIN_STUFF, CHARACTERISTIC_STUFF, DATA_STUFF, ElementRecord, EVALUATE_DESC, FLEET_STUFF,
     INTEL_STUFF, INTERSECT_CONTROL, MAX_DISPLAY_PRIMS, MOVEMENT_STATE, MUSIC_REF,
-    PRIMITIVE, PRIM_DESC, QUEUE, RaceDescriptor, SHIP_INFO, ShipRecord,
+    PRIMITIVE, PRIM_DESC, RaceDescriptor, SHIP_INFO, ShipRecord,
     STATE,
 };
 // Shared engine records used by the Rust runtime.
@@ -1167,38 +1167,6 @@ pub type Checksum = uint32;
 pub use crate::battle::netplay::CrcState as crc_State;
 pub use crate::supermelee::netplay::crc::crc_finish;
 pub use crate::supermelee::netplay::crc::crc_init;
-pub type QUEUE_HANDLE = *mut ::std::os::raw::c_void;
-pub type OBJ_SIZE = UWORD;
-pub type HLINK = QUEUE_HANDLE;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct link {
-    pub pred: HLINK,
-    pub succ: HLINK,
-}
-pub type LINK = link;
-pub unsafe fn FreeLink(pq: *mut QUEUE, hLink: HLINK) {
-    crate::collections::queue::FreeLink(pq.cast(), hLink);
-}
-pub unsafe fn InitQueue(pq: *mut QUEUE, num_elements: COUNT, size: OBJ_SIZE) -> BOOLEAN {
-    BOOLEAN::from(crate::collections::queue::InitQueue(
-        pq.cast(),
-        num_elements,
-        size,
-    ))
-}
-pub unsafe fn UninitQueue(pq: *mut QUEUE) -> BOOLEAN {
-    BOOLEAN::from(crate::collections::queue::UninitQueue(pq.cast()))
-}
-pub unsafe fn ReinitQueue(pq: *mut QUEUE) {
-    crate::collections::queue::ReinitQueue(pq.cast());
-}
-pub unsafe fn RemoveQueue(pq: *mut QUEUE, hLink: HLINK) {
-    crate::collections::queue::RemoveQueue(pq.cast(), hLink);
-}
-pub unsafe fn CountLinks(pq: *const QUEUE) -> COUNT {
-    crate::collections::queue::CountLinks(pq.cast())
-}
 unsafe extern "C" {
     pub static mut ScreenWidth: ::std::os::raw::c_int;
 }
@@ -1451,17 +1419,7 @@ pub const MOVEMENT_STATE_PURSUE: MOVEMENT_STATE = 0;
 pub const MOVEMENT_STATE_AVOID: MOVEMENT_STATE = 1;
 pub const MOVEMENT_STATE_ENTICE: MOVEMENT_STATE = 2;
 pub const MOVEMENT_STATE_NO_MOVEMENT: MOVEMENT_STATE = 3;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct SHIP_BASE {
-    pub pred: HLINK,
-    pub succ: HLINK,
-    pub SpeciesID: SPECIES_ID,
-    pub captains_name_index: BYTE,
-}
-pub type HSHIPFRAG = HLINK;
 pub use crate::engine::world::queues::ShipFragment as SHIP_FRAGMENT;
-pub type HFLEETINFO = HLINK;
 pub use crate::engine::world::queues::FleetInfo as FLEET_INFO;
 pub const DEAD_GUY: _bindgen_ty_3 = 0;
 pub const GOOD_GUY: _bindgen_ty_3 = 1;
@@ -1603,56 +1561,41 @@ pub use crate::battle::ship_native::engine::collision;
 #[cfg(not(test))]
 pub use crate::battle::ship_native::engine::inertial_thrust;
 
-#[cfg(not(test))]
-pub use crate::battle::build_native::engine::Build;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #[cfg(not(test))]
-pub use crate::battle::build_native::engine::CloneShipFragment;
+pub use crate::battle::build_native::set_race_allied;
 
 #[cfg(not(test))]
-pub use crate::battle::build_native::engine::GetStarShipFromIndex;
+pub use crate::battle::build_native::start_sphere_tracking;
 
-#[cfg(not(test))]
-pub use crate::battle::build_native::engine::GetEscortByStarShipIndex;
 
-#[cfg(not(test))]
-pub use crate::battle::build_native::engine::NameCaptain;
 
-#[cfg(not(test))]
-pub use crate::battle::build_native::engine::GetIndexFromStarShip;
 
-#[cfg(not(test))]
-pub use crate::battle::build_native::engine::SetEscortCrewComplement;
 
-#[cfg(not(test))]
-pub use crate::battle::build_native::engine::AddEscortShips;
 
-#[cfg(not(test))]
-pub use crate::battle::build_native::engine::CalculateEscortsWorth;
 
-#[cfg(not(test))]
-pub use crate::battle::build_native::engine::set_race_allied;
 
-#[cfg(not(test))]
-pub use crate::battle::build_native::engine::start_sphere_tracking;
 
-#[cfg(not(test))]
-pub use crate::battle::build_native::engine::CountEscortShips;
 
-#[cfg(not(test))]
-pub use crate::battle::build_native::engine::HaveEscortShip;
 
-#[cfg(not(test))]
-pub use crate::battle::build_native::engine::EscortFeasibilityStudy;
 
-#[cfg(not(test))]
-pub use crate::battle::build_native::engine::CheckAlliance;
-
-#[cfg(not(test))]
-pub use crate::battle::build_native::engine::RemoveSomeEscortShips;
-
-#[cfg(not(test))]
-pub use crate::battle::build_native::engine::RemoveEscortShips;
 
 #[cfg(not(test))]
 pub use crate::ships::loader_native::engine::load_ship;
@@ -3530,29 +3473,6 @@ pub use crate::callback::ffi::Async_process;
 #[cfg(test)]
 mod ship_abi_tests {
     use super::*;
-
-    #[test]
-    fn queue_adapters_preserve_handles_and_boolean_results() {
-        unsafe {
-            let mut queue: QUEUE = std::mem::zeroed();
-            assert_eq!(
-                InitQueue(&mut queue, 2, size_of::<LINK>() as OBJ_SIZE),
-                BOOLEAN_TRUE
-            );
-            let handle = crate::collections::queue::AllocLink((&raw mut queue).cast());
-            assert!(!handle.is_null());
-            crate::collections::queue::PutQueue((&raw mut queue).cast(), handle);
-            assert_eq!(CountLinks(&queue), 1);
-            RemoveQueue(&mut queue, handle);
-            assert_eq!(CountLinks(&queue), 0);
-            FreeLink(&mut queue, handle);
-            assert_eq!(queue.free_list, handle);
-            ReinitQueue(&mut queue);
-            assert_eq!(CountLinks(&queue), 0);
-            assert_eq!(UninitQueue(&mut queue), BOOLEAN_TRUE);
-            assert!(queue.pq_tab.is_null());
-        }
-    }
 
     #[test]
     fn velocity_adapters_preserve_signed_components_and_frame_steps() {

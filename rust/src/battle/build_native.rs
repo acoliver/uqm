@@ -1,349 +1,183 @@
 //! Native fleet construction and escort bookkeeping ported from build.c.
 
-#[cfg(not(test))]
-use crate::engine::WorldData as WorldFields;
-use crate::ships::native::abi::*;
-#[cfg(not(test))]
-use std::ptr;
-#[cfg(not(test))]
-const INFINITE_RADIUS_NATIVE: u16 = u16::MAX;
-#[cfg(not(test))]
-pub use crate::battle::context_access::fleet_legacy::{Build, GetIndexFromStarShip, NameCaptain};
+use crate::engine::battle::link_queue::{LinkId, LinkQueue};
+use crate::engine::world::queues::Fragment;
+use crate::engine::World;
 
-const SHIP_COSTS: [COUNT; 23] = [
+#[cfg(not(test))]
+pub fn captain_name() -> u8 {
+    ((crate::math::random() as u16 & 15) + 5) as u8
+}
+
+/// # Safety
+/// The game thread owns the initialized SIS display, with no owner borrow retained.
+#[cfg(not(test))]
+pub unsafe fn refresh_escorts() {
+    // SAFETY: the legacy caller has released its campaign mutation before drawing.
+    unsafe { crate::ui::sis::DeltaSISGauges(32767, 32767, 32767) }
+}
+
+const SHIP_COSTS: [u16; 23] = [
     1600, 3000, 1100, 2300, 2000, 500, 1800, 1600, 1000, 2200, 1200, 2300, 3600, 1700, 1000, 2100,
     4400, 700, 3000, 600, 1300, 3000, 2300,
 ];
 
-fn matches_race(stored: BYTE, requested: COUNT) -> bool {
-    COUNT::from(stored) == requested
+fn matches_race(stored: u8, requested: u16) -> bool {
+    u16::from(stored) == requested
 }
 
-use crate::battle::context_access::fleet_legacy::ship_from_index;
-
-unsafe fn escort_window(queue: *mut QUEUE, window: &mut BYTE) -> HLINK {
+fn escort_window(queue: &LinkQueue<'_, Fragment, 12>, window: &mut u8) -> Option<LinkId<Fragment>> {
     loop {
-        let old = ship_from_index(queue, COUNT::from(*window));
+        let old = queue.at(usize::from(*window));
         *window = window.wrapping_add(1);
-        if old.is_null() || *window <= (*old.cast::<SHIP_FRAGMENT>()).index {
+        if old.is_none_or(|id| *window <= queue.get(id).index) {
             return old;
         }
     }
 }
 
-#[cfg(not(test))]
-pub(crate) mod engine {
-    use super::*;
-
-    pub use super::{Build, GetIndexFromStarShip, NameCaptain};
-
-    /// # Safety
-    /// Queue must be initialized and its links remain locked only while read.
-    #[no_mangle]
-    pub unsafe extern "C" fn GetStarShipFromIndex(queue: *mut QUEUE, index: COUNT) -> HLINK {
-        ship_from_index(queue, index)
+pub fn count_escort_ships(world: &World, race: u16) -> u16 {
+    if world.avail_races_ref().at(usize::from(race)).is_none() {
+        return 0;
     }
-
-    /// # Safety
-    /// Fleet queue and fragment handle must be initialized.
-    #[no_mangle]
-    pub unsafe extern "C" fn GetEscortByStarShipIndex(index: COUNT) -> HSHIPFRAG {
-        let world = WorldFields::current();
-        let queue = &raw mut (**world).game.built_ship_q;
-        let mut handle = (*queue).head;
-        while !handle.is_null() {
-            let frag = handle.cast::<SHIP_FRAGMENT>();
-            let next = (*frag).succ;
-            let matched = matches_race((*frag).index, index);
-            if matched {
-                return handle;
-            }
-            handle = next;
+    let ships = world.built_ships_ref();
+    let mut next = ships.head();
+    let mut count: u16 = 0;
+    while let Some(id) = next {
+        if matches_race(ships.get(id).race_id, race) {
+            count = count.wrapping_add(1);
         }
-        ptr::null_mut()
+        next = ships.succ(id);
     }
-
-    /// # Safety
-    /// Global queue state and fleet resources must be initialized.
-    #[no_mangle]
-    pub unsafe extern "C" fn CountEscortShips(race: COUNT) -> COUNT {
-        let world = WorldFields::current();
-        if GetStarShipFromIndex(&raw mut (**world).game.avail_race_q, race).is_null() {
-            return 0;
-        }
-        let queue = &raw mut (**world).game.built_ship_q;
-        let mut handle = (*queue).head;
-        let mut count: COUNT = 0;
-        while !handle.is_null() {
-            let frag = handle.cast::<SHIP_FRAGMENT>();
-            let next = (*frag).succ;
-            if matches_race((*frag).race_id, race) {
-                count = count.wrapping_add(1);
-            }
-            handle = next;
-        }
-        count
-    }
-
-    /// # Safety
-    /// Global queue state and fleet resources must be initialized.
-    #[no_mangle]
-    pub unsafe extern "C" fn HaveEscortShip(race: COUNT) -> BOOLEAN {
-        (CountEscortShips(race) > 0) as BOOLEAN
-    }
-
-    /// # Safety
-    /// Global queue state and fleet resources must be initialized.
-    #[no_mangle]
-    pub unsafe extern "C" fn EscortFeasibilityStudy(race: COUNT) -> COUNT {
-        let world = WorldFields::current();
-        let fleet = GetStarShipFromIndex(&raw mut (**world).game.avail_race_q, race);
-        if fleet.is_null() {
-            return 0;
-        }
-        (MAX_BUILT_SHIPS as COUNT).wrapping_sub(CountLinks(&raw mut (**world).game.built_ship_q))
-    }
-
-    /// # Safety
-    /// Global fleet queue and UI are initialized.
-    #[no_mangle]
-    pub unsafe extern "C" fn RemoveSomeEscortShips(race: COUNT, mut count: COUNT) -> COUNT {
-        let world = WorldFields::current();
-        if count == 0 {
-            return 0;
-        }
-        let queue = &raw mut (**world).game.built_ship_q;
-        let mut handle = (*queue).head;
-        while !handle.is_null() {
-            let frag = handle.cast::<SHIP_FRAGMENT>();
-            let next = (*frag).succ;
-            let matching = matches_race((*frag).race_id, race);
-            if matching {
-                RemoveQueue(queue, handle);
-                FreeLink(queue, handle);
-                count -= 1;
-                if count == 0 {
-                    break;
-                }
-            }
-            handle = next;
-        }
-        drop(world);
-        if count > 0 {
-            DeltaSISGauges(
-                UNDEFINED_DELTA as i16,
-                UNDEFINED_DELTA as i16,
-                UNDEFINED_DELTA as i32,
-            );
-        }
-        count
-    }
-
-    /// # Safety
-    /// Global fleet queue and UI are initialized.
-    #[no_mangle]
-    pub unsafe extern "C" fn RemoveEscortShips(race: COUNT) {
-        let _ = RemoveSomeEscortShips(race, COUNT::MAX);
-    }
-
-    /// # Safety
-    /// Global race queues and their records are initialized.
-    #[no_mangle]
-    pub unsafe extern "C" fn CheckAlliance(race: COUNT) -> COUNT {
-        let world = WorldFields::current();
-        let fleet = GetStarShipFromIndex(&raw mut (**world).game.avail_race_q, race);
-        if fleet.is_null() {
-            return 0;
-        }
-        let record = fleet.cast::<FLEET_INFO>();
-        (*record).allied_state
-    }
-
-    /// # Safety
-    /// Global race queues and their records are initialized.
-    pub unsafe fn set_race_allied(
-        world: &mut crate::engine::World,
-        race: COUNT,
-        allied: BOOLEAN,
-    ) -> COUNT {
-        let mut fleets = world.avail_races();
-        let Some(id) = fleets.at(usize::from(race)) else {
-            return 0;
-        };
-        let record = fleets.get_mut(id);
-        if record.allied_state != DEAD_GUY as u16 {
-            record.allied_state = if allied != 0 {
-                GOOD_GUY as u16
-            } else {
-                BAD_GUY as u16
-            };
-        }
-        1
-    }
-
-    /// # Safety
-    /// Race queue and its fleet records must be initialized on the game thread.
-    pub unsafe fn start_sphere_tracking(world: &mut crate::engine::World, race: COUNT) -> COUNT {
-        let mut fleets = world.avail_races();
-        let Some(id) = fleets.at(usize::from(race)) else {
-            return 0;
-        };
-        let info = fleets.get_mut(id);
-        if info.actual_strength == 0 && info.allied_state == DEAD_GUY as u16 {
-            return 0;
-        }
-        if info.actual_strength != 0
-            && info.known_strength == 0
-            && info.actual_strength != INFINITE_RADIUS_NATIVE
-        {
-            info.known_strength = 1;
-            info.known_loc = info.loc;
-        }
-        race
-    }
-
-    /// # Safety
-    /// Race and escort queues must contain live fleet and fragment records.
-    #[no_mangle]
-    pub unsafe extern "C" fn SetEscortCrewComplement(
-        which_ship: COUNT,
-        crew_level: COUNT,
-        captain: BYTE,
-    ) -> i32 {
-        let world = WorldFields::current();
-        let races = &raw mut (**world).game.avail_race_q;
-        let fleet = GetStarShipFromIndex(races, which_ship);
-        if fleet.is_null() {
-            return -1;
-        }
-        let template = fleet.cast::<FLEET_INFO>();
-        let full_crew = (*template).crew_level;
-        let queue = &raw mut (**world).game.built_ship_q;
-        let mut handle = (*queue).head;
-        let mut index: i32 = 0;
-        while !handle.is_null() {
-            let frag = handle.cast::<SHIP_FRAGMENT>();
-            let next = (*frag).succ;
-            if matches_race((*frag).race_id, which_ship) && (*frag).crew_level == full_crew {
-                (*frag).crew_level = crew_level;
-                (*frag).captains_name_index = captain;
-                return index;
-            }
-            handle = next;
-            index += 1;
-        }
-        -1
-    }
-
-    /// # Safety
-    /// The destination must be a fragment queue, distinct from the live race-template queue.
-    #[no_mangle]
-    pub unsafe extern "C" fn CloneShipFragment(
-        races: &mut QUEUE,
-        ship_index: COUNT,
-        destination: *mut QUEUE,
-        crew_level: COUNT,
-    ) -> HSHIPFRAG {
-        assert_eq!(
-            (*destination).object_size as usize,
-            std::mem::size_of::<SHIP_FRAGMENT>()
-        );
-        let fleet = GetStarShipFromIndex(races, ship_index);
-        if fleet.is_null() {
-            return ptr::null_mut();
-        }
-        let template = fleet.cast::<FLEET_INFO>();
-        let species = (*template).SpeciesID;
-        let captain = if ship_index == SAMATRA_SHIP as COUNT {
-            0
-        } else {
-            NameCaptain(destination, species)
-        };
-        let built = Build(destination, species);
-        if !built.is_null() {
-            let frag = built.cast::<SHIP_FRAGMENT>();
-            (*frag).captains_name_index = captain;
-            (*frag).race_strings = (*template).race_strings;
-            (*frag).icons = (*template).icons;
-            (*frag).melee_icon = (*template).melee_icon;
-            (*frag).crew_level = if crew_level != 0 {
-                crew_level
-            } else {
-                (*template).crew_level
-            };
-            (*frag).max_crew = (*template).max_crew;
-            (*frag).energy_level = 0;
-            (*frag).max_energy = (*template).max_energy;
-            (*frag).race_id = ship_index as BYTE;
-            (*frag).index = 0;
-        }
-        built
-    }
-
-    /// # Safety
-    /// Race and escort queues and SIS display must be initialized; count must be positive.
-    #[no_mangle]
-    pub unsafe extern "C" fn AddEscortShips(race: COUNT, count: SIZE) -> COUNT {
-        let world = WorldFields::current();
-        let races = &mut (**world).game.avail_race_q;
-        if GetStarShipFromIndex(races, race).is_null() {
-            return 0;
-        }
-        assert!(count > 0);
-        let queue = &raw mut (**world).game.built_ship_q;
-        let mut window: BYTE = 0;
-        let mut added: COUNT = 0;
-        while added < count as COUNT {
-            let ship = CloneShipFragment(races, race, queue, 0);
-            if ship.is_null() {
-                break;
-            }
-            RemoveQueue(queue, ship);
-            let old = escort_window(queue, &mut window);
-            let frag = ship.cast::<SHIP_FRAGMENT>();
-            (*frag).index = window.wrapping_sub(1);
-            InsertQueue(queue, ship, old);
-            added = added.wrapping_add(1);
-        }
-        drop(world);
-        DeltaSISGauges(
-            UNDEFINED_DELTA as i16,
-            UNDEFINED_DELTA as i16,
-            UNDEFINED_DELTA as i32,
-        );
-        added
-    }
-
-    /// # Safety
-    /// Escort queue must contain live fragments with race IDs in RACE_SHIP_COST.
-    #[no_mangle]
-    pub unsafe extern "C" fn CalculateEscortsWorth() -> COUNT {
-        let world = WorldFields::current();
-        let queue = &raw mut (**world).game.built_ship_q;
-        let mut handle = (*queue).head;
-        let mut total: COUNT = 0;
-        while !handle.is_null() {
-            let frag = handle.cast::<SHIP_FRAGMENT>();
-            let next = (*frag).succ;
-            total = total.wrapping_add(SHIP_COSTS[(*frag).race_id as usize]);
-            handle = next;
-        }
-        total
-    }
+    count
 }
 
-#[cfg(not(test))]
-pub use engine::{
-    set_race_allied, start_sphere_tracking, AddEscortShips, CalculateEscortsWorth, CheckAlliance,
-    CloneShipFragment, CountEscortShips, EscortFeasibilityStudy, GetEscortByStarShipIndex,
-    GetStarShipFromIndex, HaveEscortShip, RemoveEscortShips, RemoveSomeEscortShips,
-    SetEscortCrewComplement,
-};
+pub fn escort_feasibility(world: &World, race: u16) -> u16 {
+    if world.avail_races_ref().at(usize::from(race)).is_none() {
+        return 0;
+    }
+    12u16.wrapping_sub(world.built_ships_ref().count() as u16)
+}
+
+pub fn remove_escort_ships(world: &mut World, race: u16, mut count: u16) -> u16 {
+    if count == 0 {
+        return 0;
+    }
+    let mut ships = world.built_ships();
+    let mut next = ships.head();
+    while let Some(id) = next {
+        next = ships.succ(id);
+        if matches_race(ships.get(id).race_id, race) {
+            ships.remove(id);
+            ships.free(id);
+            count -= 1;
+            if count == 0 {
+                break;
+            }
+        }
+    }
+    count
+}
+
+pub fn check_alliance(world: &World, race: u16) -> u16 {
+    let fleets = world.avail_races_ref();
+    fleets
+        .at(usize::from(race))
+        .map_or(0, |id| fleets.get(id).allied_state)
+}
+
+pub fn set_race_allied(world: &mut World, race: u16, allied: u32) -> u16 {
+    let mut fleets = world.avail_races();
+    let Some(id) = fleets.at(usize::from(race)) else {
+        return 0;
+    };
+    let record = fleets.get_mut(id);
+    if record.allied_state != 0 {
+        record.allied_state = if allied != 0 { 1 } else { 2 };
+    }
+    1
+}
+
+pub fn start_sphere_tracking(world: &mut World, race: u16) -> u16 {
+    let mut fleets = world.avail_races();
+    let Some(id) = fleets.at(usize::from(race)) else {
+        return 0;
+    };
+    let info = fleets.get_mut(id);
+    if info.actual_strength == 0 && info.allied_state == 0 {
+        return 0;
+    }
+    if info.actual_strength != 0 && info.known_strength == 0 && info.actual_strength != u16::MAX {
+        info.known_strength = 1;
+        info.known_loc = info.loc;
+    }
+    race
+}
+
+pub fn set_escort_crew(world: &mut World, race: u16, crew: u16, captain: u8) -> i32 {
+    let fleets = world.avail_races_ref();
+    let Some(template) = fleets.at(usize::from(race)) else {
+        return -1;
+    };
+    let full_crew = fleets.get(template).crew_level;
+    let mut ships = world.built_ships();
+    let mut next = ships.head();
+    let mut index = 0;
+    while let Some(id) = next {
+        next = ships.succ(id);
+        let ship = ships.get_mut(id);
+        if matches_race(ship.race_id, race) && ship.crew_level == full_crew {
+            ship.crew_level = crew;
+            ship.captains_name_index = captain;
+            return index;
+        }
+        index += 1;
+    }
+    -1
+}
+
+pub fn add_escort_ships(
+    world: &mut World,
+    race: u16,
+    count: i16,
+    mut random: impl FnMut() -> u8,
+) -> u16 {
+    let fleets = world.avail_races_ref();
+    let Some(id) = fleets.at(usize::from(race)) else {
+        return 0;
+    };
+    let template = *fleets.get(id);
+    assert!(count > 0);
+    let mut ships = world.built_ships();
+    let mut window = 0;
+    let mut added: u16 = 0;
+    while added < count as u16 {
+        let Some(id) = ships.clone_fragment(&template, race as u8, 0, &mut random) else {
+            break;
+        };
+        ships.remove(id);
+        let old = escort_window(&ships, &mut window);
+        ships.get_mut(id).index = window.wrapping_sub(1);
+        ships.insert_before(id, old);
+        added = added.wrapping_add(1);
+    }
+    added
+}
+
+pub fn escorts_worth(world: &World) -> u16 {
+    let ships = world.built_ships_ref();
+    let mut next = ships.head();
+    let mut total: u16 = 0;
+    while let Some(id) = next {
+        total = total.wrapping_add(SHIP_COSTS[usize::from(ships.get(id).race_id)]);
+        next = ships.succ(id);
+    }
+    total
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{mem, ptr};
 
     #[test]
     fn race_and_window_matching_preserves_count_width() {
@@ -354,29 +188,81 @@ mod tests {
 
     #[test]
     fn queue_lookup_and_escort_slots_follow_real_links() {
-        unsafe {
-            let mut queue: QUEUE = mem::zeroed();
-            let mut first: SHIP_FRAGMENT = mem::zeroed();
-            let mut second: SHIP_FRAGMENT = mem::zeroed();
-            first.index = 0;
-            second.index = 2;
-            first.succ = (&raw mut second).cast();
-            second.pred = (&raw mut first).cast();
-            queue.head = (&raw mut first).cast();
-            let mut window = 0;
-            assert_eq!(
-                escort_window(&raw mut queue, &mut window),
-                (&raw mut second).cast()
-            );
-            assert_eq!(window - 1, 1);
-            assert_eq!(ship_from_index(&raw mut queue, 0), (&raw mut first).cast());
-            assert_eq!(ship_from_index(&raw mut queue, 1), (&raw mut second).cast());
-            assert_eq!(ship_from_index(&raw mut queue, 2), ptr::null_mut());
-            queue.head = ptr::null_mut();
-            window = 0;
-            assert!(escort_window(&raw mut queue, &mut window).is_null());
-            assert_eq!(window - 1, 0);
+        let mut world = World::new();
+        let mut ships = world.built_ships();
+        let first = ships.alloc().unwrap();
+        let second = ships.alloc().unwrap();
+        ships.get_mut(first).index = 0;
+        ships.get_mut(second).index = 2;
+        ships.put(first);
+        ships.put(second);
+        let mut window = 0;
+        assert_eq!(escort_window(&ships, &mut window), Some(second));
+        assert_eq!(window - 1, 1);
+        assert_eq!(ships.at(0), Some(first));
+        assert_eq!(ships.at(1), Some(second));
+        assert_eq!(ships.at(2), None);
+        ships.reinit();
+        window = 0;
+        assert_eq!(escort_window(&ships, &mut window), None);
+        assert_eq!(window - 1, 0);
+    }
+
+    #[test]
+    fn escort_updates_keep_hangar_order_crew_limits_and_full_pool_rng() {
+        let mut world = World::new();
+        {
+            let mut fleets = world.avail_races();
+            let id = fleets.alloc().unwrap();
+            let fleet = fleets.get_mut(id);
+            fleet.SpeciesID = 1;
+            fleet.crew_level = 10;
+            fleet.max_crew = 20;
+            fleet.allied_state = 1;
+            fleets.put(id);
         }
+        assert_eq!(escort_feasibility(&world, 0), 12);
+        assert_eq!(escort_feasibility(&world, 256), 0);
+        assert_eq!(check_alliance(&world, 0), 1);
+        assert_eq!(count_escort_ships(&world, 256), 0);
+        let mut name = 0;
+        let mut random = || {
+            name = (name + 1) & 15;
+            name + 5
+        };
+        assert_eq!(add_escort_ships(&mut world, 0, 3, &mut random), 3);
+        let removed = world.built_ships_ref().head().unwrap();
+        assert_eq!(remove_escort_ships(&mut world, 0, 1), 0);
+        assert!(!world.built_ships_ref().contains(removed));
+        assert_eq!(add_escort_ships(&mut world, 0, 1, &mut random), 1);
+        let ships = world.built_ships_ref();
+        for index in 0..3 {
+            assert_eq!(ships.get(ships.at(index).unwrap()).index as usize, index);
+        }
+        assert_eq!(count_escort_ships(&world, 0), 3);
+        assert_eq!(escorts_worth(&world), 4800);
+        assert_eq!(set_escort_crew(&mut world, 0, 1, 21), 0);
+        assert_eq!(
+            world
+                .built_ships_ref()
+                .get(world.built_ships_ref().head().unwrap())
+                .crew_level,
+            1
+        );
+        assert_eq!(set_escort_crew(&mut world, 256, 1, 21), -1);
+        assert_eq!(add_escort_ships(&mut world, 0, 20, &mut random), 9);
+        assert_eq!(escort_feasibility(&world, 0), 0);
+        let mut draws = 0;
+        assert_eq!(
+            add_escort_ships(&mut world, 0, 1, || {
+                draws += 1;
+                20
+            }),
+            0
+        );
+        assert_eq!(draws, 1);
+        assert_eq!(remove_escort_ships(&mut world, 0, u16::MAX), u16::MAX - 12);
+        assert_eq!(world.built_ships_ref().count(), 0);
     }
 
     #[test]

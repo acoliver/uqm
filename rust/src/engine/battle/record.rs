@@ -8,10 +8,7 @@ use crate::graphics::native_abi::{
 };
 use std::os::raw::c_uint as SPECIES_ID;
 
-pub use crate::collections::queue::Queue;
 pub use crate::graphics::native_abi::{INTERSECT_CONTROL, PRIMITIVE};
-
-pub type QUEUE = Queue;
 
 pub use abi::{
     captain_stuff, state, state__bindgen_ty_1, tfb_soundsample, ElementRecord, ShipRecord,

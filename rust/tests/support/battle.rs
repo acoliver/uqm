@@ -4,7 +4,7 @@
 )]
 use std::{mem, ptr, rc::Rc};
 use uqm_rust::battle::process_native::init_display_list;
-use uqm_rust::engine::battle::schema::HLINK;
+
 use uqm_rust::{
     engine::battle::{ElementId, RaceState, ShipId},
     ships::native::abi::*,
@@ -74,7 +74,7 @@ pub unsafe fn plot_intercept(
 
 /// # Safety
 /// The caller retains the published, serialized fixture battle.
-pub unsafe fn head() -> HLINK {
+pub unsafe fn head() -> *mut std::ffi::c_void {
     // SAFETY: the fixture owns the active context for this synchronous lookup.
     unsafe {
         uqm_rust::app::bridge::enter(|cx| {
@@ -87,7 +87,7 @@ pub unsafe fn head() -> HLINK {
 
 /// # Safety
 /// The caller retains the published, serialized fixture battle.
-pub unsafe fn tail() -> HLINK {
+pub unsafe fn tail() -> *mut std::ffi::c_void {
     // SAFETY: the fixture owns the active context for this synchronous lookup.
     unsafe {
         uqm_rust::app::bridge::enter(|cx| {
@@ -100,7 +100,7 @@ pub unsafe fn tail() -> HLINK {
 
 /// # Safety
 /// The operand must be a retained element allocation of the serialized fixture.
-pub unsafe fn succ<T>(pointer: *mut T) -> HLINK {
+pub unsafe fn succ<T>(pointer: *mut T) -> *mut std::ffi::c_void {
     // SAFETY: the fixture retains the operand throughout this synchronous projection.
     unsafe {
         uqm_rust::app::bridge::enter(|cx| {
@@ -117,7 +117,7 @@ pub unsafe fn succ<T>(pointer: *mut T) -> HLINK {
 
 /// # Safety
 /// The operand must be a retained element allocation of the serialized fixture.
-pub unsafe fn pred<T>(pointer: *mut T) -> HLINK {
+pub unsafe fn pred<T>(pointer: *mut T) -> *mut std::ffi::c_void {
     // SAFETY: the fixture retains the operand throughout this synchronous projection.
     unsafe {
         uqm_rust::app::bridge::enter(|cx| {
@@ -194,7 +194,7 @@ pub struct Ship<'a> {
     battle: &'a Battle,
     ss: Record<ShipRecord>,
     el: Record<ElementRecord>,
-    pub handle: HLINK,
+    pub handle: *mut std::ffi::c_void,
     pub id: ElementId,
     pub ship_id: ShipId,
     frames: Option<[FrameSet; 3]>,
@@ -322,7 +322,7 @@ impl<'a> Ship<'a> {
             };
         }
     }
-    pub fn weapon_handles(&mut self, expected: COUNT) -> Vec<HLINK> {
+    pub fn weapon_handles(&mut self, expected: COUNT) -> Vec<*mut std::ffi::c_void> {
         // SAFETY: the owning battle and ship remain live throughout weapon creation.
         unsafe {
             uqm_rust::app::bridge::enter(|cx| {
@@ -369,7 +369,11 @@ impl<'a> Ship<'a> {
     }
     /// # Safety
     /// The source must be a live element in this fixture's retained battle pool.
-    pub unsafe fn initialize_from(&self, source: *mut ElementRecord, expected: u16) -> Vec<HLINK> {
+    pub unsafe fn initialize_from(
+        &self,
+        source: *mut ElementRecord,
+        expected: u16,
+    ) -> Vec<*mut std::ffi::c_void> {
         // SAFETY: the caller retains all pool records through the synchronous Native dispatch.
         unsafe {
             uqm_rust::app::bridge::enter(|cx| {
@@ -741,11 +745,11 @@ pub unsafe fn prim(e: *mut ElementRecord) -> *mut PRIMITIVE {
         uqm_rust::app::bridge::enter(|cx| std::ptr::from_mut(cx.display_primitive((*e).PrimIndex)))
     }
 }
-pub unsafe fn queued() -> Vec<HLINK> {
+pub unsafe fn queued() -> Vec<*mut std::ffi::c_void> {
     // SAFETY: the serialized fixture retains the published context throughout observation.
     unsafe { uqm_rust::app::bridge::enter(|cx| queued_in(cx)) }
 }
-pub fn queued_in(cx: &uqm_rust::engine::battle::Cx<'_>) -> Vec<HLINK> {
+pub fn queued_in(cx: &uqm_rust::engine::battle::Cx<'_>) -> Vec<*mut std::ffi::c_void> {
     let mut all = Vec::new();
     let mut next = cx.elements().head();
     while let Some(id) = next {

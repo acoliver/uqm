@@ -1,5 +1,5 @@
 //! Exercise Slylandro's live callbacks, target selection, and RNG order.
-use uqm_rust::engine::battle::schema::HLINK;
+
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]
@@ -1066,7 +1066,7 @@ unsafe fn at(ship: &mut Ship<'_>, x: COORD, y: COORD) {
     ship.element_mut().current.location = POINT { x, y };
     ship.element_mut().next.location = POINT { x, y };
 }
-unsafe fn fire_from(source: *mut ElementRecord) -> HLINK {
+unsafe fn fire_from(source: *mut ElementRecord) -> *mut std::ffi::c_void {
     // SAFETY: the fixture retains the source element in the published battle pool.
     uqm_rust::app::bridge::enter(|cx| {
         let source = cx.elements().id(source.cast()).unwrap();

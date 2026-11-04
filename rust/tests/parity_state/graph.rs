@@ -392,27 +392,20 @@ pub(super) fn event_queue_fields(observer: &AutomationObserver, directory: &Path
 }
 
 pub(super) fn non_ship_parent_fields(observer: &AutomationObserver, directory: &Path) {
-    use uqm_rust::{
-        collections::queue::{AllocLink, InitQueue, PutQueue, UninitQueue},
-        savegame::runtime::groups::CIpGroup,
-    };
     let mut element = ElementRecord::new();
     // SAFETY: no game loop is running; this test owns both queues and the group pool.
     unsafe {
-        let handle = uqm_rust::engine::WorldData::current().write(|world| {
-            let queue = &raw mut world.game.ip_group_q;
-            assert!(InitQueue(queue, 4, std::mem::size_of::<CIpGroup>() as u16));
-            let handle = AllocLink(queue);
-            assert!(!handle.is_null());
-            handle.cast::<CIpGroup>().write(std::mem::zeroed());
-            let group = &mut *handle.cast::<CIpGroup>();
+        let handle = uqm_rust::engine::World::current().write(|world| {
+            let mut queue = world.ip_groups();
+            let id = queue.alloc().unwrap();
+            let group = queue.get_mut(id);
             group.group_id = 31;
             group.race_id = 4;
             group.group_counter = 123;
             group.loc.x = -71;
             group.task = 2;
-            PutQueue(queue, handle);
-            handle
+            queue.put(id);
+            queue.raw(id)
         });
         element.parent = uqm_rust::engine::battle::Parent::IpGroup(0);
         attach_elements(std::slice::from_mut(&mut element));
@@ -431,13 +424,11 @@ pub(super) fn non_ship_parent_fields(observer: &AutomationObserver, directory: &
         assert_eq!(fields["mode.groups.31.counter"], "123");
         assert_eq!(fields["mode.groups.31.x"], "-71");
         assert!(line.contains("[hook 5 battle::ship_native::collision]"));
-        (*handle.cast::<CIpGroup>()).group_id = 32;
+        (*handle.cast::<uqm_rust::engine::world::queues::IpGroup>()).group_id = 32;
         let (fields, _) = snapshot(observer, directory);
         assert_eq!(fields["elements.0.parent"], "group:32");
         assert_eq!(fields["mode.groups.32.counter"], "123");
         clear_queues();
-        uqm_rust::engine::WorldData::current().write(|world| {
-            assert!(UninitQueue(&raw mut world.game.ip_group_q));
-        });
+        uqm_rust::engine::World::current().write(|world| world.ip_groups().reinit());
     }
 }

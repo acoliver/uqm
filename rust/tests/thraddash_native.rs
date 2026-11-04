@@ -1,6 +1,5 @@
 //! Live Thraddash callbacks, using the engine queue, frames, velocity and RNG.
 
-use uqm_rust::engine::battle::schema::HLINK;
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]
@@ -21,10 +20,10 @@ unsafe fn burn(ship: &mut Ship<'_>) -> *mut ElementRecord {
     assert_ne!(trail, head);
     battle::element(trail)
 }
-unsafe fn fire(ship: &mut Ship<'_>) -> HLINK {
+unsafe fn fire(ship: &mut Ship<'_>) -> *mut std::ffi::c_void {
     ship.weapon_handles(1)[0]
 }
-unsafe fn queued() -> Vec<HLINK> {
+unsafe fn queued() -> Vec<*mut std::ffi::c_void> {
     let mut result = Vec::new();
     let mut h = battle::head();
     while !h.is_null() {

@@ -25,25 +25,28 @@ impl Cx<'_> {
         }
     }
 
-    fn ip_group_pointer(&self, element: ElementId) -> NonNull<IP_GROUP> {
+    fn ip_group_id(
+        &self,
+        element: ElementId,
+    ) -> crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Group> {
         let Parent::IpGroup(slot) = self.parent(element) else {
             panic!("navigation element has no IP-group parent");
         };
-        let queue = &self.navigation().game.ip_group_q;
-        let pointer = queue
-            .pq_tab
-            .wrapping_add(usize::from(slot) * usize::from(queue.object_size));
-        NonNull::new(pointer.cast()).unwrap_or_else(|| panic!("IP-group pool"))
+        self.world
+            .ip_groups_ref()
+            .at_slot(slot)
+            .expect("live IP-group parent")
     }
 
     pub(crate) fn ip_group(&self, element: ElementId) -> &IP_GROUP {
-        // SAFETY: the typed parent identifies a retained record in the context's group pool.
-        unsafe { self.ip_group_pointer(element).as_ref() }
+        self.world
+            .ip_groups_ref()
+            .into_record(self.ip_group_id(element))
     }
 
     pub(crate) fn ip_group_mut(&mut self, element: ElementId) -> &mut IP_GROUP {
-        // SAFETY: the exclusive context scopes this checked parent record mutation.
-        unsafe { self.ip_group_pointer(element).as_mut() }
+        let id = self.ip_group_id(element);
+        self.world.ip_groups().into_record_mut(id)
     }
 
     pub(crate) fn previous_activity(&self) -> u16 {
@@ -150,14 +153,6 @@ impl Cx<'_> {
             }
         }
     }
-    pub(crate) fn promote_hyper_encounter(&mut self, encounter: NonNull<ENCOUNTER>) {
-        let queue = &raw mut self.navigation_mut().game.encounter_q;
-        // SAFETY: the encounter is a linked record from this queue; no borrow crosses the splice.
-        unsafe {
-            RemoveQueue(queue, encounter.as_ptr().cast());
-            InsertQueue(queue, encounter.as_ptr().cast(), (*queue).head);
-        }
-    }
 }
 
 impl Cx<'_> {
@@ -185,21 +180,11 @@ impl Cx<'_> {
         assert!(offset.is_multiple_of(std::mem::size_of::<PLANET_DESC>()));
         (1 + offset / std::mem::size_of::<PLANET_DESC>()) as u8
     }
-    pub(crate) fn group_record(&self, p: NonNull<IP_GROUP>) -> &IP_GROUP {
-        // SAFETY: the navigation caller supplies a record retained by the current context.
-        unsafe { p.as_ref() }
-    }
-    pub(crate) fn group_record_mut(&mut self, mut p: NonNull<IP_GROUP>) -> &mut IP_GROUP {
-        // SAFETY: the exclusive context serializes the retained navigation record mutation.
-        unsafe { p.as_mut() }
-    }
-    pub(crate) fn encounter_record(&self, p: NonNull<ENCOUNTER>) -> &ENCOUNTER {
-        // SAFETY: the navigation caller supplies a record retained by the current context.
-        unsafe { p.as_ref() }
-    }
-    pub(crate) fn encounter_record_mut(&mut self, mut p: NonNull<ENCOUNTER>) -> &mut ENCOUNTER {
-        // SAFETY: the exclusive context serializes the retained navigation record mutation.
-        unsafe { p.as_mut() }
+    pub(crate) fn group_record(
+        &self,
+        id: crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Group>,
+    ) -> &IP_GROUP {
+        self.world.ip_groups_ref().into_record(id)
     }
     pub(crate) fn set_encounter_group(&mut self, group: u8) {
         // SAFETY: encounter selection is owned by this exclusive navigation context.
@@ -215,14 +200,20 @@ impl Cx<'_> {
     }
     pub(crate) fn group_icon(
         &self,
-        group: NonNull<IP_GROUP>,
+        group: crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Group>,
     ) -> crate::engine::battle::views::FrameSelection {
         let icon = self.group_record(group).melee_icon;
         crate::engine::battle::views::FrameSelection::retain(icon)
     }
-    pub(crate) fn set_group_image(&mut self, id: ElementId, group: NonNull<IP_GROUP>) {
+    pub(crate) fn set_group_image(
+        &mut self,
+        id: ElementId,
+        group: crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Group>,
+    ) {
         let record = self.group_record(group);
-        let role = crate::engine::battle::views::SharedFrames::GroupIcon(group.as_ptr() as usize);
+        let role = crate::engine::battle::views::SharedFrames::GroupIcon(
+            self.world.ip_groups_ref().raw(group) as usize,
+        );
         let source = NonNull::from(&record.melee_icon);
         // SAFETY: the retained group owns its single icon frame slot.
         let (frame, frames) = unsafe {

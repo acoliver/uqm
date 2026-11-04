@@ -1,6 +1,5 @@
 //! Exercise the Pkunk descriptor and callbacks against the linked engine.
 
-use uqm_rust::engine::battle::schema::HLINK;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 #[path = "support/battle.rs"]
@@ -72,7 +71,7 @@ impl Drop for Sounds {
 
 #[derive(Clone, Copy)]
 struct SavedState {
-    phoenix: HLINK,
+    phoenix: *mut std::ffi::c_void,
     saved_preprocess: Option<uqm_rust::engine::battle::ElementHook>,
     saved_postprocess: Option<uqm_rust::engine::battle::ElementHook>,
     saved_death: Option<uqm_rust::engine::battle::ElementHook>,
@@ -104,7 +103,7 @@ fn addr(f: Option<uqm_rust::engine::battle::ElementHook>) -> Option<usize> {
 
 struct Ship<'a> {
     inner: shared::Ship<'a>,
-    handle: HLINK,
+    handle: *mut std::ffi::c_void,
     ship_frames: FrameSet,
     weapon_frames: FrameSet,
 }
@@ -134,7 +133,7 @@ impl<'a> Ship<'a> {
         }
     }
 
-    unsafe fn fire(&mut self, out: &mut [HLINK]) -> COUNT {
+    unsafe fn fire(&mut self, out: &mut [*mut std::ffi::c_void]) -> COUNT {
         uqm_rust::app::bridge::enter(|cx| {
             let origin = cx.weapon_origin(self.inner.id);
             let weapons = cx.spawn_weapons(self.inner.ship_id, origin);
@@ -226,7 +225,7 @@ unsafe fn prim(el: *mut ElementRecord) -> *mut PRIMITIVE {
     uqm_rust::app::bridge::enter(|cx| std::ptr::from_mut(cx.display_primitive((*el).PrimIndex)))
 }
 
-unsafe fn queued() -> Vec<HLINK> {
+unsafe fn queued() -> Vec<*mut std::ffi::c_void> {
     let mut result = Vec::new();
     let mut h = shared::head();
     while !h.is_null() {
@@ -571,7 +570,7 @@ fn bug_missiles_launch_fore_left_and_right_inheriting_ship_velocity() {
                     let (velocity_x, velocity_y) =
                         ((*ship.ptr()).velocity).get_current_components();
                     let (dx, dy) = (velocity_x as i16, velocity_y as i16);
-                    let mut out = [1usize as HLINK; 3];
+                    let mut out = [1usize as *mut std::ffi::c_void; 3];
                     let before = queued();
                     let count = with_rng(5, 0, || ship.fire(&mut out));
                     assert_eq!(count, 3);
@@ -645,7 +644,7 @@ fn bug_missile_allocation_failure_leaves_null_slots_but_still_reports_three() {
         unsafe {
             let mut ship = Ship::new(&_battle, 0);
             ship.inner.ship_mut().ship_facing = 6;
-            let mut out = [1usize as HLINK; 3];
+            let mut out = [1usize as *mut std::ffi::c_void; 3];
             let count = ship.fire(&mut out);
             assert_eq!(count, 3);
             assert!(!out[0].is_null());

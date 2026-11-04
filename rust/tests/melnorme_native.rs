@@ -1,6 +1,5 @@
 //! Exercise the Melnorme descriptor and callbacks against the linked battle engine.
 
-use uqm_rust::engine::battle::schema::HLINK;
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]
@@ -51,7 +50,7 @@ unsafe fn remove(e: *mut ElementRecord) {
     battle_context::dispose(e.cast());
 }
 
-unsafe fn queue() -> Vec<HLINK> {
+unsafe fn queue() -> Vec<*mut std::ffi::c_void> {
     let mut handles = Vec::new();
     let mut h = battle::head();
     while !h.is_null() {
@@ -61,7 +60,7 @@ unsafe fn queue() -> Vec<HLINK> {
     handles
 }
 
-unsafe fn exhaust_queue() -> Vec<HLINK> {
+unsafe fn exhaust_queue() -> Vec<*mut std::ffi::c_void> {
     let mut handles = Vec::new();
     loop {
         let h = uqm_rust::app::bridge::enter(|cx| {

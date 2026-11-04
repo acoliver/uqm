@@ -99,7 +99,7 @@ impl Cx<'_> {
 
     pub(crate) fn set_ip_group_parent(&mut self, id: ElementId, slot: u8) {
         assert!(
-            slot < self.groups().num_objects,
+            self.groups().at_slot(slot).is_some(),
             "IP-group slot outside pool"
         );
         self.kernel.elements.record_mut(id).parent = Parent::IpGroup(slot);

@@ -1,6 +1,5 @@
 //! Live Umgah callbacks, private cone state, collision cleanup and AI RNG order.
 
-use uqm_rust::engine::battle::schema::HLINK;
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]
@@ -15,7 +14,7 @@ use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, frame_index, sine
 
 // FRAME_DESC and DRAWABLE_DESC layouts from drawable.h.
 
-unsafe fn queued() -> Vec<HLINK> {
+unsafe fn queued() -> Vec<*mut std::ffi::c_void> {
     let mut result = Vec::new();
     let mut h = battle::head();
     while !h.is_null() {
@@ -1012,7 +1011,7 @@ fn rear_arc_uses_unwrapped_next_location_difference_and_inclusive_angle_bounds()
     })
 }
 
-unsafe fn fire(ship: &mut Ship<'_>) -> HLINK {
+unsafe fn fire(ship: &mut Ship<'_>) -> *mut std::ffi::c_void {
     let h = ship.initialize_from(ship.ptr(), 1)[0];
     if !h.is_null() {
         assert!((*battle::element(h)).parent == uqm_rust::engine::battle::Parent::None);

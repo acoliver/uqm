@@ -11,7 +11,7 @@ use std::ffi::c_void;
 
 use crate::c_bindings::global_state::{
     planetOuterLocation, EncounterGroup as ENCOUNTER_GROUP, EncounterRace as ENCOUNTER_RACE,
-    EscortFeasibilityStudy, XFormIPLoc, IP_GROUP,
+    XFormIPLoc, IP_GROUP,
 };
 use crate::comm::dispatch::{ship, CPoint, ONE_SECOND};
 use crate::mainloop::restart_menu::c_extern::{
@@ -143,7 +143,10 @@ pub unsafe fn set_encounter_group(value: u8) {
 /// # Safety
 /// Game thread, with the available-race and escort queues initialised.
 pub unsafe fn rebel_escort_feasible() -> bool {
-    EscortFeasibilityStudy(u16::from(ship::YEHAT_REBEL_SHIP)) != 0
+    WorldOwner::current().read(|world| {
+        crate::battle::build_native::escort_feasibility(world, u16::from(ship::YEHAT_REBEL_SHIP))
+            != 0
+    })
 }
 
 /// The beast report has no mask, but still loads the lander font.
@@ -215,7 +218,7 @@ const INFINITE_FLEET: u16 = !0;
 /// Game thread, with the fleet queue initialised.
 pub unsafe fn start_sphere_tracking(race: u16) -> bool {
     WorldOwner::current()
-        .write(|world| crate::battle::build_native::engine::start_sphere_tracking(world, race))
+        .write(|world| crate::battle::build_native::start_sphere_tracking(world, race))
         != 0
 }
 

@@ -1,6 +1,5 @@
 //! Exercise the Spathi live descriptor and registered callbacks against the linked engine.
 
-use uqm_rust::engine::battle::schema::HLINK;
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]
@@ -16,7 +15,7 @@ use uqm_rust::ships::native::abi::*;
 unsafe fn index_of(frame: FRAME) -> u16 {
     uqm_rust::ships::native::frame_index(frame)
 }
-unsafe fn queue_tail() -> HLINK {
+unsafe fn queue_tail() -> *mut std::ffi::c_void {
     battle::tail()
 }
 #[test]

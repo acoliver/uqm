@@ -1,8 +1,8 @@
 //! Fixed-capacity element ownership and queue order on the game thread.
 
 use crate::collections::pool::{Id, OrderedPool};
-use crate::collections::queue::HLink;
 use crate::engine::battle::record::ElementRecord;
+use std::ffi::c_void;
 use std::ops::{Index, IndexMut};
 
 const CAPACITY: usize = 150;
@@ -81,13 +81,13 @@ impl ElementTable {
                 .is_some_and(|key| key.generation() == id.gen)
     }
 
-    pub fn raw(&self, id: ElementId) -> HLink {
+    pub fn raw(&self, id: ElementId) -> *mut c_void {
         std::ptr::from_ref(self.records.pool.get(self.key(id)))
             .cast_mut()
             .cast()
     }
 
-    pub fn id(&self, address: HLink) -> Option<ElementId> {
+    pub fn id(&self, address: *mut c_void) -> Option<ElementId> {
         if address.is_null() {
             return None;
         }
@@ -99,7 +99,7 @@ impl ElementTable {
         id
     }
 
-    pub(crate) fn allocated_id(&self, address: HLink) -> Option<ElementId> {
+    pub(crate) fn allocated_id(&self, address: *mut c_void) -> Option<ElementId> {
         (0..CAPACITY).find_map(|index| {
             let key = self.records.pool.id_at(index)?;
             (std::ptr::from_ref(self.records.pool.get(key)).cast::<()>() == address.cast::<()>())

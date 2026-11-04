@@ -1014,31 +1014,6 @@ pub use crate::memory::rust_hmalloc;
 pub use crate::memory::rust_hrealloc;
 pub use crate::memory::rust_mem_init;
 pub use crate::memory::rust_mem_uninit;
-pub type QUEUE_HANDLE = *mut ::std::os::raw::c_void;
-pub type OBJ_SIZE = UWORD;
-pub type HLINK = QUEUE_HANDLE;
-pub use crate::ships::native::abi::link;
-pub type LINK = link;
-pub use crate::engine::battle::record::QUEUE;
-
-pub use crate::collections::queue::AllocLink;
-
-pub use crate::collections::queue::FreeLink;
-
-pub use crate::collections::queue::InitQueue;
-
-pub use crate::collections::queue::UninitQueue;
-
-pub use crate::collections::queue::ReinitQueue;
-
-pub use crate::collections::queue::PutQueue;
-
-pub use crate::collections::queue::InsertQueue;
-
-pub use crate::collections::queue::RemoveQueue;
-
-pub use crate::collections::queue::CountLinks;
-
 pub const EVENT_TYPE_ABSOLUTE_EVENT: EVENT_TYPE = 0;
 pub const EVENT_TYPE_RELATIVE_EVENT: EVENT_TYPE = 1;
 pub type EVENT_TYPE = ::std::os::raw::c_uint;
@@ -3447,11 +3422,8 @@ pub use crate::ships::native::abi::DATA_STUFF;
 pub use crate::ships::native::abi::EVALUATE_DESC;
 pub use crate::ships::native::abi::FLEET_STUFF;
 pub use crate::ships::native::abi::INTEL_STUFF;
-pub use crate::ships::native::abi::SHIP_BASE;
 pub use crate::ships::native::abi::SHIP_INFO;
-pub type HSHIPFRAG = HLINK;
 pub use crate::ships::native::abi::SHIP_FRAGMENT;
-pub type HFLEETINFO = HLINK;
 pub use crate::ships::native::abi::FLEET_INFO;
 pub const DEAD_GUY: _bindgen_ty_20 = 0;
 pub const GOOD_GUY: _bindgen_ty_20 = 1;
@@ -3685,7 +3657,6 @@ pub const Segue_Segue_hostile: Segue = 1;
 pub const Segue_Segue_victory: Segue = 2;
 pub const Segue_Segue_defeat: Segue = 3;
 pub type Segue = ::std::os::raw::c_uint;
-pub type HENCOUNTER = HLINK;
 pub use crate::engine::world::queues::BriefShipInfo as brief_ship_info;
 pub use crate::engine::world::queues::EncounterRecord as encounter;
 pub const HAIL: _bindgen_ty_23 = 0;
@@ -3778,32 +3749,25 @@ extern "C" {
     pub fn save_sis_hyper_state();
 }
 
-#[cfg(not(test))]
-pub use crate::battle::build_native::engine::Build;
+
+
+
+
+
+
+
+
+
+
+
 
 #[cfg(not(test))]
-pub use crate::battle::build_native::engine::CloneShipFragment;
+pub use crate::battle::build_native::set_race_allied;
 
 #[cfg(not(test))]
-pub use crate::battle::build_native::engine::GetStarShipFromIndex;
+pub use crate::battle::build_native::start_sphere_tracking;
 
-#[cfg(not(test))]
-pub use crate::battle::build_native::engine::GetEscortByStarShipIndex;
 
-#[cfg(not(test))]
-pub use crate::battle::build_native::engine::GetIndexFromStarShip;
-
-#[cfg(not(test))]
-pub use crate::battle::build_native::engine::AddEscortShips;
-
-#[cfg(not(test))]
-pub use crate::battle::build_native::engine::set_race_allied;
-
-#[cfg(not(test))]
-pub use crate::battle::build_native::engine::start_sphere_tracking;
-
-#[cfg(not(test))]
-pub use crate::battle::build_native::engine::CheckAlliance;
 
 #[cfg(not(test))]
 pub use crate::ships::loader_native::engine::load_ship;
@@ -3845,7 +3809,6 @@ pub use crate::state::c_api::read_state_file;
 pub use crate::state::c_api::write_state_file;
 
 pub use crate::state::c_api::seek_state_file;
-pub type HIPGROUP = HLINK;
 pub use crate::engine::world::queues::IpGroup as IP_GROUP;
 pub const IN_ORBIT: _bindgen_ty_24 = 0;
 pub const EXPLORE: _bindgen_ty_24 = 1;

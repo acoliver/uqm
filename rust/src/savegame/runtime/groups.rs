@@ -47,7 +47,7 @@
 use std::ffi::c_void;
 use std::fmt;
 
-use super::queues::{c_point, entries, point, QueueElement, QueueKind};
+use super::queues::{c_point, entries, point, QueueKind};
 use crate::c_bindings::{assert_c_layout, global_state};
 use crate::comm::dispatch::{
     CFrameHandle, CPoint, IN_INTERPLANETARY, MAX_HYPER_SHIPS, START_ENCOUNTER, START_INTERPLANETARY,
@@ -99,15 +99,6 @@ assert_c_layout!(
 pub const MAX_BATTLE_GROUPS: u8 = global_state::MAX_BATTLE_GROUPS as u8;
 /// `MAX_ENCOUNTERS` (globdata.h): slots of `encounter_q`.
 pub const MAX_ENCOUNTERS: u8 = global_state::MAX_ENCOUNTERS as u8;
-
-impl QueueElement for CIpGroup {
-    fn pred(&self) -> *mut c_void {
-        self.pred
-    }
-    fn succ(&self) -> *mut c_void {
-        self.succ
-    }
-}
 
 /// Why the group and encounter sections could not be captured or restored.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

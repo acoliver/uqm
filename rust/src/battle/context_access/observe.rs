@@ -10,7 +10,9 @@ use crate::engine::battle::{
 /// The ship and group authorities remain immutable during the observation.
 pub(crate) fn elements(
     elements: &crate::engine::battle::ElementTable,
-    groups: Option<&QUEUE>,
+    groups: Option<
+        &crate::engine::battle::link_queue::LinkQueue<'_, crate::engine::world::queues::Group, 32>,
+    >,
 ) -> Vec<ElementObservation> {
     let mut result = Vec::new();
     let mut next = elements.head();

@@ -72,9 +72,6 @@ fn starbase_and_probe_setup_use_owned_campaign_storage() {
         });
     }
     assert_eq!(game.world.built_ships_ref().count(), 12);
-    assert!(game.world.data.game.built_ship_q.pq_tab.is_null());
-    assert!(game.world.data.game.npc_built_ship_q.pq_tab.is_null());
-    assert!(game.world.data.game.avail_race_q.pq_tab.is_null());
 }
 
 #[test]

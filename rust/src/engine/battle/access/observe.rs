@@ -11,7 +11,12 @@ use std::ffi::c_void;
 ///
 /// # Safety
 /// The game-thread ship and group pools must remain live throughout the observation.
-unsafe fn parent_address(parent: super::super::Parent, groups: Option<&QUEUE>) -> *mut c_void {
+unsafe fn parent_address(
+    parent: super::super::Parent,
+    groups: Option<
+        &crate::engine::battle::link_queue::LinkQueue<'_, crate::engine::world::queues::Group, 32>,
+    >,
+) -> *mut c_void {
     use super::super::Parent;
     let (queue, slot) = match parent {
         Parent::None => return std::ptr::null_mut(),
@@ -26,16 +31,13 @@ unsafe fn parent_address(parent: super::super::Parent, groups: Option<&QUEUE>) -
             slot,
         ),
     };
-    queue
-        .pq_tab
-        .wrapping_add(usize::from(slot) * usize::from(queue.object_size))
-        .cast()
+    queue.retired_address(slot) as *mut c_void
 }
 
 impl super::super::Cx<'_> {
     pub(crate) fn element_parent_address(&self, id: ElementId) -> *mut c_void {
         // SAFETY: this context retains the source identity pools during observation.
-        unsafe { parent_address(self.kernel.elements[id].parent, Some(self.groups())) }
+        unsafe { parent_address(self.kernel.elements[id].parent, Some(&self.groups())) }
     }
 }
 #[derive(Clone)]
@@ -61,7 +63,13 @@ impl ElementObservation {
     /// The caller retains the live source record and its reachable resource graph.
     pub(crate) unsafe fn decode(
         record: &ElementRecord,
-        groups: Option<&QUEUE>,
+        groups: Option<
+            &crate::engine::battle::link_queue::LinkQueue<
+                '_,
+                crate::engine::world::queues::Group,
+                32,
+            >,
+        >,
         target: usize,
     ) -> Self {
         Self {
@@ -81,7 +89,9 @@ impl ElementObservation {
 pub(crate) fn element(
     table: &ElementTable,
     id: ElementId,
-    groups: Option<&QUEUE>,
+    groups: Option<
+        &crate::engine::battle::link_queue::LinkQueue<'_, crate::engine::world::queues::Group, 32>,
+    >,
 ) -> ElementObservation {
     let record = &table[id];
     let target = record.target.map_or(0, |id| table.raw(id) as usize);

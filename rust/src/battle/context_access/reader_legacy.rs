@@ -1,7 +1,7 @@
 #[cfg(not(test))]
 use crate::engine::battle::ShipId;
 #[cfg(not(test))]
-use crate::ships::native::abi::{COUNT, RPG_PLAYER_NUM, SHIP_FRAGMENT};
+use crate::ships::native::abi::{COUNT, RPG_PLAYER_NUM};
 #[cfg(not(test))]
 use std::ffi::c_void;
 
@@ -37,28 +37,40 @@ pub unsafe fn get_encounter_star_ship_with_picker(
 }
 
 #[cfg(not(test))]
-/// # Safety
 /// The owner's fragment queue matches battle ship link order in the supplied context.
-pub(crate) unsafe fn update_ship_frag_crew(cx: &mut crate::engine::battle::Cx<'_>, owner: ShipId) {
-    // SAFETY: the caller retains the initialized fragment queue through this writeback.
-    unsafe {
-        let player = cx.ship_state(owner).player;
-        let mut hf = cx
-            .world
-            .data
-            .ship_fragments(player == RPG_PLAYER_NUM as i16)
-            .head;
-        let ships = cx.kernel.ships(player as usize);
-        let mut hs = ships.head();
-        while let Some(id) = hs.filter(|_| !hf.is_null()) {
-            let frag = hf.cast::<SHIP_FRAGMENT>();
-            hs = ships.succ(id);
-            hf = (*frag).succ;
-            if ships.ship_id(id) == owner {
-                assert_ne!((*frag).crew_level, COUNT::MAX);
-                (*frag).crew_level = ships.get(id).crew;
-                break;
+pub(crate) fn update_ship_frag_crew(cx: &mut crate::engine::battle::Cx<'_>, owner: ShipId) {
+    let player = cx.ship_state(owner).player;
+    let ships = cx.kernel.ships(player as usize);
+    let mut next = ships.head();
+    let mut index = 0;
+    while let Some(id) = next {
+        if ships.ship_id(id) == owner {
+            let crew = ships.get(id).crew;
+            if player == RPG_PLAYER_NUM as i16 {
+                write_fragment_crew(cx.world.built_ships(), index, crew);
+            } else {
+                write_fragment_crew(cx.world.npc_built_ships(), index, crew);
             }
+            break;
         }
+        next = ships.succ(id);
+        index += 1;
+    }
+}
+
+#[cfg(not(test))]
+fn write_fragment_crew<const N: usize>(
+    mut queue: crate::engine::battle::link_queue::LinkQueue<
+        '_,
+        crate::engine::world::queues::Fragment,
+        N,
+    >,
+    index: usize,
+    crew: u16,
+) {
+    if let Some(id) = queue.at(index) {
+        let fragment = queue.get_mut(id);
+        assert_ne!(fragment.crew_level, COUNT::MAX);
+        fragment.crew_level = crew;
     }
 }

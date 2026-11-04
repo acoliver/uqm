@@ -15,7 +15,7 @@ fn retired_slot_identity_does_not_require_a_live_value() {
     assert!(std::panic::catch_unwind(|| pool.get(id)).is_err());
 }
 
-use uqm_engine::collections::{pool::OrderedPool, queue};
+use uqm_engine::collections::pool::OrderedPool;
 
 #[test]
 fn allocation_order() {
@@ -102,88 +102,72 @@ fn exhaustion_at_150() {
 #[test]
 fn randomized_queue_equivalence() {
     const N: usize = 150;
-    let mut raw = queue::Queue::default();
     let mut pool = OrderedPool::<usize, N>::new();
     let mut slots = [None; N];
     let mut linked = [false; N];
+    let mut free: Vec<_> = (0..N).rev().collect();
+    let mut order = Vec::new();
     let mut state = 0x4d59_5df4_d0f3_3173_u64;
-    // SAFETY: this test owns the queue and all links until UninitQueue below.
-    unsafe {
-        assert!(queue::InitQueue(
-            &mut raw,
-            N as u16,
-            size_of::<queue::Link>() as u16,
-        ));
-        for step in 0..50_000 {
-            state ^= state << 13;
-            state ^= state >> 7;
-            state ^= state << 17;
-            let slot = (state >> 8) as usize % N;
-            let address = raw.pq_tab.add(slot * size_of::<queue::Link>()).cast();
-            match (state % 6, slots[slot], linked[slot]) {
-                (0, _, _) => {
-                    let raw_id = queue::AllocLink(&mut raw);
-                    let id = pool.alloc(step);
-                    assert_eq!(raw_id.is_null(), id.is_none());
-                    if let Some(id) = id {
-                        let ix = (raw_id as usize - raw.pq_tab as usize) / size_of::<queue::Link>();
-                        assert_eq!(id.index(), ix);
-                        slots[ix] = Some(id);
-                        linked[ix] = false;
-                    }
+    for step in 0..50_000 {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        let slot = (state >> 8) as usize % N;
+        match (state % 6, slots[slot], linked[slot]) {
+            (0, _, _) => {
+                let expected = free.pop();
+                let id = pool.alloc(step);
+                assert_eq!(id.map(|id| id.index()), expected);
+                if let Some(id) = id {
+                    slots[id.index()] = Some(id);
+                    linked[id.index()] = false;
                 }
-                (1, Some(id), false) => {
-                    queue::FreeLink(&mut raw, address);
-                    pool.free(id);
-                    slots[slot] = None;
-                }
-                (2, Some(id), false) => {
-                    queue::PutQueue(&mut raw, address);
-                    pool.put(id);
-                    linked[slot] = true;
-                }
-                (3, Some(id), true) => {
-                    queue::RemoveQueue(&mut raw, address);
-                    pool.remove(id);
-                    linked[slot] = false;
-                }
-                (4, Some(id), false) => {
-                    let before = (slot + 1..N).find(|&i| linked[i]);
-                    let raw_before = before.map_or(std::ptr::null_mut(), |ix| {
-                        raw.pq_tab.add(ix * size_of::<queue::Link>()).cast()
-                    });
-                    queue::InsertQueue(&mut raw, address, raw_before);
-                    pool.insert_before(id, before.and_then(|ix| slots[ix]));
-                    linked[slot] = true;
-                }
-                (5, _, _) if step % 997 == 0 => {
-                    queue::ReinitQueue(&mut raw);
-                    pool.reinit();
-                    slots.fill(None);
-                    linked.fill(false);
-                }
-                _ => {}
             }
-            let mut raw_link = raw.head;
-            let mut pool_link = pool.head();
-            let mut previous = None;
-            let mut count = 0;
-            while !raw_link.is_null() {
-                let ix = (raw_link as usize - raw.pq_tab as usize) / size_of::<queue::Link>();
-                let id = pool_link.unwrap();
-                assert_eq!(id.index(), ix, "visit order at step {step}");
-                assert_eq!(pool.pred(id), previous);
-                previous = Some(id);
-                pool_link = pool.succ(id);
-                raw_link = (*raw_link.cast::<queue::Link>()).succ;
-                count += 1;
-                assert!(count <= N);
+            (1, Some(id), false) => {
+                free.push(slot);
+                pool.free(id);
+                slots[slot] = None;
             }
-            assert_eq!(pool_link, None);
-            assert_eq!(pool.tail(), previous);
-            assert_eq!(pool.count(), count);
+            (2, Some(id), false) => {
+                order.push(slot);
+                pool.put(id);
+                linked[slot] = true;
+            }
+            (3, Some(id), true) => {
+                order.retain(|&ix| ix != slot);
+                pool.remove(id);
+                linked[slot] = false;
+            }
+            (4, Some(id), false) => {
+                let before = (slot + 1..N).find(|&i| linked[i]);
+                let position = before.map_or(order.len(), |ix| {
+                    order.iter().position(|&item| item == ix).unwrap()
+                });
+                order.insert(position, slot);
+                pool.insert_before(id, before.and_then(|ix| slots[ix]));
+                linked[slot] = true;
+            }
+            (5, _, _) if step % 997 == 0 => {
+                free = (0..N).rev().collect();
+                order.clear();
+                pool.reinit();
+                slots.fill(None);
+                linked.fill(false);
+            }
+            _ => {}
         }
-        queue::UninitQueue(&mut raw);
+        let mut next = pool.head();
+        let mut previous = None;
+        for &expected in &order {
+            let id = next.unwrap();
+            assert_eq!(id.index(), expected, "visit order at step {step}");
+            assert_eq!(pool.pred(id), previous);
+            previous = Some(id);
+            next = pool.succ(id);
+        }
+        assert_eq!(next, None);
+        assert_eq!(pool.tail(), previous);
+        assert_eq!(pool.count(), order.len());
     }
 }
 

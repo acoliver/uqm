@@ -18,13 +18,8 @@ mod live {
     use super::*;
     use crate::comm::races::script::live::LiveScript;
 
-    use crate::battle::build_native::engine::CheckAlliance;
-
-    use crate::battle::build_native::engine::EscortFeasibilityStudy;
-
-    use crate::battle::build_native::engine::AddEscortShips;
-
-    use crate::battle::build_native::engine::SetEscortCrewComplement;
+    use crate::battle::build_native;
+    use crate::engine::World;
 
     use crate::time::clock_abi::live::add_event;
 
@@ -40,20 +35,25 @@ mod live {
             crate::mainloop::ffi::get_current_activity().0
         }
         fn alliance(&self, race: u16) -> u16 {
-            unsafe { CheckAlliance(race) }
+            World::current().read(|world| build_native::check_alliance(world, race))
         }
         fn escort_feasibility(&self, race: u16) -> u16 {
-            unsafe { EscortFeasibilityStudy(race) }
+            World::current().read(|world| build_native::escort_feasibility(world, race))
         }
         fn add_escorts(&mut self, race: u16, count: i16) {
             unsafe {
-                AddEscortShips(race, count);
+                World::current().write(|world| {
+                    build_native::add_escort_ships(world, race, count, build_native::captain_name)
+                });
+                build_native::refresh_escorts();
             }
         }
         fn fwiffo_crew(&mut self) {
             use crate::ships::queue::{NAME_OFFSET, NUM_CAPTAINS_NAMES};
             unsafe {
-                SetEscortCrewComplement(6, 1, NAME_OFFSET + NUM_CAPTAINS_NAMES);
+                World::current().write(|world| {
+                    build_native::set_escort_crew(world, 6, 1, NAME_OFFSET + NUM_CAPTAINS_NAMES)
+                });
             }
         }
         fn advance_ilwrath(&mut self) {

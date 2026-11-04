@@ -137,6 +137,31 @@ impl<'a, T: QueueRecord, const N: usize> LinkQueue<'a, T, N> {
         assert!(id.is_some(), "ship link addresses free or foreign storage");
         id
     }
+    pub fn slot(&self, id: LinkId<T>) -> u8 {
+        self.key(id).index() as u8
+    }
+    pub fn at_slot(&self, slot: u8) -> Option<LinkId<T>> {
+        self.queue
+            .id_at(usize::from(slot))
+            .map(|id| self.identify(id))
+    }
+    pub fn retired_address(&self, slot: u8) -> usize {
+        self.queue.retired_address(usize::from(slot))
+    }
+    pub fn into_record(self, id: LinkId<T>) -> &'a T::Record {
+        let key = self.key(id);
+        match self.queue {
+            QueueBorrow::Shared(queue) => queue.get(key),
+            QueueBorrow::Exclusive(queue) => queue.get(key),
+        }
+    }
+    pub fn into_record_mut(self, id: LinkId<T>) -> &'a mut T::Record {
+        let key = self.key(id);
+        match self.queue {
+            QueueBorrow::Exclusive(queue) => queue.get_mut(key),
+            QueueBorrow::Shared(_) => panic!("cannot mutate a read-only queue view"),
+        }
+    }
     pub fn head(&self) -> Option<LinkId<T>> {
         self.queue.head().map(|id| self.identify(id))
     }

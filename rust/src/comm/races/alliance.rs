@@ -18,9 +18,9 @@ mod live {
     use super::*;
     use crate::comm::races::script::live::LiveScript;
 
-    use crate::battle::build_native::engine::set_race_allied;
+    use crate::battle::build_native::set_race_allied;
 
-    use crate::battle::build_native::engine::start_sphere_tracking;
+    use crate::battle::build_native::start_sphere_tracking;
 
     use crate::time::clock_abi::live::add_event;
     impl<H> AllianceApi<H> for LiveScript<H> {

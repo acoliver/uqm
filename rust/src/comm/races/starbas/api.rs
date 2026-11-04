@@ -48,7 +48,7 @@ mod live {
 
     use crate::threading::legacy_abi::TaskSwitch;
 
-    use crate::battle::build_native::engine::CalculateEscortsWorth;
+    use crate::battle::build_native::escorts_worth;
 
     use crate::comm::comm_abi::EnableTalkingAnim;
 
@@ -90,7 +90,7 @@ mod live {
             }
         }
         fn escorts_worth(&self) -> u16 {
-            unsafe { CalculateEscortsWorth() }
+            crate::engine::World::current().read(escorts_worth)
         }
         fn using_speech(&self) -> bool {
             {
