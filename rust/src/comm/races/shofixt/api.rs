@@ -14,7 +14,7 @@ pub(super) trait ShofixtApi: EncounterApi<Handler> {
 impl ShofixtApi for super::super::script::live::LiveScript<'_, '_, Handler> {
     fn schedule_return(&mut self) {
         unsafe {
-            crate::navigation::events::live::add_event(self.cx.borrow_mut().world, 1, 2, 0, 0, 8);
+            crate::time::clock_abi::live::add_event(self.cx.borrow_mut().world, 1, 2, 0, 0, 8);
         }
     }
 }

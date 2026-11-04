@@ -66,14 +66,7 @@ mod live {
         }
         fn advance_ilwrath(&mut self) {
             unsafe {
-                crate::navigation::events::live::add_event(
-                    self.cx.borrow_mut().world,
-                    1,
-                    0,
-                    0,
-                    0,
-                    12,
-                );
+                crate::time::clock_abi::live::add_event(self.cx.borrow_mut().world, 1, 0, 0, 0, 12);
             }
         }
     }

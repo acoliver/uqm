@@ -85,6 +85,34 @@ pub(crate) mod live {
 
     use crate::navigation::events::live::dispatch_event;
 
+    /// # Safety
+    /// Immediate events may call legacy game services; the caller owns the live campaign.
+    pub unsafe fn add_event(
+        world: &mut crate::engine::World,
+        kind: u32,
+        month: u16,
+        day: u16,
+        year: u16,
+        selector: u8,
+    ) -> Option<crate::engine::battle::link_queue::LinkId<crate::engine::clock::ScheduledEvent>>
+    {
+        if kind == 1 && month == 0 && day == 0 && year == 0 {
+            dispatch_event(world, selector);
+        } else {
+            let clock = &world.data.game.game_clock;
+            let now = (
+                clock.year_index,
+                u16::from(clock.month_index),
+                u16::from(clock.day_index),
+            );
+            let date = crate::time::clock_abi::event_date(now, kind == 1, (year, month, day));
+            if date >= now {
+                return crate::time::clock_abi::insert_event(&mut world.clock, date, selector);
+            }
+        }
+        None
+    }
+
     pub(crate) unsafe fn finish_clock_day(cx: &mut crate::engine::battle::Cx<'_>) {
         cx.with_legacy(|| crate::ui::sis::DrawStatusMessage(ptr::null()));
         let world = &mut *cx.world;

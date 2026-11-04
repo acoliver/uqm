@@ -29,7 +29,7 @@ mod live {
         }
         fn event(&mut self, kind: i32, month: u16, day: u16, year: u16, selector: u8) {
             unsafe {
-                crate::navigation::events::live::add_event(
+                crate::time::clock_abi::live::add_event(
                     self.cx.borrow_mut().world,
                     kind as u32,
                     month,

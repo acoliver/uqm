@@ -295,8 +295,6 @@ mod ffi {
     #[cfg(not(test))]
     pub use crate::ui::sis::DrawSISTitle;
 
-    pub use crate::planets::starmap::FindStar;
-
     #[cfg(not(test))]
     pub use crate::comm::races::arilou::live::init_arilou_comm;
 

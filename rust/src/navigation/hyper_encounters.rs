@@ -145,6 +145,30 @@ pub(crate) fn collision(
     cx.set_target(source, target);
     cx.element_mut(source).velocity.zero();
 }
+unsafe fn populate_ships(world: &crate::engine::World, encounter: &mut ENCOUNTER) {
+    let race = encounter.race_id as usize;
+    let makeup = MAKEUP[race];
+    let mut ships = makeup & 15;
+    for _ in 0..((makeup >> 4) - ships) {
+        if TFB_Random() as u16 % 100 < 50 {
+            ships += 1;
+        }
+    }
+    ships = ships.min(MAX_HYPER_SHIPS as u8);
+    encounter.num_ships = ships;
+    let fleets = world.avail_races_ref();
+    let id = fleets
+        .at(race)
+        .unwrap_or_else(|| panic!("hyperspace encounter fleet"));
+    let fleet = fleets.get(id);
+    for i in 0..ships as usize {
+        let brief = &mut encounter.ship_list[i];
+        brief.race_id = race as u8;
+        brief.crew_level = fleet.crew_level;
+        brief.max_crew = fleet.max_crew;
+        brief.max_energy = fleet.max_energy;
+    }
+}
 unsafe fn add(cx: &mut Cx<'_>, encounter: &mut ENCOUNTER, universe: POINT) -> Option<ElementId> {
     if get(cx.world, StoryKey::ARILOU_SPACE_SIDE) >= 2 {
         return None;
@@ -159,28 +183,7 @@ unsafe fn add(cx: &mut Cx<'_>, encounter: &mut ENCOUNTER, universe: POINT) -> Op
     let new = encounter.num_ships == 0;
     let mut point = encounter.loc_pt;
     if new {
-        let race = encounter.race_id as usize;
-        let makeup = MAKEUP[race];
-        let mut ships = makeup & 15;
-        for _ in 0..((makeup >> 4) - ships) {
-            if TFB_Random() as u16 % 100 < 50 {
-                ships += 1;
-            }
-        }
-        ships = ships.min(MAX_HYPER_SHIPS as u8);
-        encounter.num_ships = ships;
-        for i in 0..ships as usize {
-            let fleets = cx.world.avail_races_ref();
-            let id = fleets
-                .at(race)
-                .unwrap_or_else(|| panic!("hyperspace encounter fleet"));
-            let fleet = fleets.get(id);
-            let brief = &mut encounter.ship_list[i];
-            brief.race_id = race as u8;
-            brief.crew_level = fleet.crew_level;
-            brief.max_crew = fleet.max_crew;
-            brief.max_energy = fleet.max_energy;
-        }
+        populate_ships(cx.world, encounter);
         loop {
             let random = TFB_Random();
             point = POINT {

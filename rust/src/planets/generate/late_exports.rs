@@ -164,10 +164,9 @@ fn home<'a, 'b, 'c>(
 // SAFETY (all callbacks): callers pass the live solar system and one of its
 // worlds on the game thread, just as for the original GenerateFunctions.
 unsafe fn utw_init(owner: &mut crate::engine::World, _system: *mut SOLARSYS_STATE) -> bool {
-    utw::init_npcs(
-        (*owner.star_pointer(crate::planets::starmap::current_catalog())).index,
-        &mut crate::planets::c_api::NpcWorld::new(owner),
-    )
+    // SAFETY: the selected star belongs to the retained runtime catalog.
+    let index = unsafe { (*owner.star_pointer(crate::planets::starmap::current_catalog())).index };
+    utw::init_npcs(index, &mut crate::planets::c_api::NpcWorld::new(owner))
 }
 unsafe fn sam_init(owner: &mut crate::engine::World, _system: *mut SOLARSYS_STATE) -> bool {
     sam::init_npcs(&mut crate::planets::c_api::NpcWorld::new(owner))

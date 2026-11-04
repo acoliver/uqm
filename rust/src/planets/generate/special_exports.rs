@@ -416,10 +416,9 @@ unsafe fn melnorme_init_npcs(
     owner: &mut crate::engine::World,
     _system: *mut SOLARSYS_STATE,
 ) -> bool {
-    melnorme::init_npcs(
-        (*owner.star_pointer(crate::planets::starmap::current_catalog())).index,
-        &mut crate::planets::c_api::NpcWorld::new(owner),
-    )
+    // SAFETY: the selected star belongs to the retained runtime catalog.
+    let index = unsafe { (*owner.star_pointer(crate::planets::starmap::current_catalog())).index };
+    melnorme::init_npcs(index, &mut crate::planets::c_api::NpcWorld::new(owner))
 }
 
 unsafe extern "C" fn rainbow_planets(system: *mut SOLARSYS_STATE) -> bool {

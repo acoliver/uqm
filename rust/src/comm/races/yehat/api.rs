@@ -25,7 +25,7 @@ impl YehatApi for LiveScript<'_, '_, Handler> {
     fn schedule_rebel_event(&mut self) {
         // SAFETY: the callback owns the initialized campaign clock on the game thread.
         unsafe {
-            crate::navigation::events::live::add_event(self.cx.borrow_mut().world, 1, 0, 0, 0, 15)
+            crate::time::clock_abi::live::add_event(self.cx.borrow_mut().world, 1, 0, 0, 0, 15)
         };
     }
 }

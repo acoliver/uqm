@@ -104,33 +104,6 @@ fn advance_fleets(world: &mut World, mut on_arrival: impl FnMut(&mut World, u8))
 
 #[cfg(not(test))]
 pub(crate) mod live {
-    /// # Safety
-    /// Immediate events may call legacy game services; the caller owns the live campaign.
-    pub unsafe fn add_event(
-        world: &mut crate::engine::World,
-        kind: u32,
-        month: u16,
-        day: u16,
-        year: u16,
-        selector: u8,
-    ) -> Option<crate::engine::battle::link_queue::LinkId<crate::engine::clock::ScheduledEvent>>
-    {
-        if kind == 1 && month == 0 && day == 0 && year == 0 {
-            dispatch_event(world, selector);
-        } else {
-            let clock = &world.data.game.game_clock;
-            let now = (
-                clock.year_index,
-                u16::from(clock.month_index),
-                u16::from(clock.day_index),
-            );
-            let date = crate::time::clock_abi::event_date(now, kind == 1, (year, month, day));
-            if date >= now {
-                return crate::time::clock_abi::insert_event(&mut world.clock, date, selector);
-            }
-        }
-        None
-    }
 
     use super::*;
     use crate::navigation::globals::in_hyper_space;
@@ -146,7 +119,7 @@ pub(crate) mod live {
             .unwrap_or_else(|| panic!("scheduled event fleet"))
     }
     unsafe fn relative(world: &mut World, month: u16, day: u16, year: u16, selector: u32) {
-        crate::navigation::events::live::add_event(
+        crate::time::clock_abi::live::add_event(
             world,
             EVENT_TYPE_RELATIVE_EVENT,
             month,
@@ -166,7 +139,7 @@ pub(crate) mod live {
     /// Game-thread access to initialized game-clock and fleet queues.
     pub unsafe fn schedule_initial_events(world: &mut World) {
         relative(world, 0, 1, 0, HYPERSPACE_ENCOUNTER_EVENT);
-        crate::navigation::events::live::add_event(
+        crate::time::clock_abi::live::add_event(
             world,
             EVENT_TYPE_ABSOLUTE_EVENT,
             3,
@@ -188,7 +161,7 @@ pub(crate) mod live {
     /// Game-thread access to initialized game-clock and fleet queues.
     pub unsafe fn dispatch_event(world: &mut World, selector: u8) {
         if let Some(event) = apply_story_event(world, selector) {
-            crate::navigation::events::live::add_event(
+            crate::time::clock_abi::live::add_event(
                 world,
                 event.kind,
                 event.month,

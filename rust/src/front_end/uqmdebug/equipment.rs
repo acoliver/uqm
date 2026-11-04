@@ -90,6 +90,43 @@ pub(super) fn update_flight(sis: &SisState, system: &mut SOLARSYS_STATE) {
     }
 }
 
+pub(super) fn clear_escorts(world: &mut crate::engine::World) {
+    let mut ships = world.built_ships();
+    let mut next = ships.head();
+    while let Some(id) = next {
+        next = ships.succ(id);
+        ships.remove(id);
+        ships.free(id);
+    }
+}
+
+#[cfg(not(test))]
+pub(super) fn reveal_spheres(world: &mut World) {
+    let mut fleets = world.avail_races();
+    let mut next = fleets.head();
+    while let Some(id) = next {
+        next = fleets.succ(id);
+        let fleet = fleets.get_mut(id);
+        if fleet.actual_strength != COUNT::MAX && fleet.known_strength != fleet.actual_strength {
+            fleet.known_strength = fleet.actual_strength;
+            fleet.known_loc = fleet.loc;
+        }
+    }
+}
+
+#[cfg(not(test))]
+pub(super) fn activate_fleets(world: &mut World) {
+    let mut fleets = world.avail_races();
+    let mut next = fleets.head();
+    while let Some(id) = next {
+        next = fleets.succ(id);
+        let fleet = fleets.get_mut(id);
+        if !fleet.icons.is_null() {
+            fleet.allied_state = GOOD_GUY as _;
+        }
+    }
+}
+
 #[cfg(test)]
 mod equipment_tests {
     use super::*;
@@ -166,40 +203,5 @@ mod equipment_tests {
         assert!(!equip_flagship(&mut world));
         assert_eq!(world.data.flagship.drive_slots, [0; 11]);
         assert_eq!(world.story_state(StoryKey::LANDER_SHIELDS), 0);
-    }
-}
-
-pub(super) fn clear_escorts(world: &mut crate::engine::World) {
-    let mut ships = world.built_ships();
-    let mut next = ships.head();
-    while let Some(id) = next {
-        next = ships.succ(id);
-        ships.remove(id);
-        ships.free(id);
-    }
-}
-
-pub(super) fn reveal_spheres(world: &mut World) {
-    let mut fleets = world.avail_races();
-    let mut next = fleets.head();
-    while let Some(id) = next {
-        next = fleets.succ(id);
-        let fleet = fleets.get_mut(id);
-        if fleet.actual_strength != COUNT::MAX && fleet.known_strength != fleet.actual_strength {
-            fleet.known_strength = fleet.actual_strength;
-            fleet.known_loc = fleet.loc;
-        }
-    }
-}
-
-pub(super) fn activate_fleets(world: &mut World) {
-    let mut fleets = world.avail_races();
-    let mut next = fleets.head();
-    while let Some(id) = next {
-        next = fleets.succ(id);
-        let fleet = fleets.get_mut(id);
-        if !fleet.icons.is_null() {
-            fleet.allied_state = GOOD_GUY as _;
-        }
     }
 }

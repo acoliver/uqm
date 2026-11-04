@@ -1019,7 +1019,9 @@ pub const EVENT_TYPE_RELATIVE_EVENT: EVENT_TYPE = 1;
 pub type EVENT_TYPE = ::std::os::raw::c_uint;
 
 #[cfg(not(test))]
-pub use crate::navigation::events::live::{add_event, dispatch_event};
+pub use crate::navigation::events::live::dispatch_event;
+#[cfg(not(test))]
+pub use crate::time::clock_abi::live::add_event;
 
 #[cfg(not(test))]
 pub use crate::time::clock_abi::live::MoveGameClockDays;

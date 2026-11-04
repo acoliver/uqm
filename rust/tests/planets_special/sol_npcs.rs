@@ -87,7 +87,11 @@ pub fn check(h: &mut Harness) {
             .read(|world| world.npc_built_ships_ref().head().is_none()));
         let group = uqm_rust::engine::World::current().read(|world| {
             let groups = world.ip_groups_ref();
-            *groups.get(groups.head().unwrap())
+            *groups.get(
+                groups
+                    .head()
+                    .unwrap_or_else(|| panic!("fixture group missing")),
+            )
         });
         assert_eq!(group.race_id, 23);
         assert_eq!((group.task, group.sys_loc, group.dest_loc), (0, 3, 3));
@@ -122,7 +126,9 @@ pub fn check(h: &mut Harness) {
         assert_eq!(file(), saved_file);
         uqm_rust::engine::World::current().write(|world| {
             let mut groups = world.ip_groups();
-            let head = groups.head().unwrap();
+            let head = groups
+                .head()
+                .unwrap_or_else(|| panic!("fixture group missing"));
             groups.get_mut(head).task = uqm_rust::planets::generate::default::REFORM_GROUP;
         });
         assert!(
@@ -148,7 +154,11 @@ pub fn check(h: &mut Harness) {
         assert_eq!(LiveStory.word("URQUAN_PROBE_GRPOFFS0"), probe_ref);
         let probe = uqm_rust::engine::World::current().read(|world| {
             let groups = world.ip_groups_ref();
-            *groups.get(groups.head().unwrap())
+            *groups.get(
+                groups
+                    .head()
+                    .unwrap_or_else(|| panic!("fixture group missing")),
+            )
         });
         assert_eq!(
             probe.task,
