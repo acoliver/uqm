@@ -141,7 +141,7 @@ fn status_offsets_use_the_already_borrowed_kernel() {
     // SAFETY: the serialized fixture owns the lifecycle; status initialization only writes offsets.
     unsafe {
         bridge::with_game(&mut game, || {
-            uqm_rust::engine::Kernel::current().write(|kernel| InitStatusOffsets(kernel));
+            uqm_rust::engine::Kernel::current().write(|kernel| init_status_offsets(kernel, 240));
         });
     }
 }

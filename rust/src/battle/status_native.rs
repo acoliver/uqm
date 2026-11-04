@@ -4,8 +4,8 @@
 use crate::engine::Kernel as KernelOwner;
 use crate::ships::native::abi::*;
 
-fn status_offsets(height_pixels: i32) -> [COORD; 2] {
-    [(height_pixels >> 1) as COORD, 0]
+pub fn init_status_offsets(kernel: &mut crate::engine::Kernel, height_pixels: i32) {
+    kernel.status_offsets = [(height_pixels >> 1) as COORD, 0];
 }
 
 fn crew_text(value: COUNT) -> [u8; 40] {
@@ -217,12 +217,6 @@ pub(crate) mod engine {
     use super::*;
     use crate::engine::battle::{views::FrameSelection, Cx, ElementId};
     use crate::ships::native::rel_frame_index;
-
-    /// # Safety
-    /// Status rendering runs on the game thread after screen initialization.
-    pub unsafe fn InitStatusOffsets(kernel: &mut crate::engine::Kernel) {
-        kernel.status_offsets = status_offsets(ScreenHeight);
-    }
 
     unsafe fn filled(color: Color, mut r: RECT) {
         SetContextForeGroundColor(color);
@@ -461,7 +455,7 @@ pub(crate) mod engine {
 #[cfg(not(test))]
 pub use engine::{
     delta_crew, delta_energy, draw_captains_window, preprocess_status, DrawBattleCrewAmount,
-    InitStatusOffsets, PostProcessStatus,
+    PostProcessStatus,
 };
 
 #[cfg(test)]
@@ -470,8 +464,11 @@ mod tests {
 
     #[test]
     fn offsets_put_player_zero_at_bottom() {
-        assert_eq!(status_offsets(240), [120, 0]);
-        assert_eq!(status_offsets(481), [240, 0]);
+        let mut kernel = crate::engine::Kernel::new();
+        init_status_offsets(&mut kernel, 240);
+        assert_eq!(kernel.status_offsets, [120, 0]);
+        init_status_offsets(&mut kernel, 481);
+        assert_eq!(kernel.status_offsets, [240, 0]);
     }
 
     #[test]

@@ -1560,7 +1560,7 @@ pub type _bindgen_ty_5 = ::std::os::raw::c_uint;
 
 
 #[cfg(not(test))]
-pub use crate::battle::status_native::engine::InitStatusOffsets;
+pub use crate::battle::status_native::init_status_offsets;
 
 #[cfg(not(test))]
 pub use crate::ui::shipstat::DrawCrewFuelString;
