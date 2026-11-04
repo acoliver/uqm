@@ -101,6 +101,35 @@ mod tests {
     };
 
     #[test]
+    fn specialized_templates_supply_typed_resource_keys() {
+        for descriptor in [
+            super::super::vux_template::descriptor(&RACE),
+            super::super::androsynth_template::descriptor(&RACE),
+        ] {
+            let raw = &descriptor.raw;
+            let token = |key: Option<&'static CStr>| key.map_or(std::ptr::null(), CStr::as_ptr);
+            assert_eq!(token(raw.resources.strings), raw.ship_info.race_strings_rsc);
+            assert_eq!(token(raw.resources.icons), raw.ship_info.icons_rsc);
+            assert_eq!(
+                token(raw.resources.melee_icon),
+                raw.ship_info.melee_icon_rsc
+            );
+            assert_eq!(raw.resources.ship.map(token), raw.ship_data.ship_rsc);
+            assert_eq!(raw.resources.weapon.map(token), raw.ship_data.weapon_rsc);
+            assert_eq!(raw.resources.special.map(token), raw.ship_data.special_rsc);
+            assert_eq!(
+                token(raw.resources.captain),
+                raw.ship_data.captain_control.captain_rsc
+            );
+            assert_eq!(
+                token(raw.resources.victory),
+                raw.ship_data.victory_ditty_rsc
+            );
+            assert_eq!(token(raw.resources.sounds), raw.ship_data.ship_sounds_rsc);
+        }
+    }
+
+    #[test]
     fn typed_resource_keys_survive_changes_to_legacy_mirrors() {
         let resources = RaceResources {
             strings: Some(c"race.names"),
