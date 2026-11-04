@@ -5,7 +5,6 @@ use std::time::{Duration, Instant};
 #[path = "tests/process_tests.rs"]
 mod tests;
 
-
 pub(super) struct Completion {
     pub status: ExitStatus,
     pub timed_out: bool,
@@ -68,24 +67,28 @@ fn supervise(child: &mut Child, budget: Duration) -> Result<Completion> {
     }
 }
 
+#[cfg(unix)]
+pub(crate) fn kill_group(child: &Child) -> std::io::Result<()> {
+    let group = libc::pid_t::try_from(child.id())
+        .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidInput, error))?;
+    // SAFETY: kill takes integer arguments only. Callers create the child's
+    // dedicated process group with process_group(0); the negative ID targets it.
+    if unsafe { libc::kill(-group, libc::SIGKILL) } == -1 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(())
+}
+
 fn terminate(child: &mut Child) -> Result<ExitStatus> {
     #[cfg(unix)]
     {
         // The process group belongs to this invocation, never a name-wide game kill.
-        let status = Command::new("/bin/kill")
-            .args(["-KILL", "--", &format!("-{}", child.id())])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .map_err(|error| error.to_string())?;
-        if !status.success()
-            && child
-                .try_wait()
-                .map_err(|error| error.to_string())?
-                .is_none()
-        {
+        if let Err(error) = kill_group(child) {
+            if let Some(status) = child.try_wait().map_err(|error| error.to_string())? {
+                return Ok(status);
+            }
             return Err(format!(
-                "kill owned process group {} failed: {status}",
+                "kill owned process group {} failed: {error}",
                 child.id()
             ));
         }
