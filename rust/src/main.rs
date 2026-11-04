@@ -144,15 +144,23 @@ fn main() {
             // SAFETY: the main thread keeps all argument CStrings and argv storage alive through shutdown.
             let exit_code = init_sequence::run_uqm(args.len() as c_int, c_argv.as_mut_ptr());
 
-            finish_automation(exit_code, parsed.replay_summary.as_deref())
+            finish_automation(
+                _application.observer().map(|owner| owner.as_ref()),
+                exit_code,
+                parsed.replay_summary.as_deref(),
+            )
         })
     };
     exit(exit_code);
 }
 
-fn finish_automation(exit_code: i32, replay_summary: Option<&str>) -> i32 {
+fn finish_automation(
+    observer: Option<&uqm_rust::automation::AutomationObserver>,
+    exit_code: i32,
+    replay_summary: Option<&str>,
+) -> i32 {
     // Finalize automation after teardown and propagate its terminal/evidence status.
-    let exit_code = match uqm_rust::automation::AutomationObserver::finalize(exit_code) {
+    let exit_code = match observer.map_or(Ok(exit_code), |observer| observer.finalize(exit_code)) {
         Ok(status) => status,
         Err(error) => {
             eprintln!("Automation finalization failed: {error}");
@@ -161,9 +169,10 @@ fn finish_automation(exit_code: i32, replay_summary: Option<&str>) -> i32 {
     };
 
     if let Some(path) = replay_summary {
-        if let Err(error) = uqm_rust::automation::AutomationObserver::write_replay_summary(
-            std::path::Path::new(path),
-        ) {
+        if let Err(error) = observer
+            .ok_or("replay coordinator not initialized".to_string())
+            .and_then(|observer| observer.write_replay_summary(std::path::Path::new(path)))
+        {
             eprintln!("Replay summary failed: {error}");
             return 1;
         }

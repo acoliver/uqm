@@ -525,8 +525,8 @@ impl AutomationObserver {
     }
 
     /// Write only deterministic runtime observations, excluding host timing.
-    pub fn write_replay_summary(path: &std::path::Path) -> Result<(), String> {
-        let coord = Self::get().ok_or("replay coordinator not initialized")?;
+    pub fn write_replay_summary(&self, path: &std::path::Path) -> Result<(), String> {
+        let coord = self;
         let inner = coord.inner.lock();
         if let Some(journal) = &coord.parity {
             journal.lock().flush().map_err(|e| e.to_string())?;
@@ -555,8 +555,8 @@ impl AutomationObserver {
     /// The backend calls this after presenting pixels but before the corresponding coordinator
     /// presentation callback. The ordered commit's next sequence is the length of the exact
     /// reserved trace prefix; both semantic counters are protected by the coordinator lock.
-    pub fn native_window_semantic_snapshot() -> Option<(u64, u64, u64)> {
-        let coord = Self::get()?;
+    pub fn native_window_semantic_snapshot(&self) -> Option<(u64, u64, u64)> {
+        let coord = self;
         let inner = coord.inner.lock();
         Some((
             coord.runtime.commit.next_sequence(),
@@ -566,10 +566,8 @@ impl AutomationObserver {
     }
 
     /// Terminate active automation when an external evidence publisher fails.
-    pub fn external_trace_failure(detail: impl Into<String>) {
-        let Some(coord) = Self::get() else {
-            return;
-        };
+    pub fn external_trace_failure(&self, detail: impl Into<String>) {
+        let coord = self;
         let mut inner = coord.inner.lock();
         coord.write_trace_labeled(&mut inner, RecordKind::SemanticAssertion, detail.into());
         coord.set_terminal(&mut inner, TerminalClass::TraceFailure);
@@ -577,12 +575,10 @@ impl AutomationObserver {
 
     /// Activate the script's start scene after game structures and initial
     /// events are initialized, before the first activity dispatch.
-    pub fn activate_start_scene(cx: &mut crate::engine::battle::Cx<'_>) {
+    pub fn activate_start_scene(&self, cx: &mut crate::engine::battle::Cx<'_>) {
         // SAFETY: loading returns all owner access before the typed scene writes below.
-        unsafe { crate::app::bridge::publish(cx, Self::activate_save_capture) };
-        let Some(coord) = Self::get() else {
-            return;
-        };
+        unsafe { crate::app::bridge::publish(cx, || self.activate_save_capture()) };
+        let coord = self;
 
         let scene = {
             let mut inner = coord.inner.lock();
@@ -651,26 +647,20 @@ impl AutomationObserver {
 
     /// Process an admitted input callback. Returns true if the game loop
     /// should stop (terminal condition or script finished).
-    pub(crate) fn process_input() -> bool {
-        let Some(coord) = Self::get() else {
-            return false;
-        };
+    pub(crate) fn process_input(&self) -> bool {
+        let coord = self;
         coord.process_input_inner()
     }
 
     /// Service a nested button wait, which cannot accept planet-menu selections.
-    pub(crate) fn process_button_wait() -> bool {
-        let Some(coord) = Self::get() else {
-            return false;
-        };
+    pub(crate) fn process_button_wait(&self) -> bool {
+        let coord = self;
         coord.process_input_at_boundary(true)
     }
 
     /// Observe a scripted player input after production updates current and pulsed state.
-    pub fn process_player_input_observation() -> bool {
-        let Some(coord) = Self::get() else {
-            return false;
-        };
+    pub fn process_player_input_observation(&self) -> bool {
+        let coord = self;
         coord.process_player_input_observation_inner()
     }
 
@@ -742,10 +732,8 @@ impl AutomationObserver {
     /// Whether the current semantic response action is waiting for NPC speech
     /// to finish before its pending response list can become selectable.
     #[must_use]
-    pub fn should_skip_pending_communication_speech() -> bool {
-        let Some(coord) = Self::get() else {
-            return false;
-        };
+    pub fn should_skip_pending_communication_speech(&self) -> bool {
+        let coord = self;
         let inner = coord.inner.lock();
         let index = match coord.actions.get(inner.sched_state.step_index) {
             Some(Action::SelectCommunicationResponse(select)) => select.index,
@@ -760,10 +748,8 @@ impl AutomationObserver {
     /// Report whether a response action later in the current synchronous
     /// prerequisite chain targets the pending communication list.
     #[must_use]
-    pub fn pending_communication_response_action(response_count: usize) -> bool {
-        let Some(coord) = Self::get() else {
-            return false;
-        };
+    pub fn pending_communication_response_action(&self, response_count: usize) -> bool {
+        let coord = self;
         if response_count == 0 {
             return false;
         }
@@ -783,10 +769,8 @@ impl AutomationObserver {
     /// Whether automation is waiting for this communication to close and can
     /// therefore skip its final NPC speech segment.
     #[must_use]
-    pub fn should_skip_communication_closing_speech() -> bool {
-        let Some(coord) = Self::get() else {
-            return false;
-        };
+    pub fn should_skip_communication_closing_speech(&self) -> bool {
+        let coord = self;
         let inner = coord.inner.lock();
         matches!(
             coord.actions.get(inner.sched_state.step_index),
@@ -797,20 +781,18 @@ impl AutomationObserver {
     /// Advance one scheduler callback at a synchronous boundary and report
     /// whether a pending semantic response action now requires speech skipping.
     #[must_use]
-    pub(crate) fn service_and_should_skip_pending_communication_speech() -> bool {
+    pub(crate) fn service_and_should_skip_pending_communication_speech(&self) -> bool {
         for _ in 0..4 {
-            if Self::should_skip_pending_communication_speech() {
+            if self.should_skip_pending_communication_speech() {
                 return true;
             }
 
-            let Some(coord) = Self::get() else {
-                return false;
-            };
+            let coord = self;
             let before = coord.inner.lock().sched_state.step_index;
             if coord.process_input_inner() {
                 return false;
             }
-            if Self::should_skip_pending_communication_speech() {
+            if self.should_skip_pending_communication_speech() {
                 return true;
             }
             let after = coord.inner.lock().sched_state.step_index;
@@ -823,11 +805,9 @@ impl AutomationObserver {
 
     /// Consume an already-observed communication completion after hail teardown
     /// and expose the next action before returning to the outer game loop.
-    pub(crate) fn service_communication_completion_boundary() -> bool {
+    pub(crate) fn service_communication_completion_boundary(&self) -> bool {
         for _ in 0..2 {
-            let Some(coord) = Self::get() else {
-                return false;
-            };
+            let coord = self;
             let before = coord.inner.lock().sched_state.step_index;
             if coord.process_input_inner() {
                 return true;
@@ -2567,10 +2547,8 @@ impl AutomationObserver {
 
     /// Process a committed present callback. Returns true if the game loop
     /// should stop.
-    pub fn process_present(frame: Option<PresentedFrame>) -> bool {
-        let Some(coord) = Self::get() else {
-            return false;
-        };
+    pub fn process_present(&self, frame: Option<PresentedFrame>) -> bool {
+        let coord = self;
         let committed_presentation = frame.as_ref().map(|frame| frame.count);
         let stop = coord.process_present_inner(frame);
         let boundary = committed_presentation
@@ -2581,9 +2559,7 @@ impl AutomationObserver {
             coord.stage_native_trace()
         };
         if let Err(error) = publication {
-            Self::external_trace_failure(format!(
-                "native trace prefix publication failed: {error}"
-            ));
+            self.external_trace_failure(format!("native trace prefix publication failed: {error}"));
             return true;
         }
         #[cfg(feature = "debug-process")]
@@ -2592,7 +2568,7 @@ impl AutomationObserver {
                 committed_presentation,
                 boundary,
             ) {
-                Self::external_trace_failure(format!(
+                self.external_trace_failure(format!(
                     "native-window state publication failed: {error}"
                 ));
                 return true;
@@ -2676,10 +2652,8 @@ impl AutomationObserver {
     // -----------------------------------------------------------------------
 
     /// Advance a script waiting for the initialized production restart menu.
-    pub fn process_main_menu_ready() -> bool {
-        let Some(coord) = Self::get() else {
-            return false;
-        };
+    pub fn process_main_menu_ready(&self) -> bool {
+        let coord = self;
         let mut inner = coord.inner.lock();
         if inner.terminal_class.is_some() {
             return true;
@@ -2719,10 +2693,8 @@ impl AutomationObserver {
 
     /// The restart menu set `CHECK_ABORT` for the Quit entry. Records the
     /// observation; whether the script declared it is decided at finalization.
-    pub fn observe_quit_selected() {
-        let Some(coord) = Self::get() else {
-            return;
-        };
+    pub fn observe_quit_selected(&self) {
+        let coord = self;
         let mut inner = coord.inner.lock();
         if inner.terminal_class.is_some() {
             return;
@@ -2771,10 +2743,8 @@ impl AutomationObserver {
 
     /// Process an observed main-menu transition. Returns true if the game
     /// loop should stop (e.g., semantic assertion mismatch).
-    pub fn process_menu_transition(from_index: u8, to_index: u8) -> bool {
-        let Some(coord) = Self::get() else {
-            return false;
-        };
+    pub fn process_menu_transition(&self, from_index: u8, to_index: u8) -> bool {
+        let coord = self;
         coord.process_menu_transition_inner(from_index, to_index)
     }
 
@@ -2802,10 +2772,8 @@ impl AutomationObserver {
     /// In inactive mode this preserves the game result. Active mode durably
     /// publishes the ordered trace and teardown receipt before returning the
     /// terminal-aware process status. Evidence failures are fatal.
-    pub fn finalize(game_result: i32) -> Result<i32, String> {
-        let Some(coord) = Self::get() else {
-            return Ok(game_result);
-        };
+    pub fn finalize(&self, game_result: i32) -> Result<i32, String> {
+        let coord = self;
         coord.finalize_inner(game_result)
     }
 
@@ -3723,9 +3691,9 @@ mod tests {
             temp.path().to_path_buf(),
         )));
         if case != "declared_not_reported" {
-            AutomationObserver::observe_quit_selected();
+            _app.observer().unwrap().observe_quit_selected();
         }
-        let status = AutomationObserver::finalize(0).unwrap();
+        let status = _app.observer().unwrap().finalize(0).unwrap();
         let records: Vec<_> = std::fs::read_to_string(temp.path().join("trace.jsonl"))
             .unwrap()
             .lines()
@@ -3801,7 +3769,7 @@ mod tests {
         assert!(!coord.process_input_inner());
         assert_eq!(coord.inner.lock().sched_state.step_index, 1);
         assert!(coord.process_input_inner());
-        assert_eq!(AutomationObserver::finalize(0).unwrap(), 0);
+        assert_eq!(_app.observer().unwrap().finalize(0).unwrap(), 0);
     }
 
     #[test]
@@ -3850,7 +3818,7 @@ mod tests {
                 .collect::<Vec<_>>()
         };
         assert!(!coord.process_input_inner());
-        assert!(!AutomationObserver::process_present(Some(frame(1, 1))));
+        assert!(!_app.observer().unwrap().process_present(Some(frame(1, 1))));
         assert_eq!(
             coord.inner.lock().sched_state.step_index,
             1,
@@ -3861,13 +3829,13 @@ mod tests {
         assert_eq!(coord.inner.lock().sched_state.step_index, 2);
         assert!(!coord.process_input_inner());
         assert!(coord.inner.lock().armed_capture_label.is_none());
-        assert!(!AutomationObserver::process_present(Some(frame(2, 1))));
+        assert!(!_app.observer().unwrap().process_present(Some(frame(2, 1))));
         assert_eq!(plan.committed(&records()).unwrap().len(), 2);
         assert!(!coord.process_input_inner());
-        assert!(!AutomationObserver::process_present(Some(frame(3, 2))));
+        assert!(!_app.observer().unwrap().process_present(Some(frame(3, 2))));
         assert_eq!(plan.committed(&records()).unwrap().len(), 3);
         assert!(coord.process_input_inner());
-        assert_eq!(AutomationObserver::finalize(0).unwrap(), 0);
+        assert_eq!(_app.observer().unwrap().finalize(0).unwrap(), 0);
         let trace = records();
         let counts: Vec<_> = trace
             .iter()
@@ -3918,18 +3886,21 @@ mod tests {
                 Some(65536),
             )));
         let coord = AutomationObserver::get().unwrap();
-        assert!(!AutomationObserver::process_main_menu_ready());
-        assert!(!AutomationObserver::process_main_menu_ready());
+        assert!(!_app.observer().unwrap().process_main_menu_ready());
+        assert!(!_app.observer().unwrap().process_main_menu_ready());
         assert_eq!(coord.inner.lock().sched_state.step_index, 1);
         assert!(coord.inner.lock().pending_main_menu_ready);
         for count in 1..=2 {
-            assert!(!AutomationObserver::process_present(Some(PresentedFrame {
-                count,
-                generation: 0,
-                width: 1,
-                height: 1,
-                rgba: vec![1, 2, 3, 255]
-            })));
+            assert!(!_app
+                .observer()
+                .unwrap()
+                .process_present(Some(PresentedFrame {
+                    count,
+                    generation: 0,
+                    width: 1,
+                    height: 1,
+                    rgba: vec![1, 2, 3, 255]
+                })));
             let records: Vec<_> = std::fs::read_to_string(temp.path().join("trace.jsonl"))
                 .unwrap()
                 .lines()
@@ -3939,7 +3910,7 @@ mod tests {
             assert_eq!(coord.process_input_inner(), count == 2);
         }
         assert!(!coord.inner.lock().pending_main_menu_ready);
-        assert_eq!(AutomationObserver::finalize(0).unwrap(), 0);
+        assert_eq!(_app.observer().unwrap().finalize(0).unwrap(), 0);
     }
     #[test]
     fn native_trace_keeps_ordinary_presentations_in_memory_until_a_boundary() {
@@ -3978,11 +3949,14 @@ mod tests {
             rgba: vec![1, 2, 3, 255],
         };
         assert!(!coord.process_input_inner());
-        assert!(!AutomationObserver::process_present(Some(frame(1, 0))));
+        assert!(!_app.observer().unwrap().process_present(Some(frame(1, 0))));
         let first = std::fs::read(temp.path().join("trace.jsonl")).unwrap();
         for count in 2..=8 {
             assert!(!coord.process_input_inner());
-            assert!(!AutomationObserver::process_present(Some(frame(count, 0))));
+            assert!(!_app
+                .observer()
+                .unwrap()
+                .process_present(Some(frame(count, 0))));
             assert_eq!(
                 std::fs::read(temp.path().join("trace.jsonl")).unwrap(),
                 first
@@ -3991,7 +3965,7 @@ mod tests {
         while coord.inner.lock().armed_capture_label.is_none() {
             assert!(!coord.process_input_inner());
         }
-        assert!(!AutomationObserver::process_present(Some(frame(9, 1))));
+        assert!(!_app.observer().unwrap().process_present(Some(frame(9, 1))));
         let boundary = std::fs::read(temp.path().join("trace.jsonl")).unwrap();
         assert!(boundary.starts_with(&first));
         let records: Vec<_> = std::str::from_utf8(&boundary)
@@ -4006,7 +3980,7 @@ mod tests {
             .collect();
         assert_eq!(presentations, (1..=9).collect::<Vec<_>>());
         assert!(coord.process_input_inner());
-        assert_eq!(AutomationObserver::finalize(0).unwrap(), 0);
+        assert_eq!(_app.observer().unwrap().finalize(0).unwrap(), 0);
         let finished = std::fs::read(temp.path().join("trace.jsonl")).unwrap();
         assert!(finished.starts_with(&boundary));
         let records: Vec<_> = std::str::from_utf8(&finished)
@@ -4113,7 +4087,7 @@ mod tests {
                 Some(65536),
             )));
         let coord = AutomationObserver::get().unwrap();
-        assert!(!AutomationObserver::process_main_menu_ready());
+        assert!(!_app.observer().unwrap().process_main_menu_ready());
         for _ in 0..3 {
             assert!(!coord.process_input_inner());
             assert_eq!(coord.inner.lock().sched_state.step_index, 1);
@@ -4126,9 +4100,9 @@ mod tests {
             height: 1,
             rgba: vec![1, 2, 3, 255],
         };
-        assert!(!AutomationObserver::process_menu_transition(0, 1));
-        assert!(!AutomationObserver::process_menu_transition(1, 0));
-        assert!(!AutomationObserver::process_present(Some(frame(1, 0))));
+        assert!(!_app.observer().unwrap().process_menu_transition(0, 1));
+        assert!(!_app.observer().unwrap().process_menu_transition(1, 0));
+        assert!(!_app.observer().unwrap().process_present(Some(frame(1, 0))));
         let live_trace = std::fs::read_to_string(temp.path().join("trace.jsonl")).unwrap();
         let live_records: Vec<_> = live_trace
             .lines()
@@ -4136,7 +4110,9 @@ mod tests {
             .collect();
         assert_eq!(
             live_records.len() as u64,
-            AutomationObserver::native_window_semantic_snapshot()
+            _app.observer()
+                .unwrap()
+                .native_window_semantic_snapshot()
                 .unwrap()
                 .0
         );
@@ -4146,23 +4122,23 @@ mod tests {
         assert_eq!(coord.inner.lock().pending_transitions.len(), 1);
         assert!(!coord.process_input_inner());
         assert_eq!(coord.inner.lock().sched_state.step_index, 2);
-        assert!(!AutomationObserver::process_present(Some(frame(2, 0))));
+        assert!(!_app.observer().unwrap().process_present(Some(frame(2, 0))));
         assert!(!coord.process_input_inner());
         assert_eq!(coord.inner.lock().sched_state.step_index, 3);
         assert!(coord.inner.lock().pending_transitions.is_empty());
-        assert!(!AutomationObserver::process_present(Some(frame(3, 0))));
+        assert!(!_app.observer().unwrap().process_present(Some(frame(3, 0))));
         assert!(!coord.process_input_inner());
         assert_eq!(
             coord.inner.lock().armed_capture_label.as_deref(),
             Some("menu")
         );
-        assert!(!AutomationObserver::process_present(Some(frame(4, 1))));
+        assert!(!_app.observer().unwrap().process_present(Some(frame(4, 1))));
         assert!(coord.process_input_inner());
         assert_eq!(
             coord.inner.lock().terminal_class,
             Some(TerminalClass::Success)
         );
-        assert_eq!(AutomationObserver::finalize(0).unwrap(), 0);
+        assert_eq!(_app.observer().unwrap().finalize(0).unwrap(), 0);
         let trace = std::fs::read(temp.path().join("trace.jsonl")).unwrap();
         let records: Vec<_> = std::str::from_utf8(&trace)
             .unwrap()

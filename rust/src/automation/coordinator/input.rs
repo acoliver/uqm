@@ -345,7 +345,7 @@ mod tests {
                 Some(TerminalClass::SemanticMismatch)
             );
         }
-        assert!(AutomationObserver::finalize(0)? != 0);
+        assert!(_app.observer().unwrap().finalize(0)? != 0);
         Ok(())
     }
 }

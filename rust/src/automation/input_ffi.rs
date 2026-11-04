@@ -641,7 +641,7 @@ pub extern "C" fn rust_automation_service_do_input() -> i32 {
         .into()
 }
 
-pub(crate) fn service_input(button_wait: bool) -> i32 {
+pub(crate) fn service_input(observer: &AutomationObserver, button_wait: bool) -> i32 {
     // Step 1: ABI entry (saturating).
     if let Some(rt) = with_runtime() {
         rt.record_abi_entry();
@@ -680,9 +680,9 @@ pub(crate) fn service_input(button_wait: bool) -> i32 {
     // Step 4: Feed the input callback to the coordinator (scheduler+watchdog).
     if AutomationObserver::is_active() {
         let stop = if button_wait {
-            AutomationObserver::process_button_wait()
+            observer.process_button_wait()
         } else {
-            AutomationObserver::process_input()
+            observer.process_input()
         };
         if stop {
             return 1;
@@ -709,7 +709,7 @@ pub extern "C" fn rust_automation_after_input_update() -> i32 {
         .into()
 }
 
-pub(crate) fn after_input_update() -> i32 {
+pub(crate) fn after_input_update(observer: &AutomationObserver) -> i32 {
     // Step 1: ABI entry (saturating).
     if let Some(rt) = with_runtime() {
         rt.record_abi_entry();
@@ -734,8 +734,8 @@ pub(crate) fn after_input_update() -> i32 {
 
     // Step 3: Commit the scripted player-input observation at the exact
     // production boundary that follows UpdateInputState.
-    AutomationObserver::parity_input();
-    AutomationObserver::process_player_input_observation().into()
+    observer.parity_input();
+    observer.process_player_input_observation().into()
 }
 
 // ===========================================================================

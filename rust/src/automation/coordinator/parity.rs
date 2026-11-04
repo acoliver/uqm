@@ -80,10 +80,8 @@ impl AutomationObserver {
             .try_set(TerminalClass::TraceFailure);
     }
 
-    pub fn parity_checkpoint(boundary: &str) {
-        let Some(coord) = Self::get() else {
-            return;
-        };
+    pub fn parity_checkpoint(&self, boundary: &str) {
+        let coord = self;
         if coord.runtime.mirror.is_terminal() {
             return;
         }
@@ -96,10 +94,8 @@ impl AutomationObserver {
         }
     }
 
-    pub fn parity_input() {
-        let Some(coord) = Self::get() else {
-            return;
-        };
+    pub fn parity_input(&self) {
+        let coord = self;
         let Some(journal) = &coord.parity else {
             return;
         };
@@ -159,6 +155,6 @@ mod tests {
         assert_eq!(inner.terminal_class, Some(TerminalClass::TraceFailure));
         assert!(coord.admit_boundary(&mut inner, CallbackKind::Input));
         drop(inner);
-        assert_ne!(AutomationObserver::finalize(0).unwrap(), 0);
+        assert_ne!(_app.observer().unwrap().finalize(0).unwrap(), 0);
     }
 }

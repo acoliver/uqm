@@ -9,16 +9,14 @@ pub(crate) struct Handle(pub(crate) Arc<AutomationObserver>);
 impl Observer for Handle {
     fn input_admitted(&mut self, view: &InputView) -> Injected {
         let stop = match *view {
-            InputView::BeforeUpdate => input_ffi::service_input(false) != 0,
-            InputView::Nested => input_ffi::service_input(true) != 0,
-            InputView::AfterUpdate => input_ffi::after_input_update() != 0,
+            InputView::BeforeUpdate => input_ffi::service_input(&self.0, false) != 0,
+            InputView::Nested => input_ffi::service_input(&self.0, true) != 0,
+            InputView::AfterUpdate => input_ffi::after_input_update(&self.0) != 0,
             InputView::Active => true,
-            InputView::MainMenuReady => AutomationObserver::process_main_menu_ready(),
-            InputView::MenuTransition { from, to } => {
-                AutomationObserver::process_menu_transition(from, to)
-            }
+            InputView::MainMenuReady => self.0.process_main_menu_ready(),
+            InputView::MenuTransition { from, to } => self.0.process_menu_transition(from, to),
             InputView::QuitSelected => {
-                AutomationObserver::observe_quit_selected();
+                self.0.observe_quit_selected();
                 false
             }
             InputView::ReplacesIntroduction => {
@@ -30,36 +28,32 @@ impl Observer for Handle {
                     seed: Some(super::coordinator::seed_value(domain, fallback)),
                 }
             }
-            InputView::PendingSpeech => {
-                AutomationObserver::service_and_should_skip_pending_communication_speech()
-            }
+            InputView::PendingSpeech => self
+                .0
+                .service_and_should_skip_pending_communication_speech(),
             InputView::PendingResponse { count } => {
-                AutomationObserver::pending_communication_response_action(count)
+                self.0.pending_communication_response_action(count)
             }
-            InputView::ClosingSpeech => {
-                AutomationObserver::should_skip_communication_closing_speech()
-            }
-            InputView::CommunicationCompleted => {
-                AutomationObserver::service_communication_completion_boundary()
-            }
+            InputView::ClosingSpeech => self.0.should_skip_communication_closing_speech(),
+            InputView::CommunicationCompleted => self.0.service_communication_completion_boundary(),
         };
         Injected { stop, seed: None }
     }
 
     fn checkpoint(&mut self, view: &CheckpointView<'_>) {
         match *view {
-            CheckpointView::Simulation(boundary) => AutomationObserver::parity_checkpoint(boundary),
+            CheckpointView::Simulation(boundary) => self.0.parity_checkpoint(boundary),
             CheckpointView::BattleReset => {}
             CheckpointView::BattleAdvanced => {
                 AutomationObserver::native_battle_frame_completed(
                     crate::mainloop::ffi::get_current_activity(),
                 );
-                AutomationObserver::parity_checkpoint("battle");
+                self.0.parity_checkpoint("battle");
             }
-            CheckpointView::InputSampled => AutomationObserver::parity_input(),
+            CheckpointView::InputSampled => self.0.parity_input(),
             CheckpointView::GameInitialized => {
                 // SAFETY: game initialization publishes the lifecycle context for this synchronous hook.
-                unsafe { crate::app::bridge::enter(AutomationObserver::activate_start_scene) }
+                unsafe { crate::app::bridge::enter(|cx| self.0.activate_start_scene(cx)) }
             }
             CheckpointView::FlagshipDestroyed => self
                 .0
@@ -94,6 +88,6 @@ impl Observer for Handle {
     }
 
     fn presented(&mut self, presented: &mut Presented) {
-        presented.stop = AutomationObserver::process_present(presented.frame.take());
+        presented.stop = self.0.process_present(presented.frame.take());
     }
 }

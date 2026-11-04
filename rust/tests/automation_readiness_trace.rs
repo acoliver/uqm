@@ -50,7 +50,7 @@ fn main_menu_ready_emits_readiness_record() {
     );
 
     assert!(
-        !AutomationObserver::process_main_menu_ready(),
+        !_application.observer().unwrap().process_main_menu_ready(),
         "readiness advances to the non-terminal finish step"
     );
 

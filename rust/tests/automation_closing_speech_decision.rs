@@ -45,12 +45,18 @@ fn waiting_for_the_conversation_to_end_skips_the_closing_speech() {
             "a validated script must activate the coordinator"
         );
         assert!(
-            AutomationObserver::should_skip_communication_closing_speech(),
+            _application
+                .observer()
+                .unwrap()
+                .should_skip_communication_closing_speech(),
             "a wait-for-end step means the run is only waiting for the conversation to close"
         );
         // The same step is not a response selection, so nothing is pending there.
         assert!(
-            !AutomationObserver::pending_communication_response_action(4),
+            !_application
+                .observer()
+                .unwrap()
+                .pending_communication_response_action(4),
             "a wait-for-end step selects no response, whatever the list offers"
         );
     });

@@ -23,7 +23,7 @@ pub(super) fn unregistered_hook(
 ) {
 }
 
-pub(super) fn elements_and_fighters(directory: &Path) {
+pub(super) fn elements_and_fighters(observer: &AutomationObserver, directory: &Path) {
     let mut pool = std::array::from_fn::<_, 3, _>(|_| ElementRecord::new());
     // SAFETY: the local contiguous pool stays live until the queues are detached.
     unsafe {
@@ -86,7 +86,7 @@ pub(super) fn elements_and_fighters(directory: &Path) {
     for element in [&mut *first, &mut *second, &mut *neutral] {
         observation::record(Event::Allocate(element.pointer() as usize));
     }
-    let (before, line) = snapshot(directory);
+    let (before, line) = snapshot(observer, directory);
     let mut expected = CrcState::new();
     expected.process_u32(123456);
     for element in [&**first, &**second, &**neutral] {
@@ -103,7 +103,14 @@ pub(super) fn elements_and_fighters(directory: &Path) {
     assert_eq!(before["elements.2.side"], "-1");
     assert_eq!(before["elements.0.succ"], before["elements.1.identity"]);
     assert_eq!(before["elements.2.target"], before["elements.0.identity"]);
-    element_mutations(directory, &mut *first, &mut *second, &mut *neutral, &before);
+    element_mutations(
+        observer,
+        directory,
+        &mut *first,
+        &mut *second,
+        &mut *neutral,
+        &before,
+    );
     // SAFETY: detach all stack graph nodes before returning.
     unsafe {
         clear_queues();
@@ -111,6 +118,7 @@ pub(super) fn elements_and_fighters(directory: &Path) {
 }
 
 pub(super) fn element_mutations(
+    observer: &AutomationObserver,
     directory: &Path,
     first: &mut ElementRecord,
     second: &mut ElementRecord,
@@ -139,14 +147,15 @@ pub(super) fn element_mutations(
     first.velocity.error.height = 71;
     first.velocity.incr.width = -73;
     first.velocity.incr.height = 79;
-    let (after, _) = snapshot(directory);
+    let (after, _) = snapshot(observer, directory);
     assert_eq!(changed(before, &after).len(), 22);
     assert_eq!(after["elements.0.velocity.incr.width"], "-73");
     assert_eq!(after["elements.0.intersect.origin.x"], "-23");
-    frame_fields(directory, first, second, neutral);
+    frame_fields(observer, directory, first, second, neutral);
 }
 
 pub(super) fn frame_fields(
+    observer: &AutomationObserver,
     directory: &Path,
     first: &mut ElementRecord,
     second: &mut ElementRecord,
@@ -185,7 +194,7 @@ pub(super) fn frame_fields(
         &mut first.IntersectControl.IntersectStamp.frame,
         pointer.cast(),
     );
-    let (fields, _) = snapshot(directory);
+    let (fields, _) = snapshot(observer, directory);
     for name in [
         "current.frame",
         "next.frame",
@@ -347,7 +356,7 @@ impl Drop for ElementRecord {
     }
 }
 
-pub(super) fn event_queue_fields(directory: &Path) {
+pub(super) fn event_queue_fields(observer: &AutomationObserver, directory: &Path) {
     use uqm_rust::{
         collections::queue::{InitQueue, UninitQueue},
         savegame::{runtime::events::restore_events, types::EventEntry},
@@ -377,7 +386,7 @@ pub(super) fn event_queue_fields(directory: &Path) {
             restore_events(&mut *queue, &[first, second])
                 .unwrap_or_else(|error| panic!("restore test events: {error}"));
         });
-        let (fields, _) = snapshot(directory);
+        let (fields, _) = snapshot(observer, directory);
         assert_eq!(fields["mode.events.initialized"], "true");
         assert_eq!(fields["mode.events.count"], "2");
         for (index, day, function) in [(0, 8, 1), (1, 10, 2)] {
@@ -395,7 +404,7 @@ pub(super) fn event_queue_fields(directory: &Path) {
     }
 }
 
-pub(super) fn non_ship_parent_fields(directory: &Path) {
+pub(super) fn non_ship_parent_fields(observer: &AutomationObserver, directory: &Path) {
     use uqm_rust::{
         collections::queue::{AllocLink, InitQueue, PutQueue, UninitQueue},
         savegame::runtime::groups::CIpGroup,
@@ -430,13 +439,13 @@ pub(super) fn non_ship_parent_fields(directory: &Path) {
             parent: handle as usize,
             callback,
         });
-        let (fields, line) = snapshot(directory);
+        let (fields, line) = snapshot(observer, directory);
         assert_eq!(fields["elements.0.parent"], "group:31");
         assert_eq!(fields["mode.groups.31.counter"], "123");
         assert_eq!(fields["mode.groups.31.x"], "-71");
         assert!(line.contains("[hook 5 battle::ship_native::collision]"));
         (*handle.cast::<CIpGroup>()).group_id = 32;
-        let (fields, _) = snapshot(directory);
+        let (fields, _) = snapshot(observer, directory);
         assert_eq!(fields["elements.0.parent"], "group:32");
         assert_eq!(fields["mode.groups.32.counter"], "123");
         clear_queues();

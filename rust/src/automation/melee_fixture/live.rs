@@ -107,7 +107,9 @@ fn place(element: &mut Element, x: i16, y: i16) {
 }
 
 fn checkpoint() {
-    crate::automation::coordinator::AutomationObserver::parity_checkpoint("fixture");
+    crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::Simulation(
+        "fixture",
+    ));
 }
 
 struct Hooks {
