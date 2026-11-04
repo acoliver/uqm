@@ -478,6 +478,17 @@ fn postprocess_spawns_comets_and_sentinels_only_while_generators_live() {
             assert_eq!(ship.descriptor_mut().characteristics.weapon_wait, 1);
             assert_eq!(queued().len(), 14);
             assert_ne!((*comet).state_flags & NONSOLID as u16, 0);
+            (**uqm_rust::engine::WorldData::current())
+                .game
+                .current_activity = (IN_LAST_BATTLE | IN_BATTLE) as u16;
+            assert_eq!(
+                uqm_rust::automation::samatra::observe()
+                    .1
+                    .unwrap()
+                    .hazards
+                    .len(),
+                2
+            );
             let sentinel = battle::element(
                 *queued()
                     .iter()
