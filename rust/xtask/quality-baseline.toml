@@ -2982,8 +2982,8 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "layers|module_edges|uqm::comm::dispatch::rust_explore_solar_sys::@file" = 1
 "layers|module_edges|uqm::comm::dispatch::rust_init_race_dispatch::@file" = 1
 "layers|module_edges|uqm::comm::dispatch::rust_race_communication::@file" = 15
-"layers|module_edges|uqm::comm::ffi::do_response_phrase::@file" = 1
-"layers|module_edges|uqm::comm::ffi::rust_clear_responses::@file" = 2
+"layers|module_edges|uqm::comm::ffi::response_commands::do_response_phrase::@file" = 1
+"layers|module_edges|uqm::comm::ffi::response_commands::rust_clear_responses::@file" = 2
 "layers|module_edges|uqm::comm::ffi::rust_do_communication::@file" = 6
 "layers|module_edges|uqm::comm::hail::<CFontRelease as super::player_font::FontRelease>::drain_draw_queue::@file" = 1
 "layers|module_edges|uqm::comm::hail::c_bridge::@file" = 2
@@ -4938,8 +4938,8 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "layers|planned.uqm-modes|uqm::comm::dispatch::rust_explore_solar_sys::@file" = 1
 "layers|planned.uqm-modes|uqm::comm::dispatch::rust_init_race_dispatch::@file" = 1
 "layers|planned.uqm-modes|uqm::comm::dispatch::rust_race_communication::@file" = 15
-"layers|planned.uqm-modes|uqm::comm::ffi::do_response_phrase::@file" = 1
-"layers|planned.uqm-modes|uqm::comm::ffi::rust_clear_responses::@file" = 2
+"layers|planned.uqm-modes|uqm::comm::ffi::response_commands::do_response_phrase::@file" = 1
+"layers|planned.uqm-modes|uqm::comm::ffi::response_commands::rust_clear_responses::@file" = 2
 "layers|planned.uqm-modes|uqm::comm::ffi::rust_do_communication::@file" = 6
 "layers|planned.uqm-modes|uqm::comm::hail::<CFontRelease as super::player_font::FontRelease>::drain_draw_queue::@file" = 1
 "layers|planned.uqm-modes|uqm::comm::hail::c_bridge::@file" = 2
@@ -5360,6 +5360,8 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "uqm::automation::coordinator::<Coordinator>::service_semantic_waits" = "uqm::automation::coordinator::<AutomationObserver>::service_semantic_waits"
 "uqm::automation::coordinator::<Coordinator>::service_star_flight" = "uqm::automation::coordinator::<AutomationObserver>::service_star_flight"
 "uqm::automation::coordinator::<Coordinator>::verify_runtime_assertions" = "uqm::automation::coordinator::<AutomationObserver>::verify_runtime_assertions"
+"uqm::comm::ffi::do_response_phrase" = "uqm::comm::ffi::response_commands::do_response_phrase"
+"uqm::comm::ffi::rust_clear_responses" = "uqm::comm::ffi::response_commands::rust_clear_responses"
 "uqm::front_end::intro::runtime::do_presentation" = "uqm::front_end::intro::runtime::presentation_commands"
 "uqm::graphics" = "uqm-engine::graphics"
 "uqm::input" = "uqm-engine::input"

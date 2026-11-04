@@ -297,35 +297,6 @@ pub(crate) fn sis_crew_and_landers(_world: &CampaignView) -> Option<(u16, u8)> {
     None
 }
 
-type SisFittings = ([u8; 11], [u8; 8], [u8; 16], u16);
-
-#[cfg(not(test))]
-pub(crate) fn sis_fittings(world: &CampaignView) -> Option<SisFittings> {
-    let sis = world.flagship;
-    Some((
-        sis.drive_slots,
-        sis.jet_slots,
-        sis.module_slots,
-        sis.total_element_mass,
-    ))
-}
-#[cfg(test)]
-pub(crate) fn sis_fittings(_world: &CampaignView) -> Option<SisFittings> {
-    None
-}
-
-/// The game clock's `(day, month, year)` indices.
-#[cfg(not(test))]
-pub(crate) fn game_date(world: &CampaignView) -> Option<(u8, u8, u16)> {
-    Some(world.date)
-}
-
-/// Without the linked game there is no clock to read.
-#[cfg(test)]
-pub(crate) fn game_date(_world: &CampaignView) -> Option<(u8, u8, u16)> {
-    None
-}
-
 /// The flagship's authoritative `ElementAmounts`, indexed by element category.
 ///
 /// The lander hold is added to these when it returns to the ship, so they

@@ -94,46 +94,7 @@ fn main() {
         }
     }
 
-    // Build capabilities resolved from build.vars at compile time
-    let caps = uqm_rust::automation::BuildCapabilities::from_flags(&[
-        ("RUST_OWNS_MAIN", true),
-        ("USE_RUST_THREADS", true),
-        ("USE_RUST_GFX", true),
-        ("USE_RUST_COMM", true),
-        ("USE_RUST_RESTART", true),
-    ]);
-
-    let observer = match uqm_rust::automation::setup_automation(&auto_opts, &caps) {
-        Ok(Some(setup)) => {
-            #[cfg(feature = "debug-process")]
-            if let Some(config) = parsed.native_window_proof.as_deref() {
-                if let Err(error) = uqm_rust::automation::activate_native_window_proof(
-                    std::path::Path::new(config),
-                    &setup.output_root,
-                ) {
-                    eprintln!("Native-window proof setup failed: {error}");
-                    exit(1);
-                }
-            }
-            // Active automation validated — initialize the coordinator.
-            Some(uqm_rust::automation::AutomationObserver::new(
-                setup.script,
-                setup.output_root,
-            ))
-        }
-        Ok(None) => {
-            if parsed.native_window_proof.is_some() {
-                eprintln!("Native-window proof requires active automation.");
-                exit(1);
-            }
-            // Inactive — proceed normally
-            None
-        }
-        Err(e) => {
-            eprintln!("Automation setup failed: {e}");
-            exit(1);
-        }
-    };
+    let observer = setup_observer(&auto_opts, parsed.native_window_proof.as_deref());
     let mut application = uqm_rust::app::Application::new(observer);
 
     application
@@ -160,6 +121,52 @@ fn main() {
         })
     };
     exit(exit_code);
+}
+
+fn setup_observer(
+    auto_opts: &uqm_rust::automation::AutomationOptions,
+    native_window_proof: Option<&str>,
+) -> Option<std::sync::Arc<uqm_rust::automation::AutomationObserver>> {
+    // Build capabilities resolved from build.vars at compile time
+    let caps = uqm_rust::automation::BuildCapabilities::from_flags(&[
+        ("RUST_OWNS_MAIN", true),
+        ("USE_RUST_THREADS", true),
+        ("USE_RUST_GFX", true),
+        ("USE_RUST_COMM", true),
+        ("USE_RUST_RESTART", true),
+    ]);
+
+    match uqm_rust::automation::setup_automation(auto_opts, &caps) {
+        Ok(Some(setup)) => {
+            #[cfg(feature = "debug-process")]
+            if let Some(config) = native_window_proof {
+                if let Err(error) = uqm_rust::automation::activate_native_window_proof(
+                    std::path::Path::new(config),
+                    &setup.output_root,
+                ) {
+                    eprintln!("Native-window proof setup failed: {error}");
+                    exit(1);
+                }
+            }
+            // Active automation validated — initialize the coordinator.
+            Some(uqm_rust::automation::AutomationObserver::new(
+                setup.script,
+                setup.output_root,
+            ))
+        }
+        Ok(None) => {
+            if native_window_proof.is_some() {
+                eprintln!("Native-window proof requires active automation.");
+                exit(1);
+            }
+            // Inactive — proceed normally
+            None
+        }
+        Err(e) => {
+            eprintln!("Automation setup failed: {e}");
+            exit(1);
+        }
+    }
 }
 
 fn finish_automation(

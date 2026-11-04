@@ -1,5 +1,7 @@
 //! Single versioned transitional ABI for PlanetSide ownership migration.
 
+#[cfg(not(test))]
+use crate::engine::observe::InputView;
 use std::ffi::c_void;
 
 use super::hazards::{hazard_chance, thermal_hazard_rating, HazardKind};
@@ -227,8 +229,7 @@ unsafe fn run_session(context: *mut PlanetSideRunContext) -> PlanetSideReply {
         // consumed under one observation and installed under another.  Ordinary
         // gameplay never consumes or fails from a stale queue: a request left
         // pending because no active owner tapped it stays queued.
-        let automation_active =
-            crate::app::observe::input(crate::engine::observe::InputView::Active).stop;
+        let automation_active = crate::app::observe::input(InputView::Active).stop;
         let fixture_request = if automation_active {
             super::automation_fixture::tap_planet_side_fixture_request(session.lander.position)
         } else {

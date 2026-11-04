@@ -459,15 +459,14 @@ impl StateSource for LiveCampaign<'_> {
             StateKey::HyperStopped => input_ffi::hyperspace_stopped(world).map(u32::from),
             StateKey::Story(name) => world.named_state_value(name).map(u32::from),
             StateKey::Activity => Some(u32::from(world.activity)),
-            StateKey::SisDrive(slot) => input_ffi::sis_fittings(world)
-                .map(|(drives, _, _, _)| u32::from(drives[usize::from(slot)])),
-            StateKey::SisJet(slot) => input_ffi::sis_fittings(world)
-                .map(|(_, jets, _, _)| u32::from(jets[usize::from(slot)])),
-            StateKey::SisModule(slot) => input_ffi::sis_fittings(world)
-                .map(|(_, _, modules, _)| u32::from(modules[usize::from(slot)])),
-            StateKey::SisMineralMass => {
-                input_ffi::sis_fittings(world).map(|(_, _, _, mass)| u32::from(mass))
+            StateKey::SisDrive(slot) => {
+                Some(u32::from(world.flagship.drive_slots[usize::from(slot)]))
             }
+            StateKey::SisJet(slot) => Some(u32::from(world.flagship.jet_slots[usize::from(slot)])),
+            StateKey::SisModule(slot) => {
+                Some(u32::from(world.flagship.module_slots[usize::from(slot)]))
+            }
+            StateKey::SisMineralMass => Some(u32::from(world.flagship.total_element_mass)),
             StateKey::EncounterMenu => {
                 Some(u32::from(super::ui_observation::encounter_menu_active()))
             }
@@ -494,11 +493,9 @@ impl StateSource for LiveCampaign<'_> {
             StateKey::SisLanders => {
                 input_ffi::sis_crew_and_landers(world).map(|(_, landers)| u32::from(landers))
             }
-            StateKey::DateDay => input_ffi::game_date(world).map(|(day, _, _)| u32::from(day)),
-            StateKey::DateMonth => {
-                input_ffi::game_date(world).map(|(_, month, _)| u32::from(month))
-            }
-            StateKey::DateYear => input_ffi::game_date(world).map(|(_, _, year)| u32::from(year)),
+            StateKey::DateDay => Some(u32::from(world.date.0)),
+            StateKey::DateMonth => Some(u32::from(world.date.1)),
+            StateKey::DateYear => Some(u32::from(world.date.2)),
             StateKey::FlagshipDestroyed => Some(u32::from(self.flagship_destroyed)),
             StateKey::BattleShipsP1 => input_ffi::battle_fleets().map(|(p1, _)| u32::from(p1)),
             StateKey::BattleShipsP2 => input_ffi::battle_fleets().map(|(_, p2)| u32::from(p2)),
@@ -509,6 +506,31 @@ impl StateSource for LiveCampaign<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn campaign_equipment_and_date_come_from_the_supplied_typed_view() {
+        let mut world = CampaignView::empty();
+        world.flagship.drive_slots[10] = 19;
+        world.flagship.jet_slots[7] = 23;
+        world.flagship.module_slots[15] = 31;
+        world.flagship.total_element_mass = 47;
+        world.date = (17, 8, 2161);
+        let campaign = LiveCampaign {
+            world: &world,
+            flagship_destroyed: false,
+        };
+        for (key, value) in [
+            (StateKey::SisDrive(10), 19),
+            (StateKey::SisJet(7), 23),
+            (StateKey::SisModule(15), 31),
+            (StateKey::SisMineralMass, 47),
+            (StateKey::DateDay, 17),
+            (StateKey::DateMonth, 8),
+            (StateKey::DateYear, 2161),
+        ] {
+            assert_eq!(campaign.read(key), Some(value));
+        }
+    }
 
     #[test]
     fn terminal_observation_comes_from_the_supplied_owner() {

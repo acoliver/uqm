@@ -1968,9 +1968,8 @@ pub(crate) fn record_native_window_presentation(
         )
     })
     .ok_or_else(|| "graphics state is unavailable for native-window proof".to_string())?;
-    let (trace_record_count, accepted_player_inputs, verified_battle_frames) = observer
-        .native_window_semantic_snapshot()
-        .ok_or_else(|| "native-window semantic snapshot is unavailable".to_string())?;
+    let (trace_record_count, accepted_player_inputs, verified_battle_frames) =
+        observer.native_window_semantic_snapshot();
     let state = NativeWindowChildState {
         schema: NATIVE_WINDOW_STATE_SCHEMA.to_string(),
         nonce: config.nonce.clone(),

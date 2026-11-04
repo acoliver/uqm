@@ -15,6 +15,7 @@
 
 use super::response::ResponseFunc;
 use super::state::CommState;
+use crate::engine::observe::CheckpointView;
 #[cfg(not(test))]
 use crate::engine::Kernel;
 
@@ -277,8 +278,7 @@ pub(super) mod c_bridge {
 #[cfg(not(test))]
 pub mod dinput {
     #![allow(dead_code)]
-    use super::c_bridge;
-    use super::{KEY_MENU_CANCEL, KEY_MENU_LEFT, KEY_MENU_RIGHT};
+    use super::{c_bridge, CheckpointView, KEY_MENU_CANCEL, KEY_MENU_LEFT, KEY_MENU_RIGHT};
     use crate::engine::Kernel;
     use crate::mainloop::restart_menu::c_extern::{DoInput, SetMenuSounds};
     use std::ffi::{c_int, c_void};
@@ -444,9 +444,7 @@ pub mod dinput {
         };
 
         if wait_track == 0 {
-            crate::app::observe::checkpoint(
-                crate::engine::observe::CheckpointView::CommunicationReplay(true),
-            );
+            crate::app::observe::checkpoint(CheckpointView::CommunicationReplay(true));
         } else if c_bridge::PlayingTrack() == 0 {
             c_bridge::PlayTrack();
         }
@@ -456,9 +454,7 @@ pub mod dinput {
             DoInput(&mut ts as *mut _ as *mut c_void, 0);
         }
         if wait_track == 0 {
-            crate::app::observe::checkpoint(
-                crate::engine::observe::CheckpointView::CommunicationReplay(false),
-            );
+            crate::app::observe::checkpoint(CheckpointView::CommunicationReplay(false));
         }
         unsafe { c_bridge::comm_ClearSubtitles() };
 
@@ -853,12 +849,8 @@ pub fn select_response(state: &mut CommState) -> Option<(ResponseFunc, u32)> {
 
     state.set_talking_finished(false);
     state.responses_mut().clear();
-    crate::app::observe::checkpoint(
-        crate::engine::observe::CheckpointView::CommunicationResponses(0),
-    );
-    crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::ResponsesReady(
-        false,
-    ));
+    crate::app::observe::checkpoint(CheckpointView::CommunicationResponses(0));
+    crate::app::observe::checkpoint(CheckpointView::ResponsesReady(false));
     state.top_response = None;
 
     Some((func, response_ref))

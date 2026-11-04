@@ -1,4 +1,4 @@
-use super::conv;
+use super::{conv, ship, RACE_SHIP_FOR_COMM};
 use crate::engine::{StoryKey, World};
 
 pub(super) fn restored_conversation(world: &World) -> u32 {
@@ -11,6 +11,25 @@ pub(super) fn restored_conversation(world: &World) -> u32 {
         conv::ILWRATH
     } else {
         conv::CHMMR
+    }
+}
+
+/// Resolve the two conversation exceptions before sphere tracking and race init.
+pub(super) fn conversation_setup(conversation: u32) -> (u32, u16) {
+    if conversation == conv::URQUAN_DRONE {
+        (conv::URQUAN, u16::from(ship::URQUAN_DRONE_SHIP))
+    } else if conversation == conv::YEHAT_REBEL {
+        (conv::YEHAT, u16::from(ship::YEHAT_REBEL_SHIP))
+    } else {
+        let race = RACE_SHIP_FOR_COMM[conversation as usize];
+        (
+            conversation,
+            u16::from(if race >= ship::YEHAT_REBEL_SHIP {
+                ship::HUMAN_SHIP
+            } else {
+                race
+            }),
+        )
     }
 }
 

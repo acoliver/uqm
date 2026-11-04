@@ -17,6 +17,7 @@
 
 use crate::engine::StoryKey;
 mod fixtures;
+mod initialization;
 mod input;
 use input::{discard_held_repeat, inject_menu_key};
 mod navigation;
@@ -452,72 +453,29 @@ impl AutomationObserver {
             runtime,
             orbit_exit_phase: AtomicU64::new(0),
             flagship_destroyed: Default::default(),
-            inner: Mutex::new(CoordInner {
-                sched_state: SchedulerState::initial(),
-                checkpoint_step: 0,
-                native_publication_pending: false,
-                #[cfg(feature = "debug-process")]
-                native_playable_published: false,
-                ready: false,
-                last_progress: now,
-                input_seen: 0,
-                present_seen: 0,
-                last_observed: now,
-                accepted_player_inputs: 0,
-                pending_player_input: None,
-                held_repeat_key: None,
-                verified_battle_frames: 0,
-                flight_position: FlightPositionTracker::default(),
-                battle_loss: BattleLossTracker::default(),
-                flagship_turn: FlagshipTurnTracker::default(),
-                planet_minerals: PlanetMineralsTracker::default(),
-                battle_fight: BattleFightTracker::default(),
-                fleet_fight: crate::automation::fleet_fight::FleetFight::default(),
-                fleet_retreat: crate::automation::fleet_fight::FleetRetreat::default(),
-                samatra: crate::automation::samatra::Controller::default(),
-                star_flight: crate::automation::star_flight::StarFlight::default(),
-                star_encounter_active: false,
-                patrol_response_pending: false,
-                device: Default::default(),
-                energy: Default::default(),
-                finalized: false,
-                terminal_class: None,
-                pending_transitions: Vec::new(),
-                quit_selected: false,
-                pending_main_menu_ready: false,
-                armed_capture_label: None,
-                pending_start_scene: PendingStartScene::new(start_scene),
+            inner: Mutex::new(CoordInner::new(
+                now,
+                PendingStartScene::new(start_scene),
                 consumed_communication_completions,
-                consumed_dispatch_generation: 0,
-                observed_planet_side_phase: None,
-                awaited_planet_side_generation: None,
-                consumed_response_generation: 0,
-                consumed_replay_generation: 0,
-                consumed_planet_menu_generation: 0,
-                consumed_ship_picker_generation: 0,
-                release_semantic_select: false,
-                replay_final_activity: 0,
-                parity_fixture: None,
-                save_capture: super::save_capture::Request::from_environment(),
-                orbit: Default::default(),
-                departure: Default::default(),
-            }),
+            )),
         };
 
-        // Write run_start trace.
-        {
-            let mut init_inner = coord.inner.lock();
-            coord.write_trace(&mut init_inner, RecordKind::RunStart);
-            if resolved_result.is_err()
+        coord.record_start(
+            resolved_result.is_err()
                 || checkpoint_plan.is_err()
                 || native_trace_failed
-                || parity_failed
-            {
-                coord.set_terminal(&mut init_inner, TerminalClass::TraceFailure);
-            }
-        }
+                || parity_failed,
+        );
 
         Arc::new(coord)
+    }
+
+    fn record_start(&self, trace_failed: bool) {
+        let mut inner = self.inner.lock();
+        self.write_trace(&mut inner, RecordKind::RunStart);
+        if trace_failed {
+            self.set_terminal(&mut inner, TerminalClass::TraceFailure);
+        }
     }
 
     fn elapsed_ms(&self) -> u64 {
@@ -545,28 +503,19 @@ impl AutomationObserver {
         std::fs::write(path, format!("{summary}\n")).map_err(|error| error.to_string())
     }
 
-    /// Get the global coordinator if active.
-    pub(crate) fn get() -> Option<Arc<AutomationObserver>> {
-        crate::app::bridge::observer()
-    }
-
-    /// Whether automation is active and the coordinator is initialized.
-    pub fn is_active() -> bool {
-        Self::get().is_some()
-    }
     /// Return one atomic semantic snapshot for the backend publication.
     ///
     /// The backend calls this after presenting pixels but before the corresponding coordinator
     /// presentation callback. The ordered commit's next sequence is the length of the exact
     /// reserved trace prefix; both semantic counters are protected by the coordinator lock.
-    pub fn native_window_semantic_snapshot(&self) -> Option<(u64, u64, u64)> {
+    pub fn native_window_semantic_snapshot(&self) -> (u64, u64, u64) {
         let coord = self;
         let inner = coord.inner.lock();
-        Some((
+        (
             coord.runtime.commit.next_sequence(),
             inner.accepted_player_inputs,
             inner.verified_battle_frames,
-        ))
+        )
     }
 
     /// Terminate active automation when an external evidence publisher fails.
@@ -817,6 +766,16 @@ impl AutomationObserver {
             }
         }
         false
+    }
+
+    fn campaign_source<'a>(
+        &self,
+        world: &'a campaign_state::CampaignView,
+    ) -> campaign_state::LiveCampaign<'a> {
+        campaign_state::LiveCampaign {
+            world,
+            flagship_destroyed: self.flagship_destroyed.load(Ordering::SeqCst),
+        }
     }
 
     /// Service whichever semantic wait the current step is blocked on.
@@ -1084,13 +1043,8 @@ impl AutomationObserver {
         {
             let expired =
                 inner.sched_state.phase == (ActionPhase::WaitingCondition { remaining: 0 });
-            let evaluation = campaign_state::evaluate(
-                &wait.predicate,
-                &campaign_state::LiveCampaign {
-                    world,
-                    flagship_destroyed: self.flagship_destroyed.load(Ordering::SeqCst),
-                },
-            );
+            let evaluation =
+                campaign_state::evaluate(&wait.predicate, &self.campaign_source(world));
             if expired {
                 // The scheduler ends the proof on this tick; say what the
                 // game state was instead of leaving a bare mismatch.
@@ -1721,14 +1675,7 @@ impl AutomationObserver {
         mut scheduler_event: SchedulerEvent,
     ) -> SchedulerEvent {
         use super::script::PatrolPolicy;
-        let policy = match self.actions.get(inner.sched_state.step_index) {
-            Some(Action::NavigateToHyperspace(step)) if step.retreat_encounters => {
-                PatrolPolicy::Retreat
-            }
-            Some(Action::NavigateToPlanet(step)) => step.patrol_policy,
-            Some(Action::NavigateToOrbit(step)) => step.patrol_policy,
-            _ => PatrolPolicy::Fight,
-        };
+        let policy = Self::patrol_policy(self.actions.get(inner.sched_state.step_index));
         let transit_budget =
             Self::transit_budget(world, self.actions.get(inner.sched_state.step_index));
         if let Some(max_ticks) = transit_budget {
@@ -2327,13 +2274,7 @@ impl AutomationObserver {
         }
         if let Some(Action::AssertState(predicate)) = self.actions.get(inner.sched_state.step_index)
         {
-            let evaluation = campaign_state::evaluate(
-                predicate,
-                &campaign_state::LiveCampaign {
-                    world,
-                    flagship_destroyed: self.flagship_destroyed.load(Ordering::SeqCst),
-                },
-            );
+            let evaluation = campaign_state::evaluate(predicate, &self.campaign_source(world));
             if evaluation.held {
                 self.write_trace_labeled(
                     inner,
@@ -3357,13 +3298,6 @@ fn activity_evidence(assertion: &ActivityAssertion, word: u16) -> ActivityEviden
     }
 }
 
-/// Return the deterministic seed for an automation-owned RNG boundary, while
-/// preserving the caller's wall-clock seed when automation is inactive.
-#[no_mangle]
-pub extern "C" fn rust_automation_seed_value(domain: u32, fallback: u32) -> u32 {
-    crate::app::observe::seed(domain, fallback)
-}
-
 impl AutomationObserver {
     pub(crate) fn seed_value(&self, domain: u32, fallback: u32) -> u32 {
         let Some(domain) = SeedDomain::from_ffi(domain) else {
@@ -3535,11 +3469,11 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let observer = AutomationObserver::new(script, directory.path().into());
         let application = crate::app::Application::new(Some(observer.clone()));
-        assert!(Arc::ptr_eq(&AutomationObserver::get().unwrap(), &observer));
+        assert!(Arc::ptr_eq(application.observer().unwrap(), &observer));
         crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::FlagshipDestroyed);
         assert!(observer.flagship_destroyed.load(Ordering::SeqCst));
         drop(application);
-        assert!(AutomationObserver::get().is_none());
+        assert_eq!(Arc::strong_count(&observer), 1);
         assert!(!crate::app::observe::input(crate::engine::observe::InputView::BeforeUpdate).stop);
     }
 
@@ -3762,7 +3696,7 @@ mod tests {
         .unwrap();
         let _app =
             crate::app::Application::new(Some(AutomationObserver::new(script, temp.path().into())));
-        let coord = AutomationObserver::get().unwrap();
+        let coord = _app.observer().cloned().unwrap();
         // AutoScan has already selected, and its synchronous callback owns
         // three scans of 84 lines. Dispatch cannot accept input yet.
         coord.inner.lock().release_semantic_select = true;
@@ -3820,7 +3754,7 @@ mod tests {
                 temp.path().into(),
                 Some(65536),
             )));
-        let coord = AutomationObserver::get().unwrap();
+        let coord = _app.observer().cloned().unwrap();
         let frame = |count, generation| PresentedFrame {
             count,
             generation,
@@ -3903,7 +3837,7 @@ mod tests {
                 temp.path().into(),
                 Some(65536),
             )));
-        let coord = AutomationObserver::get().unwrap();
+        let coord = _app.observer().cloned().unwrap();
         assert!(!_app.observer().unwrap().process_main_menu_ready());
         assert!(!_app.observer().unwrap().process_main_menu_ready());
         assert_eq!(coord.inner.lock().sched_state.step_index, 1);
@@ -3961,7 +3895,7 @@ mod tests {
                 temp.path().into(),
                 Some(65536),
             )));
-        let coord = AutomationObserver::get().unwrap();
+        let coord = _app.observer().cloned().unwrap();
         let frame = |count, generation| PresentedFrame {
             count,
             generation,
@@ -4045,7 +3979,7 @@ mod tests {
                 temp.path().into(),
                 Some(65536),
             )));
-        let coord = AutomationObserver::get().unwrap();
+        let coord = _app.observer().cloned().unwrap();
         let frame = PresentedFrame {
             count: 1,
             generation: 0,
@@ -4107,7 +4041,7 @@ mod tests {
                 temp.path().into(),
                 Some(65536),
             )));
-        let coord = AutomationObserver::get().unwrap();
+        let coord = _app.observer().cloned().unwrap();
         assert!(!_app.observer().unwrap().process_main_menu_ready());
         for _ in 0..3 {
             assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
@@ -4131,11 +4065,7 @@ mod tests {
             .collect();
         assert_eq!(
             live_records.len() as u64,
-            _app.observer()
-                .unwrap()
-                .native_window_semantic_snapshot()
-                .unwrap()
-                .0
+            _app.observer().unwrap().native_window_semantic_snapshot().0
         );
         assert_eq!(plan.committed(&live_records).unwrap().len(), 1);
         assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
@@ -4201,7 +4131,21 @@ mod tests {
         doc.seed = Some(u64::from(seed));
         let script = crate::automation::script::validate_script(doc, "seed-test.json").unwrap();
         for domain in [SeedDomain::NEW_GAME_ID, SeedDomain::CAMPAIGN_BATTLE_ID] {
-            assert_eq!(rust_automation_seed_value(domain, 999), 999);
+            let mut unobserved = crate::engine::observe::Unobserved;
+            let io = crate::engine::observe::Io {
+                observer: &mut unobserved,
+            };
+            let seed = io
+                .observer
+                .input_admitted(
+                    &crate::engine::observe::InputView::Seed {
+                        domain,
+                        fallback: 999,
+                    },
+                    &None,
+                )
+                .seed;
+            assert_eq!(seed.unwrap_or(999), 999);
         }
         let _app = crate::app::Application::new(Some(AutomationObserver::new(
             script,
@@ -4214,14 +4158,18 @@ mod tests {
             SeedDomain::NEW_GAME_ID,
             SeedDomain::CAMPAIGN_BATTLE_ID,
         ] {
-            assert_eq!(rust_automation_seed_value(domain, 999), applied_seed);
+            assert_eq!(
+                _app.observer().unwrap().seed_value(domain, 999),
+                applied_seed
+            );
             expected.push(SeedApplication {
                 domain: SeedDomain::from_ffi(domain).unwrap(),
                 seed: applied_seed,
             });
         }
         let mut trace = Vec::new();
-        AutomationObserver::get()
+        _app.observer()
+            .cloned()
             .unwrap()
             .runtime
             .commit
@@ -4293,7 +4241,8 @@ mod tests {
         );
 
         let mut trace = Vec::new();
-        AutomationObserver::get()
+        _app.observer()
+            .cloned()
             .unwrap()
             .runtime
             .commit
@@ -4340,7 +4289,8 @@ mod tests {
             temp.path().to_path_buf(),
         )));
         assert_eq!(
-            AutomationObserver::get()
+            _app.observer()
+                .cloned()
                 .unwrap()
                 .inner
                 .lock()
@@ -4384,8 +4334,8 @@ mod tests {
     }
 
     #[test]
-    fn coordinator_not_active_by_default() {
-        assert!(!AutomationObserver::is_active());
+    fn application_without_automation_has_no_observer() {
+        assert!(crate::app::Application::new(None).observer().is_none());
     }
 
     #[test]

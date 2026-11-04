@@ -11,6 +11,20 @@ pub(super) struct Departure {
 }
 
 impl AutomationObserver {
+    pub(super) fn patrol_policy(
+        action: Option<&Action>,
+    ) -> crate::automation::script::PatrolPolicy {
+        use crate::automation::script::PatrolPolicy;
+        match action {
+            Some(Action::NavigateToHyperspace(step)) if step.retreat_encounters => {
+                PatrolPolicy::Retreat
+            }
+            Some(Action::NavigateToPlanet(step)) => step.patrol_policy,
+            Some(Action::NavigateToOrbit(step)) => step.patrol_policy,
+            _ => PatrolPolicy::Fight,
+        }
+    }
+
     pub(super) fn transit_budget(
         world: &campaign_state::CampaignView,
         action: Option<&Action>,

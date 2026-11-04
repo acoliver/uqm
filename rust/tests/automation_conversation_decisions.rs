@@ -43,7 +43,7 @@ fn conversation_decisions_follow_the_script_step_in_hand() {
     battle_context::run(|| {
         let _application = application_started();
         assert!(
-            AutomationObserver::is_active(),
+            _application.observer().is_some(),
             "a validated script must activate the coordinator"
         );
 

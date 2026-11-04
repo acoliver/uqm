@@ -141,7 +141,7 @@ mod tests {
             script,
             directory.path().into(),
         )));
-        let coord = AutomationObserver::get().unwrap();
+        let coord = _app.observer().cloned().unwrap();
         let mut inner = coord.inner.lock();
         coord.parity_failure(
             "fixture",

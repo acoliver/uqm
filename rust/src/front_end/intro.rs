@@ -62,41 +62,6 @@ pub(crate) mod runtime {
     const MAX_FONTS: usize = 5;
     const MAX_TEXT_LINES: usize = 15;
 
-    struct PresentationState {
-        start_time: TimeCount,
-        last_sync_time: TimeCount,
-        time_out: TimeCount,
-        time_out_on_skip: c_int,
-        slide_show: STRING,
-        fonts: [FONT; MAX_FONTS],
-        frame: FRAME,
-        music_ref: MUSIC_REF,
-        batched: BOOLEAN,
-        sis_frame: FRAME,
-        rotated_frame: FRAME,
-        last_draw_kind: c_int,
-        ending: bool,
-        last_angle: c_int,
-        oper_index: COUNT,
-        text_fade_color: Color,
-        text_color: Color,
-        text_back_color: Color,
-        text_vpos: c_int,
-        text_effect: c_int,
-        clip_r: RECT,
-        tfade_r: RECT,
-        text_lines: [TEXT; MAX_TEXT_LINES],
-        lines_count: COUNT,
-        buffer: [c_char; 512],
-        movie_frame: c_int,
-        movie_end_frame: c_int,
-        interframe_delay: c_int,
-    }
-
-    struct VideoState {
-        cur_video: *mut LegacyVideoRef,
-    }
-
     unsafe fn menu(key: u32) -> bool {
         PulsedInputState.menu[key as usize] != 0
     }
@@ -220,6 +185,9 @@ pub(crate) mod runtime {
         cx.with_legacy(|| DestroyStringTable(ReleaseStringTable(table)));
         result
     }
+
+    mod records;
+    use records::PresentationState;
 
     enum PresentationStep {
         Input(bool),
@@ -754,8 +722,8 @@ pub(crate) mod runtime {
         1
     }
 
-    unsafe fn video_input(state: &mut VideoState) -> BOOLEAN {
-        if PlayingLegacyVideo(state.cur_video) == 0 {
+    unsafe fn video_input(video: *mut LegacyVideoRef) -> BOOLEAN {
+        if PlayingLegacyVideo(video) == 0 {
             return 0;
         }
         if menu(KEY_MENU_SELECT)
@@ -803,12 +771,9 @@ pub(crate) mod runtime {
         if reference.is_null() {
             return 0;
         }
-        let mut state = VideoState {
-            cur_video: reference,
-        };
         cx.with_legacy(|| SetMenuSounds(0, 0));
         cx.run_input(io, true, |cx, _| {
-            cx.with_legacy(|| video_input(&mut state) != 0)
+            cx.with_legacy(|| video_input(reference) != 0)
         });
         cx.with_legacy(|| {
             StopLegacyVideo(reference);
@@ -858,23 +823,7 @@ pub(crate) mod runtime {
             }
         }
     }
-    /// # Safety
-    /// The ship-spin caller supplies a registered resource on the publishing game thread.
-    #[no_mangle]
-    pub unsafe extern "C" fn ShowPresentation(presentation: RESOURCE) -> BOOLEAN {
-        crate::app::bridge::enter(|cx| {
-            let runtime = cx.kernel.input_runtime();
-            let mut observer = runtime.observer();
-            let mut io = Io {
-                observer: observer.as_mut(),
-            };
-            show_presentation(cx, &mut io, presentation)
-        })
-    }
 }
-
-#[cfg(not(test))]
-pub use runtime::ShowPresentation;
 
 #[cfg(test)]
 mod tests {

@@ -41,7 +41,7 @@ fn waiting_for_the_conversation_to_end_skips_the_closing_speech() {
             uqm_rust::app::Application::new(Some(AutomationObserver::new(script, output_root)));
 
         assert!(
-            AutomationObserver::is_active(),
+            _application.observer().is_some(),
             "a validated script must activate the coordinator"
         );
         assert!(

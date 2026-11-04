@@ -45,7 +45,7 @@ fn main_menu_ready_emits_readiness_record() {
     let evidence = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).expect("fresh evidence root");
     let _application = application_started(evidence.path());
     assert!(
-        AutomationObserver::is_active(),
+        _application.observer().is_some(),
         "a validated script must activate the coordinator"
     );
 

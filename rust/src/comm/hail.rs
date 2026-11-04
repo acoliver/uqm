@@ -8,6 +8,8 @@
 //! @requirement REQ-HL-001
 
 #[cfg(not(test))]
+use crate::engine::observe::CheckpointView;
+#[cfg(not(test))]
 use crate::engine::StoryKey;
 #[cfg(not(test))]
 use crate::engine::World;
@@ -401,13 +403,9 @@ pub unsafe fn hail_alien() {
                 use crate::mainloop::restart_menu::c_extern::DoInput;
                 c_bridge::c_SetCurInputState(&mut es as *mut _ as *mut std::ffi::c_void);
                 c_bridge::SetMenuSounds(MENU_SOUND_UP | MENU_SOUND_DOWN, MENU_SOUND_SELECT);
-                crate::app::observe::checkpoint(
-                    crate::engine::observe::CheckpointView::CommunicationStarted,
-                );
+                crate::app::observe::checkpoint(CheckpointView::CommunicationStarted);
                 DoInput(&mut es as *mut _ as *mut std::ffi::c_void, 0);
-                crate::app::observe::checkpoint(
-                    crate::engine::observe::CheckpointView::CommunicationEnded,
-                );
+                crate::app::observe::checkpoint(CheckpointView::CommunicationEnded);
                 c_bridge::c_SetCurInputState(std::ptr::null_mut());
             }
         }

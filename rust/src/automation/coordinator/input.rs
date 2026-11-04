@@ -353,7 +353,10 @@ mod tests {
         let temp = tempfile::tempdir()?;
         let _app =
             crate::app::Application::new(Some(AutomationObserver::new(script, temp.path().into())));
-        let coord = AutomationObserver::get().ok_or("coordinator not initialized")?;
+        let coord = _app
+            .observer()
+            .cloned()
+            .ok_or("coordinator not initialized")?;
         if case == "watchdog" {
             let mut stopped = false;
             for _ in 0..11 {

@@ -2,7 +2,7 @@
 
 #[cfg(not(test))]
 pub(crate) mod runtime {
-    use super::super::intro::{runtime::show_presentation, ShowPresentation};
+    use super::super::intro::runtime::show_presentation;
     use crate::engine::{battle::Cx, observe::Io};
     use crate::engine::{Kernel, WorldData};
     use crate::navigation::abi::*;
@@ -32,7 +32,14 @@ pub(crate) mod runtime {
             c"slides.spins.%02u".as_ptr(),
             index as u32,
         );
-        ShowPresentation(name.as_ptr());
+        crate::app::bridge::enter(|cx| {
+            let runtime = cx.kernel.input_runtime();
+            let mut observer = runtime.observer();
+            let mut io = Io {
+                observer: observer.as_mut(),
+            };
+            show_presentation(cx, &mut io, name.as_ptr())
+        });
         SleepThreadUntil(FadeScreen(
             ScreenFadeType_FadeAllToBlack,
             (ONE_SECOND / 4) as SIZE,

@@ -10,7 +10,10 @@
 //! @requirement REQ-ML-007, REQ-COMM-DISPATCH
 
 mod routing;
+use routing::conversation_setup;
 
+#[cfg(not(test))]
+use crate::engine::observe::CheckpointView;
 #[cfg(not(test))]
 use crate::engine::StoryKey;
 use crate::engine::World;
@@ -687,7 +690,7 @@ pub unsafe extern "C" fn rust_race_communication() {
                 crate::mainloop::ffi::set_current_activity(crate::mainloop::types::ActivityValue(
                     WON_LAST_BATTLE,
                 ));
-                crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::Won);
+                crate::app::observe::checkpoint(CheckpointView::Won);
             }
         }
         return;
@@ -756,9 +759,7 @@ pub unsafe extern "C" fn rust_race_communication() {
     } else {
         conv::INVALID
     };
-    crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::EncounterDispatch(
-        conv_id,
-    ));
+    crate::app::observe::checkpoint(CheckpointView::EncounterDispatch(conv_id));
 
     let status = init_communication(conv_id);
 
@@ -806,25 +807,6 @@ pub unsafe extern "C" fn rust_race_communication() {
 // ---------------------------------------------------------------------------
 // InitCommunication — ported from comm.c:1359
 // ---------------------------------------------------------------------------
-
-/// Resolve the two conversation exceptions before sphere tracking and race init.
-fn conversation_setup(conversation: u32) -> (u32, u16) {
-    if conversation == conv::URQUAN_DRONE {
-        (conv::URQUAN, u16::from(ship::URQUAN_DRONE_SHIP))
-    } else if conversation == conv::YEHAT_REBEL {
-        (conv::YEHAT, u16::from(ship::YEHAT_REBEL_SHIP))
-    } else {
-        let race = RACE_SHIP_FOR_COMM[conversation as usize];
-        (
-            conversation,
-            u16::from(if race >= ship::YEHAT_REBEL_SHIP {
-                ship::HUMAN_SHIP
-            } else {
-                race
-            }),
-        )
-    }
-}
 
 #[cfg(not(test))]
 /// Map the conversation to a ship, run the dialogue or attack selection, and
@@ -910,13 +892,9 @@ unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
     if World::current().read(|world| world.story_state(StoryKey::BATTLE_SEGUE)) == 0 {
         status = HAIL;
     } else {
-        crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::EncounterMenu(
-            true,
-        ));
+        crate::app::observe::checkpoint(CheckpointView::EncounterMenu(true));
         status = ffi::InitEncounter();
-        crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::EncounterMenu(
-            false,
-        ));
+        crate::app::observe::checkpoint(CheckpointView::EncounterMenu(false));
         if status == HAIL && !descriptor.is_null() {
             World::current().write(|world| world.set_story_state(StoryKey::BATTLE_SEGUE, 0));
         } else {
@@ -1184,9 +1162,7 @@ unsafe fn name_captain(
 /// The returned pointer is a raw C LOCDATA pointer and must not be freed by
 /// the caller — it points to static C data.
 pub unsafe extern "C" fn rust_init_race_dispatch(comm_id: u32) -> *mut c_void {
-    crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::DialogueDispatch(
-        comm_id,
-    ));
+    crate::app::observe::checkpoint(CheckpointView::DialogueDispatch(comm_id));
 
     // Initialize Rust dialogue state (callbacks, phrase state, etc.)
     ffi::rust_init_race_dialogue(comm_id as i32);
