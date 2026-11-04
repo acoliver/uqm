@@ -963,11 +963,8 @@ impl NativeFrameSet {
     }
 
     pub fn array(&self) -> uqm_rust::engine::battle::frames::FrameArray {
-        // SAFETY: these leases retain the drawable after the fixture's logical release.
-        unsafe {
-            let frame = self.frame(0);
-            uqm_rust::engine::battle::frames::FrameArray::from_native([frame.cast(); 3])
-        }
+        let frame = self.frame(0);
+        uqm_rust::engine::battle::frames::FrameArray::from_native([frame.cast(); 3])
     }
 }
 impl Drop for NativeFrameSet {
