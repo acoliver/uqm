@@ -1082,29 +1082,46 @@ unsafe fn update_map() {
 #[cfg(not(test))]
 /// # Safety
 /// Game-thread only, with game globals and native UI resources initialized.
-pub unsafe fn star_map(
+pub unsafe fn StarMap(
     cx: &mut crate::engine::battle::Cx<'_>,
     io: &mut crate::engine::observe::Io<'_>,
 ) -> u32 {
-    let (mut menu, universe) = cx.with_legacy(|| prepare_star_map());
+    let misc_data = cx.kernel.misc_data_frame;
+    let space = cx.kernel.space_context;
+    let autopilot = cx.world.data.game.autopilot;
+    let (mut menu, universe) =
+        cx.with_legacy(|| prepare_star_map(misc_data.cast(), space.cast(), autopilot));
+    cx.with_legacy(|| {
+        SetMenuSounds(0, 0);
+        SetMenuRepeatDelay(ONE_SECOND / 60, ONE_SECOND / 8, ONE_SECOND / 120, 1);
+    });
     cx.run_input(io, false, |cx, _| {
         cx.with_legacy(|| DoMoveCursor(&mut menu) != 0)
     });
-    cx.with_legacy(|| finish_star_map(universe))
+    cx.with_legacy(|| {
+        SetMenuSounds(15, 16);
+        SetDefaultMenuRepeatDelay();
+        finish_star_map(universe);
+    });
+    if cx.world.data.game.autopilot.x == universe.x && cx.world.data.game.autopilot.y == universe.y
+    {
+        cx.world.data.game.autopilot = POINT { x: -1, y: -1 };
+    }
+    u32::from(cx.world.data.game.autopilot.x != -1 && cx.world.data.game.autopilot.y != -1)
 }
 
 #[cfg(not(test))]
-unsafe fn prepare_star_map() -> (MENU_STATE, POINT) {
+unsafe fn prepare_star_map(
+    misc_data: *mut c_void,
+    space: *mut c_void,
+    autopilot: POINT,
+) -> (MENU_STATE, POINT) {
     let mut menu: MENU_STATE = std::mem::zeroed();
     ZOOM_LEVEL = 0;
     MAP_ORIGIN = POINT { x: 4999, y: 4999 };
-    STAR_MAP_FRAME = pixmap_abi::SetAbsFrameIndex(
-        Kernel::current().read(|owner| owner.misc_data_frame).cast(),
-        48,
-    )
-    .cast();
+    STAR_MAP_FRAME = pixmap_abi::SetAbsFrameIndex(misc_data.cast(), 48).cast();
     let universe = current_location();
-    cursorLoc = WorldData::current().read(|owner| owner.game.autopilot);
+    cursorLoc = autopilot;
     if cursorLoc.x == -1 && cursorLoc.y == -1 {
         cursorLoc = universe;
     }
@@ -1116,34 +1133,21 @@ unsafe fn prepare_star_map() -> (MENU_STATE, POINT) {
     DrawStarMap(0, (-1isize) as *mut RECT);
     TRANSITION_PENDING = false;
     BatchGraphics();
-    let old_context = SetContext(Kernel::current().read(|owner| owner.space_context));
+    let old_context = SetContext(space.cast());
     let mut clip = zero_rect();
     GetContextClipRect(&mut clip);
     SetContext(old_context);
     LoadIntoExtraScreen(ptr::from_mut(&mut clip).cast());
     draw_cursor(ux(cursorLoc.x), uy(cursorLoc.y));
     UnbatchGraphics();
-    SetMenuSounds(0, 0);
-    SetMenuRepeatDelay(ONE_SECOND / 60, ONE_SECOND / 8, ONE_SECOND / 120, 1);
     (menu, universe)
 }
 
 #[cfg(not(test))]
-unsafe fn finish_star_map(universe: POINT) -> u32 {
-    SetMenuSounds(15, 16);
-    SetDefaultMenuRepeatDelay();
+unsafe fn finish_star_map(universe: POINT) {
     DrawHyperCoords(universe);
     DrawSISMessage(ptr::null());
     DrawStatusMessage(ptr::null());
-    if WorldData::current().read(|owner| owner.game.autopilot.x) == universe.x
-        && WorldData::current().read(|owner| owner.game.autopilot.y) == universe.y
-    {
-        (**WorldData::current()).game.autopilot = POINT { x: -1, y: -1 };
-    }
-    u32::from(
-        WorldData::current().read(|owner| owner.game.autopilot.x) != -1
-            && WorldData::current().read(|owner| owner.game.autopilot.y) != -1,
-    )
 }
 
 #[cfg(test)]

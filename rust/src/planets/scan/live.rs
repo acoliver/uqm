@@ -254,47 +254,14 @@ unsafe fn spawn_fwiffo() {
 }
 
 unsafe fn dispatch_lander(cx: &mut Cx<'_>, io: &mut Io<'_>) -> bool {
-    let (mut context, old_callback) = cx.with_legacy(|| prepare_lander());
+    let misc_data = cx.kernel.misc_data_frame;
+    let (mut context, old_callback) = cx.with_legacy(|| {
+        let landing_fuel = fuel() as i16;
+        erase_coarse();
+        let old_callback = SetInputCallback(None);
+        (prepare_lander(landing_fuel, misc_data.cast()), old_callback)
+    });
     let reply = run_session(cx, io, &mut context);
-    cx.with_legacy(|| finish_lander(context, old_callback, reply))
-}
-
-unsafe fn prepare_lander() -> (
-    PlanetSideRunContext,
-    Option<crate::engine::input::InputFrameHook>,
-) {
-    let landing_fuel = fuel() as i16;
-    erase_coarse();
-    let old_callback = SetInputCallback(None);
-    DeltaSISGauges(0, -landing_fuel, 0);
-    SetContext(SCAN_CONTEXT);
-    draw_cursor(false);
-    let system = solar_system::current();
-    let context = PlanetSideRunContext {
-        solar_system: system.cast(),
-        world: (*system).pOrbitalDesc.cast(),
-        misc_data_frame: Kernel::current().read(|owner| owner.misc_data_frame).cast(),
-        energy_frame: (*system).PlanetSideFrame[1].cast(),
-        life_frames: std::array::from_fn(|i| (*system).PlanetSideFrame[i + 3].cast()),
-        landing_x: i32::from(PLANET_LOCATION.x),
-        landing_y: i32::from(PLANET_LOCATION.y),
-        facing: crate::math::random() as u8,
-        retrieval_masks: (*system).SysInfo.PlanetInfo.ScanRetrieveMask,
-        tick_period: 840 / 35,
-        frame_budget: u32::MAX,
-        tectonics_rating: (*system).SysInfo.PlanetInfo.Tectonics as u8,
-        weather_rating: (*system).SysInfo.PlanetInfo.Weather as u8,
-        temperature: i32::from((*system).SysInfo.PlanetInfo.SurfaceTemperature),
-        ..PlanetSideRunContext::default()
-    };
-    (context, old_callback)
-}
-
-unsafe fn finish_lander(
-    context: PlanetSideRunContext,
-    old_callback: Option<crate::engine::input::InputFrameHook>,
-    reply: PlanetSideReply,
-) -> bool {
     let system = context
         .solar_system
         .cast::<crate::c_bindings::global_state::SOLARSYS_STATE>();
@@ -303,7 +270,7 @@ unsafe fn finish_lander(
             crate::logging::LogLevel::Fatal,
             &format!("Rust PlanetSide failed with status {}", reply.status),
         );
-        (**WorldData::current()).game.current_activity |= CHECK_ABORT;
+        cx.world.set_activity(cx.world.activity() | CHECK_ABORT);
     } else {
         (*system).SysInfo.PlanetInfo.ScanRetrieveMask = context.retrieval_masks;
         if reply.detail == 4 {
@@ -321,20 +288,49 @@ unsafe fn finish_lander(
             );
         }
     }
-    if WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT != 0 {
+    if cx.world.activity() & CHECK_ABORT != 0 {
         return false;
     }
-    if World::current().read(|world| world.story_state(StoryKey::FOUND_PLUTO_SPATHI)) == 1 {
-        spawn_fwiffo();
-        NextActivity |= CHECK_LOAD;
-        (**WorldData::current()).game.current_activity |= START_ENCOUNTER;
-        SaveSolarSysLocation();
+    if cx.world.story_state(StoryKey::FOUND_PLUTO_SPATHI) == 1 {
+        cx.with_legacy(|| {
+            spawn_fwiffo();
+            NextActivity |= CHECK_LOAD;
+        });
+        cx.world.set_activity(cx.world.activity() | START_ENCOUNTER);
+        cx.with_legacy(|| SaveSolarSysLocation());
         return false;
     }
-    RedrawPlanetOrbitDisplay();
-    display::coarse();
-    SetInputCallback(old_callback);
+    cx.with_legacy(|| {
+        RedrawPlanetOrbitDisplay();
+        display::coarse();
+        SetInputCallback(old_callback);
+    });
     true
+}
+
+unsafe fn prepare_lander(landing_fuel: i16, misc_data: *mut c_void) -> PlanetSideRunContext {
+    DeltaSISGauges(0, -landing_fuel, 0);
+    SetContext(SCAN_CONTEXT);
+    draw_cursor(false);
+    let system = solar_system::current();
+    let context = PlanetSideRunContext {
+        solar_system: system.cast(),
+        world: (*system).pOrbitalDesc.cast(),
+        misc_data_frame: misc_data,
+        energy_frame: (*system).PlanetSideFrame[1].cast(),
+        life_frames: std::array::from_fn(|i| (*system).PlanetSideFrame[i + 3].cast()),
+        landing_x: i32::from(PLANET_LOCATION.x),
+        landing_y: i32::from(PLANET_LOCATION.y),
+        facing: crate::math::random() as u8,
+        retrieval_masks: (*system).SysInfo.PlanetInfo.ScanRetrieveMask,
+        tick_period: 840 / 35,
+        frame_budget: u32::MAX,
+        tectonics_rating: (*system).SysInfo.PlanetInfo.Tectonics as u8,
+        weather_rating: (*system).SysInfo.PlanetInfo.Weather as u8,
+        temperature: i32::from((*system).SysInfo.PlanetInfo.SurfaceTemperature),
+        ..PlanetSideRunContext::default()
+    };
+    context
 }
 
 struct PickState {
@@ -653,9 +649,12 @@ pub unsafe extern "C" fn DestroyScanContext() {
     }
 }
 
-pub unsafe fn scan_system(cx: &mut Cx<'_>, io: &mut Io<'_>) {
+pub unsafe fn ScanSystem(cx: &mut Cx<'_>, io: &mut Io<'_>) {
     let mut menu: MENU_STATE = std::mem::zeroed();
-    cx.with_legacy(|| prepare_scan_system(&mut menu));
+    cx.with_legacy(|| {
+        prepare_scan_system(&mut menu);
+        base::SetMenuSounds(15, 16);
+    });
     io.observer.checkpoint(&CheckpointView::PlanetMenu(2));
     cx.run_input(io, false, |cx, io| scan_input(cx, io, &mut menu) != 0);
     io.observer.checkpoint(&CheckpointView::PlanetMenu(0));
@@ -681,7 +680,6 @@ unsafe fn prepare_scan_system(menu: &mut MENU_STATE) {
     DrawMenuStateStrings(7, i16::from(menu.CurState));
     CffiPlatform.set_flash(FlashTarget::Menu3do);
     display::coarse();
-    base::SetMenuSounds(15, 16);
 }
 
 unsafe fn finish_scan_system() {

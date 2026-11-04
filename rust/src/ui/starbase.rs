@@ -421,54 +421,55 @@ unsafe fn cleanup_after_star_base() {
 }
 
 unsafe fn prepare_starbase_visit(cx: &mut Cx<'_>, io: &mut Io<'_>) -> Option<u32> {
-    if World::current().read(|world| world.story_state(StoryKey::CHMMR_BOMB_STATE)) == 2 {
-        (**World::current()).select_star(None, crate::planets::starmap::current_catalog());
-        World::current().write(|world| {
-            world.set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, BYTE::MAX as u32)
-        });
+    if cx.world.story_state(StoryKey::CHMMR_BOMB_STATE) == 2 {
+        cx.world
+            .select_star(None, crate::planets::starmap::current_catalog());
+        cx.world
+            .set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, BYTE::MAX as u32);
     }
-    if World::current().read(|world| world.story_state(StoryKey::STARBASE_AVAILABLE)) == 0 {
+    if cx.world.story_state(StoryKey::STARBASE_AVAILABLE) == 0 {
         io.observer.checkpoint(&CheckpointView::EncounterDispatch(
             CONVERSATION_COMMANDER_CONVERSATION,
         ));
         SetCommIntroMode(CROSSFADE_SCREEN, 0);
         crate::comm::dispatch::init_communication(cx, io, CONVERSATION_COMMANDER_CONVERSATION);
-        if World::current().read(|world| world.story_state(StoryKey::PROBE_ILWRATH_ENCOUNTER)) == 0
-            || (**WorldData::current()).game.current_activity & CHECK_ABORT as u16 != 0
+        if cx.world.story_state(StoryKey::PROBE_ILWRATH_ENCOUNTER) == 0
+            || cx.world.activity() & CHECK_ABORT as u16 != 0
         {
-            cleanup_after_star_base();
+            cx.with_legacy(|| cleanup_after_star_base());
             return None;
         }
-        let ship = WorldData::current().write(|world| {
-            CloneShipFragment(
-                &mut world.game.avail_race_q,
-                ILWRATH_SHIP as COUNT,
-                &raw mut world.game.npc_built_ship_q,
-                7,
-            )
+        let ship = cx.with_legacy(|| {
+            WorldData::current().write(|world| {
+                CloneShipFragment(
+                    &mut world.game.avail_race_q,
+                    ILWRATH_SHIP as COUNT,
+                    &raw mut world.game.npc_built_ship_q,
+                    7,
+                )
+            })
         });
         (*ship.cast::<SHIP_FRAGMENT>()).race_id = BYTE::MAX;
         crate::comm::dispatch::init_communication(cx, io, CONVERSATION_ILWRATH_CONVERSATION);
-        if (**WorldData::current()).flagship.crew_enlisted == COUNT::MAX
-            || (**WorldData::current()).game.current_activity & CHECK_ABORT as u16 != 0
+        if cx.world.data.flagship.crew_enlisted == COUNT::MAX
+            || cx.world.activity() & CHECK_ABORT as u16 != 0
         {
             return None;
         }
         SetCommIntroMode(CROSSFADE_SCREEN, 0);
         crate::comm::dispatch::init_communication(cx, io, CONVERSATION_COMMANDER_CONVERSATION);
-        if (**WorldData::current()).game.current_activity & CHECK_ABORT as u16 != 0 {
+        if cx.world.activity() & CHECK_ABORT as u16 != 0 {
             return None;
         }
-        World::current().write(|world| {
-            world.set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, BYTE::MAX as u32)
-        });
+        cx.world
+            .set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, BYTE::MAX as u32);
     }
-    let previous = SetStatusMessageMode(StatMsgMode_SMM_RES_UNITS);
-    if World::current().read(|world| world.story_state(StoryKey::MOONBASE_ON_SHIP)) != 0
-        || World::current().read(|world| world.story_state(StoryKey::CHMMR_BOMB_STATE)) == 2
+    let previous = cx.with_legacy(|| SetStatusMessageMode(StatMsgMode_SMM_RES_UNITS));
+    if cx.world.story_state(StoryKey::MOONBASE_ON_SHIP) != 0
+        || cx.world.story_state(StoryKey::CHMMR_BOMB_STATE) == 2
     {
-        do_time_passage();
-        if (**WorldData::current()).flagship.crew_enlisted == COUNT::MAX {
+        cx.with_legacy(|| do_time_passage());
+        if cx.world.data.flagship.crew_enlisted == COUNT::MAX {
             return None;
         }
         io.observer.checkpoint(&CheckpointView::EncounterDispatch(
@@ -476,12 +477,11 @@ unsafe fn prepare_starbase_visit(cx: &mut Cx<'_>, io: &mut Io<'_>) -> Option<u32
         ));
         SetCommIntroMode(FADE_IN_SCREEN, ONE_SECOND * 2);
         crate::comm::dispatch::init_communication(cx, io, CONVERSATION_COMMANDER_CONVERSATION);
-        if (**WorldData::current()).game.current_activity & CHECK_ABORT as u16 != 0 {
+        if cx.world.activity() & CHECK_ABORT as u16 != 0 {
             return None;
         }
-        World::current().write(|world| {
-            world.set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, BYTE::MAX as u32)
-        });
+        cx.world
+            .set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, BYTE::MAX as u32);
     }
     Some(previous)
 }

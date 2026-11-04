@@ -525,7 +525,7 @@ pub(crate) mod engine {
                     net.wait_reset(NetState_NetState_inSetup);
                     set_activity(activity() & !(CHECK_ABORT as u16));
                 } else {
-                    crate::supermelee::native::battle_picker::live::melee_game_over(&mut Io {
+                    crate::supermelee::native::battle_picker::live::MeleeGameOver(&mut Io {
                         observer: bs
                             .observer
                             .as_deref_mut()

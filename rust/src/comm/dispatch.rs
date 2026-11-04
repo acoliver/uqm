@@ -432,6 +432,9 @@ mod ffi {
     pub use crate::battle::encount_native::engine::InitEncounter;
 
     #[cfg(not(test))]
+    pub use crate::battle::encount_native::engine::UninitEncounter;
+
+    #[cfg(not(test))]
     pub use crate::battle::encount_native::engine::EncounterBattle;
 
     #[cfg(not(test))]
@@ -968,7 +971,7 @@ unsafe fn init_communication_inner(
         }
         status
     });
-    crate::battle::encount_native::engine::uninit_encounter(cx, io);
+    cx.with_legacy(|| ffi::UninitEncounter());
     status
 }
 

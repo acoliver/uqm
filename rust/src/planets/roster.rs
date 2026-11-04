@@ -282,8 +282,29 @@ pub(crate) mod live {
 
     /// # Safety
     /// Call on the game thread with campaign globals and screen resources initialized.
-    pub unsafe fn roster_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) -> i32 {
-        let Some(mut menu) = cx.with_legacy(|| prepare_roster_menu()) else {
+    pub unsafe fn RosterMenu(cx: &mut Cx<'_>, io: &mut Io<'_>) -> i32 {
+        let Some(mut menu) = cx.with_legacy(|| {
+            let world = WorldFields::current();
+            let count = CountLinks(std::ptr::addr_of!((**world).game.built_ship_q).cast::<Queue>())
+                as usize;
+            drop(world);
+            if count == 0 {
+                return None;
+            }
+            let mut positions = SHIP_POS[..count].to_vec();
+            positions.sort_by_key(|point| (point.0, point.1));
+            let mut menu = Menu {
+                selected: 0,
+                positions,
+                point: (0, 0),
+                frame: std::ptr::null_mut(),
+                modifying: false,
+            };
+            CffiPlatform.set_context(ContextId::Status);
+            select(&mut menu, 0);
+            SetMenuSounds(15, 16);
+            Some(menu)
+        }) else {
             return 0;
         };
         cx.run_input(io, true, |cx, _| cx.with_legacy(|| modify(&mut menu) != 0));
@@ -293,29 +314,6 @@ pub(crate) mod live {
             DrawStatusMessage(std::ptr::null());
         });
         1
-    }
-
-    unsafe fn prepare_roster_menu() -> Option<Menu> {
-        let world = WorldFields::current();
-        let count =
-            CountLinks(std::ptr::addr_of!((**world).game.built_ship_q).cast::<Queue>()) as usize;
-        drop(world);
-        if count == 0 {
-            return None;
-        }
-        let mut positions = SHIP_POS[..count].to_vec();
-        positions.sort_by_key(|point| (point.0, point.1));
-        let mut menu = Menu {
-            selected: 0,
-            positions,
-            point: (0, 0),
-            frame: std::ptr::null_mut(),
-            modifying: false,
-        };
-        CffiPlatform.set_context(ContextId::Status);
-        select(&mut menu, 0);
-        SetMenuSounds(15, 16);
-        Some(menu)
     }
 }
 

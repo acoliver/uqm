@@ -14,7 +14,7 @@ use crate::graphics::pixmap_abi::{GetFrameIndex, ReleaseDrawable, SetAbsFrameInd
 use crate::mainloop::restart_menu::c_extern::PlayMusic;
 use crate::math::arctan;
 use crate::planet_side::orbit_music::load_lander_data;
-use crate::planets::devices::devices_menu;
+use crate::planets::devices::DevicesMenu;
 use crate::planets::ffi::do_planetary_analysis_c;
 use crate::planets::starmap::FindStar;
 use crate::sound::heart_ffi::PLRPlaying;
@@ -103,7 +103,7 @@ mod ffi {
 
     pub(super) use crate::state::c_api::planets::put_planet_info;
 
-    pub(super) use crate::planets::orbit::live::planet_orbit_menu;
+    pub(super) use crate::planets::orbit::live::PlanetOrbitMenu;
 
     pub(super) use crate::planets::orbit::live::FreePlanet;
 
@@ -113,13 +113,13 @@ mod ffi {
 
     pub(super) use crate::ui::menu::DoMenuChooser;
 
-    pub(super) use crate::planets::cargo::live::cargo_menu;
+    pub(super) use crate::planets::cargo::live::CargoMenu;
 
-    pub(super) use crate::planets::roster::live::roster_menu;
+    pub(super) use crate::planets::roster::live::RosterMenu;
 
     pub(super) use crate::front_end::gameopt::runtime::game_options;
 
-    pub(super) use crate::planets::pstarmap::star_map;
+    pub(super) use crate::planets::pstarmap::StarMap;
 
     extern "C" {
 
@@ -337,7 +337,7 @@ unsafe fn enter_planet_orbit(cx: &mut Cx<'_>, io: &mut Io<'_>) {
         return;
     }
     if !(*system()).TopoFrame.is_null() {
-        ffi::planet_orbit_menu(cx, io);
+        ffi::PlanetOrbitMenu(cx, io);
         cx.with_legacy(|| ffi::FreePlanet());
     }
     cx.with_legacy(|| finish_planet_orbit());
@@ -673,20 +673,20 @@ unsafe fn do_solar_sys_menu(
     cx.with_legacy(|| ffi::SetFlashRect(ptr::null()));
     match menu.CurState {
         EQUIP_DEVICE => {
-            select = devices_menu(cx, io) as c::BOOLEAN;
+            select = DevicesMenu(cx, io) as c::BOOLEAN;
             if cx.world.activity() & START_ENCOUNTER != 0 {
                 return 0;
             }
         }
-        CARGO => ffi::cargo_menu(cx, io),
-        ROSTER => select = ffi::roster_menu(cx, io) as c::BOOLEAN,
+        CARGO => ffi::CargoMenu(cx, io),
+        ROSTER => select = ffi::RosterMenu(cx, io) as c::BOOLEAN,
         GAME_MENU => {
             if ffi::game_options(cx, io) == 0 {
                 return 0;
             }
         }
         STARMAP => {
-            ffi::star_map(cx, io);
+            ffi::StarMap(cx, io);
             if cx.world.activity() & CHECK_ABORT != 0 {
                 return 0;
             }

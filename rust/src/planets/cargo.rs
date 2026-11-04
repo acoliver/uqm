@@ -253,7 +253,7 @@ pub(crate) mod live {
 
     /// # Safety
     /// Call on the game thread with campaign globals and screen resources initialized.
-    pub unsafe fn cargo_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) {
+    pub unsafe fn CargoMenu(cx: &mut Cx<'_>, io: &mut Io<'_>) {
         let mut menu = Menu { current: 0 };
         cx.with_legacy(|| {
             DrawCargoStrings(u8::MAX, 0);

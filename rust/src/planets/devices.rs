@@ -428,12 +428,23 @@ pub unsafe extern "C" fn InventoryDevices(map: *mut u8, size: u16) -> i16 {
 
 /// # Safety
 /// Requires the initialized UI and campaign on the owning game thread.
-pub unsafe fn devices_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) -> i32 {
+pub unsafe fn DevicesMenu(cx: &mut Cx<'_>, io: &mut Io<'_>) -> i32 {
     let Some(mut menu) = cx.with_legacy(|| prepare_devices_menu()) else {
         return 0;
     };
+    cx.with_legacy(|| SetMenuSounds(0x000f | 0x0080 | 0x0100, 0x0010));
     cx.run_input(io, true, |cx, _| cx.with_legacy(|| frame(&mut menu) != 0));
-    cx.with_legacy(|| finish_devices_menu())
+    cx.with_legacy(|| SetMenuSounds(0x000f, 0x0010));
+    OBSERVATION.lock().unwrap().list = None;
+    if cx.world.data.flagship.crew_enlisted == u16::MAX || cx.world.activity() & 0x4000 != 0 {
+        return 0;
+    }
+    cx.with_legacy(|| ClearSISRect(8));
+    i32::from(
+        cx.world.story_state(StoryKey::PORTAL_COUNTER) == 0
+            && cx.world.activity() & START_ENCOUNTER == 0
+            && cx.world.data.flagship.crew_enlisted != u16::MAX,
+    )
 }
 
 unsafe fn prepare_devices_menu() -> Option<Menu> {
@@ -453,24 +464,5 @@ unsafe fn prepare_devices_menu() -> Option<Menu> {
         obs.selected = 0;
     }
     draw(&menu, None, true);
-    SetMenuSounds(0x000f | 0x0080 | 0x0100, 0x0010);
     Some(menu)
-}
-
-unsafe fn finish_devices_menu() -> i32 {
-    SetMenuSounds(0x000f, 0x0010);
-    OBSERVATION.lock().unwrap().list = None;
-    if WorldFields::current().read(|owner| owner.flagship.crew_enlisted) != u16::MAX
-        && WorldFields::current().read(|owner| owner.game.current_activity) & 0x4000 == 0
-    {
-        ClearSISRect(8);
-        if WorldOwner::current().read(|world| get(world, StoryKey::PORTAL_COUNTER)) == 0
-            && WorldFields::current().read(|owner| owner.game.current_activity) & START_ENCOUNTER
-                == 0
-            && WorldFields::current().read(|owner| owner.flagship.crew_enlisted) != u16::MAX
-        {
-            return 1;
-        }
-    }
-    0
 }

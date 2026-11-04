@@ -221,10 +221,7 @@ pub(crate) mod live {
         }
         ok
     }
-    pub fn run_melee(
-        cx: &mut crate::engine::battle::Cx<'_>,
-        io: &mut crate::engine::observe::Io<'_>,
-    ) {
+    pub fn Melee(cx: &mut crate::engine::battle::Cx<'_>, io: &mut crate::engine::observe::Io<'_>) {
         // SAFETY: the application admits this session on the initialized game thread.
         let mut state = cx.with_legacy(|| unsafe {
             WorldOwner::current().write(init_glob_data);

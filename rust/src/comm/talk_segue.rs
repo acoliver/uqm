@@ -2577,8 +2577,8 @@ mod tests {
     #[test]
     fn test_last_replay_requires_a_fresh_press_on_every_acting_key() {
         let source = include_str!("talk_segue.rs");
-        let body = extract_fn_body(source, "fn do_last_replay_cb")
-            .expect("do_last_replay_cb must be in talk_segue.rs");
+        let body = extract_fn_body(source, "fn do_last_replay_frame")
+            .expect("do_last_replay_frame must be in talk_segue.rs");
 
         for key in ["KEY_MENU_CANCEL", "KEY_MENU_LEFT"] {
             assert!(
@@ -2611,7 +2611,7 @@ mod tests {
             .nth(1)
             .expect("rust_DoCommunication must contain the no-response branch");
         assert!(
-            no_response_branch.contains("run_last_replay_bridge(timeout as i32)"),
+            no_response_branch.contains("run_last_replay_bridge(cx, io, timeout as i32)"),
             "no-response communication must exercise the production last-replay input loop"
         );
         assert!(

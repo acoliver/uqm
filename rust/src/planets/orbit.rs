@@ -76,17 +76,17 @@ pub(crate) mod live {
 
     use crate::graphics::font_abi::DestroyFont;
 
-    use crate::planets::scan::live::scan_system;
+    use crate::planets::scan::live::ScanSystem;
 
-    use crate::planets::devices::devices_menu;
+    use crate::planets::devices::DevicesMenu;
 
-    use crate::planets::cargo::live::cargo_menu;
+    use crate::planets::cargo::live::CargoMenu;
 
-    use crate::planets::roster::live::roster_menu;
+    use crate::planets::roster::live::RosterMenu;
 
     use crate::front_end::gameopt::runtime::game_options;
 
-    use crate::planets::pstarmap::star_map;
+    use crate::planets::pstarmap::StarMap;
 
     use crate::ui::menu::DoMenuChooser;
 
@@ -364,19 +364,19 @@ pub(crate) mod live {
         cx.with_legacy(|| CffiPlatform.set_flash(FlashTarget::Off));
         match menu.CurState {
             0 => {
-                scan_system(cx, io);
+                ScanSystem(cx, io);
                 if cx.world.activity() & START_ENCOUNTER != 0 {
                     return 0;
                 }
             }
             2 => {
-                selected = devices_menu(cx, io) != 0;
+                selected = DevicesMenu(cx, io) != 0;
                 if cx.world.activity() & START_ENCOUNTER != 0 {
                     return 0;
                 }
             }
-            3 => cargo_menu(cx, io),
-            4 => selected = roster_menu(cx, io) != 0,
+            3 => CargoMenu(cx, io),
+            4 => selected = RosterMenu(cx, io) != 0,
             5 => {
                 if game_options(cx, io) == 0 {
                     return 0;
@@ -388,7 +388,7 @@ pub(crate) mod live {
                     repair_sisborder();
                     old
                 });
-                let autopilot = star_map(cx, io);
+                let autopilot = StarMap(cx, io);
                 if cx.world.activity() & CHECK_ABORT != 0 {
                     return 0;
                 }
@@ -416,7 +416,7 @@ pub(crate) mod live {
         RotatePlanetSphere(1);
     }
 
-    pub unsafe fn planet_orbit_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) {
+    pub unsafe fn PlanetOrbitMenu(cx: &mut Cx<'_>, io: &mut Io<'_>) {
         let mut menu: MENU_STATE = std::mem::zeroed();
         let old = cx.with_legacy(|| {
             DrawMenuStateStrings(0, 0);
