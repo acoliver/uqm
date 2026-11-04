@@ -1,7 +1,5 @@
 //! Resource ownership follows a descriptor through attachment and detachment.
-#[cfg(not(test))]
 use crate::engine::battle::{frames::FrameArray, record::*, RaceDesc};
-#[cfg(not(test))]
 use crate::graphics::native_abi::{FRAME, STRING, STRING as SOUND};
 #[cfg(not(test))]
 use crate::graphics::{drawable_abi::DestroyDrawable, pixmap_abi::ReleaseDrawable};
@@ -16,7 +14,6 @@ use crate::strings::{
     },
 };
 
-#[cfg(not(test))]
 #[derive(Debug)]
 pub(crate) struct ShipAssets {
     icons: FRAME,
@@ -27,6 +24,17 @@ pub(crate) struct ShipAssets {
     victory: MUSIC_REF,
     sounds: SOUND,
     animations: [FrameArray; 3],
+}
+
+impl RaceDescriptor {
+    pub(crate) fn take_captain_background(&mut self) -> FRAME {
+        let assets = self
+            .assets
+            .as_mut()
+            .unwrap_or_else(|| panic!("captain release requires loaded ship assets"));
+        self.ship_data.captain_control.background = std::ptr::null_mut();
+        std::mem::replace(&mut assets.captain, std::ptr::null_mut())
+    }
 }
 
 #[cfg(not(test))]
@@ -206,3 +214,42 @@ impl ShipAssets {
 use crate::engine::battle::frames::{free_image, load_animation};
 #[cfg(not(test))]
 use crate::sound::resource_types::{LoadMusicInstance, LoadSoundInstance};
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn early_captain_release_consumes_captured_authority_not_the_mutable_view() {
+        let captain = std::ptr::dangling_mut();
+        let mut descriptor = RaceDesc::empty();
+        descriptor.raw.assets = Some(Box::new(ShipAssets {
+            icons: std::ptr::null_mut(),
+            melee_icon: std::ptr::null_mut(),
+            strings: std::ptr::null_mut(),
+            name: None,
+            captain,
+            victory: std::ptr::null_mut(),
+            sounds: std::ptr::null_mut(),
+            animations: std::array::from_fn(|_| FrameArray::EMPTY),
+        }));
+        descriptor.raw.ship_data.captain_control.background = captain.wrapping_add(1);
+        assert_eq!(descriptor.raw.take_captain_background(), captain);
+        assert!(descriptor
+            .raw
+            .ship_data
+            .captain_control
+            .background
+            .is_null());
+        let assets = descriptor.raw.assets.as_ref().unwrap();
+        assert!(assets.captain.is_null());
+        assert!(assets.icons.is_null());
+        assert!(assets.melee_icon.is_null());
+        assert!(assets.strings.is_null());
+        assert!(assets.name.is_none());
+        assert!(assets.victory.is_null());
+        assert!(assets.sounds.is_null());
+        assert!(assets.animations.iter().all(FrameArray::is_absent));
+        assert!(descriptor.raw.take_captain_background().is_null());
+    }
+}

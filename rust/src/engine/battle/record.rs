@@ -815,7 +815,6 @@ mod zero_descriptor_tests {
 #[repr(align(16))]
 #[derive(Debug)]
 pub struct RaceDescriptor {
-    #[cfg(not(test))]
     pub(crate) assets: Option<Box<super::ship_assets::ShipAssets>>,
     pub(crate) resources: super::template::RaceResources,
     pub ship_info: SHIP_INFO,

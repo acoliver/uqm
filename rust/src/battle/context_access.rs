@@ -142,8 +142,8 @@ impl Cx<'_> {
 #[cfg(not(test))]
 impl Cx<'_> {
     pub fn draw_final_battle_captain(&mut self, ship: ShipId) {
-        let frame = self.desc(ship).ship_data.captain_control.background;
-        // SAFETY: these resources belong to the live final-battle descriptor.
+        let frame = self.take_captain_background(ship);
+        // SAFETY: this consumes the live descriptor's captain release authority.
         unsafe {
             let old = SetContext(self.kernel.status_context);
             let mut stamp = STAMP {
@@ -152,7 +152,6 @@ impl Cx<'_> {
             };
             DrawStamp(&mut stamp);
             DestroyDrawable(ReleaseDrawable(frame));
-            self.clear_captain_background(ship);
             SetContext(old);
         }
     }
