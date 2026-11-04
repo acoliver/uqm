@@ -774,8 +774,8 @@
       "sha256": "87a17a1671ae85ec4e2feac29000037bd7a0e39b4935d0b411dcc9872f6ed4ab"
     },
     "parity/counts/samatra-dev-fixture-v1.toml": {
-      "bytes": 767603,
-      "sha256": "ee41172e217118b02bc6badd582f3fd6212986006dce4e8e268e08752c50b92a"
+      "bytes": 2345471,
+      "sha256": "425c5adec4f090ab938b56aa46fd7e05ef45218a599424c1ee34f6193928b049"
     },
     "parity/counts/setup-menu-v1.toml": {
       "bytes": 11588,
