@@ -65,26 +65,22 @@ fn summary_picker_clones_from_the_already_borrowed_race_queue() {
     unsafe {
         bridge::with_game(&mut game, || {
             World::current().write(|world| {
-                let races = &mut world.data.game.avail_race_q;
-                let destination = &raw mut world.data.game.built_ship_q;
-                assert_ne!(InitQueue(races, 1, mem::size_of::<FLEET_INFO>() as u16), 0);
-                assert_ne!(
-                    InitQueue(destination, 1, mem::size_of::<SHIP_FRAGMENT>() as u16),
-                    0
-                );
-                let template = AllocLink(races).cast::<FLEET_INFO>();
-                assert!(!template.is_null());
-                (*template).SpeciesID = SPECIES_ID_EARTHLING_ID;
-                (*template).crew_level = 12;
-                (*template).max_crew = 18;
-                PutQueue(races, template.cast());
-                let cloned = CloneShipFragment(races, 0, destination, 0).cast::<SHIP_FRAGMENT>();
-                assert!(!cloned.is_null());
-                assert_eq!((*cloned).crew_level, 12);
-                assert_eq!((*cloned).max_crew, 18);
-                assert_eq!((*cloned).SpeciesID, SPECIES_ID_EARTHLING_ID);
-                UninitQueue(destination);
-                UninitQueue(races);
+                let template = {
+                    let mut races = world.avail_races();
+                    let id = races.alloc().unwrap();
+                    let template = races.get_mut(id);
+                    template.SpeciesID = SPECIES_ID_EARTHLING_ID;
+                    template.crew_level = 12;
+                    template.max_crew = 18;
+                    races.put(id);
+                    *races.get(id)
+                };
+                let mut destination = world.built_ships();
+                let id = destination.clone_fragment(&template, 0, 0, || 5).unwrap();
+                let cloned = destination.get(id);
+                assert_eq!(cloned.crew_level, 12);
+                assert_eq!(cloned.max_crew, 18);
+                assert_eq!(cloned.SpeciesID, SPECIES_ID_EARTHLING_ID);
             });
         });
     }
@@ -325,9 +321,11 @@ fn hyperspace_movement_releases_world_before_fuel_queries() {
 fn campaign_events_schedule_and_dispatch_using_the_existing_world() {
     use uqm_rust::engine::StoryKey;
     use uqm_rust::navigation::abi::{
-        dispatch_event, AddEvent, ARILOU_ENTRANCE_EVENT, ARILOU_EXIT_EVENT, ARILOU_UMGAH_CHECK,
+        add_event, dispatch_event, ARILOU_ENTRANCE_EVENT, ARILOU_EXIT_EVENT, ARILOU_UMGAH_CHECK,
     };
-    use uqm_rust::time::clock_bridge::CEvent;
+    unsafe extern "C" {
+        fn GameClockTick();
+    }
     let mut game = Game::new();
     game.world.story = Some(uqm_rust::state::game_state::GameState::new());
     let clock = &mut game.world.data.game.game_clock;
@@ -336,23 +334,20 @@ fn campaign_events_schedule_and_dispatch_using_the_existing_world() {
     clock.day_index = 1;
     // SAFETY: this fixture owns the event pool and World throughout dispatch and cleanup.
     unsafe {
-        assert_ne!(
-            InitQueue(&raw mut clock.event_q, 18, mem::size_of::<CEvent>() as u16),
-            0
-        );
+        game.world.clock.init();
         bridge::with_game(&mut game, || {
             World::current().write(|world| {
                 dispatch_event(world, ARILOU_ENTRANCE_EVENT as u8);
                 assert_eq!(world.story_state(StoryKey::ARILOU_SPACE), 1);
-                let next = world.data.game.game_clock.event_q.head.cast::<CEvent>();
-                assert!(!next.is_null());
+                let events = world.clock.events_ref();
+                let next = events.get(events.head().unwrap());
                 assert_eq!(
-                    ((*next).year_index, (*next).month_index, (*next).day_index),
+                    (next.year_index, next.month_index, next.day_index),
                     (2155, 1, 4)
                 );
-                assert_eq!((*next).func_index, ARILOU_EXIT_EVENT as u8);
+                assert_eq!(next.func_index, ARILOU_EXIT_EVENT as u8);
             });
-            AddEvent(1, 0, 0, 0, ARILOU_UMGAH_CHECK as u8);
+            add_event(1, 0, 0, 0, ARILOU_UMGAH_CHECK as u8);
             assert_eq!(
                 World::current().read(|world| world.story_state(StoryKey::ARILOU_CHECKED_UMGAH)),
                 2
@@ -364,14 +359,14 @@ fn campaign_events_schedule_and_dispatch_using_the_existing_world() {
                 world.data.game.game_clock.tick_count = 1;
                 world.data.game.game_clock.day_in_ticks = 1;
             });
-            AddEvent(1, 0, 1, 0, ARILOU_UMGAH_CHECK as u8);
-            uqm_rust::time::clock_bridge::rust_clock_tick();
+            add_event(1, 0, 1, 0, ARILOU_UMGAH_CHECK as u8);
+            GameClockTick();
             World::current().read(|world| {
                 assert_eq!(world.data.game.game_clock.day_index, 2);
                 assert_eq!(world.story_state(StoryKey::ARILOU_CHECKED_UMGAH), 2);
             });
         });
-        UninitQueue(&raw mut game.world.data.game.game_clock.event_q);
+        game.world.clock.uninit();
     }
 }
 

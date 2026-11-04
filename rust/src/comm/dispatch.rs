@@ -64,9 +64,9 @@ pub const MAX_HYPER_SHIPS: usize = 7;
 /// C: `struct encounter` — encounter queue element.
 #[repr(C)]
 pub struct CEncounter {
-    pub pred: HLink,
-    pub succ: HLink,
-    pub h_element: HLink,
+    pub pred: *mut c_void,
+    pub succ: *mut c_void,
+    pub h_element: *mut c_void,
     pub transition_state: i16,
     pub origin: CPoint,
     pub radius: u16,
@@ -79,22 +79,13 @@ pub struct CEncounter {
     pub log_y: i32,
 }
 
-/// C: `SHIP_BASE_COMMON` macro expands to the first fields of any ship struct.
-#[repr(C)]
-pub struct ShipBaseCommon {
-    pub pred: HLink,
-    pub succ: HLink,
-    pub species_id: CSpeciesId,
-    pub captains_name_index: u8,
-}
-
 /// C: `SHIP_FRAGMENT` — queue element for built ship queues.
 #[repr(C)]
 #[derive(Default)]
 pub struct CShipFragment {
     // SHIP_BASE_COMMON
-    pub pred: HLink,
-    pub succ: HLink,
+    pub pred: *mut c_void,
+    pub succ: *mut c_void,
     pub species_id: CSpeciesId,
     pub captains_name_index: u8,
     // SHIP_FRAGMENT specific
@@ -113,8 +104,8 @@ pub struct CShipFragment {
 #[repr(C)]
 pub struct CFleetInfo {
     // LINK elements
-    pub pred: HLink,
-    pub succ: HLink,
+    pub pred: *mut c_void,
+    pub succ: *mut c_void,
     pub species_id: CSpeciesId,
     pub allied_state: u16,
     pub days_left: u8,
@@ -564,98 +555,17 @@ fn in_hq_space() -> bool {
     lobyte(activity) == IN_HYPERSPACE
 }
 
-/// C: `GetHeadLink(pq)` — returns the head handle of a queue.
-#[inline]
-unsafe fn get_head_link(pq: *const Queue) -> HLink {
-    (*pq).head
+fn avail_race_queue<R>(edit: impl FnOnce(&mut LinkQueue<'_, Fleet, 24>) -> R) -> R {
+    World::current().write(|world| edit(&mut world.avail_races()))
 }
 
-/// Direct GlobData queue accessors — replace C bridge FFI calls.
-/// These return *mut Queue by taking the address of the queue field
-/// inside the C GlobData global, avoiding a C function call entirely.
-#[inline]
-fn avail_race_queue() -> *mut Queue {
-    #[cfg(not(test))]
-    #[cfg(not(test))]
-    unsafe {
-        let world = WorldData::current();
-        std::ptr::addr_of_mut!((**world).game.avail_race_q)
-    }
-    #[cfg(test)]
-    std::ptr::null_mut()
-}
-#[inline]
-fn npc_built_ship_queue() -> *mut Queue {
-    #[cfg(not(test))]
-    #[cfg(not(test))]
-    unsafe {
-        let world = WorldData::current();
-        std::ptr::addr_of_mut!((**world).game.npc_built_ship_q)
-    }
-    #[cfg(test)]
-    std::ptr::null_mut()
-}
-#[cfg(not(test))]
-#[inline]
-fn encounter_queue() -> *mut Queue {
-    #[cfg(not(test))]
-    unsafe {
-        let world = WorldData::current();
-        std::ptr::addr_of_mut!((**world).game.encounter_q)
-    }
-    #[cfg(test)]
-    std::ptr::null_mut()
-}
-#[cfg(not(test))]
-#[inline]
-fn built_ship_queue() -> *mut Queue {
-    unsafe {
-        let world = WorldData::current();
-        std::ptr::addr_of_mut!((**world).game.built_ship_q)
-    }
-}
-
-/// C: `_GetSuccLink(lp)` — returns the succ field of a link.
-#[inline]
-unsafe fn get_succ_link(lp: *const ShipBaseCommon) -> HLink {
-    (*lp).succ
-}
-
-/// C: `GetStarShipFromIndex(pShipQ, Index)` — walks the queue by index.
-///
-/// Returns the HLINK at position `index` (0-based), or null if out of range.
-pub(crate) unsafe fn get_star_ship_from_index(p_ship_q: *const Queue, index: u8) -> HLink {
-    let mut h_star_ship = get_head_link(p_ship_q);
-    let mut remaining = index;
-
-    while remaining > 0 && !h_star_ship.is_null() {
-        let ship_ptr = h_star_ship as *const ShipBaseCommon;
-        let h_next = get_succ_link(ship_ptr);
-        h_star_ship = h_next;
-        remaining -= 1;
-    }
-
-    h_star_ship
-}
-
-/// C: `LockShipFrag(pq, h)` — cast HLINK to SHIP_FRAGMENT pointer.
-#[inline]
-unsafe fn lock_ship_frag(_pq: *const Queue, h: HLink) -> *mut CShipFragment {
-    h as *mut CShipFragment
-}
-
-/// C: `LockFleetInfo(pq, h)` — cast HLINK to FLEET_INFO pointer.
-#[inline]
-unsafe fn lock_fleet_info(_pq: *const Queue, h: HLink) -> *mut CFleetInfo {
-    h as *mut CFleetInfo
+fn npc_built_ship_queue<R>(edit: impl FnOnce(&mut LinkQueue<'_, Fragment, 14>) -> R) -> R {
+    World::current().write(|world| edit(&mut world.npc_built_ships()))
 }
 
 #[cfg(not(test))]
-/// C: `GetHeadEncounter()` = `GetHeadLink(&GLOBAL(encounter_q))`
-#[inline]
-unsafe fn get_head_encounter() -> HLink {
-    let enc_q = encounter_queue();
-    get_head_link(enc_q)
+fn encounter_queue<R>(edit: impl FnOnce(&mut LinkQueue<'_, Encounter, 16>) -> R) -> R {
+    World::current().write(|world| edit(&mut world.encounters()))
 }
 
 /// C: `LockEncounter(h, &ptr)` = `*(ppe) = (ENCOUNTER*)LockLink(...)`
@@ -754,12 +664,7 @@ pub unsafe fn race_communication(cx: &mut Cx<'_>, io: &mut Io<'_>) {
     let h_star_ship = get_head_link(npc_q);
     if h_star_ship.is_null() {
         return;
-    }
-
-    let frag_ptr = lock_ship_frag(npc_q, h_star_ship);
-    let i = (*frag_ptr).race_id;
-
-    // UnlockShipFrag is a no-op in QUEUE_TABLE mode
+    };
 
     let conv_id = if (i as usize) < RACE_COMMUNICATION.len() {
         RACE_COMMUNICATION[i as usize]
@@ -779,9 +684,7 @@ pub unsafe fn race_communication(cx: &mut Cx<'_>, io: &mut Io<'_>) {
     if i == ship::CHMMR_SHIP {
         cx.with_legacy(|| ReinitQueue(npc_q));
     }
-
     if lobyte(activity) == IN_INTERPLANETARY {
-        // if used destruct code in interplanetary
         if i == ship::SLYLANDRO_SHIP && status == 0 {
             cx.with_legacy(|| ReinitQueue(npc_q));
         }
@@ -909,22 +812,12 @@ fn run_encounter(cx: &mut Cx<'_>, io: &mut Io<'_>, which_comm: u32, ship_type: u
 // CloneShipFragment — ported from build.c:477
 // ---------------------------------------------------------------------------
 
-/// Port of C `CloneShipFragment(shipIndex, pDstQueue, crew_level)`.
-///
-/// Creates a SHIP_FRAGMENT in the destination queue by copying template
-/// data from the fleet queue (avail_race_q).
-pub(crate) unsafe fn clone_ship_fragment(
-    ship_index: u8,
-    dst_queue: *mut Queue,
-    crew_level: u16,
-) -> HLink {
-    clone_ship_fragment_from(
-        avail_race_queue(),
-        ship_index,
-        dst_queue,
-        crew_level,
-        &mut production_captain_name,
-    )
+fn clone_ship_fragment(ship_index: u8, crew_level: u16) -> Option<LinkId<Fragment>> {
+    let template =
+        avail_race_queue(|queue| queue.at(usize::from(ship_index)).map(|id| *queue.get(id)))?;
+    npc_built_ship_queue(|queue| {
+        queue.clone_fragment(&template, ship_index, crew_level, production_captain_name)
+    })
 }
 
 /// `PickCaptainName ()` as the running game draws it.
@@ -935,62 +828,6 @@ pub(crate) fn production_captain_name() -> u8 {
     pick_captain_name()
 }
 
-/// `CloneShipFragment` against an explicit fleet queue and captain-name draw.
-///
-/// # Safety
-/// `avail_q` is a queue of `FLEET_INFO` links and `dst_queue` a queue of
-/// `SHIP_FRAGMENT` slots; both are well formed.
-pub(crate) unsafe fn clone_ship_fragment_from(
-    avail_q: *mut Queue,
-    ship_index: u8,
-    dst_queue: *mut Queue,
-    crew_level: u16,
-    pick_name: &mut dyn FnMut() -> u8,
-) -> HLink {
-    let h_fleet = get_star_ship_from_index(avail_q, ship_index);
-    if h_fleet.is_null() {
-        return std::ptr::null_mut();
-    }
-
-    let template_ptr = lock_fleet_info(avail_q, h_fleet);
-
-    let captains_name_index = if ship_index == ship::SAMATRA_SHIP {
-        0
-    } else {
-        name_captain(dst_queue, (*template_ptr).species_id, pick_name)
-    };
-
-    // Build a new link in the destination queue
-    let h_built = AllocLink(dst_queue);
-    if !h_built.is_null() {
-        let frag_ptr = lock_ship_frag(dst_queue, h_built);
-
-        // C's Build() does memset(0) + sets SpeciesID. We must do the same.
-        let species_id = (*template_ptr).species_id;
-        *frag_ptr = CShipFragment::default();
-        (*frag_ptr).species_id = species_id;
-
-        (*frag_ptr).captains_name_index = captains_name_index;
-        (*frag_ptr).race_strings = (*template_ptr).race_strings;
-        (*frag_ptr).icons = (*template_ptr).icons;
-        (*frag_ptr).melee_icon = (*template_ptr).melee_icon;
-        if crew_level != 0 {
-            (*frag_ptr).crew_level = crew_level;
-        } else {
-            (*frag_ptr).crew_level = (*template_ptr).crew_level;
-        }
-        (*frag_ptr).max_crew = (*template_ptr).max_crew;
-        (*frag_ptr).energy_level = 0;
-        (*frag_ptr).max_energy = (*template_ptr).max_energy;
-        (*frag_ptr).race_id = ship_index;
-        (*frag_ptr).index = 0;
-
-        // Link it into the queue
-        PutQueue(dst_queue, h_built);
-    }
-
-    h_built
-}
 /// Prepare the real NPC ship queue for the deterministic Sol probe scene.
 ///
 /// The normal game-loop state machine performs the subsequent encounter and
@@ -1000,18 +837,8 @@ pub(crate) unsafe fn clone_ship_fragment_from(
 /// Game structures and both fleet queues must already be initialized.
 #[cfg_attr(test, allow(dead_code))]
 pub unsafe fn prepare_automation_sol_probe_encounter() -> Result<(), &'static str> {
-    let npc_q = npc_built_ship_queue();
-    let avail_q = avail_race_queue();
-    if npc_q.is_null() || avail_q.is_null() {
-        return Err("ship queue accessor returned null");
-    }
-    if (*npc_q).pq_tab.is_null() || (*avail_q).pq_tab.is_null() {
-        return Err("ship queues are not initialized");
-    }
-
-    ReinitQueue(npc_q);
-    let probe = clone_ship_fragment(ship::URQUAN_DRONE_SHIP, npc_q, 0);
-    if probe.is_null() || get_head_link(npc_q).is_null() {
+    npc_built_ship_queue(|queue| queue.reinit());
+    if clone_ship_fragment(ship::URQUAN_DRONE_SHIP, 0).is_none() {
         return Err("failed to clone the Ur-Quan probe into the NPC queue");
     }
     Ok(())
@@ -1024,8 +851,7 @@ pub unsafe fn prepare_automation_sol_probe_encounter() -> Result<(), &'static st
 /// Initialized fleets and SIS must be exclusively owned by the game thread.
 #[cfg(not(test))]
 pub(crate) unsafe fn prepare_samatra_dev_fixture() -> Result<(), &'static str> {
-    let queue = built_ship_queue();
-    ReinitQueue(queue);
+    built_ship_queue(|queue| queue.reinit());
     if crate::battle::build_native::AddEscortShips(4, 12) != 12 {
         return Err("boss fixture could not allocate Pkunk escorts");
     }
@@ -1065,43 +891,6 @@ pub unsafe fn place_flagship_at_star(location: (i16, i16)) -> Result<(), &'stati
         crate::planets::starmap::current_catalog(),
     );
     Ok(())
-}
-
-// ---------------------------------------------------------------------------
-// NameCaptain — ported from build.c:437
-// ---------------------------------------------------------------------------
-
-/// Port of C `NameCaptain(pQueue, SpeciesID)`. Picks a random captain name
-/// index, retrying if it matches an existing ship of the same species.
-unsafe fn name_captain(
-    p_queue: *mut Queue,
-    species_id: CSpeciesId,
-    pick_name: &mut dyn FnMut() -> u8,
-) -> u8 {
-    let mut name_index: u8;
-    loop {
-        name_index = pick_name();
-
-        let mut h_star_ship = get_head_link(p_queue);
-        let mut found_match = false;
-        while !h_star_ship.is_null() {
-            let ship_ptr = h_star_ship as *const ShipBaseCommon;
-            let h_next = get_succ_link(ship_ptr);
-
-            if (*ship_ptr).species_id == species_id && (*ship_ptr).captains_name_index == name_index
-            {
-                found_match = true;
-                break;
-            }
-
-            h_star_ship = h_next;
-        }
-
-        if !found_match {
-            break;
-        }
-    }
-    name_index
 }
 
 // ---------------------------------------------------------------------------
@@ -1180,30 +969,23 @@ pub unsafe extern "C" fn rust_init_race_dispatch(comm_id: u32) -> *mut c_void {
 ///
 /// Returns `race` if tracking started, 0 if race is extinct or not found.
 unsafe fn start_sphere_tracking(race: u8) -> u16 {
-    let avail_q = avail_race_queue();
-    let h_fleet = get_star_ship_from_index(avail_q, race);
-    if h_fleet.is_null() {
-        return 0;
-    }
-
-    let fleet_ptr = lock_fleet_info(avail_q, h_fleet);
-
-    let result;
-    if (*fleet_ptr).actual_strength == 0 {
-        if (*fleet_ptr).allied_state == DEAD_GUY {
-            result = 0;
-        } else {
-            result = race as u16;
+    avail_race_queue(|queue| {
+        let Some(id) = queue.at(usize::from(race)) else {
+            return 0;
+        };
+        let fleet = queue.get_mut(id);
+        if fleet.actual_strength == 0 && fleet.allied_state == DEAD_GUY {
+            return 0;
         }
-    } else if (*fleet_ptr).known_strength == 0 && (*fleet_ptr).actual_strength != INFINITE_RADIUS {
-        (*fleet_ptr).known_strength = 1;
-        (*fleet_ptr).known_loc = (*fleet_ptr).loc;
-        result = race as u16;
-    } else {
-        result = race as u16;
-    }
-
-    result
+        if fleet.actual_strength != 0
+            && fleet.known_strength == 0
+            && fleet.actual_strength != INFINITE_RADIUS
+        {
+            fleet.known_strength = 1;
+            fleet.known_loc = fleet.loc;
+        }
+        u16::from(race)
+    })
 }
 
 // ---------------------------------------------------------------------------

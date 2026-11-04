@@ -13,9 +13,9 @@ pub(super) trait ShofixtApi: EncounterApi<Handler> {
 #[cfg(not(test))]
 impl ShofixtApi for super::super::script::live::LiveScript<Handler> {
     fn schedule_return(&mut self) {
-        use crate::time::clock_abi::live::AddEvent;
+        use crate::time::clock_abi::live::add_event;
         unsafe {
-            AddEvent(1, 2, 0, 0, 8);
+            add_event(1, 2, 0, 0, 8);
         }
     }
 }

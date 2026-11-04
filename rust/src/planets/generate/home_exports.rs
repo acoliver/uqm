@@ -170,7 +170,7 @@ impl UrquanEncounterSite for RaceHome {
     }
     fn move_game_clock_days(&mut self, days: u16) {
         // SAFETY: plain call into the Rust game clock, as `MoveGameClockDays`.
-        unsafe { crate::time::clock_bridge::rust_clock_advance_days(i32::from(days)) };
+        unsafe { crate::time::clock_abi::live::MoveGameClockDays(days) };
     }
     fn star_point(&self) -> (i16, i16) {
         // SAFETY: `CurStarDescPtr` is the system being visited.

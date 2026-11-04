@@ -22,7 +22,7 @@ mod live {
 
     use crate::battle::build_native::engine::start_sphere_tracking;
 
-    use crate::time::clock_abi::live::AddEvent;
+    use crate::time::clock_abi::live::add_event;
     impl<H> AllianceApi<H> for LiveScript<H> {
         fn set_allied(&mut self, race: u16, allied: bool) {
             unsafe {
@@ -36,7 +36,7 @@ mod live {
         }
         fn event(&mut self, kind: i32, month: u16, day: u16, year: u16, selector: u8) {
             unsafe {
-                AddEvent((kind) as u32, month, day, year, selector);
+                add_event((kind) as u32, month, day, year, selector);
             }
         }
     }

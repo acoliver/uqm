@@ -2,7 +2,7 @@ use super::Handler;
 use crate::comm::locdata::CSisState;
 use crate::comm::races::encounter::EncounterApi;
 #[cfg(not(test))]
-use crate::engine::WorldData;
+use crate::engine::{World, WorldData};
 
 pub(super) trait DruugeApi: EncounterApi<Handler> {
     fn ship(&self) -> CSisState;
@@ -24,9 +24,7 @@ impl DruugeApi for crate::comm::races::script::live::LiveScript<Handler> {
     }
     fn has_escorts(&self) -> bool {
         {
-            !WorldData::current()
-                .read(|owner| owner.game.built_ship_q.head)
-                .is_null()
+            World::current().read(|world| world.built_ships_ref().head().is_some())
         }
     }
     fn crew_cost(&self) -> u8 {

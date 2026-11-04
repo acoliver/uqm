@@ -405,38 +405,17 @@ fn box_union(a: RECT, b: RECT) -> RECT {
     }
 }
 #[cfg(not(test))]
-unsafe fn fleet_queue() -> *mut QUEUE {
-    let world = WorldData::current();
-    ptr::addr_of_mut!((**world).game.avail_race_q)
+fn fleet_queue<R>(edit: impl FnOnce(&mut LinkQueue<'_, Fleet, 24>) -> R) -> R {
+    World::current().write(|world| edit(&mut world.avail_races()))
 }
 #[cfg(not(test))]
-unsafe fn lock_fleet(handle: *mut c_void) -> *mut FLEET_INFO {
-    let q = fleet_queue();
-    debug_assert_eq!(
-        usize::from((*q).object_size),
-        std::mem::size_of::<FLEET_INFO>()
-    );
-    check_fleet_link(q, handle);
-    handle.cast()
+fn lock_fleet(handle: LinkId<Fleet>) -> FleetInfo {
+    fleet_queue(|queue| *queue.get(handle))
 }
 #[cfg(not(test))]
-unsafe fn check_fleet_link(q: *const QUEUE, handle: *mut c_void) {
-    debug_assert!(
-        !(*q).pq_tab.is_null()
-            && handle as usize >= (*q).pq_tab as usize
-            && (handle as usize)
-                < (*q).pq_tab as usize
-                    + usize::from((*q).object_size) * usize::from((*q).num_objects)
-    );
-}
-#[cfg(not(test))]
-unsafe fn unlock_fleet(handle: *mut c_void) {
-    check_fleet_link(fleet_queue(), handle);
-}
-#[cfg(not(test))]
-unsafe fn sphere_text(fleet: *const FLEET_INFO, r: RECT) -> TEXT {
+unsafe fn sphere_text(fleet: &FleetInfo, r: RECT) -> TEXT {
     font_abi::SetContextFont(Kernel::current().read(|owner| owner.tiny_font).cast());
-    let string = string_table::SetAbsStringTableIndex((*fleet).race_strings.cast(), 1);
+    let string = string_table::SetAbsStringTableIndex(fleet.race_strings.cast(), 1);
     TEXT {
         baseline: POINT {
             x: r.corner.x.wrapping_add(r.extent.width >> 1),
@@ -451,8 +430,8 @@ unsafe fn sphere_text(fleet: *const FLEET_INFO, r: RECT) -> TEXT {
     }
 }
 #[cfg(not(test))]
-unsafe fn get_sphere_rect(fleet: *const FLEET_INFO) -> (RECT, RECT) {
-    let diameter = c_long::from(i32::from((*fleet).known_strength) * 11);
+unsafe fn get_sphere_rect(fleet: &FleetInfo) -> (RECT, RECT) {
+    let diameter = c_long::from(i32::from(fleet.known_strength) * 11);
     let mut w = universeToDispx(diameter).wrapping_sub(ux(0));
     if w < 0 {
         w = w.wrapping_neg();
@@ -467,8 +446,8 @@ unsafe fn get_sphere_rect(fleet: *const FLEET_INFO) -> (RECT, RECT) {
     }
     let r = RECT {
         corner: POINT {
-            x: ux((*fleet).known_loc.x).wrapping_sub(w >> 1),
-            y: uy((*fleet).known_loc.y).wrapping_sub(h >> 1),
+            x: ux(fleet.known_loc.x).wrapping_sub(w >> 1),
+            y: uy(fleet.known_loc.y).wrapping_sub(h >> 1),
         },
         extent: EXTENT {
             width: w,
@@ -600,12 +579,12 @@ pub unsafe extern "C" fn DrawStarMap(race_update: u16, clip: *mut RECT) {
     let star_frame = pixmap_abi::SetRelFrameIndex(STAR_MAP_FRAME.cast(), 2);
     if space <= 1 {
         let mut index = 0;
-        let mut handle = (*fleet_queue()).head;
-        while !handle.is_null() {
-            let fleet = lock_fleet(handle);
-            let next = (*fleet).succ;
-            if (*fleet).known_strength != 0 {
-                let (mut r, repair) = get_sphere_rect(fleet);
+        let mut handle = fleet_queue(|queue| queue.head());
+        while let Some(id) = handle {
+            let fleet = lock_fleet(id);
+            let next = fleet_queue(|queue| queue.succ(id));
+            if fleet.known_strength != 0 {
+                let (mut r, repair) = get_sphere_rect(&fleet);
                 if i32::from(r.corner.x) < width()
                     && i32::from(r.corner.y) < height()
                     && i32::from(r.corner.x) + i32::from(r.extent.width) > 0
@@ -619,7 +598,7 @@ pub unsafe extern "C" fn DrawStarMap(race_update: u16, clip: *mut RECT) {
                         color
                     });
                     DrawOval(&mut r, 0);
-                    let mut t = sphere_text(fleet, r);
+                    let mut t = sphere_text(&fleet, r);
                     font_abi::TextRect(
                         ptr::from_mut(&mut t).cast(),
                         ptr::from_mut(&mut r).cast(),
@@ -646,7 +625,6 @@ pub unsafe extern "C" fn DrawStarMap(race_update: u16, clip: *mut RECT) {
                     font_abi::font_DrawText(ptr::from_mut(&mut t).cast());
                 }
             }
-            unlock_fleet(handle);
             handle = next;
             index += 1;
         }
@@ -968,31 +946,29 @@ unsafe fn update_map() {
     let mut drawn = false;
     let mut was_interrupted = false;
     let mut index = 1u16;
-    let mut handle = (*fleet_queue()).head;
-    while !handle.is_null() {
-        let fleet = lock_fleet(handle);
-        let next = (*fleet).succ;
+    let mut handle = fleet_queue(|queue| queue.head());
+    while let Some(id) = handle {
+        let next = fleet_queue(|queue| queue.succ(id));
         interrupted(&mut button, &mut was_interrupted, &mut drawn);
-        if (*fleet).known_strength != 0 {
-            let dx = (*fleet).loc.x.wrapping_sub((*fleet).known_loc.x);
-            let dy = (*fleet).loc.y.wrapping_sub((*fleet).known_loc.y);
+        let fleet = lock_fleet(id);
+        if fleet.known_strength != 0 {
+            let dx = fleet.loc.x.wrapping_sub(fleet.known_loc.x);
+            let dy = fleet.loc.y.wrapping_sub(fleet.known_loc.y);
             if dx != 0 || dy != 0 {
                 let mut walk = LineWalk::new(dx, dy);
                 if !drawn {
                     DrawStarMap(u16::MAX, ptr::null_mut());
                     drawn = true;
                 }
-                let (initial, mut last) = get_sphere_rect(fleet);
+                let (initial, mut last) = get_sphere_rect(&lock_fleet(id));
                 enlarge(&mut last);
                 let mut visible = false;
                 let mut final_r = zero_rect();
                 let mut canceled = false;
                 loop {
                     let (sphere, mut r) = loop {
-                        let mut loc = (*fleet).known_loc;
-                        walk.step(&mut loc);
-                        (*fleet).known_loc = loc;
-                        let pair = get_sphere_rect(fleet);
+                        fleet_queue(|queue| walk.step(&mut queue.get_mut(id).known_loc));
+                        let pair = get_sphere_rect(&lock_fleet(id));
                         let before = walk.delta;
                         walk.delta = walk.delta.wrapping_sub(1);
                         if before == 0
@@ -1020,10 +996,14 @@ unsafe fn update_map() {
                 if !canceled && visible {
                     repair_map(u16::MAX, &mut last, final_r);
                 }
-                (*fleet).known_loc = (*fleet).loc;
+                fleet_queue(|queue| {
+                    let fleet = queue.get_mut(id);
+                    fleet.known_loc = fleet.loc;
+                });
             }
+            let fleet = lock_fleet(id);
             let mut delta =
-                (i32::from((*fleet).actual_strength) - i32::from((*fleet).known_strength)) as i16;
+                (i32::from(fleet.actual_strength) - i32::from(fleet.known_strength)) as i16;
             if delta != 0 {
                 if !drawn {
                     DrawStarMap(u16::MAX, ptr::null_mut());
@@ -1036,7 +1016,7 @@ unsafe fn update_map() {
                     -1i16
                 };
                 delta = delta.wrapping_sub(1);
-                let (initial, mut last) = get_sphere_rect(fleet);
+                let (initial, mut last) = get_sphere_rect(&lock_fleet(id));
                 enlarge(&mut last);
                 let mut visible = false;
                 let mut final_r = zero_rect();
@@ -1044,8 +1024,11 @@ unsafe fn update_map() {
                 let mut canceled = false;
                 loop {
                     let (sphere, mut r) = loop {
-                        (*fleet).known_strength = (*fleet).known_strength.wrapping_add(dx as u16);
-                        let pair = get_sphere_rect(fleet);
+                        fleet_queue(|queue| {
+                            let fleet = queue.get_mut(id);
+                            fleet.known_strength = fleet.known_strength.wrapping_add(dx as u16);
+                        });
+                        let pair = get_sphere_rect(&lock_fleet(id));
                         let before = delta;
                         delta = delta.wrapping_sub(1);
                         if before == 0
@@ -1072,10 +1055,12 @@ unsafe fn update_map() {
                 if !canceled && (visible || initial.extent.width != final_sphere.extent.width) {
                     repair_map(u16::MAX, &mut last, final_r);
                 }
-                (*fleet).known_strength = (*fleet).actual_strength;
+                fleet_queue(|queue| {
+                    let fleet = queue.get_mut(id);
+                    fleet.known_strength = fleet.actual_strength;
+                });
             }
         }
-        unlock_fleet(handle);
         handle = next;
         index += 1;
     }

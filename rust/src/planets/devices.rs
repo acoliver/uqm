@@ -212,13 +212,12 @@ unsafe fn use_caster() -> bool {
             .write(|world| start_sphere_tracking(world, u16::from(ship::ILWRATH_SHIP)))
             != 0;
     if !found {
-        let queue = std::ptr::addr_of!((**WorldFields::current()).game.ip_group_q);
-        let group = (*queue)
-            .head
-            .cast::<crate::c_bindings::global_state::IP_GROUP>();
-        if !group.is_null() {
-            found = (*group).race_id == ship::ILWRATH_SHIP;
-        }
+        found = WorldOwner::current().read(|world| {
+            let groups = world.ip_groups_ref();
+            groups
+                .head()
+                .is_some_and(|id| groups.get(id).race_id == ship::ILWRATH_SHIP)
+        });
     }
     if !found {
         return false;
@@ -260,13 +259,21 @@ unsafe fn invoke(id: u8) -> u8 {
                 WorldOwner::current().write(|world| set(world, StoryKey::CHMMR_EMERGING, 1));
                 (**WorldFields::current()).game.current_activity |= START_ENCOUNTER;
                 reset_groups();
-                WorldFields::current().write(|world| {
-                    crate::battle::build_native::CloneShipFragment(
-                        &mut world.game.avail_race_q,
-                        ship::CHMMR_SHIP.into(),
-                        &raw mut world.game.npc_built_ship_q,
-                        0,
-                    );
+                WorldOwner::current().write(|world| {
+                    let template = {
+                        let fleets = world.avail_races_ref();
+                        fleets
+                            .at(usize::from(ship::CHMMR_SHIP))
+                            .map(|id| *fleets.get(id))
+                    };
+                    if let Some(template) = template {
+                        world.npc_built_ships().clone_fragment(
+                            &template,
+                            ship::CHMMR_SHIP,
+                            0,
+                            crate::comm::dispatch::production_captain_name,
+                        );
+                    }
                 });
             }
             2
@@ -282,7 +289,7 @@ unsafe fn invoke(id: u8) -> u8 {
             (**WorldFields::current()).game.current_activity |= START_ENCOUNTER;
             WorldOwner::current().write(|world| set(world, StoryKey::GLOBAL_FLAGS_AND_DATA, 0));
             if WorldOwner::current().read(in_hqspace) != 0 {
-                if !(**WorldFields::current()).game.encounter_q.head.is_null() {
+                if WorldOwner::current().read(|world| world.encounters_ref().head().is_some()) {
                     WorldOwner::current().write(|world| set(world, StoryKey::SHIP_TO_COMPEL, 1));
                 }
                 (**WorldFields::current()).game.current_activity &= !0x0200;
@@ -292,7 +299,7 @@ unsafe fn invoke(id: u8) -> u8 {
                 save_sis_hyper_state();
             } else {
                 crate::c_bindings::global_state::EncounterGroup = 0;
-                if !(**WorldFields::current()).game.ip_group_q.head.is_null() {
+                if WorldOwner::current().read(|world| world.ip_groups_ref().head().is_some()) {
                     WorldOwner::current().write(|world| set(world, StoryKey::SHIP_TO_COMPEL, 1));
                     reset_groups();
                 }

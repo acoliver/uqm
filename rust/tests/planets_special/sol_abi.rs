@@ -2,7 +2,6 @@
 
 use super::Harness;
 use uqm_rust::battle::gendef::{getGenerateFunctions, SOL_DEFINED};
-use uqm_rust::collections::queue::Queue;
 
 use uqm_rust::planets::c_api::{self, CapturedSurface};
 use uqm_rust::planets::consts::{MAP_HEIGHT, MAP_WIDTH};
@@ -73,27 +72,27 @@ fn check_bomb_queue(h: &mut Harness) {
         (world).set_story_state(uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED, 1)
     });
     unsafe {
-        let saved = uqm_rust::engine::WorldData::current().write(|world| {
+        let saved = uqm_rust::engine::World::current().write(|world| {
             let saved = (
-                world.game.ip_group_q,
-                world.game.npc_built_ship_q,
-                world.game.battle_group_ref,
+                std::mem::take(&mut world.queues),
+                world.data.game.battle_group_ref,
             );
-            world.game.ip_group_q = Queue::default();
-            world.game.npc_built_ship_q = Queue::default();
-            world.game.battle_group_ref = 0x12345678;
+            world.data.game.battle_group_ref = 0x12345678;
             saved
         });
-        assert!(GENERATE_SOL_FUNCTIONS.reinit_npcs.unwrap()(
-            &raw mut *h.state
-        ));
-        uqm_rust::engine::WorldData::current().write(|world| {
-            assert_eq!(world.game.battle_group_ref, 0);
-            assert!(world.game.ip_group_q.head.is_null());
-            assert!(world.game.npc_built_ship_q.head.is_null());
-            world.game.ip_group_q = saved.0;
-            world.game.npc_built_ship_q = saved.1;
-            world.game.battle_group_ref = saved.2;
+        assert!(
+            uqm_rust::engine::World::current().write(|world| GENERATE_SOL_FUNCTIONS
+                .reinit_npcs
+                .unwrap()(
+                world, &raw mut *h.state
+            ))
+        );
+        uqm_rust::engine::World::current().write(|world| {
+            assert_eq!(world.data.game.battle_group_ref, 0);
+            assert!(world.ip_groups_ref().head().is_none());
+            assert!(world.npc_built_ships_ref().head().is_none());
+            world.queues = saved.0;
+            world.data.game.battle_group_ref = saved.1;
         });
     }
     uqm_rust::engine::World::current().write(|world| {

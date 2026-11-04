@@ -1,12 +1,8 @@
-//! C clock API, including the save-compatible intrusive event queue.
+//! Clock entry points and save-compatible event scheduling.
 
 use super::clock_bridge::days_in_month;
 use crate::engine::battle::link_queue::LinkId;
 use crate::engine::clock::{GameClock, ScheduledEvent};
-#[cfg(not(test))]
-use crate::engine::World as WorldOwner;
-#[cfg(not(test))]
-use crate::engine::WorldData as WorldFields;
 
 pub(crate) fn event_date(
     now: (u16, u16, u16),
@@ -89,63 +85,30 @@ pub(crate) mod live {
 
     use crate::navigation::events::live::dispatch_event;
 
-    /// # Safety
-    /// Game-thread access to the live global state.
-    #[no_mangle]
-    pub unsafe extern "C" fn GetGameClock() -> *mut ClockState {
-        let world = WorldFields::current();
-        ptr::addr_of_mut!((**world).game.game_clock).cast()
-    }
-
-    pub(crate) unsafe fn finish_clock_day() {
-        crate::ui::sis::DrawStatusMessage(ptr::null());
-        WorldOwner::current().write(|world| {
-            let clock = &world.data.game.game_clock;
-            let today = (
-                clock.year_index,
-                u16::from(clock.month_index),
-                u16::from(clock.day_index),
-            );
-            while let Some((id, selector)) = take_day_event(&mut world.clock, today) {
-                dispatch_event(world, selector);
-                world.clock.events().free(id);
-            }
-        });
-    }
-
-    /// # Safety
-    /// Date pointers must be valid and writable; game-thread access only.
-    #[no_mangle]
-    pub unsafe extern "C" fn ValidateEvent(
-        kind: u32,
-        month: *mut u16,
-        day: *mut u16,
-        year: *mut u16,
-    ) -> u32 {
-        let clock = &*GetGameClock();
-        let now = (
+    pub(crate) unsafe fn finish_clock_day(world: &mut crate::engine::World) {
+        let clock = &world.data.game.game_clock;
+        let today = (
             clock.year_index,
-            clock.month_index as u16,
-            clock.day_index as u16,
+            u16::from(clock.month_index),
+            u16::from(clock.day_index),
         );
-        let date = event_date(now, kind == 1, (*year, *month, *day));
-        if kind == 1 {
-            (*year, *month, *day) = date;
+        while let Some((id, selector)) = take_day_event(&mut world.clock, today) {
+            dispatch_event(world, selector);
+            world.clock.events().free(id);
         }
-        u32::from(date >= now)
     }
 
     /// # Safety
     /// Game-thread access to the initialized event queue.
-    pub unsafe fn AddEvent(
+    pub unsafe fn add_event(
         kind: u32,
         month: u16,
         day: u16,
         year: u16,
         selector: u8,
     ) -> Option<LinkId<ScheduledEvent>> {
-        WorldOwner::current().write(|world| {
-            crate::navigation::events::live::add_event(world, kind, month, day, year, selector)
+        crate::app::bridge::enter(|cx| {
+            crate::navigation::events::live::add_event(cx.world, kind, month, day, year, selector)
         })
     }
 
@@ -153,33 +116,56 @@ pub(crate) mod live {
     /// Called once before accessing the game clock or event queue.
     #[no_mangle]
     pub unsafe extern "C" fn InitGameClock() -> u32 {
-        rust_clock_init() as u32
+        crate::app::bridge::enter(|cx| rust_clock_init(cx.world)) as u32
     }
 
     /// # Safety
     /// The initialized clock must no longer be in use.
     #[no_mangle]
     pub unsafe extern "C" fn UninitGameClock() -> u32 {
-        rust_clock_uninit() as u32
+        crate::app::bridge::enter(|cx| rust_clock_uninit(cx.world)) as u32
     }
 
     /// # Safety
     /// Game-thread access to the initialized clock.
     #[no_mangle]
     pub extern "C" fn SetGameClockRate(seconds: u16) {
-        rust_clock_set_rate(seconds as i32);
+        // SAFETY: this legacy clock entry borrows the caller's published context synchronously.
+        unsafe {
+            crate::app::bridge::enter(|cx| rust_clock_set_rate(cx.world, i32::from(seconds)))
+        };
     }
     /// # Safety
     /// Game-thread access to the initialized clock.
     #[no_mangle]
     pub unsafe extern "C" fn GameClockTick() {
-        rust_clock_tick();
+        crate::app::bridge::enter(|cx| {
+            if rust_clock_tick(cx.world) {
+                crate::app::bridge::publish(cx, || crate::ui::sis::DrawStatusMessage(ptr::null()));
+                finish_clock_day(cx.world);
+            }
+        });
     }
     /// # Safety
     /// Game-thread access to the initialized clock.
     #[no_mangle]
     pub unsafe extern "C" fn MoveGameClockDays(days: u16) {
-        rust_clock_advance_days(days as i32);
+        advance_days(i32::from(days));
+    }
+
+    /// # Safety
+    /// Game-thread entry with a published context and initialized clock.
+    pub unsafe fn advance_days(days: i32) {
+        log_clock_bridge(&format!("RUST_CLOCK_MOVE: {} days", days));
+        crate::app::bridge::enter(|cx| {
+            for _ in 0..days {
+                next_clock_day_internal(&mut cx.world.data.game.game_clock);
+                crate::app::bridge::publish(cx, || crate::ui::sis::DrawStatusMessage(ptr::null()));
+                finish_clock_day(cx.world);
+            }
+            let clock = &mut cx.world.data.game.game_clock;
+            clock.tick_count = clock.day_in_ticks;
+        });
     }
     /// # Safety
     /// Called with the initialized clock.
@@ -197,7 +183,8 @@ pub(crate) mod live {
     /// Called with the initialized clock.
     #[no_mangle]
     pub extern "C" fn GameClockRunning() -> u32 {
-        rust_clock_is_running() as u32
+        // SAFETY: this legacy clock query borrows the published context only for its read.
+        unsafe { crate::app::bridge::enter(|cx| rust_clock_is_running(cx.world)) as u32 }
     }
 }
 

@@ -23,9 +23,9 @@ impl YehatApi for LiveScript<Handler> {
     }
 
     fn schedule_rebel_event(&mut self) {
-        use crate::time::clock_abi::live::AddEvent;
+        use crate::time::clock_abi::live::add_event;
         unsafe {
-            AddEvent(1, 0, 0, 0, 15);
+            add_event(1, 0, 0, 0, 15);
         }
     }
 }

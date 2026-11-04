@@ -20,9 +20,7 @@ impl TalkpetApi for super::super::script::live::LiveScript<Handler> {
     }
     fn npc_ships(&self) -> bool {
         {
-            !WorldData::current()
-                .read(|owner| owner.game.npc_built_ship_q.head)
-                .is_null()
+            World::current().read(|world| world.npc_built_ships_ref().head().is_some())
         }
     }
     fn umgah_alive(&mut self) -> bool {

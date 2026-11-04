@@ -26,11 +26,7 @@ pub type UNICODE = ::std::os::raw::c_char;
 pub const BOOLEAN_FALSE: BOOLEAN = 0;
 pub const BOOLEAN_TRUE: BOOLEAN = 1;
 pub type BOOLEAN = ::std::os::raw::c_uint;
-pub type QUEUE_HANDLE = *mut ::std::os::raw::c_void;
-pub type HLINK = QUEUE_HANDLE;
 
-pub use crate::engine::battle::record::QUEUE;
-pub type HEVENT = HLINK;
 pub use crate::navigation::abi::event;
 pub type EVENT = event;
 pub use crate::graphics::native_abi::Color;
@@ -173,9 +169,7 @@ pub type SPECIES_ID = ::std::os::raw::c_uint;
 pub use crate::engine::battle::record::RaceDescriptor;
 pub use crate::ships::native::abi::SHIP_FRAGMENT;
 pub use crate::engine::battle::record::ShipRecord;
-pub type HFLEETINFO = HLINK;
 pub use crate::ships::native::abi::FLEET_INFO;
-pub type HIPGROUP = HLINK;
 pub use crate::navigation::abi::IP_GROUP;
 pub type BRIEF_SHIP_INFO = brief_ship_info;
 pub type ENCOUNTER = encounter;
@@ -281,7 +275,6 @@ pub use crate::planets::solarsys::planetOuterLocation;
 #[cfg(test)]
 #[cfg(not(test))]
 pub use crate::planets::solarsys::XFormIPLoc;
-pub type HENCOUNTER = HLINK;
 pub use crate::navigation::abi::brief_ship_info;
 pub use crate::navigation::abi::encounter;
 extern "C" {

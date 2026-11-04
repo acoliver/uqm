@@ -810,7 +810,6 @@ unsafe fn draw_slots(slots: *const BYTE, len: usize, y: SIZE, mode: u32) {
     }
 }
 unsafe fn draw_support_ships() {
-    let world = WorldData::current();
     let points = [
         (3, 62),
         (45, 62),
@@ -825,19 +824,22 @@ unsafe fn draw_support_ships() {
         (3, 110),
         (45, 110),
     ];
-    let q = ptr::addr_of_mut!((**world).game.built_ship_q);
-    let mut h = (*q).head;
-    let mut i = 0;
-    while !h.is_null() {
-        let p = h.cast::<SHIP_FRAGMENT>();
-        let next = (*p).succ;
-        let mut stamp: STAMP = mem::zeroed();
-        stamp.origin.x = points[i].0;
-        stamp.origin.y = points[i].1;
-        stamp.frame = (*p).icons;
+    let icons = World::current().read(|world| {
+        let ships = world.built_ships_ref();
+        let mut icons = Vec::new();
+        let mut next = ships.head();
+        while let Some(id) = next {
+            icons.push(ships.get(id).icons);
+            next = ships.succ(id);
+        }
+        icons
+    });
+    for (icon, (x, y)) in icons.into_iter().zip(points) {
+        let mut stamp = STAMP {
+            origin: POINT { x, y },
+            frame: icon,
+        };
         DrawStamp(&mut stamp);
-        h = next;
-        i += 1;
     }
 }
 

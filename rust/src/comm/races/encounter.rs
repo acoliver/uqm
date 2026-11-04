@@ -26,7 +26,7 @@ mod live {
 
     use crate::battle::build_native::engine::SetEscortCrewComplement;
 
-    use crate::time::clock_abi::live::AddEvent;
+    use crate::time::clock_abi::live::add_event;
 
     impl<H> EncounterApi<H> for LiveScript<H> {
         fn segue(&mut self, segue: u32) {
@@ -58,7 +58,7 @@ mod live {
         }
         fn advance_ilwrath(&mut self) {
             unsafe {
-                AddEvent(1, 0, 0, 0, 12);
+                add_event(1, 0, 0, 0, 12);
             }
         }
     }

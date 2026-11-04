@@ -1056,10 +1056,7 @@ pub const EVENT_TYPE_RELATIVE_EVENT: EVENT_TYPE = 1;
 pub type EVENT_TYPE = ::std::os::raw::c_uint;
 
 #[cfg(not(test))]
-pub use crate::time::clock_abi::live::ValidateEvent;
-
-#[cfg(not(test))]
-pub use crate::time::clock_abi::live::AddEvent;
+pub use crate::time::clock_abi::live::add_event;
 
 #[cfg(not(test))]
 pub use crate::navigation::events::live::dispatch_event;
