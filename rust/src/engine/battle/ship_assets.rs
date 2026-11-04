@@ -10,7 +10,10 @@ use crate::sound::heart_ffi::{DestroyMusic, DestroySound};
 #[cfg(not(test))]
 use crate::strings::{
     sresins::LoadStringTableInstance,
-    string_table::{CaptureStringTable, DestroyStringTable, ReleaseStringTable},
+    string_table::{
+        CaptureStringTable, DestroyStringTable, GetStringAddress, ReleaseStringTable,
+        SetAbsStringTableIndex,
+    },
 };
 
 #[cfg(not(test))]
@@ -19,10 +22,35 @@ pub(crate) struct ShipAssets {
     icons: FRAME,
     melee_icon: FRAME,
     strings: STRING,
+    name: Option<Vec<u8>>,
     captain: FRAME,
     victory: MUSIC_REF,
     sounds: SOUND,
     animations: [FrameArray; 3],
+}
+
+#[cfg(not(test))]
+fn load_music(key: &std::ffi::CStr) -> MUSIC_REF {
+    // SAFETY: the borrowed key stays live through decoding and the descriptor owns the result.
+    unsafe { LoadMusicInstance(key.as_ptr()).cast() }
+}
+
+#[cfg(not(test))]
+fn load_sounds(key: &std::ffi::CStr) -> SOUND {
+    // SAFETY: the borrowed key stays live through decoding and the descriptor owns the captured bank.
+    unsafe { CaptureStringTable(LoadSoundInstance(key.as_ptr()).cast()).cast() }
+}
+
+#[cfg(not(test))]
+fn load_names(key: &std::ffi::CStr) -> (STRING, Option<Vec<u8>>) {
+    // SAFETY: the key is borrowed through loading. Any returned name points into
+    // this newly captured table, which stays owned while its bytes are copied.
+    unsafe {
+        let strings = CaptureStringTable(LoadStringTableInstance(key.as_ptr()));
+        let name = GetStringAddress(SetAbsStringTableIndex(strings, 2));
+        let name = (!name.is_null()).then(|| std::ffi::CStr::from_ptr(name).to_bytes().to_vec());
+        (strings.cast(), name)
+    }
 }
 
 #[cfg(not(test))]
@@ -40,7 +68,7 @@ fn load_animation_set(keys: [Option<&'static std::ffi::CStr>; 3]) -> Option<Fram
 #[cfg(not(test))]
 impl RaceDesc {
     pub(crate) fn initialize_assets(&mut self, battle: bool) -> bool {
-        self.initialize_icons();
+        let name = self.initialize_icons();
         let loaded = !battle || self.initialize_battle_assets();
         let data = &self.raw.ship_data;
         let info = self.info();
@@ -48,6 +76,7 @@ impl RaceDesc {
             icons: info.icons,
             melee_icon: info.melee_icon,
             strings: info.race_strings,
+            name,
             captain: data.captain_control.background,
             victory: data.victory_ditty,
             sounds: data.ship_sounds,
@@ -56,7 +85,7 @@ impl RaceDesc {
         loaded
     }
 
-    fn initialize_icons(&mut self) {
+    fn initialize_icons(&mut self) -> Option<Vec<u8>> {
         let info = &mut self.raw.ship_info;
         if let Some(key) = self.resources.icons {
             info.icons = crate::engine::battle::frames::load_graphic(key);
@@ -65,9 +94,11 @@ impl RaceDesc {
             info.melee_icon = crate::engine::battle::frames::load_graphic(key);
         }
         if let Some(key) = self.resources.strings {
-            // SAFETY: the retained static key is live; the captured table belongs to this descriptor.
-            info.race_strings =
-                unsafe { CaptureStringTable(LoadStringTableInstance(key.as_ptr())).cast() };
+            let (strings, name) = load_names(key);
+            info.race_strings = strings;
+            name
+        } else {
+            None
         }
     }
 
@@ -99,21 +130,16 @@ impl RaceDesc {
                 return false;
             }
         }
-        // SAFETY: retained static keys are live, and captured handles remain privately
-        // owned even when a later load fails.
-        unsafe {
-            if let Some(key) = self.resources.victory {
-                data.victory_ditty = LoadMusicInstance(key.as_ptr()).cast();
-                if data.victory_ditty.is_null() {
-                    return false;
-                }
+        if let Some(key) = self.resources.victory {
+            data.victory_ditty = load_music(key);
+            if data.victory_ditty.is_null() {
+                return false;
             }
-            if let Some(key) = self.resources.sounds {
-                data.ship_sounds =
-                    CaptureStringTable(LoadSoundInstance(key.as_ptr()).cast()).cast();
-                if data.ship_sounds.is_null() {
-                    return false;
-                }
+        }
+        if let Some(key) = self.resources.sounds {
+            data.ship_sounds = load_sounds(key);
+            if data.ship_sounds.is_null() {
+                return false;
             }
         }
         true
@@ -133,7 +159,7 @@ impl RaceDesc {
         }
     }
 
-    pub(crate) fn catalog_name(&self) -> Vec<u8> {
+    pub(crate) fn catalog_name(&self) -> &[u8] {
         let assets = self
             .raw
             .assets
@@ -143,13 +169,10 @@ impl RaceDesc {
             !assets.strings.is_null(),
             "catalog string table was not loaded"
         );
-        // SAFETY: this private handle was captured by load and cannot be changed through the legacy record.
-        unsafe {
-            use crate::strings::string_table::{GetStringAddress, SetAbsStringTableIndex};
-            let name = GetStringAddress(SetAbsStringTableIndex(assets.strings.cast(), 2));
-            assert!(!name.is_null(), "catalog string table has no ship name");
-            std::ffi::CStr::from_ptr(name).to_bytes().to_vec()
-        }
+        assets
+            .name
+            .as_deref()
+            .unwrap_or_else(|| panic!("catalog string table has no ship name"))
     }
 }
 

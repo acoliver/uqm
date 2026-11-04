@@ -125,13 +125,6 @@ pub unsafe extern "C" fn DestroyContext(context: *mut context_desc) -> BOOLEAN {
 
 pub(super) unsafe fn free_context(context: std::ptr::NonNull<context_desc>) {
     let context = context.as_ptr();
-    // SAFETY: the final context lease owns this allocation on the serialized graphics thread.
-    unsafe {
-        if _pCurContext == context {
-            SetContext(ptr::null_mut());
-        }
-    }
-
     #[cfg(feature = "debug-process")]
     {
         let mut link = ptr::addr_of_mut!(FIRST_CONTEXT);

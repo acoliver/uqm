@@ -25,7 +25,7 @@ impl ContextFrame {
 enum Operation {
     Select,
     Background(Color),
-    Frame(ContextFrame),
+    Frame(FRAME),
     Clip(RECT),
     Clear,
 }
@@ -43,35 +43,32 @@ impl ContextLease {
         Self(allocation.unwrap_or_else(|| panic!("context is unowned or retired: {context:p}")))
     }
 
-    fn apply(&self, operation: Operation) {
+    fn apply(&self, operation: Operation) -> FRAME {
         self.0.owned.assert_thread();
         // SAFETY: the lease owns the selected context on this graphics thread.
-        // Frame changes carry allocation leases; drawing and clipping retain the
-        // current target before the native operation can dereference it.
+        // Set-frame retains its new allocation; clipping and drawing retain the
+        // selected target before entering this native operation boundary.
         unsafe {
             context_abi::SetContext(self.0.context.as_ptr());
-            let _target = if matches!(operation, Operation::Clip(_) | Operation::Clear) {
-                Some(ContextFrame::retain(NonNull::new(
-                    self.0.context.as_ref().ForeGroundFrame,
-                )))
-            } else {
-                None
-            };
             match operation {
                 Operation::Select => (),
                 Operation::Background(color) => {
                     context_abi::SetContextBackGroundColor(color);
                 }
-                Operation::Frame(target) => {
-                    drawable_abi::SetContextFGFrame(target.frame);
-                    *self.0.target.borrow_mut() = Some(target);
+                Operation::Frame(frame) => {
+                    drawable_abi::SetContextFGFrame(frame);
                 }
                 Operation::Clip(mut rect) => {
                     context_abi::SetContextClipRect(&mut rect);
                 }
                 Operation::Clear => frame_abi::ClearDrawable(),
             }
+            self.0.context.as_ref().ForeGroundFrame
         }
+    }
+
+    fn retain_target(&self) -> ContextFrame {
+        ContextFrame::retain(NonNull::new(self.apply(Operation::Select)))
     }
 
     pub fn select(&self) {
@@ -84,14 +81,17 @@ impl ContextLease {
 
     /// Retain the registered target allocation before changing the context's frame.
     pub fn set_frame(&self, target: ContextFrame) {
-        self.apply(Operation::Frame(target));
+        self.apply(Operation::Frame(target.frame));
+        *self.0.target.borrow_mut() = Some(target);
     }
 
     pub fn set_clip(&self, rect: RECT) {
+        let _target = self.retain_target();
         self.apply(Operation::Clip(rect));
     }
 
     pub fn clear(&self) {
+        let _target = self.retain_target();
         self.apply(Operation::Clear);
     }
 }

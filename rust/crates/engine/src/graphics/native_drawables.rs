@@ -84,7 +84,12 @@ impl Drop for OwnedAllocation {
                 AllocationKind::Drawable(drawable) => {
                     super::gfxload::release_cel_data_now(drawable)
                 }
-                AllocationKind::Context(context) => super::context_abi::free_context(context),
+                AllocationKind::Context(context) => {
+                    if super::context_abi::_pCurContext == context.as_ptr() {
+                        super::context_abi::SetContext(std::ptr::null_mut());
+                    }
+                    super::context_abi::free_context(context);
+                }
             }
         }
     }

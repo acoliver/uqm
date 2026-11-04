@@ -63,7 +63,7 @@ pub(crate) mod engine {
         }
         let descriptor = crate::engine::battle::RaceDesc::load(world, species, false)
             .unwrap_or_else(|| panic!("master species {species}"));
-        let name = descriptor.catalog_name();
+        let name = descriptor.catalog_name().to_vec();
         let queue = &mut kernel.master_queue;
         let id = queue
             .alloc(CatalogEntry {
@@ -73,7 +73,7 @@ pub(crate) mod engine {
             .unwrap_or_else(|| panic!("master catalog capacity"));
         let mut before = queue.head();
         while let Some(other) = before {
-            if name < queue.get(other).descriptor.catalog_name() {
+            if name.as_slice() < queue.get(other).descriptor.catalog_name() {
                 break;
             }
             before = queue.succ(other);
