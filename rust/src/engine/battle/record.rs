@@ -499,7 +499,6 @@ impl Cx<'_> {
 #[derive(Debug)]
 pub struct RaceDesc {
     pub(super) raw: Box<RaceDescriptor>,
-    pub(super) resources: super::template::RaceResources,
 }
 impl RaceDesc {
     pub(super) fn empty() -> Self {
@@ -509,10 +508,7 @@ impl RaceDesc {
         Self::from_storage(Box::new(raw))
     }
     pub(super) fn from_storage(raw: Box<RaceDescriptor>) -> Self {
-        Self {
-            raw,
-            resources: super::template::RaceResources::default(),
-        }
+        Self { raw }
     }
     #[cfg(not(test))]
     pub(super) fn into_storage(self) -> Box<RaceDescriptor> {
@@ -824,6 +820,7 @@ mod zero_descriptor_tests {
 pub struct RaceDescriptor {
     #[cfg(not(test))]
     pub(crate) assets: Option<Box<super::ship_assets::ShipAssets>>,
+    pub(crate) resources: super::template::RaceResources,
     pub ship_info: SHIP_INFO,
     pub fleet: FLEET_STUFF,
     pub __bindgen_padding_0: [u16; 5usize],

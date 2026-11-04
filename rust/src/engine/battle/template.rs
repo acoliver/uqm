@@ -17,6 +17,20 @@ pub struct RaceResources {
     pub sounds: Option<&'static CStr>,
 }
 
+impl RaceResources {
+    pub const EMPTY: Self = Self {
+        strings: None,
+        icons: None,
+        melee_icon: None,
+        ship: [None; 3],
+        weapon: [None; 3],
+        special: [None; 3],
+        captain: None,
+        victory: None,
+        sounds: None,
+    };
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct RaceTemplate {
     pub info: Info,
@@ -68,9 +82,8 @@ impl RaceTemplate {
         raw.fleet.strength = self.fleet_strength;
         raw.fleet.known_loc = self.fleet_location;
         raw.race = Some(race);
-        let mut descriptor = RaceDesc::from_storage(raw);
-        descriptor.resources = r;
-        descriptor
+        raw.resources = r;
+        RaceDesc::from_storage(raw)
     }
 }
 
@@ -102,8 +115,12 @@ mod tests {
         .descriptor(&RACE);
         descriptor.raw.ship_info.icons_rsc = std::ptr::null();
         descriptor.raw.ship_data.ship_rsc = [std::ptr::null(); 3];
-        assert_eq!(descriptor.resources.strings, resources.strings);
-        assert_eq!(descriptor.resources.icons, resources.icons);
-        assert_eq!(descriptor.resources.ship, resources.ship);
+        assert_eq!(descriptor.raw.resources.strings, resources.strings);
+        assert_eq!(descriptor.raw.resources.icons, resources.icons);
+        assert_eq!(descriptor.raw.resources.ship, resources.ship);
+        let descriptor = RaceDesc::from_legacy(descriptor.into_legacy());
+        assert_eq!(descriptor.raw.resources.strings, resources.strings);
+        assert_eq!(descriptor.raw.resources.icons, resources.icons);
+        assert_eq!(descriptor.raw.resources.ship, resources.ship);
     }
 }

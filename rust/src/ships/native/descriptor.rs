@@ -5,6 +5,7 @@ impl RaceDescriptor {
     pub const EMPTY: Self = Self {
         #[cfg(not(test))]
         assets: None,
+        resources: crate::engine::battle::template::RaceResources::EMPTY,
         ship_info: SHIP_INFO {
             ship_flags: 0,
             ship_cost: 0,

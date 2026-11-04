@@ -87,13 +87,13 @@ impl RaceDesc {
 
     fn initialize_icons(&mut self) -> Option<Vec<u8>> {
         let info = &mut self.raw.ship_info;
-        if let Some(key) = self.resources.icons {
+        if let Some(key) = self.raw.resources.icons {
             info.icons = crate::engine::battle::frames::load_graphic(key);
         }
-        if let Some(key) = self.resources.melee_icon {
+        if let Some(key) = self.raw.resources.melee_icon {
             info.melee_icon = crate::engine::battle::frames::load_graphic(key);
         }
-        if let Some(key) = self.resources.strings {
+        if let Some(key) = self.raw.resources.strings {
             let (strings, name) = load_names(key);
             info.race_strings = strings;
             name
@@ -104,13 +104,13 @@ impl RaceDesc {
 
     fn initialize_battle_assets(&mut self) -> bool {
         let data = &mut self.raw.ship_data;
-        let Some(ship) = load_animation_set(self.resources.ship) else {
+        let Some(ship) = load_animation_set(self.raw.resources.ship) else {
             return false;
         };
         data.ship = ship;
         for (keys, frames) in [
-            (self.resources.weapon, &mut data.weapon),
-            (self.resources.special, &mut data.special),
+            (self.raw.resources.weapon, &mut data.weapon),
+            (self.raw.resources.special, &mut data.special),
         ] {
             if keys[0].is_some() {
                 let Some(loaded) = load_animation_set(keys) else {
@@ -124,19 +124,19 @@ impl RaceDesc {
 
     fn initialize_battle_audio_and_captain(&mut self) -> bool {
         let data = &mut self.raw.ship_data;
-        if let Some(key) = self.resources.captain {
+        if let Some(key) = self.raw.resources.captain {
             data.captain_control.background = crate::engine::battle::frames::load_graphic(key);
             if data.captain_control.background.is_null() {
                 return false;
             }
         }
-        if let Some(key) = self.resources.victory {
+        if let Some(key) = self.raw.resources.victory {
             data.victory_ditty = load_music(key);
             if data.victory_ditty.is_null() {
                 return false;
             }
         }
-        if let Some(key) = self.resources.sounds {
+        if let Some(key) = self.raw.resources.sounds {
             data.ship_sounds = load_sounds(key);
             if data.ship_sounds.is_null() {
                 return false;
