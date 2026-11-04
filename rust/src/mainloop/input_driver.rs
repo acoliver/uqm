@@ -1,77 +1,60 @@
 //! The application implementation of the kernel's typed input port.
 
+#[cfg(not(test))]
 use super::live::*;
+#[cfg(not(test))]
 use std::ptr;
 
-unsafe fn run_loop(reset: bool, step: &mut InputLoop<'_, '_, '_, '_>) {
-    // SAFETY: the native driver owns game-thread input for this synchronous loop.
-    unsafe {
-        if reset {
-            step.legacy(|| FlushInput());
+#[cfg(not(test))]
+fn run_loop(reset: bool, step: &mut InputLoop<'_, '_, '_, '_>) {
+    if reset {
+        // SAFETY: the native driver owns game-thread input for this synchronous loop.
+        step.legacy(|| unsafe { FlushInput() });
+    }
+    step.legacy(crate::mainloop::input_frame::rust_begin_input_loop);
+    loop {
+        // SAFETY: event dispatch and task switching run on the initialized game thread.
+        step.legacy(|| unsafe {
+            crate::callback::ffi::Async_process();
+            crate::graphics::sdl::lifecycle_abi::TFB_ProcessEvents();
+            crate::mainloop::lifecycle_abi::process_utility_keys();
+            super::yield_input_loop(|| crate::threading::legacy_abi::TaskSwitch());
+        });
+        if step
+            .input(crate::engine::observe::InputView::BeforeUpdate)
+            .stop
+        {
+            break;
         }
-        step.legacy(|| crate::mainloop::input_frame::rust_begin_input_loop());
-        loop {
-            step.legacy(|| {
-                crate::callback::ffi::Async_process();
-                crate::graphics::sdl::lifecycle_abi::TFB_ProcessEvents();
-                crate::mainloop::lifecycle_abi::process_utility_keys();
-                super::yield_input_loop(|| crate::threading::legacy_abi::TaskSwitch());
-            });
-            if step
-                .input(crate::engine::observe::InputView::BeforeUpdate)
-                .stop
-            {
-                break;
-            }
-            step.legacy(|| UpdateInputState());
-            if step
-                .input(crate::engine::observe::InputView::AfterUpdate)
-                .stop
-            {
-                break;
-            }
-            let flags = menu_sound_flags(&ptr::addr_of!(PulsedInputState).read());
-            let mut sound = step.menu_sounds();
-            step.legacy(|| {
-                if !sound.is_null() && flags & (SOUND_0 | SOUND_1) != 0 {
-                    if flags & SOUND_1 != 0 {
-                        sound =
-                            crate::strings::string_table::SetAbsStringTableIndex(sound.cast(), 1)
-                                .cast();
-                    }
-                    crate::ui::settings::PlaySoundEffect(
-                        sound.cast(),
-                        0,
-                        crate::navigation::abi::SoundPosition {
-                            positional: 0,
-                            x: 0,
-                            y: 0,
-                        },
-                        ptr::null_mut(),
-                        0,
-                    );
-                }
-                if let Some(callback) = INPUT_CALLBACK {
-                    callback();
-                }
-            });
-            let keep = step.frame();
-            if !step.complete(keep) {
-                break;
-            }
+        // SAFETY: the driver is the sole writer of this input frame.
+        step.legacy(|| unsafe { UpdateInputState() });
+        if step
+            .input(crate::engine::observe::InputView::AfterUpdate)
+            .stop
+        {
+            break;
         }
-        if reset {
-            step.legacy(|| FlushInput());
+        step.play_menu_sound();
+        step.input_hook();
+        let keep = step.frame();
+        if !step.complete(keep) {
+            break;
         }
+    }
+    if reset {
+        // SAFETY: the synchronous loop still owns initialized input on this thread.
+        step.legacy(|| unsafe { FlushInput() });
     }
 }
 
+#[cfg(not(test))]
 struct InputLoop<'a, 'b, 'c, 'd> {
     cx: &'a mut crate::engine::battle::Cx<'b>,
     io: &'a mut crate::engine::observe::Io<'c>,
     frame: &'a mut crate::engine::input::Frame<'d>,
 }
 
+#[cfg(not(test))]
 impl InputLoop<'_, '_, '_, '_> {
     fn input(
         &mut self,
@@ -84,8 +67,39 @@ impl InputLoop<'_, '_, '_, '_> {
             .with_legacy(|| self.io.observer.input_admitted(&view, &campaign))
     }
 
-    fn menu_sounds(&mut self) -> crate::graphics::native_abi::STRING {
-        self.cx.kernel.menu_sounds
+    fn play_menu_sound(&mut self) {
+        let mut sound = self.cx.kernel.menu_sounds;
+        // SAFETY: the game thread owns the input snapshot and initialized sound resources.
+        self.legacy(|| unsafe {
+            let flags = menu_sound_flags(&ptr::addr_of!(PulsedInputState).read());
+            if !sound.is_null() && flags & (SOUND_0 | SOUND_1) != 0 {
+                if flags & SOUND_1 != 0 {
+                    sound = crate::strings::string_table::SetAbsStringTableIndex(sound.cast(), 1)
+                        .cast();
+                }
+                crate::ui::settings::PlaySoundEffect(
+                    sound.cast(),
+                    0,
+                    crate::navigation::abi::SoundPosition {
+                        positional: 0,
+                        x: 0,
+                        y: 0,
+                    },
+                    ptr::null_mut(),
+                    0,
+                );
+            }
+        });
+    }
+
+    fn input_hook(&mut self) {
+        // SAFETY: installation and invocation are serialized on the game thread.
+        let callback = unsafe { INPUT_CALLBACK };
+        if let Some(callback) = callback {
+            let io = &mut self.io;
+            // SAFETY: the installed function remains valid until its owner removes it.
+            self.cx.with_legacy(|| unsafe { callback(io) });
+        }
     }
 
     fn frame(&mut self) -> bool {
@@ -104,10 +118,12 @@ impl InputLoop<'_, '_, '_, '_> {
     }
 }
 
+#[cfg(not(test))]
 pub struct NativeInputRuntime {
     pub observer: Option<std::sync::Arc<crate::automation::AutomationObserver>>,
 }
 
+#[cfg(not(test))]
 impl crate::engine::input::InputRuntime for NativeInputRuntime {
     fn observer(
         &self,
@@ -126,8 +142,7 @@ impl crate::engine::input::InputRuntime for NativeInputRuntime {
         reset: bool,
         frame: &mut crate::engine::input::Frame<'_>,
     ) {
-        // SAFETY: the application runs this driver on the game thread with initialized input.
-        unsafe { run_loop(reset, &mut InputLoop { cx, io, frame }) }
+        run_loop(reset, &mut InputLoop { cx, io, frame });
     }
 
     fn battle_input(&self, input: &crate::engine::battle::input::InputContext) -> u8 {

@@ -75,7 +75,7 @@ pub(crate) mod live {
     static mut GESTALT_KEYS: bool = false;
     pub(super) static mut SOUND_0: u16 = 0;
     pub(super) static mut SOUND_1: u16 = 0;
-    pub(super) static mut INPUT_CALLBACK: Option<unsafe extern "C" fn()> = None;
+    pub(super) static mut INPUT_CALLBACK: Option<crate::engine::input::InputFrameHook> = None;
 
     /// # Safety
     /// Automation calls on the game thread with externally supplied input indices.
@@ -187,10 +187,9 @@ pub(crate) mod live {
 
     /// # Safety
     /// Callback must outlive its installation, and must not replace an active callback.
-    #[no_mangle]
-    pub unsafe extern "C" fn SetInputCallback(
-        callback: Option<unsafe extern "C" fn()>,
-    ) -> Option<unsafe extern "C" fn()> {
+    pub unsafe fn SetInputCallback(
+        callback: Option<crate::engine::input::InputFrameHook>,
+    ) -> Option<crate::engine::input::InputFrameHook> {
         let old = INPUT_CALLBACK;
         assert!(old.is_none() || callback.is_none());
         INPUT_CALLBACK = callback;
@@ -326,7 +325,6 @@ pub(crate) mod live {
         result
     }
 }
-#[cfg(not(test))]
 #[path = "input_driver.rs"]
 mod driver;
 #[cfg(not(test))]

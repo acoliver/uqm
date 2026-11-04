@@ -3,6 +3,8 @@
 use super::{battle::input::InputContext, battle::Cx, observe::Io};
 use std::rc::Rc;
 
+pub type InputFrameHook = unsafe fn(&mut Io<'_>);
+
 pub type Frame<'a> = dyn FnMut(&mut Cx<'_>, &mut Io<'_>) -> bool + 'a;
 
 pub trait InputRuntime {

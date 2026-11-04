@@ -74,7 +74,7 @@ unsafe fn animate_power_lines(menu: *mut MENU_STATE) {
     }
 }
 
-unsafe extern "C" fn on_input_frame() {
+unsafe fn on_input_frame(_io: &mut crate::engine::observe::Io<'_>) {
     let old = SetContext(Kernel::current().read(|owner| owner.space_context));
     animate_power_lines(ptr::null_mut());
     SetContext(old);

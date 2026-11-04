@@ -32,6 +32,7 @@ pub(crate) mod runtime {
     use super::super::intro::{parse_text_lines, rgb15, BLACK_COLOR, WANT_PIXMAP};
     use super::*;
 
+    use crate::engine::observe::CheckpointView;
     use std::ffi::{c_char, c_void};
     use std::ptr;
 
@@ -355,7 +356,7 @@ pub(crate) mod runtime {
 
     static mut VICTORY_CREDITS_ACTIVE: bool = false;
 
-    unsafe fn process_frame() {
+    unsafe fn process_frame(io: &mut crate::engine::observe::Io<'_>) {
         let now = GetTimeCounter();
         if now < NEXT_TIME {
             return;
@@ -382,9 +383,7 @@ pub(crate) mod runtime {
             }
             CREDITS_RUNNING = (CREDITS_RATE != 0) as BOOLEAN;
             if CREDITS_RUNNING == 0 && VICTORY_CREDITS_ACTIVE {
-                crate::app::observe::checkpoint(
-                    crate::engine::observe::CheckpointView::CreditsCompleted,
-                );
+                io.observer.checkpoint(&CheckpointView::CreditsCompleted);
             }
         } else if CREDITS_RUNNING == 0 {
             CREDITS_RUNNING = 1;
@@ -570,8 +569,8 @@ pub(crate) mod runtime {
         1
     }
 
-    unsafe extern "C" fn on_input_frame() {
-        process_frame();
+    unsafe fn on_input_frame(io: &mut crate::engine::observe::Io<'_>) {
+        process_frame(io);
     }
 
     /// # Safety

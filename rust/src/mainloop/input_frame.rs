@@ -58,7 +58,7 @@ pub fn drain_committed_draws() {
 ///
 /// Nested menus often draw their initial state immediately before calling
 /// `DoInput`; the outer callback cannot return while that nested loop runs.
-pub extern "C" fn rust_begin_input_loop() {
+pub fn rust_begin_input_loop() {
     #[cfg(not(test))]
     // SAFETY: Called on the game/main thread after the owner has completed the
     // draw transaction that establishes this input loop's initial state.

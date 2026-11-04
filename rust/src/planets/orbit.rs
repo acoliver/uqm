@@ -415,7 +415,7 @@ pub(crate) mod live {
         1
     }
 
-    unsafe extern "C" fn input_frame() {
+    unsafe fn input_frame(_io: &mut crate::engine::observe::Io<'_>) {
         RotatePlanetSphere(1);
     }
 
