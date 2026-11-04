@@ -10,6 +10,7 @@ pub(crate) mod drawing;
 mod flight;
 #[path = "solarsys/lifecycle.rs"]
 pub(crate) mod lifecycle;
+pub use lifecycle::P_SOLAR_SYS_STATE;
 #[path = "solarsys/resources.rs"]
 pub(crate) mod resources;
 

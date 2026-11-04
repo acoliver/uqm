@@ -1019,9 +1019,7 @@ pub const EVENT_TYPE_RELATIVE_EVENT: EVENT_TYPE = 1;
 pub type EVENT_TYPE = ::std::os::raw::c_uint;
 
 #[cfg(not(test))]
-
-#[cfg(not(test))]
-pub use crate::navigation::events::live::dispatch_event;
+pub use crate::navigation::events::live::{add_event, dispatch_event};
 
 #[cfg(not(test))]
 pub use crate::time::clock_abi::live::MoveGameClockDays;
@@ -1033,8 +1031,7 @@ pub use crate::time::clock_abi::live::LockGameClock;
 pub use crate::time::clock_abi::live::UnlockGameClock;
 
 pub use crate::graphics::native_abi::Color;
-#[cfg(not(test))]
-pub use crate::time::clock_abi::live::GameClockRunning;
+
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct uio_Handle {

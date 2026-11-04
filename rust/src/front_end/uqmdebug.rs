@@ -292,15 +292,16 @@ mod runtime {
 
     /// # Safety
     /// Must run on the game thread. The game clock and event queue must be live.
-    pub unsafe fn forward_to_next_event(skip_hee: BOOLEAN) {
-        if GameClockRunning() == 0 {
+    pub unsafe fn forward_to_next_event(cx: &mut crate::engine::battle::Cx<'_>, skip_hee: BOOLEAN) {
+        if crate::time::clock_bridge::rust_clock_is_running(cx.world) == 0 {
             return;
         }
         LockGameClock();
         let mut done = skip_hee == 0;
         let mut target = None;
         loop {
-            let current = World::current().read(|world| {
+            let current = (|| {
+                let world = &*cx.world;
                 if target.is_none() {
                     let events = world.clock.events_ref();
                     let event = events.get(events.head()?);
@@ -311,12 +312,12 @@ mod runtime {
                 }
                 let clock = &world.data.game.game_clock;
                 Some((clock.year_index, clock.month_index, clock.day_index))
-            });
+            })();
             let Some(current) = current else {
                 return;
             };
             if current < target.expect("event selected before calendar comparison") {
-                MoveGameClockDays(1);
+                cx.with_legacy(|| MoveGameClockDays(1));
             } else if done {
                 break;
             } else {
@@ -508,9 +509,14 @@ mod runtime {
 
     /// # Safety
     /// Must run on the game thread. The callback must accept every star and its context.
-    pub unsafe fn for_all_stars<T>(callback: unsafe fn(*mut STAR_DESC, &mut T), arg: &mut T) {
+    pub unsafe fn for_all_stars<T>(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        callback: unsafe fn(&mut crate::engine::battle::Cx<'_>, *mut STAR_DESC, &mut T),
+        arg: &mut T,
+    ) {
         for i in 0..NUM_SOLAR_SYSTEMS as usize {
             callback(
+                cx,
                 ptr::addr_of_mut!(starmap_array).cast::<STAR_DESC>().add(i),
                 arg,
             );
@@ -519,18 +525,27 @@ mod runtime {
     /// # Safety
     /// `system` and `star` must be the active system. Callback and context must be valid.
     pub unsafe fn for_all_planets<T>(
+        cx: &mut crate::engine::battle::Cx<'_>,
         star: *mut STAR_DESC,
         system: *mut SOLARSYS_STATE,
-        callback: unsafe fn(*mut STAR_DESC, *mut SOLARSYS_STATE, *mut PLANET_DESC, &mut T),
+        callback: unsafe fn(
+            &mut crate::engine::battle::Cx<'_>,
+            *mut STAR_DESC,
+            *mut SOLARSYS_STATE,
+            *mut PLANET_DESC,
+            &mut T,
+        ),
         arg: &mut T,
     ) {
         assert!(
-            (**World::current()).star_pointer(crate::planets::starmap::current_catalog())
+            cx.world
+                .star_pointer(crate::planets::starmap::current_catalog())
                 == star.cast()
         );
         assert!(pSolarSysState == system);
         for i in 0..(*system).SunDesc[0].NumPlanets as usize {
             callback(
+                cx,
                 star,
                 system,
                 ptr::addr_of_mut!((*system).PlanetDesc[i]),
@@ -541,10 +556,12 @@ mod runtime {
     /// # Safety
     /// The planet and system must be active and their generated moon records valid.
     pub unsafe fn for_all_moons<T>(
+        cx: &mut crate::engine::battle::Cx<'_>,
         star: *mut STAR_DESC,
         system: *mut SOLARSYS_STATE,
         planet: *mut PLANET_DESC,
         callback: unsafe fn(
+            &mut crate::engine::battle::Cx<'_>,
             *mut STAR_DESC,
             *mut SOLARSYS_STATE,
             *mut PLANET_DESC,
@@ -556,6 +573,7 @@ mod runtime {
         assert!(pSolarSysState == system);
         for i in 0..(*planet).NumPlanets as usize {
             callback(
+                cx,
                 star,
                 system,
                 planet,
@@ -567,7 +585,10 @@ mod runtime {
     /// # Safety
     /// Must run on the game thread. All supplied callbacks and their context must
     /// remain valid throughout universe generation, which can change game state.
-    pub unsafe fn universe_recurse<T>(arg: &mut UniverseRecurseArg<'_, T>) {
+    pub unsafe fn universe_recurse<T>(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        arg: &mut UniverseRecurseArg<'_, T>,
+    ) {
         if arg.system_func_pre.is_none()
             && arg.system_func_post.is_none()
             && arg.planet_func_pre.is_none()
@@ -577,18 +598,23 @@ mod runtime {
             return;
         }
         LockGameClock();
-        let saved_activity = WorldData::current().read(|owner| owner.game.current_activity);
+        let saved_activity = cx.world.activity();
         DISABLE_INTERACTIVITY = 1;
-        for_all_stars(star_recurse, arg);
+        for_all_stars(cx, star_recurse, arg);
         DISABLE_INTERACTIVITY = 0;
-        (**WorldData::current()).game.current_activity = saved_activity;
+        cx.world.set_activity(saved_activity);
         UnlockGameClock();
     }
-    unsafe fn star_recurse<T>(star: *mut STAR_DESC, recurse: &mut UniverseRecurseArg<'_, T>) {
+    unsafe fn star_recurse<T>(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        star: *mut STAR_DESC,
+        recurse: &mut UniverseRecurseArg<'_, T>,
+    ) {
         let old_system = pSolarSysState;
-        let old_star =
-            (**World::current()).star_pointer(crate::planets::starmap::current_catalog());
-        (**World::current()).select_star(
+        let old_star = cx
+            .world
+            .star_pointer(crate::planets::starmap::current_catalog());
+        cx.world.select_star(
             (star.cast::<crate::engine::world::CStarDesc>()).as_ref(),
             crate::planets::starmap::current_catalog(),
         );
@@ -602,56 +628,59 @@ mod runtime {
         system.SunDesc[0].location = POINT { x: 0, y: 0 };
         system.genFuncs = (getGenerateFunctions((*star).Index)).cast();
         pSolarSysState = &mut system;
-        ((*system.genFuncs).generatePlanets.unwrap())(&mut system);
+        cx.with_legacy(|| ((*system.genFuncs).generatePlanets.unwrap())(&mut system));
         if let Some(cb) = recurse.system_func_pre {
-            cb(star, &system, recurse.arg);
+            cx.with_legacy(|| cb(star, &system, recurse.arg));
         }
         if recurse.planet_func_pre.is_some()
             || recurse.planet_func_post.is_some()
             || recurse.moon_func.is_some()
         {
-            for_all_planets(star, &mut system, planet_recurse, recurse);
+            for_all_planets(cx, star, &mut system, planet_recurse, recurse);
         }
         if let Some(cb) = recurse.system_func_post {
-            cb(star, &system, recurse.arg);
+            cx.with_legacy(|| cb(star, &system, recurse.arg));
         }
         pSolarSysState = old_system;
-        (**World::current()).select_star(
+        cx.world.select_star(
             (old_star).as_ref(),
             crate::planets::starmap::current_catalog(),
         );
     }
     unsafe fn planet_recurse<T>(
+        cx: &mut crate::engine::battle::Cx<'_>,
         star: *mut STAR_DESC,
         system: *mut SOLARSYS_STATE,
         planet: *mut PLANET_DESC,
         recurse: &mut UniverseRecurseArg<'_, T>,
     ) {
         assert!(
-            (**World::current()).star_pointer(crate::planets::starmap::current_catalog())
+            cx.world
+                .star_pointer(crate::planets::starmap::current_catalog())
                 == star.cast()
         );
         assert!(pSolarSysState == system);
         (*planet).pPrevDesc = ptr::addr_of_mut!((*system).SunDesc[0]);
         if let Some(cb) = recurse.planet_func_pre {
             (*system).pOrbitalDesc = planet;
-            DoPlanetaryAnalysis(ptr::addr_of_mut!((*system).SysInfo), planet);
-            ((*(*system).genFuncs).generateOrbital.unwrap())(system, planet);
-            cb(planet, recurse.arg);
+            cx.with_legacy(|| DoPlanetaryAnalysis(ptr::addr_of_mut!((*system).SysInfo), planet));
+            ((*(*system).genFuncs).generateOrbital.unwrap())(cx, system, planet);
+            cx.with_legacy(|| cb(planet, recurse.arg));
         }
         if recurse.moon_func.is_some() {
             (*SysGenRNG).reseed((*planet).rand_seed);
-            ((*(*system).genFuncs).generateMoons.unwrap())(system, planet);
-            for_all_moons(star, system, planet, moon_recurse, recurse);
+            cx.with_legacy(|| ((*(*system).genFuncs).generateMoons.unwrap())(system, planet));
+            for_all_moons(cx, star, system, planet, moon_recurse, recurse);
         }
         if let Some(cb) = recurse.planet_func_post {
             (*system).pOrbitalDesc = planet;
-            DoPlanetaryAnalysis(ptr::addr_of_mut!((*system).SysInfo), planet);
-            ((*(*system).genFuncs).generateOrbital.unwrap())(system, planet);
-            cb(planet, recurse.arg);
+            cx.with_legacy(|| DoPlanetaryAnalysis(ptr::addr_of_mut!((*system).SysInfo), planet));
+            ((*(*system).genFuncs).generateOrbital.unwrap())(cx, system, planet);
+            cx.with_legacy(|| cb(planet, recurse.arg));
         }
     }
     unsafe fn moon_recurse<T>(
+        cx: &mut crate::engine::battle::Cx<'_>,
         star: *mut STAR_DESC,
         system: *mut SOLARSYS_STATE,
         planet: *mut PLANET_DESC,
@@ -659,7 +688,8 @@ mod runtime {
         recurse: &mut UniverseRecurseArg<'_, T>,
     ) {
         assert!(
-            (**World::current()).star_pointer(crate::planets::starmap::current_catalog())
+            cx.world
+                .star_pointer(crate::planets::starmap::current_catalog())
                 == star.cast()
         );
         assert!(pSolarSysState == system);
@@ -669,10 +699,10 @@ mod runtime {
             if (*moon).data_index != HIERARCHY_STARBASE as BYTE
                 && (*moon).data_index != SA_MATRA as BYTE
             {
-                DoPlanetaryAnalysis(ptr::addr_of_mut!((*system).SysInfo), moon);
+                cx.with_legacy(|| DoPlanetaryAnalysis(ptr::addr_of_mut!((*system).SysInfo), moon));
             }
-            ((*(*system).genFuncs).generateOrbital.unwrap())(system, moon);
-            cb(moon, recurse.arg);
+            ((*(*system).genFuncs).generateOrbital.unwrap())(cx, system, moon);
+            cx.with_legacy(|| cb(moon, recurse.arg));
         }
     }
 
@@ -681,7 +711,7 @@ mod runtime {
     }
     /// # Safety
     /// Must run on the game thread with an open output stream.
-    pub unsafe fn dump_universe(out: *mut FILE) {
+    pub unsafe fn dump_universe(cx: &mut crate::engine::battle::Cx<'_>, out: *mut FILE) {
         let mut context = DumpUniverseArg { out };
         let mut recurse = UniverseRecurseArg {
             system_func_pre: Some(dump_system_callback),
@@ -691,11 +721,11 @@ mod runtime {
             moon_func: Some(dump_moon_callback),
             arg: &mut context,
         };
-        universe_recurse(&mut recurse);
+        universe_recurse(cx, &mut recurse);
     }
     unsafe fn write_generation_file(
         name: *const c_char,
-        callback: unsafe fn(*mut FILE),
+        callback: impl FnOnce(*mut FILE),
         message: *const c_char,
     ) {
         let out = libc::fopen(name, c"w".as_ptr());
@@ -715,10 +745,10 @@ mod runtime {
     }
     /// # Safety
     /// Must run on the game thread; generation can change game state.
-    pub unsafe fn dump_universe_to_file() {
+    pub unsafe fn dump_universe_to_file(cx: &mut crate::engine::battle::Cx<'_>) {
         write_generation_file(
             c"PlanetInfo".as_ptr(),
-            dump_universe,
+            |out| dump_universe(cx, out),
             c"*** Star dump complete. The game may be in an undefined state.\n".as_ptr(),
         );
     }
@@ -1015,7 +1045,7 @@ mod runtime {
     }
     /// # Safety
     /// Must run on the game thread with an open output stream.
-    pub unsafe fn tally_resources(out: *mut FILE) {
+    pub unsafe fn tally_resources(cx: &mut crate::engine::battle::Cx<'_>, out: *mut FILE) {
         let mut context = TallyResourcesArg {
             out,
             mineral_count: 0,
@@ -1029,14 +1059,14 @@ mod runtime {
             moon_func: Some(tally_moon_callback),
             arg: &mut context,
         };
-        universe_recurse(&mut recurse);
+        universe_recurse(cx, &mut recurse);
     }
     /// # Safety
     /// Must run on the game thread; generation can change game state.
-    pub unsafe fn tally_resources_to_file() {
+    pub unsafe fn tally_resources_to_file(cx: &mut crate::engine::battle::Cx<'_>) {
         write_generation_file(
             c"ResourceTally".as_ptr(),
-            tally_resources,
+            |out| tally_resources(cx, out),
             c"*** Resource tally complete. The game may be in an undefined state.\n".as_ptr(),
         );
     }

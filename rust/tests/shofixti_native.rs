@@ -393,7 +393,7 @@ fn darts_use_next_location_exact_facing_offset_speed_and_failure_count() {
                 (*dart).current.location.y,
                 origin_y.wrapping_sub(vy >> VELOCITY_SHIFT)
             );
-            let mut failure = 1usize as *mut std::ffi::c_void;
+            let mut failure = std::ptr::dangling_mut::<std::ffi::c_void>();
             with_rng(31, 0, || {
                 assert_eq!(ship.fire(std::slice::from_mut(&mut failure)), 1)
             });

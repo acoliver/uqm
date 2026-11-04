@@ -223,9 +223,11 @@ unsafe fn scenes(h: &mut Harness) {
         uqm_rust::engine::World::current().write(|world| {
             set_game_state(world, uqm_rust::engine::StoryKey::MOONBASE_DESTROYED, 0)
         });
-        assert!(GENERATE_SOL_FUNCTIONS.generate_orbital.unwrap()(
-            system, world
-        ));
+        assert!(uqm_rust::app::bridge::enter(|cx| GENERATE_SOL_FUNCTIONS
+            .generate_orbital
+            .unwrap()(
+            cx, system, world
+        )));
         let info = &(*system).SysInfo.PlanetInfo;
         assert!(!info.LanderFont.is_null());
         assert!(!info.LanderFontEff.is_null());

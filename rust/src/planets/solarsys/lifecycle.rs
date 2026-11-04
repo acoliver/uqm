@@ -330,7 +330,7 @@ pub(super) unsafe fn reset_solar_sys() {
 }
 
 unsafe fn run_planet_orbit(cx: &mut Cx<'_>, io: &mut Io<'_>) {
-    if !cx.with_legacy(|| prepare_planet_orbit()) {
+    if !prepare_planet_orbit(cx) {
         return;
     }
     if !(*system()).TopoFrame.is_null() {
@@ -340,31 +340,36 @@ unsafe fn run_planet_orbit(cx: &mut Cx<'_>, io: &mut Io<'_>) {
     finish_planet_orbit(cx);
 }
 
-unsafe fn prepare_planet_orbit() -> bool {
+unsafe fn prepare_planet_orbit(cx: &mut Cx<'_>) -> bool {
     let state = system();
-    if (*state).InIpFlight != 0 {
-        free_solar_sys();
-        if worldIsMoon(state, (*state).pOrbitalDesc) {
-            (**glob()).game.ship_stamp.origin = saved_point((*(*state).pOrbitalDesc).image.origin);
-        } else {
-            let (width, height) = sis_dimensions();
-            (**glob()).game.ship_stamp.origin.x = (width >> 1) as _;
-            (**glob()).game.ship_stamp.origin.y = (height >> 1) as _;
+    cx.with_legacy(|| {
+        if (*state).InIpFlight != 0 {
+            free_solar_sys();
+            if worldIsMoon(state, (*state).pOrbitalDesc) {
+                (**glob()).game.ship_stamp.origin =
+                    saved_point((*(*state).pOrbitalDesc).image.origin);
+            } else {
+                let (width, height) = sis_dimensions();
+                (**glob()).game.ship_stamp.origin.x = (width >> 1) as _;
+                (**glob()).game.ship_stamp.origin.y = (height >> 1) as _;
+            }
         }
-    }
 
-    World::current().write(|world| ffi::get_planet_info(world));
-    ((*(*state).genFuncs).generateOrbital.unwrap())(state, (*state).pOrbitalDesc);
-    (**Kernel::current()).last_activity &= !(CHECK_LOAD | CHECK_RESTART);
-    if glob().read(|owner| owner.game.current_activity)
-        & (CHECK_ABORT | CHECK_LOAD | START_ENCOUNTER)
-        != 0
-        || glob().read(|owner| owner.flagship.crew_enlisted) == c::COUNT::MAX
-        || World::current().read(|world| world.story_state(StoryKey::CHMMR_BOMB_STATE)) == 2
-    {
-        return false;
-    }
-    true
+        World::current().write(|world| ffi::get_planet_info(world));
+    });
+    ((*(*state).genFuncs).generateOrbital.unwrap())(cx, state, (*state).pOrbitalDesc);
+    cx.with_legacy(|| {
+        (**Kernel::current()).last_activity &= !(CHECK_LOAD | CHECK_RESTART);
+        if glob().read(|owner| owner.game.current_activity)
+            & (CHECK_ABORT | CHECK_LOAD | START_ENCOUNTER)
+            != 0
+            || glob().read(|owner| owner.flagship.crew_enlisted) == c::COUNT::MAX
+            || World::current().read(|world| world.story_state(StoryKey::CHMMR_BOMB_STATE)) == 2
+        {
+            return false;
+        }
+        true
+    })
 }
 
 unsafe fn finish_planet_orbit(cx: &mut Cx<'_>) {

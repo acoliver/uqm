@@ -323,8 +323,9 @@ fn hyperspace_movement_releases_world_before_fuel_queries() {
 #[serial_test::serial]
 fn campaign_events_schedule_and_dispatch_using_the_existing_world() {
     use uqm_rust::engine::StoryKey;
+    use uqm_rust::navigation::abi::add_event;
     use uqm_rust::navigation::abi::{
-        add_event, dispatch_event, ARILOU_ENTRANCE_EVENT, ARILOU_EXIT_EVENT, ARILOU_UMGAH_CHECK,
+        dispatch_event, ARILOU_ENTRANCE_EVENT, ARILOU_EXIT_EVENT, ARILOU_UMGAH_CHECK,
     };
     unsafe extern "C" {
         fn GameClockTick();
@@ -350,7 +351,7 @@ fn campaign_events_schedule_and_dispatch_using_the_existing_world() {
                 );
                 assert_eq!(next.func_index, ARILOU_EXIT_EVENT as u8);
             });
-            add_event(1, 0, 0, 0, ARILOU_UMGAH_CHECK as u8);
+            World::current().write(|world| add_event(world, 1, 0, 0, 0, ARILOU_UMGAH_CHECK as u8));
             assert_eq!(
                 World::current().read(|world| world.story_state(StoryKey::ARILOU_CHECKED_UMGAH)),
                 2
@@ -362,7 +363,7 @@ fn campaign_events_schedule_and_dispatch_using_the_existing_world() {
                 world.data.game.game_clock.tick_count = 1;
                 world.data.game.game_clock.day_in_ticks = 1;
             });
-            add_event(1, 0, 1, 0, ARILOU_UMGAH_CHECK as u8);
+            World::current().write(|world| add_event(world, 1, 0, 1, 0, ARILOU_UMGAH_CHECK as u8));
             GameClockTick();
             World::current().read(|world| {
                 assert_eq!(world.data.game.game_clock.day_index, 2);

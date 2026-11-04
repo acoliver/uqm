@@ -142,13 +142,6 @@ pub(crate) mod live {
     pub extern "C" fn UnlockGameClock() {
         rust_clock_unlock();
     }
-    /// # Safety
-    /// Called with the initialized clock.
-    #[no_mangle]
-    pub extern "C" fn GameClockRunning() -> u32 {
-        // SAFETY: this legacy clock query borrows the published context only for its read.
-        unsafe { crate::app::bridge::enter(|cx| rust_clock_is_running(cx.world)) as u32 }
-    }
 }
 
 #[cfg(test)]

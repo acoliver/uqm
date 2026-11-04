@@ -104,7 +104,9 @@ fn advance_fleets(world: &mut World, mut on_arrival: impl FnMut(&mut World, u8))
 
 #[cfg(not(test))]
 pub(crate) mod live {
-    pub(crate) unsafe fn add_event(
+    /// # Safety
+    /// Immediate events may call legacy game services; the caller owns the live campaign.
+    pub unsafe fn add_event(
         world: &mut crate::engine::World,
         kind: u32,
         month: u16,

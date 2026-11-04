@@ -142,11 +142,11 @@ pub unsafe fn set_encounter_group(value: u8) {
 ///
 /// # Safety
 /// Game thread, with the available-race and escort queues initialised.
-pub unsafe fn rebel_escort_feasible() -> bool {
-    crate::app::bridge::enter(|cx| {
-        crate::battle::build_native::escort_feasibility(cx.world, u16::from(ship::YEHAT_REBEL_SHIP))
+pub fn rebel_escort_feasible(world: &crate::engine::World) -> bool {
+    {
+        crate::battle::build_native::escort_feasibility(world, u16::from(ship::YEHAT_REBEL_SHIP))
             != 0
-    })
+    }
 }
 
 /// The beast report has no mask, but still loads the lander font.
@@ -194,14 +194,12 @@ pub const SLYLANDRO_HOME_CONVERSATION: u32 = 23;
 ///
 /// # Safety
 /// Game thread, inside a planet orbit.
-pub unsafe fn init_communication(which_comm: u32) {
-    crate::app::bridge::enter(|cx| {
-        let mut observer = cx.kernel.input_runtime().observer();
-        let mut io = crate::engine::observe::Io {
-            observer: &mut *observer,
-        };
-        crate::comm::dispatch::init_communication(cx, &mut io, which_comm);
-    });
+pub unsafe fn init_communication(cx: &mut crate::engine::battle::Cx<'_>, which_comm: u32) {
+    let mut observer = cx.kernel.input_runtime().observer();
+    let mut io = crate::engine::observe::Io {
+        observer: &mut *observer,
+    };
+    crate::comm::dispatch::init_communication(cx, &mut io, which_comm);
 }
 
 /// `YEHAT_CONVERSATION` (`commglue.h`) and `YEHAT_SHIP` (`races.h`).
@@ -216,10 +214,8 @@ const INFINITE_FLEET: u16 = !0;
 ///
 /// # Safety
 /// Game thread, with the fleet queue initialised.
-pub unsafe fn start_sphere_tracking(race: u16) -> bool {
-    WorldOwner::current()
-        .write(|world| crate::battle::build_native::start_sphere_tracking(world, race))
-        != 0
+pub fn start_sphere_tracking(world: &mut crate::engine::World, race: u16) -> bool {
+    crate::battle::build_native::start_sphere_tracking(world, race) != 0
 }
 
 /// `RepairSISBorder ()`.
@@ -239,11 +235,12 @@ pub unsafe fn notify_others_all_clear(race: u16) {
 }
 
 unsafe fn clone_npc_ship(
+    world: &mut crate::engine::World,
     ship: u8,
     crew: u16,
     captain: Option<u8>,
 ) -> Option<crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Fragment>> {
-    WorldOwner::current().write(|world| {
+    {
         let fleets = world.avail_races_ref();
         let template = *fleets.get(fleets.at(usize::from(ship))?);
         let mut ships = world.npc_built_ships();
@@ -257,15 +254,16 @@ unsafe fn clone_npc_ship(
             ships.get_mut(id).captains_name_index = captain;
         }
         Some(id)
-    })
+    }
 }
 
 /// `CloneShipFragment (ship, &GLOBAL (npc_built_ship_q), INFINITE_FLEET)`.
 ///
 /// # Safety
 /// Game thread, with the fleet queue initialised.
-pub unsafe fn clone_infinite_ship_into_built_queue(ship: u16) {
+pub unsafe fn clone_infinite_ship_into_built_queue(world: &mut crate::engine::World, ship: u16) {
     clone_npc_ship(
+        world,
         u8::try_from(ship).expect("ship index fits a byte"),
         INFINITE_FLEET,
         None,
@@ -276,8 +274,8 @@ pub unsafe fn clone_infinite_ship_into_built_queue(ship: u16) {
 ///
 /// # Safety
 /// Game thread; `GlobData` is initialised.
-pub unsafe fn built_ship_count() -> u16 {
-    glob().read(|world| world.npc_built_ships_ref().count() as u16)
+pub fn built_ship_count(world: &crate::engine::World) -> u16 {
+    world.npc_built_ships_ref().count() as u16
 }
 
 /// The `star_index` byte of every catalog entry before `CurStarDescPtr`:
@@ -374,8 +372,8 @@ pub unsafe fn free_lander_font(system: *mut crate::c_bindings::global_state::SOL
 ///
 /// # Safety
 /// Game thread; `GlobData` is initialised.
-pub unsafe fn built_ship_queue_has_ships() -> bool {
-    glob().read(|world| world.npc_built_ships_ref().head().is_some())
+pub fn built_ship_queue_has_ships(world: &crate::engine::World) -> bool {
+    world.npc_built_ships_ref().head().is_some()
 }
 
 /// `ONE_SHOT_ENCOUNTER` (`encount.h`).
@@ -387,8 +385,8 @@ const ONE_SHOT_ENCOUNTER: u8 = 1 << 7;
 ///
 /// # Safety
 /// Game thread; `GlobData` and the fleet queue are initialised.
-pub unsafe fn begin_urquan_encounter(loc: (i16, i16)) -> bool {
-    glob().write(|world| {
+pub unsafe fn begin_urquan_encounter(world: &mut crate::engine::World, loc: (i16, i16)) -> bool {
+    {
         let mut encounters = world.encounters();
         let Some(id) = encounters.alloc().or_else(|| encounters.head()) else {
             return false;
@@ -424,7 +422,7 @@ pub unsafe fn begin_urquan_encounter(loc: (i16, i16)) -> bool {
         world.data.flagship.log_x = position.0;
         world.data.flagship.log_y = position.1;
         true
-    })
+    }
 }
 
 /// `SleepThreadUntil (FadeScreen (FadeAllToBlack, ONE_SECOND * 2))`.
@@ -480,7 +478,7 @@ pub unsafe fn draw_hyper_coords(loc: (i16, i16)) {
 }
 
 /// The live game, through `GlobData` and the C group functions.
-pub struct LiveGame;
+pub struct LiveNames;
 
 fn glob() -> crate::engine::Projection<crate::engine::World> {
     {
@@ -491,7 +489,7 @@ fn glob() -> crate::engine::Projection<crate::engine::World> {
 /// `BATTLE_PLANET` start and end bit.
 const BATTLE_PLANET: (i32, i32) = (751, 758);
 
-impl PlanetNames for LiveGame {
+impl PlanetNames for LiveNames {
     fn set_planet_name(&mut self, string_index: u16) {
         // SAFETY: `PlanetName` is the 16-byte name field of the SIS state;
         // `GAME_STRING` text is NUL terminated.
@@ -509,29 +507,52 @@ impl PlanetNames for LiveGame {
     }
 }
 
-impl LiveGame {
+pub struct LiveGame<'a, 'b, 'c> {
+    pub(crate) cx: &'a std::cell::RefCell<&'b mut crate::engine::battle::Cx<'c>>,
+}
+
+impl<'a, 'b, 'c> LiveGame<'a, 'b, 'c> {
+    pub fn new(cx: &'a std::cell::RefCell<&'b mut crate::engine::battle::Cx<'c>>) -> Self {
+        Self { cx }
+    }
+
     pub(crate) fn load_ip_groups(&mut self) {
         // SAFETY: this orbital entry temporarily takes the published context; no borrow escapes.
         unsafe {
-            crate::app::bridge::enter(|cx| get_group_info(cx.world, GROUPS_RANDOM, GROUP_LOAD_IP))
-        };
+            get_group_info(self.cx.borrow_mut().world, GROUPS_RANDOM, GROUP_LOAD_IP);
+        }
     }
     pub(crate) fn save_ip_groups(&mut self) {
         // SAFETY: this orbital entry temporarily takes the published context; no borrow escapes.
         unsafe {
-            crate::app::bridge::enter(|cx| {
-                group_storage::put_group_info(cx.world, GROUPS_RANDOM, GROUP_SAVE_IP)
-            })
-        };
+            group_storage::put_group_info(self.cx.borrow_mut().world, GROUPS_RANDOM, GROUP_SAVE_IP);
+        }
     }
     pub(crate) fn reinit_npc_built_ship_q(&mut self) {
-        glob().write(|world| world.npc_built_ships().reinit());
+        self.cx.borrow_mut().world.npc_built_ships().reinit();
     }
     pub(crate) fn reinit_ip_group_q(&mut self) {
-        glob().write(|world| world.ip_groups().reinit());
+        self.cx.borrow_mut().world.ip_groups().reinit();
     }
     pub(crate) fn clone_ship_into_built_queue(&mut self, ship: u8) {
         // SAFETY: the orbital entry owns the initialized NPC fragment queue on the game thread.
-        unsafe { clone_npc_ship(ship, 0, None) };
+        unsafe {
+            clone_npc_ship(self.cx.borrow_mut().world, ship, 0, None);
+        }
+    }
+}
+
+impl crate::planets::generate::special::Story for LiveGame<'_, '_, '_> {
+    fn flag(&self, name: &'static str) -> u32 {
+        self.cx.borrow().world.flag(name)
+    }
+    fn set_flag(&mut self, name: &'static str, value: u32) {
+        self.cx.borrow_mut().world.set_flag(name, value);
+    }
+    fn word(&self, name: &'static str) -> u32 {
+        self.cx.borrow().world.word(name)
+    }
+    fn set_word(&mut self, name: &'static str, value: u32) {
+        self.cx.borrow_mut().world.set_word(name, value);
     }
 }

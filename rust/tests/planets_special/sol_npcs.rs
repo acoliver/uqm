@@ -183,9 +183,11 @@ pub fn check(h: &mut Harness) {
             uqm_rust::engine::World::current().write(|world| {
                 (world).set_story_state(uqm_rust::engine::StoryKey::GLOBAL_FLAGS_AND_DATA, 0)
             });
-            assert!(GENERATE_SOL_FUNCTIONS.generate_orbital.unwrap()(
-                system, starbase
-            ));
+            assert!(uqm_rust::app::bridge::enter(|cx| GENERATE_SOL_FUNCTIONS
+                .generate_orbital
+                .unwrap()(
+                cx, system, starbase
+            )));
             assert_eq!(
                 uqm_rust::mainloop::ffi::get_current_activity().0,
                 activity | START_ENCOUNTER

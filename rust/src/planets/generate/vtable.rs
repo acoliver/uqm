@@ -16,6 +16,9 @@ pub type NpcsHook = Option<unsafe fn(&mut crate::engine::World, *mut SOLARSYS_ST
 /// `generateOrbital`.
 pub type WorldHook = Option<unsafe extern "C" fn(*mut SOLARSYS_STATE, *mut PLANET_DESC) -> bool>;
 /// `bool (*)(const SOLARSYS_STATE *, const PLANET_DESC *)`: `generateName`.
+pub type OrbitalHook = Option<
+    unsafe fn(&mut crate::engine::battle::Cx<'_>, *mut SOLARSYS_STATE, *mut PLANET_DESC) -> bool,
+>;
 pub type NameHook = Option<unsafe extern "C" fn(*const SOLARSYS_STATE, *const PLANET_DESC) -> bool>;
 /// `COUNT (*)(const SOLARSYS_STATE *, const PLANET_DESC *, COUNT, NODE_INFO *)`.
 pub type NodeCountHook = Option<
@@ -34,7 +37,7 @@ pub struct GenerateFunctions {
     pub generate_planets: SystemHook,
     pub generate_moons: WorldHook,
     pub generate_name: NameHook,
-    pub generate_orbital: WorldHook,
+    pub generate_orbital: OrbitalHook,
     pub generate_minerals: NodeCountHook,
     pub generate_energy: NodeCountHook,
     pub generate_life: NodeCountHook,

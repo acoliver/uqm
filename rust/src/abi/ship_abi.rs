@@ -3018,9 +3018,7 @@ pub type GeneratePlanetsFunction =
 pub type GenerateMoonsFunction = ::std::option::Option<
     unsafe extern "C" fn(solarSys: *mut SOLARSYS_STATE, planet: *mut PLANET_DESC) -> bool,
 >;
-pub type GenerateOrbitalFunction = ::std::option::Option<
-    unsafe extern "C" fn(solarSys: *mut SOLARSYS_STATE, world: *mut PLANET_DESC) -> bool,
->;
+pub type GenerateOrbitalFunction = Option<unsafe fn(&mut crate::engine::battle::Cx<'_>, *mut SOLARSYS_STATE, *mut PLANET_DESC) -> bool>;
 pub type GenerateNameFunction = ::std::option::Option<
     unsafe extern "C" fn(arg1: *const SOLARSYS_STATE, world: *const PLANET_DESC) -> bool,
 >;

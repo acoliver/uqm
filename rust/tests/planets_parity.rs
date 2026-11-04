@@ -25,6 +25,17 @@ mod topography_parity;
 use std::ffi::c_void;
 use std::fmt::Write as _;
 use std::path::PathBuf;
+use uqm_rust::planets::ffi::fill_orbits_c as FillOrbits;
+use uqm_rust::planets::generate::exports::generate_artifact_c as GenerateDefault_generateArtifact;
+use uqm_rust::planets::generate::exports::generate_energy_c as GenerateDefault_generateEnergy;
+use uqm_rust::planets::generate::exports::generate_life_c as GenerateDefault_generateLife;
+use uqm_rust::planets::generate::exports::generate_minerals_c as GenerateDefault_generateMinerals;
+use uqm_rust::planets::generate::exports::generate_moons_c as GenerateDefault_generateMoons;
+use uqm_rust::planets::generate::exports::generate_planets_c as GenerateDefault_generatePlanets;
+use uqm_rust::planets::generate::exports::generate_ruins_c as GenerateDefault_generateRuins;
+use uqm_rust::planets::generate::exports::pickup_life_c as GenerateDefault_pickupLife;
+use uqm_rust::planets::generate::exports::pickup_minerals_c as GenerateDefault_pickupMinerals;
+use uqm_rust::planets::solarsys::P_SOLAR_SYS_STATE as pSolarSysState;
 
 use planets_common::default_gen::{
     self, layout_cases, moon_cases, moons_line, nodes_line, planets_line, DefaultOps, Layout,
@@ -43,7 +54,6 @@ use uqm_rust::savegame::runtime::star::{CStarDesc, CATALOG_LEN};
 
 unsafe extern "C" {
     static mut SysGenRNG: *mut RandomContext;
-    static mut pSolarSysState: *mut SOLARSYS_STATE;
 
     static mut ScreenWidth: i32;
     static planet_array: [PlanetFrame; 59];
@@ -74,53 +84,6 @@ unsafe extern "C" {
         info: *mut NODE_INFO,
     ) -> u16;
     fn GenerateRandomLocation(loc: *mut POINT);
-    fn GenerateDefault_generatePlanets(system: *mut SOLARSYS_STATE) -> bool;
-    fn GenerateDefault_generateMoons(system: *mut SOLARSYS_STATE, planet: *mut PLANET_DESC)
-        -> bool;
-    fn GenerateDefault_generateMinerals(
-        system: *const SOLARSYS_STATE,
-        world: *const PLANET_DESC,
-        which: u16,
-        info: *mut NODE_INFO,
-    ) -> u16;
-    fn GenerateDefault_generateEnergy(
-        system: *const SOLARSYS_STATE,
-        world: *const PLANET_DESC,
-        which: u16,
-        info: *mut NODE_INFO,
-    ) -> u16;
-    fn GenerateDefault_generateLife(
-        system: *const SOLARSYS_STATE,
-        world: *const PLANET_DESC,
-        which: u16,
-        info: *mut NODE_INFO,
-    ) -> u16;
-    fn GenerateDefault_generateArtifact(
-        system: *const SOLARSYS_STATE,
-        which: u16,
-        info: *mut NODE_INFO,
-    ) -> u16;
-    fn GenerateDefault_generateRuins(
-        system: *const SOLARSYS_STATE,
-        which: u16,
-        info: *mut NODE_INFO,
-    ) -> u16;
-    fn GenerateDefault_pickupMinerals(
-        system: *mut SOLARSYS_STATE,
-        world: *mut PLANET_DESC,
-        which: u16,
-    ) -> bool;
-    fn GenerateDefault_pickupLife(
-        system: *mut SOLARSYS_STATE,
-        world: *mut PLANET_DESC,
-        which: u16,
-    ) -> bool;
-    fn FillOrbits(
-        system: *mut SOLARSYS_STATE,
-        num_planets: u8,
-        base: *mut PLANET_DESC,
-        types_defined: u32,
-    );
 }
 
 /// `RECT` as `{ corner.x, corner.y, extent.width, extent.height }`; only the

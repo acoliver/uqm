@@ -9,7 +9,7 @@ use uqm_rust::planets::generate::sol_exports::GENERATE_SOL_FUNCTIONS;
 use uqm_rust::planets::generate::vtable::DEFAULT_HOOKS;
 
 pub fn check() {
-    let table = unsafe { &super::sol::generateSolFunctions };
+    let table = &super::sol::generateSolFunctions;
     assert!(std::ptr::eq(table, &GENERATE_SOL_FUNCTIONS));
     assert_eq!(
         getGenerateFunctions(SOL_DEFINED),

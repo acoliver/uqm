@@ -2,7 +2,7 @@
 //! report and surface calls can reenter the generator.
 
 use crate::c_bindings::global_state::{NODE_INFO, PLANET_DESC, PLANET_INFO, SOLARSYS_STATE};
-use crate::planets::c_api::{self, CapturedSurface, LiveGame};
+use crate::planets::c_api::{self, CapturedSurface, LiveNames};
 use crate::planets::consts::star_color;
 use crate::planets::ffi::{blank_node, current_star_type, node_or, sys_gen_rng};
 use crate::planets::generate::default;
@@ -12,85 +12,85 @@ use crate::planets::generate::special::{LiveStory, Orbit, Story};
 use crate::planets::generate::special_exports::{body_of, orbit_world};
 use crate::planets::generate::vtable::{GenerateFunctions, DEFAULT_HOOKS};
 
-impl orbital::Queues for LiveGame {
-    fn save_ip_groups(&mut self) {
-        LiveGame.save_ip_groups();
-    }
-    fn reinit_ip_group_q(&mut self) {
-        LiveGame.reinit_ip_group_q();
-    }
-
-    fn built_ship_count(&self) -> u16 {
-        // SAFETY: the live built queue belongs to the game thread.
-        unsafe { c_api::built_ship_count() }
-    }
-}
-
-struct SolOrbit {
+struct SolOrbit<'a, 'b, 'c> {
+    game: crate::planets::c_api::LiveGame<'a, 'b, 'c>,
     system: *mut SOLARSYS_STATE,
     world: *mut PLANET_DESC,
 }
 
-impl orbital::Queues for SolOrbit {
+impl orbital::Queues for SolOrbit<'_, '_, '_> {
     fn save_ip_groups(&mut self) {
-        LiveGame.save_ip_groups();
+        self.game.save_ip_groups();
     }
     fn reinit_ip_group_q(&mut self) {
-        LiveGame.reinit_ip_group_q();
+        self.game.reinit_ip_group_q();
     }
 
     fn built_ship_count(&self) -> u16 {
-        orbital::Queues::built_ship_count(&LiveGame)
+        self.game.cx.borrow().world.npc_built_ships_ref().count() as u16
     }
 }
 
-impl orbital::Orbital for SolOrbit {
+impl orbital::Orbital for SolOrbit<'_, '_, '_> {
     type EarthSurface = CapturedSurface;
 
     fn set_encounter_group(&mut self, value: u8) {
-        // SAFETY: game-thread encounter global.
-        unsafe { c_api::set_encounter_group(value) };
+        self.game.cx.borrow_mut().with_legacy(|| {
+            // SAFETY: game-thread encounter global.
+            unsafe { c_api::set_encounter_group(value) };
+        })
     }
     fn current_activity(&self) -> u16 {
-        crate::mainloop::ffi::get_current_activity().0
+        self.game
+            .cx
+            .borrow_mut()
+            .with_legacy(|| crate::mainloop::ffi::get_current_activity().0)
     }
     fn set_current_activity(&mut self, value: u16) {
-        crate::mainloop::ffi::set_current_activity(crate::mainloop::types::ActivityValue(value));
+        self.game.cx.borrow_mut().world.set_activity(value);
     }
     fn set_global_flags_and_data(&mut self, value: u8) {
-        LiveStory.set_flag("GLOBAL_FLAGS_AND_DATA", u32::from(value));
+        self.game
+            .set_flag("GLOBAL_FLAGS_AND_DATA", u32::from(value));
     }
     fn with_orbit(&mut self, run: impl FnOnce(&mut Orbit<'_>)) {
-        // SAFETY: no system or RNG reference survives this callback.
         unsafe {
-            orbit_world(self.system, self.world, |orbit, _| {
+            orbit_world(self.game.cx, self.system, self.world, |orbit, _| {
                 run(orbit);
                 true
             });
         }
     }
     fn planet_info(&mut self) -> &mut PLANET_INFO {
-        // SAFETY: this borrow ends before any host resource call.
-        unsafe { &mut (*self.system).SysInfo.PlanetInfo }
+        self.game.cx.borrow_mut().with_legacy(|| {
+            // SAFETY: this borrow ends before any host resource call.
+            unsafe { &mut (*self.system).SysInfo.PlanetInfo }
+        })
     }
     fn load_scene(&mut self, scene: orbital::Scene) {
-        // SAFETY: live system on the game thread, without outstanding borrows.
-        unsafe { c_api::load_lander_scene(self.system, scene.graphics(), scene.strings(), 0) };
+        self.game.cx.borrow_mut().with_legacy(|| {
+            // SAFETY: live system on the game thread, without outstanding borrows.
+            unsafe { c_api::load_lander_scene(self.system, scene.graphics(), scene.strings(), 0) };
+        })
     }
     fn load_earth_surface(&mut self) -> CapturedSurface {
-        // SAFETY: the resource loader returns an owned, detached drawable.
-        unsafe {
-            CapturedSurface::load(c"graphics.earthmask")
-                .into_definition(
-                    crate::planets::consts::MAP_WIDTH as i16,
-                    crate::planets::consts::MAP_HEIGHT as i16,
-                )
-                .expect("Earth surface definition could not be rescaled")
-        }
+        self.game.cx.borrow_mut().with_legacy(|| {
+            // SAFETY: the resource loader returns an owned, detached drawable.
+            unsafe {
+                CapturedSurface::load(c"graphics.earthmask")
+                    .into_definition(
+                        crate::planets::consts::MAP_WIDTH as i16,
+                        crate::planets::consts::MAP_HEIGHT as i16,
+                    )
+                    .expect("Earth surface definition could not be rescaled")
+            }
+        })
     }
     fn load_planet(&mut self, surface: Option<CapturedSurface>) {
-        // SAFETY: the live orbit owns the transferred surface until FreePlanet.
-        unsafe { c_api::load_planet_surface(surface) };
+        self.game.cx.borrow_mut().with_legacy(|| {
+            // SAFETY: the live orbit owns the transferred surface until FreePlanet.
+            unsafe { c_api::load_planet_surface(surface) };
+        })
     }
 }
 
@@ -156,16 +156,28 @@ unsafe extern "C" fn moons(system: *mut SOLARSYS_STATE, planet: *mut PLANET_DESC
 unsafe extern "C" fn name(system: *const SOLARSYS_STATE, world: *const PLANET_DESC) -> bool {
     let index = planet_index(system, world);
     sol::generate_name(
-        &mut LiveGame,
+        &mut LiveNames,
         index,
         (*system).PlanetDesc[usize::from(index)].data_index,
     )
 }
-unsafe extern "C" fn orbital(system: *mut SOLARSYS_STATE, world: *mut PLANET_DESC) -> bool {
+unsafe fn orbital(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    system: *mut SOLARSYS_STATE,
+    world: *mut PLANET_DESC,
+) -> bool {
+    let owner = std::cell::RefCell::new(cx);
+    let owner = &owner;
+    let story = crate::planets::c_api::LiveGame { cx: owner };
+
     sol::generate_orbital(
         body_of(system, world),
-        &LiveStory,
-        &mut SolOrbit { system, world },
+        &story,
+        &mut SolOrbit {
+            system,
+            world,
+            game: crate::planets::c_api::LiveGame { cx: owner },
+        },
     )
 }
 unsafe extern "C" fn energy(
