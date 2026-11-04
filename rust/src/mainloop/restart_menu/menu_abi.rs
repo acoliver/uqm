@@ -4,7 +4,7 @@ use crate::engine::Kernel;
 use crate::engine::StoryKey;
 use crate::engine::World;
 use crate::ships::native::abi::*;
-use std::{ffi::c_void, ptr};
+use std::ptr;
 
 macro_rules! operation {
     ($name:ident($($arg:ident: $ty:ty),*) $(-> $ret:ty)? $body:block) => {
@@ -31,21 +31,14 @@ operation!(uqm_do_popup_window_msg(id: u16) {
     let string = crate::strings::string_table::SetAbsStringTableIndex((**Kernel::current()).game_strings.cast(), (MAINMENU_STRING_BASE as u16).wrapping_add(id));
     crate::ui::confirm::DoPopupWindow(crate::strings::string_table::GetStringAddress(string));
 });
-unsafe extern "C" fn restart_input(menu: *mut MENU_STATE) -> u32 {
-    super::do_restart::rust_do_restart_frame(menu.cast()) as u32
-}
-operation!(uqm_set_rust_input_func(menu: *mut MENU_STATE) { (*menu).InputFunc = Some(restart_input); });
 operation!(uqm_get_menu_cur_frame(menu: *mut MENU_STATE) -> FRAME { (*menu).CurFrame });
-operation!(uqm_get_menu_priv_data(menu: *mut MENU_STATE) -> *mut c_void { (*menu).privData });
 operation!(uqm_set_menu_flash_context(menu: *mut MENU_STATE, context: *mut FlashContext) { (*menu).flashContext = context; });
 operation!(uqm_set_menu_initialized(menu: *mut MENU_STATE, value: i16) { (*menu).Initialized = value; });
 operation!(uqm_set_menu_cur_state(menu: *mut MENU_STATE, state: u8) { (*menu).CurState = state; });
 operation!(uqm_set_menu_cur_frame(menu: *mut MENU_STATE, frame: FRAME) { (*menu).CurFrame = frame; });
 operation!(uqm_set_menu_h_music(menu: *mut MENU_STATE, music: MUSIC_REF) { (*menu).hMusic = music; });
 operation!(uqm_create_menu_state() -> *mut MENU_STATE {
-    let mut menu: Box<MENU_STATE> = Box::new(std::mem::zeroed());
-    menu.InputFunc = Some(restart_input);
+    let menu: Box<MENU_STATE> = Box::new(std::mem::zeroed());
     Box::into_raw(menu)
 });
-operation!(uqm_set_menu_priv_data(menu: *mut MENU_STATE, data: *mut c_void) { if !menu.is_null() { (*menu).privData = data; } });
 operation!(uqm_destroy_menu_state(menu: *mut MENU_STATE) { if !menu.is_null() { drop(Box::from_raw(menu)); } });

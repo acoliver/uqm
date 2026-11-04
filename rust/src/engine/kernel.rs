@@ -8,6 +8,7 @@ use crate::graphics::native_abi::{POINT, STRING as SOUND};
 use std::ptr;
 
 pub struct Kernel {
+    pub(super) input_runtime: Option<std::rc::Rc<dyn super::input::InputRuntime>>,
     pub last_activity: u16,
     pub player_control: [u8; 2],
     pub h_res_index: *mut std::ffi::c_void,
@@ -95,6 +96,7 @@ impl Kernel {
     pub(crate) fn new() -> Self {
         let star_planes = Box::new([30, 60, 90].map(StarPlane::new));
         Self {
+            input_runtime: None,
             last_activity: 0,
             player_control: [0; 2],
             h_res_index: ptr::null_mut(),

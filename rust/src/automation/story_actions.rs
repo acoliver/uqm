@@ -59,15 +59,7 @@ pub struct CollectEnergyNodeStep {
     pub max_ticks: u64,
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct DeviceObservation {
-    pub in_orbit: bool,
-    pub pc_menu: bool,
-    pub list: Option<Vec<u8>>,
-    pub selected: usize,
-    /// Successful invocation published by the device owner, with actual state effects.
-    pub activation: Option<(u64, u8, String, bool)>,
-}
+pub use crate::engine::observe::DeviceObservation;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum DeviceProgress {
@@ -269,18 +261,7 @@ impl EnergyTracker {
     }
 }
 
-pub const DEVICE_STORY_KEYS: &[&str] = &[
-    "ULTRON_CONDITION",
-    "ROSY_SPHERE_ON_SHIP",
-    "AQUA_HELIX_ON_SHIP",
-    "CLEAR_SPINDLE_ON_SHIP",
-    "USED_BROADCASTER",
-    "GLOBAL_FLAGS_AND_DATA",
-    "CHMMR_EMERGING",
-    "READY_TO_CONFUSE_URQUAN",
-    "SHIP_TO_COMPEL",
-    "PORTAL_COUNTER",
-];
+use crate::planets::device_effects::{device_effect_holds, DEVICE_STORY_KEYS};
 
 pub fn device_evidence_holds(device: Device, state: &str) -> bool {
     let mut before = std::collections::BTreeMap::new();
@@ -318,39 +299,6 @@ pub fn device_evidence_holds(device: Device, state: &str) -> bool {
         return false;
     }
     device_effect_holds(device.id(), &before, &after)
-}
-
-pub fn device_effect_holds(
-    id: u8,
-    before: &std::collections::BTreeMap<String, u32>,
-    after: &std::collections::BTreeMap<String, u32>,
-) -> bool {
-    let changed_to_one = |key: &str| before[key] == 0 && after[key] == 1;
-    let encounter = before["activity"] & 0x0400 == 0 && after["activity"] & 0x0400 != 0;
-    match id {
-        0 => {
-            before["fuel"].checked_sub(1000) == Some(after["fuel"])
-                && changed_to_one("PORTAL_COUNTER")
-        }
-        1 => encounter,
-        3 => changed_to_one("CHMMR_EMERGING"),
-        4..=6 => {
-            let key = [
-                "ROSY_SPHERE_ON_SHIP",
-                "AQUA_HELIX_ON_SHIP",
-                "CLEAR_SPINDLE_ON_SHIP",
-            ][usize::from(id - 4)];
-            before[key] == 1
-                && after[key] == 0
-                && before["ULTRON_CONDITION"] > 0
-                && Some(after["ULTRON_CONDITION"]) == before["ULTRON_CONDITION"].checked_add(1)
-        }
-        12 | 13 => {
-            changed_to_one("USED_BROADCASTER")
-                || (encounter && [16, 32, 128].contains(&after["GLOBAL_FLAGS_AND_DATA"]))
-        }
-        _ => false,
-    }
 }
 
 #[cfg(test)]

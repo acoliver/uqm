@@ -194,7 +194,28 @@ where
     S: ShipStatusPort,
 {
     let deadline = Tick(adapters.clock.now().0.wrapping_add(tick_period));
+    let input = if session.phase == SessionPhase::Active {
+        Some(adapters.input.poll()?)
+    } else {
+        None
+    };
+    run_frame_at(session, adapters, deadline, input)
+}
 
+pub(crate) fn run_frame_at<I, C, G, A, K, S>(
+    session: &mut PlanetSideSession,
+    adapters: &mut RuntimeAdapters<I, C, G, A, K, S>,
+    deadline: Tick,
+    input: Option<FrameInput>,
+) -> Result<RuntimeStep, RuntimeError>
+where
+    I: PlanetSideInput,
+    C: PlanetSideCollision,
+    G: PlanetSideGraphics,
+    A: PlanetSideAudio,
+    K: PlanetSideClock,
+    S: ShipStatusPort,
+{
     if matches!(
         session.phase,
         SessionPhase::Warmup
@@ -222,7 +243,12 @@ where
         session.phase
     );
 
-    if let Some(step) = run_lander_simulation(session, adapters, deadline)? {
+    if let Some(step) = apply_lander_input(
+        session,
+        adapters,
+        deadline,
+        input.unwrap_or_else(|| panic!("active PlanetSide frame requires input")),
+    )? {
         return Ok(step);
     }
 
@@ -320,6 +346,7 @@ where
 ///
 /// Returns `Some` when the tick ends the frame, either by aborting the trip or
 /// by entering the takeoff animation.
+#[cfg(test)]
 fn run_lander_simulation<I, C, G, A, K, S>(
     session: &mut PlanetSideSession,
     adapters: &mut RuntimeAdapters<I, C, G, A, K, S>,
@@ -333,7 +360,21 @@ where
     K: PlanetSideClock,
 {
     let input = adapters.input.poll()?;
+    apply_lander_input(session, adapters, deadline, input)
+}
 
+fn apply_lander_input<I, C, G, A, K, S>(
+    session: &mut PlanetSideSession,
+    adapters: &mut RuntimeAdapters<I, C, G, A, K, S>,
+    deadline: Tick,
+    input: FrameInput,
+) -> Result<Option<RuntimeStep>, RuntimeError>
+where
+    C: PlanetSideCollision,
+    G: PlanetSideGraphics,
+    A: PlanetSideAudio,
+    K: PlanetSideClock,
+{
     match simulation::tick(&mut session.lander, input) {
         TickResult::Aborted => {
             session.abort();

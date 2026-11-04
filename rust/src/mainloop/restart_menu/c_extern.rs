@@ -79,8 +79,6 @@ extern "C" {
     #[cfg(test)]
     pub fn uqm_get_menu_cur_frame(pms: *mut c_void) -> usize;
     #[cfg(test)]
-    pub fn uqm_get_menu_priv_data(pms: *mut c_void) -> *mut c_void;
-    #[cfg(test)]
     pub fn uqm_set_menu_flash_context(pms: *mut c_void, ctx: usize);
     #[cfg(test)]
     pub fn uqm_set_menu_initialized(pms: *mut c_void, val: i16);
@@ -92,8 +90,6 @@ extern "C" {
     pub fn uqm_set_menu_h_music(pms: *mut c_void, handle: usize);
     #[cfg(test)]
     pub fn uqm_create_menu_state() -> *mut c_void;
-    #[cfg(test)]
-    pub fn uqm_set_menu_priv_data(pms: *mut c_void, data: *mut c_void);
     #[cfg(test)]
     pub fn uqm_destroy_menu_state(pms: *mut c_void);
 
@@ -199,13 +195,6 @@ pub unsafe fn uqm_get_menu_cur_frame(pms: *mut c_void) -> usize {
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
 #[cfg(not(test))]
-pub unsafe fn uqm_get_menu_priv_data(pms: *mut c_void) -> *mut c_void {
-    (crate::mainloop::restart_menu::menu_abi::uqm_get_menu_priv_data(pms as _)) as _
-}
-
-/// # Safety
-/// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(not(test))]
 pub unsafe fn uqm_set_menu_flash_context(pms: *mut c_void, ctx: usize) {
     crate::mainloop::restart_menu::menu_abi::uqm_set_menu_flash_context(pms as _, ctx as _);
 }
@@ -248,13 +237,6 @@ pub unsafe fn uqm_create_menu_state() -> *mut c_void {
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
 #[cfg(not(test))]
-pub unsafe fn uqm_set_menu_priv_data(pms: *mut c_void, data: *mut c_void) {
-    crate::mainloop::restart_menu::menu_abi::uqm_set_menu_priv_data(pms as _, data as _);
-}
-
-/// # Safety
-/// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(not(test))]
 pub unsafe fn uqm_destroy_menu_state(pms: *mut c_void) {
     crate::mainloop::restart_menu::menu_abi::uqm_destroy_menu_state(pms as _);
 }
@@ -275,69 +257,6 @@ pub unsafe fn draw_restart_menu(pms: *mut c_void, new_state: u8, frame: *mut c_v
         new_state as _,
         frame as _,
     );
-}
-
-// ===========================================================================
-//  C wrappers from rust_bridge_mainloop.c (reused)
-// ===========================================================================
-
-#[cfg(not(test))]
-pub use crate::game_init::macro_abi::get_current_activity;
-extern "C" {
-
-    #[cfg(test)]
-    pub fn set_current_activity(v: u16);
-    #[cfg(test)]
-    pub fn get_last_activity() -> u16;
-    #[cfg(test)]
-    pub fn set_last_activity(v: u16);
-    #[cfg(test)]
-    pub fn set_next_activity(v: u16);
-    #[cfg(test)]
-    pub fn uqm_get_crew_enlisted() -> u16;
-    #[cfg(test)]
-    pub fn set_main_exited(b: c_int);
-}
-/// # Safety
-/// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(not(test))]
-pub unsafe fn set_current_activity(v: u16) {
-    crate::mainloop::state_abi::set_current_activity(v as _);
-}
-
-/// # Safety
-/// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(not(test))]
-pub unsafe fn get_last_activity() -> u16 {
-    (crate::mainloop::state_abi::get_last_activity()) as _
-}
-
-/// # Safety
-/// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(not(test))]
-pub unsafe fn set_last_activity(v: u16) {
-    crate::mainloop::state_abi::set_last_activity(v as _);
-}
-
-/// # Safety
-/// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(not(test))]
-pub unsafe fn set_next_activity(v: u16) {
-    crate::mainloop::state_abi::set_next_activity(v as _);
-}
-
-/// # Safety
-/// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(not(test))]
-pub unsafe fn uqm_get_crew_enlisted() -> u16 {
-    (crate::mainloop::state_abi::uqm_get_crew_enlisted()) as _
-}
-
-/// # Safety
-/// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(not(test))]
-pub unsafe fn set_main_exited(b: c_int) {
-    crate::mainloop::state_abi::set_main_exited(b as _);
 }
 
 // ===========================================================================
@@ -431,21 +350,6 @@ pub use crate::ui::flash::Flash_setState;
 
 #[cfg(not(test))]
 pub use crate::ui::flash::Flash_setOverlay;
-
-#[cfg(not(test))]
-pub use crate::supermelee::native::menu::live::Melee;
-
-#[cfg(not(test))]
-pub use crate::front_end::setupmenu::runtime::SetupMenu;
-
-#[cfg(not(test))]
-pub use crate::front_end::credits::runtime::Credits;
-
-#[cfg(not(test))]
-pub use crate::front_end::fmv::runtime::Victory;
-
-#[cfg(not(test))]
-pub use crate::front_end::fmv::runtime::SplashScreen;
 
 #[cfg(not(test))]
 pub use crate::ui::confirm::DoPopupWindow;

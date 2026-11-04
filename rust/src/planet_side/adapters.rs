@@ -30,31 +30,51 @@ const NUM_TEMPLATES: usize = CONTROL_TEMPLATE_NUM_TEMPLATES as usize;
 /// Input adapter reading the resolved player-one control template.
 pub struct CffiPlanetSideInput;
 
+impl CffiPlanetSideInput {
+    pub fn poll_observed(
+        &mut self,
+        cx: &mut crate::engine::battle::Cx<'_>,
+        io: &mut crate::engine::observe::Io<'_>,
+    ) -> Result<FrameInput, AdapterError> {
+        use crate::engine::observe::{CampaignView, InputView};
+        let campaign =
+            CampaignView::for_input(InputView::BeforeUpdate, || CampaignView::capture(cx.world));
+        if cx
+            .with_legacy(|| {
+                io.observer
+                    .input_admitted(&InputView::BeforeUpdate, &campaign)
+            })
+            .stop
+        {
+            return Ok(FrameInput {
+                abort: true,
+                ..FrameInput::default()
+            });
+        }
+        #[cfg(not(test))]
+        {
+            let runtime = cx.kernel.input_runtime();
+            cx.with_legacy(|| runtime.update());
+        }
+        if cx
+            .with_legacy(|| io.observer.input_admitted(&InputView::AfterUpdate, &None))
+            .stop
+        {
+            return Ok(FrameInput {
+                abort: true,
+                ..FrameInput::default()
+            });
+        }
+        cx.with_legacy(|| self.poll())
+    }
+}
+
 impl PlanetSideInput for CffiPlanetSideInput {
     fn poll(&mut self) -> Result<FrameInput, AdapterError> {
-        #[cfg(not(test))]
-        unsafe {
-            if crate::automation::input_ffi::rust_automation_service_do_input() != 0 {
-                return Ok(FrameInput {
-                    abort: true,
-                    ..FrameInput::default()
-                });
-            }
-            UpdateInputState();
-            if crate::automation::input_ffi::rust_automation_after_input_update() != 0 {
-                return Ok(FrameInput {
-                    abort: true,
-                    ..FrameInput::default()
-                });
-            }
-        }
         Ok(read_player_one_input())
     }
 }
 
-#[cfg(not(test))]
-use crate::mainloop::input_abi::live::UpdateInputState;
-#[cfg(not(test))]
 #[cfg(not(test))]
 use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
 #[cfg(not(test))]
@@ -238,5 +258,70 @@ mod tests {
         );
         assert_eq!(ship.storage_capacity(), 0);
         assert_eq!(ship.apply(&ShipDelta::default()), Ok(()));
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn observed_input_uses_the_supplied_campaign_and_honors_both_stop_boundaries() {
+        use crate::engine::{
+            battle::{Battle, Cx},
+            observe::{CampaignView, CheckpointView, Injected, InputView, Io, Observer, Presented},
+            Game,
+        };
+
+        struct Recording {
+            stop: Option<InputView>,
+            inputs: Vec<(InputView, Option<u16>)>,
+        }
+        impl Observer<Option<CampaignView>> for Recording {
+            fn input_admitted(
+                &mut self,
+                view: &InputView,
+                world: &Option<CampaignView>,
+            ) -> Injected {
+                self.inputs
+                    .push((*view, world.as_ref().map(|world| world.activity)));
+                Injected {
+                    stop: Some(*view) == self.stop,
+                    seed: None,
+                }
+            }
+            fn checkpoint(&mut self, _: &CheckpointView<'_>) {}
+            fn presented(&mut self, _: &mut Presented) {}
+        }
+
+        for stop in [
+            Some(InputView::BeforeUpdate),
+            Some(InputView::AfterUpdate),
+            None,
+        ] {
+            let mut game = Game::new();
+            let mut battle = Battle::new();
+            let mut cx = Cx::new(
+                &mut battle,
+                &mut game.world,
+                &mut game.kernel,
+                crate::math::random,
+            );
+            cx.world.set_activity(0x1234);
+            let mut observer = Recording {
+                stop,
+                inputs: Vec::new(),
+            };
+            let input = CffiPlanetSideInput
+                .poll_observed(
+                    &mut cx,
+                    &mut Io {
+                        observer: &mut observer,
+                    },
+                )
+                .unwrap();
+            assert_eq!(input.abort, stop.is_some());
+            let mut expected = vec![(InputView::BeforeUpdate, Some(0x1234))];
+            if stop != Some(InputView::BeforeUpdate) {
+                expected.push((InputView::AfterUpdate, None));
+            }
+            assert_eq!(observer.inputs, expected);
+        }
     }
 }

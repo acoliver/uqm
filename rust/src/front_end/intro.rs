@@ -52,50 +52,15 @@ pub(crate) mod runtime {
         },
     };
 
-    use std::ffi::{c_int, c_void, CStr};
+    use crate::engine::{
+        battle::Cx,
+        observe::{CheckpointView, Io},
+    };
+    use std::ffi::{c_int, CStr};
 
     const LOG_WARNING: c_int = 3;
     const MAX_FONTS: usize = 5;
     const MAX_TEXT_LINES: usize = 15;
-
-    #[repr(C)]
-    struct PresentationState {
-        input_func: Option<unsafe extern "C" fn(*mut c_void) -> BOOLEAN>,
-        start_time: TimeCount,
-        last_sync_time: TimeCount,
-        time_out: TimeCount,
-        time_out_on_skip: c_int,
-        slide_show: STRING,
-        fonts: [FONT; MAX_FONTS],
-        frame: FRAME,
-        music_ref: MUSIC_REF,
-        batched: BOOLEAN,
-        sis_frame: FRAME,
-        rotated_frame: FRAME,
-        last_draw_kind: c_int,
-        ending: bool,
-        last_angle: c_int,
-        oper_index: COUNT,
-        text_fade_color: Color,
-        text_color: Color,
-        text_back_color: Color,
-        text_vpos: c_int,
-        text_effect: c_int,
-        clip_r: RECT,
-        tfade_r: RECT,
-        text_lines: [TEXT; MAX_TEXT_LINES],
-        lines_count: COUNT,
-        buffer: [c_char; 512],
-        movie_frame: c_int,
-        movie_end_frame: c_int,
-        interframe_delay: c_int,
-    }
-
-    #[repr(C)]
-    struct VideoState {
-        input_func: Option<unsafe extern "C" fn(*mut c_void) -> BOOLEAN>,
-        cur_video: *mut LegacyVideoRef,
-    }
 
     unsafe fn menu(key: u32) -> bool {
         PulsedInputState.menu[key as usize] != 0
@@ -213,19 +178,31 @@ pub(crate) mod runtime {
         1
     }
 
-    unsafe fn show_file(name: *const c_char) -> BOOLEAN {
-        let table = CaptureStringTable(LoadStringTableFile((contentDir).cast(), name));
-        let result = show_slides(table, false);
-        DestroyStringTable(ReleaseStringTable(table));
+    unsafe fn show_file(cx: &mut Cx<'_>, io: &mut Io<'_>, name: *const c_char) -> BOOLEAN {
+        let table =
+            cx.with_legacy(|| CaptureStringTable(LoadStringTableFile((contentDir).cast(), name)));
+        let result = show_slides(cx, io, table, false);
+        cx.with_legacy(|| DestroyStringTable(ReleaseStringTable(table)));
         result
     }
 
-    unsafe extern "C" fn do_presentation(raw: *mut c_void) -> BOOLEAN {
-        let state = &mut *raw.cast::<PresentationState>();
-        let activity = WorldData::current().read(|owner| owner.game.current_activity);
+    mod records;
+    use records::PresentationState;
+
+    enum PresentationStep {
+        Input(bool),
+        Call,
+    }
+
+    unsafe fn admit_presentation(
+        state: &mut PresentationState,
+        io: &mut Io<'_>,
+        activity: u16,
+    ) -> Option<bool> {
         if menu(KEY_MENU_CANCEL) || activity & CHECK_ABORT as u16 != 0 {
-            crate::automation::ending::presentation_cancelled();
-            return 0;
+            io.observer
+                .checkpoint(&CheckpointView::PresentationCancelled);
+            return Some(false);
         }
         if state.time_out != 0 {
             let mut delay = ONE_SECOND / 84;
@@ -239,7 +216,7 @@ pub(crate) mod runtime {
                     delay = state.interframe_delay as TimePeriod;
                 } else {
                     state.time_out = 0;
-                    return 1;
+                    return Some(true);
                 }
             }
             if state.time_out_on_skip != 0
@@ -247,11 +224,18 @@ pub(crate) mod runtime {
             {
                 state.time_out = 0;
                 state.movie_frame = -1;
-                return 1;
+                return Some(true);
             }
             SleepThread(delay);
-            return 1;
+            return Some(true);
         }
+        None
+    }
+
+    unsafe fn presentation_commands(
+        state: &mut PresentationState,
+        io: &mut Io<'_>,
+    ) -> PresentationStep {
         while state.oper_index < GetStringTableCount(state.slide_show) {
             let mut opcode = [0 as c_char; 16];
             let mut src = GetStringAddress(state.slide_show);
@@ -358,7 +342,7 @@ pub(crate) mod runtime {
                                 state.time_out_on_skip = 0;
                             }
                         }
-                        return 1;
+                        return PresentationStep::Input(true);
                     }
                 }
                 b"RESYNC" => {
@@ -577,7 +561,7 @@ pub(crate) mod runtime {
                         b"FTB" => ScreenFadeType_FadeAllToBlack,
                         _ => ScreenFadeType_FadeAllToWhite,
                     };
-                    return fade_screen(state, src, kind);
+                    return PresentationStep::Input(fade_screen(state, src, kind) != 0);
                 }
                 b"CLS" => {
                     unbatch(state, true);
@@ -590,7 +574,7 @@ pub(crate) mod runtime {
                         state.buffer.len(),
                         (src).cast(),
                     );
-                    show_file(state.buffer.as_ptr());
+                    return PresentationStep::Call;
                 }
                 b"LINE" => {
                     let (mut x1, mut y1, mut x2, mut y2) = (0, 0, 0, 0);
@@ -645,7 +629,7 @@ pub(crate) mod runtime {
                         state.interframe_delay = ONE_SECOND as c_int / fps;
                         state.time_out = GetTimeCounter();
                         state.time_out_on_skip = 1;
-                        return 1;
+                        return PresentationStep::Input(true);
                     } else {
                         crate::log_abi::log_message(
                             LOG_WARNING,
@@ -661,55 +645,85 @@ pub(crate) mod runtime {
             }
         }
         if state.ending {
-            crate::automation::ending::presentation_completed();
+            io.observer
+                .checkpoint(&CheckpointView::PresentationCompleted);
         }
-        0
+        PresentationStep::Input(false)
     }
 
-    unsafe fn show_slides(table: STRING, ending: bool) -> BOOLEAN {
+    unsafe fn presentation_frame(
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
+        state: &mut PresentationState,
+    ) -> bool {
+        let activity = cx.world.activity();
+        if let Some(keep) = cx.with_legacy(|| admit_presentation(state, io, activity)) {
+            return keep;
+        }
+        loop {
+            match cx.with_legacy(|| presentation_commands(state, io)) {
+                PresentationStep::Input(keep) => return keep,
+                PresentationStep::Call => {
+                    show_file(cx, io, state.buffer.as_ptr());
+                }
+            }
+        }
+    }
+
+    unsafe fn show_slides(
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
+        table: STRING,
+        ending: bool,
+    ) -> BOOLEAN {
         let mut state: PresentationState = std::mem::zeroed();
         state.slide_show = table;
         if state.slide_show.is_null() {
-            crate::automation::ending::presentation_cancelled();
+            io.observer
+                .checkpoint(&CheckpointView::PresentationCancelled);
             return 0;
         }
         state.ending = ending;
         if ending {
-            crate::automation::ending::presentation_started();
+            io.observer.checkpoint(&CheckpointView::PresentationStarted);
         }
         state.slide_show = SetAbsStringTableIndex(state.slide_show, 0);
         state.oper_index = 0;
-        let old_context = SetContext(Kernel::current().read(|owner| owner.screen_context));
-        let mut old_rect: RECT = std::mem::zeroed();
-        GetContextClipRect(&mut old_rect);
-        let old_font = SetContextFont(ptr::null_mut());
-        SetContextBackGroundColor(BLACK_COLOR);
-        SetMenuSounds(0, 0);
-        state.input_func = Some(do_presentation);
-        state.last_draw_kind = -1;
-        state.text_vpos = b'B' as c_int;
-        state.movie_frame = -1;
-        state.start_time = GetTimeCounter();
-        state.last_sync_time = state.start_time;
-        DoInput(ptr::addr_of_mut!(state).cast(), 1);
-        SleepThreadUntil(FadeMusic(0, ONE_SECOND as SIZE));
-        stop_music();
-        FadeMusic(NORMAL_VOLUME as BYTE, 0);
-        DestroyMusic(state.music_ref);
-        DestroyDrawable(ReleaseDrawable(state.rotated_frame));
-        DestroyDrawable(ReleaseDrawable(state.frame));
-        for font in state.fonts {
-            DestroyFont(font);
-        }
-        SetContextFont(old_font);
-        SetContextClipRect(&mut old_rect);
-        SetContext(old_context);
+        let context = cx.kernel.screen_context;
+        let (old_context, old_font, mut old_rect) = cx.with_legacy(|| {
+            let old_context = SetContext(context);
+            let mut old_rect: RECT = std::mem::zeroed();
+            GetContextClipRect(&mut old_rect);
+            let old_font = SetContextFont(ptr::null_mut());
+            SetContextBackGroundColor(BLACK_COLOR);
+            SetMenuSounds(0, 0);
+            state.last_draw_kind = -1;
+            state.text_vpos = b'B' as c_int;
+            state.movie_frame = -1;
+            state.start_time = GetTimeCounter();
+            state.last_sync_time = state.start_time;
+            (old_context, old_font, old_rect)
+        });
+        cx.run_input(io, true, |cx, io| presentation_frame(cx, io, &mut state));
+        cx.with_legacy(|| {
+            SleepThreadUntil(FadeMusic(0, ONE_SECOND as SIZE));
+            stop_music();
+            FadeMusic(NORMAL_VOLUME as BYTE, 0);
+            DestroyMusic(state.music_ref);
+            DestroyDrawable(ReleaseDrawable(state.rotated_frame));
+            DestroyDrawable(ReleaseDrawable(state.frame));
+            for font in state.fonts {
+                DestroyFont(font);
+            }
+            SetContextFont(old_font);
+            SetContextClipRect(&mut old_rect);
+            SetContext(old_context);
+        });
         1
     }
 
-    unsafe extern "C" fn video_input(raw: *mut c_void) -> BOOLEAN {
-        let state = &mut *raw.cast::<VideoState>();
-        if PlayingLegacyVideo(state.cur_video) == 0 {
+    unsafe fn video_input(video: *mut LegacyVideoRef) -> BOOLEAN {
+        if PlayingLegacyVideo(video) == 0 {
             return 0;
         }
         if menu(KEY_MENU_SELECT)
@@ -751,45 +765,49 @@ pub(crate) mod runtime {
         FadeScreen(ScreenFadeType_FadeAllToColor, 0);
     }
 
-    unsafe fn show_video(video: *mut LegacyVideo) -> BOOLEAN {
-        fade_clear_screen();
-        let reference = PlayLegacyVideo(video);
+    unsafe fn show_video(cx: &mut Cx<'_>, io: &mut Io<'_>, video: *mut LegacyVideo) -> BOOLEAN {
+        cx.with_legacy(|| fade_clear_screen());
+        let reference = cx.with_legacy(|| PlayLegacyVideo(video));
         if reference.is_null() {
             return 0;
         }
-        let mut state = VideoState {
-            input_func: Some(video_input),
-            cur_video: reference,
-        };
-        SetMenuSounds(0, 0);
-        DoInput(ptr::addr_of_mut!(state).cast(), 1);
-        StopLegacyVideo(reference);
-        fade_clear_screen();
+        cx.with_legacy(|| SetMenuSounds(0, 0));
+        cx.run_input(io, true, |cx, _| {
+            cx.with_legacy(|| video_input(reference) != 0)
+        });
+        cx.with_legacy(|| {
+            StopLegacyVideo(reference);
+            fade_clear_screen();
+        });
         1
     }
 
     /// # Safety
     /// `presentation` must identify a registered resource. Graphics, audio and input
     /// must be initialized, and this call must run on the game thread.
-    #[no_mangle]
-    pub unsafe extern "C" fn ShowPresentation(presentation: RESOURCE) -> BOOLEAN {
-        let kind = res_GetResourceType(presentation);
+    pub unsafe fn show_presentation(
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
+        presentation: RESOURCE,
+    ) -> BOOLEAN {
+        let kind = cx.with_legacy(|| res_GetResourceType(presentation));
         if kind.is_null() {
             return 0;
         }
         match CStr::from_ptr(kind).to_bytes() {
             b"STRTAB" => {
-                let table = CaptureStringTable(LoadStringTableInstance(presentation));
+                let table =
+                    cx.with_legacy(|| CaptureStringTable(LoadStringTableInstance(presentation)));
                 let ending = CStr::from_ptr(presentation).to_bytes()
                     == &FINALPRES_STRTAB[..FINALPRES_STRTAB.len() - 1];
-                let result = show_slides(table, ending);
-                DestroyStringTable(ReleaseStringTable(table));
+                let result = show_slides(cx, io, table, ending);
+                cx.with_legacy(|| DestroyStringTable(ReleaseStringTable(table)));
                 result
             }
             b"3DOVID" => {
-                let video = LoadLegacyVideoInstance(presentation);
-                let result = show_video(video);
-                DestroyLegacyVideo(video);
+                let video = cx.with_legacy(|| LoadLegacyVideoInstance(presentation));
+                let result = show_video(cx, io, video);
+                cx.with_legacy(|| DestroyLegacyVideo(video));
                 result
             }
             _ => {
@@ -806,9 +824,6 @@ pub(crate) mod runtime {
         }
     }
 }
-
-#[cfg(not(test))]
-pub use runtime::ShowPresentation;
 
 #[cfg(test)]
 mod tests {

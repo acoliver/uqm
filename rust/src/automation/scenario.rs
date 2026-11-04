@@ -340,8 +340,8 @@ pub fn enter_scene(plan: &ScenePlan, ops: &mut impl SceneEntryOps) {
 }
 
 #[cfg(not(test))]
-pub(super) struct LinkedSceneEntry {
-    pub(super) screen_context: crate::graphics::native_abi::CONTEXT,
+pub(crate) struct LinkedSceneEntry {
+    pub(crate) screen_context: crate::graphics::native_abi::CONTEXT,
 }
 
 #[cfg(not(test))]

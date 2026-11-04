@@ -3,11 +3,10 @@
 //! All graphics handles here are native FRAME/CONTEXT pointers. The game
 //! thread owns the map state; callbacks may reenter drawing and input code.
 
-#![allow(non_snake_case)]
-
-use crate::c_bindings::global_state::{Color, EXTENT, FRAME, MENU_STATE, POINT, RECT, STAMP};
+mod screen;
 #[cfg(not(test))]
-use crate::c_bindings::global_state::{FLEET_INFO, QUEUE, TEXT};
+use screen::{finish_star_map, prepare_star_map};
+
 use crate::engine::Kernel;
 #[cfg(not(test))]
 use crate::engine::{StoryKey, World, WorldData};
@@ -23,6 +22,9 @@ use crate::graphics::{
         BatchGraphics, LoadIntoExtraScreen, ScreenTransition, SetTransitionSource, UnbatchGraphics,
     },
 };
+use crate::ships::native::abi::{Color, EXTENT, FRAME, MENU_STATE, POINT, RECT, STAMP};
+#[cfg(not(test))]
+use crate::ships::native::abi::{FLEET_INFO, QUEUE, TEXT};
 
 use crate::graphics::{
     context_abi::{SetContext, SetContextForeGroundColor},
@@ -81,8 +83,7 @@ use crate::navigation::globals::in_hqspace;
 
 #[cfg(not(test))]
 use crate::mainloop::input_abi::live::{
-    AnyButtonPress, DoInput, FlushInput, SetDefaultMenuRepeatDelay, SetMenuRepeatDelay,
-    SetMenuSounds,
+    AnyButtonPress, FlushInput, SetDefaultMenuRepeatDelay, SetMenuRepeatDelay, SetMenuSounds,
 };
 
 #[cfg(not(test))]
@@ -736,7 +737,7 @@ unsafe fn erase_cursor(x: i16, y: i16) {
 #[cfg(not(test))]
 /// # Safety
 /// Game-thread only, with the star-map UI active.
-pub unsafe fn ZoomStarMap(direction: i16) {
+pub unsafe fn zoom_star_map(direction: i16) {
     if direction > 0 && ZOOM_LEVEL < MAX_ZOOM_SHIFT {
         ZOOM_LEVEL += 1;
         MAP_ORIGIN = cursorLoc;
@@ -877,7 +878,7 @@ fn fuel_requirement(from: POINT, to: POINT, space: u8, sqrt: impl FnOnce(u32) ->
 #[cfg(not(test))]
 /// # Safety
 /// Game-thread only, with the star-map status UI active.
-pub unsafe fn UpdateFuelRequirement() {
+pub unsafe fn update_fuel_requirement() {
     let fuel = fuel_requirement(current_location(), cursorLoc, which_space(), |f| {
         crate::math::square_root(f)
     });
@@ -1083,54 +1084,32 @@ unsafe fn update_map() {
 #[cfg(not(test))]
 /// # Safety
 /// Game-thread only, with game globals and native UI resources initialized.
-#[no_mangle]
-pub unsafe extern "C" fn StarMap() -> u32 {
-    let mut menu: MENU_STATE = std::mem::zeroed();
-    ZOOM_LEVEL = 0;
-    MAP_ORIGIN = POINT { x: 4999, y: 4999 };
-    STAR_MAP_FRAME = pixmap_abi::SetAbsFrameIndex(
-        Kernel::current().read(|owner| owner.misc_data_frame).cast(),
-        48,
-    )
-    .cast();
-    let universe = current_location();
-    cursorLoc = WorldData::current().read(|owner| owner.game.autopilot);
-    if cursorLoc.x == -1 && cursorLoc.y == -1 {
-        cursorLoc = universe;
-    }
-    menu.InputFunc = Some(DoMoveCursor);
-    menu.Initialized = 0;
-    TRANSITION_PENDING = true;
-    if which_space() <= 1 {
-        update_map();
-    }
-    DrawStarMap(0, (-1isize) as *mut RECT);
-    TRANSITION_PENDING = false;
-    BatchGraphics();
-    let old_context = SetContext(Kernel::current().read(|owner| owner.space_context));
-    let mut clip = zero_rect();
-    GetContextClipRect(&mut clip);
-    SetContext(old_context);
-    LoadIntoExtraScreen(ptr::from_mut(&mut clip).cast());
-    draw_cursor(ux(cursorLoc.x), uy(cursorLoc.y));
-    UnbatchGraphics();
-    SetMenuSounds(0, 0);
-    SetMenuRepeatDelay(ONE_SECOND / 60, ONE_SECOND / 8, ONE_SECOND / 120, 1);
-    DoInput(ptr::from_mut(&mut menu).cast(), 0);
-    SetMenuSounds(15, 16);
-    SetDefaultMenuRepeatDelay();
-    DrawHyperCoords(universe);
-    DrawSISMessage(ptr::null());
-    DrawStatusMessage(ptr::null());
-    if WorldData::current().read(|owner| owner.game.autopilot.x) == universe.x
-        && WorldData::current().read(|owner| owner.game.autopilot.y) == universe.y
+pub unsafe fn star_map(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    io: &mut crate::engine::observe::Io<'_>,
+) -> u32 {
+    let misc_data = cx.kernel.misc_data_frame;
+    let space = cx.kernel.space_context;
+    let autopilot = cx.world.data.game.autopilot;
+    let (mut menu, universe) =
+        cx.with_legacy(|| prepare_star_map(misc_data.cast(), space.cast(), autopilot));
+    cx.with_legacy(|| {
+        SetMenuSounds(0, 0);
+        SetMenuRepeatDelay(ONE_SECOND / 60, ONE_SECOND / 8, ONE_SECOND / 120, 1);
+    });
+    cx.run_input(io, false, |cx, _| {
+        cx.with_legacy(|| DoMoveCursor(&mut menu) != 0)
+    });
+    cx.with_legacy(|| {
+        SetMenuSounds(15, 16);
+        SetDefaultMenuRepeatDelay();
+        finish_star_map(universe);
+    });
+    if cx.world.data.game.autopilot.x == universe.x && cx.world.data.game.autopilot.y == universe.y
     {
-        (**WorldData::current()).game.autopilot = POINT { x: -1, y: -1 };
+        cx.world.data.game.autopilot = POINT { x: -1, y: -1 };
     }
-    u32::from(
-        WorldData::current().read(|owner| owner.game.autopilot.x) != -1
-            && WorldData::current().read(|owner| owner.game.autopilot.y) != -1,
-    )
+    u32::from(cx.world.data.game.autopilot.x != -1 && cx.world.data.game.autopilot.y != -1)
 }
 
 #[cfg(test)]

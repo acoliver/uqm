@@ -1097,7 +1097,7 @@ mod tests {
             device: Device::ClearSpindle,
             max_ticks: 50,
         });
-        let state = super::super::story_actions::DEVICE_STORY_KEYS
+        let state = crate::planets::device_effects::DEVICE_STORY_KEYS
             .iter()
             .copied()
             .chain(["fuel", "activity"])

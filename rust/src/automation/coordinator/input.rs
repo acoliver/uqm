@@ -17,23 +17,17 @@ pub(super) fn discard_held_repeat(
     held.is_none_or(|key| discard(i32::from(crate::automation::input::menu_key_to_index(key))))
 }
 
-impl Coordinator {
+impl AutomationObserver {
     #[must_use]
-    pub fn start_scene_replaces_introduction() -> bool {
-        Self::get().is_some_and(|coord| {
-            coord
-                .inner
-                .lock()
-                .pending_start_scene
-                .replaces_introduction()
-        })
+    pub fn start_scene_replaces_introduction(&self) -> bool {
+        self.inner
+            .lock()
+            .pending_start_scene
+            .replaces_introduction()
     }
 
-    pub(super) fn activate_input_runtime() -> &'static RuntimeModel {
-        input_ffi::init_automation_runtime();
-        let Some(runtime) = input_ffi::get_runtime() else {
-            panic!("automation runtime initialization did not publish its runtime");
-        };
+    pub(super) fn activate_input_runtime() -> Arc<RuntimeModel> {
+        let runtime = Arc::new(RuntimeModel::new());
         runtime.activate();
         runtime
     }
@@ -69,7 +63,11 @@ impl Coordinator {
         false
     }
 
-    pub(super) fn process_input_at_boundary(&self, button_wait: bool) -> bool {
+    pub(super) fn process_input_at_boundary(
+        &self,
+        capture: &mut dyn FnMut() -> campaign_state::CampaignView,
+        button_wait: bool,
+    ) -> bool {
         let mut inner = self.inner.lock();
 
         if inner.terminal_class.is_some() {
@@ -110,7 +108,9 @@ impl Coordinator {
             inner.pending_main_menu_ready = false;
             return self.apply_main_menu_ready(&mut inner);
         }
-        if self.verify_runtime_assertions(&mut inner) || self.verify_activity_assertion(&mut inner)
+        let world = &capture();
+        if self.verify_runtime_assertions(world, &mut inner)
+            || self.verify_activity_assertion(world, &mut inner)
         {
             return true;
         }
@@ -118,6 +118,7 @@ impl Coordinator {
         // Step 2: Feed to scheduler. Runtime waits are satisfied only by
         // observed production state, never by injected input.
         let mut scheduler_event = self.service_semantic_waits(
+            world,
             &mut inner,
             released_semantic_select,
             orbit_transition_pending,
@@ -126,7 +127,7 @@ impl Coordinator {
             return true;
         }
 
-        scheduler_event = self.service_navigation(&mut inner, scheduler_event);
+        scheduler_event = self.service_navigation(world, &mut inner, scheduler_event);
 
         if inner.terminal_class.is_some() {
             return true;
@@ -155,7 +156,7 @@ impl Coordinator {
         ) && inner.sched_state.phase == ActionPhase::WaitingForInput
             && scheduler_event == SchedulerEvent::AdmittedInput
         {
-            match crate::automation::melee_fixture::trigger() {
+            match crate::automation::melee_fixture::trigger(&|| self.parity_checkpoint("fixture")) {
                 Ok(()) => self.write_trace_labeled(
                     inner,
                     RecordKind::SemanticAssertion,
@@ -277,6 +278,38 @@ mod tests {
     use super::*;
 
     #[test]
+    fn nested_and_terminal_admission_do_not_read_campaign_owners() {
+        let source = serde_json::to_vec(&serde_json::json!({
+            "version": 1, "name": "lazy-owner",
+            "steps": [
+                {"action": "select_planet_menu", "phase": "dispatch", "max_ticks": 2},
+                {"action": "finish"}
+            ],
+            "budgets": {"max_input_ticks": 10, "max_presentations": 100, "max_wallclock_seconds": 60}
+        })).unwrap();
+        let script = crate::automation::validate_script(
+            crate::automation::parse_script(&source, "test.json").unwrap(),
+            "test.json",
+        )
+        .unwrap();
+        let temp = tempfile::tempdir().unwrap();
+        let observer = AutomationObserver::new(script, temp.path().into());
+        let mut capture = || panic!("admission must not acquire a campaign owner");
+        assert!(!observer.process_input_at_boundary(&mut capture, true));
+        assert_eq!(observer.inner.lock().input_seen, 1);
+        assert_eq!(observer.inner.lock().sched_state, SchedulerState::initial());
+        observer
+            .runtime
+            .mirror
+            .terminal
+            .try_set(TerminalClass::SemanticMismatch);
+        assert_eq!(input_ffi::service_input(&observer, &mut capture, false), 1);
+        assert_eq!(input_ffi::after_input_update(&observer), 1);
+        assert!(observer.process_input_at_boundary(&mut capture, false));
+        assert_eq!(observer.inner.lock().input_seen, 1);
+    }
+
+    #[test]
     fn fixture_failures_and_button_wait_watchdog_are_terminal(
     ) -> Result<(), Box<dyn std::error::Error>> {
         const CHILD: &str = "UQM_INPUT_BOUNDARY_FAILURE";
@@ -318,12 +351,16 @@ mod tests {
             "test.json",
         )?;
         let temp = tempfile::tempdir()?;
-        Coordinator::init(script, temp.path().into());
-        let coord = Coordinator::get().ok_or("coordinator not initialized")?;
+        let _app =
+            crate::app::Application::new(Some(AutomationObserver::new(script, temp.path().into())));
+        let coord = _app
+            .observer()
+            .cloned()
+            .ok_or("coordinator not initialized")?;
         if case == "watchdog" {
             let mut stopped = false;
             for _ in 0..11 {
-                if coord.process_input_at_boundary(true) {
+                if coord.process_input_at_boundary(&mut campaign_state::CampaignView::empty, true) {
                     stopped = true;
                     break;
                 }
@@ -335,16 +372,16 @@ mod tests {
             assert_eq!(coord.inner.lock().sched_state, SchedulerState::initial());
         } else {
             if case != "melee" {
-                assert!(!coord.process_input_inner());
+                assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
                 assert_eq!(coord.inner.lock().sched_state.step_index, 1);
             }
-            assert!(coord.process_input_inner());
+            assert!(coord.process_input_inner(&mut campaign_state::CampaignView::empty));
             assert_eq!(
                 coord.inner.lock().terminal_class,
                 Some(TerminalClass::SemanticMismatch)
             );
         }
-        assert!(Coordinator::finalize(0)? != 0);
+        assert!(_app.observer().unwrap().finalize(0)? != 0);
         Ok(())
     }
 }

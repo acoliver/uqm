@@ -10,17 +10,32 @@ pub(super) struct Departure {
     pub(super) native_frame_pending: bool,
 }
 
-impl Coordinator {
-    pub(super) fn transit_budget(action: Option<&Action>) -> Option<u64> {
+impl AutomationObserver {
+    pub(super) fn patrol_policy(
+        action: Option<&Action>,
+    ) -> crate::automation::script::PatrolPolicy {
+        use crate::automation::script::PatrolPolicy;
+        match action {
+            Some(Action::NavigateToHyperspace(step)) if step.retreat_encounters => {
+                PatrolPolicy::Retreat
+            }
+            Some(Action::NavigateToPlanet(step)) => step.patrol_policy,
+            Some(Action::NavigateToOrbit(step)) => step.patrol_policy,
+            _ => PatrolPolicy::Fight,
+        }
+    }
+
+    pub(super) fn transit_budget(
+        world: &campaign_state::CampaignView,
+        action: Option<&Action>,
+    ) -> Option<u64> {
         use crate::automation::script::PatrolPolicy;
         match action {
             Some(Action::NavigateToHyperspace(step)) if step.encounter_response.is_none() => {
                 Some(step.max_ticks)
             }
             Some(Action::NavigateToMoon(step))
-                if World::current()
-                    .read(|world| world.story_value(StoryKey::GLOBAL_FLAGS_AND_DATA))
-                    == Some(0) =>
+                if world.story_value(StoryKey::GLOBAL_FLAGS_AND_DATA) == Some(0) =>
             {
                 Some(step.max_ticks)
             }
@@ -29,9 +44,7 @@ impl Coordinator {
             }
             Some(Action::NavigateToOrbit(step))
                 if step.patrol_policy != PatrolPolicy::Stop
-                    && World::current()
-                        .read(|world| world.story_value(StoryKey::GLOBAL_FLAGS_AND_DATA))
-                        == Some(0) =>
+                    && world.story_value(StoryKey::GLOBAL_FLAGS_AND_DATA) == Some(0) =>
             {
                 Some(step.max_ticks)
             }
@@ -40,21 +53,21 @@ impl Coordinator {
     }
 
     pub(in crate::automation) fn native_battle_frame_completed(
+        &self,
         activity: crate::mainloop::types::ActivityValue,
     ) {
         if activity.kind() == crate::mainloop::types::ActivityKind::InHyperspace {
-            if let Some(coord) = Self::get() {
-                coord.inner.lock().departure.native_frame_pending = false;
-            }
+            self.inner.lock().departure.native_frame_pending = false;
         }
     }
 
     pub(super) fn service_hyperspace_departure(
         &self,
+        world: &campaign_state::CampaignView,
         inner: &mut CoordInner,
         mut scheduler_event: SchedulerEvent,
     ) -> SchedulerEvent {
-        let snapshot = crate::automation::input_ffi::departure_snapshot();
+        let snapshot = crate::automation::input_ffi::departure_snapshot(world);
         let solar_system_active = snapshot.active != 0;
         if solar_system_active && snapshot.in_ip_flight != 0 && !inner.departure.flight_observed {
             inner.departure.flight_observed = true;
@@ -74,7 +87,7 @@ impl Coordinator {
             solar_system_active,
             activity,
         ) {
-            if !Self::set_navigation_controls(
+            if !self.set_navigation_controls(
                 crate::automation::navigation::NavigationControl::default(),
             ) {
                 self.reject_input(inner, "navigation", -1, -1);
@@ -106,22 +119,26 @@ impl Coordinator {
                 target_guard_active: false,
             },
         );
-        if !Self::set_navigation_controls(control) {
+        if !self.set_navigation_controls(control) {
             self.reject_input(inner, "navigation", -1, -1);
         }
         scheduler_event
     }
 }
 
-impl Coordinator {
+impl AutomationObserver {
     pub(super) fn service_orbit_navigation(
         &self,
+        world: &campaign_state::CampaignView,
         inner: &mut CoordInner,
         navigation: &crate::automation::script::NavigateToOrbitStep,
         mut scheduler_event: SchedulerEvent,
     ) -> SchedulerEvent {
-        let snapshot =
-            crate::automation::input_ffi::navigation_snapshot(i32::from(navigation.planet), None);
+        let snapshot = crate::automation::input_ffi::navigation_snapshot(
+            world,
+            i32::from(navigation.planet),
+            None,
+        );
         if inner.sched_state.phase == ActionPhase::WaitingForInput {
             inner.orbit = Default::default();
         }
@@ -159,7 +176,7 @@ impl Coordinator {
             navigation.planet,
         );
         if reached || contact {
-            if !Self::set_navigation_controls(
+            if !self.set_navigation_controls(
                 crate::automation::navigation::NavigationControl::default(),
             ) {
                 self.reject_input(inner, "navigation", -1, -1);
@@ -180,7 +197,7 @@ impl Coordinator {
                     navigation.planet
                 ),
             );
-        } else if !Self::set_navigation_controls(control) {
+        } else if !self.set_navigation_controls(control) {
             self.reject_input(inner, "navigation", -1, -1);
             return scheduler_event;
         }

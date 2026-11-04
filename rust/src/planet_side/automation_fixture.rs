@@ -30,7 +30,7 @@ use super::world::WORLD_WIDTH;
 
 /// Automation gate that mirrors the live Rust PlanetSide controller.
 ///
-/// Production binds this to [`Coordinator::is_active`]
+/// Production binds this to [`AutomationObserver::is_active`]
 /// before install; the tests bind it directly so the accepted and rejected
 /// paths stay deterministic.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -155,7 +155,7 @@ fn queue_fixture_request(layout: u8) -> Result<(), AdapterError> {
 /// The one coordinator-facing function that consumes the queued flag.
 ///
 /// Ordinary gameplay that never executed the script action gets `None`; production
-/// [`Coordinator::is_active`] is checked by the caller before tapping, so a stale
+/// [`AutomationObserver::is_active`] is checked by the caller before tapping, so a stale
 /// queue cannot be consumed or fail outside automation.
 #[must_use]
 pub(crate) fn tap_planet_side_fixture_request(position: SurfacePoint) -> Option<PlanetSideFixture> {
@@ -854,7 +854,7 @@ mod tests {
 
     #[test]
     fn one_observation_decides_both_the_tap_and_the_install_gate() {
-        // run_session samples `Coordinator::is_active()` exactly once before
+        // run_session samples `AutomationObserver::is_active()` exactly once before
         // tapping and derives both the tap and the install gate from that same
         // observation.  Mirror that contract: an inactive observation must not
         // consume the queued request, and the request must survive for a later

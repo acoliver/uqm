@@ -224,12 +224,7 @@ pub use crate::mainloop::lifecycle_abi::uqm_battle_with_frame_callback;
 extern "C" {
     pub fn uqm_battle_with_frame_callback();
 }
-#[cfg(not(test))]
-pub use crate::mainloop::lifecycle_abi::uqm_splash_with_bg_init_kernel;
-#[cfg(test)]
-extern "C" {
-    pub fn uqm_splash_with_bg_init_kernel();
-}
+
 extern "C" {
     /// Sets the `MainExited` global.
     ///
@@ -265,21 +260,6 @@ pub use crate::ui::starbase::install_bomb_at_earth;
 extern "C" {
     pub fn install_bomb_at_earth();
 }
-#[cfg(not(test))]
-pub use crate::ui::starbase::visit_star_base;
-#[cfg(test)]
-extern "C" {
-    pub fn visit_star_base();
-}
-
-#[cfg(not(test))]
-pub use crate::planets::solarsys::lifecycle::ExploreSolarSys;
-
-#[cfg(not(test))]
-pub use crate::comm::comm_abi::RaceCommunication;
-
-#[cfg(not(test))]
-pub use crate::comm::comm_abi::InitCommunication;
 
 // ---------------------------------------------------------------------------
 // LoadKernel — kernel initialization
@@ -349,21 +329,6 @@ pub use crate::time::clock_abi::live::UninitGameClock;
 pub use crate::ships::master_native::engine::FreeMasterShipList;
 
 pub use crate::log_abi::log_showBox;
-
-extern "C" {
-    /// `BOOLEAN StartGame(void)` — outer-loop controller.
-    ///
-    /// Returns non-zero (true) to start/load a game, zero to quit.
-    /// @plan PLAN-20260707-MAINLOOP.P06
-    #[cfg(test)]
-    pub fn start_game() -> CBoolean;
-}
-/// # Safety
-/// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(not(test))]
-pub fn start_game() -> CBoolean {
-    (crate::mainloop::restart_menu::render_abi::start_game()) as _
-}
 
 // ---------------------------------------------------------------------------
 // Test-shim activity state — pure Rust, only compiled in `cfg(test)`

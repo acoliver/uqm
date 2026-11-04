@@ -1,6 +1,4 @@
 //! Input repeat, nested input loops and battle controls, ported from gameinp.c.
-#[cfg(not(test))]
-use crate::engine::Kernel;
 #[derive(Clone, Copy)]
 struct Repeat {
     delay: u32,
@@ -75,9 +73,9 @@ pub(crate) mod live {
     static mut MAXIMUM: u32 = 0;
     static mut STEP: u32 = 0;
     static mut GESTALT_KEYS: bool = false;
-    static mut SOUND_0: u16 = 0;
-    static mut SOUND_1: u16 = 0;
-    static mut INPUT_CALLBACK: Option<unsafe extern "C" fn()> = None;
+    pub(super) static mut SOUND_0: u16 = 0;
+    pub(super) static mut SOUND_1: u16 = 0;
+    pub(super) static mut INPUT_CALLBACK: Option<crate::engine::input::InputFrameHook> = None;
 
     /// # Safety
     /// Automation calls on the game thread with externally supplied input indices.
@@ -189,10 +187,9 @@ pub(crate) mod live {
 
     /// # Safety
     /// Callback must outlive its installation, and must not replace an active callback.
-    #[no_mangle]
-    pub unsafe extern "C" fn SetInputCallback(
-        callback: Option<unsafe extern "C" fn()>,
-    ) -> Option<unsafe extern "C" fn()> {
+    pub unsafe fn SetInputCallback(
+        callback: Option<crate::engine::input::InputFrameHook>,
+    ) -> Option<crate::engine::input::InputFrameHook> {
         let old = INPUT_CALLBACK;
         assert!(old.is_none() || callback.is_none());
         INPUT_CALLBACK = callback;
@@ -222,7 +219,7 @@ pub(crate) mod live {
         clear_menu_state();
     }
 
-    fn menu_sound_flags(state: &InputState) -> u16 {
+    pub(super) fn menu_sound_flags(state: &InputState) -> u16 {
         [
             KEY_MENU_UP,
             KEY_MENU_DOWN,
@@ -245,54 +242,21 @@ pub(crate) mod live {
     /// State starts with a live non-null C ABI input callback; nested loops run on the game thread.
     #[no_mangle]
     pub unsafe extern "C" fn DoInput(state: *mut c_void, reset: u32) {
-        if reset != 0 {
-            FlushInput();
-        }
-        crate::mainloop::input_frame::rust_begin_input_loop();
-        loop {
-            crate::callback::ffi::Async_process();
-            crate::graphics::sdl::lifecycle_abi::TFB_ProcessEvents();
-            crate::mainloop::lifecycle_abi::process_utility_keys();
-            super::yield_input_loop(|| crate::threading::legacy_abi::TaskSwitch());
-            if crate::automation::input_ffi::rust_automation_service_do_input() != 0 {
-                break;
-            }
-            UpdateInputState();
-            if crate::automation::input_ffi::rust_automation_after_input_update() != 0 {
-                break;
-            }
-            let flags = menu_sound_flags(&ptr::addr_of!(PulsedInputState).read());
-            let mut sound = Kernel::current().read(|owner| owner.menu_sounds);
-            if !sound.is_null() && flags & (SOUND_0 | SOUND_1) != 0 {
-                if flags & SOUND_1 != 0 {
-                    sound = crate::strings::string_table::SetAbsStringTableIndex(sound.cast(), 1)
-                        .cast();
-                }
-                crate::ui::settings::PlaySoundEffect(
-                    sound.cast(),
-                    0,
-                    crate::navigation::abi::SoundPosition {
-                        positional: 0,
-                        x: 0,
-                        y: 0,
-                    },
-                    ptr::null_mut(),
-                    0,
-                );
-            }
-            if let Some(callback) = INPUT_CALLBACK {
-                callback();
-            }
-            let callback = *state.cast::<unsafe extern "C" fn(*mut c_void) -> u32>();
-            let keep = callback(state);
-            if crate::mainloop::input_frame::rust_complete_input_frame(keep as i32) == 0 {
-                break;
-            }
-        }
-        if reset != 0 {
-            FlushInput();
-        }
+        crate::app::bridge::enter(|cx| {
+            let runtime = cx.kernel.input_runtime();
+            let mut observer = runtime.observer();
+            let mut io = crate::engine::observe::Io {
+                observer: &mut *observer,
+            };
+            runtime.run(cx, &mut io, reset != 0, &mut |cx, _| {
+                cx.with_legacy(|| {
+                    let callback = *state.cast::<unsafe extern "C" fn(*mut c_void) -> u32>();
+                    callback(state) != 0
+                })
+            });
+        });
     }
+
     /// # Safety
     /// Game-thread access to menu sounds.
     #[no_mangle]
@@ -361,6 +325,10 @@ pub(crate) mod live {
         result
     }
 }
+#[path = "input_driver.rs"]
+mod driver;
+#[cfg(not(test))]
+pub use driver::NativeInputRuntime;
 #[cfg(not(test))]
 pub use live::*;
 

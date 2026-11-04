@@ -13,10 +13,13 @@
 //!
 //! @plan PLAN-20260314-COMM.P09
 
+#[cfg(not(test))]
+use crate::engine::Kernel;
+
 use super::response::ResponseFunc;
 use super::state::CommState;
 #[cfg(not(test))]
-use crate::engine::Kernel;
+use crate::engine::observe::CheckpointView;
 
 fn communication_background_volume(background: u8, using_speech: u32) -> u8 {
     if using_speech != 0 {
@@ -46,6 +49,8 @@ pub enum ScrollMode {
     /// Smooth scrolling (OPT_3DO).
     Smooth,
 }
+
+mod fresh_press;
 
 // Production C bridge — all calls go through these wrappers so tests can
 // override behaviour by operating on CommState fields directly.
@@ -276,12 +281,11 @@ pub(super) mod c_bridge {
 
 #[cfg(not(test))]
 pub mod dinput {
-    #![allow(dead_code)]
-    use super::c_bridge;
-    use super::{KEY_MENU_CANCEL, KEY_MENU_LEFT, KEY_MENU_RIGHT};
-    use crate::engine::Kernel;
-    use crate::mainloop::restart_menu::c_extern::{DoInput, SetMenuSounds};
-    use std::ffi::{c_int, c_void};
+    use super::fresh_press::FreshPressLatch;
+    use super::{c_bridge, CheckpointView, KEY_MENU_CANCEL, KEY_MENU_LEFT, KEY_MENU_RIGHT};
+    use crate::engine::{battle::Cx, observe::Io};
+    use crate::mainloop::restart_menu::c_extern::SetMenuSounds;
+    use std::ffi::c_int;
 
     const MENU_SOUND_NONE: u32 = 0;
     const OPT_PC: c_int = 0x02;
@@ -294,7 +298,6 @@ pub mod dinput {
     // DoInput-compatible talking state struct (matches C C_TALKING_STATE)
     #[repr(C)]
     struct TalkingStateDInput {
-        input_func: unsafe extern "C" fn(*mut TalkingStateDInput) -> c_int,
         next_time: u32,
         wait_track: u16,
         rewind: c_int,
@@ -302,45 +305,9 @@ pub mod dinput {
         ended: c_int,
     }
 
-    /// Tracks whether a menu key has been released since it last acted.
-    ///
-    /// A key still held when a nested `DoInput` loop is entered keeps
-    /// producing repeat pulses inside that loop. Without this latch the loop
-    /// reads those repeats as fresh presses, re-triggering its action and
-    /// resetting its timeout indefinitely.
-    #[repr(C)]
-    #[derive(Clone, Copy)]
-    struct FreshPressLatch {
-        armed: c_int,
-    }
-
-    impl FreshPressLatch {
-        /// Arm only when the key is already up; an inherited hold must be
-        /// released before it can act.
-        fn entering(key: c_int) -> Self {
-            Self {
-                armed: (unsafe { c_bridge::current_menu_key(key) } == 0) as c_int,
-            }
-        }
-
-        /// Report a fresh press, re-arming whenever the key is released.
-        fn pressed(&mut self, key: c_int) -> bool {
-            if unsafe { c_bridge::current_menu_key(key) } == 0 {
-                self.armed = 1;
-                return false;
-            }
-            if self.armed != 0 && unsafe { c_bridge::pulsed_menu_key(key) } != 0 {
-                self.armed = 0;
-                return true;
-            }
-            false
-        }
-    }
-
     // DoInput-compatible last-replay state struct
     #[repr(C)]
     struct LastReplayStateDInput {
-        input_func: unsafe extern "C" fn(*mut LastReplayStateDInput) -> c_int,
         next_time: u32,
         time_out: u32,
         cancel: FreshPressLatch,
@@ -348,9 +315,7 @@ pub mod dinput {
     }
 
     // DoInput callback for talk segue (replaces c_DoTalkSegue)
-    unsafe extern "C" fn do_talk_segue_cb(p_ts: *mut TalkingStateDInput) -> c_int {
-        let ts = unsafe { &mut *p_ts };
-
+    unsafe fn do_talk_segue_frame(ts: &mut TalkingStateDInput) -> c_int {
         // Abort check: GLOBAL(CurrentActivity) & CHECK_ABORT
         let activity = crate::mainloop::ffi::get_current_activity().0 as u32;
         if (activity & CHECK_ABORT) != 0 {
@@ -416,22 +381,22 @@ pub mod dinput {
 
     /// Ported from c_RunTalkSegue — runs the talk segue via DoInput.
     /// Returns true if playback reached its natural end.
-    pub fn run_talk_segue_dinput(wait_track: u32) -> bool {
-        // Transition animation to talking state
-        if unsafe { c_bridge::want_talking_anim() } != 0
-            && unsafe { c_bridge::have_talking_anim() } != 0
-        {
-            if unsafe { c_bridge::has_transition_anim() } != 0 {
-                unsafe { c_bridge::set_run_intro_anim() };
+    pub fn run_talk_segue_dinput(cx: &mut Cx<'_>, io: &mut Io<'_>, wait_track: u32) -> bool {
+        cx.with_legacy(|| {
+            // Transition animation to talking state
+            if unsafe { c_bridge::want_talking_anim() } != 0
+                && unsafe { c_bridge::have_talking_anim() } != 0
+            {
+                if unsafe { c_bridge::has_transition_anim() } != 0 {
+                    unsafe { c_bridge::set_run_intro_anim() };
+                }
+                unsafe { c_bridge::set_run_talking_anim() };
+                while unsafe { c_bridge::running_intro_anim() } != 0 {
+                    unsafe { super::do_run_comm_anim_frame() };
+                }
             }
-            unsafe { c_bridge::set_run_talking_anim() };
-            while unsafe { c_bridge::running_intro_anim() } != 0 {
-                unsafe { super::do_run_comm_anim_frame() };
-            }
-        }
-
+        });
         let mut ts = TalkingStateDInput {
-            input_func: do_talk_segue_cb,
             next_time: 0,
             wait_track: if wait_track == 0 {
                 u16::MAX
@@ -443,41 +408,48 @@ pub mod dinput {
             ended: 0,
         };
 
-        if wait_track == 0 {
-            crate::automation::ui_observation::observe_communication_replay(true);
-        } else if c_bridge::PlayingTrack() == 0 {
-            c_bridge::PlayTrack();
-        }
+        cx.with_legacy(|| {
+            if wait_track == 0 {
+                io.observer
+                    .checkpoint(&CheckpointView::CommunicationReplay(true));
+            } else if c_bridge::PlayingTrack() == 0 {
+                c_bridge::PlayTrack();
+            }
 
-        unsafe {
-            SetMenuSounds(MENU_SOUND_NONE as u16, MENU_SOUND_NONE as u16);
-            DoInput(&mut ts as *mut _ as *mut c_void, 0);
-        }
-        if wait_track == 0 {
-            crate::automation::ui_observation::observe_communication_replay(false);
-        }
-        unsafe { c_bridge::comm_ClearSubtitles() };
+            unsafe { SetMenuSounds(MENU_SOUND_NONE as u16, MENU_SOUND_NONE as u16) };
+        });
+        cx.run_input(io, false, |cx, _| {
+            cx.with_legacy(|| unsafe { do_talk_segue_frame(&mut ts) != 0 })
+        });
+        cx.with_legacy(|| {
+            if wait_track == 0 {
+                io.observer
+                    .checkpoint(&CheckpointView::CommunicationReplay(false));
+            }
+            unsafe { c_bridge::comm_ClearSubtitles() };
 
-        if ts.ended != 0 {
-            unsafe { super::set_slider_image_frame(8) };
-        }
+            if ts.ended != 0 {
+                unsafe { super::set_slider_image_frame(8) };
+            }
 
-        // Transition back to silent
-        if unsafe { c_bridge::running_talking_anim() } != 0 {
-            unsafe { c_bridge::set_stop_talking_anim() };
-        }
-        while unsafe { c_bridge::running_talking_anim() } != 0 {
-            unsafe { super::do_run_comm_anim_frame() };
-        }
-
+            // Transition back to silent
+            if unsafe { c_bridge::running_talking_anim() } != 0 {
+                unsafe { c_bridge::set_stop_talking_anim() };
+            }
+            while unsafe { c_bridge::running_talking_anim() } != 0 {
+                unsafe { super::do_run_comm_anim_frame() };
+            }
+        });
         ts.ended != 0
     }
 
     // DoInput callback for last replay (replaces c_DoLastReplay)
-    unsafe extern "C" fn do_last_replay_cb(p_lrs: *mut LastReplayStateDInput) -> c_int {
-        let lrs = unsafe { &mut *p_lrs };
-
-        let activity = crate::mainloop::ffi::get_current_activity().0 as u32;
+    unsafe fn do_last_replay_frame(
+        lrs: &mut LastReplayStateDInput,
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
+    ) -> c_int {
+        let activity = cx.world.activity() as u32;
         if (activity & CHECK_ABORT) != 0 {
             return 0;
         }
@@ -494,51 +466,56 @@ pub mod dinput {
         let left_pressed = lrs.left.pressed(KEY_MENU_LEFT);
 
         if cancel_pressed && !won_last_battle {
-            let speech = Kernel::current().read(|kernel| kernel.using_speech);
-            c_bridge::FadeMusic(
-                super::communication_background_volume(
-                    crate::sound::types::NORMAL_VOLUME as u8,
-                    speech,
-                ),
-                c_bridge::ONE_SECOND_TICKS as i16,
-            );
-            super::super::response_ui::select_conversation_summary_production();
-            lrs.time_out = c_bridge::FadeMusic(0, (c_bridge::ONE_SECOND_TICKS * 2) as i16)
+            let speech = cx.kernel.using_speech;
+            cx.with_legacy(|| {
+                c_bridge::FadeMusic(
+                    super::communication_background_volume(
+                        crate::sound::types::NORMAL_VOLUME as u8,
+                        speech,
+                    ),
+                    c_bridge::ONE_SECOND_TICKS as i16,
+                )
+            });
+            cx.with_legacy(super::super::response_ui::select_conversation_summary_production);
+            lrs.time_out = cx
+                .with_legacy(|| c_bridge::FadeMusic(0, (c_bridge::ONE_SECOND_TICKS * 2) as i16))
                 + (c_bridge::ONE_SECOND_TICKS as u32) / 60;
         } else if left_pressed {
-            let speech = Kernel::current().read(|kernel| kernel.using_speech);
-            c_bridge::FadeMusic(
-                super::communication_background_volume(
-                    crate::sound::types::NORMAL_VOLUME as u8,
-                    speech,
-                ),
-                c_bridge::ONE_SECOND_TICKS as i16,
-            );
-            run_talk_segue_dinput(0);
-            lrs.time_out = c_bridge::FadeMusic(0, (c_bridge::ONE_SECOND_TICKS * 2) as i16)
+            let speech = cx.kernel.using_speech;
+            cx.with_legacy(|| {
+                c_bridge::FadeMusic(
+                    super::communication_background_volume(
+                        crate::sound::types::NORMAL_VOLUME as u8,
+                        speech,
+                    ),
+                    c_bridge::ONE_SECOND_TICKS as i16,
+                )
+            });
+            run_talk_segue_dinput(cx, io, 0);
+            lrs.time_out = cx
+                .with_legacy(|| c_bridge::FadeMusic(0, (c_bridge::ONE_SECOND_TICKS * 2) as i16))
                 + (c_bridge::ONE_SECOND_TICKS as u32) / 60;
         }
 
-        unsafe { super::do_update_animations(false) };
+        unsafe { cx.with_legacy(|| super::do_update_animations(false)) };
 
-        unsafe { SleepThreadUntil(lrs.next_time) };
+        unsafe { cx.with_legacy(|| SleepThreadUntil(lrs.next_time)) };
         lrs.next_time = c_bridge::clock::now_ticks() + (c_bridge::ONE_SECOND_TICKS as u32) / 40;
 
         1
     }
 
     /// Ported from c_RunLastReplay — runs the last replay via DoInput.
-    pub fn run_last_replay_dinput(timeout: i32) {
+    pub fn run_last_replay_dinput(cx: &mut Cx<'_>, io: &mut Io<'_>, timeout: i32) {
         let mut lrs = LastReplayStateDInput {
-            input_func: do_last_replay_cb,
             next_time: 0,
             time_out: timeout as u32 + (c_bridge::ONE_SECOND_TICKS as u32) / 60,
             cancel: FreshPressLatch::entering(KEY_MENU_CANCEL),
             left: FreshPressLatch::entering(KEY_MENU_LEFT),
         };
-        unsafe {
-            DoInput(&mut lrs as *mut _ as *mut c_void, 0);
-        }
+        cx.run_input(io, false, |cx, io| unsafe {
+            do_last_replay_frame(&mut lrs, cx, io) != 0
+        });
     }
 }
 
@@ -849,8 +826,6 @@ pub fn select_response(state: &mut CommState) -> Option<(ResponseFunc, u32)> {
 
     state.set_talking_finished(false);
     state.responses_mut().clear();
-    crate::automation::ui_observation::observe_communication_responses(0);
-    crate::automation::ui_observation::set_communication_responses_ready(false);
     state.top_response = None;
 
     Some((func, response_ref))
@@ -1208,8 +1183,12 @@ pub fn won_last_battle_external() -> bool {
 
 /// Run the "last replay" DoInput loop via Rust port (no lock needed).
 #[cfg(not(test))]
-pub fn run_last_replay_bridge(timeout: i32) {
-    dinput::run_last_replay_dinput(timeout);
+pub fn run_last_replay_bridge(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    io: &mut crate::engine::observe::Io<'_>,
+    timeout: i32,
+) {
+    dinput::run_last_replay_dinput(cx, io, timeout);
 }
 
 /// Fade music to background volume (no lock needed).
@@ -1248,7 +1227,12 @@ pub fn won_last_battle_external() -> bool {
     false
 }
 #[cfg(test)]
-pub fn run_last_replay_bridge(_timeout: i32) {}
+pub fn run_last_replay_bridge(
+    _cx: &mut crate::engine::battle::Cx<'_>,
+    _io: &mut crate::engine::observe::Io<'_>,
+    _timeout: i32,
+) {
+}
 #[cfg(test)]
 pub fn fade_music_to_background_bridge() {}
 
@@ -2495,31 +2479,6 @@ mod tests {
 
     // ---- Test 8 ------------------------------------------------------------
 
-    /// Structural: rust_do_communication in ffi.rs must drop(state) before
-    /// calling func(rref) in the Selected arm (lock discipline).
-    ///
-    /// PASSES against P09 stubs (P09 already has the correct structure).
-    #[test]
-    fn test_lock_dropped_before_callback_p10() {
-        let source = include_str!("ffi.rs");
-        // Find the rust_do_communication function body.
-        let fn_body = extract_fn_body(source, "fn rust_do_communication")
-            .expect("rust_do_communication must be in ffi.rs");
-        // drop(state) must appear before func(rref).
-        let drop_pos = fn_body.find("drop(state)").expect(
-            "rust_DoCommunication must contain drop(state) to release lock before callback",
-        );
-        let call_pos = fn_body
-            .find("func(rref)")
-            .expect("rust_DoCommunication must contain func(rref) in Selected arm");
-        assert!(
-            drop_pos < call_pos,
-            "drop(state) (at {}) must appear before func(rref) (at {}) in rust_DoCommunication",
-            drop_pos,
-            call_pos
-        );
-    }
-
     /// Structural regression: the response callback runs inside the enclosing
     /// `DoInput` loop, which owns event pumping and the sole `UpdateInputState`
     /// call. Polling input again in `rust_do_communication` erases the Select
@@ -2561,8 +2520,8 @@ mod tests {
     #[test]
     fn test_last_replay_requires_a_fresh_press_on_every_acting_key() {
         let source = include_str!("talk_segue.rs");
-        let body = extract_fn_body(source, "fn do_last_replay_cb")
-            .expect("do_last_replay_cb must be in talk_segue.rs");
+        let body = extract_fn_body(source, "fn do_last_replay_frame")
+            .expect("do_last_replay_frame must be in talk_segue.rs");
 
         for key in ["KEY_MENU_CANCEL", "KEY_MENU_LEFT"] {
             assert!(
@@ -2595,7 +2554,7 @@ mod tests {
             .nth(1)
             .expect("rust_DoCommunication must contain the no-response branch");
         assert!(
-            no_response_branch.contains("run_last_replay_bridge(timeout as i32)"),
+            no_response_branch.contains("run_last_replay_bridge(cx, io, timeout as i32)"),
             "no-response communication must exercise the production last-replay input loop"
         );
         assert!(

@@ -272,13 +272,19 @@ pub unsafe extern "C" fn c_ResetClearSubtitles() {
 }
 
 /// # Safety
-/// Called from the game thread with an initialized communication system.
+/// The game thread must have an active published communication context.
 #[no_mangle]
 pub unsafe extern "C" fn AlienTalkSegue(track: u16) {
-    super::ffi::rust_alien_talk_segue(track.into());
+    crate::app::bridge::enter(|cx| {
+        let mut observer = cx.kernel.input_runtime().observer();
+        let mut io = crate::engine::observe::Io {
+            observer: &mut *observer,
+        };
+        super::ffi::observe_responses(&mut io);
+        super::ffi::rust_alien_talk_segue(cx, &mut io, track.into());
+    });
 }
-/// # Safety
-/// CommData must be initialized on the game thread.
+
 #[no_mangle]
 pub unsafe extern "C" fn EnableTalkingAnim(enable: i32) {
     if enable != 0 {
@@ -290,16 +296,4 @@ pub unsafe extern "C" fn EnableTalkingAnim(enable: i32) {
 #[no_mangle]
 pub extern "C" fn SetCommIntroMode(mode: u32, duration: u32) {
     super::ffi::set_comm_intro_mode(mode, duration);
-}
-/// # Safety
-/// Game thread only, with game state and resources initialized.
-#[no_mangle]
-pub unsafe extern "C" fn InitCommunication(conversation: u32) -> u16 {
-    super::dispatch::init_communication(conversation)
-}
-/// # Safety
-/// Game thread only, with game state and resources initialized.
-#[no_mangle]
-pub unsafe extern "C" fn RaceCommunication() {
-    super::dispatch::rust_race_communication();
 }

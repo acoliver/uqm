@@ -225,20 +225,20 @@ fn cyborg_effect_uses_both_live_spawned_elements_and_descriptor_crew() {
     let catalog = BTreeMap::from([(0, 1), (1, 2)]);
     let mut run = corpus::Run::new(CorpusRequest { fleet: 0 }, vec![]).unwrap();
     assert!(matches!(
-        run.advance(&mut world, &catalog)
+        run.advance(&mut world, &catalog, &|| {})
             .unwrap()
             .unwrap()
             .as_slice(),
         [Effect::Reset]
     ));
-    let effects = run.advance(&mut world, &catalog).unwrap().unwrap();
+    let effects = run.advance(&mut world, &catalog, &|| {}).unwrap().unwrap();
     assert_eq!(effects.len(), 2);
     for (side, element) in handles.iter().enumerate() {
         world.ship_mut(*element).element = Some(*element);
         world.ship_mut(*element).info.as_mut().unwrap().crew_level = 7 + side as u16;
     }
-    run.advance(&mut world, &catalog).unwrap();
-    let effects = run.advance(&mut world, &catalog).unwrap().unwrap();
+    run.advance(&mut world, &catalog, &|| {}).unwrap();
+    let effects = run.advance(&mut world, &catalog, &|| {}).unwrap().unwrap();
     assert!(
         matches!(effects.as_slice(), [Effect::Think(active), Effect::Redraw(false)]
         if *active == [(handles[0], 7), (handles[1], 8)])

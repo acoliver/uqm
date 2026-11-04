@@ -5,7 +5,7 @@ use crate::engine::StoryKey;
 use crate::engine::World;
 use crate::engine::WorldData;
 use crate::ships::native::abi::*;
-use std::{ffi::c_void, ptr};
+use std::ptr;
 
 #[no_mangle]
 pub static mut MainExited: i32 = 0;
@@ -57,13 +57,16 @@ unsafe extern "C" fn background_init_kernel(timeout: u32) {
 
 /// # Safety
 /// Called by the game loop on the SDL owner thread during kernel initialization.
-pub unsafe fn uqm_splash_with_bg_init_kernel() {
+pub unsafe fn uqm_splash_with_bg_init_kernel(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    io: &mut crate::engine::observe::Io<'_>,
+) {
     extern "C" fn initialize(timeout: u32) {
         unsafe {
             background_init_kernel(timeout);
         }
     }
-    super::restart_menu::c_extern::SplashScreen(Some(initialize));
+    crate::front_end::fmv::runtime::splash_screen(cx, io, Some(initialize));
 }
 
 /// # Safety
@@ -107,8 +110,4 @@ pub unsafe extern "C" fn process_utility_keys() {
         }
         DEBUG_KEY_STATE = pressed;
     }
-}
-
-pub extern "C" fn starcon2_main(_arg: *mut c_void) -> i32 {
-    super::game_loop::rust_game_loop()
 }

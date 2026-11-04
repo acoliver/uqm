@@ -108,7 +108,11 @@ fn movie_frames_never_alternate_with_the_cleared_game_screen() {
             let movie = readback();
             assert!(movie.as_chunks::<4>().0.iter().any(|p| p[..3] != [0, 0, 0]));
             for _ in 0..3 {
-                rust_complete_input_frame(1);
+                let mut observer = uqm_rust::engine::observe::Unobserved;
+                let mut io = uqm_rust::engine::observe::Io {
+                    observer: &mut observer,
+                };
+                rust_complete_input_frame(1, &mut io);
                 assert!(readback() == movie, "input boundary erased the movie");
                 TFB_FlushGraphics();
                 assert!(readback() == movie, "pacing flush erased the movie");

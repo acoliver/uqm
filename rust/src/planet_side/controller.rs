@@ -50,8 +50,19 @@ where
     }
 
     pub fn run(&mut self) -> Result<SessionOutcome, ControllerError> {
+        self.run_with_frame(run_frame)
+    }
+
+    pub(crate) fn run_with_frame(
+        &mut self,
+        mut frame: impl FnMut(
+            &mut PlanetSideSession,
+            &mut RuntimeAdapters<I, C, G, A, K, S>,
+            u32,
+        ) -> Result<RuntimeStep, RuntimeError>,
+    ) -> Result<SessionOutcome, ControllerError> {
         for _ in 0..self.frame_budget {
-            match run_frame(&mut self.session, &mut self.adapters, self.tick_period)? {
+            match frame(&mut self.session, &mut self.adapters, self.tick_period)? {
                 RuntimeStep::Continue => crate::planet_side::telemetry::frame(&self.session),
                 RuntimeStep::Complete(outcome) => {
                     crate::planet_side::telemetry::frame(&self.session);
@@ -166,5 +177,31 @@ mod tests {
         let mut controller =
             PlanetSideController::new(session(), adapters(vec![FrameInput::default()]), 1, 1);
         assert_eq!(controller.run(), Err(ControllerError::FrameBudgetExceeded));
+    }
+
+    #[test]
+    fn prepared_input_preserves_simulation_frames_and_terminal_settlement() {
+        let budget = 3 + u32::from(super::super::lifecycle::LifecycleAnimation::takeoff_total());
+        let mut input = vec![FrameInput::default(); budget as usize];
+        input[1].takeoff = true;
+        let mut direct = PlanetSideController::new(session(), adapters(input.clone()), 24, budget);
+        let mut prepared = PlanetSideController::new(session(), adapters(input), 24, budget);
+        let expected = direct.run();
+        let mut active_frames = 0;
+        let actual = prepared.run_with_frame(|session, adapters, period| {
+            let deadline = Tick(adapters.clock.now().0.wrapping_add(period));
+            let input = if session.phase == SessionPhase::Active {
+                active_frames += 1;
+                Some(adapters.input.poll()?)
+            } else {
+                None
+            };
+            super::super::runtime::run_frame_at(session, adapters, deadline, input)
+        });
+        assert_eq!(actual, expected);
+        assert!(matches!(actual, Ok(SessionOutcome::Returned(_))));
+        assert_eq!(active_frames, 2);
+        assert_eq!(prepared.adapters.ship.0, direct.adapters.ship.0);
+        assert_eq!(prepared.adapters.input.0, direct.adapters.input.0);
     }
 }

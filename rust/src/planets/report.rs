@@ -23,11 +23,11 @@ fn needs_page_marker(row: i32, rows: i32, remaining: u16, columns: i32, lf_remai
 #[cfg(not(test))]
 pub(crate) mod live {
     use super::{character_delay, needs_page_marker};
-    use crate::c_bindings::solar_system;
     use crate::comm::{locdata::CRect, sis_graphics::CText};
 
-    use crate::engine::WorldData as WorldFields;
-    use crate::mainloop::{input_abi::live::FlushInput, restart_menu::c_extern::SetContext};
+    use crate::engine::{battle::Cx, observe::Io};
+    use crate::graphics::context_abi::SetContext;
+    use crate::mainloop::input_abi::live::FlushInput;
 
     use crate::starbase::{
         cffi::CffiPlatform,
@@ -55,7 +55,7 @@ pub(crate) mod live {
     use crate::planets::scan::live::{DestroyScanContext, GetScanContext};
 
     use crate::ui::util::live::{
-        SaveContextFrame, WaitForAnyButton, WaitForAnyButtonUntil, WaitForNoInput,
+        wait_for_any_button, wait_for_any_button_until, wait_for_no_input, SaveContextFrame,
     };
 
     use crate::battle::sounds::engine::NON_POSITIONAL;
@@ -102,29 +102,78 @@ pub(crate) mod live {
 
     use crate::battle::sounds::play_sound;
 
-    unsafe fn make_report(sounds: *mut c_void, text: *const u8, mut remaining: u16) {
+    struct ReportPrinter {
+        sounds: *mut c_void,
+        advance: i16,
+        sleepy: bool,
+    }
+
+    impl ReportPrinter {
+        unsafe fn draw_word(
+            &mut self,
+            cx: &mut Cx<'_>,
+            io: &mut Io<'_>,
+            t: &mut CText,
+            mut word_chars: u16,
+            mut timeout: u32,
+        ) {
+            while word_chars != 0 {
+                word_chars -= 1;
+                let mut next = t.p_str.cast();
+                let c = getCharFromString(&mut next);
+                cx.with_legacy(|| font_DrawText(std::ptr::from_mut(t).cast()));
+                if self.sleepy && cx.world.activity() & (1 << 14) == 0 {
+                    cx.with_legacy(|| play_sound(self.sounds.cast(), NON_POSITIONAL, None, 2));
+                    timeout = timeout.wrapping_add(character_delay(c, word_chars == 0));
+                    if wait_for_any_button_until(cx, io, 1, timeout, 0) != 0 {
+                        self.sleepy = false;
+                        cx.with_legacy(|| CffiPlatform.batch());
+                    }
+                }
+                t.p_str = next.cast();
+                t.baseline.x += self.advance;
+            }
+        }
+    }
+
+    unsafe fn make_report(
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
+        sounds: *mut c_void,
+        text: *const u8,
+        mut remaining: u16,
+    ) {
         let g = CffiPlatform;
-        let end_page = CString::new(format!("{}\n", g.game_string(305 + 3))).unwrap();
+        let (end_page, r) = cx.with_legacy(|| {
+            let end_page = CString::new(format!("{}\n", g.game_string(305 + 3))).unwrap();
+            let mut r = CRect::default();
+            GetFrameRect(
+                SetAbsFrameIndex((SpaceJunkFrame).cast(), 18),
+                (&mut r as *mut CRect).cast(),
+            );
+            (end_page, r)
+        });
         let end_len = utf8StringCount(end_page.as_ptr().cast()) as u16;
-        let mut r = CRect::default();
-        GetFrameRect(
-            SetAbsFrameIndex((SpaceJunkFrame).cast(), 18),
-            (&mut r as *mut CRect).cast(),
-        );
         let columns = (ScreenWidth - 78) / 6;
         let rows = 75 / 6;
         let mut t = CText::default();
         t.p_str = text.cast();
         t.char_count = 1;
-        let mut sleepy = true;
+        let mut printer = ReportPrinter {
+            sounds,
+            advance: r.width + 1,
+            sleepy: true,
+        };
         let mut last_c = 0;
         let mut row = 0;
-        FlushInput();
+        cx.with_legacy(|| {
+            FlushInput();
+            if remaining != 0 {
+                clear();
+                g.set_fg_color(Rgba::rgb15(0, 31, 0));
+            }
+        });
         t.baseline.y = r.height + 1;
-        if remaining != 0 {
-            clear();
-            g.set_fg_color(Rgba::rgb15(0, 31, 0));
-        }
         while remaining != 0 {
             let last_string = t.p_str;
             let mut next = t.p_str.cast::<u8>();
@@ -145,32 +194,12 @@ pub(crate) mod live {
                 while UniChar_isGraph(getCharFromString(&mut next)) != 0 {
                     end = next;
                 }
-                let mut word_chars = utf8StringCountN(t.p_str.cast(), end) as u16;
+                let word_chars = utf8StringCountN(t.p_str.cast(), end) as u16;
                 col = col.wrapping_add(word_chars);
                 if i32::from(col) <= columns {
                     remaining = remaining.wrapping_sub(word_chars);
                     remaining = remaining.saturating_sub(1);
-                    let mut timeout = GetTimeCounter();
-                    while word_chars != 0 {
-                        word_chars -= 1;
-                        next = t.p_str.cast();
-                        let c = getCharFromString(&mut next);
-                        font_DrawText(std::ptr::from_mut(&mut t).cast());
-                        if sleepy
-                            && WorldFields::current().read(|owner| owner.game.current_activity)
-                                & (1 << 14)
-                                == 0
-                        {
-                            play_sound(sounds.cast(), NON_POSITIONAL, None, 2);
-                            timeout = timeout.wrapping_add(character_delay(c, word_chars == 0));
-                            if WaitForAnyButtonUntil(1, timeout, 0) != 0 {
-                                sleepy = false;
-                                g.batch();
-                            }
-                        }
-                        t.p_str = next.cast();
-                        t.baseline.x += r.width + 1;
-                    }
+                    printer.draw_word(cx, io, &mut t, word_chars, GetTimeCounter());
                     col += 1;
                     next = t.p_str.cast();
                     last_c = getCharFromString(&mut next);
@@ -185,62 +214,90 @@ pub(crate) mod live {
             row += 1;
             if row == rows || remaining == 0 {
                 t.p_str = last_string;
-                if !sleepy {
-                    g.unbatch();
+                if !printer.sleepy {
+                    cx.with_legacy(|| g.unbatch());
                 }
-                if WaitForAnyButton(1, u32::MAX, 0) == 0 {
+                if wait_for_any_button(cx, io, 1, u32::MAX, 0) == 0 {
                     break;
                 }
                 t.baseline.y = r.height + 1;
                 row = 0;
                 if remaining != 0 {
-                    if !sleepy {
-                        g.batch();
-                    }
-                    clear();
-                    g.set_fg_color(Rgba::rgb15(0, 31, 0));
+                    cx.with_legacy(|| {
+                        if !printer.sleepy {
+                            g.batch();
+                        }
+                        clear();
+                        g.set_fg_color(Rgba::rgb15(0, 31, 0));
+                    });
                 }
             }
         }
     }
 
-    #[no_mangle]
-    pub unsafe extern "C" fn DoDiscoveryReport(sounds: *mut c_void) {
+    /// # Safety
+    /// The game thread publishes the active owner for the generator callback.
+    pub unsafe fn discovery_report(system: *mut crate::ships::native::abi::SOLARSYS_STATE) {
+        crate::app::bridge::enter(|cx| {
+            let mut observer = cx.kernel.input_runtime().observer();
+            let mut io = Io {
+                observer: &mut *observer,
+            };
+            do_discovery_report(cx, &mut io, system);
+        });
+    }
+
+    pub unsafe fn do_discovery_report(
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
+        system: *mut crate::ships::native::abi::SOLARSYS_STATE,
+    ) {
         #[cfg(feature = "debug-process")]
         if crate::front_end::uqmdebug::DISABLE_INTERACTIVITY != 0 {
             return;
         }
-        let mut own_context = 0;
-        let context = GetScanContext(&mut own_context);
-        let old_context = SetContext((context).cast());
-        let saved = SaveContextFrame(std::ptr::null_mut());
-        let info = std::ptr::addr_of!((*solar_system::current()).SysInfo.PlanetInfo);
-        let old_font = SetContextFont((*info).LanderFont.cast());
-        let old_effect = SetContextFontEffect(if optWhichFonts == 2 {
-            (*info).LanderFontEff.cast()
-        } else {
-            std::ptr::null_mut()
+        let sounds = cx.kernel.menu_sounds.cast();
+        let (own_context, old_context, saved, old_font, old_effect, text, length) =
+            cx.with_legacy(|| {
+                let mut own_context = 0;
+                let context = GetScanContext(&mut own_context);
+                let old_context = SetContext((context).cast());
+                let saved = SaveContextFrame(std::ptr::null_mut());
+                let info = std::ptr::addr_of!((*system).SysInfo.PlanetInfo);
+                let old_font = SetContextFont((*info).LanderFont.cast());
+                let old_effect = SetContextFontEffect(if optWhichFonts == 2 {
+                    (*info).LanderFontEff.cast()
+                } else {
+                    std::ptr::null_mut()
+                });
+                (
+                    own_context,
+                    old_context,
+                    saved,
+                    old_font,
+                    old_effect,
+                    GetStringAddress((*info).DiscoveryString.cast()).cast(),
+                    GetStringLength((*info).DiscoveryString.cast()),
+                )
+            });
+        make_report(cx, io, sounds, text, length);
+        cx.with_legacy(|| {
+            SetContextFontEffect(old_effect);
+            SetContextFont(old_font);
+            CffiPlatform.draw_stamp(Stamp {
+                origin: Point {
+                    x: saved.origin.x,
+                    y: saved.origin.y,
+                },
+                frame: saved.frame as usize,
+            });
+            SetContext(old_context);
+            if own_context != 0 {
+                DestroyScanContext();
+            }
+            DestroyDrawable(ReleaseDrawable(saved.frame));
         });
-        make_report(
-            sounds,
-            GetStringAddress((*info).DiscoveryString.cast()).cast(),
-            GetStringLength((*info).DiscoveryString.cast()),
-        );
-        SetContextFontEffect(old_effect);
-        SetContextFont(old_font);
-        CffiPlatform.draw_stamp(Stamp {
-            origin: Point {
-                x: saved.origin.x,
-                y: saved.origin.y,
-            },
-            frame: saved.frame as usize,
-        });
-        SetContext(old_context);
-        if own_context != 0 {
-            DestroyScanContext();
-        }
-        DestroyDrawable(ReleaseDrawable(saved.frame));
-        WaitForNoInput(u32::MAX, 1);
+        wait_for_no_input(cx, io, u32::MAX, 1);
     }
 }
 

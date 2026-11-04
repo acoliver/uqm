@@ -31,6 +31,7 @@ pub(super) fn advance(
     run: &mut Battle,
     world: &mut World,
     hooks: &Hooks,
+    checkpoint: &dyn Fn(),
 ) -> Result<Option<Vec<Effect>>, String> {
     match run.stage {
         0 => {

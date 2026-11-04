@@ -94,6 +94,39 @@ fn main() {
         }
     }
 
+    let observer = setup_observer(&auto_opts, parsed.native_window_proof.as_deref());
+    let mut application = uqm_rust::app::Application::new(observer);
+
+    application
+        .game
+        .kernel
+        .install_input_runtime(std::rc::Rc::new(
+            uqm_rust::mainloop::input_abi::NativeInputRuntime {
+                observer: application.observer().cloned(),
+            },
+        ));
+    // SAFETY: argv storage and the application owner remain live through shutdown.
+    let exit_code = unsafe {
+        init_sequence::run_uqm(&mut application, args.len() as c_int, c_argv.as_mut_ptr())
+    };
+    let observer = application.observer().cloned();
+    // SAFETY: finalization runs synchronously before the application releases Game.
+    let exit_code = unsafe {
+        application.legacy(|| {
+            finish_automation(
+                observer.as_deref(),
+                exit_code,
+                parsed.replay_summary.as_deref(),
+            )
+        })
+    };
+    exit(exit_code);
+}
+
+fn setup_observer(
+    auto_opts: &uqm_rust::automation::AutomationOptions,
+    native_window_proof: Option<&str>,
+) -> Option<std::sync::Arc<uqm_rust::automation::AutomationObserver>> {
     // Build capabilities resolved from build.vars at compile time
     let caps = uqm_rust::automation::BuildCapabilities::from_flags(&[
         ("RUST_OWNS_MAIN", true),
@@ -103,10 +136,10 @@ fn main() {
         ("USE_RUST_RESTART", true),
     ]);
 
-    match uqm_rust::automation::setup_automation(&auto_opts, &caps) {
+    match uqm_rust::automation::setup_automation(auto_opts, &caps) {
         Ok(Some(setup)) => {
             #[cfg(feature = "debug-process")]
-            if let Some(config) = parsed.native_window_proof.as_deref() {
+            if let Some(config) = native_window_proof {
                 if let Err(error) = uqm_rust::automation::activate_native_window_proof(
                     std::path::Path::new(config),
                     &setup.output_root,
@@ -116,38 +149,33 @@ fn main() {
                 }
             }
             // Active automation validated — initialize the coordinator.
-            uqm_rust::automation::Coordinator::init(setup.script, setup.output_root);
+            Some(uqm_rust::automation::AutomationObserver::new(
+                setup.script,
+                setup.output_root,
+            ))
         }
         Ok(None) => {
-            if parsed.native_window_proof.is_some() {
+            if native_window_proof.is_some() {
                 eprintln!("Native-window proof requires active automation.");
                 exit(1);
             }
             // Inactive — proceed normally
+            None
         }
         Err(e) => {
             eprintln!("Automation setup failed: {e}");
             exit(1);
         }
     }
-
-    let mut game = uqm_rust::engine::Game::new();
-    // SAFETY: main owns the game until shutdown and the final state summary have completed.
-    let exit_code = unsafe {
-        uqm_rust::app::bridge::with_game(&mut game, || {
-            // Run the full UQM lifecycle: init -> game loop -> teardown
-            // SAFETY: the main thread keeps all argument CStrings and argv storage alive through shutdown.
-            let exit_code = init_sequence::run_uqm(args.len() as c_int, c_argv.as_mut_ptr());
-
-            finish_automation(exit_code, parsed.replay_summary.as_deref())
-        })
-    };
-    exit(exit_code);
 }
 
-fn finish_automation(exit_code: i32, replay_summary: Option<&str>) -> i32 {
+fn finish_automation(
+    observer: Option<&uqm_rust::automation::AutomationObserver>,
+    exit_code: i32,
+    replay_summary: Option<&str>,
+) -> i32 {
     // Finalize automation after teardown and propagate its terminal/evidence status.
-    let exit_code = match uqm_rust::automation::Coordinator::finalize(exit_code) {
+    let exit_code = match observer.map_or(Ok(exit_code), |observer| observer.finalize(exit_code)) {
         Ok(status) => status,
         Err(error) => {
             eprintln!("Automation finalization failed: {error}");
@@ -156,8 +184,9 @@ fn finish_automation(exit_code: i32, replay_summary: Option<&str>) -> i32 {
     };
 
     if let Some(path) = replay_summary {
-        if let Err(error) =
-            uqm_rust::automation::Coordinator::write_replay_summary(std::path::Path::new(path))
+        if let Err(error) = observer
+            .ok_or("replay coordinator not initialized".to_string())
+            .and_then(|observer| observer.write_replay_summary(std::path::Path::new(path)))
         {
             eprintln!("Replay summary failed: {error}");
             return 1;

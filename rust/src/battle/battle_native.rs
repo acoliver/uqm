@@ -71,11 +71,34 @@ fn run_away_allowed(world: &crate::engine::World) -> bool {
         && world.story_state(StoryKey::BOMB_CARRIER) == 0
 }
 
+fn seed(io: &mut crate::engine::observe::Io<'_>, domain: u32, fallback: u32) -> u32 {
+    io.observer
+        .input_admitted(
+            &crate::engine::observe::InputView::Seed { domain, fallback },
+            &None,
+        )
+        .seed
+        .unwrap_or(fallback)
+}
+
+fn reset_observation(io: &mut crate::engine::observe::Io<'_>) {
+    crate::collections::observation::reset();
+    io.observer
+        .checkpoint(&crate::engine::observe::CheckpointView::BattleReset);
+}
+
+fn advance_observation(io: &mut crate::engine::observe::Io<'_>) {
+    crate::collections::observation::advance();
+    io.observer
+        .checkpoint(&crate::engine::observe::CheckpointView::BattleAdvanced);
+}
+
 #[cfg(not(test))]
 type BattleNetwork = (
     *mut crate::engine::battle::Battle,
     std::rc::Rc<dyn crate::engine::battle::net::BattleNet>,
     bool,
+    Option<crate::engine::input::InputObserver>,
 );
 #[cfg(not(test))]
 fn initialize_battle(cx: &mut crate::engine::battle::Cx<'_>) -> BattleNetwork {
@@ -85,7 +108,12 @@ fn initialize_battle(cx: &mut crate::engine::battle::Cx<'_>) -> BattleNetwork {
     battle
         .net
         .get_or_insert_with(|| crate::supermelee::netplay::NetplaySession::default().battle_net());
-    (battle, battle.network(), had_net)
+    (
+        battle,
+        battle.network(),
+        had_net,
+        Some(cx.kernel.input_runtime().observer()),
+    )
 }
 
 #[cfg(not(test))]
@@ -98,7 +126,7 @@ fn finish_battle_network(battle: &mut crate::engine::battle::Battle, had_net: bo
 #[cfg(not(test))]
 unsafe fn battle_network() -> BattleNetwork {
     use engine::NETWORK_CONTROL;
-    let (battle, net, had_net) = crate::app::bridge::enter(|cx| {
+    crate::app::bridge::enter(|cx| {
         let result = initialize_battle(cx);
         for side in 0..2 {
             if cx.kernel.player_control[side] & NETWORK_CONTROL != 0 {
@@ -109,8 +137,7 @@ unsafe fn battle_network() -> BattleNetwork {
             }
         }
         result
-    });
-    (battle, net, had_net)
+    })
 }
 
 #[cfg(not(test))]
@@ -130,13 +157,8 @@ pub(crate) mod engine {
     // gfx_common.h SCALE enum starts with the stepped scaler.
     pub const SCALE_STEP: i32 = 0;
 
-    use crate::automation::battle_observer::rust_battle_frame_reset;
-
-    use crate::automation::battle_observer::rust_battle_frame_advance;
-
-    use crate::automation::coordinator::rust_automation_seed_value;
-
     use crate::battle::process_native::engine::RedrawQueue;
+    use crate::engine::observe::Io;
 
     use crate::state::ffi::rust_get_game_state_bits as getGameState;
 
@@ -206,7 +228,11 @@ pub(crate) mod engine {
         ScreenHeight - 13
     }
 
-    fn run_away(cx: &mut crate::engine::battle::Cx<'_>, ship: crate::engine::battle::ShipId) {
+    fn run_away(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        io: &mut Io<'_>,
+        ship: crate::engine::battle::ShipId,
+    ) {
         let e = cx.ship_element(ship);
         let state = cx.element(e);
         if cx.primitive_style(e).kind == gfx_object_STAMP_PRIM as u8
@@ -227,12 +253,16 @@ pub(crate) mod engine {
             cx.primitive_style_mut(e).color = rgb15(0x0b, 0, 0);
             cx.primitive_style_mut(e).kind = gfx_object_STAMPFILL_PRIM as u8;
             cx.ship_state_mut(ship).input = 0;
-            crate::automation::ui_observation::record_ship_escape();
+            cx.with_legacy(|| {
+                io.observer
+                    .checkpoint(&crate::engine::observe::CheckpointView::ShipEscaped);
+            });
         }
     }
 
     fn process_input(
         cx: &mut crate::engine::battle::Cx<'_>,
+        io: &mut Io<'_>,
         net: &dyn crate::engine::battle::net::BattleNet,
         order: [usize; 2],
     ) {
@@ -272,7 +302,7 @@ pub(crate) mod engine {
                         && side == 0
                         && input & BATTLE_ESCAPE != 0
                     {
-                        run_away(cx, ship);
+                        run_away(cx, io, ship);
                     }
                 }
             }
@@ -319,6 +349,18 @@ pub(crate) mod engine {
         (**KernelOwner::current()).battle_music = ptr::null_mut();
     }
 
+    fn battle_io(observer: &mut Option<crate::engine::input::InputObserver>) -> Io<'_> {
+        Io {
+            observer: observer
+                .as_deref_mut()
+                .unwrap_or_else(|| panic!("missing battle observer")),
+        }
+    }
+
+    unsafe fn observe_melee_game_over(observer: &mut Option<crate::engine::input::InputObserver>) {
+        crate::supermelee::native::battle_picker::live::melee_game_over(&mut battle_io(observer));
+    }
+
     unsafe extern "C" fn do_battle(bs: *mut battlestate_struct) -> BOOLEAN {
         crate::log_abi::log_message(
             5,
@@ -337,9 +379,11 @@ pub(crate) mod engine {
             crc_processState(&mut state);
             net.record_checksum(frame, crc_finish(&state));
         }
+        let mut io = battle_io(&mut (*bs).observer);
         crate::app::bridge::enter(|cx| {
             process_input(
                 cx,
+                &mut io,
                 &*net,
                 battle_input_order(&cx.kernel.player_control, NETWORK_CONTROL),
             )
@@ -390,7 +434,7 @@ pub(crate) mod engine {
         if activity() & IN_BATTLE as u16 == 0 {
             return 0;
         }
-        rust_battle_frame_advance();
+        advance_observation(&mut io);
         net.set_frame(frame.wrapping_add(1));
         1
     }
@@ -412,14 +456,12 @@ pub(crate) mod engine {
     /// The game thread must own initialized battle, input, audio, and display state; any callback must remain valid for the battle.
     #[no_mangle]
     pub unsafe extern "C" fn Battle(callback: BattleFrameCallback) -> BOOLEAN {
-        let (battle, net, had_net) = battle_network();
+        let (battle, net, had_net, mut observer) = battle_network();
+        let mut io = battle_io(&mut observer);
         if activity() as u8 != SUPER_MELEE as u8 {
-            crate::math::seed_random(rust_automation_seed_value(
-                crate::automation::trace::SeedDomain::CAMPAIGN_BATTLE_ID,
-                GetTimeCounter(),
-            ));
+            crate::math::seed_random(seed(&mut io, 4, GetTimeCounter()));
         } else {
-            let seed = rust_automation_seed_value(2, 0);
+            let seed = seed(&mut io, 2, 0);
             if seed != 0 {
                 crate::math::seed_random(seed);
             }
@@ -436,12 +478,13 @@ pub(crate) mod engine {
             set_activity(activity() | IN_BATTLE as u16);
             (*battle).counters[0] = crate::engine::battle::link_queue::ships(0).count() as u8;
             (*battle).counters[1] = crate::engine::battle::link_queue::ships(1).count() as u8;
-            rust_battle_frame_reset();
+            reset_observation(&mut io);
             if optMeleeScale != SCALE_STEP {
                 SetGraphicScaleMode(optMeleeScale);
             }
             bs.battle = battle;
             bs.net = Some(net.clone());
+            bs.observer = observer;
             net.begin((&raw mut bs).cast());
             crate::app::bridge::enter(|cx| reset_winner(cx.kernel));
             crate::log_abi::log_message(
@@ -487,7 +530,7 @@ pub(crate) mod engine {
                     net.wait_reset(NetState_NetState_inSetup);
                     set_activity(activity() & !(CHECK_ABORT as u16));
                 } else {
-                    MeleeGameOver();
+                    observe_melee_game_over(&mut bs.observer);
                 }
             }
             net.finish();
@@ -509,6 +552,126 @@ pub use engine::{player_input, set_player_input, Battle, BattleSong, FreeBattleS
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::observe::{
+        CampaignView, CheckpointView, Injected, InputView, Io, Observer, Presented,
+    };
+    use std::{cell::RefCell, rc::Rc};
+
+    #[derive(Debug, PartialEq)]
+    enum Observed {
+        Fallback,
+        Seed(u32, u32),
+        Reset(u64),
+        Advanced(u64),
+    }
+
+    struct Recording {
+        events: Rc<RefCell<Vec<Observed>>>,
+        seed: Option<u32>,
+    }
+
+    impl Observer<Option<CampaignView>> for Recording {
+        fn input_admitted(
+            &mut self,
+            view: &InputView,
+            campaign: &Option<CampaignView>,
+        ) -> Injected {
+            assert!(campaign.is_none());
+            let InputView::Seed { domain, fallback } = *view else {
+                panic!("unexpected input {view:?}");
+            };
+            self.events
+                .borrow_mut()
+                .push(Observed::Seed(domain, fallback));
+            Injected {
+                seed: self.seed,
+                stop: false,
+            }
+        }
+
+        fn checkpoint(&mut self, view: &CheckpointView<'_>) {
+            let frame = crate::collections::observation::current_frame();
+            self.events.borrow_mut().push(match view {
+                CheckpointView::BattleReset => Observed::Reset(frame),
+                CheckpointView::BattleAdvanced => Observed::Advanced(frame),
+                _ => panic!("unexpected checkpoint {view:?}"),
+            });
+        }
+
+        fn presented(&mut self, _: &mut Presented) {
+            panic!("unexpected presentation");
+        }
+    }
+
+    #[test]
+    fn supplied_seed_observer_keeps_domains_and_eager_fallback_order() {
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let mut observer = Recording {
+            events: events.clone(),
+            seed: Some(17),
+        };
+        let mut io = Io {
+            observer: &mut observer,
+        };
+        assert_eq!(
+            seed(&mut io, 4, {
+                events.borrow_mut().push(Observed::Fallback);
+                123
+            }),
+            17
+        );
+        assert_eq!(seed(&mut io, 2, 0), 17);
+        observer.seed = None;
+        let mut io = Io {
+            observer: &mut observer,
+        };
+        assert_eq!(seed(&mut io, 4, 456), 456);
+        assert_eq!(seed(&mut io, 2, 0), 0);
+        assert_eq!(
+            *events.borrow(),
+            [
+                Observed::Fallback,
+                Observed::Seed(4, 123),
+                Observed::Seed(2, 0),
+                Observed::Seed(4, 456),
+                Observed::Seed(2, 0),
+            ]
+        );
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn retained_battle_observer_sees_counter_changes_before_checkpoints() {
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let mut state = abi::battlestate_struct {
+            InputFunc: None,
+            first_time: 0,
+            NextTime: 0,
+            frame_cb: None,
+            net: None,
+            battle: std::ptr::null_mut(),
+            observer: Some(Box::new(Recording {
+                events: events.clone(),
+                seed: None,
+            })),
+        };
+        crate::collections::observation::advance();
+        let mut io = Io {
+            observer: state.observer.as_deref_mut().unwrap(),
+        };
+        reset_observation(&mut io);
+        advance_observation(&mut io);
+        advance_observation(&mut io);
+        assert_eq!(
+            *events.borrow(),
+            [
+                Observed::Reset(0),
+                Observed::Advanced(1),
+                Observed::Advanced(2)
+            ]
+        );
+    }
+
     #[test]
     fn c_boolean_and_input_widths_are_distinct() {
         assert_eq!(std::mem::size_of::<abi::BOOLEAN>(), 4);

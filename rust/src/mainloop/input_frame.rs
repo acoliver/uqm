@@ -58,7 +58,7 @@ pub fn drain_committed_draws() {
 ///
 /// Nested menus often draw their initial state immediately before calling
 /// `DoInput`; the outer callback cannot return while that nested loop runs.
-pub extern "C" fn rust_begin_input_loop() {
+pub fn rust_begin_input_loop() {
     #[cfg(not(test))]
     // SAFETY: Called on the game/main thread after the owner has completed the
     // draw transaction that establishes this input loop's initial state.
@@ -67,11 +67,14 @@ pub extern "C" fn rust_begin_input_loop() {
     };
 }
 
-/// C ABI entry used by `DoInput` after `InputFunc` returns.
+/// Complete the typed input callback and notify its supplied observer.
 ///
 /// Returns the callback's original continue value after presenting its complete
 /// draw transaction in Rust-owned-main builds.
-pub extern "C" fn rust_complete_input_frame(keep_running: i32) -> i32 {
+pub fn rust_complete_input_frame(
+    keep_running: i32,
+    io: &mut crate::engine::observe::Io<'_>,
+) -> i32 {
     let result = complete_input_frame(|| keep_running != 0);
 
     #[cfg(not(test))]
@@ -81,7 +84,10 @@ pub extern "C" fn rust_complete_input_frame(keep_running: i32) -> i32 {
         unsafe { present_complete_transaction() };
     }
 
-    crate::automation::Coordinator::parity_checkpoint("input-loop");
+    io.observer
+        .checkpoint(&crate::engine::observe::CheckpointView::Simulation(
+            "input-loop",
+        ));
     i32::from(result.keep_running)
 }
 

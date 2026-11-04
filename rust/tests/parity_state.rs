@@ -9,7 +9,7 @@ use uqm_rust::{
     automation::{
         battle_fight::BattleSnapshot,
         script::{parse_script, validate_script},
-        Coordinator,
+        AutomationObserver,
     },
     battle::{
         element::{Element, ElementFlags},
@@ -121,34 +121,39 @@ fn exercise_live_callers(directory: &Path) {
         "state-test.json",
     )
     .unwrap_or_else(|error| panic!("parse state test script: {error}"));
-    Coordinator::init(
+    let _application = uqm_rust::app::Application::new(Some(AutomationObserver::new(
         validate_script(document, "state-test.json")
             .unwrap_or_else(|error| panic!("validate state test script: {error}")),
         directory.into(),
-    );
+    )));
+    let observer = _application
+        .observer()
+        .unwrap_or_else(|| panic!("state test application has no observer"))
+        .as_ref();
     uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
     observation::record(Event::SpaceActive(true));
-    descriptor_fields(directory);
-    elements_and_fighters(directory);
-    descriptor_assets(directory);
-    race_custom_fields(directory);
-    campaign_fields(directory);
-    event_queue_fields(directory);
-    non_ship_parent_fields(directory);
-    reused_owner_and_group_identities(directory);
-    frameset_and_media_identity(directory);
-    retired_space_does_not_borrow_released_frames(directory);
+    descriptor_fields(observer, directory);
+    elements_and_fighters(observer, directory);
+    descriptor_assets(observer, directory);
+    race_custom_fields(observer, directory);
+    campaign_fields(observer, directory);
+    event_queue_fields(observer, directory);
+    non_ship_parent_fields(observer, directory);
+    reused_owner_and_group_identities(observer, directory);
+    frameset_and_media_identity(observer, directory);
+    retired_space_does_not_borrow_released_frames(observer, directory);
 }
 
-fn snapshot(directory: &Path) -> (Fields, String) {
+fn snapshot(observer: &AutomationObserver, directory: &Path) -> (Fields, String) {
     uqm_rust::math::seed_random(123456);
-    Coordinator::parity_checkpoint("integration");
+    observer.parity_checkpoint("integration");
     assert_eq!(
         uqm_rust::math::seed_random(123456),
         123456,
         "checkpoint changed RNG"
     );
-    Coordinator::write_replay_summary(&directory.join("summary.json"))
+    observer
+        .write_replay_summary(&directory.join("summary.json"))
         .unwrap_or_else(|error| panic!("write state test summary: {error}"));
     let text = fs::read_to_string(directory.join("parity.fields"))
         .unwrap_or_else(|error| panic!("read checkpoint fields: {error}"));
@@ -180,7 +185,7 @@ fn changed(before: &Fields, after: &Fields) -> Vec<String> {
         .collect()
 }
 
-fn descriptor_fields(directory: &Path) {
+fn descriptor_fields(observer: &AutomationObserver, directory: &Path) {
     // SAFETY: all native records contain only scalar fields, optional callbacks and pointers.
     let descriptor: RaceDescriptor = unsafe { std::mem::zeroed() };
     // SAFETY: STARSHIP contains integers, pointers and optional callbacks; zero is valid.
@@ -191,9 +196,9 @@ fn descriptor_fields(directory: &Path) {
     unsafe {
         install_ship(&mut ship);
     }
-    let (before, _) = snapshot(directory);
+    let (before, _) = snapshot(observer, directory);
     update_descriptor(&mut descriptor, &mut ship);
-    let (after, _) = snapshot(directory);
+    let (after, _) = snapshot(observer, directory);
     for (name, value) in [
         ("race.max_crew", 37),
         ("race.cost", 19),
@@ -325,7 +330,7 @@ unsafe fn install_ship(ship: &mut ShipRecord) {
     });
 }
 
-fn race_custom_fields(directory: &Path) {
+fn race_custom_fields(observer: &AutomationObserver, directory: &Path) {
     // SAFETY: native initializers run on this sole game thread; all test allocations
     // match the races' repr(C) saved-data records and outlive the snapshots.
     unsafe {
@@ -363,7 +368,7 @@ fn race_custom_fields(directory: &Path) {
                 species: SPECIES_ID_PKUNK_ID,
             });
             battle::put(phoenix.cast());
-            let (fields, _) = snapshot(directory);
+            let (fields, _) = snapshot(observer, directory);
             assert_eq!(
                 fields["ships.0.0.custom.phoenix"],
                 fields["elements.0.identity"]
@@ -373,7 +378,7 @@ fn race_custom_fields(directory: &Path) {
                 cx.unlink(phoenix_object.id);
                 cx.dispose(phoenix_object.id);
             });
-            let (retired, _) = snapshot(directory);
+            let (retired, _) = snapshot(observer, directory);
             assert_eq!(
                 retired["ships.0.0.custom.phoenix"],
                 fields["ships.0.0.custom.phoenix"]
@@ -385,7 +390,7 @@ fn race_custom_fields(directory: &Path) {
                 .elements()
                 .contains(phoenix_object.id)));
             battle::put(reused.ptr().cast());
-            let (reallocated, _) = snapshot(directory);
+            let (reallocated, _) = snapshot(observer, directory);
             assert_eq!(
                 reallocated["ships.0.0.custom.phoenix"],
                 reallocated["elements.0.identity"]
@@ -424,7 +429,7 @@ fn race_custom_fields(directory: &Path) {
                 previous_facing: Some(27),
             };
         }
-        let (fields, _) = snapshot(directory);
+        let (fields, _) = snapshot(observer, directory);
         assert_eq!(fields["ships.0.0.custom.prev_facing"], "27");
         ship.SpeciesID = SPECIES_ID_ANDROSYNTH_ID;
         ship.descriptor
@@ -435,7 +440,7 @@ fn race_custom_fields(directory: &Path) {
                 known_collision(),
             )),
         };
-        let (fields, _) = snapshot(directory);
+        let (fields, _) = snapshot(observer, directory);
         assert!(fields["ships.0.0.custom.collision"].ends_with("::collision"));
         ship.SpeciesID = SPECIES_ID_MMRNMHRM_ID;
         let mut mmrnmhrm =
@@ -445,9 +450,9 @@ fn race_custom_fields(directory: &Path) {
         };
         release_descriptor(&mut ship);
         ship.descriptor = Some(mmrnmhrm);
-        let (fields, _) = snapshot(directory);
+        let (fields, _) = snapshot(observer, directory);
         assert_characteristics(&fields, "ships.0.0.custom.characteristics");
-        sis_fields(directory, &mut ship);
+        sis_fields(observer, directory, &mut ship);
         release_descriptor(&mut ship);
         clear_queues();
     }
@@ -465,7 +470,7 @@ fn known_collision() -> uqm_rust::engine::battle::CollisionFn {
     unsafe { std::mem::transmute(address) }
 }
 
-unsafe fn sis_fields(directory: &Path, ship: &mut ShipRecord) {
+unsafe fn sis_fields(observer: &AutomationObserver, directory: &Path, ship: &mut ShipRecord) {
     uqm_rust::engine::WorldData::current().write(|world| {
         let sis = &mut world.flagship;
         sis.module_slots
@@ -484,7 +489,7 @@ unsafe fn sis_fields(directory: &Path, ship: &mut ShipRecord) {
     let descriptor =
         unsafe { uqm_rust::ships::races::descriptor(SPECIES_ID_SIS_SHIP_ID).into_legacy() };
     let descriptor = install_descriptor(ship, descriptor);
-    let (fields, _) = snapshot(directory);
+    let (fields, _) = snapshot(observer, directory);
     assert_eq!(fields["ships.0.0.custom.num_trackers"], "1");
     assert_eq!(fields["ships.0.0.custom.num_blasters"], "3");
     for index in 0..6 {
@@ -540,8 +545,8 @@ unsafe fn sis_fields(directory: &Path, ship: &mut ShipRecord) {
     release_descriptor(ship);
 }
 
-fn campaign_fields(directory: &Path) {
-    let (before, _) = snapshot(directory);
+fn campaign_fields(observer: &AutomationObserver, directory: &Path) {
+    let (before, _) = snapshot(observer, directory);
     // SAFETY: the game is idle and this is its sole thread.
     unsafe {
         (**uqm_rust::engine::WorldData::current())
@@ -567,7 +572,7 @@ fn campaign_fields(directory: &Path) {
             uqm_rust::state::ffi::rust_set_game_state(world, c"BOMB_CARRIER".as_ptr(), 1)
         });
     }
-    let (after, _) = snapshot(directory);
+    let (after, _) = snapshot(observer, directory);
     assert_eq!(after["mode.clock.day"], "7");
     assert_eq!(after["mode.clock.month"], "9");
     assert_eq!(after["mode.clock.year"], "2161");
@@ -579,7 +584,7 @@ fn campaign_fields(directory: &Path) {
     assert_eq!(after["mode.events.initialized"], "false");
 }
 
-fn descriptor_assets(directory: &Path) {
+fn descriptor_assets(observer: &AutomationObserver, directory: &Path) {
     // SAFETY: native records contain no invalid zero scalar representations.
     let mut descriptor: RaceDescriptor = unsafe { std::mem::zeroed() };
     // SAFETY: STARSHIP contains integers, pointers and optional callbacks; zero is valid.
@@ -642,7 +647,7 @@ fn descriptor_assets(directory: &Path) {
         owner: ptr::from_mut(drawable) as usize,
         index: frame.Index,
     });
-    let (fields, _) = snapshot(directory);
+    let (fields, _) = snapshot(observer, directory);
     assert_eq!(fields["ships.0.0.race.icons.resource"], "test.icons");
     assert_eq!(fields["ships.0.0.race.strings.resource"], "test.strings");
     assert_eq!(fields["ships.0.0.race.melee_icon.resource"], "test.melee");
@@ -694,7 +699,7 @@ fn asset_expectations(fields: &Fields) {
     }
 }
 
-fn reused_owner_and_group_identities(directory: &Path) {
+fn reused_owner_and_group_identities(observer: &AutomationObserver, directory: &Path) {
     // SAFETY: STARSHIP contains integers, pointers and optional callbacks; zero is valid.
     let mut ship = unsafe { battle::PoolShip::new(0) };
     ship.SpeciesID = SPECIES_ID_EARTHLING_ID;
@@ -702,7 +707,7 @@ fn reused_owner_and_group_identities(directory: &Path) {
     unsafe {
         install_ship(&mut ship);
     }
-    let _ = snapshot(directory);
+    let _ = snapshot(observer, directory);
     let callback = known_collision() as usize;
     observation::record(Event::Hook {
         parent: ptr::from_mut(&mut *ship) as usize,
@@ -718,7 +723,7 @@ fn reused_owner_and_group_identities(directory: &Path) {
         parent: ptr::from_mut(&mut *ship) as usize,
         callback,
     });
-    let (_, line) = snapshot(directory);
+    let (_, line) = snapshot(observer, directory);
     let old = line
         .find("[hook 3 battle::ship_native::collision]")
         .unwrap_or_else(|| panic!("old owner hook is absent from checkpoint"));
@@ -747,7 +752,7 @@ fn observe_test_frames(views: &FrameArray, role: &str) {
     });
 }
 
-fn frameset_and_media_identity(directory: &Path) {
+fn frameset_and_media_identity(observer: &AutomationObserver, directory: &Path) {
     // SAFETY: RACE_DESC contains integers, pointers and optional callbacks.
     let mut descriptor: RaceDescriptor = unsafe { std::mem::zeroed() };
     // SAFETY: STARSHIP contains integers, pointers and optional callbacks; zero is valid.
@@ -789,7 +794,7 @@ fn frameset_and_media_identity(directory: &Path) {
         ),
         None,
     );
-    let (before, _) = snapshot(directory);
+    let (before, _) = snapshot(observer, directory);
     // SAFETY: the fixture retains the same drawable and its array through the next snapshot.
     unsafe {
         observation::assign_view(
@@ -797,7 +802,7 @@ fn frameset_and_media_identity(directory: &Path) {
             ptr::from_mut(second).cast(),
         );
     }
-    let (after, _) = snapshot(directory);
+    let (after, _) = snapshot(observer, directory);
     assert_eq!(before["elements.0.current.farray.0.index"], "1");
     assert_eq!(after["elements.0.current.farray.0.index"], "1");
     assert_eq!(before["elements.0.current.farray.1.index"], "1");
@@ -820,7 +825,7 @@ fn frameset_and_media_identity(directory: &Path) {
         ),
         None,
     );
-    let (outgoing, _) = snapshot(directory);
+    let (outgoing, _) = snapshot(observer, directory);
     assert_eq!(
         outgoing["elements.0.current.farray.role"],
         after["elements.0.current.farray.role"]
@@ -829,7 +834,7 @@ fn frameset_and_media_identity(directory: &Path) {
         outgoing["elements.0.current.farray.role"],
         outgoing["elements.0.next.farray.role"]
     );
-    media_identity(directory, &mut replacement);
+    media_identity(observer, directory, &mut replacement);
     // SAFETY: all snapshots finished; detach stack nodes before returning.
     unsafe {
         release_descriptor(ship);
@@ -842,7 +847,11 @@ fn frameset_and_media_identity(directory: &Path) {
     }
 }
 
-fn media_identity(directory: &Path, descriptor: &mut RaceDescriptor) {
+fn media_identity(
+    observer: &AutomationObserver,
+    directory: &Path,
+    descriptor: &mut RaceDescriptor,
+) {
     use uqm_rust::strings::string_table::{StringTable, StringTableEntry};
     // SAFETY: StringTable contains only integers and pointers; zero is valid.
     let mut table_a: StringTable = unsafe { std::mem::zeroed() };
@@ -858,11 +867,11 @@ fn media_identity(directory: &Path, descriptor: &mut RaceDescriptor) {
     let mut music_b = ptr::null_mut();
     descriptor.ship_info.race_strings = &mut entry;
     descriptor.ship_data.victory_ditty = &mut music_a;
-    let (before, _) = snapshot(directory);
+    let (before, _) = snapshot(observer, directory);
     let entry = &mut entry;
     entry.parent = &mut table_b;
     descriptor.ship_data.victory_ditty = &mut music_b;
-    let (after, _) = snapshot(directory);
+    let (after, _) = snapshot(observer, directory);
     assert_eq!(
         before["ships.0.0.race.strings.index"],
         after["ships.0.0.race.strings.index"]
@@ -879,7 +888,7 @@ fn media_identity(directory: &Path, descriptor: &mut RaceDescriptor) {
     descriptor.ship_data.victory_ditty = ptr::null_mut();
 }
 
-fn retired_space_does_not_borrow_released_frames(directory: &Path) {
+fn retired_space_does_not_borrow_released_frames(observer: &AutomationObserver, directory: &Path) {
     // SAFETY: clear the prior fixture graph before allocating this owned operand.
     unsafe {
         clear_queues();
@@ -906,7 +915,7 @@ fn retired_space_does_not_borrow_released_frames(directory: &Path) {
     });
     observation::record(Event::DrawableFree(17));
     observation::record(Event::SpaceActive(false));
-    let (fields, _) = snapshot(directory);
+    let (fields, _) = snapshot(observer, directory);
     assert_eq!(fields["mode.space_active"], "false");
     assert_eq!(fields["elements.0.current.frame.index"], "23");
     assert_eq!(fields["elements.0.next.frame.index"], "23");

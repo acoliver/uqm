@@ -40,7 +40,7 @@ pub(super) unsafe fn planet_index(system: *const SOLARSYS_STATE, world: *const P
 /// `system` must be valid.
 pub(super) unsafe fn discovery_report(system: *mut SOLARSYS_STATE) -> CffiDiscoveryReport {
     let slot = std::ptr::addr_of_mut!((*system).SysInfo.PlanetInfo.DiscoveryString);
-    CffiDiscoveryReport::new(slot.cast::<*mut c_void>())
+    CffiDiscoveryReport::new(slot.cast::<*mut c_void>(), system)
         .expect("the discovery string slot is part of the system state")
 }
 

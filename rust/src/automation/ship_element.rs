@@ -99,8 +99,8 @@ pub fn assert_ship_element(
 
 /// The live flagship element amounts, when this build links the game.
 #[must_use]
-pub fn live_amounts() -> Option<ElementAmounts> {
-    crate::automation::input_ffi::ship_element_amounts()
+pub(crate) fn live_amounts(world: &super::campaign_state::CampaignView) -> Option<ElementAmounts> {
+    crate::automation::input_ffi::ship_element_amounts(world)
 }
 
 #[cfg(test)]

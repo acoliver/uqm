@@ -1,5 +1,7 @@
 pub mod battle;
+pub mod observe;
 
+pub mod input;
 pub mod kernel;
 mod owner;
 pub mod world;

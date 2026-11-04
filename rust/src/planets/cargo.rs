@@ -24,8 +24,8 @@ pub(crate) mod live {
     use crate::battle::c_bridge::SleepThread;
     use crate::c_bindings::controller_input::*;
     use crate::comm::locdata::{CColor, CPoint, CRect};
+    use crate::engine::{battle::Cx, observe::Io};
     use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
-    use crate::mainloop::restart_menu::c_extern::DoInput;
     use crate::starbase::cffi::CffiPlatform;
     use crate::starbase::gfx::{Align, ContextId, FontId, Gfx, Point, Rect, Rgba, Stamp, TextDraw};
     use std::ffi::{c_void, CString};
@@ -213,14 +213,11 @@ pub(crate) mod live {
         }
     }
 
-    #[repr(C)]
     struct Menu {
-        input: unsafe extern "C" fn(*mut Menu) -> i32,
         current: u8,
     }
 
-    unsafe extern "C" fn discard(menu: *mut Menu) -> i32 {
-        let menu = &mut *menu;
+    unsafe fn discard(menu: &mut Menu) -> i32 {
         let pulse = std::ptr::addr_of!(PulsedInputState).read();
         if WorldFields::current().read(|owner| owner.game.current_activity) & (1 << 14) != 0
             || pulse.menu[KEY_MENU_CANCEL as usize] != 0
@@ -254,19 +251,17 @@ pub(crate) mod live {
         1
     }
 
-    #[no_mangle]
     /// # Safety
     /// Call on the game thread with campaign globals and screen resources initialized.
-    pub unsafe extern "C" fn CargoMenu() {
-        let mut menu = Menu {
-            input: discard,
-            current: 0,
-        };
-        DrawCargoStrings(u8::MAX, 0);
-        description(0);
-        SetMenuSounds(15, 16);
-        DoInput((&mut menu as *mut Menu).cast(), 1);
-        ClearSISRect(8);
+    pub unsafe fn cargo_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) {
+        let mut menu = Menu { current: 0 };
+        cx.with_legacy(|| {
+            DrawCargoStrings(u8::MAX, 0);
+            description(0);
+            SetMenuSounds(15, 16);
+        });
+        cx.run_input(io, true, |cx, _| cx.with_legacy(|| discard(&mut menu) != 0));
+        cx.with_legacy(|| ClearSISRect(8));
     }
 }
 

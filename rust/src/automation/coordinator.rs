@@ -15,8 +15,9 @@
 //! @plan PLAN-20260723-RUNTIME-AUTOMATION.P08
 //! @requirement REQ-FFI-001..005, REQ-SCHED-001, REQ-WATCH-001
 
-use crate::engine::{StoryKey, World};
+use crate::engine::StoryKey;
 mod fixtures;
+mod initialization;
 mod input;
 use input::{discard_held_repeat, inject_menu_key};
 mod navigation;
@@ -55,7 +56,7 @@ use std::{
     path::PathBuf,
     sync::{
         atomic::{AtomicU64, Ordering},
-        OnceLock,
+        Arc,
     },
     time::{Duration, Instant},
 };
@@ -207,9 +208,6 @@ fn planet_side_wait_mismatch_label(
     )
 }
 
-/// Rotating phase for the orbital-exit key sequence.
-static ORBIT_EXIT_PHASE: AtomicU64 = AtomicU64::new(0);
-
 /// Callbacks in one repetition of the orbital-exit key sequence.
 const ORBIT_EXIT_PERIOD: u64 = 6;
 
@@ -235,6 +233,15 @@ fn orbit_exit_menu_keys(phase: u64) -> (bool, bool, bool) {
     }
 }
 
+fn next_orbit_exit_keys(phase: &AtomicU64, leave_orbit: bool) -> (bool, bool, bool) {
+    if leave_orbit {
+        orbit_exit_menu_keys(phase.fetch_add(1, Ordering::AcqRel))
+    } else {
+        phase.store(0, Ordering::Release);
+        (false, false, false)
+    }
+}
+
 /// Default RNG seed for scripts that predate explicit seed selection.
 pub const AUTOMATION_SEED: u32 = 0x55AA_2317;
 
@@ -250,12 +257,8 @@ pub const QUIT_VERIFIED_LABEL: &str = "quit_verified:activity=0x4000";
 pub const MAIN_MENU_READINESS_OBSERVATION: &str = "restart_menu_first_frame_initialized";
 
 // ===========================================================================
-//  Coordinator state (global, single-threaded in RUST_OWNS_MAIN mode)
+//  AutomationObserver state (global, single-threaded in RUST_OWNS_MAIN mode)
 // ===========================================================================
-
-/// The global automation coordinator. Initialized once when automation is
-/// activated, accessed via FFI hooks from the C game loop.
-static COORDINATOR: OnceLock<Coordinator> = OnceLock::new();
 
 /// Maximum number of script steps ahead of the current step that semantic
 /// communication actions may lookahead. Bounded to keep the search cheap
@@ -347,7 +350,7 @@ struct CoordInner {
 
 /// The automation coordinator, holding all live state needed to drive
 /// the scheduler/watchdog during the game loop.
-pub struct Coordinator {
+pub struct AutomationObserver {
     /// Validated seed returned at each automation-owned RNG initialization.
     seed: u32,
     /// The validated script actions.
@@ -366,30 +369,36 @@ pub struct Coordinator {
     /// Output root for artifacts/traces.
     output_root: PathBuf,
     /// The runtime model reference (borrowed from input_ffi's global).
-    runtime: &'static RuntimeModel,
+    pub(crate) runtime: Arc<RuntimeModel>,
+    orbit_exit_phase: AtomicU64,
+    pub(crate) flagship_destroyed: std::sync::atomic::AtomicBool,
     /// Mutable inner state.
     inner: Mutex<CoordInner>,
 }
 
-impl Coordinator {
+impl AutomationObserver {
+    pub fn runtime(&self) -> &RuntimeModel {
+        &self.runtime
+    }
+
     /// Initialize the global coordinator with a validated script.
     ///
     /// This is called from `main.rs` after `setup_automation` succeeds.
     /// It activates the runtime model and writes the run_start trace.
-    pub fn init(script: ValidatedScript, output_root: PathBuf) {
+    pub fn new(script: ValidatedScript, output_root: PathBuf) -> Arc<Self> {
         #[cfg(feature = "debug-process")]
         let native_limit = super::native_window::active_native_window_config()
             .map(|config| config.runtime_contract.inventory_limits.member_bytes);
         #[cfg(not(feature = "debug-process"))]
         let native_limit = None;
-        Self::init_with_native_checkpoints(script, output_root, native_limit);
+        Self::init_with_native_checkpoints(script, output_root, native_limit)
     }
 
     fn init_with_native_checkpoints(
         script: ValidatedScript,
         output_root: PathBuf,
         native_limit: Option<u64>,
-    ) {
+    ) -> Arc<Self> {
         let native_trace = native_limit
             .map(|limit| {
                 super::native_trace::NativeTraceJournal::create(&output_root, limit).map(Mutex::new)
@@ -429,7 +438,7 @@ impl Coordinator {
         let parity = Self::create_parity(&output_root);
         let parity_failed = Self::trace_initialization_failed(&parity, "parity");
         let native_trace_failed = Self::trace_initialization_failed(&native_trace, "native");
-        let coord = Coordinator {
+        let coord = AutomationObserver {
             seed: script.seed(),
             actions,
             native_checkpoint_plan,
@@ -442,72 +451,31 @@ impl Coordinator {
             started_at: now,
             output_root,
             runtime,
-            inner: Mutex::new(CoordInner {
-                sched_state: SchedulerState::initial(),
-                checkpoint_step: 0,
-                native_publication_pending: false,
-                #[cfg(feature = "debug-process")]
-                native_playable_published: false,
-                ready: false,
-                last_progress: now,
-                input_seen: 0,
-                present_seen: 0,
-                last_observed: now,
-                accepted_player_inputs: 0,
-                pending_player_input: None,
-                held_repeat_key: None,
-                verified_battle_frames: 0,
-                flight_position: FlightPositionTracker::default(),
-                battle_loss: BattleLossTracker::default(),
-                flagship_turn: FlagshipTurnTracker::default(),
-                planet_minerals: PlanetMineralsTracker::default(),
-                battle_fight: BattleFightTracker::default(),
-                fleet_fight: crate::automation::fleet_fight::FleetFight::default(),
-                fleet_retreat: crate::automation::fleet_fight::FleetRetreat::default(),
-                samatra: crate::automation::samatra::Controller::default(),
-                star_flight: crate::automation::star_flight::StarFlight::default(),
-                star_encounter_active: false,
-                patrol_response_pending: false,
-                device: Default::default(),
-                energy: Default::default(),
-                finalized: false,
-                terminal_class: None,
-                pending_transitions: Vec::new(),
-                quit_selected: false,
-                pending_main_menu_ready: false,
-                armed_capture_label: None,
-                pending_start_scene: PendingStartScene::new(start_scene),
+            orbit_exit_phase: AtomicU64::new(0),
+            flagship_destroyed: Default::default(),
+            inner: Mutex::new(CoordInner::new(
+                now,
+                PendingStartScene::new(start_scene),
                 consumed_communication_completions,
-                consumed_dispatch_generation: 0,
-                observed_planet_side_phase: None,
-                awaited_planet_side_generation: None,
-                consumed_response_generation: 0,
-                consumed_replay_generation: 0,
-                consumed_planet_menu_generation: 0,
-                consumed_ship_picker_generation: 0,
-                release_semantic_select: false,
-                replay_final_activity: 0,
-                parity_fixture: None,
-                save_capture: super::save_capture::Request::from_environment(),
-                orbit: Default::default(),
-                departure: Default::default(),
-            }),
+            )),
         };
 
-        // Write run_start trace.
-        {
-            let mut init_inner = coord.inner.lock();
-            coord.write_trace(&mut init_inner, RecordKind::RunStart);
-            if resolved_result.is_err()
+        coord.record_start(
+            resolved_result.is_err()
                 || checkpoint_plan.is_err()
                 || native_trace_failed
-                || parity_failed
-            {
-                coord.set_terminal(&mut init_inner, TerminalClass::TraceFailure);
-            }
-        }
+                || parity_failed,
+        );
 
-        let _ = COORDINATOR.set(coord);
+        Arc::new(coord)
+    }
+
+    fn record_start(&self, trace_failed: bool) {
+        let mut inner = self.inner.lock();
+        self.write_trace(&mut inner, RecordKind::RunStart);
+        if trace_failed {
+            self.set_terminal(&mut inner, TerminalClass::TraceFailure);
+        }
     }
 
     fn elapsed_ms(&self) -> u64 {
@@ -519,8 +487,8 @@ impl Coordinator {
     }
 
     /// Write only deterministic runtime observations, excluding host timing.
-    pub fn write_replay_summary(path: &std::path::Path) -> Result<(), String> {
-        let coord = Self::get().ok_or("replay coordinator not initialized")?;
+    pub fn write_replay_summary(&self, path: &std::path::Path) -> Result<(), String> {
+        let coord = self;
         let inner = coord.inner.lock();
         if let Some(journal) = &coord.parity {
             journal.lock().flush().map_err(|e| e.to_string())?;
@@ -535,35 +503,24 @@ impl Coordinator {
         std::fs::write(path, format!("{summary}\n")).map_err(|error| error.to_string())
     }
 
-    /// Get the global coordinator if active.
-    fn get() -> Option<&'static Coordinator> {
-        COORDINATOR.get()
-    }
-
-    /// Whether automation is active and the coordinator is initialized.
-    pub fn is_active() -> bool {
-        Self::get().is_some()
-    }
     /// Return one atomic semantic snapshot for the backend publication.
     ///
     /// The backend calls this after presenting pixels but before the corresponding coordinator
     /// presentation callback. The ordered commit's next sequence is the length of the exact
     /// reserved trace prefix; both semantic counters are protected by the coordinator lock.
-    pub fn native_window_semantic_snapshot() -> Option<(u64, u64, u64)> {
-        let coord = Self::get()?;
+    pub fn native_window_semantic_snapshot(&self) -> (u64, u64, u64) {
+        let coord = self;
         let inner = coord.inner.lock();
-        Some((
+        (
             coord.runtime.commit.next_sequence(),
             inner.accepted_player_inputs,
             inner.verified_battle_frames,
-        ))
+        )
     }
 
     /// Terminate active automation when an external evidence publisher fails.
-    pub fn external_trace_failure(detail: impl Into<String>) {
-        let Some(coord) = Self::get() else {
-            return;
-        };
+    pub fn external_trace_failure(&self, detail: impl Into<String>) {
+        let coord = self;
         let mut inner = coord.inner.lock();
         coord.write_trace_labeled(&mut inner, RecordKind::SemanticAssertion, detail.into());
         coord.set_terminal(&mut inner, TerminalClass::TraceFailure);
@@ -571,11 +528,8 @@ impl Coordinator {
 
     /// Activate the script's start scene after game structures and initial
     /// events are initialized, before the first activity dispatch.
-    pub fn activate_start_scene() {
-        Self::activate_save_capture();
-        let Some(coord) = Self::get() else {
-            return;
-        };
+    pub(crate) fn prepare_start_scene(&self) -> Option<scenario::ScenePlan> {
+        let coord = self;
 
         let scene = {
             let mut inner = coord.inner.lock();
@@ -591,38 +545,15 @@ impl Coordinator {
                         error.to_string(),
                     );
                     coord.set_terminal(&mut inner, TerminalClass::SemanticMismatch);
-                    return;
+                    return None;
                 }
             }
         };
 
-        let Some(scene) = scene else {
-            return;
-        };
+        let scene = scene?;
 
-        match scenario::activate(scene, SceneActivationBoundary::GameInitialized, |plan| {
-            World::current().write(|world| {
-                for &(key, value) in plan.game_state {
-                    world.set_story_state(key, value);
-                }
-            });
-            #[cfg(not(test))]
-            scenario::enter_scene(
-                plan,
-                &mut scenario::LinkedSceneEntry {
-                    screen_context: crate::engine::Kernel::current()
-                        .read(|kernel| kernel.screen_context),
-                },
-            );
-        }) {
-            Ok(plan) => {
-                let mut inner = coord.inner.lock();
-                coord.write_trace_labeled(
-                    &mut inner,
-                    RecordKind::SemanticAssertion,
-                    format!("scene_activated:{}", plan.scene.name()),
-                );
-            }
+        match scenario::activate(scene, SceneActivationBoundary::GameInitialized, |_| {}) {
+            Ok(plan) => Some(plan),
             Err(error) => {
                 let mut inner = coord.inner.lock();
                 coord.write_trace_labeled(
@@ -631,36 +562,47 @@ impl Coordinator {
                     error.to_string(),
                 );
                 coord.set_terminal(&mut inner, TerminalClass::SemanticMismatch);
+                None
             }
         }
     }
 
+    #[cfg(not(test))]
+    pub(crate) fn finish_start_scene(&self, plan: &scenario::ScenePlan) {
+        let mut inner = self.inner.lock();
+        self.write_trace_labeled(
+            &mut inner,
+            RecordKind::SemanticAssertion,
+            format!("scene_activated:{}", plan.scene.name()),
+        );
+    }
+
     // -----------------------------------------------------------------------
-    //  Input callback processing (called from rust_automation_service_do_input)
+    //  Input callback processing
     // -----------------------------------------------------------------------
 
     /// Process an admitted input callback. Returns true if the game loop
     /// should stop (terminal condition or script finished).
-    pub fn process_input() -> bool {
-        let Some(coord) = Self::get() else {
-            return false;
-        };
-        coord.process_input_inner()
+    pub(crate) fn process_input(
+        &self,
+        capture: &mut dyn FnMut() -> campaign_state::CampaignView,
+    ) -> bool {
+        let coord = self;
+        coord.process_input_inner(capture)
     }
 
     /// Service a nested button wait, which cannot accept planet-menu selections.
-    pub fn process_button_wait() -> bool {
-        let Some(coord) = Self::get() else {
-            return false;
-        };
-        coord.process_input_at_boundary(true)
+    pub(crate) fn process_button_wait(
+        &self,
+        capture: &mut dyn FnMut() -> campaign_state::CampaignView,
+    ) -> bool {
+        let coord = self;
+        coord.process_input_at_boundary(capture, true)
     }
 
     /// Observe a scripted player input after production updates current and pulsed state.
-    pub fn process_player_input_observation() -> bool {
-        let Some(coord) = Self::get() else {
-            return false;
-        };
+    pub fn process_player_input_observation(&self) -> bool {
+        let coord = self;
         coord.process_player_input_observation_inner()
     }
 
@@ -732,10 +674,8 @@ impl Coordinator {
     /// Whether the current semantic response action is waiting for NPC speech
     /// to finish before its pending response list can become selectable.
     #[must_use]
-    pub fn should_skip_pending_communication_speech() -> bool {
-        let Some(coord) = Self::get() else {
-            return false;
-        };
+    pub fn should_skip_pending_communication_speech(&self) -> bool {
+        let coord = self;
         let inner = coord.inner.lock();
         let index = match coord.actions.get(inner.sched_state.step_index) {
             Some(Action::SelectCommunicationResponse(select)) => select.index,
@@ -750,10 +690,8 @@ impl Coordinator {
     /// Report whether a response action later in the current synchronous
     /// prerequisite chain targets the pending communication list.
     #[must_use]
-    pub fn pending_communication_response_action(response_count: usize) -> bool {
-        let Some(coord) = Self::get() else {
-            return false;
-        };
+    pub fn pending_communication_response_action(&self, response_count: usize) -> bool {
+        let coord = self;
         if response_count == 0 {
             return false;
         }
@@ -773,10 +711,8 @@ impl Coordinator {
     /// Whether automation is waiting for this communication to close and can
     /// therefore skip its final NPC speech segment.
     #[must_use]
-    pub fn should_skip_communication_closing_speech() -> bool {
-        let Some(coord) = Self::get() else {
-            return false;
-        };
+    pub fn should_skip_communication_closing_speech(&self) -> bool {
+        let coord = self;
         let inner = coord.inner.lock();
         matches!(
             coord.actions.get(inner.sched_state.step_index),
@@ -787,20 +723,21 @@ impl Coordinator {
     /// Advance one scheduler callback at a synchronous boundary and report
     /// whether a pending semantic response action now requires speech skipping.
     #[must_use]
-    pub fn service_and_should_skip_pending_communication_speech() -> bool {
+    pub(crate) fn service_and_should_skip_pending_communication_speech(
+        &self,
+        capture: &mut dyn FnMut() -> campaign_state::CampaignView,
+    ) -> bool {
         for _ in 0..4 {
-            if Self::should_skip_pending_communication_speech() {
+            if self.should_skip_pending_communication_speech() {
                 return true;
             }
 
-            let Some(coord) = Self::get() else {
-                return false;
-            };
+            let coord = self;
             let before = coord.inner.lock().sched_state.step_index;
-            if coord.process_input_inner() {
+            if coord.process_input_inner(capture) {
                 return false;
             }
-            if Self::should_skip_pending_communication_speech() {
+            if self.should_skip_pending_communication_speech() {
                 return true;
             }
             let after = coord.inner.lock().sched_state.step_index;
@@ -813,13 +750,14 @@ impl Coordinator {
 
     /// Consume an already-observed communication completion after hail teardown
     /// and expose the next action before returning to the outer game loop.
-    pub fn service_communication_completion_boundary() -> bool {
+    pub(crate) fn service_communication_completion_boundary(
+        &self,
+        capture: &mut dyn FnMut() -> campaign_state::CampaignView,
+    ) -> bool {
         for _ in 0..2 {
-            let Some(coord) = Self::get() else {
-                return false;
-            };
+            let coord = self;
             let before = coord.inner.lock().sched_state.step_index;
-            if coord.process_input_inner() {
+            if coord.process_input_inner(capture) {
                 return true;
             }
             let after = coord.inner.lock().sched_state.step_index;
@@ -830,12 +768,23 @@ impl Coordinator {
         false
     }
 
+    fn campaign_source<'a>(
+        &self,
+        world: &'a campaign_state::CampaignView,
+    ) -> campaign_state::LiveCampaign<'a> {
+        campaign_state::LiveCampaign {
+            world,
+            flagship_destroyed: self.flagship_destroyed.load(Ordering::SeqCst),
+        }
+    }
+
     /// Service whichever semantic wait the current step is blocked on.
     ///
     /// Each wait observes real production state and only then reports that its
     /// condition was reached; injected input never satisfies a wait.
     fn service_semantic_waits(
         &self,
+        world: &campaign_state::CampaignView,
         inner: &mut CoordInner,
         released_semantic_select: bool,
         orbit_transition_pending: bool,
@@ -1095,7 +1044,7 @@ impl Coordinator {
             let expired =
                 inner.sched_state.phase == (ActionPhase::WaitingCondition { remaining: 0 });
             let evaluation =
-                campaign_state::evaluate(&wait.predicate, &campaign_state::LiveCampaign);
+                campaign_state::evaluate(&wait.predicate, &self.campaign_source(world));
             if expired {
                 // The scheduler ends the proof on this tick; say what the
                 // game state was instead of leaving a bare mismatch.
@@ -1161,13 +1110,13 @@ impl Coordinator {
         };
         match progress {
             Ok(TurnProgress::Turning { .. }) => {
-                if !Self::set_navigation_controls(holding) {
+                if !self.set_navigation_controls(holding) {
                     self.reject_input(inner, "turn_flagship", -1, -1);
                 }
                 scheduler_event
             }
             Ok(TurnProgress::Complete(proof)) => {
-                if !Self::set_navigation_controls(NavigationControl::default()) {
+                if !self.set_navigation_controls(NavigationControl::default()) {
                     self.reject_input(inner, "turn_flagship", -1, -1);
                     return scheduler_event;
                 }
@@ -1197,13 +1146,13 @@ impl Coordinator {
             .observe(&planet_minerals::PlanetSnapshot::live(), &collect);
         match progress {
             Ok(CollectProgress::Steering(control)) => {
-                if !Self::set_navigation_controls(control) {
+                if !self.set_navigation_controls(control) {
                     self.reject_input(inner, "collect_planet_minerals", -1, -1);
                 }
                 scheduler_event
             }
             Ok(CollectProgress::Complete(proof)) => {
-                if !Self::set_navigation_controls(NavigationControl::default()) {
+                if !self.set_navigation_controls(NavigationControl::default()) {
                     self.reject_input(inner, "collect_planet_minerals", -1, -1);
                     return scheduler_event;
                 }
@@ -1211,7 +1160,7 @@ impl Coordinator {
                 SchedulerEvent::NavigationReached
             }
             Err(error) => {
-                if !Self::set_navigation_controls(NavigationControl::default()) {
+                if !self.set_navigation_controls(NavigationControl::default()) {
                     self.reject_input(inner, "collect_planet_minerals", -1, -1);
                     return scheduler_event;
                 }
@@ -1290,7 +1239,7 @@ impl Coordinator {
         } else {
             None
         };
-        if !Self::set_navigation_controls(Default::default()) {
+        if !self.set_navigation_controls(Default::default()) {
             self.reject_input(inner, "use_device", -1, -1);
             return event;
         }
@@ -1316,6 +1265,7 @@ impl Coordinator {
 
     fn service_energy(
         &self,
+        world: &campaign_state::CampaignView,
         inner: &mut CoordInner,
         step: crate::automation::story_actions::CollectEnergyNodeStep,
         event: SchedulerEvent,
@@ -1329,11 +1279,7 @@ impl Coordinator {
         let (nodes, retrieved) = crate::planet_side::telemetry::energy_snapshot();
         let flags = ARTIFACT_FLAGS
             .iter()
-            .map(|key| {
-                World::current()
-                    .read(|world| crate::state::ffi::named_state_value(world, key))
-                    .map(u32::from)
-            })
+            .map(|key| world.named_state_value(key).map(u32::from))
             .collect::<Option<Vec<_>>>();
         let Some(flags) = flags else {
             self.set_terminal(inner, TerminalClass::SemanticMismatch);
@@ -1344,9 +1290,7 @@ impl Coordinator {
             lander: planet_minerals::PlanetSnapshot::live(),
             nodes,
             retrieved,
-            vault_unlocked: World::current()
-                .read(|world| crate::state::ffi::named_state_value(world, "SHIP_VAULT_UNLOCKED"))
-                == Some(1),
+            vault_unlocked: world.named_state_value("SHIP_VAULT_UNLOCKED") == Some(1),
             flags,
         };
         let progress = inner.energy.observe(step, &observation);
@@ -1355,7 +1299,7 @@ impl Coordinator {
         } else {
             Default::default()
         };
-        if !Self::set_navigation_controls(control) {
+        if !self.set_navigation_controls(control) {
             self.reject_input(inner, "collect_energy_node", -1, -1);
             return event;
         }
@@ -1384,6 +1328,7 @@ impl Coordinator {
 
     fn service_samatra(
         &self,
+        world: &campaign_state::CampaignView,
         inner: &mut CoordInner,
         step: crate::automation::samatra::FightSamatraStep,
         event: SchedulerEvent,
@@ -1391,7 +1336,7 @@ impl Coordinator {
         use crate::automation::samatra::{Controls, Progress};
         use crate::automation::script::{MenuKey, PlayerKey};
         let (events, snapshot) = crate::automation::samatra::observe();
-        let observation = crate::automation::input_ffi::fleet_fight_observation();
+        let observation = crate::automation::input_ffi::fleet_fight_observation(world);
         if inner.input_seen % 60 == 1 || inner.sched_state.phase == ActionPhase::WaitingForInput {
             self.write_trace_labeled(
                 inner,
@@ -1461,6 +1406,7 @@ impl Coordinator {
 
     fn service_fleet_fight(
         &self,
+        world: &campaign_state::CampaignView,
         inner: &mut CoordInner,
         max_ticks: u64,
         event: SchedulerEvent,
@@ -1468,7 +1414,7 @@ impl Coordinator {
         use crate::automation::fleet_fight::Progress;
         let progress = inner.fleet_fight.observe(
             max_ticks,
-            crate::automation::input_ffi::fleet_fight_observation(),
+            crate::automation::input_ffi::fleet_fight_observation(world),
         );
         let key = match &progress {
             Progress::Input(key) => *key,
@@ -1503,6 +1449,7 @@ impl Coordinator {
 
     fn service_fleet_retreat(
         &self,
+        world: &campaign_state::CampaignView,
         inner: &mut CoordInner,
         max_ticks: u64,
         event: SchedulerEvent,
@@ -1510,12 +1457,12 @@ impl Coordinator {
         use crate::automation::fleet_fight::RetreatProgress;
         let progress = inner
             .fleet_retreat
-            .observe(max_ticks, input_ffi::fleet_fight_observation());
+            .observe(max_ticks, input_ffi::fleet_fight_observation(world));
         let (talking, _) = crate::automation::ui_observation::communication_lifecycle();
         if talking && matches!(progress, RetreatProgress::Input { .. }) {
             for phrase in ["like_to_leave", "bye"] {
                 if crate::comm::ffi::offered_response_index(phrase).is_ok() {
-                    self.service_patrol_contact(inner, phrase);
+                    self.service_patrol_contact(world, inner, phrase);
                     return event;
                 }
             }
@@ -1561,6 +1508,7 @@ impl Coordinator {
 
     fn service_star_flight(
         &self,
+        world: &campaign_state::CampaignView,
         inner: &mut CoordInner,
         flight: &crate::automation::star_flight::FlyToStarStep,
         event: SchedulerEvent,
@@ -1572,7 +1520,7 @@ impl Coordinator {
             inner.star_encounter_active = false;
         }
         if let Some(phrase) = flight.encounter_response.as_deref() {
-            if self.service_patrol_contact(inner, phrase) {
+            if self.service_patrol_contact(world, inner, phrase) {
                 inner.star_flight.resume_after_encounter();
                 return event;
             }
@@ -1581,7 +1529,7 @@ impl Coordinator {
             && !flight.target.is_arilou_home()
         {
             if !inner.star_encounter_active {
-                let observation = input_ffi::fleet_fight_observation();
+                let observation = input_ffi::fleet_fight_observation(world);
                 self.write_trace_labeled(
                     inner,
                     RecordKind::SemanticAssertion,
@@ -1590,7 +1538,7 @@ impl Coordinator {
                         observation.flagship_crew,
                         observation.activity,
                         observation.escape_generation,
-                        input_ffi::star_flight_observation(flight.target).position
+                        input_ffi::star_flight_observation(world, flight.target).position
                     ),
                 );
             }
@@ -1598,9 +1546,9 @@ impl Coordinator {
         }
         if inner.star_encounter_active {
             let result = if flight.retreat_encounters {
-                self.service_fleet_retreat(inner, flight.max_ticks, event)
+                self.service_fleet_retreat(world, inner, flight.max_ticks, event)
             } else {
-                self.service_fleet_fight(inner, flight.max_ticks, event)
+                self.service_fleet_fight(world, inner, flight.max_ticks, event)
             };
             if result == SchedulerEvent::NavigationReached {
                 inner.star_encounter_active = false;
@@ -1609,7 +1557,7 @@ impl Coordinator {
             // A fleet win resumes the interrupted flight, not the next action.
             return event;
         }
-        let observation = input_ffi::star_flight_observation(flight.target);
+        let observation = input_ffi::star_flight_observation(world, flight.target);
         let progress = inner.star_flight.observe(flight, observation);
         let input = match &progress {
             Progress::Input(key) => *key,
@@ -1653,7 +1601,12 @@ impl Coordinator {
         }
     }
 
-    fn service_patrol_contact(&self, inner: &mut CoordInner, phrase: &str) -> bool {
+    fn service_patrol_contact(
+        &self,
+        world: &campaign_state::CampaignView,
+        inner: &mut CoordInner,
+        phrase: &str,
+    ) -> bool {
         use crate::automation::script::MenuKey;
         let (active, completions) = crate::automation::ui_observation::communication_lifecycle();
         if inner.patrol_response_pending && !active {
@@ -1666,16 +1619,14 @@ impl Coordinator {
             );
         }
         // A homeworld is the destination, not a patrol to dismiss.
-        if World::current().read(|world| world.story_value(StoryKey::GLOBAL_FLAGS_AND_DATA))
-            == Some(128)
-        {
+        if world.story_value(StoryKey::GLOBAL_FLAGS_AND_DATA) == Some(128) {
             return false;
         }
         let preview = crate::automation::ui_observation::encounter_menu_active();
         if !preview && !active {
             return false;
         }
-        if !Self::set_navigation_controls(Default::default()) {
+        if !self.set_navigation_controls(Default::default()) {
             self.reject_input(inner, "patrol_navigation", -1, -1);
             return true;
         }
@@ -1719,19 +1670,14 @@ impl Coordinator {
     /// is running, and report arrival.
     fn service_navigation(
         &self,
+        world: &campaign_state::CampaignView,
         inner: &mut CoordInner,
         mut scheduler_event: SchedulerEvent,
     ) -> SchedulerEvent {
         use super::script::PatrolPolicy;
-        let policy = match self.actions.get(inner.sched_state.step_index) {
-            Some(Action::NavigateToHyperspace(step)) if step.retreat_encounters => {
-                PatrolPolicy::Retreat
-            }
-            Some(Action::NavigateToPlanet(step)) => step.patrol_policy,
-            Some(Action::NavigateToOrbit(step)) => step.patrol_policy,
-            _ => PatrolPolicy::Fight,
-        };
-        let transit_budget = Self::transit_budget(self.actions.get(inner.sched_state.step_index));
+        let policy = Self::patrol_policy(self.actions.get(inner.sched_state.step_index));
+        let transit_budget =
+            Self::transit_budget(world, self.actions.get(inner.sched_state.step_index));
         if let Some(max_ticks) = transit_budget {
             if inner.sched_state.phase == ActionPhase::WaitingForInput {
                 inner.star_encounter_active = false;
@@ -1741,9 +1687,9 @@ impl Coordinator {
             }
             if inner.star_encounter_active {
                 let result = if policy == PatrolPolicy::Retreat {
-                    self.service_fleet_retreat(inner, max_ticks, scheduler_event)
+                    self.service_fleet_retreat(world, inner, max_ticks, scheduler_event)
                 } else {
-                    self.service_fleet_fight(inner, max_ticks, scheduler_event)
+                    self.service_fleet_fight(world, inner, max_ticks, scheduler_event)
                 };
                 if result == SchedulerEvent::NavigationReached {
                     inner.star_encounter_active = false;
@@ -1757,7 +1703,7 @@ impl Coordinator {
             Some(Action::NavigateToHyperspace(step)) => step.encounter_response.as_deref(),
             _ => None,
         };
-        if patrol_phrase.is_some_and(|phrase| self.service_patrol_contact(inner, phrase)) {
+        if patrol_phrase.is_some_and(|phrase| self.service_patrol_contact(world, inner, phrase)) {
             return scheduler_event;
         }
         if let Some(Action::NavigateToContact(step)) =
@@ -1766,7 +1712,7 @@ impl Coordinator {
             let preview = crate::automation::ui_observation::encounter_menu_active();
             let conversation = crate::automation::ui_observation::conversation_snapshot().active;
             let contact = preview || conversation;
-            let snapshot = crate::automation::input_ffi::contact_snapshot(step.race);
+            let snapshot = crate::automation::input_ffi::contact_snapshot(world, step.race);
             let control = if contact {
                 Default::default()
             } else if let Some((snapshot, same_view)) = snapshot {
@@ -1793,10 +1739,10 @@ impl Coordinator {
             } else {
                 Default::default()
             };
-            if !Self::set_navigation_controls(control) {
+            if !self.set_navigation_controls(control) {
                 self.reject_input(inner, "navigate_to_contact", -1, -1);
             } else if contact {
-                let race = crate::automation::input_ffi::contact_race();
+                let race = crate::automation::input_ffi::contact_race(world);
                 let reached = crate::automation::navigation::contact_reached(
                     step.race,
                     race,
@@ -1822,6 +1768,7 @@ impl Coordinator {
             self.actions.get(inner.sched_state.step_index)
         {
             let snapshot = crate::automation::input_ffi::navigation_snapshot(
+                world,
                 i32::from(navigation.planet),
                 None,
             );
@@ -1845,7 +1792,7 @@ impl Coordinator {
                 },
             );
             if reached {
-                if !Self::set_navigation_controls(
+                if !self.set_navigation_controls(
                     crate::automation::navigation::NavigationControl::default(),
                 ) {
                     self.reject_input(inner, "navigation", -1, -1);
@@ -1857,29 +1804,30 @@ impl Coordinator {
                     RecordKind::SemanticAssertion,
                     format!("navigation_reached:planet={}", navigation.planet),
                 );
-            } else if !Self::set_navigation_controls(control) {
+            } else if !self.set_navigation_controls(control) {
                 self.reject_input(inner, "navigation", -1, -1);
                 return scheduler_event;
             }
         } else if let Some(Action::NavigateToOrbit(navigation)) =
             self.actions.get(inner.sched_state.step_index)
         {
-            scheduler_event = self.service_orbit_navigation(inner, navigation, scheduler_event);
+            scheduler_event =
+                self.service_orbit_navigation(world, inner, navigation, scheduler_event);
         } else if let Some(Action::UseDevice(step)) = self.actions.get(inner.sched_state.step_index)
         {
             scheduler_event = self.service_device(inner, *step, scheduler_event);
         } else if let Some(Action::CollectEnergyNode(step)) =
             self.actions.get(inner.sched_state.step_index)
         {
-            scheduler_event = self.service_energy(inner, *step, scheduler_event);
+            scheduler_event = self.service_energy(world, inner, *step, scheduler_event);
         } else if let Some(Action::FlyToStar(flight)) =
             self.actions.get(inner.sched_state.step_index)
         {
-            scheduler_event = self.service_star_flight(inner, flight, scheduler_event);
+            scheduler_event = self.service_star_flight(world, inner, flight, scheduler_event);
         } else if let Some(Action::NavigateToHyperspace(_)) =
             self.actions.get(inner.sched_state.step_index)
         {
-            scheduler_event = self.service_hyperspace_departure(inner, scheduler_event);
+            scheduler_event = self.service_hyperspace_departure(world, inner, scheduler_event);
         } else if let Some(Action::TurnFlagship(turn)) =
             self.actions.get(inner.sched_state.step_index)
         {
@@ -1891,15 +1839,17 @@ impl Coordinator {
         } else if let Some(Action::FightSamatra(fight)) =
             self.actions.get(inner.sched_state.step_index)
         {
-            scheduler_event = self.service_samatra(inner, *fight, scheduler_event);
+            scheduler_event = self.service_samatra(world, inner, *fight, scheduler_event);
         } else if let Some(Action::FightEncounter(fight)) =
             self.actions.get(inner.sched_state.step_index)
         {
-            scheduler_event = self.service_fleet_fight(inner, fight.max_ticks, scheduler_event);
+            scheduler_event =
+                self.service_fleet_fight(world, inner, fight.max_ticks, scheduler_event);
         } else if let Some(Action::RetreatEncounter(retreat)) =
             self.actions.get(inner.sched_state.step_index)
         {
-            scheduler_event = self.service_fleet_retreat(inner, retreat.max_ticks, scheduler_event);
+            scheduler_event =
+                self.service_fleet_retreat(world, inner, retreat.max_ticks, scheduler_event);
         } else if let Some(Action::FightBattle(fight)) =
             self.actions.get(inner.sched_state.step_index)
         {
@@ -1908,6 +1858,7 @@ impl Coordinator {
             self.actions.get(inner.sched_state.step_index)
         {
             let snapshot = crate::automation::input_ffi::navigation_snapshot(
+                world,
                 i32::from(navigation.planet),
                 Some(i32::from(navigation.moon)),
             );
@@ -1954,7 +1905,7 @@ impl Coordinator {
                 }
             }
             if reached_orbit {
-                if !Self::set_navigation_controls(
+                if !self.set_navigation_controls(
                     crate::automation::navigation::NavigationControl::default(),
                 ) {
                     self.reject_input(inner, "navigation", -1, -1);
@@ -1972,7 +1923,7 @@ impl Coordinator {
                         snapshot.target_data_index
                     ),
                 );
-            } else if !Self::set_navigation_controls(control) {
+            } else if !self.set_navigation_controls(control) {
                 self.reject_input(inner, "navigation", -1, -1);
                 return scheduler_event;
             }
@@ -2007,8 +1958,11 @@ impl Coordinator {
         }
     }
 
-    fn process_input_inner(&self) -> bool {
-        self.process_input_at_boundary(false)
+    fn process_input_inner(
+        &self,
+        capture: &mut dyn FnMut() -> campaign_state::CampaignView,
+    ) -> bool {
+        self.process_input_at_boundary(capture, false)
     }
 
     /// When a `wait_for_planet_side_end` ran out of ticks, record the last
@@ -2027,7 +1981,11 @@ impl Coordinator {
         self.write_trace_labeled(inner, RecordKind::SemanticAssertion, label);
     }
 
-    fn verify_runtime_assertions(&self, inner: &mut CoordInner) -> bool {
+    fn verify_runtime_assertions(
+        &self,
+        world: &campaign_state::CampaignView,
+        inner: &mut CoordInner,
+    ) -> bool {
         // Runtime semantic assertions are checked before allowing the pure
         // scheduler to advance their action.
         if let Some(Action::AssertScene(assertion)) = self.actions.get(inner.sched_state.step_index)
@@ -2178,7 +2136,7 @@ impl Coordinator {
         {
             match inner
                 .flight_position
-                .record(mode::require_live(), flight_position::live_position())
+                .record(mode::require_live(), flight_position::live_position(world))
             {
                 Ok(position) => self.write_trace_labeled(
                     inner,
@@ -2201,7 +2159,7 @@ impl Coordinator {
         {
             match inner.flight_position.assert_displacement(
                 mode::require_live(),
-                flight_position::live_position(),
+                flight_position::live_position(world),
                 assertion.minimum_logical_units,
             ) {
                 Ok(proof) => self.write_trace_labeled(
@@ -2225,7 +2183,7 @@ impl Coordinator {
         {
             match inner.flight_position.assert_stationary(
                 mode::require_live(),
-                flight_position::live_position(),
+                flight_position::live_position(world),
                 assertion.maximum_logical_units,
             ) {
                 Ok(proof) => self.write_trace_labeled(
@@ -2249,7 +2207,7 @@ impl Coordinator {
         {
             match inner
                 .flight_position
-                .record_saved(mode::require_live(), flight_position::live_position())
+                .record_saved(mode::require_live(), flight_position::live_position(world))
             {
                 Ok(position) => self.write_trace_labeled(
                     inner,
@@ -2272,7 +2230,7 @@ impl Coordinator {
         {
             match inner
                 .flight_position
-                .assert_restored(mode::require_live(), flight_position::live_position())
+                .assert_restored(mode::require_live(), flight_position::live_position(world))
             {
                 Ok((saved, observed)) => self.write_trace_labeled(
                     inner,
@@ -2295,7 +2253,7 @@ impl Coordinator {
         {
             match ship_resources::assert_ship_resources(
                 mode::require_live(),
-                ship_resources::live_resources(),
+                ship_resources::live_resources(world),
                 *assertion,
             ) {
                 Ok(proof) => self.write_trace_labeled(
@@ -2316,7 +2274,7 @@ impl Coordinator {
         }
         if let Some(Action::AssertState(predicate)) = self.actions.get(inner.sched_state.step_index)
         {
-            let evaluation = campaign_state::evaluate(predicate, &campaign_state::LiveCampaign);
+            let evaluation = campaign_state::evaluate(predicate, &self.campaign_source(world));
             if evaluation.held {
                 self.write_trace_labeled(
                     inner,
@@ -2338,7 +2296,7 @@ impl Coordinator {
         {
             match ship_element::assert_ship_element(
                 mode::require_live(),
-                ship_element::live_amounts(),
+                ship_element::live_amounts(world),
                 *assertion,
             ) {
                 Ok(proof) => self.write_trace_labeled(
@@ -2402,13 +2360,17 @@ impl Coordinator {
         false
     }
 
-    fn verify_activity_assertion(&self, inner: &mut CoordInner) -> bool {
+    fn verify_activity_assertion(
+        &self,
+        world: &campaign_state::CampaignView,
+        inner: &mut CoordInner,
+    ) -> bool {
         let Some(Action::AssertActivity(assertion)) =
             self.actions.get(inner.sched_state.step_index)
         else {
             return false;
         };
-        let word = crate::mainloop::ffi::get_current_activity().0;
+        let word = world.activity;
         let evidence = activity_evidence(assertion, word);
         let passed = evidence.passed;
         let reservation = self.runtime.commit.reserve();
@@ -2542,10 +2504,8 @@ impl Coordinator {
 
     /// Process a committed present callback. Returns true if the game loop
     /// should stop.
-    pub fn process_present(frame: Option<PresentedFrame>) -> bool {
-        let Some(coord) = Self::get() else {
-            return false;
-        };
+    pub fn process_present(&self, frame: Option<PresentedFrame>) -> bool {
+        let coord = self;
         let committed_presentation = frame.as_ref().map(|frame| frame.count);
         let stop = coord.process_present_inner(frame);
         let boundary = committed_presentation
@@ -2556,18 +2516,17 @@ impl Coordinator {
             coord.stage_native_trace()
         };
         if let Err(error) = publication {
-            Self::external_trace_failure(format!(
-                "native trace prefix publication failed: {error}"
-            ));
+            self.external_trace_failure(format!("native trace prefix publication failed: {error}"));
             return true;
         }
         #[cfg(feature = "debug-process")]
         if let Some(committed_presentation) = committed_presentation {
             if let Err(error) = crate::automation::native_window::record_native_window_presentation(
+                self,
                 committed_presentation,
                 boundary,
             ) {
-                Self::external_trace_failure(format!(
+                self.external_trace_failure(format!(
                     "native-window state publication failed: {error}"
                 ));
                 return true;
@@ -2651,10 +2610,8 @@ impl Coordinator {
     // -----------------------------------------------------------------------
 
     /// Advance a script waiting for the initialized production restart menu.
-    pub fn process_main_menu_ready() -> bool {
-        let Some(coord) = Self::get() else {
-            return false;
-        };
+    pub fn process_main_menu_ready(&self) -> bool {
+        let coord = self;
         let mut inner = coord.inner.lock();
         if inner.terminal_class.is_some() {
             return true;
@@ -2694,10 +2651,8 @@ impl Coordinator {
 
     /// The restart menu set `CHECK_ABORT` for the Quit entry. Records the
     /// observation; whether the script declared it is decided at finalization.
-    pub fn observe_quit_selected() {
-        let Some(coord) = Self::get() else {
-            return;
-        };
+    pub fn observe_quit_selected(&self) {
+        let coord = self;
         let mut inner = coord.inner.lock();
         if inner.terminal_class.is_some() {
             return;
@@ -2746,10 +2701,8 @@ impl Coordinator {
 
     /// Process an observed main-menu transition. Returns true if the game
     /// loop should stop (e.g., semantic assertion mismatch).
-    pub fn process_menu_transition(from_index: u8, to_index: u8) -> bool {
-        let Some(coord) = Self::get() else {
-            return false;
-        };
+    pub fn process_menu_transition(&self, from_index: u8, to_index: u8) -> bool {
+        let coord = self;
         coord.process_menu_transition_inner(from_index, to_index)
     }
 
@@ -2777,10 +2730,8 @@ impl Coordinator {
     /// In inactive mode this preserves the game result. Active mode durably
     /// publishes the ordered trace and teardown receipt before returning the
     /// terminal-aware process status. Evidence failures are fatal.
-    pub fn finalize(game_result: i32) -> Result<i32, String> {
-        let Some(coord) = Self::get() else {
-            return Ok(game_result);
-        };
+    pub fn finalize(&self, game_result: i32) -> Result<i32, String> {
+        let coord = self;
         coord.finalize_inner(game_result)
     }
 
@@ -2944,7 +2895,10 @@ impl Coordinator {
         .all(|(key, active)| inject_player_key(i32::from(key.index()), i32::from(active)))
     }
 
-    fn set_navigation_controls(control: crate::automation::navigation::NavigationControl) -> bool {
+    fn set_navigation_controls(
+        &self,
+        control: crate::automation::navigation::NavigationControl,
+    ) -> bool {
         use crate::automation::script::{MenuKey, PlayerKey};
 
         for (key, active) in [
@@ -2957,12 +2911,8 @@ impl Coordinator {
             }
         }
 
-        let (cancel, up, select) = if control.leave_orbit {
-            orbit_exit_menu_keys(ORBIT_EXIT_PHASE.fetch_add(1, Ordering::AcqRel))
-        } else {
-            ORBIT_EXIT_PHASE.store(0, Ordering::Release);
-            (false, false, false)
-        };
+        let (cancel, up, select) =
+            next_orbit_exit_keys(&self.orbit_exit_phase, control.leave_orbit);
         for (key, active) in [
             (MenuKey::Cancel, cancel),
             (MenuKey::Up, up),
@@ -3348,50 +3298,47 @@ fn activity_evidence(assertion: &ActivityAssertion, word: u16) -> ActivityEviden
     }
 }
 
-/// Return the deterministic seed for an automation-owned RNG boundary, while
-/// preserving the caller's wall-clock seed when automation is inactive.
-#[no_mangle]
-pub extern "C" fn rust_automation_seed_value(domain: u32, fallback: u32) -> u32 {
-    let Some(domain) = SeedDomain::from_ffi(domain) else {
-        return fallback;
-    };
-    let Some(coord) = Coordinator::get() else {
-        return fallback;
-    };
-    let mut inner = coord.inner.lock();
-    let reservation = coord.runtime.commit.reserve();
-    let seq = reservation.sequence();
-    let record = TraceRecord {
-        schema: TraceRecord::SCHEMA,
-        run: 1,
-        sequence: seq,
-        input_seen: inner.input_seen,
-        present_seen: inner.present_seen,
-        elapsed_ms: coord.elapsed_ms(),
-        kind: RecordKind::SeedApplication,
-        label: None,
-        from: None,
-        to: None,
-        terminal_reason: None,
-        seed_application: Some(SeedApplication {
-            domain,
-            seed: coord.seed,
-        }),
-        presentation: None,
-        activity: None,
-        readiness: None,
-        command_acknowledgement: None,
-        checkpoint: None,
-        failure: None,
-    };
-    match record.to_jsonl() {
-        Ok(jsonl) => reservation.commit_record(jsonl),
-        Err(_) => {
-            reservation.cancel();
-            coord.set_terminal(&mut inner, TerminalClass::TraceFailure);
+impl AutomationObserver {
+    pub(crate) fn seed_value(&self, domain: u32, fallback: u32) -> u32 {
+        let Some(domain) = SeedDomain::from_ffi(domain) else {
+            return fallback;
+        };
+        let coord = self;
+        let mut inner = coord.inner.lock();
+        let reservation = coord.runtime.commit.reserve();
+        let seq = reservation.sequence();
+        let record = TraceRecord {
+            schema: TraceRecord::SCHEMA,
+            run: 1,
+            sequence: seq,
+            input_seen: inner.input_seen,
+            present_seen: inner.present_seen,
+            elapsed_ms: coord.elapsed_ms(),
+            kind: RecordKind::SeedApplication,
+            label: None,
+            from: None,
+            to: None,
+            terminal_reason: None,
+            seed_application: Some(SeedApplication {
+                domain,
+                seed: coord.seed,
+            }),
+            presentation: None,
+            activity: None,
+            readiness: None,
+            command_acknowledgement: None,
+            checkpoint: None,
+            failure: None,
+        };
+        match record.to_jsonl() {
+            Ok(jsonl) => reservation.commit_record(jsonl),
+            Err(_) => {
+                reservation.cancel();
+                coord.set_terminal(&mut inner, TerminalClass::TraceFailure);
+            }
         }
+        coord.seed
     }
-    coord.seed
 }
 
 fn validate_runtime_finalization(result: FinalizationResult) -> Result<(), String> {
@@ -3500,8 +3447,58 @@ mod tests {
     use super::*;
 
     #[test]
+    fn application_releases_its_observer_while_external_handles_remain_alive() {
+        const CHILD: &str = "UQM_OBSERVER_OWNERSHIP_TEST";
+        if std::env::var_os(CHILD).is_none() {
+            let status = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "automation::coordinator::tests::application_releases_its_observer_while_external_handles_remain_alive"])
+            .env(CHILD, "1").status().unwrap();
+            assert!(status.success());
+            return;
+        }
+        let source = serde_json::to_vec(&serde_json::json!({
+            "version": 1, "name": "ownership", "steps": [{"action": "finish"}],
+            "budgets": {"max_input_ticks": 10, "max_presentations": 10, "max_wallclock_seconds": 10}
+        }))
+        .unwrap();
+        let script = crate::automation::validate_script(
+            crate::automation::parse_script(&source, "test.json").unwrap(),
+            "test.json",
+        )
+        .unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let observer = AutomationObserver::new(script, directory.path().into());
+        let application = crate::app::Application::new(Some(observer.clone()));
+        assert!(Arc::ptr_eq(application.observer().unwrap(), &observer));
+        use crate::engine::observe::Observer;
+        let mut handle =
+            crate::automation::observer::Handle(application.observer().unwrap().clone());
+        handle.checkpoint(&crate::engine::observe::CheckpointView::FlagshipDestroyed);
+        drop(handle);
+        assert!(observer.flagship_destroyed.load(Ordering::SeqCst));
+        drop(application);
+        assert_eq!(Arc::strong_count(&observer), 1);
+    }
+
+    #[test]
+    fn initialization_without_a_scene_never_enters_the_owner_slot() {
+        let source = br#"{"version":1,"name":"no-scene","steps":[{"action":"finish"}],"budgets":{"max_input_ticks":10,"max_presentations":10,"max_wallclock_seconds":60}}"#;
+        let script = crate::automation::validate_script(
+            crate::automation::parse_script(source, "test.json").unwrap(),
+            "test.json",
+        )
+        .unwrap();
+        let output = tempfile::tempdir().unwrap();
+        let observer = crate::automation::AutomationObserver::new(script, output.path().into());
+        let before = observer.runtime.commit.next_sequence();
+        assert!(observer.prepare_start_scene().is_none());
+        assert_eq!(observer.runtime.commit.next_sequence(), before);
+    }
+
+    #[test]
     fn replay_generation_is_consumed_once_and_retains_early_events() {
         let mut consumed = 0;
+
         assert!(consume_new_generation(&mut consumed, 1));
         assert_eq!(consumed, 1);
         assert!(!consume_new_generation(&mut consumed, 1));
@@ -3657,11 +3654,14 @@ mod tests {
             "quit.json",
         )
         .unwrap();
-        Coordinator::init(script, temp.path().to_path_buf());
+        let _app = crate::app::Application::new(Some(AutomationObserver::new(
+            script,
+            temp.path().to_path_buf(),
+        )));
         if case != "declared_not_reported" {
-            Coordinator::observe_quit_selected();
+            _app.observer().unwrap().observe_quit_selected();
         }
-        let status = Coordinator::finalize(0).unwrap();
+        let status = _app.observer().unwrap().finalize(0).unwrap();
         let records: Vec<_> = std::fs::read_to_string(temp.path().join("trace.jsonl"))
             .unwrap()
             .lines()
@@ -3712,13 +3712,16 @@ mod tests {
             "test.json",
         )
         .unwrap();
-        Coordinator::init(script, temp.path().into());
-        let coord = Coordinator::get().unwrap();
+        let _app =
+            crate::app::Application::new(Some(AutomationObserver::new(script, temp.path().into())));
+        let coord = _app.observer().cloned().unwrap();
         // AutoScan has already selected, and its synchronous callback owns
         // three scans of 84 lines. Dispatch cannot accept input yet.
         coord.inner.lock().release_semantic_select = true;
         for _ in 0..252 {
-            assert!(!coord.process_input_at_boundary(true));
+            assert!(
+                !coord.process_input_at_boundary(&mut campaign_state::CampaignView::empty, true)
+            );
         }
         {
             let inner = coord.inner.lock();
@@ -3733,10 +3736,10 @@ mod tests {
             rust_automation_observe_planet_menu, PlanetMenuPhase,
         };
         rust_automation_observe_planet_menu(PlanetMenuPhase::Dispatch as usize);
-        assert!(!coord.process_input_inner());
+        assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
         assert_eq!(coord.inner.lock().sched_state.step_index, 1);
-        assert!(coord.process_input_inner());
-        assert_eq!(Coordinator::finalize(0).unwrap(), 0);
+        assert!(coord.process_input_inner(&mut campaign_state::CampaignView::empty));
+        assert_eq!(_app.observer().unwrap().finalize(0).unwrap(), 0);
     }
 
     #[test]
@@ -3763,8 +3766,13 @@ mod tests {
         .unwrap();
         let plan =
             super::super::native_checkpoint::NativeCheckpointPlan::derive(source, &script).unwrap();
-        Coordinator::init_with_native_checkpoints(script, temp.path().into(), Some(65536));
-        let coord = Coordinator::get().unwrap();
+        let _app =
+            crate::app::Application::new(Some(AutomationObserver::init_with_native_checkpoints(
+                script,
+                temp.path().into(),
+                Some(65536),
+            )));
+        let coord = _app.observer().cloned().unwrap();
         let frame = |count, generation| PresentedFrame {
             count,
             generation,
@@ -3779,25 +3787,25 @@ mod tests {
                 .map(|line| TraceRecord::from_jsonl(line).unwrap())
                 .collect::<Vec<_>>()
         };
-        assert!(!coord.process_input_inner());
-        assert!(!Coordinator::process_present(Some(frame(1, 1))));
+        assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
+        assert!(!_app.observer().unwrap().process_present(Some(frame(1, 1))));
         assert_eq!(
             coord.inner.lock().sched_state.step_index,
             1,
             "capture must leave activity awaiting its runtime verification"
         );
         assert_eq!(plan.committed(&records()).unwrap().len(), 1);
-        assert!(!coord.process_input_inner());
+        assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
         assert_eq!(coord.inner.lock().sched_state.step_index, 2);
-        assert!(!coord.process_input_inner());
+        assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
         assert!(coord.inner.lock().armed_capture_label.is_none());
-        assert!(!Coordinator::process_present(Some(frame(2, 1))));
+        assert!(!_app.observer().unwrap().process_present(Some(frame(2, 1))));
         assert_eq!(plan.committed(&records()).unwrap().len(), 2);
-        assert!(!coord.process_input_inner());
-        assert!(!Coordinator::process_present(Some(frame(3, 2))));
+        assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
+        assert!(!_app.observer().unwrap().process_present(Some(frame(3, 2))));
         assert_eq!(plan.committed(&records()).unwrap().len(), 3);
-        assert!(coord.process_input_inner());
-        assert_eq!(Coordinator::finalize(0).unwrap(), 0);
+        assert!(coord.process_input_inner(&mut campaign_state::CampaignView::empty));
+        assert_eq!(_app.observer().unwrap().finalize(0).unwrap(), 0);
         let trace = records();
         let counts: Vec<_> = trace
             .iter()
@@ -3841,30 +3849,41 @@ mod tests {
         .unwrap();
         let plan =
             super::super::native_checkpoint::NativeCheckpointPlan::derive(source, &script).unwrap();
-        Coordinator::init_with_native_checkpoints(script, temp.path().into(), Some(65536));
-        let coord = Coordinator::get().unwrap();
-        assert!(!Coordinator::process_main_menu_ready());
-        assert!(!Coordinator::process_main_menu_ready());
+        let _app =
+            crate::app::Application::new(Some(AutomationObserver::init_with_native_checkpoints(
+                script,
+                temp.path().into(),
+                Some(65536),
+            )));
+        let coord = _app.observer().cloned().unwrap();
+        assert!(!_app.observer().unwrap().process_main_menu_ready());
+        assert!(!_app.observer().unwrap().process_main_menu_ready());
         assert_eq!(coord.inner.lock().sched_state.step_index, 1);
         assert!(coord.inner.lock().pending_main_menu_ready);
         for count in 1..=2 {
-            assert!(!Coordinator::process_present(Some(PresentedFrame {
-                count,
-                generation: 0,
-                width: 1,
-                height: 1,
-                rgba: vec![1, 2, 3, 255]
-            })));
+            assert!(!_app
+                .observer()
+                .unwrap()
+                .process_present(Some(PresentedFrame {
+                    count,
+                    generation: 0,
+                    width: 1,
+                    height: 1,
+                    rgba: vec![1, 2, 3, 255]
+                })));
             let records: Vec<_> = std::fs::read_to_string(temp.path().join("trace.jsonl"))
                 .unwrap()
                 .lines()
                 .map(|line| TraceRecord::from_jsonl(line).unwrap())
                 .collect();
             assert_eq!(plan.committed(&records).unwrap().len() as u64, count);
-            assert_eq!(coord.process_input_inner(), count == 2);
+            assert_eq!(
+                coord.process_input_inner(&mut campaign_state::CampaignView::empty),
+                count == 2
+            );
         }
         assert!(!coord.inner.lock().pending_main_menu_ready);
-        assert_eq!(Coordinator::finalize(0).unwrap(), 0);
+        assert_eq!(_app.observer().unwrap().finalize(0).unwrap(), 0);
     }
     #[test]
     fn native_trace_keeps_ordinary_presentations_in_memory_until_a_boundary() {
@@ -3888,8 +3907,13 @@ mod tests {
             "test.json",
         )
         .unwrap();
-        Coordinator::init_with_native_checkpoints(script, temp.path().into(), Some(65536));
-        let coord = Coordinator::get().unwrap();
+        let _app =
+            crate::app::Application::new(Some(AutomationObserver::init_with_native_checkpoints(
+                script,
+                temp.path().into(),
+                Some(65536),
+            )));
+        let coord = _app.observer().cloned().unwrap();
         let frame = |count, generation| PresentedFrame {
             count,
             generation,
@@ -3897,21 +3921,24 @@ mod tests {
             height: 1,
             rgba: vec![1, 2, 3, 255],
         };
-        assert!(!coord.process_input_inner());
-        assert!(!Coordinator::process_present(Some(frame(1, 0))));
+        assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
+        assert!(!_app.observer().unwrap().process_present(Some(frame(1, 0))));
         let first = std::fs::read(temp.path().join("trace.jsonl")).unwrap();
         for count in 2..=8 {
-            assert!(!coord.process_input_inner());
-            assert!(!Coordinator::process_present(Some(frame(count, 0))));
+            assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
+            assert!(!_app
+                .observer()
+                .unwrap()
+                .process_present(Some(frame(count, 0))));
             assert_eq!(
                 std::fs::read(temp.path().join("trace.jsonl")).unwrap(),
                 first
             );
         }
         while coord.inner.lock().armed_capture_label.is_none() {
-            assert!(!coord.process_input_inner());
+            assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
         }
-        assert!(!Coordinator::process_present(Some(frame(9, 1))));
+        assert!(!_app.observer().unwrap().process_present(Some(frame(9, 1))));
         let boundary = std::fs::read(temp.path().join("trace.jsonl")).unwrap();
         assert!(boundary.starts_with(&first));
         let records: Vec<_> = std::str::from_utf8(&boundary)
@@ -3925,8 +3952,8 @@ mod tests {
             .map(|record| record.presentation.as_ref().unwrap().count)
             .collect();
         assert_eq!(presentations, (1..=9).collect::<Vec<_>>());
-        assert!(coord.process_input_inner());
-        assert_eq!(Coordinator::finalize(0).unwrap(), 0);
+        assert!(coord.process_input_inner(&mut campaign_state::CampaignView::empty));
+        assert_eq!(_app.observer().unwrap().finalize(0).unwrap(), 0);
         let finished = std::fs::read(temp.path().join("trace.jsonl")).unwrap();
         assert!(finished.starts_with(&boundary));
         let records: Vec<_> = std::str::from_utf8(&finished)
@@ -3964,8 +3991,13 @@ mod tests {
             "test.json",
         )
         .unwrap();
-        Coordinator::init_with_native_checkpoints(script, temp.path().into(), Some(65536));
-        let coord = Coordinator::get().unwrap();
+        let _app =
+            crate::app::Application::new(Some(AutomationObserver::init_with_native_checkpoints(
+                script,
+                temp.path().into(),
+                Some(65536),
+            )));
+        let coord = _app.observer().cloned().unwrap();
         let frame = PresentedFrame {
             count: 1,
             generation: 0,
@@ -3984,12 +4016,12 @@ mod tests {
             );
             assert!(!inner.native_publication_pending);
         }
-        Coordinator::native_battle_frame_completed(2u16.into());
+        coord.native_battle_frame_completed(2u16.into());
         assert!(
             coord.inner.lock().departure.native_frame_pending,
             "encounter combat must not release the departure endpoint"
         );
-        Coordinator::native_battle_frame_completed((3u16 | (1 << 9)).into());
+        coord.native_battle_frame_completed((3u16 | (1 << 9)).into());
         let mut inner = coord.inner.lock();
         assert!(!inner.departure.native_frame_pending);
         assert!(!coord.commit_native_checkpoints(&mut inner, &frame));
@@ -4021,11 +4053,16 @@ mod tests {
         .unwrap();
         let plan =
             super::super::native_checkpoint::NativeCheckpointPlan::derive(source, &script).unwrap();
-        Coordinator::init_with_native_checkpoints(script, temp.path().into(), Some(65536));
-        let coord = Coordinator::get().unwrap();
-        assert!(!Coordinator::process_main_menu_ready());
+        let _app =
+            crate::app::Application::new(Some(AutomationObserver::init_with_native_checkpoints(
+                script,
+                temp.path().into(),
+                Some(65536),
+            )));
+        let coord = _app.observer().cloned().unwrap();
+        assert!(!_app.observer().unwrap().process_main_menu_ready());
         for _ in 0..3 {
-            assert!(!coord.process_input_inner());
+            assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
             assert_eq!(coord.inner.lock().sched_state.step_index, 1);
             assert!(coord.inner.lock().armed_capture_label.is_none());
         }
@@ -4036,9 +4073,9 @@ mod tests {
             height: 1,
             rgba: vec![1, 2, 3, 255],
         };
-        assert!(!Coordinator::process_menu_transition(0, 1));
-        assert!(!Coordinator::process_menu_transition(1, 0));
-        assert!(!Coordinator::process_present(Some(frame(1, 0))));
+        assert!(!_app.observer().unwrap().process_menu_transition(0, 1));
+        assert!(!_app.observer().unwrap().process_menu_transition(1, 0));
+        assert!(!_app.observer().unwrap().process_present(Some(frame(1, 0))));
         let live_trace = std::fs::read_to_string(temp.path().join("trace.jsonl")).unwrap();
         let live_records: Vec<_> = live_trace
             .lines()
@@ -4046,31 +4083,31 @@ mod tests {
             .collect();
         assert_eq!(
             live_records.len() as u64,
-            Coordinator::native_window_semantic_snapshot().unwrap().0
+            _app.observer().unwrap().native_window_semantic_snapshot().0
         );
         assert_eq!(plan.committed(&live_records).unwrap().len(), 1);
-        assert!(!coord.process_input_inner());
+        assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
         assert_eq!(coord.inner.lock().sched_state.step_index, 2);
         assert_eq!(coord.inner.lock().pending_transitions.len(), 1);
-        assert!(!coord.process_input_inner());
+        assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
         assert_eq!(coord.inner.lock().sched_state.step_index, 2);
-        assert!(!Coordinator::process_present(Some(frame(2, 0))));
-        assert!(!coord.process_input_inner());
+        assert!(!_app.observer().unwrap().process_present(Some(frame(2, 0))));
+        assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
         assert_eq!(coord.inner.lock().sched_state.step_index, 3);
         assert!(coord.inner.lock().pending_transitions.is_empty());
-        assert!(!Coordinator::process_present(Some(frame(3, 0))));
-        assert!(!coord.process_input_inner());
+        assert!(!_app.observer().unwrap().process_present(Some(frame(3, 0))));
+        assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
         assert_eq!(
             coord.inner.lock().armed_capture_label.as_deref(),
             Some("menu")
         );
-        assert!(!Coordinator::process_present(Some(frame(4, 1))));
-        assert!(coord.process_input_inner());
+        assert!(!_app.observer().unwrap().process_present(Some(frame(4, 1))));
+        assert!(coord.process_input_inner(&mut campaign_state::CampaignView::empty));
         assert_eq!(
             coord.inner.lock().terminal_class,
             Some(TerminalClass::Success)
         );
-        assert_eq!(Coordinator::finalize(0).unwrap(), 0);
+        assert_eq!(_app.observer().unwrap().finalize(0).unwrap(), 0);
         let trace = std::fs::read(temp.path().join("trace.jsonl")).unwrap();
         let records: Vec<_> = std::str::from_utf8(&trace)
             .unwrap()
@@ -4112,9 +4149,26 @@ mod tests {
         doc.seed = Some(u64::from(seed));
         let script = crate::automation::script::validate_script(doc, "seed-test.json").unwrap();
         for domain in [SeedDomain::NEW_GAME_ID, SeedDomain::CAMPAIGN_BATTLE_ID] {
-            assert_eq!(rust_automation_seed_value(domain, 999), 999);
+            let mut unobserved = crate::engine::observe::Unobserved;
+            let io = crate::engine::observe::Io {
+                observer: &mut unobserved,
+            };
+            let seed = io
+                .observer
+                .input_admitted(
+                    &crate::engine::observe::InputView::Seed {
+                        domain,
+                        fallback: 999,
+                    },
+                    &None,
+                )
+                .seed;
+            assert_eq!(seed.unwrap_or(999), 999);
         }
-        Coordinator::init(script, temp.path().to_path_buf());
+        let _app = crate::app::Application::new(Some(AutomationObserver::new(
+            script,
+            temp.path().to_path_buf(),
+        )));
         let mut expected = Vec::new();
         for domain in [
             SeedDomain::SUPER_MELEE_MENU_ID,
@@ -4122,14 +4176,18 @@ mod tests {
             SeedDomain::NEW_GAME_ID,
             SeedDomain::CAMPAIGN_BATTLE_ID,
         ] {
-            assert_eq!(rust_automation_seed_value(domain, 999), applied_seed);
+            assert_eq!(
+                _app.observer().unwrap().seed_value(domain, 999),
+                applied_seed
+            );
             expected.push(SeedApplication {
                 domain: SeedDomain::from_ffi(domain).unwrap(),
                 seed: applied_seed,
             });
         }
         let mut trace = Vec::new();
-        Coordinator::get()
+        _app.observer()
+            .cloned()
             .unwrap()
             .runtime
             .commit
@@ -4181,13 +4239,17 @@ mod tests {
 
         // Without automation the clock seeder runs and nothing is recorded.
         let mut clock_used = false;
-        crate::mainloop::restart_menu::restart_ops::seed_new_campaign(|| clock_used = true);
+        crate::mainloop::restart_menu::restart_ops::seed_new_campaign(0, || clock_used = true);
         assert!(clock_used, "inactive automation must keep the clock seed");
 
-        Coordinator::init(script, temp.path().to_path_buf());
-        crate::mainloop::restart_menu::restart_ops::seed_new_campaign(|| {
-            panic!("the clock seed must not run while automation supplies a seed")
-        });
+        let _app = crate::app::Application::new(Some(AutomationObserver::new(
+            script,
+            temp.path().to_path_buf(),
+        )));
+        crate::mainloop::restart_menu::restart_ops::seed_new_campaign(
+            _app.observer().unwrap().seed_value(3, 0),
+            || panic!("the clock seed must not run while automation supplies a seed"),
+        );
         let after_restart = crate::math::random();
         crate::math::seed_random(1437213463);
         assert_eq!(
@@ -4197,7 +4259,8 @@ mod tests {
         );
 
         let mut trace = Vec::new();
-        Coordinator::get()
+        _app.observer()
+            .cloned()
             .unwrap()
             .runtime
             .commit
@@ -4239,12 +4302,17 @@ mod tests {
             br#"{"version":1,"name":"receipt","budgets":{"max_input_ticks":2,"max_presentations":2,"max_wallclock_seconds":1},"steps":[{"action":"finish"}]}"#,
             "receipt.json",
         ).unwrap();
-        Coordinator::init(
+        let _app = crate::app::Application::new(Some(AutomationObserver::new(
             crate::automation::script::validate_script(doc, "receipt.json").unwrap(),
             temp.path().to_path_buf(),
-        );
+        )));
         assert_eq!(
-            Coordinator::get().unwrap().inner.lock().terminal_class,
+            _app.observer()
+                .cloned()
+                .unwrap()
+                .inner
+                .lock()
+                .terminal_class,
             Some(TerminalClass::TraceFailure)
         );
         assert_eq!(
@@ -4284,8 +4352,8 @@ mod tests {
     }
 
     #[test]
-    fn coordinator_not_active_by_default() {
-        assert!(!Coordinator::is_active());
+    fn application_without_automation_has_no_observer() {
+        assert!(crate::app::Application::new(None).observer().is_none());
     }
 
     #[test]
@@ -4538,15 +4606,12 @@ mod tests {
 
     #[test]
     fn orbit_exit_phase_restarts_at_the_cancel_press_after_a_reset() {
-        // `set_navigation_controls` stores zero whenever `leave_orbit` is
-        // false, so the next orbit exit must begin with the Cancel press
-        // again rather than resuming mid-sequence.
-        let phase = ORBIT_EXIT_PHASE.load(Ordering::Acquire);
-        assert_eq!(
-            orbit_exit_menu_keys(phase.wrapping_sub(phase)),
-            (true, false, false)
-        );
-        assert_eq!(orbit_exit_menu_keys(0), (true, false, false));
+        let phase = AtomicU64::new(17);
+        assert_eq!(next_orbit_exit_keys(&phase, false), (false, false, false));
+        assert_eq!(phase.load(Ordering::Acquire), 0);
+        assert_eq!(next_orbit_exit_keys(&phase, true), (true, false, false));
+        assert_eq!(phase.load(Ordering::Acquire), 1);
+        assert_eq!(next_orbit_exit_keys(&phase, true), (false, false, false));
     }
 
     #[test]

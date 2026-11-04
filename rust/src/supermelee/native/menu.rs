@@ -2,7 +2,6 @@
 mod rules;
 #[cfg(not(test))]
 pub(crate) mod live {
-    use crate::automation::coordinator::rust_automation_seed_value;
     use crate::battle::{COMPUTER_CONTROL, HUMAN_CONTROL, NETWORK_CONTROL, PSYTRON_CONTROL};
     use crate::comm::hail::game_string;
     use crate::engine::{Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields};
@@ -222,13 +221,8 @@ pub(crate) mod live {
         }
         ok
     }
-    #[no_mangle]
-    /// # Safety
-    /// Call on the game thread after kernel/resource initialization. Any state
-    /// pointer must remain exclusively accessible through the nested input loop.
-    pub unsafe extern "C" fn Melee() {
-        WorldOwner::current().write(init_glob_data);
-        let mut state = MELEE_STATE {
+    fn new_menu_state() -> MELEE_STATE {
+        MELEE_STATE {
             input_func: None,
             initialized: 0,
             melee_started: 0,
@@ -237,7 +231,8 @@ pub(crate) mod live {
             row: 0,
             col: 0,
             melee_setup: ptr::null_mut(),
-            load: mem::zeroed(),
+            // SAFETY: the native load-state record contains integers and nullable pointers.
+            load: unsafe { mem::zeroed() },
             current_ship: 0,
             cur_index: 0,
             build_pick_confirmed: 0,
@@ -245,59 +240,97 @@ pub(crate) mod live {
             last_input_time: 0,
             h_music: ptr::null_mut(),
             netplay: Default::default(),
-        };
-        P_MELEE_STATE = &mut state;
-        state.input_func = Some(DoMelee);
-        state.melee_setup = MeleeSetup_new();
-        state.random_context = new_context();
-        (*state.random_context).reseed(rust_automation_seed_value(1, GetTimeCounter()));
-        state.current_ship = 255;
-        state.cur_index = u16::MAX;
-        InitMeleeLoadState(&mut state);
-        (**WorldFields::current()).game.current_activity = SUPER_MELEE as u16;
-        (**KernelOwner::current()).game_sounds =
-            capture_sound(LoadSound(GAME_SOUNDS.as_ptr().cast()));
-        crate::supermelee::native::battle_picker::live::BuildPickMeleeFrame();
-        MeleeFrame = CaptureDrawable(LoadGraphic(MELEE_SCREEN_PMAP_ANIM.as_ptr().cast()).cast());
-        crate::supermelee::native::build_picker::live::build_build_pick_frame();
-        KernelOwner::current().write(|kernel| {
-            init_space(kernel, WorldOwner::current().read(|world| world.activity()))
+        }
+    }
+
+    /// # Safety
+    /// Run on the initialized game thread with exclusive access to native menu resources.
+    pub unsafe fn melee(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        io: &mut crate::engine::observe::Io<'_>,
+    ) {
+        // SAFETY: the application admits this session on the initialized game thread.
+        cx.with_legacy(|| WorldOwner::current().write(init_glob_data));
+        let mut state = new_menu_state();
+        // SAFETY: state remains in this stack frame through all synchronous callbacks and cleanup.
+        cx.with_legacy(|| {
+            P_MELEE_STATE = &mut state;
+            state.input_func = Some(DoMelee);
+            state.melee_setup = MeleeSetup_new();
+            state.random_context = new_context();
+            let fallback = GetTimeCounter();
+            let seed = io
+                .observer
+                .input_admitted(
+                    &crate::engine::observe::InputView::Seed {
+                        domain: 1,
+                        fallback,
+                    },
+                    &None,
+                )
+                .seed
+                .unwrap_or(fallback);
+            (*state.random_context).reseed(seed);
+            state.current_ship = 255;
+            state.cur_index = u16::MAX;
+            InitMeleeLoadState(&mut state);
+            (**WorldFields::current()).game.current_activity = SUPER_MELEE as u16;
+            (**KernelOwner::current()).game_sounds =
+                capture_sound(LoadSound(GAME_SOUNDS.as_ptr().cast()));
+            crate::supermelee::native::battle_picker::live::BuildPickMeleeFrame();
+            MeleeFrame =
+                CaptureDrawable(LoadGraphic(MELEE_SCREEN_PMAP_ANIM.as_ptr().cast()).cast());
+            crate::supermelee::native::build_picker::live::build_build_pick_frame();
+            KernelOwner::current().write(|kernel| {
+                init_space(kernel, WorldOwner::current().read(|world| world.activity()))
+            });
+            LoadTeamList(&mut state);
+            if !load_config(&mut state) {
+                (**KernelOwner::current()).player_control[0] = HUMAN_CONTROL | 16;
+                Melee_LocalChange_team(&mut state, 0, *state.load.preBuiltList);
+                (**KernelOwner::current()).player_control[1] = COMPUTER_CONTROL | 16;
+                Melee_LocalChange_team(&mut state, 1, *state.load.preBuiltList.add(1));
+            }
+            state.side = 0;
+            SetMenuSounds(15, 16);
         });
-        LoadTeamList(&mut state);
-        if !load_config(&mut state) {
-            (**KernelOwner::current()).player_control[0] = HUMAN_CONTROL | 16;
-            Melee_LocalChange_team(&mut state, 0, *state.load.preBuiltList);
-            (**KernelOwner::current()).player_control[1] = COMPUTER_CONTROL | 16;
-            Melee_LocalChange_team(&mut state, 1, *state.load.preBuiltList.add(1));
-        }
-        state.side = 0;
-        SetMenuSounds(15, 16);
-        crate::mainloop::restart_menu::c_extern::DoInput(
-            (&mut state as *mut MELEE_STATE).cast(),
-            1,
-        );
-        stop_music();
-        WaitForSoundEnd(u16::MAX);
-        write_config(&mut state);
-        DestroyStringTable(ReleaseStringTable(state.load.dirEntries));
-        state.load.dirEntries = ptr::null_mut();
-        if !state.h_music.is_null() {
-            DestroyMusic(state.h_music);
-            state.h_music = ptr::null_mut();
-        }
-        KernelOwner::current().write(|kernel| uninit_space(kernel));
-        crate::supermelee::native::battle_picker::live::DestroyPickMeleeFrame();
-        DestroyDrawable(ReleaseDrawable(MeleeFrame));
-        MeleeFrame = ptr::null_mut();
-        crate::supermelee::native::build_picker::live::destroy_build_pick_frame();
-        state.netplay.close_all_connections();
-        state.netplay.setup_input_delay(0);
-        DestroySound(release_sound(KernelOwner::current().read(|owner| owner.game_sounds)).cast());
-        (**KernelOwner::current()).game_sounds = ptr::null_mut();
-        UninitMeleeLoadState(&mut state);
-        delete_context(state.random_context);
-        MeleeSetup_delete(state.melee_setup);
-        FlushInput();
+        let input = &raw mut state;
+        cx.run_input(io, true, |cx, _| {
+            // SAFETY: the synchronous session keeps input live; legacy menu code retains its raw address.
+            cx.with_legacy(|| {
+                let callback = (*input)
+                    .input_func
+                    .unwrap_or_else(|| panic!("missing melee menu callback"));
+                callback(input) != 0
+            })
+        });
+        // SAFETY: the input session has stopped and no callback retains these resources.
+        cx.with_legacy(|| {
+            stop_music();
+            WaitForSoundEnd(u16::MAX);
+            write_config(&mut state);
+            DestroyStringTable(ReleaseStringTable(state.load.dirEntries));
+            state.load.dirEntries = ptr::null_mut();
+            if !state.h_music.is_null() {
+                DestroyMusic(state.h_music);
+                state.h_music = ptr::null_mut();
+            }
+            KernelOwner::current().write(|kernel| uninit_space(kernel));
+            crate::supermelee::native::battle_picker::live::DestroyPickMeleeFrame();
+            DestroyDrawable(ReleaseDrawable(MeleeFrame));
+            MeleeFrame = ptr::null_mut();
+            crate::supermelee::native::build_picker::live::destroy_build_pick_frame();
+            state.netplay.close_all_connections();
+            state.netplay.setup_input_delay(0);
+            DestroySound(
+                release_sound(KernelOwner::current().read(|owner| owner.game_sounds)).cast(),
+            );
+            (**KernelOwner::current()).game_sounds = ptr::null_mut();
+            UninitMeleeLoadState(&mut state);
+            delete_context(state.random_context);
+            MeleeSetup_delete(state.melee_setup);
+            FlushInput();
+        });
     }
 }
 

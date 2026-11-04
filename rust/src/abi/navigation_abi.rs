@@ -1762,8 +1762,6 @@ extern "C" {
 pub use crate::ships::native::abi::velocity_desc;
 pub type VELOCITY_DESC = velocity_desc;
 
-
-
 pub use crate::ships::native::abi::ANIMATION_DESC;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -2721,8 +2719,6 @@ pub const CHECK_ABORT: _bindgen_ty_8 = 16384;
 pub type _bindgen_ty_8 = ::std::os::raw::c_uint;
 pub type ACTIVITY = UWORD;
 
-
-
 pub const DEFGRP_NONE: _bindgen_ty_9 = 0;
 pub const DEFGRP_SHOFIXTI: _bindgen_ty_9 = 1;
 pub const DEFGRP_ZOQFOT: _bindgen_ty_9 = 2;
@@ -2773,31 +2769,18 @@ pub use crate::navigation::globals::in_hyper_space;
 pub use crate::navigation::globals::in_quasi_space;
 
 #[cfg(not(test))]
-pub use crate::navigation::globals::InitGameStructures;
-#[cfg(not(test))]
 pub use crate::navigation::globals::uninit_game_structures;
+#[cfg(not(test))]
+pub use crate::navigation::globals::InitGameStructures;
 #[cfg(test)]
 extern "C" {
     pub fn uninit_game_structures();
 }
 
-#[cfg(not(test))]
-pub use crate::front_end::fmv::runtime::SplashScreen;
-
-#[cfg(not(test))]
-pub use crate::front_end::fmv::runtime::Introduction;
-
-#[cfg(not(test))]
-pub use crate::front_end::fmv::runtime::Victory;
 
 #[cfg(not(test))]
 pub use crate::front_end::fmv::runtime::DoShipSpin;
 
-#[cfg(not(test))]
-pub use crate::front_end::intro::runtime::ShowPresentation;
-
-#[cfg(not(test))]
-pub use crate::front_end::credits::runtime::Credits;
 pub const KEY_UP: _bindgen_ty_10 = 0;
 pub const KEY_DOWN: _bindgen_ty_10 = 1;
 pub const KEY_LEFT: _bindgen_ty_10 = 2;
@@ -2857,10 +2840,11 @@ extern "C" {
     pub static mut PulsedInputState: crate::c_bindings::controller_input::_controller_input_state;
 }
 extern "C" {
-    pub static mut ImmediateInputState: crate::c_bindings::controller_input::_controller_input_state;
+    pub static mut ImmediateInputState:
+        crate::c_bindings::controller_input::_controller_input_state;
 }
 extern "C" {
-    pub static mut PlayerControls: [u32;2];
+    pub static mut PlayerControls: [u32; 2];
 }
 
 #[cfg(not(test))]
@@ -3017,8 +3001,6 @@ pub struct globalopts_struct {
 }
 pub type GLOBALOPTS = globalopts_struct;
 
-#[cfg(not(test))]
-pub use crate::front_end::setupmenu::runtime::SetupMenu;
 
 #[cfg(not(test))]
 pub use crate::front_end::setupmenu::runtime::GetGlobalOptions;
@@ -3427,7 +3409,6 @@ pub use crate::engine::battle::record::state__bindgen_ty_1;
 pub type STATE = state;
 
 #[cfg(not(test))]
-
 #[cfg(not(test))]
 pub use crate::battle::world_elements::engine::spawn_planet;
 
@@ -3435,7 +3416,6 @@ pub use crate::battle::world_elements::engine::spawn_planet;
 pub use crate::battle::world_elements::engine::spawn_asteroid;
 
 #[cfg(not(test))]
-
 
 pub type STATUS_FLAGS = UWORD;
 pub const SPECIES_ID_NO_ID: SPECIES_ID = 0;
@@ -3477,13 +3457,13 @@ pub const MOVEMENT_STATE_AVOID: MOVEMENT_STATE = 1;
 pub const MOVEMENT_STATE_ENTICE: MOVEMENT_STATE = 2;
 pub const MOVEMENT_STATE_NO_MOVEMENT: MOVEMENT_STATE = 3;
 pub type MOVEMENT_STATE = ::std::os::raw::c_uint;
-pub use crate::ships::native::abi::EVALUATE_DESC;
 pub use crate::ships::native::abi::CHARACTERISTIC_STUFF;
 pub use crate::ships::native::abi::DATA_STUFF;
+pub use crate::ships::native::abi::EVALUATE_DESC;
 pub use crate::ships::native::abi::FLEET_STUFF;
 pub use crate::ships::native::abi::INTEL_STUFF;
-pub use crate::ships::native::abi::SHIP_INFO;
 pub use crate::ships::native::abi::SHIP_BASE;
+pub use crate::ships::native::abi::SHIP_INFO;
 pub type HSHIPFRAG = HLINK;
 pub use crate::ships::native::abi::SHIP_FRAGMENT;
 pub type HFLEETINFO = HLINK;
@@ -3604,13 +3584,13 @@ pub use crate::front_end::uqmdebug::tally_resources_to_file;
 #[cfg(all(not(test), feature = "debug-process"))]
 pub use crate::front_end::uqmdebug::tectonics_string;
 #[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::universe_recurse;
+#[cfg(all(not(test), feature = "debug-process"))]
 pub use crate::front_end::uqmdebug::uqm_debug_creature_bio_value;
 #[cfg(all(not(test), feature = "debug-process"))]
 pub use crate::front_end::uqmdebug::world_gen_algo_string;
 #[cfg(all(not(test), feature = "debug-process"))]
 pub use crate::front_end::uqmdebug::world_size_string;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::universe_recurse;
 #[cfg(all(not(test), feature = "debug-process"))]
 pub use crate::front_end::uqmdebug::DEBUG_HOOK;
 #[cfg(all(not(test), feature = "debug-process"))]
@@ -3645,7 +3625,7 @@ extern "C" {
 pub use crate::savegame::live::load::LoadGame;
 
 #[cfg(not(test))]
-pub use crate::savegame::problem::SaveProblem;
+pub use crate::ui::save_problem::SaveProblem;
 
 #[cfg(not(test))]
 pub use crate::savegame::live::save::SaveGame;
@@ -3778,20 +3758,6 @@ pub use crate::ships::master_native::engine::FindMasterShipIndex;
 
 #[cfg(not(test))]
 pub use crate::ships::master_native::engine::GetShipMeleeIconsFromIndex;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 #[cfg(not(test))]
 pub use crate::game_init::cleanup::free_kernel;
@@ -4080,7 +4046,6 @@ pub use crate::ships::native::abi::MeleeSetup;
 pub use crate::ships::native::abi::MeleeTeam;
 pub type FleetShipIndex = COUNT;
 
-
 #[cfg(not(test))]
 pub use crate::game_init::space_resources::live::init_space;
 
@@ -4203,12 +4168,12 @@ extern "C" {
     pub static mut meleeDir: *mut crate::io::uio_bridge::uio_DirHandle;
 }
 extern "C" {
-    pub static mut baseContentPath: [std::ffi::c_char;4096];
+    pub static mut baseContentPath: [std::ffi::c_char; 4096];
 }
 pub use crate::ships::native::abi::_input_template;
 pub type INPUT_TEMPLATE = _input_template;
 extern "C" {
-    pub static mut input_templates: [[std::ffi::c_char;30];6];
+    pub static mut input_templates: [[std::ffi::c_char; 30]; 6];
 }
 #[cfg(not(test))]
 pub use crate::mainloop::options_abi::setGammaCorrection;
@@ -4319,9 +4284,6 @@ pub type MeleeShip = ::std::os::raw::c_uint;
 pub use crate::ships::native::abi::melee_state;
 
 #[cfg(not(test))]
-pub use crate::supermelee::native::menu::live::Melee;
-
-#[cfg(not(test))]
 pub use crate::supermelee::native::menu::live::DoMelee;
 
 #[cfg(not(test))]
@@ -4430,7 +4392,6 @@ pub const FIRST_EMPTY_INDEX: _bindgen_ty_28 = 4;
 pub type _bindgen_ty_28 = ::std::os::raw::c_uint;
 
 #[cfg(not(test))]
-
 #[cfg(not(test))]
 pub use crate::navigation::interplanetary::live::notify_others_abi as NotifyOthers;
 
@@ -4438,7 +4399,6 @@ pub use crate::navigation::interplanetary::live::notify_others_abi as NotifyOthe
 pub use crate::navigation::interplanetary::live::do_missions as DoMissions;
 
 #[cfg(not(test))]
-
 #[cfg(not(test))]
 pub const SOUND_EFFECTS_GRAB_CREW: SOUND_EFFECTS = 0;
 pub const SOUND_EFFECTS_SHIP_EXPLODES: SOUND_EFFECTS = 1;
@@ -4452,7 +4412,6 @@ pub const MENU_SOUND_EFFECT_MENU_SOUND_SUCCESS: MENU_SOUND_EFFECT = 1;
 pub const MENU_SOUND_EFFECT_MENU_SOUND_FAILURE: MENU_SOUND_EFFECT = 2;
 pub const MENU_SOUND_EFFECT_MENU_SOUND_INVOKED: MENU_SOUND_EFFECT = 3;
 pub type MENU_SOUND_EFFECT = ::std::os::raw::c_uint;
-
 
 pub type MENU_SOUND_FLAGS = UWORD;
 
@@ -4477,15 +4436,6 @@ pub use crate::ui::starbase::install_bomb_at_earth;
 extern "C" {
     pub fn install_bomb_at_earth();
 }
-#[cfg(not(test))]
-pub use crate::ui::starbase::visit_star_base;
-#[cfg(test)]
-extern "C" {
-    pub fn visit_star_base();
-}
-
-#[cfg(not(test))]
-pub use crate::ui::starbase::DoStarBase;
 
 #[cfg(not(test))]
 pub use crate::ui::outfit::DoOutfit;
@@ -4495,7 +4445,6 @@ pub use crate::ui::shipyard::DoShipyard;
 
 #[cfg(not(test))]
 pub use crate::ui::starbase::DrawShipPiece;
-
 
 #[cfg(not(test))]
 pub use crate::ui::shipstat::DrawCrewFuelString;
@@ -4534,17 +4483,9 @@ pub type NamingCallback = ::std::option::Option<unsafe extern "C" fn()>;
 #[cfg(not(test))]
 pub use crate::front_end::gameopt::runtime::SetNamingCallback;
 
-#[cfg(not(test))]
-pub use crate::planets::cargo::live::CargoMenu;
 
-#[cfg(not(test))]
-pub use crate::planets::roster::live::RosterMenu;
 
-#[cfg(not(test))]
-pub use crate::planets::devices::DevicesMenu;
 
-#[cfg(not(test))]
-pub use crate::planets::pstarmap::StarMap;
 
 #[cfg(not(test))]
 pub use crate::planets::devices::InventoryDevices;

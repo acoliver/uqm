@@ -82,7 +82,7 @@ pub(crate) mod live {
     use crate::comm::dispatch::{get_star_ship_from_index, CFleetInfo, CShipFragment};
     use crate::comm::locdata::CRect;
     use crate::engine::WorldData as WorldFields;
-    use crate::mainloop::restart_menu::c_extern::DoInput;
+    use crate::engine::{battle::Cx, observe::Io};
     use crate::starbase::cffi::CffiPlatform;
     use crate::starbase::gfx::{ContextId, FlashTarget, Gfx, Point, Rect, Rgba, Stamp};
     use std::ffi::{c_void, CString};
@@ -101,9 +101,7 @@ pub(crate) mod live {
 
     use crate::battle::sounds::engine::PlayMenuSound;
 
-    #[repr(C)]
     struct Menu {
-        input: unsafe extern "C" fn(*mut Menu) -> i32,
         selected: usize,
         positions: Vec<(i16, i16)>,
         point: (i16, i16),
@@ -216,8 +214,7 @@ pub(crate) mod live {
         }
     }
 
-    unsafe extern "C" fn modify(menu: *mut Menu) -> i32 {
-        let menu = &mut *menu;
+    unsafe fn modify(menu: &mut Menu) -> i32 {
         if WorldFields::current().read(|owner| owner.game.current_activity) & (1 << 14) != 0 {
             return 0;
         }
@@ -283,34 +280,39 @@ pub(crate) mod live {
         1
     }
 
-    #[no_mangle]
     /// # Safety
     /// Call on the game thread with campaign globals and screen resources initialized.
-    pub unsafe extern "C" fn RosterMenu() -> i32 {
-        let world = WorldFields::current();
-        let count =
-            CountLinks(std::ptr::addr_of!((**world).game.built_ship_q).cast::<Queue>()) as usize;
-        drop(world);
-        if count == 0 {
+    pub unsafe fn roster_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) -> i32 {
+        let Some(mut menu) = cx.with_legacy(|| {
+            let world = WorldFields::current();
+            let count = CountLinks(std::ptr::addr_of!((**world).game.built_ship_q).cast::<Queue>())
+                as usize;
+            drop(world);
+            if count == 0 {
+                return None;
+            }
+            let mut positions = SHIP_POS[..count].to_vec();
+            positions.sort_by_key(|point| (point.0, point.1));
+            let mut menu = Menu {
+                selected: 0,
+                positions,
+                point: (0, 0),
+                frame: std::ptr::null_mut(),
+                modifying: false,
+            };
+            CffiPlatform.set_context(ContextId::Status);
+            select(&mut menu, 0);
+            SetMenuSounds(15, 16);
+            Some(menu)
+        }) else {
             return 0;
-        }
-        let mut positions = SHIP_POS[..count].to_vec();
-        positions.sort_by_key(|point| (point.0, point.1));
-        let mut menu = Menu {
-            input: modify,
-            selected: 0,
-            positions,
-            point: (0, 0),
-            frame: std::ptr::null_mut(),
-            modifying: false,
         };
-        CffiPlatform.set_context(ContextId::Status);
-        select(&mut menu, 0);
-        SetMenuSounds(15, 16);
-        DoInput((&mut menu as *mut Menu).cast(), 1);
-        CffiPlatform.set_context(ContextId::Status);
-        draw(&menu, false);
-        DrawStatusMessage(std::ptr::null());
+        cx.run_input(io, true, |cx, _| cx.with_legacy(|| modify(&mut menu) != 0));
+        cx.with_legacy(|| {
+            CffiPlatform.set_context(ContextId::Status);
+            draw(&menu, false);
+            DrawStatusMessage(std::ptr::null());
+        });
         1
     }
 }

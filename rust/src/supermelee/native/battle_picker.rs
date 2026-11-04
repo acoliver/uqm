@@ -427,45 +427,48 @@ pub mod live {
         value(frame, ship.player as usize);
     }
 
-    use crate::automation::input_ffi::nested_input;
-
+    use crate::engine::observe::{CampaignView, Io};
     use crate::mainloop::input_abi::live::UpdateInputState;
     /// # Safety
     /// Called at the end of a live melee battle on the game thread.
-    #[no_mangle]
-    pub unsafe extern "C" fn MeleeGameOver() {
+    pub unsafe fn melee_game_over(io: &mut Io<'_>) {
         for player in 0..2 {
             draw(player);
         }
-        let net = crate::app::bridge::battle(|b| b.network());
-        net.negotiate(true, NetState_NetState_inSetup);
-        let timeout = GetTimeCounter().wrapping_add(840 * 4);
-        let mut pressed = PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0
-            || PulsedInputState.menu[KEY_MENU_CANCEL as usize] != 0;
-        loop {
-            if nested_input(|| UpdateInputState()).is_none() {
-                break;
-            }
-            let mut button = PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0
+        crate::app::bridge::enter(|cx| {
+            let net = cx.b.network();
+            cx.with_legacy(|| net.negotiate(true, NetState_NetState_inSetup));
+            let timeout = GetTimeCounter().wrapping_add(840 * 4);
+            let mut pressed = PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0
                 || PulsedInputState.menu[KEY_MENU_CANCEL as usize] != 0;
-            if pressed {
-                pressed = button;
-                button = false;
+            loop {
+                let campaign = Some(CampaignView::capture(cx.world));
+                if cx
+                    .with_legacy(|| io.nested_input(&campaign, || UpdateInputState()))
+                    .is_none()
+                {
+                    break;
+                }
+                let mut button = PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0
+                    || PulsedInputState.menu[KEY_MENU_CANCEL as usize] != 0;
+                if pressed {
+                    pressed = button;
+                    button = false;
+                }
+                cx.with_legacy(|| {
+                    Async_process();
+                    SleepThread(840 / 40);
+                });
+                if cx.world.activity() & CHECK_ABORT as u16 != 0
+                    || button
+                    || (cx.kernel.player_control[0] & cx.kernel.player_control[1] & PSYTRON_CONTROL
+                        != 0
+                        && GetTimeCounter() >= timeout)
+                {
+                    break;
+                }
             }
-            Async_process();
-            SleepThread(840 / 40);
-            if WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
-                != 0
-                || button
-                || (KernelOwner::current().read(|owner| owner.player_control[0])
-                    & KernelOwner::current().read(|owner| owner.player_control[1])
-                    & PSYTRON_CONTROL
-                    != 0
-                    && GetTimeCounter() >= timeout)
-            {
-                break;
-            }
-        }
+        });
     }
     unsafe fn get_ships(mask: u16, ships: *mut *mut std::ffi::c_void) -> u32 {
         let mut state: GETMELEE_STATE = mem::zeroed();

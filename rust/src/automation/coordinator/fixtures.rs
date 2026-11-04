@@ -3,7 +3,7 @@
 use super::*;
 use crate::automation::melee_fixture;
 
-impl Coordinator {
+impl AutomationObserver {
     pub(super) fn parity_fixture_input(
         &self,
         inner: &mut CoordInner,
@@ -38,16 +38,17 @@ impl Coordinator {
         inner: &mut CoordInner,
         event: SchedulerEvent,
     ) -> Result<Option<String>, String> {
+        let checkpoint = || self.parity_checkpoint("fixture");
         let witnesses = crate::collections::observation::take_saves();
         if let Some(run) = inner.parity_fixture.as_mut() {
             for (slot, loading) in witnesses {
                 if loading {
-                    run.loaded(slot)?;
+                    run.loaded(slot, &checkpoint)?;
                 } else {
-                    run.saved(slot)?;
+                    run.saved(slot, &checkpoint)?;
                 }
             }
-            run.advance()?;
+            run.advance(&checkpoint)?;
         }
         if inner.sched_state.phase != ActionPhase::WaitingForInput
             || event != SchedulerEvent::AdmittedInput
@@ -60,18 +61,18 @@ impl Coordinator {
                 Ok(Some("netplay_connected".into()))
             }
             Some(Action::ConfigureParityMelee(request)) => {
-                melee_fixture::configure(request)?;
+                melee_fixture::configure(request, &checkpoint)?;
                 Ok(Some("parity_melee_configured".into()))
             }
             Some(Action::RunParityCorpus(request)) => {
-                melee_fixture::corpus(*request)?;
+                melee_fixture::corpus(*request, &checkpoint)?;
                 Ok(Some(format!("parity_corpus_completed:{}", request.fleet)))
             }
             Some(Action::RunParityFixture(request)) => {
                 if inner.parity_fixture.is_some() {
                     return Err("a parity fixture is already active".into());
                 }
-                inner.parity_fixture = Some(melee_fixture::run(request)?);
+                inner.parity_fixture = Some(melee_fixture::run(request, &checkpoint)?);
                 Ok(Some("parity_fixture_started".into()))
             }
             Some(Action::AssertParityFixture) => {

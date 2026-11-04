@@ -1,10 +1,8 @@
 //! First-terminal publication and propagation to the game loop.
 
 use super::*;
-#[cfg(not(test))]
-use crate::engine::World;
 
-impl Coordinator {
+impl AutomationObserver {
     /// Set a terminal outcome on both the coordinator and the runtime mirror.
     /// Also propagates the stop to the game loop by setting CHECK_ABORT
     /// and MainExited to force the game loop to exit.
@@ -22,10 +20,10 @@ impl Coordinator {
         // CHECK_ABORT = 0x4000 (setup.h).
         // SAFETY: terminal publication runs on the game thread that owns activity state.
         #[cfg(not(test))]
-        unsafe {
-            crate::mainloop::c_extern::set_current_activity(
-                World::current().read(crate::mainloop::c_extern::get_current_activity) | 0x4000,
-            );
+        {
+            crate::mainloop::ffi::set_current_activity(crate::mainloop::types::ActivityValue(
+                crate::mainloop::ffi::get_current_activity().0 | 0x4000,
+            ));
             crate::mainloop::ffi::set_main_exited(true);
         }
     }

@@ -193,43 +193,115 @@ pub(crate) mod live {
         1
     }
 
-    unsafe fn wait_until(released: bool, timeout: TimeCount, reset: BOOLEAN) -> BOOLEAN {
-        let mut pressed = AnyButtonPress(1);
+    use crate::engine::{
+        battle::Cx,
+        observe::{CampaignView, InputView, Io},
+    };
+
+    fn wait_until(
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
+        released: bool,
+        timeout: TimeCount,
+        reset: BOOLEAN,
+    ) -> BOOLEAN {
+        // SAFETY: the synchronous wait owns initialized game-thread input.
+        let mut pressed = cx.with_legacy(|| unsafe { AnyButtonPress(1) });
         while (pressed != 0) == released
             && (timeout == TimePeriod::MAX || GetTimeCounter() < timeout)
-            && WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
-                == 0
-            && QuitPosted == 0
+            && cx.world.activity() & CHECK_ABORT as u16 == 0
+            // SAFETY: quit dispatch and this wait run on the same game thread.
+            && unsafe { QuitPosted == 0 }
         {
-            let Some(sampled) = crate::automation::input_ffi::nested_input(|| {
-                SleepThread(ONE_SECOND / 40);
-                AnyButtonPress(1)
+            let campaign =
+                CampaignView::for_input(InputView::Nested, || CampaignView::capture(cx.world));
+            let Some(sampled) = cx.with_legacy(|| {
+                // SAFETY: the published input scope remains live during the synchronous sleep.
+                io.nested_input(&campaign, || unsafe {
+                    SleepThread(ONE_SECOND / 40);
+                    AnyButtonPress(1)
+                })
             }) else {
                 break;
             };
             pressed = sampled;
         }
         if reset != 0 {
-            FlushInput();
+            // SAFETY: this wait still owns the initialized input scope.
+            cx.with_legacy(|| unsafe { FlushInput() });
         }
         u32::from((pressed != 0) != released)
     }
 
+    pub fn wait_for_any_button_until(
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
+        new_button: BOOLEAN,
+        timeout: TimeCount,
+        reset: BOOLEAN,
+    ) -> BOOLEAN {
+        if new_button != 0 && wait_for_no_input_until(cx, io, timeout, 0) == 0 {
+            return 0;
+        }
+        wait_until(cx, io, false, timeout, reset)
+    }
+
+    pub fn wait_for_any_button(
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
+        new_button: BOOLEAN,
+        duration: TimePeriod,
+        reset: BOOLEAN,
+    ) -> BOOLEAN {
+        let timeout = if duration == TimePeriod::MAX {
+            duration
+        } else {
+            duration.wrapping_add(GetTimeCounter())
+        };
+        wait_for_any_button_until(cx, io, new_button, timeout, reset)
+    }
+
+    pub fn wait_for_no_input_until(
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
+        timeout: TimeCount,
+        reset: BOOLEAN,
+    ) -> BOOLEAN {
+        wait_until(cx, io, true, timeout, reset)
+    }
+
+    pub fn wait_for_no_input(
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
+        duration: TimePeriod,
+        reset: BOOLEAN,
+    ) -> BOOLEAN {
+        let timeout = if duration == TimePeriod::MAX {
+            duration
+        } else {
+            duration.wrapping_add(GetTimeCounter())
+        };
+        wait_for_no_input_until(cx, io, timeout, reset)
+    }
+
     /// # Safety
-    /// Game-thread access to initialized input and automation state.
+    /// Game-thread legacy boundary with the caller's context published.
     #[no_mangle]
     pub unsafe extern "C" fn WaitForAnyButtonUntil(
         new_button: BOOLEAN,
         timeout: TimeCount,
         reset: BOOLEAN,
     ) -> BOOLEAN {
-        if new_button != 0 && WaitForNoInputUntil(timeout, 0) == 0 {
-            return 0;
-        }
-        wait_until(false, timeout, reset)
+        crate::app::bridge::enter(|cx| {
+            let mut observer = cx.kernel.input_runtime().observer();
+            let mut io = Io {
+                observer: &mut *observer,
+            };
+            wait_for_any_button_until(cx, &mut io, new_button, timeout, reset)
+        })
     }
     /// # Safety
-    /// Game-thread access to initialized input and automation state.
+    /// The caller owns initialized input and the published game-thread context.
     #[no_mangle]
     pub unsafe extern "C" fn WaitForAnyButton(
         new_button: BOOLEAN,
@@ -244,13 +316,19 @@ pub(crate) mod live {
         WaitForAnyButtonUntil(new_button, timeout, reset)
     }
     /// # Safety
-    /// Game-thread access to initialized input and automation state.
+    /// The caller owns initialized input and the published game-thread context.
     #[no_mangle]
     pub unsafe extern "C" fn WaitForNoInputUntil(timeout: TimeCount, reset: BOOLEAN) -> BOOLEAN {
-        wait_until(true, timeout, reset)
+        crate::app::bridge::enter(|cx| {
+            let mut observer = cx.kernel.input_runtime().observer();
+            let mut io = Io {
+                observer: &mut *observer,
+            };
+            wait_for_no_input_until(cx, &mut io, timeout, reset)
+        })
     }
     /// # Safety
-    /// Game-thread access to initialized input and automation state.
+    /// The caller owns initialized input and the published game-thread context.
     #[no_mangle]
     pub unsafe extern "C" fn WaitForNoInput(duration: TimePeriod, reset: BOOLEAN) -> BOOLEAN {
         let timeout = if duration == TimePeriod::MAX {

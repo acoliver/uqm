@@ -343,8 +343,10 @@ fn distance(from: HyperspacePosition, to: HyperspacePosition) -> u64 {
 
 /// The live hyperspace position, when this build links the game.
 #[must_use]
-pub fn live_position() -> Option<HyperspacePosition> {
-    crate::automation::input_ffi::hyperspace_position()
+pub(crate) fn live_position(
+    world: &super::campaign_state::CampaignView,
+) -> Option<HyperspacePosition> {
+    crate::automation::input_ffi::hyperspace_position(world)
         .map(|(log_x, log_y)| HyperspacePosition { log_x, log_y })
 }
 

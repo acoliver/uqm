@@ -127,10 +127,12 @@ impl Cx<'_> {
     }
 
     pub fn hyperspace_menu(&mut self) {
-        // SAFETY: publication suspends the context while menu callbacks run.
-        unsafe {
-            crate::app::bridge::publish(self, || hyperspace_menu());
-        }
+        let mut observer = self.kernel.input_runtime().observer();
+        let mut io = crate::engine::observe::Io {
+            observer: &mut *observer,
+        };
+        // SAFETY: the context owns the initialized hyperspace session.
+        unsafe { hyperspace_menu(self, &mut io) };
     }
 }
 

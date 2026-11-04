@@ -28,8 +28,8 @@ pub struct TfbGraphicsBackend {
     upload_transition_screen: unsafe extern "C" fn(),
     screen: unsafe extern "C" fn(c_int, u8, *const SDL_Rect),
     color: unsafe extern "C" fn(u8, u8, u8, u8, *const SDL_Rect),
-    present_hook: Option<fn(bool) -> i32>,
-    pub(crate) readback_hook: Option<fn() -> Option<u64>>,
+    present_hook: Option<std::rc::Rc<dyn Fn(bool) -> i32>>,
+    pub(crate) readback_hook: Option<std::rc::Rc<dyn Fn() -> Option<u64>>>,
 }
 pub(crate) static mut RUST_BACKEND: TfbGraphicsBackend = TfbGraphicsBackend {
     preprocess: ffi::rust_gfx_preprocess,
@@ -50,8 +50,8 @@ use crate::graphics::dcqueue_abi::Uninit_DrawCommandQueue;
 pub struct GraphicsOptions {
     pub renderer: Option<std::ffi::CString>,
     pub native_position: Option<(i32, i32)>,
-    pub present_hook: Option<fn(bool) -> i32>,
-    pub readback_hook: Option<fn() -> Option<u64>>,
+    pub present_hook: Option<std::rc::Rc<dyn Fn(bool) -> i32>>,
+    pub readback_hook: Option<std::rc::Rc<dyn Fn() -> Option<u64>>>,
 }
 
 use crate::graphics::cmap_abi::GetFadeAmount;
@@ -111,8 +111,8 @@ pub unsafe extern "C" fn TFB_InitGraphics(
     // SAFETY: the caller supplies live options and exclusively owns graphics initialization.
     let options = unsafe {
         let options = &*options.cast::<GraphicsOptions>();
-        RUST_BACKEND.present_hook = options.present_hook;
-        RUST_BACKEND.readback_hook = options.readback_hook;
+        RUST_BACKEND.present_hook = options.present_hook.clone();
+        RUST_BACKEND.readback_hook = options.readback_hook.clone();
         options
     };
     SDL_SCREENS = [ptr::null_mut(); NUM_SCREENS];
@@ -139,6 +139,11 @@ pub unsafe extern "C" fn TFB_UninitGraphics() {
     Uninit_DrawCommandQueue();
     ffi::rust_gfx_uninit();
     clear_rust_screen_globals();
+    // SAFETY: graphics shutdown runs exclusively on the backend's owner thread.
+    unsafe {
+        RUST_BACKEND.present_hook = None;
+        RUST_BACKEND.readback_hook = None;
+    }
 }
 /// # Safety
 /// Called on the SDL main thread with input initialized.
@@ -195,7 +200,9 @@ static mut LAST_TRANSITION: c_int = 255;
 #[no_mangle]
 pub unsafe extern "C" fn TFB_SwapBuffers(mut redraw: c_int) {
     // SAFETY: the graphics thread owns the initialized backend throughout this call.
-    if unsafe { RUST_BACKEND.present_hook }.is_some_and(|hook| hook(false) != 0) {
+    if unsafe { (&*ptr::addr_of!(RUST_BACKEND.present_hook)).clone() }
+        .is_some_and(|hook| hook(false) != 0)
+    {
         return;
     }
     let fade = GetFadeAmount();
@@ -235,7 +242,7 @@ pub unsafe extern "C" fn TFB_SwapBuffers(mut redraw: c_int) {
     }
     (backend.postprocess)();
     // SAFETY: GRAPHICS_BACKEND refers to the backend initialized on this graphics thread.
-    if let Some(hook) = unsafe { (*GRAPHICS_BACKEND).present_hook } {
+    if let Some(hook) = unsafe { (*GRAPHICS_BACKEND).present_hook.clone() } {
         hook(true);
     }
 }

@@ -70,6 +70,7 @@ mod native_trace_oracle;
 pub mod native_window;
 pub mod navigation;
 mod netplay_fixture;
+pub(crate) mod observer;
 pub mod outcome;
 pub mod parity;
 mod parity_hooks;
@@ -111,7 +112,8 @@ pub use child_session::{
     SessionState,
 };
 pub use coordinator::{
-    Coordinator, AUTOMATION_SEED, MAIN_MENU_READINESS_OBSERVATION, MAIN_MENU_READINESS_SUBJECT,
+    AutomationObserver, AUTOMATION_SEED, MAIN_MENU_READINESS_OBSERVATION,
+    MAIN_MENU_READINESS_SUBJECT,
 };
 pub use error::AutomationError;
 pub use input::{

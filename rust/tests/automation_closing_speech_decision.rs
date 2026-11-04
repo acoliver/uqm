@@ -6,12 +6,11 @@
 //! case that lets a scripted run reach the next scene instead of sitting
 //! through the farewell.
 //!
-//! The coordinator is a process-wide singleton set once, so the two cases need
-//! separate test binaries to hold different scripts.
+//! Each test owns an observer with its own script and output directory.
 
 use std::path::PathBuf;
 
-use uqm_rust::automation::coordinator::Coordinator;
+use uqm_rust::automation::coordinator::AutomationObserver;
 use uqm_rust::automation::script::{parse_script, validate_script};
 
 const SCRIPT: &str = r#"{
@@ -38,19 +37,26 @@ fn waiting_for_the_conversation_to_end_skips_the_closing_speech() {
         let output_root =
             PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("closing-speech-decision");
         std::fs::create_dir_all(&output_root).expect("evidence root");
-        Coordinator::init(script, output_root);
+        let _application =
+            uqm_rust::app::Application::new(Some(AutomationObserver::new(script, output_root)));
 
         assert!(
-            Coordinator::is_active(),
+            _application.observer().is_some(),
             "a validated script must activate the coordinator"
         );
         assert!(
-            Coordinator::should_skip_communication_closing_speech(),
+            _application
+                .observer()
+                .unwrap()
+                .should_skip_communication_closing_speech(),
             "a wait-for-end step means the run is only waiting for the conversation to close"
         );
         // The same step is not a response selection, so nothing is pending there.
         assert!(
-            !Coordinator::pending_communication_response_action(4),
+            !_application
+                .observer()
+                .unwrap()
+                .pending_communication_response_action(4),
             "a wait-for-end step selects no response, whatever the list offers"
         );
     });

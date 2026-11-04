@@ -39,9 +39,9 @@ pub(crate) mod live {
 
     use crate::io::uio_bridge::{uio_fclose, uio_fopen, uio_unlink};
     use crate::memory::{rust_hfree, rust_hmalloc};
-    use crate::savegame::problem::SaveProblem;
     use crate::ships::native::abi::*;
     use crate::supermelee::native::teams::*;
+    use crate::ui::save_problem::SaveProblem;
     use std::{
         ffi::{c_char, CStr, CString},
         mem, ptr,

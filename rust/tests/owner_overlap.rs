@@ -7,6 +7,26 @@ use uqm_rust::{
 };
 
 #[test]
+fn public_campaign_copy_does_not_traverse_live_records() {
+    use uqm_rust::automation::campaign_state::{CampaignView, LiveCampaign, StateKey, StateSource};
+    let mut world = World::new();
+    world.story = Some(uqm_rust::state::game_state::GameState::new());
+    world.data.game.ship_stamp.frame = std::ptr::dangling_mut();
+    world.data.game.npc_built_ship_q.head = std::ptr::dangling_mut();
+    world.data.game.built_ship_q.head = std::ptr::dangling_mut();
+    world.data.game.ip_group_q.head = std::ptr::dangling_mut();
+    let view = CampaignView::from_world(&world);
+    assert_eq!(
+        LiveCampaign {
+            world: &view,
+            flagship_destroyed: false
+        }
+        .read(StateKey::Story("STARBASE_AVAILABLE")),
+        Some(0)
+    );
+}
+
+#[test]
 #[serial_test::serial]
 fn empty_npc_phrase_does_not_acquire_an_owner() {
     let mut game = Game::new();
@@ -149,17 +169,47 @@ fn status_offsets_use_the_already_borrowed_kernel() {
 #[test]
 #[serial_test::serial]
 fn starbase_releases_world_before_communication_and_cleanup() {
+    use uqm_rust::engine::observe::{
+        CampaignView, CheckpointView, Injected, InputView, Io, Observer, Presented,
+    };
+    struct Recording(Vec<String>);
+    impl Observer<Option<CampaignView>> for Recording {
+        fn input_admitted(&mut self, _: &InputView, _: &Option<CampaignView>) -> Injected {
+            Injected::default()
+        }
+        fn checkpoint(&mut self, view: &CheckpointView<'_>) {
+            self.0.push(format!("{view:?}"));
+        }
+        fn presented(&mut self, _: &mut Presented) {}
+    }
     let mut game = Game::new();
     game.world.story = Some(uqm_rust::state::game_state::GameState::new());
     game.world.set_activity(CHECK_ABORT as u16);
+    let mut observer = Recording(Vec::new());
     // SAFETY: this serialized fixture restores the developer flag and owns the lifecycle.
     unsafe {
         let previous = uqm_rust::front_end::uqmdebug::DISABLE_INTERACTIVITY;
         uqm_rust::front_end::uqmdebug::DISABLE_INTERACTIVITY = 1;
-        bridge::with_game(&mut game, || uqm_rust::ui::starbase::visit_star_base());
+        bridge::with_game(&mut game, || {
+            bridge::enter(|cx| {
+                uqm_rust::ui::starbase::run_starbase_visit(
+                    cx,
+                    &mut Io {
+                        observer: &mut observer,
+                    },
+                );
+            })
+        });
         uqm_rust::front_end::uqmdebug::DISABLE_INTERACTIVITY = previous;
     }
     assert_eq!(game.world.activity(), CHECK_ABORT as u16);
+    assert_eq!(
+        observer.0,
+        [format!(
+            "EncounterDispatch({})",
+            uqm_rust::navigation::abi::CONVERSATION_COMMANDER_CONVERSATION
+        )]
+    );
 }
 
 #[test]
@@ -178,13 +228,21 @@ fn encounter_teardown_releases_world_before_activity_queries() {
 #[test]
 #[serial_test::serial]
 fn campaign_star_observation_releases_world_between_field_reads() {
-    use uqm_rust::automation::campaign_state::{LiveCampaign, StateKey, StateSource};
+    use uqm_rust::automation::campaign_state::{CampaignView, LiveCampaign, StateKey, StateSource};
     let mut game = Game::new();
     game.world.story = Some(uqm_rust::state::game_state::GameState::new());
+    let view = CampaignView::from_world(&game.world);
     // SAFETY: the serialized fixture owns the lifecycle and has no selected star.
     unsafe {
         bridge::with_game(&mut game, || {
-            assert_eq!(LiveCampaign.read(StateKey::StarCurrent), None);
+            assert_eq!(
+                LiveCampaign {
+                    world: &view,
+                    flagship_destroyed: false
+                }
+                .read(StateKey::StarCurrent),
+                None
+            );
         });
     }
 }
