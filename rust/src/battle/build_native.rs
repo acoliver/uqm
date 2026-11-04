@@ -136,16 +136,15 @@ pub fn set_escort_crew(world: &mut World, race: u16, crew: u16, captain: u8) -> 
     -1
 }
 
+/// A missing race has no template; a full escort pool yields `Some(0)`.
 pub fn add_escort_ships(
     world: &mut World,
     race: u16,
     count: i16,
     mut random: impl FnMut() -> u8,
-) -> u16 {
+) -> Option<u16> {
     let fleets = world.avail_races_ref();
-    let Some(id) = fleets.at(usize::from(race)) else {
-        return 0;
-    };
+    let id = fleets.at(usize::from(race))?;
     let template = *fleets.get(id);
     assert!(count > 0);
     let mut ships = world.built_ships();
@@ -161,7 +160,7 @@ pub fn add_escort_ships(
         ships.insert_before(id, old);
         added = added.wrapping_add(1);
     }
-    added
+    Some(added)
 }
 
 pub fn escorts_worth(world: &World) -> u16 {
@@ -178,6 +177,15 @@ pub fn escorts_worth(world: &World) -> u16 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unavailable_race_skips_rng_and_the_escort_refresh_result() {
+        let mut world = World::new();
+        assert_eq!(
+            add_escort_ships(&mut world, 256, 1, || panic!("invalid race drew a captain")),
+            None
+        );
+    }
 
     #[test]
     fn race_and_window_matching_preserves_count_width() {
@@ -230,11 +238,11 @@ mod tests {
             name = (name + 1) & 15;
             name + 5
         };
-        assert_eq!(add_escort_ships(&mut world, 0, 3, &mut random), 3);
+        assert_eq!(add_escort_ships(&mut world, 0, 3, &mut random), Some(3));
         let removed = world.built_ships_ref().head().unwrap();
         assert_eq!(remove_escort_ships(&mut world, 0, 1), 0);
         assert!(!world.built_ships_ref().contains(removed));
-        assert_eq!(add_escort_ships(&mut world, 0, 1, &mut random), 1);
+        assert_eq!(add_escort_ships(&mut world, 0, 1, &mut random), Some(1));
         let ships = world.built_ships_ref();
         for index in 0..3 {
             assert_eq!(ships.get(ships.at(index).unwrap()).index as usize, index);
@@ -250,7 +258,7 @@ mod tests {
             1
         );
         assert_eq!(set_escort_crew(&mut world, 256, 1, 21), -1);
-        assert_eq!(add_escort_ships(&mut world, 0, 20, &mut random), 9);
+        assert_eq!(add_escort_ships(&mut world, 0, 20, &mut random), Some(9));
         assert_eq!(escort_feasibility(&world, 0), 0);
         let mut draws = 0;
         assert_eq!(
@@ -258,7 +266,7 @@ mod tests {
                 draws += 1;
                 20
             }),
-            0
+            Some(0)
         );
         assert_eq!(draws, 1);
         assert_eq!(remove_escort_ships(&mut world, 0, u16::MAX), u16::MAX - 12);

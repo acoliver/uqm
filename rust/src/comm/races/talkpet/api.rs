@@ -25,11 +25,9 @@ impl TalkpetApi for super::super::script::live::LiveScript<Handler> {
     }
     fn umgah_alive(&mut self) -> bool {
         use crate::battle::build_native::start_sphere_tracking;
-        unsafe {
-            World::current().write(|world| {
-                start_sphere_tracking(world, crate::comm::dispatch::ship::UMGAH_SHIP as u16)
-            }) != 0
-        }
+        World::current().write(|world| {
+            start_sphere_tracking(world, crate::comm::dispatch::ship::UMGAH_SHIP as u16)
+        }) != 0
     }
     fn strobe(&mut self) {
         unsafe {

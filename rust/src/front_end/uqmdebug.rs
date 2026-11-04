@@ -268,7 +268,7 @@ mod runtime {
             URQUAN_SHIP,
             BLACK_URQUAN_SHIP,
         ] {
-            crate::engine::World::current().write(|world| {
+            let added = crate::engine::World::current().write(|world| {
                 crate::battle::build_native::add_escort_ships(
                     world,
                     race as COUNT,
@@ -276,7 +276,9 @@ mod runtime {
                     crate::battle::build_native::captain_name,
                 )
             });
-            crate::battle::build_native::refresh_escorts();
+            if added.is_some() {
+                crate::battle::build_native::refresh_escorts();
+            }
         }
         reset_crew_battle();
         reset_energy_battle();

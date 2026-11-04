@@ -31,8 +31,13 @@ impl PkunkApi for crate::comm::races::script::live::LiveScript<Handler> {
                     build_native::captain_name,
                 )
             });
-            build_native::refresh_escorts();
-            added
+            match added {
+                Some(count) => {
+                    build_native::refresh_escorts();
+                    count
+                }
+                None => 0,
+            }
         }
     }
 }

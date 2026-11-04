@@ -121,7 +121,6 @@ fn push_group(game: &mut LiveGame, entry: &IpGroup, icon: usize) {
         group_id: entry.group_id,
         loc: cp(entry.loc.x, entry.loc.y),
         melee_icon: icon as _,
-        ..Default::default()
     };
     queue.put(id);
 }
@@ -145,7 +144,6 @@ fn push_encounter(game: &mut LiveGame, entry: &EncounterEntry, element: usize) {
         }),
         log_x: entry.log_x,
         log_y: entry.log_y,
-        ..Default::default()
     };
     queue.put(id);
 }

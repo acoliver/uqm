@@ -442,7 +442,7 @@ pub(crate) unsafe fn encounter_ship(
 
     // NPC player in a full game
     // SAFETY: plain call.
-    if WorldOwner::current().read(|world| unsafe { fleet_is_infinite(world, which_player) }) != 0 {
+    if WorldOwner::current().read(|world| fleet_is_infinite(world, which_player)) != 0 {
         if last.is_some() {
             // The current STARSHIP is reused for the next one; update with new
             // info.

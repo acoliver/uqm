@@ -66,7 +66,6 @@ impl LiveGame {
                 growth_err_term: 0xa6,
                 func_index: 3,
                 dest_loc: CPoint { x: -5, y: -6 },
-                ..Default::default()
             };
             queue.put(id);
         }

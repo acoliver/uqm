@@ -42,19 +42,19 @@ mod live {
         }
         fn add_escorts(&mut self, race: u16, count: i16) {
             unsafe {
-                World::current().write(|world| {
+                let added = World::current().write(|world| {
                     build_native::add_escort_ships(world, race, count, build_native::captain_name)
                 });
-                build_native::refresh_escorts();
+                if added.is_some() {
+                    build_native::refresh_escorts();
+                }
             }
         }
         fn fwiffo_crew(&mut self) {
             use crate::ships::queue::{NAME_OFFSET, NUM_CAPTAINS_NAMES};
-            unsafe {
-                World::current().write(|world| {
-                    build_native::set_escort_crew(world, 6, 1, NAME_OFFSET + NUM_CAPTAINS_NAMES)
-                });
-            }
+            World::current().write(|world| {
+                build_native::set_escort_crew(world, 6, 1, NAME_OFFSET + NUM_CAPTAINS_NAMES)
+            });
         }
         fn advance_ilwrath(&mut self) {
             unsafe {

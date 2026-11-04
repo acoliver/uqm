@@ -25,14 +25,10 @@ mod live {
     use crate::time::clock_abi::live::add_event;
     impl<H> AllianceApi<H> for LiveScript<H> {
         fn set_allied(&mut self, race: u16, allied: bool) {
-            unsafe {
-                World::current().write(|world| set_race_allied(world, race, u32::from(allied)));
-            }
+            World::current().write(|world| set_race_allied(world, race, u32::from(allied)));
         }
         fn track(&mut self, race: u16) {
-            unsafe {
-                World::current().write(|world| start_sphere_tracking(world, race));
-            }
+            World::current().write(|world| start_sphere_tracking(world, race));
         }
         fn event(&mut self, kind: i32, month: u16, day: u16, year: u16, selector: u8) {
             unsafe {

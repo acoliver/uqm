@@ -267,7 +267,6 @@ fn restore_groups_with_icons(
             group_id: entry.group_id,
             loc: c_point(entry.loc),
             melee_icon: templates[icon].melee_icon,
-            ..Default::default()
         };
         groups.put(id);
     }
