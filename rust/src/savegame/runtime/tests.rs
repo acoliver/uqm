@@ -15,11 +15,11 @@ use serial_test::serial;
 use super::*;
 
 use crate::engine::battle::link_queue::LinkId;
+use crate::engine::clock::NUM_EVENTS;
 use crate::engine::clock::{GameClock, ScheduledEvent};
 use crate::savegame::decode::decode_save;
 use crate::savegame::types::{ClockState, Extent, Point, Velocity};
 use crate::state::ffi::snapshot_game_state;
-use crate::time::clock_bridge::{CEvent, NUM_EVENTS};
 
 /// Tracked evidence from a real run of the C game: epic 20 load/save proof.
 const C_WRITTEN_SAVE: &[u8] = include_bytes!("../../../tests/fixtures/savegame/legacy-save.00");
@@ -291,18 +291,31 @@ fn event(day: u8, month: u8, year: u16, func: u8) -> EventEntry {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn event_record_and_pool_match_the_c_enum_and_struct() {
+fn event_pool_preserves_all_handler_records_at_capacity() {
     assert_eq!(NUM_EVENTS, 18, "gameev.h lists 18 event kinds");
-    assert_eq!(
-        size_of::<CEvent>(),
-        24,
-        "two pointers, 4 date bytes, padded"
-    );
     let mut clock = GameClock::new();
-    for _ in 0..NUM_EVENTS {
-        assert!(clock.events().alloc().is_some());
+    let mut ids = Vec::new();
+    for selector in 0..NUM_EVENTS {
+        let mut queue = clock.events();
+        let Some(id) = queue.alloc() else {
+            panic!("event pool exhausted before handler {selector}");
+        };
+        let record = queue.get_mut(id);
+        record.day_index = 1;
+        record.month_index = 1;
+        record.year_index = 2155;
+        record.func_index = selector as u8;
+        ids.push(id);
     }
     assert!(clock.events().alloc().is_none());
+    assert_eq!(events::capture_events(&clock), Ok(Vec::new()));
+    for id in ids {
+        clock.events().put(id);
+    }
+    let expected = (0..NUM_EVENTS)
+        .map(|selector| event(1, 1, 2155, selector as u8))
+        .collect();
+    assert_eq!(events::capture_events(&clock), Ok(expected));
 }
 
 // ---------------------------------------------------------------------------

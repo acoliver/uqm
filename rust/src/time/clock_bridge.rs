@@ -4,27 +4,8 @@
 use std::ffi::c_int;
 
 use crate::bridge_log::rust_bridge_log_msg;
-use crate::c_bindings::{assert_c_layout, global_state};
 
 pub use crate::engine::battle::schema::CLOCK_STATE as ClockState;
-
-pub use crate::engine::clock::{CEvent, NUM_EVENTS};
-
-mod layout {
-    use super::*;
-
-    assert_c_layout!(
-        CEvent,
-        global_state::EVENT {
-            pred: pred,
-            succ: succ,
-            day_index: day_index,
-            month_index: month_index,
-            year_index: year_index,
-            func_index: func_index,
-        }
-    );
-}
 
 #[cfg(not(test))]
 use crate::engine::World;

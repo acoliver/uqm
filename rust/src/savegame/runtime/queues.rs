@@ -49,10 +49,10 @@ use crate::comm::dispatch::{
     START_INTERPLANETARY,
 };
 use crate::engine::battle::link_queue::{LinkQueue, QueueRecord};
+use crate::engine::clock::NUM_EVENTS;
 use crate::engine::world::queues::{FleetInfo, Fragment, ShipFragment};
 use crate::engine::World;
 use crate::savegame::types::{Point, RaceEntry, ShipFragmentEntry};
-use crate::time::clock_bridge::NUM_EVENTS;
 
 /// `MAX_BUILT_SHIPS` (sis.h): hangar slots, so the bound of an escort's index.
 pub const MAX_BUILT_SHIPS: u8 = 12;

@@ -59,6 +59,7 @@ pub(crate) struct FuelDistance {
 }
 
 pub struct World {
+    #[cfg(not(test))]
     pub(crate) last_encounter_group: u8,
     #[cfg(not(test))]
     pub(crate) hyper_distance: FuelDistance,
@@ -74,6 +75,7 @@ impl World {
     pub fn new() -> Self {
         Self {
             data: WorldData::new(),
+            #[cfg(not(test))]
             last_encounter_group: 0,
             queues: CampaignQueues::new(),
             clock: super::clock::GameClock::new(),

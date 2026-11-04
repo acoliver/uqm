@@ -240,7 +240,7 @@ mod tests {
         assert_eq!(queue.succ(second), Some(middle));
         assert_eq!(queue.succ(middle), Some(late));
         assert_eq!(queue.tail(), Some(late));
-        for _ in 4..crate::time::clock_bridge::NUM_EVENTS {
+        for _ in 4..crate::engine::clock::NUM_EVENTS {
             assert!(insert_event(&mut clock, (2156, 1, 1), 5).is_some());
         }
         assert!(insert_event(&mut clock, (2155, 1, 1), 6).is_none());

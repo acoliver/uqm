@@ -4,11 +4,8 @@ use crate::collections::pool::OrderedPool;
 use crate::engine::battle::link_queue::{queue_record, LinkId, LinkQueue, QueueRecord};
 pub const NUM_EVENTS: usize = 18;
 
-#[repr(C)]
 #[derive(Default)]
 pub struct CEvent {
-    pub pred: *mut std::ffi::c_void,
-    pub succ: *mut std::ffi::c_void,
     pub day_index: u8,
     pub month_index: u8,
     pub year_index: u16,

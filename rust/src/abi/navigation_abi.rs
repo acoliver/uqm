@@ -1039,18 +1039,6 @@ pub use crate::collections::queue::RemoveQueue;
 
 pub use crate::collections::queue::CountLinks;
 
-pub type HEVENT = HLINK;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct event {
-    pub pred: HEVENT,
-    pub succ: HEVENT,
-    pub day_index: BYTE,
-    pub month_index: BYTE,
-    pub year_index: COUNT,
-    pub func_index: BYTE,
-}
-pub type EVENT = event;
 pub const EVENT_TYPE_ABSOLUTE_EVENT: EVENT_TYPE = 0;
 pub const EVENT_TYPE_RELATIVE_EVENT: EVENT_TYPE = 1;
 pub type EVENT_TYPE = ::std::os::raw::c_uint;

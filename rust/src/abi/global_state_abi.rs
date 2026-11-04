@@ -27,8 +27,6 @@ pub const BOOLEAN_FALSE: BOOLEAN = 0;
 pub const BOOLEAN_TRUE: BOOLEAN = 1;
 pub type BOOLEAN = ::std::os::raw::c_uint;
 
-pub use crate::navigation::abi::event;
-pub type EVENT = event;
 pub use crate::graphics::native_abi::Color;
 pub type RESOURCE = *const ::std::os::raw::c_char;
 pub use crate::graphics::native_abi::string_table_entry;
