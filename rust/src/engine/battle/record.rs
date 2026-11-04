@@ -447,8 +447,8 @@ impl Cx<'_> {
             .unwrap_or_else(|| panic!("ship {id:?} has no descriptor"))
     }
     #[cfg(not(test))]
-    pub(crate) fn captain_controls(&mut self, id: ShipId) -> std::ptr::NonNull<CAPTAIN_STUFF> {
-        std::ptr::NonNull::from(&mut self.desc_mut(id).ship_data.captain_control)
+    pub(crate) fn captain_controls(&self, id: ShipId) -> &CAPTAIN_STUFF {
+        &self.desc(id).ship_data.captain_control
     }
     /// Return the checked legacy address; dereferencing it requires the owning game-thread boundary.
     pub fn legacy_element(&self, id: ElementId) -> *mut ElementRecord {

@@ -817,3 +817,19 @@ mod processing;
 
 #[path = "ship_assets.rs"]
 mod ship_assets;
+
+#[cfg(not(test))]
+impl Cx<'_> {
+    pub(crate) fn draw_stamp(
+        &self,
+        frame: super::frames::FrameRef<'_>,
+        origin: crate::graphics::native_abi::POINT,
+    ) {
+        let mut stamp = crate::graphics::native_abi::STAMP {
+            origin,
+            frame: frame.raw(),
+        };
+        // SAFETY: the frame borrow retains its registered drawable through the synchronous draw.
+        unsafe { crate::graphics::frame_abi::DrawStamp(&mut stamp) }
+    }
+}

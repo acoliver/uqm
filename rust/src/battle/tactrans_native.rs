@@ -443,18 +443,12 @@ pub(crate) mod engine {
         cx.element_mut(ship).death = Some(ElementHook::Native(cleanup_dead_ship));
         cx.set_target(ship, None);
         if play_sound {
-            let position = crate::battle::sounds::engine::position(cx, Some(ship));
-            // SAFETY: the battle sound bank and source element remain live during playback.
-            unsafe {
-                let sound = SetAbsStringTableIndex((*cx.kernel()).game_sounds, 1);
-                crate::battle::sounds::engine::play_sound_in_context(
-                    cx,
-                    sound,
-                    position,
-                    Some(ship),
-                    (GAME_SOUND_PRIORITY + 1) as u8,
-                );
-            }
+            cx.play_battle_sound(
+                crate::engine::battle::views::BattleSoundBank::Game,
+                1,
+                ship,
+                (GAME_SOUND_PRIORITY + 1) as u8,
+            );
         }
     }
 

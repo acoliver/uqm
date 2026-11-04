@@ -62,11 +62,22 @@ impl Cx<'_> {
         })
     }
 
-    pub fn play_ship_sound(&mut self, ship: ShipId, index: u16, source: ElementId, priority: u8) {
+    pub fn play_battle_sound(
+        &mut self,
+        bank: crate::engine::battle::views::BattleSoundBank,
+        index: u16,
+        source: ElementId,
+        priority: u8,
+    ) {
         use crate::battle::sounds::engine::{play_sound_in_context, position};
-        let sounds = self.desc(ship).ship_data.ship_sounds;
+        let sounds = match bank {
+            crate::engine::battle::views::BattleSoundBank::Ship(ship) => {
+                self.desc(ship).ship_data.ship_sounds
+            }
+            crate::engine::battle::views::BattleSoundBank::Game => self.kernel.game_sounds,
+        };
         let position = position(self, Some(source));
-        // SAFETY: the ship sound bank and source remain live for immediate positional playback.
+        // SAFETY: the borrowed owner retains the sound bank and source during playback.
         unsafe {
             let sound = SetAbsStringTableIndex(sounds, index);
             play_sound_in_context(self, sound, position, Some(source), priority);

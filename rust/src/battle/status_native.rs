@@ -223,40 +223,38 @@ pub(crate) mod engine {
         DrawFilledRectangle(&mut r);
     }
 
-    pub(crate) unsafe fn CaptainsWindow(
-        captain: *mut CAPTAIN_STUFF,
+    pub(crate) fn captains_window(
+        cx: &Cx<'_>,
+        ship: crate::engine::battle::ShipId,
         y: COORD,
         delta: STATUS_FLAGS,
         current: STATUS_FLAGS,
         pass: COUNT,
     ) {
-        let mut stamp = STAMP {
-            origin: POINT {
-                x: 4,
-                y: y.wrapping_add(69),
-            },
-            frame: std::ptr::null_mut(),
+        let captain = cx.captain_controls(ship);
+        let origin = POINT {
+            x: 4,
+            y: y.wrapping_add(69),
         };
         let (frames, count) = turn_frames(delta, current, pass);
-        for &frame in &frames[..count] {
-            stamp.frame = rel_frame_index((*captain).turn, frame);
-            DrawStamp(&mut stamp);
+        let turn = FrameSelection::retain(captain.turn);
+        for &offset in &frames[..count] {
+            cx.draw_stamp(cx.relative_frame(turn.view(), offset).view(), origin);
         }
         for (flag, base) in [
-            (THRUST, (*captain).thrust),
-            (WEAPON, (*captain).weapon),
-            (SPECIAL, (*captain).special.raw()),
+            (THRUST, FrameSelection::retain(captain.thrust)),
+            (WEAPON, FrameSelection::retain(captain.weapon)),
+            (SPECIAL, captain.special.clone()),
         ] {
             if delta & flag as u16 != 0 {
-                let frame = if pass == 1 {
+                let offset = if pass == 1 {
                     1
                 } else if current & flag as u16 != 0 {
                     2
                 } else {
                     0
                 };
-                stamp.frame = rel_frame_index(base, frame);
-                DrawStamp(&mut stamp);
+                cx.draw_stamp(cx.relative_frame(base.view(), offset).view(), origin);
             }
         }
     }

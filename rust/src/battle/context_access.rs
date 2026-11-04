@@ -432,11 +432,7 @@ mod status_native_access {
             delta: u16,
             current: u16,
         ) {
-            let controls = self.captain_controls(ship).as_ptr();
-            // SAFETY: drawing consumes only this ship's loaded captain frames.
-            unsafe {
-                CaptainsWindow(controls, y, delta, current, 2);
-            }
+            captains_window(self, ship, y, delta, current, 2);
         }
     }
 }
@@ -598,11 +594,7 @@ impl Cx<'_> {
         current: u16,
         pass: u16,
     ) {
-        let controls = self.captain_controls(ship).as_ptr();
-        // SAFETY: these frames are retained by this ship throughout the synchronous draw.
-        unsafe {
-            crate::battle::status_native::engine::CaptainsWindow(controls, y, delta, current, pass);
-        }
+        crate::battle::status_native::engine::captains_window(self, ship, y, delta, current, pass);
     }
 }
 
