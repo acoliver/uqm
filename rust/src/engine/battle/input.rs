@@ -222,4 +222,23 @@ mod tests {
     fn network_dispatch_requires_its_session() {
         InputContext::new(1, 8).battle_end_ready();
     }
+
+    #[test]
+    #[should_panic(expected = "network session assigned to local input")]
+    fn local_input_rejects_a_network_session() {
+        let net = Rc::new(TestNet {
+            ready: std::cell::Cell::new(false),
+            player: std::cell::Cell::new(None),
+        });
+        InputContext::new(0, 1).connect(net);
+    }
+
+    #[test]
+    #[should_panic(expected = "missing player input")]
+    fn network_player_order_requires_an_installed_context() {
+        let mut kernel = crate::engine::Kernel::new();
+        kernel.player_control = [8, 1];
+        kernel.player_input = [None, None];
+        kernel.player_order(0);
+    }
 }
