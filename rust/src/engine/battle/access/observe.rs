@@ -36,10 +36,18 @@ unsafe fn parent_address(
 
 impl super::super::Cx<'_> {
     pub(crate) fn element_parent_address(&self, id: ElementId) -> *mut c_void {
-        // SAFETY: this context retains the source identity pools during observation.
-        unsafe { parent_address(self.kernel.elements[id].parent, Some(&self.groups())) }
+        use super::super::Parent;
+        match self.kernel.elements[id].parent {
+            Parent::None => std::ptr::null_mut(),
+            Parent::Ship(ship) => self.kernel.races[usize::from(ship.side())]
+                .pool
+                .retired_address(usize::from(ship.slot()))
+                as *mut c_void,
+            Parent::IpGroup(group) => self.groups().journal_address(group) as *mut c_void,
+        }
     }
 }
+
 #[derive(Clone)]
 pub(crate) struct ElementObservation {
     pub state: ElementState,
@@ -175,5 +183,30 @@ pub(crate) unsafe fn ship<'a>(
         strings: unsafe { s.race_strings.as_ref() },
         #[cfg(test)]
         lifetime: std::marker::PhantomData,
+    }
+}
+
+#[cfg(test)]
+mod owner_tests {
+    use super::super::super::{Battle, Cx, Parent};
+
+    #[test]
+    fn callback_parent_identity_uses_the_retained_kernel_without_publication() {
+        let mut game = crate::engine::Game::new();
+        game.kernel.reset_ship_capacity(1, 1);
+        let mut ships = game.kernel.ships(1);
+        let link = ships.alloc().unwrap();
+        let ship = ships.ship_id(link);
+        let address = ships.raw(link);
+        let element = game.kernel.elements.alloc().unwrap();
+        game.kernel.elements.record_mut(element).parent = Parent::Ship(ship);
+        let mut battle = Battle::new();
+        let cx = Cx::new(
+            &mut battle,
+            &mut game.world,
+            &mut game.kernel,
+            crate::math::random,
+        );
+        assert_eq!(cx.element_parent_address(element), address);
     }
 }

@@ -129,14 +129,14 @@ impl wreck::WreckSite for LanderScene {
 
 /// The conversations the Syreen starbase and the Slylandro home start.
 struct Conversations<'a, 'b, 'c> {
-    game: LiveGame<'a, 'b, 'c>,
+    cx: &'a std::cell::RefCell<&'b mut crate::engine::battle::Cx<'c>>,
 }
 
 impl syreen::StarbaseSite for Conversations<'_, '_, '_> {
     fn talk_to_syreen(&mut self) {
         // SAFETY: the orbital host exclusively owns the live campaign context on the game thread.
         unsafe {
-            init_communication(&mut self.game.cx.borrow_mut(), SYREEN_CONVERSATION);
+            init_communication(&mut self.cx.borrow_mut(), SYREEN_CONVERSATION);
         }
     }
 }
@@ -145,7 +145,7 @@ impl slylandro::HomeSite for Conversations<'_, '_, '_> {
     fn talk_to_slylandro(&mut self) {
         // SAFETY: the orbital host exclusively owns the live campaign context on the game thread.
         unsafe {
-            init_communication(&mut self.game.cx.borrow_mut(), SLYLANDRO_HOME_CONVERSATION);
+            init_communication(&mut self.cx.borrow_mut(), SLYLANDRO_HOME_CONVERSATION);
         }
     }
 }
@@ -475,18 +475,11 @@ unsafe fn syreen_orbital(
     let owner = &owner;
 
     orbit_world(owner, system, world, |orbit, body| {
-        syreen::generate_orbital(
-            orbit,
-            body,
-            &mut Conversations {
-                game: LiveGame { cx: owner },
-            },
-            || {
-                owner
-                    .borrow_mut()
-                    .with_legacy(|| load_planet_default_surface())
-            },
-        )
+        syreen::generate_orbital(orbit, body, &mut Conversations { cx: owner }, || {
+            owner
+                .borrow_mut()
+                .with_legacy(|| load_planet_default_surface())
+        })
     })
 }
 
@@ -538,18 +531,11 @@ unsafe fn slylandro_orbital(
     let owner = &owner;
 
     orbit_world(owner, system, world, |orbit, body| {
-        slylandro::generate_orbital(
-            orbit,
-            body,
-            &mut Conversations {
-                game: LiveGame { cx: owner },
-            },
-            || {
-                owner
-                    .borrow_mut()
-                    .with_legacy(|| load_planet_default_surface())
-            },
-        )
+        slylandro::generate_orbital(orbit, body, &mut Conversations { cx: owner }, || {
+            owner
+                .borrow_mut()
+                .with_legacy(|| load_planet_default_surface())
+        })
     })
 }
 

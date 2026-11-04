@@ -25,6 +25,15 @@ fn npc_story_and_groups_use_the_supplied_world_without_a_published_context() {
     });
     assert_eq!(visited, [7, 8]);
     assert_eq!(host.flag("YEHAT_CIVIL_WAR"), 1);
+    host.set_word("URQUAN_PROBE_GRPOFFS0", 0xdeca_fbad);
+    assert_eq!(host.word("URQUAN_PROBE_GRPOFFS0"), 0xdeca_fbad);
+    assert!(
+        uqm_rust::planets::generate::special::FleetGroups::head_ip_group(&mut host, &mut |group| {
+            group.group_counter = 17
+        },)
+    );
+    assert_eq!(world.ip_groups_ref().get(first).group_counter, 17);
+    assert_eq!(world.ip_groups_ref().get(second).group_counter, 0);
     assert_eq!(world.ip_groups_ref().get(first).sys_loc, 3);
     assert_eq!(world.ip_groups_ref().get(second).sys_loc, 3);
 }
