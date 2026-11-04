@@ -319,7 +319,7 @@ pub(crate) mod live {
                 DestroyMusic(state.h_music);
                 state.h_music = ptr::null_mut();
             }
-            KernelOwner::current().write(|kernel| uninit_space(kernel));
+            KernelOwner::current().write(uninit_space);
             crate::supermelee::native::battle_picker::live::DestroyPickMeleeFrame();
             DestroyDrawable(ReleaseDrawable(MeleeFrame));
             MeleeFrame = ptr::null_mut();
@@ -336,6 +336,7 @@ pub(crate) mod live {
             FlushInput();
 
         });
+
     }
 }
 

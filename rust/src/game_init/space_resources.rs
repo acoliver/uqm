@@ -43,65 +43,48 @@ fn release_images(
 }
 
 #[cfg(not(test))]
-fn space_animations(
-    kernel: &mut crate::engine::Kernel,
-) -> impl Iterator<Item = (*mut [*mut frame_desc; 3], [&'static std::ffi::CStr; 3])> {
-    [
-        &raw mut kernel.explosion,
-        &raw mut kernel.blast,
-        &raw mut kernel.asteroid,
-    ]
-    .into_iter()
-    .zip(SPACE_ANIMATION_KEYS)
-}
-
-#[cfg(not(test))]
 use crate::graphics::{
     drawable_abi::DestroyDrawable,
     pixmap_abi::{CaptureDrawable, ReleaseDrawable},
     resgfx::LoadGraphicInstance,
 };
-#[cfg(not(test))]
-use std::ffi::c_char;
 
 #[cfg(not(test))]
-/// # Safety
-/// Frames points to three writable slots. Resource keys are NUL-terminated;
-/// medium and small may be null to reuse the previous drawable.
-pub unsafe fn load_animation(
-    frames: *mut *mut frame_desc,
-    big: *const c_char,
-    medium: *const c_char,
-    small: *const c_char,
+pub fn load_animation(
+    frames: &mut [*mut frame_desc; 3],
+    keys: [Option<&std::ffi::CStr>; 3],
     role: &str,
 ) -> u32 {
-    let mut drawable =
-        LoadGraphicInstance(big).cast::<crate::graphics::native_abi::drawable_desc>();
-    if drawable.is_null() {
-        return 0;
-    }
-    *frames = CaptureDrawable(drawable);
-    for (i, key) in [medium, small].into_iter().enumerate() {
-        if !key.is_null() {
-            drawable = LoadGraphicInstance(key).cast();
-            if drawable.is_null() {
-                return 0;
-            }
+    let Some(big) = keys[0] else { return 0 };
+    // SAFETY: CStr keys remain borrowed through resource decoding; loaded drawables own their frames.
+    unsafe {
+        let mut drawable =
+            LoadGraphicInstance(big.as_ptr()).cast::<crate::graphics::native_abi::drawable_desc>();
+        if drawable.is_null() {
+            return 0;
         }
-        *frames.add(i + 1) = CaptureDrawable(drawable);
+        frames[0] = CaptureDrawable(drawable);
+        for (index, key) in keys[1..].iter().enumerate() {
+            if let Some(key) = key {
+                drawable = LoadGraphicInstance(key.as_ptr()).cast();
+                if drawable.is_null() {
+                    return 0;
+                }
+            }
+            frames[index + 1] = CaptureDrawable(drawable);
+        }
     }
-    observe_views(std::slice::from_raw_parts(frames, 3), role, |frame| {
-        *frame as usize
-    });
+    observe_views(frames, role, |frame| *frame as usize);
     1
 }
 
 #[cfg(not(test))]
-/// # Safety
-/// Frames points to three exclusively borrowed live or null frame handles.
-pub unsafe fn free_image(frames: *mut [*mut frame_desc; 3], role: &str) -> u32 {
-    let frames = &mut *frames;
-    let freed = release_images(frames, |frame| DestroyDrawable(ReleaseDrawable(frame)) != 0);
+pub fn free_image(frames: &mut [*mut frame_desc; 3], role: &str) -> u32 {
+    let _allocations = crate::graphics::drawable_abi::retain_frame_allocations(frames);
+    let freed = release_images(frames, |frame| {
+        // SAFETY: every non-null address was validated and its allocation remains retained through release.
+        unsafe { DestroyDrawable(ReleaseDrawable(frame)) != 0 }
+    });
     observe_views(frames, role, |frame| *frame as usize);
     freed as u32
 }
@@ -110,37 +93,37 @@ pub unsafe fn free_image(frames: *mut [*mut frame_desc; 3], role: &str) -> u32 {
 pub(crate) mod live {
     use super::*;
 
-    /// # Safety
-    /// Game thread only, after graphics and resource initialization.
-    pub unsafe fn init_space(kernel: &mut crate::engine::Kernel, activity: u16) -> u32 {
+    pub fn init_space(kernel: &mut crate::engine::Kernel, activity: u16) -> u32 {
         {
             let old = kernel.space_init_count;
             kernel.space_init_count = kernel.space_init_count.wrapping_add(1);
             if old == 0 && activity as u8 <= crate::ships::native::abi::IN_ENCOUNTER as u8 {
-                let stars = &mut *ptr::addr_of_mut!(kernel.stars_in_space);
-                *stars = CaptureDrawable(LoadGraphicInstance(c"graphics.stars".as_ptr()).cast());
+                let stars = &mut kernel.stars_in_space;
+                // SAFETY: the resource key is static and the returned drawable supplies its captured frame.
+                *stars = unsafe {
+                    CaptureDrawable(LoadGraphicInstance(c"graphics.stars".as_ptr()).cast())
+                };
                 if stars.is_null() {
                     return 0;
                 }
                 observe_views(std::slice::from_ref(stars), "engine-global:stars", |f| {
                     *f as usize
                 });
-                if space_animations(&mut *kernel)
-                    .zip([
-                        "engine-global:explosion",
-                        "engine-global:blast",
-                        "engine-global:asteroid",
-                    ])
-                    .any(|((frames, [big, medium, small]), role)| {
-                        load_animation(
-                            frames.cast(),
-                            big.as_ptr(),
-                            medium.as_ptr(),
-                            small.as_ptr(),
-                            role,
-                        ) == 0
-                    })
-                {
+                if [
+                    &mut kernel.explosion,
+                    &mut kernel.blast,
+                    &mut kernel.asteroid,
+                ]
+                .into_iter()
+                .zip(SPACE_ANIMATION_KEYS)
+                .zip([
+                    "engine-global:explosion",
+                    "engine-global:blast",
+                    "engine-global:asteroid",
+                ])
+                .any(|((frames, [big, medium, small]), role)| {
+                    load_animation(frames, [Some(big), Some(medium), Some(small)], role) == 0
+                }) {
                     return 0;
                 }
             }
@@ -151,9 +134,7 @@ pub(crate) mod live {
         }
     }
 
-    /// # Safety
-    /// Game thread only; pairs with InitSpace while graphics is live.
-    pub unsafe fn uninit_space(kernel: &mut crate::engine::Kernel) {
+    pub fn uninit_space(kernel: &mut crate::engine::Kernel) {
         {
             if kernel.space_init_count != 0 {
                 kernel.space_init_count -= 1;
@@ -161,19 +142,22 @@ pub(crate) mod live {
                     crate::collections::observation::record(
                         crate::collections::observation::Event::SpaceActive(false),
                     );
-                    free_image(ptr::addr_of_mut!(kernel.blast), "engine-global:blast");
-                    free_image(
-                        ptr::addr_of_mut!(kernel.explosion),
-                        "engine-global:explosion",
+                    free_image(&mut kernel.blast, "engine-global:blast");
+                    free_image(&mut kernel.explosion, "engine-global:explosion");
+                    free_image(&mut kernel.asteroid, "engine-global:asteroid");
+                    let stars = &mut kernel.stars_in_space;
+                    let _allocation = crate::graphics::drawable_abi::retain_frame_allocations(
+                        std::slice::from_ref(stars),
                     );
-                    free_image(ptr::addr_of_mut!(kernel.asteroid), "engine-global:asteroid");
                     for plane in kernel.star_planes.iter_mut() {
                         plane
                             .frames
                             .fill(crate::engine::battle::frames::FrameSelection::ABSENT);
                     }
-                    let stars = &mut *ptr::addr_of_mut!(kernel.stars_in_space);
-                    DestroyDrawable(ReleaseDrawable(*stars));
+                    // SAFETY: the star frame is null or belongs to the retained registered allocation.
+                    unsafe {
+                        DestroyDrawable(ReleaseDrawable(*stars));
+                    }
                     *stars = ptr::null_mut();
                     observe_views(std::slice::from_ref(stars), "engine-global:stars", |f| {
                         *f as usize

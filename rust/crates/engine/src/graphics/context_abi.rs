@@ -2,6 +2,7 @@
 use super::drawable_abi::{CopyFrameRect, SetFrameHot};
 use super::loaddisp::LoadDisplayPixmap;
 use super::native_abi::*;
+pub use super::native_context::{ContextFrame, ContextLease};
 use crate::memory::{rust_hcalloc, rust_hfree};
 #[cfg(feature = "debug-process")]
 use std::ffi::c_char;
@@ -66,6 +67,9 @@ unsafe fn create_context() -> *mut context_desc {
         (*context).Mode = MODE;
         (*context).ForeGroundColor = FORE;
         (*context).BackGroundColor = BACK;
+        super::native_context::register(
+            std::ptr::NonNull::new(context).unwrap_or_else(|| unreachable!()),
+        );
     }
     context
 }
@@ -101,6 +105,20 @@ pub unsafe extern "C" fn DestroyContext(context: *mut context_desc) -> BOOLEAN {
     if _pCurContext == context {
         SetContext(ptr::null_mut());
     }
+    super::native_context::release(
+        std::ptr::NonNull::new(context).unwrap_or_else(|| unreachable!()),
+    );
+    1
+}
+
+pub(super) unsafe fn free_context(context: *mut context_desc) {
+    // SAFETY: the final context lease owns this allocation on the serialized graphics thread.
+    unsafe {
+        if _pCurContext == context {
+            SetContext(ptr::null_mut());
+        }
+    }
+
     #[cfg(feature = "debug-process")]
     {
         let mut link = ptr::addr_of_mut!(FIRST_CONTEXT);
@@ -116,7 +134,6 @@ pub unsafe extern "C" fn DestroyContext(context: *mut context_desc) -> BOOLEAN {
         TFB_DrawImage_Delete((*context).FontBacking);
     }
     rust_hfree(context.cast());
-    1
 }
 /// # Safety
 /// Called on the serialized graphics thread.
@@ -358,6 +375,80 @@ pub unsafe extern "C" fn GetNextContext(context: *mut context_desc) -> *mut cont
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn allocated_context() -> *mut context_desc {
+        // SAFETY: the serial context tests exclusively own context allocation and destruction.
+        unsafe {
+            #[cfg(feature = "debug-process")]
+            {
+                CreateContextAux(c"lease-test".as_ptr())
+            }
+            #[cfg(not(feature = "debug-process"))]
+            {
+                CreateContextAux()
+            }
+        }
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn retained_context_survives_native_owner_release() {
+        let raw = allocated_context();
+        let context = ContextLease::retain(raw);
+        // SAFETY: this consumes the allocation's native owner; the typed lease remains live.
+        assert_eq!(unsafe { DestroyContext(raw) }, 1);
+        context.set_background(Color {
+            r: 17,
+            g: 31,
+            b: 47,
+            a: 255,
+        });
+        // SAFETY: context still owns the registered allocation.
+        assert_eq!(unsafe { (*raw).BackGroundColor.r }, 17);
+        drop(context);
+        // SAFETY: the serial test owns the native context state.
+        assert!(unsafe { _pCurContext }.is_null());
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn context_retention_rejects_unowned_and_retired_addresses() {
+        assert!(std::panic::catch_unwind(|| ContextLease::retain(ptr::dangling_mut())).is_err());
+        let raw = allocated_context();
+        // SAFETY: the native owner is consumed without any retained lease.
+        assert_eq!(unsafe { DestroyContext(raw) }, 1);
+        assert!(std::panic::catch_unwind(|| ContextLease::retain(raw)).is_err());
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn a_context_target_retains_its_frame_after_native_drawable_release() {
+        let raw = allocated_context();
+        let context = ContextLease::retain(raw);
+        // SAFETY: the serial test exclusively owns the newly allocated drawable and context.
+        let drawable = unsafe { super::super::drawable_abi::AllocDrawable(1) };
+        // SAFETY: AllocDrawable initialized the drawable's first frame.
+        let frame = unsafe { super::super::pixmap_abi::CaptureDrawable(drawable) };
+        context.set_frame(ContextFrame::retain(frame));
+        // SAFETY: the context now retains the drawable allocation after its native owner is retired.
+        assert_eq!(
+            unsafe { super::super::drawable_abi::DestroyDrawable(drawable) },
+            1
+        );
+        context.set_clip(RECT {
+            corner: POINT { x: 1, y: 2 },
+            extent: EXTENT {
+                width: 3,
+                height: 4,
+            },
+        });
+        // SAFETY: the context and its target remain retained by the lease.
+        assert_eq!(unsafe { (*raw).ClipRect.extent.width }, 3);
+        // SAFETY: consume the native context owner before releasing its retained lease.
+        assert_eq!(unsafe { DestroyContext(raw) }, 1);
+        drop(context);
+    }
+
     #[test]
     fn full_frame_clip_is_undefined_and_partial_clip_is_preserved() {
         let mut context: context_desc = unsafe { std::mem::zeroed() };

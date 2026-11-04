@@ -444,7 +444,7 @@ pub(crate) mod engine {
     #[no_mangle]
     pub unsafe extern "C" fn UninitEncounter() -> COUNT {
         let mut killed = 0u16;
-        KernelOwner::current().write(|kernel| free_gravity_well(kernel));
+        KernelOwner::current().write(free_gravity_well);
         if activity() & (CHECK_ABORT | CHECK_LOAD) as u16 != 0
             || (**WorldFields::current()).flagship.crew_enlisted == COUNT::MAX
             || activity() as u8 == IN_LAST_BATTLE as u8

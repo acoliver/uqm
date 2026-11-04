@@ -49,7 +49,7 @@ pub unsafe fn uninit_ships() {
     use crate::ships::native::abi::*;
 
     StopSound();
-    KernelOwner::current().write(|kernel| crate::game_init::space_resources::uninit_space(kernel));
+    KernelOwner::current().write(crate::game_init::space_resources::uninit_space);
     crate::app::bridge::enter(|cx| {
         let mut ships = [None; 2];
         let crew = remaining_battle_crew(cx);
@@ -127,7 +127,7 @@ mod live {
             SetContextBackGroundColor(Color {r:0,g:0,b:0,a:255});
             let old = SetContext((**KernelOwner::current()).screen_context);
             SetContextBackGroundColor(Color {r:0,g:0,b:0,a:255}); ClearDrawable(); SetContext(old);
-            if uqm_get_current_activity_lobyte() == IN_LAST_BATTLE as u8 { KernelOwner::current().write(|kernel| crate::game_init::world_resources::free_gravity_well(kernel)); }
+            if uqm_get_current_activity_lobyte() == IN_LAST_BATTLE as u8 { KernelOwner::current().write(crate::game_init::world_resources::free_gravity_well); }
             else { crate::app::bridge::enter(|cx| { for _ in 0..5 { crate::battle::world_elements::create_asteroid(cx, None); } crate::battle::world_elements::spawn_planet(cx); }); }
             2
         }

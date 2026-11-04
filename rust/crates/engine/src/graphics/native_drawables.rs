@@ -12,6 +12,7 @@ pub(super) struct Allocations {
     pub owner: Option<Arc<ThreadId>>,
     entries: BTreeMap<usize, Rc<Allocation>>,
     frames: BTreeMap<usize, Weak<Allocation>>,
+    pub(super) contexts: BTreeMap<usize, Rc<super::native_context::Allocation>>,
 }
 impl Allocations {
     pub const fn new() -> Self {
@@ -19,6 +20,7 @@ impl Allocations {
             owner: None,
             entries: BTreeMap::new(),
             frames: BTreeMap::new(),
+            contexts: BTreeMap::new(),
         }
     }
     pub fn assert_thread(&mut self) {

@@ -107,7 +107,7 @@ impl ShipAssets {
             if battle {
                 for array in &self.animations {
                     let mut raw = array.views().map(|frame| frame.raw());
-                    crate::game_init::space_resources::free_image(&raw mut raw, "animation");
+                    crate::game_init::space_resources::free_image(&mut raw, "animation");
                     array.retire_views();
                 }
                 DestroyDrawable(ReleaseDrawable(self.captain.cast()));

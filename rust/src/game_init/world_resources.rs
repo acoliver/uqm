@@ -111,13 +111,15 @@ pub(crate) mod live {
         }
     }
 
-    /// # Safety
-    /// Called on the game thread while the graphics resource system is live.
-    pub unsafe fn free_gravity_well(kernel: &mut crate::engine::Kernel) {
+    pub fn free_gravity_well(kernel: &mut crate::engine::Kernel) {
         {
-            let frames = std::slice::from_raw_parts_mut(ptr::addr_of_mut!(kernel.planet).cast(), 3);
+            let frames = &mut kernel.planet;
+            let _allocations = crate::graphics::drawable_abi::retain_frame_allocations(frames);
             for frame in frames.iter_mut() {
-                DestroyDrawable(ReleaseDrawable(*frame));
+                // SAFETY: each non-null frame belongs to an allocation retained through release.
+                unsafe {
+                    DestroyDrawable(ReleaseDrawable(*frame));
+                }
                 *frame = ptr::null_mut();
             }
             crate::collections::observation::observe_views(

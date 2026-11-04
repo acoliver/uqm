@@ -8,11 +8,18 @@ pub(crate) mod engine {
     use crate::strings::string_table::CaptureStringTable;
 
     pub(crate) unsafe fn load_battle(d: &mut RaceDesc) -> bool {
-        let load_animation_set = |keys: [_; 3]| {
+        let load_animation_set = |keys: [*const std::ffi::c_char; 3]| {
             use crate::engine::battle::frames::FrameArray;
             let mut raw = [std::ptr::null_mut(); 3];
-            if load_animation(raw.as_mut_ptr(), keys[0], keys[1], keys[2], "animation") == 0 {
-                free_image(&raw mut raw, "animation");
+            let keys = keys.map(|key| {
+                if key.is_null() {
+                    None
+                } else {
+                    Some(std::ffi::CStr::from_ptr(key))
+                }
+            });
+            if load_animation(&mut raw, keys, "animation") == 0 {
+                free_image(&mut raw, "animation");
                 return None;
             }
             let array = FrameArray::from_native(raw);
