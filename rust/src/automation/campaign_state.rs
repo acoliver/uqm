@@ -374,8 +374,7 @@ impl CampaignView {
         view.contact_race = unsafe { game.npc_built_ship_q.head.cast::<CShipFragment>().as_ref() }
             .map(|ship| ship.race_id);
         if !game.built_ship_q.head.is_null() {
-            // SAFETY: the world owns the live escort queue on this game thread.
-            let ships = unsafe { walk::<CShipFragment>(&game.built_ship_q, QueueKind::BuiltShips) }
+            let ships = walk::<CShipFragment>(&game.built_ship_q, QueueKind::BuiltShips)
                 .unwrap_or_else(|error| panic!("live escort queue: {error}"));
             view.escorts = ships
                 .into_iter()
@@ -386,8 +385,7 @@ impl CampaignView {
                 .collect();
         }
         if !game.ip_group_q.head.is_null() {
-            // SAFETY: the world owns the live IP-group queue on this game thread.
-            let groups = unsafe { walk::<CIpGroup>(&game.ip_group_q, QueueKind::IpGroups) }
+            let groups = walk::<CIpGroup>(&game.ip_group_q, QueueKind::IpGroups)
                 .unwrap_or_else(|error| panic!("live IP group queue: {error}"));
             view.groups = groups
                 .into_iter()
