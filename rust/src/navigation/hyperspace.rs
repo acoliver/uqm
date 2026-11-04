@@ -159,13 +159,16 @@ pub(crate) mod live {
             x: universe_x(world.data.flagship.log_x),
             y: universe_y(world.data.flagship.log_y),
         };
-        let queue = ptr::addr_of_mut!(world.data.game.encounter_q);
-        let mut handle = world.data.game.avail_race_q.head;
+        let mut handle = world.avail_races_ref().head();
         let mut race = 0usize;
-        while !handle.is_null() && world.data.game.current_activity & IN_BATTLE as u16 != 0 {
-            let fleet = handle.cast::<FLEET_INFO>();
-            handle = (*fleet).succ;
-            let mut radius = (*fleet).actual_strength;
+        while let Some(id) = handle {
+            if world.activity() & IN_BATTLE as u16 == 0 {
+                break;
+            }
+            let fleets = world.avail_races_ref();
+            let fleet = *fleets.get(id);
+            handle = fleets.succ(id);
+            let mut radius = fleet.actual_strength;
             if radius != 0 {
                 let mut flags = 0;
                 let mut percent = PERCENT[race];
@@ -193,11 +196,12 @@ pub(crate) mod live {
                         };
                         flags = ONE_SHOT_ENCOUNTER as u8;
                     }
-                    let mut encounter = (*queue).head;
-                    while !encounter.is_null() {
-                        let current = encounter.cast::<ENCOUNTER>();
-                        encounter = (*current).succ;
-                        if (*current).race_id as usize == race {
+                    let encounters = world.encounters_ref();
+                    let mut next = encounters.head();
+                    while let Some(id) = next {
+                        let current = encounters.get(id);
+                        next = encounters.succ(id);
+                        if current.race_id as usize == race {
                             percent = 0;
                             break;
                         }
@@ -206,23 +210,22 @@ pub(crate) mod live {
                         world.set_story_state(StoryKey::BROADCASTER_RESPONSE, 1);
                     }
                 }
-                let dx = universe.x.wrapping_sub((*fleet).loc.x).wrapping_abs() as u16;
-                let dy = universe.y.wrapping_sub((*fleet).loc.y).wrapping_abs() as u16;
+                let dx = universe.x.wrapping_sub(fleet.loc.x).wrapping_abs() as u16;
+                let dy = universe.y.wrapping_sub(fleet.loc.y).wrapping_abs() as u16;
                 if dx < radius
                     && dy < radius
                     && dx as u32 * dx as u32 + dy as u32 * (dy as u32)
                         < radius as u32 * radius as u32
                     && (TFB_Random() as u16 % 100) < percent
                 {
-                    let encounter = AllocLink(queue);
-                    if !encounter.is_null() {
-                        let current = encounter.cast::<ENCOUNTER>();
-                        ptr::write_bytes(current, 0, 1);
-                        (*current).origin = (*fleet).loc;
-                        (*current).radius = radius;
-                        (*current).flags = flags;
-                        (*current).race_id = race as u8;
-                        PutQueue(queue, encounter);
+                    let mut encounters = world.encounters();
+                    if let Some(id) = encounters.alloc() {
+                        let current = encounters.get_mut(id);
+                        current.origin = fleet.loc;
+                        current.radius = radius;
+                        current.flags = flags;
+                        current.race_id = race as u8;
+                        encounters.put(id);
                     }
                 }
             }

@@ -2,7 +2,18 @@
 
 use crate::collections::pool::OrderedPool;
 use crate::engine::battle::link_queue::{queue_record, LinkId, LinkQueue, QueueRecord};
-use crate::time::clock_bridge::{CEvent, NUM_EVENTS};
+pub const NUM_EVENTS: usize = 18;
+
+#[repr(C)]
+#[derive(Default)]
+pub struct CEvent {
+    pub pred: *mut std::ffi::c_void,
+    pub succ: *mut std::ffi::c_void,
+    pub day_index: u8,
+    pub month_index: u8,
+    pub year_index: u16,
+    pub func_index: u8,
+}
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum ScheduledEvent {}

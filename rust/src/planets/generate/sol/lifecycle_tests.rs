@@ -117,9 +117,14 @@ impl FleetGroups for QueueHost {
     fn reinit_built_queue(&mut self) {
         self.reinit_npc_built_ship_q();
     }
-    fn head_ip_group(&mut self) -> Option<&mut IP_GROUP> {
+    fn with_head_ip_group(&mut self, visit: &mut dyn FnMut(&mut IP_GROUP)) -> bool {
         self.call("head");
-        self.groups.first_mut()
+        if let Some(group) = self.groups.first_mut() {
+            visit(group);
+            true
+        } else {
+            false
+        }
     }
 }
 

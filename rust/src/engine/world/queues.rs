@@ -2,35 +2,151 @@
 
 use crate::collections::pool::OrderedPool;
 use crate::engine::battle::link_queue::{queue_record, LinkId, LinkQueue, QueueRecord};
-use crate::navigation::abi::{ENCOUNTER, IP_GROUP};
-use crate::ships::native::abi::{FLEET_INFO, SHIP_FRAGMENT};
+use crate::graphics::native_abi::{FRAME, POINT, STRING};
 
-macro_rules! campaign_record {
-    ($marker:ident, $record:ty) => {
-        #[derive(Debug, PartialEq, Eq)]
-        pub enum $marker {}
-        impl queue_record::Sealed for $marker {}
-        impl QueueRecord for $marker {
-            type Record = $record;
-        }
-        impl<const N: usize> LinkQueue<'_, $marker, N> {
-            pub fn get(&self, id: LinkId<$marker>) -> &$record {
-                self.record(id)
-            }
-        }
-    };
+pub const SAMATRA_RACE: u8 = 23;
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Default)]
+pub struct ShipFragment {
+    pub pred: *mut std::ffi::c_void,
+    pub succ: *mut std::ffi::c_void,
+    pub SpeciesID: u32,
+    pub captains_name_index: u8,
+    pub race_id: u8,
+    pub index: u8,
+    pub crew_level: u16,
+    pub max_crew: u16,
+    pub energy_level: u8,
+    pub max_energy: u8,
+    pub race_strings: STRING,
+    pub icons: FRAME,
+    pub melee_icon: FRAME,
 }
-campaign_record!(Fleet, FLEET_INFO);
-campaign_record!(Fragment, SHIP_FRAGMENT);
-campaign_record!(Group, IP_GROUP);
-campaign_record!(Encounter, ENCOUNTER);
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Default)]
+pub struct FleetInfo {
+    pub pred: *mut std::ffi::c_void,
+    pub succ: *mut std::ffi::c_void,
+    pub SpeciesID: u32,
+    pub allied_state: u16,
+    pub days_left: u8,
+    pub growth_fract: u8,
+    pub crew_level: u16,
+    pub max_crew: u16,
+    pub growth: u8,
+    pub max_energy: u8,
+    pub loc: POINT,
+    pub race_strings: STRING,
+    pub icons: FRAME,
+    pub melee_icon: FRAME,
+    pub actual_strength: u16,
+    pub known_strength: u16,
+    pub known_loc: POINT,
+    pub growth_err_term: u8,
+    pub func_index: u8,
+    pub dest_loc: POINT,
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Default)]
+pub struct BriefShipInfo {
+    pub race_id: u8,
+    pub crew_level: u16,
+    pub max_crew: u16,
+    pub max_energy: u8,
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Default)]
+pub struct EncounterRecord {
+    pub pred: *mut std::ffi::c_void,
+    pub succ: *mut std::ffi::c_void,
+    pub hElement: *mut std::ffi::c_void,
+    pub transition_state: i16,
+    pub origin: POINT,
+    pub radius: u16,
+    pub race_id: u8,
+    pub num_ships: u8,
+    pub flags: u8,
+    pub loc_pt: POINT,
+    pub ShipList: [BriefShipInfo; 7usize],
+    pub log_x: i32,
+    pub log_y: i32,
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Default)]
+pub struct IpGroup {
+    pub pred: *mut std::ffi::c_void,
+    pub succ: *mut std::ffi::c_void,
+    pub group_counter: u16,
+    pub race_id: u8,
+    pub sys_loc: u8,
+    pub task: u8,
+    pub in_system: u8,
+    pub dest_loc: u8,
+    pub orbit_pos: u8,
+    pub group_id: u8,
+    pub loc: POINT,
+    pub melee_icon: FRAME,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum Fleet {}
+impl queue_record::Sealed for Fleet {}
+impl QueueRecord for Fleet {
+    type Record = FleetInfo;
+}
+impl<const N: usize> LinkQueue<'_, Fleet, N> {
+    pub fn get(&self, id: LinkId<Fleet>) -> &FleetInfo {
+        self.record(id)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum Fragment {}
+impl queue_record::Sealed for Fragment {}
+impl QueueRecord for Fragment {
+    type Record = ShipFragment;
+}
+impl<const N: usize> LinkQueue<'_, Fragment, N> {
+    pub fn get(&self, id: LinkId<Fragment>) -> &ShipFragment {
+        self.record(id)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum Group {}
+impl queue_record::Sealed for Group {}
+impl QueueRecord for Group {
+    type Record = IpGroup;
+}
+impl<const N: usize> LinkQueue<'_, Group, N> {
+    pub fn get(&self, id: LinkId<Group>) -> &IpGroup {
+        self.record(id)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum Encounter {}
+impl queue_record::Sealed for Encounter {}
+impl QueueRecord for Encounter {
+    type Record = EncounterRecord;
+}
+impl<const N: usize> LinkQueue<'_, Encounter, N> {
+    pub fn get(&self, id: LinkId<Encounter>) -> &EncounterRecord {
+        self.record(id)
+    }
+}
 
 pub struct CampaignQueues {
-    pub(crate) avail_races: OrderedPool<FLEET_INFO, 24>,
-    pub(crate) built_ships: OrderedPool<SHIP_FRAGMENT, 12>,
-    pub(crate) npc_built_ships: OrderedPool<SHIP_FRAGMENT, 14>,
-    pub(crate) ip_groups: OrderedPool<IP_GROUP, 32>,
-    pub(crate) encounters: OrderedPool<ENCOUNTER, 16>,
+    pub(crate) avail_races: OrderedPool<FleetInfo, 24>,
+    pub(crate) built_ships: OrderedPool<ShipFragment, 12>,
+    pub(crate) npc_built_ships: OrderedPool<ShipFragment, 14>,
+    pub(crate) ip_groups: OrderedPool<IpGroup, 32>,
+    pub(crate) encounters: OrderedPool<EncounterRecord, 16>,
 }
 
 impl CampaignQueues {
@@ -62,12 +178,12 @@ impl Default for CampaignQueues {
 impl<const N: usize> LinkQueue<'_, Fragment, N> {
     pub fn clone_fragment(
         &mut self,
-        template: &FLEET_INFO,
+        template: &FleetInfo,
         race: u8,
         crew: u16,
         mut pick_name: impl FnMut() -> u8,
     ) -> Option<LinkId<Fragment>> {
-        let captain = if race == crate::ships::native::abi::SAMATRA_SHIP as u8 {
+        let captain = if race == SAMATRA_RACE {
             0
         } else {
             loop {
@@ -100,5 +216,73 @@ impl<const N: usize> LinkQueue<'_, Fragment, N> {
         ship.melee_icon = template.melee_icon;
         self.put(id);
         Some(id)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fragment_clones_preserve_template_fields_and_same_species_name_uniqueness() {
+        let template = FleetInfo {
+            SpeciesID: 7,
+            crew_level: 10,
+            max_crew: 20,
+            max_energy: 30,
+            ..Default::default()
+        };
+        let mut pool = OrderedPool::<ShipFragment, 3>::new();
+        let mut ships = LinkQueue::<Fragment, 3>::from_pool(&mut pool);
+        let first = ships.clone_fragment(&template, 6, 0, || 5).unwrap();
+        let mut candidates = [5, 6].into_iter();
+        let second = ships
+            .clone_fragment(&template, 6, 1, || candidates.next().unwrap())
+            .unwrap();
+        assert_eq!(ships.get(first).crew_level, 10);
+        assert_eq!(ships.get(first).max_crew, 20);
+        assert_eq!(ships.get(first).max_energy, 30);
+        assert_eq!(ships.get(first).energy_level, 0);
+        assert_eq!(ships.get(first).race_id, 6);
+        assert_eq!(ships.get(second).crew_level, 1);
+        assert_eq!(ships.get(second).captains_name_index, 6);
+        assert_eq!(ships.succ(first), Some(second));
+        let other = FleetInfo {
+            SpeciesID: 8,
+            ..template
+        };
+        let third = ships.clone_fragment(&other, 7, 0, || 5).unwrap();
+        assert_eq!(ships.get(third).captains_name_index, 5);
+        assert_eq!(ships.tail(), Some(third));
+    }
+
+    #[test]
+    fn full_fragment_pool_still_draws_a_name_before_allocation_fails() {
+        let template = FleetInfo::default();
+        let mut pool = OrderedPool::<ShipFragment, 1>::new();
+        let mut ships = LinkQueue::<Fragment, 1>::from_pool(&mut pool);
+        ships.clone_fragment(&template, 0, 0, || 5).unwrap();
+        let mut draws = 0;
+        assert!(ships
+            .clone_fragment(&template, 0, 0, || {
+                draws += 1;
+                6
+            })
+            .is_none());
+        assert_eq!(draws, 1);
+        assert_eq!(ships.count(), 1);
+    }
+
+    #[test]
+    fn samatra_captain_does_not_draw_a_name() {
+        let template = FleetInfo::default();
+        let mut pool = OrderedPool::<ShipFragment, 1>::new();
+        let mut ships = LinkQueue::<Fragment, 1>::from_pool(&mut pool);
+        let id = ships
+            .clone_fragment(&template, SAMATRA_RACE, 0, || {
+                panic!("Sa-Matra has a fixed captain")
+            })
+            .unwrap();
+        assert_eq!(ships.get(id).captains_name_index, 0);
     }
 }

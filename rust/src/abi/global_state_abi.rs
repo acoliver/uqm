@@ -123,7 +123,7 @@ pub const ARILOU_UMGAH_CHECK: _bindgen_ty_10 = 14;
 pub const YEHAT_REBEL_EVENT: _bindgen_ty_10 = 15;
 pub const SLYLANDRO_RAMP_UP: _bindgen_ty_10 = 16;
 pub const SLYLANDRO_RAMP_DOWN: _bindgen_ty_10 = 17;
-pub const NUM_EVENTS: _bindgen_ty_10 = 18;
+pub const NUM_EVENTS: _bindgen_ty_10 = crate::engine::clock::NUM_EVENTS as _bindgen_ty_10;
 pub type _bindgen_ty_10 = ::std::os::raw::c_uint;
 extern "C" {
     pub static mut ScreenWidth: ::std::os::raw::c_int;

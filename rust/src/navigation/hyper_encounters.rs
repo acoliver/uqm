@@ -129,10 +129,11 @@ pub(crate) fn collision(
         return;
     }
     init_transition(cx, source, ship, 0);
-    let mut handle = cx.navigation().game.encounter_q.head;
-    while let Some(encounter) = NonNull::new(handle.cast::<ENCOUNTER>()) {
-        let encounter = *cx.encounter_record(encounter);
-        handle = encounter.succ;
+    let mut next = cx.world.encounters_ref().head();
+    while let Some(id) = next {
+        let encounters = cx.world.encounters_ref();
+        let encounter = *encounters.get(id);
+        next = encounters.succ(id);
         if let Some(element) = cx.elements().id(encounter.hElement) {
             cx.element_mut(element).flags |= (NONSOLID | IGNORE_SIMILAR) as u16;
         }
@@ -141,21 +142,21 @@ pub(crate) fn collision(
     cx.set_target(source, target);
     cx.element_mut(source).velocity.zero();
 }
-unsafe fn add(cx: &mut Cx<'_>, encounter: *mut ENCOUNTER, universe: POINT) -> Option<ElementId> {
+unsafe fn add(cx: &mut Cx<'_>, encounter: &mut ENCOUNTER, universe: POINT) -> Option<ElementId> {
     if get(cx.world, StoryKey::ARILOU_SPACE_SIDE) >= 2 {
         return None;
     }
-    if (*encounter).flags & ENCOUNTER_REFORMING as u8 != 0 {
-        (*encounter).flags &= !(ENCOUNTER_REFORMING as u8);
-        (*encounter).transition_state = 100;
-        if (*encounter).flags & ONE_SHOT_ENCOUNTER as u8 != 0 || (*encounter).num_ships == 0 {
+    if encounter.flags & ENCOUNTER_REFORMING as u8 != 0 {
+        encounter.flags &= !(ENCOUNTER_REFORMING as u8);
+        encounter.transition_state = 100;
+        if encounter.flags & ONE_SHOT_ENCOUNTER as u8 != 0 || encounter.num_ships == 0 {
             return None;
         }
     }
-    let new = (*encounter).num_ships == 0;
-    let mut point = (*encounter).loc_pt;
+    let new = encounter.num_ships == 0;
+    let mut point = encounter.loc_pt;
     if new {
-        let race = (*encounter).race_id as usize;
+        let race = encounter.race_id as usize;
         let makeup = MAKEUP[race];
         let mut ships = makeup & 15;
         for _ in 0..((makeup >> 4) - ships) {
@@ -164,15 +165,15 @@ unsafe fn add(cx: &mut Cx<'_>, encounter: *mut ENCOUNTER, universe: POINT) -> Op
             }
         }
         ships = ships.min(MAX_HYPER_SHIPS as u8);
-        (*encounter).num_ships = ships;
+        encounter.num_ships = ships;
         for i in 0..ships as usize {
-            let races = &raw mut cx.world.data.game.avail_race_q;
-            let fleet = GetStarShipFromIndex(races, race as u16).cast::<FLEET_INFO>();
-            let brief = &mut (*encounter).ShipList[i];
+            let fleets = cx.world.avail_races_ref();
+            let fleet = fleets.get(fleets.at(race).expect("hyperspace encounter fleet"));
+            let brief = &mut encounter.ShipList[i];
             brief.race_id = race as u8;
-            brief.crew_level = (*fleet).crew_level;
-            brief.max_crew = (*fleet).max_crew;
-            brief.max_energy = (*fleet).max_energy;
+            brief.crew_level = fleet.crew_level;
+            brief.max_crew = fleet.max_crew;
+            brief.max_energy = fleet.max_energy;
         }
         loop {
             let random = TFB_Random();
@@ -182,19 +183,19 @@ unsafe fn add(cx: &mut Cx<'_>, encounter: *mut ENCOUNTER, universe: POINT) -> Op
                 y: (universe.y as i32 + ((random >> 16) % (YOFFS as u32 * 2)) as i32 - YOFFS as i32)
                     .clamp(0, 9999) as i16,
             };
-            let dx = point.x.wrapping_sub((*encounter).origin.x) as i64;
-            let dy = point.y.wrapping_sub((*encounter).origin.y) as i64;
-            if dx * dx + dy * dy <= (*encounter).radius as i64 * (*encounter).radius as i64 {
+            let dx = point.x.wrapping_sub(encounter.origin.x) as i64;
+            let dy = point.y.wrapping_sub(encounter.origin.y) as i64;
+            if dx * dx + dy * dy <= encounter.radius as i64 * encounter.radius as i64 {
                 break;
             }
         }
-        (*encounter).loc_pt = point;
-        (*encounter).log_x = logx(point.x);
-        (*encounter).log_y = logy(point.y);
+        encounter.loc_pt = point;
+        encounter.log_x = logx(point.x);
+        encounter.log_y = logy(point.y);
     }
     let handle = allocate(cx, point);
     if let Some(element) = handle {
-        let mut i = (*encounter).transition_state;
+        let mut i = encounter.transition_state;
         if i != 0 || new {
             if i < 0 {
                 i = -i;
@@ -235,30 +236,30 @@ unsafe fn add(cx: &mut Cx<'_>, encounter: *mut ENCOUNTER, universe: POINT) -> Op
         let tail = cx.elements().tail();
         cx.insert_before(element, tail);
     }
-    (*encounter).hElement = handle.map_or(ptr::null_mut(), |id| cx.elements().raw(id));
+    encounter.hElement = handle.map_or(ptr::null_mut(), |id| cx.elements().raw(id));
     handle
 }
 unsafe fn process(
     cx: &mut Cx<'_>,
-    encounter: *mut ENCOUNTER,
+    encounter: &mut ENCOUNTER,
     universe: POINT,
     ox: i16,
     oy: i16,
     stamp: *mut STAMP,
 ) -> bool {
-    if (*encounter).hElement.is_null() && add(cx, encounter, universe).is_none() {
+    if encounter.hElement.is_null() && add(cx, encounter, universe).is_none() {
         return false;
     }
     let element = cx
         .elements()
-        .id((*encounter).hElement)
+        .id(encounter.hElement)
         .unwrap_or_else(|| panic!("encounter element"));
     if cx.element_mut(element).death.is_some() {
-        if (*encounter).transition_state != 0 && cx.element_mut(element).turn == 0 {
-            (*encounter).transition_state -= 1;
-            if (*encounter).transition_state >= 9 {
+        if encounter.transition_state != 0 && cx.element_mut(element).turn == 0 {
+            encounter.transition_state -= 1;
+            if encounter.transition_state >= 9 {
                 cx.element_mut(element).turn += 1;
-            } else if (*encounter).transition_state == -9 {
+            } else if encounter.transition_state == -9 {
                 cx.element_mut(element).death = None;
                 return false;
             } else {
@@ -274,13 +275,13 @@ unsafe fn process(
         } else if cx.target(element).is_none() {
             let mut facing = (cx.element_mut(element).velocity.travel_angle + 2) >> 2;
             let target = (ARCTAN(
-                universe.x.wrapping_sub((*encounter).loc_pt.x),
-                universe.y.wrapping_sub((*encounter).loc_pt.y),
+                universe.x.wrapping_sub(encounter.loc_pt.x),
+                universe.y.wrapping_sub(encounter.loc_pt.y),
             ) + 2)
                 >> 2;
             let delta = facing.wrapping_sub(target) & 15;
             if delta != 0 || (dx == 0 && dy == 0) {
-                let mut speed = SPEED[(*encounter).race_id as usize] * 16;
+                let mut speed = SPEED[encounter.race_id as usize] * 16;
                 if delta < 8 {
                     facing = facing.wrapping_sub(1);
                 } else {
@@ -304,22 +305,22 @@ unsafe fn process(
                 cx.element_mut(element).thrust = 3;
             }
         }
-        (*encounter).log_x += dx as i32;
-        (*encounter).log_y -= dy as i32;
-        (*encounter).loc_pt = POINT {
-            x: universe_x((*encounter).log_x),
-            y: universe_y((*encounter).log_y),
+        encounter.log_x += dx as i32;
+        encounter.log_y -= dy as i32;
+        encounter.loc_pt = POINT {
+            x: universe_x(encounter.log_x),
+            y: universe_y(encounter.log_y),
         };
-        let radius = (*encounter).radius.wrapping_add(100);
-        let dx = (*encounter)
+        let radius = encounter.radius.wrapping_add(100);
+        let dx = encounter
             .loc_pt
             .x
-            .wrapping_sub((*encounter).origin.x)
+            .wrapping_sub(encounter.origin.x)
             .wrapping_abs() as u16;
-        let dy = (*encounter)
+        let dy = encounter
             .loc_pt
             .y
-            .wrapping_sub((*encounter).origin.y)
+            .wrapping_sub(encounter.origin.y)
             .wrapping_abs() as u16;
         if dx >= radius
             || dy >= radius
@@ -327,9 +328,9 @@ unsafe fn process(
         {
             cx.element_mut(element).flags |= NONSOLID as u16;
             cx.element_mut(element).life = 0;
-            if (*encounter).transition_state == 0 {
+            if encounter.transition_state == 0 {
                 cx.element_mut(element).death = Some(ElementHook::Native(transition));
-                (*encounter).transition_state = -1;
+                encounter.transition_state = -1;
                 cx.element_mut(element).hits = 1;
             } else {
                 cx.element_mut(element).death = None;
@@ -337,19 +338,17 @@ unsafe fn process(
             }
         }
     }
-    let point = (*encounter).loc_pt;
+    let point = encounter.loc_pt;
     let dx = point.x as i32 - universe.x as i32;
     let dy = point.y as i32 - universe.y as i32;
     if (-63..=63).contains(&dx) && (-50..=50).contains(&dy) {
         cx.element_mut(element).next.location = POINT {
-            x: (((*encounter).log_x - cx.world.data.flagship.log_x) as i16 as i32 + (width() >> 1))
+            x: ((encounter.log_x - cx.world.data.flagship.log_x) as i16 as i32 + (width() >> 1))
                 as i16,
-            y: (((*encounter).log_y - cx.world.data.flagship.log_y) as i16 as i32 + (height() >> 1))
+            y: ((encounter.log_y - cx.world.data.flagship.log_y) as i16 as i32 + (height() >> 1))
                 as i16,
         };
-        if cx.element_mut(element).flags & NONSOLID as u16 != 0
-            && (*encounter).transition_state == 0
-        {
+        if cx.element_mut(element).flags & NONSOLID as u16 != 0 && encounter.transition_state == 0 {
             let next = cx.element(element).next.location;
             cx.element_mut(element).current.location = next;
             cx.primitive_style_mut(element).kind = gfx_object_STAMP_PRIM as u8;
@@ -379,14 +378,16 @@ pub(super) unsafe fn process_all(cx: &mut Cx<'_>, universe: POINT, ox: i16, oy: 
         origin: POINT { x: 0, y: 0 },
         frame: SetAbsFrameIndex(cx.kernel.stars_in_space, 91),
     };
-    let queue = ptr::addr_of_mut!(cx.world.data.game.encounter_q);
-    let mut handle = (*queue).head;
-    while !handle.is_null() {
-        let encounter = handle.cast::<ENCOUNTER>();
-        handle = (*encounter).succ;
-        if !process(cx, encounter, universe, ox, oy, &mut stamp) {
-            RemoveQueue(queue, encounter.cast());
-            FreeLink(queue, encounter.cast());
+    let mut next = cx.world.encounters_ref().head();
+    while let Some(id) = next {
+        let encounters = cx.world.encounters_ref();
+        let mut encounter = *encounters.get(id);
+        next = encounters.succ(id);
+        if process(cx, &mut encounter, universe, ox, oy, &mut stamp) {
+            *cx.world.encounters().get_mut(id) = encounter;
+        } else {
+            cx.world.encounters().remove(id);
+            cx.world.encounters().free(id);
         }
     }
 }

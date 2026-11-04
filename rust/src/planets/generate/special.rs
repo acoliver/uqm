@@ -138,7 +138,7 @@ pub trait FleetGroups: Npcs {
     /// `ReinitQueue (&GLOBAL (npc_built_ship_q))`.
     fn reinit_built_queue(&mut self);
     /// `GetHeadLink (&GLOBAL (ip_group_q))`.
-    fn head_ip_group(&mut self) -> Option<&mut IP_GROUP>;
+    fn with_head_ip_group(&mut self, visit: &mut dyn FnMut(&mut IP_GROUP)) -> bool;
 }
 
 /// The shared opening of the fixed-fleet `initNpcs` hooks: take the group

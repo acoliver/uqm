@@ -1460,48 +1460,9 @@ pub struct SHIP_BASE {
     pub captains_name_index: BYTE,
 }
 pub type HSHIPFRAG = HLINK;
-#[repr(C)]
-#[derive(Debug, Copy, Clone, Default)]
-pub struct SHIP_FRAGMENT {
-    pub pred: HLINK,
-    pub succ: HLINK,
-    pub SpeciesID: SPECIES_ID,
-    pub captains_name_index: BYTE,
-    pub race_id: BYTE,
-    pub index: BYTE,
-    pub crew_level: COUNT,
-    pub max_crew: COUNT,
-    pub energy_level: BYTE,
-    pub max_energy: BYTE,
-    pub race_strings: STRING,
-    pub icons: FRAME,
-    pub melee_icon: FRAME,
-}
+pub use crate::engine::world::queues::ShipFragment as SHIP_FRAGMENT;
 pub type HFLEETINFO = HLINK;
-#[repr(C)]
-#[derive(Debug, Copy, Clone, Default)]
-pub struct FLEET_INFO {
-    pub pred: HFLEETINFO,
-    pub succ: HFLEETINFO,
-    pub SpeciesID: SPECIES_ID,
-    pub allied_state: UWORD,
-    pub days_left: BYTE,
-    pub growth_fract: BYTE,
-    pub crew_level: COUNT,
-    pub max_crew: COUNT,
-    pub growth: BYTE,
-    pub max_energy: BYTE,
-    pub loc: POINT,
-    pub race_strings: STRING,
-    pub icons: FRAME,
-    pub melee_icon: FRAME,
-    pub actual_strength: COUNT,
-    pub known_strength: COUNT,
-    pub known_loc: POINT,
-    pub growth_err_term: BYTE,
-    pub func_index: BYTE,
-    pub dest_loc: POINT,
-}
+pub use crate::engine::world::queues::FleetInfo as FLEET_INFO;
 pub const DEAD_GUY: _bindgen_ty_3 = 0;
 pub const GOOD_GUY: _bindgen_ty_3 = 1;
 pub const BAD_GUY: _bindgen_ty_3 = 2;
@@ -1530,7 +1491,7 @@ pub const SYREEN_SHIP: _bindgen_ty_4 = 20;
 pub const BLACK_URQUAN_SHIP: _bindgen_ty_4 = 21;
 pub const YEHAT_REBEL_SHIP: _bindgen_ty_4 = 22;
 pub const URQUAN_DRONE_SHIP: _bindgen_ty_4 = 23;
-pub const SAMATRA_SHIP: _bindgen_ty_4 = 23;
+pub const SAMATRA_SHIP: _bindgen_ty_4 = crate::engine::world::queues::SAMATRA_RACE as _bindgen_ty_4;
 pub const NUM_AVAILABLE_RACES: _bindgen_ty_4 = 24;
 pub type _bindgen_ty_4 = ::std::os::raw::c_uint;
 

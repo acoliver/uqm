@@ -3701,31 +3701,8 @@ pub const Segue_Segue_victory: Segue = 2;
 pub const Segue_Segue_defeat: Segue = 3;
 pub type Segue = ::std::os::raw::c_uint;
 pub type HENCOUNTER = HLINK;
-#[repr(C)]
-#[derive(Debug, Copy, Clone, Default)]
-pub struct brief_ship_info {
-    pub race_id: BYTE,
-    pub crew_level: COUNT,
-    pub max_crew: COUNT,
-    pub max_energy: BYTE,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone, Default)]
-pub struct encounter {
-    pub pred: HENCOUNTER,
-    pub succ: HENCOUNTER,
-    pub hElement: HLINK,
-    pub transition_state: SIZE,
-    pub origin: POINT,
-    pub radius: COUNT,
-    pub race_id: BYTE,
-    pub num_ships: BYTE,
-    pub flags: BYTE,
-    pub loc_pt: POINT,
-    pub ShipList: [BRIEF_SHIP_INFO; 7usize],
-    pub log_x: SDWORD,
-    pub log_y: SDWORD,
-}
+pub use crate::engine::world::queues::BriefShipInfo as brief_ship_info;
+pub use crate::engine::world::queues::EncounterRecord as encounter;
 pub const HAIL: _bindgen_ty_23 = 0;
 pub const ATTACK: _bindgen_ty_23 = 1;
 pub type _bindgen_ty_23 = ::std::os::raw::c_uint;
@@ -3858,14 +3835,8 @@ pub use crate::navigation::groups::live::init_group_info;
 #[cfg(not(test))]
 pub use crate::navigation::groups::live::uninit_group_info;
 
-#[cfg(not(test))]
-pub use crate::navigation::groups::live::GetGroupInfo;
 
-#[cfg(not(test))]
-pub use crate::navigation::groups::live::PutGroupInfo;
 
-#[cfg(not(test))]
-pub use crate::navigation::groups::live::BuildGroups;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct GAME_STATE_FILE {
@@ -3890,22 +3861,7 @@ pub use crate::state::c_api::write_state_file;
 
 pub use crate::state::c_api::seek_state_file;
 pub type HIPGROUP = HLINK;
-#[repr(C)]
-#[derive(Debug, Copy, Clone, Default)]
-pub struct IP_GROUP {
-    pub pred: HIPGROUP,
-    pub succ: HIPGROUP,
-    pub group_counter: UWORD,
-    pub race_id: BYTE,
-    pub sys_loc: BYTE,
-    pub task: BYTE,
-    pub in_system: BYTE,
-    pub dest_loc: BYTE,
-    pub orbit_pos: BYTE,
-    pub group_id: BYTE,
-    pub loc: POINT,
-    pub melee_icon: FRAME,
-}
+pub use crate::engine::world::queues::IpGroup as IP_GROUP;
 pub const IN_ORBIT: _bindgen_ty_24 = 0;
 pub const EXPLORE: _bindgen_ty_24 = 1;
 pub const FLEE: _bindgen_ty_24 = 2;
@@ -3914,8 +3870,6 @@ pub const IGNORE_FLAGSHIP: _bindgen_ty_24 = 4;
 pub const REFORM_GROUP: _bindgen_ty_24 = 8;
 pub type _bindgen_ty_24 = ::std::os::raw::c_uint;
 
-#[cfg(not(test))]
-pub use crate::navigation::groups::live::BuildGroup;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct GROUP_HEADER {
@@ -3927,17 +3881,12 @@ pub struct GROUP_HEADER {
     pub GroupOffset: [DWORD; 65usize],
 }
 
-pub use crate::navigation::groups::ReadGroupHeader;
 
 pub use crate::navigation::groups::write_group_header;
 
-pub use crate::navigation::groups::ReadShipFragment;
 
-pub use crate::navigation::groups::WriteShipFragment;
 
-pub use crate::navigation::groups::ReadIpGroup;
 
-pub use crate::navigation::groups::WriteIpGroup;
 pub const STAR_STRING_BASE: _bindgen_ty_25 = 0;
 pub const DEVICE_STRING_BASE: _bindgen_ty_25 = 133;
 pub const CARGO_STRING_BASE: _bindgen_ty_25 = 162;

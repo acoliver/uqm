@@ -12,7 +12,7 @@ use crate::navigation::globals::in_hqspace;
 
 use crate::planets::solarsys::playerInSolarSystem;
 
-use crate::navigation::groups::live::PutGroupInfo;
+use crate::navigation::groups::live::put_group_info;
 
 pub(crate) unsafe fn capture(name: &[u8]) -> anyhow::Result<SaveFile> {
     let star = live::capture_live_star()?;
@@ -24,7 +24,7 @@ pub(crate) unsafe fn capture(name: &[u8]) -> anyhow::Result<SaveFile> {
     }
     if groups::saves_ip_group_queue(WorldData::current().read(|world| world.game.current_activity))
     {
-        PutGroupInfo(0, u8::MAX);
+        crate::engine::World::current().write(|world| put_group_info(world, 0, u8::MAX));
     }
     let summary = live::capture_live_summary(name)?;
     let lease = World::current();

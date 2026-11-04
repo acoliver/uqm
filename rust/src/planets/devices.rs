@@ -16,7 +16,6 @@ use crate::mainloop::{
 use std::sync::Mutex;
 
 use crate::c_bindings::global_state::{CHMMR_DEFINED, ILWRATH_DEFINED, SAMATRA_DEFINED};
-use crate::collections::queue::{CountLinks, Queue, ReinitQueue};
 use crate::comm::{
     dispatch::ship,
     locdata::{CColor, CRect},
@@ -56,7 +55,7 @@ use crate::battle::{build_native::engine::start_sphere_tracking, sounds::engine:
 
 use crate::navigation::{
     globals::{in_hqspace, in_hyper_space},
-    groups::live::PutGroupInfo,
+    groups::live::put_group_info,
 };
 
 use crate::planets::solarsys::{
@@ -170,13 +169,11 @@ unsafe fn draw(menu: &Menu, old: Option<usize>, refresh: bool) {
 
 unsafe fn reset_groups() {
     crate::c_bindings::global_state::EncounterGroup = 0;
-    PutGroupInfo(0, 255);
-    let world = WorldFields::current();
-    ReinitQueue(std::ptr::addr_of_mut!((**world).game.ip_group_q).cast::<Queue>());
-    assert_eq!(
-        CountLinks(std::ptr::addr_of_mut!((**world).game.npc_built_ship_q).cast::<Queue>()),
-        0
-    );
+    crate::engine::World::current().write(|world| {
+        put_group_info(world, 0, 255);
+        world.ip_groups().reinit();
+        assert_eq!(world.npc_built_ships_ref().count(), 0);
+    });
 }
 
 unsafe fn orbit_is(planet: u8) -> bool {

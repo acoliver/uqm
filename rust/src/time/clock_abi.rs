@@ -1,6 +1,6 @@
 //! C clock API, including the save-compatible intrusive event queue.
 
-use super::clock_bridge::{days_in_month, CEvent};
+use super::clock_bridge::days_in_month;
 use crate::engine::battle::link_queue::LinkId;
 use crate::engine::clock::{GameClock, ScheduledEvent};
 #[cfg(not(test))]

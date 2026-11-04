@@ -6,28 +6,10 @@ use std::ffi::c_int;
 
 use crate::bridge_log::rust_bridge_log_msg;
 use crate::c_bindings::{assert_c_layout, global_state};
-use crate::collections::queue::HLink;
 
 pub use crate::engine::battle::schema::CLOCK_STATE as ClockState;
 
-/// C `EVENT` (clock.h): a scheduled game-clock event, the element type of
-/// `ClockState::event_q`.
-///
-/// `pred` and `succ` are the queue's `LINK` and must stay first.
-#[repr(C)]
-#[derive(Default)]
-pub struct CEvent {
-    pub pred: HLink,
-    pub succ: HLink,
-    pub day_index: u8,
-    pub month_index: u8,
-    pub year_index: u16,
-    pub func_index: u8,
-}
-
-/// `NUM_EVENTS` (gameev.h): the number of event kinds, and the size of the
-/// pool `InitGameClock` allocates for `ClockState::event_q`.
-pub const NUM_EVENTS: usize = global_state::NUM_EVENTS as usize;
+pub use crate::engine::clock::{CEvent, NUM_EVENTS};
 
 mod layout {
     use super::*;

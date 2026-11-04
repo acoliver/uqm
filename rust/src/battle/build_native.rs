@@ -166,13 +166,13 @@ pub(crate) mod engine {
         race: COUNT,
         allied: BOOLEAN,
     ) -> COUNT {
-        let fleet = GetStarShipFromIndex(&raw mut world.data.game.avail_race_q, race);
-        if fleet.is_null() {
+        let mut fleets = world.avail_races();
+        let Some(id) = fleets.at(usize::from(race)) else {
             return 0;
-        }
-        let record = fleet.cast::<FLEET_INFO>();
-        if (*record).allied_state != DEAD_GUY as u16 {
-            (*record).allied_state = if allied != 0 {
+        };
+        let record = fleets.get_mut(id);
+        if record.allied_state != DEAD_GUY as u16 {
+            record.allied_state = if allied != 0 {
                 GOOD_GUY as u16
             } else {
                 BAD_GUY as u16
@@ -184,21 +184,20 @@ pub(crate) mod engine {
     /// # Safety
     /// Race queue and its fleet records must be initialized on the game thread.
     pub unsafe fn start_sphere_tracking(world: &mut crate::engine::World, race: COUNT) -> COUNT {
-        let queue = &raw mut world.data.game.avail_race_q;
-        let fleet = GetStarShipFromIndex(queue, race);
-        if fleet.is_null() {
+        let mut fleets = world.avail_races();
+        let Some(id) = fleets.at(usize::from(race)) else {
+            return 0;
+        };
+        let info = fleets.get_mut(id);
+        if info.actual_strength == 0 && info.allied_state == DEAD_GUY as u16 {
             return 0;
         }
-        let info = fleet.cast::<FLEET_INFO>();
-        if (*info).actual_strength == 0 && (*info).allied_state == DEAD_GUY as u16 {
-            return 0;
-        }
-        if (*info).actual_strength != 0
-            && (*info).known_strength == 0
-            && (*info).actual_strength != INFINITE_RADIUS_NATIVE
+        if info.actual_strength != 0
+            && info.known_strength == 0
+            && info.actual_strength != INFINITE_RADIUS_NATIVE
         {
-            (*info).known_strength = 1;
-            (*info).known_loc = (*info).loc;
+            info.known_strength = 1;
+            info.known_loc = info.loc;
         }
         race
     }

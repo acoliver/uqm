@@ -107,8 +107,6 @@ mod ffi {
 
     pub(super) use crate::planets::orbit::live::FreePlanet;
 
-    pub(super) use crate::navigation::groups::live::GetGroupInfo;
-
     pub(super) use crate::mainloop::input_abi::live::SetMenuSounds;
 
     pub(super) use crate::ui::menu::DoMenuChooser;
@@ -501,10 +499,13 @@ pub(super) unsafe fn uninit_solar_sys() {
     if glob().read(|owner| owner.game.current_activity) & START_ENCOUNTER != 0
         && EncounterGroup != 0
     {
-        ffi::GetGroupInfo(
-            glob().read(|owner| owner.game.battle_group_ref),
-            EncounterGroup,
-        );
+        crate::engine::World::current().write(|world| {
+            crate::navigation::groups::live::get_group_info(
+                world,
+                world.data.game.battle_group_ref,
+                EncounterGroup,
+            )
+        });
         if glob().read(|owner| owner.game.ip_planet) == 0 {
             let point = c_point(glob().read(|owner| owner.game.ship_stamp.origin));
             let planet = closest_planet_interplanetary(&point);
