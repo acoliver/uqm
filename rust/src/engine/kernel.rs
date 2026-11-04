@@ -61,10 +61,6 @@ pub struct Kernel {
     pub(crate) star_planes: Box<[StarPlane; 3]>,
 }
 impl Kernel {
-    pub(crate) fn ship_teardown_needed(&self, activity: u16) -> bool {
-        self.ships_initialized || activity as u8 == crate::ships::native::abi::IN_ENCOUNTER as u8
-    }
-
     pub(crate) fn begin_battle(&mut self) {
         assert!(!self.battle_active, "nested battle session");
         self.battle_active = true;

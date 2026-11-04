@@ -817,19 +817,3 @@ mod processing;
 
 #[path = "ship_assets.rs"]
 mod ship_assets;
-
-#[cfg(not(test))]
-impl Cx<'_> {
-    pub(crate) fn write_back_surviving_ship_crew(&mut self, ships: [Option<ShipId>; 2]) {
-        // SAFETY: this context owns the matching battle and fragment queues through writeback.
-        unsafe {
-            for side in (0..2).rev() {
-                if let Some(ship) = ships[side].filter(|_| {
-                    crate::battle::encount_native::fleet_is_infinite(self.world, side as u16) == 0
-                }) {
-                    crate::battle::context_access::reader_legacy::update_ship_frag_crew(self, ship);
-                }
-            }
-        }
-    }
-}

@@ -19,8 +19,8 @@ fn ship_teardown_is_idempotent_without_an_arena_and_preserves_encounter_recovery
                 let element = cx.alloc_element().unwrap();
                 cx.put(element);
                 cx.world.set_activity(SUPER_MELEE as u16);
-                uqm_rust::ships::native_adapters::uninit_ships(cx);
-                uqm_rust::ships::native_adapters::uninit_ships(cx);
+                uqm_rust::game_init::space_resources::uninit_ships(cx);
+                uqm_rust::game_init::space_resources::uninit_ships(cx);
                 assert_eq!(cx.elements().head(), Some(element));
                 assert_eq!(cx.world.activity(), SUPER_MELEE as u16);
                 cx.unlink(element);
@@ -28,9 +28,9 @@ fn ship_teardown_is_idempotent_without_an_arena_and_preserves_encounter_recovery
 
                 cx.world
                     .set_activity(IN_ENCOUNTER as u16 | IN_BATTLE as u16);
-                uqm_rust::ships::native_adapters::uninit_ships(cx);
+                uqm_rust::game_init::space_resources::uninit_ships(cx);
                 assert_eq!(cx.world.activity(), IN_ENCOUNTER as u16);
-                uqm_rust::ships::native_adapters::uninit_ships(cx);
+                uqm_rust::game_init::space_resources::uninit_ships(cx);
                 assert_eq!(cx.world.activity(), IN_ENCOUNTER as u16);
                 assert!(cx.elements().head().is_none());
             });

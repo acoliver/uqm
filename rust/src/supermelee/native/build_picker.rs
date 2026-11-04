@@ -34,6 +34,7 @@ pub(super) mod live {
     use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
     use crate::front_end::fmv::DoShipSpin;
     use crate::graphics::{drawable_abi, geometry_ffi, native_abi};
+    use crate::mainloop::input_abi::live::DoInput;
     use crate::ships::native::abi::*;
     use std::{mem, ptr};
 

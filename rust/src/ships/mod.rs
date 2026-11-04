@@ -17,6 +17,4 @@ pub mod writeback;
 
 pub mod ffi;
 
-pub mod native_adapters;
-
 pub mod hook_registry;

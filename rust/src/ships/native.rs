@@ -45,9 +45,6 @@ pub mod abi {
     };
 
     #[cfg(not(test))]
-    pub use crate::mainloop::input_abi::live::{CurrentInputToBattleInput, DoInput};
-
-    #[cfg(not(test))]
     pub unsafe fn DoMenuChooser(menu: *mut MENU_STATE, first: BYTE) -> BOOLEAN {
         use crate::ui::menu::DoMenuChooser as choose;
         choose(menu.cast(), first)
