@@ -10,19 +10,7 @@ pub struct LoadedMusic(std::ptr::NonNull<c_void>);
 
 impl LoadedMusic {
     pub fn load(resource: &std::ffi::CStr) -> Option<Self> {
-        // SAFETY: the terminated key and checked resource type authorize music ownership.
-        unsafe {
-            let kind = crate::resource::ffi_bridge::res_GetResourceType(resource.as_ptr());
-            if kind.is_null() {
-                return None;
-            }
-            assert_eq!(
-                std::ffi::CStr::from_ptr(kind),
-                c"MUSICRES",
-                "expected a music resource: {resource:?}"
-            );
-            std::ptr::NonNull::new(LoadMusicInstance(resource.as_ptr())).map(Self)
-        }
+        crate::resource::ffi_bridge::detach_resource_of_type(resource, "MUSICRES").map(Self)
     }
 
     pub fn as_raw(&self) -> *mut c_void {
