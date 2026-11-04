@@ -391,7 +391,7 @@ mod tests {
             POINT { x: 1, y: 4 },
             POINT { x: 2, y: 9 },
         ];
-        let mut block = block(&mut points);
+        let mut block = block(&points);
         {
             block.sort();
             block.wrap(0, 3, -2, 10);
@@ -419,7 +419,7 @@ mod tests {
                 POINT { x: 3, y: 9 },
             ];
             let mut expected = points;
-            let mut block = block(&mut points);
+            let mut block = block(&points);
             {
                 block.sort();
                 for dy in [-3, 1, 8, -7, 0, 2, -1] {

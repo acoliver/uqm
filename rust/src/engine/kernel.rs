@@ -46,7 +46,7 @@ pub struct Kernel {
     battle_active: bool,
     pub(crate) display: super::battle::display::DisplayPool,
     pub(crate) master_queue: super::battle::kernel::MasterCatalog,
-    pub player_input: [Option<crate::engine::battle::input::InputContext>; 2],
+    pub(crate) player_input: [Option<crate::engine::battle::input::InputContext>; 2],
     pub(crate) instant_victory: u32,
     pub(crate) battle_music: MUSIC_REF,
     pub(crate) ditty_playing: u32,

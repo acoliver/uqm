@@ -1,4 +1,3 @@
-use crate::engine::battle::schema::GETMELEE_STATE;
 use crate::engine::battle::schema::{FlashState, FlashType};
 pub use crate::engine::battle::{CollisionHook, ElementHook};
 // Shared engine records used by the Rust runtime.

@@ -96,7 +96,7 @@ unsafe fn battle_network() -> BattleNetwork {
             if cx.kernel.player_control[side] & NETWORK_CONTROL != 0 {
                 cx.kernel.player_input[side]
                     .as_mut()
-                    .expect("missing player input")
+                    .unwrap_or_else(|| panic!("missing player input"))
                     .connect(result.1.clone());
             }
         }
@@ -244,7 +244,7 @@ pub(crate) mod engine {
                     cx.ship_state_mut(ship).control = player_control(side);
                     let context = cx.kernel.player_input[side]
                         .clone()
-                        .expect("missing player input");
+                        .unwrap_or_else(|| panic!("missing player input"));
                     let mut input = match context.source() {
                         crate::engine::battle::input::InputSource::Human => {
                             cx.human_input(context.player())
@@ -399,7 +399,7 @@ pub(crate) mod engine {
         for side in 0..2 {
             if player_control(side) & NETWORK_CONTROL != 0 {
                 return player_input(side)
-                    .expect("missing player input")
+                    .unwrap_or_else(|| panic!("missing player input"))
                     .network()
                     .player_order(i);
             }

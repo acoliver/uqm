@@ -3602,11 +3602,11 @@ mod ship_abi_tests {
     fn velocity_adapters_preserve_signed_components_and_frame_steps() {
         unsafe {
             let mut velocity: VELOCITY_DESC = std::mem::zeroed();
-            (velocity).set_components(i32::from(96), i32::from(-64));
+            (velocity).set_components(96, -64);
             let (velocity_x, velocity_y) = (velocity).get_current_components();
 let (mut dx, mut dy) = (velocity_x as i16, velocity_y as i16);
             assert_eq!((dx, dy), (96, -64));
-            (velocity).delta_components(i32::from(32), i32::from(-32));
+            (velocity).delta_components(32, -32);
             { let (velocity_x, velocity_y) = (velocity).get_current_components();
 (dx, dy) = (velocity_x as i16, velocity_y as i16); };
             assert_eq!((dx, dy), (128, -96));

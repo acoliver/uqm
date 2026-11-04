@@ -782,7 +782,7 @@ fn frameset_and_media_identity(directory: &Path) {
     }
     observe_test_frames(&descriptor.ship_data.ship, "test-ship");
     observation::assign_set(
-        &mut element.current.frames,
+        &mut element.current.image.frames,
         uqm_rust::engine::battle::frames::Frames::shared(
             uqm_rust::engine::battle::frames::SharedFrames::Fixture(0),
             descriptor.ship_data.ship.clone(),
@@ -813,7 +813,7 @@ fn frameset_and_media_identity(directory: &Path) {
     let element = &mut element;
     observe_test_frames(&replacement.ship_data.ship, "replacement-ship");
     observation::assign_set(
-        &mut element.next.frames,
+        &mut element.next.image.frames,
         uqm_rust::engine::battle::frames::Frames::shared(
             uqm_rust::engine::battle::frames::SharedFrames::Fixture(0),
             replacement.ship_data.ship.clone(),
@@ -888,10 +888,10 @@ fn retired_space_does_not_borrow_released_frames(directory: &Path) {
     let native = battle::NativeFrameSet::new(24);
     // SAFETY: the registered fixture retains all 24 frame slots.
     let frame = FrameSelection::retain(native.frame(23).cast());
-    element.current.frame = frame.clone();
-    element.next.frame = frame;
+    element.current.image.frame = frame.clone();
+    element.next.image.frame = frame;
     drop(native);
-    element.current.frames = uqm_rust::engine::battle::frames::Frames::ABSENT;
+    element.current.image.frames = uqm_rust::engine::battle::frames::Frames::ABSENT;
     // SAFETY: the element pool and its selections remain owned after space teardown.
     // The retired journal graph must not be traversed by the observer.
     unsafe {
@@ -900,7 +900,7 @@ fn retired_space_does_not_borrow_released_frames(directory: &Path) {
     observation::record(Event::Allocate(element.pointer() as usize));
     observation::record(Event::Drawable(17));
     observation::record(Event::Frame {
-        address: element.current.frame.raw() as usize,
+        address: element.current.image.frame.raw() as usize,
         owner: 17,
         index: 23,
     });
@@ -911,10 +911,7 @@ fn retired_space_does_not_borrow_released_frames(directory: &Path) {
     assert_eq!(fields["elements.0.current.frame.index"], "23");
     assert_eq!(fields["elements.0.next.frame.index"], "23");
     assert_eq!(fields["elements.0.current.frame.retired"], "true");
-    assert_eq!(
-        fields["elements.0.flags"],
-        element.state_flags.bits().to_string()
-    );
+    assert_eq!(fields["elements.0.flags"], element.state_flags.to_string());
     // SAFETY: detach the stack element before it is dropped.
     unsafe {
         clear_queues();

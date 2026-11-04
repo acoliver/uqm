@@ -431,7 +431,7 @@ mod cffi {
         }
 
         fn clear_player_input_all(&self) {
-            unsafe { Kernel::current().write(|kernel| c_extern::ClearPlayerInputAll(kernel)) }
+            Kernel::current().write(c_extern::ClearPlayerInputAll)
         }
 
         fn init_communication(&self, conversation: u32) {

@@ -159,7 +159,11 @@ pub mod live {
                 unsafe { process(state, usize::from(player), 8) }
             }
             InputSource::Network(_) => {
-                state.net.as_ref().expect("missing net").flush();
+                state
+                    .net
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("missing net"))
+                    .flush();
                 let p = &mut state.player[usize::from(player)];
                 if p.remoteSelected != 0 {
                     p.done = 1;
@@ -200,7 +204,11 @@ pub mod live {
                 if (*state).player[player].selecting == 0 || (*state).player[player].done != 0 {
                     continue;
                 }
-                if select_ship(&input.expect("missing player input"), &mut *state) == 0 {
+                if select_ship(
+                    &input.unwrap_or_else(|| panic!("missing player input")),
+                    &mut *state,
+                ) == 0
+                {
                     abort = true;
                     break;
                 }

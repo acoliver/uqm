@@ -815,15 +815,6 @@ impl Cx<'_> {
     }
 }
 
-impl Cx<'_> {
-    /// # Safety
-    /// Legacy game-thread access must not retain record borrows across callbacks.
-    #[cfg(not(test))]
-    pub(crate) unsafe fn records(&mut self) -> &mut super::table::Records {
-        self.kernel.elements.records_mut()
-    }
-}
-
 #[path = "androsynth_template.rs"]
 pub(crate) mod androsynth_template;
 #[path = "template.rs"]

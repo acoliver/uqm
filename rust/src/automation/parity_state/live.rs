@@ -112,8 +112,7 @@ unsafe fn display_elements(
     elements: &crate::engine::battle::ElementTable,
     groups: Option<&crate::engine::battle::record::QUEUE>,
 ) -> Vec<ElementObservation> {
-    // SAFETY: the caller retains the immutable source authorities throughout observation.
-    unsafe { crate::battle::context_access::observe::elements(elements, groups) }
+    crate::battle::context_access::observe::elements(elements, groups)
 }
 
 fn visuals(fields: &mut Fields, prefix: &str, element: &ElementObservation, journal: &mut Journal) {

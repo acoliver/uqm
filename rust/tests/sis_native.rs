@@ -164,7 +164,7 @@ fn hyperspace_fuel_brakes_and_quasispace_allows_thrust_without_fuel() {
             assert!(ship.descriptor_mut().callbacks()[3] == 0);
             assert_eq!(ship.descriptor_mut().characteristics.max_thrust, 8);
             assert!(ship.descriptor_mut().ship_info.icons_rsc.is_null());
-            ((*ship.ptr()).velocity).set_components(i32::from(256), i32::from(0));
+            ((*ship.ptr()).velocity).set_components(256, 0);
             ship.ship_mut().cur_status_flags = THRUST as u16;
             uqm_rust::engine::World::current().write(|world| {
                 set_game_state(world, uqm_rust::engine::StoryKey::ARILOU_SPACE_SIDE, 0)

@@ -195,7 +195,7 @@ pub(crate) mod engine {
             && kernel.player_input.iter().all(|input| {
                 input
                     .as_ref()
-                    .expect("missing player input")
+                    .unwrap_or_else(|| panic!("missing player input"))
                     .battle_end_ready()
             })
     }

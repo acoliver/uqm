@@ -572,7 +572,7 @@ fn skiff_stops_dead_unless_the_thrust_delay_is_running() {
             let mut skiff = Skiff::new(&_battle);
             let ship = skiff.ship;
             (*ship).velocity.travel_angle = 37;
-            ((*ship).velocity).delta_components(i32::from(640), i32::from(-320));
+            ((*ship).velocity).delta_components(640, -320);
             skiff.fleet.fixture.ship_mut().cur_status_flags = (SHIP_AT_MAX_SPEED | THRUST) as u16;
 
             // thrust_wait != 0: the engine is still coasting the thrust delay.
@@ -609,7 +609,7 @@ fn special_key_starts_the_teleport() {
         let mut skiff = Skiff::new(&_battle);
         let ship = skiff.ship;
         (*ship).velocity.travel_angle = 37;
-        ((*ship).velocity).delta_components(i32::from(640), i32::from(-320));
+        ((*ship).velocity).delta_components(640, -320);
         (*ship).thrust = 3;
         skiff.fleet.fixture.ship_mut().cur_status_flags =
             (SHIP_AT_MAX_SPEED | LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as u16;

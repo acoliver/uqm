@@ -196,7 +196,7 @@ fn horn_uses_next_location_exact_facing_speed_and_offsets_without_inheriting_vel
         unsafe {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_THRADDASH_ID, 1, [16, 16, 10], [4, 4]);
-            ((*ship.ptr()).velocity).set_components(i32::from(1000), i32::from(-1000));
+            ((*ship.ptr()).velocity).set_components(1000, -1000);
             (*ship.ptr()).next.location = POINT {
                 x: i16::MAX - 5,
                 y: i16::MIN + 5,
@@ -430,7 +430,7 @@ fn no_key_and_exhausted_energy_leave_velocity_and_queue_alone() {
         unsafe {
             let mut ship =
                 Ship::with_frames(&_battle, SPECIES_ID_THRADDASH_ID, 0, [16, 16, 10], [4, 4]);
-            ((*ship.ptr()).velocity).set_components(i32::from(123), i32::from(-456));
+            ((*ship.ptr()).velocity).set_components(123, -456);
             let v = velocity_fields(&(*ship.ptr()).velocity);
             observation::enable();
             for (current, old, expected) in [
@@ -485,7 +485,7 @@ fn napalm_materializes_without_decaying_and_initializes_the_intersection_from_ne
             (*e).next.image.frame = next_frames.selection(7);
             (*e).current.location = POINT { x: -9, y: 13 };
             (*e).next.location = POINT { x: 42, y: -5 };
-            ((*e).velocity).set_components(i32::from(1001), i32::from(-4003));
+            ((*e).velocity).set_components(1001, -4003);
             (*e).velocity.error.width = 19;
             let callback = (*e)
                 .preprocess_func
@@ -524,7 +524,7 @@ fn napalm_decay_wait_and_loop_boundary_match_c_including_last_frame_wrap() {
             hooks::invoke_element_pointer(callback, e);
             (*e).state_flags &= !(APPEARING as u16);
             for wait in (0..5).rev() {
-                ((*e).velocity).set_components(i32::from(77), i32::from(99));
+                ((*e).velocity).set_components(77, 99);
                 with_rng(3, 0, || hooks::invoke_element_pointer(callback, e));
                 assert_eq!((*e).turn, wait);
                 assert_eq!((*e).next.image.frame.raw(), ship.raw_frame(2, 9));
@@ -687,7 +687,7 @@ fn entice_ship_geometry_uses_next_locations_and_size_truncation() {
                 Ship::with_frames(&_battle, SPECIES_ID_THRADDASH_ID, 0, [16, 16, 10], [4, 4]);
             let enemy =
                 Ship::with_frames(&_battle, SPECIES_ID_THRADDASH_ID, 1, [16, 16, 10], [4, 4]);
-            ((*enemy.ptr()).velocity).set_components(i32::from(513), i32::from(0));
+            ((*enemy.ptr()).velocity).set_components(513, 0);
             for (ship_y, enemy_y, boost) in [
                 (4000, 4400, true),
                 (4000, 3600, false),
