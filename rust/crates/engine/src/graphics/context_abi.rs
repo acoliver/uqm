@@ -30,7 +30,19 @@ pub static mut _GraphicsStatusFlags: u8 = 0;
 #[no_mangle]
 pub static mut _pCurContext: *mut context_desc = ptr::null_mut();
 #[no_mangle]
-pub static mut _locPrim: PRIMITIVE = unsafe { std::mem::zeroed() };
+pub static mut _locPrim: PRIMITIVE = PRIMITIVE {
+    Links: 0,
+    Type: 0,
+    color: Color {
+        r: 0,
+        g: 0,
+        b: 0,
+        a: 0,
+    },
+    Object: PRIM_DESC {
+        Point: POINT { x: 0, y: 0 },
+    },
+};
 #[no_mangle]
 pub static mut _CurFontPtr: *mut font_desc = ptr::null_mut();
 #[cfg(feature = "debug-process")]

@@ -30,6 +30,14 @@ impl ContextFrame {
     }
 }
 
+enum Operation {
+    Select,
+    Background(Color),
+    Frame(ContextFrame),
+    Clip(RECT),
+    Clear,
+}
+
 #[derive(Clone)]
 pub struct ContextLease(Rc<Allocation>);
 
@@ -43,44 +51,56 @@ impl ContextLease {
         Self(allocation.unwrap_or_else(|| panic!("context is unowned or retired: {context:p}")))
     }
 
-    pub fn select(&self) {
+    fn apply(&self, operation: Operation) {
         assert_eq!(*self.0.owner, std::thread::current().id());
-        // SAFETY: the lease retains this context, and selection stays on its graphics thread.
-        unsafe { context_abi::SetContext(self.0.context.as_ptr()) };
+        // SAFETY: the lease owns the selected context on this graphics thread.
+        // Frame changes carry allocation leases; drawing and clipping retain the
+        // current target before the native operation can dereference it.
+        unsafe {
+            context_abi::SetContext(self.0.context.as_ptr());
+            let _target = if matches!(operation, Operation::Clip(_) | Operation::Clear) {
+                Some(ContextFrame::retain(NonNull::new(
+                    self.0.context.as_ref().ForeGroundFrame,
+                )))
+            } else {
+                None
+            };
+            match operation {
+                Operation::Select => (),
+                Operation::Background(color) => {
+                    context_abi::SetContextBackGroundColor(color);
+                }
+                Operation::Frame(target) => {
+                    drawable_abi::SetContextFGFrame(target.frame);
+                    *self.0.target.borrow_mut() = Some(target);
+                }
+                Operation::Clip(mut rect) => {
+                    context_abi::SetContextClipRect(&mut rect);
+                }
+                Operation::Clear => frame_abi::ClearDrawable(),
+            }
+        }
+    }
+
+    pub fn select(&self) {
+        self.apply(Operation::Select);
     }
 
     pub fn set_background(&self, color: Color) {
-        self.select();
-        // SAFETY: selection and the retained context belong to this graphics thread.
-        unsafe { context_abi::SetContextBackGroundColor(color) };
+        self.apply(Operation::Background(color));
     }
 
     /// Retain the registered target allocation before changing the context's frame.
     pub fn set_frame(&self, target: ContextFrame) {
-        self.select();
-        // SAFETY: non-null frame addresses were validated against the retained allocation.
-        unsafe { drawable_abi::SetContextFGFrame(target.frame) };
-        *self.0.target.borrow_mut() = Some(target);
+        self.apply(Operation::Frame(target));
     }
 
-    fn retain_target(&self) -> ContextFrame {
-        // SAFETY: this reads a field of the retained context, not the referenced frame.
-        let frame = unsafe { self.0.context.as_ref().ForeGroundFrame };
-        ContextFrame::retain(NonNull::new(frame))
-    }
-
-    pub fn set_clip(&self, mut rect: RECT) {
-        self.select();
-        let _target = self.retain_target();
-        // SAFETY: the context and any non-null target remain retained through clipping.
-        unsafe { context_abi::SetContextClipRect(&mut rect) };
+    pub fn set_clip(&self, rect: RECT) {
+        self.apply(Operation::Clip(rect));
     }
 
     pub fn clear(&self) {
-        self.select();
-        let _target = self.retain_target();
-        // SAFETY: the context and any non-null target remain retained through submission.
-        unsafe { frame_abi::ClearDrawable() };
+        self.apply(Operation::Clear);
     }
 }
 

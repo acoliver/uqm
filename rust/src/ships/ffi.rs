@@ -29,13 +29,14 @@ pub unsafe extern "C" fn rust_ships_init() -> CCount {
         }
 
         #[cfg(not(test))]
-        unsafe {
+        {
             use crate::ships::native_adapters::rust_bridge_init_battle_arena;
 
             // Delegate arena setup entirely to C — this calls the original
             // InitShips() body which handles InitSpace, display list, galaxy,
             // asteroids, planets, hyperspace setup, etc.
-            let num_ships = rust_bridge_init_battle_arena();
+            // SAFETY: the lifecycle entry runs on the serialized game thread.
+            let num_ships = unsafe { rust_bridge_init_battle_arena() };
             if num_ships <= 0 {
                 #[cfg(debug_assertions)]
                 eprintln!(
@@ -94,7 +95,7 @@ pub unsafe extern "C" fn rust_ships_uninit() {
         }
 
         #[cfg(not(test))]
-        unsafe {
+        {
             use crate::ships::native_adapters::uninit_ships as rust_bridge_uninit_ships;
 
             // H2: Reconcile Rust-side state with C-side state before
@@ -151,7 +152,8 @@ pub unsafe extern "C" fn rust_ships_uninit() {
             // C-side null guards (C3): The C helper guards against null
             // StarShipPtr and null descriptor on each element, so
             // partial-init states are handled safely.
-            rust_bridge_uninit_ships();
+            // SAFETY: the lifecycle entry exclusively owns game-thread arena teardown.
+            unsafe { rust_bridge_uninit_ships() };
 
             // Update Rust-side state tracking
             super::lifecycle::mark_ships_uninitialized();
