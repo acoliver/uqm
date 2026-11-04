@@ -186,13 +186,6 @@ impl Controller {
                 i64::from(dx) * i64::from(dx) + i64::from(dy) * i64::from(dy),
             )
         };
-        if !s.bomb_carrier && s.selected_species == Some(5) && remaining != 0 {
-            return Progress::Running(Controls {
-                flight: fury_engagement(s, player),
-                special: true,
-                ..Controls::default()
-            });
-        }
         if !s.bomb_carrier && s.selected_species == Some(2) && remaining != 0 {
             if let Some(hazard) = s
                 .hazards
@@ -248,26 +241,7 @@ impl Controller {
             });
         }
         if !s.bomb_carrier {
-            if !s
-                .generators
-                .iter()
-                .any(|g| Some(g.id) == self.target && g.hit_points > 0)
-            {
-                self.target = s
-                    .generators
-                    .iter()
-                    .filter(|g| g.hit_points > 0)
-                    .min_by_key(|g| distance(g.x, g.y).2)
-                    .map(|g| g.id);
-            }
-            let Some(target) = s.generators.iter().find(|g| Some(g.id) == self.target) else {
-                return Progress::Running(Controls::default());
-            };
-            return Progress::Running(Controls {
-                flight: escort_approach(s, player, target),
-                special: s.selected_species == Some(5),
-                ..Controls::default()
-            });
+            return Progress::Running(self.generator_engagement(s, player));
         }
         let (dx, dy, _) = distance(s.gate.0, s.gate.1);
         let bearing = bearing_facing(dx, dy).unwrap_or(player.facing);
@@ -283,6 +257,42 @@ impl Controller {
             special: false,
             ..Controls::default()
         })
+    }
+    fn generator_engagement(
+        &mut self,
+        s: &Snapshot,
+        player: super::battle_fight::ShipState,
+    ) -> Controls {
+        if s.selected_species == Some(5) {
+            return Controls {
+                flight: fury_engagement(s, player),
+                special: true,
+                ..Controls::default()
+            };
+        }
+        if !s
+            .generators
+            .iter()
+            .any(|g| Some(g.id) == self.target && g.hit_points > 0)
+        {
+            self.target = s
+                .generators
+                .iter()
+                .filter(|g| g.hit_points > 0)
+                .min_by_key(|g| {
+                    let dx = i64::from(shortest_path_delta(player.x, g.x, s.arena.0));
+                    let dy = i64::from(shortest_path_delta(player.y, g.y, s.arena.1));
+                    dx * dx + dy * dy
+                })
+                .map(|g| g.id);
+        }
+        let Some(target) = s.generators.iter().find(|g| Some(g.id) == self.target) else {
+            return Controls::default();
+        };
+        Controls {
+            flight: escort_approach(s, player, target),
+            ..Controls::default()
+        }
     }
 }
 
