@@ -371,7 +371,8 @@ pub(crate) mod engine {
         if cx.race_stats(ship).ship_info.max_crew > MAX_CREW_SIZE as COUNT
             || cx.race_stats(ship).ship_info.ship_flags & PLAYER_CAPTAIN as u16 != 0
         {
-            DrawBattleCrewAmount(cx.ship_info_pointer(ship), y);
+            let info = cx.ship_info_pointer(ship);
+            cx.with_legacy(|| DrawBattleCrewAmount(info, y));
         }
         UnbatchGraphics();
     }

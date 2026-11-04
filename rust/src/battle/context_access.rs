@@ -157,7 +157,7 @@ impl Cx<'_> {
         let info = self.ship_info_pointer(ship);
         // SAFETY: the descriptor retains its owned status data while graphics are drawn.
         unsafe {
-            crate::ui::shipstat::init_ship_status(info, Some(ship), clip);
+            self.with_legacy(|| crate::ui::shipstat::init_ship_status(info, Some(ship), clip));
             if !clipped {
                 let old = SetContext(self.kernel.status_context);
                 crate::battle::status_native::draw_captains_window(self, ship);
@@ -418,7 +418,7 @@ mod status_native_access {
         pub(crate) fn draw_energy_label(&mut self, y: i16, change: i16) {
             // SAFETY: the status drawing context and fonts are initialized.
             unsafe {
-                DrawCrewFuelString(y, change);
+                self.with_legacy(|| DrawCrewFuelString(y, change));
             }
         }
         pub(crate) fn draw_captain_controls(
@@ -575,7 +575,7 @@ impl Cx<'_> {
         let info = self.ship_info_pointer(ship);
         // SAFETY: the checked descriptor and status resources remain live during drawing.
         unsafe {
-            crate::ships::native::abi::DeltaStatistics(info, y, crew, energy);
+            self.with_legacy(|| crate::ships::native::abi::DeltaStatistics(info, y, crew, energy));
         }
     }
 }
