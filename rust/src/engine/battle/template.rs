@@ -147,7 +147,7 @@ mod tests {
         assert_eq!(descriptor.raw.resources.strings, resources.strings);
         assert_eq!(descriptor.raw.resources.icons, resources.icons);
         assert_eq!(descriptor.raw.resources.ship, resources.ship);
-        let descriptor = RaceDesc::from_legacy(descriptor.into_legacy());
+        let descriptor = RaceDesc::from_storage(Box::new(descriptor.into_legacy()));
         assert_eq!(descriptor.raw.resources.strings, resources.strings);
         assert_eq!(descriptor.raw.resources.icons, resources.icons);
         assert_eq!(descriptor.raw.resources.ship, resources.ship);
