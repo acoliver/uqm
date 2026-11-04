@@ -240,6 +240,7 @@ pub(crate) mod live {
             last_input_time: 0,
             h_music: ptr::null_mut(),
             netplay: Default::default(),
+            catalog: Vec::new(),
         }
     }
 
@@ -275,8 +276,11 @@ pub(crate) mod live {
             state.cur_index = u16::MAX;
             InitMeleeLoadState(&mut state);
             (**WorldFields::current()).game.current_activity = SUPER_MELEE as u16;
-            (**KernelOwner::current()).game_sounds =
-                capture_sound(LoadSound(GAME_SOUNDS.as_ptr().cast()));
+            let game_sounds = capture_sound(LoadSound(GAME_SOUNDS.as_ptr().cast()));
+            state.catalog = KernelOwner::current().write(|kernel| {
+                kernel.game_sounds = game_sounds;
+                crate::ships::master_native::choices(&kernel.master_queue)
+            });
             crate::supermelee::native::battle_picker::live::BuildPickMeleeFrame();
             MeleeFrame =
                 CaptureDrawable(LoadGraphic(MELEE_SCREEN_PMAP_ANIM.as_ptr().cast()).cast());
@@ -330,6 +334,7 @@ pub(crate) mod live {
             delete_context(state.random_context);
             MeleeSetup_delete(state.melee_setup);
             FlushInput();
+
         });
     }
 }

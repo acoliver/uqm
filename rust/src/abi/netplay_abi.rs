@@ -474,7 +474,6 @@ pub use crate::supermelee::native::teams::MeleeSetup_new;
 
 pub use crate::supermelee::native::teams::MeleeSetup_delete;
 
-pub use crate::supermelee::native::teams::MeleeSetup_setShip;
 
 pub use crate::supermelee::native::teams::MeleeSetup_getShip;
 

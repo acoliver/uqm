@@ -1597,11 +1597,7 @@ pub use crate::engine::world::fleet::start_sphere_tracking;
 
 
 
-#[cfg(not(test))]
-pub use crate::ships::loader_native::engine::load_ship;
 
-#[cfg(not(test))]
-pub use crate::ships::loader_native::engine::unload_ship;
 #[cfg(not(test))]
 pub use crate::ui::settings::stop_music;
 #[cfg(test)]

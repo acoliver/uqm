@@ -25,6 +25,7 @@ pub struct MeleeState {
     pub last_input_time: TimeCount,
     pub h_music: MUSIC_REF,
     pub netplay: NetplaySession,
+    pub(crate) catalog: Vec<crate::ships::master_native::ShipChoice>,
 }
 
 pub struct SessionCore {

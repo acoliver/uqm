@@ -35,7 +35,12 @@ unsafe extern "C" fn on_battle_frame() {
 }
 
 unsafe extern "C" fn background_init_kernel(timeout: u32) {
-    crate::ships::master_native::LoadMasterShipList(Some(crate::threading::legacy_abi::TaskSwitch));
+    for species in SPECIES_ID_ARILOU_ID..=SPECIES_ID_LAST_MELEE_ID {
+        crate::threading::legacy_abi::TaskSwitch();
+        crate::app::bridge::enter(|cx| {
+            crate::ships::master_native::engine::load_entry(cx.world, cx.kernel, species)
+        });
+    }
     crate::threading::legacy_abi::TaskSwitch();
     Kernel::current().write(|kernel| {
         crate::game_init::kernel_abi::InitGameKernel(

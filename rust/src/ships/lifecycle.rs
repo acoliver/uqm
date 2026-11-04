@@ -373,15 +373,10 @@ pub(crate) fn mark_ships_uninitialized() {
 
 /// Query whether ships are currently initialized.
 /// Used by uninit idempotence guard (P03) — not test-only.
+#[cfg(not(test))]
 pub(crate) fn is_ships_initialized_for_uninit() -> bool {
     let state = BATTLE_STATE.lock().unwrap_or_else(|e| e.into_inner());
     state.ships_initialized
-}
-
-/// Query whether ships are currently initialized (test convenience).
-#[cfg(test)]
-pub(crate) fn is_ships_initialized() -> bool {
-    is_ships_initialized_for_uninit()
 }
 
 // ---------------------------------------------------------------------------

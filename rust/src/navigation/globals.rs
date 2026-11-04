@@ -96,9 +96,9 @@ unsafe fn initialize_races(cx: &mut crate::engine::battle::Cx<'_>) {
                 .unwrap_or_else(|| panic!("master species {ship}"));
             copy_fleet(fleet, &master.info, &master.fleet);
         } else {
-            if let Some(desc) = load_ship(cx.world, ship, 0) {
+            if let Some(desc) = crate::engine::battle::RaceDesc::load(cx.world, ship, false) {
                 copy_fleet(fleet, desc.info(), desc.fleet());
-                unload_ship(cx.world, desc, 0, 0);
+                desc.unload(cx.world, false, false);
             }
         }
         (*fleet).allied_state = BAD_GUY as u16;

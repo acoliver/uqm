@@ -60,7 +60,7 @@ pub unsafe fn uninit_ships() {
             next = cx.elements().succ(id);
             if let Some((ship, descriptor)) = retire_element_ship(cx, id, crew, replacement) {
                 ships[cx.ship_state(ship).player as usize] = Some(ship);
-                crate::ships::loader_native::unload_ship(cx.world, descriptor, 1, 1);
+                descriptor.unload(cx.world, true, true);
             }
         }
         let activity = cx.world.activity() & !(IN_BATTLE as u16);
@@ -78,7 +78,7 @@ pub unsafe fn uninit_ships() {
             while let Some(ship) = next {
                 next = cx.next_ship(ship);
                 if let Some(descriptor) = cx.take_descriptor(ship) {
-                    crate::ships::loader_native::unload_ship(cx.world, descriptor, 1, 1);
+                    descriptor.unload(cx.world, true, true);
                 }
             }
         }

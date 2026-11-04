@@ -49,7 +49,13 @@ pub unsafe extern "C" fn GetShipBox(r: *mut RECT, side: u16, row: u16, col: u16)
         },
     };
 }
-pub(super) unsafe fn ship_box(side: u16, index: usize, ship: u32, highlight: bool) {
+pub(super) unsafe fn ship_box(
+    catalog: &[crate::ships::master_native::ShipChoice],
+    side: u16,
+    index: usize,
+    ship: u32,
+    highlight: bool,
+) {
     let mut r = mem::zeroed();
     GetShipBox(&mut r, side, (index / 7) as u16, (index % 7) as u16);
     BatchGraphics();
@@ -65,7 +71,9 @@ pub(super) unsafe fn ship_box(side: u16, index: usize, ship: u32, highlight: boo
                 x: r.corner.x + (r.extent.width >> 1),
                 y: r.corner.y + (r.extent.height >> 1),
             },
-            frame: crate::ships::master_native::GetShipMeleeIconsFromIndex(ship),
+            frame: catalog
+                .get(ship as usize)
+                .map_or(ptr::null_mut(), |ship| ship.melee_icon.raw().cast()),
         };
         DrawStamp(&mut s);
     }
@@ -95,6 +103,7 @@ pub(super) unsafe fn teams() {
         controls(side, false);
         for index in 0..14 {
             ship_box(
+                &(*P_MELEE_STATE).catalog,
                 side as u16,
                 index,
                 MeleeSetup_getShip((*P_MELEE_STATE).melee_setup, side, index as u16),
@@ -351,6 +360,7 @@ pub(super) unsafe fn highlight(option: u8, on: bool) {
             if s.input_func.map(|f| f as usize) == Some(edit as *const () as usize) {
                 if s.row < 2 {
                     ship_box(
+                        &s.catalog,
                         s.side,
                         (s.row * 7 + s.col) as usize,
                         MeleeSetup_getShip(s.melee_setup, s.side as usize, s.row * 7 + s.col),
@@ -363,6 +373,7 @@ pub(super) unsafe fn highlight(option: u8, on: bool) {
             }
         }
         11 => crate::supermelee::native::build_picker::live::draw_pick_icon(
+            &(*P_MELEE_STATE).catalog,
             (*P_MELEE_STATE).current_ship,
             !on,
         ),
@@ -409,7 +420,13 @@ pub(super) unsafe fn init_screen() {
 /// Call on the graphics thread with loaded melee resources. Pointer arguments
 /// must be valid for the call, and player, row, column and ship indices must be in range.
 pub unsafe extern "C" fn DrawMeleeShipStrings(state: *mut MELEE_STATE, ship: u32) {
-    let old = SetContext(KernelOwner::current().read(|owner| owner.status_context));
+    let (context, master) = KernelOwner::current().read(|owner| {
+        (
+            owner.status_context,
+            crate::ships::master_native::master_in(owner, ship as u16),
+        )
+    });
+    let old = SetContext(context);
     let mut clip = mem::zeroed();
     get_context_clip_rect(&mut clip);
     let mut r = clip;
@@ -442,8 +459,7 @@ pub unsafe extern "C" fn DrawMeleeShipStrings(state: *mut MELEE_STATE, ship: u32
         t.baseline.y += TINY_TEXT_HEIGHT as i16;
         font_DrawText(&mut t);
     } else {
-        let mut master = crate::ships::master_native::master(ship as u16)
-            .unwrap_or_else(|| panic!("melee master ship {ship}"));
+        let mut master = master.unwrap_or_else(|| panic!("melee master ship {ship}"));
         crate::ui::shipstat::init_ship_status(&mut master.info, None, ptr::null_mut());
     }
     UnbatchGraphics();

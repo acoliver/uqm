@@ -820,6 +820,8 @@ mod zero_descriptor_tests {
 #[repr(align(16))]
 #[derive(Debug)]
 pub struct RaceDescriptor {
+    #[cfg(not(test))]
+    pub(crate) assets: Option<Box<super::ship_assets::ShipAssets>>,
     pub ship_info: SHIP_INFO,
     pub fleet: FLEET_STUFF,
     pub __bindgen_padding_0: [u16; 5usize],

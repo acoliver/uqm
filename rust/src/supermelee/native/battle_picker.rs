@@ -330,10 +330,11 @@ pub mod live {
     /// The setup, master queue and empty battle queues must be initialized.
     #[no_mangle]
     pub unsafe extern "C" fn FillPickMeleeFrame(setup: *mut MeleeSetup) {
-        let (context, order) = KernelOwner::current().read(|kernel| {
+        let (context, order, catalog) = KernelOwner::current().read(|owner| {
             (
-                kernel.off_screen_context,
-                [kernel.player_order(0), kernel.player_order(1)],
+                owner.off_screen_context,
+                [owner.player_order(0), owner.player_order(1)],
+                crate::ships::master_native::engine::snapshot(owner),
             )
         });
         let old = SetContext(context);
@@ -379,7 +380,8 @@ pub mod live {
                 if ship == 255 {
                     continue;
                 }
-                let master = crate::ships::master_native::master(ship as u16)
+                let master = catalog
+                    .get(ship as usize)
                     .unwrap_or_else(|| panic!("melee master ship {ship}"));
                 let captain = link_queue::ships(side).captain_name(master.species, TFB_Random);
                 let built = link_queue::ships(side)

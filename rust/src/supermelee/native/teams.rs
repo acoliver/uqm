@@ -161,27 +161,27 @@ pub unsafe extern "C" fn MeleeSetup_resetSentTeams(setup: *mut MeleeSetup) {
         reset_sent(setup, side);
     }
 }
-/// # Safety
-/// Pointers must be valid for the indicated records or streams on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn MeleeSetup_setShip(
-    setup: *mut MeleeSetup,
+pub(crate) fn set_ship(
+    setup: &mut MeleeSetup,
+    catalog: &[crate::ships::master_native::ShipChoice],
     side: usize,
     slot: u16,
     ship: MeleeShip,
 ) -> bool {
-    let old = MeleeTeam_getShip(&(*setup).teams[side], slot);
+    let old = setup.teams[side].ships[usize::from(slot)];
     if ship == old {
         return false;
     }
     if old != 255 {
-        (*setup).fleetValue[side] =
-            (*setup).fleetValue[side].wrapping_sub(crate::ships::master_native::cost(old));
+        setup.fleetValue[side] = setup.fleetValue[side].wrapping_sub(
+            crate::ships::master_native::choice_cost(catalog, old as u16),
+        );
     }
-    MeleeTeam_setShip(&mut (*setup).teams[side], slot, ship);
+    setup.teams[side].ships[usize::from(slot)] = ship;
     if ship != 255 {
-        (*setup).fleetValue[side] =
-            (*setup).fleetValue[side].wrapping_add(crate::ships::master_native::cost(ship));
+        setup.fleetValue[side] = setup.fleetValue[side].wrapping_add(
+            crate::ships::master_native::choice_cost(catalog, ship as u16),
+        );
     }
     true
 }
@@ -327,6 +327,36 @@ pub unsafe extern "C" fn MeleeSetup_setSentTeamName(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn ship_changes_use_the_borrowed_catalog_without_bridge_publication() {
+        use crate::engine::battle::frames::FrameSelection;
+        let catalog = [23, 16].map(|cost| crate::ships::master_native::ShipChoice {
+            cost,
+            icon: FrameSelection::ABSENT,
+            melee_icon: FrameSelection::ABSENT,
+        });
+        let team = MeleeTeam {
+            ships: [255; 14],
+            name: [0; 55],
+        };
+        let mut setup = MeleeSetup {
+            teams: [team; 2],
+            fleetValue: [0; 2],
+            sentTeams: [team; 2],
+            haveSentTeamName: [false; 2],
+        };
+        assert!(set_ship(&mut setup, &catalog, 0, 3, 0));
+        assert_eq!(setup.fleetValue, [23, 0]);
+        assert_eq!(setup.teams[0].ships[3], 0);
+        assert!(!set_ship(&mut setup, &catalog, 0, 3, 0));
+        assert_eq!(setup.fleetValue, [23, 0]);
+        assert!(set_ship(&mut setup, &catalog, 0, 3, 1));
+        assert_eq!(setup.fleetValue, [16, 0]);
+        assert!(set_ship(&mut setup, &catalog, 0, 3, 255));
+        assert_eq!(setup.fleetValue, [0, 0]);
+        assert!(set_ship(&mut setup, &catalog, 1, 13, 0));
+        assert_eq!(setup.fleetValue, [0, 23]);
+    }
     #[test]
     #[serial_test::serial]
     fn persists_a_team_in_a_real_uio_stream_and_releases_it_on_short_read() {

@@ -1,4 +1,5 @@
 //! Queue allocation and battle lifecycle during the owner migration.
+#[cfg(test)]
 use super::catalog::free_master_ship_list;
 use std::panic::catch_unwind;
 type CCount = u16;

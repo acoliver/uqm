@@ -7,7 +7,15 @@ pub(super) unsafe fn view_name(state: *mut MELEE_STATE, side: u16) {
     }
 }
 unsafe fn change_ship(state: *mut MELEE_STATE, side: u16, index: u16, ship: u32) -> bool {
-    if !MeleeSetup_setShip((*state).melee_setup, side as usize, index, ship) {
+    let catalog_state = &*state;
+    let changed = set_ship(
+        &mut *catalog_state.melee_setup,
+        &catalog_state.catalog,
+        side as usize,
+        index,
+        ship,
+    );
+    if !changed {
         return false;
     }
     if (*state).melee_started == 0 {
@@ -16,7 +24,7 @@ unsafe fn change_ship(state: *mut MELEE_STATE, side: u16, index: u16, ship: u32)
             GetShipBox(&mut r, side, index / 7, index % 7);
             RepairMeleeFrame(&r);
         } else {
-            ship_box(side, index as usize, ship, false);
+            ship_box(&catalog_state.catalog, side, index as usize, ship, false);
         }
         worth(state, side, 4);
     }

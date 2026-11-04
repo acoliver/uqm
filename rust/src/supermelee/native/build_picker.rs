@@ -64,7 +64,11 @@ pub(super) mod live {
         hot(stamp.frame, 0, 0);
         DrawStamp(&mut stamp);
         for ship in 0..25 {
-            draw_pick_icon(ship, true);
+            draw_pick_icon(
+                &(*crate::supermelee::native::menu::live::drawing::P_MELEE_STATE).catalog,
+                ship,
+                true,
+            );
         }
         SetContext(old);
     }
@@ -76,14 +80,20 @@ pub(super) mod live {
     }
     /// # Safety
     /// Game thread, with the popup drawable and ship icons loaded.
-    pub unsafe extern "C" fn draw_pick_icon(ship: MeleeShip, draw: bool) {
+    pub(crate) unsafe fn draw_pick_icon(
+        catalog: &[crate::ships::master_native::ShipChoice],
+        ship: MeleeShip,
+        draw: bool,
+    ) {
         let rect = frame_rect(BUILD_PICK_FRAME);
         let mut stamp = STAMP {
             origin: POINT {
                 x: rect.corner.x + 20 + (ship % 5) as i16 * 18,
                 y: rect.corner.y + 5 + (ship / 5) as i16 * 18,
             },
-            frame: crate::ships::master_native::GetShipIconsFromIndex(ship),
+            frame: catalog
+                .get(ship as usize)
+                .map_or(ptr::null_mut(), |ship| ship.icon.raw().cast()),
         };
         if draw {
             DrawStamp(&mut stamp);
@@ -159,7 +169,7 @@ pub(super) mod live {
             keys[KEY_MENU_DOWN as usize] != 0,
         );
         if selected != (*state).current_ship {
-            draw_pick_icon((*state).current_ship, true);
+            draw_pick_icon(&(*state).catalog, (*state).current_ship, true);
             (*state).current_ship = selected;
             DrawMeleeShipStrings(state, selected);
         }

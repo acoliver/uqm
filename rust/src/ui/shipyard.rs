@@ -83,8 +83,7 @@ unsafe fn on_input_frame(_io: &mut crate::engine::observe::Io<'_>) {
     SetContext(old);
 }
 
-unsafe fn spin_star_ship(menu: *mut MENU_STATE, fleet: &FleetInfo) {
-    let index = FindMasterShipIndex(fleet.species_id);
+unsafe fn spin_star_ship(menu: *mut MENU_STATE, index: i32) {
     if index >= 0 && index < (MeleeShip_MELEE_ZOQFOTPIK + 1) as i32 {
         DoShipSpin(index as COUNT, (*menu).hMusic);
     }
@@ -404,10 +403,19 @@ unsafe fn dms_spin_ship(menu: *mut MENU_STATE, ship: Option<LinkId<Fragment>>) -
         return false;
     };
     SetFlashRect(ptr::null());
-    let old = SetContext(Kernel::current().read(|owner| owner.screen_context));
+    let (context, index) = Kernel::current().read(|owner| {
+        (
+            owner.screen_context,
+            crate::ships::master_native::find(
+                &owner.master_queue,
+                spin_ship.species_id,
+            ),
+        )
+    });
+    let old = SetContext(context);
     let mut old_clip: RECT = mem::zeroed();
     GetContextClipRect(&mut old_clip);
-    spin_star_ship(menu, &spin_ship);
+    spin_star_ship(menu, index);
     SetContextClipRect(&mut old_clip);
     SetContext(old);
     true

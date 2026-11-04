@@ -345,7 +345,9 @@ pub(crate) mod engine {
     /// # Safety
     /// The game thread retains the initialized battle context and all resources used by this call.
     pub unsafe fn spawn_ship(cx: &mut Cx<'_>, ship: ShipId) -> BOOLEAN {
-        let Some(descriptor) = load_ship(cx.world, cx.ship(ship).SpeciesID, 1) else {
+        let Some(descriptor) =
+            crate::engine::battle::RaceDesc::load(cx.world, cx.ship(ship).SpeciesID, true)
+        else {
             return 0;
         };
         cx.attach_descriptor(ship, descriptor);

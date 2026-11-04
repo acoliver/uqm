@@ -104,7 +104,13 @@ pub(crate) mod live {
         }
         u16::MAX
     }
-    unsafe fn draw_entry(team: *const MeleeTeam, origin: POINT, ships: bool, highlighted: bool) {
+    unsafe fn draw_entry(
+        catalog: &[crate::ships::master_native::engine::MasterShip],
+        team: *const MeleeTeam,
+        origin: POINT,
+        ships: bool,
+        highlighted: bool,
+    ) {
         let color = if highlighted {
             rgb(23, 24, 29)
         } else {
@@ -133,8 +139,9 @@ pub(crate) mod live {
             };
             for ship in (*team).ships {
                 if ship != 255 {
-                    stamp.frame =
-                        crate::ships::master_native::GetShipIconsFromIndex(ship as u8 as u32);
+                    stamp.frame = catalog
+                        .get(ship as u8 as usize)
+                        .map_or(ptr::null_mut(), |ship| ship.info.icons);
                     DrawStamp(&mut stamp);
                     stamp.origin.x += 17;
                 }
@@ -169,6 +176,7 @@ pub(crate) mod live {
         SetContextFont(KernelOwner::current().read(|owner| owner.micro_font));
         BatchGraphics();
         draw_entry(
+            &[],
             (*state).load.view[index as usize],
             POINT {
                 x: 5,
@@ -181,7 +189,13 @@ pub(crate) mod live {
         SetContext(old);
     }
     unsafe fn draw(state: *mut MELEE_STATE) {
-        let old = SetContext(KernelOwner::current().read(|owner| owner.space_context));
+        let (context, catalog) = KernelOwner::current().read(|owner| {
+            (
+                owner.space_context,
+                crate::ships::master_native::engine::snapshot(owner),
+            )
+        });
+        let old = SetContext(context);
         SetContextFont(KernelOwner::current().read(|owner| owner.micro_font));
         BatchGraphics();
         DrawMeleeIcon(28);
@@ -189,6 +203,7 @@ pub(crate) mod live {
             for index in (*state).load.top..(*state).load.bot {
                 let relative = index - (*state).load.top;
                 draw_entry(
+                    &catalog,
                     (*state).load.view[relative as usize],
                     POINT {
                         x: 5,

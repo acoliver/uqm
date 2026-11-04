@@ -315,7 +315,7 @@ pub(crate) mod engine {
         let descriptor = cx
             .take_descriptor(ship)
             .unwrap_or_else(|| panic!("dead ship descriptor"));
-        unload_ship(cx.world, descriptor, 1, 1);
+        descriptor.unload(cx.world, true, true);
 
         UnbatchGraphics();
         if let Some(net) = &net {

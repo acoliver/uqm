@@ -742,41 +742,7 @@ impl Cx<'_> {
         self.kernel.elements.remove(id);
     }
 }
-#[cfg(not(test))]
-pub(crate) fn race_desc_layout() -> RaceDescLayout {
-    use super::record::*;
-    use std::mem;
-    RaceDescLayout {
-        race_desc_size: mem::size_of::<RaceDescriptor>(),
-        ship_data_offset: mem::offset_of!(RaceDescriptor, ship_data),
-        ship_info_offset: mem::offset_of!(RaceDescriptor, ship_info),
-        characteristics_offset: mem::offset_of!(RaceDescriptor, characteristics),
-        ship_data_ship_offset: mem::offset_of!(DATA_STUFF, ship),
-        ship_info_crew_offset: mem::offset_of!(SHIP_INFO, crew_level),
-        ship_info_max_crew_offset: mem::offset_of!(SHIP_INFO, max_crew),
-        characteristics_mass_offset: mem::offset_of!(CHARACTERISTIC_STUFF, ship_mass),
-    }
-}
-
 pub(crate) mod observe;
-
-/// Layout descriptor for RACE_DESC C-side field offsets.
-/// Matches C `RACE_DESC_LAYOUT` in `rust_bridge_ships.h`.
-#[repr(C)]
-pub struct RaceDescLayout {
-    pub race_desc_size: usize,
-    pub ship_data_offset: usize,
-    pub ship_info_offset: usize,
-    pub characteristics_offset: usize,
-    /// Offset of `DATA_STUFF.ship` within DATA_STUFF (not within RACE_DESC).
-    pub ship_data_ship_offset: usize,
-    /// Offset of `SHIP_INFO.crew_level` within SHIP_INFO (not within RACE_DESC).
-    pub ship_info_crew_offset: usize,
-    /// Offset of `SHIP_INFO.max_crew` within SHIP_INFO (not within RACE_DESC).
-    pub ship_info_max_crew_offset: usize,
-    /// Offset of `CHARACTERISTIC_STUFF.ship_mass` within CHARACTERISTIC_STUFF.
-    pub characteristics_mass_offset: usize,
-}
 
 pub mod schema;
 
@@ -859,3 +825,7 @@ impl super::RaceDesc {
 
 #[path = "access/processing.rs"]
 mod processing;
+
+#[cfg(not(test))]
+#[path = "ship_assets.rs"]
+mod ship_assets;
