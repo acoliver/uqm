@@ -76,7 +76,7 @@ fn snapshot(cx: &mut Cx<'_>) -> (Events, Option<Snapshot>) {
             engine::sentinel_collision as *const () as usize,
         ]
         .contains(&e.collide.map_or(0, |f| f.address()))
-            && e.flags & (DISAPPEARING | NONSOLID) as u16 == 0
+            && e.flags & DISAPPEARING as u16 == 0
         {
             let (vx, vy) = e.velocity.preview_next_components(1);
             result.hazards.push(observation::Hazard {
