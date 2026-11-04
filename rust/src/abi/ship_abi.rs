@@ -1139,11 +1139,7 @@ pub struct _input_template {
 pub type INPUT_TEMPLATE = _input_template;
 pub type BattleFrameCounter = DWORD;
 
-#[cfg(not(test))]
-pub use crate::battle::battle_native::engine::BattleSong;
 
-#[cfg(not(test))]
-pub use crate::battle::battle_native::engine::FreeBattleSong;
 pub type Checksum = uint32;
 pub use crate::battle::netplay::CrcState as crc_State;
 pub use crate::supermelee::netplay::crc::crc_finish;

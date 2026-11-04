@@ -106,8 +106,8 @@ pub(crate) mod engine {
     use super::*;
     use crate::battle::battle_native::battle;
     use crate::battle::battle_native::engine::{
-        activity, game_state, rgb15, set_activity, set_game_state, sis_height, sis_width,
-        AWESOME_RATING, CYBORG_CONTROL, HUMAN_CONTROL, STANDARD_RATING,
+        activity, game_state, rgb15, set_game_state, sis_height, sis_width, AWESOME_RATING,
+        CYBORG_CONTROL, HUMAN_CONTROL, STANDARD_RATING,
     };
     use crate::engine::battle::link_queue;
     use crate::ships::native::abi::*;
@@ -698,32 +698,27 @@ pub(crate) mod engine {
     }
 
     /// # Safety
-    /// The game thread must own initialized encounter, fleet, input, audio, and activity state.
-    #[no_mangle]
-    pub unsafe extern "C" fn EncounterBattle() {
-        set_game_state(BATTLE_SEGUE, END_BATTLE_SEGUE, 1);
-        let old = activity();
-        set_activity(if old as u8 == IN_LAST_BATTLE as u8 {
+    /// The game thread must retain initialized native encounter audio resources.
+    pub unsafe fn encounter_battle(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        io: &mut crate::engine::observe::Io<'_>,
+    ) {
+        cx.world
+            .set_story_state(crate::engine::StoryKey::BATTLE_SEGUE, 1);
+        let old = cx.world.activity();
+        cx.world.set_activity(if old as u8 == IN_LAST_BATTLE as u8 {
             IN_LAST_BATTLE as u16
         } else {
             IN_ENCOUNTER as u16
         });
-        WaitForSoundEnd(COUNT::MAX);
+        cx.with_legacy(|| WaitForSoundEnd(COUNT::MAX));
         let mut saved = None;
-        if WorldFields::current().read(|owner| owner.game.glob_flags) & CYBORG_ENABLED as u8 != 0 {
-            let speed = 1
-                | ((combat_speed(WorldFields::current().read(|owner| owner.game.glob_flags))
-                    as u16)
-                    << 8);
-            crate::app::bridge::battle(|b| b.nth_frame = speed);
-            let installed = KernelOwner::current().write(|kernel| {
-                kernel.player_control[0] = CYBORG_CONTROL | AWESOME_RATING;
-                saved = kernel.replace_player_input(0, None);
-                SetPlayerInput(kernel, 0)
-            });
-            if !installed {
+        if cx.world.data.game.glob_flags & CYBORG_ENABLED as u8 != 0 {
+            cx.b.nth_frame = 1 | ((combat_speed(cx.world.data.game.glob_flags) as u16) << 8);
+            cx.kernel.player_control[0] = CYBORG_CONTROL | AWESOME_RATING;
+            saved = cx.kernel.replace_player_input(0, None);
+            if !SetPlayerInput(cx.kernel, 0) {
                 crate::log_abi::log_message(1, "Could not set cyborg player input.");
-                // misc.h explode(): abort in DEBUG, exit(EXIT_FAILURE) otherwise.
                 if cfg!(feature = "debug-process") {
                     std::process::abort();
                 } else {
@@ -731,33 +726,25 @@ pub(crate) mod engine {
                 }
             }
         }
-        (**KernelOwner::current()).game_sounds = crate::strings::string_table::CaptureStringTable(
-            crate::sound::resource_types::LoadSoundInstance(GAME_SOUNDS.as_ptr().cast()).cast(),
-        )
-        .cast();
-        crate::app::bridge::enter(|cx| {
-            let mut observer = cx.kernel.input_runtime().observer();
-            let mut io = crate::engine::observe::Io {
-                observer: observer.as_mut(),
-            };
-            battle(cx, &mut io, None)
+        cx.kernel.game_sounds = cx.with_legacy(|| {
+            crate::strings::string_table::CaptureStringTable(
+                crate::sound::resource_types::LoadSoundInstance(GAME_SOUNDS.as_ptr().cast()).cast(),
+            )
+            .cast()
         });
-        DestroySound(ReleaseStringTable(
-            KernelOwner::current().read(|owner| owner.game_sounds),
-        ));
-        (**KernelOwner::current()).game_sounds = ptr::null_mut();
-        if activity() & CHECK_ABORT as u16 != 0 {
-            (**WorldFields::current()).flagship.crew_enlisted = COUNT::MAX;
+        battle(cx, io, None);
+        DestroySound(ReleaseStringTable(cx.kernel.game_sounds));
+        cx.kernel.game_sounds = ptr::null_mut();
+        if cx.world.activity() & CHECK_ABORT as u16 != 0 {
+            cx.world.data.flagship.crew_enlisted = COUNT::MAX;
         }
-        if WorldFields::current().read(|owner| owner.game.glob_flags) & CYBORG_ENABLED as u8 != 0 {
-            crate::app::bridge::battle(|b| b.nth_frame = 0);
-            KernelOwner::current().write(|kernel| {
-                kernel.player_control[0] = HUMAN_CONTROL | STANDARD_RATING;
-                ClearPlayerInput(kernel, 0);
-                kernel.replace_player_input(0, saved);
-            });
+        if cx.world.data.game.glob_flags & CYBORG_ENABLED as u8 != 0 {
+            cx.b.nth_frame = 0;
+            cx.kernel.player_control[0] = HUMAN_CONTROL | STANDARD_RATING;
+            ClearPlayerInput(cx.kernel, 0);
+            cx.kernel.replace_player_input(0, saved);
         }
-        set_activity(old);
+        cx.world.set_activity(old);
     }
 }
 

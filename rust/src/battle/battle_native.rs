@@ -143,11 +143,6 @@ pub(crate) mod engine {
         WorldFields::current().read(|owner| owner.game.current_activity)
     }
     /// # Safety
-    /// The caller must exclusively own game-thread activity state.
-    pub unsafe fn set_activity(value: u16) {
-        (**WorldFields::current()).game.current_activity = value;
-    }
-    /// # Safety
     /// `start..=end` must name a valid game-state bit field on the game thread.
     pub fn game_state(start: u32, end: u32) -> u8 {
         WorldOwner::current().read(|world| getGameState(world, start as i32, end as i32))
@@ -290,26 +285,10 @@ pub(crate) mod engine {
         }
     }
 
-    /// # Safety
-    /// The game thread must own initialized audio, activity, and resource state.
-    #[no_mangle]
-    pub unsafe extern "C" fn BattleSong(play: BOOLEAN) {
-        KernelOwner::current().write(|kernel| {
-            WorldOwner::current().read(|world| battle_song(kernel, world, play != 0));
-        });
-    }
-
     pub fn free_battle_song(kernel: &mut crate::engine::Kernel) {
         // SAFETY: Kernel owns this music reference and clears it before any later use.
         unsafe { DestroyMusic(kernel.battle_music) };
         kernel.battle_music = ptr::null_mut();
-    }
-
-    /// # Safety
-    /// The game thread must own the battle music handle and initialized audio state.
-    #[no_mangle]
-    pub unsafe extern "C" fn FreeBattleSong() {
-        KernelOwner::current().write(free_battle_song);
     }
 
     struct BattleSession {
@@ -500,7 +479,7 @@ pub(crate) mod engine {
 }
 
 #[cfg(not(test))]
-pub use engine::{battle, free_battle_song, player_input, BattleSong, FreeBattleSong};
+pub use engine::{battle, free_battle_song, player_input};
 
 #[cfg(test)]
 mod tests {
