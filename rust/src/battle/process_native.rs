@@ -26,6 +26,8 @@ enum ViewState {
     Change = VIEW_STATE_VIEW_CHANGE,
 }
 
+use queue_view::draw_frame;
+
 fn display_align(value: i32) -> i16 {
     (value as COORD) & !((1 << ONE_SHIFT) - 1)
 }
@@ -791,7 +793,7 @@ pub(crate) mod engine {
 
     /// # Safety
     /// Engine contexts, element/display pools and sound system are initialized on the game thread.
-    unsafe fn redraw_queue(cx: &mut Cx<'_>, clear: BOOLEAN) {
+    pub(crate) unsafe fn redraw_queue(cx: &mut Cx<'_>, clear: bool) {
         SetContext(cx.kernel.status_context);
         let scale = optMeleeScale;
         let (bounds, minimum) = preprocess_queue(cx, scale);
@@ -810,15 +812,8 @@ pub(crate) mod engine {
         if activity as u8 == SUPER_MELEE as u8
             || activity & (CHECK_ABORT | CHECK_LOAD) as UWORD == 0
         {
-            let skip = (cx.b.nth_frame >> 8) as BYTE;
-            if skip != BYTE::MAX
-                && (skip == 0 || {
-                    cx.b.nth_frame = cx.b.nth_frame.wrapping_sub(1);
-                    cx.b.nth_frame & 0x00ff == 0
-                })
-            {
-                cx.b.nth_frame = cx.b.nth_frame.wrapping_add(UWORD::from(skip));
-                if clear != 0 {
+            if draw_frame(&mut cx.b.nth_frame) {
+                if clear {
                     ClearDrawable();
                 }
                 if optMeleeScale != SCALE_STEP {
@@ -841,7 +836,7 @@ pub(crate) mod engine {
     /// Game thread, inside the published lifecycle, with initialized rendering state.
     #[no_mangle]
     pub unsafe extern "C" fn RedrawQueue(clear: BOOLEAN) {
-        crate::app::bridge::enter(|cx| redraw_queue(cx, clear));
+        crate::app::bridge::enter(|cx| redraw_queue(cx, clear != 0));
     }
 }
 
@@ -852,6 +847,30 @@ pub use engine::{init_display_list, process_collisions, RedrawQueue};
 mod tests {
     use super::*;
     use crate::engine::battle::display::DisplayPool;
+
+    #[test]
+    fn frame_skip_preserves_byte_counter_cycles_and_suppression() {
+        for value in 0..=u8::MAX {
+            let mut unthrottled = u16::from(value);
+            assert!(draw_frame(&mut unthrottled));
+            assert_eq!(unthrottled, u16::from(value));
+            let mut suppressed = 0xff00 | u16::from(value);
+            assert!(!draw_frame(&mut suppressed));
+            assert_eq!(suppressed, 0xff00 | u16::from(value));
+        }
+        let mut counter = 0x0303;
+        for _ in 0..3 {
+            assert!(!draw_frame(&mut counter));
+            assert_eq!(counter, 0x0302);
+            assert!(!draw_frame(&mut counter));
+            assert_eq!(counter, 0x0301);
+            assert!(draw_frame(&mut counter));
+            assert_eq!(counter, 0x0303);
+        }
+        let mut borrow = 0x0100;
+        assert!(!draw_frame(&mut borrow));
+        assert_eq!(borrow, 0x00ff);
+    }
 
     #[test]
     fn live_helper_dimensions_and_collision_flags() {

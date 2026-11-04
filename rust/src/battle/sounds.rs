@@ -88,13 +88,15 @@ pub(crate) mod engine {
         let channel = channels.select(sound, |c| {
             ChannelPlaying((c + MIN_FX_CHANNEL as usize) as u32) != 0
         });
-        PlaySoundEffect(
-            sound,
-            (channel + MIN_FX_CHANNEL as usize) as u16,
-            pos,
-            encode_object(object) as *mut std::ffi::c_void,
-            priority,
-        );
+        cx.with_legacy(|| {
+            PlaySoundEffect(
+                sound,
+                (channel + MIN_FX_CHANNEL as usize) as u16,
+                pos,
+                encode_object(object) as *mut std::ffi::c_void,
+                priority,
+            );
+        });
     }
 
     /// # Safety

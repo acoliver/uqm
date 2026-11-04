@@ -130,7 +130,7 @@ pub(crate) mod engine {
     // gfx_common.h SCALE enum starts with the stepped scaler.
     pub const SCALE_STEP: i32 = 0;
 
-    use crate::battle::process_native::engine::RedrawQueue;
+    use crate::battle::process_native::engine::redraw_queue;
     use crate::engine::observe::Io;
 
     use crate::state::ffi::rust_get_game_state_bits as getGameState;
@@ -341,7 +341,7 @@ pub(crate) mod engine {
         if let Some(callback) = callback {
             callback(cx, io);
         }
-        cx.with_legacy(|| RedrawQueue(1));
+        redraw_queue(cx, true);
         if session.first_time {
             session.first_time = false;
             ScreenTransition(3, &rect);
