@@ -361,43 +361,46 @@ impl CampaignView {
     pub(crate) fn capture(world: &World) -> Self {
         let game = &world.data.game;
         let mut view = Self::from_world(world);
-        // SAFETY: app capture owns the game-thread read guard and these records remain live through the copy.
-        unsafe {
-            use crate::comm::dispatch::CShipFragment;
-            use crate::savegame::runtime::groups::CIpGroup;
-            use crate::savegame::runtime::queues::{walk, QueueKind};
-            if !game.ship_stamp.frame.is_null() {
-                view.ship_facing = i32::from(crate::graphics::pixmap_abi::GetFrameIndex(
-                    game.ship_stamp.frame.cast(),
-                ));
-            }
-            view.contact_race = game
-                .npc_built_ship_q
-                .head
-                .cast::<CShipFragment>()
-                .as_ref()
-                .map(|ship| ship.race_id);
-            if !game.built_ship_q.head.is_null() {
-                view.escorts = walk::<CShipFragment>(&game.built_ship_q, QueueKind::BuiltShips)
-                    .unwrap_or_else(|error| panic!("live escort queue: {error}"))
-                    .into_iter()
-                    .map(|ship| ((*ship).race_id, (*ship).crew_level))
-                    .collect();
-            }
-            if !game.ip_group_q.head.is_null() {
-                view.groups = walk::<CIpGroup>(&game.ip_group_q, QueueKind::IpGroups)
-                    .unwrap_or_else(|error| panic!("live IP group queue: {error}"))
-                    .into_iter()
-                    .filter_map(|group| {
-                        let group = &*group;
-                        (group.in_system != 0).then_some((
-                            group.race_id,
-                            group.sys_loc,
-                            (group.loc.x, group.loc.y),
-                        ))
-                    })
-                    .collect();
-            }
+        use crate::comm::dispatch::CShipFragment;
+        use crate::savegame::runtime::groups::CIpGroup;
+        use crate::savegame::runtime::queues::{walk, QueueKind};
+        if !game.ship_stamp.frame.is_null() {
+            // SAFETY: the supplied world retains this game-thread graphics frame.
+            view.ship_facing = i32::from(unsafe {
+                crate::graphics::pixmap_abi::GetFrameIndex(game.ship_stamp.frame.cast())
+            });
+        }
+        // SAFETY: the supplied world retains the NPC queue through this copy.
+        view.contact_race = unsafe { game.npc_built_ship_q.head.cast::<CShipFragment>().as_ref() }
+            .map(|ship| ship.race_id);
+        if !game.built_ship_q.head.is_null() {
+            // SAFETY: the world owns the live escort queue on this game thread.
+            let ships = unsafe { walk::<CShipFragment>(&game.built_ship_q, QueueKind::BuiltShips) }
+                .unwrap_or_else(|error| panic!("live escort queue: {error}"));
+            view.escorts = ships
+                .into_iter()
+                .map(|ship| {
+                    // SAFETY: walk validated each record, and no mutation occurs during this copy.
+                    unsafe { ((*ship).race_id, (*ship).crew_level) }
+                })
+                .collect();
+        }
+        if !game.ip_group_q.head.is_null() {
+            // SAFETY: the world owns the live IP-group queue on this game thread.
+            let groups = unsafe { walk::<CIpGroup>(&game.ip_group_q, QueueKind::IpGroups) }
+                .unwrap_or_else(|error| panic!("live IP group queue: {error}"));
+            view.groups = groups
+                .into_iter()
+                .filter_map(|group| {
+                    // SAFETY: walk validated each record, and no mutation occurs during this copy.
+                    let group = unsafe { &*group };
+                    (group.in_system != 0).then_some((
+                        group.race_id,
+                        group.sys_loc,
+                        (group.loc.x, group.loc.y),
+                    ))
+                })
+                .collect();
         }
         view
     }

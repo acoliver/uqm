@@ -23,69 +23,71 @@ pub(super) fn load_descriptor(cx: &mut Cx<'_>, comm_id: u32) -> bool {
 #[cfg(not(test))]
 pub(super) fn finish_unhailed(cx: &mut Cx<'_>, has_descriptor: bool) {
     let active = cx.world.activity() & (CHECK_ABORT | CHECK_LOAD) == 0;
-    // SAFETY: the descriptor's callbacks remain live until encounter teardown.
-    cx.with_legacy(|| unsafe {
-        if has_descriptor {
-            if active {
-                if let Some(callback) = ffi::CommData.post_encounter_func {
-                    callback();
-                }
-            }
-            if let Some(callback) = ffi::CommData.uninit_encounter_func {
-                callback();
+    if has_descriptor {
+        // SAFETY: the descriptor remains live until encounter teardown on this thread.
+        let post = unsafe { ffi::CommData.post_encounter_func };
+        if active {
+            if let Some(callback) = post {
+                cx.with_legacy(callback);
             }
         }
-    });
+        // SAFETY: post-encounter dispatch has completed on the game thread.
+        let uninit = unsafe { ffi::CommData.uninit_encounter_func };
+        if let Some(callback) = uninit {
+            cx.with_legacy(callback);
+        }
+    }
 }
 
 #[cfg(not(test))]
 pub(super) fn fight_if_selected(cx: &mut Cx<'_>) -> u16 {
-    // SAFETY: battle and encounter loops still use the published campaign until U2-10a.
-    cx.with_legacy(|| unsafe {
-        let mut status = 0;
-        let activity = crate::mainloop::ffi::get_current_activity().0;
-        if activity & (CHECK_ABORT | CHECK_LOAD) == 0 {
-            let npc = npc_built_ship_queue();
-            if lobyte(activity) == IN_LAST_BATTLE
-                && WorldData::current().read(|owner| owner.game.glob_flags) & CYBORG_ENABLED != 0
-            {
-                ReinitQueue(npc);
-            }
-            World::current()
-                .write(|world| world.set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, 0));
-            status = u16::from(
-                World::current().read(|world| world.story_state(StoryKey::BATTLE_SEGUE)) != 0
-                    && !get_head_link(npc).is_null(),
-            );
-            if status != 0 {
+    let mut status = 0;
+    let activity = cx.world.activity();
+    if activity & (CHECK_ABORT | CHECK_LOAD) == 0 {
+        let npc = cx.with_legacy(npc_built_ship_queue);
+        if lobyte(activity) == IN_LAST_BATTLE && cx.world.data.game.glob_flags & CYBORG_ENABLED != 0
+        {
+            // SAFETY: encounter dispatch exclusively owns the live NPC queue.
+            cx.with_legacy(|| unsafe { ReinitQueue(npc) });
+        }
+        cx.world.set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, 0);
+        // SAFETY: the queue remains live through this synchronous encounter.
+        let has_ships = unsafe { !get_head_link(npc).is_null() };
+        status = u16::from(cx.world.story_state(StoryKey::BATTLE_SEGUE) != 0 && has_ships);
+        if status != 0 {
+            // SAFETY: battle still consumes the published campaign until U2-10a.
+            cx.with_legacy(|| unsafe {
                 ffi::BuildBattle(RPG_PLAYER_NUM);
                 ffi::EncounterBattle();
-            } else {
-                World::current().write(|world| world.set_story_state(StoryKey::BATTLE_SEGUE, 0));
-            }
+            });
+        } else {
+            cx.world.set_story_state(StoryKey::BATTLE_SEGUE, 0);
         }
-        status
-    })
+    }
+    status
 }
 
 #[cfg(not(test))]
 pub(super) unsafe fn update_fleet(h_encounter: HLink, npc_q: *mut Queue, status: u16) {
-    // SAFETY: the caller retains these native resources on the initialized game thread.
+    // SAFETY: the caller retains this encounter and NPC queue throughout the update.
+    let (enc_ptr, num_ships) = unsafe { (lock_encounter(h_encounter), CountLinks(npc_q)) };
+    // SAFETY: the encounter record is exclusively owned by this update.
     unsafe {
-        // Update HSpace encounter info, ships left, etc.
-        let enc_ptr = lock_encounter(h_encounter);
-        let num_ships = CountLinks(npc_q);
         (*enc_ptr).num_ships = num_ships as u8;
         (*enc_ptr).flags |= ENCOUNTER_REFORMING;
-        if status == 0 {
-            (*enc_ptr).flags |= ONE_SHOT_ENCOUNTER;
+    }
+    if status == 0 {
+        // SAFETY: the same encounter record remains exclusively owned.
+        unsafe { (*enc_ptr).flags |= ONE_SHOT_ENCOUNTER };
+    }
+    for i in 0..num_ships {
+        // SAFETY: the queue remains live and i is bounded by its current link count.
+        let h_star_ship = unsafe { get_star_ship_from_index(npc_q, i as u8) };
+        if h_star_ship.is_null() {
+            break;
         }
-
-        for i in 0..num_ships {
-            let h_star_ship = get_star_ship_from_index(npc_q, i as u8);
-            if h_star_ship.is_null() {
-                break;
-            }
+        // SAFETY: this handle belongs to the retained NPC queue and the encounter has matching slots.
+        unsafe {
             let frag_ptr = lock_ship_frag(npc_q, h_star_ship);
             let bsi = &mut (*enc_ptr).ship_list[i as usize];
             bsi.race_id = (*frag_ptr).race_id;
