@@ -5,7 +5,12 @@ use super::battle::{
     ShipId,
 };
 use crate::graphics::native_abi::{POINT, STRING as SOUND};
-use std::ptr;
+use std::{ptr, rc::Rc};
+
+pub trait InputRuntime {
+    fn run_loop(&self, reset: bool, step: &mut dyn FnMut() -> bool);
+    fn battle_input(&self, context: &super::battle::input::InputContext) -> u8;
+}
 
 pub struct Kernel {
     pub(super) input_runtime: Option<std::rc::Rc<dyn super::input::InputRuntime>>,
@@ -38,6 +43,7 @@ pub struct Kernel {
     pub planet: [crate::graphics::native_abi::FRAME; 3],
     pub space_init_count: u8,
     pub(crate) ships_initialized: bool,
+    input_runtime: Option<Rc<dyn InputRuntime>>,
     pub hyperstars: [crate::graphics::native_abi::FRAME; 3],
     pub cmaps: [crate::graphics::native_abi::STRING; 2],
     pub portal_point: POINT,
@@ -61,6 +67,22 @@ pub struct Kernel {
     pub(crate) star_planes: Box<[StarPlane; 3]>,
 }
 impl Kernel {
+    pub fn install_input_runtime(&mut self, runtime: Rc<dyn InputRuntime>) {
+        assert!(
+            self.input_runtime.is_none(),
+            "game input runtime is already installed"
+        );
+        self.input_runtime = Some(runtime);
+    }
+
+    pub fn input_runtime(&self) -> Rc<dyn InputRuntime> {
+        Rc::clone(
+            self.input_runtime
+                .as_ref()
+                .unwrap_or_else(|| panic!("game input runtime is not installed")),
+        )
+    }
+
     pub(crate) fn begin_battle(&mut self) {
         assert!(!self.battle_active, "nested battle session");
         self.battle_active = true;
@@ -126,6 +148,7 @@ impl Kernel {
             planet: [ptr::null_mut(); 3],
             space_init_count: 0,
             ships_initialized: false,
+            input_runtime: None,
             hyperstars: [ptr::null_mut(); 3],
             cmaps: [ptr::null_mut(); 2],
             portal_point: POINT { x: 0, y: 0 },
@@ -157,5 +180,55 @@ impl super::battle::Cx<'_> {
     #[cfg(not(test))]
     pub(crate) fn race_pool(&self, side: usize) -> &super::battle::link_queue::RacePool {
         &self.kernel.races[side]
+    }
+}
+
+#[cfg(test)]
+mod input_runtime_tests {
+    use super::*;
+    use std::{cell::Cell, rc::Rc};
+
+    struct Runtime {
+        reset: Cell<Option<bool>>,
+        player: Cell<Option<u16>>,
+    }
+
+    impl InputRuntime for Runtime {
+        fn run_loop(&self, reset: bool, step: &mut dyn FnMut() -> bool) {
+            self.reset.set(Some(reset));
+            while step() {}
+        }
+        fn battle_input(&self, context: &super::super::battle::input::InputContext) -> u8 {
+            self.player.set(Some(context.player()));
+            19
+        }
+    }
+
+    #[test]
+    fn input_runtime_is_owned_by_its_kernel_and_runs_a_borrowed_typed_callback() {
+        let mut kernel = Kernel::new();
+        let runtime = Rc::new(Runtime {
+            reset: Cell::new(None),
+            player: Cell::new(None),
+        });
+        kernel.install_input_runtime(runtime.clone());
+        let driver = kernel.input_runtime();
+        drop(kernel);
+        let mut frames = 0;
+        driver.run_loop(true, &mut || {
+            frames += 1;
+            frames < 3
+        });
+        assert_eq!(frames, 3);
+        assert_eq!(runtime.reset.get(), Some(true));
+        let context = super::super::battle::input::InputContext::new(1, 1);
+        assert_eq!(driver.battle_input(&context), 19);
+        assert_eq!(runtime.player.get(), Some(1));
+    }
+
+    #[test]
+    #[should_panic(expected = "game input runtime is not installed")]
+    fn input_runtime_does_not_fabricate_a_driver() {
+        Kernel::new().input_runtime();
     }
 }
