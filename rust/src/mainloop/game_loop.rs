@@ -434,7 +434,7 @@ mod cffi {
                 return;
             };
             self.legacy(|| observer.activate_save_capture());
-            let plan = self.legacy(|| observer.prepare_start_scene());
+            let plan = self.owned(|cx| observer.prepare_start_scene(cx));
             if let Some(plan) = plan {
                 let screen_context = self.owned(|cx| {
                     for &(key, value) in plan.game_state {

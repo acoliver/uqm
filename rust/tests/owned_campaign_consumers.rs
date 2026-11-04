@@ -55,9 +55,13 @@ fn starbase_and_probe_setup_use_owned_campaign_storage() {
                 assert!(ships.clone_fragment(&template, 0, 1, &mut name).is_none());
                 assert_eq!(ships.count(), 12);
             });
-            uqm_rust::comm::dispatch::prepare_automation_sol_probe_encounter().unwrap();
+            World::current().write(|world| {
+                uqm_rust::comm::dispatch::prepare_automation_sol_probe_encounter(world).unwrap()
+            });
             let first = World::current().read(|world| world.npc_built_ships_ref().head().unwrap());
-            uqm_rust::comm::dispatch::prepare_automation_sol_probe_encounter().unwrap();
+            World::current().write(|world| {
+                uqm_rust::comm::dispatch::prepare_automation_sol_probe_encounter(world).unwrap()
+            });
             World::current().read(|world| {
                 let ships = world.npc_built_ships_ref();
                 assert!(!ships.contains(first));

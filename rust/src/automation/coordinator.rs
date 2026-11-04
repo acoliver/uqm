@@ -528,7 +528,10 @@ impl AutomationObserver {
 
     /// Activate the script's start scene after game structures and initial
     /// events are initialized, before the first activity dispatch.
-    pub(crate) fn prepare_start_scene(&self) -> Option<scenario::ScenePlan> {
+    pub(crate) fn prepare_start_scene(
+        &self,
+        cx: &mut crate::engine::battle::Cx<'_>,
+    ) -> Option<scenario::ScenePlan> {
         let coord = self;
 
         let scene = {
@@ -552,7 +555,7 @@ impl AutomationObserver {
 
         let scene = scene?;
 
-        match scenario::activate(scene, SceneActivationBoundary::GameInitialized, |_| {}) {
+        match scenario::activate(cx, scene, SceneActivationBoundary::GameInitialized, |_| {}) {
             Ok(plan) => Some(plan),
             Err(error) => {
                 let mut inner = coord.inner.lock();
@@ -3491,7 +3494,15 @@ mod tests {
         let output = tempfile::tempdir().unwrap();
         let observer = crate::automation::AutomationObserver::new(script, output.path().into());
         let before = observer.runtime.commit.next_sequence();
-        assert!(observer.prepare_start_scene().is_none());
+        let mut game = crate::engine::Game::new();
+        let mut battle = crate::engine::battle::Battle::new();
+        let mut cx = crate::engine::battle::Cx::new(
+            &mut battle,
+            &mut game.world,
+            &mut game.kernel,
+            crate::math::random,
+        );
+        assert!(observer.prepare_start_scene(&mut cx).is_none());
         assert_eq!(observer.runtime.commit.next_sequence(), before);
     }
 

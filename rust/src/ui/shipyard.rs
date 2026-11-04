@@ -317,17 +317,14 @@ unsafe fn crew_transaction(delta: SIZE) {
             (**WorldData::current()).game.crew_cost -= 2;
             DrawMenuStateStrings(PM_CREW as BYTE, SHIPYARD_CREW as i16);
         }
-        if World::current().read(|world| {
-            crate::battle::build_native::check_alliance(world, SHOFIXTI_SHIP as COUNT)
-        }) != GOOD_GUY as COUNT
-        {
-            World::current().write(|world| {
-                world.set_story_state(StoryKey::CREW_PURCHASED0, bought as BYTE as u32)
-            });
-            World::current().write(|world| {
-                world.set_story_state(StoryKey::CREW_PURCHASED1, ((bought as u16) >> 8) as u32)
-            });
-        }
+        World::current().write(|world| {
+            if crate::battle::build_native::check_alliance(world, SHOFIXTI_SHIP as COUNT)
+                != GOOD_GUY as COUNT
+            {
+                world.set_story_state(StoryKey::CREW_PURCHASED0, bought as BYTE as u32);
+                world.set_story_state(StoryKey::CREW_PURCHASED1, ((bought as u16) >> 8) as u32);
+            }
+        });
     }
 }
 

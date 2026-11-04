@@ -26,7 +26,9 @@ use std::os::raw::c_void;
 use crate::c_bindings::global_state;
 #[cfg(not(test))]
 use crate::comm::locdata::{read_locdata, set_comm_data};
-use crate::engine::battle::link_queue::{LinkId, LinkQueue};
+use crate::engine::battle::link_queue::LinkId;
+#[cfg(not(test))]
+use crate::engine::battle::link_queue::LinkQueue;
 #[cfg(not(test))]
 use crate::engine::world::queues::Fleet;
 use crate::engine::world::queues::Fragment;
@@ -412,10 +414,6 @@ fn avail_race_queue<R>(edit: impl FnOnce(&mut LinkQueue<'_, Fleet, 24>) -> R) ->
     World::current().write(|world| edit(&mut world.avail_races()))
 }
 
-fn npc_built_ship_queue<R>(edit: impl FnOnce(&mut LinkQueue<'_, Fragment, 14>) -> R) -> R {
-    World::current().write(|world| edit(&mut world.npc_built_ships()))
-}
-
 // ---------------------------------------------------------------------------
 // RaceCommunication — ported from comm.c:1503
 // ---------------------------------------------------------------------------
@@ -641,10 +639,6 @@ fn run_encounter(cx: &mut Cx<'_>, io: &mut Io<'_>, which_comm: u32, ship_type: u
 // CloneShipFragment — ported from build.c:477
 // ---------------------------------------------------------------------------
 
-fn clone_ship_fragment(ship_index: u8, crew_level: u16) -> Option<LinkId<Fragment>> {
-    World::current().write(|world| clone_npc_fragment(world, ship_index, crew_level))
-}
-
 pub(crate) fn clone_npc_fragment(
     world: &mut World,
     ship_index: u8,
@@ -676,9 +670,11 @@ pub(crate) fn production_captain_name() -> u8 {
 /// # Safety
 /// Game structures and both fleet queues must already be initialized.
 #[cfg_attr(test, allow(dead_code))]
-pub unsafe fn prepare_automation_sol_probe_encounter() -> Result<(), &'static str> {
-    npc_built_ship_queue(|queue| queue.reinit());
-    if clone_ship_fragment(ship::URQUAN_DRONE_SHIP, 0).is_none() {
+pub unsafe fn prepare_automation_sol_probe_encounter(
+    world: &mut World,
+) -> Result<(), &'static str> {
+    world.npc_built_ships().reinit();
+    if clone_npc_fragment(world, ship::URQUAN_DRONE_SHIP, 0).is_none() {
         return Err("failed to clone the Ur-Quan probe into the NPC queue");
     }
     Ok(())
@@ -690,18 +686,19 @@ pub unsafe fn prepare_automation_sol_probe_encounter() -> Result<(), &'static st
 /// # Safety
 /// Initialized fleets and SIS must be exclusively owned by the game thread.
 #[cfg(not(test))]
-pub(crate) unsafe fn prepare_samatra_dev_fixture() -> Result<(), &'static str> {
-    World::current().write(|world| world.built_ships().reinit());
-    let added = crate::engine::World::current().write(|world| {
-        crate::battle::build_native::add_escort_ships(world, 4, 12, pick_captain_name)
-    });
+pub(crate) unsafe fn prepare_samatra_dev_fixture(
+    cx: &mut crate::engine::battle::Cx<'_>,
+) -> Result<(), &'static str> {
+    cx.world.built_ships().reinit();
+    let added = crate::battle::build_native::add_escort_ships(cx.world, 4, 12, pick_captain_name);
     if added.is_some() {
-        crate::battle::build_native::refresh_escorts();
+        cx.with_legacy(|| crate::battle::build_native::refresh_escorts());
     }
     if added != Some(12) {
         return Err("boss fixture could not allocate Pkunk escorts");
     }
-    WorldData::current().write(|world| {
+    {
+        let world = &mut cx.world.data;
         let sis = &mut world.flagship;
         sis.crew_enlisted = 50;
         sis.fuel_on_board = 1000;
@@ -710,7 +707,7 @@ pub(crate) unsafe fn prepare_samatra_dev_fixture() -> Result<(), &'static str> {
         // Bomb conversion removes the flagship weapons; this is a steering ship.
         sis.module_slots.fill(0xff);
         world.game.glob_flags &= !(1 << 5);
-    });
+    }
     Ok(())
 }
 
@@ -723,7 +720,10 @@ pub(crate) unsafe fn prepare_samatra_dev_fixture() -> Result<(), &'static str> {
 /// # Safety
 /// The star map must be initialized.
 #[cfg_attr(test, allow(dead_code))]
-pub unsafe fn place_flagship_at_star(location: (i16, i16)) -> Result<(), &'static str> {
+pub unsafe fn place_flagship_at_star(
+    world: &mut World,
+    location: (i16, i16),
+) -> Result<(), &'static str> {
     let mut universe = CPoint {
         x: location.0,
         y: location.1,
@@ -732,7 +732,7 @@ pub unsafe fn place_flagship_at_star(location: (i16, i16)) -> Result<(), &'stati
     if star.is_null() {
         return Err("no star at the scene location");
     }
-    (**World::current()).select_star(
+    world.select_star(
         ((star).cast::<crate::engine::world::CStarDesc>()).as_ref(),
         crate::planets::starmap::current_catalog(),
     );

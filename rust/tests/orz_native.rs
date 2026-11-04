@@ -1380,7 +1380,7 @@ fn exhausted_queue_preserves_weapon_return_count_and_still_rotates_turret() {
             let mut ship = orz(&_battle, 0);
             let turret = ship.install_turret();
             ship.ship_mut().cur_status_flags = (SPECIAL | LEFT) as u16;
-            let mut out = 1usize as *mut std::ffi::c_void;
+            let mut out = std::ptr::dangling_mut::<std::ffi::c_void>();
             with_rng(6, 0, || {
                 assert_eq!(
                     {

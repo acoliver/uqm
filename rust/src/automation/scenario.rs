@@ -383,6 +383,7 @@ impl SceneEntryOps for LinkedSceneEntry {
 /// This prepares the real NPC queue and sets `START_ENCOUNTER`; the normal
 /// main-loop state machine subsequently calls `rust_race_communication`.
 pub fn activate(
+    cx: &mut crate::engine::battle::Cx<'_>,
     scene: AutomationScene,
     boundary: SceneActivationBoundary,
     enter: impl FnOnce(&ScenePlan),
@@ -393,16 +394,20 @@ pub fn activate(
     #[cfg(not(test))]
     unsafe {
         if scene == AutomationScene::SamatraDevFixture {
-            crate::comm::dispatch::prepare_samatra_dev_fixture()
+            crate::comm::dispatch::prepare_samatra_dev_fixture(cx)
                 .map_err(SceneError::SetupFailed)?;
         }
         if scene == AutomationScene::SolProbeEncounter {
-            if let Err(reason) = crate::comm::dispatch::prepare_automation_sol_probe_encounter() {
+            if let Err(reason) =
+                crate::comm::dispatch::prepare_automation_sol_probe_encounter(cx.world)
+            {
                 *observation().lock() = SceneObservation::default();
                 return Err(SceneError::SetupFailed(reason));
             }
         }
-        if let Err(reason) = crate::comm::dispatch::place_flagship_at_star(plan.star_location) {
+        if let Err(reason) =
+            crate::comm::dispatch::place_flagship_at_star(cx.world, plan.star_location)
+        {
             *observation().lock() = SceneObservation::default();
             return Err(SceneError::SetupFailed(reason));
         }
@@ -411,7 +416,7 @@ pub fn activate(
 
     #[cfg(test)]
     {
-        let _ = (plan, enter);
+        let _ = (cx, plan, enter);
         *observation().lock() = SceneObservation::default();
         return Err(SceneError::SetupFailed(
             "runtime scene activation is unavailable in isolated unit tests",
