@@ -1,19 +1,11 @@
 //! Retained ownership of native contexts on the serialized graphics thread.
 use super::{context_abi, drawable_abi, ffi, frame_abi, native_abi::*, native_drawables};
-use std::{cell::RefCell, ptr::NonNull, rc::Rc, sync::Arc, thread::ThreadId};
+use std::{cell::RefCell, ptr::NonNull, rc::Rc};
 
 pub(super) struct Allocation {
     context: NonNull<context_desc>,
-    owner: Arc<ThreadId>,
+    owned: native_drawables::OwnedAllocation,
     target: RefCell<Option<ContextFrame>>,
-}
-
-impl Drop for Allocation {
-    fn drop(&mut self) {
-        assert_eq!(*self.owner, std::thread::current().id());
-        // SAFETY: this is the final graphics-thread owner of the registered allocation.
-        unsafe { context_abi::free_context(self.context) };
-    }
 }
 
 pub struct ContextFrame {
@@ -52,7 +44,7 @@ impl ContextLease {
     }
 
     fn apply(&self, operation: Operation) {
-        assert_eq!(*self.0.owner, std::thread::current().id());
+        self.0.owned.assert_thread();
         // SAFETY: the lease owns the selected context on this graphics thread.
         // Frame changes carry allocation leases; drawing and clipping retain the
         // current target before the native operation can dereference it.
@@ -112,7 +104,10 @@ pub(super) fn register(context: NonNull<context_desc>) {
         .unwrap_or_else(|| panic!("context registry has no owner"));
     let allocation = Rc::new(Allocation {
         context,
-        owner,
+        owned: native_drawables::OwnedAllocation::new(
+            native_drawables::AllocationKind::Context(context),
+            owner,
+        ),
         target: RefCell::new(None),
     });
     assert!(

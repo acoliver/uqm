@@ -1,5 +1,5 @@
 //! Shared allocation leases for native drawable handles.
-use super::native_abi::{drawable_desc, FRAME};
+use super::native_abi::{context_desc, drawable_desc, FRAME};
 use std::{
     collections::BTreeMap,
     ptr::NonNull,
@@ -39,10 +39,13 @@ impl Allocations {
             .owner
             .clone()
             .unwrap_or_else(|| panic!("drawable registry has no owning thread"));
-        let allocation = Rc::new(Allocation(drawable, owner, frames));
+        let allocation = Rc::new(Allocation {
+            _owned: OwnedAllocation::new(AllocationKind::Drawable(drawable), owner),
+            frames,
+        });
         self.frames
             .retain(|_, allocation| allocation.strong_count() != 0);
-        for address in &allocation.2 {
+        for address in &allocation.frames {
             self.frames
                 .insert(*address as usize, Rc::downgrade(&allocation));
         }
@@ -55,15 +58,41 @@ impl Allocations {
     }
 }
 
-pub(super) struct Allocation(NonNull<drawable_desc>, Arc<ThreadId>, Vec<FRAME>);
-impl Drop for Allocation {
+pub(super) enum AllocationKind {
+    Drawable(NonNull<drawable_desc>),
+    Context(NonNull<context_desc>),
+}
+
+pub(super) struct OwnedAllocation {
+    kind: AllocationKind,
+    owner: Arc<ThreadId>,
+}
+impl OwnedAllocation {
+    pub(super) fn new(kind: AllocationKind, owner: Arc<ThreadId>) -> Self {
+        Self { kind, owner }
+    }
+    pub(super) fn assert_thread(&self) {
+        assert_eq!(*self.owner, std::thread::current().id());
+    }
+}
+impl Drop for OwnedAllocation {
     fn drop(&mut self) {
-        assert_eq!(*self.1, std::thread::current().id());
-        // SAFETY: this is the last graphics-thread owner of the registered allocation.
+        self.assert_thread();
+        // SAFETY: this is the final graphics-thread owner of the registered allocation.
         unsafe {
-            super::gfxload::release_cel_data_now(self.0);
+            match self.kind {
+                AllocationKind::Drawable(drawable) => {
+                    super::gfxload::release_cel_data_now(drawable)
+                }
+                AllocationKind::Context(context) => super::context_abi::free_context(context),
+            }
         }
     }
+}
+
+pub(super) struct Allocation {
+    _owned: OwnedAllocation,
+    frames: Vec<FRAME>,
 }
 
 #[derive(Clone)]
@@ -114,14 +143,17 @@ impl DrawableLease {
         self.frame_at_address(frame).is_some()
     }
     pub fn frame_index(&self, frame: FRAME) -> Option<usize> {
-        self._allocation.2.iter().position(|owned| *owned == frame)
+        self._allocation
+            .frames
+            .iter()
+            .position(|owned| *owned == frame)
     }
     pub fn frame(&self, index: usize) -> Option<FRAME> {
-        self._allocation.2.get(index).copied()
+        self._allocation.frames.get(index).copied()
     }
     pub fn frame_at_address(&self, frame: FRAME) -> Option<FRAME> {
         self._allocation
-            .2
+            .frames
             .iter()
             .copied()
             .find(|owned| *owned == frame)
