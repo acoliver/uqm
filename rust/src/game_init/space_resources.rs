@@ -91,11 +91,27 @@ pub(crate) mod live {
 
     #[no_mangle]
     pub extern "C" fn InitShips() -> i16 {
-        unsafe { crate::ships::ffi::rust_ships_init() as i16 }
+        // SAFETY: this entry runs on the published game thread, before the battle loop borrows Cx.
+        unsafe {
+            use crate::ships::native::abi::{optMeleeScale, ScreenHeight, ScreenWidth};
+            let players = crate::app::bridge::enter(|cx| {
+                crate::ships::native_adapters::init_ships(
+                    cx,
+                    (ScreenWidth - 64) as i16,
+                    ScreenHeight as i16,
+                    optMeleeScale == 0,
+                )
+            });
+            if players == 1 {
+                crate::navigation::hyper_data::LoadHyperspace();
+            }
+            players
+        }
     }
     #[no_mangle]
     pub extern "C" fn UninitShips() {
-        unsafe { crate::ships::ffi::rust_ships_uninit() }
+        // SAFETY: the battle loop has relinquished Cx before this teardown entry.
+        unsafe { crate::app::bridge::enter(crate::ships::native_adapters::uninit_ships) }
     }
 }
 

@@ -28,10 +28,9 @@ pub mod abi {
     #[cfg(not(test))]
     pub use super::engine::{
         abs_frame_index as SetAbsFrameIndex, abs_string_index as SetAbsStringTableIndex,
-        capture_drawable as CaptureDrawable, current_battle_input as CurrentInputToBattleInput,
-        dec_frame_index as DecFrameIndex, destroy_drawable as DestroyDrawable,
-        destroy_music as DestroyMusic, destroy_sound as DestroySound,
-        destroy_string_table as DestroyStringTable, do_input as DoInput,
+        capture_drawable as CaptureDrawable, dec_frame_index as DecFrameIndex,
+        destroy_drawable as DestroyDrawable, destroy_music as DestroyMusic,
+        destroy_sound as DestroySound, destroy_string_table as DestroyStringTable,
         draw_filled_rectangle as DrawFilledRectangle, draw_filled_stamp as DrawFilledStamp,
         draw_sis_title as DrawSISTitle, draw_stamp as DrawStamp, draw_text as font_DrawText,
         drawables_intersect as DrawablesIntersect, equ_frame_index as SetEquFrameIndex,
@@ -44,6 +43,9 @@ pub mod abi {
         set_status_mode as SetStatusMessageMode, set_transition_source as SetTransitionSource,
         string_address as GetStringAddress,
     };
+
+    #[cfg(not(test))]
+    pub use crate::mainloop::input_abi::live::{CurrentInputToBattleInput, DoInput};
 
     #[cfg(not(test))]
     pub unsafe fn DoMenuChooser(menu: *mut MENU_STATE, first: BYTE) -> BOOLEAN {
@@ -89,7 +91,6 @@ pub mod abi {
 #[cfg(not(test))]
 mod engine {
     use super::abi;
-    use std::ffi::c_void;
 
     // Keep opaque-pointer declarations identical to existing engine imports.
 
@@ -176,18 +177,6 @@ mod engine {
             x: point.x,
             y: point.y,
         }
-    }
-
-    /// # Safety
-    /// `player` must be a valid side with initialized input state.
-    pub unsafe fn current_battle_input(player: abi::COUNT) -> abi::BATTLE_INPUT_STATE {
-        crate::battle::c_bridge::CurrentInputToBattleInput(player)
-    }
-
-    /// # Safety
-    /// `state` must have a valid input callback and remain live for the input loop.
-    pub unsafe fn do_input(state: *mut c_void, reset: abi::BOOLEAN) {
-        crate::battle::c_bridge::DoInput(state, reset);
     }
 
     /// # Safety

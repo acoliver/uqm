@@ -88,14 +88,9 @@ pub unsafe extern "C" fn LoadHyperspace() -> BOOLEAN {
     1
 }
 
-/// # Safety
-/// Must be paired with `LoadHyperspace` on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn FreeHyperspace() -> BOOLEAN {
-    let kernel = KernelOwner::current();
+pub fn free_hyperspace(kernel: &mut KernelOwner) {
     crate::collections::observation::swap_image_view(
-        &mut *ptr::addr_of_mut!((**kernel).hyperstars[0]),
-        &mut *ptr::addr_of_mut!((**kernel).stars_in_space),
+        &mut kernel.hyperstars[0],
+        &mut kernel.stars_in_space,
     );
-    1
 }

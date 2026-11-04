@@ -9,6 +9,35 @@ use uqm_rust::collections::observation::{self, Event};
 use uqm_rust::engine::battle::{Cx, Selection, ShipId, WeaponOrigin, WeaponSpawn};
 use uqm_rust::ships::native::abi::*;
 
+#[test]
+fn ship_teardown_is_idempotent_without_an_arena_and_preserves_encounter_recovery() {
+    battle_context::run(|| {
+        let _owner = Battle::new(4);
+        // SAFETY: the serialized fixture publishes the game only for this owner borrow.
+        unsafe {
+            uqm_rust::app::bridge::enter(|cx| {
+                let element = cx.alloc_element().unwrap();
+                cx.put(element);
+                cx.world.set_activity(SUPER_MELEE as u16);
+                uqm_rust::ships::native_adapters::uninit_ships(cx);
+                uqm_rust::ships::native_adapters::uninit_ships(cx);
+                assert_eq!(cx.elements().head(), Some(element));
+                assert_eq!(cx.world.activity(), SUPER_MELEE as u16);
+                cx.unlink(element);
+                cx.dispose(element);
+
+                cx.world
+                    .set_activity(IN_ENCOUNTER as u16 | IN_BATTLE as u16);
+                uqm_rust::ships::native_adapters::uninit_ships(cx);
+                assert_eq!(cx.world.activity(), IN_ENCOUNTER as u16);
+                uqm_rust::ships::native_adapters::uninit_ships(cx);
+                assert_eq!(cx.world.activity(), IN_ENCOUNTER as u16);
+                assert!(cx.elements().head().is_none());
+            });
+        }
+    });
+}
+
 fn alternate_pre(cx: &mut Cx<'_>, ship: ShipId) {
     cx.ship_state_mut(ship).energy_counter = 71;
 }

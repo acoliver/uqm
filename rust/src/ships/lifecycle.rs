@@ -358,27 +358,6 @@ pub fn get_initial_starships(
 // Lifecycle State API (P02)
 // ---------------------------------------------------------------------------
 
-/// Mark battle ships as initialized (called after successful arena setup).
-#[cfg_attr(test, expect(dead_code, reason = "only called from non-test FFI path"))]
-pub(crate) fn mark_ships_initialized() {
-    let mut state = BATTLE_STATE.lock().unwrap_or_else(|e| e.into_inner());
-    state.ships_initialized = true;
-}
-
-/// Mark battle ships as uninitialized (called after teardown).
-pub(crate) fn mark_ships_uninitialized() {
-    let mut state = BATTLE_STATE.lock().unwrap_or_else(|e| e.into_inner());
-    state.ships_initialized = false;
-}
-
-/// Query whether ships are currently initialized.
-/// Used by uninit idempotence guard (P03) — not test-only.
-#[cfg(not(test))]
-pub(crate) fn is_ships_initialized_for_uninit() -> bool {
-    let state = BATTLE_STATE.lock().unwrap_or_else(|e| e.into_inner());
-    state.ships_initialized
-}
-
 // ---------------------------------------------------------------------------
 // Testing Helper
 // ---------------------------------------------------------------------------

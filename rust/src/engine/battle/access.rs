@@ -812,22 +812,24 @@ pub(crate) fn fixture_element_state(record: &super::record::ElementRecord) -> El
 
 pub(super) mod links;
 
-#[cfg(not(test))]
-impl super::RaceDesc {
-    pub(crate) fn info_pointer(&mut self) -> *mut super::record::SHIP_INFO {
-        &raw mut self.raw.ship_info
-    }
-}
-
-#[cfg(not(test))]
-impl super::RaceDesc {
-    pub(crate) fn data_pointer(&mut self) -> *mut super::record::DATA_STUFF {
-        &raw mut self.raw.ship_data
-    }
-}
-
 #[path = "access/processing.rs"]
 mod processing;
 
 #[path = "ship_assets.rs"]
 mod ship_assets;
+
+#[cfg(not(test))]
+impl Cx<'_> {
+    pub(crate) fn write_back_surviving_ship_crew(&mut self, ships: [Option<ShipId>; 2]) {
+        // SAFETY: this context owns the matching battle and fragment queues through writeback.
+        unsafe {
+            for side in (0..2).rev() {
+                if let Some(ship) = ships[side].filter(|_| {
+                    crate::battle::encount_native::fleet_is_infinite(self.world, side as u16) == 0
+                }) {
+                    crate::battle::context_access::reader_legacy::update_ship_frag_crew(self, ship);
+                }
+            }
+        }
+    }
+}

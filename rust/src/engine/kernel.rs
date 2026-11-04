@@ -37,6 +37,7 @@ pub struct Kernel {
     pub explosion: [crate::graphics::native_abi::FRAME; 3],
     pub planet: [crate::graphics::native_abi::FRAME; 3],
     pub space_init_count: u8,
+    pub(crate) ships_initialized: bool,
     pub hyperstars: [crate::graphics::native_abi::FRAME; 3],
     pub cmaps: [crate::graphics::native_abi::STRING; 2],
     pub portal_point: POINT,
@@ -60,6 +61,10 @@ pub struct Kernel {
     pub(crate) star_planes: Box<[StarPlane; 3]>,
 }
 impl Kernel {
+    pub(crate) fn ship_teardown_needed(&self, activity: u16) -> bool {
+        self.ships_initialized || activity as u8 == crate::ships::native::abi::IN_ENCOUNTER as u8
+    }
+
     pub(crate) fn begin_battle(&mut self) {
         assert!(!self.battle_active, "nested battle session");
         self.battle_active = true;
@@ -124,6 +129,7 @@ impl Kernel {
             explosion: [ptr::null_mut(); 3],
             planet: [ptr::null_mut(); 3],
             space_init_count: 0,
+            ships_initialized: false,
             hyperstars: [ptr::null_mut(); 3],
             cmaps: [ptr::null_mut(); 2],
             portal_point: POINT { x: 0, y: 0 },

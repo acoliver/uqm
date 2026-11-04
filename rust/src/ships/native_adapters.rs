@@ -40,55 +40,49 @@ fn retire_element_ship(
     Some((ship, descriptor))
 }
 
-/// # Safety
-/// Call on the game thread while the battle queues and their resources remain live.
 #[cfg(not(test))]
-pub unsafe fn uninit_ships() {
+pub fn uninit_ships(cx: &mut crate::engine::battle::Cx<'_>) {
     use crate::ships::native::abi::*;
-
-    StopSound();
-    crate::app::bridge::enter(|cx| {
-        crate::game_init::space_resources::uninit_space(cx.kernel);
-        let mut ships = [None; 2];
-        let crew = remaining_battle_crew(cx);
-        let replacement =
-            crate::engine::battle::ElementHook::Native(crate::battle::tactrans_native::new_ship);
-        let mut next = cx.elements().head();
-        while let Some(id) = next {
-            next = cx.elements().succ(id);
-            if let Some((ship, descriptor)) = retire_element_ship(cx, id, crew, replacement) {
-                ships[cx.ship_state(ship).player as usize] = Some(ship);
+    if !cx.kernel.ship_teardown_needed(cx.world.activity()) {
+        return;
+    }
+    crate::sound::heart_ffi::stop_sound();
+    crate::game_init::space_resources::uninit_space(cx.kernel);
+    let mut ships = [None; 2];
+    let crew = remaining_battle_crew(cx);
+    let replacement =
+        crate::engine::battle::ElementHook::Native(crate::battle::tactrans_native::new_ship);
+    let mut next = cx.elements().head();
+    while let Some(id) = next {
+        next = cx.elements().succ(id);
+        if let Some((ship, descriptor)) = retire_element_ship(cx, id, crew, replacement) {
+            ships[cx.ship_state(ship).player as usize] = Some(ship);
+            descriptor.unload(cx.world, true, true);
+        }
+    }
+    let activity = cx.world.activity() & !(IN_BATTLE as u16);
+    cx.world.set_activity(activity);
+    if activity as u8 == IN_ENCOUNTER as u8 && activity & CHECK_ABORT as u16 == 0 {
+        cx.write_back_surviving_ship_crew(ships);
+    }
+    for side in 0..2 {
+        let mut next = cx.first_ship(side);
+        while let Some(ship) = next {
+            next = cx.next_ship(ship);
+            if let Some(descriptor) = cx.take_descriptor(ship) {
                 descriptor.unload(cx.world, true, true);
             }
         }
-        let activity = cx.world.activity() & !(IN_BATTLE as u16);
-        cx.world.set_activity(activity);
-        if activity as u8 == IN_ENCOUNTER as u8 && activity & CHECK_ABORT as u16 == 0 {
-            for i in (0..2).rev() {
-                if let Some(ship) = ships[i].filter(|_| fleet_is_infinite(cx.world, i as u16) == 0)
-                {
-                    crate::battle::encount_native::engine::update_ship_frag_crew(cx, ship);
-                }
-            }
+    }
+    if cx.world.activity() as u8 != IN_ENCOUNTER as u8 {
+        cx.reset_ships(0);
+        cx.reset_ships(1);
+        if in_hqspace(cx.world) != 0 {
+            crate::navigation::hyper_data::free_hyperspace(cx.kernel);
         }
-        for side in 0..2 {
-            let mut next = cx.first_ship(side);
-            while let Some(ship) = next {
-                next = cx.next_ship(ship);
-                if let Some(descriptor) = cx.take_descriptor(ship) {
-                    descriptor.unload(cx.world, true, true);
-                }
-            }
-        }
-        if cx.world.activity() as u8 != IN_ENCOUNTER as u8 {
-            cx.reset_ships(0);
-            cx.reset_ships(1);
-            if in_hqspace(cx.world) != 0 {
-                crate::navigation::hyper_data::FreeHyperspace();
-            }
-        }
-        cx.complete_ship_reset();
-    });
+    }
+    cx.complete_ship_reset();
+    cx.kernel.ships_initialized = false;
 }
 
 #[cfg(not(test))]
@@ -185,28 +179,26 @@ mod live {
         ))
     }
 
-    /// # Safety
-    /// Called on the game thread with live display, galaxy and hyperspace resources.
-    pub unsafe fn rust_bridge_init_battle_arena() -> i16 {
-        let Some((mut graphics, activity, hyperspace)) = crate::app::bridge::enter(prepare_arena)
-        else {
+    pub fn init_ships(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        width: i16,
+        height: i16,
+        step_zoom: bool,
+    ) -> i16 {
+        let Some((mut graphics, activity, hyperspace)) = prepare_arena(cx) else {
             return 0;
         };
         graphics.select();
-        crate::app::bridge::enter(|cx| {
-            crate::battle::process_native::init_display_list(cx, optMeleeScale == 0)
-        });
-        crate::app::bridge::enter(crate::battle::galaxy::init_galaxy);
+        crate::battle::process_native::init_display_list(cx, step_zoom);
+        crate::battle::galaxy::init_galaxy(cx);
         let planet = activity as u8 != IN_LAST_BATTLE as u8;
-        graphics.show_viewport((ScreenWidth - 64) as i16, ScreenHeight as i16);
-        crate::app::bridge::enter(|cx| {
-            if !hyperspace && !planet {
-                crate::game_init::world_resources::free_gravity_well(cx.kernel);
-            }
-            create_arena_ships(cx, hyperspace, planet);
-        });
+        graphics.show_viewport(width, height);
+        if !hyperspace && !planet {
+            crate::game_init::world_resources::free_gravity_well(cx.kernel);
+        }
+        create_arena_ships(cx, hyperspace, planet);
+        cx.kernel.ships_initialized = true;
         if hyperspace {
-            crate::navigation::hyper_data::LoadHyperspace();
             1
         } else {
             2
@@ -220,6 +212,22 @@ pub use live::*;
 mod crew_writeback_tests {
     use crate::engine::battle::record::recover_ship_crew;
     use crate::ships::native::abi::RaceDescriptor;
+
+    #[test]
+    fn teardown_guard_belongs_to_the_kernel_and_preserves_encounter_recovery() {
+        let mut first = crate::engine::Game::new();
+        let second = crate::engine::Game::new();
+        for activity in [0, 1, 3, 0x101, 0x103] {
+            assert!(!first.kernel.ship_teardown_needed(activity));
+        }
+        assert!(first.kernel.ship_teardown_needed(2));
+        assert!(first.kernel.ship_teardown_needed(0x102));
+        first.kernel.ships_initialized = true;
+        for activity in [0, 1, 2, 3, 0x101, 0x103] {
+            assert!(first.kernel.ship_teardown_needed(activity));
+        }
+        assert!(!second.kernel.ship_teardown_needed(1));
+    }
 
     #[test]
     fn battle_survivor_retains_native_descriptor_crew_and_recovers_pods() {

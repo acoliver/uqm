@@ -3708,8 +3708,6 @@ extern "C" {
 pub use crate::navigation::hyper_data::LoadHyperspace;
 
 #[cfg(not(test))]
-pub use crate::navigation::hyper_data::FreeHyperspace;
-#[cfg(not(test))]
 pub use crate::navigation::hyper_radar::SeedUniverse;
 #[cfg(test)]
 extern "C" {
