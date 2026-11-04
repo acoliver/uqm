@@ -193,7 +193,10 @@ mod live {
             return 0;
         };
         graphics.select();
-        crate::app::bridge::enter(|cx| crate::battle::process_native::init_display_list(cx, optMeleeScale == 0)); crate::app::bridge::enter(crate::battle::galaxy::init_galaxy);
+        crate::app::bridge::enter(|cx| {
+            crate::battle::process_native::init_display_list(cx, optMeleeScale == 0)
+        });
+        crate::app::bridge::enter(crate::battle::galaxy::init_galaxy);
         let planet = activity as u8 != IN_LAST_BATTLE as u8;
         graphics.show_viewport((ScreenWidth - 64) as i16, ScreenHeight as i16);
         crate::app::bridge::enter(|cx| {
