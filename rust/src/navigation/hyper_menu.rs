@@ -1,94 +1,88 @@
 //! Hyperspace menu dispatch.
 #![cfg(not(test))]
 use super::abi::*;
-use super::get;
-use crate::engine::StoryKey;
-use crate::engine::World as WorldOwner;
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
-
-use super::hyper_transition::cleanup;
+use crate::engine::{battle::Cx, observe::Io, StoryKey};
 use std::{mem, ptr};
 
-unsafe extern "C" fn input(state: *mut MENU_STATE) -> BOOLEAN {
+unsafe fn input(cx: &mut Cx<'_>, io: &mut Io<'_>, state: *mut MENU_STATE) -> BOOLEAN {
     let mut select = PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0;
-    if WorldFields::current().read(|owner| owner.game.current_activity)
-        & ((CHECK_ABORT | CHECK_LOAD) as u16)
-        != 0
-        || WorldFields::current().read(|owner| owner.flagship.crew_enlisted) == u16::MAX
+    if cx.world.activity() & (CHECK_ABORT | CHECK_LOAD) as u16 != 0
+        || cx.world.data.flagship.crew_enlisted == u16::MAX
     {
         return 0;
     }
-    if DoMenuChooser(state, PM_STARMAP as u8) != 0 || !select {
+    if cx.with_legacy(|| DoMenuChooser(state, PM_STARMAP as u8)) != 0 || !select {
         return 1;
     }
-    SetFlashRect(ptr::null());
+    cx.with_legacy(|| SetFlashRect(ptr::null()));
     match (*state).CurState {
         2 => {
-            select = DevicesMenu() != 0;
-            if WorldOwner::current().read(|world| get(world, StoryKey::PORTAL_COUNTER)) != 0
-                || WorldFields::current().read(|owner| owner.game.current_activity)
-                    & START_ENCOUNTER as u16
-                    != 0
+            select = crate::planets::devices::devices_menu(cx, io) != 0;
+            if cx.world.story_state(StoryKey::PORTAL_COUNTER) != 0
+                || cx.world.activity() & START_ENCOUNTER as u16 != 0
             {
                 return 0;
             }
         }
-        3 => {
-            CargoMenu();
-        }
-        4 => {
-            select = RosterMenu() != 0;
-        }
+        3 => crate::planets::cargo::live::cargo_menu(cx, io),
+        4 => select = crate::planets::roster::live::roster_menu(cx, io) != 0,
         5 => {
-            if GameOptions() == 0 {
+            if crate::front_end::gameopt::runtime::game_options(cx, io) == 0 {
                 return 0;
             }
         }
         1 => {
-            StarMap();
+            crate::planets::pstarmap::star_map(cx, io);
             return 0;
         }
         6 => return 0,
         _ => {}
     }
-    if WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16 == 0 {
-        if select {
-            if optWhichMenu != 2 {
-                (*state).CurState = 6;
+    if cx.world.activity() & CHECK_ABORT as u16 == 0 {
+        cx.with_legacy(|| {
+            if select {
+                if optWhichMenu != 2 {
+                    (*state).CurState = 6;
+                }
+                DrawMenuStateStrings(PM_STARMAP as u8, (*state).CurState as i16);
             }
-            DrawMenuStateStrings(PM_STARMAP as u8, (*state).CurState as i16);
-        }
-        SetFlashRect(usize::MAX as *const RECT);
+            SetFlashRect(usize::MAX as *const RECT);
+        });
     }
     1
 }
+
 /// # Safety
 /// Input, graphics and world state must be initialized on the game thread.
-pub unsafe fn hyperspace_menu() {
-    UnbatchGraphics();
-    let old_context = SetContext(KernelOwner::current().read(|owner| owner.space_context));
-    let old_color = SetContextBackGroundColor(super::color(0, 0, 0));
+pub unsafe fn hyperspace_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) {
+    let (old_context, old_color) = cx.with_legacy(|| {
+        UnbatchGraphics();
+        let old_context =
+            SetContext(crate::engine::Kernel::current().read(|owner| owner.space_context));
+        let old_color = SetContextBackGroundColor(super::color(0, 0, 0));
+        DrawMenuStateStrings(PM_STARMAP as u8, 1);
+        SetFlashRect(usize::MAX as *const RECT);
+        SetMenuSounds(15, 16);
+        (old_context, old_color)
+    });
     let mut state: MENU_STATE = mem::zeroed();
-    state.InputFunc = Some(input);
     state.Initialized = 1;
     state.CurState = 1;
-    DrawMenuStateStrings(PM_STARMAP as u8, 1);
-    SetFlashRect(usize::MAX as *const RECT);
-    SetMenuSounds(15, 16);
-    DoInput(ptr::addr_of_mut!(state).cast(), 1);
-    SetFlashRect(ptr::null());
-    SetContext(KernelOwner::current().read(|owner| owner.space_context));
-    if WorldFields::current().read(|owner| owner.game.current_activity)
-        & ((CHECK_ABORT | CHECK_LOAD) as u16)
-        == 0
-    {
-        ClearSISRect(CLEAR_SIS_RADAR as u8);
-        WaitForNoInput(ONE_SECOND / 2, 0);
+    cx.run_input(io, true, |cx, io| input(cx, io, &mut state) != 0);
+    cx.with_legacy(|| {
+        SetFlashRect(ptr::null());
+        SetContext(crate::engine::Kernel::current().read(|owner| owner.space_context));
+    });
+    if cx.world.activity() & (CHECK_ABORT | CHECK_LOAD) as u16 == 0 {
+        cx.with_legacy(|| ClearSISRect(CLEAR_SIS_RADAR as u8));
+        crate::ui::util::live::wait_for_no_input(cx, io, ONE_SECOND / 2, 0);
     }
-    SetContextBackGroundColor(old_color);
-    SetContext(old_context);
-    if WorldFields::current().read(|owner| owner.game.current_activity) & IN_BATTLE as u16 == 0 {
-        crate::app::bridge::enter(cleanup);
+    cx.with_legacy(|| {
+        SetContextBackGroundColor(old_color);
+        SetContext(old_context);
+    });
+    if cx.world.activity() & IN_BATTLE as u16 == 0 {
+        super::hyper_transition::cleanup(cx);
     }
-    BatchGraphics();
+    cx.with_legacy(|| BatchGraphics());
 }

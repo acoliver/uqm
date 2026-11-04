@@ -15,9 +15,9 @@
 
 use super::response::ResponseFunc;
 use super::state::CommState;
+use crate::engine::observe::CheckpointView;
 #[cfg(not(test))]
 use crate::engine::Kernel;
-use crate::engine::observe::CheckpointView;
 
 fn communication_background_volume(background: u8, using_speech: u32) -> u8 {
     if using_speech != 0 {
@@ -69,7 +69,7 @@ pub(super) mod c_bridge {
 #[cfg(not(test))]
 pub(super) mod c_bridge {
     use crate::c_bindings::controller_input::{
-        CONTROLLER_INPUT_STATE as ControllerInputState, CurrentInputState, PulsedInputState,
+        CurrentInputState, PulsedInputState, CONTROLLER_INPUT_STATE as ControllerInputState,
     };
     use crate::comm::locdata::COMM_DATA;
     use crate::engine::Kernel;
@@ -278,7 +278,7 @@ pub(super) mod c_bridge {
 #[cfg(not(test))]
 pub mod dinput {
     #![allow(dead_code)]
-    use super::{CheckpointView, KEY_MENU_CANCEL, KEY_MENU_LEFT, KEY_MENU_RIGHT, c_bridge};
+    use super::{c_bridge, CheckpointView, KEY_MENU_CANCEL, KEY_MENU_LEFT, KEY_MENU_RIGHT};
     use crate::engine::Kernel;
     use crate::engine::{battle::Cx, observe::Io};
     use crate::mainloop::restart_menu::c_extern::SetMenuSounds;
@@ -414,19 +414,20 @@ pub mod dinput {
     /// Ported from c_RunTalkSegue — runs the talk segue via DoInput.
     /// Returns true if playback reached its natural end.
     pub fn run_talk_segue_dinput(cx: &mut Cx<'_>, io: &mut Io<'_>, wait_track: u32) -> bool {
-        // Transition animation to talking state
-        if unsafe { c_bridge::want_talking_anim() } != 0
-            && unsafe { c_bridge::have_talking_anim() } != 0
-        {
-            if unsafe { c_bridge::has_transition_anim() } != 0 {
-                unsafe { c_bridge::set_run_intro_anim() };
+        cx.with_legacy(|| {
+            // Transition animation to talking state
+            if unsafe { c_bridge::want_talking_anim() } != 0
+                && unsafe { c_bridge::have_talking_anim() } != 0
+            {
+                if unsafe { c_bridge::has_transition_anim() } != 0 {
+                    unsafe { c_bridge::set_run_intro_anim() };
+                }
+                unsafe { c_bridge::set_run_talking_anim() };
+                while unsafe { c_bridge::running_intro_anim() } != 0 {
+                    unsafe { super::do_run_comm_anim_frame() };
+                }
             }
-            unsafe { c_bridge::set_run_talking_anim() };
-            while unsafe { c_bridge::running_intro_anim() } != 0 {
-                unsafe { super::do_run_comm_anim_frame() };
-            }
-        }
-
+        });
         let mut ts = TalkingStateDInput {
             next_time: 0,
             wait_track: if wait_track == 0 {
@@ -439,35 +440,38 @@ pub mod dinput {
             ended: 0,
         };
 
-        if wait_track == 0 {
-            io.observer
-                .checkpoint(&CheckpointView::CommunicationReplay(true));
-        } else if c_bridge::PlayingTrack() == 0 {
-            c_bridge::PlayTrack();
-        }
+        cx.with_legacy(|| {
+            if wait_track == 0 {
+                io.observer
+                    .checkpoint(&CheckpointView::CommunicationReplay(true));
+            } else if c_bridge::PlayingTrack() == 0 {
+                c_bridge::PlayTrack();
+            }
 
-        unsafe { SetMenuSounds(MENU_SOUND_NONE as u16, MENU_SOUND_NONE as u16) };
-        cx.run_input(io, false, |_, _| unsafe {
-            do_talk_segue_frame(&mut ts) != 0
+            unsafe { SetMenuSounds(MENU_SOUND_NONE as u16, MENU_SOUND_NONE as u16) };
         });
-        if wait_track == 0 {
-            io.observer
-                .checkpoint(&CheckpointView::CommunicationReplay(false));
-        }
-        unsafe { c_bridge::comm_ClearSubtitles() };
+        cx.run_input(io, false, |cx, _| {
+            cx.with_legacy(|| unsafe { do_talk_segue_frame(&mut ts) != 0 })
+        });
+        cx.with_legacy(|| {
+            if wait_track == 0 {
+                io.observer
+                    .checkpoint(&CheckpointView::CommunicationReplay(false));
+            }
+            unsafe { c_bridge::comm_ClearSubtitles() };
 
-        if ts.ended != 0 {
-            unsafe { super::set_slider_image_frame(8) };
-        }
+            if ts.ended != 0 {
+                unsafe { super::set_slider_image_frame(8) };
+            }
 
-        // Transition back to silent
-        if unsafe { c_bridge::running_talking_anim() } != 0 {
-            unsafe { c_bridge::set_stop_talking_anim() };
-        }
-        while unsafe { c_bridge::running_talking_anim() } != 0 {
-            unsafe { super::do_run_comm_anim_frame() };
-        }
-
+            // Transition back to silent
+            if unsafe { c_bridge::running_talking_anim() } != 0 {
+                unsafe { c_bridge::set_stop_talking_anim() };
+            }
+            while unsafe { c_bridge::running_talking_anim() } != 0 {
+                unsafe { super::do_run_comm_anim_frame() };
+            }
+        });
         ts.ended != 0
     }
 
@@ -477,7 +481,7 @@ pub mod dinput {
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
     ) -> c_int {
-        let activity = crate::mainloop::ffi::get_current_activity().0 as u32;
+        let activity = cx.world.activity() as u32;
         if (activity & CHECK_ABORT) != 0 {
             return 0;
         }
@@ -494,34 +498,40 @@ pub mod dinput {
         let left_pressed = lrs.left.pressed(KEY_MENU_LEFT);
 
         if cancel_pressed && !won_last_battle {
-            let speech = Kernel::current().read(|kernel| kernel.using_speech);
-            c_bridge::FadeMusic(
-                super::communication_background_volume(
-                    crate::sound::types::NORMAL_VOLUME as u8,
-                    speech,
-                ),
-                c_bridge::ONE_SECOND_TICKS as i16,
-            );
-            super::super::response_ui::select_conversation_summary_production();
-            lrs.time_out = c_bridge::FadeMusic(0, (c_bridge::ONE_SECOND_TICKS * 2) as i16)
+            let speech = cx.kernel.using_speech;
+            cx.with_legacy(|| {
+                c_bridge::FadeMusic(
+                    super::communication_background_volume(
+                        crate::sound::types::NORMAL_VOLUME as u8,
+                        speech,
+                    ),
+                    c_bridge::ONE_SECOND_TICKS as i16,
+                )
+            });
+            cx.with_legacy(|| super::super::response_ui::select_conversation_summary_production());
+            lrs.time_out = cx
+                .with_legacy(|| c_bridge::FadeMusic(0, (c_bridge::ONE_SECOND_TICKS * 2) as i16))
                 + (c_bridge::ONE_SECOND_TICKS as u32) / 60;
         } else if left_pressed {
-            let speech = Kernel::current().read(|kernel| kernel.using_speech);
-            c_bridge::FadeMusic(
-                super::communication_background_volume(
-                    crate::sound::types::NORMAL_VOLUME as u8,
-                    speech,
-                ),
-                c_bridge::ONE_SECOND_TICKS as i16,
-            );
+            let speech = cx.kernel.using_speech;
+            cx.with_legacy(|| {
+                c_bridge::FadeMusic(
+                    super::communication_background_volume(
+                        crate::sound::types::NORMAL_VOLUME as u8,
+                        speech,
+                    ),
+                    c_bridge::ONE_SECOND_TICKS as i16,
+                )
+            });
             run_talk_segue_dinput(cx, io, 0);
-            lrs.time_out = c_bridge::FadeMusic(0, (c_bridge::ONE_SECOND_TICKS * 2) as i16)
+            lrs.time_out = cx
+                .with_legacy(|| c_bridge::FadeMusic(0, (c_bridge::ONE_SECOND_TICKS * 2) as i16))
                 + (c_bridge::ONE_SECOND_TICKS as u32) / 60;
         }
 
-        unsafe { super::do_update_animations(false) };
+        unsafe { cx.with_legacy(|| super::do_update_animations(false)) };
 
-        unsafe { SleepThreadUntil(lrs.next_time) };
+        unsafe { cx.with_legacy(|| SleepThreadUntil(lrs.next_time)) };
         lrs.next_time = c_bridge::clock::now_ticks() + (c_bridge::ONE_SECOND_TICKS as u32) / 40;
 
         1
@@ -1270,7 +1280,11 @@ fn playing_track(state: &CommState) -> u32 {
     #[cfg(test)]
     {
         // Simulate: playing_track returns 1 while track is playing, 0 otherwise.
-        if state.track().is_playing() { 1 } else { 0 }
+        if state.track().is_playing() {
+            1
+        } else {
+            0
+        }
     }
 }
 
@@ -1765,7 +1779,7 @@ fn intro_transition(mode: u32, fade_time: u32) -> IntroTransition {
 fn comm_intro_transition() {
     #[cfg(not(test))]
     unsafe {
-        use crate::mainloop::restart_menu::c_extern::{FADE_ALL_TO_COLOR, FadeScreen};
+        use crate::mainloop::restart_menu::c_extern::{FadeScreen, FADE_ALL_TO_COLOR};
         use std::ffi::{c_uint, c_void};
 
         // Ported from c_CommIntroTransition in rust_comm.c

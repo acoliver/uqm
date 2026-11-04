@@ -1,8 +1,8 @@
 //! Devices menu, ported from `planets/devices.c`.
 
-use crate::engine::{battle::Cx, observe::Io};
 use super::device_effects::{repair_ultron, ULTRON_COMPONENTS};
 use crate::battle::c_bridge::SleepThread;
+use crate::engine::{battle::Cx, observe::Io};
 use crate::engine::{
     Kernel as KernelOwner, StoryKey, World as WorldOwner, WorldData as WorldFields,
 };
@@ -429,9 +429,11 @@ pub unsafe extern "C" fn InventoryDevices(map: *mut u8, size: u16) -> i16 {
 /// # Safety
 /// Requires the initialized UI and campaign on the owning game thread.
 pub unsafe fn devices_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) -> i32 {
-    let Some(mut menu) = cx.with_legacy(prepare_devices_menu) else { return 0; };
+    let Some(mut menu) = cx.with_legacy(|| prepare_devices_menu()) else {
+        return 0;
+    };
     cx.run_input(io, true, |cx, _| cx.with_legacy(|| frame(&mut menu) != 0));
-    cx.with_legacy(finish_devices_menu)
+    cx.with_legacy(|| finish_devices_menu())
 }
 
 unsafe fn prepare_devices_menu() -> Option<Menu> {

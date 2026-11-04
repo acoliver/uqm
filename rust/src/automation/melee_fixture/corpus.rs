@@ -22,7 +22,7 @@ struct Observations {
 }
 
 impl Observations {
-    fn observe(&mut self) -> Result<(), String> {
+    fn observe(&mut self, checkpoint: &dyn Fn()) -> Result<(), String> {
         inspect_pending(|events| -> Result<(), String> {
             for event in &events[self.seen_pending..] {
                 match event {
@@ -94,6 +94,7 @@ impl Run {
         &mut self,
         world: &mut World,
         catalog: &BTreeMap<u8, u32>,
+        checkpoint: &dyn Fn(),
     ) -> Result<Option<Vec<Effect>>, String> {
         match self.stage {
             0 => {
@@ -135,13 +136,13 @@ impl Run {
                 ))
             }
             2 => {
-                self.observations.observe()?;
+                self.observations.observe(checkpoint)?;
                 self.wait = 0;
                 self.stage = 3;
                 Ok(Some(vec![Effect::Redraw(false)]))
             }
-            3 => self.arrival(world),
-            4 => self.engage(world),
+            3 => self.arrival(world, checkpoint),
+            4 => self.engage(world, checkpoint),
             _ => {
                 self.observations
                     .coverage
@@ -151,8 +152,12 @@ impl Run {
         }
     }
 
-    fn arrival(&mut self, world: &World) -> Result<Option<Vec<Effect>>, String> {
-        self.observations.observe()?;
+    fn arrival(
+        &mut self,
+        world: &World,
+        checkpoint: &dyn Fn(),
+    ) -> Result<Option<Vec<Effect>>, String> {
+        self.observations.observe(checkpoint)?;
         if self.ended(world)? {
             return Err("production corpus ship died during arrival".into());
         }
@@ -179,8 +184,12 @@ impl Run {
         Ok(Some(vec![Effect::Redraw(false)]))
     }
 
-    fn engage(&mut self, world: &World) -> Result<Option<Vec<Effect>>, String> {
-        self.observations.observe()?;
+    fn engage(
+        &mut self,
+        world: &World,
+        checkpoint: &dyn Fn(),
+    ) -> Result<Option<Vec<Effect>>, String> {
+        self.observations.observe(checkpoint)?;
         self.wait += 1;
         if self.ended(world)? || self.wait == 96 {
             self.pair += 1;

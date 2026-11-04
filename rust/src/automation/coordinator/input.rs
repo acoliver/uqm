@@ -156,7 +156,7 @@ impl AutomationObserver {
         ) && inner.sched_state.phase == ActionPhase::WaitingForInput
             && scheduler_event == SchedulerEvent::AdmittedInput
         {
-            match crate::automation::melee_fixture::trigger() {
+            match crate::automation::melee_fixture::trigger(&|| self.parity_checkpoint("fixture")) {
                 Ok(()) => self.write_trace_labeled(
                     inner,
                     RecordKind::SemanticAssertion,

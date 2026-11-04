@@ -2777,8 +2777,6 @@ extern "C" {
     pub fn uninit_game_structures();
 }
 
-#[cfg(not(test))]
-pub use crate::front_end::fmv::runtime::SplashScreen;
 
 #[cfg(not(test))]
 pub use crate::front_end::fmv::runtime::DoShipSpin;
@@ -3003,8 +3001,6 @@ pub struct globalopts_struct {
 }
 pub type GLOBALOPTS = globalopts_struct;
 
-#[cfg(not(test))]
-pub use crate::front_end::setupmenu::runtime::SetupMenu;
 
 #[cfg(not(test))]
 pub use crate::front_end::setupmenu::runtime::GetGlobalOptions;
@@ -4487,17 +4483,9 @@ pub type NamingCallback = ::std::option::Option<unsafe extern "C" fn()>;
 #[cfg(not(test))]
 pub use crate::front_end::gameopt::runtime::SetNamingCallback;
 
-#[cfg(not(test))]
-pub use crate::planets::cargo::live::CargoMenu;
 
-#[cfg(not(test))]
-pub use crate::planets::roster::live::RosterMenu;
 
-#[cfg(not(test))]
-pub use crate::planets::devices::DevicesMenu;
 
-#[cfg(not(test))]
-pub use crate::planets::pstarmap::StarMap;
 
 #[cfg(not(test))]
 pub use crate::planets::devices::InventoryDevices;

@@ -81,6 +81,18 @@ fn seed(io: &mut crate::engine::observe::Io<'_>, domain: u32, fallback: u32) -> 
         .unwrap_or(fallback)
 }
 
+fn reset_observation(io: &mut crate::engine::observe::Io<'_>) {
+    crate::collections::observation::reset();
+    io.observer
+        .checkpoint(&crate::engine::observe::CheckpointView::BattleReset);
+}
+
+fn advance_observation(io: &mut crate::engine::observe::Io<'_>) {
+    crate::collections::observation::advance();
+    io.observer
+        .checkpoint(&crate::engine::observe::CheckpointView::BattleAdvanced);
+}
+
 #[cfg(not(test))]
 type BattleNetwork = (
     *mut crate::engine::battle::Battle,
@@ -145,8 +157,8 @@ pub(crate) mod engine {
     // gfx_common.h SCALE enum starts with the stepped scaler.
     pub const SCALE_STEP: i32 = 0;
 
-    use crate::engine::observe::Io;
     use crate::battle::process_native::engine::RedrawQueue;
+    use crate::engine::observe::Io;
 
     use crate::state::ffi::rust_get_game_state_bits as getGameState;
 
@@ -415,9 +427,7 @@ pub(crate) mod engine {
         if activity() & IN_BATTLE as u16 == 0 {
             return 0;
         }
-        crate::collections::observation::advance();
-        io.observer
-            .checkpoint(&crate::engine::observe::CheckpointView::BattleAdvanced);
+        advance_observation(&mut io);
         net.set_frame(frame.wrapping_add(1));
         1
     }
@@ -463,9 +473,7 @@ pub(crate) mod engine {
             set_activity(activity() | IN_BATTLE as u16);
             (*battle).counters[0] = crate::engine::battle::link_queue::ships(0).count() as u8;
             (*battle).counters[1] = crate::engine::battle::link_queue::ships(1).count() as u8;
-            crate::collections::observation::reset();
-            io.observer
-                .checkpoint(&crate::engine::observe::CheckpointView::BattleReset);
+            reset_observation(&mut io);
             if optMeleeScale != SCALE_STEP {
                 SetGraphicScaleMode(optMeleeScale);
             }
@@ -523,8 +531,6 @@ pub(crate) mod engine {
                             .as_deref_mut()
                             .unwrap_or_else(|| panic!("missing battle observer")),
                     });
-
-
                 }
             }
             net.finish();
@@ -546,6 +552,126 @@ pub use engine::{player_input, set_player_input, Battle, BattleSong, FreeBattleS
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::observe::{
+        CampaignView, CheckpointView, Injected, InputView, Io, Observer, Presented,
+    };
+    use std::{cell::RefCell, rc::Rc};
+
+    #[derive(Debug, PartialEq)]
+    enum Observed {
+        Fallback,
+        Seed(u32, u32),
+        Reset(u64),
+        Advanced(u64),
+    }
+
+    struct Recording {
+        events: Rc<RefCell<Vec<Observed>>>,
+        seed: Option<u32>,
+    }
+
+    impl Observer<Option<CampaignView>> for Recording {
+        fn input_admitted(
+            &mut self,
+            view: &InputView,
+            campaign: &Option<CampaignView>,
+        ) -> Injected {
+            assert!(campaign.is_none());
+            let InputView::Seed { domain, fallback } = *view else {
+                panic!("unexpected input {view:?}");
+            };
+            self.events
+                .borrow_mut()
+                .push(Observed::Seed(domain, fallback));
+            Injected {
+                seed: self.seed,
+                stop: false,
+            }
+        }
+
+        fn checkpoint(&mut self, view: &CheckpointView<'_>) {
+            let frame = crate::collections::observation::current_frame();
+            self.events.borrow_mut().push(match view {
+                CheckpointView::BattleReset => Observed::Reset(frame),
+                CheckpointView::BattleAdvanced => Observed::Advanced(frame),
+                _ => panic!("unexpected checkpoint {view:?}"),
+            });
+        }
+
+        fn presented(&mut self, _: &mut Presented) {
+            panic!("unexpected presentation");
+        }
+    }
+
+    #[test]
+    fn supplied_seed_observer_keeps_domains_and_eager_fallback_order() {
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let mut observer = Recording {
+            events: events.clone(),
+            seed: Some(17),
+        };
+        let mut io = Io {
+            observer: &mut observer,
+        };
+        assert_eq!(
+            seed(&mut io, 4, {
+                events.borrow_mut().push(Observed::Fallback);
+                123
+            }),
+            17
+        );
+        assert_eq!(seed(&mut io, 2, 0), 17);
+        observer.seed = None;
+        let mut io = Io {
+            observer: &mut observer,
+        };
+        assert_eq!(seed(&mut io, 4, 456), 456);
+        assert_eq!(seed(&mut io, 2, 0), 0);
+        assert_eq!(
+            *events.borrow(),
+            [
+                Observed::Fallback,
+                Observed::Seed(4, 123),
+                Observed::Seed(2, 0),
+                Observed::Seed(4, 456),
+                Observed::Seed(2, 0),
+            ]
+        );
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn retained_battle_observer_sees_counter_changes_before_checkpoints() {
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let mut state = abi::battlestate_struct {
+            InputFunc: None,
+            first_time: 0,
+            NextTime: 0,
+            frame_cb: None,
+            net: None,
+            battle: std::ptr::null_mut(),
+            observer: Some(Box::new(Recording {
+                events: events.clone(),
+                seed: None,
+            })),
+        };
+        crate::collections::observation::advance();
+        let mut io = Io {
+            observer: state.observer.as_deref_mut().unwrap(),
+        };
+        reset_observation(&mut io);
+        advance_observation(&mut io);
+        advance_observation(&mut io);
+        assert_eq!(
+            *events.borrow(),
+            [
+                Observed::Reset(0),
+                Observed::Advanced(1),
+                Observed::Advanced(2)
+            ]
+        );
+    }
+
     #[test]
     fn c_boolean_and_input_widths_are_distinct() {
         assert_eq!(std::mem::size_of::<abi::BOOLEAN>(), 4);

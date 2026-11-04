@@ -24,8 +24,8 @@ pub(crate) mod live {
     use crate::battle::c_bridge::SleepThread;
     use crate::c_bindings::controller_input::*;
     use crate::comm::locdata::{CColor, CPoint, CRect};
-    use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
     use crate::engine::{battle::Cx, observe::Io};
+    use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
     use crate::starbase::cffi::CffiPlatform;
     use crate::starbase::gfx::{Align, ContextId, FontId, Gfx, Point, Rect, Rgba, Stamp, TextDraw};
     use std::ffi::{c_void, CString};
@@ -254,9 +254,7 @@ pub(crate) mod live {
     /// # Safety
     /// Call on the game thread with campaign globals and screen resources initialized.
     pub unsafe fn cargo_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) {
-        let mut menu = Menu {
-            current: 0,
-        };
+        let mut menu = Menu { current: 0 };
         cx.with_legacy(|| {
             DrawCargoStrings(u8::MAX, 0);
             description(0);

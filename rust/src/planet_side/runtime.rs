@@ -194,7 +194,11 @@ where
     S: ShipStatusPort,
 {
     let deadline = Tick(adapters.clock.now().0.wrapping_add(tick_period));
-    let input = if session.phase == SessionPhase::Active { Some(adapters.input.poll()?) } else { None };
+    let input = if session.phase == SessionPhase::Active {
+        Some(adapters.input.poll()?)
+    } else {
+        None
+    };
     run_frame_at(session, adapters, deadline, input)
 }
 
@@ -239,7 +243,12 @@ where
         session.phase
     );
 
-    if let Some(step) = apply_lander_input(session, adapters, deadline, input.expect("active PlanetSide frame requires input"))? {
+    if let Some(step) = apply_lander_input(
+        session,
+        adapters,
+        deadline,
+        input.expect("active PlanetSide frame requires input"),
+    )? {
         return Ok(step);
     }
 

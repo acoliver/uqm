@@ -352,12 +352,6 @@ pub use crate::ui::flash::Flash_setState;
 pub use crate::ui::flash::Flash_setOverlay;
 
 #[cfg(not(test))]
-pub use crate::front_end::setupmenu::runtime::SetupMenu;
-
-#[cfg(not(test))]
-pub use crate::front_end::fmv::runtime::SplashScreen;
-
-#[cfg(not(test))]
 pub use crate::ui::confirm::DoPopupWindow;
 
 extern "C" {}

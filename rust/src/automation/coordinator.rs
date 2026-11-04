@@ -3447,11 +3447,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn application_releases_publication_while_observer_handles_remain_alive() {
+    fn application_releases_its_observer_while_external_handles_remain_alive() {
         const CHILD: &str = "UQM_OBSERVER_OWNERSHIP_TEST";
         if std::env::var_os(CHILD).is_none() {
             let status = std::process::Command::new(std::env::current_exe().unwrap())
-            .args(["--exact", "automation::coordinator::tests::application_releases_publication_while_observer_handles_remain_alive"])
+            .args(["--exact", "automation::coordinator::tests::application_releases_its_observer_while_external_handles_remain_alive"])
             .env(CHILD, "1").status().unwrap();
             assert!(status.success());
             return;
@@ -3470,11 +3470,29 @@ mod tests {
         let observer = AutomationObserver::new(script, directory.path().into());
         let application = crate::app::Application::new(Some(observer.clone()));
         assert!(Arc::ptr_eq(application.observer().unwrap(), &observer));
-        crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::FlagshipDestroyed);
+        use crate::engine::observe::Observer;
+        let mut handle =
+            crate::automation::observer::Handle(application.observer().unwrap().clone());
+        handle.checkpoint(&crate::engine::observe::CheckpointView::FlagshipDestroyed);
+        drop(handle);
         assert!(observer.flagship_destroyed.load(Ordering::SeqCst));
         drop(application);
         assert_eq!(Arc::strong_count(&observer), 1);
-        assert!(!crate::app::observe::input(crate::engine::observe::InputView::BeforeUpdate).stop);
+    }
+
+    #[test]
+    fn initialization_without_a_scene_never_enters_the_owner_slot() {
+        let source = br#"{"version":1,"name":"no-scene","steps":[{"action":"finish"}],"budgets":{"max_input_ticks":10,"max_presentations":10,"max_wallclock_seconds":60}}"#;
+        let script = crate::automation::validate_script(
+            crate::automation::parse_script(source, "test.json").unwrap(),
+            "test.json",
+        )
+        .unwrap();
+        let output = tempfile::tempdir().unwrap();
+        let observer = crate::automation::AutomationObserver::new(script, output.path().into());
+        let before = observer.runtime.commit.next_sequence();
+        assert!(observer.prepare_start_scene().is_none());
+        assert_eq!(observer.runtime.commit.next_sequence(), before);
     }
 
     #[test]

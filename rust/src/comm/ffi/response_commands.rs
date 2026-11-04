@@ -1,7 +1,7 @@
 //! Response mutations and their ordered observer notifications.
 
 use super::COMM_STATE;
-use std::ffi::{CStr, c_int, c_uint};
+use std::ffi::{c_int, c_uint, CStr};
 
 /// Add a response option, rejecting absent or non-UTF-8 resource text.
 /// `func` receives `response_ref` when the response is selected.
@@ -31,7 +31,11 @@ pub fn do_response_phrase(
         "[DBG] rust_DoResponsePhrase: added={}, count={}",
         ok, response_count
     );
-    if ok { 1 } else { 0 }
+    if ok {
+        1
+    } else {
+        0
+    }
 }
 
 /// Clear all responses

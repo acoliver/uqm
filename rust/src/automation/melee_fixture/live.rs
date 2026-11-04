@@ -106,12 +106,6 @@ fn place(element: &mut Element, x: i16, y: i16) {
     element.flags |= ElementFlags::CHANGING.bits();
 }
 
-fn checkpoint() {
-    crate::app::observe::checkpoint(crate::engine::observe::CheckpointView::Simulation(
-        "fixture",
-    ));
-}
-
 struct Hooks {
     blazer_collision: usize,
     satellite: Option<crate::engine::battle::ElementHook>,
@@ -372,6 +366,7 @@ impl<'a> Task<'a> {
         world: &mut World,
         hooks: &Hooks,
         catalog: &BTreeMap<u8, u32>,
+        checkpoint: &dyn Fn(),
     ) -> Result<Option<Vec<Effect>>, String> {
         match self {
             Self::Battle(run) => {
@@ -381,9 +376,9 @@ impl<'a> Task<'a> {
                 }
                 run.advance(world, hooks)
             }
-            Self::Corpus(run) => run.advance(world, catalog),
+            Self::Corpus(run) => run.advance(world, catalog, checkpoint),
             Self::Mutual(run) => combat::mutual_loss(run, world),
-            Self::Star(_, run) => star::advance(run, world, hooks),
+            Self::Star(_, run) => star::advance(run, world, hooks, checkpoint),
         }
     }
 
@@ -482,7 +477,8 @@ mod tests {
             .advance(
                 &mut World::new(0, [0; 2], 0),
                 &test_hooks(),
-                &BTreeMap::new()
+                &BTreeMap::new(),
+                &|| {}
             )
             .is_err());
         task.reply(production::Reply::None).unwrap();

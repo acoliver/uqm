@@ -41,8 +41,6 @@ pub(crate) mod runtime {
 
     // uqm/comm.h is not included in navigation's generated ABI yet.
 
-    use crate::comm::comm_abi::InitCommunication;
-
     use crate::comm::comm_abi::SetCommIntroMode;
 
     extern "C" {
@@ -492,7 +490,7 @@ pub(crate) mod runtime {
         }
     }
 
-    unsafe fn outtakes() {
+    unsafe fn outtakes(cx: &mut Cx<'_>, io: &mut Io<'_>) {
         const CONVERSATIONS: [CONVERSATION; 15] = [
             CONVERSATION_ZOQFOTPIK_CONVERSATION,
             CONVERSATION_TALKING_PET_CONVERSATION,
@@ -510,22 +508,24 @@ pub(crate) mod runtime {
             CONVERSATION_BLACKURQ_CONVERSATION,
             CONVERSATION_ARILOU_CONVERSATION,
         ];
-        let old_subtitles = optSubtitles;
-        optSubtitles = 1;
-        sliderDisabled = 1;
-        oscillDisabled = 1;
+        let old_subtitles = cx.with_legacy(|| {
+            let old = optSubtitles;
+            optSubtitles = 1;
+            sliderDisabled = 1;
+            oscillDisabled = 1;
+            old
+        });
         let mut i = 0;
-        while i < CONVERSATIONS.len()
-            && WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
-                == 0
-        {
-            SetCommIntroMode((CIM_CROSSFADE_WINDOW) as u32, 0);
-            InitCommunication(CONVERSATIONS[i]);
+        while i < CONVERSATIONS.len() && cx.world.activity() & CHECK_ABORT as u16 == 0 {
+            cx.with_legacy(|| SetCommIntroMode((CIM_CROSSFADE_WINDOW) as u32, 0));
+            crate::comm::dispatch::init_communication(cx, io, CONVERSATIONS[i]);
             i += 1;
         }
-        optSubtitles = old_subtitles;
-        sliderDisabled = 0;
-        oscillDisabled = 0;
+        cx.with_legacy(|| {
+            optSubtitles = old_subtitles;
+            sliderDisabled = 0;
+            oscillDisabled = 0;
+        });
     }
 
     unsafe fn menu(key: u32) -> bool {
@@ -605,8 +605,6 @@ pub(crate) mod runtime {
         SetInputCallback(Some(on_input_frame));
         if with_outtakes {
             OUT_TAKES_RUNNING = 1;
-            outtakes();
-            OUT_TAKES_RUNNING = 0;
         }
         Some(music)
     }
@@ -637,6 +635,10 @@ pub(crate) mod runtime {
         let Some(music) = cx.with_legacy(|| prepare_credits(context, with_outtakes, io)) else {
             return;
         };
+        if with_outtakes {
+            outtakes(cx, io);
+            cx.with_legacy(|| OUT_TAKES_RUNNING = 0);
+        }
         if cx.world.activity() & CHECK_ABORT as u16 == 0 {
             if with_outtakes {
                 cx.with_legacy(|| io.observer.checkpoint(&CheckpointView::CreditsReady));

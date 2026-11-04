@@ -51,7 +51,6 @@ struct BridgeState {
     thread: Option<ThreadId>,
     world_borrowed: bool,
     kernel_borrowed: bool,
-    observer: std::sync::Weak<crate::automation::AutomationObserver>,
 }
 
 impl BridgeState {
@@ -79,40 +78,7 @@ static CONTEXT: Mutex<BridgeState> = Mutex::new(BridgeState {
     thread: None,
     world_borrowed: false,
     kernel_borrowed: false,
-    observer: std::sync::Weak::new(),
 });
-
-pub(crate) fn install_observer(observer: &std::sync::Arc<crate::automation::AutomationObserver>) {
-    let mut state = CONTEXT.lock();
-    assert!(
-        state.observer.upgrade().is_none(),
-        "application observer already installed"
-    );
-    state.observer = std::sync::Arc::downgrade(observer);
-}
-
-pub(crate) fn observer() -> Option<std::sync::Arc<crate::automation::AutomationObserver>> {
-    CONTEXT.lock().observer.upgrade()
-}
-
-pub(crate) fn uninstall_observer(observer: &std::sync::Arc<crate::automation::AutomationObserver>) {
-    let mut state = CONTEXT.lock();
-    assert!(
-        std::sync::Weak::ptr_eq(&state.observer, &std::sync::Arc::downgrade(observer)),
-        "application observer changed before teardown"
-    );
-    state.observer = std::sync::Weak::new();
-}
-
-#[cfg(not(test))]
-pub(crate) fn campaign_view() -> crate::automation::campaign_state::CampaignView {
-    crate::engine::World::current().read(crate::automation::campaign_state::CampaignView::capture)
-}
-
-#[cfg(test)]
-pub(crate) fn campaign_view() -> crate::automation::campaign_state::CampaignView {
-    crate::automation::campaign_state::CampaignView::empty()
-}
 
 impl<T> std::ops::Deref for Projection<T> {
     type Target = *mut T;

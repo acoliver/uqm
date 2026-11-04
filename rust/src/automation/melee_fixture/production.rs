@@ -47,6 +47,7 @@ fn hooks() -> Hooks {
 #[cfg(not(test))]
 pub(in crate::automation::melee_fixture) fn execute(
     operation: Operation<'_>,
+    checkpoint: &dyn Fn(),
 ) -> Result<Option<FixtureRun>, String> {
     let hooks = hooks();
     let mut registry = crate::ships::hook_registry::hooks();
@@ -82,7 +83,7 @@ pub(in crate::automation::melee_fixture) fn execute(
                 (index, master.species)
             })
             .collect();
-        drive(cx, *task, &hooks, &catalog)
+        drive(cx, *task, &hooks, &catalog, checkpoint)
     };
     // SAFETY: the admitted fixture exclusively borrows the published game context.
     unsafe { crate::app::bridge::enter(run) }
@@ -94,6 +95,7 @@ fn drive(
     mut task: Task<'_>,
     hooks: &Hooks,
     catalog: &BTreeMap<u8, u32>,
+    checkpoint: &dyn Fn(),
 ) -> Result<Option<FixtureRun>, String> {
     let mut retained: Option<crate::battle::context_access::fixture::Descriptor> = None;
     let mut retained_owner = None;
@@ -101,8 +103,9 @@ fn drive(
     loop {
         let mut world = borrow_world(cx);
         // SAFETY: planning owns only copied values; its legacy checkpoint may enter Cx.
-        let effects =
-            unsafe { crate::app::bridge::publish(cx, || task.advance(&mut world, hooks, catalog)) };
+        let effects = unsafe {
+            crate::app::bridge::publish(cx, || task.advance(&mut world, hooks, catalog, checkpoint))
+        };
         world.commit(cx);
         let elements = world.order;
         let ships = world.ship_order;
@@ -122,7 +125,7 @@ fn drive(
                             retained = Some(cx.detach_descriptor(owner));
                             retained_owner = None;
                         }
-                        apply(cx, Effect::Spawn(owner))?
+                        apply(cx, Effect::Spawn(owner), checkpoint)?
                     }
                     Effect::FreeRetained => {
                         crate::mainloop::input_frame::drain_committed_draws();
@@ -136,7 +139,7 @@ fn drive(
                         crate::mainloop::input_frame::drain_committed_draws();
                         crate::battle::tactrans_native::reset_winner(cx.kernel);
                         cx.b.counters = [7, 7];
-                        apply(cx, Effect::Remove(elements.clone()))?;
+                        apply(cx, Effect::Remove(elements.clone()), checkpoint)?;
                         for &owner in &ships {
                             cx.detach_descriptor(owner).free(cx.world);
                         }
@@ -150,7 +153,7 @@ fn drive(
                         optMeleeScale = old_scale;
                         Reply::None
                     }
-                    other => apply(cx, other)?,
+                    other => apply(cx, other, checkpoint)?,
                 }
             };
             task.reply(reply)?;
@@ -197,14 +200,14 @@ pub(super) enum Reply {
 /// Handles and callback addresses must have come from the just-dropped live
 /// graph. No borrowed Element, ship, descriptor or frame may cross this call.
 #[cfg(not(test))]
-unsafe fn apply(cx: &mut Cx<'_>, effect: Effect) -> Result<Reply, String> {
+unsafe fn apply(cx: &mut Cx<'_>, effect: Effect, checkpoint: &dyn Fn()) -> Result<Reply, String> {
     // SAFETY: effects execute at the published game-thread boundary after command planning commits.
     unsafe {
         match effect {
             Effect::Redraw(check) => {
                 crate::app::bridge::publish(cx, || {
                     crate::battle::process_native::RedrawQueue(0);
-                    redrawn(check);
+                    redrawn(check, checkpoint);
                 });
                 return Ok(Reply::None);
             }
@@ -380,7 +383,7 @@ pub(super) fn loaded(reply: Reply) -> Result<(), String> {
 }
 
 #[cfg(not(test))]
-fn redrawn(check: bool) {
+fn redrawn(check: bool, checkpoint: &dyn Fn()) {
     crate::collections::observation::advance();
     if check {
         checkpoint();

@@ -17,9 +17,9 @@ use crate::engine::StoryKey;
 #[cfg(not(test))]
 use crate::engine::WorldData;
 use crate::engine::{
-    World,
     battle::Cx,
     observe::{CheckpointView, Io},
+    World,
 };
 use std::os::raw::c_void;
 
@@ -29,8 +29,6 @@ use crate::collections::queue::CountLinks;
 use crate::collections::queue::{AllocLink, HLink, PutQueue, Queue, ReinitQueue};
 #[cfg(not(test))]
 use crate::comm::locdata::{read_locdata, set_comm_data};
-#[cfg(not(test))]
-use crate::mainloop::c_extern;
 
 // ---------------------------------------------------------------------------
 // C type mirrors for queue elements (#[repr(C)] matching C struct layout)
@@ -434,9 +432,6 @@ mod ffi {
     pub use crate::battle::encount_native::engine::InitEncounter;
 
     #[cfg(not(test))]
-    pub use crate::battle::encount_native::engine::UninitEncounter;
-
-    #[cfg(not(test))]
     pub use crate::battle::encount_native::engine::EncounterBattle;
 
     #[cfg(not(test))]
@@ -678,78 +673,86 @@ unsafe fn lock_encounter(_h: HLink) -> *mut CEncounter {
 /// # Safety
 /// Calls C FFI functions that access global state.
 pub unsafe fn race_communication(cx: &mut Cx<'_>, io: &mut Io<'_>) {
-    if lobyte(crate::mainloop::ffi::get_current_activity().0) == IN_LAST_BATTLE {
+    if lobyte(cx.world.activity()) == IN_LAST_BATTLE {
         // Going into talking pet conversation
-        let npc_q = npc_built_ship_queue();
-        ReinitQueue(npc_q);
-        clone_ship_fragment(ship::SAMATRA_SHIP, npc_q, 0);
+        let npc_q = cx.with_legacy(|| npc_built_ship_queue());
+        cx.with_legacy(|| ReinitQueue(npc_q));
+        cx.with_legacy(|| clone_ship_fragment(ship::SAMATRA_SHIP, npc_q, 0));
         init_communication(cx, io, conv::TALKING_PET);
 
-        let activity = crate::mainloop::ffi::get_current_activity().0;
+        let activity = cx.world.activity();
         if (activity & (CHECK_ABORT | CHECK_LOAD)) == 0 {
-            let crew = crate::mainloop::ffi::get_crew_enlisted();
+            let crew = cx.world.data.flagship.crew_enlisted;
             if crew != 0xFFFF {
-                crate::mainloop::ffi::set_current_activity(crate::mainloop::types::ActivityValue(
-                    WON_LAST_BATTLE,
-                ));
+                cx.with_legacy(|| {
+                    crate::mainloop::ffi::set_current_activity(
+                        crate::mainloop::types::ActivityValue(WON_LAST_BATTLE),
+                    )
+                });
                 io.observer.checkpoint(&CheckpointView::Won);
             }
         }
         return;
     }
 
-    if crate::mainloop::ffi::get_next_activity().0 & CHECK_LOAD != 0 {
-        let ec = World::current().read(|world| world.story_state(StoryKey::ESCAPE_COUNTER)) as u8;
+    if cx
+        .with_legacy(|| crate::mainloop::ffi::get_next_activity())
+        .0
+        & CHECK_LOAD
+        != 0
+    {
+        let ec = cx.world.story_state(StoryKey::ESCAPE_COUNTER) as u8;
 
-        init_communication(
-            cx,
-            io,
-            World::current().read(routing::restored_conversation),
-        );
+        init_communication(cx, io, routing::restored_conversation(cx.world));
 
-        let crew = crate::mainloop::ffi::get_crew_enlisted();
+        let crew = cx.world.data.flagship.crew_enlisted;
         if crew != 0xFFFF {
-            let activity = crate::mainloop::ffi::get_current_activity().0;
+            let activity = cx.world.activity();
             let mut na = activity & !START_ENCOUNTER;
             if lobyte(na) == IN_INTERPLANETARY {
                 na |= START_INTERPLANETARY;
             }
-            crate::mainloop::ffi::set_next_activity(crate::mainloop::types::ActivityValue(na));
-            crate::mainloop::ffi::set_current_activity(crate::mainloop::types::ActivityValue(
-                activity | CHECK_LOAD,
-            ));
+            cx.with_legacy(|| {
+                crate::mainloop::ffi::set_next_activity(crate::mainloop::types::ActivityValue(na))
+            });
+            cx.with_legacy(|| {
+                crate::mainloop::ffi::set_current_activity(crate::mainloop::types::ActivityValue(
+                    activity | CHECK_LOAD,
+                ))
+            });
         }
 
-        World::current().write(|world| world.set_story_state(StoryKey::ESCAPE_COUNTER, ec as u32));
+        cx.world
+            .set_story_state(StoryKey::ESCAPE_COUNTER, ec as u32);
         return;
     }
 
     let mut h_encounter: HLink = std::ptr::null_mut();
 
-    if in_hq_space() {
-        let npc_q = npc_built_ship_queue();
-        ReinitQueue(npc_q);
+    if cx.with_legacy(|| in_hq_space()) {
+        let npc_q = cx.with_legacy(|| npc_built_ship_queue());
+        cx.with_legacy(|| ReinitQueue(npc_q));
 
-        if World::current().read(|world| world.story_state(StoryKey::ARILOU_SPACE_SIDE)) >= 2 {
+        if cx.world.story_state(StoryKey::ARILOU_SPACE_SIDE) >= 2 {
             init_communication(cx, io, conv::ARILOU);
             return;
         }
 
         // Encounter with a black globe in HS, prepare enemy ship list
-        h_encounter = get_head_encounter();
+        h_encounter = cx.with_legacy(|| get_head_encounter());
         if !h_encounter.is_null() {
             let enc_ptr = lock_encounter(h_encounter);
             let num_ships = (*enc_ptr).num_ships;
             for i in 0..num_ships {
                 let race_id = (*enc_ptr).race_id;
                 let crew_level = (*enc_ptr).ship_list[i as usize].crew_level;
-                clone_ship_fragment(race_id, npc_q, crew_level);
+                cx.with_legacy(|| clone_ship_fragment(race_id, npc_q, crew_level));
             }
         }
     }
 
     // First ship in the npc queue defines which alien race the player talks to
-    let npc_q = npc_built_ship_queue();
+    let npc_q = cx.with_legacy(|| npc_built_ship_queue());
     let h_star_ship = get_head_link(npc_q);
     if h_star_ship.is_null() {
         return;
@@ -770,19 +773,19 @@ pub unsafe fn race_communication(cx: &mut Cx<'_>, io: &mut Io<'_>) {
 
     let status = init_communication(cx, io, conv_id);
 
-    let activity = crate::mainloop::ffi::get_current_activity().0;
+    let activity = cx.world.activity();
     if (activity & (CHECK_ABORT | CHECK_LOAD)) != 0 {
         return;
     }
 
     if i == ship::CHMMR_SHIP {
-        ReinitQueue(npc_q);
+        cx.with_legacy(|| ReinitQueue(npc_q));
     }
 
     if lobyte(activity) == IN_INTERPLANETARY {
         // if used destruct code in interplanetary
         if i == ship::SLYLANDRO_SHIP && status == 0 {
-            ReinitQueue(npc_q);
+            cx.with_legacy(|| ReinitQueue(npc_q));
         }
     } else if !h_encounter.is_null() {
         // Update HSpace encounter info, ships left, etc.
@@ -807,7 +810,7 @@ pub unsafe fn race_communication(cx: &mut Cx<'_>, io: &mut Io<'_>) {
             bsi.max_energy = (*frag_ptr).max_energy;
         }
 
-        ReinitQueue(npc_q);
+        cx.with_legacy(|| ReinitQueue(npc_q));
     }
 }
 
@@ -828,39 +831,41 @@ pub unsafe fn init_communication(cx: &mut Cx<'_>, io: &mut Io<'_>, which_comm: u
             return 0;
         }
     }
-    let last_activity = crate::mainloop::ffi::get_last_activity().0;
-    if last_activity & CHECK_LOAD != 0 {
-        crate::mainloop::ffi::set_last_activity(crate::mainloop::types::ActivityValue(
-            last_activity & !CHECK_LOAD,
-        ));
-        if which_comm != conv::COMMANDER {
-            if lobyte(last_activity) == 0 {
-                ffi::draw_sisframe();
-            } else {
-                ffi::ClearSISRect((DRAW_SIS_DISPLAY) as u8);
-                ffi::repair_sisborder();
-            }
-            ffi::DrawSISMessage(std::ptr::null());
-            if in_hq_space() {
-                let point = WorldData::current().read(|world| world.game.ship_stamp.origin);
-                ffi::DrawHyperCoords(CPoint {
-                    x: point.x,
-                    y: point.y,
-                });
-            } else if WorldData::current().read(|world| world.game.ip_planet) == 0 {
-                let star = &*(**World::current())
-                    .star_pointer(crate::planets::starmap::current_catalog())
-                    .cast::<crate::savegame::runtime::star::CStarDesc>();
-                ffi::DrawHyperCoords(CPoint {
-                    x: star.star_pt.x,
-                    y: star.star_pt.y,
-                });
-            } else {
-                let name = WorldData::current().read(|world| world.flagship.planet_name);
-                ffi::DrawSISTitle(name.as_ptr().cast());
+    cx.with_legacy(|| {
+        let last_activity = crate::mainloop::ffi::get_last_activity().0;
+        if last_activity & CHECK_LOAD != 0 {
+            crate::mainloop::ffi::set_last_activity(crate::mainloop::types::ActivityValue(
+                last_activity & !CHECK_LOAD,
+            ));
+            if which_comm != conv::COMMANDER {
+                if lobyte(last_activity) == 0 {
+                    ffi::draw_sisframe();
+                } else {
+                    ffi::ClearSISRect((DRAW_SIS_DISPLAY) as u8);
+                    ffi::repair_sisborder();
+                }
+                ffi::DrawSISMessage(std::ptr::null());
+                if in_hq_space() {
+                    let point = WorldData::current().read(|world| world.game.ship_stamp.origin);
+                    ffi::DrawHyperCoords(CPoint {
+                        x: point.x,
+                        y: point.y,
+                    });
+                } else if WorldData::current().read(|world| world.game.ip_planet) == 0 {
+                    let star = &*(**World::current())
+                        .star_pointer(crate::planets::starmap::current_catalog())
+                        .cast::<crate::savegame::runtime::star::CStarDesc>();
+                    ffi::DrawHyperCoords(CPoint {
+                        x: star.star_pt.x,
+                        y: star.star_pt.y,
+                    });
+                } else {
+                    let name = WorldData::current().read(|world| world.flagship.planet_name);
+                    ffi::DrawSISTitle(name.as_ptr().cast());
+                }
             }
         }
-    }
+    });
     let (conversation, ship_type) = conversation_setup(which_comm);
     init_communication_inner(cx, io, conversation, ship_type)
 }
@@ -873,84 +878,97 @@ unsafe fn init_communication_inner(
     which_comm: u32,
     ship_type: u16,
 ) -> u16 {
-    if ship_type != u16::from(ship::URQUAN_DRONE_SHIP) {
-        start_sphere_tracking(ship_type as u8);
-        if which_comm == conv::ORZ
-            || (which_comm == conv::TALKING_PET
-                && (World::current()
-                    .read(|world| world.story_state(StoryKey::TALKING_PET_ON_SHIP))
-                    == 0
-                    || lobyte(crate::mainloop::ffi::get_current_activity().0) == IN_LAST_BATTLE))
-            || (which_comm != conv::CHMMR && which_comm != conv::SYREEN)
-        {
-            ffi::BuildBattle(NPC_PLAYER_NUM);
-        }
-    }
-    let comm_id = if ship_type != u16::from(ship::YEHAT_REBEL_SHIP) {
-        which_comm
-    } else {
-        conv::YEHAT_REBEL
-    };
-    io.observer
-        .checkpoint(&CheckpointView::DialogueDispatch(comm_id));
-    let descriptor = rust_init_race_dispatch(comm_id);
-    if !descriptor.is_null() {
-        std::ptr::copy_nonoverlapping(
-            descriptor.cast::<crate::comm::locdata::CLocData>(),
-            &raw mut ffi::CommData,
-            1,
-        );
-        set_comm_data(read_locdata(&*descriptor.cast()));
-    }
-    let mut status;
-    if World::current().read(|world| world.story_state(StoryKey::BATTLE_SEGUE)) == 0 {
-        status = HAIL;
-    } else {
-        io.observer.checkpoint(&CheckpointView::EncounterMenu(true));
-        status = ffi::InitEncounter();
-        io.observer
-            .checkpoint(&CheckpointView::EncounterMenu(false));
-        if status == HAIL && !descriptor.is_null() {
-            World::current().write(|world| world.set_story_state(StoryKey::BATTLE_SEGUE, 0));
-        } else {
-            status = ATTACK;
-            World::current().write(|world| world.set_story_state(StoryKey::BATTLE_SEGUE, 1));
-        }
-    }
-    if status == HAIL {
-        crate::comm::hail::hail_alien(cx, io);
-    } else if !descriptor.is_null() {
-        if crate::mainloop::ffi::get_current_activity().0 & (CHECK_ABORT | CHECK_LOAD) == 0 {
-            if let Some(callback) = ffi::CommData.post_encounter_func {
-                callback();
+    let (descriptor, mut status) = cx.with_legacy(|| {
+        if ship_type != u16::from(ship::URQUAN_DRONE_SHIP) {
+            start_sphere_tracking(ship_type as u8);
+            if which_comm == conv::ORZ
+                || (which_comm == conv::TALKING_PET
+                    && (World::current()
+                        .read(|world| world.story_state(StoryKey::TALKING_PET_ON_SHIP))
+                        == 0
+                        || lobyte(crate::mainloop::ffi::get_current_activity().0)
+                            == IN_LAST_BATTLE))
+                || (which_comm != conv::CHMMR && which_comm != conv::SYREEN)
+            {
+                ffi::BuildBattle(NPC_PLAYER_NUM);
             }
         }
-        if let Some(callback) = ffi::CommData.uninit_encounter_func {
-            callback();
-        }
-    }
-    status = 0;
-    let activity = crate::mainloop::ffi::get_current_activity().0;
-    if activity & (CHECK_ABORT | CHECK_LOAD) == 0 {
-        let npc = npc_built_ship_queue();
-        if lobyte(activity) == IN_LAST_BATTLE
-            && WorldData::current().read(|owner| owner.game.glob_flags) & CYBORG_ENABLED != 0
-        {
-            ReinitQueue(npc);
-        }
-        World::current().write(|world| world.set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, 0));
-        status = u16::from(
-            World::current().read(|world| world.story_state(StoryKey::BATTLE_SEGUE)) != 0
-                && !get_head_link(npc).is_null(),
-        );
-        if status != 0 {
-            ffi::BuildBattle(RPG_PLAYER_NUM);
-            ffi::EncounterBattle();
+        let comm_id = if ship_type != u16::from(ship::YEHAT_REBEL_SHIP) {
+            which_comm
         } else {
-            World::current().write(|world| world.set_story_state(StoryKey::BATTLE_SEGUE, 0));
+            conv::YEHAT_REBEL
+        };
+        io.observer
+            .checkpoint(&CheckpointView::DialogueDispatch(comm_id));
+        let descriptor = rust_init_race_dispatch(comm_id);
+        if !descriptor.is_null() {
+            std::ptr::copy_nonoverlapping(
+                descriptor.cast::<crate::comm::locdata::CLocData>(),
+                &raw mut ffi::CommData,
+                1,
+            );
+            set_comm_data(read_locdata(&*descriptor.cast()));
         }
+        let mut status;
+        if World::current().read(|world| world.story_state(StoryKey::BATTLE_SEGUE)) == 0 {
+            status = HAIL;
+        } else {
+            io.observer.checkpoint(&CheckpointView::EncounterMenu(true));
+            status = ffi::InitEncounter();
+            io.observer
+                .checkpoint(&CheckpointView::EncounterMenu(false));
+            if status == HAIL && !descriptor.is_null() {
+                World::current().write(|world| world.set_story_state(StoryKey::BATTLE_SEGUE, 0));
+            } else {
+                status = ATTACK;
+                World::current().write(|world| world.set_story_state(StoryKey::BATTLE_SEGUE, 1));
+            }
+        }
+        (descriptor, status)
+    });
+    if status == HAIL {
+        crate::comm::hail::hail_alien(cx, io);
+    } else {
+        cx.with_legacy(|| {
+            if !descriptor.is_null() {
+                if crate::mainloop::ffi::get_current_activity().0 & (CHECK_ABORT | CHECK_LOAD) == 0
+                {
+                    if let Some(callback) = ffi::CommData.post_encounter_func {
+                        callback();
+                    }
+                }
+                if let Some(callback) = ffi::CommData.uninit_encounter_func {
+                    callback();
+                }
+            }
+        });
     }
-    ffi::UninitEncounter();
+    status = cx.with_legacy(|| {
+        let mut status = 0;
+        let activity = crate::mainloop::ffi::get_current_activity().0;
+        if activity & (CHECK_ABORT | CHECK_LOAD) == 0 {
+            let npc = npc_built_ship_queue();
+            if lobyte(activity) == IN_LAST_BATTLE
+                && WorldData::current().read(|owner| owner.game.glob_flags) & CYBORG_ENABLED != 0
+            {
+                ReinitQueue(npc);
+            }
+            World::current()
+                .write(|world| world.set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, 0));
+            status = u16::from(
+                World::current().read(|world| world.story_state(StoryKey::BATTLE_SEGUE)) != 0
+                    && !get_head_link(npc).is_null(),
+            );
+            if status != 0 {
+                ffi::BuildBattle(RPG_PLAYER_NUM);
+                ffi::EncounterBattle();
+            } else {
+                World::current().write(|world| world.set_story_state(StoryKey::BATTLE_SEGUE, 0));
+            }
+        }
+        status
+    });
+    crate::battle::encount_native::engine::uninit_encounter(cx, io);
     status
 }
 
@@ -1277,29 +1295,6 @@ pub mod smm {
 
 /// C: `ONE_SECOND` = 840 (from timelib.h)
 pub const ONE_SECOND: u32 = 840;
-
-// ---------------------------------------------------------------------------
-// ExploreSolarSys — ported from solarsys.c:1713
-// ---------------------------------------------------------------------------
-
-#[cfg(not(test))]
-/// Port of C `ExploreSolarSys()`. Initializes solar system exploration.
-///
-/// The heavy lifting (InitSolarSys, DoIpFlight, UninitSolarSys) stays in C
-/// for now — these are 2000+ lines of solar system generation and rendering
-/// that would require porting the entire planet system. The dispatch logic
-/// (finding the current star, setting up state) is ported to Rust.
-///
-/// # Safety
-/// Calls C FFI functions that access global state.
-pub unsafe extern "C" fn rust_explore_solar_sys() {
-    // The full ExploreSolarSys is deeply tied to SOLARSYS_STATE, CurStarDescPtr,
-    // InitSolarSys, DoIpFlight, UninitSolarSys — all complex C functions with
-    // hundreds of dependencies (planet generation, rendering, input handling).
-    // Porting the dispatch wrapper alone would just be a thin wrapper around C.
-    // This stays as a C call until the solar system subsystem is ported.
-    c_extern::ExploreSolarSys();
-}
 
 // ---------------------------------------------------------------------------
 // Tests

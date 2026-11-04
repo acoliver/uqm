@@ -11,12 +11,15 @@ fn submenu_selection(current: u8, selected: bool, pc_menu: bool) -> u8 {
 #[cfg(not(test))]
 pub(crate) mod live {
     use super::submenu_selection;
-    use crate::engine::{battle::Cx, observe::{CheckpointView, Io}};
     use crate::c_bindings::{
         global_state::{MENU_STATE, PLANET_INFO},
         solar_system,
     };
     use crate::comm::locdata::CRect;
+    use crate::engine::{
+        battle::Cx,
+        observe::{CheckpointView, Io},
+    };
     use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
     use crate::graphics::drawable_abi::SetContextFGFrame;
     use crate::mainloop::restart_menu::c_extern::{self as base, SetContext};
@@ -350,9 +353,7 @@ pub(crate) mod live {
     unsafe fn do_orbit(cx: &mut Cx<'_>, io: &mut Io<'_>, menu: &mut MENU_STATE) -> u32 {
         use crate::c_bindings::controller_input::{PulsedInputState, KEY_MENU_SELECT};
         let mut selected = PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0;
-        if cx.world.activity()
-            & (CHECK_ABORT | CHECK_LOAD)
-            != 0
+        if cx.world.activity() & (CHECK_ABORT | CHECK_LOAD) != 0
             || cx.world.data.flagship.crew_enlisted == u16::MAX
         {
             return 0;
@@ -364,19 +365,13 @@ pub(crate) mod live {
         match menu.CurState {
             0 => {
                 scan_system(cx, io);
-                if cx.world.activity()
-                    & START_ENCOUNTER
-                    != 0
-                {
+                if cx.world.activity() & START_ENCOUNTER != 0 {
                     return 0;
                 }
             }
             2 => {
                 selected = devices_menu(cx, io) != 0;
-                if cx.world.activity()
-                    & START_ENCOUNTER
-                    != 0
-                {
+                if cx.world.activity() & START_ENCOUNTER != 0 {
                     return 0;
                 }
             }
@@ -394,9 +389,7 @@ pub(crate) mod live {
                     old
                 });
                 let autopilot = star_map(cx, io);
-                if cx.world.activity() & CHECK_ABORT
-                    != 0
-                {
+                if cx.world.activity() & CHECK_ABORT != 0 {
                     return 0;
                 }
                 cx.with_legacy(|| SetInputCallback(old));
@@ -426,18 +419,18 @@ pub(crate) mod live {
     pub unsafe fn planet_orbit_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) {
         let mut menu: MENU_STATE = std::mem::zeroed();
         let old = cx.with_legacy(|| {
-        DrawMenuStateStrings(0, 0);
-        CffiPlatform.set_flash(FlashTarget::Menu3do);
-        base::SetMenuSounds(15, 16);
-        SetInputCallback(Some(input_frame))
+            DrawMenuStateStrings(0, 0);
+            CffiPlatform.set_flash(FlashTarget::Menu3do);
+            base::SetMenuSounds(15, 16);
+            SetInputCallback(Some(input_frame))
         });
         io.observer.checkpoint(&CheckpointView::PlanetMenu(1));
         cx.run_input(io, true, |cx, io| do_orbit(cx, io, &mut menu) != 0);
         io.observer.checkpoint(&CheckpointView::PlanetMenu(0));
         cx.with_legacy(|| {
-        SetInputCallback(old);
-        CffiPlatform.set_flash(FlashTarget::Off);
-        DrawMenuStateStrings(1, -6);
+            SetInputCallback(old);
+            CffiPlatform.set_flash(FlashTarget::Off);
+            DrawMenuStateStrings(1, -6);
         });
     }
     #[cfg(not(test))]

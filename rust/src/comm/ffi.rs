@@ -4,7 +4,7 @@ use crate::engine::observe::{CheckpointView, InputView};
 #[cfg(not(test))]
 use crate::engine::{StoryKey, World, WorldData};
 use std::cell::RefCell;
-use std::ffi::{CStr, c_char, c_int, c_uint};
+use std::ffi::{c_char, c_int, c_uint, CStr};
 
 use super::segue::Segue;
 use super::state::COMM_STATE;
@@ -89,7 +89,11 @@ pub fn rust_commit_track() -> f32 {
 
 /// Wait for track to finish (returns 1 when done)
 pub fn rust_wait_track() -> c_int {
-    if COMM_STATE.read().wait_track() { 1 } else { 0 }
+    if COMM_STATE.read().wait_track() {
+        1
+    } else {
+        0
+    }
 }
 
 /// Get track position
@@ -513,7 +517,11 @@ pub fn rust_clear_oscilloscope() {
 
 /// Check if alien is talking
 pub fn rust_is_talking() -> c_int {
-    if COMM_STATE.read().is_talking() { 1 } else { 0 }
+    if COMM_STATE.read().is_talking() {
+        1
+    } else {
+        0
+    }
 }
 
 /// Check if talking has finished
@@ -636,11 +644,14 @@ pub unsafe fn rust_alien_talk_segue(
 ) -> c_int {
     #[cfg(not(test))]
     {
+        let aborted = cx.with_legacy(super::talk_segue::check_abort_external);
         run_alien_talk_unlocked(
             wait,
-            || super::talk_segue::alien_talk_first_call_init(),
-            |wait| super::talk_segue::dinput::run_talk_segue_dinput(cx, io, wait),
-            super::talk_segue::fade_music_to_foreground_bridge,
+            aborted,
+            &mut (cx, io),
+            |(cx, _)| cx.with_legacy(|| super::talk_segue::alien_talk_first_call_init()),
+            |(cx, io), wait| super::talk_segue::dinput::run_talk_segue_dinput(cx, io, wait),
+            |(cx, _)| cx.with_legacy(super::talk_segue::fade_music_to_foreground_bridge),
         )
     }
     #[cfg(test)]
@@ -656,15 +667,17 @@ pub unsafe fn rust_alien_talk_segue(
     }
 }
 
-fn run_alien_talk_unlocked(
+fn run_alien_talk_unlocked<C>(
     wait: u32,
-    initialize: impl FnOnce(),
-    playback: impl FnOnce(u32) -> bool,
-    fade: impl FnOnce(),
+    aborted: bool,
+    context: &mut C,
+    initialize: impl FnOnce(&mut C),
+    playback: impl FnOnce(&mut C, u32) -> bool,
+    fade: impl FnOnce(&mut C),
 ) -> c_int {
     let initialize_needed = {
         let mut state = COMM_STATE.write();
-        if super::talk_segue::check_abort_external() || state.is_talking_finished() {
+        if aborted || state.is_talking_finished() {
             return 0;
         }
         let needed = !state.first_talk_call;
@@ -672,12 +685,12 @@ fn run_alien_talk_unlocked(
         needed
     };
     if initialize_needed {
-        initialize();
+        initialize(context);
     }
-    let finished = playback(wait);
+    let finished = playback(context, wait);
     COMM_STATE.write().set_talking_finished(finished);
     if finished {
-        fade();
+        fade(context);
     }
     i32::from(finished)
 }
@@ -746,7 +759,7 @@ pub unsafe fn rust_do_communication(
                     state.first_talk_call = true;
                     // Drop lock before calling C bridges
                     drop(state);
-                    super::talk_segue::alien_talk_first_call_init();
+                    cx.with_legacy(|| super::talk_segue::alien_talk_first_call_init());
                 }
             }
 
@@ -756,24 +769,25 @@ pub unsafe fn rust_do_communication(
                 .checkpoint(&CheckpointView::ResponsesReady(false));
 
             let response_count = COMM_STATE.read().responses().count();
-            let campaign = crate::engine::observe::CampaignView::from_world(cx.world);
-            let semantic_skip = io
-                .observer
-                .input_admitted(&InputView::PendingSpeech, &Some(campaign.clone()))
-                .stop
-                || io
-                    .observer
-                    .input_admitted(
-                        &InputView::PendingResponse {
-                            count: response_count,
-                        },
-                        &Some(campaign.clone()),
-                    )
+            let campaign = crate::engine::observe::CampaignView::capture(cx.world);
+            let semantic_skip = cx.with_legacy(|| {
+                io.observer
+                    .input_admitted(&InputView::PendingSpeech, &Some(campaign.clone()))
                     .stop
-                || io
-                    .observer
-                    .input_admitted(&InputView::ClosingSpeech, &Some(campaign))
-                    .stop;
+                    || io
+                        .observer
+                        .input_admitted(
+                            &InputView::PendingResponse {
+                                count: response_count,
+                            },
+                            &Some(campaign.clone()),
+                        )
+                        .stop
+                    || io
+                        .observer
+                        .input_admitted(&InputView::ClosingSpeech, &Some(campaign))
+                        .stop
+            });
             if semantic_skip {
                 let _ = crate::sound::trackplayer::jump_track(0);
             }
@@ -792,7 +806,7 @@ pub unsafe fn rust_do_communication(
             COMM_STATE.write().set_talking_finished(ended);
 
             if ended {
-                super::talk_segue::fade_music_to_foreground_bridge();
+                cx.with_legacy(|| super::talk_segue::fade_music_to_foreground_bridge());
             }
 
             return 1;
@@ -811,7 +825,7 @@ pub unsafe fn rust_do_communication(
             "[DBG] rust_DoCommunication: response phase, num_responses={}",
             state.responses().count()
         );
-        if super::talk_segue::check_abort_external() {
+        if cx.with_legacy(|| super::talk_segue::check_abort_external()) {
             return 0;
         }
         state.responses().count()
@@ -848,7 +862,7 @@ pub unsafe fn rust_do_communication(
                     s.responses().selected().max(0) as u8,
                 )
             };
-            super::talk_segue::c_bridge::call_refresh_responses(top, count, cur);
+            cx.with_legacy(|| super::talk_segue::c_bridge::call_refresh_responses(top, count, cur));
         }
     }
 
@@ -867,7 +881,7 @@ pub unsafe fn rust_do_communication(
             io.observer
                 .checkpoint(&CheckpointView::ResponsesReady(false));
             let mut state = COMM_STATE.write();
-            let sel = super::talk_segue::select_response(&mut state);
+            let sel = cx.with_legacy(|| super::talk_segue::select_response(&mut state));
             eprintln!(
                 "[DBG] rust_DoCommunication: select_response returned {:?}",
                 sel.is_some()
@@ -885,7 +899,7 @@ pub unsafe fn rust_do_communication(
                     rref
                 );
                 // Lock is dropped — safe to call alien script callback
-                func(rref);
+                cx.with_legacy(|| func(rref));
                 eprintln!(
                     "[DBG] rust_DoCommunication: callback returned, talking_finished={}",
                     COMM_STATE.read().is_talking_finished()
@@ -897,10 +911,10 @@ pub unsafe fn rust_do_communication(
     }
 
     if cancel {
-        let won = super::talk_segue::won_last_battle_external();
+        let won = cx.with_legacy(|| super::talk_segue::won_last_battle_external());
         if !won {
             // Conversation summary — C bridge, no lock needed
-            super::talk_segue::c_bridge::call_select_conversation_summary();
+            cx.with_legacy(|| super::talk_segue::c_bridge::call_select_conversation_summary());
             // After summary returns, re-render responses (no lock for C call)
             let (top, count, cur) = {
                 let s = COMM_STATE.read();
@@ -910,18 +924,18 @@ pub unsafe fn rust_do_communication(
                     s.responses().selected().max(0) as u8,
                 )
             };
-            super::talk_segue::c_bridge::call_refresh_responses(top, count, cur);
+            cx.with_legacy(|| super::talk_segue::c_bridge::call_refresh_responses(top, count, cur));
             return 1;
         }
     }
 
     if left {
         // Replay last phrase — all C bridge calls, no lock
-        super::talk_segue::fade_music_to_background_bridge();
-        super::talk_segue::c_bridge::call_feedback_player_phrase();
+        cx.with_legacy(|| super::talk_segue::fade_music_to_background_bridge());
+        cx.with_legacy(|| super::talk_segue::c_bridge::call_feedback_player_phrase());
         #[cfg(not(test))]
         let _ = super::talk_segue::dinput::run_talk_segue_dinput(cx, io, 0);
-        if !super::talk_segue::check_abort_external() {
+        if !cx.with_legacy(|| super::talk_segue::check_abort_external()) {
             let (top, count, cur) = {
                 let s = COMM_STATE.read();
                 (
@@ -930,8 +944,8 @@ pub unsafe fn rust_do_communication(
                     s.responses().selected().max(0) as u8,
                 )
             };
-            super::talk_segue::c_bridge::call_refresh_responses(top, count, cur);
-            super::talk_segue::fade_music_to_foreground_bridge();
+            cx.with_legacy(|| super::talk_segue::c_bridge::call_refresh_responses(top, count, cur));
+            cx.with_legacy(|| super::talk_segue::fade_music_to_foreground_bridge());
         }
         return 1;
     }
@@ -942,7 +956,11 @@ pub unsafe fn rust_do_communication(
         let count = state.responses().count();
         let cur = state.responses().selected().max(0) as usize;
         let next = if up {
-            if cur == 0 { count - 1 } else { cur - 1 }
+            if cur == 0 {
+                count - 1
+            } else {
+                cur - 1
+            }
         } else {
             (cur + 1) % count
         };
@@ -952,11 +970,11 @@ pub unsafe fn rust_do_communication(
         let sel = next as u8;
         drop(state);
         // Render updated selection (C→Rust callback, no lock)
-        super::talk_segue::c_bridge::call_refresh_responses(top, cnt, sel);
+        cx.with_legacy(|| super::talk_segue::c_bridge::call_refresh_responses(top, cnt, sel));
     }
 
     // Step 2e: Update animations (C bridge, no lock)
-    super::talk_segue::c_bridge::call_update_comm_graphics();
+    cx.with_legacy(|| super::talk_segue::c_bridge::call_update_comm_graphics());
 
     1
 }
@@ -1617,13 +1635,15 @@ fn alien_talk_callbacks_run_without_the_global_state_lock() {
     COMM_STATE.write().reset_for_encounter();
     let finished = run_alien_talk_unlocked(
         1,
-        || assert!(COMM_STATE.try_write().is_some()),
-        |wait| {
+        false,
+        &mut (),
+        |_| assert!(COMM_STATE.try_write().is_some()),
+        |_, wait| {
             assert_eq!(wait, 1);
             assert!(COMM_STATE.try_write().is_some());
             true
         },
-        || assert!(COMM_STATE.try_write().is_some()),
+        |_| assert!(COMM_STATE.try_write().is_some()),
     );
     assert_eq!(finished, 1);
     assert!(COMM_STATE.read().is_talking_finished());

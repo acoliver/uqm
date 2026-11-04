@@ -52,7 +52,6 @@ pub use ffi::{
     get_global_flags_and_data, get_kohr_ah_killed_all, get_last_activity, get_next_activity,
     get_starbase_available, set_chmmr_bomb_state, set_current_activity, set_flash_rect_null,
     set_last_activity, set_main_exited, set_next_activity, set_player_input_all_or_explode,
-    splash_with_bg_init_kernel,
 };
 pub use state_machine::{
     check_break, evaluate, post_encounter_clear, pre_dispatch_mutate, resolve_load_activity,

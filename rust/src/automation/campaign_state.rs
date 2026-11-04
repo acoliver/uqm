@@ -358,7 +358,6 @@ pub struct LiveCampaign<'a> {
 pub use crate::engine::observe::CampaignView;
 
 impl CampaignView {
-    #[cfg(not(test))]
     pub(crate) fn capture(world: &World) -> Self {
         let game = &world.data.game;
         let mut view = Self::from_world(world);

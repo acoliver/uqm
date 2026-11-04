@@ -4,9 +4,9 @@
 use super::{outfit::DoOutfit, shipyard::DoShipyard};
 use crate::comm::comm_abi::SetCommIntroMode;
 use crate::engine::{
-    Kernel, StoryKey, World, WorldData,
     battle::Cx,
     observe::{CheckpointView, Io},
+    Kernel, StoryKey, World, WorldData,
 };
 use crate::navigation::abi::*;
 

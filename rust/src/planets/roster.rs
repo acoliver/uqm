@@ -283,7 +283,9 @@ pub(crate) mod live {
     /// # Safety
     /// Call on the game thread with campaign globals and screen resources initialized.
     pub unsafe fn roster_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) -> i32 {
-        let Some(mut menu) = cx.with_legacy(prepare_roster_menu) else { return 0; };
+        let Some(mut menu) = cx.with_legacy(|| prepare_roster_menu()) else {
+            return 0;
+        };
         cx.run_input(io, true, |cx, _| cx.with_legacy(|| modify(&mut menu) != 0));
         cx.with_legacy(|| {
             CffiPlatform.set_context(ContextId::Status);

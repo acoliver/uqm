@@ -205,14 +205,14 @@ pub(crate) mod live {
         timeout: TimeCount,
         reset: BOOLEAN,
     ) -> BOOLEAN {
-        let mut pressed = AnyButtonPress(1);
+        let mut pressed = cx.with_legacy(|| AnyButtonPress(1));
         while (pressed != 0) == released
             && (timeout == TimePeriod::MAX || GetTimeCounter() < timeout)
             && cx.world.activity() & CHECK_ABORT as u16 == 0
             && QuitPosted == 0
         {
             let campaign =
-                CampaignView::for_input(InputView::Nested, || CampaignView::from_world(cx.world));
+                CampaignView::for_input(InputView::Nested, || CampaignView::capture(cx.world));
             let Some(sampled) = cx.with_legacy(|| {
                 io.nested_input(&campaign, || {
                     SleepThread(ONE_SECOND / 40);
@@ -224,7 +224,7 @@ pub(crate) mod live {
             pressed = sampled;
         }
         if reset != 0 {
-            FlushInput();
+            cx.with_legacy(|| FlushInput());
         }
         u32::from((pressed != 0) != released)
     }
@@ -280,33 +280,21 @@ pub(crate) mod live {
         wait_for_no_input_until(cx, io, timeout, reset)
     }
 
-    unsafe fn legacy_wait_until(released: bool, timeout: TimeCount, reset: BOOLEAN) -> BOOLEAN {
-        let mut pressed = AnyButtonPress(1);
-        while (pressed != 0) == released
-            && (timeout == TimePeriod::MAX || GetTimeCounter() < timeout)
-            && WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
-                == 0
-            && QuitPosted == 0
-        {
-            SleepThread(ONE_SECOND / 40);
-            pressed = AnyButtonPress(1);
-        }
-        if reset != 0 {
-            FlushInput();
-        }
-        u32::from((pressed != 0) != released)
-    }
-
+    /// # Safety
+    /// Game-thread legacy boundary with the caller's context published.
     #[no_mangle]
     pub unsafe extern "C" fn WaitForAnyButtonUntil(
         new_button: BOOLEAN,
         timeout: TimeCount,
         reset: BOOLEAN,
     ) -> BOOLEAN {
-        if new_button != 0 && legacy_wait_until(true, timeout, 0) == 0 {
-            return 0;
-        }
-        legacy_wait_until(false, timeout, reset)
+        crate::app::bridge::enter(|cx| {
+            let mut observer = cx.kernel.input_runtime().observer();
+            let mut io = Io {
+                observer: &mut *observer,
+            };
+            wait_for_any_button_until(cx, &mut io, new_button, timeout, reset)
+        })
     }
     #[no_mangle]
     pub unsafe extern "C" fn WaitForAnyButton(
@@ -323,7 +311,13 @@ pub(crate) mod live {
     }
     #[no_mangle]
     pub unsafe extern "C" fn WaitForNoInputUntil(timeout: TimeCount, reset: BOOLEAN) -> BOOLEAN {
-        legacy_wait_until(true, timeout, reset)
+        crate::app::bridge::enter(|cx| {
+            let mut observer = cx.kernel.input_runtime().observer();
+            let mut io = Io {
+                observer: &mut *observer,
+            };
+            wait_for_no_input_until(cx, &mut io, timeout, reset)
+        })
     }
     #[no_mangle]
     pub unsafe extern "C" fn WaitForNoInput(duration: TimePeriod, reset: BOOLEAN) -> BOOLEAN {

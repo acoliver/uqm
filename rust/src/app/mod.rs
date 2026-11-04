@@ -1,5 +1,4 @@
 pub mod bridge;
-pub mod observe;
 
 use std::sync::Arc;
 
@@ -11,9 +10,6 @@ pub struct Application {
 
 impl Application {
     pub fn new(observer: Option<Arc<crate::automation::AutomationObserver>>) -> Self {
-        if let Some(observer) = &observer {
-            bridge::install_observer(observer);
-        }
         Self {
             observer,
             game: crate::engine::Game::new(),
@@ -29,13 +25,5 @@ impl Application {
 
     pub fn observer(&self) -> Option<&Arc<crate::automation::AutomationObserver>> {
         self.observer.as_ref()
-    }
-}
-
-impl Drop for Application {
-    fn drop(&mut self) {
-        if let Some(observer) = &self.observer {
-            bridge::uninstall_observer(observer);
-        }
     }
 }

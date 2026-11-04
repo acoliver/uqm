@@ -364,17 +364,6 @@ pub fn set_main_exited(value: bool) {
     unsafe { c_globals::MAIN_EXITED = cval };
 }
 
-/// Run the splash screen with the background init kernel.
-///
-/// Wraps `SplashScreen(BackgroundInitKernel)` (defined in starcon.c).
-///
-/// @plan PLAN-20260707-MAINLOOP.P03
-#[inline]
-pub fn splash_with_bg_init_kernel() {
-    // SAFETY: no preconditions; drives splash screen initialization.
-    unsafe { prod::uqm_splash_with_bg_init_kernel() };
-}
-
 /// Start a battle with the on-frame callback.
 ///
 /// Wraps `Battle(&on_battle_frame)` (defined in starcon.c).

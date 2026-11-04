@@ -165,19 +165,19 @@ impl FixtureRun {
         }
     }
 
-    pub fn advance(&mut self) -> Result<(), String> {
+    pub fn advance(&mut self, checkpoint: &dyn Fn()) -> Result<(), String> {
         if self.fixture == FixtureName::StarContact {
-            execute(Operation::Advance(self))?;
+            execute(Operation::Advance(self), checkpoint)?;
         }
         Ok(())
     }
 
-    pub fn saved(&mut self, slot: u16) -> Result<(), String> {
-        execute(Operation::SaveWitness(self, slot, false)).map(|_| ())
+    pub fn saved(&mut self, slot: u16, checkpoint: &dyn Fn()) -> Result<(), String> {
+        execute(Operation::SaveWitness(self, slot, false), checkpoint).map(|_| ())
     }
 
-    pub fn loaded(&mut self, slot: u16) -> Result<(), String> {
-        execute(Operation::SaveWitness(self, slot, true)).map(|_| ())
+    pub fn loaded(&mut self, slot: u16, checkpoint: &dyn Fn()) -> Result<(), String> {
+        execute(Operation::SaveWitness(self, slot, true), checkpoint).map(|_| ())
     }
 
     fn require(&mut self, condition: bool, check: &'static str) -> Result<(), String> {
@@ -313,15 +313,15 @@ impl CorpusCoverage {
     }
 }
 
-pub(crate) fn configure(request: &MeleeSetupRequest) -> Result<(), String> {
+pub(crate) fn configure(request: &MeleeSetupRequest, checkpoint: &dyn Fn()) -> Result<(), String> {
     request.validate()?;
     crate::collections::observation::enable();
-    execute(Operation::Configure(request)).map(|_| ())
+    execute(Operation::Configure(request), checkpoint).map(|_| ())
 }
 
-pub(crate) fn run(request: &FixtureRequest) -> Result<FixtureRun, String> {
+pub(crate) fn run(request: &FixtureRequest, checkpoint: &dyn Fn()) -> Result<FixtureRun, String> {
     crate::collections::observation::enable();
-    let proof = execute(Operation::Fixture(request.fixture))?
+    let proof = execute(Operation::Fixture(request.fixture), checkpoint)?
         .ok_or("fixture operation returned no proof")?;
     if request.fixture != FixtureName::StarContact {
         proof.verify()?;
@@ -329,14 +329,14 @@ pub(crate) fn run(request: &FixtureRequest) -> Result<FixtureRun, String> {
     Ok(proof)
 }
 
-pub(crate) fn corpus(request: CorpusRequest) -> Result<(), String> {
+pub(crate) fn corpus(request: CorpusRequest, checkpoint: &dyn Fn()) -> Result<(), String> {
     request.validate()?;
     crate::collections::observation::enable();
-    execute(Operation::Corpus(request)).map(|_| ())
+    execute(Operation::Corpus(request), checkpoint).map(|_| ())
 }
 
-pub(crate) fn trigger() -> Result<(), String> {
-    execute(Operation::MutualLoss).map(|_| ())
+pub(crate) fn trigger(checkpoint: &dyn Fn()) -> Result<(), String> {
+    execute(Operation::MutualLoss, checkpoint).map(|_| ())
 }
 
 enum Operation<'a> {
@@ -351,7 +351,10 @@ enum Operation<'a> {
 #[cfg(not(test))]
 use live::execute;
 #[cfg(test)]
-fn execute(_operation: Operation<'_>) -> Result<Option<FixtureRun>, String> {
+fn execute(
+    _operation: Operation<'_>,
+    _checkpoint: &dyn Fn(),
+) -> Result<Option<FixtureRun>, String> {
     Err("parity fixtures require the loaded game on its input thread".into())
 }
 

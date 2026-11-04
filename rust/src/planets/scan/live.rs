@@ -4,15 +4,17 @@ use crate::c_bindings::{controller_input::*, global_state::MENU_STATE, solar_sys
 use crate::collections::queue::{CountLinks, Queue, ReinitQueue};
 use crate::comm::dispatch::{clone_ship_fragment, CShipFragment};
 use crate::comm::locdata::{CColor, CPoint, CRect};
-use crate::engine::{battle::Cx, observe::{CheckpointView, Io}, Kernel, StoryKey, World, WorldData};
+use crate::engine::{
+    battle::Cx,
+    observe::{CheckpointView, Io},
+    Kernel, StoryKey, World, WorldData,
+};
 use crate::graphics::drawable_abi::SetContextFGFrame;
 use crate::mainloop::restart_menu::c_extern::{
     self as base, uqm_sleep_thread_until as SleepThreadUntil, SetContext,
 };
 use crate::mainloop::types::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER};
-use crate::planet_side::ffi::{
-    run_session, PlanetSideReply, PlanetSideRunContext, STATUS_OK,
-};
+use crate::planet_side::ffi::{run_session, PlanetSideReply, PlanetSideRunContext, STATUS_OK};
 use crate::starbase::cffi::CffiPlatform;
 use crate::starbase::gfx::{FlashTarget, Gfx, Point, Rgba, Stamp};
 use std::ffi::{c_void, CString};
@@ -252,12 +254,15 @@ unsafe fn spawn_fwiffo() {
 }
 
 unsafe fn dispatch_lander(cx: &mut Cx<'_>, io: &mut Io<'_>) -> bool {
-    let (mut context, old_callback) = cx.with_legacy(prepare_lander);
+    let (mut context, old_callback) = cx.with_legacy(|| prepare_lander());
     let reply = run_session(cx, io, &mut context);
     cx.with_legacy(|| finish_lander(context, old_callback, reply))
 }
 
-unsafe fn prepare_lander() -> (PlanetSideRunContext, Option<crate::engine::input::InputFrameHook>) {
+unsafe fn prepare_lander() -> (
+    PlanetSideRunContext,
+    Option<crate::engine::input::InputFrameHook>,
+) {
     let landing_fuel = fuel() as i16;
     erase_coarse();
     let old_callback = SetInputCallback(None);
@@ -285,8 +290,14 @@ unsafe fn prepare_lander() -> (PlanetSideRunContext, Option<crate::engine::input
     (context, old_callback)
 }
 
-unsafe fn finish_lander(context: PlanetSideRunContext, old_callback: Option<crate::engine::input::InputFrameHook>, reply: PlanetSideReply) -> bool {
-    let system = context.solar_system.cast::<crate::c_bindings::global_state::SOLARSYS_STATE>();
+unsafe fn finish_lander(
+    context: PlanetSideRunContext,
+    old_callback: Option<crate::engine::input::InputFrameHook>,
+    reply: PlanetSideReply,
+) -> bool {
+    let system = context
+        .solar_system
+        .cast::<crate::c_bindings::global_state::SOLARSYS_STATE>();
     if reply.status != STATUS_OK {
         crate::logging::log_add(
             crate::logging::LogLevel::Fatal,
@@ -377,15 +388,17 @@ unsafe fn pick_input(state: &mut PickState) -> u32 {
 
 unsafe fn pick_side(cx: &mut Cx<'_>, io: &mut Io<'_>) -> bool {
     let mut state = PickState { success: false };
-    cx.with_legacy(prepare_pick_side);
+    cx.with_legacy(|| prepare_pick_side());
     io.observer.checkpoint(&CheckpointView::PlanetMenu(4));
-    cx.run_input(io, true, |cx, _| cx.with_legacy(|| pick_input(&mut state) != 0));
+    cx.run_input(io, true, |cx, _| {
+        cx.with_legacy(|| pick_input(&mut state) != 0)
+    });
     io.observer.checkpoint(&CheckpointView::PlanetMenu(3));
     cx.with_legacy(|| DrawStatusMessage(std::ptr::null()));
     let result = if state.success {
         dispatch_lander(cx, io)
     } else {
-        cx.with_legacy(restore_location_image);
+        cx.with_legacy(|| restore_location_image());
         true
     };
     cx.with_legacy(|| base::SetMenuSounds(15, 16));
@@ -492,30 +505,30 @@ unsafe fn scan_planet(cx: &mut Cx<'_>, io: &mut Io<'_>, scan_type: u16) {
     let mut repair = CRect::default();
     for scan in start..=end {
         let (mut timeout, tint) = cx.with_legacy(|| {
-        let baseline_y = ScreenHeight - 13 - 75 - 7;
-        SetContext(PlanetContext);
-        repair = CRect {
-            corner: CPoint {
-                x: 0,
-                y: (baseline_y - 10) as i16,
-            },
-            width: width(),
-            height: 11,
-        };
-        RepairBackRect(&mut repair);
-        SetContextFont((Kernel::current().read(|owner| owner.micro_font)).cast());
-        CffiPlatform.set_fg_color(text_colors[usize::from(scan)]);
-        display::text(
-            width() >> 1,
-            baseline_y as i16,
-            crate::starbase::gfx::Align::Center,
-            CffiPlatform.game_string(305 + i32::from(scan)),
-        );
-        SetContext(SCAN_CONTEXT);
-        CffiPlatform.batch();
-        DrawPlanet(0, black());
-        CffiPlatform.unbatch();
-        (GetTimeCounter(), color(tint_colors[usize::from(scan)]))
+            let baseline_y = ScreenHeight - 13 - 75 - 7;
+            SetContext(PlanetContext);
+            repair = CRect {
+                corner: CPoint {
+                    x: 0,
+                    y: (baseline_y - 10) as i16,
+                },
+                width: width(),
+                height: 11,
+            };
+            RepairBackRect(&mut repair);
+            SetContextFont((Kernel::current().read(|owner| owner.micro_font)).cast());
+            CffiPlatform.set_fg_color(text_colors[usize::from(scan)]);
+            display::text(
+                width() >> 1,
+                baseline_y as i16,
+                crate::starbase::gfx::Align::Center,
+                CffiPlatform.game_string(305 + i32::from(scan)),
+            );
+            SetContext(SCAN_CONTEXT);
+            CffiPlatform.batch();
+            DrawPlanet(0, black());
+            CffiPlatform.unbatch();
+            (GetTimeCounter(), color(tint_colors[usize::from(scan)]))
         });
         let mut line = 0;
         while line < 84 {
@@ -523,25 +536,33 @@ unsafe fn scan_planet(cx: &mut Cx<'_>, io: &mut Io<'_>, scan_type: u16) {
             if wait_for_any_button_until(cx, io, 1, timeout, 0) != 0 {
                 break;
             }
-            CffiPlatform.batch();
-            DrawPlanet(line, tint);
+            cx.with_legacy(|| {
+                CffiPlatform.batch();
+                DrawPlanet(line, tint);
+            });
             scanned_stuff(cx, line as u16, scan);
             CffiPlatform.unbatch();
             line += 1;
         }
         if line < 84 {
-            CffiPlatform.batch();
-            DrawPlanet(83, tint);
+            cx.with_legacy(|| {
+                CffiPlatform.batch();
+                DrawPlanet(83, tint);
+            });
             scanned_stuff(cx, 83, scan);
             CffiPlatform.unbatch();
         }
     }
-    SetContext(PlanetContext);
-    RepairBackRect(&mut repair);
-    SetContext(SCAN_CONTEXT);
+    cx.with_legacy(|| {
+        SetContext(PlanetContext);
+        RepairBackRect(&mut repair);
+        SetContext(SCAN_CONTEXT);
+    });
     if scan_type == 4 {
-        DrawPlanet(0, black());
-        cx.with_legacy(|| DrawScannedObjects(0));
+        cx.with_legacy(|| {
+            DrawPlanet(0, black());
+            DrawScannedObjects(0);
+        });
     }
     FlushInput();
 }
@@ -563,7 +584,7 @@ unsafe fn scan_input(cx: &mut Cx<'_>, io: &mut Io<'_>, menu: &mut MENU_STATE) ->
     } else if selected {
         if (*menu).CurState == 5 {
             if unavailable() {
-                PlayMenuSound(2);
+                cx.with_legacy(|| PlayMenuSound(2));
                 return 1;
             }
             let required = fuel();
@@ -571,19 +592,19 @@ unsafe fn scan_input(cx: &mut Cx<'_>, io: &mut Io<'_>, menu: &mut MENU_STATE) ->
                 || cx.world.data.flagship.num_landers == 0
                 || cx.world.data.flagship.crew_enlisted == 0
             {
-                PlayMenuSound(2);
+                cx.with_legacy(|| PlayMenuSound(2));
                 return 1;
             }
-            CffiPlatform.set_flash(FlashTarget::Off);
+            cx.with_legacy(|| CffiPlatform.set_flash(FlashTarget::Off));
             if !pick_side(cx, io) {
                 return 0;
             }
             cx.with_legacy(|| DrawMenuStateStrings(7, i16::from(menu.CurState)));
-            CffiPlatform.set_flash(FlashTarget::Menu3do);
+            cx.with_legacy(|| CffiPlatform.set_flash(FlashTarget::Menu3do));
             return 1;
         }
         if (*(*solar_system::current()).pOrbitalDesc).data_index & 0x80 != 0 {
-            PlayMenuSound(2);
+            cx.with_legacy(|| PlayMenuSound(2));
             return 1;
         }
         scan_planet(cx, io, u16::from(menu.CurState));
@@ -638,7 +659,7 @@ pub unsafe fn scan_system(cx: &mut Cx<'_>, io: &mut Io<'_>) {
     io.observer.checkpoint(&CheckpointView::PlanetMenu(2));
     cx.run_input(io, false, |cx, io| scan_input(cx, io, &mut menu) != 0);
     io.observer.checkpoint(&CheckpointView::PlanetMenu(0));
-    cx.with_legacy(finish_scan_system);
+    cx.with_legacy(|| finish_scan_system());
 }
 
 unsafe fn prepare_scan_system(menu: &mut MENU_STATE) {

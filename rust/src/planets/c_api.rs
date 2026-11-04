@@ -195,7 +195,13 @@ pub const SLYLANDRO_HOME_CONVERSATION: u32 = 23;
 /// # Safety
 /// Game thread, inside a planet orbit.
 pub unsafe fn init_communication(which_comm: u32) {
-    crate::comm::dispatch::init_communication(which_comm);
+    crate::app::bridge::enter(|cx| {
+        let mut observer = cx.kernel.input_runtime().observer();
+        let mut io = crate::engine::observe::Io {
+            observer: &mut *observer,
+        };
+        crate::comm::dispatch::init_communication(cx, &mut io, which_comm);
+    });
 }
 
 /// `YEHAT_CONVERSATION` (`commglue.h`) and `YEHAT_SHIP` (`races.h`).

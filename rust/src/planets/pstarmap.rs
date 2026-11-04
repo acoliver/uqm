@@ -81,8 +81,7 @@ use crate::navigation::globals::in_hqspace;
 
 #[cfg(not(test))]
 use crate::mainloop::input_abi::live::{
-    AnyButtonPress, FlushInput, SetDefaultMenuRepeatDelay, SetMenuRepeatDelay,
-    SetMenuSounds,
+    AnyButtonPress, FlushInput, SetDefaultMenuRepeatDelay, SetMenuRepeatDelay, SetMenuSounds,
 };
 
 #[cfg(not(test))]
@@ -1083,9 +1082,14 @@ unsafe fn update_map() {
 #[cfg(not(test))]
 /// # Safety
 /// Game-thread only, with game globals and native UI resources initialized.
-pub unsafe fn star_map(cx: &mut crate::engine::battle::Cx<'_>, io: &mut crate::engine::observe::Io<'_>) -> u32 {
-    let (mut menu, universe) = cx.with_legacy(prepare_star_map);
-    cx.run_input(io, false, |cx, _| cx.with_legacy(|| DoMoveCursor(&mut menu) != 0));
+pub unsafe fn star_map(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    io: &mut crate::engine::observe::Io<'_>,
+) -> u32 {
+    let (mut menu, universe) = cx.with_legacy(|| prepare_star_map());
+    cx.run_input(io, false, |cx, _| {
+        cx.with_legacy(|| DoMoveCursor(&mut menu) != 0)
+    });
     cx.with_legacy(|| finish_star_map(universe))
 }
 

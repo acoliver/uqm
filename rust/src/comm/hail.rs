@@ -190,200 +190,227 @@ pub unsafe fn hail_alien(cx: &mut Cx<'_>, io: &mut Io<'_>) {
         // Reset Rust-side comm state for the new encounter, then sync
         // C statics (pCurInputState, TalkingFinished) via bridges.
         // ----------------------------------------------------------------
-        eprintln!("[DBG] HailAlien: clearing COMM_STATE");
-        super::state::COMM_STATE.write().reset_for_encounter();
-        {
-            let s = super::state::COMM_STATE.read();
-            eprintln!(
-                "[DBG] HailAlien: after clear, talking_finished={}",
-                s.is_talking_finished()
-            );
-        }
-        c_SetTalkingFinished(0);
+        let (
+            space_ctx,
+            anim_ctx,
+            old_font,
+            phrases,
+            alien_song,
+            alien_cmap,
+            alien_font,
+            alien_frame,
+            text_cache_ctx,
+            text_cache_frame,
+        ) = cx.with_legacy(|| {
+            eprintln!("[DBG] HailAlien: clearing COMM_STATE");
+            super::state::COMM_STATE.write().reset_for_encounter();
+            {
+                let s = super::state::COMM_STATE.read();
+                eprintln!(
+                    "[DBG] HailAlien: after clear, talking_finished={}",
+                    s.is_talking_finished()
+                );
+            }
+            c_SetTalkingFinished(0);
 
-        // ----------------------------------------------------------------
-        // Step 2: Load PlayerFont
-        // ----------------------------------------------------------------
-        let player_font_res = c"font.player".as_ptr();
-        let player_font = LoadGraphicInstance(player_font_res);
-        // The conversation owns this font: the response and feedback renderers
-        // borrow it, and it is freed only at teardown after queued draws drain.
-        CONVERSATION_PLAYER_FONT
-            .install(player_font)
-            .unwrap_or_else(|error| panic!("HailAlien: {error}"));
+            // ----------------------------------------------------------------
+            // Step 2: Load PlayerFont
+            // ----------------------------------------------------------------
+            let player_font_res = c"font.player".as_ptr();
+            let player_font = LoadGraphicInstance(player_font_res);
+            // The conversation owns this font: the response and feedback renderers
+            // borrow it, and it is freed only at teardown after queued draws drain.
+            CONVERSATION_PLAYER_FONT
+                .install(player_font)
+                .unwrap_or_else(|error| panic!("HailAlien: {error}"));
 
-        // ----------------------------------------------------------------
-        // Step 3: Load and set alien resources
-        // ----------------------------------------------------------------
+            // ----------------------------------------------------------------
+            // Step 3: Load and set alien resources
+            // ----------------------------------------------------------------
 
-        // AlienFrame: load → capture → set
-        let alien_frame_raw = LoadGraphicInstance(unsafe { c_bridge::CommData.alien_frame_res });
-        let alien_frame = CaptureDrawable(alien_frame_raw.cast());
-        unsafe { c_bridge::CommData.alien_frame = alien_frame.cast() };
+            // AlienFrame: load → capture → set
+            let alien_frame_raw =
+                LoadGraphicInstance(unsafe { c_bridge::CommData.alien_frame_res });
+            let alien_frame = CaptureDrawable(alien_frame_raw.cast());
+            unsafe { c_bridge::CommData.alien_frame = alien_frame.cast() };
 
-        // AlienFont: load → set (not captured, direct Destroy on exit)
-        let alien_font = LoadGraphicInstance(unsafe { c_bridge::CommData.alien_font_res });
-        unsafe { c_bridge::CommData.alien_font = alien_font };
+            // AlienFont: load → set (not captured, direct Destroy on exit)
+            let alien_font = LoadGraphicInstance(unsafe { c_bridge::CommData.alien_font_res });
+            unsafe { c_bridge::CommData.alien_font = alien_font };
 
-        // AlienColorMap: load → capture → set
-        let alien_cmap_raw =
-            LoadStringTableInstance(unsafe { c_bridge::CommData.alien_colormap_res });
-        let alien_cmap = CaptureStringTable(alien_cmap_raw);
-        unsafe { c_bridge::CommData.alien_colormap = alien_cmap.cast() };
+            // AlienColorMap: load → capture → set
+            let alien_cmap_raw =
+                LoadStringTableInstance(unsafe { c_bridge::CommData.alien_colormap_res });
+            let alien_cmap = CaptureStringTable(alien_cmap_raw);
+            unsafe { c_bridge::CommData.alien_colormap = alien_cmap.cast() };
 
-        // AlienSong: alt-song fallback then primary
-        let song_flags = unsafe { c_bridge::CommData.alien_song_flags };
-        let alt_song_res = unsafe { c_bridge::CommData.alien_alt_song_res };
-        let alien_song = if (song_flags & LDASF_USE_ALTERNATE) != 0 && !alt_song_res.is_null() {
-            let alt = LoadMusicInstance(alt_song_res);
-            if !alt.is_null() {
-                alt
+            // AlienSong: alt-song fallback then primary
+            let song_flags = unsafe { c_bridge::CommData.alien_song_flags };
+            let alt_song_res = unsafe { c_bridge::CommData.alien_alt_song_res };
+            let alien_song = if (song_flags & LDASF_USE_ALTERNATE) != 0 && !alt_song_res.is_null() {
+                let alt = LoadMusicInstance(alt_song_res);
+                if !alt.is_null() {
+                    alt
+                } else {
+                    LoadMusicInstance(unsafe { c_bridge::CommData.alien_song_res })
+                }
             } else {
                 LoadMusicInstance(unsafe { c_bridge::CommData.alien_song_res })
-            }
-        } else {
-            LoadMusicInstance(unsafe { c_bridge::CommData.alien_song_res })
-        };
-        unsafe { c_bridge::CommData.alien_song = alien_song };
-
-        // ConversationPhrases: load → capture → set
-        let phrases_raw =
-            LoadStringTableInstance(unsafe { c_bridge::CommData.conversation_phrases_res });
-        let phrases = CaptureStringTable(phrases_raw);
-        unsafe { c_bridge::CommData.conversation_phrases = phrases.cast() };
-
-        // Populate COMM_STATE.comm_data so Rust-side NPCPhrase can
-        // resolve conversation phrases without calling back into C.
-        {
-            let comm_data = super::types::CommData {
-                conversation_phrases: phrases.cast(),
-                alien_frame: alien_frame.cast(),
-                alien_font,
-                alien_color_map: alien_cmap.cast(),
-                alien_song,
-                ..Default::default()
             };
-            super::state::COMM_STATE.write().set_comm_data(comm_data);
-        }
+            unsafe { c_bridge::CommData.alien_song = alien_song };
 
-        // ----------------------------------------------------------------
-        // Step 4: Subtitle text setup
-        // ----------------------------------------------------------------
-        c_SetupSubtitleTextFromCommData();
+            // ConversationPhrases: load → capture → set
+            let phrases_raw =
+                LoadStringTableInstance(unsafe { c_bridge::CommData.conversation_phrases_res });
+            let phrases = CaptureStringTable(phrases_raw);
+            unsafe { c_bridge::CommData.conversation_phrases = phrases.cast() };
 
-        // ----------------------------------------------------------------
-        // Step 5: TextCacheContext setup
-        // ----------------------------------------------------------------
-        let text_cache_ctx_name = c"TextCacheContext".as_ptr() as *const _;
-        let text_cache_ctx = create_named_context(text_cache_ctx_name);
-
-        let sis_w = unsafe { c_bridge::ScreenWidth - 78 };
-        let sis_h = unsafe { c_bridge::ScreenHeight - 13 };
-        let slider_y = 107;
-        let slider_h = 15;
-        let cache_height = sis_h - slider_y - slider_h + 2;
-
-        let want_pixmap: std::ffi::c_uint = 2; // WANT_PIXMAP = 1 << 1
-        let cache_frame_raw =
-            CreateDrawable(want_pixmap as u8, sis_w as i16, cache_height as i16, 1);
-        let text_cache_frame = CaptureDrawable(cache_frame_raw);
-
-        c_SetTextCacheContext(text_cache_ctx.cast());
-        c_SetTextCacheFrame(text_cache_frame.cast());
-        SetContext(text_cache_ctx);
-        SetContextFGFrame(text_cache_frame);
-        // TextBack = BUILD_COLOR(MAKE_RGB15(0x00, 0x00, 0x10), 0x00)
-        let text_back = crate::graphics::native_abi::Color {
-            r: 0,
-            g: 0,
-            b: (0x10 << 3) | (0x10 >> 2),
-            a: 0xff,
-        };
-        SetContextBackGroundColor(text_back);
-        ClearDrawable();
-        SetFrameTransparentColor(text_cache_frame, text_back);
-
-        // ----------------------------------------------------------------
-        // Step 6: Clear phrase buffer
-        // ----------------------------------------------------------------
-        c_ClearPhraseBuf();
-
-        // ----------------------------------------------------------------
-        // Step 7: Set SpaceContext and save old font
-        // ----------------------------------------------------------------
-        let space_ctx = { Kernel::current().read(|owner| owner.space_context) };
-        SetContext(space_ctx.cast());
-        let old_font = SetContextFont(player_font.cast());
-
-        // ----------------------------------------------------------------
-        // Step 8: Create AnimContext and configure
-        // ----------------------------------------------------------------
-        let anim_ctx = create_named_context(c"AnimContext".as_ptr().cast());
-        c_SetAnimContext(anim_ctx.cast());
-        SetContext(anim_ctx);
-        let screen = { Kernel::current().read(|owner| owner.screen) };
-        SetContextFGFrame(screen.cast());
-
-        let mut frame_rect = crate::comm::locdata::CRect::default();
-        GetFrameRect(alien_frame, ptr::addr_of_mut!(frame_rect).cast());
-
-        // CommWndRect.extent = { SIS_SCREEN_WIDTH, frame_rect.height }
-        // CommWndRect.corner stays at its current value for WON_LAST_BATTLE
-        let wnd_x = unsafe { c_bridge::CommWndRect.corner.x as i32 };
-        let wnd_y = unsafe { c_bridge::CommWndRect.corner.y as i32 };
-        unsafe {
-            c_bridge::CommWndRect.corner.x = wnd_x as i16;
-            c_bridge::CommWndRect.corner.y = wnd_y as i16;
-            c_bridge::CommWndRect.width = sis_w as i16;
-            c_bridge::CommWndRect.height = frame_rect.height;
-        }
-
-        // ----------------------------------------------------------------
-        // Steps 9–10: Transition, batch, draw SIS UI
-        // ----------------------------------------------------------------
-        SetTransitionSource(ptr::null());
-        BatchGraphics();
-
-        if (crate::mainloop::ffi::get_current_activity().0 & 0xFF) == 5 {
-            // WON_LAST_BATTLE branch: set clip to current CommWndRect
-            unsafe {
-                SetContextClipRect((&raw mut c_bridge::CommWndRect).cast());
-            }
-        } else {
-            // Normal branch: set clip to SIS origin + CommWndRect size
-            unsafe {
-                c_bridge::CommWndRect.corner.x = 7; // SIS_ORG_X
-                c_bridge::CommWndRect.corner.y = 10; // SIS_ORG_Y
-                SetContextClipRect((&raw mut c_bridge::CommWndRect).cast());
+            // Populate COMM_STATE.comm_data so Rust-side NPCPhrase can
+            // resolve conversation phrases without calling back into C.
+            {
+                let comm_data = super::types::CommData {
+                    conversation_phrases: phrases.cast(),
+                    alien_frame: alien_frame.cast(),
+                    alien_font,
+                    alien_color_map: alien_cmap.cast(),
+                    alien_song,
+                    ..Default::default()
+                };
+                super::state::COMM_STATE.write().set_comm_data(comm_data);
             }
 
-            draw_sisframe();
+            // ----------------------------------------------------------------
+            // Step 4: Subtitle text setup
+            // ----------------------------------------------------------------
+            c_SetupSubtitleTextFromCommData();
 
-            if is_starbase_conversation() {
-                // Talking to allied Starbase
-                let msg = game_string(STARBASE_STRING_BASE + 1);
-                DrawSISMessage(msg);
-                let title = game_string(STARBASE_STRING_BASE);
-                DrawSISTitle(title.cast_mut());
+            // ----------------------------------------------------------------
+            // Step 5: TextCacheContext setup
+            // ----------------------------------------------------------------
+            let text_cache_ctx_name = c"TextCacheContext".as_ptr() as *const _;
+            let text_cache_ctx = create_named_context(text_cache_ctx_name);
+
+            let sis_w = unsafe { c_bridge::ScreenWidth - 78 };
+            let sis_h = unsafe { c_bridge::ScreenHeight - 13 };
+            let slider_y = 107;
+            let slider_h = 15;
+            let cache_height = sis_h - slider_y - slider_h + 2;
+
+            let want_pixmap: std::ffi::c_uint = 2; // WANT_PIXMAP = 1 << 1
+            let cache_frame_raw =
+                CreateDrawable(want_pixmap as u8, sis_w as i16, cache_height as i16, 1);
+            let text_cache_frame = CaptureDrawable(cache_frame_raw);
+
+            c_SetTextCacheContext(text_cache_ctx.cast());
+            c_SetTextCacheFrame(text_cache_frame.cast());
+            SetContext(text_cache_ctx);
+            SetContextFGFrame(text_cache_frame);
+            // TextBack = BUILD_COLOR(MAKE_RGB15(0x00, 0x00, 0x10), 0x00)
+            let text_back = crate::graphics::native_abi::Color {
+                r: 0,
+                g: 0,
+                b: (0x10 << 3) | (0x10 >> 2),
+                a: 0xff,
+            };
+            SetContextBackGroundColor(text_back);
+            ClearDrawable();
+            SetFrameTransparentColor(text_cache_frame, text_back);
+
+            // ----------------------------------------------------------------
+            // Step 6: Clear phrase buffer
+            // ----------------------------------------------------------------
+            c_ClearPhraseBuf();
+
+            // ----------------------------------------------------------------
+            // Step 7: Set SpaceContext and save old font
+            // ----------------------------------------------------------------
+            let space_ctx = { Kernel::current().read(|owner| owner.space_context) };
+            SetContext(space_ctx.cast());
+            let old_font = SetContextFont(player_font.cast());
+
+            // ----------------------------------------------------------------
+            // Step 8: Create AnimContext and configure
+            // ----------------------------------------------------------------
+            let anim_ctx = create_named_context(c"AnimContext".as_ptr().cast());
+            c_SetAnimContext(anim_ctx.cast());
+            SetContext(anim_ctx);
+            let screen = { Kernel::current().read(|owner| owner.screen) };
+            SetContextFGFrame(screen.cast());
+
+            let mut frame_rect = crate::comm::locdata::CRect::default();
+            GetFrameRect(alien_frame, ptr::addr_of_mut!(frame_rect).cast());
+
+            // CommWndRect.extent = { SIS_SCREEN_WIDTH, frame_rect.height }
+            // CommWndRect.corner stays at its current value for WON_LAST_BATTLE
+            let wnd_x = unsafe { c_bridge::CommWndRect.corner.x as i32 };
+            let wnd_y = unsafe { c_bridge::CommWndRect.corner.y as i32 };
+            unsafe {
+                c_bridge::CommWndRect.corner.x = wnd_x as i16;
+                c_bridge::CommWndRect.corner.y = wnd_y as i16;
+                c_bridge::CommWndRect.width = sis_w as i16;
+                c_bridge::CommWndRect.height = frame_rect.height;
+            }
+
+            // ----------------------------------------------------------------
+            // Steps 9–10: Transition, batch, draw SIS UI
+            // ----------------------------------------------------------------
+            SetTransitionSource(ptr::null());
+            BatchGraphics();
+
+            if (crate::mainloop::ffi::get_current_activity().0 & 0xFF) == 5 {
+                // WON_LAST_BATTLE branch: set clip to current CommWndRect
+                unsafe {
+                    SetContextClipRect((&raw mut c_bridge::CommWndRect).cast());
+                }
             } else {
-                // Default titles: NULL message + planet name
-                DrawSISMessage(ptr::null());
-                let planet_name = planet_name();
-                DrawSISTitle(planet_name.cast_mut());
+                // Normal branch: set clip to SIS origin + CommWndRect size
+                unsafe {
+                    c_bridge::CommWndRect.corner.x = 7; // SIS_ORG_X
+                    c_bridge::CommWndRect.corner.y = 10; // SIS_ORG_Y
+                    SetContextClipRect((&raw mut c_bridge::CommWndRect).cast());
+                }
+
+                draw_sisframe();
+
+                if is_starbase_conversation() {
+                    // Talking to allied Starbase
+                    let msg = game_string(STARBASE_STRING_BASE + 1);
+                    DrawSISMessage(msg);
+                    let title = game_string(STARBASE_STRING_BASE);
+                    DrawSISTitle(title.cast_mut());
+                } else {
+                    // Default titles: NULL message + planet name
+                    DrawSISMessage(ptr::null());
+                    let planet_name = planet_name();
+                    DrawSISTitle(planet_name.cast_mut());
+                }
             }
-        }
 
-        // DrawSISComWindow (C line 1278) — ported from c_DrawSISComWindow
-        draw_sis_com_window();
+            // DrawSISComWindow (C line 1278) — ported from c_DrawSISComWindow
+            draw_sis_com_window();
 
-        // ----------------------------------------------------------------
-        // Step 11: Set CHECK_LOAD flag, call encounter funcs, run DoInput
-        // ----------------------------------------------------------------
-        // LastActivity |= CHECK_LOAD (0x1000)
-        (**Kernel::current()).last_activity |= 0x1000;
-        if let Some(callback) = c_bridge::CommData.init_encounter_func {
-            callback();
-        }
+            // ----------------------------------------------------------------
+            // Step 11: Set CHECK_LOAD flag, call encounter funcs, run DoInput
+            // ----------------------------------------------------------------
+            // LastActivity |= CHECK_LOAD (0x1000)
+            (**Kernel::current()).last_activity |= 0x1000;
+            if let Some(callback) = c_bridge::CommData.init_encounter_func {
+                callback();
+            }
+
+            (
+                space_ctx,
+                anim_ctx,
+                old_font,
+                phrases,
+                alien_song,
+                alien_cmap,
+                alien_font,
+                alien_frame,
+                text_cache_ctx,
+                text_cache_frame,
+            )
+        });
 
         // Run the encounter loop: DoInput with rust_do_communication as InputFunc.
         // Allocates ENCOUNTER_STATE, wires InputFunc, registers pCurInputState,
@@ -397,17 +424,17 @@ pub unsafe fn hail_alien(cx: &mut Cx<'_>, io: &mut Io<'_>) {
 
             let mut es: EncounterStateDInput = std::mem::zeroed();
             es.input = None;
-            unsafe {
+            cx.with_legacy(|| {
                 c_bridge::c_SetCurInputState(&mut es as *mut _ as *mut std::ffi::c_void);
                 c_bridge::SetMenuSounds(MENU_SOUND_UP | MENU_SOUND_DOWN, MENU_SOUND_SELECT);
-            }
+            });
             io.observer
                 .checkpoint(&CheckpointView::CommunicationStarted);
             cx.run_input(io, false, |cx, io| unsafe {
                 crate::comm::ffi::rust_do_communication(cx, io) != 0
             });
             io.observer.checkpoint(&CheckpointView::CommunicationEnded);
-            unsafe { c_bridge::c_SetCurInputState(std::ptr::null_mut()) };
+            cx.with_legacy(|| c_bridge::c_SetCurInputState(std::ptr::null_mut()));
         }
 
         // ----------------------------------------------------------------
@@ -419,89 +446,93 @@ pub unsafe fn hail_alien(cx: &mut Cx<'_>, io: &mut Io<'_>) {
         // FlushColorXForms, ClearSubtitles, stop audio) is performed here.
         // ----------------------------------------------------------------
 
-        // AnimContext teardown (C lines 1126–1128)
-        SetContext(space_ctx.cast());
-        DestroyContext(anim_ctx);
+        cx.with_legacy(|| {
+            // AnimContext teardown (C lines 1126–1128)
+            SetContext(space_ctx.cast());
+            DestroyContext(anim_ctx);
 
-        // FlushColorXForms, ClearSubtitles (C lines 1130–1131)
-        FlushColorXForms();
-        super::ffi::rust_clear_subtitles();
+            // FlushColorXForms, ClearSubtitles (C lines 1130–1131)
+            FlushColorXForms();
+            super::ffi::rust_clear_subtitles();
 
-        // Stop audio, fade music (C lines 1133–1136)
-        stop_music();
-        StopSound();
-        StopTrack();
-        let fade_end = FadeMusic(NORMAL_VOLUME as u8, 0);
-        SleepThreadUntil(fade_end.wrapping_add(840 / 60));
+            // Stop audio, fade music (C lines 1133–1136)
+            stop_music();
+            StopSound();
+            StopTrack();
+            let fade_end = FadeMusic(NORMAL_VOLUME as u8, 0);
+            SleepThreadUntil(fade_end.wrapping_add(840 / 60));
 
-        // ----------------------------------------------------------------
-        // Step 16: Call post/uninit encounter funcs
-        // ----------------------------------------------------------------
-        let activity = crate::mainloop::ffi::get_current_activity().0;
-        if (activity & 0x4000) == 0 && (activity & 0x1000) == 0 {
-            if let Some(callback) = c_bridge::CommData.post_encounter_func {
+            // ----------------------------------------------------------------
+            // Step 16: Call post/uninit encounter funcs
+            // ----------------------------------------------------------------
+            let activity = crate::mainloop::ffi::get_current_activity().0;
+            if (activity & 0x4000) == 0 && (activity & 0x1000) == 0 {
+                if let Some(callback) = c_bridge::CommData.post_encounter_func {
+                    callback();
+                }
+            }
+            if let Some(callback) = c_bridge::CommData.uninit_encounter_func {
                 callback();
             }
-        }
-        if let Some(callback) = c_bridge::CommData.uninit_encounter_func {
-            callback();
-        }
 
-        // ----------------------------------------------------------------
-        // Step 17: Restore context and font
-        // ----------------------------------------------------------------
-        SetContext(space_ctx.cast());
-        SetContextFont(old_font);
+            // ----------------------------------------------------------------
+            // Step 17: Restore context and font
+            // ----------------------------------------------------------------
+            SetContext(space_ctx.cast());
+            SetContextFont(old_font);
 
-        // ----------------------------------------------------------------
-        // Step 18: Destroy all resources in exact C order
-        // Captured resources: Release first, then Destroy the raw handle.
-        // Non-captured resources: Destroy directly.
-        // Order: ConversationPhrases → AlienSong → AlienColorMap →
-        //        AlienFont → AlienFrame → TextCacheContext → TextCacheFrame
-        //        → PlayerFont
-        // ----------------------------------------------------------------
+            // ----------------------------------------------------------------
+            // Step 18: Destroy all resources in exact C order
+            // Captured resources: Release first, then Destroy the raw handle.
+            // Non-captured resources: Destroy directly.
+            // Order: ConversationPhrases → AlienSong → AlienColorMap →
+            //        AlienFont → AlienFrame → TextCacheContext → TextCacheFrame
+            //        → PlayerFont
+            // ----------------------------------------------------------------
 
-        // c_Destroy* for captured resources (Drawable, ColorMap, StringTable)
-        // already do Release+Destroy internally.  Non-captured resources
-        // (Font, Music) go straight to Destroy.
+            // c_Destroy* for captured resources (Drawable, ColorMap, StringTable)
+            // already do Release+Destroy internally.  Non-captured resources
+            // (Font, Music) go straight to Destroy.
 
-        // ConversationPhrases — captured; Release to get back STRING_TABLE, then Destroy
-        DestroyStringTable(ReleaseStringTable(phrases));
+            // ConversationPhrases — captured; Release to get back STRING_TABLE, then Destroy
+            DestroyStringTable(ReleaseStringTable(phrases));
 
-        // AlienSong — not captured, direct Destroy
-        DestroyMusic(alien_song);
+            // AlienSong — not captured, direct Destroy
+            DestroyMusic(alien_song);
 
-        // AlienColorMap — captured; release before destroying the table
-        DestroyStringTable(ReleaseStringTable(alien_cmap));
+            // AlienColorMap — captured; release before destroying the table
+            DestroyStringTable(ReleaseStringTable(alien_cmap));
 
-        // AlienFont — not captured, direct Destroy
-        DestroyFont(alien_font.cast());
+            // AlienFont — not captured, direct Destroy
+            DestroyFont(alien_font.cast());
 
-        // AlienFrame — captured; ReleaseDrawable to get back raw handle, then DestroyDrawable
-        DestroyDrawable(ReleaseDrawable(alien_frame));
+            // AlienFrame — captured; ReleaseDrawable to get back raw handle, then DestroyDrawable
+            DestroyDrawable(ReleaseDrawable(alien_frame));
 
-        // TextCacheContext — context, direct destroy
-        DestroyContext(text_cache_ctx);
+            // TextCacheContext — context, direct destroy
+            DestroyContext(text_cache_ctx);
 
-        // TextCacheFrame — captured; ReleaseDrawable to get back raw handle, then DestroyDrawable
-        DestroyDrawable(ReleaseDrawable(text_cache_frame));
+            // TextCacheFrame — captured; ReleaseDrawable to get back raw handle, then DestroyDrawable
+            DestroyDrawable(ReleaseDrawable(text_cache_frame));
 
-        // PlayerFont — not captured; queued response/feedback glyph draws may
-        // still read it, so the release drains the draw queue first.
-        CONVERSATION_PLAYER_FONT.release(&mut CFontRelease);
+            // PlayerFont — not captured; queued response/feedback glyph draws may
+            // still read it, so the release drains the draw queue first.
+            CONVERSATION_PLAYER_FONT.release(&mut CFontRelease);
 
-        // ----------------------------------------------------------------
-        // Steps 19–20: Clear CommData fields and pCurInputState
-        // ----------------------------------------------------------------
-        unsafe { c_bridge::CommData.conversation_phrases_res = std::ptr::null() };
-        unsafe { c_bridge::CommData.conversation_phrases = std::ptr::null_mut() };
-        // Clear Rust-side comm_data (resources already destroyed above)
-        super::state::COMM_STATE.write().clear_comm_data();
-        // pCurInputState was already cleared by c_RunEncounterDoInput.
-        let campaign = crate::engine::observe::CampaignView::from_world(cx.world);
-        io.observer
-            .input_admitted(&InputView::CommunicationCompleted, &Some(campaign));
+            // ----------------------------------------------------------------
+            // Steps 19–20: Clear CommData fields and pCurInputState
+            // ----------------------------------------------------------------
+            unsafe { c_bridge::CommData.conversation_phrases_res = std::ptr::null() };
+            unsafe { c_bridge::CommData.conversation_phrases = std::ptr::null_mut() };
+            // Clear Rust-side comm_data (resources already destroyed above)
+            super::state::COMM_STATE.write().clear_comm_data();
+            // pCurInputState was already cleared by c_RunEncounterDoInput.
+        });
+        let campaign = crate::engine::observe::CampaignView::capture(cx.world);
+        cx.with_legacy(|| {
+            io.observer
+                .input_admitted(&InputView::CommunicationCompleted, &Some(campaign))
+        });
     }
 }
 

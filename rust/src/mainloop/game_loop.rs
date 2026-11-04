@@ -319,11 +319,16 @@ mod cffi {
 
         fn observed<R>(
             &self,
-            call: impl FnOnce(&mut crate::engine::battle::Cx<'_>, &mut crate::engine::observe::Io<'_>) -> R,
+            call: impl FnOnce(
+                &mut crate::engine::battle::Cx<'_>,
+                &mut crate::engine::observe::Io<'_>,
+            ) -> R,
         ) -> R {
             self.owned(|cx| {
                 let mut observer = cx.kernel.input_runtime().observer();
-                let mut io = crate::engine::observe::Io { observer: observer.as_mut() };
+                let mut io = crate::engine::observe::Io {
+                    observer: observer.as_mut(),
+                };
                 call(cx, &mut io)
             })
         }
@@ -344,7 +349,9 @@ mod cffi {
         }
 
         fn splash(&self) {
-            self.observed(|cx, io| unsafe { crate::mainloop::lifecycle_abi::uqm_splash_with_bg_init_kernel(cx, io) })
+            self.observed(|cx, io| unsafe {
+                crate::mainloop::lifecycle_abi::uqm_splash_with_bg_init_kernel(cx, io)
+            })
         }
 
         fn start_game(&self) -> bool {
@@ -489,7 +496,9 @@ mod cffi {
         }
 
         fn explore_solar_sys(&self) {
-            self.observed(|cx, io| unsafe { crate::planets::solarsys::lifecycle::run_explore_solar_sys(cx, io) })
+            self.observed(|cx, io| unsafe {
+                crate::planets::solarsys::lifecycle::run_explore_solar_sys(cx, io)
+            })
         }
 
         fn battle_with_frame_callback(&self) {

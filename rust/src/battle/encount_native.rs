@@ -394,10 +394,17 @@ pub(crate) mod engine {
         }
     }
 
-    /// # Safety
-    /// The game thread must own initialized encounter fleet queues, game state, display, and salvage resources.
-    #[no_mangle]
-    pub unsafe extern "C" fn UninitEncounter() -> COUNT {
+    struct Salvage {
+        killed: COUNT,
+        victory: bool,
+        recycle: COUNT,
+        rect: RECT,
+        salvage_rect: RECT,
+        str1: *const UNICODE,
+        str2: *const UNICODE,
+    }
+
+    unsafe fn prepare_salvage() -> Result<Salvage, COUNT> {
         let mut killed = 0u16;
         KernelOwner::current().write(|kernel| free_gravity_well(kernel));
         if activity() & (CHECK_ABORT | CHECK_LOAD) as u16 != 0
@@ -405,12 +412,12 @@ pub(crate) mod engine {
             || activity() as u8 == IN_LAST_BATTLE as u8
             || activity() as u8 == WON_LAST_BATTLE as u8
         {
-            return killed;
+            return Err(killed);
         }
         if game_state(BATTLE_SEGUE, END_BATTLE_SEGUE) == 0 {
             link_queue::ships(0).reinit();
             link_queue::ships(1).reinit();
-            return killed;
+            return Err(killed);
         }
         let mut recycle = 0u16;
         let mut rect: RECT = mem::zeroed();
@@ -569,40 +576,78 @@ pub(crate) mod engine {
             }
         }
         SetStatusMessageMode(previous_mode);
-        if victory != 0 {
-            WaitForAnyButton(1, ONE_SECOND * 3, 0);
-            if !escape_pressed() {
-                draw_fade_text(str1, str2, 0, &mut salvage_rect);
-                if !escape_pressed() {
-                    SetContextForeGroundColor(rgb15(0, 0, 0));
-                    rect.corner.x = salvage_rect.corner.x.wrapping_add(10);
-                    rect.extent.width = 132;
-                    DrawFilledRectangle(&mut rect);
-                    sprintf(
-                        buf.as_mut_ptr(),
-                        c"%u %s".as_ptr(),
-                        recycle as u32,
-                        game_string(STATUS_STRING_BASE + 1),
-                    );
-                    t = text(
-                        (rect.corner.x as i32 + (rect.extent.width as i32 >> 1)) as i16,
-                        rect.corner.y.wrapping_add(14),
-                        TEXT_ALIGN_ALIGN_CENTER,
-                        buf.as_ptr(),
-                    );
-                    SetContextForeGroundColor(rgb15(0, 0, 24));
-                    font_DrawText(&mut t);
-                    str1 = game_string(ENCOUNTER_STRING_BASE + 6);
-                    str2 = game_string(ENCOUNTER_STRING_BASE + 7);
-                    draw_fade_text(str1, str2, 1, &mut salvage_rect);
-                    WaitForAnyButton(1, ONE_SECOND * 2, 0);
-                    if !escape_pressed() {
-                        draw_fade_text(str1, str2, 0, &mut salvage_rect);
-                    }
-                }
+        Ok(Salvage {
+            killed,
+            victory: victory != 0,
+            recycle,
+            rect,
+            salvage_rect,
+            str1,
+            str2,
+        })
+    }
+
+    impl Salvage {
+        unsafe fn show_summary(&mut self) -> bool {
+            if escape_pressed() {
+                return false;
             }
-            DrawStatusMessage(ptr::null());
+            draw_fade_text(self.str1, self.str2, 0, &mut self.salvage_rect);
+            if escape_pressed() {
+                return false;
+            }
+            SetContextForeGroundColor(rgb15(0, 0, 0));
+            self.rect.corner.x = self.salvage_rect.corner.x.wrapping_add(10);
+            self.rect.extent.width = 132;
+            DrawFilledRectangle(&mut self.rect);
+            let mut buf = [0 as UNICODE; 80];
+            sprintf(
+                buf.as_mut_ptr(),
+                c"%u %s".as_ptr(),
+                self.recycle as u32,
+                game_string(STATUS_STRING_BASE + 1),
+            );
+            let mut t = text(
+                (self.rect.corner.x as i32 + (self.rect.extent.width as i32 >> 1)) as i16,
+                self.rect.corner.y.wrapping_add(14),
+                TEXT_ALIGN_ALIGN_CENTER,
+                buf.as_ptr(),
+            );
+            SetContextForeGroundColor(rgb15(0, 0, 24));
+            font_DrawText(&mut t);
+            self.str1 = game_string(ENCOUNTER_STRING_BASE + 6);
+            self.str2 = game_string(ENCOUNTER_STRING_BASE + 7);
+            draw_fade_text(self.str1, self.str2, 1, &mut self.salvage_rect);
+            true
         }
+    }
+
+    /// # Safety
+    /// The game thread must own initialized encounter fleet queues, game state, display, and salvage resources.
+    pub unsafe fn uninit_encounter(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        io: &mut crate::engine::observe::Io<'_>,
+    ) -> COUNT {
+        let mut salvage = match cx.with_legacy(|| prepare_salvage()) {
+            Ok(salvage) => salvage,
+            Err(killed) => return killed,
+        };
+        if salvage.victory {
+            crate::ui::util::live::wait_for_any_button(cx, io, 1, ONE_SECOND * 3, 0);
+            if cx.with_legacy(|| salvage.show_summary()) {
+                crate::ui::util::live::wait_for_any_button(cx, io, 1, ONE_SECOND * 2, 0);
+                cx.with_legacy(|| {
+                    if !escape_pressed() {
+                        draw_fade_text(salvage.str1, salvage.str2, 0, &mut salvage.salvage_rect);
+                    }
+                });
+            }
+            cx.with_legacy(|| DrawStatusMessage(ptr::null()));
+        }
+        cx.with_legacy(|| finish_salvage(salvage.killed))
+    }
+
+    unsafe fn finish_salvage(mut killed: COUNT) -> COUNT {
         if killed != 0
             && EncounterRace == THRADDASH_SHIP as i16
             && game_state(THRADD_MANNER, END_THRADD_MANNER) == 0

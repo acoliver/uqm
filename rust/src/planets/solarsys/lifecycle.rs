@@ -333,12 +333,14 @@ pub(super) unsafe fn reset_solar_sys() {
 }
 
 unsafe fn enter_planet_orbit(cx: &mut Cx<'_>, io: &mut Io<'_>) {
-    if !cx.with_legacy(prepare_planet_orbit) { return; }
+    if !cx.with_legacy(|| prepare_planet_orbit()) {
+        return;
+    }
     if !(*system()).TopoFrame.is_null() {
         ffi::planet_orbit_menu(cx, io);
-        cx.with_legacy(ffi::FreePlanet);
+        cx.with_legacy(|| ffi::FreePlanet());
     }
-    cx.with_legacy(finish_planet_orbit);
+    cx.with_legacy(|| finish_planet_orbit());
 }
 
 unsafe fn prepare_planet_orbit() -> bool {
@@ -523,7 +525,9 @@ pub(super) unsafe fn hyperspace_unit_factors() -> (i32, i32) {
 pub unsafe fn run_explore_solar_sys(cx: &mut Cx<'_>, io: &mut Io<'_>) {
     let mut solar_sys_state = MaybeUninit::<c::SOLARSYS_STATE>::uninit();
     cx.with_legacy(|| prepare_explore_solar_sys(solar_sys_state.as_mut_ptr()));
-    cx.run_input(io, false, |cx, io| do_ip_flight(cx, io, solar_sys_state.as_mut_ptr()) != 0);
+    cx.run_input(io, false, |cx, io| {
+        do_ip_flight(cx, io, solar_sys_state.as_mut_ptr()) != 0
+    });
     cx.with_legacy(|| {
         uninit_solar_sys();
         P_SOLAR_SYS_STATE = ptr::null_mut();
@@ -646,7 +650,11 @@ pub unsafe extern "C" fn SaveSolarSysLocation() {
     }
 }
 
-unsafe fn do_solar_sys_menu(cx: &mut Cx<'_>, io: &mut Io<'_>, menu: &mut c::MENU_STATE) -> c::BOOLEAN {
+unsafe fn do_solar_sys_menu(
+    cx: &mut Cx<'_>,
+    io: &mut Io<'_>,
+    menu: &mut c::MENU_STATE,
+) -> c::BOOLEAN {
     let mut select = input::PulsedInputState.menu[KEY_MENU_SELECT] as c::BOOLEAN;
     if cx.world.activity() & (CHECK_ABORT | CHECK_LOAD) != 0
         || cx.world.data.flagship.crew_enlisted == c::COUNT::MAX
@@ -706,21 +714,25 @@ unsafe fn do_solar_sys_menu(cx: &mut Cx<'_>, io: &mut Io<'_>, menu: &mut c::MENU
 unsafe fn solar_sys_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) {
     let mut menu: c::MENU_STATE = std::mem::zeroed();
     cx.with_legacy(|| {
-    if Kernel::current().read(|owner| owner.last_activity) == CHECK_LOAD {
-        menu.CurState = GAME_MENU;
-    } else {
-        ffi::DrawMenuStateStrings(PM_STARMAP, i16::from(STARMAP));
-        menu.CurState = STARMAP;
-    }
-    ffi::DrawStatusMessage(ptr::null());
-    ffi::SetFlashRect((usize::MAX as *const c_void).cast());
-    ffi::SetMenuSounds(MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
+        if Kernel::current().read(|owner| owner.last_activity) == CHECK_LOAD {
+            menu.CurState = GAME_MENU;
+        } else {
+            ffi::DrawMenuStateStrings(PM_STARMAP, i16::from(STARMAP));
+            menu.CurState = STARMAP;
+        }
+        ffi::DrawStatusMessage(ptr::null());
+        ffi::SetFlashRect((usize::MAX as *const c_void).cast());
+        ffi::SetMenuSounds(MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
     });
     cx.run_input(io, true, |cx, io| do_solar_sys_menu(cx, io, &mut menu) != 0);
     cx.with_legacy(|| ffi::DrawMenuStateStrings(PM_STARMAP, -i16::from(NAVIGATION)));
 }
 
-unsafe fn do_ip_flight(cx: &mut Cx<'_>, io: &mut Io<'_>, state: *mut c::SOLARSYS_STATE) -> c::BOOLEAN {
+unsafe fn do_ip_flight(
+    cx: &mut Cx<'_>,
+    io: &mut Io<'_>,
+    state: *mut c::SOLARSYS_STATE,
+) -> c::BOOLEAN {
     let cancel = input::PulsedInputState.menu[KEY_MENU_CANCEL];
     if (*state).InOrbit != 0 {
         enter_planet_orbit(cx, io);
@@ -737,8 +749,6 @@ unsafe fn do_ip_flight(cx: &mut Cx<'_>, io: &mut Io<'_>, state: *mut c::SOLARSYS
             NEXT_TIME = ffi::GetTimeCounter().wrapping_add(IP_FRAME_RATE);
         });
     }
-    (cx.world.activity()
-        & (START_ENCOUNTER | END_INTERPLANETARY | CHECK_ABORT | CHECK_LOAD)
-        == 0
+    (cx.world.activity() & (START_ENCOUNTER | END_INTERPLANETARY | CHECK_ABORT | CHECK_LOAD) == 0
         && cx.world.data.flagship.crew_enlisted != c::COUNT::MAX) as c::BOOLEAN
 }

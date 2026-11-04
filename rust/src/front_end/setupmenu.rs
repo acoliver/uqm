@@ -84,9 +84,7 @@ pub(crate) mod runtime {
         max_x: 0.0,
     };
 
-    #[repr(C)]
     struct SetupMenuState {
-        input_func: Option<unsafe extern "C" fn(*mut SetupMenuState) -> BOOLEAN>,
         initialized: BOOLEAN,
         anim_frame_count: c_int,
         next_time: DWORD,
@@ -261,7 +259,7 @@ pub(crate) mod runtime {
         opts.gamma = SLIDERS[3].value;
         SetGlobalOptions(&mut opts);
     }
-    unsafe extern "C" fn do_setup_menu(state: *mut SetupMenuState) -> BOOLEAN {
+    unsafe fn do_setup_menu(state: &mut SetupMenuState) -> BOOLEAN {
         GamePaused = 0;
         if (*state).initialized == 0 {
             SetDefaultMenuRepeatDelay();
@@ -864,7 +862,6 @@ pub(crate) mod runtime {
     ) {
         let mut state: SetupMenuState = mem::zeroed();
         cx.with_legacy(|| {
-            state.input_func = Some(do_setup_menu);
             state.initialized = 0;
             SetMenuSounds(MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
             SETUP_TAB =
@@ -876,9 +873,8 @@ pub(crate) mod runtime {
             }
             DONE = 0;
         });
-        let callback = state.input_func.take().unwrap();
-        cx.run_input(io, true, |cx, _| unsafe {
-            cx.with_legacy(|| callback(ptr::addr_of_mut!(state))) != 0
+        cx.run_input(io, true, |cx, _| {
+            cx.with_legacy(|| do_setup_menu(&mut state)) != 0
         });
         cx.with_legacy(|| {
             (**WorldData::current()).game.current_activity &= !(CHECK_ABORT as u16);
@@ -1241,7 +1237,7 @@ pub(crate) mod runtime {
 }
 
 #[cfg(not(test))]
-pub use runtime::{GetGlobalOptions, SetGlobalOptions, setup_menu};
+pub use runtime::{setup_menu, GetGlobalOptions, SetGlobalOptions};
 
 #[cfg(test)]
 mod tests {

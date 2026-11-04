@@ -219,9 +219,21 @@ fn encounter_teardown_releases_world_before_activity_queries() {
     game.world.set_activity(CHECK_ABORT as u16);
     // SAFETY: the serialized fixture owns empty resources and the published lifecycle.
     unsafe {
-        bridge::with_game(&mut game, || {
-            assert_eq!(uqm_rust::battle::encount_native::UninitEncounter(), 0)
-        });
+        let mut battle = uqm_rust::engine::battle::Battle::new();
+        let mut cx = uqm_rust::engine::battle::Cx::new(
+            &mut battle,
+            &mut game.world,
+            &mut game.kernel,
+            uqm_rust::math::random,
+        );
+        let mut observer = uqm_rust::engine::observe::Unobserved;
+        let mut io = uqm_rust::engine::observe::Io {
+            observer: &mut observer,
+        };
+        assert_eq!(
+            uqm_rust::battle::encount_native::uninit_encounter(&mut cx, &mut io),
+            0
+        );
     }
 }
 
