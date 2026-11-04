@@ -27,3 +27,6 @@ pub mod shipyard;
 mod shipyard_hangar;
 pub(crate) mod shipyard_layout;
 pub mod starbase;
+
+#[cfg(not(test))]
+pub(crate) mod save_problem;

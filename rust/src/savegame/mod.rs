@@ -10,8 +10,6 @@ pub mod legacy;
 #[cfg(not(test))]
 pub(crate) mod live;
 pub mod lzh;
-#[cfg(not(test))]
-pub(crate) mod problem;
 pub mod runtime;
 pub mod slots;
 

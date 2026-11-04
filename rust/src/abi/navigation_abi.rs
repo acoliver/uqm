@@ -3625,7 +3625,7 @@ extern "C" {
 pub use crate::savegame::live::load::LoadGame;
 
 #[cfg(not(test))]
-pub use crate::savegame::problem::SaveProblem;
+pub use crate::ui::save_problem::SaveProblem;
 
 #[cfg(not(test))]
 pub use crate::savegame::live::save::SaveGame;

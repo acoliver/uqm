@@ -1224,7 +1224,7 @@ pub(crate) mod runtime {
             }
             log::info!("RUST_PICKER: operation_failed picker_remains_open");
             if saving != 0 && canceled_by_user == 0 {
-                crate::savegame::problem::save_problem(cx, io);
+                crate::ui::save_problem::save_problem(cx, io);
             }
             cx.with_legacy(|| {
                 load_game_descriptions(ptr::addr_of_mut!(pick_state.summary).cast());
