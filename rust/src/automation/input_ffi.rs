@@ -610,23 +610,6 @@ pub(crate) fn graphics_options(
 //  Service hook: called before UpdateInputState in DoInput
 // ===========================================================================
 
-/// C-callable automation service hook for `DoInput`.
-///
-/// Called after both pumps (TFB_ProcessEvents + TaskSwitch) and before
-/// the sole `UpdateInputState`. Returns 1 (stop) if automation wants to
-/// stop, 0 (continue) otherwise.
-///
-/// In inactive mode: returns 0 (no stop) via fast path.
-/// In active mode: follows the full ABI shell.
-///
-/// @plan PLAN-20260723-RUNTIME-AUTOMATION.P06
-/// @requirement REQ-INJECT-001, REQ-INJECT-002
-pub extern "C" fn rust_automation_service_do_input() -> i32 {
-    crate::app::observe::input(crate::engine::observe::InputView::BeforeUpdate)
-        .stop
-        .into()
-}
-
 pub(crate) fn service_input(
     observer: &AutomationObserver,
     capture: &mut dyn FnMut() -> CampaignView,
@@ -676,19 +659,6 @@ pub(crate) fn service_input(
 // ===========================================================================
 //  Observation hook: called after UpdateInputState in DoInput
 // ===========================================================================
-
-/// C-callable automation observation hook for after `UpdateInputState`.
-///
-/// Reads current/pulsed menu keys via production getters, traces the
-/// observation, and returns stop if the scheduler says to stop.
-///
-/// @plan PLAN-20260723-RUNTIME-AUTOMATION.P06
-/// @requirement REQ-INJECT-006, REQ-INJECT-007
-pub extern "C" fn rust_automation_after_input_update() -> i32 {
-    crate::app::observe::input(crate::engine::observe::InputView::AfterUpdate)
-        .stop
-        .into()
-}
 
 pub(crate) fn after_input_update(observer: &AutomationObserver) -> i32 {
     // Step 1: ABI entry (saturating).

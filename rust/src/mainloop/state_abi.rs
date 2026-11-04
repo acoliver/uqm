@@ -40,7 +40,6 @@ accessor!(uqm_get_starbase_available() -> u8 = World::current().read(|world| gam
 accessor!(uqm_get_global_flags_and_data() -> u8 = World::current().read(|world| game_byte(world, StoryKey::GLOBAL_FLAGS_AND_DATA)));
 accessor!(uqm_get_kohr_ah_killed_all() -> u8 = World::current().read(|world| game_byte(world, StoryKey::KOHR_AH_KILLED_ALL)));
 accessor!(uqm_get_crew_enlisted() -> u16 = (**WorldData::current()).flagship.crew_enlisted);
-accessor!(uqm_zero_global_velocity() -> () = { (**WorldData::current()).game.velocity = std::mem::zeroed(); });
 accessor!(uqm_set_flash_rect_null() -> () = crate::ui::sis::SetFlashRect(ptr::null()));
 accessor!(uqm_set_player_input_all_or_explode() -> () = {
     let initialized = Kernel::current().write(|kernel| {

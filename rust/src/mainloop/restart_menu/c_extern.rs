@@ -260,69 +260,6 @@ pub unsafe fn draw_restart_menu(pms: *mut c_void, new_state: u8, frame: *mut c_v
 }
 
 // ===========================================================================
-//  C wrappers from rust_bridge_mainloop.c (reused)
-// ===========================================================================
-
-#[cfg(not(test))]
-pub use crate::game_init::macro_abi::get_current_activity;
-extern "C" {
-
-    #[cfg(test)]
-    pub fn set_current_activity(v: u16);
-    #[cfg(test)]
-    pub fn get_last_activity() -> u16;
-    #[cfg(test)]
-    pub fn set_last_activity(v: u16);
-    #[cfg(test)]
-    pub fn set_next_activity(v: u16);
-    #[cfg(test)]
-    pub fn uqm_get_crew_enlisted() -> u16;
-    #[cfg(test)]
-    pub fn set_main_exited(b: c_int);
-}
-/// # Safety
-/// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(not(test))]
-pub unsafe fn set_current_activity(v: u16) {
-    crate::mainloop::state_abi::set_current_activity(v as _);
-}
-
-/// # Safety
-/// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(not(test))]
-pub unsafe fn get_last_activity() -> u16 {
-    (crate::mainloop::state_abi::get_last_activity()) as _
-}
-
-/// # Safety
-/// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(not(test))]
-pub unsafe fn set_last_activity(v: u16) {
-    crate::mainloop::state_abi::set_last_activity(v as _);
-}
-
-/// # Safety
-/// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(not(test))]
-pub unsafe fn set_next_activity(v: u16) {
-    crate::mainloop::state_abi::set_next_activity(v as _);
-}
-
-/// # Safety
-/// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(not(test))]
-pub unsafe fn uqm_get_crew_enlisted() -> u16 {
-    (crate::mainloop::state_abi::uqm_get_crew_enlisted()) as _
-}
-
-/// # Safety
-/// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(not(test))]
-pub unsafe fn set_main_exited(b: c_int) {
-    crate::mainloop::state_abi::set_main_exited(b as _);
-}
-
-// ===========================================================================
 //  Directly linkable C functions (no wrapper needed)
 // ===========================================================================
 

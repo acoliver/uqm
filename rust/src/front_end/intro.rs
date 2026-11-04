@@ -226,8 +226,11 @@ pub(crate) mod runtime {
         Call,
     }
 
-    unsafe fn admit_presentation(state: &mut PresentationState, io: &mut Io<'_>) -> Option<bool> {
-        let activity = WorldData::current().read(|owner| owner.game.current_activity);
+    unsafe fn admit_presentation(
+        state: &mut PresentationState,
+        io: &mut Io<'_>,
+        activity: u16,
+    ) -> Option<bool> {
         if menu(KEY_MENU_CANCEL) || activity & CHECK_ABORT as u16 != 0 {
             io.observer
                 .checkpoint(&CheckpointView::PresentationCancelled);
@@ -680,20 +683,20 @@ pub(crate) mod runtime {
         PresentationStep::Input(false)
     }
 
-    fn presentation_frame(cx: &mut Cx<'_>, io: &mut Io<'_>, state: &mut PresentationState) -> bool {
-        // SAFETY: this session owns its presentation state and the initialized game-thread renderer.
-        if let Some(keep) = cx.with_legacy(|| unsafe { admit_presentation(state, io) }) {
+    unsafe fn presentation_frame(
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
+        state: &mut PresentationState,
+    ) -> bool {
+        let activity = cx.world.activity();
+        if let Some(keep) = cx.with_legacy(|| admit_presentation(state, io, activity)) {
             return keep;
         }
         loop {
-            // SAFETY: commands run with the context suspended before any nested input loop.
-            match cx.with_legacy(|| unsafe { presentation_commands(state, io) }) {
+            match cx.with_legacy(|| presentation_commands(state, io)) {
                 PresentationStep::Input(keep) => return keep,
                 PresentationStep::Call => {
-                    // SAFETY: CALL copied a NUL-terminated resource name into this live session buffer.
-                    unsafe {
-                        show_file(cx, io, state.buffer.as_ptr());
-                    }
+                    show_file(cx, io, state.buffer.as_ptr());
                 }
             }
         }

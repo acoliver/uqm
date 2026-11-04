@@ -629,7 +629,7 @@ impl AutomationObserver {
     }
 
     // -----------------------------------------------------------------------
-    //  Input callback processing (called from rust_automation_service_do_input)
+    //  Input callback processing
     // -----------------------------------------------------------------------
 
     /// Process an admitted input callback. Returns true if the game loop

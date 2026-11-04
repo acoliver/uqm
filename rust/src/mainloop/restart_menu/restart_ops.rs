@@ -674,13 +674,16 @@ impl RestartMenuOps for CffiOps<'_, '_, '_> {
     }
 
     fn credits(&self, victory: bool) {
-        self.owned(|cx, io| crate::front_end::credits::credits(cx, io, victory));
+        // SAFETY: the restart session runs after graphics, audio and input initialization.
+        self.owned(|cx, io| unsafe { crate::front_end::credits::credits(cx, io, victory) });
     }
     fn victory(&self) {
-        self.owned(crate::front_end::fmv::victory);
+        // SAFETY: the restart session owns the initialized presentation systems.
+        self.owned(|cx, io| unsafe { crate::front_end::fmv::victory(cx, io) });
     }
     fn introduction(&self) {
-        self.owned(crate::front_end::fmv::introduction);
+        // SAFETY: the restart session owns the initialized presentation systems.
+        self.owned(|cx, io| unsafe { crate::front_end::fmv::introduction(cx, io) });
     }
     fn splash_screen(&self) {
         self.legacy(|| {

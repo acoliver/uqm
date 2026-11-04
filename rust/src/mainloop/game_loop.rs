@@ -449,7 +449,7 @@ mod cffi {
         }
 
         fn zero_velocity(&self) {
-            self.legacy(crate::mainloop::ffi::zero_global_velocity)
+            self.owned(|cx| cx.world.data.game.velocity.zero());
         }
 
         fn set_flash_rect_null(&self) {

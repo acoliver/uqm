@@ -31,14 +31,31 @@ fn getter_valid_index_returns_zero() {
 }
 
 #[test]
-fn service_inactive_returns_zero() {
-    // Without init_automation_runtime, this should return 0 (inactive).
-    assert_eq!(rust_automation_service_do_input(), 0);
+fn service_without_an_observer_does_not_stop_input() {
+    use crate::engine::observe::{InputView, Io, Unobserved};
+    let mut observer = Unobserved;
+    let io = Io {
+        observer: &mut observer,
+    };
+    assert!(
+        !io.observer
+            .input_admitted(&InputView::BeforeUpdate, &None)
+            .stop
+    );
 }
 
 #[test]
-fn observation_inactive_returns_zero() {
-    assert_eq!(rust_automation_after_input_update(), 0);
+fn observation_without_an_observer_does_not_stop_input() {
+    use crate::engine::observe::{InputView, Io, Unobserved};
+    let mut observer = Unobserved;
+    let io = Io {
+        observer: &mut observer,
+    };
+    assert!(
+        !io.observer
+            .input_admitted(&InputView::AfterUpdate, &None)
+            .stop
+    );
 }
 
 /// Ground truth captured by compiling the real C macros from `units.h`

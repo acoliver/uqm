@@ -88,13 +88,11 @@ pub(crate) mod runtime {
         ));
     }
 
-    pub fn introduction(cx: &mut Cx<'_>, io: &mut Io<'_>) {
-        // SAFETY: the registered introduction resource is used on the initialized game thread.
-        unsafe {
-            show_presentation(cx, io, INTROPRES_STRTAB.as_ptr().cast());
-        }
-        // SAFETY: the presentation has completed before its final fade is drained.
-        cx.with_legacy(|| unsafe {
+    /// # Safety
+    /// Graphics, audio, resources and input must be initialized on the game thread.
+    pub unsafe fn introduction(cx: &mut Cx<'_>, io: &mut Io<'_>) {
+        show_presentation(cx, io, INTROPRES_STRTAB.as_ptr().cast());
+        cx.with_legacy(|| {
             SleepThreadUntil(FadeScreen(
                 ScreenFadeType_FadeAllToBlack,
                 (ONE_SECOND / 2) as SIZE,
@@ -102,20 +100,17 @@ pub(crate) mod runtime {
         });
     }
 
-    pub fn victory(cx: &mut Cx<'_>, io: &mut Io<'_>) {
-        // SAFETY: the initialized game thread owns the fade transaction.
-        cx.with_legacy(|| unsafe {
+    /// # Safety
+    /// Graphics, audio, resources and input must be initialized on the game thread.
+    pub unsafe fn victory(cx: &mut Cx<'_>, io: &mut Io<'_>) {
+        cx.with_legacy(|| {
             SleepThreadUntil(FadeScreen(
                 ScreenFadeType_FadeAllToBlack,
                 (ONE_SECOND / 2) as SIZE,
             ));
         });
-        // SAFETY: the registered victory resource remains live throughout the presentation.
-        unsafe {
-            show_presentation(cx, io, FINALPRES_STRTAB.as_ptr().cast());
-        }
-        // SAFETY: the presentation has completed before the final fade is applied.
-        cx.with_legacy(|| unsafe {
+        show_presentation(cx, io, FINALPRES_STRTAB.as_ptr().cast());
+        cx.with_legacy(|| {
             FadeScreen(ScreenFadeType_FadeAllToBlack, 0);
         });
     }

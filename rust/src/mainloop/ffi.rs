@@ -292,29 +292,6 @@ pub fn get_crew_enlisted() -> u16 {
 // Macro / global wrappers
 // ---------------------------------------------------------------------------
 
-/// Zero the global velocity components.
-///
-/// Wraps `ZeroVelocityComponents(&GLOBAL(velocity))` — which is `memset(pv,0,sizeof(*pv))`.
-/// Since `ZeroVelocityComponents` is a `#define` macro (not a function), we inline the
-/// memset directly on the `velocity` field in `GlobData.game`.
-#[inline]
-pub fn zero_global_velocity() {
-    #[cfg(not(test))]
-    #[cfg(not(test))]
-    {
-        // SAFETY: zeroes the velocity field in the C GlobData global.
-        unsafe {
-            let world = WorldData::current();
-            let velocity_ptr = std::ptr::addr_of_mut!((**world).game.velocity);
-            std::ptr::write_bytes(velocity_ptr, 0, 1);
-        }
-    }
-    #[cfg(test)]
-    {
-        // No-op in test mode — test shim doesn't model velocity.
-    }
-}
-
 /// Set the flash rectangle to NULL (full screen).
 ///
 /// Wraps `SetFlashRect(NULL)`.

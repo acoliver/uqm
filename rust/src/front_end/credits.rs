@@ -630,19 +630,18 @@ pub(crate) mod runtime {
         VICTORY_CREDITS_ACTIVE = false;
     }
 
-    pub fn credits(cx: &mut Cx<'_>, io: &mut Io<'_>, with_outtakes: bool) {
+    /// # Safety
+    /// Graphics, audio, communication and input must be initialized on the game thread.
+    pub unsafe fn credits(cx: &mut Cx<'_>, io: &mut Io<'_>, with_outtakes: bool) {
         let context = cx.kernel.screen_context;
-        // SAFETY: the mode runs synchronously on the initialized game thread.
-        let Some(music) = cx.with_legacy(|| unsafe { prepare_credits(context, with_outtakes, io) })
-        else {
+        let Some(music) = cx.with_legacy(|| prepare_credits(context, with_outtakes, io)) else {
             return;
         };
         if cx.world.activity() & CHECK_ABORT as u16 == 0 {
             if with_outtakes {
                 cx.with_legacy(|| io.observer.checkpoint(&CheckpointView::CreditsReady));
             }
-            // SAFETY: prepare_credits loaded this music and installed the input-frame hook.
-            cx.with_legacy(|| unsafe {
+            cx.with_legacy(|| {
                 if !music.is_null() {
                     PlayMusic(music, 1, 1);
                 }
@@ -653,16 +652,13 @@ pub(crate) mod runtime {
                 close_when_done: (!with_outtakes) as BOOLEAN,
                 close_time_out: 0,
             };
-            // SAFETY: the initialized menu sounds belong to this game-thread loop.
-            cx.with_legacy(|| unsafe { SetMenuSounds(0, 0) });
+            cx.with_legacy(|| SetMenuSounds(0, 0));
             cx.run_input(io, true, |cx, _| {
-                // SAFETY: the state remains live for this synchronous callback.
-                cx.with_legacy(|| unsafe { credits_input(&mut state) != 0 })
+                cx.with_legacy(|| credits_input(&mut state) != 0)
             });
         }
         let context = cx.kernel.screen_context;
-        // SAFETY: the loop and all outtakes have returned before their resources are freed.
-        cx.with_legacy(|| unsafe { finish_credits(context, music) });
+        cx.with_legacy(|| finish_credits(context, music));
     }
 }
 
