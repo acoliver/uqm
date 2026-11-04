@@ -90,7 +90,8 @@ mod live {
             }
         }
         fn escorts_worth(&self) -> u16 {
-            crate::engine::World::current().read(escorts_worth)
+            // SAFETY: response callbacks run with the game-thread context published.
+            unsafe { crate::app::bridge::enter(|cx| escorts_worth(cx.world)) }
         }
         fn using_speech(&self) -> bool {
             {

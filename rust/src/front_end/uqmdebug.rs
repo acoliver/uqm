@@ -268,9 +268,9 @@ mod runtime {
             URQUAN_SHIP,
             BLACK_URQUAN_SHIP,
         ] {
-            let added = crate::engine::World::current().write(|world| {
+            let added = crate::app::bridge::enter(|cx| {
                 crate::battle::build_native::add_escort_ships(
-                    world,
+                    cx.world,
                     race as COUNT,
                     1,
                     crate::battle::build_native::captain_name,

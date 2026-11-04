@@ -23,9 +23,9 @@ impl PkunkApi for crate::comm::races::script::live::LiveScript<Handler> {
     fn gift_ships(&mut self) -> u16 {
         use crate::battle::build_native;
         unsafe {
-            let added = crate::engine::World::current().write(|world| {
+            let added = crate::app::bridge::enter(|cx| {
                 build_native::add_escort_ships(
-                    world,
+                    cx.world,
                     crate::comm::dispatch::ship::PKUNK_SHIP as u16,
                     4,
                     build_native::captain_name,

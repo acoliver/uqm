@@ -143,8 +143,8 @@ pub unsafe fn set_encounter_group(value: u8) {
 /// # Safety
 /// Game thread, with the available-race and escort queues initialised.
 pub unsafe fn rebel_escort_feasible() -> bool {
-    WorldOwner::current().read(|world| {
-        crate::battle::build_native::escort_feasibility(world, u16::from(ship::YEHAT_REBEL_SHIP))
+    crate::app::bridge::enter(|cx| {
+        crate::battle::build_native::escort_feasibility(cx.world, u16::from(ship::YEHAT_REBEL_SHIP))
             != 0
     })
 }

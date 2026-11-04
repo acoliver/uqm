@@ -15,9 +15,15 @@ pub(super) trait YehatApi: EncounterApi<Handler> {
 impl YehatApi for LiveScript<Handler> {
     fn have_shofixti_escort(&self) -> bool {
         use crate::battle::build_native::count_escort_ships;
-        crate::engine::World::current().read(|world| {
-            count_escort_ships(world, u16::from(crate::comm::dispatch::ship::SHOFIXTI_SHIP)) != 0
-        })
+        // SAFETY: response callbacks run with the game-thread context published.
+        unsafe {
+            crate::app::bridge::enter(|cx| {
+                count_escort_ships(
+                    cx.world,
+                    u16::from(crate::comm::dispatch::ship::SHOFIXTI_SHIP),
+                ) != 0
+            })
+        }
     }
 
     fn random_bit(&mut self) -> u8 {

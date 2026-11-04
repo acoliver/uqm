@@ -11,8 +11,9 @@ impl OrzApi for crate::comm::races::script::live::LiveScript<Handler> {
     fn remove_escorts(&mut self, race: u16) {
         use crate::battle::build_native;
         unsafe {
-            let remaining = crate::engine::World::current()
-                .write(|world| build_native::remove_escort_ships(world, race, u16::MAX));
+            let remaining = crate::app::bridge::enter(|cx| {
+                build_native::remove_escort_ships(cx.world, race, u16::MAX)
+            });
             if remaining > 0 {
                 build_native::refresh_escorts();
             }
