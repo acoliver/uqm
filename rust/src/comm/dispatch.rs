@@ -27,7 +27,9 @@ use crate::c_bindings::global_state;
 #[cfg(not(test))]
 use crate::comm::locdata::{read_locdata, set_comm_data};
 use crate::engine::battle::link_queue::{LinkId, LinkQueue};
-use crate::engine::world::queues::{Fleet, Fragment};
+#[cfg(not(test))]
+use crate::engine::world::queues::Fleet;
+use crate::engine::world::queues::Fragment;
 
 // ---------------------------------------------------------------------------
 // Resource and geometry types used by retained presentation calls

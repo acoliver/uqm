@@ -1019,7 +1019,6 @@ pub const EVENT_TYPE_RELATIVE_EVENT: EVENT_TYPE = 1;
 pub type EVENT_TYPE = ::std::os::raw::c_uint;
 
 #[cfg(not(test))]
-pub use crate::time::clock_abi::live::add_event;
 
 #[cfg(not(test))]
 pub use crate::navigation::events::live::dispatch_event;
@@ -2730,8 +2729,6 @@ pub use crate::navigation::globals::in_quasi_space;
 
 #[cfg(not(test))]
 pub use crate::navigation::globals::uninit_game_structures;
-#[cfg(not(test))]
-pub use crate::navigation::globals::InitGameStructures;
 #[cfg(test)]
 extern "C" {
     pub fn uninit_game_structures();

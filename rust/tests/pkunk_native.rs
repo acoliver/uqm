@@ -570,7 +570,7 @@ fn bug_missiles_launch_fore_left_and_right_inheriting_ship_velocity() {
                     let (velocity_x, velocity_y) =
                         ((*ship.ptr()).velocity).get_current_components();
                     let (dx, dy) = (velocity_x as i16, velocity_y as i16);
-                    let mut out = [1usize as *mut std::ffi::c_void; 3];
+                    let mut out = [std::ptr::dangling_mut::<std::ffi::c_void>(); 3];
                     let before = queued();
                     let count = with_rng(5, 0, || ship.fire(&mut out));
                     assert_eq!(count, 3);
@@ -644,7 +644,7 @@ fn bug_missile_allocation_failure_leaves_null_slots_but_still_reports_three() {
         unsafe {
             let mut ship = Ship::new(&_battle, 0);
             ship.inner.ship_mut().ship_facing = 6;
-            let mut out = [1usize as *mut std::ffi::c_void; 3];
+            let mut out = [std::ptr::dangling_mut::<std::ffi::c_void>(); 3];
             let count = ship.fire(&mut out);
             assert_eq!(count, 3);
             assert!(!out[0].is_null());

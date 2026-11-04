@@ -115,10 +115,9 @@ unsafe fn initialize_races(cx: &mut crate::engine::battle::Cx<'_>) {
 
 /// # Safety
 /// Game-thread initialization, before any world queues have been allocated.
-#[no_mangle]
-pub unsafe extern "C" fn InitGameStructures() -> BOOLEAN {
+pub unsafe fn init_game_structures(cx: &mut crate::engine::battle::Cx<'_>) -> BOOLEAN {
     // SAFETY: the lifecycle borrows owners from Cx; callbacks republish it synchronously.
-    crate::app::bridge::enter(|cx| {
+    {
         init_glob_data(cx.world);
         cx.kernel.play_frame =
             CaptureDrawable(LoadGraphicInstance(c"graphics.playmenu".as_ptr()).cast());
@@ -186,7 +185,7 @@ pub unsafe extern "C" fn InitGameStructures() -> BOOLEAN {
             .select_star(None, crate::planets::starmap::current_catalog());
         cx.world.data.game.autopilot = POINT { x: -1, y: -1 };
         1
-    })
+    }
 }
 
 /// # Safety
@@ -204,9 +203,9 @@ pub unsafe fn free_sc2_data(kernel: &mut crate::engine::Kernel) {
 
 /// # Safety
 /// The initialized game structures must no longer be in use.
-pub unsafe fn uninit_game_structures() {
+pub unsafe fn uninit_game_structures(cx: &mut crate::engine::battle::Cx<'_>) {
     // SAFETY: the lifecycle borrows owners from Cx; callbacks republish it synchronously.
-    crate::app::bridge::enter(|cx| {
+    {
         let kernel = cx.kernel();
         cx.world.encounters().reinit();
         cx.world.ip_groups().reinit();
@@ -223,7 +222,7 @@ pub unsafe fn uninit_game_structures() {
         cx.world.avail_races().reinit();
         DestroyDrawable(ReleaseDrawable((*kernel).play_frame));
         (*kernel).play_frame = ptr::null_mut();
-    })
+    }
 }
 
 /// Reset campaign values, retaining the caller’s global flags. Queue/resource

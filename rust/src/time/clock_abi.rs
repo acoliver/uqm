@@ -99,49 +99,12 @@ pub(crate) mod live {
     }
 
     /// # Safety
-    /// Game-thread access to the initialized event queue.
-    pub unsafe fn add_event(
-        kind: u32,
-        month: u16,
-        day: u16,
-        year: u16,
-        selector: u8,
-    ) -> Option<LinkId<ScheduledEvent>> {
-        crate::app::bridge::enter(|cx| {
-            crate::navigation::events::live::add_event(cx.world, kind, month, day, year, selector)
-        })
-    }
-
-    /// # Safety
-    /// Called once before accessing the game clock or event queue.
-    #[no_mangle]
-    pub unsafe extern "C" fn InitGameClock() -> u32 {
-        crate::app::bridge::enter(|cx| rust_clock_init(cx.world)) as u32
-    }
-
-    /// # Safety
-    /// The initialized clock must no longer be in use.
-    #[no_mangle]
-    pub unsafe extern "C" fn UninitGameClock() -> u32 {
-        crate::app::bridge::enter(|cx| rust_clock_uninit(cx.world)) as u32
-    }
-
-    /// # Safety
-    /// Game-thread access to the initialized clock.
-    #[no_mangle]
-    pub extern "C" fn SetGameClockRate(seconds: u16) {
-        // SAFETY: this legacy clock entry borrows the caller's published context synchronously.
-        unsafe {
-            crate::app::bridge::enter(|cx| rust_clock_set_rate(cx.world, i32::from(seconds)))
-        };
-    }
-    /// # Safety
     /// Game-thread access to the initialized clock.
     #[no_mangle]
     pub unsafe extern "C" fn GameClockTick() {
         crate::app::bridge::enter(|cx| {
             if rust_clock_tick(cx.world) {
-                crate::app::bridge::publish(cx, || crate::ui::sis::DrawStatusMessage(ptr::null()));
+                cx.with_legacy(|| crate::ui::sis::DrawStatusMessage(ptr::null()));
                 finish_clock_day(cx.world);
             }
         });
@@ -160,7 +123,7 @@ pub(crate) mod live {
         crate::app::bridge::enter(|cx| {
             for _ in 0..days {
                 next_clock_day_internal(&mut cx.world.data.game.game_clock);
-                crate::app::bridge::publish(cx, || crate::ui::sis::DrawStatusMessage(ptr::null()));
+                cx.with_legacy(|| crate::ui::sis::DrawStatusMessage(ptr::null()));
                 finish_clock_day(cx.world);
             }
             let clock = &mut cx.world.data.game.game_clock;
