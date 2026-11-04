@@ -1,8 +1,6 @@
 //! Ship runtime operations formerly supplied by rust_bridge_ships.c.
 
 #[cfg(not(test))]
-use crate::engine::Kernel as KernelOwner;
-#[cfg(not(test))]
 fn remaining_battle_crew(cx: &crate::engine::battle::Cx<'_>) -> u16 {
     let mut crew = 0u16;
     let mut next = cx.elements().head();
@@ -49,8 +47,8 @@ pub unsafe fn uninit_ships() {
     use crate::ships::native::abi::*;
 
     StopSound();
-    KernelOwner::current().write(crate::game_init::space_resources::uninit_space);
     crate::app::bridge::enter(|cx| {
+        crate::game_init::space_resources::uninit_space(cx.kernel);
         let mut ships = [None; 2];
         let crew = remaining_battle_crew(cx);
         let replacement =
@@ -95,8 +93,6 @@ pub unsafe fn uninit_ships() {
 
 #[cfg(not(test))]
 mod live {
-    use crate::engine::Kernel as KernelOwner;
-    use crate::engine::World as WorldOwner;
     use crate::ships::native::abi::*;
 
     use crate::graphics::context_abi::{ContextFrame, ContextLease};
@@ -176,27 +172,43 @@ mod live {
         }
     }
 
-    macro_rules! operation {
-    ($name:ident($($arg:ident: $ty:ty),*) $(-> $ret:ty)? $body:block) => {
-        /// # Safety
-        /// Called on the game thread with live queue, element, ship and resource handles.
-        pub unsafe fn $name($($arg: $ty),*) $(-> $ret)? $body
-    };
-}
-    operation!(rust_bridge_init_battle_arena() -> i16 {
-        let (activity, hyperspace) = WorldOwner::current().read(|world| (world.activity(), in_hqspace(world) != 0));
-        let Some(mut graphics) = KernelOwner::current().write(|kernel| {
-            if crate::game_init::space_resources::init_space(kernel, activity) == 0 { None }
-            else { Some(ArenaGraphics::retain(kernel, hyperspace)) }
-        }) else { return 0; };
+    fn prepare_arena(cx: &mut crate::engine::battle::Cx<'_>) -> Option<(ArenaGraphics, u16, bool)> {
+        let activity = cx.world.activity();
+        let hyperspace = in_hqspace(cx.world) != 0;
+        if crate::game_init::space_resources::init_space(cx.kernel, activity) == 0 {
+            return None;
+        }
+        Some((
+            ArenaGraphics::retain(cx.kernel, hyperspace),
+            activity,
+            hyperspace,
+        ))
+    }
+
+    /// # Safety
+    /// Called on the game thread with live display, galaxy and hyperspace resources.
+    pub unsafe fn rust_bridge_init_battle_arena() -> i16 {
+        let Some((mut graphics, activity, hyperspace)) = crate::app::bridge::enter(prepare_arena)
+        else {
+            return 0;
+        };
         graphics.select();
         crate::app::bridge::enter(|cx| crate::battle::process_native::init_display_list(cx, optMeleeScale == 0)); crate::app::bridge::enter(crate::battle::galaxy::init_galaxy);
         let planet = activity as u8 != IN_LAST_BATTLE as u8;
         graphics.show_viewport((ScreenWidth - 64) as i16, ScreenHeight as i16);
-        if !hyperspace && !planet { KernelOwner::current().write(crate::game_init::world_resources::free_gravity_well); }
-        crate::app::bridge::enter(|cx| create_arena_ships(cx, hyperspace, planet));
-        if hyperspace { crate::navigation::hyper_data::LoadHyperspace(); 1 } else { 2 }
-    });
+        crate::app::bridge::enter(|cx| {
+            if !hyperspace && !planet {
+                crate::game_init::world_resources::free_gravity_well(cx.kernel);
+            }
+            create_arena_ships(cx, hyperspace, planet);
+        });
+        if hyperspace {
+            crate::navigation::hyper_data::LoadHyperspace();
+            1
+        } else {
+            2
+        }
+    }
 }
 #[cfg(not(test))]
 pub use live::*;
