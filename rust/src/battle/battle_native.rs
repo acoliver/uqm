@@ -315,39 +315,49 @@ pub(crate) mod engine {
         }
     }
 
-    /// # Safety
-    /// The game thread must own initialized audio, activity, and resource state.
-    #[no_mangle]
-    pub unsafe extern "C" fn BattleSong(play: BOOLEAN) {
-        if KernelOwner::current()
-            .read(|owner| owner.battle_music)
-            .is_null()
-        {
-            let resource = if WorldOwner::current().read(in_hyper_space) != 0 {
+    pub(crate) fn battle_song(
+        kernel: &mut crate::engine::Kernel,
+        world: &crate::engine::World,
+        play: bool,
+    ) {
+        if kernel.battle_music.is_null() {
+            let resource = if in_hyper_space(world) != 0 {
                 HYPERSPACE_MUSIC.as_ptr()
-            } else if WorldOwner::current().read(in_quasi_space) != 0 {
+            } else if in_quasi_space(world) != 0 {
                 QUASISPACE_MUSIC.as_ptr()
             } else {
                 BATTLE_MUSIC.as_ptr()
             };
-            (**KernelOwner::current()).battle_music =
-                crate::sound::resource_types::LoadMusicInstance(resource.cast()).cast();
+            // SAFETY: the selected resource key is a static NUL-terminated string.
+            kernel.battle_music =
+                unsafe { crate::sound::resource_types::LoadMusicInstance(resource.cast()).cast() };
         }
-        if play != 0 {
-            PlayMusic(
-                KernelOwner::current().read(|owner| owner.battle_music),
-                1,
-                1,
-            );
+        if play {
+            // SAFETY: Kernel retains this loaded music for synchronous playback.
+            unsafe { crate::ui::settings::play_music_for_world(world, kernel.battle_music, 1, 1) };
         }
+    }
+
+    /// # Safety
+    /// The game thread must own initialized audio, activity, and resource state.
+    #[no_mangle]
+    pub unsafe extern "C" fn BattleSong(play: BOOLEAN) {
+        KernelOwner::current().write(|kernel| {
+            WorldOwner::current().read(|world| battle_song(kernel, world, play != 0));
+        });
+    }
+
+    pub fn free_battle_song(kernel: &mut crate::engine::Kernel) {
+        // SAFETY: Kernel owns this music reference and clears it before any later use.
+        unsafe { DestroyMusic(kernel.battle_music) };
+        kernel.battle_music = ptr::null_mut();
     }
 
     /// # Safety
     /// The game thread must own the battle music handle and initialized audio state.
     #[no_mangle]
     pub unsafe extern "C" fn FreeBattleSong() {
-        DestroyMusic(KernelOwner::current().read(|owner| owner.battle_music));
-        (**KernelOwner::current()).battle_music = ptr::null_mut();
+        KernelOwner::current().write(free_battle_song);
     }
 
     fn battle_io(observer: &mut Option<crate::engine::input::InputObserver>) -> Io<'_> {
@@ -554,7 +564,9 @@ pub(crate) mod engine {
 }
 
 #[cfg(not(test))]
-pub use engine::{player_input, set_player_input, Battle, BattleSong, FreeBattleSong};
+pub use engine::{
+    free_battle_song, player_input, set_player_input, Battle, BattleSong, FreeBattleSong,
+};
 
 #[cfg(test)]
 mod tests {

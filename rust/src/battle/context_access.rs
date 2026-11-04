@@ -168,11 +168,8 @@ impl Cx<'_> {
 
     pub fn start_battle_song_if_ready(&mut self, ship: ShipId) {
         use crate::battle::tactrans_native::opponent_alive;
-        // SAFETY: audio and ship authorities remain live on the game thread.
-        unsafe {
-            if PLRPlaying(usize::MAX as MUSIC_REF) == 0 && opponent_alive(self, ship) {
-                BattleSong(1);
-            }
+        if !crate::sound::music::plr_playing_current() && opponent_alive(self, ship) {
+            crate::battle::battle_native::engine::battle_song(self.kernel, self.world, true);
         }
     }
 

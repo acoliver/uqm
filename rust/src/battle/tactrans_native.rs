@@ -126,8 +126,8 @@ pub fn flee_cycle(index: u8, thrust: u8) -> (u8, u8, u8) {
 #[cfg(not(test))]
 pub(crate) mod engine {
     use super::*;
+    use crate::battle::battle_native::engine::battle_song;
     use crate::battle::battle_native::engine::rgb15;
-    use crate::battle::battle_native::BattleSong;
     use crate::battle::encount_native::fleet_is_infinite;
     use crate::engine::battle::views::SharedFrames;
     use crate::engine::battle::{Cx, ElementFn, ElementId, Parent};
@@ -345,7 +345,7 @@ pub(crate) mod engine {
                 return;
             }
             if restart {
-                BattleSong(1);
+                battle_song(cx.kernel, cx.world, true);
             }
         } else if cx.b.counters.contains(&0) {
             cx.world
