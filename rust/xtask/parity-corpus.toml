@@ -108,11 +108,4 @@ name = "slylandro-harvest"
 scenario = "parity-slylandro-harvest"
 outcome = "success"
 
-# This existing development replay fails in the controller, not by test design.
-[[expectation]]
-scenario = "samatra-dev-fixture-v1"
-classification = "known_bug"
-terminal = "semantic_mismatch"
-issue = 718
-
 # Existing campaign failures reproduced on pristine main; see issue 719.
