@@ -130,7 +130,7 @@ pub(crate) mod engine {
 
     use crate::graphics::resgfx::LoadGraphicInstance;
 
-    use crate::planets::starmap::naming::GetClusterName;
+    use crate::planets::starmap::{current_catalog, naming::GetClusterName};
 
     use crate::mainloop::input_abi::live::AnyButtonPress;
 
@@ -337,16 +337,15 @@ pub(crate) mod engine {
 
     /// # Safety
     /// The game thread must own initialized encounter, display, input, resource, and audio state.
-    unsafe fn prepare_encounter() {
-        SetContext(KernelOwner::current().read(|owner| owner.space_context));
-        SetContextFont(KernelOwner::current().read(|owner| owner.tiny_font));
-        let music =
-            crate::sound::resource_types::LoadMusicInstance(REDALERT_MUSIC.as_ptr().cast()).cast();
-        PlayMusic(music, 0, 1);
+    unsafe fn prepare_encounter(cx: &mut crate::engine::battle::Cx<'_>) {
+        SetContext(cx.kernel.space_context);
+        SetContextFont(cx.kernel.tiny_font);
+        let music = crate::sound::resource_types::LoadedMusic::load(c"music.redalert");
+        crate::ui::settings::play_loaded_music(cx.world, music.as_ref(), 0, 1);
         let segue = CaptureDrawable(LoadGraphicInstance(SEGUE_PMAP_ANIM.as_ptr().cast()).cast());
-        WaitForSoundEnd(COUNT::MAX);
+        cx.with_legacy(|| WaitForSoundEnd(COUNT::MAX));
         stop_music();
-        DestroyMusic(music);
+        drop(music);
         let mut stamp = STAMP {
             origin: POINT { x: 0, y: 0 },
             frame: segue,
@@ -362,30 +361,40 @@ pub(crate) mod engine {
             TEXT_ALIGN_ALIGN_CENTER,
             ptr::null(),
         );
-        SetContextFont(KernelOwner::current().read(|owner| owner.micro_font));
+        SetContextFont(cx.kernel.micro_font);
         SetContextForeGroundColor(rgb15(0, 0, 20));
-        if WorldOwner::current().read(in_hqspace) != 0 {
-            draw_text(&mut t, game_string(ENCOUNTER_STRING_BASE));
+        if in_hqspace(cx.world) != 0 {
+            draw_text(
+                &mut t,
+                cx.with_legacy(|| game_string(ENCOUNTER_STRING_BASE)),
+            );
             t.baseline.y += 12;
-            draw_text(&mut t, game_string(ENCOUNTER_STRING_BASE + 1));
+            draw_text(
+                &mut t,
+                cx.with_legacy(|| game_string(ENCOUNTER_STRING_BASE + 1)),
+            );
         } else {
             let mut buf = [0 as UNICODE; 256];
-            draw_text(&mut t, game_string(ENCOUNTER_STRING_BASE + 2));
+            draw_text(
+                &mut t,
+                cx.with_legacy(|| game_string(ENCOUNTER_STRING_BASE + 2)),
+            );
             t.baseline.y += 12;
-            GetClusterName(encounter_star(), buf.as_mut_ptr());
+            let star = cx.world.star_pointer(current_catalog());
+            cx.with_legacy(|| GetClusterName(star, buf.as_mut_ptr()));
             draw_text(&mut t, buf.as_ptr());
             t.baseline.y += 12;
-            draw_text(&mut t, planet_name());
+            draw_text(&mut t, cx.world.data.flagship.planet_name.as_ptr().cast());
         }
-        DrawSISMessage(ptr::null());
+        cx.with_legacy(|| DrawSISMessage(ptr::null()));
         stamp.origin = POINT {
             x: (sis_width() >> 1) as i16,
             y: (sis_height() >> 1) as i16,
         };
-        stamp.frame = KernelOwner::current().read(|owner| owner.planet[0]);
+        stamp.frame = cx.kernel.planet[0];
         DrawStamp(&mut stamp);
-        if activity() as u8 != IN_LAST_BATTLE as u8 {
-            let fragments = WorldOwner::current().read(|world| fragment_snapshot(world, false));
+        if cx.world.activity() as u8 != IN_LAST_BATTLE as u8 {
+            let fragments = fragment_snapshot(cx.world, false);
             let mut index = 0;
             let mut i = 0usize;
             while index < fragments.len() && i < 60 {
@@ -417,7 +426,7 @@ pub(crate) mod engine {
         }
         UnbatchGraphics();
         DestroyDrawable(ReleaseDrawable(segue));
-        ScreenTransition(3, ptr::null());
+        cx.with_legacy(|| ScreenTransition(3, ptr::null()));
     }
 
     /// # Safety
@@ -426,7 +435,7 @@ pub(crate) mod engine {
         cx: &mut crate::engine::battle::Cx<'_>,
         io: &mut crate::engine::observe::Io<'_>,
     ) -> COUNT {
-        cx.with_legacy(|| prepare_encounter());
+        prepare_encounter(cx);
         let mut menu = EncounterSelection::new();
         cx.with_legacy(|| {
             DrawMenuStateStrings(PM_CONVERSE as u8, menu.choice as i16);

@@ -785,7 +785,6 @@ pub const ORBIT3_MUSIC: &[u8; 13] = b"music.orbit3\0";
 pub const ORBIT4_MUSIC: &[u8; 13] = b"music.orbit4\0";
 pub const ORBIT5_MUSIC: &[u8; 13] = b"music.orbit5\0";
 pub const OUTFIT_MUSIC: &[u8; 13] = b"music.outfit\0";
-pub const REDALERT_MUSIC: &[u8; 15] = b"music.redalert\0";
 pub const SHIPYARD_MUSIC: &[u8; 15] = b"music.shipyard\0";
 pub const STARBASE_MUSIC: &[u8; 15] = b"music.starbase\0";
 pub const ACCEL_SCROLL_SPEED: u32 = 300;
