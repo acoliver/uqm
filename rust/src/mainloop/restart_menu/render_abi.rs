@@ -60,11 +60,6 @@ pub unsafe fn draw_restart_menu(menu: *mut MENU_STATE, state: u8, frame: FRAME) 
     );
 }
 
-#[cfg(not(test))]
-pub fn start_game() -> u32 {
-    super::orchestration::rust_start_game() as u32
-}
-
 fn centered_coordinate(screen: i32, image: i16) -> i16 {
     ((screen - i32::from(image)) >> 1) as i16
 }

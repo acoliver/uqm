@@ -19,7 +19,6 @@
 
 use super::campaign_state::CampaignView;
 use crate::automation::coordinator::AutomationObserver;
-use crate::automation::runtime::RuntimeModel;
 #[cfg(not(test))]
 use crate::c_bindings::controller_input::{CurrentInputState, PulsedInputState};
 #[cfg(not(test))]
@@ -235,7 +234,7 @@ pub(crate) fn hyperspace_position(_world: &CampaignView) -> Option<(i32, i32)> {
 /// Unavailable outside hyperspace flight or while a conversation is active.
 #[cfg(not(test))]
 pub(crate) fn hyperspace_stopped(world: &CampaignView) -> Option<bool> {
-    if crate::mainloop::ffi::get_current_activity().kind()
+    if crate::mainloop::types::ActivityValue(world.activity).kind()
         != crate::mainloop::types::ActivityKind::InHyperspace
         || super::ui_observation::conversation_snapshot().active
     {
@@ -572,7 +571,9 @@ pub(crate) fn navigation_snapshot(
 
 pub(crate) fn graphics_options(
     renderer: Option<std::ffi::CString>,
+    observer: Option<std::sync::Arc<AutomationObserver>>,
 ) -> crate::graphics::sdl::lifecycle_abi::GraphicsOptions {
+    let presented_owner = observer.clone();
     crate::graphics::sdl::lifecycle_abi::GraphicsOptions {
         renderer,
         #[cfg(feature = "debug-process")]
@@ -580,37 +581,31 @@ pub(crate) fn graphics_options(
             .map(|config| (config.client_bounds.x, config.client_bounds.y)),
         #[cfg(not(feature = "debug-process"))]
         native_position: None,
-        present_hook: Some(present_hook),
-        readback_hook: Some(readback_hook),
+        present_hook: Some(std::rc::Rc::new(move |presented| {
+            let Some(observer) = &presented_owner else {
+                return 0;
+            };
+            if !presented {
+                return i32::from(observer.runtime.mirror.is_terminal());
+            }
+            let mut owner = super::observer::Handle(observer.clone());
+            let io = crate::engine::observe::Io {
+                observer: &mut owner,
+            };
+            let mut frame = crate::engine::observe::Presented {
+                frame: crate::graphics::ffi::take_presented_frame(),
+                stop: false,
+            };
+            io.observer.presented(&mut frame);
+            i32::from(frame.stop)
+        })),
+        readback_hook: Some(std::rc::Rc::new(move || {
+            observer
+                .as_ref()
+                .map(|owner| owner.runtime.mirror.capture_generation())
+        })),
     }
 }
-
-fn present_hook(presented: bool) -> i32 {
-    if presented {
-        rust_automation_presented_frame()
-    } else {
-        rust_automation_present_callback()
-    }
-}
-
-fn readback_hook() -> Option<u64> {
-    if AutomationObserver::is_active() {
-        get_runtime().map(|runtime| runtime.mirror.capture_generation())
-    } else {
-        None
-    }
-}
-
-/// Get the runtime model if it exists.
-fn with_runtime() -> Option<std::sync::Arc<RuntimeModel>> {
-    get_runtime()
-}
-
-/// Get the runtime model if it exists (public for coordinator).
-pub fn get_runtime() -> Option<std::sync::Arc<RuntimeModel>> {
-    AutomationObserver::get().map(|observer| observer.runtime.clone())
-}
-
 // ===========================================================================
 //  Service hook: called before UpdateInputState in DoInput
 // ===========================================================================
@@ -830,26 +825,6 @@ pub(crate) fn injection_rejected() -> bool {
     INJECTION_REJECTED.load(std::sync::atomic::Ordering::Acquire)
 }
 
-/// Query whether automation has reached a terminal state before rendering.
-#[no_mangle]
-pub extern "C" fn rust_automation_present_callback() -> i32 {
-    with_runtime()
-        .is_some_and(|runtime| runtime.mirror.is_terminal())
-        .into()
-}
-
-/// Commit one frame after the graphics backend has actually presented it.
-#[no_mangle]
-pub extern "C" fn rust_automation_presented_frame() -> i32 {
-    if !AutomationObserver::is_active() {
-        return 0;
-    }
-    let frame = crate::graphics::ffi::take_presented_frame();
-    let mut presented = crate::engine::observe::Presented { frame, stop: false };
-    crate::app::observe::presented(&mut presented);
-    presented.stop.into()
-}
-
 // ===========================================================================
 //  Production getters (REQ-INJECT-006)
 // ===========================================================================
@@ -1032,7 +1007,7 @@ mod tests;
 mod graphics_hook_tests {
     #[test]
     fn options_install_both_live_observers() {
-        let options = super::graphics_options(None);
+        let options = super::graphics_options(None, None);
         assert!(options.present_hook.is_some());
         assert!(options.readback_hook.is_some());
         assert!(options.renderer.is_none());

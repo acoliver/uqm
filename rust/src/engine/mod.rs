@@ -1,5 +1,5 @@
-pub use uqm_engine::observe;
 pub mod battle;
+pub mod observe;
 
 pub mod input;
 pub mod kernel;

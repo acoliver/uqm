@@ -376,6 +376,10 @@ pub struct AutomationObserver {
 }
 
 impl AutomationObserver {
+    pub fn runtime(&self) -> &RuntimeModel {
+        &self.runtime
+    }
+
     /// Initialize the global coordinator with a validated script.
     ///
     /// This is called from `main.rs` after `setup_automation` succeeds.
@@ -575,7 +579,7 @@ impl AutomationObserver {
 
     /// Activate the script's start scene after game structures and initial
     /// events are initialized, before the first activity dispatch.
-    pub fn activate_start_scene(&self, enter: impl FnOnce(&scenario::ScenePlan)) {
+    pub(crate) fn prepare_start_scene(&self) -> Option<scenario::ScenePlan> {
         let coord = self;
 
         let scene = {
@@ -592,24 +596,15 @@ impl AutomationObserver {
                         error.to_string(),
                     );
                     coord.set_terminal(&mut inner, TerminalClass::SemanticMismatch);
-                    return;
+                    return None;
                 }
             }
         };
 
-        let Some(scene) = scene else {
-            return;
-        };
+        let scene = scene?;
 
-        match scenario::activate(scene, SceneActivationBoundary::GameInitialized, enter) {
-            Ok(plan) => {
-                let mut inner = coord.inner.lock();
-                coord.write_trace_labeled(
-                    &mut inner,
-                    RecordKind::SemanticAssertion,
-                    format!("scene_activated:{}", plan.scene.name()),
-                );
-            }
+        match scenario::activate(scene, SceneActivationBoundary::GameInitialized, |_| {}) {
+            Ok(plan) => Some(plan),
             Err(error) => {
                 let mut inner = coord.inner.lock();
                 coord.write_trace_labeled(
@@ -618,8 +613,19 @@ impl AutomationObserver {
                     error.to_string(),
                 );
                 coord.set_terminal(&mut inner, TerminalClass::SemanticMismatch);
+                None
             }
         }
+    }
+
+    #[cfg(not(test))]
+    pub(crate) fn finish_start_scene(&self, plan: &scenario::ScenePlan) {
+        let mut inner = self.inner.lock();
+        self.write_trace_labeled(
+            &mut inner,
+            RecordKind::SemanticAssertion,
+            format!("scene_activated:{}", plan.scene.name()),
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -2413,13 +2419,17 @@ impl AutomationObserver {
         false
     }
 
-    fn verify_activity_assertion(&self, inner: &mut CoordInner) -> bool {
+    fn verify_activity_assertion(
+        &self,
+        world: &campaign_state::CampaignView,
+        inner: &mut CoordInner,
+    ) -> bool {
         let Some(Action::AssertActivity(assertion)) =
             self.actions.get(inner.sched_state.step_index)
         else {
             return false;
         };
-        let word = crate::mainloop::ffi::get_current_activity().0;
+        let word = world.activity;
         let evidence = activity_evidence(assertion, word);
         let passed = evidence.passed;
         let reservation = self.runtime.commit.reserve();
@@ -2571,6 +2581,7 @@ impl AutomationObserver {
         #[cfg(feature = "debug-process")]
         if let Some(committed_presentation) = committed_presentation {
             if let Err(error) = crate::automation::native_window::record_native_window_presentation(
+                self,
                 committed_presentation,
                 boundary,
             ) {
@@ -3529,7 +3540,6 @@ mod tests {
         assert!(observer.flagship_destroyed.load(Ordering::SeqCst));
         drop(application);
         assert!(AutomationObserver::get().is_none());
-        assert!(input_ffi::get_runtime().is_none());
         assert!(!crate::app::observe::input(crate::engine::observe::InputView::BeforeUpdate).stop);
     }
 
@@ -4054,12 +4064,12 @@ mod tests {
             );
             assert!(!inner.native_publication_pending);
         }
-        AutomationObserver::native_battle_frame_completed(2u16.into());
+        coord.native_battle_frame_completed(2u16.into());
         assert!(
             coord.inner.lock().departure.native_frame_pending,
             "encounter combat must not release the departure endpoint"
         );
-        AutomationObserver::native_battle_frame_completed((3u16 | (1 << 9)).into());
+        coord.native_battle_frame_completed((3u16 | (1 << 9)).into());
         let mut inner = coord.inner.lock();
         assert!(!inner.departure.native_frame_pending);
         assert!(!coord.commit_native_checkpoints(&mut inner, &frame));
@@ -4263,16 +4273,17 @@ mod tests {
 
         // Without automation the clock seeder runs and nothing is recorded.
         let mut clock_used = false;
-        crate::mainloop::restart_menu::restart_ops::seed_new_campaign(|| clock_used = true);
+        crate::mainloop::restart_menu::restart_ops::seed_new_campaign(0, || clock_used = true);
         assert!(clock_used, "inactive automation must keep the clock seed");
 
         let _app = crate::app::Application::new(Some(AutomationObserver::new(
             script,
             temp.path().to_path_buf(),
         )));
-        crate::mainloop::restart_menu::restart_ops::seed_new_campaign(|| {
-            panic!("the clock seed must not run while automation supplies a seed")
-        });
+        crate::mainloop::restart_menu::restart_ops::seed_new_campaign(
+            _app.observer().unwrap().seed_value(3, 0),
+            || panic!("the clock seed must not run while automation supplies a seed"),
+        );
         let after_restart = crate::math::random();
         crate::math::seed_random(1437213463);
         assert_eq!(

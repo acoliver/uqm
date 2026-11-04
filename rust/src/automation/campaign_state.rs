@@ -355,45 +355,9 @@ pub struct LiveCampaign<'a> {
     pub flagship_destroyed: bool,
 }
 
-/// Values copied for one observer call; this view never outlives its input boundary.
-pub struct CampaignView {
-    pub(crate) flagship: crate::engine::world::SisState,
-    pub(crate) velocity: (i32, i32),
-    pub(crate) ship_position: (i16, i16),
-    pub(crate) ship_facing: i32,
-    pub(crate) autopilot: (i16, i16),
-    pub(crate) combat_flags: u8,
-    pub(crate) date: (u8, u8, u16),
-    pub(crate) story: Option<crate::engine::world::story::GameState>,
-    pub(crate) current_star: Option<crate::engine::StarId>,
-    pub(crate) contact_race: Option<u8>,
-    pub(crate) escorts: Vec<(u8, u16)>,
-    pub(crate) groups: Vec<(u8, u8, (i16, i16))>,
-}
+pub use crate::engine::observe::CampaignView;
 
 impl CampaignView {
-    pub fn from_world(world: &World) -> Self {
-        let game = &world.data.game;
-        Self {
-            flagship: world.data.flagship,
-            velocity: game.velocity.get_current_components(),
-            ship_position: (game.ship_stamp.origin.x, game.ship_stamp.origin.y),
-            ship_facing: 0,
-            autopilot: (game.autopilot.x, game.autopilot.y),
-            combat_flags: game.glob_flags,
-            date: (
-                game.game_clock.day_index,
-                game.game_clock.month_index,
-                game.game_clock.year_index,
-            ),
-            story: world.story.clone(),
-            current_star: world.current_star,
-            contact_race: None,
-            escorts: Vec::new(),
-            groups: Vec::new(),
-        }
-    }
-
     #[cfg(not(test))]
     pub(crate) fn capture(world: &World) -> Self {
         let game = &world.data.game;
@@ -437,21 +401,6 @@ impl CampaignView {
             }
         }
         view
-    }
-
-    pub(crate) fn story_value(&self, key: crate::engine::StoryKey) -> Option<u8> {
-        self.story
-            .as_ref()
-            .map(|story| story.get_state(key.start(), key.end()))
-    }
-
-    pub(crate) fn named_state_value(&self, name: &str) -> Option<u8> {
-        self.story_value(crate::engine::StoryKey::from_name(name)?)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn empty() -> Self {
-        Self::from_world(&World::new())
     }
 }
 
@@ -509,7 +458,7 @@ impl StateSource for LiveCampaign<'_> {
             }
             StateKey::HyperStopped => input_ffi::hyperspace_stopped(world).map(u32::from),
             StateKey::Story(name) => world.named_state_value(name).map(u32::from),
-            StateKey::Activity => Some(u32::from(crate::mainloop::ffi::get_current_activity().0)),
+            StateKey::Activity => Some(u32::from(world.activity)),
             StateKey::SisDrive(slot) => input_ffi::sis_fittings(world)
                 .map(|(drives, _, _, _)| u32::from(drives[usize::from(slot)])),
             StateKey::SisJet(slot) => input_ffi::sis_fittings(world)

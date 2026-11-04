@@ -55,8 +55,10 @@ fn main_menu_ready_emits_readiness_record() {
     );
 
     let mut sink = Vec::new();
-    uqm_rust::automation::input_ffi::get_runtime()
-        .expect("the coordinator runtime is initialized")
+    _application
+        .observer()
+        .expect("the coordinator is initialized")
+        .runtime()
         .commit
         .publish_all(&mut sink)
         .expect("the ordered commit publishes every submitted record");

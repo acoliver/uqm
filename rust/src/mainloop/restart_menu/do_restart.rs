@@ -3,9 +3,6 @@
 //! @plan PLAN-20260707-RESTARTMENU.P06
 //! @requirement REQ-RM-006
 
-#[cfg(not(test))]
-use std::os::raw::c_int;
-
 use super::c_extern;
 use super::menu_logic::{self, check_timeout};
 use super::restart_ops::RestartMenuOps;
@@ -186,9 +183,12 @@ fn init_first_frame<O: RestartMenuOps + ?Sized>(ops: &O, state: &mut DoRestartSt
         (c_extern::ONE_SECOND / 2) as i16,
     );
     ops.sleep_thread_until(fade_result);
-    state.scene_replaces_introduction =
-        crate::app::observe::input(crate::engine::observe::InputView::ReplacesIntroduction).stop;
-    let _stop = crate::app::observe::input(crate::engine::observe::InputView::MainMenuReady).stop;
+    state.scene_replaces_introduction = ops
+        .input(crate::engine::observe::InputView::ReplacesIntroduction)
+        .stop;
+    let _stop = ops
+        .input(crate::engine::observe::InputView::MainMenuReady)
+        .stop;
 }
 
 /// Handle menu selection dispatch.
@@ -249,8 +249,8 @@ fn handle_select<O: RestartMenuOps + ?Sized>(ops: &O, state: &mut DoRestartState
             );
             ops.sleep_thread_until(fade_result);
             ops.set_current_activity(CHECK_ABORT);
-            if crate::app::observe::input(crate::engine::observe::InputView::Active).stop {
-                crate::app::observe::input(crate::engine::observe::InputView::QuitSelected);
+            if ops.input(crate::engine::observe::InputView::Active).stop {
+                ops.input(crate::engine::observe::InputView::QuitSelected);
             }
             ops.flash_pause(state.flash_context);
             false
@@ -290,9 +290,9 @@ fn handle_navigate<O: RestartMenuOps + ?Sized>(
         // Feed the menu transition to the automation coordinator if active.
         // This drives the scheduler's WaitingSemantic state and semantic
         // assertion matching.
-        if crate::app::observe::input(crate::engine::observe::InputView::Active).stop {
-            let _stop =
-                crate::app::observe::input(crate::engine::observe::InputView::MenuTransition {
+        if ops.input(crate::engine::observe::InputView::Active).stop {
+            let _stop = ops
+                .input(crate::engine::observe::InputView::MenuTransition {
                     from: cur_item.as_u8(),
                     to: new_item.as_u8(),
                 })
@@ -347,46 +347,6 @@ fn handle_timeout<O: RestartMenuOps + ?Sized>(ops: &O) {
     ops.set_current_activity(!0u16);
 }
 
-// ===========================================================================
-//  C entry point (non-test only)
-// ===========================================================================
-
-/// C-callable entry point for `DoRestart` when `USE_RUST_RESTART` is defined.
-///
-/// Called by the C `DoInput` loop via the `InputFunc` trampoline.
-///
-/// @plan PLAN-20260707-RESTARTMENU.P06
-/// @requirement REQ-RM-006
-#[cfg(not(test))]
-#[no_mangle]
-/// # Safety
-/// A nonnull `menu_state_ptr` must point to an initialized restart menu
-/// state exclusively owned by the game thread for the duration of this call.
-pub unsafe extern "C" fn rust_do_restart_frame(menu_state_ptr: *mut std::os::raw::c_void) -> c_int {
-    if menu_state_ptr.is_null() {
-        return 0;
-    }
-    let ops = super::restart_ops::CffiOps::new();
-    // Set the Cell to the real C MENU_STATE pointer so all subsequent
-    // draw/input calls pass the correct pointer.
-    ops.set_menu_state_ptr(menu_state_ptr as usize);
-
-    // Extract DoRestartState from MENU_STATE.privData.
-    // SAFETY: privData was set by try_start_game_impl to point to a
-    // DoRestartState that outlives the DoInput loop.
-    let priv_data = unsafe { super::c_extern::uqm_get_menu_priv_data(menu_state_ptr) };
-    if priv_data.is_null() {
-        return 0;
-    }
-    // SAFETY: priv_data was set by the Rust side to point to a DoRestartState.
-    let state = unsafe { &mut *(priv_data as *mut DoRestartState) };
-
-    if do_restart_frame(&ops, state) {
-        1
-    } else {
-        0
-    }
-}
 // ===========================================================================
 //  Tests — Tier 1 (pure Rust, MockOps, no C linkage)
 // ===========================================================================
@@ -481,7 +441,6 @@ mod tests {
         fn create_menu_state(&self) -> usize {
             0
         }
-        fn set_menu_priv_data(&self, _ptr: usize, _data: usize) {}
         fn destroy_menu_state(&self, _ptr: usize) {}
         fn sync_flash_context(&self, _ctx: usize) {}
         fn sync_initialized(&self, _val: bool) {}
@@ -546,7 +505,7 @@ mod tests {
         fn set_menu_sounds(&self, _s0: u16, _s1: u16) {}
         fn set_default_menu_repeat_delay(&self) {}
         fn set_transition_source_null(&self) {}
-        fn run_do_input(&self, _reset_input: bool) {}
+        fn run_do_input(&self, _reset_input: bool, _state: &mut DoRestartState) {}
         fn load_menu_music(&self) -> usize {
             1
         }

@@ -79,8 +79,6 @@ extern "C" {
     #[cfg(test)]
     pub fn uqm_get_menu_cur_frame(pms: *mut c_void) -> usize;
     #[cfg(test)]
-    pub fn uqm_get_menu_priv_data(pms: *mut c_void) -> *mut c_void;
-    #[cfg(test)]
     pub fn uqm_set_menu_flash_context(pms: *mut c_void, ctx: usize);
     #[cfg(test)]
     pub fn uqm_set_menu_initialized(pms: *mut c_void, val: i16);
@@ -92,8 +90,6 @@ extern "C" {
     pub fn uqm_set_menu_h_music(pms: *mut c_void, handle: usize);
     #[cfg(test)]
     pub fn uqm_create_menu_state() -> *mut c_void;
-    #[cfg(test)]
-    pub fn uqm_set_menu_priv_data(pms: *mut c_void, data: *mut c_void);
     #[cfg(test)]
     pub fn uqm_destroy_menu_state(pms: *mut c_void);
 
@@ -199,13 +195,6 @@ pub unsafe fn uqm_get_menu_cur_frame(pms: *mut c_void) -> usize {
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
 #[cfg(not(test))]
-pub unsafe fn uqm_get_menu_priv_data(pms: *mut c_void) -> *mut c_void {
-    (crate::mainloop::restart_menu::menu_abi::uqm_get_menu_priv_data(pms as _)) as _
-}
-
-/// # Safety
-/// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(not(test))]
 pub unsafe fn uqm_set_menu_flash_context(pms: *mut c_void, ctx: usize) {
     crate::mainloop::restart_menu::menu_abi::uqm_set_menu_flash_context(pms as _, ctx as _);
 }
@@ -243,13 +232,6 @@ pub unsafe fn uqm_set_menu_h_music(pms: *mut c_void, handle: usize) {
 #[cfg(not(test))]
 pub unsafe fn uqm_create_menu_state() -> *mut c_void {
     (crate::mainloop::restart_menu::menu_abi::uqm_create_menu_state()) as _
-}
-
-/// # Safety
-/// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(not(test))]
-pub unsafe fn uqm_set_menu_priv_data(pms: *mut c_void, data: *mut c_void) {
-    crate::mainloop::restart_menu::menu_abi::uqm_set_menu_priv_data(pms as _, data as _);
 }
 
 /// # Safety

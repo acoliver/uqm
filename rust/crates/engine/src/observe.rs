@@ -25,7 +25,6 @@ pub enum CheckpointView<'a> {
     BattleReset,
     BattleAdvanced,
     InputSampled,
-    GameInitialized,
     FlagshipDestroyed,
     ShipEscaped,
     EncounterDispatch(u32),
@@ -59,19 +58,19 @@ pub struct Presented {
     pub stop: bool,
 }
 
-pub trait Observer {
-    fn input_admitted(&mut self, view: &InputView) -> Injected;
+pub trait Observer<W = ()> {
+    fn input_admitted(&mut self, view: &InputView, world: &W) -> Injected;
     fn checkpoint(&mut self, view: &CheckpointView<'_>);
     fn presented(&mut self, presented: &mut Presented);
 }
 
-pub struct Io<'a> {
-    pub observer: &'a mut dyn Observer,
+pub struct Io<'a, W = ()> {
+    pub observer: &'a mut dyn Observer<W>,
 }
 
-impl Io<'_> {
-    pub fn nested_input<R>(&mut self, sample: impl FnOnce() -> R) -> Option<R> {
-        if self.observer.input_admitted(&InputView::Nested).stop {
+impl<W> Io<'_, W> {
+    pub fn nested_input<R>(&mut self, world: &W, sample: impl FnOnce() -> R) -> Option<R> {
+        if self.observer.input_admitted(&InputView::Nested, world).stop {
             return None;
         }
         let result = sample();
@@ -83,8 +82,8 @@ impl Io<'_> {
 #[derive(Default)]
 pub struct Unobserved;
 
-impl Observer for Unobserved {
-    fn input_admitted(&mut self, _: &InputView) -> Injected {
+impl<W> Observer<W> for Unobserved {
+    fn input_admitted(&mut self, _: &InputView, _: &W) -> Injected {
         Injected::default()
     }
 
@@ -113,7 +112,7 @@ mod tests {
     }
 
     impl Observer for Recording {
-        fn input_admitted(&mut self, view: &InputView) -> Injected {
+        fn input_admitted(&mut self, view: &InputView, _: &()) -> Injected {
             assert_eq!(*view, InputView::Nested);
             self.events.borrow_mut().push("admitted");
             Injected {
@@ -141,7 +140,7 @@ mod tests {
             observer: &mut observer,
         };
         assert_eq!(
-            io.nested_input(|| {
+            io.nested_input(&(), || {
                 events.borrow_mut().push("sample");
                 7
             }),
@@ -168,7 +167,7 @@ mod tests {
             observer: &mut observer,
         };
         assert_eq!(
-            io.nested_input(|| panic!("stopped input was sampled")),
+            io.nested_input(&(), || panic!("stopped input was sampled")),
             None::<()>
         );
         assert_eq!(*events.borrow(), ["admitted"]);
@@ -181,7 +180,7 @@ mod tests {
             observer: &mut observer,
         };
         assert_eq!(
-            io.observer.input_admitted(&InputView::BeforeUpdate),
+            io.observer.input_admitted(&InputView::BeforeUpdate, &()),
             Injected::default()
         );
         io.observer.checkpoint(&CheckpointView::BattleAdvanced);

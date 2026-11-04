@@ -9,6 +9,9 @@ pub fn run<R>(body: impl FnOnce() -> R) -> R {
     // SAFETY: the test mutex serializes all use of this binary's game authorities.
     unsafe {
         let mut game = uqm_rust::engine::Game::new();
+        game.kernel.install_input_runtime(std::rc::Rc::new(
+            uqm_rust::mainloop::input_abi::NativeInputRuntime { observer: None },
+        ));
         uqm_rust::app::bridge::with_game(&mut game, body)
     }
 }

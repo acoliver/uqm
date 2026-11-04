@@ -39,12 +39,11 @@ impl AutomationObserver {
     }
 
     pub(in crate::automation) fn native_battle_frame_completed(
+        &self,
         activity: crate::mainloop::types::ActivityValue,
     ) {
         if activity.kind() == crate::mainloop::types::ActivityKind::InHyperspace {
-            if let Some(coord) = Self::get() {
-                coord.inner.lock().departure.native_frame_pending = false;
-            }
+            self.inner.lock().departure.native_frame_pending = false;
         }
     }
 

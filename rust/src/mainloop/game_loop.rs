@@ -4,9 +4,6 @@
 //! @requirement REQ-ML-001, REQ-ML-007, REQ-ML-008
 
 #[cfg(not(test))]
-use crate::engine::Kernel;
-#[cfg(not(test))]
-use crate::engine::World;
 use std::os::raw::c_int;
 
 use super::state_machine::{self, ActivityDecision, BreakAction, GameStateInfo};
@@ -289,205 +286,266 @@ mod cffi {
     ///
     /// @plan PLAN-20260707-MAINLOOP.P06
     /// @requirement REQ-ML-001
-    pub struct CffiOps;
+    pub struct CffiOps<'a> {
+        owner: std::cell::RefCell<(&'a mut crate::engine::Game, crate::engine::battle::Battle)>,
+        observer: Option<std::sync::Arc<crate::automation::AutomationObserver>>,
+    }
 
-    impl GameLoopOps for CffiOps {
+    impl<'a> CffiOps<'a> {
+        pub fn new(
+            game: &'a mut crate::engine::Game,
+            observer: Option<std::sync::Arc<crate::automation::AutomationObserver>>,
+        ) -> Self {
+            Self {
+                owner: std::cell::RefCell::new((game, crate::engine::battle::Battle::new())),
+                observer,
+            }
+        }
+
+        fn owned<R>(&self, call: impl FnOnce(&mut crate::engine::battle::Cx<'_>) -> R) -> R {
+            let mut owner = self.owner.borrow_mut();
+            let (game, battle) = &mut *owner;
+            call(&mut crate::engine::battle::Cx::new(
+                battle,
+                &mut game.world,
+                &mut game.kernel,
+                crate::math::random,
+            ))
+        }
+
+        fn legacy<R>(&self, call: impl FnOnce() -> R) -> R {
+            self.owned(|cx| cx.with_legacy(call))
+        }
+    }
+
+    impl GameLoopOps for CffiOps<'_> {
         fn init_audio(&self) {
-            crate::mainloop::ffi::init_audio()
+            self.legacy(crate::mainloop::ffi::init_audio)
         }
 
         fn load_kernel(&self) -> bool {
             // SAFETY: LoadKernel reads content packages; the null argv is the
             // documented call pattern in starcon.c.
             unsafe {
-                Kernel::current().write(|kernel| {
-                    World::current()
-                        .write(|world| c_extern::LoadKernel(kernel, world, 0, std::ptr::null_mut()))
-                }) != 0
+                self.owned(|cx| c_extern::LoadKernel(cx.kernel, cx.world, 0, std::ptr::null_mut()))
+                    != 0
             }
         }
 
         fn splash(&self) {
-            unsafe { c_extern::uqm_splash_with_bg_init_kernel() }
+            self.legacy(|| unsafe { c_extern::uqm_splash_with_bg_init_kernel() })
         }
 
         fn start_game(&self) -> bool {
-            {
-                c_extern::start_game() != 0
-            }
+            self.owned(|cx| {
+                let runtime = cx.kernel.input_runtime();
+                let mut observer = runtime.observer();
+                let mut io = crate::engine::observe::Io {
+                    observer: &mut *observer,
+                };
+                crate::mainloop::restart_menu::orchestration::start_game_impl(
+                    &crate::mainloop::restart_menu::restart_ops::CffiOps::new(cx, &mut io),
+                )
+            })
         }
 
         fn get_current_activity(&self) -> ActivityValue {
-            ActivityValue::new(World::current().read(c_extern::get_current_activity))
+            self.owned(|cx| ActivityValue::new(cx.world.activity()))
         }
 
         fn set_current_activity(&self, activity: ActivityValue) {
-            unsafe { c_extern::set_current_activity(u16::from(activity)) }
+            self.owned(|cx| cx.world.set_activity(u16::from(activity)))
         }
 
         fn get_next_activity(&self) -> ActivityValue {
-            crate::mainloop::ffi::get_next_activity()
+            self.legacy(crate::mainloop::ffi::get_next_activity)
         }
 
         fn set_last_activity(&self, activity: ActivityValue) {
-            crate::mainloop::ffi::set_last_activity(activity)
+            self.legacy(|| crate::mainloop::ffi::set_last_activity(activity))
         }
 
         fn get_game_state(&self) -> GameStateInfo {
             GameStateInfo {
-                chmmr_bomb_state: crate::mainloop::ffi::get_chmmr_bomb_state(),
-                starbase_available: crate::mainloop::ffi::get_starbase_available(),
-                global_flags_and_data: crate::mainloop::ffi::get_global_flags_and_data(),
-                kohr_ah_killed_all: crate::mainloop::ffi::get_kohr_ah_killed_all(),
-                crew_enlisted: crate::mainloop::ffi::get_crew_enlisted(),
+                chmmr_bomb_state: self.owned(|cx| {
+                    cx.world
+                        .story_state(crate::engine::StoryKey::CHMMR_BOMB_STATE)
+                        as u8
+                }),
+                starbase_available: self.owned(|cx| {
+                    cx.world
+                        .story_state(crate::engine::StoryKey::STARBASE_AVAILABLE)
+                        as u8
+                }),
+                global_flags_and_data: self.owned(|cx| {
+                    cx.world
+                        .story_state(crate::engine::StoryKey::GLOBAL_FLAGS_AND_DATA)
+                        as u8
+                }),
+                kohr_ah_killed_all: self.owned(|cx| {
+                    cx.world
+                        .story_state(crate::engine::StoryKey::KOHR_AH_KILLED_ALL)
+                        as u8
+                }),
+                crew_enlisted: self.owned(|cx| cx.world.data.flagship.crew_enlisted),
             }
         }
 
         fn set_player_input_all_or_explode(&self) {
-            crate::mainloop::ffi::set_player_input_all_or_explode()
+            self.legacy(crate::mainloop::ffi::set_player_input_all_or_explode)
         }
 
         fn init_game_structures(&self) {
-            unsafe {
+            self.legacy(|| unsafe {
                 c_extern::InitGameStructures();
-            }
+            })
         }
 
         fn init_game_clock(&self) {
-            unsafe {
+            self.legacy(|| unsafe {
                 c_extern::InitGameClock();
-            }
+            })
         }
 
         fn add_initial_game_events(&self) {
-            unsafe { World::current().write(|world| c_extern::schedule_initial_events(world)) }
+            unsafe { self.owned(|cx| c_extern::schedule_initial_events(cx.world)) }
         }
 
         fn activate_automation_start_scene(&self) {
-            crate::app::observe::checkpoint(
-                crate::engine::observe::CheckpointView::GameInitialized,
-            );
+            let Some(observer) = &self.observer else {
+                return;
+            };
+            self.legacy(|| observer.activate_save_capture());
+            let plan = self.legacy(|| observer.prepare_start_scene());
+            if let Some(plan) = plan {
+                let screen_context = self.owned(|cx| {
+                    for &(key, value) in plan.game_state {
+                        cx.world.set_story_state(key, value);
+                    }
+                    cx.kernel.screen_context
+                });
+                self.legacy(|| {
+                    crate::automation::scenario::enter_scene(
+                        &plan,
+                        &mut crate::automation::scenario::LinkedSceneEntry { screen_context },
+                    )
+                });
+                observer.finish_start_scene(&plan);
+            }
         }
 
         fn note_flagship_destroyed(&self) {
-            crate::app::observe::checkpoint(
-                crate::engine::observe::CheckpointView::FlagshipDestroyed,
-            );
+            if let Some(observer) = &self.observer {
+                use crate::engine::observe::Observer;
+                crate::automation::observer::Handle(observer.clone())
+                    .checkpoint(&crate::engine::observe::CheckpointView::FlagshipDestroyed);
+            }
         }
 
         fn set_status_message_mode_default(&self) {
-            unsafe {
+            self.legacy(|| unsafe {
                 c_extern::SetStatusMessageMode((SMM_DEFAULT) as u32);
-            }
+            })
         }
 
         fn zero_velocity(&self) {
-            crate::mainloop::ffi::zero_global_velocity()
+            self.legacy(crate::mainloop::ffi::zero_global_velocity)
         }
 
         fn set_flash_rect_null(&self) {
-            crate::mainloop::ffi::set_flash_rect_null()
+            self.legacy(crate::mainloop::ffi::set_flash_rect_null)
         }
 
         fn install_bomb_at_earth(&self) {
-            unsafe { c_extern::install_bomb_at_earth() }
+            self.legacy(|| unsafe { c_extern::install_bomb_at_earth() })
         }
 
         fn visit_starbase(&self) -> Result<(), MainLoopError> {
-            unsafe { crate::ui::starbase::visit_star_base() };
-            Ok(())
+            self.legacy(|| {
+                unsafe { crate::ui::starbase::visit_star_base() };
+                Ok(())
+            })
         }
 
         fn race_communication(&self) {
-            // P11: Ported to Rust — operates on C-owned queues through
-            // the Rust queue API, reads game state from Rust singleton.
-            unsafe { crate::comm::dispatch::rust_race_communication() }
+            self.legacy(|| {
+                // P11: Ported to Rust — operates on C-owned queues through
+                // the Rust queue API, reads game state from Rust singleton.
+                unsafe { crate::comm::dispatch::rust_race_communication() }
+            })
         }
 
         fn explore_solar_sys(&self) {
-            unsafe { c_extern::ExploreSolarSys() }
+            self.legacy(|| unsafe { c_extern::ExploreSolarSys() })
         }
 
         fn battle_with_frame_callback(&self) {
-            unsafe { c_extern::uqm_battle_with_frame_callback() }
+            self.legacy(|| unsafe { c_extern::uqm_battle_with_frame_callback() })
         }
 
         fn draw_autopilot_message(&self, tf: bool) {
-            unsafe { c_extern::DrawAutoPilotMessage(if tf { 1 } else { 0 }) }
+            self.legacy(|| unsafe { c_extern::DrawAutoPilotMessage(if tf { 1 } else { 0 }) })
         }
 
         fn set_game_clock_rate(&self, rate: u16) {
-            c_extern::SetGameClockRate(rate)
+            self.legacy(|| c_extern::SetGameClockRate(rate))
         }
 
         fn stop_sound(&self) {
-            c_extern::StopSound()
+            self.legacy(c_extern::StopSound)
         }
 
         fn uninit_game_clock(&self) {
-            unsafe {
+            self.legacy(|| unsafe {
                 c_extern::UninitGameClock();
-            }
+            })
         }
 
         fn uninit_game_structures(&self) {
-            unsafe { c_extern::uninit_game_structures() }
+            self.legacy(|| unsafe { c_extern::uninit_game_structures() })
         }
 
         fn clear_player_input_all(&self) {
-            Kernel::current().write(c_extern::ClearPlayerInputAll)
+            self.owned(|cx| c_extern::ClearPlayerInputAll(cx.kernel))
         }
 
         fn init_communication(&self, conversation: u32) {
-            unsafe {
+            self.legacy(|| unsafe {
                 c_extern::InitCommunication(conversation);
-            }
+            })
         }
 
         fn set_main_exited(&self, val: bool) {
-            crate::mainloop::ffi::set_main_exited(val)
+            self.legacy(|| crate::mainloop::ffi::set_main_exited(val))
         }
 
         fn uninit_game_kernel(&self) {
-            unsafe { crate::app::bridge::enter(|cx| c_extern::uninit_game_kernel(cx)) }
+            unsafe { self.owned(|cx| c_extern::uninit_game_kernel(cx)) }
         }
 
         fn free_master_ship_list(&self) {
-            unsafe { c_extern::FreeMasterShipList() }
+            self.legacy(|| unsafe { c_extern::FreeMasterShipList() })
         }
 
         fn free_kernel(&self) {
-            unsafe { Kernel::current().write(|kernel| c_extern::free_kernel(kernel)) }
+            unsafe { self.owned(|cx| c_extern::free_kernel(cx.kernel)) }
         }
 
         fn log_show_box(&self, b: bool, c: bool) {
-            c_extern::log_showBox(b, c)
+            self.legacy(|| c_extern::log_showBox(b, c))
         }
     }
 }
 
-/// Rust entry point — called from C `Starcon2Main` when
-/// `USE_RUST_MAINLOOP` is defined.
-///
-/// @plan PLAN-20260707-MAINLOOP.P06
-/// @requirement REQ-ML-001
-/// The same entry point for test builds, which link the C archive but must
-/// never start a game.
-///
-/// `Starcon2Main` references this symbol, so a test binary that links the
-/// archive needs it to exist. Nothing in a test calls it, and anything that
-/// did would be a defect, so it reports that rather than running.
-#[cfg(test)]
-pub extern "C" fn rust_game_loop() -> c_int {
-    panic!("rust_game_loop must not run under test");
-}
-
 #[cfg(not(test))]
-pub extern "C" fn rust_game_loop() -> c_int {
-    match run_game_lifecycle_impl(&cffi::CffiOps) {
+pub fn run_game_loop(
+    game: &mut crate::engine::Game,
+    observer: Option<std::sync::Arc<crate::automation::AutomationObserver>>,
+) -> c_int {
+    match run_game_lifecycle_impl(&cffi::CffiOps::new(game, observer)) {
         Ok(_) => 0,
         Err(e) => {
-            eprintln!("rust_game_loop: fatal error: {e}");
+            eprintln!("run_game_loop: fatal error: {e}");
             1
         }
     }

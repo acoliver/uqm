@@ -134,21 +134,26 @@ fn main() {
             exit(1);
         }
     };
-    let _application = uqm_rust::app::Application::new(observer);
+    let mut application = uqm_rust::app::Application::new(observer);
 
-    let mut game = uqm_rust::engine::Game::new();
-    game.kernel.install_input_runtime(std::rc::Rc::new(
-        uqm_rust::mainloop::input_abi::NativeInputRuntime,
-    ));
-    // SAFETY: main owns the game until shutdown and the final state summary have completed.
+    application
+        .game
+        .kernel
+        .install_input_runtime(std::rc::Rc::new(
+            uqm_rust::mainloop::input_abi::NativeInputRuntime {
+                observer: application.observer().cloned(),
+            },
+        ));
+    // SAFETY: argv storage and the application owner remain live through shutdown.
     let exit_code = unsafe {
-        uqm_rust::app::bridge::with_game(&mut game, || {
-            // Run the full UQM lifecycle: init -> game loop -> teardown
-            // SAFETY: the main thread keeps all argument CStrings and argv storage alive through shutdown.
-            let exit_code = init_sequence::run_uqm(args.len() as c_int, c_argv.as_mut_ptr());
-
+        init_sequence::run_uqm(&mut application, args.len() as c_int, c_argv.as_mut_ptr())
+    };
+    let observer = application.observer().cloned();
+    // SAFETY: finalization runs synchronously before the application releases Game.
+    let exit_code = unsafe {
+        application.legacy(|| {
             finish_automation(
-                _application.observer().map(|owner| owner.as_ref()),
+                observer.as_deref(),
                 exit_code,
                 parsed.replay_summary.as_deref(),
             )

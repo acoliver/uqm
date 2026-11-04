@@ -37,7 +37,11 @@ mod live {
 
     /// # Safety
     /// Called once on the SDL owner thread after command-line parsing.
-    pub unsafe fn initialize(argc: i32, argv: *mut *mut c_char) -> i32 {
+    pub unsafe fn initialize(
+        argc: i32,
+        argv: *mut *mut c_char,
+        observer: Option<std::sync::Arc<crate::automation::AutomationObserver>>,
+    ) -> i32 {
         let parsed = options::parsed();
         crate::log_abi::log_init(15);
         crate::bridge_log::rust_bridge_init();
@@ -135,7 +139,7 @@ mod live {
         crate::callback::ffi::Callback_init();
 
         let (driver, flags) = super::graphics_config(parsed);
-        let backend = graphics_options(c_option(&parsed.graphics_backend));
+        let backend = graphics_options(c_option(&parsed.graphics_backend), observer);
         if crate::graphics::sdl::lifecycle_abi::TFB_InitGraphics(
             driver,
             flags,

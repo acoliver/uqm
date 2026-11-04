@@ -6,9 +6,6 @@
 //! @plan PLAN-20260707-RESTARTMENU.P07
 //! @requirement REQ-RM-007
 
-#[cfg(not(test))]
-use std::os::raw::c_int;
-
 use super::c_extern;
 use super::do_restart::DoRestartState;
 use super::restart_ops::RestartMenuOps;
@@ -131,8 +128,7 @@ pub fn restart_menu_impl<O: RestartMenuOps + ?Sized>(
     menu_state.initialized = false;
 
     // Run the input loop (restart.c:313)
-    // DoInput calls our do_restart_frame callback via the InputFunc trampoline
-    ops.run_do_input(true);
+    ops.run_do_input(true, menu_state);
 
     // Cleanup (restart.c:315-322)
     ops.stop_music();
@@ -197,9 +193,7 @@ pub fn try_start_game_impl<O: RestartMenuOps + ?Sized>(ops: &O) -> Option<Campai
     let menu_ptr = ops.create_menu_state();
     let mut menu_state = DoRestartState::default();
 
-    // Set MENU_STATE.InputFunc and privData (via C bridge)
     ops.set_menu_state_ptr(menu_ptr);
-    ops.set_menu_priv_data(menu_ptr, (&mut menu_state as *mut DoRestartState) as usize);
 
     // Save LastActivity, clear CurrentActivity (restart.c:360-361)
     let activity = ops.get_current_activity();
@@ -292,23 +286,6 @@ fn play_campaign_introduction(ops: &(impl RestartMenuOps + ?Sized), start: Campa
     }
 }
 
-// ===========================================================================
-//  C entry point (non-test only)
-// ===========================================================================
-
-/// C-callable entry point for `StartGame` when `USE_RUST_RESTART` is defined.
-///
-/// @plan PLAN-20260707-RESTARTMENU.P07
-/// @requirement REQ-RM-007
-#[cfg(not(test))]
-pub extern "C" fn rust_start_game() -> c_int {
-    let ops = super::restart_ops::CffiOps::new();
-    if start_game_impl(&ops) {
-        1
-    } else {
-        0
-    }
-}
 // ===========================================================================
 //  Tests — Tier 1 (pure Rust, MockOps, no C linkage)
 // ===========================================================================
@@ -413,7 +390,6 @@ mod tests {
         fn create_menu_state(&self) -> usize {
             0
         }
-        fn set_menu_priv_data(&self, _ptr: usize, _data: usize) {}
         fn destroy_menu_state(&self, _ptr: usize) {}
         fn sync_flash_context(&self, _ctx: usize) {}
         fn sync_initialized(&self, _val: bool) {}
@@ -479,7 +455,7 @@ mod tests {
         fn set_menu_sounds(&self, _s0: u16, _s1: u16) {}
         fn set_default_menu_repeat_delay(&self) {}
         fn set_transition_source_null(&self) {}
-        fn run_do_input(&self, _reset_input: bool) {
+        fn run_do_input(&self, _reset_input: bool, _state: &mut DoRestartState) {
             self.input_callbacks.set(self.input_callbacks.get() + 1);
             // Simulate DoInput setting activity via user selection.
             // For new game (IN_INTERPLANETARY), DoRestart also sets

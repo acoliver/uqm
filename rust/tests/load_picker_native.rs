@@ -93,7 +93,16 @@ unsafe fn open_from_restart_while_select_is_held(occupied: bool) {
         inact_timeout: u32::MAX,
         ..Default::default()
     };
-    assert!(!do_restart_frame(&CffiOps::new(), &mut menu));
+    // SAFETY: the serialized fixture publishes its unique game context for this call.
+    unsafe {
+        uqm_rust::app::bridge::enter(|cx| {
+            let mut observer = uqm_rust::engine::observe::Unobserved;
+            let mut io = uqm_rust::engine::observe::Io {
+                observer: &mut observer,
+            };
+            assert!(!do_restart_frame(&CffiOps::new(cx, &mut io), &mut menu));
+        });
+    }
     assert_eq!(ffi::get_last_activity().0, 0x1000);
     assert_eq!(ffi::get_current_activity().0, 4);
     // A queued Cancel is cleared at the same ownership boundary as Select.

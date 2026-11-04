@@ -6,6 +6,9 @@ use std::rc::Rc;
 pub type Frame<'a> = dyn FnMut(&mut Cx<'_>, &mut Io<'_>) -> bool + 'a;
 
 pub trait InputRuntime {
+    fn observer(
+        &self,
+    ) -> Box<dyn crate::engine::observe::Observer<Option<crate::engine::observe::CampaignView>>>;
     fn run(&self, cx: &mut Cx<'_>, io: &mut Io<'_>, reset: bool, frame: &mut Frame<'_>);
     fn battle_input(&self, input: &InputContext) -> u8;
 }
@@ -27,6 +30,12 @@ impl super::Kernel {
 }
 
 impl Cx<'_> {
+    /// Suspend this context for a synchronous provider that still uses the A4 slot.
+    pub(crate) fn with_legacy<R>(&mut self, call: impl FnOnce() -> R) -> R {
+        // SAFETY: the unique context is inaccessible to the caller until publication returns.
+        unsafe { crate::app::bridge::publish(self, call) }
+    }
+
     pub fn run_input(
         &mut self,
         io: &mut Io<'_>,
@@ -46,6 +55,13 @@ mod tests {
     struct Driver(Rc<RefCell<Vec<bool>>>);
 
     impl InputRuntime for Driver {
+        fn observer(
+            &self,
+        ) -> Box<dyn crate::engine::observe::Observer<Option<crate::engine::observe::CampaignView>>>
+        {
+            Box::new(Unobserved)
+        }
+
         fn run(&self, cx: &mut Cx<'_>, io: &mut Io<'_>, reset: bool, frame: &mut Frame<'_>) {
             self.0.borrow_mut().push(reset);
             while frame(cx, io) {}
@@ -85,6 +101,24 @@ mod tests {
                 .battle_input(&InputContext::new(1, 1)),
             8
         );
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn explicit_context_handoff_publishes_and_restores_the_same_owner() {
+        let mut game = Game::new();
+        let mut battle = Battle::new();
+        let mut cx = Cx::new(
+            &mut battle,
+            &mut game.world,
+            &mut game.kernel,
+            crate::math::random,
+        );
+        cx.world.set_activity(7);
+        cx.with_legacy(|| {
+            crate::engine::World::current().write(|world| world.set_activity(11));
+        });
+        assert_eq!(cx.world.activity(), 11);
     }
 
     #[test]

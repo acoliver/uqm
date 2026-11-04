@@ -350,21 +350,6 @@ pub use crate::ships::master_native::engine::FreeMasterShipList;
 
 pub use crate::log_abi::log_showBox;
 
-extern "C" {
-    /// `BOOLEAN StartGame(void)` — outer-loop controller.
-    ///
-    /// Returns non-zero (true) to start/load a game, zero to quit.
-    /// @plan PLAN-20260707-MAINLOOP.P06
-    #[cfg(test)]
-    pub fn start_game() -> CBoolean;
-}
-/// # Safety
-/// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(not(test))]
-pub fn start_game() -> CBoolean {
-    (crate::mainloop::restart_menu::render_abi::start_game()) as _
-}
-
 // ---------------------------------------------------------------------------
 // Test-shim activity state — pure Rust, only compiled in `cfg(test)`
 // ---------------------------------------------------------------------------

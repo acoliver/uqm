@@ -110,7 +110,7 @@ impl AutomationObserver {
         }
         let world = &capture();
         if self.verify_runtime_assertions(world, &mut inner)
-            || self.verify_activity_assertion(&mut inner)
+            || self.verify_activity_assertion(world, &mut inner)
         {
             return true;
         }

@@ -4,16 +4,23 @@ use super::{coordinator::AutomationObserver, input_ffi, ui_observation as ui};
 use crate::engine::observe::{CheckpointView, Injected, InputView, Observer, Presented};
 use std::sync::Arc;
 
-pub(crate) struct Handle<'a>(
-    pub(crate) Arc<AutomationObserver>,
-    pub(crate) &'a mut dyn FnMut() -> super::campaign_state::CampaignView,
-);
+pub(crate) struct Handle(pub(crate) Arc<AutomationObserver>);
 
-impl Observer for Handle<'_> {
-    fn input_admitted(&mut self, view: &InputView) -> Injected {
+impl Observer<Option<super::campaign_state::CampaignView>> for Handle {
+    fn input_admitted(
+        &mut self,
+        view: &InputView,
+        world: &Option<super::campaign_state::CampaignView>,
+    ) -> Injected {
+        let mut capture = || {
+            world
+                .as_ref()
+                .unwrap_or_else(|| panic!("input admission without a campaign view"))
+                .clone()
+        };
         let stop = match *view {
-            InputView::BeforeUpdate => input_ffi::service_input(&self.0, self.1, false) != 0,
-            InputView::Nested => input_ffi::service_input(&self.0, self.1, true) != 0,
+            InputView::BeforeUpdate => input_ffi::service_input(&self.0, &mut capture, false) != 0,
+            InputView::Nested => input_ffi::service_input(&self.0, &mut capture, true) != 0,
             InputView::AfterUpdate => input_ffi::after_input_update(&self.0) != 0,
             InputView::Active => true,
             InputView::MainMenuReady => self.0.process_main_menu_ready(),
@@ -31,14 +38,14 @@ impl Observer for Handle<'_> {
             }
             InputView::PendingSpeech => self
                 .0
-                .service_and_should_skip_pending_communication_speech(self.1),
+                .service_and_should_skip_pending_communication_speech(&mut capture),
             InputView::PendingResponse { count } => {
                 self.0.pending_communication_response_action(count)
             }
             InputView::ClosingSpeech => self.0.should_skip_communication_closing_speech(),
-            InputView::CommunicationCompleted => {
-                self.0.service_communication_completion_boundary(self.1)
-            }
+            InputView::CommunicationCompleted => self
+                .0
+                .service_communication_completion_boundary(&mut capture),
         };
         Injected { stop, seed: None }
     }
@@ -48,15 +55,11 @@ impl Observer for Handle<'_> {
             CheckpointView::Simulation(boundary) => self.0.parity_checkpoint(boundary),
             CheckpointView::BattleReset => {}
             CheckpointView::BattleAdvanced => {
-                AutomationObserver::native_battle_frame_completed(
-                    crate::mainloop::ffi::get_current_activity(),
-                );
+                self.0
+                    .native_battle_frame_completed(crate::mainloop::ffi::get_current_activity());
                 self.0.parity_checkpoint("battle");
             }
             CheckpointView::InputSampled => self.0.parity_input(),
-            CheckpointView::GameInitialized => {
-                crate::app::observe::game_initialized(&self.0);
-            }
             CheckpointView::FlagshipDestroyed => self
                 .0
                 .flagship_destroyed
