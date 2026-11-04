@@ -575,9 +575,7 @@ impl AutomationObserver {
 
     /// Activate the script's start scene after game structures and initial
     /// events are initialized, before the first activity dispatch.
-    pub fn activate_start_scene(&self, cx: &mut crate::engine::battle::Cx<'_>) {
-        // SAFETY: loading returns all owner access before the typed scene writes below.
-        unsafe { crate::app::bridge::publish(cx, || self.activate_save_capture()) };
+    pub fn activate_start_scene(&self, enter: impl FnOnce(&scenario::ScenePlan)) {
         let coord = self;
 
         let scene = {
@@ -603,24 +601,7 @@ impl AutomationObserver {
             return;
         };
 
-        match scenario::activate(scene, SceneActivationBoundary::GameInitialized, |plan| {
-            for &(key, value) in plan.game_state {
-                cx.world.set_story_state(key, value);
-            }
-            #[cfg(not(test))]
-            {
-                let screen_context = cx.kernel_mut().screen_context;
-                // SAFETY: no owner borrow survives the scoped legacy scene entry.
-                unsafe {
-                    crate::app::bridge::publish(cx, || {
-                        scenario::enter_scene(
-                            plan,
-                            &mut scenario::LinkedSceneEntry { screen_context },
-                        )
-                    })
-                };
-            }
-        }) {
+        match scenario::activate(scene, SceneActivationBoundary::GameInitialized, enter) {
             Ok(plan) => {
                 let mut inner = coord.inner.lock();
                 coord.write_trace_labeled(

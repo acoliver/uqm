@@ -4,7 +4,7 @@ use super::*;
 
 impl AutomationObserver {
     /// Called by the existing post-InitGameStructures start-scene hook.
-    pub(super) fn activate_save_capture(&self) {
+    pub(crate) fn activate_save_capture(&self) {
         let coord = self;
         let mut inner = coord.inner.lock();
         let Some(request) = inner.save_capture.as_mut() else {

@@ -55,8 +55,7 @@ impl Observer for Handle<'_> {
             }
             CheckpointView::InputSampled => self.0.parity_input(),
             CheckpointView::GameInitialized => {
-                // SAFETY: game initialization publishes the lifecycle context for this synchronous hook.
-                unsafe { crate::app::bridge::enter(|cx| self.0.activate_start_scene(cx)) }
+                crate::app::observe::game_initialized(&self.0);
             }
             CheckpointView::FlagshipDestroyed => self
                 .0
