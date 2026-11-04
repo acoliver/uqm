@@ -34,7 +34,6 @@ pub(super) mod live {
     use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
     use crate::front_end::fmv::DoShipSpin;
     use crate::graphics::{drawable_abi, geometry_ffi, native_abi};
-    use crate::mainloop::input_abi::live::DoInput;
     use crate::ships::native::abi::*;
     use std::{mem, ptr};
 
@@ -187,7 +186,14 @@ pub(super) mod live {
         }
         draw_pick_frame(state);
         (*state).input_func = Some(pick);
-        DoInput(state.cast(), 0);
+        crate::app::bridge::enter(|cx| {
+            let runtime = cx.kernel.input_runtime();
+            let mut observer = runtime.observer();
+            let mut io = crate::engine::observe::Io {
+                observer: &mut *observer,
+            };
+            cx.run_input(&mut io, false, |cx, _| cx.with_legacy(|| pick(state) != 0));
+        });
         (*state).build_pick_confirmed != 0
     }
 }

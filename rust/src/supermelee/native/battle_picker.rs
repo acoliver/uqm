@@ -513,10 +513,16 @@ pub mod live {
         let mut ok = net.negotiate(true, NetState_NetState_selectShip);
         SetDefaultMenuRepeatDelay();
         SetContext(KernelOwner::current().read(|owner| owner.off_screen_context));
-        crate::mainloop::restart_menu::c_extern::DoInput(
-            (&mut state as *mut GETMELEE_STATE).cast(),
-            0,
-        );
+        crate::app::bridge::enter(|cx| {
+            let runtime = cx.kernel.input_runtime();
+            let mut observer = runtime.observer();
+            let mut io = Io {
+                observer: &mut *observer,
+            };
+            cx.run_input(&mut io, false, |cx, _| {
+                cx.with_legacy(|| choose(&mut state) != 0)
+            });
+        });
         WaitForSoundEnd(0);
         for (player, p) in state.player.iter_mut().enumerate() {
             if p.selecting == 0 {

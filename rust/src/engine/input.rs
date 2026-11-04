@@ -36,6 +36,12 @@ impl super::Kernel {
 }
 
 impl Cx<'_> {
+    pub(crate) fn human_input(&self, player: u16) -> u8 {
+        self.kernel
+            .input_runtime()
+            .battle_input(&InputContext::new(player, 1))
+    }
+
     /// Suspend this context for a synchronous provider that still uses the A4 slot.
     pub(crate) fn with_legacy<R>(&mut self, call: impl FnOnce() -> R) -> R {
         // SAFETY: the unique context is inaccessible to the caller until publication returns.
@@ -102,6 +108,7 @@ mod tests {
             cx.world.activity() < 3
         });
         assert_eq!(cx.world.activity(), 3);
+        assert_eq!(cx.human_input(1), 8);
         assert_eq!(*resets.borrow(), [true]);
         assert_eq!(
             cx.kernel
@@ -109,6 +116,16 @@ mod tests {
                 .battle_input(&InputContext::new(1, 1)),
             8
         );
+    }
+
+    #[test]
+    fn retained_driver_keeps_its_runtime_after_kernel_teardown() {
+        let mut game = Game::new();
+        game.kernel
+            .install_input_runtime(Rc::new(Driver(Rc::default())));
+        let driver = game.kernel.input_runtime();
+        drop(game);
+        assert_eq!(driver.battle_input(&InputContext::new(1, 1)), 8);
     }
 
     #[test]

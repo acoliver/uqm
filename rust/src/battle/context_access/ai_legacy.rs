@@ -37,13 +37,6 @@ pub(crate) fn computer_intelligence(
 
 #[cfg(not(test))]
 impl Cx<'_> {
-    pub(crate) fn human_input(&self, player: u16) -> u8 {
-        // SAFETY: the owning game thread reads the current admitted input state.
-        unsafe { crate::mainloop::input_abi::live::CurrentInputToBattleInput(player) }
-    }
-}
-#[cfg(not(test))]
-impl Cx<'_> {
     pub(crate) fn selection_delay(&self) {
         // SAFETY: the owning game thread performs the existing half-second picker delay.
         unsafe {

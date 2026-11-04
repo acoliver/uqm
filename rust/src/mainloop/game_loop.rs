@@ -547,7 +547,6 @@ mod cffi {
                     c_extern::free_kernel(cx.kernel);
                 })
             }
-
         }
 
         fn log_show_box(&self, b: bool, c: bool) {

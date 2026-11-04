@@ -221,7 +221,7 @@ pub(crate) mod live {
         }
         ok
     }
-    fn new_menu_state() -> MELEE_STATE {
+    fn new_menu_state(kernel: &KernelOwner) -> MELEE_STATE {
         MELEE_STATE {
             input_func: None,
             initialized: 0,
@@ -240,7 +240,7 @@ pub(crate) mod live {
             last_input_time: 0,
             h_music: ptr::null_mut(),
             netplay: Default::default(),
-            catalog: Vec::new(),
+            catalog: crate::ships::master_native::choices(&kernel.master_queue),
         }
     }
 
@@ -252,7 +252,7 @@ pub(crate) mod live {
     ) {
         // SAFETY: the application admits this session on the initialized game thread.
         cx.with_legacy(|| WorldOwner::current().write(init_glob_data));
-        let mut state = new_menu_state();
+        let mut state = new_menu_state(cx.kernel);
         // SAFETY: state remains in this stack frame through all synchronous callbacks and cleanup.
         cx.with_legacy(|| {
             P_MELEE_STATE = &mut state;
@@ -276,11 +276,8 @@ pub(crate) mod live {
             state.cur_index = u16::MAX;
             InitMeleeLoadState(&mut state);
             (**WorldFields::current()).game.current_activity = SUPER_MELEE as u16;
-            let game_sounds = capture_sound(LoadSound(GAME_SOUNDS.as_ptr().cast()));
-            state.catalog = KernelOwner::current().write(|kernel| {
-                kernel.game_sounds = game_sounds;
-                crate::ships::master_native::choices(&kernel.master_queue)
-            });
+            (**KernelOwner::current()).game_sounds =
+                capture_sound(LoadSound(GAME_SOUNDS.as_ptr().cast()));
             crate::supermelee::native::battle_picker::live::BuildPickMeleeFrame();
             MeleeFrame =
                 CaptureDrawable(LoadGraphic(MELEE_SCREEN_PMAP_ANIM.as_ptr().cast()).cast());
@@ -334,9 +331,7 @@ pub(crate) mod live {
             delete_context(state.random_context);
             MeleeSetup_delete(state.melee_setup);
             FlushInput();
-
         });
-
     }
 }
 
