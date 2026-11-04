@@ -310,18 +310,7 @@ mod tactrans_native_access {
             };
             let owner = self.owner(ship);
             let angle = facing_to_angle(self.ship_state(owner).facing as i32) + HALF_CIRCLE as i32;
-            let mut rect: RECT = RECT {
-                corner: POINT { x: 0, y: 0 },
-                extent: EXTENT {
-                    width: 0,
-                    height: 0,
-                },
-            };
-            let frame = self.ship_frame(owner, 0).to_owned().raw();
-            // SAFETY: the ship owns the loaded frame; the rectangle is local output.
-            unsafe {
-                GetFrameRect(frame, &mut rect);
-            }
+            let mut rect = self.frame_rect(self.ship_frame(owner, 0));
             rect.extent.height =
                 ((rect.extent.height as i32 + rect.corner.y as i32) << ONE_SHIFT) as _;
             self.insert_before(e, self.elements().head());
@@ -377,10 +366,7 @@ mod tactrans_native_access {
         }
 
         pub fn stop_battle_music(&mut self) {
-            // SAFETY: music state is owned by the battle thread.
-            unsafe {
-                StopAllBattleMusic();
-            }
+            stop_all_battle_music(self.kernel);
         }
         pub fn start_ship_explosion(&mut self, ship: ElementId, play_sound: bool) {
             crate::battle::tactrans_native::start_ship_explosion(self, ship, play_sound);

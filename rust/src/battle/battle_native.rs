@@ -144,7 +144,7 @@ unsafe fn battle_network() -> BattleNetwork {
 pub(crate) mod engine {
     use super::*;
     use crate::battle::c_bridge::DoInput;
-    use crate::battle::tactrans_native::{flee_preprocess, reset_winner, StopDitty};
+    use crate::battle::tactrans_native::{flee_preprocess, reset_winner, stop_ditty};
     use abi::*;
     use std::{mem, ptr};
 
@@ -453,6 +453,15 @@ pub(crate) mod engine {
         GetInitialStarShips()
     }
 
+    unsafe fn finish_battle(cx: &mut crate::engine::battle::Cx<'_>, stop_audio: bool) {
+        if stop_audio {
+            stop_ditty(cx.kernel);
+            stop_music();
+            StopSound();
+        }
+        cx.finish_battle();
+    }
+
     /// # Safety
     /// The game thread must own initialized battle, input, audio, and display state; any callback must remain valid for the battle.
     #[no_mangle]
@@ -535,11 +544,8 @@ pub(crate) mod engine {
                 }
             }
             net.finish();
-            StopDitty();
-            stop_music();
-            StopSound();
         }
-        crate::app::bridge::enter(|cx| cx.finish_battle());
+        crate::app::bridge::enter(|cx| finish_battle(cx, count != 0));
         UninitShips();
         FreeBattleSong();
         finish_battle_network(&mut *battle, had_net);

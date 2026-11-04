@@ -871,7 +871,7 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                     );
                     core(transitions::cleanup_dead_ship, ship.ptr());
                     core(transitions::cleanup_dead_ship, other.ptr());
-                    transitions::StopDitty();
+                    uqm_rust::engine::Kernel::current().write(transitions::stop_ditty);
                     let expected_selection = initial == [2, 2];
                     let mut selected = [false; 2];
                     for side in 0..2 {

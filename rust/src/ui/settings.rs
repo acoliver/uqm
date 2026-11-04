@@ -28,10 +28,22 @@ pub unsafe fn toggle_music() {
 /// The music reference and player must be valid on the game thread.
 #[no_mangle]
 pub unsafe extern "C" fn PlayMusic(music_ref: MUSIC_REF, continuous: BOOLEAN, priority: BYTE) {
+    crate::engine::World::current()
+        .read(|world| play_music_for_world(world, music_ref, continuous, priority));
+}
+
+/// # Safety
+/// The music reference is retained by its owner for this game-thread playback.
+pub(crate) unsafe fn play_music_for_world(
+    world: &crate::engine::World,
+    music_ref: MUSIC_REF,
+    continuous: BOOLEAN,
+    priority: BYTE,
+) {
     LAST_MUSIC_REF = music_ref;
     LAST_CONTINUOUS = continuous;
     LAST_PRIORITY = priority;
-    if WorldData::current().read(|owner| owner.game.glob_flags) & (MUSIC_DISABLED as u8) == 0 {
+    if world.data.game.glob_flags & (MUSIC_DISABLED as u8) == 0 {
         PLRPlaySong(music_ref.cast(), continuous as i32, priority.into());
     }
 }
@@ -95,4 +107,9 @@ pub unsafe extern "C" fn PlaySoundEffect(
             priority,
         );
     }
+}
+
+pub(crate) fn stop_battle_music() {
+    // SAFETY: the player retains its current music reference on the game thread.
+    unsafe { stop_music() }
 }

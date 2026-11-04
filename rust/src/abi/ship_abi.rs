@@ -2965,13 +2965,7 @@ pub use crate::battle::tactrans_native::engine::ship_death;
 pub use crate::battle::tactrans_native::engine::flee_preprocess;
 
 #[cfg(not(test))]
-pub use crate::battle::tactrans_native::engine::StopDitty;
-
-#[cfg(not(test))]
 pub use crate::battle::tactrans_native::engine::reset_winner;
-
-#[cfg(not(test))]
-pub use crate::battle::tactrans_native::engine::StopAllBattleMusic;
 
 #[cfg(not(test))]
 

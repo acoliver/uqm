@@ -1,4 +1,18 @@
 //! Legacy callers may borrow disjoint fields without reacquiring their owner.
+#[test]
+#[serial_test::serial]
+fn battle_ditty_stop_uses_the_already_borrowed_kernel() {
+    let mut game = uqm_rust::engine::Game::new();
+    // SAFETY: this serialized fixture owns the published game and inactive audio.
+    unsafe {
+        uqm_rust::app::bridge::with_game(&mut game, || {
+            uqm_rust::engine::Kernel::current().write(|kernel| {
+                uqm_rust::battle::tactrans_native::stop_ditty(kernel);
+            });
+        });
+    }
+}
+
 use std::mem;
 use uqm_rust::{
     app::bridge,

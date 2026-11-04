@@ -1,7 +1,5 @@
 //! Ship death, replacement, warp transitions, and battle-end synchronization.
 
-#[cfg(not(test))]
-use crate::engine::Kernel as KernelOwner;
 use crate::ships::native::abi;
 
 pub const fn minimum_ditty_frames(ticks_per_second: u32) -> u16 {
@@ -164,18 +162,20 @@ pub(crate) mod engine {
     }
 
     pub(crate) unsafe fn play_ditty(cx: &mut Cx<'_>, ship: crate::engine::battle::ShipId) {
-        PlayMusic(cx.desc(ship).ship_data.victory_ditty, 0, 3);
-        (*cx.kernel()).ditty_playing = 1;
+        crate::ui::settings::play_music_for_world(
+            cx.world,
+            cx.desc(ship).ship_data.victory_ditty,
+            0,
+            3,
+        );
+        cx.kernel.ditty_playing = 1;
     }
 
-    /// # Safety
-    /// The game thread must own initialized audio and battle music state.
-    #[no_mangle]
-    pub unsafe extern "C" fn StopDitty() {
-        if KernelOwner::current().read(|owner| owner.ditty_playing) != 0 {
-            stop_music();
+    pub fn stop_ditty(kernel: &mut crate::engine::Kernel) {
+        if kernel.ditty_playing != 0 {
+            crate::ui::settings::stop_battle_music();
         }
-        (**KernelOwner::current()).ditty_playing = 0;
+        kernel.ditty_playing = 0;
     }
 
     fn ditty_playing(kernel: &mut crate::engine::Kernel) -> bool {
@@ -307,7 +307,7 @@ pub(crate) mod engine {
             return;
         }
         cx.set_winner_slot(None);
-        StopDitty();
+        stop_ditty(cx.kernel);
         stop_music();
         StopSound();
         cx.set_parent(dead, None);
@@ -392,12 +392,9 @@ pub(crate) mod engine {
         }
     }
 
-    /// # Safety
-    /// The game thread must own initialized audio and battle music state.
-    #[no_mangle]
-    pub unsafe extern "C" fn StopAllBattleMusic() {
-        StopDitty();
-        stop_music();
+    pub fn stop_all_battle_music(kernel: &mut crate::engine::Kernel) {
+        stop_ditty(kernel);
+        crate::ui::settings::stop_battle_music();
     }
 
     pub(crate) fn find_alive_ship(
