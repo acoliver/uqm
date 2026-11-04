@@ -2,6 +2,8 @@
 
 use crate::battle::element::ElementFlags;
 use crate::c_bindings::global_state::PLANET_INFO;
+#[cfg(not(test))]
+use crate::ships::native::abi::optMeleeScale;
 
 pub(crate) fn node_retrieved(life: u16, info: &PLANET_INFO) -> bool {
     let scan = life as u8;
@@ -235,8 +237,10 @@ mod production {
 pub extern "C" fn generate_planet_side() {
     #[cfg(not(test))]
     unsafe {
-        crate::battle::process_native::engine::InitDisplayList();
-        crate::app::bridge::enter(|cx| production::generate(cx));
+        crate::app::bridge::enter(|cx| {
+            crate::battle::process_native::init_display_list(cx, optMeleeScale == 0);
+            production::generate(cx);
+        });
     }
 }
 

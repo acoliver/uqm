@@ -1,6 +1,4 @@
 #[cfg(not(test))]
-use crate::engine::battle::link_queue;
-#[cfg(not(test))]
 use crate::engine::battle::ShipId;
 #[cfg(not(test))]
 use crate::ships::native::abi::{COUNT, RPG_PLAYER_NUM, SHIP_FRAGMENT};
@@ -39,21 +37,18 @@ pub unsafe fn get_encounter_star_ship_with_picker(
 }
 
 #[cfg(not(test))]
-#[cfg(not(test))]
 /// # Safety
-/// The owner's fragment queue matches battle ship link order on the game thread.
-pub(crate) unsafe fn update_ship_frag_crew(owner: ShipId) {
-    // SAFETY: the caller retains the initialized operands on the published game thread.
+/// The owner's fragment queue matches battle ship link order in the supplied context.
+pub(crate) unsafe fn update_ship_frag_crew(cx: &mut crate::engine::battle::Cx<'_>, owner: ShipId) {
+    // SAFETY: the caller retains the initialized fragment queue through this writeback.
     unsafe {
-        let player = {
-            // SAFETY: the typed owner identifies its initialized battle side.
-            let ships = link_queue::ships(owner.side() as usize);
-            ships.get(ships.link(owner)).player
-        };
-        let mut hf = crate::engine::WorldData::current()
-            .read(|world| world.ship_fragments(player == RPG_PLAYER_NUM as i16).head);
-        // SAFETY: this player was read from the live owner's battle record above.
-        let ships = link_queue::ships(player as usize);
+        let player = cx.ship_state(owner).player;
+        let mut hf = cx
+            .world
+            .data
+            .ship_fragments(player == RPG_PLAYER_NUM as i16)
+            .head;
+        let ships = cx.kernel.ships(player as usize);
         let mut hs = ships.head();
         while let Some(id) = hs.filter(|_| !hf.is_null()) {
             let frag = hf.cast::<SHIP_FRAGMENT>();

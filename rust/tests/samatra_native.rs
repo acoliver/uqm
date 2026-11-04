@@ -26,7 +26,9 @@ fn terminal_outcome_survives_descriptor_teardown_until_the_next_battle() {
             uqm_rust::app::bridge::enter(|cx| cx.finish_battle());
             assert!(matches!(ship.descriptor_mut().race_state, RaceState::None));
             drop(ship);
-            uqm_rust::battle::process_native::InitDisplayList();
+            uqm_rust::app::bridge::enter(|cx| {
+                uqm_rust::battle::process_native::init_display_list(cx, optMeleeScale == 0);
+            });
             (**uqm_rust::engine::WorldData::current())
                 .game
                 .current_activity = WON_LAST_BATTLE as u16;

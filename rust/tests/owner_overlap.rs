@@ -316,3 +316,55 @@ fn campaign_events_schedule_and_dispatch_using_the_existing_world() {
         UninitQueue(&raw mut game.world.data.game.game_clock.event_q);
     }
 }
+
+#[test]
+#[serial_test::serial]
+fn display_list_initializes_with_the_entered_context_and_explicit_scale() {
+    let mut game = Game::new();
+    // SAFETY: this serialized fixture owns the game and its idle battle state.
+    unsafe {
+        bridge::with_game(&mut game, || {
+            for step in [false, true] {
+                bridge::enter(|cx| {
+                    uqm_rust::battle::process_native::init_display_list(cx, step);
+                    assert!(cx.elements().head().is_none());
+                });
+                let zoom = bridge::battle(|battle| (battle.zoom_out, battle.max_zoom_out));
+                let expected = if step {
+                    ((MAX_VIS_REDUCTION + 1) as i16, MAX_VIS_REDUCTION as i16)
+                } else {
+                    (
+                        (MAX_ZOOM_OUT + (1 << ZOOM_SHIFT)) as i16,
+                        MAX_ZOOM_OUT as i16,
+                    )
+                };
+                assert_eq!(zoom, expected);
+            }
+        });
+    }
+}
+
+#[test]
+#[serial_test::serial]
+fn fleet_infinity_reads_the_supplied_world_without_publication() {
+    let mut world = World::new();
+    // SAFETY: this fixture owns the fragment allocation through queue teardown.
+    unsafe {
+        assert_eq!(fleet_is_infinite(&world, 0), 0);
+        assert_eq!(fleet_is_infinite(&world, 1), 0);
+        let queue = &raw mut world.data.game.npc_built_ship_q;
+        assert_ne!(
+            InitQueue(queue, 1, mem::size_of::<SHIP_FRAGMENT>() as u16),
+            0
+        );
+        let fragment = AllocLink(queue).cast::<SHIP_FRAGMENT>();
+        assert!(!fragment.is_null());
+        (*fragment).crew_level = 7;
+        PutQueue(queue, fragment.cast());
+        assert_eq!(fleet_is_infinite(&world, 1), 0);
+        (*fragment).crew_level = u16::MAX;
+        assert_eq!(fleet_is_infinite(&world, 1), 1);
+        assert_eq!(fleet_is_infinite(&world, 0), 0);
+        UninitQueue(queue);
+    }
+}

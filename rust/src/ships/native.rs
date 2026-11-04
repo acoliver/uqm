@@ -60,7 +60,7 @@ pub mod abi {
     };
     #[cfg(not(test))]
     #[cfg(not(test))]
-    pub use crate::battle::encount_native::FleetIsInfinite;
+    pub use crate::battle::encount_native::fleet_is_infinite;
     #[cfg(not(test))]
     pub use crate::battle::galaxy::move_galaxy;
     #[cfg(not(test))]

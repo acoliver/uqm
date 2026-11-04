@@ -130,7 +130,7 @@ pub(crate) mod engine {
     use super::*;
     use crate::battle::battle_native::engine::{activity, rgb15, set_activity};
     use crate::battle::battle_native::BattleSong;
-    use crate::battle::encount_native::FleetIsInfinite;
+    use crate::battle::encount_native::fleet_is_infinite;
     use crate::engine::battle::views::SharedFrames;
     use crate::engine::battle::{Cx, ElementFn, ElementId, Parent};
     use crate::ships::native::{cosine, facing_to_angle, sine};
@@ -329,8 +329,8 @@ pub(crate) mod engine {
             BatchGraphics();
             return;
         }
-        if FleetIsInfinite(cx.ship_state(ship).player as COUNT) == 0 {
-            crate::battle::encount_native::engine::update_ship_frag_crew(ship);
+        if fleet_is_infinite(cx.world, cx.ship_state(ship).player as COUNT) == 0 {
+            crate::battle::encount_native::engine::update_ship_frag_crew(cx, ship);
             cx.set_ship_species(ship, SPECIES_ID_NO_ID);
         }
         if pick(cx, ship, cx.ship_state(ship).player as COUNT) != 0 {

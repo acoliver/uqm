@@ -67,8 +67,9 @@ pub unsafe fn uninit_ships() {
         cx.world.set_activity(activity);
         if activity as u8 == IN_ENCOUNTER as u8 && activity & CHECK_ABORT as u16 == 0 {
             for i in (0..2).rev() {
-                if let Some(ship) = ships[i].filter(|_| FleetIsInfinite(i as u16) == 0) {
-                    crate::battle::encount_native::engine::update_ship_frag_crew(ship);
+                if let Some(ship) = ships[i].filter(|_| fleet_is_infinite(cx.world, i as u16) == 0)
+                {
+                    crate::battle::encount_native::engine::update_ship_frag_crew(cx, ship);
                 }
             }
         }
@@ -110,7 +111,7 @@ mod live {
     operation!(rust_bridge_init_battle_arena() -> i16 {
         if KernelOwner::current().write(|kernel| crate::game_init::space_resources::init_space(kernel, WorldOwner::current().read(|world|world.activity()))) == 0 { return 0; }
         SetContext((**KernelOwner::current()).status_context); SetContext((**KernelOwner::current()).space_context);
-        InitDisplayList(); crate::app::bridge::enter(crate::battle::galaxy::init_galaxy);
+        crate::app::bridge::enter(|cx| crate::battle::process_native::init_display_list(cx, optMeleeScale == 0)); crate::app::bridge::enter(crate::battle::galaxy::init_galaxy);
         if WorldOwner::current().read(in_hqspace) != 0 {
             crate::app::bridge::enter(|cx| {
                 cx.reset_ships(0); cx.reset_ships(1);

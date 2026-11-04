@@ -640,21 +640,16 @@ pub(crate) mod engine {
         state
     }
 
-    /// # Safety
-    /// The element queue has been initialized; no elements may remain in use.
-    #[no_mangle]
-    pub unsafe extern "C" fn InitDisplayList() {
-        crate::app::bridge::enter(|cx| {
-            if optMeleeScale == SCALE_STEP {
-                cx.b.zoom_out = (MAX_VIS_REDUCTION + 1) as SIZE;
-                cx.b.max_zoom_out = MAX_VIS_REDUCTION as SIZE;
-            } else {
-                cx.b.zoom_out = (MAX_ZOOM_OUT + (1 << ZOOM_SHIFT)) as SIZE;
-                cx.b.max_zoom_out = MAX_ZOOM_OUT as SIZE;
-            }
-            cx.reset_elements();
-            cx.reset_display();
-        });
+    pub fn init_display_list(cx: &mut Cx<'_>, step_zoom: bool) {
+        if step_zoom {
+            cx.b.zoom_out = (MAX_VIS_REDUCTION + 1) as SIZE;
+            cx.b.max_zoom_out = MAX_VIS_REDUCTION as SIZE;
+        } else {
+            cx.b.zoom_out = (MAX_ZOOM_OUT + (1 << ZOOM_SHIFT)) as SIZE;
+            cx.b.max_zoom_out = MAX_ZOOM_OUT as SIZE;
+        }
+        cx.reset_elements();
+        cx.reset_display();
     }
 
     fn retire(cx: &mut Cx<'_>, id: ElementId) {
@@ -854,7 +849,7 @@ pub(crate) mod engine {
 }
 
 #[cfg(not(test))]
-pub use engine::{process_collisions, InitDisplayList, RedrawQueue};
+pub use engine::{init_display_list, process_collisions, RedrawQueue};
 
 #[cfg(test)]
 mod tests {

@@ -3015,7 +3015,6 @@ pub use crate::game_init::kernel_abi::ClearPlayerInput;
 pub use crate::battle::process_native::engine::RedrawQueue;
 
 #[cfg(not(test))]
-pub use crate::battle::process_native::engine::InitDisplayList;
 
 #[cfg(not(test))]
 

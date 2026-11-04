@@ -11,7 +11,9 @@ pub(super) unsafe fn clear_queues() {
                 cx.kernel_mut().reset_ship_capacity(side, 32);
             }
         });
-        uqm_rust::battle::process_native::InitDisplayList();
+        uqm_rust::app::bridge::enter(|cx| {
+            uqm_rust::battle::process_native::init_display_list(cx, optMeleeScale == 0);
+        });
     }
 }
 

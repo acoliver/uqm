@@ -234,11 +234,10 @@ pub(crate) mod engine {
     }
 
     /// # Safety
-    /// `player` must be a valid side with an initialized ship-fragment queue on the game thread.
-    #[no_mangle]
-    pub unsafe extern "C" fn FleetIsInfinite(player: COUNT) -> BOOLEAN {
-        let h = WorldFields::current()
-            .read(|world| world.ship_fragments(player == RPG_PLAYER_NUM as COUNT).head);
+    /// The supplied world's fragment queue must be initialized and retained for this read.
+    pub unsafe fn fleet_is_infinite(world: &crate::engine::World, player: COUNT) -> BOOLEAN {
+        let queue = world.data.ship_fragments(player == RPG_PLAYER_NUM as COUNT);
+        let h = queue.head;
         if h.is_null() {
             return 0;
         }

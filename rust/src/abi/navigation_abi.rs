@@ -3751,7 +3751,7 @@ pub const ATTACK: _bindgen_ty_23 = 1;
 pub type _bindgen_ty_23 = ::std::os::raw::c_uint;
 
 #[cfg(not(test))]
-pub use crate::battle::encount_native::engine::FleetIsInfinite;
+pub use crate::battle::encount_native::engine::fleet_is_infinite;
 
 #[cfg(not(test))]
 extern "C" {
@@ -4438,7 +4438,6 @@ pub use crate::navigation::interplanetary::live::notify_others_abi as NotifyOthe
 pub use crate::navigation::interplanetary::live::do_missions as DoMissions;
 
 #[cfg(not(test))]
-pub use crate::battle::process_native::engine::InitDisplayList;
 
 #[cfg(not(test))]
 pub const SOUND_EFFECTS_GRAB_CREW: SOUND_EFFECTS = 0;
