@@ -1,7 +1,6 @@
 //! Persistent gameplay resources and pools owned by Game.
 use super::battle::{
     kernel::{Channels, SoundQueue, StarPlane},
-    record::MUSIC_REF,
     ShipId,
 };
 use crate::graphics::native_abi::{POINT, STRING as SOUND};
@@ -49,7 +48,7 @@ pub struct Kernel {
     pub(crate) master_queue: super::battle::kernel::MasterCatalog,
     pub(crate) player_input: [Option<crate::engine::battle::input::InputContext>; 2],
     pub(crate) instant_victory: u32,
-    pub(crate) battle_music: MUSIC_REF,
+    pub(crate) battle_music: Option<crate::sound::resource_types::LoadedMusic>,
     pub(crate) ditty_playing: u32,
     pub(crate) winner: Option<ShipId>,
     pub(crate) status_offsets: [i16; 2],
@@ -139,7 +138,7 @@ impl Kernel {
             master_queue: super::battle::kernel::MasterCatalog::new(),
             player_input: [None, None],
             instant_victory: 0,
-            battle_music: ptr::null_mut(),
+            battle_music: None,
             ditty_playing: 0,
             winner: None,
             status_offsets: [0; 2],

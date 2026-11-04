@@ -871,7 +871,7 @@ mod kernel_tests {
         assert_eq!(moved.status_offsets, [7, 11]);
         let fresh = Kernel::new();
         assert_eq!(fresh.instant_victory, 0);
-        assert!(fresh.battle_music.is_null());
+        assert!(fresh.battle_music.is_none());
         assert_eq!(fresh.ditty_playing, 0);
         assert_eq!(fresh.space_origin.x, 0);
         assert_eq!(fresh.space_origin.y, 0);

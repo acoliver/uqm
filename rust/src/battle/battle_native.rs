@@ -118,7 +118,7 @@ pub(crate) mod engine {
     use super::*;
     use crate::battle::tactrans_native::{flee_preprocess, reset_winner, stop_ditty};
     use abi::*;
-    use std::{mem, ptr};
+    use std::mem;
 
     const BATTLE_ESCAPE: u8 = 1 << 5;
 
@@ -267,28 +267,23 @@ pub(crate) mod engine {
         world: &crate::engine::World,
         play: bool,
     ) {
-        if kernel.battle_music.is_null() {
+        if kernel.battle_music.is_none() {
             let resource = if in_hyper_space(world) != 0 {
-                HYPERSPACE_MUSIC.as_ptr()
+                c"music.hyperspace"
             } else if in_quasi_space(world) != 0 {
-                QUASISPACE_MUSIC.as_ptr()
+                c"music.quasispace"
             } else {
-                BATTLE_MUSIC.as_ptr()
+                c"music.battle"
             };
-            // SAFETY: the selected resource key is a static NUL-terminated string.
-            kernel.battle_music =
-                unsafe { crate::sound::resource_types::LoadMusicInstance(resource.cast()).cast() };
+            kernel.battle_music = crate::sound::resource_types::LoadedMusic::load(resource);
         }
         if play {
-            // SAFETY: Kernel retains this loaded music for synchronous playback.
-            unsafe { crate::ui::settings::play_music_for_world(world, kernel.battle_music, 1, 1) };
+            crate::ui::settings::play_loaded_music(world, kernel.battle_music.as_ref(), 1, 1);
         }
     }
 
     pub fn free_battle_song(kernel: &mut crate::engine::Kernel) {
-        // SAFETY: Kernel owns this music reference and clears it before any later use.
-        unsafe { DestroyMusic(kernel.battle_music) };
-        kernel.battle_music = ptr::null_mut();
+        kernel.battle_music = None;
     }
 
     struct BattleSession {

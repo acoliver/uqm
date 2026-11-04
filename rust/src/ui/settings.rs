@@ -48,6 +48,16 @@ pub(crate) unsafe fn play_music_for_world(
     }
 }
 
+pub(crate) fn play_loaded_music(
+    world: &crate::engine::World,
+    music: Option<&crate::sound::resource_types::LoadedMusic>,
+    continuous: BOOLEAN,
+    priority: BYTE,
+) {
+    let raw = music.map_or(std::ptr::null_mut(), |music| music.as_raw().cast());
+    // SAFETY: the borrow retains the resource; a missing resource preserves null playback.
+    unsafe { play_music_for_world(world, raw, continuous, priority) };
+}
 /// # Safety
 /// The music player must be initialized on the game thread.
 pub unsafe fn stop_music() {
