@@ -137,6 +137,9 @@ fn main() {
     let _application = uqm_rust::app::Application::new(observer);
 
     let mut game = uqm_rust::engine::Game::new();
+    game.kernel.install_input_runtime(std::rc::Rc::new(
+        uqm_rust::mainloop::input_abi::NativeInputRuntime,
+    ));
     // SAFETY: main owns the game until shutdown and the final state summary have completed.
     let exit_code = unsafe {
         uqm_rust::app::bridge::with_game(&mut game, || {

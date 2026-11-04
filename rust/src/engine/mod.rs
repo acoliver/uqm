@@ -1,6 +1,7 @@
 pub use uqm_engine::observe;
 pub mod battle;
 
+pub mod input;
 pub mod kernel;
 mod owner;
 pub mod world;

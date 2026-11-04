@@ -241,11 +241,17 @@ pub(crate) mod live {
             flags | (u16::from(state.menu[key as usize] != 0) << bit)
         }) | (u16::from(state.menu[KEY_MENU_BACKSPACE as usize] != 0) << 9)
     }
-    /// # Safety
-    /// State starts with a live non-null C ABI input callback; nested loops run on the game thread.
-    #[no_mangle]
-    pub unsafe extern "C" fn DoInput(state: *mut c_void, reset: u32) {
-        if reset != 0 {
+    trait InputStep {
+        fn input(
+            &mut self,
+            view: crate::engine::observe::InputView,
+        ) -> crate::engine::observe::Injected;
+        fn menu_sounds(&mut self) -> crate::graphics::native_abi::STRING;
+        fn frame(&mut self) -> bool;
+    }
+
+    unsafe fn run_loop(reset: bool, step: &mut impl InputStep) {
+        if reset {
             FlushInput();
         }
         crate::mainloop::input_frame::rust_begin_input_loop();
@@ -254,15 +260,21 @@ pub(crate) mod live {
             crate::graphics::sdl::lifecycle_abi::TFB_ProcessEvents();
             crate::mainloop::lifecycle_abi::process_utility_keys();
             super::yield_input_loop(|| crate::threading::legacy_abi::TaskSwitch());
-            if crate::app::observe::input(crate::engine::observe::InputView::BeforeUpdate).stop {
+            if step
+                .input(crate::engine::observe::InputView::BeforeUpdate)
+                .stop
+            {
                 break;
             }
             UpdateInputState();
-            if crate::app::observe::input(crate::engine::observe::InputView::AfterUpdate).stop {
+            if step
+                .input(crate::engine::observe::InputView::AfterUpdate)
+                .stop
+            {
                 break;
             }
             let flags = menu_sound_flags(&ptr::addr_of!(PulsedInputState).read());
-            let mut sound = Kernel::current().read(|owner| owner.menu_sounds);
+            let mut sound = step.menu_sounds();
             if !sound.is_null() && flags & (SOUND_0 | SOUND_1) != 0 {
                 if flags & SOUND_1 != 0 {
                     sound = crate::strings::string_table::SetAbsStringTableIndex(sound.cast(), 1)
@@ -283,16 +295,89 @@ pub(crate) mod live {
             if let Some(callback) = INPUT_CALLBACK {
                 callback();
             }
-            let callback = *state.cast::<unsafe extern "C" fn(*mut c_void) -> u32>();
-            let keep = callback(state);
+            let keep = step.frame();
             if crate::mainloop::input_frame::rust_complete_input_frame(keep as i32) == 0 {
                 break;
             }
         }
-        if reset != 0 {
+        if reset {
             FlushInput();
         }
     }
+
+    struct RawStep(*mut c_void);
+
+    impl InputStep for RawStep {
+        fn input(
+            &mut self,
+            view: crate::engine::observe::InputView,
+        ) -> crate::engine::observe::Injected {
+            crate::app::observe::input(view)
+        }
+
+        fn menu_sounds(&mut self) -> crate::graphics::native_abi::STRING {
+            Kernel::current().read(|owner| owner.menu_sounds)
+        }
+
+        fn frame(&mut self) -> bool {
+            // SAFETY: DoInput's caller supplies live state beginning with its callback.
+            unsafe {
+                let callback = *self.0.cast::<unsafe extern "C" fn(*mut c_void) -> u32>();
+                callback(self.0) != 0
+            }
+        }
+    }
+
+    /// # Safety
+    /// State starts with a live non-null C ABI input callback; nested loops run on the game thread.
+    #[no_mangle]
+    pub unsafe extern "C" fn DoInput(state: *mut c_void, reset: u32) {
+        run_loop(reset != 0, &mut RawStep(state));
+    }
+
+    struct TypedStep<'a, 'b, 'c, 'd> {
+        cx: &'a mut crate::engine::battle::Cx<'b>,
+        io: &'a mut crate::engine::observe::Io<'c>,
+        frame: &'a mut crate::engine::input::Frame<'d>,
+    }
+
+    impl InputStep for TypedStep<'_, '_, '_, '_> {
+        fn input(
+            &mut self,
+            view: crate::engine::observe::InputView,
+        ) -> crate::engine::observe::Injected {
+            self.io.observer.input_admitted(&view)
+        }
+
+        fn menu_sounds(&mut self) -> crate::graphics::native_abi::STRING {
+            self.cx.kernel.menu_sounds
+        }
+
+        fn frame(&mut self) -> bool {
+            (self.frame)(self.cx, self.io)
+        }
+    }
+
+    pub struct NativeInputRuntime;
+
+    impl crate::engine::input::InputRuntime for NativeInputRuntime {
+        fn run(
+            &self,
+            cx: &mut crate::engine::battle::Cx<'_>,
+            io: &mut crate::engine::observe::Io<'_>,
+            reset: bool,
+            frame: &mut crate::engine::input::Frame<'_>,
+        ) {
+            // SAFETY: the application runs this driver on the game thread with initialized input.
+            unsafe { run_loop(reset, &mut TypedStep { cx, io, frame }) }
+        }
+
+        fn battle_input(&self, input: &crate::engine::battle::input::InputContext) -> u8 {
+            // SAFETY: InputContext validates its player when installed by the game thread.
+            unsafe { CurrentInputToBattleInput(input.player()) }
+        }
+    }
+
     /// # Safety
     /// Game-thread access to menu sounds.
     #[no_mangle]
