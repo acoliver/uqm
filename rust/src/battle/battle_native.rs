@@ -374,7 +374,7 @@ pub(crate) mod engine {
             crate::log_abi::log_message(2, "Only one side at a time can be network controlled.\n");
             return 0;
         }
-        cx.with_legacy(|| GetInitialStarShips())
+        crate::battle::ship_native::initial_star_ships(cx)
     }
 
     fn finish_battle(cx: &mut crate::engine::battle::Cx<'_>, stop_audio: bool) {

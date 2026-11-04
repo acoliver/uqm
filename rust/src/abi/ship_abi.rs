@@ -1518,9 +1518,6 @@ pub struct MISSILE_BLOCK {
 #[cfg(not(test))]
 
 #[cfg(not(test))]
-pub use crate::battle::ship_native::engine::GetInitialStarShips;
-
-#[cfg(not(test))]
 pub use crate::battle::ship_native::engine::animation_preprocess;
 
 #[cfg(not(test))]

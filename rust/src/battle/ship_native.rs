@@ -1,7 +1,5 @@
 //! Native ship motion and collision callbacks ported from ship.c.
 
-#[cfg(not(test))]
-use crate::engine::WorldData as WorldFields;
 use crate::ships::native::abi::*;
 
 fn velocity_squared(dx: i16, dy: i16) -> u32 {
@@ -449,32 +447,28 @@ pub(crate) mod engine {
 
     /// # Safety
     /// Player queues and encounter/melee selection state must be initialized.
-    #[no_mangle]
-    pub unsafe extern "C" fn GetInitialStarShips() -> BOOLEAN {
-        if WorldFields::current().read(|owner| owner.game.current_activity) as BYTE
-            == SUPER_MELEE as BYTE
-        {
+    pub unsafe fn initial_star_ships(cx: &mut Cx<'_>) -> BOOLEAN {
+        if cx.world.activity() as BYTE == SUPER_MELEE as BYTE {
             let mut ships = [ptr::null_mut(); NUM_PLAYERS as usize];
-            if GetInitialMeleeStarShips(ships.as_mut_ptr()) == 0 {
+            if cx.with_legacy(|| GetInitialMeleeStarShips(ships.as_mut_ptr())) == 0 {
                 return 0;
             }
-            for i in 0..NUM_PLAYERS as COUNT {
-                if crate::app::bridge::enter(|cx| {
-                    let player = cx.kernel.player_order(i);
-                    spawn_ship(
-                        cx,
-                        crate::engine::battle::link_queue::identify(
-                            ships[player as usize] as usize,
-                        ),
-                    )
-                }) == 0
-                {
+            for rank in 0..NUM_PLAYERS as COUNT {
+                let player = cx.kernel.player_order(rank);
+                let ship = {
+                    let queue = cx.kernel.ships(player as usize);
+                    let selected = queue
+                        .id(ships[player as usize])
+                        .unwrap_or_else(|| panic!("successful picker returned no initial ship"));
+                    queue.ship_id(selected)
+                };
+                if spawn_ship(cx, ship) == 0 {
                     return 0;
                 }
             }
         } else {
             for player in (0..NUM_PLAYERS as COUNT).rev() {
-                if crate::app::bridge::enter(|cx| next_star_ship(cx, None, player)) == 0 {
+                if next_star_ship(cx, None, player) == 0 {
                     return 0;
                 }
             }
@@ -504,8 +498,8 @@ pub(crate) mod engine {
 
 #[cfg(not(test))]
 pub use engine::{
-    animation_preprocess, collision, inertial_thrust, next_star_ship, ship_postprocess,
-    ship_preprocess, spawn_ship, GetInitialStarShips,
+    animation_preprocess, collision, inertial_thrust, initial_star_ships, next_star_ship,
+    ship_postprocess, ship_preprocess, spawn_ship,
 };
 
 #[cfg(test)]
