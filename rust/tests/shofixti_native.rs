@@ -839,7 +839,7 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                         reserves[side].playerNr = side as SIZE;
                         uqm_rust::app::bridge::battle(|_| {
                             let mut ships = (**uqm_rust::engine::Kernel::current()).ships(side);
-                            let active = ships.id(active.cast()).unwrap();
+                            let active = ships.id(active as usize).unwrap();
                             ships.put(active);
                             if initial[side] > 1 {
                                 let reserve = ships.link(reserves[side].ship_id);
