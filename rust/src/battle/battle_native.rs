@@ -63,6 +63,14 @@ pub fn ship_input(input: u8, crew: u16) -> u8 {
     state
 }
 
+fn run_away_allowed(world: &crate::engine::World) -> bool {
+    use crate::engine::StoryKey;
+    (world.activity() as u8 == abi::IN_ENCOUNTER as u8
+        || world.activity() as u8 == abi::IN_LAST_BATTLE as u8)
+        && world.story_state(StoryKey::STARBASE_AVAILABLE) != 0
+        && world.story_state(StoryKey::BOMB_CARRIER) == 0
+}
+
 #[cfg(not(test))]
 type BattleNetwork = (
     *mut crate::engine::battle::Battle,
@@ -198,12 +206,6 @@ pub(crate) mod engine {
         ScreenHeight - 13
     }
 
-    fn run_away_allowed() -> bool {
-        (activity() as u8 == IN_ENCOUNTER as u8 || activity() as u8 == IN_LAST_BATTLE as u8)
-            && game_state(STARBASE_AVAILABLE, END_STARBASE_AVAILABLE) != 0
-            && game_state(BOMB_CARRIER, END_BOMB_CARRIER) == 0
-    }
-
     fn run_away(cx: &mut crate::engine::battle::Cx<'_>, ship: crate::engine::battle::ShipId) {
         let e = cx.ship_element(ship);
         let state = cx.element(e);
@@ -229,19 +231,19 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe fn process_input(
+    fn process_input(
         cx: &mut crate::engine::battle::Cx<'_>,
         net: &dyn crate::engine::battle::net::BattleNet,
         order: [usize; 2],
     ) {
         net.poll();
-        let can_run = run_away_allowed();
+        let can_run = run_away_allowed(cx.world);
         for side in order {
             let mut next = cx.first_ship(side);
             while let Some(ship) = next {
                 next = cx.next_ship(ship);
                 if cx.optional_ship_element(ship).is_some() {
-                    cx.ship_state_mut(ship).control = player_control(side);
+                    cx.ship_state_mut(ship).control = cx.kernel.player_control[side];
                     let context = cx.kernel.player_input[side]
                         .clone()
                         .unwrap_or_else(|| panic!("missing player input"));
@@ -260,7 +262,7 @@ pub(crate) mod engine {
                             context.network().remote_input(side)
                         }
                     };
-                    if player_control(side) & NETWORK_CONTROL == 0 {
+                    if cx.kernel.player_control[side] & NETWORK_CONTROL == 0 {
                         input = net.local_input(side, input);
                     }
                     cx.ship_state_mut(ship).input =
@@ -276,8 +278,9 @@ pub(crate) mod engine {
             }
         }
         net.flush();
-        if activity() & (CHECK_LOAD | CHECK_ABORT) as u16 != 0 {
-            set_activity(activity() & !(IN_BATTLE as u16));
+        if cx.world.activity() & (CHECK_LOAD | CHECK_ABORT) as u16 != 0 {
+            cx.world
+                .set_activity(cx.world.activity() & !(IN_BATTLE as u16));
         }
     }
 
@@ -338,7 +341,7 @@ pub(crate) mod engine {
             process_input(
                 cx,
                 &*net,
-                battle_input_order(&[player_control(0), player_control(1)], NETWORK_CONTROL),
+                battle_input_order(&cx.kernel.player_control, NETWORK_CONTROL),
             )
         });
         if net.peer_count() > 0 {
@@ -513,6 +516,31 @@ mod tests {
         assert_eq!(std::mem::size_of::<abi::BATTLE_INPUT_STATE>(), 1);
         assert_eq!(std::mem::size_of::<abi::COUNT>(), 2);
         assert_eq!(std::mem::size_of::<abi::SIZE>(), 2);
+    }
+
+    #[test]
+    fn retreat_permission_uses_the_supplied_world_and_low_activity_byte() {
+        use crate::engine::{StoryKey, World};
+        let mut world = World::new();
+        world.story = Some(crate::state::game_state::GameState::new());
+        for activity in 0..=4 {
+            for flags in [0, abi::IN_BATTLE as u16, abi::CHECK_ABORT as u16] {
+                world.set_activity(activity | flags);
+                for starbase in 0..=1 {
+                    world.set_story_state(StoryKey::STARBASE_AVAILABLE, starbase);
+                    for bomb in 0..=1 {
+                        world.set_story_state(StoryKey::BOMB_CARRIER, bomb);
+                        assert_eq!(
+                            run_away_allowed(&world),
+                            (activity == abi::IN_ENCOUNTER as u16
+                                || activity == abi::IN_LAST_BATTLE as u16)
+                                && starbase != 0
+                                && bomb == 0,
+                        );
+                    }
+                }
+            }
+        }
     }
 
     #[test]
