@@ -44,3 +44,6 @@ pub mod wreck;
 pub mod yehat;
 pub mod zfpscout;
 pub mod zoq;
+
+#[cfg(test)]
+mod test_npcs;

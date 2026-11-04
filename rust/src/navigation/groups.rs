@@ -721,6 +721,18 @@ mod tests {
             seek_state_file(world, file, 0, 0);
             super::read_ship_fragment(world, file, &mut ship);
             assert_eq!((ship.crew_level, ship.max_crew, ship.race_id), (44, 255, 6));
+            let mut header: GROUP_HEADER = std::mem::zeroed();
+            header.NumGroups = 16;
+            header.star_index = 0x1234;
+            header.year_index = 2160;
+            header.GroupOffset[64] = 0xabcdef01;
+            seek_state_file(world, file, 0, 0);
+            super::write_group_header(world, file, &header);
+            assert_eq!(length_state_file(world, file), 268);
+            seek_state_file(world, file, 0, 0);
+            let mut restored_header: GROUP_HEADER = std::mem::zeroed();
+            super::read_group_header(world, file, &mut restored_header);
+            assert_eq!(encode_header(&restored_header), encode_header(&header));
             close_state_file(world, file);
             delete_state_file(world, 1);
         }

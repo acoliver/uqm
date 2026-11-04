@@ -48,27 +48,30 @@ pub(super) unsafe fn discovery_report(system: *mut SOLARSYS_STATE) -> CffiDiscov
 ///
 /// # Safety
 /// Game thread, with `GlobData` initialised.
-#[export_name = "GenerateDefault_initNpcs"]
-pub unsafe extern "C" fn init_npcs_c(_system: *mut SOLARSYS_STATE) -> bool {
-    default::init_npcs(&mut LiveGame)
+pub unsafe fn init_npcs_c(owner: &mut crate::engine::World, _system: *mut SOLARSYS_STATE) -> bool {
+    default::init_npcs(&mut crate::planets::c_api::NpcWorld::new(owner))
 }
 
 /// C: `bool GenerateDefault_reinitNpcs (SOLARSYS_STATE *)`.
 ///
 /// # Safety
 /// Game thread, with `GlobData` initialised.
-#[export_name = "GenerateDefault_reinitNpcs"]
-pub unsafe extern "C" fn reinit_npcs_c(_system: *mut SOLARSYS_STATE) -> bool {
-    default::reinit_npcs(&mut LiveGame)
+pub unsafe fn reinit_npcs_c(
+    owner: &mut crate::engine::World,
+    _system: *mut SOLARSYS_STATE,
+) -> bool {
+    default::reinit_npcs(&mut crate::planets::c_api::NpcWorld::new(owner))
 }
 
 /// C: `bool GenerateDefault_uninitNpcs (SOLARSYS_STATE *)`.
 ///
 /// # Safety
 /// Game thread, with `GlobData` initialised.
-#[export_name = "GenerateDefault_uninitNpcs"]
-pub unsafe extern "C" fn uninit_npcs_c(_system: *mut SOLARSYS_STATE) -> bool {
-    default::uninit_npcs(&mut LiveGame)
+pub unsafe fn uninit_npcs_c(
+    owner: &mut crate::engine::World,
+    _system: *mut SOLARSYS_STATE,
+) -> bool {
+    default::uninit_npcs(&mut crate::planets::c_api::NpcWorld::new(owner))
 }
 
 /// C: `bool GenerateDefault_generatePlanets (SOLARSYS_STATE *)`.

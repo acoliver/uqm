@@ -145,9 +145,12 @@ pub(crate) mod live {
         }));
     }
 
-    unsafe fn delta_crew(menu: &Menu, delta: i16) -> bool {
+    unsafe fn delta_crew(menu: &mut Menu, delta: i16) -> bool {
         let value = World::current().write(|world| {
             let id = support_ship(world, menu)?;
+            if delta == 0 {
+                menu.frame = world.built_ships_ref().get(id).icons.cast();
+            }
             let race = world.built_ships_ref().get(id).race_id;
             let fleets = world.avail_races_ref();
             let maximum = fleets
@@ -181,11 +184,6 @@ pub(crate) mod live {
     unsafe fn select(menu: &mut Menu, index: usize) {
         menu.point = menu.positions[index];
         menu.frame = std::ptr::null_mut();
-        menu.frame = World::current().read(|world| {
-            support_ship(world, menu).map_or(std::ptr::null_mut(), |id| {
-                world.built_ships_ref().get(id).icons.cast()
-            })
-        });
         delta_crew(menu, 0);
     }
 

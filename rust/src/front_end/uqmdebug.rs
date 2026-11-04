@@ -8,13 +8,13 @@ use std::ffi::{c_char, c_int};
 
 mod equipment;
 
-unsafe fn clear_escort_queue(queue: *mut crate::collections::queue::Queue) {
-    let mut handle = (*queue).head;
-    while !handle.is_null() {
-        let next = (*handle.cast::<SHIP_FRAGMENT>()).succ;
-        crate::collections::queue::RemoveQueue(queue, handle);
-        crate::collections::queue::FreeLink(queue, handle);
-        handle = next;
+fn clear_escort_queue(world: &mut crate::engine::World) {
+    let mut ships = world.built_ships();
+    let mut next = ships.head();
+    while let Some(id) = next {
+        next = ships.succ(id);
+        ships.remove(id);
+        ships.free(id);
     }
 }
 
@@ -283,65 +283,63 @@ mod runtime {
     /// # Safety
     /// Must run on the game thread. The game clock and event queue must be live.
     pub unsafe fn forward_to_next_event(skip_hee: BOOLEAN) {
-        let world = WorldData::current();
         if GameClockRunning() == 0 {
             return;
         }
         LockGameClock();
         let mut done = skip_hee == 0;
+        let mut target = None;
         loop {
-            let handle = (**world).game.game_clock.event_q.head;
-            if handle.is_null() {
-                return;
-            }
-            let event = &*handle.cast::<EVENT>();
-            if event.func_index as u32 != HYPERSPACE_ENCOUNTER_EVENT {
-                done = true;
-            }
-            let (year, month, day) = (
-                event.year_index,
-                event.month_index as COUNT,
-                event.day_index as COUNT,
-            );
-            loop {
-                let clock = &*ptr::addr_of!((**world).game.game_clock);
-                if clock.year_index > year
-                    || (clock.year_index == year
-                        && (clock.month_index as COUNT > month
-                            || (clock.month_index as COUNT == month
-                                && clock.day_index as COUNT >= day)))
-                {
-                    break;
+            let current = World::current().read(|world| {
+                if target.is_none() {
+                    let events = world.clock.events_ref();
+                    let event = events.get(events.head()?);
+                    if event.func_index as u32 != HYPERSPACE_ENCOUNTER_EVENT {
+                        done = true;
+                    }
+                    target = Some((event.year_index, event.month_index, event.day_index));
                 }
+                let clock = &world.data.game.game_clock;
+                Some((clock.year_index, clock.month_index, clock.day_index))
+            });
+            let Some(current) = current else {
+                return;
+            };
+            if current < target.expect("event selected before calendar comparison") {
                 MoveGameClockDays(1);
-            }
-            if done {
+            } else if done {
                 break;
+            } else {
+                target = None;
             }
         }
         UnlockGameClock();
     }
     /// # Safety
     /// `out` must be an open C stream and `event` a readable event record.
-    pub unsafe fn dump_event(out: *mut FILE, event: *const EVENT) {
+    pub unsafe fn dump_event(out: *mut FILE, event: &crate::engine::clock::CEvent) {
         libc::fprintf(
             out,
             c"%4u/%02u/%02u: %s\n".as_ptr(),
-            (*event).year_index as u32,
-            (*event).month_index as u32,
-            (*event).day_index as u32,
-            event_name((*event).func_index),
+            event.year_index as u32,
+            event.month_index as u32,
+            event.day_index as u32,
+            event_name(event.func_index),
         );
     }
     /// # Safety
     /// Must run with a live game clock and an open output stream.
     pub unsafe fn dump_events(out: *mut FILE) {
-        let world = WorldData::current();
+        let world = World::current();
         LockGameClock();
-        crate::collections::queue::for_all_links(
-            ptr::addr_of_mut!((**world).game.game_clock.event_q).cast(),
-            |event| dump_event(out, ptr::from_mut(event).cast()),
-        );
+        world.read(|world| {
+            let events = world.clock.events_ref();
+            let mut next = events.head();
+            while let Some(id) = next {
+                next = events.succ(id);
+                dump_event(out, events.get(id));
+            }
+        });
         UnlockGameClock();
     }
 
@@ -401,9 +399,7 @@ mod runtime {
     /// # Safety
     /// Must run on the game thread with the escort queue initialized.
     pub unsafe fn clear_escorts() {
-        let world = WorldData::current();
-        let queue = ptr::addr_of_mut!((**world).game.built_ship_q);
-        clear_escort_queue(queue.cast());
+        World::current().write(clear_escort_queue);
         DeltaSISGauges(
             UNDEFINED_DELTA as _,
             UNDEFINED_DELTA as _,
@@ -469,31 +465,35 @@ mod runtime {
     /// # Safety
     /// Must run on the game thread with the race queue initialized.
     pub unsafe fn show_spheres() {
-        let mut handle = WorldData::current().read(|owner| owner.game.avail_race_q.head);
-        while !handle.is_null() {
-            let fleet = handle.cast::<FLEET_INFO>();
-            let next = (*fleet).succ;
-            if (*fleet).actual_strength != INFINITE_RADIUS as COUNT
-                && (*fleet).known_strength != (*fleet).actual_strength
-            {
-                (*fleet).known_strength = (*fleet).actual_strength;
-                (*fleet).known_loc = (*fleet).loc;
+        World::current().write(|world| {
+            let mut fleets = world.avail_races();
+            let mut next = fleets.head();
+            while let Some(id) = next {
+                next = fleets.succ(id);
+                let fleet = fleets.get_mut(id);
+                if fleet.actual_strength != INFINITE_RADIUS as COUNT
+                    && fleet.known_strength != fleet.actual_strength
+                {
+                    fleet.known_strength = fleet.actual_strength;
+                    fleet.known_loc = fleet.loc;
+                }
             }
-            handle = next;
-        }
+        });
     }
     /// # Safety
     /// Must run on the game thread with the race queue initialized.
     pub unsafe fn activate_all_ships() {
-        let mut handle = WorldData::current().read(|owner| owner.game.avail_race_q.head);
-        while !handle.is_null() {
-            let fleet = handle.cast::<FLEET_INFO>();
-            let next = (*fleet).succ;
-            if !(*fleet).icons.is_null() {
-                (*fleet).allied_state = GOOD_GUY as _;
+        World::current().write(|world| {
+            let mut fleets = world.avail_races();
+            let mut next = fleets.head();
+            while let Some(id) = next {
+                next = fleets.succ(id);
+                let fleet = fleets.get_mut(id);
+                if !fleet.icons.is_null() {
+                    fleet.allied_state = GOOD_GUY as _;
+                }
             }
-            handle = next;
-        }
+        });
     }
 
     /// # Safety
@@ -1557,7 +1557,6 @@ pub use runtime::{
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::collections::queue::{AllocLink, InitQueue, PutQueue, Queue, UninitQueue};
 
     #[test]
     fn traversal_callbacks_borrow_typed_context_without_an_abi_cast() {
@@ -1587,30 +1586,26 @@ mod tests {
 
     #[test]
     fn clearing_escort_queue_returns_every_fragment_slot_to_pool() {
-        unsafe {
-            let mut queue = std::mem::MaybeUninit::<Queue>::zeroed().assume_init();
-            assert!(InitQueue(
-                &mut queue,
-                3,
-                std::mem::size_of::<SHIP_FRAGMENT>() as u16,
-            ));
-            let mut original = Vec::new();
-            for _ in 0..3 {
-                let slot = AllocLink(&mut queue);
-                assert!(!slot.is_null());
-                PutQueue(&mut queue, slot);
-                original.push(slot);
-            }
-
-            clear_escort_queue(&mut queue);
-            assert!(queue.head.is_null());
-            assert!(queue.tail.is_null());
-
-            let reusable: Vec<_> = (0..3).map(|_| AllocLink(&mut queue)).collect();
-            assert!(reusable.iter().all(|slot| original.contains(slot)));
-            assert!(AllocLink(&mut queue).is_null());
-            assert!(UninitQueue(&mut queue));
+        let mut world = crate::engine::World::new();
+        let mut original = Vec::new();
+        for _ in 0..12 {
+            let mut ships = world.built_ships();
+            let id = ships.alloc().unwrap();
+            ships.put(id);
+            original.push(id);
         }
+        assert!(world.built_ships().alloc().is_none());
+
+        clear_escort_queue(&mut world);
+        assert!(world.built_ships_ref().head().is_none());
+        assert!(world.built_ships_ref().tail().is_none());
+        for id in original {
+            assert!(!world.built_ships_ref().contains(id));
+        }
+        for _ in 0..12 {
+            assert!(world.built_ships().alloc().is_some());
+        }
+        assert!(world.built_ships().alloc().is_none());
     }
 
     #[test]

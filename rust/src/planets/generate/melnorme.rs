@@ -52,15 +52,15 @@ fn set_ref(var: Option<&'static str>, story: &mut impl Story, group: u32) {
 /// `GenerateMelnorme_initNpcs`. A star that is no Melnorme post still gets a
 /// new group each time, as in C: the reference cannot be read or stored, and
 /// both attempts only log a warning.
-pub fn init_npcs(star_index: u8, story: &mut impl Story, host: &mut impl FleetGroups) -> bool {
+pub fn init_npcs(star_index: u8, host: &mut (impl FleetGroups + Story)) -> bool {
     let var = ref_var(star_index);
-    host.set_battle_group_ref(get_ref(var, story));
+    host.set_battle_group_ref(get_ref(var, host));
     if host.battle_group_ref() == 0 {
         host.clone_ship_into_built_queue(MELNORME_SHIP);
         let group = host.add_new_group();
         host.set_battle_group_ref(group);
         host.reinit_built_queue();
-        set_ref(var, story, group);
+        set_ref(var, host, group);
     }
     special::default_init(host);
     true

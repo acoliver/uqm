@@ -103,9 +103,9 @@ impl Npcs for FakeNpcs {
 #[test]
 fn the_default_groups_are_made_unless_the_zoq_fot_pik_are_in_distress_value_one() {
     for distress in 0..4u32 {
-        let story = FakeStory::with(&[("ZOQFOT_DISTRESS", distress)]);
+        let mut story = FakeStory::with(&[("ZOQFOT_DISTRESS", distress)]);
         let mut host = FakeNpcs::default();
-        assert!(init_npcs(&story, &mut host));
+        assert!(init_npcs(&mut (&mut story, &mut host)));
         let expected: &[&str] = if distress == 1 {
             &[]
         } else {

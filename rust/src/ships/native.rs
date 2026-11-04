@@ -54,9 +54,8 @@ pub mod abi {
     pub use super::engine::sleep_thread as SleepThread;
     #[cfg(not(test))]
     pub use super::engine::{
-        alloc_link as AllocLink, draw_batch as DrawBatch, draw_rectangle as DrawRectangle,
-        frame_count as GetFrameCount, frame_index as GetFrameIndex, put_queue as PutQueue,
-        rel_frame_index as SetRelFrameIndex,
+        draw_batch as DrawBatch, draw_rectangle as DrawRectangle, frame_count as GetFrameCount,
+        frame_index as GetFrameIndex, rel_frame_index as SetRelFrameIndex,
     };
     #[cfg(not(test))]
     #[cfg(not(test))]
@@ -357,18 +356,6 @@ mod engine {
     /// The game thread must own initialized pacing and display state.
     pub unsafe fn sleep_thread(ticks: u32) {
         crate::battle::c_bridge::SleepThread(ticks);
-    }
-
-    /// # Safety
-    /// `queue` must be an initialized engine queue owned by the game thread.
-    pub unsafe fn alloc_link(queue: *mut abi::QUEUE) -> abi::HLINK {
-        crate::collections::queue::AllocLink(queue.cast())
-    }
-
-    /// # Safety
-    /// `handle` must be an unlinked live element allocated from `queue`.
-    pub unsafe fn put_queue(queue: *mut abi::QUEUE, handle: abi::HLINK) {
-        crate::collections::queue::PutQueue(queue.cast(), handle);
     }
 
     /// # Safety

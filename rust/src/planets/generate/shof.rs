@@ -32,51 +32,51 @@ pub trait ShofixtiSite: FleetGroups {
 /// `GenerateShofixti_initNpcs`: while a Shofixti is still to be found (not
 /// recruited, and either alive or the brother is alive and the maidens are
 /// aboard) the stored group is resumed or, failing that, made anew.
-pub fn init_npcs(story: &mut impl Story, host: &mut impl ShofixtiSite) -> bool {
-    let a_shofixti_remains = story.flag("SHOFIXTI_RECRUITED") == 0
-        && (story.flag("SHOFIXTI_KIA") == 0
-            || (story.flag("SHOFIXTI_BRO_KIA") == 0 && story.flag("MAIDENS_ON_SHIP") != 0));
+pub fn init_npcs(host: &mut (impl ShofixtiSite + Story)) -> bool {
+    let a_shofixti_remains = host.flag("SHOFIXTI_RECRUITED") == 0
+        && (host.flag("SHOFIXTI_KIA") == 0
+            || (host.flag("SHOFIXTI_BRO_KIA") == 0 && host.flag("MAIDENS_ON_SHIP") != 0));
     if a_shofixti_remains {
-        host.set_battle_group_ref(story.word("SHOFIXTI_GRPOFFS0"));
+        host.set_battle_group_ref(host.word("SHOFIXTI_GRPOFFS0"));
         if host.battle_group_ref() == 0 || !host.init_ip_groups() {
             if host.battle_group_ref() == 0 {
                 host.set_battle_group_ref(!0);
             }
             // Tanaka, or Katana (+1) once Tanaka is dead.
-            let name = NAME_OFFSET + NUM_CAPTAINS_NAMES + (story.flag("SHOFIXTI_KIA") & 1) as u8;
+            let name = NAME_OFFSET + NUM_CAPTAINS_NAMES + (host.flag("SHOFIXTI_KIA") & 1) as u8;
             host.clone_shofixti_named(name);
             let stored = host.put_group_info(host.battle_group_ref());
             host.set_battle_group_ref(stored);
             host.reinit_built_queue();
-            story.set_word("SHOFIXTI_GRPOFFS0", stored);
+            host.set_word("SHOFIXTI_GRPOFFS0", stored);
         }
     }
 
     // This was originally a fallthrough to REINIT_NPCS.
     default::init_npcs(host);
-    check_old_shofixti(story, host);
+    check_old_shofixti(host);
     true
 }
 
 /// `GenerateShofixti_reinitNpcs`.
-pub fn reinit_npcs(story: &impl Story, host: &mut impl FleetGroups) -> bool {
+pub fn reinit_npcs(host: &mut (impl FleetGroups + Story)) -> bool {
     default::reinit_npcs(host);
-    check_old_shofixti(story, host);
+    check_old_shofixti(host);
     true
 }
 
 /// `GenerateShofixti_uninitNpcs`: a Shofixti group that is gone from the
 /// system when the player leaves was killed; the brother is the second one.
-pub fn uninit_npcs(story: &mut impl Story, host: &mut impl FleetGroups) -> bool {
+pub fn uninit_npcs(host: &mut (impl FleetGroups + Story)) -> bool {
     if host.battle_group_ref() != 0
-        && story.flag("SHOFIXTI_RECRUITED") == 0
+        && host.flag("SHOFIXTI_RECRUITED") == 0
         && !host.head_ip_group(&mut |_| {})
     {
-        if story.flag("SHOFIXTI_KIA") == 0 {
-            story.set_flag("SHOFIXTI_KIA", 1);
-            story.set_flag("SHOFIXTI_VISITS", 0);
-        } else if story.flag("MAIDENS_ON_SHIP") != 0 {
-            story.set_flag("SHOFIXTI_BRO_KIA", 1);
+        if host.flag("SHOFIXTI_KIA") == 0 {
+            host.set_flag("SHOFIXTI_KIA", 1);
+            host.set_flag("SHOFIXTI_VISITS", 0);
+        } else if host.flag("MAIDENS_ON_SHIP") != 0 {
+            host.set_flag("SHOFIXTI_BRO_KIA", 1);
         }
     }
 
@@ -117,11 +117,11 @@ pub fn generate_planets(
 
 /// `check_old_shofixti`: a Shofixti the flagship collided with flees once he
 /// has been recruited.
-fn check_old_shofixti(story: &impl Story, host: &mut impl FleetGroups) {
+fn check_old_shofixti(host: &mut (impl FleetGroups + Story)) {
     if host.battle_group_ref() == 0 {
         return;
     }
-    let recruited = story.flag("SHOFIXTI_RECRUITED") != 0;
+    let recruited = host.flag("SHOFIXTI_RECRUITED") != 0;
     host.head_ip_group(&mut |group| {
         if group.race_id == SHOFIXTI_SHIP && group.task & REFORM_GROUP != 0 && recruited {
             group.task = FLEE | IGNORE_FLAGSHIP | REFORM_GROUP;

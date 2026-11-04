@@ -90,7 +90,7 @@ fn guard_build_order_races_and_full_groups() {
                 ..Guard::default()
             };
             let mut expected_groups = site.groups.clone();
-            assert!(init_npcs(&mut story, &mut site));
+            assert!(init_npcs(&mut (&mut story, &mut site)));
             let stored = if reference == 0 { 7919 } else { reference };
             assert_eq!(story.word("SAMATRA_GRPOFFS0"), stored);
             let first = if frenzy == 0 { 18 } else { 21 };
@@ -126,26 +126,26 @@ fn guard_build_order_races_and_full_groups() {
 #[test]
 fn ghosts_are_saved_without_building_and_empty_queue_is_enforced() {
     let mut site = Guard::default();
-    init_npcs(&mut FakeStory::with(&[("URQUAN_MESSED_UP", 1)]), &mut site);
+    init_npcs(&mut (&mut FakeStory::with(&[("URQUAN_MESSED_UP", 1)]), &mut site));
     assert_eq!(site.calls, ["save"]);
     assert!(std::panic::catch_unwind(|| {
-        init_npcs(
+        init_npcs(&mut (
             &mut FakeStory::default(),
             &mut Guard {
                 built: 1,
                 ..Guard::default()
             },
-        );
+        ));
     })
     .is_err());
     assert!(std::panic::catch_unwind(|| {
-        init_npcs(
+        init_npcs(&mut (
             &mut FakeStory::default(),
             &mut Guard {
                 groups: groups(15),
                 ..Guard::default()
             },
-        );
+        ));
     })
     .is_err());
 }
@@ -172,7 +172,10 @@ fn reinit_preserves_full_groups_and_moves_only_engaged_guard() {
                         g.group_counter = 0;
                     }
                 }
-                reinit_npcs(&FakeStory::with(&[("URQUAN_MESSED_UP", messed)]), &mut site);
+                reinit_npcs(&mut (
+                    &mut FakeStory::with(&[("URQUAN_MESSED_UP", messed)]),
+                    &mut site,
+                ));
                 assert_eq!(format!("{:?}", site.groups), format!("{expected:?}"));
                 let engaged = messed == 0 && count != 0 && task & 8 != 0;
                 assert_eq!(

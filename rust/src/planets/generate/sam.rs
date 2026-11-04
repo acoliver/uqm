@@ -49,18 +49,18 @@ pub trait SamatraSite: HomeContactSite {
     fn talk_rebels(&mut self);
 }
 
-pub fn init_npcs(story: &mut impl Story, site: &mut impl GuardSite) -> bool {
-    if story.flag("URQUAN_MESSED_UP") == 0 {
-        build_guard(story, site);
+pub fn init_npcs(site: &mut (impl GuardSite + Story)) -> bool {
+    if site.flag("URQUAN_MESSED_UP") == 0 {
+        build_guard(site);
     } else {
         site.save_ip_groups();
     }
     true
 }
 
-fn build_guard(story: &mut impl Story, site: &mut impl GuardSite) {
-    site.set_battle_group_ref(story.word("SAMATRA_GRPOFFS0"));
-    let (ship1, ship2) = if story.flag("KOHR_AH_FRENZY") == 0 {
+fn build_guard(site: &mut (impl GuardSite + Story)) {
+    site.set_battle_group_ref(site.word("SAMATRA_GRPOFFS0"));
+    let (ship1, ship2) = if site.flag("KOHR_AH_FRENZY") == 0 {
         (URQUAN_SHIP, BLACK_URQUAN_SHIP)
     } else {
         (BLACK_URQUAN_SHIP, URQUAN_SHIP)
@@ -72,7 +72,7 @@ fn build_guard(story: &mut impl Story, site: &mut impl GuardSite) {
     if site.battle_group_ref() == 0 {
         let reference = site.add_new_group();
         site.set_battle_group_ref(reference);
-        story.set_word("SAMATRA_GRPOFFS0", reference);
+        site.set_word("SAMATRA_GRPOFFS0", reference);
     }
     for group in 1..=12 {
         site.store_group(site.battle_group_ref(), group);
@@ -112,12 +112,13 @@ fn build_guard(story: &mut impl Story, site: &mut impl GuardSite) {
     assert_eq!(index, GUARDS);
 }
 
-pub fn reinit_npcs(story: &impl Story, site: &mut impl GuardSite) -> bool {
+pub fn reinit_npcs(site: &mut (impl GuardSite + Story)) -> bool {
     site.load_ip_groups();
     site.reset_encounter();
     let mut engaged = false;
+    let messed_up = site.flag("URQUAN_MESSED_UP") != 0;
     site.for_each_ip_group(&mut |group| {
-        if story.flag("URQUAN_MESSED_UP") != 0 {
+        if messed_up {
             group.task &= REFORM_GROUP;
             group.task |= FLEE | IGNORE_FLAGSHIP;
             group.dest_loc = 0;

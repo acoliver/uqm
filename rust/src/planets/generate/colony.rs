@@ -14,8 +14,8 @@ use crate::planets::generate::special::{
 use crate::planets::orbits::{self, OrbitRequest};
 
 /// `GenerateColony_initNpcs`.
-pub fn init_npcs(story: &mut impl Story, host: &mut impl FleetGroups) -> bool {
-    special::ensure_fleet(story, host, "COLONY_GRPOFFS0", URQUAN_SHIP);
+pub fn init_npcs(host: &mut (impl FleetGroups + Story)) -> bool {
+    special::ensure_fleet(host, "COLONY_GRPOFFS0", URQUAN_SHIP);
     default::init_npcs(host);
     if host.battle_group_ref() != 0 {
         host.head_ip_group(&mut |group| {

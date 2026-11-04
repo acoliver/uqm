@@ -8,7 +8,6 @@ use crate::ships::native::abi::optMeleeScale;
 
 use crate::battle::gendef::getGenerateFunctions;
 use crate::c_bindings::controller_input as input;
-use crate::collections::queue::ReinitQueue;
 use crate::comm::locdata::CPoint;
 use crate::graphics::pixmap_abi::{GetFrameIndex, ReleaseDrawable, SetAbsFrameIndex};
 use crate::mainloop::restart_menu::c_extern::PlayMusic;
@@ -415,16 +414,18 @@ pub(super) unsafe fn init_solar_sys() {
     if inner_system {
         validate_inner_orbits();
     }
-    if reentry {
-        ((*(*state).genFuncs).reinitNpcs.unwrap())(state);
-    } else {
-        ENCOUNTER_RACE = -1;
-        EncounterGroup = 0;
-        (**glob()).game.battle_group_ref = 0;
-        ReinitQueue(ptr::addr_of_mut!((**glob()).game.ip_group_q).cast());
-        ReinitQueue(ptr::addr_of_mut!((**glob()).game.npc_built_ship_q).cast());
-        ((*(*state).genFuncs).initNpcs.unwrap())(state);
-    }
+    World::current().write(|world| {
+        if reentry {
+            ((*(*state).genFuncs).reinitNpcs.unwrap())(world, state);
+        } else {
+            ENCOUNTER_RACE = -1;
+            EncounterGroup = 0;
+            world.data.game.battle_group_ref = 0;
+            world.ip_groups().reinit();
+            world.npc_built_ships().reinit();
+            ((*(*state).genFuncs).initNpcs.unwrap())(world, state);
+        }
+    });
 
     if !orbital.is_null() {
         enter_orbital(orbital);
@@ -460,12 +461,14 @@ pub(super) unsafe fn init_solar_sys() {
 }
 
 pub(super) unsafe fn end_interplanetary() {
-    (**glob()).game.current_activity &= !END_INTERPLANETARY;
-    if glob().read(|owner| owner.game.current_activity) & (CHECK_ABORT | CHECK_LOAD) == 0 {
-        let state = system();
-        ((*(*state).genFuncs).uninitNpcs.unwrap())(state);
-        World::current().write(|world| world.set_story_state(StoryKey::USED_BROADCASTER, 0));
-    }
+    World::current().write(|world| {
+        world.data.game.current_activity &= !END_INTERPLANETARY;
+        if world.data.game.current_activity & (CHECK_ABORT | CHECK_LOAD) == 0 {
+            let state = system();
+            ((*(*state).genFuncs).uninitNpcs.unwrap())(world, state);
+            world.set_story_state(StoryKey::USED_BROADCASTER, 0);
+        }
+    });
 }
 
 pub(super) unsafe fn closest_planet_interplanetary(point: *const c::POINT) -> *mut c::PLANET_DESC {

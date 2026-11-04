@@ -69,8 +69,6 @@ extern "C" {
 
     static mut NextActivity: u16;
 
-    static mut pSolarSysState: *mut crate::ships::native::abi::solarsys_state;
-
 }
 
 struct Menu {
@@ -177,7 +175,8 @@ unsafe fn reset_groups() {
 }
 
 unsafe fn orbit_is(planet: u8) -> bool {
-    playerInPlanetOrbit() && matchWorld(pSolarSysState, (*pSolarSysState).pOrbitalDesc, planet, 255)
+    let system = crate::planets::solarsys::lifecycle::P_SOLAR_SYS_STATE;
+    playerInPlanetOrbit() && matchWorld(system, (*system).pOrbitalDesc, planet, 255)
 }
 
 unsafe fn use_caster() -> bool {

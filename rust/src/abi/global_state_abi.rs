@@ -185,11 +185,11 @@ pub type NODE_INFO = node_info;
 pub type PLANET_ORBIT = planet_orbit;
 pub type SOLARSYS_STATE = solarsys_state;
 pub type InitNpcsFunction =
-    ::std::option::Option<unsafe extern "C" fn(solarSys: *mut SOLARSYS_STATE) -> bool>;
+    Option<unsafe fn(&mut crate::engine::World, *mut SOLARSYS_STATE) -> bool>;
 pub type ReinitNpcsFunction =
-    ::std::option::Option<unsafe extern "C" fn(solarSys: *mut SOLARSYS_STATE) -> bool>;
+    Option<unsafe fn(&mut crate::engine::World, *mut SOLARSYS_STATE) -> bool>;
 pub type UninitNpcsFunction =
-    ::std::option::Option<unsafe extern "C" fn(solarSys: *mut SOLARSYS_STATE) -> bool>;
+    Option<unsafe fn(&mut crate::engine::World, *mut SOLARSYS_STATE) -> bool>;
 pub type GeneratePlanetsFunction =
     ::std::option::Option<unsafe extern "C" fn(solarSys: *mut SOLARSYS_STATE) -> bool>;
 pub type GenerateMoonsFunction = ::std::option::Option<

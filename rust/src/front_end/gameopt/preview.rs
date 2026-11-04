@@ -1,50 +1,45 @@
 //! Temporary flagship and escort state while rendering a saved-game summary.
 
-use crate::collections::queue::Queue;
-use crate::engine::{world::SisState, WorldData};
+use crate::collections::pool::OrderedPool;
+use crate::engine::world::{queues::ShipFragment, SisState};
+use crate::engine::World;
 
 pub(super) struct SavedState {
     flagship: SisState,
-    ships: Queue,
+    ships: OrderedPool<ShipFragment, 12>,
 }
 
 impl SavedState {
-    pub(super) fn capture(world: &WorldData) -> Self {
+    pub(super) fn capture(world: &mut World) -> Self {
         Self {
-            flagship: world.flagship,
-            ships: world.game.built_ship_q,
+            flagship: world.data.flagship,
+            ships: std::mem::take(&mut world.queues.built_ships),
         }
     }
 
-    pub(super) fn restore(self, world: &mut WorldData) {
-        world.flagship = self.flagship;
-        world.game.built_ship_q = self.ships;
+    pub(super) fn restore(self, world: &mut World) {
+        world.data.flagship = self.flagship;
+        world.queues.built_ships = self.ships;
     }
 }
 
 /// # Safety
-/// Race templates must be live. Release the temporary escort queue before restoring SavedState.
+/// Race templates must be live and SavedState must hold the campaign escorts.
 #[cfg(not(test))]
-pub(super) unsafe fn install(
-    world: &mut WorldData,
-    summary: &crate::navigation::abi::SUMMARY_DESC,
-) {
-    use crate::navigation::abi::*;
-    world.flagship = summary.SS;
-    let queue = &raw mut world.game.built_ship_q;
-    // SAFETY: the saved header is retained separately; this initializes the temporary queue.
-    unsafe {
-        InitQueue(
-            queue,
-            MAX_BUILT_SHIPS as COUNT,
-            std::mem::size_of::<SHIP_FRAGMENT>() as OBJ_SIZE,
-        );
-    }
+pub(super) unsafe fn install(world: &mut World, summary: &crate::navigation::abi::SUMMARY_DESC) {
+    world.data.flagship = summary.SS;
     for &species in &summary.ShipList[..usize::from(summary.NumShips)] {
-        // SAFETY: live templates and the newly initialized destination are distinct queues.
-        unsafe {
-            CloneShipFragment(&mut world.game.avail_race_q, species as COUNT, queue, 0);
-        }
+        let fleets = world.avail_races_ref();
+        let Some(id) = fleets.at(usize::from(species)) else {
+            continue;
+        };
+        let template = *fleets.get(id);
+        world.built_ships().clone_fragment(
+            &template,
+            species,
+            0,
+            crate::comm::dispatch::production_captain_name,
+        );
     }
 }
 
@@ -56,14 +51,29 @@ mod tests {
     fn restore_reinstates_the_flagship_and_escorts_without_rewinding_other_state() {
         let mut world = crate::engine::World::new();
         world.data.flagship.crew_enlisted = 20;
-        world.data.game.built_ship_q.object_size = 36;
-        let saved = SavedState::capture(&world.data);
+        let mut ships = world.built_ships();
+        let first = ships.alloc().unwrap();
+        ships.get_mut(first).crew_level = 9;
+        ships.put(first);
+        let second = ships.alloc().unwrap();
+        ships.put(second);
+        let saved = SavedState::capture(&mut world);
+        assert_eq!(world.built_ships_ref().count(), 0);
+        assert!(!world.built_ships_ref().contains(first));
+
         world.data.flagship.crew_enlisted = 5;
-        world.data.game.built_ship_q.object_size = 40;
+        let temporary = world.built_ships().alloc().unwrap();
+        world.built_ships().put(temporary);
         world.data.game.glob_flags = 7;
-        saved.restore(&mut world.data);
+        saved.restore(&mut world);
+
         assert_eq!(world.data.flagship.crew_enlisted, 20);
-        assert_eq!(world.data.game.built_ship_q.object_size, 36);
+        let ships = world.built_ships_ref();
+        assert_eq!(ships.count(), 2);
+        assert_eq!(ships.head(), Some(first));
+        assert_eq!(ships.succ(first), Some(second));
+        assert_eq!(ships.get(first).crew_level, 9);
+        assert!(!ships.contains(temporary));
         assert_eq!(world.data.game.glob_flags, 7);
     }
 }

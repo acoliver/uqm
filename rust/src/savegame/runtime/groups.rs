@@ -47,11 +47,10 @@
 use std::ffi::c_void;
 use std::fmt;
 
-use super::queues::{c_point, entries, point, QueueElement, QueueError, QueueKind};
+use super::queues::{c_point, entries, point, QueueElement, QueueKind};
 use crate::c_bindings::{assert_c_layout, global_state};
 use crate::comm::dispatch::{
-    CEncounter, CFrameHandle, CPoint, IN_INTERPLANETARY, MAX_HYPER_SHIPS, START_ENCOUNTER,
-    START_INTERPLANETARY,
+    CFrameHandle, CPoint, IN_INTERPLANETARY, MAX_HYPER_SHIPS, START_ENCOUNTER, START_INTERPLANETARY,
 };
 use crate::engine::world::queues::{
     BriefShipInfo as ShipInfo, EncounterRecord, IpGroup as GroupRecord,
@@ -110,20 +109,9 @@ impl QueueElement for CIpGroup {
     }
 }
 
-impl QueueElement for CEncounter {
-    fn pred(&self) -> *mut c_void {
-        self.pred
-    }
-    fn succ(&self) -> *mut c_void {
-        self.succ
-    }
-}
-
 /// Why the group and encounter sections could not be captured or restored.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GroupError {
-    /// A pool or its links are not what the game's queues are.
-    Queue(QueueError),
     /// The entry names a race the fleet queue has no template for.
     UnknownRace {
         queue: QueueKind,
@@ -147,12 +135,6 @@ impl fmt::Display for GroupError {
 }
 
 impl std::error::Error for GroupError {}
-
-impl From<QueueError> for GroupError {
-    fn from(error: QueueError) -> Self {
-        Self::Queue(error)
-    }
-}
 
 /// The group and encounter queues as a save holds them.
 #[derive(Debug, Clone, PartialEq, Eq)]

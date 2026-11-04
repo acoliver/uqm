@@ -4,52 +4,18 @@
 //! borrows end before LoadPlanet, which can reenter the generators and RNG.
 
 use crate::battle::gendef::UTWIG_DEFINED;
-use crate::c_bindings::global_state::{IP_GROUP, NODE_INFO, PLANET_DESC, SOLARSYS_STATE};
+use crate::c_bindings::global_state::{NODE_INFO, PLANET_DESC, SOLARSYS_STATE};
 use crate::comm::dispatch::{conv, ship};
-use crate::planets::c_api::{self, LiveGame};
+use crate::planets::c_api;
 use crate::planets::consts::star_color;
 use crate::planets::ffi::{blank_node, current_star_type, node_or, sys_gen_rng};
-use crate::planets::generate::default::Npcs;
 use crate::planets::generate::exports::discovery_report;
 use crate::planets::generate::home_exports::{RaceHome, Takeoff};
-use crate::planets::generate::special::{Body, FleetGroups, LiveStory, Story};
+use crate::planets::generate::special::{Body, LiveStory, Story};
 use crate::planets::generate::special_exports::{body_of, lay_out_planets, orbit_world};
 use crate::planets::generate::vtable::{GenerateFunctions, DEFAULT_HOOKS};
 use crate::planets::generate::{myc, sam, spa, utw, vux};
 use crate::planets::surface::{BIOLOGICAL_SCAN, ENERGY_SCAN};
-
-impl Npcs for RaceHome {
-    fn init_ip_groups(&mut self) -> bool {
-        Npcs::init_ip_groups(&mut self.game)
-    }
-    fn clear_battle_group_ref(&mut self) {
-        self.game.clear_battle_group_ref();
-    }
-    fn build_groups(&mut self) {
-        self.game.build_groups();
-    }
-    fn load_ip_groups(&mut self) {
-        Npcs::load_ip_groups(&mut self.game);
-    }
-    fn save_ip_groups(&mut self) {
-        Npcs::save_ip_groups(&mut self.game);
-    }
-    fn reinit_npc_built_ship_q(&mut self) {
-        self.game.reinit_npc_built_ship_q();
-    }
-    fn reinit_ip_group_q(&mut self) {
-        Npcs::reinit_ip_group_q(&mut self.game);
-    }
-    fn yehat_civil_war(&self) -> bool {
-        self.game.yehat_civil_war()
-    }
-    fn encounter_race(&self) -> i16 {
-        self.game.encounter_race()
-    }
-    fn for_each_ip_group(&mut self, visit: &mut dyn FnMut(&mut IP_GROUP)) {
-        Npcs::for_each_ip_group(&mut self.game, visit);
-    }
-}
 
 impl utw::UtwigSite for RaceHome {
     fn start_druuge_tracking(&mut self) -> bool {
@@ -178,18 +144,17 @@ fn home(system: *mut SOLARSYS_STATE, race: u8, conversation: u32) -> RaceHome {
 
 // SAFETY (all callbacks): callers pass the live solar system and one of its
 // worlds on the game thread, just as for the original GenerateFunctions.
-unsafe extern "C" fn utw_init(system: *mut SOLARSYS_STATE) -> bool {
+unsafe fn utw_init(owner: &mut crate::engine::World, _system: *mut SOLARSYS_STATE) -> bool {
     utw::init_npcs(
-        c_api::current_star_index(),
-        &LiveStory,
-        &mut home(system, ship::UTWIG_SHIP, conv::UTWIG),
+        (*owner.star_pointer(crate::planets::starmap::current_catalog())).index,
+        &mut crate::planets::c_api::NpcWorld::new(owner),
     )
 }
-unsafe extern "C" fn sam_init(_system: *mut SOLARSYS_STATE) -> bool {
-    sam::init_npcs(&mut LiveStory, &mut LiveGame)
+unsafe fn sam_init(owner: &mut crate::engine::World, _system: *mut SOLARSYS_STATE) -> bool {
+    sam::init_npcs(&mut crate::planets::c_api::NpcWorld::new(owner))
 }
-unsafe extern "C" fn sam_reinit(_system: *mut SOLARSYS_STATE) -> bool {
-    sam::reinit_npcs(&LiveStory, &mut LiveGame)
+unsafe fn sam_reinit(owner: &mut crate::engine::World, _system: *mut SOLARSYS_STATE) -> bool {
+    sam::reinit_npcs(&mut crate::planets::c_api::NpcWorld::new(owner))
 }
 unsafe extern "C" fn utw_planets(system: *mut SOLARSYS_STATE) -> bool {
     lay_out_planets(system, |rng, data, size, color, planets| {

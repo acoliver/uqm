@@ -11,9 +11,9 @@ use crate::planets::generate::special::{self, FleetGroups, Story, ZOQFOTPIK_SHIP
 use crate::planets::generate::default::{FLEE, IGNORE_FLAGSHIP, REFORM_GROUP};
 
 /// `GenerateZoqFotPikScout_initNpcs`.
-pub fn init_npcs(story: &mut impl Story, host: &mut impl FleetGroups) -> bool {
-    if story.flag("MET_ZOQFOT") == 0 {
-        special::ensure_fleet(story, host, "ZOQFOT_GRPOFFS0", ZOQFOTPIK_SHIP);
+pub fn init_npcs(host: &mut (impl FleetGroups + Story)) -> bool {
+    if host.flag("MET_ZOQFOT") == 0 {
+        special::ensure_fleet(host, "ZOQFOT_GRPOFFS0", ZOQFOTPIK_SHIP);
     }
     default::init_npcs(host);
     true

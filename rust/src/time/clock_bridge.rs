@@ -85,9 +85,9 @@ fn next_clock_day_internal(clock: &mut ClockState) {
 #[cfg(not(test))]
 fn with_game_clock<F, R>(f: F) -> R
 where
-    F: FnOnce(&mut ClockState) -> R,
+    F: FnOnce(&mut ClockState, &mut crate::engine::clock::GameClock) -> R,
 {
-    World::current().write(|world| f(&mut world.data.game.game_clock))
+    World::current().write(|world| f(&mut world.data.game.game_clock, &mut world.clock))
 }
 
 // Initialize the game clock
@@ -95,14 +95,14 @@ where
 pub extern "C" fn rust_clock_init() -> c_int {
     log_clock_bridge("RUST_CLOCK_INIT");
 
-    with_game_clock(|clock| {
+    with_game_clock(|clock, events| {
+        events.init();
         // Initialize to Feb 17, START_YEAR
         clock.month_index = 2;
         clock.day_index = 17;
         clock.year_index = START_YEAR;
         clock.tick_count = 0;
         clock.day_in_ticks = 0;
-        // event_q initialization is handled by C code
     });
 
     1 // TRUE (success)
@@ -113,7 +113,8 @@ pub extern "C" fn rust_clock_init() -> c_int {
 pub extern "C" fn rust_clock_uninit() -> c_int {
     log_clock_bridge("RUST_CLOCK_UNINIT");
 
-    with_game_clock(|clock| {
+    with_game_clock(|clock, events| {
+        events.uninit();
         // Reset clock state
         clock.tick_count = 0;
         clock.day_in_ticks = 0;
@@ -129,7 +130,7 @@ pub extern "C" fn rust_clock_set_rate(seconds_per_day: c_int) {
 
     let new_day_in_ticks = seconds_per_day * (CLOCK_BASE_FRAMERATE as i32);
 
-    with_game_clock(|clock| {
+    with_game_clock(|clock, _| {
         let new_tick_count = if clock.day_in_ticks == 0 {
             new_day_in_ticks as i16
         } else if clock.tick_count == 0 {
@@ -171,7 +172,7 @@ fn tick(clock: &mut ClockState) -> bool {
 pub unsafe extern "C" fn rust_clock_tick() {
     // Don't log every tick - too noisy
 
-    let changed_day = with_game_clock(tick);
+    let changed_day = with_game_clock(|clock, _| tick(clock));
     if changed_day {
         #[cfg(not(test))]
         crate::time::clock_abi::live::finish_clock_day();
@@ -187,11 +188,11 @@ pub unsafe extern "C" fn rust_clock_advance_days(days: c_int) {
     log_clock_bridge(&format!("RUST_CLOCK_MOVE: {} days", days));
 
     for _ in 0..days {
-        with_game_clock(next_clock_day_internal);
+        with_game_clock(|clock, _| next_clock_day_internal(clock));
         #[cfg(not(test))]
         crate::time::clock_abi::live::finish_clock_day();
     }
-    with_game_clock(|clock| clock.tick_count = clock.day_in_ticks);
+    with_game_clock(|clock, _| clock.tick_count = clock.day_in_ticks);
 }
 
 // Lock the game clock (for debugging)
@@ -211,7 +212,7 @@ pub extern "C" fn rust_clock_unlock() {
 pub extern "C" fn rust_clock_is_running() -> c_int {
     log_clock_bridge("RUST_CLOCK_RUNNING");
 
-    with_game_clock(|clock| {
+    with_game_clock(|clock, _| {
         if clock.day_in_ticks != 0 {
             1 // TRUE (running)
         } else {

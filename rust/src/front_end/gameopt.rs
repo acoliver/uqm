@@ -790,7 +790,7 @@ pub(crate) mod runtime {
         } else {
             let mut old_rect: RECT = mem::zeroed();
             let mut buf: [UNICODE; 256] = [0; 256];
-            let saved = WorldData::current().read(super::preview::SavedState::capture);
+            let saved = crate::engine::World::current().write(super::preview::SavedState::capture);
             let old_context = SetContext(Kernel::current().read(|owner| owner.status_context));
             GetContextClipRect(&mut old_rect);
             r.corner.x = (SIS_ORG_X as i32
@@ -802,7 +802,7 @@ pub(crate) mod runtime {
             r.extent.width = STATUS_WIDTH as COORD;
             r.extent.height = (ScreenHeight - (SAFE_Y as i32 * 2)) as COORD;
             SetContextClipRect(&mut r);
-            WorldData::current().write(|world| super::preview::install(world, &*p_sd));
+            crate::engine::World::current().write(|world| super::preview::install(world, &*p_sd));
             DateToString(
                 buf.as_mut_ptr(),
                 buf.len(),
@@ -967,7 +967,7 @@ pub(crate) mod runtime {
             t.CharCount = COUNT::MAX;
             font_DrawText(&mut t);
             SetContext(old_context);
-            WorldData::current().write(|world| saved.restore(world));
+            crate::engine::World::current().write(|world| saved.restore(world));
         }
         UnbatchGraphics();
     }

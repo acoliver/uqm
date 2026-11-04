@@ -10,17 +10,16 @@ use crate::c_bindings::global_state::{NODE_INFO, PLANET_DESC, SOLARSYS_STATE};
 use crate::comm::dispatch::{conv, ship};
 use crate::planet_side::report_adapter::{DiscoveryReportPort, ReportDisposition};
 use crate::planets::c_api::{
-    built_ship_count, clone_infinite_ship_into_built_queue, clone_named_ship_into_built_queue,
-    free_lander_font, init_communication, load_planet_default_surface, load_ruins_story,
-    load_starbase_report, put_group_info, start_sphere_tracking, LiveGame,
+    built_ship_count, clone_infinite_ship_into_built_queue, free_lander_font, init_communication,
+    load_planet_default_surface, load_ruins_story, load_starbase_report, start_sphere_tracking,
+    LiveGame,
 };
 use crate::planets::consts::star_color;
 use crate::planets::ffi::{blank_node, node_or, sys_gen_rng};
 use crate::planets::generate::andro;
 use crate::planets::generate::chmmr::{self, ChmmrSite};
-use crate::planets::generate::default::Npcs;
 use crate::planets::generate::exports::discovery_report;
-use crate::planets::generate::shof::{self, ShofixtiSite};
+use crate::planets::generate::shof;
 use crate::planets::generate::special::{LiveStory, Story};
 use crate::planets::generate::special_exports::{body_of, lay_out_planets, orbit_world};
 use crate::planets::generate::vtable::{GenerateFunctions, DEFAULT_HOOKS};
@@ -177,27 +176,16 @@ unsafe extern "C" fn chmmr_orbital(system: *mut SOLARSYS_STATE, world: *mut PLAN
     })
 }
 
-impl ShofixtiSite for LiveGame {
-    fn clone_shofixti_named(&mut self, name_index: u8) {
-        // SAFETY: game thread, with the fleet queue initialised.
-        unsafe { clone_named_ship_into_built_queue(u16::from(ship::SHOFIXTI_SHIP), name_index) };
-    }
-    fn put_group_info(&mut self, offset: u32) -> u32 {
-        // SAFETY: game thread.
-        unsafe { put_group_info(offset) }
-    }
+unsafe fn shof_init_npcs(owner: &mut crate::engine::World, _system: *mut SOLARSYS_STATE) -> bool {
+    shof::init_npcs(&mut crate::planets::c_api::NpcWorld::new(owner))
 }
 
-unsafe extern "C" fn shof_init_npcs(_system: *mut SOLARSYS_STATE) -> bool {
-    shof::init_npcs(&mut LiveStory, &mut LiveGame)
+unsafe fn shof_reinit_npcs(owner: &mut crate::engine::World, _system: *mut SOLARSYS_STATE) -> bool {
+    shof::reinit_npcs(&mut crate::planets::c_api::NpcWorld::new(owner))
 }
 
-unsafe extern "C" fn shof_reinit_npcs(_system: *mut SOLARSYS_STATE) -> bool {
-    shof::reinit_npcs(&LiveStory, &mut LiveGame)
-}
-
-unsafe extern "C" fn shof_uninit_npcs(_system: *mut SOLARSYS_STATE) -> bool {
-    shof::uninit_npcs(&mut LiveStory, &mut LiveGame)
+unsafe fn shof_uninit_npcs(owner: &mut crate::engine::World, _system: *mut SOLARSYS_STATE) -> bool {
+    shof::uninit_npcs(&mut crate::planets::c_api::NpcWorld::new(owner))
 }
 
 unsafe extern "C" fn shof_planets(system: *mut SOLARSYS_STATE) -> bool {

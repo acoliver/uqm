@@ -64,12 +64,10 @@ pub(crate) mod live {
     }
 
     fn notify_others(cx: &mut crate::engine::battle::Cx<'_>, race: u16, target: u8) {
-        let mut handle = cx.navigation().game.ip_group_q.head;
-        while !handle.is_null() {
-            let pointer = std::ptr::NonNull::new(handle.cast::<IP_GROUP>())
-                .unwrap_or_else(|| panic!("linked group"));
-            let mut group = *cx.group_record(pointer);
-            handle = group.succ;
+        let mut next = cx.world.ip_groups_ref().head();
+        while let Some(id) = next {
+            let mut group = *cx.world.ip_groups_ref().get(id);
+            next = cx.world.ip_groups_ref().succ(id);
             if group.race_id as u16 != race {
                 continue;
             }
@@ -95,7 +93,7 @@ pub(crate) mod live {
                 group.task |= IGNORE_FLAGSHIP as u8;
                 group.dest_loc = target;
             }
-            *cx.group_record_mut(pointer) = group;
+            *cx.world.ip_groups().get_mut(id) = group;
         }
     }
 

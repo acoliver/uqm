@@ -43,8 +43,9 @@ use std::fmt;
 use std::mem::{align_of, size_of};
 
 use crate::collections::queue::{LinkLayout, Queue};
+
 use crate::comm::dispatch::{
-    production_captain_name, CFleetInfo, CPoint, CShipFragment, INFINITE_FLEET, START_ENCOUNTER,
+    production_captain_name, CPoint, CShipFragment, INFINITE_FLEET, START_ENCOUNTER,
     START_INTERPLANETARY,
 };
 use crate::engine::battle::link_queue::{LinkQueue, QueueRecord};
@@ -52,11 +53,6 @@ use crate::engine::world::queues::{FleetInfo, Fragment, ShipFragment};
 use crate::engine::World;
 use crate::savegame::types::{Point, RaceEntry, ShipFragmentEntry};
 use crate::time::clock_bridge::NUM_EVENTS;
-
-const _: () = {
-    assert!(size_of::<Queue>() == size_of::<Queue>());
-    assert!(align_of::<Queue>() == align_of::<Queue>());
-};
 
 /// `MAX_BUILT_SHIPS` (sis.h): hangar slots, so the bound of an escort's index.
 pub const MAX_BUILT_SHIPS: u8 = 12;
@@ -155,15 +151,6 @@ pub(crate) trait QueueElement {
     fn succ(&self) -> *mut c_void;
 }
 
-impl QueueElement for CFleetInfo {
-    fn pred(&self) -> *mut c_void {
-        self.pred
-    }
-    fn succ(&self) -> *mut c_void {
-        self.succ
-    }
-}
-
 impl QueueElement for CShipFragment {
     fn pred(&self) -> *mut c_void {
         self.pred
@@ -173,13 +160,6 @@ impl QueueElement for CShipFragment {
     }
 }
 
-/// Slots of a queue that really is a pool of `T`.
-pub(super) fn pool_slots<T: QueueElement>(
-    queue: &Queue,
-    kind: QueueKind,
-) -> Result<usize, QueueError> {
-    pool_slots_layout(queue, kind, size_of::<T>(), align_of::<T>())
-}
 fn pool_slots_layout(
     queue: &Queue,
     kind: QueueKind,

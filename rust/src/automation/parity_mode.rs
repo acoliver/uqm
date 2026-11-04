@@ -17,7 +17,7 @@ pub(super) fn capture(
     value(fields, "mode", "battle_group_ref", game.battle_group_ref);
     story(fields, world.story.as_ref());
     events(fields, &world.clock);
-    groups(fields, &game.ip_group_q, journal);
+    groups(fields, world, journal);
 }
 
 pub(super) fn global(fields: &mut Fields, state: &GlobalState) {
@@ -117,25 +117,15 @@ fn events(fields: &mut Fields, clock: &crate::engine::clock::GameClock) {
 }
 
 #[cfg(not(test))]
-fn groups(
-    fields: &mut Fields,
-    queue: &crate::collections::queue::Queue,
-    journal: &mut super::parity::Journal,
-) {
-    use crate::savegame::runtime::{
-        groups::CIpGroup,
-        queues::{walk, QueueKind},
-    };
-    if queue.pq_tab.is_null() {
-        return;
-    }
-    for pointer in walk::<CIpGroup>(queue, QueueKind::IpGroups)
-        .unwrap_or_else(|error| panic!("IP group queue: {error}"))
-    {
-        // SAFETY: the pool walker checked membership, size, alignment and link order.
-        let group = unsafe { &*pointer };
-        journal.register_parent(pointer as usize, format!("group:{}", group.group_id));
-        journal.owner(pointer as usize, -1, u32::from(group.race_id) + 1);
+fn groups(fields: &mut Fields, world: &crate::engine::World, journal: &mut super::parity::Journal) {
+    let groups = world.ip_groups_ref();
+    let mut next = groups.head();
+    while let Some(id) = next {
+        next = groups.succ(id);
+        let group = groups.get(id);
+        let address = std::ptr::from_ref(group) as usize;
+        journal.register_parent(address, format!("group:{}", group.group_id));
+        journal.owner(address, -1, u32::from(group.race_id) + 1);
         let prefix = format!("mode.groups.{}", group.group_id);
         for (name, number) in [
             ("counter", i32::from(group.group_counter)),

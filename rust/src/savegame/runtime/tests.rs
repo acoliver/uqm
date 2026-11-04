@@ -432,13 +432,13 @@ fn restore_replaces_events_that_were_already_queued() {
     events::restore_events(&mut game.1, &fresh).unwrap();
 
     assert_eq!(events::capture_events(&game.1).unwrap(), fresh);
-    assert_eq!((NUM_EVENTS - &game.1.events_ref().count()), NUM_EVENTS - 1);
+    assert_eq!((NUM_EVENTS - game.1.events_ref().count()), NUM_EVENTS - 1);
 
     events::restore_events(&mut game.1, &[]).unwrap();
     assert!(events::capture_events(&game.1).unwrap().is_empty());
     assert!(game.1.events_ref().head().is_none());
     assert!(game.1.events_ref().tail().is_none());
-    assert_eq!((NUM_EVENTS - &game.1.events_ref().count()), NUM_EVENTS);
+    assert_eq!((NUM_EVENTS - game.1.events_ref().count()), NUM_EVENTS);
 }
 
 #[test]
@@ -862,7 +862,7 @@ fn restoring_a_c_written_save_puts_its_bytes_at_the_c_offsets() {
             for (index, raw) in walked.iter().enumerate() {
                 assert_eq!(raw.date_and_function, evts[index * 5..index * 5 + 5]);
             }
-            assert_eq!((NUM_EVENTS - &game.1.events_ref().count()), NUM_EVENTS - 4);
+            assert_eq!((NUM_EVENTS - game.1.events_ref().count()), NUM_EVENTS - 4);
 
             // Capturing the restored game gives back what the file held.
             game.current_activity = restored.next_activity;

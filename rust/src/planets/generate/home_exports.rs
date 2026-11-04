@@ -19,11 +19,10 @@ use crate::planets::c_api::{
     start_sphere_tracking, LiveGame,
 };
 use crate::planets::ffi::{blank_node, node_or, sys_gen_rng};
-use crate::planets::generate::default::Npcs;
 use crate::planets::generate::exports::discovery_report;
 use crate::planets::generate::home_contact::{HomeContactSite, LanderTakeoff};
 use crate::planets::generate::pet::{TalkingPetSite, UrquanEncounterSite};
-use crate::planets::generate::special::{FleetGroups, LiveStory, Story};
+use crate::planets::generate::special::{LiveStory, Story};
 use crate::planets::generate::special_exports::{body_of, lay_out_planets, orbit_world};
 use crate::planets::generate::vtable::{GenerateFunctions, DEFAULT_HOOKS};
 use crate::planets::generate::{burv, dru, ilw, orz, pet, pku, sup, thrad, zoq};
@@ -569,8 +568,8 @@ unsafe extern "C" fn orz_pickup(
     )
 }
 
-unsafe extern "C" fn zoq_init_npcs(_system: *mut SOLARSYS_STATE) -> bool {
-    zoq::init_npcs(&LiveStory, &mut LiveGame)
+unsafe fn zoq_init_npcs(owner: &mut crate::engine::World, _system: *mut SOLARSYS_STATE) -> bool {
+    zoq::init_npcs(&mut crate::planets::c_api::NpcWorld::new(owner))
 }
 
 unsafe extern "C" fn zoq_planets(system: *mut SOLARSYS_STATE) -> bool {

@@ -350,7 +350,7 @@ fn fleet(group_ref: u32) -> FakeFleet {
 fn colony_builds_its_group_once_and_parks_it_in_orbit() {
     let mut story = FakeStory::default();
     let mut host = fleet(0);
-    assert!(colony::init_npcs(&mut story, &mut host));
+    assert!(colony::init_npcs(&mut (&mut story, &mut host)));
     assert_eq!(host.built_clones, [URQUAN_SHIP]);
     assert_eq!(host.built_reinits, 1);
     assert_eq!(story.word("COLONY_GRPOFFS0"), 41);
@@ -369,7 +369,7 @@ fn colony_builds_its_group_once_and_parks_it_in_orbit() {
     let mut story = FakeStory::with(&[("COLONY_GRPOFFS0", 7)]);
     let mut host = fleet(0);
     host.groups[0].task = 3;
-    assert!(colony::init_npcs(&mut story, &mut host));
+    assert!(colony::init_npcs(&mut (&mut story, &mut host)));
     assert!(host.built_clones.is_empty());
     assert_eq!(host.group_ref, 7);
     assert_eq!(host.groups[0].task, IN_ORBIT);
@@ -380,11 +380,11 @@ fn colony_without_a_group_in_the_queue_parks_nothing() {
     let mut story = FakeStory::with(&[("COLONY_GRPOFFS0", 7)]);
     let mut host = fleet(0);
     host.groups.clear();
-    assert!(colony::init_npcs(&mut story, &mut host));
+    assert!(colony::init_npcs(&mut (&mut story, &mut host)));
     // The default init found no saved groups to resume and dropped the ref.
     let mut host = fleet(0);
     host.resume_succeeds = false;
-    assert!(colony::init_npcs(&mut story, &mut host));
+    assert!(colony::init_npcs(&mut (&mut story, &mut host)));
     assert_eq!((host.cleared, host.built_groups, host.group_ref), (1, 1, 0));
     assert_eq!(host.groups[0].task, 0);
 }
@@ -396,8 +396,7 @@ fn melnorme_known_post_reuses_or_stores_its_reference() {
     let mut host = fleet(0);
     assert!(melnorme::init_npcs(
         MELNORME0_DEFINED + 2,
-        &mut story,
-        &mut host
+        &mut (&mut story, &mut host)
     ));
     assert!(host.built_clones.is_empty());
     assert_eq!(host.group_ref, 12);
@@ -405,8 +404,7 @@ fn melnorme_known_post_reuses_or_stores_its_reference() {
     let mut host = fleet(0);
     assert!(melnorme::init_npcs(
         MELNORME0_DEFINED + 3,
-        &mut story,
-        &mut host
+        &mut (&mut story, &mut host)
     ));
     assert_eq!(host.built_clones, [MELNORME_SHIP]);
     assert_eq!(story.word("MELNORME3_GRPOFFS0"), 41);
@@ -420,8 +418,7 @@ fn melnorme_unknown_star_builds_a_group_it_cannot_remember() {
     let mut host = fleet(99);
     assert!(melnorme::init_npcs(
         MELNORME0_DEFINED_PAST_END,
-        &mut story,
-        &mut host
+        &mut (&mut story, &mut host)
     ));
     assert_eq!(host.built_clones, [MELNORME_SHIP]);
     assert_eq!((host.group_ref, host.built_reinits), (41, 1));
@@ -437,20 +434,20 @@ const MELNORME0_DEFINED_PAST_END: u8 = crate::planets::generate::melnorme::MELNO
 fn zoqfotpik_scout_builds_its_group_only_before_the_meeting() {
     let mut story = FakeStory::default();
     let mut host = fleet(0);
-    assert!(zfpscout::init_npcs(&mut story, &mut host));
+    assert!(zfpscout::init_npcs(&mut (&mut story, &mut host)));
     assert_eq!(host.built_clones, [ZOQFOTPIK_SHIP]);
     assert_eq!(story.word("ZOQFOT_GRPOFFS0"), 41);
 
     let mut story = FakeStory::with(&[("ZOQFOT_GRPOFFS0", 8)]);
     let mut host = fleet(0);
-    assert!(zfpscout::init_npcs(&mut story, &mut host));
+    assert!(zfpscout::init_npcs(&mut (&mut story, &mut host)));
     assert!(host.built_clones.is_empty());
     assert_eq!(host.group_ref, 8);
 
     // After the meeting the reference is not read at all.
     let mut story = FakeStory::with(&[("MET_ZOQFOT", 1), ("ZOQFOT_GRPOFFS0", 8)]);
     let mut host = fleet(55);
-    assert!(zfpscout::init_npcs(&mut story, &mut host));
+    assert!(zfpscout::init_npcs(&mut (&mut story, &mut host)));
     assert!(host.built_clones.is_empty());
     assert_eq!(host.group_ref, 55);
 }

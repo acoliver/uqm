@@ -13,6 +13,13 @@ use crate::planets::generate::special_exports::{body_of, orbit_world};
 use crate::planets::generate::vtable::{GenerateFunctions, DEFAULT_HOOKS};
 
 impl orbital::Queues for LiveGame {
+    fn save_ip_groups(&mut self) {
+        LiveGame.save_ip_groups();
+    }
+    fn reinit_ip_group_q(&mut self) {
+        LiveGame.reinit_ip_group_q();
+    }
+
     fn built_ship_count(&self) -> u16 {
         // SAFETY: the live built queue belongs to the game thread.
         unsafe { c_api::built_ship_count() }
@@ -24,43 +31,14 @@ struct SolOrbit {
     world: *mut PLANET_DESC,
 }
 
-impl default::Npcs for SolOrbit {
-    fn init_ip_groups(&mut self) -> bool {
-        LiveGame.init_ip_groups()
-    }
-    fn clear_battle_group_ref(&mut self) {
-        LiveGame.clear_battle_group_ref();
-    }
-    fn build_groups(&mut self) {
-        LiveGame.build_groups();
-    }
-    fn load_ip_groups(&mut self) {
-        LiveGame.load_ip_groups();
-    }
+impl orbital::Queues for SolOrbit {
     fn save_ip_groups(&mut self) {
         LiveGame.save_ip_groups();
-    }
-    fn reinit_npc_built_ship_q(&mut self) {
-        LiveGame.reinit_npc_built_ship_q();
     }
     fn reinit_ip_group_q(&mut self) {
         LiveGame.reinit_ip_group_q();
     }
-    fn yehat_civil_war(&self) -> bool {
-        LiveGame.yehat_civil_war()
-    }
-    fn encounter_race(&self) -> i16 {
-        LiveGame.encounter_race()
-    }
-    fn for_each_ip_group(
-        &mut self,
-        visit: &mut dyn FnMut(&mut crate::c_bindings::global_state::IP_GROUP),
-    ) {
-        LiveGame.for_each_ip_group(visit);
-    }
-}
 
-impl orbital::Queues for SolOrbit {
     fn built_ship_count(&self) -> u16 {
         orbital::Queues::built_ship_count(&LiveGame)
     }
@@ -150,11 +128,11 @@ impl sol::Pickup for SolPickup {
 
 // SAFETY (all hooks): callers supply the live system and one of its worlds
 // on the game thread; descriptor links and generator globals are initialised.
-unsafe extern "C" fn init(_system: *mut SOLARSYS_STATE) -> bool {
-    sol::init_npcs(&mut LiveStory, &mut LiveGame)
+unsafe fn init(owner: &mut crate::engine::World, _system: *mut SOLARSYS_STATE) -> bool {
+    sol::init_npcs(&mut crate::planets::c_api::NpcWorld::new(owner))
 }
-unsafe extern "C" fn reinit(_system: *mut SOLARSYS_STATE) -> bool {
-    sol::reinit_npcs(&LiveStory, &mut LiveGame)
+unsafe fn reinit(owner: &mut crate::engine::World, _system: *mut SOLARSYS_STATE) -> bool {
+    sol::reinit_npcs(&mut crate::planets::c_api::NpcWorld::new(owner))
 }
 unsafe extern "C" fn planets(system: *mut SOLARSYS_STATE) -> bool {
     let count = sol::generate_planets(sys_gen_rng(), &mut (*system).PlanetDesc);

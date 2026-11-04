@@ -11,6 +11,7 @@ use crate::planets::generate::exports;
 /// `bool (*)(SOLARSYS_STATE *)`: `initNpcs`, `reinitNpcs`, `uninitNpcs` and
 /// `generatePlanets`.
 pub type SystemHook = Option<unsafe extern "C" fn(*mut SOLARSYS_STATE) -> bool>;
+pub type NpcsHook = Option<unsafe fn(&mut crate::engine::World, *mut SOLARSYS_STATE) -> bool>;
 /// `bool (*)(SOLARSYS_STATE *, PLANET_DESC *)`: `generateMoons`,
 /// `generateOrbital`.
 pub type WorldHook = Option<unsafe extern "C" fn(*mut SOLARSYS_STATE, *mut PLANET_DESC) -> bool>;
@@ -27,9 +28,9 @@ pub type PickupHook =
 /// C `GenerateFunctions`: thirteen hook pointers in this order.
 #[repr(C)]
 pub struct GenerateFunctions {
-    pub init_npcs: SystemHook,
-    pub reinit_npcs: SystemHook,
-    pub uninit_npcs: SystemHook,
+    pub init_npcs: NpcsHook,
+    pub reinit_npcs: NpcsHook,
+    pub uninit_npcs: NpcsHook,
     pub generate_planets: SystemHook,
     pub generate_moons: WorldHook,
     pub generate_name: NameHook,

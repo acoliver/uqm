@@ -12,16 +12,15 @@ use std::ffi::CStr;
 use crate::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC, SOLARSYS_STATE};
 use crate::math::RandomContext;
 use crate::planets::c_api::{
-    built_ship_count, clone_infinite_ship_into_built_queue, current_star_index, init_communication,
-    load_lander_scene, load_planet_default_surface, notify_others_all_clear,
-    star_indexes_before_current, start_sphere_tracking, LiveGame, SLYLANDRO_HOME_CONVERSATION,
-    SYREEN_CONVERSATION, YEHAT_CONVERSATION, YEHAT_SHIP,
+    built_ship_count, clone_infinite_ship_into_built_queue, init_communication, load_lander_scene,
+    load_planet_default_surface, notify_others_all_clear, star_indexes_before_current,
+    start_sphere_tracking, LiveGame, SLYLANDRO_HOME_CONVERSATION, SYREEN_CONVERSATION,
+    YEHAT_CONVERSATION, YEHAT_SHIP,
 };
 use crate::planets::consts::star_color;
 use crate::planets::ffi::{
     analysis_context, blank_node, current_star_type, node_or, plan_data, sys_gen_rng,
 };
-use crate::planets::generate::default::Npcs;
 use crate::planets::generate::exports::{discovery_report, planet_index};
 use crate::planets::generate::special::{Body, LiveStory, Orbit, Story};
 use crate::planets::generate::vtable::{GenerateFunctions, DEFAULT_HOOKS};
@@ -333,8 +332,8 @@ unsafe extern "C" fn yehat_pickup(
     yehat::pickup_energy(body_of(system, world), &mut discovery_report(system))
 }
 
-unsafe extern "C" fn colony_init_npcs(_system: *mut SOLARSYS_STATE) -> bool {
-    colony::init_npcs(&mut LiveStory, &mut LiveGame)
+unsafe fn colony_init_npcs(owner: &mut crate::engine::World, _system: *mut SOLARSYS_STATE) -> bool {
+    colony::init_npcs(&mut crate::planets::c_api::NpcWorld::new(owner))
 }
 
 unsafe extern "C" fn colony_planets(system: *mut SOLARSYS_STATE) -> bool {
@@ -349,8 +348,14 @@ unsafe extern "C" fn colony_orbital(system: *mut SOLARSYS_STATE, world: *mut PLA
     })
 }
 
-unsafe extern "C" fn melnorme_init_npcs(_system: *mut SOLARSYS_STATE) -> bool {
-    melnorme::init_npcs(current_star_index(), &mut LiveStory, &mut LiveGame)
+unsafe fn melnorme_init_npcs(
+    owner: &mut crate::engine::World,
+    _system: *mut SOLARSYS_STATE,
+) -> bool {
+    melnorme::init_npcs(
+        (*owner.star_pointer(crate::planets::starmap::current_catalog())).index,
+        &mut crate::planets::c_api::NpcWorld::new(owner),
+    )
 }
 
 unsafe extern "C" fn rainbow_planets(system: *mut SOLARSYS_STATE) -> bool {
@@ -396,12 +401,18 @@ unsafe extern "C" fn syreen_orbital(system: *mut SOLARSYS_STATE, world: *mut PLA
     })
 }
 
-unsafe extern "C" fn zfpscout_init_npcs(_system: *mut SOLARSYS_STATE) -> bool {
-    zfpscout::init_npcs(&mut LiveStory, &mut LiveGame)
+unsafe fn zfpscout_init_npcs(
+    owner: &mut crate::engine::World,
+    _system: *mut SOLARSYS_STATE,
+) -> bool {
+    zfpscout::init_npcs(&mut crate::planets::c_api::NpcWorld::new(owner))
 }
 
-unsafe extern "C" fn zfpscout_reinit_npcs(_system: *mut SOLARSYS_STATE) -> bool {
-    zfpscout::reinit_npcs(&mut LiveGame)
+unsafe fn zfpscout_reinit_npcs(
+    owner: &mut crate::engine::World,
+    _system: *mut SOLARSYS_STATE,
+) -> bool {
+    zfpscout::reinit_npcs(&mut crate::planets::c_api::NpcWorld::new(owner))
 }
 
 unsafe extern "C" fn trap_planets(system: *mut SOLARSYS_STATE) -> bool {

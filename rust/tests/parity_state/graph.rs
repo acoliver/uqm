@@ -357,51 +357,38 @@ impl Drop for ElementRecord {
 }
 
 pub(super) fn event_queue_fields(observer: &AutomationObserver, directory: &Path) {
-    use uqm_rust::{
-        collections::queue::{InitQueue, UninitQueue},
-        savegame::{runtime::events::restore_events, types::EventEntry},
-        time::clock_bridge::{CEvent, NUM_EVENTS},
-    };
-    // SAFETY: this test owns the idle game clock queue until it is uninitialized.
-    unsafe {
-        uqm_rust::engine::WorldData::current().write(|world| {
-            let queue = &raw mut world.game.game_clock.event_q;
-            assert!(InitQueue(
-                queue,
-                NUM_EVENTS as u16,
-                std::mem::size_of::<CEvent>() as u16
-            ));
-            let first = EventEntry {
-                day_index: 8,
-                month_index: 9,
-                year_index: 2161,
-                func_index: 1,
-            };
-            let second = EventEntry {
-                day_index: 10,
-                month_index: 9,
-                year_index: 2161,
-                func_index: 2,
-            };
-            restore_events(&mut *queue, &[first, second])
-                .unwrap_or_else(|error| panic!("restore test events: {error}"));
-        });
-        let (fields, _) = snapshot(observer, directory);
-        assert_eq!(fields["mode.events.initialized"], "true");
-        assert_eq!(fields["mode.events.count"], "2");
-        for (index, day, function) in [(0, 8, 1), (1, 10, 2)] {
-            assert_eq!(fields[&format!("mode.events.{index}.day")], day.to_string());
-            assert_eq!(fields[&format!("mode.events.{index}.month")], "9");
-            assert_eq!(fields[&format!("mode.events.{index}.year")], "2161");
-            assert_eq!(
-                fields[&format!("mode.events.{index}.function")],
-                function.to_string()
-            );
-        }
-        uqm_rust::engine::WorldData::current().write(|world| {
-            assert!(UninitQueue(&raw mut world.game.game_clock.event_q));
-        });
+    use uqm_rust::savegame::{runtime::events::restore_events, types::EventEntry};
+
+    uqm_rust::engine::World::current().write(|world| {
+        world.clock.init();
+        let first = EventEntry {
+            day_index: 8,
+            month_index: 9,
+            year_index: 2161,
+            func_index: 1,
+        };
+        let second = EventEntry {
+            day_index: 10,
+            month_index: 9,
+            year_index: 2161,
+            func_index: 2,
+        };
+        restore_events(&mut world.clock, &[first, second])
+            .unwrap_or_else(|error| panic!("restore test events: {error}"));
+    });
+    let (fields, _) = snapshot(observer, directory);
+    assert_eq!(fields["mode.events.initialized"], "true");
+    assert_eq!(fields["mode.events.count"], "2");
+    for (index, day, function) in [(0, 8, 1), (1, 10, 2)] {
+        assert_eq!(fields[&format!("mode.events.{index}.day")], day.to_string());
+        assert_eq!(fields[&format!("mode.events.{index}.month")], "9");
+        assert_eq!(fields[&format!("mode.events.{index}.year")], "2161");
+        assert_eq!(
+            fields[&format!("mode.events.{index}.function")],
+            function.to_string()
+        );
     }
+    uqm_rust::engine::World::current().write(|world| world.clock.uninit());
 }
 
 pub(super) fn non_ship_parent_fields(observer: &AutomationObserver, directory: &Path) {
