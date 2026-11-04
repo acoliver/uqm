@@ -7,6 +7,10 @@ mod screen;
 #[cfg(not(test))]
 use screen::{finish_star_map, prepare_star_map};
 
+#[cfg(not(test))]
+use crate::engine::battle::link_queue::{LinkId, LinkQueue};
+#[cfg(not(test))]
+use crate::engine::world::queues::{Fleet, FleetInfo};
 use crate::engine::Kernel;
 #[cfg(not(test))]
 use crate::engine::{StoryKey, World, WorldData};
@@ -22,9 +26,9 @@ use crate::graphics::{
         BatchGraphics, LoadIntoExtraScreen, ScreenTransition, SetTransitionSource, UnbatchGraphics,
     },
 };
-use crate::ships::native::abi::{Color, EXTENT, FRAME, MENU_STATE, POINT, RECT, STAMP};
 #[cfg(not(test))]
-use crate::ships::native::abi::{FLEET_INFO, QUEUE, TEXT};
+use crate::ships::native::abi::TEXT;
+use crate::ships::native::abi::{Color, EXTENT, FRAME, MENU_STATE, POINT, RECT, STAMP};
 
 use crate::graphics::{
     context_abi::{SetContext, SetContextForeGroundColor},

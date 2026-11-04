@@ -1,7 +1,5 @@
 use uqm_rust::app::bridge;
 use uqm_rust::engine::{Game, World};
-use uqm_rust::starbase::cffi::CffiPlatform;
-use uqm_rust::starbase::platform::{Platform, StarbaseError};
 
 #[test]
 #[serial_test::serial]
@@ -23,40 +21,40 @@ fn starbase_and_probe_setup_use_owned_campaign_storage() {
     // SAFETY: the serialized fixture owns its published game; queue operations do not enter UI.
     unsafe {
         bridge::with_game(&mut game, || {
-            let platform = CffiPlatform;
-            assert_eq!(platform.race_templates().unwrap().len(), 24);
-            assert!(platform.escorts().unwrap().is_empty());
-            assert!(platform.add_escort(0, 7).unwrap());
-            assert!(platform.add_escort(0, 3).unwrap());
-            assert!(matches!(
-                platform.add_escort(0, 3),
-                Err(StarbaseError::EscortQueue(_))
-            ));
-            let escorts = platform.escorts().unwrap();
-            assert_eq!(
-                escorts.iter().map(|ship| ship.slot).collect::<Vec<_>>(),
-                [3, 7]
-            );
-            assert!(escorts
-                .iter()
-                .all(|ship| ship.crew_level == 1 && ship.max_crew == 18));
-            platform.set_escort_crew(3, 5).unwrap();
-            assert_eq!(platform.escorts().unwrap()[0].crew_level, 5);
-            let removed = World::current().read(|world| world.built_ships_ref().head().unwrap());
-            platform.remove_escort(3).unwrap();
-            assert!(!World::current().read(|world| world.built_ships_ref().contains(removed)));
-            assert!(matches!(
-                platform.remove_escort(3),
-                Err(StarbaseError::EscortSlot(3))
-            ));
-            for slot in 0..12 {
-                if slot != 7 {
-                    assert!(platform.add_escort(0, slot).unwrap());
+            World::current().write(|world| {
+                let fleets = world.avail_races_ref();
+                assert_eq!(fleets.count(), 24);
+                let template = *fleets.get(fleets.at(0).unwrap());
+                let mut ships = world.built_ships();
+                assert_eq!(ships.count(), 0);
+                let mut captain = 0;
+                let mut name = || {
+                    captain += 1;
+                    captain
+                };
+                for slot in [3, 7] {
+                    let id = ships.clone_fragment(&template, 0, 1, &mut name).unwrap();
+                    ships.get_mut(id).index = slot;
                 }
-            }
-            assert_eq!(platform.escorts().unwrap().len(), 12);
-            assert!(!platform.add_escort(0, 12).unwrap());
-            assert_eq!(platform.escorts().unwrap().len(), 12);
+                let first = ships.head().unwrap();
+                let second = ships.succ(first).unwrap();
+                assert_eq!([ships.get(first).index, ships.get(second).index], [3, 7]);
+                for id in [first, second] {
+                    assert_eq!(ships.get(id).crew_level, 1);
+                    assert_eq!(ships.get(id).max_crew, 18);
+                }
+                ships.get_mut(first).crew_level = 5;
+                assert_eq!(ships.get(first).crew_level, 5);
+                ships.remove(first);
+                ships.free(first);
+                assert!(!ships.contains(first));
+                for _ in 1..12 {
+                    assert!(ships.clone_fragment(&template, 0, 1, &mut name).is_some());
+                }
+                assert_eq!(ships.count(), 12);
+                assert!(ships.clone_fragment(&template, 0, 1, &mut name).is_none());
+                assert_eq!(ships.count(), 12);
+            });
             uqm_rust::comm::dispatch::prepare_automation_sol_probe_encounter().unwrap();
             let first = World::current().read(|world| world.npc_built_ships_ref().head().unwrap());
             uqm_rust::comm::dispatch::prepare_automation_sol_probe_encounter().unwrap();

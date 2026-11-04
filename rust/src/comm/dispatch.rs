@@ -23,11 +23,11 @@ use crate::engine::{
 };
 use std::os::raw::c_void;
 
-use crate::c_bindings::{assert_c_layout, global_state};
-use crate::collections::queue::CountLinks;
-use crate::collections::queue::{AllocLink, HLink, PutQueue, Queue, ReinitQueue};
+use crate::c_bindings::global_state;
 #[cfg(not(test))]
 use crate::comm::locdata::{read_locdata, set_comm_data};
+use crate::engine::battle::link_queue::{LinkId, LinkQueue};
+use crate::engine::world::queues::{Fleet, Fragment};
 
 // ---------------------------------------------------------------------------
 // Resource and geometry types used by retained presentation calls
@@ -413,18 +413,6 @@ fn npc_built_ship_queue<R>(edit: impl FnOnce(&mut LinkQueue<'_, Fragment, 14>) -
     World::current().write(|world| edit(&mut world.npc_built_ships()))
 }
 
-#[cfg(not(test))]
-fn encounter_queue<R>(edit: impl FnOnce(&mut LinkQueue<'_, Encounter, 16>) -> R) -> R {
-    World::current().write(|world| edit(&mut world.encounters()))
-}
-
-/// C: `LockEncounter(h, &ptr)` = `*(ppe) = (ENCOUNTER*)LockLink(...)`
-#[inline]
-unsafe fn lock_encounter(_h: HLink) -> *mut CEncounter {
-    // LockLink is just a cast in QUEUE_TABLE mode
-    _h as *mut CEncounter
-}
-
 // ---------------------------------------------------------------------------
 // RaceCommunication — ported from comm.c:1503
 // ---------------------------------------------------------------------------
@@ -438,9 +426,8 @@ unsafe fn lock_encounter(_h: HLink) -> *mut CEncounter {
 pub unsafe fn race_communication(cx: &mut Cx<'_>, io: &mut Io<'_>) {
     if lobyte(cx.world.activity()) == IN_LAST_BATTLE {
         // Going into talking pet conversation
-        let npc_q = cx.with_legacy(npc_built_ship_queue);
-        cx.with_legacy(|| ReinitQueue(npc_q));
-        cx.with_legacy(|| clone_ship_fragment(ship::SAMATRA_SHIP, npc_q, 0));
+        cx.world.npc_built_ships().reinit();
+        clone_npc_fragment(cx.world, ship::SAMATRA_SHIP, 0);
         init_communication(cx, io, conv::TALKING_PET);
 
         let activity = cx.world.activity();
@@ -485,34 +472,24 @@ pub unsafe fn race_communication(cx: &mut Cx<'_>, io: &mut Io<'_>) {
         return;
     }
 
-    let mut h_encounter: HLink = std::ptr::null_mut();
-
-    if cx.with_legacy(in_hq_space) {
-        let npc_q = cx.with_legacy(npc_built_ship_queue);
-        cx.with_legacy(|| ReinitQueue(npc_q));
-
+    let mut encounter = None;
+    if lobyte(cx.world.activity()) == IN_HYPERSPACE {
+        cx.world.npc_built_ships().reinit();
         if cx.world.story_state(StoryKey::ARILOU_SPACE_SIDE) >= 2 {
             init_communication(cx, io, conv::ARILOU);
             return;
         }
-
-        // Encounter with a black globe in HS, prepare enemy ship list
-        h_encounter = cx.with_legacy(|| get_head_encounter());
-        if !h_encounter.is_null() {
-            let enc_ptr = lock_encounter(h_encounter);
-            let num_ships = (*enc_ptr).num_ships;
-            for i in 0..num_ships {
-                let race_id = (*enc_ptr).race_id;
-                let crew_level = (*enc_ptr).ship_list[i as usize].crew_level;
-                cx.with_legacy(|| clone_ship_fragment(race_id, npc_q, crew_level));
+        let queue = cx.world.encounters_ref();
+        if let Some(id) = queue.head() {
+            let record = *queue.get(id);
+            encounter = Some(id);
+            for info in &record.ship_list[..usize::from(record.num_ships)] {
+                clone_npc_fragment(cx.world, record.race_id, info.crew_level);
             }
         }
     }
-
-    // First ship in the npc queue defines which alien race the player talks to
-    let npc_q = cx.with_legacy(npc_built_ship_queue);
-    let h_star_ship = get_head_link(npc_q);
-    if h_star_ship.is_null() {
+    let queue = cx.world.npc_built_ships_ref();
+    let Some(i) = queue.head().map(|id| queue.get(id).race_id) else {
         return;
     };
 
@@ -532,16 +509,15 @@ pub unsafe fn race_communication(cx: &mut Cx<'_>, io: &mut Io<'_>) {
     }
 
     if i == ship::CHMMR_SHIP {
-        cx.with_legacy(|| ReinitQueue(npc_q));
+        cx.world.npc_built_ships().reinit();
     }
     if lobyte(activity) == IN_INTERPLANETARY {
         if i == ship::SLYLANDRO_SHIP && status == 0 {
-            cx.with_legacy(|| ReinitQueue(npc_q));
+            cx.world.npc_built_ships().reinit();
         }
-    } else if !h_encounter.is_null() {
-        cx.with_legacy(|| encounter::update_fleet(h_encounter, npc_q, status));
-
-        cx.with_legacy(|| ReinitQueue(npc_q));
+    } else if let Some(id) = encounter {
+        encounter::update_fleet(cx.world, id, status);
+        cx.world.npc_built_ships().reinit();
     }
 }
 
@@ -663,11 +639,22 @@ fn run_encounter(cx: &mut Cx<'_>, io: &mut Io<'_>, which_comm: u32, ship_type: u
 // ---------------------------------------------------------------------------
 
 fn clone_ship_fragment(ship_index: u8, crew_level: u16) -> Option<LinkId<Fragment>> {
-    let template =
-        avail_race_queue(|queue| queue.at(usize::from(ship_index)).map(|id| *queue.get(id)))?;
-    npc_built_ship_queue(|queue| {
-        queue.clone_fragment(&template, ship_index, crew_level, production_captain_name)
-    })
+    World::current().write(|world| clone_npc_fragment(world, ship_index, crew_level))
+}
+
+pub(crate) fn clone_npc_fragment(
+    world: &mut World,
+    ship_index: u8,
+    crew_level: u16,
+) -> Option<LinkId<Fragment>> {
+    let fleets = world.avail_races_ref();
+    let template = *fleets.get(fleets.at(usize::from(ship_index))?);
+    world.npc_built_ships().clone_fragment(
+        &template,
+        ship_index,
+        crew_level,
+        production_captain_name,
+    )
 }
 
 /// `PickCaptainName ()` as the running game draws it.
@@ -701,7 +688,7 @@ pub unsafe fn prepare_automation_sol_probe_encounter() -> Result<(), &'static st
 /// Initialized fleets and SIS must be exclusively owned by the game thread.
 #[cfg(not(test))]
 pub(crate) unsafe fn prepare_samatra_dev_fixture() -> Result<(), &'static str> {
-    built_ship_queue(|queue| queue.reinit());
+    World::current().write(|world| world.built_ships().reinit());
     let added = crate::engine::World::current().write(|world| {
         crate::battle::build_native::add_escort_ships(world, 4, 12, pick_captain_name)
     });

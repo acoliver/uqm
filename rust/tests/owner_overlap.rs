@@ -12,9 +12,12 @@ fn public_campaign_copy_does_not_traverse_live_records() {
     let mut world = World::new();
     world.story = Some(uqm_rust::state::game_state::GameState::new());
     world.data.game.ship_stamp.frame = std::ptr::dangling_mut();
-    world.data.game.npc_built_ship_q.head = std::ptr::dangling_mut();
-    world.data.game.built_ship_q.head = std::ptr::dangling_mut();
-    world.data.game.ip_group_q.head = std::ptr::dangling_mut();
+    let id = world.npc_built_ships().alloc().unwrap();
+    world.npc_built_ships().put(id);
+    let id = world.built_ships().alloc().unwrap();
+    world.built_ships().put(id);
+    let id = world.ip_groups().alloc().unwrap();
+    world.ip_groups().put(id);
     let view = CampaignView::from_world(&world);
     assert_eq!(
         LiveCampaign {
@@ -401,23 +404,13 @@ fn display_list_initializes_with_the_entered_context_and_explicit_scale() {
 #[serial_test::serial]
 fn fleet_infinity_reads_the_supplied_world_without_publication() {
     let mut world = World::new();
-    // SAFETY: this fixture owns the fragment allocation through queue teardown.
-    unsafe {
-        assert_eq!(fleet_is_infinite(&world, 0), 0);
-        assert_eq!(fleet_is_infinite(&world, 1), 0);
-        let queue = &raw mut world.data.game.npc_built_ship_q;
-        assert_ne!(
-            InitQueue(queue, 1, mem::size_of::<SHIP_FRAGMENT>() as u16),
-            0
-        );
-        let fragment = AllocLink(queue).cast::<SHIP_FRAGMENT>();
-        assert!(!fragment.is_null());
-        (*fragment).crew_level = 7;
-        PutQueue(queue, fragment.cast());
-        assert_eq!(fleet_is_infinite(&world, 1), 0);
-        (*fragment).crew_level = u16::MAX;
-        assert_eq!(fleet_is_infinite(&world, 1), 1);
-        assert_eq!(fleet_is_infinite(&world, 0), 0);
-        UninitQueue(queue);
-    }
+    assert_eq!(fleet_is_infinite(&world, 0), 0);
+    assert_eq!(fleet_is_infinite(&world, 1), 0);
+    let id = world.npc_built_ships().alloc().unwrap();
+    world.npc_built_ships().get_mut(id).crew_level = 7;
+    world.npc_built_ships().put(id);
+    assert_eq!(fleet_is_infinite(&world, 1), 0);
+    world.npc_built_ships().get_mut(id).crew_level = u16::MAX;
+    assert_eq!(fleet_is_infinite(&world, 1), 1);
+    assert_eq!(fleet_is_infinite(&world, 0), 0);
 }

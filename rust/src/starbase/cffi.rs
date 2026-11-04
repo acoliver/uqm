@@ -417,3 +417,11 @@ impl Gfx for CffiPlatform {
         }
     }
 }
+
+pub(crate) fn built_ship_queue<R>(edit: impl FnOnce(&mut LinkQueue<'_, Fragment, 12>) -> R) -> R {
+    crate::engine::World::current().write(|world| edit(&mut world.built_ships()))
+}
+
+pub(crate) fn avail_race_queue<R>(read: impl FnOnce(&LinkQueue<'_, Fleet, 24>) -> R) -> R {
+    crate::engine::World::current().read(|world| read(&world.avail_races_ref()))
+}
