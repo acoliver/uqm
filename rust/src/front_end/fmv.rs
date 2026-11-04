@@ -2,7 +2,8 @@
 
 #[cfg(not(test))]
 pub(crate) mod runtime {
-    use super::super::intro::ShowPresentation;
+    use super::super::intro::{runtime::show_presentation, ShowPresentation};
+    use crate::engine::{battle::Cx, observe::Io};
     use crate::engine::{Kernel, WorldData};
     use crate::navigation::abi::*;
 
@@ -87,29 +88,38 @@ pub(crate) mod runtime {
         ));
     }
 
-    /// # Safety
-    /// Graphics, audio, resources and input must be initialized on the game thread.
-    #[no_mangle]
-    pub unsafe extern "C" fn Introduction() {
-        ShowPresentation(INTROPRES_STRTAB.as_ptr().cast());
-        SleepThreadUntil(FadeScreen(
-            ScreenFadeType_FadeAllToBlack,
-            (ONE_SECOND / 2) as SIZE,
-        ));
+    pub fn introduction(cx: &mut Cx<'_>, io: &mut Io<'_>) {
+        // SAFETY: the registered introduction resource is used on the initialized game thread.
+        unsafe {
+            show_presentation(cx, io, INTROPRES_STRTAB.as_ptr().cast());
+        }
+        // SAFETY: the presentation has completed before its final fade is drained.
+        cx.with_legacy(|| unsafe {
+            SleepThreadUntil(FadeScreen(
+                ScreenFadeType_FadeAllToBlack,
+                (ONE_SECOND / 2) as SIZE,
+            ));
+        });
     }
 
-    /// # Safety
-    /// Graphics, audio, resources and input must be initialized on the game thread.
-    #[no_mangle]
-    pub unsafe extern "C" fn Victory() {
-        SleepThreadUntil(FadeScreen(
-            ScreenFadeType_FadeAllToBlack,
-            (ONE_SECOND / 2) as SIZE,
-        ));
-        ShowPresentation(FINALPRES_STRTAB.as_ptr().cast());
-        FadeScreen(ScreenFadeType_FadeAllToBlack, 0);
+    pub fn victory(cx: &mut Cx<'_>, io: &mut Io<'_>) {
+        // SAFETY: the initialized game thread owns the fade transaction.
+        cx.with_legacy(|| unsafe {
+            SleepThreadUntil(FadeScreen(
+                ScreenFadeType_FadeAllToBlack,
+                (ONE_SECOND / 2) as SIZE,
+            ));
+        });
+        // SAFETY: the registered victory resource remains live throughout the presentation.
+        unsafe {
+            show_presentation(cx, io, FINALPRES_STRTAB.as_ptr().cast());
+        }
+        // SAFETY: the presentation has completed before the final fade is applied.
+        cx.with_legacy(|| unsafe {
+            FadeScreen(ScreenFadeType_FadeAllToBlack, 0);
+        });
     }
 }
 
 #[cfg(not(test))]
-pub use runtime::{DoShipSpin, Introduction, SplashScreen, Victory};
+pub use runtime::{introduction, victory, DoShipSpin, SplashScreen};

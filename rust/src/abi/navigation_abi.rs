@@ -2784,11 +2784,7 @@ extern "C" {
 #[cfg(not(test))]
 pub use crate::front_end::fmv::runtime::SplashScreen;
 
-#[cfg(not(test))]
-pub use crate::front_end::fmv::runtime::Introduction;
 
-#[cfg(not(test))]
-pub use crate::front_end::fmv::runtime::Victory;
 
 #[cfg(not(test))]
 pub use crate::front_end::fmv::runtime::DoShipSpin;

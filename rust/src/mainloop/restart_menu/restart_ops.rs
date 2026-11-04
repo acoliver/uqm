@@ -677,16 +677,10 @@ impl RestartMenuOps for CffiOps<'_, '_, '_> {
         self.owned(|cx, io| crate::front_end::credits::credits(cx, io, victory));
     }
     fn victory(&self) {
-        self.legacy(|| {
-            // SAFETY: Victory displays the victory sequence.
-            unsafe { c_extern::Victory() }
-        })
+        self.owned(crate::front_end::fmv::victory);
     }
     fn introduction(&self) {
-        self.legacy(|| {
-            // SAFETY: invoked on the initialized game thread before a new campaign.
-            unsafe { crate::front_end::fmv::Introduction() }
-        })
+        self.owned(crate::front_end::fmv::introduction);
     }
     fn splash_screen(&self) {
         self.legacy(|| {
