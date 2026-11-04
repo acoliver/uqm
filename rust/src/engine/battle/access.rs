@@ -616,8 +616,11 @@ impl Cx<'_> {
 
 #[cfg(not(test))]
 impl Cx<'_> {
-    pub(crate) fn captain_pointer(&mut self, ship: ShipId) -> *mut super::record::CAPTAIN_STUFF {
-        &raw mut self.desc_mut(ship).ship_data.captain_control
+    pub(crate) fn captain_controls_mut(
+        &mut self,
+        ship: ShipId,
+    ) -> &mut super::record::CAPTAIN_STUFF {
+        &mut self.desc_mut(ship).ship_data.captain_control
     }
     pub(crate) fn ship_info_pointer(&mut self, ship: ShipId) -> *mut super::record::SHIP_INFO {
         &raw mut self.desc_mut(ship).ship_info

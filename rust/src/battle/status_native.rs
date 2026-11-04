@@ -211,12 +211,49 @@ pub(crate) fn explosion_flash(life: COUNT, y: COORD, mut draw: impl FnMut(Color,
     draw(color, r, true);
 }
 
+fn captain_border(y: COORD, height: SIZE, mut fill: impl FnMut(Color, RECT)) {
+    let dark = rgb15(8, 8, 8);
+    let light = rgb15(16, 16, 16);
+    fill(
+        rgb15(10, 10, 10),
+        rect(2, y.wrapping_add(65), 60, height.wrapping_sub(67)),
+    );
+    fill(
+        dark,
+        rect(1, y.wrapping_add(65), 1, height.wrapping_sub(67)),
+    );
+    fill(
+        dark,
+        rect(0, y.wrapping_add(65), 1, height.wrapping_sub(66)),
+    );
+    fill(
+        light,
+        rect(63, y.wrapping_add(65), 1, height.wrapping_sub(65)),
+    );
+    fill(
+        light,
+        rect(62, y.wrapping_add(65), 1, height.wrapping_sub(65)),
+    );
+    fill(
+        light,
+        rect(1, y.wrapping_add(height.wrapping_sub(2)), 62, 1),
+    );
+    fill(
+        light,
+        rect(0, y.wrapping_add(height.wrapping_sub(1)), 63, 1),
+    );
+    let cy = y.wrapping_add(69);
+    fill(dark, rect(59, cy, 1, 30));
+    fill(dark, rect(3, cy.wrapping_add(30), 57, 1));
+    fill(light, rect(3, cy.wrapping_sub(1), 57, 1));
+    fill(light, rect(3, cy, 1, 30));
+}
+
 #[cfg(not(test))]
 #[allow(non_snake_case)]
 pub(crate) mod engine {
     use super::*;
     use crate::engine::battle::{views::FrameSelection, Cx, ElementId};
-    use crate::ships::native::rel_frame_index;
 
     unsafe fn filled(color: Color, mut r: RECT) {
         SetContextForeGroundColor(color);
@@ -283,62 +320,33 @@ pub(crate) mod engine {
         font_DrawText(&mut text);
     }
 
+    fn prepare_captain(cx: &mut Cx<'_>, ship: crate::engine::battle::ShipId) -> CAPTAIN_STUFF {
+        let mut captain = cx.captain_controls(ship).clone();
+        let background = FrameSelection::retain(captain.background);
+        if !background.is_absent() {
+            let mut frame = cx.absolute_frame(background.view(), 0);
+            captain.background = frame.raw();
+            frame = cx.relative_frame(frame.view(), 1);
+            captain.turn = frame.raw();
+            frame = cx.relative_frame(frame.view(), 5);
+            captain.thrust = frame.raw();
+            frame = cx.relative_frame(frame.view(), 3);
+            captain.weapon = frame.raw();
+            captain.special = cx.relative_frame(frame.view(), 3);
+        }
+        *cx.captain_controls_mut(ship) = captain.clone();
+        captain
+    }
+
     /// # Safety
     /// Ship, captain assets, and the active status context must be live.
     pub unsafe fn draw_captains_window(cx: &mut Cx<'_>, ship: crate::engine::battle::ShipId) {
-        let mut captain = (*cx.captain_pointer(ship)).clone();
-        let mut frame = captain.background;
-        if !frame.is_null() {
-            frame = SetAbsFrameIndex(frame, 0);
-            captain.background = frame;
-            frame = rel_frame_index(frame, 1);
-            captain.turn = frame;
-            frame = rel_frame_index(frame, 5);
-            captain.thrust = frame;
-            frame = rel_frame_index(frame, 3);
-            captain.weapon = frame;
-            frame = rel_frame_index(frame, 3);
-            captain.special = FrameSelection::retain(frame);
-        }
-        *cx.captain_pointer(ship) = captain.clone();
+        let captain = prepare_captain(cx, ship);
         BatchGraphics();
         let y = cx.status_offset(ship);
         let height = (ScreenHeight >> 1) as SIZE;
-        let dark = rgb15(8, 8, 8);
-        let light = rgb15(16, 16, 16);
-        filled(
-            rgb15(10, 10, 10),
-            rect(2, y.wrapping_add(65), 60, height.wrapping_sub(67)),
-        );
-        filled(
-            dark,
-            rect(1, y.wrapping_add(65), 1, height.wrapping_sub(67)),
-        );
-        filled(
-            dark,
-            rect(0, y.wrapping_add(65), 1, height.wrapping_sub(66)),
-        );
-        filled(
-            light,
-            rect(63, y.wrapping_add(65), 1, height.wrapping_sub(65)),
-        );
-        filled(
-            light,
-            rect(62, y.wrapping_add(65), 1, height.wrapping_sub(65)),
-        );
-        filled(
-            light,
-            rect(1, y.wrapping_add(height.wrapping_sub(2)), 62, 1),
-        );
-        filled(
-            light,
-            rect(0, y.wrapping_add(height.wrapping_sub(1)), 63, 1),
-        );
+        captain_border(y, height, |color, r| filled(color, r));
         let cy = y.wrapping_add(69);
-        filled(dark, rect(59, cy, 1, 30));
-        filled(dark, rect(3, cy.wrapping_add(30), 57, 1));
-        filled(light, rect(3, cy.wrapping_sub(1), 57, 1));
-        filled(light, rect(3, cy, 1, 30));
         let mut stamp = STAMP {
             origin: POINT { x: 4, y: cy },
             frame: captain.background,
@@ -495,6 +503,40 @@ mod tests {
     fn crew_text_is_unsigned_decimal_and_terminated() {
         assert_eq!(&crew_text(0)[..2], b"0\0");
         assert_eq!(&crew_text(65535)[..6], b"65535\0");
+    }
+
+    #[test]
+    fn captain_border_draw_order_and_status_offsets_match_the_layout() {
+        let mut draws = Vec::new();
+        captain_border(120, 120, |color, r| {
+            draws.push((
+                color.r,
+                r.corner.x,
+                r.corner.y,
+                r.extent.width,
+                r.extent.height,
+            ));
+        });
+        assert_eq!(
+            draws,
+            [
+                (82, 2, 185, 60, 53),
+                (66, 1, 185, 1, 53),
+                (66, 0, 185, 1, 54),
+                (132, 63, 185, 1, 55),
+                (132, 62, 185, 1, 55),
+                (132, 1, 238, 62, 1),
+                (132, 0, 239, 63, 1),
+                (66, 59, 189, 1, 30),
+                (66, 3, 219, 57, 1),
+                (132, 3, 188, 57, 1),
+                (132, 3, 189, 1, 30),
+            ]
+        );
+        let mut wrapped = Vec::new();
+        captain_border(i16::MAX, 120, |_, r| wrapped.push(r.corner.y));
+        assert_eq!(wrapped[0], i16::MAX.wrapping_add(65));
+        assert_eq!(wrapped[5], i16::MAX.wrapping_add(118));
     }
 
     #[test]
