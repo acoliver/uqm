@@ -881,7 +881,7 @@ mod kernel_tests {
         assert!(fresh.game_sounds.is_null());
         assert!(fresh.winner.is_none());
         assert_eq!(fresh.sounds.count, 0);
-        assert_eq!(fresh.channels.lru, [0, 1, 2, 3]);
+        assert_eq!(fresh.channels.borrow().lru, [0, 1, 2, 3]);
     }
 }
 

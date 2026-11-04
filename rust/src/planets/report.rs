@@ -100,7 +100,7 @@ pub(crate) mod live {
         g.unbatch();
     }
 
-    use crate::battle::sounds::play_sound;
+    use crate::battle::sounds::engine::play_sound;
 
     struct ReportPrinter {
         sounds: *mut c_void,
@@ -123,7 +123,16 @@ pub(crate) mod live {
                 let c = getCharFromString(&mut next);
                 cx.with_legacy(|| font_DrawText(std::ptr::from_mut(t).cast()));
                 if self.sleepy && cx.world.activity() & (1 << 14) == 0 {
-                    cx.with_legacy(|| play_sound(self.sounds.cast(), NON_POSITIONAL, None, 2));
+                    let channels = cx.kernel.channels.clone();
+                    cx.with_legacy(|| {
+                        play_sound(
+                            &mut channels.borrow_mut(),
+                            self.sounds.cast(),
+                            NON_POSITIONAL,
+                            None,
+                            2,
+                        )
+                    });
                     timeout = timeout.wrapping_add(character_delay(c, word_chars == 0));
                     if wait_for_any_button_until(cx, io, 1, timeout, 0) != 0 {
                         self.sleepy = false;

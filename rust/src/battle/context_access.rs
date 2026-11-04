@@ -534,7 +534,6 @@ pub(crate) mod ai_legacy;
 #[path = "race_access.rs"]
 mod race_access;
 pub(crate) mod reader_legacy;
-pub(crate) mod sound_legacy;
 
 #[cfg(not(test))]
 impl Cx<'_> {

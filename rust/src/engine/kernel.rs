@@ -55,7 +55,7 @@ pub struct Kernel {
     pub(crate) menu_sounds: SOUND,
     pub(crate) game_sounds: SOUND,
     pub(crate) sounds: SoundQueue,
-    pub(crate) channels: Channels,
+    pub(crate) channels: std::rc::Rc<std::cell::RefCell<Channels>>,
     pub(crate) space_origin: POINT,
     pub(crate) star_planes: Box<[StarPlane; 3]>,
 }
@@ -145,7 +145,7 @@ impl Kernel {
             menu_sounds: ptr::null_mut(),
             game_sounds: ptr::null_mut(),
             sounds: SoundQueue::new(),
-            channels: Channels::new(),
+            channels: std::rc::Rc::new(std::cell::RefCell::new(Channels::new())),
             space_origin: POINT { x: 0, y: 0 },
             star_planes,
         }

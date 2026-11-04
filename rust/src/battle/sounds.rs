@@ -73,9 +73,9 @@ pub(crate) mod engine {
     use crate::ships::native::abi::*;
 
     /// # Safety
-    /// Called on the game thread with a live sound and optional live element.
-    pub(crate) unsafe fn play_sound_in_context(
-        cx: &mut Cx<'_>,
+    /// Called inside a native handoff with a live sound and retained channel state.
+    pub(crate) unsafe fn play_sound(
+        channels: &mut Channels,
         sound: SOUND,
         pos: SoundPosition,
         object: Option<ElementId>,
@@ -84,19 +84,16 @@ pub(crate) mod engine {
         if sound.is_null() {
             return;
         }
-        let channels = &mut cx.kernel.channels;
         let channel = channels.select(sound, |c| {
             ChannelPlaying((c + MIN_FX_CHANNEL as usize) as u32) != 0
         });
-        cx.with_legacy(|| {
-            PlaySoundEffect(
-                sound,
-                (channel + MIN_FX_CHANNEL as usize) as u16,
-                pos,
-                encode_object(object) as *mut std::ffi::c_void,
-                priority,
-            );
-        });
+        PlaySoundEffect(
+            sound,
+            (channel + MIN_FX_CHANNEL as usize) as u16,
+            pos,
+            encode_object(object) as *mut std::ffi::c_void,
+            priority,
+        );
     }
 
     /// # Safety
@@ -171,7 +168,16 @@ pub(crate) mod engine {
             let sound = cx.kernel.sounds.sounds[i];
             let object = cx.kernel.sounds.objects[i];
             let pos = position(cx, object);
-            play_sound_in_context(cx, sound, pos, object, GAME_SOUND_PRIORITY as u8);
+            let channels = cx.kernel.channels.clone();
+            cx.with_legacy(|| {
+                play_sound(
+                    &mut channels.borrow_mut(),
+                    sound,
+                    pos,
+                    object,
+                    GAME_SOUND_PRIORITY as u8,
+                )
+            });
             i += 1;
             cx.kernel.sounds.count -= 1;
         }
@@ -187,8 +193,6 @@ pub(crate) mod engine {
     }
 }
 
-#[cfg(not(test))]
-pub use crate::battle::context_access::sound_legacy::*;
 #[cfg(not(test))]
 pub use engine::{PlayMenuSound, NON_POSITIONAL};
 
