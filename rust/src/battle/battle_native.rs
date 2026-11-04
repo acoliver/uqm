@@ -98,7 +98,7 @@ type BattleNetwork = (
     *mut crate::engine::battle::Battle,
     std::rc::Rc<dyn crate::engine::battle::net::BattleNet>,
     bool,
-    Box<dyn crate::engine::observe::Observer<Option<crate::engine::observe::CampaignView>>>,
+    Option<crate::engine::input::InputObserver>,
 );
 #[cfg(not(test))]
 fn initialize_battle(cx: &mut crate::engine::battle::Cx<'_>) -> BattleNetwork {
@@ -112,7 +112,7 @@ fn initialize_battle(cx: &mut crate::engine::battle::Cx<'_>) -> BattleNetwork {
         battle,
         battle.network(),
         had_net,
-        cx.kernel.input_runtime().observer(),
+        Some(cx.kernel.input_runtime().observer()),
     )
 }
 
@@ -349,6 +349,18 @@ pub(crate) mod engine {
         (**KernelOwner::current()).battle_music = ptr::null_mut();
     }
 
+    fn battle_io(observer: &mut Option<crate::engine::input::InputObserver>) -> Io<'_> {
+        Io {
+            observer: observer
+                .as_deref_mut()
+                .unwrap_or_else(|| panic!("missing battle observer")),
+        }
+    }
+
+    unsafe fn observe_melee_game_over(observer: &mut Option<crate::engine::input::InputObserver>) {
+        crate::supermelee::native::battle_picker::live::melee_game_over(&mut battle_io(observer));
+    }
+
     unsafe extern "C" fn do_battle(bs: *mut battlestate_struct) -> BOOLEAN {
         crate::log_abi::log_message(
             5,
@@ -367,12 +379,7 @@ pub(crate) mod engine {
             crc_processState(&mut state);
             net.record_checksum(frame, crc_finish(&state));
         }
-        let mut io = Io {
-            observer: (*bs)
-                .observer
-                .as_deref_mut()
-                .unwrap_or_else(|| panic!("missing battle observer")),
-        };
+        let mut io = battle_io(&mut (*bs).observer);
         crate::app::bridge::enter(|cx| {
             process_input(
                 cx,
@@ -450,9 +457,7 @@ pub(crate) mod engine {
     #[no_mangle]
     pub unsafe extern "C" fn Battle(callback: BattleFrameCallback) -> BOOLEAN {
         let (battle, net, had_net, mut observer) = battle_network();
-        let mut io = Io {
-            observer: &mut *observer,
-        };
+        let mut io = battle_io(&mut observer);
         if activity() as u8 != SUPER_MELEE as u8 {
             crate::math::seed_random(seed(&mut io, 4, GetTimeCounter()));
         } else {
@@ -479,7 +484,7 @@ pub(crate) mod engine {
             }
             bs.battle = battle;
             bs.net = Some(net.clone());
-            bs.observer = Some(observer);
+            bs.observer = observer;
             net.begin((&raw mut bs).cast());
             crate::app::bridge::enter(|cx| reset_winner(cx.kernel));
             crate::log_abi::log_message(
@@ -525,12 +530,7 @@ pub(crate) mod engine {
                     net.wait_reset(NetState_NetState_inSetup);
                     set_activity(activity() & !(CHECK_ABORT as u16));
                 } else {
-                    crate::supermelee::native::battle_picker::live::MeleeGameOver(&mut Io {
-                        observer: bs
-                            .observer
-                            .as_deref_mut()
-                            .unwrap_or_else(|| panic!("missing battle observer")),
-                    });
+                    observe_melee_game_over(&mut bs.observer);
                 }
             }
             net.finish();

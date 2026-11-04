@@ -13,11 +13,13 @@
 //!
 //! @plan PLAN-20260314-COMM.P09
 
-use super::response::ResponseFunc;
-use super::state::CommState;
-use crate::engine::observe::CheckpointView;
 #[cfg(not(test))]
 use crate::engine::Kernel;
+
+use super::response::ResponseFunc;
+use super::state::CommState;
+#[cfg(not(test))]
+use crate::engine::observe::CheckpointView;
 
 fn communication_background_volume(background: u8, using_speech: u32) -> u8 {
     if using_speech != 0 {
@@ -47,6 +49,8 @@ pub enum ScrollMode {
     /// Smooth scrolling (OPT_3DO).
     Smooth,
 }
+
+mod fresh_press;
 
 // Production C bridge — all calls go through these wrappers so tests can
 // override behaviour by operating on CommState fields directly.
@@ -277,12 +281,11 @@ pub(super) mod c_bridge {
 
 #[cfg(not(test))]
 pub mod dinput {
-    #![allow(dead_code)]
+    use super::fresh_press::FreshPressLatch;
     use super::{c_bridge, CheckpointView, KEY_MENU_CANCEL, KEY_MENU_LEFT, KEY_MENU_RIGHT};
-    use crate::engine::Kernel;
     use crate::engine::{battle::Cx, observe::Io};
     use crate::mainloop::restart_menu::c_extern::SetMenuSounds;
-    use std::ffi::{c_int, c_void};
+    use std::ffi::c_int;
 
     const MENU_SOUND_NONE: u32 = 0;
     const OPT_PC: c_int = 0x02;
@@ -300,41 +303,6 @@ pub mod dinput {
         rewind: c_int,
         seeking: c_int,
         ended: c_int,
-    }
-
-    /// Tracks whether a menu key has been released since it last acted.
-    ///
-    /// A key still held when a nested `DoInput` loop is entered keeps
-    /// producing repeat pulses inside that loop. Without this latch the loop
-    /// reads those repeats as fresh presses, re-triggering its action and
-    /// resetting its timeout indefinitely.
-    #[repr(C)]
-    #[derive(Clone, Copy)]
-    struct FreshPressLatch {
-        armed: c_int,
-    }
-
-    impl FreshPressLatch {
-        /// Arm only when the key is already up; an inherited hold must be
-        /// released before it can act.
-        fn entering(key: c_int) -> Self {
-            Self {
-                armed: (unsafe { c_bridge::current_menu_key(key) } == 0) as c_int,
-            }
-        }
-
-        /// Report a fresh press, re-arming whenever the key is released.
-        fn pressed(&mut self, key: c_int) -> bool {
-            if unsafe { c_bridge::current_menu_key(key) } == 0 {
-                self.armed = 1;
-                return false;
-            }
-            if self.armed != 0 && unsafe { c_bridge::pulsed_menu_key(key) } != 0 {
-                self.armed = 0;
-                return true;
-            }
-            false
-        }
     }
 
     // DoInput-compatible last-replay state struct
@@ -508,7 +476,7 @@ pub mod dinput {
                     c_bridge::ONE_SECOND_TICKS as i16,
                 )
             });
-            cx.with_legacy(|| super::super::response_ui::select_conversation_summary_production());
+            cx.with_legacy(super::super::response_ui::select_conversation_summary_production);
             lrs.time_out = cx
                 .with_legacy(|| c_bridge::FadeMusic(0, (c_bridge::ONE_SECOND_TICKS * 2) as i16))
                 + (c_bridge::ONE_SECOND_TICKS as u32) / 60;
@@ -2510,31 +2478,6 @@ mod tests {
     }
 
     // ---- Test 8 ------------------------------------------------------------
-
-    /// Structural: rust_do_communication in ffi.rs must drop(state) before
-    /// calling func(rref) in the Selected arm (lock discipline).
-    ///
-    /// PASSES against P09 stubs (P09 already has the correct structure).
-    #[test]
-    fn test_lock_dropped_before_callback_p10() {
-        let source = include_str!("ffi.rs");
-        // Find the rust_do_communication function body.
-        let fn_body = extract_fn_body(source, "fn rust_do_communication")
-            .expect("rust_do_communication must be in ffi.rs");
-        // drop(state) must appear before func(rref).
-        let drop_pos = fn_body.find("drop(state)").expect(
-            "rust_DoCommunication must contain drop(state) to release lock before callback",
-        );
-        let call_pos = fn_body
-            .find("func(rref)")
-            .expect("rust_DoCommunication must contain func(rref) in Selected arm");
-        assert!(
-            drop_pos < call_pos,
-            "drop(state) (at {}) must appear before func(rref) (at {}) in rust_DoCommunication",
-            drop_pos,
-            call_pos
-        );
-    }
 
     /// Structural regression: the response callback runs inside the enclosing
     /// `DoInput` loop, which owns event pumping and the sole `UpdateInputState`

@@ -97,6 +97,7 @@ pub unsafe extern "C" fn SaveProblem() {
         let mut io = Io {
             observer: &mut *observer,
         };
-        save_problem(cx, &mut io);
+        // SAFETY: SaveProblem requires the initialized game-thread popup resources.
+        unsafe { save_problem(cx, &mut io) };
     });
 }

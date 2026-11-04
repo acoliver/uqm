@@ -280,6 +280,7 @@ pub unsafe extern "C" fn AlienTalkSegue(track: u16) {
         let mut io = crate::engine::observe::Io {
             observer: &mut *observer,
         };
+        super::ffi::observe_responses(&mut io);
         super::ffi::rust_alien_talk_segue(cx, &mut io, track.into());
     });
 }

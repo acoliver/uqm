@@ -1,7 +1,7 @@
 //! Setup menus and persistent options, ported from uqm/setupmenu.c.
 
 #[cfg(not(test))]
-use crate::engine::{Kernel, WorldData};
+use crate::engine::{battle::Cx, observe::Io, Kernel, WorldData};
 use crate::navigation::abi::*;
 use std::ffi::c_int;
 
@@ -86,11 +86,9 @@ pub(crate) mod runtime {
 
     struct SetupMenuState {
         initialized: BOOLEAN,
-        anim_frame_count: c_int,
         next_time: DWORD,
     }
     static mut SETUP_TAB: STRING = ptr::null_mut();
-    static mut DONE: BOOLEAN = 0;
     static mut CURRENT: *mut WIDGET = ptr::null_mut();
     static mut NEXT: *mut WIDGET = ptr::null_mut();
     static mut MENUS: [WIDGET_MENU_SCREEN; 8] = unsafe { mem::zeroed() };
@@ -261,9 +259,9 @@ pub(crate) mod runtime {
     }
     unsafe fn do_setup_menu(state: &mut SetupMenuState) -> BOOLEAN {
         GamePaused = 0;
-        if (*state).initialized == 0 {
+        if state.initialized == 0 {
             SetDefaultMenuRepeatDelay();
-            (*state).next_time = GetTimeCounter();
+            state.next_time = GetTimeCounter();
             set_defaults();
             Widget_SetFont(Kernel::current().read(|owner| owner.star_con_font));
             Widget_SetWindowColors(
@@ -274,7 +272,7 @@ pub(crate) mod runtime {
             CURRENT = ptr::null_mut();
             NEXT = ptr::addr_of_mut!(MENUS[0]).cast();
             ((*NEXT).receiveFocus.unwrap())(NEXT, WIDGET_EVENT_DOWN as c_int);
-            (*state).initialized = 1;
+            state.initialized = 1;
         }
         if CURRENT != NEXT {
             SetTransitionSource(ptr::null());
@@ -306,8 +304,8 @@ pub(crate) mod runtime {
                 Widget_Event(event as c_int);
             }
         }
-        SleepThreadUntil((*state).next_time.wrapping_add(MENU_FRAME_RATE));
-        (*state).next_time = GetTimeCounter();
+        SleepThreadUntil(state.next_time.wrapping_add(MENU_FRAME_RATE));
+        state.next_time = GetTimeCounter();
         let activity = WorldData::current().read(|owner| owner.game.current_activity);
         BOOLEAN::from(activity & CHECK_ABORT as u16 == 0 && !NEXT.is_null())
     }
@@ -856,13 +854,9 @@ pub(crate) mod runtime {
 
     /// # Safety
     /// Must run on the game thread with graphics, input and resources initialized.
-    pub unsafe fn setup_menu(
-        cx: &mut crate::engine::battle::Cx<'_>,
-        io: &mut crate::engine::observe::Io<'_>,
-    ) {
+    pub unsafe fn setup_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) {
         let mut state: SetupMenuState = mem::zeroed();
         cx.with_legacy(|| {
-            state.initialized = 0;
             SetMenuSounds(MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
             SETUP_TAB =
                 CaptureStringTable(LoadStringTableInstance(SETUP_MENU_STRTAB.as_ptr().cast()));
@@ -871,7 +865,6 @@ pub(crate) mod runtime {
             } else {
                 fatal(c"PANIC: Could not find strings for the setup menu!");
             }
-            DONE = 0;
         });
         cx.run_input(io, true, |cx, _| {
             cx.with_legacy(|| do_setup_menu(&mut state)) != 0

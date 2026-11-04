@@ -431,7 +431,7 @@ pub mod live {
     use crate::mainloop::input_abi::live::UpdateInputState;
     /// # Safety
     /// Called at the end of a live melee battle on the game thread.
-    pub unsafe fn MeleeGameOver(io: &mut Io<'_>) {
+    pub unsafe fn melee_game_over(io: &mut Io<'_>) {
         for player in 0..2 {
             draw(player);
         }

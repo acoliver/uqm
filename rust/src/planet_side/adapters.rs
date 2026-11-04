@@ -52,7 +52,10 @@ impl CffiPlanetSideInput {
             });
         }
         #[cfg(not(test))]
-        cx.with_legacy(|| unsafe { UpdateInputState() });
+        {
+            let runtime = cx.kernel.input_runtime();
+            cx.with_legacy(|| runtime.update());
+        }
         if cx
             .with_legacy(|| io.observer.input_admitted(&InputView::AfterUpdate, &None))
             .stop
@@ -72,9 +75,6 @@ impl PlanetSideInput for CffiPlanetSideInput {
     }
 }
 
-#[cfg(not(test))]
-use crate::mainloop::input_abi::live::UpdateInputState;
-#[cfg(not(test))]
 #[cfg(not(test))]
 use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
 #[cfg(not(test))]

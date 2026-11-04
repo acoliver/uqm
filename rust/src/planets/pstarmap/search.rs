@@ -34,22 +34,22 @@ use crate::navigation::abi::TEXTENTRY_STATE as TextEntryState;
 
 #[repr(C)]
 struct StarSearchState {
-    pMS: *mut MENU_STATE,
-    Text: [c_char; 256],
-    LastText: [c_char; 256],
-    LastChangeTime: u32,
-    FirstIndex: i32,
-    CurIndex: i32,
-    LastIndex: i32,
-    SingleClust: bool,
-    SingleMatch: bool,
-    Buffer: [c_char; 256],
-    Prefix: *const c_char,
-    Cluster: *const c_char,
-    PrefixLen: i32,
-    ClusterLen: i32,
-    ClusterPos: i32,
-    SortedStars: [i32; NUM_SOLAR_SYSTEMS],
+    menu: *mut MENU_STATE,
+    text: [c_char; 256],
+    last_text: [c_char; 256],
+    last_change_time: u32,
+    first_index: i32,
+    current_index: i32,
+    last_index: i32,
+    single_cluster: bool,
+    single_match: bool,
+    buffer: [c_char; 256],
+    prefix: *const c_char,
+    cluster: *const c_char,
+    prefix_len: i32,
+    cluster_len: i32,
+    cluster_pos: i32,
+    sorted_stars: [i32; NUM_SOLAR_SYSTEMS],
 }
 
 unsafe fn compare_star_names(
@@ -79,10 +79,10 @@ unsafe extern "C" fn comp_star_name(a: *const c_void, b: *const c_void) -> i32 {
 #[cfg(not(test))]
 unsafe fn sort_stars_on_name(state: *mut StarSearchState) {
     for i in 0..NUM_SOLAR_SYSTEMS {
-        (*state).SortedStars[i] = i as i32;
+        (*state).sorted_stars[i] = i as i32;
     }
     qsort(
-        ptr::addr_of_mut!((*state).SortedStars).cast(),
+        ptr::addr_of_mut!((*state).sorted_stars).cast(),
         NUM_SOLAR_SYSTEMS,
         std::mem::size_of::<i32>(),
         comp_star_name,
@@ -90,12 +90,12 @@ unsafe fn sort_stars_on_name(state: *mut StarSearchState) {
 }
 
 unsafe fn split_star_name(state: *mut StarSearchState) {
-    let mut buf = ptr::addr_of_mut!((*state).Buffer).cast::<c_char>();
-    (*state).Prefix = ptr::null();
-    (*state).PrefixLen = 0;
-    (*state).Cluster = ptr::null();
-    (*state).ClusterLen = 0;
-    (*state).ClusterPos = 0;
+    let mut buf = ptr::addr_of_mut!((*state).buffer).cast::<c_char>();
+    (*state).prefix = ptr::null();
+    (*state).prefix_len = 0;
+    (*state).cluster = ptr::null();
+    (*state).cluster_len = 0;
+    (*state).cluster_pos = 0;
     let mut next = buf.cast::<u8>().cast_const();
     while *next != 0 && getCharFromString(&mut next) == u32::from(b' ') {
         buf = next.cast_mut().cast();
@@ -103,7 +103,7 @@ unsafe fn split_star_name(state: *mut StarSearchState) {
     if *buf == 0 {
         return;
     }
-    (*state).Prefix = buf;
+    (*state).prefix = buf;
     buf = next.cast_mut().cast();
     while *next != 0 && getCharFromString(&mut next) != u32::from(b' ') {
         buf = next.cast_mut().cast();
@@ -117,23 +117,23 @@ unsafe fn split_star_name(state: *mut StarSearchState) {
         }
     }
     if *buf == 0 {
-        (*state).Cluster = (*state).Prefix;
-        (*state).ClusterLen = utf8StringCount(((*state).Cluster).cast()) as i32;
-        (*state).ClusterPos = utf8StringCountN(
-            ptr::addr_of!((*state).Buffer).cast(),
-            ((*state).Cluster).cast(),
+        (*state).cluster = (*state).prefix;
+        (*state).cluster_len = utf8StringCount(((*state).cluster).cast()) as i32;
+        (*state).cluster_pos = utf8StringCountN(
+            ptr::addr_of!((*state).buffer).cast(),
+            ((*state).cluster).cast(),
         ) as i32;
-        (*state).Prefix = ptr::null();
+        (*state).prefix = ptr::null();
         return;
     }
-    (*state).Cluster = buf;
-    (*state).ClusterLen = utf8StringCount(((*state).Cluster).cast()) as i32;
-    (*state).ClusterPos = utf8StringCountN(
-        ptr::addr_of!((*state).Buffer).cast(),
-        ((*state).Cluster).cast(),
+    (*state).cluster = buf;
+    (*state).cluster_len = utf8StringCount(((*state).cluster).cast()) as i32;
+    (*state).cluster_pos = utf8StringCountN(
+        ptr::addr_of!((*state).buffer).cast(),
+        ((*state).cluster).cast(),
     ) as i32;
     *sep = 0;
-    (*state).PrefixLen = utf8StringCount(((*state).Prefix).cast()) as i32;
+    (*state).prefix_len = utf8StringCount(((*state).prefix).cast()) as i32;
 }
 
 fn skip_star_cluster(stars: &[CStarDesc], sorted: &[i32], mut i: usize) -> usize {
@@ -165,28 +165,28 @@ unsafe fn find_next_index(
     cluster_name: impl Fn(u8) -> *const c_char,
     full_name: impl Fn(*const CStarDesc, *mut c_char),
 ) -> i32 {
-    if (*state).Cluster.is_null() {
+    if (*state).cluster.is_null() {
         return -1;
     }
-    let sorted = &(&(*state).SortedStars)[..stars.len()];
+    let sorted = &(&(*state).sorted_stars)[..stars.len()];
     let mut i = from as usize;
     while i < stars.len() {
         let star = &stars[sorted[i] as usize];
         let name = cluster_name(star.postfix);
-        if (*state).ClusterLen > utf8StringCount((name).cast()) as i32
-            || !matches_chars((*state).Cluster, name, (*state).ClusterLen)
+        if (*state).cluster_len > utf8StringCount((name).cast()) as i32
+            || !matches_chars((*state).cluster, name, (*state).cluster_len)
         {
             i = skip_star_cluster(stars, sorted, i);
             continue;
         }
-        if !(*state).Prefix.is_null() && star.prefix == 0 {
+        if !(*state).prefix.is_null() && star.prefix == 0 {
             i += 1;
             continue;
         }
         if within_cluster {
             break;
         }
-        if (*state).Prefix.is_null() {
+        if (*state).prefix.is_null() {
             if i == 0 || star.postfix != stars[sorted[i - 1] as usize].postfix {
                 break;
             }
@@ -195,8 +195,8 @@ unsafe fn find_next_index(
         }
         let mut name = [0 as c_char; 256];
         full_name(star, name.as_mut_ptr());
-        if (*state).PrefixLen <= utf8StringCount((name.as_ptr()).cast()) as i32
-            && matches_chars((*state).Prefix, name.as_ptr(), (*state).PrefixLen)
+        if (*state).prefix_len <= utf8StringCount((name.as_ptr()).cast()) as i32
+            && matches_chars((*state).prefix, name.as_ptr(), (*state).prefix_len)
         {
             break;
         }
@@ -226,16 +226,16 @@ unsafe fn draw_matched_star_name(entry: *mut TextEntryState) {
     let mut buf = [0 as c_char; 256];
     let mut cur_pos = -1i16;
     let ex_pos;
-    let star = star_array.add((*state).SortedStars[(*state).CurIndex as usize] as usize);
+    let star = star_array.add((*state).sorted_stars[(*state).current_index as usize] as usize);
     let flags;
-    if (*state).SingleClust || (*state).SingleMatch {
+    if (*state).single_cluster || (*state).single_match {
         GetClusterName(star, buf.as_mut_ptr());
         ex_pos = -1;
         flags = 1;
     } else {
-        strcpy(buf.as_mut_ptr(), ptr::addr_of!((*state).Text).cast());
-        ex_pos = ((*state).ClusterPos + (*state).ClusterLen) as i16;
-        let pstr = skipUTF8Chars((buf.as_ptr()).cast(), (*state).ClusterPos as usize);
+        strcpy(buf.as_mut_ptr(), ptr::addr_of!((*state).text).cast());
+        ex_pos = ((*state).cluster_pos + (*state).cluster_len) as i16;
+        let pstr = skipUTF8Chars((buf.as_ptr()).cast(), (*state).cluster_pos as usize);
         strcpy((pstr).cast(), game_string(u16::from((*star).postfix)));
         cur_pos = (*entry).CursorPos as i16;
         flags = 2 | if (*entry).JoystickMode != 0 { 4 } else { 0 };
@@ -250,32 +250,32 @@ unsafe fn match_next_with(
     find: impl Fn(*const StarSearchState, i32, bool) -> i32,
 ) {
     if reset {
-        (*state).FirstIndex = -1;
+        (*state).first_index = -1;
     }
-    if (*state).FirstIndex < 0 {
-        (*state).CurIndex = -1;
-        (*state).LastIndex = -1;
-        (*state).SingleClust = false;
-        (*state).SingleMatch = false;
+    if (*state).first_index < 0 {
+        (*state).current_index = -1;
+        (*state).last_index = -1;
+        (*state).single_cluster = false;
+        (*state).single_match = false;
         strcpy(
-            ptr::addr_of_mut!((*state).Buffer).cast(),
-            ptr::addr_of!((*state).Text).cast(),
+            ptr::addr_of_mut!((*state).buffer).cast(),
+            ptr::addr_of!((*state).text).cast(),
         );
         split_star_name(state);
     }
-    (*state).CurIndex = find(state, (*state).CurIndex + 1, (*state).SingleClust);
-    if (*state).FirstIndex < 0 {
-        (*state).FirstIndex = (*state).CurIndex;
+    (*state).current_index = find(state, (*state).current_index + 1, (*state).single_cluster);
+    if (*state).first_index < 0 {
+        (*state).first_index = (*state).current_index;
     }
-    if (*state).CurIndex >= 0 {
-        (*state).LastIndex = (*state).CurIndex;
+    if (*state).current_index >= 0 {
+        (*state).last_index = (*state).current_index;
     } else {
-        (*state).CurIndex = (*state).FirstIndex;
-        if (*state).FirstIndex == (*state).LastIndex && (*state).FirstIndex != -1 {
-            if (*state).Prefix.is_null() {
-                (*state).SingleClust = true;
+        (*state).current_index = (*state).first_index;
+        if (*state).first_index == (*state).last_index && (*state).first_index != -1 {
+            if (*state).prefix.is_null() {
+                (*state).single_cluster = true;
             } else {
-                (*state).SingleMatch = true;
+                (*state).single_match = true;
             }
         }
     }
@@ -291,31 +291,31 @@ unsafe fn match_next_star(state: *mut StarSearchState, reset: bool) {
 unsafe extern "C" fn on_star_name_change(entry: *mut TextEntryState) -> u32 {
     let state = (*entry).CbParam.cast::<StarSearchState>();
     if strcmp(
-        ptr::addr_of!((*state).Text).cast(),
-        ptr::addr_of!((*state).LastText).cast(),
+        ptr::addr_of!((*state).text).cast(),
+        ptr::addr_of!((*state).last_text).cast(),
     ) != 0
     {
-        (*state).LastChangeTime = GetTimeCounter();
+        (*state).last_change_time = GetTimeCounter();
         strcpy(
-            ptr::addr_of_mut!((*state).LastText).cast(),
-            ptr::addr_of!((*state).Text).cast(),
+            ptr::addr_of_mut!((*state).last_text).cast(),
+            ptr::addr_of!((*state).text).cast(),
         );
         match_next_star(state, true);
     }
-    if (*state).CurIndex < 0 {
-        let flags = if (*state).Text[0] == 0 { 1 } else { 2 }
+    if (*state).current_index < 0 {
+        let flags = if (*state).text[0] == 0 { 1 } else { 2 }
             | if (*entry).JoystickMode != 0 { 4 } else { 0 };
         DrawSISMessageEx(
-            ptr::addr_of!((*state).Text).cast(),
+            ptr::addr_of!((*state).text).cast(),
             (*entry).CursorPos as i16,
             -1,
             flags,
         )
     } else {
-        let star = star_array.add((*state).SortedStars[(*state).CurIndex as usize] as usize);
+        let star = star_array.add((*state).sorted_stars[(*state).current_index as usize] as usize);
         UpdateCursorLocation(0, 0, ptr::addr_of!((*star).star_pt).cast());
         draw_matched_star_name(entry);
-        UpdateFuelRequirement();
+        update_fuel_requirement();
         1
     }
 }
@@ -328,7 +328,7 @@ unsafe extern "C" fn on_star_name_frame(entry: *mut TextEntryState) -> u32 {
         != 0
     {
         match_next_star(state, false);
-        if (*state).CurIndex < 0 {
+        if (*state).current_index < 0 {
             if ptr::addr_of!(crate::c_bindings::controller_input::PulsedInputState)
                 .read()
                 .menu[22]
@@ -338,10 +338,10 @@ unsafe extern "C" fn on_star_name_frame(entry: *mut TextEntryState) -> u32 {
             }
             return 1;
         }
-        let star = star_array.add((*state).SortedStars[(*state).CurIndex as usize] as usize);
+        let star = star_array.add((*state).sorted_stars[(*state).current_index as usize] as usize);
         UpdateCursorLocation(0, 0, ptr::addr_of!((*star).star_pt).cast());
         draw_matched_star_name(entry);
-        UpdateFuelRequirement();
+        update_fuel_requirement();
     }
     flashCurrentLocation(ptr::null());
     SleepThread(ONE_SECOND / 30);
@@ -362,15 +362,15 @@ pub unsafe extern "C" fn DoStarSearch(menu: *mut MENU_STATE) -> u32 {
     // indeterminate integers before the first text-change callback.
     state.write(std::mem::zeroed());
     DrawSISMessageEx(c"".as_ptr(), 0, 0, 1);
-    (*state).pMS = menu;
-    (*state).LastChangeTime = 0;
-    (*state).Text[0] = 0;
-    (*state).LastText[0] = 0;
-    (*state).FirstIndex = -1;
+    (*state).menu = menu;
+    (*state).last_change_time = 0;
+    (*state).text[0] = 0;
+    (*state).last_text[0] = 0;
+    (*state).first_index = -1;
     sort_stars_on_name(state);
     let mut entry: TextEntryState = std::mem::zeroed();
     entry.Initialized = 0;
-    entry.BaseStr = ptr::addr_of_mut!((*state).Text).cast();
+    entry.BaseStr = ptr::addr_of_mut!((*state).text).cast();
     entry.MaxSize = 256;
     entry.CursorPos = 0;
     entry.CbParam = state.cast();
@@ -379,7 +379,7 @@ pub unsafe extern "C" fn DoStarSearch(menu: *mut MENU_STATE) -> u32 {
     SetMenuSounds(15, 16);
     SetDefaultMenuRepeatDelay();
     let success = DoTextEntry(&mut entry);
-    DrawSISMessageEx(ptr::addr_of!((*state).Text).cast(), -1, -1, 2);
+    DrawSISMessageEx(ptr::addr_of!((*state).text).cast(), -1, -1, 2);
     rust_hfree(state.cast());
     success
 }
@@ -393,13 +393,13 @@ mod tests {
         let mut state: Box<StarSearchState> = Box::new(unsafe { std::mem::zeroed() });
         let text = CString::new(text).unwrap();
         unsafe {
-            strcpy(state.Text.as_mut_ptr(), text.as_ptr());
-            strcpy(state.Buffer.as_mut_ptr(), text.as_ptr());
+            strcpy(state.text.as_mut_ptr(), text.as_ptr());
+            strcpy(state.buffer.as_mut_ptr(), text.as_ptr());
         }
         for i in 0..NUM_SOLAR_SYSTEMS {
-            state.SortedStars[i] = i as i32;
+            state.sorted_stars[i] = i as i32;
         }
-        state.FirstIndex = -1;
+        state.first_index = -1;
         state
     }
     unsafe fn string(p: *const c_char) -> Option<String> {
@@ -420,16 +420,16 @@ mod tests {
             let mut state = state(input);
             unsafe {
                 split_star_name(&mut *state);
-                assert_eq!(string(state.Prefix).as_deref(), prefix, "{input}");
-                assert_eq!(string(state.Cluster).as_deref(), cluster, "{input}");
+                assert_eq!(string(state.prefix).as_deref(), prefix, "{input}");
+                assert_eq!(string(state.cluster).as_deref(), cluster, "{input}");
             }
-            assert_eq!(state.ClusterPos, position, "{input}");
+            assert_eq!(state.cluster_pos, position, "{input}");
             assert_eq!(
-                state.PrefixLen,
+                state.prefix_len,
                 prefix.map_or(0, |p| p.chars().count() as i32)
             );
             assert_eq!(
-                state.ClusterLen,
+                state.cluster_len,
                 cluster.map_or(0, |p| p.chars().count() as i32)
             );
         }
@@ -516,27 +516,27 @@ mod tests {
         let mut s = state("Cent");
         unsafe {
             match_next_with(&mut *s, true, |s, f, w| catalog.find(s, f, w));
-            assert_eq!(s.CurIndex, 0);
-            assert!(!s.SingleClust);
+            assert_eq!(s.current_index, 0);
+            assert!(!s.single_cluster);
             match_next_with(&mut *s, false, |s, f, w| catalog.find(s, f, w));
-            assert_eq!(s.CurIndex, 0);
-            assert!(s.SingleClust);
+            assert_eq!(s.current_index, 0);
+            assert!(s.single_cluster);
             match_next_with(&mut *s, false, |s, f, w| catalog.find(s, f, w));
-            assert_eq!(s.CurIndex, 1);
+            assert_eq!(s.current_index, 1);
             match_next_with(&mut *s, false, |s, f, w| catalog.find(s, f, w));
-            assert_eq!(s.CurIndex, 0);
-            strcpy(s.Text.as_mut_ptr(), c"Beta Ceti".as_ptr());
+            assert_eq!(s.current_index, 0);
+            strcpy(s.text.as_mut_ptr(), c"Beta Ceti".as_ptr());
             match_next_with(&mut *s, true, |s, f, w| catalog.find(s, f, w));
-            assert_eq!(s.CurIndex, 3);
-            assert!(!s.SingleClust);
+            assert_eq!(s.current_index, 3);
+            assert!(!s.single_cluster);
             match_next_with(&mut *s, false, |s, f, w| catalog.find(s, f, w));
-            assert_eq!(s.CurIndex, 3);
-            assert!(s.SingleMatch);
-            strcpy(s.Text.as_mut_ptr(), c"absent".as_ptr());
+            assert_eq!(s.current_index, 3);
+            assert!(s.single_match);
+            strcpy(s.text.as_mut_ptr(), c"absent".as_ptr());
             match_next_with(&mut *s, true, |s, f, w| catalog.find(s, f, w));
-            assert_eq!(s.CurIndex, -1);
-            assert_eq!(s.FirstIndex, -1);
-            assert!(!s.SingleMatch);
+            assert_eq!(s.current_index, -1);
+            assert_eq!(s.first_index, -1);
+            assert!(!s.single_match);
         }
     }
     #[test]

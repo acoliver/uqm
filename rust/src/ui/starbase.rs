@@ -308,6 +308,7 @@ unsafe fn activate_starbase_selection(
     }
     if menu.CurState == TALK_COMMANDER {
         io.observer.checkpoint(&CheckpointView::StarbaseMenu(false));
+        // SAFETY: the starbase session owns initialized game-thread input.
         cx.with_legacy(|| unsafe { FlushInput() });
         crate::comm::dispatch::init_communication(cx, io, CONVERSATION_COMMANDER_CONVERSATION);
         io.observer.checkpoint(&CheckpointView::StarbaseMenu(true));

@@ -247,7 +247,7 @@ where
         session,
         adapters,
         deadline,
-        input.expect("active PlanetSide frame requires input"),
+        input.unwrap_or_else(|| panic!("active PlanetSide frame requires input")),
     )? {
         return Ok(step);
     }

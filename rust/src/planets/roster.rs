@@ -282,7 +282,7 @@ pub(crate) mod live {
 
     /// # Safety
     /// Call on the game thread with campaign globals and screen resources initialized.
-    pub unsafe fn RosterMenu(cx: &mut Cx<'_>, io: &mut Io<'_>) -> i32 {
+    pub unsafe fn roster_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) -> i32 {
         let Some(mut menu) = cx.with_legacy(|| {
             let world = WorldFields::current();
             let count = CountLinks(std::ptr::addr_of!((**world).game.built_ship_q).cast::<Queue>())

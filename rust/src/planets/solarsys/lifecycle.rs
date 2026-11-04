@@ -14,7 +14,7 @@ use crate::graphics::pixmap_abi::{GetFrameIndex, ReleaseDrawable, SetAbsFrameInd
 use crate::mainloop::restart_menu::c_extern::PlayMusic;
 use crate::math::arctan;
 use crate::planet_side::orbit_music::load_lander_data;
-use crate::planets::devices::DevicesMenu;
+use crate::planets::devices::devices_menu;
 use crate::planets::ffi::do_planetary_analysis_c;
 use crate::planets::starmap::FindStar;
 use crate::sound::heart_ffi::PLRPlaying;
@@ -103,7 +103,7 @@ mod ffi {
 
     pub(super) use crate::state::c_api::planets::put_planet_info;
 
-    pub(super) use crate::planets::orbit::live::PlanetOrbitMenu;
+    pub(super) use crate::planets::orbit::live::planet_orbit_menu;
 
     pub(super) use crate::planets::orbit::live::FreePlanet;
 
@@ -113,13 +113,13 @@ mod ffi {
 
     pub(super) use crate::ui::menu::DoMenuChooser;
 
-    pub(super) use crate::planets::cargo::live::CargoMenu;
+    pub(super) use crate::planets::cargo::live::cargo_menu;
 
-    pub(super) use crate::planets::roster::live::RosterMenu;
+    pub(super) use crate::planets::roster::live::roster_menu;
 
     pub(super) use crate::front_end::gameopt::runtime::game_options;
 
-    pub(super) use crate::planets::pstarmap::StarMap;
+    pub(super) use crate::planets::pstarmap::star_map;
 
     extern "C" {
 
@@ -332,15 +332,15 @@ pub(super) unsafe fn reset_solar_sys() {
     }
 }
 
-unsafe fn enter_planet_orbit(cx: &mut Cx<'_>, io: &mut Io<'_>) {
+unsafe fn run_planet_orbit(cx: &mut Cx<'_>, io: &mut Io<'_>) {
     if !cx.with_legacy(|| prepare_planet_orbit()) {
         return;
     }
     if !(*system()).TopoFrame.is_null() {
-        ffi::PlanetOrbitMenu(cx, io);
+        ffi::planet_orbit_menu(cx, io);
         cx.with_legacy(|| ffi::FreePlanet());
     }
-    cx.with_legacy(|| finish_planet_orbit());
+    finish_planet_orbit(cx);
 }
 
 unsafe fn prepare_planet_orbit() -> bool {
@@ -370,21 +370,22 @@ unsafe fn prepare_planet_orbit() -> bool {
     true
 }
 
-unsafe fn finish_planet_orbit() {
-    if glob().read(|owner| owner.game.current_activity)
-        & (START_ENCOUNTER | CHECK_ABORT | CHECK_LOAD)
-        == 0
-        && glob().read(|owner| owner.flagship.crew_enlisted) != c::COUNT::MAX
+unsafe fn finish_planet_orbit(cx: &mut Cx<'_>) {
+    if cx.world.activity() & (START_ENCOUNTER | CHECK_ABORT | CHECK_LOAD) == 0
+        && cx.world.data.flagship.crew_enlisted != c::COUNT::MAX
     {
-        let orbital = load_solar_sys();
-        assert!(orbital.is_null());
-        check_zoom_level();
-        validate_orbits();
-        validate_inner_orbits();
-        reset_solar_sys();
-        ffi::repair_sisborder();
-        ffi::SetContext(Kernel::current().read(|owner| owner.space_context));
-        draw_system_transition(playerInInnerSystem());
+        let space_context = cx.kernel.space_context;
+        cx.with_legacy(|| {
+            let orbital = load_solar_sys();
+            assert!(orbital.is_null());
+            check_zoom_level();
+            validate_orbits();
+            validate_inner_orbits();
+            reset_solar_sys();
+            ffi::repair_sisborder();
+            ffi::SetContext(space_context);
+            draw_system_transition(playerInInnerSystem());
+        });
     }
 }
 
@@ -673,20 +674,20 @@ unsafe fn do_solar_sys_menu(
     cx.with_legacy(|| ffi::SetFlashRect(ptr::null()));
     match menu.CurState {
         EQUIP_DEVICE => {
-            select = DevicesMenu(cx, io) as c::BOOLEAN;
+            select = devices_menu(cx, io) as c::BOOLEAN;
             if cx.world.activity() & START_ENCOUNTER != 0 {
                 return 0;
             }
         }
-        CARGO => ffi::CargoMenu(cx, io),
-        ROSTER => select = ffi::RosterMenu(cx, io) as c::BOOLEAN,
+        CARGO => ffi::cargo_menu(cx, io),
+        ROSTER => select = ffi::roster_menu(cx, io) as c::BOOLEAN,
         GAME_MENU => {
             if ffi::game_options(cx, io) == 0 {
                 return 0;
             }
         }
         STARMAP => {
-            ffi::StarMap(cx, io);
+            ffi::star_map(cx, io);
             if cx.world.activity() & CHECK_ABORT != 0 {
                 return 0;
             }
@@ -702,7 +703,7 @@ unsafe fn do_solar_sys_menu(
     if cx.world.activity() & CHECK_ABORT == 0 {
         if select != 0 {
             if ffi::optWhichMenu != OPT_PC {
-                (*menu).CurState = NAVIGATION;
+                menu.CurState = NAVIGATION;
             }
             cx.with_legacy(|| ffi::DrawMenuStateStrings(PM_STARMAP, i16::from(menu.CurState)));
         }
@@ -735,7 +736,7 @@ unsafe fn do_ip_flight(
 ) -> c::BOOLEAN {
     let cancel = input::PulsedInputState.menu[KEY_MENU_CANCEL];
     if (*state).InOrbit != 0 {
-        enter_planet_orbit(cx, io);
+        run_planet_orbit(cx, io);
         cx.with_legacy(|| ffi::SetMenuSounds(MENU_SOUND_NONE, MENU_SOUND_NONE));
         (*state).InOrbit = 0;
     } else if cancel != 0 || cx.kernel.last_activity == CHECK_LOAD {

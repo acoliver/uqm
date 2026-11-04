@@ -3,6 +3,9 @@
 use super::{battle::input::InputContext, battle::Cx, observe::Io};
 use std::rc::Rc;
 
+pub type InputObserver =
+    Box<dyn crate::engine::observe::Observer<Option<crate::engine::observe::CampaignView>>>;
+
 pub type InputFrameHook = unsafe fn(&mut Io<'_>);
 
 pub type Frame<'a> = dyn FnMut(&mut Cx<'_>, &mut Io<'_>) -> bool + 'a;
@@ -11,6 +14,7 @@ pub trait InputRuntime {
     fn observer(
         &self,
     ) -> Box<dyn crate::engine::observe::Observer<Option<crate::engine::observe::CampaignView>>>;
+    fn update(&self);
     fn run(&self, cx: &mut Cx<'_>, io: &mut Io<'_>, reset: bool, frame: &mut Frame<'_>);
     fn battle_input(&self, input: &InputContext) -> u8;
 }
@@ -63,6 +67,8 @@ mod tests {
         {
             Box::new(Unobserved)
         }
+
+        fn update(&self) {}
 
         fn run(&self, cx: &mut Cx<'_>, io: &mut Io<'_>, reset: bool, frame: &mut Frame<'_>) {
             self.0.borrow_mut().push(reset);

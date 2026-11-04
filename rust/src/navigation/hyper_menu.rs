@@ -17,22 +17,22 @@ unsafe fn input(cx: &mut Cx<'_>, io: &mut Io<'_>, state: *mut MENU_STATE) -> BOO
     cx.with_legacy(|| SetFlashRect(ptr::null()));
     match (*state).CurState {
         2 => {
-            select = crate::planets::devices::DevicesMenu(cx, io) != 0;
+            select = crate::planets::devices::devices_menu(cx, io) != 0;
             if cx.world.story_state(StoryKey::PORTAL_COUNTER) != 0
                 || cx.world.activity() & START_ENCOUNTER as u16 != 0
             {
                 return 0;
             }
         }
-        3 => crate::planets::cargo::live::CargoMenu(cx, io),
-        4 => select = crate::planets::roster::live::RosterMenu(cx, io) != 0,
+        3 => crate::planets::cargo::live::cargo_menu(cx, io),
+        4 => select = crate::planets::roster::live::roster_menu(cx, io) != 0,
         5 => {
             if crate::front_end::gameopt::runtime::game_options(cx, io) == 0 {
                 return 0;
             }
         }
         1 => {
-            crate::planets::pstarmap::StarMap(cx, io);
+            crate::planets::pstarmap::star_map(cx, io);
             return 0;
         }
         6 => return 0,

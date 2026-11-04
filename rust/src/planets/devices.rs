@@ -428,7 +428,7 @@ pub unsafe extern "C" fn InventoryDevices(map: *mut u8, size: u16) -> i16 {
 
 /// # Safety
 /// Requires the initialized UI and campaign on the owning game thread.
-pub unsafe fn DevicesMenu(cx: &mut Cx<'_>, io: &mut Io<'_>) -> i32 {
+pub unsafe fn devices_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) -> i32 {
     let Some(mut menu) = cx.with_legacy(|| prepare_devices_menu()) else {
         return 0;
     };

@@ -34,6 +34,7 @@ fn run_loop(reset: bool, step: &mut InputLoop<'_, '_, '_, '_>) {
         {
             break;
         }
+        // SAFETY: the native loop owns initialized input and sound resources on this thread.
         step.play_menu_sound();
         step.input_hook();
         let keep = step.frame();
@@ -133,6 +134,11 @@ impl crate::engine::input::InputRuntime for NativeInputRuntime {
             Some(observer) => Box::new(crate::automation::observer::Handle(observer.clone())),
             None => Box::new(crate::engine::observe::Unobserved),
         }
+    }
+
+    fn update(&self) {
+        // SAFETY: the owner publishes the initialized game-thread input scope.
+        unsafe { UpdateInputState() };
     }
 
     fn run(

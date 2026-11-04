@@ -9,17 +9,19 @@
 //! @plan PLAN-20260724-MAINLOOP-AND-COMM.P11
 //! @requirement REQ-ML-007, REQ-COMM-DISPATCH
 
+mod encounter;
 mod routing;
 use routing::conversation_setup;
 
 #[cfg(not(test))]
 use crate::engine::StoryKey;
+use crate::engine::World;
 #[cfg(not(test))]
 use crate::engine::WorldData;
+#[cfg(not(test))]
 use crate::engine::{
     battle::Cx,
     observe::{CheckpointView, Io},
-    World,
 };
 use std::os::raw::c_void;
 
@@ -678,7 +680,7 @@ unsafe fn lock_encounter(_h: HLink) -> *mut CEncounter {
 pub unsafe fn race_communication(cx: &mut Cx<'_>, io: &mut Io<'_>) {
     if lobyte(cx.world.activity()) == IN_LAST_BATTLE {
         // Going into talking pet conversation
-        let npc_q = cx.with_legacy(|| npc_built_ship_queue());
+        let npc_q = cx.with_legacy(npc_built_ship_queue);
         cx.with_legacy(|| ReinitQueue(npc_q));
         cx.with_legacy(|| clone_ship_fragment(ship::SAMATRA_SHIP, npc_q, 0));
         init_communication(cx, io, conv::TALKING_PET);
@@ -698,12 +700,7 @@ pub unsafe fn race_communication(cx: &mut Cx<'_>, io: &mut Io<'_>) {
         return;
     }
 
-    if cx
-        .with_legacy(|| crate::mainloop::ffi::get_next_activity())
-        .0
-        & CHECK_LOAD
-        != 0
-    {
+    if cx.with_legacy(crate::mainloop::ffi::get_next_activity).0 & CHECK_LOAD != 0 {
         let ec = cx.world.story_state(StoryKey::ESCAPE_COUNTER) as u8;
 
         init_communication(cx, io, routing::restored_conversation(cx.world));
@@ -732,8 +729,8 @@ pub unsafe fn race_communication(cx: &mut Cx<'_>, io: &mut Io<'_>) {
 
     let mut h_encounter: HLink = std::ptr::null_mut();
 
-    if cx.with_legacy(|| in_hq_space()) {
-        let npc_q = cx.with_legacy(|| npc_built_ship_queue());
+    if cx.with_legacy(in_hq_space) {
+        let npc_q = cx.with_legacy(npc_built_ship_queue);
         cx.with_legacy(|| ReinitQueue(npc_q));
 
         if cx.world.story_state(StoryKey::ARILOU_SPACE_SIDE) >= 2 {
@@ -755,7 +752,7 @@ pub unsafe fn race_communication(cx: &mut Cx<'_>, io: &mut Io<'_>) {
     }
 
     // First ship in the npc queue defines which alien race the player talks to
-    let npc_q = cx.with_legacy(|| npc_built_ship_queue());
+    let npc_q = cx.with_legacy(npc_built_ship_queue);
     let h_star_ship = get_head_link(npc_q);
     if h_star_ship.is_null() {
         return;
@@ -791,27 +788,7 @@ pub unsafe fn race_communication(cx: &mut Cx<'_>, io: &mut Io<'_>) {
             cx.with_legacy(|| ReinitQueue(npc_q));
         }
     } else if !h_encounter.is_null() {
-        // Update HSpace encounter info, ships left, etc.
-        let enc_ptr = lock_encounter(h_encounter);
-        let num_ships = CountLinks(npc_q);
-        (*enc_ptr).num_ships = num_ships as u8;
-        (*enc_ptr).flags |= ENCOUNTER_REFORMING;
-        if status == 0 {
-            (*enc_ptr).flags |= ONE_SHOT_ENCOUNTER;
-        }
-
-        for i in 0..num_ships {
-            let h_star_ship = get_star_ship_from_index(npc_q, i as u8);
-            if h_star_ship.is_null() {
-                break;
-            }
-            let frag_ptr = lock_ship_frag(npc_q, h_star_ship);
-            let bsi = &mut (*enc_ptr).ship_list[i as usize];
-            bsi.race_id = (*frag_ptr).race_id;
-            bsi.crew_level = (*frag_ptr).crew_level;
-            bsi.max_crew = (*frag_ptr).max_crew;
-            bsi.max_energy = (*frag_ptr).max_energy;
-        }
+        cx.with_legacy(|| encounter::update_fleet(h_encounter, npc_q, status));
 
         cx.with_legacy(|| ReinitQueue(npc_q));
     }
@@ -870,108 +847,63 @@ pub unsafe fn init_communication(cx: &mut Cx<'_>, io: &mut Io<'_>, which_comm: u
         }
     });
     let (conversation, ship_type) = conversation_setup(which_comm);
-    init_communication_inner(cx, io, conversation, ship_type)
+    run_encounter(cx, io, conversation, ship_type)
 }
 
 #[cfg(not(test))]
 /// Perform sphere tracking, battle setup, dialogue and teardown in C order.
-unsafe fn init_communication_inner(
-    cx: &mut Cx<'_>,
-    io: &mut Io<'_>,
-    which_comm: u32,
-    ship_type: u16,
-) -> u16 {
-    let (descriptor, mut status) = cx.with_legacy(|| {
-        if ship_type != u16::from(ship::URQUAN_DRONE_SHIP) {
-            start_sphere_tracking(ship_type as u8);
-            if which_comm == conv::ORZ
-                || (which_comm == conv::TALKING_PET
-                    && (World::current()
-                        .read(|world| world.story_state(StoryKey::TALKING_PET_ON_SHIP))
-                        == 0
-                        || lobyte(crate::mainloop::ffi::get_current_activity().0)
-                            == IN_LAST_BATTLE))
-                || (which_comm != conv::CHMMR && which_comm != conv::SYREEN)
-            {
-                ffi::BuildBattle(NPC_PLAYER_NUM);
-            }
+fn run_encounter(cx: &mut Cx<'_>, io: &mut Io<'_>, which_comm: u32, ship_type: u16) -> u16 {
+    if ship_type != u16::from(ship::URQUAN_DRONE_SHIP) {
+        // SAFETY: the mode owns the initialized campaign during resource dispatch.
+        cx.with_legacy(|| unsafe { start_sphere_tracking(ship_type as u8) });
+        let build = which_comm == conv::ORZ
+            || (which_comm == conv::TALKING_PET
+                && (cx.world.story_state(StoryKey::TALKING_PET_ON_SHIP) == 0
+                    || lobyte(cx.world.activity()) == IN_LAST_BATTLE))
+            || (which_comm != conv::CHMMR && which_comm != conv::SYREEN);
+        if build {
+            // SAFETY: the current mode owns the campaign's NPC fleet.
+            cx.with_legacy(|| unsafe { ffi::BuildBattle(NPC_PLAYER_NUM) });
         }
-        let comm_id = if ship_type != u16::from(ship::YEHAT_REBEL_SHIP) {
-            which_comm
-        } else {
-            conv::YEHAT_REBEL
-        };
+    }
+    let comm_id = if ship_type != u16::from(ship::YEHAT_REBEL_SHIP) {
+        which_comm
+    } else {
+        conv::YEHAT_REBEL
+    };
+    cx.with_legacy(|| {
         io.observer
-            .checkpoint(&CheckpointView::DialogueDispatch(comm_id));
-        let descriptor = rust_init_race_dispatch(comm_id);
-        if !descriptor.is_null() {
-            std::ptr::copy_nonoverlapping(
-                descriptor.cast::<crate::comm::locdata::CLocData>(),
-                &raw mut ffi::CommData,
-                1,
-            );
-            set_comm_data(read_locdata(&*descriptor.cast()));
-        }
-        let mut status;
-        if World::current().read(|world| world.story_state(StoryKey::BATTLE_SEGUE)) == 0 {
-            status = HAIL;
-        } else {
+            .checkpoint(&CheckpointView::DialogueDispatch(comm_id))
+    });
+    let has_descriptor = encounter::load_descriptor(cx, comm_id);
+    let status = if cx.world.story_state(StoryKey::BATTLE_SEGUE) == 0 {
+        HAIL
+    } else {
+        let status = cx.with_legacy(|| {
             io.observer.checkpoint(&CheckpointView::EncounterMenu(true));
-            status = ffi::InitEncounter();
+            // SAFETY: the legacy encounter loop runs under the same owner publication.
+            let status = unsafe { ffi::InitEncounter() };
             io.observer
                 .checkpoint(&CheckpointView::EncounterMenu(false));
-            if status == HAIL && !descriptor.is_null() {
-                World::current().write(|world| world.set_story_state(StoryKey::BATTLE_SEGUE, 0));
-            } else {
-                status = ATTACK;
-                World::current().write(|world| world.set_story_state(StoryKey::BATTLE_SEGUE, 1));
-            }
-        }
-        (descriptor, status)
-    });
-    if status == HAIL {
-        crate::comm::hail::hail_alien(cx, io);
-    } else {
-        cx.with_legacy(|| {
-            if !descriptor.is_null() {
-                if crate::mainloop::ffi::get_current_activity().0 & (CHECK_ABORT | CHECK_LOAD) == 0
-                {
-                    if let Some(callback) = ffi::CommData.post_encounter_func {
-                        callback();
-                    }
-                }
-                if let Some(callback) = ffi::CommData.uninit_encounter_func {
-                    callback();
-                }
-            }
+            status
         });
-    }
-    status = cx.with_legacy(|| {
-        let mut status = 0;
-        let activity = crate::mainloop::ffi::get_current_activity().0;
-        if activity & (CHECK_ABORT | CHECK_LOAD) == 0 {
-            let npc = npc_built_ship_queue();
-            if lobyte(activity) == IN_LAST_BATTLE
-                && WorldData::current().read(|owner| owner.game.glob_flags) & CYBORG_ENABLED != 0
-            {
-                ReinitQueue(npc);
-            }
-            World::current()
-                .write(|world| world.set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, 0));
-            status = u16::from(
-                World::current().read(|world| world.story_state(StoryKey::BATTLE_SEGUE)) != 0
-                    && !get_head_link(npc).is_null(),
-            );
-            if status != 0 {
-                ffi::BuildBattle(RPG_PLAYER_NUM);
-                ffi::EncounterBattle();
-            } else {
-                World::current().write(|world| world.set_story_state(StoryKey::BATTLE_SEGUE, 0));
-            }
+        if status == HAIL && has_descriptor {
+            cx.world.set_story_state(StoryKey::BATTLE_SEGUE, 0);
+            HAIL
+        } else {
+            cx.world.set_story_state(StoryKey::BATTLE_SEGUE, 1);
+            ATTACK
         }
-        status
-    });
-    cx.with_legacy(|| ffi::UninitEncounter());
+    };
+    if status == HAIL {
+        // SAFETY: the loaded descriptor and resources remain live for the synchronous session.
+        unsafe { crate::comm::hail::hail_alien(cx, io) };
+    } else {
+        encounter::finish_unhailed(cx, has_descriptor);
+    }
+    let status = encounter::fight_if_selected(cx);
+    // SAFETY: encounter teardown retains its legacy implementation for U2-10a.
+    cx.with_legacy(|| unsafe { ffi::UninitEncounter() });
     status
 }
 

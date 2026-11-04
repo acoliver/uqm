@@ -15,16 +15,16 @@ static mut LAST_BUF: [u8; 256] = [0; 256];
 pub use crate::ships::native::abi::MENU_STATE as MenuHeader;
 
 #[cfg(not(test))]
-use crate::planets::pstarmap::UpdateFuelRequirement;
+use crate::planets::pstarmap::update_fuel_requirement;
 #[cfg(test)]
 extern "C" {
-    fn UpdateFuelRequirement();
+    fn update_fuel_requirement();
 }
 #[cfg(not(test))]
-use crate::planets::pstarmap::ZoomStarMap;
+use crate::planets::pstarmap::zoom_star_map;
 #[cfg(test)]
 extern "C" {
-    fn ZoomStarMap(direction: i16);
+    fn zoom_star_map(direction: i16);
 }
 
 use crate::battle::sounds::engine::PlayMenuSound;
@@ -90,7 +90,7 @@ pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> u32 {
         flashCurrentLocation(&universe);
         *last = 0;
         UpdateCursorInfo((last).cast());
-        UpdateFuelRequirement();
+        update_fuel_requirement();
         return 1;
     }
     let keys = std::ptr::addr_of!(PulsedInputState).read().menu;
@@ -126,7 +126,7 @@ pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> u32 {
             let invalid = b"  <random garbage>  \0";
             std::ptr::copy_nonoverlapping(invalid.as_ptr(), last, invalid.len());
             UpdateCursorInfo((last).cast());
-            UpdateFuelRequirement();
+            update_fuel_requirement();
             SetMenuRepeatDelay(14, 105, 7, 1);
             SetMenuSounds(0, 0);
         } else {
@@ -140,7 +140,7 @@ pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> u32 {
         } else {
             0
         };
-        ZoomStarMap(zoom);
+        zoom_star_map(zoom);
         let sx = if keys[8] != 0 {
             1
         } else if keys[7] != 0 {
@@ -158,7 +158,7 @@ pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> u32 {
         if sx != 0 || sy != 0 {
             UpdateCursorLocation(sx, sy, std::ptr::null());
             UpdateCursorInfo((last).cast());
-            UpdateFuelRequirement();
+            update_fuel_requirement();
         }
         SleepThreadUntil(time_in.wrapping_add(14));
     }

@@ -54,6 +54,7 @@ pub struct PlanetSideReply {
 #[cfg(not(test))]
 use crate::graphics::pixmap_abi::GetFrameCount;
 
+#[cfg(not(test))]
 const fn failure(status: i32) -> PlanetSideReply {
     PlanetSideReply {
         status,
@@ -63,6 +64,8 @@ const fn failure(status: i32) -> PlanetSideReply {
     }
 }
 
+/// # Safety
+/// Native handles in context must remain live throughout the synchronous lander session.
 #[cfg(not(test))]
 pub unsafe fn run_session(
     cx: &mut crate::engine::battle::Cx<'_>,

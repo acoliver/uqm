@@ -1,7 +1,5 @@
 //! Discovery-report ownership at the PlanetSide runtime boundary.
 
-#[cfg(not(test))]
-use crate::engine::Kernel as KernelOwner;
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -33,20 +31,27 @@ pub trait DiscoveryReportPort {
 pub struct CffiDiscoveryReport {
     #[cfg_attr(test, allow(dead_code))]
     discovery_string: *mut *mut c_void,
+    system: *mut crate::ships::native::abi::SOLARSYS_STATE,
 }
 
 impl CffiDiscoveryReport {
-    pub fn new(discovery_string: *mut *mut c_void) -> Result<Self, AdapterError> {
+    pub fn new(
+        discovery_string: *mut *mut c_void,
+        system: *mut crate::ships::native::abi::SOLARSYS_STATE,
+    ) -> Result<Self, AdapterError> {
         if discovery_string.is_null() {
             Err(AdapterError::new("discovery_report_slot"))
         } else {
-            Ok(Self { discovery_string })
+            Ok(Self {
+                discovery_string,
+                system,
+            })
         }
     }
 }
 
 #[cfg(not(test))]
-use crate::planets::report::live::DoDiscoveryReport;
+use crate::planets::report::live::discovery_report;
 #[cfg(not(test))]
 use crate::strings::string_table::DestroyStringTable;
 #[cfg(not(test))]
@@ -71,11 +76,7 @@ impl DiscoveryReportPort for CffiDiscoveryReport {
             // re-acquiring one level was an assumption of the retired native
             // lander loop and leaked a level against a Rust caller.
             REPORT_ACTIVE.store(true, Ordering::Release);
-            DoDiscoveryReport(
-                KernelOwner::current()
-                    .read(|owner| owner.menu_sounds)
-                    .cast(),
-            );
+            discovery_report(self.system);
             REPORT_ACTIVE.store(false, Ordering::Release);
 
             match disposition {
@@ -92,7 +93,7 @@ impl DiscoveryReportPort for CffiDiscoveryReport {
         }
         #[cfg(test)]
         {
-            let _ = disposition;
+            let _ = (disposition, self.system);
             Err(AdapterError::new("discovery_report_unlinked"))
         }
     }
@@ -113,7 +114,7 @@ mod tests {
     #[test]
     fn null_report_slot_is_rejected() {
         assert!(matches!(
-            CffiDiscoveryReport::new(std::ptr::null_mut()),
+            CffiDiscoveryReport::new(std::ptr::null_mut(), std::ptr::null_mut()),
             Err(AdapterError {
                 operation: "discovery_report_slot"
             })
@@ -123,7 +124,7 @@ mod tests {
     #[test]
     fn unlinked_report_never_silently_succeeds() {
         let mut string = std::ptr::NonNull::<u8>::dangling().as_ptr().cast();
-        let mut report = CffiDiscoveryReport::new(&mut string).unwrap();
+        let mut report = CffiDiscoveryReport::new(&mut string, std::ptr::null_mut()).unwrap();
         assert_eq!(
             report.present(ReportDisposition::Once),
             Err(AdapterError::new("discovery_report_unlinked"))

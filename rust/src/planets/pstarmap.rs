@@ -3,11 +3,10 @@
 //! All graphics handles here are native FRAME/CONTEXT pointers. The game
 //! thread owns the map state; callbacks may reenter drawing and input code.
 
-#![allow(non_snake_case)]
-
-use crate::c_bindings::global_state::{Color, EXTENT, FRAME, MENU_STATE, POINT, RECT, STAMP};
+mod screen;
 #[cfg(not(test))]
-use crate::c_bindings::global_state::{FLEET_INFO, QUEUE, TEXT};
+use screen::{finish_star_map, prepare_star_map};
+
 use crate::engine::Kernel;
 #[cfg(not(test))]
 use crate::engine::{StoryKey, World, WorldData};
@@ -23,6 +22,9 @@ use crate::graphics::{
         BatchGraphics, LoadIntoExtraScreen, ScreenTransition, SetTransitionSource, UnbatchGraphics,
     },
 };
+use crate::ships::native::abi::{Color, EXTENT, FRAME, MENU_STATE, POINT, RECT, STAMP};
+#[cfg(not(test))]
+use crate::ships::native::abi::{FLEET_INFO, QUEUE, TEXT};
 
 use crate::graphics::{
     context_abi::{SetContext, SetContextForeGroundColor},
@@ -735,7 +737,7 @@ unsafe fn erase_cursor(x: i16, y: i16) {
 #[cfg(not(test))]
 /// # Safety
 /// Game-thread only, with the star-map UI active.
-pub unsafe fn ZoomStarMap(direction: i16) {
+pub unsafe fn zoom_star_map(direction: i16) {
     if direction > 0 && ZOOM_LEVEL < MAX_ZOOM_SHIFT {
         ZOOM_LEVEL += 1;
         MAP_ORIGIN = cursorLoc;
@@ -876,7 +878,7 @@ fn fuel_requirement(from: POINT, to: POINT, space: u8, sqrt: impl FnOnce(u32) ->
 #[cfg(not(test))]
 /// # Safety
 /// Game-thread only, with the star-map status UI active.
-pub unsafe fn UpdateFuelRequirement() {
+pub unsafe fn update_fuel_requirement() {
     let fuel = fuel_requirement(current_location(), cursorLoc, which_space(), |f| {
         crate::math::square_root(f)
     });
@@ -1082,7 +1084,7 @@ unsafe fn update_map() {
 #[cfg(not(test))]
 /// # Safety
 /// Game-thread only, with game globals and native UI resources initialized.
-pub unsafe fn StarMap(
+pub unsafe fn star_map(
     cx: &mut crate::engine::battle::Cx<'_>,
     io: &mut crate::engine::observe::Io<'_>,
 ) -> u32 {
@@ -1108,46 +1110,6 @@ pub unsafe fn StarMap(
         cx.world.data.game.autopilot = POINT { x: -1, y: -1 };
     }
     u32::from(cx.world.data.game.autopilot.x != -1 && cx.world.data.game.autopilot.y != -1)
-}
-
-#[cfg(not(test))]
-unsafe fn prepare_star_map(
-    misc_data: *mut c_void,
-    space: *mut c_void,
-    autopilot: POINT,
-) -> (MENU_STATE, POINT) {
-    let mut menu: MENU_STATE = std::mem::zeroed();
-    ZOOM_LEVEL = 0;
-    MAP_ORIGIN = POINT { x: 4999, y: 4999 };
-    STAR_MAP_FRAME = pixmap_abi::SetAbsFrameIndex(misc_data.cast(), 48).cast();
-    let universe = current_location();
-    cursorLoc = autopilot;
-    if cursorLoc.x == -1 && cursorLoc.y == -1 {
-        cursorLoc = universe;
-    }
-    menu.Initialized = 0;
-    TRANSITION_PENDING = true;
-    if which_space() <= 1 {
-        update_map();
-    }
-    DrawStarMap(0, (-1isize) as *mut RECT);
-    TRANSITION_PENDING = false;
-    BatchGraphics();
-    let old_context = SetContext(space.cast());
-    let mut clip = zero_rect();
-    GetContextClipRect(&mut clip);
-    SetContext(old_context);
-    LoadIntoExtraScreen(ptr::from_mut(&mut clip).cast());
-    draw_cursor(ux(cursorLoc.x), uy(cursorLoc.y));
-    UnbatchGraphics();
-    (menu, universe)
-}
-
-#[cfg(not(test))]
-unsafe fn finish_star_map(universe: POINT) {
-    DrawHyperCoords(universe);
-    DrawSISMessage(ptr::null());
-    DrawStatusMessage(ptr::null());
 }
 
 #[cfg(test)]

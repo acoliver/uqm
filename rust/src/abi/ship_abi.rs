@@ -1149,9 +1149,7 @@ pub struct battlestate_struct {
     pub frame_cb: BattleFrameCallback,
     pub net: Option<std::rc::Rc<dyn crate::engine::battle::net::BattleNet>>,
     pub battle: *mut crate::engine::battle::Battle,
-    pub observer: Option<
-        Box<dyn crate::engine::observe::Observer<Option<crate::engine::observe::CampaignView>>>,
-    >,
+    pub observer: Option<crate::engine::input::InputObserver>,
 }
 
 

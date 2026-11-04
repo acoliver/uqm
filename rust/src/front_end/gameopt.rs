@@ -79,7 +79,7 @@ pub use runtime::{
 #[cfg(not(test))]
 pub(crate) mod runtime {
     mod save_load;
-    use save_load::save_load_game;
+    use save_load::pick_game;
 
     use super::{picker_action, picker_slot, PickerAction, MAX_SAVED_GAMES, SAVES_PER_PAGE};
     use crate::engine::{battle::Cx, observe::Io, Kernel, StoryKey, World, WorldData};
@@ -1141,111 +1141,6 @@ pub(crate) mod runtime {
             }
         }
         1
-    }
-
-    unsafe fn pick_game(
-        cx: &mut Cx<'_>,
-        io: &mut Io<'_>,
-        saving: BOOLEAN,
-        from_main_menu: BOOLEAN,
-    ) -> BOOLEAN {
-        let activity = cx.world.activity();
-        log::info!(
-            "RUST_PICKER: enter saving={saving} main_menu={from_main_menu} activity={activity:#x}"
-        );
-        let mut pick_state: PickGameState = mem::zeroed();
-        pick_state.saving = saving;
-        let mut menu_state: MENU_STATE = mem::zeroed();
-        let (old_callback, old_context, mut dlg_stamp, dlg_rect) = cx.with_legacy(|| {
-            pick_state.summary_frame =
-                SetAbsFrameIndex(Kernel::current().read(|owner| owner.play_frame), 39);
-            menu_state.privData = ptr::addr_of_mut!(pick_state).cast();
-            menu_state.CurState = LAST_USED_SLOT as BYTE;
-            let time_out = FadeMusic(0, (ONE_SECOND / 2) as SIZE);
-            let old_callback = SetInputCallback(None);
-            load_game_descriptions(ptr::addr_of_mut!(pick_state.summary).cast());
-            let old_context = SetContext(Kernel::current().read(|owner| owner.space_context));
-            let mut dlg_stamp = SaveContextFrame(ptr::null());
-            let mut dlg_rect: RECT = mem::zeroed();
-            GetContextClipRect(&mut dlg_rect);
-            SleepThreadUntil(time_out);
-            pause_music();
-            StopSound();
-            FadeMusic(NORMAL_VOLUME as BYTE, 0);
-            SetTransitionSource(ptr::null());
-            BatchGraphics();
-            SetContextBackGroundColor(BLACK_COLOR);
-            ClearDrawable();
-            redraw_pick_display(&mut pick_state, menu_state.CurState as COUNT);
-            draw_save_load(&mut pick_state);
-            if from_main_menu != 0 {
-                UnbatchGraphics();
-                FadeScreen(ScreenFadeType_FadeAllToColor, (ONE_SECOND / 2) as SIZE);
-            } else {
-                let mut ctx_rect: RECT = mem::zeroed();
-                GetContextClipRect(&mut ctx_rect);
-                ScreenTransition(3, &ctx_rect);
-                UnbatchGraphics();
-            }
-            SetMenuSounds(
-                MENU_SOUND_ARROWS | MENU_SOUND_PAGEUP | MENU_SOUND_PAGEDOWN,
-                0,
-            );
-            log::info!("RUST_PICKER: list_drawn slots=50");
-            (old_callback, old_context, dlg_stamp, dlg_rect)
-        });
-        loop {
-            let mut canceled_by_user: BOOLEAN = 0;
-            pick_state.success = 0;
-            cx.run_input(io, true, |cx, _| {
-                cx.with_legacy(|| do_pick_game(ptr::addr_of_mut!(menu_state))) != 0
-            });
-            if pick_state.success == 0 {
-                break;
-            }
-            LAST_USED_SLOT = menu_state.CurState as COUNT;
-            if cx.with_legacy(|| {
-                save_load_game(
-                    &mut pick_state,
-                    menu_state.CurState as COUNT,
-                    &mut canceled_by_user,
-                )
-            }) != 0
-            {
-                log::info!(
-                    "{}",
-                    if saving != 0 {
-                        "RUST_PICKER: exit=save_success"
-                    } else {
-                        "RUST_PICKER: exit=load_success"
-                    }
-                );
-                break;
-            }
-            log::info!("RUST_PICKER: operation_failed picker_remains_open");
-            if saving != 0 && canceled_by_user == 0 {
-                crate::ui::save_problem::save_problem(cx, io);
-            }
-            cx.with_legacy(|| {
-                load_game_descriptions(ptr::addr_of_mut!(pick_state.summary).cast());
-                redraw_pick_display(&mut pick_state, menu_state.CurState as COUNT);
-            });
-        }
-        cx.with_legacy(|| SetMenuSounds(MENU_SOUND_ARROWS, MENU_SOUND_SELECT));
-        if pick_state.success != 0 && saving == 0 {
-            cx.world
-                .set_activity(cx.world.activity() | CHECK_LOAD as ACTIVITY);
-        }
-        let activity = cx.world.activity();
-        let restore = activity & CHECK_ABORT as ACTIVITY == 0
-            && (saving != 0 || (pick_state.success == 0 && from_main_menu == 0));
-        cx.with_legacy(|| {
-            save_load::restore_display(&mut dlg_stamp, &dlg_rect, restore);
-            SetContext(old_context);
-            resume_music();
-            SetInputCallback(old_callback);
-        });
-        pick_state.success
     }
 
     unsafe fn do_game_options(cx: &mut Cx<'_>, io: &mut Io<'_>, p_ms: *mut MENU_STATE) -> BOOLEAN {
