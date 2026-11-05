@@ -26,13 +26,7 @@ pub type UNICODE = ::std::os::raw::c_char;
 pub const BOOLEAN_FALSE: BOOLEAN = 0;
 pub const BOOLEAN_TRUE: BOOLEAN = 1;
 pub type BOOLEAN = ::std::os::raw::c_uint;
-pub type QUEUE_HANDLE = *mut ::std::os::raw::c_void;
-pub type HLINK = QUEUE_HANDLE;
 
-pub use crate::engine::battle::record::QUEUE;
-pub type HEVENT = HLINK;
-pub use crate::navigation::abi::event;
-pub type EVENT = event;
 pub use crate::graphics::native_abi::Color;
 pub type RESOURCE = *const ::std::os::raw::c_char;
 pub use crate::graphics::native_abi::string_table_entry;
@@ -123,7 +117,7 @@ pub const ARILOU_UMGAH_CHECK: _bindgen_ty_10 = 14;
 pub const YEHAT_REBEL_EVENT: _bindgen_ty_10 = 15;
 pub const SLYLANDRO_RAMP_UP: _bindgen_ty_10 = 16;
 pub const SLYLANDRO_RAMP_DOWN: _bindgen_ty_10 = 17;
-pub const NUM_EVENTS: _bindgen_ty_10 = 18;
+pub const NUM_EVENTS: _bindgen_ty_10 = crate::engine::clock::NUM_EVENTS as _bindgen_ty_10;
 pub type _bindgen_ty_10 = ::std::os::raw::c_uint;
 extern "C" {
     pub static mut ScreenWidth: ::std::os::raw::c_int;
@@ -173,9 +167,7 @@ pub type SPECIES_ID = ::std::os::raw::c_uint;
 pub use crate::engine::battle::record::RaceDescriptor;
 pub use crate::ships::native::abi::SHIP_FRAGMENT;
 pub use crate::engine::battle::record::ShipRecord;
-pub type HFLEETINFO = HLINK;
 pub use crate::ships::native::abi::FLEET_INFO;
-pub type HIPGROUP = HLINK;
 pub use crate::navigation::abi::IP_GROUP;
 pub type BRIEF_SHIP_INFO = brief_ship_info;
 pub type ENCOUNTER = encounter;
@@ -185,11 +177,11 @@ pub type NODE_INFO = node_info;
 pub type PLANET_ORBIT = planet_orbit;
 pub type SOLARSYS_STATE = solarsys_state;
 pub type InitNpcsFunction =
-    ::std::option::Option<unsafe extern "C" fn(solarSys: *mut SOLARSYS_STATE) -> bool>;
+    Option<unsafe fn(&mut crate::engine::World, *mut SOLARSYS_STATE) -> bool>;
 pub type ReinitNpcsFunction =
-    ::std::option::Option<unsafe extern "C" fn(solarSys: *mut SOLARSYS_STATE) -> bool>;
+    Option<unsafe fn(&mut crate::engine::World, *mut SOLARSYS_STATE) -> bool>;
 pub type UninitNpcsFunction =
-    ::std::option::Option<unsafe extern "C" fn(solarSys: *mut SOLARSYS_STATE) -> bool>;
+    Option<unsafe fn(&mut crate::engine::World, *mut SOLARSYS_STATE) -> bool>;
 pub type GeneratePlanetsFunction =
     ::std::option::Option<unsafe extern "C" fn(solarSys: *mut SOLARSYS_STATE) -> bool>;
 pub type GenerateMoonsFunction = ::std::option::Option<
@@ -265,10 +257,6 @@ pub use crate::ships::native::abi::PlanetFrame;
 pub use crate::ships::native::abi::ELEMENT_ENTRY;
 pub use crate::ships::native::abi::PLANET_INFO;
 pub use crate::ships::native::abi::SYSTEM_INFO;
-// The runtime providers are excluded from the isolated unit-test build.
-#[cfg(test)]
-#[cfg(not(test))]
-pub use crate::battle::build_native::engine::EscortFeasibilityStudy;
 #[cfg(test)]
 #[cfg(not(test))]
 pub use crate::planets::render::c_api::draw_filled_oval as DrawFilledOval;
@@ -281,7 +269,6 @@ pub use crate::planets::solarsys::planetOuterLocation;
 #[cfg(test)]
 #[cfg(not(test))]
 pub use crate::planets::solarsys::XFormIPLoc;
-pub type HENCOUNTER = HLINK;
 pub use crate::navigation::abi::brief_ship_info;
 pub use crate::navigation::abi::encounter;
 extern "C" {
@@ -365,8 +352,6 @@ pub type TFB_Image = tfb_image;
 pub use crate::graphics::geometry_ffi::BresenhamLine as bresenham_line;
 pub type BRESENHAM_LINE = bresenham_line;
 pub type DRAWABLE_TYPE = UWORD;
-#[cfg(not(test))]
-pub use crate::battle::build_native::EscortFeasibilityStudy;
 pub use crate::graphics::geometry_ffi::_clip_line;
 pub use crate::graphics::native_abi::drawable_desc;
 pub use crate::graphics::native_abi::frame_desc;

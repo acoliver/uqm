@@ -64,12 +64,10 @@ pub(crate) mod live {
     }
 
     fn notify_others(cx: &mut crate::engine::battle::Cx<'_>, race: u16, target: u8) {
-        let mut handle = cx.navigation().game.ip_group_q.head;
-        while !handle.is_null() {
-            let pointer = std::ptr::NonNull::new(handle.cast::<IP_GROUP>())
-                .unwrap_or_else(|| panic!("linked group"));
-            let mut group = *cx.group_record(pointer);
-            handle = group.succ;
+        let mut next = cx.world.ip_groups_ref().head();
+        while let Some(id) = next {
+            let mut group = *cx.world.ip_groups_ref().get(id);
+            next = cx.world.ip_groups_ref().succ(id);
             if group.race_id as u16 != race {
                 continue;
             }
@@ -95,7 +93,7 @@ pub(crate) mod live {
                 group.task |= IGNORE_FLAGSHIP as u8;
                 group.dest_loc = target;
             }
-            *cx.group_record_mut(pointer) = group;
+            *cx.world.ip_groups().get_mut(id) = group;
         }
     }
 
@@ -436,7 +434,10 @@ pub(crate) mod live {
             collide_flagship(cx, first, second);
         }
     }
-    fn spawn_group(cx: &mut crate::engine::battle::Cx<'_>, group: std::ptr::NonNull<IP_GROUP>) {
+    fn spawn_group(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        group: crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Group>,
+    ) {
         let Some(element) = cx.alloc_element() else {
             return;
         };
@@ -454,18 +455,7 @@ pub(crate) mod live {
             cx,
             locationToDisplay(record.loc, radius(cx, record.sys_loc)),
         );
-        let queue = &cx.navigation().game.ip_group_q;
-        let offset = (group.as_ptr() as usize)
-            .checked_sub(queue.pq_tab as usize)
-            .unwrap_or_else(|| panic!("group belongs to pool"));
-        let stride = usize::from(queue.object_size);
-        assert!(offset.is_multiple_of(stride));
-        cx.set_ip_group_parent(
-            element,
-            (offset / stride)
-                .try_into()
-                .unwrap_or_else(|_| panic!("IP-group slot")),
-        );
+        cx.set_ip_group_parent(element, group);
         cx.setup_element(element);
         let stars = cx.navigation_stars();
         let frame = cx.retreat_frame(stars.view());
@@ -551,9 +541,9 @@ pub(crate) mod live {
                 notify_others(cx, EncounterRace as u16, 0);
                 EncounterRace = -1;
             }
-            let mut handle = cx.navigation().game.ip_group_q.head;
-            while let Some(group) = std::ptr::NonNull::new(handle.cast::<IP_GROUP>()) {
-                handle = cx.group_record(group).succ;
+            let mut handle = cx.world.ip_groups_ref().head();
+            while let Some(group) = handle {
+                handle = cx.world.ip_groups_ref().succ(group);
                 if cx.group_record(group).in_system != 0 {
                     spawn_group(cx, group);
                 }

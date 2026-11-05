@@ -1,4 +1,3 @@
-use uqm_rust::engine::battle::schema::HLINK;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
@@ -40,7 +39,7 @@ fn descriptor_and_spit_animation_preserve_jitter_rng_and_speed() {
                             ship.weapon_record(Some(id)).cast()
                         })
                     })
-                    .collect::<Vec<HLINK>>()
+                    .collect::<Vec<*mut std::ffi::c_void>>()
             })[0];
             let e = battle::element(h);
             assert_eq!(((*e).life, (*e).hits, (*e).mass), (10, 1, 1));

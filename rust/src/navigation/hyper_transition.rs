@@ -20,14 +20,21 @@ pub(crate) fn element_universe(cx: &Cx<'_>, element: ElementId) -> POINT {
     }
 }
 pub(super) fn cleanup(cx: &mut Cx<'_>) {
-    let mut handle = cx.navigation().game.encounter_q.head;
-    while let Some(encounter) = NonNull::new(handle.cast::<ENCOUNTER>()) {
-        handle = cx.encounter_record(encounter).succ;
-        let element = cx.elements().id(cx.encounter_record(encounter).hElement);
-        if element.is_some_and(|id| cx.target(id).is_some()) {
-            cx.promote_hyper_encounter(encounter);
+    let mut next = cx.world.encounters_ref().head();
+    while let Some(encounter) = next {
+        let queue = cx.world.encounters_ref();
+        next = queue.succ(encounter);
+        let element = cx
+            .elements()
+            .id(std::ptr::NonNull::new(queue.get(encounter).h_element));
+        let promote = element.is_some_and(|id| cx.target(id).is_some());
+        let mut queue = cx.world.encounters();
+        if promote {
+            queue.remove(encounter);
+            let head = queue.head();
+            queue.insert_before(encounter, head);
         }
-        cx.encounter_record_mut(encounter).hElement = ptr::null_mut();
+        queue.get_mut(encounter).h_element = ptr::null_mut();
     }
 }
 pub(crate) fn unhyper(cx: &mut Cx<'_>, element: ElementId) {
@@ -232,4 +239,3 @@ pub fn save_sis_hyper_state(cx: &mut Cx<'_>) {
 }
 
 use crate::engine::battle::{Cx, ElementId};
-use std::ptr::NonNull;

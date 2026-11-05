@@ -1,6 +1,5 @@
 //! Mycon native entry point and callbacks linked against the engine archive.
 
-use uqm_rust::engine::battle::schema::HLINK;
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]
@@ -79,7 +78,7 @@ fn plasma_launch_and_postprocess_boundaries_match_c() {
         let ship = fixture.ptr();
         (*ship).next.location = POINT { x: 100, y: 200 };
         let slots = fixture.weapon(1);
-        let handles: [HLINK; 1] = [fixture.weapon_record(slots[0]).cast()];
+        let handles: [*mut std::ffi::c_void; 1] = [fixture.weapon_record(slots[0]).cast()];
         assert!(!handles[0].is_null());
         let plasma = battle::element(handles[0]);
         assert_eq!((*plasma).life, 143);

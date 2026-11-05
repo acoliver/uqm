@@ -52,6 +52,46 @@ pub trait Story {
     fn set_word(&mut self, name: &'static str, value: u32);
 }
 
+impl Story for &std::cell::RefCell<&mut crate::engine::battle::Cx<'_>> {
+    fn flag(&self, name: &'static str) -> u32 {
+        self.borrow().world.flag(name)
+    }
+    fn set_flag(&mut self, name: &'static str, value: u32) {
+        self.borrow_mut().world.set_flag(name, value);
+    }
+    fn word(&self, name: &'static str) -> u32 {
+        self.borrow().world.word(name)
+    }
+    fn set_word(&mut self, name: &'static str, value: u32) {
+        self.borrow_mut().world.set_word(name, value);
+    }
+}
+
+impl Story for World {
+    fn flag(&self, name: &'static str) -> u32 {
+        StoryKey::from_name(name).map_or(0, |key| self.story_state(key))
+    }
+    fn set_flag(&mut self, name: &'static str, value: u32) {
+        if let Some(key) = StoryKey::from_name(name) {
+            self.set_story_state(key, value);
+        }
+    }
+    fn word(&self, name: &'static str) -> u32 {
+        read_word(word_start(name), |start| {
+            u32::from(rust_get_game_state_bits(
+                self,
+                start as i32,
+                start as i32 + 7,
+            ))
+        })
+    }
+    fn set_word(&mut self, name: &'static str, value: u32) {
+        write_word(word_start(name), value, |start, byte| {
+            rust_set_game_state_bits(self, start as i32, start as i32 + 7, byte);
+        });
+    }
+}
+
 /// The live game state through the Rust game-state API.
 pub struct LiveStory;
 
@@ -138,25 +178,20 @@ pub trait FleetGroups: Npcs {
     /// `ReinitQueue (&GLOBAL (npc_built_ship_q))`.
     fn reinit_built_queue(&mut self);
     /// `GetHeadLink (&GLOBAL (ip_group_q))`.
-    fn head_ip_group(&mut self) -> Option<&mut IP_GROUP>;
+    fn head_ip_group(&mut self, visit: &mut dyn FnMut(&mut IP_GROUP)) -> bool;
 }
 
 /// The shared opening of the fixed-fleet `initNpcs` hooks: take the group
 /// reference stored under `word`, and build and store a new group when there
 /// is none yet.
-pub fn ensure_fleet(
-    story: &mut impl Story,
-    host: &mut impl FleetGroups,
-    word: &'static str,
-    ship: u8,
-) {
-    host.set_battle_group_ref(story.word(word));
+pub fn ensure_fleet(host: &mut (impl FleetGroups + Story), word: &'static str, ship: u8) {
+    host.set_battle_group_ref(host.word(word));
     if host.battle_group_ref() == 0 {
         host.clone_ship_into_built_queue(ship);
         let group = host.add_new_group();
         host.set_battle_group_ref(group);
         host.reinit_built_queue();
-        story.set_word(word, group);
+        host.set_word(word, group);
     }
 }
 

@@ -2,6 +2,7 @@
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
+use crate::engine::battle::Cx;
 mod phrases;
 use phrases::*;
 mod api;
@@ -333,15 +334,15 @@ fn descriptor(screen_width: i32) -> CLocData {
 pub(crate) mod live {
     use super::super::script::live::LiveScript;
     use super::*;
-    fn run(f: impl FnOnce(&mut Dialogue<'_, LiveScript<Handler>>)) {
-        let mut a = LiveScript { callback };
+    fn run(cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>)) {
+        let mut a = LiveScript::new(cx, callback);
         f(&mut Dialogue { api: &mut a });
     }
-    fn combat(r: u32) {
-        run(|s| s.handle(Handler::Combat, r as i32));
+    fn combat(cx: &mut Cx<'_>, r: u32) {
+        run(cx, |s| s.handle(Handler::Combat, r as i32));
     }
-    fn story(r: u32) {
-        run(|s| s.handle(Handler::Story, r as i32));
+    fn story(cx: &mut Cx<'_>, r: u32) {
+        run(cx, |s| s.handle(Handler::Story, r as i32));
     }
     fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
         match h {
@@ -349,46 +350,45 @@ pub(crate) mod live {
             Handler::Story => story,
         }
     }
-    pub(super) fn intro() {
-        run(|s| s.intro());
+    pub(super) fn intro(cx: &mut Cx<'_>) {
+        run(cx, |s| s.intro());
     }
-    pub(super) fn post() {}
-    pub(super) fn uninit() -> u16 {
+    pub(super) fn post(_cx: &mut Cx<'_>) {}
+    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
         0
     }
-    #[no_mangle]
-    pub unsafe extern "C" fn init_blackurq_comm() -> *mut CLocData {
+    pub unsafe fn init_blackurq_comm(cx: &mut Cx<'_>) -> *mut CLocData {
         static mut D: Option<CLocData> = None;
         extern "C" {
             static mut ScreenWidth: i32;
         }
         let d = (&mut *std::ptr::addr_of_mut!(D)).get_or_insert_with(|| descriptor(ScreenWidth));
         (d.alien_text_baseline, d.alien_text_width) = text_layout(ScreenWidth);
-        run(|s| s.initialize());
+        run(cx, |s| s.initialize());
         d
     }
 }
 pub struct BlackurDialogue;
 impl super::RaceDialogue for BlackurDialogue {
-    fn init(&self) -> CommData {
+    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
         #[cfg(not(test))]
         {
-            unsafe { as_comm_data(&*live::init_blackurq_comm()) }
+            unsafe { as_comm_data(&*live::init_blackurq_comm(_cx)) }
         }
         #[cfg(test)]
         {
             as_comm_data(&descriptor(320))
         }
     }
-    fn intro(&self) {
+    fn intro(&self, _cx: &mut Cx<'_>) {
         #[cfg(not(test))]
-        live::intro();
+        live::intro(_cx);
     }
-    fn post_encounter(&self) {
+    fn post_encounter(&self, _cx: &mut Cx<'_>) {
         #[cfg(not(test))]
-        live::post();
+        live::post(_cx);
     }
-    fn uninit(&self) -> u32 {
+    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
         0
     }
 }

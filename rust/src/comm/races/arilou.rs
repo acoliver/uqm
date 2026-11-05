@@ -3,6 +3,7 @@ use super::alliance::AllianceApi;
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
+use crate::engine::battle::Cx;
 mod phrases;
 use phrases::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -683,44 +684,44 @@ fn descriptor() -> CLocData {
 pub(crate) mod live {
     use super::*;
     use crate::comm::races::script::live::LiveScript;
-    fn run(f: impl FnOnce(&mut Dialogue<'_, LiveScript<Handler>>)) {
-        let mut api = LiveScript { callback };
+    fn run(cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>)) {
+        let mut api = LiveScript::new(cx, callback);
         f(&mut Dialogue { api: &mut api });
     }
-    fn exit_conversation(r: u32) {
-        run(|s| {
+    fn exit_conversation(cx: &mut Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::ExitConversation,
                 u16::try_from(r).expect("response exceeds COUNT"),
             )
         });
     }
-    fn arilou_home(r: u32) {
-        run(|s| {
+    fn arilou_home(cx: &mut Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::ArilouHome,
                 u16::try_from(r).expect("response exceeds COUNT"),
             )
         });
     }
-    fn angry_home_arilou(r: u32) {
-        run(|s| {
+    fn angry_home_arilou(cx: &mut Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::AngryHomeArilou,
                 u16::try_from(r).expect("response exceeds COUNT"),
             )
         });
     }
-    fn angry_space_arilou(r: u32) {
-        run(|s| {
+    fn angry_space_arilou(cx: &mut Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::AngrySpaceArilou,
                 u16::try_from(r).expect("response exceeds COUNT"),
             )
         });
     }
-    fn friendly_space_arilou(r: u32) {
-        run(|s| {
+    fn friendly_space_arilou(cx: &mut Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::FriendlySpaceArilou,
                 u16::try_from(r).expect("response exceeds COUNT"),
@@ -736,48 +737,47 @@ pub(crate) mod live {
             Handler::FriendlySpaceArilou => friendly_space_arilou,
         }
     }
-    pub(super) fn intro() {
-        run(|s| s.intro());
+    pub(super) fn intro(cx: &mut Cx<'_>) {
+        run(cx, |s| s.intro());
     }
-    pub(super) fn post() {
-        run(|s| s.post_arilou_enc());
+    pub(super) fn post(cx: &mut Cx<'_>) {
+        run(cx, |s| s.post_arilou_enc());
     }
-    pub(super) fn uninit() -> u16 {
+    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
         0
     }
     /// Initialize this encounter on the game thread.
     ///
     /// # Safety
     /// The caller must copy the descriptor before another encounter initializes.
-    #[no_mangle]
-    pub unsafe extern "C" fn init_arilou_comm() -> *mut CLocData {
+    pub unsafe fn init_arilou_comm(cx: &mut Cx<'_>) -> *mut CLocData {
         static mut DESC: Option<CLocData> = None;
         let desc = (&mut *std::ptr::addr_of_mut!(DESC)).get_or_insert_with(descriptor);
-        run(|s| s.initialize());
+        run(cx, |s| s.initialize());
         desc
     }
 }
 pub struct ArilouDialogue;
 impl super::RaceDialogue for ArilouDialogue {
-    fn init(&self) -> CommData {
+    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
         #[cfg(not(test))]
         {
-            unsafe { as_comm_data(&*live::init_arilou_comm()) }
+            unsafe { as_comm_data(&*live::init_arilou_comm(_cx)) }
         }
         #[cfg(test)]
         {
             as_comm_data(&descriptor())
         }
     }
-    fn intro(&self) {
+    fn intro(&self, _cx: &mut Cx<'_>) {
         #[cfg(not(test))]
-        live::intro();
+        live::intro(_cx);
     }
-    fn post_encounter(&self) {
+    fn post_encounter(&self, _cx: &mut Cx<'_>) {
         #[cfg(not(test))]
-        live::post();
+        live::post(_cx);
     }
-    fn uninit(&self) -> u32 {
+    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
         0
     }
 }

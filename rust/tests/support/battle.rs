@@ -4,7 +4,7 @@
 )]
 use std::{mem, ptr, rc::Rc};
 use uqm_rust::battle::process_native::init_display_list;
-use uqm_rust::engine::battle::schema::HLINK;
+
 use uqm_rust::{
     engine::battle::{ElementId, RaceState, ShipId},
     ships::native::abi::*,
@@ -22,7 +22,9 @@ unsafe fn invoke_intelligence(
             let mut concerns = raw
                 .iter()
                 .map(|item| uqm_rust::engine::battle::Concern {
-                    object: cx.elements().id(item.ObjectPtr.cast()),
+                    object: cx
+                        .elements()
+                        .id(std::ptr::NonNull::new(item.ObjectPtr.cast())),
                     facing: item.facing,
                     which_turn: item.which_turn,
                     movement: item.MoveState,
@@ -57,12 +59,12 @@ pub unsafe fn plot_intercept(
             cx.plot_intercept(
                 &cx.weapon_origin(
                     cx.elements()
-                        .id(a.cast())
+                        .id(std::ptr::NonNull::new(a.cast()))
                         .unwrap_or_else(|| panic!("fixture operand")),
                 ),
                 &cx.weapon_origin(
                     cx.elements()
-                        .id(b.cast())
+                        .id(std::ptr::NonNull::new(b.cast()))
                         .unwrap_or_else(|| panic!("fixture operand")),
                 ),
                 turns,
@@ -74,7 +76,7 @@ pub unsafe fn plot_intercept(
 
 /// # Safety
 /// The caller retains the published, serialized fixture battle.
-pub unsafe fn head() -> HLINK {
+pub unsafe fn head() -> *mut std::ffi::c_void {
     // SAFETY: the fixture owns the active context for this synchronous lookup.
     unsafe {
         uqm_rust::app::bridge::enter(|cx| {
@@ -87,7 +89,7 @@ pub unsafe fn head() -> HLINK {
 
 /// # Safety
 /// The caller retains the published, serialized fixture battle.
-pub unsafe fn tail() -> HLINK {
+pub unsafe fn tail() -> *mut std::ffi::c_void {
     // SAFETY: the fixture owns the active context for this synchronous lookup.
     unsafe {
         uqm_rust::app::bridge::enter(|cx| {
@@ -100,13 +102,13 @@ pub unsafe fn tail() -> HLINK {
 
 /// # Safety
 /// The operand must be a retained element allocation of the serialized fixture.
-pub unsafe fn succ<T>(pointer: *mut T) -> HLINK {
+pub unsafe fn succ<T>(pointer: *mut T) -> *mut std::ffi::c_void {
     // SAFETY: the fixture retains the operand throughout this synchronous projection.
     unsafe {
         uqm_rust::app::bridge::enter(|cx| {
             let id = cx
                 .elements()
-                .id(pointer.cast())
+                .id(std::ptr::NonNull::new(pointer.cast()))
                 .unwrap_or_else(|| panic!("fixture operand"));
             cx.elements()
                 .succ(id)
@@ -117,13 +119,13 @@ pub unsafe fn succ<T>(pointer: *mut T) -> HLINK {
 
 /// # Safety
 /// The operand must be a retained element allocation of the serialized fixture.
-pub unsafe fn pred<T>(pointer: *mut T) -> HLINK {
+pub unsafe fn pred<T>(pointer: *mut T) -> *mut std::ffi::c_void {
     // SAFETY: the fixture retains the operand throughout this synchronous projection.
     unsafe {
         uqm_rust::app::bridge::enter(|cx| {
             let id = cx
                 .elements()
-                .id(pointer.cast())
+                .id(std::ptr::NonNull::new(pointer.cast()))
                 .unwrap_or_else(|| panic!("fixture operand"));
             cx.elements()
                 .pred(id)
@@ -194,7 +196,7 @@ pub struct Ship<'a> {
     battle: &'a Battle,
     ss: Record<ShipRecord>,
     el: Record<ElementRecord>,
-    pub handle: HLINK,
+    pub handle: *mut std::ffi::c_void,
     pub id: ElementId,
     pub ship_id: ShipId,
     frames: Option<[FrameSet; 3]>,
@@ -225,7 +227,7 @@ impl<'a> Ship<'a> {
             (*el).state_flags = PLAYER_SHIP as u16;
             let id = uqm_rust::app::bridge::enter(|cx| {
                 cx.elements()
-                    .id(handle)
+                    .id(std::ptr::NonNull::new(handle))
                     .unwrap_or_else(|| panic!("allocated element missing from pool"))
             });
             (*raw_ship).hShip = Some(id);
@@ -322,7 +324,7 @@ impl<'a> Ship<'a> {
             };
         }
     }
-    pub fn weapon_handles(&mut self, expected: COUNT) -> Vec<HLINK> {
+    pub fn weapon_handles(&mut self, expected: COUNT) -> Vec<*mut std::ffi::c_void> {
         // SAFETY: the owning battle and ship remain live throughout weapon creation.
         unsafe {
             uqm_rust::app::bridge::enter(|cx| {
@@ -347,7 +349,7 @@ impl<'a> Ship<'a> {
         unsafe {
             let id = uqm_rust::app::bridge::enter(|cx| {
                 cx.elements()
-                    .id(subject.cast())
+                    .id(std::ptr::NonNull::new(subject.cast()))
                     .unwrap_or_else(|| panic!("fixture subject is absent"))
             });
             let mut value = uqm_rust::app::bridge::enter(|cx| cx.weapon_origin(id));
@@ -369,13 +371,17 @@ impl<'a> Ship<'a> {
     }
     /// # Safety
     /// The source must be a live element in this fixture's retained battle pool.
-    pub unsafe fn initialize_from(&self, source: *mut ElementRecord, expected: u16) -> Vec<HLINK> {
+    pub unsafe fn initialize_from(
+        &self,
+        source: *mut ElementRecord,
+        expected: u16,
+    ) -> Vec<*mut std::ffi::c_void> {
         // SAFETY: the caller retains all pool records through the synchronous Native dispatch.
         unsafe {
             uqm_rust::app::bridge::enter(|cx| {
                 let source = cx
                     .elements()
-                    .id(source.cast())
+                    .id(std::ptr::NonNull::new(source.cast()))
                     .unwrap_or_else(|| panic!("weapon source"));
                 let origin = cx.weapon_origin(source);
                 let out = cx.spawn_weapons(self.ship_id, origin);
@@ -543,7 +549,9 @@ impl<'a> Ship<'a> {
         unsafe {
             let id = uqm_rust::app::bridge::enter(|cx| {
                 cx.elements()
-                    .id((subject as *mut ElementRecord).cast())
+                    .id(std::ptr::NonNull::new(
+                        (subject as *mut ElementRecord).cast(),
+                    ))
                     .unwrap_or_else(|| panic!("fixture subject is absent"))
             });
             let mut value = uqm_rust::app::bridge::enter(|cx| cx.weapon_origin(id));
@@ -671,7 +679,7 @@ pub unsafe fn id(pointer: *mut ElementRecord) -> ElementId {
     unsafe {
         uqm_rust::app::bridge::enter(|cx| {
             cx.elements()
-                .id(pointer.cast())
+                .id(std::ptr::NonNull::new(pointer.cast()))
                 .unwrap_or_else(|| panic!("{}", "pool record"))
         })
     }
@@ -741,11 +749,11 @@ pub unsafe fn prim(e: *mut ElementRecord) -> *mut PRIMITIVE {
         uqm_rust::app::bridge::enter(|cx| std::ptr::from_mut(cx.display_primitive((*e).PrimIndex)))
     }
 }
-pub unsafe fn queued() -> Vec<HLINK> {
+pub unsafe fn queued() -> Vec<*mut std::ffi::c_void> {
     // SAFETY: the serialized fixture retains the published context throughout observation.
     unsafe { uqm_rust::app::bridge::enter(|cx| queued_in(cx)) }
 }
-pub fn queued_in(cx: &uqm_rust::engine::battle::Cx<'_>) -> Vec<HLINK> {
+pub fn queued_in(cx: &uqm_rust::engine::battle::Cx<'_>) -> Vec<*mut std::ffi::c_void> {
     let mut all = Vec::new();
     let mut next = cx.elements().head();
     while let Some(id) = next {
@@ -806,7 +814,7 @@ impl<'a> Object<'a> {
             assert!(!handle.is_null());
             let id = uqm_rust::app::bridge::enter(|cx| {
                 cx.elements()
-                    .id(handle)
+                    .id(std::ptr::NonNull::new(handle))
                     .unwrap_or_else(|| panic!("allocated element missing from pool"))
             });
             Self {
@@ -910,7 +918,7 @@ pub unsafe fn put(handle: *mut std::ffi::c_void) {
         uqm_rust::app::bridge::enter(|cx| {
             let id = cx
                 .elements()
-                .id(handle)
+                .id(std::ptr::NonNull::new(handle))
                 .unwrap_or_else(|| panic!("fixture element"));
             cx.put(id);
         });

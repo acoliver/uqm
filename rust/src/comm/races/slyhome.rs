@@ -4,6 +4,7 @@
 
 use super::script::as_comm_data;
 use crate::comm::types::CommData;
+use crate::engine::battle::Cx;
 
 mod phrases;
 use phrases::*;
@@ -513,33 +514,33 @@ use descriptor::descriptor;
 pub(crate) mod live {
     use super::super::script::live::LiveScript;
     use super::*;
-    fn run(f: impl FnOnce(&mut Dialogue<'_, LiveScript<Handler>>)) {
-        let mut api = LiveScript { callback };
+    fn run(cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>)) {
+        let mut api = LiveScript::new(cx, callback);
         f(&mut Dialogue { api: &mut api });
     }
-    fn exit(r: u32) {
-        run(|s| s.handle(Handler::Exit, r as i32));
+    fn exit(cx: &mut Cx<'_>, r: u32) {
+        run(cx, |s| s.handle(Handler::Exit, r as i32));
     }
-    fn home(r: u32) {
-        run(|s| s.handle(Handler::Home, r as i32));
+    fn home(cx: &mut Cx<'_>, r: u32) {
+        run(cx, |s| s.handle(Handler::Home, r as i32));
     }
-    fn human(r: u32) {
-        run(|s| s.handle(Handler::Human, r as i32));
+    fn human(cx: &mut Cx<'_>, r: u32) {
+        run(cx, |s| s.handle(Handler::Human, r as i32));
     }
-    fn alien(r: u32) {
-        run(|s| s.handle(Handler::Alien, r as i32));
+    fn alien(cx: &mut Cx<'_>, r: u32) {
+        run(cx, |s| s.handle(Handler::Alien, r as i32));
     }
-    fn probe(r: u32) {
-        run(|s| s.handle(Handler::Probe, r as i32));
+    fn probe(cx: &mut Cx<'_>, r: u32) {
+        run(cx, |s| s.handle(Handler::Probe, r as i32));
     }
-    fn function(r: u32) {
-        run(|s| s.handle(Handler::Function, r as i32));
+    fn function(cx: &mut Cx<'_>, r: u32) {
+        run(cx, |s| s.handle(Handler::Function, r as i32));
     }
-    fn bug(r: u32) {
-        run(|s| s.handle(Handler::Bug, r as i32));
+    fn bug(cx: &mut Cx<'_>, r: u32) {
+        run(cx, |s| s.handle(Handler::Bug, r as i32));
     }
-    fn fix(r: u32) {
-        run(|s| s.handle(Handler::Fix, r as i32));
+    fn fix(cx: &mut Cx<'_>, r: u32) {
+        run(cx, |s| s.handle(Handler::Fix, r as i32));
     }
     fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
         match h {
@@ -553,15 +554,14 @@ pub(crate) mod live {
             Handler::Fix => fix,
         }
     }
-    pub(super) fn intro() {
-        run(|s| s.intro());
+    pub(super) fn intro(cx: &mut Cx<'_>) {
+        run(cx, |s| s.intro());
     }
-    pub(super) fn post() {}
-    pub(super) fn uninit() -> u16 {
+    pub(super) fn post(_cx: &mut Cx<'_>) {}
+    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
         0
     }
-    #[no_mangle]
-    pub unsafe extern "C" fn init_slylandro_comm() -> *mut crate::comm::locdata::CLocData {
+    pub unsafe fn init_slylandro_comm(cx: &mut Cx<'_>) -> *mut crate::comm::locdata::CLocData {
         static mut DESC: Option<crate::comm::locdata::CLocData> = None;
         extern "C" {
             static mut ScreenWidth: i32;
@@ -569,7 +569,7 @@ pub(crate) mod live {
         let d = (&mut *std::ptr::addr_of_mut!(DESC)).get_or_insert_with(|| descriptor(ScreenWidth));
         d.alien_text_baseline.x = (1 + ((ScreenWidth - 80) >> 1)) as i16;
         d.alien_text_width = (ScreenWidth - 80) as u16;
-        run(|s| s.initialize());
+        run(cx, |s| s.initialize());
         d
     }
 }
@@ -581,10 +581,10 @@ mod branch_tests;
 pub struct SlyhomeDialogue;
 
 impl super::RaceDialogue for SlyhomeDialogue {
-    fn init(&self) -> CommData {
+    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
         #[cfg(not(test))]
         {
-            unsafe { as_comm_data(&*live::init_slylandro_comm()) }
+            unsafe { as_comm_data(&*live::init_slylandro_comm(_cx)) }
         }
         #[cfg(test)]
         {
@@ -592,14 +592,14 @@ impl super::RaceDialogue for SlyhomeDialogue {
         }
     }
 
-    fn intro(&self) {
+    fn intro(&self, _cx: &mut Cx<'_>) {
         #[cfg(not(test))]
-        live::intro();
+        live::intro(_cx);
     }
 
-    fn post_encounter(&self) {}
+    fn post_encounter(&self, _cx: &mut Cx<'_>) {}
 
-    fn uninit(&self) -> u32 {
+    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
         0
     }
 }

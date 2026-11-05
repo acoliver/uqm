@@ -2,22 +2,18 @@
 use super::Harness;
 use crate::planets_common::late_gen::{self, Kind, Layout, Ops, Scan};
 use uqm_rust::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC, SYSTEM_INFO};
+use uqm_rust::planets::generate::late_exports::GENERATE_SAMATRA_FUNCTIONS as generateSaMatraFunctions;
+use uqm_rust::planets::generate::late_exports::GENERATE_SPATHI_FUNCTIONS as generateSpathiFunctions;
+use uqm_rust::planets::generate::late_exports::GENERATE_VUX_FUNCTIONS as generateVuxFunctions;
 use uqm_rust::planets::generate::special::Body;
 use uqm_rust::planets::generate::vtable::GenerateFunctions;
 use uqm_rust::state::game_state_keys::get_game_state;
 
-unsafe extern "C" {
-    static generateVuxFunctions: GenerateFunctions;
-    static generateSaMatraFunctions: GenerateFunctions;
-    static generateSpathiFunctions: GenerateFunctions;
-}
 fn table(kind: Kind) -> &'static GenerateFunctions {
-    unsafe {
-        match kind {
-            Kind::Vux => &generateVuxFunctions,
-            Kind::Samatra => &generateSaMatraFunctions,
-            Kind::Spathi => &generateSpathiFunctions,
-        }
+    match kind {
+        Kind::Vux => &generateVuxFunctions,
+        Kind::Samatra => &generateSaMatraFunctions,
+        Kind::Spathi => &generateSpathiFunctions,
     }
 }
 impl Ops for Harness {

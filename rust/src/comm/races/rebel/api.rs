@@ -1,7 +1,5 @@
 use super::Handler;
 use crate::comm::races::encounter::EncounterApi;
-#[cfg(not(test))]
-use crate::engine::WorldData;
 
 #[derive(Clone, Copy)]
 pub(super) struct Date {
@@ -47,16 +45,14 @@ pub(super) trait RebelApi: EncounterApi<Handler> {
     }
 }
 #[cfg(not(test))]
-impl RebelApi for super::super::script::live::LiveScript<Handler> {
+impl RebelApi for super::super::script::live::LiveScript<'_, '_, Handler> {
     fn date(&self) -> Date {
-        unsafe {
-            let world = WorldData::current();
-            let clock = std::ptr::addr_of!((**world).game.game_clock);
-            Date {
-                year: (*clock).year_index,
-                month: (*clock).month_index,
-                day: (*clock).day_index,
-            }
+        let cx = self.cx.borrow();
+        let clock = &cx.world.data.game.game_clock;
+        Date {
+            year: clock.year_index,
+            month: clock.month_index,
+            day: clock.day_index,
         }
     }
 }

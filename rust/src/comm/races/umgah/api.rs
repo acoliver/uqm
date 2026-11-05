@@ -1,18 +1,14 @@
 use super::Handler;
 use crate::comm::races::encounter::EncounterApi;
-#[cfg(not(test))]
-use crate::engine::WorldData;
 pub(super) trait UmgahApi: EncounterApi<Handler> {
     fn add_biomass(&mut self, amount: u16);
 }
 #[cfg(not(test))]
-impl UmgahApi for super::super::script::live::LiveScript<Handler> {
+impl UmgahApi for super::super::script::live::LiveScript<'_, '_, Handler> {
     fn add_biomass(&mut self, amount: u16) {
-        unsafe {
-            (**WorldData::current()).flagship.total_bio_mass = WorldData::current()
-                .read(|owner| owner.flagship.total_bio_mass)
-                .wrapping_add(amount);
-        }
+        let mut cx = self.cx.borrow_mut();
+        let sis = &mut cx.world.data.flagship;
+        sis.total_bio_mass = sis.total_bio_mass.wrapping_add(amount);
     }
 }
 #[cfg(test)]

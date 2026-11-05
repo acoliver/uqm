@@ -2,6 +2,7 @@
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
+use crate::engine::battle::Cx;
 mod phrases;
 use phrases::*;
 mod api;
@@ -560,8 +561,8 @@ fn descriptor() -> CLocData {
 pub(crate) mod live {
     use super::super::script::live::LiveScript;
     use super::*;
-    fn run(f: impl FnOnce(&mut Dialogue<'_, LiveScript<Handler>>)) {
-        let mut api = LiveScript { callback };
+    fn run(cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>)) {
+        let mut api = LiveScript::new(cx, callback);
         static mut SESSION: Session = Session { made_choice: 0 };
         unsafe {
             f(&mut Dialogue {
@@ -570,32 +571,32 @@ pub(crate) mod live {
             });
         }
     }
-    fn combat_is_inevitable(r: u32) {
-        run(|s| {
+    fn combat_is_inevitable(cx: &mut Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::CombatIsInevitable,
                 i32::try_from(r).expect("invalid response"),
             )
         });
     }
-    fn sun_device(r: u32) {
-        run(|s| {
+    fn sun_device(cx: &mut Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::SunDevice,
                 i32::try_from(r).expect("invalid response"),
             )
         });
     }
-    fn trick_mycon(r: u32) {
-        run(|s| {
+    fn trick_mycon(cx: &mut Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::TrickMycon,
                 i32::try_from(r).expect("invalid response"),
             )
         });
     }
-    fn normal_mycon(r: u32) {
-        run(|s| {
+    fn normal_mycon(cx: &mut Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::NormalMycon,
                 i32::try_from(r).expect("invalid response"),
@@ -610,48 +611,47 @@ pub(crate) mod live {
             Handler::NormalMycon => normal_mycon,
         }
     }
-    pub(super) fn intro() {
-        run(|s| s.intro());
+    pub(super) fn intro(cx: &mut Cx<'_>) {
+        run(cx, |s| s.intro());
     }
-    pub(super) fn post() {
-        run(|s| s.post_mycon_enc());
+    pub(super) fn post(cx: &mut Cx<'_>) {
+        run(cx, |s| s.post_mycon_enc());
     }
-    pub(super) fn uninit() -> u16 {
+    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
         0
     }
     /// Initialize the encounter on the game thread.
     ///
     /// # Safety
     /// The caller must copy the descriptor before another encounter initializes.
-    #[no_mangle]
-    pub unsafe extern "C" fn init_mycon_comm() -> *mut CLocData {
+    pub unsafe fn init_mycon_comm(cx: &mut Cx<'_>) -> *mut CLocData {
         static mut DESC: Option<CLocData> = None;
         let desc = (&mut *std::ptr::addr_of_mut!(DESC)).get_or_insert_with(descriptor);
-        run(|s| s.initialize());
+        run(cx, |s| s.initialize());
         desc
     }
 }
 pub struct MyconDialogue;
 impl super::RaceDialogue for MyconDialogue {
-    fn init(&self) -> CommData {
+    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
         #[cfg(not(test))]
         {
-            unsafe { as_comm_data(&*live::init_mycon_comm()) }
+            unsafe { as_comm_data(&*live::init_mycon_comm(_cx)) }
         }
         #[cfg(test)]
         {
             as_comm_data(&descriptor())
         }
     }
-    fn intro(&self) {
+    fn intro(&self, _cx: &mut Cx<'_>) {
         #[cfg(not(test))]
-        live::intro();
+        live::intro(_cx);
     }
-    fn post_encounter(&self) {
+    fn post_encounter(&self, _cx: &mut Cx<'_>) {
         #[cfg(not(test))]
-        live::post();
+        live::post(_cx);
     }
-    fn uninit(&self) -> u32 {
+    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
         0
     }
 }

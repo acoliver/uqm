@@ -40,8 +40,11 @@ impl Ops for Harness {
         };
         let mut expected = *self.state;
         self.seed(0xabcdef01);
-        let result =
-            unsafe { super::sol::generateSolFunctions.generate_orbital.unwrap()(system, world) };
+        let result = unsafe {
+            uqm_rust::app::bridge::enter(|cx| {
+                super::sol::generateSolFunctions.generate_orbital.unwrap()(cx, system, world)
+            })
+        };
         let info = self.state.SysInfo;
         expected.SysInfo = info;
         assert_eq!(

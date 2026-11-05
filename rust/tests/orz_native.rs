@@ -1,6 +1,5 @@
 //! Exercise Orz's native callbacks with the linked engine queue and physics.
 
-use uqm_rust::engine::battle::schema::HLINK;
 use uqm_rust::ships::races::{intruder_preprocess, marine_collision};
 #[path = "support/battle_context.rs"]
 mod battle_context;
@@ -25,7 +24,7 @@ trait OrzFixture {
     unsafe fn install_turret(&mut self) -> *mut ElementRecord;
     unsafe fn tick_turret(&mut self) -> *mut ElementRecord;
     unsafe fn launch(&mut self) -> *mut ElementRecord;
-    unsafe fn missile(&mut self) -> HLINK;
+    unsafe fn missile(&mut self) -> *mut std::ffi::c_void;
 }
 impl OrzFixture for Ship<'_> {
     unsafe fn at(&mut self, x: COORD, y: COORD) {
@@ -73,7 +72,7 @@ impl OrzFixture for Ship<'_> {
         marine
     }
 
-    unsafe fn missile(&mut self) -> HLINK {
+    unsafe fn missile(&mut self) -> *mut std::ffi::c_void {
         let out = self.weapon_handles(1)[0];
         assert!(!out.is_null());
         let e = battle::element(out);
@@ -88,7 +87,7 @@ unsafe fn prim(e: *mut ElementRecord) -> *mut PRIMITIVE {
     uqm_rust::app::bridge::enter(|cx| std::ptr::from_mut(cx.display_primitive((*e).PrimIndex)))
 }
 
-unsafe fn queued() -> Vec<HLINK> {
+unsafe fn queued() -> Vec<*mut std::ffi::c_void> {
     let mut result = Vec::new();
     let mut h = battle::head();
     let mut previous = ptr::null_mut();
@@ -146,8 +145,14 @@ unsafe fn velocity_toward(speed: SIZE, facing: COUNT) -> [i32; 9] {
 
 unsafe fn collide(marine: *mut ElementRecord, target: *mut ElementRecord) {
     uqm_rust::app::bridge::enter(|cx| {
-        let a = cx.elements().id(marine.cast()).unwrap();
-        let b = cx.elements().id(target.cast()).unwrap();
+        let a = cx
+            .elements()
+            .id(std::ptr::NonNull::new(marine.cast()))
+            .unwrap();
+        let b = cx
+            .elements()
+            .id(std::ptr::NonNull::new(target.cast()))
+            .unwrap();
         marine_collision(
             cx,
             a,
@@ -160,7 +165,7 @@ unsafe fn collide(marine: *mut ElementRecord, target: *mut ElementRecord) {
 
 unsafe fn intruder(e: *mut ElementRecord) {
     uqm_rust::app::bridge::enter(|cx| {
-        let id = cx.elements().id(e.cast()).unwrap();
+        let id = cx.elements().id(std::ptr::NonNull::new(e.cast())).unwrap();
         intruder_preprocess(cx, id);
     });
 }
@@ -1381,7 +1386,7 @@ fn exhausted_queue_preserves_weapon_return_count_and_still_rotates_turret() {
             let mut ship = orz(&_battle, 0);
             let turret = ship.install_turret();
             ship.ship_mut().cur_status_flags = (SPECIAL | LEFT) as u16;
-            let mut out = 1usize as HLINK;
+            let mut out = std::ptr::dangling_mut::<std::ffi::c_void>();
             with_rng(6, 0, || {
                 assert_eq!(
                     {

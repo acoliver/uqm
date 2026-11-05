@@ -21,7 +21,7 @@ pub unsafe fn dispose(handle: *mut std::ffi::c_void) {
     // SAFETY: callers own the serialized fixture and pass its live optional allocation.
     unsafe {
         uqm_rust::app::bridge::enter(|cx| {
-            if let Some(id) = cx.elements().id(handle) {
+            if let Some(id) = cx.elements().id(std::ptr::NonNull::new(handle)) {
                 cx.dispose(id);
             }
         });
@@ -34,7 +34,7 @@ pub unsafe fn unlink(handle: *mut std::ffi::c_void) {
         uqm_rust::app::bridge::enter(|cx| {
             let id = cx
                 .elements()
-                .id(handle)
+                .id(std::ptr::NonNull::new(handle))
                 .unwrap_or_else(|| panic!("fixture element"));
             cx.unlink(id);
         });

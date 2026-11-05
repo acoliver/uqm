@@ -1,50 +1,11 @@
-// Clock Bridge - Rust implementations of C game clock functions
-// These functions bridge to the existing C GameClock state
+//! Calendar and clock lifecycle operations over the campaign owner.
 
 #[cfg(not(test))]
 use std::ffi::c_int;
 
 use crate::bridge_log::rust_bridge_log_msg;
-use crate::c_bindings::{assert_c_layout, global_state};
-use crate::collections::queue::HLink;
 
 pub use crate::engine::battle::schema::CLOCK_STATE as ClockState;
-
-/// C `EVENT` (clock.h): a scheduled game-clock event, the element type of
-/// `ClockState::event_q`.
-///
-/// `pred` and `succ` are the queue's `LINK` and must stay first.
-#[repr(C)]
-pub struct CEvent {
-    pub pred: HLink,
-    pub succ: HLink,
-    pub day_index: u8,
-    pub month_index: u8,
-    pub year_index: u16,
-    pub func_index: u8,
-}
-
-/// `NUM_EVENTS` (gameev.h): the number of event kinds, and the size of the
-/// pool `InitGameClock` allocates for `ClockState::event_q`.
-pub const NUM_EVENTS: usize = global_state::NUM_EVENTS as usize;
-
-mod layout {
-    use super::*;
-
-    assert_c_layout!(
-        CEvent,
-        global_state::EVENT {
-            pred: pred,
-            succ: succ,
-            day_index: day_index,
-            month_index: month_index,
-            year_index: year_index,
-            func_index: func_index,
-        }
-    );
-}
-
-// Access the C GameClock global variable via GetGameClock() function
 
 #[cfg(not(test))]
 use crate::engine::World;
@@ -58,7 +19,7 @@ const START_YEAR: u16 = 2155;
 // Event type constants
 
 // Helper: Log a message to the bridge log (uses central logger)
-fn log_clock_bridge(message: &str) {
+pub(crate) fn log_clock_bridge(message: &str) {
     rust_bridge_log_msg(message);
 }
 
@@ -84,7 +45,7 @@ pub(crate) fn days_in_month(month: u8, year: u16) -> u8 {
 }
 
 // Helper: Advance to next day (internal version that takes &mut ClockState)
-fn next_clock_day_internal(clock: &mut ClockState) {
+pub(crate) fn next_clock_day_internal(clock: &mut ClockState) {
     clock.day_index += 1;
 
     if clock.day_index > days_in_month(clock.month_index, clock.year_index) {
@@ -98,55 +59,50 @@ fn next_clock_day_internal(clock: &mut ClockState) {
     }
 }
 
-// Helper: Access the GameClock safely
-#[cfg(not(test))]
-fn with_game_clock<F, R>(f: F) -> R
-where
-    F: FnOnce(&mut ClockState) -> R,
-{
-    World::current().write(|world| f(&mut world.data.game.game_clock))
-}
-
 // Initialize the game clock
 #[cfg(not(test))]
-pub extern "C" fn rust_clock_init() -> c_int {
+pub fn rust_clock_init(world: &mut World) -> c_int {
     log_clock_bridge("RUST_CLOCK_INIT");
 
-    with_game_clock(|clock| {
+    world.clock.init();
+    {
+        let clock = &mut world.data.game.game_clock;
         // Initialize to Feb 17, START_YEAR
         clock.month_index = 2;
         clock.day_index = 17;
         clock.year_index = START_YEAR;
         clock.tick_count = 0;
         clock.day_in_ticks = 0;
-        // event_q initialization is handled by C code
-    });
+    }
 
     1 // TRUE (success)
 }
 
 // Uninitialize the game clock
 #[cfg(not(test))]
-pub extern "C" fn rust_clock_uninit() -> c_int {
+pub fn rust_clock_uninit(world: &mut World) -> c_int {
     log_clock_bridge("RUST_CLOCK_UNINIT");
 
-    with_game_clock(|clock| {
+    world.clock.uninit();
+    {
+        let clock = &mut world.data.game.game_clock;
         // Reset clock state
         clock.tick_count = 0;
         clock.day_in_ticks = 0;
-    });
+    }
 
     1 // TRUE (success)
 }
 
 // Set game clock rate (seconds per day)
 #[cfg(not(test))]
-pub extern "C" fn rust_clock_set_rate(seconds_per_day: c_int) {
+pub fn rust_clock_set_rate(world: &mut World, seconds_per_day: c_int) {
     log_clock_bridge("RUST_CLOCK_RATE");
 
     let new_day_in_ticks = seconds_per_day * (CLOCK_BASE_FRAMERATE as i32);
 
-    with_game_clock(|clock| {
+    {
+        let clock = &mut world.data.game.game_clock;
         let new_tick_count = if clock.day_in_ticks == 0 {
             new_day_in_ticks as i16
         } else if clock.tick_count == 0 {
@@ -164,7 +120,7 @@ pub extern "C" fn rust_clock_set_rate(seconds_per_day: c_int) {
 
         clock.day_in_ticks = new_day_in_ticks as i16;
         clock.tick_count = new_tick_count;
-    });
+    }
 }
 
 fn tick(clock: &mut ClockState) -> bool {
@@ -180,35 +136,9 @@ fn tick(clock: &mut ClockState) -> bool {
     }
 }
 
-// Tick the game clock forward one tick
 #[cfg(not(test))]
-/// # Safety
-///
-/// This is an FFI function called from C. The caller must ensure pointers are valid.
-pub unsafe extern "C" fn rust_clock_tick() {
-    // Don't log every tick - too noisy
-
-    let changed_day = with_game_clock(tick);
-    if changed_day {
-        #[cfg(not(test))]
-        crate::time::clock_abi::live::finish_clock_day();
-    }
-}
-
-// Move game clock forward by specific number of days
-#[cfg(not(test))]
-/// # Safety
-///
-/// This is an FFI function called from C. The caller must ensure pointers are valid.
-pub unsafe extern "C" fn rust_clock_advance_days(days: c_int) {
-    log_clock_bridge(&format!("RUST_CLOCK_MOVE: {} days", days));
-
-    for _ in 0..days {
-        with_game_clock(next_clock_day_internal);
-        #[cfg(not(test))]
-        crate::time::clock_abi::live::finish_clock_day();
-    }
-    with_game_clock(|clock| clock.tick_count = clock.day_in_ticks);
+pub fn rust_clock_tick(world: &mut World) -> bool {
+    tick(&mut world.data.game.game_clock)
 }
 
 // Lock the game clock (for debugging)
@@ -225,16 +155,9 @@ pub extern "C" fn rust_clock_unlock() {
 
 // Check if game clock is running
 #[cfg(not(test))]
-pub extern "C" fn rust_clock_is_running() -> c_int {
+pub fn rust_clock_is_running(world: &World) -> c_int {
     log_clock_bridge("RUST_CLOCK_RUNNING");
-
-    with_game_clock(|clock| {
-        if clock.day_in_ticks != 0 {
-            1 // TRUE (running)
-        } else {
-            0 // FALSE (not running)
-        }
-    })
+    i32::from(world.data.game.game_clock.day_in_ticks != 0)
 }
 
 #[cfg(test)]

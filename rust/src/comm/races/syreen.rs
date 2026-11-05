@@ -2,6 +2,7 @@
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
+use crate::engine::battle::Cx;
 mod phrases;
 use phrases::*;
 mod api;
@@ -665,71 +666,73 @@ fn descriptor() -> CLocData {
 pub(crate) mod live {
     use super::super::script::live::LiveScript;
     use super::*;
-    fn run(f: impl FnOnce(&mut Dialogue<'_, LiveScript<Handler>>)) {
-        let mut api = LiveScript { callback };
+    fn run(cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>)) {
+        let mut api = LiveScript::new(cx, callback);
         f(&mut Dialogue { api: &mut api });
     }
-    fn friendly_exit(r: u32) {
-        run(|s| {
+    fn friendly_exit(cx: &mut Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::FriendlyExit,
                 i32::try_from(r).expect("invalid response"),
             )
         });
     }
-    fn sex(r: u32) {
-        run(|s| s.handle(Handler::Sex, i32::try_from(r).expect("invalid response")));
+    fn sex(cx: &mut Cx<'_>, r: u32) {
+        run(cx, |s| {
+            s.handle(Handler::Sex, i32::try_from(r).expect("invalid response"))
+        });
     }
-    fn foreplay(r: u32) {
-        run(|s| {
+    fn foreplay(cx: &mut Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::Foreplay,
                 i32::try_from(r).expect("invalid response"),
             )
         });
     }
-    fn after_ambush(r: u32) {
-        run(|s| {
+    fn after_ambush(cx: &mut Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::AfterAmbush,
                 i32::try_from(r).expect("invalid response"),
             )
         });
     }
-    fn ambush_ready(r: u32) {
-        run(|s| {
+    fn ambush_ready(cx: &mut Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::AmbushReady,
                 i32::try_from(r).expect("invalid response"),
             )
         });
     }
-    fn syreen_shuttle(r: u32) {
-        run(|s| {
+    fn syreen_shuttle(cx: &mut Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::SyreenShuttle,
                 i32::try_from(r).expect("invalid response"),
             )
         });
     }
-    fn normal_syreen(r: u32) {
-        run(|s| {
+    fn normal_syreen(cx: &mut Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::NormalSyreen,
                 i32::try_from(r).expect("invalid response"),
             )
         });
     }
-    fn initial_syreen(r: u32) {
-        run(|s| {
+    fn initial_syreen(cx: &mut Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::InitialSyreen,
                 i32::try_from(r).expect("invalid response"),
             )
         });
     }
-    fn syreen_vault(r: u32) {
-        run(|s| {
+    fn syreen_vault(cx: &mut Cx<'_>, r: u32) {
+        run(cx, |s| {
             s.handle(
                 Handler::SyreenVault,
                 i32::try_from(r).expect("invalid response"),
@@ -749,48 +752,47 @@ pub(crate) mod live {
             Handler::SyreenVault => syreen_vault,
         }
     }
-    pub(super) fn intro() {
-        run(|s| s.intro());
+    pub(super) fn intro(cx: &mut Cx<'_>) {
+        run(cx, |s| s.intro());
     }
-    pub(super) fn post() {
-        run(|s| s.post_syreen_enc());
+    pub(super) fn post(cx: &mut Cx<'_>) {
+        run(cx, |s| s.post_syreen_enc());
     }
-    pub(super) fn uninit() -> u16 {
+    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
         0
     }
     /// Initialize the encounter on the game thread.
     ///
     /// # Safety
     /// The caller must copy the descriptor before another encounter initializes.
-    #[no_mangle]
-    pub unsafe extern "C" fn init_syreen_comm() -> *mut CLocData {
+    pub unsafe fn init_syreen_comm(cx: &mut Cx<'_>) -> *mut CLocData {
         static mut DESC: Option<CLocData> = None;
         let desc = (&mut *std::ptr::addr_of_mut!(DESC)).get_or_insert_with(descriptor);
-        run(|s| s.initialize());
+        run(cx, |s| s.initialize());
         desc
     }
 }
 pub struct SyreenDialogue;
 impl super::RaceDialogue for SyreenDialogue {
-    fn init(&self) -> CommData {
+    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
         #[cfg(not(test))]
         {
-            unsafe { as_comm_data(&*live::init_syreen_comm()) }
+            unsafe { as_comm_data(&*live::init_syreen_comm(_cx)) }
         }
         #[cfg(test)]
         {
             as_comm_data(&descriptor())
         }
     }
-    fn intro(&self) {
+    fn intro(&self, _cx: &mut Cx<'_>) {
         #[cfg(not(test))]
-        live::intro();
+        live::intro(_cx);
     }
-    fn post_encounter(&self) {
+    fn post_encounter(&self, _cx: &mut Cx<'_>) {
         #[cfg(not(test))]
-        live::post();
+        live::post(_cx);
     }
-    fn uninit(&self) -> u32 {
+    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
         0
     }
 }

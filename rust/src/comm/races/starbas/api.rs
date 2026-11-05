@@ -48,7 +48,7 @@ mod live {
 
     use crate::threading::legacy_abi::TaskSwitch;
 
-    use crate::battle::build_native::engine::CalculateEscortsWorth;
+    use crate::engine::world::fleet::escorts_worth;
 
     use crate::comm::comm_abi::EnableTalkingAnim;
 
@@ -63,19 +63,19 @@ mod live {
     use crate::threading::pacing::linked::sleep_thread as SleepThread;
     use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
 
-    impl StarbaseApi for LiveScript<Handler> {
+    impl StarbaseApi for LiveScript<'_, '_, Handler> {
         fn date(&self) -> Date {
-            unsafe {
+            self.cx.borrow_mut().with_legacy(|| unsafe {
                 let clock = &(**WorldData::current()).game.game_clock;
                 Date {
                     year: clock.year_index,
                     month: clock.month_index,
                     day: clock.day_index,
                 }
-            }
+            })
         }
         fn ship(&self) -> Ship {
-            unsafe {
+            self.cx.borrow_mut().with_legacy(|| unsafe {
                 let sis = &(**WorldData::current()).flagship;
                 Ship {
                     drives: sis.drive_slots,
@@ -87,79 +87,94 @@ mod live {
                     units: sis.res_units,
                     mineral_mass: sis.total_element_mass,
                 }
-            }
+            })
         }
         fn escorts_worth(&self) -> u16 {
-            unsafe { CalculateEscortsWorth() }
+            // SAFETY: response callbacks run with the game-thread context published.
+            {
+                {
+                    let mut owner = self.cx.borrow_mut();
+                    let cx = &mut **owner;
+                    escorts_worth(cx.world)
+                }
+            }
         }
         fn using_speech(&self) -> bool {
-            {
-                Kernel::current().read(|owner| owner.using_speech) != 0
-            }
+            self.cx.borrow_mut().with_legacy(|| {
+                {
+                    Kernel::current().read(|owner| owner.using_speech) != 0
+                }
+            })
         }
         fn random(&mut self) -> u32 {
-            crate::math::random()
+            self.cx.borrow_mut().with_legacy(crate::math::random)
         }
         fn talking_animation(&mut self, enabled: bool) {
-            unsafe {
+            self.cx.borrow_mut().with_legacy(|| unsafe {
                 EnableTalkingAnim((u8::from(enabled)) as i32);
-            }
+            })
         }
         fn mineral_amount(&self, category: usize) -> u16 {
-            {
-                WorldData::current().read(|owner| owner.flagship.element_amounts[category])
-            }
+            self.cx.borrow_mut().with_legacy(|| {
+                {
+                    WorldData::current().read(|owner| owner.flagship.element_amounts[category])
+                }
+            })
         }
         fn mineral_worth(&self, category: usize) -> u8 {
-            {
-                WorldData::current().read(|owner| owner.game.element_worth[category])
-            }
+            self.cx.borrow_mut().with_legacy(|| {
+                {
+                    WorldData::current().read(|owner| owner.game.element_worth[category])
+                }
+            })
         }
         fn remove_minerals(&mut self, category: usize, amount: u16) {
-            unsafe {
+            self.cx.borrow_mut().with_legacy(|| unsafe {
                 (**WorldData::current()).flagship.element_amounts[category] -= amount;
                 (**WorldData::current()).flagship.total_element_mass -= amount;
-            }
+            })
         }
         fn draw_cargo(&mut self, old: u8, new: u8) {
-            unsafe {
+            self.cx.borrow_mut().with_legacy(|| unsafe {
                 DrawCargoStrings(old, new);
-            }
+            })
         }
         fn show_capacity(&mut self) {
-            unsafe {
+            self.cx.borrow_mut().with_legacy(|| unsafe {
                 ShowRemainingCapacity();
-            }
+            })
         }
         fn clear_display(&mut self) {
-            unsafe {
+            self.cx.borrow_mut().with_legacy(|| unsafe {
                 ClearSISRect(1 << 3);
-            }
+            })
         }
         fn now(&mut self) -> u32 {
-            crate::time::counter_abi::GetTimeCounter()
+            self.cx
+                .borrow_mut()
+                .with_legacy(|| crate::time::counter_abi::GetTimeCounter())
         }
         fn sleep(&mut self, ticks: u32) {
-            unsafe {
+            self.cx.borrow_mut().with_legacy(|| unsafe {
                 SleepThread(ticks);
-            }
+            })
         }
         fn sleep_until(&mut self, time: u32) {
-            unsafe {
+            self.cx.borrow_mut().with_legacy(|| unsafe {
                 SleepThreadUntil(time);
-            }
+            })
         }
         fn task_switch(&mut self) {
-            unsafe {
+            self.cx.borrow_mut().with_legacy(|| unsafe {
                 TaskSwitch();
-            }
+            })
         }
         fn skip_sale(&mut self) -> bool {
-            unsafe {
+            self.cx.borrow_mut().with_legacy(|| unsafe {
                 AnyButtonPress(1) != 0
                     || WorldData::current().read(|owner| owner.game.current_activity) & (1 << 14)
                         != 0
-            }
+            })
         }
     }
 }

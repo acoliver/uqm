@@ -18,47 +18,55 @@ mod live {
     use super::*;
     use crate::comm::races::script::live::LiveScript;
 
-    use crate::battle::build_native::engine::CheckAlliance;
+    use crate::engine::world::fleet;
 
-    use crate::battle::build_native::engine::EscortFeasibilityStudy;
-
-    use crate::battle::build_native::engine::AddEscortShips;
-
-    use crate::battle::build_native::engine::SetEscortCrewComplement;
-
-    use crate::time::clock_abi::live::AddEvent;
-
-    impl<H> EncounterApi<H> for LiveScript<H> {
+    impl<H> EncounterApi<H> for LiveScript<'_, '_, H> {
         fn segue(&mut self, segue: u32) {
             self.set("BATTLE_SEGUE", u8::from(segue == 1));
             crate::comm::ffi::rust_set_segue(segue)
         }
         fn get_segue(&self) -> u32 {
-            crate::comm::ffi::rust_get_segue()
+            self.cx
+                .borrow_mut()
+                .with_legacy(crate::comm::ffi::rust_get_segue)
         }
         fn activity(&self) -> u16 {
-            crate::mainloop::ffi::get_current_activity().0
+            self.cx.borrow().world.activity()
         }
         fn alliance(&self, race: u16) -> u16 {
-            unsafe { CheckAlliance(race) }
+            fleet::check_alliance(self.cx.borrow().world, race)
         }
         fn escort_feasibility(&self, race: u16) -> u16 {
-            unsafe { EscortFeasibilityStudy(race) }
+            fleet::escort_feasibility(self.cx.borrow().world, race)
         }
         fn add_escorts(&mut self, race: u16, count: i16) {
-            unsafe {
-                AddEscortShips(race, count);
+            let added = fleet::add_escort_ships(
+                self.cx.borrow_mut().world,
+                race,
+                count,
+                fleet::captain_name,
+            );
+            if added.is_some() {
+                // SAFETY: the campaign borrow ends before the game-thread display refresh.
+                unsafe {
+                    self.cx
+                        .borrow_mut()
+                        .with_legacy(|| crate::battle::build_native::refresh_escorts())
+                };
             }
         }
         fn fwiffo_crew(&mut self) {
             use crate::ships::queue::{NAME_OFFSET, NUM_CAPTAINS_NAMES};
-            unsafe {
-                SetEscortCrewComplement(6, 1, NAME_OFFSET + NUM_CAPTAINS_NAMES);
-            }
+            fleet::set_escort_crew(
+                self.cx.borrow_mut().world,
+                6,
+                1,
+                NAME_OFFSET + NUM_CAPTAINS_NAMES,
+            );
         }
         fn advance_ilwrath(&mut self) {
             unsafe {
-                AddEvent(1, 0, 0, 0, 12);
+                crate::time::clock_abi::live::add_event(self.cx.borrow_mut().world, 1, 0, 0, 0, 12);
             }
         }
     }

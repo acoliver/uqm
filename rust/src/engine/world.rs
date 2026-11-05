@@ -1,10 +1,15 @@
 //! Campaign state owned by one game-thread lifecycle.
 
 use crate::engine::battle::schema::GAME_STATE;
+pub mod fleet;
 pub mod planet_info;
+pub mod queues;
 pub mod state_file;
 pub mod story;
 use self::{state_file::StateFileManager, story::GameState};
+use crate::engine::battle::link_queue::LinkQueue;
+use queues::CampaignQueues;
+use queues::{Encounter, Fleet, Fragment, Group};
 
 #[derive(Clone, Copy)]
 pub struct WorldData {
@@ -16,25 +21,6 @@ impl WorldData {
     pub(crate) fn calendar_date(&self) -> (u8, u8, u16) {
         let clock = &self.game.game_clock;
         (clock.month_index, clock.day_index, clock.year_index)
-    }
-
-    pub(crate) fn ship_fragments(&self, player: bool) -> &crate::collections::queue::Queue {
-        if player {
-            &self.game.built_ship_q
-        } else {
-            &self.game.npc_built_ship_q
-        }
-    }
-
-    pub(crate) fn ship_fragments_mut(
-        &mut self,
-        player: bool,
-    ) -> &mut crate::collections::queue::Queue {
-        if player {
-            &mut self.game.built_ship_q
-        } else {
-            &mut self.game.npc_built_ship_q
-        }
     }
 
     pub(crate) fn new() -> Self {
@@ -56,8 +42,12 @@ pub(crate) struct FuelDistance {
 
 pub struct World {
     #[cfg(not(test))]
+    pub(crate) last_encounter_group: u8,
+    #[cfg(not(test))]
     pub(crate) hyper_distance: FuelDistance,
     pub data: WorldData,
+    pub queues: CampaignQueues,
+    pub clock: super::clock::GameClock,
     pub story: Option<GameState>,
     pub files: StateFileManager,
     pub current_star: Option<StarId>,
@@ -67,6 +57,10 @@ impl World {
     pub fn new() -> Self {
         Self {
             data: WorldData::new(),
+            #[cfg(not(test))]
+            last_encounter_group: 0,
+            queues: CampaignQueues::new(),
+            clock: super::clock::GameClock::new(),
             #[cfg(not(test))]
             hyper_distance: FuelDistance {
                 dx: 0,
@@ -78,6 +72,37 @@ impl World {
             files: StateFileManager::new(),
             current_star: None,
         }
+    }
+
+    pub fn avail_races(&mut self) -> LinkQueue<'_, Fleet, 24> {
+        LinkQueue::from_pool(&mut self.queues.avail_races)
+    }
+    pub fn avail_races_ref(&self) -> LinkQueue<'_, Fleet, 24> {
+        LinkQueue::borrow_pool(&self.queues.avail_races)
+    }
+    pub fn built_ships(&mut self) -> LinkQueue<'_, Fragment, 12> {
+        LinkQueue::from_pool(&mut self.queues.built_ships)
+    }
+    pub fn built_ships_ref(&self) -> LinkQueue<'_, Fragment, 12> {
+        LinkQueue::borrow_pool(&self.queues.built_ships)
+    }
+    pub fn npc_built_ships(&mut self) -> LinkQueue<'_, Fragment, 14> {
+        LinkQueue::from_pool(&mut self.queues.npc_built_ships)
+    }
+    pub fn npc_built_ships_ref(&self) -> LinkQueue<'_, Fragment, 14> {
+        LinkQueue::borrow_pool(&self.queues.npc_built_ships)
+    }
+    pub fn ip_groups(&mut self) -> LinkQueue<'_, Group, 32> {
+        LinkQueue::from_pool(&mut self.queues.ip_groups)
+    }
+    pub fn ip_groups_ref(&self) -> LinkQueue<'_, Group, 32> {
+        LinkQueue::borrow_pool(&self.queues.ip_groups)
+    }
+    pub fn encounters(&mut self) -> LinkQueue<'_, Encounter, 16> {
+        LinkQueue::from_pool(&mut self.queues.encounters)
+    }
+    pub fn encounters_ref(&self) -> LinkQueue<'_, Encounter, 16> {
+        LinkQueue::borrow_pool(&self.queues.encounters)
     }
 
     pub fn activity(&self) -> u16 {
@@ -122,9 +147,19 @@ impl World {
 
     /// Return the selected catalog address for legacy read-only callers.
     pub fn star_pointer(&self, catalog: Option<&[CStarDesc; CATALOG_LEN]>) -> *mut CStarDesc {
-        self.current_star.map_or(std::ptr::null_mut(), |id| {
+        self.selected_star(catalog)
+            .map_or(std::ptr::null_mut(), |star| {
+                std::ptr::from_ref(star).cast_mut()
+            })
+    }
+
+    pub fn selected_star<'a>(
+        &self,
+        catalog: Option<&'a [CStarDesc; CATALOG_LEN]>,
+    ) -> Option<&'a CStarDesc> {
+        self.current_star.map(|id| {
             let catalog = catalog.unwrap_or_else(|| panic!("selected star without a catalog"));
-            std::ptr::from_ref(&catalog[id.0]).cast_mut()
+            &catalog[id.0]
         })
     }
 
@@ -264,18 +299,36 @@ mod tests {
     }
 
     #[test]
-    fn fragment_queue_borrows_only_the_selected_header() {
+    fn campaign_pools_have_fixed_capacities_and_independent_fragment_storage() {
         let mut world = World::new();
-        assert!(std::ptr::eq(
-            world.data.ship_fragments(true),
-            &world.data.game.built_ship_q
-        ));
-        assert!(std::ptr::eq(
-            world.data.ship_fragments(false),
-            &world.data.game.npc_built_ship_q
-        ));
-        world.data.ship_fragments_mut(true).object_size = 42;
-        assert_eq!(world.data.game.built_ship_q.object_size, 42);
-        assert_eq!(world.data.game.npc_built_ship_q.object_size, 0);
+        let first = world.built_ships().alloc().unwrap();
+        world.built_ships().get_mut(first).crew_level = 7;
+        world.built_ships().put(first);
+        for _ in 1..12 {
+            let id = world.built_ships().alloc().unwrap();
+            world.built_ships().put(id);
+        }
+        assert!(world.built_ships().alloc().is_none());
+        assert_eq!(world.npc_built_ships().count(), 0);
+        assert!(!world.npc_built_ships().contains(first));
+        let view = world.built_ships_ref();
+        assert_eq!(view.count(), 12);
+        assert_eq!(view.get(first).crew_level, 7);
+        world.built_ships().reinit();
+        assert!(!world.built_ships_ref().contains(first));
+        assert_eq!(world.built_ships_ref().count(), 0);
+    }
+
+    #[test]
+    fn fragment_views_mutate_only_the_selected_pool() {
+        let mut world = World::new();
+        let escort = world.built_ships().alloc().unwrap();
+        let npc = world.npc_built_ships().alloc().unwrap();
+        world.built_ships().get_mut(escort).crew_level = 42;
+        assert_eq!(world.built_ships_ref().get(escort).crew_level, 42);
+        assert_eq!(world.npc_built_ships_ref().get(npc).crew_level, 0);
+        world.npc_built_ships().get_mut(npc).crew_level = 17;
+        assert_eq!(world.npc_built_ships_ref().get(npc).crew_level, 17);
+        assert_eq!(world.built_ships_ref().get(escort).crew_level, 42);
     }
 }

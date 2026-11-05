@@ -1,24 +1,22 @@
 //! Tests for the live "RacQ", "NpcQ" and "ShpQ" capture and restore.
 //!
-//! The queues are real `QUEUE_TABLE` pools made by `InitQueue`, sized as
-//! `InitGameStructures` sizes them (24 `FLEET_INFO`, 14 and 12 `SHIP_FRAGMENT`),
+//! World owns fixed-capacity pools sized as `InitGameStructures` sizes them
+//! (24 fleets, 14 NPC fragments and 12 escort fragments),
 //! and the fleet templates carry resource handles that are never dereferenced
 //! but must come through a restore unchanged. The expected values are
 //! written out here from the bytes of a save the C game wrote
 //! (`C_WRITTEN_SAVE`, read with a separate script) and from `races.h`, not
 //! from the encoder.
 
-use std::mem::{offset_of, size_of};
 use std::ops::{Deref, DerefMut};
 
-use super::groups::CIpGroup;
 use super::queues::*;
-use crate::collections::queue::{AllocLink, HLink, InitQueue, PutQueue, Queue, UninitQueue};
-use crate::comm::dispatch::{CEncounter, CFleetInfo, CPoint, CShipFragment, INFINITE_FLEET};
-use crate::comm::locdata::CGameState;
+use crate::engine::clock::NUM_EVENTS;
+
+use crate::comm::dispatch::{CPoint, INFINITE_FLEET};
+use crate::engine::world::queues::{FleetInfo as CFleetInfo, ShipFragment as CShipFragment};
 use crate::savegame::decode::decode_save;
 use crate::savegame::types::{Point, RaceEntry, ShipFragmentEntry};
-use crate::time::clock_bridge::NUM_EVENTS;
 
 /// Tracked evidence from a real run of the C game: epic 20 load/save proof.
 pub(super) const C_WRITTEN_SAVE: &[u8] =
@@ -34,222 +32,133 @@ const URQUAN_DRONE_SHIP: u16 = 23;
 const HUMAN_SHIP: u16 = 2;
 
 // ---------------------------------------------------------------------------
-// A live GAME_STATE with initialised queues
+// An owned World with initialized queues
 // ---------------------------------------------------------------------------
 
-/// A `GAME_STATE` whose three queues were made by `InitQueue`, with a template
-/// in `avail_race_q` for every race.
-pub(super) struct LiveGame(Box<CGameState>);
+/// An owned campaign with a template for every race.
+pub(super) struct LiveGame(crate::engine::World);
 
-/// Resource handles of the template of `race`; never dereferenced.
 pub(super) fn handle(race: usize, which: usize) -> *mut std::ffi::c_void {
     (0x1_0000 + race * 0x100 + which * 0x10) as *mut std::ffi::c_void
 }
-
 impl LiveGame {
     pub(super) fn new() -> Self {
         let mut game = Self::bare();
         for race in 0..RACES {
-            let queue = game.avail_ptr();
-            let link = unsafe {
-                // SAFETY: The initialized queue is exclusively borrowed and its free-list belongs to its pool.
-                AllocLink(queue)
+            let mut queue = game.avail_races();
+            let id = queue.alloc().unwrap();
+            *queue.get_mut(id) = crate::engine::world::queues::FleetInfo {
+                species_id: race as u32 + 1,
+                allied_state: 2,
+                days_left: 0xa1,
+                growth_fract: 0xa2,
+                crew_level: 100 + race as u16,
+                max_crew: 200 + race as u16,
+                growth: 0xa3,
+                max_energy: 30 + race as u8,
+                loc: CPoint { x: -1, y: -2 },
+                race_strings: handle(race, 1).cast(),
+                icons: handle(race, 2).cast(),
+                melee_icon: handle(race, 3).cast(),
+                actual_strength: 0xa4a4,
+                known_strength: 0xa5a5,
+                known_loc: CPoint { x: -3, y: -4 },
+                growth_err_term: 0xa6,
+                func_index: 3,
+                dest_loc: CPoint { x: -5, y: -6 },
             };
-            assert!(!link.is_null());
-            // SAFETY: `link` is a free slot of the `FLEET_INFO` pool.
-            unsafe {
-                link.cast::<CFleetInfo>().write(CFleetInfo {
-                    pred: std::ptr::null_mut(),
-                    succ: std::ptr::null_mut(),
-                    species_id: race as i32 + 1,
-                    // Values no save holds, so a restore that skips a field
-                    // shows.
-                    allied_state: 2,
-                    days_left: 0xA1,
-                    growth_fract: 0xA2,
-                    crew_level: 100 + race as u16,
-                    max_crew: 200 + race as u16,
-                    growth: 0xA3,
-                    max_energy: 30 + race as u8,
-                    loc: CPoint { x: -1, y: -2 },
-                    race_strings: handle(race, 1),
-                    icons: handle(race, 2),
-                    melee_icon: handle(race, 3),
-                    actual_strength: 0xA4A4,
-                    known_strength: 0xA5A5,
-                    known_loc: CPoint { x: -3, y: -4 },
-                    growth_err_term: 0xA6,
-                    func_index: 3,
-                    dest_loc: CPoint { x: -5, y: -6 },
-                });
-            }
-            unsafe {
-                // SAFETY: The queue is exclusively borrowed and the element was allocated from this pool.
-                PutQueue(queue, link)
-            };
+            queue.put(id);
         }
         game
     }
-
-    /// The three pools with nothing queued in `avail_race_q`.
     pub(super) fn bare() -> Self {
-        // SAFETY: `CGameState` is integers and raw pointers; all zeroes is a
-        // valid value, and it is what C's static storage starts as.
-        let mut game: Box<CGameState> = Box::new(unsafe { std::mem::zeroed() });
-        assert!(unsafe {
-            // SAFETY: The queue storage is exclusive and its element layout matches this pool.
-            InitQueue(
-                std::ptr::addr_of_mut!(game.avail_race_q).cast::<Queue>(),
-                RACES as u16,
-                size_of::<CFleetInfo>() as u16,
-            )
-        });
-        assert!(unsafe {
-            // SAFETY: The queue storage is exclusive and its element layout matches this pool.
-            InitQueue(
-                std::ptr::addr_of_mut!(game.npc_built_ship_q).cast::<Queue>(),
-                NPC_SLOTS,
-                size_of::<CShipFragment>() as u16,
-            )
-        });
-        assert!(unsafe {
-            // SAFETY: The queue storage is exclusive and its element layout matches this pool.
-            InitQueue(
-                std::ptr::addr_of_mut!(game.built_ship_q).cast::<Queue>(),
-                BUILT_SLOTS,
-                size_of::<CShipFragment>() as u16,
-            )
-        });
-        // `MAX_BATTLE_GROUPS` and `MAX_ENCOUNTERS`, as `InitGameStructures` sizes them.
-        assert!(unsafe {
-            // SAFETY: The queue storage is exclusive and its element layout matches this pool.
-            InitQueue(
-                std::ptr::addr_of_mut!(game.ip_group_q).cast::<Queue>(),
-                32,
-                size_of::<CIpGroup>() as u16,
-            )
-        });
-        assert!(unsafe {
-            // SAFETY: The queue storage is exclusive and its element layout matches this pool.
-            InitQueue(
-                std::ptr::addr_of_mut!(game.encounter_q).cast::<Queue>(),
-                16,
-                size_of::<CEncounter>() as u16,
-            )
-        });
-        Self(game)
+        Self(crate::engine::World::new())
     }
-
-    pub(super) fn avail_ptr(&mut self) -> *mut Queue {
-        std::ptr::addr_of_mut!(self.0.avail_race_q).cast::<Queue>()
+    pub(super) fn template(&self, race: usize) -> CFleetInfo {
+        let view = self.avail_races_ref();
+        *view.get(view.at(race).unwrap())
     }
-
-    pub(super) fn template(&self, race: usize) -> &CFleetInfo {
-        let fleets: Vec<*mut CFleetInfo> = links(&self.avail_race_q);
-        // SAFETY: the links are slots of the `FLEET_INFO` pool.
-        unsafe { &*fleets[race] }
+    fn built_fragments(&self) -> Vec<CShipFragment> {
+        records(&self.built_ships_ref())
     }
-
-    fn built_fragments(&self) -> Vec<&CShipFragment> {
-        fragments(&self.built_ship_q)
+    fn npc_fragments(&self) -> Vec<CShipFragment> {
+        records(&self.npc_built_ships_ref())
     }
-
-    fn npc_fragments(&self) -> Vec<&CShipFragment> {
-        fragments(&self.npc_built_ship_q)
-    }
-
-    /// Append a fragment straight to `queue`, the way a test of the game's own
-    /// ship building would, without the code under test.
     pub(super) fn push_fragment(&mut self, npc: bool, race: u8, captain: u8) {
-        let queue = if npc {
-            std::ptr::addr_of_mut!(self.0.npc_built_ship_q).cast::<Queue>()
+        if npc {
+            push_fragment(self.npc_built_ships(), race, captain);
         } else {
-            std::ptr::addr_of_mut!(self.0.built_ship_q).cast::<Queue>()
-        };
-        let link = unsafe {
-            // SAFETY: The initialized queue is exclusively borrowed and its free-list belongs to its pool.
-            AllocLink(queue)
-        };
-        assert!(!link.is_null());
-        // SAFETY: `link` is a free slot of a `SHIP_FRAGMENT` pool.
-        unsafe {
-            link.cast::<CShipFragment>().write(CShipFragment {
-                race_id: race,
-                captains_name_index: captain,
-                crew_level: 1,
-                max_crew: 1,
-                ..CShipFragment::default()
-            });
-        }
-        unsafe {
-            // SAFETY: The queue is exclusively borrowed and the element was allocated from this pool.
-            PutQueue(queue, link)
-        };
-    }
-}
-
-impl Drop for LiveGame {
-    fn drop(&mut self) {
-        for queue in [
-            std::ptr::addr_of_mut!(self.0.avail_race_q),
-            std::ptr::addr_of_mut!(self.0.npc_built_ship_q),
-            std::ptr::addr_of_mut!(self.0.built_ship_q),
-            std::ptr::addr_of_mut!(self.0.ip_group_q),
-            std::ptr::addr_of_mut!(self.0.encounter_q),
-        ] {
-            unsafe {
-                // SAFETY: This scope owns the initialized pool and no element is used after teardown.
-                UninitQueue(queue.cast::<Queue>())
-            };
+            push_fragment(self.built_ships(), race, captain);
         }
     }
 }
-
+fn push_fragment<const N: usize>(
+    mut queue: crate::engine::battle::link_queue::LinkQueue<
+        '_,
+        crate::engine::world::queues::Fragment,
+        N,
+    >,
+    race: u8,
+    captain: u8,
+) {
+    let id = queue.alloc().unwrap();
+    *queue.get_mut(id) = crate::engine::world::queues::ShipFragment {
+        race_id: race,
+        captains_name_index: captain,
+        crew_level: 1,
+        max_crew: 1,
+        ..Default::default()
+    };
+    queue.put(id);
+}
 impl Deref for LiveGame {
-    type Target = CGameState;
-    fn deref(&self) -> &CGameState {
+    type Target = crate::engine::World;
+    fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
-
 impl DerefMut for LiveGame {
-    fn deref_mut(&mut self) -> &mut CGameState {
+    fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
-/// The links of a queue by following the raw `succ` pointers, independent of
-/// the walker under test.
-pub(super) fn links<T>(queue: &Queue) -> Vec<*mut T> {
-    let mut out = Vec::new();
-    let mut link = queue.head;
-    while !link.is_null() {
-        out.push(link.cast::<T>());
-        // SAFETY: every link starts with `pred` and `succ`; the queues in
-        // these tests are well formed.
-        link = unsafe { (*link.cast::<crate::collections::queue::Link>()).succ };
-    }
-    out
+pub(super) trait FixturePool {
+    fn remaining(&self) -> usize;
+    fn identity(&self) -> String;
 }
-
-fn fragments(queue: &Queue) -> Vec<&CShipFragment> {
-    links::<CShipFragment>(queue)
-        .into_iter()
-        // SAFETY: the links are slots of a `SHIP_FRAGMENT` pool.
-        .map(|link| unsafe { &*link })
-        .collect()
-}
-
-/// Slots on the free list of `queue`.
-pub(super) fn free_slots(queue: &Queue) -> usize {
-    let mut count = 0;
-    let mut link: HLink = queue.free_list;
-    while !link.is_null() {
-        count += 1;
-        // SAFETY: free slots are linked through `succ`.
-        link = unsafe { (*link.cast::<crate::collections::queue::Link>()).succ };
+impl<T: crate::engine::battle::link_queue::QueueRecord + std::fmt::Debug, const N: usize>
+    FixturePool for crate::engine::battle::link_queue::LinkQueue<'_, T, N>
+{
+    fn remaining(&self) -> usize {
+        N - self.count()
     }
-    count
+    fn identity(&self) -> String {
+        let mut ids = Vec::new();
+        let mut next = self.head();
+        while let Some(id) = next {
+            ids.push(id);
+            next = self.succ(id);
+        }
+        format!("{ids:?}")
+    }
+}
+pub(super) fn records<T: crate::engine::battle::link_queue::QueueRecord, const N: usize>(
+    queue: &crate::engine::battle::link_queue::LinkQueue<'_, T, N>,
+) -> Vec<T::Record>
+where
+    T::Record: Copy,
+{
+    let mut values = Vec::new();
+    let mut next = queue.head();
+    while let Some(id) = next {
+        values.push(*queue.record(id));
+        next = queue.succ(id);
+    }
+    values
+}
+pub(super) fn free_slots(queue: &impl FixturePool) -> usize {
+    queue.remaining()
 }
 
 /// A counter standing in for the random captain-name draw.
@@ -298,32 +207,6 @@ fn empty_sections() -> QueueSections {
 }
 
 // ---------------------------------------------------------------------------
-// Layout
-// ---------------------------------------------------------------------------
-
-/// Offsets worked out by hand from `races.h` on LP64: two 8-byte links, a
-/// 4-byte `SPECIES_ID`, then the fields in declaration order.
-#[test]
-fn queue_elements_have_the_lp64_layout_races_h_gives_them() {
-    assert_eq!(size_of::<CFleetInfo>(), 80);
-    assert_eq!(offset_of!(CFleetInfo, species_id), 16);
-    assert_eq!(offset_of!(CFleetInfo, allied_state), 20);
-    assert_eq!(offset_of!(CFleetInfo, crew_level), 24);
-    assert_eq!(offset_of!(CFleetInfo, loc), 30);
-    assert_eq!(offset_of!(CFleetInfo, race_strings), 40);
-    assert_eq!(offset_of!(CFleetInfo, actual_strength), 64);
-    assert_eq!(offset_of!(CFleetInfo, func_index), 73);
-    assert_eq!(offset_of!(CFleetInfo, dest_loc), 74);
-    assert_eq!(size_of::<CShipFragment>(), 56);
-    assert_eq!(offset_of!(CShipFragment, captains_name_index), 20);
-    assert_eq!(offset_of!(CShipFragment, race_id), 21);
-    assert_eq!(offset_of!(CShipFragment, index), 22);
-    assert_eq!(offset_of!(CShipFragment, crew_level), 24);
-    assert_eq!(offset_of!(CShipFragment, max_energy), 29);
-    assert_eq!(offset_of!(CShipFragment, race_strings), 32);
-}
-
-// ---------------------------------------------------------------------------
 // Capture
 // ---------------------------------------------------------------------------
 
@@ -335,10 +218,10 @@ fn capture_reads_the_values_the_c_game_wrote() {
     let mut game = LiveGame::new();
     // RacQ entry 0 of the seed: 00 00 | 02 00 | 00 | 00 | 06 00 | 06 00 | 00 |
     // 14 | b6 01 e4 18 | 2c 00 | 00 00 | b6 01 e4 18 | 7f | ff | d2 c2 00 00
-    let fleet0 = links::<CFleetInfo>(&game.avail_race_q)[0];
-    // SAFETY: the links are slots of the `FLEET_INFO` pool.
-    unsafe {
-        let f = &mut *fleet0;
+    let fleet0 = game.avail_races_ref().head().unwrap();
+    {
+        let mut fleets = game.avail_races();
+        let f = fleets.get_mut(fleet0);
         f.allied_state = 2;
         f.days_left = 0;
         f.growth_fract = 0;
@@ -359,10 +242,10 @@ fn capture_reads_the_values_the_c_game_wrote() {
     }
     game.push_fragment(false, 2, 15);
     {
-        let escort = links::<CShipFragment>(&game.built_ship_q)[0];
+        let escort = game.built_ships_ref().head().unwrap();
         // ShpQ of the seed: 02 00 | 0f | 02 | 00 | 12 00 | 12 00 | 00 | 12
-        // SAFETY: slot of the `SHIP_FRAGMENT` pool.
-        let f = unsafe { &mut *escort };
+        let mut ships = game.built_ships();
+        let f = ships.get_mut(escort);
         f.crew_level = 0x12;
         f.max_crew = 0x12;
         f.max_energy = 0x12;
@@ -440,81 +323,15 @@ fn capture_follows_queue_order_not_pool_order() {
 }
 
 #[test]
-fn capture_rejects_a_queue_whose_links_disagree() {
-    let mut game = LiveGame::new();
-    game.push_fragment(false, 2, 6);
-    game.push_fragment(false, 3, 7);
-    let q = links::<CShipFragment>(&game.built_ship_q);
-    let (first, second) = (q[0], q[1]);
-    // A broken back-link.
-    // SAFETY: slots of the `SHIP_FRAGMENT` pool.
-    unsafe { (*second).pred = std::ptr::null_mut() };
-    assert_eq!(
-        capture_queues(&game).unwrap_err(),
-        QueueError::CorruptQueue {
-            queue: QueueKind::BuiltShips,
-            position: 1
-        }
-    );
-    // SAFETY: as above.
-    unsafe { (*second).pred = first.cast() };
-
-    // A loop: the tail points back at the head.
-    // SAFETY: as above.
-    unsafe { (*second).succ = first.cast() };
-    assert!(matches!(
-        capture_queues(&game).unwrap_err(),
-        QueueError::CorruptQueue {
-            queue: QueueKind::BuiltShips,
-            ..
-        }
-    ));
-    // SAFETY: as above.
-    unsafe { (*second).succ = std::ptr::null_mut() };
-
-    // A link outside the pool.
-    let mut outside = CShipFragment::default();
-    // SAFETY: as above.
-    unsafe { (*second).succ = std::ptr::addr_of_mut!(outside).cast() };
-    assert!(matches!(
-        capture_queues(&game).unwrap_err(),
-        QueueError::CorruptQueue {
-            queue: QueueKind::BuiltShips,
-            position: 2
-        }
-    ));
-    // SAFETY: as above.
-    unsafe { (*second).succ = std::ptr::null_mut() };
-
-    // A tail that is not the last link.
-    game.built_ship_q.tail = first.cast();
-    assert!(matches!(
-        capture_queues(&game).unwrap_err(),
-        QueueError::CorruptQueue { .. }
-    ));
-}
-
-#[test]
-fn capture_refuses_uninitialised_or_foreign_pools() {
-    // SAFETY: all zeroes is a valid `CGameState`.
-    let game: Box<CGameState> = Box::new(unsafe { std::mem::zeroed() });
-    assert_eq!(
-        capture_queues(&game).unwrap_err(),
-        QueueError::PoolMissing {
-            queue: QueueKind::AvailableRaces
-        }
-    );
-
-    let mut game = LiveGame::new();
-    game.built_ship_q.object_size = size_of::<CFleetInfo>() as u16;
-    assert_eq!(
-        capture_queues(&game).unwrap_err(),
-        QueueError::WrongObjectSize {
-            queue: QueueKind::BuiltShips,
-            found: size_of::<CFleetInfo>() as u16,
-            expected: size_of::<CShipFragment>()
-        }
-    );
+fn fragment_ids_are_pool_specific_and_reset_invalidates_them() {
+    let mut world = crate::engine::World::new();
+    let id = world.built_ships().alloc().unwrap();
+    world.built_ships().put(id);
+    assert!(!world.npc_built_ships_ref().contains(id));
+    world.built_ships().reinit();
+    let replacement = world.built_ships().alloc().unwrap();
+    assert_ne!(id, replacement);
+    assert!(!world.built_ships_ref().contains(id));
 }
 
 #[test]
@@ -562,13 +379,13 @@ fn restoring_the_seed_overwrites_only_the_persisted_fleet_fields() {
     // What the save does not hold is the template's own.
     for race in 0..RACES {
         let t = game.template(race);
-        assert_eq!(t.species_id, race as i32 + 1, "race {race}");
-        assert_eq!(t.race_strings, handle(race, 1), "race {race}");
-        assert_eq!(t.icons, handle(race, 2), "race {race}");
-        assert_eq!(t.melee_icon, handle(race, 3), "race {race}");
+        assert_eq!(t.species_id, race as u32 + 1, "race {race}");
+        assert_eq!(t.race_strings, handle(race, 1).cast(), "race {race}");
+        assert_eq!(t.icons, handle(race, 2).cast(), "race {race}");
+        assert_eq!(t.melee_icon, handle(race, 3).cast(), "race {race}");
     }
-    assert_eq!(links::<CFleetInfo>(&game.avail_race_q).len(), RACES);
-    assert_eq!(free_slots(&game.avail_race_q), 0);
+    assert_eq!(game.avail_races_ref().count(), RACES);
+    assert_eq!(free_slots(&game.avail_races_ref()), 0);
 
     // The one escort of the seed: a clone of the Human template with the
     // saved fields on top.
@@ -580,14 +397,17 @@ fn restoring_the_seed_overwrites_only_the_persisted_fleet_fields() {
     assert_eq!((ship.crew_level, ship.max_crew), (18, 18));
     assert_eq!((ship.energy_level, ship.max_energy), (0, 18));
     assert_eq!(ship.species_id, 3);
-    assert_eq!(ship.race_strings, handle(2, 1));
-    assert_eq!(ship.icons, handle(2, 2));
-    assert_eq!(ship.melee_icon, handle(2, 3));
+    assert_eq!(ship.race_strings, handle(2, 1).cast());
+    assert_eq!(ship.icons, handle(2, 2).cast());
+    assert_eq!(ship.melee_icon, handle(2, 3).cast());
     // One captain draw for the clone, whatever name the save then put on top.
     assert_eq!(draws.get(), 1);
     assert!(game.npc_fragments().is_empty());
-    assert_eq!(free_slots(&game.built_ship_q), BUILT_SLOTS as usize - 1);
-    assert_eq!(free_slots(&game.npc_built_ship_q), NPC_SLOTS as usize);
+    assert_eq!(
+        free_slots(&game.built_ships_ref()),
+        BUILT_SLOTS as usize - 1
+    );
+    assert_eq!(free_slots(&game.npc_built_ships_ref()), NPC_SLOTS as usize);
 }
 
 #[test]
@@ -630,11 +450,17 @@ fn restore_keeps_entry_order_and_replaces_what_was_queued() {
     let npc = game.npc_fragments();
     assert_eq!(npc.len(), 1);
     assert_eq!(npc[0].crew_level, INFINITE_FLEET);
-    assert_eq!(free_slots(&game.built_ship_q), BUILT_SLOTS as usize - 3);
-    assert_eq!(free_slots(&game.npc_built_ship_q), NPC_SLOTS as usize - 1);
+    assert_eq!(
+        free_slots(&game.built_ships_ref()),
+        BUILT_SLOTS as usize - 3
+    );
+    assert_eq!(
+        free_slots(&game.npc_built_ships_ref()),
+        NPC_SLOTS as usize - 1
+    );
     // The templates of races 2 and 5 were the source of each clone.
     assert_eq!(game.built_fragments()[0].species_id, 6);
-    assert_eq!(game.built_fragments()[1].race_strings, handle(2, 1));
+    assert_eq!(game.built_fragments()[1].race_strings, handle(2, 1).cast());
     // The saved sections read back.
     assert_eq!(
         capture_queues(&game).unwrap().ship_queue,
@@ -653,8 +479,8 @@ fn a_save_without_ship_chunks_empties_the_ship_queues() {
     restore_queues_with(&mut game, &empty_sections(), &mut pick).unwrap();
     assert!(game.built_fragments().is_empty());
     assert!(game.npc_fragments().is_empty());
-    assert_eq!(free_slots(&game.built_ship_q), BUILT_SLOTS as usize);
-    assert_eq!(free_slots(&game.npc_built_ship_q), NPC_SLOTS as usize);
+    assert_eq!(free_slots(&game.built_ships_ref()), BUILT_SLOTS as usize);
+    assert_eq!(free_slots(&game.npc_built_ships_ref()), NPC_SLOTS as usize);
 }
 
 /// `CloneShipFragment` names no captain for the Sa-Matra (`SAMATRA_SHIP ==
@@ -685,8 +511,11 @@ fn loading_twice_gives_the_same_queues_and_leaks_no_slots() {
         let (_, mut pick) = names();
         restore_queues_with(&mut game, &sections, &mut pick).unwrap();
         assert_eq!(game.built_fragments().len(), 1);
-        assert_eq!(free_slots(&game.built_ship_q), BUILT_SLOTS as usize - 1);
-        assert_eq!(free_slots(&game.avail_race_q), 0);
+        assert_eq!(
+            free_slots(&game.built_ships_ref()),
+            BUILT_SLOTS as usize - 1
+        );
+        assert_eq!(free_slots(&game.avail_races_ref()), 0);
     }
     assert_eq!(
         capture_queues(&game).unwrap().race_queue,
@@ -711,11 +540,9 @@ fn restore_of_a_partial_fleet_list_leaves_the_other_fleets() {
 fn assert_rejected_without_change(game: &mut LiveGame, sections: &QueueSections) -> QueueError {
     let before = capture_queues(game).unwrap();
     let heads = (
-        game.avail_race_q.head,
-        game.npc_built_ship_q.head,
-        game.built_ship_q.head,
-        game.npc_built_ship_q.free_list,
-        game.built_ship_q.free_list,
+        game.avail_races_ref().identity(),
+        game.npc_built_ships_ref().identity(),
+        game.built_ships_ref().identity(),
     );
     let (draws, mut pick) = names();
     let error = restore_queues_with(game, sections, &mut pick).unwrap_err();
@@ -724,11 +551,9 @@ fn assert_rejected_without_change(game: &mut LiveGame, sections: &QueueSections)
     assert_eq!(
         heads,
         (
-            game.avail_race_q.head,
-            game.npc_built_ship_q.head,
-            game.built_ship_q.head,
-            game.npc_built_ship_q.free_list,
-            game.built_ship_q.free_list,
+            game.avail_races_ref().identity(),
+            game.npc_built_ships_ref().identity(),
+            game.built_ships_ref().identity()
         )
     );
     error
@@ -917,32 +742,6 @@ fn restore_refuses_ships_when_no_templates_were_initialised() {
         }
     );
     assert!(game.built_fragments().is_empty());
-
-    // An empty save is not accepted over a game that never initialised its
-    // fleet pool.
-    // SAFETY: all zeroes is a valid `CGameState`.
-    let mut game: Box<CGameState> = Box::new(unsafe { std::mem::zeroed() });
-    assert_eq!(
-        restore_queues_with(&mut game, &empty_sections(), &mut pick).unwrap_err(),
-        QueueError::PoolMissing {
-            queue: QueueKind::AvailableRaces
-        }
-    );
-}
-
-#[test]
-fn restore_refuses_ship_queues_that_were_never_initialised() {
-    let mut game = LiveGame::new();
-    let pool = game.npc_built_ship_q.pq_tab;
-    game.npc_built_ship_q.pq_tab = std::ptr::null_mut();
-    let (_, mut pick) = names();
-    assert_eq!(
-        restore_queues_with(&mut game, &empty_sections(), &mut pick).unwrap_err(),
-        QueueError::PoolMissing {
-            queue: QueueKind::NpcShips
-        }
-    );
-    game.npc_built_ship_q.pq_tab = pool;
 }
 
 // ---------------------------------------------------------------------------
@@ -1015,7 +814,7 @@ fn capture_for_activity_writes_the_npc_queue_only_for_an_encounter() {
         (2, false),
         (0, false),
     ] {
-        game.current_activity = activity;
+        game.data.game.current_activity = activity;
         let selected = capture_queues_for_activity(&game).unwrap();
         assert_eq!(selected.race_queue, raw.race_queue, "{activity:#06x}");
         assert_eq!(selected.ship_queue, raw.ship_queue, "{activity:#06x}");
@@ -1035,27 +834,26 @@ fn capture_for_activity_writes_the_npc_queue_only_for_an_encounter() {
 fn an_npc_queue_that_is_not_saved_is_not_read() {
     let mut game = LiveGame::new();
     game.push_fragment(true, HUMAN_SHIP as u8, 3);
-    let head = game.npc_built_ship_q.head;
-    game.npc_built_ship_q.head = (head as usize + 1) as *mut std::ffi::c_void;
-
-    game.current_activity = 4;
-    let selected = capture_queues_for_activity(&game).unwrap();
-    assert!(selected.npc_ship_queue.is_empty());
+    let id = game.npc_built_ships_ref().head().unwrap();
+    game.npc_built_ships().get_mut(id).race_id = 255;
+    game.data.game.current_activity = 4;
+    assert!(capture_queues_for_activity(&game)
+        .unwrap()
+        .npc_ship_queue
+        .is_empty());
     assert!(matches!(
-        capture_queues(&game).unwrap_err(),
-        QueueError::CorruptQueue {
+        capture_queues(&game),
+        Err(QueueError::UnknownRace {
             queue: QueueKind::NpcShips,
             ..
-        }
+        })
     ));
-
-    game.current_activity = START_ENCOUNTER_BIT | 2;
+    game.data.game.current_activity = START_ENCOUNTER_BIT | 2;
     assert!(matches!(
-        capture_queues_for_activity(&game).unwrap_err(),
-        QueueError::CorruptQueue {
+        capture_queues_for_activity(&game),
+        Err(QueueError::UnknownRace {
             queue: QueueKind::NpcShips,
             ..
-        }
+        })
     ));
-    game.npc_built_ship_q.head = head;
 }

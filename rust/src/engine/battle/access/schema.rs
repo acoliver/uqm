@@ -1,7 +1,6 @@
 //! Unchanged ABI storage declarations used at the Stage B boundary.
 #![allow(non_snake_case, non_camel_case_types)]
-use super::super::record::{QUEUE, VELOCITY_DESC};
-pub use crate::collections::queue::HLink as HLINK;
+use super::super::record::VELOCITY_DESC;
 use crate::graphics::native_abi::*;
 use crate::graphics::native_abi::{DWORD as TimeCount, UWORD as ACTIVITY};
 
@@ -19,7 +18,7 @@ pub struct getmelee_struct {
 #[repr(C)]
 pub struct getmelee_struct__bindgen_ty_1 {
     pub timeIn: TimeCount,
-    pub hBattleShip: HLINK,
+    pub hBattleShip: *mut std::ffi::c_void,
     pub choice: COUNT,
     pub row: COUNT,
     pub col: COUNT,
@@ -39,7 +38,6 @@ pub struct CLOCK_STATE {
     pub year_index: COUNT,
     pub tick_count: SIZE,
     pub day_in_ticks: SIZE,
-    pub event_q: QUEUE,
 }
 
 #[repr(C)]
@@ -61,11 +59,6 @@ pub struct GAME_STATE {
     pub in_orbit: BYTE,
     pub velocity: VELOCITY_DESC,
     pub battle_group_ref: DWORD,
-    pub avail_race_q: QUEUE,
-    pub npc_built_ship_q: QUEUE,
-    pub ip_group_q: QUEUE,
-    pub encounter_q: QUEUE,
-    pub built_ship_q: QUEUE,
 }
 
 pub type FlashState = ::std::os::raw::c_uint;

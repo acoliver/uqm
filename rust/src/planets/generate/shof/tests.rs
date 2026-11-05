@@ -97,8 +97,13 @@ impl FleetGroups for Host {
     fn reinit_built_queue(&mut self) {
         self.calls.push(Call::ReinitBuiltQueue);
     }
-    fn head_ip_group(&mut self) -> Option<&mut IP_GROUP> {
-        self.groups.first_mut()
+    fn head_ip_group(&mut self, visit: &mut dyn FnMut(&mut IP_GROUP)) -> bool {
+        if let Some(group) = self.groups.first_mut() {
+            visit(group);
+            true
+        } else {
+            false
+        }
     }
 }
 
@@ -139,7 +144,7 @@ fn a_group_is_made_exactly_when_a_shofixti_remains() {
         let remains = recruited == 0 && (kia == 0 || (bro_kia == 0 && maidens != 0));
         let mut story = story(recruited, kia, bro_kia, maidens);
         let mut host = Host::new(0, true);
-        assert!(init_npcs(&mut story, &mut host));
+        assert!(init_npcs(&mut (&mut story, &mut host)));
         let cloned = host
             .calls
             .iter()
@@ -159,7 +164,7 @@ fn the_new_group_is_named_for_the_shofixti_who_lives() {
         // Katana lives only when the maidens are aboard.
         let mut story = story(0, kia, 0, 1);
         let mut host = Host::new(0, true);
-        init_npcs(&mut story, &mut host);
+        init_npcs(&mut (&mut story, &mut host));
         assert!(
             host.calls.contains(&Call::CloneShofixtiNamed(name)),
             "{kia}"
@@ -171,7 +176,7 @@ fn the_new_group_is_named_for_the_shofixti_who_lives() {
 fn a_missing_reference_is_stored_as_all_ones_until_the_group_exists() {
     let mut story = story(0, 0, 0, 0);
     let mut host = Host::new(0, true);
-    init_npcs(&mut story, &mut host);
+    init_npcs(&mut (&mut story, &mut host));
     assert_eq!(
         host.calls,
         [
@@ -193,12 +198,12 @@ fn a_stored_reference_resumes_its_group_and_a_lost_one_is_put_again() {
     stored.set_word("SHOFIXTI_GRPOFFS0", 5);
 
     let mut host = Host::new(0, true);
-    init_npcs(&mut stored, &mut host);
+    init_npcs(&mut (&mut stored, &mut host));
     assert_eq!(host.group_ref, 5);
     assert_eq!(host.calls, [Call::InitIpGroups, Call::InitIpGroups]);
 
     let mut host = Host::new(0, false);
-    init_npcs(&mut stored, &mut host);
+    init_npcs(&mut (&mut stored, &mut host));
     assert_eq!(
         host.calls,
         [
@@ -218,7 +223,7 @@ fn a_stored_reference_resumes_its_group_and_a_lost_one_is_put_again() {
 fn nothing_is_stored_once_the_shofixti_are_recruited() {
     let mut story = story(1, 0, 0, 0);
     let mut host = Host::new(9, true);
-    assert!(init_npcs(&mut story, &mut host));
+    assert!(init_npcs(&mut (&mut story, &mut host)));
     assert_eq!(host.group_ref, 9);
     assert_eq!(host.calls, [Call::InitIpGroups]);
 }
@@ -233,10 +238,10 @@ fn a_recruited_shofixti_the_flagship_collided_with_flees() {
         (UMGAH_SHIP, REFORM_GROUP, 1, 3, false),
         (SHOFIXTI_SHIP, REFORM_GROUP, 1, 0, false),
     ] {
-        let story = story(recruited, 0, 0, 0);
+        let mut story = story(recruited, 0, 0, 0);
         let mut host = Host::new(group_ref, true);
         host.groups = vec![group(race, task)];
-        assert!(reinit_npcs(&story, &mut host));
+        assert!(reinit_npcs(&mut (&mut story, &mut host)));
         assert_eq!(host.calls, [Call::LoadIpGroups]);
         let head = &host.groups[0];
         assert_eq!(head.task, if flees { collided } else { task });
@@ -244,9 +249,9 @@ fn a_recruited_shofixti_the_flagship_collided_with_flees() {
     }
 
     // Recruited and referenced, but nobody in the system.
-    let story = story(1, 0, 0, 0);
+    let mut story = story(1, 0, 0, 0);
     let mut host = Host::new(3, true);
-    assert!(reinit_npcs(&story, &mut host));
+    assert!(reinit_npcs(&mut (&mut story, &mut host)));
 }
 
 #[test]
@@ -254,7 +259,7 @@ fn init_checks_the_old_shofixti_after_the_default_groups() {
     let mut story = story(1, 0, 0, 0);
     let mut host = Host::new(3, true);
     host.groups = vec![group(SHOFIXTI_SHIP, REFORM_GROUP)];
-    init_npcs(&mut story, &mut host);
+    init_npcs(&mut (&mut story, &mut host));
     assert_eq!(host.groups[0].task, FLEE | IGNORE_FLAGSHIP | REFORM_GROUP);
 }
 
@@ -285,7 +290,7 @@ fn a_missing_group_means_a_shofixti_died() {
         if present {
             host.groups = vec![group(SHOFIXTI_SHIP, 0)];
         }
-        assert!(uninit_npcs(&mut story, &mut host));
+        assert!(uninit_npcs(&mut (&mut story, &mut host)));
         assert_eq!(host.calls, saved_and_emptied);
         assert_eq!(
             (

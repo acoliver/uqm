@@ -117,13 +117,25 @@ impl FleetGroups for QueueHost {
     fn reinit_built_queue(&mut self) {
         self.reinit_npc_built_ship_q();
     }
-    fn head_ip_group(&mut self) -> Option<&mut IP_GROUP> {
+    fn head_ip_group(&mut self, visit: &mut dyn FnMut(&mut IP_GROUP)) -> bool {
         self.call("head");
-        self.groups.first_mut()
+        if let Some(group) = self.groups.first_mut() {
+            visit(group);
+            true
+        } else {
+            false
+        }
     }
 }
 
 impl orbital::Queues for QueueHost {
+    fn save_ip_groups(&mut self) {
+        Npcs::save_ip_groups(self);
+    }
+    fn reinit_ip_group_q(&mut self) {
+        Npcs::reinit_ip_group_q(self);
+    }
+
     fn built_ship_count(&self) -> u16 {
         self.call("count-built");
         self.built
@@ -169,7 +181,7 @@ fn probe_creation_persists_reference_and_initial_orbit_changes_only_c_fields() {
         expected[0].loc.x = 0;
         expected[0].loc.y = 0;
         expected[0].group_counter = 0;
-        assert!(init_npcs(&mut story, &mut host));
+        assert!(init_npcs(&mut (&mut story, &mut host)));
         assert_eq!(format!("{:?}", host.groups), format!("{expected:?}"));
         let reference = if saved == 0 { 0x12345678 } else { saved };
         assert_eq!(host.reference, reference);
@@ -218,7 +230,7 @@ fn probe_init_short_circuits_and_repeats_default_group_load_as_c_does() {
                     }
                     host.init.push_back(default_load);
                     let before = format!("{:?}", host.groups);
-                    assert!(init_npcs(&mut story, &mut host));
+                    assert!(init_npcs(&mut (&mut story, &mut host)));
                     assert_eq!(format!("{:?}", host.groups), before);
                     assert!(host.init.is_empty());
                     assert_eq!(host.reference, if default_load { 71 } else { 0 });
@@ -266,7 +278,7 @@ fn probe_reinit_restores_first_and_changes_only_a_reforming_head_probe() {
                         expected[0].dest_loc = 0;
                     }
                     host.restored = Some(restored);
-                    assert!(reinit_npcs(&story, &mut host));
+                    assert!(reinit_npcs(&mut (&mut story, &mut host)));
                     assert_eq!(format!("{:?}", host.groups), format!("{expected:?}"));
                     let mut trace = vec!["read:CHMMR_BOMB_STATE", "load", "civil-war", "get-ref"];
                     if reference != 0 {
@@ -283,12 +295,12 @@ fn probe_reinit_restores_first_and_changes_only_a_reforming_head_probe() {
 
 #[test]
 fn reinit_keeps_default_yehat_rebellion_before_sol_probe_check() {
-    let (story, mut host) = pair();
+    let (mut story, mut host) = pair();
     host.reference = 99;
     host.rebellion = true;
     host.race = -1;
     host.groups = vec![group(23, 8), group(11, 4)];
-    assert!(reinit_npcs(&story, &mut host));
+    assert!(reinit_npcs(&mut (&mut story, &mut host)));
     assert_eq!(host.groups[0].task, 6);
     assert_eq!(host.groups[1].task, 6);
     assert_eq!(host.groups[1].dest_loc, 0);
@@ -317,7 +329,7 @@ fn bomb_state_three_resets_only_reference_and_ip_queue_and_asserts_built_empty()
             host.built = built;
             host.groups = vec![group(23, 8)];
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                reinit_npcs(&story, &mut host)
+                reinit_npcs(&mut (&mut story, &mut host))
             }));
             assert_eq!(result.is_err(), bomb == 3 && built != 0);
             assert_eq!(host.built, built);
@@ -349,7 +361,7 @@ fn delivered_message_still_creates_and_persists_missing_probe_before_default_ini
     host.init.push_back(true);
     host.groups.push(group(11, 0xfe));
     let before = format!("{:?}", host.groups);
-    assert!(init_npcs(&mut story, &mut host));
+    assert!(init_npcs(&mut (&mut story, &mut host)));
     assert_eq!(host.reference, 0x12345678);
     assert_eq!(story.words["URQUAN_PROBE_GRPOFFS0"], 0x12345678);
     assert_eq!(format!("{:?}", host.groups), before);

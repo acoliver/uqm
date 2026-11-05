@@ -1,6 +1,6 @@
 //! The element-loop owner and borrowed views needed while legacy code remains.
 
-use super::{record::QUEUE, table::ElementTable};
+use super::table::ElementTable;
 
 pub struct Battle {
     pub(super) terminal_outcome: Option<super::RaceState>,
@@ -74,8 +74,10 @@ impl Cx<'_> {
     pub fn elements(&self) -> &ElementTable {
         &self.kernel.elements
     }
-    pub(crate) fn groups(&self) -> &QUEUE {
-        &self.world.data.game.ip_group_q
+    pub(crate) fn groups(
+        &self,
+    ) -> super::link_queue::LinkQueue<'_, crate::engine::world::queues::Group, 32> {
+        self.world.ip_groups_ref()
     }
 }
 

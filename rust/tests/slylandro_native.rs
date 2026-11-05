@@ -1,5 +1,5 @@
 //! Exercise Slylandro's live callbacks, target selection, and RNG order.
-use uqm_rust::engine::battle::schema::HLINK;
+
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]
@@ -1010,7 +1010,10 @@ fn native_ai_preserves_fifth_concern_and_expands_active_count() {
         ship.ship_mut().special_counter = 0;
         with_rng(8, 0, || {
             uqm_rust::app::bridge::enter(|cx| {
-                let junk_id = cx.elements().id(debris.cast()).unwrap();
+                let junk_id = cx
+                    .elements()
+                    .id(std::ptr::NonNull::new(debris.cast()))
+                    .unwrap();
                 let mut concerns = Concerns {
                     subject: cx.weapon_origin(ship.id),
                     objects: [Concern {
@@ -1066,10 +1069,13 @@ unsafe fn at(ship: &mut Ship<'_>, x: COORD, y: COORD) {
     ship.element_mut().current.location = POINT { x, y };
     ship.element_mut().next.location = POINT { x, y };
 }
-unsafe fn fire_from(source: *mut ElementRecord) -> HLINK {
+unsafe fn fire_from(source: *mut ElementRecord) -> *mut std::ffi::c_void {
     // SAFETY: the fixture retains the source element in the published battle pool.
     uqm_rust::app::bridge::enter(|cx| {
-        let source = cx.elements().id(source.cast()).unwrap();
+        let source = cx
+            .elements()
+            .id(std::ptr::NonNull::new(source.cast()))
+            .unwrap();
         uqm_rust::ships::races::lightning_segment(cx, source)
             .map_or(ptr::null_mut(), |id| cx.legacy_element(id).cast())
     })

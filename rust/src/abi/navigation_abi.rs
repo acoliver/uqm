@@ -1014,55 +1014,14 @@ pub use crate::memory::rust_hmalloc;
 pub use crate::memory::rust_hrealloc;
 pub use crate::memory::rust_mem_init;
 pub use crate::memory::rust_mem_uninit;
-pub type QUEUE_HANDLE = *mut ::std::os::raw::c_void;
-pub type OBJ_SIZE = UWORD;
-pub type HLINK = QUEUE_HANDLE;
-pub use crate::ships::native::abi::link;
-pub type LINK = link;
-pub use crate::engine::battle::record::QUEUE;
-
-pub use crate::collections::queue::AllocLink;
-
-pub use crate::collections::queue::FreeLink;
-
-pub use crate::collections::queue::InitQueue;
-
-pub use crate::collections::queue::UninitQueue;
-
-pub use crate::collections::queue::ReinitQueue;
-
-pub use crate::collections::queue::PutQueue;
-
-pub use crate::collections::queue::InsertQueue;
-
-pub use crate::collections::queue::RemoveQueue;
-
-pub use crate::collections::queue::CountLinks;
-
-pub type HEVENT = HLINK;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct event {
-    pub pred: HEVENT,
-    pub succ: HEVENT,
-    pub day_index: BYTE,
-    pub month_index: BYTE,
-    pub year_index: COUNT,
-    pub func_index: BYTE,
-}
-pub type EVENT = event;
 pub const EVENT_TYPE_ABSOLUTE_EVENT: EVENT_TYPE = 0;
 pub const EVENT_TYPE_RELATIVE_EVENT: EVENT_TYPE = 1;
 pub type EVENT_TYPE = ::std::os::raw::c_uint;
 
 #[cfg(not(test))]
-pub use crate::time::clock_abi::live::ValidateEvent;
-
-#[cfg(not(test))]
-pub use crate::time::clock_abi::live::AddEvent;
-
-#[cfg(not(test))]
 pub use crate::navigation::events::live::dispatch_event;
+#[cfg(not(test))]
+pub use crate::time::clock_abi::live::add_event;
 
 #[cfg(not(test))]
 pub use crate::time::clock_abi::live::MoveGameClockDays;
@@ -1074,8 +1033,7 @@ pub use crate::time::clock_abi::live::LockGameClock;
 pub use crate::time::clock_abi::live::UnlockGameClock;
 
 pub use crate::graphics::native_abi::Color;
-#[cfg(not(test))]
-pub use crate::time::clock_abi::live::GameClockRunning;
+
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct uio_Handle {
@@ -2770,8 +2728,6 @@ pub use crate::navigation::globals::in_quasi_space;
 
 #[cfg(not(test))]
 pub use crate::navigation::globals::uninit_game_structures;
-#[cfg(not(test))]
-pub use crate::navigation::globals::InitGameStructures;
 #[cfg(test)]
 extern "C" {
     pub fn uninit_game_structures();
@@ -3033,11 +2989,11 @@ pub type NODE_INFO = node_info;
 pub type PLANET_ORBIT = planet_orbit;
 pub type SOLARSYS_STATE = solarsys_state;
 pub type InitNpcsFunction =
-    ::std::option::Option<unsafe extern "C" fn(solarSys: *mut SOLARSYS_STATE) -> bool>;
+    Option<unsafe fn(&mut crate::engine::World, *mut SOLARSYS_STATE) -> bool>;
 pub type ReinitNpcsFunction =
-    ::std::option::Option<unsafe extern "C" fn(solarSys: *mut SOLARSYS_STATE) -> bool>;
+    Option<unsafe fn(&mut crate::engine::World, *mut SOLARSYS_STATE) -> bool>;
 pub type UninitNpcsFunction =
-    ::std::option::Option<unsafe extern "C" fn(solarSys: *mut SOLARSYS_STATE) -> bool>;
+    Option<unsafe fn(&mut crate::engine::World, *mut SOLARSYS_STATE) -> bool>;
 pub type GeneratePlanetsFunction =
     ::std::option::Option<unsafe extern "C" fn(solarSys: *mut SOLARSYS_STATE) -> bool>;
 pub type GenerateMoonsFunction = ::std::option::Option<
@@ -3462,11 +3418,8 @@ pub use crate::ships::native::abi::DATA_STUFF;
 pub use crate::ships::native::abi::EVALUATE_DESC;
 pub use crate::ships::native::abi::FLEET_STUFF;
 pub use crate::ships::native::abi::INTEL_STUFF;
-pub use crate::ships::native::abi::SHIP_BASE;
 pub use crate::ships::native::abi::SHIP_INFO;
-pub type HSHIPFRAG = HLINK;
 pub use crate::ships::native::abi::SHIP_FRAGMENT;
-pub type HFLEETINFO = HLINK;
 pub use crate::ships::native::abi::FLEET_INFO;
 pub const DEAD_GUY: _bindgen_ty_20 = 0;
 pub const GOOD_GUY: _bindgen_ty_20 = 1;
@@ -3700,32 +3653,8 @@ pub const Segue_Segue_hostile: Segue = 1;
 pub const Segue_Segue_victory: Segue = 2;
 pub const Segue_Segue_defeat: Segue = 3;
 pub type Segue = ::std::os::raw::c_uint;
-pub type HENCOUNTER = HLINK;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct brief_ship_info {
-    pub race_id: BYTE,
-    pub crew_level: COUNT,
-    pub max_crew: COUNT,
-    pub max_energy: BYTE,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct encounter {
-    pub pred: HENCOUNTER,
-    pub succ: HENCOUNTER,
-    pub hElement: HLINK,
-    pub transition_state: SIZE,
-    pub origin: POINT,
-    pub radius: COUNT,
-    pub race_id: BYTE,
-    pub num_ships: BYTE,
-    pub flags: BYTE,
-    pub loc_pt: POINT,
-    pub ShipList: [BRIEF_SHIP_INFO; 7usize],
-    pub log_x: SDWORD,
-    pub log_y: SDWORD,
-}
+pub use crate::engine::world::queues::BriefShipInfo as brief_ship_info;
+pub use crate::engine::world::queues::EncounterRecord as encounter;
 pub const HAIL: _bindgen_ty_23 = 0;
 pub const ATTACK: _bindgen_ty_23 = 1;
 pub type _bindgen_ty_23 = ::std::os::raw::c_uint;
@@ -3816,32 +3745,25 @@ extern "C" {
     pub fn save_sis_hyper_state();
 }
 
-#[cfg(not(test))]
-pub use crate::battle::build_native::engine::Build;
+
+
+
+
+
+
+
+
+
+
+
 
 #[cfg(not(test))]
-pub use crate::battle::build_native::engine::CloneShipFragment;
+pub use crate::engine::world::fleet::set_race_allied;
 
 #[cfg(not(test))]
-pub use crate::battle::build_native::engine::GetStarShipFromIndex;
+pub use crate::engine::world::fleet::start_sphere_tracking;
 
-#[cfg(not(test))]
-pub use crate::battle::build_native::engine::GetEscortByStarShipIndex;
 
-#[cfg(not(test))]
-pub use crate::battle::build_native::engine::GetIndexFromStarShip;
-
-#[cfg(not(test))]
-pub use crate::battle::build_native::engine::AddEscortShips;
-
-#[cfg(not(test))]
-pub use crate::battle::build_native::engine::set_race_allied;
-
-#[cfg(not(test))]
-pub use crate::battle::build_native::engine::start_sphere_tracking;
-
-#[cfg(not(test))]
-pub use crate::battle::build_native::engine::CheckAlliance;
 
 #[cfg(not(test))]
 pub use crate::ships::loader_native::engine::load_ship;
@@ -3858,14 +3780,8 @@ pub use crate::navigation::groups::live::init_group_info;
 #[cfg(not(test))]
 pub use crate::navigation::groups::live::uninit_group_info;
 
-#[cfg(not(test))]
-pub use crate::navigation::groups::live::GetGroupInfo;
 
-#[cfg(not(test))]
-pub use crate::navigation::groups::live::PutGroupInfo;
 
-#[cfg(not(test))]
-pub use crate::navigation::groups::live::BuildGroups;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct GAME_STATE_FILE {
@@ -3889,23 +3805,7 @@ pub use crate::state::c_api::read_state_file;
 pub use crate::state::c_api::write_state_file;
 
 pub use crate::state::c_api::seek_state_file;
-pub type HIPGROUP = HLINK;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct IP_GROUP {
-    pub pred: HIPGROUP,
-    pub succ: HIPGROUP,
-    pub group_counter: UWORD,
-    pub race_id: BYTE,
-    pub sys_loc: BYTE,
-    pub task: BYTE,
-    pub in_system: BYTE,
-    pub dest_loc: BYTE,
-    pub orbit_pos: BYTE,
-    pub group_id: BYTE,
-    pub loc: POINT,
-    pub melee_icon: FRAME,
-}
+pub use crate::engine::world::queues::IpGroup as IP_GROUP;
 pub const IN_ORBIT: _bindgen_ty_24 = 0;
 pub const EXPLORE: _bindgen_ty_24 = 1;
 pub const FLEE: _bindgen_ty_24 = 2;
@@ -3914,8 +3814,6 @@ pub const IGNORE_FLAGSHIP: _bindgen_ty_24 = 4;
 pub const REFORM_GROUP: _bindgen_ty_24 = 8;
 pub type _bindgen_ty_24 = ::std::os::raw::c_uint;
 
-#[cfg(not(test))]
-pub use crate::navigation::groups::live::BuildGroup;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct GROUP_HEADER {
@@ -3927,17 +3825,12 @@ pub struct GROUP_HEADER {
     pub GroupOffset: [DWORD; 65usize],
 }
 
-pub use crate::navigation::groups::ReadGroupHeader;
 
 pub use crate::navigation::groups::write_group_header;
 
-pub use crate::navigation::groups::ReadShipFragment;
 
-pub use crate::navigation::groups::WriteShipFragment;
 
-pub use crate::navigation::groups::ReadIpGroup;
 
-pub use crate::navigation::groups::WriteIpGroup;
 pub const STAR_STRING_BASE: _bindgen_ty_25 = 0;
 pub const DEVICE_STRING_BASE: _bindgen_ty_25 = 133;
 pub const CARGO_STRING_BASE: _bindgen_ty_25 = 162;

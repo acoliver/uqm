@@ -440,17 +440,9 @@ unsafe fn prepare_starbase_visit(cx: &mut Cx<'_>, io: &mut Io<'_>) -> Option<u32
             cx.with_legacy(|| cleanup_after_star_base());
             return None;
         }
-        let ship = cx.with_legacy(|| {
-            WorldData::current().write(|world| {
-                CloneShipFragment(
-                    &mut world.game.avail_race_q,
-                    ILWRATH_SHIP as COUNT,
-                    &raw mut world.game.npc_built_ship_q,
-                    7,
-                )
-            })
-        });
-        (*ship.cast::<SHIP_FRAGMENT>()).race_id = BYTE::MAX;
+        let ship = crate::comm::dispatch::clone_npc_fragment(cx.world, ILWRATH_SHIP as u8, 7)
+            .unwrap_or_else(|| panic!("starbase Ilwrath fragment capacity"));
+        cx.world.npc_built_ships().get_mut(ship).race_id = BYTE::MAX;
         crate::comm::dispatch::init_communication(cx, io, CONVERSATION_ILWRATH_CONVERSATION);
         if cx.world.data.flagship.crew_enlisted == COUNT::MAX
             || cx.world.activity() & CHECK_ABORT as u16 != 0

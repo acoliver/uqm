@@ -92,48 +92,34 @@ fn grow_fleet(fleet: &mut FLEET_INFO) -> Option<u8> {
     None
 }
 
+fn advance_fleets(world: &mut World, mut on_arrival: impl FnMut(&mut World, u8)) {
+    let mut next = world.avail_races_ref().head();
+    while let Some(id) = next {
+        next = world.avail_races_ref().succ(id);
+        if let Some(selector) = grow_fleet(world.avail_races().get_mut(id)) {
+            on_arrival(world, selector);
+        }
+    }
+}
+
 #[cfg(not(test))]
 pub(crate) mod live {
-    pub(crate) unsafe fn add_event(
-        world: &mut crate::engine::World,
-        kind: u32,
-        month: u16,
-        day: u16,
-        year: u16,
-        selector: u8,
-    ) -> crate::collections::queue::HLink {
-        if kind == 1 && month == 0 && day == 0 && year == 0 {
-            dispatch_event(world, selector);
-        } else {
-            let clock = &world.data.game.game_clock;
-            let now = (
-                clock.year_index,
-                u16::from(clock.month_index),
-                u16::from(clock.day_index),
-            );
-            let date = crate::time::clock_abi::event_date(now, kind == 1, (year, month, day));
-            if date >= now {
-                return crate::time::clock_abi::insert_event(
-                    &raw mut world.data.game.game_clock.event_q,
-                    date,
-                    selector,
-                );
-            }
-        }
-        ptr::null_mut()
-    }
 
     use super::*;
     use crate::navigation::globals::in_hyper_space;
     use crate::navigation::{get, set};
 
-    use std::ptr;
-
-    unsafe fn fleet(world: &mut World, race: u32) -> *mut FLEET_INFO {
-        GetStarShipFromIndex(ptr::addr_of_mut!(world.data.game.avail_race_q), race as u16).cast()
+    fn fleet(
+        world: &World,
+        race: u32,
+    ) -> crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Fleet> {
+        world
+            .avail_races_ref()
+            .at(race as usize)
+            .unwrap_or_else(|| panic!("scheduled event fleet"))
     }
     unsafe fn relative(world: &mut World, month: u16, day: u16, year: u16, selector: u32) {
-        crate::navigation::events::live::add_event(
+        crate::time::clock_abi::live::add_event(
             world,
             EVENT_TYPE_RELATIVE_EVENT,
             month,
@@ -153,7 +139,7 @@ pub(crate) mod live {
     /// Game-thread access to initialized game-clock and fleet queues.
     pub unsafe fn schedule_initial_events(world: &mut World) {
         relative(world, 0, 1, 0, HYPERSPACE_ENCOUNTER_EVENT);
-        crate::navigation::events::live::add_event(
+        crate::time::clock_abi::live::add_event(
             world,
             EVENT_TYPE_ABSOLUTE_EVENT,
             3,
@@ -175,7 +161,7 @@ pub(crate) mod live {
     /// Game-thread access to initialized game-clock and fleet queues.
     pub unsafe fn dispatch_event(world: &mut World, selector: u8) {
         if let Some(event) = apply_story_event(world, selector) {
-            crate::navigation::events::live::add_event(
+            crate::time::clock_abi::live::add_event(
                 world,
                 event.kind,
                 event.month,
@@ -187,14 +173,7 @@ pub(crate) mod live {
         }
         match selector as u32 {
             HYPERSPACE_ENCOUNTER_EVENT => {
-                let mut handle = world.data.game.avail_race_q.head;
-                while !handle.is_null() {
-                    let current = handle.cast::<FLEET_INFO>();
-                    handle = (*current).succ;
-                    if let Some(callback) = grow_fleet(&mut *current) {
-                        dispatch_event(world, callback);
-                    }
-                }
+                advance_fleets(world, |world, callback| dispatch_event(world, callback));
                 if in_hyper_space(world) != 0 {
                     check_hyperspace_encounter(world);
                 }
@@ -225,8 +204,8 @@ pub(crate) mod live {
                     relative(world, 0, 7, 0, ZOQFOT_DEATH_EVENT);
                 } else if get(world, StoryKey::ZOQFOT_DISTRESS) != 0 {
                     let race = fleet(world, ZOQFOTPIK_SHIP);
-                    (*race).actual_strength = 0;
-                    (*race).allied_state = DEAD_GUY as u16;
+                    world.avail_races().get_mut(race).actual_strength = 0;
+                    world.avail_races().get_mut(race).allied_state = DEAD_GUY as u16;
                     set(world, StoryKey::ZOQFOT_DISTRESS, 2);
                 }
             }
@@ -242,10 +221,10 @@ pub(crate) mod live {
                     relative(world, 0, 7, 0, SPATHI_SHIELD_EVENT);
                 } else {
                     let race = fleet(world, SPATHI_SHIP);
-                    if (*race).actual_strength != 0 {
+                    if world.avail_races_ref().get(race).actual_strength != 0 {
                         set_race_allied(world, SPATHI_SHIP as u16, 0);
                         set(world, StoryKey::SPATHI_SHIELDED_SELVES, 1);
-                        (*race).actual_strength = 0;
+                        world.avail_races().get_mut(race).actual_strength = 0;
                     }
                 }
             }
@@ -254,9 +233,11 @@ pub(crate) mod live {
             YEHAT_REBEL_EVENT => {
                 let rebel = fleet(world, YEHAT_REBEL_SHIP);
                 let royal = fleet(world, YEHAT_SHIP);
-                (*royal).actual_strength = ((*royal).actual_strength as u32 * 2 / 3) as u16;
-                (*rebel).actual_strength = (*royal).actual_strength;
-                (*rebel).loc = POINT { x: 5150, y: 0 };
+                world.avail_races().get_mut(royal).actual_strength =
+                    (world.avail_races_ref().get(royal).actual_strength as u32 * 2 / 3) as u16;
+                world.avail_races().get_mut(rebel).actual_strength =
+                    world.avail_races_ref().get(royal).actual_strength;
+                world.avail_races().get_mut(rebel).loc = POINT { x: 5150, y: 0 };
                 start_sphere_tracking(world, YEHAT_REBEL_SHIP as u16);
             }
             SLYLANDRO_RAMP_DOWN => {
@@ -281,38 +262,47 @@ pub(crate) mod live {
         selector: u8,
     ) {
         let current = fleet(world, race as u32);
-        (*current).dest_loc = POINT { x, y };
-        (*current).days_left = days;
-        (*current).func_index = selector;
+        world.avail_races().get_mut(current).dest_loc = POINT { x, y };
+        world.avail_races().get_mut(current).days_left = days;
+        world.avail_races().get_mut(current).func_index = selector;
     }
 
     unsafe fn genocide(world: &mut World) {
         let black = fleet(world, BLACK_URQUAN_SHIP);
         let mut best_dist = -1i64;
-        let mut best_dx = (SOL_X as i32 - (*black).loc.x as i32) as i16;
-        let mut best_dy = (SOL_Y as i32 - (*black).loc.y as i32) as i16;
+        let mut best_dx = (SOL_X as i32 - world.avail_races_ref().get(black).loc.x as i32) as i16;
+        let mut best_dy = (SOL_Y as i32 - world.avail_races_ref().get(black).loc.y as i32) as i16;
         let mut index = 0u8;
-        let mut handle = world.data.game.avail_race_q.head;
-        while !handle.is_null() {
-            let current = handle.cast::<FLEET_INFO>();
-            handle = (*current).succ;
+        let mut handle = world.avail_races_ref().head();
+        while let Some(current) = handle {
+            handle = world.avail_races_ref().succ(current);
             if index as u32 != BLACK_URQUAN_SHIP
                 && index as u32 != URQUAN_SHIP
-                && (*current).actual_strength != u16::MAX
+                && world.avail_races_ref().get(current).actual_strength != u16::MAX
             {
-                let dx = (*current).loc.x.wrapping_sub((*black).loc.x);
-                let dy = (*current).loc.y.wrapping_sub((*black).loc.y);
+                let dx = world
+                    .avail_races_ref()
+                    .get(current)
+                    .loc
+                    .x
+                    .wrapping_sub(world.avail_races_ref().get(black).loc.x);
+                let dy = world
+                    .avail_races_ref()
+                    .get(current)
+                    .loc
+                    .y
+                    .wrapping_sub(world.avail_races_ref().get(black).loc.y);
                 if dx == 0 && dy == 0 {
-                    (*current).allied_state = DEAD_GUY as u16;
-                    (*current).actual_strength = 0;
-                } else if (*current).actual_strength != 0 {
+                    world.avail_races().get_mut(current).allied_state = DEAD_GUY as u16;
+                    world.avail_races().get_mut(current).actual_strength = 0;
+                } else if world.avail_races_ref().get(current).actual_strength != 0 {
                     let dist = dx as i64 * dx as i64 + dy as i64 * dy as i64;
                     if best_dist < 0 || dist < best_dist || index as u32 == DRUUGE_SHIP {
                         best_dist = dist;
                         best_dx = dx;
                         best_dy = dy;
                         if index as u32 == DRUUGE_SHIP {
-                            handle = ptr::null_mut();
+                            handle = None;
                         }
                     }
                 }
@@ -338,11 +328,12 @@ pub(crate) mod live {
             ] {
                 set(world, key, 0);
             }
+            let location = world.avail_races_ref().get(black).loc;
             set_race_destination(
                 world,
                 BLACK_URQUAN_SHIP as u8,
-                (*black).loc.x.wrapping_add(best_dx),
-                (*black).loc.y.wrapping_add(best_dy),
+                location.x.wrapping_add(best_dx),
+                location.y.wrapping_add(best_dy),
                 speed,
                 KOHR_AH_GENOCIDE_EVENT as u8,
             );
@@ -351,15 +342,18 @@ pub(crate) mod live {
 
     unsafe fn pkunk(world: &mut World) {
         let race = fleet(world, PKUNK_SHIP);
-        if (*race).actual_strength == 0 {
+        if world.avail_races_ref().get(race).actual_strength == 0 {
             return;
         }
         let mission = get(world, StoryKey::PKUNK_MISSION);
-        if (*race).days_left == 0 && mission != 0 {
-            if mission & 1 != 0 || ((*race).loc.x == 4970 && (*race).loc.y == 400) {
-                (*race).actual_strength = 0;
-            } else if (*race).loc.x == 502
-                && (*race).loc.y == 401
+        if world.avail_races_ref().get(race).days_left == 0 && mission != 0 {
+            if mission & 1 != 0
+                || (world.avail_races_ref().get(race).loc.x == 4970
+                    && world.avail_races_ref().get(race).loc.y == 400)
+            {
+                world.avail_races().get_mut(race).actual_strength = 0;
+            } else if world.avail_races_ref().get(race).loc.x == 502
+                && world.avail_races_ref().get(race).loc.y == 401
                 && get(world, StoryKey::PKUNK_ON_THE_MOVE) != 0
             {
                 set(world, StoryKey::PKUNK_ON_THE_MOVE, 0);
@@ -367,9 +361,9 @@ pub(crate) mod live {
                 return;
             }
         }
-        if (*race).actual_strength == 0 {
+        if world.avail_races_ref().get(race).actual_strength == 0 {
             set(world, StoryKey::YEHAT_ABSORBED_PKUNK, 1);
-            (*race).allied_state = DEAD_GUY as u16;
+            world.avail_races().get_mut(race).allied_state = DEAD_GUY as u16;
             start_sphere_tracking(world, YEHAT_SHIP as u16);
         } else {
             let (x, y) = if mission & 1 == 0 {
@@ -379,12 +373,13 @@ pub(crate) mod live {
             };
             set(world, StoryKey::PKUNK_ON_THE_MOVE, 1);
             set(world, StoryKey::PKUNK_SWITCH, 0);
+            let days_left = world.avail_races_ref().get(race).days_left;
             set_race_destination(
                 world,
                 PKUNK_SHIP as u8,
                 x,
                 y,
-                (182u16.wrapping_sub((*race).days_left as u16)) as u8,
+                (182u16.wrapping_sub(days_left as u16)) as u8,
                 ADVANCE_PKUNK_MISSION as u8,
             );
         }
@@ -394,20 +389,20 @@ pub(crate) mod live {
     unsafe fn thradd(world: &mut World) {
         let race = fleet(world, THRADDASH_SHIP);
         let mut mission = get(world, StoryKey::THRADD_MISSION);
-        if (*race).actual_strength != 0 && mission < 3 {
+        if world.avail_races_ref().get(race).actual_strength != 0 && mission < 3 {
             let (x, y) = if mission < 2 {
                 (4879, 7201)
             } else {
                 (2535, 8358)
             };
             if mission == 1 {
-                let loss = ((*race).actual_strength >> 1) as i32;
-                (*race).growth = (-loss / 14) as u8;
-                (*race).growth_fract = (((loss % 14) << 8) / 14) as u8;
-                (*race).growth_err_term = 127;
+                let loss = (world.avail_races_ref().get(race).actual_strength >> 1) as i32;
+                world.avail_races().get_mut(race).growth = (-loss / 14) as u8;
+                world.avail_races().get_mut(race).growth_fract = (((loss % 14) << 8) / 14) as u8;
+                world.avail_races().get_mut(race).growth_err_term = 127;
             } else if mission != 0 {
-                (*race).growth = 0;
-                (*race).growth_fract = 0;
+                world.avail_races().get_mut(race).growth = 0;
+                world.avail_races().get_mut(race).growth_fract = 0;
             }
             set_race_destination(
                 world,
@@ -428,14 +423,17 @@ pub(crate) mod live {
     unsafe fn ilwrath(world: &mut World) {
         let ilwrath = fleet(world, ILWRATH_SHIP);
         let thradd = fleet(world, THRADDASH_SHIP);
-        if (*ilwrath).loc.x == (2500 + 2535) / 2 && (*ilwrath).loc.y == (8070 + 8358) / 2 {
-            (*ilwrath).actual_strength = 0;
-            (*thradd).actual_strength = 0;
-            (*ilwrath).allied_state = DEAD_GUY as u16;
-            (*thradd).allied_state = DEAD_GUY as u16;
-        } else if (*ilwrath).actual_strength != 0 {
+        if world.avail_races_ref().get(ilwrath).loc.x == (2500 + 2535) / 2
+            && world.avail_races_ref().get(ilwrath).loc.y == (8070 + 8358) / 2
+        {
+            world.avail_races().get_mut(ilwrath).actual_strength = 0;
+            world.avail_races().get_mut(thradd).actual_strength = 0;
+            world.avail_races().get_mut(ilwrath).allied_state = DEAD_GUY as u16;
+            world.avail_races().get_mut(thradd).allied_state = DEAD_GUY as u16;
+        } else if world.avail_races_ref().get(ilwrath).actual_strength != 0 {
             if get(world, StoryKey::ILWRATH_FIGHT_THRADDASH) == 0
-                && ((*ilwrath).dest_loc.x != 2500 || (*ilwrath).dest_loc.y != 8070)
+                && (world.avail_races_ref().get(ilwrath).dest_loc.x != 2500
+                    || world.avail_races_ref().get(ilwrath).dest_loc.y != 8070)
             {
                 set_race_destination(
                     world,
@@ -446,12 +444,13 @@ pub(crate) mod live {
                     ADVANCE_ILWRATH_MISSION as u8,
                 );
             } else {
-                if (*ilwrath).days_left == 0 {
+                if world.avail_races_ref().get(ilwrath).days_left == 0 {
                     set(world, StoryKey::ILWRATH_FIGHT_THRADDASH, 1);
                     set(world, StoryKey::HELIX_UNPROTECTED, 1);
-                    let loss = (*ilwrath).actual_strength as i32;
-                    (*ilwrath).growth = (-loss / 128) as u8;
-                    (*ilwrath).growth_fract = (((loss % 128) << 8) / 128) as u8;
+                    let loss = world.avail_races_ref().get(ilwrath).actual_strength as i32;
+                    world.avail_races().get_mut(ilwrath).growth = (-loss / 128) as u8;
+                    world.avail_races().get_mut(ilwrath).growth_fract =
+                        (((loss % 128) << 8) / 128) as u8;
                     set_race_destination(
                         world,
                         ILWRATH_SHIP as u8,
@@ -460,22 +459,24 @@ pub(crate) mod live {
                         127,
                         ADVANCE_ILWRATH_MISSION as u8,
                     );
-                    let loss = (*thradd).actual_strength as i32;
-                    (*thradd).growth = (-loss / 128) as u8;
-                    (*thradd).growth_fract = (((loss % 128) << 8) / 128) as u8;
+                    let loss = world.avail_races_ref().get(thradd).actual_strength as i32;
+                    world.avail_races().get_mut(thradd).growth = (-loss / 128) as u8;
+                    world.avail_races().get_mut(thradd).growth_fract =
+                        (((loss % 128) << 8) / 128) as u8;
                     set(world, StoryKey::THRADD_VISITS, 0);
-                    if (*thradd).allied_state == GOOD_GUY as u16 {
+                    if world.avail_races_ref().get(thradd).allied_state == GOOD_GUY as u16 {
                         set_race_allied(world, THRADDASH_SHIP as u16, 0);
                     }
                 }
                 let mission = get(world, StoryKey::THRADD_MISSION);
                 if mission == 0 || mission > 3 {
+                    let days_left = world.avail_races_ref().get(ilwrath).days_left;
                     set_race_destination(
                         world,
                         THRADDASH_SHIP as u8,
                         (2500 + 2535) / 2,
                         (8070 + 8358) / 2,
-                        (*ilwrath).days_left.wrapping_add(1),
+                        days_left.wrapping_add(1),
                         u8::MAX,
                     );
                 } else if mission < 3 {
@@ -497,18 +498,19 @@ pub(crate) mod live {
         let utwig = fleet(world, UTWIG_SHIP);
         let supox = fleet(world, SUPOX_SHIP);
         let mut mission = get(world, StoryKey::UTWIG_SUPOX_MISSION);
-        if (*utwig).actual_strength != 0 && mission < 5 {
+        if world.avail_races_ref().get(utwig).actual_strength != 0 && mission < 5 {
             if mission == 1 {
                 relative(world, 0, 80, 0, ADVANCE_UTWIG_SUPOX_MISSION);
-                let loss = ((*utwig).actual_strength >> 1) as i32;
-                (*utwig).growth = (-loss / 160) as u8;
-                (*utwig).growth_fract = (((loss % 160) << 8) / 160) as u8;
-                (*utwig).growth_err_term = 127;
-                let loss = ((*supox).actual_strength >> 1) as i32;
+                let loss = (world.avail_races_ref().get(utwig).actual_strength >> 1) as i32;
+                world.avail_races().get_mut(utwig).growth = (-loss / 160) as u8;
+                world.avail_races().get_mut(utwig).growth_fract = (((loss % 160) << 8) / 160) as u8;
+                world.avail_races().get_mut(utwig).growth_err_term = 127;
+                let loss = (world.avail_races_ref().get(supox).actual_strength >> 1) as i32;
                 if loss != 0 {
-                    (*supox).growth = (-loss / 160) as u8;
-                    (*supox).growth_fract = (((loss % 160) << 8) / 160) as u8;
-                    (*supox).growth_err_term = 127;
+                    world.avail_races().get_mut(supox).growth = (-loss / 160) as u8;
+                    world.avail_races().get_mut(supox).growth_fract =
+                        (((loss % 160) << 8) / 160) as u8;
+                    world.avail_races().get_mut(supox).growth_err_term = 127;
                 }
                 set(world, StoryKey::UTWIG_WAR_NEWS, 0);
                 set(world, StoryKey::SUPOX_WAR_NEWS, 0);
@@ -519,10 +521,10 @@ pub(crate) mod live {
                 let (ux, uy, sx, sy) = if mission == 0 {
                     (7208, 7000, 6479, 7541)
                 } else {
-                    (*utwig).growth = 0;
-                    (*utwig).growth_fract = 0;
-                    (*supox).growth = 0;
-                    (*supox).growth_fract = 0;
+                    world.avail_races().get_mut(utwig).growth = 0;
+                    world.avail_races().get_mut(utwig).growth_fract = 0;
+                    world.avail_races().get_mut(supox).growth = 0;
+                    world.avail_races().get_mut(supox).growth_fract = 0;
                     set(world, StoryKey::UTWIG_WAR_NEWS, 0);
                     set(world, StoryKey::SUPOX_WAR_NEWS, 0);
                     (8534, 8797, 7468, 9246)
@@ -555,15 +557,17 @@ pub(crate) mod live {
 
     unsafe fn mycon(world: &mut World) {
         let race = fleet(world, MYCON_SHIP);
-        if (*race).actual_strength == 0 {
+        if world.avail_races_ref().get(race).actual_strength == 0 {
             return;
         }
-        if (*race).growth != 0 {
+        if world.avail_races_ref().get(race).growth != 0 {
             set(world, StoryKey::MYCON_KNOW_AMBUSH, 1);
             set_race_destination(world, MYCON_SHIP as u8, 6392, 2200, 30, u8::MAX);
-            (*race).growth = 0;
-            (*race).growth_fract = 0;
-        } else if (*race).loc.x != 6858 || (*race).loc.y != 577 {
+            world.avail_races().get_mut(race).growth = 0;
+            world.avail_races().get_mut(race).growth_fract = 0;
+        } else if world.avail_races_ref().get(race).loc.x != 6858
+            || world.avail_races_ref().get(race).loc.y != 577
+        {
             set_race_destination(
                 world,
                 MYCON_SHIP as u8,
@@ -574,10 +578,10 @@ pub(crate) mod live {
             );
         } else {
             relative(world, 0, 14, 0, ADVANCE_MYCON_MISSION);
-            let loss = ((*race).actual_strength >> 1) as i32;
-            (*race).growth = (-loss / 14) as u8;
-            (*race).growth_fract = (((loss % 14) << 8) / 14) as u8;
-            (*race).growth_err_term = 127;
+            let loss = (world.avail_races_ref().get(race).actual_strength >> 1) as i32;
+            world.avail_races().get_mut(race).growth = (-loss / 14) as u8;
+            world.avail_races().get_mut(race).growth_fract = (((loss % 14) << 8) / 14) as u8;
+            world.avail_races().get_mut(race).growth_err_term = 127;
         }
     }
 }
@@ -585,6 +589,39 @@ pub(crate) mod live {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn daily_fleet_walk_observes_callback_changes_before_reaching_later_fleets() {
+        let mut world = World::new();
+        let mut fleets = world.avail_races();
+        let first = fleets.alloc().unwrap();
+        let later = fleets.alloc().unwrap();
+        for (id, strength) in [(first, 10), (later, 20)] {
+            let fleet = fleets.get_mut(id);
+            fleet.actual_strength = strength;
+            fleet.growth_err_term = 127;
+            fleets.put(id);
+        }
+        fleets.get_mut(first).days_left = 1;
+        fleets.get_mut(first).func_index = 3;
+        let mut callbacks = Vec::new();
+        advance_fleets(&mut world, |world, selector| {
+            callbacks.push(selector);
+            let mut fleets = world.avail_races();
+            fleets.get_mut(later).growth = 2;
+            let appended = fleets.alloc().unwrap();
+            let fleet = fleets.get_mut(appended);
+            fleet.actual_strength = 30;
+            fleet.growth = 1;
+            fleet.growth_err_term = 127;
+            fleets.put(appended);
+        });
+        assert_eq!(callbacks, [3]);
+        let fleets = world.avail_races_ref();
+        assert_eq!(fleets.get(first).actual_strength, 10);
+        assert_eq!(fleets.get(later).actual_strength, 22);
+        assert_eq!(fleets.get(fleets.tail().unwrap()).actual_strength, 31);
+    }
 
     #[test]
     fn growth_fraction_and_destination_arrival_match_the_original_integer_math() {

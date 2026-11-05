@@ -37,18 +37,20 @@ const STARBASE: Body = Body::Moon { planet: 2, moon: 0 };
 const URQUAN_DRONE_SHIP: u8 = 23;
 
 /// Persist the single probe group even after its message has been delivered.
-pub fn init_npcs(story: &mut impl Story, host: &mut impl FleetGroups) -> bool {
-    special::ensure_fleet(story, host, "URQUAN_PROBE_GRPOFFS0", URQUAN_DRONE_SHIP);
-    if story.flag("PROBE_MESSAGE_DELIVERED") == 0 && host.init_ip_groups() {
-        if let Some(group) = host.head_ip_group() {
+pub fn init_npcs(host: &mut (impl FleetGroups + Story)) -> bool {
+    special::ensure_fleet(host, "URQUAN_PROBE_GRPOFFS0", URQUAN_DRONE_SHIP);
+    if host.flag("PROBE_MESSAGE_DELIVERED") == 0
+        && host.init_ip_groups()
+        && host.head_ip_group(&mut |group| {
             group.task = special::IN_ORBIT;
             group.sys_loc = 3;
             group.dest_loc = 3;
             group.loc.x = 0;
             group.loc.y = 0;
             group.group_counter = 0;
-            return true;
-        }
+        })
+    {
+        return true;
     }
     default::init_npcs(host);
     true
@@ -56,20 +58,20 @@ pub fn init_npcs(story: &mut impl Story, host: &mut impl FleetGroups) -> bool {
 
 /// Restore the queue before checking the collision flag, except when the
 /// completed bomb empties Sol. Only the head probe may be changed.
-pub fn reinit_npcs<H: FleetGroups + orbital::Queues>(story: &impl Story, host: &mut H) -> bool {
-    if story.flag("CHMMR_BOMB_STATE") == 3 {
+pub fn reinit_npcs<H: FleetGroups + orbital::Queues + Story>(host: &mut H) -> bool {
+    if host.flag("CHMMR_BOMB_STATE") == 3 {
         host.clear_battle_group_ref();
-        host.reinit_ip_group_q();
+        default::Npcs::reinit_ip_group_q(host);
         assert_eq!(host.built_ship_count(), 0);
     } else {
         default::reinit_npcs(host);
         if host.battle_group_ref() != 0 {
-            if let Some(group) = host.head_ip_group() {
+            host.head_ip_group(&mut |group| {
                 if group.race_id == URQUAN_DRONE_SHIP && group.task & default::REFORM_GROUP != 0 {
                     group.task = default::FLEE | default::IGNORE_FLAGSHIP;
                     group.dest_loc = 0;
                 }
-            }
+            });
         }
     }
     true

@@ -12,16 +12,15 @@ use std::ffi::CStr;
 use crate::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC, SOLARSYS_STATE};
 use crate::math::RandomContext;
 use crate::planets::c_api::{
-    built_ship_count, clone_infinite_ship_into_built_queue, current_star_index, init_communication,
-    load_lander_scene, load_planet_default_surface, notify_others_all_clear,
-    star_indexes_before_current, start_sphere_tracking, LiveGame, SLYLANDRO_HOME_CONVERSATION,
-    SYREEN_CONVERSATION, YEHAT_CONVERSATION, YEHAT_SHIP,
+    built_ship_count, clone_infinite_ship_into_built_queue, init_communication, load_lander_scene,
+    load_planet_default_surface, notify_others_all_clear, star_indexes_before_current,
+    start_sphere_tracking, LiveGame, SLYLANDRO_HOME_CONVERSATION, SYREEN_CONVERSATION,
+    YEHAT_CONVERSATION, YEHAT_SHIP,
 };
 use crate::planets::consts::star_color;
 use crate::planets::ffi::{
     analysis_context, blank_node, current_star_type, node_or, plan_data, sys_gen_rng,
 };
-use crate::planets::generate::default::Npcs;
 use crate::planets::generate::exports::{discovery_report, planet_index};
 use crate::planets::generate::special::{Body, LiveStory, Orbit, Story};
 use crate::planets::generate::vtable::{GenerateFunctions, DEFAULT_HOOKS};
@@ -71,13 +70,16 @@ pub(super) unsafe fn lay_out_planets(
 /// # Safety
 /// As [`super::exports::generate_orbital_c`].
 pub(super) unsafe fn orbit_world(
+    owner: &std::cell::RefCell<&mut crate::engine::battle::Cx<'_>>,
     system: *mut SOLARSYS_STATE,
     world: *mut PLANET_DESC,
     generate: impl FnOnce(&mut Orbit<'_>, Body) -> bool,
 ) -> bool {
     let body = body_of(system, world);
     let sys_info = std::ptr::addr_of_mut!((*system).SysInfo);
-    let (star, site) = analysis_context(sys_info, world);
+    let (star, site) = owner
+        .borrow_mut()
+        .with_legacy(|| analysis_context(sys_info, world));
     let mut orbit = Orbit {
         rng: sys_gen_rng(),
         plan_data: plan_data(),
@@ -126,37 +128,44 @@ impl wreck::WreckSite for LanderScene {
 }
 
 /// The conversations the Syreen starbase and the Slylandro home start.
-struct Conversations;
+struct Conversations<'a, 'b, 'c> {
+    cx: &'a std::cell::RefCell<&'b mut crate::engine::battle::Cx<'c>>,
+}
 
-impl syreen::StarbaseSite for Conversations {
+impl syreen::StarbaseSite for Conversations<'_, '_, '_> {
     fn talk_to_syreen(&mut self) {
-        // SAFETY: game thread, inside a planet orbit.
-        unsafe { init_communication(SYREEN_CONVERSATION) };
+        // SAFETY: the orbital host exclusively owns the live campaign context on the game thread.
+        unsafe {
+            init_communication(&mut self.cx.borrow_mut(), SYREEN_CONVERSATION);
+        }
     }
 }
 
-impl slylandro::HomeSite for Conversations {
+impl slylandro::HomeSite for Conversations<'_, '_, '_> {
     fn talk_to_slylandro(&mut self) {
-        // SAFETY: game thread, inside a planet orbit.
-        unsafe { init_communication(SLYLANDRO_HOME_CONVERSATION) };
+        // SAFETY: the orbital host exclusively owns the live campaign context on the game thread.
+        unsafe {
+            init_communication(&mut self.cx.borrow_mut(), SLYLANDRO_HOME_CONVERSATION);
+        }
     }
 }
 
 /// The live Yehat capital: the C engine behind each host call of
 /// [`yehat::YehatSite`].
-struct YehatCapital {
+struct YehatCapital<'a, 'b, 'c> {
     system: *mut SOLARSYS_STATE,
-    game: LiveGame,
+    game: LiveGame<'a, 'b, 'c>,
 }
 
-impl yehat::YehatSite for YehatCapital {
+impl yehat::YehatSite for YehatCapital<'_, '_, '_> {
     fn start_sphere_tracking(&mut self) -> bool {
-        // SAFETY: game thread, inside a planet orbit.
-        unsafe { start_sphere_tracking(YEHAT_SHIP) }
+        start_sphere_tracking(self.game.cx.borrow_mut().world, YEHAT_SHIP)
     }
     fn notify_others_all_clear(&mut self) {
-        // SAFETY: as above.
-        unsafe { notify_others_all_clear(YEHAT_SHIP) };
+        self.game.cx.borrow_mut().with_legacy(|| {
+            // SAFETY: as above.
+            unsafe { notify_others_all_clear(YEHAT_SHIP) };
+        })
     }
     fn save_ip_groups(&mut self) {
         self.game.save_ip_groups();
@@ -165,25 +174,35 @@ impl yehat::YehatSite for YehatCapital {
         self.game.reinit_ip_group_q();
     }
     fn built_ship_count(&self) -> u16 {
-        // SAFETY: as above.
-        unsafe { built_ship_count() }
+        built_ship_count(self.game.cx.borrow().world)
     }
     fn clone_yehat_fleet_into_built_queue(&mut self) {
-        // SAFETY: as above.
-        unsafe { clone_infinite_ship_into_built_queue(YEHAT_SHIP) };
+        // SAFETY: the orbital host exclusively owns the live campaign context on the game thread.
+        unsafe {
+            clone_infinite_ship_into_built_queue(self.game.cx.borrow_mut().world, YEHAT_SHIP)
+        };
     }
     fn current_activity(&self) -> u16 {
-        crate::mainloop::ffi::get_current_activity().0
+        self.game
+            .cx
+            .borrow_mut()
+            .with_legacy(|| crate::mainloop::ffi::get_current_activity().0)
     }
     fn set_current_activity(&mut self, activity: u16) {
-        crate::mainloop::ffi::set_current_activity(crate::mainloop::types::ActivityValue(activity));
+        self.game.cx.borrow_mut().world.set_activity(activity);
     }
     fn set_global_flags_and_data(&mut self, value: u8) {
-        LiveStory.set_flag("GLOBAL_FLAGS_AND_DATA", u32::from(value));
+        self.game
+            .cx
+            .borrow_mut()
+            .world
+            .set_flag("GLOBAL_FLAGS_AND_DATA", u32::from(value));
     }
     fn talk_to_yehat(&mut self) {
-        // SAFETY: as above.
-        unsafe { init_communication(YEHAT_CONVERSATION) };
+        // SAFETY: the orbital host exclusively owns the live campaign context on the game thread.
+        unsafe {
+            init_communication(&mut self.game.cx.borrow_mut(), YEHAT_CONVERSATION);
+        }
     }
     fn reinit_built_ship_q(&mut self) {
         self.game.reinit_npc_built_ship_q();
@@ -192,10 +211,12 @@ impl yehat::YehatSite for YehatCapital {
         self.game.load_ip_groups();
     }
     fn load_ruins_scene(&mut self) {
-        // SAFETY: `system` is the live solar system state on the game thread.
-        unsafe {
-            load_lander_scene(self.system, c"graphics.ruins", c"text.ruins", 0);
-        }
+        self.game.cx.borrow_mut().with_legacy(|| {
+            // SAFETY: `system` is the live solar system state on the game thread.
+            unsafe {
+                load_lander_scene(self.system, c"graphics.ruins", c"text.ruins", 0);
+            }
+        })
     }
 }
 
@@ -219,10 +240,20 @@ fn wreck_scene(system: *mut SOLARSYS_STATE) -> LanderScene {
 // one of its worlds, as the C callers pass them; the globals they read are
 // the ones the C originals read.
 
-unsafe extern "C" fn vault_orbital(system: *mut SOLARSYS_STATE, world: *mut PLANET_DESC) -> bool {
-    orbit_world(system, world, |orbit, body| {
-        vault::generate_orbital(orbit, body, &LiveStory, &mut vault_scene(system), || {
-            load_planet_default_surface()
+unsafe fn vault_orbital(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    system: *mut SOLARSYS_STATE,
+    world: *mut PLANET_DESC,
+) -> bool {
+    let owner = std::cell::RefCell::new(cx);
+    let owner = &owner;
+    let story = owner;
+
+    orbit_world(owner, system, world, |orbit, body| {
+        vault::generate_orbital(orbit, body, &story, &mut vault_scene(system), || {
+            owner
+                .borrow_mut()
+                .with_legacy(|| load_planet_default_surface())
         })
     })
 }
@@ -257,10 +288,20 @@ unsafe extern "C" fn vault_pickup(
     )
 }
 
-unsafe extern "C" fn wreck_orbital(system: *mut SOLARSYS_STATE, world: *mut PLANET_DESC) -> bool {
-    orbit_world(system, world, |orbit, body| {
-        wreck::generate_orbital(orbit, body, &LiveStory, &mut wreck_scene(system), || {
-            load_planet_default_surface()
+unsafe fn wreck_orbital(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    system: *mut SOLARSYS_STATE,
+    world: *mut PLANET_DESC,
+) -> bool {
+    let owner = std::cell::RefCell::new(cx);
+    let owner = &owner;
+    let story = owner;
+
+    orbit_world(owner, system, world, |orbit, body| {
+        wreck::generate_orbital(orbit, body, &story, &mut wreck_scene(system), || {
+            owner
+                .borrow_mut()
+                .with_legacy(|| load_planet_default_surface())
         })
     })
 }
@@ -299,13 +340,24 @@ unsafe extern "C" fn yehat_planets(system: *mut SOLARSYS_STATE) -> bool {
     lay_out_planets(system, yehat::generate_planets)
 }
 
-unsafe extern "C" fn yehat_orbital(system: *mut SOLARSYS_STATE, world: *mut PLANET_DESC) -> bool {
-    orbit_world(system, world, |orbit, body| {
+unsafe fn yehat_orbital(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    system: *mut SOLARSYS_STATE,
+    world: *mut PLANET_DESC,
+) -> bool {
+    let owner = std::cell::RefCell::new(cx);
+    let owner = &owner;
+
+    orbit_world(owner, system, world, |orbit, body| {
         let mut capital = YehatCapital {
             system,
-            game: LiveGame,
+            game: crate::planets::c_api::LiveGame { cx: owner },
         };
-        yehat::generate_orbital(orbit, body, &mut capital, || load_planet_default_surface())
+        yehat::generate_orbital(orbit, body, &mut capital, || {
+            owner
+                .borrow_mut()
+                .with_legacy(|| load_planet_default_surface())
+        })
     })
 }
 
@@ -333,8 +385,8 @@ unsafe extern "C" fn yehat_pickup(
     yehat::pickup_energy(body_of(system, world), &mut discovery_report(system))
 }
 
-unsafe extern "C" fn colony_init_npcs(_system: *mut SOLARSYS_STATE) -> bool {
-    colony::init_npcs(&mut LiveStory, &mut LiveGame)
+unsafe fn colony_init_npcs(owner: &mut crate::engine::World, _system: *mut SOLARSYS_STATE) -> bool {
+    colony::init_npcs(&mut crate::planets::c_api::NpcWorld::new(owner))
 }
 
 unsafe extern "C" fn colony_planets(system: *mut SOLARSYS_STATE) -> bool {
@@ -343,30 +395,56 @@ unsafe extern "C" fn colony_planets(system: *mut SOLARSYS_STATE) -> bool {
     })
 }
 
-unsafe extern "C" fn colony_orbital(system: *mut SOLARSYS_STATE, world: *mut PLANET_DESC) -> bool {
-    orbit_world(system, world, |orbit, body| {
-        colony::generate_orbital(orbit, body, || load_planet_default_surface())
+unsafe fn colony_orbital(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    system: *mut SOLARSYS_STATE,
+    world: *mut PLANET_DESC,
+) -> bool {
+    let owner = std::cell::RefCell::new(cx);
+    let owner = &owner;
+
+    orbit_world(owner, system, world, |orbit, body| {
+        colony::generate_orbital(orbit, body, || {
+            owner
+                .borrow_mut()
+                .with_legacy(|| load_planet_default_surface())
+        })
     })
 }
 
-unsafe extern "C" fn melnorme_init_npcs(_system: *mut SOLARSYS_STATE) -> bool {
-    melnorme::init_npcs(current_star_index(), &mut LiveStory, &mut LiveGame)
+unsafe fn melnorme_init_npcs(
+    owner: &mut crate::engine::World,
+    _system: *mut SOLARSYS_STATE,
+) -> bool {
+    // SAFETY: the selected star belongs to the retained runtime catalog.
+    let index = unsafe { (*owner.star_pointer(crate::planets::starmap::current_catalog())).index };
+    melnorme::init_npcs(index, &mut crate::planets::c_api::NpcWorld::new(owner))
 }
 
 unsafe extern "C" fn rainbow_planets(system: *mut SOLARSYS_STATE) -> bool {
     lay_out_planets(system, rainbow::generate_planets)
 }
 
-unsafe extern "C" fn rainbow_orbital(system: *mut SOLARSYS_STATE, world: *mut PLANET_DESC) -> bool {
-    orbit_world(system, world, |orbit, body| {
+unsafe fn rainbow_orbital(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    system: *mut SOLARSYS_STATE,
+    world: *mut PLANET_DESC,
+) -> bool {
+    let owner = std::cell::RefCell::new(cx);
+    let owner = &owner;
+    let mut story = owner;
+
+    orbit_world(owner, system, world, |orbit, body| {
         let which_rainbow = if body == Body::Planet(0) {
-            let before = star_indexes_before_current();
+            let before = star_indexes_before_current(owner.borrow().world);
             rainbow::rainbow_ordinal(&before, before.len())
         } else {
             0
         };
-        rainbow::generate_orbital(orbit, body, which_rainbow, &mut LiveStory, || {
-            load_planet_default_surface()
+        rainbow::generate_orbital(orbit, body, which_rainbow, &mut story, || {
+            owner
+                .borrow_mut()
+                .with_legacy(|| load_planet_default_surface())
         })
     })
 }
@@ -388,29 +466,55 @@ unsafe extern "C" fn syreen_moons(system: *mut SOLARSYS_STATE, planet: *mut PLAN
     )
 }
 
-unsafe extern "C" fn syreen_orbital(system: *mut SOLARSYS_STATE, world: *mut PLANET_DESC) -> bool {
-    orbit_world(system, world, |orbit, body| {
-        syreen::generate_orbital(orbit, body, &mut Conversations, || {
-            load_planet_default_surface()
+unsafe fn syreen_orbital(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    system: *mut SOLARSYS_STATE,
+    world: *mut PLANET_DESC,
+) -> bool {
+    let owner = std::cell::RefCell::new(cx);
+    let owner = &owner;
+
+    orbit_world(owner, system, world, |orbit, body| {
+        syreen::generate_orbital(orbit, body, &mut Conversations { cx: owner }, || {
+            owner
+                .borrow_mut()
+                .with_legacy(|| load_planet_default_surface())
         })
     })
 }
 
-unsafe extern "C" fn zfpscout_init_npcs(_system: *mut SOLARSYS_STATE) -> bool {
-    zfpscout::init_npcs(&mut LiveStory, &mut LiveGame)
+unsafe fn zfpscout_init_npcs(
+    owner: &mut crate::engine::World,
+    _system: *mut SOLARSYS_STATE,
+) -> bool {
+    zfpscout::init_npcs(&mut crate::planets::c_api::NpcWorld::new(owner))
 }
 
-unsafe extern "C" fn zfpscout_reinit_npcs(_system: *mut SOLARSYS_STATE) -> bool {
-    zfpscout::reinit_npcs(&mut LiveGame)
+unsafe fn zfpscout_reinit_npcs(
+    owner: &mut crate::engine::World,
+    _system: *mut SOLARSYS_STATE,
+) -> bool {
+    zfpscout::reinit_npcs(&mut crate::planets::c_api::NpcWorld::new(owner))
 }
 
 unsafe extern "C" fn trap_planets(system: *mut SOLARSYS_STATE) -> bool {
     lay_out_planets(system, trap::generate_planets)
 }
 
-unsafe extern "C" fn trap_orbital(system: *mut SOLARSYS_STATE, world: *mut PLANET_DESC) -> bool {
-    orbit_world(system, world, |orbit, body| {
-        trap::generate_orbital(orbit, body, || load_planet_default_surface())
+unsafe fn trap_orbital(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    system: *mut SOLARSYS_STATE,
+    world: *mut PLANET_DESC,
+) -> bool {
+    let owner = std::cell::RefCell::new(cx);
+    let owner = &owner;
+
+    orbit_world(owner, system, world, |orbit, body| {
+        trap::generate_orbital(orbit, body, || {
+            owner
+                .borrow_mut()
+                .with_legacy(|| load_planet_default_surface())
+        })
     })
 }
 
@@ -418,13 +522,19 @@ unsafe extern "C" fn slylandro_planets(system: *mut SOLARSYS_STATE) -> bool {
     lay_out_planets(system, slylandro::generate_planets)
 }
 
-unsafe extern "C" fn slylandro_orbital(
+unsafe fn slylandro_orbital(
+    cx: &mut crate::engine::battle::Cx<'_>,
     system: *mut SOLARSYS_STATE,
     world: *mut PLANET_DESC,
 ) -> bool {
-    orbit_world(system, world, |orbit, body| {
-        slylandro::generate_orbital(orbit, body, &mut Conversations, || {
-            load_planet_default_surface()
+    let owner = std::cell::RefCell::new(cx);
+    let owner = &owner;
+
+    orbit_world(owner, system, world, |orbit, body| {
+        slylandro::generate_orbital(orbit, body, &mut Conversations { cx: owner }, || {
+            owner
+                .borrow_mut()
+                .with_legacy(|| load_planet_default_surface())
         })
     })
 }

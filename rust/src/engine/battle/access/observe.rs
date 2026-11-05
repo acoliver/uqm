@@ -11,9 +11,14 @@ use std::ffi::c_void;
 ///
 /// # Safety
 /// The game-thread ship and group pools must remain live throughout the observation.
-unsafe fn parent_address(parent: super::super::Parent, groups: Option<&QUEUE>) -> *mut c_void {
+unsafe fn parent_address(
+    parent: super::super::Parent,
+    groups: Option<
+        &crate::engine::battle::link_queue::LinkQueue<'_, crate::engine::world::queues::Group, 32>,
+    >,
+) -> *mut c_void {
     use super::super::Parent;
-    let (queue, slot) = match parent {
+    let (queue, group) = match parent {
         Parent::None => return std::ptr::null_mut(),
         Parent::Ship(id) => {
             // SAFETY: the observation retains the live ship authority.
@@ -21,23 +26,28 @@ unsafe fn parent_address(parent: super::super::Parent, groups: Option<&QUEUE>) -
                 unsafe { super::super::record::ship_queue(usize::from(id.side())).as_ref() };
             return queue.pool.retired_address(usize::from(id.slot())) as *mut c_void;
         }
-        Parent::IpGroup(slot) => (
+        Parent::IpGroup(id) => (
             groups.unwrap_or_else(|| panic!("missing IP-group authority")),
-            slot,
+            id,
         ),
     };
-    queue
-        .pq_tab
-        .wrapping_add(usize::from(slot) * usize::from(queue.object_size))
-        .cast()
+    queue.journal_address(group) as *mut c_void
 }
 
 impl super::super::Cx<'_> {
     pub(crate) fn element_parent_address(&self, id: ElementId) -> *mut c_void {
-        // SAFETY: this context retains the source identity pools during observation.
-        unsafe { parent_address(self.kernel.elements[id].parent, Some(self.groups())) }
+        use super::super::Parent;
+        match self.kernel.elements[id].parent {
+            Parent::None => std::ptr::null_mut(),
+            Parent::Ship(ship) => self.kernel.races[usize::from(ship.side())]
+                .pool
+                .retired_address(usize::from(ship.slot()))
+                as *mut c_void,
+            Parent::IpGroup(group) => self.groups().journal_address(group) as *mut c_void,
+        }
     }
 }
+
 #[derive(Clone)]
 pub(crate) struct ElementObservation {
     pub state: ElementState,
@@ -61,7 +71,13 @@ impl ElementObservation {
     /// The caller retains the live source record and its reachable resource graph.
     pub(crate) unsafe fn decode(
         record: &ElementRecord,
-        groups: Option<&QUEUE>,
+        groups: Option<
+            &crate::engine::battle::link_queue::LinkQueue<
+                '_,
+                crate::engine::world::queues::Group,
+                32,
+            >,
+        >,
         target: usize,
     ) -> Self {
         Self {
@@ -81,7 +97,9 @@ impl ElementObservation {
 pub(crate) fn element(
     table: &ElementTable,
     id: ElementId,
-    groups: Option<&QUEUE>,
+    groups: Option<
+        &crate::engine::battle::link_queue::LinkQueue<'_, crate::engine::world::queues::Group, 32>,
+    >,
 ) -> ElementObservation {
     let record = &table[id];
     let target = record.target.map_or(0, |id| table.raw(id) as usize);
@@ -165,5 +183,30 @@ pub(crate) unsafe fn ship<'a>(
         strings: unsafe { s.race_strings.as_ref() },
         #[cfg(test)]
         lifetime: std::marker::PhantomData,
+    }
+}
+
+#[cfg(test)]
+mod owner_tests {
+    use super::super::super::{Battle, Cx, Parent};
+
+    #[test]
+    fn callback_parent_identity_uses_the_retained_kernel_without_publication() {
+        let mut game = crate::engine::Game::new();
+        game.kernel.reset_ship_capacity(1, 1);
+        let mut ships = game.kernel.ships(1);
+        let link = ships.alloc().unwrap();
+        let ship = ships.ship_id(link);
+        let address = ships.raw(link);
+        let element = game.kernel.elements.alloc().unwrap();
+        game.kernel.elements.record_mut(element).parent = Parent::Ship(ship);
+        let mut battle = Battle::new();
+        let cx = Cx::new(
+            &mut battle,
+            &mut game.world,
+            &mut game.kernel,
+            crate::math::random,
+        );
+        assert_eq!(cx.element_parent_address(element), address);
     }
 }

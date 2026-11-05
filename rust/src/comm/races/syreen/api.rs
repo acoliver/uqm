@@ -1,17 +1,13 @@
 use super::Handler;
 use crate::comm::races::alliance::AllianceApi;
-#[cfg(not(test))]
-use crate::engine::Kernel;
 
 pub(super) trait SyreenApi: AllianceApi<Handler> {
     fn using_speech(&self) -> bool;
 }
 #[cfg(not(test))]
-impl SyreenApi for super::super::script::live::LiveScript<Handler> {
+impl SyreenApi for super::super::script::live::LiveScript<'_, '_, Handler> {
     fn using_speech(&self) -> bool {
-        {
-            Kernel::current().read(|owner| owner.using_speech) != 0
-        }
+        self.cx.borrow().kernel.using_speech != 0
     }
 }
 #[cfg(test)]

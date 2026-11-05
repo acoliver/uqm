@@ -78,11 +78,10 @@ pub(crate) mod live {
     use super::{navigate, transfer_crew, SHIP_POS};
     use crate::battle::c_bridge::SleepThread;
     use crate::c_bindings::controller_input::*;
-    use crate::collections::queue::{CountLinks, Queue};
-    use crate::comm::dispatch::{get_star_ship_from_index, CFleetInfo, CShipFragment};
     use crate::comm::locdata::CRect;
-    use crate::engine::WorldData as WorldFields;
-    use crate::engine::{battle::Cx, observe::Io};
+    use crate::engine::battle::link_queue::LinkId;
+    use crate::engine::world::queues::Fragment;
+    use crate::engine::{battle::Cx, observe::Io, World, WorldData as WorldFields};
     use crate::starbase::cffi::CffiPlatform;
     use crate::starbase::gfx::{ContextId, FlashTarget, Gfx, Point, Rect, Rgba, Stamp};
     use std::ffi::{c_void, CString};
@@ -109,18 +108,9 @@ pub(crate) mod live {
         modifying: bool,
     }
 
-    unsafe fn support_ship(menu: &Menu) -> *mut CShipFragment {
-        let mut link = WorldFields::current().read(|owner| owner.game.built_ship_q.head);
-        let mut index = 0;
-        while !link.is_null() {
-            let ship = link.cast::<CShipFragment>();
-            if SHIP_POS[index] == menu.point {
-                return ship;
-            }
-            link = (*ship).succ;
-            index += 1;
-        }
-        std::ptr::null_mut()
+    fn support_ship(world: &World, menu: &Menu) -> Option<LinkId<Fragment>> {
+        let index = SHIP_POS.iter().position(|point| *point == menu.point)?;
+        world.built_ships_ref().at(index)
     }
 
     fn draw(menu: &Menu, filled: bool) {
@@ -155,25 +145,34 @@ pub(crate) mod live {
         }));
     }
 
-    unsafe fn delta_crew(menu: &Menu, delta: i16) -> bool {
-        let ship = support_ship(menu);
-        if ship.is_null() {
-            return false;
-        }
-        let template = WorldFields::current().read(|world| {
-            get_star_ship_from_index(
-                std::ptr::addr_of!(world.game.avail_race_q).cast::<Queue>(),
-                (*ship).race_id,
-            )
-            .cast::<CFleetInfo>()
+    unsafe fn delta_crew(menu: &mut Menu, delta: i16) -> bool {
+        let value = World::current().write(|world| {
+            let id = support_ship(world, menu)?;
+            if delta == 0 {
+                menu.frame = world.built_ships_ref().get(id).icons.cast();
+            }
+            let race = world.built_ships_ref().get(id).race_id;
+            let fleets = world.avail_races_ref();
+            let maximum = fleets
+                .get(
+                    fleets
+                        .at(usize::from(race))
+                        .unwrap_or_else(|| panic!("escort fleet")),
+                )
+                .crew_level;
+            let mut ships = world.built_ships();
+            let ship = ships.get_mut(id);
+            if !transfer_crew(&mut ship.crew_level, maximum, delta) {
+                return None;
+            }
+            Some(if ship.crew_level >= maximum {
+                ship.crew_level.to_string()
+            } else {
+                format!("{}/{}", ship.crew_level, maximum)
+            })
         });
-        if !transfer_crew(&mut (*ship).crew_level, (*template).crew_level, delta) {
+        let Some(value) = value else {
             return false;
-        }
-        let value = if (*ship).crew_level >= (*template).crew_level {
-            (*ship).crew_level.to_string()
-        } else {
-            format!("{}/{}", (*ship).crew_level, (*template).crew_level)
         };
         let message = CString::new(value).unwrap();
         CffiPlatform.pre_update_flash();
@@ -189,10 +188,6 @@ pub(crate) mod live {
     unsafe fn select(menu: &mut Menu, index: usize) {
         menu.point = menu.positions[index];
         menu.frame = std::ptr::null_mut();
-        let ship = support_ship(menu);
-        if !ship.is_null() {
-            menu.frame = (*ship).icons;
-        }
         delta_crew(menu, 0);
     }
 
@@ -283,11 +278,8 @@ pub(crate) mod live {
     /// # Safety
     /// Call on the game thread with campaign globals and screen resources initialized.
     pub unsafe fn roster_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) -> i32 {
+        let count = cx.world.built_ships_ref().count();
         let Some(mut menu) = cx.with_legacy(|| {
-            let world = WorldFields::current();
-            let count = CountLinks(std::ptr::addr_of!((**world).game.built_ship_q).cast::<Queue>())
-                as usize;
-            drop(world);
             if count == 0 {
                 return None;
             }

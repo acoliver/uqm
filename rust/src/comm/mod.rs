@@ -60,3 +60,17 @@ pub use track::{SoundChunk, TrackManager};
 pub use types::{
     AnimationDescData, CommData, CommError, CommIntroMode, CommResult, MAX_ANIMATIONS,
 };
+
+#[cfg(test)]
+pub(crate) fn with_test_context<R>(
+    call: impl FnOnce(&mut crate::engine::battle::Cx<'_>) -> R,
+) -> R {
+    let mut game = crate::engine::Game::new();
+    let mut battle = crate::engine::battle::Battle::new();
+    call(&mut crate::engine::battle::Cx::new(
+        &mut battle,
+        &mut game.world,
+        &mut game.kernel,
+        crate::math::random,
+    ))
+}

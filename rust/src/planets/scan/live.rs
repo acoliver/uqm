@@ -1,8 +1,6 @@
 use super::{landing_fuel, move_cursor};
 use crate::battle::element::ElementFlags;
 use crate::c_bindings::{controller_input::*, solar_system};
-use crate::collections::queue::{CountLinks, Queue, ReinitQueue};
-use crate::comm::dispatch::{clone_ship_fragment, CShipFragment};
 use crate::comm::locdata::{CColor, CPoint, CRect};
 use crate::engine::{
     battle::Cx,
@@ -62,7 +60,7 @@ use crate::battle::sounds::engine::PlayMenuSound;
 
 use crate::mainloop::input_abi::live::SetInputCallback;
 
-use crate::navigation::groups::live::PutGroupInfo;
+use crate::navigation::groups::live::put_group_info;
 
 use crate::planets::solarsys::lifecycle::SaveSolarSysLocation;
 
@@ -242,17 +240,26 @@ unsafe fn fuel() -> u16 {
 }
 
 unsafe fn spawn_fwiffo() {
-    let world = WorldData::current();
     crate::planets::c_api::set_encounter_group(0);
-    PutGroupInfo(0, u8::MAX);
-    ReinitQueue(std::ptr::addr_of_mut!((**world).game.ip_group_q).cast::<Queue>());
-    let queue = std::ptr::addr_of_mut!((**world).game.npc_built_ship_q).cast::<Queue>();
-    assert_eq!(CountLinks(queue), 0);
-    let ship = clone_ship_fragment(crate::comm::dispatch::ship::SPATHI_SHIP, queue, 1)
-        .cast::<CShipFragment>();
-    if !ship.is_null() {
-        (*ship).captains_name_index = 5 + 16;
-    }
+    crate::engine::World::current().write(|world| {
+        put_group_info(world, 0, u8::MAX);
+        world.ip_groups().reinit();
+        assert_eq!(world.npc_built_ships_ref().count(), 0);
+        let fleets = world.avail_races_ref();
+        let template = *fleets.get(
+            fleets
+                .at(crate::comm::dispatch::ship::SPATHI_SHIP as usize)
+                .unwrap_or_else(|| panic!("Spathi fleet")),
+        );
+        if let Some(id) = world.npc_built_ships().clone_fragment(
+            &template,
+            crate::comm::dispatch::ship::SPATHI_SHIP,
+            1,
+            crate::comm::dispatch::production_captain_name,
+        ) {
+            world.npc_built_ships().get_mut(id).captains_name_index = 5 + 16;
+        }
+    });
 }
 
 unsafe fn dispatch_lander(cx: &mut Cx<'_>, io: &mut Io<'_>) -> bool {

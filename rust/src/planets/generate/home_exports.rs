@@ -14,16 +14,15 @@ use crate::comm::dispatch::{conv, ship};
 use crate::planets::c_api::{
     begin_urquan_encounter, built_ship_count, built_ship_queue_has_ships, clear_sis_message,
     clone_infinite_ship_into_built_queue, current_star_index, current_star_point, delta_fuel,
-    draw_hyper_coords, fade_to_black_for_two_seconds, fuel_on_board, init_communication,
-    load_lander_scene, load_planet_default_surface, notify_others_all_clear, repair_sis_border,
-    start_sphere_tracking, LiveGame,
+    draw_hyper_coords, fade_to_black_for_two_seconds, init_communication, load_lander_scene,
+    load_planet_default_surface, notify_others_all_clear, repair_sis_border, start_sphere_tracking,
+    LiveGame,
 };
 use crate::planets::ffi::{blank_node, node_or, sys_gen_rng};
-use crate::planets::generate::default::Npcs;
 use crate::planets::generate::exports::discovery_report;
 use crate::planets::generate::home_contact::{HomeContactSite, LanderTakeoff};
 use crate::planets::generate::pet::{TalkingPetSite, UrquanEncounterSite};
-use crate::planets::generate::special::{FleetGroups, LiveStory, Story};
+use crate::planets::generate::special::{LiveStory, Story};
 use crate::planets::generate::special_exports::{body_of, lay_out_planets, orbit_world};
 use crate::planets::generate::vtable::{GenerateFunctions, DEFAULT_HOOKS};
 use crate::planets::generate::{burv, dru, ilw, orz, pet, pku, sup, thrad, zoq};
@@ -31,16 +30,17 @@ use crate::planets::generate::{burv, dru, ilw, orz, pet, pku, sup, thrad, zoq};
 /// The live race home: the C engine behind each host call of
 /// [`HomeContactSite`] and the extras the Orz, Thraddash and Zoq-Fot-Pik
 /// generators ask for.
-pub(super) struct RaceHome {
+pub(super) struct RaceHome<'a, 'b, 'c> {
     pub(super) system: *mut SOLARSYS_STATE,
-    pub(super) game: LiveGame,
+    pub(super) game: LiveGame<'a, 'b, 'c>,
     ship: u8,
     conversation: u32,
     ruins_text: &'static CStr,
 }
 
-impl RaceHome {
+impl<'a, 'b, 'c> RaceHome<'a, 'b, 'c> {
     pub(super) fn new(
+        owner: &'a std::cell::RefCell<&'b mut crate::engine::battle::Cx<'c>>,
         system: *mut SOLARSYS_STATE,
         ship: u8,
         conversation: u32,
@@ -48,7 +48,7 @@ impl RaceHome {
     ) -> Self {
         Self {
             system,
-            game: LiveGame,
+            game: LiveGame { cx: owner },
             ship,
             conversation,
             ruins_text,
@@ -57,18 +57,21 @@ impl RaceHome {
 
     pub(super) fn load_scene(&self, graphics: &CStr, strtab: &CStr, first_report: u16) {
         // SAFETY: `system` is the live solar system state on the game thread.
-        unsafe { load_lander_scene(self.system, graphics, strtab, first_report) };
+        self.game.cx.borrow_mut().with_legacy(|| unsafe {
+            load_lander_scene(self.system, graphics, strtab, first_report)
+        });
     }
 }
 
-impl HomeContactSite for RaceHome {
+impl HomeContactSite for RaceHome<'_, '_, '_> {
     fn start_sphere_tracking(&mut self) -> bool {
-        // SAFETY: game thread, inside a planet orbit.
-        unsafe { start_sphere_tracking(u16::from(self.ship)) }
+        start_sphere_tracking(self.game.cx.borrow_mut().world, u16::from(self.ship))
     }
     fn notify_others_all_clear(&mut self) {
-        // SAFETY: as above.
-        unsafe { notify_others_all_clear(u16::from(self.ship)) };
+        self.game.cx.borrow_mut().with_legacy(|| {
+            // SAFETY: as above.
+            unsafe { notify_others_all_clear(u16::from(self.ship)) };
+        })
     }
     fn save_ip_groups(&mut self) {
         self.game.save_ip_groups();
@@ -77,25 +80,38 @@ impl HomeContactSite for RaceHome {
         self.game.reinit_ip_group_q();
     }
     fn built_ship_count(&self) -> u16 {
-        // SAFETY: as above.
-        unsafe { built_ship_count() }
+        built_ship_count(self.game.cx.borrow().world)
     }
     fn clone_fleet_into_built_queue(&mut self) {
-        // SAFETY: as above.
-        unsafe { clone_infinite_ship_into_built_queue(u16::from(self.ship)) };
+        // SAFETY: the orbital host exclusively owns the live campaign context on the game thread.
+        unsafe {
+            clone_infinite_ship_into_built_queue(
+                self.game.cx.borrow_mut().world,
+                u16::from(self.ship),
+            )
+        }
     }
     fn current_activity(&self) -> u16 {
-        crate::mainloop::ffi::get_current_activity().0
+        self.game
+            .cx
+            .borrow_mut()
+            .with_legacy(|| crate::mainloop::ffi::get_current_activity().0)
     }
     fn set_current_activity(&mut self, activity: u16) {
-        crate::mainloop::ffi::set_current_activity(crate::mainloop::types::ActivityValue(activity));
+        self.game.cx.borrow_mut().world.set_activity(activity);
     }
     fn set_global_flags_and_data(&mut self, value: u8) {
-        LiveStory.set_flag("GLOBAL_FLAGS_AND_DATA", u32::from(value));
+        self.game
+            .cx
+            .borrow_mut()
+            .world
+            .set_flag("GLOBAL_FLAGS_AND_DATA", u32::from(value));
     }
     fn talk(&mut self) {
-        // SAFETY: as above.
-        unsafe { init_communication(self.conversation) };
+        // SAFETY: the orbital host exclusively owns the live campaign context on the game thread.
+        unsafe {
+            init_communication(&mut self.game.cx.borrow_mut(), self.conversation);
+        }
     }
     fn reinit_built_ship_q(&mut self) {
         self.game.reinit_npc_built_ship_q();
@@ -112,95 +128,109 @@ impl HomeContactSite for RaceHome {
     }
 }
 
-impl orz::OrzSite for RaceHome {
+impl orz::OrzSite for RaceHome<'_, '_, '_> {
     fn clone_escort_into_built_queue(&mut self) {
         self.game.clone_ship_into_built_queue(self.ship);
     }
     fn repair_sis_border(&mut self) {
-        // SAFETY: game thread, inside a planet orbit.
-        unsafe { repair_sis_border() };
+        self.game.cx.borrow_mut().with_legacy(|| {
+            // SAFETY: game thread, inside a planet orbit.
+            unsafe { repair_sis_border() };
+        })
     }
     fn load_taalo_device_scene(&mut self) {
         self.load_scene(c"graphics.taalodevice", c"text.taalodevice", 0);
     }
 }
 
-impl thrad::ThraddashSite for RaceHome {
+impl thrad::ThraddashSite for RaceHome<'_, '_, '_> {
     fn repair_sis_border(&mut self) {
-        // SAFETY: as above.
-        unsafe { repair_sis_border() };
+        self.game.cx.borrow_mut().with_legacy(|| {
+            // SAFETY: as above.
+            unsafe { repair_sis_border() };
+        })
     }
     fn load_aqua_scene(&mut self) {
         self.load_scene(c"graphics.aquahelix", c"text.aquahelix", 0);
     }
 }
 
-impl zoq::ZoqFotPikSite for RaceHome {
+impl zoq::ZoqFotPikSite for RaceHome<'_, '_, '_> {
     fn clone_black_urquan_into_built_queue(&mut self) {
         self.game
             .clone_ship_into_built_queue(ship::BLACK_URQUAN_SHIP);
     }
     fn talk_black_urquan(&mut self) {
-        // SAFETY: as above.
-        unsafe { init_communication(conv::BLACKURQ) };
+        // SAFETY: the orbital host exclusively owns the live campaign context on the game thread.
+        unsafe {
+            init_communication(&mut self.game.cx.borrow_mut(), conv::BLACKURQ);
+        }
     }
 }
 
-impl TalkingPetSite for RaceHome {
+impl TalkingPetSite for RaceHome<'_, '_, '_> {
     fn clone_zombie_into_built_queue(&mut self) {
         self.game.clone_ship_into_built_queue(self.ship);
     }
     fn built_ship_survives(&self) -> bool {
-        // SAFETY: game thread; `GlobData` is initialised.
-        unsafe { built_ship_queue_has_ships() }
+        built_ship_queue_has_ships(self.game.cx.borrow().world)
     }
     fn talk_pet(&mut self) {
-        // SAFETY: as above.
-        unsafe { init_communication(conv::TALKING_PET) };
+        // SAFETY: the orbital host exclusively owns the live campaign context on the game thread.
+        unsafe {
+            init_communication(&mut self.game.cx.borrow_mut(), conv::TALKING_PET);
+        }
     }
 }
 
-impl UrquanEncounterSite for RaceHome {
+impl UrquanEncounterSite for RaceHome<'_, '_, '_> {
     fn begin_urquan_encounter(&mut self, loc: (i16, i16)) -> bool {
-        // SAFETY: game thread, with the fleet and encounter queues initialised.
-        unsafe { begin_urquan_encounter(loc) }
+        // SAFETY: the orbital host exclusively owns the live campaign context on the game thread.
+        unsafe { begin_urquan_encounter(self.game.cx.borrow_mut().world, loc) }
     }
     fn fade_to_black(&mut self) {
-        // SAFETY: game thread.
-        unsafe { fade_to_black_for_two_seconds() };
+        self.game.cx.borrow_mut().with_legacy(|| {
+            // SAFETY: game thread.
+            unsafe { fade_to_black_for_two_seconds() };
+        })
     }
     fn move_game_clock_days(&mut self, days: u16) {
-        // SAFETY: plain call into the Rust game clock, as `MoveGameClockDays`.
-        unsafe { crate::time::clock_bridge::rust_clock_advance_days(i32::from(days)) };
+        self.game.cx.borrow_mut().with_legacy(|| {
+            // SAFETY: plain call into the Rust game clock, as `MoveGameClockDays`.
+            unsafe { crate::time::clock_abi::live::MoveGameClockDays(days) };
+        })
     }
     fn star_point(&self) -> (i16, i16) {
-        // SAFETY: `CurStarDescPtr` is the system being visited.
-        unsafe { current_star_point() }
+        self.game.cx.borrow_mut().with_legacy(|| {
+            // SAFETY: `CurStarDescPtr` is the system being visited.
+            unsafe { current_star_point() }
+        })
     }
     fn fuel_on_board(&self) -> u32 {
-        // SAFETY: game thread; `GlobData` is initialised.
-        {
-            fuel_on_board()
-        }
+        self.game.cx.borrow().world.data.flagship.fuel_on_board
     }
     fn delta_fuel(&mut self, delta: i16) {
-        // SAFETY: game thread.
-        unsafe { delta_fuel(delta) };
+        self.game.cx.borrow_mut().with_legacy(|| {
+            // SAFETY: game thread.
+            unsafe { delta_fuel(delta) };
+        })
     }
     fn random(&mut self) -> u32 {
-        crate::math::random()
+        self.game.cx.borrow_mut().with_legacy(crate::math::random)
     }
     fn clear_sis_message(&mut self) {
-        // SAFETY: game thread.
-        unsafe { clear_sis_message() };
+        self.game.cx.borrow_mut().with_legacy(|| {
+            // SAFETY: game thread.
+            unsafe { clear_sis_message() };
+        })
     }
     fn draw_hyper_coords(&mut self, loc: (i16, i16)) {
-        // SAFETY: game thread.
-        unsafe { draw_hyper_coords(loc) };
+        self.game.cx.borrow_mut().with_legacy(|| {
+            // SAFETY: game thread.
+            unsafe { draw_hyper_coords(loc) };
+        })
     }
-    fn finish_encounter(&mut self) {
-        // `UnlockEncounter` on a table queue is `(void) h`: nothing to release.
-    }
+    fn finish_encounter(&mut self) {}
 }
 
 /// `set_lander_takeoff ()`.
@@ -230,36 +260,90 @@ impl burv::BurvScenes for BurvScenes {
     }
 }
 
-fn ilwrath(system: *mut SOLARSYS_STATE) -> RaceHome {
-    RaceHome::new(system, ship::ILWRATH_SHIP, conv::ILWRATH, c"text.ruins")
+fn ilwrath<'a, 'b, 'c>(
+    owner: &'a std::cell::RefCell<&'b mut crate::engine::battle::Cx<'c>>,
+    system: *mut SOLARSYS_STATE,
+) -> RaceHome<'a, 'b, 'c> {
+    RaceHome::new(
+        owner,
+        system,
+        ship::ILWRATH_SHIP,
+        conv::ILWRATH,
+        c"text.ruins",
+    )
 }
 
-fn umgah(system: *mut SOLARSYS_STATE) -> RaceHome {
-    RaceHome::new(system, ship::UMGAH_SHIP, conv::UMGAH, c"text.ruins")
+fn umgah<'a, 'b, 'c>(
+    owner: &'a std::cell::RefCell<&'b mut crate::engine::battle::Cx<'c>>,
+    system: *mut SOLARSYS_STATE,
+) -> RaceHome<'a, 'b, 'c> {
+    RaceHome::new(owner, system, ship::UMGAH_SHIP, conv::UMGAH, c"text.ruins")
 }
 
-fn pkunk(system: *mut SOLARSYS_STATE) -> RaceHome {
-    RaceHome::new(system, ship::PKUNK_SHIP, conv::PKUNK, c"text.spindle")
+fn pkunk<'a, 'b, 'c>(
+    owner: &'a std::cell::RefCell<&'b mut crate::engine::battle::Cx<'c>>,
+    system: *mut SOLARSYS_STATE,
+) -> RaceHome<'a, 'b, 'c> {
+    RaceHome::new(
+        owner,
+        system,
+        ship::PKUNK_SHIP,
+        conv::PKUNK,
+        c"text.spindle",
+    )
 }
 
-fn supox(system: *mut SOLARSYS_STATE) -> RaceHome {
-    RaceHome::new(system, ship::SUPOX_SHIP, conv::SUPOX, c"text.ultron")
+fn supox<'a, 'b, 'c>(
+    owner: &'a std::cell::RefCell<&'b mut crate::engine::battle::Cx<'c>>,
+    system: *mut SOLARSYS_STATE,
+) -> RaceHome<'a, 'b, 'c> {
+    RaceHome::new(owner, system, ship::SUPOX_SHIP, conv::SUPOX, c"text.ultron")
 }
 
-fn druuge(system: *mut SOLARSYS_STATE) -> RaceHome {
-    RaceHome::new(system, ship::DRUUGE_SHIP, conv::DRUUGE, c"text.sphere")
+fn druuge<'a, 'b, 'c>(
+    owner: &'a std::cell::RefCell<&'b mut crate::engine::battle::Cx<'c>>,
+    system: *mut SOLARSYS_STATE,
+) -> RaceHome<'a, 'b, 'c> {
+    RaceHome::new(
+        owner,
+        system,
+        ship::DRUUGE_SHIP,
+        conv::DRUUGE,
+        c"text.sphere",
+    )
 }
 
-fn thraddash(system: *mut SOLARSYS_STATE) -> RaceHome {
-    RaceHome::new(system, ship::THRADDASH_SHIP, conv::THRADD, c"text.ruins")
+fn thraddash<'a, 'b, 'c>(
+    owner: &'a std::cell::RefCell<&'b mut crate::engine::battle::Cx<'c>>,
+    system: *mut SOLARSYS_STATE,
+) -> RaceHome<'a, 'b, 'c> {
+    RaceHome::new(
+        owner,
+        system,
+        ship::THRADDASH_SHIP,
+        conv::THRADD,
+        c"text.ruins",
+    )
 }
 
-fn orz_home(system: *mut SOLARSYS_STATE) -> RaceHome {
-    RaceHome::new(system, ship::ORZ_SHIP, conv::ORZ, c"text.ruins")
+fn orz_home<'a, 'b, 'c>(
+    owner: &'a std::cell::RefCell<&'b mut crate::engine::battle::Cx<'c>>,
+    system: *mut SOLARSYS_STATE,
+) -> RaceHome<'a, 'b, 'c> {
+    RaceHome::new(owner, system, ship::ORZ_SHIP, conv::ORZ, c"text.ruins")
 }
 
-fn zoq_home(system: *mut SOLARSYS_STATE) -> RaceHome {
-    RaceHome::new(system, ship::ZOQFOTPIK_SHIP, conv::ZOQFOTPIK, c"text.ruins")
+fn zoq_home<'a, 'b, 'c>(
+    owner: &'a std::cell::RefCell<&'b mut crate::engine::battle::Cx<'c>>,
+    system: *mut SOLARSYS_STATE,
+) -> RaceHome<'a, 'b, 'c> {
+    RaceHome::new(
+        owner,
+        system,
+        ship::ZOQFOTPIK_SHIP,
+        conv::ZOQFOTPIK,
+        c"text.ruins",
+    )
 }
 
 // SAFETY (all hooks below): the arguments are the live solar system state and
@@ -298,10 +382,19 @@ unsafe extern "C" fn ilw_planets(system: *mut SOLARSYS_STATE) -> bool {
     lay_out_planets(system, ilw::generate_planets)
 }
 
-unsafe extern "C" fn ilw_orbital(system: *mut SOLARSYS_STATE, world: *mut PLANET_DESC) -> bool {
-    orbit_world(system, world, |orbit, body| {
-        ilw::generate_orbital(orbit, body, &mut ilwrath(system), || {
-            load_planet_default_surface()
+unsafe fn ilw_orbital(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    system: *mut SOLARSYS_STATE,
+    world: *mut PLANET_DESC,
+) -> bool {
+    let owner = std::cell::RefCell::new(cx);
+    let owner = &owner;
+
+    orbit_world(owner, system, world, |orbit, body| {
+        ilw::generate_orbital(orbit, body, &mut ilwrath(owner, system), || {
+            owner
+                .borrow_mut()
+                .with_legacy(|| load_planet_default_surface())
         })
     })
 }
@@ -318,10 +411,20 @@ unsafe extern "C" fn pet_planets(system: *mut SOLARSYS_STATE) -> bool {
     lay_out_planets(system, pet::generate_planets)
 }
 
-unsafe extern "C" fn pet_orbital(system: *mut SOLARSYS_STATE, world: *mut PLANET_DESC) -> bool {
-    orbit_world(system, world, |orbit, body| {
-        pet::generate_orbital(orbit, body, &mut LiveStory, &mut umgah(system), || {
-            load_planet_default_surface()
+unsafe fn pet_orbital(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    system: *mut SOLARSYS_STATE,
+    world: *mut PLANET_DESC,
+) -> bool {
+    let owner = std::cell::RefCell::new(cx);
+    let owner = &owner;
+    let mut story = owner;
+
+    orbit_world(owner, system, world, |orbit, body| {
+        pet::generate_orbital(orbit, body, &mut story, &mut umgah(owner, system), || {
+            owner
+                .borrow_mut()
+                .with_legacy(|| load_planet_default_surface())
         })
     })
 }
@@ -338,10 +441,20 @@ unsafe extern "C" fn pku_planets(system: *mut SOLARSYS_STATE) -> bool {
     lay_out_planets(system, pku::generate_planets)
 }
 
-unsafe extern "C" fn pku_orbital(system: *mut SOLARSYS_STATE, world: *mut PLANET_DESC) -> bool {
-    orbit_world(system, world, |orbit, body| {
-        pku::generate_orbital(orbit, body, &LiveStory, &mut pkunk(system), || {
-            load_planet_default_surface()
+unsafe fn pku_orbital(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    system: *mut SOLARSYS_STATE,
+    world: *mut PLANET_DESC,
+) -> bool {
+    let owner = std::cell::RefCell::new(cx);
+    let owner = &owner;
+    let story = owner;
+
+    orbit_world(owner, system, world, |orbit, body| {
+        pku::generate_orbital(orbit, body, &story, &mut pkunk(owner, system), || {
+            owner
+                .borrow_mut()
+                .with_legacy(|| load_planet_default_surface())
         })
     })
 }
@@ -363,10 +476,20 @@ unsafe extern "C" fn sup_planets(system: *mut SOLARSYS_STATE) -> bool {
     lay_out_planets(system, sup::generate_planets)
 }
 
-unsafe extern "C" fn sup_orbital(system: *mut SOLARSYS_STATE, world: *mut PLANET_DESC) -> bool {
-    orbit_world(system, world, |orbit, body| {
-        sup::generate_orbital(orbit, body, &LiveStory, &mut supox(system), || {
-            load_planet_default_surface()
+unsafe fn sup_orbital(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    system: *mut SOLARSYS_STATE,
+    world: *mut PLANET_DESC,
+) -> bool {
+    let owner = std::cell::RefCell::new(cx);
+    let owner = &owner;
+    let story = owner;
+
+    orbit_world(owner, system, world, |orbit, body| {
+        sup::generate_orbital(orbit, body, &story, &mut supox(owner, system), || {
+            owner
+                .borrow_mut()
+                .with_legacy(|| load_planet_default_surface())
         })
     })
 }
@@ -388,10 +511,20 @@ unsafe extern "C" fn dru_planets(system: *mut SOLARSYS_STATE) -> bool {
     lay_out_planets(system, dru::generate_planets)
 }
 
-unsafe extern "C" fn dru_orbital(system: *mut SOLARSYS_STATE, world: *mut PLANET_DESC) -> bool {
-    orbit_world(system, world, |orbit, body| {
-        dru::generate_orbital(orbit, body, &LiveStory, &mut druuge(system), || {
-            load_planet_default_surface()
+unsafe fn dru_orbital(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    system: *mut SOLARSYS_STATE,
+    world: *mut PLANET_DESC,
+) -> bool {
+    let owner = std::cell::RefCell::new(cx);
+    let owner = &owner;
+    let story = owner;
+
+    orbit_world(owner, system, world, |orbit, body| {
+        dru::generate_orbital(orbit, body, &story, &mut druuge(owner, system), || {
+            owner
+                .borrow_mut()
+                .with_legacy(|| load_planet_default_surface())
         })
     })
 }
@@ -426,10 +559,20 @@ unsafe extern "C" fn burv_moons(system: *mut SOLARSYS_STATE, planet: *mut PLANET
     )
 }
 
-unsafe extern "C" fn burv_orbital(system: *mut SOLARSYS_STATE, world: *mut PLANET_DESC) -> bool {
-    orbit_world(system, world, |orbit, body| {
-        burv::generate_orbital(orbit, body, &LiveStory, &mut BurvScenes(system), || {
-            load_planet_default_surface()
+unsafe fn burv_orbital(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    system: *mut SOLARSYS_STATE,
+    world: *mut PLANET_DESC,
+) -> bool {
+    let owner = std::cell::RefCell::new(cx);
+    let owner = &owner;
+    let story = owner;
+
+    orbit_world(owner, system, world, |orbit, body| {
+        burv::generate_orbital(orbit, body, &story, &mut BurvScenes(system), || {
+            owner
+                .borrow_mut()
+                .with_legacy(|| load_planet_default_surface())
         })
     })
 }
@@ -471,15 +614,33 @@ unsafe extern "C" fn thrad_planets(system: *mut SOLARSYS_STATE) -> bool {
     })
 }
 
-unsafe extern "C" fn thrad_orbital(system: *mut SOLARSYS_STATE, world: *mut PLANET_DESC) -> bool {
-    orbit_world(system, world, |orbit, body| {
+unsafe fn thrad_orbital(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    system: *mut SOLARSYS_STATE,
+    world: *mut PLANET_DESC,
+) -> bool {
+    let owner = std::cell::RefCell::new(cx);
+    let owner = &owner;
+    let story = owner;
+    let star = owner
+        .borrow()
+        .world
+        .selected_star(crate::planets::starmap::current_catalog())
+        .unwrap_or_else(|| panic!("orbital generation requires a selected star"))
+        .index;
+
+    orbit_world(owner, system, world, |orbit, body| {
         thrad::generate_orbital(
             orbit,
             body,
-            current_star_index(),
-            &LiveStory,
-            &mut thraddash(system),
-            || load_planet_default_surface(),
+            star,
+            &story,
+            &mut thraddash(owner, system),
+            || {
+                owner
+                    .borrow_mut()
+                    .with_legacy(|| load_planet_default_surface())
+            },
         )
     })
 }
@@ -523,15 +684,33 @@ unsafe extern "C" fn orz_planets(system: *mut SOLARSYS_STATE) -> bool {
     })
 }
 
-unsafe extern "C" fn orz_orbital(system: *mut SOLARSYS_STATE, world: *mut PLANET_DESC) -> bool {
-    orbit_world(system, world, |orbit, body| {
+unsafe fn orz_orbital(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    system: *mut SOLARSYS_STATE,
+    world: *mut PLANET_DESC,
+) -> bool {
+    let owner = std::cell::RefCell::new(cx);
+    let owner = &owner;
+    let mut story = owner;
+    let star = owner
+        .borrow()
+        .world
+        .selected_star(crate::planets::starmap::current_catalog())
+        .unwrap_or_else(|| panic!("orbital generation requires a selected star"))
+        .index;
+
+    orbit_world(owner, system, world, |orbit, body| {
         orz::generate_orbital(
             orbit,
             body,
-            current_star_index(),
-            &mut LiveStory,
-            &mut orz_home(system),
-            || load_planet_default_surface(),
+            star,
+            &mut story,
+            &mut orz_home(owner, system),
+            || {
+                owner
+                    .borrow_mut()
+                    .with_legacy(|| load_planet_default_surface())
+            },
         )
     })
 }
@@ -569,18 +748,28 @@ unsafe extern "C" fn orz_pickup(
     )
 }
 
-unsafe extern "C" fn zoq_init_npcs(_system: *mut SOLARSYS_STATE) -> bool {
-    zoq::init_npcs(&LiveStory, &mut LiveGame)
+unsafe fn zoq_init_npcs(owner: &mut crate::engine::World, _system: *mut SOLARSYS_STATE) -> bool {
+    zoq::init_npcs(&mut crate::planets::c_api::NpcWorld::new(owner))
 }
 
 unsafe extern "C" fn zoq_planets(system: *mut SOLARSYS_STATE) -> bool {
     lay_out_planets(system, zoq::generate_planets)
 }
 
-unsafe extern "C" fn zoq_orbital(system: *mut SOLARSYS_STATE, world: *mut PLANET_DESC) -> bool {
-    orbit_world(system, world, |orbit, body| {
-        zoq::generate_orbital(orbit, body, &LiveStory, &mut zoq_home(system), || {
-            load_planet_default_surface()
+unsafe fn zoq_orbital(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    system: *mut SOLARSYS_STATE,
+    world: *mut PLANET_DESC,
+) -> bool {
+    let owner = std::cell::RefCell::new(cx);
+    let owner = &owner;
+    let story = owner;
+
+    orbit_world(owner, system, world, |orbit, body| {
+        zoq::generate_orbital(orbit, body, &story, &mut zoq_home(owner, system), || {
+            owner
+                .borrow_mut()
+                .with_legacy(|| load_planet_default_surface())
         })
     })
 }

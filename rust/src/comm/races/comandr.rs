@@ -6,7 +6,8 @@ use super::script::{
 };
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
-use crate::engine::{StoryKey, World};
+use crate::engine::battle::Cx;
+use crate::engine::StoryKey;
 
 const GLAD_WHEN_YOU_COME_BACK: u16 = 1;
 const GIVE_FUEL: u16 = 2;
@@ -581,13 +582,13 @@ pub(crate) mod live {
     use super::*;
     use crate::comm::races::script::live::LiveScript;
 
-    fn api() -> LiveScript<Handler> {
-        LiveScript { callback }
+    fn api<'a, 'b>(cx: &'a mut crate::engine::battle::Cx<'b>) -> LiveScript<'a, 'b, Handler> {
+        LiveScript::new(cx, callback)
     }
 
     macro_rules! callbacks {
         ($($handler:ident => $name:ident),* $(,)?) => {
-            $(fn $name(r: u32) { Commander(&mut api()).handle(Handler::$handler, u16::try_from(r).expect("response reference exceeds COUNT")); })*
+            $(fn $name(cx: &mut Cx<'_>, r: u32) { Commander(&mut api(cx)).handle(Handler::$handler, u16::try_from(r).expect("response reference exceeds COUNT")); })*
             fn callback(handler: Handler) -> crate::comm::response::ResponseFunc {
                 match handler { $(Handler::$handler => $name,)* }
             }
@@ -604,11 +605,11 @@ pub(crate) mod live {
         GiveRadios => give_radios,
     }
 
-    pub(super) fn intro() {
-        Commander(&mut api()).intro();
+    pub(super) fn intro(cx: &mut Cx<'_>) {
+        Commander(&mut api(cx)).intro();
     }
-    pub(super) fn post() {}
-    pub(super) fn uninit() -> u16 {
+    pub(super) fn post(_cx: &mut Cx<'_>) {}
+    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
         0
     }
 
@@ -617,13 +618,12 @@ pub(crate) mod live {
     /// # Safety
     /// Game thread only; the engine must copy the descriptor before initializing
     /// another encounter. Loaded handles belong to CommData, not this template.
-    #[no_mangle]
-    pub unsafe extern "C" fn init_commander_comm() -> *mut CLocData {
+    pub unsafe fn init_commander_comm(cx: &mut Cx<'_>) -> *mut CLocData {
         static mut DESC: Option<CLocData> = None;
         let desc = (&mut *std::ptr::addr_of_mut!(DESC)).get_or_insert_with(descriptor);
-        configure(desc, api().get("RADIOACTIVES_PROVIDED") != 0);
+        configure(desc, api(cx).get("RADIOACTIVES_PROVIDED") != 0);
         // setSegue(peace) also updates the legacy battle bit used by dispatch.
-        api().set("BATTLE_SEGUE", 0);
+        api(cx).set("BATTLE_SEGUE", 0);
         crate::comm::ffi::rust_set_segue(0);
         desc
     }
@@ -632,20 +632,20 @@ pub(crate) mod live {
 pub struct ComandrDialogue;
 
 impl super::RaceDialogue for ComandrDialogue {
-    fn init(&self) -> CommData {
+    fn init(&self, cx: &mut Cx<'_>) -> CommData {
         let mut desc = descriptor();
         configure(
             &mut desc,
-            World::current().read(|world| world.story_state(StoryKey::RADIOACTIVES_PROVIDED)) != 0,
+            cx.world.story_state(StoryKey::RADIOACTIVES_PROVIDED) != 0,
         );
         as_comm_data(&desc)
     }
-    fn intro(&self) {
+    fn intro(&self, _cx: &mut Cx<'_>) {
         #[cfg(not(test))]
-        live::intro();
+        live::intro(_cx);
     }
-    fn post_encounter(&self) {}
-    fn uninit(&self) -> u32 {
+    fn post_encounter(&self, _cx: &mut Cx<'_>) {}
+    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
         0
     }
 }

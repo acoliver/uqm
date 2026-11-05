@@ -8,7 +8,6 @@ use crate::ships::native::abi::optMeleeScale;
 
 use crate::battle::gendef::getGenerateFunctions;
 use crate::c_bindings::controller_input as input;
-use crate::collections::queue::ReinitQueue;
 use crate::comm::locdata::CPoint;
 use crate::graphics::pixmap_abi::{GetFrameIndex, ReleaseDrawable, SetAbsFrameIndex};
 use crate::mainloop::restart_menu::c_extern::PlayMusic;
@@ -106,8 +105,6 @@ mod ffi {
     pub(super) use crate::planets::orbit::live::planet_orbit_menu;
 
     pub(super) use crate::planets::orbit::live::FreePlanet;
-
-    pub(super) use crate::navigation::groups::live::GetGroupInfo;
 
     pub(super) use crate::mainloop::input_abi::live::SetMenuSounds;
 
@@ -333,7 +330,7 @@ pub(super) unsafe fn reset_solar_sys() {
 }
 
 unsafe fn run_planet_orbit(cx: &mut Cx<'_>, io: &mut Io<'_>) {
-    if !cx.with_legacy(|| prepare_planet_orbit()) {
+    if !prepare_planet_orbit(cx) {
         return;
     }
     if !(*system()).TopoFrame.is_null() {
@@ -343,31 +340,36 @@ unsafe fn run_planet_orbit(cx: &mut Cx<'_>, io: &mut Io<'_>) {
     finish_planet_orbit(cx);
 }
 
-unsafe fn prepare_planet_orbit() -> bool {
+unsafe fn prepare_planet_orbit(cx: &mut Cx<'_>) -> bool {
     let state = system();
-    if (*state).InIpFlight != 0 {
-        free_solar_sys();
-        if worldIsMoon(state, (*state).pOrbitalDesc) {
-            (**glob()).game.ship_stamp.origin = saved_point((*(*state).pOrbitalDesc).image.origin);
-        } else {
-            let (width, height) = sis_dimensions();
-            (**glob()).game.ship_stamp.origin.x = (width >> 1) as _;
-            (**glob()).game.ship_stamp.origin.y = (height >> 1) as _;
+    cx.with_legacy(|| {
+        if (*state).InIpFlight != 0 {
+            free_solar_sys();
+            if worldIsMoon(state, (*state).pOrbitalDesc) {
+                (**glob()).game.ship_stamp.origin =
+                    saved_point((*(*state).pOrbitalDesc).image.origin);
+            } else {
+                let (width, height) = sis_dimensions();
+                (**glob()).game.ship_stamp.origin.x = (width >> 1) as _;
+                (**glob()).game.ship_stamp.origin.y = (height >> 1) as _;
+            }
         }
-    }
 
-    World::current().write(|world| ffi::get_planet_info(world));
-    ((*(*state).genFuncs).generateOrbital.unwrap())(state, (*state).pOrbitalDesc);
-    (**Kernel::current()).last_activity &= !(CHECK_LOAD | CHECK_RESTART);
-    if glob().read(|owner| owner.game.current_activity)
-        & (CHECK_ABORT | CHECK_LOAD | START_ENCOUNTER)
-        != 0
-        || glob().read(|owner| owner.flagship.crew_enlisted) == c::COUNT::MAX
-        || World::current().read(|world| world.story_state(StoryKey::CHMMR_BOMB_STATE)) == 2
-    {
-        return false;
-    }
-    true
+        World::current().write(|world| ffi::get_planet_info(world));
+    });
+    ((*(*state).genFuncs).generateOrbital.unwrap())(cx, state, (*state).pOrbitalDesc);
+    cx.with_legacy(|| {
+        (**Kernel::current()).last_activity &= !(CHECK_LOAD | CHECK_RESTART);
+        if glob().read(|owner| owner.game.current_activity)
+            & (CHECK_ABORT | CHECK_LOAD | START_ENCOUNTER)
+            != 0
+            || glob().read(|owner| owner.flagship.crew_enlisted) == c::COUNT::MAX
+            || World::current().read(|world| world.story_state(StoryKey::CHMMR_BOMB_STATE)) == 2
+        {
+            return false;
+        }
+        true
+    })
 }
 
 unsafe fn finish_planet_orbit(cx: &mut Cx<'_>) {
@@ -417,16 +419,18 @@ pub(super) unsafe fn init_solar_sys() {
     if inner_system {
         validate_inner_orbits();
     }
-    if reentry {
-        ((*(*state).genFuncs).reinitNpcs.unwrap())(state);
-    } else {
-        ENCOUNTER_RACE = -1;
-        EncounterGroup = 0;
-        (**glob()).game.battle_group_ref = 0;
-        ReinitQueue(ptr::addr_of_mut!((**glob()).game.ip_group_q).cast());
-        ReinitQueue(ptr::addr_of_mut!((**glob()).game.npc_built_ship_q).cast());
-        ((*(*state).genFuncs).initNpcs.unwrap())(state);
-    }
+    World::current().write(|world| {
+        if reentry {
+            ((*(*state).genFuncs).reinitNpcs.unwrap())(world, state);
+        } else {
+            ENCOUNTER_RACE = -1;
+            EncounterGroup = 0;
+            world.data.game.battle_group_ref = 0;
+            world.ip_groups().reinit();
+            world.npc_built_ships().reinit();
+            ((*(*state).genFuncs).initNpcs.unwrap())(world, state);
+        }
+    });
 
     if !orbital.is_null() {
         enter_orbital(orbital);
@@ -462,12 +466,14 @@ pub(super) unsafe fn init_solar_sys() {
 }
 
 pub(super) unsafe fn end_interplanetary() {
-    (**glob()).game.current_activity &= !END_INTERPLANETARY;
-    if glob().read(|owner| owner.game.current_activity) & (CHECK_ABORT | CHECK_LOAD) == 0 {
-        let state = system();
-        ((*(*state).genFuncs).uninitNpcs.unwrap())(state);
-        World::current().write(|world| world.set_story_state(StoryKey::USED_BROADCASTER, 0));
-    }
+    World::current().write(|world| {
+        world.data.game.current_activity &= !END_INTERPLANETARY;
+        if world.data.game.current_activity & (CHECK_ABORT | CHECK_LOAD) == 0 {
+            let state = system();
+            ((*(*state).genFuncs).uninitNpcs.unwrap())(world, state);
+            world.set_story_state(StoryKey::USED_BROADCASTER, 0);
+        }
+    });
 }
 
 pub(super) unsafe fn closest_planet_interplanetary(point: *const c::POINT) -> *mut c::PLANET_DESC {
@@ -501,10 +507,13 @@ pub(super) unsafe fn uninit_solar_sys() {
     if glob().read(|owner| owner.game.current_activity) & START_ENCOUNTER != 0
         && EncounterGroup != 0
     {
-        ffi::GetGroupInfo(
-            glob().read(|owner| owner.game.battle_group_ref),
-            EncounterGroup,
-        );
+        crate::engine::World::current().write(|world| {
+            crate::navigation::groups::live::get_group_info(
+                world,
+                world.data.game.battle_group_ref,
+                EncounterGroup,
+            )
+        });
         if glob().read(|owner| owner.game.ip_planet) == 0 {
             let point = c_point(glob().read(|owner| owner.game.ship_stamp.origin));
             let planet = closest_planet_interplanetary(&point);

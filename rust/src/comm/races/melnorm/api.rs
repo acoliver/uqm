@@ -34,66 +34,74 @@ mod live {
     use crate::ui::sis::ClearSISRect;
 
     use crate::threading::pacing::linked::sleep_thread as SleepThread;
-    impl MelnormApi for LiveScript<Handler> {
+    impl MelnormApi for LiveScript<'_, '_, Handler> {
         fn ship(&self) -> CSisState {
-            unsafe {
+            self.cx.borrow_mut().with_legacy(|| unsafe {
                 let world = WorldData::current();
                 std::ptr::addr_of!((**world).flagship)
                     .cast::<CSisState>()
                     .read()
-            }
+            })
         }
         fn set_ship(&mut self, ship: CSisState) {
-            unsafe {
+            self.cx.borrow_mut().with_legacy(|| unsafe {
                 let world = WorldData::current();
                 std::ptr::addr_of_mut!((**world).flagship)
                     .cast::<CSisState>()
                     .write(ship);
-            }
+            })
         }
         fn module_cost(&self, id: usize) -> u8 {
-            {
-                WorldData::current().read(|owner| owner.game.module_cost[id])
-            }
+            self.cx.borrow_mut().with_legacy(|| {
+                {
+                    WorldData::current().read(|owner| owner.game.module_cost[id])
+                }
+            })
         }
         fn set_module_cost(&mut self, id: usize, cost: u8) {
-            unsafe {
+            self.cx.borrow_mut().with_legacy(|| unsafe {
                 (**WorldData::current()).game.module_cost[id] = cost;
-            }
+            })
         }
         fn number(&mut self, number: i32) {
-            unsafe {
+            self.cx.borrow_mut().with_legacy(|| unsafe {
                 NPCNumber(number, std::ptr::null());
-            }
+            })
         }
         fn status_mode(&mut self, mode: i32) -> i32 {
-            unsafe { SetStatusMessageMode(mode as u32) as i32 }
+            self.cx
+                .borrow_mut()
+                .with_legacy(|| unsafe { SetStatusMessageMode(mode as u32) as i32 })
         }
         fn draw_status(&mut self) {
-            unsafe {
+            self.cx.borrow_mut().with_legacy(|| unsafe {
                 DrawStatusMessage(std::ptr::null());
-            }
+            })
         }
         fn draw_cargo(&mut self, old: u8, new: u8) {
-            unsafe {
+            self.cx.borrow_mut().with_legacy(|| unsafe {
                 DrawCargoStrings(old, new);
-            }
+            })
         }
         fn sleep(&mut self, ticks: u32) {
-            unsafe {
+            self.cx.borrow_mut().with_legacy(|| unsafe {
                 SleepThread(ticks);
-            }
+            })
         }
         fn now(&mut self) -> u32 {
-            crate::time::counter_abi::GetTimeCounter()
+            self.cx
+                .borrow_mut()
+                .with_legacy(|| crate::time::counter_abi::GetTimeCounter())
         }
         fn skip_sale(&mut self) -> bool {
-            unsafe { AnyButtonPress(1) != 0 }
+            self.cx
+                .borrow_mut()
+                .with_legacy(|| unsafe { AnyButtonPress(1) != 0 })
         }
         fn clear_display(&mut self) {
-            unsafe {
+            self.cx.borrow_mut().with_legacy(|| unsafe {
                 ClearSISRect(8);
-            }
+            })
         }
     }
 }

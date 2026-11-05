@@ -2,8 +2,6 @@
 
 use crate::comm::locdata::{CAnimationDesc, CLocData};
 #[cfg(not(test))]
-use crate::engine::World;
-#[cfg(not(test))]
 use crate::engine::WorldData;
 
 pub(super) const ANIM_DISABLED: u8 = 1 << 7;
@@ -89,138 +87,158 @@ pub(super) mod live {
     }
 
     // Callbacks and live globals belong to the game thread, as in the C scripts.
-    pub(in crate::comm::races) struct LiveScript<H> {
+    pub(in crate::comm::races) struct LiveScript<'a, 'b, H> {
+        pub cx: std::cell::RefCell<&'a mut crate::engine::battle::Cx<'b>>,
         pub callback: fn(H) -> crate::comm::response::ResponseFunc,
     }
 
-    impl<H> ScriptApi<H> for LiveScript<H> {
-        fn get(&self, key: &str) -> u8 {
-            let (start, end) = crate::state::game_state_keys::bit_range(key)
-                .expect("dialogue uses an unknown game-state key");
-            {
-                World::current().read(|world| {
-                    crate::state::ffi::rust_get_game_state_bits(world, start as i32, end as i32)
-                })
+    impl<'a, 'b, H> LiveScript<'a, 'b, H> {
+        pub fn new(
+            cx: &'a mut crate::engine::battle::Cx<'b>,
+            callback: fn(H) -> fn(&mut crate::engine::battle::Cx<'_>, u32),
+        ) -> Self {
+            Self {
+                callback,
+                cx: std::cell::RefCell::new(cx),
             }
+        }
+    }
+
+    impl<H> ScriptApi<H> for LiveScript<'_, '_, H> {
+        fn get(&self, key: &str) -> u8 {
+            let (start, end) =
+                crate::state::game_state_keys::bit_range(key).expect("unknown dialogue state key");
+            crate::state::ffi::rust_get_game_state_bits(
+                self.cx.borrow().world,
+                start as i32,
+                end as i32,
+            )
         }
 
         fn set(&mut self, key: &str, value: u8) {
-            let (start, end) = crate::state::game_state_keys::bit_range(key)
-                .expect("dialogue uses an unknown game-state key");
-            {
-                World::current().write(|world| {
-                    crate::state::ffi::rust_set_game_state_bits(
-                        world,
-                        start as i32,
-                        end as i32,
-                        value,
-                    )
-                })
-            }
+            let (start, end) =
+                crate::state::game_state_keys::bit_range(key).expect("unknown dialogue state key");
+            crate::state::ffi::rust_set_game_state_bits(
+                self.cx.borrow_mut().world,
+                start as i32,
+                end as i32,
+                value,
+            );
         }
 
         fn npc(&mut self, phrase: i32) {
-            unsafe { crate::comm::ffi::rust_npc_phrase_cb(phrase, None) }
+            self.cx
+                .borrow_mut()
+                .with_legacy(|| unsafe { crate::comm::ffi::rust_npc_phrase_cb(phrase, None) })
         }
 
         fn response(&mut self, phrase: u16, handler: H, fragments: &[i32]) {
-            unsafe {
-                let world = WorldData::current();
-                let text = if fragments.is_empty() {
-                    GetStringAddress(SetAbsStringTableIndex(
-                        (COMM_DATA.conversation_phrases).cast(),
-                        phrase - 1,
-                    ))
-                } else {
-                    // Concatenate bytes exactly as construct_response does, including
-                    // the spaces already present in the translated phrase fragments.
-                    let mut text = Vec::new();
-                    for &fragment in fragments {
-                        let ptr = match fragment {
-                            GLOBAL_PLAYER_NAME => {
-                                std::ptr::addr_of!((**world).flagship.commander_name).cast()
-                            }
-                            GLOBAL_SHIP_NAME => {
-                                std::ptr::addr_of!((**world).flagship.ship_name).cast()
-                            }
-                            _ => {
-                                let index =
-                                    u16::try_from(fragment - 1).expect("invalid response fragment");
-                                GetStringAddress(SetAbsStringTableIndex(
-                                    (COMM_DATA.conversation_phrases).cast(),
-                                    index,
-                                ))
-                            }
-                        };
-                        text.extend_from_slice(CStr::from_ptr(ptr).to_bytes());
-                    }
-                    assert!(
-                        text.len() < 2048,
-                        "constructed dialogue response exceeds shared buffer"
+            self.cx.borrow_mut().with_legacy(|| {
+                unsafe {
+                    let world = WorldData::current();
+                    let text = if fragments.is_empty() {
+                        GetStringAddress(SetAbsStringTableIndex(
+                            (COMM_DATA.conversation_phrases).cast(),
+                            phrase - 1,
+                        ))
+                    } else {
+                        // Concatenate bytes exactly as construct_response does, including
+                        // the spaces already present in the translated phrase fragments.
+                        let mut text = Vec::new();
+                        for &fragment in fragments {
+                            let ptr = match fragment {
+                                GLOBAL_PLAYER_NAME => {
+                                    std::ptr::addr_of!((**world).flagship.commander_name).cast()
+                                }
+                                GLOBAL_SHIP_NAME => {
+                                    std::ptr::addr_of!((**world).flagship.ship_name).cast()
+                                }
+                                _ => {
+                                    let index = u16::try_from(fragment - 1)
+                                        .expect("invalid response fragment");
+                                    GetStringAddress(SetAbsStringTableIndex(
+                                        (COMM_DATA.conversation_phrases).cast(),
+                                        index,
+                                    ))
+                                }
+                            };
+                            text.extend_from_slice(CStr::from_ptr(ptr).to_bytes());
+                        }
+                        assert!(
+                            text.len() < 2048,
+                            "constructed dialogue response exceeds shared buffer"
+                        );
+                        let buf = std::ptr::addr_of_mut!(shared_phrase_buf).cast::<u8>();
+                        std::ptr::copy_nonoverlapping(text.as_ptr(), buf, text.len());
+                        buf.add(text.len()).write(0);
+                        buf.cast()
+                    };
+                    crate::comm::ffi::do_response_phrase(
+                        u32::from(phrase),
+                        Some(CStr::from_ptr(text)),
+                        Some((self.callback)(handler)),
                     );
-                    let buf = std::ptr::addr_of_mut!(shared_phrase_buf).cast::<u8>();
-                    std::ptr::copy_nonoverlapping(text.as_ptr(), buf, text.len());
-                    buf.add(text.len()).write(0);
-                    buf.cast()
-                };
-                crate::comm::ffi::do_response_phrase(
-                    u32::from(phrase),
-                    Some(CStr::from_ptr(text)),
-                    Some((self.callback)(handler)),
-                );
-            }
+                }
+            })
         }
 
         fn enabled(&self, phrase: u16) -> bool {
-            crate::comm::ffi::rust_phrase_enabled(i32::from(phrase)) != 0
+            self.cx
+                .borrow_mut()
+                .with_legacy(|| crate::comm::ffi::rust_phrase_enabled(i32::from(phrase)) != 0)
         }
 
         fn disable(&mut self, phrase: u16) {
-            crate::comm::ffi::rust_disable_phrase(i32::from(phrase))
+            self.cx
+                .borrow_mut()
+                .with_legacy(|| crate::comm::ffi::rust_disable_phrase(i32::from(phrase)))
         }
 
         fn supplies(&self) -> Supplies {
-            {
-                Supplies {
-                    landers: WorldData::current().read(|owner| owner.flagship.num_landers),
-                    fuel: WorldData::current().read(|owner| owner.flagship.fuel_on_board),
-                    radioactives: WorldData::current()
-                        .read(|owner| owner.flagship.element_amounts[6]),
-                }
-            }
+            self.cx.borrow_mut().with_legacy(|| Supplies {
+                landers: WorldData::current().read(|owner| owner.flagship.num_landers),
+                fuel: WorldData::current().read(|owner| owner.flagship.fuel_on_board),
+                radioactives: WorldData::current().read(|owner| owner.flagship.element_amounts[6]),
+            })
         }
 
         fn add_lander(&mut self) {
-            unsafe {
+            self.cx.borrow_mut().with_legacy(|| unsafe {
                 (**WorldData::current()).flagship.num_landers += 1;
                 draw_landers();
-            }
+            })
         }
 
         fn gauges(&mut self, crew: i16, fuel: i16, units: i32) {
-            unsafe { DeltaSISGauges(crew, fuel, units) }
+            self.cx
+                .borrow_mut()
+                .with_legacy(|| unsafe { DeltaSISGauges(crew, fuel, units) })
         }
 
         fn palette(&mut self, index: u16) {
-            unsafe {
+            self.cx.borrow_mut().with_legacy(|| unsafe {
                 COMM_DATA.alien_colormap =
                     (SetAbsStringTableIndex((COMM_DATA.alien_colormap).cast(), index)).cast()
-            }
+            })
         }
 
         fn talk_segue(&mut self, track: u16) {
-            unsafe { AlienTalkSegue(track) }
+            self.cx
+                .borrow_mut()
+                .with_legacy(|| unsafe { AlienTalkSegue(track) })
         }
 
         fn disable_animation(&mut self, index: usize) {
-            unsafe { COMM_DATA.alien_ambient_array[index].anim_flags |= ANIM_DISABLED }
+            self.cx.borrow_mut().with_legacy(|| unsafe {
+                COMM_DATA.alien_ambient_array[index].anim_flags |= ANIM_DISABLED
+            })
         }
 
         fn fade_palette(&mut self, index: u16, duration: i16) {
-            unsafe {
+            self.cx.borrow_mut().with_legacy(|| unsafe {
                 let map = SetAbsStringTableIndex((COMM_DATA.alien_colormap).cast(), index);
                 XFormColorMap(GetColorMapAddress(map), duration);
-            }
+            })
         }
     }
 }

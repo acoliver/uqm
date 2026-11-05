@@ -97,12 +97,16 @@ impl Cx<'_> {
         self.kernel.elements.record_mut(element).target = target;
     }
 
-    pub(crate) fn set_ip_group_parent(&mut self, id: ElementId, slot: u8) {
+    pub(crate) fn set_ip_group_parent(
+        &mut self,
+        id: ElementId,
+        group: super::link_queue::LinkId<crate::engine::world::queues::Group>,
+    ) {
         assert!(
-            slot < self.groups().num_objects,
-            "IP-group slot outside pool"
+            self.groups().contains(group),
+            "stale or foreign IP-group parent"
         );
-        self.kernel.elements.record_mut(id).parent = Parent::IpGroup(slot);
+        self.kernel.elements.record_mut(id).parent = Parent::IpGroup(group);
     }
 
     pub fn put(&mut self, id: ElementId) {
@@ -694,8 +698,16 @@ mod intersection_projection_tests {
                 .IntersectStamp
                 .frame
                 .is_null());
-            assert_eq!(cx.elements().id(cx.elements().raw(id)), Some(id));
-            assert_eq!(cx.elements().id(std::ptr::null_mut()), None);
+            assert_eq!(
+                cx.elements()
+                    .id(std::ptr::NonNull::new(cx.elements().raw(id))),
+                Some(id)
+            );
+            assert_eq!(
+                cx.elements()
+                    .id(std::ptr::NonNull::new(std::ptr::null_mut())),
+                None
+            );
             let primitive = cx.display_pool().alloc().unwrap();
             cx.kernel.display.get_mut(primitive).Type = 3;
             assert_eq!(cx.display_primitive(primitive).Type, 3);

@@ -11,7 +11,7 @@ use std::ffi::c_void;
 
 use crate::c_bindings::global_state::{NODE_INFO, PLANET_DESC, SOLARSYS_STATE};
 use crate::planet_side::report_adapter::CffiDiscoveryReport;
-use crate::planets::c_api::{load_planet_default_surface, LiveGame};
+use crate::planets::c_api::{load_planet_default_surface, LiveNames};
 use crate::planets::consts::star_color;
 use crate::planets::ffi::{
     analysis_context, blank_node, current_star_type, node_or, plan_data, sys_gen_rng,
@@ -48,27 +48,30 @@ pub(super) unsafe fn discovery_report(system: *mut SOLARSYS_STATE) -> CffiDiscov
 ///
 /// # Safety
 /// Game thread, with `GlobData` initialised.
-#[export_name = "GenerateDefault_initNpcs"]
-pub unsafe extern "C" fn init_npcs_c(_system: *mut SOLARSYS_STATE) -> bool {
-    default::init_npcs(&mut LiveGame)
+pub unsafe fn init_npcs_c(owner: &mut crate::engine::World, _system: *mut SOLARSYS_STATE) -> bool {
+    default::init_npcs(&mut crate::planets::c_api::NpcWorld::new(owner))
 }
 
 /// C: `bool GenerateDefault_reinitNpcs (SOLARSYS_STATE *)`.
 ///
 /// # Safety
 /// Game thread, with `GlobData` initialised.
-#[export_name = "GenerateDefault_reinitNpcs"]
-pub unsafe extern "C" fn reinit_npcs_c(_system: *mut SOLARSYS_STATE) -> bool {
-    default::reinit_npcs(&mut LiveGame)
+pub unsafe fn reinit_npcs_c(
+    owner: &mut crate::engine::World,
+    _system: *mut SOLARSYS_STATE,
+) -> bool {
+    default::reinit_npcs(&mut crate::planets::c_api::NpcWorld::new(owner))
 }
 
 /// C: `bool GenerateDefault_uninitNpcs (SOLARSYS_STATE *)`.
 ///
 /// # Safety
 /// Game thread, with `GlobData` initialised.
-#[export_name = "GenerateDefault_uninitNpcs"]
-pub unsafe extern "C" fn uninit_npcs_c(_system: *mut SOLARSYS_STATE) -> bool {
-    default::uninit_npcs(&mut LiveGame)
+pub unsafe fn uninit_npcs_c(
+    owner: &mut crate::engine::World,
+    _system: *mut SOLARSYS_STATE,
+) -> bool {
+    default::uninit_npcs(&mut crate::planets::c_api::NpcWorld::new(owner))
 }
 
 /// C: `bool GenerateDefault_generatePlanets (SOLARSYS_STATE *)`.
@@ -123,7 +126,7 @@ pub unsafe extern "C" fn generate_name_c(
     world: *const PLANET_DESC,
 ) -> bool {
     default::generate_name(
-        &mut LiveGame,
+        &mut LiveNames,
         planet_index(system, world),
         (*world).data_index,
     )
@@ -136,12 +139,18 @@ pub unsafe extern "C" fn generate_name_c(
 /// `SysGenRNG` and `PlanData` must be valid, and `world.pPrevDesc` must point
 /// at the sun or a valid description.
 #[export_name = "GenerateDefault_generateOrbital"]
-pub unsafe extern "C" fn generate_orbital_c(
+pub unsafe fn generate_orbital_c(
+    cx: &mut crate::engine::battle::Cx<'_>,
     system: *mut SOLARSYS_STATE,
     world: *mut PLANET_DESC,
 ) -> bool {
+    let owner = std::cell::RefCell::new(cx);
+    let owner = &owner;
+
     let sys_info = std::ptr::addr_of_mut!((*system).SysInfo);
-    let (star, site) = analysis_context(sys_info, world);
+    let (star, site) = owner
+        .borrow_mut()
+        .with_legacy(|| analysis_context(sys_info, world));
     default::generate_orbital(
         sys_gen_rng(),
         plan_data(),
@@ -149,7 +158,11 @@ pub unsafe extern "C" fn generate_orbital_c(
         site,
         &mut *sys_info,
         &*world,
-        || load_planet_default_surface(),
+        || {
+            owner
+                .borrow_mut()
+                .with_legacy(|| load_planet_default_surface())
+        },
     )
 }
 

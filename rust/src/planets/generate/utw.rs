@@ -57,15 +57,14 @@ fn at_bomb(star_index: u8, body: Body, story: &impl Story) -> bool {
 
 /// `GenerateUtwig_initNpcs`: with the bomb still in place no ships roam the
 /// bomb system.
-pub fn init_npcs<H: Npcs + HomeContactSite>(
+pub fn init_npcs<H: Npcs + Story + crate::planets::generate::sol::orbital::Queues>(
     star_index: u8,
-    story: &impl Story,
     host: &mut H,
 ) -> bool {
-    if star_index == BOMB_DEFINED && story.flag("UTWIG_BOMB") == 0 {
+    if star_index == BOMB_DEFINED && host.flag("UTWIG_BOMB") == 0 {
         Npcs::reinit_ip_group_q(host);
         assert_eq!(
-            HomeContactSite::built_ship_count(host),
+            crate::planets::generate::sol::orbital::Queues::built_ship_count(host),
             0,
             "the built-ship queue must be empty before the bomb system is left empty"
         );

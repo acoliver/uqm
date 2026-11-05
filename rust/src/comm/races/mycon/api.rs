@@ -6,9 +6,9 @@ pub(super) trait MyconApi: AllianceApi<Handler> {
 }
 
 #[cfg(not(test))]
-impl MyconApi for super::super::script::live::LiveScript<Handler> {
+impl MyconApi for super::super::script::live::LiveScript<'_, '_, Handler> {
     fn random(&mut self) -> u32 {
-        crate::math::random()
+        self.cx.borrow_mut().with_legacy(crate::math::random)
     }
 }
 

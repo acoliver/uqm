@@ -159,7 +159,7 @@ impl Journal {
             self.observe_frame_set(address, vec![frame], role);
         }
         let frames = self.set_identity(address);
-        let role = (address != 0).then(|| self.parent(address));
+        let role = (address != 0).then(|| self.frame_role(address));
         self.bindings.sets.insert(
             slot,
             SetReference {
@@ -288,7 +288,7 @@ impl Journal {
             .get(&address)
             .is_some_and(|source| self.bindings.sets[&slot].source == Some(source.generation))
         {
-            let role = self.parent(address);
+            let role = self.frame_role(address);
             self.bindings
                 .sets
                 .get_mut(&slot)

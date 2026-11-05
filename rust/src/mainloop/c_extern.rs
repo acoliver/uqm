@@ -305,12 +305,6 @@ extern "C" {
 pub use crate::sound::heart_ffi::stop_sound as StopSound;
 
 #[cfg(not(test))]
-pub use crate::navigation::globals::InitGameStructures;
-
-#[cfg(not(test))]
-pub use crate::time::clock_abi::live::InitGameClock;
-
-#[cfg(not(test))]
 pub use crate::navigation::events::live::schedule_initial_events;
 
 #[cfg(not(test))]
@@ -318,12 +312,6 @@ pub use crate::ui::sis::SetStatusMessageMode;
 
 #[cfg(not(test))]
 pub use crate::ui::sis::DrawAutoPilotMessage;
-
-#[cfg(not(test))]
-pub use crate::time::clock_abi::live::SetGameClockRate;
-
-#[cfg(not(test))]
-pub use crate::time::clock_abi::live::UninitGameClock;
 
 #[cfg(not(test))]
 pub use crate::ships::master_native::engine::FreeMasterShipList;

@@ -70,9 +70,9 @@ mod live {
     unsafe fn pik() {
         select(Speaker::Pik);
     }
-    impl ZoqApi for LiveScript<Handler> {
+    impl ZoqApi for LiveScript<'_, '_, Handler> {
         fn speak(&mut self, phrase: u16, speaker: Speaker) {
-            unsafe {
+            self.cx.borrow_mut().with_legacy(|| unsafe {
                 crate::comm::ffi::rust_npc_phrase_cb(
                     i32::from(phrase),
                     Some(match speaker {
@@ -80,7 +80,7 @@ mod live {
                         Speaker::Pik => pik,
                     }),
                 );
-            }
+            })
         }
         fn begin_talk(&mut self, track: u16) {
             unsafe {
@@ -90,12 +90,14 @@ mod live {
             self.talk_segue(track);
         }
         fn date(&self) -> (i16, u8) {
-            {
-                (
-                    WorldData::current().read(|owner| owner.game.game_clock.year_index) as i16,
-                    WorldData::current().read(|owner| owner.game.game_clock.month_index),
-                )
-            }
+            self.cx.borrow_mut().with_legacy(|| {
+                {
+                    (
+                        WorldData::current().read(|owner| owner.game.game_clock.year_index) as i16,
+                        WorldData::current().read(|owner| owner.game.game_clock.month_index),
+                    )
+                }
+            })
         }
     }
 }

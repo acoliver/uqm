@@ -16,7 +16,6 @@ use crate::mainloop::{
 use std::sync::Mutex;
 
 use crate::c_bindings::global_state::{CHMMR_DEFINED, ILWRATH_DEFINED, SAMATRA_DEFINED};
-use crate::collections::queue::{CountLinks, Queue, ReinitQueue};
 use crate::comm::{
     dispatch::ship,
     locdata::{CColor, CRect},
@@ -52,11 +51,12 @@ extern "C" {
     fn save_sis_hyper_state();
 }
 
-use crate::battle::{build_native::engine::start_sphere_tracking, sounds::engine::PlayMenuSound};
+use crate::battle::sounds::engine::PlayMenuSound;
+use crate::engine::world::fleet::start_sphere_tracking;
 
 use crate::navigation::{
     globals::{in_hqspace, in_hyper_space},
-    groups::live::PutGroupInfo,
+    groups::live::put_group_info,
 };
 
 use crate::planets::solarsys::{
@@ -69,8 +69,6 @@ use crate::ui::{sis::ClearSISRect, util::live::DrawStarConBox};
 extern "C" {
 
     static mut NextActivity: u16;
-
-    static mut pSolarSysState: *mut crate::ships::native::abi::solarsys_state;
 
 }
 
@@ -170,17 +168,16 @@ unsafe fn draw(menu: &Menu, old: Option<usize>, refresh: bool) {
 
 unsafe fn reset_groups() {
     crate::c_bindings::global_state::EncounterGroup = 0;
-    PutGroupInfo(0, 255);
-    let world = WorldFields::current();
-    ReinitQueue(std::ptr::addr_of_mut!((**world).game.ip_group_q).cast::<Queue>());
-    assert_eq!(
-        CountLinks(std::ptr::addr_of_mut!((**world).game.npc_built_ship_q).cast::<Queue>()),
-        0
-    );
+    crate::engine::World::current().write(|world| {
+        put_group_info(world, 0, 255);
+        world.ip_groups().reinit();
+        assert_eq!(world.npc_built_ships_ref().count(), 0);
+    });
 }
 
 unsafe fn orbit_is(planet: u8) -> bool {
-    playerInPlanetOrbit() && matchWorld(pSolarSysState, (*pSolarSysState).pOrbitalDesc, planet, 255)
+    let system = crate::planets::solarsys::lifecycle::P_SOLAR_SYS_STATE;
+    playerInPlanetOrbit() && matchWorld(system, (*system).pOrbitalDesc, planet, 255)
 }
 
 unsafe fn use_caster() -> bool {
@@ -216,13 +213,12 @@ unsafe fn use_caster() -> bool {
             .write(|world| start_sphere_tracking(world, u16::from(ship::ILWRATH_SHIP)))
             != 0;
     if !found {
-        let queue = std::ptr::addr_of!((**WorldFields::current()).game.ip_group_q);
-        let group = (*queue)
-            .head
-            .cast::<crate::c_bindings::global_state::IP_GROUP>();
-        if !group.is_null() {
-            found = (*group).race_id == ship::ILWRATH_SHIP;
-        }
+        found = WorldOwner::current().read(|world| {
+            let groups = world.ip_groups_ref();
+            groups
+                .head()
+                .is_some_and(|id| groups.get(id).race_id == ship::ILWRATH_SHIP)
+        });
     }
     if !found {
         return false;
@@ -264,13 +260,8 @@ unsafe fn invoke(id: u8) -> u8 {
                 WorldOwner::current().write(|world| set(world, StoryKey::CHMMR_EMERGING, 1));
                 (**WorldFields::current()).game.current_activity |= START_ENCOUNTER;
                 reset_groups();
-                WorldFields::current().write(|world| {
-                    crate::battle::build_native::CloneShipFragment(
-                        &mut world.game.avail_race_q,
-                        ship::CHMMR_SHIP.into(),
-                        &raw mut world.game.npc_built_ship_q,
-                        0,
-                    );
+                WorldOwner::current().write(|world| {
+                    crate::comm::dispatch::clone_npc_fragment(world, ship::CHMMR_SHIP, 0);
                 });
             }
             2
@@ -286,7 +277,7 @@ unsafe fn invoke(id: u8) -> u8 {
             (**WorldFields::current()).game.current_activity |= START_ENCOUNTER;
             WorldOwner::current().write(|world| set(world, StoryKey::GLOBAL_FLAGS_AND_DATA, 0));
             if WorldOwner::current().read(in_hqspace) != 0 {
-                if !(**WorldFields::current()).game.encounter_q.head.is_null() {
+                if WorldOwner::current().read(|world| world.encounters_ref().head().is_some()) {
                     WorldOwner::current().write(|world| set(world, StoryKey::SHIP_TO_COMPEL, 1));
                 }
                 (**WorldFields::current()).game.current_activity &= !0x0200;
@@ -296,7 +287,7 @@ unsafe fn invoke(id: u8) -> u8 {
                 save_sis_hyper_state();
             } else {
                 crate::c_bindings::global_state::EncounterGroup = 0;
-                if !(**WorldFields::current()).game.ip_group_q.head.is_null() {
+                if WorldOwner::current().read(|world| world.ip_groups_ref().head().is_some()) {
                     WorldOwner::current().write(|world| set(world, StoryKey::SHIP_TO_COMPEL, 1));
                     reset_groups();
                 }

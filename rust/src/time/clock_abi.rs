@@ -1,11 +1,8 @@
-//! C clock API, including the save-compatible intrusive event queue.
+//! Clock entry points and save-compatible event scheduling.
 
-use super::clock_bridge::{days_in_month, CEvent};
-use crate::collections::queue::{AllocLink, HLink, InitQueue, InsertQueue, Queue, UninitQueue};
-#[cfg(not(test))]
-use crate::engine::World as WorldOwner;
-#[cfg(not(test))]
-use crate::engine::WorldData as WorldFields;
+use super::clock_bridge::days_in_month;
+use crate::engine::battle::link_queue::LinkId;
+use crate::engine::clock::{GameClock, ScheduledEvent};
 
 pub(crate) fn event_date(
     now: (u16, u16, u16),
@@ -30,177 +27,136 @@ pub(crate) fn event_date(
     (year, month, day)
 }
 
-pub(crate) unsafe fn insert_event(queue: *mut Queue, date: (u16, u16, u16), selector: u8) -> HLink {
-    let new = AllocLink(queue);
-    if new.is_null() {
-        return new;
-    }
-    let event = new.cast::<CEvent>();
-    (*event).year_index = date.0;
-    (*event).month_index = date.1 as u8;
-    (*event).day_index = date.2 as u8;
-    (*event).func_index = selector;
-    let mut at = (*queue).head;
-    while !at.is_null() {
-        let current = &*at.cast::<CEvent>();
+pub(crate) fn insert_event(
+    clock: &mut GameClock,
+    date: (u16, u16, u16),
+    selector: u8,
+) -> Option<LinkId<ScheduledEvent>> {
+    let mut queue = clock.events();
+    let new = queue.alloc()?;
+    let event = queue.get_mut(new);
+    event.year_index = date.0;
+    event.month_index = date.1 as u8;
+    event.day_index = date.2 as u8;
+    event.func_index = selector;
+    let mut at = queue.head();
+    while let Some(id) = at {
+        let current = queue.get(id);
         if date
             < (
                 current.year_index,
-                current.month_index as u16,
-                current.day_index as u16,
+                u16::from(current.month_index),
+                u16::from(current.day_index),
             )
         {
             break;
         }
-        at = current.succ;
+        at = queue.succ(id);
     }
-    InsertQueue(queue, new, at);
-    new
+    queue.insert_before(new, at);
+    Some(new)
 }
 
-unsafe fn process_day_events(
-    queue: *mut Queue,
+fn take_day_event(
+    clock: &mut GameClock,
     today: (u16, u16, u16),
-    mut dispatch: impl FnMut(u8),
-) {
-    loop {
-        let head = (*queue).head;
-        if head.is_null() {
-            break;
-        }
-        let event = head.cast::<CEvent>();
-        let date = (
-            (*event).year_index,
-            u16::from((*event).month_index),
-            u16::from((*event).day_index),
-        );
-        // Saves produced by the missing dispatch implementation can contain
-        // overdue events. Execute those callbacks instead of stranding the queue.
-        if date > today {
-            break;
-        }
-        let selector = (*event).func_index;
-        crate::collections::queue::RemoveQueue(queue, head);
-        dispatch(selector);
-        crate::collections::queue::FreeLink(queue, head);
+) -> Option<(LinkId<ScheduledEvent>, u8)> {
+    let mut queue = clock.events();
+    let id = queue.head()?;
+    let event = queue.get(id);
+    let date = (
+        event.year_index,
+        u16::from(event.month_index),
+        u16::from(event.day_index),
+    );
+    if date > today {
+        return None;
     }
+    let selector = event.func_index;
+    queue.remove(id);
+    Some((id, selector))
 }
 
 #[cfg(not(test))]
 pub(crate) mod live {
     use super::super::clock_bridge::*;
     use super::*;
-    use std::ffi::c_void;
     use std::ptr;
 
     use crate::navigation::events::live::dispatch_event;
 
-    use crate::threading::legacy_abi::CreateMutex_Core;
-
-    use crate::threading::legacy_abi::DestroyMutex;
-
-    static mut CLOCK_MUTEX: *mut c_void = ptr::null_mut();
-
     /// # Safety
-    /// Game-thread access to the live global state.
-    #[no_mangle]
-    pub unsafe extern "C" fn GetGameClock() -> *mut ClockState {
-        let world = WorldFields::current();
-        ptr::addr_of_mut!((**world).game.game_clock).cast()
-    }
-
-    pub(crate) unsafe fn finish_clock_day() {
-        let clock = GetGameClock();
-        crate::ui::sis::DrawStatusMessage(ptr::null());
-        let today = (
-            (*clock).year_index,
-            u16::from((*clock).month_index),
-            u16::from((*clock).day_index),
-        );
-        process_day_events(ptr::addr_of_mut!((*clock).event_q), today, |selector| {
-            WorldOwner::current().write(|world| dispatch_event(world, selector))
-        });
-    }
-
-    /// # Safety
-    /// Date pointers must be valid and writable; game-thread access only.
-    #[no_mangle]
-    pub unsafe extern "C" fn ValidateEvent(
-        kind: u32,
-        month: *mut u16,
-        day: *mut u16,
-        year: *mut u16,
-    ) -> u32 {
-        let clock = &*GetGameClock();
-        let now = (
-            clock.year_index,
-            clock.month_index as u16,
-            clock.day_index as u16,
-        );
-        let date = event_date(now, kind == 1, (*year, *month, *day));
-        if kind == 1 {
-            (*year, *month, *day) = date;
-        }
-        u32::from(date >= now)
-    }
-
-    /// # Safety
-    /// Game-thread access to the initialized event queue.
-    #[no_mangle]
-    pub unsafe extern "C" fn AddEvent(
+    /// Immediate events may call legacy game services; the caller owns the live campaign.
+    pub unsafe fn add_event(
+        world: &mut crate::engine::World,
         kind: u32,
         month: u16,
         day: u16,
         year: u16,
         selector: u8,
-    ) -> HLink {
-        WorldOwner::current().write(|world| {
-            crate::navigation::events::live::add_event(world, kind, month, day, year, selector)
-        })
-    }
-
-    /// # Safety
-    /// Called once before accessing the game clock or event queue.
-    #[no_mangle]
-    pub unsafe extern "C" fn InitGameClock() -> u32 {
-        if !InitQueue(
-            ptr::addr_of_mut!((*GetGameClock()).event_q),
-            NUM_EVENTS as u16,
-            std::mem::size_of::<CEvent>() as u16,
-        ) {
-            return 0;
+    ) -> Option<crate::engine::battle::link_queue::LinkId<crate::engine::clock::ScheduledEvent>>
+    {
+        if kind == 1 && month == 0 && day == 0 && year == 0 {
+            dispatch_event(world, selector);
+        } else {
+            let clock = &world.data.game.game_clock;
+            let now = (
+                clock.year_index,
+                u16::from(clock.month_index),
+                u16::from(clock.day_index),
+            );
+            let date = crate::time::clock_abi::event_date(now, kind == 1, (year, month, day));
+            if date >= now {
+                return crate::time::clock_abi::insert_event(&mut world.clock, date, selector);
+            }
         }
-        CLOCK_MUTEX = (CreateMutex_Core(c"Clock Mutex".as_ptr(), 1)).cast();
-        rust_clock_init() as u32
+        None
     }
 
-    /// # Safety
-    /// The initialized clock must no longer be in use.
-    #[no_mangle]
-    pub unsafe extern "C" fn UninitGameClock() -> u32 {
-        DestroyMutex((CLOCK_MUTEX).cast());
-        CLOCK_MUTEX = ptr::null_mut();
-        UninitQueue(ptr::addr_of_mut!((*GetGameClock()).event_q));
-        rust_clock_uninit() as u32
+    pub(crate) unsafe fn finish_clock_day(cx: &mut crate::engine::battle::Cx<'_>) {
+        cx.with_legacy(|| crate::ui::sis::DrawStatusMessage(ptr::null()));
+        let world = &mut *cx.world;
+        let clock = &world.data.game.game_clock;
+        let today = (
+            clock.year_index,
+            u16::from(clock.month_index),
+            u16::from(clock.day_index),
+        );
+        while let Some((id, selector)) = take_day_event(&mut world.clock, today) {
+            dispatch_event(world, selector);
+            world.clock.events().free(id);
+        }
     }
 
-    /// # Safety
-    /// Game-thread access to the initialized clock.
-    #[no_mangle]
-    pub extern "C" fn SetGameClockRate(seconds: u16) {
-        rust_clock_set_rate(seconds as i32);
-    }
     /// # Safety
     /// Game-thread access to the initialized clock.
     #[no_mangle]
     pub unsafe extern "C" fn GameClockTick() {
-        rust_clock_tick();
+        crate::app::bridge::enter(|cx| {
+            if rust_clock_tick(cx.world) {
+                finish_clock_day(cx);
+            }
+        });
     }
     /// # Safety
     /// Game-thread access to the initialized clock.
     #[no_mangle]
     pub unsafe extern "C" fn MoveGameClockDays(days: u16) {
-        rust_clock_advance_days(days as i32);
+        advance_days(i32::from(days));
+    }
+
+    /// # Safety
+    /// Game-thread entry with a published context and initialized clock.
+    pub unsafe fn advance_days(days: i32) {
+        log_clock_bridge(&format!("RUST_CLOCK_MOVE: {} days", days));
+        crate::app::bridge::enter(|cx| {
+            for _ in 0..days {
+                next_clock_day_internal(&mut cx.world.data.game.game_clock);
+                finish_clock_day(cx);
+            }
+            let clock = &mut cx.world.data.game.game_clock;
+            clock.tick_count = clock.day_in_ticks;
+        });
     }
     /// # Safety
     /// Called with the initialized clock.
@@ -214,12 +170,6 @@ pub(crate) mod live {
     pub extern "C" fn UnlockGameClock() {
         rust_clock_unlock();
     }
-    /// # Safety
-    /// Called with the initialized clock.
-    #[no_mangle]
-    pub extern "C" fn GameClockRunning() -> u32 {
-        rust_clock_is_running() as u32
-    }
 }
 
 #[cfg(test)]
@@ -228,34 +178,29 @@ mod tests {
 
     #[test]
     fn daily_events_are_removed_before_callbacks_and_preserve_order() {
-        let mut queue: Queue = unsafe { std::mem::zeroed() };
-        assert!(unsafe {
-            // SAFETY: The queue storage is exclusive and its element layout matches this pool.
-            InitQueue(&mut queue, 8, std::mem::size_of::<CEvent>() as u16)
-        });
-        let queue = &mut queue as *mut Queue;
-        unsafe {
-            insert_event(queue, (2155, 3, 17), 0);
-            insert_event(queue, (2156, 3, 17), 1);
-            insert_event(queue, (2156, 3, 17), 2);
-            insert_event(queue, (2156, 3, 18), 3);
-            let mut seen = Vec::new();
-            process_day_events(queue, (2156, 3, 17), |selector| {
-                seen.push(selector);
-                if selector == 1 {
-                    insert_event(queue, (2156, 3, 17), 4);
-                }
-            });
-            assert_eq!(seen, [0, 1, 2, 4]);
-            assert_eq!((*(*queue).head.cast::<CEvent>()).func_index, 3);
-            process_day_events(queue, (2156, 3, 18), |selector| seen.push(selector));
-            assert_eq!(seen, [0, 1, 2, 4, 3]);
-            assert!((*queue).head.is_null());
+        let mut clock = GameClock::new();
+        insert_event(&mut clock, (2155, 3, 17), 0);
+        insert_event(&mut clock, (2156, 3, 17), 1);
+        insert_event(&mut clock, (2156, 3, 17), 2);
+        insert_event(&mut clock, (2156, 3, 18), 3);
+        let mut seen = Vec::new();
+        while let Some((id, selector)) = take_day_event(&mut clock, (2156, 3, 17)) {
+            assert!(!clock.events_ref().linked(id));
+            seen.push(selector);
+            if selector == 1 {
+                insert_event(&mut clock, (2156, 3, 17), 4);
+            }
+            clock.events().free(id);
         }
-        unsafe {
-            // SAFETY: This scope owns the initialized pool and no element is used after teardown.
-            UninitQueue(queue)
-        };
+        assert_eq!(seen, [0, 1, 2, 4]);
+        let queue = clock.events_ref();
+        assert_eq!(queue.get(queue.head().unwrap()).func_index, 3);
+        while let Some((id, selector)) = take_day_event(&mut clock, (2156, 3, 18)) {
+            seen.push(selector);
+            clock.events().free(id);
+        }
+        assert_eq!(seen, [0, 1, 2, 4, 3]);
+        assert!(clock.events_ref().head().is_none());
     }
 
     #[test]
@@ -268,26 +213,20 @@ mod tests {
 
     #[test]
     fn events_are_sorted_and_same_date_events_keep_insertion_order() {
-        let mut queue: Queue = unsafe { std::mem::zeroed() };
-        assert!(unsafe {
-            // SAFETY: The queue storage is exclusive and its element layout matches this pool.
-            InitQueue(&mut queue, 4, std::mem::size_of::<CEvent>() as u16)
-        });
-        unsafe {
-            let late = insert_event(&mut queue, (2156, 1, 1), 1);
-            let first = insert_event(&mut queue, (2155, 2, 18), 2);
-            let second = insert_event(&mut queue, (2155, 2, 18), 3);
-            let middle = insert_event(&mut queue, (2155, 12, 31), 4);
-            assert_eq!(queue.head, first);
-            assert_eq!((*first.cast::<CEvent>()).succ, second);
-            assert_eq!((*second.cast::<CEvent>()).succ, middle);
-            assert_eq!((*middle.cast::<CEvent>()).succ, late);
-            assert_eq!(queue.tail, late);
-            assert!(insert_event(&mut queue, (2155, 1, 1), 5).is_null());
+        let mut clock = GameClock::new();
+        let late = insert_event(&mut clock, (2156, 1, 1), 1).unwrap();
+        let first = insert_event(&mut clock, (2155, 2, 18), 2).unwrap();
+        let second = insert_event(&mut clock, (2155, 2, 18), 3).unwrap();
+        let middle = insert_event(&mut clock, (2155, 12, 31), 4).unwrap();
+        let queue = clock.events_ref();
+        assert_eq!(queue.head(), Some(first));
+        assert_eq!(queue.succ(first), Some(second));
+        assert_eq!(queue.succ(second), Some(middle));
+        assert_eq!(queue.succ(middle), Some(late));
+        assert_eq!(queue.tail(), Some(late));
+        for _ in 4..crate::engine::clock::NUM_EVENTS {
+            assert!(insert_event(&mut clock, (2156, 1, 1), 5).is_some());
         }
-        unsafe {
-            // SAFETY: This scope owns the initialized pool and no element is used after teardown.
-            UninitQueue(&mut queue)
-        };
+        assert!(insert_event(&mut clock, (2155, 1, 1), 6).is_none());
     }
 }

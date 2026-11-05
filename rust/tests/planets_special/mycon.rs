@@ -18,7 +18,7 @@ impl MyconOps for Harness {
         self.state.PlanetDesc.copy_from_slice(planets);
         self.state.SunDesc[0].NumPlanets = 0;
         self.seed(case.2);
-        let hook = unsafe { generateMyconFunctions.generate_planets }.unwrap();
+        let hook = generateMyconFunctions.generate_planets.unwrap();
         let result = unsafe { hook(&mut *self.state) };
         planets.copy_from_slice(&self.state.PlanetDesc);
         (
@@ -54,7 +54,7 @@ impl MyconOps for Harness {
                 &self.state.MoonDesc[usize::from(moon)]
             }
         };
-        let hook = unsafe {
+        let hook = {
             if case.life {
                 generateMyconFunctions.generate_life
             } else {

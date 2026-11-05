@@ -1,22 +1,24 @@
 //! Tests for the live "IGpQ" and "Enct" capture and restore.
 //!
-//! The queues are real `QUEUE_TABLE` pools made by `InitQueue`, sized as
-//! `InitGameStructures` sizes them (32 `IP_GROUP`, 16 `ENCOUNTER`), next to a
-//! full `avail_race_q` whose templates carry resource handles that are never
+//! World owns the same fixed capacities as `InitGameStructures` (32 groups
+//! and 16 encounters), next to a full fleet pool whose resource handles are never
 //! dereferenced. The expected values are written out here from the bytes of a
 //! save the C game wrote (`C_WRITTEN_SAVE`, which holds an "IGpQ" chunk and no
 //! "Enct" chunk, so the encounter bytes are assembled by hand from
 //! `SaveEncounters`) and from `grpinfo.h` and `encount.h`, not from the codec.
 
-use std::mem::{offset_of, size_of};
-
 use super::groups::*;
-use super::queue_tests::{free_slots, handle, links, LiveGame, C_WRITTEN_SAVE, RACES};
-use super::queues::{QueueError, QueueKind};
-use crate::collections::queue::{AllocLink, Link, PutQueue, Queue};
+use super::queue_tests::{
+    free_slots, handle, records, FixturePool, LiveGame, C_WRITTEN_SAVE, RACES,
+};
+use super::queues::QueueKind;
+
 use crate::comm::dispatch::{
-    BriefShipInfo as CBriefShipInfo, CEncounter, CFleetInfo, CPoint, IN_ENCOUNTER, IN_HYPERSPACE,
-    IN_INTERPLANETARY, START_ENCOUNTER, START_INTERPLANETARY,
+    CPoint, IN_ENCOUNTER, IN_HYPERSPACE, IN_INTERPLANETARY, START_ENCOUNTER, START_INTERPLANETARY,
+};
+use crate::engine::battle::link_queue::LinkQueue;
+use crate::engine::world::queues::{
+    Encounter, EncounterRecord as CEncounter, Group, IpGroup as CIpGroup,
 };
 use crate::savegame::decode::decode_save;
 use crate::savegame::encode::encode_save;
@@ -105,97 +107,51 @@ fn sections(groups: Vec<IpGroup>, encounters: Vec<EncounterEntry>) -> GroupSecti
     }
 }
 
-fn ip_queue(game: &mut LiveGame) -> *mut Queue {
-    std::ptr::addr_of_mut!(game.ip_group_q).cast::<Queue>()
-}
-
-fn enc_queue(game: &mut LiveGame) -> *mut Queue {
-    std::ptr::addr_of_mut!(game.encounter_q).cast::<Queue>()
-}
-
-/// Append a group straight to `ip_group_q`, the way the game's own
-/// `BuildGroup` does, without the code under test.
 fn push_group(game: &mut LiveGame, entry: &IpGroup, icon: usize) {
-    let queue = ip_queue(game);
-    let link = unsafe {
-        // SAFETY: The initialized queue is exclusively borrowed and its free-list belongs to its pool.
-        AllocLink(queue)
+    let mut queue = game.ip_groups();
+    let id = queue.alloc().unwrap();
+    *queue.get_mut(id) = crate::engine::world::queues::IpGroup {
+        group_counter: entry.group_counter,
+        race_id: entry.race_id,
+        sys_loc: entry.sys_loc,
+        task: entry.task,
+        in_system: entry.in_system,
+        dest_loc: entry.dest_loc,
+        orbit_pos: entry.orbit_pos,
+        group_id: entry.group_id,
+        loc: cp(entry.loc.x, entry.loc.y),
+        melee_icon: icon as _,
     };
-    assert!(!link.is_null());
-    // SAFETY: `link` is a free slot of the `IP_GROUP` pool.
-    unsafe {
-        link.cast::<CIpGroup>().write(CIpGroup {
-            pred: std::ptr::null_mut(),
-            succ: std::ptr::null_mut(),
-            group_counter: entry.group_counter,
-            race_id: entry.race_id,
-            sys_loc: entry.sys_loc,
-            task: entry.task,
-            in_system: entry.in_system,
-            dest_loc: entry.dest_loc,
-            orbit_pos: entry.orbit_pos,
-            group_id: entry.group_id,
-            loc: cp(entry.loc.x, entry.loc.y),
-            melee_icon: icon as *mut std::ffi::c_void,
-        });
-    }
-    unsafe {
-        // SAFETY: The queue is exclusively borrowed and the element was allocated from this pool.
-        PutQueue(queue, link)
-    };
+    queue.put(id);
 }
-
-/// Append an encounter with a live `hElement` straight to `encounter_q`.
 fn push_encounter(game: &mut LiveGame, entry: &EncounterEntry, element: usize) {
-    let queue = enc_queue(game);
-    let link = unsafe {
-        // SAFETY: The initialized queue is exclusively borrowed and its free-list belongs to its pool.
-        AllocLink(queue)
+    let mut queue = game.encounters();
+    let id = queue.alloc().unwrap();
+    *queue.get_mut(id) = crate::engine::world::queues::EncounterRecord {
+        h_element: element as _,
+        transition_state: entry.transition_state,
+        origin: cp(entry.origin.x, entry.origin.y),
+        radius: entry.radius,
+        race_id: entry.race_id,
+        num_ships: entry.num_ships,
+        flags: entry.flags,
+        loc_pt: cp(entry.loc_pt.x, entry.loc_pt.y),
+        ship_list: std::array::from_fn(|i| crate::engine::world::queues::BriefShipInfo {
+            race_id: entry.ship_list[i].race_id,
+            crew_level: entry.ship_list[i].crew_level,
+            max_crew: entry.ship_list[i].max_crew,
+            max_energy: entry.ship_list[i].max_energy,
+        }),
+        log_x: entry.log_x,
+        log_y: entry.log_y,
     };
-    assert!(!link.is_null());
-    // SAFETY: `link` is a free slot of the `ENCOUNTER` pool.
-    unsafe {
-        link.cast::<CEncounter>().write(CEncounter {
-            pred: std::ptr::null_mut(),
-            succ: std::ptr::null_mut(),
-            h_element: element as *mut std::ffi::c_void,
-            transition_state: entry.transition_state,
-            origin: cp(entry.origin.x, entry.origin.y),
-            radius: entry.radius,
-            race_id: entry.race_id,
-            num_ships: entry.num_ships,
-            flags: entry.flags,
-            loc_pt: cp(entry.loc_pt.x, entry.loc_pt.y),
-            ship_list: std::array::from_fn(|i| CBriefShipInfo {
-                race_id: entry.ship_list[i].race_id,
-                crew_level: entry.ship_list[i].crew_level,
-                max_crew: entry.ship_list[i].max_crew,
-                max_energy: entry.ship_list[i].max_energy,
-            }),
-            log_x: entry.log_x,
-            log_y: entry.log_y,
-        });
-    }
-    unsafe {
-        // SAFETY: The queue is exclusively borrowed and the element was allocated from this pool.
-        PutQueue(queue, link)
-    };
+    queue.put(id);
 }
-
-fn raw_groups(queue: &Queue) -> Vec<&CIpGroup> {
-    links::<CIpGroup>(queue)
-        .into_iter()
-        // SAFETY: the links are slots of an `IP_GROUP` pool.
-        .map(|link| unsafe { &*link })
-        .collect()
+fn raw_groups(queue: &LinkQueue<'_, Group, 32>) -> Vec<CIpGroup> {
+    records(queue)
 }
-
-fn raw_encounters(queue: &Queue) -> Vec<&CEncounter> {
-    links::<CEncounter>(queue)
-        .into_iter()
-        // SAFETY: the links are slots of an `ENCOUNTER` pool.
-        .map(|link| unsafe { &*link })
-        .collect()
+fn raw_encounters(queue: &LinkQueue<'_, Encounter, 16>) -> Vec<CEncounter> {
+    records(queue)
 }
 
 /// The 13 bytes `SaveGroupQueue` writes for a live group, by hand.
@@ -215,32 +171,22 @@ fn group_wire(g: &CIpGroup) -> Vec<u8> {
     out
 }
 
-/// The queue words that tell whether a queue was touched.
-fn queue_words(queue: &Queue) -> (usize, usize, usize, usize) {
-    (
-        queue.head as usize,
-        queue.tail as usize,
-        queue.free_list as usize,
-        free_slots(queue),
-    )
+/// Allocation identities and remaining capacity expose resets and replacements.
+fn queue_words(queue: &impl FixturePool) -> (String, usize) {
+    (queue.identity(), queue.remaining())
 }
-
-type Fingerprint = (
-    GroupSections,
-    (usize, usize, usize, usize),
-    (usize, usize, usize, usize),
-);
+type Fingerprint = (GroupSections, (String, usize), (String, usize));
 
 /// Everything an observer can read of the two queues.
 fn fingerprint(game: &mut LiveGame) -> Fingerprint {
-    let was = game.current_activity;
-    game.current_activity = IN_INTERPLANETARY;
+    let was = game.data.game.current_activity;
+    game.data.game.current_activity = IN_INTERPLANETARY;
     let captured = capture_groups(game).unwrap();
-    game.current_activity = was;
+    game.data.game.current_activity = was;
     (
         captured,
-        queue_words(&game.ip_group_q),
-        queue_words(&game.encounter_q),
+        queue_words(&game.ip_groups_ref()),
+        queue_words(&game.encounters_ref()),
     )
 }
 
@@ -249,26 +195,12 @@ fn fingerprint(game: &mut LiveGame) -> Fingerprint {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn element_layouts_match_the_headers() {
-    // grpinfo.h IP_GROUP on LP64: two links, a count, seven bytes, a POINT and
-    // the icon handle.
-    assert_eq!(size_of::<CIpGroup>(), 40);
-    assert_eq!(offset_of!(CIpGroup, group_counter), 16);
-    assert_eq!(offset_of!(CIpGroup, race_id), 18);
-    assert_eq!(offset_of!(CIpGroup, group_id), 24);
-    assert_eq!(offset_of!(CIpGroup, loc), 26);
-    assert_eq!(offset_of!(CIpGroup, melee_icon), 32);
-    // encount.h ENCOUNTER: BRIEF_SHIP_INFO is 8 bytes with COUNT as 16 bits.
-    assert_eq!(size_of::<CBriefShipInfo>(), 8);
-    assert_eq!(size_of::<CEncounter>(), 104);
-    assert_eq!(offset_of!(CEncounter, h_element), 16);
-    assert_eq!(offset_of!(CEncounter, transition_state), 24);
-    assert_eq!(offset_of!(CEncounter, race_id), 32);
-    assert_eq!(offset_of!(CEncounter, loc_pt), 36);
-    assert_eq!(offset_of!(CEncounter, ship_list), 40);
-    assert_eq!(offset_of!(CEncounter, log_x), 96);
+fn group_pool_capacities_match_the_save_limits() {
+    let game = LiveGame::bare();
     assert_eq!(MAX_BATTLE_GROUPS as usize, MAX_GROUPS);
     assert_eq!(MAX_ENCOUNTERS as usize, MAX_ENCOUNTER_SLOTS);
+    assert_eq!(game.ip_groups_ref().count(), 0);
+    assert_eq!(game.encounters_ref().count(), 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -282,14 +214,14 @@ fn seed_group_restores_into_the_live_queue_and_captures_back() {
     assert!(seed.encounters.is_empty(), "the seed has no Enct chunk");
 
     let mut game = LiveGame::new();
-    game.current_activity = IN_INTERPLANETARY;
+    game.data.game.current_activity = IN_INTERPLANETARY;
     restore_groups(
         &mut game,
         &sections(seed.ip_group_queue.clone(), Vec::new()),
     )
     .unwrap();
 
-    let live = raw_groups(&game.ip_group_q);
+    let live = raw_groups(&game.ip_groups_ref());
     assert_eq!(live.len(), 1);
     let g = live[0];
     assert_eq!(
@@ -299,8 +231,8 @@ fn seed_group_restores_into_the_live_queue_and_captures_back() {
     assert_eq!((g.dest_loc, g.orbit_pos, g.group_id), (3, 13, 1));
     assert_eq!((g.loc.x, g.loc.y), (-2185, -969));
     // The icon is the template of the group's own race.
-    assert_eq!(g.melee_icon, handle(23, 3));
-    assert_eq!(group_wire(g), SEED_GROUP_WIRE);
+    assert_eq!(g.melee_icon, handle(23, 3).cast());
+    assert_eq!(group_wire(&g), SEED_GROUP_WIRE);
 
     let captured = capture_groups(&game).unwrap();
     assert_eq!(captured.ip_group_queue, seed.ip_group_queue);
@@ -317,14 +249,14 @@ fn hand_assembled_encounter_bytes_restore_and_encode_back_unchanged() {
     assert_eq!(save.encounters.len(), 1);
 
     let mut game = LiveGame::new();
-    game.current_activity = IN_INTERPLANETARY;
+    game.data.game.current_activity = IN_INTERPLANETARY;
     restore_groups(
         &mut game,
         &sections(save.ip_group_queue.clone(), save.encounters.clone()),
     )
     .unwrap();
 
-    let live = raw_encounters(&game.encounter_q);
+    let live = raw_encounters(&game.encounters_ref());
     assert_eq!(live.len(), 1);
     let e = live[0];
     assert_eq!(e.transition_state, -2);
@@ -371,7 +303,7 @@ fn groups_keep_their_order_and_take_the_icon_of_their_own_race() {
     let groups = vec![group(5, 1), group(0, 2), group(17, 3), group(5, 4)];
     restore_groups(&mut game, &sections(groups.clone(), Vec::new())).unwrap();
 
-    let live = raw_groups(&game.ip_group_q);
+    let live = raw_groups(&game.ip_groups_ref());
     let races: Vec<u8> = live.iter().map(|g| g.race_id).collect();
     assert_eq!(races, [5, 0, 17, 5]);
     let counters: Vec<u16> = live.iter().map(|g| g.group_counter).collect();
@@ -379,13 +311,18 @@ fn groups_keep_their_order_and_take_the_icon_of_their_own_race() {
     let icons: Vec<_> = live.iter().map(|g| g.melee_icon).collect();
     assert_eq!(
         icons,
-        [handle(5, 3), handle(0, 3), handle(17, 3), handle(5, 3)]
+        [
+            handle(5, 3).cast(),
+            handle(0, 3).cast(),
+            handle(17, 3).cast(),
+            handle(5, 3).cast()
+        ]
     );
     assert_eq!(live[2].loc.x, -103);
     assert_eq!(live[2].loc.y, 203);
-    assert_eq!(free_slots(&game.ip_group_q), MAX_GROUPS - 4);
+    assert_eq!(free_slots(&game.ip_groups_ref()), MAX_GROUPS - 4);
 
-    game.current_activity = IN_INTERPLANETARY;
+    game.data.game.current_activity = IN_INTERPLANETARY;
     assert_eq!(capture_groups(&game).unwrap().ip_group_queue, groups);
 }
 
@@ -399,25 +336,25 @@ fn encounters_keep_their_order_and_fields_and_clear_the_element_handle() {
     let encounters = vec![encounter(18, 3, 1), encounter(7, 7, 2), encounter(2, 0, 3)];
     restore_groups(&mut game, &sections(Vec::new(), encounters.clone())).unwrap();
 
-    let live = raw_encounters(&game.encounter_q);
+    let live = raw_encounters(&game.encounters_ref());
     let races: Vec<u8> = live.iter().map(|e| e.race_id).collect();
     assert_eq!(races, [18, 7, 2]);
     assert!(live.iter().all(|e| e.h_element.is_null()));
     assert_eq!(live[1].num_ships, 7);
     assert_eq!(live[1].ship_list[6].crew_level, 10 + 2 + 6);
     assert_eq!(live[1].log_y, -80_002);
-    assert_eq!(free_slots(&game.encounter_q), MAX_ENCOUNTER_SLOTS - 3);
+    assert_eq!(free_slots(&game.encounters_ref()), MAX_ENCOUNTER_SLOTS - 3);
 
-    game.current_activity = IN_INTERPLANETARY;
+    game.data.game.current_activity = IN_INTERPLANETARY;
     assert_eq!(capture_groups(&game).unwrap().encounters, encounters);
 }
 
 #[test]
 fn restore_reads_but_never_changes_the_fleet_templates() {
     let mut game = LiveGame::new();
-    let before: Vec<(i32, u16, usize, usize, usize)> = (0..RACES)
+    let before: Vec<(u32, u16, usize, usize, usize)> = (0..RACES)
         .map(|race| {
-            let t: &CFleetInfo = game.template(race);
+            let t = game.template(race);
             (
                 t.species_id,
                 t.crew_level,
@@ -432,9 +369,9 @@ fn restore_reads_but_never_changes_the_fleet_templates() {
         &sections(vec![group(1, 1), group(22, 2)], vec![encounter(18, 2, 1)]),
     )
     .unwrap();
-    let after: Vec<(i32, u16, usize, usize, usize)> = (0..RACES)
+    let after: Vec<(u32, u16, usize, usize, usize)> = (0..RACES)
         .map(|race| {
-            let t: &CFleetInfo = game.template(race);
+            let t = game.template(race);
             (
                 t.species_id,
                 t.crew_level,
@@ -459,18 +396,18 @@ fn restoring_again_replaces_the_queues_and_recycles_the_owner_slots() {
         ),
     )
     .unwrap();
-    assert_eq!(free_slots(&game.ip_group_q), MAX_GROUPS - 5);
+    assert_eq!(free_slots(&game.ip_groups_ref()), MAX_GROUPS - 5);
 
     restore_groups(
         &mut game,
         &sections(vec![group(9, 7)], vec![encounter(3, 2, 5)]),
     )
     .unwrap();
-    assert_eq!(raw_groups(&game.ip_group_q).len(), 1);
-    assert_eq!(raw_groups(&game.ip_group_q)[0].race_id, 9);
-    assert_eq!(free_slots(&game.ip_group_q), MAX_GROUPS - 1);
-    assert_eq!(raw_encounters(&game.encounter_q).len(), 1);
-    assert_eq!(free_slots(&game.encounter_q), MAX_ENCOUNTER_SLOTS - 1);
+    assert_eq!(raw_groups(&game.ip_groups_ref()).len(), 1);
+    assert_eq!(raw_groups(&game.ip_groups_ref())[0].race_id, 9);
+    assert_eq!(free_slots(&game.ip_groups_ref()), MAX_GROUPS - 1);
+    assert_eq!(raw_encounters(&game.encounters_ref()).len(), 1);
+    assert_eq!(free_slots(&game.encounters_ref()), MAX_ENCOUNTER_SLOTS - 1);
 
     // A full queue restores, and so does the same save twice.
     let full = sections(
@@ -481,9 +418,9 @@ fn restoring_again_replaces_the_queues_and_recycles_the_owner_slots() {
     );
     restore_groups(&mut game, &full).unwrap();
     restore_groups(&mut game, &full).unwrap();
-    assert_eq!(free_slots(&game.ip_group_q), 0);
-    assert_eq!(free_slots(&game.encounter_q), 0);
-    game.current_activity = IN_INTERPLANETARY;
+    assert_eq!(free_slots(&game.ip_groups_ref()), 0);
+    assert_eq!(free_slots(&game.encounters_ref()), 0);
+    game.data.game.current_activity = IN_INTERPLANETARY;
     assert_eq!(capture_groups(&game).unwrap(), full);
 }
 
@@ -493,10 +430,10 @@ fn a_save_without_the_sections_empties_both_queues_as_load_game_does() {
     push_group(&mut game, &group(4, 1), 1);
     push_encounter(&mut game, &encounter(4, 1, 1), 2);
     restore_groups(&mut game, &sections(Vec::new(), Vec::new())).unwrap();
-    assert!(raw_groups(&game.ip_group_q).is_empty());
-    assert!(raw_encounters(&game.encounter_q).is_empty());
-    assert_eq!(free_slots(&game.ip_group_q), MAX_GROUPS);
-    assert_eq!(free_slots(&game.encounter_q), MAX_ENCOUNTER_SLOTS);
+    assert!(raw_groups(&game.ip_groups_ref()).is_empty());
+    assert!(raw_encounters(&game.encounters_ref()).is_empty());
+    assert_eq!(free_slots(&game.ip_groups_ref()), MAX_GROUPS);
+    assert_eq!(free_slots(&game.encounters_ref()), MAX_ENCOUNTER_SLOTS);
 }
 
 #[test]
@@ -511,7 +448,7 @@ fn seven_ships_is_the_most_an_encounter_lists_and_unused_entries_are_kept() {
     e.ship_list[3].race_id = 200;
     restore_groups(&mut game, &sections(Vec::new(), vec![e.clone()])).unwrap();
     assert_eq!(
-        raw_encounters(&game.encounter_q)[0].ship_list[3].race_id,
+        raw_encounters(&game.encounters_ref())[0].ship_list[3].race_id,
         200
     );
 }
@@ -530,25 +467,25 @@ fn game_with_live_state() -> LiveGame {
 
 fn assert_rejected(game: &mut LiveGame, bad: GroupSections, expected: GroupError) {
     let before = fingerprint(game);
-    let icons: Vec<usize> = raw_groups(&game.ip_group_q)
+    let icons: Vec<usize> = raw_groups(&game.ip_groups_ref())
         .iter()
         .map(|g| g.melee_icon as usize)
         .collect();
-    let elements: Vec<usize> = raw_encounters(&game.encounter_q)
+    let elements: Vec<usize> = raw_encounters(&game.encounters_ref())
         .iter()
         .map(|e| e.h_element as usize)
         .collect();
     assert_eq!(restore_groups(game, &bad), Err(expected));
     assert_eq!(fingerprint(game), before);
     assert_eq!(
-        raw_groups(&game.ip_group_q)
+        raw_groups(&game.ip_groups_ref())
             .iter()
             .map(|g| g.melee_icon as usize)
             .collect::<Vec<_>>(),
         icons
     );
     assert_eq!(
-        raw_encounters(&game.encounter_q)
+        raw_encounters(&game.encounters_ref())
             .iter()
             .map(|e| e.h_element as usize)
             .collect::<Vec<_>>(),
@@ -637,59 +574,14 @@ fn more_elements_than_the_pool_has_slots_is_rejected() {
 }
 
 #[test]
-fn a_queue_that_is_not_the_right_pool_is_rejected_before_any_write() {
-    let mut game = game_with_live_state();
-    let good = sections(vec![group(1, 1)], vec![encounter(1, 1, 1)]);
-
-    let saved = game.ip_group_q;
-    game.ip_group_q = Queue::default();
-    assert_eq!(
-        restore_groups(&mut game, &good),
-        Err(GroupError::Queue(QueueError::PoolMissing {
-            queue: QueueKind::IpGroups
-        }))
-    );
-    game.ip_group_q = saved;
-
-    let saved = game.encounter_q;
-    game.encounter_q.object_size += 8;
-    let found = game.encounter_q.object_size;
-    assert_eq!(
-        restore_groups(&mut game, &good),
-        Err(GroupError::Queue(QueueError::WrongObjectSize {
-            queue: QueueKind::Encounters,
-            found,
-            expected: size_of::<CEncounter>(),
-        }))
-    );
-    game.encounter_q = saved;
-
-    // Nothing was written by either failed attempt.
-    assert_eq!(raw_groups(&game.ip_group_q).len(), 2);
-    assert_eq!(raw_encounters(&game.encounter_q).len(), 1);
-    assert_eq!(raw_groups(&game.ip_group_q)[0].melee_icon as usize, 0x11);
-}
-
-#[test]
-fn a_fleet_queue_that_is_corrupt_rejects_the_restore() {
-    let mut game = game_with_live_state();
-    let before = fingerprint(&mut game);
-    let fleets = links::<CFleetInfo>(&game.avail_race_q);
-    // SAFETY: slot of the fleet pool; the link is put back below.
-    let last = fleets[RACES - 1];
-    let succ = unsafe { (*last).succ };
-    unsafe { (*last).succ = fleets[0].cast() };
-    let result = restore_groups(&mut game, &sections(vec![group(1, 1)], Vec::new()));
-    // SAFETY: as above.
-    unsafe { (*last).succ = succ };
-    assert!(matches!(
-        result,
-        Err(GroupError::Queue(QueueError::CorruptQueue {
-            queue: QueueKind::AvailableRaces,
-            ..
-        }))
-    ));
-    assert_eq!(fingerprint(&mut game), before);
+fn group_ids_reject_foreign_storage_and_reinit() {
+    let mut a = LiveGame::new();
+    let b = LiveGame::new();
+    let id = a.ip_groups().alloc().unwrap();
+    assert!(!b.ip_groups_ref().contains(id));
+    a.ip_groups().put(id);
+    a.ip_groups().reinit();
+    assert!(!a.ip_groups_ref().contains(id));
 }
 
 // ---------------------------------------------------------------------------
@@ -699,7 +591,7 @@ fn a_fleet_queue_that_is_corrupt_rejects_the_restore() {
 #[test]
 fn capture_reads_the_live_queues_in_order_without_the_codec() {
     let mut game = LiveGame::new();
-    game.current_activity = IN_INTERPLANETARY;
+    game.data.game.current_activity = IN_INTERPLANETARY;
     push_group(&mut game, &group(6, 1), 0);
     push_group(&mut game, &group(2, 2), 0);
     push_encounter(&mut game, &encounter(11, 4, 1), 0x77);
@@ -734,7 +626,7 @@ fn the_group_queue_is_saved_only_in_plain_interplanetary() {
         IN_INTERPLANETARY | START_ENCOUNTER,
         IN_INTERPLANETARY | START_INTERPLANETARY,
     ] {
-        game.current_activity = activity;
+        game.data.game.current_activity = activity;
         let captured = capture_groups(&game).unwrap();
         assert!(captured.ip_group_queue.is_empty(), "activity {activity:#x}");
         // "Enct" does not depend on the activity.
@@ -743,73 +635,9 @@ fn the_group_queue_is_saved_only_in_plain_interplanetary() {
 }
 
 #[test]
-fn capture_refuses_a_queue_whose_links_are_not_the_pool() {
-    let mut game = LiveGame::new();
-    game.current_activity = IN_INTERPLANETARY;
-    push_group(&mut game, &group(6, 1), 0);
-    push_group(&mut game, &group(7, 2), 0);
-    push_group(&mut game, &group(8, 3), 0);
-    let mut nodes = links::<CIpGroup>(&game.ip_group_q);
-
-    // A back-link that disagrees with the forward links.
-    // SAFETY: slots of the group pool, restored below.
-    let second = unsafe { &mut *nodes[1] };
-    let pred = second.pred;
-    second.pred = std::ptr::null_mut();
-    assert_eq!(
-        capture_groups(&game),
-        Err(GroupError::Queue(QueueError::CorruptQueue {
-            queue: QueueKind::IpGroups,
-            position: 1
-        }))
-    );
-    // SAFETY: as above.
-    unsafe { (*nodes[1]).pred = pred };
-
-    // A loop: the tail points back at the head.
-    // SAFETY: as above.
-    unsafe { (*nodes[2].cast::<Link>()).succ = nodes[0].cast() };
-    assert!(matches!(
-        capture_groups(&game),
-        Err(GroupError::Queue(QueueError::CorruptQueue {
-            queue: QueueKind::IpGroups,
-            ..
-        }))
-    ));
-    // SAFETY: as above.
-    unsafe { (*nodes[2].cast::<Link>()).succ = std::ptr::null_mut() };
-
-    // A link that is not a slot of this pool.
-    let mut elsewhere = Box::new(unsafe { std::mem::zeroed::<CIpGroup>() });
-    // SAFETY: as above.
-    unsafe { (*nodes[0].cast::<Link>()).succ = std::ptr::addr_of_mut!(*elsewhere).cast() };
-    assert!(matches!(
-        capture_groups(&game),
-        Err(GroupError::Queue(QueueError::CorruptQueue {
-            queue: QueueKind::IpGroups,
-            position: 1
-        }))
-    ));
-    // SAFETY: as above.
-    unsafe { (*nodes[0].cast::<Link>()).succ = nodes[1].cast() };
-
-    // A queue whose tail is not its last link.
-    game.ip_group_q.tail = nodes[1].cast();
-    assert!(matches!(
-        capture_groups(&game),
-        Err(GroupError::Queue(QueueError::CorruptQueue {
-            queue: QueueKind::IpGroups,
-            position: 3
-        }))
-    ));
-    game.ip_group_q.tail = nodes[2].cast();
-    assert_eq!(capture_groups(&game).unwrap().ip_group_queue.len(), 3);
-}
-
-#[test]
 fn capture_refuses_what_restore_would_refuse() {
     let mut game = LiveGame::new();
-    game.current_activity = IN_INTERPLANETARY;
+    game.data.game.current_activity = IN_INTERPLANETARY;
     push_group(&mut game, &group(30, 1), 0);
     assert_eq!(
         capture_groups(&game),
@@ -837,7 +665,7 @@ fn capture_refuses_what_restore_would_refuse() {
 fn load_game_retains_the_build_group_zero_template_icon() {
     let mut game = LiveGame::new();
     restore_loaded_groups(&mut game, &sections(vec![group(7, 1)], Vec::new())).unwrap();
-    let loaded = raw_groups(&game.ip_group_q);
+    let loaded = raw_groups(&game.ip_groups_ref());
     assert_eq!(loaded[0].race_id, 7);
-    assert_eq!(loaded[0].melee_icon, handle(0, 3));
+    assert_eq!(loaded[0].melee_icon, handle(0, 3).cast());
 }

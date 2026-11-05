@@ -12,32 +12,34 @@ pub(super) trait TalkpetApi: AllianceApi<Handler> {
     fn strobe(&mut self);
 }
 #[cfg(not(test))]
-impl TalkpetApi for super::super::script::live::LiveScript<Handler> {
+impl TalkpetApi for super::super::script::live::LiveScript<'_, '_, Handler> {
     fn flags(&self) -> u8 {
-        {
-            WorldData::current().read(|owner| owner.game.glob_flags)
-        }
+        self.cx.borrow_mut().with_legacy(|| {
+            {
+                WorldData::current().read(|owner| owner.game.glob_flags)
+            }
+        })
     }
     fn npc_ships(&self) -> bool {
-        {
-            !WorldData::current()
-                .read(|owner| owner.game.npc_built_ship_q.head)
-                .is_null()
-        }
+        self.cx.borrow_mut().with_legacy(|| {
+            {
+                World::current().read(|world| world.npc_built_ships_ref().head().is_some())
+            }
+        })
     }
     fn umgah_alive(&mut self) -> bool {
-        use crate::battle::build_native::engine::start_sphere_tracking;
-        unsafe {
+        self.cx.borrow_mut().with_legacy(|| {
+            use crate::engine::world::fleet::start_sphere_tracking;
             World::current().write(|world| {
                 start_sphere_tracking(world, crate::comm::dispatch::ship::UMGAH_SHIP as u16)
             }) != 0
-        }
+        })
     }
     fn strobe(&mut self) {
-        unsafe {
+        self.cx.borrow_mut().with_legacy(|| unsafe {
             crate::comm::locdata::COMM_DATA.alien_ambient_array[16].anim_flags &=
                 !super::super::script::ANIM_DISABLED;
-        }
+        })
     }
 }
 #[cfg(test)]

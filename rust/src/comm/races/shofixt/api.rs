@@ -11,11 +11,10 @@ pub(super) trait ShofixtApi: EncounterApi<Handler> {
     fn schedule_return(&mut self);
 }
 #[cfg(not(test))]
-impl ShofixtApi for super::super::script::live::LiveScript<Handler> {
+impl ShofixtApi for super::super::script::live::LiveScript<'_, '_, Handler> {
     fn schedule_return(&mut self) {
-        use crate::time::clock_abi::live::AddEvent;
         unsafe {
-            AddEvent(1, 2, 0, 0, 8);
+            crate::time::clock_abi::live::add_event(self.cx.borrow_mut().world, 1, 2, 0, 0, 8);
         }
     }
 }

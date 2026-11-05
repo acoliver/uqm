@@ -318,7 +318,7 @@ unsafe fn install_ship(ship: &mut ShipRecord) {
         uqm_rust::app::bridge::enter(|cx| {
             let mut ships = cx.kernel_mut().ships(0);
             let link = ships
-                .id(ptr::from_mut(ship).cast())
+                .id(ptr::from_mut(ship) as usize)
                 .unwrap_or_else(|| panic!("fixture ship is missing"));
             ships.put(link);
         });

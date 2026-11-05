@@ -26,32 +26,32 @@ mod live {
         static mut ScreenWidth: i32;
         static mut ScreenHeight: i32;
     }
-    impl SlylandApi for LiveScript<Handler> {
+    impl SlylandApi for LiveScript<'_, '_, Handler> {
         fn choices(&self) -> [u16; 5] {
             unsafe { CHOICES }
         }
         fn remember_choices(&mut self, choices: [u16; 5]) {
-            unsafe {
+            self.cx.borrow_mut().with_legacy(|| unsafe {
                 CHOICES = choices;
-            }
+            })
         }
         fn position(&self) -> (i32, i32, i32, i32) {
-            unsafe {
+            self.cx.borrow_mut().with_legacy(|| unsafe {
                 (
                     WorldData::current().read(|owner| owner.flagship.log_x),
                     WorldData::current().read(|owner| owner.flagship.log_y),
                     ScreenWidth,
                     ScreenHeight,
                 )
-            }
+            })
         }
         fn splice(&mut self, phrase: u32) {
-            unsafe {
+            self.cx.borrow_mut().with_legacy(|| unsafe {
                 crate::comm::ffi::rust_npc_phrase_splice(phrase as i32);
-            }
+            })
         }
         fn number(&mut self, number: i32, padded: bool) {
-            unsafe {
+            self.cx.borrow_mut().with_legacy(|| unsafe {
                 NPCNumber(
                     number,
                     if padded {
@@ -60,7 +60,7 @@ mod live {
                         std::ptr::null()
                     },
                 );
-            }
+            })
         }
     }
 }

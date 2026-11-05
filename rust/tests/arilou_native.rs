@@ -285,7 +285,7 @@ unsafe fn think(
     let mut subject = uqm_rust::app::bridge::enter(|cx| {
         cx.weapon_origin(
             cx.elements()
-                .id(ship.cast())
+                .id(std::ptr::NonNull::new(ship.cast()))
                 .unwrap_or_else(|| panic!("fixture subject is absent")),
         )
     });

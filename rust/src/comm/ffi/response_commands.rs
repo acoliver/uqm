@@ -65,7 +65,7 @@ pub(super) fn deliver_selected(
     };
     if let Some((func, reference)) = result {
         eprintln!("[DBG] rust_DoCommunication: calling response callback ref={reference}");
-        cx.with_legacy(|| func(reference));
+        func(cx, reference);
         observe_responses(io);
         eprintln!(
             "[DBG] rust_DoCommunication: callback returned, talking_finished={}",
@@ -104,7 +104,7 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn selected_callback_releases_state_and_publishes_its_result_to_the_observer() {
-        fn callback(reference: u32) {
+        fn callback(_cx: &mut Cx<'_>, reference: u32) {
             assert_eq!(reference, 17);
             let mut state = COMM_STATE
                 .try_write()

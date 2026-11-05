@@ -30,6 +30,24 @@ use crate::savegame::types::{Point, StarDesc};
 use crate::state::ffi::replace_game_state;
 use crate::state::game_state::NUM_GAME_STATE_BYTES;
 
+fn capture_summary(
+    sis: &CSisState,
+    game: &LiveGame,
+    solar: &dyn SolarSystemOwner,
+    name: &[u8],
+) -> Result<crate::savegame::types::Summary, SummaryError> {
+    World::current().read(|world| {
+        super::summary::capture_summary(
+            sis,
+            &game.data.game,
+            game.built_ships_ref(),
+            &world.story,
+            solar,
+            name,
+        )
+    })
+}
+
 // Chunk positions inside C_WRITTEN_SAVE, worked out from `save.c`.
 const FIXTURE_SUMM: std::ops::Range<usize> = 12..172;
 const FIXTURE_GLST_ACTIVITY: usize = 211;
@@ -194,10 +212,10 @@ fn summary_of_the_game_the_c_save_came_from_matches_what_c_wrote() {
             install(&state);
 
             let mut game = LiveGame::bare();
-            game.current_activity = le16(&C_WRITTEN_SAVE[FIXTURE_GLST_ACTIVITY..]);
-            game.game_clock.day_index = raw[124];
-            game.game_clock.month_index = raw[125];
-            game.game_clock.year_index = le16(&raw[126..]);
+            game.data.game.current_activity = le16(&C_WRITTEN_SAVE[FIXTURE_GLST_ACTIVITY..]);
+            game.data.game.game_clock.day_index = raw[124];
+            game.data.game.game_clock.month_index = raw[125];
+            game.data.game.game_clock.year_index = le16(&raw[126..]);
             game.push_fragment(false, raw[132], 0);
 
             let flagship = CSisState {
@@ -224,7 +242,7 @@ fn summary_of_the_game_the_c_save_came_from_matches_what_c_wrote() {
             solar.planet = raw[106..122].try_into().unwrap();
             let summary = capture_summary(&flagship, &game, &solar, b"").unwrap();
 
-            assert_eq!(game.current_activity & 0xff, 4);
+            assert_eq!(game.data.game.current_activity & 0xff, 4);
             assert_eq!(summary.activity, raw[122]);
             assert_eq!(summary.flags, raw[123]);
             assert_eq!(summary.day_index, 17);
@@ -257,7 +275,7 @@ fn summary_copies_the_flagship_state_field_by_field() {
         crate::app::bridge::with_game(&mut game_owner, || {
             install(&blank_state());
             let mut game = LiveGame::bare();
-            game.current_activity = 3;
+            game.data.game.current_activity = 3;
             let flagship = sis();
             let summary = capture_summary(&flagship, &game, &Solar::new(), b"x").unwrap();
             assert_eq!(summary.sis.log_x, -123_456);
@@ -315,7 +333,7 @@ fn the_activity_of_a_summary_follows_prepare_summary_for_every_state() {
                         solar.orbit = orbit;
                         for lobyte in 0u16..=8 {
                             for high in 0u16..128 {
-                                game.current_activity = lobyte | (high << 8);
+                                game.data.game.current_activity = lobyte | (high << 8);
                                 let summary = capture_summary(&sis(), &game, &solar, b"s").unwrap();
                                 assert_eq!(
                                     summary.activity,
@@ -342,7 +360,7 @@ fn the_solar_system_owner_is_asked_only_where_prepare_summary_asks_it() {
             install(&blank_state());
             for activity in [0u16, 1, 2, 3, 4, 5, 6, 7, 8] {
                 let mut game = LiveGame::bare();
-                game.current_activity = activity | START_ENCOUNTER;
+                game.data.game.current_activity = activity | START_ENCOUNTER;
                 let solar = Solar::new();
                 let summary = capture_summary(&sis(), &game, &solar, b"").unwrap();
                 match activity {
@@ -384,7 +402,7 @@ fn a_starbase_visit_does_not_ask_whether_the_flagship_is_in_orbit() {
             set_key(&mut state, "GLOBAL_FLAGS_AND_DATA", 0xFF);
             install(&state);
             let mut game = LiveGame::bare();
-            game.current_activity = 4;
+            game.data.game.current_activity = 4;
             let solar = Solar::new();
             let summary = capture_summary(&sis(), &game, &solar, b"").unwrap();
             assert_eq!(summary.activity, IN_STARBASE);
@@ -412,7 +430,7 @@ fn credit_and_lander_flags_come_from_the_singleton_bits() {
             set_key(&mut state, "IMPROVED_LANDER_CARGO", 1);
             install(&state);
             let mut game = LiveGame::bare();
-            game.current_activity = 3;
+            game.data.game.current_activity = 3;
             let summary = capture_summary(&sis(), &game, &Solar::new(), b"").unwrap();
             assert_eq!(summary.mcredit_lo, 0xA5);
             assert_eq!(summary.mcredit_hi, 0x5A);
@@ -461,7 +479,7 @@ fn each_device_is_listed_by_its_id_when_only_its_condition_holds() {
         crate::app::bridge::with_game(&mut game_owner, || {
             let game = {
                 let mut game = LiveGame::bare();
-                game.current_activity = 3;
+                game.data.game.current_activity = 3;
                 game
             };
             for (id, name) in DEVICE_FLAGS {
@@ -514,7 +532,7 @@ fn devices_are_listed_in_id_order_and_stop_at_sixteen() {
             set_key(&mut state, "ULTRON_CONDITION", 2);
             install(&state);
             let mut game = LiveGame::bare();
-            game.current_activity = 3;
+            game.data.game.current_activity = 3;
             let summary = capture_summary(&sis(), &game, &Solar::new(), b"").unwrap();
             assert_eq!(summary.num_devices, 16);
             assert_eq!(
@@ -558,7 +576,7 @@ fn escorts_and_date_follow_the_live_queue_and_clock() {
         crate::app::bridge::with_game(&mut game_owner, || {
             install(&blank_state());
             let mut game = LiveGame::bare();
-            game.current_activity = 3;
+            game.data.game.current_activity = 3;
             let before = capture_summary(&sis(), &game, &Solar::new(), b"").unwrap();
             assert_eq!(before.num_ships, 0);
             assert_eq!(before.ship_list, [0; 12]);
@@ -568,9 +586,9 @@ fn escorts_and_date_follow_the_live_queue_and_clock() {
             }
             // The npc queue is not part of the summary.
             game.push_fragment(true, 9, 0);
-            game.game_clock.day_index = 28;
-            game.game_clock.month_index = 12;
-            game.game_clock.year_index = 2160;
+            game.data.game.game_clock.day_index = 28;
+            game.data.game.game_clock.month_index = 12;
+            game.data.game.game_clock.year_index = 2160;
 
             let after = capture_summary(&sis(), &game, &Solar::new(), b"").unwrap();
             assert_eq!(after.num_ships, 4);
@@ -592,7 +610,7 @@ fn a_full_hangar_fills_the_ship_list() {
         crate::app::bridge::with_game(&mut game_owner, || {
             install(&blank_state());
             let mut game = LiveGame::bare();
-            game.current_activity = 3;
+            game.data.game.current_activity = 3;
             for race in 1..=12u8 {
                 game.push_fragment(false, race, 0);
             }
@@ -605,22 +623,23 @@ fn a_full_hangar_fills_the_ship_list() {
 
 #[test]
 #[serial]
-fn a_corrupt_built_ship_queue_is_an_error_not_a_summary() {
+fn a_full_summary_pool_cannot_grow_past_the_ship_list() {
     let mut game_owner = crate::engine::Game::new();
-    // SAFETY: the serialized fixture owns this published lifecycle.
+    // SAFETY: this serialized fixture owns the published game lifecycle.
     unsafe {
         crate::app::bridge::with_game(&mut game_owner, || {
             install(&blank_state());
             let mut game = LiveGame::bare();
-            game.current_activity = 3;
-            game.push_fragment(false, 2, 0);
-            let head = game.built_ship_q.head;
-            game.built_ship_q.head = (head as usize + 1) as *mut std::ffi::c_void;
-            let error = capture_summary(&sis(), &game, &Solar::new(), b"").unwrap_err();
-            assert!(matches!(error, SummaryError::Queue(_)), "{error:?}");
-            game.built_ship_q.head = head;
+            game.data.game.current_activity = 3;
+            for race in 1..=12 {
+                game.push_fragment(false, race, 0);
+            }
+            assert!(game.built_ships().alloc().is_none());
+            let summary = capture_summary(&sis(), &game, &Solar::new(), b"").unwrap();
+            assert_eq!(summary.num_ships, 12);
+            assert_eq!(summary.ship_list, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
         })
-    }
+    };
 }
 
 #[test]
@@ -632,7 +651,7 @@ fn the_save_name_is_cut_where_strncpy_cuts_it() {
         crate::app::bridge::with_game(&mut game_owner, || {
             install(&blank_state());
             let mut game = LiveGame::bare();
-            game.current_activity = 3;
+            game.data.game.current_activity = 3;
             let name = |bytes: &[u8]| {
                 capture_summary(&sis(), &game, &Solar::new(), bytes)
                     .unwrap()
@@ -679,13 +698,13 @@ fn a_changed_owner_changes_the_summary() {
         crate::app::bridge::with_game(&mut game_owner, || {
             install(&blank_state());
             let mut game = LiveGame::bare();
-            game.current_activity = 3;
+            game.data.game.current_activity = 3;
             let mut flagship = sis();
             let first = capture_summary(&flagship, &game, &Solar::new(), b"a").unwrap();
 
             flagship.fuel_on_board += 50;
             flagship.num_landers = 2;
-            game.game_clock.year_index += 1;
+            game.data.game.game_clock.year_index += 1;
             let mut state = blank_state();
             set_key(&mut state, "MELNORME_CREDIT0", 9);
             install(&state);
@@ -711,7 +730,7 @@ const SA_MATRA_NAME: &str = "s407";
 
 fn interplanetary_game() -> LiveGame {
     let mut game = LiveGame::bare();
-    game.current_activity = IN_INTERPLANETARY | START_ENCOUNTER;
+    game.data.game.current_activity = IN_INTERPLANETARY | START_ENCOUNTER;
     game
 }
 
@@ -812,7 +831,7 @@ fn the_final_battle_summary_names_sa_matra_whatever_the_system_holds() {
         crate::app::bridge::with_game(&mut game_owner, || {
             install(&blank_state());
             let mut game = LiveGame::bare();
-            game.current_activity = IN_LAST_BATTLE | START_ENCOUNTER;
+            game.data.game.current_activity = IN_LAST_BATTLE | START_ENCOUNTER;
             let summary = summary_over(&System::orbiting_planet(2), &game, Some(SOL_STAR)).unwrap();
             assert_eq!(text(summary.sis.planet_name), SA_MATRA_NAME);
             assert_eq!(summary.activity, IN_LAST_BATTLE as u8);
@@ -833,7 +852,7 @@ fn the_other_activities_do_not_read_the_solar_system() {
             broken.pOrbitalDesc = std::ptr::null_mut();
             for activity in [0u16, 2, 3, 5, 6, 7, 8] {
                 let mut game = LiveGame::bare();
-                game.current_activity = activity | START_ENCOUNTER;
+                game.data.game.current_activity = activity | START_ENCOUNTER;
                 let summary = summary_over(&broken, &game, Some(SOL_STAR)).unwrap();
                 assert_eq!(
                     &summary.sis.planet_name,

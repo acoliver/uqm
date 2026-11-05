@@ -8,10 +8,7 @@ use crate::graphics::native_abi::{
 };
 use std::os::raw::c_uint as SPECIES_ID;
 
-pub use crate::collections::queue::Queue;
 pub use crate::graphics::native_abi::{INTERSECT_CONTROL, PRIMITIVE};
-
-pub type QUEUE = Queue;
 
 pub use abi::{
     captain_stuff, state, state__bindgen_ty_1, tfb_soundsample, ElementRecord, ShipRecord,
@@ -691,6 +688,21 @@ mod projection_tests {
         assert_eq!(cx.ship_pointer(replacement), pointer);
     }
     #[test]
+    fn ip_group_parent_keeps_identity_across_slot_reuse() {
+        let mut world = WorldOwner::new();
+        let original = world.ip_groups().alloc().unwrap();
+        let parent = Parent::IpGroup(original);
+        world.ip_groups().free(original);
+        let replacement = world.ip_groups().alloc().unwrap();
+        assert_eq!(world.ip_groups_ref().slot(replacement), 0);
+        assert_ne!(
+            Parent::IpGroup(replacement),
+            parent,
+            "a reused slot has a new parent identity"
+        );
+    }
+
+    #[test]
     fn pointer_free_values_roundtrip_record_scalars_and_subject_metadata() {
         let mut raw = ElementRecord {
             state_flags: 513,
@@ -718,9 +730,11 @@ mod projection_tests {
         subject.set_mass_points(6);
         subject.set_turn_wait(14);
         subject.set_thrust_wait(15);
-        subject.parent = Parent::IpGroup(3);
+        let mut world = WorldOwner::new();
+        let group = world.ip_groups().alloc().unwrap();
+        subject.parent = Parent::IpGroup(group);
         let encoded = ElementRecord::from(subject);
-        assert_eq!(Subject::decode(&encoded).parent, Parent::IpGroup(3));
+        assert_eq!(Subject::decode(&encoded).parent, Parent::IpGroup(group));
         assert_eq!(encoded.PrimIndex, 17);
         assert_eq!(encoded.IntersectControl.last_time_val, 31);
         assert_eq!(encoded.current.location.x, 11);
@@ -873,9 +887,6 @@ mod kernel_tests {
         assert_eq!(fresh.channels.lru, [0, 1, 2, 3]);
     }
 }
-
-use crate::engine::battle::link_queue::QueueRecord;
-impl QueueRecord for crate::engine::battle::link_queue::Starship {}
 
 #[cfg(not(test))]
 impl RaceDesc {

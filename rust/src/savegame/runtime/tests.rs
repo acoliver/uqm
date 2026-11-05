@@ -3,8 +3,7 @@
 //! The field checks place and read bytes at offsets taken from bindgen's
 //! reading of the C headers, not from the Rust mirror, and compare them with
 //! values written out here or with the bytes of a save the C game wrote. The
-//! event checks use a real `QUEUE_TABLE` pool from `InitQueue`, the way
-//! `InitGameClock` makes it.
+//! event checks use the owned fixed-capacity game-clock pool.
 
 use crate::engine::battle::schema::GAME_STATE;
 use crate::engine::World;
@@ -15,11 +14,12 @@ use serial_test::serial;
 
 use super::*;
 
-use crate::collections::queue::{AllocLink, HLink, InitQueue, Queue, UninitQueue};
+use crate::engine::battle::link_queue::LinkId;
+use crate::engine::clock::NUM_EVENTS;
+use crate::engine::clock::{GameClock, ScheduledEvent};
 use crate::savegame::decode::decode_save;
 use crate::savegame::types::{ClockState, Extent, Point, Velocity};
 use crate::state::ffi::snapshot_game_state;
-use crate::time::clock_bridge::{CEvent, NUM_EVENTS};
 
 /// Tracked evidence from a real run of the C game: epic 20 load/save proof.
 const C_WRITTEN_SAVE: &[u8] = include_bytes!("../../../tests/fixtures/savegame/legacy-save.00");
@@ -33,33 +33,13 @@ const FIXTURE_EVTS: std::ops::Range<usize> = 1194..1214;
 // A live GAME_STATE with a real event pool
 // ---------------------------------------------------------------------------
 
-/// A `GAME_STATE` whose clock queue was made by `InitQueue(NUM_EVENTS,
-/// sizeof(EVENT))`, as `InitGameClock` does.
-struct LiveGame(Box<CGameState>);
+struct LiveGame(Box<CGameState>, GameClock);
 
 impl LiveGame {
     fn new() -> Self {
-        // SAFETY: `CGameState` is integers and raw pointers; all zeroes is a
-        // valid value, and it is what C's static storage starts as.
-        let mut game: Box<CGameState> = Box::new(unsafe { std::mem::zeroed() });
-        assert!(unsafe {
-            // SAFETY: The queue storage is exclusive and its element layout matches this pool.
-            InitQueue(
-                &mut game.game_clock.event_q,
-                NUM_EVENTS as u16,
-                size_of::<CEvent>() as u16,
-            )
-        });
-        Self(game)
-    }
-}
-
-impl Drop for LiveGame {
-    fn drop(&mut self) {
-        unsafe {
-            // SAFETY: This scope owns the initialized pool and no element is used after teardown.
-            UninitQueue(&mut self.0.game_clock.event_q)
-        };
+        // SAFETY: the retained scalar ABI record contains only integers and nullable pointers.
+        let game = Box::new(unsafe { std::mem::zeroed() });
+        Self(game, GameClock::new())
     }
 }
 
@@ -255,34 +235,23 @@ fn sentinel_fields() -> Vec<(usize, Vec<u8>)> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct RawEvent {
-    slot: usize,
-    pred_slot: Option<usize>,
-    succ_slot: Option<usize>,
+    slot: LinkId<ScheduledEvent>,
+    pred_slot: Option<LinkId<ScheduledEvent>>,
+    succ_slot: Option<LinkId<ScheduledEvent>>,
     date_and_function: [u8; 5],
 }
 
-fn slot_of(queue: &Queue, link: HLink) -> Option<usize> {
-    if link.is_null() {
-        return None;
-    }
-    let offset = link as usize - queue.pq_tab as usize;
-    assert_eq!(offset % size_of::<CEvent>(), 0, "link off a slot boundary");
-    assert!(offset / size_of::<CEvent>() < usize::from(queue.num_objects));
-    Some(offset / size_of::<CEvent>())
-}
-
-/// The queue's events, head to tail, read without `capture_events`.
-fn walk_events(queue: &Queue) -> Vec<RawEvent> {
+fn walk_events(clock: &GameClock) -> Vec<RawEvent> {
+    let queue = clock.events_ref();
     let mut walked = Vec::new();
-    let mut link = queue.head;
-    while !link.is_null() {
-        // SAFETY: `link` came from the queue's own head/succ chain inside the pool.
-        let event = unsafe { &*(link as *const CEvent) };
+    let mut next = queue.head();
+    while let Some(id) = next {
+        let event = queue.get(id);
         let year = event.year_index.to_le_bytes();
         walked.push(RawEvent {
-            slot: slot_of(queue, link).unwrap(),
-            pred_slot: slot_of(queue, event.pred),
-            succ_slot: slot_of(queue, event.succ),
+            slot: id,
+            pred_slot: queue.pred(id),
+            succ_slot: queue.succ(id),
             date_and_function: [
                 event.day_index,
                 event.month_index,
@@ -291,34 +260,21 @@ fn walk_events(queue: &Queue) -> Vec<RawEvent> {
                 event.func_index,
             ],
         });
-        link = event.succ;
+        next = queue.succ(id);
         assert!(walked.len() <= NUM_EVENTS, "event list does not end");
     }
     walked
 }
 
-/// Slots on the free list, in allocation order.
-fn free_slots(queue: &Queue) -> Vec<usize> {
-    let mut slots = Vec::new();
-    let mut link = queue.free_list;
-    while !link.is_null() {
-        slots.push(slot_of(queue, link).unwrap());
-        // SAFETY: a free link is a pool slot whose first words `FreeLink` set.
-        link = unsafe { (*(link as *const CEvent)).succ };
-        assert!(slots.len() <= NUM_EVENTS, "free list does not end");
-    }
-    slots
-}
-
-/// Everything about the queue that a rejected restore must not change.
-fn queue_state(queue: &Queue) -> (usize, usize, usize, Vec<RawEvent>, Vec<usize>) {
-    (
-        queue.head as usize,
-        queue.tail as usize,
-        queue.free_list as usize,
-        walk_events(queue),
-        free_slots(queue),
-    )
+fn queue_state(
+    clock: &GameClock,
+) -> (
+    Option<LinkId<ScheduledEvent>>,
+    Option<LinkId<ScheduledEvent>>,
+    Vec<RawEvent>,
+) {
+    let queue = clock.events_ref();
+    (queue.head(), queue.tail(), walk_events(clock))
 }
 
 fn event(day: u8, month: u8, year: u16, func: u8) -> EventEntry {
@@ -335,19 +291,31 @@ fn event(day: u8, month: u8, year: u16, func: u8) -> EventEntry {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn event_record_and_pool_match_the_c_enum_and_struct() {
+fn event_pool_preserves_all_handler_records_at_capacity() {
     assert_eq!(NUM_EVENTS, 18, "gameev.h lists 18 event kinds");
-    assert_eq!(
-        size_of::<CEvent>(),
-        24,
-        "two pointers, 4 date bytes, padded"
-    );
-    let game = LiveGame::new();
-    let queue = &game.game_clock.event_q;
-    assert_eq!(usize::from(queue.num_objects), NUM_EVENTS);
-    assert_eq!(usize::from(queue.object_size), size_of::<CEvent>());
-    assert_eq!(queue.pq_tab as usize % std::mem::align_of::<CEvent>(), 0);
-    assert_eq!(free_slots(queue).len(), NUM_EVENTS);
+    let mut clock = GameClock::new();
+    let mut ids = Vec::new();
+    for selector in 0..NUM_EVENTS {
+        let mut queue = clock.events();
+        let Some(id) = queue.alloc() else {
+            panic!("event pool exhausted before handler {selector}");
+        };
+        let record = queue.get_mut(id);
+        record.day_index = 1;
+        record.month_index = 1;
+        record.year_index = 2155;
+        record.func_index = selector as u8;
+        ids.push(id);
+    }
+    assert!(clock.events().alloc().is_none());
+    assert_eq!(events::capture_events(&clock), Ok(Vec::new()));
+    for id in ids {
+        clock.events().put(id);
+    }
+    let expected = (0..NUM_EVENTS)
+        .map(|selector| event(1, 1, 2155, selector as u8))
+        .collect();
+    assert_eq!(events::capture_events(&clock), Ok(expected));
 }
 
 // ---------------------------------------------------------------------------
@@ -386,8 +354,8 @@ fn restore_leaves_what_glst_does_not_carry() {
 
     game.current_activity = 0x0102;
     let events = [event(18, 2, 2155, 2), event(7, 3, 2156, 9)];
-    events::restore_events(&mut game.game_clock.event_q, &events).unwrap();
-    let before = queue_state(&game.game_clock.event_q);
+    events::restore_events(&mut game.1, &events).unwrap();
+    let before = queue_state(&game.1);
 
     let next = global::apply_global_state(&mut game, &sentinel_global());
 
@@ -396,7 +364,7 @@ fn restore_leaves_what_glst_does_not_carry() {
     assert_eq!(game.ship_stamp.frame, frame);
     assert_eq!(game.battle_group_ref, 0xdead_beef);
 
-    assert_eq!(queue_state(&game.game_clock.event_q), before);
+    assert_eq!(queue_state(&game.1), before);
     assert_eq!(
         get(&game, c_offset::STAMP_FRAME, 8),
         (0x1000u64).to_le_bytes()
@@ -441,9 +409,9 @@ fn restore_rebuilds_the_real_queue_in_order() {
         event(29, 2, 2156, 8),
         event(31, 12, 65535, 12),
     ];
-    events::restore_events(&mut game.game_clock.event_q, &events).unwrap();
+    events::restore_events(&mut game.1, &events).unwrap();
 
-    let queue = &game.game_clock.event_q;
+    let queue = &game.1;
     let walked = walk_events(queue);
     assert_eq!(walked.len(), 4);
     for (index, (raw, wanted)) in walked.iter().zip(&events).enumerate() {
@@ -461,8 +429,8 @@ fn restore_rebuilds_the_real_queue_in_order() {
         assert_eq!(raw.pred_slot, index.checked_sub(1).map(|i| walked[i].slot));
         assert_eq!(raw.succ_slot, walked.get(index + 1).map(|next| next.slot));
     }
-    assert_eq!(slot_of(queue, queue.tail), Some(walked[3].slot));
-    assert_eq!(free_slots(queue).len(), NUM_EVENTS - 4);
+    assert_eq!(queue.events_ref().tail(), Some(walked[3].slot));
+    assert_eq!((NUM_EVENTS - queue.events_ref().count()), NUM_EVENTS - 4);
 
     assert_eq!(events::capture_events(queue).unwrap(), events);
 }
@@ -471,24 +439,19 @@ fn restore_rebuilds_the_real_queue_in_order() {
 fn restore_replaces_events_that_were_already_queued() {
     let mut game = LiveGame::new();
     let stale: Vec<_> = (0..10).map(|n| event(1 + n, 3, 2155, n)).collect();
-    events::restore_events(&mut game.game_clock.event_q, &stale).unwrap();
+    events::restore_events(&mut game.1, &stale).unwrap();
 
     let fresh = [event(5, 5, 2160, 4)];
-    events::restore_events(&mut game.game_clock.event_q, &fresh).unwrap();
+    events::restore_events(&mut game.1, &fresh).unwrap();
 
-    assert_eq!(
-        events::capture_events(&game.game_clock.event_q).unwrap(),
-        fresh
-    );
-    assert_eq!(free_slots(&game.game_clock.event_q).len(), NUM_EVENTS - 1);
+    assert_eq!(events::capture_events(&game.1).unwrap(), fresh);
+    assert_eq!((NUM_EVENTS - game.1.events_ref().count()), NUM_EVENTS - 1);
 
-    events::restore_events(&mut game.game_clock.event_q, &[]).unwrap();
-    assert!(events::capture_events(&game.game_clock.event_q)
-        .unwrap()
-        .is_empty());
-    assert!(game.game_clock.event_q.head.is_null());
-    assert!(game.game_clock.event_q.tail.is_null());
-    assert_eq!(free_slots(&game.game_clock.event_q).len(), NUM_EVENTS);
+    events::restore_events(&mut game.1, &[]).unwrap();
+    assert!(events::capture_events(&game.1).unwrap().is_empty());
+    assert!(game.1.events_ref().head().is_none());
+    assert!(game.1.events_ref().tail().is_none());
+    assert_eq!((NUM_EVENTS - game.1.events_ref().count()), NUM_EVENTS);
 }
 
 #[test]
@@ -497,22 +460,15 @@ fn a_full_pool_of_events_round_trips_and_leaves_no_free_slot() {
     let events: Vec<_> = (0..NUM_EVENTS as u8)
         .map(|n| event(1 + n, 1 + n % 12, 2155 + u16::from(n), n))
         .collect();
-    events::restore_events(&mut game.game_clock.event_q, &events).unwrap();
-    assert!(unsafe {
-        // SAFETY: The initialized queue is exclusively borrowed and its free-list belongs to its pool.
-        AllocLink(&mut game.game_clock.event_q)
-    }
-    .is_null());
-    assert_eq!(
-        events::capture_events(&game.game_clock.event_q).unwrap(),
-        events
-    );
+    events::restore_events(&mut game.1, &events).unwrap();
+    assert!(game.1.events().alloc().is_none());
+    assert_eq!(events::capture_events(&game.1).unwrap(), events);
 }
 
 #[test]
 fn leap_day_is_valid_only_in_a_leap_year() {
     let mut game = LiveGame::new();
-    let queue = &mut game.game_clock.event_q;
+    let queue = &mut game.1;
     assert!(events::restore_events(queue, &[event(29, 2, 2156, 0)]).is_ok());
     assert!(events::restore_events(queue, &[event(29, 2, 2400, 0)]).is_ok());
     for year in [2155u16, 2100] {
@@ -536,8 +492,8 @@ fn rejected_events_leave_the_queue_exactly_as_it_was() {
         event(2, 4, 2155, 11),
         event(9, 9, 2157, 3),
     ];
-    events::restore_events(&mut game.game_clock.event_q, &before_events).unwrap();
-    let before = queue_state(&game.game_clock.event_q);
+    events::restore_events(&mut game.1, &before_events).unwrap();
+    let before = queue_state(&game.1);
 
     let too_many: Vec<_> = (0..=NUM_EVENTS as u8)
         .map(|n| event(1, 1, 2155, n % 18))
@@ -602,156 +558,64 @@ fn rejected_events_leave_the_queue_exactly_as_it_was() {
         ),
     ];
     for (events, expected) in cases {
-        assert_eq!(
-            events::restore_events(&mut game.game_clock.event_q, &events),
-            Err(expected)
-        );
-        assert_eq!(queue_state(&game.game_clock.event_q), before, "{expected}");
+        assert_eq!(events::restore_events(&mut game.1, &events), Err(expected));
+        assert_eq!(queue_state(&game.1), before, "{expected}");
     }
-    assert_eq!(
-        events::capture_events(&game.game_clock.event_q).unwrap(),
-        before_events
-    );
+    assert_eq!(events::capture_events(&game.1).unwrap(), before_events);
 }
 
 #[test]
-fn a_queue_that_is_not_an_event_pool_is_refused() {
-    // SAFETY: `Queue` is integers and raw pointers; all zeroes is C's initial state.
-    let mut never_initialised: Queue = unsafe { std::mem::zeroed() };
-    assert_eq!(
-        events::restore_events(&mut never_initialised, &[]),
-        Err(EventError::PoolMissing)
-    );
-    assert_eq!(
-        events::capture_events(&never_initialised).err(),
-        Some(EventError::PoolMissing)
-    );
-
-    // SAFETY: as above.
-    let mut wrong_size: Queue = unsafe { std::mem::zeroed() };
-    assert!(unsafe {
-        // SAFETY: The queue storage is exclusive and its element layout matches this pool.
-        InitQueue(&mut wrong_size, NUM_EVENTS as u16, 16)
-    });
-    assert_eq!(
-        events::restore_events(&mut wrong_size, &[]),
-        Err(EventError::WrongObjectSize {
-            found: 16,
-            expected: size_of::<CEvent>()
-        })
-    );
-    unsafe {
-        // SAFETY: This scope owns the initialized pool and no element is used after teardown.
-        UninitQueue(&mut wrong_size)
-    };
+fn event_ids_cannot_be_used_with_another_clock() {
+    let mut a = GameClock::new();
+    let mut b = GameClock::new();
+    let id = a.events().alloc().unwrap();
+    b.events().alloc().unwrap();
+    assert!(!b.events_ref().contains(id));
+    assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| b
+        .events_ref()
+        .get(id)
+        .func_index))
+    .is_err());
 }
 
 #[test]
-fn a_smaller_pool_bounds_the_event_count() {
-    // SAFETY: `Queue` is integers and raw pointers; all zeroes is C's initial state.
-    let mut small: Queue = unsafe { std::mem::zeroed() };
-    assert!(unsafe {
-        // SAFETY: The queue storage is exclusive and its element layout matches this pool.
-        InitQueue(&mut small, 3, size_of::<CEvent>() as u16)
-    });
-    let four: Vec<_> = (0..4).map(|n| event(1 + n, 1, 2155, n)).collect();
+fn fixed_event_capacity_bounds_restore() {
+    let mut clock = GameClock::new();
+    let entries: Vec<_> = (0..=NUM_EVENTS).map(|_| event(1, 1, 2155, 0)).collect();
     assert_eq!(
-        events::restore_events(&mut small, &four),
+        events::restore_events(&mut clock, &entries),
         Err(EventError::TooManyEvents {
-            count: 4,
-            capacity: 3
+            count: NUM_EVENTS + 1,
+            capacity: NUM_EVENTS
         })
     );
-    assert!(events::restore_events(&mut small, &four[..3]).is_ok());
-    unsafe {
-        // SAFETY: This scope owns the initialized pool and no element is used after teardown.
-        UninitQueue(&mut small)
-    };
+    events::restore_events(&mut clock, &entries[..NUM_EVENTS]).unwrap();
+    assert!(clock.events().alloc().is_none());
 }
 
 #[test]
-fn capture_refuses_a_queue_the_game_corrupted() {
-    let events = [
+fn capture_refuses_invalid_live_event_fields() {
+    let mut clock = GameClock::new();
+    let entries = [
         event(1, 1, 2155, 0),
         event(2, 1, 2155, 1),
         event(3, 1, 2155, 2),
     ];
-    let fresh = || {
-        let mut game = LiveGame::new();
-        events::restore_events(&mut game.game_clock.event_q, &events).unwrap();
-        game
-    };
-    let nth = |game: &LiveGame, n: usize| -> *mut CEvent {
-        let mut link = game.game_clock.event_q.head;
-        for _ in 0..n {
-            // SAFETY: walking the freshly built, valid list.
-            link = unsafe { (*(link as *const CEvent)).succ };
-        }
-        link as *mut CEvent
-    };
-
-    // A forward link out of the pool.
-    let game = fresh();
-    // SAFETY: the pointer is a live slot of `game`'s pool.
-    unsafe { (*nth(&game, 1)).succ = 0x10 as HLink };
+    events::restore_events(&mut clock, &entries).unwrap();
+    let second = clock.events_ref().at(1).unwrap();
+    clock.events().get_mut(second).func_index = 99;
     assert_eq!(
-        events::capture_events(&game.game_clock.event_q).err(),
-        Some(EventError::CorruptQueue { position: 2 })
-    );
-
-    // A forward link inside the pool but off a slot boundary.
-    let game = fresh();
-    let inside = (game.game_clock.event_q.pq_tab as usize + 5) as HLink;
-    // SAFETY: as above.
-    unsafe { (*nth(&game, 0)).succ = inside };
-    assert_eq!(
-        events::capture_events(&game.game_clock.event_q).err(),
-        Some(EventError::CorruptQueue { position: 1 })
-    );
-
-    // A loop.
-    let game = fresh();
-    let head = game.game_clock.event_q.head;
-    // SAFETY: as above.
-    unsafe { (*nth(&game, 2)).succ = head };
-    assert!(matches!(
-        events::capture_events(&game.game_clock.event_q),
-        Err(EventError::CorruptQueue { .. })
-    ));
-
-    // A back-link that disagrees.
-    let game = fresh();
-    // SAFETY: as above.
-    unsafe { (*nth(&game, 2)).pred = std::ptr::null_mut() };
-    assert_eq!(
-        events::capture_events(&game.game_clock.event_q).err(),
-        Some(EventError::CorruptQueue { position: 2 })
-    );
-
-    // A tail that is not the last link.
-    let mut game = fresh();
-    game.game_clock.event_q.tail = nth(&game, 1) as HLink;
-    assert_eq!(
-        events::capture_events(&game.game_clock.event_q).err(),
-        Some(EventError::CorruptQueue { position: 3 })
-    );
-
-    // An event the game could never have scheduled.
-    let game = fresh();
-    // SAFETY: as above.
-    unsafe { (*nth(&game, 1)).func_index = 99 };
-    assert_eq!(
-        events::capture_events(&game.game_clock.event_q).err(),
-        Some(EventError::UnknownEventFunction {
+        events::capture_events(&clock),
+        Err(EventError::UnknownEventFunction {
             position: 1,
             func_index: 99
         })
     );
-    let game = fresh();
-    // SAFETY: as above.
-    unsafe { (*nth(&game, 0)).month_index = 14 };
+    clock.events().get_mut(second).func_index = 1;
+    let first = clock.events_ref().head().unwrap();
+    clock.events().get_mut(first).month_index = 14;
     assert!(matches!(
-        events::capture_events(&game.game_clock.event_q),
+        events::capture_events(&clock),
         Err(EventError::InvalidEventDate { position: 0, .. })
     ));
 }
@@ -778,11 +642,12 @@ fn restore_uses_the_already_borrowed_story_owner() {
             let mut game = LiveGame::new();
             World::current().write(|world| {
                 super::restore_runtime(
-                    &mut game,
+                    &mut game.0,
                     &mut world.story,
                     &sentinel_global(),
                     &game_state_bits(7),
                     &[],
+                    &mut game.1,
                 )
                 .unwrap();
             });
@@ -806,7 +671,14 @@ fn restore_then_capture_returns_the_sections_that_were_restored() {
 
             let restored = World::current()
                 .write(|world| {
-                    restore_runtime(&mut game, &mut world.story, &global, &bits, &events)
+                    restore_runtime(
+                        &mut game.0,
+                        &mut world.story,
+                        &global,
+                        &bits,
+                        &events,
+                        &mut game.1,
+                    )
                 })
                 .unwrap();
 
@@ -818,7 +690,7 @@ fn restore_then_capture_returns_the_sections_that_were_restored() {
 
             game.current_activity = global.current_activity;
             let captured = World::current()
-                .write(|world| capture_runtime(&game, &world.story))
+                .write(|world| capture_runtime(&game, &world.story, &game.1))
                 .unwrap();
             assert_eq!(captured.global, global);
             assert_eq!(captured.game_state, bits);
@@ -839,18 +711,19 @@ fn capture_reads_game_state_from_the_singleton() {
             World::current()
                 .write(|world| {
                     restore_runtime(
-                        &mut game,
+                        &mut game.0,
                         &mut world.story,
                         &sentinel_global(),
                         &singleton,
                         &[],
+                        &mut game.1,
                     )
                 })
                 .unwrap();
 
             assert_eq!(
                 World::current()
-                    .write(|world| capture_runtime(&game, &world.story))
+                    .write(|world| capture_runtime(&game, &world.story, &game.1))
                     .unwrap()
                     .game_state,
                 singleton
@@ -874,19 +747,20 @@ fn a_rejected_restore_changes_nothing() {
             World::current()
                 .write(|world| {
                     restore_runtime(
-                        &mut game,
+                        &mut game.0,
                         &mut world.story,
                         &original_global,
                         &original_bits,
                         &original_events,
+                        &mut game.1,
                     )
                 })
                 .unwrap();
             game.current_activity = 0x0100;
             let before_sections = World::current()
-                .write(|world| capture_runtime(&game, &world.story))
+                .write(|world| capture_runtime(&game, &world.story, &game.1))
                 .unwrap();
-            let before_queue = queue_state(&game.game_clock.event_q);
+            let before_queue = queue_state(&game.1);
 
             let mut other_global = sentinel_global();
             other_global.glob_flags = 0xff;
@@ -894,11 +768,12 @@ fn a_rejected_restore_changes_nothing() {
             let bad = [event(1, 1, 2155, 0), event(30, 2, 2155, 1)];
             let result = World::current().write(|world| {
                 restore_runtime(
-                    &mut game,
+                    &mut game.0,
                     &mut world.story,
                     &other_global,
                     &game_state_bits(200),
                     &bad,
+                    &mut game.1,
                 )
             });
 
@@ -913,11 +788,11 @@ fn a_rejected_restore_changes_nothing() {
             );
             assert_eq!(
                 World::current()
-                    .write(|world| capture_runtime(&game, &world.story))
+                    .write(|world| capture_runtime(&game, &world.story, &game.1))
                     .unwrap(),
                 before_sections
             );
-            assert_eq!(queue_state(&game.game_clock.event_q), before_queue);
+            assert_eq!(queue_state(&game.1), before_queue);
 
             assert_eq!(
                 World::current().read(snapshot_game_state).unwrap(),
@@ -952,11 +827,12 @@ fn restoring_a_c_written_save_puts_its_bytes_at_the_c_offsets() {
             let restored = World::current()
                 .write(|world| {
                     restore_runtime(
-                        &mut game,
+                        &mut game.0,
                         &mut world.story,
                         &save.global,
                         &save.game_state,
                         &save.events,
+                        &mut game.1,
                     )
                 })
                 .unwrap();
@@ -994,17 +870,17 @@ fn restoring_a_c_written_save_puts_its_bytes_at_the_c_offsets() {
             );
 
             // Evts: four events, in the file's order, in real pool slots.
-            let walked = walk_events(&game.game_clock.event_q);
+            let walked = walk_events(&game.1);
             assert_eq!(walked.len(), 4);
             for (index, raw) in walked.iter().enumerate() {
                 assert_eq!(raw.date_and_function, evts[index * 5..index * 5 + 5]);
             }
-            assert_eq!(free_slots(&game.game_clock.event_q).len(), NUM_EVENTS - 4);
+            assert_eq!((NUM_EVENTS - game.1.events_ref().count()), NUM_EVENTS - 4);
 
             // Capturing the restored game gives back what the file held.
             game.current_activity = restored.next_activity;
             let captured = World::current()
-                .write(|world| capture_runtime(&game, &world.story))
+                .write(|world| capture_runtime(&game, &world.story, &game.1))
                 .unwrap();
             assert_eq!(captured.global, save.global);
             assert_eq!(captured.game_state, save.game_state);
@@ -1015,10 +891,14 @@ fn restoring_a_c_written_save_puts_its_bytes_at_the_c_offsets() {
 
 #[test]
 fn runtime_errors_say_which_part_failed() {
-    let events: RuntimeError = EventError::PoolMissing.into();
+    let events: RuntimeError = EventError::TooManyEvents {
+        count: 19,
+        capacity: 18,
+    }
+    .into();
     assert_eq!(
         events.to_string(),
-        "event queue: the event queue has no slot table"
+        "event queue: 19 events do not fit the 18-slot event pool"
     );
     let state: RuntimeError = GameStateOwnerError::NotInitialized.into();
     assert_eq!(

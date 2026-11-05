@@ -39,7 +39,6 @@ pub struct Kernel {
     pub space_init_count: u8,
     pub hyperstars: [crate::graphics::native_abi::FRAME; 3],
     pub cmaps: [crate::graphics::native_abi::STRING; 2],
-    pub last_encounter_group: u8,
     pub portal_point: POINT,
     pub(super) elements: super::battle::ElementTable,
     pub(super) races: [super::battle::link_queue::RacePool; 2],
@@ -127,7 +126,6 @@ impl Kernel {
             space_init_count: 0,
             hyperstars: [ptr::null_mut(); 3],
             cmaps: [ptr::null_mut(); 2],
-            last_encounter_group: 0,
             portal_point: POINT { x: 0, y: 0 },
             elements: super::battle::ElementTable::with_capacity(150),
             races: std::array::from_fn(|side| {

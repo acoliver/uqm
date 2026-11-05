@@ -13,7 +13,7 @@ pub unsafe fn invoke_element_pointer<E>(hook: ElementHook, element: *mut E) {
         uqm_rust::app::bridge::enter(|cx| {
             let id = cx
                 .elements()
-                .id(element.cast())
+                .id(std::ptr::NonNull::new(element.cast()))
                 .unwrap_or_else(|| panic!("fixture element is allocated"));
             uqm_rust::battle::process_native::invoke_element::invoke_element(cx, hook, id);
         });
@@ -35,11 +35,11 @@ pub unsafe fn invoke_collision_pointer<E, P>(
         uqm_rust::app::bridge::enter(|cx| {
             let a = cx
                 .elements()
-                .id(a.cast())
+                .id(std::ptr::NonNull::new(a.cast()))
                 .unwrap_or_else(|| panic!("first collision element is allocated"));
             let b = cx
                 .elements()
-                .id(b.cast())
+                .id(std::ptr::NonNull::new(b.cast()))
                 .unwrap_or_else(|| panic!("second collision element is allocated"));
             uqm_rust::battle::process_native::invoke_collision::invoke_collision(
                 cx,

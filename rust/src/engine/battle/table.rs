@@ -1,8 +1,8 @@
 //! Fixed-capacity element ownership and queue order on the game thread.
 
 use crate::collections::pool::{Id, OrderedPool};
-use crate::collections::queue::HLink;
 use crate::engine::battle::record::ElementRecord;
+use std::ffi::c_void;
 use std::ops::{Index, IndexMut};
 
 const CAPACITY: usize = 150;
@@ -27,7 +27,7 @@ pub struct ShipId {
 pub enum Parent {
     None,
     Ship(ShipId),
-    IpGroup(u8),
+    IpGroup(super::link_queue::LinkId<crate::engine::world::queues::Group>),
 }
 
 pub struct ElementTable {
@@ -81,16 +81,14 @@ impl ElementTable {
                 .is_some_and(|key| key.generation() == id.gen)
     }
 
-    pub fn raw(&self, id: ElementId) -> HLink {
+    pub fn raw(&self, id: ElementId) -> *mut c_void {
         std::ptr::from_ref(self.records.pool.get(self.key(id)))
             .cast_mut()
             .cast()
     }
 
-    pub fn id(&self, address: HLink) -> Option<ElementId> {
-        if address.is_null() {
-            return None;
-        }
+    pub fn id(&self, address: Option<std::ptr::NonNull<c_void>>) -> Option<ElementId> {
+        let address = address?;
         let id = self.allocated_id(address);
         assert!(
             id.is_some(),
@@ -99,11 +97,12 @@ impl ElementTable {
         id
     }
 
-    pub(crate) fn allocated_id(&self, address: HLink) -> Option<ElementId> {
+    pub(crate) fn allocated_id(&self, address: std::ptr::NonNull<c_void>) -> Option<ElementId> {
         (0..CAPACITY).find_map(|index| {
             let key = self.records.pool.id_at(index)?;
-            (std::ptr::from_ref(self.records.pool.get(key)).cast::<()>() == address.cast::<()>())
-                .then_some(self.identify(key))
+            (std::ptr::from_ref(self.records.pool.get(key)).cast::<()>()
+                == address.as_ptr().cast::<()>())
+            .then_some(self.identify(key))
         })
     }
 

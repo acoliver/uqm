@@ -414,14 +414,14 @@ mod cffi {
         }
 
         fn init_game_structures(&self) {
-            self.legacy(|| unsafe {
-                c_extern::InitGameStructures();
+            self.owned(|cx| unsafe {
+                crate::navigation::globals::init_game_structures(cx);
             })
         }
 
         fn init_game_clock(&self) {
-            self.legacy(|| unsafe {
-                c_extern::InitGameClock();
+            self.owned(|cx| {
+                crate::time::clock_bridge::rust_clock_init(cx.world);
             })
         }
 
@@ -434,7 +434,7 @@ mod cffi {
                 return;
             };
             self.legacy(|| observer.activate_save_capture());
-            let plan = self.legacy(|| observer.prepare_start_scene());
+            let plan = self.owned(|cx| observer.prepare_start_scene(cx));
             if let Some(plan) = plan {
                 let screen_context = self.owned(|cx| {
                     for &(key, value) in plan.game_state {
@@ -510,7 +510,9 @@ mod cffi {
         }
 
         fn set_game_clock_rate(&self, rate: u16) {
-            self.legacy(|| c_extern::SetGameClockRate(rate))
+            self.owned(|cx| {
+                crate::time::clock_bridge::rust_clock_set_rate(cx.world, i32::from(rate))
+            })
         }
 
         fn stop_sound(&self) {
@@ -518,13 +520,13 @@ mod cffi {
         }
 
         fn uninit_game_clock(&self) {
-            self.legacy(|| unsafe {
-                c_extern::UninitGameClock();
+            self.owned(|cx| {
+                crate::time::clock_bridge::rust_clock_uninit(cx.world);
             })
         }
 
         fn uninit_game_structures(&self) {
-            self.legacy(|| unsafe { c_extern::uninit_game_structures() })
+            self.owned(|cx| unsafe { crate::navigation::globals::uninit_game_structures(cx) })
         }
 
         fn clear_player_input_all(&self) {

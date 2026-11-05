@@ -48,7 +48,7 @@ fn response_text(index: c_int, capacity: c_int) -> (c_int, String) {
 
 static CHOSEN: AtomicU32 = AtomicU32::new(0);
 
-fn remember_choice(reference: u32) {
+fn remember_choice(_cx: &mut crate::engine::battle::Cx<'_>, reference: u32) {
     CHOSEN.store(reference, Ordering::SeqCst);
 }
 
@@ -296,7 +296,7 @@ fn there_is_nothing_to_select_without_responses() {
     assert_eq!(rust_select_next_response(), 0);
     assert_eq!(rust_select_prev_response(), 0);
     assert_eq!(rust_select_response_index(0), 0);
-    assert_eq!(rust_execute_response(), 0);
+    assert_eq!(crate::comm::with_test_context(rust_execute_response), 0);
 }
 
 #[test]
@@ -308,7 +308,7 @@ fn a_response_with_a_handler_calls_it_with_its_reference() {
     offer("Second", 22, Some(remember_choice));
 
     assert_eq!(rust_select_response_index(1), 1);
-    assert_eq!(rust_execute_response(), 22);
+    assert_eq!(crate::comm::with_test_context(rust_execute_response), 22);
 
     assert_eq!(CHOSEN.load(Ordering::SeqCst), 22);
 }
@@ -321,7 +321,7 @@ fn a_response_without_a_handler_just_reports_its_reference() {
     offer("Plain", 33, None);
 
     rust_display_responses();
-    assert_eq!(rust_execute_response(), 33);
+    assert_eq!(crate::comm::with_test_context(rust_execute_response), 33);
 
     assert_eq!(CHOSEN.load(Ordering::SeqCst), 0);
 }
@@ -390,7 +390,7 @@ fn clearing_responses_empties_the_list() {
 
     rust_clear_responses();
     assert_eq!(rust_get_response_count(), 0);
-    assert_eq!(rust_execute_response(), 0);
+    assert_eq!(crate::comm::with_test_context(rust_execute_response), 0);
 }
 
 #[test]
@@ -619,7 +619,7 @@ fn the_conversation_summary_pages_through_what_was_said() {
 #[test]
 fn state_accessors_use_safe_rust_signatures() {
     let _: fn() -> *const c_char = rust_get_subtitle;
-    let _: fn() -> c_uint = rust_execute_response;
+    let _: fn(&mut crate::engine::battle::Cx<'_>) -> c_uint = rust_execute_response;
     let _: fn() = rust_init_speech_graphics;
     let _: fn() = rust_update_speech_graphics;
     let _: fn() = rust_refresh_responses;

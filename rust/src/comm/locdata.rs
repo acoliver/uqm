@@ -145,9 +145,9 @@ pub struct CAnimationDesc {
 #[derive(Default)]
 pub struct CLocData {
     // Function pointers (3 × 8 bytes on 64-bit)
-    pub init_encounter_func: Option<fn()>,
-    pub post_encounter_func: Option<fn()>,
-    pub uninit_encounter_func: Option<fn() -> u16>,
+    pub init_encounter_func: Option<fn(&mut crate::engine::battle::Cx<'_>)>,
+    pub post_encounter_func: Option<fn(&mut crate::engine::battle::Cx<'_>)>,
+    pub uninit_encounter_func: Option<fn(&mut crate::engine::battle::Cx<'_>) -> u16>,
 
     // Resource IDs (const char* pointers)
     pub alien_frame_res: *const c_char,
@@ -259,8 +259,8 @@ pub fn has_comm_data() -> bool {
 /// # Safety
 /// Must be called from the game thread. The returned pointer is valid for
 /// the lifetime of the encounter.
-pub unsafe fn init_race(comm_id: i32) -> *const c_void {
-    unsafe { crate::comm::dispatch::rust_init_race_dispatch(comm_id as u32).cast_const() }
+pub unsafe fn init_race(cx: &mut crate::engine::battle::Cx<'_>, comm_id: i32) -> *const c_void {
+    unsafe { crate::comm::dispatch::rust_init_race_dispatch(cx, comm_id as u32).cast_const() }
 }
 
 /// Copy a dialogue descriptor into the owned communication state.
@@ -316,13 +316,13 @@ mod tests {
     fn descriptor_conversion_preserves_typed_lifecycle_callbacks() {
         use std::sync::atomic::{AtomicU8, Ordering};
         static CALLS: AtomicU8 = AtomicU8::new(0);
-        fn init() {
+        fn init(_cx: &mut crate::engine::battle::Cx<'_>) {
             assert_eq!(CALLS.fetch_add(1, Ordering::SeqCst), 0);
         }
-        fn post() {
+        fn post(_cx: &mut crate::engine::battle::Cx<'_>) {
             assert_eq!(CALLS.fetch_add(1, Ordering::SeqCst), 1);
         }
-        fn uninit() -> u16 {
+        fn uninit(_cx: &mut crate::engine::battle::Cx<'_>) -> u16 {
             assert_eq!(CALLS.fetch_add(1, Ordering::SeqCst), 2);
             17
         }
@@ -333,9 +333,12 @@ mod tests {
             ..CLocData::default()
         };
         let data = read_locdata(&descriptor);
-        data.init_encounter_func.unwrap()();
-        data.post_encounter_func.unwrap()();
-        assert_eq!(data.uninit_encounter_func.unwrap()(), 17);
+        crate::comm::with_test_context(data.init_encounter_func.unwrap());
+        crate::comm::with_test_context(data.post_encounter_func.unwrap());
+        assert_eq!(
+            crate::comm::with_test_context(data.uninit_encounter_func.unwrap()),
+            17
+        );
         assert_eq!(CALLS.load(Ordering::SeqCst), 3);
         let empty = read_locdata(&CLocData::default());
         assert!(empty.init_encounter_func.is_none());
@@ -364,10 +367,10 @@ mod tests {
         assert_eq!(std::mem::offset_of!(CSisState, drive_slots), 38);
         assert_eq!(std::mem::offset_of!(CSisState, ship_name), 74);
         assert_eq!(std::mem::size_of::<CStamp>(), 16);
-        assert_eq!(std::mem::size_of::<CGameState>(), 352);
+        assert_eq!(std::mem::size_of::<CGameState>(), 112);
         assert_eq!(std::mem::offset_of!(CGameState, current_activity), 40);
-        assert_eq!(std::mem::offset_of!(CGameState, ship_stamp), 104);
-        assert_eq!(std::mem::offset_of!(CGameState, avail_race_q), 152);
+        assert_eq!(std::mem::offset_of!(CGameState, ship_stamp), 64);
+        assert_eq!(std::mem::offset_of!(CGameState, battle_group_ref), 104);
     }
 
     #[test]

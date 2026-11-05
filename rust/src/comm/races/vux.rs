@@ -5,6 +5,7 @@
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
+use crate::engine::battle::Cx;
 
 mod dialogue;
 #[cfg(test)]
@@ -203,19 +204,28 @@ pub(crate) mod live {
     use super::super::script::live::LiveScript;
     use super::*;
 
-    fn run(f: impl FnOnce(&mut dialogue::Dialogue<'_, LiveScript<Handler>>)) {
-        let mut api = LiveScript { callback };
+    fn run(
+        cx: &mut Cx<'_>,
+        f: impl FnOnce(&mut dialogue::Dialogue<'_, LiveScript<'_, '_, Handler>>),
+    ) {
+        let mut api = LiveScript::new(cx, callback);
         f(&mut dialogue::Dialogue { api: &mut api });
     }
 
-    fn combat(response: u32) {
-        run(|dialogue| dialogue.handle(Handler::Combat, response as i32));
+    fn combat(cx: &mut Cx<'_>, response: u32) {
+        run(cx, |dialogue| {
+            dialogue.handle(Handler::Combat, response as i32)
+        });
     }
-    fn menagerie(response: u32) {
-        run(|dialogue| dialogue.handle(Handler::Menagerie, response as i32));
+    fn menagerie(cx: &mut Cx<'_>, response: u32) {
+        run(cx, |dialogue| {
+            dialogue.handle(Handler::Menagerie, response as i32)
+        });
     }
-    fn normal(response: u32) {
-        run(|dialogue| dialogue.handle(Handler::Normal, response as i32));
+    fn normal(cx: &mut Cx<'_>, response: u32) {
+        run(cx, |dialogue| {
+            dialogue.handle(Handler::Normal, response as i32)
+        });
     }
 
     fn callback(handler: Handler) -> crate::comm::response::ResponseFunc {
@@ -226,16 +236,15 @@ pub(crate) mod live {
         }
     }
 
-    pub(super) fn intro() {
-        run(|dialogue| dialogue.intro());
+    pub(super) fn intro(cx: &mut Cx<'_>) {
+        run(cx, |dialogue| dialogue.intro());
     }
-    pub(super) fn post() {}
-    pub(super) fn uninit() -> u16 {
+    pub(super) fn post(_cx: &mut Cx<'_>) {}
+    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
         0
     }
 
-    #[no_mangle]
-    pub unsafe extern "C" fn init_vux_comm() -> *mut CLocData {
+    pub unsafe fn init_vux_comm(cx: &mut Cx<'_>) -> *mut CLocData {
         static mut DESCRIPTOR: Option<CLocData> = None;
         extern "C" {
             static mut ScreenWidth: i32;
@@ -243,7 +252,7 @@ pub(crate) mod live {
         let descriptor = (&mut *std::ptr::addr_of_mut!(DESCRIPTOR))
             .get_or_insert_with(|| super::descriptor(ScreenWidth));
         (descriptor.alien_text_baseline, descriptor.alien_text_width) = text_layout(ScreenWidth);
-        run(|dialogue| dialogue.initialize());
+        run(cx, |dialogue| dialogue.initialize());
         descriptor
     }
 }
@@ -251,10 +260,10 @@ pub(crate) mod live {
 pub struct VuxDialogue;
 
 impl super::RaceDialogue for VuxDialogue {
-    fn init(&self) -> CommData {
+    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
         #[cfg(not(test))]
         {
-            unsafe { as_comm_data(&*live::init_vux_comm()) }
+            unsafe { as_comm_data(&*live::init_vux_comm(_cx)) }
         }
         #[cfg(test)]
         {
@@ -262,19 +271,19 @@ impl super::RaceDialogue for VuxDialogue {
         }
     }
 
-    fn intro(&self) {
+    fn intro(&self, _cx: &mut Cx<'_>) {
         #[cfg(not(test))]
-        live::intro();
+        live::intro(_cx);
     }
 
-    fn post_encounter(&self) {
+    fn post_encounter(&self, _cx: &mut Cx<'_>) {
         #[cfg(not(test))]
-        live::post();
+        live::post(_cx);
     }
 
-    fn uninit(&self) -> u32 {
+    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
         #[cfg(not(test))]
-        return live::uninit() as u32;
+        return live::uninit(_cx) as u32;
         #[cfg(test)]
         0
     }

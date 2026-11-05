@@ -28,8 +28,8 @@ pub trait ZoqFotPikSite: HomeContactSite {
 
 /// `GenerateZoqFotPik_initNpcs`: nobody is in orbit while the Zoq-Fot-Pik are
 /// in distress (value 1).
-pub fn init_npcs(story: &impl Story, host: &mut impl Npcs) -> bool {
-    if story.flag("ZOQFOT_DISTRESS") != 1 {
+pub fn init_npcs(host: &mut (impl Npcs + Story)) -> bool {
+    if host.flag("ZOQFOT_DISTRESS") != 1 {
         default::init_npcs(host);
     }
     true

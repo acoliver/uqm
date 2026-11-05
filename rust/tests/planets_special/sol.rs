@@ -3,13 +3,9 @@
 use super::{Harness, SysGenRNG};
 use crate::planets_common::sol::{self, Layout, Ops, Scan};
 use uqm_rust::c_bindings::global_state::{NODE_INFO, PLANET_DESC, SYSTEM_INFO};
+pub(super) use uqm_rust::planets::generate::sol_exports::GENERATE_SOL_FUNCTIONS as generateSolFunctions;
 use uqm_rust::planets::generate::special::Body;
-use uqm_rust::planets::generate::vtable::GenerateFunctions;
 use uqm_rust::state::game_state_keys::get_game_state;
-
-unsafe extern "C" {
-    pub(super) static generateSolFunctions: GenerateFunctions;
-}
 
 impl Ops for Harness {
     fn planets(&mut self, case: Layout, descs: &mut [PLANET_DESC; 16]) -> (bool, u8, u32) {
@@ -102,7 +98,7 @@ impl Ops for Harness {
                 }
             }
         };
-        let hook = unsafe {
+        let hook = {
             if case.life {
                 generateSolFunctions.generate_life
             } else {

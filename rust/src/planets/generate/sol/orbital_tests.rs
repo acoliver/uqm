@@ -1,7 +1,7 @@
 use super::lifecycle_tests::{group, pair, QueueHost, Trace};
 use super::orbital::{Orbital, Queues, Scene};
 use super::*;
-use crate::c_bindings::global_state::{IP_GROUP, PLANET_INFO};
+use crate::c_bindings::global_state::PLANET_INFO;
 use crate::comm::dispatch::{CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER};
 use crate::planets::calc::{AnalysisSite, StarDescription};
 use crate::planets::generate::default::Npcs;
@@ -75,40 +75,14 @@ impl Site {
     }
 }
 
-impl Npcs for Site {
-    fn init_ip_groups(&mut self) -> bool {
-        self.queues.init_ip_groups()
-    }
-    fn clear_battle_group_ref(&mut self) {
-        self.queues.clear_battle_group_ref();
-    }
-    fn build_groups(&mut self) {
-        self.queues.build_groups();
-    }
-    fn load_ip_groups(&mut self) {
-        self.queues.load_ip_groups();
-    }
+impl Queues for Site {
     fn save_ip_groups(&mut self) {
-        self.queues.save_ip_groups();
-    }
-    fn reinit_npc_built_ship_q(&mut self) {
-        self.queues.reinit_npc_built_ship_q();
+        Npcs::save_ip_groups(&mut self.queues);
     }
     fn reinit_ip_group_q(&mut self) {
-        self.queues.reinit_ip_group_q();
+        Npcs::reinit_ip_group_q(&mut self.queues);
     }
-    fn yehat_civil_war(&self) -> bool {
-        self.queues.yehat_civil_war()
-    }
-    fn encounter_race(&self) -> i16 {
-        self.queues.encounter_race()
-    }
-    fn for_each_ip_group(&mut self, visit: &mut dyn FnMut(&mut IP_GROUP)) {
-        self.queues.for_each_ip_group(visit);
-    }
-}
 
-impl Queues for Site {
     fn built_ship_count(&self) -> u16 {
         self.queues.built_ship_count()
     }

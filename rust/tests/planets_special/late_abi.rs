@@ -150,80 +150,75 @@ pub fn check() {
 }
 
 fn check_live_queues(harness: &mut Harness) {
-    use uqm_rust::c_bindings::global_state::IP_GROUP;
-    use uqm_rust::collections::queue::Queue;
-    use uqm_rust::planets::c_api::LiveGame;
-
+    use uqm_rust::engine::World;
+    use uqm_rust::planets::c_api::NpcWorld;
     use uqm_rust::planets::generate::sam::GuardSite;
     extern "C" {
         static mut ScreenHeight: i32;
     }
-    let mut groups: [IP_GROUP; 3] = unsafe { std::mem::zeroed() };
-    let first = groups.as_mut_ptr();
-    for (i, group) in groups.iter_mut().enumerate() {
-        group.group_id = i as u8 + 1;
-        group.task = 8;
-        group.succ = if i == 2 {
-            std::ptr::null_mut()
-        } else {
-            unsafe { first.add(i + 1).cast() }
-        };
-    }
-    let queue = Queue {
-        head: first.cast(),
-        tail: unsafe { first.add(2).cast() },
-        pq_tab: first.cast(),
-        free_list: std::ptr::null_mut(),
-        object_size: std::mem::size_of::<IP_GROUP>() as u16,
-        num_objects: 3,
-    };
-    // No references into GlobData or the group array cross either callback.
-    unsafe {
-        let (saved_ip, saved_npc) = uqm_rust::engine::WorldData::current().write(|world| {
-            let saved = (world.game.ip_group_q, world.game.npc_built_ship_q);
-            world.game.ip_group_q = queue;
-            world.game.npc_built_ship_q = Queue::default();
-            saved
+    let (saved_queues, ids, first) = World::current().write(|world| {
+        let saved = std::mem::take(&mut world.queues);
+        let mut groups = world.ip_groups();
+        let ids = std::array::from_fn::<_, 3, _>(|i| {
+            let id = groups
+                .alloc()
+                .unwrap_or_else(|| panic!("fixture pool capacity"));
+            groups.get_mut(id).group_id = i as u8 + 1;
+            groups.get_mut(id).task = 8;
+            groups.put(id);
+            id
         });
+        (saved, ids, groups.raw(ids[0]))
+    });
+    unsafe {
         let mut visited = Vec::new();
-        GuardSite::for_each_ip_group(&mut LiveGame, &mut |group| {
-            visited.push(group.group_id);
-            group.task &= !8;
+        World::current().write(|world| {
+            GuardSite::for_each_ip_group(&mut NpcWorld::new(world), &mut |group| {
+                visited.push(group.group_id);
+                group.task &= !8;
+            });
+            assert!(ids
+                .iter()
+                .all(|id| world.ip_groups_ref().get(*id).task == 0));
         });
         assert_eq!(visited, [1, 2, 3]);
-        assert!(groups.iter().all(|group| group.task == 0));
         harness.star_index = BOMB_DEFINED;
         harness.set_star(0, 0);
-        uqm_rust::engine::World::current()
-            .write(|world| (world).set_story_state(uqm_rust::engine::StoryKey::UTWIG_BOMB, 0));
+        World::current()
+            .write(|world| world.set_story_state(uqm_rust::engine::StoryKey::UTWIG_BOMB, 0));
         let before = format!("{:?}", harness.state);
-        assert!(GENERATE_UTWIG_FUNCTIONS.init_npcs.unwrap()(
-            &mut *harness.state
-        ));
-        let current_ip = uqm_rust::engine::WorldData::current().read(|world| world.game.ip_group_q);
-        assert!(current_ip.head.is_null() && current_ip.tail.is_null());
-        assert_eq!(current_ip.free_list, first.cast());
-        assert_eq!(groups[0].succ, first.add(1).cast());
-        assert_eq!(groups[1].succ, first.add(2).cast());
-        assert!(groups[2].succ.is_null());
+        assert!(
+            World::current().write(|world| GENERATE_UTWIG_FUNCTIONS.init_npcs.unwrap()(
+                world,
+                &mut *harness.state
+            ))
+        );
+        World::current().write(|world| {
+            let mut groups = world.ip_groups();
+            assert!(groups.head().is_none() && groups.tail().is_none());
+            assert!(ids.iter().all(|id| !groups.contains(*id)));
+            let reused = groups
+                .alloc()
+                .unwrap_or_else(|| panic!("fixture pool capacity"));
+            assert_eq!(groups.raw(reused), first);
+            assert_ne!(reused, ids[0]);
+            groups.free(reused);
+        });
         assert_eq!(format!("{:?}", harness.state), before);
         assert_eq!(
-            uqm_rust::engine::World::current()
+            World::current()
                 .read(|world| get_game_state(world, uqm_rust::engine::StoryKey::UTWIG_BOMB)),
             0
         );
         assert_eq!(harness.rng_position(), 104729);
-        uqm_rust::engine::WorldData::current().write(|world| {
-            world.game.ip_group_q = saved_ip;
-            world.game.npc_built_ship_q = saved_npc;
-        });
+        World::current().write(|world| world.queues = saved_queues);
 
         use uqm_rust::c_bindings::global_state::{EncounterGroup, EncounterRace, POINT};
         let saved_race = std::ptr::addr_of!(EncounterRace).read();
         let saved_group = std::ptr::addr_of!(EncounterGroup).read();
         std::ptr::addr_of_mut!(EncounterRace).write(18);
         std::ptr::addr_of_mut!(EncounterGroup).write(7);
-        GuardSite::reset_encounter(&mut LiveGame);
+        World::current().write(|world| GuardSite::reset_encounter(&mut NpcWorld::new(world)));
         assert_eq!(std::ptr::addr_of!(EncounterRace).read(), -1);
         assert_eq!(std::ptr::addr_of!(EncounterGroup).read(), 0);
         std::ptr::addr_of_mut!(EncounterRace).write(saved_race);
@@ -250,10 +245,14 @@ fn check_live_queues(harness: &mut Harness) {
             x: (half_width + 12) as i16,
             y: (half_height - 9) as i16,
         };
-        let outer = GuardSite::planet_outer_location(&LiveGame, 4);
+        let outer = World::current()
+            .write(|world| GuardSite::planet_outer_location(&NpcWorld::new(world), 4));
         assert_eq!((outer.x, outer.y), (120, -90));
-        GuardSite::set_and_transform_ip_location(&mut LiveGame, outer);
-        let location = GuardSite::ip_location(&LiveGame);
+        World::current().write(|world| {
+            GuardSite::set_and_transform_ip_location(&mut NpcWorld::new(world), outer)
+        });
+        let location =
+            World::current().write(|world| GuardSite::ip_location(&NpcWorld::new(world)));
         assert_eq!((location.x, location.y), (120, -90));
         let origin = std::ptr::addr_of!(
             (**uqm_rust::engine::WorldData::current())

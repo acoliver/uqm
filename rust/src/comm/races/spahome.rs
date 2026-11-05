@@ -4,6 +4,7 @@
 
 use super::script::as_comm_data;
 use crate::comm::types::CommData;
+use crate::engine::battle::Cx;
 
 mod phrases;
 use phrases::*;
@@ -628,39 +629,39 @@ use descriptor::descriptor;
 pub(crate) mod live {
     use super::super::script::live::LiveScript;
     use super::*;
-    fn run(f: impl FnOnce(&mut Dialogue<'_, LiveScript<Handler>>)) {
-        let mut api = LiveScript { callback };
+    fn run(cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>)) {
+        let mut api = LiveScript::new(cx, callback);
         f(&mut Dialogue { api: &mut api });
     }
-    fn exit(r: u32) {
-        run(|s| s.handle(Handler::Exit, r as i32));
+    fn exit(cx: &mut Cx<'_>, r: u32) {
+        run(cx, |s| s.handle(Handler::Exit, r as i32));
     }
-    fn password(r: u32) {
-        run(|s| s.handle(Handler::Password, r as i32));
+    fn password(cx: &mut Cx<'_>, r: u32) {
+        run(cx, |s| s.handle(Handler::Password, r as i32));
     }
-    fn council(r: u32) {
-        run(|s| s.handle(Handler::Council, r as i32));
+    fn council(cx: &mut Cx<'_>, r: u32) {
+        run(cx, |s| s.handle(Handler::Council, r as i32));
     }
-    fn angry(r: u32) {
-        run(|s| s.handle(Handler::Angry, r as i32));
+    fn angry(cx: &mut Cx<'_>, r: u32) {
+        run(cx, |s| s.handle(Handler::Angry, r as i32));
     }
-    fn alliance(r: u32) {
-        run(|s| s.handle(Handler::Alliance, r as i32));
+    fn alliance(cx: &mut Cx<'_>, r: u32) {
+        run(cx, |s| s.handle(Handler::Alliance, r as i32));
     }
-    fn learn(r: u32) {
-        run(|s| s.handle(Handler::Learn, r as i32));
+    fn learn(cx: &mut Cx<'_>, r: u32) {
+        run(cx, |s| s.handle(Handler::Learn, r as i32));
     }
-    fn quest(r: u32) {
-        run(|s| s.handle(Handler::Quest, r as i32));
+    fn quest(cx: &mut Cx<'_>, r: u32) {
+        run(cx, |s| s.handle(Handler::Quest, r as i32));
     }
-    fn party(r: u32) {
-        run(|s| s.handle(Handler::Party, r as i32));
+    fn party(cx: &mut Cx<'_>, r: u32) {
+        run(cx, |s| s.handle(Handler::Party, r as i32));
     }
-    fn allies(r: u32) {
-        run(|s| s.handle(Handler::Allies, r as i32));
+    fn allies(cx: &mut Cx<'_>, r: u32) {
+        run(cx, |s| s.handle(Handler::Allies, r as i32));
     }
-    fn info(r: u32) {
-        run(|s| s.handle(Handler::Info, r as i32));
+    fn info(cx: &mut Cx<'_>, r: u32) {
+        run(cx, |s| s.handle(Handler::Info, r as i32));
     }
     fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
         match h {
@@ -676,17 +677,16 @@ pub(crate) mod live {
             Handler::Info => info,
         }
     }
-    pub(super) fn intro() {
-        run(|s| s.intro());
+    pub(super) fn intro(cx: &mut Cx<'_>) {
+        run(cx, |s| s.intro());
     }
-    pub(super) fn post() {
-        run(|s| s.post());
+    pub(super) fn post(cx: &mut Cx<'_>) {
+        run(cx, |s| s.post());
     }
-    pub(super) fn uninit() -> u16 {
+    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
         0
     }
-    #[no_mangle]
-    pub unsafe extern "C" fn init_spahome_comm() -> *mut crate::comm::locdata::CLocData {
+    pub unsafe fn init_spahome_comm(cx: &mut Cx<'_>) -> *mut crate::comm::locdata::CLocData {
         static mut DESC: Option<crate::comm::locdata::CLocData> = None;
         extern "C" {
             static mut ScreenWidth: i32;
@@ -694,7 +694,7 @@ pub(crate) mod live {
         let d = (&mut *std::ptr::addr_of_mut!(DESC)).get_or_insert_with(|| descriptor(ScreenWidth));
         d.alien_text_baseline.x = (1 + ((ScreenWidth - 80) >> 1)) as i16;
         d.alien_text_width = (ScreenWidth - 80 - 16) as u16;
-        run(|s| s.initialize());
+        run(cx, |s| s.initialize());
         d
     }
 }
@@ -705,10 +705,10 @@ mod branch_tests;
 pub struct SpahomeDialogue;
 
 impl super::RaceDialogue for SpahomeDialogue {
-    fn init(&self) -> CommData {
+    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
         #[cfg(not(test))]
         {
-            unsafe { as_comm_data(&*live::init_spahome_comm()) }
+            unsafe { as_comm_data(&*live::init_spahome_comm(_cx)) }
         }
         #[cfg(test)]
         {
@@ -716,17 +716,17 @@ impl super::RaceDialogue for SpahomeDialogue {
         }
     }
 
-    fn intro(&self) {
+    fn intro(&self, _cx: &mut Cx<'_>) {
         #[cfg(not(test))]
-        live::intro();
+        live::intro(_cx);
     }
 
-    fn post_encounter(&self) {
+    fn post_encounter(&self, _cx: &mut Cx<'_>) {
         #[cfg(not(test))]
-        live::post();
+        live::post(_cx);
     }
 
-    fn uninit(&self) -> u32 {
+    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
         0
     }
 }

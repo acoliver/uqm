@@ -12,21 +12,21 @@ pub(super) trait YehatApi: EncounterApi<Handler> {
 }
 
 #[cfg(not(test))]
-impl YehatApi for LiveScript<Handler> {
+impl YehatApi for LiveScript<'_, '_, Handler> {
     fn have_shofixti_escort(&self) -> bool {
-        use crate::battle::build_native::engine::HaveEscortShip;
-        unsafe { HaveEscortShip(u16::from(crate::comm::dispatch::ship::SHOFIXTI_SHIP)) != 0 }
+        crate::engine::world::fleet::count_escort_ships(
+            self.cx.borrow().world,
+            u16::from(crate::comm::dispatch::ship::SHOFIXTI_SHIP),
+        ) != 0
     }
-
     fn random_bit(&mut self) -> u8 {
         (crate::math::random() & 1) as u8
     }
-
     fn schedule_rebel_event(&mut self) {
-        use crate::time::clock_abi::live::AddEvent;
+        // SAFETY: the callback owns the initialized campaign clock on the game thread.
         unsafe {
-            AddEvent(1, 0, 0, 0, 15);
-        }
+            crate::time::clock_abi::live::add_event(self.cx.borrow_mut().world, 1, 0, 0, 0, 15)
+        };
     }
 }
 

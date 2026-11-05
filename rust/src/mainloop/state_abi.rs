@@ -65,12 +65,6 @@ accessor!(uqm_set_base_content_path(path: *const c_char) = {
     destination.add(super::dir_prep::PATH_MAX - 1).write(0);
 });
 
-type Queue = crate::navigation::abi::QUEUE;
-accessor!(rust_get_avail_race_queue() -> *mut Queue = ptr::addr_of_mut!((**WorldData::current()).game.avail_race_q));
-accessor!(rust_get_npc_built_ship_queue() -> *mut Queue = ptr::addr_of_mut!((**WorldData::current()).game.npc_built_ship_q));
-accessor!(rust_get_encounter_queue() -> *mut Queue = ptr::addr_of_mut!((**WorldData::current()).game.encounter_q));
-accessor!(rust_get_built_ship_queue() -> *mut Queue = ptr::addr_of_mut!((**WorldData::current()).game.built_ship_q));
-accessor!(rust_get_ip_group_queue() -> *mut Queue = ptr::addr_of_mut!((**WorldData::current()).game.ip_group_q));
 accessor!(rust_set_cur_star_desc_ptr_null() -> () = (**World::current()).select_star(None, crate::planets::starmap::current_catalog()));
 
 /// # Safety

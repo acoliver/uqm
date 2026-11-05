@@ -24,8 +24,8 @@ pub mod abi {
         draw_sis_title as DrawSISTitle, draw_stamp as DrawStamp, draw_text as font_DrawText,
         drawables_intersect as DrawablesIntersect, equ_frame_index as SetEquFrameIndex,
         frame_hot as GetFrameHot, frame_rect as GetFrameRect, in_hq_space as in_hqspace,
-        in_hyper_space, inc_frame_index as IncFrameIndex, insert_queue as InsertQueue,
-        music_playing as PLRPlaying, play_music as PlayMusic, release_drawable as ReleaseDrawable,
+        in_hyper_space, inc_frame_index as IncFrameIndex, music_playing as PLRPlaying,
+        play_music as PlayMusic, release_drawable as ReleaseDrawable,
         release_string_table as ReleaseStringTable, screen_transition as ScreenTransition,
         set_context as SetContext, set_context_font as SetContextFont,
         set_flash_rect as SetFlashRect, set_mipmap as TFB_DrawScreen_SetMipmap,
@@ -54,9 +54,8 @@ pub mod abi {
     pub use super::engine::sleep_thread as SleepThread;
     #[cfg(not(test))]
     pub use super::engine::{
-        alloc_link as AllocLink, draw_batch as DrawBatch, draw_rectangle as DrawRectangle,
-        frame_count as GetFrameCount, frame_index as GetFrameIndex, put_queue as PutQueue,
-        rel_frame_index as SetRelFrameIndex,
+        draw_batch as DrawBatch, draw_rectangle as DrawRectangle, frame_count as GetFrameCount,
+        frame_index as GetFrameIndex, rel_frame_index as SetRelFrameIndex,
     };
     #[cfg(not(test))]
     #[cfg(not(test))]
@@ -104,12 +103,6 @@ mod engine {
     use crate::graphics::frame_abi::DrawRectangle;
 
     use crate::sound::heart_ffi::DestroySound;
-
-    /// # Safety
-    /// `queue` must be live; both handles must belong to its pool and `handle` must be unlinked.
-    pub unsafe fn insert_queue(queue: *mut abi::QUEUE, handle: abi::HLINK, before: abi::HLINK) {
-        crate::collections::queue::InsertQueue(queue.cast(), handle, before);
-    }
 
     /// # Safety
     /// `dst` must hold `size` bytes and `src` must be NUL-terminated.
@@ -357,18 +350,6 @@ mod engine {
     /// The game thread must own initialized pacing and display state.
     pub unsafe fn sleep_thread(ticks: u32) {
         crate::battle::c_bridge::SleepThread(ticks);
-    }
-
-    /// # Safety
-    /// `queue` must be an initialized engine queue owned by the game thread.
-    pub unsafe fn alloc_link(queue: *mut abi::QUEUE) -> abi::HLINK {
-        crate::collections::queue::AllocLink(queue.cast())
-    }
-
-    /// # Safety
-    /// `handle` must be an unlinked live element allocated from `queue`.
-    pub unsafe fn put_queue(queue: *mut abi::QUEUE, handle: abi::HLINK) {
-        crate::collections::queue::PutQueue(queue.cast(), handle);
     }
 
     /// # Safety

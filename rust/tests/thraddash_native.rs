@@ -1,6 +1,5 @@
 //! Live Thraddash callbacks, using the engine queue, frames, velocity and RNG.
 
-use uqm_rust::engine::battle::schema::HLINK;
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]
@@ -21,10 +20,10 @@ unsafe fn burn(ship: &mut Ship<'_>) -> *mut ElementRecord {
     assert_ne!(trail, head);
     battle::element(trail)
 }
-unsafe fn fire(ship: &mut Ship<'_>) -> HLINK {
+unsafe fn fire(ship: &mut Ship<'_>) -> *mut std::ffi::c_void {
     ship.weapon_handles(1)[0]
 }
-unsafe fn queued() -> Vec<HLINK> {
+unsafe fn queued() -> Vec<*mut std::ffi::c_void> {
     let mut result = Vec::new();
     let mut h = battle::head();
     while !h.is_null() {
@@ -365,7 +364,10 @@ fn boost_uses_temporary_characteristics_and_preserves_the_inertial_thrust_result
                 }
                 let mut expected = PoolElement::new();
                 let thrust_status = uqm_rust::app::bridge::enter(|cx| {
-                    let id = cx.elements().id((&raw mut *expected).cast()).unwrap();
+                    let id = cx
+                        .elements()
+                        .id(std::ptr::NonNull::new((&raw mut *expected).cast()))
+                        .unwrap();
                     cx.copy_allocated_element(id, ship.id);
                     expected.parent = uqm_rust::engine::battle::Parent::Ship(expected_ss.ship_id);
                     inertial_thrust(cx, id)
@@ -769,10 +771,10 @@ fn owner_cleanup_during_collision_scan_invalidates_the_active_napalm() {
             ));
             _GraphicsStatusFlags |= 4;
             let result = uqm_rust::app::bridge::enter(|cx| {
-                let next = cx.elements().id(ship.handle);
+                let next = cx.elements().id(std::ptr::NonNull::new(ship.handle));
                 let element = cx
                     .elements()
-                    .id(trail.cast())
+                    .id(std::ptr::NonNull::new(trail.cast()))
                     .unwrap_or_else(|| panic!("live trail fixture"));
                 uqm_rust::battle::process_native::process_collisions(
                     cx,
@@ -862,10 +864,10 @@ fn napalm_and_horn_collide_with_battle_objects_without_optional_callback_skips()
                     let mut context: uqm_rust::graphics::native_abi::context_desc = mem::zeroed();
                     let old_context = uqm_rust::graphics::context_abi::SetContext(&mut context);
                     uqm_rust::app::bridge::enter(|cx| {
-                        let next = cx.elements().id(target.handle);
+                        let next = cx.elements().id(std::ptr::NonNull::new(target.handle));
                         let element = cx
                             .elements()
-                            .id(weapon.cast())
+                            .id(std::ptr::NonNull::new(weapon.cast()))
                             .unwrap_or_else(|| panic!("live weapon fixture"));
                         uqm_rust::battle::process_native::process_collisions(
                             cx,

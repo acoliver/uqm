@@ -1,4 +1,3 @@
-use uqm_rust::engine::battle::schema::HLINK;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
@@ -43,7 +42,7 @@ fn descriptor_and_twin_missile_launch() {
                             ship.weapon_record(Some(id)).cast()
                         })
                     })
-                    .collect::<Vec<HLINK>>()
+                    .collect::<Vec<*mut std::ffi::c_void>>()
             });
             for (i, &h) in out.iter().enumerate() {
                 let e = battle::element(h);

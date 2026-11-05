@@ -11,23 +11,27 @@ pub(super) trait UrquanApi: EncounterApi<Handler> {
 }
 
 #[cfg(not(test))]
-impl UrquanApi for super::super::script::live::LiveScript<Handler> {
+impl UrquanApi for super::super::script::live::LiveScript<'_, '_, Handler> {
     fn group_battle(&self, state_key: &str) -> bool {
-        let (start, _) = crate::state::game_state_keys::bit_range(state_key)
-            .expect("Ur-Quan group offset state is missing");
-        let offset = {
-            World::current()
-                .read(|world| crate::state::ffi::rust_get_game_state_32(world, start as i32))
-        };
-        {
-            WorldData::current().read(|owner| owner.game.battle_group_ref) != 0
-                && WorldData::current().read(|owner| owner.game.battle_group_ref) == offset
-        }
+        self.cx.borrow_mut().with_legacy(|| {
+            let (start, _) = crate::state::game_state_keys::bit_range(state_key)
+                .expect("Ur-Quan group offset state is missing");
+            let offset = {
+                World::current()
+                    .read(|world| crate::state::ffi::rust_get_game_state_32(world, start as i32))
+            };
+            {
+                WorldData::current().read(|owner| owner.game.battle_group_ref) != 0
+                    && WorldData::current().read(|owner| owner.game.battle_group_ref) == offset
+            }
+        })
     }
 
     fn intro_mode(&mut self, mode: i32, duration: u32) {
-        use crate::comm::comm_abi::SetCommIntroMode;
-        SetCommIntroMode(mode as u32, duration)
+        self.cx.borrow_mut().with_legacy(|| {
+            use crate::comm::comm_abi::SetCommIntroMode;
+            SetCommIntroMode(mode as u32, duration)
+        })
     }
 }
 

@@ -6,18 +6,18 @@ use crate::savegame::types::GlobalState;
 #[cfg(not(test))]
 pub(super) fn capture(
     fields: &mut Fields,
-    game: &crate::comm::locdata::CGameState,
-    state: Option<&crate::state::game_state::GameState>,
+    world: &crate::engine::World,
     journal: &mut super::parity::Journal,
 ) {
+    let game = &world.data.game;
     global(
         fields,
         &crate::savegame::runtime::global::capture_global_state(game),
     );
     value(fields, "mode", "battle_group_ref", game.battle_group_ref);
-    story(fields, state);
-    events(fields, &game.game_clock.event_q);
-    groups(fields, &game.ip_group_q, journal);
+    story(fields, world.story.as_ref());
+    events(fields, &world.clock);
+    groups(fields, world, journal);
 }
 
 pub(super) fn global(fields: &mut Fields, state: &GlobalState) {
@@ -99,17 +99,12 @@ pub(super) fn story(fields: &mut Fields, state: Option<&crate::state::game_state
 }
 
 #[cfg(not(test))]
-fn events(fields: &mut Fields, queue: &crate::collections::queue::Queue) {
-    value(
-        fields,
-        "mode.events",
-        "initialized",
-        !queue.pq_tab.is_null(),
-    );
-    if queue.pq_tab.is_null() {
+fn events(fields: &mut Fields, clock: &crate::engine::clock::GameClock) {
+    value(fields, "mode.events", "initialized", clock.initialized());
+    if !clock.initialized() {
         return;
     }
-    let events = crate::savegame::runtime::events::capture_events(queue)
+    let events = crate::savegame::runtime::events::capture_events(clock)
         .unwrap_or_else(|error| panic!("live event queue: {error}"));
     value(fields, "mode.events", "count", events.len());
     for (index, event) in events.iter().enumerate() {
@@ -122,25 +117,15 @@ fn events(fields: &mut Fields, queue: &crate::collections::queue::Queue) {
 }
 
 #[cfg(not(test))]
-fn groups(
-    fields: &mut Fields,
-    queue: &crate::collections::queue::Queue,
-    journal: &mut super::parity::Journal,
-) {
-    use crate::savegame::runtime::{
-        groups::CIpGroup,
-        queues::{walk, QueueKind},
-    };
-    if queue.pq_tab.is_null() {
-        return;
-    }
-    for pointer in walk::<CIpGroup>(queue, QueueKind::IpGroups)
-        .unwrap_or_else(|error| panic!("IP group queue: {error}"))
-    {
-        // SAFETY: the pool walker checked membership, size, alignment and link order.
-        let group = unsafe { &*pointer };
-        journal.register_parent(pointer as usize, format!("group:{}", group.group_id));
-        journal.owner(pointer as usize, -1, u32::from(group.race_id) + 1);
+fn groups(fields: &mut Fields, world: &crate::engine::World, journal: &mut super::parity::Journal) {
+    let groups = world.ip_groups_ref();
+    let mut next = groups.head();
+    while let Some(id) = next {
+        next = groups.succ(id);
+        let group = groups.get(id);
+        let address = std::ptr::from_ref(group) as usize;
+        journal.register_parent(address, format!("group:{}", group.group_id));
+        journal.owner(address, -1, u32::from(group.race_id) + 1);
         let prefix = format!("mode.groups.{}", group.group_id);
         for (name, number) in [
             ("counter", i32::from(group.group_counter)),

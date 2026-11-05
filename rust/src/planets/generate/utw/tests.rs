@@ -100,6 +100,19 @@ impl Site {
     }
 }
 
+impl crate::planets::generate::sol::orbital::Queues for Site {
+    fn save_ip_groups(&mut self) {
+        Npcs::save_ip_groups(self);
+    }
+    fn reinit_ip_group_q(&mut self) {
+        Npcs::reinit_ip_group_q(self);
+    }
+
+    fn built_ship_count(&self) -> u16 {
+        HomeContactSite::built_ship_count(self)
+    }
+}
+
 impl HomeContactSite for Site {
     fn start_sphere_tracking(&mut self) -> bool {
         self.record(Call::StartSphereTracking);
@@ -339,24 +352,26 @@ fn other_worlds_pick_up_nothing() {
 fn the_bomb_system_stays_empty_while_the_bomb_is_there() {
     let calls = Rc::new(RefCell::new(Vec::new()));
     let mut site = Site::new(&calls);
-    assert!(init_npcs(BOMB_DEFINED, &FakeStory::default(), &mut site));
+    assert!(init_npcs(
+        BOMB_DEFINED,
+        &mut (&mut FakeStory::default(), &mut site)
+    ));
     assert_eq!(calls.take(), [Call::ReinitIpGroupQ]);
 }
 
 #[test]
 fn every_other_case_starts_the_default_groups() {
-    let taken = FakeStory::with(&[("UTWIG_BOMB", 1)]);
-    let fresh = FakeStory::default();
-    for (star_index, story, stored) in [
-        (BOMB_DEFINED, &taken, false),
-        (UTWIG_DEFINED, &fresh, false),
-        (0, &fresh, false),
-        (BOMB_DEFINED, &taken, true),
+    for (star_index, bomb_taken, stored) in [
+        (BOMB_DEFINED, true, false),
+        (UTWIG_DEFINED, false, false),
+        (0, false, false),
+        (BOMB_DEFINED, true, true),
     ] {
+        let mut story = FakeStory::with(&[("UTWIG_BOMB", u32::from(bomb_taken))]);
         let calls = Rc::new(RefCell::new(Vec::new()));
         let mut site = Site::new(&calls);
         site.stored_groups = stored;
-        assert!(init_npcs(star_index, story, &mut site));
+        assert!(init_npcs(star_index, &mut (&mut story, &mut site)));
         let expected = if stored {
             vec![Call::InitIpGroups]
         } else {
@@ -376,7 +391,7 @@ fn a_bomb_system_with_ships_queued_is_a_broken_invariant() {
     let mut site = Site::new(&calls);
     site.built_ships = 1;
     let attempt = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        init_npcs(BOMB_DEFINED, &FakeStory::default(), &mut site)
+        init_npcs(BOMB_DEFINED, &mut (&mut FakeStory::default(), &mut site))
     }));
     assert!(attempt.is_err());
 }

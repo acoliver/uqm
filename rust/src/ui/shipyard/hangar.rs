@@ -1,12 +1,14 @@
 use super::shipyard_layout::{
     HANGAR_DY, HANGAR_SHIPS_ROW, HANGAR_X_COORDS, HANGAR_Y, SHIP_WIN_WIDTH,
 };
+use crate::engine::battle::link_queue::{LinkId, LinkQueue};
+use crate::engine::world::queues::Fragment;
 use crate::navigation::abi::*;
-use std::{mem, ptr};
+use std::ptr;
 
 #[derive(Clone, Copy)]
 pub(super) struct ShipWindow {
-    pub(super) ship: *mut SHIP_FRAGMENT,
+    pub(super) ship: Option<LinkId<Fragment>>,
     pub(super) finished: POINT,
     pub(super) image: STAMP,
     pub(super) left_door: STAMP,
@@ -16,17 +18,27 @@ pub(super) struct ShipWindow {
 /// # Safety
 /// The game thread retains the menu drawable and initialized fragment records.
 pub(super) unsafe fn prepare_windows(
-    queue: &mut QUEUE,
+    queue: &mut LinkQueue<'_, Fragment, 12>,
     menu: &MENU_STATE,
     mut window: COUNT,
-    yanked: Option<&mut SHIP_FRAGMENT>,
+    yanked: Option<LinkId<Fragment>>,
 ) -> ([ShipWindow; MAX_BUILT_SHIPS as usize], COUNT) {
-    // SAFETY: window records contain only nullable pointers and integer drawing coordinates.
-    let mut windows: [ShipWindow; MAX_BUILT_SHIPS as usize] = unsafe { mem::zeroed() };
+    let stamp = STAMP {
+        origin: POINT { x: 0, y: 0 },
+        frame: ptr::null_mut(),
+    };
+    let mut windows = [ShipWindow {
+        ship: None,
+        finished: POINT { x: 0, y: 0 },
+        image: stamp,
+        left_door: stamp,
+        right_door: stamp,
+    }; MAX_BUILT_SHIPS as usize];
     let mut num_ships: COUNT = 1;
-    if let Some(yanked) = yanked {
+    if let Some(id) = yanked {
+        let ship = queue.get(id);
         let info = &mut windows[0];
-        info.ship = ptr::from_mut(yanked);
+        info.ship = Some(id);
         info.left_door.origin = POINT {
             x: -(SHIP_WIN_WIDTH >> 1),
             y: 0,
@@ -35,63 +47,59 @@ pub(super) unsafe fn prepare_windows(
             x: SHIP_WIN_WIDTH >> 1,
             y: 0,
         };
-        // SAFETY: the caller retains the menu drawable throughout preparation.
+        // SAFETY: both doors are frames in the retained menu drawable.
         info.left_door.frame = unsafe { IncFrameIndex(menu.ModuleFrame) };
-        // SAFETY: both doors are frames in the same retained menu drawable.
+        // SAFETY: both doors are frames in the retained menu drawable.
         info.right_door.frame = unsafe { IncFrameIndex(info.left_door.frame) };
         info.image.origin = POINT {
             x: (SHIP_WIN_WIDTH >> 1) + 1,
             y: SHIP_WIN_WIDTH >> 1,
         };
-        info.image.frame = yanked.melee_icon;
+        info.image.frame = ship.melee_icon;
         info.finished.x = HANGAR_X_COORDS[window as usize % HANGAR_SHIPS_ROW as usize];
         info.finished.y = HANGAR_Y + HANGAR_DY * (window / HANGAR_SHIPS_ROW as COUNT) as i16;
     } else {
         let mut handle;
         if window == COUNT::MAX {
-            handle = queue.head;
-            // SAFETY: the caller retains every record in this initialized queue.
-            num_ships = unsafe { CountLinks(queue) };
+            handle = queue.head();
+            num_ships = queue.count() as COUNT;
         } else {
-            let tail = queue.tail;
-            // SAFETY: the tail belongs to the exclusively borrowed queue.
-            unsafe { RemoveQueue(queue, tail) };
-            handle = queue.head;
-            while !handle.is_null() {
-                // SAFETY: each retained link is an initialized ship fragment.
-                let ship = unsafe { &*handle.cast::<SHIP_FRAGMENT>() };
-                if ship.index as COUNT > window {
+            let Some(tail) = queue.tail() else {
+                panic!("a newly purchased hangar ship must be linked");
+            };
+            queue.remove(tail);
+            handle = queue.head();
+            while let Some(id) = handle {
+                if COUNT::from(queue.get(id).index) > window {
                     break;
                 }
-                handle = ship.succ;
+                handle = queue.succ(id);
             }
-            // SAFETY: the retained tail is detached, and handle is in this queue or null.
-            unsafe { InsertQueue(queue, tail, handle) };
-            handle = tail;
-            // SAFETY: the queue exclusively retains the inserted fragment.
-            unsafe { (*handle.cast::<SHIP_FRAGMENT>()).index = window as BYTE };
+            queue.insert_before(tail, handle);
+            handle = Some(tail);
+            queue.get_mut(tail).index = window as BYTE;
         }
-        for i in 0..num_ships {
-            // SAFETY: each retained fragment is exclusively borrowed during preparation.
-            let ship = unsafe { &mut *handle.cast::<SHIP_FRAGMENT>() };
-            let next = ship.succ;
-            let info = &mut windows[i as usize];
-            info.ship = ptr::from_mut(ship);
+        for info in &mut windows[..usize::from(num_ships)] {
+            let Some(id) = handle else {
+                panic!("hangar ship count must match its live links");
+            };
+            let ship = queue.get(id);
+            handle = queue.succ(id);
+            info.ship = Some(id);
             info.left_door.origin = POINT { x: -1, y: 0 };
             info.right_door.origin = POINT { x: 1, y: 0 };
-            // SAFETY: the caller retains the menu drawable throughout preparation.
+            // SAFETY: both doors are frames in the retained menu drawable.
             info.left_door.frame = unsafe { IncFrameIndex(menu.ModuleFrame) };
-            // SAFETY: both doors are frames in the same retained menu drawable.
+            // SAFETY: both doors are frames in the retained menu drawable.
             info.right_door.frame = unsafe { IncFrameIndex(info.left_door.frame) };
             info.image.origin = POINT {
                 x: (SHIP_WIN_WIDTH >> 1) + 1,
                 y: SHIP_WIN_WIDTH >> 1,
             };
             info.image.frame = ship.melee_icon;
-            window = ship.index as COUNT;
+            window = COUNT::from(ship.index);
             info.finished.x = HANGAR_X_COORDS[window as usize % HANGAR_SHIPS_ROW as usize];
             info.finished.y = HANGAR_Y + HANGAR_DY * (window / HANGAR_SHIPS_ROW as COUNT) as i16;
-            handle = next;
         }
     }
     (windows, num_ships)
@@ -100,39 +108,38 @@ pub(super) unsafe fn prepare_windows(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::World;
 
     fn menu() -> MENU_STATE {
         // SAFETY: menu records contain nullable handles and integers; null frames are supported.
-        unsafe { mem::zeroed() }
+        unsafe { std::mem::zeroed() }
     }
 
     #[test]
     fn empty_hangar_has_no_ship_windows() {
-        let mut queue = QUEUE::default();
+        let mut world = World::new();
+        let mut queue = world.built_ships();
         // SAFETY: this fixture owns its empty queue and menu; no drawable is dereferenced.
         let (windows, count) = unsafe { prepare_windows(&mut queue, &menu(), COUNT::MAX, None) };
         assert_eq!(count, 0);
-        assert!(windows.iter().all(|w| w.ship.is_null()));
+        assert!(windows.iter().all(|window| window.ship.is_none()));
     }
 
     #[test]
     fn existing_ships_keep_queue_order_and_row_positions() {
-        // SAFETY: ship fragments contain nullable handles and integers.
-        let mut ships: [SHIP_FRAGMENT; 2] = unsafe { mem::zeroed() };
-        ships[0].index = 1;
-        ships[1].index = 7;
-        ships[0].succ = ptr::from_mut(&mut ships[1]).cast();
-        ships[1].pred = ptr::from_mut(&mut ships[0]).cast();
-        let mut queue = QUEUE {
-            head: ptr::from_mut(&mut ships[0]).cast(),
-            tail: ptr::from_mut(&mut ships[1]).cast(),
-            ..QUEUE::default()
-        };
+        let mut world = World::new();
+        let mut queue = world.built_ships();
+        let first = queue.alloc().unwrap();
+        queue.get_mut(first).index = 1;
+        queue.put(first);
+        let second = queue.alloc().unwrap();
+        queue.get_mut(second).index = 7;
+        queue.put(second);
         // SAFETY: the fixture retains both linked records throughout preparation.
         let (windows, count) = unsafe { prepare_windows(&mut queue, &menu(), COUNT::MAX, None) };
         assert_eq!(count, 2);
-        assert_eq!(windows[0].ship, ptr::from_mut(&mut ships[0]));
-        assert_eq!(windows[1].ship, ptr::from_mut(&mut ships[1]));
+        assert_eq!(windows[0].ship, Some(first));
+        assert_eq!(windows[1].ship, Some(second));
         assert_eq!(windows[0].finished.x, HANGAR_X_COORDS[1]);
         assert_eq!(windows[0].finished.y, HANGAR_Y);
         assert_eq!(windows[1].finished.y, HANGAR_Y + HANGAR_DY);
@@ -142,46 +149,39 @@ mod tests {
 
     #[test]
     fn new_tail_ship_is_inserted_before_the_next_occupied_slot() {
-        // SAFETY: ship fragments contain nullable handles and integers.
-        let mut ships: [SHIP_FRAGMENT; 3] = unsafe { mem::zeroed() };
-        for (ship, slot) in ships.iter_mut().zip([1, 6, 0]) {
-            ship.index = slot;
-        }
-        for i in 0..2 {
-            ships[i].succ = ptr::from_mut(&mut ships[i + 1]).cast();
-            ships[i + 1].pred = ptr::from_mut(&mut ships[i]).cast();
-        }
-        let mut queue = QUEUE {
-            head: ptr::from_mut(&mut ships[0]).cast(),
-            tail: ptr::from_mut(&mut ships[2]).cast(),
-            ..QUEUE::default()
-        };
-        // SAFETY: the fixture retains all records and the mutable queue header.
+        let mut world = World::new();
+        let mut queue = world.built_ships();
+        let ids = [1, 6, 0].map(|slot| {
+            let id = queue.alloc().unwrap();
+            queue.get_mut(id).index = slot;
+            queue.put(id);
+            id
+        });
+        // SAFETY: the fixture retains all records and the mutable queue view.
         let (windows, count) = unsafe { prepare_windows(&mut queue, &menu(), 3, None) };
         assert_eq!(count, 1);
-        assert_eq!(windows[0].ship, ptr::from_mut(&mut ships[2]));
-        assert_eq!(ships[2].index, 3);
-        assert_eq!(ships[0].succ, ptr::from_ref(&ships[2]).cast_mut().cast());
-        assert_eq!(ships[2].succ, ptr::from_ref(&ships[1]).cast_mut().cast());
-        assert_eq!(queue.tail, ptr::from_mut(&mut ships[1]).cast());
+        assert_eq!(windows[0].ship, Some(ids[2]));
+        assert_eq!(queue.get(ids[2]).index, 3);
+        assert_eq!(queue.succ(ids[0]), Some(ids[2]));
+        assert_eq!(queue.succ(ids[2]), Some(ids[1]));
+        assert_eq!(queue.tail(), Some(ids[1]));
         assert_eq!(windows[0].finished.x, HANGAR_X_COORDS[3]);
     }
 
     #[test]
     fn removed_ship_uses_open_doors_without_touching_the_queue() {
-        let mut queue = QUEUE::default();
-        // SAFETY: ship fragments contain nullable handles and integers.
-        let mut removed: SHIP_FRAGMENT = unsafe { mem::zeroed() };
-        let ship = ptr::from_mut(&mut removed);
-        // SAFETY: the fixture retains the removed record and menu until preparation returns.
-        let (windows, count) =
-            unsafe { prepare_windows(&mut queue, &menu(), 7, Some(&mut removed)) };
+        let mut world = World::new();
+        let mut queue = world.built_ships();
+        let removed = queue.alloc().unwrap();
+        // SAFETY: the fixture retains the detached record and menu until preparation returns.
+        let (windows, count) = unsafe { prepare_windows(&mut queue, &menu(), 7, Some(removed)) };
         assert_eq!(count, 1);
-        assert_eq!(windows[0].ship, ship);
+        assert_eq!(windows[0].ship, Some(removed));
         assert_eq!(windows[0].left_door.origin.x, -(SHIP_WIN_WIDTH >> 1));
         assert_eq!(windows[0].right_door.origin.x, SHIP_WIN_WIDTH >> 1);
         assert_eq!(windows[0].finished.x, HANGAR_X_COORDS[1]);
         assert_eq!(windows[0].finished.y, HANGAR_Y + HANGAR_DY);
-        assert!(queue.head.is_null());
+        assert!(queue.head().is_none());
+        assert!(queue.tail().is_none());
     }
 }

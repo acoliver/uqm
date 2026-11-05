@@ -10,17 +10,16 @@ use crate::c_bindings::global_state::{NODE_INFO, PLANET_DESC, SOLARSYS_STATE};
 use crate::comm::dispatch::{conv, ship};
 use crate::planet_side::report_adapter::{DiscoveryReportPort, ReportDisposition};
 use crate::planets::c_api::{
-    built_ship_count, clone_infinite_ship_into_built_queue, clone_named_ship_into_built_queue,
-    free_lander_font, init_communication, load_planet_default_surface, load_ruins_story,
-    load_starbase_report, put_group_info, start_sphere_tracking, LiveGame,
+    built_ship_count, clone_infinite_ship_into_built_queue, free_lander_font, init_communication,
+    load_planet_default_surface, load_ruins_story, load_starbase_report, start_sphere_tracking,
+    LiveGame,
 };
 use crate::planets::consts::star_color;
 use crate::planets::ffi::{blank_node, node_or, sys_gen_rng};
 use crate::planets::generate::andro;
 use crate::planets::generate::chmmr::{self, ChmmrSite};
-use crate::planets::generate::default::Npcs;
 use crate::planets::generate::exports::discovery_report;
-use crate::planets::generate::shof::{self, ShofixtiSite};
+use crate::planets::generate::shof;
 use crate::planets::generate::special::{LiveStory, Story};
 use crate::planets::generate::special_exports::{body_of, lay_out_planets, orbit_world};
 use crate::planets::generate::vtable::{GenerateFunctions, DEFAULT_HOOKS};
@@ -43,10 +42,19 @@ unsafe extern "C" fn andro_planets(system: *mut SOLARSYS_STATE) -> bool {
     lay_out_planets(system, andro::generate_planets)
 }
 
-unsafe extern "C" fn andro_orbital(system: *mut SOLARSYS_STATE, world: *mut PLANET_DESC) -> bool {
-    orbit_world(system, world, |orbit, body| {
+unsafe fn andro_orbital(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    system: *mut SOLARSYS_STATE,
+    world: *mut PLANET_DESC,
+) -> bool {
+    let owner = std::cell::RefCell::new(cx);
+    let owner = &owner;
+
+    orbit_world(owner, system, world, |orbit, body| {
         andro::generate_orbital(orbit, body, &mut AndrosynthRuins(system), || {
-            load_planet_default_surface()
+            owner
+                .borrow_mut()
+                .with_legacy(|| load_planet_default_surface())
         })
     })
 }
@@ -83,19 +91,23 @@ unsafe extern "C" fn andro_pickup(
 
 /// The Chmmr home: the Ilwrath ambush, the Chmmr conversation and the
 /// starbase report.
-struct ChmmrHome {
+struct ChmmrHome<'a, 'b, 'c> {
     system: *mut SOLARSYS_STATE,
-    game: LiveGame,
+    game: LiveGame<'a, 'b, 'c>,
 }
 
-impl ChmmrSite for ChmmrHome {
+impl ChmmrSite for ChmmrHome<'_, '_, '_> {
     fn talk_to_chmmr(&mut self) {
-        // SAFETY: game thread, inside a planet orbit.
-        unsafe { init_communication(conv::CHMMR) };
+        // SAFETY: the orbital host exclusively owns the live campaign context on the game thread.
+        unsafe {
+            init_communication(&mut self.game.cx.borrow_mut(), conv::CHMMR);
+        }
     }
     fn start_ilwrath_sphere_tracking(&mut self) -> bool {
-        // SAFETY: game thread, with the fleet queue initialised.
-        unsafe { start_sphere_tracking(u16::from(ship::ILWRATH_SHIP)) }
+        start_sphere_tracking(
+            self.game.cx.borrow_mut().world,
+            u16::from(ship::ILWRATH_SHIP),
+        )
     }
     fn save_ip_groups(&mut self) {
         self.game.save_ip_groups();
@@ -104,25 +116,38 @@ impl ChmmrSite for ChmmrHome {
         self.game.reinit_ip_group_q();
     }
     fn built_ship_count(&self) -> u16 {
-        // SAFETY: as above.
-        unsafe { built_ship_count() }
+        built_ship_count(self.game.cx.borrow().world)
     }
     fn clone_ilwrath_fleet_into_built_queue(&mut self) {
-        // SAFETY: as above.
-        unsafe { clone_infinite_ship_into_built_queue(u16::from(ship::ILWRATH_SHIP)) };
+        // SAFETY: the orbital host exclusively owns the live campaign context on the game thread.
+        unsafe {
+            clone_infinite_ship_into_built_queue(
+                self.game.cx.borrow_mut().world,
+                u16::from(ship::ILWRATH_SHIP),
+            )
+        }
     }
     fn current_activity(&self) -> u16 {
-        crate::mainloop::ffi::get_current_activity().0
+        self.game
+            .cx
+            .borrow_mut()
+            .with_legacy(|| crate::mainloop::ffi::get_current_activity().0)
     }
     fn set_current_activity(&mut self, activity: u16) {
-        crate::mainloop::ffi::set_current_activity(crate::mainloop::types::ActivityValue(activity));
+        self.game.cx.borrow_mut().world.set_activity(activity);
     }
     fn set_global_flags_and_data(&mut self, value: u8) {
-        LiveStory.set_flag("GLOBAL_FLAGS_AND_DATA", u32::from(value));
+        self.game
+            .cx
+            .borrow_mut()
+            .world
+            .set_flag("GLOBAL_FLAGS_AND_DATA", u32::from(value));
     }
     fn talk_to_ilwrath(&mut self) {
-        // SAFETY: as above.
-        unsafe { init_communication(conv::ILWRATH) };
+        // SAFETY: the orbital host exclusively owns the live campaign context on the game thread.
+        unsafe {
+            init_communication(&mut self.game.cx.borrow_mut(), conv::ILWRATH);
+        }
     }
     fn reinit_built_ship_q(&mut self) {
         self.game.reinit_npc_built_ship_q();
@@ -131,22 +156,27 @@ impl ChmmrSite for ChmmrHome {
         self.game.load_ip_groups();
     }
     fn visit_starbase(&mut self) {
-        // SAFETY: the live solar system state on the game thread.
-        unsafe { load_starbase_report(self.system) };
-        // SAFETY: as above.
-        let presented = unsafe { discovery_report(self.system) }
-            .present(ReportDisposition::Once)
-            .expect("the starbase report is presented through the linked C archive");
-        assert!(presented, "the starbase report table was loaded");
-        // SAFETY: as above.
-        unsafe { free_lander_font(self.system) };
+        self.game.cx.borrow_mut().with_legacy(|| {
+            // SAFETY: the live solar system state on the game thread.
+            unsafe { load_starbase_report(self.system) };
+            // SAFETY: as above.
+            let presented = unsafe { discovery_report(self.system) }
+                .present(ReportDisposition::Once)
+                .expect("the starbase report is presented through the linked C archive");
+            assert!(presented, "the starbase report table was loaded");
+            // SAFETY: as above.
+            unsafe { free_lander_font(self.system) };
+        })
     }
 }
 
-fn chmmr_home(system: *mut SOLARSYS_STATE) -> ChmmrHome {
+fn chmmr_home<'a, 'b, 'c>(
+    owner: &'a std::cell::RefCell<&'b mut crate::engine::battle::Cx<'c>>,
+    system: *mut SOLARSYS_STATE,
+) -> ChmmrHome<'a, 'b, 'c> {
     ChmmrHome {
         system,
-        game: LiveGame,
+        game: LiveGame { cx: owner },
     }
 }
 
@@ -169,35 +199,34 @@ unsafe extern "C" fn chmmr_moons(system: *mut SOLARSYS_STATE, planet: *mut PLANE
     )
 }
 
-unsafe extern "C" fn chmmr_orbital(system: *mut SOLARSYS_STATE, world: *mut PLANET_DESC) -> bool {
-    orbit_world(system, world, |orbit, body| {
-        chmmr::generate_orbital(orbit, body, &LiveStory, &mut chmmr_home(system), || {
-            load_planet_default_surface()
+unsafe fn chmmr_orbital(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    system: *mut SOLARSYS_STATE,
+    world: *mut PLANET_DESC,
+) -> bool {
+    let owner = std::cell::RefCell::new(cx);
+    let owner = &owner;
+    let story = owner;
+
+    orbit_world(owner, system, world, |orbit, body| {
+        chmmr::generate_orbital(orbit, body, &story, &mut chmmr_home(owner, system), || {
+            owner
+                .borrow_mut()
+                .with_legacy(|| load_planet_default_surface())
         })
     })
 }
 
-impl ShofixtiSite for LiveGame {
-    fn clone_shofixti_named(&mut self, name_index: u8) {
-        // SAFETY: game thread, with the fleet queue initialised.
-        unsafe { clone_named_ship_into_built_queue(u16::from(ship::SHOFIXTI_SHIP), name_index) };
-    }
-    fn put_group_info(&mut self, offset: u32) -> u32 {
-        // SAFETY: game thread.
-        unsafe { put_group_info(offset) }
-    }
+unsafe fn shof_init_npcs(owner: &mut crate::engine::World, _system: *mut SOLARSYS_STATE) -> bool {
+    shof::init_npcs(&mut crate::planets::c_api::NpcWorld::new(owner))
 }
 
-unsafe extern "C" fn shof_init_npcs(_system: *mut SOLARSYS_STATE) -> bool {
-    shof::init_npcs(&mut LiveStory, &mut LiveGame)
+unsafe fn shof_reinit_npcs(owner: &mut crate::engine::World, _system: *mut SOLARSYS_STATE) -> bool {
+    shof::reinit_npcs(&mut crate::planets::c_api::NpcWorld::new(owner))
 }
 
-unsafe extern "C" fn shof_reinit_npcs(_system: *mut SOLARSYS_STATE) -> bool {
-    shof::reinit_npcs(&LiveStory, &mut LiveGame)
-}
-
-unsafe extern "C" fn shof_uninit_npcs(_system: *mut SOLARSYS_STATE) -> bool {
-    shof::uninit_npcs(&mut LiveStory, &mut LiveGame)
+unsafe fn shof_uninit_npcs(owner: &mut crate::engine::World, _system: *mut SOLARSYS_STATE) -> bool {
+    shof::uninit_npcs(&mut crate::planets::c_api::NpcWorld::new(owner))
 }
 
 unsafe extern "C" fn shof_planets(system: *mut SOLARSYS_STATE) -> bool {

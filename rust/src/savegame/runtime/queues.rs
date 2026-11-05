@@ -2,10 +2,8 @@
 //! game's live queues: `GLOBAL (avail_race_q)`, `npc_built_ship_q` and
 //! `built_ship_q`.
 //!
-//! All three are `QUEUE_TABLE` pools driven by the Rust queue owner in
-//! `collections::queue`. `avail_race_q` holds one `FLEET_INFO` per race and is
-//! built once by `InitGameStructures` (the template resources are loaded
-//! there, which is still C). The two ship queues hold `SHIP_FRAGMENT`s.
+//! World owns three fixed-capacity pools. The fleet templates and their loaded
+//! resources survive restore; fragment pools are replaced in save-file order.
 //!
 //! Capture follows `SaveRaceQueue` and `SaveShipQueue`. Restore follows
 //! `LoadRaceQueue` and `LoadShipQueue`, plus the `ReinitQueue` calls `LoadGame`
@@ -37,26 +35,19 @@
 //!   an escort that has more crew than its ship holds are rejected.
 //!
 //! Not ported here: `InitGameStructures`, which makes `avail_race_q` and its
-//! templates. The "IGpQ" and "Enct" queues are in `groups`, which reuses the
-//! pool walker of this module.
+//! templates. The "IGpQ" and "Enct" queues are in `groups`, which uses the same
+//! typed traversal order.
 
-use std::ffi::c_void;
 use std::fmt;
-use std::mem::{align_of, size_of};
 
-use crate::collections::queue::{LinkLayout, Queue, ReinitQueue};
 use crate::comm::dispatch::{
-    clone_ship_fragment_from, production_captain_name, CFleetInfo, CPoint, CShipFragment,
-    INFINITE_FLEET, START_ENCOUNTER, START_INTERPLANETARY,
+    production_captain_name, CPoint, INFINITE_FLEET, START_ENCOUNTER, START_INTERPLANETARY,
 };
-use crate::comm::locdata::CGameState;
+use crate::engine::battle::link_queue::{LinkQueue, QueueRecord};
+use crate::engine::clock::NUM_EVENTS;
+use crate::engine::world::queues::{FleetInfo, Fragment, ShipFragment};
+use crate::engine::World;
 use crate::savegame::types::{Point, RaceEntry, ShipFragmentEntry};
-use crate::time::clock_bridge::NUM_EVENTS;
-
-const _: () = {
-    assert!(size_of::<Queue>() == size_of::<Queue>());
-    assert!(align_of::<Queue>() == align_of::<Queue>());
-};
 
 /// `MAX_BUILT_SHIPS` (sis.h): hangar slots, so the bound of an escort's index.
 pub const MAX_BUILT_SHIPS: u8 = 12;
@@ -84,19 +75,6 @@ pub enum QueueKind {
 /// Why the queue sections could not be captured or restored.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum QueueError {
-    /// The queue has no slot table, so it was never initialised.
-    PoolMissing { queue: QueueKind },
-    /// The queue's slots are not the size of its element.
-    WrongObjectSize {
-        queue: QueueKind,
-        found: u16,
-        expected: usize,
-    },
-    /// The slot table is not aligned for its element.
-    MisalignedPool { queue: QueueKind },
-    /// A link is outside the pool, off a slot boundary, repeated, or its
-    /// back-link, or the queue's tail, disagrees with the forward links.
-    CorruptQueue { queue: QueueKind, position: usize },
     /// More ships than the queue has slots.
     TooManyShips {
         queue: QueueKind,
@@ -149,122 +127,6 @@ pub struct QueueSections {
     pub ship_queue: Vec<ShipFragmentEntry>,
 }
 
-/// An element that starts with the `LINK` fields.
-pub(crate) trait QueueElement {
-    fn pred(&self) -> *mut c_void;
-    fn succ(&self) -> *mut c_void;
-}
-
-impl QueueElement for CFleetInfo {
-    fn pred(&self) -> *mut c_void {
-        self.pred
-    }
-    fn succ(&self) -> *mut c_void {
-        self.succ
-    }
-}
-
-impl QueueElement for CShipFragment {
-    fn pred(&self) -> *mut c_void {
-        self.pred
-    }
-    fn succ(&self) -> *mut c_void {
-        self.succ
-    }
-}
-
-/// Slots of a queue that really is a pool of `T`.
-pub(super) fn pool_slots<T: QueueElement>(
-    queue: &Queue,
-    kind: QueueKind,
-) -> Result<usize, QueueError> {
-    pool_slots_layout(queue, kind, size_of::<T>(), align_of::<T>())
-}
-fn pool_slots_layout(
-    queue: &Queue,
-    kind: QueueKind,
-    size: usize,
-    align: usize,
-) -> Result<usize, QueueError> {
-    if queue.pq_tab.is_null() {
-        return Err(QueueError::PoolMissing { queue: kind });
-    }
-    if usize::from(queue.object_size) != size {
-        return Err(QueueError::WrongObjectSize {
-            queue: kind,
-            found: queue.object_size,
-            expected: size,
-        });
-    }
-    if !(queue.pq_tab as usize).is_multiple_of(align) {
-        return Err(QueueError::MisalignedPool { queue: kind });
-    }
-    Ok(usize::from(queue.num_objects))
-}
-
-/// The links of `queue`, head to tail.
-///
-/// Every link is checked against the pool, so a queue the game corrupted is an
-/// error and not a save of whatever the pointers reach.
-pub(crate) fn walk<T: QueueElement>(
-    queue: &Queue,
-    kind: QueueKind,
-) -> Result<Vec<*mut T>, QueueError> {
-    let layout = LinkLayout {
-        size: size_of::<T>(),
-        align: align_of::<T>(),
-        read: |pointer| {
-            // SAFETY: walk_layout checks each slot against this exact record layout before invoking the codec.
-            let record = unsafe { &*pointer.cast::<T>().as_ptr() };
-            (record.pred(), record.succ())
-        },
-    };
-    walk_layout(queue, kind, layout).map(|links| links.into_iter().map(|p| p.cast()).collect())
-}
-
-pub(crate) fn walk_layout(
-    queue: &Queue,
-    kind: QueueKind,
-    layout: LinkLayout,
-) -> Result<Vec<*mut c_void>, QueueError> {
-    let slots = pool_slots_layout(queue, kind, layout.size, layout.align)?;
-    let pool = queue.pq_tab as usize;
-    let slot_size = usize::from(queue.object_size);
-
-    let mut links: Vec<*mut c_void> = Vec::new();
-    let mut previous: *mut c_void = std::ptr::null_mut();
-    let mut link = queue.head;
-    while !link.is_null() {
-        let position = links.len();
-        let offset = (link as usize).wrapping_sub(pool);
-        // A queue holds each slot at most once, so more links than slots is a loop.
-        if position >= slots || offset >= slots * slot_size || !offset.is_multiple_of(slot_size) {
-            return Err(QueueError::CorruptQueue {
-                queue: kind,
-                position,
-            });
-        }
-        // SAFETY: link is non-null, aligned and inside the retained pool with the codec's exact record stride.
-        let (pred, succ) = unsafe { (layout.read)(std::ptr::NonNull::new_unchecked(link)) };
-        if pred != previous {
-            return Err(QueueError::CorruptQueue {
-                queue: kind,
-                position,
-            });
-        }
-        links.push(link);
-        previous = link;
-        link = succ;
-    }
-    if previous != queue.tail {
-        return Err(QueueError::CorruptQueue {
-            queue: kind,
-            position: links.len(),
-        });
-    }
-    Ok(links)
-}
-
 pub(super) fn point(p: CPoint) -> Point {
     Point { x: p.x, y: p.y }
 }
@@ -273,7 +135,7 @@ pub(super) fn c_point(p: Point) -> CPoint {
     CPoint { x: p.x, y: p.y }
 }
 
-fn race_entry(index: usize, fleet: &CFleetInfo) -> RaceEntry {
+fn race_entry(index: usize, fleet: &FleetInfo) -> RaceEntry {
     RaceEntry {
         // `Index` is the position in the queue and the queue holds at most
         // `u8::MAX` slots, so it fits.
@@ -295,7 +157,7 @@ fn race_entry(index: usize, fleet: &CFleetInfo) -> RaceEntry {
     }
 }
 
-fn ship_entry(fragment: &CShipFragment) -> ShipFragmentEntry {
+fn ship_entry(fragment: &ShipFragment) -> ShipFragmentEntry {
     ShipFragmentEntry {
         race_index: u16::from(fragment.race_id),
         captains_name_index: fragment.captains_name_index,
@@ -384,16 +246,25 @@ fn validate_ships(
     Ok(())
 }
 
-fn capture_ships(
-    queue: &Queue,
+pub(super) fn entries<T: QueueRecord, const N: usize, R>(
+    view: LinkQueue<'_, T, N>,
+    mut map: impl FnMut(usize, &T::Record) -> R,
+) -> Vec<R> {
+    let mut values = Vec::with_capacity(view.count());
+    let mut next = view.head();
+    while let Some(id) = next {
+        values.push(map(values.len(), view.record(id)));
+        next = view.succ(id);
+    }
+    values
+}
+
+fn capture_ships<const N: usize>(
+    queue: LinkQueue<'_, Fragment, N>,
     kind: QueueKind,
     race_count: usize,
 ) -> Result<Vec<ShipFragmentEntry>, QueueError> {
-    let entries: Vec<ShipFragmentEntry> = walk::<CShipFragment>(queue, kind)?
-        .into_iter()
-        // SAFETY: `walk` returned slots of the pool, which holds `SHIP_FRAGMENT`s.
-        .map(|link| ship_entry(unsafe { &*link }))
-        .collect();
+    let entries = entries(queue, |_, ship| ship_entry(ship));
     validate_ships(kind, &entries, race_count)?;
     Ok(entries)
 }
@@ -408,29 +279,23 @@ pub fn saves_npc_ship_queue(activity: u16) -> bool {
     activity & START_INTERPLANETARY == 0 && activity & START_ENCOUNTER != 0
 }
 
-fn capture_queues_with(game: &CGameState, with_npc: bool) -> Result<QueueSections, QueueError> {
-    let fleets = walk::<CFleetInfo>(&game.avail_race_q, QueueKind::AvailableRaces)?;
-    let race_queue = fleets
-        .iter()
-        .enumerate()
-        // SAFETY: `walk` returned slots of the pool, which holds `FLEET_INFO`s.
-        .map(|(index, &link)| race_entry(index, unsafe { &*link }))
-        .collect::<Vec<_>>();
-    validate_races(&race_queue, fleets.len())?;
-    let npc_ship_queue = if with_npc {
-        capture_ships(&game.npc_built_ship_q, QueueKind::NpcShips, fleets.len())?
-    } else {
-        Vec::new()
-    };
+fn capture_queues_with(world: &World, with_npc: bool) -> Result<QueueSections, QueueError> {
+    let race_queue = entries(world.avail_races_ref(), race_entry);
+    let races = race_queue.len();
+    validate_races(&race_queue, races)?;
     Ok(QueueSections {
         race_queue,
-        npc_ship_queue,
-        ship_queue: capture_ships(&game.built_ship_q, QueueKind::BuiltShips, fleets.len())?,
+        npc_ship_queue: if with_npc {
+            capture_ships(world.npc_built_ships_ref(), QueueKind::NpcShips, races)?
+        } else {
+            Vec::new()
+        },
+        ship_queue: capture_ships(world.built_ships_ref(), QueueKind::BuiltShips, races)?,
     })
 }
 
 /// The three queues of `game`, head to tail, whatever the game's activity.
-pub fn capture_queues(game: &CGameState) -> Result<QueueSections, QueueError> {
+pub fn capture_queues(game: &World) -> Result<QueueSections, QueueError> {
     capture_queues_with(game, true)
 }
 
@@ -440,13 +305,13 @@ pub fn capture_queues(game: &CGameState) -> Result<QueueSections, QueueError> {
 ///
 /// This reads each queue on its own; it is not a snapshot of the whole game
 /// taken under one lock, and nothing here makes a save atomic.
-pub fn capture_queues_for_activity(game: &CGameState) -> Result<QueueSections, QueueError> {
-    capture_queues_with(game, saves_npc_ship_queue(game.current_activity))
+pub fn capture_queues_for_activity(game: &World) -> Result<QueueSections, QueueError> {
+    capture_queues_with(game, saves_npc_ship_queue(game.activity()))
 }
 
 /// Make the live queues hold the given sections, drawing captain names from
 /// the game's random stream.
-pub fn restore_queues(game: &mut CGameState, sections: &QueueSections) -> Result<(), QueueError> {
+pub fn restore_queues(game: &mut World, sections: &QueueSections) -> Result<(), QueueError> {
     restore_queues_with(game, sections, &mut production_captain_name)
 }
 
@@ -454,25 +319,16 @@ pub fn restore_queues(game: &mut CGameState, sections: &QueueSections) -> Result
 ///
 /// On error the queues are untouched.
 pub fn restore_queues_with(
-    game: &mut CGameState,
+    game: &mut World,
     sections: &QueueSections,
     pick_name: &mut dyn FnMut() -> u8,
 ) -> Result<(), QueueError> {
-    let fleets = walk::<CFleetInfo>(&game.avail_race_q, QueueKind::AvailableRaces)?;
-    validate_races(&sections.race_queue, fleets.len())?;
-    for (queue, kind, entries) in [
-        (
-            &game.npc_built_ship_q,
-            QueueKind::NpcShips,
-            &sections.npc_ship_queue,
-        ),
-        (
-            &game.built_ship_q,
-            QueueKind::BuiltShips,
-            &sections.ship_queue,
-        ),
+    let races = game.avail_races_ref().count();
+    validate_races(&sections.race_queue, races)?;
+    for (capacity, kind, entries) in [
+        (14, QueueKind::NpcShips, &sections.npc_ship_queue),
+        (12, QueueKind::BuiltShips, &sections.ship_queue),
     ] {
-        let capacity = pool_slots::<CShipFragment>(queue, kind)?;
         if entries.len() > capacity {
             return Err(QueueError::TooManyShips {
                 queue: kind,
@@ -480,14 +336,16 @@ pub fn restore_queues_with(
                 capacity,
             });
         }
-        validate_ships(kind, entries, fleets.len())?;
+        validate_ships(kind, entries, races)?;
     }
 
     for entry in &sections.race_queue {
-        // SAFETY: `fleets` are the live slots of `avail_race_q`, and the
-        // validation above bounded `index` by their number.
-        let slot = fleets[usize::from(entry.index)];
-        let fleet = unsafe { &mut *slot };
+        let id = game
+            .avail_races_ref()
+            .at(usize::from(entry.index))
+            .unwrap_or_else(|| panic!("validated fleet index"));
+        let mut fleets = game.avail_races();
+        let fleet = fleets.get_mut(id);
         fleet.allied_state = entry.allied_state;
         fleet.days_left = entry.days_left;
         fleet.growth_fract = entry.growth_fract;
@@ -504,40 +362,41 @@ pub fn restore_queues_with(
         fleet.dest_loc = c_point(entry.dest_loc);
     }
 
-    let avail = std::ptr::addr_of_mut!(game.avail_race_q).cast::<Queue>();
-    let npc = std::ptr::addr_of_mut!(game.npc_built_ship_q).cast::<Queue>();
-    let built = std::ptr::addr_of_mut!(game.built_ship_q).cast::<Queue>();
-    for (queue, entries) in [
-        (npc, &sections.npc_ship_queue),
-        (built, &sections.ship_queue),
-    ] {
-        unsafe {
-            // SAFETY: The queue is initialized and exclusively borrowed; its previous links are discarded.
-            ReinitQueue(queue)
-        };
-        for entry in entries {
-            // `race_index` fits a byte: it is below the number of fleets,
-            // which is at most `u8::MAX`.
-            //
-            // SAFETY: `avail` holds `FLEET_INFO` links and `queue` is an
-            // emptied pool of `SHIP_FRAGMENT` slots, both checked above.
-            let link = unsafe {
-                clone_ship_fragment_from(avail, entry.race_index as u8, queue, 0, pick_name)
-            };
-            assert!(
-                !link.is_null(),
-                "ship queue ran out of slots or races after validation"
-            );
-            // SAFETY: the clone is a `SHIP_FRAGMENT` slot of `queue`.
-            let fragment = unsafe { &mut *link.cast::<CShipFragment>() };
-            fragment.captains_name_index = entry.captains_name_index;
-            fragment.race_id = entry.race_id;
-            fragment.index = entry.index;
-            fragment.crew_level = entry.crew_level;
-            fragment.max_crew = entry.max_crew;
-            fragment.energy_level = entry.energy_level;
-            fragment.max_energy = entry.max_energy;
-        }
-    }
+    let templates = entries(game.avail_races_ref(), |_, fleet| *fleet);
+    restore_ships(
+        game.npc_built_ships(),
+        &sections.npc_ship_queue,
+        &templates,
+        pick_name,
+    );
+    restore_ships(
+        game.built_ships(),
+        &sections.ship_queue,
+        &templates,
+        pick_name,
+    );
     Ok(())
+}
+
+fn restore_ships<const N: usize>(
+    mut queue: LinkQueue<'_, Fragment, N>,
+    entries: &[ShipFragmentEntry],
+    templates: &[FleetInfo],
+    pick_name: &mut dyn FnMut() -> u8,
+) {
+    queue.reinit();
+    for entry in entries {
+        let template = &templates[usize::from(entry.race_index)];
+        let id = queue
+            .clone_fragment(template, entry.race_index as u8, 0, &mut *pick_name)
+            .unwrap_or_else(|| panic!("ship capacity validated before installation"));
+        let fragment = queue.get_mut(id);
+        fragment.captains_name_index = entry.captains_name_index;
+        fragment.race_id = entry.race_id;
+        fragment.index = entry.index;
+        fragment.crew_level = entry.crew_level;
+        fragment.max_crew = entry.max_crew;
+        fragment.energy_level = entry.energy_level;
+        fragment.max_energy = entry.max_energy;
+    }
 }

@@ -5,12 +5,14 @@ use crate::c_bindings::global_state::{PLANET_INFO, SYSTEM_INFO};
 use crate::comm::dispatch::START_ENCOUNTER;
 use crate::planets::calc;
 use crate::planets::consts::EARTH_RADIUS;
-use crate::planets::generate::default::{self, Npcs};
+use crate::planets::generate::default;
 use crate::planets::generate::special::{Body, Orbit, Story, EARTH_ATMOSPHERE};
 use crate::planets::surface::{self, BIOLOGICAL_SCAN, MINERAL_SCAN};
 
 /// Queue operations shared by Sol's bomb reset and starbase entry.
-pub trait Queues: Npcs {
+pub trait Queues {
+    fn save_ip_groups(&mut self);
+    fn reinit_ip_group_q(&mut self);
     fn built_ship_count(&self) -> u16;
 }
 

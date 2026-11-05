@@ -25,7 +25,14 @@ impl Journal {
         role: String,
     ) {
         self.frame_sets.insert(address, frames);
-        self.parents.insert(address, role);
+        self.frame_roles.insert(address, role);
+    }
+
+    pub(super) fn frame_role(&self, address: usize) -> String {
+        self.frame_roles
+            .get(&address)
+            .unwrap_or_else(|| panic!("unregistered frame set at {address:#x}"))
+            .clone()
     }
 
     pub(in crate::automation) fn frame_set(&self, address: usize) -> Option<&[usize]> {
@@ -71,6 +78,18 @@ mod tests {
         journal.write_frame(0, &mut fields, "null");
         assert_eq!(fields["null.owner"], "none");
         assert_eq!(fields["null.retired"], "false");
+        Ok(())
+    }
+
+    #[test]
+    fn group_and_icon_slot_can_share_an_address_without_sharing_identity() -> std::io::Result<()> {
+        let directory = crate::automation::parity_state::test_directory();
+        let mut journal = Journal::create(directory.path())?;
+        journal.register_parent(17, "group:1".into());
+        journal.register_frame_set(17, vec![0], "frame-single:none".into());
+        assert_eq!(journal.parent(17), "group:1");
+        assert_eq!(journal.frame_set(17), Some([0].as_slice()));
+        assert_eq!(journal.frame_role(17), "frame-single:none");
         Ok(())
     }
 

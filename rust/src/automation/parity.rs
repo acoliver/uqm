@@ -36,6 +36,7 @@ pub struct Journal {
     pub(super) space_active: bool,
     frames: BTreeMap<usize, (String, u16)>,
     frame_sets: BTreeMap<usize, Vec<usize>>,
+    frame_roles: BTreeMap<usize, String>,
     retired_drawables: std::collections::BTreeSet<String>,
     bindings: bindings::Bindings,
 }
@@ -71,6 +72,7 @@ impl Journal {
             space_active: false,
             frames: BTreeMap::new(),
             frame_sets: BTreeMap::new(),
+            frame_roles: BTreeMap::new(),
             retired_drawables: std::collections::BTreeSet::new(),
             bindings: bindings::Bindings::default(),
         })

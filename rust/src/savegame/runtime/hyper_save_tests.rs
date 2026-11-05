@@ -49,7 +49,7 @@ fn allocate_element(elements: &mut ElementTable, value: ElementRecord) -> *mut E
 
 fn push_element(elements: &mut ElementTable, value: ElementRecord) -> *mut ElementRecord {
     let pointer = allocate_element(elements, value);
-    let id = elements.id(pointer.cast()).unwrap();
+    let id = elements.id(std::ptr::NonNull::new(pointer.cast())).unwrap();
     elements.put(id);
     pointer
 }
@@ -102,7 +102,7 @@ impl Queues {
         );
         push_element(&mut queues.display, element(0, Parent::None));
         // SAFETY: `ship` is the slot just pushed.
-        unsafe { (*ship).hShip = queues.display.id(flagship.cast()) };
+        unsafe { (*ship).hShip = queues.display.id(std::ptr::NonNull::new(flagship.cast())) };
         queues
     }
 
@@ -276,7 +276,11 @@ fn only_the_head_ship_names_the_element_and_later_ships_are_not_consulted() {
         element(PLAYER_SHIP_BIT, Parent::Ship(queue_ship(&queues.ships, 1))),
     );
     // SAFETY: `other_owner` is a slot of the ship pool.
-    unsafe { (*other_owner).hShip = queues.display.id(other_element.cast()) };
+    unsafe {
+        (*other_owner).hShip = queues
+            .display
+            .id(std::ptr::NonNull::new(other_element.cast()))
+    };
 
     let mut game = game();
     assert_eq!(queues.save(&mut game), Ok(HyperFlagship::Facing(7)));
@@ -317,7 +321,9 @@ fn a_handle_that_is_not_a_link_of_the_display_list_is_refused() {
         element(PLAYER_SHIP_BIT, Parent::Ship(queue_ship(&queues.ships, 0))),
     );
     // SAFETY: the head is a slot of the ship pool.
-    unsafe { (*queues.head_ship()).hShip = queues.display.id(loose.cast()) };
+    unsafe {
+        (*queues.head_ship()).hShip = queues.display.id(std::ptr::NonNull::new(loose.cast()))
+    };
 
     let mut game = game();
     assert_eq!(
@@ -330,7 +336,10 @@ fn a_handle_that_is_not_a_link_of_the_display_list_is_refused() {
 #[test]
 fn a_stale_generation_or_slot_outside_the_pool_is_refused() {
     let queues = Queues::flight(5);
-    let flagship = queues.display.id(queues.flagship_element().cast()).unwrap();
+    let flagship = queues
+        .display
+        .id(std::ptr::NonNull::new(queues.flagship_element().cast()))
+        .unwrap();
     for id in [
         ElementId::fixture(flagship.slot(), flagship.generation() + 1),
         ElementId::fixture(u8::MAX, 0),
@@ -373,10 +382,12 @@ fn an_owner_that_is_not_a_link_of_the_player_queue_is_refused() {
     let mut queues = Queues::flight(5);
     let free_slot = allocate(&mut queues.ships, starship(1, None));
     assert_ne!(free_slot, queues.head_ship());
+    let mut world = crate::engine::World::new();
+    let group = world.ip_groups().alloc().unwrap();
     for owner in [
         Parent::Ship(queue_ship(&queues.ships, 1)),
         Parent::Ship(crate::engine::battle::ShipId::fixture(1, 0, 0)),
-        Parent::IpGroup(0),
+        Parent::IpGroup(group),
     ] {
         // SAFETY: the flagship element is a slot of the display pool.
         unsafe { (*queues.flagship_element()).parent = owner };
@@ -403,7 +414,10 @@ fn a_disabled_ship_pool_has_no_flagship_and_writes_nothing() {
 #[test]
 fn a_retired_element_is_refused_after_its_slot_is_freed() {
     let mut queues = Queues::flight(5);
-    let id = queues.display.id(queues.flagship_element().cast()).unwrap();
+    let id = queues
+        .display
+        .id(std::ptr::NonNull::new(queues.flagship_element().cast()))
+        .unwrap();
     queues.display.remove(id);
     queues.display.free(id);
     let mut game = game();
@@ -453,8 +467,6 @@ fn queue_ship(pool: &RacePool, slot: usize) -> ShipId {
     use crate::engine::battle::link_queue::{LinkQueue, Starship};
     let queue = LinkQueue::<Starship>::borrow(pool);
     let key = pool.fixture_records().id_at(slot).unwrap();
-    let address = std::ptr::from_ref(pool.fixture_records().get(key))
-        .cast_mut()
-        .cast();
+    let address = std::ptr::from_ref(pool.fixture_records().get(key)) as usize;
     queue.ship_id(queue.id(address).unwrap())
 }

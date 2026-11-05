@@ -1999,7 +1999,7 @@ mod tests {
         s.track_mut().splice_track(1, Some("Hi"), 0.0, 2.0);
         s.track_mut().start();
 
-        fn noop(_: u32) {}
+        fn noop(_cx: &mut crate::engine::battle::Cx<'_>, _: u32) {}
         s.add_response(1, "Option A", Some(noop));
         s.add_response(2, "Option B", Some(noop));
         s.responses_mut().start_display();
@@ -2026,7 +2026,7 @@ mod tests {
     fn test_select_response_returns_callback() {
         use std::sync::atomic::{AtomicU32, Ordering};
         static CALLED_WITH: AtomicU32 = AtomicU32::new(0);
-        fn marker(r: u32) {
+        fn marker(_cx: &mut crate::engine::battle::Cx<'_>, r: u32) {
             CALLED_WITH.store(r, Ordering::SeqCst);
         }
 
@@ -2047,7 +2047,7 @@ mod tests {
         );
         let (func, rref) = result.unwrap();
         assert_eq!(rref, 42, "response_ref must match");
-        func(rref);
+        crate::comm::with_test_context(|cx| func(cx, rref));
         assert_eq!(
             CALLED_WITH.load(Ordering::SeqCst),
             42,
@@ -2380,7 +2380,7 @@ mod tests {
     /// EXPECTED FAIL against P09 stubs (stub always returns Talking).
     #[test]
     fn test_do_comm_response_continue_p10() {
-        fn noop(_: u32) {}
+        fn noop(_cx: &mut crate::engine::battle::Cx<'_>, _: u32) {}
 
         let mut s = CommState::new();
         s.init().unwrap();
@@ -2407,7 +2407,7 @@ mod tests {
     fn test_do_comm_selected_p10() {
         use std::sync::atomic::{AtomicBool, Ordering};
         static CALLED: AtomicBool = AtomicBool::new(false);
-        fn marker(_: u32) {
+        fn marker(_cx: &mut crate::engine::battle::Cx<'_>, _: u32) {
             CALLED.store(true, Ordering::SeqCst);
         }
 
@@ -2425,7 +2425,7 @@ mod tests {
             CommunicationResult::Selected(func, rref) => {
                 assert_eq!(rref, 99, "response_ref must match the registered value");
                 // Invoke to verify it is the right function pointer.
-                func(rref);
+                crate::comm::with_test_context(|cx| func(cx, rref));
                 assert!(CALLED.load(Ordering::SeqCst), "callback must be callable");
             }
             other => panic!("expected Selected(fn, 99), got {:?}", other),
@@ -2440,7 +2440,7 @@ mod tests {
     /// EXPECTED FAIL against P09 stubs (stub always returns None).
     #[test]
     fn test_select_response_returns_tuple_p10() {
-        fn noop(_: u32) {}
+        fn noop(_cx: &mut crate::engine::battle::Cx<'_>, _: u32) {}
 
         let mut s = CommState::new();
         s.init().unwrap();

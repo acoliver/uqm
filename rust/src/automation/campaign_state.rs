@@ -361,44 +361,30 @@ impl CampaignView {
     pub(crate) fn capture(world: &World) -> Self {
         let game = &world.data.game;
         let mut view = Self::from_world(world);
-        use crate::comm::dispatch::CShipFragment;
-        use crate::savegame::runtime::groups::CIpGroup;
-        use crate::savegame::runtime::queues::{walk, QueueKind};
         if !game.ship_stamp.frame.is_null() {
             // SAFETY: the supplied world retains this game-thread graphics frame.
             view.ship_facing = i32::from(unsafe {
                 crate::graphics::pixmap_abi::GetFrameIndex(game.ship_stamp.frame.cast())
             });
         }
-        // SAFETY: the supplied world retains the NPC queue through this copy.
-        view.contact_race = unsafe { game.npc_built_ship_q.head.cast::<CShipFragment>().as_ref() }
-            .map(|ship| ship.race_id);
-        if !game.built_ship_q.head.is_null() {
-            let ships = walk::<CShipFragment>(&game.built_ship_q, QueueKind::BuiltShips)
-                .unwrap_or_else(|error| panic!("live escort queue: {error}"));
-            view.escorts = ships
-                .into_iter()
-                .map(|ship| {
-                    // SAFETY: walk validated each record, and no mutation occurs during this copy.
-                    unsafe { ((*ship).race_id, (*ship).crew_level) }
-                })
-                .collect();
+        let npcs = world.npc_built_ships_ref();
+        view.contact_race = npcs.head().map(|id| npcs.get(id).race_id);
+        let ships = world.built_ships_ref();
+        let mut next = ships.head();
+        while let Some(id) = next {
+            let ship = ships.get(id);
+            view.escorts.push((ship.race_id, ship.crew_level));
+            next = ships.succ(id);
         }
-        if !game.ip_group_q.head.is_null() {
-            let groups = walk::<CIpGroup>(&game.ip_group_q, QueueKind::IpGroups)
-                .unwrap_or_else(|error| panic!("live IP group queue: {error}"));
-            view.groups = groups
-                .into_iter()
-                .filter_map(|group| {
-                    // SAFETY: walk validated each record, and no mutation occurs during this copy.
-                    let group = unsafe { &*group };
-                    (group.in_system != 0).then_some((
-                        group.race_id,
-                        group.sys_loc,
-                        (group.loc.x, group.loc.y),
-                    ))
-                })
-                .collect();
+        let groups = world.ip_groups_ref();
+        let mut next = groups.head();
+        while let Some(id) = next {
+            let group = groups.get(id);
+            if group.in_system != 0 {
+                view.groups
+                    .push((group.race_id, group.sys_loc, (group.loc.x, group.loc.y)));
+            }
+            next = groups.succ(id);
         }
         view
     }
