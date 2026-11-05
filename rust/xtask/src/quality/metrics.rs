@@ -407,10 +407,19 @@ pub fn use_paths(tree: &syn::UseTree, prefix: &str, result: &mut BTreeMap<String
     match tree {
         syn::UseTree::Path(p) => use_paths(&p.tree, &format!("{prefix}{}::", p.ident), result),
         syn::UseTree::Name(n) => {
-            result.insert(n.ident.to_string(), format!("{prefix}{}", n.ident));
+            let target = import_target(prefix, &n.ident);
+            let binding = if n.ident == "self" {
+                target
+                    .rsplit_once("::")
+                    .map_or(target.as_str(), |(_, name)| name)
+                    .to_owned()
+            } else {
+                n.ident.to_string()
+            };
+            result.insert(binding, target);
         }
         syn::UseTree::Rename(n) => {
-            result.insert(n.rename.to_string(), format!("{prefix}{}", n.ident));
+            result.insert(n.rename.to_string(), import_target(prefix, &n.ident));
         }
         syn::UseTree::Group(g) => {
             for item in &g.items {
@@ -420,6 +429,14 @@ pub fn use_paths(tree: &syn::UseTree, prefix: &str, result: &mut BTreeMap<String
         syn::UseTree::Glob(_) => {
             result.insert(format!("{prefix}*"), format!("{prefix}*"));
         }
+    }
+}
+
+fn import_target(prefix: &str, ident: &syn::Ident) -> String {
+    if ident == "self" {
+        prefix.trim_end_matches("::").to_owned()
+    } else {
+        format!("{prefix}{ident}")
     }
 }
 
@@ -444,6 +461,45 @@ pub const HOOK_FIELDS: &[&str] = &[
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn imports_from(source: &str) -> BTreeMap<String, String> {
+        let item: syn::ItemUse =
+            syn::parse_str(source).unwrap_or_else(|error| panic!("invalid test import: {error}"));
+        let mut imports = BTreeMap::new();
+        use_paths(&item.tree, "", &mut imports);
+        imports
+    }
+
+    #[test]
+    fn grouped_self_import_binds_the_module_name() {
+        let imports = imports_from("use crate::planets::c_api::{self, LiveGame};");
+        assert_eq!(imports["c_api"], "crate::planets::c_api");
+        assert_eq!(imports["LiveGame"], "crate::planets::c_api::LiveGame");
+        assert!(!imports.contains_key("self"));
+        assert_eq!(
+            imports_from("use crate::planets::c_api;"),
+            imports_from("use crate::planets::c_api::{self};")
+        );
+    }
+
+    #[test]
+    fn nested_grouped_self_and_renamed_imports_keep_each_module_path() {
+        let imports = imports_from(
+            "use crate::{planets::{self, c_api::{self as game, LiveGame as Game}}, comm::{self as dialogue, Script}};",
+        );
+        assert_eq!(imports["planets"], "crate::planets");
+        assert_eq!(imports["game"], "crate::planets::c_api");
+        assert_eq!(imports["Game"], "crate::planets::c_api::LiveGame");
+        assert_eq!(imports["dialogue"], "crate::comm");
+        assert_eq!(imports["Script"], "crate::comm::Script");
+    }
+
+    #[test]
+    fn relative_self_alias_preserves_the_relative_module() {
+        let imports = imports_from("use super::{self as parent};");
+        assert_eq!(imports["parent"], "super");
+    }
+
     #[test]
     fn zero_occurrences_of_known_metrics_are_reportable() {
         let empty = Measurement::default();
