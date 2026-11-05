@@ -40,14 +40,14 @@
 
 use std::fmt;
 
-use crate::comm::dispatch::{
-    production_captain_name, CPoint, INFINITE_FLEET, START_ENCOUNTER, START_INTERPLANETARY,
-};
+use super::activity::{INFINITE_FLEET, START_ENCOUNTER, START_INTERPLANETARY};
 use crate::engine::battle::link_queue::{LinkQueue, QueueRecord};
 use crate::engine::clock::NUM_EVENTS;
+use crate::engine::world::fleet::captain_name;
 use crate::engine::world::queues::{FleetInfo, Fragment, ShipFragment};
 use crate::engine::World;
-use crate::savegame::types::{Point, RaceEntry, ShipFragmentEntry};
+use crate::graphics::native_abi::POINT as CPoint;
+use uqm_save::{Point, RaceEntry, ShipFragmentEntry};
 
 /// `MAX_BUILT_SHIPS` (sis.h): hangar slots, so the bound of an escort's index.
 pub const MAX_BUILT_SHIPS: u8 = 12;
@@ -127,11 +127,11 @@ pub struct QueueSections {
     pub ship_queue: Vec<ShipFragmentEntry>,
 }
 
-pub(super) fn point(p: CPoint) -> Point {
+pub(crate) fn point(p: CPoint) -> Point {
     Point { x: p.x, y: p.y }
 }
 
-pub(super) fn c_point(p: Point) -> CPoint {
+pub(crate) fn c_point(p: Point) -> CPoint {
     CPoint { x: p.x, y: p.y }
 }
 
@@ -246,7 +246,7 @@ fn validate_ships(
     Ok(())
 }
 
-pub(super) fn entries<T: QueueRecord, const N: usize, R>(
+pub(crate) fn entries<T: QueueRecord, const N: usize, R>(
     view: LinkQueue<'_, T, N>,
     mut map: impl FnMut(usize, &T::Record) -> R,
 ) -> Vec<R> {
@@ -312,7 +312,7 @@ pub fn capture_queues_for_activity(game: &World) -> Result<QueueSections, QueueE
 /// Make the live queues hold the given sections, drawing captain names from
 /// the game's random stream.
 pub fn restore_queues(game: &mut World, sections: &QueueSections) -> Result<(), QueueError> {
-    restore_queues_with(game, sections, &mut production_captain_name)
+    restore_queues_with(game, sections, &mut captain_name)
 }
 
 /// `restore_queues` with the captain-name draw supplied by the caller.

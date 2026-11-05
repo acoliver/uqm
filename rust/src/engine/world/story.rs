@@ -226,6 +226,23 @@ impl fmt::Debug for GameState {
     }
 }
 
+/// Why the game-state singleton could not be read or replaced.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GameStateOwnerError {
+    /// `rust_init_game_state` has not run, so there is no state to read.
+    NotInitialized,
+}
+
+impl fmt::Display for GameStateOwnerError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NotInitialized => f.write_str("the game-state singleton is not initialised"),
+        }
+    }
+}
+
+impl std::error::Error for GameStateOwnerError {}
+
 #[cfg(test)]
 mod tests {
     use super::*;

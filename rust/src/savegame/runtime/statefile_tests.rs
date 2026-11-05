@@ -37,7 +37,9 @@ fn game() -> Box<CGameState> {
 fn fresh_game() -> Box<CGameState> {
     // SAFETY: no requirements.
     World::current().write(rust_init_game_state);
-    init_group_info(true).unwrap();
+    World::current()
+        .write(|world| init_group_info(world, true))
+        .unwrap();
     World::current()
         .write(|world| {
             with_state_files(world, |files| {
@@ -703,7 +705,9 @@ fn init_group_info_matches_the_c_initialiser() {
                 })
                 .unwrap();
 
-            init_group_info(false).unwrap();
+            World::current()
+                .write(|world| init_group_info(world, false))
+                .unwrap();
             let mut empty_random = vec![0, 0, 0, 0, 0xff, 0xff, 0, 0];
             empty_random.extend_from_slice(&[0; 260]);
             assert_eq!(file(RANDGRPINFO_FILE), empty_random);
@@ -713,7 +717,9 @@ fn init_group_info_matches_the_c_initialiser() {
                 "FirstTime FALSE keeps defined groups"
             );
 
-            init_group_info(true).unwrap();
+            World::current()
+                .write(|world| init_group_info(world, true))
+                .unwrap();
             assert_eq!(file(DEFGRPINFO_FILE), vec![0]);
 
             // An initialised but empty random file still saves its header as a group.

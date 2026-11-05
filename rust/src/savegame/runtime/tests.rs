@@ -18,8 +18,10 @@ use crate::engine::battle::link_queue::LinkId;
 use crate::engine::clock::NUM_EVENTS;
 use crate::engine::clock::{GameClock, ScheduledEvent};
 use crate::savegame::decode::decode_save;
-use crate::savegame::types::{ClockState, Extent, Point, Velocity};
-use crate::state::ffi::snapshot_game_state;
+use crate::savegame::types::{
+    ClockState, EventEntry, Extent, GlobalState, Point, Velocity, GAME_STATE_BYTES,
+};
+use crate::state::ffi::{snapshot_game_state, GameStateOwnerError};
 
 /// Tracked evidence from a real run of the C game: epic 20 load/save proof.
 const C_WRITTEN_SAVE: &[u8] = include_bytes!("../../../tests/fixtures/savegame/legacy-save.00");

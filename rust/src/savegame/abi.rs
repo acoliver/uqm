@@ -1,5 +1,5 @@
 //! The save menu's `SUMMARY_DESC` boundary.
-use super::types::{SisState, Summary};
+use super::types::Summary;
 use crate::comm::locdata::CSisState;
 
 #[repr(C)]
@@ -38,28 +38,6 @@ crate::c_bindings::assert_c_layout!(
         save_name: SaveName,
     }
 );
-
-impl From<&SisState> for CSisState {
-    fn from(s: &SisState) -> Self {
-        Self {
-            log_x: s.log_x,
-            log_y: s.log_y,
-            res_units: s.res_units,
-            fuel_on_board: s.fuel_on_board,
-            crew_enlisted: s.crew_enlisted,
-            total_element_mass: s.total_element_mass,
-            total_bio_mass: s.total_bio_mass,
-            module_slots: s.module_slots,
-            drive_slots: s.drive_slots,
-            jet_slots: s.jet_slots,
-            num_landers: s.num_landers,
-            element_amounts: s.element_amounts,
-            ship_name: s.ship_name,
-            commander_name: s.commander_name,
-            planet_name: s.planet_name,
-        }
-    }
-}
 
 impl From<&Summary> for SummaryDesc {
     fn from(s: &Summary) -> Self {

@@ -256,43 +256,14 @@ mod live {
         let mut len = 0;
         cfilelength(decoder.0, &mut len);
         let legacy = decode_legacy_payload(&saved_summary, decoder, len)?;
-        let game = &mut world.data.game;
-        let save = legacy.save;
-        super::super::runtime::restore_runtime(
-            game,
-            &mut world.story,
-            &save.global,
-            &save.game_state,
-            &save.events,
-            &mut world.clock,
-        )?;
-        super::super::runtime::queues::restore_queues(
+        let star = legacy.save.star;
+        let activity = crate::engine::save::apply_legacy(
+            legacy.save,
             world,
-            &super::super::runtime::queues::QueueSections {
-                race_queue: save.race_queue,
-                npc_ship_queue: save.npc_ship_queue,
-                ship_queue: save.ship_queue,
-            },
+            legacy.state_files,
+            legacy.battle_group_ref,
         )?;
-        super::super::runtime::groups::restore_loaded_groups(
-            world,
-            &super::super::runtime::groups::GroupSections {
-                ip_group_queue: save.ip_group_queue,
-                encounters: save.encounters,
-            },
-        )?;
-        world.files.canned_nodes.clear();
-        for (index, image) in [0, 2, 1].into_iter().zip(&legacy.state_files) {
-            world
-                .files
-                .replace_contents(index, image)
-                .expect("three state files exist");
-        }
-        world.data.game.battle_group_ref = legacy.battle_group_ref;
-        std::ptr::addr_of_mut!(world.data.flagship)
-            .cast::<crate::comm::locdata::CSisState>()
-            .write((&save.summary.sis).into());
-        Ok(Some((save.star, save.global.current_activity)))
+        Ok(Some((star, activity)))
     }
 }
 #[cfg(not(test))]

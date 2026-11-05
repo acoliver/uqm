@@ -1,9 +1,9 @@
 //! Capture and restore of scheduled events in save-file order.
 
+use crate::engine::clock::days_in_month;
 use crate::engine::clock::{GameClock, NUM_EVENTS};
-use crate::savegame::types::EventEntry;
-use crate::time::clock_bridge::days_in_month;
 use std::fmt;
+use uqm_save::EventEntry;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EventError {
@@ -112,7 +112,7 @@ pub fn restore_events(clock: &mut GameClock, events: &[EventEntry]) -> Result<()
     Ok(())
 }
 
-pub(super) fn install_events(clock: &mut GameClock, events: &[EventEntry]) {
+pub(crate) fn install_events(clock: &mut GameClock, events: &[EventEntry]) {
     let mut queue = clock.events();
     queue.reinit();
     for entry in events {

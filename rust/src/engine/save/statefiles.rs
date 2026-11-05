@@ -1,27 +1,26 @@
 //! Map the live campaign's story offsets and owned state files to save sections.
 
 use super::RuntimeError;
-use crate::comm::locdata::CGameState;
+use crate::engine::battle::schema::GAME_STATE as CGameState;
 use crate::engine::world::state_file::StateFileManager;
+use crate::engine::world::story::GameStateOwnerError;
+use crate::engine::world::story::{get_state_32_raw, GameState, NUM_GAME_STATE_BITS};
+use crate::engine::StoryKey;
 use crate::engine::World;
-use crate::savegame::types::GAME_STATE_BYTES;
-use crate::state::ffi::{with_state_files, GameStateOwnerError};
-use crate::state::game_state::{get_state_32_raw, GameState, NUM_GAME_STATE_BITS};
-use crate::state::game_state_keys::bit_range;
 use uqm_save::statefiles;
 pub use uqm_save::statefiles::{
     initial_defined_image, initial_random_image, StateFileSections, StateSectionError,
     GROUP_HEADER_BYTES, NUM_SAVED_BATTLE_GROUPS,
 };
 use uqm_save::statefiles::{RestorePlan, DEFGRPINFO_FILE, RANDGRPINFO_FILE, STARINFO_FILE};
+use uqm_save::GAME_STATE_BYTES;
 
 const OFFSET_STRIDE_BITS: usize = 32;
 
 /// Defined (encounter) groups: from `SHOFIXTI_GRPOFFS0` to the end of the
 /// game-state array, one 32-bit offset each.
 fn defined_group_slots() -> (usize, usize) {
-    let (first, _) = bit_range("SHOFIXTI_GRPOFFS0").expect("SHOFIXTI_GRPOFFS0 is a game-state key");
-    let first = first as usize;
+    let first = StoryKey::SHOFIXTI_GRPOFFS0.start();
     (first, (NUM_GAME_STATE_BITS - first) / OFFSET_STRIDE_BITS)
 }
 
@@ -123,19 +122,16 @@ pub fn restore_state_files(
 
 /// `InitGroupInfo` on the live files: empty the random groups and, when
 /// `first_time`, restart the defined groups.
-pub fn init_group_info(first_time: bool) -> Result<(), RuntimeError> {
-    World::current()
-        .write(|world| {
-            with_state_files(world, |files| {
-                files
-                    .replace_contents(RANDGRPINFO_FILE, &initial_random_image())
-                    .expect("the three state files always exist");
-                if first_time {
-                    files
-                        .replace_contents(DEFGRPINFO_FILE, &initial_defined_image())
-                        .expect("the three state files always exist");
-                }
-            })
-        })
-        .map_err(RuntimeError::from)
+pub fn init_group_info(world: &mut World, first_time: bool) -> Result<(), RuntimeError> {
+    world
+        .files
+        .replace_contents(RANDGRPINFO_FILE, &initial_random_image())
+        .expect("the three state files always exist");
+    if first_time {
+        world
+            .files
+            .replace_contents(DEFGRPINFO_FILE, &initial_defined_image())
+            .expect("the three state files always exist");
+    }
+    Ok(())
 }

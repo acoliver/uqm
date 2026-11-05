@@ -1,6 +1,6 @@
 //! The LoadGame ABI and installation of a decoded save.
 use super::super::abi::SummaryDesc;
-use super::super::runtime::{self, groups, queues, statefiles};
+use super::super::runtime;
 use super::super::{SaveFile, SaveSlots};
 use crate::comm::dispatch::{IN_INTERPLANETARY, START_ENCOUNTER, START_INTERPLANETARY};
 use crate::engine::{Kernel, World};
@@ -29,48 +29,9 @@ pub(in crate::savegame) unsafe fn finish_load(star: &super::super::StarDesc, act
 }
 
 unsafe fn install(save: SaveFile) -> anyhow::Result<()> {
-    let next_activity = World::current().write(|world| -> anyhow::Result<u16> {
-        let game = &mut world.data.game;
-        let restored = runtime::restore_runtime(
-            game,
-            &mut world.story,
-            &save.global,
-            &save.game_state,
-            &save.events,
-            &mut world.clock,
-        )?;
-        queues::restore_queues(
-            world,
-            &queues::QueueSections {
-                race_queue: save.race_queue,
-                npc_ship_queue: save.npc_ship_queue,
-                ship_queue: save.ship_queue,
-            },
-        )?;
-        groups::restore_loaded_groups(
-            world,
-            &groups::GroupSections {
-                ip_group_queue: save.ip_group_queue,
-                encounters: save.encounters,
-            },
-        )?;
-        statefiles::restore_state_files(
-            &mut world.data.game,
-            &mut world.story,
-            &mut world.files,
-            &statefiles::StateFileSections {
-                scan: save.scan,
-                canned_nodes: save.canned_nodes,
-                group_list: save.group_list,
-                battle_groups: save.battle_groups,
-            },
-        )?;
-        std::ptr::addr_of_mut!(world.data.flagship)
-            .cast::<crate::comm::locdata::CSisState>()
-            .write((&save.summary.sis).into());
-        Ok(restored.next_activity)
-    })?;
-    finish_load(&save.star, next_activity);
+    let star = save.star;
+    let next_activity = World::current().write(|world| crate::engine::save::apply(save, world))?;
+    finish_load(&star, next_activity);
     Ok(())
 }
 

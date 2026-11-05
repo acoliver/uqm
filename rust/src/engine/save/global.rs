@@ -6,9 +6,11 @@
 //! `ShipStamp.frame`, `BattleGroupRef`, the queues and the clock's event queue
 //! belong to other sections or to the running game.
 
-use crate::battle::velocity::{Extent as LiveExtent, VelocityDesc};
-use crate::comm::locdata::{CGameState, CPoint};
-use crate::savegame::types::{ClockState, Extent, GlobalState, Point, Velocity};
+use crate::engine::battle::record::VELOCITY_DESC as VelocityDesc;
+use crate::engine::battle::schema::GAME_STATE as CGameState;
+use crate::graphics::native_abi::extent as LiveExtent;
+use crate::graphics::native_abi::POINT as CPoint;
+use uqm_save::{ClockState, Extent, GlobalState, Point, Velocity};
 
 fn point(live: CPoint) -> Point {
     Point {

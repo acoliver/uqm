@@ -4,7 +4,6 @@ use crate::engine::battle::link_queue::{LinkId, LinkQueue};
 use crate::engine::world::queues::Fragment;
 use crate::engine::World;
 
-#[cfg(not(test))]
 pub fn captain_name() -> u8 {
     ((crate::math::random() as u16 & 15) + 5) as u8
 }

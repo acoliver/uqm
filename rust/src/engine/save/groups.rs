@@ -46,22 +46,19 @@
 
 use std::fmt;
 
+use super::activity::{IN_INTERPLANETARY, START_ENCOUNTER, START_INTERPLANETARY};
 use super::queues::{c_point, entries, point, QueueKind};
-use crate::c_bindings::global_state;
-use crate::comm::dispatch::{
-    IN_INTERPLANETARY, MAX_HYPER_SHIPS, START_ENCOUNTER, START_INTERPLANETARY,
-};
 use crate::engine::world::queues::{
     BriefShipInfo as ShipInfo, EncounterRecord, IpGroup as GroupRecord,
 };
 use crate::engine::World;
-use crate::savegame::types::{self, BriefShipInfo, EncounterEntry, IpGroup};
+use uqm_save::{self, BriefShipInfo, EncounterEntry, IpGroup};
 
-const _: () = assert!(MAX_HYPER_SHIPS == types::MAX_HYPER_SHIPS);
+use uqm_save::MAX_HYPER_SHIPS;
 
-pub const MAX_BATTLE_GROUPS: u8 = global_state::MAX_BATTLE_GROUPS as u8;
+pub const MAX_BATTLE_GROUPS: u8 = 32;
 /// `MAX_ENCOUNTERS` (globdata.h): slots of `encounter_q`.
-pub const MAX_ENCOUNTERS: u8 = global_state::MAX_ENCOUNTERS as u8;
+pub const MAX_ENCOUNTERS: u8 = 16;
 
 /// Why the group and encounter sections could not be captured or restored.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

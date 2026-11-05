@@ -62,6 +62,27 @@ impl Default for GameClock {
     }
 }
 
+// Helper: Check if year is leap year
+pub(crate) fn is_leap_year(year: u16) -> bool {
+    (year.is_multiple_of(4) && !year.is_multiple_of(100)) || year.is_multiple_of(400)
+}
+
+// Helper: Get days in month
+pub(crate) fn days_in_month(month: u8, year: u16) -> u8 {
+    match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 => {
+            if is_leap_year(year) {
+                29
+            } else {
+                28
+            }
+        }
+        _ => 30, // Should never happen
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

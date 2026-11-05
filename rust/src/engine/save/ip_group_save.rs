@@ -39,8 +39,8 @@
 //!   and `FreeIpGroup`); this module reports their positions.
 
 use super::statefiles::StateSectionError;
+use crate::engine::clock::days_in_month;
 use crate::engine::world::state_file::{StateFileManager, DEFGRPINFO_FILE, RANDGRPINFO_FILE};
-use crate::time::clock_bridge::days_in_month;
 pub use uqm_save::ip_groups::{Date, SaveIpInput, SaveIpPlan};
 
 /// How long the groups of a system stay good, in days (`PutGroupInfo`).

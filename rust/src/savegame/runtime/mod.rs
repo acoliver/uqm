@@ -4,139 +4,32 @@
 //! Location preparation runs before capture. The menu ABI coordinates these
 //! owners on the game thread and installs the saved activity after loading.
 
-pub mod events;
-pub mod global;
-pub mod groups;
+pub use crate::engine::save::events;
+pub use crate::engine::save::global;
+pub use crate::engine::save::groups;
 pub mod hyper_save;
-pub mod ip_group_save;
+pub use crate::engine::save::ip_group_save;
 #[cfg(not(test))]
 pub mod live;
 pub mod location;
-pub mod queues;
+pub use crate::engine::save::queues;
 pub mod solar;
 pub mod star;
-pub mod statefiles;
+pub use crate::engine::save::statefiles;
 pub mod summary;
 
-use std::fmt;
-
-use super::types::{EventEntry, GlobalState, Summary, GAME_STATE_BYTES};
+use super::types::Summary;
+#[cfg(test)]
 use crate::comm::locdata::CGameState;
-use crate::engine::world::story::GameState;
-use crate::state::ffi::GameStateOwnerError;
-
-pub use events::EventError;
+pub use crate::engine::save::{
+    capture_runtime, restore_runtime, EventError, Restored, RuntimeError, RuntimeSections,
+};
 
 /// Preserve the live writer's historical `write_a16` element-amount layout.
 /// The general codec must retain distinct amounts when re-encoding a save.
 pub fn prepare_summary_for_write(summary: &mut Summary) {
     let first_amount = summary.sis.element_amounts[0];
     summary.sis.element_amounts.fill(first_amount);
-}
-
-/// The sections of a save that this module owns, as read from the live game.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RuntimeSections {
-    pub global: GlobalState,
-    pub game_state: [u8; GAME_STATE_BYTES],
-    pub events: Vec<EventEntry>,
-}
-
-/// What a restore leaves for the caller to act on.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Restored {
-    /// The activity the save was made in (`NextActivity` in `LoadGame`).
-    /// The live `current_activity` is unchanged.
-    pub next_activity: u16,
-}
-
-/// Why the runtime sections could not be captured or restored.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RuntimeError {
-    Events(EventError),
-    GameState(GameStateOwnerError),
-    StateFiles(statefiles::StateSectionError),
-    Queues(queues::QueueError),
-    Groups(groups::GroupError),
-}
-
-impl fmt::Display for RuntimeError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Events(error) => write!(f, "event queue: {error}"),
-            Self::GameState(error) => write!(f, "game state: {error}"),
-            Self::StateFiles(error) => write!(f, "state files: {error}"),
-            Self::Queues(error) => write!(f, "ship queues: {error}"),
-            Self::Groups(error) => write!(f, "group queues: {error}"),
-        }
-    }
-}
-
-impl std::error::Error for RuntimeError {}
-
-impl From<EventError> for RuntimeError {
-    fn from(error: EventError) -> Self {
-        Self::Events(error)
-    }
-}
-
-impl From<queues::QueueError> for RuntimeError {
-    fn from(error: queues::QueueError) -> Self {
-        Self::Queues(error)
-    }
-}
-
-impl From<groups::GroupError> for RuntimeError {
-    fn from(error: groups::GroupError) -> Self {
-        Self::Groups(error)
-    }
-}
-
-impl From<GameStateOwnerError> for RuntimeError {
-    fn from(error: GameStateOwnerError) -> Self {
-        Self::GameState(error)
-    }
-}
-
-/// Read "GlSt" from `game`, "GmSt" from the Rust game-state singleton (the
-/// owner of those bits; the array in `game` is only a shadow) and "Evts" from
-/// the clock's event queue.
-pub fn capture_runtime(
-    game: &CGameState,
-    activity: u16,
-    story: &Option<GameState>,
-    clock: &crate::engine::clock::GameClock,
-) -> Result<RuntimeSections, RuntimeError> {
-    Ok(RuntimeSections {
-        global: global::capture_global_state(game, activity),
-        game_state: *story
-            .as_ref()
-            .ok_or(GameStateOwnerError::NotInitialized)?
-            .as_bytes(),
-        events: events::capture_events(clock)?,
-    })
-}
-
-/// Make the live game hold the given sections.
-///
-/// Everything that can be rejected is checked before anything changes, and the
-/// one remaining fallible step, replacing the game-state singleton, runs
-/// before the first write to `game`. The singleton owns all story-state bits.
-pub fn restore_runtime(
-    game: &mut CGameState,
-    story: &mut Option<GameState>,
-    global: &GlobalState,
-    game_state: &[u8; GAME_STATE_BYTES],
-    events: &[EventEntry],
-    clock: &mut crate::engine::clock::GameClock,
-) -> Result<Restored, RuntimeError> {
-    events::validate_restore(events)?;
-    *story = Some(GameState::from_bytes(game_state));
-
-    events::install_events(clock, events);
-    Ok(Restored {
-        next_activity: global::apply_global_state(game, global),
-    })
 }
 
 #[cfg(test)]

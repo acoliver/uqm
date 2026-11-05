@@ -3,7 +3,6 @@ use crate::engine::World;
 // FFI bindings for state management.
 
 use std::ffi::CStr;
-use std::fmt;
 use std::os::raw::{c_char, c_int, c_uchar};
 
 use super::game_state::{
@@ -282,22 +281,7 @@ pub unsafe fn rust_restore_game_state_from_bytes(
     replace_game_state(world, &arr).expect("game-state singleton poisoned");
 }
 
-/// Why the game-state singleton could not be read or replaced.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum GameStateOwnerError {
-    /// `rust_init_game_state` has not run, so there is no state to read.
-    NotInitialized,
-}
-
-impl fmt::Display for GameStateOwnerError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::NotInitialized => f.write_str("the game-state singleton is not initialised"),
-        }
-    }
-}
-
-impl std::error::Error for GameStateOwnerError {}
+pub use crate::engine::world::story::GameStateOwnerError;
 
 /// Copy of the singleton's bytes: the game state a save writes as "GmSt".
 pub fn snapshot_game_state(
