@@ -121,8 +121,9 @@ pub(super) unsafe fn register(drawable: NonNull<drawable_desc>, count: u16) {
 pub(super) fn release(drawable: NonNull<drawable_desc>) {
     let allocation = super::ffi::native_allocations()
         .entries
-        .remove(&(drawable.as_ptr() as usize))
-        .unwrap_or_else(|| panic!("release of unowned drawable {drawable:p}"));
+        .remove(&(drawable.as_ptr() as usize));
+    let allocation =
+        allocation.unwrap_or_else(|| panic!("release of unowned drawable {drawable:p}"));
     drop(allocation);
 }
 
@@ -185,7 +186,9 @@ mod tests {
         release(drawable);
         assert_eq!(retained[0].frame(0), Some(frame));
         assert!(std::panic::catch_unwind(|| release(drawable)).is_err());
+        assert_eq!(retain_frame_allocations(&[frame])[0].frame(0), Some(frame));
         assert!(std::panic::catch_unwind(|| release(NonNull::dangling())).is_err());
+        assert_eq!(retain_frame_allocations(&[frame])[0].frame(0), Some(frame));
         drop(retained);
         assert!(std::panic::catch_unwind(|| retain_frame_allocations(&[frame])).is_err());
     }
