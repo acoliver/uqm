@@ -1,11 +1,22 @@
 //! Live captain-window rendering and crew/energy bookkeeping from status.c.
 
-#[cfg(not(test))]
-use crate::engine::Kernel as KernelOwner;
 use crate::ships::native::abi::*;
 
 pub fn init_status_offsets(kernel: &mut crate::engine::Kernel, height_pixels: i32) {
     kernel.status_offsets = [(height_pixels >> 1) as COORD, 0];
+}
+
+pub(crate) fn has_crew_counter(maximum: COUNT, flags: u16) -> bool {
+    maximum > MAX_CREW_SIZE as COUNT || flags & PLAYER_CAPTAIN as u16 != 0
+}
+
+fn crew_counter_layout(y: COORD, pc_menu: bool) -> (POINT, RECT) {
+    let baseline = POINT {
+        x: if pc_menu { 4 } else { 12 },
+        y: y.wrapping_add(64),
+    };
+    let background = rect(baseline.x, baseline.y.wrapping_sub(5), 24, 5);
+    (baseline, background)
 }
 
 fn crew_text(value: COUNT) -> [u8; 40] {
@@ -25,6 +36,11 @@ fn crew_text(value: COUNT) -> [u8; 40] {
         buffer[index] = digits[count - index - 1];
     }
     buffer
+}
+
+fn captain_name(name: &[u8]) -> &std::ffi::CStr {
+    std::ffi::CStr::from_bytes_until_nul(name)
+        .unwrap_or_else(|_| panic!("captain name is not terminated within its owned buffer"))
 }
 
 fn energy_delta(current: BYTE, maximum: BYTE, delta: SIZE) -> (bool, SIZE) {
@@ -211,163 +227,174 @@ pub(crate) fn explosion_flash(life: COUNT, y: COORD, mut draw: impl FnMut(Color,
     draw(color, r, true);
 }
 
+fn captain_border(y: COORD, height: SIZE, mut fill: impl FnMut(Color, RECT)) {
+    let dark = rgb15(8, 8, 8);
+    let light = rgb15(16, 16, 16);
+    fill(
+        rgb15(10, 10, 10),
+        rect(2, y.wrapping_add(65), 60, height.wrapping_sub(67)),
+    );
+    fill(
+        dark,
+        rect(1, y.wrapping_add(65), 1, height.wrapping_sub(67)),
+    );
+    fill(
+        dark,
+        rect(0, y.wrapping_add(65), 1, height.wrapping_sub(66)),
+    );
+    fill(
+        light,
+        rect(63, y.wrapping_add(65), 1, height.wrapping_sub(65)),
+    );
+    fill(
+        light,
+        rect(62, y.wrapping_add(65), 1, height.wrapping_sub(65)),
+    );
+    fill(
+        light,
+        rect(1, y.wrapping_add(height.wrapping_sub(2)), 62, 1),
+    );
+    fill(
+        light,
+        rect(0, y.wrapping_add(height.wrapping_sub(1)), 63, 1),
+    );
+    let cy = y.wrapping_add(69);
+    fill(dark, rect(59, cy, 1, 30));
+    fill(dark, rect(3, cy.wrapping_add(30), 57, 1));
+    fill(light, rect(3, cy.wrapping_sub(1), 57, 1));
+    fill(light, rect(3, cy, 1, 30));
+}
+
 #[cfg(not(test))]
 #[allow(non_snake_case)]
 pub(crate) mod engine {
     use super::*;
     use crate::engine::battle::{views::FrameSelection, Cx, ElementId};
-    use crate::ships::native::rel_frame_index;
 
-    unsafe fn filled(color: Color, mut r: RECT) {
-        SetContextForeGroundColor(color);
-        DrawFilledRectangle(&mut r);
-    }
-
-    pub(crate) unsafe fn CaptainsWindow(
-        captain: *mut CAPTAIN_STUFF,
+    pub(crate) fn captains_window(
+        cx: &Cx<'_>,
+        ship: crate::engine::battle::ShipId,
         y: COORD,
         delta: STATUS_FLAGS,
         current: STATUS_FLAGS,
         pass: COUNT,
     ) {
-        let mut stamp = STAMP {
-            origin: POINT {
-                x: 4,
-                y: y.wrapping_add(69),
-            },
-            frame: std::ptr::null_mut(),
+        let captain = cx.captain_controls(ship);
+        let origin = POINT {
+            x: 4,
+            y: y.wrapping_add(69),
         };
         let (frames, count) = turn_frames(delta, current, pass);
-        for &frame in &frames[..count] {
-            stamp.frame = rel_frame_index((*captain).turn, frame);
-            DrawStamp(&mut stamp);
+        let turn = FrameSelection::retain(captain.turn);
+        for &offset in &frames[..count] {
+            cx.draw_stamp(cx.relative_frame(turn.view(), offset).view(), origin, false);
         }
         for (flag, base) in [
-            (THRUST, (*captain).thrust),
-            (WEAPON, (*captain).weapon),
-            (SPECIAL, (*captain).special.raw()),
+            (THRUST, FrameSelection::retain(captain.thrust)),
+            (WEAPON, FrameSelection::retain(captain.weapon)),
+            (SPECIAL, captain.special.clone()),
         ] {
             if delta & flag as u16 != 0 {
-                let frame = if pass == 1 {
+                let offset = if pass == 1 {
                     1
                 } else if current & flag as u16 != 0 {
                     2
                 } else {
                     0
                 };
-                stamp.frame = rel_frame_index(base, frame);
-                DrawStamp(&mut stamp);
+                cx.draw_stamp(cx.relative_frame(base.view(), offset).view(), origin, false);
             }
         }
     }
 
-    /// # Safety
-    /// Ship info, fonts, and the active graphics context must be live.
-    #[no_mangle]
-    pub unsafe extern "C" fn DrawBattleCrewAmount(info: *mut SHIP_INFO, y: COORD) {
-        let x = if optWhichMenu == OPT_PC as i32 { 4 } else { 12 };
-        let bytes = crew_text((*info).crew_level);
-        let mut text = TEXT {
-            baseline: POINT {
-                x,
-                y: y.wrapping_add(64),
-            },
-            pStr: bytes.as_ptr().cast(),
-            align: TEXT_ALIGN_ALIGN_LEFT,
-            CharCount: COUNT::MAX,
-        };
-        SetContextFont(KernelOwner::current().read(|owner| owner.star_con_font));
-        filled(
-            rgb15(10, 10, 10),
-            rect(x, text.baseline.y.wrapping_sub(5), 24, 5),
+    pub(crate) fn draw_battle_crew_amount(
+        context: &crate::graphics::context_abi::ContextLease,
+        font: &crate::graphics::native_font::FontLease,
+        crew: COUNT,
+        y_offs: COORD,
+        pc_menu: bool,
+    ) {
+        let buffer = crew_text(crew);
+        let string = std::ffi::CStr::from_bytes_until_nul(&buffer)
+            .unwrap_or_else(|_| unreachable!("crew text is NUL-terminated"));
+        let (baseline, background) = crew_counter_layout(y_offs, pc_menu);
+        context.fill_rectangle(rgb15(0x0a, 0x0a, 0x0a), background);
+        context.draw_text(
+            font,
+            string,
+            baseline,
+            TEXT_ALIGN_ALIGN_LEFT,
+            rgb15(0, 0, 0),
         );
-        SetContextForeGroundColor(rgb15(0, 0, 0));
-        font_DrawText(&mut text);
     }
 
-    /// # Safety
-    /// Ship, captain assets, and the active status context must be live.
-    pub unsafe fn draw_captains_window(cx: &mut Cx<'_>, ship: crate::engine::battle::ShipId) {
-        let mut captain = (*cx.captain_pointer(ship)).clone();
-        let mut frame = captain.background;
-        if !frame.is_null() {
-            frame = SetAbsFrameIndex(frame, 0);
-            captain.background = frame;
-            frame = rel_frame_index(frame, 1);
-            captain.turn = frame;
-            frame = rel_frame_index(frame, 5);
-            captain.thrust = frame;
-            frame = rel_frame_index(frame, 3);
-            captain.weapon = frame;
-            frame = rel_frame_index(frame, 3);
-            captain.special = FrameSelection::retain(frame);
+    fn prepare_captain(cx: &mut Cx<'_>, ship: crate::engine::battle::ShipId) -> CAPTAIN_STUFF {
+        let mut captain = cx.captain_controls(ship).clone();
+        let background = FrameSelection::retain(captain.background);
+        if !background.is_absent() {
+            let mut frame = cx.absolute_frame(background.view(), 0);
+            captain.background = frame.raw();
+            frame = cx.relative_frame(frame.view(), 1);
+            captain.turn = frame.raw();
+            frame = cx.relative_frame(frame.view(), 5);
+            captain.thrust = frame.raw();
+            frame = cx.relative_frame(frame.view(), 3);
+            captain.weapon = frame.raw();
+            captain.special = cx.relative_frame(frame.view(), 3);
         }
-        *cx.captain_pointer(ship) = captain.clone();
-        BatchGraphics();
-        let y = cx.status_offset(ship);
-        let height = (ScreenHeight >> 1) as SIZE;
-        let dark = rgb15(8, 8, 8);
-        let light = rgb15(16, 16, 16);
-        filled(
-            rgb15(10, 10, 10),
-            rect(2, y.wrapping_add(65), 60, height.wrapping_sub(67)),
-        );
-        filled(
-            dark,
-            rect(1, y.wrapping_add(65), 1, height.wrapping_sub(67)),
-        );
-        filled(
-            dark,
-            rect(0, y.wrapping_add(65), 1, height.wrapping_sub(66)),
-        );
-        filled(
-            light,
-            rect(63, y.wrapping_add(65), 1, height.wrapping_sub(65)),
-        );
-        filled(
-            light,
-            rect(62, y.wrapping_add(65), 1, height.wrapping_sub(65)),
-        );
-        filled(
-            light,
-            rect(1, y.wrapping_add(height.wrapping_sub(2)), 62, 1),
-        );
-        filled(
-            light,
-            rect(0, y.wrapping_add(height.wrapping_sub(1)), 63, 1),
-        );
-        let cy = y.wrapping_add(69);
-        filled(dark, rect(59, cy, 1, 30));
-        filled(dark, rect(3, cy.wrapping_add(30), 57, 1));
-        filled(light, rect(3, cy.wrapping_sub(1), 57, 1));
-        filled(light, rect(3, cy, 1, 30));
-        let mut stamp = STAMP {
-            origin: POINT { x: 4, y: cy },
-            frame: captain.background,
+        *cx.captain_controls_mut(ship) = captain.clone();
+        captain
+    }
+
+    pub fn draw_captains_window(
+        cx: &mut Cx<'_>,
+        ship: crate::engine::battle::ShipId,
+        context: Option<&crate::graphics::context_abi::ContextLease>,
+        height: SIZE,
+        pc_menu: bool,
+    ) {
+        let captain = prepare_captain(cx, ship);
+        let Some(context) = context else {
+            return;
         };
-        DrawStamp(&mut stamp);
-        if cx.ship(ship).captains_name_index == 0
-            && cx.ship(ship).playerNr == RPG_PLAYER_NUM as SIZE
-        {
-            let mut text = TEXT {
-                baseline: POINT {
-                    x: 32,
-                    y: cy.wrapping_add(6),
-                },
-                pStr: (&raw const cx.world.data.flagship.commander_name).cast(),
-                align: TEXT_ALIGN_ALIGN_CENTER,
-                CharCount: COUNT::MAX,
-            };
-            SetContextForeGroundColor(rgb15(0, 20, 0));
-            SetContextFont(cx.kernel.tiny_font);
-            font_DrawText(&mut text);
-        }
-        if cx.race_stats(ship).ship_info.max_crew > MAX_CREW_SIZE as COUNT
-            || cx.race_stats(ship).ship_info.ship_flags & PLAYER_CAPTAIN as u16 != 0
-        {
-            DrawBattleCrewAmount(cx.ship_info_pointer(ship), y);
-        }
-        UnbatchGraphics();
+        context.draw_batch(|| {
+            let y = cx.status_offset(ship);
+            captain_border(y, height, |color, r| context.fill_rectangle(color, r));
+            let cy = y.wrapping_add(69);
+            let background = crate::graphics::context_abi::ContextFrame::retain(
+                std::ptr::NonNull::new(captain.background),
+            );
+            context.draw_stamp(&background, POINT { x: 4, y: cy });
+            if cx.ship(ship).captains_name_index == 0
+                && cx.ship(ship).playerNr == RPG_PLAYER_NUM as SIZE
+            {
+                let font = cx.kernel.tiny_font_lease().unwrap_or_else(|| {
+                    panic!("captain name display requires the loaded tiny font")
+                });
+                context.draw_text(
+                    &font,
+                    captain_name(&cx.world.data.flagship.commander_name),
+                    POINT {
+                        x: 32,
+                        y: cy.wrapping_add(6),
+                    },
+                    TEXT_ALIGN_ALIGN_CENTER,
+                    rgb15(0, 20, 0),
+                );
+            }
+            let info = cx.race_stats(ship).ship_info;
+            if has_crew_counter(info.max_crew, info.ship_flags) {
+                draw_battle_crew_amount(
+                    context,
+                    &cx.kernel.battle_font().unwrap_or_else(|| {
+                        panic!("numeric crew display requires the loaded battle font")
+                    }),
+                    info.crew_level,
+                    y,
+                    pc_menu,
+                );
+            }
+        });
     }
 
     pub fn delta_energy(cx: &mut Cx<'_>, e: ElementId, delta: SIZE) -> bool {
@@ -454,13 +481,31 @@ pub(crate) mod engine {
 
 #[cfg(not(test))]
 pub use engine::{
-    delta_crew, delta_energy, draw_captains_window, preprocess_status, DrawBattleCrewAmount,
-    PostProcessStatus,
+    delta_crew, delta_energy, draw_captains_window, preprocess_status, PostProcessStatus,
 };
+
+#[cfg(not(test))]
+pub(crate) use engine::draw_battle_crew_amount;
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn captain_name_borrows_only_the_bounded_name_before_its_terminator() {
+        let name = [b'Z', 0xc3, 0xb6, b'q', 0, b'X'];
+        assert_eq!(captain_name(&name).to_bytes(), "Zöq".as_bytes());
+        assert_eq!(captain_name(&[0, b'X']).to_bytes(), b"");
+        assert!(std::panic::catch_unwind(|| captain_name(b"unterminated")).is_err());
+    }
+
+    #[test]
+    fn crew_counter_is_needed_only_for_large_crews_or_player_captains() {
+        assert!(!has_crew_counter(42, 0));
+        assert!(has_crew_counter(43, 0));
+        assert!(has_crew_counter(0, PLAYER_CAPTAIN as u16));
+        assert!(!has_crew_counter(0, CREW_IMMUNE as u16));
+    }
 
     #[test]
     fn offsets_put_player_zero_at_bottom() {
@@ -494,9 +539,58 @@ mod tests {
     }
 
     #[test]
+    fn crew_counter_layout_preserves_menu_offsets_and_wrapping() {
+        for (pc_menu, x) in [(true, 4), (false, 12)] {
+            for y in [0, 120, i16::MAX] {
+                let (baseline, background) = crew_counter_layout(y, pc_menu);
+                assert_eq!((baseline.x, baseline.y), (x, y.wrapping_add(64)));
+                assert_eq!(
+                    (background.corner.x, background.corner.y),
+                    (x, y.wrapping_add(59)),
+                );
+                assert_eq!((background.extent.width, background.extent.height), (24, 5));
+            }
+        }
+    }
+
+    #[test]
     fn crew_text_is_unsigned_decimal_and_terminated() {
         assert_eq!(&crew_text(0)[..2], b"0\0");
         assert_eq!(&crew_text(65535)[..6], b"65535\0");
+    }
+
+    #[test]
+    fn captain_border_draw_order_and_status_offsets_match_the_layout() {
+        let mut draws = Vec::new();
+        captain_border(120, 120, |color, r| {
+            draws.push((
+                color.r,
+                r.corner.x,
+                r.corner.y,
+                r.extent.width,
+                r.extent.height,
+            ));
+        });
+        assert_eq!(
+            draws,
+            [
+                (82, 2, 185, 60, 53),
+                (66, 1, 185, 1, 53),
+                (66, 0, 185, 1, 54),
+                (132, 63, 185, 1, 55),
+                (132, 62, 185, 1, 55),
+                (132, 1, 238, 62, 1),
+                (132, 0, 239, 63, 1),
+                (66, 59, 189, 1, 30),
+                (66, 3, 219, 57, 1),
+                (132, 3, 188, 57, 1),
+                (132, 3, 189, 1, 30),
+            ]
+        );
+        let mut wrapped = Vec::new();
+        captain_border(i16::MAX, 120, |_, r| wrapped.push(r.corner.y));
+        assert_eq!(wrapped[0], i16::MAX.wrapping_add(65));
+        assert_eq!(wrapped[5], i16::MAX.wrapping_add(118));
     }
 
     #[test]

@@ -27,12 +27,16 @@ impl LanderSoundTable {
 /// Concrete audio adapter for an already loaded lander sound table.
 pub struct CffiPlanetSideAudio {
     sounds: LanderSoundTable,
+    channels: std::rc::Rc<std::cell::RefCell<crate::engine::battle::record::Channels>>,
 }
 
 impl CffiPlanetSideAudio {
     #[must_use]
-    pub const fn new(sounds: LanderSoundTable) -> Self {
-        Self { sounds }
+    pub(crate) const fn new(
+        sounds: LanderSoundTable,
+        channels: std::rc::Rc<std::cell::RefCell<crate::engine::battle::record::Channels>>,
+    ) -> Self {
+        Self { sounds, channels }
     }
 }
 
@@ -56,7 +60,13 @@ impl PlanetSideAudio for CffiPlanetSideAudio {
             } else {
                 2
             };
-            crate::battle::sounds::play_sound(sound, NON_POSITIONAL, None, priority);
+            crate::battle::sounds::engine::play_sound(
+                &mut self.channels.borrow_mut(),
+                sound,
+                NON_POSITIONAL,
+                None,
+                priority,
+            );
         }
         #[cfg(test)]
         let _ = cue;
@@ -88,6 +98,25 @@ mod tests {
     use super::*;
 
     #[test]
+    fn audio_retains_the_supplied_kernel_channel_state() {
+        let game = crate::engine::Game::new();
+        let channels = game.kernel.channels.clone();
+        let audio = CffiPlanetSideAudio::new(
+            LanderSoundTable::from_raw(std::ptr::null_mut()),
+            channels.clone(),
+        );
+        assert!(std::rc::Rc::ptr_eq(&audio.channels, &channels));
+        drop(game);
+        assert_eq!(
+            audio
+                .channels
+                .borrow_mut()
+                .select(std::ptr::dangling_mut(), |_| false),
+            0
+        );
+    }
+
+    #[test]
     fn cue_indices_match_planets_h_order() {
         let cues = [
             SoundCue::BiologicalDisaster,
@@ -111,7 +140,10 @@ mod tests {
 
     #[test]
     fn unloaded_sound_table_is_a_typed_error() {
-        let mut audio = CffiPlanetSideAudio::new(LanderSoundTable::from_raw(std::ptr::null_mut()));
+        let mut audio = CffiPlanetSideAudio::new(
+            LanderSoundTable::from_raw(std::ptr::null_mut()),
+            crate::engine::Game::new().kernel.channels,
+        );
         assert_eq!(
             audio.play(SoundCue::Pickup),
             Err(AdapterError::new("lander_sound_table_not_loaded"))
@@ -121,7 +153,10 @@ mod tests {
     #[test]
     fn loaded_non_linked_adapter_accepts_all_cues() {
         let raw = std::ptr::NonNull::<u8>::dangling().as_ptr().cast();
-        let mut audio = CffiPlanetSideAudio::new(LanderSoundTable::from_raw(raw));
+        let mut audio = CffiPlanetSideAudio::new(
+            LanderSoundTable::from_raw(raw),
+            crate::engine::Game::new().kernel.channels,
+        );
         assert_eq!(audio.play(SoundCue::Destroyed), Ok(()));
     }
 }

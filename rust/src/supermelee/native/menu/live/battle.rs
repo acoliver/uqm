@@ -112,7 +112,13 @@ pub(super) unsafe fn start(state: *mut MELEE_STATE) {
             "melee battle already owns a session"
         );
         (*battle).net = Some((*state).netplay.battle_net());
-        Battle(None);
+        crate::app::bridge::enter(|cx| {
+            let mut observer = cx.kernel.input_runtime().observer();
+            let mut io = crate::engine::observe::Io {
+                observer: observer.as_mut(),
+            };
+            crate::battle::battle_native::battle(cx, &mut io, None)
+        });
         (*battle).net = None;
         KernelOwner::current().write(free_gravity_well);
         KernelOwner::current().write(ClearPlayerInputAll);
@@ -124,7 +130,7 @@ pub(super) unsafe fn start(state: *mut MELEE_STATE) {
         SleepThreadUntil(FadeScreen(FADE_ALL_TO_BLACK, 840 / 2).wrapping_add(840 / 60));
         FlushColorXForms();
     }
-    (**WorldFields::current()).game.current_activity = SUPER_MELEE as u16;
+    WorldFields::current().write(|owner| owner.game.current_activity = SUPER_MELEE as u16);
     (*state).initialized = 0;
 }
 pub(super) unsafe fn start_button(state: *mut MELEE_STATE) {

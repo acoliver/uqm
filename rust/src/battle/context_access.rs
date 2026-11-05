@@ -117,14 +117,7 @@ impl Cx<'_> {
         frame: crate::engine::battle::views::FrameSelection,
         flags: u8,
     ) {
-        let mut stamp = STAMP {
-            origin,
-            frame: frame.raw(),
-        };
-        // SAFETY: the checked ship and supplied loaded frame remain live.
-        unsafe {
-            crate::battle::weapon_native::modify_silhouette(self, source, &mut stamp, flags);
-        }
+        crate::battle::weapon_native::modify_silhouette(self, source, origin, frame, flags);
     }
 
     pub fn missile(
@@ -156,24 +149,37 @@ impl Cx<'_> {
         }
     }
 
-    pub fn init_ship_status(&mut self, ship: ShipId) {
+    pub fn init_ship_status(&mut self, ship: ShipId, mut clip: Option<RECT>) {
+        use crate::ui::shipstat::init_ship_status as draw_status;
+        let clipped = clip.is_some();
+        let clip = clip
+            .as_mut()
+            .map_or(std::ptr::null_mut(), std::ptr::from_mut);
+        let info = self.ship_info_pointer(ship);
+        let font = self.kernel.battle_font();
         // SAFETY: the descriptor retains its owned status data while graphics are drawn.
-        unsafe {
-            let info = self.ship_info_pointer(ship);
-            crate::ui::shipstat::init_ship_status(info, Some(ship), std::ptr::null_mut());
-            let old = SetContext(self.kernel.status_context);
-            crate::battle::status_native::draw_captains_window(self, ship);
-            SetContext(old);
+        let pc_menu = unsafe {
+            self.with_legacy(|| draw_status(font.as_ref(), info, Some(ship), clip));
+            optWhichMenu == OPT_PC as i32
+        };
+        if !clipped {
+            let context = std::ptr::NonNull::new(self.kernel.status_context)
+                .map(crate::graphics::context_abi::ContextLease::retain);
+            let height = (self.screen_dimensions().1 >> 1) as SIZE;
+            crate::battle::status_native::draw_captains_window(
+                self,
+                ship,
+                context.as_ref(),
+                height,
+                pc_menu,
+            );
         }
     }
 
     pub fn start_battle_song_if_ready(&mut self, ship: ShipId) {
         use crate::battle::tactrans_native::opponent_alive;
-        // SAFETY: audio and ship authorities remain live on the game thread.
-        unsafe {
-            if PLRPlaying(usize::MAX as MUSIC_REF) == 0 && opponent_alive(self, ship) {
-                BattleSong(1);
-            }
+        if !crate::sound::music::plr_playing_current() && opponent_alive(self, ship) {
+            crate::battle::battle_native::engine::battle_song(self.kernel, self.world, true);
         }
     }
 
@@ -310,18 +316,7 @@ mod tactrans_native_access {
             };
             let owner = self.owner(ship);
             let angle = facing_to_angle(self.ship_state(owner).facing as i32) + HALF_CIRCLE as i32;
-            let mut rect: RECT = RECT {
-                corner: POINT { x: 0, y: 0 },
-                extent: EXTENT {
-                    width: 0,
-                    height: 0,
-                },
-            };
-            let frame = self.ship_frame(owner, 0).to_owned().raw();
-            // SAFETY: the ship owns the loaded frame; the rectangle is local output.
-            unsafe {
-                GetFrameRect(frame, &mut rect);
-            }
+            let mut rect = self.frame_rect(self.ship_frame(owner, 0));
             rect.extent.height =
                 ((rect.extent.height as i32 + rect.corner.y as i32) << ONE_SHIFT) as _;
             self.insert_before(e, self.elements().head());
@@ -377,10 +372,7 @@ mod tactrans_native_access {
         }
 
         pub fn stop_battle_music(&mut self) {
-            // SAFETY: music state is owned by the battle thread.
-            unsafe {
-                StopAllBattleMusic();
-            }
+            stop_all_battle_music(self.kernel);
         }
         pub fn start_ship_explosion(&mut self, ship: ElementId, play_sound: bool) {
             crate::battle::tactrans_native::start_ship_explosion(self, ship, play_sound);
@@ -436,7 +428,7 @@ mod status_native_access {
         pub(crate) fn draw_energy_label(&mut self, y: i16, change: i16) {
             // SAFETY: the status drawing context and fonts are initialized.
             unsafe {
-                DrawCrewFuelString(y, change);
+                self.with_legacy(|| DrawCrewFuelString(y, change));
             }
         }
         pub(crate) fn draw_captain_controls(
@@ -446,11 +438,7 @@ mod status_native_access {
             delta: u16,
             current: u16,
         ) {
-            let controls = self.captain_controls(ship).as_ptr();
-            // SAFETY: drawing consumes only this ship's loaded captain frames.
-            unsafe {
-                CaptainsWindow(controls, y, delta, current, 2);
-            }
+            captains_window(self, ship, y, delta, current, 2);
         }
     }
 }
@@ -556,7 +544,6 @@ pub(crate) mod ai_legacy;
 #[path = "race_access.rs"]
 mod race_access;
 pub(crate) mod reader_legacy;
-pub(crate) mod sound_legacy;
 
 #[cfg(not(test))]
 impl Cx<'_> {
@@ -593,11 +580,13 @@ impl Cx<'_> {
 #[cfg(not(test))]
 impl Cx<'_> {
     pub(crate) fn draw_statistics(&mut self, ship: ShipId, crew: i16, energy: i16) {
+        use crate::ui::shipstat::delta_statistics;
         let y = self.status_offset(ship);
         let info = self.ship_info_pointer(ship);
+        let font = self.kernel.battle_font();
         // SAFETY: the checked descriptor and status resources remain live during drawing.
         unsafe {
-            crate::ships::native::abi::DeltaStatistics(info, y, crew, energy);
+            self.with_legacy(|| delta_statistics(font.as_ref(), info, y, crew, energy));
         }
     }
 }
@@ -612,50 +601,31 @@ impl Cx<'_> {
         current: u16,
         pass: u16,
     ) {
-        let controls = self.captain_controls(ship).as_ptr();
-        // SAFETY: these frames are retained by this ship throughout the synchronous draw.
-        unsafe {
-            crate::battle::status_native::engine::CaptainsWindow(controls, y, delta, current, pass);
-        }
+        crate::battle::status_native::engine::captains_window(self, ship, y, delta, current, pass);
     }
 }
 
 #[cfg(not(test))]
 impl Cx<'_> {
     pub(crate) fn set_star_image(&mut self, id: ElementId) {
-        // SAFETY: the shared stars frame and its frame set remain loaded throughout the battle.
-        unsafe {
-            let frame = crate::engine::battle::views::FrameSelection::retain(DecFrameIndex(
-                self.kernel.stars_in_space,
-            ));
-            let frames = crate::engine::battle::views::Frames::native_shared(
-                crate::engine::battle::views::SharedFrames::Stars,
-                std::ptr::NonNull::new_unchecked(&raw mut self.kernel.stars_in_space),
-                1,
-            );
-            self.set_frame(id, false, frame);
-            self.set_frames(id, false, frames);
-        }
+        use crate::engine::battle::views::{Frames, SharedFrames};
+        let frames = Frames::retain_shared(
+            SharedFrames::Stars,
+            std::slice::from_ref(&self.kernel.stars_in_space),
+        );
+        let frame = self.retreat_frame(frames.view(0));
+        self.set_frame(id, false, frame);
+        self.set_frames(id, false, frames);
     }
     pub(crate) fn set_blast_frames(&mut self, id: ElementId) {
-        // SAFETY: the shared blast frames remain loaded throughout the battle.
-        unsafe {
-            let frames = crate::engine::battle::views::Frames::native_shared(
-                crate::engine::battle::views::SharedFrames::Blast,
-                std::ptr::NonNull::new_unchecked((&raw mut self.kernel.blast).cast()),
-                3,
-            );
-            self.set_frames(id, false, frames);
-        }
+        use crate::engine::battle::views::{Frames, SharedFrames};
+        let frames = Frames::retain_shared(SharedFrames::Blast, &self.kernel.blast);
+        self.set_frames(id, false, frames);
     }
     pub(crate) fn planet_frames(&self) -> crate::engine::battle::views::Frames {
-        // SAFETY: the current solar-system resources retain this frame set throughout the battle.
-        unsafe {
-            crate::engine::battle::views::Frames::native_shared(
-                crate::engine::battle::views::SharedFrames::Planet,
-                std::ptr::NonNull::from(&self.kernel.planet[0]),
-                3,
-            )
-        }
+        crate::engine::battle::views::Frames::retain_shared(
+            crate::engine::battle::views::SharedFrames::Planet,
+            &self.kernel.planet,
+        )
     }
 }

@@ -27,19 +27,6 @@ pub unsafe extern "C" fn NetMelee_getMeleeState(conn: *mut NetConnection) -> *mu
         (*conn).extra.cast()
     }
 }
-/// # Safety
-/// Called on the game thread with live connection, state and callback arguments.
-#[no_mangle]
-pub unsafe extern "C" fn NetMelee_getBattleState(
-    conn: *mut NetConnection,
-) -> *mut battlestate_struct {
-    if (*conn).state > NetState_NetState_connecting {
-        (*(*conn).stateData.cast::<BattleStateData>()).battle_state
-    } else {
-        ptr::null_mut()
-    }
-}
-
 unsafe extern "C" fn deleted(conn: *mut NetConnection) {
     (*(*conn).session).remove_net_connection((*conn).player);
 }
@@ -346,13 +333,14 @@ impl super::session::SessionCore {
             }
         }
     }
-    /// # Safety
-    /// Called on the game thread with live connection, state and callback arguments.
-    pub unsafe fn set_battle_state_connections(&self, state: *mut battlestate_struct) {
+    pub(super) fn set_battle_active_connections(&self, active: bool) {
         for player in 0..NETPLAY_NUM_PLAYERS as usize {
             let conn = self.connection(player);
             if !conn.is_null() {
-                (*(*conn).stateData.cast::<BattleStateData>()).battle_state = state;
+                // SAFETY: the session retains each initialized connection record.
+                unsafe {
+                    (*(*conn).stateData.cast::<BattleStateData>()).battle_active = active;
+                }
             }
         }
     }

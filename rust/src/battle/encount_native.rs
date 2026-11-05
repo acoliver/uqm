@@ -45,6 +45,50 @@ pub const fn combat_speed(flags: u8) -> u8 {
     }
 }
 
+struct EncounterSelection {
+    initialized: bool,
+    choice: u8,
+}
+
+#[derive(Debug, PartialEq)]
+enum SelectionAction {
+    Continue,
+    Finish,
+    Options,
+    Unknown(u8),
+}
+
+impl EncounterSelection {
+    fn new() -> Self {
+        Self {
+            initialized: false,
+            choice: 0,
+        }
+    }
+
+    fn advance(&mut self, aborted: bool, selected: bool, last_battle: bool) -> SelectionAction {
+        if aborted {
+            self.choice = 2;
+            return SelectionAction::Finish;
+        }
+        if !self.initialized {
+            self.initialized = true;
+        } else if selected {
+            return match self.choice {
+                0 | 1 => {
+                    if last_battle {
+                        self.choice = 0;
+                    }
+                    SelectionAction::Finish
+                }
+                2 => SelectionAction::Options,
+                choice => SelectionAction::Unknown(choice),
+            };
+        }
+        SelectionAction::Continue
+    }
+}
+
 #[cfg(not(test))]
 use crate::ships::native::abi::{COUNT, POINT, TEXT, TEXT_ALIGN, UNICODE};
 #[cfg(not(test))]
@@ -60,13 +104,11 @@ fn text(x: i16, y: i16, align: TEXT_ALIGN, string: *const UNICODE) -> TEXT {
 #[cfg(not(test))]
 pub(crate) mod engine {
     use super::*;
+    use crate::battle::battle_native::battle;
     use crate::battle::battle_native::engine::{
-        activity, game_state, player_input, rgb15, set_activity, set_game_state,
-        set_player_control, set_player_input, sis_height, sis_width, AWESOME_RATING,
+        activity, game_state, rgb15, set_game_state, sis_height, sis_width, AWESOME_RATING,
         CYBORG_CONTROL, HUMAN_CONTROL, STANDARD_RATING,
     };
-    use crate::battle::battle_native::Battle;
-    use crate::battle::c_bridge::DoInput;
     use crate::engine::battle::link_queue;
     use crate::ships::native::abi::*;
     use crate::ships::native::{cosine, sine};
@@ -88,7 +130,7 @@ pub(crate) mod engine {
 
     use crate::graphics::resgfx::LoadGraphicInstance;
 
-    use crate::planets::starmap::naming::GetClusterName;
+    use crate::planets::starmap::{current_catalog, naming::GetClusterName};
 
     use crate::mainloop::input_abi::live::AnyButtonPress;
 
@@ -113,37 +155,36 @@ pub(crate) mod engine {
         font_DrawText(t);
     }
 
-    unsafe extern "C" fn do_select_action(ms: *mut MENU_STATE) -> BOOLEAN {
+    unsafe fn do_select_action(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        menu: &mut EncounterSelection,
+    ) -> bool {
         SetMenuSounds(0x0f, 1 << 4);
-        if activity() & CHECK_ABORT as u16 != 0 {
-            (*ms).CurState = ATTACK as u8 + 1;
-            return 0;
-        }
-        if (*ms).Initialized == 0 {
-            (*ms).Initialized = 1;
-            (*ms).InputFunc = Some(do_select_action);
-        } else if PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0 {
-            match (*ms).CurState as u32 {
-                HAIL | ATTACK => {
-                    if activity() as u8 == IN_LAST_BATTLE as u8 {
-                        (*ms).CurState = HAIL as u8;
-                    }
-                    return 0;
+        match menu.advance(
+            cx.world.activity() & CHECK_ABORT as u16 != 0,
+            PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0,
+            cx.world.activity() as u8 == IN_LAST_BATTLE as u8,
+        ) {
+            SelectionAction::Finish => return false,
+            SelectionAction::Options => {
+                if cx.with_legacy(|| GameOptions()) == 0 {
+                    return false;
                 }
-                option if option == ATTACK + 1 => {
-                    if GameOptions() == 0 {
-                        return 0;
-                    }
-                    DrawMenuStateStrings(PM_CONVERSE as u8, (*ms).CurState as i16);
+                cx.with_legacy(|| {
+                    DrawMenuStateStrings(PM_CONVERSE as u8, menu.choice as i16);
                     SetFlashRect(usize::MAX as *const RECT);
-                }
-                option => {
-                    printf(c"Unknown option: %d\n".as_ptr(), option as i32);
-                }
+                });
             }
+            SelectionAction::Unknown(choice) => {
+                printf(c"Unknown option: %d\n".as_ptr(), i32::from(choice));
+            }
+            SelectionAction::Continue => {}
         }
-        DoMenuChooser(ms, PM_CONVERSE as u8);
-        1
+        let flags = cx.world.data.game.glob_flags;
+        cx.with_legacy(|| {
+            crate::ui::menu::choose_menu_state(&mut menu.choice, PM_CONVERSE as u8, flags);
+        });
+        true
     }
 
     unsafe fn encounter_star() -> *mut crate::engine::world::CStarDesc {
@@ -207,43 +248,40 @@ pub(crate) mod engine {
 
     /// # Safety
     /// `player` must be a valid side; fleet, ship queues, and encounter resources must be initialized on the game thread.
-    #[no_mangle]
-    pub unsafe extern "C" fn BuildBattle(player: COUNT) {
+    pub unsafe fn build_battle(
+        world: &mut crate::engine::World,
+        kernel: &mut crate::engine::Kernel,
+        player: COUNT,
+    ) {
         EncounterRace = -1;
-        if WorldOwner::current().read(|world| world.npc_built_ships_ref().head().is_none()) {
-            set_game_state(BATTLE_SEGUE, END_BATTLE_SEGUE, 0);
+        if world.npc_built_ships_ref().head().is_none() {
+            world.set_story_state(crate::engine::StoryKey::BATTLE_SEGUE, 0);
             return;
         }
         if player != RPG_PLAYER_NUM as u16 {
-            match activity() as u8 as u32 {
-                IN_LAST_BATTLE => KernelOwner::current()
-                    .write(|kernel| load_gravity_well(kernel, NUMBER_OF_PLANET_TYPES as u8)),
-                IN_HYPERSPACE => KernelOwner::current().write(|kernel| {
-                    load_gravity_well(
-                        kernel,
-                        ((TFB_Random() as COUNT) % NUMBER_OF_PLANET_TYPES as COUNT) as u8,
-                    )
-                }),
+            let selector = match world.activity() as u8 as u32 {
+                IN_LAST_BATTLE => NUMBER_OF_PLANET_TYPES as u8,
+                IN_HYPERSPACE => ((TFB_Random() as COUNT) % NUMBER_OF_PLANET_TYPES as COUNT) as u8,
                 _ => {
-                    set_game_state(ESCAPE_COUNTER, END_ESCAPE_COUNTER, 110);
-                    KernelOwner::current().write(|kernel| {
-                        load_gravity_well(kernel, game_state(BATTLE_PLANET, END_BATTLE_PLANET))
-                    });
+                    world.set_story_state(crate::engine::StoryKey::ESCAPE_COUNTER, 110);
+                    world.story_state(crate::engine::StoryKey::BATTLE_PLANET) as u8
                 }
-            }
+            };
+            load_gravity_well(kernel, selector);
         }
-        link_queue::ships(player as usize).reinit();
-        let fragments = WorldOwner::current()
-            .read(|world| fragment_snapshot(world, player == RPG_PLAYER_NUM as COUNT));
+        kernel.ships(player as usize).reinit();
+        let fragments = fragment_snapshot(world, player == RPG_PLAYER_NUM as COUNT);
         for (_, frag) in fragments {
             let built =
-                link_queue::ships(player as usize).build(if frag.race_id == SAMATRA_SHIP as u8 {
-                    SPECIES_ID_SA_MATRA_ID
-                } else {
-                    frag.species_id
-                });
+                kernel
+                    .ships(player as usize)
+                    .build(if frag.race_id == SAMATRA_SHIP as u8 {
+                        SPECIES_ID_SA_MATRA_ID
+                    } else {
+                        frag.species_id
+                    });
             if let Some(id) = built {
-                let mut ships = link_queue::ships(player as usize);
+                let mut ships = kernel.ships(player as usize);
                 let mut ship = ships.get(id);
                 ship.captain = frag.captains_name_index;
                 ship.player = player as i16;
@@ -261,9 +299,9 @@ pub(crate) mod engine {
             }
         }
         if player == RPG_PLAYER_NUM as u16 {
-            let built = link_queue::ships(0).build(SPECIES_ID_SIS_SHIP_ID);
+            let built = kernel.ships(0).build(SPECIES_ID_SIS_SHIP_ID);
             if let Some(id) = built {
-                let mut ships = link_queue::ships(0);
+                let mut ships = kernel.ships(0);
                 let mut ship = ships.get(id);
                 ship.captain = 0;
                 ship.player = RPG_PLAYER_NUM as i16;
@@ -295,18 +333,52 @@ pub(crate) mod engine {
     pub(crate) use crate::battle::context_access::reader_legacy::update_ship_frag_crew;
 
     /// # Safety
+    /// The encounter retains its fonts, string table and active graphics context.
+    unsafe fn draw_encounter_location(cx: &mut crate::engine::battle::Cx<'_>) {
+        let mut t = text(
+            ((sis_width() >> 1) + 1) as i16,
+            10,
+            TEXT_ALIGN_ALIGN_CENTER,
+            ptr::null(),
+        );
+        SetContextFont(cx.kernel.micro_font);
+        SetContextForeGroundColor(rgb15(0, 0, 20));
+        if in_hqspace(cx.world) != 0 {
+            draw_text(
+                &mut t,
+                cx.with_legacy(|| game_string(ENCOUNTER_STRING_BASE)),
+            );
+            t.baseline.y += 12;
+            draw_text(
+                &mut t,
+                cx.with_legacy(|| game_string(ENCOUNTER_STRING_BASE + 1)),
+            );
+        } else {
+            let mut buf = [0 as UNICODE; 256];
+            draw_text(
+                &mut t,
+                cx.with_legacy(|| game_string(ENCOUNTER_STRING_BASE + 2)),
+            );
+            t.baseline.y += 12;
+            let star = cx.world.star_pointer(current_catalog());
+            cx.with_legacy(|| GetClusterName(star, buf.as_mut_ptr()));
+            draw_text(&mut t, buf.as_ptr());
+            t.baseline.y += 12;
+            draw_text(&mut t, cx.world.data.flagship.planet_name.as_ptr().cast());
+        }
+    }
+
+    /// # Safety
     /// The game thread must own initialized encounter, display, input, resource, and audio state.
-    #[no_mangle]
-    pub unsafe extern "C" fn InitEncounter() -> COUNT {
-        SetContext(KernelOwner::current().read(|owner| owner.space_context));
-        SetContextFont(KernelOwner::current().read(|owner| owner.tiny_font));
-        let music =
-            crate::sound::resource_types::LoadMusicInstance(REDALERT_MUSIC.as_ptr().cast()).cast();
-        PlayMusic(music, 0, 1);
+    unsafe fn prepare_encounter(cx: &mut crate::engine::battle::Cx<'_>) {
+        SetContext(cx.kernel.space_context);
+        SetContextFont(cx.kernel.tiny_font);
+        let music = crate::sound::resource_types::LoadedMusic::load(c"music.redalert");
+        crate::ui::settings::play_loaded_music(cx.world, music.as_ref(), 0, 1);
         let segue = CaptureDrawable(LoadGraphicInstance(SEGUE_PMAP_ANIM.as_ptr().cast()).cast());
-        WaitForSoundEnd(COUNT::MAX);
+        cx.with_legacy(|| WaitForSoundEnd(COUNT::MAX));
         stop_music();
-        DestroyMusic(music);
+        drop(music);
         let mut stamp = STAMP {
             origin: POINT { x: 0, y: 0 },
             frame: segue,
@@ -316,36 +388,16 @@ pub(crate) mod engine {
         SetContextBackGroundColor(rgb15(0, 0, 0));
         ClearDrawable();
         DrawStamp(&mut stamp);
-        let mut t = text(
-            ((sis_width() >> 1) + 1) as i16,
-            10,
-            TEXT_ALIGN_ALIGN_CENTER,
-            ptr::null(),
-        );
-        SetContextFont(KernelOwner::current().read(|owner| owner.micro_font));
-        SetContextForeGroundColor(rgb15(0, 0, 20));
-        if WorldOwner::current().read(in_hqspace) != 0 {
-            draw_text(&mut t, game_string(ENCOUNTER_STRING_BASE));
-            t.baseline.y += 12;
-            draw_text(&mut t, game_string(ENCOUNTER_STRING_BASE + 1));
-        } else {
-            let mut buf = [0 as UNICODE; 256];
-            draw_text(&mut t, game_string(ENCOUNTER_STRING_BASE + 2));
-            t.baseline.y += 12;
-            GetClusterName(encounter_star(), buf.as_mut_ptr());
-            draw_text(&mut t, buf.as_ptr());
-            t.baseline.y += 12;
-            draw_text(&mut t, planet_name());
-        }
-        DrawSISMessage(ptr::null());
+        draw_encounter_location(cx);
+        cx.with_legacy(|| DrawSISMessage(ptr::null()));
         stamp.origin = POINT {
             x: (sis_width() >> 1) as i16,
             y: (sis_height() >> 1) as i16,
         };
-        stamp.frame = KernelOwner::current().read(|owner| owner.planet[0]);
+        stamp.frame = cx.kernel.planet[0];
         DrawStamp(&mut stamp);
-        if activity() as u8 != IN_LAST_BATTLE as u8 {
-            let fragments = WorldOwner::current().read(|world| fragment_snapshot(world, false));
+        if cx.world.activity() as u8 != IN_LAST_BATTLE as u8 {
+            let fragments = fragment_snapshot(cx.world, false);
             let mut index = 0;
             let mut i = 0usize;
             while index < fragments.len() && i < 60 {
@@ -377,16 +429,24 @@ pub(crate) mod engine {
         }
         UnbatchGraphics();
         DestroyDrawable(ReleaseDrawable(segue));
-        ScreenTransition(3, ptr::null());
-        let mut menu: MENU_STATE = mem::zeroed();
-        menu.InputFunc = Some(do_select_action);
-        menu.Initialized = 0;
-        menu.CurState = HAIL as u8;
-        DrawMenuStateStrings(PM_CONVERSE as u8, menu.CurState as i16);
-        SetFlashRect(usize::MAX as *const RECT);
-        DoInput((&mut menu as *mut MENU_STATE).cast(), 1);
-        SetFlashRect(ptr::null());
-        menu.CurState as COUNT
+        cx.with_legacy(|| ScreenTransition(3, ptr::null()));
+    }
+
+    /// # Safety
+    /// Native encounter resources and input are initialized on the game thread.
+    pub unsafe fn init_encounter(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        io: &mut crate::engine::observe::Io<'_>,
+    ) -> COUNT {
+        prepare_encounter(cx);
+        let mut menu = EncounterSelection::new();
+        cx.with_legacy(|| {
+            DrawMenuStateStrings(PM_CONVERSE as u8, menu.choice as i16);
+            SetFlashRect(usize::MAX as *const RECT);
+        });
+        cx.run_input(io, true, |cx, _| do_select_action(cx, &mut menu));
+        cx.with_legacy(|| SetFlashRect(ptr::null()));
+        COUNT::from(menu.choice)
     }
 
     unsafe fn draw_fade_text(
@@ -650,30 +710,27 @@ pub(crate) mod engine {
     }
 
     /// # Safety
-    /// The game thread must own initialized encounter, fleet, input, audio, and activity state.
-    #[no_mangle]
-    pub unsafe extern "C" fn EncounterBattle() {
-        set_game_state(BATTLE_SEGUE, END_BATTLE_SEGUE, 1);
-        let old = activity();
-        set_activity(if old as u8 == IN_LAST_BATTLE as u8 {
+    /// The game thread must retain initialized native encounter audio resources.
+    pub unsafe fn encounter_battle(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        io: &mut crate::engine::observe::Io<'_>,
+    ) {
+        cx.world
+            .set_story_state(crate::engine::StoryKey::BATTLE_SEGUE, 1);
+        let old = cx.world.activity();
+        cx.world.set_activity(if old as u8 == IN_LAST_BATTLE as u8 {
             IN_LAST_BATTLE as u16
         } else {
             IN_ENCOUNTER as u16
         });
-        WaitForSoundEnd(COUNT::MAX);
+        cx.with_legacy(|| WaitForSoundEnd(COUNT::MAX));
         let mut saved = None;
-        if WorldFields::current().read(|owner| owner.game.glob_flags) & CYBORG_ENABLED as u8 != 0 {
-            let speed = 1
-                | ((combat_speed(WorldFields::current().read(|owner| owner.game.glob_flags))
-                    as u16)
-                    << 8);
-            crate::app::bridge::battle(|b| b.nth_frame = speed);
-            set_player_control(0, CYBORG_CONTROL | AWESOME_RATING);
-            saved = player_input(0);
-            set_player_input(0, None);
-            if !KernelOwner::current().write(|kernel| SetPlayerInput(kernel, 0)) {
+        if cx.world.data.game.glob_flags & CYBORG_ENABLED as u8 != 0 {
+            cx.b.nth_frame = 1 | ((combat_speed(cx.world.data.game.glob_flags) as u16) << 8);
+            cx.kernel.player_control[0] = CYBORG_CONTROL | AWESOME_RATING;
+            saved = cx.kernel.replace_player_input(0, None);
+            if !SetPlayerInput(cx.kernel, 0) {
                 crate::log_abi::log_message(1, "Could not set cyborg player input.");
-                // misc.h explode(): abort in DEBUG, exit(EXIT_FAILURE) otherwise.
                 if cfg!(feature = "debug-process") {
                     std::process::abort();
                 } else {
@@ -681,25 +738,25 @@ pub(crate) mod engine {
                 }
             }
         }
-        (**KernelOwner::current()).game_sounds = crate::strings::string_table::CaptureStringTable(
-            crate::sound::resource_types::LoadSoundInstance(GAME_SOUNDS.as_ptr().cast()).cast(),
-        )
-        .cast();
-        Battle(None);
-        DestroySound(ReleaseStringTable(
-            KernelOwner::current().read(|owner| owner.game_sounds),
-        ));
-        (**KernelOwner::current()).game_sounds = ptr::null_mut();
-        if activity() & CHECK_ABORT as u16 != 0 {
-            (**WorldFields::current()).flagship.crew_enlisted = COUNT::MAX;
+        cx.kernel.game_sounds = cx.with_legacy(|| {
+            crate::strings::string_table::CaptureStringTable(
+                crate::sound::resource_types::LoadSoundInstance(GAME_SOUNDS.as_ptr().cast()).cast(),
+            )
+            .cast()
+        });
+        battle(cx, io, None);
+        DestroySound(ReleaseStringTable(cx.kernel.game_sounds));
+        cx.kernel.game_sounds = ptr::null_mut();
+        if cx.world.activity() & CHECK_ABORT as u16 != 0 {
+            cx.world.data.flagship.crew_enlisted = COUNT::MAX;
         }
-        if WorldFields::current().read(|owner| owner.game.glob_flags) & CYBORG_ENABLED as u8 != 0 {
-            crate::app::bridge::battle(|b| b.nth_frame = 0);
-            set_player_control(0, HUMAN_CONTROL | STANDARD_RATING);
-            KernelOwner::current().write(|kernel| ClearPlayerInput(kernel, 0));
-            set_player_input(0, saved);
+        if cx.world.data.game.glob_flags & CYBORG_ENABLED as u8 != 0 {
+            cx.b.nth_frame = 0;
+            cx.kernel.player_control[0] = HUMAN_CONTROL | STANDARD_RATING;
+            ClearPlayerInput(cx.kernel, 0);
+            cx.kernel.replace_player_input(0, saved);
         }
-        set_activity(old);
+        cx.world.set_activity(old);
     }
 }
 
@@ -709,6 +766,34 @@ pub use engine::*;
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn encounter_selection_ignores_initial_select_then_preserves_hail_attack_and_options() {
+        for choice in 0..=2 {
+            let mut menu = EncounterSelection::new();
+            menu.choice = choice;
+            assert_eq!(menu.advance(false, true, false), SelectionAction::Continue);
+            assert_eq!(menu.choice, choice);
+            assert_eq!(
+                menu.advance(false, true, false),
+                if choice == 2 {
+                    SelectionAction::Options
+                } else {
+                    SelectionAction::Finish
+                }
+            );
+        }
+        for choice in 0..=1 {
+            let mut menu = EncounterSelection::new();
+            menu.choice = choice;
+            menu.advance(false, false, true);
+            assert_eq!(menu.advance(false, true, true), SelectionAction::Finish);
+            assert_eq!(menu.choice, 0);
+        }
+        let mut menu = EncounterSelection::new();
+        assert_eq!(menu.advance(true, false, false), SelectionAction::Finish);
+        assert_eq!(menu.choice, 2);
+    }
+
     #[test]
     fn salvage_requires_surviving_player_without_samatra_protection() {
         assert_eq!(victory_state(0, 1, false), 1);

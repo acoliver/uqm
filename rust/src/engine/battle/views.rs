@@ -196,3 +196,9 @@ impl Subject {
         self.intersect
     }
 }
+
+#[derive(Clone, Copy)]
+pub enum BattleSoundBank {
+    Ship(super::ShipId),
+    Game,
+}

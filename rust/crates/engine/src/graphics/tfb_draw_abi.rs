@@ -180,7 +180,7 @@ pub unsafe extern "C" fn TFB_DrawScreen_FilledImage(
 /// Pointer arguments and referenced image/canvas resources must remain live through this serialized graphics operation.
 #[no_mangle]
 pub unsafe extern "C" fn TFB_DrawScreen_FontChar(
-    ch: *mut TFB_Char,
+    ch: &TFB_Char,
     backing: *mut Image,
     x: i32,
     y: i32,
@@ -189,7 +189,7 @@ pub unsafe extern "C" fn TFB_DrawScreen_FontChar(
 ) {
     let mut c = empty_command(TFB_DRAWCOMMANDTYPE_FONTCHAR);
     c.data.fontchar = TFB_DrawCommand_FontChar {
-        fontchar: ch,
+        fontchar: *ch,
         backing,
         x,
         y,
@@ -585,4 +585,46 @@ pub unsafe extern "C" fn TFB_DrawImage_CopyRect(
     (*dst).dirty = 1;
     image_unlock(dst);
     image_unlock(src);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[serial_test::serial]
+    fn queued_glyph_metadata_survives_changes_to_the_source_descriptor() {
+        use crate::graphics::{dcqueue_abi, drawable_abi};
+        // SAFETY: this serial test owns queue/frame state and keeps the glyph live
+        // until its queued metadata has been read. No canvas command is dispatched.
+        let (retained, data) = unsafe {
+            let saved_queue = dcqueue_abi::DrawCommandQueue;
+            let saved_command = dcqueue_abi::DCQ[0];
+            let saved_frame = drawable_abi::_CurFramePtr;
+            let mut frame: super::super::native_abi::frame_desc = std::mem::zeroed();
+            frame.Type = super::super::native_abi::RAM_DRAWABLE as u16;
+            drawable_abi::_CurFramePtr = ptr::addr_of_mut!(frame);
+            dcqueue_abi::DrawCommandQueue = std::mem::zeroed();
+            let mut bitmap = [255_u8; 7];
+            let mut glyph: TFB_Char = std::mem::zeroed();
+            glyph.extent = EXTENT {
+                width: 7,
+                height: 1,
+            };
+            glyph.HotSpot = HOT_SPOT { x: 2, y: 3 };
+            glyph.data = bitmap.as_mut_ptr();
+            glyph.pitch = 7;
+            TFB_DrawScreen_FontChar(&glyph, ptr::null_mut(), 11, 13, std::mem::zeroed(), 0);
+            glyph.extent.width = 99;
+            glyph.HotSpot.x = 42;
+            assert_eq!((glyph.extent.width, glyph.HotSpot.x), (99, 42));
+            let retained = dcqueue_abi::DCQ[0].data.fontchar.fontchar;
+            dcqueue_abi::DrawCommandQueue = saved_queue;
+            dcqueue_abi::DCQ[0] = saved_command;
+            drawable_abi::_CurFramePtr = saved_frame;
+            (retained, bitmap.as_mut_ptr())
+        };
+        assert_eq!((retained.extent.width, retained.HotSpot.x), (7, 2));
+        assert_eq!(retained.data, data);
+    }
 }

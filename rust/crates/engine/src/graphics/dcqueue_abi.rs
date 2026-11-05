@@ -359,9 +359,9 @@ pub unsafe extern "C" fn TFB_FlushGraphicsEx(skip_swap: BOOLEAN) {
                 }
             }
             4 => {
-                let c = command.data.fontchar;
+                let mut c = command.data.fontchar;
                 TFB_DrawCanvas_FontChar(
-                    c.fontchar,
+                    &mut c.fontchar,
                     c.backing,
                     c.x,
                     c.y,
@@ -371,10 +371,10 @@ pub unsafe extern "C" fn TFB_FlushGraphicsEx(skip_swap: BOOLEAN) {
                 if c.destBuffer == 0 {
                     let r = RECT {
                         corner: POINT {
-                            x: (c.x - i32::from((*c.fontchar).HotSpot.x)) as i16,
-                            y: (c.y - i32::from((*c.fontchar).HotSpot.y)) as i16,
+                            x: (c.x - i32::from(c.fontchar.HotSpot.x)) as i16,
+                            y: (c.y - i32::from(c.fontchar.HotSpot.y)) as i16,
                         },
-                        extent: (*c.fontchar).extent,
+                        extent: c.fontchar.extent,
                     };
                     TFB_BBox_RegisterRect(&r);
                 }

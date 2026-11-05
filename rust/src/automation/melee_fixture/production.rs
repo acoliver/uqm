@@ -205,10 +205,8 @@ unsafe fn apply(cx: &mut Cx<'_>, effect: Effect, checkpoint: &dyn Fn()) -> Resul
     unsafe {
         match effect {
             Effect::Redraw(check) => {
-                crate::app::bridge::publish(cx, || {
-                    crate::battle::process_native::RedrawQueue(0);
-                    redrawn(check, checkpoint);
-                });
+                crate::battle::process_native::engine::redraw_queue(cx, false);
+                crate::app::bridge::publish(cx, || redrawn(check, checkpoint));
                 return Ok(Reply::None);
             }
             Effect::ClearStar => {

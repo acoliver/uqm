@@ -26,6 +26,8 @@ enum ViewState {
     Change = VIEW_STATE_VIEW_CHANGE,
 }
 
+use queue_view::draw_frame;
+
 fn display_align(value: i32) -> i16 {
     (value as COORD) & !((1 << ONE_SHIFT) - 1)
 }
@@ -657,13 +659,14 @@ pub(crate) mod engine {
         cx.dispose(id);
     }
 
-    unsafe fn postprocess_queue(
+    fn postprocess_queue(
         cx: &mut Cx<'_>,
         view_state: ViewState,
         mut scroll_x: SIZE,
         mut scroll_y: SIZE,
+        scale_mode: i32,
     ) {
-        let reduction = if optMeleeScale == SCALE_STEP {
+        let reduction = if scale_mode == SCALE_STEP {
             (i32::from(cx.b.zoom_out) + ONE_SHIFT as i32) as SIZE
         } else {
             (i32::from(cx.b.zoom_out) << ONE_SHIFT) as SIZE
@@ -714,14 +717,16 @@ pub(crate) mod engine {
                 retire(cx, e);
             } else {
                 let index = cx.elements()[e].PrimIndex;
-                let primitive = std::ptr::from_mut(cx.display_primitive(index));
-                let kind = (*primitive).Type;
+                let kind = cx.display_primitive(index).Type;
                 if view_state != ViewState::Stable || flags & CHANGE_BITS != 0 {
                     let projection = queue_view::Projection {
-                        dimensions: (width(ScreenWidth), height(ScreenHeight)),
-                        origin: (*cx.kernel()).space_origin,
+                        dimensions: {
+                            let (w, h) = cx.screen_dimensions();
+                            (width(w), height(h))
+                        },
+                        origin: cx.kernel.space_origin,
                         reduction,
-                        step: optMeleeScale == SCALE_STEP,
+                        step: scale_mode == SCALE_STEP,
                     };
                     let next;
                     if kind == gfx_object_LINE_PRIM as GRAPHICS_PRIM {
@@ -731,17 +736,16 @@ pub(crate) mod engine {
                             (delta_x, delta_y),
                         );
                         next = location;
-                        (*primitive).Object.Line.first = first;
-                        (*primitive).Object.Line.second = second;
+                        cx.display_primitive(index).Object.Line = LINE { first, second };
                     } else {
                         next =
                             projection.scroll(cx.elements()[e].next.location, (delta_x, delta_y));
-                        (*primitive).Object.Point = projection.display(next);
+                        cx.display_primitive(index).Object.Point = projection.display(next);
                         if kind == gfx_object_STAMP_PRIM as GRAPHICS_PRIM
                             || kind == gfx_object_STAMPFILL_PRIM as GRAPHICS_PRIM
                         {
                             if view_state == ViewState::Change || flags & CHANGE_BITS != 0 {
-                                let (index, scale) = if optMeleeScale == SCALE_STEP {
+                                let (index, scale) = if scale_mode == SCALE_STEP {
                                     (cx.b.zoom_out as COUNT, GSCALE_IDENTITY as COUNT)
                                 } else {
                                     calc_zoom_stuff(cx.b.zoom_out)
@@ -751,33 +755,28 @@ pub(crate) mod engine {
                                     cx.elements()[e].next.image.frame.view(),
                                 );
                                 cx.set_frame(e, true, frame);
-                                if optMeleeScale == SCALE_TRILINEAR
+                                if scale_mode == SCALE_TRILINEAR
                                     && index < 2
                                     && scale != GSCALE_IDENTITY as COUNT
                                 {
-                                    let frame = cx.elements()[e].next.image.frame.raw();
-                                    let mmframe = SetEquFrameIndex(
+                                    let frame = cx.elements()[e].next.image.frame.clone();
+                                    let mmframe = cx.equivalent_frame(
                                         cx.elements()[e]
                                             .next
                                             .image
                                             .frames
-                                            .view(usize::from(index) + 1)
-                                            .raw(),
-                                        frame,
+                                            .view(usize::from(index) + 1),
+                                        frame.view(),
                                     );
-                                    if !frame.is_null() && !mmframe.is_null() {
-                                        let hot = GetFrameHot(mmframe);
-                                        TFB_DrawScreen_SetMipmap(
-                                            (*frame).image,
-                                            (*mmframe).image,
-                                            i32::from(hot.x),
-                                            i32::from(hot.y),
-                                        );
+                                    if !frame.is_absent() && !mmframe.is_absent() {
+                                        cx.set_mipmap(frame.view(), mmframe.view());
                                     }
                                 }
                             }
-                            (*primitive).Object.Stamp.frame =
-                                cx.elements()[e].next.image.frame.raw();
+                            cx.display_primitive(index).Object.Stamp = STAMP {
+                                origin: projection.display(next),
+                                frame: cx.elements()[e].next.image.frame.raw(),
+                            };
                         }
                     }
                     cx.element_mut(e).next.location = next;
@@ -794,7 +793,7 @@ pub(crate) mod engine {
 
     /// # Safety
     /// Engine contexts, element/display pools and sound system are initialized on the game thread.
-    unsafe fn redraw_queue(cx: &mut Cx<'_>, clear: BOOLEAN) {
+    pub(crate) unsafe fn redraw_queue(cx: &mut Cx<'_>, clear: bool) {
         SetContext(cx.kernel.status_context);
         let scale = optMeleeScale;
         let (bounds, minimum) = preprocess_queue(cx, scale);
@@ -804,7 +803,7 @@ pub(crate) mod engine {
             crate::app::bridge::publish(cx, || MoveSIS(&mut sx, &mut sy));
         }
         let state = calc_view_engine(cx, minimum, (sx, sy), bounds.ships_alive, scale);
-        postprocess_queue(cx, state, sx, sy);
+        postprocess_queue(cx, state, sx, sy, scale);
         if optStereoSFX != 0 {
             crate::battle::sounds::engine::update_positions(cx);
         }
@@ -813,15 +812,8 @@ pub(crate) mod engine {
         if activity as u8 == SUPER_MELEE as u8
             || activity & (CHECK_ABORT | CHECK_LOAD) as UWORD == 0
         {
-            let skip = (cx.b.nth_frame >> 8) as BYTE;
-            if skip != BYTE::MAX
-                && (skip == 0 || {
-                    cx.b.nth_frame = cx.b.nth_frame.wrapping_sub(1);
-                    cx.b.nth_frame & 0x00ff == 0
-                })
-            {
-                cx.b.nth_frame = cx.b.nth_frame.wrapping_add(UWORD::from(skip));
-                if clear != 0 {
+            if draw_frame(&mut cx.b.nth_frame) {
+                if clear {
                     ClearDrawable();
                 }
                 if optMeleeScale != SCALE_STEP {
@@ -840,21 +832,39 @@ pub(crate) mod engine {
         }
         cx.clear_display_order();
     }
-    /// # Safety
-    /// Game thread, inside the published lifecycle, with initialized rendering state.
-    #[no_mangle]
-    pub unsafe extern "C" fn RedrawQueue(clear: BOOLEAN) {
-        crate::app::bridge::enter(|cx| redraw_queue(cx, clear));
-    }
 }
 
 #[cfg(not(test))]
-pub use engine::{init_display_list, process_collisions, RedrawQueue};
+pub use engine::{init_display_list, process_collisions};
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::engine::battle::display::DisplayPool;
+
+    #[test]
+    fn frame_skip_preserves_byte_counter_cycles_and_suppression() {
+        for value in 0..=u8::MAX {
+            let mut unthrottled = u16::from(value);
+            assert!(draw_frame(&mut unthrottled));
+            assert_eq!(unthrottled, u16::from(value));
+            let mut suppressed = 0xff00 | u16::from(value);
+            assert!(!draw_frame(&mut suppressed));
+            assert_eq!(suppressed, 0xff00 | u16::from(value));
+        }
+        let mut counter = 0x0303;
+        for _ in 0..3 {
+            assert!(!draw_frame(&mut counter));
+            assert_eq!(counter, 0x0302);
+            assert!(!draw_frame(&mut counter));
+            assert_eq!(counter, 0x0301);
+            assert!(draw_frame(&mut counter));
+            assert_eq!(counter, 0x0303);
+        }
+        let mut borrow = 0x0100;
+        assert!(!draw_frame(&mut borrow));
+        assert_eq!(borrow, 0x00ff);
+    }
 
     #[test]
     fn live_helper_dimensions_and_collision_flags() {

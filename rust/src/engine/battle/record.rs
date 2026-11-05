@@ -447,8 +447,8 @@ impl Cx<'_> {
             .unwrap_or_else(|| panic!("ship {id:?} has no descriptor"))
     }
     #[cfg(not(test))]
-    pub(crate) fn captain_controls(&mut self, id: ShipId) -> std::ptr::NonNull<CAPTAIN_STUFF> {
-        std::ptr::NonNull::from(&mut self.desc_mut(id).ship_data.captain_control)
+    pub(crate) fn captain_controls(&self, id: ShipId) -> &CAPTAIN_STUFF {
+        &self.desc(id).ship_data.captain_control
     }
     /// Return the checked legacy address; dereferencing it requires the owning game-thread boundary.
     pub fn legacy_element(&self, id: ElementId) -> *mut ElementRecord {
@@ -871,7 +871,7 @@ mod kernel_tests {
         assert_eq!(moved.status_offsets, [7, 11]);
         let fresh = Kernel::new();
         assert_eq!(fresh.instant_victory, 0);
-        assert!(fresh.battle_music.is_null());
+        assert!(fresh.battle_music.is_none());
         assert_eq!(fresh.ditty_playing, 0);
         assert_eq!(fresh.space_origin.x, 0);
         assert_eq!(fresh.space_origin.y, 0);
@@ -881,7 +881,7 @@ mod kernel_tests {
         assert!(fresh.game_sounds.is_null());
         assert!(fresh.winner.is_none());
         assert_eq!(fresh.sounds.count, 0);
-        assert_eq!(fresh.channels.lru, [0, 1, 2, 3]);
+        assert_eq!(fresh.channels.borrow().lru, [0, 1, 2, 3]);
     }
 }
 
@@ -926,10 +926,10 @@ impl Kernel {
     pub(crate) fn shared_frame_source(
         &self,
         role: super::views::SharedFrames,
-    ) -> std::ptr::NonNull<crate::graphics::native_abi::FRAME> {
+    ) -> &[crate::graphics::native_abi::FRAME; 3] {
         match role {
-            super::views::SharedFrames::Asteroid => std::ptr::NonNull::from(&self.asteroid[0]),
-            super::views::SharedFrames::Explosion => std::ptr::NonNull::from(&self.explosion[0]),
+            super::views::SharedFrames::Asteroid => &self.asteroid,
+            super::views::SharedFrames::Explosion => &self.explosion,
             _ => panic!("not a battle shared frame role {role:?}"),
         }
     }

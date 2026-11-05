@@ -189,7 +189,14 @@ fn convert_alternate(base: u8, state: u8) -> u8 {
 /// Menu state and input globals must be initialized on the game thread.
 #[no_mangle]
 pub unsafe extern "C" fn DoMenuChooser(menu: *mut MENU_STATE, base_state: BYTE) -> BOOLEAN {
-    let mut new_state = (*menu).CurState;
+    let flags = WorldData::current().read(|owner| owner.game.glob_flags);
+    choose_menu_state(&mut (*menu).CurState, base_state, flags)
+}
+
+/// # Safety
+/// The game thread owns initialized menu input and display resources.
+pub(crate) unsafe fn choose_menu_state(state: &mut u8, base_state: BYTE, flags: u8) -> BOOLEAN {
+    let mut new_state = *state;
     let original_base = base_state;
     let mut base = base_state;
     let use_alt = if optWhichMenu == OPT_PC {
@@ -200,20 +207,16 @@ pub unsafe extern "C" fn DoMenuChooser(menu: *mut MENU_STATE, base_state: BYTE) 
     if PulsedInputState.menu[KEY_MENU_LEFT as usize] != 0
         || PulsedInputState.menu[KEY_MENU_UP as usize] != 0
     {
-        new_state = previous_menu_state(base, new_state);
+        new_state = super::menu_state::previous_state(base, new_state, flags);
     } else if PulsedInputState.menu[KEY_MENU_RIGHT as usize] != 0
         || PulsedInputState.menu[KEY_MENU_DOWN as usize] != 0
     {
-        new_state = next_state(
-            base,
-            new_state,
-            WorldData::current().read(|owner| owner.game.glob_flags),
-        );
+        new_state = next_state(base, new_state, flags);
     } else if use_alt && PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0 {
         new_state = convert_alternate(base, new_state);
         if new_state == ALT_MANIFEST {
             DrawMenuStateStrings(PM_ALT_CARGO, 0);
-            (*menu).CurState = PM_CARGO - PM_SCAN;
+            *state = PM_CARGO - PM_SCAN;
             return 1;
         }
         if new_state == ALT_EXIT_MANIFEST {
@@ -222,7 +225,7 @@ pub unsafe extern "C" fn DoMenuChooser(menu: *mut MENU_STATE, base_state: BYTE) 
             } else {
                 DrawMenuStateStrings(PM_ALT_STARMAP, (PM_ALT_MANIFEST - PM_ALT_STARMAP) as i16);
             }
-            (*menu).CurState = ALT_MANIFEST;
+            *state = ALT_MANIFEST;
             return 1;
         }
         return 0;
@@ -235,7 +238,7 @@ pub unsafe extern "C" fn DoMenuChooser(menu: *mut MENU_STATE, base_state: BYTE) 
         } else {
             DrawMenuStateStrings(PM_ALT_STARMAP, (PM_ALT_MANIFEST - PM_ALT_STARMAP) as i16);
         }
-        (*menu).CurState = ALT_MANIFEST;
+        *state = ALT_MANIFEST;
         return 1;
     } else {
         return 0;
@@ -244,7 +247,7 @@ pub unsafe extern "C" fn DoMenuChooser(menu: *mut MENU_STATE, base_state: BYTE) 
     if use_alt {
         new_state = convert_alternate(base, new_state);
     }
-    (*menu).CurState = new_state;
+    *state = new_state;
     SleepThread(ONE_SECOND / 20);
     1
 }

@@ -2,6 +2,21 @@
 
 use super::*;
 
+pub(super) fn draw_frame(counter: &mut u16) -> bool {
+    let skip = (*counter >> 8) as u8;
+    if skip == u8::MAX {
+        return false;
+    }
+    if skip != 0 {
+        *counter = counter.wrapping_sub(1);
+        if *counter & 0x00ff != 0 {
+            return false;
+        }
+    }
+    *counter = counter.wrapping_add(u16::from(skip));
+    true
+}
+
 pub(super) struct CameraBounds {
     minimum: SIZE,
     maximum: SIZE,

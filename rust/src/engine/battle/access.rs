@@ -301,9 +301,7 @@ impl Cx<'_> {
 
 impl Cx<'_> {
     pub fn shared_frame_set(&self, role: SharedFrames) -> Frames {
-        let source = self.kernel.shared_frame_source(role);
-        // SAFETY: World retains these source slots; the result leases their loaded allocations.
-        unsafe { Frames::native_shared(role, source, 3) }
+        Frames::retain_shared(role, self.kernel.shared_frame_source(role))
     }
     pub fn init_intersect(&mut self, id: ElementId) {
         self.init_intersect_start(id);
@@ -618,8 +616,11 @@ impl Cx<'_> {
 
 #[cfg(not(test))]
 impl Cx<'_> {
-    pub(crate) fn captain_pointer(&mut self, ship: ShipId) -> *mut super::record::CAPTAIN_STUFF {
-        &raw mut self.desc_mut(ship).ship_data.captain_control
+    pub(crate) fn captain_controls_mut(
+        &mut self,
+        ship: ShipId,
+    ) -> &mut super::record::CAPTAIN_STUFF {
+        &mut self.desc_mut(ship).ship_data.captain_control
     }
     pub(crate) fn ship_info_pointer(&mut self, ship: ShipId) -> *mut super::record::SHIP_INFO {
         &raw mut self.desc_mut(ship).ship_info
@@ -817,3 +818,53 @@ mod processing;
 
 #[path = "ship_assets.rs"]
 mod ship_assets;
+
+#[cfg(not(test))]
+impl Cx<'_> {
+    pub(crate) fn draw_stamp(
+        &self,
+        frame: super::frames::FrameRef<'_>,
+        origin: crate::graphics::native_abi::POINT,
+        in_status_context: bool,
+    ) {
+        let mut stamp = crate::graphics::native_abi::STAMP {
+            origin,
+            frame: frame.raw(),
+        };
+        // SAFETY: the frame borrow retains its registered drawable through the synchronous draw.
+        unsafe {
+            let old = in_status_context
+                .then(|| crate::graphics::context_abi::SetContext(self.kernel.status_context));
+            crate::graphics::frame_abi::DrawStamp(&mut stamp);
+            if let Some(old) = old {
+                crate::graphics::context_abi::SetContext(old);
+            }
+        }
+    }
+}
+
+#[cfg(not(test))]
+impl Cx<'_> {
+    pub(crate) fn set_mipmap(
+        &self,
+        frame: super::frames::FrameRef<'_>,
+        mipmap: super::frames::FrameRef<'_>,
+    ) {
+        assert!(
+            !frame.is_absent() && !mipmap.is_absent(),
+            "mipmap requires two loaded frames"
+        );
+        let frame = frame.raw();
+        let mipmap = mipmap.raw();
+        // SAFETY: both non-absent frame borrows retain their allocations during the image update.
+        unsafe {
+            let hot = crate::graphics::drawable_abi::GetFrameHot(mipmap);
+            crate::graphics::tfb_draw_abi::TFB_DrawScreen_SetMipmap(
+                (*frame).image,
+                (*mipmap).image,
+                i32::from(hot.x),
+                i32::from(hot.y),
+            );
+        }
+    }
+}

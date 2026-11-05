@@ -2,7 +2,7 @@ use super::abi::*;
 use super::notify::Netplay_Notify_shipSelected;
 use super::session::SessionCore;
 use crate::engine::battle::net::BattleNet;
-use std::{ffi::c_void, ptr};
+use std::ffi::c_void;
 
 impl BattleNet for SessionCore {
     fn poll(&self) {
@@ -116,7 +116,7 @@ impl BattleNet for SessionCore {
             });
         }
     }
-    unsafe fn begin(&self, state: *mut c_void) {
+    fn begin(&self) {
         // SAFETY: the function contract requires live, game-thread-owned records
         // and callback arguments for all legacy accesses in this operation.
         // SAFETY: SessionCore owns the live connections and buffers on the game thread.
@@ -124,7 +124,7 @@ impl BattleNet for SessionCore {
             self.init_battle_input_buffers();
             self.init_checksum_buffers();
             self.frame_count.set(0);
-            self.set_battle_state_connections(state.cast());
+            self.set_battle_active_connections(true);
         }
     }
     fn finish(&self) {
@@ -132,7 +132,7 @@ impl BattleNet for SessionCore {
         unsafe {
             self.uninit_battle_input_buffers();
             self.uninit_checksum_buffers();
-            self.set_battle_state_connections(ptr::null_mut());
+            self.set_battle_active_connections(false);
         }
     }
     unsafe fn bind_picker(&self, mask: u16, picker: *mut c_void) {

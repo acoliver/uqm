@@ -277,7 +277,12 @@ pub(crate) mod engine {
         cx.stop_battle_music();
         cx.start_ship_explosion(e, false);
         cx.element_mut(e).pre = Some(ElementHook::Native(destruct_preprocess));
-        cx.play_ship_sound(ss, 1, e, 3);
+        cx.play_battle_sound(
+            crate::engine::battle::views::BattleSoundBank::Ship(ss),
+            1,
+            e,
+            3,
+        );
         cx.select_self_destruct_winner(e);
         cx.record_ship_death(e);
     }

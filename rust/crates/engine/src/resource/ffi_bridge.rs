@@ -583,6 +583,36 @@ pub unsafe extern "C" fn InstallResTypeVectors(
 // Resource access
 // =============================================================================
 
+fn with_dispatch<R>(access: impl FnOnce(&mut ResourceDispatch) -> R) -> R {
+    let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+    ensure_init(&mut guard);
+    access(
+        &mut guard
+            .as_mut()
+            .unwrap_or_else(|| panic!("resource state was not initialized"))
+            .dispatch,
+    )
+}
+
+/// Validate, load and transfer an exclusive resource under one dispatch lock.
+pub(crate) fn detach_resource_of_type(
+    key: &CStr,
+    expected: &str,
+) -> Option<std::ptr::NonNull<c_void>> {
+    let key = key.to_str().ok()?;
+    with_dispatch(|dispatch| {
+        let kind = dispatch.get_resource_type(key)?;
+        assert_eq!(kind, expected, "unexpected resource type for {key}");
+        std::ptr::NonNull::new(dispatch.get_resource(key))?;
+        let detached = dispatch.detach_resource(key);
+        if detached.is_null() {
+            dispatch.free_resource(key);
+            panic!("resource already has another owner: {key}");
+        }
+        std::ptr::NonNull::new(detached)
+    })
+}
+
 /// Get a resource, lazy-loading if needed. Returns the data pointer.
 ///
 /// # Safety
@@ -595,14 +625,7 @@ pub unsafe extern "C" fn res_GetResource(key: *const c_char) -> *mut c_void {
         None => return ptr::null_mut(),
     };
 
-    let mut guard = match RESOURCE_STATE.lock() {
-        Ok(g) => g,
-        Err(poisoned) => poisoned.into_inner(),
-    };
-    ensure_init(&mut guard);
-
-    let state = guard.as_mut().unwrap();
-    state.dispatch.get_resource(key_str)
+    with_dispatch(|dispatch| dispatch.get_resource(key_str))
 }
 
 /// Detach a resource, transferring ownership to the caller.
@@ -617,14 +640,7 @@ pub unsafe extern "C" fn res_DetachResource(key: *const c_char) -> *mut c_void {
         None => return ptr::null_mut(),
     };
 
-    let mut guard = match RESOURCE_STATE.lock() {
-        Ok(g) => g,
-        Err(poisoned) => poisoned.into_inner(),
-    };
-    ensure_init(&mut guard);
-
-    let state = guard.as_mut().unwrap();
-    state.dispatch.detach_resource(key_str)
+    with_dispatch(|dispatch| dispatch.detach_resource(key_str))
 }
 
 /// Free a resource, decrementing its refcount.
@@ -639,14 +655,7 @@ pub unsafe extern "C" fn res_FreeResource(key: *const c_char) {
         None => return,
     };
 
-    let mut guard = match RESOURCE_STATE.lock() {
-        Ok(g) => g,
-        Err(poisoned) => poisoned.into_inner(),
-    };
-    ensure_init(&mut guard);
-
-    let state = guard.as_mut().unwrap();
-    state.dispatch.free_resource(key_str);
+    with_dispatch(|dispatch| dispatch.free_resource(key_str));
 }
 
 /// Remove a resource entry from the map. Returns 1 if removed, 0 otherwise.
@@ -661,18 +670,7 @@ pub unsafe extern "C" fn res_Remove(key: *const c_char) -> c_int {
         None => return 0,
     };
 
-    let mut guard = match RESOURCE_STATE.lock() {
-        Ok(g) => g,
-        Err(poisoned) => poisoned.into_inner(),
-    };
-    ensure_init(&mut guard);
-
-    let state = guard.as_mut().unwrap();
-    if state.dispatch.remove_resource(key_str) {
-        1
-    } else {
-        0
-    }
+    with_dispatch(|dispatch| i32::from(dispatch.remove_resource(key_str)))
 }
 
 // =============================================================================
@@ -1486,6 +1484,48 @@ mod tests {
     use super::*;
     use serial_test::serial;
     use std::ffi::CString;
+
+    #[test]
+    #[serial]
+    fn typed_detachment_preserves_an_existing_resource_reference() {
+        unsafe extern "C" fn release_fixture(_data: *mut c_void) -> c_int {
+            1
+        }
+        reset_state();
+        let address = std::ptr::NonNull::<u8>::dangling()
+            .as_ptr()
+            .cast::<c_void>();
+        {
+            let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+            ensure_init(&mut guard);
+            let state = guard.as_mut().unwrap();
+            state
+                .dispatch
+                .type_registry
+                .install("TESTMUSIC", None, Some(release_fixture), None);
+            state
+                .dispatch
+                .process_resource_desc("test.borrowed-music", "TESTMUSIC:fixture");
+            let entry = state
+                .dispatch
+                .entries
+                .get_mut("test.borrowed-music")
+                .unwrap();
+            entry.data = ResourceData { ptr: address };
+            entry.refcount = 1;
+        }
+        let rejected = std::panic::catch_unwind(|| {
+            detach_resource_of_type(c"test.borrowed-music", "TESTMUSIC")
+        });
+        assert!(rejected.is_err());
+        let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+        let state = guard.as_mut().unwrap();
+        assert_eq!(state.dispatch.entries["test.borrowed-music"].refcount, 1);
+        assert_eq!(
+            state.dispatch.detach_resource("test.borrowed-music"),
+            address
+        );
+    }
 
     #[test]
     fn resource_property_accessors_have_rust_signatures() {

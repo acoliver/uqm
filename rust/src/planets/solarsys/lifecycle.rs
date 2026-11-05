@@ -82,8 +82,6 @@ mod ffi {
 
     pub(super) use crate::graphics::gfx_common_abi::SetTransitionSource;
 
-    pub(super) use crate::battle::process_native::engine::RedrawQueue;
-
     pub(super) use crate::graphics::gfx_common_abi::ScreenTransition;
 
     pub(super) use crate::graphics::cmap_abi::FadeScreen;
@@ -377,7 +375,7 @@ unsafe fn finish_planet_orbit(cx: &mut Cx<'_>) {
         && cx.world.data.flagship.crew_enlisted != c::COUNT::MAX
     {
         let space_context = cx.kernel.space_context;
-        cx.with_legacy(|| {
+        let inner = cx.with_legacy(|| {
             let orbital = load_solar_sys();
             assert!(orbital.is_null());
             check_zoom_level();
@@ -386,12 +384,44 @@ unsafe fn finish_planet_orbit(cx: &mut Cx<'_>) {
             reset_solar_sys();
             ffi::repair_sisborder();
             ffi::SetContext(space_context);
-            draw_system_transition(playerInInnerSystem());
+            playerInInnerSystem()
         });
+        draw_system_transition(cx, inner);
     }
 }
 
-pub(super) unsafe fn init_solar_sys() {
+enum SolarSystemStart {
+    Orbit,
+    Fade,
+    ResumeLoad,
+    Transition,
+}
+
+unsafe fn start_solar_sys(cx: &mut Cx<'_>) {
+    let start = cx.with_legacy(|| prepare_solar_sys());
+    match start {
+        SolarSystemStart::Orbit => {}
+        SolarSystemStart::ResumeLoad => cx.with_legacy(|| ffi::UnbatchGraphics()),
+        SolarSystemStart::Fade => {
+            crate::battle::process_native::engine::redraw_queue(cx, false);
+            cx.with_legacy(|| {
+                ffi::UnbatchGraphics();
+                ffi::FadeScreen(FADE_ALL_TO_COLOR, (ONE_SECOND / 2) as c::SIZE);
+            });
+            cx.kernel.last_activity = 0;
+        }
+        SolarSystemStart::Transition => {
+            crate::battle::process_native::engine::redraw_queue(cx, false);
+            cx.with_legacy(|| {
+                ffi::ScreenTransition(3, ptr::null());
+                ffi::UnbatchGraphics();
+            });
+            cx.kernel.last_activity &= !CHECK_LOAD;
+        }
+    }
+}
+
+unsafe fn prepare_solar_sys() -> SolarSystemStart {
     super::resources::LoadIPData();
     load_lander_data();
 
@@ -434,6 +464,7 @@ pub(super) unsafe fn init_solar_sys() {
 
     if !orbital.is_null() {
         enter_orbital(orbital);
+        SolarSystemStart::Orbit
     } else {
         ffi::SetContext(Kernel::current().read(|owner| owner.space_context));
         ffi::SetTransitionSource(ptr::null_mut());
@@ -443,24 +474,18 @@ pub(super) unsafe fn init_solar_sys() {
         reset_solar_sys();
         if Kernel::current().read(|owner| owner.last_activity) == CHECK_LOAD | CHECK_RESTART {
             draw_outer_system();
-            ffi::RedrawQueue(0);
-            ffi::UnbatchGraphics();
-            ffi::FadeScreen(FADE_ALL_TO_COLOR, (ONE_SECOND / 2) as c::SIZE);
-            (**Kernel::current()).last_activity = 0;
+            SolarSystemStart::Fade
         } else if Kernel::current().read(|owner| owner.last_activity) == CHECK_LOAD
             && ffi::NextActivity == 0
         {
-            ffi::UnbatchGraphics();
+            SolarSystemStart::ResumeLoad
         } else {
             if inner_system {
                 draw_inner_system();
             } else {
                 draw_outer_system();
             }
-            ffi::RedrawQueue(0);
-            ffi::ScreenTransition(3, ptr::null());
-            ffi::UnbatchGraphics();
-            (**Kernel::current()).last_activity &= !CHECK_LOAD;
+            SolarSystemStart::Transition
         }
     }
 }
@@ -535,6 +560,8 @@ pub(super) unsafe fn hyperspace_unit_factors() -> (i32, i32) {
 pub unsafe fn run_explore_solar_sys(cx: &mut Cx<'_>, io: &mut Io<'_>) {
     let mut solar_sys_state = MaybeUninit::<c::SOLARSYS_STATE>::uninit();
     cx.with_legacy(|| prepare_explore_solar_sys(solar_sys_state.as_mut_ptr()));
+    start_solar_sys(cx);
+    cx.with_legacy(|| ffi::SetMenuSounds(MENU_SOUND_NONE, MENU_SOUND_NONE));
     cx.run_input(io, false, |cx, io| {
         do_ip_flight(cx, io, solar_sys_state.as_mut_ptr()) != 0
     });
@@ -584,8 +611,6 @@ unsafe fn prepare_explore_solar_sys(state: *mut c::SOLARSYS_STATE) {
     let index = World::current()
         .read(|world| (*world.star_pointer(crate::planets::starmap::current_catalog())).index);
     (*P_SOLAR_SYS_STATE).genFuncs = getGenerateFunctions(index).cast();
-    init_solar_sys();
-    ffi::SetMenuSounds(MENU_SOUND_NONE, MENU_SOUND_NONE);
 }
 
 pub(super) unsafe fn game_string(index: c::COUNT) -> *mut c_char {
@@ -700,10 +725,12 @@ unsafe fn do_solar_sys_menu(
             if cx.world.activity() & CHECK_ABORT != 0 {
                 return 0;
             }
-            cx.with_legacy(|| {
-                ffi::SetContext(Kernel::current().read(|owner| owner.space_context));
-                draw_system_transition(playerInInnerSystem());
+            let space_context = cx.kernel.space_context;
+            let inner = cx.with_legacy(|| {
+                ffi::SetContext(space_context);
+                playerInInnerSystem()
             });
+            draw_system_transition(cx, inner);
             return 0;
         }
         NAVIGATION => return 0,
@@ -753,8 +780,8 @@ unsafe fn do_ip_flight(
         cx.with_legacy(|| ffi::SetMenuSounds(MENU_SOUND_NONE, MENU_SOUND_NONE));
     } else {
         assert!((*state).InIpFlight != 0);
+        ip_frame(cx);
         cx.with_legacy(|| {
-            ip_frame();
             ffi::SleepThreadUntil(NEXT_TIME);
             NEXT_TIME = ffi::GetTimeCounter().wrapping_add(IP_FRAME_RATE);
         });

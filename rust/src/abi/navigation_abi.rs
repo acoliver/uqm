@@ -775,9 +775,7 @@ pub const YTTRIC_XLAT_TAB: &[u8; 29] = b"planet.yttric.translatetable\0";
 pub const GAME_SOUNDS: &[u8; 14] = b"sounds.battle\0";
 pub const LANDER_SOUNDS: &[u8; 14] = b"sounds.lander\0";
 pub const MENU_SOUNDS: &[u8; 12] = b"sounds.menu\0";
-pub const BATTLE_MUSIC: &[u8; 13] = b"music.battle\0";
 pub const CREDITS_MUSIC: &[u8; 14] = b"music.credits\0";
-pub const HYPERSPACE_MUSIC: &[u8; 17] = b"music.hyperspace\0";
 pub const IP_MUSIC: &[u8; 12] = b"music.space\0";
 pub const MAINMENU_MUSIC: &[u8; 15] = b"music.mainmenu\0";
 pub const MELEE_MUSIC: &[u8; 16] = b"music.meleemenu\0";
@@ -787,8 +785,6 @@ pub const ORBIT3_MUSIC: &[u8; 13] = b"music.orbit3\0";
 pub const ORBIT4_MUSIC: &[u8; 13] = b"music.orbit4\0";
 pub const ORBIT5_MUSIC: &[u8; 13] = b"music.orbit5\0";
 pub const OUTFIT_MUSIC: &[u8; 13] = b"music.outfit\0";
-pub const QUASISPACE_MUSIC: &[u8; 17] = b"music.quasispace\0";
-pub const REDALERT_MUSIC: &[u8; 15] = b"music.redalert\0";
 pub const SHIPYARD_MUSIC: &[u8; 15] = b"music.shipyard\0";
 pub const STARBASE_MUSIC: &[u8; 15] = b"music.starbase\0";
 pub const ACCEL_SCROLL_SPEED: u32 = 300;
@@ -4069,12 +4065,7 @@ extern "C" {
     pub fn setGammaCorrection(gamma: f32) -> bool;
 }
 pub type BattleFrameCounter = DWORD;
-pub type BattleFrameCallback = ::std::option::Option<unsafe extern "C" fn()>;
-pub use crate::ships::native::abi::battlestate_struct;
-pub type BATTLE_STATE = battlestate_struct;
 
-#[cfg(not(test))]
-pub use crate::battle::battle_native::engine::Battle;
 pub type Checksum = uint32;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -4339,11 +4330,7 @@ pub use crate::ui::shipstat::ClearShipStatus;
 #[cfg(not(test))]
 pub use crate::ui::shipstat::OutlineShipStatus;
 
-#[cfg(not(test))]
-pub use crate::ui::shipstat::DeltaStatistics;
 
-#[cfg(not(test))]
-pub use crate::battle::status_native::engine::DrawBattleCrewAmount;
 
 #[cfg(not(test))]
 pub use crate::battle::ship_native::engine::animation_preprocess;

@@ -272,16 +272,7 @@ mod ffi {
     }
 
     #[cfg(not(test))]
-    pub use crate::battle::encount_native::engine::BuildBattle;
-
-    #[cfg(not(test))]
-    pub use crate::battle::encount_native::engine::InitEncounter;
-
-    #[cfg(not(test))]
     pub use crate::battle::encount_native::engine::UninitEncounter;
-
-    #[cfg(not(test))]
-    pub use crate::battle::encount_native::engine::EncounterBattle;
 
     #[cfg(not(test))]
     pub use crate::ui::sis::ClearSISRect;
@@ -589,7 +580,9 @@ fn run_encounter(cx: &mut Cx<'_>, io: &mut Io<'_>, which_comm: u32, ship_type: u
             || (which_comm != conv::CHMMR && which_comm != conv::SYREEN);
         if build {
             // SAFETY: the current mode owns the campaign's NPC fleet.
-            cx.with_legacy(|| unsafe { ffi::BuildBattle(NPC_PLAYER_NUM) });
+            unsafe {
+                crate::battle::encount_native::build_battle(cx.world, cx.kernel, NPC_PLAYER_NUM)
+            };
         }
     }
     let comm_id = if ship_type != u16::from(ship::YEHAT_REBEL_SHIP) {
@@ -605,13 +598,12 @@ fn run_encounter(cx: &mut Cx<'_>, io: &mut Io<'_>, which_comm: u32, ship_type: u
     let status = if cx.world.story_state(StoryKey::BATTLE_SEGUE) == 0 {
         HAIL
     } else {
-        let status = cx.with_legacy(|| {
-            io.observer.checkpoint(&CheckpointView::EncounterMenu(true));
-            // SAFETY: the legacy encounter loop runs under the same owner publication.
-            let status = unsafe { ffi::InitEncounter() };
+        cx.with_legacy(|| io.observer.checkpoint(&CheckpointView::EncounterMenu(true)));
+        // SAFETY: the encounter borrows this mode's initialized resources and input runtime.
+        let status = unsafe { crate::battle::encount_native::init_encounter(cx, io) };
+        cx.with_legacy(|| {
             io.observer
-                .checkpoint(&CheckpointView::EncounterMenu(false));
-            status
+                .checkpoint(&CheckpointView::EncounterMenu(false))
         });
         if status == HAIL && has_descriptor {
             cx.world.set_story_state(StoryKey::BATTLE_SEGUE, 0);
@@ -627,7 +619,7 @@ fn run_encounter(cx: &mut Cx<'_>, io: &mut Io<'_>, which_comm: u32, ship_type: u
     } else {
         encounter::finish_unhailed(cx, has_descriptor);
     }
-    let status = encounter::fight_if_selected(cx);
+    let status = encounter::fight_if_selected(cx, io);
     // SAFETY: encounter teardown retains its legacy implementation for U2-10a.
     cx.with_legacy(|| unsafe { ffi::UninitEncounter() });
     status

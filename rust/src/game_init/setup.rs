@@ -252,6 +252,8 @@ mod tests {
                 .map(|s| s.as_bytes().iter().filter(|&&b| b != 0).count())
         });
         assert_eq!(state_count, Some(0));
+        assert_eq!(uninit_game_kernel(), Ok(()));
+        assert!(!is_kernel_initialized());
     }
 
     #[test]

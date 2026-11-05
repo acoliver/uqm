@@ -751,9 +751,7 @@ pub const YTTRIC_XLAT_TAB: &[u8; 29] = b"planet.yttric.translatetable\0";
 pub const GAME_SOUNDS: &[u8; 14] = b"sounds.battle\0";
 pub const LANDER_SOUNDS: &[u8; 14] = b"sounds.lander\0";
 pub const MENU_SOUNDS: &[u8; 12] = b"sounds.menu\0";
-pub const BATTLE_MUSIC: &[u8; 13] = b"music.battle\0";
 pub const CREDITS_MUSIC: &[u8; 14] = b"music.credits\0";
-pub const HYPERSPACE_MUSIC: &[u8; 17] = b"music.hyperspace\0";
 pub const IP_MUSIC: &[u8; 12] = b"music.space\0";
 pub const MAINMENU_MUSIC: &[u8; 15] = b"music.mainmenu\0";
 pub const MELEE_MUSIC: &[u8; 16] = b"music.meleemenu\0";
@@ -763,8 +761,6 @@ pub const ORBIT3_MUSIC: &[u8; 13] = b"music.orbit3\0";
 pub const ORBIT4_MUSIC: &[u8; 13] = b"music.orbit4\0";
 pub const ORBIT5_MUSIC: &[u8; 13] = b"music.orbit5\0";
 pub const OUTFIT_MUSIC: &[u8; 13] = b"music.outfit\0";
-pub const QUASISPACE_MUSIC: &[u8; 17] = b"music.quasispace\0";
-pub const REDALERT_MUSIC: &[u8; 15] = b"music.redalert\0";
 pub const SHIPYARD_MUSIC: &[u8; 15] = b"music.shipyard\0";
 pub const STARBASE_MUSIC: &[u8; 15] = b"music.starbase\0";
 pub const ACCEL_SCROLL_SPEED: u32 = 300;
@@ -1138,31 +1134,8 @@ pub struct _input_template {
 }
 pub type INPUT_TEMPLATE = _input_template;
 pub type BattleFrameCounter = DWORD;
-pub type BattleFrameCallback = ::std::option::Option<unsafe extern "C" fn()>;
-#[repr(C)]
-pub struct battlestate_struct {
-    pub InputFunc: ::std::option::Option<
-        unsafe extern "C" fn(pInputState: *mut battlestate_struct) -> BOOLEAN,
-    >,
-    pub first_time: BOOLEAN,
-    pub NextTime: DWORD,
-    pub frame_cb: BattleFrameCallback,
-    pub net: Option<std::rc::Rc<dyn crate::engine::battle::net::BattleNet>>,
-    pub battle: *mut crate::engine::battle::Battle,
-    pub observer: Option<crate::engine::input::InputObserver>,
-}
 
 
-
-
-#[cfg(not(test))]
-pub use crate::battle::battle_native::engine::Battle;
-
-#[cfg(not(test))]
-pub use crate::battle::battle_native::engine::BattleSong;
-
-#[cfg(not(test))]
-pub use crate::battle::battle_native::engine::FreeBattleSong;
 pub type Checksum = uint32;
 pub use crate::battle::netplay::CrcState as crc_State;
 pub use crate::supermelee::netplay::crc::crc_finish;
@@ -1479,21 +1452,7 @@ pub use crate::battle::status_native::init_status_offsets;
 
 #[cfg(not(test))]
 pub use crate::ui::shipstat::DrawCrewFuelString;
-#[cfg(not(test))]
-pub unsafe fn DeltaStatistics(
-    ShipInfoPtr: *mut SHIP_INFO,
-    y_offs: COORD,
-    crew_delta: SIZE,
-    energy_delta: SIZE,
-) {
-    crate::ui::shipstat::DeltaStatistics(ShipInfoPtr.cast(), y_offs, crew_delta, energy_delta);
-}
-#[cfg(test)]
-#[cfg(not(test))]
-pub use crate::ui::shipstat::DeltaStatistics;
 
-#[cfg(not(test))]
-pub use crate::battle::status_native::engine::DrawBattleCrewAmount;
 
 #[cfg(not(test))]
 
@@ -1542,9 +1501,6 @@ pub struct MISSILE_BLOCK {
 #[cfg(not(test))]
 
 #[cfg(not(test))]
-
-#[cfg(not(test))]
-pub use crate::battle::ship_native::engine::GetInitialStarShips;
 
 #[cfg(not(test))]
 pub use crate::battle::ship_native::engine::animation_preprocess;
@@ -2910,9 +2866,6 @@ pub use crate::game_init::kernel_abi::SetPlayerInput;
 pub use crate::game_init::kernel_abi::ClearPlayerInput;
 
 #[cfg(not(test))]
-pub use crate::battle::process_native::engine::RedrawQueue;
-
-#[cfg(not(test))]
 
 #[cfg(not(test))]
 
@@ -2965,13 +2918,7 @@ pub use crate::battle::tactrans_native::engine::ship_death;
 pub use crate::battle::tactrans_native::engine::flee_preprocess;
 
 #[cfg(not(test))]
-pub use crate::battle::tactrans_native::engine::StopDitty;
-
-#[cfg(not(test))]
 pub use crate::battle::tactrans_native::engine::reset_winner;
-
-#[cfg(not(test))]
-pub use crate::battle::tactrans_native::engine::StopAllBattleMusic;
 
 #[cfg(not(test))]
 

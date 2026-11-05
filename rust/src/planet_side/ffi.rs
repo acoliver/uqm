@@ -133,6 +133,7 @@ pub unsafe fn run_session(
             })?;
         let mut world_visuals = super::visual_adapter::CffiWorldVisuals::new(&assets, &mut visuals);
         let automation_active = io.observer.input_admitted(&InputView::Active, &None).stop;
+        let channels = cx.kernel.channels.clone();
         let (mut controller, _menu_silence) = cx.with_legacy(|| {
             // The issue #162 fixture is optional and explicitly requested.  Only the
             // `setup_planet_side_collision_fixture` script action queues the
@@ -178,11 +179,6 @@ pub unsafe fn run_session(
                     GetFrameCount((assets.graphic(LanderGraphic::Lava)).cast())
                 },
             };
-            let graphics = CffiPlanetSideGraphics {
-                surface: surface.clone(),
-                assets: &assets,
-                last_scan_position: None,
-            };
             // The orbit/scan menu underneath stays resident, so silence its
             // navigation sounds for the trip. Restored on every exit path by Drop.
             let menu_silence = super::menu_sounds::MenuSoundSilence::acquire();
@@ -190,8 +186,12 @@ pub unsafe fn run_session(
             let adapters = RuntimeAdapters {
                 input: CffiPlanetSideInput,
                 collision,
-                graphics,
-                audio: CffiPlanetSideAudio::new(assets.sounds()),
+                graphics: CffiPlanetSideGraphics {
+                    surface: surface.clone(),
+                    assets: &assets,
+                    last_scan_position: None,
+                },
+                audio: CffiPlanetSideAudio::new(assets.sounds(), channels),
                 clock: CffiPlanetSideClock,
                 ship,
             };

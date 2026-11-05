@@ -21,9 +21,7 @@ pub trait BattleNet {
     fn init_end_frames(&self);
     fn end_ready(&self, side: usize) -> bool;
     fn ship_selected(&self, choice: u16);
-    /// # Safety
-    /// State must be the live legacy battle record until finish returns.
-    unsafe fn begin(&self, state: *mut c_void);
+    fn begin(&self);
     fn finish(&self);
     /// # Safety
     /// Picker must be the live legacy selection record, or null to release it.

@@ -218,13 +218,6 @@ pub unsafe fn uqm_get_crew_enlisted() -> u16 {
 // Macro / global wrappers
 // ---------------------------------------------------------------------------
 
-#[cfg(not(test))]
-pub use crate::mainloop::lifecycle_abi::uqm_battle_with_frame_callback;
-#[cfg(test)]
-extern "C" {
-    pub fn uqm_battle_with_frame_callback();
-}
-
 extern "C" {
     /// Sets the `MainExited` global.
     ///

@@ -318,20 +318,13 @@ impl Frames {
             .map_or(std::ptr::null_mut(), FrameSetRef::raw)
     }
 
-    /// # Safety
-    /// The source contains one or three live native frame slots on the graphics thread.
-    pub(crate) unsafe fn native_shared(
-        role: SharedFrames,
-        source: std::ptr::NonNull<FRAME>,
-        count: usize,
-    ) -> Self {
+    pub(crate) fn retain_shared(role: SharedFrames, source: &[FRAME]) -> Self {
+        let count = source.len();
         assert!(
             count == 1 || count == 3,
             "invalid native frame array length {count}"
         );
-        // SAFETY: construction retains the registered allocations behind these live source slots.
-        let raw =
-            unsafe { std::array::from_fn(|index| *source.as_ptr().add(index.min(count - 1))) };
+        let raw = std::array::from_fn(|index| source[index.min(count - 1)]);
         Self::shared(
             role,
             FrameArray::from_raw(raw, Some(source.as_ptr() as usize)),
@@ -442,6 +435,29 @@ mod tests {
     use crate::collections::observation::{self, Event};
 
     #[test]
+    #[serial_test::serial]
+    fn bounded_shared_sources_preserve_identity_and_snapshot_slots() {
+        let mut source = [std::ptr::null_mut(); 3];
+        let address = source.as_mut_ptr();
+        let frames = Frames::retain_shared(SharedFrames::Blast, &source);
+        source.fill(std::ptr::dangling_mut());
+        assert_eq!(frames.raw(), address);
+        for index in 0..3 {
+            assert!(frames.view(index).is_absent());
+        }
+        let single = [std::ptr::null_mut()];
+        let frames = Frames::retain_shared(SharedFrames::Stars, &single);
+        assert_eq!(frames.raw(), single.as_ptr().cast_mut());
+        assert!(frames.view(2).is_absent());
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid native frame array length 2")]
+    fn bounded_shared_sources_reject_invalid_lengths() {
+        Frames::retain_shared(SharedFrames::Blast, &[std::ptr::null_mut(); 2]);
+    }
+
+    #[test]
     fn replacement_descriptor_has_distinct_frames_even_for_the_same_ship_and_role() {
         let mut kernel = KernelOwner::new();
         kernel.reset_ship_capacity(0, 1);
@@ -468,14 +484,7 @@ mod tests {
         let frames = {
             let mut source = [std::ptr::null_mut(); 3];
             let address = source.as_mut_ptr();
-            // SAFETY: the source contains three absent frame slots throughout construction.
-            let frames = unsafe {
-                Frames::native_shared(
-                    SharedFrames::Blast,
-                    std::ptr::NonNull::new(address).unwrap(),
-                    3,
-                )
-            };
+            let frames = Frames::retain_shared(SharedFrames::Blast, &source);
             assert_eq!(frames.raw(), address);
             frames
         };

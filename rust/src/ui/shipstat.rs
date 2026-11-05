@@ -1,7 +1,9 @@
 #![cfg(not(test))]
 
+use crate::battle::status_native::draw_battle_crew_amount as draw_crew;
 use crate::engine::battle::{link_queue, ShipId};
 use crate::engine::{Kernel, WorldData};
+use crate::graphics::context_abi::_pCurContext;
 use crate::navigation::abi::*;
 use std::mem;
 
@@ -122,6 +124,7 @@ pub unsafe extern "C" fn OutlineShipStatus(y: COORD) {
 /// # Safety
 /// SIPtr must point to writable ship info. Optional pointers must be null or point to valid game objects.
 pub(crate) unsafe fn init_ship_status(
+    font: Option<&crate::graphics::native_font::FontLease>,
     siptr: *mut SHIP_INFO,
     starship: Option<ShipId>,
     clip_rect: *mut RECT,
@@ -166,7 +169,7 @@ pub(crate) unsafe fn init_ship_status(
     let energy_delta = (*siptr).energy_level as SIZE;
     (*siptr).crew_level = 0;
     (*siptr).energy_level = 0;
-    DeltaStatistics(siptr, y, crew_delta, energy_delta);
+    delta_statistics(font, siptr, y, crew_delta, energy_delta);
     UnbatchGraphics();
     if !clip_rect.is_null() {
         SetContextOrigin(old_origin);
@@ -223,34 +226,34 @@ unsafe fn draw_status_title(
 
 /// # Safety
 /// ShipInfoPtr must be writable and point to valid ship information; graphics context must be initialized.
-#[no_mangle]
-pub unsafe extern "C" fn DeltaStatistics(
+pub(crate) unsafe fn delta_statistics(
+    font: Option<&crate::graphics::native_font::FontLease>,
     ship: *mut SHIP_INFO,
     y_offs: COORD,
     crew_delta: SIZE,
     mut energy_delta: SIZE,
 ) {
+    let ship = &mut *ship;
     if crew_delta == 0 && energy_delta == 0 {
         return;
     }
-    let x: COORD = 0;
     let y = GAUGE_YOFFS + y_offs;
     let mut r: RECT = mem::zeroed();
     r.extent.width = UNIT_WIDTH;
     r.extent.height = UNIT_HEIGHT;
     if crew_delta != 0 {
-        let old_blocks = std::cmp::min((*ship).crew_level, MAX_CREW_SIZE as COUNT) as COORD;
-        let new_level = ((*ship).crew_level as i32 + crew_delta as i32) as COUNT;
+        let old_blocks = std::cmp::min(ship.crew_level, MAX_CREW_SIZE as COUNT) as COORD;
+        let new_level = (ship.crew_level as i32 + crew_delta as i32) as COUNT;
         let new_blocks = std::cmp::min(new_level, MAX_CREW_SIZE as COUNT) as COORD;
         if crew_delta > 0 {
             r.corner.y = (y + 1) - (((old_blocks + 1) >> 1) * (UNIT_HEIGHT + 1));
-            SetContextForeGroundColor(if (*ship).ship_flags & CREW_IMMUNE != 0 {
+            SetContextForeGroundColor(if ship.ship_flags & CREW_IMMUNE != 0 {
                 rgb15(0x0a, 0x0a, 0x0a)
             } else {
                 rgb15(0, 0x14, 0)
             });
             for i in old_blocks..new_blocks {
-                r.corner.x = x + CREW_XOFFS + 1;
+                r.corner.x = CREW_XOFFS + 1;
                 if i & 1 == 0 {
                     r.corner.x += UNIT_WIDTH + 1;
                     r.corner.y -= UNIT_HEIGHT + 1;
@@ -262,7 +265,7 @@ pub unsafe extern "C" fn DeltaStatistics(
             r.corner.y = (y + 1) - (((old_blocks + 2) >> 1) * (UNIT_HEIGHT + 1));
             let mut i = old_blocks;
             while i > new_blocks {
-                r.corner.x = x + CREW_XOFFS + 1 + UNIT_WIDTH + 1;
+                r.corner.x = CREW_XOFFS + 1 + UNIT_WIDTH + 1;
                 if i & 1 == 0 {
                     r.corner.x -= UNIT_WIDTH + 1;
                     r.corner.y += UNIT_HEIGHT + 1;
@@ -271,54 +274,83 @@ pub unsafe extern "C" fn DeltaStatistics(
                 i -= 1;
             }
         }
-        if (*ship).ship_flags & PLAYER_CAPTAIN != 0
-            && ((((*ship).crew_level > MAX_CREW_SIZE as COUNT)
-                != (new_level > MAX_CREW_SIZE as COUNT))
-                || (*ship).crew_level == 0)
-            && new_level != 0
+        draw_crew_marker(ship, new_level, y);
+        ship.crew_level = new_level;
+        if crate::graphics::context_abi::_GraphicsStatusFlags & 4 != 0
+            && crate::battle::status_native::has_crew_counter(ship.max_crew, ship.ship_flags)
         {
-            SetContextForeGroundColor(if new_level > MAX_CREW_SIZE as COUNT {
-                rgb15(0, 0x14, 0)
-            } else {
-                rgb15(0x0a, 0x0a, 0x1f)
-            });
-            r.corner.x = x + CREW_XOFFS + 1 + UNIT_WIDTH + 1;
-            r.corner.y = y - UNIT_HEIGHT;
-            DrawFilledRectangle(&mut r);
-        }
-        (*ship).crew_level = new_level;
-        if (*ship).max_crew > MAX_CREW_SIZE as COUNT || (*ship).ship_flags & PLAYER_CAPTAIN != 0 {
-            DrawBattleCrewAmount(ship, y_offs);
+            let context = crate::graphics::context_abi::ContextLease::retain(
+                std::ptr::NonNull::new(_pCurContext)
+                    .unwrap_or_else(|| panic!("missing status context")),
+            );
+            draw_crew(
+                &context,
+                font.unwrap_or_else(|| {
+                    panic!("numeric crew display requires the loaded battle font")
+                }),
+                ship.crew_level,
+                y_offs,
+                optWhichMenu == OPT_PC,
+            );
         }
     }
     if energy_delta != 0 {
         if energy_delta > 0 {
             SetContextForeGroundColor(rgb15(0x14, 0, 0));
-            r.corner.y = (y + 1) - (((*ship).energy_level as COORD + 1) >> 1) * (UNIT_HEIGHT + 1);
+            r.corner.y = (y + 1) - ((ship.energy_level as COORD + 1) >> 1) * (UNIT_HEIGHT + 1);
             while energy_delta > 0 {
-                r.corner.x = x + ENERGY_XOFFS + 1;
-                if (*ship).energy_level & 1 == 0 {
+                r.corner.x = ENERGY_XOFFS + 1;
+                if ship.energy_level & 1 == 0 {
                     r.corner.x += UNIT_WIDTH + 1;
                     r.corner.y -= UNIT_HEIGHT + 1;
                 }
                 DrawFilledRectangle(&mut r);
-                (*ship).energy_level += 1;
+                ship.energy_level += 1;
                 energy_delta -= 1;
             }
         } else {
             SetContextForeGroundColor(rgb15(0, 0, 0));
-            r.corner.y = (y + 1) - (((*ship).energy_level as COORD + 2) >> 1) * (UNIT_HEIGHT + 1);
+            r.corner.y = (y + 1) - ((ship.energy_level as COORD + 2) >> 1) * (UNIT_HEIGHT + 1);
             while energy_delta < 0 {
-                r.corner.x = x + ENERGY_XOFFS + 1 + UNIT_WIDTH + 1;
-                if (*ship).energy_level & 1 == 0 {
+                r.corner.x = ENERGY_XOFFS + 1 + UNIT_WIDTH + 1;
+                if ship.energy_level & 1 == 0 {
                     r.corner.x -= UNIT_WIDTH + 1;
                     r.corner.y += UNIT_HEIGHT + 1;
                 }
                 DrawFilledRectangle(&mut r);
-                (*ship).energy_level -= 1;
+                ship.energy_level -= 1;
                 energy_delta += 1;
             }
         }
+    }
+}
+
+unsafe fn draw_crew_marker(ship: &SHIP_INFO, new_level: COUNT, y: COORD) {
+    if ship.ship_flags & PLAYER_CAPTAIN != 0
+        && ((ship.crew_level > MAX_CREW_SIZE as COUNT) != (new_level > MAX_CREW_SIZE as COUNT)
+            || ship.crew_level == 0)
+        && new_level != 0
+    {
+        let context = crate::graphics::context_abi::ContextLease::retain(
+            std::ptr::NonNull::new(_pCurContext)
+                .unwrap_or_else(|| panic!("missing status context")),
+        );
+        let color = if new_level > MAX_CREW_SIZE as COUNT {
+            rgb15(0, 0x14, 0)
+        } else {
+            rgb15(0x0a, 0x0a, 0x1f)
+        };
+        let rect = RECT {
+            corner: POINT {
+                x: CREW_XOFFS + 1 + UNIT_WIDTH + 1,
+                y: y - UNIT_HEIGHT,
+            },
+            extent: EXTENT {
+                width: UNIT_WIDTH,
+                height: UNIT_HEIGHT,
+            },
+        };
+        context.fill_rectangle(color, rect);
     }
 }
 

@@ -209,10 +209,11 @@ pub unsafe extern "C" fn TFB_Prim_FontChar(
 ) {
     let x = i32::from(char_origin.x) + i32::from(origin.x);
     let y = i32::from(char_origin.y) + i32::from(origin.y);
-    if (*_CurFramePtr).Type == SCREEN_DRAWABLE as u16 {
-        TFB_DrawScreen_FontChar(glyph, backing, x, y, mode, 0);
+    let target = &*_CurFramePtr;
+    if target.Type == SCREEN_DRAWABLE as u16 {
+        TFB_DrawScreen_FontChar(&*glyph, backing, x, y, mode, 0);
     } else {
-        TFB_DrawImage_FontChar(glyph, backing, x, y, mode, (*_CurFramePtr).image);
+        TFB_DrawImage_FontChar(glyph, backing, x, y, mode, target.image);
     }
 }
 #[cfg(test)]

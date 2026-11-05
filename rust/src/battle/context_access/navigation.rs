@@ -6,7 +6,6 @@ use crate::navigation::abi::*;
 
 use crate::navigation::hyperspace::live::{logx, logy};
 use crate::planets::starmap::find_star_in;
-use std::ptr::NonNull;
 impl Cx<'_> {
     pub(crate) fn navigation(&self) -> &crate::engine::WorldData {
         &self.world.data
@@ -211,14 +210,11 @@ impl Cx<'_> {
         let role = crate::engine::battle::views::SharedFrames::GroupIcon(
             self.world.ip_groups_ref().raw(group) as usize,
         );
-        let source = NonNull::from(&record.melee_icon);
-        // SAFETY: the retained group owns its single icon frame slot.
-        let (frame, frames) = unsafe {
-            (
-                crate::engine::battle::views::FrameSelection::retain(record.melee_icon),
-                crate::engine::battle::views::Frames::native_shared(role, source, 1),
-            )
-        };
+        let frame = crate::engine::battle::views::FrameSelection::retain(record.melee_icon);
+        let frames = crate::engine::battle::views::Frames::retain_shared(
+            role,
+            std::slice::from_ref(&record.melee_icon),
+        );
         self.set_single_frames(id, frames, frame);
     }
     pub(crate) fn flagship_stamp_frame(&self) -> crate::engine::battle::views::FrameSelection {
@@ -228,10 +224,10 @@ impl Cx<'_> {
     pub(crate) fn set_flagship_image(&mut self, id: ElementId) {
         let frame = self.flagship_stamp_frame();
         let role = crate::engine::battle::views::SharedFrames::Flagship;
-        let source = NonNull::from(&self.navigation().game.ship_stamp.frame);
-        // SAFETY: the navigation authority retains this single-frame stamp slot.
-        let frames =
-            unsafe { crate::engine::battle::views::Frames::native_shared(role, source, 1) };
+        let frames = crate::engine::battle::views::Frames::retain_shared(
+            role,
+            std::slice::from_ref(&self.navigation().game.ship_stamp.frame),
+        );
         self.set_single_frames(id, frames, frame.clone());
         self.set_frame(id, false, frame);
     }

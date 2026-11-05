@@ -1,7 +1,5 @@
 //! Ship death, replacement, warp transitions, and battle-end synchronization.
 
-#[cfg(not(test))]
-use crate::engine::Kernel as KernelOwner;
 use crate::ships::native::abi;
 
 pub const fn minimum_ditty_frames(ticks_per_second: u32) -> u16 {
@@ -128,8 +126,8 @@ pub fn flee_cycle(index: u8, thrust: u8) -> (u8, u8, u8) {
 #[cfg(not(test))]
 pub(crate) mod engine {
     use super::*;
-    use crate::battle::battle_native::engine::{activity, rgb15, set_activity};
-    use crate::battle::battle_native::BattleSong;
+    use crate::battle::battle_native::engine::battle_song;
+    use crate::battle::battle_native::engine::rgb15;
     use crate::battle::encount_native::fleet_is_infinite;
     use crate::engine::battle::views::SharedFrames;
     use crate::engine::battle::{Cx, ElementFn, ElementId, Parent};
@@ -164,18 +162,20 @@ pub(crate) mod engine {
     }
 
     pub(crate) unsafe fn play_ditty(cx: &mut Cx<'_>, ship: crate::engine::battle::ShipId) {
-        PlayMusic(cx.desc(ship).ship_data.victory_ditty, 0, 3);
-        (*cx.kernel()).ditty_playing = 1;
+        crate::ui::settings::play_music_for_world(
+            cx.world,
+            cx.desc(ship).ship_data.victory_ditty,
+            0,
+            3,
+        );
+        cx.kernel.ditty_playing = 1;
     }
 
-    /// # Safety
-    /// The game thread must own initialized audio and battle music state.
-    #[no_mangle]
-    pub unsafe extern "C" fn StopDitty() {
-        if KernelOwner::current().read(|owner| owner.ditty_playing) != 0 {
-            stop_music();
+    pub fn stop_ditty(kernel: &mut crate::engine::Kernel) {
+        if kernel.ditty_playing != 0 {
+            crate::ui::settings::stop_battle_music();
         }
-        (**KernelOwner::current()).ditty_playing = 0;
+        kernel.ditty_playing = 0;
     }
 
     fn ditty_playing(kernel: &mut crate::engine::Kernel) -> bool {
@@ -307,7 +307,7 @@ pub(crate) mod engine {
             return;
         }
         cx.set_winner_slot(None);
-        StopDitty();
+        stop_ditty(cx.kernel);
         stop_music();
         StopSound();
         cx.set_parent(dead, None);
@@ -325,7 +325,8 @@ pub(crate) mod engine {
             .as_ref()
             .is_some_and(|net| !cx.negotiate_battle(net.as_ref(), NetState_NetState_interBattle))
         {
-            set_activity(activity() & !(IN_BATTLE as u16));
+            cx.world
+                .set_activity(cx.world.activity() & !(IN_BATTLE as u16));
             BatchGraphics();
             return;
         }
@@ -338,17 +339,20 @@ pub(crate) mod engine {
                 .as_ref()
                 .is_some_and(|net| !cx.negotiate_battle(net.as_ref(), NetState_NetState_inBattle))
             {
-                set_activity(activity() & !(IN_BATTLE as u16));
+                cx.world
+                    .set_activity(cx.world.activity() & !(IN_BATTLE as u16));
                 BatchGraphics();
                 return;
             }
             if restart {
-                BattleSong(1);
+                battle_song(cx.kernel, cx.world, true);
             }
         } else if cx.b.counters.contains(&0) {
-            set_activity(activity() & !(IN_BATTLE as u16));
+            cx.world
+                .set_activity(cx.world.activity() & !(IN_BATTLE as u16));
         } else {
-            set_activity(activity() | CHECK_ABORT as u16);
+            cx.world
+                .set_activity(cx.world.activity() | CHECK_ABORT as u16);
         }
         BatchGraphics();
     }
@@ -392,12 +396,9 @@ pub(crate) mod engine {
         }
     }
 
-    /// # Safety
-    /// The game thread must own initialized audio and battle music state.
-    #[no_mangle]
-    pub unsafe extern "C" fn StopAllBattleMusic() {
-        StopDitty();
-        stop_music();
+    pub fn stop_all_battle_music(kernel: &mut crate::engine::Kernel) {
+        stop_ditty(kernel);
+        crate::ui::settings::stop_battle_music();
     }
 
     pub(crate) fn find_alive_ship(
@@ -446,18 +447,12 @@ pub(crate) mod engine {
         cx.element_mut(ship).death = Some(ElementHook::Native(cleanup_dead_ship));
         cx.set_target(ship, None);
         if play_sound {
-            let position = crate::battle::sounds::engine::position(cx, Some(ship));
-            // SAFETY: the battle sound bank and source element remain live during playback.
-            unsafe {
-                let sound = SetAbsStringTableIndex((*cx.kernel()).game_sounds, 1);
-                crate::battle::sounds::engine::play_sound_in_context(
-                    cx,
-                    sound,
-                    position,
-                    Some(ship),
-                    (GAME_SOUND_PRIORITY + 1) as u8,
-                );
-            }
+            cx.play_battle_sound(
+                crate::engine::battle::views::BattleSoundBank::Game,
+                1,
+                ship,
+                (GAME_SOUND_PRIORITY + 1) as u8,
+            );
         }
     }
 

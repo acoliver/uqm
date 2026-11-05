@@ -7,6 +7,21 @@ pub const NUM_PLAYERS: usize = 2;
 const NETWORK_CONTROL: u8 = 8;
 
 impl crate::engine::Kernel {
+    pub fn replace_player_input(
+        &mut self,
+        side: usize,
+        input: Option<InputContext>,
+    ) -> Option<InputContext> {
+        if let Some(input) = &input {
+            assert_eq!(
+                usize::from(input.player()),
+                side,
+                "input belongs to another player"
+            );
+        }
+        std::mem::replace(&mut self.player_input[side], input)
+    }
+
     pub fn player_order(&self, rank: u16) -> u16 {
         for side in 0..NUM_PLAYERS {
             if self.player_control[side] & NETWORK_CONTROL != 0 {
@@ -143,7 +158,7 @@ mod tests {
         fn ship_selected(&self, _: u16) {
             unreachable!()
         }
-        unsafe fn begin(&self, _: *mut std::ffi::c_void) {
+        fn begin(&self) {
             unreachable!()
         }
         fn finish(&self) {
@@ -152,6 +167,39 @@ mod tests {
         unsafe fn bind_picker(&self, _: u16, _: *mut std::ffi::c_void) {
             unreachable!()
         }
+    }
+
+    #[test]
+    fn input_replacement_returns_the_owned_previous_context_and_preserves_other_player() {
+        let mut kernel = crate::engine::Kernel::new();
+        assert!(kernel
+            .replace_player_input(1, Some(InputContext::new(1, 2)))
+            .is_none());
+        assert!(kernel
+            .replace_player_input(0, Some(InputContext::new(0, 1)))
+            .is_none());
+        let saved = kernel
+            .replace_player_input(0, Some(InputContext::new(0, 2)))
+            .unwrap();
+        assert!(matches!(saved.source(), InputSource::Human));
+        let computer = kernel.replace_player_input(0, Some(saved)).unwrap();
+        assert!(matches!(computer.source(), InputSource::Computer));
+        assert!(matches!(
+            kernel.player_input[0].as_ref().unwrap().source(),
+            InputSource::Human
+        ));
+        assert!(matches!(
+            kernel.player_input[1].as_ref().unwrap().source(),
+            InputSource::Computer
+        ));
+        assert!(kernel.replace_player_input(0, None).is_some());
+        assert!(kernel.replace_player_input(0, None).is_none());
+    }
+
+    #[test]
+    #[should_panic(expected = "input belongs to another player")]
+    fn input_cannot_be_installed_on_another_players_slot() {
+        crate::engine::Kernel::new().replace_player_input(0, Some(InputContext::new(1, 1)));
     }
 
     #[test]

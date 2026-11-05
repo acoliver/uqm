@@ -421,10 +421,11 @@ pub(super) unsafe fn init_screen() {
 /// Call on the graphics thread with loaded melee resources. Pointer arguments
 /// must be valid for the call, and player, row, column and ship indices must be in range.
 pub unsafe extern "C" fn DrawMeleeShipStrings(state: *mut MELEE_STATE, ship: u32) {
-    let (context, master) = KernelOwner::current().read(|owner| {
+    let (context, master, font) = KernelOwner::current().read(|owner| {
         (
             owner.status_context,
             crate::ships::master_native::master_in(owner, ship as u16),
+            owner.battle_font(),
         )
     });
     let old = SetContext(context);
@@ -461,7 +462,12 @@ pub unsafe extern "C" fn DrawMeleeShipStrings(state: *mut MELEE_STATE, ship: u32
         font_DrawText(&mut t);
     } else {
         let mut master = master.unwrap_or_else(|| panic!("melee master ship {ship}"));
-        crate::ui::shipstat::init_ship_status(&mut master.info, None, ptr::null_mut());
+        crate::ui::shipstat::init_ship_status(
+            font.as_ref(),
+            &mut master.info,
+            None,
+            ptr::null_mut(),
+        );
     }
     UnbatchGraphics();
     set_context_clip_rect(&mut clip);

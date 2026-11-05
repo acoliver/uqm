@@ -5,7 +5,6 @@ use std::ptr;
 use uqm_rust::graphics::{gfxload, native_abi as abi};
 use uqm_rust::io::uio_bridge as uio;
 use uqm_rust::mainloop::dir_prep::{contentDir, repository};
-use uqm_rust::memory::rust_hfree;
 
 fn png(width: u32, height: u32, color: png::ColorType, pixels: &[u8]) -> Vec<u8> {
     let mut output = Vec::new();
@@ -74,14 +73,9 @@ unsafe fn check_font(path: &std::ffi::CStr, zipped: bool, alpha: &[u8]) {
         std::slice::from_raw_parts(b.data, 6),
         [0, 255, 18, 72, 145, 36]
     );
-    // Production font release queues data deletion; this isolated loader test has
-    // no drawing queue, so consume the owned page allocations directly.
-    for i in 0..(*page).numChars {
-        rust_hfree((*(*page).charDesc.add(i)).data.cast());
-    }
-    rust_hfree((*page).charDesc.cast());
-    rust_hfree(page.cast());
-    rust_hfree(font.cast());
+    assert_eq!(uqm_rust::graphics::font_abi::DestroyFont(font), 1);
+    // This loader fixture has no renderer; drain its queued bitmap deletions.
+    uqm_rust::graphics::dcqueue_abi::TFB_PurgeDanglingGraphics();
 }
 
 unsafe fn check_animation(path: &std::ffi::CStr) {
@@ -244,13 +238,8 @@ sprite.png -1 0 0 0
         let font = uqm_rust::graphics::filegfx::LoadFontFile(c"font".as_ptr());
         assert!(!font.is_null());
         assert_eq!(((*font).Leading, (*font).LeadingWidth), (10, 4));
-        let page = (*font).fontPages;
-        for i in 0..(*page).numChars {
-            rust_hfree((*(*page).charDesc.add(i)).data.cast());
-        }
-        rust_hfree((*page).charDesc.cast());
-        rust_hfree(page.cast());
-        rust_hfree(font.cast());
+        assert_eq!(uqm_rust::graphics::font_abi::DestroyFont(font), 1);
+        uqm_rust::graphics::dcqueue_abi::TFB_PurgeDanglingGraphics();
         assert!(ptr::addr_of!(abi::_cur_resfile_name).read().is_null());
         check_animation(c"frames.ani");
         check_animation(c"/animation/packed.ani");

@@ -1,11 +1,9 @@
 //! Battle entry, ordered input processing, and frame scheduling from `battle.c`.
 
 #[cfg(not(test))]
-use crate::engine::battle::input::InputContext;
-#[cfg(not(test))]
 use crate::engine::World as WorldOwner;
 #[cfg(not(test))]
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
+use crate::engine::WorldData as WorldFields;
 use crate::ships::native::abi;
 
 const BATTLE_LEFT: u8 = 1 << 0;
@@ -94,59 +92,31 @@ fn advance_observation(io: &mut crate::engine::observe::Io<'_>) {
 }
 
 #[cfg(not(test))]
-type BattleNetwork = (
-    *mut crate::engine::battle::Battle,
-    std::rc::Rc<dyn crate::engine::battle::net::BattleNet>,
-    bool,
-    Option<crate::engine::input::InputObserver>,
-);
-#[cfg(not(test))]
-fn initialize_battle(cx: &mut crate::engine::battle::Cx<'_>) -> BattleNetwork {
+fn initialize_battle(
+    cx: &mut crate::engine::battle::Cx<'_>,
+) -> (std::rc::Rc<dyn crate::engine::battle::net::BattleNet>, bool) {
     cx.b.initialize(cx.kernel);
-    let battle = &mut *cx.b;
-    let had_net = battle.net.is_some();
-    battle
-        .net
+    let had_net = cx.b.net.is_some();
+    cx.b.net
         .get_or_insert_with(|| crate::supermelee::netplay::NetplaySession::default().battle_net());
-    (
-        battle,
-        battle.network(),
-        had_net,
-        Some(cx.kernel.input_runtime().observer()),
-    )
-}
-
-#[cfg(not(test))]
-fn finish_battle_network(battle: &mut crate::engine::battle::Battle, had_net: bool) {
-    if !had_net {
-        battle.net = None;
-    }
-}
-
-#[cfg(not(test))]
-unsafe fn battle_network() -> BattleNetwork {
-    use engine::NETWORK_CONTROL;
-    crate::app::bridge::enter(|cx| {
-        let result = initialize_battle(cx);
-        for side in 0..2 {
-            if cx.kernel.player_control[side] & NETWORK_CONTROL != 0 {
-                cx.kernel.player_input[side]
-                    .as_mut()
-                    .unwrap_or_else(|| panic!("missing player input"))
-                    .connect(result.1.clone());
-            }
+    let net = cx.b.network();
+    for side in 0..2 {
+        if cx.kernel.player_control[side] & engine::NETWORK_CONTROL != 0 {
+            cx.kernel.player_input[side]
+                .as_mut()
+                .unwrap_or_else(|| panic!("missing player input"))
+                .connect(net.clone());
         }
-        result
-    })
+    }
+    (net, had_net)
 }
 
 #[cfg(not(test))]
 pub(crate) mod engine {
     use super::*;
-    use crate::battle::c_bridge::DoInput;
-    use crate::battle::tactrans_native::{flee_preprocess, reset_winner, StopDitty};
+    use crate::battle::tactrans_native::{flee_preprocess, reset_winner, stop_ditty};
     use abi::*;
-    use std::{mem, ptr};
+    use std::mem;
 
     const BATTLE_ESCAPE: u8 = 1 << 5;
 
@@ -158,7 +128,7 @@ pub(crate) mod engine {
     // gfx_common.h SCALE enum starts with the stepped scaler.
     pub const SCALE_STEP: i32 = 0;
 
-    use crate::battle::process_native::engine::RedrawQueue;
+    use crate::battle::process_native::engine::redraw_queue;
     use crate::engine::observe::Io;
 
     use crate::state::ffi::rust_get_game_state_bits as getGameState;
@@ -171,11 +141,6 @@ pub(crate) mod engine {
         WorldFields::current().read(|owner| owner.game.current_activity)
     }
     /// # Safety
-    /// The caller must exclusively own game-thread activity state.
-    pub unsafe fn set_activity(value: u16) {
-        (**WorldFields::current()).game.current_activity = value;
-    }
-    /// # Safety
     /// `start..=end` must name a valid game-state bit field on the game thread.
     pub fn game_state(start: u32, end: u32) -> u8 {
         WorldOwner::current().read(|world| getGameState(world, start as i32, end as i32))
@@ -185,31 +150,6 @@ pub(crate) mod engine {
     pub fn set_game_state(start: u32, end: u32, value: u8) {
         WorldOwner::current().write(|world| setGameState(world, start as i32, end as i32, value));
     }
-    /// # Safety
-    /// `side` must be a valid player index with initialized input state.
-    pub fn player_input(side: usize) -> Option<InputContext> {
-        KernelOwner::current().read(|owner| owner.player_input[side].clone())
-    }
-    pub fn set_player_input(side: usize, input: Option<InputContext>) {
-        KernelOwner::current().write(|owner| owner.player_input[side] = input);
-    }
-    /// # Safety
-    /// `side` must be a valid player index on the game thread.
-    pub unsafe fn player_control(side: usize) -> u8 {
-        let kernel = KernelOwner::current();
-        *(&raw const (**kernel).player_control)
-            .cast::<BYTE>()
-            .add(side)
-    }
-    /// # Safety
-    /// `side` must be a valid player index owned by the game thread.
-    pub unsafe fn set_player_control(side: usize, value: u8) {
-        let kernel = KernelOwner::current();
-        *(&raw mut (**kernel).player_control)
-            .cast::<BYTE>()
-            .add(side) = value;
-    }
-
     pub const fn rgb15(r: u8, g: u8, b: u8) -> Color {
         Color {
             r: (r << 3) | (r >> 2),
@@ -315,93 +255,70 @@ pub(crate) mod engine {
         }
     }
 
-    /// # Safety
-    /// The game thread must own initialized audio, activity, and resource state.
-    #[no_mangle]
-    pub unsafe extern "C" fn BattleSong(play: BOOLEAN) {
-        if KernelOwner::current()
-            .read(|owner| owner.battle_music)
-            .is_null()
-        {
-            let resource = if WorldOwner::current().read(in_hyper_space) != 0 {
-                HYPERSPACE_MUSIC.as_ptr()
-            } else if WorldOwner::current().read(in_quasi_space) != 0 {
-                QUASISPACE_MUSIC.as_ptr()
+    pub(crate) fn battle_song(
+        kernel: &mut crate::engine::Kernel,
+        world: &crate::engine::World,
+        play: bool,
+    ) {
+        if kernel.battle_music.is_none() {
+            let resource = if in_hyper_space(world) != 0 {
+                c"music.hyperspace"
+            } else if in_quasi_space(world) != 0 {
+                c"music.quasispace"
             } else {
-                BATTLE_MUSIC.as_ptr()
+                c"music.battle"
             };
-            (**KernelOwner::current()).battle_music =
-                crate::sound::resource_types::LoadMusicInstance(resource.cast()).cast();
+            kernel.battle_music = crate::sound::resource_types::LoadedMusic::load(resource);
         }
-        if play != 0 {
-            PlayMusic(
-                KernelOwner::current().read(|owner| owner.battle_music),
-                1,
-                1,
-            );
+        if play {
+            crate::ui::settings::play_loaded_music(world, kernel.battle_music.as_ref(), 1, 1);
         }
     }
 
-    /// # Safety
-    /// The game thread must own the battle music handle and initialized audio state.
-    #[no_mangle]
-    pub unsafe extern "C" fn FreeBattleSong() {
-        DestroyMusic(KernelOwner::current().read(|owner| owner.battle_music));
-        (**KernelOwner::current()).battle_music = ptr::null_mut();
+    pub fn free_battle_song(kernel: &mut crate::engine::Kernel) {
+        kernel.battle_music = None;
     }
 
-    fn battle_io(observer: &mut Option<crate::engine::input::InputObserver>) -> Io<'_> {
-        Io {
-            observer: observer
-                .as_deref_mut()
-                .unwrap_or_else(|| panic!("missing battle observer")),
-        }
+    struct BattleSession {
+        first_time: bool,
+        next_time: u32,
     }
 
-    unsafe fn observe_melee_game_over(observer: &mut Option<crate::engine::input::InputObserver>) {
-        crate::supermelee::native::battle_picker::live::melee_game_over(&mut battle_io(observer));
-    }
-
-    unsafe extern "C" fn do_battle(bs: *mut battlestate_struct) -> BOOLEAN {
-        crate::log_abi::log_message(
-            5,
-            &format!(
-                "BATTLE_DEBUG: DoBattle called, first_time={}, CHECK_ABORT={}",
-                (*bs).first_time,
-                (activity() & CHECK_ABORT as u16 != 0) as i32
-            ),
-        );
+    unsafe fn do_battle(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        io: &mut Io<'_>,
+        session: &mut BattleSession,
+        net: &dyn crate::engine::battle::net::BattleNet,
+        callback: Option<fn(&mut crate::engine::battle::Cx<'_>, &mut Io<'_>)>,
+    ) -> bool {
         SetMenuSounds(0, 0);
-        let net = (*bs).net.clone().unwrap_or_else(|| panic!("missing net"));
         let frame = net.frame();
         if net.peer_count() > 0 && frame.is_multiple_of(NETPLAY_CHECKSUM_INTERVAL) {
             let mut state = mem::zeroed();
             crc_init(&mut state);
-            crc_processState(&mut state);
+            cx.with_legacy(|| crc_processState(&mut state));
             net.record_checksum(frame, crc_finish(&state));
         }
-        let mut io = battle_io(&mut (*bs).observer);
-        crate::app::bridge::enter(|cx| {
-            process_input(
-                cx,
-                &mut io,
-                &*net,
-                battle_input_order(&cx.kernel.player_control, NETWORK_CONTROL),
-            )
-        });
+        process_input(
+            cx,
+            io,
+            net,
+            battle_input_order(&cx.kernel.player_control, NETWORK_CONTROL),
+        );
         if net.peer_count() > 0 {
             let delay = net.input_delay();
             if frame as usize >= delay
                 && (frame as usize - delay).is_multiple_of(NETPLAY_CHECKSUM_INTERVAL as usize)
-                && activity() & CHECK_ABORT as u16 == 0
+                && cx.world.activity() & CHECK_ABORT as u16 == 0
                 && !net.verify_checksum((frame as usize - delay) as u32)
             {
-                set_activity(activity() | CHECK_ABORT as u16);
-                net.reset(NetplayResetReason_ResetReason_syncLoss);
+                cx.world
+                    .set_activity(cx.world.activity() | CHECK_ABORT as u16);
+                cx.with_legacy(|| net.reset(NetplayResetReason_ResetReason_syncLoss));
             }
         }
         let mut rect: RECT = mem::zeroed();
-        if (*bs).first_time != 0 {
+        if session.first_time {
             rect.corner.x = SIS_ORG_X as i16;
             rect.corner.y = SIS_ORG_Y as i16;
             rect.extent.width = sis_width() as _;
@@ -409,146 +326,148 @@ pub(crate) mod engine {
             SetTransitionSource(&rect);
         }
         BatchGraphics();
-        if let Some(callback) = (*bs).frame_cb {
-            callback();
+        if let Some(callback) = callback {
+            callback(cx, io);
         }
-        RedrawQueue(1);
-        if (*bs).first_time != 0 {
-            (*bs).first_time = 0;
+        redraw_queue(cx, true);
+        if session.first_time {
+            session.first_time = false;
             ScreenTransition(3, &rect);
         }
         UnbatchGraphics();
-        if activity() & IN_BATTLE as u16 == 0 || activity() & (CHECK_ABORT | CHECK_LOAD) as u16 != 0
+        if cx.world.activity() & IN_BATTLE as u16 == 0
+            || cx.world.activity() & (CHECK_ABORT | CHECK_LOAD) as u16 != 0
         {
-            return 0;
+            return false;
         }
-        match frame_interval(ONE_SECOND, ((*(*bs).battle).nth_frame >> 8) as u8) {
-            None => {
+        match frame_interval(ONE_SECOND, (cx.b.nth_frame >> 8) as u8) {
+            None => cx.with_legacy(|| {
                 Async_process();
                 TaskSwitch();
-            }
+            }),
             Some(interval) => {
-                SleepThreadUntil((*bs).NextTime.wrapping_add(interval));
-                (*bs).NextTime = GetTimeCounter();
+                cx.with_legacy(|| SleepThreadUntil(session.next_time.wrapping_add(interval)));
+                session.next_time = GetTimeCounter();
             }
         }
-        if activity() & IN_BATTLE as u16 == 0 {
-            return 0;
+        if cx.world.activity() & IN_BATTLE as u16 == 0 {
+            return false;
         }
-        advance_observation(&mut io);
+        cx.with_legacy(|| advance_observation(io));
         net.set_frame(frame.wrapping_add(1));
-        1
+        true
     }
 
-    unsafe fn select_all_ships(count: SIZE) -> BOOLEAN {
+    unsafe fn select_all_ships(cx: &mut crate::engine::battle::Cx<'_>, count: SIZE) -> BOOLEAN {
+        let controls = cx.kernel.player_control;
         if count == 1 {
-            return crate::app::bridge::enter(|cx| {
-                crate::battle::ship_native::engine::next_star_ship(cx, None, 0)
-            });
+            return crate::battle::ship_native::engine::next_star_ship(cx, None, 0);
         }
-        if player_control(0) & NETWORK_CONTROL != 0 && player_control(1) & NETWORK_CONTROL != 0 {
+        if controls[0] & NETWORK_CONTROL != 0 && controls[1] & NETWORK_CONTROL != 0 {
             crate::log_abi::log_message(2, "Only one side at a time can be network controlled.\n");
             return 0;
         }
-        GetInitialStarShips()
+        crate::battle::ship_native::initial_star_ships(cx)
     }
 
-    /// # Safety
-    /// The game thread must own initialized battle, input, audio, and display state; any callback must remain valid for the battle.
-    #[no_mangle]
-    pub unsafe extern "C" fn Battle(callback: BattleFrameCallback) -> BOOLEAN {
-        let (battle, net, had_net, mut observer) = battle_network();
-        let mut io = battle_io(&mut observer);
-        if activity() as u8 != SUPER_MELEE as u8 {
-            crate::math::seed_random(seed(&mut io, 4, GetTimeCounter()));
+    fn finish_battle(cx: &mut crate::engine::battle::Cx<'_>, stop_audio: bool) {
+        if stop_audio {
+            stop_ditty(cx.kernel);
+            crate::ui::settings::stop_battle_music();
+            StopSound();
+        }
+        cx.finish_battle();
+    }
+
+    fn seed_battle_rng(
+        activity: u8,
+        campaign_domain: u32,
+        seed_value: impl FnOnce(u32, u32) -> u32,
+    ) {
+        if activity != SUPER_MELEE as u8 {
+            crate::math::seed_random(seed_value(campaign_domain, GetTimeCounter()));
         } else {
-            let seed = seed(&mut io, 2, 0);
+            let seed = seed_value(2, 0);
             if seed != 0 {
                 crate::math::seed_random(seed);
             }
         }
-        BattleSong(0);
-        let mut count = InitShips();
-        if KernelOwner::current().read(|owner| owner.instant_victory) != 0 {
+    }
+
+    /// # Safety
+    /// The game thread must retain initialized native audio and display resources.
+    pub unsafe fn battle(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        io: &mut Io<'_>,
+        callback: Option<fn(&mut crate::engine::battle::Cx<'_>, &mut Io<'_>)>,
+    ) -> bool {
+        let (net, had_net) = initialize_battle(cx);
+        let activity = cx.world.activity() as u8;
+        cx.with_legacy(|| {
+            seed_battle_rng(activity, 4, |domain, fallback| seed(io, domain, fallback))
+        });
+        battle_song(cx.kernel, cx.world, false);
+        let mut count = cx.with_legacy(|| InitShips());
+        if cx.kernel.instant_victory != 0 {
             count = 0;
-            (*battle).counters = [1, 0];
-            (**KernelOwner::current()).instant_victory = 0;
+            cx.b.counters = [1, 0];
+            cx.kernel.instant_victory = 0;
         }
         if count != 0 {
-            let mut bs: battlestate_struct = mem::zeroed();
-            set_activity(activity() | IN_BATTLE as u16);
-            (*battle).counters[0] = crate::engine::battle::link_queue::ships(0).count() as u8;
-            (*battle).counters[1] = crate::engine::battle::link_queue::ships(1).count() as u8;
-            reset_observation(&mut io);
+            cx.world
+                .set_activity(cx.world.activity() | IN_BATTLE as u16);
+            cx.b.counters = std::array::from_fn(|side| cx.kernel.ships(side).count() as u8);
+            cx.with_legacy(|| reset_observation(io));
             if optMeleeScale != SCALE_STEP {
                 SetGraphicScaleMode(optMeleeScale);
             }
-            bs.battle = battle;
-            bs.net = Some(net.clone());
-            bs.observer = observer;
-            net.begin((&raw mut bs).cast());
-            crate::app::bridge::enter(|cx| reset_winner(cx.kernel));
-            crate::log_abi::log_message(
-                5,
-                &format!(
-                    "BATTLE_DEBUG: About to call selectAllShips, CHECK_ABORT={}, IN_BATTLE={}",
-                    (activity() & CHECK_ABORT as u16 != 0) as i32,
-                    (activity() & IN_BATTLE as u16 != 0) as i32
-                ),
-            );
-            if select_all_ships(count) == 0 {
-                set_activity(activity() | CHECK_ABORT as u16);
+            let mut session = BattleSession {
+                first_time: false,
+                next_time: 0,
+            };
+            net.begin();
+            reset_winner(cx.kernel);
+            if select_all_ships(cx, count) == 0 {
+                cx.world
+                    .set_activity(cx.world.activity() | CHECK_ABORT as u16);
             } else {
-                crate::log_abi::log_message(
-                    5,
-                    "BATTLE_DEBUG: selectAllShips returned TRUE, calling BattleSong",
-                );
-                BattleSong(1);
-                bs.NextTime = 0;
+                battle_song(cx.kernel, cx.world, true);
                 net.init_end_frames();
-                if !net.negotiate(true, NetState_NetState_inBattle) {
-                    set_activity(activity() | CHECK_ABORT as u16);
+                if !cx.with_legacy(|| net.negotiate(true, NetState_NetState_inBattle)) {
+                    cx.world
+                        .set_activity(cx.world.activity() | CHECK_ABORT as u16);
                 } else {
-                    bs.InputFunc = Some(do_battle);
-                    bs.frame_cb = callback;
-                    bs.first_time = WorldOwner::current().read(in_hqspace);
-                    crate::log_abi::log_message(
-                        5,
-                        "BATTLE_DEBUG: About to call DoInput for battle loop",
-                    );
-                    DoInput((&mut bs as *mut battlestate_struct).cast(), 0);
-                    crate::log_abi::log_message(
-                        5,
-                        &format!(
-                            "BATTLE_DEBUG: DoInput returned, CHECK_ABORT={}",
-                            (activity() & CHECK_ABORT as u16 != 0) as i32
-                        ),
-                    );
+                    session.first_time = in_hqspace(cx.world) != 0;
+                    cx.run_input(io, false, |cx, io| {
+                        do_battle(cx, io, &mut session, &*net, callback)
+                    });
                 }
             }
-            if activity() as u8 == SUPER_MELEE as u8 {
-                if activity() & CHECK_ABORT as u16 != 0 {
-                    net.wait_reset(NetState_NetState_inSetup);
-                    set_activity(activity() & !(CHECK_ABORT as u16));
+            if cx.world.activity() as u8 == SUPER_MELEE as u8 {
+                if cx.world.activity() & CHECK_ABORT as u16 != 0 {
+                    cx.with_legacy(|| net.wait_reset(NetState_NetState_inSetup));
+                    cx.world
+                        .set_activity(cx.world.activity() & !(CHECK_ABORT as u16));
                 } else {
-                    observe_melee_game_over(&mut bs.observer);
+                    cx.with_legacy(|| {
+                        crate::supermelee::native::battle_picker::live::melee_game_over(io)
+                    });
                 }
             }
             net.finish();
-            StopDitty();
-            stop_music();
-            StopSound();
         }
-        crate::app::bridge::enter(|cx| cx.finish_battle());
-        UninitShips();
-        FreeBattleSong();
-        finish_battle_network(&mut *battle, had_net);
-        (count < 0) as BOOLEAN
+        finish_battle(cx, count != 0);
+        cx.with_legacy(|| UninitShips());
+        free_battle_song(cx.kernel);
+        if !had_net {
+            cx.b.net = None;
+        }
+        count < 0
     }
 }
 
 #[cfg(not(test))]
-pub use engine::{player_input, set_player_input, Battle, BattleSong, FreeBattleSong};
+pub use engine::{battle, free_battle_song};
 
 #[cfg(test)]
 mod tests {
@@ -644,21 +563,13 @@ mod tests {
     #[serial_test::serial]
     fn retained_battle_observer_sees_counter_changes_before_checkpoints() {
         let events = Rc::new(RefCell::new(Vec::new()));
-        let mut state = abi::battlestate_struct {
-            InputFunc: None,
-            first_time: 0,
-            NextTime: 0,
-            frame_cb: None,
-            net: None,
-            battle: std::ptr::null_mut(),
-            observer: Some(Box::new(Recording {
-                events: events.clone(),
-                seed: None,
-            })),
+        let mut observer = Recording {
+            events: events.clone(),
+            seed: None,
         };
         crate::collections::observation::advance();
         let mut io = Io {
-            observer: state.observer.as_deref_mut().unwrap(),
+            observer: &mut observer,
         };
         reset_observation(&mut io);
         advance_observation(&mut io);

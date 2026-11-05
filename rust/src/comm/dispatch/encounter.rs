@@ -39,7 +39,7 @@ pub(super) fn finish_unhailed(cx: &mut Cx<'_>, has_descriptor: bool) {
 }
 
 #[cfg(not(test))]
-pub(super) fn fight_if_selected(cx: &mut Cx<'_>) -> u16 {
+pub(super) fn fight_if_selected(cx: &mut Cx<'_>, io: &mut Io<'_>) -> u16 {
     let mut status = 0;
     let activity = cx.world.activity();
     if activity & (CHECK_ABORT | CHECK_LOAD) == 0 {
@@ -54,11 +54,11 @@ pub(super) fn fight_if_selected(cx: &mut Cx<'_>) -> u16 {
                 && cx.world.npc_built_ships_ref().head().is_some(),
         );
         if status != 0 {
-            // SAFETY: battle still consumes the published campaign until U2-10a.
-            cx.with_legacy(|| unsafe {
-                ffi::BuildBattle(RPG_PLAYER_NUM);
-                ffi::EncounterBattle();
-            });
+            // SAFETY: dispatch retains the campaign fleet and audio resources through combat.
+            unsafe {
+                crate::battle::encount_native::build_battle(cx.world, cx.kernel, RPG_PLAYER_NUM);
+                crate::battle::encount_native::encounter_battle(cx, io);
+            }
         } else {
             cx.world.set_story_state(StoryKey::BATTLE_SEGUE, 0);
         }

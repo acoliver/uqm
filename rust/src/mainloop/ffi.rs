@@ -364,17 +364,6 @@ pub fn set_main_exited(value: bool) {
     unsafe { c_globals::MAIN_EXITED = cval };
 }
 
-/// Start a battle with the on-frame callback.
-///
-/// Wraps `Battle(&on_battle_frame)` (defined in starcon.c).
-///
-/// @plan PLAN-20260707-MAINLOOP.P03
-#[inline]
-pub fn battle_with_frame_callback() {
-    // SAFETY: no preconditions; enters the battle loop.
-    unsafe { prod::uqm_battle_with_frame_callback() };
-}
-
 // ---------------------------------------------------------------------------
 // LoadKernel
 // ---------------------------------------------------------------------------
