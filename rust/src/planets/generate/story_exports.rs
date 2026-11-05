@@ -128,10 +128,7 @@ impl ChmmrSite for ChmmrHome<'_, '_, '_> {
         }
     }
     fn current_activity(&self) -> u16 {
-        self.game
-            .cx
-            .borrow_mut()
-            .with_legacy(|| crate::mainloop::ffi::get_current_activity().0)
+        self.game.cx.borrow().world.activity()
     }
     fn set_current_activity(&mut self, activity: u16) {
         self.game.cx.borrow_mut().world.set_activity(activity);
