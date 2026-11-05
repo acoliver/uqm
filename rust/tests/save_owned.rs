@@ -143,3 +143,40 @@ fn snapshot_preserves_saved_location_and_normalizes_only_live_location() {
     assert_eq!(world.data.game.in_orbit, 0);
     assert_eq!(captured.summary, summary);
 }
+
+#[test]
+fn solar_scan_save_uses_unpublished_story_and_files_and_clears_the_flag_after_writing() {
+    use uqm_rust::engine::{
+        save::location::{apply_solar_location, OrbitLocation, SolarLocation},
+        world::planet_info::ScanRetrieveMask,
+        StoryKey,
+    };
+    let mut world = World::new();
+    world.story = Some(uqm_rust::engine::world::story::GameState::new());
+    world.data.game.ip_planet = 2;
+    world.data.game.ship_facing = 9;
+    world.set_story_state(StoryKey::PLANETARY_CHANGE, 1);
+    world.files.replace_contents(0, &[0; 4]).unwrap();
+    let mut moon_counts = [0; 16];
+    moon_counts[..3].copy_from_slice(&[1, 2, 0]);
+    apply_solar_location(
+        &mut world,
+        SolarLocation::Orbit(OrbitLocation {
+            in_orbit: 3,
+            star_index: 0,
+            planet: 1,
+            moon: 2,
+            scan: ScanRetrieveMask::from_array(&[1, 2, 3]),
+            planet_count: 3,
+            moon_counts,
+        }),
+    )
+    .unwrap();
+    assert_eq!(world.data.game.in_orbit, 3);
+    assert_eq!(world.data.game.ship_facing, 9);
+    assert_eq!(world.story_state(StoryKey::PLANETARY_CHANGE), 0);
+    let image = world.files.get_file(0).unwrap().contents();
+    assert_eq!(image.len(), 4 + 6 * 12);
+    assert_eq!(&image[..4], &4u32.to_le_bytes());
+    assert_eq!(&image[52..64], &[1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0]);
+}

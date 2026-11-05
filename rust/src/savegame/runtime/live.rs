@@ -165,22 +165,15 @@ pub unsafe fn prepare_live_solar_location() -> Result<(), LiveLocationError> {
     assert!(!state.is_null(), "not in a solar system");
     // SAFETY: this game-thread operation retains the initialized star catalog.
     let catalog = unsafe { Some(live_catalog()) };
-    let current = (**World::current()).star_pointer(catalog);
+    let lease = World::current();
+    let world = &mut **lease;
+    let current = world.star_pointer(catalog);
     let star_index =
         star::catalog_index(live_catalog(), current).map_err(LiveLocationError::Star)?;
-    let mut game = WorldData::current().read(|world| world.game);
-    location::save_solar_location(
-        &mut *std::ptr::addr_of_mut!(game).cast::<crate::comm::locdata::CGameState>(),
-        &*state,
-        star_index,
-    )
-    .map_err(LiveLocationError::Location)?;
-    WorldData::current().write(|world| {
-        world.game.in_orbit = game.in_orbit;
-        world.game.ship_facing = game.ship_facing;
-        world.game.ip_planet = game.ip_planet;
-        world.game.ip_location = game.ip_location;
-    });
+    let location = location::prepare_solar_location(&world.data.game, &*state, star_index)
+        .map_err(LiveLocationError::Location)?;
+    crate::engine::save::location::apply_solar_location(world, location)
+        .map_err(LiveLocationError::Location)?;
     Ok(())
 }
 
