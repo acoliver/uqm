@@ -1,7 +1,7 @@
 //! Setup menus and persistent options, ported from uqm/setupmenu.c.
 
 #[cfg(not(test))]
-use crate::engine::{battle::Cx, observe::Io, Kernel, WorldData};
+use crate::engine::{battle::Cx, observe::Io, Kernel};
 use crate::navigation::abi::*;
 use std::ffi::c_int;
 
@@ -306,8 +306,7 @@ pub(crate) mod runtime {
         }
         SleepThreadUntil(state.next_time.wrapping_add(MENU_FRAME_RATE));
         state.next_time = GetTimeCounter();
-        let activity = WorldData::current().read(|owner| owner.game.current_activity);
-        BOOLEAN::from(activity & CHECK_ABORT as u16 == 0 && !NEXT.is_null())
+        BOOLEAN::from(!NEXT.is_null())
     }
     unsafe fn redraw_menu() {
         BatchGraphics();
@@ -868,13 +867,13 @@ pub(crate) mod runtime {
         });
         cx.run_input(io, true, |cx, _| {
             cx.with_legacy(|| do_setup_menu(&mut state)) != 0
+                && cx.world.activity() & CHECK_ABORT as u16 == 0
         });
+        cx.world
+            .set_activity(cx.world.activity() & !(CHECK_ABORT as u16));
         cx.with_legacy(|| {
-            (**WorldData::current()).game.current_activity &= !(CHECK_ABORT as u16);
             propagate_results();
-            if !SETUP_TAB.is_null() {
-                clean_up_widgets();
-            }
+            clean_up_widgets();
         });
     }
 

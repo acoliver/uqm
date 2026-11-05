@@ -590,10 +590,8 @@ pub(crate) mod runtime {
         NAMING_CB = callback;
     }
 
-    unsafe fn do_settings(p_ms: *mut MENU_STATE) -> BOOLEAN {
-        if WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as ACTIVITY
-            != 0
-        {
+    unsafe fn do_settings(p_ms: *mut MENU_STATE, activity: u16) -> BOOLEAN {
+        if activity & CHECK_ABORT as ACTIVITY != 0 {
             return 0;
         }
         let mut cur_speed = (WorldData::current().read(|owner| owner.game.glob_flags)
@@ -649,7 +647,8 @@ pub(crate) mod runtime {
             feedback_setting(menu_state.CurState);
         });
         cx.run_input(io, false, |cx, _| {
-            cx.with_legacy(|| do_settings(ptr::addr_of_mut!(menu_state))) != 0
+            let activity = cx.world.activity();
+            cx.with_legacy(|| do_settings(ptr::addr_of_mut!(menu_state), activity)) != 0
         });
         cx.with_legacy(|| DrawStatusMessage(ptr::null()));
     }
@@ -1091,11 +1090,10 @@ pub(crate) mod runtime {
         }
     }
 
-    unsafe fn do_pick_game(p_ms: *mut MENU_STATE) -> BOOLEAN {
+    unsafe fn do_pick_game(p_ms: *mut MENU_STATE, activity: u16) -> BOOLEAN {
         let pick_state = (*p_ms).privData.cast::<PickGameState>();
         let time_in = GetTimeCounter();
         let occupied = (*pick_state).summary[(*p_ms).CurState as usize].year_index != 0;
-        let activity = WorldData::current().read(|owner| owner.game.current_activity);
         let action = picker_action(
             activity & CHECK_ABORT as ACTIVITY != 0,
             key(KEY_MENU_CANCEL),
