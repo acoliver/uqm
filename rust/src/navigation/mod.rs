@@ -24,7 +24,6 @@ pub mod hyper_radar;
 pub mod hyper_transition;
 pub mod hyper_units;
 pub mod hyperspace;
-pub mod initial_state;
 pub mod interplanetary;
 mod portal;
 

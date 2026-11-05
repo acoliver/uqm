@@ -10,7 +10,3 @@ pub(crate) fn init_elements(kernel: &mut Kernel, capacity: u16) -> bool {
 pub(crate) fn uninit_elements(kernel: &mut Kernel) {
     kernel.elements.reinit();
 }
-
-pub(crate) fn bind_display_array(game: &mut super::schema::GAME_STATE) {
-    game._display_array = std::ptr::null_mut();
-}

@@ -2,6 +2,7 @@
 
 use crate::engine::battle::schema::GAME_STATE;
 pub mod fleet;
+pub mod new_game;
 pub mod planet_info;
 pub mod queues;
 pub mod state_file;
