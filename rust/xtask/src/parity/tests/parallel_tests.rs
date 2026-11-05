@@ -47,3 +47,39 @@ fn empty_and_single_worker_queues_keep_every_result() {
     );
     assert_eq!(parallel::map(&[7], workers, |value| *value), [7]);
 }
+
+#[test]
+fn recording_jobs_one_runs_scenarios_serially() {
+    let args = ["--all", "--out", "record", "--jobs", "1"].map(str::to_owned);
+    let options = options::Options::parse("record", &args).unwrap();
+    let active = AtomicUsize::new(0);
+    let order = std::sync::Mutex::new(Vec::new());
+    let scenarios = ["comm", "samatra", "new-game"];
+    let results = parallel::map(&scenarios, options.workers(), |scenario| {
+        assert_eq!(active.fetch_add(1, Ordering::SeqCst), 0);
+        order.lock().unwrap().push(*scenario);
+        std::thread::yield_now();
+        assert_eq!(active.fetch_sub(1, Ordering::SeqCst), 1);
+        *scenario
+    });
+    assert_eq!(results, scenarios);
+    assert_eq!(*order.lock().unwrap(), scenarios);
+}
+
+#[test]
+fn jobs_requires_a_positive_count_and_defaults_to_available_parallelism() {
+    let parse = |extra: &[&str]| {
+        let args: Vec<_> = ["--all", "--out", "record"]
+            .into_iter()
+            .chain(extra.iter().copied())
+            .map(str::to_owned)
+            .collect();
+        options::Options::parse("record", &args)
+    };
+    assert_eq!(parse(&[]).unwrap().workers(), parallel::workers());
+    for value in ["0", "invalid", "-1"] {
+        assert!(parse(&["--jobs", value]).is_err(), "accepted {value}");
+    }
+    assert!(parse(&["--jobs"]).is_err());
+    assert_eq!(parse(&["--jobs", "2"]).unwrap().workers().get(), 2);
+}

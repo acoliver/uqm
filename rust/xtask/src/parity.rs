@@ -35,7 +35,7 @@ pub(super) fn run(root: &Path, args: &[String]) -> Result<()> {
 }
 
 fn usage() -> String {
-    "usage: cargo xtask parity <record|check> [--all|--entry NAME] [--out DIR] [--base REF] [--allow-golden-update] [--recording DIR] [--game-bin PATH]; parity counts <record|check> --all [--out DIR]; parity protect --base REF [--allow-golden-update]".into()
+    "usage: cargo xtask parity <record|check> [--all|--entry NAME] [--out DIR] [--base REF] [--allow-golden-update] [--recording DIR] [--game-bin PATH] [--jobs N]; parity counts <record|check> --all [--out DIR] [--jobs N]; parity protect --base REF [--allow-golden-update]".into()
 }
 
 fn execute(root: &Path, command: &str, args: &[String]) -> Result<()> {
