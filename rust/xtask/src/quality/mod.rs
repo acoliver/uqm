@@ -351,6 +351,11 @@ fn edit_baseline(root: &Path, path: &Path, command: &str, options: &Options) -> 
                 options.scopes.clone(),
                 options.allow_growth,
             )?;
+            // Exact declaration counters transfer into the owner's budget, not
+            // duplicate credit that survives its retirement.
+            for key in options.scopes.keys() {
+                baseline.entries.remove(key);
+            }
         }
         return baseline.write(path);
     }

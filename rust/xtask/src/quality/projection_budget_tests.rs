@@ -1,6 +1,65 @@
 use super::*;
 
 #[test]
+fn unit_budgets_own_exact_layer_findings_without_hiding_growth() {
+    let name = "u5_01_world_projection";
+    let key = "layers|module_edges|uqm::planets::generate::late_exports::<MyconSite>::built_queue_has_ships";
+    let mut budgets = BTreeMap::new();
+    set_scoped(&mut budgets, name, 2, [(key.into(), 2)].into(), false).unwrap();
+    assert_eq!(budgets[name].ends, "U5-01");
+    assert_eq!(parse(&write(&budgets).unwrap()).unwrap(), budgets);
+    assert!(check_growth(&budgets, &BTreeMap::new()).is_err());
+    let base = budgets.clone();
+    assert!(set_scoped(&mut budgets, name, 3, [(key.into(), 3)].into(), false).is_err());
+    let finding = |identity: &str, value| crate::quality::metrics::Finding {
+        counter: "layers".into(),
+        metric: "module_edges".into(),
+        identity: identity.into(),
+        file: String::new(),
+        package: "uqm".into(),
+        subsystem: "planets".into(),
+        value,
+    };
+    let mut measured = Measurement {
+        findings: vec![
+            finding(key.rsplit('|').next().unwrap(), 2),
+            finding("uqm::planets::generate::other", 1),
+        ],
+        ..Default::default()
+    };
+    check(&measured, &budgets).unwrap();
+    assert_eq!(
+        scoped_entries(&measured, &budgets)["layers|module_edges|uqm::planets::generate::other"],
+        1
+    );
+    measured.findings[0].value = 3;
+    assert!(check(&measured, &budgets).is_err());
+    set_scoped(&mut budgets, name, 1, [(key.into(), 1)].into(), false).unwrap();
+    check_growth(&budgets, &base).unwrap();
+    for bad in [
+        "layers|module_edges|uqm::planets::generate::*",
+        "layers|module_edges|uqm::savegame::runtime::queues::capture",
+        "layers|planned.uqm-modes|uqm::planets::generate::late_exports",
+        "ffi|bridge_calls|uqm::planets::generate::late_exports",
+    ] {
+        assert!(
+            set_scoped(&mut budgets, name, 1, [(bad.into(), 1)].into(), true).is_err(),
+            "{bad}"
+        );
+    }
+    let save = "layers|module_edges|uqm::savegame::runtime::layout::capture";
+    set_scoped(
+        &mut budgets,
+        "u4_04_world_projection",
+        1,
+        [(save.into(), 1)].into(),
+        false,
+    )
+    .unwrap();
+    assert_eq!(budgets["u4_04_world_projection"].ends, "U4-04");
+}
+
+#[test]
 fn picker_projection_retires_with_its_melee_session_owner() {
     let scope = "ffi|owner_projections|uqm::pickship::ffi::encounter_ship";
     let mut budgets = BTreeMap::new();

@@ -54,9 +54,13 @@ pub(super) fn validate(
                         && fields[2].contains("::")
                 }
                 name if super::projection::ends(name).is_some() => {
-                    fields[0] == "ffi"
-                        && fields[1] == "owner_projections"
-                        && super::projection::identity(name, fields[2])
+                    super::projection::identity(name, fields[2])
+                        && ((fields[0] == "ffi" && fields[1] == "owner_projections")
+                            || (matches!(
+                                name,
+                                "u4_04_world_projection" | "u5_01_world_projection"
+                            ) && fields[0] == "layers"
+                                && ["module_edges", "planned.uqm-content"].contains(&fields[1])))
                 }
                 _ => {
                     fields[0] == "unsafe"
