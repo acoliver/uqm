@@ -647,7 +647,7 @@ pub unsafe fn rust_alien_talk_segue(
 ) -> c_int {
     #[cfg(not(test))]
     {
-        let aborted = cx.with_legacy(super::talk_segue::check_abort_external);
+        let aborted = super::talk_segue::check_abort_external(cx.world);
         run_alien_talk_unlocked(
             wait,
             aborted,
@@ -659,10 +659,10 @@ pub unsafe fn rust_alien_talk_segue(
     }
     #[cfg(test)]
     {
-        let _ = (cx, io);
+        let _ = io;
         let mut state = COMM_STATE.write();
         let was_finished = state.is_talking_finished();
-        super::talk_segue::alien_talk_segue(&mut state, wait);
+        super::talk_segue::alien_talk_segue(cx.world, &mut state, wait);
         if !was_finished && state.is_talking_finished() {
             1
         } else {
@@ -718,8 +718,8 @@ pub fn rust_talk_segue(
     }
     #[cfg(test)]
     {
-        let _ = (cx, io);
-        super::talk_segue::talk_segue(&mut COMM_STATE.write(), wait_track) as c_int
+        let _ = io;
+        super::talk_segue::talk_segue(cx.world, &mut COMM_STATE.write(), wait_track) as c_int
     }
 }
 
@@ -758,7 +758,7 @@ pub fn rust_do_communication(
             "[DBG] rust_DoCommunication: response phase, num_responses={}",
             state.responses().count()
         );
-        if cx.with_legacy(super::talk_segue::check_abort_external) {
+        if super::talk_segue::check_abort_external(cx.world) {
             return 0;
         }
         state.responses().count()
@@ -812,7 +812,7 @@ pub fn rust_do_communication(
     }
 
     if cancel {
-        let won = cx.with_legacy(super::talk_segue::won_last_battle_external);
+        let won = super::talk_segue::won_last_battle_external(cx.world);
         if !won {
             // Conversation summary — C bridge, no lock needed
             cx.with_legacy(super::talk_segue::c_bridge::call_select_conversation_summary);
@@ -836,7 +836,7 @@ pub fn rust_do_communication(
         cx.with_legacy(super::talk_segue::c_bridge::call_feedback_player_phrase);
         #[cfg(not(test))]
         let _ = super::talk_segue::dinput::run_talk_segue_dinput(cx, io, 0);
-        if !cx.with_legacy(super::talk_segue::check_abort_external) {
+        if !super::talk_segue::check_abort_external(cx.world) {
             let (top, count, cur) = {
                 let s = COMM_STATE.read();
                 (

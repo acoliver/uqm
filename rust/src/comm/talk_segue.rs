@@ -20,6 +20,7 @@ use super::response::ResponseFunc;
 use super::state::CommState;
 #[cfg(not(test))]
 use crate::engine::observe::CheckpointView;
+use crate::engine::World;
 
 fn communication_background_volume(background: u8, using_speech: u32) -> u8 {
     if using_speech != 0 {
@@ -315,9 +316,9 @@ pub mod dinput {
     }
 
     // DoInput callback for talk segue (replaces c_DoTalkSegue)
-    unsafe fn do_talk_segue_frame(ts: &mut TalkingStateDInput) -> c_int {
+    unsafe fn do_talk_segue_frame(ts: &mut TalkingStateDInput, activity: u16) -> c_int {
         // Abort check: GLOBAL(CurrentActivity) & CHECK_ABORT
-        let activity = crate::mainloop::ffi::get_current_activity().0 as u32;
+        let activity = u32::from(activity);
         if (activity & CHECK_ABORT) != 0 {
             ts.ended = 1;
             return 0;
@@ -419,7 +420,8 @@ pub mod dinput {
             unsafe { SetMenuSounds(MENU_SOUND_NONE as u16, MENU_SOUND_NONE as u16) };
         });
         cx.run_input(io, false, |cx, _| {
-            cx.with_legacy(|| unsafe { do_talk_segue_frame(&mut ts) != 0 })
+            let activity = cx.world.activity();
+            cx.with_legacy(|| unsafe { do_talk_segue_frame(&mut ts, activity) != 0 })
         });
         cx.with_legacy(|| {
             if wait_track == 0 {
@@ -618,9 +620,9 @@ impl Eq for CommunicationResult {}
 /// In production the caller loops over this inside `DoInput`; here we expose
 /// the per-iteration logic so it can be driven by the Rust loop in
 /// `talk_segue`.
-pub fn do_talk_segue(state: &mut CommState, ts: &mut TalkingState) -> bool {
+pub fn do_talk_segue(world: &World, state: &mut CommState, ts: &mut TalkingState) -> bool {
     // ---- abort check -------------------------------------------------------
-    if check_abort(state) {
+    if check_abort_external(world) {
         ts.ended = true;
         return false;
     }
@@ -691,7 +693,7 @@ pub fn do_talk_segue(state: &mut CommState, ts: &mut TalkingState) -> bool {
 ///
 /// Matches C `TalkSegue`.  Returns `true` if playback reached its natural
 /// end (i.e. `talkingState.ended`).
-pub fn talk_segue(state: &mut CommState, wait_track: u32) -> bool {
+pub fn talk_segue(world: &World, state: &mut CommState, wait_track: u32) -> bool {
     // ---- transition to talking animation, if available ---------------------
     if want_talking_anim(state) && have_talking_anim(state) {
         if has_transition_anim(state) {
@@ -723,7 +725,7 @@ pub fn talk_segue(state: &mut CommState, wait_track: u32) -> bool {
     ts.wait_track = effective_wait;
 
     // ---- main loop ---------------------------------------------------------
-    while do_talk_segue(state, &mut ts) {
+    while do_talk_segue(world, state, &mut ts) {
         // loop body is in do_talk_segue
     }
 
@@ -755,9 +757,9 @@ pub fn talk_segue(state: &mut CommState, wait_track: u32) -> bool {
 /// Matches C `AlienTalkSegue`.  On the first call this encounter, initialises
 /// speech graphics, starts music, sets up animations.  Subsequent calls just
 /// delegate to `talk_segue`.
-pub fn alien_talk_segue(state: &mut CommState, wait_track: u32) {
+pub fn alien_talk_segue(world: &World, state: &mut CommState, wait_track: u32) {
     // Skip if abort or already finished
-    if check_abort(state) || state.is_talking_finished() {
+    if check_abort_external(world) || state.is_talking_finished() {
         return;
     }
 
@@ -780,7 +782,7 @@ pub fn alien_talk_segue(state: &mut CommState, wait_track: u32) {
         }
     }
 
-    let finished = talk_segue(state, wait_track);
+    let finished = talk_segue(world, state, wait_track);
     state.set_talking_finished(finished);
 
     if finished {
@@ -838,7 +840,7 @@ pub fn select_response(state: &mut CommState) -> Option<(ResponseFunc, u32)> {
 /// Handle one frame of player input in the response-selection phase.
 ///
 /// Matches C `PlayerResponseInput`.
-pub fn player_response_input(state: &mut CommState) -> PlayerInputResult {
+pub fn player_response_input(world: &World, state: &mut CommState) -> PlayerInputResult {
     // Initialize top_response on the very first call
     if state.top_response.is_none() {
         state.top_response = Some(0);
@@ -853,7 +855,7 @@ pub fn player_response_input(state: &mut CommState) -> PlayerInputResult {
         return PlayerInputResult::Selected;
     }
 
-    if check_cancel_input(state) && !won_last_battle(state) {
+    if check_cancel_input(state) && !won_last_battle_external(world) {
         select_conversation_summary(state);
         return PlayerInputResult::Summary;
     }
@@ -862,8 +864,8 @@ pub fn player_response_input(state: &mut CommState) -> PlayerInputResult {
         // Replay last phrase
         fade_music_to_background(state);
         feedback_player_phrase(state, "");
-        talk_segue(state, 0);
-        if !check_abort(state) {
+        talk_segue(world, state, 0);
+        if !check_abort_external(world) {
             refresh_responses(state);
             fade_music_to_foreground(state);
         }
@@ -947,21 +949,21 @@ pub fn fade_music_to_foreground_bridge() {
 /// @plan PLAN-20260325-COMMPT3.P11
 /// @requirement REQ-DC-001..005, REQ-RL-004
 /// @pseudocode 003-do-communication-rewrite lines 07-40
-pub fn do_communication(state: &mut CommState) -> CommunicationResult {
+pub fn do_communication(world: &World, state: &mut CommState) -> CommunicationResult {
     if !state.is_talking_finished() {
-        alien_talk_segue(state, WAIT_TRACK_ALL);
+        alien_talk_segue(world, state, WAIT_TRACK_ALL);
         return CommunicationResult::Talking;
     }
 
-    do_communication_responses(state)
+    do_communication_responses(world, state)
 }
 
 /// Response-only phase of do_communication (talking is already finished).
 ///
 /// Called from rust_do_communication when talking_finished is true.
 /// Handles abort, last-replay, and player response input.
-pub fn do_communication_responses(state: &mut CommState) -> CommunicationResult {
-    if check_abort(state) {
+pub fn do_communication_responses(world: &World, state: &mut CommState) -> CommunicationResult {
+    if check_abort_external(world) {
         return CommunicationResult::Done;
     }
 
@@ -971,7 +973,7 @@ pub fn do_communication_responses(state: &mut CommState) -> CommunicationResult 
     }
 
     // Handle one frame of player input
-    let input = player_response_input(state);
+    let input = player_response_input(world, state);
     match input {
         PlayerInputResult::Selected => match select_response(state) {
             Some((func, rref)) => CommunicationResult::Selected(func, rref),
@@ -1019,20 +1021,6 @@ enum SliderImage {
 }
 
 // ---------- abort / input --------------------------------------------------
-
-fn check_abort(state: &CommState) -> bool {
-    #[cfg(not(test))]
-    {
-        let _ = state;
-        crate::mainloop::ffi::get_current_activity().0 & 0x4000 != 0
-    }
-    #[cfg(test)]
-    {
-        // In tests: abort is represented by a flag we set in CommState.
-        // We repurpose input_paused as a simple abort-for-test sentinel.
-        state.is_input_paused()
-    }
-}
 
 fn check_cancel_input(state: &CommState) -> bool {
     // @plan PLAN-20260326-COMMPT2.P03 @requirement REQ-IP-002
@@ -1129,26 +1117,12 @@ fn check_down_input(state: &CommState) -> bool {
     }
 }
 
-fn won_last_battle(state: &CommState) -> bool {
-    #[cfg(not(test))]
-    {
-        let _ = state;
-        crate::mainloop::ffi::get_current_activity().0 & 0xFF == 5
-    }
-    #[cfg(test)]
-    {
-        let _ = state;
-        false
-    }
-}
-
 // ---------- lock-free input checks for ffi.rs response phase ---------------
 // These are called from rust_do_communication WITHOUT holding COMM_STATE lock,
 // avoiding the deadlock where C bridges re-enter Rust.
 
-#[cfg(not(test))]
-pub fn check_abort_external() -> bool {
-    crate::mainloop::ffi::get_current_activity().0 & 0x4000 != 0
+pub fn check_abort_external(world: &World) -> bool {
+    world.activity() & 0x4000 != 0
 }
 
 #[cfg(not(test))]
@@ -1176,9 +1150,8 @@ pub fn check_left_external() -> bool {
     unsafe { c_bridge::pulsed_menu_key(KEY_MENU_LEFT) != 0 }
 }
 
-#[cfg(not(test))]
-pub fn won_last_battle_external() -> bool {
-    crate::mainloop::ffi::get_current_activity().0 & 0xFF == 5
+pub fn won_last_battle_external(world: &World) -> bool {
+    world.activity() & 0xFF == 5
 }
 
 /// Run the "last replay" DoInput loop via Rust port (no lock needed).
@@ -1199,10 +1172,6 @@ pub fn fade_music_to_background_bridge() {
 
 // Test stubs for lock-free external functions (prod versions are cfg(not(test)))
 #[cfg(test)]
-pub fn check_abort_external() -> bool {
-    false
-}
-#[cfg(test)]
 pub fn check_select_external() -> bool {
     false
 }
@@ -1220,10 +1189,6 @@ pub fn check_down_external() -> bool {
 }
 #[cfg(test)]
 pub fn check_left_external() -> bool {
-    false
-}
-#[cfg(test)]
-pub fn won_last_battle_external() -> bool {
     false
 }
 #[cfg(test)]
@@ -1824,6 +1789,27 @@ mod tests {
     use crate::comm::state::COMM_STATE;
     use serial_test::serial;
 
+    #[test]
+    fn external_activity_checks_follow_the_supplied_world() {
+        let mut world = crate::engine::World::new();
+        let other = crate::engine::World::new();
+        assert!(!check_abort_external(&world));
+        assert!(!won_last_battle_external(&world));
+
+        world.set_activity(0x4005);
+        assert!(check_abort_external(&world));
+        assert!(won_last_battle_external(&world));
+        assert!(!check_abort_external(&other));
+        assert!(!won_last_battle_external(&other));
+
+        world.set_activity(0x4006);
+        assert!(check_abort_external(&world));
+        assert!(!won_last_battle_external(&world));
+        world.set_activity(5);
+        assert!(!check_abort_external(&world));
+        assert!(won_last_battle_external(&world));
+    }
+
     // ---- helpers -----------------------------------------------------------
 
     fn reset() {
@@ -1858,26 +1844,28 @@ mod tests {
 
     #[test]
     fn test_do_talk_segue_cancel_ends() {
+        let mut world = crate::engine::World::new();
         let mut s = playing_state();
         let mut ts = TalkingState {
             wait_track: WAIT_TRACK_ALL,
             ..Default::default()
         };
-        // Simulate cancel: abort flag (input_paused) ends segue
-        s.set_input_paused(true);
-        let cont = do_talk_segue(&mut s, &mut ts);
+        // Set the campaign abort flag to end the segue.
+        world.set_activity(0x4000);
+        let cont = do_talk_segue(&world, &mut s, &mut ts);
         assert!(!cont, "abort should stop loop");
         assert!(ts.ended);
     }
 
     #[test]
     fn test_do_talk_segue_continues_while_playing() {
+        let world = crate::engine::World::new();
         let mut s = playing_state();
         let mut ts = TalkingState {
             wait_track: WAIT_TRACK_ALL,
             ..Default::default()
         };
-        let cont = do_talk_segue(&mut s, &mut ts);
+        let cont = do_talk_segue(&world, &mut s, &mut ts);
         // Track is playing → should continue
         assert!(cont, "should continue while track is playing");
         assert!(!ts.ended);
@@ -1885,18 +1873,20 @@ mod tests {
 
     #[test]
     fn test_do_talk_segue_ends_when_not_playing() {
+        let world = crate::engine::World::new();
         let mut s = finished_state();
         let mut ts = TalkingState {
             wait_track: WAIT_TRACK_ALL,
             ..Default::default()
         };
-        let cont = do_talk_segue(&mut s, &mut ts);
+        let cont = do_talk_segue(&world, &mut s, &mut ts);
         assert!(!cont, "should stop when track not playing");
         assert!(ts.ended);
     }
 
     #[test]
     fn test_do_talk_segue_seek_mode_stops_when_seeking() {
+        let world = crate::engine::World::new();
         let mut s = playing_state();
         let mut ts = TalkingState {
             wait_track: WAIT_TRACK_ALL,
@@ -1904,7 +1894,7 @@ mod tests {
             ..Default::default()
         };
         // While seeking, should return true even if track stops (seeking || ...)
-        let cont = do_talk_segue(&mut s, &mut ts);
+        let cont = do_talk_segue(&world, &mut s, &mut ts);
         // seeking starts true, no right/left input → seeking is cleared this iter
         // then we check track, which is playing → cont should be true (playing)
         assert!(cont);
@@ -1914,6 +1904,7 @@ mod tests {
 
     #[test]
     fn test_talk_segue_ends_when_not_playing() {
+        let world = crate::engine::World::new();
         let mut s = CommState::new();
         s.init().unwrap();
         // No track spliced → playing_track() returns 0 immediately
@@ -1923,20 +1914,21 @@ mod tests {
         s.track_mut().start();
         s.track_mut().update(0.1); // finish immediately
 
-        let ended = talk_segue(&mut s, WAIT_TRACK_ALL);
+        let ended = talk_segue(&world, &mut s, WAIT_TRACK_ALL);
         assert!(ended, "should return ended=true when track not playing");
     }
 
     #[test]
     fn test_talk_segue_rewind_mode() {
+        let mut world = crate::engine::World::new();
         let mut s = playing_state();
         // wait_track = 0 → rewind mode, ts.rewind set to true
         // Since track is playing and rewind is set, fast_reverse is called once
         // then the loop runs until track stops
-        // Force-stop by marking abort (input_paused)
-        s.set_input_paused(true);
+        // Force-stop with the campaign abort flag.
+        world.set_activity(0x4000);
 
-        let ended = talk_segue(&mut s, 0);
+        let ended = talk_segue(&world, &mut s, 0);
         // abort was set, so ended = true from abort path
         assert!(ended);
     }
@@ -1945,25 +1937,27 @@ mod tests {
 
     #[test]
     fn test_alien_talk_segue_skips_if_finished() {
+        let world = crate::engine::World::new();
         let mut s = CommState::new();
         s.init().unwrap();
         s.set_talking_finished(true);
 
         // Should be a no-op
-        alien_talk_segue(&mut s, WAIT_TRACK_ALL);
+        alien_talk_segue(&world, &mut s, WAIT_TRACK_ALL);
         // still finished, no crash
         assert!(s.is_talking_finished());
     }
 
     #[test]
     fn test_alien_talk_segue_first_call_sets_flag() {
+        let mut world = crate::engine::World::new();
         let mut s = CommState::new();
         s.init().unwrap();
         assert!(!s.first_talk_call);
 
         // Set abort immediately so we don't actually loop
-        s.set_input_paused(true);
-        alien_talk_segue(&mut s, WAIT_TRACK_ALL);
+        world.set_activity(0x4000);
+        alien_talk_segue(&world, &mut s, WAIT_TRACK_ALL);
 
         // first_talk_call should be set (but then skip due to abort)
         // check_abort returns true before first_talk_call check → skip
@@ -1971,8 +1965,9 @@ mod tests {
         // Let's check the non-abort path:
         let mut s2 = CommState::new();
         s2.init().unwrap();
-        // Don't set abort — track will finish immediately (no track loaded)
-        alien_talk_segue(&mut s2, WAIT_TRACK_ALL);
+        // With no track loaded, the first segue finishes immediately.
+        world.set_activity(0);
+        alien_talk_segue(&world, &mut s2, WAIT_TRACK_ALL);
         assert!(
             s2.first_talk_call,
             "first_talk_call should be set after first call"
@@ -1981,11 +1976,12 @@ mod tests {
 
     #[test]
     fn test_alien_talk_segue_skips_if_abort() {
+        let mut world = crate::engine::World::new();
         let mut s = CommState::new();
         s.init().unwrap();
-        s.set_input_paused(true); // simulate abort
+        world.set_activity(0x4000);
 
-        alien_talk_segue(&mut s, WAIT_TRACK_ALL);
+        alien_talk_segue(&world, &mut s, WAIT_TRACK_ALL);
         assert!(!s.first_talk_call, "should not initialize if abort");
     }
 
@@ -2068,13 +2064,14 @@ mod tests {
 
     #[test]
     fn test_player_input_initializes_top_response() {
+        let world = crate::engine::World::new();
         let mut s = CommState::new();
         s.init().unwrap();
         s.add_response(1, "A", None);
         s.add_response(2, "B", None);
 
         assert!(s.top_response.is_none());
-        player_response_input(&mut s);
+        player_response_input(&world, &mut s);
         assert!(
             s.top_response.is_some(),
             "top_response should be set after first call"
@@ -2083,6 +2080,7 @@ mod tests {
 
     #[test]
     fn test_player_input_navigate() {
+        let world = crate::engine::World::new();
         // up/down navigation is driven by check_up/down_input which return false
         // in test mode; verify that calling player_response_input is a no-op
         // (Continue result, no panic)
@@ -2092,7 +2090,7 @@ mod tests {
         s.add_response(2, "B", None);
         s.responses_mut().start_display();
 
-        let result = player_response_input(&mut s);
+        let result = player_response_input(&world, &mut s);
         assert_eq!(result, PlayerInputResult::Continue);
     }
 
@@ -2100,32 +2098,35 @@ mod tests {
 
     #[test]
     fn test_communication_talks_first() {
+        let world = crate::engine::World::new();
         let mut s = CommState::new();
         s.init().unwrap();
         assert!(!s.is_talking_finished());
 
-        let result = do_communication(&mut s);
+        let result = do_communication(&world, &mut s);
         assert_eq!(result, CommunicationResult::Talking);
     }
 
     #[test]
     fn test_communication_exits_no_responses() {
+        let world = crate::engine::World::new();
         let mut s = CommState::new();
         s.init().unwrap();
         s.set_talking_finished(true);
         // No responses → run_last_replay + Done.
-        let result = do_communication(&mut s);
+        let result = do_communication(&world, &mut s);
         assert_eq!(result, CommunicationResult::Done);
     }
 
     #[test]
     fn test_communication_shows_responses_when_ready() {
+        let world = crate::engine::World::new();
         let mut s = CommState::new();
         s.init().unwrap();
         s.set_talking_finished(true);
         s.add_response(1, "Choice A", None);
         // player_response_input returns Continue (no select input in tests) → ResponseContinue.
-        let result = do_communication(&mut s);
+        let result = do_communication(&world, &mut s);
         assert_eq!(result, CommunicationResult::ResponseContinue);
     }
 
@@ -2147,6 +2148,7 @@ mod tests {
     /// the structural invariant: first_talk_call is set iff the init block ran.
     #[test]
     fn test_set_colormap_calls_bridge() {
+        let world = crate::engine::World::new();
         let mut s = CommState::new();
         s.init().unwrap();
         assert!(
@@ -2154,7 +2156,7 @@ mod tests {
             "precondition: first_talk_call not yet set"
         );
 
-        alien_talk_segue(&mut s, WAIT_TRACK_ALL);
+        alien_talk_segue(&world, &mut s, WAIT_TRACK_ALL);
 
         assert!(
             s.first_talk_call,
@@ -2166,6 +2168,7 @@ mod tests {
     /// initialization block.  Same structural witness as test_set_colormap_calls_bridge.
     #[test]
     fn test_play_alien_music_calls_bridge() {
+        let world = crate::engine::World::new();
         let mut s = CommState::new();
         s.init().unwrap();
         assert!(
@@ -2173,7 +2176,7 @@ mod tests {
             "precondition: first_talk_call not yet set"
         );
 
-        alien_talk_segue(&mut s, WAIT_TRACK_ALL);
+        alien_talk_segue(&world, &mut s, WAIT_TRACK_ALL);
 
         assert!(
             s.first_talk_call,
@@ -2309,12 +2312,13 @@ mod tests {
     /// PASSES against stub (stub returns Talking unconditionally).
     #[test]
     fn test_do_comm_talking_phase_p10() {
+        let world = crate::engine::World::new();
         let mut s = CommState::new();
         s.init().unwrap();
         // talking_finished starts false
         assert!(!s.is_talking_finished());
 
-        let result = do_communication(&mut s);
+        let result = do_communication(&world, &mut s);
         assert_eq!(
             result,
             CommunicationResult::Talking,
@@ -2336,13 +2340,14 @@ mod tests {
     /// EXPECTED FAIL against P09 stubs (stub always returns Talking).
     #[test]
     fn test_do_comm_abort_exit_p10() {
+        let mut world = crate::engine::World::new();
         let mut s = CommState::new();
         s.init().unwrap();
         s.set_talking_finished(true);
-        // In test mode check_abort() reads is_input_paused() as the abort flag.
-        s.set_input_paused(true);
+        // Use the campaign abort flag.
+        world.set_activity(0x4000);
 
-        let result = do_communication(&mut s);
+        let result = do_communication(&world, &mut s);
         assert_eq!(
             result,
             CommunicationResult::Done,
@@ -2358,13 +2363,14 @@ mod tests {
     /// EXPECTED FAIL against P09 stubs (stub always returns Talking).
     #[test]
     fn test_do_comm_no_responses_done_p10() {
+        let world = crate::engine::World::new();
         let mut s = CommState::new();
         s.init().unwrap();
         s.set_talking_finished(true);
         // No responses added — count() == 0.
         assert_eq!(s.responses().count(), 0);
 
-        let result = do_communication(&mut s);
+        let result = do_communication(&world, &mut s);
         assert_eq!(
             result,
             CommunicationResult::Done,
@@ -2380,6 +2386,7 @@ mod tests {
     /// EXPECTED FAIL against P09 stubs (stub always returns Talking).
     #[test]
     fn test_do_comm_response_continue_p10() {
+        let world = crate::engine::World::new();
         fn noop(_cx: &mut crate::engine::battle::Cx<'_>, _: u32) {}
 
         let mut s = CommState::new();
@@ -2389,7 +2396,7 @@ mod tests {
         s.add_response(2, "Option B", Some(noop));
         // Do NOT select: player_response_input returns Continue this frame.
 
-        let result = do_communication(&mut s);
+        let result = do_communication(&world, &mut s);
         assert_eq!(
             result,
             CommunicationResult::ResponseContinue,
@@ -2405,6 +2412,7 @@ mod tests {
     /// EXPECTED FAIL against P09 stubs (stub always returns Talking).
     #[test]
     fn test_do_comm_selected_p10() {
+        let world = crate::engine::World::new();
         use std::sync::atomic::{AtomicBool, Ordering};
         static CALLED: AtomicBool = AtomicBool::new(false);
         fn marker(_cx: &mut crate::engine::battle::Cx<'_>, _: u32) {
@@ -2420,7 +2428,7 @@ mod tests {
         s.responses_mut().select(0);
         s.select_input_pending = true;
 
-        let result = do_communication(&mut s);
+        let result = do_communication(&world, &mut s);
         match result {
             CommunicationResult::Selected(func, rref) => {
                 assert_eq!(rref, 99, "response_ref must match the registered value");
