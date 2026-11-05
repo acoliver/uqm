@@ -161,3 +161,76 @@ fn temporary() -> tempfile::TempDir {
     std::fs::create_dir_all(&root).unwrap();
     tempfile::tempdir_in(root).unwrap()
 }
+
+#[test]
+fn supervised_child_outcomes_and_gpu_diagnoses_are_retained_together() {
+    use crate::native_suite::{SuiteAccounting, SuitePhase};
+    for (exit, gpu) in [(0, ""), (7, ""), (0, HANG), (7, HANG)] {
+        let temporary = temporary();
+        let root = temporary.path().join("suite");
+        let selected = vec![crate::native_config::Scenario {
+            path: "rust/scripts/super-melee-v1.json".into(),
+            outer_child_timeout_ms: None,
+        }];
+        let mut suite = SuiteAccounting::create(&root, &selected).unwrap();
+        suite.begin(0).unwrap();
+        let outcome = run_scenario_with(
+            std::process::Command::new("/bin/sh").args(["-c", &format!("exit {exit}")]),
+            std::time::Duration::from_secs(5),
+            &mut suite,
+            0,
+            "fixture child",
+            |scenario, start, end| {
+                assert_eq!(scenario, root.join("scenarios/0000"));
+                assert!(start <= end);
+                Report::from_output(gpu.as_bytes(), Ok("fixture log query passed".into()))
+            },
+        );
+        match (exit, gpu.is_empty()) {
+            (0, true) => assert!(outcome.is_ok(), "{outcome:?}"),
+            (_, false) => assert_eq!(
+                outcome.as_ref().unwrap_err(),
+                &format!("GPU command buffer error: {HANG}")
+            ),
+            _ => assert!(outcome
+                .as_ref()
+                .unwrap_err()
+                .contains("exited with Some(7)")),
+        }
+        let expected_log = if gpu.is_empty() {
+            String::new()
+        } else {
+            format!("{gpu}\n")
+        };
+        assert_eq!(
+            std::fs::read_to_string(root.join("scenario-diagnostics/0000/gpu-errors.log")).unwrap(),
+            expected_log
+        );
+        // This fixture has no game proof. Finalize as a failure so its real
+        // controller supervision can still be checked through the suite index.
+        suite
+            .fail(
+                SuitePhase::Execute,
+                Some(0),
+                outcome
+                    .err()
+                    .unwrap_or_else(|| "fixture has no game proof".into()),
+            )
+            .unwrap();
+        suite.finish().unwrap();
+        let manifest = crate::native_suite::validate_accounting(&root, &selected).unwrap();
+        let teardown = crate::native_suite::read_teardown(&root, &manifest).unwrap();
+        let supervision = teardown.scenarios[0].supervision.as_ref().unwrap();
+        assert_eq!(supervision.exit_code, Some(exit));
+        assert!(supervision.process_state_clear());
+    }
+}
+
+#[test]
+#[cfg(not(target_os = "macos"))]
+fn collecting_on_other_platforms_logs_not_applicable_without_reading_receipts() {
+    let now = SystemTime::now();
+    let report = collect(Path::new("no-scenario-directory"), now, now);
+    assert!(report.status.contains("not applicable"));
+    assert!(report.decide(Ok(())).is_ok());
+}

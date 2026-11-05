@@ -118,6 +118,17 @@ pub(crate) fn run_scenario(
     index: usize,
     label: &str,
 ) -> Result<(), String> {
+    run_scenario_with(command, timeout, suite, index, label, collect)
+}
+
+fn run_scenario_with(
+    command: &mut std::process::Command,
+    timeout: std::time::Duration,
+    suite: &mut crate::native_suite::SuiteAccounting,
+    index: usize,
+    label: &str,
+    collect: impl FnOnce(&Path, SystemTime, SystemTime) -> Report,
+) -> Result<(), String> {
     let started = SystemTime::now();
     let captured = crate::process::run(command, Some(timeout));
     let ended = SystemTime::now();
