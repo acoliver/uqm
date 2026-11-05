@@ -130,7 +130,7 @@ pub(crate) mod live {
     }
     unsafe fn at_star(world: &World, index: u32) -> bool {
         let star = world.star_pointer(crate::planets::starmap::current_catalog());
-        world.data.game.current_activity as u8 as u32 == IN_INTERPLANETARY
+        world.activity() as u8 as u32 == IN_INTERPLANETARY
             && !star.is_null()
             && (*star).index as u32 == index
     }
@@ -310,7 +310,7 @@ pub(crate) mod live {
             index = index.wrapping_add(1);
         }
         if best_dist < 0 && best_dx == 0 && best_dy == 0 {
-            world.data.game.current_activity &= !(IN_BATTLE as u16);
+            world.set_activity(world.activity() & !(IN_BATTLE as u16));
             world.data.flagship.crew_enlisted = u16::MAX;
             set(world, StoryKey::KOHR_AH_KILLED_ALL, 1);
         } else {

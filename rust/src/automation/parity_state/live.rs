@@ -5,9 +5,7 @@ use super::{custom, elements, ships::Ship, value};
 use crate::automation::parity::Journal;
 use crate::engine::battle::access::observe::ElementObservation;
 #[cfg(not(test))]
-use crate::{
-    automation::battle_fight::ShipState, battle::netplay::CrcState, comm::locdata::CGameState,
-};
+use crate::{automation::battle_fight::ShipState, battle::netplay::CrcState};
 
 #[cfg(not(test))]
 pub fn checkpoint(journal: &mut Journal, boundary: &str) -> std::io::Result<()> {
@@ -27,9 +25,8 @@ fn checkpoint_with_context(
     value(&mut fields, "mode", "boundary", boundary);
     // SAFETY: the checkpoint owns an immutable borrow of the initialized game,
     // queue pools and their linked records. No callback runs before it returns.
-    let (game, queues, elements) = unsafe {
+    let (queues, elements) = unsafe {
         (
-            &*(&raw const cx.world.data.game).cast::<CGameState>(),
             std::array::from_fn::<_, 2, _>(|side| Ship::queue(cx.race_pool(side), cx.elements())),
             display_elements(cx.elements(), Some(&cx.groups())),
         )
@@ -72,7 +69,7 @@ fn checkpoint_with_context(
         visuals(&mut fields, &prefix, element, journal);
         crate::supermelee::netplay::checksum::crc_process_element(&mut crc, &element.state);
     }
-    journal.checkpoint(game.current_activity, crc.finish(), &fields)
+    journal.checkpoint(cx.world.activity(), crc.finish(), &fields)
 }
 
 #[cfg(not(test))]
