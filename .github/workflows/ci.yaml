@@ -231,7 +231,7 @@ jobs:
     needs: parity-policy
     if: github.event_name != 'schedule'
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: rust
@@ -259,8 +259,11 @@ jobs:
           mkdir -p "$PARITY_DIR"
           update=()
           if [ "$PARITY_UPDATE" = '--allow-golden-update' ]; then update+=("$PARITY_UPDATE"); fi
+          jobs=$(nproc)
+          echo "Parity runner: $jobs CPUs, $jobs recording workers"
           SECONDS=0
-          cargo xtask parity check --base "$PARITY_BASE" "${update[@]}" --out "$PARITY_DIR/record" 2>&1 | tee "$PARITY_DIR/check.log"
+          # Optimize the host-side trace scans and inventory checks, without linking the game into xtask.
+          cargo run --release --locked --manifest-path xtask/Cargo.toml --no-default-features -- parity check --jobs "$jobs" --base "$PARITY_BASE" "${update[@]}" --out "$PARITY_DIR/record" 2>&1 | tee "$PARITY_DIR/check.log"
           echo "Full Linux parity check: ${SECONDS}s (build, content, all scenarios and 74 runtime saves)" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always()
