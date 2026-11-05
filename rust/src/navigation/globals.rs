@@ -37,26 +37,25 @@ unsafe fn create_radar(kernel: &mut crate::engine::Kernel) {
 /// # Safety
 /// Resource system and screen contexts must be initialized on the game thread.
 pub unsafe fn load_sc2_data(cx: &mut crate::engine::battle::Cx<'_>) -> BOOLEAN {
-    let kernel = cx.kernel();
-    let world = &raw mut cx.world.data;
-    if (*kernel).flag_stat_frame.is_null() {
-        (*kernel).flag_stat_frame =
+    let kernel = &mut *cx.kernel;
+    if kernel.flag_stat_frame.is_null() {
+        kernel.flag_stat_frame =
             CaptureDrawable(LoadGraphicInstance(c"graphics.flagshipstatus".as_ptr()).cast());
-        if (*kernel).flag_stat_frame.is_null() {
+        if kernel.flag_stat_frame.is_null() {
             return 0;
         }
-        (*kernel).misc_data_frame =
+        kernel.misc_data_frame =
             CaptureDrawable(LoadGraphicInstance(c"graphics.miscdata".as_ptr()).cast());
-        if (*kernel).misc_data_frame.is_null() {
+        if kernel.misc_data_frame.is_null() {
             return 0;
         }
-        (*kernel).font_grad_frame =
+        kernel.font_grad_frame =
             CaptureDrawable(LoadGraphicInstance(c"graphics.fontgradient".as_ptr()).cast());
     }
-    create_radar(cx.kernel);
-    if (*world).game.current_activity as u8 == IN_HYPERSPACE as u8 {
-        (*world).game.ship_stamp.origin.x = -1;
-        (*world).game.ship_stamp.origin.y = -1;
+    create_radar(kernel);
+    if cx.world.activity() as u8 == IN_HYPERSPACE as u8 {
+        cx.world.data.game.ship_stamp.origin.x = -1;
+        cx.world.data.game.ship_stamp.origin.y = -1;
     }
     1
 }
@@ -176,25 +175,21 @@ pub unsafe fn free_sc2_data(kernel: &mut crate::engine::Kernel) {
 /// # Safety
 /// The initialized game structures must no longer be in use.
 pub unsafe fn uninit_game_structures(cx: &mut crate::engine::battle::Cx<'_>) {
-    // SAFETY: the lifecycle borrows owners from Cx; callbacks republish it synchronously.
-    {
-        let kernel = cx.kernel();
-        cx.world.encounters().reinit();
-        cx.world.ip_groups().reinit();
-        cx.world.npc_built_ships().reinit();
-        cx.world.built_ships().reinit();
-        uninit_group_info(cx.world);
-        uninit_planet_info(cx.world);
-        if let Some(probe) = cx.world.avail_races_ref().tail() {
-            let probe = *cx.world.avail_races_ref().get(probe);
-            DestroyDrawable(ReleaseDrawable(probe.melee_icon));
-            DestroyDrawable(ReleaseDrawable(probe.icons));
-            DestroyStringTable(ReleaseStringTable(probe.race_strings));
-        }
-        cx.world.avail_races().reinit();
-        DestroyDrawable(ReleaseDrawable((*kernel).play_frame));
-        (*kernel).play_frame = ptr::null_mut();
+    cx.world.encounters().reinit();
+    cx.world.ip_groups().reinit();
+    cx.world.npc_built_ships().reinit();
+    cx.world.built_ships().reinit();
+    uninit_group_info(cx.world);
+    uninit_planet_info(cx.world);
+    if let Some(probe) = cx.world.avail_races_ref().tail() {
+        let probe = *cx.world.avail_races_ref().get(probe);
+        DestroyDrawable(ReleaseDrawable(probe.melee_icon));
+        DestroyDrawable(ReleaseDrawable(probe.icons));
+        DestroyStringTable(ReleaseStringTable(probe.race_strings));
     }
+    cx.world.avail_races().reinit();
+    DestroyDrawable(ReleaseDrawable(cx.kernel.play_frame));
+    cx.kernel.play_frame = ptr::null_mut();
 }
 
 /// Reset campaign values, retaining the caller’s global flags. Queue/resource
