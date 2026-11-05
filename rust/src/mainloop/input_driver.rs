@@ -54,6 +54,7 @@ struct InputLoop<'a, 'b, 'c, 'd> {
     io: &'a mut crate::engine::observe::Io<'c>,
     frame: &'a mut (dyn crate::engine::input::Frame + 'd),
     input: &'a crate::engine::input::InputSession,
+    automation: Option<&'a crate::automation::AutomationObserver>,
 }
 
 #[cfg(not(test))]
@@ -62,7 +63,11 @@ impl InputLoop<'_, '_, '_, '_> {
         &mut self,
         view: crate::engine::observe::InputView,
     ) -> crate::engine::observe::Injected {
-        self.frame.admit(self.cx, self.io, view)
+        let injected = self.frame.admit(self.cx, self.io, view);
+        if let Some(observer) = self.automation {
+            observer.complete_save_capture(self.cx);
+        }
+        injected
     }
 
     fn play_menu_sound(&mut self) {
@@ -166,6 +171,7 @@ impl crate::engine::input::InputRuntime for NativeInputRuntime {
                 io,
                 frame,
                 input: &self.input,
+                automation: self.observer.as_deref(),
             },
         );
     }

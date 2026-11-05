@@ -146,7 +146,7 @@ impl AutomationObserver {
         if self.admit_boundary(inner, CallbackKind::Input) {
             return std::ops::ControlFlow::Break(true);
         }
-        if self.save_input(inner, button_wait) {
+        if self.save_input(inner, button_wait, capture) {
             return std::ops::ControlFlow::Break(true);
         }
 

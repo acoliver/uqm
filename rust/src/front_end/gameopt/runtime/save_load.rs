@@ -25,15 +25,14 @@ pub(super) unsafe fn save_load_game(
         }
         name_buf[SAVE_NAME_SIZE as usize] = 0;
         // SAFETY: the game-thread picker retains its graphics context and the writable name buffer.
-        if cx.with_legacy(|| unsafe { name_save_game(input, game_index, name_buf.as_mut_ptr()) })
-            != 0
-        {
+        if cx.with_legacy(|| unsafe { name_save_game(input, game_index, name_buf.as_mut_ptr()) }) != 0 {
             play_menu_sound(cx.kernel, cx.world, MENU_SUCCESS as u16);
             // SAFETY: the game-thread picker retains the stamp, selected summary and name buffer.
-            success = cx.with_legacy(|| unsafe {
-                ConfirmSaveLoad(&mut save_stamp);
-                SaveGame(game_index, ptr::from_mut(desc).cast(), name_buf.as_ptr())
-            });
+            cx.with_legacy(|| unsafe { ConfirmSaveLoad(&mut save_stamp) });
+            let summary = ptr::from_mut(desc).cast();
+            let name = name_buf.as_ptr();
+            // SAFETY: the picker retains its writable summary and terminated name.
+            success = unsafe { SaveGame(cx, game_index, summary, name) };
         } else {
             success = 0;
             *canceled_by_user = 1;
@@ -117,19 +116,11 @@ pub(super) fn pick_game(
         if pick_state.success == 0 {
             break;
         }
+        let slot = menu_state.CurState as COUNT;
         // SAFETY: the picker is the sole game-thread writer of this remembered slot.
-        unsafe { LAST_USED_SLOT = menu_state.CurState as COUNT };
+        unsafe { LAST_USED_SLOT = slot };
         // SAFETY: the synchronous picker owns these published native resources.
-        if unsafe {
-            save_load_game(
-                cx,
-                input,
-                &mut pick_state,
-                menu_state.CurState as COUNT,
-                &mut canceled_by_user,
-            )
-        } != 0
-        {
+        if unsafe { save_load_game(cx, input, &mut pick_state, slot, &mut canceled_by_user) } != 0 {
             let operation = if saving != 0 { "save" } else { "load" };
             log::info!("RUST_PICKER: exit={operation}_success");
             break;
@@ -151,8 +142,7 @@ pub(super) fn pick_game(
         cx.world
             .set_activity(cx.world.activity() | CHECK_LOAD as ACTIVITY);
     }
-    let activity = cx.world.activity();
-    let restore = activity & CHECK_ABORT as ACTIVITY == 0
+    let restore = cx.world.activity() & CHECK_ABORT as ACTIVITY == 0
         && (saving != 0 || (pick_state.success == 0 && from_main_menu == 0));
     // SAFETY: the synchronous picker owns these published native resources.
     cx.with_legacy(|| unsafe {
