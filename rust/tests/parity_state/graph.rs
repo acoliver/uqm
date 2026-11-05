@@ -66,14 +66,15 @@ pub(super) fn elements_and_fighters(observer: &AutomationObserver, directory: &P
         });
     }
     // SAFETY: stack graph remains live; no renderer or pool allocator is running.
-    unsafe {
+    let campaign = unsafe {
         install_ship(&mut owner);
-        (**uqm_rust::engine::WorldData::current())
-            .game
-            .current_activity = IN_BATTLE as u16;
-    }
+        uqm_rust::engine::World::current().write(|world| {
+            world.set_activity(IN_BATTLE as u16);
+            uqm_rust::engine::observe::CampaignView::from_world(world)
+        })
+    };
     uqm_rust::math::seed_random(654321);
-    let fighters = BattleSnapshot::live();
+    let fighters = BattleSnapshot::live(&campaign);
     assert_eq!(uqm_rust::math::seed_random(654321), 654321);
     let player = fighters
         .player
@@ -252,15 +253,17 @@ pub(super) fn fighters_without_journal(directory: &Path) {
         unregistered_hook,
     ));
     // SAFETY: this child has not initialized Coordinator, and it alone owns the graph.
-    unsafe {
-        (**uqm_rust::engine::WorldData::current())
-            .game
-            .current_activity = IN_BATTLE as u16;
+    let campaign = unsafe {
+        let campaign = uqm_rust::engine::World::current().write(|world| {
+            world.set_activity(IN_BATTLE as u16);
+            uqm_rust::engine::observe::CampaignView::from_world(world)
+        });
         install_ship(&mut ship);
         attach_elements(std::slice::from_mut(&mut element));
-    }
+        campaign
+    };
     uqm_rust::math::seed_random(56789);
-    let snapshot = uqm_rust::automation::battle_fight::BattleSnapshot::live();
+    let snapshot = uqm_rust::automation::battle_fight::BattleSnapshot::live(&campaign);
     let player = snapshot
         .player
         .unwrap_or_else(|| panic!("missing no-journal player ship"));
@@ -274,7 +277,7 @@ pub(super) fn fighters_without_journal(directory: &Path) {
     for side in [-1, 2, i16::MAX] {
         element.playerNr = side;
         element.parent = uqm_rust::engine::battle::Parent::Ship(ship.ship_id);
-        let snapshot = BattleSnapshot::live();
+        let snapshot = BattleSnapshot::live(&campaign);
         assert!(snapshot.player.is_none());
         assert!(snapshot.enemy.is_none());
     }

@@ -857,7 +857,7 @@ pub(crate) fn star_flight_observation(
         });
         let autopilot = world.autopilot;
         super::star_flight::Observation {
-            activity: crate::mainloop::ffi::get_current_activity().0,
+            activity: world.activity,
             current_star,
             space_side: world
                 .named_state_value("ARILOU_SPACE_SIDE")
@@ -930,7 +930,7 @@ pub(crate) fn fleet_fight_observation(world: &CampaignView) -> super::fleet_figh
     #[cfg(test)]
     let picker = None;
     super::fleet_fight::Observation {
-        activity: crate::mainloop::ffi::get_current_activity().0,
+        activity: world.activity,
         cyborg,
         speed,
         counters: [player, enemy],

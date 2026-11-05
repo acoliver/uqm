@@ -1015,7 +1015,7 @@ impl AutomationObserver {
             self.actions.get(inner.sched_state.step_index)
         {
             match inner.battle_loss.observe(
-                mode::require_live(),
+                mode::require_live(world),
                 crate::automation::battle_observer::current_frame(),
                 battle_outcome::live_fleets(),
                 wait.minimum_ships,
@@ -1084,53 +1084,6 @@ impl AutomationObserver {
         scheduler_event
     }
 
-    /// Fly the flagship out of the live solar system with player controls and
-    /// report arrival once production has dispatched hyperspace.
-    /// Hold the turn key of a `turn_flagship` step until the live flagship
-    /// facing has changed by exactly the requested facings, then release it.
-    fn service_flagship_turn(
-        &self,
-        inner: &mut CoordInner,
-        turn: crate::automation::script::TurnFlagshipStep,
-        scheduler_event: SchedulerEvent,
-    ) -> SchedulerEvent {
-        use crate::automation::navigation::NavigationControl;
-        use crate::automation::script::TurnDirection;
-
-        let progress = inner.flagship_turn.observe(
-            mode::require_live(),
-            flagship_turn::live_facing(),
-            turn.direction,
-            turn.facings,
-        );
-        let holding = NavigationControl {
-            left: turn.direction == TurnDirection::Left,
-            right: turn.direction == TurnDirection::Right,
-            ..NavigationControl::default()
-        };
-        match progress {
-            Ok(TurnProgress::Turning { .. }) => {
-                if !self.set_navigation_controls(holding) {
-                    self.reject_input(inner, "turn_flagship", -1, -1);
-                }
-                scheduler_event
-            }
-            Ok(TurnProgress::Complete(proof)) => {
-                if !self.set_navigation_controls(NavigationControl::default()) {
-                    self.reject_input(inner, "turn_flagship", -1, -1);
-                    return scheduler_event;
-                }
-                self.write_trace_labeled(inner, RecordKind::SemanticAssertion, proof.trace_label());
-                SchedulerEvent::NavigationReached
-            }
-            Err(error) => {
-                self.write_trace_labeled(inner, RecordKind::SemanticAssertion, error.trace_label());
-                self.set_terminal(inner, TerminalClass::SemanticMismatch);
-                scheduler_event
-            }
-        }
-    }
-
     /// Drive the planet-side lander toward the nearest deposit of the
     /// requested category until its hold carries the requested units.
     fn service_planet_minerals(
@@ -1180,11 +1133,14 @@ impl AutomationObserver {
     /// would press.
     fn service_battle_fight(
         &self,
+        world: &campaign_state::CampaignView,
         inner: &mut CoordInner,
         fight: crate::automation::script::FightBattleStep,
         scheduler_event: SchedulerEvent,
     ) -> SchedulerEvent {
-        let progress = inner.battle_fight.observe(&BattleSnapshot::live(), &fight);
+        let progress = inner
+            .battle_fight
+            .observe(&BattleSnapshot::live(world), &fight);
         match progress {
             Ok(FightProgress::Fighting { control, report }) => {
                 if !Self::set_fight_controls(control) {
@@ -1831,7 +1787,7 @@ impl AutomationObserver {
         } else if let Some(Action::TurnFlagship(turn)) =
             self.actions.get(inner.sched_state.step_index)
         {
-            scheduler_event = self.service_flagship_turn(inner, *turn, scheduler_event);
+            scheduler_event = self.service_flagship_turn(world, inner, *turn, scheduler_event);
         } else if let Some(Action::CollectPlanetMinerals(collect)) =
             self.actions.get(inner.sched_state.step_index)
         {
@@ -1853,7 +1809,7 @@ impl AutomationObserver {
         } else if let Some(Action::FightBattle(fight)) =
             self.actions.get(inner.sched_state.step_index)
         {
-            scheduler_event = self.service_battle_fight(inner, *fight, scheduler_event);
+            scheduler_event = self.service_battle_fight(world, inner, *fight, scheduler_event);
         } else if let Some(Action::NavigateToMoon(navigation)) =
             self.actions.get(inner.sched_state.step_index)
         {
@@ -2015,7 +1971,7 @@ impl AutomationObserver {
 
         if let Some(Action::AssertMode(assertion)) = self.actions.get(inner.sched_state.step_index)
         {
-            match crate::automation::mode::require_live() {
+            match crate::automation::mode::require_live(world) {
                 Ok(observed) if observed == assertion.mode => self.write_trace_labeled(
                     inner,
                     RecordKind::SemanticAssertion,
@@ -2134,10 +2090,10 @@ impl AutomationObserver {
         if let Some(Action::RecordHyperspacePosition(_)) =
             self.actions.get(inner.sched_state.step_index)
         {
-            match inner
-                .flight_position
-                .record(mode::require_live(), flight_position::live_position(world))
-            {
+            match inner.flight_position.record(
+                mode::require_live(world),
+                flight_position::live_position(world),
+            ) {
                 Ok(position) => self.write_trace_labeled(
                     inner,
                     RecordKind::SemanticAssertion,
@@ -2158,7 +2114,7 @@ impl AutomationObserver {
             self.actions.get(inner.sched_state.step_index)
         {
             match inner.flight_position.assert_displacement(
-                mode::require_live(),
+                mode::require_live(world),
                 flight_position::live_position(world),
                 assertion.minimum_logical_units,
             ) {
@@ -2182,7 +2138,7 @@ impl AutomationObserver {
             self.actions.get(inner.sched_state.step_index)
         {
             match inner.flight_position.assert_stationary(
-                mode::require_live(),
+                mode::require_live(world),
                 flight_position::live_position(world),
                 assertion.maximum_logical_units,
             ) {
@@ -2205,10 +2161,10 @@ impl AutomationObserver {
         if let Some(Action::RecordSavedHyperspacePosition(_)) =
             self.actions.get(inner.sched_state.step_index)
         {
-            match inner
-                .flight_position
-                .record_saved(mode::require_live(), flight_position::live_position(world))
-            {
+            match inner.flight_position.record_saved(
+                mode::require_live(world),
+                flight_position::live_position(world),
+            ) {
                 Ok(position) => self.write_trace_labeled(
                     inner,
                     RecordKind::SemanticAssertion,
@@ -2228,10 +2184,10 @@ impl AutomationObserver {
         if let Some(Action::AssertHyperspacePositionRestored(_)) =
             self.actions.get(inner.sched_state.step_index)
         {
-            match inner
-                .flight_position
-                .assert_restored(mode::require_live(), flight_position::live_position(world))
-            {
+            match inner.flight_position.assert_restored(
+                mode::require_live(world),
+                flight_position::live_position(world),
+            ) {
                 Ok((saved, observed)) => self.write_trace_labeled(
                     inner,
                     RecordKind::SemanticAssertion,
@@ -2252,7 +2208,7 @@ impl AutomationObserver {
             self.actions.get(inner.sched_state.step_index)
         {
             match ship_resources::assert_ship_resources(
-                mode::require_live(),
+                mode::require_live(world),
                 ship_resources::live_resources(world),
                 *assertion,
             ) {
@@ -2295,7 +2251,7 @@ impl AutomationObserver {
             self.actions.get(inner.sched_state.step_index)
         {
             match ship_element::assert_ship_element(
-                mode::require_live(),
+                mode::require_live(world),
                 ship_element::live_amounts(world),
                 *assertion,
             ) {
