@@ -3,7 +3,6 @@
 
 pub mod build_pick;
 pub mod config;
-pub mod ffi;
 pub mod melee;
 pub mod netplay_boundary;
 pub mod persistence;

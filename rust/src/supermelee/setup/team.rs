@@ -57,7 +57,7 @@ pub fn ship_cost(ship: MeleeShip) -> u16 {
 ///
 /// Matches C `char name[MAX_TEAM_CHARS + 1 + 24]`: one byte for the
 /// terminating NUL plus 24 bytes of overflow padding.
-const TEAM_NAME_BUF: usize = MAX_TEAM_CHARS + 1 + 24;
+const TEAM_NAME_BUF: usize = uqm_save::mle::NAME_BYTES;
 
 // ---------------------------------------------------------------------------
 // MeleeTeam
@@ -133,6 +133,29 @@ impl MeleeTeam {
         for byte in &mut self.name[copy_len..] {
             *byte = 0;
         }
+    }
+}
+
+impl From<&MeleeTeam> for uqm_save::mle::Team {
+    fn from(team: &MeleeTeam) -> Self {
+        Self {
+            ships: team.ships.map(|ship| ship as u8),
+            name: team.name,
+        }
+    }
+}
+
+impl From<uqm_save::mle::Team> for MeleeTeam {
+    fn from(record: uqm_save::mle::Team) -> Self {
+        let mut team = Self {
+            ships: record.ships.map(|raw| match MeleeShip::from_u8(raw) {
+                Some(ship) if ship != MeleeShip::MeleeUnset => ship,
+                _ => MeleeShip::MeleeNone,
+            }),
+            name: record.name,
+        };
+        team.name[MAX_TEAM_CHARS] = 0;
+        team
     }
 }
 
@@ -284,6 +307,36 @@ impl MeleeSetup {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn importing_legacy_bytes_normalizes_only_ships_and_the_display_terminator() {
+        let mut record = uqm_save::mle::Team {
+            ships: [255; MELEE_FLEET_SIZE],
+            name: [0xa5; uqm_save::mle::NAME_BYTES],
+        };
+        record.ships[..6].copy_from_slice(&[0, 24, 25, 200, 254, 255]);
+        let imported = MeleeTeam::from(record.clone());
+        assert_eq!(imported.ships[0], MeleeShip::Androsynth);
+        assert_eq!(imported.ships[1], MeleeShip::ZoqFotPik);
+        assert!(imported.ships[2..]
+            .iter()
+            .all(|ship| *ship == MeleeShip::MeleeNone));
+        let mut expected_name = record.name;
+        expected_name[MAX_TEAM_CHARS] = 0;
+        assert_eq!(imported.name, expected_name);
+        assert_eq!(record.name[MAX_TEAM_CHARS], 0xa5);
+    }
+
+    #[test]
+    fn exporting_a_team_preserves_unset_slots_and_name_padding() {
+        let mut team = MeleeTeam::new();
+        team.ships[0] = MeleeShip::MeleeUnset;
+        team.name.fill(0xe9);
+        let record = uqm_save::mle::Team::from(&team);
+        assert_eq!(record.ships[0], 254);
+        assert_eq!(record.ships[1..], [255; MELEE_FLEET_SIZE - 1]);
+        assert_eq!(record.name, team.name);
+    }
 
     // -----------------------------------------------------------------------
     // MeleeTeam defaults

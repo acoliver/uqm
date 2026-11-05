@@ -4,69 +4,9 @@
 
 use crate::supermelee::error::SuperMeleeError;
 use crate::supermelee::setup::team::MeleeTeam;
-use crate::supermelee::types::{MeleeShip, MAX_TEAM_CHARS, MELEE_FLEET_SIZE, NUM_MELEE_SHIPS};
-use std::io::{self, Read, Write};
+use crate::supermelee::types::MeleeShip;
 use std::path::{Path, PathBuf};
-
-// ---------------------------------------------------------------------------
-// Serial size — matches C `MeleeTeam_serialSize`
-// ---------------------------------------------------------------------------
-
-/// On-disk size of one serialized team: 14 ship bytes + 55 name bytes.
-pub const MELEE_TEAM_SERIAL_SIZE: usize = MELEE_FLEET_SIZE + MAX_TEAM_CHARS + 1 + 24;
-
-// ---------------------------------------------------------------------------
-// Serialize / Deserialize  (mirrors meleesetup.c)
-// ---------------------------------------------------------------------------
-
-/// Writes a `MeleeTeam` to `writer` in the legacy `.mle` binary format.
-///
-/// Format: 14 ship bytes (one `u8` per slot) followed by 55 name bytes.
-/// Matches `MeleeTeam_serialize()` in `meleesetup.c`.
-pub fn serialize_team<W: Write>(team: &MeleeTeam, writer: &mut W) -> Result<(), SuperMeleeError> {
-    for &ship in &team.ships {
-        writer
-            .write_all(&[ship as u8])
-            .map_err(|e| SuperMeleeError::PersistenceError(e.to_string()))?;
-    }
-    writer
-        .write_all(&team.name)
-        .map_err(|e| SuperMeleeError::PersistenceError(e.to_string()))?;
-    Ok(())
-}
-
-/// Reads a `MeleeTeam` from `reader` in the legacy `.mle` binary format.
-///
-/// Invalid ship IDs (>= NUM_MELEE_SHIPS and not MELEE_NONE) are silently
-/// replaced with `MeleeNone`, matching C `MeleeTeam_deserialize()`.
-pub fn deserialize_team<R: Read>(reader: &mut R) -> Result<MeleeTeam, SuperMeleeError> {
-    let mut team = MeleeTeam::new();
-
-    for slot in 0..MELEE_FLEET_SIZE {
-        let mut byte = [0u8; 1];
-        reader
-            .read_exact(&mut byte)
-            .map_err(|e| SuperMeleeError::PersistenceError(e.to_string()))?;
-        let raw = byte[0];
-        if raw == MeleeShip::MeleeNone as u8 {
-            team.ships[slot] = MeleeShip::MeleeNone;
-        } else if (raw as usize) < NUM_MELEE_SHIPS {
-            team.ships[slot] = MeleeShip::from_u8(raw).unwrap_or(MeleeShip::MeleeNone);
-        } else {
-            // Invalid ship — replace with MELEE_NONE (matches C behavior)
-            team.ships[slot] = MeleeShip::MeleeNone;
-        }
-    }
-
-    reader
-        .read_exact(&mut team.name)
-        .map_err(|e| SuperMeleeError::PersistenceError(e.to_string()))?;
-
-    // Ensure NUL-termination at MAX_TEAM_CHARS (matches C)
-    team.name[MAX_TEAM_CHARS] = 0;
-
-    Ok(team)
-}
+use uqm_save::mle::Team as TeamRecord;
 
 // ---------------------------------------------------------------------------
 // File-level team I/O
@@ -76,26 +16,24 @@ pub fn deserialize_team<R: Read>(reader: &mut R) -> Result<MeleeTeam, SuperMelee
 pub fn load_team_file(path: &Path) -> Result<MeleeTeam, SuperMeleeError> {
     let data = std::fs::read(path)
         .map_err(|e| SuperMeleeError::PersistenceError(format!("{}: {}", path.display(), e)))?;
-    if data.len() < MELEE_TEAM_SERIAL_SIZE {
+    let Some(bytes) = data.first_chunk() else {
         return Err(SuperMeleeError::InvalidTeamData(format!(
             "{}: file too short ({} bytes, expected {})",
             path.display(),
             data.len(),
-            MELEE_TEAM_SERIAL_SIZE,
+            TeamRecord::SERIALIZED_LEN,
         )));
-    }
-    let mut cursor = io::Cursor::new(&data);
-    deserialize_team(&mut cursor)
+    };
+    Ok(TeamRecord::from_bytes(bytes).into())
 }
 
 /// Saves a team to a `.mle` file at `path`.
 ///
 /// On write failure, the partial file is removed (matching C `DoSaveTeam`).
 pub fn save_team_file(team: &MeleeTeam, path: &Path) -> Result<(), SuperMeleeError> {
-    let mut buf = Vec::with_capacity(MELEE_TEAM_SERIAL_SIZE);
-    serialize_team(team, &mut buf)?;
+    let buf = TeamRecord::from(team).to_bytes();
 
-    if let Err(e) = std::fs::write(path, &buf) {
+    if let Err(e) = std::fs::write(path, buf) {
         // Clean up partial artifact (matches C behavior)
         let _ = std::fs::remove_file(path);
         return Err(SuperMeleeError::PersistenceError(format!(
@@ -118,10 +56,8 @@ pub const PREBUILT_COUNT: usize = 15;
 fn make_team(name: &str, ships: &[MeleeShip]) -> MeleeTeam {
     let mut team = MeleeTeam::new();
     team.set_name(name);
-    for (i, &ship) in ships.iter().enumerate() {
-        if i < MELEE_FLEET_SIZE {
-            team.ships[i] = ship;
-        }
+    for (slot, &ship) in team.ships.iter_mut().zip(ships) {
+        *slot = ship;
     }
     team
 }
@@ -300,6 +236,7 @@ pub fn enumerate_teams(melee_dir: &Path) -> Vec<TeamEntry> {
 mod tests {
     use super::*;
     use crate::supermelee::setup::team::MeleeSetup;
+    use crate::supermelee::types::{MAX_TEAM_CHARS, MELEE_FLEET_SIZE};
     use std::io::Cursor;
 
     // -----------------------------------------------------------------------
@@ -313,9 +250,11 @@ mod tests {
         team.ships[5] = MeleeShip::Earthling;
         team.set_name("Test Team");
         let mut buf = Vec::new();
-        serialize_team(&team, &mut buf).unwrap();
-        assert_eq!(buf.len(), MELEE_TEAM_SERIAL_SIZE);
-        let restored = deserialize_team(&mut Cursor::new(&buf)).unwrap();
+        TeamRecord::from(&team).write_to(&mut buf).unwrap();
+        assert_eq!(buf.len(), TeamRecord::SERIALIZED_LEN);
+        let restored = TeamRecord::read_from(Cursor::new(&buf))
+            .map(MeleeTeam::from)
+            .unwrap();
         assert_eq!(restored.ships[0], MeleeShip::Chmmr);
         assert_eq!(restored.ships[5], MeleeShip::Earthling);
         assert_eq!(restored.ships[1], MeleeShip::MeleeNone);
@@ -324,28 +263,32 @@ mod tests {
 
     #[test]
     fn deserialize_replaces_invalid_ship_ids() {
-        let mut buf = vec![0u8; MELEE_TEAM_SERIAL_SIZE];
+        let mut buf = vec![0u8; TeamRecord::SERIALIZED_LEN];
         // Set slot 0 to an invalid ship ID (200)
         buf[0] = 200;
         // Set slot 1 to a valid ship (Earthling = 5)
         buf[1] = 5;
-        let team = deserialize_team(&mut Cursor::new(&buf)).unwrap();
+        let team = TeamRecord::read_from(Cursor::new(&buf))
+            .map(MeleeTeam::from)
+            .unwrap();
         assert_eq!(team.ships[0], MeleeShip::MeleeNone); // replaced
         assert_eq!(team.ships[1], MeleeShip::Earthling); // preserved
     }
 
     #[test]
     fn deserialize_preserves_melee_none() {
-        let mut buf = vec![0u8; MELEE_TEAM_SERIAL_SIZE];
+        let mut buf = vec![0u8; TeamRecord::SERIALIZED_LEN];
         buf[0] = MeleeShip::MeleeNone as u8; // 0xFF
-        let team = deserialize_team(&mut Cursor::new(&buf)).unwrap();
+        let team = TeamRecord::read_from(Cursor::new(&buf))
+            .map(MeleeTeam::from)
+            .unwrap();
         assert_eq!(team.ships[0], MeleeShip::MeleeNone);
     }
 
     #[test]
     fn deserialize_truncated_data_returns_error() {
         let buf = vec![0u8; 5]; // way too short
-        let result = deserialize_team(&mut Cursor::new(&buf));
+        let result = TeamRecord::read_from(Cursor::new(&buf)).map(MeleeTeam::from);
         assert!(result.is_err());
     }
 
@@ -353,7 +296,7 @@ mod tests {
     fn serialize_size_matches_c() {
         // C: MELEE_FLEET_SIZE + sizeof(name) = 14 + 55 = 69
         assert_eq!(
-            MELEE_TEAM_SERIAL_SIZE,
+            TeamRecord::SERIALIZED_LEN,
             MELEE_FLEET_SIZE + MAX_TEAM_CHARS + 1 + 24
         );
     }
