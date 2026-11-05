@@ -114,4 +114,25 @@ fn scoped_budget_cli_preserves_unrelated_ratchets_and_approval_on_scope_changes(
         ]
     )
     .is_err());
+    let layer = "layers|module_edges|uqm::planets::generate::late_exports::existing";
+    let unrelated = "complexity|function_lines|uqm::other";
+    let mut before = Baseline::read(&path).unwrap();
+    before.entries.insert(layer.into(), 2);
+    before.entries.insert(unrelated.into(), 77);
+    before.write(&path).unwrap();
+    run(
+        root.path(),
+        &[
+            "budget".into(),
+            "u5_01_world_projection".into(),
+            "3".into(),
+            "--scope".into(),
+            format!("{layer}=3"),
+        ],
+    )
+    .unwrap();
+    let after = Baseline::read(&path).unwrap();
+    assert!(!after.entries.contains_key(layer));
+    assert_eq!(after.entries[unrelated], 77);
+    assert_eq!(after.budget["u5_01_world_projection"].scopes[layer], 3);
 }
