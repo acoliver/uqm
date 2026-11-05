@@ -12,7 +12,7 @@ pub static mut MainExited: i32 = 0;
 
 unsafe extern "C" fn on_battle_frame() {
     crate::time::clock_abi::live::GameClockTick();
-    let activity = World::current().write(|world| {
+    World::current().write(|world| {
         let opening = crate::navigation::get(world, StoryKey::ARILOU_SPACE) == 1;
         let counter = crate::navigation::get(world, StoryKey::ARILOU_SPACE_COUNTER);
         crate::navigation::set(
@@ -24,9 +24,11 @@ unsafe extern "C" fn on_battle_frame() {
                 counter - u8::from(counter > 0)
             },
         );
-        world.activity()
     });
-    if activity & (CHECK_ABORT | CHECK_LOAD) as u16 == 0 {
+    if WorldData::current().read(|owner| owner.game.current_activity)
+        & (CHECK_ABORT | CHECK_LOAD) as u16
+        == 0
+    {
         crate::navigation::hyper_radar::SeedUniverse();
     }
     crate::ui::sis::DrawAutoPilotMessage(0);
@@ -35,9 +37,12 @@ unsafe extern "C" fn on_battle_frame() {
 unsafe extern "C" fn background_init_kernel(timeout: u32) {
     for species in SPECIES_ID_ARILOU_ID..=SPECIES_ID_LAST_MELEE_ID {
         crate::threading::legacy_abi::TaskSwitch();
-        crate::app::bridge::enter(|cx| {
-            crate::ships::master_native::engine::load_entry(cx.world, cx.kernel, species)
-        });
+        // SAFETY: the splash callback enters the published game owner between task switches.
+        unsafe {
+            crate::app::bridge::enter(|cx| {
+                crate::ships::master_native::engine::load_entry(cx.world, cx.kernel, species)
+            });
+        }
     }
     crate::threading::legacy_abi::TaskSwitch();
     Kernel::current().write(|kernel| {

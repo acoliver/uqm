@@ -153,21 +153,21 @@ pub(super) mod live {
             (*state).build_pick_confirmed = u32::from(keys[KEY_MENU_CANCEL as usize] == 0);
             return 0;
         }
-        if keys[KEY_MENU_SPECIAL as usize] != 0 && (*state).current_ship != 255 {
-            DoShipSpin((*state).current_ship as u16, ptr::null_mut());
+        let current_ship = (*state).current_ship;
+        if keys[KEY_MENU_SPECIAL as usize] != 0 && current_ship != 255 {
+            DoShipSpin(current_ship as u16, ptr::null_mut());
             return 1;
         }
         let selected = navigate(
-            (*state).current_ship,
+            current_ship,
             keys[KEY_MENU_LEFT as usize] != 0,
             keys[KEY_MENU_RIGHT as usize] != 0,
             keys[KEY_MENU_UP as usize] != 0,
             keys[KEY_MENU_DOWN as usize] != 0,
         );
-        if selected != (*state).current_ship {
-            // SAFETY: the picker owns this live menu for the synchronous draw.
-            let catalog = unsafe { &(*state).catalog };
-            draw_pick_icon(catalog, (*state).current_ship, true);
+        if selected != current_ship {
+            let catalog = &(*state).catalog;
+            draw_pick_icon(catalog, current_ship, true);
             (*state).current_ship = selected;
             DrawMeleeShipStrings(state, selected);
         }
