@@ -300,14 +300,8 @@ pub(crate) mod live {
     ) {
         for (side, ship) in ships.into_iter().enumerate().rev() {
             if let Some(ship) = ship {
-                // SAFETY: Cx retains the initialized queues and survivor through this read and writeback.
-                unsafe {
-                    if crate::battle::encount_native::fleet_is_infinite(cx.world, side as u16) == 0
-                    {
-                        crate::battle::context_access::reader_legacy::update_ship_frag_crew(
-                            cx, ship,
-                        );
-                    }
+                if crate::battle::encount_native::fleet_is_infinite(cx.world, side as u16) == 0 {
+                    crate::battle::context_access::reader_legacy::update_ship_frag_crew(cx, ship);
                 }
             }
         }
