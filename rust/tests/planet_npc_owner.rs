@@ -37,3 +37,46 @@ fn npc_story_and_groups_use_the_supplied_world_without_a_published_context() {
     assert_eq!(world.ip_groups_ref().get(first).sys_loc, 3);
     assert_eq!(world.ip_groups_ref().get(second).sys_loc, 3);
 }
+
+#[test]
+fn npc_guard_queue_operations_preserve_escorts_and_invalidate_only_reset_ids() {
+    use uqm_rust::planets::generate::sam::GuardSite;
+    use uqm_rust::planets::generate::sol::orbital::Queues;
+    use uqm_rust::planets::generate::special::FleetGroups;
+
+    let mut world = World::new();
+    let mut escorts = world.built_ships();
+    let escort = escorts.alloc().unwrap();
+    escorts.put(escort);
+    let mut ships = world.npc_built_ships();
+    let npc = ships.alloc().unwrap();
+    ships.put(npc);
+    let mut groups = world.ip_groups();
+    let group = groups.alloc().unwrap();
+    groups.put(group);
+
+    {
+        let mut host = NpcWorld::new(&mut world);
+        assert_eq!(Queues::built_ship_count(&host), 1);
+        assert_eq!(GuardSite::built_ship_count(&host), 1);
+        GuardSite::set_battle_group_ref(&mut host, 0x1234_5678);
+        assert_eq!(GuardSite::battle_group_ref(&host), 0x1234_5678);
+        host.clear_battle_group_ref();
+        assert_eq!(FleetGroups::battle_group_ref(&host), 0);
+        GuardSite::reinit_built_queue(&mut host);
+        assert_eq!(Queues::built_ship_count(&host), 0);
+        GuardSite::clone_ship(&mut host, u8::MAX);
+        assert_eq!(GuardSite::built_ship_count(&host), 0);
+        Npcs::reinit_ip_group_q(&mut host);
+        assert!(!FleetGroups::head_ip_group(&mut host, &mut |_| {
+            panic!("an empty group queue must not visit a record")
+        }));
+        GuardSite::for_each_ip_group(&mut host, &mut |_| {
+            panic!("an empty group queue must not visit a record")
+        });
+    }
+    assert!(!world.npc_built_ships_ref().contains(npc));
+    assert!(!world.ip_groups_ref().contains(group));
+    assert!(world.built_ships_ref().contains(escort));
+    assert_eq!(world.built_ships_ref().count(), 1);
+}
