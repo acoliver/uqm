@@ -193,10 +193,7 @@ pub(crate) mod live {
         1
     }
 
-    use crate::engine::{
-        battle::Cx,
-        observe::{CampaignView, InputView, Io},
-    };
+    use crate::engine::{battle::Cx, observe::Io};
 
     fn wait_until(
         cx: &mut Cx<'_>,
@@ -213,11 +210,9 @@ pub(crate) mod live {
             // SAFETY: quit dispatch and this wait run on the same game thread.
             && unsafe { QuitPosted == 0 }
         {
-            let campaign =
-                CampaignView::for_input(InputView::Nested, || CampaignView::capture(cx.world));
-            let Some(sampled) = cx.with_legacy(|| {
+            let Some(sampled) = cx.nested_input(io, |cx| {
                 // SAFETY: the published input scope remains live during the synchronous sleep.
-                io.nested_input(&campaign, || unsafe {
+                cx.with_legacy(|| unsafe {
                     SleepThread(ONE_SECOND / 40);
                     AnyButtonPress(1)
                 })

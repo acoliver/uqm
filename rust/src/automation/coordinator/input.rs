@@ -304,7 +304,7 @@ mod tests {
             .terminal
             .try_set(TerminalClass::SemanticMismatch);
         assert_eq!(input_ffi::service_input(&observer, &mut capture, false), 1);
-        assert_eq!(input_ffi::after_input_update(&observer), 1);
+        assert_eq!(input_ffi::after_input_update(&observer, 0), 1);
         assert!(observer.process_input_at_boundary(&mut capture, false));
         assert_eq!(observer.inner.lock().input_seen, 1);
     }

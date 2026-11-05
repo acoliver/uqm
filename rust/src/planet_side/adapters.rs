@@ -56,8 +56,12 @@ impl CffiPlanetSideInput {
             let runtime = cx.kernel.input_runtime();
             cx.with_legacy(|| runtime.update());
         }
+        let activity = cx.world.activity();
         if cx
-            .with_legacy(|| io.observer.input_admitted(&InputView::AfterUpdate, &None))
+            .with_legacy(|| {
+                io.observer
+                    .input_admitted(&InputView::AfterUpdate(activity), &None)
+            })
             .stop
         {
             return Ok(FrameInput {
@@ -290,7 +294,7 @@ mod tests {
 
         for stop in [
             Some(InputView::BeforeUpdate),
-            Some(InputView::AfterUpdate),
+            Some(InputView::AfterUpdate(0x1234)),
             None,
         ] {
             let mut game = Game::new();
@@ -317,7 +321,7 @@ mod tests {
             assert_eq!(input.abort, stop.is_some());
             let mut expected = vec![(InputView::BeforeUpdate, Some(0x1234))];
             if stop != Some(InputView::BeforeUpdate) {
-                expected.push((InputView::AfterUpdate, None));
+                expected.push((InputView::AfterUpdate(0x1234), None));
             }
             assert_eq!(observer.inputs, expected);
         }

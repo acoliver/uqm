@@ -433,7 +433,7 @@ pub mod live {
         value(frame, ship.player as usize);
     }
 
-    use crate::engine::observe::{CampaignView, Io};
+    use crate::engine::observe::Io;
     use crate::mainloop::input_abi::live::UpdateInputState;
     /// # Safety
     /// Called at the end of a live melee battle on the game thread.
@@ -448,9 +448,8 @@ pub mod live {
             let mut pressed = PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0
                 || PulsedInputState.menu[KEY_MENU_CANCEL as usize] != 0;
             loop {
-                let campaign = Some(CampaignView::capture(cx.world));
                 if cx
-                    .with_legacy(|| io.nested_input(&campaign, || UpdateInputState()))
+                    .nested_input(io, |cx| cx.with_legacy(|| UpdateInputState()))
                     .is_none()
                 {
                     break;

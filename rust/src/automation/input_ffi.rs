@@ -631,7 +631,7 @@ pub(crate) fn service_input(
 //  Observation hook: called after UpdateInputState in DoInput
 // ===========================================================================
 
-pub(crate) fn after_input_update(observer: &AutomationObserver) -> i32 {
+pub(crate) fn after_input_update(observer: &AutomationObserver, activity: u16) -> i32 {
     // Step 1: ABI entry (saturating).
     let rt = &observer.runtime;
     rt.record_abi_entry();
@@ -648,7 +648,7 @@ pub(crate) fn after_input_update(observer: &AutomationObserver) -> i32 {
 
     // Step 3: Commit the scripted player-input observation at the exact
     // production boundary that follows UpdateInputState.
-    observer.parity_input();
+    observer.parity_input(activity);
     observer.process_player_input_observation().into()
 }
 

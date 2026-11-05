@@ -94,7 +94,7 @@ impl AutomationObserver {
         }
     }
 
-    pub fn parity_input(&self) {
+    pub fn parity_input(&self, activity: u16) {
         let coord = self;
         let Some(journal) = &coord.parity else {
             return;
@@ -103,7 +103,7 @@ impl AutomationObserver {
         let keys = super::super::input_ffi::current_inputs();
         let result = journal.lock().input(
             count,
-            crate::mainloop::ffi::get_current_activity().0,
+            activity,
             &format!("menu={:?};players={:?}", keys.menu, keys.key),
         );
         if let Err(error) = result {

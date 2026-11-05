@@ -28,8 +28,9 @@ fn run_loop(reset: bool, step: &mut InputLoop<'_, '_, '_, '_>) {
         }
         // SAFETY: the driver is the sole writer of this input frame.
         step.legacy(|| unsafe { UpdateInputState() });
+        let activity = step.cx.world.activity();
         if step
-            .input(crate::engine::observe::InputView::AfterUpdate)
+            .input(crate::engine::observe::InputView::AfterUpdate(activity))
             .stop
         {
             break;

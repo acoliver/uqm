@@ -21,7 +21,9 @@ impl Observer<Option<super::campaign_state::CampaignView>> for Handle {
         let stop = match *view {
             InputView::BeforeUpdate => input_ffi::service_input(&self.0, &mut capture, false) != 0,
             InputView::Nested => input_ffi::service_input(&self.0, &mut capture, true) != 0,
-            InputView::AfterUpdate => input_ffi::after_input_update(&self.0) != 0,
+            InputView::AfterUpdate(activity) => {
+                input_ffi::after_input_update(&self.0, activity) != 0
+            }
             InputView::Active => true,
             InputView::MainMenuReady => self.0.process_main_menu_ready(),
             InputView::MenuTransition { from, to } => self.0.process_menu_transition(from, to),
@@ -59,7 +61,7 @@ impl Observer<Option<super::campaign_state::CampaignView>> for Handle {
                     .native_battle_frame_completed(crate::mainloop::ffi::get_current_activity());
                 self.0.parity_checkpoint("battle");
             }
-            CheckpointView::InputSampled => self.0.parity_input(),
+            CheckpointView::InputSampled(activity) => self.0.parity_input(activity),
             CheckpointView::FlagshipDestroyed => self
                 .0
                 .flagship_destroyed
