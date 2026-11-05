@@ -680,6 +680,8 @@ mod tests {
     fn group_and_fragment_records_keep_the_legacy_sixteen_byte_wire_layout() {
         let mut owner = World::new();
         let world = &mut owner;
+        // SAFETY: the local World owns every state-file handle used below. These
+        // zeroable ABI records and their stack pointers stay live for each call.
         unsafe {
             crate::state::ffi::rust_init_game_state(world);
             let file = open_state_file(world, 1, c"wb".as_ptr());
