@@ -4,6 +4,7 @@ mod activity;
 pub mod events;
 pub mod global;
 pub mod groups;
+pub mod hyper_save;
 pub mod ip_group_save;
 pub mod location;
 pub mod queues;

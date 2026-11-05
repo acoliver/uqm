@@ -7,7 +7,7 @@
 pub use crate::engine::save::events;
 pub use crate::engine::save::global;
 pub use crate::engine::save::groups;
-pub mod hyper_save;
+pub use crate::engine::save::hyper_save;
 pub use crate::engine::save::ip_group_save;
 #[cfg(not(test))]
 pub mod live;

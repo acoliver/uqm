@@ -180,3 +180,18 @@ fn solar_scan_save_uses_unpublished_story_and_files_and_clears_the_flag_after_wr
     assert_eq!(&image[..4], &4u32.to_le_bytes());
     assert_eq!(&image[52..64], &[1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0]);
 }
+
+#[test]
+fn hyper_save_uses_unpublished_owners_and_leaves_absent_flagship_state_unchanged() {
+    let mut game = uqm_rust::engine::Game::new();
+    game.world.data.game.ship_facing = 42;
+    game.world.data.game.ip_location.x = 91;
+    game.world.data.game.in_orbit = 3;
+    assert_eq!(
+        save::hyper_save::prepare_hyper_state(&mut game.world, &game.kernel),
+        Ok(save::hyper_save::HyperFlagship::Absent)
+    );
+    assert_eq!(game.world.data.game.ship_facing, 42);
+    assert_eq!(game.world.data.game.ip_location.x, 91);
+    assert_eq!(game.world.data.game.in_orbit, 3);
+}
