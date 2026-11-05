@@ -242,6 +242,78 @@ fn starbase_releases_world_before_communication_and_cleanup() {
 
 #[test]
 #[serial_test::serial]
+fn encounter_construction_uses_retained_owners_without_publication() {
+    use uqm_rust::engine::StoryKey;
+    let mut game = Game::new();
+    game.world.story = Some(uqm_rust::state::game_state::GameState::new());
+    game.world.set_story_state(StoryKey::BATTLE_SEGUE, 1);
+    // SAFETY: this serialized fixture owns empty ship resources and the encounter lifecycle.
+    unsafe {
+        uqm_rust::battle::encount_native::build_battle(
+            &mut game.world,
+            &mut game.kernel,
+            RPG_PLAYER_NUM as u16,
+        );
+    }
+    assert_eq!(game.world.story_state(StoryKey::BATTLE_SEGUE), 0);
+    assert!(game.kernel.ships(0).head().is_none());
+}
+
+#[test]
+#[serial_test::serial]
+fn encounter_construction_keeps_fragment_order_infinite_crew_and_flagship_last() {
+    let mut game = Game::new();
+    game.kernel.reset_ship_capacity(0, 32);
+    game.world.story = Some(uqm_rust::state::game_state::GameState::new());
+    let mut npc = game.world.npc_built_ships();
+    let id = npc.alloc().unwrap();
+    npc.put(id);
+    let mut fragments = game.world.built_ships();
+    for (index, crew) in [(7, 5), (11, u16::MAX)] {
+        let id = fragments.alloc().unwrap();
+        let fragment = fragments.get_mut(id);
+        fragment.race_id = SAMATRA_SHIP as u8;
+        fragment.species_id = SPECIES_ID_VUX_ID;
+        fragment.index = index;
+        fragment.crew_level = crew;
+        fragment.max_crew = 19;
+        fragment.captains_name_index = 3;
+        fragments.put(id);
+    }
+    // SAFETY: the fixture owns the fleet, absent picker assets, and empty descriptor slots.
+    unsafe {
+        uqm_rust::battle::encount_native::build_battle(
+            &mut game.world,
+            &mut game.kernel,
+            RPG_PLAYER_NUM as u16,
+        );
+    }
+    let ships = game.kernel.ships(0);
+    let first = ships.head().unwrap();
+    let second = ships.succ(first).unwrap();
+    let flagship = ships.succ(second).unwrap();
+    assert_eq!(ships.succ(flagship), None);
+    assert_eq!((ships.get(first).index, ships.get(first).crew), (7, 5));
+    assert_eq!((ships.get(second).index, ships.get(second).crew), (11, 19));
+    for id in [first, second] {
+        let ship = ships.get(id);
+        assert_eq!(ship.species, SPECIES_ID_SA_MATRA_ID);
+        assert_eq!(
+            (ship.captain, ship.max_crew, ship.player, ship.cost),
+            (3, 19, 0, 0)
+        );
+    }
+    let ship = ships.get(flagship);
+    assert_eq!(ship.species, SPECIES_ID_SIS_SHIP_ID);
+    assert_eq!(
+        (ship.index, ship.crew, ship.max_crew, ship.captain),
+        (u16::MAX, 0, 0, 0)
+    );
+    assert_eq!(ship.energy_counter, MAX_ENERGY_SIZE as u8);
+}
+
+#[test]
+#[serial_test::serial]
 fn encounter_teardown_releases_world_before_activity_queries() {
     let mut game = Game::new();
     game.world.set_activity(CHECK_ABORT as u16);

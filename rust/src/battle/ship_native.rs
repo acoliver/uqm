@@ -458,7 +458,7 @@ pub(crate) mod engine {
                 let ship = {
                     let queue = cx.kernel.ships(player as usize);
                     let selected = queue
-                        .id(ships[player as usize])
+                        .id(ships[player as usize] as usize)
                         .unwrap_or_else(|| panic!("successful picker returned no initial ship"));
                     queue.ship_id(selected)
                 };

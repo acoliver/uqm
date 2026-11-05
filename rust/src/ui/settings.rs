@@ -93,13 +93,15 @@ pub unsafe extern "C" fn PlaySoundEffect(
     positional_object: *mut ::std::ffi::c_void,
     priority: BYTE,
 ) {
+    let sound_disabled =
+        WorldData::current().read(|owner| owner.game.glob_flags) & (SOUND_DISABLED as u8) != 0;
     eprintln!(
         "[PlaySoundEffect] S={sound:p} ch={} pri={} sound_disabled={}",
         channel,
         priority,
-        u8::from((**WorldData::current()).game.glob_flags & (SOUND_DISABLED as u8) != 0)
+        u8::from(sound_disabled)
     );
-    if WorldData::current().read(|owner| owner.game.glob_flags) & (SOUND_DISABLED as u8) == 0 {
+    if !sound_disabled {
         SetChannelVolume(
             u32::from(channel),
             (MAX_VOLUME >> 1) as i32,

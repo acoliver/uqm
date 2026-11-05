@@ -248,43 +248,40 @@ pub(crate) mod engine {
 
     /// # Safety
     /// `player` must be a valid side; fleet, ship queues, and encounter resources must be initialized on the game thread.
-    #[no_mangle]
-    pub unsafe extern "C" fn BuildBattle(player: COUNT) {
+    pub unsafe fn build_battle(
+        world: &mut crate::engine::World,
+        kernel: &mut crate::engine::Kernel,
+        player: COUNT,
+    ) {
         EncounterRace = -1;
-        if WorldOwner::current().read(|world| world.npc_built_ships_ref().head().is_none()) {
-            set_game_state(BATTLE_SEGUE, END_BATTLE_SEGUE, 0);
+        if world.npc_built_ships_ref().head().is_none() {
+            world.set_story_state(crate::engine::StoryKey::BATTLE_SEGUE, 0);
             return;
         }
         if player != RPG_PLAYER_NUM as u16 {
-            match activity() as u8 as u32 {
-                IN_LAST_BATTLE => KernelOwner::current()
-                    .write(|kernel| load_gravity_well(kernel, NUMBER_OF_PLANET_TYPES as u8)),
-                IN_HYPERSPACE => KernelOwner::current().write(|kernel| {
-                    load_gravity_well(
-                        kernel,
-                        ((TFB_Random() as COUNT) % NUMBER_OF_PLANET_TYPES as COUNT) as u8,
-                    )
-                }),
+            let selector = match world.activity() as u8 as u32 {
+                IN_LAST_BATTLE => NUMBER_OF_PLANET_TYPES as u8,
+                IN_HYPERSPACE => ((TFB_Random() as COUNT) % NUMBER_OF_PLANET_TYPES as COUNT) as u8,
                 _ => {
-                    set_game_state(ESCAPE_COUNTER, END_ESCAPE_COUNTER, 110);
-                    KernelOwner::current().write(|kernel| {
-                        load_gravity_well(kernel, game_state(BATTLE_PLANET, END_BATTLE_PLANET))
-                    });
+                    world.set_story_state(crate::engine::StoryKey::ESCAPE_COUNTER, 110);
+                    world.story_state(crate::engine::StoryKey::BATTLE_PLANET) as u8
                 }
-            }
+            };
+            load_gravity_well(kernel, selector);
         }
-        link_queue::ships(player as usize).reinit();
-        let fragments = WorldOwner::current()
-            .read(|world| fragment_snapshot(world, player == RPG_PLAYER_NUM as COUNT));
+        kernel.ships(player as usize).reinit();
+        let fragments = fragment_snapshot(world, player == RPG_PLAYER_NUM as COUNT);
         for (_, frag) in fragments {
             let built =
-                link_queue::ships(player as usize).build(if frag.race_id == SAMATRA_SHIP as u8 {
-                    SPECIES_ID_SA_MATRA_ID
-                } else {
-                    frag.species_id
-                });
+                kernel
+                    .ships(player as usize)
+                    .build(if frag.race_id == SAMATRA_SHIP as u8 {
+                        SPECIES_ID_SA_MATRA_ID
+                    } else {
+                        frag.species_id
+                    });
             if let Some(id) = built {
-                let mut ships = link_queue::ships(player as usize);
+                let mut ships = kernel.ships(player as usize);
                 let mut ship = ships.get(id);
                 ship.captain = frag.captains_name_index;
                 ship.player = player as i16;
@@ -302,9 +299,9 @@ pub(crate) mod engine {
             }
         }
         if player == RPG_PLAYER_NUM as u16 {
-            let built = link_queue::ships(0).build(SPECIES_ID_SIS_SHIP_ID);
+            let built = kernel.ships(0).build(SPECIES_ID_SIS_SHIP_ID);
             if let Some(id) = built {
-                let mut ships = link_queue::ships(0);
+                let mut ships = kernel.ships(0);
                 let mut ship = ships.get(id);
                 ship.captain = 0;
                 ship.player = RPG_PLAYER_NUM as i16;
@@ -336,25 +333,8 @@ pub(crate) mod engine {
     pub(crate) use crate::battle::context_access::reader_legacy::update_ship_frag_crew;
 
     /// # Safety
-    /// The game thread must own initialized encounter, display, input, resource, and audio state.
-    unsafe fn prepare_encounter(cx: &mut crate::engine::battle::Cx<'_>) {
-        SetContext(cx.kernel.space_context);
-        SetContextFont(cx.kernel.tiny_font);
-        let music = crate::sound::resource_types::LoadedMusic::load(c"music.redalert");
-        crate::ui::settings::play_loaded_music(cx.world, music.as_ref(), 0, 1);
-        let segue = CaptureDrawable(LoadGraphicInstance(SEGUE_PMAP_ANIM.as_ptr().cast()).cast());
-        cx.with_legacy(|| WaitForSoundEnd(COUNT::MAX));
-        stop_music();
-        drop(music);
-        let mut stamp = STAMP {
-            origin: POINT { x: 0, y: 0 },
-            frame: segue,
-        };
-        SetTransitionSource(ptr::null());
-        BatchGraphics();
-        SetContextBackGroundColor(rgb15(0, 0, 0));
-        ClearDrawable();
-        DrawStamp(&mut stamp);
+    /// The encounter retains its fonts, string table and active graphics context.
+    unsafe fn draw_encounter_location(cx: &mut crate::engine::battle::Cx<'_>) {
         let mut t = text(
             ((sis_width() >> 1) + 1) as i16,
             10,
@@ -386,6 +366,29 @@ pub(crate) mod engine {
             t.baseline.y += 12;
             draw_text(&mut t, cx.world.data.flagship.planet_name.as_ptr().cast());
         }
+    }
+
+    /// # Safety
+    /// The game thread must own initialized encounter, display, input, resource, and audio state.
+    unsafe fn prepare_encounter(cx: &mut crate::engine::battle::Cx<'_>) {
+        SetContext(cx.kernel.space_context);
+        SetContextFont(cx.kernel.tiny_font);
+        let music = crate::sound::resource_types::LoadedMusic::load(c"music.redalert");
+        crate::ui::settings::play_loaded_music(cx.world, music.as_ref(), 0, 1);
+        let segue = CaptureDrawable(LoadGraphicInstance(SEGUE_PMAP_ANIM.as_ptr().cast()).cast());
+        cx.with_legacy(|| WaitForSoundEnd(COUNT::MAX));
+        stop_music();
+        drop(music);
+        let mut stamp = STAMP {
+            origin: POINT { x: 0, y: 0 },
+            frame: segue,
+        };
+        SetTransitionSource(ptr::null());
+        BatchGraphics();
+        SetContextBackGroundColor(rgb15(0, 0, 0));
+        ClearDrawable();
+        DrawStamp(&mut stamp);
+        draw_encounter_location(cx);
         cx.with_legacy(|| DrawSISMessage(ptr::null()));
         stamp.origin = POINT {
             x: (sis_width() >> 1) as i16,

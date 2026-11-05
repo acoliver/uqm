@@ -9,7 +9,6 @@ use super::hyperspace::live::{cosine, height, logx, logy, sine, universe_x, univ
 use crate::engine::battle::views::{FrameSelection as Frame, Frames};
 use crate::engine::battle::{Cx, ElementId};
 use std::ptr;
-use std::ptr::NonNull;
 
 const MAKEUP: [u8; 23] = [
     0x51, 0, 0, 0x51, 0x51, 0, 0x51, 0x51, 0x51, 0x51, 0x51, 0x51, 0x11, 0x51, 0x51, 0x51, 0x11,

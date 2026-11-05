@@ -272,9 +272,6 @@ mod ffi {
     }
 
     #[cfg(not(test))]
-    pub use crate::battle::encount_native::engine::BuildBattle;
-
-    #[cfg(not(test))]
     pub use crate::battle::encount_native::engine::UninitEncounter;
 
     #[cfg(not(test))]
@@ -583,7 +580,9 @@ fn run_encounter(cx: &mut Cx<'_>, io: &mut Io<'_>, which_comm: u32, ship_type: u
             || (which_comm != conv::CHMMR && which_comm != conv::SYREEN);
         if build {
             // SAFETY: the current mode owns the campaign's NPC fleet.
-            cx.with_legacy(|| unsafe { ffi::BuildBattle(NPC_PLAYER_NUM) });
+            unsafe {
+                crate::battle::encount_native::build_battle(cx.world, cx.kernel, NPC_PLAYER_NUM)
+            };
         }
     }
     let comm_id = if ship_type != u16::from(ship::YEHAT_REBEL_SHIP) {

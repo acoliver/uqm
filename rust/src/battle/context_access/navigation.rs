@@ -6,7 +6,6 @@ use crate::navigation::abi::*;
 
 use crate::navigation::hyperspace::live::{logx, logy};
 use crate::planets::starmap::find_star_in;
-use std::ptr::NonNull;
 impl Cx<'_> {
     pub(crate) fn navigation(&self) -> &crate::engine::WorldData {
         &self.world.data

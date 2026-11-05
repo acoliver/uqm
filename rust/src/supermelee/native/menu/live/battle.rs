@@ -130,7 +130,7 @@ pub(super) unsafe fn start(state: *mut MELEE_STATE) {
         SleepThreadUntil(FadeScreen(FADE_ALL_TO_BLACK, 840 / 2).wrapping_add(840 / 60));
         FlushColorXForms();
     }
-    (**WorldFields::current()).game.current_activity = SUPER_MELEE as u16;
+    WorldFields::current().write(|owner| owner.game.current_activity = SUPER_MELEE as u16);
     (*state).initialized = 0;
 }
 pub(super) unsafe fn start_button(state: *mut MELEE_STATE) {
