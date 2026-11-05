@@ -169,6 +169,7 @@ fi
         content: root.join("content"),
         executable,
         jitter: jitter.map(Into::into),
+        workers: std::num::NonZeroUsize::MIN,
         started: Instant::now(),
     }
 }

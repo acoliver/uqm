@@ -16,6 +16,7 @@ pub(super) struct Context<'a> {
     pub content: PathBuf,
     pub executable: PathBuf,
     pub jitter: Option<std::ffi::OsString>,
+    workers: std::num::NonZeroUsize,
     started: Instant,
 }
 
@@ -31,7 +32,7 @@ pub(super) fn record(
     let mut errors = Vec::new();
     let mut cached = BTreeMap::new();
     let mut failed = BTreeSet::new();
-    let results = parallel::map(selected, parallel::workers(), |entry| {
+    let results = parallel::map(selected, context.workers, |entry| {
         replay::record_entry(&context, entry)
     });
     for (entry, result) in selected.iter().zip(results) {
@@ -95,7 +96,7 @@ impl<'a> Context<'a> {
             .tempdir_in(parent)
             .map_err(|error| error.to_string())?;
         let started = Instant::now();
-        eprintln!("parity workers: {}", parallel::workers());
+        eprintln!("parity workers: {}", options.workers());
         let executable = match &options.game_bin {
             Some(binary) => absolute(binary)?
                 .canonicalize()
@@ -111,6 +112,7 @@ impl<'a> Context<'a> {
             content,
             executable,
             jitter: std::env::var_os("UQM_REPLAY_JITTER"),
+            workers: options.workers(),
             started,
         })
     }
@@ -212,7 +214,7 @@ fn counts_with_cache(
         .iter()
         .filter(|name| !rows.contains_key(*name))
         .collect();
-    let results = parallel::map(&pending, parallel::workers(), |name| {
+    let results = parallel::map(&pending, context.workers, |name| {
         if failed.contains(*name) {
             Err("preceding corpus replay failed; not retried".into())
         } else {

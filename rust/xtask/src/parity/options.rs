@@ -2,6 +2,7 @@ use super::*;
 
 #[derive(Debug, Default)]
 pub(super) struct Options {
+    pub jobs: Option<std::num::NonZeroUsize>,
     pub entry: Option<String>,
     pub out: Option<PathBuf>,
     pub base: Option<String>,
@@ -21,6 +22,13 @@ impl Options {
             }
             match arg.as_str() {
                 "--all" => (),
+                "--jobs" => {
+                    result.jobs = Some(
+                        value(&mut args, arg)?
+                            .parse()
+                            .map_err(|_| "--jobs requires a positive worker count".to_owned())?,
+                    );
+                }
                 "--allow-golden-update" => result.allow_golden_update = true,
                 "--entry" => result.entry = Some(value(&mut args, arg)?),
                 "--out" => result.out = Some(value(&mut args, arg)?.into()),
@@ -34,6 +42,10 @@ impl Options {
         Ok(result)
     }
 
+    pub fn workers(&self) -> std::num::NonZeroUsize {
+        self.jobs.unwrap_or_else(parallel::workers)
+    }
+
     fn validate(&self, command: &str, seen: &BTreeSet<&str>) -> Result<()> {
         if seen.contains("--all") && self.entry.is_some() {
             return Err("--all and --entry are mutually exclusive".into());
@@ -45,6 +57,9 @@ impl Options {
         }
         if command != "check" && self.recording.is_some() {
             return Err("--recording is only valid for check".into());
+        }
+        if self.recording.is_some() && self.jobs.is_some() {
+            return Err("--jobs requires a fresh recording".into());
         }
         if self.recording.is_some() && (self.out.is_some() || self.game_bin.is_some()) {
             return Err("--recording cannot be combined with --out or --game-bin".into());
