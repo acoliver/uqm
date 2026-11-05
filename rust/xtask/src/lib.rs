@@ -45,6 +45,8 @@ mod native_frames;
 #[cfg(feature = "native")]
 mod native_gallery;
 #[cfg(feature = "native")]
+mod native_gpu;
+#[cfg(feature = "native")]
 mod native_save;
 #[cfg(feature = "native")]
 mod native_smoke;
@@ -432,19 +434,9 @@ pub(crate) fn execute_native_scenarios(
                 return Err(error);
             }
         };
-        let captured = process::run(&mut command, Some(timeout));
-        echo_output(&captured);
-        let supervision = classify_supervision(&captured, &label);
-        let outcome = if captured.succeeded() {
-            Ok(())
-        } else {
-            Err(supervision.detail.clone())
-        };
-        let retention =
-            suite.record_supervision(index, supervision, &captured.stdout, &captured.stderr);
+        let outcome = native_gpu::run_scenario(&mut command, timeout, suite, index, &label);
         let protection = shared.verify();
-        let accounting = suite.account_scenario(index);
-        outcome.and(retention).and(protection).and(accounting)?;
+        outcome.and(protection)?;
 
         // Each scenario adds evidence, so check the running total as the suite
         // grows rather than after the upload fails, and name the scenario that
