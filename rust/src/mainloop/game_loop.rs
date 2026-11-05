@@ -86,9 +86,7 @@ pub trait GameLoopOps {
 
     // --- Game-kernel cleanup (starcon.c:313-318) ---
     fn set_main_exited(&self, val: bool);
-    fn uninit_game_kernel(&self);
-    fn free_master_ship_list(&self);
-    fn free_kernel(&self);
+    fn shutdown_kernel(&self);
     fn log_show_box(&self, b: bool, c: bool);
 }
 
@@ -138,9 +136,7 @@ fn execute_activity<O: GameLoopOps + ?Sized>(
 /// @plan PLAN-20260707-MAINLOOP.P06
 /// @requirement REQ-ML-008
 fn shutdown_game_kernel<O: GameLoopOps + ?Sized>(ops: &O) {
-    ops.uninit_game_kernel();
-    ops.free_master_ship_list();
-    ops.free_kernel();
+    ops.shutdown_kernel();
     ops.log_show_box(false, false);
     ops.set_main_exited(true);
 }
@@ -543,16 +539,14 @@ mod cffi {
             self.legacy(|| crate::mainloop::ffi::set_main_exited(val))
         }
 
-        fn uninit_game_kernel(&self) {
-            unsafe { self.owned(|cx| c_extern::uninit_game_kernel(cx)) }
-        }
-
-        fn free_master_ship_list(&self) {
-            self.legacy(|| unsafe { c_extern::FreeMasterShipList() })
-        }
-
-        fn free_kernel(&self) {
-            unsafe { self.owned(|cx| c_extern::free_kernel(cx.kernel)) }
+        fn shutdown_kernel(&self) {
+            unsafe {
+                self.owned(|cx| {
+                    c_extern::uninit_game_kernel(cx);
+                    crate::ships::master_native::engine::free(cx.world, cx.kernel);
+                    c_extern::free_kernel(cx.kernel);
+                })
+            }
         }
 
         fn log_show_box(&self, b: bool, c: bool) {
@@ -789,14 +783,12 @@ mod tests {
             assert!(val);
             self.inner.borrow_mut().calls.push("set_main_exited");
         }
-        fn uninit_game_kernel(&self) {
-            self.inner.borrow_mut().calls.push("uninit_game_kernel");
-        }
-        fn free_master_ship_list(&self) {
-            self.inner.borrow_mut().calls.push("free_master_ship_list");
-        }
-        fn free_kernel(&self) {
-            self.inner.borrow_mut().calls.push("free_kernel");
+        fn shutdown_kernel(&self) {
+            self.inner.borrow_mut().calls.extend([
+                "uninit_game_kernel",
+                "free_master_ship_list",
+                "free_kernel",
+            ]);
         }
         fn log_show_box(&self, _b: bool, _c: bool) {
             self.inner.borrow_mut().calls.push("log_show_box");

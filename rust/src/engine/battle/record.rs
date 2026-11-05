@@ -502,12 +502,7 @@ pub struct RaceDesc {
 }
 impl RaceDesc {
     pub(super) fn empty() -> Self {
-        Self {
-            raw: Box::new(RaceDescriptor::EMPTY),
-        }
-    }
-    pub(super) fn from_legacy(raw: RaceDescriptor) -> Self {
-        Self { raw: Box::new(raw) }
+        Self::from_storage(Box::new(RaceDescriptor::EMPTY))
     }
     pub(super) fn from_storage(raw: Box<RaceDescriptor>) -> Self {
         Self { raw }
@@ -785,7 +780,7 @@ mod projection_tests {
         assert_eq!(descriptor.ship_info.energy_level, 10);
         assert_eq!(descriptor.cyborg_control.WeaponRange, 231);
         assert_eq!(descriptor.ship_data.ship_rsc[0], c"retained".as_ptr());
-        let value = RaceDesc::from_legacy(descriptor);
+        let value = RaceDesc::from_storage(Box::new(descriptor));
         // SAFETY: this value retains only test-local static resource tokens.
         let raw = value.into_legacy();
         assert_eq!(raw.ship_info.energy_level, 10);
@@ -820,6 +815,8 @@ mod zero_descriptor_tests {
 #[repr(align(16))]
 #[derive(Debug)]
 pub struct RaceDescriptor {
+    pub(crate) assets: Option<Box<super::ship_assets::ShipAssets>>,
+    pub(crate) resources: super::template::RaceResources,
     pub ship_info: SHIP_INFO,
     pub fleet: FLEET_STUFF,
     pub __bindgen_padding_0: [u16; 5usize],

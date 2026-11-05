@@ -66,6 +66,7 @@ pub(crate) mod engine {
         CYBORG_CONTROL, HUMAN_CONTROL, STANDARD_RATING,
     };
     use crate::battle::battle_native::Battle;
+    use crate::battle::c_bridge::DoInput;
     use crate::engine::battle::link_queue;
     use crate::ships::native::abi::*;
     use crate::ships::native::{cosine, sine};
@@ -444,7 +445,7 @@ pub(crate) mod engine {
     #[no_mangle]
     pub unsafe extern "C" fn UninitEncounter() -> COUNT {
         let mut killed = 0u16;
-        KernelOwner::current().write(|kernel| free_gravity_well(kernel));
+        KernelOwner::current().write(free_gravity_well);
         if activity() & (CHECK_ABORT | CHECK_LOAD) as u16 != 0
             || (**WorldFields::current()).flagship.crew_enlisted == COUNT::MAX
             || activity() as u8 == IN_LAST_BATTLE as u8
@@ -522,11 +523,10 @@ pub(crate) mod engine {
                                 SetContextFont(
                                     KernelOwner::current().read(|owner| owner.tiny_font),
                                 );
-                                utf8StringCopy(
-                                    buf.as_mut_ptr(),
-                                    buf.len(),
+                                let name = std::ffi::CStr::from_ptr(
                                     GetStringAddress(frag.race_strings).cast(),
                                 );
+                                crate::ships::native::copy_display_name(&mut buf, name.to_bytes());
                                 strupr(buf.as_mut_ptr());
                                 t = text(
                                     salvage_rect.corner.x.wrapping_add(100),

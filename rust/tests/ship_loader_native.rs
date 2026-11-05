@@ -1,4 +1,4 @@
-use uqm_rust::ships::{load_ship, unload_ship};
+use uqm_rust::engine::battle::RaceDesc;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
@@ -127,10 +127,10 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
                 let key = CString::new(format!("ship.{key}.code")).unwrap();
                 let species = i as u32 + 1;
                 let first = uqm_rust::engine::World::current()
-                    .write(|world| load_ship(world, species, 0))
+                    .write(|world| RaceDesc::load(world, species, false))
                     .unwrap();
                 let second = uqm_rust::engine::World::current()
-                    .write(|world| load_ship(world, species, 0))
+                    .write(|world| RaceDesc::load(world, species, false))
                     .unwrap();
                 assert_ne!(first.address(), second.address(), "{key:?}");
                 let original = first.info().ship_cost;
@@ -140,33 +140,33 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
                     .ship_cost = 254;
                 assert_eq!(second.info().ship_cost, original);
                 let loaded = uqm_rust::engine::World::current()
-                    .write(|world| load_ship(world, species, 0))
+                    .write(|world| RaceDesc::load(world, species, false))
                     .unwrap();
                 assert_eq!(loaded.info().ship_cost, original);
                 assert!(loaded.race().is_some());
                 assert_eq!(loaded.callbacks(), first.callbacks());
-                uqm_rust::engine::World::current().write(|world| unload_ship(world, first, 1, 0));
-                uqm_rust::engine::World::current().write(|world| unload_ship(world, second, 1, 0));
-                uqm_rust::engine::World::current().write(|world| unload_ship(world, loaded, 1, 0));
+                uqm_rust::engine::World::current().write(|world| first.unload(world, true, false));
+                uqm_rust::engine::World::current().write(|world| second.unload(world, true, false));
+                uqm_rust::engine::World::current().write(|world| loaded.unload(world, true, false));
             }
             assert!(uqm_rust::engine::World::current()
-                .write(|world| load_ship(world, SPECIES_ID_NUM_SPECIES_ID, 0))
+                .write(|world| RaceDesc::load(world, SPECIES_ID_NUM_SPECIES_ID, false))
                 .is_none());
             assert!(uqm_rust::engine::World::current()
-                .write(|world| load_ship(world, u32::MAX, 0))
+                .write(|world| RaceDesc::load(world, u32::MAX, false))
                 .is_none());
             // No graphics are registered in the fixture, so required battle art fails.
             assert!(uqm_rust::engine::World::current()
-                .write(|world| load_ship(world, SPECIES_ID_ARILOU_ID, 1))
+                .write(|world| RaceDesc::load(world, SPECIES_ID_ARILOU_ID, true))
                 .is_none());
             let mut loaded = uqm_rust::engine::World::current()
-                .write(|world| load_ship(world, SPECIES_ID_ARILOU_ID, 0))
+                .write(|world| RaceDesc::load(world, SPECIES_ID_ARILOU_ID, false))
                 .unwrap();
             assert!(loaded.race().is_some());
             loaded.set_race(&TEARDOWN_RACE);
             uqm_rust::collections::observation::enable();
             uqm_rust::collections::observation::drain();
-            uqm_rust::engine::World::current().write(|world| unload_ship(world, loaded, 1, 1));
+            uqm_rust::engine::World::current().write(|world| loaded.unload(world, true, true));
             assert_eq!(UNINIT.load(Ordering::SeqCst), 1);
             assert!(uqm_rust::collections::observation::drain()
                 .iter()

@@ -341,7 +341,11 @@ fn boost_uses_temporary_characteristics_and_preserves_the_inertial_thrust_result
                 ),
             ] {
                 ship.ship_mut().ship_facing = face;
-                SetVelocityVector(&raw mut (*ship.ptr()).velocity, speed, 0);
+                uqm_rust::battle::velocity::set_velocity_vector(
+                    &mut (*ship.ptr()).velocity,
+                    speed,
+                    0,
+                );
                 ship.ship_mut().old_status_flags = old as u16;
                 ship.ship_mut().cur_status_flags = (SPECIAL | THRUST | status) as u16;
                 (*ship.ptr()).thrust = wait;

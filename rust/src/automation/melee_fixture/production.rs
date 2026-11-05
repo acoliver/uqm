@@ -350,8 +350,9 @@ fn configure(cx: &mut Cx<'_>, request: &MeleeSetupRequest) -> Result<(), String>
         state.melee_option = 4;
         state.input_func = Some(crate::supermelee::native::menu::live::DoMelee);
         for (side, slot, ship) in ships {
-            crate::supermelee::native::teams::MeleeSetup_setShip(
-                state.melee_setup,
+            crate::supermelee::native::teams::set_ship(
+                &mut *state.melee_setup,
+                &state.catalog,
                 side,
                 slot,
                 ship,

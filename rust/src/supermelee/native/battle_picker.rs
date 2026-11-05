@@ -172,7 +172,10 @@ pub mod live {
             }
         }
     }
-    unsafe extern "C" fn choose(state: *mut GETMELEE_STATE) -> u32 {
+    unsafe fn choose(
+        state: *mut GETMELEE_STATE,
+        inputs: &[Option<crate::engine::battle::input::InputContext>; 2],
+    ) -> u32 {
         SetMenuSounds(0, 0);
         if (*state).Initialized == 0 {
             (*state).Initialized = 1;
@@ -199,13 +202,14 @@ pub mod live {
                 != 0;
         let mut done = true;
         if !abort {
-            for player in 0..2 {
-                let input = crate::battle::battle_native::engine::player_input(player);
+            for (player, input) in inputs.iter().enumerate() {
                 if (*state).player[player].selecting == 0 || (*state).player[player].done != 0 {
                     continue;
                 }
                 if select_ship(
-                    &input.unwrap_or_else(|| panic!("missing player input")),
+                    input
+                        .as_ref()
+                        .unwrap_or_else(|| panic!("missing player input")),
                     &mut *state,
                 ) == 0
                 {
@@ -330,10 +334,11 @@ pub mod live {
     /// The setup, master queue and empty battle queues must be initialized.
     #[no_mangle]
     pub unsafe extern "C" fn FillPickMeleeFrame(setup: *mut MeleeSetup) {
-        let (context, order) = KernelOwner::current().read(|kernel| {
+        let (context, order, catalog) = KernelOwner::current().read(|owner| {
             (
-                kernel.off_screen_context,
-                [kernel.player_order(0), kernel.player_order(1)],
+                owner.off_screen_context,
+                [owner.player_order(0), owner.player_order(1)],
+                crate::ships::master_native::engine::snapshot(owner),
             )
         });
         let old = SetContext(context);
@@ -379,7 +384,8 @@ pub mod live {
                 if ship == 255 {
                     continue;
                 }
-                let master = crate::ships::master_native::master(ship as u16)
+                let master = catalog
+                    .get(ship as usize)
                     .unwrap_or_else(|| panic!("melee master ship {ship}"));
                 let captain = link_queue::ships(side).captain_name(master.species, TFB_Random);
                 let built = link_queue::ships(side)
@@ -476,7 +482,6 @@ pub mod live {
         state.net = Some(net.clone());
         net.bind_picker(mask, (&raw mut state).cast());
         let now = GetTimeCounter();
-        state.InputFunc = Some(choose);
         let (screen_context, controls, order) = KernelOwner::current().read(|kernel| {
             (
                 kernel.screen_context,
@@ -511,10 +516,17 @@ pub mod live {
         let mut ok = net.negotiate(true, NetState_NetState_selectShip);
         SetDefaultMenuRepeatDelay();
         SetContext(KernelOwner::current().read(|owner| owner.off_screen_context));
-        crate::mainloop::restart_menu::c_extern::DoInput(
-            (&mut state as *mut GETMELEE_STATE).cast(),
-            0,
-        );
+        crate::app::bridge::enter(|cx| {
+            let runtime = cx.kernel.input_runtime();
+            let mut observer = runtime.observer();
+            let mut io = Io {
+                observer: &mut *observer,
+            };
+            cx.run_input(&mut io, false, |cx, _| {
+                let inputs = cx.kernel.player_input.clone();
+                cx.with_legacy(|| choose(&mut state, &inputs) != 0)
+            });
+        });
         WaitForSoundEnd(0);
         for (player, p) in state.player.iter_mut().enumerate() {
             if p.selecting == 0 {

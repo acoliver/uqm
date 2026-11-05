@@ -4,7 +4,6 @@
 pub mod c_bridge;
 pub mod catalog;
 pub(crate) mod code_resources;
-pub mod ffi_contract;
 pub mod lifecycle;
 pub mod loader;
 pub(crate) mod loader_native;
@@ -16,11 +15,4 @@ pub mod registry;
 pub mod types;
 pub mod writeback;
 
-pub mod ffi;
-
-pub mod native_adapters;
-
 pub mod hook_registry;
-
-#[cfg(not(test))]
-pub use loader_native::engine::{load_ship, unload_ship};

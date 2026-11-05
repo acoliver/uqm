@@ -32,25 +32,6 @@ pub unsafe extern "C" fn rust_uninit_space() -> c_int {
     }
 }
 
-// Ship initialization
-
-/// Initialize ships (FFI wrapper - delegates to ships::ffi)
-/// # Safety
-///
-/// This is an FFI function called from C. The caller must ensure pointers are valid.
-pub unsafe extern "C" fn rust_init_ships() -> c_int {
-    crate::ships::ffi::rust_ships_init() as c_int
-}
-
-/// Uninitialize ships (FFI wrapper - delegates to ships::ffi)
-/// # Safety
-///
-/// This is an FFI function called from C. The caller must ensure pointers are valid.
-pub unsafe extern "C" fn rust_uninit_ships() -> c_int {
-    crate::ships::ffi::rust_ships_uninit();
-    1
-}
-
 // Game kernel
 
 /// Initialize the game kernel (FFI wrapper)
@@ -106,7 +87,7 @@ pub unsafe extern "C" fn rust_uninit_contexts() -> c_int {
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
 pub unsafe extern "C" fn rust_load_master_ship_list() -> c_int {
-    crate::ships::ffi::rust_ships_load_catalog() as c_int
+    i32::from(crate::ships::catalog::load_master_ship_list().is_ok())
 }
 
 /// Free the master ship list (FFI wrapper - delegates to ships::ffi)
@@ -114,7 +95,7 @@ pub unsafe extern "C" fn rust_load_master_ship_list() -> c_int {
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
 pub unsafe extern "C" fn rust_free_master_ship_list() -> c_int {
-    crate::ships::ffi::rust_ships_free_catalog();
+    crate::ships::catalog::free_master_ship_list();
     1
 }
 
@@ -217,13 +198,12 @@ mod tests {
     #[test]
     #[serial]
     fn test_rust_init_uninit_ships() {
-        unsafe {
-            let result = rust_init_ships();
-            assert_eq!(result, 2); // Returns NUM_SIDES (2) for battle mode
-
-            let result = rust_uninit_ships();
-            assert_eq!(result, 1);
-        }
+        let result = crate::ships::lifecycle::init_ships(2).unwrap();
+        assert_eq!(result, 2);
+        let mut ships = [Vec::new(), Vec::new()];
+        let mut fragments = [Vec::new(), Vec::new()];
+        let result = crate::ships::lifecycle::uninit_ships(&mut ships, &mut fragments, 2, 0, None);
+        assert!(result.is_ok());
     }
 
     #[test]

@@ -528,8 +528,8 @@ fn sentinel_recoil_stuns_live_player_caps_velocity_and_preserves_sentinel() {
             (*player.ptr()).hits = 20;
             (*player.ptr()).mass = 10;
             player.ship_mut().cur_status_flags = (SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16;
-            ((*player.ptr()).velocity).set_components(5000, 0);
-            SetVelocityVector(&raw mut (*sentinel).velocity, 32, 4);
+            (*player.ptr()).velocity.set_components(5000, 0);
+            uqm_rust::battle::velocity::set_velocity_vector(&mut (*sentinel).velocity, 32, 4);
             let mut p = POINT { x: 0, y: 0 };
             let mut q = p;
             hooks::invoke_collision_pointer(

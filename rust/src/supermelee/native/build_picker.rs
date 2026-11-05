@@ -50,7 +50,7 @@ pub(super) mod live {
 
     /// # Safety
     /// Game thread, with the melee graphics and master ship list loaded.
-    pub unsafe extern "C" fn build_build_pick_frame() {
+    pub unsafe fn build_build_pick_frame(catalog: &[crate::ships::master_native::ShipChoice]) {
         let old = SetContext(KernelOwner::current().read(|owner| owner.off_screen_context));
         let mut stamp = STAMP {
             origin: POINT { x: 0, y: 0 },
@@ -64,7 +64,7 @@ pub(super) mod live {
         hot(stamp.frame, 0, 0);
         DrawStamp(&mut stamp);
         for ship in 0..25 {
-            draw_pick_icon(ship, true);
+            draw_pick_icon(catalog, ship, true);
         }
         SetContext(old);
     }
@@ -76,14 +76,20 @@ pub(super) mod live {
     }
     /// # Safety
     /// Game thread, with the popup drawable and ship icons loaded.
-    pub unsafe extern "C" fn draw_pick_icon(ship: MeleeShip, draw: bool) {
+    pub(crate) unsafe fn draw_pick_icon(
+        catalog: &[crate::ships::master_native::ShipChoice],
+        ship: MeleeShip,
+        draw: bool,
+    ) {
         let rect = frame_rect(BUILD_PICK_FRAME);
         let mut stamp = STAMP {
             origin: POINT {
                 x: rect.corner.x + 20 + (ship % 5) as i16 * 18,
                 y: rect.corner.y + 5 + (ship / 5) as i16 * 18,
             },
-            frame: crate::ships::master_native::GetShipIconsFromIndex(ship),
+            frame: catalog
+                .get(ship as usize)
+                .map_or(ptr::null_mut(), |ship| ship.icon.raw().cast()),
         };
         if draw {
             DrawStamp(&mut stamp);
@@ -147,19 +153,21 @@ pub(super) mod live {
             (*state).build_pick_confirmed = u32::from(keys[KEY_MENU_CANCEL as usize] == 0);
             return 0;
         }
-        if keys[KEY_MENU_SPECIAL as usize] != 0 && (*state).current_ship != 255 {
-            DoShipSpin((*state).current_ship as u16, ptr::null_mut());
+        let current_ship = (*state).current_ship;
+        if keys[KEY_MENU_SPECIAL as usize] != 0 && current_ship != 255 {
+            DoShipSpin(current_ship as u16, ptr::null_mut());
             return 1;
         }
         let selected = navigate(
-            (*state).current_ship,
+            current_ship,
             keys[KEY_MENU_LEFT as usize] != 0,
             keys[KEY_MENU_RIGHT as usize] != 0,
             keys[KEY_MENU_UP as usize] != 0,
             keys[KEY_MENU_DOWN as usize] != 0,
         );
-        if selected != (*state).current_ship {
-            draw_pick_icon((*state).current_ship, true);
+        if selected != current_ship {
+            let catalog = &(*state).catalog;
+            draw_pick_icon(catalog, current_ship, true);
             (*state).current_ship = selected;
             DrawMeleeShipStrings(state, selected);
         }
@@ -176,7 +184,14 @@ pub(super) mod live {
         }
         draw_pick_frame(state);
         (*state).input_func = Some(pick);
-        DoInput(state.cast(), 0);
+        crate::app::bridge::enter(|cx| {
+            let runtime = cx.kernel.input_runtime();
+            let mut observer = runtime.observer();
+            let mut io = crate::engine::observe::Io {
+                observer: &mut *observer,
+            };
+            cx.run_input(&mut io, false, |cx, _| cx.with_legacy(|| pick(state) != 0));
+        });
         (*state).build_pick_confirmed != 0
     }
 }

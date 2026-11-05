@@ -12,7 +12,6 @@ pub const HANDLERS: &[(&str, &str)] = &[
     ("src/mainloop/state_abi.rs", "accessor"),
     ("src/mainloop/main2_abi.rs", "operation"),
     ("src/mainloop/restart_menu/menu_abi.rs", "operation"),
-    ("src/ships/native_adapters.rs", "operation"),
     ("src/collections/hash_table.rs", "define_hash_table"),
     ("src/planets/generate/home_exports.rs", "energy_hook"),
     ("src/planets/generate/late_exports.rs", "moons_hook"),

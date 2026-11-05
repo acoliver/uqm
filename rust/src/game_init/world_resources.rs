@@ -80,11 +80,7 @@ fn gravity_keys(selector: u8) -> [Option<String>; 3] {
 pub(crate) mod live {
     use super::gravity_keys;
     use crate::graphics::native_abi::frame_desc;
-    use crate::graphics::{
-        drawable_abi::DestroyDrawable,
-        pixmap_abi::{CaptureDrawable, ReleaseDrawable},
-        resgfx::LoadGraphicInstance,
-    };
+    use crate::graphics::{pixmap_abi::CaptureDrawable, resgfx::LoadGraphicInstance};
     use std::{
         ffi::{c_void, CString},
         ptr,
@@ -111,21 +107,8 @@ pub(crate) mod live {
         }
     }
 
-    /// # Safety
-    /// Called on the game thread while the graphics resource system is live.
-    pub unsafe fn free_gravity_well(kernel: &mut crate::engine::Kernel) {
-        {
-            let frames = std::slice::from_raw_parts_mut(ptr::addr_of_mut!(kernel.planet).cast(), 3);
-            for frame in frames.iter_mut() {
-                DestroyDrawable(ReleaseDrawable(*frame));
-                *frame = ptr::null_mut();
-            }
-            crate::collections::observation::observe_views(
-                frames,
-                "engine-global:planet",
-                |frame| *frame as usize,
-            );
-        }
+    pub fn free_gravity_well(kernel: &mut crate::engine::Kernel) {
+        crate::engine::battle::frames::free_image(&mut kernel.planet, "engine-global:planet");
     }
 
     /// # Safety

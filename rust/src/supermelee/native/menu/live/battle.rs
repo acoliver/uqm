@@ -114,7 +114,7 @@ pub(super) unsafe fn start(state: *mut MELEE_STATE) {
         (*battle).net = Some((*state).netplay.battle_net());
         Battle(None);
         (*battle).net = None;
-        KernelOwner::current().write(|kernel| free_gravity_well(kernel));
+        KernelOwner::current().write(free_gravity_well);
         KernelOwner::current().write(ClearPlayerInputAll);
         if WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
             != 0

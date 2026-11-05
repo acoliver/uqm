@@ -33,7 +33,7 @@ fn velocity_fields(v: &VELOCITY_DESC) -> [i32; 9] {
 fn velocity_toward(speed: SIZE, facing: COUNT) -> [i32; 9] {
     unsafe {
         let mut v: VELOCITY_DESC = mem::zeroed();
-        SetVelocityVector(&mut v, speed, facing);
+        uqm_rust::battle::velocity::set_velocity_vector(&mut v, speed, facing);
         velocity_fields(&v)
     }
 }
@@ -446,7 +446,11 @@ fn exhausted_blazer_reverts_and_restores_the_saved_collision_function() {
             assert_eq!(ship.element_mut().next.image.frames, blazer_farray);
 
             // Moving, turning and out of energy.
-            SetVelocityVector(&raw mut ship.element_mut().velocity, 60, 3);
+            uqm_rust::battle::velocity::set_velocity_vector(
+                &mut ship.element_mut().velocity,
+                60,
+                3,
+            );
             ship.descriptor_mut().ship_info.energy_level = 0;
             ship.ship_mut().cur_status_flags =
                 (LEFT | RIGHT | THRUST | SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16;
@@ -749,7 +753,11 @@ fn guardian_ai_fires_when_close_or_when_the_target_is_ahead_of_the_drift() {
                     x: 5000,
                     y: 5000 + dy,
                 };
-                SetVelocityVector(&raw mut duel.ship.element_mut().velocity, 20, 0);
+                uqm_rust::battle::velocity::set_velocity_vector(
+                    &mut duel.ship.element_mut().velocity,
+                    20,
+                    0,
+                );
                 duel.run();
                 assert_eq!(duel.enemy_state(), MOVEMENT_STATE_ENTICE);
                 duel.input() & WEAPON as u8 != 0

@@ -17,6 +17,20 @@ pub struct RaceResources {
     pub sounds: Option<&'static CStr>,
 }
 
+impl RaceResources {
+    pub const EMPTY: Self = Self {
+        strings: None,
+        icons: None,
+        melee_icon: None,
+        ship: [None; 3],
+        weapon: [None; 3],
+        special: [None; 3],
+        captain: None,
+        victory: None,
+        sounds: None,
+    };
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct RaceTemplate {
     pub info: Info,
@@ -68,6 +82,74 @@ impl RaceTemplate {
         raw.fleet.strength = self.fleet_strength;
         raw.fleet.known_loc = self.fleet_location;
         raw.race = Some(race);
+        raw.resources = r;
         RaceDesc::from_storage(raw)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    static RACE: Race = Race {
+        descriptor: |_| unreachable!(),
+        preprocess: None,
+        postprocess: None,
+        init_weapon: None,
+        intelligence: None,
+        uninit: None,
+    };
+
+    #[test]
+    fn specialized_templates_supply_typed_resource_keys() {
+        for descriptor in [
+            super::super::vux_template::descriptor(&RACE),
+            super::super::androsynth_template::descriptor(&RACE),
+        ] {
+            let raw = &descriptor.raw;
+            let token = |key: Option<&'static CStr>| key.map_or(std::ptr::null(), CStr::as_ptr);
+            assert_eq!(token(raw.resources.strings), raw.ship_info.race_strings_rsc);
+            assert_eq!(token(raw.resources.icons), raw.ship_info.icons_rsc);
+            assert_eq!(
+                token(raw.resources.melee_icon),
+                raw.ship_info.melee_icon_rsc
+            );
+            assert_eq!(raw.resources.ship.map(token), raw.ship_data.ship_rsc);
+            assert_eq!(raw.resources.weapon.map(token), raw.ship_data.weapon_rsc);
+            assert_eq!(raw.resources.special.map(token), raw.ship_data.special_rsc);
+            assert_eq!(
+                token(raw.resources.captain),
+                raw.ship_data.captain_control.captain_rsc
+            );
+            assert_eq!(
+                token(raw.resources.victory),
+                raw.ship_data.victory_ditty_rsc
+            );
+            assert_eq!(token(raw.resources.sounds), raw.ship_data.ship_sounds_rsc);
+        }
+    }
+
+    #[test]
+    fn typed_resource_keys_survive_changes_to_legacy_mirrors() {
+        let resources = RaceResources {
+            strings: Some(c"race.names"),
+            icons: Some(c"race.icons"),
+            ship: [Some(c"race.big"), Some(c"race.medium"), None],
+            ..RaceResources::default()
+        };
+        let mut descriptor = RaceTemplate {
+            resources,
+            ..RaceTemplate::default()
+        }
+        .descriptor(&RACE);
+        descriptor.raw.ship_info.icons_rsc = std::ptr::null();
+        descriptor.raw.ship_data.ship_rsc = [std::ptr::null(); 3];
+        assert_eq!(descriptor.raw.resources.strings, resources.strings);
+        assert_eq!(descriptor.raw.resources.icons, resources.icons);
+        assert_eq!(descriptor.raw.resources.ship, resources.ship);
+        let descriptor = RaceDesc::from_storage(Box::new(descriptor.into_legacy()));
+        assert_eq!(descriptor.raw.resources.strings, resources.strings);
+        assert_eq!(descriptor.raw.resources.icons, resources.icons);
+        assert_eq!(descriptor.raw.resources.ship, resources.ship);
     }
 }

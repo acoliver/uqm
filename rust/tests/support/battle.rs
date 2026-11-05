@@ -2,7 +2,7 @@
     dead_code,
     reason = "shared fixture API used by independent race test binaries"
 )]
-use std::{mem, ptr, rc::Rc};
+use std::{ptr, rc::Rc};
 use uqm_rust::battle::process_native::init_display_list;
 
 use uqm_rust::{
@@ -625,7 +625,11 @@ impl Drop for Ship<'_> {
 }
 pub fn descriptor(species: u32) -> RaceDescriptor {
     // SAFETY: the caller owns the serialized test context.
-    unsafe { uqm_rust::ships::races::descriptor(species).into_legacy() }
+    unsafe {
+        uqm_rust::app::bridge::enter(|cx| {
+            uqm_rust::ships::races::descriptor(cx.world, species).into_legacy()
+        })
+    }
 }
 
 pub unsafe fn call_element(name: &str, id: ElementId) {
@@ -776,13 +780,10 @@ pub fn velocity(v: &VELOCITY_DESC) -> [i32; 9] {
         v.incr.height.into(),
     ]
 }
-pub unsafe fn toward(speed: SIZE, face: COUNT) -> [i32; 9] {
-    // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
-    unsafe {
-        let mut v = mem::zeroed();
-        SetVelocityVector(&mut v, speed, face);
-        velocity(&v)
-    }
+pub fn toward(speed: SIZE, face: COUNT) -> [i32; 9] {
+    let mut v = uqm_rust::battle::velocity::VelocityDesc::new();
+    uqm_rust::battle::velocity::set_velocity_vector(&mut v, speed, face);
+    velocity(&v)
 }
 pub unsafe fn with_rng<T>(seed: u32, draws: usize, run: impl FnOnce() -> T) -> T {
     // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
@@ -962,11 +963,8 @@ impl NativeFrameSet {
     }
 
     pub fn array(&self) -> uqm_rust::engine::battle::frames::FrameArray {
-        // SAFETY: these leases retain the drawable after the fixture's logical release.
-        unsafe {
-            let frame = self.frame(0);
-            uqm_rust::engine::battle::frames::FrameArray::from_native([frame.cast(); 3])
-        }
+        let frame = self.frame(0);
+        uqm_rust::engine::battle::frames::FrameArray::from_native([frame.cast(); 3])
     }
 }
 impl Drop for NativeFrameSet {

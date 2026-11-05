@@ -3683,10 +3683,8 @@ pub use crate::planets::starmap::naming::GetClusterName;
 pub use crate::ships::master_native::engine::find_master_ship;
 
 #[cfg(not(test))]
-pub use crate::ships::master_native::engine::FindMasterShipIndex;
 
 #[cfg(not(test))]
-pub use crate::ships::master_native::engine::GetShipMeleeIconsFromIndex;
 
 #[cfg(not(test))]
 pub use crate::game_init::cleanup::free_kernel;
@@ -3709,8 +3707,6 @@ extern "C" {
 #[cfg(not(test))]
 pub use crate::navigation::hyper_data::LoadHyperspace;
 
-#[cfg(not(test))]
-pub use crate::navigation::hyper_data::FreeHyperspace;
 #[cfg(not(test))]
 pub use crate::navigation::hyper_radar::SeedUniverse;
 #[cfg(test)]
@@ -3765,11 +3761,7 @@ pub use crate::engine::world::fleet::start_sphere_tracking;
 
 
 
-#[cfg(not(test))]
-pub use crate::ships::loader_native::engine::load_ship;
 
-#[cfg(not(test))]
-pub use crate::ships::loader_native::engine::unload_ship;
 
 #[cfg(not(test))]
 pub use crate::state::c_api::planets::uninit_planet_info;
@@ -4255,7 +4247,6 @@ pub use crate::supermelee::native::teams::MeleeSetup_new;
 
 pub use crate::supermelee::native::teams::MeleeSetup_delete;
 
-pub use crate::supermelee::native::teams::MeleeSetup_setShip;
 
 pub use crate::supermelee::native::teams::MeleeSetup_getShip;
 

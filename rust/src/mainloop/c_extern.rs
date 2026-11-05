@@ -314,8 +314,6 @@ pub use crate::ui::sis::SetStatusMessageMode;
 pub use crate::ui::sis::DrawAutoPilotMessage;
 
 #[cfg(not(test))]
-pub use crate::ships::master_native::engine::FreeMasterShipList;
-
 pub use crate::log_abi::log_showBox;
 
 // ---------------------------------------------------------------------------

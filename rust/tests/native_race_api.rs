@@ -9,6 +9,35 @@ use uqm_rust::collections::observation::{self, Event};
 use uqm_rust::engine::battle::{Cx, Selection, ShipId, WeaponOrigin, WeaponSpawn};
 use uqm_rust::ships::native::abi::*;
 
+#[test]
+fn ship_teardown_is_idempotent_without_an_arena_and_preserves_encounter_recovery() {
+    battle_context::run(|| {
+        let _owner = Battle::new(4);
+        // SAFETY: the serialized fixture publishes the game only for this owner borrow.
+        unsafe {
+            uqm_rust::app::bridge::enter(|cx| {
+                let element = cx.alloc_element().unwrap();
+                cx.put(element);
+                cx.world.set_activity(SUPER_MELEE as u16);
+                uqm_rust::game_init::space_resources::uninit_ships(cx);
+                uqm_rust::game_init::space_resources::uninit_ships(cx);
+                assert_eq!(cx.elements().head(), Some(element));
+                assert_eq!(cx.world.activity(), SUPER_MELEE as u16);
+                cx.unlink(element);
+                cx.dispose(element);
+
+                cx.world
+                    .set_activity(IN_ENCOUNTER as u16 | IN_BATTLE as u16);
+                uqm_rust::game_init::space_resources::uninit_ships(cx);
+                assert_eq!(cx.world.activity(), IN_ENCOUNTER as u16);
+                uqm_rust::game_init::space_resources::uninit_ships(cx);
+                assert_eq!(cx.world.activity(), IN_ENCOUNTER as u16);
+                assert!(cx.elements().head().is_none());
+            });
+        }
+    });
+}
+
 fn alternate_pre(cx: &mut Cx<'_>, ship: ShipId) {
     cx.ship_state_mut(ship).energy_counter = 71;
 }
@@ -250,7 +279,7 @@ fn native_races_cannot_escape_the_real_accessor_boundary() -> Result<(), Box<dyn
         ("table", "fn probe(cx: &mut Cx<'_>, id: ElementId) { cx.kernel.elements[id].next.image.frames = std::ptr::NonNull::dangling().as_ptr(); let _ = cx.element_frame_set_first(id, true).to_owned(); }", "E0616"),
         ("frame", "fn probe() { let _ = crate::engine::battle::views::FrameRef { raw: std::ptr::NonNull::dangling().as_ptr(), owner: &crate::engine::battle::frames::FrameArray::EMPTY, resolution: 0, identity: crate::engine::battle::frames::FrameOwner::Drawable }; }", "E0451"),
         ("frames", "fn probe() { let _ = crate::engine::battle::views::Frames(None); }", "E0423"),
-        ("descriptor", "fn probe() { let _ = crate::engine::battle::RaceDesc::from_legacy(crate::engine::battle::record::RaceDescriptor::EMPTY); }", "E0624"),
+        ("descriptor", "fn probe() { let _ = crate::engine::battle::RaceDesc::from_storage(Box::new(crate::engine::battle::record::RaceDescriptor::EMPTY)); }", "E0624"),
         ("projection", "fn probe(cx: &mut Cx<'_>, p: std::ptr::NonNull<u8>) { let _ = cx.project(p); }", "E0599"),
         ("primitive", "fn probe(cx: &mut Cx<'_>, id: ElementId) { cx.primitive(id).Type = 0; }", "E0624"),
         ("raw_frame", "fn probe(cx: &mut Cx<'_>) { cx.abs_frame(std::ptr::NonNull::dangling().as_ptr(), 0); }", "E0624"),

@@ -30,8 +30,6 @@ pub(crate) mod kernel;
 pub use access::template;
 pub use template::{RaceResources, RaceTemplate};
 
-pub use access::RaceDescLayout;
-
 pub use access::schema;
 
 #[cfg(test)]

@@ -221,7 +221,7 @@ pub(crate) mod live {
         }
         ok
     }
-    fn new_menu_state() -> MELEE_STATE {
+    fn new_menu_state(kernel: &KernelOwner) -> MELEE_STATE {
         MELEE_STATE {
             input_func: None,
             initialized: 0,
@@ -240,6 +240,7 @@ pub(crate) mod live {
             last_input_time: 0,
             h_music: ptr::null_mut(),
             netplay: Default::default(),
+            catalog: crate::ships::master_native::choices(&kernel.master_queue),
         }
     }
 
@@ -251,7 +252,7 @@ pub(crate) mod live {
     ) {
         // SAFETY: the application admits this session on the initialized game thread.
         cx.with_legacy(|| WorldOwner::current().write(init_glob_data));
-        let mut state = new_menu_state();
+        let mut state = new_menu_state(cx.kernel);
         // SAFETY: state remains in this stack frame through all synchronous callbacks and cleanup.
         cx.with_legacy(|| {
             P_MELEE_STATE = &mut state;
@@ -280,7 +281,7 @@ pub(crate) mod live {
             crate::supermelee::native::battle_picker::live::BuildPickMeleeFrame();
             MeleeFrame =
                 CaptureDrawable(LoadGraphic(MELEE_SCREEN_PMAP_ANIM.as_ptr().cast()).cast());
-            crate::supermelee::native::build_picker::live::build_build_pick_frame();
+            crate::supermelee::native::build_picker::live::build_build_pick_frame(&state.catalog);
             KernelOwner::current().write(|kernel| {
                 init_space(kernel, WorldOwner::current().read(|world| world.activity()))
             });
@@ -315,7 +316,7 @@ pub(crate) mod live {
                 DestroyMusic(state.h_music);
                 state.h_music = ptr::null_mut();
             }
-            KernelOwner::current().write(|kernel| uninit_space(kernel));
+            KernelOwner::current().write(uninit_space);
             crate::supermelee::native::battle_picker::live::DestroyPickMeleeFrame();
             DestroyDrawable(ReleaseDrawable(MeleeFrame));
             MeleeFrame = ptr::null_mut();
