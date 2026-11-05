@@ -31,9 +31,7 @@ impl Battle {
 }
 impl Drop for Battle {
     fn drop(&mut self) {
-        unsafe {
-            uqm_rust::engine::World::current().write(|world| world.set_activity(self.activity));
-        }
+        uqm_rust::engine::World::current().write(|world| world.set_activity(self.activity));
     }
 }
 

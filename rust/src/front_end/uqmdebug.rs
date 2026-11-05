@@ -439,10 +439,10 @@ mod runtime {
                 / universe_y;
         }
         if world.story_state(StoryKey::ARILOU_SPACE_SIDE) <= 1 {
+            let selected =
+                crate::planets::starmap::find_star_in(world, None, (*game).autopilot, 0, 0);
             world.select_star(
-                ((FindStar(ptr::null_mut(), ptr::addr_of_mut!((*game).autopilot), 0, 0))
-                    .cast::<crate::engine::world::CStarDesc>())
-                .as_ref(),
+                selected.as_ref(),
                 crate::planets::starmap::current_catalog(),
             );
             if !world

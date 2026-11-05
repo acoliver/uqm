@@ -516,3 +516,56 @@ fn fleet_infinity_reads_the_supplied_world_without_publication() {
     assert_eq!(fleet_is_infinite(&world, 1), 1);
     assert_eq!(fleet_is_infinite(&world, 0), 0);
 }
+
+#[test]
+#[serial_test::serial]
+fn instant_move_selects_a_star_with_the_retained_world() {
+    use uqm_rust::engine::{
+        world::{CStarDesc, CATALOG_LEN},
+        StoryKey,
+    };
+    let mut game = Game::new();
+    game.world.story = Some(uqm_rust::state::game_state::GameState::new());
+    game.world.set_story_state(StoryKey::ARILOU_SPACE_SIDE, 0);
+    game.world.set_story_state(StoryKey::USED_BROADCASTER, 1);
+    game.world.set_activity((IN_HYPERSPACE | IN_BATTLE) as u16);
+    game.world.data.game.autopilot = POINT { x: 1752, y: 1450 };
+    game.world.data.game.ship_facing = 7;
+    game.world.data.game.ip_planet = 2;
+    game.world.data.game.in_orbit = 1;
+    // SAFETY: zero is valid for the catalog's scalar records, retained through the call.
+    let mut catalog: Box<[CStarDesc; CATALOG_LEN]> = Box::new(unsafe { mem::zeroed() });
+    for star in catalog.iter_mut() {
+        star.star_pt.y = i16::MAX;
+    }
+    catalog[0].star_pt = POINT { x: 1752, y: 1450 };
+    // SAFETY: the serialized fixture restores the catalog and display dimensions even on failure.
+    unsafe {
+        let previous_catalog = uqm_rust::planets::starmap::star_array;
+        let previous_width = ScreenWidth;
+        let previous_height = ScreenHeight;
+        uqm_rust::planets::starmap::star_array = catalog.as_mut_ptr();
+        ScreenWidth = 320;
+        ScreenHeight = 240;
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            bridge::with_game(&mut game, || {
+                uqm_rust::front_end::uqmdebug::do_instant_move()
+            });
+        }));
+        uqm_rust::planets::starmap::star_array = previous_catalog;
+        ScreenWidth = previous_width;
+        ScreenHeight = previous_height;
+        result.unwrap();
+    }
+    assert_eq!(
+        game.world.star_pointer(Some(&catalog)),
+        catalog.as_mut_ptr()
+    );
+    assert_eq!(game.world.story_state(StoryKey::USED_BROADCASTER), 0);
+    assert_eq!(game.world.activity() & IN_BATTLE as u16, 0);
+    assert_ne!(game.world.activity() & START_INTERPLANETARY as u16, 0);
+    assert_eq!(game.world.data.game.ship_facing, 0);
+    assert_eq!(game.world.data.game.ip_planet, 0);
+    assert_eq!(game.world.data.game.in_orbit, 0);
+    assert_eq!(game.world.data.game.autopilot, POINT { x: -1, y: -1 });
+}

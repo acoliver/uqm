@@ -1,9 +1,9 @@
 //! Tests for the live "GlSt", "GmSt" and "Evts" capture and restore.
 //!
-//! The field checks place and read bytes at offsets taken from bindgen's
-//! reading of the C headers, not from the Rust mirror, and compare them with
-//! values written out here or with the bytes of a save the C game wrote. The
-//! event checks use the owned fixed-capacity game-clock pool.
+//! The field checks place and read bytes at explicit offsets in the retained
+//! scalar record. Live activity is supplied separately. Serialized chunks are
+//! compared with the bytes of a save written by the C runtime; event checks
+//! use the owned fixed-capacity game-clock pool.
 
 use crate::engine::battle::schema::GAME_STATE;
 use crate::engine::World;
