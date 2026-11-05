@@ -1,11 +1,9 @@
 //! Battle entry, ordered input processing, and frame scheduling from `battle.c`.
 
 #[cfg(not(test))]
-use crate::engine::battle::input::InputContext;
-#[cfg(not(test))]
 use crate::engine::World as WorldOwner;
 #[cfg(not(test))]
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
+use crate::engine::WorldData as WorldFields;
 use crate::ships::native::abi;
 
 const BATTLE_LEFT: u8 = 1 << 0;
@@ -151,11 +149,6 @@ pub(crate) mod engine {
     /// `start..=end` must name a valid game-state bit field owned by the game thread.
     pub fn set_game_state(start: u32, end: u32, value: u8) {
         WorldOwner::current().write(|world| setGameState(world, start as i32, end as i32, value));
-    }
-    /// # Safety
-    /// `side` must be a valid player index with initialized input state.
-    pub fn player_input(side: usize) -> Option<InputContext> {
-        KernelOwner::current().read(|owner| owner.player_input[side].clone())
     }
     pub const fn rgb15(r: u8, g: u8, b: u8) -> Color {
         Color {
@@ -474,7 +467,7 @@ pub(crate) mod engine {
 }
 
 #[cfg(not(test))]
-pub use engine::{battle, free_battle_song, player_input};
+pub use engine::{battle, free_battle_song};
 
 #[cfg(test)]
 mod tests {

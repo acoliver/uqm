@@ -150,14 +150,16 @@ impl Cx<'_> {
     }
 
     pub fn init_ship_status(&mut self, ship: ShipId, mut clip: Option<RECT>) {
+        use crate::ui::shipstat::init_ship_status as draw_status;
         let clipped = clip.is_some();
         let clip = clip
             .as_mut()
             .map_or(std::ptr::null_mut(), std::ptr::from_mut);
         let info = self.ship_info_pointer(ship);
+        let font = self.kernel.battle_font();
         // SAFETY: the descriptor retains its owned status data while graphics are drawn.
         unsafe {
-            self.with_legacy(|| crate::ui::shipstat::init_ship_status(info, Some(ship), clip));
+            self.with_legacy(|| draw_status(font.as_ref(), info, Some(ship), clip));
             if !clipped {
                 let old = SetContext(self.kernel.status_context);
                 crate::battle::status_native::draw_captains_window(self, ship);
@@ -570,11 +572,13 @@ impl Cx<'_> {
 #[cfg(not(test))]
 impl Cx<'_> {
     pub(crate) fn draw_statistics(&mut self, ship: ShipId, crew: i16, energy: i16) {
+        use crate::ui::shipstat::delta_statistics;
         let y = self.status_offset(ship);
         let info = self.ship_info_pointer(ship);
+        let font = self.kernel.battle_font();
         // SAFETY: the checked descriptor and status resources remain live during drawing.
         unsafe {
-            self.with_legacy(|| crate::ships::native::abi::DeltaStatistics(info, y, crew, energy));
+            self.with_legacy(|| delta_statistics(font.as_ref(), info, y, crew, energy));
         }
     }
 }

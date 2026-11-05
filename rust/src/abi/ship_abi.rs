@@ -1452,21 +1452,7 @@ pub use crate::battle::status_native::init_status_offsets;
 
 #[cfg(not(test))]
 pub use crate::ui::shipstat::DrawCrewFuelString;
-#[cfg(not(test))]
-pub unsafe fn DeltaStatistics(
-    ShipInfoPtr: *mut SHIP_INFO,
-    y_offs: COORD,
-    crew_delta: SIZE,
-    energy_delta: SIZE,
-) {
-    crate::ui::shipstat::DeltaStatistics(ShipInfoPtr.cast(), y_offs, crew_delta, energy_delta);
-}
-#[cfg(test)]
-#[cfg(not(test))]
-pub use crate::ui::shipstat::DeltaStatistics;
 
-#[cfg(not(test))]
-pub use crate::battle::status_native::engine::DrawBattleCrewAmount;
 
 #[cfg(not(test))]
 

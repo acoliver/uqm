@@ -1,5 +1,5 @@
 //! Shared allocation leases for native drawable handles.
-use super::native_abi::{context_desc, drawable_desc, FRAME};
+use super::native_abi::{context_desc, drawable_desc, font_desc, FRAME};
 use std::{
     collections::BTreeMap,
     ptr::NonNull,
@@ -13,6 +13,7 @@ pub(super) struct Allocations {
     entries: BTreeMap<usize, Rc<Allocation>>,
     frames: BTreeMap<usize, Weak<Allocation>>,
     pub(super) contexts: BTreeMap<usize, Rc<super::native_context::Allocation>>,
+    pub(super) fonts: BTreeMap<usize, Rc<super::native_font::Allocation>>,
 }
 impl Allocations {
     pub const fn new() -> Self {
@@ -21,6 +22,7 @@ impl Allocations {
             entries: BTreeMap::new(),
             frames: BTreeMap::new(),
             contexts: BTreeMap::new(),
+            fonts: BTreeMap::new(),
         }
     }
     pub fn assert_thread(&mut self) {
@@ -61,6 +63,7 @@ impl Allocations {
 pub(super) enum AllocationKind {
     Drawable(NonNull<drawable_desc>),
     Context(NonNull<context_desc>),
+    Font(NonNull<font_desc>),
 }
 
 pub(super) struct OwnedAllocation {
@@ -84,6 +87,7 @@ impl Drop for OwnedAllocation {
                 AllocationKind::Drawable(drawable) => {
                     super::gfxload::release_cel_data_now(drawable)
                 }
+                AllocationKind::Font(font) => super::gfxload::release_font_data_now(font),
                 AllocationKind::Context(context) => {
                     if super::context_abi::_pCurContext == context.as_ptr() {
                         super::context_abi::SetContext(std::ptr::null_mut());

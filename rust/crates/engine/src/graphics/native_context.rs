@@ -6,6 +6,7 @@ pub(super) struct Allocation {
     context: NonNull<context_desc>,
     owned: native_drawables::OwnedAllocation,
     target: RefCell<Option<ContextFrame>>,
+    font: RefCell<Option<super::native_font::FontLease>>,
 }
 
 pub struct ContextFrame {
@@ -28,6 +29,8 @@ enum Operation {
     Frame(FRAME),
     Clip(RECT),
     Clear,
+    Fill(Color, RECT),
+    Text(super::native_font::FontLease, TEXT, Color),
 }
 
 #[derive(Clone)]
@@ -62,6 +65,15 @@ impl ContextLease {
                     context_abi::SetContextClipRect(&mut rect);
                 }
                 Operation::Clear => frame_abi::ClearDrawable(),
+                Operation::Fill(color, mut rect) => {
+                    context_abi::SetContextForeGroundColor(color);
+                    frame_abi::DrawFilledRectangle(&mut rect);
+                }
+                Operation::Text(font, mut text, color) => {
+                    super::font_abi::SetContextFont(font.as_raw());
+                    context_abi::SetContextForeGroundColor(color);
+                    super::font_abi::font_DrawText(&mut text);
+                }
             }
             self.0.context.as_ref().ForeGroundFrame
         }
@@ -90,6 +102,31 @@ impl ContextLease {
         self.apply(Operation::Clip(rect));
     }
 
+    pub fn fill_rectangle(&self, color: Color, rect: RECT) {
+        let _target = self.retain_target();
+        self.apply(Operation::Fill(color, rect));
+    }
+
+    pub fn draw_text(
+        &self,
+        font: &super::native_font::FontLease,
+        string: &std::ffi::CStr,
+        baseline: POINT,
+        align: TEXT_ALIGN,
+        color: Color,
+    ) {
+        assert!(string.to_str().is_ok(), "font text must be UTF-8");
+        let _target = self.retain_target();
+        *self.0.font.borrow_mut() = Some(font.clone());
+        let text = TEXT {
+            baseline,
+            pStr: string.as_ptr().cast(),
+            align,
+            CharCount: u16::MAX,
+        };
+        self.apply(Operation::Text(font.clone(), text, color));
+    }
+
     pub fn clear(&self) {
         let _target = self.retain_target();
         self.apply(Operation::Clear);
@@ -109,6 +146,7 @@ pub(super) fn register(context: NonNull<context_desc>) {
             owner,
         ),
         target: RefCell::new(None),
+        font: RefCell::new(None),
     });
     assert!(
         allocations

@@ -48,7 +48,7 @@ unsafe fn uninit_kernel(kernel: &mut crate::engine::Kernel) {
         DestroyDrawable(ReleaseDrawable(kernel.status_frame));
         DestroyDrawable(ReleaseDrawable(kernel.activity_frame));
         DestroyFont(kernel.tiny_font.cast());
-        DestroyFont(kernel.star_con_font.cast());
+        kernel.release_battle_font();
         crate::battle::context_access::lifecycle::uninit_ships(&mut *kernel);
         kernel.activity_frame = ptr::null_mut();
     }

@@ -312,9 +312,16 @@ pub unsafe extern "C" fn get_font_data(fp: *mut c_void, _length: u32) -> *mut c_
         std::mem::size_of::<BuildChar>(),
         Some(compare_char),
     );
-    let font: *mut font_desc = rust_hcalloc(std::mem::size_of::<font_desc>()).cast();
+    build_font(&chars)
+}
+
+unsafe fn build_font(chars: &[BuildChar]) -> *mut c_void {
+    let mut font =
+        std::ptr::NonNull::new(rust_hcalloc(std::mem::size_of::<font_desc>()).cast::<font_desc>())
+            .unwrap_or_else(|| panic!("font allocation failed"));
+    let desc = font.as_mut();
     let mut start = 0;
-    let mut page_end = ptr::addr_of_mut!((*font).fontPages);
+    let mut page_end = ptr::addr_of_mut!(desc.fontPages);
     while start < chars.len() {
         let page_start = chars[start].index & CHARACTER_PAGE_MASK;
         let mut end = start;
@@ -339,26 +346,35 @@ pub unsafe extern "C" fn get_font_data(fp: *mut c_void, _length: u32) -> *mut c_
             }
             process_font_char(ch, bcd.canvas);
             TFB_DrawCanvas_Delete(bcd.canvas);
-            if (*ch).disp.height as i32 > i32::from((*font).Leading) {
-                (*font).Leading = (*ch).disp.height as u16;
+            if (*ch).disp.height as i32 > i32::from(desc.Leading) {
+                desc.Leading = (*ch).disp.height as u16;
             }
-            if (*ch).disp.width as i32 > i32::from((*font).LeadingWidth) {
-                (*font).LeadingWidth = (*ch).disp.width as u16;
+            if (*ch).disp.width as i32 > i32::from(desc.LeadingWidth) {
+                desc.LeadingWidth = (*ch).disp.width as u16;
             }
         }
         start = end;
     }
     *page_end = ptr::null_mut();
-    (*font).Leading = (*font).Leading.wrapping_add(1);
-    font.cast()
+    desc.Leading = desc.Leading.wrapping_add(1);
+    super::native_font::register(font);
+    font.as_ptr().cast()
 }
 /// # Safety
 /// Handle must be null or an owned font allocation, consumed here.
 pub unsafe extern "C" fn release_font_data(handle: *mut c_void) -> i32 {
-    if handle.is_null() {
+    let Some(font) = std::ptr::NonNull::new(handle.cast()) else {
         return 0;
+    };
+    super::native_font::release(font);
+    1
+}
+
+pub(super) unsafe fn release_font_data_now(font: std::ptr::NonNull<font_desc>) {
+    let font = font.as_ptr();
+    if super::context_abi::_CurFontPtr == font {
+        super::font_abi::SetContextFont(ptr::null_mut());
     }
-    let font = handle.cast::<font_desc>();
     let mut page = (*font).fontPages;
     while !page.is_null() {
         for i in 0..(*page).numChars {
@@ -372,8 +388,7 @@ pub unsafe extern "C" fn release_font_data(handle: *mut c_void) -> i32 {
         rust_hfree(page.cast());
         page = next;
     }
-    rust_hfree(handle);
-    1
+    rust_hfree(font.cast());
 }
 #[cfg(test)]
 mod tests {

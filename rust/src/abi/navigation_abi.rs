@@ -4330,11 +4330,7 @@ pub use crate::ui::shipstat::ClearShipStatus;
 #[cfg(not(test))]
 pub use crate::ui::shipstat::OutlineShipStatus;
 
-#[cfg(not(test))]
-pub use crate::ui::shipstat::DeltaStatistics;
 
-#[cfg(not(test))]
-pub use crate::battle::status_native::engine::DrawBattleCrewAmount;
 
 #[cfg(not(test))]
 pub use crate::battle::ship_native::engine::animation_preprocess;

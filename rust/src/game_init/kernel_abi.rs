@@ -138,11 +138,10 @@ unsafe fn init_kernel(kernel: &mut crate::engine::Kernel, activity: u16) -> u32 
     // SAFETY: only resource loaders run during the owner borrow.
     let loaded = {
         crate::battle::context_access::lifecycle::init_ships(&mut *kernel);
-        kernel.star_con_font =
-            crate::graphics::resgfx::LoadGraphicInstance(c"font.starcon".as_ptr()).cast();
-        if kernel.star_con_font.is_null() {
+        let Some(font) = crate::graphics::native_font::LoadedFont::load(c"font.starcon") else {
             return 0;
-        }
+        };
+        kernel.install_battle_font(font);
         kernel.tiny_font =
             crate::graphics::resgfx::LoadGraphicInstance(c"font.tiny".as_ptr()).cast();
         if kernel.tiny_font.is_null() {

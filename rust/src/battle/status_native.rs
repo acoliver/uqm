@@ -1,11 +1,24 @@
 //! Live captain-window rendering and crew/energy bookkeeping from status.c.
 
 #[cfg(not(test))]
-use crate::engine::Kernel as KernelOwner;
+use crate::graphics::context_abi::_pCurContext;
 use crate::ships::native::abi::*;
 
 pub fn init_status_offsets(kernel: &mut crate::engine::Kernel, height_pixels: i32) {
     kernel.status_offsets = [(height_pixels >> 1) as COORD, 0];
+}
+
+pub(crate) fn has_crew_counter(maximum: COUNT, flags: u16) -> bool {
+    maximum > MAX_CREW_SIZE as COUNT || flags & PLAYER_CAPTAIN as u16 != 0
+}
+
+fn crew_counter_layout(y: COORD, pc_menu: bool) -> (POINT, RECT) {
+    let baseline = POINT {
+        x: if pc_menu { 4 } else { 12 },
+        y: y.wrapping_add(64),
+    };
+    let background = rect(baseline.x, baseline.y.wrapping_sub(5), 24, 5);
+    (baseline, background)
 }
 
 fn crew_text(value: COUNT) -> [u8; 40] {
@@ -296,28 +309,25 @@ pub(crate) mod engine {
         }
     }
 
-    /// # Safety
-    /// Ship info, fonts, and the active graphics context must be live.
-    #[no_mangle]
-    pub unsafe extern "C" fn DrawBattleCrewAmount(info: *mut SHIP_INFO, y: COORD) {
-        let x = if optWhichMenu == OPT_PC as i32 { 4 } else { 12 };
-        let bytes = crew_text((*info).crew_level);
-        let mut text = TEXT {
-            baseline: POINT {
-                x,
-                y: y.wrapping_add(64),
-            },
-            pStr: bytes.as_ptr().cast(),
-            align: TEXT_ALIGN_ALIGN_LEFT,
-            CharCount: COUNT::MAX,
-        };
-        SetContextFont(KernelOwner::current().read(|owner| owner.star_con_font));
-        filled(
-            rgb15(10, 10, 10),
-            rect(x, text.baseline.y.wrapping_sub(5), 24, 5),
+    pub(crate) fn draw_battle_crew_amount(
+        context: &crate::graphics::context_abi::ContextLease,
+        font: &crate::graphics::native_font::FontLease,
+        crew: COUNT,
+        y_offs: COORD,
+        pc_menu: bool,
+    ) {
+        let buffer = crew_text(crew);
+        let string = std::ffi::CStr::from_bytes_until_nul(&buffer)
+            .unwrap_or_else(|_| unreachable!("crew text is NUL-terminated"));
+        let (baseline, background) = crew_counter_layout(y_offs, pc_menu);
+        context.fill_rectangle(rgb15(0x0a, 0x0a, 0x0a), background);
+        context.draw_text(
+            font,
+            string,
+            baseline,
+            TEXT_ALIGN_ALIGN_LEFT,
+            rgb15(0, 0, 0),
         );
-        SetContextForeGroundColor(rgb15(0, 0, 0));
-        font_DrawText(&mut text);
     }
 
     fn prepare_captain(cx: &mut Cx<'_>, ship: crate::engine::battle::ShipId) -> CAPTAIN_STUFF {
@@ -368,11 +378,21 @@ pub(crate) mod engine {
             SetContextFont(cx.kernel.tiny_font);
             font_DrawText(&mut text);
         }
-        if cx.race_stats(ship).ship_info.max_crew > MAX_CREW_SIZE as COUNT
-            || cx.race_stats(ship).ship_info.ship_flags & PLAYER_CAPTAIN as u16 != 0
-        {
-            let info = cx.ship_info_pointer(ship);
-            cx.with_legacy(|| DrawBattleCrewAmount(info, y));
+        let info = cx.race_stats(ship).ship_info;
+        if has_crew_counter(info.max_crew, info.ship_flags) {
+            let context = crate::graphics::context_abi::ContextLease::retain(
+                std::ptr::NonNull::new(_pCurContext)
+                    .unwrap_or_else(|| panic!("missing status context")),
+            );
+            draw_battle_crew_amount(
+                &context,
+                &cx.kernel.battle_font().unwrap_or_else(|| {
+                    panic!("numeric crew display requires the loaded battle font")
+                }),
+                cx.race_stats(ship).ship_info.crew_level,
+                y,
+                optWhichMenu == OPT_PC as i32,
+            );
         }
         UnbatchGraphics();
     }
@@ -461,13 +481,23 @@ pub(crate) mod engine {
 
 #[cfg(not(test))]
 pub use engine::{
-    delta_crew, delta_energy, draw_captains_window, preprocess_status, DrawBattleCrewAmount,
-    PostProcessStatus,
+    delta_crew, delta_energy, draw_captains_window, preprocess_status, PostProcessStatus,
 };
+
+#[cfg(not(test))]
+pub(crate) use engine::draw_battle_crew_amount;
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn crew_counter_is_needed_only_for_large_crews_or_player_captains() {
+        assert!(!has_crew_counter(42, 0));
+        assert!(has_crew_counter(43, 0));
+        assert!(has_crew_counter(0, PLAYER_CAPTAIN as u16));
+        assert!(!has_crew_counter(0, CREW_IMMUNE as u16));
+    }
 
     #[test]
     fn offsets_put_player_zero_at_bottom() {
@@ -498,6 +528,21 @@ mod tests {
             crew_delta(32768, 32768, 65535, i16::MIN),
             (false, 0, i16::MIN)
         );
+    }
+
+    #[test]
+    fn crew_counter_layout_preserves_menu_offsets_and_wrapping() {
+        for (pc_menu, x) in [(true, 4), (false, 12)] {
+            for y in [0, 120, i16::MAX] {
+                let (baseline, background) = crew_counter_layout(y, pc_menu);
+                assert_eq!((baseline.x, baseline.y), (x, y.wrapping_add(64)));
+                assert_eq!(
+                    (background.corner.x, background.corner.y),
+                    (x, y.wrapping_add(59)),
+                );
+                assert_eq!((background.extent.width, background.extent.height), (24, 5));
+            }
+        }
     }
 
     #[test]

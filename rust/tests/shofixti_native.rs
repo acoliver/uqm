@@ -800,9 +800,6 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
             for computer in [false, true] {
                 for initial in [[2, 2], [1, 2], [2, 1], [1, 1]] {
                     let _battle = Battle::new(16);
-                    let saved_inputs = std::array::from_fn::<_, 2, _>(|side| {
-                        uqm_rust::battle::battle_native::player_input(side)
-                    });
                     let saved_offscreen =
                         (**uqm_rust::engine::Kernel::current()).off_screen_context;
                     let saved_controls = PlayerControls;
@@ -824,10 +821,12 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                             if computer && side == 1 { 2 } else { 1 },
                         )
                     });
+                    let saved_inputs = uqm_rust::engine::Kernel::current().write(|kernel| {
+                        std::array::from_fn::<_, 2, _>(|side| {
+                            kernel.replace_player_input(side, Some(inputs[side].clone()))
+                        })
+                    });
                     for side in 0..2 {
-                        uqm_rust::engine::Kernel::current().write(|kernel| {
-                            kernel.replace_player_input(side, Some(inputs[side].clone()));
-                        });
                         let active = if side == 0 {
                             &raw mut *ship.inner.ship_mut()
                         } else {
