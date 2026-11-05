@@ -534,7 +534,6 @@ mod tests {
         fn assign_global_arrays(&self) {
             self.assign_globals_called.set(true);
         }
-        fn set_main_exited(&self, _val: bool) {}
     }
 
     // ---- restart_menu_impl tests -----------------------------------------

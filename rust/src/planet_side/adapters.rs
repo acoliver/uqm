@@ -106,9 +106,7 @@ fn read_player_one_input() -> FrameInput {
             thrust: key[KEY_UP] != 0,
             fire: key[KEY_WEAPON] != 0,
             takeoff: key[KEY_ESCAPE] != 0 || key[KEY_SPECIAL] != 0,
-            abort: WorldOwner::current().read(crate::mainloop::c_extern::get_current_activity)
-                & 0x4000
-                != 0,
+            abort: WorldOwner::current().read(WorldOwner::activity) & 0x4000 != 0,
         }
     }
 }
