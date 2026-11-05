@@ -57,8 +57,6 @@ extern "C" {
     #[cfg(test)]
     pub fn uqm_get_utwig_bomb() -> u8;
     #[cfg(test)]
-    pub fn uqm_set_player_control(player: u8, control: u16);
-    #[cfg(test)]
     pub fn uqm_get_pulsed_menu_key(key_index: u8) -> c_int;
     #[cfg(test)]
     pub fn uqm_get_mouse_button_down() -> c_int;
@@ -72,8 +70,6 @@ extern "C" {
     pub fn uqm_reinit_race_queues();
     #[cfg(test)]
     pub fn uqm_assign_star_planet_globals();
-    #[cfg(test)]
-    pub fn uqm_do_popup_window_msg(string_id: u16);
 
     // --- Menu state lifecycle (rust_bridge_restart.c) ---
     #[cfg(test)]
@@ -94,8 +90,6 @@ extern "C" {
     pub fn uqm_destroy_menu_state(pms: *mut c_void);
 
     // --- Menu drawing (de-staticized in restart.c under USE_RUST_RESTART) ---
-    #[cfg(test)]
-    pub fn draw_restart_menu_graphic(pms: *mut c_void);
     #[cfg(test)]
     pub fn draw_restart_menu(pms: *mut c_void, new_state: u8, frame: *mut c_void);
 }
@@ -118,13 +112,6 @@ pub unsafe fn uqm_set_utwig_bomb_on_ship(v: u8) {
 #[cfg(not(test))]
 pub unsafe fn uqm_get_utwig_bomb() -> u8 {
     (crate::mainloop::restart_menu::menu_abi::uqm_get_utwig_bomb()) as _
-}
-
-/// # Safety
-/// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(not(test))]
-pub unsafe fn uqm_set_player_control(player: u8, control: u16) {
-    crate::mainloop::restart_menu::menu_abi::uqm_set_player_control(player as _, control as _);
 }
 
 /// # Safety
@@ -181,13 +168,6 @@ pub unsafe fn uqm_assign_star_planet_globals() {
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
 #[cfg(not(test))]
-pub unsafe fn uqm_do_popup_window_msg(string_id: u16) {
-    crate::mainloop::restart_menu::menu_abi::uqm_do_popup_window_msg(string_id as _);
-}
-
-/// # Safety
-/// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(not(test))]
 pub unsafe fn uqm_get_menu_cur_frame(pms: *mut c_void) -> usize {
     (crate::mainloop::restart_menu::menu_abi::uqm_get_menu_cur_frame(pms as _)) as _
 }
@@ -239,13 +219,6 @@ pub unsafe fn uqm_create_menu_state() -> *mut c_void {
 #[cfg(not(test))]
 pub unsafe fn uqm_destroy_menu_state(pms: *mut c_void) {
     crate::mainloop::restart_menu::menu_abi::uqm_destroy_menu_state(pms as _);
-}
-
-/// # Safety
-/// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(not(test))]
-pub unsafe fn draw_restart_menu_graphic(pms: *mut c_void) {
-    crate::mainloop::restart_menu::render_abi::draw_restart_menu_graphic(pms as _);
 }
 
 /// # Safety

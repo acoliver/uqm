@@ -484,11 +484,13 @@ impl RestartMenuOps for CffiOps<'_, '_, '_> {
     }
 
     fn draw_restart_menu_graphic(&self) {
-        self.legacy(|| {
-            // SAFETY: pMS must be set by the caller via set_menu_state_ptr before calling.
-            // This calls the de-staticized DrawRestartMenuGraphic in restart.c.
-            let pms = self.get_menu_state_ptr();
-            unsafe { c_extern::draw_restart_menu_graphic(pms as *mut c_void) }
+        self.owned(|cx, _| {
+            let font = cx.kernel.tiny_font;
+            let menu = self.get_menu_state_ptr();
+            cx.with_legacy(|| {
+                // SAFETY: the restart session retains the menu, its frame and the Kernel font.
+                unsafe { super::render_abi::draw_restart_menu_graphic(menu as _, font) }
+            })
         })
     }
     fn draw_restart_menu_state(&self, state: u8) {
@@ -688,17 +690,17 @@ impl RestartMenuOps for CffiOps<'_, '_, '_> {
         unsafe { self.owned(|cx, io| crate::front_end::fmv::runtime::splash_screen(cx, io, None)) }
     }
     fn do_popup_window_msg(&self, string_id: u16) {
-        self.legacy(|| {
-            // SAFETY: Popup window message with a valid string ID.
-            unsafe { c_extern::uqm_do_popup_window_msg(string_id) }
+        self.owned(|cx, _| {
+            let strings = cx.kernel.game_strings;
+            cx.with_legacy(|| {
+                // SAFETY: the retained Kernel owns the table through synchronous popup rendering.
+                unsafe { super::menu_abi::uqm_do_popup_window_msg(strings.cast(), string_id) }
+            })
         })
     }
 
     fn set_player_control(&self, player: u8, control: u16) {
-        self.legacy(|| {
-            // SAFETY: Sets the PlayerControl array entry.
-            unsafe { c_extern::uqm_set_player_control(player, control) }
-        })
+        self.owned(|cx, _| super::menu_abi::uqm_set_player_control(cx.kernel, player, control))
     }
     fn assign_global_arrays(&self) {
         self.legacy(|| {

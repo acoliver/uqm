@@ -16,7 +16,9 @@ macro_rules! operation {
 operation!(uqm_get_utwig_bomb_on_ship() -> u8 { World::current().read(|world| super::super::state_abi::game_byte(world, StoryKey::UTWIG_BOMB_ON_SHIP)) });
 operation!(uqm_set_utwig_bomb_on_ship(value: u8) { World::current().write(|world| super::super::state_abi::set_game_byte(world, StoryKey::UTWIG_BOMB_ON_SHIP, value)); });
 operation!(uqm_get_utwig_bomb() -> u8 { World::current().read(|world| super::super::state_abi::game_byte(world, StoryKey::UTWIG_BOMB)) });
-operation!(uqm_set_player_control(player: u8, control: u16) { (**Kernel::current()).player_control[player as usize] = control as u8; });
+pub fn uqm_set_player_control(kernel: &mut Kernel, player: u8, control: u16) {
+    kernel.player_control[player as usize] = control as u8;
+}
 operation!(uqm_get_pulsed_menu_key(index: u8) -> u32 { super::super::input_abi::PulsedInputState.menu[index as usize] as u32 });
 operation!(uqm_get_mouse_button_down() -> u32 { crate::input::sdl_input::MouseButtonDown as u32 });
 pub use crate::time::counter_abi::GetTimeCounter as uqm_get_time_counter;
@@ -27,8 +29,8 @@ operation!(uqm_reinit_race_queues() {
     for side in 0..2 { crate::engine::battle::link_queue::ships(side).reinit(); }
 });
 operation!(uqm_assign_star_planet_globals() { crate::planets::starmap::star_array = ptr::addr_of_mut!(crate::planets::tables::STARMAP_ARRAY).cast(); });
-operation!(uqm_do_popup_window_msg(id: u16) {
-    let string = crate::strings::string_table::SetAbsStringTableIndex((**Kernel::current()).game_strings.cast(), (MAINMENU_STRING_BASE as u16).wrapping_add(id));
+operation!(uqm_do_popup_window_msg(strings: STRING, id: u16) {
+    let string = crate::strings::string_table::SetAbsStringTableIndex(strings, (MAINMENU_STRING_BASE as u16).wrapping_add(id));
     crate::ui::confirm::DoPopupWindow(crate::strings::string_table::GetStringAddress(string));
 });
 operation!(uqm_get_menu_cur_frame(menu: *mut MENU_STATE) -> FRAME { (*menu).CurFrame });
