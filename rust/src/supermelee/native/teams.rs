@@ -2,45 +2,27 @@
 use crate::io::uio_bridge::{uio_fread, uio_fwrite};
 use crate::memory::{rust_hfree, rust_hmalloc};
 use crate::ships::native::abi::{MeleeSetup, MeleeShip, MeleeTeam};
-use crate::supermelee::setup::ffi::{
-    rust_supermelee_fleet_value, rust_supermelee_team_deserialize, rust_supermelee_team_serialize,
-};
+use crate::supermelee::setup::team::{ship_cost, MeleeTeam as TypedTeam};
+use crate::supermelee::types::MeleeShip as TypedShip;
 use std::{ffi::c_char, mem, ptr};
+use uqm_save::mle::Team as TeamRecord;
 
 #[no_mangle]
-pub static MeleeTeam_serialSize: usize = 69;
+pub static MeleeTeam_serialSize: usize = TeamRecord::SERIALIZED_LEN;
 
-fn encode(team: &MeleeTeam) -> [u8; 69] {
-    let ships = team.ships.map(|ship| ship as u8);
-    let mut bytes = [0; 69];
-    unsafe {
-        assert_eq!(
-            rust_supermelee_team_serialize(
-                ships.as_ptr(),
-                team.name.as_ptr().cast(),
-                bytes.as_mut_ptr(),
-                bytes.len()
-            ),
-            0
-        );
-    }
-    bytes
+fn encode(team: &MeleeTeam) -> [u8; TeamRecord::SERIALIZED_LEN] {
+    let typed = TypedTeam {
+        ships: team
+            .ships
+            .map(|ship| TypedShip::from_u8(ship as u8).unwrap_or(TypedShip::MeleeNone)),
+        name: team.name.map(|byte| byte as u8),
+    };
+    TeamRecord::from(&typed).to_bytes()
 }
-fn decode(team: &mut MeleeTeam, bytes: &[u8; 69]) {
-    let mut ships = [0; 14];
-    unsafe {
-        assert_eq!(
-            rust_supermelee_team_deserialize(
-                bytes.as_ptr(),
-                bytes.len(),
-                ships.as_mut_ptr(),
-                team.name.as_mut_ptr().cast()
-            ),
-            0
-        );
-    }
-    team.ships = ships.map(u32::from);
-    team.name[30] = 0;
+fn decode(team: &mut MeleeTeam, bytes: &[u8; TeamRecord::SERIALIZED_LEN]) {
+    let typed = TypedTeam::from(TeamRecord::from_bytes(bytes));
+    team.ships = typed.ships.map(|ship| ship as MeleeShip);
+    team.name = typed.name.map(|byte| byte as c_char);
 }
 
 /// # Safety
@@ -86,7 +68,7 @@ pub unsafe extern "C" fn MeleeTeam_deserialize(
     team: *mut MeleeTeam,
     stream: *mut crate::io::uio_bridge::uio_Stream,
 ) -> i32 {
-    let mut bytes = [0; 69];
+    let mut bytes = [0; TeamRecord::SERIALIZED_LEN];
     if uio_fread(bytes.as_mut_ptr().cast(), bytes.len(), 1, stream) != 1 {
         MeleeTeam_delete(team);
         return -1;
@@ -98,8 +80,11 @@ pub unsafe extern "C" fn MeleeTeam_deserialize(
 /// Pointers must be valid for the indicated records or streams on the game thread.
 #[no_mangle]
 pub unsafe extern "C" fn MeleeTeam_getValue(team: *const MeleeTeam) -> u16 {
-    let ships = (*team).ships.map(|ship| ship as u8);
-    rust_supermelee_fleet_value(ships.as_ptr())
+    (*team)
+        .ships
+        .iter()
+        .map(|&ship| TypedShip::from_u8(ship as u8).map(ship_cost).unwrap_or(0))
+        .sum()
 }
 /// # Safety
 /// Pointers must be valid for the indicated records or streams on the game thread.
@@ -374,10 +359,13 @@ mod tests {
             assert!(!output.is_null());
             assert_eq!(MeleeTeam_serialize(team, output), 0);
             uio_fclose(output);
-            assert_eq!(
-                std::fs::read(scratch.path().join("fleet.mle")).unwrap(),
-                encode(&*team)
-            );
+            let written = std::fs::read(scratch.path().join("fleet.mle")).unwrap();
+            assert_eq!(written, encode(&*team));
+            let mut legacy = [0; 69];
+            legacy[..14].fill(255);
+            legacy[0] = 3;
+            legacy[14..24].copy_from_slice(b"Test fleet");
+            assert_eq!(written, legacy);
             let input = uio_fopen(dir, c"fleet.mle".as_ptr(), c"rb".as_ptr());
             let loaded = MeleeTeam_new();
             assert_eq!(MeleeTeam_deserialize(loaded, input), 0);

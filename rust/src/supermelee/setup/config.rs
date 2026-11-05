@@ -3,20 +3,18 @@
 // @requirement persistence, startup sanitization
 
 use crate::supermelee::error::SuperMeleeError;
-use crate::supermelee::setup::persistence::{
-    deserialize_team, serialize_team, MELEE_TEAM_SERIAL_SIZE,
-};
 use crate::supermelee::setup::team::MeleeSetup;
 use crate::supermelee::types::{PlayerControl, NUM_SIDES};
 use std::io::{self, Read};
 use std::path::Path;
+use uqm_save::mle::Team as TeamRecord;
 
 // ---------------------------------------------------------------------------
 // melee.cfg format
 // ---------------------------------------------------------------------------
 
 /// On-disk size of `melee.cfg`: for each side, 1 control byte + team payload.
-const MELEE_CFG_SIZE: usize = (1 + MELEE_TEAM_SERIAL_SIZE) * NUM_SIDES;
+const MELEE_CFG_SIZE: usize = (1 + TeamRecord::SERIALIZED_LEN) * NUM_SIDES;
 
 /// Standard AI rating bit from C (`STANDARD_RATING = 1 << 4 = 16`).
 const STANDARD_RATING: u8 = 1 << 4;
@@ -80,9 +78,9 @@ pub fn load_melee_config(config_dir: &Path, setup: &mut MeleeSetup) -> ConfigLoa
         setup.player_control[side] = control;
 
         // Read team payload
-        match deserialize_team(&mut cursor) {
+        match TeamRecord::read_from(&mut cursor) {
             Ok(team) => {
-                if setup.replace_team(side, &team).is_err() {
+                if setup.replace_team(side, &team.into()).is_err() {
                     return ConfigLoadResult::Invalid(format!(
                         "failed to apply team for side {}",
                         side
@@ -116,7 +114,9 @@ pub fn save_melee_config(config_dir: &Path, setup: &MeleeSetup) -> Result<(), Su
 
     for side in 0..NUM_SIDES {
         buf.push(setup.player_control[side].bits());
-        serialize_team(&setup.teams[side], &mut buf)?;
+        TeamRecord::from(&setup.teams[side])
+            .write_to(&mut buf)
+            .map_err(|e| SuperMeleeError::PersistenceError(e.to_string()))?;
     }
 
     if let Err(e) = std::fs::write(&path, &buf) {
@@ -158,7 +158,7 @@ mod tests {
     }
 
     #[test]
-    fn valid_config_roundtrip() {
+    fn valid_config_roundtrip() -> io::Result<()> {
         let dir = tempfile::tempdir().unwrap();
         let mut setup = MeleeSetup::new();
         setup.set_ship(0, 0, MeleeShip::Chmmr).unwrap();
@@ -168,6 +168,16 @@ mod tests {
         setup.player_control[0] = PlayerControl::HUMAN_CONTROL;
         setup.player_control[1] = PlayerControl::COMPUTER_CONTROL;
         save_melee_config(dir.path(), &setup).unwrap();
+        let mut expected = [0; 140];
+        expected[0] = 1;
+        expected[1..15].fill(255);
+        expected[1] = 3;
+        expected[15..21].copy_from_slice(b"Side A");
+        expected[70] = 6;
+        expected[71..85].fill(255);
+        expected[71] = 13;
+        expected[85..91].copy_from_slice(b"Side B");
+        assert_eq!(std::fs::read(dir.path().join("melee.cfg"))?, expected);
         let mut restored = MeleeSetup::new();
         let result = load_melee_config(dir.path(), &mut restored);
         assert!(matches!(result, ConfigLoadResult::Ok));
@@ -177,6 +187,7 @@ mod tests {
         assert_eq!(restored.teams[1].name_str(), "Side B");
         assert_eq!(restored.player_control[0], PlayerControl::HUMAN_CONTROL);
         assert_eq!(restored.player_control[1], PlayerControl::COMPUTER_CONTROL);
+        Ok(())
     }
 
     #[test]
