@@ -1,7 +1,7 @@
 //! Typed access to engine owners shared with the melee menu.
 use super::*;
 use crate::engine::Kernel as KernelOwner;
-pub(super) use crate::mainloop::c_extern::ClearPlayerInputAll;
+pub(super) use crate::game_init::kernel_abi::ClearPlayerInputAll;
 use crate::supermelee::netplay as net;
 pub(super) unsafe fn connection(player: usize) -> *mut NetConnection {
     // SAFETY: the function contract requires live, game-thread-owned records

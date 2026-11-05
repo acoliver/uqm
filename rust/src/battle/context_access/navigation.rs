@@ -88,7 +88,7 @@ pub(crate) unsafe fn interplanetary(world: &mut crate::engine::World, point: POI
     // SAFETY: the caller holds exclusive game-thread navigation state and its loaded catalog.
     unsafe {
         if world.story_state(StoryKey::ARILOU_SPACE_SIDE) <= 1 {
-            world.data.game.current_activity |= START_INTERPLANETARY as u16;
+            world.set_activity(world.activity() | START_INTERPLANETARY as u16);
             world.set_story_state(StoryKey::ESCAPE_COUNTER, 0);
         } else {
             world.data.game.autopilot = POINT { x: -1, y: -1 };
@@ -100,7 +100,7 @@ pub(crate) unsafe fn interplanetary(world: &mut crate::engine::World, point: POI
             if (*star).star_pt.x == ARILOU_HOME_X as i16
                 && (*star).star_pt.y == ARILOU_HOME_Y as i16
             {
-                world.data.game.current_activity |= START_ENCOUNTER as u16;
+                world.set_activity(world.activity() | START_ENCOUNTER as u16);
             } else {
                 let Some(portal) = world.current_star else {
                     panic!("portal transition without a selected star");

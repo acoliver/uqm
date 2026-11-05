@@ -103,11 +103,12 @@ impl From<GameStateOwnerError> for RuntimeError {
 /// the clock's event queue.
 pub fn capture_runtime(
     game: &CGameState,
+    activity: u16,
     story: &Option<GameState>,
     clock: &crate::engine::clock::GameClock,
 ) -> Result<RuntimeSections, RuntimeError> {
     Ok(RuntimeSections {
-        global: global::capture_global_state(game),
+        global: global::capture_global_state(game, activity),
         game_state: *story
             .as_ref()
             .ok_or(GameStateOwnerError::NotInitialized)?

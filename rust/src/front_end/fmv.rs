@@ -75,25 +75,26 @@ pub(crate) mod runtime {
     pub unsafe fn splash_screen(
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
-        process: Option<unsafe extern "C" fn(DWORD)>,
+        process: Option<unsafe fn(&mut Cx<'_>, DWORD)>,
     ) {
-        cx.with_legacy(|| {
+        let screen_context = cx.kernel.screen_context;
+        let timeout = cx.with_legacy(|| {
             SleepThreadUntil(FadeScreen(
                 ScreenFadeType_FadeAllToBlack,
                 (ONE_SECOND / 120) as SIZE,
             ));
-            SetContext(crate::engine::Kernel::current().read(|owner| owner.screen_context));
+            SetContext(screen_context);
             let mut stamp = STAMP {
                 origin: POINT { x: 0, y: 0 },
                 frame: CaptureDrawable(LoadGraphicInstance(TITLE_ANIM.as_ptr().cast()).cast()),
             };
             DrawStamp(&mut stamp);
             DestroyDrawable(ReleaseDrawable(stamp.frame));
-            let timeout = FadeScreen(ScreenFadeType_FadeAllToColor, (ONE_SECOND / 2) as SIZE);
-            if let Some(callback) = process {
-                callback(timeout);
-            }
+            FadeScreen(ScreenFadeType_FadeAllToColor, (ONE_SECOND / 2) as SIZE)
         });
+        if let Some(callback) = process {
+            callback(cx, timeout);
+        }
         if cx.world.activity() & CHECK_ABORT as u16 != 0 {
             return;
         }

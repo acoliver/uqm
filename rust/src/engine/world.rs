@@ -1,6 +1,7 @@
 //! Campaign state owned by one game-thread lifecycle.
 
 use crate::engine::battle::schema::GAME_STATE;
+pub mod activity;
 pub mod fleet;
 pub mod new_game;
 pub mod planet_info;
@@ -46,7 +47,9 @@ pub struct World {
     pub(crate) last_encounter_group: u8,
     #[cfg(not(test))]
     pub(crate) hyper_distance: FuelDistance,
+    activity: activity::ActivityState,
     pub data: WorldData,
+    pub next_activity: u16,
     pub queues: CampaignQueues,
     pub clock: super::clock::GameClock,
     pub story: Option<GameState>,
@@ -57,7 +60,9 @@ pub struct World {
 impl World {
     pub fn new() -> Self {
         Self {
+            activity: activity::ActivityState::new(0),
             data: WorldData::new(),
+            next_activity: 0,
             #[cfg(not(test))]
             last_encounter_group: 0,
             queues: CampaignQueues::new(),
@@ -107,10 +112,14 @@ impl World {
     }
 
     pub fn activity(&self) -> u16 {
-        self.data.game.current_activity
+        self.activity.activity()
     }
     pub fn set_activity(&mut self, activity: u16) {
-        self.data.game.current_activity = activity;
+        self.activity.set_activity(activity);
+    }
+
+    pub fn activity_control(&self) -> activity::ActivityControl {
+        self.activity.control()
     }
 
     pub fn story_value(&self, key: StoryKey) -> Option<u8> {

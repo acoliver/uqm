@@ -351,6 +351,7 @@ struct CoordInner {
 /// The automation coordinator, holding all live state needed to drive
 /// the scheduler/watchdog during the game loop.
 pub struct AutomationObserver {
+    pub(crate) activity: crate::engine::world::activity::ActivityControl,
     /// Validated seed returned at each automation-owned RNG initialization.
     seed: u32,
     /// The validated script actions.
@@ -385,19 +386,24 @@ impl AutomationObserver {
     ///
     /// This is called from `main.rs` after `setup_automation` succeeds.
     /// It activates the runtime model and writes the run_start trace.
-    pub fn new(script: ValidatedScript, output_root: PathBuf) -> Arc<Self> {
+    pub fn new(
+        script: ValidatedScript,
+        output_root: PathBuf,
+        activity: crate::engine::world::activity::ActivityControl,
+    ) -> Arc<Self> {
         #[cfg(feature = "debug-process")]
         let native_limit = super::native_window::active_native_window_config()
             .map(|config| config.runtime_contract.inventory_limits.member_bytes);
         #[cfg(not(feature = "debug-process"))]
         let native_limit = None;
-        Self::init_with_native_checkpoints(script, output_root, native_limit)
+        Self::init_with_native_checkpoints(script, output_root, native_limit, activity)
     }
 
     fn init_with_native_checkpoints(
         script: ValidatedScript,
         output_root: PathBuf,
         native_limit: Option<u64>,
+        activity: crate::engine::world::activity::ActivityControl,
     ) -> Arc<Self> {
         let native_trace = native_limit
             .map(|limit| {
@@ -439,6 +445,7 @@ impl AutomationObserver {
         let parity_failed = Self::trace_initialization_failed(&parity, "parity");
         let native_trace_failed = Self::trace_initialization_failed(&native_trace, "native");
         let coord = AutomationObserver {
+            activity,
             seed: script.seed(),
             actions,
             native_checkpoint_plan,
@@ -3423,8 +3430,13 @@ mod tests {
         )
         .unwrap();
         let directory = tempfile::tempdir().unwrap();
-        let observer = AutomationObserver::new(script, directory.path().into());
-        let application = crate::app::Application::new(Some(observer.clone()));
+        let game = crate::engine::Game::new();
+        let observer = AutomationObserver::new(
+            script,
+            directory.path().into(),
+            game.world.activity_control(),
+        );
+        let application = crate::app::Application::new(game, Some(observer.clone()));
         assert!(Arc::ptr_eq(application.observer().unwrap(), &observer));
         use crate::engine::observe::Observer;
         let mut handle =
@@ -3445,7 +3457,11 @@ mod tests {
         )
         .unwrap();
         let output = tempfile::tempdir().unwrap();
-        let observer = crate::automation::AutomationObserver::new(script, output.path().into());
+        let observer = crate::automation::AutomationObserver::new(
+            script,
+            output.path().into(),
+            crate::engine::World::new().activity_control(),
+        );
         let before = observer.runtime.commit.next_sequence();
         let mut game = crate::engine::Game::new();
         let mut battle = crate::engine::battle::Battle::new();
@@ -3618,10 +3634,15 @@ mod tests {
             "quit.json",
         )
         .unwrap();
-        let _app = crate::app::Application::new(Some(AutomationObserver::new(
-            script,
-            temp.path().to_path_buf(),
-        )));
+        let _app = {
+            let game = crate::engine::Game::new();
+            let observer = Some(AutomationObserver::new(
+                script,
+                temp.path().to_path_buf(),
+                game.world.activity_control(),
+            ));
+            crate::app::Application::new(game, observer)
+        };
         if case != "declared_not_reported" {
             _app.observer().unwrap().observe_quit_selected();
         }
@@ -3676,8 +3697,15 @@ mod tests {
             "test.json",
         )
         .unwrap();
-        let _app =
-            crate::app::Application::new(Some(AutomationObserver::new(script, temp.path().into())));
+        let _app = {
+            let game = crate::engine::Game::new();
+            let observer = Some(AutomationObserver::new(
+                script,
+                temp.path().into(),
+                game.world.activity_control(),
+            ));
+            crate::app::Application::new(game, observer)
+        };
         let coord = _app.observer().cloned().unwrap();
         // AutoScan has already selected, and its synchronous callback owns
         // three scans of 84 lines. Dispatch cannot accept input yet.
@@ -3730,12 +3758,16 @@ mod tests {
         .unwrap();
         let plan =
             super::super::native_checkpoint::NativeCheckpointPlan::derive(source, &script).unwrap();
-        let _app =
-            crate::app::Application::new(Some(AutomationObserver::init_with_native_checkpoints(
+        let _app = {
+            let game = crate::engine::Game::new();
+            let observer = Some(AutomationObserver::init_with_native_checkpoints(
                 script,
                 temp.path().into(),
                 Some(65536),
-            )));
+                game.world.activity_control(),
+            ));
+            crate::app::Application::new(game, observer)
+        };
         let coord = _app.observer().cloned().unwrap();
         let frame = |count, generation| PresentedFrame {
             count,
@@ -3813,12 +3845,16 @@ mod tests {
         .unwrap();
         let plan =
             super::super::native_checkpoint::NativeCheckpointPlan::derive(source, &script).unwrap();
-        let _app =
-            crate::app::Application::new(Some(AutomationObserver::init_with_native_checkpoints(
+        let _app = {
+            let game = crate::engine::Game::new();
+            let observer = Some(AutomationObserver::init_with_native_checkpoints(
                 script,
                 temp.path().into(),
                 Some(65536),
-            )));
+                game.world.activity_control(),
+            ));
+            crate::app::Application::new(game, observer)
+        };
         let coord = _app.observer().cloned().unwrap();
         assert!(!_app.observer().unwrap().process_main_menu_ready());
         assert!(!_app.observer().unwrap().process_main_menu_ready());
@@ -3871,12 +3907,16 @@ mod tests {
             "test.json",
         )
         .unwrap();
-        let _app =
-            crate::app::Application::new(Some(AutomationObserver::init_with_native_checkpoints(
+        let _app = {
+            let game = crate::engine::Game::new();
+            let observer = Some(AutomationObserver::init_with_native_checkpoints(
                 script,
                 temp.path().into(),
                 Some(65536),
-            )));
+                game.world.activity_control(),
+            ));
+            crate::app::Application::new(game, observer)
+        };
         let coord = _app.observer().cloned().unwrap();
         let frame = |count, generation| PresentedFrame {
             count,
@@ -3955,12 +3995,16 @@ mod tests {
             "test.json",
         )
         .unwrap();
-        let _app =
-            crate::app::Application::new(Some(AutomationObserver::init_with_native_checkpoints(
+        let _app = {
+            let game = crate::engine::Game::new();
+            let observer = Some(AutomationObserver::init_with_native_checkpoints(
                 script,
                 temp.path().into(),
                 Some(65536),
-            )));
+                game.world.activity_control(),
+            ));
+            crate::app::Application::new(game, observer)
+        };
         let coord = _app.observer().cloned().unwrap();
         let frame = PresentedFrame {
             count: 1,
@@ -4017,12 +4061,16 @@ mod tests {
         .unwrap();
         let plan =
             super::super::native_checkpoint::NativeCheckpointPlan::derive(source, &script).unwrap();
-        let _app =
-            crate::app::Application::new(Some(AutomationObserver::init_with_native_checkpoints(
+        let _app = {
+            let game = crate::engine::Game::new();
+            let observer = Some(AutomationObserver::init_with_native_checkpoints(
                 script,
                 temp.path().into(),
                 Some(65536),
-            )));
+                game.world.activity_control(),
+            ));
+            crate::app::Application::new(game, observer)
+        };
         let coord = _app.observer().cloned().unwrap();
         assert!(!_app.observer().unwrap().process_main_menu_ready());
         for _ in 0..3 {
@@ -4129,10 +4177,15 @@ mod tests {
                 .seed;
             assert_eq!(seed.unwrap_or(999), 999);
         }
-        let _app = crate::app::Application::new(Some(AutomationObserver::new(
-            script,
-            temp.path().to_path_buf(),
-        )));
+        let _app = {
+            let game = crate::engine::Game::new();
+            let observer = Some(AutomationObserver::new(
+                script,
+                temp.path().to_path_buf(),
+                game.world.activity_control(),
+            ));
+            crate::app::Application::new(game, observer)
+        };
         let mut expected = Vec::new();
         for domain in [
             SeedDomain::SUPER_MELEE_MENU_ID,
@@ -4206,10 +4259,15 @@ mod tests {
         crate::mainloop::restart_menu::restart_ops::seed_new_campaign(0, || clock_used = true);
         assert!(clock_used, "inactive automation must keep the clock seed");
 
-        let _app = crate::app::Application::new(Some(AutomationObserver::new(
-            script,
-            temp.path().to_path_buf(),
-        )));
+        let _app = {
+            let game = crate::engine::Game::new();
+            let observer = Some(AutomationObserver::new(
+                script,
+                temp.path().to_path_buf(),
+                game.world.activity_control(),
+            ));
+            crate::app::Application::new(game, observer)
+        };
         crate::mainloop::restart_menu::restart_ops::seed_new_campaign(
             _app.observer().unwrap().seed_value(3, 0),
             || panic!("the clock seed must not run while automation supplies a seed"),
@@ -4266,10 +4324,15 @@ mod tests {
             br#"{"version":1,"name":"receipt","budgets":{"max_input_ticks":2,"max_presentations":2,"max_wallclock_seconds":1},"steps":[{"action":"finish"}]}"#,
             "receipt.json",
         ).unwrap();
-        let _app = crate::app::Application::new(Some(AutomationObserver::new(
-            crate::automation::script::validate_script(doc, "receipt.json").unwrap(),
-            temp.path().to_path_buf(),
-        )));
+        let _app = {
+            let game = crate::engine::Game::new();
+            let observer = Some(AutomationObserver::new(
+                crate::automation::script::validate_script(doc, "receipt.json").unwrap(),
+                temp.path().to_path_buf(),
+                game.world.activity_control(),
+            ));
+            crate::app::Application::new(game, observer)
+        };
         assert_eq!(
             _app.observer()
                 .cloned()
@@ -4317,7 +4380,11 @@ mod tests {
 
     #[test]
     fn application_without_automation_has_no_observer() {
-        assert!(crate::app::Application::new(None).observer().is_none());
+        assert!(
+            crate::app::Application::new(crate::engine::Game::new(), None)
+                .observer()
+                .is_none()
+        );
     }
 
     #[test]

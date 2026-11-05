@@ -31,7 +31,7 @@ fn navigate(ship: u32, left: bool, right: bool, up: bool, down: bool) -> u32 {
 #[cfg(not(test))]
 pub(super) mod live {
     use super::navigate;
-    use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
+    use crate::engine::Kernel as KernelOwner;
     use crate::front_end::fmv::DoShipSpin;
     use crate::graphics::{drawable_abi, geometry_ffi, native_abi};
     use crate::ships::native::abi::*;
@@ -141,8 +141,7 @@ pub(super) mod live {
     unsafe extern "C" fn pick(state: *mut MELEE_STATE) -> u32 {
         let time = GetTimeCounter();
         GamePaused = 0;
-        if WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
-            != 0
+        if crate::engine::World::current().read(|world| world.activity()) & CHECK_ABORT as u16 != 0
         {
             (*state).build_pick_confirmed = 0;
             return 0;

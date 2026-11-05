@@ -22,9 +22,7 @@ unsafe fn modules() {
     (**uqm_rust::engine::WorldData::current())
         .flagship
         .crew_enlisted = 9;
-    (**uqm_rust::engine::WorldData::current())
-        .game
-        .current_activity = IN_ENCOUNTER as u16;
+    uqm_rust::engine::World::current().write(|world| world.set_activity(IN_ENCOUNTER as u16));
     uqm_rust::engine::World::current()
         .write(|world| set_game_state(world, uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE, 0));
 }
@@ -152,9 +150,8 @@ fn hyperspace_fuel_brakes_and_quasispace_allows_thrust_without_fuel() {
         let _battle = Battle::new(16);
         unsafe {
             modules();
-            (**uqm_rust::engine::WorldData::current())
-                .game
-                .current_activity = IN_HYPERSPACE as u16;
+            uqm_rust::engine::World::current()
+                .write(|world| world.set_activity(IN_HYPERSPACE as u16));
             (**uqm_rust::engine::WorldData::current())
                 .flagship
                 .fuel_on_board = 0;
@@ -200,9 +197,8 @@ fn autopilot_accelerates_toward_target_and_cancels_on_manual_turn() {
         let _battle = Battle::new(16);
         unsafe {
             modules();
-            (**uqm_rust::engine::WorldData::current())
-                .game
-                .current_activity = IN_HYPERSPACE as u16;
+            uqm_rust::engine::World::current()
+                .write(|world| world.set_activity(IN_HYPERSPACE as u16));
             (**uqm_rust::engine::WorldData::current())
                 .flagship
                 .fuel_on_board = 100;

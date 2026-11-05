@@ -607,9 +607,7 @@ pub(crate) fn service_input(
         // exits the inner loop.
         #[cfg(not(test))]
         {
-            crate::mainloop::ffi::set_current_activity(crate::mainloop::types::ActivityValue(
-                crate::mainloop::ffi::get_current_activity().0 | 0x4000,
-            ));
+            observer.activity.raise_flags(0x4000);
         }
         return 1; // Terminal: stop the DoInput loop.
     }

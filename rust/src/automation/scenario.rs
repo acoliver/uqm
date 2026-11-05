@@ -340,19 +340,20 @@ pub fn enter_scene(plan: &ScenePlan, ops: &mut impl SceneEntryOps) {
 }
 
 #[cfg(not(test))]
-pub(crate) struct LinkedSceneEntry {
+pub(crate) struct LinkedSceneEntry<'a> {
+    pub(crate) world: &'a mut crate::engine::World,
+    pub(crate) kernel: &'a mut crate::engine::Kernel,
     pub(crate) screen_context: crate::graphics::native_abi::CONTEXT,
 }
 
 #[cfg(not(test))]
-impl SceneEntryOps for LinkedSceneEntry {
+impl SceneEntryOps for LinkedSceneEntry<'_> {
     fn set_last_activity(&mut self, activity: u16) {
-        crate::mainloop::ffi::set_last_activity(crate::mainloop::types::ActivityValue(activity));
+        self.kernel.last_activity = activity;
     }
 
     fn set_current_activity(&mut self, activity: u16) {
-        // SAFETY: writes the current-activity global on the main thread.
-        unsafe { crate::mainloop::c_extern::set_current_activity(activity) };
+        self.world.set_activity(activity);
     }
 
     fn clear_screen(&mut self) {

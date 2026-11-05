@@ -121,11 +121,16 @@ fn exercise_live_callers(directory: &Path) {
         "state-test.json",
     )
     .unwrap_or_else(|error| panic!("parse state test script: {error}"));
-    let _application = uqm_rust::app::Application::new(Some(AutomationObserver::new(
-        validate_script(document, "state-test.json")
-            .unwrap_or_else(|error| panic!("validate state test script: {error}")),
-        directory.into(),
-    )));
+    let _application = {
+        let game = uqm_rust::engine::Game::new();
+        let observer = Some(AutomationObserver::new(
+            validate_script(document, "state-test.json")
+                .unwrap_or_else(|error| panic!("validate state test script: {error}")),
+            directory.into(),
+            game.world.activity_control(),
+        ));
+        uqm_rust::app::Application::new(game, observer)
+    };
     let observer = _application
         .observer()
         .unwrap_or_else(|| panic!("state test application has no observer"))
@@ -475,8 +480,8 @@ fn known_collision() -> uqm_rust::engine::battle::CollisionFn {
 }
 
 unsafe fn sis_fields(observer: &AutomationObserver, directory: &Path, ship: &mut ShipRecord) {
-    uqm_rust::engine::WorldData::current().write(|world| {
-        let sis = &mut world.flagship;
+    uqm_rust::engine::World::current().write(|world| {
+        let sis = &mut world.data.flagship;
         sis.module_slots
             .fill(uqm_rust::starbase::sis_modules::EMPTY_SLOT);
         sis.module_slots[15] = GUN_WEAPON as u8;
@@ -486,7 +491,7 @@ unsafe fn sis_fields(observer: &AutomationObserver, directory: &Path, ship: &mut
             .fill(uqm_rust::starbase::sis_modules::EMPTY_SLOT);
         sis.jet_slots
             .fill(uqm_rust::starbase::sis_modules::EMPTY_SLOT);
-        world.game.current_activity = SUPER_MELEE as u16;
+        world.set_activity(SUPER_MELEE as u16);
     });
     ship.SpeciesID = SPECIES_ID_SIS_SHIP_ID;
     // SAFETY: the caller runs native initialization on the sole game thread.

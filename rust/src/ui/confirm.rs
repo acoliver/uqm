@@ -1,7 +1,7 @@
 #![cfg(not(test))]
 
 use super::palette::*;
-use crate::engine::{Kernel, WorldData};
+use crate::engine::Kernel;
 use crate::navigation::abi::*;
 
 use crate::ui::util::live::SaveContextFrame;
@@ -93,7 +93,7 @@ pub unsafe extern "C" fn DoConfirmExit() -> BOOLEAN {
         ExitRequested = 0;
         GamePaused = 0;
         UpdateInputState();
-        if WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16 != 0
+        if crate::engine::World::current().read(|world| world.activity()) & CHECK_ABORT as u16 != 0
         {
             done = true;
             response = 1;
@@ -116,9 +116,10 @@ pub unsafe extern "C" fn DoConfirmExit() -> BOOLEAN {
     DestroyDrawable(ReleaseDrawable(saved.frame));
     ClearSystemRect();
     let result = if response != 0
-        || WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16 != 0
+        || crate::engine::World::current().read(|world| world.activity()) & CHECK_ABORT as u16 != 0
     {
-        (**WorldData::current()).game.current_activity |= CHECK_ABORT as u16;
+        crate::engine::World::current()
+            .write(|world| world.set_activity(world.activity() | CHECK_ABORT as u16));
         1
     } else {
         0
@@ -144,7 +145,7 @@ unsafe extern "C" fn do_popup(_state: *mut PopupState) -> BOOLEAN {
     u32::from(
         PulsedInputState.menu[KEY_MENU_SELECT as usize] == 0
             && PulsedInputState.menu[KEY_MENU_CANCEL as usize] == 0
-            && WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
+            && crate::engine::World::current().read(|world| world.activity()) & CHECK_ABORT as u16
                 == 0,
     )
 }

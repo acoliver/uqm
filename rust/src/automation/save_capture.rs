@@ -41,7 +41,7 @@ impl Request {
 #[cfg(not(test))]
 impl Request {
     /// The caller is the post-game-initialization hook on the game thread.
-    pub fn load(&mut self) -> anyhow::Result<()> {
+    pub fn load(&mut self, cx: &mut crate::engine::battle::Cx<'_>) -> anyhow::Result<()> {
         anyhow::ensure!(self.loaded_activity.is_none(), "save capture loaded twice");
         anyhow::ensure!(
             self.source.is_file(),
@@ -50,21 +50,21 @@ impl Request {
         );
         // SAFETY: InitGameStructures and InitGameClock completed; the runner staged
         // the source in slot zero of this subprocess's isolated save directory.
-        let loaded = unsafe { crate::savegame::live::load::LoadGame(0, std::ptr::null_mut()) };
+        let loaded = cx.with_legacy(|| unsafe {
+            crate::savegame::live::load::LoadGame(0, std::ptr::null_mut())
+        });
         anyhow::ensure!(loaded != 0, "LoadGame failed for {}", self.source.display());
-        let activity = crate::mainloop::ffi::get_next_activity().0;
+        let activity = cx.world.next_activity;
         self.loaded_activity = Some(activity);
         self.loaded_tick = crate::time::source::now_ms();
         // Preserve NextActivity for the production main-loop load resolution.
-        let load = crate::mainloop::types::ActivityValue(0x1000);
-        crate::mainloop::ffi::set_current_activity(load);
-        crate::mainloop::ffi::set_last_activity(load);
+        cx.world.set_activity(0x1000);
+        cx.kernel.last_activity = 0x1000;
         Ok(())
     }
 
     /// Capture at the first non-button mode admission, before consuming input.
-    pub fn capture(&mut self, input_admission: u64) -> anyhow::Result<()> {
-        let activity = crate::mainloop::ffi::get_current_activity().0;
+    pub fn capture(&mut self, input_admission: u64, activity: u16) -> anyhow::Result<()> {
         anyhow::ensure!(
             self.admits_capture(activity, false),
             "invalid save capture boundary"

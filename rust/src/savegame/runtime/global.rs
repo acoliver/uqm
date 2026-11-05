@@ -44,7 +44,7 @@ fn live_extent(saved: Extent) -> LiveExtent {
 /// clock meanwhile. This takes no lock; the C clock mutex is not reachable
 /// from Rust, and reading the record in one call is what keeps the date and
 /// tick count consistent with each other.
-pub fn capture_global_state(game: &CGameState) -> GlobalState {
+pub fn capture_global_state(game: &CGameState, activity: u16) -> GlobalState {
     let clock = &game.game_clock;
     GlobalState {
         glob_flags: game.glob_flags,
@@ -52,7 +52,7 @@ pub fn capture_global_state(game: &CGameState) -> GlobalState {
         fuel_cost: game.fuel_cost,
         module_cost: game.module_cost,
         element_worth: game.element_worth,
-        current_activity: game.current_activity,
+        current_activity: activity,
         clock: ClockState {
             day_index: clock.day_index,
             month_index: clock.month_index,

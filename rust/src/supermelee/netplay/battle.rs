@@ -35,11 +35,16 @@ impl BattleNet for SessionCore {
     fn input_delay(&self) -> usize {
         self.get_battle_input_delay()
     }
-    fn local_input(&self, side: usize, input: u8) -> u8 {
+    fn local_input(
+        &self,
+        side: usize,
+        input: u8,
+        activity: &crate::engine::world::activity::ActivityControl,
+    ) -> u8 {
         // Replay peers retain AI evaluation (and its RNG draws), but received
         // input remains authoritative for the remote player.
         if self.replay_remote_player == Some(side) {
-            return self.remote_input(side);
+            return self.remote_input(side, activity);
         }
         // SAFETY: SessionCore owns the live connections and buffers on the game thread.
         unsafe {
@@ -50,9 +55,13 @@ impl BattleNet for SessionCore {
         self.pop_input(side)
             .unwrap_or_else(|| panic!("local input buffer empty after push"))
     }
-    fn remote_input(&self, side: usize) -> u8 {
+    fn remote_input(
+        &self,
+        side: usize,
+        activity: &crate::engine::world::activity::ActivityControl,
+    ) -> u8 {
         // SAFETY: SessionCore owns the live connections and buffers on the game thread.
-        unsafe { self.network_battle_input(side) }
+        unsafe { self.network_battle_input(side, activity) }
     }
     fn set_frame(&self, frame: u32) {
         self.frame_count.set(frame);

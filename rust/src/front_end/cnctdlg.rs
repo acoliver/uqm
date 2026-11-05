@@ -1,7 +1,7 @@
 //! Netplay connection dialog, ported from uqm/cnctdlg.c.
 #![cfg(not(test))]
 
-use crate::engine::{Kernel, WorldData};
+use crate::engine::Kernel;
 use crate::navigation::abi::*;
 
 use std::{
@@ -448,7 +448,7 @@ unsafe extern "C" fn do_melee_connect_dialog(state: *mut ConnectDialogState) -> 
     SleepThreadUntil((*state).next_time.wrapping_add(MENU_FRAME_RATE));
     (*state).next_time = GetTimeCounter();
     BOOLEAN::from(
-        WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as ACTIVITY
+        crate::engine::World::current().read(|world| world.activity()) & CHECK_ABORT as ACTIVITY
             == 0
             && DONE == 0,
     )

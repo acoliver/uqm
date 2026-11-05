@@ -16,7 +16,7 @@ pub fn check(h: &mut Harness) {
     let story =
         keys.map(|key| uqm_rust::engine::World::current().read(|world| (world).story_state(key)));
     let word = LiveStory.word("URQUAN_PROBE_GRPOFFS0");
-    let activity = uqm_rust::mainloop::ffi::get_current_activity();
+    let activity = uqm_rust::engine::World::current().read(|world| world.activity());
     unsafe {
         let saved = uqm_rust::engine::World::current().write(|world| {
             let saved = (
@@ -188,9 +188,7 @@ pub fn check(h: &mut Harness) {
         let starbase = &raw mut (*system).MoonDesc[0];
         (*starbase).pPrevDesc = parent;
         for activity in [0, CHECK_ABORT, CHECK_LOAD, CHECK_ABORT | CHECK_LOAD] {
-            uqm_rust::mainloop::ffi::set_current_activity(
-                uqm_rust::mainloop::types::ActivityValue(activity),
-            );
+            uqm_rust::engine::World::current().write(|world| world.set_activity(activity));
             c_api::set_encounter_group(17);
             uqm_rust::engine::World::current().write(|world| {
                 (world).set_story_state(uqm_rust::engine::StoryKey::GLOBAL_FLAGS_AND_DATA, 0)
@@ -201,7 +199,7 @@ pub fn check(h: &mut Harness) {
                 cx, system, starbase
             )));
             assert_eq!(
-                uqm_rust::mainloop::ffi::get_current_activity().0,
+                uqm_rust::engine::World::current().read(|world| world.activity()),
                 activity | START_ENCOUNTER
             );
             assert_eq!(
@@ -239,6 +237,6 @@ pub fn check(h: &mut Harness) {
         uqm_rust::engine::World::current().write(|world| (world).set_story_state(key, value));
     }
     LiveStory.set_word("URQUAN_PROBE_GRPOFFS0", word);
-    uqm_rust::mainloop::ffi::set_current_activity(activity);
+    uqm_rust::engine::World::current().write(|world| world.set_activity(activity));
     println!("Sol NPC ABI: real probe file creation/reload/persistence, queue init/uninit/reinit, starbase save/reset, abort/load bits retained");
 }

@@ -1,14 +1,8 @@
 //! Main-thread lifecycle callbacks, ported from starcon.c (GPL-2.0-or-later).
 
-use crate::engine::Kernel;
 use crate::engine::StoryKey;
-use crate::engine::World;
-use crate::engine::WorldData;
 use crate::ships::native::abi::*;
 use std::ptr;
-
-#[no_mangle]
-pub static mut MainExited: i32 = 0;
 
 fn on_battle_frame(
     cx: &mut crate::engine::battle::Cx<'_>,
@@ -41,32 +35,24 @@ fn on_battle_frame(
     });
 }
 
-unsafe extern "C" fn background_init_kernel(timeout: u32) {
+unsafe fn background_init_kernel(cx: &mut crate::engine::battle::Cx<'_>, timeout: u32) {
     for species in SPECIES_ID_ARILOU_ID..=SPECIES_ID_LAST_MELEE_ID {
-        crate::threading::legacy_abi::TaskSwitch();
-        // SAFETY: the splash callback enters the published game owner between task switches.
-        unsafe {
-            crate::app::bridge::enter(|cx| {
-                crate::ships::master_native::engine::load_entry(cx.world, cx.kernel, species)
-            });
-        }
+        cx.with_legacy(|| crate::threading::legacy_abi::TaskSwitch());
+        crate::ships::master_native::engine::load_entry(cx.world, cx.kernel, species);
     }
-    crate::threading::legacy_abi::TaskSwitch();
-    Kernel::current().write(|kernel| {
-        crate::game_init::kernel_abi::InitGameKernel(
-            kernel,
-            World::current().read(|world| world.activity()),
-        )
-    });
+    cx.with_legacy(|| crate::threading::legacy_abi::TaskSwitch());
+    crate::game_init::kernel_abi::InitGameKernel(cx.kernel, cx.world.activity());
     while crate::time::counter_abi::GetTimeCounter() <= timeout
-        && WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16 == 0
+        && cx.world.activity() & CHECK_ABORT as u16 == 0
     {
-        super::input_abi::UpdateInputState();
-        if crate::time::source::is_replay() {
-            crate::threading::pacing::linked::sleep_thread_until(timeout.saturating_add(1));
-        } else {
-            crate::threading::legacy_abi::TaskSwitch();
-        }
+        cx.with_legacy(|| super::input_abi::UpdateInputState());
+        cx.with_legacy(|| {
+            if crate::time::source::is_replay() {
+                crate::threading::pacing::linked::sleep_thread_until(timeout.saturating_add(1));
+            } else {
+                crate::threading::legacy_abi::TaskSwitch();
+            }
+        });
     }
 }
 
@@ -76,12 +62,7 @@ pub unsafe fn uqm_splash_with_bg_init_kernel(
     cx: &mut crate::engine::battle::Cx<'_>,
     io: &mut crate::engine::observe::Io<'_>,
 ) {
-    extern "C" fn initialize(timeout: u32) {
-        unsafe {
-            background_init_kernel(timeout);
-        }
-    }
-    crate::front_end::fmv::runtime::splash_screen(cx, io, Some(initialize));
+    crate::front_end::fmv::runtime::splash_screen(cx, io, Some(background_init_kernel));
 }
 
 /// # Safety
@@ -91,14 +72,6 @@ pub unsafe fn battle_with_frame_callback(
     io: &mut crate::engine::observe::Io<'_>,
 ) {
     crate::battle::battle_native::battle(cx, io, Some(on_battle_frame));
-}
-
-/// # Safety
-/// Called on the game thread while live state and input are initialized.
-pub unsafe extern "C" fn signal_stop_main_thread() {
-    ptr::addr_of_mut!(GamePaused).write_volatile(0);
-    (**WorldData::current()).game.current_activity |= CHECK_ABORT as u16;
-    crate::threading::legacy_abi::TaskSwitch();
 }
 
 /// # Safety

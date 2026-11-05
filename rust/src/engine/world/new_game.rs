@@ -37,6 +37,7 @@ impl World {
     pub fn reset_game_data(&mut self) {
         let flags = self.data.game.glob_flags;
         self.data = WorldData::new();
+        self.set_activity(0);
         self.data.game.glob_flags = flags;
         self.story = Some(GameState::new());
         self.files.canned_nodes.clear();

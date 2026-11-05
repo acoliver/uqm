@@ -37,8 +37,15 @@ fn waiting_for_the_conversation_to_end_skips_the_closing_speech() {
         let output_root =
             PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("closing-speech-decision");
         std::fs::create_dir_all(&output_root).expect("evidence root");
-        let _application =
-            uqm_rust::app::Application::new(Some(AutomationObserver::new(script, output_root)));
+        let _application = {
+            let game = uqm_rust::engine::Game::new();
+            let observer = Some(AutomationObserver::new(
+                script,
+                output_root,
+                game.world.activity_control(),
+            ));
+            uqm_rust::app::Application::new(game, observer)
+        };
 
         assert!(
             _application.observer().is_some(),

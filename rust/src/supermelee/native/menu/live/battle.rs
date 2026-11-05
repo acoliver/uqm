@@ -1,6 +1,6 @@
 //! Battle launch and network confirmation.
 use super::*;
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
+use crate::engine::Kernel as KernelOwner;
 pub(super) unsafe fn ready() -> isize {
     // SAFETY: the function contract requires live, game-thread-owned records
     // and callback arguments for all legacy accesses in this operation.
@@ -84,7 +84,7 @@ pub(super) unsafe extern "C" fn confirm(state: *mut MELEE_STATE) -> u32 {
     (*state).input_func = Some(DoMelee);
     start(state);
     u32::from(
-        WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16 == 0,
+        crate::engine::World::current().read(|world| world.activity()) & CHECK_ABORT as u16 == 0,
     )
 }
 pub(super) unsafe fn start(state: *mut MELEE_STATE) {
@@ -122,15 +122,14 @@ pub(super) unsafe fn start(state: *mut MELEE_STATE) {
         (*battle).net = None;
         KernelOwner::current().write(free_gravity_well);
         KernelOwner::current().write(ClearPlayerInputAll);
-        if WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
-            != 0
+        if crate::engine::World::current().read(|world| world.activity()) & CHECK_ABORT as u16 != 0
         {
             return;
         }
         SleepThreadUntil(FadeScreen(FADE_ALL_TO_BLACK, 840 / 2).wrapping_add(840 / 60));
         FlushColorXForms();
     }
-    WorldFields::current().write(|owner| owner.game.current_activity = SUPER_MELEE as u16);
+    crate::engine::World::current().write(|world| world.set_activity(SUPER_MELEE as u16));
     (*state).initialized = 0;
 }
 pub(super) unsafe fn start_button(state: *mut MELEE_STATE) {
@@ -190,8 +189,7 @@ pub(super) unsafe extern "C" fn connecting(state: *mut MELEE_STATE) -> u32 {
         let time = GetTimeCounter();
         let side = usize::from((*state).melee_option == 0);
         GamePaused = 0;
-        if WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
-            != 0
+        if crate::engine::World::current().read(|world| world.activity()) & CHECK_ABORT as u16 != 0
         {
             return 0;
         }

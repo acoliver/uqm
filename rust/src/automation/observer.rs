@@ -58,7 +58,9 @@ impl Observer<Option<super::campaign_state::CampaignView>> for Handle {
             CheckpointView::BattleReset => {}
             CheckpointView::BattleAdvanced => {
                 self.0
-                    .native_battle_frame_completed(crate::mainloop::ffi::get_current_activity());
+                    .native_battle_frame_completed(crate::mainloop::types::ActivityValue(
+                        self.0.activity.activity(),
+                    ));
                 self.0.parity_checkpoint("battle");
             }
             CheckpointView::InputSampled(activity) => self.0.parity_input(activity),

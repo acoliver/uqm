@@ -1,8 +1,8 @@
 //! Unchanged ABI storage declarations used at the Stage B boundary.
 #![allow(non_snake_case, non_camel_case_types)]
 use super::super::record::VELOCITY_DESC;
+use crate::graphics::native_abi::DWORD as TimeCount;
 use crate::graphics::native_abi::*;
-use crate::graphics::native_abi::{DWORD as TimeCount, UWORD as ACTIVITY};
 
 pub type GETMELEE_STATE = getmelee_struct;
 
@@ -49,7 +49,6 @@ pub struct GAME_STATE {
     pub module_cost: [BYTE; 20usize],
     pub element_worth: [BYTE; 8usize],
     pub _display_array: *mut PRIMITIVE,
-    pub current_activity: ACTIVITY,
     pub game_clock: CLOCK_STATE,
     pub autopilot: POINT,
     pub ip_location: POINT,

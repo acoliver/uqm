@@ -1,6 +1,5 @@
 //! Local and remote team-change protocol.
 use super::*;
-use crate::engine::WorldData as WorldFields;
 pub(super) unsafe fn view_name(state: *mut MELEE_STATE, side: u16) {
     if (*state).melee_started == 0 {
         name(state, side, 4, ptr::null());
@@ -298,5 +297,6 @@ pub unsafe extern "C" fn resetFeedback(conn: *mut NetConnection, reason: u32, re
             false,
         );
     }
-    (**WorldFields::current()).game.current_activity |= CHECK_ABORT as u16;
+    crate::engine::World::current()
+        .write(|world| world.set_activity(world.activity() | CHECK_ABORT as u16));
 }

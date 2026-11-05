@@ -232,7 +232,7 @@ pub unsafe extern "C" fn DrawSISMessageEx(
     let mut buf = [0u8; 256];
     let mut text = p_str;
     if text.is_null() {
-        let activity = WorldData::current().read(|owner| owner.game.current_activity) as BYTE;
+        let activity = crate::engine::World::current().read(|world| world.activity()) as BYTE;
         text = match u32::from(activity) {
             IN_LAST_BATTLE | IN_INTERPLANETARY => {
                 let star = World::current().read(|world| world.star_pointer(current_catalog()));
@@ -992,7 +992,7 @@ pub unsafe extern "C" fn DrawAutoPilotMessage(reset: BOOLEAN) {
             DrawSISMessage(ptr::null());
             PILOT_CYCLE_INDEX = 0;
         } else if GetTimeCounter() >= NEXT_PILOT_TIME {
-            if WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
+            if crate::engine::World::current().read(|world| world.activity()) & CHECK_ABORT as u16
                 == 0
                 && sis().read(|owner| owner.crew_enlisted) != COUNT::MAX
             {

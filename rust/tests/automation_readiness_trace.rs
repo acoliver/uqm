@@ -34,10 +34,15 @@ fn application_started(output_root: &Path) -> uqm_rust::app::Application {
     let document = parse_script(SCRIPT.as_bytes(), "readiness-trace.json")
         .expect("the script fixture must parse");
     let script = validate_script(document, "readiness-trace.json").expect("and must validate");
-    uqm_rust::app::Application::new(Some(AutomationObserver::new(
-        script,
-        output_root.to_path_buf(),
-    )))
+    {
+        let game = uqm_rust::engine::Game::new();
+        let observer = Some(AutomationObserver::new(
+            script,
+            output_root.to_path_buf(),
+            game.world.activity_control(),
+        ));
+        uqm_rust::app::Application::new(game, observer)
+    }
 }
 
 #[test]

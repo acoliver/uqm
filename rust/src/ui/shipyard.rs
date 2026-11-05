@@ -708,7 +708,7 @@ unsafe fn dms_navigate_ship_slots(
 }
 
 unsafe extern "C" fn do_modify_ships(menu: *mut MENU_STATE) -> BOOLEAN {
-    if WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16 != 0 {
+    if crate::engine::World::current().read(|world| world.activity()) & CHECK_ABORT as u16 != 0 {
         (*menu).InputFunc = Some(DoShipyard);
         return 1;
     }
@@ -860,7 +860,7 @@ unsafe fn exit_shipyard(menu: *mut MENU_STATE) -> BOOLEAN {
 /// callbacks and this function must run exclusively on that same thread.
 #[no_mangle]
 pub unsafe extern "C" fn DoShipyard(menu: *mut MENU_STATE) -> BOOLEAN {
-    if WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16 != 0 {
+    if crate::engine::World::current().read(|world| world.activity()) & CHECK_ABORT as u16 != 0 {
         return exit_shipyard(menu);
     }
     let select = PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0;

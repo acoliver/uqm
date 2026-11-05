@@ -69,7 +69,7 @@ pub unsafe fn cursor() -> Option<(i16, i16)> {
 pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> u32 {
     use crate::c_bindings::controller_input::PulsedInputState;
     let time_in = crate::time::counter_abi::GetTimeCounter();
-    let activity = WorldData::current().read(|owner| owner.game.current_activity);
+    let activity = World::current().read(|world| world.activity());
     let hyper = activity & 0xff == 3;
     let last = std::ptr::addr_of_mut!(LAST_BUF).cast::<u8>();
     if (*menu).Initialized == 0 {
@@ -109,7 +109,7 @@ pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> u32 {
             if hyper {
                 crate::front_end::uqmdebug::do_instant_move();
             } else if activity & 0xff == 4 {
-                (**WorldData::current()).game.current_activity |= 0x0800;
+                World::current().write(|world| world.set_activity(activity | 0x0800));
                 crate::front_end::uqmdebug::DEBUG_HOOK =
                     Some(crate::front_end::uqmdebug::do_instant_move);
             }
@@ -163,7 +163,7 @@ pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> u32 {
         SleepThreadUntil(time_in.wrapping_add(14));
     }
     flashCurrentLocation(std::ptr::null());
-    let keep_going = WorldData::current().read(|owner| owner.game.current_activity) & 0x4000 == 0;
+    let keep_going = World::current().read(|world| world.activity()) & 0x4000 == 0;
     if !keep_going {
         ACTIVE = false;
     }

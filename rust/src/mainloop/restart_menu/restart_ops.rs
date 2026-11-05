@@ -226,9 +226,7 @@ impl RestartMenuOps for CffiOps<'_, '_, '_> {
         self.owned(|cx, _| cx.kernel.last_activity = v);
     }
     fn set_next_activity(&self, v: u16) {
-        self.legacy(|| {
-            crate::mainloop::ffi::set_next_activity(crate::mainloop::types::ActivityValue(v));
-        })
+        self.owned(|cx, _| cx.world.next_activity = v);
     }
 
     fn set_menu_state_ptr(&self, ptr: usize) {

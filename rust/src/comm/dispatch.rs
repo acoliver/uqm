@@ -393,8 +393,7 @@ fn lobyte(x: u16) -> u16 {
 ///
 /// # Safety
 /// Calls C FFI to read CurrentActivity from global state.
-fn in_hq_space() -> bool {
-    let activity = crate::mainloop::ffi::get_current_activity().0;
+fn in_hq_space(activity: u16) -> bool {
     lobyte(activity) == IN_HYPERSPACE
 }
 
@@ -424,18 +423,14 @@ pub unsafe fn race_communication(cx: &mut Cx<'_>, io: &mut Io<'_>) {
         if (activity & (CHECK_ABORT | CHECK_LOAD)) == 0 {
             let crew = cx.world.data.flagship.crew_enlisted;
             if crew != 0xFFFF {
-                cx.with_legacy(|| {
-                    crate::mainloop::ffi::set_current_activity(
-                        crate::mainloop::types::ActivityValue(WON_LAST_BATTLE),
-                    )
-                });
+                cx.world.set_activity(WON_LAST_BATTLE);
                 io.observer.checkpoint(&CheckpointView::Won);
             }
         }
         return;
     }
 
-    if cx.with_legacy(crate::mainloop::ffi::get_next_activity).0 & CHECK_LOAD != 0 {
+    if cx.world.next_activity & CHECK_LOAD != 0 {
         let ec = cx.world.story_state(StoryKey::ESCAPE_COUNTER) as u8;
 
         init_communication(cx, io, routing::restored_conversation(cx.world));
@@ -447,14 +442,8 @@ pub unsafe fn race_communication(cx: &mut Cx<'_>, io: &mut Io<'_>) {
             if lobyte(na) == IN_INTERPLANETARY {
                 na |= START_INTERPLANETARY;
             }
-            cx.with_legacy(|| {
-                crate::mainloop::ffi::set_next_activity(crate::mainloop::types::ActivityValue(na))
-            });
-            cx.with_legacy(|| {
-                crate::mainloop::ffi::set_current_activity(crate::mainloop::types::ActivityValue(
-                    activity | CHECK_LOAD,
-                ))
-            });
+            cx.world.next_activity = na;
+            cx.world.set_activity(activity | CHECK_LOAD);
         }
 
         cx.world
@@ -528,38 +517,37 @@ pub unsafe fn init_communication(cx: &mut Cx<'_>, io: &mut Io<'_>, which_comm: u
             return 0;
         }
     }
+    let last_activity = cx.kernel.last_activity;
+    let activity = cx.world.activity();
+    if last_activity & CHECK_LOAD != 0 {
+        cx.kernel.last_activity = last_activity & !CHECK_LOAD;
+    }
     cx.with_legacy(|| {
-        let last_activity = crate::mainloop::ffi::get_last_activity().0;
-        if last_activity & CHECK_LOAD != 0 {
-            crate::mainloop::ffi::set_last_activity(crate::mainloop::types::ActivityValue(
-                last_activity & !CHECK_LOAD,
-            ));
-            if which_comm != conv::COMMANDER {
-                if lobyte(last_activity) == 0 {
-                    ffi::draw_sisframe();
-                } else {
-                    ffi::ClearSISRect((DRAW_SIS_DISPLAY) as u8);
-                    ffi::repair_sisborder();
-                }
-                ffi::DrawSISMessage(std::ptr::null());
-                if in_hq_space() {
-                    let point = WorldData::current().read(|world| world.game.ship_stamp.origin);
-                    ffi::DrawHyperCoords(CPoint {
-                        x: point.x,
-                        y: point.y,
-                    });
-                } else if WorldData::current().read(|world| world.game.ip_planet) == 0 {
-                    let star = &*(**World::current())
-                        .star_pointer(crate::planets::starmap::current_catalog())
-                        .cast::<crate::savegame::runtime::star::CStarDesc>();
-                    ffi::DrawHyperCoords(CPoint {
-                        x: star.star_pt.x,
-                        y: star.star_pt.y,
-                    });
-                } else {
-                    let name = WorldData::current().read(|world| world.flagship.planet_name);
-                    ffi::DrawSISTitle(name.as_ptr().cast());
-                }
+        if last_activity & CHECK_LOAD != 0 && which_comm != conv::COMMANDER {
+            if lobyte(last_activity) == 0 {
+                ffi::draw_sisframe();
+            } else {
+                ffi::ClearSISRect((DRAW_SIS_DISPLAY) as u8);
+                ffi::repair_sisborder();
+            }
+            ffi::DrawSISMessage(std::ptr::null());
+            if in_hq_space(activity) {
+                let point = WorldData::current().read(|world| world.game.ship_stamp.origin);
+                ffi::DrawHyperCoords(CPoint {
+                    x: point.x,
+                    y: point.y,
+                });
+            } else if WorldData::current().read(|world| world.game.ip_planet) == 0 {
+                let star = &*(**World::current())
+                    .star_pointer(crate::planets::starmap::current_catalog())
+                    .cast::<crate::savegame::runtime::star::CStarDesc>();
+                ffi::DrawHyperCoords(CPoint {
+                    x: star.star_pt.x,
+                    y: star.star_pt.y,
+                });
+            } else {
+                let name = WorldData::current().read(|world| world.flagship.planet_name);
+                ffi::DrawSISTitle(name.as_ptr().cast());
             }
         }
     });

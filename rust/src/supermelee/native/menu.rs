@@ -4,7 +4,7 @@ mod rules;
 pub(crate) mod live {
     use crate::battle::{COMPUTER_CONTROL, HUMAN_CONTROL, NETWORK_CONTROL, PSYTRON_CONTROL};
     use crate::comm::hail::game_string;
-    use crate::engine::{Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields};
+    use crate::engine::{Kernel as KernelOwner, World as WorldOwner};
 
     use crate::game_init::macro_abi::{LoadMusic, LoadSound};
     use crate::graphics::{drawable_abi, resgfx::LoadGraphicInstance as LoadGraphic};
@@ -59,7 +59,8 @@ pub(crate) mod live {
                     PlayMenuSound(2);
                 }
             }
-            9 => (**WorldFields::current()).game.current_activity |= CHECK_ABORT as u16,
+            9 => crate::engine::World::current()
+                .write(|world| world.set_activity(world.activity() | CHECK_ABORT as u16)),
             0 | 8 => {
                 let side = u16::from((*state).melee_option == 0);
                 let confirmed = MeleeConnectDialog(&mut (*state).netplay, side as i32);
@@ -81,7 +82,7 @@ pub(crate) mod live {
     pub unsafe extern "C" fn DoMelee(state: *mut MELEE_STATE) -> u32 {
         let time = GetTimeCounter();
         GamePaused = 0;
-        let activity = WorldFields::current().read(|owner| owner.game.current_activity);
+        let activity = crate::engine::World::current().read(|world| world.activity());
         if activity & CHECK_ABORT as u16 != 0 {
             return 0;
         }
@@ -148,7 +149,7 @@ pub(crate) mod live {
             }
             if key(KEY_MENU_SELECT) || force {
                 select_option(state);
-                let activity = WorldFields::current().read(|owner| owner.game.current_activity);
+                let activity = crate::engine::World::current().read(|world| world.activity());
                 if activity & CHECK_ABORT as u16 != 0 {
                     return 0;
                 }
@@ -271,7 +272,7 @@ pub(crate) mod live {
             state.current_ship = 255;
             state.cur_index = u16::MAX;
             InitMeleeLoadState(&mut state);
-            (**WorldFields::current()).game.current_activity = SUPER_MELEE as u16;
+            crate::engine::World::current().write(|world| world.set_activity(SUPER_MELEE as u16));
             (**KernelOwner::current()).game_sounds =
                 capture_sound(LoadSound(GAME_SOUNDS.as_ptr().cast()));
             crate::supermelee::native::battle_picker::live::BuildPickMeleeFrame();

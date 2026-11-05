@@ -158,7 +158,8 @@ pub(crate) mod runtime {
             3 => {
                 set("BATTLE_SEGUE", 0);
                 (**WorldData::current()).flagship.crew_enlisted = u16::MAX;
-                (**WorldData::current()).game.current_activity |= 0x2000;
+                crate::engine::World::current()
+                    .write(|world| world.set_activity(world.activity() | 0x2000));
             }
             _ => unreachable!("invalid Segue"),
         }
@@ -170,7 +171,7 @@ pub(crate) mod runtime {
     pub unsafe extern "C" fn getSegue() -> i32 {
         if get("BATTLE_SEGUE") == 0 {
             if WorldData::current().read(|owner| owner.flagship.crew_enlisted) == u16::MAX
-                && WorldData::current().read(|owner| owner.game.current_activity) & 0x2000 != 0
+                && crate::engine::World::current().read(|world| world.activity()) & 0x2000 != 0
             {
                 3
             } else {

@@ -422,8 +422,11 @@ pub(crate) mod engine {
         mut last: Option<ShipId>,
         side: COUNT,
     ) -> BOOLEAN {
+        let activity = cx.world.activity_control();
         let selected = crate::app::bridge::publish(cx, || {
-            crate::battle::context_access::reader_legacy::get_encounter_star_ship(last, side)
+            crate::battle::context_access::reader_legacy::get_encounter_star_ship(
+                activity, last, side,
+            )
         });
         if let Some(ship) = selected {
             if let Some(previous) = last {

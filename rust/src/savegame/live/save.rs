@@ -30,8 +30,9 @@ pub(crate) unsafe fn capture(name: &[u8]) -> anyhow::Result<SaveFile> {
     let summary = live::capture_live_summary(name)?;
     let lease = World::current();
     let world = &mut **lease;
+    let activity = world.activity();
     let game = &mut world.data.game;
-    let runtime = runtime::capture_runtime(game, &world.story, &world.clock)?;
+    let runtime = runtime::capture_runtime(game, activity, &world.story, &world.clock)?;
     game.ip_location = point;
     game.in_orbit = 0;
     let queues = queues::capture_queues_for_activity(world)?;

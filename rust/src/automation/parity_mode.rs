@@ -12,7 +12,7 @@ pub(super) fn capture(
     let game = &world.data.game;
     global(
         fields,
-        &crate::savegame::runtime::global::capture_global_state(game),
+        &crate::savegame::runtime::global::capture_global_state(game, world.activity()),
     );
     value(fields, "mode", "battle_group_ref", game.battle_group_ref);
     story(fields, world.story.as_ref());

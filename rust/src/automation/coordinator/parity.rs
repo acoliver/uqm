@@ -137,10 +137,15 @@ mod tests {
         )
         .unwrap();
         let directory = tempfile::tempdir().unwrap();
-        let _app = crate::app::Application::new(Some(AutomationObserver::new(
-            script,
-            directory.path().into(),
-        )));
+        let _app = {
+            let game = crate::engine::Game::new();
+            let observer = Some(AutomationObserver::new(
+                script,
+                directory.path().into(),
+                game.world.activity_control(),
+            ));
+            crate::app::Application::new(game, observer)
+        };
         let coord = _app.observer().cloned().unwrap();
         let mut inner = coord.inner.lock();
         coord.parity_failure(

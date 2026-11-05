@@ -66,7 +66,6 @@ const STARBASE_STRING_BASE: u16 = 422;
 static mut NEXT_TIME: u32 = 0;
 
 mod ffi {
-    use super::*;
 
     pub(super) use crate::graphics::drawable_abi::SetContextFGFrame;
     pub(super) use crate::time::counter_abi::GetTimeCounter;
@@ -117,8 +116,6 @@ mod ffi {
     pub(super) use crate::planets::pstarmap::star_map;
 
     extern "C" {
-
-        pub(super) static mut NextActivity: c::ACTIVITY;
 
         pub(super) static mut optWhichMenu: i32;
     }
@@ -300,7 +297,7 @@ pub(super) unsafe fn free_solar_sys() {
     let state = system();
     if (*state).InIpFlight != 0 {
         (*state).InIpFlight = 0;
-        if glob().read(|owner| owner.game.current_activity) & (CHECK_ABORT | CHECK_LOAD) == 0 {
+        if World::current().read(|world| world.activity()) & (CHECK_ABORT | CHECK_LOAD) == 0 {
             save_non_orbital_location();
         }
     }
@@ -309,7 +306,7 @@ pub(super) unsafe fn free_solar_sys() {
     ffi::stop_music();
 }
 
-pub(super) unsafe fn reset_solar_sys() {
+pub(super) unsafe fn reset_solar_sys(next_activity: u16) {
     let state = system();
     assert!((*state).InIpFlight == 0);
     ffi::DrawMenuStateStrings(PM_STARMAP, -(PM_NAVIGATE - PM_SCAN));
@@ -320,8 +317,7 @@ pub(super) unsafe fn reset_solar_sys() {
     check_intersect();
     (*state).InIpFlight = 1;
     if PLRPlaying(usize::MAX as *mut c_void) == 0
-        && (Kernel::current().read(|owner| owner.last_activity) != CHECK_LOAD
-            || ffi::NextActivity != 0)
+        && (Kernel::current().read(|owner| owner.last_activity) != CHECK_LOAD || next_activity != 0)
     {
         PlayMusic((SpaceMusic).cast(), 1, 1);
     }
@@ -358,7 +354,7 @@ unsafe fn prepare_planet_orbit(cx: &mut Cx<'_>) -> bool {
     ((*(*state).genFuncs).generateOrbital.unwrap())(cx, state, (*state).pOrbitalDesc);
     cx.with_legacy(|| {
         (**Kernel::current()).last_activity &= !(CHECK_LOAD | CHECK_RESTART);
-        if glob().read(|owner| owner.game.current_activity)
+        if World::current().read(|world| world.activity())
             & (CHECK_ABORT | CHECK_LOAD | START_ENCOUNTER)
             != 0
             || glob().read(|owner| owner.flagship.crew_enlisted) == c::COUNT::MAX
@@ -375,13 +371,14 @@ unsafe fn finish_planet_orbit(cx: &mut Cx<'_>) {
         && cx.world.data.flagship.crew_enlisted != c::COUNT::MAX
     {
         let space_context = cx.kernel.space_context;
+        let next_activity = cx.world.next_activity;
         let inner = cx.with_legacy(|| {
             let orbital = load_solar_sys();
             assert!(orbital.is_null());
             check_zoom_level();
             validate_orbits();
             validate_inner_orbits();
-            reset_solar_sys();
+            reset_solar_sys(next_activity);
             ffi::repair_sisborder();
             ffi::SetContext(space_context);
             playerInInnerSystem()
@@ -398,7 +395,8 @@ enum SolarSystemStart {
 }
 
 unsafe fn start_solar_sys(cx: &mut Cx<'_>) {
-    let start = cx.with_legacy(|| prepare_solar_sys());
+    let next_activity = cx.world.next_activity;
+    let start = cx.with_legacy(|| prepare_solar_sys(next_activity));
     match start {
         SolarSystemStart::Orbit => {}
         SolarSystemStart::ResumeLoad => cx.with_legacy(|| ffi::UnbatchGraphics()),
@@ -421,7 +419,7 @@ unsafe fn start_solar_sys(cx: &mut Cx<'_>) {
     }
 }
 
-unsafe fn prepare_solar_sys() -> SolarSystemStart {
+unsafe fn prepare_solar_sys(next_activity: u16) -> SolarSystemStart {
     super::resources::LoadIPData();
     load_lander_data();
 
@@ -471,12 +469,12 @@ unsafe fn prepare_solar_sys() -> SolarSystemStart {
         ffi::BatchGraphics();
         ffi::draw_sisframe();
         ffi::DrawSISMessage(ptr::null());
-        reset_solar_sys();
+        reset_solar_sys(next_activity);
         if Kernel::current().read(|owner| owner.last_activity) == CHECK_LOAD | CHECK_RESTART {
             draw_outer_system();
             SolarSystemStart::Fade
         } else if Kernel::current().read(|owner| owner.last_activity) == CHECK_LOAD
-            && ffi::NextActivity == 0
+            && next_activity == 0
         {
             SolarSystemStart::ResumeLoad
         } else {
@@ -492,8 +490,8 @@ unsafe fn prepare_solar_sys() -> SolarSystemStart {
 
 pub(super) unsafe fn end_interplanetary() {
     World::current().write(|world| {
-        world.data.game.current_activity &= !END_INTERPLANETARY;
-        if world.data.game.current_activity & (CHECK_ABORT | CHECK_LOAD) == 0 {
+        world.set_activity(world.activity() & !END_INTERPLANETARY);
+        if world.activity() & (CHECK_ABORT | CHECK_LOAD) == 0 {
             let state = system();
             ((*(*state).genFuncs).uninitNpcs.unwrap())(world, state);
             world.set_story_state(StoryKey::USED_BROADCASTER, 0);
@@ -525,12 +523,11 @@ pub(super) unsafe fn uninit_solar_sys() {
     free_solar_sys();
     ffi::DestroyDrawable(ReleaseDrawable(STARS_FRAME.cast()).cast());
     STARS_FRAME = ptr::null_mut();
-    if glob().read(|owner| owner.game.current_activity) & END_INTERPLANETARY != 0 {
+    if World::current().read(|world| world.activity()) & END_INTERPLANETARY != 0 {
         end_interplanetary();
         return;
     }
-    if glob().read(|owner| owner.game.current_activity) & START_ENCOUNTER != 0
-        && EncounterGroup != 0
+    if World::current().read(|world| world.activity()) & START_ENCOUNTER != 0 && EncounterGroup != 0
     {
         crate::engine::World::current().write(|world| {
             crate::navigation::groups::live::get_group_info(

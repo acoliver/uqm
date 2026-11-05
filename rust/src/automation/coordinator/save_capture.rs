@@ -5,14 +5,14 @@ use super::*;
 impl AutomationObserver {
     /// Called by the existing post-InitGameStructures start-scene hook.
     #[cfg(not(test))]
-    pub(crate) fn activate_save_capture(&self) {
+    pub(crate) fn activate_save_capture(&self, cx: &mut Cx<'_>) {
         let coord = self;
         let mut inner = coord.inner.lock();
         let Some(request) = inner.save_capture.as_mut() else {
             return;
         };
         #[cfg(not(test))]
-        if let Err(error) = request.load() {
+        if let Err(error) = request.load(cx) {
             coord.write_trace_labeled(
                 &mut inner,
                 RecordKind::SemanticAssertion,
@@ -28,12 +28,12 @@ impl AutomationObserver {
         let Some(request) = inner.save_capture.as_mut() else {
             return false;
         };
-        if !request.admits_capture(crate::mainloop::ffi::get_current_activity().0, button_wait) {
+        if !request.admits_capture(self.activity.activity(), button_wait) {
             return false;
         }
         #[cfg(not(test))]
         {
-            let result = request.capture(inner.input_seen);
+            let result = request.capture(inner.input_seen, self.activity.activity());
             let (class, label) = match result {
                 Ok(()) => (TerminalClass::Success, "save_capture_complete".to_string()),
                 Err(error) => (

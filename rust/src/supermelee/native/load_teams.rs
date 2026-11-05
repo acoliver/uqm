@@ -35,7 +35,7 @@ fn page(top: u16, bottom: u16, current: u16, count: u16, keys: [bool; 4]) -> (u1
 #[cfg(not(test))]
 pub(crate) mod live {
     use super::page;
-    use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
+    use crate::engine::Kernel as KernelOwner;
 
     use crate::io::uio_bridge::{uio_fclose, uio_fopen, uio_unlink};
     use crate::memory::{rust_hfree, rust_hmalloc};
@@ -235,8 +235,7 @@ pub(crate) mod live {
     pub unsafe extern "C" fn DoLoadTeam(state: *mut MELEE_STATE) -> u32 {
         let time = GetTimeCounter();
         GamePaused = 0;
-        if WorldFields::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
-            != 0
+        if crate::engine::World::current().read(|world| world.activity()) & CHECK_ABORT as u16 != 0
         {
             return 0;
         }

@@ -6,9 +6,6 @@ use crate::comm::dispatch::{IN_INTERPLANETARY, START_ENCOUNTER, START_INTERPLANE
 use crate::engine::{Kernel, World};
 use crate::mainloop::dir_prep::saveDir;
 
-#[no_mangle]
-pub static mut NextActivity: u16 = 0;
-
 use crate::planets::starmap::FindStar;
 
 pub(in crate::savegame) unsafe fn finish_load(star: &super::super::StarDesc, activity: u16) {
@@ -22,11 +19,13 @@ pub(in crate::savegame) unsafe fn finish_load(star: &super::super::StarDesc, act
     };
     let selected =
         FindStar(std::ptr::null_mut(), &mut point, 0, 0).cast::<crate::engine::world::CStarDesc>();
-    World::current().write(|world| runtime::live::select_live_star(world, selected.as_ref()));
-    NextActivity = activity;
-    if activity & START_ENCOUNTER == 0 && activity & 0xff == IN_INTERPLANETARY {
-        NextActivity |= START_INTERPLANETARY;
-    }
+    World::current().write(|world| {
+        runtime::live::select_live_star(world, selected.as_ref());
+        world.next_activity = activity;
+        if activity & START_ENCOUNTER == 0 && activity & 0xff == IN_INTERPLANETARY {
+            world.next_activity |= START_INTERPLANETARY;
+        }
+    });
 }
 
 unsafe fn install(save: SaveFile) -> anyhow::Result<()> {

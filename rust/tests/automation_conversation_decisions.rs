@@ -35,7 +35,15 @@ fn application_started() -> uqm_rust::app::Application {
         validate_script(document, "conversation-decisions.json").expect("and must validate");
     let output_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("conversation-decisions");
     std::fs::create_dir_all(&output_root).expect("evidence root");
-    uqm_rust::app::Application::new(Some(AutomationObserver::new(script, output_root)))
+    {
+        let game = uqm_rust::engine::Game::new();
+        let observer = Some(AutomationObserver::new(
+            script,
+            output_root,
+            game.world.activity_control(),
+        ));
+        uqm_rust::app::Application::new(game, observer)
+    }
 }
 
 #[test]
