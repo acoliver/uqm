@@ -6,7 +6,6 @@ use std::ffi::{c_char, CStr};
 use super::super::abi::SummaryDesc;
 use super::super::runtime::{self, groups, live};
 use super::super::{SaveFile, SaveSlots};
-use crate::engine::save::{snapshot, SessionView};
 use crate::mainloop::dir_prep::saveDir;
 
 use crate::navigation::globals::in_hqspace;
@@ -28,17 +27,9 @@ pub(crate) unsafe fn capture(name: &[u8]) -> anyhow::Result<SaveFile> {
             put_group_info(world, 0, u8::MAX);
         }
     });
-    let summary = live::capture_live_summary(name)?;
     let lease = World::current();
     let world = &mut **lease;
-    snapshot(
-        world,
-        SessionView {
-            summary,
-            star,
-            ip_location: point,
-        },
-    )
+    live::capture_prepared(world, star, point, name)
 }
 
 /// # Safety

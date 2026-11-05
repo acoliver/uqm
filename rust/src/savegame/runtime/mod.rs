@@ -16,7 +16,7 @@ pub use crate::engine::save::queues;
 pub mod solar;
 pub mod star;
 pub use crate::engine::save::statefiles;
-pub mod summary;
+pub use crate::engine::save::summary;
 
 use super::types::Summary;
 #[cfg(test)]

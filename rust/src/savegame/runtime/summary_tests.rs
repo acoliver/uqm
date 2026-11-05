@@ -20,7 +20,7 @@ use std::cell::Cell;
 use serial_test::serial;
 
 use super::queue_tests::{LiveGame, C_WRITTEN_SAVE};
-use super::solar::{SolarError, SolarSystem};
+use super::solar::{SolarError, SolarSystem, SolarSystemOwner};
 use super::solar_tests::{owner, text, System, Table, FLAGSHIP_NAME};
 use super::star::*;
 use super::summary::*;
@@ -43,7 +43,17 @@ fn capture_summary(
             &game.data.game,
             game.built_ships_ref(),
             &world.story,
-            solar,
+            {
+                if world.story.is_none() {
+                    return Err(
+                        crate::engine::world::story::GameStateOwnerError::NotInitialized.into(),
+                    );
+                }
+                solar.prepare_summary(
+                    game.data.game.current_activity,
+                    world.story_state(crate::engine::StoryKey::GLOBAL_FLAGS_AND_DATA) == 255,
+                )?
+            },
             name,
         )
     })

@@ -16,8 +16,8 @@
 use std::mem::{offset_of, size_of};
 use std::ops::{Deref, DerefMut};
 
+use super::solar::SolarSystemOwner;
 use super::solar::*;
-use super::summary::SolarSystemOwner;
 use crate::c_bindings::global_state::{self, PLANET_DESC, SOLARSYS_STATE};
 use crate::savegame::types::SIS_NAME_SIZE;
 

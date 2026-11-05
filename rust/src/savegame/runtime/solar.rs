@@ -34,11 +34,35 @@
 //! sits in, is a [`SolarError`]. `pBaseDesc` being neither array is the
 //! assertion C has in `playerInInnerSystem`, and panics.
 
-use std::fmt;
-
-use super::summary::{utf8_string_copy, SolarSystemOwner, SA_MATRA_STRING};
+use super::summary::{utf8_string_copy, SessionSummary, SA_MATRA_STRING};
 use crate::c_bindings::global_state::{self, PLANET_DESC, SOLARSYS_STATE};
 use crate::savegame::types::SIS_NAME_SIZE;
+
+/// What the solar-system state and the game strings say about the game.
+///
+/// Each method is one question `PrepareSummary` asks. An implementation reads
+/// the live state; it does not invent an answer when the state has none.
+pub trait SolarSystemOwner {
+    /// `GetPlanetOrMoonName` into a `PlanetName`-sized buffer.
+    fn planet_or_moon_name(&self) -> Result<[u8; SIS_NAME_SIZE], SolarError>;
+    /// `playerInPlanetOrbit ()`.
+    fn player_in_planet_orbit(&self) -> bool;
+    /// `GAME_STRING (PLANET_NUMBER_BASE + 32)` copied into a `PlanetName`
+    /// buffer.
+    fn last_battle_planet_name(&self) -> [u8; SIS_NAME_SIZE];
+    fn prepare_summary(&self, activity: u16, starbase: bool) -> Result<SessionSummary, SolarError> {
+        match activity & 0xff {
+            4 => Ok(SessionSummary::Planet {
+                name: self.planet_or_moon_name()?,
+                in_orbit: !starbase && self.player_in_planet_orbit(),
+            }),
+            1 => Ok(SessionSummary::FinalBattle {
+                name: self.last_battle_planet_name(),
+            }),
+            _ => Ok(SessionSummary::None),
+        }
+    }
+}
 
 /// `PLANET_NUMBER_BASE` (gamestr.h): the first planet name in `GameStrings`.
 const PLANET_NUMBER_BASE: u16 = global_state::PLANET_NUMBER_BASE as u16;
@@ -59,27 +83,7 @@ const _: () = {
     assert!(global_state::SAMATRA_DEFINED as u64 <= u8::MAX as u64);
 };
 
-/// Why a solar-system question could not be answered.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SolarError {
-    /// The flagship is in an inner system but `pOrbitalDesc` is NULL, which
-    /// C asserts against.
-    OrbitalWorldMissing,
-    /// `pOrbitalDesc` is not an element of `PlanetDesc` or `MoonDesc`, or
-    /// does not sit on an element boundary.
-    WorldNotInSystem,
-    /// An entry of `PlanetDesc` does not orbit the sun, or an entry of
-    /// `MoonDesc` orbits the sun or something that is not in `PlanetDesc`.
-    WorldDisagreesWithItsTable,
-}
-
-impl fmt::Display for SolarError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{self:?}")
-    }
-}
-
-impl std::error::Error for SolarError {}
+pub use super::summary::SolarError;
 
 /// Where `GAME_STRING (index)` text comes from.
 ///

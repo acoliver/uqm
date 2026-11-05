@@ -19,13 +19,13 @@ use std::fmt;
 
 use super::hyper_save::{self, HyperFlagship, HyperSaveError};
 use super::location::{self, LocationError};
-use super::solar::{GameStrings, SolarSystem};
+use super::solar::{GameStrings, SolarSystem, SolarSystemOwner};
 use super::star::{self, CStarDesc, StarError, CATALOG_LEN};
-use super::summary::{self, SummaryError};
 use crate::c_bindings::global_state::RPG_PLAYER_NUM;
 use crate::c_bindings::solar_system;
 use crate::engine::battle::access::live_queues;
-use crate::savegame::types::{StarDesc, Summary};
+use crate::engine::save::{snapshot, SessionView};
+use crate::savegame::types::{SaveFile, StarDesc};
 
 extern "C" {
 
@@ -48,36 +48,41 @@ impl GameStrings for LiveGameStrings {
     }
 }
 
-/// `PrepareSummary` over the live `GlobData`, `pSolarSysState` and
-/// `CurStarDescPtr`.
-///
-/// The solar-system state is borrowed once, for this call only.
+/// Supply the active solar session to the owned engine snapshot.
 ///
 /// # Safety
-/// Game thread only; `GlobData` must be initialised, `pSolarSysState` must be
-/// NULL or point at the live solar-system state, and `CurStarDescPtr` must be
-/// NULL or point at a catalog entry.
-pub unsafe fn capture_live_summary(name: &[u8]) -> Result<Summary, SummaryError> {
+/// Game thread only; the solar-system pointer and star catalog must remain
+/// valid for this synchronous capture.
+pub unsafe fn capture_prepared(
+    world: &mut World,
+    star: StarDesc,
+    ip_location: crate::graphics::native_abi::POINT,
+    name: &[u8],
+) -> anyhow::Result<SaveFile> {
     let state = solar_system::current();
-    World::current().read(|world| {
-        let current = world.star_pointer(Some(live_catalog()));
-        let solar = SolarSystem::new(
-            state.as_ref(),
-            current.as_ref().map(|star| star.index),
-            world.data.flagship.planet_name,
-            &LiveGameStrings,
-        );
-        // SAFETY: the flagship codec mirror asserts every field offset against SisState.
-        summary::capture_summary(
-            world.activity(),
-            &*std::ptr::addr_of!(world.data.flagship).cast::<crate::comm::locdata::CSisState>(),
-            &world.data.game,
-            world.built_ships_ref(),
-            &world.story,
-            &solar,
-            name,
-        )
-    })
+    let current = world.star_pointer(Some(live_catalog()));
+    let solar = SolarSystem::new(
+        state.as_ref(),
+        current.as_ref().map(|star| star.index),
+        world.data.flagship.planet_name,
+        &LiveGameStrings,
+    );
+    if world.story.is_none() {
+        return Err(crate::engine::world::story::GameStateOwnerError::NotInitialized.into());
+    }
+    let solar = solar.prepare_summary(
+        world.activity(),
+        world.story_state(crate::engine::StoryKey::GLOBAL_FLAGS_AND_DATA) == u32::from(u8::MAX),
+    )?;
+    snapshot(
+        world,
+        SessionView {
+            solar,
+            star,
+            ip_location,
+        },
+        name,
+    )
 }
 
 /// The live star catalog.

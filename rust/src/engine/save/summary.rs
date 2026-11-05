@@ -10,13 +10,9 @@
 //! * `GLOBAL (built_ship_q)`: the escorts' races.
 //!
 //! The activity of a summary is the low byte of `CurrentActivity`, refined the
-//! way `PrepareSummary` does. Two of its branches read the solar-system
-//! state (`GetPlanetOrMoonName` and `playerInPlanetOrbit` depend on
-//! `pSolarSysState`) and, for the final battle, the game string table. They
-//! reach this module through [`SolarSystemOwner`]. The computation of those
-//! answers is Rust (`solar`, over the C-owned `SOLARSYS_STATE` that
-//! `ExploreSolarSys` initialises); nothing here guesses a name when the state
-//! cannot answer.
+//! way `PrepareSummary` does. Solar names and the orbit status are prepared
+//! at the active mode boundary and supplied as [`SessionSummary`]. The
+//! engine derives the summary from those values and the supplied owners.
 //!
 //! The device list is `InventoryDevices` (planets/devices.c) over the same
 //! game-state bits. The save name is cut the way `strncpy (SaveName, name,
@@ -30,14 +26,37 @@ use crate::engine::battle::link_queue::LinkQueue;
 use crate::engine::world::queues::Fragment;
 use std::fmt;
 
-use super::solar::SolarError;
-use crate::comm::dispatch::{IN_HYPERSPACE, IN_INTERPLANETARY, IN_LAST_BATTLE};
-use crate::comm::locdata::{CGameState, CSisState};
-use crate::savegame::types::{
+use super::activity::{IN_HYPERSPACE, IN_INTERPLANETARY, IN_LAST_BATTLE};
+use crate::engine::battle::schema::GAME_STATE as CGameState;
+use crate::engine::world::story::GameState;
+use crate::engine::world::story::GameStateOwnerError;
+use crate::engine::world::SisState as CSisState;
+use crate::engine::StoryKey;
+use uqm_save::{
     SaveName, SisState, Summary, MAX_BUILT_SHIPS, MAX_EXCLUSIVE_DEVICES, SIS_NAME_SIZE,
 };
-use crate::state::ffi::GameStateOwnerError;
-use crate::state::game_state::GameState;
+
+/// Why a solar-system question could not be answered.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SolarError {
+    /// The flagship is in an inner system but `pOrbitalDesc` is NULL, which
+    /// C asserts against.
+    OrbitalWorldMissing,
+    /// `pOrbitalDesc` is not an element of `PlanetDesc` or `MoonDesc`, or
+    /// does not sit on an element boundary.
+    WorldNotInSystem,
+    /// An entry of `PlanetDesc` does not orbit the sun, or an entry of
+    /// `MoonDesc` orbits the sun or something that is not in `PlanetDesc`.
+    WorldDisagreesWithItsTable,
+}
+
+impl fmt::Display for SolarError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
+impl std::error::Error for SolarError {}
 
 /// `IN_QUASISPACE` (globdata.h): only ever stored in a summary.
 pub const IN_QUASISPACE: u8 = 6;
@@ -58,7 +77,7 @@ pub const NUM_DEVICES: usize = 28;
 #[derive(Clone, Copy)]
 enum OnBoard {
     /// The device is aboard when this one-bit state is set.
-    Flag(&'static str),
+    Flag(StoryKey),
     /// The device is aboard when `ULTRON_CONDITION` holds this value.
     Ultron(u8),
     /// `InventoryDevices` never lists it (the data plates, and the destruct
@@ -68,48 +87,47 @@ enum OnBoard {
 
 /// The `InventoryDevices` switch, indexed by the device enum of globdata.h.
 const DEVICES: [OnBoard; NUM_DEVICES] = [
-    OnBoard::Flag("PORTAL_SPAWNER_ON_SHIP"), // PORTAL_SPAWNER_DEVICE
-    OnBoard::Flag("TALKING_PET_ON_SHIP"),    // TALKING_PET_DEVICE
-    OnBoard::Flag("UTWIG_BOMB_ON_SHIP"),     // UTWIG_BOMB_DEVICE
-    OnBoard::Flag("SUN_DEVICE_ON_SHIP"),     // SUN_EFFICIENCY_DEVICE
-    OnBoard::Flag("ROSY_SPHERE_ON_SHIP"),    // ROSY_SPHERE_DEVICE
-    OnBoard::Flag("AQUA_HELIX_ON_SHIP"),     // AQUA_HELIX_DEVICE
-    OnBoard::Flag("CLEAR_SPINDLE_ON_SHIP"),  // CLEAR_SPINDLE_DEVICE
-    OnBoard::Ultron(1),                      // ULTRON_0_DEVICE
-    OnBoard::Ultron(2),                      // ULTRON_1_DEVICE
-    OnBoard::Ultron(3),                      // ULTRON_2_DEVICE
-    OnBoard::Ultron(4),                      // ULTRON_3_DEVICE
-    OnBoard::Flag("MAIDENS_ON_SHIP"),        // MAIDENS_DEVICE
-    OnBoard::Flag("UMGAH_BROADCASTERS_ON_SHIP"), // UMGAH_HYPERWAVE_DEVICE
-    OnBoard::Flag("BURV_BROADCASTERS_ON_SHIP"), // BURVIX_HYPERWAVE_DEVICE
-    OnBoard::Never,                          // DATA_PLATE_1_DEVICE
-    OnBoard::Never,                          // DATA_PLATE_2_DEVICE
-    OnBoard::Never,                          // DATA_PLATE_3_DEVICE
-    OnBoard::Flag("TAALO_PROTECTOR_ON_SHIP"), // TAALO_PROTECTOR_DEVICE
-    OnBoard::Flag("EGG_CASE0_ON_SHIP"),      // EGG_CASING0_DEVICE
-    OnBoard::Flag("EGG_CASE1_ON_SHIP"),      // EGG_CASING1_DEVICE
-    OnBoard::Flag("EGG_CASE2_ON_SHIP"),      // EGG_CASING2_DEVICE
-    OnBoard::Flag("SYREEN_SHUTTLE_ON_SHIP"), // SYREEN_SHUTTLE_DEVICE
-    OnBoard::Flag("VUX_BEAST_ON_SHIP"),      // VUX_BEAST_DEVICE
-    OnBoard::Never,                          // DESTRUCT_CODE_DEVICE
-    OnBoard::Flag("PORTAL_KEY_ON_SHIP"),     // URQUAN_WARP_DEVICE
-    OnBoard::Flag("ARTIFACT_2_ON_SHIP"),     // ARTIFACT_2_DEVICE
-    OnBoard::Flag("ARTIFACT_3_ON_SHIP"),     // ARTIFACT_3_DEVICE
-    OnBoard::Flag("MOONBASE_ON_SHIP"),       // LUNAR_BASE_DEVICE
+    OnBoard::Flag(StoryKey::PORTAL_SPAWNER_ON_SHIP), // PORTAL_SPAWNER_DEVICE
+    OnBoard::Flag(StoryKey::TALKING_PET_ON_SHIP),    // TALKING_PET_DEVICE
+    OnBoard::Flag(StoryKey::UTWIG_BOMB_ON_SHIP),     // UTWIG_BOMB_DEVICE
+    OnBoard::Flag(StoryKey::SUN_DEVICE_ON_SHIP),     // SUN_EFFICIENCY_DEVICE
+    OnBoard::Flag(StoryKey::ROSY_SPHERE_ON_SHIP),    // ROSY_SPHERE_DEVICE
+    OnBoard::Flag(StoryKey::AQUA_HELIX_ON_SHIP),     // AQUA_HELIX_DEVICE
+    OnBoard::Flag(StoryKey::CLEAR_SPINDLE_ON_SHIP),  // CLEAR_SPINDLE_DEVICE
+    OnBoard::Ultron(1),                              // ULTRON_0_DEVICE
+    OnBoard::Ultron(2),                              // ULTRON_1_DEVICE
+    OnBoard::Ultron(3),                              // ULTRON_2_DEVICE
+    OnBoard::Ultron(4),                              // ULTRON_3_DEVICE
+    OnBoard::Flag(StoryKey::MAIDENS_ON_SHIP),        // MAIDENS_DEVICE
+    OnBoard::Flag(StoryKey::UMGAH_BROADCASTERS_ON_SHIP), // UMGAH_HYPERWAVE_DEVICE
+    OnBoard::Flag(StoryKey::BURV_BROADCASTERS_ON_SHIP), // BURVIX_HYPERWAVE_DEVICE
+    OnBoard::Never,                                  // DATA_PLATE_1_DEVICE
+    OnBoard::Never,                                  // DATA_PLATE_2_DEVICE
+    OnBoard::Never,                                  // DATA_PLATE_3_DEVICE
+    OnBoard::Flag(StoryKey::TAALO_PROTECTOR_ON_SHIP), // TAALO_PROTECTOR_DEVICE
+    OnBoard::Flag(StoryKey::EGG_CASE0_ON_SHIP),      // EGG_CASING0_DEVICE
+    OnBoard::Flag(StoryKey::EGG_CASE1_ON_SHIP),      // EGG_CASING1_DEVICE
+    OnBoard::Flag(StoryKey::EGG_CASE2_ON_SHIP),      // EGG_CASING2_DEVICE
+    OnBoard::Flag(StoryKey::SYREEN_SHUTTLE_ON_SHIP), // SYREEN_SHUTTLE_DEVICE
+    OnBoard::Flag(StoryKey::VUX_BEAST_ON_SHIP),      // VUX_BEAST_DEVICE
+    OnBoard::Never,                                  // DESTRUCT_CODE_DEVICE
+    OnBoard::Flag(StoryKey::PORTAL_KEY_ON_SHIP),     // URQUAN_WARP_DEVICE
+    OnBoard::Flag(StoryKey::ARTIFACT_2_ON_SHIP),     // ARTIFACT_2_DEVICE
+    OnBoard::Flag(StoryKey::ARTIFACT_3_ON_SHIP),     // ARTIFACT_3_DEVICE
+    OnBoard::Flag(StoryKey::MOONBASE_ON_SHIP),       // LUNAR_BASE_DEVICE
 ];
 
-/// What the solar-system state and the game strings say about the game.
-///
-/// Each method is one question `PrepareSummary` asks. An implementation reads
-/// the live state; it does not invent an answer when the state has none.
-pub trait SolarSystemOwner {
-    /// `GetPlanetOrMoonName` into a `PlanetName`-sized buffer.
-    fn planet_or_moon_name(&self) -> Result<[u8; SIS_NAME_SIZE], SolarError>;
-    /// `playerInPlanetOrbit ()`.
-    fn player_in_planet_orbit(&self) -> bool;
-    /// `GAME_STRING (PLANET_NUMBER_BASE + 32)` copied into a `PlanetName`
-    /// buffer.
-    fn last_battle_planet_name(&self) -> [u8; SIS_NAME_SIZE];
+/// Summary fields prepared from the active mode's solar state.
+#[derive(Clone, Copy)]
+pub enum SessionSummary {
+    None,
+    Planet {
+        name: [u8; SIS_NAME_SIZE],
+        in_orbit: bool,
+    },
+    FinalBattle {
+        name: [u8; SIS_NAME_SIZE],
+    },
 }
 
 /// Why a summary could not be captured.
@@ -140,12 +158,8 @@ impl From<SolarError> for SummaryError {
     }
 }
 
-/// `GET_GAME_STATE (key)` on borrowed story state. An unknown key is a
-/// bug in this module's tables, not a runtime condition.
-pub(super) fn state_value(state: &GameState, key: &str) -> u8 {
-    let (start, end) = GameState::lookup_bits(key)
-        .unwrap_or_else(|| panic!("game-state key {key} is not in the state table"));
-    state.get_state(start, end)
+fn state_value(state: &GameState, key: StoryKey) -> u8 {
+    state.get_state(key.start(), key.end())
 }
 
 /// `InventoryDevices (list, MAX_EXCLUSIVE_DEVICES)`.
@@ -157,7 +171,7 @@ pub(crate) fn inventory_devices(state: &GameState, limit: usize) -> Vec<u8> {
         }
         let aboard = match *on_board {
             OnBoard::Flag(key) => state_value(state, key) != 0,
-            OnBoard::Ultron(value) => state_value(state, "ULTRON_CONDITION") == value,
+            OnBoard::Ultron(value) => state_value(state, StoryKey::ULTRON_CONDITION) == value,
             OnBoard::Never => false,
         };
         if aboard {
@@ -222,7 +236,7 @@ pub fn capture_summary(
     game: &CGameState,
     escorts: LinkQueue<'_, Fragment, 12>,
     story: &Option<GameState>,
-    solar: &dyn SolarSystemOwner,
+    solar: SessionSummary,
     name: &[u8],
 ) -> Result<Summary, SummaryError> {
     let state = story.as_ref().ok_or(GameStateOwnerError::NotInitialized)?;
@@ -231,19 +245,27 @@ pub fn capture_summary(
     let mut activity = (activity & 0x00ff) as u8;
     match u16::from(activity) {
         IN_HYPERSPACE => {
-            if state_value(state, "ARILOU_SPACE_SIDE") > 1 {
+            if state_value(state, StoryKey::ARILOU_SPACE_SIDE) > 1 {
                 activity = IN_QUASISPACE;
             }
         }
         IN_INTERPLANETARY => {
-            sis_copy.planet_name = solar.planet_or_moon_name()?;
-            if state_value(state, "GLOBAL_FLAGS_AND_DATA") == IN_STARBASE_FLAGS {
+            let SessionSummary::Planet { name, in_orbit } = solar else {
+                panic!("interplanetary capture requires prepared solar summary");
+            };
+            sis_copy.planet_name = name;
+            if state_value(state, StoryKey::GLOBAL_FLAGS_AND_DATA) == IN_STARBASE_FLAGS {
                 activity = IN_STARBASE;
-            } else if solar.player_in_planet_orbit() {
+            } else if in_orbit {
                 activity = IN_PLANET_ORBIT;
             }
         }
-        IN_LAST_BATTLE => sis_copy.planet_name = solar.last_battle_planet_name(),
+        IN_LAST_BATTLE => {
+            let SessionSummary::FinalBattle { name } = solar else {
+                panic!("final-battle capture requires its prepared name");
+            };
+            sis_copy.planet_name = name;
+        }
         _ => {}
     }
 
@@ -259,11 +281,11 @@ pub fn capture_summary(
     let mut device_list = [0u8; MAX_EXCLUSIVE_DEVICES];
     device_list[..devices.len()].copy_from_slice(&devices);
 
-    let flags = state_value(state, "LANDER_SHIELDS")
-        | (state_value(state, "IMPROVED_LANDER_SPEED") << 4)
-        | (state_value(state, "IMPROVED_LANDER_CARGO") << 5)
-        | (state_value(state, "IMPROVED_LANDER_SHOT") << 6)
-        | (u8::from(state_value(state, "CHMMR_BOMB_STATE") >= 2) << 7);
+    let flags = state_value(state, StoryKey::LANDER_SHIELDS)
+        | (state_value(state, StoryKey::IMPROVED_LANDER_SPEED) << 4)
+        | (state_value(state, StoryKey::IMPROVED_LANDER_CARGO) << 5)
+        | (state_value(state, StoryKey::IMPROVED_LANDER_SHOT) << 6)
+        | (u8::from(state_value(state, StoryKey::CHMMR_BOMB_STATE) >= 2) << 7);
 
     Ok(Summary {
         sis: sis_copy,
@@ -272,8 +294,8 @@ pub fn capture_summary(
         day_index: game.game_clock.day_index,
         month_index: game.game_clock.month_index,
         year_index: game.game_clock.year_index,
-        mcredit_lo: state_value(state, "MELNORME_CREDIT0"),
-        mcredit_hi: state_value(state, "MELNORME_CREDIT1"),
+        mcredit_lo: state_value(state, StoryKey::MELNORME_CREDIT0),
+        mcredit_hi: state_value(state, StoryKey::MELNORME_CREDIT1),
         // Both lists are bounded by their fixed storage capacities.
         num_ships: escorts.count() as u8,
         num_devices: devices.len() as u8,

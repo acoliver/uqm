@@ -1,6 +1,48 @@
 use uqm_rust::engine::{save, world::queues::FleetInfo, World};
 
 #[test]
+fn snapshot_derives_summary_from_owned_story_clock_and_escort_order() {
+    let saved = uqm_save::decode_save(include_bytes!("fixtures/savegame/legacy-save.00")).unwrap();
+    let mut world = World::new();
+    world.story = Some(uqm_rust::engine::world::story::GameState::new());
+    world.set_activity(3);
+    world.set_story_state(uqm_rust::engine::StoryKey::ARILOU_SPACE_SIDE, 2);
+    world.data.game.game_clock.month_index = 11;
+    world.data.game.game_clock.day_index = 5;
+    world.data.game.game_clock.year_index = 2155;
+    for _ in 0..24 {
+        let mut fleets = world.avail_races();
+        let id = fleets.alloc().unwrap();
+        *fleets.get_mut(id) = FleetInfo::default();
+        fleets.put(id);
+    }
+    for race in [4, 3] {
+        let mut ships = world.built_ships();
+        let id = ships.alloc().unwrap();
+        ships.get_mut(id).race_id = race;
+        ships.put(id);
+    }
+    let captured = save::snapshot(
+        &mut world,
+        save::SessionView {
+            solar: save::summary::SessionSummary::None,
+            star: saved.star,
+            ip_location: uqm_rust::graphics::native_abi::POINT { x: 0, y: 0 },
+        },
+        &[b'x'; 80],
+    )
+    .unwrap();
+    assert_eq!(captured.summary.activity, save::summary::IN_QUASISPACE);
+    assert_eq!(captured.summary.month_index, 11);
+    assert_eq!(captured.summary.day_index, 5);
+    assert_eq!(captured.summary.year_index, 2155);
+    assert_eq!(captured.summary.num_ships, 2);
+    assert_eq!(&captured.summary.ship_list[..2], &[4, 3]);
+    assert_eq!(captured.summary.save_name.as_bytes(), &[b'x'; 63]);
+    assert_eq!(captured.global.current_activity, 3);
+}
+
+#[test]
 fn apply_returns_saved_activity_without_changing_live_activity_or_acquiring_an_owner() {
     let saved = uqm_save::decode_save(include_bytes!("fixtures/savegame/legacy-save.00")).unwrap();
     let mut world = World::new();
@@ -60,19 +102,35 @@ fn legacy_apply_installs_original_image_order_without_publishing_the_world() {
 #[test]
 fn snapshot_preserves_saved_location_and_normalizes_only_live_location() {
     let saved = uqm_save::decode_save(include_bytes!("fixtures/savegame/legacy-save.00")).unwrap();
-    let mut summary = saved.summary;
-    summary.sis.element_amounts = [1, 2, 3, 4, 5, 6, 7, 8];
+    let mut sis = saved.summary.sis;
+    sis.element_amounts = [1, 2, 3, 4, 5, 6, 7, 8];
+    let summary = uqm_save::Summary {
+        sis,
+        activity: 0,
+        flags: 0,
+        month_index: 0,
+        day_index: 0,
+        year_index: 0,
+        mcredit_lo: 0,
+        mcredit_hi: 0,
+        num_ships: 0,
+        num_devices: 0,
+        ship_list: [0; uqm_save::MAX_BUILT_SHIPS],
+        device_list: [0; uqm_save::MAX_EXCLUSIVE_DEVICES],
+        save_name: saved.summary.save_name,
+    };
     let mut world = World::new();
     world.story = Some(uqm_rust::engine::world::story::GameState::new());
+    world.data.flagship = (&summary.sis).into();
     world.data.game.ip_location.x = 21;
     world.data.game.ip_location.y = 31;
     world.data.game.in_orbit = 2;
     let view = save::SessionView {
-        summary: summary.clone(),
+        solar: save::summary::SessionSummary::None,
         star: saved.star,
         ip_location: uqm_rust::graphics::native_abi::POINT { x: 91, y: 92 },
     };
-    let captured = save::snapshot(&mut world, view).unwrap();
+    let captured = save::snapshot(&mut world, view, summary.save_name.as_bytes()).unwrap();
     assert_eq!(
         captured.global.ip_location,
         uqm_save::Point { x: 21, y: 31 }

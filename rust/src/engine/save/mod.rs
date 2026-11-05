@@ -7,6 +7,7 @@ pub mod groups;
 pub mod ip_group_save;
 pub mod queues;
 pub mod statefiles;
+pub mod summary;
 
 use std::fmt;
 
@@ -124,7 +125,7 @@ pub fn restore_runtime(
 
 /// Session-derived save fields prepared by the active mode.
 pub struct SessionView {
-    pub summary: uqm_save::Summary,
+    pub solar: summary::SessionSummary,
     pub star: uqm_save::StarDesc,
     pub ip_location: crate::graphics::native_abi::POINT,
 }
@@ -133,7 +134,17 @@ pub struct SessionView {
 pub fn snapshot(
     world: &mut crate::engine::World,
     view: SessionView,
+    name: &[u8],
 ) -> anyhow::Result<uqm_save::SaveFile> {
+    let summary = summary::capture_summary(
+        world.activity(),
+        &world.data.flagship,
+        &world.data.game,
+        world.built_ships_ref(),
+        &world.story,
+        view.solar,
+        name,
+    )?;
     let runtime = capture_runtime(&world.data.game, world.activity(), &world.story, &world.clock)?;
     world.data.game.ip_location = view.ip_location;
     world.data.game.in_orbit = 0;
@@ -141,7 +152,7 @@ pub fn snapshot(
     let groups = groups::capture_groups(world)?;
     let files = statefiles::capture_state_files(&world.data.game, &world.story, &world.files)?;
     Ok(uqm_save::SaveFile {
-        summary: view.summary,
+        summary,
         global: runtime.global,
         game_state: runtime.game_state,
         race_queue: queues.race_queue,
