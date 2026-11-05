@@ -12,7 +12,7 @@ pub static mut MainExited: i32 = 0;
 
 unsafe extern "C" fn on_battle_frame() {
     crate::time::clock_abi::live::GameClockTick();
-    World::current().write(|world| {
+    let activity = World::current().write(|world| {
         let opening = crate::navigation::get(world, StoryKey::ARILOU_SPACE) == 1;
         let counter = crate::navigation::get(world, StoryKey::ARILOU_SPACE_COUNTER);
         crate::navigation::set(
@@ -24,11 +24,9 @@ unsafe extern "C" fn on_battle_frame() {
                 counter - u8::from(counter > 0)
             },
         );
+        world.activity()
     });
-    if WorldData::current().read(|owner| owner.game.current_activity)
-        & (CHECK_ABORT | CHECK_LOAD) as u16
-        == 0
-    {
+    if activity & (CHECK_ABORT | CHECK_LOAD) as u16 == 0 {
         crate::navigation::hyper_radar::SeedUniverse();
     }
     crate::ui::sis::DrawAutoPilotMessage(0);

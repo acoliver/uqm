@@ -165,7 +165,9 @@ pub(super) mod live {
             keys[KEY_MENU_DOWN as usize] != 0,
         );
         if selected != (*state).current_ship {
-            draw_pick_icon(&(*state).catalog, (*state).current_ship, true);
+            // SAFETY: the picker owns this live menu for the synchronous draw.
+            let catalog = unsafe { &(*state).catalog };
+            draw_pick_icon(catalog, (*state).current_ship, true);
             (*state).current_ship = selected;
             DrawMeleeShipStrings(state, selected);
         }

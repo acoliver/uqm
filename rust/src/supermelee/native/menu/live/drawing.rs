@@ -99,19 +99,20 @@ pub(super) unsafe fn controls(side: usize, highlight: bool) {
     DrawMeleeIcon(icon);
 }
 pub(super) unsafe fn teams() {
+    let state = P_MELEE_STATE;
     for side in [0usize, 1] {
         controls(side, false);
         for index in 0..14 {
             ship_box(
-                &(*P_MELEE_STATE).catalog,
+                &(*state).catalog,
                 side as u16,
                 index,
-                MeleeSetup_getShip((*P_MELEE_STATE).melee_setup, side, index as u16),
+                MeleeSetup_getShip((*state).melee_setup, side, index as u16),
                 false,
             );
         }
-        name(P_MELEE_STATE, side as u16, 0, ptr::null());
-        worth(P_MELEE_STATE, side as u16, 0);
+        name(state, side as u16, 0, ptr::null());
+        worth(state, side as u16, 0);
     }
 }
 #[no_mangle]
