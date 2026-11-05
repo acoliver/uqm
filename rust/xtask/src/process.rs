@@ -82,7 +82,7 @@ impl Captured {
     }
 }
 
-fn drain(mut pipe: impl Read + Send + 'static) -> JoinHandle<(Vec<u8>, u64)> {
+fn drain(mut pipe: impl Read + Send + 'static, limit: usize) -> JoinHandle<(Vec<u8>, u64)> {
     std::thread::spawn(move || {
         let (mut kept, mut seen) = (Vec::new(), 0u64);
         let mut chunk = [0u8; 64 * 1024];
@@ -91,7 +91,7 @@ fn drain(mut pipe: impl Read + Send + 'static) -> JoinHandle<(Vec<u8>, u64)> {
                 break;
             }
             seen += count as u64;
-            kept.extend_from_slice(&chunk[..count.min(OUTPUT_LIMIT.saturating_sub(kept.len()))]);
+            kept.extend_from_slice(&chunk[..count.min(limit.saturating_sub(kept.len()))]);
         }
         (kept, seen)
     })
@@ -102,6 +102,14 @@ fn drain(mut pipe: impl Read + Send + 'static) -> JoinHandle<(Vec<u8>, u64)> {
 /// With a `timeout` the whole group is killed when it elapses. Whatever is
 /// still alive in the group once the child has exited is killed and reported.
 pub fn run(command: &mut Command, timeout: Option<Duration>) -> Captured {
+    run_bounded(command, timeout, OUTPUT_LIMIT)
+}
+
+pub(crate) fn run_bounded(
+    command: &mut Command,
+    timeout: Option<Duration>,
+    limit: usize,
+) -> Captured {
     use std::os::unix::process::{CommandExt, ExitStatusExt};
 
     command
@@ -114,8 +122,8 @@ pub fn run(command: &mut Command, timeout: Option<Duration>) -> Captured {
         Err(error) => return Captured::not_launched(error.to_string()),
     };
     let group = child.id() as libc::pid_t;
-    let stdout = child.stdout.take().map(drain);
-    let stderr = child.stderr.take().map(drain);
+    let stdout = child.stdout.take().map(|pipe| drain(pipe, limit));
+    let stderr = child.stderr.take().map(|pipe| drain(pipe, limit));
 
     let deadline = timeout.map(|timeout| Instant::now() + timeout);
     let mut timed_out = false;
