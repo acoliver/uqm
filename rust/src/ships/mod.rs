@@ -15,6 +15,4 @@ pub mod registry;
 pub mod types;
 pub mod writeback;
 
-pub mod ffi;
-
 pub mod hook_registry;

@@ -113,7 +113,6 @@ mod engine {
 
     use crate::sound::heart_ffi::DestroySound;
 
-
     /// # Safety
     /// `table` must be null or a live table no longer in use.
     pub unsafe fn destroy_string_table(table: abi::STRING_TABLE) -> abi::BOOLEAN {
