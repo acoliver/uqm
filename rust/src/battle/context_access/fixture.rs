@@ -150,8 +150,7 @@ impl Cx<'_> {
         Descriptor(self.take_descriptor(id))
     }
     pub(crate) fn fixture_spawn(&mut self, id: ShipId) -> bool {
-        // SAFETY: all command planning values are committed before this lifecycle handoff.
-        unsafe { crate::battle::ship_native::spawn_ship(self, id) != 0 }
+        crate::battle::ship_native::spawn_ship(self, id) != 0
     }
     pub(crate) fn fixture_damage(&mut self, id: ElementId, damage: i16) {
         self.damage(id, damage);
