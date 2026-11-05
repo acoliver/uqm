@@ -467,6 +467,12 @@ impl CommState {
         &mut self.response_ui
     }
 
+    pub fn refresh_response_ui(&mut self, activity: u16) {
+        let selected = self.responses.selected().max(0) as usize;
+        self.response_ui
+            .refresh_responses(activity, &self.responses, selected);
+    }
+
     // Subtitle display
 
     /// Get subtitle display state.

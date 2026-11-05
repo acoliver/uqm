@@ -17,10 +17,11 @@
 use crate::engine::Kernel;
 
 use super::response::ResponseFunc;
+use super::response_ui::{refresh_responses, select_conversation_summary};
 use super::state::CommState;
 #[cfg(not(test))]
 use crate::engine::observe::CheckpointView;
-use crate::engine::World;
+use crate::engine::{battle::Cx, observe::Io, World};
 
 fn communication_background_volume(background: u8, using_speech: u32) -> u8 {
     if using_speech != 0 {
@@ -65,10 +66,10 @@ pub(super) mod c_bridge {
 
     pub fn play_alien_music() {}
     pub fn set_color_map_from_comm_data() {}
-    pub fn call_refresh_responses(_top: u8, _count: u8, _cur: u8) {}
-    pub fn call_select_conversation_summary() {}
+    pub fn call_refresh_responses(_cx: &mut super::Cx<'_>, _top: u8, _count: u8, _cur: u8) {}
+    pub fn call_select_conversation_summary(_cx: &mut super::Cx<'_>, _io: &mut super::Io<'_>) {}
     pub fn call_update_comm_graphics() {}
-    pub fn call_feedback_player_phrase() {}
+    pub fn call_feedback_player_phrase(_cx: &mut super::Cx<'_>) {}
 }
 
 #[cfg(not(test))]
@@ -245,20 +246,26 @@ pub(super) mod c_bridge {
 
     // Safe wrappers for use from ffi.rs (outside lock)
     #[cfg(not(test))]
-    pub fn call_refresh_responses(top: u8, count: u8, cur: u8) {
-        super::super::response_ui::refresh_responses_production(top, count, cur);
+    pub fn call_refresh_responses(cx: &mut super::Cx<'_>, top: u8, count: u8, cur: u8) {
+        let activity = cx.world.activity();
+        cx.with_legacy(|| {
+            super::super::response_ui::refresh_responses_production(activity, top, count, cur)
+        });
     }
     #[cfg(not(test))]
-    pub fn call_select_conversation_summary() {
-        super::super::response_ui::select_conversation_summary_production();
+    pub fn call_select_conversation_summary(cx: &mut super::Cx<'_>, io: &mut super::Io<'_>) {
+        super::super::response_ui::select_conversation_summary_production(cx, io);
     }
     #[cfg(not(test))]
     pub fn call_update_comm_graphics() {
         unsafe { super::do_update_animations(false) }
     }
     #[cfg(not(test))]
-    pub fn call_feedback_player_phrase() {
-        unsafe { super::super::response_ui::feedback_player_phrase_production(std::ptr::null()) };
+    pub fn call_feedback_player_phrase(cx: &mut super::Cx<'_>) {
+        let activity = cx.world.activity();
+        cx.with_legacy(|| unsafe {
+            super::super::response_ui::feedback_player_phrase_production(activity, std::ptr::null())
+        });
     }
 
     /// Play alien music from CommData.AlienSong (port of c_PlayAlienMusic).
@@ -478,7 +485,7 @@ pub mod dinput {
                     c_bridge::ONE_SECOND_TICKS as i16,
                 )
             });
-            cx.with_legacy(super::super::response_ui::select_conversation_summary_production);
+            super::super::response_ui::select_conversation_summary_production(cx, io);
             lrs.time_out = cx
                 .with_legacy(|| c_bridge::FadeMusic(0, (c_bridge::ONE_SECOND_TICKS * 2) as i16))
                 + (c_bridge::ONE_SECOND_TICKS as u32) / 60;
@@ -805,7 +812,7 @@ pub fn alien_talk_segue(world: &World, state: &mut CommState, wait_track: u32) {
 /// @plan PLAN-20260325-COMMPT3.P11
 /// @requirement REQ-RL-004
 /// @pseudocode 003-do-communication-rewrite lines 36-40
-pub fn select_response(state: &mut CommState) -> Option<(ResponseFunc, u32)> {
+pub fn select_response(activity: u16, state: &mut CommState) -> Option<(ResponseFunc, u32)> {
     let (func, response_ref) = {
         let resp = state.responses().get_selected()?;
         let func = resp.response_func?;
@@ -819,7 +826,7 @@ pub fn select_response(state: &mut CommState) -> Option<(ResponseFunc, u32)> {
         .map(|r| r.response_text.clone())
         .unwrap_or_default();
 
-    feedback_player_phrase(state, &response_text);
+    state.response_ui().draw_feedback(activity, &response_text);
     stop_track(state);
     clear_subtitles(state);
     set_slider_image(state, SliderImage::Play);
@@ -840,11 +847,15 @@ pub fn select_response(state: &mut CommState) -> Option<(ResponseFunc, u32)> {
 /// Handle one frame of player input in the response-selection phase.
 ///
 /// Matches C `PlayerResponseInput`.
-pub fn player_response_input(world: &World, state: &mut CommState) -> PlayerInputResult {
+pub fn player_response_input(
+    cx: &mut Cx<'_>,
+    io: &mut Io<'_>,
+    state: &mut CommState,
+) -> PlayerInputResult {
     // Initialize top_response on the very first call
     if state.top_response.is_none() {
         state.top_response = Some(0);
-        refresh_responses(state);
+        refresh_responses(cx.world.activity(), state);
     }
 
     if check_select_input(state) {
@@ -855,18 +866,18 @@ pub fn player_response_input(world: &World, state: &mut CommState) -> PlayerInpu
         return PlayerInputResult::Selected;
     }
 
-    if check_cancel_input(state) && !won_last_battle_external(world) {
-        select_conversation_summary(state);
+    if check_cancel_input(state) && !won_last_battle_external(cx.world) {
+        select_conversation_summary(cx, io, state);
         return PlayerInputResult::Summary;
     }
 
     if check_left_input(state) {
         // Replay last phrase
         fade_music_to_background(state);
-        feedback_player_phrase(state, "");
-        talk_segue(world, state, 0);
-        if !check_abort_external(world) {
-            refresh_responses(state);
+        state.response_ui().draw_feedback(cx.world.activity(), "");
+        talk_segue(cx.world, state, 0);
+        if !check_abort_external(cx.world) {
+            refresh_responses(cx.world.activity(), state);
             fade_music_to_foreground(state);
         }
         return PlayerInputResult::Replay;
@@ -883,11 +894,11 @@ pub fn player_response_input(world: &World, state: &mut CommState) -> PlayerInpu
     if check_up_input(state) {
         let next = if cur == 0 { count - 1 } else { cur - 1 };
         state.responses_mut().select(next as i32);
-        update_response_scroll(state);
+        update_response_scroll(cx.world.activity(), state);
     } else if check_down_input(state) {
         let next = (cur + 1) % count;
         state.responses_mut().select(next as i32);
-        update_response_scroll(state);
+        update_response_scroll(cx.world.activity(), state);
     }
 
     update_comm_graphics(state);
@@ -949,21 +960,29 @@ pub fn fade_music_to_foreground_bridge() {
 /// @plan PLAN-20260325-COMMPT3.P11
 /// @requirement REQ-DC-001..005, REQ-RL-004
 /// @pseudocode 003-do-communication-rewrite lines 07-40
-pub fn do_communication(world: &World, state: &mut CommState) -> CommunicationResult {
+pub fn do_communication(
+    cx: &mut Cx<'_>,
+    io: &mut Io<'_>,
+    state: &mut CommState,
+) -> CommunicationResult {
     if !state.is_talking_finished() {
-        alien_talk_segue(world, state, WAIT_TRACK_ALL);
+        alien_talk_segue(cx.world, state, WAIT_TRACK_ALL);
         return CommunicationResult::Talking;
     }
 
-    do_communication_responses(world, state)
+    do_communication_responses(cx, io, state)
 }
 
 /// Response-only phase of do_communication (talking is already finished).
 ///
 /// Called from rust_do_communication when talking_finished is true.
 /// Handles abort, last-replay, and player response input.
-pub fn do_communication_responses(world: &World, state: &mut CommState) -> CommunicationResult {
-    if check_abort_external(world) {
+pub fn do_communication_responses(
+    cx: &mut Cx<'_>,
+    io: &mut Io<'_>,
+    state: &mut CommState,
+) -> CommunicationResult {
+    if check_abort_external(cx.world) {
         return CommunicationResult::Done;
     }
 
@@ -973,9 +992,9 @@ pub fn do_communication_responses(world: &World, state: &mut CommState) -> Commu
     }
 
     // Handle one frame of player input
-    let input = player_response_input(world, state);
+    let input = player_response_input(cx, io, state);
     match input {
-        PlayerInputResult::Selected => match select_response(state) {
+        PlayerInputResult::Selected => match select_response(cx.world.activity(), state) {
             Some((func, rref)) => CommunicationResult::Selected(func, rref),
             None => CommunicationResult::ResponseContinue,
         },
@@ -988,13 +1007,13 @@ pub fn do_communication_responses(world: &World, state: &mut CommState) -> Commu
 // ============================================================================
 
 /// Update `top_response` so the selected response is on screen.
-fn update_response_scroll(state: &mut CommState) {
+fn update_response_scroll(activity: u16, state: &mut CommState) {
     let selected = state.responses().selected().max(0) as u8;
     let top = state.top_response.unwrap_or(0);
 
     if selected < top {
         state.top_response = Some(0);
-        refresh_responses(state);
+        refresh_responses(activity, state);
     } else {
         // In production the "y > SIS_SCREEN_HEIGHT" check adjusts top_response;
         // we approximate: if selection moved past a threshold, scroll to it.
@@ -1426,21 +1445,6 @@ unsafe fn do_run_comm_anim_frame() {
     c_bridge::SleepThread(840 / 40); // ONE_SECOND / 40
 }
 
-fn feedback_player_phrase(state: &mut CommState, text: &str) {
-    #[cfg(not(test))]
-    {
-        let _ = state;
-        use std::ffi::CString;
-        if let Ok(cs) = CString::new(text) {
-            unsafe { super::response_ui::feedback_player_phrase_production(cs.as_ptr()) };
-        }
-    }
-    #[cfg(test)]
-    {
-        let _ = (state, text);
-    }
-}
-
 fn update_comm_graphics(state: &mut CommState) {
     #[cfg(not(test))]
     unsafe {
@@ -1451,34 +1455,6 @@ fn update_comm_graphics(state: &mut CommState) {
     #[cfg(test)]
     {
         let _ = state;
-    }
-}
-
-fn refresh_responses(state: &mut CommState) {
-    #[cfg(not(test))]
-    {
-        let top = state.response_ui().top_response() as u8;
-        let count = state.responses().count() as u8;
-        let cur = state.responses().selected().max(0) as u8;
-        super::response_ui::refresh_responses_production(top, count, cur);
-    }
-    #[cfg(test)]
-    {
-        // In tests, start_display initializes display state
-        state.responses_mut().start_display();
-    }
-}
-
-fn select_conversation_summary(state: &mut CommState) {
-    #[cfg(not(test))]
-    {
-        let _ = state;
-        super::response_ui::select_conversation_summary_production();
-    }
-    #[cfg(test)]
-    {
-        // Simulate: rebuild the summary from track subtitles
-        state.rebuild_summary();
     }
 }
 
@@ -1810,6 +1786,19 @@ mod tests {
         assert!(won_last_battle_external(&world));
     }
 
+    fn with_world<R>(mut world: World, call: impl FnOnce(&mut Cx<'_>, &mut Io<'_>) -> R) -> R {
+        let mut kernel = crate::engine::Kernel::new();
+        let mut battle = crate::engine::battle::Battle::new();
+        let mut cx = Cx::new(&mut battle, &mut world, &mut kernel, crate::math::random);
+        let mut observer = crate::engine::observe::Unobserved;
+        call(
+            &mut cx,
+            &mut Io {
+                observer: &mut observer,
+            },
+        )
+    }
+
     // ---- helpers -----------------------------------------------------------
 
     fn reset() {
@@ -2004,7 +1993,7 @@ mod tests {
         drop(s);
 
         let mut s = COMM_STATE.write();
-        let result = select_response(&mut s);
+        let result = select_response(0, &mut s);
         assert!(
             result.is_some(),
             "select_response must return Some when callback is present"
@@ -2034,7 +2023,7 @@ mod tests {
         drop(s);
 
         let mut s = COMM_STATE.write();
-        let result = select_response(&mut s);
+        let result = select_response(0, &mut s);
         drop(s);
 
         assert!(
@@ -2056,7 +2045,7 @@ mod tests {
         let mut s = CommState::new();
         s.init().unwrap();
         // No responses added, no selection
-        let result = select_response(&mut s);
+        let result = select_response(0, &mut s);
         assert!(result.is_none());
     }
 
@@ -2071,7 +2060,7 @@ mod tests {
         s.add_response(2, "B", None);
 
         assert!(s.top_response.is_none());
-        player_response_input(&world, &mut s);
+        with_world(world, |cx, io| player_response_input(cx, io, &mut s));
         assert!(
             s.top_response.is_some(),
             "top_response should be set after first call"
@@ -2090,7 +2079,7 @@ mod tests {
         s.add_response(2, "B", None);
         s.responses_mut().start_display();
 
-        let result = player_response_input(&world, &mut s);
+        let result = with_world(world, |cx, io| player_response_input(cx, io, &mut s));
         assert_eq!(result, PlayerInputResult::Continue);
     }
 
@@ -2103,7 +2092,7 @@ mod tests {
         s.init().unwrap();
         assert!(!s.is_talking_finished());
 
-        let result = do_communication(&world, &mut s);
+        let result = with_world(world, |cx, io| do_communication(cx, io, &mut s));
         assert_eq!(result, CommunicationResult::Talking);
     }
 
@@ -2114,7 +2103,7 @@ mod tests {
         s.init().unwrap();
         s.set_talking_finished(true);
         // No responses → run_last_replay + Done.
-        let result = do_communication(&world, &mut s);
+        let result = with_world(world, |cx, io| do_communication(cx, io, &mut s));
         assert_eq!(result, CommunicationResult::Done);
     }
 
@@ -2126,7 +2115,7 @@ mod tests {
         s.set_talking_finished(true);
         s.add_response(1, "Choice A", None);
         // player_response_input returns Continue (no select input in tests) → ResponseContinue.
-        let result = do_communication(&world, &mut s);
+        let result = with_world(world, |cx, io| do_communication(cx, io, &mut s));
         assert_eq!(result, CommunicationResult::ResponseContinue);
     }
 
@@ -2318,7 +2307,7 @@ mod tests {
         // talking_finished starts false
         assert!(!s.is_talking_finished());
 
-        let result = do_communication(&world, &mut s);
+        let result = with_world(world, |cx, io| do_communication(cx, io, &mut s));
         assert_eq!(
             result,
             CommunicationResult::Talking,
@@ -2347,7 +2336,7 @@ mod tests {
         // Use the campaign abort flag.
         world.set_activity(0x4000);
 
-        let result = do_communication(&world, &mut s);
+        let result = with_world(world, |cx, io| do_communication(cx, io, &mut s));
         assert_eq!(
             result,
             CommunicationResult::Done,
@@ -2370,7 +2359,7 @@ mod tests {
         // No responses added — count() == 0.
         assert_eq!(s.responses().count(), 0);
 
-        let result = do_communication(&world, &mut s);
+        let result = with_world(world, |cx, io| do_communication(cx, io, &mut s));
         assert_eq!(
             result,
             CommunicationResult::Done,
@@ -2396,7 +2385,7 @@ mod tests {
         s.add_response(2, "Option B", Some(noop));
         // Do NOT select: player_response_input returns Continue this frame.
 
-        let result = do_communication(&world, &mut s);
+        let result = with_world(world, |cx, io| do_communication(cx, io, &mut s));
         assert_eq!(
             result,
             CommunicationResult::ResponseContinue,
@@ -2428,7 +2417,7 @@ mod tests {
         s.responses_mut().select(0);
         s.select_input_pending = true;
 
-        let result = do_communication(&world, &mut s);
+        let result = with_world(world, |cx, io| do_communication(cx, io, &mut s));
         match result {
             CommunicationResult::Selected(func, rref) => {
                 assert_eq!(rref, 99, "response_ref must match the registered value");
@@ -2456,7 +2445,7 @@ mod tests {
         s.responses_mut().start_display();
         s.responses_mut().select(0);
 
-        let result = select_response(&mut s);
+        let result = select_response(0, &mut s);
         assert!(
             result.is_some(),
             "select_response must return Some(...) when a response with callback is selected"
@@ -2478,7 +2467,7 @@ mod tests {
         s.responses_mut().start_display();
         s.responses_mut().select(0);
 
-        let result = select_response(&mut s);
+        let result = select_response(0, &mut s);
         assert!(
             result.is_none(),
             "null callback must yield None from select_response"

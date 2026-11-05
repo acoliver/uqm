@@ -795,7 +795,7 @@ pub fn rust_do_communication(
                     s.responses().selected().max(0) as u8,
                 )
             };
-            cx.with_legacy(|| super::talk_segue::c_bridge::call_refresh_responses(top, count, cur));
+            super::talk_segue::c_bridge::call_refresh_responses(cx, top, count, cur);
         }
     }
 
@@ -815,7 +815,7 @@ pub fn rust_do_communication(
         let won = super::talk_segue::won_last_battle_external(cx.world);
         if !won {
             // Conversation summary — C bridge, no lock needed
-            cx.with_legacy(super::talk_segue::c_bridge::call_select_conversation_summary);
+            super::talk_segue::c_bridge::call_select_conversation_summary(cx, io);
             // After summary returns, re-render responses (no lock for C call)
             let (top, count, cur) = {
                 let s = COMM_STATE.read();
@@ -825,7 +825,7 @@ pub fn rust_do_communication(
                     s.responses().selected().max(0) as u8,
                 )
             };
-            cx.with_legacy(|| super::talk_segue::c_bridge::call_refresh_responses(top, count, cur));
+            super::talk_segue::c_bridge::call_refresh_responses(cx, top, count, cur);
             return 1;
         }
     }
@@ -833,7 +833,7 @@ pub fn rust_do_communication(
     if left {
         // Replay last phrase — all C bridge calls, no lock
         cx.with_legacy(super::talk_segue::fade_music_to_background_bridge);
-        cx.with_legacy(super::talk_segue::c_bridge::call_feedback_player_phrase);
+        super::talk_segue::c_bridge::call_feedback_player_phrase(cx);
         #[cfg(not(test))]
         let _ = super::talk_segue::dinput::run_talk_segue_dinput(cx, io, 0);
         if !super::talk_segue::check_abort_external(cx.world) {
@@ -845,7 +845,7 @@ pub fn rust_do_communication(
                     s.responses().selected().max(0) as u8,
                 )
             };
-            cx.with_legacy(|| super::talk_segue::c_bridge::call_refresh_responses(top, count, cur));
+            super::talk_segue::c_bridge::call_refresh_responses(cx, top, count, cur);
             cx.with_legacy(super::talk_segue::fade_music_to_foreground_bridge);
         }
         return 1;
@@ -871,7 +871,7 @@ pub fn rust_do_communication(
         let sel = next as u8;
         drop(state);
         // Render updated selection (C→Rust callback, no lock)
-        cx.with_legacy(|| super::talk_segue::c_bridge::call_refresh_responses(top, cnt, sel));
+        super::talk_segue::c_bridge::call_refresh_responses(cx, top, cnt, sel);
     }
 
     // Step 2e: Update animations (C bridge, no lock)
@@ -922,21 +922,8 @@ pub fn rust_update_speech_graphics() {
 ///
 /// Matches C `RefreshResponses`. Delegates rendering to C bridge; Rust
 /// updates scroll state.
-pub fn rust_refresh_responses() {
-    let mut state = COMM_STATE.write();
-    let selected = state.responses().selected().max(0) as usize;
-    // We need an owned snapshot of responses to avoid split-borrow.
-    // response_ui_mut() borrows state mutably; responses() borrows it
-    // immutably. Collect what we need first.
-    let count = state.responses().count();
-    let _ = count; // used inside refresh_responses via ResponseSystem ref
-    let responses_ptr: *const super::response::ResponseSystem = state.responses();
-    // SAFETY: responses_ptr is valid for the duration of this call under the
-    // write guard. response_ui_mut() does not touch the responses field.
-    let responses_ref = unsafe { &*responses_ptr };
-    state
-        .response_ui_mut()
-        .refresh_responses(responses_ref, selected);
+pub fn rust_refresh_responses(world: &crate::engine::World) {
+    COMM_STATE.write().refresh_response_ui(world.activity());
 }
 
 // ============================================================================
@@ -986,8 +973,11 @@ pub fn rust_redraw_subtitles() {
 /// @requirement REQ-CS-002
 /// @pseudocode 004-summary-guard-stale-markers lines 01-24
 #[cfg(not(test))]
-pub fn rust_show_conversation_summary() -> c_int {
-    super::response_ui::select_conversation_summary_production();
+pub fn rust_show_conversation_summary(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    io: &mut crate::engine::observe::Io<'_>,
+) -> c_int {
+    super::response_ui::select_conversation_summary_production(cx, io);
     1
 }
 
@@ -1003,7 +993,11 @@ pub fn rust_show_conversation_summary() -> c_int {
 /// @requirement REQ-CS-002, REQ-CS-003, REQ-SM-001
 /// @pseudocode 004-summary-guard-stale-markers lines 01-47
 #[cfg(test)]
-pub fn rust_show_conversation_summary() -> c_int {
+pub fn rust_show_conversation_summary(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    io: &mut crate::engine::observe::Io<'_>,
+) -> c_int {
+    let _ = (cx, io);
     use super::summary::SummaryResult;
     use super::summary::SummaryView;
 

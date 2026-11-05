@@ -589,7 +589,7 @@ fn the_speech_graphics_and_subtitle_display_refresh_without_a_screen() {
         rust_clear_subtitles();
         rust_redraw_subtitles();
         offer("Choice", 1, None);
-        rust_refresh_responses();
+        rust_refresh_responses(&crate::engine::World::new());
         assert_eq!(
             rust_get_response_count(),
             1,
@@ -603,16 +603,28 @@ fn the_speech_graphics_and_subtitle_display_refresh_without_a_screen() {
 fn the_conversation_summary_pages_through_what_was_said() {
     let _comm = Comm::new();
     let line = CString::new("Something the alien said").unwrap();
+    let mut game = crate::engine::Game::new();
+    let mut battle = crate::engine::battle::Battle::new();
+    let mut cx = crate::engine::battle::Cx::new(
+        &mut battle,
+        &mut game.world,
+        &mut game.kernel,
+        crate::math::random,
+    );
+    let mut observer = crate::engine::observe::Unobserved;
+    let mut io = crate::engine::observe::Io {
+        observer: &mut observer,
+    };
     unsafe {
         assert_eq!(
-            rust_show_conversation_summary(),
+            rust_show_conversation_summary(&mut cx, &mut io),
             1,
             "an empty history exits at once"
         );
         for i in 0..30 {
             rust_splice_track(i + 1, line.as_ptr(), i as f32, 1.0);
         }
-        assert_eq!(rust_show_conversation_summary(), 1);
+        assert_eq!(rust_show_conversation_summary(&mut cx, &mut io), 1);
     }
 }
 
@@ -622,7 +634,7 @@ fn state_accessors_use_safe_rust_signatures() {
     let _: fn(&mut crate::engine::battle::Cx<'_>) -> c_uint = rust_execute_response;
     let _: fn() = rust_init_speech_graphics;
     let _: fn() = rust_update_speech_graphics;
-    let _: fn() = rust_refresh_responses;
+    let _: fn(&crate::engine::World) = rust_refresh_responses;
     let _: fn() = rust_clear_subtitles;
     let _: fn() = rust_check_subtitles;
     let _: fn() = rust_redraw_subtitles;

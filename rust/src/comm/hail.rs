@@ -248,8 +248,8 @@ fn is_starbase_conversation() -> bool {
 
 /// Draw the player communication panel using the shared C-parity renderer.
 #[cfg(not(test))]
-fn draw_sis_com_window() {
-    super::sis_graphics::draw_sis_com_window();
+fn draw_sis_com_window(activity: u16) {
+    super::sis_graphics::draw_sis_com_window(activity);
 }
 
 /// Get the planet name from GlobData.flagship.planet_name.
@@ -309,6 +309,7 @@ pub unsafe fn hail_alien(cx: &mut Cx<'_>, io: &mut Io<'_>) {
         // Reset Rust-side comm state for the new encounter, then sync
         // C statics (pCurInputState, TalkingFinished) via bridges.
         // ----------------------------------------------------------------
+        let activity = cx.world.activity();
         let resources = cx.with_legacy(|| {
             eprintln!("[DBG] HailAlien: clearing COMM_STATE");
             super::state::COMM_STATE.write().reset_for_encounter();
@@ -324,8 +325,7 @@ pub unsafe fn hail_alien(cx: &mut Cx<'_>, io: &mut Io<'_>) {
             // ----------------------------------------------------------------
             // Step 2: Load PlayerFont
             // ----------------------------------------------------------------
-            let player_font_res = c"font.player".as_ptr();
-            let player_font = LoadGraphicInstance(player_font_res);
+            let player_font = LoadGraphicInstance(c"font.player".as_ptr());
             // The conversation owns this font: the response and feedback renderers
             // borrow it, and it is freed only at teardown after queued draws drain.
             CONVERSATION_PLAYER_FONT
@@ -465,7 +465,7 @@ pub unsafe fn hail_alien(cx: &mut Cx<'_>, io: &mut Io<'_>) {
             SetTransitionSource(ptr::null());
             BatchGraphics();
 
-            if (crate::mainloop::ffi::get_current_activity().0 & 0xFF) == 5 {
+            if (activity & 0xFF) == 5 {
                 // WON_LAST_BATTLE branch: set clip to current CommWndRect
                 unsafe {
                     SetContextClipRect((&raw mut c_bridge::CommWndRect).cast());
@@ -495,7 +495,7 @@ pub unsafe fn hail_alien(cx: &mut Cx<'_>, io: &mut Io<'_>) {
             }
 
             // DrawSISComWindow (C line 1278) — ported from c_DrawSISComWindow
-            draw_sis_com_window();
+            draw_sis_com_window(activity);
 
             // ----------------------------------------------------------------
             // Step 11: Set CHECK_LOAD flag, call encounter funcs, run DoInput

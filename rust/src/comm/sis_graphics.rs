@@ -100,27 +100,12 @@ unsafe fn scroll_indicator_stamp(
     })
 }
 
-/// State for the conversation summary page loop (DoInput-compatible).
-/// First field MUST be a function pointer for DoInput compatibility.
-#[repr(C)]
+/// State retained by the typed conversation-history input loop.
+#[derive(Default)]
 struct SummaryLoopState {
-    input_func: Option<unsafe extern "C" fn(*mut SummaryLoopState) -> std::ffi::c_int>,
-    initialized: std::ffi::c_int,
     print_next: std::ffi::c_int,
-    next_sub: *mut std::ffi::c_void, // SUBTITLE_REF
+    next_sub: *mut std::ffi::c_void,
     left_over: *const std::ffi::c_char,
-}
-
-impl Default for SummaryLoopState {
-    fn default() -> Self {
-        Self {
-            input_func: None,
-            initialized: 0,
-            print_next: 0,
-            next_sub: std::ptr::null_mut(),
-            left_over: std::ptr::null(),
-        }
-    }
 }
 
 // ============================================================================
@@ -182,7 +167,7 @@ mod c_bridge {
 
     pub use crate::graphics::pixmap_abi::SetAbsFrameIndex;
 
-    pub use crate::mainloop::input_abi::live::{DoInput, PulsedInputState};
+    pub use crate::mainloop::input_abi::live::PulsedInputState;
     pub use crate::sound::heart_ffi::get_first_track_subtitle as GetFirstTrackSubtitle;
     pub use crate::sound::heart_ffi::get_next_track_subtitle as GetNextTrackSubtitle;
     pub use crate::sound::heart_ffi::get_track_subtitle_text as GetTrackSubtitleText;
@@ -211,20 +196,7 @@ static mut LAST_CUR_RESPONSE: u8 = 0;
 // ============================================================================
 
 #[cfg(not(test))]
-unsafe extern "C" fn do_summary_page_cb(state: *mut SummaryLoopState) -> std::ffi::c_int {
-    let pss = &mut *state;
-
-    if pss.initialized == 0 {
-        pss.print_next = 1;
-        pss.next_sub = c_bridge::GetFirstTrackSubtitle();
-        pss.left_over = std::ptr::null();
-        pss.initialized = 1;
-        pss.input_func = Some(do_summary_page_cb);
-        c_bridge::DoInput(state as *mut std::ffi::c_void, 0);
-        return 1;
-    }
-
-    let activity = crate::mainloop::ffi::get_current_activity().0;
+unsafe fn do_summary_page_frame(pss: &mut SummaryLoopState, activity: u16) -> std::ffi::c_int {
     if (activity & CHECK_ABORT) != 0 {
         return 0;
     }
@@ -613,12 +585,14 @@ fn draw_player_text_wrapped<G: CommWindowGfx>(gfx: &mut G, text: &mut CText, lea
 
 /// The game's drawing surface: the C graphics exports.
 #[cfg(not(test))]
-struct CommWindow;
+struct CommWindow {
+    activity: u16,
+}
 
 #[cfg(not(test))]
 impl CommWindowGfx for CommWindow {
     fn current_activity(&self) -> u16 {
-        crate::mainloop::ffi::get_current_activity().0
+        self.activity
     }
 
     fn space_context(&self) -> *mut std::ffi::c_void {
@@ -719,8 +693,8 @@ impl CommWindowGfx for CommWindow {
 
 /// Draw the SIS communication window background.
 #[cfg(not(test))]
-pub fn draw_sis_com_window() {
-    draw_sis_com_window_with(&mut CommWindow);
+pub fn draw_sis_com_window(activity: u16) {
+    draw_sis_com_window_with(&mut CommWindow { activity });
 }
 
 /// Render the player's selected response text in the SIS comm window.
@@ -729,57 +703,74 @@ pub fn draw_sis_com_window() {
 /// Caller must ensure `text` is a valid null-terminated C string or null,
 /// and that the graphics subsystem is initialized.
 #[cfg(not(test))]
-pub unsafe fn feedback_player_phrase(text: *const std::ffi::c_char) {
-    feedback_player_phrase_with(&mut CommWindow, text);
+pub unsafe fn feedback_player_phrase(activity: u16, text: *const std::ffi::c_char) {
+    feedback_player_phrase_with(&mut CommWindow { activity }, text);
 }
 
 /// Render the response list in the SIS comm window.
 #[cfg(not(test))]
-pub unsafe fn refresh_responses(top: u8, num_responses: u8, cur_response: u8) {
+pub unsafe fn refresh_responses(activity: u16, top: u8, num_responses: u8, cur_response: u8) {
     LAST_TOP_RESPONSE = top;
     LAST_NUM_RESPONSES = num_responses;
     LAST_CUR_RESPONSE = cur_response;
-    refresh_responses_with(&mut CommWindow, top, num_responses, cur_response);
+    refresh_responses_with(
+        &mut CommWindow { activity },
+        top,
+        num_responses,
+        cur_response,
+    );
 }
 
 /// Show conversation history summary page.
 /// Ported from `c_SelectConversationSummary()` in rust_comm.c.
 #[cfg(not(test))]
-pub unsafe fn select_conversation_summary() {
+pub unsafe fn select_conversation_summary(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    io: &mut crate::engine::observe::Io<'_>,
+) {
     let mut text_buf = [0u8; 1024];
-
     if LAST_NUM_RESPONSES > 0
         && c_bridge::rust_get_response_text(
             LAST_CUR_RESPONSE as std::ffi::c_int,
-            text_buf.as_mut_ptr() as *mut std::ffi::c_char,
+            text_buf.as_mut_ptr().cast(),
             text_buf
                 .len()
                 .try_into()
                 .expect("response buffer length fits i32"),
         ) != 0
     {
-        feedback_player_phrase(text_buf.as_ptr() as *const std::ffi::c_char);
+        let activity = cx.world.activity();
+        cx.with_legacy(|| feedback_player_phrase(activity, text_buf.as_ptr().cast()));
     }
-
     let mut state = SummaryLoopState::default();
-    state.initialized = 0;
-    do_summary_page(&mut state);
-
+    do_summary_page(cx, io, &mut state);
     if LAST_NUM_RESPONSES > 0 {
-        refresh_responses(LAST_TOP_RESPONSE, LAST_NUM_RESPONSES, LAST_CUR_RESPONSE);
+        let activity = cx.world.activity();
+        cx.with_legacy(|| {
+            refresh_responses(
+                activity,
+                LAST_TOP_RESPONSE,
+                LAST_NUM_RESPONSES,
+                LAST_CUR_RESPONSE,
+            )
+        });
     }
-
     c_bridge::comm_ClearSubtitles();
 }
 
 #[cfg(not(test))]
-unsafe fn do_summary_page(state: &mut SummaryLoopState) {
+unsafe fn do_summary_page(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    io: &mut crate::engine::observe::Io<'_>,
+    state: &mut SummaryLoopState,
+) {
     state.print_next = 1;
     state.next_sub = c_bridge::GetFirstTrackSubtitle();
     state.left_over = std::ptr::null();
-    state.initialized = 1;
-    state.input_func = Some(do_summary_page_cb);
-    c_bridge::DoInput(state as *mut SummaryLoopState as *mut std::ffi::c_void, 0);
+    cx.run_input(io, false, |cx, _| {
+        let activity = cx.world.activity();
+        cx.with_legacy(|| do_summary_page_frame(state, activity) != 0)
+    });
 }
 
 // ============================================================================
@@ -828,10 +819,11 @@ mod tests {
     }
 
     #[test]
-    fn summary_loop_state_has_function_pointer_first() {
-        // First field must be a function pointer for DoInput compatibility
-        let offset = std::mem::offset_of!(SummaryLoopState, input_func);
-        assert_eq!(offset, 0);
+    fn summary_loop_state_starts_without_a_page_or_subtitle() {
+        let state = SummaryLoopState::default();
+        assert_eq!(state.print_next, 0);
+        assert!(state.next_sub.is_null());
+        assert!(state.left_over.is_null());
     }
 
     #[test]
