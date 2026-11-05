@@ -127,7 +127,7 @@ fn activate_start_scene(
     let Some(observer) = observer else {
         return;
     };
-    observer.activate_save_capture(cx);
+    observer.activate_save_capture();
     let Some(plan) = observer.prepare_start_scene(cx) else {
         return;
     };

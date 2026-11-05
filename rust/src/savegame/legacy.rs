@@ -1,8 +1,6 @@
 //! Pre-UMS save layout, including its 32-bit pointer padding and packed groups.
 use super::format::*;
 use super::{decode_save, decode_summary_from, SaveFile, Summary, GAME_STATE_BYTES};
-#[cfg(not(test))]
-use crate::engine::World;
 use crate::state::game_state::{copy_state_bits_raw, get_state_32_raw, set_state_32_raw};
 use std::io::{self, Read};
 
@@ -204,9 +202,7 @@ pub fn decode_legacy_payload<R: Read>(
 #[cfg(not(test))]
 mod live {
     use super::*;
-    use crate::mainloop::dir_prep::saveDir;
 
-    use crate::savegame::abi::SummaryDesc;
     use crate::savegame::lzh::{cclose, cfilelength, copen, cread, CodeDesc};
     use crate::savegame::slots::SaveSlots;
 
@@ -225,14 +221,10 @@ mod live {
         }
     }
 
-    /// # Safety
-    /// Game thread; summary is null for loading or a writable SUMMARY_DESC.
-    pub unsafe fn load_legacy_game(
-        world: &mut World,
+    fn open_legacy_slot(
+        slots: &SaveSlots,
         slot: u16,
-        summary: *mut SummaryDesc,
-    ) -> anyhow::Result<Option<(super::super::StarDesc, u16)>> {
-        let slots = SaveSlots::new(saveDir.cast())?;
+    ) -> anyhow::Result<(crate::savegame::slots::Stream, Summary)> {
         let mut stream = slots
             .open(&format!("starcon2.{slot:02}"), c"rb")
             .ok_or_else(|| anyhow::anyhow!("no legacy save in slot {slot}"))?;
@@ -241,12 +233,19 @@ mod live {
         }
         let mut header = [0; 164];
         (&mut stream).read_exact(&mut header)?;
-        let saved_summary = decode_legacy_summary(&header)?;
-        if !summary.is_null() {
-            summary.write(SummaryDesc::from(&saved_summary));
-            return Ok(None);
-        }
-        if !(2155..2186).contains(&saved_summary.year_index) {
+        let summary = decode_legacy_summary(&header)?;
+        Ok((stream, summary))
+    }
+
+    pub fn read_legacy_summary(slots: &SaveSlots, slot: u16) -> anyhow::Result<Summary> {
+        open_legacy_slot(slots, slot).map(|(_, summary)| summary)
+    }
+
+    /// # Safety
+    /// Game thread; the resource system and its compressed-stream decoder are initialized.
+    pub unsafe fn read_legacy_game(slots: &SaveSlots, slot: u16) -> anyhow::Result<LegacySave> {
+        let (stream, summary) = open_legacy_slot(slots, slot)?;
+        if !(2155..2186).contains(&summary.year_index) {
             anyhow::bail!("legacy save is corrupt or from an incompatible platform");
         }
         let decoder = Compressed(copen(stream.fp, 0, 0));
@@ -255,16 +254,8 @@ mod live {
         }
         let mut len = 0;
         cfilelength(decoder.0, &mut len);
-        let legacy = decode_legacy_payload(&saved_summary, decoder, len)?;
-        let star = legacy.save.star;
-        let activity = crate::engine::save::apply_legacy(
-            legacy.save,
-            world,
-            legacy.state_files,
-            legacy.battle_group_ref,
-        )?;
-        Ok(Some((star, activity)))
+        decode_legacy_payload(&summary, decoder, len)
     }
 }
 #[cfg(not(test))]
-pub use live::load_legacy_game;
+pub use live::{read_legacy_game, read_legacy_summary};

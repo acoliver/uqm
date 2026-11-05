@@ -517,22 +517,22 @@ impl AutomationObserver {
     /// Activate the script's start scene after game structures and initial
     /// events are initialized, before the first activity dispatch.
     pub(crate) fn prepare_start_scene(&self, cx: &mut Cx<'_>) -> Option<scenario::ScenePlan> {
-        let coord = self;
+        self.complete_admitted_load(cx);
 
         let scene = {
-            let mut inner = coord.inner.lock();
+            let mut inner = self.inner.lock();
             match inner
                 .pending_start_scene
                 .take(SceneActivationBoundary::GameInitialized)
             {
                 Ok(scene) => scene,
                 Err(error) => {
-                    coord.write_trace_labeled(
+                    self.write_trace_labeled(
                         &mut inner,
                         RecordKind::SemanticAssertion,
                         error.to_string(),
                     );
-                    coord.set_terminal(&mut inner, TerminalClass::SemanticMismatch);
+                    self.set_terminal(&mut inner, TerminalClass::SemanticMismatch);
                     return None;
                 }
             }
@@ -543,13 +543,13 @@ impl AutomationObserver {
         match scenario::activate(cx, scene, SceneActivationBoundary::GameInitialized, |_| {}) {
             Ok(plan) => Some(plan),
             Err(error) => {
-                let mut inner = coord.inner.lock();
-                coord.write_trace_labeled(
+                let mut inner = self.inner.lock();
+                self.write_trace_labeled(
                     &mut inner,
                     RecordKind::SemanticAssertion,
                     error.to_string(),
                 );
-                coord.set_terminal(&mut inner, TerminalClass::SemanticMismatch);
+                self.set_terminal(&mut inner, TerminalClass::SemanticMismatch);
                 None
             }
         }

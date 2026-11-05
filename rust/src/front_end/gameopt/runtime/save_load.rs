@@ -1,4 +1,5 @@
 use super::*;
+use crate::savegame::live::load::{load_game_descriptions, LoadRequest};
 
 pub(super) unsafe fn save_load_game(
     cx: &mut Cx<'_>,
@@ -39,10 +40,9 @@ pub(super) unsafe fn save_load_game(
         }
     } else {
         // SAFETY: loading needs no saved stamp and uses the initialized game-thread loader.
-        success = cx.with_legacy(|| unsafe {
-            ConfirmSaveLoad(ptr::null_mut());
-            LoadGame(game_index, ptr::null_mut())
-        });
+        cx.with_legacy(|| unsafe { ConfirmSaveLoad(ptr::null_mut()) });
+        // SAFETY: the picker retains the initialized World and Kernel through loading.
+        success = unsafe { LoadGame(game_index, LoadRequest::Restore(cx)) };
     }
     if pick_state.saving != 0 {
         // SAFETY: ConfirmSaveLoad initializes the retained stamp before drawing it.
@@ -132,7 +132,7 @@ pub(super) fn pick_game(
         }
         // SAFETY: the synchronous picker owns these published native resources.
         cx.with_legacy(|| unsafe {
-            load_game_descriptions(ptr::addr_of_mut!(pick_state.summary).cast());
+            load_game_descriptions(&mut *ptr::addr_of_mut!(pick_state.summary).cast());
             redraw_pick_display(&mut pick_state, menu_state.CurState as COUNT);
         });
     }
@@ -163,7 +163,7 @@ unsafe fn prepare_display(
 ) -> (CONTEXT, STAMP, RECT) {
     // SAFETY: the caller retains the native picker state and graphics resources.
     unsafe {
-        load_game_descriptions(ptr::addr_of_mut!(pick_state.summary).cast());
+        load_game_descriptions(&mut *ptr::addr_of_mut!(pick_state.summary).cast());
         let old_context = SetContext(space_context);
         let dlg_stamp = SaveContextFrame(ptr::null());
         let mut dlg_rect: RECT = mem::zeroed();

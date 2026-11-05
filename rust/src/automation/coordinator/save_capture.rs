@@ -3,25 +3,36 @@
 use super::*;
 
 impl AutomationObserver {
-    /// Called by the existing post-InitGameStructures start-scene hook.
+    /// Admit V3b loading at the existing initialized-game hook.
     #[cfg(not(test))]
-    pub(crate) fn activate_save_capture(&self, cx: &mut Cx<'_>) {
-        let coord = self;
-        let mut inner = coord.inner.lock();
+    pub(crate) fn activate_save_capture(&self) {
+        if let Some(request) = self.inner.lock().save_capture.as_mut() {
+            request.admit_load();
+        }
+    }
+
+    pub(super) fn complete_admitted_load(&self, cx: &mut crate::engine::battle::Cx<'_>) {
+        let mut inner = self.inner.lock();
         let Some(request) = inner.save_capture.as_mut() else {
             return;
         };
+        if !request.load_admitted {
+            return;
+        }
         #[cfg(not(test))]
         if let Err(error) = request.load(cx) {
-            coord.write_trace_labeled(
+            self.write_trace_labeled(
                 &mut inner,
                 RecordKind::SemanticAssertion,
                 format!("save_capture_load_failed:{error:#}"),
             );
-            coord.set_terminal(&mut inner, TerminalClass::SemanticMismatch);
+            cx.with_legacy(|| self.set_terminal(&mut inner, TerminalClass::SemanticMismatch));
         }
         #[cfg(test)]
-        panic!("runtime save load cannot run in unit tests: {request:?}");
+        {
+            let _ = cx;
+            panic!("runtime save load cannot run in unit tests: {request:?}");
+        }
     }
 
     pub(super) fn save_input(
@@ -81,6 +92,7 @@ mod tests {
             source: "source".into(),
             output: "output".into(),
             loaded_activity: Some(0x0804),
+            load_admitted: false,
             loaded_tick: 17,
             captured: false,
             pending_admission: None,

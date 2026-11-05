@@ -10,6 +10,7 @@ pub mod location;
 pub mod queues;
 pub mod statefiles;
 pub mod summary;
+pub mod summary_record;
 
 use std::fmt;
 

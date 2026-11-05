@@ -9,9 +9,9 @@ pub use picker::{picker_action, PickerAction};
 use picker::{picker_slot, MAX_SAVED_GAMES};
 
 #[cfg(not(test))]
-pub use runtime::{
-    game_options, load_game_descriptions, ConfirmSaveLoad, GameOptions, SetNamingCallback,
-};
+pub use crate::savegame::live::load::load_game_descriptions;
+#[cfg(not(test))]
+pub use runtime::{game_options, ConfirmSaveLoad, GameOptions, SetNamingCallback};
 
 #[cfg(not(test))]
 pub(crate) mod runtime {
@@ -862,27 +862,6 @@ pub(crate) mod runtime {
         draw_savegame_summary(pick_state, sel_slot);
         draw_game_selection(pick_state, sel_slot);
         UnbatchGraphics();
-    }
-
-    /// Enumerate the original 50-slot picker list synchronously.
-    ///
-    /// # Safety
-    /// Game-thread caller supplies 50 writable summaries and owns the save directory.
-    pub unsafe fn load_game_descriptions(mut p_sd: *mut SUMMARY_DESC) {
-        for i in 0..MAX_SAVED_GAMES as COUNT {
-            if LoadGame(i, (p_sd).cast()) == 0 {
-                (*p_sd).year_index = 0;
-            }
-            log::info!(
-                "RUST_PICKER: enumerated slot={i} state={}",
-                if (*p_sd).year_index == 0 {
-                    "unavailable"
-                } else {
-                    "occupied"
-                },
-            );
-            p_sd = p_sd.add(1);
-        }
     }
 
     unsafe fn do_pick_game(
