@@ -13,53 +13,42 @@ fn debug_consumer_observes_the_rust_creature_catalog() {
     }
 }
 
-use uqm_rust::navigation::globals::init_glob_data;
-
 use uqm_rust::state::ffi::rust_get_game_state;
 use uqm_rust::state::ffi::rust_set_game_state;
 
 /// Starting another game must not inherit the previous game's story flags.
 ///
-/// This drives the production C entry point rather than the Rust function it
-/// calls, so it covers the wiring that actually broke: `InitGlobData` zeroes its
-/// own shadow array and relies on that call to reset the authoritative Rust
-/// state. When it did not, a second New Game believed the Ur-Quan probe had
-/// already been met and Luna's moon base already taken.
+/// Exercise the World reset used by the live new-game and melee paths, including
+/// the state API's named flag mapping. A second game must find Luna's moon base
+/// intact and must not start with it already aboard.
 #[test]
 fn a_second_new_game_starts_from_zero_state() {
     let moonbase = c"MOONBASE_DESTROYED";
     let on_ship = c"MOONBASE_ON_SHIP";
 
-    let mut game = uqm_rust::engine::Game::new();
-    // SAFETY: this fixture owns the synchronous lifecycle through both initializations.
+    let mut world = uqm_rust::engine::World::new();
+    world.reset_game_data();
+    // SAFETY: the keys are static NUL-terminated strings, and this fixture owns World.
     unsafe {
-        uqm_rust::app::bridge::with_game(&mut game, || {
-            uqm_rust::engine::World::current().write(init_glob_data);
-            uqm_rust::engine::World::current()
-                .write(|world| rust_set_game_state(world, moonbase.as_ptr(), 1));
-            uqm_rust::engine::World::current()
-                .write(|world| rust_set_game_state(world, on_ship.as_ptr(), 1));
-            assert_eq!(
-                uqm_rust::engine::World::current()
-                    .read(|world| rust_get_game_state(world, moonbase.as_ptr())),
-                1,
-                "precondition: the first game recorded the moon base as taken"
-            );
+        rust_set_game_state(&mut world, moonbase.as_ptr(), 1);
+        rust_set_game_state(&mut world, on_ship.as_ptr(), 1);
+        assert_eq!(
+            rust_get_game_state(&world, moonbase.as_ptr()),
+            1,
+            "precondition: the first game recorded the moon base as taken"
+        );
 
-            uqm_rust::engine::World::current().write(init_glob_data);
+        world.reset_game_data();
 
-            assert_eq!(
-                uqm_rust::engine::World::current()
-                    .read(|world| rust_get_game_state(world, moonbase.as_ptr())),
-                0,
-                "a new game must find Luna's moon base intact"
-            );
-            assert_eq!(
-                uqm_rust::engine::World::current()
-                    .read(|world| rust_get_game_state(world, on_ship.as_ptr())),
-                0,
-                "a new game must not start with the moon base already aboard"
-            );
-        })
+        assert_eq!(
+            rust_get_game_state(&world, moonbase.as_ptr()),
+            0,
+            "a new game must find Luna's moon base intact"
+        );
+        assert_eq!(
+            rust_get_game_state(&world, on_ship.as_ptr()),
+            0,
+            "a new game must not start with the moon base already aboard"
+        );
     }
 }

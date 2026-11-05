@@ -12,10 +12,7 @@ pub(crate) mod live {
     use crate::io::uio_bridge;
     use crate::mainloop::restart_menu::c_extern::{DoPopupWindow, FadeMusic, SeedRandomNumbers};
     use crate::math::{delete_context, new_context};
-    use crate::navigation::{
-        abi::{init_space, uninit_space, MeleeConnectDialog, TEXTENTRY_STATE},
-        globals::init_glob_data,
-    };
+    use crate::navigation::abi::{init_space, uninit_space, MeleeConnectDialog, TEXTENTRY_STATE};
 
     use crate::ships::native::abi::*;
 
@@ -250,8 +247,7 @@ pub(crate) mod live {
         cx: &mut crate::engine::battle::Cx<'_>,
         io: &mut crate::engine::observe::Io<'_>,
     ) {
-        // SAFETY: the application admits this session on the initialized game thread.
-        cx.with_legacy(|| WorldOwner::current().write(init_glob_data));
+        cx.world.reset_game_data();
         let mut state = new_menu_state(cx.kernel);
         // SAFETY: state remains in this stack frame through all synchronous callbacks and cleanup.
         cx.with_legacy(|| {
