@@ -13,14 +13,13 @@
 //!
 //! @plan PLAN-20260314-COMM.P09
 
-#[cfg(not(test))]
-use crate::engine::Kernel;
-
 use super::response::ResponseFunc;
 use super::response_ui::{refresh_responses, select_conversation_summary};
 use super::state::CommState;
 #[cfg(not(test))]
 use crate::engine::observe::CheckpointView;
+#[cfg(not(test))]
+use crate::engine::Kernel;
 use crate::engine::{battle::Cx, observe::Io, World};
 
 fn communication_background_volume(background: u8, using_speech: u32) -> u8 {
@@ -78,7 +77,6 @@ pub(super) mod c_bridge {
         CurrentInputState, PulsedInputState, CONTROLLER_INPUT_STATE as ControllerInputState,
     };
     use crate::comm::locdata::COMM_DATA;
-    use crate::engine::Kernel;
     #[cfg(not(test))]
     use std::ffi::c_int;
 
@@ -159,12 +157,6 @@ pub(super) mod c_bridge {
             .as_ref()
             .map(|s| s.menu[key_index as usize])
             .unwrap_or(0)
-    }
-
-    /// Clear CHECK_LOAD bit from LastActivity (replaces c_ClearLastActivityLoadFlag)
-    pub unsafe fn clear_last_activity_load_flag() {
-        (**Kernel::current()).last_activity &= !0x1000;
-        // CHECK_LOAD = 0x1000
     }
 
     /// Check if CommData.AlienTransitionDesc.NumFrames > 0 (replaces c_HasTransitionAnim)
@@ -764,32 +756,34 @@ pub fn talk_segue(world: &World, state: &mut CommState, wait_track: u32) -> bool
 /// Matches C `AlienTalkSegue`.  On the first call this encounter, initialises
 /// speech graphics, starts music, sets up animations.  Subsequent calls just
 /// delegate to `talk_segue`.
-pub fn alien_talk_segue(world: &World, state: &mut CommState, wait_track: u32) {
+pub fn alien_talk_segue(cx: &mut Cx<'_>, state: &mut CommState, wait_track: u32) {
     // Skip if abort or already finished
-    if check_abort_external(world) || state.is_talking_finished() {
+    if check_abort_external(cx.world) || state.is_talking_finished() {
         return;
     }
 
     if !state.first_talk_call {
         state.first_talk_call = true;
         // First call this encounter — initialize speech subsystem
-        init_speech_graphics(state);
-        set_colormap(state);
-        draw_alien_frame(state);
-        update_speech_graphics(state);
-        comm_intro_transition();
+        cx.with_legacy(|| {
+            init_speech_graphics(state);
+            set_colormap(state);
+            draw_alien_frame(state);
+            update_speech_graphics(state);
+            comm_intro_transition();
 
-        play_alien_music(state);
-        set_music_background_vol(state);
+            play_alien_music(state);
+            set_music_background_vol(state);
 
-        #[cfg(not(test))]
-        unsafe {
-            c_bridge::InitCommAnimations();
-            c_bridge::clear_last_activity_load_flag();
-        }
+            #[cfg(not(test))]
+            unsafe {
+                c_bridge::InitCommAnimations()
+            };
+        });
+        cx.kernel.last_activity &= !0x1000;
     }
 
-    let finished = talk_segue(world, state, wait_track);
+    let finished = talk_segue(cx.world, state, wait_track);
     state.set_talking_finished(finished);
 
     if finished {
@@ -918,9 +912,9 @@ pub fn player_response_input(
 ///
 /// # Safety
 /// Must be called from the game thread with CommData fully initialized.
-pub unsafe fn alien_talk_first_call_init() {
+pub unsafe fn alien_talk_first_call_init(cx: &mut Cx<'_>) {
     #[cfg(not(test))]
-    {
+    cx.with_legacy(|| {
         rust_init_speech_graphics();
         c_bridge::set_color_map_from_comm_data();
         c_bridge::DrawAlienFrame(std::ptr::null_mut(), 0, 1);
@@ -929,8 +923,8 @@ pub unsafe fn alien_talk_first_call_init() {
         c_bridge::play_alien_music();
         c_bridge::FadeMusic((c_bridge::music_volume::BACKGROUND) as u8, 0i16);
         c_bridge::InitCommAnimations();
-        c_bridge::clear_last_activity_load_flag();
-    }
+    });
+    cx.kernel.last_activity &= !0x1000;
 }
 
 #[cfg(not(test))]
@@ -966,7 +960,7 @@ pub fn do_communication(
     state: &mut CommState,
 ) -> CommunicationResult {
     if !state.is_talking_finished() {
-        alien_talk_segue(cx.world, state, WAIT_TRACK_ALL);
+        alien_talk_segue(cx, state, WAIT_TRACK_ALL);
         return CommunicationResult::Talking;
     }
 
@@ -1932,35 +1926,37 @@ mod tests {
         s.set_talking_finished(true);
 
         // Should be a no-op
-        alien_talk_segue(&world, &mut s, WAIT_TRACK_ALL);
+        with_world(world, |cx, _| alien_talk_segue(cx, &mut s, WAIT_TRACK_ALL));
         // still finished, no crash
         assert!(s.is_talking_finished());
     }
 
     #[test]
     fn test_alien_talk_segue_first_call_sets_flag() {
-        let mut world = crate::engine::World::new();
-        let mut s = CommState::new();
-        s.init().unwrap();
-        assert!(!s.first_talk_call);
+        let world = crate::engine::World::new();
+        with_world(world, |cx, _| {
+            let mut s = CommState::new();
+            s.init().unwrap();
+            assert!(!s.first_talk_call);
 
-        // Set abort immediately so we don't actually loop
-        world.set_activity(0x4000);
-        alien_talk_segue(&world, &mut s, WAIT_TRACK_ALL);
+            // Set abort immediately so we don't actually loop
+            cx.world.set_activity(0x4000);
+            alien_talk_segue(cx, &mut s, WAIT_TRACK_ALL);
 
-        // first_talk_call should be set (but then skip due to abort)
-        // check_abort returns true before first_talk_call check → skip
-        // Actually check_abort is first, so first_talk_call stays false here.
-        // Let's check the non-abort path:
-        let mut s2 = CommState::new();
-        s2.init().unwrap();
-        // With no track loaded, the first segue finishes immediately.
-        world.set_activity(0);
-        alien_talk_segue(&world, &mut s2, WAIT_TRACK_ALL);
-        assert!(
-            s2.first_talk_call,
-            "first_talk_call should be set after first call"
-        );
+            // first_talk_call should be set (but then skip due to abort)
+            // check_abort returns true before first_talk_call check → skip
+            // Actually check_abort is first, so first_talk_call stays false here.
+            // Let's check the non-abort path:
+            let mut s2 = CommState::new();
+            s2.init().unwrap();
+            // With no track loaded, the first segue finishes immediately.
+            cx.world.set_activity(0);
+            alien_talk_segue(cx, &mut s2, WAIT_TRACK_ALL);
+            assert!(
+                s2.first_talk_call,
+                "first_talk_call should be set after first call"
+            );
+        });
     }
 
     #[test]
@@ -1970,7 +1966,7 @@ mod tests {
         s.init().unwrap();
         world.set_activity(0x4000);
 
-        alien_talk_segue(&world, &mut s, WAIT_TRACK_ALL);
+        with_world(world, |cx, _| alien_talk_segue(cx, &mut s, WAIT_TRACK_ALL));
         assert!(!s.first_talk_call, "should not initialize if abort");
     }
 
@@ -2145,7 +2141,7 @@ mod tests {
             "precondition: first_talk_call not yet set"
         );
 
-        alien_talk_segue(&world, &mut s, WAIT_TRACK_ALL);
+        with_world(world, |cx, _| alien_talk_segue(cx, &mut s, WAIT_TRACK_ALL));
 
         assert!(
             s.first_talk_call,
@@ -2165,7 +2161,7 @@ mod tests {
             "precondition: first_talk_call not yet set"
         );
 
-        alien_talk_segue(&world, &mut s, WAIT_TRACK_ALL);
+        with_world(world, |cx, _| alien_talk_segue(cx, &mut s, WAIT_TRACK_ALL));
 
         assert!(
             s.first_talk_call,
@@ -3039,5 +3035,29 @@ mod tests {
     #[should_panic(expected = "Unknown comm intro transition")]
     fn an_unknown_comm_intro_mode_is_an_invariant_failure() {
         let _ = intro_transition(4, 0);
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn first_talk_consumes_only_the_supplied_kernel_load_flag() {
+        let world = World::new();
+        let mut state = CommState::new();
+        with_world(world, |cx, _| {
+            cx.kernel.last_activity = 0x5003;
+            cx.world.set_activity(0x4003);
+            alien_talk_segue(cx, &mut state, WAIT_TRACK_ALL);
+            assert_eq!(cx.kernel.last_activity, 0x5003);
+            assert!(!state.first_talk_call);
+
+            cx.world.set_activity(3);
+            alien_talk_segue(cx, &mut state, WAIT_TRACK_ALL);
+            assert_eq!(cx.kernel.last_activity, 0x4003);
+            assert!(state.first_talk_call);
+
+            state.set_talking_finished(false);
+            cx.kernel.last_activity |= 0x1000;
+            alien_talk_segue(cx, &mut state, WAIT_TRACK_ALL);
+            assert_eq!(cx.kernel.last_activity, 0x5003);
+        });
     }
 }

@@ -652,7 +652,7 @@ pub unsafe fn rust_alien_talk_segue(
             wait,
             aborted,
             &mut (cx, io),
-            |(cx, _)| cx.with_legacy(|| super::talk_segue::alien_talk_first_call_init()),
+            |(cx, _)| super::talk_segue::alien_talk_first_call_init(cx),
             |(cx, io), wait| super::talk_segue::dinput::run_talk_segue_dinput(cx, io, wait),
             |(cx, _)| cx.with_legacy(super::talk_segue::fade_music_to_foreground_bridge),
         )
@@ -662,7 +662,7 @@ pub unsafe fn rust_alien_talk_segue(
         let _ = io;
         let mut state = COMM_STATE.write();
         let was_finished = state.is_talking_finished();
-        super::talk_segue::alien_talk_segue(cx.world, &mut state, wait);
+        super::talk_segue::alien_talk_segue(cx, &mut state, wait);
         if !was_finished && state.is_talking_finished() {
             1
         } else {

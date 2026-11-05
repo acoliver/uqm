@@ -497,12 +497,6 @@ pub unsafe fn hail_alien(cx: &mut Cx<'_>, io: &mut Io<'_>) {
             // DrawSISComWindow (C line 1278) — ported from c_DrawSISComWindow
             draw_sis_com_window(activity);
 
-            // ----------------------------------------------------------------
-            // Step 11: Set CHECK_LOAD flag, call encounter funcs, run DoInput
-            // ----------------------------------------------------------------
-            // LastActivity |= CHECK_LOAD (0x1000)
-            (**Kernel::current()).last_activity |= 0x1000;
-
             c_bridge::HailResources {
                 space_ctx,
                 anim_ctx,
@@ -517,6 +511,7 @@ pub unsafe fn hail_alien(cx: &mut Cx<'_>, io: &mut Io<'_>) {
             }
         });
 
+        cx.kernel.last_activity |= 0x1000;
         if let Some(callback) = c_bridge::CommData.init_encounter_func {
             callback(cx);
             super::ffi::observe_responses(io);
