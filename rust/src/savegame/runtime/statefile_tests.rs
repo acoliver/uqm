@@ -514,7 +514,7 @@ fn rejected_restore_leaves_files_and_state_alone() {
                             &sections,
                         )
                     }),
-                    Err(expected)
+                    Err(expected.into())
                 );
                 let after = (
                     file(STARINFO_FILE),
