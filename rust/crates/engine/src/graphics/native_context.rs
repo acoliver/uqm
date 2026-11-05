@@ -25,16 +25,35 @@ impl ContextFrame {
 
 enum Operation {
     Select,
+    Deselect,
+    BeginBatch,
+    EndBatch,
     Background(Color),
     Frame(FRAME),
     Clip(RECT),
     Clear,
     Fill(Color, RECT),
+    Stamp(STAMP),
     Text(super::native_font::FontLease, TEXT, Color),
 }
 
 #[derive(Clone)]
 pub struct ContextLease(Rc<Allocation>);
+
+struct ContextBatch {
+    context: ContextLease,
+    previous: Option<ContextLease>,
+}
+impl Drop for ContextBatch {
+    fn drop(&mut self) {
+        self.context.apply(Operation::EndBatch);
+        if let Some(previous) = &self.previous {
+            previous.select();
+        } else {
+            self.context.apply(Operation::Deselect);
+        }
+    }
+}
 
 impl ContextLease {
     /// Retain a registered context without dereferencing the supplied address.
@@ -46,15 +65,22 @@ impl ContextLease {
         Self(allocation.unwrap_or_else(|| panic!("context is unowned or retired: {context:p}")))
     }
 
-    fn apply(&self, operation: Operation) -> FRAME {
+    fn apply(&self, operation: Operation) -> (FRAME, CONTEXT) {
         self.0.owned.assert_thread();
+        let selected = if matches!(&operation, Operation::Deselect) {
+            std::ptr::null_mut()
+        } else {
+            self.0.context.as_ptr()
+        };
         // SAFETY: the lease owns the selected context on this graphics thread.
         // Set-frame retains its new allocation; clipping and drawing retain the
         // selected target before entering this native operation boundary.
         unsafe {
-            context_abi::SetContext(self.0.context.as_ptr());
+            let previous = context_abi::SetContext(selected);
             match operation {
-                Operation::Select => (),
+                Operation::Select | Operation::Deselect => (),
+                Operation::BeginBatch => super::gfx_common_abi::batch_graphics(),
+                Operation::EndBatch => super::gfx_common_abi::unbatch_graphics(),
                 Operation::Background(color) => {
                     context_abi::SetContextBackGroundColor(color);
                 }
@@ -69,18 +95,31 @@ impl ContextLease {
                     context_abi::SetContextForeGroundColor(color);
                     frame_abi::DrawFilledRectangle(&mut rect);
                 }
+                Operation::Stamp(mut stamp) => frame_abi::DrawStamp(&mut stamp),
                 Operation::Text(font, mut text, color) => {
                     super::font_abi::SetContextFont(font.as_raw());
                     context_abi::SetContextForeGroundColor(color);
                     super::font_abi::font_DrawText(&mut text);
                 }
             }
-            self.0.context.as_ref().ForeGroundFrame
+            (self.0.context.as_ref().ForeGroundFrame, previous)
         }
     }
 
     fn retain_target(&self) -> ContextFrame {
-        ContextFrame::retain(NonNull::new(self.apply(Operation::Select)))
+        ContextFrame::retain(NonNull::new(self.apply(Operation::Select).0))
+    }
+
+    pub fn draw_batch<R>(&self, draw: impl FnOnce() -> R) -> R {
+        let previous = NonNull::new(self.apply(Operation::Select).1).map(Self::retain);
+        let batch = ContextBatch {
+            context: self.clone(),
+            previous,
+        };
+        self.apply(Operation::BeginBatch);
+        let result = draw();
+        drop(batch);
+        result
     }
 
     pub fn select(&self) {
@@ -105,6 +144,14 @@ impl ContextLease {
     pub fn fill_rectangle(&self, color: Color, rect: RECT) {
         let _target = self.retain_target();
         self.apply(Operation::Fill(color, rect));
+    }
+
+    pub fn draw_stamp(&self, source: &ContextFrame, origin: POINT) {
+        let _target = self.retain_target();
+        self.apply(Operation::Stamp(STAMP {
+            origin,
+            frame: source.frame,
+        }));
     }
 
     pub fn draw_text(

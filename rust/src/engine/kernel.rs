@@ -20,6 +20,8 @@ pub struct Kernel {
     pub screen: crate::graphics::native_abi::FRAME,
     #[cfg(not(test))]
     battle_font: Option<crate::graphics::native_font::LoadedFont>,
+    #[cfg(not(test))]
+    tiny_font_owner: Option<crate::graphics::native_font::LoadedFont>,
     pub star_con_font: crate::graphics::native_abi::FONT,
     pub micro_font: crate::graphics::native_abi::FONT,
     pub tiny_font: crate::graphics::native_abi::FONT,
@@ -79,6 +81,23 @@ impl Kernel {
         self.battle_font = None;
     }
 
+    #[cfg(not(test))]
+    pub(crate) fn install_tiny_font(&mut self, font: crate::graphics::native_font::LoadedFont) {
+        self.tiny_font = font.as_raw();
+        self.tiny_font_owner = Some(font);
+    }
+
+    #[cfg(not(test))]
+    pub(crate) fn tiny_font_lease(&self) -> Option<crate::graphics::native_font::FontLease> {
+        self.tiny_font_owner.as_ref().map(|font| font.lease())
+    }
+
+    #[cfg(not(test))]
+    pub(crate) fn release_tiny_font(&mut self) {
+        self.tiny_font = ptr::null_mut();
+        self.tiny_font_owner = None;
+    }
+
     pub(crate) fn begin_battle(&mut self) {
         assert!(!self.battle_active, "nested battle session");
         self.battle_active = true;
@@ -127,6 +146,8 @@ impl Kernel {
             screen: ptr::null_mut(),
             #[cfg(not(test))]
             battle_font: None,
+            #[cfg(not(test))]
+            tiny_font_owner: None,
             star_con_font: ptr::null_mut(),
             micro_font: ptr::null_mut(),
             tiny_font: ptr::null_mut(),

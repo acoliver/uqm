@@ -123,21 +123,26 @@ pub unsafe extern "C" fn DestroyContext(context: *mut context_desc) -> BOOLEAN {
     1
 }
 
-pub(super) unsafe fn free_context(context: std::ptr::NonNull<context_desc>) {
-    let context = context.as_ptr();
+pub(super) unsafe fn free_context(allocation: std::ptr::NonNull<context_desc>) {
+    let context = allocation.as_ptr();
+    // SetContext mutates the outgoing descriptor, so deselect before borrowing it.
+    if _pCurContext == context {
+        SetContext(ptr::null_mut());
+    }
+    let descriptor = allocation.as_ref();
     #[cfg(feature = "debug-process")]
     {
         let mut link = ptr::addr_of_mut!(FIRST_CONTEXT);
         while !(*link).is_null() && *link != context {
             link = ptr::addr_of_mut!((**link).next);
         }
-        if CONTEXT_END == ptr::addr_of_mut!((*context).next) {
+        if CONTEXT_END == ptr::from_ref(&descriptor.next).cast_mut() {
             CONTEXT_END = link;
         }
-        *link = (*context).next;
+        *link = descriptor.next;
     }
-    if !(*context).FontBacking.is_null() {
-        TFB_DrawImage_Delete((*context).FontBacking);
+    if !descriptor.FontBacking.is_null() {
+        TFB_DrawScreen_DeleteImage(descriptor.FontBacking);
     }
     rust_hfree(context.cast());
 }
@@ -418,6 +423,56 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
+    fn retained_batch_restores_the_previous_context_and_depth_after_unwinding() {
+        let previous_raw = allocated_context();
+        let current_raw = allocated_context();
+        let previous = ContextLease::retain(
+            std::ptr::NonNull::new(previous_raw)
+                .unwrap_or_else(|| panic!("fixture context allocation failed")),
+        );
+        let current = ContextLease::retain(
+            std::ptr::NonNull::new(current_raw)
+                .unwrap_or_else(|| panic!("fixture context allocation failed")),
+        );
+        previous.select();
+        // SAFETY: this serial test exclusively owns native context and batch state.
+        let state = || unsafe {
+            (
+                std::ptr::addr_of!(_pCurContext).read(),
+                super::super::gfx_common_abi::get_batch_depth(),
+            )
+        };
+        let depth = state().1;
+        assert_eq!(
+            current.draw_batch(|| {
+                assert_eq!(state(), (current_raw, depth + 1));
+                previous.draw_batch(|| assert_eq!(state(), (previous_raw, depth + 2)));
+                assert_eq!(state(), (current_raw, depth + 1));
+                17
+            }),
+            17
+        );
+        assert_eq!(state(), (previous_raw, depth));
+        let rejected = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            current.draw_batch(|| panic!("fixture drawing failure"));
+        }));
+        assert!(rejected.is_err());
+        assert_eq!(state(), (previous_raw, depth));
+        // SAFETY: both fixture contexts remain owned while clearing the selection.
+        unsafe { SetContext(std::ptr::null_mut()) };
+        assert_eq!(current.draw_batch(|| 21), 21);
+        assert_eq!(state(), (std::ptr::null_mut(), depth));
+        // SAFETY: the serial test consumes both fixture allocation owners exactly once.
+        unsafe {
+            assert_eq!(DestroyContext(current_raw), 1);
+            assert_eq!(DestroyContext(previous_raw), 1);
+        }
+        drop(current);
+        drop(previous);
+    }
+
+    #[test]
+    #[serial_test::serial]
     fn context_retention_rejects_unowned_and_retired_addresses() {
         assert!(
             std::panic::catch_unwind(|| ContextLease::retain(std::ptr::NonNull::dangling()))
@@ -454,11 +509,22 @@ mod tests {
                 height: 4,
             },
         });
+        let source = ContextFrame::retain(std::ptr::NonNull::new(frame));
+        context.draw_stamp(&source, POINT { x: 7, y: 11 });
         // SAFETY: the context and its target remain retained by the lease.
         assert_eq!(unsafe { (*raw).ClipRect.extent.width }, 3);
         // SAFETY: consume the native context owner before releasing its retained lease.
         assert_eq!(unsafe { DestroyContext(raw) }, 1);
         drop(context);
+        assert_eq!(
+            super::super::drawable_abi::retain_frame_allocations(&[frame])[0].frame(0),
+            Some(frame)
+        );
+        drop(source);
+        assert!(std::panic::catch_unwind(|| {
+            super::super::drawable_abi::retain_frame_allocations(&[frame])
+        })
+        .is_err());
     }
 
     #[test]

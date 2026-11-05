@@ -557,7 +557,7 @@ pub type TFB_DrawCommand_FilledImage = tfb_dc_filledimg;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct tfb_dc_fontchar {
-    pub fontchar: *mut TFB_Char,
+    pub fontchar: TFB_Char,
     pub backing: *mut TFB_Image,
     pub x: ::std::os::raw::c_int,
     pub y: ::std::os::raw::c_int,

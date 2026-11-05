@@ -1,7 +1,5 @@
 //! Live captain-window rendering and crew/energy bookkeeping from status.c.
 
-#[cfg(not(test))]
-use crate::graphics::context_abi::_pCurContext;
 use crate::ships::native::abi::*;
 
 pub fn init_status_offsets(kernel: &mut crate::engine::Kernel, height_pixels: i32) {
@@ -38,6 +36,11 @@ fn crew_text(value: COUNT) -> [u8; 40] {
         buffer[index] = digits[count - index - 1];
     }
     buffer
+}
+
+fn captain_name(name: &[u8]) -> &std::ffi::CStr {
+    std::ffi::CStr::from_bytes_until_nul(name)
+        .unwrap_or_else(|_| panic!("captain name is not terminated within its owned buffer"))
 }
 
 fn energy_delta(current: BYTE, maximum: BYTE, delta: SIZE) -> (bool, SIZE) {
@@ -268,11 +271,6 @@ pub(crate) mod engine {
     use super::*;
     use crate::engine::battle::{views::FrameSelection, Cx, ElementId};
 
-    unsafe fn filled(color: Color, mut r: RECT) {
-        SetContextForeGroundColor(color);
-        DrawFilledRectangle(&mut r);
-    }
-
     pub(crate) fn captains_window(
         cx: &Cx<'_>,
         ship: crate::engine::battle::ShipId,
@@ -348,53 +346,55 @@ pub(crate) mod engine {
         captain
     }
 
-    /// # Safety
-    /// Ship, captain assets, and the active status context must be live.
-    pub unsafe fn draw_captains_window(cx: &mut Cx<'_>, ship: crate::engine::battle::ShipId) {
+    pub fn draw_captains_window(
+        cx: &mut Cx<'_>,
+        ship: crate::engine::battle::ShipId,
+        context: Option<&crate::graphics::context_abi::ContextLease>,
+        height: SIZE,
+        pc_menu: bool,
+    ) {
         let captain = prepare_captain(cx, ship);
-        BatchGraphics();
-        let y = cx.status_offset(ship);
-        let height = (ScreenHeight >> 1) as SIZE;
-        captain_border(y, height, |color, r| filled(color, r));
-        let cy = y.wrapping_add(69);
-        let mut stamp = STAMP {
-            origin: POINT { x: 4, y: cy },
-            frame: captain.background,
+        let Some(context) = context else {
+            return;
         };
-        DrawStamp(&mut stamp);
-        if cx.ship(ship).captains_name_index == 0
-            && cx.ship(ship).playerNr == RPG_PLAYER_NUM as SIZE
-        {
-            let mut text = TEXT {
-                baseline: POINT {
-                    x: 32,
-                    y: cy.wrapping_add(6),
-                },
-                pStr: (&raw const cx.world.data.flagship.commander_name).cast(),
-                align: TEXT_ALIGN_ALIGN_CENTER,
-                CharCount: COUNT::MAX,
-            };
-            SetContextForeGroundColor(rgb15(0, 20, 0));
-            SetContextFont(cx.kernel.tiny_font);
-            font_DrawText(&mut text);
-        }
-        let info = cx.race_stats(ship).ship_info;
-        if has_crew_counter(info.max_crew, info.ship_flags) {
-            let context = crate::graphics::context_abi::ContextLease::retain(
-                std::ptr::NonNull::new(_pCurContext)
-                    .unwrap_or_else(|| panic!("missing status context")),
+        context.draw_batch(|| {
+            let y = cx.status_offset(ship);
+            captain_border(y, height, |color, r| context.fill_rectangle(color, r));
+            let cy = y.wrapping_add(69);
+            let background = crate::graphics::context_abi::ContextFrame::retain(
+                std::ptr::NonNull::new(captain.background),
             );
-            draw_battle_crew_amount(
-                &context,
-                &cx.kernel.battle_font().unwrap_or_else(|| {
-                    panic!("numeric crew display requires the loaded battle font")
-                }),
-                cx.race_stats(ship).ship_info.crew_level,
-                y,
-                optWhichMenu == OPT_PC as i32,
-            );
-        }
-        UnbatchGraphics();
+            context.draw_stamp(&background, POINT { x: 4, y: cy });
+            if cx.ship(ship).captains_name_index == 0
+                && cx.ship(ship).playerNr == RPG_PLAYER_NUM as SIZE
+            {
+                let font = cx.kernel.tiny_font_lease().unwrap_or_else(|| {
+                    panic!("captain name display requires the loaded tiny font")
+                });
+                context.draw_text(
+                    &font,
+                    captain_name(&cx.world.data.flagship.commander_name),
+                    POINT {
+                        x: 32,
+                        y: cy.wrapping_add(6),
+                    },
+                    TEXT_ALIGN_ALIGN_CENTER,
+                    rgb15(0, 20, 0),
+                );
+            }
+            let info = cx.race_stats(ship).ship_info;
+            if has_crew_counter(info.max_crew, info.ship_flags) {
+                draw_battle_crew_amount(
+                    context,
+                    &cx.kernel.battle_font().unwrap_or_else(|| {
+                        panic!("numeric crew display requires the loaded battle font")
+                    }),
+                    info.crew_level,
+                    y,
+                    pc_menu,
+                );
+            }
+        });
     }
 
     pub fn delta_energy(cx: &mut Cx<'_>, e: ElementId, delta: SIZE) -> bool {
@@ -490,6 +490,14 @@ pub(crate) use engine::draw_battle_crew_amount;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn captain_name_borrows_only_the_bounded_name_before_its_terminator() {
+        let name = [b'Z', 0xc3, 0xb6, b'q', 0, b'X'];
+        assert_eq!(captain_name(&name).to_bytes(), "Zöq".as_bytes());
+        assert_eq!(captain_name(&[0, b'X']).to_bytes(), b"");
+        assert!(std::panic::catch_unwind(|| captain_name(b"unterminated")).is_err());
+    }
 
     #[test]
     fn crew_counter_is_needed_only_for_large_crews_or_player_captains() {

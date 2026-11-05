@@ -88,12 +88,7 @@ impl Drop for OwnedAllocation {
                     super::gfxload::release_cel_data_now(drawable)
                 }
                 AllocationKind::Font(font) => super::gfxload::release_font_data_now(font),
-                AllocationKind::Context(context) => {
-                    if super::context_abi::_pCurContext == context.as_ptr() {
-                        super::context_abi::SetContext(std::ptr::null_mut());
-                    }
-                    super::context_abi::free_context(context);
-                }
+                AllocationKind::Context(context) => super::context_abi::free_context(context),
             }
         }
     }

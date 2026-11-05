@@ -158,13 +158,21 @@ impl Cx<'_> {
         let info = self.ship_info_pointer(ship);
         let font = self.kernel.battle_font();
         // SAFETY: the descriptor retains its owned status data while graphics are drawn.
-        unsafe {
+        let pc_menu = unsafe {
             self.with_legacy(|| draw_status(font.as_ref(), info, Some(ship), clip));
-            if !clipped {
-                let old = SetContext(self.kernel.status_context);
-                crate::battle::status_native::draw_captains_window(self, ship);
-                SetContext(old);
-            }
+            optWhichMenu == OPT_PC as i32
+        };
+        if !clipped {
+            let context = std::ptr::NonNull::new(self.kernel.status_context)
+                .map(crate::graphics::context_abi::ContextLease::retain);
+            let height = (self.screen_dimensions().1 >> 1) as SIZE;
+            crate::battle::status_native::draw_captains_window(
+                self,
+                ship,
+                context.as_ref(),
+                height,
+                pc_menu,
+            );
         }
     }
 

@@ -142,11 +142,10 @@ unsafe fn init_kernel(kernel: &mut crate::engine::Kernel, activity: u16) -> u32 
             return 0;
         };
         kernel.install_battle_font(font);
-        kernel.tiny_font =
-            crate::graphics::resgfx::LoadGraphicInstance(c"font.tiny".as_ptr()).cast();
-        if kernel.tiny_font.is_null() {
+        let Some(font) = crate::graphics::native_font::LoadedFont::load(c"font.tiny") else {
             return 0;
-        }
+        };
+        kernel.install_tiny_font(font);
         kernel.activity_frame = pixmap_abi::CaptureDrawable(
             crate::graphics::resgfx::LoadGraphicInstance(c"graphics.activity".as_ptr()).cast(),
         )
