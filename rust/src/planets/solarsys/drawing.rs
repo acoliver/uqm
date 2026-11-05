@@ -24,7 +24,8 @@ use crate::graphics::cmap_abi::SetColorMap;
 
 use crate::graphics::gfx_common_abi::SetTransitionSource;
 
-use crate::battle::process_native::engine::RedrawQueue;
+use crate::battle::process_native::engine::redraw_queue;
+use crate::engine::battle::Cx;
 
 use crate::graphics::gfx_common_abi::ScreenTransition;
 
@@ -191,17 +192,21 @@ pub(super) unsafe fn draw_outer_system() {
     );
 }
 
-pub(super) unsafe fn draw_system_transition(inner: bool) {
-    SetTransitionSource(std::ptr::null_mut());
-    BatchGraphics();
-    if inner {
-        draw_inner_system();
-    } else {
-        draw_outer_system();
-    }
-    RedrawQueue(0);
-    ScreenTransition(3, std::ptr::null_mut());
-    UnbatchGraphics();
+pub(super) unsafe fn draw_system_transition(cx: &mut Cx<'_>, inner: bool) {
+    cx.with_legacy(|| {
+        SetTransitionSource(std::ptr::null_mut());
+        BatchGraphics();
+        if inner {
+            draw_inner_system();
+        } else {
+            draw_outer_system();
+        }
+    });
+    redraw_queue(cx, false);
+    cx.with_legacy(|| {
+        ScreenTransition(3, std::ptr::null_mut());
+        UnbatchGraphics();
+    });
 }
 
 pub(super) unsafe fn draw_system(radius: c::SIZE, inner: bool) {

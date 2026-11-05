@@ -30,7 +30,8 @@ use crate::graphics::context_abi::SetContext;
 
 use crate::graphics::gfx_common_abi::SetTransitionSource;
 
-use crate::battle::process_native::engine::RedrawQueue;
+use crate::battle::process_native::engine::redraw_queue;
+use crate::engine::battle::Cx;
 
 use crate::graphics::gfx_common_abi::ScreenTransition;
 
@@ -421,26 +422,31 @@ pub(super) unsafe fn check_ship_location(new_radius: *mut c::SIZE) -> c::BOOLEAN
     0
 }
 
-pub(super) unsafe fn scale_system(new_radius: c::SIZE) {
-    let lease = glob();
-    let game = ptr::addr_of_mut!((**lease).game);
-    (*system()).SunDesc[0].radius = new_radius;
-    XFormIPLoc(
-        ptr::addr_of_mut!((*game).ip_location).cast(),
-        ptr::addr_of_mut!((*game).ship_stamp.origin).cast(),
-        1,
-    );
+pub(super) unsafe fn scale_system(cx: &mut Cx<'_>, new_radius: c::SIZE) {
+    let rect = cx.with_legacy(|| {
+        let lease = glob();
+        let game = ptr::addr_of_mut!((**lease).game);
+        (*system()).SunDesc[0].radius = new_radius;
+        XFormIPLoc(
+            ptr::addr_of_mut!((*game).ip_location).cast(),
+            ptr::addr_of_mut!((*game).ship_stamp.origin).cast(),
+            1,
+        );
 
-    drop(lease);
-    // SMOOTH_SYSTEM_ZOOM is disabled in the C source; use its crossfade path.
-    let mut rect: c::RECT = std::mem::zeroed();
-    c::GetContextClipRect(&mut rect);
-    SetTransitionSource((&raw mut rect).cast());
-    BatchGraphics();
-    draw_outer_system();
-    RedrawQueue(0);
-    ScreenTransition(3, (&raw const rect).cast());
-    UnbatchGraphics();
+        drop(lease);
+        // SMOOTH_SYSTEM_ZOOM is disabled in the C source; use its crossfade path.
+        let mut rect: c::RECT = std::mem::zeroed();
+        c::GetContextClipRect(&mut rect);
+        SetTransitionSource((&raw mut rect).cast());
+        BatchGraphics();
+        draw_outer_system();
+        rect
+    });
+    redraw_queue(cx, false);
+    cx.with_legacy(|| {
+        ScreenTransition(3, (&raw const rect).cast());
+        UnbatchGraphics();
+    });
 }
 
 pub(super) unsafe fn restore_system_view() {
@@ -451,27 +457,34 @@ pub(super) unsafe fn restore_system_view() {
     DrawStamp((&raw mut stamp).cast());
 }
 
-pub(super) unsafe fn ip_frame() {
-    SetContext(KernelOwner::current().read(|owner| owner.space_context));
-    GameClockTick();
-    process_ship_controls();
+pub(super) unsafe fn ip_frame(cx: &mut Cx<'_>) {
+    let (location_change, new_radius) = cx.with_legacy(|| {
+        SetContext(KernelOwner::current().read(|owner| owner.space_context));
+        GameClockTick();
+        process_ship_controls();
 
-    let mut new_radius: c::SIZE = 0;
-    let location_change = check_ship_location(&mut new_radius);
+        let mut new_radius: c::SIZE = 0;
+        let location_change = check_ship_location(&mut new_radius);
+        (location_change, new_radius)
+    });
     if location_change != 0 {
-        if playerInInnerSystem() {
-            draw_system_transition(true);
+        if cx.with_legacy(|| playerInInnerSystem()) {
+            draw_system_transition(cx, true);
         } else if (*system()).SunDesc[0].radius == new_radius {
-            draw_system_transition(false);
+            draw_system_transition(cx, false);
         } else {
-            scale_system(new_radius);
+            scale_system(cx, new_radius);
         }
     } else {
-        BatchGraphics();
-        restore_system_view();
-        RedrawQueue(0);
-        DrawAutoPilotMessage(0);
-        UnbatchGraphics();
+        cx.with_legacy(|| {
+            BatchGraphics();
+            restore_system_view();
+        });
+        redraw_queue(cx, false);
+        cx.with_legacy(|| {
+            DrawAutoPilotMessage(0);
+            UnbatchGraphics();
+        });
     }
 }
 

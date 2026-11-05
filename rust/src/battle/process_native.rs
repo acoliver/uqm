@@ -832,16 +832,10 @@ pub(crate) mod engine {
         }
         cx.clear_display_order();
     }
-    /// # Safety
-    /// Game thread, inside the published lifecycle, with initialized rendering state.
-    #[no_mangle]
-    pub unsafe extern "C" fn RedrawQueue(clear: BOOLEAN) {
-        crate::app::bridge::enter(|cx| redraw_queue(cx, clear != 0));
-    }
 }
 
 #[cfg(not(test))]
-pub use engine::{init_display_list, process_collisions, RedrawQueue};
+pub use engine::{init_display_list, process_collisions};
 
 #[cfg(test)]
 mod tests {

@@ -2880,9 +2880,6 @@ pub use crate::game_init::kernel_abi::SetPlayerInput;
 pub use crate::game_init::kernel_abi::ClearPlayerInput;
 
 #[cfg(not(test))]
-pub use crate::battle::process_native::engine::RedrawQueue;
-
-#[cfg(not(test))]
 
 #[cfg(not(test))]
 
