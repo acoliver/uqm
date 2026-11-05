@@ -4,8 +4,9 @@ use crate::engine::WorldData;
 use std::ffi::{c_char, CStr};
 
 use super::super::abi::SummaryDesc;
-use super::super::runtime::{self, groups, live, queues, statefiles};
+use super::super::runtime::{self, groups, live};
 use super::super::{SaveFile, SaveSlots};
+use crate::engine::save::{snapshot, SessionView};
 use crate::mainloop::dir_prep::saveDir;
 
 use crate::navigation::globals::in_hqspace;
@@ -30,30 +31,14 @@ pub(crate) unsafe fn capture(name: &[u8]) -> anyhow::Result<SaveFile> {
     let summary = live::capture_live_summary(name)?;
     let lease = World::current();
     let world = &mut **lease;
-    let activity = world.activity();
-    let game = &mut world.data.game;
-    let runtime = runtime::capture_runtime(game, activity, &world.story, &world.clock)?;
-    game.ip_location = point;
-    game.in_orbit = 0;
-    let queues = queues::capture_queues_for_activity(world)?;
-    let groups = groups::capture_groups(world)?;
-    let files = statefiles::capture_state_files(&world.data.game, &world.story, &world.files)?;
-    Ok(SaveFile {
-        summary,
-        global: runtime.global,
-        game_state: runtime.game_state,
-        race_queue: queues.race_queue,
-        ip_group_queue: groups.ip_group_queue,
-        npc_ship_queue: queues.npc_ship_queue,
-        ship_queue: queues.ship_queue,
-        events: runtime.events,
-        encounters: groups.encounters,
-        scan: files.scan,
-        canned_nodes: files.canned_nodes,
-        group_list: files.group_list,
-        battle_groups: files.battle_groups,
-        star,
-    })
+    snapshot(
+        world,
+        SessionView {
+            summary,
+            star,
+            ip_location: point,
+        },
+    )
 }
 
 /// # Safety

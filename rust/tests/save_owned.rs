@@ -56,3 +56,32 @@ fn legacy_apply_installs_original_image_order_without_publishing_the_world() {
     }
     assert_eq!(world.files.canned_node(node.key()), None);
 }
+
+#[test]
+fn snapshot_preserves_saved_location_and_normalizes_only_live_location() {
+    let saved = uqm_save::decode_save(include_bytes!("fixtures/savegame/legacy-save.00")).unwrap();
+    let mut summary = saved.summary;
+    summary.sis.element_amounts = [1, 2, 3, 4, 5, 6, 7, 8];
+    let mut world = World::new();
+    world.story = Some(uqm_rust::engine::world::story::GameState::new());
+    world.data.game.ip_location.x = 21;
+    world.data.game.ip_location.y = 31;
+    world.data.game.in_orbit = 2;
+    let view = save::SessionView {
+        summary: summary.clone(),
+        star: saved.star,
+        ip_location: uqm_rust::graphics::native_abi::POINT { x: 91, y: 92 },
+    };
+    let captured = save::snapshot(&mut world, view).unwrap();
+    assert_eq!(
+        captured.global.ip_location,
+        uqm_save::Point { x: 21, y: 31 }
+    );
+    assert_eq!(captured.global.in_orbit, 2);
+    assert_eq!(
+        (world.data.game.ip_location.x, world.data.game.ip_location.y),
+        (91, 92)
+    );
+    assert_eq!(world.data.game.in_orbit, 0);
+    assert_eq!(captured.summary, summary);
+}

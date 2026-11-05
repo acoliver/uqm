@@ -122,6 +122,42 @@ pub fn restore_runtime(
     })
 }
 
+/// Session-derived save fields prepared by the active mode.
+pub struct SessionView {
+    pub summary: uqm_save::Summary,
+    pub star: uqm_save::StarDesc,
+    pub ip_location: crate::graphics::native_abi::POINT,
+}
+
+/// Capture prepared state before restoring the live IP position and orbit marker.
+pub fn snapshot(
+    world: &mut crate::engine::World,
+    view: SessionView,
+) -> anyhow::Result<uqm_save::SaveFile> {
+    let runtime = capture_runtime(&world.data.game, world.activity(), &world.story, &world.clock)?;
+    world.data.game.ip_location = view.ip_location;
+    world.data.game.in_orbit = 0;
+    let queues = queues::capture_queues_for_activity(world)?;
+    let groups = groups::capture_groups(world)?;
+    let files = statefiles::capture_state_files(&world.data.game, &world.story, &world.files)?;
+    Ok(uqm_save::SaveFile {
+        summary: view.summary,
+        global: runtime.global,
+        game_state: runtime.game_state,
+        race_queue: queues.race_queue,
+        ip_group_queue: groups.ip_group_queue,
+        npc_ship_queue: queues.npc_ship_queue,
+        ship_queue: queues.ship_queue,
+        events: runtime.events,
+        encounters: groups.encounters,
+        scan: files.scan,
+        canned_nodes: files.canned_nodes,
+        group_list: files.group_list,
+        battle_groups: files.battle_groups,
+        star: view.star,
+    })
+}
+
 enum StateFiles {
     Sections,
     Legacy {
