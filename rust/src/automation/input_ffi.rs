@@ -247,26 +247,6 @@ pub(crate) fn hyperspace_stopped(_world: &CampaignView) -> Option<bool> {
     None
 }
 
-/// The hyperspace flagship's own `ShipFacing`, read from the player's
-/// `STARSHIP` as `SaveSisHyperState` finds it. `None` when no flagship is in
-/// flight or its queues are inconsistent. Nothing is written.
-#[cfg(not(test))]
-pub(crate) fn hyperspace_facing() -> Option<u8> {
-    // SAFETY: the production game invokes the automation hooks synchronously
-    // on the game thread, after `InitKernel` and `InitSpace` set up the queues.
-    let facing = unsafe { crate::savegame::runtime::live::live_flagship_facing() };
-    facing
-        .ok()
-        .flatten()
-        .and_then(|facing| u8::try_from(facing).ok())
-}
-
-/// Without the linked game there is no facing to read.
-#[cfg(test)]
-pub(crate) fn hyperspace_facing() -> Option<u8> {
-    None
-}
-
 /// The flagship's authoritative `FuelOnBoard` and `ResUnits`, in that order.
 ///
 /// `DeltaSISGauges` changes exactly these `SIS_STATE` fields, so a reward or

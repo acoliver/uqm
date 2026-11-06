@@ -112,7 +112,7 @@ mod tests {
             .fixture_record_mut(first)
             .IntersectControl
             .last_time_val = 19;
-        let mut view = crate::engine::battle::access::observe::element(&elements, first, None);
+        let mut view = crate::engine::battle::access::observe::element(&elements, first, 0);
         let mut fields = Fields::new();
         element(&mut fields, "first", &view, &journal, &[]);
         assert_eq!(fields["first.identity"], "0:1");
@@ -120,7 +120,7 @@ mod tests {
         assert_eq!(fields["first.target"], "1:1");
         assert_eq!(fields["first.velocity.error.width"], "-23");
         assert_eq!(fields["first.intersect.time"], "19");
-        let second_view = crate::engine::battle::access::observe::element(&elements, second, None);
+        let second_view = crate::engine::battle::access::observe::element(&elements, second, 0);
         element(&mut fields, "second", &second_view, &journal, &[]);
         assert_eq!(fields["second.pred"], "0:1");
         view.target = 0;

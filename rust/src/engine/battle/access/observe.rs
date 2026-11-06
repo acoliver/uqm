@@ -7,33 +7,6 @@ use super::super::{
     views::*,
 };
 use std::ffi::c_void;
-/// Encode an owner identity for the existing journal, without decoding record fields.
-///
-/// # Safety
-/// The game-thread ship and group pools must remain live throughout the observation.
-unsafe fn parent_address(
-    parent: super::super::Parent,
-    groups: Option<
-        &crate::engine::battle::link_queue::LinkQueue<'_, crate::engine::world::queues::Group, 32>,
-    >,
-) -> *mut c_void {
-    use super::super::Parent;
-    let (queue, group) = match parent {
-        Parent::None => return std::ptr::null_mut(),
-        Parent::Ship(id) => {
-            // SAFETY: the observation retains the live ship authority.
-            let queue =
-                unsafe { super::super::record::ship_queue(usize::from(id.side())).as_ref() };
-            return queue.pool.retired_address(usize::from(id.slot())) as *mut c_void;
-        }
-        Parent::IpGroup(id) => (
-            groups.unwrap_or_else(|| panic!("missing IP-group authority")),
-            id,
-        ),
-    };
-    queue.journal_address(group) as *mut c_void
-}
-
 impl super::super::Cx<'_> {
     pub(crate) fn element_parent_address(&self, id: ElementId) -> *mut c_void {
         use super::super::Parent;
@@ -67,26 +40,13 @@ impl std::ops::Deref for ElementObservation {
 }
 
 impl ElementObservation {
-    /// # Safety
-    /// The caller retains the live source record and its reachable resource graph.
-    pub(crate) unsafe fn decode(
-        record: &ElementRecord,
-        groups: Option<
-            &crate::engine::battle::link_queue::LinkQueue<
-                '_,
-                crate::engine::world::queues::Group,
-                32,
-            >,
-        >,
-        target: usize,
-    ) -> Self {
+    pub(crate) fn decode(record: &ElementRecord, parent: usize, target: usize) -> Self {
         Self {
             state: crate::engine::battle::access::observe_element_record(record),
             address: std::ptr::from_ref(record) as usize,
             pred: 0,
             succ: 0,
-            // SAFETY: the observation retains all referenced owner pools.
-            parent: unsafe { parent_address(record.parent, groups) } as usize,
+            parent,
             target,
             primitive: record.PrimIndex,
             intersect: record.IntersectControl,
@@ -94,43 +54,45 @@ impl ElementObservation {
     }
 }
 
-pub(crate) fn element(
-    table: &ElementTable,
-    id: ElementId,
-    groups: Option<
-        &crate::engine::battle::link_queue::LinkQueue<'_, crate::engine::world::queues::Group, 32>,
-    >,
-) -> ElementObservation {
+pub(crate) fn element(table: &ElementTable, id: ElementId, parent: usize) -> ElementObservation {
     let record = &table[id];
     let target = record.target.map_or(0, |id| table.raw(id) as usize);
-    // SAFETY: the checked table retains the decoded record through this synchronous copy.
-    let mut value = unsafe { ElementObservation::decode(record, groups, target) };
+    let mut value = ElementObservation::decode(record, parent, target);
     value.pred = table.pred(id).map_or(0, |id| table.raw(id) as usize);
     value.succ = table.succ(id).map_or(0, |id| table.raw(id) as usize);
     value
 }
-#[cfg(not(test))]
-pub(crate) unsafe fn retired_element_address(id: ElementId) -> usize {
-    // SAFETY: the caller retains the published Kernel while taking the snapshot.
-    unsafe { &**super::super::record::Kernel::current() }
-        .elements
-        .journal_address(id)
-}
-pub(crate) struct ShipRecordObservation<'a> {
+pub(crate) struct ShipRecordObservation {
     pub state: ShipState,
     pub pick: super::super::link_queue::PickShip,
     pub address: usize,
     pub pred: usize,
     pub succ: usize,
     pub element: usize,
-    #[cfg(not(test))]
+}
+
+pub(crate) fn ship_record(
+    pool: &super::super::link_queue::RacePool,
+    id: LinkId<Starship>,
+    elements: &ElementTable,
+) -> ShipRecordObservation {
+    let ships = LinkQueue::<Starship>::borrow(pool);
+    let s = pool.pool.get(ships.key(id));
+    ShipRecordObservation {
+        state: ShipState::decode(s),
+        pick: ships.get(id),
+        address: ships.raw(id) as usize,
+        pred: ships.pred(id).map_or(0, |id| ships.raw(id) as usize),
+        succ: ships.succ(id).map_or(0, |id| ships.raw(id) as usize),
+        element: s.hShip.map_or(0, |id| elements.journal_address(id)),
+    }
+}
+
+#[cfg(not(test))]
+pub(crate) struct ShipResourceObservation<'a> {
     pub descriptor: Option<DescriptorRecordObservation<'a>>,
-    #[cfg(not(test))]
     pub icons: Option<&'a crate::graphics::native_abi::frame_desc>,
-    #[cfg(not(test))]
     pub strings: Option<&'a crate::strings::string_table::StringTableEntry>,
-    #[cfg(test)]
-    pub lifetime: std::marker::PhantomData<&'a ()>,
 }
 #[cfg(not(test))]
 pub(crate) struct DescriptorRecordObservation<'a> {
@@ -146,21 +108,14 @@ pub(crate) struct DescriptorRecordObservation<'a> {
 }
 /// # Safety
 /// The caller retains every descriptor and loaded resource referenced by this immutable queue view.
-pub(crate) unsafe fn ship<'a>(
-    pool: &'a super::super::link_queue::RacePool,
+#[cfg(not(test))]
+pub(crate) unsafe fn ship_resources(
+    pool: &super::super::link_queue::RacePool,
     id: LinkId<Starship>,
-    elements: &ElementTable,
-) -> ShipRecordObservation<'a> {
+) -> ShipResourceObservation<'_> {
     let ships = LinkQueue::<Starship>::borrow(pool);
     let s = pool.pool.get(ships.key(id));
-    ShipRecordObservation {
-        state: ShipState::decode(s),
-        pick: ships.get(id),
-        address: ships.raw(id) as usize,
-        pred: ships.pred(id).map_or(0, |id| ships.raw(id) as usize),
-        succ: ships.succ(id).map_or(0, |id| ships.raw(id) as usize),
-        element: s.hShip.map_or(0, |id| elements.journal_address(id)),
-        #[cfg(not(test))]
+    ShipResourceObservation {
         descriptor: s
             .descriptor
             .as_deref()
@@ -175,20 +130,38 @@ pub(crate) unsafe fn ship<'a>(
                 code_loaded: d.race.is_some(),
                 state: &d.race_state,
             }),
-        #[cfg(not(test))]
         // SAFETY: the caller retains the loaded icon array for the observation lifetime.
-        icons: unsafe { s.icons.cast::<crate::graphics::native_abi::frame_desc>().as_ref() },
-        #[cfg(not(test))]
+        icons: unsafe { s.icons.as_ref() },
         // SAFETY: the caller retains this ship's loaded string table for the observation lifetime.
         strings: unsafe { s.race_strings.as_ref() },
-        #[cfg(test)]
-        lifetime: std::marker::PhantomData,
     }
 }
 
 #[cfg(test)]
 mod owner_tests {
     use super::super::super::{Battle, Cx, Parent};
+
+    #[test]
+    fn scalar_ship_observation_does_not_follow_resource_handles() {
+        let mut game = crate::engine::Game::new();
+        game.kernel.reset_ship_capacity(0, 1);
+        let mut ships = game.kernel.ships(0);
+        let link = ships.alloc().unwrap();
+        let record = ships.get_mut(link);
+        record.ship_facing = 9;
+        record.crew_level = 42;
+        record.icons = std::ptr::without_provenance_mut(0x1234);
+        record.race_strings = std::ptr::without_provenance_mut(0x5678);
+        ships.put(link);
+        let observed = super::ship_record(&game.kernel.races[0], link, &game.kernel.elements);
+        assert_eq!(observed.state.facing, 9);
+        assert_eq!(observed.state.crew, 42);
+        assert_eq!(observed.pick.crew, 42);
+        assert_ne!(observed.address, 0);
+        assert_eq!(observed.pred, 0);
+        assert_eq!(observed.succ, 0);
+        assert_eq!(observed.element, 0);
+    }
 
     #[test]
     fn callback_parent_identity_uses_the_retained_kernel_without_publication() {
@@ -208,5 +181,11 @@ mod owner_tests {
             crate::math::random,
         );
         assert_eq!(cx.element_parent_address(element), address);
+        let observed = super::element(
+            cx.elements(),
+            element,
+            cx.element_parent_address(element) as usize,
+        );
+        assert_eq!(observed.parent, address as usize);
     }
 }

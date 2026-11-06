@@ -165,12 +165,6 @@ impl FlagshipTurnTracker {
     }
 }
 
-/// The live flagship's facing, or `None` when the game exposes none.
-#[must_use]
-pub fn live_facing() -> Option<u8> {
-    crate::automation::input_ffi::hyperspace_facing()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -24,8 +24,9 @@ impl CffiPlanetSideInput {
         io: &mut crate::engine::observe::Io<'_>,
     ) -> Result<FrameInput, AdapterError> {
         use crate::engine::observe::{CampaignView, InputView};
-        let campaign =
-            CampaignView::for_input(InputView::BeforeUpdate, || CampaignView::capture(cx.world));
+        let campaign = CampaignView::for_input(InputView::BeforeUpdate, || {
+            CampaignView::capture(cx.world, cx.kernel)
+        });
         if cx
             .with_legacy(|| {
                 io.observer

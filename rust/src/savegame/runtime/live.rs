@@ -18,13 +18,10 @@ use crate::engine::{Kernel, World};
 use crate::strings::string_table::{GetStringAddress, SetAbsStringTableIndex};
 use std::fmt;
 
-use super::hyper_save::{self, HyperSaveError};
 use super::location::{self, LocationError};
 use super::solar::{GameStrings, SolarSystem, SolarSystemOwner};
 use super::star::{self, CStarDesc, StarError, CATALOG_LEN};
-use crate::c_bindings::global_state::RPG_PLAYER_NUM;
 use crate::c_bindings::solar_system;
-use crate::engine::battle::access::live_queues;
 use crate::engine::save::{snapshot, SessionView};
 use crate::savegame::types::{SaveFile, StarDesc};
 
@@ -177,17 +174,4 @@ pub unsafe fn prepare_live_solar_location(world: &mut World) -> Result<(), LiveL
     crate::engine::save::location::apply_solar_location(world, location)
         .map_err(LiveLocationError::Location)?;
     Ok(())
-}
-
-/// The live flagship's own `ShipFacing` (0..16), read from `race_q[RPG_PLAYER_NUM]`
-/// and `disp_q` the way `SaveSisHyperState` finds it. Nothing is written.
-///
-/// # Safety
-/// Game thread only; `race_q` and `disp_q` must have been set up by
-/// `InitQueue` (`InitKernel` and `InitSpace`).
-pub unsafe fn live_flagship_facing() -> Result<Option<u16>, HyperSaveError> {
-    let player_ships = &*live_queues::player_ships(RPG_PLAYER_NUM as usize);
-    // SAFETY: the save operation retains the published game-thread Kernel.
-    let display_list = unsafe { &*live_queues::display_list() };
-    hyper_save::read_flagship_facing(player_ships, display_list)
 }

@@ -6,20 +6,18 @@ use crate::engine::battle::{
     views::*,
 };
 
-/// # Safety
-/// The ship and group authorities remain immutable during the observation.
 pub(crate) fn elements(
     elements: &crate::engine::battle::ElementTable,
-    groups: Option<
-        &crate::engine::battle::link_queue::LinkQueue<'_, crate::engine::world::queues::Group, 32>,
-    >,
+    parent_address: impl Fn(crate::engine::battle::ElementId) -> usize,
 ) -> Vec<ElementObservation> {
     let mut result = Vec::new();
     let mut next = elements.head();
     while let Some(id) = next {
         next = elements.succ(id);
         result.push(crate::engine::battle::access::observe::element(
-            elements, id, groups,
+            elements,
+            id,
+            parent_address(id),
         ));
     }
     result
@@ -70,7 +68,10 @@ pub(crate) enum CustomData<'a> {
 }
 #[cfg(not(test))]
 impl<'a> CustomData<'a> {
-    fn decode(_species: u32, state: &'a crate::engine::battle::RaceState) -> Self {
+    fn decode(
+        state: &'a crate::engine::battle::RaceState,
+        elements: &crate::engine::battle::ElementTable,
+    ) -> Self {
         use crate::engine::battle::RaceState;
         match state {
             RaceState::Androsynth { collision } => return Self::Androsynth(*collision),
@@ -81,10 +82,7 @@ impl<'a> CustomData<'a> {
                 saved_post,
                 saved_death,
             } => {
-                let address = phoenix.map_or(0, |id| {
-                    // SAFETY: the retained Pkunk state names a slot in the initialized display pool.
-                    unsafe { crate::engine::battle::access::observe::retired_element_address(id) }
-                });
+                let address = phoenix.map_or(0, |id| elements.journal_address(id));
                 return Self::NativePkunk {
                     phoenix: address,
                     saved: [*saved_pre, *saved_post, *saved_death],
@@ -109,12 +107,14 @@ pub(crate) fn ships<'a>(
     let mut result = Vec::new();
     let mut next = ships.head();
     while let Some(id) = next {
-        // SAFETY: validated immutable ship storage and its loaded resources remain live.
-        let s = unsafe { crate::engine::battle::access::observe::ship(queue, id, elements) };
+        let s = crate::engine::battle::access::observe::ship_record(queue, id, elements);
         next = ships.succ(id);
         #[cfg(not(test))]
         let (race, icons, strings) = {
-            let race = s.descriptor.map(|d| DescriptorObservation {
+            // SAFETY: the retained queue and all loaded ship resources stay immutable.
+            let resources =
+                unsafe { crate::engine::battle::access::observe::ship_resources(queue, id) };
+            let race = resources.descriptor.map(|d| DescriptorObservation {
                 address: d.address,
                 info: d.info,
                 data: d.data,
@@ -123,10 +123,9 @@ pub(crate) fn ships<'a>(
                 intel: d.intel,
                 callbacks: d.callbacks,
                 code_loaded: d.code_loaded,
-                // SAFETY: the observation retains this live descriptor and its race state.
-                custom: CustomData::decode(s.pick.species, d.state),
+                custom: CustomData::decode(d.state, elements),
             });
-            (race, s.icons, s.strings)
+            (race, resources.icons, resources.strings)
         };
         result.push(ShipObservation {
             // SAFETY: the retained ship pool remains immutable during observation.

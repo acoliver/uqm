@@ -14,6 +14,8 @@ fn ship_detachment_is_an_explicit_fixture_command() {
     assert_eq!(ship.element, None);
 }
 
+#[cfg(not(test))]
+use crate::battle::world_elements::engine::ElementDamage;
 use crate::engine::battle::{record::*, views::*, ElementId, Parent};
 #[cfg(not(test))]
 use crate::engine::battle::{Cx, ShipId};

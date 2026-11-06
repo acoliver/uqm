@@ -111,7 +111,9 @@ impl ElementTable {
         })
     }
 
-    pub(crate) fn journal_address(&self, id: ElementId) -> usize {
+    /// A stable journal identity after retirement or reuse, not a live record handle.
+    #[inline]
+    pub fn journal_address(&self, id: ElementId) -> usize {
         assert_eq!(
             id.owner,
             self.records.pool.storage_identity(),

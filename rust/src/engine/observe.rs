@@ -1,6 +1,6 @@
 //! Observation ports specialized to the owned campaign view.
 
-use super::World;
+use super::{Kernel, World};
 pub use uqm_engine::observe::{
     CheckpointView, DeviceObservation, Injected, InputSetup, InputView, Observer, PeerSetup,
     Presented, Unobserved,
@@ -15,6 +15,7 @@ pub struct CampaignView {
     pub(crate) velocity: (i32, i32),
     pub(crate) ship_position: (i16, i16),
     pub(crate) ship_facing: i32,
+    pub(crate) flight_facing: Option<u8>,
     pub(crate) autopilot: (i16, i16),
     pub(crate) combat_flags: u8,
     pub(crate) date: (u8, u8, u16),
@@ -26,9 +27,16 @@ pub struct CampaignView {
 }
 
 impl CampaignView {
-    pub(crate) fn capture(world: &World) -> Self {
+    pub(crate) fn capture(world: &World, kernel: &Kernel) -> Self {
         let game = &world.data.game;
         let mut view = Self::from_world(world);
+        view.flight_facing = crate::engine::save::hyper_save::read_flagship_facing(
+            &kernel.races[0],
+            &kernel.elements,
+        )
+        .ok()
+        .flatten()
+        .and_then(|facing| u8::try_from(facing).ok());
         if !game.ship_stamp.frame.is_null() {
             // SAFETY: the supplied world retains this game-thread graphics frame.
             view.ship_facing = i32::from(unsafe {
@@ -76,6 +84,7 @@ impl CampaignView {
             velocity: game.velocity.get_current_components(),
             ship_position: (game.ship_stamp.origin.x, game.ship_stamp.origin.y),
             ship_facing: 0,
+            flight_facing: None,
             autopilot: (game.autopilot.x, game.autopilot.y),
             combat_flags: game.glob_flags,
             date: (
@@ -107,8 +116,35 @@ mod tests {
     use super::*;
 
     #[test]
+    fn capture_reads_flagship_facing_from_its_unpublished_kernel() {
+        let world = World::new();
+        let mut kernel = crate::engine::Kernel::new();
+        kernel.reset_ship_capacity(0, 1);
+        kernel.reset_element_capacity(1);
+        let element = kernel.elements.alloc().unwrap();
+        let mut ships = kernel.ships(0);
+        let link = ships.alloc().unwrap();
+        let owner = ships.ship_id(link);
+        ships.get_mut(link).hShip = Some(element);
+        ships.get_mut(link).ship_facing = 9;
+        ships.put(link);
+        let record = kernel.elements.fixture_record_mut(element);
+        record.state_flags = 1 << 2;
+        record.parent = crate::engine::battle::Parent::Ship(owner);
+        kernel.elements.put(element);
+        let captured = CampaignView::capture(&world, &kernel);
+        kernel.ships(0).get_mut(link).ship_facing = 11;
+        assert_eq!(captured.flight_facing, Some(9));
+        assert_eq!(
+            CampaignView::capture(&world, &kernel).flight_facing,
+            Some(11)
+        );
+    }
+
+    #[test]
     fn capture_preserves_queue_order_and_freezes_the_supplied_world() {
         let mut world = World::new();
+        let kernel = Kernel::new();
         world.data.flagship.fuel_on_board = 42;
         {
             let mut ships = world.built_ships();
@@ -138,7 +174,7 @@ mod tests {
                 groups.put(id);
             }
         }
-        let captured = CampaignView::capture(&world);
+        let captured = CampaignView::capture(&world, &kernel);
         world.data.flagship.fuel_on_board = 99;
         let first = world.built_ships_ref().head().unwrap();
         world.built_ships().get_mut(first).crew_level = 99;
@@ -146,6 +182,6 @@ mod tests {
         assert_eq!(captured.contact_race, Some(5));
         assert_eq!(captured.escorts, vec![(3, 12), (7, 19)]);
         assert_eq!(captured.groups, vec![(2, 8, (2, -2)), (6, 10, (6, -6))]);
-        assert_eq!(CampaignView::capture(&world).escorts[0], (3, 99));
+        assert_eq!(CampaignView::capture(&world, &kernel).escorts[0], (3, 99));
     }
 }

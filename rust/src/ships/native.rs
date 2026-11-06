@@ -76,7 +76,7 @@ pub mod abi {
         initialize_laser, initialize_missile, modify_silhouette, track_ship, weapon_collision,
     };
     #[cfg(not(test))]
-    pub use crate::battle::world_elements::abandon_ship;
+    pub use crate::battle::world_elements::{abandon_ship, engine::ElementDamage};
 }
 
 #[cfg(not(test))]

@@ -32,7 +32,7 @@ pub fn admit_observer(
     view: super::observe::InputView,
 ) -> super::observe::Injected {
     let campaign = super::observe::CampaignView::for_input(view, || {
-        super::observe::CampaignView::capture(cx.world)
+        super::observe::CampaignView::capture(cx.world, cx.kernel)
     });
     cx.with_legacy(|| io.observer.input_admitted(&view, &campaign))
 }
@@ -90,8 +90,9 @@ impl Cx<'_> {
         sample: impl FnOnce(&mut Self) -> R,
     ) -> Option<R> {
         use super::observe::{CampaignView, CheckpointView, InputView};
-        let campaign =
-            CampaignView::for_input(InputView::Nested, || CampaignView::capture(self.world));
+        let campaign = CampaignView::for_input(InputView::Nested, || {
+            CampaignView::capture(self.world, self.kernel)
+        });
         let admitted =
             self.with_legacy(|| io.observer.input_admitted(&InputView::Nested, &campaign));
         if admitted.stop {

@@ -29,7 +29,7 @@ use crate::automation::{
     battle_fight::{BattleFightTracker, BattleSnapshot, FightControl, FightProgress},
     battle_outcome::{self, BattleLossTracker},
     campaign_state,
-    flagship_turn::{self, FlagshipTurnTracker, TurnProgress},
+    flagship_turn::{FlagshipTurnTracker, TurnProgress},
     flight_position::{self, FlightPositionTracker},
     input_ffi, mode,
     outcome::TerminalClass,

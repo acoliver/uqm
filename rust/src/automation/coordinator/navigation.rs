@@ -27,7 +27,7 @@ impl AutomationObserver {
 
         let progress = inner.flagship_turn.observe(
             mode::require_live(world),
-            flagship_turn::live_facing(),
+            world.flight_facing,
             turn.direction,
             turn.facings,
         );

@@ -207,7 +207,7 @@ impl RestartMenuOps for CffiOps<'_, '_, '_> {
     fn input(&self, view: crate::engine::observe::InputView) -> crate::engine::observe::Injected {
         self.owned(|cx, io| {
             let campaign = crate::engine::observe::CampaignView::for_input(view, || {
-                crate::engine::observe::CampaignView::capture(cx.world)
+                crate::engine::observe::CampaignView::capture(cx.world, cx.kernel)
             });
             cx.with_legacy(|| io.observer.input_admitted(&view, &campaign))
         })
