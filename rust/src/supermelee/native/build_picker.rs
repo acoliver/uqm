@@ -140,7 +140,7 @@ pub(crate) mod live {
     }
 
     unsafe fn pick(
-        state: *mut MeleeSession,
+        state: &mut MeleeSession,
         cx: &mut crate::engine::battle::Cx<'_>,
         io: &mut crate::engine::observe::Io<'_>,
         input: &crate::engine::input::InputSession,
@@ -148,16 +148,16 @@ pub(crate) mod live {
         let time = GetTimeCounter();
         input.set_paused(false);
         if cx.world.activity() & CHECK_ABORT as u16 != 0 {
-            (*state).build_pick_confirmed = 0;
+            state.build_pick_confirmed = 0;
             return 0;
         }
         SetMenuSounds(input, 15, 16);
         let keys = input.pulsed().menu;
         if keys[KEY_MENU_SELECT as usize] != 0 || keys[KEY_MENU_CANCEL as usize] != 0 {
-            (*state).build_pick_confirmed = u32::from(keys[KEY_MENU_CANCEL as usize] == 0);
+            state.build_pick_confirmed = u32::from(keys[KEY_MENU_CANCEL as usize] == 0);
             return 0;
         }
-        let current_ship = (*state).current_ship;
+        let current_ship = state.current_ship;
         if keys[KEY_MENU_SPECIAL as usize] != 0 && current_ship != 255 {
             crate::front_end::fmv::runtime::do_ship_spin(
                 cx,
@@ -175,15 +175,13 @@ pub(crate) mod live {
             keys[KEY_MENU_DOWN as usize] != 0,
         );
         if selected != current_ship {
-            let catalog = &(*state).catalog;
-            (*state)
-                .build_picker()
-                .draw_icon(catalog, current_ship, true);
-            (*state).current_ship = selected;
-            cx.with_legacy(|| draw_ship_strings(&*state, selected));
+            let catalog = &state.catalog;
+            state.build_picker().draw_icon(catalog, current_ship, true);
+            state.current_ship = selected;
+            cx.with_legacy(|| draw_ship_strings(state, selected));
         }
         cx.with_legacy(|| {
-            flash_selection(&mut *state);
+            flash_selection(state);
             SleepThreadUntil(time.wrapping_add(840 / 30));
         });
         1
@@ -194,17 +192,17 @@ pub(crate) mod live {
         cx: &mut crate::engine::battle::Cx<'_>,
         io: &mut crate::engine::observe::Io<'_>,
         input: &crate::engine::input::InputSession,
-        state: *mut MeleeSession,
+        state: &mut MeleeSession,
     ) -> bool {
         cx.with_legacy(|| FlushInput(input));
-        if (*state).current_ship == 255 {
-            (*state).current_ship = 0;
+        if state.current_ship == 255 {
+            state.current_ship = 0;
         }
-        cx.with_legacy(|| draw_pick_frame(&*state));
-        (*state).phase = crate::supermelee::session::MenuPhase::Building;
+        cx.with_legacy(|| draw_pick_frame(state));
+        state.phase = crate::supermelee::session::MenuPhase::Building;
         {
             let mut frame = crate::supermelee::native::menu::live::admission::SessionFrame::new(
-                &mut *state,
+                state,
                 |state: &mut MeleeSession,
                  cx: &mut crate::engine::battle::Cx<'_>,
                  io: &mut crate::engine::observe::Io<'_>| {
@@ -213,7 +211,7 @@ pub(crate) mod live {
             );
             cx.run_input_frame(io, false, &mut frame);
         }
-        (*state).build_pick_confirmed != 0
+        state.build_pick_confirmed != 0
     }
 }
 
