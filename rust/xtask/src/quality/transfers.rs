@@ -47,18 +47,28 @@ pub fn compose(
     Ok(moves)
 }
 
-pub fn reverse_step(current: &Measurement, old: &str, new: &str) -> Result<Measurement, String> {
-    fn relocate(identity: &str, old: &str, new: &str) -> String {
-        if prefix(identity, new) {
+pub fn reverse_step(
+    current: &Measurement,
+    old: &str,
+    new: &str,
+    previous: &BTreeMap<String, String>,
+) -> Result<Measurement, String> {
+    let already_moved: Vec<_> = previous
+        .values()
+        .filter(|target| prefix(target, new) && !prefix(target, old))
+        .collect();
+    let relocate = |identity: &str| {
+        if prefix(identity, new) && !already_moved.iter().any(|target| prefix(identity, target)) {
             format!("{old}{}", &identity[new.len()..])
         } else {
             identity.to_owned()
         }
-    }
+    };
     let mut before = current.clone();
     for finding in before.findings.iter_mut().chain(&mut before.declarations) {
-        if prefix(&finding.identity, new) {
-            finding.identity = relocate(&finding.identity, old, new);
+        let identity = relocate(&finding.identity);
+        if identity != finding.identity {
+            finding.identity = identity;
             let (package, path) = finding
                 .identity
                 .split_once("::")
@@ -76,12 +86,18 @@ pub fn reverse_step(current: &Measurement, old: &str, new: &str) -> Result<Measu
         }
     }
     for coverage in &mut before.allow_coverage {
-        coverage.item = relocate(&coverage.item, old, new);
+        if already_moved
+            .iter()
+            .any(|target| prefix(&coverage.item, target))
+        {
+            continue;
+        }
+        coverage.item = relocate(&coverage.item);
         let (head, identity) = coverage
             .scope
             .rsplit_once('|')
             .ok_or("missing allow identity")?;
-        coverage.scope = format!("{head}|{}", relocate(identity, old, new));
+        coverage.scope = format!("{head}|{}", relocate(identity));
     }
     Ok(before)
 }

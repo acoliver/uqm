@@ -377,3 +377,71 @@ fn a_child_rename_after_its_module_move_keeps_original_source_credit() {
     );
     assert!(baseline.add_move(new, new, &current, &base).is_err());
 }
+
+#[test]
+fn final_child_destination_can_be_registered_before_its_enclosing_move() {
+    let old = "uqm-engine::observe";
+    let new = "uqm-engine::observe_port";
+    let mut base = composition_state(old, "Io");
+    let mut current = composition_state(new, "ObservationIo");
+    for (state, namespace) in [(&mut base, old), (&mut current, new)] {
+        state.findings.push(Finding {
+            identity: format!("{namespace}::Marker"),
+            ..state.findings[0].clone()
+        });
+    }
+    let mut baseline = Baseline::default();
+    super::budgets::set_scoped(
+        &mut baseline.budget,
+        "stage_b_raw",
+        1,
+        [(format!("ffi|raw_records|{old}::Io"), 1)].into(),
+        false,
+    )
+    .unwrap();
+    baseline.entries = super::budgets::scoped_entries(&base, &baseline.budget);
+    baseline.lint = [(
+        "macos".into(),
+        [(format!("clippy::unwrap_used|{old}::Io"), 1)].into(),
+    )]
+    .into();
+    baseline
+        .add_move(
+            &format!("{old}::Io"),
+            &format!("{new}::ObservationIo"),
+            &current,
+            &base,
+        )
+        .unwrap();
+    baseline.add_move(old, new, &current, &base).unwrap();
+    assert_eq!(
+        baseline.entries,
+        super::budgets::scoped_entries(&current, &baseline.budget)
+    );
+    assert_eq!(baseline.budget["stage_b_raw"].limit, 1);
+    assert_eq!(
+        baseline.budget["stage_b_raw"].scopes,
+        [(format!("ffi|raw_records|{new}::ObservationIo"), 1)].into()
+    );
+    assert_eq!(
+        baseline.lint["macos"],
+        [(format!("clippy::unwrap_used|{new}::ObservationIo"), 1)].into()
+    );
+    assert_eq!(baseline.moved[old], new);
+    assert_eq!(
+        baseline.moved[&format!("{old}::Io")],
+        format!("{new}::ObservationIo")
+    );
+    let mut duplicate = current.clone();
+    duplicate.findings.push(Finding {
+        identity: format!("{new}::Io"),
+        ..duplicate.findings[0].clone()
+    });
+    assert!(super::baseline::check_limits(
+        &duplicate.baseline(),
+        &baseline.entries,
+        &baseline.moved,
+        true
+    )
+    .is_err());
+}

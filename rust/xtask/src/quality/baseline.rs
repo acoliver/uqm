@@ -179,7 +179,7 @@ impl Baseline {
             .collect();
         let original_budgets = super::budgets::relocated(&self.budget, &reverse)?;
         let measured = super::budgets::scoped_entries(base, &original_budgets);
-        let intermediate = super::transfers::reverse_step(current, old, new)?;
+        let intermediate = super::transfers::reverse_step(current, old, new, &previous)?;
         let before =
             super::transfers::limits(&measured, &intermediate, base, &previous, &original_budgets)?;
         let after = super::transfers::limits(&measured, current, base, &moves, &original_budgets)?;
