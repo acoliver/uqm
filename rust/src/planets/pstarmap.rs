@@ -98,9 +98,6 @@ use crate::mainloop::input_abi::live::{
     AnyButtonPress, FlushInput, SetDefaultMenuRepeatDelay, SetMenuRepeatDelay, SetMenuSounds,
 };
 
-#[cfg(not(test))]
-use crate::battle::sounds::engine::PlayMenuSound;
-
 extern "C" {
     #[cfg(not(test))]
     static mut cursorLoc: POINT;

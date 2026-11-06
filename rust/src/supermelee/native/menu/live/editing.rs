@@ -1,27 +1,40 @@
 //! Fleet-slot and team-name editing.
 use super::*;
-unsafe fn changed(entry: *mut TEXTENTRY_STATE, _input: &crate::engine::input::InputSession) -> u32 {
-    // SAFETY: the function contract requires live, game-thread-owned records
-    // and callback arguments for all legacy accesses in this operation.
-    unsafe {
-        let state = (*entry).CbParam.cast::<MELEE_STATE>();
-        (*state).cur_index = (*entry).CursorPos as u16;
-        name(
-            state,
-            (*state).side,
-            1 | if (*entry).JoystickMode != 0 { 8 } else { 0 },
-            (*entry).BaseStr,
-        )
-    }
+unsafe fn changed(
+    entry: *mut TEXTENTRY_STATE,
+    cx: &mut crate::engine::battle::Cx<'_>,
+    _input: &crate::engine::input::InputSession,
+) -> u32 {
+    cx.with_legacy(|| {
+        // SAFETY: the function contract requires live, game-thread-owned records
+        // and callback arguments for all legacy accesses in this operation.
+        unsafe {
+            let state = (*entry).CbParam.cast::<MELEE_STATE>();
+            (*state).cur_index = (*entry).CursorPos as u16;
+            name(
+                state,
+                (*state).side,
+                1 | if (*entry).JoystickMode != 0 { 8 } else { 0 },
+                (*entry).BaseStr,
+            )
+        }
+    })
 }
-unsafe fn frame(entry: *mut TEXTENTRY_STATE, _input: &crate::engine::input::InputSession) -> u32 {
-    // SAFETY: the function contract requires live, game-thread-owned records
-    // and callback arguments for all legacy accesses in this operation.
-    unsafe {
-        let state = (*entry).CbParam.cast::<MELEE_STATE>();
-        poll_menu(state, 0);
-        1
-    }
+unsafe fn frame(
+    entry: *mut TEXTENTRY_STATE,
+    cx: &mut crate::engine::battle::Cx<'_>,
+    _io: &mut crate::engine::observe::Io<'_>,
+    _input: &crate::engine::input::InputSession,
+) -> u32 {
+    cx.with_legacy(|| {
+        // SAFETY: the function contract requires live, game-thread-owned records
+        // and callback arguments for all legacy accesses in this operation.
+        unsafe {
+            let state = (*entry).CbParam.cast::<MELEE_STATE>();
+            poll_menu(state, 0);
+            1
+        }
+    })
 }
 unsafe fn advance(state: *mut MELEE_STATE) {
     ((*state).row, (*state).col) = super::super::rules::advance_cursor((*state).row, (*state).col);

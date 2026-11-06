@@ -1,6 +1,7 @@
 use super::*;
 
 pub(super) unsafe fn save_load_game(
+    cx: &mut Cx<'_>,
     input: &crate::engine::input::InputSession,
     pick_state: &mut PickGameState,
     game_index: COUNT,
@@ -24,23 +25,25 @@ pub(super) unsafe fn save_load_game(
         }
         name_buf[SAVE_NAME_SIZE as usize] = 0;
         // SAFETY: the game-thread picker retains its graphics context and the writable name buffer.
-        if unsafe { name_save_game(input, game_index, name_buf.as_mut_ptr()) } != 0 {
+        if cx.with_legacy(|| unsafe { name_save_game(input, game_index, name_buf.as_mut_ptr()) })
+            != 0
+        {
+            play_menu_sound(cx.kernel, cx.world, MENU_SUCCESS as u16);
             // SAFETY: the game-thread picker retains the stamp, selected summary and name buffer.
-            unsafe {
-                PlayMenuSound(MENU_SOUND_EFFECT_MENU_SOUND_SUCCESS);
+            success = cx.with_legacy(|| unsafe {
                 ConfirmSaveLoad(&mut save_stamp);
-                success = SaveGame(game_index, ptr::from_mut(desc).cast(), name_buf.as_ptr());
-            }
+                SaveGame(game_index, ptr::from_mut(desc).cast(), name_buf.as_ptr())
+            });
         } else {
             success = 0;
             *canceled_by_user = 1;
         }
     } else {
         // SAFETY: loading needs no saved stamp and uses the initialized game-thread loader.
-        unsafe {
+        success = cx.with_legacy(|| unsafe {
             ConfirmSaveLoad(ptr::null_mut());
-            success = LoadGame(game_index, ptr::null_mut());
-        }
+            LoadGame(game_index, ptr::null_mut())
+        });
     }
     if pick_state.saving != 0 {
         // SAFETY: ConfirmSaveLoad initializes the retained stamp before drawing it.
@@ -108,11 +111,8 @@ pub(super) fn pick_game(
         let mut canceled_by_user: BOOLEAN = 0;
         pick_state.success = 0;
         cx.run_input(io, true, |cx, _| {
-            let activity = cx.world.activity();
-            // SAFETY: the synchronous picker owns these published native resources.
-            cx.with_legacy(|| unsafe {
-                do_pick_game(input, ptr::addr_of_mut!(menu_state), activity)
-            }) != 0
+            // SAFETY: the synchronous picker retains its menu and graphics resources.
+            unsafe { do_pick_game(cx, input, ptr::addr_of_mut!(menu_state)) != 0 }
         });
         if pick_state.success == 0 {
             break;
@@ -120,14 +120,15 @@ pub(super) fn pick_game(
         // SAFETY: the picker is the sole game-thread writer of this remembered slot.
         unsafe { LAST_USED_SLOT = menu_state.CurState as COUNT };
         // SAFETY: the synchronous picker owns these published native resources.
-        if cx.with_legacy(|| unsafe {
+        if unsafe {
             save_load_game(
+                cx,
                 input,
                 &mut pick_state,
                 menu_state.CurState as COUNT,
                 &mut canceled_by_user,
             )
-        }) != 0
+        } != 0
         {
             let operation = if saving != 0 { "save" } else { "load" };
             log::info!("RUST_PICKER: exit={operation}_success");

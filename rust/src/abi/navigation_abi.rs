@@ -1,3 +1,4 @@
+use crate::engine::{battle::Cx, input::InputSession, observe::Io};
 use crate::graphics::flash::{FlashState, FlashType};
 pub use crate::engine::battle::{CollisionHook, ElementHook};
 // Shared engine records used by the Rust runtime.
@@ -2859,12 +2860,12 @@ pub struct textentry_state {
     pub BaseStr: *mut UNICODE,
     pub CursorPos: ::std::os::raw::c_int,
     pub MaxSize: ::std::os::raw::c_int,
-    pub ChangeCallback:
-        ::std::option::Option<unsafe fn(pTES: *mut textentry_state, input: &crate::engine::input::InputSession) -> BOOLEAN>,
-    pub FrameCallback:
-        ::std::option::Option<unsafe fn(pTES: *mut textentry_state, input: &crate::engine::input::InputSession) -> BOOLEAN>,
+    pub ChangeCallback: Option<ChangeFn>,
+    pub FrameCallback: Option<FrameFn>,
     pub CbParam: *mut ::std::os::raw::c_void,
 }
+pub type ChangeFn = unsafe fn(*mut textentry_state, &mut Cx<'_>, &InputSession) -> u32;
+pub type FrameFn = unsafe fn(*mut textentry_state, &mut Cx<'_>, &mut Io<'_>, &InputSession) -> u32;
 pub type TEXTENTRY_STATE = textentry_state;
 
 #[cfg(not(test))]

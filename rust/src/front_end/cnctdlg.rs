@@ -203,6 +203,7 @@ unsafe extern "C" fn mcd_draw_text_entry(widget: *mut WIDGET, x: c_int, y: c_int
 }
 unsafe fn on_text_entry_change(
     state: *mut TEXTENTRY_STATE,
+    _cx: &mut crate::engine::battle::Cx<'_>,
     _input: &crate::engine::input::InputSession,
 ) -> BOOLEAN {
     let widget = (*state).CbParam.cast::<WIDGET_TEXTENTRY>();
@@ -216,12 +217,16 @@ unsafe fn on_text_entry_change(
 }
 unsafe fn on_text_entry_frame(
     state: *mut TEXTENTRY_STATE,
+    cx: &mut crate::engine::battle::Cx<'_>,
+    _io: &mut crate::engine::observe::Io<'_>,
     _input: &crate::engine::input::InputSession,
 ) -> BOOLEAN {
-    draw_connect_dialog();
-    SleepThreadUntil((*state).NextTime);
-    (*state).NextTime = GetTimeCounter().wrapping_add(MENU_FRAME_RATE);
-    1
+    cx.with_legacy(|| {
+        draw_connect_dialog();
+        SleepThreadUntil((*state).NextTime);
+        (*state).NextTime = GetTimeCounter().wrapping_add(MENU_FRAME_RATE);
+        1
+    })
 }
 unsafe fn on_text_entry_event(
     widget: *mut WIDGET_TEXTENTRY,

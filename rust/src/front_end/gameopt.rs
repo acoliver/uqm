@@ -15,6 +15,9 @@ pub use runtime::{
 
 #[cfg(not(test))]
 pub(crate) mod runtime {
+    mod layout;
+    use layout::{BLACK_COLOR, CAPTAIN_NAME_RECT, CAPTAIN_NAME_TEXT_COLOR, SHIP_NAME_RECT};
+
     mod save_load;
 
     use save_load::pick_game;
@@ -23,7 +26,11 @@ pub(crate) mod runtime {
     use crate::engine::{
         battle::Cx, input::InputSession, observe::Io, Kernel, StoryKey, World, WorldData,
     };
-    use crate::navigation::abi::*;
+    use crate::navigation::abi::{
+        MENU_SOUND_EFFECT_MENU_SOUND_FAILURE as MENU_FAILURE,
+        MENU_SOUND_EFFECT_MENU_SOUND_SUCCESS as MENU_SUCCESS, *,
+    };
+    use crate::ui::settings::play_menu_sound;
 
     use std::{mem, ptr};
 
@@ -63,32 +70,7 @@ pub(crate) mod runtime {
     static mut LAST_USED_SLOT: COUNT = 0;
     static mut NAMING_CB: NamingCallback = None;
 
-    const CAPTAIN_NAME_RECT: RECT = RECT {
-        corner: POINT { x: 3, y: 10 },
-        extent: EXTENT {
-            width: (SHIP_NAME_WIDTH - 2) as i16,
-            height: SHIP_NAME_HEIGHT as i16,
-        },
-    };
-    const SHIP_NAME_RECT: RECT = RECT {
-        corner: POINT { x: 2, y: 20 },
-        extent: EXTENT {
-            width: SHIP_NAME_WIDTH as i16,
-            height: SHIP_NAME_HEIGHT as i16,
-        },
-    };
-
-    // BUILD_COLOR(col, c256) is col; CC5TO8 replicates the high bits.
-    const fn rgb15(r: u8, g: u8, b: u8) -> Color {
-        Color {
-            r: (r << 3) | (r >> 2),
-            g: (g << 3) | (g >> 2),
-            b: (b << 3) | (b >> 2),
-            a: 0xff,
-        }
-    }
-    const BLACK_COLOR: Color = rgb15(0, 0, 0);
-    const CAPTAIN_NAME_TEXT_COLOR: Color = rgb15(0x16, 0x0b, 0x1f);
+    use crate::ui::rgb15;
 
     unsafe fn game_string(index: u32) -> *mut UNICODE {
         GetStringAddress(SetAbsStringTableIndex(
@@ -240,22 +222,27 @@ pub(crate) mod runtime {
         1
     }
 
-    unsafe fn on_name_change(p_tes: *mut TEXTENTRY_STATE, _input: &InputSession) -> BOOLEAN {
-        let name_captain = !(*p_tes).CbParam.is_null();
-        let mut hl = DDSHS_EDIT;
-        if (*p_tes).JoystickMode != 0 {
-            hl |= DDSHS_BLOCKCUR;
-        }
-        draw_name_string(
-            name_captain,
-            (*p_tes).BaseStr,
-            (*p_tes).CursorPos as COUNT,
-            hl,
-        )
+    unsafe fn on_name_change(
+        p_tes: *mut TEXTENTRY_STATE,
+        cx: &mut Cx<'_>,
+        _input: &InputSession,
+    ) -> BOOLEAN {
+        cx.with_legacy(|| {
+            let name_captain = !(*p_tes).CbParam.is_null();
+            let mut hl = DDSHS_EDIT;
+            if (*p_tes).JoystickMode != 0 {
+                hl |= DDSHS_BLOCKCUR;
+            }
+            draw_name_string(
+                name_captain,
+                (*p_tes).BaseStr,
+                (*p_tes).CursorPos as COUNT,
+                hl,
+            )
+        })
     }
 
     unsafe fn name_captain_or_ship(input: &InputSession, name_captain: bool) {
-        let world = WorldData::current();
         let mut buf: [UNICODE; MAX_NAME_SIZE] = [0; MAX_NAME_SIZE];
         let mut tes: TEXTENTRY_STATE = mem::zeroed();
         SetContext(Kernel::current().read(|owner| owner.status_context));
@@ -266,27 +253,26 @@ pub(crate) mod runtime {
         });
         draw_name_string(name_captain, buf.as_mut_ptr(), 0, DDSHS_EDIT);
         DrawStatusMessage(game_string(NAMING_STRING_BASE));
-        let setting = if name_captain {
-            tes.MaxSize = mem::size_of::<[UNICODE; MAX_NAME_SIZE]>() as i32;
-            ptr::addr_of_mut!((**world).flagship.commander_name).cast::<UNICODE>()
-        } else {
-            tes.MaxSize = mem::size_of::<[UNICODE; MAX_NAME_SIZE]>() as i32;
-            ptr::addr_of_mut!((**world).flagship.ship_name).cast::<UNICODE>()
-        };
+        tes.MaxSize = mem::size_of::<[UNICODE; MAX_NAME_SIZE]>() as i32;
         tes.Initialized = 0;
         tes.BaseStr = buf.as_mut_ptr();
         tes.CursorPos = 0;
         tes.CbParam = usize::from(name_captain) as *mut std::ffi::c_void;
         tes.ChangeCallback = Some(on_name_change);
         tes.FrameCallback = None;
-        if do_text_entry(&mut tes, input) != 0 {
-            utf8StringCopy(
-                (setting).cast(),
-                tes.MaxSize as usize,
-                (buf.as_ptr()).cast(),
-            );
-        } else {
-            utf8StringCopy((buf.as_mut_ptr()).cast(), buf.len(), (setting).cast());
+        let accepted = do_text_entry(&mut tes, input) != 0;
+        {
+            let world = WorldData::current();
+            let setting = if name_captain {
+                ptr::addr_of_mut!((**world).flagship.commander_name).cast::<u8>()
+            } else {
+                ptr::addr_of_mut!((**world).flagship.ship_name).cast::<u8>()
+            };
+            if accepted {
+                utf8StringCopy(setting, tes.MaxSize as usize, buf.as_ptr().cast());
+            } else {
+                utf8StringCopy(buf.as_mut_ptr().cast(), buf.len(), setting);
+            }
         }
         SetFlashRect(SFR_MENU_3DO);
         draw_name_string(name_captain, buf.as_mut_ptr(), 0, DDSHS_NORMAL);
@@ -392,18 +378,24 @@ pub(crate) mod runtime {
         1
     }
 
-    unsafe fn on_save_name_change(p_tes: *mut TEXTENTRY_STATE, _input: &InputSession) -> BOOLEAN {
-        let mut hl = DDSHS_EDIT;
-        let game_index = (*p_tes).CbParam.cast::<COUNT>();
-        if (*p_tes).JoystickMode != 0 {
-            hl |= DDSHS_BLOCKCUR;
-        }
-        draw_save_name_string(
-            (*p_tes).BaseStr,
-            (*p_tes).CursorPos as COUNT,
-            hl,
-            *game_index,
-        )
+    unsafe fn on_save_name_change(
+        p_tes: *mut TEXTENTRY_STATE,
+        cx: &mut Cx<'_>,
+        _input: &InputSession,
+    ) -> BOOLEAN {
+        cx.with_legacy(|| {
+            let mut hl = DDSHS_EDIT;
+            let game_index = (*p_tes).CbParam.cast::<COUNT>();
+            if (*p_tes).JoystickMode != 0 {
+                hl |= DDSHS_BLOCKCUR;
+            }
+            draw_save_name_string(
+                (*p_tes).BaseStr,
+                (*p_tes).CursorPos as COUNT,
+                hl,
+                *game_index,
+            )
+        })
     }
 
     unsafe fn name_save_game(
@@ -893,7 +885,12 @@ pub(crate) mod runtime {
         }
     }
 
-    unsafe fn do_pick_game(input: &InputSession, p_ms: *mut MENU_STATE, activity: u16) -> BOOLEAN {
+    unsafe fn do_pick_game(
+        cx: &mut Cx<'_>,
+        input: &InputSession,
+        p_ms: *mut MENU_STATE,
+    ) -> BOOLEAN {
+        let activity = cx.world.activity();
         let pick_state = (*p_ms).privData.cast::<PickGameState>();
         let time_in = GetTimeCounter();
         let occupied = (*pick_state).summary[(*p_ms).CurState as usize].year_index != 0;
@@ -920,11 +917,11 @@ pub(crate) mod runtime {
                 return 0;
             }
             PickerAction::Select => {
-                PlayMenuSound(MENU_SOUND_EFFECT_MENU_SOUND_SUCCESS);
+                play_menu_sound(cx.kernel, cx.world, MENU_SUCCESS as u16);
                 (*pick_state).success = 1;
                 return 0;
             }
-            PickerAction::EmptySlot => PlayMenuSound(MENU_SOUND_EFFECT_MENU_SOUND_FAILURE),
+            PickerAction::EmptySlot => play_menu_sound(cx.kernel, cx.world, MENU_FAILURE as u16),
             PickerAction::Continue => {
                 let new_state = picker_slot(
                     (*p_ms).CurState,
@@ -935,10 +932,10 @@ pub(crate) mod runtime {
                 );
                 if new_state != (*p_ms).CurState {
                     (*p_ms).CurState = new_state;
-                    SetContext(Kernel::current().read(|owner| owner.space_context));
-                    redraw_pick_display(pick_state, (*p_ms).CurState as COUNT);
+                    SetContext(cx.kernel.space_context);
+                    cx.with_legacy(|| redraw_pick_display(pick_state, (*p_ms).CurState as COUNT));
                 }
-                SleepThreadUntil(time_in.wrapping_add(ONE_SECOND / 30));
+                cx.with_legacy(|| SleepThreadUntil(time_in.wrapping_add(ONE_SECOND / 30)));
             }
         }
         1

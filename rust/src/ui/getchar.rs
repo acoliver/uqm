@@ -1,11 +1,16 @@
 #![cfg(not(test))]
 
-use crate::engine::input::InputSession;
+use crate::engine::battle::Cx;
+use crate::engine::input::{frames::InputState, InputSession};
+use crate::engine::observe::Io;
 use crate::memory::{rust_hfree as HFree, rust_hmalloc as HMalloc};
 use crate::navigation::abi::*;
+use crate::ui::settings::play_menu_sound;
 
 use libc::{strcmp, strlen};
 use std::{ffi::c_char, mem, ptr};
+
+const FAILURE: u16 = MENU_SOUND_EFFECT_MENU_SOUND_FAILURE as u16;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -44,20 +49,83 @@ unsafe fn switch_case(ch: &mut JoyChar, from: *const JoyChar, to: *const JoyChar
     }
 }
 
+/// Run initialization, the input loop and cleanup for a complete entry session.
+/// Prepared entries are stepped with [`text_entry_frame`].
+///
 /// # Safety
 /// text and its strings, callbacks, and input subsystem must remain valid for the duration of the call.
 pub unsafe fn do_text_entry(text: *mut TEXTENTRY_STATE, input: &InputSession) -> BOOLEAN {
     if crate::engine::World::current().read(|world| world.activity()) & CHECK_ABORT as u16 != 0 {
         return 0;
     }
-    if (*text).Initialized == 0 {
-        return begin_text_entry(text, input);
+    begin_text_entry(text, input)
+}
+
+/// # Safety
+/// `BaseStr` and `CacheStr` are distinct writable buffers of at least `MaxSize` bytes.
+/// `BaseStr` is NUL-terminated; `InsPt` points to one of its UTF-8 character boundaries.
+/// Callbacks and their state remain valid and must not invalidate these buffers.
+pub unsafe fn text_entry_frame(
+    text: *mut TEXTENTRY_STATE,
+    cx: &mut Cx<'_>,
+    io: &mut Io<'_>,
+    input: &InputSession,
+) -> BOOLEAN {
+    if cx.world.activity() & CHECK_ABORT as u16 != 0 {
+        return 0;
     }
     let pulse = input.pulsed();
     let mut string = (*text).InsPt;
     let mut len = strlen(string.cast()) as i32;
     let (cached_ins, cached_cursor) = (string, (*text).CursorPos);
     ptr::copy_nonoverlapping((*text).BaseStr, (*text).CacheStr, (*text).MaxSize as usize);
+    let mut changed = insert_characters(cx, &pulse, &mut *text, &mut string, len);
+    changed |= edit_cursor(&pulse, &mut *text, &mut string, &mut len);
+    if !(*text).JoyAlpha.is_null()
+        && [
+            KEY_MENU_UP,
+            KEY_MENU_DOWN,
+            KEY_MENU_PAGE_UP,
+            KEY_MENU_PAGE_DOWN,
+        ]
+        .iter()
+        .any(|key| pulse.menu[*key as usize] != 0)
+    {
+        joystick_character(cx, input, text, &mut string, &mut len, &mut changed);
+    }
+    if pulse.menu[KEY_MENU_SELECT as usize] != 0 {
+        (*text).Success = 1;
+        return 0;
+    }
+    if pulse.menu[KEY_MENU_EDIT_CANCEL as usize] != 0 {
+        (*text).Success = 0;
+        return 0;
+    }
+    (*text).InsPt = string;
+    if let Some(callback) = (*text).ChangeCallback.filter(|_| changed) {
+        if callback(text, cx, input) == 0 {
+            ptr::copy_nonoverlapping((*text).CacheStr, (*text).BaseStr, (*text).MaxSize as usize);
+            (*text).InsPt = cached_ins;
+            (*text).CursorPos = cached_cursor;
+            play_menu_sound(cx.kernel, cx.world, FAILURE);
+        }
+    }
+    if let Some(callback) = (*text).FrameCallback {
+        callback(text, cx, io, input)
+    } else {
+        cx.with_legacy(|| SleepThread(ONE_SECOND / 30));
+        1
+    }
+}
+
+unsafe fn insert_characters(
+    cx: &mut Cx<'_>,
+    pulse: &InputState,
+    text: &mut TEXTENTRY_STATE,
+    position: &mut *mut UNICODE,
+    len: i32,
+) -> bool {
+    let mut string = *position;
     let mut changed = false;
     let mut ch = GetNextCharacter();
     if ch == 0 && pulse.menu[KEY_MENU_ANY as usize] != 0 {
@@ -65,26 +133,39 @@ pub unsafe fn do_text_entry(text: *mut TEXTENTRY_STATE, input: &InputSession) ->
     }
     while ch != 0 {
         let mut encoded = [0 as UNICODE; 8];
-        (*text).JoystickMode = 0;
+        text.JoystickMode = 0;
         let size = getStringFromChar(
             (encoded.as_mut_ptr()).cast(),
             mem::size_of_val(&encoded),
             ch,
         );
         if UniChar_isPrint(ch) != 0 && size > 0 {
-            let offset = string.offset_from((*text).BaseStr);
-            if offset + len as isize + (size as isize) < (*text).MaxSize as isize {
+            let offset = string.offset_from(text.BaseStr);
+            if offset + len as isize + (size as isize) < text.MaxSize as isize {
                 ptr::copy(string, string.add(size as usize), len as usize + 1);
                 ptr::copy_nonoverlapping(encoded.as_ptr(), string, size as usize);
                 string = string.add(size as usize);
-                (*text).CursorPos += 1;
+                text.CursorPos += 1;
                 changed = true;
             } else {
-                PlayMenuSound(MENU_SOUND_EFFECT_MENU_SOUND_FAILURE);
+                play_menu_sound(cx.kernel, cx.world, FAILURE);
             }
         }
         ch = GetNextCharacter();
     }
+    *position = string;
+    changed
+}
+
+unsafe fn edit_cursor(
+    pulse: &InputState,
+    text: &mut TEXTENTRY_STATE,
+    position: &mut *mut UNICODE,
+    remaining: &mut i32,
+) -> bool {
+    let mut string = *position;
+    let mut len = *remaining;
+    let mut changed = false;
     if pulse.menu[KEY_MENU_DELETE as usize] != 0 {
         if len != 0 {
             let current = char_from_utf8(string.cast());
@@ -97,21 +178,19 @@ pub unsafe fn do_text_entry(text: *mut TEXTENTRY_STATE, input: &InputSession) ->
             changed = true;
         }
     } else if pulse.menu[KEY_MENU_BACKSPACE as usize] != 0 {
-        if string > (*text).BaseStr {
-            let previous =
-                skipUTF8Chars(((*text).BaseStr).cast(), ((*text).CursorPos - 1) as usize);
+        if string > text.BaseStr {
+            let previous = skipUTF8Chars((text.BaseStr).cast(), (text.CursorPos - 1) as usize);
             ptr::copy(string, (previous).cast(), len as usize + 1);
             string = (previous).cast();
-            (*text).CursorPos -= 1;
+            text.CursorPos -= 1;
             changed = true;
         }
     } else if pulse.menu[KEY_MENU_LEFT as usize] != 0 {
-        if string > (*text).BaseStr {
-            let previous =
-                skipUTF8Chars(((*text).BaseStr).cast(), ((*text).CursorPos - 1) as usize);
+        if string > text.BaseStr {
+            let previous = skipUTF8Chars((text.BaseStr).cast(), (text.CursorPos - 1) as usize);
             string = (previous).cast();
             // The C code subtracts prev after assigning pStr to prev, so len is unchanged.
-            (*text).CursorPos -= 1;
+            text.CursorPos -= 1;
             changed = true;
         }
     } else if pulse.menu[KEY_MENU_RIGHT as usize] != 0 {
@@ -119,57 +198,25 @@ pub unsafe fn do_text_entry(text: *mut TEXTENTRY_STATE, input: &InputSession) ->
             let current = char_from_utf8(string.cast());
             string = string.add(current.len as usize);
             len -= current.len as i32;
-            (*text).CursorPos += 1;
+            text.CursorPos += 1;
             changed = true;
         }
     } else if pulse.menu[KEY_MENU_HOME as usize] != 0 {
-        if string > (*text).BaseStr {
-            string = (*text).BaseStr;
+        if string > text.BaseStr {
+            string = text.BaseStr;
             len = strlen(string.cast()) as i32;
-            (*text).CursorPos = 0;
+            text.CursorPos = 0;
             changed = true;
         }
     } else if pulse.menu[KEY_MENU_END as usize] != 0 && len > 0 {
-        (*text).CursorPos += utf8StringCount((string).cast()) as i32;
+        text.CursorPos += utf8StringCount((string).cast()) as i32;
         string = string.add(len as usize);
         len = 0;
         changed = true;
     }
-    if !(*text).JoyAlpha.is_null()
-        && [
-            KEY_MENU_UP,
-            KEY_MENU_DOWN,
-            KEY_MENU_PAGE_UP,
-            KEY_MENU_PAGE_DOWN,
-        ]
-        .iter()
-        .any(|key| pulse.menu[*key as usize] != 0)
-    {
-        joystick_character(input, text, &mut string, &mut len, &mut changed);
-    }
-    if pulse.menu[KEY_MENU_SELECT as usize] != 0 {
-        (*text).Success = 1;
-        return 0;
-    }
-    if pulse.menu[KEY_MENU_EDIT_CANCEL as usize] != 0 {
-        (*text).Success = 0;
-        return 0;
-    }
-    (*text).InsPt = string;
-    if let Some(callback) = (*text).ChangeCallback.filter(|_| changed) {
-        if callback(text, input) == 0 {
-            ptr::copy_nonoverlapping((*text).CacheStr, (*text).BaseStr, (*text).MaxSize as usize);
-            (*text).InsPt = cached_ins;
-            (*text).CursorPos = cached_cursor;
-            PlayMenuSound(MENU_SOUND_EFFECT_MENU_SOUND_FAILURE);
-        }
-    }
-    if let Some(callback) = (*text).FrameCallback {
-        callback(text, input)
-    } else {
-        SleepThread(ONE_SECOND / 30);
-        1
-    }
+    *position = string;
+    *remaining = len;
+    changed
 }
 
 unsafe fn begin_text_entry(text: *mut TEXTENTRY_STATE, input: &InputSession) -> BOOLEAN {
@@ -204,12 +251,9 @@ unsafe fn begin_text_entry(text: *mut TEXTENTRY_STATE, input: &InputSession) -> 
     (*text).CacheStr =
         HMalloc(((*text).MaxSize as usize).wrapping_mul(mem::size_of::<UNICODE>())).cast();
     EnterCharacterMode();
-    DoInput(
-        1,
-        &mut |cx: &mut crate::engine::battle::Cx<'_>, _: &mut crate::engine::observe::Io<'_>| {
-            cx.with_legacy(|| do_text_entry(text, input) != 0)
-        },
-    );
+    DoInput(1, &mut |cx: &mut Cx<'_>, io: &mut Io<'_>| {
+        text_entry_frame(text, cx, io, input) != 0
+    });
     ExitCharacterMode();
     if !(*text).CacheStr.is_null() {
         HFree((*text).CacheStr.cast());
@@ -249,6 +293,7 @@ unsafe fn load_alpha(string: STRING, count: *mut i32) -> *mut JoyChar {
 }
 
 unsafe fn joystick_character(
+    cx: &mut Cx<'_>,
     input: &InputSession,
     text: *mut TEXTENTRY_STATE,
     string: &mut *mut UNICODE,
@@ -323,6 +368,6 @@ unsafe fn joystick_character(
         *len += next.len as i32;
         *changed = true;
     } else {
-        PlayMenuSound(MENU_SOUND_EFFECT_MENU_SOUND_FAILURE);
+        play_menu_sound(cx.kernel, cx.world, FAILURE);
     }
 }
