@@ -50,7 +50,7 @@ fn capture_summary(
                     );
                 }
                 solar.prepare_summary(
-                    game.data.game.current_activity,
+                    game.activity(),
                     world.story_state(crate::engine::StoryKey::GLOBAL_FLAGS_AND_DATA) == 255,
                 )?
             },

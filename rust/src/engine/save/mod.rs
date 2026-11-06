@@ -148,7 +148,12 @@ pub fn snapshot(
         view.solar,
         name,
     )?;
-    let runtime = capture_runtime(&world.data.game, world.activity(), &world.story, &world.clock)?;
+    let runtime = capture_runtime(
+        &world.data.game,
+        world.activity(),
+        &world.story,
+        &world.clock,
+    )?;
     world.data.game.ip_location = view.ip_location;
     world.data.game.in_orbit = 0;
     let queues = queues::capture_queues_for_activity(world)?;

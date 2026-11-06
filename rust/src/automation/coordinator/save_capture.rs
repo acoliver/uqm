@@ -85,7 +85,13 @@ mod tests {
         )
         .unwrap();
         let output = tempfile::tempdir().unwrap();
-        let observer = AutomationObserver::new(script, output.path().into());
+        let observer = AutomationObserver::new(
+            script,
+            output.path().into(),
+            crate::engine::World::new().activity_control(),
+            crate::engine::input::InputControls::default(),
+            Default::default(),
+        );
         let mut inner = observer.inner.lock();
         inner.input_seen = 9;
         inner.save_capture = Some(crate::automation::save_capture::Request {
