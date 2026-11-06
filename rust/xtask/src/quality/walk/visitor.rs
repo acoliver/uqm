@@ -559,7 +559,7 @@ impl<'a> Visit<'a> for Walker {
             {
                 self.add("ffi", "queue_calls", expr.span(), 1);
             }
-            if resolved.contains("app::bridge::") {
+            if self.is_bridge_call(&resolved) {
                 self.add("ffi", "bridge_calls", expr.span(), 1);
             }
             self.record_owner_call(&resolved, expr.span());
