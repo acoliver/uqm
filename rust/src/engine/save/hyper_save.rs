@@ -1,9 +1,9 @@
 //! Save the hyperspace flagship's facing from its owned ship and element pools.
 
-use crate::engine::battle::link_queue::{LinkQueue, RacePool, Starship};
-use crate::engine::battle::schema::GAME_STATE;
-use crate::engine::battle::{ElementTable, Parent};
-use crate::engine::{Kernel, World};
+use super::super::battle::link_queue::{LinkQueue, RacePool, Starship};
+use super::super::battle::schema::GAME_STATE;
+use super::super::battle::{ElementTable, Parent};
+use super::super::{Kernel, World};
 use std::fmt;
 
 const PLAYER_SHIP: u16 = 1 << 2;

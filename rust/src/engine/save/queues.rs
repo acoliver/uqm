@@ -40,12 +40,12 @@
 
 use std::fmt;
 
+use super::super::battle::link_queue::{LinkQueue, QueueRecord};
+use super::super::clock::NUM_EVENTS;
+use super::super::world::fleet::captain_name;
+use super::super::world::queues::{FleetInfo, Fragment, ShipFragment};
+use super::super::World;
 use super::activity::{INFINITE_FLEET, START_ENCOUNTER, START_INTERPLANETARY};
-use crate::engine::battle::link_queue::{LinkQueue, QueueRecord};
-use crate::engine::clock::NUM_EVENTS;
-use crate::engine::world::fleet::captain_name;
-use crate::engine::world::queues::{FleetInfo, Fragment, ShipFragment};
-use crate::engine::World;
 use crate::graphics::native_abi::POINT as CPoint;
 use uqm_save::{Point, RaceEntry, ShipFragmentEntry};
 

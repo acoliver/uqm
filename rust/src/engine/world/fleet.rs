@@ -1,8 +1,8 @@
 //! Campaign fleet construction and escort bookkeeping ported from build.c.
 
-use crate::engine::battle::link_queue::{LinkId, LinkQueue};
-use crate::engine::world::queues::Fragment;
-use crate::engine::World;
+use super::super::battle::link_queue::{LinkId, LinkQueue};
+use super::super::world::queues::Fragment;
+use super::super::World;
 
 pub fn captain_name() -> u8 {
     ((crate::math::random() as u16 & 15) + 5) as u8

@@ -665,7 +665,7 @@ mod intersection_projection_tests {
     #[serial_test::serial]
     fn live_helpers_preserve_record_coordinates_and_pool_addresses() {
         use crate::engine::battle::{Battle, Cx, World};
-        use crate::ships::native::abi::*;
+        use crate::graphics::native_abi::POINT;
         // SAFETY: a zeroed group queue has no allocated storage.
 
         // SAFETY: the local queue authorities and their pool remain exclusive for this test.
@@ -698,7 +698,7 @@ mod intersection_projection_tests {
                 11
             );
             assert_eq!(cx.elements()[id].IntersectControl.EndPoint.y, 17);
-            cx.element_mut(id).flags = NONSOLID as u16;
+            cx.element_mut(id).flags = 64;
             cx.refresh_intersect_frame(id);
             assert!(cx.elements()[id]
                 .IntersectControl

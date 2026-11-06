@@ -1,5 +1,5 @@
 //! Fixed save-menu summary records, shared with the live snapshot boundary.
-use crate::engine::world::SisState;
+use super::super::world::SisState;
 use uqm_save::Summary;
 
 #[repr(C)]

@@ -46,12 +46,12 @@
 
 use std::fmt;
 
-use super::activity::{IN_INTERPLANETARY, START_ENCOUNTER, START_INTERPLANETARY};
-use super::queues::{c_point, entries, point, QueueKind};
-use crate::engine::world::queues::{
+use super::super::world::queues::{
     BriefShipInfo as ShipInfo, EncounterRecord, IpGroup as GroupRecord,
 };
-use crate::engine::World;
+use super::super::World;
+use super::activity::{IN_INTERPLANETARY, START_ENCOUNTER, START_INTERPLANETARY};
+use super::queues::{c_point, entries, point, QueueKind};
 use uqm_save::{self, BriefShipInfo, EncounterEntry, IpGroup};
 
 use uqm_save::MAX_HYPER_SHIPS;

@@ -1,7 +1,7 @@
 //! Capture and restore of scheduled events in save-file order.
 
-use crate::engine::clock::days_in_month;
-use crate::engine::clock::{GameClock, NUM_EVENTS};
+use super::super::clock::days_in_month;
+use super::super::clock::{GameClock, NUM_EVENTS};
 use std::fmt;
 use uqm_save::EventEntry;
 
@@ -133,7 +133,7 @@ mod owned_tests {
     use super::*;
     #[test]
     fn owned_event_pool_preserves_file_order_and_rejects_before_reset() {
-        let mut clock = crate::engine::clock::GameClock::new();
+        let mut clock = super::super::super::clock::GameClock::new();
         let entries = [
             EventEntry {
                 day_index: 20,

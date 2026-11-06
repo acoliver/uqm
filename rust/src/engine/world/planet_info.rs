@@ -1,7 +1,7 @@
 // Planet Information Management
 // Handles planet scan masks and star information storage.
 
-use crate::engine::world::state_file::{
+use super::super::world::state_file::{
     read_u32_array, read_u32_le, write_u32_array, write_u32_le, FileMode, SeekWhence,
     StateFileError, StateFileManager, STARINFO_FILE,
 };

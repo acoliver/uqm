@@ -22,16 +22,16 @@
 //! `ShipList` and `DeviceList` is zero, where C writes whatever the caller's
 //! `SUMMARY_DESC` held. The fixed escort pool cannot exceed `ShipList`.
 
-use crate::engine::battle::link_queue::LinkQueue;
-use crate::engine::world::queues::Fragment;
+use super::super::battle::link_queue::LinkQueue;
+use super::super::world::queues::Fragment;
 use std::fmt;
 
+use super::super::battle::schema::GAME_STATE as CGameState;
+use super::super::world::story::GameState;
+use super::super::world::story::GameStateOwnerError;
+use super::super::world::SisState as CSisState;
+use super::super::StoryKey;
 use super::activity::{IN_HYPERSPACE, IN_INTERPLANETARY, IN_LAST_BATTLE};
-use crate::engine::battle::schema::GAME_STATE as CGameState;
-use crate::engine::world::story::GameState;
-use crate::engine::world::story::GameStateOwnerError;
-use crate::engine::world::SisState as CSisState;
-use crate::engine::StoryKey;
 use uqm_save::{
     SaveName, SisState, Summary, MAX_BUILT_SHIPS, MAX_EXCLUSIVE_DEVICES, SIS_NAME_SIZE,
 };

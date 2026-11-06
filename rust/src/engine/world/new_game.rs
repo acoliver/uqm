@@ -1,6 +1,6 @@
 //! Campaign initialization from retained resource metadata and prepared names.
+use super::super::battle::schema::GAME_STATE;
 use super::{queues::FleetInfo, story::GameState, SisState, World, WorldData};
-use crate::engine::battle::schema::GAME_STATE;
 use crate::graphics::native_abi::{FRAME, POINT, STRING};
 
 #[derive(Clone, Copy)]

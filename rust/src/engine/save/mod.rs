@@ -14,9 +14,9 @@ pub mod summary_record;
 
 use std::fmt;
 
-use crate::engine::battle::schema::GAME_STATE as CGameState;
-use crate::engine::world::story::GameState;
-use crate::engine::world::story::GameStateOwnerError;
+use super::battle::schema::GAME_STATE as CGameState;
+use super::world::story::GameState;
+use super::world::story::GameStateOwnerError;
 use uqm_save::{EventEntry, GlobalState, GAME_STATE_BYTES};
 
 pub use events::EventError;
@@ -92,7 +92,7 @@ pub fn capture_runtime(
     game: &CGameState,
     activity: u16,
     story: &Option<GameState>,
-    clock: &crate::engine::clock::GameClock,
+    clock: &super::clock::GameClock,
 ) -> Result<RuntimeSections, RuntimeError> {
     Ok(RuntimeSections {
         global: global::capture_global_state(game, activity),
@@ -115,7 +115,7 @@ pub fn restore_runtime(
     global: &GlobalState,
     game_state: &[u8; GAME_STATE_BYTES],
     events: &[EventEntry],
-    clock: &mut crate::engine::clock::GameClock,
+    clock: &mut super::clock::GameClock,
 ) -> Result<Restored, RuntimeError> {
     events::validate_restore(events)?;
     *story = Some(GameState::from_bytes(game_state));
@@ -135,7 +135,7 @@ pub struct SessionView {
 
 /// Capture prepared state before restoring the live IP position and orbit marker.
 pub fn snapshot(
-    world: &mut crate::engine::World,
+    world: &mut super::World,
     view: SessionView,
     name: &[u8],
 ) -> anyhow::Result<uqm_save::SaveFile> {
@@ -186,14 +186,14 @@ enum StateFiles {
 }
 
 /// Restore the save while retaining the activity of the running load menu.
-pub fn apply(save: uqm_save::SaveFile, world: &mut crate::engine::World) -> anyhow::Result<u16> {
+pub fn apply(save: uqm_save::SaveFile, world: &mut super::World) -> anyhow::Result<u16> {
     apply_with_files(save, world, StateFiles::Sections)
 }
 
 /// Legacy saves carry complete working images instead of state-file sections.
 pub fn apply_legacy(
     save: uqm_save::SaveFile,
-    world: &mut crate::engine::World,
+    world: &mut super::World,
     images: [Vec<u8>; 3],
     battle_group_ref: u32,
 ) -> anyhow::Result<u16> {
@@ -209,7 +209,7 @@ pub fn apply_legacy(
 
 fn apply_with_files(
     save: uqm_save::SaveFile,
-    world: &mut crate::engine::World,
+    world: &mut super::World,
     files: StateFiles,
 ) -> anyhow::Result<u16> {
     let restored = restore_runtime(

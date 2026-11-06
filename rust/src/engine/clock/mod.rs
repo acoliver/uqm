@@ -1,7 +1,7 @@
 //! Scheduled campaign events owned by the game clock.
 
+use super::battle::link_queue::{queue_record, LinkId, LinkQueue, QueueRecord};
 use crate::collections::pool::OrderedPool;
-use crate::engine::battle::link_queue::{queue_record, LinkId, LinkQueue, QueueRecord};
 pub const NUM_EVENTS: usize = 18;
 
 #[derive(Default)]

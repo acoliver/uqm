@@ -1,7 +1,7 @@
 //! Campaign records live in fixed-capacity pools; links belong to the pool, not the records.
 
+use super::super::battle::link_queue::{queue_record, LinkId, LinkQueue, QueueRecord};
 use crate::collections::pool::OrderedPool;
-use crate::engine::battle::link_queue::{queue_record, LinkId, LinkQueue, QueueRecord};
 use crate::graphics::native_abi::{FRAME, POINT, STRING};
 
 pub const SAMATRA_RACE: u8 = 23;
