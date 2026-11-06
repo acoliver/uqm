@@ -1036,7 +1036,6 @@ pub const NetplayResetReason_ResetReason_unspecified: NetplayResetReason = 0;
 pub const NetplayResetReason_ResetReason_syncLoss: NetplayResetReason = 1;
 pub const NetplayResetReason_ResetReason_manualReset: NetplayResetReason = 2;
 pub type NetplayResetReason = ::std::os::raw::c_uint;
-pub use crate::supermelee::netplay::abi::NetConnection;
 pub const NetState_NetState_unconnected: NetState = 0;
 pub const NetState_NetState_connecting: NetState = 1;
 pub const NetState_NetState_init: NetState = 2;
@@ -1048,33 +1047,6 @@ pub const NetState_NetState_inBattle: NetState = 7;
 pub const NetState_NetState_endingBattle: NetState = 8;
 pub const NetState_NetState_endingBattle2: NetState = 9;
 pub type NetState = ::std::os::raw::c_uint;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct NetStateData {
-    pub name: *const ::std::os::raw::c_char,
-}
-pub type NetConnectionStateData_ReleaseFunction =
-    ::std::option::Option<unsafe extern "C" fn(stateData: *mut NetConnectionStateData)>;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct NetConnectionStateData {
-    pub releaseFunction: NetConnectionStateData_ReleaseFunction,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct NetplayPeerOptions {
-    pub isServer: bool,
-    pub host: *const ::std::os::raw::c_char,
-    pub port: *const ::std::os::raw::c_char,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct NetplayOptions {
-    pub metaServer: *const ::std::os::raw::c_char,
-    pub metaPort: *const ::std::os::raw::c_char,
-    pub peer: [NetplayPeerOptions; 2usize],
-    pub inputDelay: usize,
-}
 unsafe extern "C" {
     pub static mut optWhichCoarseScan: ::std::os::raw::c_int;
 }
@@ -1161,14 +1133,8 @@ pub type ELEMENT_FLAGS = UWORD;
 
 pub use crate::supermelee::netplay::checksum::crc_process_game_state as crc_processState;
 
-pub use crate::supermelee::netplay::netconnection::NetConnection_getStateData;
-pub unsafe fn NetConnection_setState(conn: *mut NetConnection, state: NetState) {
-    crate::supermelee::netplay::abi::NetConnection_setState(conn.cast(), state);
-}
 
-pub use crate::supermelee::netplay::netconnection::NetConnection_getState;
 
-pub use crate::supermelee::netplay::netconnection::NetConnection_getDiscriminant;
 pub use crate::supermelee::netplay::session::MeleeState as MELEE_STATE;
 unsafe extern "C" {
     pub static mut PickMeleeFrame: FRAME;
@@ -1269,7 +1235,6 @@ pub unsafe fn Flash_setRect(context: *mut FlashContext, rect: *const RECT) {
 #[cfg(test)]
 #[cfg(not(test))]
 pub use crate::ui::flash::Flash_setRect;
-pub use crate::supermelee::netplay::session::BattleStateData;
 pub const KEY_UP: _bindgen_ty_1 = 0;
 pub const KEY_DOWN: _bindgen_ty_1 = 1;
 pub const KEY_LEFT: _bindgen_ty_1 = 2;
@@ -3381,9 +3346,7 @@ pub use crate::game_init::world_resources::live::load_gravity_well;
 #[cfg(not(test))]
 pub use crate::game_init::world_resources::live::free_gravity_well;
 
-pub use crate::supermelee::netplay::netmelee::negotiateReady;
 
-pub use crate::supermelee::netplay::netmelee::waitReady;
 
 pub type TFB_Canvas = *mut ::std::os::raw::c_void;
 pub use crate::graphics::native_abi::tfb_image;

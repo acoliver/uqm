@@ -19,7 +19,7 @@ unsafe extern "C" fn frame(entry: *mut TEXTENTRY_STATE) -> u32 {
     // and callback arguments for all legacy accesses in this operation.
     unsafe {
         let state = (*entry).CbParam.cast::<MELEE_STATE>();
-        (*state).netplay.net_input();
+        poll_menu(state, 0);
         1
     }
 }
@@ -36,10 +36,10 @@ pub(super) unsafe extern "C" fn edit(state: *mut MELEE_STATE) -> u32 {
     if (*state).initialized == 0 {
         current(state);
         (*state).initialized = 1;
-        (*state).input_func = Some(edit);
+        (*state).phase = crate::supermelee::netplay::session::MenuPhase::Editing;
         return 1;
     }
-    (*state).netplay.net_input();
+    poll_menu(state, 0);
     let row = (*state).row;
     let col = (*state).col;
     if (row < 2 || (*state).current_ship == 255)
@@ -48,7 +48,7 @@ pub(super) unsafe extern "C" fn edit(state: *mut MELEE_STATE) -> u32 {
         highlight(10, false);
         (*state).current_ship = 255;
         (*state).melee_option = 4;
-        (*state).input_func = Some(DoMelee);
+        (*state).phase = crate::supermelee::netplay::session::MenuPhase::Menu;
         (*state).last_input_time = GetTimeCounter();
     } else if row < 2 && key(KEY_MENU_SELECT) {
         highlight(10, false);
@@ -68,7 +68,7 @@ pub(super) unsafe extern "C" fn edit(state: *mut MELEE_STATE) -> u32 {
         crate::supermelee::native::build_picker::live::get_build_pick_frame_rect(&mut r);
         RepairMeleeFrame(&r);
         current(state);
-        (*state).input_func = Some(edit);
+        (*state).phase = crate::supermelee::netplay::session::MenuPhase::Editing;
     } else if row < 2 && key(KEY_MENU_SPECIAL) {
         highlight(10, false);
     } else if row < 2 && key(KEY_MENU_DELETE) {

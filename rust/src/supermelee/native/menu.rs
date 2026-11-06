@@ -40,6 +40,23 @@ pub(crate) mod live {
         Melee_flashSelection, RepairMeleeFrame, P_MELEE_STATE,
     };
     use editing::*;
+    unsafe fn run_menu_frame(
+        input: *mut MELEE_STATE,
+        cx: &mut crate::engine::battle::Cx<'_>,
+    ) -> bool {
+        use crate::supermelee::netplay::session::MenuPhase;
+        match (*input).phase {
+                MenuPhase::Confirm => confirm(input, cx) != 0,
+                phase => cx.with_legacy(|| match phase {
+                    MenuPhase::Menu => DoMelee(input),
+                    MenuPhase::Connecting => connecting(input),
+                    MenuPhase::Editing => edit(input),
+                    MenuPhase::Loading => DoLoadTeam(input),
+                    MenuPhase::Building => panic!("build picker escaped its nested input loop"),
+                    MenuPhase::Confirm => unreachable!(),
+                } != 0),
+            }
+    }
     pub(super) unsafe fn key(key: u32) -> bool {
         PulsedInputState.menu[key as usize] != 0
     }
@@ -68,7 +85,7 @@ pub(crate) mod live {
                 (*state).last_input_time = GetTimeCounter();
                 if confirmed != 0 {
                     (*state).initialized = 0;
-                    (*state).input_func = Some(connecting);
+                    (*state).phase = crate::supermelee::netplay::session::MenuPhase::Connecting;
                 }
             }
             1 | 7 => next_control(usize::from((*state).melee_option == 1)),
@@ -102,7 +119,7 @@ pub(crate) mod live {
             (*state).last_input_time = GetTimeCounter();
             return 1;
         }
-        (*state).netplay.net_input();
+        poll_menu(state, 0);
         if key(KEY_MENU_CANCEL) || key(KEY_MENU_LEFT) {
             (*state).last_input_time = GetTimeCounter();
             highlight((*state).melee_option, false);
@@ -221,7 +238,7 @@ pub(crate) mod live {
     }
     fn new_menu_state(kernel: &KernelOwner) -> MELEE_STATE {
         MELEE_STATE {
-            input_func: None,
+            phase: crate::supermelee::netplay::session::MenuPhase::Menu,
             initialized: 0,
             melee_started: 0,
             melee_option: 0,
@@ -253,7 +270,7 @@ pub(crate) mod live {
         // SAFETY: state remains in this stack frame through all synchronous callbacks and cleanup.
         cx.with_legacy(|| {
             P_MELEE_STATE = &mut state;
-            state.input_func = Some(DoMelee);
+            state.phase = crate::supermelee::netplay::session::MenuPhase::Menu;
             state.melee_setup = MeleeSetup_new();
             state.random_context = new_context();
             let fallback = GetTimeCounter();
@@ -294,13 +311,8 @@ pub(crate) mod live {
         });
         let input = &raw mut state;
         cx.run_input(io, true, |cx, _| {
-            // SAFETY: the synchronous session keeps input live; legacy menu code retains its raw address.
-            cx.with_legacy(|| {
-                let callback = (*input)
-                    .input_func
-                    .unwrap_or_else(|| panic!("missing melee menu callback"));
-                callback(input) != 0
-            })
+            // SAFETY: state and its UI resources outlive the synchronous input loop.
+            unsafe { run_menu_frame(input, cx) }
         });
         // SAFETY: the input session has stopped and no callback retains these resources.
         cx.with_legacy(|| {

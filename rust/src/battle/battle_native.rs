@@ -431,7 +431,7 @@ pub(crate) mod engine {
             } else {
                 battle_song(cx.kernel, cx.world, true);
                 net.init_end_frames();
-                if !cx.with_legacy(|| net.negotiate(true, NetState_NetState_inBattle)) {
+                if !cx.negotiate_battle(net.as_ref(), NetState_NetState_inBattle) {
                     cx.world
                         .set_activity(cx.world.activity() | CHECK_ABORT as u16);
                 } else {
@@ -443,7 +443,9 @@ pub(crate) mod engine {
             }
             if cx.world.activity() as u8 == SUPER_MELEE as u8 {
                 if cx.world.activity() & CHECK_ABORT as u16 != 0 {
-                    cx.with_legacy(|| net.wait_reset(NetState_NetState_inSetup));
+                    net.wait_reset(NetState_NetState_inSetup, &mut |poll| {
+                        cx.protocol_wait(poll)
+                    });
                     cx.world
                         .set_activity(cx.world.activity() & !(CHECK_ABORT as u16));
                 } else {

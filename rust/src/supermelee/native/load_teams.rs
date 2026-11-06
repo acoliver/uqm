@@ -244,7 +244,7 @@ pub(crate) mod live {
             draw(state);
             select(state, true);
             (*state).initialized = 1;
-            (*state).input_func = Some(DoLoadTeam);
+            (*state).phase = crate::supermelee::netplay::session::MenuPhase::Loading;
             return 1;
         }
         let keys = PulsedInputState.menu;
@@ -256,7 +256,7 @@ pub(crate) mod live {
                     (*state).load.view[((*state).load.cur - (*state).load.top) as usize],
                 );
             }
-            (*state).input_func = Some(DoMelee);
+            (*state).phase = crate::supermelee::netplay::session::MenuPhase::Menu;
             (*state).last_input_time = GetTimeCounter();
             let mut rect = mem::zeroed();
             GetFrameRect(SetAbsFrameIndex(MeleeFrame, 28), &mut rect);

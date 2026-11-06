@@ -1,5 +1,5 @@
 //! The battle's protocol boundary, independent of the melee menu and transport.
-use std::ffi::c_void;
+pub type ProtocolWait<'a> = dyn FnMut(&mut dyn FnMut() -> bool) + 'a;
 
 pub trait BattleNet {
     fn poll(&self);
@@ -24,15 +24,15 @@ pub trait BattleNet {
     fn record_checksum(&self, frame: u32, checksum: u32);
     fn verify_checksum(&self, frame: u32) -> bool;
     fn reset(&self, reason: u32);
-    fn negotiate(&self, notify: bool, state: u32) -> bool;
+    fn negotiate(&self, notify: bool, state: u32, wait: &mut ProtocolWait<'_>) -> bool;
     fn set_state(&self, state: u32);
-    fn wait_reset(&self, state: u32);
+    fn wait_reset(&self, state: u32, wait: &mut ProtocolWait<'_>);
     fn init_end_frames(&self);
-    fn end_ready(&self, side: usize) -> bool;
+    fn end_ready(&self, side: usize, wait: &mut ProtocolWait<'_>) -> bool;
     fn ship_selected(&self, choice: u16);
     fn begin(&self);
     fn finish(&self);
-    /// # Safety
-    /// Picker must be the live legacy selection record, or null to release it.
-    unsafe fn bind_picker(&self, mask: u16, picker: *mut c_void);
+    fn begin_selection(&self, mask: u16, available: [[bool; 14]; 2]);
+    fn selected(&self, side: usize) -> Option<u16>;
+    fn end_selection(&self);
 }

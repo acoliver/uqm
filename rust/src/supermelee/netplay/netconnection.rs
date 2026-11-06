@@ -1,304 +1,265 @@
-//! C ABI connection lifetime. All access is serialized on the network/game thread.
-use super::abi::*;
+//! Owned protocol state for one remote player.
+use super::{abi::*, checkbuf::ChecksumBuffer, packet::Packet, packetq::PacketQueue};
 
-use super::netstate::NetConnectionStateData_release;
-use super::packetq::{PacketQueue_init, PacketQueue_uninit};
-use std::{ffi::c_void, ptr};
-
-unsafe fn go(conn: *mut NetConnection) -> Result<(), i32> {
-    assert_eq!((*conn).state, NetState_NetState_unconnected);
-    NetConnection_setState(conn, NetState_NetState_connecting);
-    let options = &*(*conn).options;
-    let host = std::ffi::CStr::from_ptr(options.host).to_string_lossy();
-    let port = std::ffi::CStr::from_ptr(options.port).to_string_lossy();
-    let result = {
-        let mut net = (*(*conn).session).transport.borrow_mut();
-        if options.isServer {
-            net.listen(&port)
+#[derive(Debug, Clone)]
+pub struct PeerOptions {
+    pub server: bool,
+    pub host: String,
+    pub port: String,
+}
+impl Default for PeerOptions {
+    fn default() -> Self {
+        Self {
+            server: true,
+            host: "localhost".into(),
+            port: "21837".into(),
+        }
+    }
+}
+#[derive(Debug, Clone)]
+pub struct Options {
+    pub peer: [PeerOptions; 2],
+    pub input_delay: usize,
+}
+impl Default for Options {
+    fn default() -> Self {
+        Self {
+            peer: std::array::from_fn(|_| PeerOptions::default()),
+            input_delay: 2,
+        }
+    }
+}
+#[derive(Debug, Default)]
+pub struct Exchange {
+    pub local: bool,
+    pub remote: bool,
+}
+#[derive(Debug, Default)]
+pub struct Handshake {
+    pub local: bool,
+    pub remote: bool,
+    pub canceling: bool,
+}
+#[derive(Debug, Default)]
+pub struct Flags {
+    pub connected: bool,
+    pub disconnected: bool,
+    pub discriminant: bool,
+    pub handshake: Handshake,
+    pub ready: Exchange,
+    pub reset: Exchange,
+    pub random_seed: bool,
+    pub input_delay: usize,
+    pub checksum_interval: usize,
+}
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum ReadyAction {
+    EnterSetup,
+    Transition(NetState),
+    EndBattle,
+    EndBattle2,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Effect {
+    ResetSentTeams,
+    ShipSelected,
+    EndBattle,
+    FinishReset,
+    Connected,
+    Closed,
+    Error(i32),
+    Bootstrap,
+    ConfirmationCancelled,
+    Ship { side: u16, index: u16, ship: u32 },
+    TeamName { side: u16, name: Vec<u8> },
+    Seed(u32),
+    Abort(u32),
+    Reset { reason: u32, remote: bool },
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Event {
+    pub player: usize,
+    pub battle_active: bool,
+    pub effect: Effect,
+}
+#[derive(Debug)]
+pub struct NetConnection {
+    pub socket: Option<uqm_engine::host::Connection>,
+    pub player: usize,
+    pub state: NetState,
+    pub flags: Flags,
+    pub ready_action: Option<ReadyAction>,
+    pub reset_next: Option<NetState>,
+    pub ready_generation: usize,
+    pub reset_generation: usize,
+    pub options: PeerOptions,
+    pub queue: PacketQueue,
+    pub packets_received: usize,
+    pub packet_types_received: [usize; 18],
+    pub checksums: ChecksumBuffer,
+    pub read_buffer: Vec<u8>,
+    pub battle_active: bool,
+    pub end_frame_count: u32,
+}
+impl NetConnection {
+    pub fn new(player: usize, options: PeerOptions) -> Self {
+        Self {
+            socket: None,
+            player,
+            state: NetState_NetState_unconnected,
+            flags: Flags {
+                checksum_interval: NETPLAY_CHECKSUM_INTERVAL as usize,
+                ..Flags::default()
+            },
+            ready_action: None,
+            reset_next: None,
+            ready_generation: 0,
+            reset_generation: 0,
+            options,
+            queue: PacketQueue::default(),
+            packets_received: 0,
+            packet_types_received: [0; 18],
+            checksums: ChecksumBuffer::default(),
+            read_buffer: Vec::with_capacity(NETPLAY_READBUFSIZE as usize),
+            battle_active: false,
+            end_frame_count: 0,
+        }
+    }
+    pub fn queue(&mut self, packet: Packet) {
+        assert!(self.flags.connected);
+        self.queue.push(packet);
+    }
+    pub fn event(&self, effect: Effect) -> Event {
+        Event {
+            player: self.player,
+            battle_active: self.battle_active,
+            effect,
+        }
+    }
+    pub fn local_ready(&mut self, action: ReadyAction, notify: bool, frame: u32) -> Vec<Event> {
+        assert!(super::ready::meaningful(self.state));
+        assert!(!self.flags.ready.local);
+        self.ready_action = Some(action);
+        if notify {
+            self.queue(Packet::Ready);
+        }
+        if !self.flags.ready.remote {
+            self.flags.ready.local = true;
+            return Vec::new();
+        }
+        self.flags.ready.remote = false;
+        self.both_ready(frame)
+    }
+    pub fn remote_ready(&mut self, frame: u32) -> Vec<Event> {
+        assert!(super::ready::meaningful(self.state));
+        assert!(!self.flags.ready.remote);
+        if !self.flags.ready.local {
+            self.flags.ready.remote = true;
+            return Vec::new();
+        }
+        self.flags.ready.local = false;
+        self.both_ready(frame)
+    }
+    fn both_ready(&mut self, frame: u32) -> Vec<Event> {
+        let action = self
+            .ready_action
+            .take()
+            .unwrap_or_else(|| panic!("ready action"));
+        self.ready_generation += 1;
+        match action {
+            ReadyAction::EnterSetup => {
+                self.state = NetState_NetState_inSetup;
+                vec![self.event(Effect::Connected), self.event(Effect::Bootstrap)]
+            }
+            ReadyAction::Transition(next) => {
+                self.state = next;
+                Vec::new()
+            }
+            ReadyAction::EndBattle => {
+                self.state = NetState_NetState_endingBattle;
+                let target = frame.wrapping_add(1);
+                self.end_frame_count = self.end_frame_count.max(target);
+                self.queue(Packet::FrameCount(target));
+                vec![self.event(Effect::EndBattle)]
+            }
+            ReadyAction::EndBattle2 => {
+                self.state = NetState_NetState_endingBattle2;
+                Vec::new()
+            }
+        }
+    }
+    pub fn confirm(&mut self) -> bool {
+        assert_eq!(self.state, NetState_NetState_inSetup);
+        if self.flags.handshake.local {
+            return false;
+        }
+        self.flags.handshake.local = true;
+        if !self.flags.handshake.canceling {
+            self.queue(if self.flags.handshake.remote {
+                Packet::Handshake1
+            } else {
+                Packet::Handshake0
+            });
+        }
+        true
+    }
+    pub fn cancel_confirmation(&mut self) -> bool {
+        assert_eq!(self.state, NetState_NetState_inSetup);
+        if !self.flags.handshake.local {
+            return false;
+        }
+        self.flags.handshake.local = false;
+        if !self.flags.handshake.canceling {
+            self.flags.handshake.canceling = true;
+            self.queue(Packet::HandshakeCancel);
+        }
+        true
+    }
+    pub fn reset_complete(&mut self) {
+        if self.flags.reset.local && self.flags.reset.remote {
+            if let Some(next) = self.reset_next.take() {
+                self.flags.reset = Exchange::default();
+                self.reset_generation += 1;
+                if next != NetState::MAX {
+                    self.state = next;
+                }
+            }
+        }
+    }
+    pub fn local_reset(&mut self, reason: u32) -> Vec<Event> {
+        assert!(!self.flags.reset.local);
+        self.flags.reset.local = true;
+        if self.flags.reset.remote {
+            self.reset_complete();
+            Vec::new()
         } else {
-            net.connect(&host, &port)
+            self.queue(Packet::Reset(reason as u16));
+            self.reset_feedback(reason, false)
         }
-    };
-    match result {
-        Ok(socket) => {
-            (*conn).socket = Some(socket);
-            Ok(())
-        }
-        Err(error) => Err(error.raw_os_error().unwrap_or(libc::EIO)),
     }
-}
-
-/// # Safety
-/// The connection and its owning session are live on the game thread.
-pub(super) unsafe fn poll(conn: *mut NetConnection) {
-    let socket = (*conn)
-        .socket
-        .unwrap_or_else(|| panic!("connection without transport"));
-    if (*conn).state == NetState_NetState_connecting {
-        let ready = (*(*conn).session).transport.borrow_mut().poll(socket);
-        match ready {
-            Ok(false) => return,
-            Ok(true) => {
-                (*conn).stateFlags.discriminant = (*(*conn).options).isServer;
-                (*conn).stateFlags.connected = true;
-                NetConnection_setState(conn, NetState_NetState_init);
-                (*conn)
-                    .connectCallback
-                    .unwrap_or_else(|| panic!("connect callback"))(conn);
+    pub fn remote_reset(&mut self, reason: u32) -> Vec<Event> {
+        assert!(!self.flags.reset.remote);
+        self.flags.reset.remote = true;
+        if !self.flags.reset.local {
+            self.queue(Packet::Reset(reason as u16));
+            self.flags.reset.local = true;
+            let mut effects = self.reset_feedback(reason, true);
+            if effects.is_empty() {
+                self.reset_complete();
+            } else {
+                effects.push(self.event(Effect::FinishReset));
             }
-            Err(error) => {
-                NetConnection_doErrorCallback(conn, error.raw_os_error().unwrap_or(libc::EIO));
-                disconnected(conn);
-                return;
-            }
+            effects
+        } else {
+            self.reset_complete();
+            Vec::new()
         }
     }
-    if (*conn).stateFlags.connected {
-        super::netrcv::receive(conn);
+    fn reset_feedback(&self, reason: u32, remote: bool) -> Vec<Event> {
+        if (NetState_NetState_preBattle..=NetState_NetState_endingBattle2).contains(&self.state) {
+            vec![self.event(Effect::Reset { reason, remote })]
+        } else {
+            Vec::new()
+        }
     }
-}
-
-/// # Safety
-/// The connection is live; its session is on the game thread.
-pub(super) unsafe fn disconnected(conn: *mut NetConnection) {
-    if let Some(socket) = (*conn).socket.take() {
-        (*(*conn).session).transport.borrow_mut().close(socket);
-    }
-    do_close(conn);
-}
-
-/// # Safety
-/// Options outlive the connection; callbacks follow the connection ownership contract.
-#[no_mangle]
-pub unsafe extern "C" fn NetConnection_open(
-    player: i32,
-    options: *const NetplayPeerOptions,
-    connect_callback: NetConnection_ConnectCallback,
-    close_callback: NetConnection_CloseCallback,
-    error_callback: NetConnection_ErrorCallback,
-    delete_callback: NetConnection_DeleteCallback,
-    extra: *mut c_void,
-    session: *const super::session::SessionCore,
-) -> *mut NetConnection {
-    let conn = libc::calloc(1, size_of::<NetConnection>()).cast::<NetConnection>();
-    assert!(!conn.is_null());
-    (*conn).session = session;
-    (*conn).player = player;
-    (*conn).state = NetState_NetState_unconnected;
-    (*conn).options = options;
-    (*conn).extra = extra;
-    PacketQueue_init(&raw mut (*conn).queue);
-    (*conn).connectCallback = connect_callback;
-    (*conn).closeCallback = close_callback;
-    (*conn).errorCallback = error_callback;
-    (*conn).deleteCallback = delete_callback;
-    (*conn).readBuf = libc::malloc(NETPLAY_READBUFSIZE as usize).cast();
-    assert!(!(*conn).readBuf.is_null());
-    (*conn).readEnd = (*conn).readBuf;
-    (*conn).stateFlags.checksumInterval = NETPLAY_CHECKSUM_INTERVAL as usize;
-    if let Err(error) = go(conn) {
-        super::set_errno(error);
-        NetConnection_doErrorCallback(conn, error);
-        (*conn).stateFlags.disconnected = true;
-        NetConnection_setState(conn, NetState_NetState_unconnected);
-        NetConnection_close(conn);
-        return ptr::null_mut();
-    }
-    conn
-}
-
-unsafe fn do_close(conn: *mut NetConnection) {
-    (*conn).stateFlags.connected = false;
-    (*conn).stateFlags.disconnected = true;
-    // The callback observes the old state and its state data.
-    if let Some(callback) = (*conn).closeCallback {
-        callback(conn);
-    }
-    NetConnection_setState(conn, NetState_NetState_unconnected);
-}
-/// # Safety
-/// Consumes the live connection on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn NetConnection_close(conn: *mut NetConnection) {
-    if let Some(socket) = (*conn).socket.take() {
-        (*(*conn).session).transport.borrow_mut().close(socket);
-    }
-    if !(*conn).stateFlags.disconnected {
-        do_close(conn);
-    }
-    if let Some(callback) = (*conn).deleteCallback {
-        callback(conn);
-    }
-    if !(*conn).stateData.is_null() {
-        NetConnectionStateData_release((*conn).stateData);
-        (*conn).stateData = ptr::null_mut();
-    }
-    libc::free((*conn).readBuf.cast());
-    PacketQueue_uninit(&raw mut (*conn).queue);
-    libc::free(conn.cast());
-}
-
-/// # Safety
-/// `conn` has an error callback and is live on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn NetConnection_doErrorCallback(conn: *mut NetConnection, err: i32) {
-    let error = NetConnectionError {
-        state: (*conn).state,
-        err,
-    };
-    (*conn)
-        .errorCallback
-        .unwrap_or_else(|| panic!("error callback"))(conn, &error);
-}
-
-/// # Safety
-/// `conn` points to a live connection on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn NetConnection_getStateData(
-    conn: *const NetConnection,
-) -> *mut NetConnectionStateData {
-    (*conn).stateData
-}
-/// # Safety
-/// `conn` points to a live connection on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn NetConnection_setStateData(
-    conn: *mut NetConnection,
-    value: *mut NetConnectionStateData,
-) {
-    (*conn).stateData = value;
-}
-/// # Safety
-/// `conn` points to a live connection on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn NetConnection_getExtra(conn: *const NetConnection) -> *mut c_void {
-    (*conn).extra
-}
-/// # Safety
-/// `conn` points to a live connection on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn NetConnection_setExtra(conn: *mut NetConnection, value: *mut c_void) {
-    (*conn).extra = value;
-}
-/// # Safety
-/// `conn` points to a live connection on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn NetConnection_getState(conn: *const NetConnection) -> NetState {
-    (*conn).state
-}
-/// # Safety
-/// `conn` points to a live connection on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn NetConnection_getDiscriminant(conn: *const NetConnection) -> bool {
-    (*conn).stateFlags.discriminant
-}
-/// # Safety
-/// `conn` points to a live connection on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn NetConnection_isConnected(conn: *const NetConnection) -> bool {
-    (*conn).stateFlags.connected
-}
-/// # Safety
-/// `conn` points to a live connection on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn NetConnection_getPeerOptions(
-    conn: *const NetConnection,
-) -> *const NetplayPeerOptions {
-    (*conn).options
-}
-/// # Safety
-/// `conn` points to a live connection on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn NetConnection_getPlayerNr(conn: *const NetConnection) -> i32 {
-    (*conn).player
-}
-/// # Safety
-/// `conn` points to a live connection on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn NetConnection_getInputDelay(conn: *const NetConnection) -> usize {
-    (*conn).stateFlags.inputDelay
-}
-/// # Safety
-/// `conn` points to a live connection on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn NetConnection_getChecksumInterval(conn: *const NetConnection) -> usize {
-    (*conn).stateFlags.checksumInterval
-}
-/// # Safety
-/// `conn` points to a live connection on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn NetConnection_getReadyCallback(
-    conn: *const NetConnection,
-) -> NetConnection_ReadyCallback {
-    (*conn).readyCallback
-}
-/// # Safety
-/// `conn` points to a live connection on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn NetConnection_getReadyCallbackArg(
-    conn: *const NetConnection,
-) -> *mut c_void {
-    (*conn).readyCallbackArg
-}
-/// # Safety
-/// `conn` points to a live connection on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn NetConnection_getResetCallback(
-    conn: *const NetConnection,
-) -> NetConnection_ResetCallback {
-    (*conn).resetCallback
-}
-/// # Safety
-/// `conn` points to a live connection on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn NetConnection_getResetCallbackArg(
-    conn: *const NetConnection,
-) -> *mut c_void {
-    (*conn).resetCallbackArg
-}
-
-/// # Safety
-/// `conn` points to a live connection and state is a valid NetState.
-#[no_mangle]
-pub unsafe extern "C" fn NetConnection_setState(conn: *mut NetConnection, state: NetState) {
-    if cfg!(debug_assertions) && state == (*conn).state {
-        log::warn!(
-            "NETPLAY: [{}] Connection state set to {} while already in that state.",
-            (*conn).player,
-            super::netstate::state_name(state)
-        );
-    }
-    (*conn).state = state;
-}
-
-/// # Safety
-/// The callback argument remains valid until invoked or cleared on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn NetConnection_setReadyCallback(
-    conn: *mut NetConnection,
-    callback: NetConnection_ReadyCallback,
-    arg: *mut c_void,
-) {
-    (*conn).readyCallback = callback;
-    (*conn).readyCallbackArg = arg;
-}
-/// # Safety
-/// The callback argument remains valid until invoked or cleared on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn NetConnection_setResetCallback(
-    conn: *mut NetConnection,
-    callback: NetConnection_ResetCallback,
-    arg: *mut c_void,
-) {
-    (*conn).resetCallback = callback;
-    (*conn).resetCallbackArg = arg;
-}
-
-/// # Safety
-/// `conn` is a live exclusively owned connection.
-#[no_mangle]
-pub unsafe extern "C" fn NetConnection_getChecksumBuffer(
-    conn: *mut NetConnection,
-) -> *mut ChecksumBuffer {
-    &raw mut (*conn).checksumBuffer
 }

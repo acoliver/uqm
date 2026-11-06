@@ -83,10 +83,10 @@ impl InputContext {
         }
     }
 
-    pub fn battle_end_ready(&self) -> bool {
+    pub fn battle_end_ready(&self, wait: &mut super::net::ProtocolWait<'_>) -> bool {
         match self.source {
             InputSource::Human | InputSource::Computer => true,
-            InputSource::Network(_) => self.network().end_ready(usize::from(self.player)),
+            InputSource::Network(_) => self.network().end_ready(usize::from(self.player), wait),
         }
     }
 }
@@ -100,7 +100,7 @@ mod tests {
         player: std::cell::Cell<Option<usize>>,
     }
     impl BattleNet for TestNet {
-        fn end_ready(&self, side: usize) -> bool {
+        fn end_ready(&self, side: usize, _: &mut super::super::net::ProtocolWait<'_>) -> bool {
             self.player.set(Some(side));
             self.ready.get()
         }
@@ -152,13 +152,13 @@ mod tests {
         fn reset(&self, _: u32) {
             unreachable!()
         }
-        fn negotiate(&self, _: bool, _: u32) -> bool {
+        fn negotiate(&self, _: bool, _: u32, _: &mut super::super::net::ProtocolWait<'_>) -> bool {
             unreachable!()
         }
         fn set_state(&self, _: u32) {
             unreachable!()
         }
-        fn wait_reset(&self, _: u32) {
+        fn wait_reset(&self, _: u32, _: &mut super::super::net::ProtocolWait<'_>) {
             unreachable!()
         }
         fn init_end_frames(&self) {
@@ -173,7 +173,13 @@ mod tests {
         fn finish(&self) {
             unreachable!()
         }
-        unsafe fn bind_picker(&self, _: u16, _: *mut std::ffi::c_void) {
+        fn begin_selection(&self, _: u16, _: [[bool; 14]; 2]) {
+            unreachable!()
+        }
+        fn selected(&self, _: usize) -> Option<u16> {
+            unreachable!()
+        }
+        fn end_selection(&self) {
             unreachable!()
         }
     }
@@ -219,13 +225,13 @@ mod tests {
         });
         let mut context = InputContext::new(1, 8);
         context.connect(net.clone());
-        assert!(!context.battle_end_ready());
+        assert!(!context.battle_end_ready(&mut |_| panic!("unexpected wait")));
         assert_eq!(net.player.get(), Some(1));
         net.ready.set(true);
-        assert!(context.battle_end_ready());
+        assert!(context.battle_end_ready(&mut |_| panic!("unexpected wait")));
         let copy = context.clone();
         net.ready.set(false);
-        assert!(!copy.battle_end_ready());
+        assert!(!copy.battle_end_ready(&mut |_| panic!("unexpected wait")));
     }
 
     #[test]
@@ -253,7 +259,7 @@ mod tests {
             for control in [1, 2, 6, 1 | 16, 2 | 64] {
                 let context = InputContext::new(player, control);
                 assert_eq!(context.player(), player);
-                assert!(context.battle_end_ready());
+                assert!(context.battle_end_ready(&mut |_| panic!("unexpected wait")));
                 assert_eq!(
                     matches!(context.source(), InputSource::Human),
                     control & 15 == 1
@@ -277,7 +283,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "network input has no session")]
     fn network_dispatch_requires_its_session() {
-        InputContext::new(1, 8).battle_end_ready();
+        InputContext::new(1, 8).battle_end_ready(&mut |_| panic!("unexpected wait"));
     }
 
     #[test]

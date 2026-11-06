@@ -182,7 +182,7 @@ pub(super) mod live {
             (*state).current_ship = 0;
         }
         draw_pick_frame(state);
-        (*state).input_func = Some(pick);
+        (*state).phase = crate::supermelee::netplay::session::MenuPhase::Building;
         crate::app::bridge::enter(|cx| {
             let runtime = cx.kernel.input_runtime();
             let mut observer = runtime.observer();

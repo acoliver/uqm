@@ -255,11 +255,15 @@ unsafe fn apply_connection_options(server: bool) {
     let options = (&mut *state.session).options_mut();
     let peer = &mut options.peer[state.which_side as usize];
     if !server {
-        peer.host = TEXTS[0].value.as_ptr();
+        peer.host = std::ffi::CStr::from_ptr(TEXTS[0].value.as_ptr())
+            .to_string_lossy()
+            .into_owned();
     }
-    peer.port = TEXTS[1].value.as_ptr();
-    peer.isServer = server;
-    options.inputDelay = SLIDER.value as usize;
+    peer.port = std::ffi::CStr::from_ptr(TEXTS[1].value.as_ptr())
+        .to_string_lossy()
+        .into_owned();
+    peer.server = server;
+    options.input_delay = SLIDER.value as usize;
     state.confirmed = 1;
     DONE = 1;
 }
@@ -345,7 +349,7 @@ unsafe fn create_widgets() {
     SLIDER.min = 0;
     SLIDER.max = 9;
     SLIDER.step = 1;
-    SLIDER.value = (*(*CURRENT_STATE).session).options_mut().inputDelay as c_int;
+    SLIDER.value = (*(*CURRENT_STATE).session).options_mut().input_delay as c_int;
     SLIDER.category = game_string(NETMELEE_STRING_BASE as usize + 24);
     for entry in
         std::slice::from_raw_parts_mut(ptr::addr_of_mut!(TEXTS).cast::<WIDGET_TEXTENTRY>(), 2)
@@ -371,19 +375,11 @@ unsafe fn configure_text_entries() {
     TEXTS[1].category = game_string(NETMELEE_STRING_BASE as usize + 23);
     let peer =
         &(*(*CURRENT_STATE).session).options_mut().peer[(*CURRENT_STATE).which_side as usize];
-    if TEXTS[0].value.as_ptr() != peer.host {
-        libc::strncpy(
-            TEXTS[0].value.as_mut_ptr(),
-            peer.host,
-            TEXTS[0].maxlen as usize,
-        );
-    }
-    if TEXTS[1].value.as_ptr() != peer.port {
-        libc::strncpy(
-            TEXTS[1].value.as_mut_ptr(),
-            peer.port,
-            TEXTS[1].maxlen as usize,
-        );
+    for (index, value) in [&peer.host, &peer.port].into_iter().enumerate() {
+        let entry = &mut TEXTS[index];
+        let count = value.len().min(entry.maxlen as usize);
+        std::ptr::copy_nonoverlapping(value.as_ptr(), entry.value.as_mut_ptr().cast(), count);
+        entry.value[count] = 0;
     }
     TEXTS[0].value[TEXTS[0].maxlen as usize] = 0;
     TEXTS[1].value[TEXTS[1].maxlen as usize] = 0;

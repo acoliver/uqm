@@ -1,641 +1,397 @@
-//! Netplay orchestration, serialized on the game thread.
-use super::abi::*;
-use super::netconnection::{NetConnection_getState, NetConnection_getStateData};
-use super::notify::Netplay_Notify_frameCount;
-use super::ready::Netplay_isLocalReady;
+//! Session-owned connection orchestration and protocol waits.
 use super::{
-    netconnection::{
-        NetConnection_close, NetConnection_open, NetConnection_setReadyCallback,
-        NetConnection_setState,
-    },
-    netmisc::{NetMelee_closeCallback, NetMelee_connectCallback, NetMelee_errorCallback},
-    npconfirm::{Netplay_cancelConfirmation, Netplay_confirm},
-    packetq::flushPacketQueue,
-    packetsenders::sendAbort,
-    ready::Netplay_localReady,
-    reset::{Netplay_isLocalReset, Netplay_localReset, Netplay_setResetCallback},
+    abi::*,
+    netconnection::{Effect, Event, NetConnection, ReadyAction},
+    packet::Packet,
 };
-use std::{ffi::c_void, ptr};
-
-/// # Safety
-/// Called on the game thread with live connection, state and callback arguments.
-#[no_mangle]
-pub unsafe extern "C" fn NetMelee_getMeleeState(conn: *mut NetConnection) -> *mut melee_state {
-    if (*conn).state > NetState_NetState_connecting {
-        (*(*conn).stateData.cast::<BattleStateData>()).melee_state
-    } else {
-        (*conn).extra.cast()
-    }
-}
-unsafe extern "C" fn deleted(conn: *mut NetConnection) {
-    (*(*conn).session).remove_net_connection((*conn).player);
-}
-
-#[repr(C)]
-struct TransitionWait {
-    input: Option<unsafe extern "C" fn(*mut c_void) -> BOOLEAN>,
-    conn: *mut NetConnection,
-    next: NetState,
-    done: bool,
-}
+use crate::engine::battle::net::ProtocolWait;
 const NETWORK_POLL_DELAY: u32 = crate::time::counter_abi::ONE_SECOND / 24;
-unsafe extern "C" fn transition_input(arg: *mut c_void) -> BOOLEAN {
-    let state = arg.cast::<TransitionWait>();
-    (*(*(*state).conn).session).net_input_blocking(NETWORK_POLL_DELAY);
-    if !(*(*state).conn).stateFlags.connected {
-        return 0;
-    }
-    u32::from(!(*state).done)
-}
-unsafe extern "C" fn ready_transition(conn: *mut NetConnection, arg: *mut c_void) {
-    let state = arg.cast::<TransitionWait>();
-    // Transition before the receiver can dispatch the next packet.
-    NetConnection_setState(conn, (*state).next);
-    (*state).done = true;
-}
-unsafe extern "C" fn reset_transition(conn: *mut NetConnection, arg: *mut c_void) {
-    let state = arg.cast::<TransitionWait>();
-    if (*state).next != NetState::MAX {
-        NetConnection_setState(conn, (*state).next);
-    }
-    (*state).done = true;
-}
-/// # Safety
-/// Called on the game thread with live connection, state and callback arguments.
-#[no_mangle]
-pub unsafe extern "C" fn negotiateReady(
-    conn: *mut NetConnection,
-    notify: bool,
-    next: NetState,
-) -> bool {
-    let mut state = TransitionWait {
-        input: Some(transition_input),
-        conn,
-        next,
-        done: false,
-    };
-    let arg = (&raw mut state).cast();
-    Netplay_localReady(conn, Some(ready_transition), arg, notify);
-    flushPacketQueue(conn);
-    // SAFETY: the session and stack callback argument remain live until the wait ends.
-    if !state.done && !unsafe { (*(*conn).session).replay_wait(|| transition_input(arg) != 0) } {
-        DoInput(arg, 0);
-    }
-    (*conn).stateFlags.connected
-}
-/// # Safety
-/// Called on the game thread with live connection, state and callback arguments.
-#[no_mangle]
-pub unsafe extern "C" fn waitReset(conn: *mut NetConnection, next: NetState) -> bool {
-    let mut state = TransitionWait {
-        input: Some(transition_input),
-        conn,
-        next,
-        done: false,
-    };
-    let arg = (&raw mut state).cast();
-    Netplay_setResetCallback(conn, Some(reset_transition), arg);
-    if !state.done {
-        if !Netplay_isLocalReset(conn) {
-            Netplay_localReset(conn, NetplayResetReason_ResetReason_manualReset);
-            flushPacketQueue(conn);
-        }
-        // SAFETY: the session and stack callback argument remain live until the wait ends.
-        if !state.done && !unsafe { (*(*conn).session).replay_wait(|| transition_input(arg) != 0) }
-        {
-            DoInput(arg, 0);
-        }
-    }
-    (*conn).stateFlags.connected
-}
-
-#[repr(C)]
-struct ReadyWait {
-    input: Option<unsafe extern "C" fn(*mut c_void) -> BOOLEAN>,
-    conn: *mut NetConnection,
-    callback: NetConnection_ReadyCallback,
-    arg: *mut c_void,
-    done: bool,
-}
-unsafe extern "C" fn wait_ready_callback(conn: *mut NetConnection, arg: *mut c_void) {
-    let state = arg.cast::<ReadyWait>();
-    (*state).done = true;
-    (*state).callback.expect("original ready callback")(conn, (*state).arg);
-}
-unsafe extern "C" fn wait_ready_input(arg: *mut c_void) -> BOOLEAN {
-    let state = arg.cast::<ReadyWait>();
-    (*(*(*state).conn).session).net_input_blocking(NETWORK_POLL_DELAY);
-    if !(*(*state).conn).stateFlags.connected {
-        return 0;
-    }
-    u32::from(!(*state).done)
-}
-/// # Safety
-/// Called on the game thread with live connection, state and callback arguments.
-#[no_mangle]
-pub unsafe extern "C" fn waitReady(conn: *mut NetConnection) -> bool {
-    let mut state = ReadyWait {
-        input: Some(wait_ready_input),
-        conn,
-        callback: (*conn).readyCallback,
-        arg: (*conn).readyCallbackArg,
-        done: false,
-    };
-    let arg = (&raw mut state).cast();
-    NetConnection_setReadyCallback(conn, Some(wait_ready_callback), arg);
-    // SAFETY: the session and stack callback argument remain live until the wait ends.
-    if !unsafe { (*(*conn).session).replay_wait(|| wait_ready_input(arg) != 0) } {
-        DoInput(arg, 0);
-    }
-    (*conn).stateFlags.connected
-}
 
 impl super::session::SessionCore {
-    /// # Safety
-    /// Called on the game thread with live connection, state and callback arguments.
-    pub unsafe fn add_net_connection(&self, conn: *mut NetConnection, player: i32) {
-        let mut connections = self.connections.get();
-        connections[player as usize] = conn;
-        self.connections.set(connections);
-    }
-    /// # Safety
-    /// Called on the game thread with live connection, state and callback arguments.
-    pub unsafe fn remove_net_connection(&self, player: i32) {
-        let mut connections = self.connections.get();
-        connections[player as usize] = ptr::null_mut();
-        self.connections.set(connections);
-    }
-    /// # Safety
-    /// Called on the game thread with live connection, state and callback arguments.
     pub fn get_num_net_connections(&self) -> usize {
         self.connections
-            .get()
             .iter()
-            .filter(|conn| !conn.is_null())
+            .filter(|conn| conn.borrow().is_some())
             .count()
     }
-    pub(crate) fn connection(&self, player: usize) -> *mut NetConnection {
-        self.connections.get()[player]
-    }
-    pub(crate) unsafe fn each(&self, mut action: impl FnMut(*mut NetConnection) -> bool) -> bool {
-        for player in 0..NETPLAY_NUM_PLAYERS as usize {
-            let conn = self.connection(player);
-            if conn.is_null() || !(*conn).stateFlags.connected {
-                continue;
-            }
-            if !action(conn) {
-                return false;
+    pub fn each(&self, mut action: impl FnMut(&mut NetConnection) -> bool) -> bool {
+        for player in 0..2 {
+            if let Some(mut conn) = self.connection_mut(player) {
+                if conn.flags.connected && !action(&mut conn) {
+                    return false;
+                }
             }
         }
         true
     }
-    /// # Safety
-    /// Called on the game thread with live connection, state and callback arguments.
-    pub unsafe fn for_each_connected_player(
-        &self,
-        callback: ForEachConnectionCallback,
-        arg: *mut c_void,
-    ) -> bool {
-        self.each(|conn| callback.expect("connection callback")(conn, arg))
+    pub fn open_player_network_connection(&self, player: u16, emit: &mut dyn FnMut(Event)) -> bool {
+        let player = usize::from(player);
+        assert!(self.connections[player].borrow().is_none());
+        let mut conn = NetConnection::new(player, self.options.peer[player].clone());
+        conn.state = NetState_NetState_connecting;
+        let result = if conn.options.server {
+            self.transport.borrow_mut().listen(&conn.options.port)
+        } else {
+            self.transport
+                .borrow_mut()
+                .connect(&conn.options.host, &conn.options.port)
+        };
+        match result {
+            Ok(socket) => conn.socket = Some(socket),
+            Err(error) => {
+                let error = error.raw_os_error().unwrap_or(libc::EIO);
+                super::set_errno(error);
+                emit(conn.event(Effect::Error(error)));
+                return false;
+            }
+        }
+        *self.connections[player].borrow_mut() = Some(conn);
+        true
     }
-    /// # Safety
-    /// Called on the game thread with live connection, state and callback arguments.
-    pub unsafe fn close_all_connections(&self) {
-        for player in 0..NETPLAY_NUM_PLAYERS as usize {
-            if !self.connection(player).is_null() {
-                self.close_player_network_connection(player as COUNT);
+    pub fn close_player_with(&self, player: usize, emit: &mut dyn FnMut(Event)) {
+        self.disconnect(player, emit);
+        self.connections[player]
+            .borrow_mut()
+            .take()
+            .unwrap_or_else(|| panic!("close absent connection"));
+    }
+    pub fn close_player_network_connection(&self, player: u16) {
+        self.close_player_with(usize::from(player), &mut super::battle::effect);
+    }
+    pub fn close_all_connections(&self) {
+        for player in 0..2 {
+            if self.connection(player).is_some() {
+                self.close_player_network_connection(player as u16);
             }
         }
     }
-    /// # Safety
-    /// Called on the game thread with live connection, state and callback arguments.
-    pub unsafe fn close_disconnected_connections(&self) {
-        for player in 0..NETPLAY_NUM_PLAYERS as usize {
-            let conn = self.connection(player);
-            if !conn.is_null() && !(*conn).stateFlags.connected {
-                self.close_player_network_connection(player as COUNT);
+    pub fn close_disconnected_connections(&self) {
+        for player in 0..2 {
+            if self
+                .connection(player)
+                .is_some_and(|conn| !conn.flags.connected)
+            {
+                self.close_player_network_connection(player as u16);
             }
         }
     }
-    fn input_aux(&self, timeout: u32) {
-        let deadline =
-            std::time::Instant::now() + std::time::Duration::from_millis(u64::from(timeout));
-        let before = self.connection_progress();
-        loop {
-            Async_process();
-            for player in 0..NETPLAY_NUM_PLAYERS as usize {
-                if self
-                    .connection_snapshot(player)
-                    .is_some_and(|(_, _, disconnected)| !disconnected)
-                {
-                    // SAFETY: the session retains this record until cleanup;
-                    // callbacks only update its state while polling.
-                    unsafe { super::netconnection::poll(self.connection(player)) };
-                }
+    pub(super) fn disconnect(&self, player: usize, emit: &mut dyn FnMut(Event)) {
+        let event = {
+            let mut conn = self
+                .connection_mut(player)
+                .unwrap_or_else(|| panic!("disconnect absent connection"));
+            if let Some(socket) = conn.socket.take() {
+                self.transport.borrow_mut().close(socket);
             }
-            <Self as crate::engine::battle::net::BattleNet>::flush(self);
-            Callback_process();
-            if self.connection_progress() != before || std::time::Instant::now() >= deadline {
+            if conn.flags.disconnected {
                 return;
             }
-            std::thread::sleep(
-                deadline
-                    .saturating_duration_since(std::time::Instant::now())
-                    .min(std::time::Duration::from_millis(1)),
-            );
+            conn.flags.connected = false;
+            conn.flags.disconnected = true;
+            conn.event(Effect::Closed)
+        };
+        emit(event);
+        self.connection_mut(player)
+            .unwrap_or_else(|| panic!("disconnected connection"))
+            .state = NetState_NetState_unconnected;
+    }
+    pub(super) fn flush_player(&self, player: usize) -> std::io::Result<()> {
+        let Some(mut conn) = self.connection_mut(player) else {
+            return Ok(());
+        };
+        if !conn.flags.connected {
+            return Ok(());
         }
+        let socket = conn
+            .socket
+            .unwrap_or_else(|| panic!("send without transport"));
+        conn.queue
+            .flush(|bytes| self.transport.borrow_mut().send(socket, bytes))
     }
-    fn connection_snapshot(&self, player: usize) -> Option<(u32, usize, bool)> {
-        // SAFETY: the session owns the record and the snapshot ends before polling.
-        let conn = unsafe { self.connection(player).as_ref() }?;
-        Some((
-            conn.state,
-            conn.statistics.packetsReceived,
-            conn.stateFlags.disconnected,
-        ))
-    }
-    fn connection_progress(&self) -> [(u32, usize); 2] {
-        std::array::from_fn(|player| {
-            self.connection_snapshot(player)
-                .map_or((NetState_NetState_unconnected, 0), |(state, packets, _)| {
-                    (state, packets)
-                })
-        })
-    }
-    pub fn net_input(&self) {
-        self.input_aux(0);
-    }
-    pub fn net_input_blocking(&self, timeout: u32) {
-        self.input_aux(timeout.min(Async_timeBeforeNextMs()));
-    }
-    /// # Safety
-    /// Called on the game thread with live connection, state and callback arguments.
-    pub unsafe fn flush_packet_queues(&self) {
-        for player in 0..NETPLAY_NUM_PLAYERS as usize {
-            let conn = self.connection(player);
-            if conn.is_null() || !(*conn).stateFlags.connected {
-                continue;
-            }
-            if flushPacketQueue(conn) == -1 {
-                let err = crate::platform::errno();
-                if err != libc::EAGAIN && err != libc::EWOULDBLOCK {
-                    self.close_player_network_connection(player as COUNT);
+    pub fn flush_packet_queues(&self) {
+        for player in 0..2 {
+            if let Err(error) = self.flush_player(player) {
+                if error.kind() != std::io::ErrorKind::WouldBlock {
+                    self.close_player_network_connection(player as u16);
                 }
             }
         }
     }
-    /// # Safety
-    /// Called on the game thread with live connection, state and callback arguments.
-    pub unsafe fn confirm_connections(&self) {
+    pub fn confirm_connections(&self) {
         self.each(|conn| {
-            Netplay_confirm(conn);
+            conn.confirm();
             true
         });
     }
-    /// # Safety
-    /// Called on the game thread with live connection, state and callback arguments.
-    pub unsafe fn cancel_confirmations(&self) {
+    pub fn cancel_confirmations(&self) {
         self.each(|conn| {
-            Netplay_cancelConfirmation(conn);
+            conn.cancel_confirmation();
             true
         });
     }
-    /// # Safety
-    /// Called on the game thread with live connection, state and callback arguments.
-    pub unsafe fn connections_local_ready(
-        &self,
-        callback: NetConnection_ReadyCallback,
-        arg: *mut c_void,
-    ) {
-        self.each(|conn| {
-            Netplay_localReady(conn, callback, arg, true);
-            true
-        });
+    pub fn all_connected(&self) -> bool {
+        (0..2).all(|player| {
+            self.connection(player)
+                .is_none_or(|conn| conn.flags.connected)
+        })
     }
-    /// # Safety
-    /// Called on the game thread with live connection, state and callback arguments.
-    pub unsafe fn all_connected(&self) -> bool {
-        for player in 0..NETPLAY_NUM_PLAYERS as usize {
-            let conn = self.connection(player);
-            if !conn.is_null() && !(*conn).stateFlags.connected {
-                return false;
-            }
-        }
-        true
-    }
-    /// # Safety
-    /// Called on the game thread with live connection, state and callback arguments.
-    pub unsafe fn init_battle_state_data_connections(&self) {
-        for player in 0..NETPLAY_NUM_PLAYERS as usize {
-            let conn = self.connection(player);
-            if !conn.is_null() {
-                (*(*conn).stateData.cast::<BattleStateData>()).end_frame_count = 0;
+    pub fn init_battle_state_data_connections(&self) {
+        for player in 0..2 {
+            if let Some(mut conn) = self.connection_mut(player) {
+                conn.end_frame_count = 0;
             }
         }
     }
     pub(super) fn set_battle_active_connections(&self, active: bool) {
-        for player in 0..NETPLAY_NUM_PLAYERS as usize {
-            let conn = self.connection(player);
-            if !conn.is_null() {
-                // SAFETY: the session retains each initialized connection record.
-                unsafe {
-                    (*(*conn).stateData.cast::<BattleStateData>()).battle_active = active;
-                }
+        for player in 0..2 {
+            if let Some(mut conn) = self.connection_mut(player) {
+                conn.battle_active = active;
             }
         }
     }
-    /// # Safety
-    /// Called on the game thread with live connection, state and callback arguments.
-    pub unsafe fn open_player_network_connection(
-        &self,
-        player: COUNT,
-        extra: *mut c_void,
-    ) -> *mut NetConnection {
-        assert!(self.connections.get()[player as usize].is_null());
-        let conn = NetConnection_open(
-            player as i32,
-            &self.options.peer[player as usize],
-            Some(NetMelee_connectCallback),
-            Some(NetMelee_closeCallback),
-            Some(NetMelee_errorCallback),
-            Some(deleted),
-            extra,
-            self,
-        );
-        self.add_net_connection(conn, player as i32);
-        conn
-    }
-    /// # Safety
-    /// Called on the game thread with live connection, state and callback arguments.
-    pub unsafe fn close_player_network_connection(&self, player: COUNT) {
-        let conn = self.connections.get()[player as usize];
-        assert!(!conn.is_null());
-        NetConnection_close(conn);
-    }
-    /// # Safety
-    /// Called on the game thread with live connection, state and callback arguments.
-    pub unsafe fn setup_input_delay(&self, local_delay: usize) -> bool {
-        let mut have_network = false;
+    pub fn setup_input_delay(&self, local_delay: usize) -> bool {
+        let mut network = false;
         let mut delay = 0;
         self.each(|conn| {
-            have_network = true;
-            delay = delay.max((*conn).stateFlags.inputDelay);
+            network = true;
+            delay = delay.max(conn.flags.input_delay);
             true
         });
-        if have_network && delay < local_delay {
-            delay = local_delay;
-        }
-        self.set_battle_input_delay(delay);
+        self.set_battle_input_delay(if network {
+            delay.max(local_delay)
+        } else {
+            delay
+        });
         true
     }
-    /// # Safety
-    /// Called on the game thread with live connection, state and callback arguments.
-    pub unsafe fn set_state_connections(&self, state: NetState) -> bool {
+    pub fn set_state_connections(&self, state: NetState) -> bool {
         self.each(|conn| {
-            NetConnection_setState(conn, state);
+            conn.state = state;
             true
         })
     }
-    /// # Safety
-    /// Called on the game thread with live connection, state and callback arguments.
-    pub unsafe fn send_abort_connections(&self, reason: NetplayAbortReason) -> bool {
-        self.each(|conn| {
-            sendAbort(conn, reason);
-            true
-        })
+    pub fn reset_connections(&self, reason: u32) -> bool {
+        for player in 0..2 {
+            let events = self
+                .connection_mut(player)
+                .filter(|conn| conn.flags.connected)
+                .map(|mut conn| conn.local_reset(reason))
+                .unwrap_or_default();
+            self.apply_events(events, &mut super::battle::effect);
+        }
+        true
     }
-    /// # Safety
-    /// Called on the game thread with live connection, state and callback arguments.
-    pub unsafe fn reset_connections(&self, reason: NetplayResetReason) -> bool {
-        self.each(|conn| {
-            Netplay_localReset(conn, reason);
-            true
-        })
-    }
-    /// # Safety
-    /// Called on the game thread with live connection, state and callback arguments.
-    pub unsafe fn local_ready_connections(
+    pub fn negotiate_ready_connections(
         &self,
-        callback: NetConnection_ReadyCallback,
-        arg: *mut c_void,
         notify: bool,
+        next: u32,
+        wait: &mut ProtocolWait<'_>,
     ) -> bool {
-        self.each(|conn| {
-            Netplay_localReady(conn, callback, arg, notify);
-            true
+        self.wait_connections(|side| {
+            self.negotiate_ready(side, notify, next, wait);
         })
     }
-    unsafe fn wait_connections(&self, mut wait: impl FnMut(*mut NetConnection)) -> bool {
-        let mut disconnected = 0;
-        for player in 0..NETPLAY_NUM_PLAYERS as usize {
-            let conn = self.connection(player);
-            if conn.is_null() {
-                continue;
+    pub fn wait_reset_connections(&self, next: u32, wait: &mut ProtocolWait<'_>) -> bool {
+        self.wait_connections(|side| {
+            let generation = {
+                let mut conn = self
+                    .connection_mut(side)
+                    .unwrap_or_else(|| panic!("reset connection"));
+                let generation = conn.reset_generation;
+                conn.reset_next = Some(next);
+                conn.reset_complete();
+                generation
+            };
+            if self
+                .connection(side)
+                .unwrap_or_else(|| panic!("reset connection"))
+                .reset_generation
+                == generation
+            {
+                let effects = {
+                    let mut conn = self
+                        .connection_mut(side)
+                        .unwrap_or_else(|| panic!("reset connection"));
+                    if !conn.flags.reset.local {
+                        conn.local_reset(2)
+                    } else {
+                        Vec::new()
+                    }
+                };
+                self.apply_events(effects, &mut super::battle::effect);
+                self.flush_packet_queues();
+                self.wait_exchange(side, generation, true, wait);
             }
-            if !(*conn).stateFlags.connected {
+        })
+    }
+    fn wait_connections(&self, mut wait: impl FnMut(usize)) -> bool {
+        let mut disconnected = 0;
+        for side in 0..2 {
+            let Some(conn) = self.connection(side) else {
+                continue;
+            };
+            let connected = conn.flags.connected;
+            drop(conn);
+            if !connected {
                 disconnected += 1;
                 continue;
             }
-            wait(conn);
+            wait(side);
         }
         disconnected == 0
     }
-    /// # Safety
-    /// Called on the game thread with live connection, state and callback arguments.
-    pub unsafe fn negotiate_ready_connections(&self, notify: bool, next: NetState) -> bool {
-        self.wait_connections(|conn| {
-            negotiateReady(conn, notify, next);
-        })
+    fn wait_exchange(
+        &self,
+        side: usize,
+        generation: usize,
+        reset: bool,
+        wait: &mut ProtocolWait<'_>,
+    ) {
+        let mut poll = || {
+            self.net_input_blocking(NETWORK_POLL_DELAY);
+            self.connection(side).is_some_and(|conn| {
+                conn.flags.connected
+                    && if reset {
+                        conn.reset_generation == generation
+                    } else {
+                        conn.ready_generation == generation
+                    }
+            })
+        };
+        if !self.replay_wait(&mut poll) {
+            wait(&mut poll);
+        }
     }
-    /// # Safety
-    /// Called on the game thread with live connection, state and callback arguments.
-    pub unsafe fn wait_reset_connections(&self, next: NetState) -> bool {
-        self.wait_connections(|conn| {
-            waitReset(conn, next);
-        })
+    fn negotiate_ready(
+        &self,
+        side: usize,
+        notify: bool,
+        next: u32,
+        wait: &mut ProtocolWait<'_>,
+    ) -> bool {
+        let (generation, effects) = {
+            let mut conn = self
+                .connection_mut(side)
+                .unwrap_or_else(|| panic!("ready connection"));
+            let generation = conn.ready_generation;
+            let effects = conn.local_ready(
+                ReadyAction::Transition(next),
+                notify,
+                self.frame_count.get(),
+            );
+            (generation, effects)
+        };
+        self.apply_events(effects, &mut super::battle::effect);
+        self.flush_packet_queues();
+        if self
+            .connection(side)
+            .unwrap_or_else(|| panic!("ready connection"))
+            .ready_generation
+            == generation
+        {
+            self.wait_exchange(side, generation, false, wait);
+        }
+        self.connection(side)
+            .is_some_and(|conn| conn.flags.connected)
     }
-}
-
-impl super::session::SessionCore {
-    /// # Safety
-    /// Called on the game thread with live connection, state and callback arguments.
-    pub unsafe fn network_battle_input(
+    pub(super) fn ready_for_battle_end_player(
+        &self,
+        side: usize,
+        wait: &mut ProtocolWait<'_>,
+    ) -> bool {
+        let state = self
+            .connection(side)
+            .unwrap_or_else(|| panic!("end connection"))
+            .state;
+        if state == NetState_NetState_interBattle || state == NetState_NetState_inSetup {
+            return true;
+        }
+        if state == NetState_NetState_inBattle {
+            let effects = {
+                let mut conn = self
+                    .connection_mut(side)
+                    .unwrap_or_else(|| panic!("end connection"));
+                if conn.flags.ready.local {
+                    return false;
+                }
+                conn.local_ready(ReadyAction::EndBattle, true, self.frame_count.get())
+            };
+            self.apply_events(effects, &mut super::battle::effect);
+            if self
+                .connection(side)
+                .unwrap_or_else(|| panic!("end connection"))
+                .state
+                == NetState_NetState_inBattle
+            {
+                return false;
+            }
+        }
+        let conn = self
+            .connection(side)
+            .unwrap_or_else(|| panic!("end connection"));
+        assert!(
+            conn.state == NetState_NetState_endingBattle
+                || conn.state == NetState_NetState_endingBattle2
+        );
+        if self.frame_count.get() < conn.end_frame_count {
+            return false;
+        }
+        let generation = conn.ready_generation;
+        let state = conn.state;
+        drop(conn);
+        if state == NetState_NetState_endingBattle {
+            self.wait_exchange(side, generation, false, wait);
+            let conn = self
+                .connection(side)
+                .unwrap_or_else(|| panic!("end connection"));
+            assert_eq!(conn.state, NetState_NetState_endingBattle2);
+            if self.frame_count.get() < conn.end_frame_count {
+                return false;
+            }
+        }
+        self.negotiate_ready(side, true, NetState_NetState_interBattle, wait);
+        true
+    }
+    pub fn network_battle_input(
         &self,
         player: usize,
         activity: &crate::engine::world::activity::ActivityControl,
-    ) -> BATTLE_INPUT_STATE {
+    ) -> u8 {
         use crate::mainloop::activity_flags::CHECK_ABORT;
-        let session = self;
         loop {
-            if let Some(input) = session.pop_input(player) {
+            if let Some(input) = self.pop_input(player) {
                 return input;
             }
-            let conn = session.connection(player);
-            session.net_input();
-            if let Some(input) = session.pop_input(player) {
+            self.net_input();
+            if let Some(input) = self.pop_input(player) {
                 return input;
             }
-            if !(*conn).stateFlags.connected {
+            if !self
+                .connection(player)
+                .is_some_and(|conn| conn.flags.connected)
+            {
                 activity.raise_flags(CHECK_ABORT);
                 return 0;
             }
             if activity.activity() & CHECK_ABORT != 0 {
                 return 0;
             }
-            session.net_input_blocking(500);
-            if !(*conn).stateFlags.connected {
+            self.net_input_blocking(500);
+            if !self
+                .connection(player)
+                .is_some_and(|conn| conn.flags.connected)
+            {
                 activity.raise_flags(CHECK_ABORT);
                 return 0;
             }
         }
     }
-}
-
-unsafe extern "C" fn ready_to_end2_callback(conn: *mut NetConnection, _arg: *mut c_void) {
-    // SAFETY: the function contract requires live, game-thread-owned records
-    // and callback arguments for all legacy accesses in this operation.
-    unsafe {
-        NetConnection_setState(conn, NetState_NetState_endingBattle2);
-    }
-}
-
-unsafe extern "C" fn ready_to_end_callback(conn: *mut NetConnection, _arg: *mut c_void) {
-    // SAFETY: the function contract requires live, game-thread-owned records
-    // and callback arguments for all legacy accesses in this operation.
-    unsafe {
-        let data = NetConnection_getStateData(conn).cast::<BattleStateData>();
-        NetConnection_setState(conn, NetState_NetState_endingBattle);
-        let target = (*(*conn).session).frame_count.get().wrapping_add(1);
-        if target > (*data).end_frame_count {
-            (*data).end_frame_count = target;
-        }
-        Netplay_Notify_frameCount(conn, target);
-        flushPacketQueue(conn.cast());
-        Netplay_localReady(
-            conn.cast(),
-            Some(ready_to_end2_callback),
-            ptr::null_mut(),
-            false,
-        );
-    }
-}
-
-pub(crate) unsafe fn ready_for_battle_end_player(conn: *mut NetConnection) -> bool {
-    let data = NetConnection_getStateData(conn).cast::<BattleStateData>();
-    let state = NetConnection_getState(conn);
-    if state == NetState_NetState_interBattle || state == NetState_NetState_inSetup {
-        return true;
-    }
-    if state == NetState_NetState_inBattle {
-        if Netplay_isLocalReady(conn.cast()) {
-            return false;
-        }
-        Netplay_localReady(
-            conn.cast(),
-            Some(ready_to_end_callback),
-            ptr::null_mut(),
-            true,
-        );
-        if NetConnection_getState(conn) == NetState_NetState_inBattle {
-            return false;
-        }
-    }
-    let state = NetConnection_getState(conn);
-    assert!(state == NetState_NetState_endingBattle || state == NetState_NetState_endingBattle2);
-    if (*(*conn).session).frame_count.get() < (*data).end_frame_count {
-        return false;
-    }
-    if NetConnection_getState(conn) == NetState_NetState_endingBattle {
-        waitReady(conn);
-        assert_eq!(
-            NetConnection_getState(conn),
-            NetState_NetState_endingBattle2
-        );
-        if (*(*conn).session).frame_count.get() < (*data).end_frame_count {
-            return false;
-        }
-    }
-    negotiateReady(conn, true, NetState_NetState_interBattle);
-    true
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    #[serial_test::serial]
-    fn connection_iteration_order_short_circuit_and_input_delay_negotiation() {
-        unsafe {
-            let session = super::super::NetplaySession::default();
-            assert!(session.all_connected());
-            assert!(session.setup_input_delay(7));
-            assert_eq!(session.get_battle_input_delay(), 0);
-            let mut a: NetConnection = std::mem::zeroed();
-            let mut b: NetConnection = std::mem::zeroed();
-            a.player = 0;
-            b.player = 1;
-            a.stateFlags.connected = true;
-            a.stateFlags.inputDelay = 3;
-            b.stateFlags.inputDelay = 5;
-            session.add_net_connection(&raw mut a, 0);
-            session.add_net_connection(&raw mut b, 1);
-            assert_eq!(session.get_num_net_connections(), 2);
-            assert!(!session.all_connected());
-            let mut visited = Vec::new();
-            assert!(session.each(|conn| {
-                visited.push((*conn).player);
-                true
-            }));
-            assert_eq!(visited, [0]);
-            (*session.connection(1)).stateFlags.connected = true;
-            visited.clear();
-            assert!(!session.each(|conn| {
-                visited.push((*conn).player);
-                false
-            }));
-            assert_eq!(visited, [0]);
-            visited.clear();
-            assert!(session.each(|conn| {
-                visited.push((*conn).player);
-                true
-            }));
-            assert_eq!(visited, [0, 1]);
-            assert!(session.setup_input_delay(2));
-            assert_eq!(session.get_battle_input_delay(), 5);
-            assert!(session.setup_input_delay(7));
-            assert_eq!(session.get_battle_input_delay(), 7);
-            session.remove_net_connection(0);
-            session.remove_net_connection(1);
-            assert_eq!(session.get_num_net_connections(), 0);
-            assert!(session.all_connected());
-        }
-    }
-
-    #[test]
-    fn ready_and_reset_callbacks_transition_before_returning_to_dispatch() {
-        unsafe {
-            let mut conn: NetConnection = std::mem::zeroed();
-            conn.state = NetState_NetState_preBattle;
-            let mut state = TransitionWait {
-                input: Some(transition_input),
-                conn: &raw mut conn,
-                next: NetState_NetState_interBattle,
-                done: false,
-            };
-            ready_transition(&raw mut conn, (&raw mut state).cast());
-            assert_eq!(conn.state, NetState_NetState_interBattle);
-            assert!(state.done);
-            state.done = false;
-            state.next = NetState::MAX;
-            reset_transition(&raw mut conn, (&raw mut state).cast());
-            assert_eq!(conn.state, NetState_NetState_interBattle);
-            assert!(state.done);
-            state.done = false;
-            state.next = NetState_NetState_inSetup;
-            reset_transition(&raw mut conn, (&raw mut state).cast());
-            assert_eq!(conn.state, NetState_NetState_inSetup);
-            assert!(state.done);
-        }
+    pub fn queue_all(&self, packet: Packet, setup_only: bool) {
+        self.each(|conn| {
+            if !setup_only || conn.state == NetState_NetState_inSetup {
+                conn.queue(packet.clone());
+            }
+            true
+        });
     }
 }
