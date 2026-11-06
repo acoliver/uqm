@@ -3,7 +3,7 @@
 use crate::callback::ffi::{AlarmId, Alarm_addAbsoluteMs, Alarm_remove};
 use crate::engine::{battle::schema::FlashContext, Kernel, StoryKey, World, WorldData};
 use crate::planets::starmap::current_catalog;
-use crate::ui::rgb15;
+use crate::ui::{palette::pilot_color, rgb15};
 
 use crate::navigation::abi::*;
 
@@ -79,19 +79,7 @@ unsafe fn radar_x() -> i32 {
 unsafe fn radar_y() -> i32 {
     ScreenHeight - 56
 }
-fn pilot_color(i: usize) -> Color {
-    const RGB: [(u8, u8, u8); 7] = [
-        (10, 20, 24),
-        (6, 16, 22),
-        (3, 14, 20),
-        (2, 12, 17),
-        (1, 11, 15),
-        (1, 9, 13),
-        (0, 7, 11),
-    ];
-    let (r, g, b) = RGB[i];
-    rgb15(r, g, b)
-}
+
 #[inline]
 fn sis() -> crate::engine::Projection<SIS_STATE> {
     // SAFETY: flagship is a field of the leased World; map keeps its thread

@@ -3,8 +3,10 @@
 mod preview;
 
 mod picker;
+#[cfg(not(test))]
+use picker::SAVES_PER_PAGE;
 pub use picker::{picker_action, PickerAction};
-use picker::{picker_slot, MAX_SAVED_GAMES, SAVES_PER_PAGE};
+use picker::{picker_slot, MAX_SAVED_GAMES};
 
 #[cfg(not(test))]
 pub use runtime::{

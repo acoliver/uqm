@@ -1,6 +1,5 @@
 //! Presentation scripts and legacy-video input, ported from uqm/intro.c.
 
-use crate::ui::rgb15;
 mod text;
 
 #[cfg(not(test))]
@@ -10,7 +9,7 @@ use std::{ffi::c_char, ptr};
 
 #[cfg(not(test))]
 pub(super) const WANT_PIXMAP: CREATE_FLAGS = 1 << 1;
-pub(super) const BLACK_COLOR: Color = rgb15(0, 0, 0);
+pub(super) const BLACK_COLOR: Color = crate::ui::rgb15(0, 0, 0);
 
 unsafe fn parse_color(src: *const c_char, color: &mut Color) -> BOOLEAN {
     let mut value = 0u32;
@@ -94,7 +93,7 @@ pub(crate) mod runtime {
         ));
         SetContextFGFrame(sis);
         SetContextClipRect(ptr::null_mut());
-        let background = rgb15(1, 1, 1);
+        let background = crate::ui::rgb15(1, 1, 1);
         SetContextBackGroundColor(background);
         ClearDrawable();
         SetFrameTransparentColor(sis, background);
@@ -849,7 +848,7 @@ mod tests {
 
     #[test]
     fn rgb15_expands_all_five_bits_and_is_opaque() {
-        let color = rgb15(1, 10, 31);
+        let color = crate::ui::rgb15(1, 10, 31);
         assert_eq!((color.r, color.g, color.b, color.a), (8, 82, 255, 255));
     }
 
