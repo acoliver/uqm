@@ -115,10 +115,8 @@ pub fn register(moves: &mut BTreeMap<String, String>, old: &str, new: &str) -> R
         return Err("move needs distinct nonempty identities".into());
     }
     for (source, target) in moves.iter() {
-        if old == source
-            || (prefix(old, source) && !prefix(new, target))
-            || (prefix(source, old) && !prefix(target, new))
-        {
+        // matching() partitions nested sources; validate() rejects concrete target collisions.
+        if old == source {
             return Err(format!("move source {old} already credited"));
         }
         if new == target {
@@ -576,6 +574,97 @@ mod nested_tests {
         current.findings.push(growth);
         assert!(super::super::budgets::check(&current, &baseline.budget).is_err());
         Ok(())
+    }
+
+    #[test]
+    fn enclosing_move_preserves_a_child_relocated_outside_its_destination() -> Result<(), String> {
+        fn debt(entries: &[(&str, u64)]) -> Result<Measurement, String> {
+            let mut result = measured(&entries.iter().map(|(id, _)| *id).collect::<Vec<_>>());
+            for (finding, (_, value)) in result.declarations.iter_mut().zip(entries) {
+                finding.subsystem = if finding.package == "uqm" {
+                    finding
+                        .identity
+                        .split("::")
+                        .nth(1)
+                        .ok_or("missing subsystem")?
+                        .into()
+                } else {
+                    finding.package.clone()
+                };
+                result.findings.push(Finding {
+                    counter: "unsafe".into(),
+                    metric: "unsafe_lines".into(),
+                    value: *value,
+                    ..finding.clone()
+                });
+            }
+            Ok(result)
+        }
+        let base = debt(&[("uqm::engine::Record", 3), ("uqm::engine::draw", 2)])?;
+        let intermediate = debt(&[("uqm::engine::Record", 3), ("uqm::battle::draw", 2)])?;
+        let current = debt(&[("uqm-engine::Record", 3), ("uqm::battle::draw", 2)])?;
+        let mut baseline = super::super::baseline::Baseline {
+            entries: base.baseline(),
+            ..Default::default()
+        };
+        baseline.add_move(
+            "uqm::engine::draw",
+            "uqm::battle::draw",
+            &intermediate,
+            &base,
+        )?;
+        assert_eq!(baseline.entries, intermediate.baseline());
+        baseline.add_move("uqm::engine", "uqm-engine", &current, &base)?;
+        assert_eq!(baseline.entries, current.baseline());
+        assert_eq!(baseline.entries.values().sum::<u64>(), 5);
+        assert_eq!(baseline.moved.len(), 2);
+        assert_eq!(baseline.moved["uqm::engine::draw"], "uqm::battle::draw");
+        assert!(baseline.budget.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn enclosing_move_still_rejects_a_childs_colliding_target() -> Result<(), String> {
+        let base = measured(&["uqm::engine::Record", "uqm::engine::draw"]);
+        let intermediate = measured(&["uqm::engine::Record", "uqm-engine::Record"]);
+        let current = measured(&["uqm-engine::Record"]);
+        let mut baseline = super::super::baseline::Baseline::default();
+        baseline.add_move(
+            "uqm::engine::draw",
+            "uqm-engine::Record",
+            &intermediate,
+            &base,
+        )?;
+        let before = baseline.moved.clone();
+        assert!(matches!(
+            baseline.add_move("uqm::engine", "uqm-engine", &current, &base),
+            Err(error) if error.contains("same target")
+        ));
+        assert_eq!(baseline.moved, before);
+        Ok(())
+    }
+
+    #[test]
+    fn divergent_child_does_not_exempt_missing_targets_or_retained_sources() {
+        let base = measured(&["uqm::engine::Record", "uqm::engine::draw"]);
+        let moves = BTreeMap::from([
+            ("uqm::engine".into(), "uqm-engine".into()),
+            ("uqm::engine::draw".into(), "uqm::battle::draw".into()),
+        ]);
+        let missing = measured(&["uqm::battle::draw"]);
+        assert!(
+            matches!(validate(&missing, &base, &moves), Err(error) if error.contains("absent"))
+        );
+        let retained = measured(&[
+            "uqm-engine::Record",
+            "uqm::battle::draw",
+            "uqm::engine::Record",
+        ]);
+        assert!(
+            matches!(validate(&retained, &base, &moves), Err(error) if error.contains("still exists"))
+        );
+        let mut duplicate = moves;
+        assert!(register(&mut duplicate, "uqm::engine", "other-engine").is_err());
     }
 
     #[test]
