@@ -25,6 +25,10 @@ pub struct Kernel {
     tiny_font_owner: Option<crate::graphics::native_font::LoadedFont>,
     pub star_con_font: crate::graphics::native_abi::FONT,
     pub micro_font: crate::graphics::native_abi::FONT,
+    #[cfg(not(test))]
+    micro_font_owner: Option<crate::graphics::native_font::LoadedFont>,
+    #[cfg(not(test))]
+    game_text: Option<crate::strings::owned_table::LoadedTextTable>,
     pub tiny_font: crate::graphics::native_abi::FONT,
     pub activity_frame: crate::graphics::native_abi::FRAME,
     pub status_frame: crate::graphics::native_abi::FRAME,
@@ -58,6 +62,8 @@ pub struct Kernel {
     pub(crate) winner: Option<ShipId>,
     pub(crate) status_offsets: [i16; 2],
     pub(crate) menu_sounds: SOUND,
+    #[cfg(not(test))]
+    menu_sound_bank: Option<crate::sound::owned_bank::LoadedSoundBank>,
     pub(crate) game_sounds: SOUND,
     pub(crate) sounds: SoundQueue,
     pub(crate) channels: std::rc::Rc<std::cell::RefCell<Channels>>,
@@ -65,6 +71,52 @@ pub struct Kernel {
     pub(crate) star_planes: Box<[StarPlane; 3]>,
 }
 impl Kernel {
+    #[cfg(not(test))]
+    pub(crate) fn install_game_text(&mut self, text: crate::strings::owned_table::LoadedTextTable) {
+        self.game_strings = text.as_raw().cast();
+        self.game_text = Some(text);
+    }
+    #[cfg(not(test))]
+    pub(crate) fn install_menu_sounds(&mut self, bank: crate::sound::owned_bank::LoadedSoundBank) {
+        self.menu_sounds = bank.as_raw().cast();
+        self.menu_sound_bank = Some(bank);
+    }
+    #[cfg(not(test))]
+    pub(crate) fn menu_sound_bank(&self) -> Option<crate::sound::owned_bank::LoadedSoundBank> {
+        self.menu_sound_bank.clone()
+    }
+    #[cfg(not(test))]
+    pub(crate) fn release_menu_sounds(&mut self) {
+        self.menu_sounds = std::ptr::null_mut();
+        self.menu_sound_bank = None;
+    }
+    #[cfg(not(test))]
+    pub(crate) fn game_text(&self, index: usize) -> &std::ffi::CStr {
+        self.game_text_entry(index).unwrap_or(c"")
+    }
+    #[cfg(not(test))]
+    pub(crate) fn game_text_entry(&self, index: usize) -> Option<&std::ffi::CStr> {
+        self.game_text
+            .as_ref()
+            .unwrap_or_else(|| panic!("game text not loaded"))
+            .text(index)
+    }
+    #[cfg(not(test))]
+    pub(crate) fn install_micro_font(&mut self, font: crate::graphics::native_font::LoadedFont) {
+        self.micro_font = font.as_raw();
+        self.micro_font_owner = Some(font);
+    }
+    #[cfg(not(test))]
+    pub(crate) fn micro_font_lease(&self) -> Option<crate::graphics::native_font::FontLease> {
+        self.micro_font_owner.as_ref().map(|font| font.lease())
+    }
+    #[cfg(not(test))]
+    pub(crate) fn release_encounter_text(&mut self) {
+        self.micro_font = ptr::null_mut();
+        self.game_strings = ptr::null_mut();
+        self.micro_font_owner = None;
+        self.game_text = None;
+    }
     #[cfg(not(test))]
     pub(crate) fn install_battle_font(&mut self, font: crate::graphics::native_font::LoadedFont) {
         self.star_con_font = font.as_raw().cast();
@@ -152,6 +204,10 @@ impl Kernel {
             tiny_font_owner: None,
             star_con_font: ptr::null_mut(),
             micro_font: ptr::null_mut(),
+            #[cfg(not(test))]
+            micro_font_owner: None,
+            #[cfg(not(test))]
+            game_text: None,
             tiny_font: ptr::null_mut(),
             activity_frame: ptr::null_mut(),
             status_frame: ptr::null_mut(),
@@ -187,6 +243,8 @@ impl Kernel {
             winner: None,
             status_offsets: [0; 2],
             menu_sounds: ptr::null_mut(),
+            #[cfg(not(test))]
+            menu_sound_bank: None,
             game_sounds: ptr::null_mut(),
             sounds: SoundQueue::new(),
             channels: std::rc::Rc::new(std::cell::RefCell::new(Channels::new())),

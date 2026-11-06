@@ -57,7 +57,7 @@ use crate::ui::sis::DeltaSISGauges;
 
 use crate::ui::sis::DrawStatusMessage;
 
-use crate::battle::sounds::engine::PlayMenuSound;
+use crate::ui::settings::play_menu_sound;
 
 use crate::mainloop::input_abi::live::SetInputCallback;
 
@@ -602,7 +602,7 @@ unsafe fn scan_input(cx: &mut Cx<'_>, io: &mut Io<'_>, menu: &mut MENU_STATE) ->
     } else if selected {
         if menu.CurState == 5 {
             if unavailable() {
-                cx.with_legacy(|| PlayMenuSound(2));
+                play_menu_sound(cx.kernel, cx.world, 2);
                 return 1;
             }
             let required = fuel();
@@ -610,7 +610,7 @@ unsafe fn scan_input(cx: &mut Cx<'_>, io: &mut Io<'_>, menu: &mut MENU_STATE) ->
                 || cx.world.data.flagship.num_landers == 0
                 || cx.world.data.flagship.crew_enlisted == 0
             {
-                cx.with_legacy(|| PlayMenuSound(2));
+                play_menu_sound(cx.kernel, cx.world, 2);
                 return 1;
             }
             cx.with_legacy(|| CffiPlatform.set_flash(FlashTarget::Off));
@@ -622,7 +622,7 @@ unsafe fn scan_input(cx: &mut Cx<'_>, io: &mut Io<'_>, menu: &mut MENU_STATE) ->
             return 1;
         }
         if (*(*solar_system::current()).pOrbitalDesc).data_index & 0x80 != 0 {
-            cx.with_legacy(|| PlayMenuSound(2));
+            play_menu_sound(cx.kernel, cx.world, 2);
             return 1;
         }
         scan_planet(input, cx, io, u16::from(menu.CurState));

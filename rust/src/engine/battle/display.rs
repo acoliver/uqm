@@ -1,50 +1,38 @@
 //! Display primitive storage and frame-local drawing order.
 
 use crate::collections::pool::{Id, OrderedPool};
-use crate::graphics::native_abi::{Color, POINT, PRIMITIVE, PRIM_DESC};
+mod primitive;
+pub use primitive::DisplayPrimitive;
 
 const CAPACITY: usize = 330;
-const EMPTY: PRIMITIVE = PRIMITIVE {
-    Links: 0,
-    Type: 0,
-    color: Color {
-        r: 0,
-        g: 0,
-        b: 0,
-        a: 0,
-    },
-    Object: PRIM_DESC {
-        Point: POINT { x: 0, y: 0 },
-    },
-};
 
 pub(crate) struct DisplayPool {
-    primitives: OrderedPool<PRIMITIVE, CAPACITY>,
+    primitives: OrderedPool<DisplayPrimitive, CAPACITY>,
     // FreeLink used to retain every field except its links. Keep inactive values,
     // moving each one back into the pool when its slot is allocated again.
-    retired: Box<[Option<PRIMITIVE>; CAPACITY]>,
+    retired: Box<[Option<DisplayPrimitive>; CAPACITY]>,
 }
 impl DisplayPool {
     pub(crate) fn new() -> Self {
         Self {
             primitives: OrderedPool::new(),
-            retired: Box::new([None; CAPACITY]),
+            retired: Box::new(std::array::from_fn(|_| None)),
         }
     }
-    fn id(&self, index: u16) -> Id<PRIMITIVE> {
+    fn id(&self, index: u16) -> Id<DisplayPrimitive> {
         self.primitives
             .id_at(usize::from(index))
             .unwrap_or_else(|| panic!("unallocated display primitive {index}"))
     }
-    pub(crate) fn get(&self, index: u16) -> &PRIMITIVE {
+    pub(crate) fn get(&self, index: u16) -> &DisplayPrimitive {
         self.primitives.get(self.id(index))
     }
-    pub(crate) fn get_mut(&mut self, index: u16) -> &mut PRIMITIVE {
+    pub(crate) fn get_mut(&mut self, index: u16) -> &mut DisplayPrimitive {
         let id = self.id(index);
         self.primitives.get_mut(id)
     }
     pub(crate) fn alloc(&mut self) -> Option<u16> {
-        let id = self.primitives.alloc(EMPTY)?;
+        let id = self.primitives.alloc(DisplayPrimitive::default())?;
         if let Some(value) = self.retired[id.index()].take() {
             self.primitives[id] = value;
         }
@@ -88,23 +76,13 @@ impl DisplayPool {
         }
     }
     /// Serialize a transient drawing command batch without exposing pool storage.
-    pub(crate) fn batch(&self) -> Vec<PRIMITIVE> {
-        let mut batch: Vec<_> = self
-            .order()
-            .into_iter()
-            .map(|index| *self.get(index))
-            .collect();
-        let len = batch.len();
-        for (index, primitive) in batch.iter_mut().enumerate() {
-            let pred = index.checked_sub(1).map_or(u16::MAX, |ix| ix as u16);
-            let succ = if index + 1 == len {
-                u16::MAX
-            } else {
-                (index + 1) as u16
-            };
-            primitive.Links = u32::from(pred) | (u32::from(succ) << 16);
-        }
-        batch
+    pub(crate) fn batch(&self) -> crate::graphics::native_batch::NativeBatch {
+        crate::graphics::native_batch::NativeBatch::new(
+            self.order()
+                .into_iter()
+                .map(|index| self.get(index).command())
+                .collect(),
+        )
     }
 }
 
@@ -118,12 +96,12 @@ mod tests {
         let ids: Vec<_> = (0..330).map(|_| display.alloc().unwrap()).collect();
         assert_eq!(ids, (0..330).collect::<Vec<_>>());
         assert!(display.alloc().is_none());
-        display.get_mut(9).Type = 3;
+        display.get_mut(9).kind = 3;
         display.free(9);
         display.free(21);
         assert_eq!(display.alloc(), Some(21));
         assert_eq!(display.alloc(), Some(9));
-        assert_eq!(display.get(9).Type, 3);
+        assert_eq!(display.get(9).kind, 3);
     }
 
     #[test]
@@ -135,14 +113,16 @@ mod tests {
         }
         display.background_order(180);
         display.insert_before(180, None);
-        let batch = display.batch();
+        let order_before = display.order();
+        let retained = display.batch();
+        let batch = retained.primitives();
         assert_eq!(batch.len(), 181);
         assert_eq!(batch[0].color.r, 179);
         assert_eq!(batch[179].color.r, 0);
         assert_eq!(batch[180].color.r, 180);
         assert_eq!(batch[0].Links, u32::from(u16::MAX) | (1 << 16));
         assert_eq!(batch[180].Links, 179 | (u32::from(u16::MAX) << 16));
-        assert_eq!(display.get(179).Links, 0);
+        assert_eq!(display.order(), order_before);
         display.clear_order();
         assert!(display.batch().is_empty());
         display.background_order(180);

@@ -1,7 +1,5 @@
 //! Encounter fleet construction, decision screen, combat entry, and salvage.
 
-#[cfg(not(test))]
-use crate::engine::{Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields};
 pub const ENCOUNTER_DISPLAY_POINTS: [(i16, i16); 10] = [
     (10, 51),
     (-10, 51),
@@ -89,16 +87,32 @@ impl EncounterSelection {
     }
 }
 
-#[cfg(not(test))]
-use crate::ships::native::abi::{COUNT, POINT, TEXT, TEXT_ALIGN, UNICODE};
-#[cfg(not(test))]
-fn text(x: i16, y: i16, align: TEXT_ALIGN, string: *const UNICODE) -> TEXT {
-    TEXT {
-        baseline: POINT { x, y },
-        pStr: string,
-        align,
-        CharCount: COUNT::MAX,
+fn encounter_has_no_salvage(world: &crate::engine::World) -> bool {
+    use crate::ships::native::abi::{
+        CHECK_ABORT, CHECK_LOAD, COUNT, IN_LAST_BATTLE, WON_LAST_BATTLE,
+    };
+    world.activity() & (CHECK_ABORT | CHECK_LOAD) as u16 != 0
+        || world.data.flagship.crew_enlisted == COUNT::MAX
+        || world.activity() as u8 == IN_LAST_BATTLE as u8
+        || world.activity() as u8 == WON_LAST_BATTLE as u8
+}
+
+fn apply_thraddash_body_count(world: &mut crate::engine::World, killed: u16) -> u16 {
+    use crate::engine::StoryKey;
+    use crate::ships::native::abi::{THRADDASH_BODY_THRESHOLD, THRADDASH_SHIP};
+    if killed != 0
+        && world.encounter_race == THRADDASH_SHIP as i16
+        && world.story_state(StoryKey::THRADD_MANNER) == 0
+    {
+        let killed = thraddash_body_count(
+            killed,
+            world.story_state(StoryKey::THRADDASH_BODY_COUNT) as u16,
+            THRADDASH_BODY_THRESHOLD as u16,
+        );
+        world.set_story_state(StoryKey::THRADDASH_BODY_COUNT, u32::from(killed as u8));
+        return killed;
     }
+    killed
 }
 
 #[cfg(not(test))]
@@ -106,10 +120,11 @@ pub(crate) mod engine {
     use super::*;
     use crate::battle::battle_native::battle;
     use crate::battle::battle_native::engine::{
-        activity, game_state, rgb15, set_game_state, sis_height, sis_width, AWESOME_RATING,
-        CYBORG_CONTROL, HUMAN_CONTROL, STANDARD_RATING,
+        rgb15, sis_height, sis_width, AWESOME_RATING, CYBORG_CONTROL, HUMAN_CONTROL,
+        STANDARD_RATING,
     };
     use crate::engine::battle::link_queue;
+    use crate::engine::StoryKey;
     use crate::ships::native::abi::*;
     use crate::ships::native::{cosine, sine};
     use std::{mem, ptr};
@@ -130,29 +145,69 @@ pub(crate) mod engine {
 
     use crate::graphics::resgfx::LoadGraphicInstance;
 
-    use crate::planets::starmap::{current_catalog, naming::GetClusterName};
+    use crate::planets::starmap::{current_catalog, naming::cluster_name};
 
     use crate::mainloop::input_abi::live::AnyButtonPress;
 
-    unsafe fn game_string(index: u32) -> *const UNICODE {
-        GetStringAddress(SetAbsStringTableIndex(
-            KernelOwner::current().read(|owner| owner.game_strings),
-            index as COUNT,
-        ))
-        .cast()
-    }
-    unsafe fn planet_name() -> *mut UNICODE {
-        let world = WorldFields::current();
-        (&raw mut (**world).flagship.planet_name).cast()
-    }
     unsafe fn escape_pressed(input: &crate::engine::input::InputSession) -> bool {
         let template = input.player_controls()[0] as usize;
         input.current().key[template][KEY_ESCAPE as usize] != 0
     }
-    unsafe fn draw_text(t: &mut TEXT, string: *const UNICODE) {
-        t.pStr = string;
-        t.CharCount = COUNT::MAX;
-        font_DrawText(t);
+    enum SalvageText {
+        Caption,
+        Amount,
+        Total,
+    }
+
+    fn draw_salvage_line(
+        kernel: &crate::engine::Kernel,
+        string: &std::ffi::CStr,
+        baseline: POINT,
+        style: SalvageText,
+    ) {
+        let context = crate::graphics::context_abi::ContextLease::retain(
+            std::ptr::NonNull::new(kernel.space_context)
+                .unwrap_or_else(|| panic!("salvage requires a space context")),
+        );
+        let (font, align, color) = match style {
+            SalvageText::Caption => (
+                kernel.tiny_font_lease(),
+                TEXT_ALIGN_ALIGN_CENTER,
+                rgb15(8, 8, 8),
+            ),
+            SalvageText::Amount => (
+                kernel.micro_font_lease(),
+                TEXT_ALIGN_ALIGN_RIGHT,
+                rgb15(0, 0, 24),
+            ),
+            SalvageText::Total => (
+                kernel.micro_font_lease(),
+                TEXT_ALIGN_ALIGN_CENTER,
+                rgb15(0, 0, 24),
+            ),
+        };
+        let font = font.unwrap_or_else(|| panic!("salvage requires its retained text font"));
+        context.draw_text(&font, string, baseline, align, color);
+    }
+
+    fn draw_salvage_captions(kernel: &crate::engine::Kernel, name: &[UNICODE; 80], rect: &RECT) {
+        let baseline = POINT {
+            x: rect.corner.x.wrapping_add(100),
+            y: rect.corner.y.wrapping_add(68),
+        };
+        let bytes = name.map(|byte| byte as u8);
+        let name = std::ffi::CStr::from_bytes_until_nul(&bytes)
+            .unwrap_or_else(|error| panic!("unterminated salvage name: {error}"));
+        draw_salvage_line(kernel, name, baseline, SalvageText::Caption);
+        draw_salvage_line(
+            kernel,
+            kernel.game_text((ENCOUNTER_STRING_BASE + 3) as usize),
+            POINT {
+                y: baseline.y.wrapping_add(6),
+                ..baseline
+            },
+            SalvageText::Caption,
+        );
     }
 
     unsafe fn do_select_action(
@@ -187,15 +242,6 @@ pub(crate) mod engine {
             crate::ui::menu::choose_menu_state(input, &mut menu.choice, PM_CONVERSE as u8, flags);
         });
         true
-    }
-
-    unsafe fn encounter_star() -> *mut crate::engine::world::CStarDesc {
-        WorldOwner::current()
-            .read(|world| world.star_pointer(crate::planets::starmap::current_catalog()))
-    }
-
-    unsafe fn encounter_race_exists(race: COUNT) -> bool {
-        WorldOwner::current().read(|world| world.avail_races_ref().at(usize::from(race)).is_some())
     }
 
     fn npc_race(world: &crate::engine::World) -> i16 {
@@ -255,9 +301,9 @@ pub(crate) mod engine {
         kernel: &mut crate::engine::Kernel,
         player: COUNT,
     ) {
-        EncounterRace = -1;
+        world.encounter_race = -1;
         if world.npc_built_ships_ref().head().is_none() {
-            world.set_story_state(crate::engine::StoryKey::BATTLE_SEGUE, 0);
+            world.set_story_state(StoryKey::BATTLE_SEGUE, 0);
             return;
         }
         if player != RPG_PLAYER_NUM as u16 {
@@ -265,8 +311,8 @@ pub(crate) mod engine {
                 IN_LAST_BATTLE => NUMBER_OF_PLANET_TYPES as u8,
                 IN_HYPERSPACE => ((TFB_Random() as COUNT) % NUMBER_OF_PLANET_TYPES as COUNT) as u8,
                 _ => {
-                    world.set_story_state(crate::engine::StoryKey::ESCAPE_COUNTER, 110);
-                    world.story_state(crate::engine::StoryKey::BATTLE_PLANET) as u8
+                    world.set_story_state(StoryKey::ESCAPE_COUNTER, 110);
+                    world.story_state(StoryKey::BATTLE_PLANET) as u8
                 }
             };
             load_gravity_well(kernel, selector);
@@ -334,39 +380,42 @@ pub(crate) mod engine {
 
     pub(crate) use crate::battle::context_access::reader_legacy::update_ship_frag_crew;
 
-    /// # Safety
-    /// The encounter retains its fonts, string table and active graphics context.
-    unsafe fn draw_encounter_location(cx: &mut crate::engine::battle::Cx<'_>) {
-        let mut t = text(
-            ((sis_width() >> 1) + 1) as i16,
-            10,
-            TEXT_ALIGN_ALIGN_CENTER,
-            ptr::null(),
+    fn draw_encounter_location(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        cluster: Option<&std::ffi::CStr>,
+    ) {
+        let context = crate::graphics::context_abi::ContextLease::retain(
+            std::ptr::NonNull::new(cx.kernel.space_context)
+                .unwrap_or_else(|| panic!("encounter requires a space context")),
         );
-        SetContextFont(cx.kernel.micro_font);
-        SetContextForeGroundColor(rgb15(0, 0, 20));
-        if in_hqspace(cx.world) != 0 {
-            draw_text(
-                &mut t,
-                cx.with_legacy(|| game_string(ENCOUNTER_STRING_BASE)),
+        let font = cx
+            .kernel
+            .micro_font_lease()
+            .unwrap_or_else(|| panic!("encounter requires the micro font"));
+        let mut baseline = POINT {
+            x: (((cx.screen_dimensions().0 - 78) >> 1) + 1) as i16,
+            y: 10,
+        };
+        let mut line = |text: &std::ffi::CStr| {
+            context.draw_text(
+                &font,
+                text,
+                baseline,
+                TEXT_ALIGN_ALIGN_CENTER,
+                rgb15(0, 0, 20),
             );
-            t.baseline.y += 12;
-            draw_text(
-                &mut t,
-                cx.with_legacy(|| game_string(ENCOUNTER_STRING_BASE + 1)),
+            baseline.y += 12;
+        };
+        if let Some(cluster) = cluster {
+            line(cx.kernel.game_text((ENCOUNTER_STRING_BASE + 2) as usize));
+            line(cluster);
+            line(
+                std::ffi::CStr::from_bytes_until_nul(&cx.world.data.flagship.planet_name)
+                    .unwrap_or_else(|error| panic!("planet name is not terminated: {error}")),
             );
         } else {
-            let mut buf = [0 as UNICODE; 256];
-            draw_text(
-                &mut t,
-                cx.with_legacy(|| game_string(ENCOUNTER_STRING_BASE + 2)),
-            );
-            t.baseline.y += 12;
-            let star = cx.world.star_pointer(current_catalog());
-            cx.with_legacy(|| GetClusterName(star, buf.as_mut_ptr()));
-            draw_text(&mut t, buf.as_ptr());
-            t.baseline.y += 12;
-            draw_text(&mut t, cx.world.data.flagship.planet_name.as_ptr().cast());
+            line(cx.kernel.game_text(ENCOUNTER_STRING_BASE as usize));
+            line(cx.kernel.game_text((ENCOUNTER_STRING_BASE + 1) as usize));
         }
     }
 
@@ -390,7 +439,16 @@ pub(crate) mod engine {
         SetContextBackGroundColor(rgb15(0, 0, 0));
         ClearDrawable();
         DrawStamp(&mut stamp);
-        draw_encounter_location(cx);
+        let cluster = if in_hqspace(cx.world) == 0 {
+            let star = cx
+                .world
+                .selected_star(current_catalog())
+                .unwrap_or_else(|| panic!("encounter requires a selected star"));
+            Some(cluster_name(cx.kernel, star, STAR_NUMBER_BASE as usize))
+        } else {
+            None
+        };
+        draw_encounter_location(cx, cluster.as_deref());
         cx.with_legacy(|| DrawSISMessage(ptr::null()));
         stamp.origin = POINT {
             x: (sis_width() >> 1) as i16,
@@ -453,20 +511,36 @@ pub(crate) mod engine {
 
     unsafe fn draw_fade_text(
         input: &crate::engine::input::InputSession,
-        str1: *const UNICODE,
-        str2: *const UNICODE,
+        kernel: &crate::engine::Kernel,
+        str1: &std::ffi::CStr,
+        str2: &std::ffi::CStr,
         fade_in: BOOLEAN,
-        rect: *mut RECT,
+        rect: &RECT,
     ) {
-        let mut t1 = text(
-            (*rect).corner.x.wrapping_add(100),
-            (*rect).corner.y.wrapping_add(45),
-            TEXT_ALIGN_ALIGN_CENTER,
-            str1,
+        let context = crate::graphics::context_abi::ContextLease::retain(
+            std::ptr::NonNull::new(kernel.space_context)
+                .unwrap_or_else(|| panic!("salvage requires a space context")),
         );
-        let mut t2 = t1;
-        t2.baseline.y = t2.baseline.y.wrapping_add(11);
-        t2.pStr = str2;
+        let font = kernel
+            .micro_font_lease()
+            .unwrap_or_else(|| panic!("salvage requires the micro font"));
+        let baseline = POINT {
+            x: rect.corner.x.wrapping_add(100),
+            y: rect.corner.y.wrapping_add(45),
+        };
+        let render = |color| {
+            context.draw_text(&font, str1, baseline, TEXT_ALIGN_ALIGN_CENTER, color);
+            context.draw_text(
+                &font,
+                str2,
+                POINT {
+                    y: baseline.y.wrapping_add(11),
+                    ..baseline
+                },
+                TEXT_ALIGN_ALIGN_CENTER,
+                color,
+            );
+        };
         FlushInput(input);
         let mut time = GetTimeCounter();
         if fade_in != 0 {
@@ -476,9 +550,7 @@ pub(crate) mod engine {
                     i = TEXT_FADE.len() - 1;
                 }
                 let v = TEXT_FADE[i];
-                SetContextForeGroundColor(rgb15(v, v, v));
-                font_DrawText(&mut t1);
-                font_DrawText(&mut t2);
+                render(rgb15(v, v, v));
                 SleepThreadUntil(time.wrapping_add(ONE_SECOND / 20));
                 time = GetTimeCounter();
                 i += 1;
@@ -490,56 +562,48 @@ pub(crate) mod engine {
                     i = 0;
                 }
                 let v = TEXT_FADE[i as usize];
-                SetContextForeGroundColor(rgb15(v, v, v));
-                font_DrawText(&mut t1);
-                font_DrawText(&mut t2);
+                render(rgb15(v, v, v));
                 SleepThreadUntil(time.wrapping_add(ONE_SECOND / 20));
                 time = GetTimeCounter();
                 i -= 1;
             }
-            SetContextForeGroundColor(rgb15(10, 10, 10));
-            font_DrawText(&mut t1);
-            font_DrawText(&mut t2);
+            render(rgb15(10, 10, 10));
         }
     }
 
     /// # Safety
     /// The game thread must own initialized encounter fleet queues, game state, display, and salvage resources.
-    pub unsafe fn uninit_encounter(input: &crate::engine::input::InputSession) -> COUNT {
+    pub unsafe fn uninit_encounter(cx: &mut crate::engine::battle::Cx<'_>, input: &crate::engine::input::InputSession) -> COUNT {
         let mut killed = 0u16;
-        KernelOwner::current().write(free_gravity_well);
-        if activity() & (CHECK_ABORT | CHECK_LOAD) as u16 != 0
-            || (**WorldFields::current()).flagship.crew_enlisted == COUNT::MAX
-            || activity() as u8 == IN_LAST_BATTLE as u8
-            || activity() as u8 == WON_LAST_BATTLE as u8
-        {
+        free_gravity_well(cx.kernel);
+        if encounter_has_no_salvage(cx.world) {
             return killed;
         }
-        if game_state(BATTLE_SEGUE, END_BATTLE_SEGUE) == 0 {
-            link_queue::ships(0).reinit();
-            link_queue::ships(1).reinit();
+        if cx.world.story_state(StoryKey::BATTLE_SEGUE) == 0 {
+            cx.kernel.ships(0).reinit();
+            cx.kernel.ships(1).reinit();
             return killed;
         }
         let mut recycle = 0u16;
         let mut rect: RECT = mem::zeroed();
         let mut salvage_rect: RECT = mem::zeroed();
-        let mut t: TEXT;
         let mut stamp: STAMP = mem::zeroed();
-        let mut str1 = ptr::null();
-        let mut str2 = ptr::null();
+        let mut str1 = std::ffi::CString::default();
+        let mut str2 = std::ffi::CString::default();
         let mut buf = [0 as UNICODE; 80];
-        set_game_state(BATTLE_SEGUE, END_BATTLE_SEGUE, 0);
-        set_game_state(BOMB_CARRIER, END_BOMB_CARRIER, 0);
-        let counters = crate::app::bridge::battle(|b| b.counters);
+        cx.world.set_story_state(StoryKey::BATTLE_SEGUE, 0);
+        cx.world.set_story_state(StoryKey::BOMB_CARRIER, 0);
+        let counters = cx.b.counters;
         let mut victory = victory_state(
             counters[1],
             counters[0],
-            game_state(URQUAN_PROTECTING_SAMATRA, END_URQUAN_PROTECTING_SAMATRA) != 0,
+            cx.world.story_state(StoryKey::URQUAN_PROTECTING_SAMATRA) != 0,
         );
-        EncounterRace = WorldOwner::current().read(npc_race);
-        if !encounter_race_exists(EncounterRace as COUNT) {
+        cx.world.encounter_race = npc_race(cx.world);
+        let race_index = cx.world.encounter_race as usize;
+        if cx.world.avail_races_ref().at(race_index).is_none() {
             victory = -1;
-            KernelOwner::current().write(|kernel| init_siscontexts(kernel));
+            init_siscontexts(cx.kernel);
         }
         let previous_mode = SetStatusMessageMode(StatMsgMode_SMM_RES_UNITS);
         let mut sleepy = true;
@@ -550,21 +614,21 @@ pub(crate) mod engine {
                 } else {
                     draw_sisframe();
                     DrawSISMessage(ptr::null());
-                    if WorldOwner::current().read(in_hqspace) != 0 {
-                        DrawHyperCoords((**WorldFields::current()).game.ship_stamp.origin);
-                    } else if (**WorldFields::current()).game.ip_planet == 0 {
-                        DrawHyperCoords((*encounter_star()).star_pt);
+                    if in_hqspace(cx.world) != 0 {
+                        DrawHyperCoords(cx.world.data.game.ship_stamp.origin);
+                    } else if cx.world.data.game.ip_planet == 0 {
+                        DrawHyperCoords((*cx.world.star_pointer(current_catalog())).star_pt);
                     } else {
-                        DrawSISTitle(planet_name());
+                        DrawSISTitle(cx.world.data.flagship.planet_name.as_mut_ptr().cast());
                     }
-                    SetContext(KernelOwner::current().read(|owner| owner.space_context));
+                    SetContext(cx.kernel.space_context);
                     if victory != 0 {
                         DrawArmadaPickShip(1, &mut salvage_rect);
                     }
                 }
             }
-            link_queue::ships(NUM_SIDES as usize - 1 - side).reinit();
-            let fragments = WorldOwner::current().read(|world| fragment_snapshot(world, side == 0));
+            cx.kernel.ships(NUM_SIDES as usize - 1 - side).reinit();
+            let fragments = fragment_snapshot(cx.world, side == 0);
             for (id, frag) in fragments {
                 if fragment_is_removed(
                     frag.crew_level,
@@ -575,6 +639,7 @@ pub(crate) mod engine {
                         killed = killed.wrapping_add(1);
                         if victory != 0 {
                             if killed == 1 {
+                                let kernel = &*cx.kernel;
                                 recycle = 0;
                                 DrawStatusMessage(ptr::null());
                                 stamp.origin.x = salvage_rect.corner.x.wrapping_add(32);
@@ -582,30 +647,23 @@ pub(crate) mod engine {
                                 stamp.frame = IncFrameIndex(frag.icons);
                                 DrawStamp(&mut stamp);
                                 SetContextForeGroundColor(rgb15(8, 8, 8));
-                                SetContextFont(
-                                    KernelOwner::current().read(|owner| owner.tiny_font),
-                                );
+                                SetContextFont(kernel.tiny_font);
                                 let name = std::ffi::CStr::from_ptr(
                                     GetStringAddress(frag.race_strings).cast(),
                                 );
                                 crate::ships::native::copy_display_name(&mut buf, name.to_bytes());
                                 strupr(buf.as_mut_ptr());
-                                t = text(
-                                    salvage_rect.corner.x.wrapping_add(100),
-                                    salvage_rect.corner.y.wrapping_add(68),
-                                    TEXT_ALIGN_ALIGN_CENTER,
-                                    buf.as_ptr(),
-                                );
-                                font_DrawText(&mut t);
-                                t.baseline.y = t.baseline.y.wrapping_add(6);
-                                draw_text(&mut t, game_string(ENCOUNTER_STRING_BASE + 3));
+                                draw_salvage_captions(kernel, &buf, &salvage_rect);
+
                                 stamp.frame = frag.icons;
-                                SetContextFont(
-                                    KernelOwner::current().read(|owner| owner.micro_font),
-                                );
-                                str1 = game_string(ENCOUNTER_STRING_BASE + 4);
-                                str2 = game_string(ENCOUNTER_STRING_BASE + 5);
-                                draw_fade_text(input, str1, str2, 1, &mut salvage_rect);
+                                SetContextFont(kernel.micro_font);
+                                str1 = kernel
+                                    .game_text((ENCOUNTER_STRING_BASE + 4) as usize)
+                                    .to_owned();
+                                str2 = kernel
+                                    .game_text((ENCOUNTER_STRING_BASE + 5) as usize)
+                                    .to_owned();
+                                draw_fade_text(input, kernel, &str1, &str2, 1, &salvage_rect);
                             }
                             rect.corner.y = salvage_rect.corner.y.wrapping_add(9);
                             rect.extent.height = 22;
@@ -616,17 +674,24 @@ pub(crate) mod engine {
                                 - (10 + rect.extent.width as i32))
                                 as i16;
                             DrawFilledRectangle(&mut rect);
-                            let bounty = RACE_BOUNTY[EncounterRace as usize] >> 3;
+                            let bounty = RACE_BOUNTY[cx.world.encounter_race as usize] >> 3;
                             recycle = recycle.wrapping_add(bounty);
                             sprintf(buf.as_mut_ptr(), c"%u".as_ptr(), recycle as u32);
-                            t = text(
-                                (rect.corner.x as i32 + rect.extent.width as i32 - 1) as i16,
-                                rect.corner.y.wrapping_add(14),
-                                TEXT_ALIGN_ALIGN_RIGHT,
-                                buf.as_ptr(),
-                            );
+                            let bytes = buf.map(|byte| byte as u8);
+                            let amount = std::ffi::CStr::from_bytes_until_nul(&bytes)
+                                .unwrap_or_else(|error| {
+                                    panic!("unterminated salvage amount: {error}")
+                                });
                             SetContextForeGroundColor(rgb15(0, 0, 24));
-                            font_DrawText(&mut t);
+                            draw_salvage_line(
+                                cx.kernel,
+                                amount,
+                                POINT {
+                                    x: (rect.corner.x as i32 + rect.extent.width as i32 - 1) as i16,
+                                    y: rect.corner.y.wrapping_add(14),
+                                },
+                                SalvageText::Amount,
+                            );
                             DeltaSISGauges(0, 0, bounty as i32);
                             let before = victory;
                             victory = victory.wrapping_add(1);
@@ -644,7 +709,7 @@ pub(crate) mod engine {
                                 let mut time = GetTimeCounter();
                                 for (r, g, b) in SHIP_FADE {
                                     sleepy = AnyButtonPress(input, 1) == 0
-                                        && activity() & CHECK_ABORT as u16 == 0;
+                                        && cx.world.activity() & CHECK_ABORT as u16 == 0;
                                     if !sleepy {
                                         break;
                                     }
@@ -657,8 +722,7 @@ pub(crate) mod engine {
                             DrawStamp(&mut stamp);
                         }
                     }
-                    WorldOwner::current()
-                        .write(|world| remove_campaign_fragment(world, side == 0, id));
+                    remove_campaign_fragment(cx.world, side == 0, id);
                 }
             }
         }
@@ -666,7 +730,7 @@ pub(crate) mod engine {
         if victory != 0 {
             WaitForAnyButton(1, ONE_SECOND * 3, 0);
             if !escape_pressed(input) {
-                draw_fade_text(input, str1, str2, 0, &mut salvage_rect);
+                draw_fade_text(input, cx.kernel, &str1, &str2, 0, &salvage_rect);
                 if !escape_pressed(input) {
                     SetContextForeGroundColor(rgb15(0, 0, 0));
                     rect.corner.x = salvage_rect.corner.x.wrapping_add(10);
@@ -676,38 +740,42 @@ pub(crate) mod engine {
                         buf.as_mut_ptr(),
                         c"%u %s".as_ptr(),
                         recycle as u32,
-                        game_string(STATUS_STRING_BASE + 1),
+                        cx.kernel
+                            .game_text((STATUS_STRING_BASE + 1) as usize)
+                            .as_ptr()
+                            .cast::<UNICODE>(),
                     );
-                    t = text(
-                        (rect.corner.x as i32 + (rect.extent.width as i32 >> 1)) as i16,
-                        rect.corner.y.wrapping_add(14),
-                        TEXT_ALIGN_ALIGN_CENTER,
-                        buf.as_ptr(),
-                    );
+                    let bytes = buf.map(|byte| byte as u8);
+                    let total = std::ffi::CStr::from_bytes_until_nul(&bytes)
+                        .unwrap_or_else(|error| panic!("unterminated salvage total: {error}"));
                     SetContextForeGroundColor(rgb15(0, 0, 24));
-                    font_DrawText(&mut t);
-                    str1 = game_string(ENCOUNTER_STRING_BASE + 6);
-                    str2 = game_string(ENCOUNTER_STRING_BASE + 7);
-                    draw_fade_text(input, str1, str2, 1, &mut salvage_rect);
+                    draw_salvage_line(
+                        cx.kernel,
+                        total,
+                        POINT {
+                            x: (rect.corner.x as i32 + (rect.extent.width as i32 >> 1)) as i16,
+                            y: rect.corner.y.wrapping_add(14),
+                        },
+                        SalvageText::Total,
+                    );
+                    str1 = cx
+                        .kernel
+                        .game_text((ENCOUNTER_STRING_BASE + 6) as usize)
+                        .to_owned();
+                    str2 = cx
+                        .kernel
+                        .game_text((ENCOUNTER_STRING_BASE + 7) as usize)
+                        .to_owned();
+                    draw_fade_text(input, cx.kernel, &str1, &str2, 1, &salvage_rect);
                     WaitForAnyButton(1, ONE_SECOND * 2, 0);
                     if !escape_pressed(input) {
-                        draw_fade_text(input, str1, str2, 0, &mut salvage_rect);
+                        draw_fade_text(input, cx.kernel, &str1, &str2, 0, &salvage_rect);
                     }
                 }
             }
             DrawStatusMessage(ptr::null());
         }
-        if killed != 0
-            && EncounterRace == THRADDASH_SHIP as i16
-            && game_state(THRADD_MANNER, END_THRADD_MANNER) == 0
-        {
-            killed = thraddash_body_count(
-                killed,
-                game_state(THRADDASH_BODY_COUNT, END_THRADDASH_BODY_COUNT) as u16,
-                THRADDASH_BODY_THRESHOLD as u16,
-            );
-            set_game_state(THRADDASH_BODY_COUNT, END_THRADDASH_BODY_COUNT, killed as u8);
-        }
+        killed = apply_thraddash_body_count(cx.world, killed);
         killed
     }
 
@@ -717,8 +785,7 @@ pub(crate) mod engine {
         cx: &mut crate::engine::battle::Cx<'_>,
         io: &mut crate::engine::observe::Io<'_>,
     ) {
-        cx.world
-            .set_story_state(crate::engine::StoryKey::BATTLE_SEGUE, 1);
+        cx.world.set_story_state(StoryKey::BATTLE_SEGUE, 1);
         let old = cx.world.activity();
         cx.world.set_activity(if old as u8 == IN_LAST_BATTLE as u8 {
             IN_LAST_BATTLE as u16
@@ -805,6 +872,28 @@ mod tests {
         assert!(fragment_is_removed(0, false, false));
         assert!(fragment_is_removed(3, true, true));
         assert!(!fragment_is_removed(3, true, false));
+    }
+    #[test]
+    fn retained_world_controls_salvage_and_thraddash_accounting() {
+        use crate::engine::StoryKey;
+        use crate::ships::native::abi::{CHECK_ABORT, IN_LAST_BATTLE, THRADDASH_SHIP};
+        let mut world = crate::engine::World::new();
+        assert!(!encounter_has_no_salvage(&world));
+        world.set_activity(CHECK_ABORT as u16);
+        assert!(encounter_has_no_salvage(&world));
+        world.set_activity(IN_LAST_BATTLE as u16);
+        assert!(encounter_has_no_salvage(&world));
+        world.set_activity(0);
+        world.data.flagship.crew_enlisted = u16::MAX;
+        assert!(encounter_has_no_salvage(&world));
+        world.story = Some(crate::engine::world::story::GameState::new());
+        world.encounter_race = THRADDASH_SHIP as i16;
+        world.set_story_state(StoryKey::THRADDASH_BODY_COUNT, 23);
+        assert_eq!(apply_thraddash_body_count(&mut world, 4), 25);
+        assert_eq!(world.story_state(StoryKey::THRADDASH_BODY_COUNT), 25);
+        world.set_story_state(StoryKey::THRADD_MANNER, 1);
+        assert_eq!(apply_thraddash_body_count(&mut world, 2), 2);
+        assert_eq!(world.story_state(StoryKey::THRADDASH_BODY_COUNT), 25);
     }
     #[test]
     fn body_count_preserves_count_assignment_before_threshold() {

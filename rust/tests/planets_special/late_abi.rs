@@ -213,15 +213,15 @@ fn check_live_queues(harness: &mut Harness) {
         assert_eq!(harness.rng_position(), 104729);
         World::current().write(|world| world.queues = saved_queues);
 
-        use uqm_rust::c_bindings::global_state::{EncounterGroup, EncounterRace, POINT};
-        let saved_race = std::ptr::addr_of!(EncounterRace).read();
+        use uqm_rust::c_bindings::global_state::{EncounterGroup, POINT};
+        let saved_race = World::current().read(|w| w.encounter_race);
         let saved_group = std::ptr::addr_of!(EncounterGroup).read();
-        std::ptr::addr_of_mut!(EncounterRace).write(18);
+        World::current().write(|w| w.encounter_race = 18);
         std::ptr::addr_of_mut!(EncounterGroup).write(7);
         World::current().write(|world| GuardSite::reset_encounter(&mut NpcWorld::new(world)));
-        assert_eq!(std::ptr::addr_of!(EncounterRace).read(), -1);
+        assert_eq!(World::current().read(|w| w.encounter_race), -1);
         assert_eq!(std::ptr::addr_of!(EncounterGroup).read(), 0);
-        std::ptr::addr_of_mut!(EncounterRace).write(saved_race);
+        World::current().write(|w| w.encounter_race = saved_race);
         std::ptr::addr_of_mut!(EncounterGroup).write(saved_group);
 
         let saved_location =

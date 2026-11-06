@@ -307,7 +307,7 @@ fn cone_initialization_fixes_intersection_and_does_not_inherit_velocity() {
             );
             assert_eq!((i.EndPoint.x, i.EndPoint.y), (-3, 3));
             assert_eq!(i.IntersectStamp.frame, ship.raw_frame(2, 5));
-            assert_eq!((*prim(cone)).Type, gfx_object_STAMP_PRIM as u8);
+            assert_eq!((*prim(cone)).kind, gfx_object_STAMP_PRIM as u8);
             assert!((*cone).preprocess_func.is_some() && (*cone).collision_func.is_some());
             assert!((*cone).postprocess_func.is_none() && (*cone).death_func.is_none());
             assert_eq!(queued(), vec![ship.handle]);

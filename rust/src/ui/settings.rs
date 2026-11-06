@@ -121,6 +121,41 @@ pub unsafe extern "C" fn PlaySoundEffect(
     }
 }
 
+pub(crate) fn play_menu_sound(
+    kernel: &crate::engine::Kernel,
+    world: &crate::engine::World,
+    index: u16,
+) {
+    if let Some(bank) = kernel.menu_sound_bank() {
+        play_loaded_sound(
+            world,
+            &bank.clip(index),
+            0,
+            crate::sound::types::SoundPosition::non_positional(),
+            0,
+            GAME_SOUND_PRIORITY as u8,
+        );
+    }
+}
+
+pub(crate) fn play_loaded_sound(
+    world: &crate::engine::World,
+    sound: &crate::sound::owned_bank::SoundClip,
+    channel: usize,
+    position: crate::sound::types::SoundPosition,
+    object: usize,
+    priority: u8,
+) {
+    if world.data.game.glob_flags & SOUND_DISABLED as u8 == 0 {
+        crate::sound::sfx::set_channel_volume(
+            channel,
+            (MAX_VOLUME >> 1) as i32,
+            i32::from(priority),
+        );
+        sound.play(channel, position, object, priority);
+    }
+}
+
 pub(crate) fn stop_battle_music() {
     // SAFETY: the player retains its current music reference on the game thread.
     unsafe { stop_music() }

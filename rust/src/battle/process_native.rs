@@ -208,7 +208,6 @@ mod helpers {
 }
 
 #[cfg(not(test))]
-#[allow(non_snake_case)]
 pub(crate) mod engine {
     use super::invoke_element::invoke_element;
     use super::*;
@@ -717,7 +716,7 @@ pub(crate) mod engine {
                 retire(cx, e);
             } else {
                 let index = cx.elements()[e].PrimIndex;
-                let kind = cx.display_primitive(index).Type;
+                let kind = cx.display_primitive(index).kind;
                 if view_state != ViewState::Stable || flags & CHANGE_BITS != 0 {
                     let projection = queue_view::Projection {
                         dimensions: {
@@ -736,11 +735,13 @@ pub(crate) mod engine {
                             (delta_x, delta_y),
                         );
                         next = location;
-                        cx.display_primitive(index).Object.Line = LINE { first, second };
+                        let line = LINE { first, second };
+                        cx.display_primitive(index).set_line(line);
                     } else {
                         next =
                             projection.scroll(cx.elements()[e].next.location, (delta_x, delta_y));
-                        cx.display_primitive(index).Object.Point = projection.display(next);
+                        cx.display_primitive(index)
+                            .set_point(projection.display(next));
                         if kind == gfx_object_STAMP_PRIM as GRAPHICS_PRIM
                             || kind == gfx_object_STAMPFILL_PRIM as GRAPHICS_PRIM
                         {
@@ -773,10 +774,7 @@ pub(crate) mod engine {
                                     }
                                 }
                             }
-                            cx.display_primitive(index).Object.Stamp = STAMP {
-                                origin: projection.display(next),
-                                frame: cx.elements()[e].next.image.frame.raw(),
-                            };
+                            cx.project_display_stamp(e, projection.display(next));
                         }
                     }
                     cx.element_mut(e).next.location = next;
@@ -816,14 +814,15 @@ pub(crate) mod engine {
                 if clear {
                     ClearDrawable();
                 }
-                if cx.kernel.configuration.preferences().melee_scale != SCALE_STEP {
-                    let (_, scale) = calc_zoom_stuff(cx.b.zoom_out);
-                    SetGraphicScale(i32::from(scale));
+                let scale = if cx.kernel.configuration.preferences().melee_scale != SCALE_STEP {
+                    i32::from(calc_zoom_stuff(cx.b.zoom_out).1)
+                } else {
+                    0
+                };
+                if let Some(context) = std::ptr::NonNull::new(cx.kernel.space_context) {
+                    let context = crate::graphics::context_abi::ContextLease::retain(context);
+                    context.draw_primitives(&mut cx.display_batch(), scale);
                 }
-                let mut batch = cx.display_batch();
-                let head = if batch.is_empty() { u16::MAX } else { 0 };
-                crate::graphics::frame_abi::DrawBatch(batch.as_mut_ptr(), u32::from(head), 0);
-                SetGraphicScale(0);
             }
             crate::battle::sounds::engine::flush_sounds(cx);
         } else {
@@ -1033,7 +1032,7 @@ mod tests {
         let mut display = DisplayPool::new();
         for index in 0..330 {
             assert_eq!(display.alloc(), Some(index));
-            display.get_mut(index).Type = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
+            display.get_mut(index).kind = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
         }
         display.free(0);
         display.free(1);
@@ -1041,7 +1040,7 @@ mod tests {
         assert_eq!(display.alloc(), Some(0));
         assert!(display.alloc().is_none());
         assert!(
-            (0..330).all(|index| display.get(index).Type == gfx_object_STAMP_PRIM as GRAPHICS_PRIM)
+            (0..330).all(|index| display.get(index).kind == gfx_object_STAMP_PRIM as GRAPHICS_PRIM)
         );
     }
 

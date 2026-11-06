@@ -10,8 +10,7 @@ pub use surface::{load_planet_surface, CapturedSurface};
 use std::ffi::c_void;
 
 use crate::c_bindings::global_state::{
-    planetOuterLocation, EncounterGroup as ENCOUNTER_GROUP, EncounterRace as ENCOUNTER_RACE,
-    XFormIPLoc, IP_GROUP,
+    planetOuterLocation, EncounterGroup as ENCOUNTER_GROUP, XFormIPLoc, IP_GROUP,
 };
 use crate::comm::dispatch::{ship, CPoint, ONE_SECOND};
 use crate::mainloop::restart_menu::c_extern::{
@@ -125,9 +124,9 @@ const GROUP_LOAD_IP: u8 = 0;
 ///
 /// # Safety
 /// Game thread; the encounter globals belong to the current visit.
-pub unsafe fn reset_encounter() {
+pub unsafe fn reset_encounter(world: &mut crate::engine::World) {
     std::ptr::addr_of_mut!(ENCOUNTER_GROUP).write(0);
-    std::ptr::addr_of_mut!(ENCOUNTER_RACE).write(-1);
+    world.encounter_race = -1;
 }
 
 /// The group selected by a starbase encounter.

@@ -223,7 +223,7 @@ fn bubble_steers_toward_the_nearest_enemy_with_a_random_wobble() {
                 enemy_ship.element_mut().set_life_span(1);
                 enemy_ship.element_mut().current.location = location;
                 enemy_ship.element_mut().next.location = location;
-                (*battle::prim(enemy_ship.ptr())).Type = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
+                (*battle::prim(enemy_ship.ptr())).kind = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
                 enemy_ship.queue();
                 let enemy = enemy_ship.ptr();
                 (*bubble).target = None;

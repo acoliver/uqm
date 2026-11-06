@@ -38,12 +38,12 @@ unsafe fn color_of(ship: *mut ElementRecord) -> Rgba {
 
 unsafe fn paint(ship: *mut ElementRecord, kind: gfx_object, (r, g, b, a): Rgba) {
     let prim = prim_of(ship);
-    (*prim).Type = kind as u8;
+    (*prim).kind = kind as u8;
     (*prim).color = Color { r, g, b, a };
 }
 
 unsafe fn prim_kind(ship: *mut ElementRecord) -> u8 {
-    (*prim_of(ship)).Type
+    (*prim_of(ship)).kind
 }
 
 unsafe fn preprocess(fleet: &mut Ship<'_>, ship: *mut ElementRecord) {

@@ -100,16 +100,15 @@ pub(crate) mod engine {
     /// Menu sound resources must be loaded on the game thread.
     #[no_mangle]
     pub unsafe extern "C" fn PlayMenuSound(sound: u32) {
-        PlaySoundEffect(
-            SetAbsStringTableIndex(
-                KernelOwner::current().read(|owner| owner.menu_sounds),
-                sound as u16,
-            ),
-            0,
-            NON_POSITIONAL,
-            ptr::null_mut(),
-            GAME_SOUND_PRIORITY as u8,
-        );
+        if let Some(bank) = KernelOwner::current().read(|owner| owner.menu_sound_bank()) {
+            PlaySoundEffect(
+                SetAbsStringTableIndex(bank.as_raw().cast(), sound as u16),
+                0,
+                NON_POSITIONAL,
+                ptr::null_mut(),
+                GAME_SOUND_PRIORITY as u8,
+            );
+        }
     }
 
     /// # Safety

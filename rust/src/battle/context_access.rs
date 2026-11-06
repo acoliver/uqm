@@ -373,19 +373,14 @@ mod tactrans_native_access {
             self.queue_sound(usize::MAX, None);
         }
         pub(crate) fn play_ditty(&mut self, ship: ShipId) {
-            // SAFETY: the checked winner retains its loaded victory music.
-            unsafe {
-                play_ditty(self, ship);
-            }
+            play_ditty(self, ship);
         }
 
         pub(crate) fn replace_dead_ship(&mut self, dead: ElementId) {
-            // SAFETY: descriptor retirement and the typed picker run synchronously on the game thread.
-            unsafe {
-                new_ship_with_picker(self, dead, |cx, ship, side| {
-                    crate::battle::ship_native::engine::next_star_ship(cx, Some(ship), side)
-                });
-            }
+            new_ship_with_picker(self, dead, |cx, ship, side| {
+                // SAFETY: the native picker runs synchronously with these retained owners.
+                unsafe { crate::battle::ship_native::engine::next_star_ship(cx, Some(ship), side) }
+            });
         }
 
         pub fn stop_battle_music(&mut self) {

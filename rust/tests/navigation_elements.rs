@@ -94,8 +94,8 @@ fn interplanetary_flagship_keeps_motion_and_native_hooks() {
             solar.pBaseDesc = solar.PlanetDesc.as_mut_ptr();
             let old_solar = nav::pSolarSysState;
             nav::pSolarSysState = &mut *solar;
-            let old_race = nav::EncounterRace;
-            nav::EncounterRace = -1;
+            let old_race = uqm_rust::engine::World::current().read(|w| w.encounter_race);
+            uqm_rust::engine::World::current().write(|w| w.encounter_race = -1);
             let old_stamp = (**uqm_rust::engine::WorldData::current()).game.ship_stamp;
             let old_location = (**uqm_rust::engine::WorldData::current()).game.ip_location;
             let old_velocity = (**uqm_rust::engine::WorldData::current()).game.velocity;
@@ -136,7 +136,7 @@ fn interplanetary_flagship_keeps_motion_and_native_hooks() {
             (**uqm_rust::engine::WorldData::current()).game.ip_location = old_location;
             (**uqm_rust::engine::WorldData::current()).game.velocity = old_velocity;
             nav::pSolarSysState = old_solar;
-            nav::EncounterRace = old_race;
+            uqm_rust::engine::World::current().write(|w| w.encounter_race = old_race);
         }
     });
 }
@@ -158,7 +158,7 @@ fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
             solar.pBaseDesc = solar.MoonDesc.as_mut_ptr();
             solar.pOrbitalDesc = solar.MoonDesc.as_mut_ptr();
             let old_solar = nav::pSolarSysState;
-            let old_race = nav::EncounterRace;
+            let old_race = uqm_rust::engine::World::current().read(|w| w.encounter_race);
             let old_stamp = (**uqm_rust::engine::WorldData::current()).game.ship_stamp;
             let old_location = (**uqm_rust::engine::WorldData::current()).game.ip_location;
             let old_stars = (**uqm_rust::engine::Kernel::current()).stars_in_space;
@@ -178,7 +178,7 @@ fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
                 (id, queue.raw(id).cast::<nav::IP_GROUP>())
             });
             nav::pSolarSysState = &mut *solar;
-            nav::EncounterRace = -1;
+            uqm_rust::engine::World::current().write(|w| w.encounter_race = -1);
             (**uqm_rust::engine::Kernel::current()).stars_in_space = frames.frame(0);
             (**uqm_rust::engine::WorldData::current())
                 .game
@@ -217,7 +217,7 @@ fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
             (**uqm_rust::engine::WorldData::current()).game.ip_location = old_location;
             (**uqm_rust::engine::Kernel::current()).stars_in_space = old_stars;
             nav::pSolarSysState = old_solar;
-            nav::EncounterRace = old_race;
+            uqm_rust::engine::World::current().write(|w| w.encounter_race = old_race);
         }
     });
 }

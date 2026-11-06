@@ -3193,7 +3193,6 @@ pub type _bindgen_ty_26 = ::std::os::raw::c_uint;
 
 #[cfg(not(test))]
 unsafe extern "C" {
-    pub static mut EncounterRace: SIZE;
 }
 pub const STAR_STRING_BASE: _bindgen_ty_27 = 0;
 pub const DEVICE_STRING_BASE: _bindgen_ty_27 = 133;

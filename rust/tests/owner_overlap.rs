@@ -321,22 +321,19 @@ fn encounter_construction_keeps_fragment_order_infinite_crew_and_flagship_last()
 
 #[test]
 #[serial_test::serial]
-fn encounter_teardown_releases_world_before_activity_queries() {
+fn encounter_teardown_uses_retained_owners_without_reacquisition() {
     let mut game = Game::new();
     game.world.set_activity(CHECK_ABORT as u16);
-    let input = uqm_rust::engine::input::InputSession::new(
-        Default::default(),
-        game.kernel.configuration.clone(),
-    );
-    // SAFETY: the serialized fixture owns empty resources and the published lifecycle.
+    let input = uqm_rust::engine::input::InputSession::new(Default::default(), game.kernel.configuration.clone());
+    // SAFETY: this serialized fixture owns empty encounter resources.
     unsafe {
         bridge::with_game(&mut game, || {
-            assert_eq!(
-                uqm_rust::battle::encount_native::uninit_encounter(&input),
-                0
-            )
+            bridge::enter(|cx| {
+                assert_eq!(uqm_rust::battle::encount_native::uninit_encounter(cx, &input), 0);
+            });
         });
     }
+    assert_eq!(game.world.activity(), CHECK_ABORT as u16);
 }
 
 #[test]

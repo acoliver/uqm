@@ -161,13 +161,8 @@ pub(crate) mod engine {
         true
     }
 
-    pub(crate) unsafe fn play_ditty(cx: &mut Cx<'_>, ship: crate::engine::battle::ShipId) {
-        crate::ui::settings::play_music_for_world(
-            cx.world,
-            cx.desc(ship).ship_data.victory_ditty,
-            0,
-            3,
-        );
+    pub(crate) fn play_ditty(cx: &mut Cx<'_>, ship: crate::engine::battle::ShipId) {
+        crate::ui::settings::play_loaded_music(cx.world, cx.desc(ship).victory_music(), 0, 3);
         cx.kernel.ditty_playing = 1;
     }
 
@@ -295,7 +290,7 @@ pub(crate) mod engine {
     /// # Safety
     /// As for `new_ship`. The picker must return the next-ship result for the
     /// supplied player and must not retain the outgoing ship pointer.
-    pub unsafe fn new_ship_with_picker(
+    pub fn new_ship_with_picker(
         cx: &mut Cx<'_>,
         dead: ElementId,
         pick: impl FnOnce(&mut Cx<'_>, crate::engine::battle::ShipId, COUNT) -> BOOLEAN,
@@ -310,8 +305,8 @@ pub(crate) mod engine {
         }
         cx.set_winner_slot(None);
         stop_ditty(cx.kernel);
-        stop_music();
-        StopSound();
+        crate::ui::settings::stop_battle_music();
+        crate::sound::heart_ffi::stop_sound();
         cx.set_parent(dead, None);
         let restart = opponent_alive(cx, ship);
         let descriptor = cx
@@ -319,7 +314,9 @@ pub(crate) mod engine {
             .unwrap_or_else(|| panic!("dead ship descriptor"));
         descriptor.unload(cx.world, true, true);
 
-        UnbatchGraphics();
+        let _pause = std::ptr::NonNull::new(cx.kernel.space_context).map(|context| {
+            crate::graphics::context_abi::ContextLease::retain(context).pause_batch()
+        });
         if let Some(net) = &net {
             net.init_end_frames();
         }
@@ -329,7 +326,6 @@ pub(crate) mod engine {
         {
             cx.world
                 .set_activity(cx.world.activity() & !(IN_BATTLE as u16));
-            BatchGraphics();
             return;
         }
         if fleet_is_infinite(cx.world, cx.ship_state(ship).player as COUNT) == 0 {
@@ -343,7 +339,6 @@ pub(crate) mod engine {
             {
                 cx.world
                     .set_activity(cx.world.activity() & !(IN_BATTLE as u16));
-                BatchGraphics();
                 return;
             }
             if restart {
@@ -356,7 +351,6 @@ pub(crate) mod engine {
             cx.world
                 .set_activity(cx.world.activity() | CHECK_ABORT as u16);
         }
-        BatchGraphics();
     }
 
     pub(crate) fn explosion_preprocess(cx: &mut Cx<'_>, ship: ElementId) {

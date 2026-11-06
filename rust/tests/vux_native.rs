@@ -33,7 +33,7 @@ fn descriptor_laser_and_limpet_launch() {
             ship.ship_mut().ship_facing = 4;
             let h = with_rng(11, 0, || ship.weapon(1))[0];
             let laser = ship.weapon_record(h);
-            assert_eq!((*prim(laser)).Type, gfx_object_LINE_PRIM as GRAPHICS_PRIM);
+            assert_eq!((*prim(laser)).kind, gfx_object_LINE_PRIM as GRAPHICS_PRIM);
             assert_eq!((*laser).mass, 1);
             assert_eq!((*laser).current.location.x, 4000 + 48);
             let (velocity_x, velocity_y) = ((*laser).velocity).get_current_components();

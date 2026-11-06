@@ -455,7 +455,10 @@ impl Cx<'_> {
         self.kernel.elements.raw(id).cast()
     }
     #[cfg(not(test))]
-    pub(super) fn primitive(&mut self, id: ElementId) -> &mut PRIMITIVE {
+    pub(super) fn primitive(
+        &mut self,
+        id: ElementId,
+    ) -> &mut crate::engine::battle::DisplayPrimitive {
         let index = usize::from(self.kernel.elements[id].PrimIndex);
         assert!(index < 330, "invalid primitive index {index}");
         // SAFETY: the display authority remains live for the context's lifetime.
@@ -816,6 +819,8 @@ mod zero_descriptor_tests {
 #[derive(Debug)]
 pub struct RaceDescriptor {
     pub(crate) assets: Option<Box<super::ship_assets::ShipAssets>>,
+    pub(crate) loaded_victory: Option<crate::sound::resource_types::LoadedMusic>,
+    pub(crate) loaded_sounds: Option<crate::sound::owned_bank::LoadedSoundBank>,
     pub(crate) resources: super::template::RaceResources,
     pub ship_info: SHIP_INFO,
     pub fleet: FLEET_STUFF,

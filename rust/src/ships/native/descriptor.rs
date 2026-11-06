@@ -4,6 +4,8 @@ use super::abi::*;
 impl RaceDescriptor {
     pub const EMPTY: Self = Self {
         assets: None,
+        loaded_victory: None,
+        loaded_sounds: None,
         resources: crate::engine::battle::template::RaceResources::EMPTY,
         ship_info: SHIP_INFO {
             ship_flags: 0,

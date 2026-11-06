@@ -147,7 +147,7 @@ unsafe fn core(callback: uqm_rust::engine::battle::ElementFn, element: *mut Elem
     uqm_rust::app::bridge::enter(|cx| callback(cx, id));
 }
 
-unsafe fn prim(e: *mut ElementRecord) -> *mut PRIMITIVE {
+unsafe fn prim(e: *mut ElementRecord) -> *mut uqm_rust::engine::battle::DisplayPrimitive {
     uqm_rust::app::bridge::enter(|cx| std::ptr::from_mut(cx.display_primitive((*e).PrimIndex)))
 }
 fn rgba(c: Color) -> (u8, u8, u8, u8) {
@@ -704,14 +704,14 @@ fn glory_flash_switch_and_explosion_color_sequence_use_twelve_frame_ship_death()
         ] {
             (*ship.ptr()).life = life;
             with_rng(3, 0, || hooks::invoke_element_pointer(flash, ship.ptr()));
-            assert_eq!((*prim(ship.ptr())).Type, gfx_object_STAMPFILL_PRIM as u8);
+            assert_eq!((*prim(ship.ptr())).kind, gfx_object_STAMPFILL_PRIM as u8);
             assert_eq!(rgba((*prim(ship.ptr())).color), color);
             assert_ne!((*ship.ptr()).state_flags & CHANGING as u16, 0);
         }
         (*ship.ptr()).life = 33;
         with_rng(3, 0, || hooks::invoke_element_pointer(flash, ship.ptr()));
         assert!((*ship.ptr()).preprocess_func.is_none());
-        assert_eq!((*prim(ship.ptr())).Type, gfx_object_NUM_PRIMS as u8);
+        assert_eq!((*prim(ship.ptr())).kind, gfx_object_NUM_PRIMS as u8);
         let explosion = shared::element(shared::tail());
         assert_ne!(explosion, ship.ptr());
         assert_eq!(
@@ -735,7 +735,7 @@ fn glory_flash_switch_and_explosion_color_sequence_use_twelve_frame_ship_death()
             ),
             (4000, 4000)
         );
-        assert_eq!((*prim(explosion)).Type, gfx_object_STAMPFILL_PRIM as u8);
+        assert_eq!((*prim(explosion)).kind, gfx_object_STAMPFILL_PRIM as u8);
         assert_eq!(rgba((*prim(explosion)).color), (255, 255, 255, 255));
         assert!((*explosion).postprocess_func.is_none() && (*explosion).death_func.is_none());
         let animate = (*explosion).preprocess_func.unwrap();
@@ -780,7 +780,7 @@ fn failed_visual_explosion_allocation_still_hides_the_ship() {
         (*ship.ptr()).life = 33;
         hooks::invoke_element_pointer((*ship.ptr()).preprocess_func.unwrap(), ship.ptr());
         assert_eq!({ shared::tail() }, ship.handle);
-        assert_eq!((*prim(ship.ptr())).Type, gfx_object_NUM_PRIMS as u8);
+        assert_eq!((*prim(ship.ptr())).kind, gfx_object_NUM_PRIMS as u8);
         assert!((*ship.ptr()).preprocess_func.is_none());
     })
 }

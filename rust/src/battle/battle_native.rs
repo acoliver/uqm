@@ -1,7 +1,5 @@
 //! Battle entry, ordered input processing, and frame scheduling from `battle.c`.
 
-#[cfg(not(test))]
-use crate::engine::World as WorldOwner;
 use crate::ships::native::abi;
 
 const BATTLE_LEFT: u8 = 1 << 0;
@@ -131,25 +129,6 @@ pub(crate) mod engine {
     use crate::battle::process_native::engine::redraw_queue;
     use crate::engine::observe::Io;
 
-    use crate::state::ffi::rust_get_game_state_bits as getGameState;
-
-    use crate::state::ffi::rust_set_game_state_bits as setGameState;
-
-    /// # Safety
-    /// Game state must be initialized and accessed only on the game thread.
-    pub fn activity() -> u16 {
-        crate::engine::World::current().read(|world| world.activity())
-    }
-    /// # Safety
-    /// `start..=end` must name a valid game-state bit field on the game thread.
-    pub fn game_state(start: u32, end: u32) -> u8 {
-        WorldOwner::current().read(|world| getGameState(world, start as i32, end as i32))
-    }
-    /// # Safety
-    /// `start..=end` must name a valid game-state bit field owned by the game thread.
-    pub fn set_game_state(start: u32, end: u32, value: u8) {
-        WorldOwner::current().write(|world| setGameState(world, start as i32, end as i32, value));
-    }
     pub const fn rgb15(r: u8, g: u8, b: u8) -> Color {
         Color {
             r: (r << 3) | (r >> 2),

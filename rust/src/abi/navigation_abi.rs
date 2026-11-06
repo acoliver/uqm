@@ -3638,7 +3638,6 @@ pub use crate::battle::encount_native::engine::fleet_is_infinite;
 
 #[cfg(not(test))]
 extern "C" {
-    pub static mut EncounterRace: SIZE;
 }
 extern "C" {
     pub static mut EncounterGroup: BYTE;

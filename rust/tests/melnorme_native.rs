@@ -275,7 +275,7 @@ fn initial_pump_uses_the_c_missile_block_at_all_facings_and_coordinate_limits() 
                     .wrapping_sub(dy >> VELOCITY_SHIFT);
                 assert_eq!(((*e).current.location.x, (*e).current.location.y), (x, y));
                 assert_eq!(((*e).next.location.x, (*e).next.location.y), (0, 0));
-                assert_eq!((*prim(e)).Type, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
+                assert_eq!((*prim(e)).kind, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
                 battle_context::dispose(h);
             }
         }
@@ -300,7 +300,7 @@ fn appearing_charge_only_zeros_the_entire_velocity_record() {
             assert_eq!((*e).thrust, 13);
             assert_eq!(ship.ship_mut().energy_counter, 19);
             assert_eq!(queue(), before);
-            assert_eq!((*prim(e)).Type, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
+            assert_eq!((*prim(e)).kind, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
             assert_rng_after(7, 0);
         }
     })
@@ -343,7 +343,7 @@ fn held_charge_replaces_the_element_and_uses_the_old_level_for_damage() {
                         uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
                     );
                     assert!((*p).preprocess_func.is_none() && (*p).postprocess_func.is_some());
-                    assert_eq!((*prim(e)).Type, gfx_object_NUM_PRIMS as GRAPHICS_PRIM);
+                    assert_eq!((*prim(e)).kind, gfx_object_NUM_PRIMS as GRAPHICS_PRIM);
                     assert_ne!((*e).state_flags & NONSOLID as u16, 0);
                     assert_eq!(
                         velocity_fields(&(*p).velocity),
@@ -691,7 +691,7 @@ fn confusion_collision_inserts_a_controller_at_the_head_with_exactly_one_rng_dra
                     (*controller).current.image.frame.raw()
                 );
                 assert_eq!(
-                    (*prim(controller)).Type,
+                    (*prim(controller)).kind,
                     gfx_object_NUM_PRIMS as GRAPHICS_PRIM
                 );
                 assert_eq!((*e).hits, 0);
@@ -741,7 +741,7 @@ fn confusion_reuses_the_first_same_player_nonsolid_special_even_if_it_is_a_trail
                 (*e).life = 1;
                 (*e).target = victim.ship_mut().hShip;
                 (*e).parent = uqm_rust::engine::battle::Parent::Ship(ship.ship_id);
-                (*prim(e)).Type = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
+                (*prim(e)).kind = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
                 battle::put(h);
                 candidates.push(e);
             }
@@ -769,7 +769,7 @@ fn confusion_reuses_the_first_same_player_nonsolid_special_even_if_it_is_a_trail
                 (*chosen).preprocess_func.is_none(),
                 "reuse does not initialize the callback"
             );
-            assert_eq!((*prim(chosen)).Type, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
+            assert_eq!((*prim(chosen)).kind, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
             for &i in &[0, 1, 2, 4] {
                 assert_eq!((*candidates[i]).life, 1);
             }
@@ -861,7 +861,7 @@ fn controller_follows_target_overrides_controls_wraps_animation_and_emits_one_fr
                     (*trail).next.image.frame.raw(),
                     (*controller).next.image.frame.raw()
                 );
-                assert_eq!((*prim(trail)).Type, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
+                assert_eq!((*prim(trail)).kind, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
                 assert_eq!((*trail).preprocess_func.unwrap().address(), (pre).address());
                 // The visible one-frame copy follows, but does not override inputs
                 // or emit another copy because its turn_wait is zero.

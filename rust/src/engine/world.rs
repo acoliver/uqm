@@ -55,6 +55,7 @@ pub struct World {
     pub story: Option<GameState>,
     pub files: StateFileManager,
     pub current_star: Option<StarId>,
+    pub encounter_race: i16,
 }
 
 impl World {
@@ -77,6 +78,7 @@ impl World {
             story: None,
             files: StateFileManager::new(),
             current_star: None,
+            encounter_race: 0,
         }
     }
 

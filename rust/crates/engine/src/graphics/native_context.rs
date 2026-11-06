@@ -11,7 +11,7 @@ pub(super) struct Allocation {
 
 #[derive(Clone)]
 pub struct ContextFrame {
-    frame: FRAME,
+    pub(super) frame: FRAME,
     _allocations: Vec<native_drawables::DrawableLease>,
 }
 impl ContextFrame {
@@ -63,6 +63,13 @@ enum Operation {
 
 #[derive(Clone)]
 pub struct ContextLease(Rc<Allocation>);
+
+pub struct BatchPause(ContextLease);
+impl Drop for BatchPause {
+    fn drop(&mut self) {
+        self.0.apply(Operation::BeginBatch);
+    }
+}
 
 struct ContextBatch {
     context: ContextLease,
@@ -175,6 +182,11 @@ impl ContextLease {
         result
     }
 
+    pub fn pause_batch(&self) -> BatchPause {
+        self.apply(Operation::EndBatch);
+        BatchPause(self.clone())
+    }
+
     pub fn select(&self) {
         self.apply(Operation::Select);
     }
@@ -284,6 +296,19 @@ impl ContextLease {
             CharCount: u16::MAX,
         };
         self.apply(Operation::Text(font.clone(), text, color));
+    }
+
+    pub fn draw_primitives(&self, batch: &mut super::native_batch::NativeBatch, scale: i32) {
+        let _target = self.retain_target();
+        let head = if batch.is_empty() { u16::MAX } else { 0 };
+        // SAFETY: this lease retains the graphics-thread context/target. The
+        // batch owns bounded links and retains all registered stamp sources;
+        // it cannot contain text pointers into caller storage.
+        unsafe {
+            super::gfx_common_abi::SetGraphicScale(scale);
+            super::frame_abi::DrawBatch(batch.primitives.as_mut_ptr(), u32::from(head), 0);
+            super::gfx_common_abi::SetGraphicScale(0);
+        }
     }
 
     pub fn clear(&self) {

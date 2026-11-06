@@ -1,6 +1,7 @@
 pub(crate) mod access;
 pub mod context;
 pub(crate) mod display;
+pub use display::DisplayPrimitive;
 pub mod frames;
 pub mod hooks;
 pub mod input;

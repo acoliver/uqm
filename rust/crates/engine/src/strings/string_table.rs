@@ -2,8 +2,9 @@
 //!
 //! A table is one array of entries: `size` strings, followed by `size` names
 //! (`HAS_NAMEINDEX`), `size` sound clip names (`HAS_SOUND_CLIPS`) and `size`
-//! timestamps (`HAS_TIMESTAMP`), in that order. The loaders in C still fill
-//! these structs in directly, so the layouts must match `strintrn.h`.
+//! timestamps (`HAS_TIMESTAMP`), in that order. Native consumers share the
+//! entry layout and the first four header fields. Rust's private ownership tag
+//! distinguishes plain-text allocations from tables with individually allocated data.
 
 use std::ffi::{c_char, c_int, c_void};
 use std::ptr::null_mut;
@@ -31,6 +32,7 @@ pub struct StringTable {
     pub strings: *mut StringTableEntry,
     /// `StringHashTable` from name to entry; owned by the loader.
     pub name_index: *mut c_void,
+    pub(crate) owned_text: bool,
 }
 
 /// Number of entry arrays of `size` entries a table with `flags` holds.
@@ -41,29 +43,30 @@ fn array_count(flags: u16) -> usize {
 }
 
 /// # Safety
-/// Allocates with the game allocator; release with [`FreeStringTable`].
+/// Allocates a boxed header and game-allocator entries; release with [`FreeStringTable`].
 #[no_mangle]
 pub unsafe extern "C" fn AllocStringTable(num_entries: c_int, flags: c_int) -> *mut StringTable {
-    let table = rust_hmalloc(std::mem::size_of::<StringTable>()).cast::<StringTable>();
     let flags = flags as u16;
     let total = num_entries as usize * array_count(flags);
     let strings =
         rust_hmalloc(std::mem::size_of::<StringTableEntry>() * total).cast::<StringTableEntry>();
+    let mut table = Box::new(StringTable {
+        flags,
+        size: num_entries,
+        strings,
+        name_index: null_mut(),
+        owned_text: false,
+    });
+    let parent = std::ptr::from_mut(table.as_mut());
     for i in 0..total {
         strings.add(i).write(StringTableEntry {
             data: null_mut(),
             length: 0,
             index: i as c_int,
-            parent: table,
+            parent,
         });
     }
-    table.write(StringTable {
-        flags,
-        size: num_entries,
-        strings,
-        name_index: null_mut(),
-    });
-    table
+    Box::into_raw(table)
 }
 
 /// Frees the table and the data of the first `size * (1 + clips + timestamps)`
@@ -78,6 +81,13 @@ pub unsafe extern "C" fn FreeStringTable(table: *mut StringTable) {
         return;
     }
     let t = &*table;
+    if t.owned_text {
+        drop(Box::from_raw(
+            table.cast::<super::owned_table::TextAllocation>(),
+        ));
+        return;
+    }
+    let t = Box::from_raw(table);
     let owning_arrays =
         1 + usize::from(t.flags & HAS_SOUND_CLIPS != 0) + usize::from(t.flags & HAS_TIMESTAMP != 0);
     for i in 0..t.size as usize * owning_arrays {
@@ -87,7 +97,6 @@ pub unsafe extern "C" fn FreeStringTable(table: *mut StringTable) {
         }
     }
     rust_hfree(t.strings.cast());
-    rust_hfree(table.cast());
 }
 
 /// Returns `TRUE` (1).

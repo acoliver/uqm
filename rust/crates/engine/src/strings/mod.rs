@@ -5,3 +5,5 @@ pub mod sfileins;
 pub mod sresins;
 pub mod string_table;
 pub mod unicode;
+
+pub mod owned_table;

@@ -156,23 +156,18 @@ unsafe fn init_kernel(kernel: &mut crate::engine::Kernel, activity: u16) -> u32 
         if kernel.status_frame.is_null() {
             return 0;
         }
-        kernel.game_strings =
-            CaptureStringTable(LoadStringTableInstance(c"text.starcon".as_ptr())).cast();
-        if kernel.game_strings.is_null() {
+        let Some(text) = crate::strings::owned_table::LoadedTextTable::load(c"text.starcon") else {
             return 0;
-        }
-        kernel.micro_font =
-            crate::graphics::resgfx::LoadGraphicInstance(c"font.micro".as_ptr()).cast();
-        if kernel.micro_font.is_null() {
+        };
+        kernel.install_game_text(text);
+        let Some(font) = crate::graphics::native_font::LoadedFont::load(c"font.micro") else {
             return 0;
-        }
-        kernel.menu_sounds = CaptureStringTable(
-            crate::sound::resource_types::LoadSoundInstance(c"sounds.menu".as_ptr()).cast(),
-        )
-        .cast();
-        if kernel.menu_sounds.is_null() {
+        };
+        kernel.install_micro_font(font);
+        let Some(bank) = crate::sound::owned_bank::LoadedSoundBank::load(c"sounds.menu") else {
             return 0;
-        }
+        };
+        kernel.install_menu_sounds(bank);
         1
     };
     if loaded == 0 {
