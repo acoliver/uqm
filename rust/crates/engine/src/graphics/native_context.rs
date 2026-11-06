@@ -56,8 +56,9 @@ enum Operation {
     Clear,
     Fill(Color, RECT),
     Outline(Color, RECT),
-    FilledStamp(Color, STAMP),
+    FilledStamp(Color, STAMP, bool),
     Stamp(STAMP),
+    Font(super::native_font::FontLease),
     Text(super::native_font::FontLease, TEXT, Color),
 }
 
@@ -72,12 +73,20 @@ impl Drop for BatchPause {
 }
 
 struct ContextBatch {
-    context: ContextLease,
-    previous: Option<ContextLease>,
+    selection: ContextSelection,
 }
 impl Drop for ContextBatch {
     fn drop(&mut self) {
-        self.context.apply(Operation::EndBatch);
+        self.selection.context.apply(Operation::EndBatch);
+    }
+}
+
+struct ContextSelection {
+    context: ContextLease,
+    previous: Option<ContextLease>,
+}
+impl Drop for ContextSelection {
+    fn drop(&mut self) {
         if let Some(previous) = &self.previous {
             previous.select();
         } else {
@@ -115,8 +124,17 @@ impl ContextLease {
         Self(allocation.unwrap_or_else(|| panic!("context is unowned or retired: {context:p}")))
     }
 
-    fn apply(&self, operation: Operation) -> (FRAME, CONTEXT) {
+    pub(super) fn assert_thread(&self) {
         self.0.owned.assert_thread();
+    }
+
+    pub fn highlight(&self, rect: RECT) -> super::native_highlight::Highlight {
+        self.assert_thread();
+        super::native_highlight::Highlight::new(self.clone(), self.0.context, rect)
+    }
+
+    fn apply(&self, operation: Operation) -> (FRAME, CONTEXT) {
+        self.assert_thread();
         let selected = if matches!(&operation, Operation::Deselect) {
             std::ptr::null_mut()
         } else {
@@ -154,11 +172,17 @@ impl ContextLease {
                     context_abi::SetContextForeGroundColor(color);
                     frame_abi::DrawRectangle(&mut rect);
                 }
-                Operation::FilledStamp(color, mut stamp) => {
-                    context_abi::SetContextForeGroundColor(color);
+                Operation::FilledStamp(color, mut stamp, restore) => {
+                    let previous = context_abi::SetContextForeGroundColor(color);
                     frame_abi::DrawFilledStamp(&mut stamp);
+                    if restore {
+                        context_abi::SetContextForeGroundColor(previous);
+                    }
                 }
                 Operation::Stamp(mut stamp) => frame_abi::DrawStamp(&mut stamp),
+                Operation::Font(font) => {
+                    super::font_abi::SetContextFont(font.as_raw());
+                }
                 Operation::Text(font, mut text, color) => {
                     super::font_abi::SetContextFont(font.as_raw());
                     context_abi::SetContextForeGroundColor(color);
@@ -173,11 +197,22 @@ impl ContextLease {
         ContextFrame::retain(NonNull::new(self.apply(Operation::Select).0))
     }
 
-    pub fn draw_batch<R>(&self, draw: impl FnOnce() -> R) -> R {
+    fn selection(&self) -> ContextSelection {
         let previous = NonNull::new(self.apply(Operation::Select).1).map(Self::retain);
-        let batch = ContextBatch {
+        ContextSelection {
             context: self.clone(),
             previous,
+        }
+    }
+
+    pub fn with_selected<R>(&self, draw: impl FnOnce() -> R) -> R {
+        let _selection = self.selection();
+        draw()
+    }
+
+    pub fn draw_batch<R>(&self, draw: impl FnOnce() -> R) -> R {
+        let batch = ContextBatch {
+            selection: self.selection(),
         };
         self.apply(Operation::BeginBatch);
         let result = draw();
@@ -259,6 +294,19 @@ impl ContextLease {
     }
 
     pub fn draw_filled_stamp(&self, source: &ContextFrame, origin: POINT, color: Color) {
+        self.filled_stamp(source, origin, color, false);
+    }
+
+    pub fn draw_filled_stamp_preserving_color(
+        &self,
+        source: &ContextFrame,
+        origin: POINT,
+        color: Color,
+    ) {
+        self.filled_stamp(source, origin, color, true);
+    }
+
+    fn filled_stamp(&self, source: &ContextFrame, origin: POINT, color: Color, restore: bool) {
         let _target = self.retain_target();
         self.apply(Operation::FilledStamp(
             color,
@@ -266,6 +314,7 @@ impl ContextLease {
                 origin,
                 frame: source.frame,
             },
+            restore,
         ));
     }
 
@@ -280,6 +329,12 @@ impl ContextLease {
             origin,
             frame: source.frame,
         }));
+    }
+
+    pub fn set_font(&self, font: &super::native_font::FontLease) {
+        let previous = self.0.font.replace(Some(font.clone()));
+        self.apply(Operation::Font(font.clone()));
+        drop(previous);
     }
 
     pub fn draw_text(

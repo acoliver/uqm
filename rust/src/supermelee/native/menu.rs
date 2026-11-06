@@ -1,21 +1,22 @@
 //! Super Melee setup lifecycle and menu dispatch.
-mod rules;
+pub(super) mod rules;
 #[cfg(not(test))]
 pub(crate) mod live {
     use crate::battle::{COMPUTER_CONTROL, HUMAN_CONTROL, NETWORK_CONTROL, PSYTRON_CONTROL};
     use crate::comm::hail::game_string;
-    use crate::engine::{Kernel as KernelOwner, World as WorldOwner};
+    use crate::engine::Kernel as KernelOwner;
+    use crate::supermelee::session::MeleeSession;
 
-    use crate::game_init::macro_abi::LoadMusic;
-    use crate::graphics::{drawable_abi, resgfx::LoadGraphicInstance as LoadGraphic};
+    use crate::graphics::{context_abi::ContextLease, drawable_abi::LoadedDrawable};
+    use std::ptr::NonNull;
 
-    use crate::mainloop::restart_menu::c_extern::{do_popup_window, FadeMusic, SeedRandomNumbers};
-    use crate::math::{delete_context, new_context};
-    use crate::navigation::abi::{init_space, uninit_space, MeleeConnectDialog, TEXTENTRY_STATE};
+    use crate::mainloop::restart_menu::c_extern::{FadeMusic, SeedRandomNumbers};
+    use crate::navigation::abi::{init_space, uninit_space, TEXTENTRY_STATE};
 
     use crate::ships::native::abi::*;
 
     use crate::ui::shipstat::ClearShipStatus;
+    pub(crate) mod admission;
     mod boundary;
     use boundary::*;
     const FADE_ALL_TO_COLOR: u32 = 253;
@@ -32,97 +33,165 @@ pub(crate) mod live {
     use battle::*;
     use changes::{local_change_ship, local_change_team, local_change_team_name, view_name};
     use drawing::{
-        controls, current, highlight, init_screen, name, redraw, rgb, ship_box, status,
-        status_player, text, worth, DrawMeleeShipStrings, GetShipBox, MeleeFrame,
-        Melee_flashSelection, RepairMeleeFrame, P_MELEE_STATE,
+        controls, current, draw_ship_strings, flash_selection, highlight, init_screen, name,
+        redraw, repair_frame, rgb, ship_box, slot_rect, status, status_player, text, worth,
     };
     use editing::*;
-    unsafe fn run_menu_frame(
-        state: *mut MELEE_STATE,
+    fn load_menu_graphics(state: &mut MeleeSession, offscreen: ContextLease) {
+        state.menu_graphic = Some(
+            LoadedDrawable::load(
+                std::ffi::CStr::from_bytes_with_nul(MELEE_SCREEN_PMAP_ANIM)
+                    .unwrap_or_else(|error| panic!("menu graphic resource: {error}")),
+            )
+            .unwrap_or_else(|| panic!("melee menu graphic")),
+        );
+        state.build_picker = Some(
+            crate::supermelee::native::build_picker::live::build_build_pick_frame(
+                offscreen,
+                state
+                    .menu_context
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("menu context not loaded"))
+                    .clone(),
+                state.menu_frames().context_frame(27),
+                &state.catalog,
+            ),
+        );
+    }
+
+    unsafe fn load_setup(state: &mut MeleeSession, cx: &mut crate::engine::battle::Cx<'_>) {
+        if !state.load_config(&mut cx.kernel.player_control) {
+            cx.kernel.player_control[0] = HUMAN_CONTROL | 16;
+            let team = state.load.builtins[0].clone();
+            cx.with_legacy(|| local_change_team(state, 0, &team));
+            cx.kernel.player_control[1] = COMPUTER_CONTROL | 16;
+            let team = state.load.builtins[1].clone();
+            cx.with_legacy(|| local_change_team(state, 1, &team));
+        }
+    }
+
+    unsafe fn change_option(
+        state: &mut MeleeSession,
         cx: &mut crate::engine::battle::Cx<'_>,
+        next: u8,
+    ) {
+        if state.melee_option == 1 || state.melee_option == 7 {
+            cx.with_legacy(|| status_player(state, -1));
+        }
+        cx.with_legacy(|| highlight(state, state.melee_option, false));
+        state.melee_option = next;
+        cx.with_legacy(|| highlight(state, next, true));
+        if next == 1 || next == 7 {
+            let side = usize::from(next == 1);
+            let control = cx.kernel.player_control[side];
+            cx.with_legacy(|| {
+                status_player(state, super::rules::network_status_side(side, control))
+            });
+        }
+    }
+
+    unsafe fn run_menu_frame(
+        state: *mut MeleeSession,
+        cx: &mut crate::engine::battle::Cx<'_>,
+        io: &mut crate::engine::observe::Io<'_>,
         input: &crate::engine::input::InputSession,
     ) -> bool {
-        use crate::supermelee::netplay::session::MenuPhase;
-        match (*state).phase {
-                MenuPhase::Confirm => confirm(input, state, cx) != 0,
-                phase => cx.with_legacy(|| match phase {
-                    MenuPhase::Menu => do_melee(state, input),
-                    MenuPhase::Connecting => connecting(state, input),
-                    MenuPhase::Editing => edit(state, input),
-                    MenuPhase::Loading => do_load_team(state, input),
-                    MenuPhase::Building => panic!("build picker escaped its nested input loop"),
-                    MenuPhase::Confirm => unreachable!(),
-                } != 0),
-            }
+        use crate::supermelee::session::MenuPhase;
+        (match (*state).phase {
+            MenuPhase::Menu => do_melee(state, cx, io, input),
+            MenuPhase::Confirm => confirm(input, state, cx, io),
+            MenuPhase::Connecting => connecting(state, cx, io, input),
+            MenuPhase::Editing => edit(state, cx, io, input),
+            MenuPhase::Loading => do_load_team(state, cx, input),
+            MenuPhase::Building => panic!("build picker escaped its nested input loop"),
+        }) != 0
     }
-    pub(super) unsafe fn key(input: &crate::engine::input::InputSession, key: u32) -> bool {
+    pub(super) fn key(input: &crate::engine::input::InputSession, key: u32) -> bool {
         input.pulsed().menu[key as usize] != 0
     }
-    unsafe fn select_option(input: &crate::engine::input::InputSession, state: *mut MELEE_STATE) {
+    unsafe fn select_option(
+        input: &crate::engine::input::InputSession,
+        state: *mut MeleeSession,
+        cx: &mut crate::engine::battle::Cx<'_>,
+        io: &mut crate::engine::observe::Io<'_>,
+    ) {
         match (*state).melee_option {
-            4 => start_button(state),
+            4 => start_button(state, cx),
             3 | 5 => {
                 (*state).initialized = 0;
                 (*state).side = u16::from((*state).melee_option != 3);
-                do_load_team(state, input);
+                do_load_team(state, cx, input);
             }
             2 | 6 => {
                 (*state).side = u16::from((*state).melee_option != 2);
                 if (*state).melee_setup.fleet_value[(*state).side as usize] > 0 {
-                    do_save_team(state);
+                    let screen = ContextLease::retain(
+                        NonNull::new(cx.kernel.screen_context.cast())
+                            .unwrap_or_else(|| panic!("melee save context")),
+                    );
+                    cx.with_legacy(|| do_save_team(state, &screen));
                 } else {
-                    PlayMenuSound(2);
+                    crate::ui::settings::play_menu_sound(cx.kernel, cx.world, 2);
                 }
             }
-            9 => crate::engine::World::current()
-                .write(|world| world.set_activity(world.activity() | CHECK_ABORT as u16)),
+            9 => cx
+                .world
+                .set_activity(cx.world.activity() | CHECK_ABORT as u16),
             0 | 8 => {
                 let side = u16::from((*state).melee_option == 0);
-                let confirmed = MeleeConnectDialog(&mut (*state).netplay, side as i32);
-                redraw();
+                let confirmed = crate::front_end::cnctdlg::melee_connect_dialog(
+                    cx,
+                    io,
+                    &mut (*state).netplay,
+                    side as i32,
+                );
+                cx.with_legacy(|| redraw(&*state));
                 (*state).last_input_time = GetTimeCounter();
                 if confirmed != 0 {
                     (*state).initialized = 0;
-                    (*state).phase = crate::supermelee::netplay::session::MenuPhase::Connecting;
+                    (*state).phase = crate::supermelee::session::MenuPhase::Connecting;
                 }
             }
-            1 | 7 => next_control(state, usize::from((*state).melee_option == 1)),
+            1 | 7 => next_control(state, cx, io, usize::from((*state).melee_option == 1)),
             _ => {}
         }
     }
     /// # Safety
-    /// Call on the game thread after kernel/resource initialization. Any state
-    /// pointer must remain exclusively accessible through the nested input loop.
+    /// State and its graphics remain live through this synchronous menu frame.
     pub unsafe fn do_melee(
-        state: *mut MELEE_STATE,
+        state: *mut MeleeSession,
+        cx: &mut crate::engine::battle::Cx<'_>,
+        io: &mut crate::engine::observe::Io<'_>,
         input: &crate::engine::input::InputSession,
     ) -> u32 {
         let time = GetTimeCounter();
         input.set_paused(false);
-        let activity = crate::engine::World::current().read(|world| world.activity());
-        if activity & CHECK_ABORT as u16 != 0 {
+        if cx.world.activity() & CHECK_ABORT as u16 != 0 {
             return 0;
         }
-        SetMenuSounds(input, 15, 16);
+        input.set_menu_sounds(15, 16);
         if (*state).initialized == 0 {
-            if !(*state).h_music.is_null() {
-                stop_music();
-                DestroyMusic((*state).h_music);
-                (*state).h_music = ptr::null_mut();
+            if (*state).h_music.is_some() {
+                cx.with_legacy(|| stop_music());
+                drop((*state).h_music.take());
             }
-            (*state).h_music = LoadMusic(MELEE_MUSIC.as_ptr().cast()).cast();
+            let music_name = std::ffi::CStr::from_bytes_with_nul(MELEE_MUSIC)
+                .unwrap_or_else(|error| panic!("melee music resource name: {error}"));
+            (*state).h_music = uqm_engine::sound::resource_types::LoadedMusic::load(music_name);
             (*state).initialized = 1;
             (*state).melee_option = 4;
-            PlayMusic((*state).h_music, 1, 1);
-            init_screen();
-            FadeScreen(FADE_ALL_TO_COLOR, 840 / 2);
+            crate::ui::settings::play_loaded_music(cx.world, (*state).h_music.as_ref(), 1, 1);
+            cx.with_legacy(|| {
+                init_screen(&*state);
+                FadeScreen(FADE_ALL_TO_COLOR, 840 / 2);
+            });
             (*state).last_input_time = GetTimeCounter();
             return 1;
         }
-        poll_menu(state, 0);
+        poll_menu(state, cx, io, 0);
         if key(input, KEY_MENU_CANCEL) || key(input, KEY_MENU_LEFT) {
             (*state).last_input_time = GetTimeCounter();
-            highlight((*state).melee_option, false);
+            cx.with_legacy(|| highlight(&*state, (*state).melee_option, false));
             (*state).melee_option = 10;
             (*state).initialized = 0;
             (*state).side = 0;
@@ -133,7 +202,7 @@ pub(crate) mod live {
                 (*state).row = 1;
                 (*state).col = 6;
             }
-            edit(state, input);
+            edit(state, cx, io, input);
         } else {
             let mut next = (*state).melee_option;
             let mut force = false;
@@ -144,7 +213,7 @@ pub(crate) mod live {
                 (*state).last_input_time = GetTimeCounter();
                 next = super::rules::next_option(next, false, true);
             }
-            let controls = KernelOwner::current().read(|owner| owner.player_control);
+            let controls = cx.kernel.player_control;
             if controls[0] & controls[1] & PSYTRON_CONTROL != 0
                 && GetTimeCounter().wrapping_sub((*state).last_input_time) > 840 * 10
             {
@@ -152,145 +221,69 @@ pub(crate) mod live {
                 next = 4;
             }
             if next != (*state).melee_option {
-                if (*state).melee_option == 1 || (*state).melee_option == 7 {
-                    status_player(state, -1);
-                }
-                highlight((*state).melee_option, false);
-                (*state).melee_option = next;
-                highlight(next, true);
-                if next == 1 || next == 7 {
-                    let side = usize::from(next == 1);
-                    let control = KernelOwner::current().read(|owner| owner.player_control[side]);
-                    status_player(state, super::rules::network_status_side(side, control));
-                }
+                change_option(&mut *state, cx, next);
             }
             if key(input, KEY_MENU_SELECT) || force {
-                select_option(input, state);
-                let activity = crate::engine::World::current().read(|world| world.activity());
-                if activity & CHECK_ABORT as u16 != 0 {
+                select_option(input, state, cx, io);
+                if cx.world.activity() & CHECK_ABORT as u16 != 0 {
                     return 0;
                 }
             }
         }
-        // SAFETY: DoMelee owns the menu and its session on the game thread.
-        unsafe { (*state).netplay.flush_packet_queues() };
-        disconnects(state);
-        Melee_flashSelection(state);
-        SleepThreadUntil(time.wrapping_add(840 / 30));
+        flush_menu(state, cx, io);
+        disconnects(state, cx);
+        cx.with_legacy(|| {
+            flash_selection(&mut *state);
+            SleepThreadUntil(time.wrapping_add(840 / 30));
+        });
         1
     }
-    unsafe fn load_config(state: *mut MELEE_STATE) -> bool {
-        use std::io::Read;
-        use uqm_engine::io::uio_owned::Directory;
-        let directory = Directory::retain(
-            std::ptr::NonNull::new(configDir.cast()).unwrap_or_else(|| panic!("config directory")),
+    fn admit_menu_rendering(state: &mut MeleeSession, kernel: &KernelOwner) -> ContextLease {
+        let offscreen = ContextLease::retain(
+            NonNull::new(kernel.off_screen_context.cast())
+                .unwrap_or_else(|| panic!("melee offscreen context")),
         );
-        let Ok(mut stream) = directory.open(c"melee.cfg") else {
-            return false;
-        };
-        if stream.len().ok() != Some(140) {
-            return false;
-        }
-        for side in 0..2 {
-            let mut control = [0];
-            if stream.read_exact(&mut control).is_err() {
-                return false;
-            }
-            (**KernelOwner::current()).player_control[side] = control[0];
-            let Ok(record) = uqm_save::mle::Team::read_from(&mut stream) else {
-                return false;
-            };
-            let setup = &mut (*state).melee_setup;
-            setup.teams[side] = record.into();
-            setup.fleet_value[side] = setup.recompute_fleet_value(side);
-            if control[0] & NETWORK_CONTROL != 0 {
-                (**KernelOwner::current()).player_control[side] = HUMAN_CONTROL | 16;
-            }
-        }
-        true
+        state.menu_context = Some(ContextLease::retain(
+            NonNull::new(kernel.space_context.cast())
+                .unwrap_or_else(|| panic!("melee drawing context")),
+        ));
+        state.menu_target = Some(crate::graphics::context_abi::ContextFrame::retain(Some(
+            NonNull::new(kernel.screen.cast()).unwrap_or_else(|| panic!("melee screen frame")),
+        )));
+        state.menu_font = Some(crate::graphics::native_font::FontLease::retain(
+            NonNull::new(kernel.micro_font.cast()).unwrap_or_else(|| panic!("melee menu font")),
+        ));
+        offscreen
     }
-    unsafe fn write_config(state: *mut MELEE_STATE) -> bool {
-        use std::io::Write;
-        use uqm_engine::io::uio_owned::Directory;
-        let directory = Directory::retain(
-            std::ptr::NonNull::new(configDir.cast()).unwrap_or_else(|| panic!("config directory")),
-        );
-        let Ok(mut stream) = directory.create(c"melee.cfg") else {
-            return false;
-        };
-        let result = (|| -> std::io::Result<()> {
-            for side in 0..2 {
-                stream.write_all(&[
-                    KernelOwner::current().read(|owner| owner.player_control[side])
-                ])?;
-                uqm_save::mle::Team::from(&(*state).melee_setup.teams[side])
-                    .write_to(&mut stream)?;
-            }
-            Ok(())
-        })();
-        let closed = stream.finish();
-        if result.and(closed).is_err() {
-            let _ = directory.remove(c"melee.cfg");
-            false
-        } else {
-            true
-        }
-    }
-    fn new_menu_state(
-        kernel: &KernelOwner,
-        input: &crate::engine::input::InputSession,
-    ) -> MELEE_STATE {
-        MELEE_STATE {
-            phase: crate::supermelee::netplay::session::MenuPhase::Menu,
-            initialized: 0,
-            melee_started: 0,
-            melee_option: 0,
-            side: 0,
-            row: 0,
-            col: 0,
-            melee_setup: crate::supermelee::setup::team::MeleeSetup::new(),
-            load: crate::supermelee::setup::browser::TeamBrowser::new(
-                crate::supermelee::setup::persistence::builtin_teams(),
-            ),
-            current_ship: 0,
-            cur_index: 0,
-            build_pick_confirmed: 0,
-            random_context: ptr::null_mut(),
-            last_input_time: 0,
-            h_music: ptr::null_mut(),
-            netplay: crate::supermelee::netplay::NetplaySession::with_input(input.clone()),
-            catalog: crate::ships::master_native::choices(&kernel.master_queue),
-        }
-    }
-
     /// # Safety
     /// Run on the initialized game thread with exclusive access to native menu resources.
     pub unsafe fn melee(
         cx: &mut crate::engine::battle::Cx<'_>,
         io: &mut crate::engine::observe::Io<'_>,
+        config: uqm_engine::io::uio_owned::Directory,
+        teams: uqm_engine::io::uio_owned::Directory,
     ) {
         let runtime = cx.kernel.input_runtime();
         let input = runtime.input();
         cx.world.reset_game_data();
-        let mut state = new_menu_state(cx.kernel, input);
-        // SAFETY: state remains in this stack frame through all synchronous callbacks and cleanup.
+        let mut state = MeleeSession::new(
+            cx.world.activity_control(),
+            crate::ships::master_native::choices(&cx.kernel.master_queue),
+        );
+        state.files = Some(crate::supermelee::session::MeleeFiles { config, teams });
+        let offscreen = admit_menu_rendering(&mut state, cx.kernel);
+        // Seed observation and the unconverted random provider share this admission.
         cx.with_legacy(|| {
-            P_MELEE_STATE = &mut state;
-            state.phase = crate::supermelee::netplay::session::MenuPhase::Menu;
-            state.random_context = new_context();
+            state.phase = crate::supermelee::session::MenuPhase::Menu;
             let fallback = GetTimeCounter();
-            let seed = io
-                .observer
-                .input_admitted(
-                    &crate::engine::observe::InputView::Seed {
-                        domain: 1,
-                        fallback,
-                    },
-                    &None,
-                )
-                .seed
-                .unwrap_or(fallback);
-            (*state.random_context).reseed(seed);
+            // Seed admission is part of the recorded input sequence.
+            io.observer.input_admitted(
+                &crate::engine::observe::InputView::Seed {
+                    domain: 1,
+                    fallback,
+                },
+                &None,
+            );
             state.current_ship = 255;
             state.cur_index = u16::MAX;
             for (index, team) in state.load.builtins.iter_mut().take(5).enumerate() {
@@ -298,51 +291,55 @@ pub(crate) mod live {
                     MELEE_STRING_BASE as i32 + 4 + index as i32,
                 )));
             }
-            crate::engine::World::current().write(|world| world.set_activity(SUPER_MELEE as u16));
-            (**KernelOwner::current()).game_sounds =
-                crate::sound::owned_bank::LoadedSoundBank::load(c"sounds.battle");
-            crate::supermelee::native::battle_picker::live::BuildPickMeleeFrame();
-            MeleeFrame =
-                CaptureDrawable(LoadGraphic(MELEE_SCREEN_PMAP_ANIM.as_ptr().cast()).cast());
-            crate::supermelee::native::build_picker::live::build_build_pick_frame(&state.catalog);
-            KernelOwner::current().write(|kernel| {
-                init_space(kernel, WorldOwner::current().read(|world| world.activity()))
-            });
+        });
+        cx.world.set_activity(SUPER_MELEE as u16);
+        cx.kernel.game_sounds = crate::sound::owned_bank::LoadedSoundBank::load(c"sounds.battle");
+        cx.with_legacy(|| {
+            state.fleet_picker =
+                Some(crate::supermelee::native::battle_picker::live::FleetPicker::new(&offscreen));
+            load_menu_graphics(&mut state, offscreen);
+        });
+        init_space(cx.kernel, cx.world.activity());
+        cx.with_legacy(|| {
             load_team_list(&mut state);
-            if !load_config(&mut state) {
-                (**KernelOwner::current()).player_control[0] = HUMAN_CONTROL | 16;
-                let team = state.load.builtins[0].clone();
-                local_change_team(&mut state, 0, &team);
-                (**KernelOwner::current()).player_control[1] = COMPUTER_CONTROL | 16;
-                let team = state.load.builtins[1].clone();
-                local_change_team(&mut state, 1, &team);
-            }
-            state.side = 0;
-            SetMenuSounds(input, 15, 16);
         });
+        load_setup(&mut state, cx);
+        state.side = 0;
+        SetMenuSounds(input, 15, 16);
+        {
+            let mut frame = admission::SessionFrame::new(
+                &mut state,
+                |state: &mut MeleeSession,
+                 cx: &mut crate::engine::battle::Cx<'_>,
+                 io: &mut crate::engine::observe::Io<'_>| {
+                    // SAFETY: the frame exclusively lends its menu to each synchronous step.
+                    unsafe { run_menu_frame(state, cx, io, input) }
+                },
+            );
+            cx.run_input_frame(io, true, &mut frame);
+        }
         let state_ptr = &raw mut state;
-        cx.run_input(io, true, |cx, _| {
-            // SAFETY: state and its UI resources outlive the synchronous input loop.
-            unsafe { run_menu_frame(state_ptr, cx, input) }
-        });
         // SAFETY: the input session has stopped and no callback retains these resources.
         cx.with_legacy(|| {
             stop_music();
             WaitForSoundEnd(u16::MAX);
-            write_config(&mut state);
-            if !state.h_music.is_null() {
-                DestroyMusic(state.h_music);
-                state.h_music = ptr::null_mut();
-            }
-            KernelOwner::current().write(uninit_space);
-            crate::supermelee::native::battle_picker::live::DestroyPickMeleeFrame();
-            DestroyDrawable(ReleaseDrawable(MeleeFrame));
-            MeleeFrame = ptr::null_mut();
-            crate::supermelee::native::build_picker::live::destroy_build_pick_frame();
-            state.netplay.close_all_connections();
+        });
+        state.save_config(cx.kernel.player_control);
+        let session = state.netplay.clone();
+        session.close_all_connections(&mut |event| {
+            changes::apply_protocol_event(state_ptr, cx, io, event)
+        });
+        cx.with_legacy(|| {
+            drop(state.h_music.take());
+        });
+        uninit_space(cx.kernel);
+        cx.kernel.game_sounds = None;
+        cx.with_legacy(|| {
+            drop(state.fleet_picker.take());
+            drop(state.menu_graphic.take());
+            drop(state.build_picker.take());
             state.netplay.setup_input_delay(0);
-            (**KernelOwner::current()).game_sounds = None;
-            delete_context(state.random_context);
+
             FlushInput(input);
         });
     }

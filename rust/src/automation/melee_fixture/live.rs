@@ -303,7 +303,6 @@ impl Battle {
 }
 
 enum Admission<'a> {
-    Configure(&'a MeleeSetupRequest),
     Complete(Option<FixtureRun>),
     Task(Box<Task<'a>>),
 }
@@ -315,10 +314,6 @@ fn admit<'a>(
     registry: Vec<(usize, &'static str)>,
 ) -> Result<Admission<'a>, String> {
     match operation {
-        Operation::Configure(request) => {
-            request.validate()?;
-            Ok(Admission::Configure(request))
-        }
         Operation::SaveWitness(proof, slot, loading) => {
             position.slot = slot;
             star::witness(proof, position, loading)?;
@@ -349,7 +344,7 @@ impl<'a> Task<'a> {
                 mem::swap(&mut run.proof, proof);
                 Self::Star(proof, run)
             }
-            Operation::Configure(_) | Operation::SaveWitness(..) => unreachable!(),
+            Operation::SaveWitness(..) => unreachable!(),
         })
     }
 
@@ -443,16 +438,6 @@ mod tests {
             log_y: 0,
             star: None,
         };
-        let setup = MeleeSetupRequest {
-            ships: [[0; 7]; 2],
-            cyborg: true,
-        };
-        let Admission::Configure(request) =
-            admit(Operation::Configure(&setup), 0, position, vec![]).unwrap()
-        else {
-            panic!("configure admission");
-        };
-        assert_eq!(request, &setup);
         let Admission::Complete(Some(proof)) = admit(
             Operation::Fixture(FixtureName::StarContact),
             IN_INTERPLANETARY as u16,

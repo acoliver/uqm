@@ -1,4 +1,3 @@
-#![cfg(not(test))]
 #![allow(non_snake_case)]
 
 use super::{context_abi::*, drawable_abi::*, frame_abi::*, native_abi::*, pixmap_abi::*};
@@ -200,6 +199,19 @@ unsafe fn get_work_context() -> CONTEXT {
     }
     WORK_CONTEXT
 }
+
+#[cfg(test)]
+/// # Safety
+/// The serialized fixture must have released every flash instance first.
+pub(super) unsafe fn release_work_context_for_test() {
+    // SAFETY: the fixture exclusively owns the cache after its flash instances drop.
+    unsafe {
+        let context = WORK_CONTEXT;
+        WORK_CONTEXT = ptr::null_mut();
+        assert_eq!(DestroyContext(context), 1);
+    }
+}
+
 unsafe fn prepare_cache(ctx: &mut FlashContext, i: usize) {
     if !cache_at(ctx, i).is_null() {
         return;

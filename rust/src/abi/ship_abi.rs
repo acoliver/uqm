@@ -1087,10 +1087,6 @@ pub use crate::supermelee::netplay::checksum::crc_process_game_state as crc_proc
 
 
 
-pub use crate::supermelee::netplay::session::MeleeState as MELEE_STATE;
-unsafe extern "C" {
-    pub static mut PickMeleeFrame: FRAME;
-}
 pub type MELEE_OPTIONS = BYTE;
 pub const MeleeShip_MELEE_ANDROSYNTH: MeleeShip = 0;
 pub const MeleeShip_MELEE_ARILOU: MeleeShip = 1;
@@ -1120,28 +1116,13 @@ pub const MeleeShip_MELEE_ZOQFOTPIK: MeleeShip = 24;
 pub const MeleeShip_MELEE_UNSET: MeleeShip = 254;
 pub const MeleeShip_MELEE_NONE: MeleeShip = 255;
 pub type MeleeShip = ::std::os::raw::c_uint;
-pub use crate::supermelee::netplay::session::MeleeState as melee_state;
 
 #[cfg(not(test))]
 pub use crate::supermelee::native::menu::live::do_melee;
 
-#[cfg(not(test))]
-pub use crate::supermelee::native::menu::live::drawing::DrawMeleeIcon;
 
-#[cfg(not(test))]
-pub use crate::supermelee::native::menu::live::drawing::GetShipBox;
 
-#[cfg(not(test))]
-pub use crate::supermelee::native::menu::live::drawing::RepairMeleeFrame;
 
-#[cfg(not(test))]
-pub use crate::supermelee::native::menu::live::drawing::DrawMeleeShipStrings;
-unsafe extern "C" {
-    pub static mut MeleeFrame: FRAME;
-}
-
-#[cfg(not(test))]
-pub use crate::supermelee::native::menu::live::drawing::Melee_flashSelection;
 
 #[cfg(not(test))]
 pub use crate::supermelee::native::menu::live::changes::local_change_team;
@@ -1292,8 +1273,6 @@ pub const SAMATRA_SHIP: _bindgen_ty_4 = crate::engine::world::queues::SAMATRA_RA
 pub const NUM_AVAILABLE_RACES: _bindgen_ty_4 = 24;
 pub type _bindgen_ty_4 = ::std::os::raw::c_uint;
 
-#[cfg(not(test))]
-pub use crate::supermelee::native::battle_picker::live::MeleeShipDeath;
 
 #[cfg(not(test))]
 pub use crate::supermelee::native::battle_picker::live::get_initial_melee_star_ships;
@@ -2725,11 +2704,6 @@ pub use crate::navigation::globals::in_quasi_space;
 
 
 
-#[cfg(not(test))]
-pub use crate::game_init::kernel_abi::SetPlayerInput;
-
-#[cfg(not(test))]
-pub use crate::game_init::kernel_abi::ClearPlayerInput;
 
 #[cfg(not(test))]
 

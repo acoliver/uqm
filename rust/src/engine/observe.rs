@@ -2,7 +2,8 @@
 
 use super::World;
 pub use uqm_engine::observe::{
-    CheckpointView, DeviceObservation, Injected, InputView, Observer, Presented, Unobserved,
+    CheckpointView, DeviceObservation, Injected, InputSetup, InputView, Observer, PeerSetup,
+    Presented, Unobserved,
 };
 pub type Io<'a> = uqm_engine::observe::Io<'a, Option<CampaignView>>;
 

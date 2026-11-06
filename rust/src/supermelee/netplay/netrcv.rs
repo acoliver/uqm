@@ -48,13 +48,10 @@ impl SessionCore {
             }
         }
     }
-    pub fn net_input(&self) {
-        self.net_input_with(0, &mut |event| self.effect(event));
-    }
-    pub fn net_input_blocking(&self, timeout: u32) {
+    pub fn net_input_blocking(&self, timeout: u32, emit: &mut dyn FnMut(Event)) {
         self.net_input_with(
             timeout.min(crate::callback::ffi::Async_timeBeforeNextMs()),
-            &mut |event| self.effect(event),
+            emit,
         );
     }
     pub fn net_input_with(&self, timeout: u32, emit: &mut dyn FnMut(Event)) {
@@ -71,7 +68,7 @@ impl SessionCore {
                     self.poll_connection(player, emit);
                 }
             }
-            self.flush_packet_queues();
+            self.flush_packet_queues(emit);
             crate::callback::ffi::Callback_process();
             if self.connection_progress() != before || std::time::Instant::now() >= deadline {
                 return;

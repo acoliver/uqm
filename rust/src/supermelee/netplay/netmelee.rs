@@ -1,11 +1,10 @@
 //! Session-owned connection orchestration and protocol waits.
 use super::{
     abi::*,
-    netconnection::{Effect, Event, NetConnection, ReadyAction},
+    netconnection::{Effect, Event, NetConnection},
     packet::Packet,
 };
-use crate::engine::battle::net::ProtocolWait;
-const NETWORK_POLL_DELAY: u32 = crate::time::counter_abi::ONE_SECOND / 24;
+use crate::engine::battle::net::ProtocolDriver;
 
 impl super::session::SessionCore {
     pub fn get_num_net_connections(&self) -> usize {
@@ -55,23 +54,23 @@ impl super::session::SessionCore {
             .take()
             .unwrap_or_else(|| panic!("close absent connection"));
     }
-    pub fn close_player_network_connection(&self, player: u16) {
-        self.close_player_with(usize::from(player), &mut |event| self.effect(event));
+    pub fn close_player_network_connection(&self, player: u16, emit: &mut dyn FnMut(Event)) {
+        self.close_player_with(usize::from(player), emit);
     }
-    pub fn close_all_connections(&self) {
+    pub fn close_all_connections(&self, emit: &mut dyn FnMut(Event)) {
         for player in 0..2 {
             if self.connection(player).is_some() {
-                self.close_player_network_connection(player as u16);
+                self.close_player_network_connection(player as u16, emit);
             }
         }
     }
-    pub fn close_disconnected_connections(&self) {
+    pub fn close_disconnected_connections(&self, emit: &mut dyn FnMut(Event)) {
         for player in 0..2 {
             if self
                 .connection(player)
                 .is_some_and(|conn| !conn.flags.connected)
             {
-                self.close_player_network_connection(player as u16);
+                self.close_player_network_connection(player as u16, emit);
             }
         }
     }
@@ -108,11 +107,11 @@ impl super::session::SessionCore {
         conn.queue
             .flush(|bytes| self.transport.borrow_mut().send(socket, bytes))
     }
-    pub fn flush_packet_queues(&self) {
+    pub fn flush_packet_queues(&self, emit: &mut dyn FnMut(Event)) {
         for player in 0..2 {
             if let Err(error) = self.flush_player(player) {
                 if error.kind() != std::io::ErrorKind::WouldBlock {
-                    self.close_player_network_connection(player as u16);
+                    self.close_player_network_connection(player as u16, emit);
                 }
             }
         }
@@ -170,199 +169,29 @@ impl super::session::SessionCore {
             true
         })
     }
-    pub fn reset_connections(&self, reason: u32) -> bool {
+    pub fn reset_connections(&self, reason: u32, emit: &mut dyn FnMut(Event)) -> bool {
         for player in 0..2 {
             let events = self
                 .connection_mut(player)
                 .filter(|conn| conn.flags.connected)
                 .map(|mut conn| conn.local_reset(reason))
                 .unwrap_or_default();
-            self.apply_events(events, &mut |event| self.effect(event));
+            self.apply_events(events, emit);
         }
-        true
-    }
-    pub fn negotiate_ready_connections(
-        &self,
-        notify: bool,
-        next: u32,
-        wait: &mut ProtocolWait<'_>,
-    ) -> bool {
-        self.wait_connections(|side| {
-            self.negotiate_ready(side, notify, next, wait);
-        })
-    }
-    pub fn wait_reset_connections(&self, next: u32, wait: &mut ProtocolWait<'_>) -> bool {
-        self.wait_connections(|side| {
-            let generation = {
-                let mut conn = self
-                    .connection_mut(side)
-                    .unwrap_or_else(|| panic!("reset connection"));
-                let generation = conn.reset_generation;
-                conn.reset_next = Some(next);
-                conn.reset_complete();
-                generation
-            };
-            if self
-                .connection(side)
-                .unwrap_or_else(|| panic!("reset connection"))
-                .reset_generation
-                == generation
-            {
-                let effects = {
-                    let mut conn = self
-                        .connection_mut(side)
-                        .unwrap_or_else(|| panic!("reset connection"));
-                    if !conn.flags.reset.local {
-                        conn.local_reset(2)
-                    } else {
-                        Vec::new()
-                    }
-                };
-                self.apply_events(effects, &mut |event| self.effect(event));
-                self.flush_packet_queues();
-                self.wait_exchange(side, generation, true, wait);
-            }
-        })
-    }
-    fn wait_connections(&self, mut wait: impl FnMut(usize)) -> bool {
-        let mut disconnected = 0;
-        for side in 0..2 {
-            let Some(conn) = self.connection(side) else {
-                continue;
-            };
-            let connected = conn.flags.connected;
-            drop(conn);
-            if !connected {
-                disconnected += 1;
-                continue;
-            }
-            wait(side);
-        }
-        disconnected == 0
-    }
-    fn wait_exchange(
-        &self,
-        side: usize,
-        generation: usize,
-        reset: bool,
-        wait: &mut ProtocolWait<'_>,
-    ) {
-        let mut poll = || {
-            self.net_input_blocking(NETWORK_POLL_DELAY);
-            self.connection(side).is_some_and(|conn| {
-                conn.flags.connected
-                    && if reset {
-                        conn.reset_generation == generation
-                    } else {
-                        conn.ready_generation == generation
-                    }
-            })
-        };
-        if !self.replay_wait(&mut poll) {
-            wait(&mut poll);
-        }
-    }
-    fn negotiate_ready(
-        &self,
-        side: usize,
-        notify: bool,
-        next: u32,
-        wait: &mut ProtocolWait<'_>,
-    ) -> bool {
-        let (generation, effects) = {
-            let mut conn = self
-                .connection_mut(side)
-                .unwrap_or_else(|| panic!("ready connection"));
-            let generation = conn.ready_generation;
-            let effects = conn.local_ready(
-                ReadyAction::Transition(next),
-                notify,
-                self.frame_count.get(),
-            );
-            (generation, effects)
-        };
-        self.apply_events(effects, &mut |event| self.effect(event));
-        self.flush_packet_queues();
-        if self
-            .connection(side)
-            .unwrap_or_else(|| panic!("ready connection"))
-            .ready_generation
-            == generation
-        {
-            self.wait_exchange(side, generation, false, wait);
-        }
-        self.connection(side)
-            .is_some_and(|conn| conn.flags.connected)
-    }
-    pub(super) fn ready_for_battle_end_player(
-        &self,
-        side: usize,
-        wait: &mut ProtocolWait<'_>,
-    ) -> bool {
-        let state = self
-            .connection(side)
-            .unwrap_or_else(|| panic!("end connection"))
-            .state;
-        if state == NetState_NetState_interBattle || state == NetState_NetState_inSetup {
-            return true;
-        }
-        if state == NetState_NetState_inBattle {
-            let effects = {
-                let mut conn = self
-                    .connection_mut(side)
-                    .unwrap_or_else(|| panic!("end connection"));
-                if conn.flags.ready.local {
-                    return false;
-                }
-                conn.local_ready(ReadyAction::EndBattle, true, self.frame_count.get())
-            };
-            self.apply_events(effects, &mut |event| self.effect(event));
-            if self
-                .connection(side)
-                .unwrap_or_else(|| panic!("end connection"))
-                .state
-                == NetState_NetState_inBattle
-            {
-                return false;
-            }
-        }
-        let conn = self
-            .connection(side)
-            .unwrap_or_else(|| panic!("end connection"));
-        assert!(
-            conn.state == NetState_NetState_endingBattle
-                || conn.state == NetState_NetState_endingBattle2
-        );
-        if self.frame_count.get() < conn.end_frame_count {
-            return false;
-        }
-        let generation = conn.ready_generation;
-        let state = conn.state;
-        drop(conn);
-        if state == NetState_NetState_endingBattle {
-            self.wait_exchange(side, generation, false, wait);
-            let conn = self
-                .connection(side)
-                .unwrap_or_else(|| panic!("end connection"));
-            assert_eq!(conn.state, NetState_NetState_endingBattle2);
-            if self.frame_count.get() < conn.end_frame_count {
-                return false;
-            }
-        }
-        self.negotiate_ready(side, true, NetState_NetState_interBattle, wait);
         true
     }
     pub fn network_battle_input(
         &self,
         player: usize,
         activity: &crate::engine::world::activity::ActivityControl,
+        driver: &mut dyn ProtocolDriver,
     ) -> u8 {
         use crate::mainloop::activity_flags::CHECK_ABORT;
         loop {
             if let Some(input) = self.pop_input(player) {
                 return input;
             }
-            self.net_input();
+            self.with_notices(driver, |emit| self.net_input_with(0, emit));
             if let Some(input) = self.pop_input(player) {
                 return input;
             }
@@ -376,7 +205,7 @@ impl super::session::SessionCore {
             if activity.activity() & CHECK_ABORT != 0 {
                 return 0;
             }
-            self.net_input_blocking(500);
+            self.with_notices(driver, |emit| self.net_input_blocking(500, emit));
             if !self
                 .connection(player)
                 .is_some_and(|conn| conn.flags.connected)

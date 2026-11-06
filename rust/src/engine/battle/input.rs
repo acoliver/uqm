@@ -1,12 +1,37 @@
 //! Owned battle input and dispatch. Each installed context belongs to its player.
 
-use crate::engine::battle::net::BattleNet;
+use crate::engine::battle::net::{BattleNet, ProtocolDriver};
 use std::rc::Rc;
 
 pub const NUM_PLAYERS: usize = 2;
 const NETWORK_CONTROL: u8 = 8;
 
 impl crate::engine::Kernel {
+    pub fn install_player_input(&mut self, player: u16) {
+        let slot = &mut self.player_input[usize::from(player)];
+        assert!(slot.is_none(), "player input already installed");
+        *slot = Some(InputContext::new(
+            player,
+            self.player_control[usize::from(player)],
+        ));
+    }
+
+    pub fn install_player_inputs(&mut self) {
+        for player in 0..NUM_PLAYERS as u16 {
+            self.install_player_input(player);
+        }
+    }
+
+    pub fn clear_player_input(&mut self, player: u16) {
+        self.player_input[usize::from(player)] = None;
+    }
+
+    pub fn clear_player_inputs(&mut self) {
+        for player in 0..NUM_PLAYERS as u16 {
+            self.clear_player_input(player);
+        }
+    }
+
     pub fn replace_player_input(
         &mut self,
         side: usize,
@@ -83,10 +108,10 @@ impl InputContext {
         }
     }
 
-    pub fn battle_end_ready(&self, wait: &mut super::net::ProtocolWait<'_>) -> bool {
+    pub fn battle_end_ready(&self, driver: &mut dyn ProtocolDriver) -> bool {
         match self.source {
             InputSource::Human | InputSource::Computer => true,
-            InputSource::Network(_) => self.network().end_ready(usize::from(self.player), wait),
+            InputSource::Network(_) => self.network().end_ready(usize::from(self.player), driver),
         }
     }
 }
@@ -95,19 +120,64 @@ impl InputContext {
 mod tests {
     use super::*;
 
+    #[test]
+    fn installed_inputs_use_each_players_control_and_clear_independently() {
+        let mut game = crate::engine::Game::new();
+        game.kernel.player_control = [1 | 16, 2 | 64];
+        game.kernel.install_player_inputs();
+        assert!(matches!(
+            game.kernel.player_input[0].as_ref().unwrap().source(),
+            InputSource::Human
+        ));
+        assert!(matches!(
+            game.kernel.player_input[1].as_ref().unwrap().source(),
+            InputSource::Computer
+        ));
+        game.kernel.clear_player_input(0);
+        assert!(game.kernel.player_input[0].is_none());
+        assert_eq!(game.kernel.player_input[1].as_ref().unwrap().player(), 1);
+        game.kernel.player_control[0] = NETWORK_CONTROL;
+        game.kernel.install_player_input(0);
+        assert!(matches!(
+            game.kernel.player_input[0].as_ref().unwrap().source(),
+            InputSource::Network(None)
+        ));
+        game.kernel.clear_player_inputs();
+        assert!(game.kernel.player_input.iter().all(Option::is_none));
+    }
+
+    #[test]
+    #[should_panic(expected = "player input already installed")]
+    fn installing_an_input_requires_an_empty_player_slot() {
+        let mut game = crate::engine::Game::new();
+        game.kernel.player_control[0] = 1;
+        game.kernel.install_player_input(0);
+        game.kernel.install_player_input(0);
+    }
+
+    struct NoProtocol;
+    impl ProtocolDriver for NoProtocol {
+        fn notice(&mut self, notice: super::super::net::ProtocolNotice) {
+            panic!("unexpected protocol notice: {notice:?}");
+        }
+        fn wait(&mut self, _: &mut super::super::net::ProtocolPoll<'_>) {
+            panic!("unexpected wait");
+        }
+    }
+
     struct TestNet {
         ready: std::cell::Cell<bool>,
         player: std::cell::Cell<Option<usize>>,
     }
     impl BattleNet for TestNet {
-        fn end_ready(&self, side: usize, _: &mut super::super::net::ProtocolWait<'_>) -> bool {
+        fn end_ready(&self, side: usize, _: &mut dyn ProtocolDriver) -> bool {
             self.player.set(Some(side));
             self.ready.get()
         }
-        fn poll(&self) {
+        fn poll(&self, _: &mut dyn ProtocolDriver) {
             unreachable!()
         }
-        fn flush(&self) {
+        fn flush(&self, _: &mut dyn ProtocolDriver) {
             unreachable!()
         }
         fn all_connected(&self) -> bool {
@@ -127,6 +197,7 @@ mod tests {
             _: usize,
             _: u8,
             _: &crate::engine::world::activity::ActivityControl,
+            _: &mut dyn ProtocolDriver,
         ) -> u8 {
             unreachable!()
         }
@@ -134,6 +205,7 @@ mod tests {
             &self,
             _: usize,
             _: &crate::engine::world::activity::ActivityControl,
+            _: &mut dyn ProtocolDriver,
         ) -> u8 {
             unreachable!()
         }
@@ -143,22 +215,22 @@ mod tests {
         fn frame(&self) -> u32 {
             unreachable!()
         }
-        fn record_checksum(&self, _: u32, _: u32) {
+        fn record_checksum(&self, _: u32, _: u32, _: &mut dyn ProtocolDriver) {
             unreachable!()
         }
         fn verify_checksum(&self, _: u32) -> bool {
             unreachable!()
         }
-        fn reset(&self, _: u32) {
+        fn reset(&self, _: u32, _: &mut dyn ProtocolDriver) {
             unreachable!()
         }
-        fn negotiate(&self, _: bool, _: u32, _: &mut super::super::net::ProtocolWait<'_>) -> bool {
+        fn negotiate(&self, _: bool, _: u32, _: &mut dyn ProtocolDriver) -> bool {
             unreachable!()
         }
         fn set_state(&self, _: u32) {
             unreachable!()
         }
-        fn wait_reset(&self, _: u32, _: &mut super::super::net::ProtocolWait<'_>) {
+        fn wait_reset(&self, _: u32, _: &mut dyn ProtocolDriver) {
             unreachable!()
         }
         fn init_end_frames(&self) {
@@ -225,13 +297,13 @@ mod tests {
         });
         let mut context = InputContext::new(1, 8);
         context.connect(net.clone());
-        assert!(!context.battle_end_ready(&mut |_| panic!("unexpected wait")));
+        assert!(!context.battle_end_ready(&mut NoProtocol));
         assert_eq!(net.player.get(), Some(1));
         net.ready.set(true);
-        assert!(context.battle_end_ready(&mut |_| panic!("unexpected wait")));
+        assert!(context.battle_end_ready(&mut NoProtocol));
         let copy = context.clone();
         net.ready.set(false);
-        assert!(!copy.battle_end_ready(&mut |_| panic!("unexpected wait")));
+        assert!(!copy.battle_end_ready(&mut NoProtocol));
     }
 
     #[test]
@@ -259,7 +331,7 @@ mod tests {
             for control in [1, 2, 6, 1 | 16, 2 | 64] {
                 let context = InputContext::new(player, control);
                 assert_eq!(context.player(), player);
-                assert!(context.battle_end_ready(&mut |_| panic!("unexpected wait")));
+                assert!(context.battle_end_ready(&mut NoProtocol));
                 assert_eq!(
                     matches!(context.source(), InputSource::Human),
                     control & 15 == 1
@@ -283,7 +355,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "network input has no session")]
     fn network_dispatch_requires_its_session() {
-        InputContext::new(1, 8).battle_end_ready(&mut |_| panic!("unexpected wait"));
+        InputContext::new(1, 8).battle_end_ready(&mut NoProtocol);
     }
 
     #[test]

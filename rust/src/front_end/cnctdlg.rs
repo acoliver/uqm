@@ -482,6 +482,8 @@ unsafe fn do_melee_connect_dialog(
 /// Must run on the game thread with graphics, input, strings and netplay options
 /// initialized. `side` must index one of the two netplay peer records.
 pub unsafe fn melee_connect_dialog(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    io: &mut crate::engine::observe::Io<'_>,
     session: &mut crate::supermelee::netplay::NetplaySession,
     side: c_int,
 ) -> BOOLEAN {
@@ -493,13 +495,10 @@ pub unsafe fn melee_connect_dialog(
     state.session = session;
     state.confirmed = 1;
     CURRENT_STATE = &mut state;
-    DoInput(
-        1,
-        &mut |cx: &mut crate::engine::battle::Cx<'_>, _: &mut crate::engine::observe::Io<'_>| {
-            let runtime = cx.kernel.input_runtime();
-            cx.with_legacy(|| do_melee_connect_dialog(&mut state, runtime.input()) != 0)
-        },
-    );
+    cx.run_input(io, true, |cx, _| {
+        let runtime = cx.kernel.input_runtime();
+        cx.with_legacy(|| do_melee_connect_dialog(&mut state, runtime.input()) != 0)
+    });
     CURRENT_STATE = ptr::null_mut();
     DestroyFont(PLAYER_FONT_HANDLE);
     state.confirmed as BOOLEAN

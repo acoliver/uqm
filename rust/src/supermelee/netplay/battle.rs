@@ -4,30 +4,47 @@ use super::{
     packet::Packet,
     session::{Selection, SessionCore},
 };
-use crate::engine::battle::net::{BattleNet, ProtocolWait};
+use crate::engine::battle::net::{BattleNet, ProtocolDriver, ProtocolNotice, ProtocolNoticeKind};
 
 impl SessionCore {
-    pub(super) fn effect(&self, event: Event) {
-        match event.effect {
+    pub(crate) fn effect(&self, event: Event, driver: &mut dyn ProtocolDriver) {
+        let kind = match event.effect {
             Effect::Seed(seed) => {
                 crate::math::seed_random(seed);
+                return;
             }
-            #[cfg(not(test))]
-            _ => crate::supermelee::native::menu::live::changes::protocol_feedback(
-                self.controller(),
-                event,
-            ),
-            #[cfg(test)]
-            _ => panic!("protocol test entered live feedback: {event:?}"),
-        }
+            Effect::Connected => ProtocolNoticeKind::Connected,
+            Effect::Error(error) => ProtocolNoticeKind::Error(error),
+            Effect::Closed => ProtocolNoticeKind::Closed,
+            Effect::Abort(reason) => ProtocolNoticeKind::Abort(reason),
+            Effect::ShipSelected => ProtocolNoticeKind::ShipSelected,
+            Effect::Reset { reason, remote } => {
+                self.with_notices(driver, |emit| self.flush_packet_queues(emit));
+                ProtocolNoticeKind::Reset { reason, remote }
+            }
+            other => panic!("setup event requires the borrowed melee menu: {other:?}"),
+        };
+        driver.notice(ProtocolNotice {
+            player: event.player,
+            battle_active: event.battle_active,
+            kind,
+        });
+    }
+
+    pub(super) fn with_notices<T>(
+        &self,
+        driver: &mut dyn ProtocolDriver,
+        action: impl FnOnce(&mut dyn FnMut(Event)) -> T,
+    ) -> T {
+        action(&mut |event| self.effect(event, driver))
     }
 }
 impl BattleNet for SessionCore {
-    fn poll(&self) {
-        self.net_input();
+    fn poll(&self, driver: &mut dyn ProtocolDriver) {
+        self.with_notices(driver, |emit| self.net_input_with(0, emit));
     }
-    fn flush(&self) {
-        self.flush_packet_queues();
+    fn flush(&self, driver: &mut dyn ProtocolDriver) {
+        self.with_notices(driver, |emit| self.flush_packet_queues(emit));
     }
     fn all_connected(&self) -> bool {
         self.all_connected()
@@ -53,14 +70,15 @@ impl BattleNet for SessionCore {
         side: usize,
         input: u8,
         activity: &crate::engine::world::activity::ActivityControl,
+        driver: &mut dyn ProtocolDriver,
     ) -> u8 {
         // Replay peers retain AI evaluation (and its RNG draws), but received
         // input remains authoritative for the remote player.
         if self.replay_remote_player == Some(side) {
-            return self.remote_input(side, activity);
+            return self.remote_input(side, activity, driver);
         }
         self.queue_all(Packet::BattleInput(input), false);
-        self.flush_packet_queues();
+        self.with_notices(driver, |emit| self.flush_packet_queues(emit));
         assert!(self.push_input(side, input), "local input buffer full");
         self.pop_input(side)
             .unwrap_or_else(|| panic!("local input buffer empty after push"))
@@ -69,8 +87,9 @@ impl BattleNet for SessionCore {
         &self,
         side: usize,
         activity: &crate::engine::world::activity::ActivityControl,
+        driver: &mut dyn ProtocolDriver,
     ) -> u8 {
-        self.network_battle_input(side, activity)
+        self.network_battle_input(side, activity, driver)
     }
     fn set_frame(&self, frame: u32) {
         self.frame_count.set(frame);
@@ -78,31 +97,31 @@ impl BattleNet for SessionCore {
     fn frame(&self) -> u32 {
         self.frame_count.get()
     }
-    fn record_checksum(&self, frame: u32, checksum: u32) {
+    fn record_checksum(&self, frame: u32, checksum: u32, driver: &mut dyn ProtocolDriver) {
         self.queue_all(Packet::Checksum { frame, checksum }, false);
-        self.flush_packet_queues();
+        self.with_notices(driver, |emit| self.flush_packet_queues(emit));
         self.add_local_checksum(frame, checksum);
     }
     fn verify_checksum(&self, frame: u32) -> bool {
         self.verify_checksums(frame)
     }
-    fn reset(&self, reason: u32) {
-        self.reset_connections(reason);
+    fn reset(&self, reason: u32, driver: &mut dyn ProtocolDriver) {
+        self.with_notices(driver, |emit| self.reset_connections(reason, emit));
     }
-    fn negotiate(&self, notify: bool, state: u32, wait: &mut ProtocolWait<'_>) -> bool {
-        self.negotiate_ready_connections(notify, state, wait)
+    fn negotiate(&self, notify: bool, state: u32, driver: &mut dyn ProtocolDriver) -> bool {
+        self.negotiate_ready_connections(notify, state, driver)
     }
     fn set_state(&self, state: u32) {
         self.set_state_connections(state);
     }
-    fn wait_reset(&self, state: u32, wait: &mut ProtocolWait<'_>) {
-        self.wait_reset_connections(state, wait);
+    fn wait_reset(&self, state: u32, driver: &mut dyn ProtocolDriver) {
+        self.wait_reset_connections(state, driver);
     }
     fn init_end_frames(&self) {
         self.init_battle_state_data_connections();
     }
-    fn end_ready(&self, side: usize, wait: &mut ProtocolWait<'_>) -> bool {
-        self.ready_for_battle_end_player(side, wait)
+    fn end_ready(&self, side: usize, driver: &mut dyn ProtocolDriver) -> bool {
+        self.ready_for_battle_end_player(side, driver)
     }
     fn ship_selected(&self, choice: u16) {
         if self.replay_remote_player.is_none() {

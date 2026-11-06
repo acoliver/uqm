@@ -152,77 +152,90 @@ pub unsafe fn do_confirm_exit(
     result
 }
 
-unsafe fn do_popup(cx: &mut crate::engine::battle::Cx<'_>, input: &InputSession) -> BOOLEAN {
-    cx.with_legacy(|| SleepThread(ONE_SECOND / 20));
-    u32::from(
+pub fn do_popup_window(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    io: &mut crate::engine::observe::Io<'_>,
+    message: &std::ffi::CStr,
+) {
+    use crate::graphics::{context_abi::ContextLease, native_font::FontLease};
+    use std::ptr::NonNull;
+    let runtime = cx.kernel.input_runtime();
+    let input = runtime.input();
+    let screen = cx.kernel.screen_context;
+    let font = cx.kernel.star_con_font;
+    let _screen = ContextLease::retain(
+        NonNull::new(screen.cast()).unwrap_or_else(|| panic!("popup screen context")),
+    );
+    let _font =
+        FontLease::retain(NonNull::new(font.cast()).unwrap_or_else(|| panic!("popup font")));
+    // SAFETY: the admitted context/font leases and message retain all resources
+    // used by these synchronous widget operations. No input loop is published.
+    let (bank, old_context, mut old_rect, mut saved) = cx.with_legacy(|| unsafe {
+        let bank = StringBank_Create();
+        if bank.is_null() {
+            crate::log_abi::log_message(
+                log_Level_log_Fatal as i32,
+                "FATAL: Memory exhaustion when preparing popup window",
+            );
+            std::process::exit(1);
+        }
+        let mut lines: [*const UNICODE; 30] = [ptr::null(); 30];
+        let mut label: WIDGET_LABEL = mem::zeroed();
+        label.tag = WIDGET_TYPE_WIDGET_TYPE_LABEL;
+        label.parent = ptr::null_mut();
+        label.handleEvent = Some(widget_handle_event_ignore_all);
+        label.receiveFocus = Some(Widget_ReceiveFocusRefuseFocus);
+        label.draw = Some(Widget_DrawLabel);
+        label.height = Some(Widget_HeightLabel);
+        label.width = Some(Widget_WidthFullScreen);
+        label.line_count = SplitString(
+            message.as_ptr().cast(),
+            b'\n' as std::ffi::c_char,
+            30,
+            lines.as_mut_ptr(),
+            bank,
+        );
+        label.lines = lines.as_mut_ptr();
+        pause_flash();
+        let old_context = SetContext(screen);
+        let mut old_rect: RECT = mem::zeroed();
+        GetContextClipRect(&mut old_rect);
+        SetContextClipRect(ptr::null_mut());
+        let saved = SaveContextFrame(ptr::null());
+        Widget_SetFont(font);
+        Widget_SetWindowColors(
+            SHADOWBOX_BACKGROUND_COLOR,
+            SHADOWBOX_DARK_COLOR,
+            SHADOWBOX_MEDIUM_COLOR,
+        );
+        let mut window_rect: RECT = mem::zeroed();
+        DrawLabelAsWindow(&mut label, &mut window_rect);
+        SetSystemRect(&window_rect);
+        (bank, old_context, old_rect, saved)
+    });
+    let previous_context = NonNull::new(old_context.cast()).map(ContextLease::retain);
+    let sounds = input.menu_sounds();
+    input.set_menu_sounds(0, 0);
+    let old_callback = input.replace_callback(None);
+    cx.run_input(io, true, |cx, _| {
+        // SAFETY: the initialized game thread owns the pacing provider.
+        cx.with_legacy(|| unsafe { SleepThread(ONE_SECOND / 20) });
         input.pulsed().menu[KEY_MENU_SELECT as usize] == 0
             && input.pulsed().menu[KEY_MENU_CANCEL as usize] == 0
-            && cx.world.activity() & CHECK_ABORT as u16 == 0,
-    )
-}
-
-/// # Safety
-/// msg must be a NUL-terminated UTF-8 string; widget, graphics, and input systems must be initialized.
-pub unsafe fn do_popup_window(runtime: &InputSession, msg: *const ::std::ffi::c_char) {
-    let input = runtime;
-    let bank = StringBank_Create();
-    if bank.is_null() {
-        crate::log_abi::log_message(
-            log_Level_log_Fatal as i32,
-            "FATAL: Memory exhaustion when preparing popup window",
-        );
-        std::process::exit(1);
-    }
-    let mut lines: [*const UNICODE; 30] = [ptr::null(); 30];
-    let mut label: WIDGET_LABEL = mem::zeroed();
-    label.tag = WIDGET_TYPE_WIDGET_TYPE_LABEL;
-    label.parent = ptr::null_mut();
-    label.handleEvent = Some(widget_handle_event_ignore_all);
-    label.receiveFocus = Some(Widget_ReceiveFocusRefuseFocus);
-    label.draw = Some(Widget_DrawLabel);
-    label.height = Some(Widget_HeightLabel);
-    label.width = Some(Widget_WidthFullScreen);
-    label.line_count = SplitString(
-        msg.cast(),
-        b'\n' as std::ffi::c_char,
-        30,
-        lines.as_mut_ptr(),
-        bank,
-    );
-    label.lines = lines.as_mut_ptr();
-    pause_flash();
-    let old_context = SetContext(Kernel::current().read(|owner| owner.screen_context));
-    let mut old_rect: RECT = mem::zeroed();
-    GetContextClipRect(&mut old_rect);
-    SetContextClipRect(ptr::null_mut());
-    let mut saved = SaveContextFrame(ptr::null());
-    Widget_SetFont(Kernel::current().read(|owner| owner.star_con_font));
-    Widget_SetWindowColors(
-        SHADOWBOX_BACKGROUND_COLOR,
-        SHADOWBOX_DARK_COLOR,
-        SHADOWBOX_MEDIUM_COLOR,
-    );
-    let mut window_rect: RECT = mem::zeroed();
-    DrawLabelAsWindow(&mut label, &mut window_rect);
-    SetSystemRect(&window_rect);
-    let mut sound0: MENU_SOUND_FLAGS = mem::zeroed();
-    let mut sound1: MENU_SOUND_FLAGS = mem::zeroed();
-    GetMenuSounds(input, &mut sound0, &mut sound1);
-    SetMenuSounds(input, 0, 0);
-    let old_callback = SetInputCallback(runtime, None);
-    DoInput(
-        1,
-        &mut |cx: &mut crate::engine::battle::Cx<'_>, _: &mut crate::engine::observe::Io<'_>| {
-            do_popup(cx, input) != 0
-        },
-    );
-    SetInputCallback(runtime, old_callback);
-    ClearSystemRect();
-    DrawStamp(&mut saved);
-    DestroyDrawable(ReleaseDrawable(saved.frame));
-    SetContextClipRect(&mut old_rect);
-    SetContext(old_context);
-    continue_flash();
-    SetMenuSounds(input, sound0, sound1);
-    StringBank_Free(bank);
+            && cx.world.activity() & CHECK_ABORT as u16 == 0
+    });
+    input.replace_callback(old_callback);
+    // SAFETY: the popup still owns its saved drawable/string bank and retains
+    // both the selected and previous contexts until restoration completes.
+    cx.with_legacy(|| unsafe {
+        ClearSystemRect();
+        DrawStamp(&mut saved);
+        DestroyDrawable(ReleaseDrawable(saved.frame));
+        SetContextClipRect(&mut old_rect);
+        SetContext(old_context);
+        continue_flash();
+        input.set_menu_sounds(sounds.0, sounds.1);
+        StringBank_Free(bank);
+    });
+    drop(previous_context);
 }

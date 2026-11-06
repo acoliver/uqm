@@ -9,7 +9,7 @@ use uqm_engine::{
     host::{Connection, Net},
     network::loopback::LoopbackNet,
 };
-use uqm_rust::engine::battle::net::BattleNet;
+use uqm_rust::engine::battle::net::{BattleNet, ProtocolDriver, ProtocolNotice, ProtocolPoll};
 use uqm_rust::supermelee::netplay::{
     abi::*,
     checkbuf::ChecksumBuffer,
@@ -17,6 +17,22 @@ use uqm_rust::supermelee::netplay::{
     packet::{DecodeError, Packet},
     Effect, Event, NetplaySession,
 };
+
+#[derive(Default)]
+struct Driver {
+    allow_wait: bool,
+    admissions: usize,
+}
+impl ProtocolDriver for Driver {
+    fn notice(&mut self, notice: ProtocolNotice) {
+        panic!("unexpected protocol notice: {notice:?}");
+    }
+    fn wait(&mut self, poll: &mut ProtocolPoll<'_>) {
+        assert!(self.allow_wait, "premature protocol wait");
+        self.admissions += 1;
+        assert!(!poll(self));
+    }
+}
 
 fn prepared(state: u32) -> NetplaySession {
     let session = NetplaySession::with_net(LoopbackNet::default());
@@ -345,7 +361,7 @@ fn battle_input_treats_a_removed_peer_as_a_disconnect() {
     session.close_player_with(0, &mut |_| {});
     let world = uqm_rust::engine::World::new();
     assert_eq!(
-        session.network_battle_input(0, &world.activity_control()),
+        session.network_battle_input(0, &world.activity_control(), &mut Driver::default()),
         0
     );
     assert_ne!(
@@ -651,7 +667,7 @@ fn battle_end_flushes_frame_count_before_the_second_ready_and_uses_the_borrowed_
     init_callbacks();
     let (session, script) = scripted(7, vec![]);
     session.set_frame(10);
-    assert!(!session.end_ready(0, &mut |_| panic!("premature wait")));
+    assert!(!session.end_ready(0, &mut Driver::default()));
     assert!(
         script.borrow().sent.is_empty(),
         "local ready stays queued until the frame flush"
@@ -672,17 +688,17 @@ fn battle_end_flushes_frame_count_before_the_second_ready_and_uses_the_borrowed_
         assert_eq!(conn.ready_action, Some(ReadyAction::EndBattle2));
         assert!(conn.flags.ready.local);
     }
-    assert!(!session.end_ready(0, &mut |_| panic!("frame count not reached")));
+    assert!(!session.end_ready(0, &mut Driver::default()));
     assert_eq!(dispatch(&session, Packet::FrameCount(11)), 0);
     assert_eq!(session.connection(0).unwrap().state, 9);
     session.set_frame(11);
     script.borrow_mut().reads.push_back(Packet::Ready.encode());
-    let mut admissions = 0;
-    assert!(session.end_ready(0, &mut |poll| {
-        admissions += 1;
-        assert!(!poll());
-    }));
-    assert_eq!(admissions, 1);
+    let mut driver = Driver {
+        allow_wait: true,
+        ..Driver::default()
+    };
+    assert!(session.end_ready(0, &mut driver));
+    assert_eq!(driver.admissions, 1);
     assert_eq!(session.connection(0).unwrap().state, 5);
     assert!(session.connection(0).unwrap().ready_action.is_none());
 }

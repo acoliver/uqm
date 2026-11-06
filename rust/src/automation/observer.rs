@@ -1,6 +1,6 @@
 //! Automation's implementation of the engine's ordered observation boundaries.
 
-use super::{coordinator::AutomationObserver, input_ffi, ui_observation as ui};
+use super::{coordinator::AutomationObserver, input_admission, input_ffi, ui_observation as ui};
 use crate::engine::observe::{CheckpointView, Injected, InputView, Observer, Presented};
 use std::sync::Arc;
 
@@ -19,8 +19,16 @@ impl Observer<Option<super::campaign_state::CampaignView>> for Handle {
                 .clone()
         };
         let stop = match *view {
-            InputView::BeforeUpdate => input_ffi::service_input(&self.0, &mut capture, false) != 0,
-            InputView::Nested => input_ffi::service_input(&self.0, &mut capture, true) != 0,
+            InputView::BeforeUpdate | InputView::Nested => {
+                let coordinator = self.0.clone();
+                input_ffi::service_input(
+                    &coordinator,
+                    &mut capture,
+                    *view == InputView::Nested,
+                    &mut input_admission::Unavailable,
+                    self,
+                ) != 0
+            }
             InputView::AfterUpdate(activity) => {
                 input_ffi::after_input_update(&self.0, activity) != 0
             }
@@ -50,6 +58,33 @@ impl Observer<Option<super::campaign_state::CampaignView>> for Handle {
                 .service_communication_completion_boundary(&mut capture),
         };
         Injected { stop, seed: None }
+    }
+
+    fn input_admitted_with_setup(
+        &mut self,
+        view: &InputView,
+        world: &Option<super::campaign_state::CampaignView>,
+        setup: &mut input_admission::Target<'_>,
+    ) -> Injected {
+        if matches!(view, InputView::BeforeUpdate | InputView::Nested) {
+            let coordinator = self.0.clone();
+            let mut capture = || {
+                world
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("input admission without a campaign view"))
+                    .clone()
+            };
+            let stop = input_ffi::service_input(
+                &coordinator,
+                &mut capture,
+                *view == InputView::Nested,
+                setup,
+                self,
+            ) != 0;
+            Injected { stop, seed: None }
+        } else {
+            input_admission::legacy(setup, || self.input_admitted(view, world))
+        }
     }
 
     fn checkpoint(&mut self, view: &CheckpointView<'_>) {

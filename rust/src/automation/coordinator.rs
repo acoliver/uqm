@@ -569,25 +569,6 @@ impl AutomationObserver {
     //  Input callback processing
     // -----------------------------------------------------------------------
 
-    /// Process an admitted input callback. Returns true if the game loop
-    /// should stop (terminal condition or script finished).
-    pub(crate) fn process_input(
-        &self,
-        capture: &mut dyn FnMut() -> campaign_state::CampaignView,
-    ) -> bool {
-        let coord = self;
-        coord.process_input_inner(capture)
-    }
-
-    /// Service a nested button wait, which cannot accept planet-menu selections.
-    pub(crate) fn process_button_wait(
-        &self,
-        capture: &mut dyn FnMut() -> campaign_state::CampaignView,
-    ) -> bool {
-        let coord = self;
-        coord.process_input_at_boundary(capture, true)
-    }
-
     /// Observe a scripted player input after production updates current and pulsed state.
     pub fn process_player_input_observation(&self) -> bool {
         let coord = self;

@@ -1,41 +1,8 @@
 use super::{
-    abi::*,
     checkbuf::ChecksumBuffer,
     netconnection::{NetConnection, Options},
 };
 use std::cell::{Cell, Ref, RefCell, RefMut};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MenuPhase {
-    Menu,
-    Confirm,
-    Connecting,
-    Editing,
-    Loading,
-    Building,
-}
-
-#[repr(C)]
-#[derive(Debug)]
-pub struct MeleeState {
-    pub phase: MenuPhase,
-    pub initialized: BOOLEAN,
-    pub melee_started: BOOLEAN,
-    pub melee_option: MELEE_OPTIONS,
-    pub side: COUNT,
-    pub row: COUNT,
-    pub col: COUNT,
-    pub melee_setup: crate::supermelee::setup::team::MeleeSetup,
-    pub load: crate::supermelee::setup::browser::TeamBrowser,
-    pub current_ship: MeleeShip,
-    pub cur_index: COUNT,
-    pub build_pick_confirmed: BOOLEAN,
-    pub random_context: *mut RandomContext,
-    pub last_input_time: TimeCount,
-    pub h_music: MUSIC_REF,
-    pub netplay: NetplaySession,
-    pub(crate) catalog: Vec<crate::ships::master_native::ShipChoice>,
-}
 
 #[derive(Debug, Default)]
 pub(super) struct Selection {
@@ -44,7 +11,6 @@ pub(super) struct Selection {
     pub choices: [Option<u16>; 2],
 }
 pub struct SessionCore {
-    controller: Option<crate::engine::input::InputSession>,
     pub options: Options,
     pub(super) replay_remote_player: Option<usize>,
     pub(super) transport: RefCell<Box<dyn uqm_engine::host::Net>>,
@@ -55,17 +21,8 @@ pub struct SessionCore {
     pub(super) selection: RefCell<Selection>,
 }
 impl SessionCore {
-    pub(crate) fn controller(&self) -> &crate::engine::input::InputSession {
-        self.controller
-            .as_ref()
-            .unwrap_or_else(|| panic!("native protocol controller is not installed"))
-    }
-    fn new(
-        transport: Box<dyn uqm_engine::host::Net>,
-        controller: Option<crate::engine::input::InputSession>,
-    ) -> Self {
+    fn new(transport: Box<dyn uqm_engine::host::Net>) -> Self {
         Self {
-            controller,
             options: Options::default(),
             replay_remote_player: None,
             transport: RefCell::new(transport),
@@ -111,7 +68,7 @@ impl SessionCore {
 }
 impl Default for SessionCore {
     fn default() -> Self {
-        Self::new(uqm_engine::host::native_net(), None)
+        Self::new(uqm_engine::host::native_net())
     }
 }
 impl Drop for SessionCore {
@@ -136,12 +93,6 @@ impl std::ops::Deref for NetplaySession {
     }
 }
 impl NetplaySession {
-    pub fn with_input(input: crate::engine::input::InputSession) -> Self {
-        Self(std::rc::Rc::new(SessionCore::new(
-            uqm_engine::host::native_net(),
-            Some(input),
-        )))
-    }
     pub fn battle_net(&self) -> std::rc::Rc<dyn crate::engine::battle::net::BattleNet> {
         self.0.clone()
     }
@@ -151,7 +102,7 @@ impl NetplaySession {
             .options
     }
     pub fn with_net(net: impl uqm_engine::host::Net + 'static) -> Self {
-        Self(std::rc::Rc::new(SessionCore::new(Box::new(net), None)))
+        Self(std::rc::Rc::new(SessionCore::new(Box::new(net))))
     }
     pub(crate) fn configure_peer(&mut self, side: usize, server: bool, port: u16) {
         let core = std::rc::Rc::get_mut(&mut self.0)
@@ -191,16 +142,23 @@ fn poll_replay_wait(
 mod tests {
     use super::*;
     #[test]
-    fn protocol_session_retains_the_supplied_input_and_configuration() {
-        let input = crate::engine::input::InputSession::default();
-        let session = NetplaySession::with_input(input.clone());
-        input.set_player_control(1, 5);
-        input
-            .configuration
-            .update_preferences(|options| options.menu = 2);
-        assert_eq!(session.controller().player_controls()[1], 5);
-        assert_eq!(session.controller().preferences().menu, 2);
-        assert_eq!(session.controller().immediate_ptr(), input.immediate_ptr());
+    fn new_menu_owns_teams_and_retains_the_protocol_across_battles() {
+        let mut world = crate::engine::World::default();
+        let mut menu =
+            crate::supermelee::session::MeleeSession::new(world.activity_control(), Vec::new());
+        world.set_activity(0x1004);
+        assert_eq!(menu.activity.activity(), 0x1004);
+        assert_eq!(menu.phase, crate::supermelee::session::MenuPhase::Menu);
+        assert_eq!(menu.melee_setup.teams.len(), 2);
+        assert_eq!(menu.load.builtins.len(), 15);
+        assert!(menu.h_music.is_none());
+        let first = menu.netplay.battle_net();
+        let identity = std::rc::Rc::as_ptr(&first);
+        drop(first);
+        menu.melee_setup.teams[0].rename(c"owned fleet");
+        let second = menu.netplay.battle_net();
+        assert!(std::ptr::addr_eq(identity, std::rc::Rc::as_ptr(&second)));
+        assert_eq!(menu.melee_setup.teams[0].c_name(), c"owned fleet");
     }
     #[test]
     fn fixture_server_retains_its_bound_port_until_connection() {

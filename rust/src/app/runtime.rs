@@ -111,16 +111,7 @@ fn run_game(
 
 #[cfg(not(test))]
 fn initialize_campaign(cx: &mut Cx<'_>) {
-    if !crate::game_init::kernel_abi::SetPlayerInputAll(cx.kernel) {
-        // SAFETY: logging is initialized before the campaign's input resources are allocated.
-        unsafe {
-            crate::logging::log_add(
-                crate::logging::LogLevel::Fatal,
-                "Could not set player input.",
-            );
-        }
-        std::process::abort();
-    }
+    cx.kernel.install_player_inputs();
     // SAFETY: the application retains initialized kernel resources for campaign setup.
     unsafe { crate::navigation::globals::init_game_structures(cx) };
     crate::time::clock_bridge::rust_clock_init(cx.world);
@@ -204,7 +195,7 @@ fn run_campaign(
     crate::time::clock_bridge::rust_clock_uninit(cx.world);
     // SAFETY: the active mode has returned before its campaign resources are released.
     unsafe { crate::navigation::globals::uninit_game_structures(cx) };
-    crate::game_init::kernel_abi::ClearPlayerInputAll(cx.kernel);
+    cx.kernel.clear_player_inputs();
 }
 
 #[cfg(not(test))]

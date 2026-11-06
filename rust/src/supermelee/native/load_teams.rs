@@ -35,7 +35,14 @@ fn page(top: u16, bottom: u16, current: u16, count: u16, keys: [bool; 4]) -> (u1
 #[cfg(not(test))]
 pub(crate) mod live {
     use super::page;
-    use crate::engine::Kernel as KernelOwner;
+    use crate::graphics::{
+        context_abi::{ContextFrame, ContextLease},
+        native_abi as render,
+        native_font::FontLease,
+    };
+    use crate::ships::master_native::ShipChoice;
+    use crate::supermelee::native::menu::live::drawing::repair_frame;
+    use crate::supermelee::session::MeleeSession;
 
     use crate::ships::native::abi::*;
     use crate::supermelee::setup::{
@@ -43,13 +50,14 @@ pub(crate) mod live {
         team::{ship_cost, MeleeTeam as OwnedTeam},
     };
     use crate::ui::save_problem::SaveProblem;
-    use std::{ffi::CString, mem, ptr};
-    use uqm_engine::io::uio_owned::Directory;
+    use std::{ffi::CString, mem, ptr::NonNull};
 
-    unsafe fn draw_entry(
-        catalog: &[crate::ships::master_native::engine::MasterShip],
+    fn draw_entry(
+        context: &ContextLease,
+        font: &FontLease,
+        catalog: &[ShipChoice],
         team: &OwnedTeam,
-        origin: POINT,
+        origin: render::POINT,
         ships: bool,
         highlighted: bool,
     ) {
@@ -58,14 +66,13 @@ pub(crate) mod live {
         } else {
             rgb(15, 16, 27)
         };
-        SetContextForeGroundColor(color);
-        let mut text = TEXT {
-            baseline: origin,
-            align: TEXT_ALIGN_ALIGN_LEFT as _,
-            pStr: team.c_name().as_ptr(),
-            CharCount: u16::MAX,
-        };
-        font_DrawText(&mut text);
+        context.draw_text(
+            font,
+            team.c_name(),
+            origin,
+            render::TEXT_ALIGN_ALIGN_LEFT,
+            color,
+        );
         let value = CString::new(
             team.ships
                 .iter()
@@ -75,118 +82,132 @@ pub(crate) mod live {
                 .to_string(),
         )
         .unwrap();
-        text.baseline.x += 7 * 35 - 1;
-        text.align = TEXT_ALIGN_ALIGN_RIGHT as _;
-        text.pStr = value.as_ptr();
-        font_DrawText(&mut text);
+        context.draw_text(
+            font,
+            &value,
+            render::POINT {
+                x: origin.x + 7 * 35 - 1,
+                y: origin.y,
+            },
+            render::TEXT_ALIGN_ALIGN_RIGHT,
+            color,
+        );
         if ships {
-            let mut stamp = STAMP {
-                origin: POINT {
-                    x: origin.x + 1,
-                    y: origin.y + 4,
-                },
-                frame: ptr::null_mut(),
+            let mut origin = render::POINT {
+                x: origin.x + 1,
+                y: origin.y + 4,
             };
             for ship in team.ships {
                 if ship.is_valid() && ship as u8 != 255 {
-                    stamp.frame = catalog
+                    let source = catalog
                         .get(ship as u8 as usize)
-                        .map_or(ptr::null_mut(), |ship| ship.info.icons);
-                    DrawStamp(&mut stamp);
-                    stamp.origin.x += 17;
+                        .and_then(|ship| NonNull::new(ship.icon.raw().cast()));
+                    context.draw_stamp(&ContextFrame::retain(source), origin);
+                    origin.x += 17;
                 }
             }
         }
     }
-    fn rgb(r: u8, g: u8, b: u8) -> Color {
-        Color {
+    fn rgb(r: u8, g: u8, b: u8) -> render::Color {
+        render::Color {
             r: (r << 3) | (r >> 2),
             g: (g << 3) | (g >> 2),
             b: (b << 3) | (b >> 2),
             a: 255,
         }
     }
-    unsafe fn fill_view(state: *mut MELEE_STATE) -> bool {
-        let directory = Directory::retain(
-            std::ptr::NonNull::new(meleeDir.cast()).unwrap_or_else(|| panic!("melee directory")),
-        );
-        (*state).load.fill_view(&directory)
+    fn fill_view(state: &mut MeleeSession) -> bool {
+        let files = state
+            .files
+            .as_ref()
+            .unwrap_or_else(|| panic!("melee file resources are not admitted"));
+        state.load.fill_view(&files.teams)
     }
-    unsafe fn select(state: *mut MELEE_STATE, highlighted: bool) {
-        let index = (*state).load.current - (*state).load.top;
-        let old = SetContext(KernelOwner::current().read(|owner| owner.space_context));
-        SetContextFont(KernelOwner::current().read(|owner| owner.micro_font));
-        BatchGraphics();
-        draw_entry(
-            &[],
-            &(*state).load.view[index as usize],
-            POINT {
-                x: 5,
-                y: 34 + index as i16 * 32,
-            },
-            false,
-            highlighted,
-        );
-        UnbatchGraphics();
-        SetContext(old);
-    }
-    unsafe fn draw(state: *mut MELEE_STATE) {
-        let (context, catalog) = KernelOwner::current().read(|owner| {
-            (
-                owner.space_context,
-                crate::ships::master_native::engine::snapshot(owner),
+    fn select(state: &MeleeSession, highlighted: bool) {
+        let index = state.load.current - state.load.top;
+        let context = state
+            .menu_context
+            .as_ref()
+            .unwrap_or_else(|| panic!("menu context not admitted"));
+        let font = state
+            .menu_font
+            .as_ref()
+            .unwrap_or_else(|| panic!("menu font not admitted"));
+        context.draw_batch(|| {
+            draw_entry(
+                context,
+                font,
+                &state.catalog,
+                &state.load.view[index as usize],
+                render::POINT {
+                    x: 5,
+                    y: 34 + index as i16 * 32,
+                },
+                false,
+                highlighted,
             )
         });
-        let old = SetContext(context);
-        SetContextFont(KernelOwner::current().read(|owner| owner.micro_font));
-        BatchGraphics();
-        DrawMeleeIcon(28);
-        if fill_view(state) {
-            for index in (*state).load.top..(*state).load.bottom {
-                let relative = index - (*state).load.top;
-                draw_entry(
-                    &catalog,
-                    &(*state).load.view[relative as usize],
-                    POINT {
-                        x: 5,
-                        y: 34 + relative as i16 * 32,
-                    },
-                    true,
-                    false,
-                );
-            }
-        }
-        UnbatchGraphics();
-        SetContext(old);
     }
-    unsafe fn flash(state: *mut MELEE_STATE) {
-        let now = GetTimeCounter();
-        if now >= (*state).load.next_flash {
-            (*state).load.next_flash = now.wrapping_add(840 / 9);
-            (*state).load.highlighted = !(*state).load.highlighted;
-            let old = SetContext(KernelOwner::current().read(|owner| owner.space_context));
-            select(state, (*state).load.highlighted);
-            SetContext(old);
+    fn draw(state: &mut MeleeSession) {
+        let context = state
+            .menu_context
+            .as_ref()
+            .unwrap_or_else(|| panic!("menu context not admitted"))
+            .clone();
+        let font = state
+            .menu_font
+            .as_ref()
+            .unwrap_or_else(|| panic!("menu font not admitted"))
+            .clone();
+        context.draw_batch(|| {
+            crate::supermelee::native::menu::live::drawing::draw_melee_icon(state, 28);
+            if fill_view(state) {
+                for index in state.load.top..state.load.bottom {
+                    let relative = index - state.load.top;
+                    draw_entry(
+                        &context,
+                        &font,
+                        &state.catalog,
+                        &state.load.view[relative as usize],
+                        render::POINT {
+                            x: 5,
+                            y: 34 + relative as i16 * 32,
+                        },
+                        true,
+                        false,
+                    );
+                }
+            }
+        });
+    }
+    fn flash(state: &mut MeleeSession) {
+        let now = uqm_engine::time::counter_abi::GetTimeCounter();
+        if now >= state.load.next_flash {
+            state.load.next_flash = now.wrapping_add(840 / 9);
+            state.load.highlighted = !state.load.highlighted;
+            select(state, state.load.highlighted);
         }
     }
     /// # Safety
     /// State and its load view must be live on the game thread.
     pub unsafe fn do_load_team(
-        state: *mut MELEE_STATE,
+        state: *mut MeleeSession,
+        cx: &mut crate::engine::battle::Cx<'_>,
         input: &crate::engine::input::InputSession,
     ) -> u32 {
         let time = GetTimeCounter();
         input.set_paused(false);
-        if crate::engine::World::current().read(|world| world.activity()) & CHECK_ABORT as u16 != 0
-        {
+        if cx.world.activity() & CHECK_ABORT as u16 != 0 {
             return 0;
         }
         SetMenuSounds(input, 1 | 2 | 128 | 256, 16);
         if (*state).initialized == 0 {
-            draw(state);
-            select(state, true);
+            cx.with_legacy(|| {
+                draw(&mut *state);
+                select(&*state, true);
+            });
             (*state).initialized = 1;
-            (*state).phase = crate::supermelee::netplay::session::MenuPhase::Loading;
+            (*state).phase = crate::supermelee::session::MenuPhase::Loading;
             return 1;
         }
         let keys = input.pulsed().menu;
@@ -194,13 +215,24 @@ pub(crate) mod live {
             if keys[KEY_MENU_SELECT as usize] != 0 {
                 let team = (*state).load.view[((*state).load.current - (*state).load.top) as usize]
                     .clone();
-                local_change_team(state, (*state).side as usize, &team);
+                cx.with_legacy(|| local_change_team(state, (*state).side as usize, &team));
             }
-            (*state).phase = crate::supermelee::netplay::session::MenuPhase::Menu;
+            (*state).phase = crate::supermelee::session::MenuPhase::Menu;
             (*state).last_input_time = GetTimeCounter();
-            let mut rect = mem::zeroed();
-            GetFrameRect(SetAbsFrameIndex(MeleeFrame, 28), &mut rect);
-            RepairMeleeFrame(&rect);
+            cx.with_legacy(|| {
+                let bounds = (*state).menu_frames().frame_rect(28);
+                let rect = RECT {
+                    corner: POINT {
+                        x: bounds.corner.x,
+                        y: bounds.corner.y,
+                    },
+                    extent: EXTENT {
+                        width: bounds.extent.width,
+                        height: bounds.extent.height,
+                    },
+                };
+                repair_frame(&*state, &rect);
+            });
             return 1;
         }
         let (top, index) = page(
@@ -217,28 +249,29 @@ pub(crate) mod live {
         );
         if index != (*state).load.current {
             if top == (*state).load.top {
-                select(state, false);
+                cx.with_legacy(|| select(&*state, false));
             } else {
                 (*state).load.top = top;
-                draw(state);
+                cx.with_legacy(|| draw(&mut *state));
             }
             (*state).load.current = index;
         }
-        flash(state);
-        SleepThreadUntil(time.wrapping_add(840 / 30));
+        cx.with_legacy(|| {
+            flash(&mut *state);
+            SleepThreadUntil(time.wrapping_add(840 / 30));
+        });
         1
     }
-    /// # Safety
-    /// State must own a live load view on the game thread.
-    pub unsafe fn load_team_list(state: *mut MELEE_STATE) {
-        let directory = Directory::retain(
-            std::ptr::NonNull::new(meleeDir.cast()).unwrap_or_else(|| panic!("melee directory")),
-        );
-        (*state).load.refresh(&directory);
+    pub fn load_team_list(state: &mut MeleeSession) {
+        let files = state
+            .files
+            .as_ref()
+            .unwrap_or_else(|| panic!("melee file resources are not admitted"));
+        state.load.refresh(&files.teams);
     }
     /// # Safety
     /// State must own the team being saved on the game thread.
-    pub unsafe fn do_save_team(state: *mut MELEE_STATE) {
+    pub unsafe fn do_save_team(state: *mut MeleeSession, screen: &ContextLease) {
         let mut filename = (*state).melee_setup.teams[(*state).side as usize]
             .c_name()
             .to_bytes()
@@ -246,23 +279,21 @@ pub(crate) mod live {
         filename.extend(b".mle");
         filename.truncate(254);
         let filename = CString::new(filename).unwrap();
-        let old = SetContext(KernelOwner::current().read(|owner| owner.screen_context));
-        let mut saved = mem::zeroed();
-        ConfirmSaveLoad(&mut saved);
-        let directory = Directory::retain(
-            std::ptr::NonNull::new(meleeDir.cast()).unwrap_or_else(|| panic!("melee directory")),
-        );
-        let team = &(*state).melee_setup.teams[(*state).side as usize];
-        let ok = write_team(&directory, &filename, team).is_ok();
-        (*state).load.top = 0;
-        (*state).load.current = 0;
-        DrawStamp(&mut saved);
-        DestroyDrawable(ReleaseDrawable(saved.frame));
-        SetContext(old);
+        let ok = screen.with_selected(|| {
+            let mut saved = mem::zeroed();
+            ConfirmSaveLoad(&mut saved);
+            let team = &(*state).melee_setup.teams[(*state).side as usize];
+            let ok = write_team(&(*state).files().teams, &filename, team).is_ok();
+            (*state).load.top = 0;
+            (*state).load.current = 0;
+            DrawStamp(&mut saved);
+            DestroyDrawable(ReleaseDrawable(saved.frame));
+            ok
+        });
         if !ok {
             SaveProblem();
         }
-        load_team_list(state);
+        load_team_list(&mut *state);
         if let Some(index) = (*state).load.file_index(&filename) {
             assert!(index < (*state).load.count());
             (*state).load.current = index;

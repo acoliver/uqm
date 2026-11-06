@@ -194,7 +194,28 @@ mod tests {
         assert_eq!(unsafe { (*lease.as_raw()).Leading }, 17);
         assert!(std::panic::catch_unwind(|| release(font)).is_err());
         assert!(std::panic::catch_unwind(|| release(NonNull::dangling())).is_err());
+        // SAFETY: this serial fixture owns the context and its selected font.
+        let raw_context = unsafe {
+            #[cfg(feature = "debug-process")]
+            {
+                super::super::context_abi::CreateContextAux(c"font-lease".as_ptr())
+            }
+            #[cfg(not(feature = "debug-process"))]
+            {
+                super::super::context_abi::CreateContextAux()
+            }
+        };
+        let context =
+            super::super::context_abi::ContextLease::retain(NonNull::new(raw_context).unwrap());
+        context.set_font(&lease);
+        // SAFETY: the context owns the selected font after its original release.
+        assert_eq!(unsafe { (*raw_context).Font }, font.as_ptr());
         drop(lease);
+        assert!(allocation.upgrade().is_some());
+        // SAFETY: logical release cannot retire the retained context or its font.
+        unsafe { super::super::context_abi::DestroyContext(raw_context) };
+        assert!(allocation.upgrade().is_some());
+        drop(context);
         assert!(allocation.upgrade().is_none());
         assert!(std::panic::catch_unwind(|| FontLease::retain(font)).is_err());
     }

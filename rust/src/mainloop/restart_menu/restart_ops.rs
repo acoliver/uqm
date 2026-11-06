@@ -651,7 +651,18 @@ impl RestartMenuOps for CffiOps<'_, '_, '_> {
         // SAFETY: the restart session owns the game and its input/graphics resources.
         self.owned(|cx, io| {
             // SAFETY: restart dispatch owns the initialized game-thread menu resources.
-            unsafe { crate::supermelee::native::menu::live::melee(cx, io) }
+            unsafe {
+                use uqm_engine::io::{handles, uio_owned::Directory};
+                let config = Directory::retain(
+                    std::ptr::NonNull::new(handles::configDir)
+                        .unwrap_or_else(|| panic!("config directory")),
+                );
+                let teams = Directory::retain(
+                    std::ptr::NonNull::new(handles::meleeDir)
+                        .unwrap_or_else(|| panic!("melee directory")),
+                );
+                crate::supermelee::native::menu::live::melee(cx, io, config, teams)
+            }
         })
     }
     fn setup_menu(&self) {
@@ -680,20 +691,7 @@ impl RestartMenuOps for CffiOps<'_, '_, '_> {
         unsafe { self.owned(|cx, io| crate::front_end::fmv::runtime::splash_screen(cx, io, None)) }
     }
     fn do_popup_window_msg(&self, string_id: u16) {
-        self.owned(|cx, _| {
-            let strings = cx.kernel.game_strings;
-            let runtime = cx.kernel.input_runtime();
-            cx.with_legacy(|| {
-                // SAFETY: the retained Kernel owns the table through synchronous popup rendering.
-                unsafe {
-                    super::menu_abi::uqm_do_popup_window_msg(
-                        runtime.input(),
-                        strings.cast(),
-                        string_id,
-                    )
-                }
-            })
-        })
+        self.owned(|cx, io| super::menu_abi::uqm_do_popup_window_msg(cx, io, string_id))
     }
 
     fn set_player_control(&self, player: u8, control: u16) {

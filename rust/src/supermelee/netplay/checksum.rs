@@ -119,8 +119,31 @@ mod tests {
 
     #[test]
     fn c_element_checksum_vector_excludes_background_objects() {
-        // SAFETY: this ABI record contains only zero-valid scalar, union and pointer fields.
-        let mut element: ElementState = unsafe { std::mem::zeroed() };
+        use crate::engine::battle::views::{FrameSelection, Frames, Image};
+        let visual = Visual {
+            location: POINT { x: 0, y: 0 },
+            image: Image {
+                frame: FrameSelection::ABSENT,
+                frames: Frames::default(),
+            },
+        };
+        let mut element = ElementState {
+            player: 0,
+            flags: 0,
+            life: 0,
+            hits: 0,
+            mass: 0,
+            turn: 0,
+            thrust: 0,
+            color_cycle: 0,
+            velocity: crate::battle::velocity::VelocityDesc::new(),
+            current: visual.clone(),
+            next: visual,
+            pre: None,
+            post: None,
+            collide: None,
+            death: None,
+        };
         element.flags = 0x4567;
         element.life = 1234;
         element.hits = 5678;

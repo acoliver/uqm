@@ -74,29 +74,19 @@ impl Cx<'_> {
         })
     }
 
-    pub(crate) fn protocol_wait(&mut self, poll: &mut dyn FnMut() -> bool) {
-        let runtime = self.kernel.input_runtime();
-        let mut observer = runtime.observer();
-        let mut io = crate::engine::observe::Io {
-            observer: observer.as_mut(),
-        };
-        runtime.run(
-            self,
-            &mut io,
-            false,
-            &mut |cx: &mut crate::engine::battle::Cx<'_>,
-                  _: &mut crate::engine::observe::Io<'_>| {
-                cx.with_legacy(&mut *poll)
-            },
-        );
-    }
-
     pub(crate) fn negotiate_battle(
         &mut self,
         net: &dyn crate::engine::battle::net::BattleNet,
         state: u32,
     ) -> bool {
-        net.negotiate(true, state, &mut |poll| self.protocol_wait(poll))
+        let runtime = self.kernel.input_runtime();
+        let mut observer = runtime.observer();
+        let mut io = crate::engine::observe::Io {
+            observer: observer.as_mut(),
+        };
+        crate::supermelee::native::protocol::with_battle_driver(self, &mut io, |driver| {
+            net.negotiate(true, state, driver)
+        })
     }
 
     pub fn screen_dimensions(&self) -> (i32, i32) {
@@ -401,11 +391,7 @@ mod tactrans_native_access {
                 self.b.ship_lost(player as usize);
             }
             if self.world.activity() as u8 == SUPER_MELEE as u8 {
-                let pointer = self.ship_pointer(owner);
-                // SAFETY: the checked owner remains live while updating melee status.
-                unsafe {
-                    MeleeShipDeath(pointer.cast());
-                }
+                crate::supermelee::native::battle_picker::live::ship_death(self, owner);
             }
         }
     }

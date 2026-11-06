@@ -802,15 +802,72 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
             battle::tactrans_native as transitions,
             pickship::ffi::get_encounter_star_ship_with_picker,
         };
+        let fixture_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../tmp");
+        std::fs::create_dir_all(&fixture_root).unwrap();
+        let directory = tempfile::tempdir_in(fixture_root).unwrap();
+        std::fs::create_dir(directory.path().join("font")).unwrap();
+        std::fs::write(directory.path().join("font/not-a-glyph.txt"), []).unwrap();
+        let host = std::ffi::CString::new(directory.path().to_str().unwrap()).unwrap();
+        let format =
+            sdl2::surface::Surface::new(1, 1, sdl2::pixels::PixelFormatEnum::RGBA32).unwrap();
+        // SAFETY: this serialized fixture owns its UIO mount and all registered drawing resources.
         unsafe {
+            use uqm_rust::{graphics::drawable_abi::LoadedDrawable, io::uio_bridge as uio};
+            uio::uio_init();
+            let repo = uio::uio_openRepository(0);
+            assert!(!uio::uio_mountDir(
+                repo,
+                c"/".as_ptr(),
+                1,
+                ptr::null_mut(),
+                ptr::null(),
+                host.as_ptr(),
+                ptr::null_mut(),
+                6,
+                ptr::null_mut()
+            )
+            .is_null());
+            let content = uio::uio_openDir(repo, c"/".as_ptr(), 0);
+            assert!(!content.is_null());
+            let previous = uqm_rust::mainloop::dir_prep::contentDir;
+            uqm_rust::mainloop::dir_prep::contentDir = content.cast();
+            let font = uqm_rust::graphics::filegfx::LoadFontFile(c"font".as_ptr());
+            assert!(!font.is_null());
+            uqm_rust::mainloop::dir_prep::contentDir = previous;
+            uio::uio_closeDir(content);
+            uio::uio_closeRepository(repo);
+            uio::uio_unInit();
+            #[cfg(feature = "debug-process")]
+            let context =
+                uqm_rust::graphics::context_abi::CreateContextAux(c"melee-death-test".as_ptr());
+            #[cfg(not(feature = "debug-process"))]
+            let context = uqm_rust::graphics::context_abi::CreateContextAux();
+            let saved_screen = uqm_rust::graphics::sdl::lifecycle_abi::SDL_Screen;
+            uqm_rust::graphics::sdl::lifecycle_abi::SDL_Screen = format.raw().cast();
+            let saved_format = uqm_rust::graphics::sdl::lifecycle_abi::format_conv_surf;
+            uqm_rust::graphics::sdl::lifecycle_abi::format_conv_surf = format.raw().cast();
+            let picker = LoadedDrawable::create(2, 149, 55, 2).unwrap();
+            let status = LoadedDrawable::create(2, 1, 1, 4).unwrap();
+            let saved_graphics = uqm_rust::engine::Kernel::current().write(|kernel| {
+                let saved = (
+                    kernel.off_screen_context,
+                    kernel.tiny_font,
+                    kernel.status_frame,
+                );
+                kernel.off_screen_context = context.cast();
+                kernel.tiny_font = font.cast();
+                kernel.status_frame = status.lease().frame(0).unwrap().cast();
+                saved
+            });
             for computer in [false, true] {
                 for initial in [[2, 2], [1, 2], [2, 1], [1, 1]] {
                     let _battle = Battle::new(16);
-                    let saved_offscreen =
-                        (**uqm_rust::engine::Kernel::current()).off_screen_context;
                     let saved_controls = input.player_controls();
-                    let mut context = mem::zeroed();
-                    (**uqm_rust::engine::Kernel::current()).off_screen_context = &mut context;
+                    uqm_rust::app::bridge::battle(|battle| {
+                        battle.selection_frames = Some(std::array::from_fn(|player| {
+                            picker.lease().context_frame(player)
+                        }));
+                    });
                     uqm_rust::engine::World::current()
                         .write(|world| world.set_activity((SUPER_MELEE | IN_BATTLE) as u16));
                     uqm_rust::app::bridge::battle(|b| b.counters = initial);
@@ -897,14 +954,15 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                             transitions::new_ship_with_picker(cx, outgoing, |cx, last, player| {
                                 let activity = cx.world.activity_control();
                                 let runtime = cx.kernel_mut().input_runtime();
-                                uqm_rust::app::bridge::publish(cx, || {
+                                {
                                     assert_eq!(player as usize, side);
                                     let chosen = get_encounter_star_ship_with_picker(
+                                        cx,
                                         runtime.input(),
                                         activity,
                                         Some(last),
                                         player,
-                                        |player| {
+                                        |cx, player| {
                                             selected[side] = true;
                                             let mut state = GETMELEE_STATE::default();
                                             let p = &mut state.player[player as usize];
@@ -919,9 +977,14 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                                                     .set_player_control(side, side as u32);
                                                 sample_weapon(runtime.input(), side, true);
                                             }
-                                            let result = uqm_rust::app::bridge::enter(|cx| {
-                                                uqm_rust::supermelee::native::battle_picker::live::select_ship(cx, runtime.input(), &inputs[side], &mut state)
-                                            });
+                                            let result = {
+                                                let mut observer =
+                                                    uqm_rust::engine::observe::Unobserved;
+                                                let mut io = uqm_rust::engine::observe::Io {
+                                                    observer: &mut observer,
+                                                };
+                                                uqm_rust::supermelee::native::battle_picker::live::select_ship(cx, &mut io, runtime.input(), &inputs[side], &mut state)
+                                            };
                                             sample_weapon(runtime.input(), side, false);
                                             assert_eq!(result, 1);
                                             assert_eq!(state.player[side].done, 1);
@@ -934,7 +997,7 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                                     );
                                     assert_eq!(chosen.is_some(), expected_selection);
                                     chosen.is_some() as BOOLEAN
-                                })
+                                }
                             })
                         });
                     }
@@ -957,12 +1020,25 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                             kernel.replace_player_input(side, input);
                         }
                     });
-                    (**uqm_rust::engine::Kernel::current()).off_screen_context = saved_offscreen;
+                    uqm_rust::app::bridge::battle(|battle| battle.selection_frames = None);
                     for (side, template) in saved_controls.into_iter().enumerate() {
                         input.set_player_control(side, template);
                     }
                 }
             }
+            uqm_rust::engine::Kernel::current().write(|kernel| {
+                (
+                    kernel.off_screen_context,
+                    kernel.tiny_font,
+                    kernel.status_frame,
+                ) = saved_graphics;
+            });
+            uqm_rust::graphics::font_abi::DestroyFont(font);
+            uqm_rust::graphics::context_abi::DestroyContext(context);
+            drop((picker, status));
+            uqm_rust::graphics::dcqueue_abi::TFB_PurgeDanglingGraphics();
+            uqm_rust::graphics::sdl::lifecycle_abi::format_conv_surf = saved_format;
+            uqm_rust::graphics::sdl::lifecycle_abi::SDL_Screen = saved_screen;
         }
     })
 }

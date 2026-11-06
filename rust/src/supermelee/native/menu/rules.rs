@@ -1,6 +1,38 @@
 //! Cursor and control transitions of the Super Melee setup menu.
 use crate::battle::{COMPUTER_CONTROL, HUMAN_CONTROL};
 
+pub(in crate::supermelee::native) fn slot_bounds(
+    side: u16,
+    row: u16,
+    col: u16,
+) -> (i16, i16, i16, i16) {
+    (
+        2 + col as i16 * 35,
+        21 + side as i16 * 92 + row as i16 * 35,
+        34,
+        34,
+    )
+}
+
+pub(in crate::supermelee::native) fn popup_hotspot(
+    side: u16,
+    width: i16,
+    height: i16,
+) -> (i16, i16) {
+    let (x, y, _, _) = slot_bounds(0, 0, 0);
+    let (last_x, last_y, last_width, last_height) = slot_bounds(1, 1, 6);
+    let ships_width = last_x + last_width - x;
+    let ships_height = last_y + last_height - y;
+    (
+        -(x + ((ships_width - width) >> 1)),
+        if side != 0 {
+            -y
+        } else {
+            -(y + ships_height - height)
+        },
+    )
+}
+
 pub(super) fn name_editor_buffer(name: &std::ffi::CStr) -> [u8; 31] {
     let mut buffer = [0; 31];
     let name = name.to_bytes();
@@ -82,5 +114,18 @@ pub(super) fn network_status_side(side: usize, control: u8) -> isize {
         side as isize
     } else {
         -1
+    }
+}
+
+#[cfg(test)]
+mod layout_tests {
+    #[test]
+    fn ship_slots_and_popup_keep_the_legacy_union_and_alignment() {
+        assert_eq!(super::slot_bounds(0, 0, 0), (2, 21, 34, 34));
+        assert_eq!(super::slot_bounds(1, 1, 6), (212, 148, 34, 34));
+        assert_eq!(super::popup_hotspot(0, 104, 98), (-72, -84));
+        assert_eq!(super::popup_hotspot(1, 104, 98), (-72, -21));
+        assert_eq!(super::popup_hotspot(0, 101, 97), (-73, -85));
+        assert_eq!(super::popup_hotspot(1, 101, 97), (-73, -21));
     }
 }

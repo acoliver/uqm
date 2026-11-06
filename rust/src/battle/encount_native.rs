@@ -801,14 +801,7 @@ pub(crate) mod engine {
             cx.b.nth_frame = 1 | ((combat_speed(cx.world.data.game.glob_flags) as u16) << 8);
             cx.kernel.player_control[0] = CYBORG_CONTROL | AWESOME_RATING;
             saved = cx.kernel.replace_player_input(0, None);
-            if !SetPlayerInput(cx.kernel, 0) {
-                crate::log_abi::log_message(1, "Could not set cyborg player input.");
-                if cfg!(feature = "debug-process") {
-                    std::process::abort();
-                } else {
-                    std::process::exit(1);
-                }
-            }
+            cx.kernel.install_player_input(0);
         }
         cx.kernel.game_sounds = crate::sound::owned_bank::LoadedSoundBank::load(c"sounds.battle");
         battle(cx, io, None);
@@ -819,7 +812,7 @@ pub(crate) mod engine {
         if cx.world.data.game.glob_flags & CYBORG_ENABLED as u8 != 0 {
             cx.b.nth_frame = 0;
             cx.kernel.player_control[0] = HUMAN_CONTROL | STANDARD_RATING;
-            ClearPlayerInput(cx.kernel, 0);
+            cx.kernel.clear_player_input(0);
             cx.kernel.replace_player_input(0, saved);
         }
         cx.world.set_activity(old);

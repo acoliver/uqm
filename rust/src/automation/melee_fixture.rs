@@ -80,17 +80,7 @@ pub struct MeleeSetupRequest {
 
 impl MeleeSetupRequest {
     pub fn validate(&self) -> Result<(), String> {
-        for (side, fleet) in self.ships.iter().enumerate() {
-            if !fleet.iter().any(|ship| *ship < 25) {
-                return Err(format!("parity fleet {side} is empty"));
-            }
-            for &ship in fleet {
-                if ship >= 25 && ship != 255 {
-                    return Err(format!("invalid melee index {ship}; expected 0..24 or 255"));
-                }
-            }
-        }
-        Ok(())
+        crate::supermelee::session::validate_fleets(&self.ships)
     }
 }
 
@@ -313,12 +303,6 @@ impl CorpusCoverage {
     }
 }
 
-pub(crate) fn configure(request: &MeleeSetupRequest, checkpoint: &dyn Fn()) -> Result<(), String> {
-    request.validate()?;
-    crate::collections::observation::enable();
-    execute(Operation::Configure(request), checkpoint).map(|_| ())
-}
-
 pub(crate) fn run(request: &FixtureRequest, checkpoint: &dyn Fn()) -> Result<FixtureRun, String> {
     crate::collections::observation::enable();
     let proof = execute(Operation::Fixture(request.fixture), checkpoint)?
@@ -340,7 +324,6 @@ pub(crate) fn trigger(checkpoint: &dyn Fn()) -> Result<(), String> {
 }
 
 enum Operation<'a> {
-    Configure(&'a MeleeSetupRequest),
     Fixture(FixtureName),
     Corpus(CorpusRequest),
     MutualLoss,

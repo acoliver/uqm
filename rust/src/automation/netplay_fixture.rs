@@ -17,77 +17,43 @@ impl Request {
     }
 }
 
-fn setup_synchronized(setup: &crate::supermelee::setup::team::MeleeSetup, side: usize) -> bool {
-    setup.sent[side].is_synchronized()
-}
-
-#[cfg(not(test))]
-pub(crate) fn connect(request: &Request) -> Result<(), String> {
-    use crate::supermelee::{native::menu::live::drawing::P_MELEE_STATE, netplay::abi::*};
+pub(crate) fn connect(
+    setup: &mut crate::automation::input_admission::Target<'_>,
+    observer: &mut dyn crate::engine::observe::Observer<
+        Option<crate::engine::observe::CampaignView>,
+    >,
+    request: &Request,
+) -> Result<(), String> {
     request.validate()?;
-    // SAFETY: the fixture is admitted on the live menu input thread, before a
-    // battle borrows its session. The menu and retained option text outlive it.
-    let state =
-        unsafe { P_MELEE_STATE.as_mut() }.ok_or("netplay fixture requires the melee menu")?;
-    if state.melee_started != 0 {
-        return Err("cannot connect the netplay fixture during battle".into());
-    }
-    let side = usize::from(request.remote_player);
-    state
-        .netplay
-        .configure_peer(side, request.server, request.port);
-    let session = state.netplay.clone();
-    let remote = request.remote_player;
-    if !session.open_player_network_connection(remote, &mut |event| {
-        // SAFETY: admission retains the menu through this synchronous dispatch.
-        unsafe {
-            crate::supermelee::native::menu::live::changes::apply_protocol_event(state, event)
-        }
-    }) {
-        return Err("could not open netplay fixture endpoint".into());
-    }
-    let socket = session
-        .connection(side)
-        .unwrap_or_else(|| panic!("opened connection"))
-        .socket;
+    let port = setup.connect_peer(
+        request.remote_player,
+        request.server,
+        request.port,
+        observer,
+    )?;
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
     if request.server {
-        let socket = socket.unwrap_or_else(|| panic!("opened endpoint has no socket"));
-        let port = session
-            .local_port(socket)
-            .map_err(|error| format!("fixture port: {error}"))?;
-        eprintln!("netplay fixture listener ready {port}");
+        eprintln!(
+            "netplay fixture listener ready {}",
+            port.unwrap_or_else(|| panic!("opened listener has a port"))
+        );
     }
     loop {
-        let connection = session
-            .connection(side)
+        let peer = setup
+            .peer_setup(request.remote_player)
             .ok_or("netplay fixture disconnected during setup")?;
-        let setup = &state.melee_setup;
-        // Entering setup sends the bootstrap fleet/name but does not wait for
-        // their echoes. A late bootstrap update cancels menu confirmation.
-        if connection.state == NetState_NetState_inSetup && setup_synchronized(setup, side) {
+        if peer.ready {
             break;
         }
-        if connection.flags.disconnected || std::time::Instant::now() >= deadline {
+        if peer.disconnected || std::time::Instant::now() >= deadline {
             return Err("netplay fixture disconnected or did not synchronize setup".into());
         }
-        drop(connection);
-        session.net_input_with(1, &mut |event| {
-            // SAFETY: admission retains the menu through this synchronous dispatch.
-            unsafe {
-                crate::supermelee::native::menu::live::changes::apply_protocol_event(state, event)
-            }
-        });
-        // This nested input wait must advance replay time so async alarms run.
+        setup.poll_peer(observer);
         crate::threading::pacing::yield_input_loop(std::thread::yield_now);
     }
     Ok(())
 }
 
-#[cfg(test)]
-pub(crate) fn connect(_request: &Request) -> Result<(), String> {
-    Err("netplay fixture requires a loaded replay game".into())
-}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -96,22 +62,22 @@ mod tests {
         use crate::supermelee::{setup::team::MeleeSetup, types::MeleeShip};
         let mut setup = MeleeSetup::new();
         for side in 0..2 {
-            assert!(setup_synchronized(&setup, side));
+            assert!(setup.sent[side].is_synchronized());
             for slot in 0..14 {
                 setup.sent[side].ships[slot] = MeleeShip::MeleeNone;
                 assert!(
-                    !setup_synchronized(&setup, side),
+                    !setup.sent[side].is_synchronized(),
                     "unacknowledged slot {slot}"
                 );
                 setup.sent[side].ships[slot] = MeleeShip::MeleeUnset;
             }
             setup.sent[side].name = Some(c"".to_owned());
             assert!(
-                !setup_synchronized(&setup, side),
+                !setup.sent[side].is_synchronized(),
                 "unacknowledged team name"
             );
             setup.sent[side].name = None;
-            assert!(setup_synchronized(&setup, side));
+            assert!(setup.sent[side].is_synchronized());
         }
     }
 
@@ -132,11 +98,13 @@ mod tests {
                 assert_eq!(client.validate().is_ok(), remote_player < 2 && port != 0);
             }
         }
-        assert!(connect(&Request {
-            remote_player: 0,
-            server: false,
-            port: 21837
-        })
+        assert!(crate::engine::observe::InputSetup::connect_peer(
+            &mut crate::automation::input_admission::Unavailable,
+            0,
+            false,
+            21837,
+            &mut crate::engine::observe::Unobserved,
+        )
         .is_err());
     }
 }

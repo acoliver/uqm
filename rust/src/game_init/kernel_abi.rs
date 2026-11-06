@@ -191,45 +191,6 @@ pub unsafe fn InitGameKernel(kernel: &mut crate::engine::Kernel, activity: u16) 
 pub fn UninitPlayerInput() {}
 
 /// # Safety
-/// Player index is below NUM_PLAYERS and its input context is not already installed.
-pub fn SetPlayerInput(kernel: &mut crate::engine::Kernel, player: u16) -> bool {
-    {
-        let slot = &mut kernel.player_input[player as usize];
-        assert!(slot.is_none());
-        *slot = Some(crate::engine::battle::input::InputContext::new(
-            player,
-            kernel.player_control[player as usize],
-        ));
-        true
-    }
-}
-
-/// # Safety
-/// Both player input contexts must be uninstalled.
-pub fn SetPlayerInputAll(kernel: &mut crate::engine::Kernel) -> bool {
-    for player in 0..2 {
-        if !SetPlayerInput(kernel, player) {
-            return false;
-        }
-    }
-    true
-}
-
-/// # Safety
-/// Player index is below NUM_PLAYERS and context is null or owned by this player.
-pub fn ClearPlayerInput(kernel: &mut crate::engine::Kernel, player: u16) {
-    kernel.player_input[player as usize] = None;
-}
-
-/// # Safety
-/// Called on the game thread when the contexts are no longer in use.
-pub fn ClearPlayerInputAll(kernel: &mut crate::engine::Kernel) {
-    for player in 0..2 {
-        ClearPlayerInput(kernel, player);
-    }
-}
-
-/// # Safety
 /// Called once during startup on the IO owner thread.
 #[no_mangle]
 pub unsafe extern "C" fn initIO() -> i32 {
