@@ -6,8 +6,9 @@ use crate::comm::dispatch::production_captain_name;
 use crate::engine::{
     battle::{
         link_queue::{LinkQueue, Starship},
-        ShipId,
+        Cx, ShipId,
     },
+    observe::Io,
     world::activity::ActivityControl,
     Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields,
 };
@@ -35,8 +36,8 @@ use crate::starbase::{gfx::Rgba, platform::ONE_SECOND, sis_modules::FUEL_TANK_SC
 const RPG_PLAYER_NUM: usize = 0;
 /// `LOBYTE (CurrentActivity)` of the melee game.
 const SUPER_MELEE: u16 = 0;
-const MENU_SOUND_MOVE: c_int = 0;
-const MENU_SOUND_SUCCESS: c_int = 1;
+const MENU_SOUND_MOVE: u16 = 0;
+const MENU_SOUND_SUCCESS: u16 = 1;
 const MENU_SOUND_NONE: u16 = 0;
 /// `MENU_SOUND_UP | DOWN | LEFT | RIGHT`.
 const MENU_SOUND_ARROWS: u16 = 0x0F;
@@ -56,7 +57,7 @@ use crate::graphics::{
 
 use crate::ui::sis::{capacity::GetCrewPodCapacity, SetFlashRect};
 
-use crate::battle::{encount_native::engine::fleet_is_infinite, sounds::engine::PlayMenuSound};
+use crate::battle::encount_native::engine::fleet_is_infinite;
 
 use crate::strings::string_table::{GetStringAddress, GetStringLength, SetAbsStringTableIndex};
 
@@ -99,12 +100,8 @@ fn draw_text(x: i16, y: i16, text_ptr: *const c_char, char_count: u16) {
     unsafe { font_DrawText(std::ptr::from_mut(&mut text).cast()) };
 }
 
-/// The picker frame's corner and what `DoInput` hands back to the callback.
-/// `input_func` first, as `DoInput` requires; the rest is private to the
-/// picker.
-#[repr(C)]
+/// The picker state retained by its synchronous input frame.
 struct PickerState {
-    input_func: unsafe fn(*mut PickerState, &crate::engine::input::InputSession) -> c_int,
     initialized: bool,
     activity: ActivityControl,
     cursor: Cursor,
@@ -249,11 +246,10 @@ unsafe fn change_selection(state: &mut PickerState) {
 
 /// `DoPickBattleShip`: one input frame of the picker.
 unsafe fn do_pick_battle_ship(
-    state: *mut PickerState,
+    cx: &mut Cx<'_>,
+    state: &mut PickerState,
     input: &crate::engine::input::InputSession,
 ) -> c_int {
-    // SAFETY: `DoInput` passes the state `get_armada_star_ship` owns.
-    let state = unsafe { &mut *state };
     if base_activity_aborted(&state.activity) {
         state.chosen = None;
         return 0;
@@ -268,26 +264,24 @@ unsafe fn do_pick_battle_ship(
         // injected after this observation confirms a real choice.
         crate::automation::ui_observation::observe_ship_picker(true);
         // SAFETY: `state` is the running picker.
-        unsafe { change_selection(state) };
+        cx.with_legacy(|| unsafe { change_selection(state) });
     } else {
         let (keys, select) = pulsed_directions(input);
         if select {
             if !state.chosen.is_none() {
-                // SAFETY: plain call.
-                unsafe { PlayMenuSound((MENU_SOUND_SUCCESS) as u32) };
+                crate::ui::settings::play_menu_sound(cx.kernel, cx.world, MENU_SOUND_SUCCESS);
                 return 0;
             }
         } else if let Some(cursor) = moved(state.cursor, keys) {
-            // SAFETY: plain call.
-            unsafe { PlayMenuSound((MENU_SOUND_MOVE) as u32) };
+            crate::ui::settings::play_menu_sound(cx.kernel, cx.world, MENU_SOUND_MOVE);
             state.cursor = cursor;
             // SAFETY: `state` is the running picker.
-            unsafe { change_selection(state) };
+            cx.with_legacy(|| unsafe { change_selection(state) });
         }
     }
 
     // SAFETY: plain call.
-    unsafe { crate::battle::c_bridge::SleepThread(ONE_SECOND / 30) };
+    cx.with_legacy(|| unsafe { crate::battle::c_bridge::SleepThread(ONE_SECOND / 30) });
     1
 }
 
@@ -317,7 +311,6 @@ unsafe fn get_armada_star_ship(
     unsafe { draw_armada_pick_ship(0, &mut pick) };
 
     let mut state = PickerState {
-        input_func: do_pick_battle_ship,
         initialized: false,
         activity,
         cursor: Cursor::START,
@@ -325,11 +318,12 @@ unsafe fn get_armada_star_ship(
         frame: (pick.corner.x, pick.corner.y),
         flash: CRect::default(),
     };
-    // SAFETY: `state` starts with the `InputFunc` pointer `DoInput` calls and
-    // outlives the loop.
+    // SAFETY: the synchronous frame retains its private picker state and input resources.
     unsafe {
         base::SetMenuSounds(input, MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
-        base::DoInput(std::ptr::addr_of_mut!(state).cast(), 0);
+        base::DoInput(0, &mut |cx: &mut Cx<'_>, _: &mut Io<'_>| {
+            do_pick_battle_ship(cx, &mut state, input) != 0
+        });
     }
     crate::automation::ui_observation::observe_ship_picker(false);
     // SAFETY: plain call.

@@ -1461,11 +1461,7 @@ mod runtime {
         );
         SetContext(old);
     }
-    #[repr(C)]
-    struct WaitState {
-        input_func: Option<unsafe fn(*mut WaitState, &InputSession) -> BOOLEAN>,
-    }
-    unsafe fn wait_for_key(_: *mut WaitState, input: &InputSession) -> BOOLEAN {
+    unsafe fn wait_for_key(input: &InputSession) -> BOOLEAN {
         if input.pulsed().menu[KEY_MENU_SELECT as usize] != 0
             || input.pulsed().menu[KEY_MENU_CANCEL as usize] != 0
         {
@@ -1525,10 +1521,13 @@ mod runtime {
                 context = GetNextContext(context);
             }
             put_screen(debug_frame);
-            let mut state = WaitState {
-                input_func: Some(wait_for_key),
-            };
-            DoInput(ptr::addr_of_mut!(state).cast(), 1);
+            DoInput(
+                1,
+                &mut |cx: &mut Cx<'_>, _: &mut crate::engine::observe::Io<'_>| {
+                    let runtime = cx.kernel.input_runtime();
+                    cx.with_legacy(|| wait_for_key(runtime.input()) != 0)
+                },
+            );
             SetContext(old);
             DestroyContext(debug_context);
             DestroyDrawable(ReleaseDrawable(debug_frame));

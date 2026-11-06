@@ -15,8 +15,6 @@ const MENU_FRAME_RATE: DWORD = ONE_SECOND / 20;
 
 #[repr(C)]
 pub struct ConnectDialogState {
-    pub input_func:
-        Option<unsafe fn(*mut ConnectDialogState, &crate::engine::input::InputSession) -> BOOLEAN>,
     pub next_time: DWORD,
     pub initialized: BOOLEAN,
     pub which_side: c_int,
@@ -488,10 +486,15 @@ pub unsafe fn melee_connect_dialog(
     state.initialized = 0;
     state.which_side = side;
     state.session = session;
-    state.input_func = Some(do_melee_connect_dialog);
     state.confirmed = 1;
     CURRENT_STATE = &mut state;
-    DoInput(ptr::addr_of_mut!(state).cast(), 1);
+    DoInput(
+        1,
+        &mut |cx: &mut crate::engine::battle::Cx<'_>, _: &mut crate::engine::observe::Io<'_>| {
+            let runtime = cx.kernel.input_runtime();
+            cx.with_legacy(|| do_melee_connect_dialog(&mut state, runtime.input()) != 0)
+        },
+    );
     CURRENT_STATE = ptr::null_mut();
     DestroyFont(PLAYER_FONT_HANDLE);
     state.confirmed as BOOLEAN

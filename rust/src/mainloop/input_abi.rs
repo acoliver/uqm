@@ -11,7 +11,6 @@ pub(crate) mod live {
         input::{InputControls, InputSession},
     };
     use crate::ships::native::abi::*;
-    use std::ffi::c_void;
 
     pub fn ResetKeyRepeat(input: &InputControls) {
         input.reset_repeat(crate::time::counter_abi::GetTimeCounter());
@@ -96,27 +95,15 @@ pub(crate) mod live {
     }
 
     /// # Safety
-    /// State starts with a live callback prefix; nested loops remain on the game thread.
-    #[no_mangle]
-    pub unsafe extern "C" fn DoInput(state: *mut c_void, reset: u32) {
+    /// The initialized game-thread context must be published by the calling legacy UI.
+    pub unsafe fn DoInput(reset: u32, frame: &mut dyn crate::engine::input::Frame) {
         crate::app::bridge::enter(|cx| {
             let runtime = cx.kernel.input_runtime();
             let mut observer = runtime.observer();
             let mut io = crate::engine::observe::Io {
                 observer: &mut *observer,
             };
-            runtime.run(
-                cx,
-                &mut io,
-                reset != 0,
-                &mut |cx: &mut Cx<'_>, _: &mut crate::engine::observe::Io<'_>| {
-                    cx.with_legacy(|| {
-                        let callback =
-                            *state.cast::<unsafe fn(*mut c_void, &InputSession) -> u32>();
-                        callback(state, runtime.input()) != 0
-                    })
-                },
-            );
+            runtime.run(cx, &mut io, reset != 0, frame);
         });
     }
 

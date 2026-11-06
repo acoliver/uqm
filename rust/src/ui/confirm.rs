@@ -152,17 +152,12 @@ pub unsafe fn do_confirm_exit(
     result
 }
 
-#[repr(C)]
-struct PopupState {
-    input_func: unsafe fn(*mut PopupState, &InputSession) -> BOOLEAN,
-}
-unsafe fn do_popup(_state: *mut PopupState, input: &InputSession) -> BOOLEAN {
-    SleepThread(ONE_SECOND / 20);
+unsafe fn do_popup(cx: &mut crate::engine::battle::Cx<'_>, input: &InputSession) -> BOOLEAN {
+    cx.with_legacy(|| SleepThread(ONE_SECOND / 20));
     u32::from(
         input.pulsed().menu[KEY_MENU_SELECT as usize] == 0
             && input.pulsed().menu[KEY_MENU_CANCEL as usize] == 0
-            && crate::engine::World::current().read(|world| world.activity()) & CHECK_ABORT as u16
-                == 0,
+            && cx.world.activity() & CHECK_ABORT as u16 == 0,
     )
 }
 
@@ -215,10 +210,12 @@ pub unsafe fn do_popup_window(runtime: &InputSession, msg: *const ::std::ffi::c_
     GetMenuSounds(input, &mut sound0, &mut sound1);
     SetMenuSounds(input, 0, 0);
     let old_callback = SetInputCallback(runtime, None);
-    let mut state = PopupState {
-        input_func: do_popup,
-    };
-    DoInput((&mut state as *mut PopupState).cast(), 1);
+    DoInput(
+        1,
+        &mut |cx: &mut crate::engine::battle::Cx<'_>, _: &mut crate::engine::observe::Io<'_>| {
+            do_popup(cx, input) != 0
+        },
+    );
     SetInputCallback(runtime, old_callback);
     ClearSystemRect();
     DrawStamp(&mut saved);

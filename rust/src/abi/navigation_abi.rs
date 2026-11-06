@@ -2843,8 +2843,6 @@ pub type joy_char_t = joy_char;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct textentry_state {
-    pub InputFunc:
-        ::std::option::Option<unsafe fn(pTES: *mut textentry_state, input: &crate::engine::input::InputSession) -> BOOLEAN>,
     pub Initialized: BOOLEAN,
     pub NextTime: DWORD,
     pub Success: BOOLEAN,

@@ -51,55 +51,7 @@ pub unsafe fn do_text_entry(text: *mut TEXTENTRY_STATE, input: &InputSession) ->
         return 0;
     }
     if (*text).Initialized == 0 {
-        let mut lower_len = 0;
-        (*text).InputFunc = Some(do_text_entry);
-        (*text).Success = 0;
-        (*text).Initialized = 1;
-        (*text).JoystickMode = 0;
-        (*text).UpperRegister = 1;
-        let chars = utf8StringCount(((*text).BaseStr).cast());
-        if (*text).CursorPos as usize > chars {
-            (*text).CursorPos = chars as i32;
-        }
-        (*text).InsPt =
-            (skipUTF8Chars(((*text).BaseStr).cast(), (*text).CursorPos as usize)).cast();
-        (*text).JoyAlphaString = CaptureStringTable(LoadStringTableInstance(
-            JOYSTICK_ALPHA_STRTAB.as_ptr().cast(),
-        ));
-        let table = (*text).JoyAlphaString;
-        (*text).JoyAlpha = load_alpha(
-            SetAbsStringTableIndex(table, 0),
-            &mut (*text).JoyAlphaLength,
-        )
-        .cast();
-        (*text).JoyUpper =
-            load_alpha(SetAbsStringTableIndex(table, 1), &mut (*text).JoyRegLength).cast();
-        (*text).JoyLower = load_alpha(SetAbsStringTableIndex(table, 2), &mut lower_len).cast();
-        if lower_len != (*text).JoyRegLength {
-            if lower_len < (*text).JoyRegLength {
-                (*text).JoyRegLength = lower_len;
-            }
-            crate::log_abi::log_message(log_Level_log_Warning as i32, &format!("Warning: Joystick upper-lower registers size mismatch; using the smallest subset ({})", (*text).JoyRegLength));
-        }
-        (*text).CacheStr =
-            HMalloc(((*text).MaxSize as usize).wrapping_mul(mem::size_of::<UNICODE>())).cast();
-        EnterCharacterMode();
-        DoInput(text.cast(), 1);
-        ExitCharacterMode();
-        if !(*text).CacheStr.is_null() {
-            HFree((*text).CacheStr.cast());
-        }
-        if !(*text).JoyLower.is_null() {
-            HFree((*text).JoyLower.cast());
-        }
-        if !(*text).JoyUpper.is_null() {
-            HFree((*text).JoyUpper.cast());
-        }
-        if !(*text).JoyAlpha.is_null() {
-            HFree((*text).JoyAlpha.cast());
-        }
-        DestroyStringTable(ReleaseStringTable((*text).JoyAlphaString));
-        return (*text).Success;
+        return begin_text_entry(text, input);
     }
     let pulse = input.pulsed();
     let mut string = (*text).InsPt;
@@ -218,6 +170,61 @@ pub unsafe fn do_text_entry(text: *mut TEXTENTRY_STATE, input: &InputSession) ->
         SleepThread(ONE_SECOND / 30);
         1
     }
+}
+
+unsafe fn begin_text_entry(text: *mut TEXTENTRY_STATE, input: &InputSession) -> BOOLEAN {
+    let mut lower_len = 0;
+    (*text).Success = 0;
+    (*text).Initialized = 1;
+    (*text).JoystickMode = 0;
+    (*text).UpperRegister = 1;
+    let chars = utf8StringCount(((*text).BaseStr).cast());
+    if (*text).CursorPos as usize > chars {
+        (*text).CursorPos = chars as i32;
+    }
+    (*text).InsPt = (skipUTF8Chars(((*text).BaseStr).cast(), (*text).CursorPos as usize)).cast();
+    (*text).JoyAlphaString = CaptureStringTable(LoadStringTableInstance(
+        JOYSTICK_ALPHA_STRTAB.as_ptr().cast(),
+    ));
+    let table = (*text).JoyAlphaString;
+    (*text).JoyAlpha = load_alpha(
+        SetAbsStringTableIndex(table, 0),
+        &mut (*text).JoyAlphaLength,
+    )
+    .cast();
+    (*text).JoyUpper =
+        load_alpha(SetAbsStringTableIndex(table, 1), &mut (*text).JoyRegLength).cast();
+    (*text).JoyLower = load_alpha(SetAbsStringTableIndex(table, 2), &mut lower_len).cast();
+    if lower_len != (*text).JoyRegLength {
+        if lower_len < (*text).JoyRegLength {
+            (*text).JoyRegLength = lower_len;
+        }
+        crate::log_abi::log_message(log_Level_log_Warning as i32, &format!("Warning: Joystick upper-lower registers size mismatch; using the smallest subset ({})", (*text).JoyRegLength));
+    }
+    (*text).CacheStr =
+        HMalloc(((*text).MaxSize as usize).wrapping_mul(mem::size_of::<UNICODE>())).cast();
+    EnterCharacterMode();
+    DoInput(
+        1,
+        &mut |cx: &mut crate::engine::battle::Cx<'_>, _: &mut crate::engine::observe::Io<'_>| {
+            cx.with_legacy(|| do_text_entry(text, input) != 0)
+        },
+    );
+    ExitCharacterMode();
+    if !(*text).CacheStr.is_null() {
+        HFree((*text).CacheStr.cast());
+    }
+    if !(*text).JoyLower.is_null() {
+        HFree((*text).JoyLower.cast());
+    }
+    if !(*text).JoyUpper.is_null() {
+        HFree((*text).JoyUpper.cast());
+    }
+    if !(*text).JoyAlpha.is_null() {
+        HFree((*text).JoyAlpha.cast());
+    }
+    DestroyStringTable(ReleaseStringTable((*text).JoyAlphaString));
+    (*text).Success
 }
 
 unsafe fn load_alpha(string: STRING, count: *mut i32) -> *mut JoyChar {
