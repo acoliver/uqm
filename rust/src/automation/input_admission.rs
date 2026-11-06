@@ -42,3 +42,41 @@ pub(crate) fn legacy<R>(target: &mut Target<'_>, operation: impl FnOnce() -> R) 
     });
     result.unwrap_or_else(|| panic!("synchronous legacy effect was executed"))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unavailable_setup_rejects_fleet_and_connection_effects() {
+        let mut target = Unavailable;
+        assert_eq!(
+            target.configure_fleet([[255; 7]; 2], false),
+            Err("configure_parity_melee requires the live Super Melee menu".into())
+        );
+        assert_eq!(
+            target.connect_peer(0, true, 0, &mut crate::engine::observe::Unobserved),
+            Err("netplay fixture requires the melee menu".into())
+        );
+        assert!(target.peer_setup(0).is_none());
+        assert!(target.peer_setup(1).is_none());
+    }
+
+    #[test]
+    #[should_panic(expected = "peer polling without a live setup frame")]
+    fn unavailable_setup_rejects_polling() {
+        Unavailable.poll_peer(&mut crate::engine::observe::Unobserved);
+    }
+
+    #[test]
+    fn legacy_effect_consumes_its_capture_once_and_returns_its_result() {
+        let value = String::from("owned effect");
+        let mut calls = 0;
+        let result = legacy(&mut Unavailable, || {
+            calls += 1;
+            value
+        });
+        assert_eq!(calls, 1);
+        assert_eq!(result, "owned effect");
+    }
+}
