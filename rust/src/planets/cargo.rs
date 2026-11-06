@@ -219,7 +219,7 @@ pub(crate) mod live {
 
     unsafe fn discard(menu: &mut Menu) -> i32 {
         let pulse = std::ptr::addr_of!(PulsedInputState).read();
-        if WorldFields::current().read(|owner| owner.game.current_activity) & (1 << 14) != 0
+        if crate::engine::World::current().read(|world| world.activity()) & (1 << 14) != 0
             || pulse.menu[KEY_MENU_CANCEL as usize] != 0
         {
             return 0;

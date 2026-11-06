@@ -11,6 +11,54 @@ pub(super) struct Departure {
 }
 
 impl AutomationObserver {
+    /// Fly the flagship out of the live solar system with player controls and
+    /// report arrival once production has dispatched hyperspace.
+    /// Hold the turn key of a `turn_flagship` step until the live flagship
+    /// facing has changed by exactly the requested facings, then release it.
+    pub(super) fn service_flagship_turn(
+        &self,
+        world: &campaign_state::CampaignView,
+        inner: &mut CoordInner,
+        turn: crate::automation::script::TurnFlagshipStep,
+        scheduler_event: SchedulerEvent,
+    ) -> SchedulerEvent {
+        use crate::automation::navigation::NavigationControl;
+        use crate::automation::script::TurnDirection;
+
+        let progress = inner.flagship_turn.observe(
+            mode::require_live(world),
+            flagship_turn::live_facing(),
+            turn.direction,
+            turn.facings,
+        );
+        let holding = NavigationControl {
+            left: turn.direction == TurnDirection::Left,
+            right: turn.direction == TurnDirection::Right,
+            ..NavigationControl::default()
+        };
+        match progress {
+            Ok(TurnProgress::Turning { .. }) => {
+                if !self.set_navigation_controls(holding) {
+                    self.reject_input(inner, "turn_flagship", -1, -1);
+                }
+                scheduler_event
+            }
+            Ok(TurnProgress::Complete(proof)) => {
+                if !self.set_navigation_controls(NavigationControl::default()) {
+                    self.reject_input(inner, "turn_flagship", -1, -1);
+                    return scheduler_event;
+                }
+                self.write_trace_labeled(inner, RecordKind::SemanticAssertion, proof.trace_label());
+                SchedulerEvent::NavigationReached
+            }
+            Err(error) => {
+                self.write_trace_labeled(inner, RecordKind::SemanticAssertion, error.trace_label());
+                self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                scheduler_event
+            }
+        }
+    }
+
     pub(super) fn patrol_policy(
         action: Option<&Action>,
     ) -> crate::automation::script::PatrolPolicy {
@@ -81,7 +129,7 @@ impl AutomationObserver {
                 ),
             );
         }
-        let activity = crate::mainloop::ffi::get_current_activity().0;
+        let activity = world.activity;
         if crate::automation::navigation::hyperspace_reached(
             inner.departure.flight_observed,
             solar_system_active,

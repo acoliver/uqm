@@ -210,7 +210,7 @@ pub(crate) mod live {
     }
 
     unsafe fn modify(menu: &mut Menu) -> i32 {
-        if WorldFields::current().read(|owner| owner.game.current_activity) & (1 << 14) != 0 {
+        if crate::engine::World::current().read(|world| world.activity()) & (1 << 14) != 0 {
             return 0;
         }
         let pulse = std::ptr::addr_of!(PulsedInputState).read();

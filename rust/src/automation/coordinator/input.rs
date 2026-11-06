@@ -293,7 +293,11 @@ mod tests {
         )
         .unwrap();
         let temp = tempfile::tempdir().unwrap();
-        let observer = AutomationObserver::new(script, temp.path().into());
+        let observer = AutomationObserver::new(
+            script,
+            temp.path().into(),
+            crate::engine::World::new().activity_control(),
+        );
         let mut capture = || panic!("admission must not acquire a campaign owner");
         assert!(!observer.process_input_at_boundary(&mut capture, true));
         assert_eq!(observer.inner.lock().input_seen, 1);
@@ -304,7 +308,7 @@ mod tests {
             .terminal
             .try_set(TerminalClass::SemanticMismatch);
         assert_eq!(input_ffi::service_input(&observer, &mut capture, false), 1);
-        assert_eq!(input_ffi::after_input_update(&observer), 1);
+        assert_eq!(input_ffi::after_input_update(&observer, 0), 1);
         assert!(observer.process_input_at_boundary(&mut capture, false));
         assert_eq!(observer.inner.lock().input_seen, 1);
     }
@@ -351,8 +355,15 @@ mod tests {
             "test.json",
         )?;
         let temp = tempfile::tempdir()?;
-        let _app =
-            crate::app::Application::new(Some(AutomationObserver::new(script, temp.path().into())));
+        let _app = {
+            let game = crate::engine::Game::new();
+            let observer = Some(AutomationObserver::new(
+                script,
+                temp.path().into(),
+                game.world.activity_control(),
+            ));
+            crate::app::Application::new(game, observer)
+        };
         let coord = _app
             .observer()
             .cloned()

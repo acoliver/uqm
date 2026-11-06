@@ -170,11 +170,9 @@ mod live {
             })
         }
         fn skip_sale(&mut self) -> bool {
-            self.cx.borrow_mut().with_legacy(|| unsafe {
-                AnyButtonPress(1) != 0
-                    || WorldData::current().read(|owner| owner.game.current_activity) & (1 << 14)
-                        != 0
-            })
+            let mut cx = self.cx.borrow_mut();
+            let pressed = cx.with_legacy(|| unsafe { AnyButtonPress(1) != 0 });
+            pressed || cx.world.activity() & (1 << 14) != 0
         }
     }
 }

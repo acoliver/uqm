@@ -1,7 +1,7 @@
 //! UI drawing and nested input waits, ported from uqm/util.c.
 
 #[cfg(not(test))]
-use crate::engine::{Kernel, WorldData};
+use crate::engine::Kernel;
 use crate::navigation::abi::{Color, RECT};
 
 fn box_rectangles(
@@ -130,7 +130,7 @@ pub(crate) mod live {
         if Kernel::current()
             .read(|owner| owner.activity_frame)
             .is_null()
-            || WorldData::current().read(|owner| owner.game.current_activity)
+            || crate::engine::World::current().read(|world| world.activity())
                 & (CHECK_ABORT | CHECK_PAUSE) as u16
                 != 0
             || Kernel::current().read(|owner| owner.last_activity)
@@ -139,7 +139,8 @@ pub(crate) mod live {
         {
             return 0;
         }
-        (**WorldData::current()).game.current_activity |= CHECK_PAUSE as u16;
+        crate::engine::World::current()
+            .write(|world| world.set_activity(world.activity() | CHECK_PAUSE as u16));
         if PlayingTrack() != 0 {
             PauseTrack();
         }
@@ -189,14 +190,12 @@ pub(crate) mod live {
             ResumeTrack();
         }
         TaskSwitch();
-        (**WorldData::current()).game.current_activity &= !(CHECK_PAUSE as u16);
+        crate::engine::World::current()
+            .write(|world| world.set_activity(world.activity() & !(CHECK_PAUSE as u16)));
         1
     }
 
-    use crate::engine::{
-        battle::Cx,
-        observe::{CampaignView, InputView, Io},
-    };
+    use crate::engine::{battle::Cx, observe::Io};
 
     fn wait_until(
         cx: &mut Cx<'_>,
@@ -213,11 +212,9 @@ pub(crate) mod live {
             // SAFETY: quit dispatch and this wait run on the same game thread.
             && unsafe { QuitPosted == 0 }
         {
-            let campaign =
-                CampaignView::for_input(InputView::Nested, || CampaignView::capture(cx.world));
-            let Some(sampled) = cx.with_legacy(|| {
+            let Some(sampled) = cx.nested_input(io, |cx| {
                 // SAFETY: the published input scope remains live during the synchronous sleep.
-                io.nested_input(&campaign, || unsafe {
+                cx.with_legacy(|| unsafe {
                     SleepThread(ONE_SECOND / 40);
                     AnyButtonPress(1)
                 })

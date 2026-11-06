@@ -66,11 +66,7 @@ use crate::planets::solarsys::{
 use crate::ui::{sis::ClearSISRect, util::live::DrawStarConBox};
 
 #[allow(non_snake_case)]
-extern "C" {
-
-    static mut NextActivity: u16;
-
-}
+extern "C" {}
 
 struct Menu {
     list: Vec<u8>,
@@ -180,7 +176,7 @@ unsafe fn orbit_is(planet: u8) -> bool {
     playerInPlanetOrbit() && matchWorld(system, (*system).pOrbitalDesc, planet, 255)
 }
 
-unsafe fn use_caster() -> bool {
+unsafe fn use_caster(next_activity: &mut u16) -> bool {
     if WorldOwner::current().read(in_hqspace) != 0 {
         if WorldOwner::current().read(|world| get(world, StoryKey::ARILOU_SPACE_SIDE)) <= 1 {
             WorldOwner::current().write(|world| set(world, StoryKey::USED_BROADCASTER, 1));
@@ -188,7 +184,9 @@ unsafe fn use_caster() -> bool {
         }
         return false;
     }
-    if (**WorldFields::current()).game.current_activity & 0xff != 4 || !playerInSolarSystem() {
+    if crate::engine::World::current().read(|world| world.activity()) & 0xff != 4
+        || !playerInSolarSystem()
+    {
         return false;
     }
     if orbit_is(1)
@@ -198,8 +196,9 @@ unsafe fn use_caster() -> bool {
         ) == CHMMR_DEFINED
         && WorldOwner::current().read(|world| get(world, StoryKey::CHMMR_UNLEASHED)) == 0
     {
-        NextActivity |= CHECK_LOAD;
-        (**WorldFields::current()).game.current_activity |= START_ENCOUNTER;
+        *next_activity |= CHECK_LOAD;
+        crate::engine::World::current()
+            .write(|world| world.set_activity(world.activity() | START_ENCOUNTER));
         reset_groups();
         WorldOwner::current().write(|world| set(world, StoryKey::GLOBAL_FLAGS_AND_DATA, 1 << 7));
         SaveSolarSysLocation();
@@ -223,8 +222,9 @@ unsafe fn use_caster() -> bool {
     if !found {
         return false;
     }
-    NextActivity |= CHECK_LOAD;
-    (**WorldFields::current()).game.current_activity |= START_ENCOUNTER;
+    *next_activity |= CHECK_LOAD;
+    crate::engine::World::current()
+        .write(|world| world.set_activity(world.activity() | START_ENCOUNTER));
     reset_groups();
     WorldOwner::current().write(|world| {
         set(
@@ -240,12 +240,12 @@ unsafe fn use_caster() -> bool {
 }
 
 /// Returns the original DeviceStatus (failure, success, success without sound).
-unsafe fn invoke(id: u8) -> u8 {
+unsafe fn invoke(id: u8, next_activity: &mut u16) -> u8 {
     match id {
         4..=6 => WorldOwner::current()
             .write(|world| repair_ultron(world, ULTRON_COMPONENTS[usize::from(id - 4)])),
         3 => {
-            if (**WorldFields::current()).game.current_activity & 0xff != 4
+            if crate::engine::World::current().read(|world| world.activity()) & 0xff != 4
                 || !playerInPlanetOrbit()
             {
                 return 0;
@@ -258,7 +258,8 @@ unsafe fn invoke(id: u8) -> u8 {
                 FadeScreen(253, 1680);
             } else {
                 WorldOwner::current().write(|world| set(world, StoryKey::CHMMR_EMERGING, 1));
-                (**WorldFields::current()).game.current_activity |= START_ENCOUNTER;
+                crate::engine::World::current()
+                    .write(|world| world.set_activity(world.activity() | START_ENCOUNTER));
                 reset_groups();
                 WorldOwner::current().write(|world| {
                     crate::comm::dispatch::clone_npc_fragment(world, ship::CHMMR_SHIP, 0);
@@ -268,19 +269,22 @@ unsafe fn invoke(id: u8) -> u8 {
         }
         2 => {
             WorldOwner::current().write(|world| set(world, StoryKey::UTWIG_BOMB, 0));
-            (**WorldFields::current()).game.current_activity &= !0x0200;
+            crate::engine::World::current()
+                .write(|world| world.set_activity(world.activity() & !0x0200));
             (**WorldFields::current()).flagship.crew_enlisted = u16::MAX;
             1
         }
         1 => {
-            NextActivity |= CHECK_LOAD;
-            (**WorldFields::current()).game.current_activity |= START_ENCOUNTER;
+            *next_activity |= CHECK_LOAD;
+            crate::engine::World::current()
+                .write(|world| world.set_activity(world.activity() | START_ENCOUNTER));
             WorldOwner::current().write(|world| set(world, StoryKey::GLOBAL_FLAGS_AND_DATA, 0));
             if WorldOwner::current().read(in_hqspace) != 0 {
                 if WorldOwner::current().read(|world| world.encounters_ref().head().is_some()) {
                     WorldOwner::current().write(|world| set(world, StoryKey::SHIP_TO_COMPEL, 1));
                 }
-                (**WorldFields::current()).game.current_activity &= !0x0200;
+                crate::engine::World::current()
+                    .write(|world| world.set_activity(world.activity() & !0x0200));
                 #[cfg(not(test))]
                 crate::app::bridge::enter(save_sis_hyper_state);
                 #[cfg(test)]
@@ -303,7 +307,7 @@ unsafe fn invoke(id: u8) -> u8 {
             }
             1
         }
-        12 | 13 => u8::from(use_caster()),
+        12 | 13 => u8::from(use_caster(next_activity)),
         0 => {
             if WorldOwner::current().read(in_hyper_space) == 0
                 || (**WorldFields::current()).flagship.fuel_on_board < 1000
@@ -333,7 +337,7 @@ fn effect_state() -> std::collections::BTreeMap<String, u32> {
     {
         state.insert(
             "activity".into(),
-            u32::from(WorldFields::current().read(|owner| owner.game.current_activity)),
+            u32::from(crate::engine::World::current().read(|world| world.activity())),
         );
         state.insert(
             "fuel".into(),
@@ -343,19 +347,18 @@ fn effect_state() -> std::collections::BTreeMap<String, u32> {
     state
 }
 
-unsafe fn frame(menu: &mut Menu) -> i32 {
+unsafe fn frame(menu: &mut Menu, next_activity: &mut u16) -> i32 {
     let keys = std::ptr::addr_of!(crate::c_bindings::controller_input::PulsedInputState)
         .read()
         .menu;
-    if WorldFields::current().read(|owner| owner.game.current_activity) & 0x4000 != 0
-        || keys[10] != 0
+    if crate::engine::World::current().read(|world| world.activity()) & 0x4000 != 0 || keys[10] != 0
     {
         return 0;
     }
     if keys[9] != 0 {
         let id = menu.list[menu.selected];
         let before = effect_state();
-        let status = invoke(id);
+        let status = invoke(id, next_activity);
         if status == 0 {
             PlayMenuSound(2);
         } else if status == 1 {
@@ -424,7 +427,12 @@ pub unsafe fn devices_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) -> i32 {
         return 0;
     };
     cx.with_legacy(|| SetMenuSounds(0x000f | 0x0080 | 0x0100, 0x0010));
-    cx.run_input(io, true, |cx, _| cx.with_legacy(|| frame(&mut menu) != 0));
+    cx.run_input(io, true, |cx, _| {
+        let mut next_activity = 0;
+        let result = cx.with_legacy(|| frame(&mut menu, &mut next_activity) != 0);
+        cx.world.next_activity |= next_activity;
+        result
+    });
     cx.with_legacy(|| SetMenuSounds(0x000f, 0x0010));
     OBSERVATION.lock().unwrap().list = None;
     if cx.world.data.flagship.crew_enlisted == u16::MAX || cx.world.activity() & 0x4000 != 0 {

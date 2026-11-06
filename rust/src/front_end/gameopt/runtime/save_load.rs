@@ -108,8 +108,9 @@ pub(super) fn pick_game(
         let mut canceled_by_user: BOOLEAN = 0;
         pick_state.success = 0;
         cx.run_input(io, true, |cx, _| {
+            let activity = cx.world.activity();
             // SAFETY: the synchronous picker owns these published native resources.
-            cx.with_legacy(|| unsafe { do_pick_game(ptr::addr_of_mut!(menu_state)) }) != 0
+            cx.with_legacy(|| unsafe { do_pick_game(ptr::addr_of_mut!(menu_state), activity) }) != 0
         });
         if pick_state.success == 0 {
             break;
@@ -125,14 +126,8 @@ pub(super) fn pick_game(
             )
         }) != 0
         {
-            log::info!(
-                "{}",
-                if saving != 0 {
-                    "RUST_PICKER: exit=save_success"
-                } else {
-                    "RUST_PICKER: exit=load_success"
-                }
-            );
+            let operation = if saving != 0 { "save" } else { "load" };
+            log::info!("RUST_PICKER: exit={operation}_success");
             break;
         }
         log::info!("RUST_PICKER: operation_failed picker_remains_open");

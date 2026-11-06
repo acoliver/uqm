@@ -1,7 +1,10 @@
 //! Ownership and lifecycle of the live navigation world, ported from globdata.c.
 
 use super::abi::*;
-use crate::engine::StoryKey;
+use crate::engine::{
+    world::new_game::{FleetRoster, FleetTemplate, NewGameInputs},
+    StoryKey,
+};
 use std::{mem, ptr};
 
 unsafe fn create_radar(kernel: &mut crate::engine::Kernel) {
@@ -34,162 +37,126 @@ unsafe fn create_radar(kernel: &mut crate::engine::Kernel) {
 /// # Safety
 /// Resource system and screen contexts must be initialized on the game thread.
 pub unsafe fn load_sc2_data(cx: &mut crate::engine::battle::Cx<'_>) -> BOOLEAN {
-    let kernel = cx.kernel();
-    let world = &raw mut cx.world.data;
-    if (*kernel).flag_stat_frame.is_null() {
-        (*kernel).flag_stat_frame =
+    let kernel = &mut *cx.kernel;
+    if kernel.flag_stat_frame.is_null() {
+        kernel.flag_stat_frame =
             CaptureDrawable(LoadGraphicInstance(c"graphics.flagshipstatus".as_ptr()).cast());
-        if (*kernel).flag_stat_frame.is_null() {
+        if kernel.flag_stat_frame.is_null() {
             return 0;
         }
-        (*kernel).misc_data_frame =
+        kernel.misc_data_frame =
             CaptureDrawable(LoadGraphicInstance(c"graphics.miscdata".as_ptr()).cast());
-        if (*kernel).misc_data_frame.is_null() {
+        if kernel.misc_data_frame.is_null() {
             return 0;
         }
-        (*kernel).font_grad_frame =
+        kernel.font_grad_frame =
             CaptureDrawable(LoadGraphicInstance(c"graphics.fontgradient".as_ptr()).cast());
     }
-    create_radar(cx.kernel);
-    if (*world).game.current_activity as u8 == IN_HYPERSPACE as u8 {
-        (*world).game.ship_stamp.origin.x = -1;
-        (*world).game.ship_stamp.origin.y = -1;
+    create_radar(kernel);
+    if cx.world.activity() as u8 == IN_HYPERSPACE as u8 {
+        cx.world.data.game.ship_stamp.origin.x = -1;
+        cx.world.data.game.ship_stamp.origin.y = -1;
     }
     1
 }
 
-unsafe fn copy_fleet(dst: *mut FLEET_INFO, src: *const SHIP_INFO, fleet: *const FLEET_STUFF) {
-    (*dst).crew_level = (*src).crew_level;
-    (*dst).max_crew = (*src).max_crew;
-    (*dst).max_energy = (*src).max_energy;
-    (*dst).race_strings = (*src).race_strings;
-    (*dst).icons = (*src).icons;
-    (*dst).melee_icon = (*src).melee_icon;
-    (*dst).actual_strength = (*fleet).strength;
-    (*dst).known_loc = (*fleet).known_loc;
+fn fleet_template(info: &SHIP_INFO, fleet: &FLEET_STUFF) -> FleetTemplate {
+    FleetTemplate {
+        crew_level: info.crew_level,
+        max_crew: info.max_crew,
+        max_energy: info.max_energy,
+        race_strings: info.race_strings,
+        icons: info.icons,
+        melee_icon: info.melee_icon,
+        strength: fleet.strength,
+        known_location: fleet.known_loc,
+    }
 }
 
-unsafe fn initialize_races(cx: &mut crate::engine::battle::Cx<'_>) {
-    let mut species = SPECIES_ID_ARILOU_ID;
-    let count = SPECIES_ID_KOHR_AH_ID - species + 1 + 2;
-    cx.world.avail_races().reinit();
-    for i in 0..count {
-        let ship = if i < count - 2 {
-            let value = species;
-            species += 1;
-            value
-        } else if i == count - 2 {
-            SPECIES_ID_YEHAT_ID
-        } else {
-            SPECIES_ID_UR_QUAN_PROBE_ID
-        };
-        let handle = cx
-            .world
-            .avail_races()
-            .alloc()
-            .unwrap_or_else(|| panic!("fleet capacity"));
-        let mut value = FLEET_INFO::default();
-        let fleet = &raw mut value;
-        (*fleet).species_id = ship;
-        if i < count - 1 {
-            let master = find_master_ship(cx.kernel, ship)
-                .unwrap_or_else(|| panic!("master species {ship}"));
-            copy_fleet(fleet, &master.info, &master.fleet);
-        } else {
-            if let Some(desc) = crate::engine::battle::RaceDesc::load(cx.world, ship, false) {
-                copy_fleet(fleet, desc.info(), desc.fleet());
-                desc.unload(cx.world, false, false);
+fn initialize_races(cx: &mut crate::engine::battle::Cx<'_>) {
+    let kernel = &mut *cx.kernel;
+    cx.world.initialize_fleets(
+        FleetRoster {
+            first_species: SPECIES_ID_ARILOU_ID,
+            last_species: SPECIES_ID_KOHR_AH_ID,
+            rebel_species: SPECIES_ID_YEHAT_ID,
+            probe_species: SPECIES_ID_UR_QUAN_PROBE_ID,
+            rebel_slot: YEHAT_REBEL_SHIP as usize,
+        },
+        |world, species| {
+            if species == SPECIES_ID_UR_QUAN_PROBE_ID {
+                if let Some(desc) = crate::engine::battle::RaceDesc::load(world, species, false) {
+                    let template = fleet_template(desc.info(), desc.fleet());
+                    desc.unload(world, false, false);
+                    template
+                } else {
+                    FleetTemplate::default()
+                }
+            } else {
+                let master = find_master_ship(kernel, species)
+                    .unwrap_or_else(|| panic!("master species {species}"));
+                fleet_template(&master.info, &master.fleet)
             }
-        }
-        (*fleet).allied_state = BAD_GUY as u16;
-        (*fleet).known_strength = 0;
-        (*fleet).loc = (*fleet).known_loc;
-        if i == YEHAT_REBEL_SHIP {
-            (*fleet).actual_strength = 0;
-        }
-        (*fleet).growth = 0;
-        (*fleet).growth_fract = 0;
-        (*fleet).growth_err_term = 127;
-        (*fleet).days_left = 0;
-        (*fleet).func_index = u8::MAX;
-        *cx.world.avail_races().get_mut(handle) = value;
-        cx.world.avail_races().put(handle);
-    }
+        },
+    );
 }
 
 /// # Safety
 /// Game-thread initialization, before any world queues have been allocated.
 pub unsafe fn init_game_structures(cx: &mut crate::engine::battle::Cx<'_>) -> BOOLEAN {
-    // SAFETY: the lifecycle borrows owners from Cx; callbacks republish it synchronously.
-    {
-        init_glob_data(cx.world);
-        cx.kernel.play_frame =
-            CaptureDrawable(LoadGraphicInstance(c"graphics.playmenu".as_ptr()).cast());
-        // SAFETY: initialized master templates and the owned World remain live through construction.
-        unsafe {
-            initialize_races(cx);
-        }
-        init_siscontexts(cx.kernel);
-        load_sc2_data(cx);
-        let catalog = crate::planets::starmap::current_catalog()
-            .unwrap_or_else(|| panic!("planet state initialization requires the star catalog"));
-        crate::state::ffi::rust_init_planet_info(
-            cx.world,
-            crate::planets::starmap::catalog_star_count(catalog) as i32,
-        );
-        init_group_info(cx.world, 1);
-        let strings = cx.kernel.game_strings;
-        let state = &raw mut cx.world.data.game;
-        let sis = &raw mut cx.world.data.flagship;
-        (*state).glob_flags = 0;
-        (*state).element_worth = [1, 2, 3, 4, 5, 6, 8, 25];
-        (*sis).element_amounts = [0; 8];
-        super::initial_state::equipment(&mut *sis);
-        cx.world.built_ships().reinit();
-        cx.world.npc_built_ships().reinit();
-        cx.world.ip_groups().reinit();
-        cx.world.encounters().reinit();
-        (*state).current_activity = (IN_INTERPLANETARY | START_INTERPLANETARY) as u16;
-        super::initial_state::prices(&mut *sis, &mut *state);
-        utf8StringCopy(
-            ((*sis).ship_name.as_mut_ptr()).cast(),
-            mem::size_of_val(&(*sis).ship_name),
-            (GetStringAddress(SetAbsStringTableIndex(
-                strings,
-                (NAMING_STRING_BASE + 2) as u16,
-            )))
-            .cast(),
-        );
-        utf8StringCopy(
-            ((*sis).commander_name.as_mut_ptr()).cast(),
-            mem::size_of_val(&(*sis).commander_name),
-            (GetStringAddress(SetAbsStringTableIndex(
-                strings,
-                (NAMING_STRING_BASE + 3) as u16,
-            )))
-            .cast(),
-        );
-        let sis = &raw mut cx.world.data.flagship;
-        let human = cx
-            .world
-            .avail_races_ref()
-            .at(HUMAN_SHIP as usize)
-            .unwrap_or_else(|| panic!("human fleet"));
-        cx.world.avail_races().get_mut(human).allied_state = GOOD_GUY as u16;
-        let template = *cx.world.avail_races_ref().get(human);
-        cx.world.built_ships().clone_fragment(
-            &template,
-            HUMAN_SHIP as u8,
-            0,
-            crate::comm::dispatch::production_captain_name,
-        );
-        (*sis).log_x = crate::planets::universe_units::universe_to_logx(SOL_X as i16);
-        (*sis).log_y = crate::planets::universe_units::universe_to_logy(SOL_Y as i16);
-        cx.world
-            .select_star(None, crate::planets::starmap::current_catalog());
-        cx.world.data.game.autopilot = POINT { x: -1, y: -1 };
-        1
-    }
+    let battle = &mut *cx.b;
+    let kernel = &mut *cx.kernel;
+    let rng = cx.rng;
+    cx.world.new_game(
+        |world| {
+            let mut cx = crate::engine::battle::Cx::new(battle, world, kernel, rng);
+            cx.kernel.play_frame =
+                CaptureDrawable(LoadGraphicInstance(c"graphics.playmenu".as_ptr()).cast());
+            initialize_races(&mut cx);
+            init_siscontexts(cx.kernel);
+            load_sc2_data(&mut cx);
+            let catalog = crate::planets::starmap::current_catalog()
+                .unwrap_or_else(|| panic!("planet state initialization requires the star catalog"));
+            crate::state::ffi::rust_init_planet_info(
+                cx.world,
+                crate::planets::starmap::catalog_star_count(catalog) as i32,
+            );
+            init_group_info(cx.world, 1);
+            let strings = cx.kernel.game_strings;
+            let mut ship_name = [0; 16];
+            let mut commander_name = [0; 16];
+            utf8StringCopy(
+                ship_name.as_mut_ptr().cast(),
+                mem::size_of_val(&ship_name),
+                GetStringAddress(SetAbsStringTableIndex(
+                    strings,
+                    (NAMING_STRING_BASE + 2) as u16,
+                ))
+                .cast(),
+            );
+            utf8StringCopy(
+                commander_name.as_mut_ptr().cast(),
+                mem::size_of_val(&commander_name),
+                GetStringAddress(SetAbsStringTableIndex(
+                    strings,
+                    (NAMING_STRING_BASE + 3) as u16,
+                ))
+                .cast(),
+            );
+            NewGameInputs {
+                activity: (IN_INTERPLANETARY | START_INTERPLANETARY) as u16,
+                human_fleet: HUMAN_SHIP as usize,
+                log_position: (
+                    crate::planets::universe_units::universe_to_logx(SOL_X as i16),
+                    crate::planets::universe_units::universe_to_logy(SOL_Y as i16),
+                ),
+                ship_name,
+                commander_name,
+            }
+        },
+        crate::comm::dispatch::production_captain_name,
+    );
+    1
 }
 
 /// # Safety
@@ -208,36 +175,27 @@ pub unsafe fn free_sc2_data(kernel: &mut crate::engine::Kernel) {
 /// # Safety
 /// The initialized game structures must no longer be in use.
 pub unsafe fn uninit_game_structures(cx: &mut crate::engine::battle::Cx<'_>) {
-    // SAFETY: the lifecycle borrows owners from Cx; callbacks republish it synchronously.
-    {
-        let kernel = cx.kernel();
-        cx.world.encounters().reinit();
-        cx.world.ip_groups().reinit();
-        cx.world.npc_built_ships().reinit();
-        cx.world.built_ships().reinit();
-        uninit_group_info(cx.world);
-        uninit_planet_info(cx.world);
-        if let Some(probe) = cx.world.avail_races_ref().tail() {
-            let probe = *cx.world.avail_races_ref().get(probe);
-            DestroyDrawable(ReleaseDrawable(probe.melee_icon));
-            DestroyDrawable(ReleaseDrawable(probe.icons));
-            DestroyStringTable(ReleaseStringTable(probe.race_strings));
-        }
-        cx.world.avail_races().reinit();
-        DestroyDrawable(ReleaseDrawable((*kernel).play_frame));
-        (*kernel).play_frame = ptr::null_mut();
+    cx.world.encounters().reinit();
+    cx.world.ip_groups().reinit();
+    cx.world.npc_built_ships().reinit();
+    cx.world.built_ships().reinit();
+    uninit_group_info(cx.world);
+    uninit_planet_info(cx.world);
+    if let Some(probe) = cx.world.avail_races_ref().tail() {
+        let probe = *cx.world.avail_races_ref().get(probe);
+        DestroyDrawable(ReleaseDrawable(probe.melee_icon));
+        DestroyDrawable(ReleaseDrawable(probe.icons));
+        DestroyStringTable(ReleaseStringTable(probe.race_strings));
     }
+    cx.world.avail_races().reinit();
+    DestroyDrawable(ReleaseDrawable(cx.kernel.play_frame));
+    cx.kernel.play_frame = ptr::null_mut();
 }
 
 /// Reset campaign values, retaining the caller’s global flags. Queue/resource
 /// teardown is a separate lifecycle step; this does not release those handles.
 pub fn init_glob_data(world: &mut crate::engine::World) {
-    let flags = world.data.game.glob_flags;
-    world.data = crate::engine::WorldData::new();
-    world.data.game.glob_flags = flags;
-    world.story = Some(crate::engine::world::story::GameState::new());
-    world.files.canned_nodes.clear();
-    crate::engine::battle::access::lifecycle::bind_display_array(&mut world.data.game);
+    world.reset_game_data();
 }
 
 pub fn in_hqspace(world: &crate::engine::World) -> BOOLEAN {

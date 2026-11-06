@@ -8,6 +8,7 @@ use crate::engine::{
         link_queue::{LinkQueue, Starship},
         ShipId,
     },
+    world::activity::ActivityControl,
     Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields,
 };
 
@@ -109,6 +110,7 @@ fn draw_text(x: i16, y: i16, text_ptr: *const c_char, char_count: u16) {
 struct PickerState {
     input_func: unsafe extern "C" fn(*mut PickerState) -> c_int,
     initialized: bool,
+    activity: ActivityControl,
     cursor: Cursor,
     /// `MENU_STATE.CurFrame`: the chosen `HSTARSHIP`, null when the cell is
     /// empty.
@@ -259,7 +261,7 @@ unsafe fn change_selection(state: &mut PickerState) {
 unsafe extern "C" fn do_pick_battle_ship(state: *mut PickerState) -> c_int {
     // SAFETY: `DoInput` passes the state `get_armada_star_ship` owns.
     let state = unsafe { &mut *state };
-    if base_activity_aborted() {
+    if base_activity_aborted(&state.activity) {
         state.chosen = None;
         return 0;
     }
@@ -296,15 +298,15 @@ unsafe extern "C" fn do_pick_battle_ship(state: *mut PickerState) -> c_int {
     1
 }
 
-fn base_activity_aborted() -> bool {
-    crate::mainloop::ffi::get_current_activity().0 & CHECK_ABORT != 0
+fn base_activity_aborted(activity: &ActivityControl) -> bool {
+    activity.activity() & CHECK_ABORT != 0
 }
 
 /// `GetArmadaStarShip`: let the player pick one of the fleet's ships.
 ///
 /// # Safety
 /// Game thread, inside a full-game battle.
-unsafe fn get_armada_star_ship() -> *mut c_void {
+unsafe fn get_armada_star_ship(activity: ActivityControl) -> *mut c_void {
     // SAFETY: `battle_counter` has a slot for each side.
     if unsafe { crate::app::bridge::battle(|b| b.counters[1]) } == 0 {
         // No opponents left.
@@ -321,6 +323,7 @@ unsafe fn get_armada_star_ship() -> *mut c_void {
     let mut state = PickerState {
         input_func: do_pick_battle_ship,
         initialized: false,
+        activity,
         cursor: Cursor::START,
         chosen: None,
         frame: (pick.corner.x, pick.corner.y),
@@ -365,22 +368,23 @@ pub use crate::battle::context_access::reader_legacy::{
 pub(crate) unsafe fn encounter_ship(
     last: Option<crate::engine::battle::ShipId>,
     which_player: u16,
-    activity: u16,
+    activity: ActivityControl,
     pick: impl FnOnce(u16, *mut *mut c_void) -> u32,
 ) -> Option<crate::engine::battle::ShipId> {
+    let activity_word = activity.activity();
     let side = usize::from(which_player);
     // SAFETY: `battle_counter` and `race_q` have a slot for each side.
     // SAFETY: as above.
     let last_id = last;
 
     // SAFETY: plain call.
-    if activity as u8 == IN_HYPERSPACE as u8 {
+    if activity_word as u8 == IN_HYPERSPACE as u8 {
         assert_eq!(side, RPG_PLAYER_NUM);
         // SIS for the Hyperspace flight
         // SAFETY: `queue` is `race_q[side]`.
         return LinkQueue::<Starship>::first_ship(side);
     }
-    if activity & 0xFF == SUPER_MELEE {
+    if activity_word & 0xFF == SUPER_MELEE {
         // Let the player chose their own ship. (May be a computer player).
         // SAFETY: `battle_counter` has a slot for each side.
         let (own, other) =
@@ -413,7 +417,9 @@ pub(crate) unsafe fn encounter_ship(
         if ships_left != 0 {
             // Player still has ships left
             // SAFETY: game thread inside a full-game battle.
-            return LinkQueue::<Starship>::identify_ship(side, unsafe { get_armada_star_ship() });
+            return LinkQueue::<Starship>::identify_ship(side, unsafe {
+                get_armada_star_ship(activity)
+            });
         }
         if last.is_some() {
             // The last ship was the flagship.

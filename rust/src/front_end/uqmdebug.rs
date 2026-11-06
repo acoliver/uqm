@@ -353,7 +353,7 @@ mod runtime {
             });
         }
         if World::current().read(in_hqspace) != 0
-            || WorldData::current().read(|owner| owner.game.current_activity) as u8 as u32
+            || crate::engine::World::current().read(|world| world.activity()) as u8 as u32
                 == IN_INTERPLANETARY
         {
             DeltaSISGauges(
@@ -419,12 +419,13 @@ mod runtime {
     /// # Safety
     /// Must run on the game thread in HyperSpace or QuasiSpace.
     pub unsafe fn do_instant_move() {
-        let owned_world = WorldData::current();
+        let lease = World::current();
+        let world = &mut **lease;
         let (log_x, log_y) = log_units();
         let universe_x = ((MAX_X_UNIVERSE as i32 + 1) >> 4) * 10;
         let universe_y = (MAX_Y_UNIVERSE as i32 + 1) >> 4;
-        let game = ptr::addr_of_mut!((**owned_world).game);
-        let sis = ptr::addr_of_mut!((**owned_world).flagship);
+        let game = ptr::addr_of_mut!(world.data.game);
+        let sis = ptr::addr_of_mut!(world.data.flagship);
         if (*game).autopilot.x == -1 || (*game).autopilot.y == -1 {
             (*game).autopilot.x =
                 (((*sis).log_x.wrapping_mul(universe_x) + (log_x >> 1)) / log_x) as COORD;
@@ -437,24 +438,23 @@ mod runtime {
                 + (universe_y >> 1))
                 / universe_y;
         }
-        if World::current().read(|world| world.story_state(StoryKey::ARILOU_SPACE_SIDE)) <= 1 {
-            (**World::current()).select_star(
-                ((FindStar(ptr::null_mut(), ptr::addr_of_mut!((*game).autopilot), 0, 0))
-                    .cast::<crate::engine::world::CStarDesc>())
-                .as_ref(),
+        if world.story_state(StoryKey::ARILOU_SPACE_SIDE) <= 1 {
+            let selected =
+                crate::planets::starmap::find_star_in(world, None, (*game).autopilot, 0, 0);
+            world.select_star(
+                selected.as_ref(),
                 crate::planets::starmap::current_catalog(),
             );
-            if !(**World::current())
+            if !world
                 .star_pointer(crate::planets::starmap::current_catalog())
                 .is_null()
             {
-                World::current()
-                    .write(|world| world.set_story_state(StoryKey::USED_BROADCASTER, 0));
-                (*game).current_activity &= !(IN_BATTLE as ACTIVITY);
+                world.set_story_state(StoryKey::USED_BROADCASTER, 0);
+                world.set_activity(world.activity() & !(IN_BATTLE as ACTIVITY));
                 (*game).ship_facing = 0;
                 (*game).ip_planet = 0;
                 (*game).in_orbit = 0;
-                (*game).current_activity |= START_INTERPLANETARY as ACTIVITY;
+                world.set_activity(world.activity() | START_INTERPLANETARY as ACTIVITY);
             }
         }
         (*game).autopilot.x = -1;
@@ -1303,7 +1303,7 @@ mod runtime {
     /// # Safety
     /// Must run on the game thread with battle and status context initialized.
     pub unsafe fn reset_crew_battle() {
-        if WorldData::current().read(|owner| owner.game.current_activity) & IN_BATTLE as ACTIVITY
+        if crate::engine::World::current().read(|world| world.activity()) & IN_BATTLE as ACTIVITY
             == 0
             || World::current().read(in_hqspace) != 0
         {
@@ -1326,7 +1326,7 @@ mod runtime {
     /// # Safety
     /// Must run on the game thread with battle and status context initialized.
     pub unsafe fn reset_energy_battle() {
-        if WorldData::current().read(|owner| owner.game.current_activity) & IN_BATTLE as ACTIVITY
+        if crate::engine::World::current().read(|world| world.activity()) & IN_BATTLE as ACTIVITY
             == 0
             || World::current().read(in_hqspace) != 0
         {

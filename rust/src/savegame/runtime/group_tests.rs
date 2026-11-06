@@ -179,10 +179,10 @@ type Fingerprint = (GroupSections, (String, usize), (String, usize));
 
 /// Everything an observer can read of the two queues.
 fn fingerprint(game: &mut LiveGame) -> Fingerprint {
-    let was = game.data.game.current_activity;
-    game.data.game.current_activity = IN_INTERPLANETARY;
+    let was = game.activity();
+    game.set_activity(IN_INTERPLANETARY);
     let captured = capture_groups(game).unwrap();
-    game.data.game.current_activity = was;
+    game.set_activity(was);
     (
         captured,
         queue_words(&game.ip_groups_ref()),
@@ -214,7 +214,7 @@ fn seed_group_restores_into_the_live_queue_and_captures_back() {
     assert!(seed.encounters.is_empty(), "the seed has no Enct chunk");
 
     let mut game = LiveGame::new();
-    game.data.game.current_activity = IN_INTERPLANETARY;
+    game.set_activity(IN_INTERPLANETARY);
     restore_groups(
         &mut game,
         &sections(seed.ip_group_queue.clone(), Vec::new()),
@@ -249,7 +249,7 @@ fn hand_assembled_encounter_bytes_restore_and_encode_back_unchanged() {
     assert_eq!(save.encounters.len(), 1);
 
     let mut game = LiveGame::new();
-    game.data.game.current_activity = IN_INTERPLANETARY;
+    game.set_activity(IN_INTERPLANETARY);
     restore_groups(
         &mut game,
         &sections(save.ip_group_queue.clone(), save.encounters.clone()),
@@ -322,7 +322,7 @@ fn groups_keep_their_order_and_take_the_icon_of_their_own_race() {
     assert_eq!(live[2].loc.y, 203);
     assert_eq!(free_slots(&game.ip_groups_ref()), MAX_GROUPS - 4);
 
-    game.data.game.current_activity = IN_INTERPLANETARY;
+    game.set_activity(IN_INTERPLANETARY);
     assert_eq!(capture_groups(&game).unwrap().ip_group_queue, groups);
 }
 
@@ -345,7 +345,7 @@ fn encounters_keep_their_order_and_fields_and_clear_the_element_handle() {
     assert_eq!(live[1].log_y, -80_002);
     assert_eq!(free_slots(&game.encounters_ref()), MAX_ENCOUNTER_SLOTS - 3);
 
-    game.data.game.current_activity = IN_INTERPLANETARY;
+    game.set_activity(IN_INTERPLANETARY);
     assert_eq!(capture_groups(&game).unwrap().encounters, encounters);
 }
 
@@ -420,7 +420,7 @@ fn restoring_again_replaces_the_queues_and_recycles_the_owner_slots() {
     restore_groups(&mut game, &full).unwrap();
     assert_eq!(free_slots(&game.ip_groups_ref()), 0);
     assert_eq!(free_slots(&game.encounters_ref()), 0);
-    game.data.game.current_activity = IN_INTERPLANETARY;
+    game.set_activity(IN_INTERPLANETARY);
     assert_eq!(capture_groups(&game).unwrap(), full);
 }
 
@@ -591,7 +591,7 @@ fn group_ids_reject_foreign_storage_and_reinit() {
 #[test]
 fn capture_reads_the_live_queues_in_order_without_the_codec() {
     let mut game = LiveGame::new();
-    game.data.game.current_activity = IN_INTERPLANETARY;
+    game.set_activity(IN_INTERPLANETARY);
     push_group(&mut game, &group(6, 1), 0);
     push_group(&mut game, &group(2, 2), 0);
     push_encounter(&mut game, &encounter(11, 4, 1), 0x77);
@@ -626,7 +626,7 @@ fn the_group_queue_is_saved_only_in_plain_interplanetary() {
         IN_INTERPLANETARY | START_ENCOUNTER,
         IN_INTERPLANETARY | START_INTERPLANETARY,
     ] {
-        game.data.game.current_activity = activity;
+        game.set_activity(activity);
         let captured = capture_groups(&game).unwrap();
         assert!(captured.ip_group_queue.is_empty(), "activity {activity:#x}");
         // "Enct" does not depend on the activity.
@@ -637,7 +637,7 @@ fn the_group_queue_is_saved_only_in_plain_interplanetary() {
 #[test]
 fn capture_refuses_what_restore_would_refuse() {
     let mut game = LiveGame::new();
-    game.data.game.current_activity = IN_INTERPLANETARY;
+    game.set_activity(IN_INTERPLANETARY);
     push_group(&mut game, &group(30, 1), 0);
     assert_eq!(
         capture_groups(&game),

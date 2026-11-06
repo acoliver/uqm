@@ -5,7 +5,7 @@ use crate::comm::locdata::{CColor, CPoint, CRect};
 use crate::engine::{
     battle::Cx,
     observe::{CheckpointView, Io},
-    Kernel, StoryKey, WorldData,
+    Kernel, StoryKey,
 };
 use crate::graphics::context_abi::SetContext;
 use crate::graphics::drawable_abi::SetContextFGFrame;
@@ -85,8 +85,6 @@ use crate::graphics::context_abi::DestroyContext;
 use crate::graphics::font_abi::SetContextFont;
 
 extern "C" {
-
-    static mut NextActivity: u16;
 
     static mut PlanetContext: *mut crate::graphics::native_abi::context_desc;
 
@@ -306,8 +304,8 @@ unsafe fn dispatch_lander(cx: &mut Cx<'_>, io: &mut Io<'_>) -> bool {
     if cx.world.story_state(StoryKey::FOUND_PLUTO_SPATHI) == 1 {
         cx.with_legacy(|| {
             spawn_fwiffo();
-            NextActivity |= CHECK_LOAD;
         });
+        cx.world.next_activity |= CHECK_LOAD;
         cx.world.set_activity(cx.world.activity() | START_ENCOUNTER);
         cx.with_legacy(|| SaveSolarSysLocation());
         return false;
@@ -354,7 +352,7 @@ struct PickState {
 unsafe fn pick_input(state: &mut PickState) -> u32 {
     let time_in = GetTimeCounter();
     let pulse = std::ptr::addr_of!(PulsedInputState).read();
-    if WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT != 0
+    if crate::engine::World::current().read(|world| world.activity()) & CHECK_ABORT != 0
         || pulse.menu[KEY_MENU_CANCEL as usize] != 0
     {
         state.success = false;

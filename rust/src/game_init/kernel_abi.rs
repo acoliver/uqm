@@ -44,7 +44,6 @@ pub unsafe fn LoadKernel(
     argv: *mut *mut c_char,
 ) -> u32 {
     {
-        let world = &mut world.data;
         crate::sound::heart_ffi::InitSound(argc, argv.cast());
         crate::video::control::InitVideoPlayer(1);
         kernel.screen_context = context(c"ScreenContext");
@@ -93,7 +92,7 @@ pub unsafe fn LoadKernel(
             map.cast(),
         ));
         DestroyStringTable(ReleaseStringTable(map));
-        world.game.current_activity = u16::MAX;
+        world.set_activity(u16::MAX);
         1
     }
 }

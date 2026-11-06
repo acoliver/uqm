@@ -3,28 +3,19 @@
 use super::*;
 
 impl AutomationObserver {
-    /// Set a terminal outcome on both the coordinator and the runtime mirror.
-    /// Also propagates the stop to the game loop by setting CHECK_ABORT
-    /// and MainExited to force the game loop to exit.
+    /// Publish the first terminal outcome and request an activity-loop abort.
     pub(super) fn set_terminal(&self, inner: &mut CoordInner, class: TerminalClass) {
         let class = self.runtime.mirror.terminal.load().unwrap_or(class);
         if !record_first_terminal(&mut inner.terminal_class, class) {
             return;
         }
-        inner.replay_final_activity = crate::mainloop::ffi::get_current_activity().0;
+        inner.replay_final_activity = self.activity.activity();
         self.runtime.mirror.terminal.try_set(class);
 
-        // Propagate stop to the C game loop: set CHECK_ABORT so the
-        // activity state machine exits, and set MainExited so the
-        // outer game loop stops requesting new games.
-        // CHECK_ABORT = 0x4000 (setup.h).
-        // SAFETY: terminal publication runs on the game thread that owns activity state.
+        // CHECK_ABORT is consumed by the activity state machine.
         #[cfg(not(test))]
         {
-            crate::mainloop::ffi::set_current_activity(crate::mainloop::types::ActivityValue(
-                crate::mainloop::ffi::get_current_activity().0 | 0x4000,
-            ));
-            crate::mainloop::ffi::set_main_exited(true);
+            self.activity.raise_flags(0x4000);
         }
     }
 }

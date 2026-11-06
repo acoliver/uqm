@@ -459,10 +459,12 @@ impl super::session::SessionCore {
 impl super::session::SessionCore {
     /// # Safety
     /// Called on the game thread with live connection, state and callback arguments.
-    pub unsafe fn network_battle_input(&self, player: usize) -> BATTLE_INPUT_STATE {
-        use crate::mainloop::{
-            activity_flags::CHECK_ABORT, get_current_activity, set_current_activity, ActivityValue,
-        };
+    pub unsafe fn network_battle_input(
+        &self,
+        player: usize,
+        activity: &crate::engine::world::activity::ActivityControl,
+    ) -> BATTLE_INPUT_STATE {
+        use crate::mainloop::activity_flags::CHECK_ABORT;
         let session = self;
         loop {
             if let Some(input) = session.pop_input(player) {
@@ -474,15 +476,15 @@ impl super::session::SessionCore {
                 return input;
             }
             if !(*conn).stateFlags.connected {
-                set_current_activity(ActivityValue(get_current_activity().0 | CHECK_ABORT));
+                activity.raise_flags(CHECK_ABORT);
                 return 0;
             }
-            if get_current_activity().0 & CHECK_ABORT != 0 {
+            if activity.activity() & CHECK_ABORT != 0 {
                 return 0;
             }
             session.net_input_blocking(500);
             if !(*conn).stateFlags.connected {
-                set_current_activity(ActivityValue(get_current_activity().0 | CHECK_ABORT));
+                activity.raise_flags(CHECK_ABORT);
                 return 0;
             }
         }

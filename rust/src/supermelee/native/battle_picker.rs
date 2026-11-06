@@ -32,7 +32,7 @@ pub mod live {
     use crate::battle::sounds::PlayMenuSound;
     use crate::battle::{NETWORK_CONTROL, PSYTRON_CONTROL};
     use crate::engine::battle::schema::{FlashContext, GETMELEE_STATE};
-    use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
+    use crate::engine::Kernel as KernelOwner;
     use crate::mainloop::restart_menu::c_extern as flash;
 
     const FADE_ALL_TO_COLOR: u32 = 253;
@@ -197,8 +197,7 @@ pub mod live {
             .as_ref()
             .unwrap_or_else(|| panic!("missing net"))
             .all_connected()
-            || WorldFields::current().read(|owner| owner.game.current_activity)
-                & CHECK_ABORT as u16
+            || crate::engine::World::current().read(|world| world.activity()) & CHECK_ABORT as u16
                 != 0;
         let mut done = true;
         if !abort {
@@ -237,7 +236,8 @@ pub mod live {
                     p.hBattleShip = ptr::null_mut();
                 }
             }
-            (**WorldFields::current()).game.current_activity &= !(CHECK_ABORT as u16);
+            crate::engine::World::current()
+                .write(|world| world.set_activity(world.activity() & !(CHECK_ABORT as u16)));
             0
         } else {
             u32::from(!done)
@@ -433,7 +433,7 @@ pub mod live {
         value(frame, ship.player as usize);
     }
 
-    use crate::engine::observe::{CampaignView, Io};
+    use crate::engine::observe::Io;
     use crate::mainloop::input_abi::live::UpdateInputState;
     /// # Safety
     /// Called at the end of a live melee battle on the game thread.
@@ -448,9 +448,8 @@ pub mod live {
             let mut pressed = PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0
                 || PulsedInputState.menu[KEY_MENU_CANCEL as usize] != 0;
             loop {
-                let campaign = Some(CampaignView::capture(cx.world));
                 if cx
-                    .with_legacy(|| io.nested_input(&campaign, || UpdateInputState()))
+                    .nested_input(io, |cx| cx.with_legacy(|| UpdateInputState()))
                     .is_none()
                 {
                     break;
@@ -548,7 +547,8 @@ pub mod live {
             net.set_state(NetState_NetState_interBattle);
         }
         if !ok {
-            (**WorldFields::current()).game.current_activity &= !(IN_BATTLE as u16);
+            crate::engine::World::current()
+                .write(|world| world.set_activity(world.activity() & !(IN_BATTLE as u16)));
         }
         net.bind_picker(mask, ptr::null_mut());
         u32::from(ok)

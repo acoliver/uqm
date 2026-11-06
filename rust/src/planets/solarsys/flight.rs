@@ -391,7 +391,8 @@ pub(super) unsafe fn check_ship_location(new_radius: *mut c::SIZE) -> c::BOOLEAN
     {
         if !playerInInnerSystem() {
             if radius == MAX_ZOOM_RADIUS {
-                glob().write(|world| world.game.current_activity |= END_INTERPLANETARY);
+                crate::engine::World::current()
+                    .write(|world| world.set_activity(world.activity() | END_INTERPLANETARY));
                 return 0;
             }
             *new_radius =

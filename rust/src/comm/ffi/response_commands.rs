@@ -61,7 +61,8 @@ pub(super) fn deliver_selected(
         ));
     let result = {
         let mut state = COMM_STATE.write();
-        cx.with_legacy(|| crate::comm::talk_segue::select_response(&mut state))
+        let activity = cx.world.activity();
+        cx.with_legacy(|| crate::comm::talk_segue::select_response(activity, &mut state))
     };
     if let Some((func, reference)) = result {
         eprintln!("[DBG] rust_DoCommunication: calling response callback ref={reference}");

@@ -7,10 +7,8 @@
 //! (no separate game thread), and tears down subsystems on exit.
 
 use std::ffi::CString;
-use std::os::raw::c_int;
 use std::process::exit;
 
-use uqm_rust::mainloop::init_sequence;
 use uqm_rust::mainloop::logging;
 use uqm_rust::mainloop::options;
 
@@ -21,12 +19,6 @@ fn main() {
         .iter()
         .map(|s| CString::new(s.as_str()).unwrap_or_default())
         .collect();
-    let mut c_argv: Vec<*mut std::os::raw::c_char> = c_args
-        .iter()
-        .map(|cs| cs.as_ptr() as *mut std::os::raw::c_char)
-        .collect();
-    c_argv.push(std::ptr::null_mut());
-
     // Parse command-line options in Rust (replaces C parseOptions)
     let parsed = options::parse_and_store(&args);
 
@@ -94,8 +86,13 @@ fn main() {
         }
     }
 
-    let observer = setup_observer(&auto_opts, parsed.native_window_proof.as_deref());
-    let mut application = uqm_rust::app::Application::new(observer);
+    let game = uqm_rust::engine::Game::new();
+    let observer = setup_observer(
+        &auto_opts,
+        parsed.native_window_proof.as_deref(),
+        game.world.activity_control(),
+    );
+    let mut application = uqm_rust::app::Application::new(game, observer);
 
     application
         .game
@@ -105,10 +102,7 @@ fn main() {
                 observer: application.observer().cloned(),
             },
         ));
-    // SAFETY: argv storage and the application owner remain live through shutdown.
-    let exit_code = unsafe {
-        init_sequence::run_uqm(&mut application, args.len() as c_int, c_argv.as_mut_ptr())
-    };
+    let exit_code = uqm_rust::app::run(&mut application, &c_args);
     let observer = application.observer().cloned();
     // SAFETY: finalization runs synchronously before the application releases Game.
     let exit_code = unsafe {
@@ -126,6 +120,7 @@ fn main() {
 fn setup_observer(
     auto_opts: &uqm_rust::automation::AutomationOptions,
     native_window_proof: Option<&str>,
+    activity: uqm_rust::engine::world::activity::ActivityControl,
 ) -> Option<std::sync::Arc<uqm_rust::automation::AutomationObserver>> {
     // Build capabilities resolved from build.vars at compile time
     let caps = uqm_rust::automation::BuildCapabilities::from_flags(&[
@@ -152,6 +147,7 @@ fn setup_observer(
             Some(uqm_rust::automation::AutomationObserver::new(
                 setup.script,
                 setup.output_root,
+                activity,
             ))
         }
         Ok(None) => {

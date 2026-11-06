@@ -5044,15 +5044,12 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "unsafe|unsafe_lines|uqm::uqm" = 12
 
 [moved]
-"uqm::battle::context_access::race_access::<Cx<'_>>::play_ship_sound" = "uqm::battle::context_access::race_access::<Cx<'_>>::play_battle_sound"
-"uqm::battle::sounds::engine::play_sound_in_context" = "uqm::battle::sounds::engine::play_sound"
 "uqm::graphics" = "uqm-engine::graphics"
 "uqm::input" = "uqm-engine::input"
 "uqm::io" = "uqm-engine::io"
+"uqm::navigation::initial_state" = "uqm::engine::world::new_game"
 "uqm::network" = "uqm-engine::network"
-"uqm::planets::solarsys::lifecycle::init_solar_sys" = "uqm::planets::solarsys::lifecycle::prepare_solar_sys"
 "uqm::resource" = "uqm-engine::resource"
 "uqm::sound" = "uqm-engine::sound"
 "uqm::threading" = "uqm-engine::threading"
-"uqm::ui::shipstat::DeltaStatistics" = "uqm::ui::shipstat::delta_statistics"
 "uqm::video" = "uqm-engine::video"

@@ -53,7 +53,7 @@ fn observation_without_an_observer_does_not_stop_input() {
     };
     assert!(
         !io.observer
-            .input_admitted(&InputView::AfterUpdate, &None)
+            .input_admitted(&InputView::AfterUpdate(0), &None)
             .stop
     );
 }

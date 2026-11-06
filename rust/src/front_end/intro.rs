@@ -722,15 +722,14 @@ pub(crate) mod runtime {
         1
     }
 
-    unsafe fn video_input(video: *mut LegacyVideoRef) -> BOOLEAN {
+    unsafe fn video_input(video: *mut LegacyVideoRef, activity: u16) -> BOOLEAN {
         if PlayingLegacyVideo(video) == 0 {
             return 0;
         }
         if menu(KEY_MENU_SELECT)
             || menu(KEY_MENU_CANCEL)
             || menu(KEY_MENU_SPECIAL)
-            || WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16
-                != 0
+            || activity & CHECK_ABORT as u16 != 0
         {
             return 0;
         }
@@ -773,7 +772,8 @@ pub(crate) mod runtime {
         }
         cx.with_legacy(|| SetMenuSounds(0, 0));
         cx.run_input(io, true, |cx, _| {
-            cx.with_legacy(|| video_input(reference) != 0)
+            let activity = cx.world.activity();
+            cx.with_legacy(|| video_input(reference, activity) != 0)
         });
         cx.with_legacy(|| {
             StopLegacyVideo(reference);

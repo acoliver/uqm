@@ -48,6 +48,28 @@ impl Cx<'_> {
         unsafe { crate::app::bridge::publish(self, call) }
     }
 
+    pub fn nested_input<R>(
+        &mut self,
+        io: &mut Io<'_>,
+        sample: impl FnOnce(&mut Self) -> R,
+    ) -> Option<R> {
+        use super::observe::{CampaignView, CheckpointView, InputView};
+        let campaign =
+            CampaignView::for_input(InputView::Nested, || CampaignView::capture(self.world));
+        let admitted =
+            self.with_legacy(|| io.observer.input_admitted(&InputView::Nested, &campaign));
+        if admitted.stop {
+            return None;
+        }
+        let result = sample(self);
+        let activity = self.world.activity();
+        self.with_legacy(|| {
+            io.observer
+                .checkpoint(&CheckpointView::InputSampled(activity))
+        });
+        Some(result)
+    }
+
     pub fn run_input(
         &mut self,
         io: &mut Io<'_>,
@@ -159,5 +181,110 @@ mod tests {
         let driver = Rc::new(Driver(Rc::default()));
         game.kernel.install_input_runtime(driver.clone());
         game.kernel.install_input_runtime(driver);
+    }
+
+    struct NestedObserver {
+        events: Rc<RefCell<Vec<&'static str>>>,
+        stop: bool,
+    }
+
+    impl crate::engine::observe::Observer<Option<crate::engine::observe::CampaignView>>
+        for NestedObserver
+    {
+        fn input_admitted(
+            &mut self,
+            view: &crate::engine::observe::InputView,
+            world: &Option<crate::engine::observe::CampaignView>,
+        ) -> crate::engine::observe::Injected {
+            assert_eq!(*view, crate::engine::observe::InputView::Nested);
+            let Some(world) = world else {
+                panic!("nested input must supply its owner view");
+            };
+            assert_eq!(world.activity, 3);
+            self.events.borrow_mut().push("admitted");
+            crate::engine::observe::Injected {
+                stop: self.stop,
+                seed: None,
+            }
+        }
+
+        fn checkpoint(&mut self, view: &crate::engine::observe::CheckpointView<'_>) {
+            assert_eq!(
+                *view,
+                crate::engine::observe::CheckpointView::InputSampled(0x4004)
+            );
+            self.events.borrow_mut().push("sampled");
+        }
+
+        fn presented(&mut self, _: &mut crate::engine::observe::Presented) {
+            self.events.borrow_mut().push("presented");
+        }
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn nested_input_records_the_owner_activity_after_one_sample() {
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let mut observer = NestedObserver {
+            events: events.clone(),
+            stop: false,
+        };
+        let mut io = Io {
+            observer: &mut observer,
+        };
+        let mut game = Game::new();
+        game.world.set_activity(3);
+        let mut battle = Battle::new();
+        let mut cx = Cx::new(
+            &mut battle,
+            &mut game.world,
+            &mut game.kernel,
+            crate::math::random,
+        );
+        assert_eq!(
+            cx.nested_input(&mut io, |cx| {
+                events.borrow_mut().push("sample");
+                cx.world.set_activity(0x4004);
+                7
+            }),
+            Some(7)
+        );
+        io.observer
+            .presented(&mut crate::engine::observe::Presented {
+                frame: None,
+                stop: false,
+            });
+        assert_eq!(
+            *events.borrow(),
+            ["admitted", "sample", "sampled", "presented"]
+        );
+        assert_eq!(cx.world.activity(), 0x4004);
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn stopped_nested_input_neither_samples_nor_publishes_a_checkpoint() {
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let mut observer = NestedObserver {
+            events: events.clone(),
+            stop: true,
+        };
+        let mut io = Io {
+            observer: &mut observer,
+        };
+        let mut game = Game::new();
+        game.world.set_activity(3);
+        let mut battle = Battle::new();
+        let mut cx = Cx::new(
+            &mut battle,
+            &mut game.world,
+            &mut game.kernel,
+            crate::math::random,
+        );
+        assert!(cx
+            .nested_input(&mut io, |_| panic!("stopped input sampled"))
+            .is_none());
+        assert_eq!(*events.borrow(), ["admitted"]);
+        assert_eq!(cx.world.activity(), 3);
     }
 }

@@ -23,8 +23,8 @@ pub(super) fn run_pending(cx: &mut Cx<'_>, io: &mut Io<'_>) -> bool {
                 state.first_talk_call = true;
                 // Drop lock before calling C bridges
                 drop(state);
-                // SAFETY: the published game-thread encounter owns initialized speech resources.
-                cx.with_legacy(|| unsafe { talk_segue::alien_talk_first_call_init() });
+                // SAFETY: the retained game-thread encounter owns initialized speech resources.
+                unsafe { talk_segue::alien_talk_first_call_init(cx) };
             }
         }
 

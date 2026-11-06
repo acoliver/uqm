@@ -122,10 +122,19 @@ mod tests {
         fn input_delay(&self) -> usize {
             unreachable!()
         }
-        fn local_input(&self, _: usize, _: u8) -> u8 {
+        fn local_input(
+            &self,
+            _: usize,
+            _: u8,
+            _: &crate::engine::world::activity::ActivityControl,
+        ) -> u8 {
             unreachable!()
         }
-        fn remote_input(&self, _: usize) -> u8 {
+        fn remote_input(
+            &self,
+            _: usize,
+            _: &crate::engine::world::activity::ActivityControl,
+        ) -> u8 {
             unreachable!()
         }
         fn set_frame(&self, _: u32) {

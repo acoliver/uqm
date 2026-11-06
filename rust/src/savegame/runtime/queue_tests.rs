@@ -814,7 +814,7 @@ fn capture_for_activity_writes_the_npc_queue_only_for_an_encounter() {
         (2, false),
         (0, false),
     ] {
-        game.data.game.current_activity = activity;
+        game.set_activity(activity);
         let selected = capture_queues_for_activity(&game).unwrap();
         assert_eq!(selected.race_queue, raw.race_queue, "{activity:#06x}");
         assert_eq!(selected.ship_queue, raw.ship_queue, "{activity:#06x}");
@@ -836,7 +836,7 @@ fn an_npc_queue_that_is_not_saved_is_not_read() {
     game.push_fragment(true, HUMAN_SHIP as u8, 3);
     let id = game.npc_built_ships_ref().head().unwrap();
     game.npc_built_ships().get_mut(id).race_id = 255;
-    game.data.game.current_activity = 4;
+    game.set_activity(4);
     assert!(capture_queues_for_activity(&game)
         .unwrap()
         .npc_ship_queue
@@ -848,7 +848,7 @@ fn an_npc_queue_that_is_not_saved_is_not_read() {
             ..
         })
     ));
-    game.data.game.current_activity = START_ENCOUNTER_BIT | 2;
+    game.set_activity(START_ENCOUNTER_BIT | 2);
     assert!(matches!(
         capture_queues_for_activity(&game),
         Err(QueueError::UnknownRace {

@@ -371,7 +371,7 @@ pub fn observe(observations: Observations) -> ModeObservation {
 /// rather than inferred from the activity word. A real visit is observed
 /// while the Starbase menu or the Outfit screen is the active input loop.
 #[must_use]
-pub fn live() -> Observations {
+pub fn live(world: &crate::engine::observe::CampaignView) -> Observations {
     use crate::automation::scenario::{active_scene, AutomationScene};
     use crate::automation::ui_observation::{
         planet_menu_phase, starbase_menu_active, PlanetMenuPhase,
@@ -379,7 +379,7 @@ pub fn live() -> Observations {
 
     let phase = planet_menu_phase();
     Observations {
-        activity: crate::mainloop::ffi::get_current_activity().0,
+        activity: world.activity,
         surface: if phase == PlanetMenuPhase::LandingSite {
             SurfacePresence::OnSurface
         } else {
@@ -397,8 +397,8 @@ pub fn live() -> Observations {
 ///
 /// Returns the ambiguity description when the observation does not name
 /// exactly one mode.
-pub fn require_live() -> Result<GameMode, String> {
-    observe(live()).require()
+pub fn require_live(world: &crate::engine::observe::CampaignView) -> Result<GameMode, String> {
+    observe(live(world)).require()
 }
 
 /// One published row of the mode table.
@@ -435,6 +435,17 @@ pub fn table() -> Vec<ModeRow> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn live_activity_comes_from_the_supplied_campaign_view() {
+        let mut world = crate::engine::World::new();
+        let first = crate::engine::observe::CampaignView::from_world(&world);
+        world.set_activity(0x4004);
+        let second = crate::engine::observe::CampaignView::from_world(&world);
+        assert_eq!(live(&first).activity, 0);
+        assert_eq!(live(&second).activity, 0x4004);
+        assert_eq!(live(&first).activity, 0);
+    }
 
     #[test]
     fn every_mode_is_published_with_an_observation() {

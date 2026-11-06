@@ -11,9 +11,7 @@ use crate::engine::{
 use crate::navigation::abi::*;
 
 use std::{mem, ptr};
-extern "C" {
-    static mut NextActivity: ACTIVITY;
-}
+extern "C" {}
 const CROSSFADE_SCREEN: u32 = 2;
 const FADE_IN_SCREEN: u32 = 3;
 
@@ -286,7 +284,7 @@ unsafe fn finish_starbase_screen(menu: *mut MENU_STATE) -> BOOLEAN {
         (*menu).hMusic = ptr::null_mut();
     }
     if (*menu).CurState == DEPART_BASE {
-        if WorldData::current().read(|owner| owner.game.current_activity)
+        if crate::engine::World::current().read(|world| world.activity())
             & (CHECK_ABORT | CHECK_LOAD) as u16
             == 0
         {
@@ -338,7 +336,7 @@ unsafe fn activate_starbase_selection(
 }
 
 unsafe fn update_starbase_screen(menu: *mut MENU_STATE) -> bool {
-    if WorldData::current().read(|owner| owner.game.current_activity)
+    if crate::engine::World::current().read(|world| world.activity())
         & (CHECK_ABORT | CHECK_LOAD) as u16
         != 0
     {
@@ -410,14 +408,11 @@ unsafe fn do_time_passage() {
     MoveGameClockDays(14);
 }
 
-unsafe fn cleanup_after_star_base() {
-    if WorldData::current().read(|owner| owner.game.current_activity)
-        & (CHECK_LOAD | CHECK_ABORT) as u16
-        == 0
-    {
-        World::current().write(|world| world.set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, 0));
-        (**WorldData::current()).game.current_activity = CHECK_LOAD as u16;
-        NextActivity = IN_INTERPLANETARY as u16 | START_INTERPLANETARY as u16;
+fn cleanup_after_star_base(world: &mut World) {
+    if world.activity() & (CHECK_LOAD | CHECK_ABORT) as u16 == 0 {
+        world.set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, 0);
+        world.set_activity(CHECK_LOAD as u16);
+        world.next_activity = IN_INTERPLANETARY as u16 | START_INTERPLANETARY as u16;
     }
 }
 
@@ -437,7 +432,7 @@ unsafe fn prepare_starbase_visit(cx: &mut Cx<'_>, io: &mut Io<'_>) -> Option<u32
         if cx.world.story_state(StoryKey::PROBE_ILWRATH_ENCOUNTER) == 0
             || cx.world.activity() & CHECK_ABORT as u16 != 0
         {
-            cx.with_legacy(|| cleanup_after_star_base());
+            cleanup_after_star_base(cx.world);
             return None;
         }
         let ship = crate::comm::dispatch::clone_npc_fragment(cx.world, ILWRATH_SHIP as u8, 7)
@@ -503,8 +498,8 @@ pub unsafe fn run_starbase_visit(cx: &mut Cx<'_>, io: &mut Io<'_>) {
     cx.with_legacy(|| {
         SetContext(old);
         SetStatusMessageMode(previous);
-        cleanup_after_star_base();
     });
+    cleanup_after_star_base(cx.world);
 }
 
 /// Advance fourteen days, finish bomb installation and force a SolarSys reload.
@@ -512,15 +507,19 @@ pub unsafe fn run_starbase_visit(cx: &mut Cx<'_>, io: &mut Io<'_>) {
 /// # Safety
 /// The game clock, live world and graphics must be exclusively accessed on
 /// the initialized game thread.
-pub unsafe fn install_bomb_at_earth() {
-    do_time_passage();
-    SetContext(Kernel::current().read(|owner| owner.screen_context));
-    SetTransitionSource(ptr::null());
-    SetContextBackGroundColor(BLACK);
-    ClearDrawable();
-    SleepThreadUntil(FadeScreen(ScreenFadeType_FadeAllToColor, 0));
-    World::current().write(|world| world.set_story_state(StoryKey::CHMMR_BOMB_STATE, 3));
-    (**WorldData::current()).game.current_activity = CHECK_LOAD as u16;
-    NextActivity = IN_INTERPLANETARY as u16 | START_INTERPLANETARY as u16;
-    (**World::current()).select_star(None, crate::planets::starmap::current_catalog());
+pub unsafe fn install_bomb_at_earth(cx: &mut Cx<'_>) {
+    let screen_context = cx.kernel.screen_context;
+    cx.with_legacy(|| {
+        do_time_passage();
+        SetContext(screen_context);
+        SetTransitionSource(ptr::null());
+        SetContextBackGroundColor(BLACK);
+        ClearDrawable();
+        SleepThreadUntil(FadeScreen(ScreenFadeType_FadeAllToColor, 0));
+    });
+    cx.world.set_story_state(StoryKey::CHMMR_BOMB_STATE, 3);
+    cx.world.set_activity(CHECK_LOAD as u16);
+    cx.world.next_activity = IN_INTERPLANETARY as u16 | START_INTERPLANETARY as u16;
+    cx.world
+        .select_star(None, crate::planets::starmap::current_catalog());
 }

@@ -1,14 +1,10 @@
 //! Shared state entry points formerly supplied by rust_bridge_mainloop.c.
-use crate::engine::StoryKey;
-use crate::engine::{Kernel, World, WorldData};
 use crate::io::uio_bridge::{uio_DirHandle, uio_MountHandle, uio_Repository};
 
 use crate::ships::native::abi as options;
 use std::{ffi::c_char, ptr};
 extern "C" {
     static mut contentMountHandle: *mut uio_MountHandle;
-    #[link_name = "NextActivity"]
-    static mut NEXT_ACTIVITY: u16;
 }
 
 pub(crate) use crate::navigation::{get as game_byte, set as set_game_byte};
@@ -29,27 +25,6 @@ macro_rules! accessor {
         }
     };
 }
-accessor!(set_current_activity(value: u16) = (**WorldData::current()).game.current_activity = value);
-accessor!(get_next_activity() -> u16 = NEXT_ACTIVITY);
-accessor!(set_next_activity(value: u16) = NEXT_ACTIVITY = value);
-accessor!(get_last_activity() -> u16 = (**Kernel::current()).last_activity);
-accessor!(set_last_activity(value: u16) = (**Kernel::current()).last_activity = value);
-accessor!(uqm_get_chmmr_bomb_state() -> u8 = World::current().read(|world| game_byte(world, StoryKey::CHMMR_BOMB_STATE)));
-accessor!(uqm_set_chmmr_bomb_state(value: u8) = World::current().write(|world| set_game_byte(world, StoryKey::CHMMR_BOMB_STATE, value)));
-accessor!(uqm_get_starbase_available() -> u8 = World::current().read(|world| game_byte(world, StoryKey::STARBASE_AVAILABLE)));
-accessor!(uqm_get_global_flags_and_data() -> u8 = World::current().read(|world| game_byte(world, StoryKey::GLOBAL_FLAGS_AND_DATA)));
-accessor!(uqm_get_kohr_ah_killed_all() -> u8 = World::current().read(|world| game_byte(world, StoryKey::KOHR_AH_KILLED_ALL)));
-accessor!(uqm_get_crew_enlisted() -> u16 = (**WorldData::current()).flagship.crew_enlisted);
-accessor!(uqm_set_flash_rect_null() -> () = crate::ui::sis::SetFlashRect(ptr::null()));
-accessor!(uqm_set_player_input_all_or_explode() -> () = {
-    let initialized = Kernel::current().write(|kernel| {
-        // SAFETY: this game-thread entry owns the initialized input contexts for this short mutation.
-        crate::game_init::kernel_abi::SetPlayerInputAll(kernel)
-    });
-    if !initialized { log::error!("Could not set player input."); std::process::abort(); }
-});
-accessor!(set_main_exited(value: i32) = ptr::addr_of_mut!(super::lifecycle_abi::MainExited).write_volatile(value));
-accessor!(uqm_init_audio() -> () = { crate::sound::audio_init::initAudio(crate::sound::volume_globals::snddriver, crate::sound::volume_globals::soundflags); });
 accessor!(uqm_get_repository() -> *mut uio_Repository = crate::game_init::kernel_abi::repository);
 accessor!(uqm_get_config_dir() -> *mut uio_DirHandle = options::configDir.cast());
 accessor!(uqm_get_content_dir() -> *mut uio_DirHandle = options::contentDir.cast());
@@ -64,8 +39,6 @@ accessor!(uqm_set_base_content_path(path: *const c_char) = {
     libc::strncpy(destination, path, super::dir_prep::PATH_MAX - 1);
     destination.add(super::dir_prep::PATH_MAX - 1).write(0);
 });
-
-accessor!(rust_set_cur_star_desc_ptr_null() -> () = (**World::current()).select_star(None, crate::planets::starmap::current_catalog()));
 
 /// # Safety
 /// Data is null or points to a complete live LOCDATA on the game thread.

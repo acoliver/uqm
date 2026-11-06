@@ -937,8 +937,8 @@ impl DerivedPreparation {
     fn from_game_data(opening_res_units: u32) -> Self {
         let mut sis = unsafe { std::mem::zeroed() };
         let mut state = unsafe { std::mem::zeroed() };
-        uqm_rust::navigation::initial_state::equipment(&mut sis);
-        uqm_rust::navigation::initial_state::prices(&mut sis, &mut state);
+        uqm_rust::engine::world::new_game::equipment(&mut sis);
+        uqm_rust::engine::world::new_game::prices(&mut sis, &mut state);
         let opening_fuel = sis.fuel_on_board;
         let fuel_price = state.fuel_cost;
 

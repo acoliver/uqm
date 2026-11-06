@@ -56,7 +56,7 @@ pub(in crate::automation::melee_fixture) fn execute(
         // SAFETY: automation admits operations on the game thread after initialization.
         let (activity, position) = unsafe {
             (
-                cx.world.data.game.current_activity,
+                cx.world.activity(),
                 SavedPosition {
                     slot: 0,
                     log_x: cx.world.data.flagship.log_x,
@@ -342,7 +342,7 @@ fn configure(cx: &mut Cx<'_>, request: &MeleeSetupRequest) -> Result<(), String>
         configure_menu(
             state.melee_started != 0,
             &mut cx.kernel.player_control,
-            cx.world.data.game.current_activity,
+            cx.world.activity(),
             request.cyborg,
         )?;
         state.melee_option = 4;

@@ -3567,7 +3567,7 @@ pub struct SUMMARY_DESC {
     pub SaveName: [UNICODE; 64usize],
 }
 extern "C" {
-    pub static mut NextActivity: ACTIVITY;
+
 }
 
 #[cfg(not(test))]

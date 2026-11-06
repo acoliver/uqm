@@ -224,9 +224,7 @@ fn navigation_world_projections_write_the_single_authority() {
         let _owner = Battle::new(2);
         // SAFETY: this test serializes and restores every modified world value.
         unsafe {
-            let activity = (**uqm_rust::engine::WorldData::current())
-                .game
-                .current_activity;
+            let activity = uqm_rust::engine::World::current().read(|world| world.activity());
             let autopilot = (**uqm_rust::engine::WorldData::current()).game.autopilot;
             let velocity = (**uqm_rust::engine::WorldData::current()).game.velocity;
             let sis = (**uqm_rust::engine::WorldData::current()).flagship;
@@ -542,9 +540,7 @@ fn descriptor_world_observes_activity_and_typed_story_and_writes_the_same_author
     battle_context::run(|| {
         // SAFETY: the serialized fixture owns and restores the world authorities.
         unsafe {
-            let activity = (**uqm_rust::engine::WorldData::current())
-                .game
-                .current_activity;
+            let activity = uqm_rust::engine::World::current().read(|world| world.activity());
             let crew = (**uqm_rust::engine::WorldData::current())
                 .flagship
                 .crew_enlisted;
@@ -589,9 +585,7 @@ fn descriptor_world_observes_activity_and_typed_story_and_writes_the_same_author
                     cx.world.set_story_state(key, 0);
                 }
             });
-            (**uqm_rust::engine::WorldData::current())
-                .game
-                .current_activity = activity;
+            uqm_rust::engine::World::current().write(|world| world.set_activity(activity));
             (**uqm_rust::engine::WorldData::current())
                 .flagship
                 .crew_enlisted = crew;

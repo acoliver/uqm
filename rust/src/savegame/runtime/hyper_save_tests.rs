@@ -141,7 +141,6 @@ fn game() -> Box<CGameState> {
     game.ip_planet = 0xAB;
     game.in_orbit = 0x7C;
     game.glob_flags = 9;
-    game.current_activity = 0x0123;
     game.battle_group_ref = 0xDEAD_BEEF;
 
     game

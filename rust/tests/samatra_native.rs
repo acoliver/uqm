@@ -6,9 +6,8 @@ fn terminal_outcome_survives_descriptor_teardown_until_the_next_battle() {
         unsafe {
             use uqm_rust::automation::samatra::observe;
             uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
-            (**uqm_rust::engine::WorldData::current())
-                .game
-                .current_activity = IN_LAST_BATTLE as u16;
+            uqm_rust::engine::World::current()
+                .write(|world| world.set_activity(IN_LAST_BATTLE as u16));
             uqm_rust::app::bridge::battle(|battle| {
                 battle.initialize(&mut **uqm_rust::engine::Kernel::current())
             });
@@ -29,21 +28,18 @@ fn terminal_outcome_survives_descriptor_teardown_until_the_next_battle() {
             uqm_rust::app::bridge::enter(|cx| {
                 uqm_rust::battle::process_native::init_display_list(cx, optMeleeScale == 0);
             });
-            (**uqm_rust::engine::WorldData::current())
-                .game
-                .current_activity = WON_LAST_BATTLE as u16;
+            uqm_rust::engine::World::current()
+                .write(|world| world.set_activity(WON_LAST_BATTLE as u16));
             assert_eq!(observe(), (expected, None));
             // A non-boss battle must clear the result too, before any ship spawns.
-            (**uqm_rust::engine::WorldData::current())
-                .game
-                .current_activity = (IN_ENCOUNTER | IN_BATTLE) as u16;
+            uqm_rust::engine::World::current()
+                .write(|world| world.set_activity((IN_ENCOUNTER | IN_BATTLE) as u16));
             uqm_rust::app::bridge::battle(|battle| {
                 battle.initialize(&mut **uqm_rust::engine::Kernel::current())
             });
             uqm_rust::app::bridge::enter(|cx| assert!(cx.terminal_outcome().is_none()));
-            (**uqm_rust::engine::WorldData::current())
-                .game
-                .current_activity = IN_LAST_BATTLE as u16;
+            uqm_rust::engine::World::current()
+                .write(|world| world.set_activity(IN_LAST_BATTLE as u16));
             assert_eq!(observe(), (Default::default(), None));
         }
     });
@@ -71,9 +67,8 @@ fn live_observation_projects_owned_events_generators_hazards_and_player() {
             player.ship_mut().ship_facing = 19;
             uqm_rust::engine::World::current()
                 .write(|world| set_game_state(world, uqm_rust::engine::StoryKey::BOMB_CARRIER, 1));
-            (**uqm_rust::engine::WorldData::current())
-                .game
-                .current_activity = (IN_LAST_BATTLE | IN_BATTLE) as u16;
+            uqm_rust::engine::World::current()
+                .write(|world| world.set_activity((IN_LAST_BATTLE | IN_BATTLE) as u16));
             let (events, snapshot) = observe();
             let snapshot = snapshot.unwrap_or_else(|| panic!("live final battle"));
             assert_eq!(events.generation, 1);
@@ -188,9 +183,7 @@ fn lifecycle_counts_each_identity_once_and_retains_gate_entry() {
                 })
                 .unwrap_or_else(|| panic!("boss gate"));
             call_element("ships::races::samatra::gate_preprocess", id(gate.cast()));
-            (**uqm_rust::engine::WorldData::current())
-                .game
-                .current_activity = IN_BATTLE as u16;
+            uqm_rust::engine::World::current().write(|world| world.set_activity(IN_BATTLE as u16));
             uqm_rust::engine::World::current()
                 .write(|world| set_game_state(world, uqm_rust::engine::StoryKey::BOMB_CARRIER, 1));
             let mut pa = POINT { x: 0, y: 0 };
@@ -407,9 +400,8 @@ fn only_player_ship_bomb_carrier_through_open_gate_finishes_battle() {
                 for bomb in [0, 1] {
                     for is_ship in [false, true] {
                         for owner in [RPG_PLAYER_NUM, NPC_PLAYER_NUM] {
-                            (**uqm_rust::engine::WorldData::current())
-                                .game
-                                .current_activity = IN_BATTLE as u16;
+                            uqm_rust::engine::World::current()
+                                .write(|world| world.set_activity(IN_BATTLE as u16));
                             uqm_rust::engine::World::current().write(|world| {
                                 set_game_state(
                                     world,
@@ -432,9 +424,7 @@ fn only_player_ship_bomb_carrier_through_open_gate_finishes_battle() {
                                 hooks::CollisionCall::Hook,
                             );
                             assert_eq!(
-                                (**uqm_rust::engine::WorldData::current())
-                                    .game
-                                    .current_activity
+                                uqm_rust::engine::World::current().read(|world| world.activity())
                                     & IN_BATTLE as u16
                                     == 0,
                                 generators == 0 && bomb == 1 && is_ship && owner == RPG_PLAYER_NUM
@@ -478,9 +468,8 @@ fn postprocess_spawns_comets_and_sentinels_only_while_generators_live() {
             assert_eq!(ship.descriptor_mut().characteristics.weapon_wait, 1);
             assert_eq!(queued().len(), 14);
             assert_ne!((*comet).state_flags & NONSOLID as u16, 0);
-            (**uqm_rust::engine::WorldData::current())
-                .game
-                .current_activity = (IN_LAST_BATTLE | IN_BATTLE) as u16;
+            uqm_rust::engine::World::current()
+                .write(|world| world.set_activity((IN_LAST_BATTLE | IN_BATTLE) as u16));
             let hazards = uqm_rust::automation::samatra::observe().1.unwrap().hazards;
             assert_eq!(hazards.len(), 3);
             assert_eq!(hazards.iter().filter(|h| h.solid).count(), 2);

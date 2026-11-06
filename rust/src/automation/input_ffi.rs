@@ -607,9 +607,7 @@ pub(crate) fn service_input(
         // exits the inner loop.
         #[cfg(not(test))]
         {
-            crate::mainloop::ffi::set_current_activity(crate::mainloop::types::ActivityValue(
-                crate::mainloop::ffi::get_current_activity().0 | 0x4000,
-            ));
+            observer.activity.raise_flags(0x4000);
         }
         return 1; // Terminal: stop the DoInput loop.
     }
@@ -631,7 +629,7 @@ pub(crate) fn service_input(
 //  Observation hook: called after UpdateInputState in DoInput
 // ===========================================================================
 
-pub(crate) fn after_input_update(observer: &AutomationObserver) -> i32 {
+pub(crate) fn after_input_update(observer: &AutomationObserver, activity: u16) -> i32 {
     // Step 1: ABI entry (saturating).
     let rt = &observer.runtime;
     rt.record_abi_entry();
@@ -648,7 +646,7 @@ pub(crate) fn after_input_update(observer: &AutomationObserver) -> i32 {
 
     // Step 3: Commit the scripted player-input observation at the exact
     // production boundary that follows UpdateInputState.
-    observer.parity_input();
+    observer.parity_input(activity);
     observer.process_player_input_observation().into()
 }
 
@@ -857,7 +855,7 @@ pub(crate) fn star_flight_observation(
         });
         let autopilot = world.autopilot;
         super::star_flight::Observation {
-            activity: crate::mainloop::ffi::get_current_activity().0,
+            activity: world.activity,
             current_star,
             space_side: world
                 .named_state_value("ARILOU_SPACE_SIDE")
@@ -930,7 +928,7 @@ pub(crate) fn fleet_fight_observation(world: &CampaignView) -> super::fleet_figh
     #[cfg(test)]
     let picker = None;
     super::fleet_fight::Observation {
-        activity: crate::mainloop::ffi::get_current_activity().0,
+        activity: world.activity,
         cyborg,
         speed,
         counters: [player, enemy],

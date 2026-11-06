@@ -385,7 +385,8 @@ pub(crate) mod live {
             cx.element_mut(first).flags |= (COLLISION | NONSOLID) as u16;
         } else {
             cx.element_mut(second).flags &= !(COLLISION as u16);
-            cx.navigation_mut().game.current_activity |= START_ENCOUNTER as u16;
+            cx.world
+                .set_activity(cx.world.activity() | START_ENCOUNTER as u16);
         }
     }
     pub(crate) fn flagship_collision(
@@ -503,7 +504,7 @@ pub(crate) mod live {
             cx.element_mut(element).turn = flagship;
         }
         let escape = get(cx.world, StoryKey::ESCAPE_COUNTER);
-        if escape != 0 && cx.navigation_mut().game.current_activity & START_ENCOUNTER as u16 == 0 {
+        if escape != 0 && cx.world.activity() & START_ENCOUNTER as u16 == 0 {
             cx.element_mut(element).flags |= NONSOLID as u16;
             set(cx.world, StoryKey::ESCAPE_COUNTER, escape - 1);
         }

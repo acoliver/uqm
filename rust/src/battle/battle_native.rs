@@ -2,8 +2,6 @@
 
 #[cfg(not(test))]
 use crate::engine::World as WorldOwner;
-#[cfg(not(test))]
-use crate::engine::WorldData as WorldFields;
 use crate::ships::native::abi;
 
 const BATTLE_LEFT: u8 = 1 << 0;
@@ -138,7 +136,7 @@ pub(crate) mod engine {
     /// # Safety
     /// Game state must be initialized and accessed only on the game thread.
     pub fn activity() -> u16 {
-        WorldFields::current().read(|owner| owner.game.current_activity)
+        crate::engine::World::current().read(|world| world.activity())
     }
     /// # Safety
     /// `start..=end` must name a valid game-state bit field on the game thread.
@@ -229,12 +227,12 @@ pub(crate) mod engine {
                                 Some(ship),
                             )
                         }
-                        crate::engine::battle::input::InputSource::Network(_) => {
-                            context.network().remote_input(side)
-                        }
+                        crate::engine::battle::input::InputSource::Network(_) => context
+                            .network()
+                            .remote_input(side, &cx.world.activity_control()),
                     };
                     if cx.kernel.player_control[side] & NETWORK_CONTROL == 0 {
-                        input = net.local_input(side, input);
+                        input = net.local_input(side, input, &cx.world.activity_control());
                     }
                     cx.ship_state_mut(ship).input =
                         ship_input(input, cx.race_stats(ship).ship_info.crew_level);

@@ -169,7 +169,7 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
                     })
                     .unwrap();
                 assert_eq!(restored.next_activity, saved.global.current_activity);
-                game.data.game.current_activity = restored.next_activity;
+                game.set_activity(restored.next_activity);
                 let q = queues::QueueSections {
                     race_queue: saved.race_queue.clone(),
                     npc_ship_queue: saved.npc_ship_queue.clone(),
@@ -204,7 +204,9 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
                     })
                     .unwrap();
                 let actual = World::current()
-                    .write(|world| capture_runtime(&game.data.game, &world.story, &clock))
+                    .write(|world| {
+                        capture_runtime(&game.data.game, game.activity(), &world.story, &clock)
+                    })
                     .unwrap();
                 assert_eq!(actual.global, saved.global);
                 assert_eq!(actual.events, saved.events);

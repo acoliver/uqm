@@ -1,7 +1,5 @@
 //! Bidirectional credits scrolling and communication outtakes, ported from uqm/credits.c.
 
-#[cfg(not(test))]
-use crate::engine::WorldData;
 use crate::navigation::abi::*;
 use std::ffi::c_int;
 
@@ -532,11 +530,11 @@ pub(crate) mod runtime {
         PulsedInputState.menu[key as usize] != 0
     }
 
-    unsafe fn credits_input(state: &mut CreditsInputState) -> BOOLEAN {
+    unsafe fn credits_input(state: &mut CreditsInputState, activity: u16) -> BOOLEAN {
         if CREDITS_RUNNING != 0 {
             state.close_time_out = 0;
         }
-        if WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16 != 0
+        if activity & CHECK_ABORT as u16 != 0
             || (state.allow_cancel != 0 && (menu(KEY_MENU_SELECT) || menu(KEY_MENU_CANCEL)))
         {
             return 0;
@@ -656,7 +654,8 @@ pub(crate) mod runtime {
             };
             cx.with_legacy(|| SetMenuSounds(0, 0));
             cx.run_input(io, true, |cx, _| {
-                cx.with_legacy(|| credits_input(&mut state) != 0)
+                let activity = cx.world.activity();
+                cx.with_legacy(|| credits_input(&mut state, activity) != 0)
             });
         }
         let context = cx.kernel.screen_context;

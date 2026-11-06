@@ -10,7 +10,6 @@ use uqm_rust::{
     io::uio_bridge as uio,
     mainloop::{
         dir_prep::saveDir,
-        ffi,
         input_abi::{
             DoInput, FlushInput, ImmediateInputState, PulsedInputState, SetDefaultMenuRepeatDelay,
             UpdateInputState,
@@ -19,7 +18,6 @@ use uqm_rust::{
             do_restart::{do_restart_frame, DoRestartState},
             restart_ops::CffiOps,
         },
-        types::ActivityValue,
     },
     navigation::abi::SUMMARY_DESC,
     savegame::{decode_save, SaveSlots},
@@ -81,7 +79,7 @@ unsafe extern "C" fn picker_frame(state: *mut std::ffi::c_void) -> u32 {
 
 unsafe fn open_from_restart_while_select_is_held(occupied: bool) {
     FlushInput();
-    ffi::set_current_activity(ActivityValue(0));
+    uqm_rust::engine::World::current().write(|world| world.set_activity(0));
     key_event(RETURN, true, false);
     UpdateInputState();
     assert_ne!(ptr::addr_of!(PulsedInputState.menu[SELECT]).read(), 0);
@@ -103,8 +101,14 @@ unsafe fn open_from_restart_while_select_is_held(occupied: bool) {
             assert!(!do_restart_frame(&CffiOps::new(cx, &mut io), &mut menu));
         });
     }
-    assert_eq!(ffi::get_last_activity().0, 0x1000);
-    assert_eq!(ffi::get_current_activity().0, 4);
+    assert_eq!(
+        uqm_rust::engine::Kernel::current().read(|kernel| kernel.last_activity),
+        0x1000
+    );
+    assert_eq!(
+        uqm_rust::engine::World::current().read(|world| world.activity()),
+        4
+    );
     // A queued Cancel is cleared at the same ownership boundary as Select.
     key_event(ESCAPE, true, false);
     let mut picker = PickerProbe {
@@ -209,10 +213,10 @@ fn first_load_entry_flushes_held_keys_and_enumeration_cannot_exit_the_picker() {
             std::fs::write(saves.join("starcon2.49"), legacy).unwrap();
             std::fs::write(saves.join("starcon2.47"), b"bad").unwrap();
             for _ in 0..10 {
-                ffi::set_current_activity(ActivityValue(4));
+                uqm_rust::engine::World::current().write(|world| world.set_activity(4));
                 load_game_descriptions(summaries.as_mut_ptr());
                 assert_eq!(
-                    ffi::get_current_activity().0,
+                    uqm_rust::engine::World::current().read(|world| world.activity()),
                     4,
                     "enumeration must not set abort/load flags"
                 );

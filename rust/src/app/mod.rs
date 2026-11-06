@@ -1,4 +1,8 @@
 pub mod bridge;
+mod lifecycle;
+mod runtime;
+#[cfg(not(test))]
+pub use runtime::run;
 
 use std::sync::Arc;
 
@@ -9,11 +13,11 @@ pub struct Application {
 }
 
 impl Application {
-    pub fn new(observer: Option<Arc<crate::automation::AutomationObserver>>) -> Self {
-        Self {
-            observer,
-            game: crate::engine::Game::new(),
-        }
+    pub fn new(
+        game: crate::engine::Game,
+        observer: Option<Arc<crate::automation::AutomationObserver>>,
+    ) -> Self {
+        Self { observer, game }
     }
 
     /// # Safety

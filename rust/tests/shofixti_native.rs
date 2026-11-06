@@ -25,9 +25,7 @@ impl Battle {
         let graphics_flags = _GraphicsStatusFlags;
         let counters = uqm_rust::app::bridge::battle(|b| b.counters);
         let inner = shared::Battle::new(capacity);
-        (**uqm_rust::engine::WorldData::current())
-            .game
-            .current_activity = IN_ENCOUNTER as _;
+        uqm_rust::engine::World::current().write(|world| world.set_activity(IN_ENCOUNTER as _));
         uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
         set_recruited(true);
         ScreenWidth = 320;
@@ -204,9 +202,7 @@ fn complete_descriptor_and_damaged_tanaka_katana_variant_are_fresh_each_call() {
             (2, false, true),
             (0, false, false),
         ] {
-            (**uqm_rust::engine::WorldData::current())
-                .game
-                .current_activity = activity;
+            uqm_rust::engine::World::current().write(|world| world.set_activity(activity));
             set_recruited(recruited);
             let mut original = shared::descriptor(SPECIES_ID_SHOFIXTI_ID);
             let p = &raw mut original;
@@ -806,9 +802,8 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                     let saved_pulsed = PulsedInputState;
                     let mut context = mem::zeroed();
                     (**uqm_rust::engine::Kernel::current()).off_screen_context = &mut context;
-                    (**uqm_rust::engine::WorldData::current())
-                        .game
-                        .current_activity = (SUPER_MELEE | IN_BATTLE) as u16;
+                    uqm_rust::engine::World::current()
+                        .write(|world| world.set_activity((SUPER_MELEE | IN_BATTLE) as u16));
                     uqm_rust::app::bridge::battle(|b| b.counters = initial);
                     let mut ship = Ship::new(&_battle, 0);
                     let mut other = Ship::new(&_battle, 1);
@@ -891,9 +886,11 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                                 .id(std::ptr::NonNull::new(outgoing.cast()))
                                 .unwrap();
                             transitions::new_ship_with_picker(cx, outgoing, |cx, last, player| {
+                                let activity = cx.world.activity_control();
                                 uqm_rust::app::bridge::publish(cx, || {
                                     assert_eq!(player as usize, side);
                                     let chosen = get_encounter_star_ship_with_picker(
+                                        activity,
                                         Some(last),
                                         player,
                                         |player, out| {
@@ -930,16 +927,12 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                     let remaining = uqm_rust::app::bridge::battle(|b| b.counters);
                     assert_eq!(remaining, [initial[0] - 1, initial[1] - 1]);
                     assert_eq!(
-                        (**uqm_rust::engine::WorldData::current())
-                            .game
-                            .current_activity
+                        uqm_rust::engine::World::current().read(|world| world.activity())
                             & CHECK_ABORT as u16,
                         0
                     );
                     assert_eq!(
-                        (**uqm_rust::engine::WorldData::current())
-                            .game
-                            .current_activity
+                        uqm_rust::engine::World::current().read(|world| world.activity())
                             & IN_BATTLE as u16
                             != 0,
                         expected_selection

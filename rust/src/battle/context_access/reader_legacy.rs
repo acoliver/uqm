@@ -8,10 +8,14 @@ use std::ffi::c_void;
 #[cfg(not(test))]
 /// # Safety
 /// The game thread retains the initialized battle context and all resources used by this call.
-pub unsafe fn get_encounter_star_ship(last: Option<ShipId>, player: u16) -> Option<ShipId> {
+pub unsafe fn get_encounter_star_ship(
+    activity: crate::engine::world::activity::ActivityControl,
+    last: Option<ShipId>,
+    player: u16,
+) -> Option<ShipId> {
     // SAFETY: the game-thread picker retains its selected ship through this synchronous handoff.
     unsafe {
-        get_encounter_star_ship_with_picker(last, player, |player, result| {
+        get_encounter_star_ship_with_picker(activity, last, player, |player, result| {
             crate::supermelee::native::battle_picker::live::GetNextMeleeStarShip(player, result)
         })
     }
@@ -21,19 +25,13 @@ pub unsafe fn get_encounter_star_ship(last: Option<ShipId>, player: u16) -> Opti
 /// Last is null or live; a successful picker must return a live selected ship address.
 #[cfg(not(test))]
 pub unsafe fn get_encounter_star_ship_with_picker(
+    activity: crate::engine::world::activity::ActivityControl,
     last: Option<ShipId>,
     player: u16,
     pick: impl FnOnce(u16, *mut *mut c_void) -> u32,
 ) -> Option<ShipId> {
     // SAFETY: the Native picker retains only an identity while the blocking UI runs.
-    unsafe {
-        crate::pickship::ffi::encounter_ship(
-            last,
-            player,
-            crate::battle::battle_native::engine::activity(),
-            pick,
-        )
-    }
+    unsafe { crate::pickship::ffi::encounter_ship(last, player, activity, pick) }
 }
 
 #[cfg(not(test))]

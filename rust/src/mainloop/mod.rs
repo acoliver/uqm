@@ -8,8 +8,6 @@
 //! # Module Structure
 //!
 //! - [`types`] — `CBoolean`, `ActivityValue`, `ActivityKind`, activity flags
-//! - [`c_extern`] — raw `extern "C"` declarations (unsafe)
-//! - [`ffi`] — safe Rust wrappers around the externs
 //!
 //! # C ABI Reference
 //!
@@ -25,14 +23,10 @@
 //!
 //! @plan PLAN-20260707-MAINLOOP.P03
 
-pub mod c_extern;
 pub mod c_main_extern;
 pub mod content;
 pub mod dir_prep;
-pub mod ffi;
-pub mod game_loop;
 pub mod init_reference;
-pub mod init_sequence;
 pub mod init_wrappers;
 pub mod input_frame;
 pub mod logging;
@@ -47,12 +41,6 @@ pub mod state_machine;
 pub mod teardown;
 pub mod types;
 
-pub use ffi::{
-    get_chmmr_bomb_state, get_crew_enlisted, get_current_activity, get_global_flags_and_data,
-    get_kohr_ah_killed_all, get_last_activity, get_next_activity, get_starbase_available,
-    set_chmmr_bomb_state, set_current_activity, set_flash_rect_null, set_last_activity,
-    set_main_exited, set_next_activity, set_player_input_all_or_explode,
-};
 pub use state_machine::{
     check_break, evaluate, post_encounter_clear, pre_dispatch_mutate, resolve_load_activity,
     should_continue, should_zero_velocity, ActivityDecision, BreakAction, GameStateInfo,
@@ -83,6 +71,3 @@ pub mod lifecycle_abi;
 
 #[cfg(not(test))]
 pub mod state_abi;
-
-#[cfg(not(test))]
-pub use ffi::load_kernel;

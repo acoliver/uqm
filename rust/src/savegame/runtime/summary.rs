@@ -217,6 +217,7 @@ pub fn utf8_string_copy(source: &[u8]) -> [u8; SIS_NAME_SIZE] {
 /// `sis` and `game` are `GlobData.flagship` and `GlobData.game`;
 /// `solar` is the solar-system owner; `name` is what the player typed.
 pub fn capture_summary(
+    activity: u16,
     sis: &CSisState,
     game: &CGameState,
     escorts: LinkQueue<'_, Fragment, 12>,
@@ -227,7 +228,7 @@ pub fn capture_summary(
     let state = story.as_ref().ok_or(GameStateOwnerError::NotInitialized)?;
 
     let mut sis_copy = sis_state(sis);
-    let mut activity = (game.current_activity & 0x00ff) as u8;
+    let mut activity = (activity & 0x00ff) as u8;
     match u16::from(activity) {
         IN_HYPERSPACE => {
             if state_value(state, "ARILOU_SPACE_SIDE") > 1 {

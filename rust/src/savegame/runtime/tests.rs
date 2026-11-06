@@ -1,9 +1,9 @@
 //! Tests for the live "GlSt", "GmSt" and "Evts" capture and restore.
 //!
-//! The field checks place and read bytes at offsets taken from bindgen's
-//! reading of the C headers, not from the Rust mirror, and compare them with
-//! values written out here or with the bytes of a save the C game wrote. The
-//! event checks use the owned fixed-capacity game-clock pool.
+//! The field checks place and read bytes at explicit offsets in the retained
+//! scalar record. Live activity is supplied separately. Serialized chunks are
+//! compared with the bytes of a save written by the C runtime; event checks
+//! use the owned fixed-capacity game-clock pool.
 
 use crate::engine::battle::schema::GAME_STATE;
 use crate::engine::World;
@@ -33,7 +33,22 @@ const FIXTURE_EVTS: std::ops::Range<usize> = 1194..1214;
 // A live GAME_STATE with a real event pool
 // ---------------------------------------------------------------------------
 
-struct LiveGame(Box<CGameState>, GameClock);
+struct TestState {
+    game: CGameState,
+    current_activity: u16,
+}
+impl Deref for TestState {
+    type Target = CGameState;
+    fn deref(&self) -> &Self::Target {
+        &self.game
+    }
+}
+impl DerefMut for TestState {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.game
+    }
+}
+struct LiveGame(Box<TestState>, GameClock);
 
 impl LiveGame {
     fn new() -> Self {
@@ -44,14 +59,14 @@ impl LiveGame {
 }
 
 impl Deref for LiveGame {
-    type Target = CGameState;
-    fn deref(&self) -> &CGameState {
+    type Target = TestState;
+    fn deref(&self) -> &TestState {
         &self.0
     }
 }
 
 impl DerefMut for LiveGame {
-    fn deref_mut(&mut self) -> &mut CGameState {
+    fn deref_mut(&mut self) -> &mut TestState {
         &mut self.0
     }
 }
@@ -92,7 +107,6 @@ mod c_offset {
     pub const FUEL_COST: usize = offset_of!(GAME_STATE, fuel_cost);
     pub const MODULE_COST: usize = offset_of!(GAME_STATE, module_cost);
     pub const ELEMENT_WORTH: usize = offset_of!(GAME_STATE, element_worth);
-    pub const CURRENT_ACTIVITY: usize = offset_of!(GAME_STATE, current_activity);
     pub const CLOCK_DAY: usize = offset_of!(GAME_STATE, game_clock.day_index);
     pub const CLOCK_MONTH: usize = offset_of!(GAME_STATE, game_clock.month_index);
     pub const CLOCK_YEAR: usize = offset_of!(GAME_STATE, game_clock.year_index);
@@ -125,7 +139,6 @@ fn glst_layout() -> Vec<(usize, usize, usize)> {
         (2, 1, FUEL_COST),
         (3, 20, MODULE_COST),
         (23, 8, ELEMENT_WORTH),
-        (31, 2, CURRENT_ACTIVITY),
         (33, 1, CLOCK_DAY),
         (34, 1, CLOCK_MONTH),
         (35, 2, CLOCK_YEAR),
@@ -209,7 +222,6 @@ fn sentinel_fields() -> Vec<(usize, Vec<u8>)> {
         (FUEL_COST, vec![0x13]),
         (MODULE_COST, g.module_cost.to_vec()),
         (ELEMENT_WORTH, g.element_worth.to_vec()),
-        (CURRENT_ACTIVITY, 0x4a05u16.to_le_bytes().to_vec()),
         (CLOCK_DAY, vec![21]),
         (CLOCK_MONTH, vec![9]),
         (CLOCK_YEAR, 2161u16.to_le_bytes().to_vec()),
@@ -328,7 +340,11 @@ fn capture_reads_every_glst_field_from_its_c_offset() {
     for (offset, bytes) in sentinel_fields() {
         put(&mut game, offset, &bytes);
     }
-    assert_eq!(global::capture_global_state(&game), sentinel_global());
+    game.current_activity = 0x4a05;
+    assert_eq!(
+        global::capture_global_state(&game, game.current_activity),
+        sentinel_global()
+    );
 }
 
 #[test]
@@ -336,11 +352,6 @@ fn restore_writes_every_glst_field_at_its_c_offset() {
     let mut game = LiveGame::new();
     global::apply_global_state(&mut game, &sentinel_global());
     for (offset, bytes) in sentinel_fields() {
-        // The activity is the one field restore leaves for the caller.
-        if offset == c_offset::CURRENT_ACTIVITY {
-            assert_eq!(get(&game, offset, 2), vec![0, 0], "activity was written");
-            continue;
-        }
         assert_eq!(get(&game, offset, bytes.len()), bytes, "offset {offset}");
     }
 }
@@ -389,7 +400,7 @@ fn every_activity_code_is_carried_through() {
         assert_eq!(game.current_activity, 0x0100);
         game.current_activity = activity;
         assert_eq!(
-            global::capture_global_state(&game).current_activity,
+            global::capture_global_state(&game, game.current_activity).current_activity,
             activity
         );
     }
@@ -690,7 +701,7 @@ fn restore_then_capture_returns_the_sections_that_were_restored() {
 
             game.current_activity = global.current_activity;
             let captured = World::current()
-                .write(|world| capture_runtime(&game, &world.story, &game.1))
+                .write(|world| capture_runtime(&game, game.current_activity, &world.story, &game.1))
                 .unwrap();
             assert_eq!(captured.global, global);
             assert_eq!(captured.game_state, bits);
@@ -723,7 +734,12 @@ fn capture_reads_game_state_from_the_singleton() {
 
             assert_eq!(
                 World::current()
-                    .write(|world| capture_runtime(&game, &world.story, &game.1))
+                    .write(|world| capture_runtime(
+                        &game,
+                        game.current_activity,
+                        &world.story,
+                        &game.1
+                    ))
                     .unwrap()
                     .game_state,
                 singleton
@@ -758,7 +774,7 @@ fn a_rejected_restore_changes_nothing() {
                 .unwrap();
             game.current_activity = 0x0100;
             let before_sections = World::current()
-                .write(|world| capture_runtime(&game, &world.story, &game.1))
+                .write(|world| capture_runtime(&game, game.current_activity, &world.story, &game.1))
                 .unwrap();
             let before_queue = queue_state(&game.1);
 
@@ -788,7 +804,12 @@ fn a_rejected_restore_changes_nothing() {
             );
             assert_eq!(
                 World::current()
-                    .write(|world| capture_runtime(&game, &world.story, &game.1))
+                    .write(|world| capture_runtime(
+                        &game,
+                        game.current_activity,
+                        &world.story,
+                        &game.1
+                    ))
                     .unwrap(),
                 before_sections
             );
@@ -839,20 +860,10 @@ fn restoring_a_c_written_save_puts_its_bytes_at_the_c_offsets() {
 
             // GlSt: every chunk byte lands where the C compiler puts that field.
             let layout = glst_layout();
-            assert_eq!(layout.iter().map(|&(_, len, _)| len).sum::<usize>(), 75);
+            assert_eq!(layout.iter().map(|&(_, len, _)| len).sum::<usize>() + 2, 75);
+            assert_eq!(game.current_activity, 0x0100);
+            assert_eq!(restored.next_activity.to_le_bytes(), glst[31..33]);
             for (chunk_at, len, c_at) in layout {
-                if c_at == c_offset::CURRENT_ACTIVITY {
-                    assert_eq!(
-                        get(&game, c_at, len),
-                        vec![0, 1],
-                        "activity stays the current one"
-                    );
-                    assert_eq!(
-                        restored.next_activity.to_le_bytes(),
-                        glst[chunk_at..chunk_at + len]
-                    );
-                    continue;
-                }
                 assert_eq!(
                     get(&game, c_at, len),
                     glst[chunk_at..chunk_at + len],
@@ -880,7 +891,7 @@ fn restoring_a_c_written_save_puts_its_bytes_at_the_c_offsets() {
             // Capturing the restored game gives back what the file held.
             game.current_activity = restored.next_activity;
             let captured = World::current()
-                .write(|world| capture_runtime(&game, &world.story, &game.1))
+                .write(|world| capture_runtime(&game, game.current_activity, &world.story, &game.1))
                 .unwrap();
             assert_eq!(captured.global, save.global);
             assert_eq!(captured.game_state, save.game_state);

@@ -9,6 +9,7 @@ use uqm_rust::engine::observe::{
 
 struct Recording {
     events: Rc<RefCell<Vec<&'static str>>>,
+    activities: Rc<RefCell<Vec<u16>>>,
     stop: bool,
 }
 
@@ -22,7 +23,8 @@ impl Observer<Option<CampaignView>> for Recording {
                 );
                 self.events.borrow_mut().push("before");
             }
-            InputView::AfterUpdate => {
+            InputView::AfterUpdate(activity) => {
+                self.activities.borrow_mut().push(*activity);
                 assert!(
                     campaign.is_none(),
                     "post-update does not capture the campaign"
@@ -65,8 +67,10 @@ fn nested_callbacks_complete_before_the_outer_frame_and_stopped_admission_does_n
         uqm_rust::mainloop::input_abi::SetDefaultMenuRepeatDelay();
         uqm_rust::mainloop::input_abi::SetInputCallback(Some(record_hook));
         let events = Rc::new(RefCell::new(Vec::new()));
+        let activities = Rc::new(RefCell::new(Vec::new()));
         let mut observer = Recording {
             events: events.clone(),
+            activities: activities.clone(),
             stop: false,
         };
         let mut io = Io {
@@ -94,6 +98,7 @@ fn nested_callbacks_complete_before_the_outer_frame_and_stopped_admission_does_n
                 "complete", "complete"
             ]
         );
+        assert_eq!(*activities.borrow(), [0, 1]);
         observer.stop = true;
         events.borrow_mut().clear();
         let mut io = Io {

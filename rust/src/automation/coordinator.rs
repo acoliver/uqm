@@ -351,6 +351,7 @@ struct CoordInner {
 /// The automation coordinator, holding all live state needed to drive
 /// the scheduler/watchdog during the game loop.
 pub struct AutomationObserver {
+    pub(crate) activity: crate::engine::world::activity::ActivityControl,
     /// Validated seed returned at each automation-owned RNG initialization.
     seed: u32,
     /// The validated script actions.
@@ -385,19 +386,24 @@ impl AutomationObserver {
     ///
     /// This is called from `main.rs` after `setup_automation` succeeds.
     /// It activates the runtime model and writes the run_start trace.
-    pub fn new(script: ValidatedScript, output_root: PathBuf) -> Arc<Self> {
+    pub fn new(
+        script: ValidatedScript,
+        output_root: PathBuf,
+        activity: crate::engine::world::activity::ActivityControl,
+    ) -> Arc<Self> {
         #[cfg(feature = "debug-process")]
         let native_limit = super::native_window::active_native_window_config()
             .map(|config| config.runtime_contract.inventory_limits.member_bytes);
         #[cfg(not(feature = "debug-process"))]
         let native_limit = None;
-        Self::init_with_native_checkpoints(script, output_root, native_limit)
+        Self::init_with_native_checkpoints(script, output_root, native_limit, activity)
     }
 
     fn init_with_native_checkpoints(
         script: ValidatedScript,
         output_root: PathBuf,
         native_limit: Option<u64>,
+        activity: crate::engine::world::activity::ActivityControl,
     ) -> Arc<Self> {
         let native_trace = native_limit
             .map(|limit| {
@@ -439,6 +445,7 @@ impl AutomationObserver {
         let parity_failed = Self::trace_initialization_failed(&parity, "parity");
         let native_trace_failed = Self::trace_initialization_failed(&native_trace, "native");
         let coord = AutomationObserver {
+            activity,
             seed: script.seed(),
             actions,
             native_checkpoint_plan,
@@ -1015,7 +1022,7 @@ impl AutomationObserver {
             self.actions.get(inner.sched_state.step_index)
         {
             match inner.battle_loss.observe(
-                mode::require_live(),
+                mode::require_live(world),
                 crate::automation::battle_observer::current_frame(),
                 battle_outcome::live_fleets(),
                 wait.minimum_ships,
@@ -1084,53 +1091,6 @@ impl AutomationObserver {
         scheduler_event
     }
 
-    /// Fly the flagship out of the live solar system with player controls and
-    /// report arrival once production has dispatched hyperspace.
-    /// Hold the turn key of a `turn_flagship` step until the live flagship
-    /// facing has changed by exactly the requested facings, then release it.
-    fn service_flagship_turn(
-        &self,
-        inner: &mut CoordInner,
-        turn: crate::automation::script::TurnFlagshipStep,
-        scheduler_event: SchedulerEvent,
-    ) -> SchedulerEvent {
-        use crate::automation::navigation::NavigationControl;
-        use crate::automation::script::TurnDirection;
-
-        let progress = inner.flagship_turn.observe(
-            mode::require_live(),
-            flagship_turn::live_facing(),
-            turn.direction,
-            turn.facings,
-        );
-        let holding = NavigationControl {
-            left: turn.direction == TurnDirection::Left,
-            right: turn.direction == TurnDirection::Right,
-            ..NavigationControl::default()
-        };
-        match progress {
-            Ok(TurnProgress::Turning { .. }) => {
-                if !self.set_navigation_controls(holding) {
-                    self.reject_input(inner, "turn_flagship", -1, -1);
-                }
-                scheduler_event
-            }
-            Ok(TurnProgress::Complete(proof)) => {
-                if !self.set_navigation_controls(NavigationControl::default()) {
-                    self.reject_input(inner, "turn_flagship", -1, -1);
-                    return scheduler_event;
-                }
-                self.write_trace_labeled(inner, RecordKind::SemanticAssertion, proof.trace_label());
-                SchedulerEvent::NavigationReached
-            }
-            Err(error) => {
-                self.write_trace_labeled(inner, RecordKind::SemanticAssertion, error.trace_label());
-                self.set_terminal(inner, TerminalClass::SemanticMismatch);
-                scheduler_event
-            }
-        }
-    }
-
     /// Drive the planet-side lander toward the nearest deposit of the
     /// requested category until its hold carries the requested units.
     fn service_planet_minerals(
@@ -1180,11 +1140,14 @@ impl AutomationObserver {
     /// would press.
     fn service_battle_fight(
         &self,
+        world: &campaign_state::CampaignView,
         inner: &mut CoordInner,
         fight: crate::automation::script::FightBattleStep,
         scheduler_event: SchedulerEvent,
     ) -> SchedulerEvent {
-        let progress = inner.battle_fight.observe(&BattleSnapshot::live(), &fight);
+        let progress = inner
+            .battle_fight
+            .observe(&BattleSnapshot::live(world), &fight);
         match progress {
             Ok(FightProgress::Fighting { control, report }) => {
                 if !Self::set_fight_controls(control) {
@@ -1831,7 +1794,7 @@ impl AutomationObserver {
         } else if let Some(Action::TurnFlagship(turn)) =
             self.actions.get(inner.sched_state.step_index)
         {
-            scheduler_event = self.service_flagship_turn(inner, *turn, scheduler_event);
+            scheduler_event = self.service_flagship_turn(world, inner, *turn, scheduler_event);
         } else if let Some(Action::CollectPlanetMinerals(collect)) =
             self.actions.get(inner.sched_state.step_index)
         {
@@ -1853,7 +1816,7 @@ impl AutomationObserver {
         } else if let Some(Action::FightBattle(fight)) =
             self.actions.get(inner.sched_state.step_index)
         {
-            scheduler_event = self.service_battle_fight(inner, *fight, scheduler_event);
+            scheduler_event = self.service_battle_fight(world, inner, *fight, scheduler_event);
         } else if let Some(Action::NavigateToMoon(navigation)) =
             self.actions.get(inner.sched_state.step_index)
         {
@@ -2015,7 +1978,7 @@ impl AutomationObserver {
 
         if let Some(Action::AssertMode(assertion)) = self.actions.get(inner.sched_state.step_index)
         {
-            match crate::automation::mode::require_live() {
+            match crate::automation::mode::require_live(world) {
                 Ok(observed) if observed == assertion.mode => self.write_trace_labeled(
                     inner,
                     RecordKind::SemanticAssertion,
@@ -2134,10 +2097,10 @@ impl AutomationObserver {
         if let Some(Action::RecordHyperspacePosition(_)) =
             self.actions.get(inner.sched_state.step_index)
         {
-            match inner
-                .flight_position
-                .record(mode::require_live(), flight_position::live_position(world))
-            {
+            match inner.flight_position.record(
+                mode::require_live(world),
+                flight_position::live_position(world),
+            ) {
                 Ok(position) => self.write_trace_labeled(
                     inner,
                     RecordKind::SemanticAssertion,
@@ -2158,7 +2121,7 @@ impl AutomationObserver {
             self.actions.get(inner.sched_state.step_index)
         {
             match inner.flight_position.assert_displacement(
-                mode::require_live(),
+                mode::require_live(world),
                 flight_position::live_position(world),
                 assertion.minimum_logical_units,
             ) {
@@ -2182,7 +2145,7 @@ impl AutomationObserver {
             self.actions.get(inner.sched_state.step_index)
         {
             match inner.flight_position.assert_stationary(
-                mode::require_live(),
+                mode::require_live(world),
                 flight_position::live_position(world),
                 assertion.maximum_logical_units,
             ) {
@@ -2205,10 +2168,10 @@ impl AutomationObserver {
         if let Some(Action::RecordSavedHyperspacePosition(_)) =
             self.actions.get(inner.sched_state.step_index)
         {
-            match inner
-                .flight_position
-                .record_saved(mode::require_live(), flight_position::live_position(world))
-            {
+            match inner.flight_position.record_saved(
+                mode::require_live(world),
+                flight_position::live_position(world),
+            ) {
                 Ok(position) => self.write_trace_labeled(
                     inner,
                     RecordKind::SemanticAssertion,
@@ -2228,10 +2191,10 @@ impl AutomationObserver {
         if let Some(Action::AssertHyperspacePositionRestored(_)) =
             self.actions.get(inner.sched_state.step_index)
         {
-            match inner
-                .flight_position
-                .assert_restored(mode::require_live(), flight_position::live_position(world))
-            {
+            match inner.flight_position.assert_restored(
+                mode::require_live(world),
+                flight_position::live_position(world),
+            ) {
                 Ok((saved, observed)) => self.write_trace_labeled(
                     inner,
                     RecordKind::SemanticAssertion,
@@ -2252,7 +2215,7 @@ impl AutomationObserver {
             self.actions.get(inner.sched_state.step_index)
         {
             match ship_resources::assert_ship_resources(
-                mode::require_live(),
+                mode::require_live(world),
                 ship_resources::live_resources(world),
                 *assertion,
             ) {
@@ -2295,7 +2258,7 @@ impl AutomationObserver {
             self.actions.get(inner.sched_state.step_index)
         {
             match ship_element::assert_ship_element(
-                mode::require_live(),
+                mode::require_live(world),
                 ship_element::live_amounts(world),
                 *assertion,
             ) {
@@ -3467,8 +3430,13 @@ mod tests {
         )
         .unwrap();
         let directory = tempfile::tempdir().unwrap();
-        let observer = AutomationObserver::new(script, directory.path().into());
-        let application = crate::app::Application::new(Some(observer.clone()));
+        let game = crate::engine::Game::new();
+        let observer = AutomationObserver::new(
+            script,
+            directory.path().into(),
+            game.world.activity_control(),
+        );
+        let application = crate::app::Application::new(game, Some(observer.clone()));
         assert!(Arc::ptr_eq(application.observer().unwrap(), &observer));
         use crate::engine::observe::Observer;
         let mut handle =
@@ -3489,7 +3457,11 @@ mod tests {
         )
         .unwrap();
         let output = tempfile::tempdir().unwrap();
-        let observer = crate::automation::AutomationObserver::new(script, output.path().into());
+        let observer = crate::automation::AutomationObserver::new(
+            script,
+            output.path().into(),
+            crate::engine::World::new().activity_control(),
+        );
         let before = observer.runtime.commit.next_sequence();
         let mut game = crate::engine::Game::new();
         let mut battle = crate::engine::battle::Battle::new();
@@ -3662,10 +3634,15 @@ mod tests {
             "quit.json",
         )
         .unwrap();
-        let _app = crate::app::Application::new(Some(AutomationObserver::new(
-            script,
-            temp.path().to_path_buf(),
-        )));
+        let _app = {
+            let game = crate::engine::Game::new();
+            let observer = Some(AutomationObserver::new(
+                script,
+                temp.path().to_path_buf(),
+                game.world.activity_control(),
+            ));
+            crate::app::Application::new(game, observer)
+        };
         if case != "declared_not_reported" {
             _app.observer().unwrap().observe_quit_selected();
         }
@@ -3720,8 +3697,15 @@ mod tests {
             "test.json",
         )
         .unwrap();
-        let _app =
-            crate::app::Application::new(Some(AutomationObserver::new(script, temp.path().into())));
+        let _app = {
+            let game = crate::engine::Game::new();
+            let observer = Some(AutomationObserver::new(
+                script,
+                temp.path().into(),
+                game.world.activity_control(),
+            ));
+            crate::app::Application::new(game, observer)
+        };
         let coord = _app.observer().cloned().unwrap();
         // AutoScan has already selected, and its synchronous callback owns
         // three scans of 84 lines. Dispatch cannot accept input yet.
@@ -3774,12 +3758,16 @@ mod tests {
         .unwrap();
         let plan =
             super::super::native_checkpoint::NativeCheckpointPlan::derive(source, &script).unwrap();
-        let _app =
-            crate::app::Application::new(Some(AutomationObserver::init_with_native_checkpoints(
+        let _app = {
+            let game = crate::engine::Game::new();
+            let observer = Some(AutomationObserver::init_with_native_checkpoints(
                 script,
                 temp.path().into(),
                 Some(65536),
-            )));
+                game.world.activity_control(),
+            ));
+            crate::app::Application::new(game, observer)
+        };
         let coord = _app.observer().cloned().unwrap();
         let frame = |count, generation| PresentedFrame {
             count,
@@ -3857,12 +3845,16 @@ mod tests {
         .unwrap();
         let plan =
             super::super::native_checkpoint::NativeCheckpointPlan::derive(source, &script).unwrap();
-        let _app =
-            crate::app::Application::new(Some(AutomationObserver::init_with_native_checkpoints(
+        let _app = {
+            let game = crate::engine::Game::new();
+            let observer = Some(AutomationObserver::init_with_native_checkpoints(
                 script,
                 temp.path().into(),
                 Some(65536),
-            )));
+                game.world.activity_control(),
+            ));
+            crate::app::Application::new(game, observer)
+        };
         let coord = _app.observer().cloned().unwrap();
         assert!(!_app.observer().unwrap().process_main_menu_ready());
         assert!(!_app.observer().unwrap().process_main_menu_ready());
@@ -3915,12 +3907,16 @@ mod tests {
             "test.json",
         )
         .unwrap();
-        let _app =
-            crate::app::Application::new(Some(AutomationObserver::init_with_native_checkpoints(
+        let _app = {
+            let game = crate::engine::Game::new();
+            let observer = Some(AutomationObserver::init_with_native_checkpoints(
                 script,
                 temp.path().into(),
                 Some(65536),
-            )));
+                game.world.activity_control(),
+            ));
+            crate::app::Application::new(game, observer)
+        };
         let coord = _app.observer().cloned().unwrap();
         let frame = |count, generation| PresentedFrame {
             count,
@@ -3999,12 +3995,16 @@ mod tests {
             "test.json",
         )
         .unwrap();
-        let _app =
-            crate::app::Application::new(Some(AutomationObserver::init_with_native_checkpoints(
+        let _app = {
+            let game = crate::engine::Game::new();
+            let observer = Some(AutomationObserver::init_with_native_checkpoints(
                 script,
                 temp.path().into(),
                 Some(65536),
-            )));
+                game.world.activity_control(),
+            ));
+            crate::app::Application::new(game, observer)
+        };
         let coord = _app.observer().cloned().unwrap();
         let frame = PresentedFrame {
             count: 1,
@@ -4061,12 +4061,16 @@ mod tests {
         .unwrap();
         let plan =
             super::super::native_checkpoint::NativeCheckpointPlan::derive(source, &script).unwrap();
-        let _app =
-            crate::app::Application::new(Some(AutomationObserver::init_with_native_checkpoints(
+        let _app = {
+            let game = crate::engine::Game::new();
+            let observer = Some(AutomationObserver::init_with_native_checkpoints(
                 script,
                 temp.path().into(),
                 Some(65536),
-            )));
+                game.world.activity_control(),
+            ));
+            crate::app::Application::new(game, observer)
+        };
         let coord = _app.observer().cloned().unwrap();
         assert!(!_app.observer().unwrap().process_main_menu_ready());
         for _ in 0..3 {
@@ -4173,10 +4177,15 @@ mod tests {
                 .seed;
             assert_eq!(seed.unwrap_or(999), 999);
         }
-        let _app = crate::app::Application::new(Some(AutomationObserver::new(
-            script,
-            temp.path().to_path_buf(),
-        )));
+        let _app = {
+            let game = crate::engine::Game::new();
+            let observer = Some(AutomationObserver::new(
+                script,
+                temp.path().to_path_buf(),
+                game.world.activity_control(),
+            ));
+            crate::app::Application::new(game, observer)
+        };
         let mut expected = Vec::new();
         for domain in [
             SeedDomain::SUPER_MELEE_MENU_ID,
@@ -4250,10 +4259,15 @@ mod tests {
         crate::mainloop::restart_menu::restart_ops::seed_new_campaign(0, || clock_used = true);
         assert!(clock_used, "inactive automation must keep the clock seed");
 
-        let _app = crate::app::Application::new(Some(AutomationObserver::new(
-            script,
-            temp.path().to_path_buf(),
-        )));
+        let _app = {
+            let game = crate::engine::Game::new();
+            let observer = Some(AutomationObserver::new(
+                script,
+                temp.path().to_path_buf(),
+                game.world.activity_control(),
+            ));
+            crate::app::Application::new(game, observer)
+        };
         crate::mainloop::restart_menu::restart_ops::seed_new_campaign(
             _app.observer().unwrap().seed_value(3, 0),
             || panic!("the clock seed must not run while automation supplies a seed"),
@@ -4310,10 +4324,15 @@ mod tests {
             br#"{"version":1,"name":"receipt","budgets":{"max_input_ticks":2,"max_presentations":2,"max_wallclock_seconds":1},"steps":[{"action":"finish"}]}"#,
             "receipt.json",
         ).unwrap();
-        let _app = crate::app::Application::new(Some(AutomationObserver::new(
-            crate::automation::script::validate_script(doc, "receipt.json").unwrap(),
-            temp.path().to_path_buf(),
-        )));
+        let _app = {
+            let game = crate::engine::Game::new();
+            let observer = Some(AutomationObserver::new(
+                crate::automation::script::validate_script(doc, "receipt.json").unwrap(),
+                temp.path().to_path_buf(),
+                game.world.activity_control(),
+            ));
+            crate::app::Application::new(game, observer)
+        };
         assert_eq!(
             _app.observer()
                 .cloned()
@@ -4361,7 +4380,11 @@ mod tests {
 
     #[test]
     fn application_without_automation_has_no_observer() {
-        assert!(crate::app::Application::new(None).observer().is_none());
+        assert!(
+            crate::app::Application::new(crate::engine::Game::new(), None)
+                .observer()
+                .is_none()
+        );
     }
 
     #[test]

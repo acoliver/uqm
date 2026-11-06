@@ -229,7 +229,7 @@ unsafe fn init_flash(menu: *mut MENU_STATE, piece: BYTE) {
 }
 
 unsafe extern "C" fn do_install_module(menu: *mut MENU_STATE) -> BOOLEAN {
-    if WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16 != 0 {
+    if crate::engine::World::current().read(|world| world.activity()) & CHECK_ABORT as u16 != 0 {
         (*menu).InputFunc = Some(DoOutfit);
         return 1;
     }
@@ -485,7 +485,7 @@ unsafe fn exit_outfit(menu: *mut MENU_STATE) -> BOOLEAN {
 /// and audio must be initialized and exclusively accessed on that thread.
 #[no_mangle]
 pub unsafe extern "C" fn DoOutfit(menu: *mut MENU_STATE) -> BOOLEAN {
-    if WorldData::current().read(|owner| owner.game.current_activity) & CHECK_ABORT as u16 != 0 {
+    if crate::engine::World::current().read(|world| world.activity()) & CHECK_ABORT as u16 != 0 {
         return exit_outfit(menu);
     }
     if (*menu).Initialized == 0 {

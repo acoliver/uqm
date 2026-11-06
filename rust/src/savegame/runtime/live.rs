@@ -69,6 +69,7 @@ pub unsafe fn capture_live_summary(name: &[u8]) -> Result<Summary, SummaryError>
         );
         // SAFETY: the flagship codec mirror asserts every field offset against SisState.
         summary::capture_summary(
+            world.activity(),
             &*std::ptr::addr_of!(world.data.flagship).cast::<crate::comm::locdata::CSisState>(),
             &world.data.game,
             world.built_ships_ref(),
