@@ -160,6 +160,25 @@ impl LoadedDrawable {
         NonNull::new(drawable).map(Self::retain_loaded)
     }
 
+    /// Copy an area relative to the context's clip into an independently owned drawable.
+    /// An absent area copies the current clip; an empty intersection returns `None`.
+    pub fn capture(
+        context: &super::native_context::ContextLease,
+        area: Option<super::native_abi::RECT>,
+    ) -> Option<Self> {
+        context.with_selected(|| {
+            let _target = context.target();
+            // SAFETY: the context and target remain retained on their graphics thread;
+            // the native copy returns a newly registered drawable with unique release authority.
+            let drawable = unsafe {
+                super::context_abi::CopyContextRect(
+                    area.as_ref().map_or(std::ptr::null(), std::ptr::from_ref),
+                )
+            };
+            NonNull::new(drawable).map(Self::retain_loaded)
+        })
+    }
+
     fn retain_loaded(drawable: NonNull<drawable_desc>) -> Self {
         let allocation = super::ffi::native_allocations()
             .entries
@@ -279,5 +298,152 @@ mod tests {
         assert_eq!(retain_frame_allocations(&[frame])[0].frame(0), Some(frame));
         drop(retained);
         assert!(std::panic::catch_unwind(|| retain_frame_allocations(&[frame])).is_err());
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn context_capture_owns_its_pixels_and_restores_the_previous_context() {
+        use super::super::{context_abi, native_abi::*, sdl::lifecycle_abi};
+        struct ConversionSurface {
+            previous: *mut super::super::ffi::SDL_Surface,
+            previous_screen: *mut super::super::ffi::SDL_Surface,
+            created: *mut sdl2_sys::SDL_Surface,
+            screen: *mut sdl2_sys::SDL_Surface,
+        }
+        impl Drop for ConversionSurface {
+            fn drop(&mut self) {
+                // SAFETY: the serialized fixture restores the prior provider before freeing its surface.
+                unsafe {
+                    lifecycle_abi::format_conv_surf = self.previous;
+                    lifecycle_abi::SDL_Screen = self.previous_screen;
+                    sdl2_sys::SDL_FreeSurface(self.created);
+                    sdl2_sys::SDL_FreeSurface(self.screen);
+                }
+            }
+        }
+        // SAFETY: the serialized fixture owns this format surface until all its images drop.
+        let _format = unsafe {
+            let created =
+                sdl2_sys::SDL_CreateRGBSurface(0, 1, 1, 32, 0xff, 0xff00, 0xff0000, 0xff000000);
+            assert!(!created.is_null());
+            let screen = sdl2_sys::SDL_CreateRGBSurface(0, 1, 1, 32, 0xff, 0xff00, 0xff0000, 0);
+            assert!(!screen.is_null());
+            let previous = lifecycle_abi::format_conv_surf;
+            let previous_screen = lifecycle_abi::SDL_Screen;
+            lifecycle_abi::format_conv_surf = created.cast();
+            lifecycle_abi::SDL_Screen = screen.cast();
+            ConversionSurface {
+                previous,
+                previous_screen,
+                created,
+                screen,
+            }
+        };
+        let make_context = || {
+            // SAFETY: the serialized fixture owns every context until its final release.
+            let raw = unsafe {
+                #[cfg(feature = "debug-process")]
+                {
+                    context_abi::CreateContextAux(c"capture-test".as_ptr())
+                }
+                #[cfg(not(feature = "debug-process"))]
+                {
+                    context_abi::CreateContextAux()
+                }
+            };
+            (
+                raw,
+                context_abi::ContextLease::retain(NonNull::new(raw).unwrap()),
+            )
+        };
+        let (raw, context) = make_context();
+        let (previous_raw, previous) = make_context();
+        let source = LoadedDrawable::create(2, 16, 12, 1).unwrap();
+        let source_allocation = Rc::downgrade(&source.lease._allocation);
+        let source_frame = source.lease().context_frame(0);
+        drop(source);
+        context.set_frame(source_frame);
+        context.fill_rectangle(
+            Color {
+                r: 23,
+                g: 45,
+                b: 67,
+                a: 255,
+            },
+            RECT {
+                corner: POINT { x: 0, y: 0 },
+                extent: EXTENT {
+                    width: 16,
+                    height: 12,
+                },
+            },
+        );
+        assert!(source_allocation.upgrade().is_some());
+        previous.select();
+        let whole = LoadedDrawable::capture(&context, None).unwrap();
+        // SAFETY: graphics operations are serialized by the fixture.
+        let selected = unsafe { context_abi::_pCurContext };
+        assert_eq!(selected, previous_raw);
+        assert_eq!(whole.lease().frame_rect(0).extent.width, 16);
+        assert_eq!(whole.lease().frame_rect(0).extent.height, 12);
+        let captured = context.with_clip(
+            RECT {
+                corner: POINT { x: 2, y: 3 },
+                extent: EXTENT {
+                    width: 8,
+                    height: 7,
+                },
+            },
+            || {
+                LoadedDrawable::capture(
+                    &context,
+                    Some(RECT {
+                        corner: POINT { x: 1, y: 2 },
+                        extent: EXTENT {
+                            width: 4,
+                            height: 3,
+                        },
+                    }),
+                )
+                .unwrap()
+            },
+        );
+        previous.select();
+        assert!(LoadedDrawable::capture(
+            &context,
+            Some(RECT {
+                corner: POINT { x: 100, y: 100 },
+                extent: EXTENT {
+                    width: 4,
+                    height: 3
+                },
+            })
+        )
+        .is_none());
+        // SAFETY: the fixture reads its serialized graphics selection and releases its own contexts.
+        unsafe {
+            let selected = context_abi::_pCurContext;
+            assert_eq!(selected, previous_raw);
+            context_abi::DestroyContext(raw);
+        }
+        drop(context);
+        assert!(source_allocation.upgrade().is_none());
+        let frame = captured.lease().context_frame(0);
+        assert_eq!(frame.rect().extent.width, 4);
+        assert_eq!(frame.rect().extent.height, 3);
+        // SAFETY: the captured allocation retains its frame and (0, 0) is within its bounds.
+        let pixel = unsafe {
+            super::super::drawable_abi::GetFramePixel(
+                captured.lease().frame(0).unwrap(),
+                POINT { x: 0, y: 0 },
+            )
+        };
+        assert_eq!((pixel.r, pixel.g, pixel.b), (23, 45, 67));
+        drop(frame);
+        drop(captured);
+        drop(whole);
+        // SAFETY: the fixture releases its remaining context on the same graphics thread.
+        unsafe { context_abi::DestroyContext(previous_raw) };
+        drop(previous);
     }
 }

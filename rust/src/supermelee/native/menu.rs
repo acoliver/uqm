@@ -128,7 +128,7 @@ pub(crate) mod live {
                         NonNull::new(cx.kernel.screen_context.cast())
                             .unwrap_or_else(|| panic!("melee save context")),
                     );
-                    cx.with_legacy(|| do_save_team(state, &screen));
+                    do_save_team(state, &screen, cx, io);
                 } else {
                     crate::ui::settings::play_menu_sound(cx.kernel, cx.world, 2);
                 }
