@@ -202,6 +202,67 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                     assert_eq!((pixel.r, pixel.g, pixel.b), expected, "status ({x},{y})");
                 }
             }
+            for (max_crew, max_energy, crew_height, energy_height) in [
+                (0, 0, 1, 1),
+                (1, 1, 3, 3),
+                (42, 42, 43, 43),
+                (u16::MAX, 254, 43, 255),
+            ] {
+                for offset in [0, 10] {
+                    context_lease.fill_rectangle(
+                        Color {
+                            r: 9,
+                            g: 17,
+                            b: 25,
+                            a: 255,
+                        },
+                        RECT {
+                            corner: POINT { x: 0, y: 0 },
+                            extent: EXTENT {
+                                width: 65,
+                                height: 77,
+                            },
+                        },
+                    );
+                    uqm_rust::ui::shipstat::draw_gauge_frames(
+                        &context_lease,
+                        max_crew,
+                        max_energy,
+                        offset,
+                    );
+                    TFB_FlushGraphics();
+                    let bottom = 55 + offset;
+                    let rectangles = [
+                        (66, 3, bottom + 1, 9, 1),
+                        (66, 51, bottom + 1, 9, 1),
+                        (66, 59, bottom + 1 - energy_height, 1, energy_height),
+                        (66, 11, bottom + 1 - crew_height, 1, crew_height),
+                        (132, 3, bottom - crew_height, 9, 1),
+                        (132, 51, bottom - energy_height, 9, 1),
+                        (132, 51, bottom - energy_height, 1, energy_height + 1),
+                        (132, 3, bottom - crew_height, 1, crew_height + 1),
+                        (0, 4, bottom + 1 - crew_height, 7, crew_height),
+                        (0, 52, bottom + 1 - energy_height, 7, energy_height),
+                    ];
+                    for y in 0..77 {
+                        for x in 0..65 {
+                            let mut expected = (9, 17, 25);
+                            for (shade, left, top, width, height) in rectangles {
+                                if (left..left + width).contains(&x)
+                                    && (top..top + height).contains(&y)
+                                {
+                                    expected = (shade, shade, shade);
+                                }
+                            }
+                            let pixel = GetFramePixel(frame, POINT { x, y });
+                            assert_eq!(
+                                (pixel.r, pixel.g, pixel.b), expected,
+                                "gauge crew={max_crew} energy={max_energy} offset={offset} ({x},{y})"
+                            );
+                        }
+                    }
+                }
+            }
             for saving in [true, false] {
                 SetContext(previous);
                 let saved = uqm_rust::ui::save_problem::render_save_confirmation(

@@ -3,7 +3,6 @@ pub(super) mod rules;
 #[cfg(not(test))]
 pub(crate) mod live {
     use crate::battle::{COMPUTER_CONTROL, HUMAN_CONTROL, NETWORK_CONTROL, PSYTRON_CONTROL};
-    use crate::comm::hail::game_string;
     use crate::engine::Kernel as KernelOwner;
     use crate::supermelee::session::MeleeSession;
 
@@ -267,37 +266,28 @@ pub(crate) mod live {
         );
         state.files = Some(crate::supermelee::session::MeleeFiles { config, teams });
         let offscreen = admit_menu_rendering(&mut state, cx.kernel);
-        // Seed observation and the unconverted random provider share this admission.
-        cx.with_legacy(|| {
-            state.phase = crate::supermelee::session::MenuPhase::Menu;
-            let fallback = GetTimeCounter();
-            // Seed admission is part of the recorded input sequence.
-            io.observer.input_admitted(
-                &crate::engine::observe::InputView::Seed {
-                    domain: 1,
-                    fallback,
-                },
-                &None,
-            );
-            state.current_ship = 255;
-            state.cur_index = u16::MAX;
-            for (index, team) in state.load.builtins.iter_mut().take(5).enumerate() {
-                team.rename(std::ffi::CStr::from_ptr(game_string(
-                    MELEE_STRING_BASE as i32 + 4 + index as i32,
-                )));
-            }
-        });
+        state.phase = crate::supermelee::session::MenuPhase::Menu;
+        let fallback = GetTimeCounter();
+        // Seed admission is part of the recorded input sequence.
+        io.observer.input_admitted(
+            &crate::engine::observe::InputView::Seed {
+                domain: 1,
+                fallback,
+            },
+            &None,
+        );
+        state.current_ship = 255;
+        state.cur_index = u16::MAX;
+        for (index, team) in state.load.builtins.iter_mut().take(5).enumerate() {
+            team.rename(cx.kernel.game_text(MELEE_STRING_BASE as usize + 4 + index));
+        }
         cx.world.set_activity(SUPER_MELEE as u16);
         cx.kernel.game_sounds = crate::sound::owned_bank::LoadedSoundBank::load(c"sounds.battle");
-        cx.with_legacy(|| {
-            state.fleet_picker =
-                Some(crate::supermelee::native::battle_picker::live::FleetPicker::new(&offscreen));
-            load_menu_graphics(&mut state, offscreen);
-        });
+        state.fleet_picker =
+            Some(crate::supermelee::native::battle_picker::live::FleetPicker::new(&offscreen));
+        load_menu_graphics(&mut state, offscreen);
         init_space(cx.kernel, cx.world.activity());
-        cx.with_legacy(|| {
-            load_team_list(&mut state);
-        });
+        load_team_list(&mut state);
         load_setup(&mut state, cx);
         state.side = 0;
         SetMenuSounds(input, 15, 16);
@@ -323,9 +313,7 @@ pub(crate) mod live {
         session.close_all_connections(&mut |event| {
             changes::apply_protocol_event(&mut state, cx, io, event)
         });
-        cx.with_legacy(|| {
-            drop(state.h_music.take());
-        });
+        drop(state.h_music.take());
         uninit_space(cx.kernel);
         cx.kernel.game_sounds = None;
         cx.with_legacy(|| {

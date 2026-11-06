@@ -184,7 +184,11 @@ pub(crate) unsafe fn init_ship_status(
     stamp.origin.y = 31 + y;
     stamp.frame = IncFrameIndex((*siptr).icons);
     DrawStamp(&mut stamp);
-    draw_gauge_frames(&*siptr, y);
+    let gauge_context = crate::graphics::context_abi::ContextLease::retain(
+        std::ptr::NonNull::new(context.cast())
+            .unwrap_or_else(|| panic!("status gauge context not admitted")),
+    );
+    draw_gauge_frames(&gauge_context, (*siptr).max_crew, (*siptr).max_energy, y);
 
     draw_status_title(siptr, starship, y);
     let crew_delta = (*siptr).crew_level as SIZE;
@@ -377,28 +381,41 @@ unsafe fn draw_crew_marker(ship: &SHIP_INFO, new_level: COUNT, y: COORD) {
     }
 }
 
-pub(crate) unsafe fn draw_gauge_frames(siptr: &SHIP_INFO, y: COORD) {
-    let crew = (((std::cmp::min(siptr.max_crew, MAX_CREW_SIZE) + 1) & !1) + 1) as SIZE;
-    let energy = ((((siptr.max_energy + 1) >> 1) << 1) + 1) as COORD;
+pub fn draw_gauge_frames(
+    context: &crate::graphics::context_abi::ContextLease,
+    max_crew: COUNT,
+    max_energy: BYTE,
+    y: COORD,
+) {
+    let crew = (((std::cmp::min(max_crew, MAX_CREW_SIZE) + 1) & !1) + 1) as SIZE;
+    let energy = ((((max_energy + 1) >> 1) << 1) + 1) as COORD;
     let bottom = GAUGE_YOFFS + y;
-    let draw = |x, y, width, height| {
-        let mut rect = RECT {
-            corner: POINT { x, y },
-            extent: EXTENT { width, height },
-        };
-        DrawFilledRectangle(&mut rect);
+    let draw = |color, x, y, width, height| {
+        context.fill_rectangle(
+            color,
+            RECT {
+                corner: POINT { x, y },
+                extent: EXTENT { width, height },
+            },
+        );
     };
-    SetContextForeGroundColor(rgb15(0x08, 0x08, 0x08));
-    draw(CREW_XOFFS - 1, bottom + 1, STAT_WIDTH + 2, 1);
-    draw(ENERGY_XOFFS - 1, bottom + 1, STAT_WIDTH + 2, 1);
-    draw(ENERGY_XOFFS + STAT_WIDTH, bottom + 1 - energy, 1, energy);
-    draw(CREW_XOFFS + STAT_WIDTH, bottom + 1 - crew, 1, crew);
-    SetContextForeGroundColor(rgb15(0x10, 0x10, 0x10));
-    draw(CREW_XOFFS - 1, bottom - crew, STAT_WIDTH + 2, 1);
-    draw(ENERGY_XOFFS - 1, bottom - energy, STAT_WIDTH + 2, 1);
-    draw(ENERGY_XOFFS - 1, bottom - energy, 1, energy + 1);
-    draw(CREW_XOFFS - 1, bottom - crew, 1, crew + 1);
-    SetContextForeGroundColor(rgb15(0, 0, 0));
-    draw(CREW_XOFFS, bottom + 1 - crew, STAT_WIDTH, crew);
-    draw(ENERGY_XOFFS, bottom + 1 - energy, STAT_WIDTH, energy);
+    let dark = rgb15(0x08, 0x08, 0x08);
+    draw(dark, CREW_XOFFS - 1, bottom + 1, STAT_WIDTH + 2, 1);
+    draw(dark, ENERGY_XOFFS - 1, bottom + 1, STAT_WIDTH + 2, 1);
+    draw(
+        dark,
+        ENERGY_XOFFS + STAT_WIDTH,
+        bottom + 1 - energy,
+        1,
+        energy,
+    );
+    draw(dark, CREW_XOFFS + STAT_WIDTH, bottom + 1 - crew, 1, crew);
+    let light = rgb15(0x10, 0x10, 0x10);
+    draw(light, CREW_XOFFS - 1, bottom - crew, STAT_WIDTH + 2, 1);
+    draw(light, ENERGY_XOFFS - 1, bottom - energy, STAT_WIDTH + 2, 1);
+    draw(light, ENERGY_XOFFS - 1, bottom - energy, 1, energy + 1);
+    draw(light, CREW_XOFFS - 1, bottom - crew, 1, crew + 1);
+    let black = rgb15(0, 0, 0);
+    draw(black, CREW_XOFFS, bottom + 1 - crew, STAT_WIDTH, crew);
+    draw(black, ENERGY_XOFFS, bottom + 1 - energy, STAT_WIDTH, energy);
 }
