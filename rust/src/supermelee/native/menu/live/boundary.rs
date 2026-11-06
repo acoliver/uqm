@@ -40,30 +40,19 @@ pub(super) unsafe fn netplay_notify_seed_random(conn: Option<ConnectionView>, se
         );
     }
 }
-pub(super) unsafe fn netplay_notify_all_set_ship(state: *mut MELEE_STATE, side: u16, index: u16) {
-    // SAFETY: The menu owns the setup and the caller supplies an in-range fleet slot.
-    unsafe {
-        let ship = (*state).melee_setup.teams[side as usize].ships[index as usize] as u32;
-        (*state)
-            .netplay
-            .notify_ship(side as usize, index as usize, ship);
-    }
+pub(super) fn netplay_notify_all_set_ship(state: &MELEE_STATE, side: u16, index: u16) {
+    let ship = state.melee_setup.teams[side as usize].ships[index as usize] as u32;
+    state
+        .netplay
+        .notify_ship(side as usize, index as usize, ship);
 }
-pub(super) unsafe fn netplay_notify_all_set_team_name(state: *mut MELEE_STATE, side: u16) {
-    // SAFETY: The menu owns the setup and its NUL-terminated team names.
-    unsafe {
-        let name = (*state).melee_setup.teams[side as usize].c_name();
-        (*state).netplay.notify_name(side as usize, name.to_bytes());
-    }
+pub(super) fn netplay_notify_all_set_team_name(state: &MELEE_STATE, side: u16) {
+    let name = state.melee_setup.teams[side as usize].c_name();
+    state.netplay.notify_name(side as usize, name.to_bytes());
 }
-pub(super) unsafe fn netplay_notify_all_set_fleet(state: *mut MELEE_STATE, side: usize) {
-    // SAFETY: The menu owns the setup and each fleet contains all fourteen slots.
-    unsafe {
-        let ships = (*state).melee_setup.teams[side]
-            .ships
-            .map(|ship| ship as u32);
-        (*state).netplay.notify_fleet(side, &ships);
-    }
+pub(super) fn netplay_notify_all_set_fleet(state: &MELEE_STATE, side: usize) {
+    let ships = state.melee_setup.teams[side].ships.map(|ship| ship as u32);
+    state.netplay.notify_fleet(side, &ships);
 }
 pub(super) unsafe fn close_player_network_connection(player: u16) {
     // SAFETY: The live menu retains the session until synchronous close feedback completes.

@@ -1,6 +1,6 @@
 //! Drawable allocation and frame operations, ported from drawable.c (GPL-2.0-or-later).
 use super::native_abi::*;
-pub use super::native_drawables::{retain_frame_allocations, DrawableLease};
+pub use super::native_drawables::{retain_frame_allocations, DrawableLease, LoadedDrawable};
 use super::pixmap_abi::{CaptureDrawable, ReleaseDrawable};
 use crate::memory::{rust_hcalloc, rust_hfree, rust_hmalloc};
 use std::ptr;

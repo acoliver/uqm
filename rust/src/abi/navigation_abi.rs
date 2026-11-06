@@ -3991,7 +3991,6 @@ pub const NetplaySide_NetplaySide_remote: NetplaySide = 1;
 pub type NetplaySide = ::std::os::raw::c_uint;
 pub type MELEE_STATE = melee_state;
 pub type MELEE_OPTIONS = BYTE;
-pub use crate::ships::native::abi::melee_load_state;
 
 
 

@@ -60,7 +60,7 @@ pub unsafe fn Melee_LocalChange_ship(
         return false;
     }
     if (*state).melee_setup.sent[side as usize].ships[index as usize] == SetupShip::MeleeUnset {
-        netplay_notify_all_set_ship(state, side, index);
+        netplay_notify_all_set_ship(&*state, side, index);
         (*state).melee_setup.sent[side as usize].ships[index as usize] =
             SetupShip::from_u8(ship as u8).expect("validated melee ship");
     }
@@ -77,7 +77,7 @@ pub unsafe fn Melee_LocalChange_teamName(
         return false;
     }
     if (*state).melee_setup.sent[side as usize].name.is_none() {
-        netplay_notify_all_set_team_name(state, side);
+        netplay_notify_all_set_team_name(&*state, side);
         (*state).melee_setup.sent[side as usize].set_name(Some(value));
     }
     true
@@ -99,13 +99,13 @@ pub unsafe fn Melee_LocalChange_team(
 /// # Safety
 /// The menu and its graphics must be live on the game thread.
 pub(super) unsafe fn bootstrap_sync_team(state: *mut MELEE_STATE, side: usize) {
-    netplay_notify_all_set_fleet(state, side);
+    netplay_notify_all_set_fleet(&*state, side);
     let setup = &mut (*state).melee_setup;
     for index in 0..14 {
         assert_eq!(setup.sent[side].ships[index], SetupShip::MeleeUnset);
         setup.sent[side].ships[index] = setup.teams[side].ships[index];
     }
-    netplay_notify_all_set_team_name(state, side as u16);
+    netplay_notify_all_set_team_name(&*state, side as u16);
     let setup = &mut (*state).melee_setup;
     setup.sent[side].set_name(Some(setup.teams[side].c_name()));
 }
@@ -121,7 +121,7 @@ pub(super) unsafe fn remote_ship(
     let sent = (*state).melee_setup.sent[side as usize].ships[index as usize];
     if sent == SetupShip::MeleeUnset {
         change_ship(state, side, index, ship);
-        netplay_notify_all_set_ship(state, side, index);
+        netplay_notify_all_set_ship(&*state, side, index);
         return;
     }
     (*state).melee_setup.sent[side as usize].ships[index as usize] = SetupShip::MeleeUnset;
@@ -130,7 +130,7 @@ pub(super) unsafe fn remote_ship(
         return;
     }
     if (*state).melee_setup.teams[side as usize].ships[index as usize] != sent {
-        netplay_notify_all_set_ship(state, side, index);
+        netplay_notify_all_set_ship(&*state, side, index);
         (*state).melee_setup.sent[side as usize].ships[index as usize] =
             SetupShip::from_u8(ship as u8).expect("validated remote ship");
     }
@@ -146,7 +146,7 @@ pub(super) unsafe fn remote_name(
     let sent = (*state).melee_setup.sent[side as usize].name.clone();
     let Some(sent) = sent else {
         change_name(state, side, value);
-        netplay_notify_all_set_team_name(state, side);
+        netplay_notify_all_set_team_name(&*state, side);
         return;
     };
     if value == sent.as_c_str() && remote == side as usize {
@@ -155,7 +155,7 @@ pub(super) unsafe fn remote_name(
         return;
     }
     if (*state).melee_setup.teams[side as usize].c_name() != sent.as_c_str() {
-        netplay_notify_all_set_team_name(state, side);
+        netplay_notify_all_set_team_name(&*state, side);
         (*state).melee_setup.sent[side as usize].set_name(Some(value));
     } else {
         (*state).melee_setup.sent[side as usize].set_name(None);

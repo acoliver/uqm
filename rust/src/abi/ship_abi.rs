@@ -1120,7 +1120,6 @@ pub const MeleeShip_MELEE_ZOQFOTPIK: MeleeShip = 24;
 pub const MeleeShip_MELEE_UNSET: MeleeShip = 254;
 pub const MeleeShip_MELEE_NONE: MeleeShip = 255;
 pub type MeleeShip = ::std::os::raw::c_uint;
-pub use crate::supermelee::setup::browser::TeamBrowser as melee_load_state;
 pub use crate::supermelee::netplay::session::MeleeState as melee_state;
 
 #[cfg(not(test))]

@@ -1,6 +1,24 @@
 //! Retained directories and exclusive streams over the existing UIO mount resolver.
-use super::uio_bridge::*;
+use super::*;
 use std::{ffi::CStr, io, ptr::NonNull};
+
+#[repr(C)]
+pub struct uio_DirHandle {
+    pub(super) path: PathBuf,
+    /// The original virtual path (e.g. "/packages") used for mount resolution.
+    /// `path` holds the resolved host path; this holds the pre-resolution virtual path.
+    pub(super) virtual_path: PathBuf,
+    pub(super) refcount: std::sync::atomic::AtomicI32,
+    pub(super) repository: *mut uio_Repository,
+    pub(super) root_end: PathBuf,
+}
+
+impl uio_DirHandle {
+    pub(super) fn retain_reference(&self) {
+        let previous = self.refcount.fetch_add(1, Ordering::SeqCst);
+        assert!(previous > 0, "retaining a closed UIO directory");
+    }
+}
 
 #[derive(Debug)]
 pub struct Directory(NonNull<uio_DirHandle>);

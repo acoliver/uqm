@@ -409,6 +409,33 @@ mod tests {
     }
 
     #[test]
+    fn legacy_team_roundtrip_retains_slots_costs_and_import_name_limit() {
+        let mut team = MeleeTeam::new();
+        team.ships[0] = MeleeShip::Chmmr;
+        team.ships[13] = MeleeShip::ZoqFotPik;
+        team.rename(c"A fleet name that exceeds thirty characters by a bit");
+        let bytes = uqm_save::mle::Team::from(&team).to_bytes();
+        assert_eq!(bytes[0], 3);
+        assert_eq!(bytes[13], 24);
+        let copy = MeleeTeam::from(uqm_save::mle::Team::from_bytes(&bytes));
+        assert_eq!(copy.ships, team.ships);
+        assert_eq!(copy.name[30], 0);
+        assert_eq!(copy.ships.into_iter().map(ship_cost).sum::<u16>(), 30 + 6);
+    }
+
+    #[test]
+    fn pending_name_preserves_unset_empty_and_duplicate_transitions() {
+        let mut sent = SentTeam::default();
+        assert_eq!(sent.ships[0], MeleeShip::MeleeUnset);
+        assert!(sent.name.is_none());
+        assert!(sent.set_name(Some(c"")));
+        assert_eq!(sent.name.as_deref(), Some(c""));
+        assert!(!sent.set_name(Some(c"")));
+        assert!(sent.set_name(None));
+        assert!(!sent.set_name(None));
+    }
+
+    #[test]
     fn live_setup_owns_pending_acknowledgments_independently_of_editable_teams() {
         let mut setup = MeleeSetup::new();
         assert!(setup.sent.iter().all(SentTeam::is_synchronized));
