@@ -74,12 +74,23 @@ impl Cx<'_> {
         })
     }
 
+    pub(crate) fn protocol_wait(&mut self, poll: &mut dyn FnMut() -> bool) {
+        let runtime = self.kernel.input_runtime();
+        let mut observer = runtime.observer();
+        let mut io = crate::engine::observe::Io {
+            observer: observer.as_mut(),
+        };
+        runtime.run(self, &mut io, false, &mut |cx, _| {
+            cx.with_legacy(&mut *poll)
+        });
+    }
+
     pub(crate) fn negotiate_battle(
         &mut self,
         net: &dyn crate::engine::battle::net::BattleNet,
         state: u32,
     ) -> bool {
-        net.negotiate(true, state)
+        net.negotiate(true, state, &mut |poll| self.protocol_wait(poll))
     }
 
     pub fn screen_dimensions(&self) -> (i32, i32) {

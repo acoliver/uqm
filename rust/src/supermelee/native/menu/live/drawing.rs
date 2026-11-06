@@ -315,14 +315,12 @@ pub(super) unsafe fn status_player(player: isize) {
         status(c"".as_ptr());
         return;
     }
-    let conn = connection(player as usize);
-    let index = if conn.is_null() {
-        0
-    } else {
-        match NetConnection_getState(conn) {
+    let index = match connection(player as usize) {
+        None => 0,
+        Some(conn) => match conn.state {
             0 => 0,
             1 => {
-                if is_server(conn) {
+                if conn.server {
                     1
                 } else {
                     2
@@ -330,7 +328,7 @@ pub(super) unsafe fn status_player(player: isize) {
             }
             2 | 3 => 3,
             _ => -1,
-        }
+        },
     };
     status(if index < 0 {
         c"".as_ptr()
@@ -358,7 +356,7 @@ pub(super) unsafe fn highlight(option: u8, on: bool) {
         1 | 7 => controls(usize::from(option == 1), on),
         10 => {
             let s = &*P_MELEE_STATE;
-            if s.input_func.map(|f| f as usize) == Some(edit as *const () as usize) {
+            if s.phase == crate::supermelee::netplay::session::MenuPhase::Editing {
                 if s.row < 2 {
                     ship_box(
                         &s.catalog,

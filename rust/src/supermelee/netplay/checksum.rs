@@ -58,9 +58,9 @@ pub unsafe fn crc_process_display_queue(state: &mut CrcState) {
 /// `state` must be writable; called on the game thread owning the RNG.
 #[cfg(not(test))]
 pub unsafe fn crc_process_rng(state: &mut CrcState) {
-    let seed = TFB_SeedRandom(0);
+    let seed = crate::math::seed_random(0);
     crc_process_u32(state, seed);
-    TFB_SeedRandom(seed);
+    crate::math::seed_random(seed);
 }
 
 /// # Safety
@@ -72,72 +72,39 @@ pub unsafe fn crc_process_game_state(state: &mut CrcState) {
 }
 
 impl super::session::SessionCore {
-    /// # Safety
-    /// Called on the game thread before recording checksums, with live connections.
-    pub unsafe fn init_checksum_buffers(&self) {
-        for conn in self.connections.get() {
-            if !conn.is_null() {
-                ChecksumBuffer_init(
-                    NetConnection_getChecksumBuffer(conn),
+    pub fn init_checksum_buffers(&self) {
+        for side in 0..2 {
+            if let Some(mut conn) = self.connection_mut(side) {
+                conn.checksums = ChecksumBuffer::new(
                     self.get_battle_input_delay(),
                     NETPLAY_CHECKSUM_INTERVAL as usize,
                 );
             }
         }
-        ChecksumBuffer_init(
-            &mut *self.checksums.borrow_mut(),
+        *self.checksums.borrow_mut() = ChecksumBuffer::new(
             self.get_battle_input_delay(),
             NETPLAY_CHECKSUM_INTERVAL as usize,
         );
     }
-
-    /// # Safety
-    /// Called on the game thread after checksum recording has stopped.
-    pub unsafe fn uninit_checksum_buffers(&self) {
-        for conn in self.connections.get() {
-            if !conn.is_null() {
-                ChecksumBuffer_uninit(NetConnection_getChecksumBuffer(conn));
+    pub fn uninit_checksum_buffers(&self) {
+        for side in 0..2 {
+            if let Some(mut conn) = self.connection_mut(side) {
+                conn.checksums = ChecksumBuffer::default();
             }
         }
-        ChecksumBuffer_uninit(&mut *self.checksums.borrow_mut());
+        *self.checksums.borrow_mut() = ChecksumBuffer::default();
     }
-
-    /// # Safety
-    /// Called on the game thread with initialized buffers for the current frame.
-    pub unsafe fn add_local_checksum(&self, frame: u32, checksum: u32) {
+    pub fn add_local_checksum(&self, frame: u32, checksum: u32) {
         assert_eq!(frame, self.frame_count.get());
-        ChecksumBuffer_addChecksum(&mut *self.checksums.borrow_mut(), frame, checksum);
+        self.checksums.borrow_mut().add(frame, checksum);
     }
-
-    /// # Safety
-    /// `conn` must be live with an initialized checksum buffer.
-    pub unsafe fn add_remote_checksum(&self, conn: *mut NetConnection, frame: u32, checksum: u32) {
-        let delay = self.get_battle_input_delay();
-        assert!(frame as usize <= self.frame_count.get() as usize + delay + 1);
-        assert!(frame as usize + delay >= self.frame_count.get() as usize);
-        ChecksumBuffer_addChecksum(NetConnection_getChecksumBuffer(conn), frame, checksum);
-    }
-
-    /// # Safety
-    /// Called on the game thread for a frame present in all initialized buffers.
-    pub unsafe fn verify_checksums(&self, frame: u32) -> bool {
-        let mut local = 0;
-        if !ChecksumBuffer_getChecksum(&mut *self.checksums.borrow_mut(), frame, &mut local) {
-            return false;
-        }
-        for conn in self.connections.get() {
-            if conn.is_null() {
-                continue;
-            }
-            let mut remote = 0;
-            if !ChecksumBuffer_getChecksum(
-                NetConnection_getChecksumBuffer(conn),
-                frame,
-                &mut remote,
-            ) {
-                return false;
-            }
-            if local != remote {
+    pub fn verify_checksums(&self, frame: u32) -> bool {
+        let local = self.checksums.borrow().get(frame);
+        for side in 0..2 {
+            if self
+                .connection(side)
+                .is_some_and(|conn| conn.checksums.get(frame) != local)
+            {
                 log::error!("Network connections have gone out of sync.");
                 return false;
             }

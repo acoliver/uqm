@@ -103,8 +103,8 @@ pub mod live {
         s.choice = choice;
         let queue = link_queue::ships(player as usize);
         s.hBattleShip = queue.raw(queue.link(ship));
-        PlayMenuSound(1);
         if network {
+            PlayMenuSound(1);
             if let Some(net) = &(*state).net {
                 net.ship_selected(choice);
             }
@@ -164,9 +164,15 @@ pub mod live {
                     .as_ref()
                     .unwrap_or_else(|| panic!("missing net"))
                     .flush();
-                let p = &mut state.player[usize::from(player)];
-                if p.remoteSelected != 0 {
-                    p.done = 1;
+                if let Some(choice) = state
+                    .net
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("missing net"))
+                    .selected(usize::from(player))
+                {
+                    // SAFETY: the protocol validated the retained fleet slot before recording it.
+                    assert!(unsafe { set_ship_selected(state, player, choice, false) });
+                    state.player[usize::from(player)].remoteSelected = 1;
                 }
                 1
             }
@@ -443,7 +449,7 @@ pub mod live {
         }
         crate::app::bridge::enter(|cx| {
             let net = cx.b.network();
-            cx.with_legacy(|| net.negotiate(true, NetState_NetState_inSetup));
+            cx.negotiate_battle(net.as_ref(), NetState_NetState_inSetup);
             let timeout = GetTimeCounter().wrapping_add(840 * 4);
             let mut pressed = PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0
                 || PulsedInputState.menu[KEY_MENU_CANCEL as usize] != 0;
@@ -475,19 +481,15 @@ pub mod live {
             }
         });
     }
-    unsafe fn get_ships(mask: u16, ships: *mut *mut std::ffi::c_void) -> u32 {
-        let mut state: GETMELEE_STATE = mem::zeroed();
-        let (counters, net) = crate::app::bridge::battle(|b| (b.counters, b.network()));
-        state.net = Some(net.clone());
-        net.bind_picker(mask, (&raw mut state).cast());
+    unsafe fn initialize_selection(
+        state: &mut GETMELEE_STATE,
+        counters: [u8; 2],
+        mask: u16,
+        screen_context: CONTEXT,
+        controls: [u8; 2],
+        order: [u16; 2],
+    ) {
         let now = GetTimeCounter();
-        let (screen_context, controls, order) = KernelOwner::current().read(|kernel| {
-            (
-                kernel.screen_context,
-                kernel.player_control,
-                [kernel.player_order(0), kernel.player_order(1)],
-            )
-        });
         for player in order.map(usize::from) {
             let p = &mut state.player[player];
             p.selecting = u32::from(mask & (1 << player) != 0);
@@ -509,49 +511,67 @@ pub mod live {
             } else {
                 flash_set_speed(p.flashContext, 0, 840 / 16, 0, 840 / 16);
             }
-            changed(&mut state, player);
+            changed(state, player);
             flash_start(state.player[player].flashContext);
         }
-        let mut ok = net.negotiate(true, NetState_NetState_selectShip);
-        SetDefaultMenuRepeatDelay();
-        SetContext(KernelOwner::current().read(|owner| owner.off_screen_context));
+    }
+    unsafe fn get_ships(mask: u16, ships: *mut *mut std::ffi::c_void) -> u32 {
         crate::app::bridge::enter(|cx| {
+            let mut state: GETMELEE_STATE = mem::zeroed();
+            let counters = cx.b.counters;
+            let net = cx.b.network();
+            state.net = Some(net.clone());
+            let screen_context = cx.kernel.screen_context;
+            let controls = cx.kernel.player_control;
+            let order = [cx.kernel.player_order(0), cx.kernel.player_order(1)];
+            cx.with_legacy(|| {
+                let available = std::array::from_fn(|player| {
+                    std::array::from_fn(|slot| by_index(player, slot as u16, false).is_some())
+                });
+                net.begin_selection(mask, available);
+                initialize_selection(&mut state, counters, mask, screen_context, controls, order);
+            });
+            let mut ok = cx.negotiate_battle(net.as_ref(), NetState_NetState_selectShip);
+            cx.with_legacy(|| {
+                SetDefaultMenuRepeatDelay();
+                SetContext(KernelOwner::current().read(|owner| owner.off_screen_context));
+            });
             let runtime = cx.kernel.input_runtime();
             let mut observer = runtime.observer();
             let mut io = Io {
-                observer: &mut *observer,
+                observer: observer.as_mut(),
             };
             cx.run_input(&mut io, false, |cx, _| {
                 let inputs = cx.kernel.player_input.clone();
                 cx.with_legacy(|| choose(&mut state, &inputs) != 0)
             });
-        });
-        WaitForSoundEnd(0);
-        for (player, p) in state.player.iter_mut().enumerate() {
-            if p.selecting == 0 {
-                continue;
-            }
-            if p.done != 0 {
-                *ships.add(player) = p.hBattleShip;
+            cx.with_legacy(|| {
+                WaitForSoundEnd(0);
+                for (player, p) in state.player.iter_mut().enumerate() {
+                    if p.selecting == 0 {
+                        continue;
+                    }
+                    if p.done != 0 {
+                        *ships.add(player) = p.hBattleShip;
+                    } else {
+                        flash_terminate(p.flashContext);
+                        p.flashContext = ptr::null_mut();
+                        ok = false;
+                    }
+                }
+            });
+            if ok {
+                ok = cx.negotiate_battle(net.as_ref(), NetState_NetState_interBattle);
             } else {
-                flash_terminate(p.flashContext);
-                p.flashContext = ptr::null_mut();
-                ok = false;
+                net.set_state(NetState_NetState_interBattle);
             }
-        }
-        if ok {
-            if !net.negotiate(true, NetState_NetState_interBattle) {
-                ok = false;
+            if !ok {
+                cx.world
+                    .set_activity(cx.world.activity() & !(IN_BATTLE as u16));
             }
-        } else {
-            net.set_state(NetState_NetState_interBattle);
-        }
-        if !ok {
-            crate::engine::World::current()
-                .write(|world| world.set_activity(world.activity() & !(IN_BATTLE as u16)));
-        }
-        net.bind_picker(mask, ptr::null_mut());
-        u32::from(ok)
+            net.end_selection();
+            u32::from(ok)
+        })
     }
     /// # Safety
     /// Output has two slots and both battle fleets are initialized.
@@ -579,27 +599,5 @@ pub mod live {
             *result = ships[player as usize];
         }
         ok
-    }
-    /// # Safety
-    /// State may be null; otherwise it is the active selection record.
-    #[no_mangle]
-    pub unsafe extern "C" fn updateMeleeSelection(
-        state: *mut GETMELEE_STATE,
-        player: u16,
-        ship: u16,
-    ) -> bool {
-        if state.is_null()
-            || (*state).player[player as usize].selecting == 0
-            || (*state).player[player as usize].done != 0
-        {
-            log::warn!("Unexpected ship selection packet received");
-            return false;
-        }
-        if !set_ship_selected(state, player, ship, false) {
-            log::warn!("Invalid ship selection received from remote party");
-            return false;
-        }
-        (*state).player[player as usize].remoteSelected = 1;
-        true
     }
 }

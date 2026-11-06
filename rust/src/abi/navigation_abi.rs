@@ -3961,22 +3961,6 @@ pub const NetplayResetReason_ResetReason_unspecified: NetplayResetReason = 0;
 pub const NetplayResetReason_ResetReason_syncLoss: NetplayResetReason = 1;
 pub const NetplayResetReason_ResetReason_manualReset: NetplayResetReason = 2;
 pub type NetplayResetReason = ::std::os::raw::c_uint;
-pub use crate::ships::native::abi::NetConnection;
-pub type NetConnection_ConnectCallback =
-    ::std::option::Option<unsafe extern "C" fn(nd: *mut NetConnection)>;
-pub type NetConnection_CloseCallback =
-    ::std::option::Option<unsafe extern "C" fn(nd: *mut NetConnection)>;
-pub type NetConnection_ErrorCallback = ::std::option::Option<
-    unsafe extern "C" fn(nd: *mut NetConnection, error: *const NetConnectionError),
->;
-pub type NetConnection_DeleteCallback =
-    ::std::option::Option<unsafe extern "C" fn(nd: *mut NetConnection)>;
-pub type NetConnection_ReadyCallback = ::std::option::Option<
-    unsafe extern "C" fn(conn: *mut NetConnection, arg: *mut ::std::os::raw::c_void),
->;
-pub type NetConnection_ResetCallback = ::std::option::Option<
-    unsafe extern "C" fn(conn: *mut NetConnection, arg: *mut ::std::os::raw::c_void),
->;
 pub const NetState_NetState_unconnected: NetState = 0;
 pub const NetState_NetState_connecting: NetState = 1;
 pub const NetState_NetState_init: NetState = 2;
@@ -3988,12 +3972,6 @@ pub const NetState_NetState_inBattle: NetState = 7;
 pub const NetState_NetState_endingBattle: NetState = 8;
 pub const NetState_NetState_endingBattle2: NetState = 9;
 pub type NetState = ::std::os::raw::c_uint;
-pub use crate::ships::native::abi::NetStateData;
-pub type NetConnectionStateData_ReleaseFunction =
-    ::std::option::Option<unsafe extern "C" fn(stateData: *mut NetConnectionStateData)>;
-pub use crate::ships::native::abi::NetConnectionStateData;
-pub use crate::ships::native::abi::NetplayOptions;
-pub use crate::ships::native::abi::NetplayPeerOptions;
 extern "C" {
     pub static mut optWhichCoarseScan: ::std::os::raw::c_int;
 }
@@ -4072,42 +4050,11 @@ pub type Checksum = uint32;
 pub struct crc_State {
     pub crc: uint32,
 }
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct ChecksumEntry {
-    pub checksum: Checksum,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct ChecksumBuffer {
-    pub checksums: *mut ChecksumEntry,
-    pub maxSize: usize,
-    pub interval: usize,
-}
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct NetConnectionError {
-    pub state: NetState,
-    pub err: ::std::os::raw::c_int,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct NetStatistics {
-    pub packetsReceived: usize,
-    pub packetTypeReceived: [usize; 18usize],
-    pub packetsSent: usize,
-    pub packetTypeSent: [usize; 18usize],
-}
 
-pub use crate::supermelee::netplay::netconnection::NetConnection_isConnected;
 
-pub use crate::supermelee::netplay::netconnection::NetConnection_getState;
 
-pub use crate::supermelee::netplay::netconnection::NetConnection_getDiscriminant;
 
-pub use crate::supermelee::netplay::netconnection::NetConnection_getPeerOptions;
 
-pub use crate::supermelee::netplay::netconnection::NetConnection_getPlayerNr;
 pub const NetplaySide_NetplaySide_local: NetplaySide = 0;
 pub const NetplaySide_NetplaySide_remote: NetplaySide = 1;
 pub type NetplaySide = ::std::os::raw::c_uint;
@@ -4180,26 +4127,12 @@ extern "C" {
 #[cfg(not(test))]
 pub use crate::supermelee::native::menu::live::drawing::Melee_flashSelection;
 
-#[cfg(not(test))]
-pub use crate::supermelee::native::menu::live::changes::updateRandomSeed;
 
-#[cfg(not(test))]
-pub use crate::supermelee::native::menu::live::changes::confirmationCancelled;
 
-#[cfg(not(test))]
-pub use crate::supermelee::native::menu::live::changes::connectedFeedback;
 
-#[cfg(not(test))]
-pub use crate::supermelee::native::menu::live::changes::abortFeedback;
 
-#[cfg(not(test))]
-pub use crate::supermelee::native::menu::live::changes::resetFeedback;
 
-#[cfg(not(test))]
-pub use crate::supermelee::native::menu::live::changes::errorFeedback;
 
-#[cfg(not(test))]
-pub use crate::supermelee::native::menu::live::changes::closeFeedback;
 
 #[cfg(not(test))]
 pub use crate::supermelee::native::menu::live::changes::Melee_LocalChange_ship;
@@ -4213,14 +4146,8 @@ pub use crate::supermelee::native::menu::live::changes::Melee_LocalChange_fleet;
 #[cfg(not(test))]
 pub use crate::supermelee::native::menu::live::changes::Melee_LocalChange_team;
 
-#[cfg(not(test))]
-pub use crate::supermelee::native::menu::live::changes::Melee_bootstrapSyncTeam;
 
-#[cfg(not(test))]
-pub use crate::supermelee::native::menu::live::changes::Melee_RemoteChange_ship;
 
-#[cfg(not(test))]
-pub use crate::supermelee::native::menu::live::changes::Melee_RemoteChange_teamName;
 
 pub use crate::supermelee::native::teams::MeleeTeam_getFleet;
 

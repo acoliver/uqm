@@ -40,17 +40,22 @@ pub(crate) fn connect(request: &Request) -> Result<(), String> {
     state
         .netplay
         .configure_peer(side, request.server, request.port);
-    let session = &state.netplay;
+    let session = state.netplay.clone();
+    let setup_ptr = state.melee_setup;
     let remote = request.remote_player;
-    // SAFETY: the menu and session outlive this connection and its callbacks.
-    let (conn, socket) = unsafe {
-        let conn = session.open_player_network_connection(remote, P_MELEE_STATE.cast());
-        let socket = conn.as_ref().and_then(|conn| conn.socket);
-        (conn, socket)
+    let mut emit = |event| {
+        // SAFETY: admission keeps this menu live through synchronous dispatch.
+        unsafe {
+            crate::supermelee::native::menu::live::changes::apply_protocol_event(state, event);
+        }
     };
-    if conn.is_null() {
+    if !session.open_player_network_connection(remote, &mut emit) {
         return Err("could not open netplay fixture endpoint".into());
     }
+    let socket = session
+        .connection(side)
+        .unwrap_or_else(|| panic!("opened connection"))
+        .socket;
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
     if request.server {
         let socket = socket.unwrap_or_else(|| panic!("opened endpoint has no socket"));
@@ -60,18 +65,21 @@ pub(crate) fn connect(request: &Request) -> Result<(), String> {
         eprintln!("netplay fixture listener ready {port}");
     }
     loop {
-        // SAFETY: session teardown has not run and no callback deletes connections
-        // during polling; disconnection only updates their state until cleanup.
-        let (connection, setup) = unsafe { (&*conn, &*state.melee_setup) };
+        let connection = session
+            .connection(side)
+            .ok_or("netplay fixture disconnected during setup")?;
+        // SAFETY: the admitting menu owns this setup until synchronous polling returns.
+        let setup = unsafe { &*setup_ptr };
         // Entering setup sends the bootstrap fleet/name but does not wait for
         // their echoes. A late bootstrap update cancels menu confirmation.
         if connection.state == NetState_NetState_inSetup && setup_synchronized(setup, side) {
             break;
         }
-        if connection.stateFlags.disconnected || std::time::Instant::now() >= deadline {
+        if connection.flags.disconnected || std::time::Instant::now() >= deadline {
             return Err("netplay fixture disconnected or did not synchronize setup".into());
         }
-        state.netplay.net_input_blocking(1);
+        drop(connection);
+        session.net_input_with(1, &mut emit);
         // This nested input wait must advance replay time so async alarms run.
         crate::threading::pacing::yield_input_loop(std::thread::yield_now);
     }

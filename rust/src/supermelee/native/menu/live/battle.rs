@@ -8,7 +8,7 @@ pub(super) unsafe fn ready() -> isize {
         let mut done = 0;
         for player in [0usize, 1] {
             let conn = connection(player);
-            if conn.is_null()
+            if conn.is_none()
                 && KernelOwner::current().read(|owner| owner.player_control[player])
                     & NETWORK_CONTROL
                     == 0
@@ -16,76 +16,93 @@ pub(super) unsafe fn ready() -> isize {
                 done += 1;
                 continue;
             }
-            if conn.is_null() || !net_connection_is_connected(conn) {
+            if conn.is_none() || !net_connection_is_connected(conn) {
                 return -1;
             }
-            if NetConnection_getState(conn) > 3 {
+            if conn.unwrap_or_else(|| panic!("connection")).state > 3 {
                 done += 1;
             }
         }
         done
     }
 }
-pub(super) unsafe extern "C" fn confirm(state: *mut MELEE_STATE) -> u32 {
+unsafe fn prepare_confirmation(state: *mut MELEE_STATE, controls: [u8; 2]) -> Option<u32> {
     let session = &(*state).netplay;
     GamePaused = 0;
     if key(KEY_MENU_CANCEL) {
-        (*state).input_func = Some(DoMelee);
+        (*state).phase = crate::supermelee::netplay::session::MenuPhase::Menu;
         (*state).netplay.cancel_confirmations();
         status(game_string(NETMELEE_STRING_BASE as i32 + 4));
-        return 1;
+        return Some(1);
     }
     if key(KEY_MENU_LEFT) || key(KEY_MENU_UP) || key(KEY_MENU_DOWN) {
-        (*state).input_func = Some(DoMelee);
+        (*state).phase = crate::supermelee::netplay::session::MenuPhase::Menu;
         (*state).netplay.cancel_confirmations();
         status(c"".as_ptr());
-        return DoMelee(state);
+        return Some(DoMelee(state));
     }
     (*state).netplay.close_disconnected_connections();
-    (*state).netplay.net_input();
+    poll_menu(state, 0);
     SleepThread(840 / 120);
-    let count = session.replay_confirmation(|| ready());
+    let mut count = ready();
+    session.replay_wait(|| {
+        if count != 1 {
+            return false;
+        }
+        poll_menu(state, 0);
+        count = ready();
+        count == 1
+    });
     if count == -1 {
         (*state).netplay.cancel_confirmations();
         (*state).netplay.flush_packet_queues();
-        (*state).input_func = Some(DoMelee);
-        return 1;
+        (*state).phase = crate::supermelee::netplay::session::MenuPhase::Menu;
+        return Some(1);
     }
     if count != 2 {
-        return 1;
+        return Some(1);
     }
-    (*state)
-        .netplay
-        .netplay_notify_all_input_delay(session.options.inputDelay);
+    (*state).netplay.queue_all(
+        crate::supermelee::netplay::packet::Packet::InputDelay(session.options.input_delay as u32),
+        false,
+    );
     for player in [0usize, 1] {
-        if KernelOwner::current().read(|owner| owner.player_control[player]) & NETWORK_CONTROL == 0
-        {
+        if controls[player] & NETWORK_CONTROL == 0 {
             continue;
         }
         let conn = connection(player);
-        assert!(!conn.is_null());
+        assert!(!conn.is_none());
         if !net_connection_is_connected(conn) {
             continue;
         }
-        if NetConnection_getDiscriminant(conn) {
+        if conn.unwrap_or_else(|| panic!("connection")).discriminant {
             netplay_notify_seed_random(conn, SeedRandomNumbers());
         }
     }
     (*state).netplay.flush_packet_queues();
-    if !(*state).netplay.negotiate_ready_connections(true, 5) {
+    None
+}
+pub(super) unsafe fn confirm(
+    state: *mut MELEE_STATE,
+    cx: &mut crate::engine::battle::Cx<'_>,
+) -> u32 {
+    let controls = cx.kernel.player_control;
+    if let Some(result) = cx.with_legacy(|| prepare_confirmation(state, controls)) {
+        return result;
+    }
+    let session = (*state).netplay.clone();
+    if !session.negotiate_ready_connections(true, 5, &mut |poll| cx.protocol_wait(poll)) {
         return 0;
     }
     if !(*state)
         .netplay
-        .setup_input_delay(session.options.inputDelay)
+        .setup_input_delay(session.options.input_delay)
     {
         return 0;
     }
-    (*state).input_func = Some(DoMelee);
-    start(state);
-    u32::from(
-        crate::engine::World::current().read(|world| world.activity()) & CHECK_ABORT as u16 == 0,
-    )
+    (*state).phase = crate::supermelee::netplay::session::MenuPhase::Menu;
+    cx.with_legacy(|| start(state));
+    u32::from(cx.world.activity() & CHECK_ABORT as u16 == 0)
 }
 pub(super) unsafe fn start(state: *mut MELEE_STATE) {
     FadeMusic(0, 840 / 2);
@@ -159,13 +176,10 @@ pub(super) unsafe fn start_button(state: *mut MELEE_STATE) {
         {
             continue;
         }
-        let conn = connection(player);
-        let index = if conn.is_null() || !net_connection_is_connected(conn) {
-            Some(if player == 0 { 5 } else { 6 })
-        } else if NetConnection_getState(conn) != 3 {
-            Some(if player == 0 { 14 } else { 15 })
-        } else {
-            None
+        let index = match connection(player).filter(|conn| conn.connected) {
+            Some(conn) if conn.state != 3 => Some(if player == 0 { 14 } else { 15 }),
+            Some(_) => None,
+            None => Some(if player == 0 { 5 } else { 6 }),
         };
         if let Some(index) = index {
             ok = false;
@@ -180,7 +194,7 @@ pub(super) unsafe fn start_button(state: *mut MELEE_STATE) {
         status(game_string(NETMELEE_STRING_BASE as i32 + 7));
     }
     (*state).netplay.confirm_connections();
-    (*state).input_func = Some(confirm);
+    (*state).phase = crate::supermelee::netplay::session::MenuPhase::Confirm;
 }
 pub(super) unsafe extern "C" fn connecting(state: *mut MELEE_STATE) -> u32 {
     // SAFETY: the function contract requires live, game-thread-owned records
@@ -195,12 +209,12 @@ pub(super) unsafe extern "C" fn connecting(state: *mut MELEE_STATE) -> u32 {
         }
         SetMenuSounds(0, 0);
         if (*state).initialized == 0 {
-            if !connection(side).is_null() {
+            if !connection(side).is_none() {
                 close_player_network_connection(side as u16);
             }
             (*state).initialized = 1;
-            let conn = open_player_network_connection(side as u16, state.cast());
-            (*state).input_func = Some(connecting);
+            let conn = open_player_network_connection(side as u16, state);
+            (*state).phase = crate::supermelee::netplay::session::MenuPhase::Connecting;
             let font = SetContextFont(KernelOwner::current().read(|owner| owner.star_con_font));
             let color = SetContextForeGroundColor(rgb(0, 0, 0));
             BatchGraphics();
@@ -229,27 +243,25 @@ pub(super) unsafe extern "C" fn connecting(state: *mut MELEE_STATE) -> u32 {
             SetContextForeGroundColor(color);
             UnbatchGraphics();
         }
-        (*state).netplay.net_input();
+        poll_menu(state, 0);
         if key(KEY_MENU_CANCEL) {
-            if !connection(side).is_null() {
+            if !connection(side).is_none() {
                 close_player_network_connection(side as u16);
                 status_player(side as isize);
             }
             redraw();
-            (*state).input_func = Some(DoMelee);
+            (*state).phase = crate::supermelee::netplay::session::MenuPhase::Menu;
             (*state).last_input_time = GetTimeCounter();
             (*state).netplay.flush_packet_queues();
             return 1;
         }
-        let conn = connection(side);
-        if !conn.is_null() {
-            let phase = NetConnection_getState(conn);
-            if phase == 2 || phase == 3 {
+        if let Some(conn) = connection(side) {
+            if conn.state == 2 || conn.state == 3 {
                 (**KernelOwner::current()).player_control[side] = NETWORK_CONTROL | 16;
                 controls(side, true);
                 redraw();
                 status_player(side as isize);
-                (*state).input_func = Some(DoMelee);
+                (*state).phase = crate::supermelee::netplay::session::MenuPhase::Menu;
                 (*state).last_input_time = GetTimeCounter();
                 highlight((*state).melee_option, false);
                 (*state).melee_option = 4;
@@ -267,7 +279,7 @@ pub(super) unsafe fn disconnects() {
             continue;
         }
         let conn = connection(player);
-        if conn.is_null() || !net_connection_is_connected(conn) {
+        if conn.is_none() || !net_connection_is_connected(conn) {
             (**KernelOwner::current()).player_control[player] = HUMAN_CONTROL | 16;
             controls(player, false);
             log::info!("Player {player} has disconnected; shifting controls");
@@ -285,7 +297,7 @@ pub(super) unsafe fn next_control(side: usize) {
     {
         super::super::rules::next_control(value)
     } else if value == NETWORK_CONTROL | 16 {
-        if !connection(side).is_null() {
+        if !connection(side).is_none() {
             close_player_network_connection(side as u16);
         }
         status_player(-1);

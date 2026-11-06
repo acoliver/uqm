@@ -190,14 +190,16 @@ pub(crate) mod engine {
         kernel.winner = None;
     }
 
-    fn ready_for_battle_end(kernel: &mut crate::engine::Kernel) -> bool {
-        !ditty_playing(kernel)
-            && kernel.player_input.iter().all(|input| {
-                input
-                    .as_ref()
-                    .unwrap_or_else(|| panic!("missing player input"))
-                    .battle_end_ready()
-            })
+    fn ready_for_battle_end(cx: &mut Cx<'_>) -> bool {
+        if ditty_playing(cx.kernel) {
+            return false;
+        }
+        cx.kernel.player_input.clone().iter().all(|input| {
+            input
+                .as_ref()
+                .unwrap_or_else(|| panic!("missing player input"))
+                .battle_end_ready(&mut |poll| cx.protocol_wait(poll))
+        })
     }
 
     pub(crate) fn preprocess_dead_ship(cx: &mut Cx<'_>, _ship: ElementId) {
@@ -300,7 +302,7 @@ pub(crate) mod engine {
     ) {
         let net = cx.b.net.clone();
         let ship = cx.owner(dead);
-        if !ready_for_battle_end(cx.kernel) {
+        if !ready_for_battle_end(cx) {
             cx.element_mut(dead).flags &= !(DISAPPEARING as u16);
             cx.element_mut(dead).life = cx.element(dead).life.wrapping_add(1);
             check_other_ship_life_span(cx, dead);

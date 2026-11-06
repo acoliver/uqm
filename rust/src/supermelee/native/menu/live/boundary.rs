@@ -2,53 +2,70 @@
 use super::*;
 use crate::engine::Kernel as KernelOwner;
 pub(super) use crate::game_init::kernel_abi::ClearPlayerInputAll;
-use crate::supermelee::netplay as net;
-pub(super) unsafe fn connection(player: usize) -> *mut NetConnection {
-    // SAFETY: the function contract requires live, game-thread-owned records
-    // and callback arguments for all legacy accesses in this operation.
-    unsafe { (*P_MELEE_STATE).netplay.connection(player) }
+#[derive(Clone, Copy)]
+pub(super) struct ConnectionView {
+    pub player: usize,
+    pub state: u32,
+    pub connected: bool,
+    pub server: bool,
+    pub discriminant: bool,
 }
-pub(super) unsafe fn net_connection_is_connected(conn: *mut NetConnection) -> bool {
-    net::NetConnection_isConnected(conn.cast())
-}
-pub(super) unsafe fn net_connection_get_player_nr(conn: *mut NetConnection) -> i32 {
-    net::NetConnection_getPlayerNr(conn.cast())
-}
-pub(super) unsafe fn is_server(conn: *mut NetConnection) -> bool {
-    (*net::NetConnection_getPeerOptions(conn.cast())).isServer
-}
-pub(super) unsafe fn battle_active(conn: *mut NetConnection) -> bool {
-    let conn = conn.cast::<crate::supermelee::netplay::abi::NetConnection>();
-    // SAFETY: connected session records own stateData until their close callback returns.
+pub(super) unsafe fn connection(player: usize) -> Option<ConnectionView> {
+    // SAFETY: The live menu retains its session; the returned view copies only scalar fields.
     unsafe {
-        (*conn).state > crate::supermelee::netplay::abi::NetState_NetState_connecting
-            && (*(*conn)
-                .stateData
-                .cast::<crate::supermelee::netplay::session::BattleStateData>())
-            .battle_active
+        (*P_MELEE_STATE)
+            .netplay
+            .connection(player)
+            .map(|conn| ConnectionView {
+                player,
+                state: conn.state,
+                connected: conn.flags.connected,
+                server: conn.options.server,
+                discriminant: conn.flags.discriminant,
+            })
     }
 }
-pub(super) unsafe fn netplay_notify_seed_random(conn: *mut NetConnection, seed: u32) {
-    net::Netplay_Notify_seedRandom(conn.cast(), seed);
+pub(super) fn net_connection_is_connected(conn: Option<ConnectionView>) -> bool {
+    conn.is_some_and(|conn| conn.connected)
+}
+pub(super) fn is_server(conn: Option<ConnectionView>) -> bool {
+    conn.is_some_and(|conn| conn.server)
+}
+pub(super) unsafe fn netplay_notify_seed_random(conn: Option<ConnectionView>, seed: u32) {
+    // SAFETY: The menu retains the session for this synchronous notification.
+    unsafe {
+        (*P_MELEE_STATE).netplay.notify_seed(
+            conn.unwrap_or_else(|| panic!("seed connection")).player,
+            seed,
+        );
+    }
 }
 pub(super) unsafe fn netplay_notify_all_set_ship(state: *mut MELEE_STATE, side: u16, index: u16) {
-    (*state)
-        .netplay
-        .netplay_notify_all_set_ship(state.cast(), side as usize, index as usize);
+    // SAFETY: The menu owns the setup and the caller supplies an in-range fleet slot.
+    unsafe {
+        let ship = MeleeSetup_getShip((*state).melee_setup, side as usize, index);
+        (*state)
+            .netplay
+            .notify_ship(side as usize, index as usize, ship);
+    }
 }
 pub(super) unsafe fn netplay_notify_all_set_team_name(state: *mut MELEE_STATE, side: u16) {
-    (*state)
-        .netplay
-        .netplay_notify_all_set_team_name(state.cast(), side as usize);
+    // SAFETY: The menu owns the setup and its NUL-terminated team names.
+    unsafe {
+        let name =
+            std::ffi::CStr::from_ptr(MeleeSetup_getTeamName((*state).melee_setup, side as usize));
+        (*state).netplay.notify_name(side as usize, name.to_bytes());
+    }
 }
 pub(super) unsafe fn netplay_notify_all_set_fleet(state: *mut MELEE_STATE, side: usize) {
-    (*state)
-        .netplay
-        .netplay_notify_all_set_fleet(state.cast(), side);
+    // SAFETY: The menu owns the setup and each fleet contains all fourteen slots.
+    unsafe {
+        let ships = std::slice::from_raw_parts(MeleeSetup_getFleet((*state).melee_setup, side), 14);
+        (*state).netplay.notify_fleet(side, ships);
+    }
 }
 pub(super) unsafe fn close_player_network_connection(player: u16) {
-    // SAFETY: the function contract requires live, game-thread-owned records
-    // and callback arguments for all legacy accesses in this operation.
+    // SAFETY: The live menu retains the session until synchronous close feedback completes.
     unsafe {
         (*P_MELEE_STATE)
             .netplay
@@ -57,12 +74,28 @@ pub(super) unsafe fn close_player_network_connection(player: u16) {
 }
 pub(super) unsafe fn open_player_network_connection(
     player: u16,
-    state: *mut std::ffi::c_void,
-) -> *mut NetConnection {
-    (*state.cast::<MELEE_STATE>())
-        .netplay
-        .open_player_network_connection(player, state)
-        .cast()
+    state: *mut MELEE_STATE,
+) -> Option<ConnectionView> {
+    // SAFETY: The caller retains this menu through connection setup and its synchronous effects.
+    unsafe {
+        let session = (*state).netplay.clone();
+        if session.open_player_network_connection(player, &mut |event| {
+            changes::apply_protocol_event(state, event)
+        }) {
+            connection(player as usize)
+        } else {
+            None
+        }
+    }
+}
+pub(crate) unsafe fn poll_menu(state: *mut MELEE_STATE, timeout: u32) {
+    // SAFETY: The caller retains this menu through polling and its synchronous effects.
+    unsafe {
+        let session = (*state).netplay.clone();
+        session.net_input_with(timeout, &mut |event| {
+            changes::apply_protocol_event(state, event)
+        });
+    }
 }
 pub(super) unsafe fn capture_sound(sound: *mut std::ffi::c_void) -> SOUND {
     crate::game_init::macro_abi::CaptureSound(sound.cast()).cast()

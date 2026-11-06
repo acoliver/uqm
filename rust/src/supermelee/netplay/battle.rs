@@ -1,30 +1,38 @@
-use super::abi::*;
-use super::notify::Netplay_Notify_shipSelected;
-use super::session::SessionCore;
-use crate::engine::battle::net::BattleNet;
-use std::ffi::c_void;
+//! The battle borrows its menu's protocol session without retaining menu pointers.
+use super::{
+    netconnection::{Effect, Event},
+    packet::Packet,
+    session::{Selection, SessionCore},
+};
+use crate::engine::battle::net::{BattleNet, ProtocolWait};
 
+pub(super) fn effect(event: Event) {
+    match event.effect {
+        Effect::Seed(seed) => {
+            crate::math::seed_random(seed);
+        }
+        #[cfg(not(test))]
+        _ => crate::supermelee::native::menu::live::changes::protocol_feedback(event),
+        #[cfg(test)]
+        _ => panic!("protocol test entered live feedback: {event:?}"),
+    }
+}
 impl BattleNet for SessionCore {
     fn poll(&self) {
         self.net_input();
     }
     fn flush(&self) {
-        // SAFETY: SessionCore owns the live connections and buffers on the game thread.
-        unsafe {
-            self.flush_packet_queues();
-        }
+        self.flush_packet_queues();
     }
     fn all_connected(&self) -> bool {
-        // SAFETY: SessionCore owns the live connections and buffers on the game thread.
-        unsafe { self.all_connected() }
+        self.all_connected()
     }
     fn peer_count(&self) -> usize {
         self.get_num_net_connections()
     }
     fn player_order(&self, index: u16) -> u16 {
-        let discriminants = self.connections.get().map(|conn| {
-            // SAFETY: the session retains each record until connection teardown.
-            unsafe { conn.as_ref() }.map(|conn| conn.stateFlags.discriminant)
+        let discriminants = std::array::from_fn::<_, 2, _>(|side| {
+            self.connection(side).map(|conn| conn.flags.discriminant)
         });
         if discriminants[0] == Some(false) || discriminants[1] == Some(true) {
             index
@@ -46,11 +54,8 @@ impl BattleNet for SessionCore {
         if self.replay_remote_player == Some(side) {
             return self.remote_input(side, activity);
         }
-        // SAFETY: SessionCore owns the live connections and buffers on the game thread.
-        unsafe {
-            self.netplay_notify_all_battle_input(input);
-            self.flush_packet_queues();
-        }
+        self.queue_all(Packet::BattleInput(input), false);
+        self.flush_packet_queues();
         assert!(self.push_input(side, input), "local input buffer full");
         self.pop_input(side)
             .unwrap_or_else(|| panic!("local input buffer empty after push"))
@@ -60,8 +65,7 @@ impl BattleNet for SessionCore {
         side: usize,
         activity: &crate::engine::world::activity::ActivityControl,
     ) -> u8 {
-        // SAFETY: SessionCore owns the live connections and buffers on the game thread.
-        unsafe { self.network_battle_input(side, activity) }
+        self.network_battle_input(side, activity)
     }
     fn set_frame(&self, frame: u32) {
         self.frame_count.set(frame);
@@ -70,92 +74,60 @@ impl BattleNet for SessionCore {
         self.frame_count.get()
     }
     fn record_checksum(&self, frame: u32, checksum: u32) {
-        // SAFETY: SessionCore owns the live connections and buffers on the game thread.
-        unsafe {
-            self.netplay_notify_all_checksum(frame, checksum);
-            self.flush_packet_queues();
-            self.add_local_checksum(frame, checksum);
-        }
+        self.queue_all(Packet::Checksum { frame, checksum }, false);
+        self.flush_packet_queues();
+        self.add_local_checksum(frame, checksum);
     }
     fn verify_checksum(&self, frame: u32) -> bool {
-        // SAFETY: SessionCore owns the live connections and buffers on the game thread.
-        unsafe { self.verify_checksums(frame) }
+        self.verify_checksums(frame)
     }
     fn reset(&self, reason: u32) {
-        // SAFETY: SessionCore owns the live connections and buffers on the game thread.
-        unsafe {
-            self.reset_connections(reason);
-        }
+        self.reset_connections(reason);
     }
-    fn negotiate(&self, notify: bool, state: u32) -> bool {
-        // SAFETY: SessionCore owns the live connections and buffers on the game thread.
-        unsafe { self.negotiate_ready_connections(notify, state) }
+    fn negotiate(&self, notify: bool, state: u32, wait: &mut ProtocolWait<'_>) -> bool {
+        self.negotiate_ready_connections(notify, state, wait)
     }
     fn set_state(&self, state: u32) {
-        // SAFETY: SessionCore owns the live connections and buffers on the game thread.
-        unsafe {
-            self.set_state_connections(state);
-        }
+        self.set_state_connections(state);
     }
-    fn wait_reset(&self, state: u32) {
-        // SAFETY: SessionCore owns the live connections and buffers on the game thread.
-        unsafe {
-            self.wait_reset_connections(state);
-        }
+    fn wait_reset(&self, state: u32, wait: &mut ProtocolWait<'_>) {
+        self.wait_reset_connections(state, wait);
     }
     fn init_end_frames(&self) {
-        // SAFETY: SessionCore owns the live connections and buffers on the game thread.
-        unsafe {
-            self.init_battle_state_data_connections();
-        }
+        self.init_battle_state_data_connections();
     }
-    fn end_ready(&self, side: usize) -> bool {
-        // SAFETY: SessionCore owns the live connections and buffers on the game thread.
-        unsafe { super::netmelee::ready_for_battle_end_player(self.connection(side)) }
+    fn end_ready(&self, side: usize, wait: &mut ProtocolWait<'_>) -> bool {
+        self.ready_for_battle_end_player(side, wait)
     }
     fn ship_selected(&self, choice: u16) {
-        if self.replay_remote_player.is_some() {
-            return;
-        }
-        // SAFETY: SessionCore owns the live connections and buffers on the game thread.
-        unsafe {
-            self.each(|conn| {
-                Netplay_Notify_shipSelected(conn, choice);
-                true
-            });
+        if self.replay_remote_player.is_none() {
+            self.queue_all(Packet::SelectShip(choice), false);
         }
     }
     fn begin(&self) {
-        // SAFETY: the function contract requires live, game-thread-owned records
-        // and callback arguments for all legacy accesses in this operation.
-        // SAFETY: SessionCore owns the live connections and buffers on the game thread.
-        unsafe {
-            self.init_battle_input_buffers();
-            self.init_checksum_buffers();
-            self.frame_count.set(0);
-            self.set_battle_active_connections(true);
-        }
+        self.init_battle_input_buffers();
+        self.init_checksum_buffers();
+        self.frame_count.set(0);
+        self.set_battle_active_connections(true);
     }
     fn finish(&self) {
-        // SAFETY: SessionCore owns the live connections and buffers on the game thread.
-        unsafe {
-            self.uninit_battle_input_buffers();
-            self.uninit_checksum_buffers();
-            self.set_battle_active_connections(false);
-        }
+        self.uninit_battle_input_buffers();
+        self.uninit_checksum_buffers();
+        self.set_battle_active_connections(false);
     }
-    unsafe fn bind_picker(&self, mask: u16, picker: *mut c_void) {
-        for (side, conn) in self.connections.get().into_iter().enumerate() {
-            // SAFETY: the session owns each connection for the battle's lifetime.
-            let conn = unsafe { conn.as_mut() };
-            if let Some(conn) = conn {
-                if mask & (1 << side) != 0 && (picker.is_null() || conn.stateFlags.connected) {
-                    // SAFETY: connected connections own their battle state data.
-                    unsafe {
-                        (*conn.stateData.cast::<BattleStateData>()).get_melee_state = picker.cast()
-                    };
-                }
-            }
-        }
+    fn begin_selection(&self, mask: u16, available: [[bool; 14]; 2]) {
+        let mut selection = self.selection.borrow_mut();
+        assert_eq!(selection.mask, 0, "selection already active");
+        *selection = Selection {
+            mask,
+            available,
+            choices: [None; 2],
+        };
+    }
+    fn selected(&self, side: usize) -> Option<u16> {
+        self.selection.borrow().choices[side]
+    }
+    fn end_selection(&self) {
+        *self.selection.borrow_mut() = Selection::default();
     }
 }

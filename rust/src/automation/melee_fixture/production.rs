@@ -346,7 +346,7 @@ fn configure(cx: &mut Cx<'_>, request: &MeleeSetupRequest) -> Result<(), String>
             request.cyborg,
         )?;
         state.melee_option = 4;
-        state.input_func = Some(crate::supermelee::native::menu::live::DoMelee);
+        state.phase = crate::supermelee::netplay::session::MenuPhase::Menu;
         for (side, slot, ship) in ships {
             crate::supermelee::native::teams::set_ship(
                 &mut *state.melee_setup,

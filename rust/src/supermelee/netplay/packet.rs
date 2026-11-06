@@ -192,9 +192,3 @@ impl Packet {
         Ok(packet)
     }
 }
-
-/// # Safety
-/// Consumes the uniquely owned packet allocated by queue_packet.
-pub(crate) unsafe fn packet_delete(packet: *mut Packet) {
-    drop(Box::from_raw(packet));
-}
