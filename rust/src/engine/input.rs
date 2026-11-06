@@ -3,9 +3,10 @@
 use super::{battle::input::InputContext, battle::Cx, observe::Io};
 use std::rc::Rc;
 
-pub use uqm_engine::input::{controls::InputControls, frames, session::InputSession};
+pub use uqm_engine::input_port::*;
+pub use uqm_engine::input_port::{controls::InputControls, session::InputSession};
 
-pub use uqm_engine::input::controls::InputFrameHook;
+pub use uqm_engine::input_port::controls::InputFrameHook;
 
 pub trait Frame {
     fn admit(

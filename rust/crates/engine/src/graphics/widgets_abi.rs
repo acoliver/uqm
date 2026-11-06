@@ -616,7 +616,7 @@ pub unsafe extern "C" fn Widget_ReceiveFocusRefuseFocus(_: *mut WIDGET, _event: 
 pub unsafe fn widget_handle_event_ignore_all(
     _: *mut WIDGET,
     _event: i32,
-    _input: &crate::input::session::InputSession,
+    _input: &crate::input_port::session::InputSession,
 ) -> i32 {
     FALSE
 }
@@ -625,7 +625,7 @@ pub unsafe fn widget_handle_event_ignore_all(
 pub unsafe fn widget_handle_event_choice(
     s: *mut WIDGET,
     event: i32,
-    _input: &crate::input::session::InputSession,
+    _input: &crate::input_port::session::InputSession,
 ) -> i32 {
     let c = s as *mut WIDGET_CHOICE;
     match event {
@@ -659,7 +659,7 @@ pub unsafe fn widget_handle_event_choice(
 pub unsafe fn widget_handle_event_slider(
     s: *mut WIDGET,
     event: i32,
-    _input: &crate::input::session::InputSession,
+    _input: &crate::input_port::session::InputSession,
 ) -> i32 {
     let c = s as *mut WIDGET_SLIDER;
     match event {
@@ -685,7 +685,7 @@ pub unsafe fn widget_handle_event_slider(
 pub unsafe fn widget_handle_event_menu_screen(
     s: *mut WIDGET,
     event: i32,
-    input: &crate::input::session::InputSession,
+    input: &crate::input_port::session::InputSession,
 ) -> i32 {
     let m = s as *mut WIDGET_MENU_SCREEN;
     let dx = match event {
@@ -722,7 +722,7 @@ pub unsafe fn widget_handle_event_menu_screen(
 pub unsafe fn widget_handle_event_text_entry(
     s: *mut WIDGET,
     event: i32,
-    input: &crate::input::session::InputSession,
+    input: &crate::input_port::session::InputSession,
 ) -> i32 {
     let t = s as *mut WIDGET_TEXTENTRY;
     if event == EVENT_SELECT {
@@ -737,7 +737,7 @@ pub unsafe fn widget_handle_event_text_entry(
 pub unsafe fn widget_handle_event_control_entry(
     s: *mut WIDGET,
     event: i32,
-    input: &crate::input::session::InputSession,
+    input: &crate::input_port::session::InputSession,
 ) -> i32 {
     let c = s as *mut WIDGET_CONTROLENTRY;
     if event == EVENT_SELECT {
@@ -760,7 +760,7 @@ pub unsafe fn widget_handle_event_control_entry(
 }
 /// # Safety
 /// Widget records and callbacks must be live on the serialized graphics thread.
-pub unsafe fn widget_event(event: i32, input: &crate::input::session::InputSession) -> i32 {
+pub unsafe fn widget_event(event: i32, input: &crate::input_port::session::InputSession) -> i32 {
     let mut w = widget_focus;
     while !w.is_null() {
         if ((*w).handleEvent.unwrap())(w, event, input) != FALSE {
@@ -783,7 +783,7 @@ mod tests {
     unsafe fn handles_select(
         _: *mut WIDGET,
         event: i32,
-        _input: &crate::input::session::InputSession,
+        _input: &crate::input_port::session::InputSession,
     ) -> i32 {
         i32::from(event == EVENT_SELECT)
     }
@@ -803,12 +803,12 @@ mod tests {
             assert_eq!(
                 widget_event(
                     EVENT_SELECT,
-                    &crate::input::session::InputSession::default()
+                    &crate::input_port::session::InputSession::default()
                 ),
                 TRUE
             );
             assert_eq!(
-                widget_event(EVENT_LEFT, &crate::input::session::InputSession::default()),
+                widget_event(EVENT_LEFT, &crate::input_port::session::InputSession::default()),
                 FALSE
             );
             widget_focus = previous;
@@ -826,7 +826,7 @@ mod tests {
                 widget_handle_event_choice(
                     base,
                     EVENT_LEFT,
-                    &crate::input::session::InputSession::default()
+                    &crate::input_port::session::InputSession::default()
                 ),
                 TRUE
             );
@@ -835,7 +835,7 @@ mod tests {
                 widget_handle_event_choice(
                     base,
                     EVENT_SELECT,
-                    &crate::input::session::InputSession::default()
+                    &crate::input_port::session::InputSession::default()
                 ),
                 TRUE
             );
@@ -847,7 +847,7 @@ mod tests {
                 widget_handle_event_choice(
                     base,
                     EVENT_RIGHT,
-                    &crate::input::session::InputSession::default()
+                    &crate::input_port::session::InputSession::default()
                 ),
                 TRUE
             );
@@ -856,7 +856,7 @@ mod tests {
                 widget_handle_event_choice(
                     base,
                     EVENT_CANCEL,
-                    &crate::input::session::InputSession::default()
+                    &crate::input_port::session::InputSession::default()
                 ),
                 FALSE
             );
@@ -876,7 +876,7 @@ mod tests {
                 widget_handle_event_slider(
                     base,
                     EVENT_LEFT,
-                    &crate::input::session::InputSession::default()
+                    &crate::input_port::session::InputSession::default()
                 ),
                 TRUE
             );
@@ -884,19 +884,19 @@ mod tests {
             widget_handle_event_slider(
                 base,
                 EVENT_RIGHT,
-                &crate::input::session::InputSession::default(),
+                &crate::input_port::session::InputSession::default(),
             );
             widget_handle_event_slider(
                 base,
                 EVENT_RIGHT,
-                &crate::input::session::InputSession::default(),
+                &crate::input_port::session::InputSession::default(),
             );
             assert_eq!(slider.value, 9);
             assert_eq!(
                 widget_handle_event_slider(
                     base,
                     EVENT_SELECT,
-                    &crate::input::session::InputSession::default()
+                    &crate::input_port::session::InputSession::default()
                 ),
                 FALSE
             );
