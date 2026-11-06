@@ -895,9 +895,7 @@ pub unsafe fn star_map(
         SetMenuSounds(input, 0, 0);
         SetMenuRepeatDelay(input, ONE_SECOND / 60, ONE_SECOND / 8, ONE_SECOND / 120, 1);
     });
-    cx.run_input(io, false, |cx, _| {
-        cx.with_legacy(|| do_move_cursor(&mut menu, input) != 0)
-    });
+    cx.run_input(io, false, |cx, _| do_move_cursor(cx, &mut menu, input) != 0);
     cx.with_legacy(|| {
         SetMenuSounds(input, 15, 16);
         SetDefaultMenuRepeatDelay(input);

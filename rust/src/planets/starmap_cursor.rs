@@ -4,7 +4,7 @@
 //! movement and destination selection still go through the menu callback.
 
 use crate::comm::dispatch::CPoint;
-use crate::engine::{StoryKey, World, WorldData};
+use crate::engine::StoryKey;
 
 #[no_mangle]
 pub static mut cursorLoc: CPoint = CPoint { x: 0, y: 0 };
@@ -26,8 +26,6 @@ use crate::planets::pstarmap::zoom_star_map;
 extern "C" {
     fn zoom_star_map(direction: i16);
 }
-
-use crate::battle::sounds::engine::PlayMenuSound;
 
 use crate::mainloop::input_abi::live::SetMenuRepeatDelay;
 
@@ -61,37 +59,50 @@ pub unsafe fn cursor() -> Option<(i16, i16)> {
     })
 }
 
-/// `do_move_cursor`, including ordinary search, zoom and debug input behavior.
-///
-/// # Safety
-/// `menu` must be the live `MENU_STATE`, called by `DoInput` on the game thread.
-pub unsafe fn do_move_cursor(
-    menu: *mut MenuHeader,
-    input: &crate::engine::input::InputSession,
-) -> u32 {
-    let time_in = crate::time::counter_abi::GetTimeCounter();
-    let activity = World::current().read(|world| world.activity());
-    let hyper = activity & 0xff == 3;
+unsafe fn initialize_cursor(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    menu: &mut MenuHeader,
+    hyper: bool,
+) {
     let last = std::ptr::addr_of_mut!(LAST_BUF).cast::<u8>();
-    if (*menu).Initialized == 0 {
-        (*menu).Initialized = 1;
-        (*menu).InputFunc = Some(do_move_cursor);
-        ACTIVE = true;
-        let universe = if hyper {
-            let sis = &(**WorldData::current()).flagship;
-            let log_units_x = (((ScreenWidth - 64) << 5) >> 4) * 195;
-            let log_units_y = ((ScreenHeight << 5) >> 4) * 25;
-            CPoint {
-                x: ((sis.log_x * 6250 + (log_units_x >> 1)) / log_units_x) as i16,
-                y: (9999 - (sis.log_y * 625 + (log_units_y >> 1)) / log_units_y) as i16,
-            }
-        } else {
-            (*(**World::current()).star_pointer(crate::planets::starmap::current_catalog())).star_pt
-        };
+    menu.Initialized = 1;
+    ACTIVE = true;
+    let universe = if hyper {
+        let sis = &cx.world.data.flagship;
+        let log_units_x = (((ScreenWidth - 64) << 5) >> 4) * 195;
+        let log_units_y = ((ScreenHeight << 5) >> 4) * 25;
+        CPoint {
+            x: ((sis.log_x * 6250 + (log_units_x >> 1)) / log_units_x) as i16,
+            y: (9999 - (sis.log_y * 625 + (log_units_y >> 1)) / log_units_y) as i16,
+        }
+    } else {
+        (*cx.world
+            .star_pointer(crate::planets::starmap::current_catalog()))
+        .star_pt
+    };
+    cx.with_legacy(|| {
         flashCurrentLocation(&universe);
         *last = 0;
         UpdateCursorInfo((last).cast());
         update_fuel_requirement();
+    });
+}
+
+/// Starmap search, zoom and destination selection for its retained input frame.
+///
+/// # Safety
+/// The menu, starmap and graphics resources must be live on the game thread.
+pub unsafe fn do_move_cursor(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    menu: &mut MenuHeader,
+    input: &crate::engine::input::InputSession,
+) -> u32 {
+    let time_in = crate::time::counter_abi::GetTimeCounter();
+    let activity = cx.world.activity();
+    let hyper = activity & 0xff == 3;
+    let last = std::ptr::addr_of_mut!(LAST_BUF).cast::<u8>();
+    if menu.Initialized == 0 {
+        initialize_cursor(cx, menu, hyper);
         return 1;
     }
     let keys = input.pulsed().menu;
@@ -100,38 +111,40 @@ pub unsafe fn do_move_cursor(
         return 0;
     } else if keys[9] != 0 {
         let selected = std::ptr::addr_of!(cursorLoc).read();
-        (**WorldData::current()).game.autopilot = crate::comm::locdata::CPoint {
+        cx.world.data.game.autopilot = crate::comm::locdata::CPoint {
             x: selected.x,
             y: selected.y,
         };
         #[cfg(feature = "debug-process")]
         if crate::front_end::uqmdebug::INSTANT_MOVE != 0 {
-            PlayMenuSound(3);
+            crate::ui::settings::play_menu_sound(cx.kernel, cx.world, 3);
             if hyper {
-                crate::front_end::uqmdebug::do_instant_move();
+                cx.with_legacy(|| crate::front_end::uqmdebug::do_instant_move());
             } else if activity & 0xff == 4 {
-                World::current().write(|world| world.set_activity(activity | 0x0800));
+                cx.world.set_activity(activity | 0x0800);
                 crate::front_end::uqmdebug::DEBUG_HOOK =
                     Some(crate::front_end::uqmdebug::do_instant_move);
             }
             ACTIVE = false;
             return 0;
         }
-        DrawStarMap(0, std::ptr::null_mut());
+        cx.with_legacy(|| DrawStarMap(0, std::ptr::null_mut()));
     } else if keys[21] != 0 {
-        if World::current().read(|world| world.story_state(StoryKey::ARILOU_SPACE_SIDE)) <= 1 {
+        if cx.world.story_state(StoryKey::ARILOU_SPACE_SIDE) <= 1 {
             let old = std::ptr::addr_of!(cursorLoc).read();
-            if do_star_search(input, menu) == 0 {
-                UpdateCursorLocation(0, 0, &old);
+            if cx.with_legacy(|| do_star_search(input, menu)) == 0 {
+                cx.with_legacy(|| UpdateCursorLocation(0, 0, &old));
             }
-            let invalid = b"  <random garbage>  \0";
-            std::ptr::copy_nonoverlapping(invalid.as_ptr(), last, invalid.len());
-            UpdateCursorInfo((last).cast());
-            update_fuel_requirement();
-            SetMenuRepeatDelay(input, 14, 105, 7, 1);
-            SetMenuSounds(input, 0, 0);
+            cx.with_legacy(|| {
+                let invalid = b"  <random garbage>  \0";
+                std::ptr::copy_nonoverlapping(invalid.as_ptr(), last, invalid.len());
+                UpdateCursorInfo((last).cast());
+                update_fuel_requirement();
+                SetMenuRepeatDelay(input, 14, 105, 7, 1);
+                SetMenuSounds(input, 0, 0);
+            });
         } else {
-            PlayMenuSound(2);
+            crate::ui::settings::play_menu_sound(cx.kernel, cx.world, 2);
         }
     } else {
         let zoom = if keys[16] != 0 {
@@ -141,7 +154,7 @@ pub unsafe fn do_move_cursor(
         } else {
             0
         };
-        zoom_star_map(zoom);
+        cx.with_legacy(|| zoom_star_map(zoom));
         let sx = if keys[8] != 0 {
             1
         } else if keys[7] != 0 {
@@ -157,14 +170,16 @@ pub unsafe fn do_move_cursor(
             0
         };
         if sx != 0 || sy != 0 {
-            UpdateCursorLocation(sx, sy, std::ptr::null());
-            UpdateCursorInfo((last).cast());
-            update_fuel_requirement();
+            cx.with_legacy(|| {
+                UpdateCursorLocation(sx, sy, std::ptr::null());
+                UpdateCursorInfo((last).cast());
+                update_fuel_requirement();
+            });
         }
-        SleepThreadUntil(time_in.wrapping_add(14));
+        cx.with_legacy(|| SleepThreadUntil(time_in.wrapping_add(14)));
     }
-    flashCurrentLocation(std::ptr::null());
-    let keep_going = World::current().read(|world| world.activity()) & 0x4000 == 0;
+    cx.with_legacy(|| flashCurrentLocation(std::ptr::null()));
+    let keep_going = cx.world.activity() & 0x4000 == 0;
     if !keep_going {
         ACTIVE = false;
     }
