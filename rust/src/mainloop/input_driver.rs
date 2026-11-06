@@ -26,7 +26,7 @@ fn run_loop(reset: bool, step: &mut InputLoop<'_, '_, '_, '_>) {
             break;
         }
         // SAFETY: the driver is the sole writer of this input frame.
-        step.legacy(|| unsafe { UpdateInputState(controls) });
+        unsafe { UpdateInputState(step.cx, controls) };
         let activity = step.cx.world.activity();
         if step
             .input(crate::engine::observe::InputView::AfterUpdate(activity))
@@ -147,9 +147,9 @@ impl crate::engine::input::InputRuntime for NativeInputRuntime {
         }
     }
 
-    fn update(&self) {
-        // SAFETY: the owner publishes the initialized game-thread input scope.
-        unsafe { UpdateInputState(&self.input) };
+    fn update(&self, cx: &mut crate::engine::battle::Cx<'_>) {
+        // SAFETY: the retained context supplies initialized game-thread input resources.
+        unsafe { UpdateInputState(cx, &self.input) };
     }
 
     fn run(

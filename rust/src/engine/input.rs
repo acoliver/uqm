@@ -42,7 +42,7 @@ pub trait InputRuntime {
     fn observer(
         &self,
     ) -> Box<dyn crate::engine::observe::Observer<Option<crate::engine::observe::CampaignView>>>;
-    fn update(&self);
+    fn update(&self, cx: &mut Cx<'_>);
     fn run(&self, cx: &mut Cx<'_>, io: &mut Io<'_>, reset: bool, frame: &mut dyn Frame);
     fn battle_input(&self, input: &InputContext) -> u8;
 }
@@ -139,7 +139,7 @@ mod tests {
             Box::new(Unobserved)
         }
 
-        fn update(&self) {}
+        fn update(&self, _cx: &mut Cx<'_>) {}
 
         fn run(&self, cx: &mut Cx<'_>, io: &mut Io<'_>, reset: bool, frame: &mut dyn Frame) {
             self.0.borrow_mut().push(reset);

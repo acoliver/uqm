@@ -611,12 +611,12 @@ impl Eq for CommunicationResult {}
 /// `talk_segue`.
 pub fn do_talk_segue(
     input: &InputSession,
-    world: &World,
+    cx: &mut Cx<'_>,
     state: &mut CommState,
     ts: &mut TalkingState,
 ) -> bool {
     // ---- abort check -------------------------------------------------------
-    if check_abort_external(world) {
+    if check_abort_external(cx.world) {
         ts.ended = true;
         return false;
     }
@@ -627,7 +627,7 @@ pub fn do_talk_segue(
     // and PulsedInputState from ImmediateInputState.
     #[cfg(not(test))]
     unsafe {
-        c_bridge::UpdateInputState(input);
+        c_bridge::UpdateInputState(cx, input);
     }
 
     // ---- cancel (skip to end of current phrase) ----------------------------
@@ -689,7 +689,7 @@ pub fn do_talk_segue(
 /// end (i.e. `talkingState.ended`).
 pub fn talk_segue(
     input: &InputSession,
-    world: &World,
+    cx: &mut Cx<'_>,
     state: &mut CommState,
     wait_track: u32,
 ) -> bool {
@@ -724,7 +724,7 @@ pub fn talk_segue(
     ts.wait_track = effective_wait;
 
     // ---- main loop ---------------------------------------------------------
-    while do_talk_segue(input, world, state, &mut ts) {
+    while do_talk_segue(input, cx, state, &mut ts) {
         // loop body is in do_talk_segue
     }
 
@@ -788,7 +788,7 @@ pub fn alien_talk_segue(
         cx.kernel.last_activity &= !0x1000;
     }
 
-    let finished = talk_segue(input, cx.world, state, wait_track);
+    let finished = talk_segue(input, cx, state, wait_track);
     state.set_talking_finished(finished);
 
     if finished {
@@ -871,7 +871,7 @@ pub fn player_response_input(
         // Replay last phrase
         fade_music_to_background(state);
         state.response_ui().draw_feedback(cx.world.activity(), "");
-        talk_segue(input, cx.world, state, 0);
+        talk_segue(input, cx, state, 0);
         if !check_abort_external(cx.world) {
             refresh_responses(cx.world.activity(), state);
             fade_music_to_foreground(state);
@@ -1753,7 +1753,7 @@ mod tests {
         };
         // Set the campaign abort flag to end the segue.
         world.set_activity(0x4000);
-        let cont = do_talk_segue(&input, &world, &mut s, &mut ts);
+        let cont = with_world(world, |cx, _| do_talk_segue(&input, cx, &mut s, &mut ts));
         assert!(!cont, "abort should stop loop");
         assert!(ts.ended);
     }
@@ -1767,7 +1767,7 @@ mod tests {
             wait_track: WAIT_TRACK_ALL,
             ..Default::default()
         };
-        let cont = do_talk_segue(&input, &world, &mut s, &mut ts);
+        let cont = with_world(world, |cx, _| do_talk_segue(&input, cx, &mut s, &mut ts));
         // Track is playing → should continue
         assert!(cont, "should continue while track is playing");
         assert!(!ts.ended);
@@ -1782,7 +1782,7 @@ mod tests {
             wait_track: WAIT_TRACK_ALL,
             ..Default::default()
         };
-        let cont = do_talk_segue(&input, &world, &mut s, &mut ts);
+        let cont = with_world(world, |cx, _| do_talk_segue(&input, cx, &mut s, &mut ts));
         assert!(!cont, "should stop when track not playing");
         assert!(ts.ended);
     }
@@ -1798,7 +1798,7 @@ mod tests {
             ..Default::default()
         };
         // While seeking, should return true even if track stops (seeking || ...)
-        let cont = do_talk_segue(&input, &world, &mut s, &mut ts);
+        let cont = with_world(world, |cx, _| do_talk_segue(&input, cx, &mut s, &mut ts));
         // seeking starts true, no right/left input → seeking is cleared this iter
         // then we check track, which is playing → cont should be true (playing)
         assert!(cont);
@@ -1819,7 +1819,9 @@ mod tests {
         s.track_mut().start();
         s.track_mut().update(0.1); // finish immediately
 
-        let ended = talk_segue(&input, &world, &mut s, WAIT_TRACK_ALL);
+        let ended = with_world(world, |cx, _| {
+            talk_segue(&input, cx, &mut s, WAIT_TRACK_ALL)
+        });
         assert!(ended, "should return ended=true when track not playing");
     }
 
@@ -1834,7 +1836,7 @@ mod tests {
         // Force-stop with the campaign abort flag.
         world.set_activity(0x4000);
 
-        let ended = talk_segue(&input, &world, &mut s, 0);
+        let ended = with_world(world, |cx, _| talk_segue(&input, cx, &mut s, 0));
         // abort was set, so ended = true from abort path
         assert!(ended);
     }

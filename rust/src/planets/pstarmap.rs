@@ -4,16 +4,24 @@
 //! thread owns the map state; callbacks may reenter drawing and input code.
 
 mod screen;
+#[cfg(not(test))]
+use screen::enlarge;
 use screen::repair_rectangle;
 #[cfg(not(test))]
 #[cfg(not(test))]
 use screen::{finish_star_map, prepare_star_map};
 
 #[cfg(not(test))]
-use crate::engine::battle::link_queue::{LinkId, LinkQueue};
-#[cfg(not(test))]
 use crate::engine::world::queues::{Fleet, FleetInfo};
 use crate::engine::Kernel;
+#[cfg(not(test))]
+use crate::engine::{
+    battle::{
+        link_queue::{LinkId, LinkQueue},
+        Cx,
+    },
+    input::InputSession,
+};
 #[cfg(not(test))]
 use crate::engine::{StoryKey, World, WorldData};
 #[cfg(not(test))]
@@ -48,8 +56,6 @@ use crate::savegame::runtime::star::{CStarDesc, NUM_SOLAR_SYSTEMS};
 #[cfg(not(test))]
 use crate::strings::{string_table, unicode};
 
-#[cfg(not(test))]
-use std::ffi::c_void;
 use std::{
     ffi::{c_char, c_long},
     ptr,
@@ -880,17 +886,14 @@ pub unsafe fn update_fuel_requirement() {
 #[cfg(not(test))]
 /// # Safety
 /// Game-thread only, with game globals and native UI resources initialized.
-pub unsafe fn star_map(
-    cx: &mut crate::engine::battle::Cx<'_>,
-    io: &mut crate::engine::observe::Io<'_>,
-) -> u32 {
+pub unsafe fn star_map(cx: &mut Cx<'_>, io: &mut crate::engine::observe::Io<'_>) -> u32 {
     let runtime = cx.kernel.input_runtime();
     let input = runtime.input();
     let misc_data = cx.kernel.misc_data_frame;
     let space = cx.kernel.space_context;
     let autopilot = cx.world.data.game.autopilot;
     let (mut menu, universe) =
-        cx.with_legacy(|| prepare_star_map(input, misc_data.cast(), space.cast(), autopilot));
+        prepare_star_map(cx, input, misc_data.cast(), space.cast(), autopilot);
     cx.with_legacy(|| {
         SetMenuSounds(input, 0, 0);
         SetMenuRepeatDelay(input, ONE_SECOND / 60, ONE_SECOND / 8, ONE_SECOND / 120, 1);
@@ -928,13 +931,13 @@ unsafe fn repair_map(race: u16, last: &mut RECT, next: RECT) {
 }
 
 #[cfg(not(test))]
-unsafe fn interrupted(input: &crate::engine::input::InputSession, flags: &mut Flags) -> bool {
+unsafe fn interrupted(cx: &mut Cx<'_>, input: &InputSession, flags: &mut Flags) -> bool {
     if flags.button {
-        if AnyButtonPress(input, 1) == 0 {
+        if AnyButtonPress(cx, input, 1) == 0 {
             flags.button = false;
         }
     } else {
-        flags.interrupted = flags.interrupted || AnyButtonPress(input, 1) != 0;
+        flags.interrupted = flags.interrupted || AnyButtonPress(cx, input, 1) != 0;
         if flags.interrupted {
             flags.drawn = true;
             return true;
@@ -944,36 +947,31 @@ unsafe fn interrupted(input: &crate::engine::input::InputSession, flags: &mut Fl
 }
 
 #[cfg(not(test))]
-fn enlarge(r: &mut RECT) {
-    r.extent.width = r.extent.width.wrapping_add(1);
-    r.extent.height = r.extent.height.wrapping_add(1);
-}
-
-#[cfg(not(test))]
 unsafe fn update_sphere_position(
-    input: &crate::engine::input::InputSession,
+    cx: &mut Cx<'_>,
+    input: &InputSession,
     id: LinkId<Fleet>,
     index: u16,
     flags: &mut Flags,
 ) {
-    let fleet = lock_fleet(id);
+    let fleet = *cx.world.avail_races().get(id);
     let dx = fleet.loc.x.wrapping_sub(fleet.known_loc.x);
     let dy = fleet.loc.y.wrapping_sub(fleet.known_loc.y);
     if dx != 0 || dy != 0 {
         let mut walk = LineWalk::new(dx, dy);
         if !flags.drawn {
-            DrawStarMap(u16::MAX, ptr::null_mut());
+            cx.with_legacy(|| DrawStarMap(u16::MAX, ptr::null_mut()));
             flags.drawn = true;
         }
-        let (initial, mut last) = get_sphere_rect(&lock_fleet(id));
+        let (initial, mut last) = cx.with_legacy(|| get_sphere_rect(&lock_fleet(id)));
         enlarge(&mut last);
         let mut visible = false;
         let mut final_r = zero_rect();
         let mut canceled = false;
         loop {
             let (sphere, mut r) = loop {
-                fleet_queue(|queue| walk.step(&mut queue.get_mut(id).known_loc));
-                let pair = get_sphere_rect(&lock_fleet(id));
+                walk.step(&mut cx.world.avail_races().get_mut(id).known_loc);
+                let pair = cx.with_legacy(|| get_sphere_rect(&lock_fleet(id)));
                 let before = walk.delta;
                 walk.delta = walk.delta.wrapping_sub(1);
                 if before == 0
@@ -984,14 +982,14 @@ unsafe fn update_sphere_position(
                     break pair;
                 }
             };
-            if interrupted(input, flags) {
+            if interrupted(cx, input, flags) {
                 canceled = true;
                 break;
             }
             enlarge(&mut r);
             if initial.corner.x != sphere.corner.x || initial.corner.y != sphere.corner.y {
                 visible = true;
-                repair_map(index, &mut last, r);
+                cx.with_legacy(|| repair_map(index, &mut last, r));
             }
             final_r = r;
             if walk.delta < 0 {
@@ -999,36 +997,37 @@ unsafe fn update_sphere_position(
             }
         }
         if !canceled && visible {
-            repair_map(u16::MAX, &mut last, final_r);
+            cx.with_legacy(|| repair_map(u16::MAX, &mut last, final_r));
         }
-        fleet_queue(|queue| {
+        {
+            let mut queue = cx.world.avail_races();
             let fleet = queue.get_mut(id);
             fleet.known_loc = fleet.loc;
-        });
+        };
     }
 }
 
 #[cfg(not(test))]
-unsafe fn update_map(input: &crate::engine::input::InputSession) {
+unsafe fn update_map(cx: &mut Cx<'_>, input: &InputSession) {
     FlushInput(input);
     let mut flags = Flags {
         button: true,
         ..Flags::default()
     };
     let mut index = 1u16;
-    let mut handle = fleet_queue(|queue| queue.head());
+    let mut handle = cx.world.avail_races().head();
     while let Some(id) = handle {
-        let next = fleet_queue(|queue| queue.succ(id));
-        interrupted(input, &mut flags);
-        let fleet = lock_fleet(id);
+        let next = cx.world.avail_races().succ(id);
+        interrupted(cx, input, &mut flags);
+        let fleet = *cx.world.avail_races().get(id);
         if fleet.known_strength != 0 {
-            update_sphere_position(input, id, index, &mut flags);
-            let fleet = lock_fleet(id);
+            update_sphere_position(cx, input, id, index, &mut flags);
+            let fleet = *cx.world.avail_races().get(id);
             let mut delta =
                 (i32::from(fleet.actual_strength) - i32::from(fleet.known_strength)) as i16;
             if delta != 0 {
                 if !flags.drawn {
-                    DrawStarMap(u16::MAX, ptr::null_mut());
+                    cx.with_legacy(|| DrawStarMap(u16::MAX, ptr::null_mut()));
                     flags.drawn = true;
                 }
                 let dx = if delta > 0 {
@@ -1038,7 +1037,7 @@ unsafe fn update_map(input: &crate::engine::input::InputSession) {
                     -1i16
                 };
                 delta = delta.wrapping_sub(1);
-                let (initial, mut last) = get_sphere_rect(&lock_fleet(id));
+                let (initial, mut last) = cx.with_legacy(|| get_sphere_rect(&lock_fleet(id)));
                 enlarge(&mut last);
                 let mut visible = false;
                 let mut final_r = zero_rect();
@@ -1046,11 +1045,12 @@ unsafe fn update_map(input: &crate::engine::input::InputSession) {
                 let mut canceled = false;
                 loop {
                     let (sphere, mut r) = loop {
-                        fleet_queue(|queue| {
+                        {
+                            let mut queue = cx.world.avail_races();
                             let fleet = queue.get_mut(id);
                             fleet.known_strength = fleet.known_strength.wrapping_add(dx as u16);
-                        });
-                        let pair = get_sphere_rect(&lock_fleet(id));
+                        };
+                        let pair = cx.with_legacy(|| get_sphere_rect(&lock_fleet(id)));
                         let before = delta;
                         delta = delta.wrapping_sub(1);
                         if before == 0
@@ -1059,14 +1059,14 @@ unsafe fn update_map(input: &crate::engine::input::InputSession) {
                             break pair;
                         }
                     };
-                    if interrupted(input, &mut flags) {
+                    if interrupted(cx, input, &mut flags) {
                         canceled = true;
                         break;
                     }
                     enlarge(&mut r);
                     if initial.extent.height != sphere.extent.height {
                         visible = true;
-                        repair_map(index, &mut last, r);
+                        cx.with_legacy(|| repair_map(index, &mut last, r));
                     }
                     final_r = r;
                     final_sphere = sphere;
@@ -1075,12 +1075,13 @@ unsafe fn update_map(input: &crate::engine::input::InputSession) {
                     }
                 }
                 if !canceled && (visible || initial.extent.width != final_sphere.extent.width) {
-                    repair_map(u16::MAX, &mut last, final_r);
+                    cx.with_legacy(|| repair_map(u16::MAX, &mut last, final_r));
                 }
-                fleet_queue(|queue| {
+                {
+                    let mut queue = cx.world.avail_races();
                     let fleet = queue.get_mut(id);
                     fleet.known_strength = fleet.actual_strength;
-                });
+                };
             }
         }
         handle = next;

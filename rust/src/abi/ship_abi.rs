@@ -2896,7 +2896,7 @@ pub struct GenerateFunctions {
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct menu_state {
-    pub InputFunc: ::std::option::Option<unsafe fn(pMS: *mut menu_state, input: &crate::engine::input::InputSession) -> BOOLEAN>,
+    pub InputFunc: ::std::option::Option<unsafe fn(cx: &mut crate::engine::battle::Cx<'_>, pMS: &mut menu_state, input: &crate::engine::input::InputSession) -> BOOLEAN>,
     pub Initialized: SIZE,
     pub CurState: BYTE,
     pub CurFrame: FRAME,

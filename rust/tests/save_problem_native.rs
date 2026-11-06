@@ -56,7 +56,7 @@ impl InputRuntime for Runtime {
     fn observer(&self) -> Box<dyn Observer<Option<CampaignView>>> {
         Box::new(self.0.clone())
     }
-    fn update(&self) {
+    fn update(&self, _cx: &mut Cx<'_>) {
         panic!("the observer must stop the wait before sampling input");
     }
     fn run(&self, _: &mut Cx<'_>, _: &mut Io<'_>, _: bool, _: &mut dyn Frame) {

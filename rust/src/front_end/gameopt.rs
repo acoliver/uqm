@@ -964,7 +964,7 @@ pub(crate) mod runtime {
                     cx.with_legacy(|| SetFlashRect(SFR_MENU_3DO));
                 }
                 QUIT_GAME => {
-                    if cx.with_legacy(|| ConfirmExit(input)) != 0 {
+                    if ConfirmExit(cx, input) != 0 {
                         return 0;
                     }
                 }

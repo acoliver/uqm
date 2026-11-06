@@ -547,7 +547,7 @@ pub(crate) mod engine {
         if fade_in != 0 {
             let mut i = 0usize;
             while i < TEXT_FADE.len() {
-                if AnyButtonPress(input, 1) != 0 {
+                if AnyButtonPress(cx, input, 1) != 0 {
                     i = TEXT_FADE.len() - 1;
                 }
                 let v = TEXT_FADE[i];
@@ -559,7 +559,7 @@ pub(crate) mod engine {
         } else {
             let mut i = TEXT_FADE.len() as i16 - 1;
             while i >= 0 {
-                if AnyButtonPress(input, 1) != 0 {
+                if AnyButtonPress(cx, input, 1) != 0 {
                     i = 0;
                 }
                 let v = TEXT_FADE[i as usize];
@@ -713,7 +713,7 @@ pub(crate) mod engine {
                             if sleepy {
                                 let mut time = GetTimeCounter();
                                 for (r, g, b) in SHIP_FADE {
-                                    sleepy = AnyButtonPress(input, 1) == 0
+                                    sleepy = AnyButtonPress(cx, input, 1) == 0
                                         && cx.world.activity() & CHECK_ABORT as u16 == 0;
                                     if !sleepy {
                                         break;

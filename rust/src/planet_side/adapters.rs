@@ -41,7 +41,7 @@ impl CffiPlanetSideInput {
         #[cfg(not(test))]
         {
             let runtime = cx.kernel.input_runtime();
-            cx.with_legacy(|| runtime.update());
+            runtime.update(cx);
         }
         let activity = cx.world.activity();
         if cx

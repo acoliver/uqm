@@ -3,6 +3,8 @@
 use super::*;
 #[cfg(not(test))]
 use crate::memory::{rust_hfree, rust_hmalloc};
+#[cfg(not(test))]
+use std::ffi::c_void;
 
 use crate::strings::unicode::get_char_from_string as getCharFromString;
 #[cfg(not(test))]

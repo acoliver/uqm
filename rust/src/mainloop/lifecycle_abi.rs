@@ -45,7 +45,7 @@ unsafe fn background_init_kernel(cx: &mut crate::engine::battle::Cx<'_>, timeout
     while crate::time::counter_abi::GetTimeCounter() <= timeout
         && cx.world.activity() & CHECK_ABORT as u16 == 0
     {
-        cx.with_legacy(|| input.update());
+        input.update(cx);
         cx.with_legacy(|| {
             if crate::time::source::is_replay() {
                 crate::threading::pacing::linked::sleep_thread_until(timeout.saturating_add(1));

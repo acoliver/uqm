@@ -58,7 +58,7 @@ unsafe fn picker_frame(
         PickerAction::Continue if state.actions.len() == 1 => {
             key_event(RETURN, true, true);
             key_event(ESCAPE, true, true);
-            UpdateInputState(input);
+            uqm_rust::app::bridge::enter(|cx| UpdateInputState(cx, input));
             state.repeat_pulses = (input.pulsed().menu[SELECT], input.pulsed().menu[CANCEL]);
             key_event(RETURN, false, false);
             key_event(ESCAPE, false, false);
@@ -81,7 +81,7 @@ unsafe fn open_from_restart_while_select_is_held(
     FlushInput(input);
     uqm_rust::engine::World::current().write(|world| world.set_activity(0));
     key_event(RETURN, true, false);
-    UpdateInputState(input);
+    uqm_rust::app::bridge::enter(|cx| UpdateInputState(cx, input));
     assert_ne!(input.pulsed().menu[SELECT], 0);
     let mut flash: FlashContext = std::mem::zeroed();
     let mut menu = DoRestartState {
