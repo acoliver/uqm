@@ -134,9 +134,9 @@ pub(crate) mod live {
 
     /// # Safety
     /// State must be the active fleet editor on the game thread.
-    pub unsafe fn draw_pick_frame(state: &MeleeSession) {
+    pub unsafe fn draw_pick_frame(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeSession) {
         state.build_picker().draw_frame(state.side);
-        draw_ship_strings(state, state.current_ship);
+        draw_ship_strings(cx, state, state.current_ship);
     }
 
     unsafe fn pick(
@@ -178,12 +178,12 @@ pub(crate) mod live {
             let catalog = &state.catalog;
             state.build_picker().draw_icon(catalog, current_ship, true);
             state.current_ship = selected;
-            cx.with_legacy(|| draw_ship_strings(state, selected));
+            draw_ship_strings(cx, state, selected);
         }
-        cx.with_legacy(|| {
-            flash_selection(state);
-            SleepThreadUntil(time.wrapping_add(840 / 30));
-        });
+        {
+            flash_selection(cx, state);
+            cx.with_legacy(|| SleepThreadUntil(time.wrapping_add(840 / 30)));
+        };
         1
     }
     /// # Safety
@@ -198,7 +198,7 @@ pub(crate) mod live {
         if state.current_ship == 255 {
             state.current_ship = 0;
         }
-        cx.with_legacy(|| draw_pick_frame(state));
+        draw_pick_frame(cx, state);
         state.phase = crate::supermelee::session::MenuPhase::Building;
         {
             let mut frame = crate::supermelee::native::menu::live::admission::SessionFrame::new(

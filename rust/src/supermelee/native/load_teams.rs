@@ -214,11 +214,11 @@ pub(crate) mod live {
         if keys[KEY_MENU_SELECT as usize] != 0 || keys[KEY_MENU_CANCEL as usize] != 0 {
             if keys[KEY_MENU_SELECT as usize] != 0 {
                 let team = state.load.view[(state.load.current - state.load.top) as usize].clone();
-                cx.with_legacy(|| local_change_team(state, state.side as usize, &team));
+                local_change_team(cx, state, state.side as usize, &team);
             }
             state.phase = crate::supermelee::session::MenuPhase::Menu;
             state.last_input_time = GetTimeCounter();
-            cx.with_legacy(|| {
+            {
                 let bounds = state.menu_frames().frame_rect(28);
                 let rect = RECT {
                     corner: POINT {
@@ -230,8 +230,8 @@ pub(crate) mod live {
                         height: bounds.extent.height,
                     },
                 };
-                repair_frame(state, &rect);
-            });
+                repair_frame(cx, state, &rect);
+            };
             return 1;
         }
         let (top, index) = page(

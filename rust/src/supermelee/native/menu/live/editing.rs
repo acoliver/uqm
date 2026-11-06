@@ -12,14 +12,15 @@ impl crate::ui::getchar::TextEntryCallbacks for NameCallbacks<'_> {
         self.0.cur_index =
             u16::try_from(entry.cursor).unwrap_or_else(|error| panic!("team name cursor: {error}"));
         // SAFETY: the menu owns its retained drawing resources and entry text is borrowed.
-        cx.with_legacy(|| unsafe {
+        unsafe {
             name(
+                cx,
                 self.0,
                 self.0.side,
                 1 | if entry.joystick { 8 } else { 0 },
                 Some(entry.text),
             ) != 0
-        })
+        }
     }
 
     fn frame(
@@ -44,20 +45,20 @@ unsafe fn edit_name(
     input: &crate::engine::input::InputSession,
 ) {
     state.cur_index = 0;
-    cx.with_legacy(|| name(state, side, 1, None));
+    name(cx, state, side, 1, None);
     let mut buf =
         super::super::rules::name_editor_buffer(state.melee_setup.teams[side as usize].c_name());
     let success =
         crate::ui::getchar::edit_text(cx, io, input, &mut buf, 0, &mut NameCallbacks(state));
     state.cur_index = u16::MAX;
     if !success
-        || !cx.with_legacy(|| {
+        || !{
             let name = std::ffi::CStr::from_bytes_until_nul(&buf)
                 .unwrap_or_else(|error| panic!("team name terminator: {error}"));
-            local_change_team_name(state, side, name)
-        })
+            local_change_team_name(cx, state, side, name)
+        }
     {
-        cx.with_legacy(|| view_name(state, side));
+        view_name(cx, state, side);
     }
 }
 pub(super) unsafe fn edit(
@@ -73,7 +74,7 @@ pub(super) unsafe fn edit(
     }
     SetMenuSounds(input, 15, 16 | 512);
     if state.initialized == 0 {
-        cx.with_legacy(|| current(state));
+        current(cx, state);
         state.initialized = 1;
         state.phase = crate::supermelee::session::MenuPhase::Editing;
         return 1;
@@ -84,39 +85,38 @@ pub(super) unsafe fn edit(
     if (row < 2 || state.current_ship == 255)
         && (key(input, KEY_MENU_CANCEL) || key(input, KEY_MENU_RIGHT) && (col == 6 || row == 2))
     {
-        cx.with_legacy(|| highlight(state, 10, false));
+        highlight(cx, state, 10, false);
         state.current_ship = 255;
         state.melee_option = 4;
         state.phase = crate::supermelee::session::MenuPhase::Menu;
         state.last_input_time = GetTimeCounter();
     } else if row < 2 && key(input, KEY_MENU_SELECT) {
-        cx.with_legacy(|| highlight(state, 10, false));
+        highlight(cx, state, 10, false);
         state.melee_option = 11;
         let ok =
             crate::supermelee::native::build_picker::live::build_pick_ship(cx, io, input, state);
         if ok {
-            cx.with_legacy(|| {
-                local_change_ship(
-                    state,
-                    state.side,
-                    state.row * 7 + state.col,
-                    state.current_ship,
-                )
-            });
+            local_change_ship(
+                cx,
+                state,
+                state.side,
+                state.row * 7 + state.col,
+                state.current_ship,
+            );
             advance(state);
         }
         state.melee_option = 10;
         let r = state.build_picker().rect();
-        cx.with_legacy(|| repair_frame(state, &r));
-        cx.with_legacy(|| current(state));
+        repair_frame(cx, state, &r);
+        current(cx, state);
         state.phase = crate::supermelee::session::MenuPhase::Editing;
     } else if row < 2 && key(input, KEY_MENU_SPECIAL) {
-        cx.with_legacy(|| highlight(state, 10, false));
+        highlight(cx, state, 10, false);
     } else if row < 2 && key(input, KEY_MENU_DELETE) {
-        cx.with_legacy(|| highlight(state, 10, false));
-        cx.with_legacy(|| local_change_ship(state, state.side, row * 7 + col, 255));
+        highlight(cx, state, 10, false);
+        local_change_ship(cx, state, state.side, row * 7 + col, 255);
         advance(state);
-        cx.with_legacy(|| current(state));
+        current(cx, state);
     } else {
         let (mut side, mut row, mut col) = (state.side, row, col);
         if row == 2 && key(input, KEY_MENU_SELECT) {
@@ -131,17 +131,17 @@ pub(super) unsafe fn edit(
             key(input, KEY_MENU_DOWN),
         );
         if (side, row, col) != (state.side, state.row, state.col) {
-            cx.with_legacy(|| highlight(state, 10, false));
+            highlight(cx, state, 10, false);
             state.side = side;
             state.row = row;
             state.col = col;
-            cx.with_legacy(|| current(state));
+            current(cx, state);
         }
     }
     flush_menu(state, cx, io);
-    cx.with_legacy(|| {
-        flash_selection(state);
-        SleepThreadUntil(time.wrapping_add(840 / 30));
-    });
+    {
+        flash_selection(cx, state);
+        cx.with_legacy(|| SleepThreadUntil(time.wrapping_add(840 / 30)));
+    };
     1
 }

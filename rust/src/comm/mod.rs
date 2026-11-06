@@ -47,7 +47,7 @@ pub mod subtitle;
 pub mod subtitle_display;
 pub mod summary;
 pub mod talk_segue;
-mod text_layout;
+pub(crate) mod text_layout;
 pub mod track;
 pub mod types;
 

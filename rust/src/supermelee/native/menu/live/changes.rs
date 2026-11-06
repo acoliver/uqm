@@ -2,12 +2,22 @@
 use super::*;
 use crate::supermelee::types::MeleeShip as SetupShip;
 
-pub(super) unsafe fn view_name(state: &mut MeleeSession, side: u16) {
+pub(super) unsafe fn view_name(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    state: &mut MeleeSession,
+    side: u16,
+) {
     if state.melee_started == 0 {
-        name(state, side, 4, None);
+        name(cx, state, side, 4, None);
     }
 }
-unsafe fn change_ship(state: &mut MeleeSession, side: u16, index: u16, ship: u32) -> bool {
+unsafe fn change_ship(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    state: &mut MeleeSession,
+    side: u16,
+    index: u16,
+    ship: u32,
+) -> bool {
     let ship_kind = SetupShip::from_u8(
         u8::try_from(ship).unwrap_or_else(|error| panic!("melee ship width: {error}")),
     )
@@ -25,36 +35,42 @@ unsafe fn change_ship(state: &mut MeleeSession, side: u16, index: u16, ship: u32
     if menu.melee_started == 0 {
         if ship == 255 {
             let r = slot_rect(side, index / 7, index % 7);
-            repair_frame(state, &r);
+            repair_frame(cx, state, &r);
         } else {
             ship_box(menu, side, index as usize, ship, false);
         }
-        worth(state, side, 4);
+        worth(cx, state, side, 4);
     }
     if state.melee_option == 10 && state.side == side && index == (state.row * 7 + state.col) {
         state.current_ship = ship;
-        draw_ship_strings(state, ship);
+        draw_ship_strings(cx, state, ship);
     }
     true
 }
-unsafe fn change_name(state: &mut MeleeSession, side: u16, value: &std::ffi::CStr) -> bool {
+unsafe fn change_name(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    state: &mut MeleeSession,
+    side: u16,
+    value: &std::ffi::CStr,
+) -> bool {
     if !state.melee_setup.teams[side as usize].rename(value) {
         return false;
     }
     if state.row != 2 || state.side != side || state.cur_index == u16::MAX {
-        view_name(state, side);
+        view_name(cx, state, side);
     }
     true
 }
 /// # Safety
 /// The menu and its graphics must be live on the game thread.
 pub unsafe fn local_change_ship(
+    cx: &mut crate::engine::battle::Cx<'_>,
     state: &mut MeleeSession,
     side: u16,
     index: u16,
     ship: u32,
 ) -> bool {
-    if !change_ship(state, side, index, ship) {
+    if !change_ship(cx, state, side, index, ship) {
         return false;
     }
     if state.melee_setup.sent[side as usize].ships[index as usize] == SetupShip::MeleeUnset {
@@ -67,11 +83,12 @@ pub unsafe fn local_change_ship(
 /// # Safety
 /// The menu and its graphics must be live on the game thread.
 pub unsafe fn local_change_team_name(
+    cx: &mut crate::engine::battle::Cx<'_>,
     state: &mut MeleeSession,
     side: u16,
     value: &std::ffi::CStr,
 ) -> bool {
-    if !change_name(state, side, value) {
+    if !change_name(cx, state, side, value) {
         return false;
     }
     if state.melee_setup.sent[side as usize].name.is_none() {
@@ -83,15 +100,16 @@ pub unsafe fn local_change_team_name(
 /// # Safety
 /// The menu and its graphics must be live on the game thread.
 pub unsafe fn local_change_team(
+    cx: &mut crate::engine::battle::Cx<'_>,
     state: &mut MeleeSession,
     side: usize,
     team: &crate::supermelee::setup::team::MeleeTeam,
 ) -> bool {
     let mut changed = false;
     for (index, ship) in team.ships.iter().enumerate() {
-        changed |= local_change_ship(state, side as u16, index as u16, *ship as u32);
+        changed |= local_change_ship(cx, state, side as u16, index as u16, *ship as u32);
     }
-    changed |= local_change_team_name(state, side as u16, team.c_name());
+    changed |= local_change_team_name(cx, state, side as u16, team.c_name());
     changed
 }
 pub(super) fn bootstrap_sync_team(state: &mut MeleeSession, side: usize) {
@@ -108,6 +126,7 @@ pub(super) fn bootstrap_sync_team(state: &mut MeleeSession, side: usize) {
 /// # Safety
 /// The menu and its graphics must be live on the game thread.
 pub(super) unsafe fn remote_ship(
+    cx: &mut crate::engine::battle::Cx<'_>,
     state: &mut MeleeSession,
     remote: usize,
     side: u16,
@@ -116,13 +135,13 @@ pub(super) unsafe fn remote_ship(
 ) {
     let sent = state.melee_setup.sent[side as usize].ships[index as usize];
     if sent == SetupShip::MeleeUnset {
-        change_ship(state, side, index, ship);
+        change_ship(cx, state, side, index, ship);
         netplay_notify_all_set_ship(state, side, index);
         return;
     }
     state.melee_setup.sent[side as usize].ships[index as usize] = SetupShip::MeleeUnset;
     if ship != sent as u32 && remote == side as usize {
-        change_ship(state, side, index, ship);
+        change_ship(cx, state, side, index, ship);
         return;
     }
     if state.melee_setup.teams[side as usize].ships[index as usize] != sent {
@@ -134,6 +153,7 @@ pub(super) unsafe fn remote_ship(
 /// # Safety
 /// The menu and its graphics must be live on the game thread.
 pub(super) unsafe fn remote_name(
+    cx: &mut crate::engine::battle::Cx<'_>,
     state: &mut MeleeSession,
     remote: usize,
     side: u16,
@@ -141,12 +161,12 @@ pub(super) unsafe fn remote_name(
 ) {
     let sent = state.melee_setup.sent[side as usize].name.clone();
     let Some(sent) = sent else {
-        change_name(state, side, value);
+        change_name(cx, state, side, value);
         netplay_notify_all_set_team_name(state, side);
         return;
     };
     if value == sent.as_c_str() && remote == side as usize {
-        change_name(state, side, value);
+        change_name(cx, state, side, value);
         state.melee_setup.sent[side as usize].set_name(None);
         return;
     }
@@ -157,10 +177,15 @@ pub(super) unsafe fn remote_name(
         state.melee_setup.sent[side as usize].set_name(None);
     }
 }
-pub(super) unsafe fn confirmation_cancelled(state: &mut MeleeSession, side: u16) {
-    status(
+pub(super) unsafe fn confirmation_cancelled(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    state: &mut MeleeSession,
+    side: u16,
+) {
+    status_game(
+        cx,
         state,
-        game_string(NETMELEE_STRING_BASE as i32 + if side == 0 { 16 } else { 17 }),
+        NETMELEE_STRING_BASE as usize + if side == 0 { 16 } else { 17 },
     );
     if state.phase == crate::supermelee::session::MenuPhase::Confirm {
         state.phase = crate::supermelee::session::MenuPhase::Menu;
@@ -176,10 +201,8 @@ pub(super) fn with_protocol_driver<R>(
                        io: &mut crate::engine::observe::Io<'_>,
                        notice| {
         crate::supermelee::native::protocol::feedback(cx, io, notice, |cx, message| {
-            cx.with_legacy(|| {
-                // SAFETY: feedback lends terminated text while the menu owns its drawing resources.
-                unsafe { status(state, message.as_ptr()) }
-            });
+            // SAFETY: feedback lends terminated text while the menu owns its drawing resources.
+            unsafe { status(cx, state, message) };
         });
     };
     action(&mut crate::supermelee::native::protocol::Driver::new(
@@ -203,26 +226,20 @@ pub(crate) fn apply_protocol_event(
             flush_menu(state, cx, io);
         }
         Effect::ConfirmationCancelled => {
-            cx.with_legacy(|| {
-                // SAFETY: the live menu retains its graphics through this synchronous draw.
-                unsafe { confirmation_cancelled(state, event.player as u16) }
-            })
+            // SAFETY: the live menu retains its graphics through this synchronous draw.
+            unsafe { confirmation_cancelled(cx, state, event.player as u16) };
         }
         Effect::Ship { side, index, ship } => {
-            cx.with_legacy(|| {
-                // SAFETY: validated fleet slots use this menu's retained catalog and frame.
-                unsafe { remote_ship(state, event.player, side, index, ship) }
-            })
+            // SAFETY: validated fleet slots use this menu's retained catalog and frame.
+            unsafe { remote_ship(cx, state, event.player, side, index, ship) };
         }
         Effect::TeamName { side, name } => {
             let mut terminated = name;
             terminated.push(0);
             let name = std::ffi::CStr::from_bytes_until_nul(&terminated)
                 .unwrap_or_else(|error| panic!("terminated remote name: {error}"));
-            cx.with_legacy(|| {
-                // SAFETY: the terminated name and menu resources stay borrowed through rendering.
-                unsafe { remote_name(state, event.player, side, name) }
-            });
+            // SAFETY: the terminated name and menu resources stay borrowed through rendering.
+            unsafe { remote_name(cx, state, event.player, side, name) };
         }
         Effect::Seed(seed) => {
             crate::math::seed_random(seed);
