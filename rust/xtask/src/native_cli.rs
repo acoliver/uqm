@@ -915,6 +915,7 @@ mod tests {
     fn failed_bundle(root: &Path) -> Vec<crate::native_config::Scenario> {
         let selected = vec![crate::native_config::Scenario {
             path: "rust/scripts/report-fixture.json".into(),
+            expected_input_ticks: None,
             outer_child_timeout_ms: None,
         }];
         let mut suite = crate::native_suite::SuiteAccounting::create(root, &selected).unwrap();

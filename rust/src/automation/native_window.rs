@@ -64,85 +64,7 @@ impl NativeInventoryLimits {
 }
 
 /// Runtime bounds shared by the game child and its native-window observer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct NativeWindowRuntimeContract {
-    pub capture_timeout_ms: u64,
-    pub capture_kill_grace_ms: u64,
-    pub observer_timeout_ms: u64,
-    pub observer_kill_grace_ms: u64,
-    pub acknowledgement_timeout_ms: u64,
-    pub outer_child_timeout_ms: u64,
-    pub outer_child_kill_grace_ms: u64,
-    pub child_stdout_budget_bytes: u64,
-    pub child_stderr_budget_bytes: u64,
-    pub observer_response_budget_bytes: u64,
-    pub capture_budget_bytes: u64,
-    pub content_expansion_budget_bytes: u64,
-    pub inventory_limits: NativeInventoryLimits,
-    pub expected_client_bounds: NativeWindowBounds,
-}
-
-impl NativeWindowRuntimeContract {
-    #[must_use]
-    pub const fn capture_timeout(self) -> std::time::Duration {
-        std::time::Duration::from_millis(self.capture_timeout_ms)
-    }
-
-    #[must_use]
-    pub const fn capture_kill_grace(self) -> std::time::Duration {
-        std::time::Duration::from_millis(self.capture_kill_grace_ms)
-    }
-
-    #[must_use]
-    pub const fn observer_timeout(self) -> std::time::Duration {
-        std::time::Duration::from_millis(self.observer_timeout_ms)
-    }
-
-    #[must_use]
-    pub const fn observer_kill_grace(self) -> std::time::Duration {
-        std::time::Duration::from_millis(self.observer_kill_grace_ms)
-    }
-
-    #[must_use]
-    pub const fn acknowledgement_timeout(self) -> std::time::Duration {
-        std::time::Duration::from_millis(self.acknowledgement_timeout_ms)
-    }
-
-    #[must_use]
-    pub const fn outer_child_timeout(self) -> std::time::Duration {
-        std::time::Duration::from_millis(self.outer_child_timeout_ms)
-    }
-
-    #[must_use]
-    pub const fn outer_child_kill_grace(self) -> std::time::Duration {
-        std::time::Duration::from_millis(self.outer_child_kill_grace_ms)
-    }
-
-    #[must_use]
-    pub const fn has_valid_deadline_order(self) -> bool {
-        let operation_bound = self
-            .observer_timeout_ms
-            .saturating_add(self.observer_kill_grace_ms);
-        self.capture_timeout_ms > 0
-            && self.capture_kill_grace_ms > 0
-            && self.observer_timeout_ms
-                > self
-                    .capture_timeout_ms
-                    .saturating_add(self.capture_kill_grace_ms)
-            && self.acknowledgement_timeout_ms > operation_bound.saturating_add(operation_bound)
-            && self.outer_child_timeout_ms > self.acknowledgement_timeout_ms
-            && self.outer_child_kill_grace_ms > 0
-            && self.child_stdout_budget_bytes > 0
-            && self.child_stderr_budget_bytes > 0
-            && self.observer_response_budget_bytes > 0
-            && self.capture_budget_bytes > 0
-            && self.content_expansion_budget_bytes > 0
-            && self.inventory_limits.is_valid()
-            && self.expected_client_bounds.width > 0
-            && self.expected_client_bounds.height > 0
-    }
-}
+pub use super::native_contract::NativeWindowRuntimeContract;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -4098,6 +4020,7 @@ mod tests {
 
     fn runtime_contract() -> NativeWindowRuntimeContract {
         NativeWindowRuntimeContract {
+            expected_input_ticks: None,
             capture_timeout_ms: 30_000,
             capture_kill_grace_ms: 5_000,
             observer_timeout_ms: 40_000,

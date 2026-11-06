@@ -993,7 +993,7 @@ mod tests {
         let all = native_config::scenarios(&root).unwrap();
         let long = all
             .iter()
-            .find(|scenario| scenario.path.ends_with("/comm-encounter-v1.json"))
+            .find(|scenario| scenario.path.ends_with("/campaign-s06c-utwig-bomb.json"))
             .unwrap();
         let short = all
             .iter()

@@ -55,6 +55,20 @@ impl AutomationObserver {
         inner.last_observed = now;
         inner.input_seen = result.candidate_input_seen;
         inner.present_seen = result.candidate_present_seen;
+        if result.outcome == WatchdogOutcome::WallTimeout && self.native_trace.is_some() {
+            #[cfg(feature = "debug-process")]
+            let expected = super::super::native_window::active_native_window_config()
+                .and_then(|config| config.runtime_contract.expected_input_ticks);
+            #[cfg(not(feature = "debug-process"))]
+            let expected = None;
+            let report = super::super::native_timing::timeout_report(
+                entry.elapsed,
+                inner.input_seen,
+                expected,
+            );
+            eprintln!("{report}");
+            self.write_trace_labeled(inner, RecordKind::SemanticAssertion, report);
+        }
         if let Some(class) = watchdog_terminal_class(result.outcome) {
             self.set_terminal(inner, class);
             return true;

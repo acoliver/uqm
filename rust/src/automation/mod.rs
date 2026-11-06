@@ -54,6 +54,8 @@ mod native_capture_change;
 #[cfg(all(unix, feature = "debug-process"))]
 mod native_capture_retry;
 pub mod native_checkpoint;
+#[cfg(feature = "debug-process")]
+mod native_contract;
 #[cfg(all(unix, feature = "debug-process"))]
 mod native_isolation;
 mod native_predicate;
@@ -61,6 +63,7 @@ mod native_predicate;
 mod native_publication_history;
 #[cfg(all(unix, feature = "debug-process"))]
 pub mod native_runner;
+pub mod native_timing;
 mod native_trace;
 #[cfg(all(unix, feature = "debug-process"))]
 mod native_trace_cursor;

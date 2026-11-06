@@ -16,10 +16,22 @@ impl AutomationObserver {
     }
 
     pub(super) fn watchdog_limits(budgets: &super::super::script::Budgets) -> WatchdogLimits {
+        #[cfg(feature = "debug-process")]
+        let native_ticks = super::super::native_window::active_native_window_config()
+            .and_then(|config| config.runtime_contract.expected_input_ticks);
+        #[cfg(not(feature = "debug-process"))]
+        let native_ticks = None;
+        let max_wallclock = native_ticks.map_or_else(
+            || Duration::from_secs(budgets.max_wallclock_seconds),
+            |ticks| {
+                super::super::native_timing::wall_budget(ticks)
+                    .unwrap_or_else(|error| panic!("invalid native timing contract: {error}"))
+            },
+        );
         WatchdogLimits {
             max_input_ticks: budgets.max_input_ticks,
             max_presentations: budgets.max_presentations,
-            max_wallclock: Duration::from_secs(budgets.max_wallclock_seconds),
+            max_wallclock,
             max_startup: Duration::from_secs(budgets.startup_seconds()),
             max_idle: Duration::from_secs(budgets.idle_seconds()),
         }
