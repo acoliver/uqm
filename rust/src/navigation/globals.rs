@@ -5,6 +5,8 @@ use crate::engine::{
     world::new_game::{FleetRoster, FleetTemplate, NewGameInputs},
     StoryKey,
 };
+#[cfg(not(test))]
+use crate::ships::DescriptorLoader;
 use std::{mem, ptr};
 
 unsafe fn create_radar(kernel: &mut crate::engine::Kernel) {

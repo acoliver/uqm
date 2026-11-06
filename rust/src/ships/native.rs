@@ -23,6 +23,9 @@ pub(crate) fn copy_display_name(target: &mut [std::ffi::c_char], source: &[u8]) 
     clippy::all
 )]
 pub mod abi {
+    #[cfg(not(test))]
+    pub use crate::ships::DescriptorLoader;
+
     include!("../abi/ship_abi.rs");
 
     #[cfg(not(test))]
@@ -62,12 +65,9 @@ pub mod abi {
         frame_index as GetFrameIndex, rel_frame_index as SetRelFrameIndex,
     };
     #[cfg(not(test))]
-    #[cfg(not(test))]
     pub use crate::battle::encount_native::fleet_is_infinite;
     #[cfg(not(test))]
     pub use crate::battle::galaxy::move_galaxy;
-    #[cfg(not(test))]
-    #[cfg(not(test))]
     #[cfg(not(test))]
     pub use crate::math::seed_random as TFB_SeedRandom;
 

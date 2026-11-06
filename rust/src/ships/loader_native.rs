@@ -1,7 +1,12 @@
 //! Construct descriptors from the closed race factory table.
 #[cfg(not(test))]
-impl crate::engine::battle::RaceDesc {
-    pub fn load(world: &mut crate::engine::World, species: u32, battle: bool) -> Option<Self> {
+pub trait DescriptorLoader: Sized {
+    fn load(world: &mut crate::engine::World, species: u32, battle: bool) -> Option<Self>;
+}
+
+#[cfg(not(test))]
+impl DescriptorLoader for crate::engine::battle::RaceDesc {
+    fn load(world: &mut crate::engine::World, species: u32, battle: bool) -> Option<Self> {
         let race = crate::ships::races::race(species)?;
         let mut descriptor = (race.descriptor)(world);
         if !descriptor.initialize_assets(battle) {
