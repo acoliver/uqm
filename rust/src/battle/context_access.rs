@@ -391,11 +391,7 @@ mod tactrans_native_access {
                 self.b.ship_lost(player as usize);
             }
             if self.world.activity() as u8 == SUPER_MELEE as u8 {
-                let pointer = self.ship_pointer(owner);
-                // SAFETY: the checked owner remains live while updating melee status.
-                unsafe {
-                    MeleeShipDeath(pointer.cast());
-                }
+                crate::supermelee::native::battle_picker::live::ship_death(self, owner);
             }
         }
     }

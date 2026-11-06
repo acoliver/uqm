@@ -122,18 +122,29 @@ pub(super) unsafe fn start(
     drop((*state).h_music.take());
     cx.kernel.install_player_inputs();
     {
-        cx.with_legacy(|| {
-            crate::supermelee::native::battle_picker::live::fill_pick_melee_frame(
-                &(*state).melee_setup,
-            );
-            WaitForSoundEnd(u16::MAX);
-        });
+        assert!(
+            cx.b.selection_frames.is_none(),
+            "battle picker already admitted"
+        );
+        cx.b.selection_frames = Some(
+            (*state)
+                .fleet_picker
+                .as_ref()
+                .unwrap_or_else(|| panic!("fleet picker not loaded"))
+                .frames(),
+        );
+        crate::supermelee::native::battle_picker::live::fill_pick_melee_frame(
+            cx,
+            &(*state).melee_setup,
+        );
+        cx.with_legacy(|| WaitForSoundEnd(u16::MAX));
         let selector = (cx.random() as u16 % NUMBER_OF_PLANET_TYPES as u16) as u8;
         load_gravity_well(cx.kernel, selector);
         assert!(cx.b.net.is_none(), "melee battle already owns a session");
         cx.b.net = Some((*state).netplay.battle_net());
         crate::battle::battle_native::battle(cx, io, None);
         cx.b.net = None;
+        cx.b.selection_frames = None;
         free_gravity_well(cx.kernel);
         cx.kernel.clear_player_inputs();
         if cx.world.activity() & CHECK_ABORT as u16 != 0 {

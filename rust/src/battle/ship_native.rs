@@ -423,14 +423,13 @@ pub(crate) mod engine {
     ) -> BOOLEAN {
         let activity = cx.world.activity_control();
         let runtime = cx.kernel.input_runtime();
-        let selected = crate::app::bridge::publish(cx, || {
-            crate::battle::context_access::reader_legacy::get_encounter_star_ship(
-                runtime.input(),
-                activity,
-                last,
-                side,
-            )
-        });
+        let selected = crate::battle::context_access::reader_legacy::get_encounter_star_ship(
+            cx,
+            runtime.input(),
+            activity,
+            last,
+            side,
+        );
         if let Some(ship) = selected {
             if let Some(previous) = last {
                 if ship == previous {
@@ -454,8 +453,7 @@ pub(crate) mod engine {
     pub unsafe fn initial_star_ships(cx: &mut Cx<'_>) -> BOOLEAN {
         if cx.world.activity() as BYTE == SUPER_MELEE as BYTE {
             let runtime = cx.kernel.input_runtime();
-            let Some(ships) = cx.with_legacy(|| get_initial_melee_star_ships(runtime.input()))
-            else {
+            let Some(ships) = get_initial_melee_star_ships(cx, runtime.input()) else {
                 return 0;
             };
             for rank in 0..NUM_PLAYERS as COUNT {

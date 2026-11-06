@@ -40,14 +40,19 @@ pub(crate) mod live {
     fn load_menu_graphics(state: &mut MeleeSession, offscreen: ContextLease) {
         state.menu_graphic = Some(
             LoadedDrawable::load(
-                std::ffi::CStr::from_bytes_with_nul(MELEE_SCREEN_PMAP_ANIM).unwrap(),
+                std::ffi::CStr::from_bytes_with_nul(MELEE_SCREEN_PMAP_ANIM)
+                    .unwrap_or_else(|error| panic!("menu graphic resource: {error}")),
             )
             .unwrap_or_else(|| panic!("melee menu graphic")),
         );
         state.build_picker = Some(
             crate::supermelee::native::build_picker::live::build_build_pick_frame(
                 offscreen,
-                state.menu_context.as_ref().unwrap().clone(),
+                state
+                    .menu_context
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("menu context not loaded"))
+                    .clone(),
                 state.menu_frames().context_frame(27),
                 &state.catalog,
             ),
@@ -288,10 +293,10 @@ pub(crate) mod live {
             }
         });
         cx.world.set_activity(SUPER_MELEE as u16);
+        cx.kernel.game_sounds = crate::sound::owned_bank::LoadedSoundBank::load(c"sounds.battle");
         cx.with_legacy(|| {
-            (**KernelOwner::current()).game_sounds =
-                crate::sound::owned_bank::LoadedSoundBank::load(c"sounds.battle");
-            crate::supermelee::native::battle_picker::live::BuildPickMeleeFrame();
+            state.fleet_picker =
+                Some(crate::supermelee::native::battle_picker::live::FleetPicker::new(&offscreen));
             load_menu_graphics(&mut state, offscreen);
         });
         init_space(cx.kernel, cx.world.activity());
@@ -328,12 +333,13 @@ pub(crate) mod live {
             drop(state.h_music.take());
         });
         uninit_space(cx.kernel);
+        cx.kernel.game_sounds = None;
         cx.with_legacy(|| {
-            crate::supermelee::native::battle_picker::live::DestroyPickMeleeFrame();
+            drop(state.fleet_picker.take());
             drop(state.menu_graphic.take());
             drop(state.build_picker.take());
             state.netplay.setup_input_delay(0);
-            (**KernelOwner::current()).game_sounds = None;
+
             FlushInput(input);
         });
     }

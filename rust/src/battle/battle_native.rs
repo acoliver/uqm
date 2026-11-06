@@ -445,12 +445,11 @@ pub(crate) mod engine {
                         .set_activity(cx.world.activity() & !(CHECK_ABORT as u16));
                 } else {
                     let runtime = cx.kernel.input_runtime();
-                    cx.with_legacy(|| {
-                        crate::supermelee::native::battle_picker::live::melee_game_over(
-                            runtime.input(),
-                            io,
-                        )
-                    });
+                    crate::supermelee::native::battle_picker::live::melee_game_over(
+                        cx,
+                        runtime.input(),
+                        io,
+                    );
                 }
             }
             net.finish();

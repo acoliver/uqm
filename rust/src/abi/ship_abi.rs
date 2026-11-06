@@ -1087,9 +1087,6 @@ pub use crate::supermelee::netplay::checksum::crc_process_game_state as crc_proc
 
 
 
-unsafe extern "C" {
-    pub static mut PickMeleeFrame: FRAME;
-}
 pub type MELEE_OPTIONS = BYTE;
 pub const MeleeShip_MELEE_ANDROSYNTH: MeleeShip = 0;
 pub const MeleeShip_MELEE_ARILOU: MeleeShip = 1;
@@ -1276,8 +1273,6 @@ pub const SAMATRA_SHIP: _bindgen_ty_4 = crate::engine::world::queues::SAMATRA_RA
 pub const NUM_AVAILABLE_RACES: _bindgen_ty_4 = 24;
 pub type _bindgen_ty_4 = ::std::os::raw::c_uint;
 
-#[cfg(not(test))]
-pub use crate::supermelee::native::battle_picker::live::MeleeShipDeath;
 
 #[cfg(not(test))]
 pub use crate::supermelee::native::battle_picker::live::get_initial_melee_star_ships;

@@ -10,7 +10,7 @@ use crate::engine::{
     },
     observe::Io,
     world::activity::ActivityControl,
-    Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields,
+    Kernel as KernelOwner, WorldData as WorldFields,
 };
 
 use std::ffi::{c_char, c_int};
@@ -349,112 +349,68 @@ pub use crate::battle::context_access::reader_legacy::{
     get_encounter_star_ship, get_encounter_star_ship_with_picker,
 };
 
-/// Resolve the next ship with an explicit boundary for the blocking melee UI.
-///
-/// # Safety
-/// As for `get_encounter_star_ship`. The picker must return an identity
-/// from the requested player's live fleet.
-pub(crate) unsafe fn encounter_ship(
+/// Select from the caller's live fleet, lending the same owner to the blocking picker.
+pub(crate) fn encounter_ship(
+    cx: &mut Cx<'_>,
     input: &crate::engine::input::InputSession,
-    last: Option<crate::engine::battle::ShipId>,
+    last: Option<ShipId>,
     which_player: u16,
     activity: ActivityControl,
-    pick: impl FnOnce(u16) -> Option<ShipId>,
-) -> Option<crate::engine::battle::ShipId> {
+    pick: impl FnOnce(&mut Cx<'_>, u16) -> Option<ShipId>,
+) -> Option<ShipId> {
     let activity_word = activity.activity();
     let side = usize::from(which_player);
-    // SAFETY: `battle_counter` and `race_q` have a slot for each side.
-    // SAFETY: as above.
-    let last_id = last;
-
-    // SAFETY: plain call.
     if activity_word as u8 == IN_HYPERSPACE as u8 {
         assert_eq!(side, RPG_PLAYER_NUM);
-        // SIS for the Hyperspace flight
-        // SAFETY: `queue` is `race_q[side]`.
-        return LinkQueue::<Starship>::first_ship(side);
+        let queue = cx.kernel.ships(side);
+        return queue.head().map(|id| queue.ship_id(id));
     }
     if activity_word & 0xFF == SUPER_MELEE {
-        // Let the player chose their own ship. (May be a computer player).
-        // SAFETY: `battle_counter` has a slot for each side.
-        let (own, other) =
-            unsafe { crate::app::bridge::battle(|b| (b.counters[0], b.counters[1])) };
-        if own == 0 || other == 0 {
-            // One side is out of ships. Game over.
+        if cx.b.counters.contains(&0) {
             return None;
         }
-        return pick(which_player);
+        return pick(cx, which_player);
     }
-
-    // Full game.
     if side == RPG_PLAYER_NUM {
-        // Human player in a full game.
-        // SAFETY: `counter` points into `battle_counter`.
-        let ships_left = unsafe { crate::app::bridge::battle(|b| b.counters[side]) };
+        let ships_left = cx.b.counters[side];
         if last.is_none() && ships_left == 1 {
-            // First time picking a ship and player has no escorts: SIS is the
-            // last ship in the queue (though there is only one).
-            return LinkQueue::<Starship>::last_ship(side);
+            let queue = cx.kernel.ships(side);
+            return queue.tail().map(|id| queue.ship_id(id));
         }
         if ships_left != 0 {
-            // Player still has ships left
-            // SAFETY: game thread inside a full-game battle.
-            return unsafe { get_armada_star_ship(input, activity) };
+            // SAFETY: the campaign renderer remains on its existing bounded provider path.
+            return cx.with_legacy(|| unsafe { get_armada_star_ship(input, activity) });
         }
-        if last.is_some() {
-            // The last ship was the flagship.
-            // SAFETY: `last` is a live `STARSHIP` and `GlobData` is owned by
-            // the game thread.
-            unsafe {
-                let sis = &mut (**WorldFields::current()).flagship;
-                if LinkQueue::<Starship>::ship_value(
-                    last_id.unwrap_or_else(|| panic!("missing checked battle value")),
-                )
-                .crew
-                    == 0
-                {
-                    // Died in the line of duty
-                    sis.crew_enlisted = u16::MAX;
-                } else if sis.fuel_on_board > RUN_AWAY_FUEL_COST {
-                    // Player ran away
-                    sis.fuel_on_board -= RUN_AWAY_FUEL_COST;
-                } else {
-                    sis.fuel_on_board = 0;
-                }
+        if let Some(last) = last {
+            let crew = cx.pick_ship(last).crew;
+            let sis = &mut cx.world.data.flagship;
+            if crew == 0 {
+                sis.crew_enlisted = u16::MAX;
+            } else if sis.fuel_on_board > RUN_AWAY_FUEL_COST {
+                sis.fuel_on_board -= RUN_AWAY_FUEL_COST;
+            } else {
+                sis.fuel_on_board = 0;
             }
         }
         return None;
     }
-
-    // NPC player in a full game
-    // SAFETY: plain call.
-    if WorldOwner::current().read(|world| fleet_is_infinite(world, which_player)) != 0 {
-        if last.is_some() {
-            // The current STARSHIP is reused for the next one; update with new
-            // info.
-            // SAFETY: `last` is a live `STARSHIP`.
-            let captain = production_captain_name();
-            LinkQueue::<Starship>::restore_ship(
-                last_id.unwrap_or_else(|| panic!("missing checked battle value")),
-                which_player as i16,
-                captain,
-            );
+    if fleet_is_infinite(cx.world, which_player) != 0 {
+        if let Some(last) = last {
+            let captain = cx.with_legacy(production_captain_name);
+            let mut queue = cx.kernel.ships(side);
+            queue.edit(queue.link(last), |value| {
+                value.crew = value.max_crew;
+                value.player = which_player as i16;
+                value.captain = captain;
+            });
         }
-        // SAFETY: `counter` points into `battle_counter`.
-        unsafe { crate::app::bridge::battle(|b| b.counters[side] += 1) };
-        // SAFETY: `queue` is `race_q[side]`.
-        return LinkQueue::<Starship>::first_ship(side);
+        cx.b.counters[side] += 1;
+        let queue = cx.kernel.ships(side);
+        return queue.head().map(|id| queue.ship_id(id));
     }
-    if last.is_some() {
-        // Get the next ship for the computer
-        // SAFETY: `last` is a live `STARSHIP`.
-        return LinkQueue::<Starship>::next_ship(
-            last_id.unwrap_or_else(|| panic!("missing checked battle value")),
-        );
-    }
-    // Get the very first ship for the computer
-    // SAFETY: `queue` is `race_q[side]`.
-    LinkQueue::<Starship>::first_ship(side)
+    let queue = cx.kernel.ships(side);
+    last.map_or_else(|| queue.head(), |last| queue.succ(queue.link(last)))
+        .map(|id| queue.ship_id(id))
 }
 
 /// `DrawArmadaPickShip`: draw the picker frame, the SIS name and the escorts'

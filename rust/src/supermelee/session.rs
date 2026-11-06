@@ -24,6 +24,8 @@ pub struct MeleeSession {
     #[cfg(not(test))]
     pub(crate) build_picker: Option<crate::supermelee::native::build_picker::live::BuildPicker>,
     #[cfg(not(test))]
+    pub(crate) fleet_picker: Option<crate::supermelee::native::battle_picker::live::FleetPicker>,
+    #[cfg(not(test))]
     pub(crate) menu_graphic: Option<uqm_engine::graphics::drawable_abi::LoadedDrawable>,
     #[cfg(not(test))]
     pub(crate) menu_context: Option<uqm_engine::graphics::context_abi::ContextLease>,
@@ -211,6 +213,8 @@ impl MeleeSession {
             files: None,
             #[cfg(not(test))]
             build_picker: None,
+            #[cfg(not(test))]
+            fleet_picker: None,
             #[cfg(not(test))]
             menu_graphic: None,
             #[cfg(not(test))]

@@ -43,9 +43,12 @@ impl InputSetup<Option<CampaignView>> for Setup<'_, '_, '_> {
         }) {
             return Err("could not open netplay fixture endpoint".into());
         }
-        let socket = session.connection(side).expect("opened connection").socket;
+        let socket = session
+            .connection(side)
+            .unwrap_or_else(|| panic!("opened connection"))
+            .socket;
         if server {
-            let socket = socket.expect("opened endpoint has no socket");
+            let socket = socket.unwrap_or_else(|| panic!("opened endpoint has no socket"));
             session
                 .local_port(socket)
                 .map(Some)

@@ -35,7 +35,7 @@ pub(crate) fn connect(
     if request.server {
         eprintln!(
             "netplay fixture listener ready {}",
-            port.expect("opened listener has a port")
+            port.unwrap_or_else(|| panic!("opened listener has a port"))
         );
     }
     loop {

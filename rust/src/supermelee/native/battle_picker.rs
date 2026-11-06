@@ -31,22 +31,20 @@ pub mod live {
     use super::move_cursor;
     use crate::battle::{NETWORK_CONTROL, PSYTRON_CONTROL};
     use crate::engine::battle::schema::GETMELEE_STATE;
-    use crate::engine::Kernel as KernelOwner;
     use crate::graphics::{context_abi::ContextLease, native_abi as render};
 
     const FADE_ALL_TO_COLOR: u32 = 253;
 
-    use crate::engine::battle::{
-        link_queue::{self, LinkQueue, Starship},
-        ShipId,
-    };
-    use crate::graphics::drawable_abi;
+    use crate::engine::battle::ShipId;
     use crate::ships::native::abi::*;
-    use std::{ffi::CString, mem, ptr};
-    #[no_mangle]
-    pub static mut PickMeleeFrame: FRAME = ptr::null_mut();
-    unsafe fn by_index(player: usize, index: u16, used: bool) -> Option<ShipId> {
-        link_queue::ships(player).by_index(index, used)
+    use std::ffi::CString;
+    fn by_index(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        player: usize,
+        index: u16,
+        used: bool,
+    ) -> Option<ShipId> {
+        cx.kernel.ships(player).by_index(index, used)
     }
     fn changed(state: &mut GETMELEE_STATE, player: usize) {
         let s = &mut state.player[player];
@@ -77,9 +75,9 @@ pub mod live {
         let s = &mut (*state).player[player as usize];
         assert!(s.done == 0);
         let ship = if choice == u16::MAX {
-            cx.with_legacy(|| by_index(player as usize, s.randomIndex, true))
+            by_index(cx, player as usize, s.randomIndex, true)
         } else {
-            cx.with_legacy(|| by_index(player as usize, choice, false))
+            by_index(cx, player as usize, choice, false)
         };
         let Some(ship) = ship else {
             return false;
@@ -276,10 +274,67 @@ pub mod live {
             a: 255,
         }
     }
-    unsafe fn value(frame: FRAME, player: usize) {
+    pub(crate) struct FleetPicker {
+        drawable: crate::graphics::drawable_abi::LoadedDrawable,
+    }
+    impl FleetPicker {
+        pub(crate) fn new(context: &ContextLease) -> Self {
+            let drawable = crate::graphics::drawable_abi::LoadedDrawable::create(2, 149, 55, 2)
+                .unwrap_or_else(|| panic!("fleet picker allocation"));
+            let mask = crate::graphics::drawable_abi::LoadedDrawable::load(
+                std::ffi::CStr::from_bytes_with_nul(MELEE_PICK_MASK_PMAP_ANIM)
+                    .unwrap_or_else(|error| panic!("fleet mask resource: {error}")),
+            )
+            .unwrap_or_else(|| panic!("fleet picker mask"));
+            context.with_selected(|| {
+                for player in 0..2 {
+                    context.set_frame(drawable.lease().context_frame(player));
+                    context.draw_stamp(
+                        &mask.lease().context_frame(player),
+                        render::POINT { x: 0, y: 0 },
+                    );
+                }
+            });
+            Self { drawable }
+        }
+        pub(crate) fn frames(&self) -> [crate::graphics::context_abi::ContextFrame; 2] {
+            std::array::from_fn(|player| self.drawable.lease().context_frame(player))
+        }
+    }
+    fn context(raw: CONTEXT) -> ContextLease {
+        ContextLease::retain(
+            std::ptr::NonNull::new(raw.cast()).unwrap_or_else(|| panic!("picker context")),
+        )
+    }
+    fn font(raw: FONT) -> crate::graphics::native_font::FontLease {
+        crate::graphics::native_font::FontLease::retain(
+            std::ptr::NonNull::new(raw.cast()).unwrap_or_else(|| panic!("picker font")),
+        )
+    }
+    fn retained_frame(raw: FRAME, index: usize) -> crate::graphics::context_abi::ContextFrame {
+        let leases = crate::graphics::drawable_abi::retain_frame_allocations(&[raw.cast()]);
+        leases
+            .first()
+            .unwrap_or_else(|| panic!("picker drawable absent"))
+            .context_frame(index)
+    }
+    fn frame(
+        cx: &crate::engine::battle::Cx<'_>,
+        player: usize,
+    ) -> crate::graphics::context_abi::ContextFrame {
+        cx.b.selection_frames
+            .as_ref()
+            .unwrap_or_else(|| panic!("battle selection frames not admitted"))[player]
+            .clone()
+    }
+    fn value(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        target: &crate::graphics::context_abi::ContextFrame,
+        player: usize,
+    ) {
         let mut worth = 0u16;
         {
-            let queue = link_queue::ships(player);
+            let queue = cx.kernel.ships(player);
             let mut link = queue.head();
             while let Some(id) = link {
                 let ship = queue.get(id);
@@ -289,183 +344,167 @@ pub mod live {
                 link = queue.succ(id);
             }
         }
-        let old = SetContext(KernelOwner::current().read(|owner| owner.off_screen_context));
-        drawable_abi::SetContextFGFrame(frame.cast());
-        let mut r = mem::zeroed();
-        GetFrameRect(frame, &mut r);
-        let x = r.extent.width - 4;
-        r.corner = POINT { x: x - 18, y: 2 };
-        r.extent = EXTENT {
-            width: 18,
-            height: 5,
-        };
-        SetContextForeGroundColor(rgb(0, 1, 15));
-        DrawFilledRectangle(&mut r);
-        let buf = CString::new(worth.to_string()).unwrap();
-        let mut t = TEXT {
-            baseline: POINT { x, y: 7 },
-            align: TEXT_ALIGN_ALIGN_RIGHT,
-            pStr: buf.as_ptr(),
-            CharCount: u16::MAX,
-        };
-        SetContextFont(KernelOwner::current().read(|owner| owner.tiny_font));
-        SetContextForeGroundColor(rgb(19, 0, 0));
-        font_DrawText(&mut t);
-        SetContext(old);
+        let context = context(cx.kernel.off_screen_context);
+        let font = font(cx.kernel.tiny_font);
+        context.with_selected(|| {
+            context.set_frame(target.clone());
+            let x = target.rect().extent.width - 4;
+            context.fill_rectangle(
+                rgb(0, 1, 15),
+                render::RECT {
+                    corner: render::POINT { x: x - 18, y: 2 },
+                    extent: render::EXTENT {
+                        width: 18,
+                        height: 5,
+                    },
+                },
+            );
+            let text = CString::new(worth.to_string())
+                .unwrap_or_else(|error| panic!("fleet worth: {error}"));
+            context.draw_text(
+                &font,
+                &text,
+                render::POINT { x, y: 7 },
+                TEXT_ALIGN_ALIGN_RIGHT,
+                rgb(19, 0, 0),
+            );
+        });
     }
-    unsafe fn draw(player: usize) {
-        let old = SetContext(KernelOwner::current().read(|owner| owner.space_context));
-        let mut s = STAMP {
-            origin: POINT {
-                x: 54,
-                y: 15 + (1 - player as i16) * 100,
-            },
-            frame: SetAbsFrameIndex(PickMeleeFrame, player as u16),
-        };
-        DrawStamp(&mut s);
-        SetContext(old);
-    }
-    /// # Safety
-    /// Melee graphics and master ship list must be loaded.
-    #[no_mangle]
-    pub unsafe extern "C" fn BuildPickMeleeFrame() {
-        let old = SetContext(KernelOwner::current().read(|owner| owner.off_screen_context));
-        PickMeleeFrame = CaptureDrawable(drawable_abi::CreateDrawable(2, 149, 55, 2).cast());
-        let mut s = STAMP {
-            origin: POINT { x: 0, y: 0 },
-            frame: CaptureDrawable(
-                crate::graphics::resgfx::LoadGraphicInstance(
-                    MELEE_PICK_MASK_PMAP_ANIM.as_ptr().cast(),
-                )
-                .cast(),
-            ),
-        };
-        drawable_abi::SetContextFGFrame(PickMeleeFrame.cast());
-        DrawStamp(&mut s);
-        s.frame = IncFrameIndex(s.frame);
-        drawable_abi::SetContextFGFrame(IncFrameIndex(PickMeleeFrame).cast());
-        DrawStamp(&mut s);
-        DestroyDrawable(ReleaseDrawable(s.frame));
-        SetContext(old);
-    }
-    /// # Safety
-    /// Frame must be live, game thread only.
-    #[no_mangle]
-    pub unsafe extern "C" fn DestroyPickMeleeFrame() {
-        DestroyDrawable(ReleaseDrawable(PickMeleeFrame));
-        PickMeleeFrame = ptr::null_mut();
-    }
-    /// # Safety
-    /// The setup, master queue and empty battle queues must be initialized.
-    #[no_mangle]
-    pub unsafe fn fill_pick_melee_frame(setup: &crate::supermelee::setup::team::MeleeSetup) {
-        let (context, order, catalog) = KernelOwner::current().read(|owner| {
-            (
-                owner.off_screen_context,
-                [owner.player_order(0), owner.player_order(1)],
-                crate::ships::master_native::engine::snapshot(owner),
+    fn draw(cx: &crate::engine::battle::Cx<'_>, player: usize) {
+        let context = context(cx.kernel.space_context);
+        context.with_selected(|| {
+            context.draw_stamp(
+                &frame(cx, player),
+                render::POINT {
+                    x: 54,
+                    y: 15 + (1 - player as i16) * 100,
+                },
             )
         });
-        let old = SetContext(context);
-        for side_i in order {
-            let side = usize::from(side_i == 0);
-            let frame = SetAbsFrameIndex(PickMeleeFrame, side as u16);
-            drawable_abi::SetContextFGFrame(frame.cast());
-            let mut r = mem::zeroed();
-            GetFrameRect(frame, &mut r);
-            let mut t = TEXT {
-                baseline: POINT {
-                    x: r.extent.width >> 1,
-                    y: r.extent.height - 7 + 4,
-                },
-                align: TEXT_ALIGN_ALIGN_CENTER,
-                pStr: setup.teams[side_i as usize].c_name().as_ptr(),
-                CharCount: u16::MAX,
-            };
-            r.corner.x += 2;
-            r.corner.y += 2;
-            r.extent.width -= 4 + 18 + 1;
-            r.extent.height -= 4 + 7;
-            SetContextForeGroundColor(rgb(0, 1, 15));
-            DrawFilledRectangle(&mut r);
-            r.corner.x += 2;
-            r.extent.width += 18 - 4;
-            r.corner.y += r.extent.height;
-            r.extent.height = 7;
-            DrawFilledRectangle(&mut r);
-            SetContextFont(KernelOwner::current().read(|owner| owner.tiny_font));
-            SetContextForeGroundColor(rgb(10, 10, 31));
-            font_DrawText(&mut t);
-            let text = CString::new(setup.fleet_value[side_i as usize].to_string()).unwrap();
-            t.baseline = POINT { x: 4, y: 7 };
-            t.align = TEXT_ALIGN_ALIGN_LEFT;
-            t.pStr = text.as_ptr();
-            SetContextForeGroundColor(rgb(4, 5, 31));
-            font_DrawText(&mut t);
-            assert!(link_queue::ships(side).head().is_none());
-            for index in 0..14 {
-                let ship = setup.teams[side_i as usize].ships[index as usize] as u32;
-                if ship == 255 {
-                    continue;
-                }
-                let master = catalog
-                    .get(ship as usize)
-                    .unwrap_or_else(|| panic!("melee master ship {ship}"));
-                let captain = link_queue::ships(side).captain_name(master.species, TFB_Random);
-                let built = link_queue::ships(side)
-                    .build(master.species)
-                    .unwrap_or_else(|| panic!("battle ship pool exhausted"));
-                let mut s = STAMP {
-                    origin: POINT {
-                        x: 4 + 18 * (index % 7) as i16,
-                        y: 10 + 18 * (index / 7) as i16,
-                    },
-                    frame: master.info.icons,
-                };
-                DrawStamp(&mut s);
-                let mut queue = link_queue::ships(side);
-                queue.edit(built, |ship| {
-                    ship.index = index;
-                    ship.cost = master.info.ship_cost;
-                    ship.player = side as i16;
-                    ship.captain = captain;
-                    ship.crew = 0;
-                    ship.max_crew = 0;
-                });
-                queue.clear_descriptor(built);
-            }
-        }
-        SetContext(old);
     }
-    /// # Safety
-    /// The live battle ship and pick frame belong to the game thread.
-    #[no_mangle]
-    pub unsafe extern "C" fn MeleeShipDeath(ship: *mut std::ffi::c_void) {
-        let ship = LinkQueue::<Starship>::mark_dead(link_queue::identify(ship as usize));
-        let frame = SetAbsFrameIndex(PickMeleeFrame, ship.player as u16);
-        let old = SetContext(KernelOwner::current().read(|owner| owner.off_screen_context));
-        drawable_abi::SetContextFGFrame(frame.cast());
-        let mut s = STAMP {
-            origin: POINT {
-                x: 3 + 18 * (ship.index % 7) as i16,
-                y: 9 + 18 * (ship.index / 7) as i16,
-            },
-            frame: SetAbsFrameIndex(KernelOwner::current().read(|owner| owner.status_frame), 3),
-        };
-        DrawStamp(&mut s);
-        SetContext(old);
-        value(frame, ship.player as usize);
+    fn build_fleet_ship(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        master: &crate::ships::master_native::engine::MasterShip,
+        side: usize,
+        index: u16,
+    ) -> crate::graphics::context_abi::ContextFrame {
+        let random = cx.rng;
+        let mut queue = cx.kernel.ships(side);
+        let captain = queue.captain_name(master.species, random);
+        let built = queue
+            .build(master.species)
+            .unwrap_or_else(|| panic!("battle ship pool exhausted"));
+        let icon = crate::graphics::context_abi::ContextFrame::retain(std::ptr::NonNull::new(
+            master.info.icons.cast(),
+        ));
+        queue.edit(built, |ship| {
+            ship.index = index;
+            ship.cost = master.info.ship_cost;
+            ship.player = side as i16;
+            ship.captain = captain;
+            ship.crew = 0;
+            ship.max_crew = 0;
+        });
+        queue.clear_descriptor(built);
+        icon
+    }
+    pub(crate) fn fill_pick_melee_frame(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        setup: &crate::supermelee::setup::team::MeleeSetup,
+    ) {
+        let context = context(cx.kernel.off_screen_context);
+        let font = font(cx.kernel.tiny_font);
+        let order = [cx.kernel.player_order(0), cx.kernel.player_order(1)];
+        let catalog = crate::ships::master_native::engine::snapshot(cx.kernel);
+        context.with_selected(|| {
+            for side_i in order {
+                let side = usize::from(side_i == 0);
+                let frame = frame(cx, side);
+                context.set_frame(frame.clone());
+                let mut rect = frame.rect();
+                let baseline = render::POINT {
+                    x: rect.extent.width >> 1,
+                    y: rect.extent.height - 7 + 4,
+                };
+                rect.corner.x += 2;
+                rect.corner.y += 2;
+                rect.extent.width -= 4 + 18 + 1;
+                rect.extent.height -= 4 + 7;
+                context.fill_rectangle(rgb(0, 1, 15), rect);
+                rect.corner.x += 2;
+                rect.extent.width += 18 - 4;
+                rect.corner.y += rect.extent.height;
+                rect.extent.height = 7;
+                context.fill_rectangle(rgb(0, 1, 15), rect);
+                context.draw_text(
+                    &font,
+                    setup.teams[side_i as usize].c_name(),
+                    baseline,
+                    TEXT_ALIGN_ALIGN_CENTER,
+                    rgb(10, 10, 31),
+                );
+                let text = CString::new(setup.fleet_value[side_i as usize].to_string())
+                    .unwrap_or_else(|error| panic!("fleet value: {error}"));
+                context.draw_text(
+                    &font,
+                    &text,
+                    render::POINT { x: 4, y: 7 },
+                    TEXT_ALIGN_ALIGN_LEFT,
+                    rgb(4, 5, 31),
+                );
+                assert!(cx.kernel.ships(side).head().is_none());
+                for index in 0..14 {
+                    let ship = setup.teams[side_i as usize].ships[index as usize] as u32;
+                    if ship == 255 {
+                        continue;
+                    }
+                    let master = catalog
+                        .get(ship as usize)
+                        .unwrap_or_else(|| panic!("melee master ship {ship}"));
+                    let icon = build_fleet_ship(cx, master, side, index);
+                    context.draw_stamp(
+                        &icon,
+                        render::POINT {
+                            x: 4 + 18 * (index % 7) as i16,
+                            y: 10 + 18 * (index / 7) as i16,
+                        },
+                    );
+                }
+            }
+        });
+    }
+    pub(crate) fn ship_death(cx: &mut crate::engine::battle::Cx<'_>, owner: ShipId) {
+        cx.set_ship_species(owner, 0);
+        let ship = cx.pick_ship(owner);
+        let target = frame(cx, ship.player as usize);
+        let context = context(cx.kernel.off_screen_context);
+        let icon = retained_frame(cx.kernel.status_frame, 3);
+        context.with_selected(|| {
+            context.set_frame(target.clone());
+            context.draw_stamp(
+                &icon,
+                render::POINT {
+                    x: 3 + 18 * (ship.index % 7) as i16,
+                    y: 9 + 18 * (ship.index / 7) as i16,
+                },
+            );
+        });
+        value(cx, &target, ship.player as usize);
     }
 
     use crate::engine::observe::Io;
     use crate::mainloop::input_abi::live::UpdateInputState;
     /// # Safety
     /// Called at the end of a live melee battle on the game thread.
-    pub unsafe fn melee_game_over(input: &crate::engine::input::InputSession, io: &mut Io<'_>) {
+    pub unsafe fn melee_game_over(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        input: &crate::engine::input::InputSession,
+        io: &mut Io<'_>,
+    ) {
         for player in 0..2 {
-            draw(player);
+            draw(cx, player);
         }
-        crate::app::bridge::enter(|cx| {
+        {
             let net = cx.b.network();
             cx.negotiate_battle(net.as_ref(), NetState_NetState_inSetup);
             let timeout = GetTimeCounter().wrapping_add(840 * 4);
@@ -497,9 +536,10 @@ pub mod live {
                     break;
                 }
             }
-        });
+        }
     }
     unsafe fn initialize_selection(
+        cx: &mut crate::engine::battle::Cx<'_>,
         state: &mut GETMELEE_STATE,
         counters: [u8; 2],
         mask: u16,
@@ -512,7 +552,7 @@ pub mod live {
             let p = &mut state.player[player];
             p.selecting = u32::from(mask & (1 << player) != 0);
             p.ships_left = u16::from(counters[player]);
-            p.randomIndex = TFB_Random() as u16 % p.ships_left;
+            p.randomIndex = cx.random() as u16 % p.ships_left;
             p.done = 0;
             if p.selecting == 0 {
                 continue;
@@ -549,10 +589,11 @@ pub mod live {
         }
     }
     unsafe fn get_ships(
+        cx: &mut crate::engine::battle::Cx<'_>,
         input: &crate::engine::input::InputSession,
         mask: u16,
     ) -> Option<[Option<ShipId>; 2]> {
-        crate::app::bridge::enter(|cx| {
+        {
             let mut state = GETMELEE_STATE::default();
             let counters = cx.b.counters;
             let net = cx.b.network();
@@ -560,17 +601,24 @@ pub mod live {
             let screen_context = cx.kernel.screen_context;
             let controls = cx.kernel.player_control;
             let order = [cx.kernel.player_order(0), cx.kernel.player_order(1)];
-            cx.with_legacy(|| {
+            {
                 let available = std::array::from_fn(|player| {
-                    std::array::from_fn(|slot| by_index(player, slot as u16, false).is_some())
+                    std::array::from_fn(|slot| by_index(cx, player, slot as u16, false).is_some())
                 });
                 net.begin_selection(mask, available);
-                initialize_selection(&mut state, counters, mask, screen_context, controls, order);
-            });
+                initialize_selection(
+                    cx,
+                    &mut state,
+                    counters,
+                    mask,
+                    screen_context,
+                    controls,
+                    order,
+                );
+            }
             let mut ok = cx.negotiate_battle(net.as_ref(), NetState_NetState_selectShip);
             cx.with_legacy(|| {
                 SetDefaultMenuRepeatDelay(input);
-                SetContext(KernelOwner::current().read(|owner| owner.off_screen_context));
             });
             let runtime = cx.kernel.input_runtime();
             let mut observer = runtime.observer();
@@ -607,28 +655,30 @@ pub mod live {
             }
             net.end_selection();
             ok.then_some(ships)
-        })
+        }
     }
     /// # Safety
     /// Both battle fleets and their selection resources must be initialized.
     pub unsafe fn get_initial_melee_star_ships(
+        cx: &mut crate::engine::battle::Cx<'_>,
         input: &crate::engine::input::InputSession,
     ) -> Option<[Option<ShipId>; 2]> {
         for player in 0..2 {
-            value(SetAbsFrameIndex(PickMeleeFrame, player as u16), player);
-            draw(player);
+            value(cx, &frame(cx, player), player);
+            draw(cx, player);
         }
         SleepThreadUntil(FadeScreen(FADE_ALL_TO_COLOR, 840 / 2).wrapping_add(840 / 60));
         FlushColorXForms();
-        get_ships(input, 3)
+        get_ships(cx, input, 3)
     }
     /// # Safety
     /// The selected player's battle fleet and selection resources must be initialized.
     pub unsafe fn get_next_melee_star_ship(
+        cx: &mut crate::engine::battle::Cx<'_>,
         input: &crate::engine::input::InputSession,
         player: u16,
     ) -> Option<ShipId> {
-        draw(player as usize);
-        get_ships(input, 1 << player)?[player as usize]
+        draw(cx, player as usize);
+        get_ships(cx, input, 1 << player)?[player as usize]
     }
 }

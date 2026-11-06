@@ -497,7 +497,7 @@ impl RacePool {
 }
 
 #[cfg(not(test))]
-pub(crate) use crate::engine::battle::access::links::{identify, ships};
+pub(crate) use crate::engine::battle::access::links::ships;
 
 #[cfg(test)]
 mod identity_tests {

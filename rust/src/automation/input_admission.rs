@@ -35,7 +35,10 @@ pub(crate) fn legacy<R>(target: &mut Target<'_>, operation: impl FnOnce() -> R) 
     let mut operation = Some(operation);
     let mut result = None;
     target.with_legacy(&mut || {
-        result = Some(operation.take().expect("one synchronous legacy effect")());
+        result = Some(operation
+            .take()
+            .unwrap_or_else(|| panic!("one synchronous legacy effect"))(
+        ));
     });
-    result.expect("synchronous legacy effect was executed")
+    result.unwrap_or_else(|| panic!("synchronous legacy effect was executed"))
 }

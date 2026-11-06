@@ -4062,14 +4062,8 @@ pub use crate::supermelee::native::menu::live::changes::local_change_team;
 
 
 
-#[cfg(not(test))]
-pub use crate::supermelee::native::battle_picker::live::BuildPickMeleeFrame;
 
-#[cfg(not(test))]
-pub use crate::supermelee::native::battle_picker::live::DestroyPickMeleeFrame;
 
-#[cfg(not(test))]
-pub use crate::supermelee::native::battle_picker::live::fill_pick_melee_frame;
 pub const ENEMY_SHIP_INDEX: _bindgen_ty_28 = 0;
 pub const CREW_OBJECT_INDEX: _bindgen_ty_28 = 1;
 pub const ENEMY_WEAPON_INDEX: _bindgen_ty_28 = 2;
