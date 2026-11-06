@@ -1,6 +1,6 @@
 //! Exercise Shofixti's live callbacks against the linked engine.
-use uqm_rust::engine::battle::schema::GETMELEE_STATE;
 use uqm_rust::ships::races::{intruder_preprocess, marine_collision};
+use uqm_rust::supermelee::native::battle_picker::live::FleetSelection;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 #[path = "support/battle.rs"]
@@ -964,13 +964,12 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                                         player,
                                         |cx, player| {
                                             selected[side] = true;
-                                            let mut state = GETMELEE_STATE::default();
+                                            let mut state = FleetSelection::default();
                                             let p = &mut state.player[player as usize];
-                                            p.selecting = 1;
-                                            p.ships_left = 1;
+                                            p.selecting = true;
                                             p.col = 1;
                                             // Expire the computer's display delay without a sleep.
-                                            p.timeIn = u32::MAX - 419;
+                                            p.entered_at = u32::MAX - 419;
                                             if !(computer && side == 1) {
                                                 runtime
                                                     .input()
@@ -987,12 +986,12 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                                             };
                                             sample_weapon(runtime.input(), side, false);
                                             assert_eq!(result, 1);
-                                            assert_eq!(state.player[side].done, 1);
+                                            assert!(state.player[side].done);
                                             assert_eq!(
-                                                state.player[side].hBattleShip,
+                                                state.player[side].ship,
                                                 Some(reserves[side].ship_id)
                                             );
-                                            state.player[side].hBattleShip
+                                            state.player[side].ship
                                         },
                                     );
                                     assert_eq!(chosen.is_some(), expected_selection);
