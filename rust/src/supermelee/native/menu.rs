@@ -15,17 +15,13 @@ pub(crate) mod live {
 
     use crate::ships::native::abi::*;
 
-    use crate::ui::shipstat::ClearShipStatus;
     pub(crate) mod admission;
     mod boundary;
     use boundary::*;
     const FADE_ALL_TO_COLOR: u32 = 253;
     const FADE_ALL_TO_BLACK: u32 = 252;
     use crate::supermelee::native::load_teams::live::*;
-    use std::{
-        ffi::{c_char, CString},
-        mem, ptr,
-    };
+    use std::{ffi::CString, ptr};
     mod battle;
     pub(crate) mod changes;
     pub(crate) mod drawing;

@@ -92,10 +92,3 @@ pub(super) fn flush_menu(
     let session = state.netplay.clone();
     session.flush_packet_queues(&mut |event| changes::apply_protocol_event(state, cx, io, event));
 }
-
-pub(super) unsafe fn set_context_clip_rect(rect: *mut RECT) -> u32 {
-    crate::graphics::context_abi::SetContextClipRect(rect.cast())
-}
-pub(super) unsafe fn get_context_clip_rect(rect: *mut RECT) -> u32 {
-    crate::graphics::context_abi::GetContextClipRect(rect.cast())
-}

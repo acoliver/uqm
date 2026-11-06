@@ -87,3 +87,58 @@ pub fn render_save_problem(
         context.draw_stamp(&saved.lease().context_frame(0), rect.corner);
     });
 }
+
+pub struct SaveBackground {
+    context: ContextLease,
+    drawable: LoadedDrawable,
+    origin: POINT,
+}
+
+impl SaveBackground {
+    pub fn restore(self) {
+        self.context.with_selected(|| {
+            self.context
+                .draw_stamp(&self.drawable.lease().context_frame(0), self.origin);
+        });
+    }
+}
+
+pub fn render_save_confirmation(
+    context: &ContextLease,
+    font: &FontLease,
+    text: &std::ffi::CStr,
+    saving: bool,
+) -> Option<SaveBackground> {
+    context.with_selected(|| {
+        context.set_font(font);
+        let clip = context.clip_rect();
+        let baseline = POINT {
+            x: clip.extent.width >> 1,
+            y: (clip.extent.height >> 1) + 3,
+        };
+        let mut rect = font
+            .measure(text, baseline, TEXT_ALIGN_ALIGN_CENTER, u16::MAX)
+            .rect;
+        rect.corner.x -= 4;
+        rect.corner.y -= 4;
+        rect.extent.width += 8;
+        rect.extent.height += 8;
+        let saved = saving.then(|| SaveBackground {
+            context: context.clone(),
+            drawable: LoadedDrawable::capture(context, Some(rect))
+                .unwrap_or_else(|| panic!("save confirmation background capture failed")),
+            origin: rect.corner,
+        });
+        box_rectangles(
+            rect,
+            2,
+            color(16),
+            color(8),
+            Some(color(10)),
+            |color, rect| context.fill_rectangle(color, rect),
+        );
+        context.set_foreground(color(20));
+        context.draw_text(font, text, baseline, TEXT_ALIGN_ALIGN_CENTER, color(20));
+        saved
+    })
+}

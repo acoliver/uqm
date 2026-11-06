@@ -80,47 +80,65 @@ unsafe fn draw_ship_name_string(p_str: *mut UNICODE, char_count: COUNT, y: COORD
 /// The status context must be active and graphics initialized.
 #[no_mangle]
 pub unsafe extern "C" fn ClearShipStatus(y: COORD) {
-    SetContextForeGroundColor(rgb15(0x0a, 0x0a, 0x0a));
-    let mut r: RECT = mem::zeroed();
-    r.corner.x = 2;
-    r.corner.y = 3 + y;
-    r.extent.width = STATUS_WIDTH - 4;
-    r.extent.height = SHIP_INFO_HEIGHT - 3;
-    DrawFilledRectangle(&mut r);
+    let context = crate::graphics::context_abi::ContextLease::retain(
+        std::ptr::NonNull::new(_pCurContext).unwrap_or_else(|| panic!("missing status context")),
+    );
+    clear_ship_status(&context, y);
+}
+
+pub fn clear_ship_status(context: &crate::graphics::context_abi::ContextLease, y: COORD) {
+    context.fill_rectangle(
+        rgb15(0x0a, 0x0a, 0x0a),
+        RECT {
+            corner: POINT { x: 2, y: 3 + y },
+            extent: EXTENT {
+                width: STATUS_WIDTH - 4,
+                height: SHIP_INFO_HEIGHT - 3,
+            },
+        },
+    );
 }
 
 /// # Safety
 /// The status context must be active and graphics initialized.
 #[no_mangle]
 pub unsafe extern "C" fn OutlineShipStatus(y: COORD) {
-    let mut r: RECT = mem::zeroed();
-    SetContextForeGroundColor(rgb15(0x08, 0x08, 0x08));
-    r.corner.x = 0;
-    r.corner.y = 1 + y;
-    r.extent.width = STATUS_WIDTH;
-    r.extent.height = 1;
-    DrawFilledRectangle(&mut r);
+    let context = crate::graphics::context_abi::ContextLease::retain(
+        std::ptr::NonNull::new(_pCurContext).unwrap_or_else(|| panic!("missing status context")),
+    );
+    outline_ship_status(&context, y);
+}
+
+pub fn outline_ship_status(context: &crate::graphics::context_abi::ContextLease, y: COORD) {
+    let mut r = RECT {
+        corner: POINT { x: 0, y: 1 + y },
+        extent: EXTENT {
+            width: STATUS_WIDTH,
+            height: 1,
+        },
+    };
+    let dark = rgb15(0x08, 0x08, 0x08);
+    context.fill_rectangle(dark, r);
     r.corner.y += 1;
     r.extent.width -= 1;
-    DrawFilledRectangle(&mut r);
+    context.fill_rectangle(dark, r);
     r.extent.width = 1;
     r.extent.height = SHIP_INFO_HEIGHT - 2;
-    DrawFilledRectangle(&mut r);
+    context.fill_rectangle(dark, r);
     r.corner.x += 1;
-    DrawFilledRectangle(&mut r);
-    SetContextForeGroundColor(rgb15(0x10, 0x10, 0x10));
+    context.fill_rectangle(dark, r);
+    let light = rgb15(0x10, 0x10, 0x10);
     r.corner.x = STATUS_WIDTH - 1;
-    DrawFilledRectangle(&mut r);
+    context.fill_rectangle(light, r);
     r.corner.x = STATUS_WIDTH - 2;
     r.corner.y += 1;
     r.extent.height -= 1;
-    DrawFilledRectangle(&mut r);
-    SetContextForeGroundColor(rgb15(0, 0, 0));
+    context.fill_rectangle(light, r);
     r.corner.x = 0;
     r.corner.y = y;
     r.extent.width = STATUS_WIDTH;
     r.extent.height = 1;
-    DrawFilledRectangle(&mut r);
+    context.fill_rectangle(rgb15(0, 0, 0), r);
 }
 
 /// # Safety
