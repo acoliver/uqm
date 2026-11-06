@@ -29,13 +29,13 @@ unsafe fn prepare_confirmation(
     if key(input, KEY_MENU_CANCEL) {
         state.phase = crate::supermelee::session::MenuPhase::Menu;
         state.netplay.cancel_confirmations();
-        cx.with_legacy(|| status(state, game_string(NETMELEE_STRING_BASE as i32 + 4)));
+        status_game(cx, state, (NETMELEE_STRING_BASE as i32 + 4) as usize);
         return Some(1);
     }
     if key(input, KEY_MENU_LEFT) || key(input, KEY_MENU_UP) || key(input, KEY_MENU_DOWN) {
         state.phase = crate::supermelee::session::MenuPhase::Menu;
         state.netplay.cancel_confirmations();
-        cx.with_legacy(|| status(state, c"".as_ptr()));
+        status(cx, state, c"");
         return Some(do_melee(state, cx, io, input));
     }
     session.close_disconnected_connections(&mut |event| {
@@ -165,13 +165,13 @@ pub(super) unsafe fn start_button(
         return;
     }
     if controls[0] & NETWORK_CONTROL != 0 && controls[1] & NETWORK_CONTROL != 0 {
-        cx.with_legacy(|| status(state, game_string(NETMELEE_STRING_BASE as i32 + 32)));
+        status_game(cx, state, (NETMELEE_STRING_BASE as i32 + 32) as usize);
         return;
     }
     if (controls[0] & NETWORK_CONTROL != 0 && controls[1] & COMPUTER_CONTROL != 0)
         || (controls[1] & NETWORK_CONTROL != 0 && controls[0] & COMPUTER_CONTROL != 0)
     {
-        cx.with_legacy(|| status(state, game_string(NETMELEE_STRING_BASE as i32 + 33)));
+        status_game(cx, state, (NETMELEE_STRING_BASE as i32 + 33) as usize);
         return;
     }
     let mut ok = true;
@@ -186,7 +186,7 @@ pub(super) unsafe fn start_button(
         };
         if let Some(index) = index {
             ok = false;
-            cx.with_legacy(|| status(state, game_string(NETMELEE_STRING_BASE as i32 + index)));
+            status_game(cx, state, (NETMELEE_STRING_BASE as i32 + index) as usize);
         }
     }
     if !ok {
@@ -194,7 +194,7 @@ pub(super) unsafe fn start_button(
         return;
     }
     if ready(state, controls) != 2 {
-        cx.with_legacy(|| status(state, game_string(NETMELEE_STRING_BASE as i32 + 7)));
+        status_game(cx, state, (NETMELEE_STRING_BASE as i32 + 7) as usize);
     }
     state.netplay.confirm_connections();
     state.phase = crate::supermelee::session::MenuPhase::Confirm;
@@ -257,9 +257,9 @@ pub(super) unsafe fn connecting(
         if key(input, KEY_MENU_CANCEL) {
             if !connection(state, side).is_none() {
                 close_player_network_connection(state, cx, io, side as u16);
-                cx.with_legacy(|| status_player(state, side as isize));
+                status_player(cx, state, side as isize);
             }
-            cx.with_legacy(|| redraw(state));
+            redraw(cx, state);
             state.phase = crate::supermelee::session::MenuPhase::Menu;
             state.last_input_time = GetTimeCounter();
             flush_menu(state, cx, io);
@@ -268,12 +268,12 @@ pub(super) unsafe fn connecting(
         if let Some(conn) = connection(state, side) {
             if conn.state == 2 || conn.state == 3 {
                 cx.kernel.player_control[side] = NETWORK_CONTROL | 16;
-                cx.with_legacy(|| controls(state, side, true));
-                cx.with_legacy(|| redraw(state));
-                cx.with_legacy(|| status_player(state, side as isize));
+                controls(cx, state, side, true);
+                redraw(cx, state);
+                status_player(cx, state, side as isize);
                 state.phase = crate::supermelee::session::MenuPhase::Menu;
                 state.last_input_time = GetTimeCounter();
-                cx.with_legacy(|| highlight(state, state.melee_option, false));
+                highlight(cx, state, state.melee_option, false);
                 state.melee_option = 4;
             }
         }
@@ -290,7 +290,7 @@ pub(super) unsafe fn disconnects(state: &mut MeleeSession, cx: &mut crate::engin
         let conn = connection(state, player);
         if conn.is_none() || !net_connection_is_connected(conn) {
             cx.kernel.player_control[player] = HUMAN_CONTROL | 16;
-            cx.with_legacy(|| controls(state, player, false));
+            controls(cx, state, player, false);
             log::info!("Player {player} has disconnected; shifting controls");
         }
     }
@@ -314,11 +314,11 @@ pub(super) unsafe fn next_control(
         if !connection(state, side).is_none() {
             close_player_network_connection(state, cx, io, side as u16);
         }
-        cx.with_legacy(|| status_player(state, -1));
+        status_player(cx, state, -1);
         human
     } else {
         log::error!("Bad control type ({value}) in nextControlType");
         human
     };
-    cx.with_legacy(|| controls(state, side, true));
+    controls(cx, state, side, true);
 }

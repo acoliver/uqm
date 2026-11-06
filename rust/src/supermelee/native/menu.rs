@@ -34,7 +34,8 @@ pub(crate) mod live {
     use changes::{local_change_ship, local_change_team, local_change_team_name, view_name};
     use drawing::{
         controls, current, draw_ship_strings, flash_selection, highlight, init_screen, name,
-        redraw, repair_frame, rgb, ship_box, slot_rect, status, status_player, text, worth,
+        redraw, repair_frame, rgb, ship_box, slot_rect, status, status_game, status_player, text,
+        worth,
     };
     use editing::*;
     fn load_menu_graphics(state: &mut MeleeSession, offscreen: ContextLease) {
@@ -63,10 +64,10 @@ pub(crate) mod live {
         if !state.load_config(&mut cx.kernel.player_control) {
             cx.kernel.player_control[0] = HUMAN_CONTROL | 16;
             let team = state.load.builtins[0].clone();
-            cx.with_legacy(|| local_change_team(state, 0, &team));
+            local_change_team(cx, state, 0, &team);
             cx.kernel.player_control[1] = COMPUTER_CONTROL | 16;
             let team = state.load.builtins[1].clone();
-            cx.with_legacy(|| local_change_team(state, 1, &team));
+            local_change_team(cx, state, 1, &team);
         }
     }
 
@@ -76,17 +77,15 @@ pub(crate) mod live {
         next: u8,
     ) {
         if state.melee_option == 1 || state.melee_option == 7 {
-            cx.with_legacy(|| status_player(state, -1));
+            status_player(cx, state, -1);
         }
-        cx.with_legacy(|| highlight(state, state.melee_option, false));
+        highlight(cx, state, state.melee_option, false);
         state.melee_option = next;
-        cx.with_legacy(|| highlight(state, next, true));
+        highlight(cx, state, next, true);
         if next == 1 || next == 7 {
             let side = usize::from(next == 1);
             let control = cx.kernel.player_control[side];
-            cx.with_legacy(|| {
-                status_player(state, super::rules::network_status_side(side, control))
-            });
+            status_player(cx, state, super::rules::network_status_side(side, control));
         }
     }
 
@@ -145,7 +144,7 @@ pub(crate) mod live {
                     &mut state.netplay,
                     side as i32,
                 );
-                cx.with_legacy(|| redraw(state));
+                redraw(cx, state);
                 state.last_input_time = GetTimeCounter();
                 if confirmed != 0 {
                     state.initialized = 0;
@@ -181,17 +180,17 @@ pub(crate) mod live {
             state.initialized = 1;
             state.melee_option = 4;
             crate::ui::settings::play_loaded_music(cx.world, state.h_music.as_ref(), 1, 1);
-            cx.with_legacy(|| {
-                init_screen(state);
+            {
+                init_screen(cx, state);
                 FadeScreen(FADE_ALL_TO_COLOR, 840 / 2);
-            });
+            };
             state.last_input_time = GetTimeCounter();
             return 1;
         }
         poll_menu(state, cx, io, 0);
         if key(input, KEY_MENU_CANCEL) || key(input, KEY_MENU_LEFT) {
             state.last_input_time = GetTimeCounter();
-            cx.with_legacy(|| highlight(state, state.melee_option, false));
+            highlight(cx, state, state.melee_option, false);
             state.melee_option = 10;
             state.initialized = 0;
             state.side = 0;
@@ -232,10 +231,10 @@ pub(crate) mod live {
         }
         flush_menu(state, cx, io);
         disconnects(state, cx);
-        cx.with_legacy(|| {
-            flash_selection(state);
-            SleepThreadUntil(time.wrapping_add(840 / 30));
-        });
+        {
+            flash_selection(cx, state);
+            cx.with_legacy(|| SleepThreadUntil(time.wrapping_add(840 / 30)));
+        };
         1
     }
     fn admit_menu_rendering(state: &mut MeleeSession, kernel: &KernelOwner) -> ContextLease {

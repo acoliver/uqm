@@ -93,30 +93,13 @@ pub(super) fn flush_menu(
     session.flush_packet_queues(&mut |event| changes::apply_protocol_event(state, cx, io, event));
 }
 
-pub(super) unsafe fn get_line_within_width(
-    text: *mut TEXT,
-    next: *mut *const c_char,
-    width: i16,
-    count: u16,
-) -> i32 {
-    crate::comm::comm_abi::getLineWithinWidth(text.cast(), next, width, count)
-}
 pub(super) unsafe fn set_context_clip_rect(rect: *mut RECT) -> u32 {
     crate::graphics::context_abi::SetContextClipRect(rect.cast())
-}
-pub(super) unsafe fn get_context_font_leading(leading: *mut i16) -> u32 {
-    crate::graphics::font_abi::GetContextFontLeading(leading)
 }
 pub(super) unsafe fn get_context_clip_rect(rect: *mut RECT) -> u32 {
     crate::graphics::context_abi::GetContextClipRect(rect.cast())
 }
-pub(super) unsafe fn set_context_origin(origin: POINT) -> POINT {
-    let old = crate::graphics::context_abi::SetContextOrigin(crate::graphics::native_abi::POINT {
-        x: origin.x,
-        y: origin.y,
-    });
-    POINT { x: old.x, y: old.y }
-}
+
 pub(super) unsafe fn draw_shadowed_box(
     rect: *mut RECT,
     background: Color,

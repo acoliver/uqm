@@ -345,13 +345,25 @@ impl ContextLease {
         align: TEXT_ALIGN,
         color: Color,
     ) {
+        self.draw_text_bounded(font, string, baseline, align, color, u16::MAX);
+    }
+
+    pub fn draw_text_bounded(
+        &self,
+        font: &super::native_font::FontLease,
+        string: &std::ffi::CStr,
+        baseline: POINT,
+        align: TEXT_ALIGN,
+        color: Color,
+        characters: u16,
+    ) {
         let _target = self.retain_target();
         *self.0.font.borrow_mut() = Some(font.clone());
         let text = TEXT {
             baseline,
             pStr: string.as_ptr().cast(),
             align,
-            CharCount: u16::MAX,
+            CharCount: characters,
         };
         self.apply(Operation::Text(font.clone(), text, color));
     }
