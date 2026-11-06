@@ -51,14 +51,16 @@ enum Operation {
     BeginBatch,
     EndBatch,
     Background(Color),
+    Foreground(Color),
     Frame(FRAME),
     Clip(Option<RECT>),
     Clear,
     Fill(Color, RECT),
     Outline(Color, RECT),
+    ShadowedBox(RECT, Color, Color, Color),
     FilledStamp(Color, STAMP, bool),
     Stamp(STAMP),
-    Font(super::native_font::FontLease),
+    Font(Option<super::native_font::FontLease>),
     Text(super::native_font::FontLease, TEXT, Color),
 }
 
@@ -114,6 +116,18 @@ impl Drop for ContextOrigin {
     }
 }
 
+struct ContextTextState {
+    context: ContextLease,
+    font: Option<super::native_font::FontLease>,
+    color: Color,
+}
+impl Drop for ContextTextState {
+    fn drop(&mut self) {
+        self.context.replace_font(self.font.take());
+        self.context.apply(Operation::Foreground(self.color));
+    }
+}
+
 impl ContextLease {
     /// Retain a registered context without dereferencing the supplied address.
     pub fn retain(context: NonNull<context_desc>) -> Self {
@@ -155,6 +169,9 @@ impl ContextLease {
                 Operation::Background(color) => {
                     context_abi::SetContextBackGroundColor(color);
                 }
+                Operation::Foreground(color) => {
+                    context_abi::SetContextForeGroundColor(color);
+                }
                 Operation::Frame(frame) => {
                     drawable_abi::SetContextFGFrame(frame);
                 }
@@ -172,6 +189,9 @@ impl ContextLease {
                     context_abi::SetContextForeGroundColor(color);
                     frame_abi::DrawRectangle(&mut rect);
                 }
+                Operation::ShadowedBox(mut rect, background, dark, medium) => {
+                    super::widgets_abi::DrawShadowedBox(&mut rect, background, dark, medium);
+                }
                 Operation::FilledStamp(color, mut stamp, restore) => {
                     let previous = context_abi::SetContextForeGroundColor(color);
                     frame_abi::DrawFilledStamp(&mut stamp);
@@ -181,7 +201,10 @@ impl ContextLease {
                 }
                 Operation::Stamp(mut stamp) => frame_abi::DrawStamp(&mut stamp),
                 Operation::Font(font) => {
-                    super::font_abi::SetContextFont(font.as_raw());
+                    super::font_abi::SetContextFont(
+                        font.as_ref()
+                            .map_or(std::ptr::null_mut(), |font| font.as_raw()),
+                    );
                 }
                 Operation::Text(font, mut text, color) => {
                     super::font_abi::SetContextFont(font.as_raw());
@@ -218,6 +241,30 @@ impl ContextLease {
         let result = draw();
         drop(batch);
         result
+    }
+
+    pub fn with_text_state<R>(&self, draw: impl FnOnce() -> R) -> R {
+        self.with_selected(|| {
+            // SAFETY: the selected lease owns this descriptor on its graphics thread.
+            let descriptor = unsafe { self.0.context.as_ref() };
+            let font = NonNull::new(descriptor.Font).map(|raw| {
+                self.0
+                    .font
+                    .borrow()
+                    .as_ref()
+                    .filter(|font| font.as_raw() == raw.as_ptr())
+                    .cloned()
+                    .unwrap_or_else(|| super::native_font::FontLease::retain(raw))
+            });
+            let restore = ContextTextState {
+                context: self.clone(),
+                font,
+                color: descriptor.ForeGroundColor,
+            };
+            let result = draw();
+            drop(restore);
+            result
+        })
     }
 
     pub fn pause_batch(&self) -> BatchPause {
@@ -323,6 +370,11 @@ impl ContextLease {
         self.apply(Operation::Fill(color, rect));
     }
 
+    pub fn draw_shadowed_box(&self, rect: RECT, background: Color, dark: Color, medium: Color) {
+        let _target = self.retain_target();
+        self.apply(Operation::ShadowedBox(rect, background, dark, medium));
+    }
+
     pub fn draw_stamp(&self, source: &ContextFrame, origin: POINT) {
         let _target = self.retain_target();
         self.apply(Operation::Stamp(STAMP {
@@ -331,10 +383,14 @@ impl ContextLease {
         }));
     }
 
-    pub fn set_font(&self, font: &super::native_font::FontLease) {
-        let previous = self.0.font.replace(Some(font.clone()));
-        self.apply(Operation::Font(font.clone()));
+    fn replace_font(&self, font: Option<super::native_font::FontLease>) {
+        let previous = self.0.font.replace(font.clone());
+        self.apply(Operation::Font(font));
         drop(previous);
+    }
+
+    pub fn set_font(&self, font: &super::native_font::FontLease) {
+        self.replace_font(Some(font.clone()));
     }
 
     pub fn draw_text(

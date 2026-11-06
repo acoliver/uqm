@@ -33,9 +33,9 @@ pub(crate) mod live {
     use battle::*;
     use changes::{local_change_ship, local_change_team, local_change_team_name, view_name};
     use drawing::{
-        controls, current, draw_ship_strings, flash_selection, highlight, init_screen, name,
-        redraw, repair_frame, rgb, ship_box, slot_rect, status, status_game, status_player, text,
-        worth,
+        connection_box, controls, current, draw_ship_strings, flash_selection, highlight,
+        init_screen, name, redraw, repair_frame, ship_box, slot_rect, status, status_game,
+        status_player, worth,
     };
     use editing::*;
     fn load_menu_graphics(state: &mut MeleeSession, offscreen: ContextLease) {

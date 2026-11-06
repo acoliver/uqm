@@ -99,23 +99,3 @@ pub(super) unsafe fn set_context_clip_rect(rect: *mut RECT) -> u32 {
 pub(super) unsafe fn get_context_clip_rect(rect: *mut RECT) -> u32 {
     crate::graphics::context_abi::GetContextClipRect(rect.cast())
 }
-
-pub(super) unsafe fn draw_shadowed_box(
-    rect: *mut RECT,
-    background: Color,
-    dark: Color,
-    medium: Color,
-) {
-    let convert = |c: Color| crate::graphics::native_abi::Color {
-        r: c.r,
-        g: c.g,
-        b: c.b,
-        a: c.a,
-    };
-    crate::graphics::widgets_abi::DrawShadowedBox(
-        rect.cast(),
-        convert(background),
-        convert(dark),
-        convert(medium),
-    );
-}
