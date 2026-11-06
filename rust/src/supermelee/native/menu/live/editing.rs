@@ -26,7 +26,11 @@ unsafe fn frame(entry: *mut TEXTENTRY_STATE, _input: &crate::engine::input::Inpu
 unsafe fn advance(state: *mut MELEE_STATE) {
     ((*state).row, (*state).col) = super::super::rules::advance_cursor((*state).row, (*state).col);
 }
-unsafe fn edit_name(state: *mut MELEE_STATE, side: u16, input: &crate::engine::input::InputSession) {
+unsafe fn edit_name(
+    state: *mut MELEE_STATE,
+    side: u16,
+    input: &crate::engine::input::InputSession,
+) {
     (*state).cur_index = 0;
     name(state, side, 1, ptr::null());
     let mut buf = [0 as std::ffi::c_char; 31];

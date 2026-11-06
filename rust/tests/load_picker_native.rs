@@ -1,5 +1,5 @@
 //! Real virtual controls, restart dispatch, DoInput reset and save enumeration.
-use uqm_rust::engine::battle::schema::FlashContext;
+use uqm_rust::graphics::flash::FlashContext;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 use std::{ffi::CString, ptr};
