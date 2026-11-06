@@ -550,12 +550,12 @@ fn observe_element_record(record: &super::record::ElementRecord) -> ElementState
 
 /// # Safety
 /// The caller retains the ship pool throughout this staging observation.
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 pub(crate) unsafe fn observe_ship_record(record: &super::record::ShipRecord) -> ShipState {
     ShipState::decode(record)
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 /// # Safety
 /// The caller retains the test descriptor and all resources referenced by its state.
 pub(crate) unsafe fn observe_descriptor_record(
@@ -785,7 +785,7 @@ pub mod views;
 #[path = "vux_template.rs"]
 pub(crate) mod vux_template;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 pub(crate) fn fixture_element_state(record: &super::record::ElementRecord) -> ElementState {
     observe_element_record(record)
 }

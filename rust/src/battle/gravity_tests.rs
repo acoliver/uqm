@@ -1,5 +1,5 @@
-use super::{Battle, Cx, ElementId, World};
 use crate::battle::gravity::{calculate_gravity, time_space_matter_conflict};
+use crate::engine::battle::{Battle, Cx, ElementId, World};
 use std::cell::Cell;
 
 fn with_elements(call: impl FnOnce(&mut Cx<'_>, [ElementId; 3])) {
@@ -7,14 +7,12 @@ fn with_elements(call: impl FnOnce(&mut Cx<'_>, [ElementId; 3])) {
     {
         let mut battle = Battle::new();
         let mut kernel = crate::engine::battle::record::Kernel::new();
-        kernel.elements.reset_capacity(3);
+        let elements = kernel.fixture_elements();
+        elements.reset_capacity(3);
         let ids = std::array::from_fn(|_| {
-            let id = kernel
-                .elements
-                .alloc()
-                .unwrap_or_else(|| panic!("fixture slot"));
+            let id = elements.alloc().unwrap_or_else(|| panic!("fixture slot"));
 
-            kernel.elements.put(id);
+            elements.put(id);
             id
         });
         let mut world = World::new();
@@ -66,8 +64,11 @@ fn conflict_checks_player_ships_even_when_nonsolid() {
     with_elements(|cx, [subject, other, _]| {
         cx.element_mut(subject).current.location.x = 100;
         cx.element_mut(other).flags = NONSOLID as u16;
-        let control =
-            crate::battle::gravity::control(cx, subject, super::views::FrameSelection::ABSENT);
+        let control = crate::battle::gravity::control(
+            cx,
+            subject,
+            crate::engine::battle::views::FrameSelection::ABSENT,
+        );
         assert_eq!(control.EndPoint.x, 25);
         assert_eq!(control.IntersectStamp.origin.x, 25);
         let calls = Cell::new(0);

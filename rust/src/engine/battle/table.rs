@@ -321,6 +321,12 @@ impl ElementTable {
         self.record_mut(id)
     }
 }
+#[cfg(any(test, feature = "test-support"))]
+impl crate::engine::Kernel {
+    pub(crate) fn fixture_elements(&mut self) -> &mut ElementTable {
+        &mut self.elements
+    }
+}
 impl ShipId {
     #[cfg(any(test, feature = "test-support"))]
     pub(crate) fn fixture(side: u8, slot: u8, gen: u32) -> Self {

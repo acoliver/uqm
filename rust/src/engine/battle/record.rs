@@ -1,11 +1,11 @@
 //! Shared battle record layouts during the storage transition.
-pub use crate::battle::velocity::VelocityDesc as VELOCITY_DESC;
 #[cfg(test)]
 use crate::engine::World as WorldOwner;
 use crate::graphics::native_abi::{
     BYTE, COUNT, FRAME, POINT, RESOURCE, SIZE, STRING, STRING as SOUND, UWORD,
     UWORD as ELEMENT_FLAGS, UWORD as STATUS_FLAGS,
 };
+pub use crate::math::velocity::VelocityDesc as VELOCITY_DESC;
 use std::os::raw::c_uint as SPECIES_ID;
 
 pub use crate::graphics::native_abi::{INTERSECT_CONTROL, PRIMITIVE};
