@@ -136,8 +136,7 @@ pub(super) fn pick_game(
         }
         log::info!("RUST_PICKER: operation_failed picker_remains_open");
         if saving != 0 && canceled_by_user == 0 {
-            // SAFETY: the picker retains the popup graphics resources.
-            unsafe { crate::ui::save_problem::save_problem(cx, io) };
+            crate::ui::save_problem::save_problem(cx, io);
         }
         // SAFETY: the synchronous picker owns these published native resources.
         cx.with_legacy(|| unsafe {

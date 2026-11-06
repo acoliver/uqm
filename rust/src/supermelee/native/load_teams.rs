@@ -49,7 +49,6 @@ pub(crate) mod live {
         browser::write_team,
         team::{ship_cost, MeleeTeam as OwnedTeam},
     };
-    use crate::ui::save_problem::SaveProblem;
     use std::{ffi::CString, mem, ptr::NonNull};
 
     fn draw_entry(
@@ -270,7 +269,12 @@ pub(crate) mod live {
     }
     /// # Safety
     /// State must own the team being saved on the game thread.
-    pub unsafe fn do_save_team(state: &mut MeleeSession, screen: &ContextLease) {
+    pub unsafe fn do_save_team(
+        state: &mut MeleeSession,
+        screen: &ContextLease,
+        cx: &mut crate::engine::battle::Cx<'_>,
+        io: &mut crate::engine::observe::Io<'_>,
+    ) {
         let mut filename = state.melee_setup.teams[state.side as usize]
             .c_name()
             .to_bytes()
@@ -280,7 +284,7 @@ pub(crate) mod live {
         let filename = CString::new(filename).unwrap();
         let ok = screen.with_selected(|| {
             let mut saved = mem::zeroed();
-            ConfirmSaveLoad(&mut saved);
+            cx.with_legacy(|| ConfirmSaveLoad(&mut saved));
             let team = &state.melee_setup.teams[state.side as usize];
             let ok = write_team(&state.files().teams, &filename, team).is_ok();
             state.load.top = 0;
@@ -290,7 +294,7 @@ pub(crate) mod live {
             ok
         });
         if !ok {
-            SaveProblem();
+            crate::ui::save_problem::save_problem(cx, io);
         }
         load_team_list(state);
         if let Some(index) = state.load.file_index(&filename) {

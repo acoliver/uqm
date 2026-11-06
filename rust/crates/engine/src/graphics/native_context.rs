@@ -50,6 +50,7 @@ enum Operation {
     Deselect,
     BeginBatch,
     EndBatch,
+    Flush,
     Background(Color),
     Foreground(Color),
     Frame(FRAME),
@@ -166,6 +167,7 @@ impl ContextLease {
                 Operation::Select | Operation::Deselect => (),
                 Operation::BeginBatch => super::gfx_common_abi::batch_graphics(),
                 Operation::EndBatch => super::gfx_common_abi::unbatch_graphics(),
+                Operation::Flush => super::gfx_common_abi::flush_graphics(),
                 Operation::Background(color) => {
                     context_abi::SetContextBackGroundColor(color);
                 }
@@ -216,7 +218,7 @@ impl ContextLease {
         }
     }
 
-    fn retain_target(&self) -> ContextFrame {
+    pub fn target(&self) -> ContextFrame {
         ContextFrame::retain(NonNull::new(self.apply(Operation::Select).0))
     }
 
@@ -287,12 +289,12 @@ impl ContextLease {
     }
 
     pub fn set_clip(&self, rect: RECT) {
-        let _target = self.retain_target();
+        let _target = self.target();
         self.apply(Operation::Clip(Some(rect)));
     }
 
     fn clip_snapshot(&self) -> (RECT, bool) {
-        let _target = self.retain_target();
+        let _target = self.target();
         let mut rect = RECT {
             corner: POINT { x: 0, y: 0 },
             extent: EXTENT {
@@ -310,7 +312,7 @@ impl ContextLease {
     }
 
     pub fn clear_clip(&self) {
-        let _target = self.retain_target();
+        let _target = self.target();
         self.apply(Operation::Clip(None));
     }
 
@@ -327,7 +329,7 @@ impl ContextLease {
     }
 
     pub fn with_origin<R>(&self, origin: POINT, draw: impl FnOnce() -> R) -> R {
-        let frame = self.retain_target();
+        let frame = self.target();
         let previous = frame.replace_hotspot(origin);
         let restore = ContextOrigin { frame, previous };
         let result = draw();
@@ -336,7 +338,7 @@ impl ContextLease {
     }
 
     pub fn draw_rectangle(&self, color: Color, rect: RECT) {
-        let _target = self.retain_target();
+        let _target = self.target();
         self.apply(Operation::Outline(color, rect));
     }
 
@@ -354,7 +356,7 @@ impl ContextLease {
     }
 
     fn filled_stamp(&self, source: &ContextFrame, origin: POINT, color: Color, restore: bool) {
-        let _target = self.retain_target();
+        let _target = self.target();
         self.apply(Operation::FilledStamp(
             color,
             STAMP {
@@ -366,17 +368,25 @@ impl ContextLease {
     }
 
     pub fn fill_rectangle(&self, color: Color, rect: RECT) {
-        let _target = self.retain_target();
+        let _target = self.target();
         self.apply(Operation::Fill(color, rect));
     }
 
+    pub fn flush(&self) {
+        self.apply(Operation::Flush);
+    }
+
+    pub fn set_foreground(&self, color: Color) {
+        self.apply(Operation::Foreground(color));
+    }
+
     pub fn draw_shadowed_box(&self, rect: RECT, background: Color, dark: Color, medium: Color) {
-        let _target = self.retain_target();
+        let _target = self.target();
         self.apply(Operation::ShadowedBox(rect, background, dark, medium));
     }
 
     pub fn draw_stamp(&self, source: &ContextFrame, origin: POINT) {
-        let _target = self.retain_target();
+        let _target = self.target();
         self.apply(Operation::Stamp(STAMP {
             origin,
             frame: source.frame,
@@ -413,7 +423,7 @@ impl ContextLease {
         color: Color,
         characters: u16,
     ) {
-        let _target = self.retain_target();
+        let _target = self.target();
         *self.0.font.borrow_mut() = Some(font.clone());
         let text = TEXT {
             baseline,
@@ -425,7 +435,7 @@ impl ContextLease {
     }
 
     pub fn draw_primitives(&self, batch: &mut super::native_batch::NativeBatch, scale: i32) {
-        let _target = self.retain_target();
+        let _target = self.target();
         let head = if batch.is_empty() { u16::MAX } else { 0 };
         // SAFETY: this lease retains the graphics-thread context/target. The
         // batch owns bounded links and retains all registered stamp sources;
@@ -438,7 +448,7 @@ impl ContextLease {
     }
 
     pub fn clear(&self) {
-        let _target = self.retain_target();
+        let _target = self.target();
         self.apply(Operation::Clear);
     }
 }

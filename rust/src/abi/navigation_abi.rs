@@ -3551,9 +3551,6 @@ pub struct SUMMARY_DESC {
 pub use crate::savegame::live::load::LoadGame;
 
 #[cfg(not(test))]
-pub use crate::ui::save_problem::SaveProblem;
-
-#[cfg(not(test))]
 pub use crate::savegame::live::save::SaveGame;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]

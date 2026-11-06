@@ -1,103 +1,89 @@
 //! Save failure popup, preserving save.c's measurement and screen restoration.
-use crate::comm::locdata::{CColor, CRect};
-use crate::comm::sis_graphics::CText;
-use crate::starbase::cffi::CffiPlatform;
-use crate::starbase::gfx::{Align, ContextId, FontId, Gfx, Point, Rgba, Stamp, TextDraw};
-
-use crate::graphics::font_abi::TextRect;
-
 use crate::engine::{battle::Cx, observe::Io};
-use crate::ui::util::live::{wait_for_any_button, DrawStarConBox, SaveContextFrame};
+use crate::graphics::{
+    context_abi::ContextLease,
+    drawable_abi::LoadedDrawable,
+    native_abi::{Color, POINT, RECT, TEXT_ALIGN_ALIGN_CENTER},
+    native_font::FontLease,
+};
+use crate::ui::util::{box_rectangles, live::wait_for_any_button};
 
-use crate::graphics::gfx_common_abi::FlushGraphics;
-
-fn color(v: u8) -> CColor {
-    let c = Rgba::rgb15(v, v, v);
-    CColor {
-        r: c.r,
-        g: c.g,
-        b: c.b,
-        a: c.a,
-    }
+fn color(v: u8) -> Color {
+    super::rgb15(v, v, v)
 }
 
-/// # Safety
-/// Game thread with the SIS graphics contexts and string table initialized.
-pub unsafe fn save_problem(cx: &mut Cx<'_>, io: &mut Io<'_>) {
-    let (old, saved) = cx.with_legacy(|| {
-        let g = CffiPlatform;
-        let old = g.set_context(ContextId::Space);
-        g.set_font(FontId::StarCon);
-        let text = g.game_string(454 + 2);
-        let string = std::ffi::CString::new(text.clone()).unwrap();
-        let mut t = CText::default();
-        t.align = 1;
-        t.p_str = string.as_ptr();
-        t.char_count = u16::MAX;
-        let mut rect = CRect::default();
-        if !text.is_empty() {
-            TextRect(
-                std::ptr::from_mut(&mut t).cast(),
-                std::ptr::from_mut(&mut rect).cast(),
-                std::ptr::null_mut(),
-            );
-        }
-        let (width, height) = g.screen_size();
-        let x = (((width - 78) >> 1) as i16 - (rect.width >> 1)) - rect.corner.x;
-        let y = (((height - 13) >> 1) as i16 - (rect.height >> 1)) - rect.corner.y;
+pub fn save_problem(cx: &mut Cx<'_>, io: &mut Io<'_>) {
+    let context = ContextLease::retain(
+        std::ptr::NonNull::new(cx.kernel.space_context.cast())
+            .unwrap_or_else(|| panic!("save error context not admitted")),
+    );
+    let font = cx
+        .kernel
+        .battle_font()
+        .unwrap_or_else(|| panic!("save error font not admitted"));
+    let text = cx.kernel.game_text(454 + 2).to_owned();
+    render_save_problem(cx, io, &context, &font, &text);
+}
+
+pub fn render_save_problem(
+    cx: &mut Cx<'_>,
+    io: &mut Io<'_>,
+    context: &ContextLease,
+    font: &FontLease,
+    text: &std::ffi::CStr,
+) {
+    context.with_selected(|| {
+        context.set_font(font);
+        let mut rect = if text.is_empty() {
+            RECT {
+                corner: POINT { x: 0, y: 0 },
+                extent: crate::graphics::native_abi::EXTENT {
+                    width: 0,
+                    height: 0,
+                },
+            }
+        } else {
+            font.measure(
+                text,
+                POINT { x: 0, y: 0 },
+                TEXT_ALIGN_ALIGN_CENTER,
+                u16::MAX,
+            )
+            .rect
+        };
+        let size = context.target().rect().extent;
+        let x =
+            (((i32::from(size.width) - 78) >> 1) as i16 - (rect.extent.width >> 1)) - rect.corner.x;
+        let y = (((i32::from(size.height) - 13) >> 1) as i16 - (rect.extent.height >> 1))
+            - rect.corner.y;
         rect.corner.x += x - 4;
         rect.corner.y += y - 4;
-        rect.width += 8;
-        rect.height += 8;
-        let saved = SaveContextFrame((&mut rect as *mut CRect).cast());
-        g.batch();
-        DrawStarConBox(
-            std::ptr::from_mut(&mut rect).cast(),
-            2,
-            color(16),
-            color(8),
-            1,
-            color(10),
-        );
-        g.set_fg_color(Rgba::rgb15(20, 20, 20));
-        if !text.is_empty() {
-            g.draw_text(&TextDraw {
-                baseline: Point { x, y },
-                align: Align::Center,
-                text,
-            });
-        }
-        g.unbatch();
-        FlushGraphics();
-        (old, saved)
-    });
-    wait_for_any_button(cx, io, 1, u32::MAX, 0);
-    cx.with_legacy(|| {
-        let g = CffiPlatform;
-        g.draw_stamp(Stamp {
-            origin: Point {
-                x: saved.origin.x,
-                y: saved.origin.y,
-            },
-            frame: saved.frame as usize,
+        rect.extent.width += 8;
+        rect.extent.height += 8;
+        let saved = LoadedDrawable::capture(context, Some(rect))
+            .unwrap_or_else(|| panic!("save error background capture failed"));
+        context.draw_batch(|| {
+            box_rectangles(
+                rect,
+                2,
+                color(16),
+                color(8),
+                Some(color(10)),
+                |color, rect| context.fill_rectangle(color, rect),
+            );
+            context.set_foreground(color(20));
+            if !text.is_empty() {
+                context.draw_text(
+                    font,
+                    text,
+                    POINT { x, y },
+                    TEXT_ALIGN_ALIGN_CENTER,
+                    color(20),
+                );
+            }
         });
-        g.restore_context(old);
-        crate::graphics::drawable_abi::DestroyDrawable(
-            crate::graphics::pixmap_abi::ReleaseDrawable(saved.frame.cast()),
-        );
-    });
-}
-
-/// # Safety
-/// Game-thread legacy boundary with the caller's context published.
-#[no_mangle]
-pub unsafe extern "C" fn SaveProblem() {
-    crate::app::bridge::enter(|cx| {
-        let mut observer = cx.kernel.input_runtime().observer();
-        let mut io = Io {
-            observer: &mut *observer,
-        };
-        // SAFETY: SaveProblem requires the initialized game-thread popup resources.
-        unsafe { save_problem(cx, &mut io) };
+        context.flush();
+        wait_for_any_button(cx, io, 1, u32::MAX, 0);
+        context.draw_stamp(&saved.lease().context_frame(0), rect.corner);
     });
 }

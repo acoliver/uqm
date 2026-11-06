@@ -71,6 +71,26 @@ impl InputRuntime for Runtime {
 fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
     std::env::set_var("SDL_VIDEODRIVER", "dummy");
     std::env::set_var("SDL_AUDIODRIVER", "dummy");
+    let fixture_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("tmp");
+    std::fs::create_dir_all(&fixture_root).unwrap();
+    let directory = tempfile::tempdir_in(fixture_root).unwrap();
+    std::fs::create_dir(directory.path().join("font")).unwrap();
+    let mut png = Vec::new();
+    {
+        let mut encoder = png::Encoder::new(&mut png, 1, 1);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        encoder
+            .write_header()
+            .unwrap()
+            .write_image_data(&[255; 4])
+            .unwrap();
+    }
+    std::fs::write(directory.path().join("font/0041.png"), png).unwrap();
+    let host = std::ffi::CString::new(directory.path().to_str().unwrap()).unwrap();
     // SAFETY: this process owns SDL, the game, and every native fixture handle.
     unsafe {
         let options = GraphicsOptions::default();
@@ -98,41 +118,58 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
         });
         ClearDrawable();
         TFB_FlushGraphics();
-        let mut alpha = 255;
-        let mut glyph = TFB_Char {
-            extent: EXTENT {
-                width: 1,
-                height: 1,
-            },
-            disp: EXTENT {
-                width: 2,
-                height: 2,
-            },
-            HotSpot: HOT_SPOT { x: 0, y: 0 },
-            data: &mut alpha,
-            pitch: 1,
-        };
-        let mut page = FontPage {
-            next: ptr::null_mut(),
-            pageStart: 0,
-            firstChar: 65,
-            numChars: 1,
-            charDesc: &mut glyph,
-        };
-        let mut font = font_desc {
-            Leading: 2,
-            LeadingWidth: 2,
-            fontPages: &mut page,
-        };
+        use uqm_rust::io::uio_bridge as uio;
+        uio::uio_init();
+        let repository = uio::uio_openRepository(0);
+        assert!(!uio::uio_mountDir(
+            repository,
+            c"/".as_ptr(),
+            1,
+            ptr::null_mut(),
+            ptr::null(),
+            host.as_ptr(),
+            ptr::null_mut(),
+            6,
+            ptr::null_mut()
+        )
+        .is_null());
+        let content = uio::uio_openDir(repository, c"/".as_ptr(), 0);
+        assert!(!content.is_null());
+        let previous_content = uqm_rust::mainloop::dir_prep::contentDir;
+        uqm_rust::mainloop::dir_prep::contentDir = content.cast();
+        let font = uqm_rust::graphics::filegfx::LoadFontFile(c"font".as_ptr());
+        assert!(!font.is_null());
+        assert!(
+            !(*font).fontPages.is_null(),
+            "one-glyph font fixture did not load: {:?}",
+            std::ffi::CStr::from_ptr(sdl2_sys::SDL_GetError())
+        );
+        uqm_rust::mainloop::dir_prep::contentDir = previous_content;
+        uio::uio_closeDir(content);
+        uio::uio_closeRepository(repository);
+        uio::uio_unInit();
+        (*font).Leading = 2;
+        (*font).LeadingWidth = 2;
+        let glyph = (*(*font).fontPages).charDesc;
+        (*glyph).HotSpot.y = 0;
+        assert_eq!(((*glyph).extent.width, (*glyph).extent.height), (1, 1));
+        assert_eq!(((*glyph).disp.width, (*glyph).disp.height), (2, 2));
+        assert_eq!(*(*glyph).data, 255);
         let strings = AllocStringTable(457, 0);
         let message = (*strings).strings.add(456);
         (*message).data = uqm_rust::memory::rust_hmalloc(2).cast();
         ptr::copy_nonoverlapping(c"A".as_ptr(), (*message).data, 2);
         (*message).length = 1;
+        let context_lease = uqm_rust::graphics::context_abi::ContextLease::retain(
+            std::ptr::NonNull::new(context).unwrap(),
+        );
+        let font_lease = uqm_rust::graphics::native_font::FontLease::retain(
+            std::ptr::NonNull::new(font).unwrap(),
+        );
         let waits = Rc::new(Cell::new(0));
         let mut game = Game::new();
         game.kernel.space_context = context;
-        game.kernel.star_con_font = &mut font;
+        game.kernel.star_con_font = font;
         game.kernel.game_strings = CaptureStringTable(strings).cast();
         game.kernel.install_input_runtime(Rc::new(Runtime(
             WaitObserver {
@@ -146,20 +183,38 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                 *(*message).data = text as std::ffi::c_char;
                 (*message).length = i32::from(text != 0);
                 SetContext(previous);
-                uqm_rust::navigation::abi::SaveProblem();
+                uqm_rust::app::bridge::enter(|cx| {
+                    let mut observer = cx.kernel_mut().input_runtime().observer();
+                    let mut io = Io {
+                        observer: &mut *observer,
+                    };
+                    let text = std::ffi::CStr::from_ptr((*message).data);
+                    uqm_rust::ui::save_problem::render_save_problem(
+                        cx,
+                        &mut io,
+                        &context_lease,
+                        &font_lease,
+                        text,
+                    );
+                });
                 assert_eq!(
                     SetContext(previous),
                     previous,
                     "previous context must be restored"
                 );
+                assert_eq!((*context).Font, font);
+                let foreground = (*context).ForeGroundColor;
+                assert_eq!((foreground.r, foreground.g, foreground.b), (165, 165, 165));
                 TFB_FlushGraphics();
-                for (x, y) in [(118, 110), (120, 112), (124, 115)] {
-                    let pixel = GetFramePixel(frame, POINT { x, y });
-                    assert_eq!(
-                        (pixel.r, pixel.g, pixel.b),
-                        (9, 17, 25),
-                        "popup pixels must be restored"
-                    );
+                for y in 108..120 {
+                    for x in 116..128 {
+                        let pixel = GetFramePixel(frame, POINT { x, y });
+                        assert_eq!(
+                            (pixel.r, pixel.g, pixel.b),
+                            (9, 17, 25),
+                            "popup pixels must be restored"
+                        );
+                    }
                 }
             }
         });
@@ -170,8 +225,11 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
         FreeStringTable(strings);
         SetContext(ptr::null_mut());
         DestroyDrawable(drawable);
+        drop(context_lease);
+        drop(font_lease);
         DestroyContext(context);
         DestroyContext(previous);
+        uqm_rust::graphics::font_abi::DestroyFont(font);
         TFB_UninitGraphics();
     }
 }
