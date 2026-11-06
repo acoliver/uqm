@@ -1,34 +1,7 @@
 //! Storage declarations used at the Stage B boundary.
 #![allow(non_snake_case, non_camel_case_types)]
 use super::super::record::VELOCITY_DESC;
-use crate::graphics::native_abi::DWORD as TimeCount;
 use crate::graphics::native_abi::*;
-
-pub type GETMELEE_STATE = getmelee_struct;
-
-#[derive(Default)]
-pub struct getmelee_struct {
-    pub InputFunc:
-        ::std::option::Option<unsafe extern "C" fn(pInputState: *mut getmelee_struct) -> BOOLEAN>,
-    pub Initialized: BOOLEAN,
-    pub player: [getmelee_struct__bindgen_ty_1; 2usize],
-    pub net: Option<std::rc::Rc<dyn crate::battle::net::BattleNet>>,
-}
-
-#[derive(Default)]
-pub struct getmelee_struct__bindgen_ty_1 {
-    pub timeIn: TimeCount,
-    pub hBattleShip: Option<crate::battle::ShipId>,
-    pub choice: COUNT,
-    pub row: COUNT,
-    pub col: COUNT,
-    pub ships_left: COUNT,
-    pub randomIndex: COUNT,
-    pub selecting: BOOLEAN,
-    pub done: BOOLEAN,
-    pub highlight: Option<crate::graphics::context_abi::Highlight>,
-    pub remoteSelected: BOOLEAN,
-}
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
