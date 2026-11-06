@@ -104,34 +104,8 @@ pub(super) unsafe fn get_line_within_width(
 pub(super) unsafe fn set_context_clip_rect(rect: *mut RECT) -> u32 {
     crate::graphics::context_abi::SetContextClipRect(rect.cast())
 }
-pub(super) unsafe fn text_rect(text: *mut TEXT, rect: *mut RECT, deltas: *mut u8) -> u32 {
-    crate::graphics::font_abi::TextRect(text.cast(), rect.cast(), deltas)
-}
 pub(super) unsafe fn get_context_font_leading(leading: *mut i16) -> u32 {
     crate::graphics::font_abi::GetContextFontLeading(leading)
-}
-pub(super) unsafe fn draw_star_con_box(
-    rect: *mut RECT,
-    border: i16,
-    top: Color,
-    bottom: Color,
-    fill: u32,
-    inside: Color,
-) {
-    let convert = |c: Color| crate::navigation::abi::Color {
-        r: c.r,
-        g: c.g,
-        b: c.b,
-        a: c.a,
-    };
-    crate::ui::util::live::DrawStarConBox(
-        rect.cast(),
-        border,
-        convert(top),
-        convert(bottom),
-        fill,
-        convert(inside),
-    );
 }
 pub(super) unsafe fn get_context_clip_rect(rect: *mut RECT) -> u32 {
     crate::graphics::context_abi::GetContextClipRect(rect.cast())

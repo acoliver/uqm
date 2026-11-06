@@ -4,7 +4,7 @@ use crate::supermelee::types::MeleeShip as SetupShip;
 
 pub(super) unsafe fn view_name(state: &mut MeleeSession, side: u16) {
     if state.melee_started == 0 {
-        name(state, side, 4, ptr::null());
+        name(state, side, 4, None);
     }
 }
 unsafe fn change_ship(state: &mut MeleeSession, side: u16, index: u16, ship: u32) -> bool {
@@ -27,7 +27,7 @@ unsafe fn change_ship(state: &mut MeleeSession, side: u16, index: u16, ship: u32
             let r = slot_rect(side, index / 7, index % 7);
             repair_frame(state, &r);
         } else {
-            ship_box(&menu.catalog, side, index as usize, ship, false);
+            ship_box(menu, side, index as usize, ship, false);
         }
         worth(state, side, 4);
     }

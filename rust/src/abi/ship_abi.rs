@@ -1079,14 +1079,6 @@ pub const VIEW_STATE_VIEW_CHANGE: VIEW_STATE = 2;
 pub type VIEW_STATE = ::std::os::raw::c_uint;
 pub type ELEMENT_FLAGS = UWORD;
 
-#[cfg(not(test))]
-
-#[cfg(not(test))]
-
-pub use crate::supermelee::netplay::checksum::crc_process_game_state as crc_processState;
-
-
-
 pub type MELEE_OPTIONS = BYTE;
 pub const MeleeShip_MELEE_ANDROSYNTH: MeleeShip = 0;
 pub const MeleeShip_MELEE_ARILOU: MeleeShip = 1;

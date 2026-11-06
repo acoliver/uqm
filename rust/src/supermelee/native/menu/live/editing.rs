@@ -17,7 +17,7 @@ impl crate::ui::getchar::TextEntryCallbacks for NameCallbacks<'_> {
                 self.0,
                 self.0.side,
                 1 | if entry.joystick { 8 } else { 0 },
-                entry.text.as_ptr(),
+                Some(entry.text),
             ) != 0
         })
     }
@@ -44,7 +44,7 @@ unsafe fn edit_name(
     input: &crate::engine::input::InputSession,
 ) {
     state.cur_index = 0;
-    cx.with_legacy(|| name(state, side, 1, ptr::null()));
+    cx.with_legacy(|| name(state, side, 1, None));
     let mut buf =
         super::super::rules::name_editor_buffer(state.melee_setup.teams[side as usize].c_name());
     let success =

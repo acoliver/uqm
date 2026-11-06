@@ -283,7 +283,7 @@ pub(crate) mod engine {
         if net.peer_count() > 0 && frame.is_multiple_of(NETPLAY_CHECKSUM_INTERVAL) {
             let mut state = mem::zeroed();
             crc_init(&mut state);
-            cx.with_legacy(|| crc_processState(&mut state));
+            crate::supermelee::netplay::checksum::crc_process_game_state(cx, &mut state);
             crate::supermelee::native::protocol::with_battle_driver(cx, io, |driver| {
                 net.record_checksum(frame, crc_finish(&state), driver)
             });

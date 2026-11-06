@@ -35,34 +35,43 @@ pub(super) fn slot_rect(side: u16, row: u16, col: u16) -> RECT {
         extent: EXTENT { width, height },
     }
 }
-pub(super) unsafe fn ship_box(
-    catalog: &[crate::ships::master_native::ShipChoice],
-    side: u16,
-    index: usize,
-    ship: u32,
-    highlight: bool,
-) {
-    let mut r = slot_rect(side, (index / 7) as u16, (index % 7) as u16);
-    BatchGraphics();
+pub(super) fn ship_box(state: &MeleeSession, side: u16, index: usize, ship: u32, highlight: bool) {
+    let r = slot_rect(side, (index / 7) as u16, (index % 7) as u16);
+    let context = state
+        .menu_context
+        .as_ref()
+        .unwrap_or_else(|| panic!("menu context not admitted"));
     let (light, dark, inside) = if highlight {
         (rgb(7, 0, 12), rgb(12, 0, 20), rgb(10, 0, 17))
     } else {
         (rgb(0, 0, 9), rgb(0, 0, 14), rgb(0, 0, 12))
     };
-    draw_star_con_box(&mut r, 1, light, dark, u32::from(ship != 255), inside);
-    if ship != 255 {
-        let mut s = STAMP {
-            origin: POINT {
-                x: r.corner.x + (r.extent.width >> 1),
-                y: r.corner.y + (r.extent.height >> 1),
-            },
-            frame: catalog
+    context.draw_batch(|| {
+        crate::ui::util::box_rectangles(
+            r,
+            1,
+            light,
+            dark,
+            (ship != 255).then_some(inside),
+            |color, rect| context.fill_rectangle(color, rect),
+        );
+        if ship != 255 {
+            let frame = state
+                .catalog
                 .get(ship as usize)
-                .map_or(ptr::null_mut(), |ship| ship.melee_icon.raw().cast()),
-        };
-        DrawStamp(&mut s);
-    }
-    UnbatchGraphics();
+                .map(|ship| ship.melee_icon.raw());
+            let icon = crate::graphics::context_abi::ContextFrame::retain(
+                frame.and_then(|frame| std::ptr::NonNull::new(frame.cast())),
+            );
+            context.draw_stamp(
+                &icon,
+                POINT {
+                    x: r.corner.x + (r.extent.width >> 1),
+                    y: r.corner.y + (r.extent.height >> 1),
+                },
+            );
+        }
+    });
 }
 pub(super) unsafe fn controls(state: &MeleeSession, side: usize, highlight: bool) {
     let control = KernelOwner::current().read(|owner| owner.player_control[side]);
@@ -88,14 +97,14 @@ pub(super) unsafe fn teams(state: &MeleeSession) {
         controls(state, side, false);
         for index in 0..14 {
             ship_box(
-                &state.catalog,
+                state,
                 side as u16,
                 index,
                 state.melee_setup.teams[side].ships[index] as u32,
                 false,
             );
         }
-        name(state, side as u16, 0, ptr::null());
+        name(state, side as u16, 0, None);
         worth(state, side as u16, 0);
     }
 }
@@ -164,18 +173,6 @@ pub(super) fn name_rect(side: u16) -> RECT {
         },
     }
 }
-fn select_menu_font(state: &MeleeSession) {
-    state
-        .menu_context
-        .as_ref()
-        .unwrap_or_else(|| panic!("menu context not admitted"))
-        .set_font(
-            state
-                .menu_font
-                .as_ref()
-                .unwrap_or_else(|| panic!("menu font not admitted")),
-        );
-}
 pub(super) unsafe fn worth(state: &MeleeSession, side: u16, highlight: u16) {
     let r = RECT {
         corner: POINT {
@@ -191,91 +188,101 @@ pub(super) unsafe fn worth(state: &MeleeSession, side: u16, highlight: u16) {
         repair_frame(state, &r);
         return;
     }
-    select_menu_font(state);
+    let context = state
+        .menu_context
+        .as_ref()
+        .unwrap_or_else(|| panic!("menu context not admitted"));
+    let font = state
+        .menu_font
+        .as_ref()
+        .unwrap_or_else(|| panic!("menu font not admitted"));
     let value = CString::new(state.melee_setup.fleet_value[side as usize].to_string()).unwrap();
-    let mut t = text(
-        r.corner.x + r.extent.width,
-        r.corner.y + r.extent.height - 3,
+    context.draw_text(
+        font,
+        &value,
+        POINT {
+            x: r.corner.x + r.extent.width,
+            y: r.corner.y + r.extent.height - 3,
+        },
         TEXT_ALIGN_ALIGN_RIGHT,
-        value.as_ptr(),
+        if highlight & 2 == 0 {
+            rgb(15, 16, 27)
+        } else {
+            rgb(23, 24, 29)
+        },
     );
-    SetContextForeGroundColor(if highlight & 2 == 0 {
-        rgb(15, 16, 27)
-    } else {
-        rgb(23, 24, 29)
-    });
-    font_DrawText(&mut t);
 }
 pub(super) unsafe fn name(
     state: &MeleeSession,
     side: u16,
     highlight: u16,
-    value: *const c_char,
+    value: Option<&std::ffi::CStr>,
 ) -> u32 {
     let r = name_rect(side);
     if highlight == 4 {
         repair_frame(state, &r);
         return 1;
     }
-    select_menu_font(state);
-    let value = if value.is_null() {
-        state.melee_setup.teams[side as usize].c_name().as_ptr()
-    } else {
-        value
+    let context = state
+        .menu_context
+        .as_ref()
+        .unwrap_or_else(|| panic!("menu context not admitted"));
+    let font = state
+        .menu_font
+        .as_ref()
+        .unwrap_or_else(|| panic!("menu font not admitted"));
+    let value = value.unwrap_or_else(|| state.melee_setup.teams[side as usize].c_name());
+    let baseline = POINT {
+        x: r.corner.x + 1,
+        y: r.corner.y + r.extent.height - 3,
     };
-    let mut t = text(
-        r.corner.x + 1,
-        r.corner.y + r.extent.height - 3,
-        TEXT_ALIGN_ALIGN_LEFT,
-        value,
-    );
-    t.CharCount = libc::strlen(value) as u16;
-    BatchGraphics();
-    if highlight & 1 == 0 {
-        SetContextForeGroundColor(if highlight & 2 == 0 {
-            rgb(15, 16, 27)
-        } else {
-            rgb(23, 24, 29)
-        });
-        font_DrawText(&mut t);
-    } else {
-        let mut bounds = mem::zeroed();
-        let mut delta = [0u8; 30];
-        text_rect(&mut t, &mut bounds, delta.as_mut_ptr());
-        if bounds.extent.width + 2 >= r.extent.width {
-            UnbatchGraphics();
-            return 0;
-        }
-        bounds = r;
-        SetContextForeGroundColor(rgb(20, 0, 20));
-        DrawFilledRectangle(&mut bounds);
-        let cursor = state.cur_index as usize;
-        for d in delta.iter().take(cursor) {
-            bounds.corner.x += i16::from(*d);
-        }
-        if cursor < t.CharCount as usize {
-            bounds.corner.x -= 1;
-        }
-        bounds.extent.width = if highlight & 8 == 0 || cursor == t.CharCount as usize {
-            1
-        } else {
-            i16::from(delta[cursor])
-                + if cursor + 1 == t.CharCount as usize {
-                    2
+    context.set_font(font);
+    context.draw_batch(|| {
+        if highlight & 1 == 0 {
+            context.draw_text(
+                font,
+                value,
+                baseline,
+                TEXT_ALIGN_ALIGN_LEFT,
+                if highlight & 2 == 0 {
+                    rgb(15, 16, 27)
                 } else {
-                    1
-                }
-        };
-        bounds.corner.x += 1;
-        bounds.corner.y += 1;
-        bounds.extent.height -= 2;
-        SetContextForeGroundColor(rgb(31, 31, 31));
-        DrawFilledRectangle(&mut bounds);
-        SetContextForeGroundColor(rgb(0, 0, 0));
-        font_DrawText(&mut t);
-    }
-    UnbatchGraphics();
-    1
+                    rgb(23, 24, 29)
+                },
+            );
+        } else {
+            let measured = font.measure(
+                value,
+                baseline,
+                TEXT_ALIGN_ALIGN_LEFT,
+                value.to_bytes().len() as u16,
+            );
+            if measured.rect.extent.width + 2 >= r.extent.width {
+                return 0;
+            }
+            let mut bounds = r;
+            context.fill_rectangle(rgb(20, 0, 20), bounds);
+            let cursor = state.cur_index as usize;
+            for delta in measured.deltas.iter().take(cursor) {
+                bounds.corner.x += i16::from(*delta);
+            }
+            let count = usize::from(measured.characters);
+            if cursor < count {
+                bounds.corner.x -= 1;
+            }
+            bounds.extent.width = if highlight & 8 == 0 || cursor == count {
+                1
+            } else {
+                i16::from(measured.deltas[cursor]) + if cursor + 1 == count { 2 } else { 1 }
+            };
+            bounds.corner.x += 1;
+            bounds.corner.y += 1;
+            bounds.extent.height -= 2;
+            context.fill_rectangle(rgb(31, 31, 31), bounds);
+            context.draw_text(font, value, baseline, TEXT_ALIGN_ALIGN_LEFT, rgb(0, 0, 0));
+        }
+        1
+    })
 }
 pub(super) unsafe fn status(state: &MeleeSession, message: *const c_char) {
     let context = state
@@ -292,7 +299,12 @@ pub(super) unsafe fn status(state: &MeleeSession, message: *const c_char) {
         };
         repair_frame(state, &r);
         if *message != 0 {
-            select_menu_font(state);
+            context.set_font(
+                state
+                    .menu_font
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("menu font not admitted")),
+            );
             SetContextForeGroundColor(rgb(0, 20, 0));
             BatchGraphics();
             let mut clip = mem::zeroed();
@@ -369,7 +381,7 @@ pub(super) unsafe fn highlight(state: &MeleeSession, option: u8, on: bool) {
             if s.phase == crate::supermelee::session::MenuPhase::Editing {
                 if s.row < 2 {
                     ship_box(
-                        &s.catalog,
+                        s,
                         s.side,
                         (s.row * 7 + s.col) as usize,
                         s.melee_setup.teams[s.side as usize].ships[(s.row * 7 + s.col) as usize]
@@ -377,7 +389,7 @@ pub(super) unsafe fn highlight(state: &MeleeSession, option: u8, on: bool) {
                         on,
                     );
                 } else if s.cur_index == u16::MAX {
-                    name(state, s.side, if on { 2 } else { 0 }, ptr::null());
+                    name(state, s.side, if on { 2 } else { 0 }, None);
                     worth(state, s.side, if on { 2 } else { 0 });
                 }
             }
