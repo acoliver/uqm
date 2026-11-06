@@ -210,3 +210,59 @@ fn remaining_mode_helpers_retire_with_their_reserved_crate_move() {
         assert_eq!(budgets["u6_04_world_projection"].ends, "U6-04");
     }
 }
+
+#[test]
+fn exposed_content_edges_have_exact_scopes_and_retire_with_the_mode_move() -> Result<(), String> {
+    let name = "u6_04_content_edges";
+    let module = "layers|module_edges|uqm::battle::ship_native::@file";
+    let content = "layers|planned.uqm-content|uqm::ships::races::arilou_native::@file";
+    let scopes = [(module.into(), 2), (content.into(), 1)].into();
+    let mut budgets = BTreeMap::new();
+    set_scoped(&mut budgets, name, 3, scopes, false)?;
+    assert_eq!(budgets[name].ends, "U6-04");
+    assert_eq!(parse(&write(&budgets)?)?, budgets);
+    assert!(check_growth(&budgets, &BTreeMap::new()).is_err());
+    let before = budgets.clone();
+    assert!(set_scoped(
+        &mut budgets,
+        name,
+        2,
+        [(module.into(), 0), (content.into(), 2)].into(),
+        false,
+    )
+    .is_err());
+    assert_eq!(budgets, before);
+    set_scoped(
+        &mut budgets,
+        name,
+        2,
+        [(module.into(), 1), (content.into(), 1)].into(),
+        false,
+    )?;
+    check_growth(&budgets, &before)?;
+    assert!(set(&mut BTreeMap::new(), name, 0, false).is_err());
+    for invalid in [
+        "layers|module_edges|uqm::ships::races::*::@file",
+        "layers|module_edges|uqm::battle::ship_native::update",
+        "layers|module_edges|uqm::comm::glue::@file",
+        "layers|planned.uqm-modes|uqm::battle::ship_native::@file",
+        "layers|planned_engine_core|uqm::battle::ship_native::@file",
+        "ffi|owner_projections|uqm::battle::ship_native::@file",
+        "ffi|bridge_calls|uqm::battle::ship_native::@file",
+        "unsafe|unsafe_lines|uqm::battle::ship_native::@file",
+        "layers|module_edges|uqm-engine::battle::@file",
+    ] {
+        assert!(
+            set_scoped(
+                &mut BTreeMap::new(),
+                name,
+                1,
+                [(invalid.into(), 1)].into(),
+                true
+            )
+            .is_err(),
+            "{invalid}"
+        );
+    }
+    Ok(())
+}
