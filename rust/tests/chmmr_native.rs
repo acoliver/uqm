@@ -204,7 +204,7 @@ fn laser_uses_frame_hotspot_alignment_facing_rgba_and_cycle() {
                     assert_eq!((*laser).life, 1);
                     assert_eq!((*laser).turn, (counter + 1) % 4);
                     assert!((*laser).death_func.is_some());
-                    assert_eq!((*prim(laser)).Type, gfx_object_LINE_PRIM as u8);
+                    assert_eq!((*prim(laser)).kind, gfx_object_LINE_PRIM as u8);
                     assert_eq!(rgba((*prim(laser)).color), colors[counter as usize]);
                     let a = facing_to_angle(i32::from(face));
                     assert_eq!(
@@ -280,7 +280,7 @@ fn laser_death_obeys_range_byte_gate_count_draw_and_animation() {
                         assert_eq!((*spot).current.image.frames, ship.frame_set(1));
                         assert_eq!((*spot).life, 9);
                         assert_eq!((*spot).thrust, 0);
-                        assert_eq!((*prim(spot)).Type, gfx_object_STAMP_PRIM as u8);
+                        assert_eq!((*prim(spot)).kind, gfx_object_STAMP_PRIM as u8);
                         assert_eq!(
                             (*spot).parent,
                             uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
@@ -350,7 +350,7 @@ fn muzzle_flash_requires_friendly_appearing_tail_line_and_even_cycle() {
                 if !appearing {
                     (*laser).state_flags &= !(APPEARING as u16);
                 }
-                (*prim(laser)).Type = kind as u8;
+                (*prim(laser)).kind = kind as u8;
                 battle::put(h);
                 ship.postprocess();
                 assert_eq!(ship.ship_mut().special_counter, 0);
@@ -364,7 +364,7 @@ fn muzzle_flash_requires_friendly_appearing_tail_line_and_even_cycle() {
                     );
                     assert_eq!(frame_index((*flash).current.image.frame.raw()), 21);
                     assert_eq!((*flash).life, 1);
-                    assert_eq!((*prim(flash)).Type, gfx_object_STAMP_PRIM as u8);
+                    assert_eq!((*prim(flash)).kind, gfx_object_STAMP_PRIM as u8);
                     assert_eq!(
                         (*flash).parent,
                         uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
@@ -395,7 +395,7 @@ fn delayed_satellites_spawn_around_live_ship_with_three_ordered_rng_draws() {
                 uqm_rust::engine::battle::Selection::Disabled
             ));
             assert_eq!((*transit).life, 16);
-            assert_eq!((*prim(transit)).Type, gfx_object_NUM_PRIMS as u8);
+            assert_eq!((*prim(transit)).kind, gfx_object_NUM_PRIMS as u8);
             assert_eq!(
                 (*transit).state_flags,
                 (FINITE_LIFE | NONSOLID | IGNORE_SIMILAR | APPEARING) as u16
@@ -427,7 +427,7 @@ fn delayed_satellites_spawn_around_live_ship_with_three_ordered_rng_draws() {
                     (7000 + cosine(angle, 256), 6000 + sine(angle, 256))
                 );
                 assert_eq!(frame_index((*s).current.image.frame.raw()), index);
-                assert_eq!((*prim(s)).Type, gfx_object_STAMP_PRIM as u8);
+                assert_eq!((*prim(s)).kind, gfx_object_STAMP_PRIM as u8);
                 assert!((*s).preprocess_func.is_some());
                 assert!((*s).postprocess_func.is_some());
                 assert!((*s).death_func.is_some());
@@ -606,7 +606,7 @@ unsafe fn target(satellite: *mut ElementRecord, dx: i16, dy: i16, hp: u16) -> Po
         x: (*satellite).next.location.x.wrapping_add(dx),
         y: (*satellite).next.location.y.wrapping_add(dy),
     };
-    (*prim(e)).Type = gfx_object_STAMP_PRIM as u8;
+    (*prim(e)).kind = gfx_object_STAMP_PRIM as u8;
     battle::put(e.cast());
     fixture
 }
@@ -705,9 +705,9 @@ fn point_defense_respects_collision_cloak_range_and_full_width_hitpoints() {
                     2 => (*obj).playerNr = -1,
                     3 => (*obj).state_flags = NONSOLID as u16,
                     4 => (*obj).state_flags = DISAPPEARING as u16,
-                    5 => (*prim(obj)).Type = gfx_object_NUM_PRIMS as u8,
+                    5 => (*prim(obj)).kind = gfx_object_NUM_PRIMS as u8,
                     6 => {
-                        (*prim(obj)).Type = gfx_object_STAMPFILL_PRIM as u8;
+                        (*prim(obj)).kind = gfx_object_STAMPFILL_PRIM as u8;
                         (*prim(obj)).color = Color {
                             r: 0,
                             g: 0,
@@ -856,7 +856,7 @@ fn tractor_applies_mass_division_speed_flags_and_head_inserted_blue_shadows() {
                         (*enemy.ptr()).next.image.frame.raw()
                     );
                     assert_eq!(velocity(shadow), (vx, 0));
-                    assert_eq!((*prim(shadow)).Type, gfx_object_STAMPFILL_PRIM as u8);
+                    assert_eq!((*prim(shadow)).kind, gfx_object_STAMPFILL_PRIM as u8);
                     assert_eq!(rgba((*prim(shadow)).color), [0, 0, blue, 255]);
                     h = battle::succ(shadow);
                 }

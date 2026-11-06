@@ -107,13 +107,7 @@ mod tests {
         );
         assert!(std::rc::Rc::ptr_eq(&audio.channels, &channels));
         drop(game);
-        assert_eq!(
-            audio
-                .channels
-                .borrow_mut()
-                .select(std::ptr::dangling_mut(), |_| false),
-            0
-        );
+        assert_eq!(audio.channels.borrow_mut().select(1, |_| false), 0);
     }
 
     #[test]

@@ -272,7 +272,6 @@ pub use crate::planets::solarsys::XFormIPLoc;
 pub use crate::navigation::abi::brief_ship_info;
 pub use crate::navigation::abi::encounter;
 extern "C" {
-    pub static mut EncounterRace: SIZE;
 }
 extern "C" {
     pub static mut EncounterGroup: BYTE;

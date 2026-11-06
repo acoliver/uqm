@@ -1,6 +1,6 @@
 //! Kernel resource teardown, ported from cleanup.c (GPL-2.0-or-later).
 
-use crate::graphics::{context_abi::DestroyContext, font_abi::DestroyFont};
+use crate::graphics::context_abi::DestroyContext;
 use crate::ships::native::abi::*;
 use std::ptr;
 
@@ -42,9 +42,8 @@ unsafe fn uninit_contexts(kernel: &mut crate::engine::Kernel) {
 unsafe fn uninit_kernel(kernel: &mut crate::engine::Kernel) {
     uninit_space(kernel);
     {
-        DestroySound(ReleaseStringTable(kernel.menu_sounds.cast()).cast());
-        DestroyFont(kernel.micro_font.cast());
-        DestroyStringTable(ReleaseStringTable(kernel.game_strings));
+        kernel.release_menu_sounds();
+        kernel.release_encounter_text();
         DestroyDrawable(ReleaseDrawable(kernel.status_frame));
         DestroyDrawable(ReleaseDrawable(kernel.activity_frame));
         kernel.release_tiny_font();

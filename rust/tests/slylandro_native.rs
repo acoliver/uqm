@@ -330,7 +330,7 @@ fn root_bolts_have_exact_random_color_length_angle_and_folded_chain_length() {
                     ((*bolt).current.location.x, (*bolt).current.location.y),
                     (321, -654)
                 );
-                assert_eq!((*prim(bolt)).Type, gfx_object_LINE_PRIM as u8);
+                assert_eq!((*prim(bolt)).kind, gfx_object_LINE_PRIM as u8);
                 assert_eq!(rgba((*prim(bolt)).color), bolt_color(random));
                 assert_eq!(velocity(&(*bolt).velocity), bolt_velocity(60, -1, random));
                 assert!(
@@ -396,7 +396,7 @@ fn roots_choose_nearest_live_visible_opponent_not_a_cached_target_ally_or_dead_s
         let mut cloaked =
             Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 1, [16; 3], [4, 4]);
         at(&mut cloaked, 4000, 3997);
-        (*prim(cloaked.ptr())).Type = gfx_object_NUM_PRIMS as u8;
+        (*prim(cloaked.ptr())).kind = gfx_object_NUM_PRIMS as u8;
         let mut far =
             Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 1, [16; 3], [4, 4]);
         at(&mut far, 4000, 2000);

@@ -206,7 +206,7 @@ pub(crate) mod live {
         let runtime = cx.kernel.input_runtime();
         let input = runtime.input();
         // SAFETY: the synchronous wait owns initialized game-thread input.
-        let mut pressed = cx.with_legacy(|| unsafe { AnyButtonPress(input, 1) });
+        let mut pressed = unsafe { AnyButtonPress(cx, input, 1) };
         while (pressed != 0) == released
             && (timeout == TimePeriod::MAX || GetTimeCounter() < timeout)
             && cx.world.activity() & CHECK_ABORT as u16 == 0
@@ -215,10 +215,9 @@ pub(crate) mod live {
         {
             let Some(sampled) = cx.nested_input(io, |cx| {
                 // SAFETY: the published input scope remains live during the synchronous sleep.
-                cx.with_legacy(|| unsafe {
-                    SleepThread(ONE_SECOND / 40);
-                    AnyButtonPress(input, 1)
-                })
+                cx.with_legacy(|| unsafe { SleepThread(ONE_SECOND / 40) });
+                // SAFETY: the retained context owns initialized game-thread input.
+                unsafe { AnyButtonPress(cx, input, 1) }
             }) else {
                 break;
             };

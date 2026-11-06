@@ -10,9 +10,9 @@ use std::{mem, ptr};
 const CONFIRM_WIN_WIDTH: i16 = 80;
 const CONFIRM_WIN_HEIGHT: i16 = 22;
 
-unsafe fn draw_confirmation(answer: BOOLEAN) {
+unsafe fn draw_confirmation(kernel: &Kernel, answer: BOOLEAN) {
     let old_fg = SetContextForeGroundColor(MENU_TEXT_COLOR);
-    let old_font = SetContextFont(Kernel::current().read(|owner| owner.star_con_font));
+    let old_font = SetContextFont(kernel.star_con_font);
     let old_effect = SetContextFontEffect(ptr::null_mut());
     let mut rect = RECT {
         corner: POINT {
@@ -36,13 +36,19 @@ unsafe fn draw_confirmation(answer: BOOLEAN) {
         x: rect.corner.x + (rect.extent.width >> 1),
         y: rect.corner.y + 8,
     };
-    text.pStr = game_string(QUITMENU_STRING_BASE);
+    text.pStr = kernel
+        .game_text((QUITMENU_STRING_BASE) as usize)
+        .as_ptr()
+        .cast();
     text.align = TEXT_ALIGN_ALIGN_CENTER;
     text.CharCount = COUNT::MAX;
     font_DrawText(&mut text);
     text.baseline.y += 10;
     text.baseline.x = rect.corner.x + (rect.extent.width >> 2);
-    text.pStr = game_string(QUITMENU_STRING_BASE + 1);
+    text.pStr = kernel
+        .game_text((QUITMENU_STRING_BASE + 1) as usize)
+        .as_ptr()
+        .cast();
     SetContextForeGroundColor(if answer != 0 {
         MENU_HIGHLIGHT_COLOR
     } else {
@@ -50,7 +56,10 @@ unsafe fn draw_confirmation(answer: BOOLEAN) {
     });
     font_DrawText(&mut text);
     text.baseline.x += rect.extent.width >> 1;
-    text.pStr = game_string(QUITMENU_STRING_BASE + 2);
+    text.pStr = kernel
+        .game_text((QUITMENU_STRING_BASE + 2) as usize)
+        .as_ptr()
+        .cast();
     SetContextForeGroundColor(if answer != 0 {
         MENU_TEXT_COLOR
     } else {
@@ -65,7 +74,10 @@ unsafe fn draw_confirmation(answer: BOOLEAN) {
 
 /// # Safety
 /// Input, graphics, flash, audio, and game state must be initialized on the game thread.
-pub unsafe fn do_confirm_exit(input: &InputSession) -> BOOLEAN {
+pub unsafe fn do_confirm_exit(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    input: &InputSession,
+) -> BOOLEAN {
     if PlayingTrack() != 0 {
         PauseTrack();
     }
@@ -73,7 +85,7 @@ pub unsafe fn do_confirm_exit(input: &InputSession) -> BOOLEAN {
     let mut rect: RECT = mem::zeroed();
     let mut context_rect: RECT = mem::zeroed();
     let mut old_rect: RECT = mem::zeroed();
-    let old_context = SetContext(Kernel::current().read(|owner| owner.screen_context));
+    let old_context = SetContext(cx.kernel.screen_context);
     GetContextClipRect(&mut old_rect);
     SetContextClipRect(ptr::null_mut());
     GetContextClipRect(&mut context_rect);
@@ -84,21 +96,24 @@ pub unsafe fn do_confirm_exit(input: &InputSession) -> BOOLEAN {
     let mut saved = SaveContextFrame(&rect);
     SetSystemRect(&rect);
     let mut response = 0;
-    draw_confirmation(response);
+    draw_confirmation(cx.kernel, response);
     FlushGraphics();
     FlushInput(input);
     let mut done = false;
     while !done {
         input.set_exit_requested(false);
         input.set_paused(false);
-        UpdateInputState(input);
-        if crate::engine::World::current().read(|world| world.activity()) & CHECK_ABORT as u16 != 0
-        {
+        UpdateInputState(cx, input);
+        if cx.world.activity() & CHECK_ABORT as u16 != 0 {
             done = true;
             response = 1;
         } else if input.pulsed().menu[KEY_MENU_SELECT as usize] != 0 {
             done = true;
-            PlayMenuSound(MENU_SOUND_EFFECT_MENU_SOUND_SUCCESS);
+            crate::ui::settings::play_menu_sound(
+                cx.kernel,
+                cx.world,
+                MENU_SOUND_EFFECT_MENU_SOUND_SUCCESS as u16,
+            );
         } else if input.pulsed().menu[KEY_MENU_CANCEL as usize] != 0 {
             done = true;
             response = 0;
@@ -106,19 +121,21 @@ pub unsafe fn do_confirm_exit(input: &InputSession) -> BOOLEAN {
             || input.pulsed().menu[KEY_MENU_RIGHT as usize] != 0
         {
             response = u32::from(response == 0);
-            draw_confirmation(response);
-            PlayMenuSound(MENU_SOUND_EFFECT_MENU_SOUND_MOVE);
+            draw_confirmation(cx.kernel, response);
+            crate::ui::settings::play_menu_sound(
+                cx.kernel,
+                cx.world,
+                MENU_SOUND_EFFECT_MENU_SOUND_MOVE as u16,
+            );
         }
         SleepThread(ONE_SECOND / 30);
     }
     DrawStamp(&mut saved);
     DestroyDrawable(ReleaseDrawable(saved.frame));
     ClearSystemRect();
-    let result = if response != 0
-        || crate::engine::World::current().read(|world| world.activity()) & CHECK_ABORT as u16 != 0
-    {
-        crate::engine::World::current()
-            .write(|world| world.set_activity(world.activity() | CHECK_ABORT as u16));
+    let result = if response != 0 || cx.world.activity() & CHECK_ABORT as u16 != 0 {
+        cx.world
+            .set_activity(cx.world.activity() | CHECK_ABORT as u16);
         1
     } else {
         0
@@ -135,17 +152,12 @@ pub unsafe fn do_confirm_exit(input: &InputSession) -> BOOLEAN {
     result
 }
 
-#[repr(C)]
-struct PopupState {
-    input_func: unsafe fn(*mut PopupState, &InputSession) -> BOOLEAN,
-}
-unsafe fn do_popup(_state: *mut PopupState, input: &InputSession) -> BOOLEAN {
-    SleepThread(ONE_SECOND / 20);
+unsafe fn do_popup(cx: &mut crate::engine::battle::Cx<'_>, input: &InputSession) -> BOOLEAN {
+    cx.with_legacy(|| SleepThread(ONE_SECOND / 20));
     u32::from(
         input.pulsed().menu[KEY_MENU_SELECT as usize] == 0
             && input.pulsed().menu[KEY_MENU_CANCEL as usize] == 0
-            && crate::engine::World::current().read(|world| world.activity()) & CHECK_ABORT as u16
-                == 0,
+            && cx.world.activity() & CHECK_ABORT as u16 == 0,
     )
 }
 
@@ -198,10 +210,12 @@ pub unsafe fn do_popup_window(runtime: &InputSession, msg: *const ::std::ffi::c_
     GetMenuSounds(input, &mut sound0, &mut sound1);
     SetMenuSounds(input, 0, 0);
     let old_callback = SetInputCallback(runtime, None);
-    let mut state = PopupState {
-        input_func: do_popup,
-    };
-    DoInput((&mut state as *mut PopupState).cast(), 1);
+    DoInput(
+        1,
+        &mut |cx: &mut crate::engine::battle::Cx<'_>, _: &mut crate::engine::observe::Io<'_>| {
+            do_popup(cx, input) != 0
+        },
+    );
     SetInputCallback(runtime, old_callback);
     ClearSystemRect();
     DrawStamp(&mut saved);
@@ -211,12 +225,4 @@ pub unsafe fn do_popup_window(runtime: &InputSession, msg: *const ::std::ffi::c_
     continue_flash();
     SetMenuSounds(input, sound0, sound1);
     StringBank_Free(bank);
-}
-
-unsafe fn game_string(index: u32) -> *mut UNICODE {
-    GetStringAddress(SetAbsStringTableIndex(
-        Kernel::current().read(|owner| owner.game_strings),
-        index as u16,
-    ))
-    .cast()
 }

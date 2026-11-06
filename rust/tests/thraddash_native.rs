@@ -240,7 +240,7 @@ fn horn_uses_next_location_exact_facing_speed_and_offsets_without_inheriting_vel
                 );
                 assert!((*e).collision_func.is_some());
                 assert!((*e).parent == uqm_rust::engine::battle::Parent::None);
-                assert_eq!((*prim(e)).Type, gfx_object_STAMP_PRIM as u8);
+                assert_eq!((*prim(e)).kind, gfx_object_STAMP_PRIM as u8);
                 assert_eq!(queued(), vec![ship.handle]);
                 battle_context::dispose(h);
             }
@@ -313,7 +313,7 @@ fn afterburner_inserts_owned_invisible_napalm_at_the_head_in_newest_first_order(
                 assert_eq!(((*e).current.location.x, (*e).current.location.y), (-9, 13));
                 assert_eq!(((*e).next.location.x, (*e).next.location.y), (-9, 13));
                 assert_eq!(velocity_fields(&(*e).velocity), [0; 9]);
-                assert_eq!((*prim(e)).Type, gfx_object_NUM_PRIMS as u8);
+                assert_eq!((*prim(e)).kind, gfx_object_NUM_PRIMS as u8);
                 assert!((*e).preprocess_func.is_some() && (*e).collision_func.is_some());
             }
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 22);
@@ -501,7 +501,7 @@ fn napalm_materializes_without_decaying_and_initializes_the_intersection_from_ne
             assert_eq!((*e).state_flags & NONSOLID as u16, 0);
             assert_ne!((*e).state_flags & APPEARING as u16, 0);
             assert_eq!((*e).state_flags & CHANGING as u16, 0);
-            assert_eq!((*prim(e)).Type, gfx_object_STAMP_PRIM as u8);
+            assert_eq!((*prim(e)).kind, gfx_object_STAMP_PRIM as u8);
             let i = (*e).IntersectControl;
             assert_eq!(
                 (i.IntersectStamp.origin.x, i.IntersectStamp.origin.y),

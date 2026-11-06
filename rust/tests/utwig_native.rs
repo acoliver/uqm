@@ -98,7 +98,7 @@ fn shield_absorbs_damage_before_collision_and_recharges_on_next_preprocess() {
             assert_eq!(ship.ship_mut().special_counter, 12);
             assert_eq!((*e).life, 2);
             assert_eq!((*e).colorCycleIndex, 1);
-            assert_eq!((*prim(e)).Type, gfx_object_STAMPFILL_PRIM as GRAPHICS_PRIM);
+            assert_eq!((*prim(e)).kind, gfx_object_STAMPFILL_PRIM as GRAPHICS_PRIM);
             ship.ship_mut().weapon_counter = 1;
             let mut projectile_fixture = Object::new(&_battle);
             let projectile = projectile_fixture.ptr();
@@ -133,7 +133,7 @@ fn shield_absorbs_damage_before_collision_and_recharges_on_next_preprocess() {
             assert_eq!(ship.ship_mut().special_counter, 0);
             assert_eq!((*e).life, 1);
             assert_eq!((*e).colorCycleIndex, 0);
-            assert_eq!((*prim(e)).Type, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
+            assert_eq!((*prim(e)).kind, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
         }
     })
 }

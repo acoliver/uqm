@@ -82,3 +82,5 @@ mod tests {
         let _decoder = NullDecoder::new();
     }
 }
+
+pub mod owned_bank;

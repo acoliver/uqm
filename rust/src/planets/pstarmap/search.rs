@@ -3,6 +3,8 @@
 use super::*;
 #[cfg(not(test))]
 use crate::memory::{rust_hfree, rust_hmalloc};
+#[cfg(not(test))]
+use std::ffi::c_void;
 
 use crate::strings::unicode::get_char_from_string as getCharFromString;
 #[cfg(not(test))]
@@ -290,59 +292,70 @@ unsafe fn match_next_star(state: *mut StarSearchState, reset: bool) {
 #[cfg(not(test))]
 unsafe fn on_star_name_change(
     entry: *mut TextEntryState,
+    cx: &mut crate::engine::battle::Cx<'_>,
     _input: &crate::engine::input::InputSession,
 ) -> u32 {
-    let state = (*entry).CbParam.cast::<StarSearchState>();
-    if strcmp(
-        ptr::addr_of!((*state).text).cast(),
-        ptr::addr_of!((*state).last_text).cast(),
-    ) != 0
-    {
-        (*state).last_change_time = GetTimeCounter();
-        strcpy(
-            ptr::addr_of_mut!((*state).last_text).cast(),
+    cx.with_legacy(|| {
+        let state = (*entry).CbParam.cast::<StarSearchState>();
+        if strcmp(
             ptr::addr_of!((*state).text).cast(),
-        );
-        match_next_star(state, true);
-    }
-    if (*state).current_index < 0 {
-        let flags = if (*state).text[0] == 0 { 1 } else { 2 }
-            | if (*entry).JoystickMode != 0 { 4 } else { 0 };
-        DrawSISMessageEx(
-            ptr::addr_of!((*state).text).cast(),
-            (*entry).CursorPos as i16,
-            -1,
-            flags,
-        )
-    } else {
-        let star = star_array.add((*state).sorted_stars[(*state).current_index as usize] as usize);
-        UpdateCursorLocation(0, 0, ptr::addr_of!((*star).star_pt).cast());
-        draw_matched_star_name(entry);
-        update_fuel_requirement();
-        1
-    }
+            ptr::addr_of!((*state).last_text).cast(),
+        ) != 0
+        {
+            (*state).last_change_time = GetTimeCounter();
+            strcpy(
+                ptr::addr_of_mut!((*state).last_text).cast(),
+                ptr::addr_of!((*state).text).cast(),
+            );
+            match_next_star(state, true);
+        }
+        if (*state).current_index < 0 {
+            let flags = if (*state).text[0] == 0 { 1 } else { 2 }
+                | if (*entry).JoystickMode != 0 { 4 } else { 0 };
+            DrawSISMessageEx(
+                ptr::addr_of!((*state).text).cast(),
+                (*entry).CursorPos as i16,
+                -1,
+                flags,
+            )
+        } else {
+            let star =
+                star_array.add((*state).sorted_stars[(*state).current_index as usize] as usize);
+            UpdateCursorLocation(0, 0, ptr::addr_of!((*star).star_pt).cast());
+            draw_matched_star_name(entry);
+            update_fuel_requirement();
+            1
+        }
+    })
 }
 #[cfg(not(test))]
 unsafe fn on_star_name_frame(
     entry: *mut TextEntryState,
+    cx: &mut crate::engine::battle::Cx<'_>,
+    _io: &mut crate::engine::observe::Io<'_>,
     input: &crate::engine::input::InputSession,
 ) -> u32 {
     let state = (*entry).CbParam.cast::<StarSearchState>();
     if input.pulsed().menu[22] != 0 {
-        match_next_star(state, false);
+        cx.with_legacy(|| match_next_star(state, false));
         if (*state).current_index < 0 {
             if input.pulsed().menu[22] != 0 {
-                PlayMenuSound(2);
+                crate::ui::settings::play_menu_sound(cx.kernel, cx.world, 2);
             }
             return 1;
         }
-        let star = star_array.add((*state).sorted_stars[(*state).current_index as usize] as usize);
-        UpdateCursorLocation(0, 0, ptr::addr_of!((*star).star_pt).cast());
-        draw_matched_star_name(entry);
-        update_fuel_requirement();
+        cx.with_legacy(|| {
+            let star =
+                star_array.add((*state).sorted_stars[(*state).current_index as usize] as usize);
+            UpdateCursorLocation(0, 0, ptr::addr_of!((*star).star_pt).cast());
+            draw_matched_star_name(entry);
+            update_fuel_requirement();
+        });
     }
-    flashCurrentLocation(ptr::null());
-    SleepThread(ONE_SECOND / 30);
+    cx.with_legacy(|| {
+        flashCurrentLocation(ptr::null());
+        SleepThread(ONE_SECOND / 30);
+    });
     1
 }
 
@@ -557,9 +570,12 @@ mod tests {
     }
     #[test]
     #[cfg(target_pointer_width = "64")]
-    fn text_entry_layout_matches_controls_header_on_64_bit_hosts() {
-        assert_eq!(std::mem::size_of::<TextEntryState>(), 136);
-        assert_eq!(std::mem::offset_of!(TextEntryState, BaseStr), 96);
-        assert_eq!(std::mem::offset_of!(TextEntryState, CbParam), 128);
+    fn text_entry_layout_has_no_input_callback_prefix_on_64_bit_hosts() {
+        assert_eq!(std::mem::size_of::<TextEntryState>(), 128);
+        assert_eq!(std::mem::offset_of!(TextEntryState, Initialized), 0);
+        assert_eq!(std::mem::offset_of!(TextEntryState, BaseStr), 88);
+        assert_eq!(std::mem::offset_of!(TextEntryState, ChangeCallback), 104);
+        assert_eq!(std::mem::offset_of!(TextEntryState, FrameCallback), 112);
+        assert_eq!(std::mem::offset_of!(TextEntryState, CbParam), 120);
     }
 }

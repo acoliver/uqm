@@ -448,6 +448,22 @@ mod tests {
                 assert_eq!(state(), (current_raw, depth + 1));
                 previous.draw_batch(|| assert_eq!(state(), (previous_raw, depth + 2)));
                 assert_eq!(state(), (current_raw, depth + 1));
+                {
+                    let _pause = current.pause_batch();
+                    assert_eq!(state(), (current_raw, depth));
+                }
+                assert_eq!(state(), (current_raw, depth + 1));
+                {
+                    let _pause = previous.pause_batch();
+                    assert_eq!(state(), (current_raw, depth));
+                }
+                assert_eq!(state(), (current_raw, depth + 1));
+                let rejected = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    let _pause = current.pause_batch();
+                    panic!("paused drawing failure");
+                }));
+                assert!(rejected.is_err());
+                assert_eq!(state(), (current_raw, depth + 1));
                 17
             }),
             17

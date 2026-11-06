@@ -116,3 +116,5 @@ mod flash_math;
 mod native_context;
 mod native_drawables;
 pub mod native_font;
+
+pub mod native_batch;

@@ -41,7 +41,7 @@ pub(crate) mod live {
             utf8_string_count as utf8StringCount, utf8_string_count_n as utf8StringCountN,
         },
     };
-    use std::ffi::{c_void, CString};
+    use std::ffi::CString;
 
     use crate::time::counter_abi::GetTimeCounter;
 
@@ -57,8 +57,6 @@ pub(crate) mod live {
     use crate::ui::util::live::{
         wait_for_any_button, wait_for_any_button_until, wait_for_no_input, SaveContextFrame,
     };
-
-    use crate::battle::sounds::engine::NON_POSITIONAL;
 
     extern "C" {
         static mut SpaceJunkFrame: *mut crate::graphics::native_abi::frame_desc;
@@ -104,10 +102,10 @@ pub(crate) mod live {
         g.unbatch();
     }
 
-    use crate::battle::sounds::engine::play_sound;
+    use crate::battle::sounds::engine::play_clip;
 
     struct ReportPrinter {
-        sounds: *mut c_void,
+        sound: Option<crate::sound::owned_bank::SoundClip>,
         advance: i16,
         sleepy: bool,
     }
@@ -127,16 +125,16 @@ pub(crate) mod live {
                 let c = getCharFromString(&mut next);
                 cx.with_legacy(|| font_DrawText(std::ptr::from_mut(t).cast()));
                 if self.sleepy && cx.world.activity() & (1 << 14) == 0 {
-                    let channels = cx.kernel.channels.clone();
-                    cx.with_legacy(|| {
-                        play_sound(
-                            &mut channels.borrow_mut(),
-                            self.sounds.cast(),
-                            NON_POSITIONAL,
+                    if let Some(sound) = &self.sound {
+                        play_clip(
+                            cx.world,
+                            &mut cx.kernel.channels.borrow_mut(),
+                            sound,
+                            crate::sound::types::SoundPosition::non_positional(),
                             None,
                             2,
-                        )
-                    });
+                        );
+                    }
                     timeout = timeout.wrapping_add(character_delay(c, word_chars == 0));
                     if wait_for_any_button_until(cx, io, 1, timeout, 0) != 0 {
                         self.sleepy = false;
@@ -153,7 +151,7 @@ pub(crate) mod live {
         input: &crate::engine::input::InputSession,
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
-        sounds: *mut c_void,
+        sound: Option<crate::sound::owned_bank::SoundClip>,
         text: *const u8,
         mut remaining: u16,
     ) {
@@ -174,7 +172,7 @@ pub(crate) mod live {
         t.p_str = text.cast();
         t.char_count = 1;
         let mut printer = ReportPrinter {
-            sounds,
+            sound,
             advance: r.width + 1,
             sleepy: true,
         };
@@ -272,7 +270,7 @@ pub(crate) mod live {
         }
         let runtime = cx.kernel.input_runtime();
         let input = runtime.input();
-        let sounds = cx.kernel.menu_sounds.cast();
+        let sound = cx.kernel.menu_sound_bank().map(|bank| bank.clip(0));
         let (own_context, old_context, saved, old_font, old_effect, text, length) =
             cx.with_legacy(|| {
                 let mut own_context = 0;
@@ -296,7 +294,7 @@ pub(crate) mod live {
                     GetStringLength((*info).DiscoveryString.cast()),
                 )
             });
-        make_report(input, cx, io, sounds, text, length);
+        make_report(input, cx, io, sound, text, length);
         cx.with_legacy(|| {
             SetContextFontEffect(old_effect);
             SetContextFont(old_font);

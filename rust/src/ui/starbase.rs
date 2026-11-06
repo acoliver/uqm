@@ -321,12 +321,10 @@ unsafe fn activate_starbase_selection(
         });
         cx.with_legacy(|| SetMenuSounds(input, SOUND_ARROWS, SOUND_SELECT));
         cx.run_input(io, true, |cx, _| {
-            cx.with_legacy(|| {
-                let callback = menu
-                    .InputFunc
-                    .unwrap_or_else(|| panic!("missing Starbase submenu callback"));
-                callback(menu, input) != 0
-            })
+            let callback = menu
+                .InputFunc
+                .unwrap_or_else(|| panic!("missing Starbase submenu callback"));
+            callback(cx, menu, input) != 0
         });
         menu.Initialized = 0;
         menu.CurState = old;

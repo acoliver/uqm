@@ -3,9 +3,12 @@
 #[cfg(not(test))]
 use super::*;
 use super::{box_union, EXTENT, POINT, RECT};
+#[cfg(not(test))]
+use std::ffi::c_void;
 
 #[cfg(not(test))]
 pub(super) unsafe fn prepare_star_map(
+    cx: &mut crate::engine::battle::Cx<'_>,
     input: &crate::engine::input::InputSession,
     misc_data: *mut c_void,
     space: *mut c_void,
@@ -13,31 +16,36 @@ pub(super) unsafe fn prepare_star_map(
 ) -> (MENU_STATE, POINT) {
     // SAFETY: the caller retains these native resources on the initialized game thread.
     unsafe {
-        let mut menu: MENU_STATE = std::mem::zeroed();
-        ZOOM_LEVEL = 0;
-        MAP_ORIGIN = POINT { x: 4999, y: 4999 };
-        STAR_MAP_FRAME = pixmap_abi::SetAbsFrameIndex(misc_data.cast(), 48).cast();
-        let universe = current_location();
-        cursorLoc = autopilot;
-        if cursorLoc.x == -1 && cursorLoc.y == -1 {
-            cursorLoc = universe;
+        let (menu, universe, update) = cx.with_legacy(|| {
+            let mut menu: MENU_STATE = std::mem::zeroed();
+            ZOOM_LEVEL = 0;
+            MAP_ORIGIN = POINT { x: 4999, y: 4999 };
+            STAR_MAP_FRAME = pixmap_abi::SetAbsFrameIndex(misc_data.cast(), 48).cast();
+            let universe = current_location();
+            cursorLoc = autopilot;
+            if cursorLoc.x == -1 && cursorLoc.y == -1 {
+                cursorLoc = universe;
+            }
+            menu.Initialized = 0;
+            TRANSITION_PENDING = true;
+            (menu, universe, which_space() <= 1)
+        });
+        if update {
+            update_map(cx, input);
         }
-        menu.Initialized = 0;
-        TRANSITION_PENDING = true;
-        if which_space() <= 1 {
-            update_map(input);
-        }
-        DrawStarMap(0, (-1isize) as *mut RECT);
-        TRANSITION_PENDING = false;
-        BatchGraphics();
-        let old_context = SetContext(space.cast());
-        let mut clip = zero_rect();
-        GetContextClipRect(&mut clip);
-        SetContext(old_context);
-        LoadIntoExtraScreen(ptr::from_mut(&mut clip).cast());
-        draw_cursor(ux(cursorLoc.x), uy(cursorLoc.y));
-        UnbatchGraphics();
-        (menu, universe)
+        cx.with_legacy(|| {
+            DrawStarMap(0, (-1isize) as *mut RECT);
+            TRANSITION_PENDING = false;
+            BatchGraphics();
+            let old_context = SetContext(space.cast());
+            let mut clip = zero_rect();
+            GetContextClipRect(&mut clip);
+            SetContext(old_context);
+            LoadIntoExtraScreen(ptr::from_mut(&mut clip).cast());
+            draw_cursor(ux(cursorLoc.x), uy(cursorLoc.y));
+            UnbatchGraphics();
+            (menu, universe)
+        })
     }
 }
 
@@ -91,4 +99,10 @@ pub(super) fn repair_rectangle(last: RECT, next: RECT, width: i32, height: i32) 
     r.extent.height = r.extent.height.wrapping_add(r.corner.y & 1);
     r.corner.y &= !1;
     r
+}
+
+#[cfg(not(test))]
+pub(super) fn enlarge(r: &mut RECT) {
+    r.extent.width = r.extent.width.wrapping_add(1);
+    r.extent.height = r.extent.height.wrapping_add(1);
 }

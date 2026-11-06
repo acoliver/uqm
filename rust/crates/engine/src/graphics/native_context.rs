@@ -11,7 +11,7 @@ pub(super) struct Allocation {
 
 #[derive(Clone)]
 pub struct ContextFrame {
-    frame: FRAME,
+    pub(super) frame: FRAME,
     _allocations: Vec<native_drawables::DrawableLease>,
 }
 impl ContextFrame {
@@ -63,6 +63,13 @@ enum Operation {
 
 #[derive(Clone)]
 pub struct ContextLease(Rc<Allocation>);
+
+pub struct BatchPause(ContextLease);
+impl Drop for BatchPause {
+    fn drop(&mut self) {
+        self.0.apply(Operation::BeginBatch);
+    }
+}
 
 struct ContextBatch {
     context: ContextLease,
@@ -119,7 +126,10 @@ impl ContextLease {
         // Set-frame retains its new allocation; clipping and drawing retain the
         // selected target before entering this native operation boundary.
         unsafe {
-            let previous = context_abi::SetContext(selected);
+            let previous = match operation {
+                Operation::BeginBatch | Operation::EndBatch => context_abi::_pCurContext,
+                _ => context_abi::SetContext(selected),
+            };
             match operation {
                 Operation::Select | Operation::Deselect => (),
                 Operation::BeginBatch => super::gfx_common_abi::batch_graphics(),
@@ -173,6 +183,11 @@ impl ContextLease {
         let result = draw();
         drop(batch);
         result
+    }
+
+    pub fn pause_batch(&self) -> BatchPause {
+        self.apply(Operation::EndBatch);
+        BatchPause(self.clone())
     }
 
     pub fn select(&self) {
@@ -284,6 +299,19 @@ impl ContextLease {
             CharCount: u16::MAX,
         };
         self.apply(Operation::Text(font.clone(), text, color));
+    }
+
+    pub fn draw_primitives(&self, batch: &mut super::native_batch::NativeBatch, scale: i32) {
+        let _target = self.retain_target();
+        let head = if batch.is_empty() { u16::MAX } else { 0 };
+        // SAFETY: this lease retains the graphics-thread context/target. The
+        // batch owns bounded links and retains all registered stamp sources;
+        // it cannot contain text pointers into caller storage.
+        unsafe {
+            super::gfx_common_abi::SetGraphicScale(scale);
+            super::frame_abi::DrawBatch(batch.primitives.as_mut_ptr(), u32::from(head), 0);
+            super::gfx_common_abi::SetGraphicScale(0);
+        }
     }
 
     pub fn clear(&self) {

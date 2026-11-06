@@ -173,7 +173,7 @@ mod live {
             let runtime = self.cx.borrow().kernel.input_runtime();
             let input = runtime.input();
             let mut cx = self.cx.borrow_mut();
-            let pressed = cx.with_legacy(|| unsafe { AnyButtonPress(input, 1) != 0 });
+            let pressed = unsafe { AnyButtonPress(&mut cx, input, 1) != 0 };
             pressed || cx.world.activity() & (1 << 14) != 0
         }
     }

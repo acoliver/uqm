@@ -538,9 +538,9 @@ pub(crate) mod live {
     pub unsafe extern "C" fn do_missions() {
         crate::app::bridge::enter(|cx| {
             spawn_flagship(cx);
-            if EncounterRace >= 0 {
-                notify_others(cx, EncounterRace as u16, 0);
-                EncounterRace = -1;
+            if cx.world.encounter_race >= 0 {
+                notify_others(cx, cx.world.encounter_race as u16, 0);
+                cx.world.encounter_race = -1;
             }
             let mut handle = cx.world.ip_groups_ref().head();
             while let Some(group) = handle {

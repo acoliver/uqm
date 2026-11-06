@@ -69,10 +69,6 @@ use crate::io::uio_bridge::uio_fread;
 use crate::io::uio_bridge::uio_fseek;
 #[cfg(not(test))]
 use crate::io::uio_bridge::uio_ftell;
-#[cfg(not(test))]
-use crate::strings::string_table::AllocStringTable;
-#[cfg(not(test))]
-use crate::strings::string_table::FreeStringTable;
 
 #[allow(
     non_snake_case,
@@ -110,33 +106,7 @@ unsafe fn uio_fseek(_fp: *mut c_void, _offset: c_long, _whence: c_int) -> c_int 
 unsafe fn uio_ftell(_fp: *mut c_void) -> c_long {
     0
 }
-#[cfg(test)]
-#[allow(non_snake_case, reason = "test stub mirrors the legacy C ABI symbol")]
-unsafe fn AllocStringTable(_n: c_int, _f: c_int) -> *mut c_void {
-    null_mut()
-}
-#[cfg(test)]
-#[allow(non_snake_case, reason = "test stub mirrors the legacy C ABI symbol")]
-unsafe fn FreeStringTable(_p: *mut c_void) {}
 // HMalloc/HFree use crate::memory directly (no test stubs needed)
-
-/// C STRING_TABLE_ENTRY_DESC layout — must match sc2/src/libs/strings/strintrn.h
-#[repr(C)]
-struct CStringTableEntry {
-    data: *mut c_char,
-    length: c_int,
-    index: c_int,
-    parent: *mut c_void,
-}
-
-/// C STRING_TABLE_DESC layout — must match sc2/src/libs/strings/strintrn.h
-#[repr(C)]
-struct CStringTable {
-    flags: u16,
-    size: c_int,
-    strings: *mut CStringTableEntry,
-    name_index: *mut c_void,
-}
 
 /// Read a file via UIO into a byte vector.
 unsafe fn uio_read_file(path: *const c_char) -> Option<Vec<u8>> {
@@ -1054,32 +1024,16 @@ pub fn set_positional_object(source_index: c_uint, object: usize) {
     sfx::set_positional_object(source_index as usize, object);
 }
 
-/// Free a SOUND_REF (STRING_TABLE containing SoundSample pointers).
-/// Each entry's .data is an HMalloc'd slot pointing to a Box<SoundSample>.
+/// Release a sound bank transferred by the SNDRES loader.
 ///
 /// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
+/// `bank_ptr` must be null or the unconsumed result of LoadedSoundBank::into_raw.
 pub unsafe fn destroy_sound(bank_ptr: *mut c_void) {
-    if bank_ptr.is_null() {
-        return;
+    if !bank_ptr.is_null() {
+        drop(std::rc::Rc::from_raw(
+            bank_ptr.cast::<super::owned_bank::Bank>(),
+        ));
     }
-    let strtab = &*(bank_ptr as *const CStringTable);
-    for i in 0..strtab.size as usize {
-        let entry = &mut *strtab.strings.add(i);
-        if !entry.data.is_null() {
-            let sample_pp = entry.data as *mut *mut SoundSample;
-            let sample_ptr = *sample_pp;
-            if !sample_ptr.is_null() {
-                // Reconstruct and drop the Box<SoundSample>, destroying mixer buffers
-                let mut sample = *Box::from_raw(sample_ptr);
-                let _ = stream::destroy_sound_sample(&mut sample);
-            }
-            // Null out data so FreeStringTable won't double-free
-            entry.data = null_mut();
-        }
-    }
-    FreeStringTable((bank_ptr).cast());
 }
 
 // =============================================================================
@@ -1179,7 +1133,7 @@ pub unsafe extern "C" fn LoadSoundFile(filename: *const c_char) -> *mut c_void {
 
     // Parse lines — each line is a sound filename relative to the bank's directory
     let text = String::from_utf8_lossy(&data);
-    let mut samples: Vec<Box<SoundSample>> = Vec::new();
+    let mut samples: Vec<SoundSample> = Vec::new();
 
     for line in text.lines() {
         let snd_name = line.trim();
@@ -1277,7 +1231,7 @@ pub unsafe extern "C" fn LoadSoundFile(filename: *const c_char) -> *mut c_void {
             );
         }
 
-        samples.push(Box::new(sample));
+        samples.push(sample);
     }
 
     if samples.is_empty() {
@@ -1287,32 +1241,10 @@ pub unsafe extern "C" fn LoadSoundFile(filename: *const c_char) -> *mut c_void {
 
     let snd_ct = samples.len();
 
-    // Allocate a C STRING_TABLE
-    let strtab_ptr = AllocStringTable(snd_ct as c_int, 0);
-    if strtab_ptr.is_null() {
-        eprintln!("LoadSoundFile({}): AllocStringTable failed", name);
-        // Clean up samples
-        for mut s in samples {
-            let _ = stream::destroy_sound_sample(&mut s);
-        }
-        return null_mut();
-    }
-
-    let strtab = &*(strtab_ptr as *const CStringTable);
-
-    // Populate each entry's .data with a pointer to the SoundSample
-    for (i, sample) in samples.into_iter().enumerate() {
-        let entry = &mut *strtab.strings.add(i);
-        let sample_ptr = Box::into_raw(sample);
-        // Allocate a pointer-sized slot (matching C's `HMalloc(sizeof(TFB_SoundSample*))`)
-        let target = HMalloc(std::mem::size_of::<*mut c_void>()) as *mut *mut SoundSample;
-        *target = sample_ptr;
-        entry.data = target as *mut c_char;
-        entry.length = std::mem::size_of::<*mut c_void>() as c_int;
-    }
+    let bank = super::owned_bank::LoadedSoundBank::from_samples(samples);
 
     eprintln!("LoadSoundFile({}): loaded {} sounds", name, snd_ct);
-    (strtab_ptr).cast()
+    bank.into_raw()
 }
 
 /// Load a music file. Returns a MUSIC_REF (double pointer: `*mut *mut Arc<Mutex<SoundSample>>`).

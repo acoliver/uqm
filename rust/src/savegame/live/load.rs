@@ -9,7 +9,6 @@ use crate::mainloop::dir_prep::saveDir;
 use crate::planets::starmap::FindStar;
 
 pub(in crate::savegame) unsafe fn finish_load(star: &super::super::StarDesc, activity: u16) {
-    crate::planets::c_api::reset_encounter();
     // Loading can run inside a ship callback's menu. Unlink the old roster now,
     // but keep its records alive through callbacks and terminal-outcome capture.
     (**Kernel::current()).request_ship_reset();
@@ -20,6 +19,7 @@ pub(in crate::savegame) unsafe fn finish_load(star: &super::super::StarDesc, act
     let selected =
         FindStar(std::ptr::null_mut(), &mut point, 0, 0).cast::<crate::engine::world::CStarDesc>();
     World::current().write(|world| {
+        crate::planets::c_api::reset_encounter(world);
         runtime::live::select_live_star(world, selected.as_ref());
         world.next_activity = activity;
         if activity & START_ENCOUNTER == 0 && activity & 0xff == IN_INTERPLANETARY {

@@ -561,7 +561,7 @@ pub const COMBAT_SPEED_SHIFT: u32 = 6;
 pub const COMBAT_SPEED_MASK: u32 = 192;
 pub const NUM_COMBAT_SPEEDS: u32 = 4;
 pub const MUSIC_DISABLED: u32 = 8;
-pub const SOUND_DISABLED: u32 = 16;
+pub const SOUND_DISABLED: u32 = crate::engine::world::SOUND_DISABLED as u32;
 pub const CYBORG_ENABLED: u32 = 32;
 pub const MAX_ENCOUNTERS: u32 = 16;
 pub const MAX_BATTLE_GROUPS: u32 = 32;
@@ -2896,7 +2896,7 @@ pub struct GenerateFunctions {
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct menu_state {
-    pub InputFunc: ::std::option::Option<unsafe fn(pMS: *mut menu_state, input: &crate::engine::input::InputSession) -> BOOLEAN>,
+    pub InputFunc: ::std::option::Option<unsafe fn(cx: &mut crate::engine::battle::Cx<'_>, pMS: &mut menu_state, input: &crate::engine::input::InputSession) -> BOOLEAN>,
     pub Initialized: SIZE,
     pub CurState: BYTE,
     pub CurFrame: FRAME,
@@ -3193,7 +3193,6 @@ pub type _bindgen_ty_26 = ::std::os::raw::c_uint;
 
 #[cfg(not(test))]
 unsafe extern "C" {
-    pub static mut EncounterRace: SIZE;
 }
 pub const STAR_STRING_BASE: _bindgen_ty_27 = 0;
 pub const DEVICE_STRING_BASE: _bindgen_ty_27 = 133;

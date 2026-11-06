@@ -188,15 +188,24 @@ unsafe fn copy_pool(table: *mut StringTable, first: usize, count: usize, pool: &
 }
 
 /// Text strings, nothing else.
-unsafe fn load_plain_table(src: &mut impl LineSource, length: u32) -> *mut StringTable {
+fn load_plain_table(src: &mut impl LineSource, length: u32) -> *mut StringTable {
     let mut strings = Pool::default();
     let count = read_strings(src, length, &mut strings, |_, _| {});
     if count == 0 {
         return null_mut();
     }
-    let table = AllocStringTable(count as i32, 0);
-    copy_pool(table, 0, count, &strings);
-    table
+    let mut offset = 0;
+    let entries = strings
+        .lens
+        .iter()
+        .map(|&len| {
+            let end = offset + len as usize;
+            let entry = strings.bytes[offset..end].to_vec();
+            offset = end;
+            entry
+        })
+        .collect();
+    super::owned_table::LoadedTextTable::from_strings(entries).into_raw()
 }
 
 /// # Safety

@@ -132,51 +132,36 @@ pub(crate) mod naming {
     use super::*;
     use std::ffi::c_char;
 
-    use crate::strings::string_table::SetAbsStringTableIndex;
-
-    use crate::strings::string_table::GetStringAddress;
+    pub(crate) fn cluster_name(
+        kernel: &crate::engine::Kernel,
+        star: &CStarDesc,
+        prefix_base: usize,
+    ) -> std::ffi::CString {
+        let mut text = Vec::new();
+        if star.prefix != 0 {
+            let index = prefix_base + usize::from(star.prefix) - 1;
+            if let Some(prefix) = kernel.game_text_entry(index) {
+                text.extend_from_slice(prefix.to_bytes());
+                text.push(b' ');
+            }
+        }
+        text.extend_from_slice(kernel.game_text(usize::from(star.postfix)).to_bytes());
+        std::ffi::CString::new(text)
+            .unwrap_or_else(|error| panic!("cluster name contains NUL: {error}"))
+    }
 
     /// # Safety
     /// `star` is readable, and `buffer` has space for the prefix and cluster name.
     #[no_mangle]
     pub unsafe extern "C" fn GetClusterName(star: *const CStarDesc, buffer: *mut c_char) {
-        let mut out = buffer;
-        if (*star).prefix != 0 {
-            let mut text = GetStringAddress(SetAbsStringTableIndex(
-                (KernelOwner::current().read(|owner| owner.game_strings)).cast(),
-                crate::c_bindings::global_state::STAR_NUMBER_BASE as u16 + (*star).prefix as u16
-                    - 1,
-            ));
-            if !text.is_null() {
-                loop {
-                    *out = *text;
-                    out = out.add(1);
-                    let end = *text == 0;
-                    text = text.add(1);
-                    if end {
-                        break;
-                    }
-                }
-                *out.sub(1) = b' ' as c_char;
-            }
-        }
-        let mut text = GetStringAddress(SetAbsStringTableIndex(
-            (KernelOwner::current().read(|owner| owner.game_strings)).cast(),
-            (*star).postfix as u16,
-        ));
-        if text.is_null() {
-            *out = 0;
-        } else {
-            loop {
-                *out = *text;
-                out = out.add(1);
-                let end = *text == 0;
-                text = text.add(1);
-                if end {
-                    break;
-                }
-            }
-        }
+        let name = KernelOwner::current().read(|kernel| {
+            cluster_name(
+                kernel,
+                &*star,
+                crate::c_bindings::global_state::STAR_NUMBER_BASE as usize,
+            )
+        });
+        std::ptr::copy_nonoverlapping(name.as_ptr(), buffer, name.as_bytes_with_nul().len());
     }
 }
 

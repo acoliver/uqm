@@ -53,7 +53,6 @@ impl Cx<'_> {
 
 #[cfg(not(test))]
 #[cfg(not(test))]
-use super::record::PRIMITIVE;
 #[cfg(not(test))]
 use super::Parent;
 use super::{Cx, ElementId, ShipId};
@@ -327,13 +326,13 @@ impl Cx<'_> {
         &mut self,
         id: ElementId,
     ) -> impl std::ops::DerefMut<Target = PrimitiveStyle> + '_ {
-        fn apply(p: &mut PRIMITIVE, v: PrimitiveStyle) {
-            p.Type = v.kind;
+        fn apply(p: &mut super::display::DisplayPrimitive, v: PrimitiveStyle) {
+            p.kind = v.kind;
             p.color = v.color;
         }
         let record = self.primitive(id);
         let value = PrimitiveStyle {
-            kind: record.Type,
+            kind: record.kind,
             color: record.color,
         };
         Edit {
@@ -397,7 +396,7 @@ impl Cx<'_> {
         let index = usize::from(self.kernel.elements[id].PrimIndex);
         let record = self.kernel.display.get(index as u16);
         PrimitiveStyle {
-            kind: record.Type,
+            kind: record.kind,
             color: record.color,
         }
     }
@@ -410,7 +409,7 @@ impl Cx<'_> {
         );
         let index = self.kernel.elements[destination].PrimIndex;
         let source_index = usize::from(self.kernel.elements[source].PrimIndex);
-        let primitive = *self.kernel.display.get(source_index as u16);
+        let primitive = self.kernel.display.get(source_index as u16).clone();
         let value = self.kernel.elements[source].clone();
         let address = std::ptr::from_ref(&self.kernel.elements[source]) as usize;
         crate::collections::observation::copy_image(
@@ -476,7 +475,7 @@ impl Cx<'_> {
     ) -> crate::engine::battle::views::PrimitiveStyle {
         let primitive = self.kernel.display.get(subject.primitive);
         crate::engine::battle::views::PrimitiveStyle {
-            kind: primitive.Type,
+            kind: primitive.kind,
             color: primitive.color,
         }
     }
@@ -497,22 +496,26 @@ impl Cx<'_> {
     pub(crate) fn sound_point(&self, id: ElementId) -> crate::graphics::native_abi::POINT {
         let index = usize::from(self.elements()[id].PrimIndex);
         let primitive = self.kernel.display.get(index as u16);
-        // SAFETY: the checked element owns the primitive; its type selects the union variant.
-        unsafe {
-            if primitive.Type == crate::graphics::native_abi::LINE_PRIMITIVE {
-                primitive.Object.Line.first
-            } else {
-                primitive.Object.Point
-            }
-        }
+        primitive.point()
     }
 }
 
 #[cfg(not(test))]
 impl Cx<'_> {
     pub fn primitive_stamp(&mut self, id: ElementId) -> crate::graphics::native_abi::STAMP {
-        // SAFETY: the caller selected a stamp primitive from the retained graphics union.
-        unsafe { self.primitive(id).Object.Stamp }
+        self.primitive(id).stamp()
+    }
+
+    pub(crate) fn project_display_stamp(
+        &mut self,
+        id: ElementId,
+        origin: crate::graphics::native_abi::POINT,
+    ) {
+        let element = &self.kernel.elements[id];
+        self.kernel
+            .display
+            .get_mut(element.PrimIndex)
+            .set_image(origin, element.next.image.frame.clone());
     }
 
     pub fn set_primitive_stamp(
@@ -520,7 +523,7 @@ impl Cx<'_> {
         id: ElementId,
         stamp: crate::graphics::native_abi::STAMP,
     ) {
-        self.primitive(id).Object.Stamp = stamp;
+        self.primitive(id).set_stamp(stamp);
     }
 
     pub fn copy_current_to_next(&mut self, id: ElementId) {
@@ -713,15 +716,15 @@ mod intersection_projection_tests {
                 None
             );
             let primitive = cx.display_pool().alloc().unwrap();
-            cx.kernel.display.get_mut(primitive).Type = 3;
-            assert_eq!(cx.display_primitive(primitive).Type, 3);
+            cx.kernel.display.get_mut(primitive).kind = 3;
+            assert_eq!(cx.display_primitive(primitive).kind, 3);
             cx.append_display(primitive);
-            assert_eq!(cx.display_batch()[0].Type, 3);
+            assert_eq!(cx.display_batch().primitives()[0].Type, 3);
             cx.clear_display_order();
             assert!(cx.display_batch().is_empty());
             cx.reset_display();
             assert_eq!(cx.kernel.display.alloc(), Some(0));
-            assert_eq!(cx.display_primitive(0).Type, 3);
+            assert_eq!(cx.display_primitive(0).kind, 3);
             drop(battle);
         }
     }
@@ -780,7 +783,7 @@ impl Cx<'_> {
     pub(crate) fn display_pool(&mut self) -> &mut super::display::DisplayPool {
         &mut self.kernel.display
     }
-    pub fn display_primitive(&mut self, index: u16) -> &mut super::record::PRIMITIVE {
+    pub fn display_primitive(&mut self, index: u16) -> &mut super::display::DisplayPrimitive {
         self.kernel.display.get_mut(index)
     }
     pub(crate) fn reset_display(&mut self) {
@@ -792,7 +795,7 @@ impl Cx<'_> {
     pub(crate) fn append_display(&mut self, index: u16) {
         self.kernel.display.insert_before(index, None);
     }
-    pub(crate) fn display_batch(&self) -> Vec<super::record::PRIMITIVE> {
+    pub(crate) fn display_batch(&self) -> crate::graphics::native_batch::NativeBatch {
         self.kernel.display.batch()
     }
 }

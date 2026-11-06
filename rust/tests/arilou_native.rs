@@ -21,7 +21,7 @@ unsafe fn index_of(frame: FRAME) -> u16 {
     (*frame.cast::<uqm_rust::graphics::native_abi::frame_desc>()).Index
 }
 
-unsafe fn prim_of(element: *mut ElementRecord) -> *mut PRIMITIVE {
+unsafe fn prim_of(element: *mut ElementRecord) -> *mut uqm_rust::engine::battle::DisplayPrimitive {
     uqm_rust::app::bridge::enter(|cx| {
         std::ptr::from_mut(cx.display_primitive((*element).PrimIndex))
     })
@@ -45,7 +45,7 @@ impl<'a> Fleet<'a> {
         (*ship).life = NORMAL_LIFE as u16;
         (*ship).current.location = POINT { x, y };
         (*ship).next.location = POINT { x, y };
-        (*prim_of(ship)).Type = gfx_object_STAMP_PRIM as u8;
+        (*prim_of(ship)).kind = gfx_object_STAMP_PRIM as u8;
         self.fixture.queue();
         ship
     }
@@ -214,7 +214,7 @@ fn laser_snaps_to_the_enemy_within_the_turn_and_is_yellow() {
 
             // BUILD_COLOR (MAKE_RGB15 (0x1F, 0x1F, 0x0A), 0x0E) on a line.
             let prim = prim_of(laser);
-            assert_eq!((*prim).Type, gfx_object_LINE_PRIM as u8);
+            assert_eq!((*prim).kind, gfx_object_LINE_PRIM as u8);
             let color: Rgba = (
                 (*prim).color.r,
                 (*prim).color.g,

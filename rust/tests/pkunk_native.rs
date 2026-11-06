@@ -221,7 +221,7 @@ impl<'a> Ship<'a> {
     }
 }
 
-unsafe fn prim(el: *mut ElementRecord) -> *mut PRIMITIVE {
+unsafe fn prim(el: *mut ElementRecord) -> *mut uqm_rust::engine::battle::DisplayPrimitive {
     uqm_rust::app::bridge::enter(|cx| std::ptr::from_mut(cx.display_primitive((*el).PrimIndex)))
 }
 
@@ -357,7 +357,7 @@ unsafe fn check_trail(ship: &mut Ship, trail: *mut ElementRecord, at: POINT, ang
     );
     assert_eq!((*trail).life, 1);
     assert_eq!(
-        (*prim(trail)).Type,
+        (*prim(trail)).kind,
         gfx_object_STAMPFILL_PRIM as GRAPHICS_PRIM
     );
     // BUILD_COLOR (MAKE_RGB15 (0x1F, 0x15, 0x00), 0x7A)
@@ -595,7 +595,7 @@ fn bug_missiles_launch_fore_left_and_right_inheriting_ship_velocity() {
                         assert_eq!((*m).playerNr, 1);
                         assert_eq!((*m).current.image.frame.raw(), ship.weapon_frames.frame(0));
                         assert_eq!((*m).current.image.frames, ship.inner.frame_set(1));
-                        assert_eq!((*prim(m)).Type, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
+                        assert_eq!((*prim(m)).kind, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
                         assert!((*m).collision_func.is_some());
                         assert!((*m).postprocess_func.is_none());
                         assert!((*m).death_func.is_none());
@@ -813,7 +813,7 @@ fn reincarnation_preprocess_queues_four_trails_around_the_ship() {
 
                 let el = ship.ptr();
                 assert_eq!((*el).life, 12);
-                assert_eq!((*prim(el)).Type, gfx_object_NUM_PRIMS as GRAPHICS_PRIM);
+                assert_eq!((*prim(el)).kind, gfx_object_NUM_PRIMS as GRAPHICS_PRIM);
                 assert_eq!(
                     (*el).state_flags,
                     (PLAYER_SHIP | APPEARING | NONSOLID | FINITE_LIFE | CHANGING) as u16
@@ -890,7 +890,7 @@ fn reincarnation_ends_when_life_span_returns_to_normal() {
             ship.preprocess();
             assert_eq!(ship.inner.ship_mut().cur_status_flags, 0x3e0);
             assert!(ship.inner.descriptor_mut().callbacks()[1] != 0);
-            assert_eq!((*prim(el)).Type, gfx_object_NUM_PRIMS as GRAPHICS_PRIM);
+            assert_eq!((*prim(el)).kind, gfx_object_NUM_PRIMS as GRAPHICS_PRIM);
 
             // At NORMAL_LIFE the ship becomes solid again.
             (*el).life = NORMAL_LIFE as COUNT;
@@ -905,7 +905,7 @@ fn reincarnation_ends_when_life_span_returns_to_normal() {
             ship.preprocess();
             assert_eq!(frame_index((*el).current.image.frame.raw()), 5);
             assert_eq!(frame_index((*el).next.image.frame.raw()), 5);
-            assert_eq!((*prim(el)).Type, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
+            assert_eq!((*prim(el)).kind, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
             let control = (*el).IntersectControl;
             assert_eq!(
                 (
@@ -1215,7 +1215,7 @@ fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
             (*el).life = 3;
             (*el).mass = 11;
             (*el).target = None;
-            (*prim(el)).Type = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
+            (*prim(el)).kind = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
 
             let seed = 777;
             let draws = rolls(seed, 7);
@@ -1291,7 +1291,7 @@ fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
             assert_eq!(ship.inner.ship_mut().ship_facing, facing);
             assert_eq!((*el).current.image.frames, ship.inner.frame_set(0));
             assert_eq!(frame_index((*el).current.image.frame.raw()), facing);
-            assert_eq!((*prim(el)).Type, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
+            assert_eq!((*prim(el)).kind, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
             assert_eq!(((*el).current.location.x, (*el).current.location.y), (x, y));
             assert_eq!(
                 (*el).target,
@@ -1349,7 +1349,7 @@ fn new_pkunk_redraws_its_position_while_a_planet_pulls_on_it() {
             (*planet).next = (*planet).current.clone();
             (*planet).current.image.frames = ship.inner.frame_set(0);
             (*planet).current.image.frame = ship.ship_frames.selection(0);
-            (*prim(planet)).Type = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
+            (*prim(planet)).kind = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
             shared::put(planet_handle);
 
             let el = ship.ptr();

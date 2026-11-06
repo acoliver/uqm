@@ -33,9 +33,7 @@ unsafe fn key_event(symbol: i32, down: bool, repeat: bool) {
     rust_vcontrol_handle_event(ptr::from_ref(&event).cast());
 }
 
-#[repr(C)]
 struct PickerProbe {
-    callback: unsafe fn(*mut std::ffi::c_void, &uqm_rust::engine::input::InputSession) -> u32,
     occupied: bool,
     actions: Vec<PickerAction>,
     initial_pulses: (i32, i32),
@@ -43,10 +41,10 @@ struct PickerProbe {
 }
 
 unsafe fn picker_frame(
-    state: *mut std::ffi::c_void,
+    cx: &mut uqm_rust::engine::battle::Cx<'_>,
+    state: &mut PickerProbe,
     input: &uqm_rust::engine::input::InputSession,
 ) -> u32 {
-    let state = &mut *state.cast::<PickerProbe>();
     let select = input.pulsed().menu[SELECT];
     let cancel = input.pulsed().menu[CANCEL];
     if state.actions.is_empty() {
@@ -58,7 +56,7 @@ unsafe fn picker_frame(
         PickerAction::Continue if state.actions.len() == 1 => {
             key_event(RETURN, true, true);
             key_event(ESCAPE, true, true);
-            UpdateInputState(input);
+            UpdateInputState(cx, input);
             state.repeat_pulses = (input.pulsed().menu[SELECT], input.pulsed().menu[CANCEL]);
             key_event(RETURN, false, false);
             key_event(ESCAPE, false, false);
@@ -81,7 +79,7 @@ unsafe fn open_from_restart_while_select_is_held(
     FlushInput(input);
     uqm_rust::engine::World::current().write(|world| world.set_activity(0));
     key_event(RETURN, true, false);
-    UpdateInputState(input);
+    uqm_rust::app::bridge::enter(|cx| UpdateInputState(cx, input));
     assert_ne!(input.pulsed().menu[SELECT], 0);
     let mut flash: FlashContext = std::mem::zeroed();
     let mut menu = DoRestartState {
@@ -112,14 +110,19 @@ unsafe fn open_from_restart_while_select_is_held(
     // A queued Cancel is cleared at the same ownership boundary as Select.
     key_event(ESCAPE, true, false);
     let mut picker = PickerProbe {
-        callback: picker_frame,
         occupied,
         actions: Vec::new(),
         initial_pulses: (-1, -1),
         repeat_pulses: (-1, -1),
     };
     // No key-up for the menu's Select has happened before picker entry.
-    DoInput(ptr::from_mut(&mut picker).cast(), 1);
+    DoInput(
+        1,
+        &mut |cx: &mut uqm_rust::engine::battle::Cx<'_>,
+              _: &mut uqm_rust::engine::observe::Io<'_>| {
+            picker_frame(cx, &mut picker, input) != 0
+        },
+    );
     assert_eq!(picker.initial_pulses, (0, 0));
     assert_eq!(picker.repeat_pulses, (0, 0));
     let expected = if occupied {

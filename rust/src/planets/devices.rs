@@ -3,9 +3,7 @@
 use super::device_effects::{repair_ultron, ULTRON_COMPONENTS};
 use crate::battle::c_bridge::SleepThread;
 use crate::engine::{battle::Cx, observe::Io};
-use crate::engine::{
-    Kernel as KernelOwner, StoryKey, World as WorldOwner, WorldData as WorldFields,
-};
+use crate::engine::{Kernel as KernelOwner, StoryKey, World as WorldOwner};
 
 use crate::mainloop::{
     input_abi::live::SetMenuSounds,
@@ -51,7 +49,6 @@ extern "C" {
     fn save_sis_hyper_state();
 }
 
-use crate::battle::sounds::engine::PlayMenuSound;
 use crate::engine::world::fleet::start_sphere_tracking;
 
 use crate::navigation::{
@@ -237,134 +234,122 @@ unsafe fn use_caster(next_activity: &mut u16) -> bool {
 }
 
 /// Returns the original DeviceStatus (failure, success, success without sound).
-unsafe fn invoke(id: u8, next_activity: &mut u16) -> u8 {
+unsafe fn invoke(cx: &mut Cx<'_>, id: u8, next_activity: &mut u16) -> u8 {
     match id {
-        4..=6 => WorldOwner::current()
-            .write(|world| repair_ultron(world, ULTRON_COMPONENTS[usize::from(id - 4)])),
+        4..=6 => repair_ultron(cx.world, ULTRON_COMPONENTS[usize::from(id - 4)]),
         3 => {
-            if crate::engine::World::current().read(|world| world.activity()) & 0xff != 4
-                || !playerInPlanetOrbit()
-            {
+            if cx.world.activity() & 0xff != 4 || !cx.with_legacy(|| playerInPlanetOrbit()) {
                 return 0;
             }
-            PlayMenuSound(3);
-            SleepThreadUntil(FadeScreen(250, 840).wrapping_add(1680));
-            let catalog = crate::planets::starmap::current_catalog();
-            let star = (**WorldOwner::current()).star_pointer(catalog);
-            if u32::from((*star).index) != CHMMR_DEFINED || !orbit_is(1) {
-                FadeScreen(253, 1680);
-            } else {
-                WorldOwner::current().write(|world| set(world, StoryKey::CHMMR_EMERGING, 1));
-                crate::engine::World::current()
-                    .write(|world| world.set_activity(world.activity() | START_ENCOUNTER));
-                reset_groups();
-                WorldOwner::current().write(|world| {
-                    crate::comm::dispatch::clone_npc_fragment(world, ship::CHMMR_SHIP, 0);
-                });
-            }
+            crate::ui::settings::play_menu_sound(cx.kernel, cx.world, 3);
+            cx.with_legacy(|| {
+                SleepThreadUntil(FadeScreen(250, 840).wrapping_add(1680));
+                let catalog = crate::planets::starmap::current_catalog();
+                let star = (**WorldOwner::current()).star_pointer(catalog);
+                if u32::from((*star).index) != CHMMR_DEFINED || !orbit_is(1) {
+                    FadeScreen(253, 1680);
+                } else {
+                    WorldOwner::current().write(|world| set(world, StoryKey::CHMMR_EMERGING, 1));
+                    crate::engine::World::current()
+                        .write(|world| world.set_activity(world.activity() | START_ENCOUNTER));
+                    reset_groups();
+                    WorldOwner::current().write(|world| {
+                        crate::comm::dispatch::clone_npc_fragment(world, ship::CHMMR_SHIP, 0);
+                    });
+                }
+            });
             2
         }
         2 => {
-            WorldOwner::current().write(|world| set(world, StoryKey::UTWIG_BOMB, 0));
-            crate::engine::World::current()
-                .write(|world| world.set_activity(world.activity() & !0x0200));
-            (**WorldFields::current()).flagship.crew_enlisted = u16::MAX;
+            set(cx.world, StoryKey::UTWIG_BOMB, 0);
+            cx.world.set_activity(cx.world.activity() & !0x0200);
+            cx.world.data.flagship.crew_enlisted = u16::MAX;
             1
         }
         1 => {
             *next_activity |= CHECK_LOAD;
-            crate::engine::World::current()
-                .write(|world| world.set_activity(world.activity() | START_ENCOUNTER));
-            WorldOwner::current().write(|world| set(world, StoryKey::GLOBAL_FLAGS_AND_DATA, 0));
-            if WorldOwner::current().read(in_hqspace) != 0 {
-                if WorldOwner::current().read(|world| world.encounters_ref().head().is_some()) {
-                    WorldOwner::current().write(|world| set(world, StoryKey::SHIP_TO_COMPEL, 1));
+            cx.world.set_activity(cx.world.activity() | START_ENCOUNTER);
+            set(cx.world, StoryKey::GLOBAL_FLAGS_AND_DATA, 0);
+            if in_hqspace(cx.world) != 0 {
+                if cx.world.encounters_ref().head().is_some() {
+                    set(cx.world, StoryKey::SHIP_TO_COMPEL, 1);
                 }
-                crate::engine::World::current()
-                    .write(|world| world.set_activity(world.activity() & !0x0200));
+                cx.world.set_activity(cx.world.activity() & !0x0200);
                 #[cfg(not(test))]
-                crate::app::bridge::enter(save_sis_hyper_state);
+                save_sis_hyper_state(cx);
                 #[cfg(test)]
                 save_sis_hyper_state();
             } else {
-                crate::c_bindings::global_state::EncounterGroup = 0;
-                if WorldOwner::current().read(|world| world.ip_groups_ref().head().is_some()) {
-                    WorldOwner::current().write(|world| set(world, StoryKey::SHIP_TO_COMPEL, 1));
-                    reset_groups();
-                }
-                let catalog = crate::planets::starmap::current_catalog();
-                let star = (**WorldOwner::current()).star_pointer(catalog);
-                if u32::from((*star).index) == SAMATRA_DEFINED {
-                    WorldOwner::current()
-                        .write(|world| set(world, StoryKey::READY_TO_CONFUSE_URQUAN, 1));
-                }
-                if playerInPlanetOrbit() {
-                    SaveSolarSysLocation();
-                }
+                cx.with_legacy(|| {
+                    crate::c_bindings::global_state::EncounterGroup = 0;
+                    if WorldOwner::current().read(|world| world.ip_groups_ref().head().is_some()) {
+                        WorldOwner::current()
+                            .write(|world| set(world, StoryKey::SHIP_TO_COMPEL, 1));
+                        reset_groups();
+                    }
+                    let catalog = crate::planets::starmap::current_catalog();
+                    let star = (**WorldOwner::current()).star_pointer(catalog);
+                    if u32::from((*star).index) == SAMATRA_DEFINED {
+                        WorldOwner::current()
+                            .write(|world| set(world, StoryKey::READY_TO_CONFUSE_URQUAN, 1));
+                    }
+                    if playerInPlanetOrbit() {
+                        SaveSolarSysLocation();
+                    }
+                });
             }
             1
         }
-        12 | 13 => u8::from(use_caster(next_activity)),
+        12 | 13 => cx.with_legacy(|| u8::from(use_caster(next_activity))),
         0 => {
-            if WorldOwner::current().read(in_hyper_space) == 0
-                || (**WorldFields::current()).flagship.fuel_on_board < 1000
-            {
+            if in_hyper_space(cx.world) == 0 || cx.world.data.flagship.fuel_on_board < 1000 {
                 return 0;
             }
-            (**WorldFields::current()).flagship.fuel_on_board -= 1000;
-            WorldOwner::current().write(|world| set(world, StoryKey::PORTAL_COUNTER, 1));
+            cx.world.data.flagship.fuel_on_board -= 1000;
+            set(cx.world, StoryKey::PORTAL_COUNTER, 1);
             1
         }
         _ => 0,
     }
 }
 
-fn effect_state() -> std::collections::BTreeMap<String, u32> {
+fn effect_state(world: &crate::engine::World) -> std::collections::BTreeMap<String, u32> {
     let mut state: std::collections::BTreeMap<_, _> = super::device_effects::DEVICE_STORY_KEYS
         .iter()
         .copied()
         .map(|key| {
             (
                 key.to_owned(),
-                StoryKey::from_name(key)
-                    .map_or(0, |key| WorldOwner::current().read(|world| get(world, key))),
+                StoryKey::from_name(key).map_or(0, |key| get(world, key)),
             )
         })
         .collect();
-    {
-        state.insert(
-            "activity".into(),
-            u32::from(crate::engine::World::current().read(|world| world.activity())),
-        );
-        state.insert(
-            "fuel".into(),
-            WorldFields::current().read(|owner| owner.flagship.fuel_on_board),
-        );
-    }
+    state.insert("activity".into(), u32::from(world.activity()));
+    state.insert("fuel".into(), world.data.flagship.fuel_on_board);
     state
 }
 
 unsafe fn frame(
+    cx: &mut Cx<'_>,
     input: &crate::engine::input::InputSession,
     menu: &mut Menu,
     next_activity: &mut u16,
 ) -> i32 {
     let keys = input.pulsed().menu;
-    if crate::engine::World::current().read(|world| world.activity()) & 0x4000 != 0 || keys[10] != 0
-    {
+    if cx.world.activity() & 0x4000 != 0 || keys[10] != 0 {
         return 0;
     }
     if keys[9] != 0 {
         let id = menu.list[menu.selected];
-        let before = effect_state();
-        let status = invoke(id, next_activity);
+        let before = effect_state(cx.world);
+        let status = invoke(cx, id, next_activity);
         if status == 0 {
-            PlayMenuSound(2);
+            crate::ui::settings::play_menu_sound(cx.kernel, cx.world, 2);
         } else if status == 1 {
-            PlayMenuSound(3);
+            crate::ui::settings::play_menu_sound(cx.kernel, cx.world, 3);
         }
         if status != 0 {
-            let after = effect_state();
+            let after = effect_state(cx.world);
             let verified = super::device_effects::device_effect_holds(id, &before, &after);
             let state = before
                 .iter()
@@ -399,10 +384,10 @@ unsafe fn frame(
         };
         let refresh = top != menu.top;
         menu.top = top;
-        draw(menu, Some(old), refresh);
+        cx.with_legacy(|| draw(menu, Some(old), refresh));
         OBSERVATION.lock().unwrap().selected = next;
     }
-    SleepThread(840 / 30);
+    cx.with_legacy(|| SleepThread(840 / 30));
     1
 }
 
@@ -430,7 +415,7 @@ pub unsafe fn devices_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) -> i32 {
     cx.with_legacy(|| SetMenuSounds(input, 0x000f | 0x0080 | 0x0100, 0x0010));
     cx.run_input(io, true, |cx, _| {
         let mut next_activity = 0;
-        let result = cx.with_legacy(|| frame(input, &mut menu, &mut next_activity) != 0);
+        let result = frame(cx, input, &mut menu, &mut next_activity) != 0;
         cx.world.next_activity |= next_activity;
         result
     });

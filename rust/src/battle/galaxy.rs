@@ -205,14 +205,14 @@ pub(crate) mod engine {
                     color(0, 14, 0)
                 };
                 let primitive = cx.display_primitive(p as u16);
-                primitive.Type = if p < 90 {
+                primitive.kind = if p < 90 {
                     gfx_object_STAMP_PRIM
                 } else {
                     gfx_object_POINT_PRIM
                 } as u8;
                 primitive.color = tint;
                 if p < 90 {
-                    primitive.Object.Stamp.frame = stars.raw();
+                    primitive.set_frame(stars.clone());
                     cx.kernel.star_planes[plane].frames[index] = stars.clone();
                 }
                 p += 1;
@@ -232,7 +232,7 @@ pub(crate) mod engine {
                 for index in 0..COUNTS[plane] {
                     let random = cx.random();
                     let frame = cx.absolute_frame(star_frame.view(), (random & 31) as u16 + offset);
-                    cx.display_primitive(p as u16).Object.Stamp.frame = frame.raw();
+                    cx.display_primitive(p as u16).set_frame(frame.clone());
                     cx.kernel.star_planes[plane].frames[index] = frame;
                     p += 1;
                 }
@@ -254,8 +254,9 @@ pub(crate) mod engine {
             let mut p = 0;
             for plane in 0..2 {
                 for index in 0..COUNTS[plane] {
-                    cx.display_primitive(p as u16).Type = types[plane] as u8;
-                    cx.display_primitive(p as u16).Object.Stamp.frame = frames[plane].raw();
+                    cx.display_primitive(p as u16).kind = types[plane] as u8;
+                    cx.display_primitive(p as u16)
+                        .set_frame(frames[plane].clone());
                     cx.kernel.star_planes[plane].frames[index] = frames[plane].clone();
                     p += 1;
                 }
@@ -285,9 +286,7 @@ pub(crate) mod engine {
                             ((base & !31) + (base.wrapping_add(1) & 31)).wrapping_add(26),
                         );
                         cx.display_primitive((offset + index) as u16)
-                            .Object
-                            .Stamp
-                            .frame = frame.raw();
+                            .set_frame(frame.clone());
                         cx.kernel.star_planes[plane].frames[index] = frame;
                     }
                 }
@@ -340,7 +339,7 @@ pub(crate) mod engine {
                     plane.points[index].x = wrap_x(plane.points[index].x, wrap);
                     let point = project(plane.points[index], dx, dy, reduction, step);
                     plane.displayed[index] = point;
-                    cx.display_primitive(p as u16).Object.Point = point;
+                    cx.display_primitive(p as u16).set_point(point);
                     p += 1;
                 }
                 if step {

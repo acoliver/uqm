@@ -1,10 +1,8 @@
 //! Resource ownership follows a descriptor through attachment and detachment.
 use crate::engine::battle::{frames::FrameArray, record::*, RaceDesc};
-use crate::graphics::native_abi::{FRAME, STRING, STRING as SOUND};
+use crate::graphics::native_abi::{FRAME, STRING};
 #[cfg(not(test))]
 use crate::graphics::{drawable_abi::DestroyDrawable, pixmap_abi::ReleaseDrawable};
-#[cfg(not(test))]
-use crate::sound::heart_ffi::{DestroyMusic, DestroySound};
 #[cfg(not(test))]
 use crate::strings::{
     sresins::LoadStringTableInstance,
@@ -21,12 +19,25 @@ pub(crate) struct ShipAssets {
     strings: STRING,
     name: Option<Vec<u8>>,
     captain: FRAME,
-    victory: MUSIC_REF,
-    sounds: SOUND,
+    victory: Option<crate::sound::resource_types::LoadedMusic>,
+    sounds: Option<crate::sound::owned_bank::LoadedSoundBank>,
     animations: [FrameArray; 3],
 }
 
 impl RaceDescriptor {
+    #[cfg(not(test))]
+    pub(crate) fn sound_bank(&self) -> Option<&crate::sound::owned_bank::LoadedSoundBank> {
+        self.assets
+            .as_ref()
+            .and_then(|assets| assets.sounds.as_ref())
+    }
+
+    #[cfg(not(test))]
+    pub(crate) fn victory_music(&self) -> Option<&crate::sound::resource_types::LoadedMusic> {
+        self.assets
+            .as_ref()
+            .and_then(|assets| assets.victory.as_ref())
+    }
     pub(crate) fn take_captain_background(&mut self) -> FRAME {
         let assets = self
             .assets
@@ -35,18 +46,6 @@ impl RaceDescriptor {
         self.ship_data.captain_control.background = std::ptr::null_mut();
         std::mem::replace(&mut assets.captain, std::ptr::null_mut())
     }
-}
-
-#[cfg(not(test))]
-fn load_music(key: &std::ffi::CStr) -> MUSIC_REF {
-    // SAFETY: the borrowed key stays live through decoding and the descriptor owns the result.
-    unsafe { LoadMusicInstance(key.as_ptr()).cast() }
-}
-
-#[cfg(not(test))]
-fn load_sounds(key: &std::ffi::CStr) -> SOUND {
-    // SAFETY: the borrowed key stays live through decoding and the descriptor owns the captured bank.
-    unsafe { CaptureStringTable(LoadSoundInstance(key.as_ptr()).cast()).cast() }
 }
 
 #[cfg(not(test))]
@@ -86,8 +85,8 @@ impl RaceDesc {
             strings: info.race_strings,
             name,
             captain: data.captain_control.background,
-            victory: data.victory_ditty,
-            sounds: data.ship_sounds,
+            victory: self.raw.loaded_victory.take(),
+            sounds: self.raw.loaded_sounds.take(),
             animations: [data.special.clone(), data.weapon.clone(), data.ship.clone()],
         }));
         loaded
@@ -139,14 +138,24 @@ impl RaceDesc {
             }
         }
         if let Some(key) = self.raw.resources.victory {
-            data.victory_ditty = load_music(key);
-            if data.victory_ditty.is_null() {
+            self.raw.loaded_victory = crate::sound::resource_types::LoadedMusic::load(key);
+            data.victory_ditty = self
+                .raw
+                .loaded_victory
+                .as_ref()
+                .map_or(std::ptr::null_mut(), |music| music.as_raw().cast());
+            if self.raw.loaded_victory.is_none() {
                 return false;
             }
         }
         if let Some(key) = self.raw.resources.sounds {
-            data.ship_sounds = load_sounds(key);
-            if data.ship_sounds.is_null() {
+            self.raw.loaded_sounds = crate::sound::owned_bank::LoadedSoundBank::load(key);
+            data.ship_sounds = self
+                .raw
+                .loaded_sounds
+                .as_ref()
+                .map_or(std::ptr::null_mut(), |bank| bank.as_raw().cast());
+            if self.raw.loaded_sounds.is_none() {
                 return false;
             }
         }
@@ -194,14 +203,15 @@ impl ShipAssets {
                 array.retire_views();
             }
         }
-        // SAFETY: each handle originates in the matching loader and this consumes its sole release authority.
-        unsafe {
-            if battle {
-                DestroyDrawable(ReleaseDrawable(self.captain.cast()));
-                DestroyMusic(self.victory.cast());
-                DestroySound(ReleaseStringTable(self.sounds.cast()).cast());
-            }
-            if icons {
+        if battle {
+            // SAFETY: the matching loader transferred this captured captain's release authority.
+            unsafe { DestroyDrawable(ReleaseDrawable(self.captain.cast())) };
+            drop(self.victory);
+            drop(self.sounds);
+        }
+        if icons {
+            // SAFETY: these handles originate in their matching loaders and are released once.
+            unsafe {
                 DestroyDrawable(ReleaseDrawable(self.melee_icon.cast()));
                 DestroyDrawable(ReleaseDrawable(self.icons.cast()));
                 DestroyStringTable(ReleaseStringTable(self.strings.cast()));
@@ -212,8 +222,6 @@ impl ShipAssets {
 
 #[cfg(not(test))]
 use crate::engine::battle::frames::{free_image, load_animation};
-#[cfg(not(test))]
-use crate::sound::resource_types::{LoadMusicInstance, LoadSoundInstance};
 
 #[cfg(test)]
 mod tests {
@@ -229,8 +237,8 @@ mod tests {
             strings: std::ptr::null_mut(),
             name: None,
             captain,
-            victory: std::ptr::null_mut(),
-            sounds: std::ptr::null_mut(),
+            victory: None,
+            sounds: None,
             animations: std::array::from_fn(|_| FrameArray::EMPTY),
         }));
         descriptor.raw.ship_data.captain_control.background = captain.wrapping_add(1);
@@ -247,8 +255,8 @@ mod tests {
         assert!(assets.melee_icon.is_null());
         assert!(assets.strings.is_null());
         assert!(assets.name.is_none());
-        assert!(assets.victory.is_null());
-        assert!(assets.sounds.is_null());
+        assert!(assets.victory.is_none());
+        assert!(assets.sounds.is_none());
         assert!(assets.animations.iter().all(FrameArray::is_absent));
         assert!(descriptor.raw.take_captain_background().is_null());
     }

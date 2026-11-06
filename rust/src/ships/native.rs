@@ -44,16 +44,6 @@ pub mod abi {
         string_address as GetStringAddress,
     };
 
-    #[cfg(not(test))]
-    pub unsafe fn do_menu_chooser(
-        input: &crate::engine::input::InputSession,
-        menu: *mut MENU_STATE,
-        first: BYTE,
-    ) -> BOOLEAN {
-        use crate::ui::menu::do_menu_chooser as choose;
-        choose(input, menu.cast(), first)
-    }
-
     // Bindgen does not translate these cast-expression macros from controls.h
     // and intel.h. Keep their C operand widths at the shared ABI boundary.
     pub const BATTLE_LEFT: BATTLE_INPUT_STATE = 1 << 0;

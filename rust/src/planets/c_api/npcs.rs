@@ -63,8 +63,7 @@ impl Npcs for NpcWorld<'_> {
         self.world.flag("YEHAT_CIVIL_WAR") != 0
     }
     fn encounter_race(&self) -> i16 {
-        // SAFETY: encounter state is only accessed on the game thread.
-        unsafe { std::ptr::addr_of!(ENCOUNTER_RACE).read() }
+        self.world.encounter_race
     }
     fn for_each_ip_group(&mut self, visit: &mut dyn FnMut(&mut IP_GROUP)) {
         let mut groups = self.world.ip_groups();
@@ -156,7 +155,7 @@ impl crate::planets::generate::sam::GuardSite for NpcWorld<'_> {
     }
     fn reset_encounter(&mut self) {
         // SAFETY: encounter state is only accessed on the game thread.
-        unsafe { reset_encounter() };
+        unsafe { reset_encounter(self.world) };
     }
     fn built_ship_count(&self) -> u16 {
         self.world.npc_built_ships_ref().count() as u16

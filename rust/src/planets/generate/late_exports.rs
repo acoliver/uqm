@@ -133,10 +133,8 @@ impl sam::SamatraSite for RaceHome<'_, '_, '_> {
         c_api::built_ship_queue_has_ships(self.game.cx.borrow().world)
     }
     fn reset_encounter(&mut self) {
-        self.game.cx.borrow_mut().with_legacy(|| {
-            // SAFETY: game-thread encounter globals.
-            unsafe { c_api::reset_encounter() };
-        })
+        // SAFETY: the retained orbital owner exclusively controls encounter state.
+        unsafe { c_api::reset_encounter(self.game.cx.borrow_mut().world) };
     }
     fn track_yehat(&mut self) -> bool {
         c_api::start_sphere_tracking(self.game.cx.borrow_mut().world, u16::from(ship::YEHAT_SHIP))

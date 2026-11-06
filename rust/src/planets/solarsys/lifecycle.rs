@@ -21,8 +21,6 @@ use std::mem::MaybeUninit;
 
 #[export_name = "pSolarSysState"]
 pub static mut P_SOLAR_SYS_STATE: *mut c::SOLARSYS_STATE = ptr::null_mut();
-#[export_name = "EncounterRace"]
-pub static mut ENCOUNTER_RACE: c::SIZE = 0;
 
 // globdata.h activity flags occupy the high byte of ACTIVITY.
 const START_ENCOUNTER: u16 = 1 << 10;
@@ -448,7 +446,7 @@ unsafe fn prepare_solar_sys(next_activity: u16) -> SolarSystemStart {
         if reentry {
             ((*(*state).genFuncs).reinitNpcs.unwrap())(world, state);
         } else {
-            ENCOUNTER_RACE = -1;
+            world.encounter_race = -1;
             EncounterGroup = 0;
             world.data.game.battle_group_ref = 0;
             world.ip_groups().reinit();

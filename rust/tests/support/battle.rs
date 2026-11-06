@@ -296,7 +296,7 @@ impl<'a> Ship<'a> {
             ship.element_mut().IntersectControl.IntersectStamp.frame = frames[0].frame(0);
             // SAFETY: this slot owns its allocated display primitive.
 
-            (*prim(ship.ptr())).Type = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
+            (*prim(ship.ptr())).kind = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
 
             ship.frames = Some(frames);
             ship.queue();
@@ -750,7 +750,7 @@ impl FrameSet {
         self.0.frame(index)
     }
 }
-pub unsafe fn prim(e: *mut ElementRecord) -> *mut PRIMITIVE {
+pub unsafe fn prim(e: *mut ElementRecord) -> *mut uqm_rust::engine::battle::DisplayPrimitive {
     // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
     unsafe {
         uqm_rust::app::bridge::enter(|cx| std::ptr::from_mut(cx.display_primitive((*e).PrimIndex)))

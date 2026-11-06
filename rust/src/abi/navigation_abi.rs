@@ -1,3 +1,4 @@
+use crate::engine::{battle::Cx, input::InputSession, observe::Io};
 use crate::graphics::flash::{FlashState, FlashType};
 pub use crate::engine::battle::{CollisionHook, ElementHook};
 // Shared engine records used by the Rust runtime.
@@ -158,7 +159,7 @@ pub const COMBAT_SPEED_SHIFT: u32 = 6;
 pub const COMBAT_SPEED_MASK: u32 = 192;
 pub const NUM_COMBAT_SPEEDS: u32 = 4;
 pub const MUSIC_DISABLED: u32 = 8;
-pub const SOUND_DISABLED: u32 = 16;
+pub const SOUND_DISABLED: u32 = crate::engine::world::SOUND_DISABLED as u32;
 pub const CYBORG_ENABLED: u32 = 32;
 pub const MAX_ENCOUNTERS: u32 = 16;
 pub const MAX_BATTLE_GROUPS: u32 = 32;
@@ -2843,8 +2844,6 @@ pub type joy_char_t = joy_char;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct textentry_state {
-    pub InputFunc:
-        ::std::option::Option<unsafe fn(pTES: *mut textentry_state, input: &crate::engine::input::InputSession) -> BOOLEAN>,
     pub Initialized: BOOLEAN,
     pub NextTime: DWORD,
     pub Success: BOOLEAN,
@@ -2861,12 +2860,12 @@ pub struct textentry_state {
     pub BaseStr: *mut UNICODE,
     pub CursorPos: ::std::os::raw::c_int,
     pub MaxSize: ::std::os::raw::c_int,
-    pub ChangeCallback:
-        ::std::option::Option<unsafe fn(pTES: *mut textentry_state, input: &crate::engine::input::InputSession) -> BOOLEAN>,
-    pub FrameCallback:
-        ::std::option::Option<unsafe fn(pTES: *mut textentry_state, input: &crate::engine::input::InputSession) -> BOOLEAN>,
+    pub ChangeCallback: Option<ChangeFn>,
+    pub FrameCallback: Option<FrameFn>,
     pub CbParam: *mut ::std::os::raw::c_void,
 }
+pub type ChangeFn = unsafe fn(*mut textentry_state, &mut Cx<'_>, &InputSession) -> u32;
+pub type FrameFn = unsafe fn(*mut textentry_state, &mut Cx<'_>, &mut Io<'_>, &InputSession) -> u32;
 pub type TEXTENTRY_STATE = textentry_state;
 
 #[cfg(not(test))]
@@ -3638,7 +3637,6 @@ pub use crate::battle::encount_native::engine::fleet_is_infinite;
 
 #[cfg(not(test))]
 extern "C" {
-    pub static mut EncounterRace: SIZE;
 }
 extern "C" {
     pub static mut EncounterGroup: BYTE;

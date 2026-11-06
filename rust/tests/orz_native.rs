@@ -83,7 +83,7 @@ impl OrzFixture for Ship<'_> {
     }
 }
 
-unsafe fn prim(e: *mut ElementRecord) -> *mut PRIMITIVE {
+unsafe fn prim(e: *mut ElementRecord) -> *mut uqm_rust::engine::battle::DisplayPrimitive {
     uqm_rust::app::bridge::enter(|cx| std::ptr::from_mut(cx.display_primitive((*e).PrimIndex)))
 }
 
@@ -436,7 +436,7 @@ fn turret_replacement_decrements_wait_once_rotates_and_updates_firing_quadrant()
                 b: 11,
                 a: 99,
             };
-            (*prim(ship.ptr())).Type = gfx_object_STAMPFILL_PRIM as GRAPHICS_PRIM;
+            (*prim(ship.ptr())).kind = gfx_object_STAMPFILL_PRIM as GRAPHICS_PRIM;
             (*prim(ship.ptr())).color = tint;
             (*ship.ptr()).next.location = POINT { x: 123, y: -456 };
             for (expected_offset, expected_wait) in [(1, 3), (1, 2), (1, 1), (1, 0), (2, 3)] {
@@ -466,7 +466,7 @@ fn turret_replacement_decrements_wait_once_rotates_and_updates_firing_quadrant()
                     normalize_facing(15 + i32::from(expected_offset))
                 );
                 assert_eq!(
-                    (*prim(turret)).Type,
+                    (*prim(turret)).kind,
                     gfx_object_STAMPFILL_PRIM as GRAPHICS_PRIM
                 );
                 assert_eq!(
@@ -585,7 +585,7 @@ fn marines_launch_at_rear_with_exact_state_and_cost_only_after_allocation() {
                     (*marine).parent,
                     uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
                 );
-                assert_eq!((*prim(marine)).Type, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
+                assert_eq!((*prim(marine)).kind, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
                 assert_eq!(velocity_fields(&(*marine).velocity), [0; 9]);
                 assert!((*marine).preprocess_func.is_some());
                 assert!((*marine).postprocess_func.is_none());
@@ -663,7 +663,7 @@ fn launch_gates_require_both_keys_counter_zero_crew_and_a_trackable_enemy() {
                 ship.descriptor_mut().ship_info.crew_level = crew;
                 (*ship.ptr()).hits = crew;
                 (*ship.ptr()).target = None;
-                (*prim(enemy.ptr())).Type = if cloaked {
+                (*prim(enemy.ptr())).kind = if cloaked {
                     gfx_object_NUM_PRIMS
                 } else {
                     gfx_object_STAMP_PRIM
@@ -708,7 +708,7 @@ fn boarding_claims_first_unused_slot_and_immediately_kills_one_enemy_crew_withou
                     (*marine).state_flags & (NONSOLID | CREW_OBJECT | COLLISION) as u16,
                     NONSOLID as u16
                 );
-                assert_eq!((*prim(marine)).Type, gfx_object_NUM_PRIMS as GRAPHICS_PRIM);
+                assert_eq!((*prim(marine)).kind, gfx_object_NUM_PRIMS as GRAPHICS_PRIM);
                 assert_eq!((*enemy.ptr()).state_flags & COLLISION as u16, 0);
                 marines.push(marine);
             }
@@ -914,7 +914,7 @@ fn intruder_returns_when_enemy_is_dead_or_absent_and_randomizes_facing_once() {
                     (*marine).preprocess_func = Some(
                         uqm_rust::engine::battle::ElementHook::Native(intruder_preprocess),
                     );
-                    (*prim(marine)).Type = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
+                    (*prim(marine)).kind = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
                     TFB_SeedRandom(seed);
                     let facing = normalize_facing(i32::from(TFB_Random() as BYTE));
                     with_rng(seed, 1, || intruder(marine));
@@ -924,7 +924,7 @@ fn intruder_returns_when_enemy_is_dead_or_absent_and_randomizes_facing_once() {
                         (*marine).state_flags,
                         (IGNORE_SIMILAR | CHANGING | CREW_OBJECT) as u16
                     );
-                    assert_eq!((*prim(marine)).Type, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
+                    assert_eq!((*prim(marine)).kind, gfx_object_STAMP_PRIM as GRAPHICS_PRIM);
                     assert_eq!((*marine).current.image.frame.raw(), ship.raw_frame(2, 21));
                     assert_eq!((*marine).next.image.frame.raw(), ship.raw_frame(2, 21));
                     assert_ne!(
@@ -1054,7 +1054,7 @@ fn marine_thrust_restores_owner_state_and_inserts_preprocessed_five_color_ion_tr
             assert_eq!((*ion).life, 0);
             assert_eq!((*ion).thrust, 1);
             assert_eq!((*ion).colorCycleIndex, 0);
-            assert_eq!((*prim(ion)).Type, gfx_object_POINT_PRIM as GRAPHICS_PRIM);
+            assert_eq!((*prim(ion)).kind, gfx_object_POINT_PRIM as GRAPHICS_PRIM);
             assert_eq!(
                 (
                     (*prim(ion)).color.r,
@@ -1441,7 +1441,7 @@ fn failed_replacement_and_marine_allocation_leave_crew_and_special_budget_untouc
                 assert_eq!(ship.descriptor_mut().ship_info.crew_level, 16);
                 assert_eq!((*ship.ptr()).hits, 16);
                 assert_eq!(ship.ship_mut().special_counter, 0);
-                assert_eq!((*prim(old)).Type, gfx_object_NUM_PRIMS as GRAPHICS_PRIM);
+                assert_eq!((*prim(old)).kind, gfx_object_NUM_PRIMS as GRAPHICS_PRIM);
                 assert_eq!(queued().len(), capacity as usize);
                 assert_eq!(
                     (*ship.ptr()).target,
@@ -1521,12 +1521,12 @@ fn marine_prefers_visible_enemy_then_returns_to_visible_owner_or_keeps_heading()
                 (false, true, 0, true),
                 (false, false, 0, false),
             ] {
-                (*prim(enemy.ptr())).Type = if enemy_visible {
+                (*prim(enemy.ptr())).kind = if enemy_visible {
                     gfx_object_STAMP_PRIM
                 } else {
                     gfx_object_NUM_PRIMS
                 } as GRAPHICS_PRIM;
-                (*prim(ship.ptr())).Type = if owner_visible {
+                (*prim(ship.ptr())).kind = if owner_visible {
                     gfx_object_STAMP_PRIM
                 } else {
                     gfx_object_NUM_PRIMS
@@ -1571,8 +1571,8 @@ fn marine_without_target_clears_stale_gravity_and_decelerates_only_when_overspee
             let mut enemy = orz(&_battle, 1);
             enemy.at(4500, 4000);
             let marine = ship.launch();
-            (*prim(ship.ptr())).Type = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
-            (*prim(enemy.ptr())).Type = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
+            (*prim(ship.ptr())).kind = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
+            (*prim(enemy.ptr())).kind = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
             let preprocess = (*marine).preprocess_func.unwrap();
             for overspeed in [false, true] {
                 (*marine).turn = 0;

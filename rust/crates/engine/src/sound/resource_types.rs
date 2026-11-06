@@ -6,6 +6,7 @@ use std::ffi::{c_char, c_void};
 use crate::resource::ffi_bridge::{res_DetachResource, res_GetResource};
 
 /// Exclusive release authority for a detached music resource.
+#[derive(Debug)]
 pub struct LoadedMusic(std::ptr::NonNull<c_void>);
 
 impl LoadedMusic {

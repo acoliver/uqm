@@ -110,12 +110,8 @@ impl Cx<'_> {
         index: u16,
         source: impl Into<Option<ElementId>>,
     ) {
-        let sounds = self.desc(ship).ship_data.ship_sounds;
-        // SAFETY: loaded sound bank and checked source outlive this synchronous call.
-        unsafe {
-            let sound = SetAbsStringTableIndex(sounds, index);
-            self.queue_sound(sound as usize, source.into());
-        }
+        let sound = self.desc(ship).sound_bank().map(|bank| bank.clip(index));
+        self.queue_sound(sound, source.into());
     }
 
     pub(crate) fn silhouette(
@@ -231,11 +227,12 @@ impl Cx<'_> {
     }
 
     pub fn game_sound(&mut self, index: u16, source: ElementId) {
-        // SAFETY: shared battle sounds and checked source are live.
-        unsafe {
-            let sound = SetAbsStringTableIndex((*self.kernel()).game_sounds, index);
-            self.queue_sound(sound as usize, Some(source));
-        }
+        let sound = self
+            .kernel
+            .game_sounds
+            .as_ref()
+            .map(|bank| bank.clip(index));
+        self.queue_sound(sound, Some(source));
     }
 
     pub fn weapon_collision(
@@ -369,23 +366,17 @@ mod tactrans_native_access {
     #[cfg(not(test))]
     impl Cx<'_> {
         pub(crate) fn silence_battle_sounds(&mut self) {
-            // SAFETY: no record borrow crosses the sound queue boundary.
-            self.queue_sound(usize::MAX, None);
+            self.kernel.sounds.silence();
         }
         pub(crate) fn play_ditty(&mut self, ship: ShipId) {
-            // SAFETY: the checked winner retains its loaded victory music.
-            unsafe {
-                play_ditty(self, ship);
-            }
+            play_ditty(self, ship);
         }
 
         pub(crate) fn replace_dead_ship(&mut self, dead: ElementId) {
-            // SAFETY: descriptor retirement and the typed picker run synchronously on the game thread.
-            unsafe {
-                new_ship_with_picker(self, dead, |cx, ship, side| {
-                    crate::battle::ship_native::engine::next_star_ship(cx, Some(ship), side)
-                });
-            }
+            new_ship_with_picker(self, dead, |cx, ship, side| {
+                // SAFETY: the native picker runs synchronously with these retained owners.
+                unsafe { crate::battle::ship_native::engine::next_star_ship(cx, Some(ship), side) }
+            });
         }
 
         pub fn stop_battle_music(&mut self) {
@@ -462,15 +453,13 @@ mod status_native_access {
 
 mod sounds_access {
     #[cfg(not(test))]
-    use super::*;
-    #[cfg(not(test))]
     impl crate::engine::battle::Cx<'_> {
         pub(in crate::battle::context_access) fn queue_sound(
             &mut self,
-            sound: usize,
+            sound: Option<crate::sound::owned_bank::SoundClip>,
             source: Option<crate::engine::battle::ElementId>,
         ) {
-            self.kernel.sounds.push(sound as SOUND, source);
+            self.kernel.sounds.push(sound, source);
         }
     }
 }
