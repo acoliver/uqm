@@ -35,7 +35,8 @@
 //! assertion C has in `playerInInnerSystem`, and panics.
 
 use super::summary::{utf8_string_copy, SessionSummary, SA_MATRA_STRING};
-use crate::c_bindings::global_state::{self, PLANET_DESC, SOLARSYS_STATE};
+use crate::c_bindings::global_state::{PLANET_DESC, SOLARSYS_STATE};
+use crate::engine::save::summary as summary_values;
 use crate::savegame::types::SIS_NAME_SIZE;
 
 /// What the solar-system state and the game strings say about the game.
@@ -65,22 +66,22 @@ pub trait SolarSystemOwner {
 }
 
 /// `PLANET_NUMBER_BASE` (gamestr.h): the first planet name in `GameStrings`.
-const PLANET_NUMBER_BASE: u16 = global_state::PLANET_NUMBER_BASE as u16;
+const PLANET_NUMBER_BASE: u16 = summary_values::PLANET_NUMBER_BASE as u16;
 /// `STARBASE_STRING_BASE` (gamestr.h).
-const STARBASE_STRING_BASE: u16 = global_state::STARBASE_STRING_BASE as u16;
+const STARBASE_STRING_BASE: u16 = summary_values::STARBASE_STRING_BASE as u16;
 /// `SOL_DEFINED`, `SPATHI_DEFINED` and `SAMATRA_DEFINED` (gendef.h): the
 /// `STAR_DESC.Index` of the systems with named bodies.
-const SOL_DEFINED: u8 = global_state::SOL_DEFINED as u8;
-const SAMATRA_DEFINED: u8 = global_state::SAMATRA_DEFINED as u8;
+const SOL_DEFINED: u8 = summary_values::SOL_DEFINED as u8;
+const SAMATRA_DEFINED: u8 = summary_values::SAMATRA_DEFINED as u8;
 
 const _: () = {
     // `GAME_STRING (PLANET_NUMBER_BASE + 32)` is Sa-Matra.
     assert!(SA_MATRA_STRING == PLANET_NUMBER_BASE + 32);
     // `u16`/`u8` hold every one of these.
-    assert!(global_state::PLANET_NUMBER_BASE as u64 <= u16::MAX as u64);
-    assert!(global_state::STARBASE_STRING_BASE as u64 <= u16::MAX as u64);
-    assert!(global_state::SOL_DEFINED as u64 <= u8::MAX as u64);
-    assert!(global_state::SAMATRA_DEFINED as u64 <= u8::MAX as u64);
+    assert!(summary_values::PLANET_NUMBER_BASE as u64 <= u16::MAX as u64);
+    assert!(summary_values::STARBASE_STRING_BASE as u64 <= u16::MAX as u64);
+    assert!(summary_values::SOL_DEFINED as u64 <= u8::MAX as u64);
+    assert!(summary_values::SAMATRA_DEFINED as u64 <= u8::MAX as u64);
 };
 
 pub use super::summary::SolarError;

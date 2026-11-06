@@ -67,8 +67,12 @@ pub const IN_STARBASE: u8 = 8;
 
 /// `GET_GAME_STATE (GLOBAL_FLAGS_AND_DATA) == (BYTE)~0` marks a starbase visit.
 const IN_STARBASE_FLAGS: u8 = u8::MAX;
+pub const PLANET_NUMBER_BASE: u32 = 375;
+pub const STARBASE_STRING_BASE: u32 = 422;
+pub const SOL_DEFINED: u32 = 1;
+pub const SAMATRA_DEFINED: u32 = 29;
 /// `GAME_STRING (PLANET_NUMBER_BASE + 32)`: Sa-Matra's name.
-pub const SA_MATRA_STRING: u16 = 407;
+pub const SA_MATRA_STRING: u16 = PLANET_NUMBER_BASE as u16 + 32;
 
 /// `NUM_DEVICES` (globdata.h).
 pub const NUM_DEVICES: usize = 28;
