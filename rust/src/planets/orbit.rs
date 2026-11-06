@@ -66,7 +66,7 @@ pub(crate) mod live {
 
     use crate::planets::sphere::live::RotatePlanetSphere;
 
-    use crate::planets::plangen::live::GeneratePlanetSurface;
+    use crate::planets::plangen::live::generate_planet_surface;
 
     use crate::sound::heart_ffi::PLRPlaying;
 
@@ -88,16 +88,11 @@ pub(crate) mod live {
 
     use crate::planets::pstarmap::star_map;
 
-    use crate::ui::menu::DoMenuChooser;
+    use crate::ui::menu::do_menu_chooser;
 
     use crate::ui::menu::DrawMenuStateStrings;
 
     use crate::mainloop::input_abi::live::SetInputCallback;
-
-    extern "C" {
-
-        static mut optWhichMenu: i32;
-    }
 
     fn black() -> crate::comm::locdata::CColor {
         crate::comm::locdata::CColor {
@@ -257,7 +252,13 @@ pub(crate) mod live {
             return;
         }
         let system = solar_system::current();
-        let wait = KernelOwner::current().read(|owner| owner.last_activity) & CHECK_LOAD == 0;
+        let (last_activity, pulsing_shield) = KernelOwner::current().read(|owner| {
+            (
+                owner.last_activity,
+                owner.configuration.preferences().shield == 1,
+            )
+        });
+        let wait = last_activity & CHECK_LOAD == 0;
         assert!((*system).InOrbit != 0 && (*system).TopoFrame.is_null());
         create_context();
         if wait {
@@ -265,7 +266,7 @@ pub(crate) mod live {
         }
         base::stop_music();
         let planet = (*system).pOrbitalDesc;
-        GeneratePlanetSurface(planet, surface);
+        generate_planet_surface(pulsing_shield, planet, surface);
         orbit_music::set_planet_music((*planet).data_index & !0x80);
         orbit_scan::generate_planet_side();
         if PLRPlaying(usize::MAX as *mut c_void) == 0 {
@@ -351,14 +352,16 @@ pub(crate) mod live {
     }
 
     unsafe fn do_orbit(cx: &mut Cx<'_>, io: &mut Io<'_>, menu: &mut MENU_STATE) -> u32 {
-        use crate::c_bindings::controller_input::{PulsedInputState, KEY_MENU_SELECT};
-        let mut selected = PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0;
+        let runtime = cx.kernel.input_runtime();
+        let input = runtime.input();
+        use crate::c_bindings::controller_input::KEY_MENU_SELECT;
+        let mut selected = input.pulsed().menu[KEY_MENU_SELECT as usize] != 0;
         if cx.world.activity() & (CHECK_ABORT | CHECK_LOAD) != 0
             || cx.world.data.flagship.crew_enlisted == u16::MAX
         {
             return 0;
         }
-        if cx.with_legacy(|| DoMenuChooser(menu, 0)) != 0 || !selected {
+        if cx.with_legacy(|| do_menu_chooser(input, menu, 0)) != 0 || !selected {
             return 1;
         }
         cx.with_legacy(|| CffiPlatform.set_flash(FlashTarget::Off));
@@ -384,7 +387,7 @@ pub(crate) mod live {
             }
             1 => {
                 let old = cx.with_legacy(|| {
-                    let old = SetInputCallback(None);
+                    let old = SetInputCallback(runtime.input(), None);
                     repair_sisborder();
                     old
                 });
@@ -392,7 +395,7 @@ pub(crate) mod live {
                 if cx.world.activity() & CHECK_ABORT != 0 {
                     return 0;
                 }
-                cx.with_legacy(|| SetInputCallback(old));
+                cx.with_legacy(|| SetInputCallback(runtime.input(), old));
                 if autopilot == 0 {
                     cx.with_legacy(|| draw_display(FULL));
                 } else {
@@ -404,7 +407,8 @@ pub(crate) mod live {
         }
         if cx.world.activity() & CHECK_ABORT == 0 {
             if selected {
-                menu.CurState = submenu_selection(menu.CurState, selected, optWhichMenu == 2);
+                menu.CurState =
+                    submenu_selection(menu.CurState, selected, input.preferences().menu == 2);
                 cx.with_legacy(|| DrawMenuStateStrings(0, i16::from(menu.CurState)));
             }
             cx.with_legacy(|| CffiPlatform.set_flash(FlashTarget::Menu3do));
@@ -412,23 +416,28 @@ pub(crate) mod live {
         1
     }
 
-    unsafe fn input_frame(_io: &mut crate::engine::observe::Io<'_>) {
+    unsafe fn input_frame(
+        _checkpoint: &mut dyn FnMut(crate::engine::observe::CheckpointView<'_>),
+        _input: &crate::engine::input::InputControls,
+    ) {
         RotatePlanetSphere(1);
     }
 
     pub unsafe fn planet_orbit_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) {
+        let runtime = cx.kernel.input_runtime();
+        let input = runtime.input();
         let mut menu: MENU_STATE = std::mem::zeroed();
         let old = cx.with_legacy(|| {
             DrawMenuStateStrings(0, 0);
             CffiPlatform.set_flash(FlashTarget::Menu3do);
-            base::SetMenuSounds(15, 16);
-            SetInputCallback(Some(input_frame))
+            base::SetMenuSounds(input, 15, 16);
+            SetInputCallback(runtime.input(), Some(input_frame))
         });
         io.observer.checkpoint(&CheckpointView::PlanetMenu(1));
         cx.run_input(io, true, |cx, io| do_orbit(cx, io, &mut menu) != 0);
         io.observer.checkpoint(&CheckpointView::PlanetMenu(0));
         cx.with_legacy(|| {
-            SetInputCallback(old);
+            SetInputCallback(runtime.input(), old);
             CffiPlatform.set_flash(FlashTarget::Off);
             DrawMenuStateStrings(1, -6);
         });

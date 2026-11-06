@@ -12,7 +12,7 @@ use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, frame_index, sine
 
 #[test]
 fn descriptor_and_six_lance_order_and_coordinates() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(64);
         unsafe {
             let mut ship = Ship::new(&_battle, SPECIES_ID_UTWIG_ID, 0);
@@ -83,7 +83,7 @@ fn descriptor_and_six_lance_order_and_coordinates() {
 }
 #[test]
 fn shield_absorbs_damage_before_collision_and_recharges_on_next_preprocess() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(16);
         unsafe {
             let mut ship = Ship::new(&_battle, SPECIES_ID_UTWIG_ID, 0);
@@ -139,7 +139,7 @@ fn shield_absorbs_damage_before_collision_and_recharges_on_next_preprocess() {
 }
 #[test]
 fn failed_shield_removes_defense_flags_and_half_period_drains_energy() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(8);
         unsafe {
             let mut ship = Ship::new(&_battle, SPECIES_ID_UTWIG_ID, 0);
@@ -166,7 +166,7 @@ fn failed_shield_removes_defense_flags_and_half_period_drains_energy() {
 }
 #[test]
 fn ai_halves_finite_threat_turns_and_consumes_rng_only_at_shield_boundary() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(16);
         unsafe {
             let mut ship = Ship::new(&_battle, SPECIES_ID_UTWIG_ID, 0);
@@ -217,7 +217,7 @@ fn ai_halves_finite_threat_turns_and_consumes_rng_only_at_shield_boundary() {
 }
 #[test]
 fn lance_allocation_failure_still_returns_six_slots() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(3);
         unsafe {
             let mut ship = Ship::new(&_battle, SPECIES_ID_UTWIG_ID, 0);

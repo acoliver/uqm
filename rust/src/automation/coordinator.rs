@@ -19,7 +19,7 @@ use crate::engine::{battle::Cx, StoryKey};
 mod fixtures;
 mod initialization;
 mod input;
-use input::{discard_held_repeat, inject_menu_key};
+use input::discard_held_repeat;
 mod navigation;
 mod parity;
 mod save_capture;
@@ -61,19 +61,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-#[cfg(not(test))]
-use crate::c_bindings::{
-    controller_input::{
-        CurrentInputState, PulsedInputState, CONTROL_TEMPLATE_NUM_TEMPLATES, NUM_KEYS,
-    },
-    player_control_template,
-};
-
-#[cfg(not(test))]
-const NUM_PLAYER_KEYS: usize = NUM_KEYS as usize;
-#[cfg(not(test))]
-const NUM_INPUT_TEMPLATES: usize = CONTROL_TEMPLATE_NUM_TEMPLATES as usize;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct PendingPlayerInput {
     index: i32,
@@ -85,42 +72,6 @@ enum PlayerInputObservation {
     Matched { current: i32, pulsed: i32 },
     Missing,
     Contradictory { current: i32, pulsed: i32 },
-}
-
-fn prepare_player_input(index: i32, value: i32) -> Option<PendingPlayerInput> {
-    input_ffi::inject_player_key(index, value);
-    (!input_ffi::injection_rejected()).then_some(PendingPlayerInput {
-        index,
-        value: i32::from(value != 0),
-    })
-}
-
-fn inject_player_key(index: i32, value: i32) -> bool {
-    input_ffi::inject_player_key(index, value);
-    !input_ffi::injection_rejected()
-}
-
-#[cfg(not(test))]
-fn read_player_input_state(index: i32) -> Option<(i32, i32)> {
-    let index = usize::try_from(index).ok()?;
-    if index >= NUM_PLAYER_KEYS {
-        return None;
-    }
-    unsafe {
-        let template = usize::try_from(player_control_template(0)?).ok()?;
-        if template >= NUM_INPUT_TEMPLATES {
-            return None;
-        }
-        Some((
-            CurrentInputState.key[template][index],
-            PulsedInputState.key[template][index],
-        ))
-    }
-}
-
-#[cfg(test)]
-fn read_player_input_state(_index: i32) -> Option<(i32, i32)> {
-    None
 }
 
 fn observe_player_input_with(
@@ -140,10 +91,6 @@ fn observe_player_input_with(
     } else {
         PlayerInputObservation::Contradictory { current, pulsed }
     }
-}
-
-fn observe_player_input(pending: PendingPlayerInput) -> PlayerInputObservation {
-    observe_player_input_with(pending, read_player_input_state)
 }
 
 /// Outcome of servicing a planet-side wait for one input callback.
@@ -352,6 +299,8 @@ struct CoordInner {
 /// the scheduler/watchdog during the game loop.
 pub struct AutomationObserver {
     pub(crate) activity: crate::engine::world::activity::ActivityControl,
+    pub(crate) input: crate::engine::input::InputControls,
+    _configuration: uqm_engine::configuration::Configuration,
     /// Validated seed returned at each automation-owned RNG initialization.
     seed: u32,
     /// The validated script actions.
@@ -378,6 +327,25 @@ pub struct AutomationObserver {
 }
 
 impl AutomationObserver {
+    fn prepare_player_input(&self, index: i32, value: i32) -> Option<PendingPlayerInput> {
+        self.inject_player_key(index, value)
+            .then_some(PendingPlayerInput {
+                index,
+                value: i32::from(value != 0),
+            })
+    }
+
+    fn read_player_input_state(&self, index: i32) -> Option<(i32, i32)> {
+        let index = usize::try_from(index)
+            .ok()
+            .filter(|index| *index < crate::engine::input::frames::FLIGHT_KEYS)?;
+        let template = self.input.player_controls()[0] as usize;
+        Some((
+            self.input.current().key[template][index],
+            self.input.pulsed().key[template][index],
+        ))
+    }
+
     pub fn runtime(&self) -> &RuntimeModel {
         &self.runtime
     }
@@ -390,13 +358,22 @@ impl AutomationObserver {
         script: ValidatedScript,
         output_root: PathBuf,
         activity: crate::engine::world::activity::ActivityControl,
+        input: crate::engine::input::InputControls,
+        configuration: uqm_engine::configuration::Configuration,
     ) -> Arc<Self> {
         #[cfg(feature = "debug-process")]
         let native_limit = super::native_window::active_native_window_config()
             .map(|config| config.runtime_contract.inventory_limits.member_bytes);
         #[cfg(not(feature = "debug-process"))]
         let native_limit = None;
-        Self::init_with_native_checkpoints(script, output_root, native_limit, activity)
+        Self::init_with_native_checkpoints(
+            script,
+            output_root,
+            native_limit,
+            activity,
+            input,
+            configuration,
+        )
     }
 
     fn init_with_native_checkpoints(
@@ -404,6 +381,8 @@ impl AutomationObserver {
         output_root: PathBuf,
         native_limit: Option<u64>,
         activity: crate::engine::world::activity::ActivityControl,
+        input: crate::engine::input::InputControls,
+        configuration: uqm_engine::configuration::Configuration,
     ) -> Arc<Self> {
         let native_trace = native_limit
             .map(|limit| {
@@ -446,6 +425,8 @@ impl AutomationObserver {
         let native_trace_failed = Self::trace_initialization_failed(&native_trace, "native");
         let coord = AutomationObserver {
             activity,
+            input,
+            _configuration: configuration,
             seed: script.seed(),
             actions,
             native_checkpoint_plan,
@@ -619,7 +600,9 @@ impl AutomationObserver {
         if inner.terminal_class.is_some() {
             return true;
         }
-        if !discard_held_repeat(held, input_ffi::discard_menu_pulse) {
+        if !discard_held_repeat(held, |index| {
+            input_ffi::discard_menu_pulse(&self.input, index)
+        }) {
             self.write_trace_labeled(
                 &mut inner,
                 RecordKind::SemanticAssertion,
@@ -632,7 +615,9 @@ impl AutomationObserver {
             return false;
         };
 
-        match observe_player_input(pending.injection) {
+        match observe_player_input_with(pending.injection, |index| {
+            self.read_player_input_state(index)
+        }) {
             PlayerInputObservation::Matched { current, pulsed } => {
                 self.write_trace_labeled(
                     &mut inner,
@@ -839,7 +824,7 @@ impl AutomationObserver {
             let select = crate::automation::script::MenuKey::Select.index();
             let hail = crate::automation::ui_observation::encounter_menu_active()
                 && inner.input_seen % 4 == 3;
-            if !inject_menu_key(i32::from(select), i32::from(hail)) {
+            if !self.inject_menu_key(i32::from(select), i32::from(hail)) {
                 self.reject_input(inner, "menu", i32::from(select), i32::from(hail));
                 return scheduler_event;
             }
@@ -893,7 +878,7 @@ impl AutomationObserver {
                         );
                         let key_index =
                             i32::from(crate::automation::script::MenuKey::Select.index());
-                        if !inject_menu_key(key_index, 1) {
+                        if !self.inject_menu_key(key_index, 1) {
                             self.reject_input(inner, "menu", key_index, 1);
                             return scheduler_event;
                         }
@@ -924,7 +909,7 @@ impl AutomationObserver {
                 if ready {
                     crate::comm::ffi::rust_select_response_index(select.index as i32);
                     let key_index = i32::from(crate::automation::script::MenuKey::Select.index());
-                    if !inject_menu_key(key_index, 1) {
+                    if !self.inject_menu_key(key_index, 1) {
                         self.reject_input(inner, "menu", key_index, 1);
                         return scheduler_event;
                     }
@@ -961,7 +946,7 @@ impl AutomationObserver {
                 && phase == expected
             {
                 let key_index = i32::from(crate::automation::script::MenuKey::Select.index());
-                if !inject_menu_key(key_index, 1) {
+                if !self.inject_menu_key(key_index, 1) {
                     self.reject_input(inner, "menu", key_index, 1);
                     return scheduler_event;
                 }
@@ -987,7 +972,7 @@ impl AutomationObserver {
                 && generation > inner.consumed_ship_picker_generation
             {
                 let key_index = i32::from(crate::automation::script::MenuKey::Select.index());
-                if !inject_menu_key(key_index, 1) {
+                if !self.inject_menu_key(key_index, 1) {
                     self.reject_input(inner, "menu", key_index, 1);
                     return scheduler_event;
                 }
@@ -1150,7 +1135,7 @@ impl AutomationObserver {
             .observe(&BattleSnapshot::live(world), &fight);
         match progress {
             Ok(FightProgress::Fighting { control, report }) => {
-                if !Self::set_fight_controls(control) {
+                if !self.set_fight_controls(control) {
                     self.reject_input(inner, "fight_battle", -1, -1);
                 }
                 if let Some(report) = report {
@@ -1163,7 +1148,7 @@ impl AutomationObserver {
                 scheduler_event
             }
             Ok(FightProgress::Won(proof)) => {
-                if !Self::set_fight_controls(FightControl::default()) {
+                if !self.set_fight_controls(FightControl::default()) {
                     self.reject_input(inner, "fight_battle", -1, -1);
                     return scheduler_event;
                 }
@@ -1171,7 +1156,7 @@ impl AutomationObserver {
                 SchedulerEvent::NavigationReached
             }
             Err(error) => {
-                if !Self::set_fight_controls(FightControl::default()) {
+                if !self.set_fight_controls(FightControl::default()) {
                     self.reject_input(inner, "fight_battle", -1, -1);
                     return scheduler_event;
                 }
@@ -1193,7 +1178,7 @@ impl AutomationObserver {
             inner.device = DeviceTracker::default();
         }
         #[cfg(not(test))]
-        let observation = crate::planets::devices::observation();
+        let observation = crate::planets::devices::observation(&self._configuration);
         #[cfg(test)]
         let observation = Default::default();
         let progress = inner.device.observe(step, observation);
@@ -1207,7 +1192,7 @@ impl AutomationObserver {
             return event;
         }
         for key in crate::automation::script::MenuKey::ALL {
-            if !inject_menu_key(i32::from(key.index()), i32::from(input == Some(key))) {
+            if !self.inject_menu_key(i32::from(key.index()), i32::from(input == Some(key))) {
                 self.reject_input(inner, "use_device", -1, -1);
                 return event;
             }
@@ -1268,7 +1253,7 @@ impl AutomationObserver {
         }
         match progress {
             EnergyProgress::DismissReport(pressed) => {
-                if !inject_menu_key(
+                if !self.inject_menu_key(
                     i32::from(crate::automation::script::MenuKey::Cancel.index()),
                     i32::from(pressed),
                 ) {
@@ -1322,7 +1307,7 @@ impl AutomationObserver {
             &empty
         };
         for key in MenuKey::ALL {
-            if !inject_menu_key(
+            if !self.inject_menu_key(
                 i32::from(key.index()),
                 i32::from(controls.menu == Some(key)),
             ) {
@@ -1348,7 +1333,7 @@ impl AutomationObserver {
                 PlayerKey::Escape => controls.escape,
                 _ => false,
             };
-            if !inject_player_key(i32::from(key.index()), i32::from(pressed)) {
+            if !self.inject_player_key(i32::from(key.index()), i32::from(pressed)) {
                 self.reject_input(inner, "fight_samatra", -1, -1);
                 return event;
             }
@@ -1384,13 +1369,13 @@ impl AutomationObserver {
             _ => None,
         };
         for menu in crate::automation::script::MenuKey::ALL {
-            if !inject_menu_key(i32::from(menu.index()), i32::from(key == Some(menu))) {
+            if !self.inject_menu_key(i32::from(menu.index()), i32::from(key == Some(menu))) {
                 self.reject_input(inner, "fight_encounter", -1, -1);
                 return event;
             }
         }
         for index in 0..7 {
-            if !inject_player_key(index, 0) {
+            if !self.inject_player_key(index, 0) {
                 self.reject_input(inner, "fight_encounter", index, 0);
                 return event;
             }
@@ -1437,13 +1422,13 @@ impl AutomationObserver {
             _ => (None, false),
         };
         for menu in crate::automation::script::MenuKey::ALL {
-            if !inject_menu_key(i32::from(menu.index()), i32::from(key == Some(menu))) {
+            if !self.inject_menu_key(i32::from(menu.index()), i32::from(key == Some(menu))) {
                 self.reject_input(inner, "retreat_encounter", -1, -1);
                 return event;
             }
         }
         for index in 0..7 {
-            if !inject_player_key(
+            if !self.inject_player_key(
                 index,
                 i32::from(
                     escape
@@ -1535,13 +1520,13 @@ impl AutomationObserver {
             PlayerKey::Special,
             PlayerKey::Escape,
         ] {
-            if !inject_player_key(i32::from(key.index()), 0) {
+            if !self.inject_player_key(i32::from(key.index()), 0) {
                 self.reject_input(inner, "fly_to_star", -1, -1);
                 return event;
             }
         }
         for key in MenuKey::ALL {
-            if !inject_menu_key(i32::from(key.index()), i32::from(input == Some(key))) {
+            if !self.inject_menu_key(i32::from(key.index()), i32::from(input == Some(key))) {
                 self.reject_input(inner, "fly_to_star", -1, -1);
                 return event;
             }
@@ -1623,7 +1608,7 @@ impl AutomationObserver {
         } else if active {
             let _ = crate::sound::trackplayer::jump_track(0);
         }
-        if !inject_menu_key(i32::from(MenuKey::Select.index()), i32::from(select)) {
+        if !self.inject_menu_key(i32::from(MenuKey::Select.index()), i32::from(select)) {
             self.reject_input(inner, "patrol_hail", -1, -1);
         }
         true
@@ -2845,7 +2830,7 @@ impl AutomationObserver {
     }
 
     /// Hold exactly the thrust, turn and fire keys of `control`.
-    fn set_fight_controls(control: FightControl) -> bool {
+    fn set_fight_controls(&self, control: FightControl) -> bool {
         use crate::automation::script::PlayerKey;
 
         [
@@ -2855,7 +2840,7 @@ impl AutomationObserver {
             (PlayerKey::Weapon, control.weapon),
         ]
         .into_iter()
-        .all(|(key, active)| inject_player_key(i32::from(key.index()), i32::from(active)))
+        .all(|(key, active)| self.inject_player_key(i32::from(key.index()), i32::from(active)))
     }
 
     fn set_navigation_controls(
@@ -2869,7 +2854,7 @@ impl AutomationObserver {
             (PlayerKey::Left, control.left),
             (PlayerKey::Right, control.right),
         ] {
-            if !inject_player_key(i32::from(key.index()), i32::from(active)) {
+            if !self.inject_player_key(i32::from(key.index()), i32::from(active)) {
                 return false;
             }
         }
@@ -2881,7 +2866,7 @@ impl AutomationObserver {
             (MenuKey::Up, up),
             (MenuKey::Select, select),
         ] {
-            if !inject_menu_key(i32::from(key.index()), i32::from(active)) {
+            if !self.inject_menu_key(i32::from(key.index()), i32::from(active)) {
                 return false;
             }
         }
@@ -2897,7 +2882,7 @@ impl AutomationObserver {
     ) -> bool {
         if let Some((key, value)) = effects.write_key {
             let index = crate::automation::input::menu_key_to_index(key);
-            if !inject_menu_key(i32::from(index), i32::from(value)) {
+            if !self.inject_menu_key(i32::from(index), i32::from(value)) {
                 self.reject_input(inner, "menu", i32::from(index), i32::from(value));
                 return false;
             }
@@ -2905,7 +2890,7 @@ impl AutomationObserver {
         inner.held_repeat_key = effects.held_repeat_key;
         if let Some(key) = effects.release_key {
             let index = crate::automation::input::menu_key_to_index(key);
-            if !inject_menu_key(i32::from(index), 0) {
+            if !self.inject_menu_key(i32::from(index), 0) {
                 self.reject_input(inner, "menu", i32::from(index), 0);
                 return false;
             }
@@ -2958,7 +2943,7 @@ impl AutomationObserver {
         if self.reject_unobserved_player_input(inner) {
             return false;
         }
-        let Some(injection) = prepare_player_input(i32::from(key.index()), value) else {
+        let Some(injection) = self.prepare_player_input(i32::from(key.index()), value) else {
             self.reject_input(inner, "player", i32::from(key.index()), value);
             return false;
         };
@@ -3435,6 +3420,8 @@ mod tests {
             script,
             directory.path().into(),
             game.world.activity_control(),
+            crate::engine::input::InputControls::default(),
+            Default::default(),
         );
         let application = crate::app::Application::new(game, Some(observer.clone()));
         assert!(Arc::ptr_eq(application.observer().unwrap(), &observer));
@@ -3461,6 +3448,8 @@ mod tests {
             script,
             output.path().into(),
             crate::engine::World::new().activity_control(),
+            crate::engine::input::InputControls::default(),
+            Default::default(),
         );
         let before = observer.runtime.commit.next_sequence();
         let mut game = crate::engine::Game::new();
@@ -3640,6 +3629,8 @@ mod tests {
                 script,
                 temp.path().to_path_buf(),
                 game.world.activity_control(),
+                crate::engine::input::InputControls::default(),
+                Default::default(),
             ));
             crate::app::Application::new(game, observer)
         };
@@ -3703,6 +3694,8 @@ mod tests {
                 script,
                 temp.path().into(),
                 game.world.activity_control(),
+                crate::engine::input::InputControls::default(),
+                Default::default(),
             ));
             crate::app::Application::new(game, observer)
         };
@@ -3765,6 +3758,8 @@ mod tests {
                 temp.path().into(),
                 Some(65536),
                 game.world.activity_control(),
+                crate::engine::input::InputControls::default(),
+                Default::default(),
             ));
             crate::app::Application::new(game, observer)
         };
@@ -3852,6 +3847,8 @@ mod tests {
                 temp.path().into(),
                 Some(65536),
                 game.world.activity_control(),
+                crate::engine::input::InputControls::default(),
+                Default::default(),
             ));
             crate::app::Application::new(game, observer)
         };
@@ -3914,6 +3911,8 @@ mod tests {
                 temp.path().into(),
                 Some(65536),
                 game.world.activity_control(),
+                crate::engine::input::InputControls::default(),
+                Default::default(),
             ));
             crate::app::Application::new(game, observer)
         };
@@ -4002,6 +4001,8 @@ mod tests {
                 temp.path().into(),
                 Some(65536),
                 game.world.activity_control(),
+                crate::engine::input::InputControls::default(),
+                Default::default(),
             ));
             crate::app::Application::new(game, observer)
         };
@@ -4068,6 +4069,8 @@ mod tests {
                 temp.path().into(),
                 Some(65536),
                 game.world.activity_control(),
+                crate::engine::input::InputControls::default(),
+                Default::default(),
             ));
             crate::app::Application::new(game, observer)
         };
@@ -4183,6 +4186,8 @@ mod tests {
                 script,
                 temp.path().to_path_buf(),
                 game.world.activity_control(),
+                crate::engine::input::InputControls::default(),
+                Default::default(),
             ));
             crate::app::Application::new(game, observer)
         };
@@ -4265,6 +4270,8 @@ mod tests {
                 script,
                 temp.path().to_path_buf(),
                 game.world.activity_control(),
+                crate::engine::input::InputControls::default(),
+                Default::default(),
             ));
             crate::app::Application::new(game, observer)
         };
@@ -4330,6 +4337,8 @@ mod tests {
                 crate::automation::script::validate_script(doc, "receipt.json").unwrap(),
                 temp.path().to_path_buf(),
                 game.world.activity_control(),
+                crate::engine::input::InputControls::default(),
+                Default::default(),
             ));
             crate::app::Application::new(game, observer)
         };

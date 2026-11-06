@@ -3,6 +3,7 @@
 use crate::callback::ffi::{AlarmId, Alarm_addAbsoluteMs, Alarm_remove};
 use crate::engine::{battle::schema::FlashContext, Kernel, StoryKey, World, WorldData};
 use crate::planets::starmap::current_catalog;
+use crate::ui::rgb15;
 
 use crate::navigation::abi::*;
 
@@ -42,14 +43,6 @@ fn game_state(key: StoryKey) -> u8 {
     World::current().read(|world| world.story_state(key) as u8)
 }
 
-const fn rgb15(r: u8, g: u8, b: u8) -> Color {
-    Color {
-        r: (r << 3) | (r >> 2),
-        g: (g << 3) | (g >> 2),
-        b: (b << 3) | (b >> 2),
-        a: 255,
-    }
-}
 const SIS_ORG_X: SIZE = 7;
 const SIS_ORG_Y: SIZE = 10;
 const STATUS_WIDTH: SIZE = 64;
@@ -357,78 +350,6 @@ pub unsafe extern "C" fn GetStatusMessageRect(r: *mut RECT) {
 }
 
 /// # Safety
-/// pStr must be null or a valid NUL-terminated string; status graphics must be initialized.
-#[no_mangle]
-pub unsafe extern "C" fn DrawStatusMessage(p_str: *const UNICODE) {
-    let old = SetContext(Kernel::current().read(|owner| owner.status_context));
-    let mut ctx: RECT = mem::zeroed();
-    GetContextClipRect(&mut ctx);
-    SetContext(Kernel::current().read(|owner| owner.off_screen_context));
-    SetContextFGFrame(Kernel::current().read(|owner| owner.screen));
-    let mut r: RECT = mem::zeroed();
-    GetStatusMessageRect(&mut r);
-    r.corner.x = (i32::from(r.corner.x) + i32::from(ctx.corner.x)) as SIZE;
-    r.corner.y = (i32::from(r.corner.y) + i32::from(ctx.corner.y)) as SIZE;
-    SetContextClipRect(&mut r);
-    BatchGraphics();
-    SetContextBackGroundColor(rgb15(0, 8, 0));
-    ClearDrawable();
-    let mut buf = [0u8; 128];
-    let mut text = p_str;
-    if text.is_null() {
-        if CUR_MSG_MODE == StatMsgMode_SMM_CREDITS {
-            let credits = u16::from(game_state(StoryKey::MELNORME_CREDIT0))
-                | (u16::from(game_state(StoryKey::MELNORME_CREDIT1)) << 8);
-            libc::snprintf(
-                buf.as_mut_ptr().cast(),
-                buf.len(),
-                c"%u %s".as_ptr(),
-                credits as u32,
-                game_string(STATUS_STRING_BASE),
-            );
-        } else if CUR_MSG_MODE == StatMsgMode_SMM_RES_UNITS {
-            if game_state(StoryKey::CHMMR_BOMB_STATE) < 2 {
-                libc::snprintf(
-                    buf.as_mut_ptr().cast(),
-                    buf.len(),
-                    c"%u %s".as_ptr(),
-                    sis().read(|owner| owner.res_units),
-                    game_string(STATUS_STRING_BASE + 1),
-                );
-            } else {
-                libc::snprintf(
-                    buf.as_mut_ptr().cast(),
-                    buf.len(),
-                    c"%s %s".as_ptr(),
-                    if optWhichMenu == OPT_PC {
-                        game_string(STATUS_STRING_BASE + 2)
-                    } else {
-                        c"∞".as_ptr().cast()
-                    },
-                    game_string(STATUS_STRING_BASE + 1),
-                );
-            }
-        } else {
-            let (month, day, year) = WorldData::current().read(WorldData::calendar_date);
-            DateToString(buf.as_mut_ptr().cast(), buf.len(), month, day, year);
-        }
-        text = buf.as_ptr().cast();
-    }
-    let mut t: TEXT = mem::zeroed();
-    t.baseline.x = STATUS_MESSAGE_WIDTH >> 1;
-    t.baseline.y = STATUS_MESSAGE_HEIGHT - 1;
-    t.align = TEXT_ALIGN_ALIGN_CENTER;
-    t.pStr = text as *mut UNICODE;
-    t.CharCount = !0;
-    SetContextFont(Kernel::current().read(|owner| owner.tiny_font));
-    SetContextForeGroundColor(rgb15(0, 0x10, 0));
-    font_DrawText(&mut t);
-    UnbatchGraphics();
-    SetContextClipRect(ptr::null_mut());
-    SetContext(old);
-}
-
-/// # Safety
 /// Called on the game thread.
 #[no_mangle]
 pub unsafe extern "C" fn SetStatusMessageMode(new_mode: StatMsgMode) -> StatMsgMode {
@@ -457,73 +378,6 @@ pub unsafe fn draw_captains_name() {
     t.CharCount = !0;
     SetContextForeGroundColor(rgb15(0x16, 0x0b, 0x1f));
     font_DrawText(&mut t);
-    SetContextForeGroundColor(old_color);
-    SetContextFont(old_font);
-    SetContext(old);
-}
-
-/// # Safety
-/// Graphics, fonts and SIS strings must be initialized.
-#[no_mangle]
-pub unsafe extern "C" fn DrawFlagshipName(in_status_area: BOOLEAN) {
-    let mut r: RECT = mem::zeroed();
-    let mut buf = [0u8; 250];
-    let old = if in_status_area != 0 {
-        SetContext(Kernel::current().read(|owner| owner.status_context))
-    } else {
-        SetContext(Kernel::current().read(|owner| owner.space_context))
-    };
-    let old_font = SetContextFont(if in_status_area != 0 {
-        Kernel::current().read(|owner| owner.star_con_font)
-    } else {
-        Kernel::current().read(|owner| owner.micro_font)
-    });
-    r.corner.x = if in_status_area != 0 { 2 } else { 0 };
-    r.corner.y = if in_status_area != 0 { 20 } else { 1 };
-    r.extent.width = if in_status_area != 0 {
-        SHIP_NAME_WIDTH
-    } else {
-        sis_screen_width() as SIZE
-    };
-    r.extent.height = SHIP_NAME_HEIGHT;
-    let name = (**sis()).ship_name.as_mut_ptr();
-    let p = if in_status_area != 0 {
-        name
-    } else {
-        libc::snprintf(
-            buf.as_mut_ptr().cast(),
-            buf.len(),
-            c"%s %s".as_ptr(),
-            game_string(NAMING_STRING_BASE + 1),
-            name,
-        );
-        let mut ch = buf.as_mut_ptr().cast::<libc::c_char>();
-        while *ch != 0 {
-            *ch = libc::toupper(*ch as libc::c_int) as libc::c_char;
-            ch = ch.add(1);
-        }
-        buf.as_mut_ptr().cast()
-    };
-    let old_effect = SetContextFontEffect(ptr::null_mut());
-    let old_color = SetContextForeGroundColor(rgb15(0, 0, 0));
-    DrawFilledRectangle(&mut r);
-    let mut t: TEXT = mem::zeroed();
-    t.baseline.x = (i32::from(r.corner.x) + (i32::from(r.extent.width) >> 1)) as SIZE;
-    t.baseline.y =
-        (r.corner.y as u32 + SHIP_NAME_HEIGHT as u32).wrapping_sub(in_status_area) as SIZE;
-    t.align = TEXT_ALIGN_ALIGN_CENTER;
-    t.CharCount = !0;
-    t.pStr = p.cast();
-    if optWhichFonts == OPT_PC {
-        SetContextFontEffect(SetAbsFrameIndex(
-            Kernel::current().read(|owner| owner.font_grad_frame),
-            if in_status_area != 0 { 0 } else { 3 },
-        ));
-    } else {
-        SetContextForeGroundColor(rgb15(0x14, 0x0a, 0));
-    }
-    font_DrawText(&mut t);
-    SetContextFontEffect(old_effect);
     SetContextForeGroundColor(old_color);
     SetContextFont(old_font);
     SetContext(old);
@@ -944,16 +798,18 @@ unsafe fn delta_res(delta: SIZE) {
 /// SIS graphics, game state and asset resources must be initialized on the game thread.
 #[no_mangle]
 pub unsafe extern "C" fn DeltaSISGauges(crew_delta: SIZE, fuel_delta: SIZE, resunit_delta: i32) {
+    let (retained_status_context, preferences) =
+        Kernel::current().read(|owner| (owner.status_context, owner.configuration.preferences()));
     if crew_delta == 0 && fuel_delta == 0 && resunit_delta == 0 {
         return;
     }
-    let old = SetContext(Kernel::current().read(|owner| owner.status_context));
+    let old = SetContext(retained_status_context);
     BatchGraphics();
     if crew_delta == UNDEFINED_DELTA_LOCAL {
         let mut stamp: STAMP = mem::zeroed();
         stamp.frame = Kernel::current().read(|owner| owner.flag_stat_frame);
         DrawStamp(&mut stamp);
-        if optWhichFonts == OPT_PC {
+        if preferences.fonts == OPT_PC {
             draw_pc_sis();
         }
         let s = sis().read(|state| *state);
@@ -1040,15 +896,17 @@ unsafe fn schedule_flash_alarm() {
 /// pRect must be null, a valid RECT, or one of the SIS menu sentinel pointers; flash and graphics systems must be initialized.
 #[no_mangle]
 pub unsafe extern "C" fn SetFlashRect(p_rect: *const RECT) {
+    let (retained_status_context, preferences) =
+        Kernel::current().read(|owner| (owner.status_context, owner.configuration.preferences()));
     let mut clip: RECT = mem::zeroed();
     let mut temp: RECT = mem::zeroed();
     let mut rect = p_rect;
     if rect as usize != SFR_MENU_3DO && rect as usize != SFR_MENU_ANY {
         GetContextClipRect(&mut clip);
-    } else if optWhichMenu == OPT_PC && rect as usize != SFR_MENU_ANY {
+    } else if preferences.menu == OPT_PC && rect as usize != SFR_MENU_ANY {
         rect = ptr::null();
     } else {
-        let old = SetContext(Kernel::current().read(|owner| owner.status_context));
+        let old = SetContext(retained_status_context);
         GetContextClipRect(&mut clip);
         temp.corner.x = (radar_x() - i32::from(clip.corner.x)) as SIZE;
         temp.corner.y = (radar_y() - i32::from(clip.corner.y)) as SIZE;
@@ -1121,4 +979,147 @@ pub unsafe fn continue_flash() {
         schedule_flash_alarm();
         FLASH_PAUSED = 0;
     }
+}
+
+/// # Safety
+/// pStr must be null or a valid NUL-terminated string; status graphics must be initialized.
+#[no_mangle]
+pub unsafe extern "C" fn DrawStatusMessage(p_str: *const UNICODE) {
+    let (retained_status_context, preferences) =
+        Kernel::current().read(|owner| (owner.status_context, owner.configuration.preferences()));
+    let old = SetContext(retained_status_context);
+    let mut ctx: RECT = mem::zeroed();
+    GetContextClipRect(&mut ctx);
+    SetContext(Kernel::current().read(|owner| owner.off_screen_context));
+    SetContextFGFrame(Kernel::current().read(|owner| owner.screen));
+    let mut r: RECT = mem::zeroed();
+    GetStatusMessageRect(&mut r);
+    r.corner.x = (i32::from(r.corner.x) + i32::from(ctx.corner.x)) as SIZE;
+    r.corner.y = (i32::from(r.corner.y) + i32::from(ctx.corner.y)) as SIZE;
+    SetContextClipRect(&mut r);
+    BatchGraphics();
+    SetContextBackGroundColor(rgb15(0, 8, 0));
+    ClearDrawable();
+    let mut buf = [0u8; 128];
+    let mut text = p_str;
+    if text.is_null() {
+        if CUR_MSG_MODE == StatMsgMode_SMM_CREDITS {
+            let credits = u16::from(game_state(StoryKey::MELNORME_CREDIT0))
+                | (u16::from(game_state(StoryKey::MELNORME_CREDIT1)) << 8);
+            libc::snprintf(
+                buf.as_mut_ptr().cast(),
+                buf.len(),
+                c"%u %s".as_ptr(),
+                credits as u32,
+                game_string(STATUS_STRING_BASE),
+            );
+        } else if CUR_MSG_MODE == StatMsgMode_SMM_RES_UNITS {
+            if game_state(StoryKey::CHMMR_BOMB_STATE) < 2 {
+                libc::snprintf(
+                    buf.as_mut_ptr().cast(),
+                    buf.len(),
+                    c"%u %s".as_ptr(),
+                    sis().read(|owner| owner.res_units),
+                    game_string(STATUS_STRING_BASE + 1),
+                );
+            } else {
+                libc::snprintf(
+                    buf.as_mut_ptr().cast(),
+                    buf.len(),
+                    c"%s %s".as_ptr(),
+                    if preferences.menu == OPT_PC {
+                        game_string(STATUS_STRING_BASE + 2)
+                    } else {
+                        c"∞".as_ptr().cast()
+                    },
+                    game_string(STATUS_STRING_BASE + 1),
+                );
+            }
+        } else {
+            let (month, day, year) = WorldData::current().read(WorldData::calendar_date);
+            DateToString(buf.as_mut_ptr().cast(), buf.len(), month, day, year);
+        }
+        text = buf.as_ptr().cast();
+    }
+    let mut t: TEXT = mem::zeroed();
+    t.baseline.x = STATUS_MESSAGE_WIDTH >> 1;
+    t.baseline.y = STATUS_MESSAGE_HEIGHT - 1;
+    t.align = TEXT_ALIGN_ALIGN_CENTER;
+    t.pStr = text as *mut UNICODE;
+    t.CharCount = !0;
+    SetContextFont(Kernel::current().read(|owner| owner.tiny_font));
+    SetContextForeGroundColor(rgb15(0, 0x10, 0));
+    font_DrawText(&mut t);
+    UnbatchGraphics();
+    SetContextClipRect(ptr::null_mut());
+    SetContext(old);
+}
+
+/// # Safety
+/// Graphics, fonts and SIS strings must be initialized.
+#[no_mangle]
+pub unsafe extern "C" fn DrawFlagshipName(in_status_area: BOOLEAN) {
+    let (retained_status_context, preferences) =
+        Kernel::current().read(|owner| (owner.status_context, owner.configuration.preferences()));
+    let mut r: RECT = mem::zeroed();
+    let mut buf = [0u8; 250];
+    let old = if in_status_area != 0 {
+        SetContext(retained_status_context)
+    } else {
+        SetContext(Kernel::current().read(|owner| owner.space_context))
+    };
+    let old_font = SetContextFont(if in_status_area != 0 {
+        Kernel::current().read(|owner| owner.star_con_font)
+    } else {
+        Kernel::current().read(|owner| owner.micro_font)
+    });
+    r.corner.x = if in_status_area != 0 { 2 } else { 0 };
+    r.corner.y = if in_status_area != 0 { 20 } else { 1 };
+    r.extent.width = if in_status_area != 0 {
+        SHIP_NAME_WIDTH
+    } else {
+        sis_screen_width() as SIZE
+    };
+    r.extent.height = SHIP_NAME_HEIGHT;
+    let name = (**sis()).ship_name.as_mut_ptr();
+    let p = if in_status_area != 0 {
+        name
+    } else {
+        libc::snprintf(
+            buf.as_mut_ptr().cast(),
+            buf.len(),
+            c"%s %s".as_ptr(),
+            game_string(NAMING_STRING_BASE + 1),
+            name,
+        );
+        let mut ch = buf.as_mut_ptr().cast::<libc::c_char>();
+        while *ch != 0 {
+            *ch = libc::toupper(*ch as libc::c_int) as libc::c_char;
+            ch = ch.add(1);
+        }
+        buf.as_mut_ptr().cast()
+    };
+    let old_effect = SetContextFontEffect(ptr::null_mut());
+    let old_color = SetContextForeGroundColor(rgb15(0, 0, 0));
+    DrawFilledRectangle(&mut r);
+    let mut t: TEXT = mem::zeroed();
+    t.baseline.x = (i32::from(r.corner.x) + (i32::from(r.extent.width) >> 1)) as SIZE;
+    t.baseline.y =
+        (r.corner.y as u32 + SHIP_NAME_HEIGHT as u32).wrapping_sub(in_status_area) as SIZE;
+    t.align = TEXT_ALIGN_ALIGN_CENTER;
+    t.CharCount = !0;
+    t.pStr = p.cast();
+    if preferences.fonts == OPT_PC {
+        SetContextFontEffect(SetAbsFrameIndex(
+            Kernel::current().read(|owner| owner.font_grad_frame),
+            if in_status_area != 0 { 0 } else { 3 },
+        ));
+    } else {
+        SetContextForeGroundColor(rgb15(0x14, 0x0a, 0));
+    }
+    font_DrawText(&mut t);
+    SetContextFontEffect(old_effect);
+    SetContextForeGroundColor(old_color);
+    SetContextFont(old_font);
+    SetContext(old);
 }

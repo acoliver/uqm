@@ -228,18 +228,21 @@ unsafe fn init_flash(menu: *mut MENU_STATE, piece: BYTE) {
     }
 }
 
-unsafe extern "C" fn do_install_module(menu: *mut MENU_STATE) -> BOOLEAN {
+unsafe fn do_install_module(
+    menu: *mut MENU_STATE,
+    input: &crate::engine::input::InputSession,
+) -> BOOLEAN {
     if crate::engine::World::current().read(|world| world.activity()) & CHECK_ABORT as u16 != 0 {
-        (*menu).InputFunc = Some(DoOutfit);
+        (*menu).InputFunc = Some(do_outfit);
         return 1;
     }
-    let select = PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0;
-    let mut cancel = PulsedInputState.menu[KEY_MENU_CANCEL as usize] != 0;
-    let left = PulsedInputState.menu[KEY_MENU_LEFT as usize] != 0;
-    let right = PulsedInputState.menu[KEY_MENU_RIGHT as usize] != 0;
-    let up = PulsedInputState.menu[KEY_MENU_UP as usize] != 0;
-    let down = PulsedInputState.menu[KEY_MENU_DOWN as usize] != 0;
-    SetMenuSounds(SOUND_ARROWS, SOUND_SELECT);
+    let select = input.pulsed().menu[KEY_MENU_SELECT as usize] != 0;
+    let mut cancel = input.pulsed().menu[KEY_MENU_CANCEL as usize] != 0;
+    let left = input.pulsed().menu[KEY_MENU_LEFT as usize] != 0;
+    let right = input.pulsed().menu[KEY_MENU_RIGHT as usize] != 0;
+    let up = input.pulsed().menu[KEY_MENU_UP as usize] != 0;
+    let down = input.pulsed().menu[KEY_MENU_DOWN as usize] != 0;
+    SetMenuSounds(input, SOUND_ARROWS, SOUND_SELECT);
     let mut first: SIZE = 0;
     let mut state = (*menu).CurState;
     let old_piece = slot_piece(state, (*menu).delta_item);
@@ -306,7 +309,7 @@ unsafe extern "C" fn do_install_module(menu: *mut MENU_STATE) -> BOOLEAN {
                     if new_piece > TURNING_JETS as BYTE && old_piece > TURNING_JETS as BYTE {
                         redistribute_fuel();
                     }
-                    if optWhichFonts == OPT_PC as i32 {
+                    if input.preferences().fonts == OPT_PC as i32 {
                         draw_flagship_stats();
                     }
                 }
@@ -332,7 +335,7 @@ unsafe extern "C" fn do_install_module(menu: *mut MENU_STATE) -> BOOLEAN {
             (*menu).CurState = OUTFIT_MODULES;
             DrawMenuStateStrings(PM_FUEL as BYTE, (*menu).CurState as i16);
             SetFlashRect(MENU_3DO);
-            (*menu).InputFunc = Some(DoOutfit);
+            (*menu).InputFunc = Some(do_outfit);
             ClearSISRect(DRAW_SIS_DISPLAY as BYTE);
         }
     } else if left || right || up || down {
@@ -420,14 +423,14 @@ unsafe extern "C" fn do_install_module(menu: *mut MENU_STATE) -> BOOLEAN {
     1
 }
 
-unsafe fn change_fuel_quantity() {
-    let mut incr: i32 = if PulsedInputState.menu[KEY_MENU_UP as usize] != 0 {
+unsafe fn change_fuel_quantity(input: &crate::engine::input::InputSession) {
+    let mut incr: i32 = if input.pulsed().menu[KEY_MENU_UP as usize] != 0 {
         FUEL_TANK_SCALE as i32
-    } else if PulsedInputState.menu[KEY_MENU_DOWN as usize] != 0 {
+    } else if input.pulsed().menu[KEY_MENU_DOWN as usize] != 0 {
         -(FUEL_TANK_SCALE as i32)
-    } else if PulsedInputState.menu[KEY_MENU_PAGE_UP as usize] != 0 {
+    } else if input.pulsed().menu[KEY_MENU_PAGE_UP as usize] != 0 {
         FUEL_VOLUME_PER_ROW as i32
-    } else if PulsedInputState.menu[KEY_MENU_PAGE_DOWN as usize] != 0 {
+    } else if input.pulsed().menu[KEY_MENU_PAGE_DOWN as usize] != 0 {
         -(FUEL_VOLUME_PER_ROW as i32)
     } else {
         return;
@@ -483,13 +486,15 @@ unsafe fn exit_outfit(menu: *mut MENU_STATE) -> BOOLEAN {
 /// # Safety
 /// `menu` must be the live game-thread menu. Game, resources, input, graphics
 /// and audio must be initialized and exclusively accessed on that thread.
-#[no_mangle]
-pub unsafe extern "C" fn DoOutfit(menu: *mut MENU_STATE) -> BOOLEAN {
+pub unsafe fn do_outfit(
+    menu: *mut MENU_STATE,
+    input: &crate::engine::input::InputSession,
+) -> BOOLEAN {
     if crate::engine::World::current().read(|world| world.activity()) & CHECK_ABORT as u16 != 0 {
         return exit_outfit(menu);
     }
     if (*menu).Initialized == 0 {
-        (*menu).InputFunc = Some(DoOutfit);
+        (*menu).InputFunc = Some(do_outfit);
         (*menu).Initialized = 1;
         SetNamingCallback(Some(on_naming_done));
         (*menu).CurFrame =
@@ -546,7 +551,7 @@ pub unsafe extern "C" fn DoOutfit(menu: *mut MENU_STATE) -> BOOLEAN {
         }
         DrawMenuStateStrings(PM_FUEL as BYTE, (*menu).CurState as i16);
         DrawFlagshipName(0);
-        if optWhichFonts == OPT_PC as i32 {
+        if input.preferences().fonts == OPT_PC as i32 {
             draw_flagship_stats();
         }
         ScreenTransition(3, ptr::null());
@@ -559,8 +564,8 @@ pub unsafe extern "C" fn DoOutfit(menu: *mut MENU_STATE) -> BOOLEAN {
             / FUEL_TANK_SCALE;
         (**WorldData::current()).flagship.fuel_on_board *= FUEL_TANK_SCALE;
         SetContext(Kernel::current().read(|owner| owner.status_context));
-    } else if PulsedInputState.menu[KEY_MENU_CANCEL as usize] != 0
-        || (PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0 && (*menu).CurState == OUTFIT_EXIT)
+    } else if input.pulsed().menu[KEY_MENU_CANCEL as usize] != 0
+        || (input.pulsed().menu[KEY_MENU_SELECT as usize] != 0 && (*menu).CurState == OUTFIT_EXIT)
     {
         if (*menu).CurState == OUTFIT_DOFUEL {
             (*menu).CurState = OUTFIT_FUEL;
@@ -568,7 +573,7 @@ pub unsafe extern "C" fn DoOutfit(menu: *mut MENU_STATE) -> BOOLEAN {
         } else {
             return exit_outfit(menu);
         }
-    } else if PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0 {
+    } else if input.pulsed().menu[KEY_MENU_SELECT as usize] != 0 {
         match (*menu).CurState {
             OUTFIT_FUEL => {
                 (*menu).CurState = OUTFIT_DOFUEL;
@@ -593,7 +598,7 @@ pub unsafe extern "C" fn DoOutfit(menu: *mut MENU_STATE) -> BOOLEAN {
                 };
                 (*menu).first_item.y = 0;
                 (*menu).Initialized = 0;
-                do_install_module(menu);
+                do_install_module(menu, input);
             }
             OUTFIT_SAVELOAD => {
                 if GameOptions() == 0 {
@@ -606,15 +611,15 @@ pub unsafe extern "C" fn DoOutfit(menu: *mut MENU_STATE) -> BOOLEAN {
         }
     } else {
         if (*menu).CurState == OUTFIT_DOFUEL {
-            SetMenuSounds(SOUND_FUEL, SOUND_SELECT | SOUND_CANCEL);
+            SetMenuSounds(input, SOUND_FUEL, SOUND_SELECT | SOUND_CANCEL);
         } else {
-            SetMenuSounds(SOUND_ARROWS, SOUND_SELECT);
+            SetMenuSounds(input, SOUND_ARROWS, SOUND_SELECT);
         }
         if (*menu).CurState == OUTFIT_DOFUEL {
-            change_fuel_quantity();
+            change_fuel_quantity(input);
             SleepThread(ONE_SECOND / 30);
         } else {
-            DoMenuChooser(menu, PM_FUEL as BYTE);
+            do_menu_chooser(input, menu, PM_FUEL as BYTE);
         }
     }
     1

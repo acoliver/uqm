@@ -20,7 +20,7 @@ unsafe fn queue_tail() -> *mut std::ffi::c_void {
 }
 #[test]
 fn eluder_descriptor_matches_the_c_template() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let d = battle::descriptor(SPECIES_ID_SPATHI_ID);
             let desc = &d;
@@ -112,7 +112,7 @@ fn eluder_descriptor_matches_the_c_template() {
 
 #[test]
 fn forward_missile_leaves_the_nose_along_the_ship_facing() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
             let mut fleet = Ship::new(&_battle, SPECIES_ID_SPATHI_ID, 0);
@@ -158,7 +158,7 @@ fn forward_missile_leaves_the_nose_along_the_ship_facing() {
 
 #[test]
 fn butt_leaves_the_tail_not_the_nose() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
             let mut fleet = Ship::new(&_battle, SPECIES_ID_SPATHI_ID, 0);
@@ -203,7 +203,7 @@ fn butt_leaves_the_tail_not_the_nose() {
 
 #[test]
 fn butt_rear_facing_wraps_through_sixteen_facings() {
-    battle_context::run(|| unsafe {
+    battle_context::run(|_| unsafe {
         let _battle = Battle::new(16);
         let mut fleet = Ship::new(&_battle, SPECIES_ID_SPATHI_ID, 0);
         let butt_frames = FrameSet::new(16);
@@ -226,7 +226,7 @@ fn butt_rear_facing_wraps_through_sixteen_facings() {
 
 #[test]
 fn butt_needs_the_special_key_a_ready_counter_and_energy() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
             let mut fleet = Ship::new(&_battle, SPECIES_ID_SPATHI_ID, 0);
@@ -262,7 +262,7 @@ fn butt_needs_the_special_key_a_ready_counter_and_energy() {
 
 #[test]
 fn butt_homes_one_facing_step_per_tracking_pass() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
             let mut spathi = Ship::new(&_battle, SPECIES_ID_SPATHI_ID, 0);
@@ -338,7 +338,7 @@ unsafe fn intelligence_sets_special(
 
 #[test]
 fn intelligence_fires_the_butt_only_at_targets_behind_the_ship() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
             let mut fleet = Ship::new(&_battle, SPECIES_ID_SPATHI_ID, 0);
@@ -380,7 +380,7 @@ fn intelligence_fires_the_butt_only_at_targets_behind_the_ship() {
 
 #[test]
 fn intelligence_respects_counter_and_arrival_time() {
-    battle_context::run(|| unsafe {
+    battle_context::run(|_| unsafe {
         let _battle = Battle::new(16);
         let mut fleet = Ship::new(&_battle, SPECIES_ID_SPATHI_ID, 0);
         fleet.ship_mut().playerNr = 0;
@@ -405,7 +405,7 @@ fn intelligence_respects_counter_and_arrival_time() {
 
 #[test]
 fn intelligence_beyond_eight_turns_needs_the_enemy_to_be_closing() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
             let mut fleet = Ship::new(&_battle, SPECIES_ID_SPATHI_ID, 0);
@@ -436,7 +436,7 @@ fn intelligence_beyond_eight_turns_needs_the_enemy_to_be_closing() {
 
 #[test]
 fn intelligence_while_fast_or_in_gravity_needs_the_tail_along_travel() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
             let mut fleet = Ship::new(&_battle, SPECIES_ID_SPATHI_ID, 0);

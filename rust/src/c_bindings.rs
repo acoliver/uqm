@@ -88,19 +88,3 @@ macro_rules! assert_c_layout {
     };
 }
 pub(crate) use assert_c_layout;
-
-/// Read one control-template selector without creating a reference to the C global.
-///
-/// # Safety
-///
-/// The caller must run on the game thread at a point where C cannot mutate
-/// `PlayerControls` concurrently.
-#[cfg(not(test))]
-pub unsafe fn player_control_template(player: usize) -> Option<controller_input::CONTROL_TEMPLATE> {
-    if player >= crate::engine::battle::input::NUM_PLAYERS {
-        return None;
-    }
-    let controls = std::ptr::addr_of!(crate::mainloop::input_abi::live::PlayerControls)
-        .cast::<controller_input::CONTROL_TEMPLATE>();
-    Some(unsafe { controls.add(player).read_volatile() })
-}

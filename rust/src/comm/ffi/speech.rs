@@ -7,7 +7,11 @@ use crate::engine::{
     observe::{CampaignView, CheckpointView, InputView, Io},
 };
 
-pub(super) fn run_pending(cx: &mut Cx<'_>, io: &mut Io<'_>) -> bool {
+pub(super) fn run_pending(
+    _input: &crate::engine::input::InputSession,
+    cx: &mut Cx<'_>,
+    io: &mut Io<'_>,
+) -> bool {
     #[cfg(not(test))]
     use talk_segue::WAIT_TRACK_ALL;
     let is_finished = COMM_STATE.read().is_talking_finished();
@@ -62,7 +66,7 @@ pub(super) fn run_pending(cx: &mut Cx<'_>, io: &mut Io<'_>) -> bool {
         let ended = if semantic_skip {
             true
         } else {
-            talk_segue::dinput::run_talk_segue_dinput(cx, io, WAIT_TRACK_ALL)
+            talk_segue::dinput::run_talk_segue_dinput(_input, cx, io, WAIT_TRACK_ALL)
         };
         #[cfg(test)]
         let ended = true;

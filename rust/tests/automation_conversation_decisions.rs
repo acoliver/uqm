@@ -37,18 +37,25 @@ fn application_started() -> uqm_rust::app::Application {
     std::fs::create_dir_all(&output_root).expect("evidence root");
     {
         let game = uqm_rust::engine::Game::new();
+        let input = uqm_rust::engine::input::InputControls::default();
         let observer = Some(AutomationObserver::new(
             script,
             output_root,
             game.world.activity_control(),
+            input.clone(),
+            game.kernel.configuration.clone(),
         ));
-        uqm_rust::app::Application::new(game, observer)
+        {
+            let mut application = uqm_rust::app::Application::new(game, observer);
+            application.install_input(input);
+            application
+        }
     }
 }
 
 #[test]
 fn conversation_decisions_follow_the_script_step_in_hand() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _application = application_started();
         assert!(
             _application.observer().is_some(),

@@ -9,7 +9,7 @@ use uqm_rust::ships::native::{abi::*, frame_index};
 
 #[test]
 fn descriptor_and_fusion_match_c() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(16);
         unsafe {
             let mut ship = Ship::new(&_battle, SPECIES_ID_UR_QUAN_ID, 0);
@@ -55,7 +55,7 @@ fn descriptor_and_fusion_match_c() {
 }
 #[test]
 fn fighters_launch_left_then_right_and_return_crew() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(64);
         unsafe {
             let mut ship = Ship::new(&_battle, SPECIES_ID_UR_QUAN_ID, 0);
@@ -100,7 +100,7 @@ fn fighters_launch_left_then_right_and_return_crew() {
 }
 #[test]
 fn two_crew_launches_one_right_fighter_and_allocation_failure_keeps_crew() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         for capacity in [1, 2] {
             let _battle = Battle::new(capacity);
             unsafe {
@@ -124,7 +124,7 @@ fn two_crew_launches_one_right_fighter_and_allocation_failure_keeps_crew() {
 }
 #[test]
 fn fighter_tracking_delay_then_return_and_fire_use_exact_ranges() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(64);
         unsafe {
             let mut ship = Ship::new(&_battle, SPECIES_ID_UR_QUAN_ID, 0);
@@ -168,7 +168,7 @@ fn fighter_tracking_delay_then_return_and_fire_use_exact_ranges() {
 }
 #[test]
 fn fighter_planet_collision_clones_and_deflects_without_rng() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(64);
         unsafe {
             let mut ship = Ship::new(&_battle, SPECIES_ID_UR_QUAN_ID, 0);
@@ -203,7 +203,7 @@ fn fighter_planet_collision_clones_and_deflects_without_rng() {
 }
 #[test]
 fn ai_fighter_budget_point_defense_and_crew_boundaries() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(16);
         unsafe {
             let mut ship = Ship::new(&_battle, SPECIES_ID_UR_QUAN_ID, 0);

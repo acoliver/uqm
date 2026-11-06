@@ -613,14 +613,20 @@ pub unsafe extern "C" fn Widget_ReceiveFocusRefuseFocus(_: *mut WIDGET, _event: 
 }
 /// # Safety
 /// Widget records and callbacks must be live on the serialized graphics thread.
-#[no_mangle]
-pub unsafe extern "C" fn Widget_HandleEventIgnoreAll(_: *mut WIDGET, _event: i32) -> i32 {
+pub unsafe fn widget_handle_event_ignore_all(
+    _: *mut WIDGET,
+    _event: i32,
+    _input: &crate::input::session::InputSession,
+) -> i32 {
     FALSE
 }
 /// # Safety
 /// Widget records and callbacks must be live on the serialized graphics thread.
-#[no_mangle]
-pub unsafe extern "C" fn Widget_HandleEventChoice(s: *mut WIDGET, event: i32) -> i32 {
+pub unsafe fn widget_handle_event_choice(
+    s: *mut WIDGET,
+    event: i32,
+    _input: &crate::input::session::InputSession,
+) -> i32 {
     let c = s as *mut WIDGET_CHOICE;
     match event {
         EVENT_LEFT => {
@@ -650,8 +656,11 @@ pub unsafe extern "C" fn Widget_HandleEventChoice(s: *mut WIDGET, event: i32) ->
 }
 /// # Safety
 /// Widget records and callbacks must be live on the serialized graphics thread.
-#[no_mangle]
-pub unsafe extern "C" fn Widget_HandleEventSlider(s: *mut WIDGET, event: i32) -> i32 {
+pub unsafe fn widget_handle_event_slider(
+    s: *mut WIDGET,
+    event: i32,
+    _input: &crate::input::session::InputSession,
+) -> i32 {
     let c = s as *mut WIDGET_SLIDER;
     match event {
         EVENT_LEFT => {
@@ -673,8 +682,11 @@ pub unsafe extern "C" fn Widget_HandleEventSlider(s: *mut WIDGET, event: i32) ->
 }
 /// # Safety
 /// Widget records and callbacks must be live on the serialized graphics thread.
-#[no_mangle]
-pub unsafe extern "C" fn Widget_HandleEventMenuScreen(s: *mut WIDGET, event: i32) -> i32 {
+pub unsafe fn widget_handle_event_menu_screen(
+    s: *mut WIDGET,
+    event: i32,
+    input: &crate::input::session::InputSession,
+) -> i32 {
     let m = s as *mut WIDGET_MENU_SCREEN;
     let dx = match event {
         EVENT_UP => -1,
@@ -683,7 +695,7 @@ pub unsafe extern "C" fn Widget_HandleEventMenuScreen(s: *mut WIDGET, event: i32
             (*m).highlighted = (*m).num_children - 1;
             widget_focus = *(*m).child.offset((*m).highlighted as isize);
             let f = (*widget_focus).handleEvent.unwrap();
-            return f(widget_focus, EVENT_SELECT);
+            return f(widget_focus, EVENT_SELECT, input);
         }
         _ => return FALSE,
     };
@@ -707,30 +719,36 @@ pub unsafe extern "C" fn Widget_HandleEventMenuScreen(s: *mut WIDGET, event: i32
 }
 /// # Safety
 /// Widget records and callbacks must be live on the serialized graphics thread.
-#[no_mangle]
-pub unsafe extern "C" fn Widget_HandleEventTextEntry(s: *mut WIDGET, event: i32) -> i32 {
+pub unsafe fn widget_handle_event_text_entry(
+    s: *mut WIDGET,
+    event: i32,
+    input: &crate::input::session::InputSession,
+) -> i32 {
     let t = s as *mut WIDGET_TEXTENTRY;
     if event == EVENT_SELECT {
         if let Some(f) = (*t).handleEventSelect {
-            return f(t);
+            return f(t, input);
         }
     }
     FALSE
 }
 /// # Safety
 /// Widget records and callbacks must be live on the serialized graphics thread.
-#[no_mangle]
-pub unsafe extern "C" fn Widget_HandleEventControlEntry(s: *mut WIDGET, event: i32) -> i32 {
+pub unsafe fn widget_handle_event_control_entry(
+    s: *mut WIDGET,
+    event: i32,
+    input: &crate::input::session::InputSession,
+) -> i32 {
     let c = s as *mut WIDGET_CONTROLENTRY;
     if event == EVENT_SELECT {
         if let Some(f) = (*c).onChange {
-            f(c);
+            f(c, input);
             return TRUE;
         }
     }
     if event == EVENT_DELETE {
         if let Some(f) = (*c).onDelete {
-            f(c);
+            f(c, input);
             return TRUE;
         }
     }
@@ -742,11 +760,10 @@ pub unsafe extern "C" fn Widget_HandleEventControlEntry(s: *mut WIDGET, event: i
 }
 /// # Safety
 /// Widget records and callbacks must be live on the serialized graphics thread.
-#[no_mangle]
-pub unsafe extern "C" fn Widget_Event(event: i32) -> i32 {
+pub unsafe fn widget_event(event: i32, input: &crate::input::session::InputSession) -> i32 {
     let mut w = widget_focus;
     while !w.is_null() {
-        if ((*w).handleEvent.unwrap())(w, event) != FALSE {
+        if ((*w).handleEvent.unwrap())(w, event, input) != FALSE {
             return TRUE;
         }
         w = (*w).parent;
@@ -763,7 +780,11 @@ mod tests {
         assert_eq!((*choice).selected, (*choice).highlighted);
         OLD_CHOICE.store(old, Ordering::Relaxed);
     }
-    unsafe extern "C" fn handles_select(_: *mut WIDGET, event: i32) -> i32 {
+    unsafe fn handles_select(
+        _: *mut WIDGET,
+        event: i32,
+        _input: &crate::input::session::InputSession,
+    ) -> i32 {
         i32::from(event == EVENT_SELECT)
     }
     #[test]
@@ -774,13 +795,22 @@ mod tests {
             parent.handleEvent = Some(handles_select);
             let mut child: WIDGET = std::mem::zeroed();
             child.parent = &mut parent;
-            child.handleEvent = Some(Widget_HandleEventIgnoreAll);
+            child.handleEvent = Some(widget_handle_event_ignore_all);
             let previous = widget_focus;
             assert_eq!(Widget_ReceiveFocusSimple(&mut child, EVENT_DOWN), TRUE);
             let focused = widget_focus;
             assert_eq!(focused, ptr::addr_of_mut!(child));
-            assert_eq!(Widget_Event(EVENT_SELECT), TRUE);
-            assert_eq!(Widget_Event(EVENT_LEFT), FALSE);
+            assert_eq!(
+                widget_event(
+                    EVENT_SELECT,
+                    &crate::input::session::InputSession::default()
+                ),
+                TRUE
+            );
+            assert_eq!(
+                widget_event(EVENT_LEFT, &crate::input::session::InputSession::default()),
+                FALSE
+            );
             widget_focus = previous;
         }
     }
@@ -792,16 +822,44 @@ mod tests {
             choice.selected = 1;
             choice.onChange = Some(changed);
             let base = ptr::addr_of_mut!(choice).cast();
-            assert_eq!(Widget_HandleEventChoice(base, EVENT_LEFT), TRUE);
+            assert_eq!(
+                widget_handle_event_choice(
+                    base,
+                    EVENT_LEFT,
+                    &crate::input::session::InputSession::default()
+                ),
+                TRUE
+            );
             assert_eq!(choice.highlighted, 2);
-            assert_eq!(Widget_HandleEventChoice(base, EVENT_SELECT), TRUE);
+            assert_eq!(
+                widget_handle_event_choice(
+                    base,
+                    EVENT_SELECT,
+                    &crate::input::session::InputSession::default()
+                ),
+                TRUE
+            );
             assert_eq!(
                 (choice.selected, OLD_CHOICE.load(Ordering::Relaxed)),
                 (2, 1)
             );
-            assert_eq!(Widget_HandleEventChoice(base, EVENT_RIGHT), TRUE);
+            assert_eq!(
+                widget_handle_event_choice(
+                    base,
+                    EVENT_RIGHT,
+                    &crate::input::session::InputSession::default()
+                ),
+                TRUE
+            );
             assert_eq!(choice.highlighted, 0);
-            assert_eq!(Widget_HandleEventChoice(base, EVENT_CANCEL), FALSE);
+            assert_eq!(
+                widget_handle_event_choice(
+                    base,
+                    EVENT_CANCEL,
+                    &crate::input::session::InputSession::default()
+                ),
+                FALSE
+            );
             assert_eq!(choice.selected, 2);
         }
     }
@@ -814,12 +872,34 @@ mod tests {
             slider.step = 4;
             slider.value = 3;
             let base = ptr::addr_of_mut!(slider).cast();
-            assert_eq!(Widget_HandleEventSlider(base, EVENT_LEFT), TRUE);
+            assert_eq!(
+                widget_handle_event_slider(
+                    base,
+                    EVENT_LEFT,
+                    &crate::input::session::InputSession::default()
+                ),
+                TRUE
+            );
             assert_eq!(slider.value, 2);
-            Widget_HandleEventSlider(base, EVENT_RIGHT);
-            Widget_HandleEventSlider(base, EVENT_RIGHT);
+            widget_handle_event_slider(
+                base,
+                EVENT_RIGHT,
+                &crate::input::session::InputSession::default(),
+            );
+            widget_handle_event_slider(
+                base,
+                EVENT_RIGHT,
+                &crate::input::session::InputSession::default(),
+            );
             assert_eq!(slider.value, 9);
-            assert_eq!(Widget_HandleEventSlider(base, EVENT_SELECT), FALSE);
+            assert_eq!(
+                widget_handle_event_slider(
+                    base,
+                    EVENT_SELECT,
+                    &crate::input::session::InputSession::default()
+                ),
+                FALSE
+            );
             assert_eq!(slider.value, 9);
         }
     }

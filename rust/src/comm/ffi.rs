@@ -641,6 +641,7 @@ pub fn rust_get_battle_segue() -> c_uint {
 /// Matches C `AlienTalkSegue(wait_track)`.
 /// Returns 1 if talking finished (reached end), 0 otherwise.
 pub unsafe fn rust_alien_talk_segue(
+    input: &crate::engine::input::InputSession,
     cx: &mut crate::engine::battle::Cx<'_>,
     io: &mut crate::engine::observe::Io<'_>,
     wait: c_uint,
@@ -653,7 +654,7 @@ pub unsafe fn rust_alien_talk_segue(
             aborted,
             &mut (cx, io),
             |(cx, _)| super::talk_segue::alien_talk_first_call_init(cx),
-            |(cx, io), wait| super::talk_segue::dinput::run_talk_segue_dinput(cx, io, wait),
+            |(cx, io), wait| super::talk_segue::dinput::run_talk_segue_dinput(input, cx, io, wait),
             |(cx, _)| cx.with_legacy(super::talk_segue::fade_music_to_foreground_bridge),
         )
     }
@@ -662,7 +663,7 @@ pub unsafe fn rust_alien_talk_segue(
         let _ = io;
         let mut state = COMM_STATE.write();
         let was_finished = state.is_talking_finished();
-        super::talk_segue::alien_talk_segue(cx, &mut state, wait);
+        super::talk_segue::alien_talk_segue(input, cx, &mut state, wait);
         if !was_finished && state.is_talking_finished() {
             1
         } else {
@@ -699,30 +700,6 @@ fn run_alien_talk_unlocked<C>(
     i32::from(finished)
 }
 
-/// Run the full talk segue loop for the given wait-track.
-/// # Safety
-///
-/// Must run on the game thread with an active communication context.
-///
-/// Matches C `TalkSegue(wait_track)`.
-/// Returns 1 if playback ended naturally, 0 if aborted.
-pub fn rust_talk_segue(
-    cx: &mut crate::engine::battle::Cx<'_>,
-    io: &mut crate::engine::observe::Io<'_>,
-    wait: c_int,
-) -> c_int {
-    let wait_track = if wait <= 0 { 0 } else { wait as u32 };
-    #[cfg(not(test))]
-    {
-        super::talk_segue::dinput::run_talk_segue_dinput(cx, io, wait_track) as c_int
-    }
-    #[cfg(test)]
-    {
-        let _ = io;
-        super::talk_segue::talk_segue(cx.world, &mut COMM_STATE.write(), wait_track) as c_int
-    }
-}
-
 /// Run one iteration of the top-level communication state machine.
 /// # Safety
 ///
@@ -739,10 +716,11 @@ pub fn rust_talk_segue(
 /// @requirement REQ-RL-001..003, REQ-DC-001
 /// @pseudocode 003-do-communication-rewrite lines 41-81
 pub fn rust_do_communication(
+    input: &crate::engine::input::InputSession,
     cx: &mut crate::engine::battle::Cx<'_>,
     io: &mut crate::engine::observe::Io<'_>,
 ) -> c_int {
-    if speech::run_pending(cx, io) {
+    if speech::run_pending(input, cx, io) {
         return 1;
     }
 
@@ -800,11 +778,11 @@ pub fn rust_do_communication(
     }
 
     // Step 2c: Check input (short lock — no C callbacks)
-    let select = super::talk_segue::check_select_external();
-    let cancel = super::talk_segue::check_cancel_external();
-    let up = super::talk_segue::check_up_external();
-    let down = super::talk_segue::check_down_external();
-    let left = super::talk_segue::check_left_external();
+    let select = super::talk_segue::check_select_external(input);
+    let cancel = super::talk_segue::check_cancel_external(input);
+    let up = super::talk_segue::check_up_external(input);
+    let down = super::talk_segue::check_down_external(input);
+    let left = super::talk_segue::check_left_external(input);
 
     if select {
         response_commands::deliver_selected(cx, io);
@@ -835,7 +813,7 @@ pub fn rust_do_communication(
         cx.with_legacy(super::talk_segue::fade_music_to_background_bridge);
         super::talk_segue::c_bridge::call_feedback_player_phrase(cx);
         #[cfg(not(test))]
-        let _ = super::talk_segue::dinput::run_talk_segue_dinput(cx, io, 0);
+        let _ = super::talk_segue::dinput::run_talk_segue_dinput(input, cx, io, 0);
         if !super::talk_segue::check_abort_external(cx.world) {
             let (top, count, cur) = {
                 let s = COMM_STATE.read();
@@ -875,7 +853,7 @@ pub fn rust_do_communication(
     }
 
     // Step 2e: Update animations (C bridge, no lock)
-    cx.with_legacy(super::talk_segue::c_bridge::call_update_comm_graphics);
+    cx.with_legacy(|| super::talk_segue::c_bridge::call_update_comm_graphics(input));
 
     1
 }
@@ -952,8 +930,11 @@ pub fn rust_check_subtitles() {
 /// Redraw the current subtitle text.
 ///
 /// Matches C `RedrawSubtitles`.
-pub fn rust_redraw_subtitles() {
-    COMM_STATE.read().subtitle_display().redraw();
+pub fn rust_redraw_subtitles(input: &crate::engine::input::InputSession) {
+    COMM_STATE
+        .read()
+        .subtitle_display()
+        .redraw(input.preferences().subtitles != 0);
 }
 
 // ============================================================================

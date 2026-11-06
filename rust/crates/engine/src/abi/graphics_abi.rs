@@ -690,17 +690,13 @@ pub const WIDGET_TYPE_WIDGET_TYPE_TEXTENTRY: WIDGET_TYPE = 5;
 pub const WIDGET_TYPE_WIDGET_TYPE_CONTROLENTRY: WIDGET_TYPE = 6;
 pub const WIDGET_TYPE_NUM_WIDGET_TYPES: WIDGET_TYPE = 7;
 pub type WIDGET_TYPE = ::std::os::raw::c_uint;
+pub type WidgetEvent = unsafe fn(*mut _widget, ::std::os::raw::c_int, &crate::input::session::InputSession) -> ::std::os::raw::c_int;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct _widget {
     pub tag: WIDGET_TYPE,
     pub parent: *mut _widget,
-    pub handleEvent: ::std::option::Option<
-        unsafe extern "C" fn(
-            self_: *mut _widget,
-            event: ::std::os::raw::c_int,
-        ) -> ::std::os::raw::c_int,
-    >,
+    pub handleEvent: Option<WidgetEvent>,
     pub receiveFocus: ::std::option::Option<
         unsafe extern "C" fn(
             self_: *mut _widget,
@@ -725,12 +721,7 @@ pub type WIDGET = _widget;
 pub struct _widget_menu_screen {
     pub tag: WIDGET_TYPE,
     pub parent: *mut _widget,
-    pub handleEvent: ::std::option::Option<
-        unsafe extern "C" fn(
-            self_: *mut _widget,
-            event: ::std::os::raw::c_int,
-        ) -> ::std::os::raw::c_int,
-    >,
+    pub handleEvent: Option<WidgetEvent>,
     pub receiveFocus: ::std::option::Option<
         unsafe extern "C" fn(
             self_: *mut _widget,
@@ -767,12 +758,7 @@ pub struct CHOICE_OPTION {
 pub struct _widget_choice {
     pub tag: WIDGET_TYPE,
     pub parent: *mut _widget,
-    pub handleEvent: ::std::option::Option<
-        unsafe extern "C" fn(
-            self_: *mut _widget,
-            event: ::std::os::raw::c_int,
-        ) -> ::std::os::raw::c_int,
-    >,
+    pub handleEvent: Option<WidgetEvent>,
     pub receiveFocus: ::std::option::Option<
         unsafe extern "C" fn(
             self_: *mut _widget,
@@ -806,12 +792,7 @@ pub type WIDGET_CHOICE = _widget_choice;
 pub struct _widget_button {
     pub tag: WIDGET_TYPE,
     pub parent: *mut _widget,
-    pub handleEvent: ::std::option::Option<
-        unsafe extern "C" fn(
-            self_: *mut _widget,
-            event: ::std::os::raw::c_int,
-        ) -> ::std::os::raw::c_int,
-    >,
+    pub handleEvent: Option<WidgetEvent>,
     pub receiveFocus: ::std::option::Option<
         unsafe extern "C" fn(
             self_: *mut _widget,
@@ -838,12 +819,7 @@ pub type WIDGET_BUTTON = _widget_button;
 pub struct _widget_label {
     pub tag: WIDGET_TYPE,
     pub parent: *mut _widget,
-    pub handleEvent: ::std::option::Option<
-        unsafe extern "C" fn(
-            self_: *mut _widget,
-            event: ::std::os::raw::c_int,
-        ) -> ::std::os::raw::c_int,
-    >,
+    pub handleEvent: Option<WidgetEvent>,
     pub receiveFocus: ::std::option::Option<
         unsafe extern "C" fn(
             self_: *mut _widget,
@@ -870,12 +846,7 @@ pub type WIDGET_LABEL = _widget_label;
 pub struct _widget_slider {
     pub tag: WIDGET_TYPE,
     pub parent: *mut _widget,
-    pub handleEvent: ::std::option::Option<
-        unsafe extern "C" fn(
-            self_: *mut _widget,
-            event: ::std::os::raw::c_int,
-        ) -> ::std::os::raw::c_int,
-    >,
+    pub handleEvent: Option<WidgetEvent>,
     pub receiveFocus: ::std::option::Option<
         unsafe extern "C" fn(
             self_: *mut _widget,
@@ -917,12 +888,7 @@ pub type WIDGET_TEXTENTRY_STATE = ::std::os::raw::c_uint;
 pub struct _widget_textentry {
     pub tag: WIDGET_TYPE,
     pub parent: *mut _widget,
-    pub handleEvent: ::std::option::Option<
-        unsafe extern "C" fn(
-            self_: *mut _widget,
-            event: ::std::os::raw::c_int,
-        ) -> ::std::os::raw::c_int,
-    >,
+    pub handleEvent: Option<WidgetEvent>,
     pub receiveFocus: ::std::option::Option<
         unsafe extern "C" fn(
             self_: *mut _widget,
@@ -941,7 +907,7 @@ pub struct _widget_textentry {
     pub width:
         ::std::option::Option<unsafe extern "C" fn(self_: *mut _widget) -> ::std::os::raw::c_int>,
     pub handleEventSelect: ::std::option::Option<
-        unsafe extern "C" fn(self_: *mut _widget_textentry) -> ::std::os::raw::c_int,
+        unsafe fn(self_: *mut _widget_textentry, input: &crate::input::session::InputSession) -> ::std::os::raw::c_int,
     >,
     pub onChange: ::std::option::Option<unsafe extern "C" fn(self_: *mut _widget_textentry)>,
     pub category: *const ::std::os::raw::c_char,
@@ -956,12 +922,7 @@ pub type WIDGET_TEXTENTRY = _widget_textentry;
 pub struct _widget_controlentry {
     pub tag: WIDGET_TYPE,
     pub parent: *mut _widget,
-    pub handleEvent: ::std::option::Option<
-        unsafe extern "C" fn(
-            self_: *mut _widget,
-            event: ::std::os::raw::c_int,
-        ) -> ::std::os::raw::c_int,
-    >,
+    pub handleEvent: Option<WidgetEvent>,
     pub receiveFocus: ::std::option::Option<
         unsafe extern "C" fn(
             self_: *mut _widget,
@@ -979,8 +940,8 @@ pub struct _widget_controlentry {
         ::std::option::Option<unsafe extern "C" fn(self_: *mut _widget) -> ::std::os::raw::c_int>,
     pub width:
         ::std::option::Option<unsafe extern "C" fn(self_: *mut _widget) -> ::std::os::raw::c_int>,
-    pub onChange: ::std::option::Option<unsafe extern "C" fn(self_: *mut _widget_controlentry)>,
-    pub onDelete: ::std::option::Option<unsafe extern "C" fn(self_: *mut _widget_controlentry)>,
+    pub onChange: ::std::option::Option<unsafe fn(self_: *mut _widget_controlentry, input: &crate::input::session::InputSession)>,
+    pub onDelete: ::std::option::Option<unsafe fn(self_: *mut _widget_controlentry, input: &crate::input::session::InputSession)>,
     pub category: *const ::std::os::raw::c_char,
     pub controlindex: ::std::os::raw::c_int,
     pub highlighted: ::std::os::raw::c_int,

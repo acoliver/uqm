@@ -62,16 +62,20 @@ pub(crate) mod live {
 
     extern "C" {
         static mut SpaceJunkFrame: *mut crate::graphics::native_abi::frame_desc;
-        static mut optWhichFonts: i32;
+
         static mut ScreenWidth: i32;
 
     }
 
-    unsafe fn clear() {
+    unsafe fn clear(input: &crate::engine::input::InputSession) {
         let g = CffiPlatform;
         let frame = SetAbsFrameIndex(
             (SpaceJunkFrame).cast(),
-            if optWhichFonts == 2 { 21 } else { 18 },
+            if input.preferences().fonts == 2 {
+                21
+            } else {
+                18
+            },
         );
         let mut r = CRect::default();
         GetFrameRect(frame, (&mut r as *mut CRect).cast());
@@ -88,7 +92,7 @@ pub(crate) mod live {
                     origin: Point { x, y },
                     frame: frame as usize,
                 };
-                if optWhichFonts == 2 {
+                if input.preferences().fonts == 2 {
                     g.draw_stamp(stamp);
                 } else {
                     g.draw_filled_stamp(stamp);
@@ -146,6 +150,7 @@ pub(crate) mod live {
     }
 
     unsafe fn make_report(
+        input: &crate::engine::input::InputSession,
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
         sounds: *mut c_void,
@@ -176,9 +181,9 @@ pub(crate) mod live {
         let mut last_c = 0;
         let mut row = 0;
         cx.with_legacy(|| {
-            FlushInput();
+            FlushInput(input);
             if remaining != 0 {
-                clear();
+                clear(input);
                 g.set_fg_color(Rgba::rgb15(0, 31, 0));
             }
         });
@@ -236,7 +241,7 @@ pub(crate) mod live {
                         if !printer.sleepy {
                             g.batch();
                         }
-                        clear();
+                        clear(input);
                         g.set_fg_color(Rgba::rgb15(0, 31, 0));
                     });
                 }
@@ -265,6 +270,8 @@ pub(crate) mod live {
         if crate::front_end::uqmdebug::DISABLE_INTERACTIVITY != 0 {
             return;
         }
+        let runtime = cx.kernel.input_runtime();
+        let input = runtime.input();
         let sounds = cx.kernel.menu_sounds.cast();
         let (own_context, old_context, saved, old_font, old_effect, text, length) =
             cx.with_legacy(|| {
@@ -274,7 +281,7 @@ pub(crate) mod live {
                 let saved = SaveContextFrame(std::ptr::null_mut());
                 let info = std::ptr::addr_of!((*system).SysInfo.PlanetInfo);
                 let old_font = SetContextFont((*info).LanderFont.cast());
-                let old_effect = SetContextFontEffect(if optWhichFonts == 2 {
+                let old_effect = SetContextFontEffect(if input.preferences().fonts == 2 {
                     (*info).LanderFontEff.cast()
                 } else {
                     std::ptr::null_mut()
@@ -289,7 +296,7 @@ pub(crate) mod live {
                     GetStringLength((*info).DiscoveryString.cast()),
                 )
             });
-        make_report(cx, io, sounds, text, length);
+        make_report(input, cx, io, sounds, text, length);
         cx.with_legacy(|| {
             SetContextFontEffect(old_effect);
             SetContextFont(old_font);

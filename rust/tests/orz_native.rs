@@ -177,7 +177,7 @@ unsafe fn intelligence(ship: &mut Ship<'_>, concerns: &mut [EVALUATE_DESC; 4]) {
 
 #[test]
 fn descriptor_preserves_c_resources_characteristics_and_callback_abi() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(128);
         unsafe {
             let d = battle::descriptor(SPECIES_ID_ORZ_ID);
@@ -275,7 +275,7 @@ fn descriptor_preserves_c_resources_characteristics_and_callback_abi() {
 
 #[test]
 fn appearing_turret_is_inserted_immediately_after_ship_and_inputs_suppress_hull_and_gun() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(128);
         unsafe {
             let mut ship = orz(&_battle, 0);
@@ -314,7 +314,7 @@ fn appearing_turret_is_inserted_immediately_after_ship_and_inputs_suppress_hull_
 
 #[test]
 fn howitzer_rotates_before_firing_with_byte_wrap_and_exact_missile_fields() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(128);
         unsafe {
             let mut ship = orz(&_battle, 1);
@@ -376,7 +376,7 @@ fn howitzer_rotates_before_firing_with_byte_wrap_and_exact_missile_fields() {
 
 #[test]
 fn howitzer_ignores_friendlies_but_damages_enemies_through_engine_collision() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(4);
         unsafe {
             let mut ship = orz(&_battle, 0);
@@ -423,7 +423,7 @@ fn howitzer_ignores_friendlies_but_damages_enemies_through_engine_collision() {
 
 #[test]
 fn turret_replacement_decrements_wait_once_rotates_and_updates_firing_quadrant() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(128);
         unsafe {
             let mut ship = orz(&_battle, 0);
@@ -497,7 +497,7 @@ fn turret_replacement_decrements_wait_once_rotates_and_updates_firing_quadrant()
 
 #[test]
 fn muzzle_flash_requires_an_appearing_friendly_stamp_and_animates_from_current() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(128);
         unsafe {
             let mut ship = orz(&_battle, 0);
@@ -555,7 +555,7 @@ fn muzzle_flash_requires_an_appearing_friendly_stamp_and_animates_from_current()
 
 #[test]
 fn marines_launch_at_rear_with_exact_state_and_cost_only_after_allocation() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(128);
         unsafe {
             let mut ship = orz(&_battle, 0);
@@ -612,7 +612,7 @@ fn marines_launch_at_rear_with_exact_state_and_cost_only_after_allocation() {
 
 #[test]
 fn marine_limit_counts_only_live_matching_nonfinite_nondisappearing_elements() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(128);
         unsafe {
             let mut ship = orz(&_battle, 0);
@@ -645,7 +645,7 @@ fn marine_limit_counts_only_live_matching_nonfinite_nondisappearing_elements() {
 
 #[test]
 fn launch_gates_require_both_keys_counter_zero_crew_and_a_trackable_enemy() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(128);
         unsafe {
             let mut ship = orz(&_battle, 0);
@@ -682,7 +682,7 @@ fn launch_gates_require_both_keys_counter_zero_crew_and_a_trackable_enemy() {
 
 #[test]
 fn boarding_claims_first_unused_slot_and_immediately_kills_one_enemy_crew_without_rng() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(128);
         unsafe {
             let mut ship = orz(&_battle, 0);
@@ -732,7 +732,7 @@ fn boarding_claims_first_unused_slot_and_immediately_kills_one_enemy_crew_withou
 
 #[test]
 fn marine_collision_handles_return_planets_nonships_and_last_enemy_crew() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(128);
         unsafe {
             let mut ship = orz(&_battle, 0);
@@ -786,7 +786,7 @@ fn marine_collision_handles_return_planets_nonships_and_last_enemy_crew() {
 
 #[test]
 fn marine_collision_ignores_finite_targets_dead_marines_and_in_progress_collisions() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(128);
         unsafe {
             let mut ship = orz(&_battle, 0);
@@ -815,7 +815,7 @@ fn marine_collision_ignores_finite_targets_dead_marines_and_in_progress_collisio
 
 #[test]
 fn intruder_rng_byte_boundaries_distinguish_death_damage_and_no_action() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(128);
         unsafe {
             let mut ship = orz(&_battle, 0);
@@ -862,7 +862,7 @@ fn intruder_rng_byte_boundaries_distinguish_death_damage_and_no_action() {
 
 #[test]
 fn intruder_wait_resets_attack_silhouette_without_rng_then_counts_down() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(128);
         unsafe {
             let mut ship = orz(&_battle, 0);
@@ -894,7 +894,7 @@ fn intruder_wait_resets_attack_silhouette_without_rng_then_counts_down() {
 
 #[test]
 fn intruder_returns_when_enemy_is_dead_or_absent_and_randomizes_facing_once() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(128);
         unsafe {
             let mut ship = orz(&_battle, 0);
@@ -942,7 +942,7 @@ fn intruder_returns_when_enemy_is_dead_or_absent_and_randomizes_facing_once() {
 
 #[test]
 fn returning_marine_tracks_owner_cannot_board_again_and_replenishes_crew() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(128);
         unsafe {
             let mut ship = orz(&_battle, 0);
@@ -974,7 +974,7 @@ fn returning_marine_tracks_owner_cannot_board_again_and_replenishes_crew() {
 
 #[test]
 fn owner_death_kills_both_free_and_boarded_marines_without_rng() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(128);
         unsafe {
             let mut ship = orz(&_battle, 0);
@@ -1009,7 +1009,7 @@ fn owner_death_kills_both_free_and_boarded_marines_without_rng() {
 
 #[test]
 fn marine_thrust_restores_owner_state_and_inserts_preprocessed_five_color_ion_trail() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(128);
         unsafe {
             let mut ship = orz(&_battle, 0);
@@ -1106,7 +1106,7 @@ fn marine_thrust_restores_owner_state_and_inserts_preprocessed_five_color_ion_tr
 
 #[test]
 fn marine_collision_delay_precedes_tracking_and_half_circle_turn_uses_one_draw() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(128);
         unsafe {
             let mut ship = orz(&_battle, 0);
@@ -1144,7 +1144,7 @@ fn marine_collision_delay_precedes_tracking_and_half_circle_turn_uses_one_draw()
 
 #[test]
 fn marine_prediction_uses_wrapped_distance_but_unwrapped_future_position_with_size_casts() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(128);
         unsafe {
             let mut ship = orz(&_battle, 0);
@@ -1184,7 +1184,7 @@ fn marine_prediction_uses_wrapped_distance_but_unwrapped_future_position_with_si
 
 #[test]
 fn marine_gravity_avoidance_uses_mass_threshold_distance_and_one_draw_for_head_on() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(128);
         unsafe {
             let mut ship = orz(&_battle, 0);
@@ -1240,7 +1240,7 @@ fn marine_gravity_avoidance_uses_mass_threshold_distance_and_one_draw_for_head_o
 
 #[test]
 fn ai_turret_half_circle_consumes_trackship_draw_then_its_own_tie_break() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(128);
         unsafe {
             let mut ship = orz(&_battle, 0);
@@ -1275,7 +1275,7 @@ fn ai_turret_half_circle_consumes_trackship_draw_then_its_own_tie_break() {
 
 #[test]
 fn ai_launch_budget_obeys_crew_point_defense_maneuverability_turn_and_marine_count() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(128);
         unsafe {
             let mut ship = orz(&_battle, 0);
@@ -1336,7 +1336,7 @@ fn ai_launch_budget_obeys_crew_point_defense_maneuverability_turn_and_marine_cou
 
 #[test]
 fn ai_entice_coasting_clears_hull_turn_only_at_c_angle_boundaries() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(128);
         unsafe {
             let mut ship = orz(&_battle, 0);
@@ -1380,7 +1380,7 @@ fn ai_entice_coasting_clears_hull_turn_only_at_c_angle_boundaries() {
 
 #[test]
 fn exhausted_queue_preserves_weapon_return_count_and_still_rotates_turret() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(2);
         unsafe {
             let mut ship = orz(&_battle, 0);
@@ -1406,7 +1406,7 @@ fn exhausted_queue_preserves_weapon_return_count_and_still_rotates_turret() {
 
 #[test]
 fn failed_initial_turret_allocation_does_not_change_ship_or_counters() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(1);
         unsafe {
             let mut ship = orz(&_battle, 0);
@@ -1424,7 +1424,7 @@ fn failed_initial_turret_allocation_does_not_change_ship_or_counters() {
 
 #[test]
 fn failed_replacement_and_marine_allocation_leave_crew_and_special_budget_untouched() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         for capacity in [3, 4] {
             let _battle = Battle::new(capacity);
             unsafe {
@@ -1455,7 +1455,7 @@ fn failed_replacement_and_marine_allocation_leave_crew_and_special_budget_untouc
 
 #[test]
 fn failed_muzzle_flash_allocation_does_not_recoil_and_failed_ion_allocation_still_thrusts() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         {
             let _battle = Battle::new(4);
             unsafe {
@@ -1505,7 +1505,7 @@ fn failed_muzzle_flash_allocation_does_not_recoil_and_failed_ion_allocation_stil
 
 #[test]
 fn marine_prefers_visible_enemy_then_returns_to_visible_owner_or_keeps_heading() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(128);
         unsafe {
             let mut ship = orz(&_battle, 0);
@@ -1563,7 +1563,7 @@ fn marine_prefers_visible_enemy_then_returns_to_visible_owner_or_keeps_heading()
 
 #[test]
 fn marine_without_target_clears_stale_gravity_and_decelerates_only_when_overspeed() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(128);
         unsafe {
             let mut ship = orz(&_battle, 0);

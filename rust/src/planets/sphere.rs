@@ -75,7 +75,6 @@ pub(crate) mod live {
     extern "C" {
         static mut PlanetContext: *mut crate::graphics::native_abi::context_desc;
 
-        static mut optWhichShield: i32;
         static mut ScreenWidth: i32;
         static mut ScreenHeight: i32;
     }
@@ -113,9 +112,9 @@ pub(crate) mod live {
     }
 
     #[no_mangle]
-    pub unsafe extern "C" fn InitSphereRotation(direction: i32, shielded: u32) {
+    pub unsafe fn init_sphere_rotation(pulsing_shield: bool, direction: i32, shielded: u32) {
         let orbit = std::ptr::addr_of_mut!((*solar_system::current()).Orbit);
-        let throb = shielded != 0 && optWhichShield == 1;
+        let throb = shielded != 0 && pulsing_shield;
         ROTATION = Rotation {
             frame: 1,
             direction,

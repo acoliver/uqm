@@ -30,3 +30,12 @@ pub mod starbase;
 
 #[cfg(not(test))]
 pub(crate) mod save_problem;
+
+pub(crate) const fn rgb15(r: u8, g: u8, b: u8) -> crate::navigation::abi::Color {
+    crate::navigation::abi::Color {
+        r: (r << 3) | (r >> 2),
+        g: (g << 3) | (g >> 2),
+        b: (b << 3) | (b >> 2),
+        a: 255,
+    }
+}

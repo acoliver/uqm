@@ -1,6 +1,6 @@
 //! The Starbase menu and Outfit screens as input-loop frame functions.
 //!
-//! [`StarbaseScreen`] is `DoStarBase` and [`OutfitScreen`] is `DoOutfit`
+//! [`StarbaseScreen`] is `DoStarBase` and [`OutfitScreen`] is `do_outfit`
 //! (`starbase.c`, `outfit.c`). Each `frame` call is one call of the C
 //! `InputFunc`: it asks the pure menu model what the keys mean
 //! ([`StarbaseMenu::step`], [`OutfitMenu::step`]) and carries out the result
@@ -283,7 +283,7 @@ impl<P: Platform + ?Sized> OutfitAssets<'_, P> {
     }
 }
 
-/// `DoOutfit`. While the module chooser (`DoInstallModule`) is open it holds
+/// `do_outfit`. While the module chooser (`DoInstallModule`) is open it holds
 /// the input loop, as `MENU_STATE.InputFunc` does in C.
 pub struct OutfitScreen<'a, P: Platform + ?Sized> {
     platform: &'a P,
@@ -303,7 +303,7 @@ impl<'a, P: Platform + ?Sized> OutfitScreen<'a, P> {
         }
     }
 
-    /// One `DoOutfit` call. `Ok(true)` keeps the loop running.
+    /// One `do_outfit` call. `Ok(true)` keeps the loop running.
     pub fn frame(&mut self) -> Result<bool, StarbaseError> {
         if let Some(chooser) = self.chooser.take() {
             return self.chooser_frame(chooser);
@@ -368,7 +368,7 @@ impl<'a, P: Platform + ?Sized> OutfitScreen<'a, P> {
         Ok(true)
     }
 
-    /// `SetMenuSounds` of the final branch of `DoOutfit`.
+    /// `SetMenuSounds` of the final branch of `do_outfit`.
     fn set_frame_sounds(&self) {
         let sounds = if self.menu.state() == OutfitState::DoFuel {
             MenuSounds::FUEL_ADJUST
@@ -566,13 +566,13 @@ pub(super) fn run_loop(
     failure.map_or(Ok(()), Err)
 }
 
-/// Run the Outfit screen to its end (`DoInput (pMS, TRUE)` with `DoOutfit`).
+/// Run the Outfit screen to its end (`DoInput (pMS, TRUE)` with `do_outfit`).
 pub fn run_outfit<P: Platform + ?Sized>(platform: &P) -> Result<(), StarbaseError> {
     let mut screen = OutfitScreen::new(platform);
     run_loop(platform, || screen.frame())
 }
 
-/// Run the Shipyard to its end (`DoInput (pMS, TRUE)` with `DoShipyard`).
+/// Run the Shipyard to its end (`DoInput (pMS, TRUE)` with `do_shipyard`).
 pub fn run_shipyard<P: Platform + ?Sized>(platform: &P) -> Result<(), StarbaseError> {
     let mut screen = super::shipyard_screen::ShipyardScreen::new(platform);
     run_loop(platform, || screen.frame())

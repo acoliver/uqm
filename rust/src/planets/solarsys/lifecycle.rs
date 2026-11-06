@@ -4,10 +4,8 @@ use super::drawing::*;
 use super::flight::*;
 use super::*;
 use crate::engine::{battle::Cx, observe::Io, Kernel, StoryKey, World, WorldData};
-use crate::ships::native::abi::optMeleeScale;
 
 use crate::battle::gendef::getGenerateFunctions;
-use crate::c_bindings::controller_input as input;
 use crate::comm::locdata::CPoint;
 use crate::graphics::pixmap_abi::{GetFrameIndex, ReleaseDrawable, SetAbsFrameIndex};
 use crate::mainloop::restart_menu::c_extern::PlayMusic;
@@ -105,7 +103,7 @@ mod ffi {
 
     pub(super) use crate::mainloop::input_abi::live::SetMenuSounds;
 
-    pub(super) use crate::ui::menu::DoMenuChooser;
+    pub(super) use crate::ui::menu::do_menu_chooser;
 
     pub(super) use crate::planets::cargo::live::cargo_menu;
 
@@ -115,10 +113,6 @@ mod ffi {
 
     pub(super) use crate::planets::pstarmap::star_map;
 
-    extern "C" {
-
-        pub(super) static mut optWhichMenu: i32;
-    }
     pub(super) use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
     pub(super) use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
 }
@@ -311,7 +305,10 @@ pub(super) unsafe fn reset_solar_sys(next_activity: u16) {
     assert!((*state).InIpFlight == 0);
     ffi::DrawMenuStateStrings(PM_STARMAP, -(PM_NAVIGATE - PM_SCAN));
     crate::app::bridge::enter(|cx| {
-        crate::battle::process_native::init_display_list(cx, optMeleeScale == 0);
+        crate::battle::process_native::init_display_list(
+            cx,
+            cx.kernel.configuration.preferences().melee_scale == 0,
+        );
     });
     ffi::DoMissions();
     check_intersect();
@@ -555,10 +552,12 @@ pub(super) unsafe fn hyperspace_unit_factors() -> (i32, i32) {
 /// Call on the game thread with campaign and solar-system globals initialized;
 /// their pointers must remain valid through any input or generator callbacks.
 pub unsafe fn run_explore_solar_sys(cx: &mut Cx<'_>, io: &mut Io<'_>) {
+    let runtime = cx.kernel.input_runtime();
+    let input = runtime.input();
     let mut solar_sys_state = MaybeUninit::<c::SOLARSYS_STATE>::uninit();
     cx.with_legacy(|| prepare_explore_solar_sys(solar_sys_state.as_mut_ptr()));
     start_solar_sys(cx);
-    cx.with_legacy(|| ffi::SetMenuSounds(MENU_SOUND_NONE, MENU_SOUND_NONE));
+    cx.with_legacy(|| ffi::SetMenuSounds(input, MENU_SOUND_NONE, MENU_SOUND_NONE));
     cx.run_input(io, false, |cx, io| {
         do_ip_flight(cx, io, solar_sys_state.as_mut_ptr()) != 0
     });
@@ -687,13 +686,15 @@ unsafe fn do_solar_sys_menu(
     io: &mut Io<'_>,
     menu: &mut c::MENU_STATE,
 ) -> c::BOOLEAN {
-    let mut select = input::PulsedInputState.menu[KEY_MENU_SELECT] as c::BOOLEAN;
+    let runtime = cx.kernel.input_runtime();
+    let input = runtime.input();
+    let mut select = input.pulsed().menu[KEY_MENU_SELECT] as c::BOOLEAN;
     if cx.world.activity() & (CHECK_ABORT | CHECK_LOAD) != 0
         || cx.world.data.flagship.crew_enlisted == c::COUNT::MAX
     {
         return 0;
     }
-    if cx.with_legacy(|| ffi::DoMenuChooser(menu, PM_STARMAP)) != 0 {
+    if cx.with_legacy(|| ffi::do_menu_chooser(input, menu, PM_STARMAP)) != 0 {
         return 1;
     }
     if cx.kernel.last_activity == CHECK_LOAD {
@@ -735,7 +736,7 @@ unsafe fn do_solar_sys_menu(
     }
     if cx.world.activity() & CHECK_ABORT == 0 {
         if select != 0 {
-            if ffi::optWhichMenu != OPT_PC {
+            if input.preferences().menu != OPT_PC {
                 menu.CurState = NAVIGATION;
             }
             cx.with_legacy(|| ffi::DrawMenuStateStrings(PM_STARMAP, i16::from(menu.CurState)));
@@ -746,6 +747,8 @@ unsafe fn do_solar_sys_menu(
 }
 
 unsafe fn solar_sys_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) {
+    let runtime = cx.kernel.input_runtime();
+    let input = runtime.input();
     let mut menu: c::MENU_STATE = std::mem::zeroed();
     cx.with_legacy(|| {
         if Kernel::current().read(|owner| owner.last_activity) == CHECK_LOAD {
@@ -756,7 +759,7 @@ unsafe fn solar_sys_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) {
         }
         ffi::DrawStatusMessage(ptr::null());
         ffi::SetFlashRect((usize::MAX as *const c_void).cast());
-        ffi::SetMenuSounds(MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
+        ffi::SetMenuSounds(input, MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
     });
     cx.run_input(io, true, |cx, io| do_solar_sys_menu(cx, io, &mut menu) != 0);
     cx.with_legacy(|| ffi::DrawMenuStateStrings(PM_STARMAP, -i16::from(NAVIGATION)));
@@ -767,14 +770,16 @@ unsafe fn do_ip_flight(
     io: &mut Io<'_>,
     state: *mut c::SOLARSYS_STATE,
 ) -> c::BOOLEAN {
-    let cancel = input::PulsedInputState.menu[KEY_MENU_CANCEL];
+    let runtime = cx.kernel.input_runtime();
+    let input = runtime.input();
+    let cancel = input.pulsed().menu[KEY_MENU_CANCEL];
     if (*state).InOrbit != 0 {
         run_planet_orbit(cx, io);
-        cx.with_legacy(|| ffi::SetMenuSounds(MENU_SOUND_NONE, MENU_SOUND_NONE));
+        cx.with_legacy(|| ffi::SetMenuSounds(input, MENU_SOUND_NONE, MENU_SOUND_NONE));
         (*state).InOrbit = 0;
     } else if cancel != 0 || cx.kernel.last_activity == CHECK_LOAD {
         solar_sys_menu(cx, io);
-        cx.with_legacy(|| ffi::SetMenuSounds(MENU_SOUND_NONE, MENU_SOUND_NONE));
+        cx.with_legacy(|| ffi::SetMenuSounds(input, MENU_SOUND_NONE, MENU_SOUND_NONE));
     } else {
         assert!((*state).InIpFlight != 0);
         ip_frame(cx);

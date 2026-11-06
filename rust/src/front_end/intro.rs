@@ -1,24 +1,16 @@
 //! Presentation scripts and legacy-video input, ported from uqm/intro.c.
 
+use crate::ui::rgb15;
 mod text;
 
 #[cfg(not(test))]
-use crate::engine::{Kernel, WorldData};
+use crate::engine::{input::InputSession, Kernel, WorldData};
 use crate::navigation::abi::*;
 use std::{ffi::c_char, ptr};
 
 #[cfg(not(test))]
 pub(super) const WANT_PIXMAP: CREATE_FLAGS = 1 << 1;
 pub(super) const BLACK_COLOR: Color = rgb15(0, 0, 0);
-
-pub(super) const fn rgb15(r: u8, g: u8, b: u8) -> Color {
-    Color {
-        r: (r << 3) | (r >> 2),
-        g: (g << 3) | (g >> 2),
-        b: (b << 3) | (b >> 2),
-        a: 0xff,
-    }
-}
 
 unsafe fn parse_color(src: *const c_char, color: &mut Color) -> BOOLEAN {
     let mut value = 0u32;
@@ -62,8 +54,8 @@ pub(crate) mod runtime {
     const MAX_FONTS: usize = 5;
     const MAX_TEXT_LINES: usize = 15;
 
-    unsafe fn menu(key: u32) -> bool {
-        PulsedInputState.menu[key as usize] != 0
+    unsafe fn menu(input: &InputSession, key: u32) -> bool {
+        input.pulsed().menu[key as usize] != 0
     }
 
     unsafe fn unbatch(state: &mut PresentationState, yield_task: bool) {
@@ -195,11 +187,12 @@ pub(crate) mod runtime {
     }
 
     unsafe fn admit_presentation(
+        input: &InputSession,
         state: &mut PresentationState,
         io: &mut Io<'_>,
         activity: u16,
     ) -> Option<bool> {
-        if menu(KEY_MENU_CANCEL) || activity & CHECK_ABORT as u16 != 0 {
+        if menu(input, KEY_MENU_CANCEL) || activity & CHECK_ABORT as u16 != 0 {
             io.observer
                 .checkpoint(&CheckpointView::PresentationCancelled);
             return Some(false);
@@ -220,7 +213,9 @@ pub(crate) mod runtime {
                 }
             }
             if state.time_out_on_skip != 0
-                && (menu(KEY_MENU_SELECT) || menu(KEY_MENU_SPECIAL) || menu(KEY_MENU_RIGHT))
+                && (menu(input, KEY_MENU_SELECT)
+                    || menu(input, KEY_MENU_SPECIAL)
+                    || menu(input, KEY_MENU_RIGHT))
             {
                 state.time_out = 0;
                 state.movie_frame = -1;
@@ -657,7 +652,9 @@ pub(crate) mod runtime {
         state: &mut PresentationState,
     ) -> bool {
         let activity = cx.world.activity();
-        if let Some(keep) = cx.with_legacy(|| admit_presentation(state, io, activity)) {
+        let runtime = cx.kernel.input_runtime();
+        let input = runtime.input();
+        if let Some(keep) = cx.with_legacy(|| admit_presentation(input, state, io, activity)) {
             return keep;
         }
         loop {
@@ -676,6 +673,8 @@ pub(crate) mod runtime {
         table: STRING,
         ending: bool,
     ) -> BOOLEAN {
+        let runtime = cx.kernel.input_runtime();
+        let input = runtime.input();
         let mut state: PresentationState = std::mem::zeroed();
         state.slide_show = table;
         if state.slide_show.is_null() {
@@ -696,7 +695,7 @@ pub(crate) mod runtime {
             GetContextClipRect(&mut old_rect);
             let old_font = SetContextFont(ptr::null_mut());
             SetContextBackGroundColor(BLACK_COLOR);
-            SetMenuSounds(0, 0);
+            SetMenuSounds(input, 0, 0);
             state.last_draw_kind = -1;
             state.text_vpos = b'B' as c_int;
             state.movie_frame = -1;
@@ -718,66 +717,6 @@ pub(crate) mod runtime {
             SetContextFont(old_font);
             SetContextClipRect(&mut old_rect);
             SetContext(old_context);
-        });
-        1
-    }
-
-    unsafe fn video_input(video: *mut LegacyVideoRef, activity: u16) -> BOOLEAN {
-        if PlayingLegacyVideo(video) == 0 {
-            return 0;
-        }
-        if menu(KEY_MENU_SELECT)
-            || menu(KEY_MENU_CANCEL)
-            || menu(KEY_MENU_SPECIAL)
-            || activity & CHECK_ABORT as u16 != 0
-        {
-            return 0;
-        }
-        if menu(KEY_MENU_LEFT) || menu(KEY_MENU_RIGHT) {
-            let mut position = VidGetPosition() as SDWORD;
-            if menu(KEY_MENU_LEFT) {
-                position = position.wrapping_sub(2000);
-            } else if menu(KEY_MENU_RIGHT) {
-                position = position.wrapping_add(1000);
-            }
-            if position < 0 {
-                position = 0;
-            }
-            VidSeek(position as DWORD);
-        } else {
-            if VidProcessFrame() == 0 {
-                return 0;
-            }
-            SleepThread(ONE_SECOND / 40);
-        }
-        1
-    }
-
-    unsafe fn fade_clear_screen() {
-        SleepThreadUntil(FadeScreen(
-            ScreenFadeType_FadeAllToBlack,
-            (ONE_SECOND / 2) as SIZE,
-        ));
-        SetContext(Kernel::current().read(|owner| owner.screen_context));
-        SetContextBackGroundColor(BLACK_COLOR);
-        ClearDrawable();
-        FadeScreen(ScreenFadeType_FadeAllToColor, 0);
-    }
-
-    unsafe fn show_video(cx: &mut Cx<'_>, io: &mut Io<'_>, video: *mut LegacyVideo) -> BOOLEAN {
-        cx.with_legacy(|| fade_clear_screen());
-        let reference = cx.with_legacy(|| PlayLegacyVideo(video));
-        if reference.is_null() {
-            return 0;
-        }
-        cx.with_legacy(|| SetMenuSounds(0, 0));
-        cx.run_input(io, true, |cx, _| {
-            let activity = cx.world.activity();
-            cx.with_legacy(|| video_input(reference, activity) != 0)
-        });
-        cx.with_legacy(|| {
-            StopLegacyVideo(reference);
-            fade_clear_screen();
         });
         1
     }
@@ -822,6 +761,71 @@ pub(crate) mod runtime {
                 0
             }
         }
+    }
+    unsafe fn video_input(
+        input: &InputSession,
+        video: *mut LegacyVideoRef,
+        activity: u16,
+    ) -> BOOLEAN {
+        if PlayingLegacyVideo(video) == 0 {
+            return 0;
+        }
+        if menu(input, KEY_MENU_SELECT)
+            || menu(input, KEY_MENU_CANCEL)
+            || menu(input, KEY_MENU_SPECIAL)
+            || activity & CHECK_ABORT as u16 != 0
+        {
+            return 0;
+        }
+        if menu(input, KEY_MENU_LEFT) || menu(input, KEY_MENU_RIGHT) {
+            let mut position = VidGetPosition() as SDWORD;
+            if menu(input, KEY_MENU_LEFT) {
+                position = position.wrapping_sub(2000);
+            } else if menu(input, KEY_MENU_RIGHT) {
+                position = position.wrapping_add(1000);
+            }
+            if position < 0 {
+                position = 0;
+            }
+            VidSeek(position as DWORD);
+        } else {
+            if VidProcessFrame() == 0 {
+                return 0;
+            }
+            SleepThread(ONE_SECOND / 40);
+        }
+        1
+    }
+
+    unsafe fn fade_clear_screen() {
+        SleepThreadUntil(FadeScreen(
+            ScreenFadeType_FadeAllToBlack,
+            (ONE_SECOND / 2) as SIZE,
+        ));
+        SetContext(Kernel::current().read(|owner| owner.screen_context));
+        SetContextBackGroundColor(BLACK_COLOR);
+        ClearDrawable();
+        FadeScreen(ScreenFadeType_FadeAllToColor, 0);
+    }
+
+    unsafe fn show_video(cx: &mut Cx<'_>, io: &mut Io<'_>, video: *mut LegacyVideo) -> BOOLEAN {
+        let runtime = cx.kernel.input_runtime();
+        let input = runtime.input();
+        cx.with_legacy(|| fade_clear_screen());
+        let reference = cx.with_legacy(|| PlayLegacyVideo(video));
+        if reference.is_null() {
+            return 0;
+        }
+        cx.with_legacy(|| SetMenuSounds(input, 0, 0));
+        cx.run_input(io, true, |cx, _| {
+            let activity = cx.world.activity();
+            cx.with_legacy(|| video_input(input, reference, activity) != 0)
+        });
+        cx.with_legacy(|| {
+            StopLegacyVideo(reference);
+            fade_clear_screen();
+        });
+        1
     }
 }
 

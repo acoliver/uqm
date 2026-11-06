@@ -4,14 +4,16 @@ use super::abi::*;
 use crate::engine::{battle::Cx, observe::Io, StoryKey};
 use std::{mem, ptr};
 
-unsafe fn input(cx: &mut Cx<'_>, io: &mut Io<'_>, state: *mut MENU_STATE) -> BOOLEAN {
-    let mut select = PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0;
+unsafe fn input_frame(cx: &mut Cx<'_>, io: &mut Io<'_>, state: *mut MENU_STATE) -> BOOLEAN {
+    let runtime = cx.kernel.input_runtime();
+    let input = runtime.input();
+    let mut select = input.pulsed().menu[KEY_MENU_SELECT as usize] != 0;
     if cx.world.activity() & (CHECK_ABORT | CHECK_LOAD) as u16 != 0
         || cx.world.data.flagship.crew_enlisted == u16::MAX
     {
         return 0;
     }
-    if cx.with_legacy(|| DoMenuChooser(state, PM_STARMAP as u8)) != 0 || !select {
+    if cx.with_legacy(|| do_menu_chooser(input, state, PM_STARMAP as u8)) != 0 || !select {
         return 1;
     }
     cx.with_legacy(|| SetFlashRect(ptr::null()));
@@ -41,7 +43,7 @@ unsafe fn input(cx: &mut Cx<'_>, io: &mut Io<'_>, state: *mut MENU_STATE) -> BOO
     if cx.world.activity() & CHECK_ABORT as u16 == 0 {
         cx.with_legacy(|| {
             if select {
-                if optWhichMenu != 2 {
+                if input.preferences().menu != 2 {
                     (*state).CurState = 6;
                 }
                 DrawMenuStateStrings(PM_STARMAP as u8, (*state).CurState as i16);
@@ -55,6 +57,8 @@ unsafe fn input(cx: &mut Cx<'_>, io: &mut Io<'_>, state: *mut MENU_STATE) -> BOO
 /// # Safety
 /// Input, graphics and world state must be initialized on the game thread.
 pub unsafe fn hyperspace_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) {
+    let runtime = cx.kernel.input_runtime();
+    let input = runtime.input();
     let (old_context, old_color) = cx.with_legacy(|| {
         UnbatchGraphics();
         let old_context =
@@ -62,13 +66,13 @@ pub unsafe fn hyperspace_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) {
         let old_color = SetContextBackGroundColor(super::color(0, 0, 0));
         DrawMenuStateStrings(PM_STARMAP as u8, 1);
         SetFlashRect(usize::MAX as *const RECT);
-        SetMenuSounds(15, 16);
+        SetMenuSounds(input, 15, 16);
         (old_context, old_color)
     });
     let mut state: MENU_STATE = mem::zeroed();
     state.Initialized = 1;
     state.CurState = 1;
-    cx.run_input(io, true, |cx, io| input(cx, io, &mut state) != 0);
+    cx.run_input(io, true, |cx, io| input_frame(cx, io, &mut state) != 0);
     cx.with_legacy(|| {
         SetFlashRect(ptr::null());
         SetContext(crate::engine::Kernel::current().read(|owner| owner.space_context));

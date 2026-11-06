@@ -2,74 +2,9 @@
 
 mod preview;
 
-const MAX_SAVED_GAMES: usize = 50;
-const SAVES_PER_PAGE: u16 = 5;
-
-fn picker_slot(current: u8, left: bool, right: bool, up: bool, down: bool) -> u8 {
-    let mut next = current;
-    if left {
-        if next == 0 {
-            next = (MAX_SAVED_GAMES - 1) as u8;
-        } else if i32::from(next) - i32::from(SAVES_PER_PAGE) > 0 {
-            next -= SAVES_PER_PAGE as u8;
-        } else {
-            next = 0;
-        }
-    } else if right {
-        if next == (MAX_SAVED_GAMES - 1) as u8 {
-            next = 0;
-        } else if i32::from(next) + i32::from(SAVES_PER_PAGE) < (MAX_SAVED_GAMES - 1) as i32 {
-            next += SAVES_PER_PAGE as u8;
-        } else {
-            next = (MAX_SAVED_GAMES - 1) as u8;
-        }
-    } else if up {
-        if next == 0 {
-            next = (MAX_SAVED_GAMES - 1) as u8;
-        } else {
-            next -= 1;
-        }
-    } else if down {
-        if next == (MAX_SAVED_GAMES - 1) as u8 {
-            next = 0;
-        } else {
-            next += 1;
-        }
-    }
-    next
-}
-
-/// The original DoPickGame exit priority, independent of presentation and I/O.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PickerAction {
-    Continue,
-    Cancel,
-    Abort,
-    Select,
-    EmptySlot,
-}
-
-pub fn picker_action(
-    abort: bool,
-    cancel: bool,
-    select: bool,
-    saving: bool,
-    occupied: bool,
-) -> PickerAction {
-    if abort {
-        PickerAction::Abort
-    } else if cancel {
-        PickerAction::Cancel
-    } else if select {
-        if saving || occupied {
-            PickerAction::Select
-        } else {
-            PickerAction::EmptySlot
-        }
-    } else {
-        PickerAction::Continue
-    }
-}
+mod picker;
+pub use picker::{picker_action, PickerAction};
+use picker::{picker_slot, MAX_SAVED_GAMES, SAVES_PER_PAGE};
 
 #[cfg(not(test))]
 pub use runtime::{
@@ -79,10 +14,13 @@ pub use runtime::{
 #[cfg(not(test))]
 pub(crate) mod runtime {
     mod save_load;
+
     use save_load::pick_game;
 
     use super::{picker_action, picker_slot, PickerAction, MAX_SAVED_GAMES, SAVES_PER_PAGE};
-    use crate::engine::{battle::Cx, observe::Io, Kernel, StoryKey, World, WorldData};
+    use crate::engine::{
+        battle::Cx, input::InputSession, observe::Io, Kernel, StoryKey, World, WorldData,
+    };
     use crate::navigation::abi::*;
 
     use std::{mem, ptr};
@@ -157,8 +95,8 @@ pub(crate) mod runtime {
         ))
     }
 
-    unsafe fn key(index: u32) -> bool {
-        PulsedInputState.menu[index as usize] != 0
+    unsafe fn key(input: &InputSession, index: u32) -> bool {
+        input.pulsed().menu[index as usize] != 0
     }
 
     unsafe fn sis_screen_width() -> i32 {
@@ -220,84 +158,6 @@ pub(crate) mod runtime {
         );
         SetContextForeGroundColor(rgb15(0x14, 0x14, 0x14));
         font_DrawText(&mut t);
-    }
-
-    unsafe fn feedback_setting(which_setting: BYTE) {
-        let flags = WorldData::current().read(|world| world.game.glob_flags);
-        let mut buf: [UNICODE; 128] = [0; 128];
-        match which_setting {
-            SOUND_ON_SETTING | SOUND_OFF_SETTING => {
-                libc::snprintf(
-                    buf.as_mut_ptr(),
-                    buf.len() - 1,
-                    c"%s %s".as_ptr(),
-                    game_string(OPTION_STRING_BASE),
-                    game_string(
-                        OPTION_STRING_BASE
-                            + if flags & SOUND_DISABLED as u8 != 0 {
-                                3
-                            } else {
-                                4
-                            },
-                    ),
-                );
-            }
-            MUSIC_ON_SETTING | MUSIC_OFF_SETTING => {
-                libc::snprintf(
-                    buf.as_mut_ptr(),
-                    buf.len() - 1,
-                    c"%s %s".as_ptr(),
-                    game_string(OPTION_STRING_BASE + 1),
-                    game_string(
-                        OPTION_STRING_BASE
-                            + if flags & MUSIC_DISABLED as u8 != 0 {
-                                3
-                            } else {
-                                4
-                            },
-                    ),
-                );
-            }
-            CYBORG_OFF_SETTING
-            | CYBORG_NORMAL_SETTING
-            | CYBORG_DOUBLE_SETTING
-            | CYBORG_SUPER_SETTING => {
-                let tmpstr =
-                    if optWhichMenu == OPT_PC as i32 && which_setting > CYBORG_NORMAL_SETTING {
-                        if which_setting == CYBORG_DOUBLE_SETTING {
-                            c"+"
-                        } else {
-                            c"++"
-                        }
-                    } else {
-                        c""
-                    };
-                libc::snprintf(
-                    buf.as_mut_ptr(),
-                    buf.len() - 1,
-                    c"%s %s%s".as_ptr(),
-                    game_string(OPTION_STRING_BASE + 2),
-                    game_string(
-                        OPTION_STRING_BASE
-                            + if flags & CYBORG_ENABLED as u8 == 0 {
-                                3
-                            } else {
-                                4
-                            },
-                    ),
-                    tmpstr.as_ptr(),
-                );
-            }
-            CHANGE_CAPTAIN_SETTING | CHANGE_SHIP_SETTING => {
-                utf8StringCopy(
-                    (buf.as_mut_ptr()).cast(),
-                    buf.len(),
-                    (game_string(NAMING_STRING_BASE)).cast(),
-                );
-            }
-            _ => {}
-        }
-        DrawStatusMessage(buf.as_ptr());
     }
 
     unsafe fn draw_name_string(
@@ -378,7 +238,7 @@ pub(crate) mod runtime {
         1
     }
 
-    unsafe extern "C" fn on_name_change(p_tes: *mut TEXTENTRY_STATE) -> BOOLEAN {
+    unsafe fn on_name_change(p_tes: *mut TEXTENTRY_STATE, _input: &InputSession) -> BOOLEAN {
         let name_captain = !(*p_tes).CbParam.is_null();
         let mut hl = DDSHS_EDIT;
         if (*p_tes).JoystickMode != 0 {
@@ -392,7 +252,7 @@ pub(crate) mod runtime {
         )
     }
 
-    unsafe fn name_captain_or_ship(name_captain: bool) {
+    unsafe fn name_captain_or_ship(input: &InputSession, name_captain: bool) {
         let world = WorldData::current();
         let mut buf: [UNICODE; MAX_NAME_SIZE] = [0; MAX_NAME_SIZE];
         let mut tes: TEXTENTRY_STATE = mem::zeroed();
@@ -417,7 +277,7 @@ pub(crate) mod runtime {
         tes.CbParam = usize::from(name_captain) as *mut std::ffi::c_void;
         tes.ChangeCallback = Some(on_name_change);
         tes.FrameCallback = None;
-        if DoTextEntry(&mut tes) != 0 {
+        if do_text_entry(&mut tes, input) != 0 {
             utf8StringCopy(
                 (setting).cast(),
                 tes.MaxSize as usize,
@@ -530,7 +390,7 @@ pub(crate) mod runtime {
         1
     }
 
-    unsafe extern "C" fn on_save_name_change(p_tes: *mut TEXTENTRY_STATE) -> BOOLEAN {
+    unsafe fn on_save_name_change(p_tes: *mut TEXTENTRY_STATE, _input: &InputSession) -> BOOLEAN {
         let mut hl = DDSHS_EDIT;
         let game_index = (*p_tes).CbParam.cast::<COUNT>();
         if (*p_tes).JoystickMode != 0 {
@@ -544,7 +404,11 @@ pub(crate) mod runtime {
         )
     }
 
-    unsafe fn name_save_game(game_index: COUNT, buf: *mut UNICODE) -> BOOLEAN {
+    unsafe fn name_save_game(
+        input: &InputSession,
+        game_index: COUNT,
+        buf: *mut UNICODE,
+    ) -> BOOLEAN {
         let mut tes: TEXTENTRY_STATE = mem::zeroed();
         let curs_pos = libc::strlen(buf) as COUNT;
         let g_index = rust_hmalloc(mem::size_of::<COUNT>()).cast::<COUNT>();
@@ -568,7 +432,7 @@ pub(crate) mod runtime {
             },
         };
         SetFlashRect(&r);
-        if DoTextEntry(&mut tes) == 0 {
+        if do_text_entry(&mut tes, input) == 0 {
             *buf = 0;
         }
         SetFlashRect(ptr::null());
@@ -576,7 +440,7 @@ pub(crate) mod runtime {
         if let Some(callback) = NAMING_CB {
             callback();
         }
-        SetMenuSounds(MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
+        SetMenuSounds(input, MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
         rust_hfree(g_index.cast());
         SetFlashRect(ptr::null());
         u32::from(tes.Success != 0)
@@ -588,69 +452,6 @@ pub(crate) mod runtime {
     #[no_mangle]
     pub unsafe extern "C" fn SetNamingCallback(callback: NamingCallback) {
         NAMING_CB = callback;
-    }
-
-    unsafe fn do_settings(p_ms: *mut MENU_STATE, activity: u16) -> BOOLEAN {
-        if activity & CHECK_ABORT as ACTIVITY != 0 {
-            return 0;
-        }
-        let mut cur_speed = (WorldData::current().read(|owner| owner.game.glob_flags)
-            & COMBAT_SPEED_MASK as u8)
-            >> COMBAT_SPEED_SHIFT;
-        if key(KEY_MENU_CANCEL) || (key(KEY_MENU_SELECT) && (*p_ms).CurState == EXIT_SETTINGS_MENU)
-        {
-            return 0;
-        } else if key(KEY_MENU_SELECT) {
-            match (*p_ms).CurState {
-                SOUND_ON_SETTING | SOUND_OFF_SETTING => {
-                    toggle_sound_effect();
-                    (*p_ms).CurState ^= 1;
-                    DrawMenuStateStrings(PM_SOUND_ON as BYTE, (*p_ms).CurState as SWORD);
-                }
-                MUSIC_ON_SETTING | MUSIC_OFF_SETTING => {
-                    toggle_music();
-                    (*p_ms).CurState ^= 1;
-                    DrawMenuStateStrings(PM_SOUND_ON as BYTE, (*p_ms).CurState as SWORD);
-                }
-                CHANGE_CAPTAIN_SETTING | CHANGE_SHIP_SETTING => {
-                    name_captain_or_ship((*p_ms).CurState == CHANGE_CAPTAIN_SETTING);
-                }
-                _ => {
-                    let previous_speed = cur_speed;
-                    cur_speed += 1;
-                    if previous_speed < (NUM_COMBAT_SPEEDS - 1) as BYTE {
-                        (**WorldData::current()).game.glob_flags |= CYBORG_ENABLED as BYTE;
-                    } else {
-                        cur_speed = 0;
-                        (**WorldData::current()).game.glob_flags &= !(CYBORG_ENABLED as BYTE);
-                    }
-                    (**WorldData::current()).game.glob_flags = (WorldData::current()
-                        .read(|owner| owner.game.glob_flags)
-                        & !(COMBAT_SPEED_MASK as BYTE))
-                        | (cur_speed << COMBAT_SPEED_SHIFT);
-                    (*p_ms).CurState = CYBORG_OFF_SETTING + cur_speed;
-                    DrawMenuStateStrings(PM_SOUND_ON as BYTE, (*p_ms).CurState as SWORD);
-                }
-            }
-            feedback_setting((*p_ms).CurState);
-        } else if DoMenuChooser(p_ms, PM_SOUND_ON as BYTE) != 0 {
-            feedback_setting((*p_ms).CurState);
-        }
-        1
-    }
-
-    unsafe fn settings_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) {
-        let mut menu_state: MENU_STATE = mem::zeroed();
-        menu_state.CurState = SOUND_ON_SETTING;
-        cx.with_legacy(|| {
-            DrawMenuStateStrings(PM_SOUND_ON as BYTE, menu_state.CurState as SWORD);
-            feedback_setting(menu_state.CurState);
-        });
-        cx.run_input(io, false, |cx, _| {
-            let activity = cx.world.activity();
-            cx.with_legacy(|| do_settings(ptr::addr_of_mut!(menu_state), activity)) != 0
-        });
-        cx.with_legacy(|| DrawStatusMessage(ptr::null()));
     }
 
     // Private C-local state, containing only header-generated ABI records.
@@ -1090,14 +891,14 @@ pub(crate) mod runtime {
         }
     }
 
-    unsafe fn do_pick_game(p_ms: *mut MENU_STATE, activity: u16) -> BOOLEAN {
+    unsafe fn do_pick_game(input: &InputSession, p_ms: *mut MENU_STATE, activity: u16) -> BOOLEAN {
         let pick_state = (*p_ms).privData.cast::<PickGameState>();
         let time_in = GetTimeCounter();
         let occupied = (*pick_state).summary[(*p_ms).CurState as usize].year_index != 0;
         let action = picker_action(
             activity & CHECK_ABORT as ACTIVITY != 0,
-            key(KEY_MENU_CANCEL),
-            key(KEY_MENU_SELECT),
+            key(input, KEY_MENU_CANCEL),
+            key(input, KEY_MENU_SELECT),
             (*pick_state).saving != 0,
             occupied,
         );
@@ -1105,8 +906,8 @@ pub(crate) mod runtime {
             log::info!(
                 "RUST_PICKER: action={action:?} slot={} select={} cancel={} activity={:#x}",
                 (*p_ms).CurState,
-                key(KEY_MENU_SELECT),
-                key(KEY_MENU_CANCEL),
+                key(input, KEY_MENU_SELECT),
+                key(input, KEY_MENU_CANCEL),
                 activity,
             );
         }
@@ -1125,10 +926,10 @@ pub(crate) mod runtime {
             PickerAction::Continue => {
                 let new_state = picker_slot(
                     (*p_ms).CurState,
-                    key(KEY_MENU_LEFT) || key(KEY_MENU_PAGE_UP),
-                    key(KEY_MENU_RIGHT) || key(KEY_MENU_PAGE_DOWN),
-                    key(KEY_MENU_UP),
-                    key(KEY_MENU_DOWN),
+                    key(input, KEY_MENU_LEFT) || key(input, KEY_MENU_PAGE_UP),
+                    key(input, KEY_MENU_RIGHT) || key(input, KEY_MENU_PAGE_DOWN),
+                    key(input, KEY_MENU_UP),
+                    key(input, KEY_MENU_DOWN),
                 );
                 if new_state != (*p_ms).CurState {
                     (*p_ms).CurState = new_state;
@@ -1142,12 +943,16 @@ pub(crate) mod runtime {
     }
 
     unsafe fn do_game_options(cx: &mut Cx<'_>, io: &mut Io<'_>, p_ms: *mut MENU_STATE) -> BOOLEAN {
+        let runtime = cx.kernel.input_runtime();
+        let input = runtime.input();
         if cx.world.activity() & CHECK_ABORT as ACTIVITY != 0 {
             return 0;
         }
-        if key(KEY_MENU_CANCEL) || (key(KEY_MENU_SELECT) && (*p_ms).CurState == EXIT_GAME_MENU) {
+        if key(input, KEY_MENU_CANCEL)
+            || (key(input, KEY_MENU_SELECT) && (*p_ms).CurState == EXIT_GAME_MENU)
+        {
             return 0;
-        } else if key(KEY_MENU_SELECT) {
+        } else if key(input, KEY_MENU_SELECT) {
             match (*p_ms).CurState {
                 SAVE_GAME | LOAD_GAME => {
                     cx.with_legacy(|| SetFlashRect(ptr::null()));
@@ -1157,7 +962,7 @@ pub(crate) mod runtime {
                     cx.with_legacy(|| SetFlashRect(SFR_MENU_3DO));
                 }
                 QUIT_GAME => {
-                    if cx.with_legacy(|| ConfirmExit()) != 0 {
+                    if cx.with_legacy(|| ConfirmExit(input)) != 0 {
                         return 0;
                     }
                 }
@@ -1170,7 +975,7 @@ pub(crate) mod runtime {
                 _ => {}
             }
         } else {
-            cx.with_legacy(|| DoMenuChooser(p_ms, PM_SAVE_GAME as BYTE));
+            cx.with_legacy(|| do_menu_chooser(input, p_ms, PM_SAVE_GAME as BYTE));
         }
         1
     }
@@ -1179,6 +984,8 @@ pub(crate) mod runtime {
     /// The game thread must have initialized the game, input, audio, and SIS
     /// contexts. Runs the modal menu and may replace the live game on load.
     pub unsafe fn game_options(cx: &mut Cx<'_>, io: &mut Io<'_>) -> BOOLEAN {
+        let runtime = cx.kernel.input_runtime();
+        let input = runtime.input();
         let mut menu_state: MENU_STATE = mem::zeroed();
         if cx.kernel.last_activity == CHECK_LOAD as ACTIVITY {
             cx.with_legacy(|| DrawMenuStateStrings(PM_SAVE_GAME as BYTE, LOAD_GAME as SWORD));
@@ -1193,7 +1000,7 @@ pub(crate) mod runtime {
         cx.with_legacy(|| {
             DrawMenuStateStrings(PM_SAVE_GAME as BYTE, menu_state.CurState as SWORD);
             SetFlashRect(SFR_MENU_3DO);
-            SetMenuSounds(MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
+            SetMenuSounds(input, MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
             io.observer
                 .checkpoint(&crate::engine::observe::CheckpointView::GameOptions(true));
         });
@@ -1219,6 +1026,150 @@ pub(crate) mod runtime {
             };
             game_options(cx, &mut io)
         })
+    }
+    unsafe fn feedback_setting(input: &InputSession, which_setting: BYTE) {
+        let flags = WorldData::current().read(|world| world.game.glob_flags);
+        let mut buf: [UNICODE; 128] = [0; 128];
+        match which_setting {
+            SOUND_ON_SETTING | SOUND_OFF_SETTING => {
+                libc::snprintf(
+                    buf.as_mut_ptr(),
+                    buf.len() - 1,
+                    c"%s %s".as_ptr(),
+                    game_string(OPTION_STRING_BASE),
+                    game_string(
+                        OPTION_STRING_BASE
+                            + if flags & SOUND_DISABLED as u8 != 0 {
+                                3
+                            } else {
+                                4
+                            },
+                    ),
+                );
+            }
+            MUSIC_ON_SETTING | MUSIC_OFF_SETTING => {
+                libc::snprintf(
+                    buf.as_mut_ptr(),
+                    buf.len() - 1,
+                    c"%s %s".as_ptr(),
+                    game_string(OPTION_STRING_BASE + 1),
+                    game_string(
+                        OPTION_STRING_BASE
+                            + if flags & MUSIC_DISABLED as u8 != 0 {
+                                3
+                            } else {
+                                4
+                            },
+                    ),
+                );
+            }
+            CYBORG_OFF_SETTING
+            | CYBORG_NORMAL_SETTING
+            | CYBORG_DOUBLE_SETTING
+            | CYBORG_SUPER_SETTING => {
+                let tmpstr = if input.preferences().menu == OPT_PC as i32
+                    && which_setting > CYBORG_NORMAL_SETTING
+                {
+                    if which_setting == CYBORG_DOUBLE_SETTING {
+                        c"+"
+                    } else {
+                        c"++"
+                    }
+                } else {
+                    c""
+                };
+                libc::snprintf(
+                    buf.as_mut_ptr(),
+                    buf.len() - 1,
+                    c"%s %s%s".as_ptr(),
+                    game_string(OPTION_STRING_BASE + 2),
+                    game_string(
+                        OPTION_STRING_BASE
+                            + if flags & CYBORG_ENABLED as u8 == 0 {
+                                3
+                            } else {
+                                4
+                            },
+                    ),
+                    tmpstr.as_ptr(),
+                );
+            }
+            CHANGE_CAPTAIN_SETTING | CHANGE_SHIP_SETTING => {
+                utf8StringCopy(
+                    (buf.as_mut_ptr()).cast(),
+                    buf.len(),
+                    (game_string(NAMING_STRING_BASE)).cast(),
+                );
+            }
+            _ => {}
+        }
+        DrawStatusMessage(buf.as_ptr());
+    }
+
+    unsafe fn do_settings(input: &InputSession, p_ms: *mut MENU_STATE, activity: u16) -> BOOLEAN {
+        if activity & CHECK_ABORT as ACTIVITY != 0 {
+            return 0;
+        }
+        let mut cur_speed = (WorldData::current().read(|owner| owner.game.glob_flags)
+            & COMBAT_SPEED_MASK as u8)
+            >> COMBAT_SPEED_SHIFT;
+        if key(input, KEY_MENU_CANCEL)
+            || (key(input, KEY_MENU_SELECT) && (*p_ms).CurState == EXIT_SETTINGS_MENU)
+        {
+            return 0;
+        } else if key(input, KEY_MENU_SELECT) {
+            match (*p_ms).CurState {
+                SOUND_ON_SETTING | SOUND_OFF_SETTING => {
+                    toggle_sound_effect();
+                    (*p_ms).CurState ^= 1;
+                    DrawMenuStateStrings(PM_SOUND_ON as BYTE, (*p_ms).CurState as SWORD);
+                }
+                MUSIC_ON_SETTING | MUSIC_OFF_SETTING => {
+                    toggle_music();
+                    (*p_ms).CurState ^= 1;
+                    DrawMenuStateStrings(PM_SOUND_ON as BYTE, (*p_ms).CurState as SWORD);
+                }
+                CHANGE_CAPTAIN_SETTING | CHANGE_SHIP_SETTING => {
+                    name_captain_or_ship(input, (*p_ms).CurState == CHANGE_CAPTAIN_SETTING);
+                }
+                _ => {
+                    let previous_speed = cur_speed;
+                    cur_speed += 1;
+                    if previous_speed < (NUM_COMBAT_SPEEDS - 1) as BYTE {
+                        (**WorldData::current()).game.glob_flags |= CYBORG_ENABLED as BYTE;
+                    } else {
+                        cur_speed = 0;
+                        (**WorldData::current()).game.glob_flags &= !(CYBORG_ENABLED as BYTE);
+                    }
+                    (**WorldData::current()).game.glob_flags = (WorldData::current()
+                        .read(|owner| owner.game.glob_flags)
+                        & !(COMBAT_SPEED_MASK as BYTE))
+                        | (cur_speed << COMBAT_SPEED_SHIFT);
+                    (*p_ms).CurState = CYBORG_OFF_SETTING + cur_speed;
+                    DrawMenuStateStrings(PM_SOUND_ON as BYTE, (*p_ms).CurState as SWORD);
+                }
+            }
+            feedback_setting(input, (*p_ms).CurState);
+        } else if do_menu_chooser(input, p_ms, PM_SOUND_ON as BYTE) != 0 {
+            feedback_setting(input, (*p_ms).CurState);
+        }
+        1
+    }
+
+    unsafe fn settings_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) {
+        let runtime = cx.kernel.input_runtime();
+        let input = runtime.input();
+        let mut menu_state: MENU_STATE = mem::zeroed();
+        menu_state.CurState = SOUND_ON_SETTING;
+        cx.with_legacy(|| {
+            DrawMenuStateStrings(PM_SOUND_ON as BYTE, menu_state.CurState as SWORD);
+            feedback_setting(input, menu_state.CurState);
+        });
+        cx.run_input(io, false, |cx, _| {
+            let activity = cx.world.activity();
+            cx.with_legacy(|| do_settings(input, ptr::addr_of_mut!(menu_state), activity)) != 0
+        });
+        cx.with_legacy(|| DrawStatusMessage(ptr::null()));
     }
 }
 

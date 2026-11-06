@@ -209,11 +209,11 @@ pub(crate) mod live {
         }
     }
 
-    unsafe fn modify(menu: &mut Menu) -> i32 {
+    unsafe fn modify(input: &crate::engine::input::InputSession, menu: &mut Menu) -> i32 {
         if crate::engine::World::current().read(|world| world.activity()) & (1 << 14) != 0 {
             return 0;
         }
-        let pulse = std::ptr::addr_of!(PulsedInputState).read();
+        let pulse = input.pulsed();
         let select_key = pulse.menu[KEY_MENU_SELECT as usize] != 0;
         let cancel = pulse.menu[KEY_MENU_CANCEL as usize] != 0;
         let up = pulse.menu[KEY_MENU_UP as usize] != 0;
@@ -227,13 +227,13 @@ pub(crate) mod live {
             menu.modifying ^= true;
             if !menu.modifying {
                 g.set_flash(FlashTarget::Off);
-                SetMenuSounds(15, 16);
+                SetMenuSounds(input, 15, 16);
             } else {
                 g.set_context(ContextId::Status);
                 g.set_fg_color(Rgba::rgb15(31, 31, 31));
                 draw(menu, true);
                 flash_crew();
-                SetMenuSounds(3, 48);
+                SetMenuSounds(input, 3, 48);
             }
         } else if menu.modifying {
             let mut delta = 0;
@@ -278,6 +278,8 @@ pub(crate) mod live {
     /// # Safety
     /// Call on the game thread with campaign globals and screen resources initialized.
     pub unsafe fn roster_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) -> i32 {
+        let runtime = cx.kernel.input_runtime();
+        let input = runtime.input();
         let count = cx.world.built_ships_ref().count();
         let Some(mut menu) = cx.with_legacy(|| {
             if count == 0 {
@@ -294,12 +296,14 @@ pub(crate) mod live {
             };
             CffiPlatform.set_context(ContextId::Status);
             select(&mut menu, 0);
-            SetMenuSounds(15, 16);
+            SetMenuSounds(input, 15, 16);
             Some(menu)
         }) else {
             return 0;
         };
-        cx.run_input(io, true, |cx, _| cx.with_legacy(|| modify(&mut menu) != 0));
+        cx.run_input(io, true, |cx, _| {
+            cx.with_legacy(|| modify(input, &mut menu) != 0)
+        });
         cx.with_legacy(|| {
             CffiPlatform.set_context(ContextId::Status);
             draw(&menu, false);

@@ -57,7 +57,6 @@ extern "C" {
     #[cfg(test)]
     pub fn uqm_get_utwig_bomb() -> u8;
     #[cfg(test)]
-    pub fn uqm_get_pulsed_menu_key(key_index: u8) -> c_int;
     #[cfg(test)]
     pub fn uqm_get_mouse_button_down() -> c_int;
     #[cfg(test)]
@@ -65,7 +64,6 @@ extern "C" {
     #[cfg(test)]
     pub fn uqm_sleep_thread(duration: u32);
     #[cfg(test)]
-    pub fn uqm_set_game_paused(val: c_int);
     #[cfg(test)]
     pub fn uqm_reinit_race_queues();
     #[cfg(test)]
@@ -117,13 +115,6 @@ pub unsafe fn uqm_get_utwig_bomb() -> u8 {
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
 #[cfg(not(test))]
-pub unsafe fn uqm_get_pulsed_menu_key(key_index: u8) -> c_int {
-    (crate::mainloop::restart_menu::menu_abi::uqm_get_pulsed_menu_key(key_index as _)) as _
-}
-
-/// # Safety
-/// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(not(test))]
 pub unsafe fn uqm_get_mouse_button_down() -> c_int {
     (crate::mainloop::restart_menu::menu_abi::uqm_get_mouse_button_down()) as _
 }
@@ -142,13 +133,6 @@ pub unsafe fn uqm_sleep_thread_until(time: u32) {
 #[cfg(not(test))]
 pub unsafe fn uqm_sleep_thread(duration: u32) {
     crate::mainloop::restart_menu::menu_abi::uqm_sleep_thread(duration as _);
-}
-
-/// # Safety
-/// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(not(test))]
-pub unsafe fn uqm_set_game_paused(val: c_int) {
-    crate::mainloop::restart_menu::menu_abi::uqm_set_game_paused(val as _);
 }
 
 /// # Safety
@@ -325,8 +309,7 @@ pub use crate::ui::flash::Flash_setState;
 pub use crate::ui::flash::Flash_setOverlay;
 
 #[cfg(not(test))]
-pub use crate::ui::confirm::DoPopupWindow;
+pub use crate::ui::confirm::do_popup_window;
 
-extern "C" {}
 pub use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 pub use crate::sound::heart_ffi::DestroyMusic;

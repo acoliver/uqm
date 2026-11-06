@@ -1,4 +1,4 @@
-//! The Shipyard screen as input-loop frame functions: `DoShipyard` and
+//! The Shipyard screen as input-loop frame functions: `do_shipyard` and
 //! `DoModifyShips` (`shipyard.c`).
 //!
 //! [`ShipyardScreen::frame`] is one call of the C `InputFunc`. The rules live
@@ -110,7 +110,7 @@ enum DoorMotion {
     Close,
 }
 
-/// `DoShipyard`.
+/// `do_shipyard`.
 pub struct ShipyardScreen<'a, P: Platform + ?Sized> {
     platform: &'a P,
     assets: Option<ShipyardAssets<'a, P>>,
@@ -134,7 +134,7 @@ impl<'a, P: Platform + ?Sized> ShipyardScreen<'a, P> {
         }
     }
 
-    /// One `DoShipyard` or `DoModifyShips` call. `Ok(true)` keeps the loop
+    /// One `do_shipyard` or `DoModifyShips` call. `Ok(true)` keeps the loop
     /// running.
     pub fn frame(&mut self) -> Result<bool, StarbaseError> {
         let p = self.platform;
@@ -145,7 +145,7 @@ impl<'a, P: Platform + ?Sized> ShipyardScreen<'a, P> {
         }
         if p.current_activity().0 & activity_flags::CHECK_ABORT != 0 {
             return Ok(match self.mode {
-                // `pMS->InputFunc = DoShipyard`; the next frame exits.
+                // `pMS->InputFunc = do_shipyard`; the next frame exits.
                 Mode::Hangar(_) => {
                     self.mode = Mode::Menu;
                     true
@@ -175,7 +175,7 @@ impl<'a, P: Platform + ?Sized> ShipyardScreen<'a, P> {
             .expect("the Shipyard art is loaded")
     }
 
-    // --- DoShipyard ---------------------------------------------------
+    // --- do_shipyard ---------------------------------------------------
 
     fn menu_frame(&mut self) -> Result<bool, StarbaseError> {
         let p = self.platform;
@@ -500,7 +500,7 @@ impl<'a, P: Platform + ?Sized> ShipyardScreen<'a, P> {
 
     // --- DoModifyShips ---------------------------------------------------
 
-    /// `DoShipyard` selecting Crew: `DoModifyShips` sets itself up.
+    /// `do_shipyard` selecting Crew: `DoModifyShips` sets itself up.
     fn open_hangar(&mut self) -> Result<(), StarbaseError> {
         let p = self.platform;
         let hangar = Hangar {

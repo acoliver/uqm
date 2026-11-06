@@ -36,12 +36,19 @@ fn application_started(output_root: &Path) -> uqm_rust::app::Application {
     let script = validate_script(document, "readiness-trace.json").expect("and must validate");
     {
         let game = uqm_rust::engine::Game::new();
+        let input = uqm_rust::engine::input::InputControls::default();
         let observer = Some(AutomationObserver::new(
             script,
             output_root.to_path_buf(),
             game.world.activity_control(),
+            input.clone(),
+            game.kernel.configuration.clone(),
         ));
-        uqm_rust::app::Application::new(game, observer)
+        {
+            let mut application = uqm_rust::app::Application::new(game, observer);
+            application.install_input(input);
+            application
+        }
     }
 }
 

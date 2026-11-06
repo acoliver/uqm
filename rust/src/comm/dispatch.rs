@@ -272,7 +272,7 @@ mod ffi {
     }
 
     #[cfg(not(test))]
-    pub use crate::battle::encount_native::engine::UninitEncounter;
+    pub use crate::battle::encount_native::engine::uninit_encounter;
 
     #[cfg(not(test))]
     pub use crate::ui::sis::ClearSISRect;
@@ -608,8 +608,9 @@ fn run_encounter(cx: &mut Cx<'_>, io: &mut Io<'_>, which_comm: u32, ship_type: u
         encounter::finish_unhailed(cx, has_descriptor);
     }
     let status = encounter::fight_if_selected(cx, io);
+    let runtime = cx.kernel.input_runtime();
     // SAFETY: encounter teardown retains its legacy implementation for U2-10a.
-    cx.with_legacy(|| unsafe { ffi::UninitEncounter() });
+    cx.with_legacy(|| unsafe { ffi::uninit_encounter(runtime.input()) });
     status
 }
 

@@ -13,7 +13,7 @@ use crate::strings::unicode::utf8_string_count as utf8StringCount;
 use crate::strings::unicode::utf8_string_count_n as utf8StringCountN;
 
 #[cfg(not(test))]
-use crate::ui::getchar::DoTextEntry;
+use crate::ui::getchar::do_text_entry;
 
 extern "C" {
     #[cfg(not(test))]
@@ -288,7 +288,10 @@ unsafe fn match_next_star(state: *mut StarSearchState, reset: bool) {
 }
 
 #[cfg(not(test))]
-unsafe extern "C" fn on_star_name_change(entry: *mut TextEntryState) -> u32 {
+unsafe fn on_star_name_change(
+    entry: *mut TextEntryState,
+    _input: &crate::engine::input::InputSession,
+) -> u32 {
     let state = (*entry).CbParam.cast::<StarSearchState>();
     if strcmp(
         ptr::addr_of!((*state).text).cast(),
@@ -320,20 +323,15 @@ unsafe extern "C" fn on_star_name_change(entry: *mut TextEntryState) -> u32 {
     }
 }
 #[cfg(not(test))]
-unsafe extern "C" fn on_star_name_frame(entry: *mut TextEntryState) -> u32 {
+unsafe fn on_star_name_frame(
+    entry: *mut TextEntryState,
+    input: &crate::engine::input::InputSession,
+) -> u32 {
     let state = (*entry).CbParam.cast::<StarSearchState>();
-    if ptr::addr_of!(crate::c_bindings::controller_input::PulsedInputState)
-        .read()
-        .menu[22]
-        != 0
-    {
+    if input.pulsed().menu[22] != 0 {
         match_next_star(state, false);
         if (*state).current_index < 0 {
-            if ptr::addr_of!(crate::c_bindings::controller_input::PulsedInputState)
-                .read()
-                .menu[22]
-                != 0
-            {
+            if input.pulsed().menu[22] != 0 {
                 PlayMenuSound(2);
             }
             return 1;
@@ -352,8 +350,10 @@ unsafe extern "C" fn on_star_name_frame(entry: *mut TextEntryState) -> u32 {
 /// # Safety
 /// Game-thread only; `menu` is the live map menu. DoTextEntry owns the nested
 /// input loop and invokes the callbacks only until it returns.
-#[no_mangle]
-pub unsafe extern "C" fn DoStarSearch(menu: *mut MENU_STATE) -> u32 {
+pub unsafe fn do_star_search(
+    input: &crate::engine::input::InputSession,
+    menu: *mut MENU_STATE,
+) -> u32 {
     let state = rust_hmalloc(std::mem::size_of::<StarSearchState>()).cast::<StarSearchState>();
     if state.is_null() {
         return 0;
@@ -376,9 +376,9 @@ pub unsafe extern "C" fn DoStarSearch(menu: *mut MENU_STATE) -> u32 {
     entry.CbParam = state.cast();
     entry.ChangeCallback = Some(on_star_name_change);
     entry.FrameCallback = Some(on_star_name_frame);
-    SetMenuSounds(15, 16);
-    SetDefaultMenuRepeatDelay();
-    let success = DoTextEntry(&mut entry);
+    SetMenuSounds(input, 15, 16);
+    SetDefaultMenuRepeatDelay(input);
+    let success = do_text_entry(&mut entry, input);
     DrawSISMessageEx(ptr::addr_of!((*state).text).cast(), -1, -1, 2);
     rust_hfree(state.cast());
     success

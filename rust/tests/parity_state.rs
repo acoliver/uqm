@@ -64,7 +64,7 @@ type Fields = BTreeMap<String, String>;
 
 #[test]
 fn live_state_is_complete_stable_and_read_only() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         if let Some(directory) = std::env::var_os("UQM_STATE_TEST_CHILD") {
             exercise_live_callers(Path::new(&directory));
             return;
@@ -123,13 +123,18 @@ fn exercise_live_callers(directory: &Path) {
     .unwrap_or_else(|error| panic!("parse state test script: {error}"));
     let _application = {
         let game = uqm_rust::engine::Game::new();
+        let input = uqm_rust::engine::input::InputControls::default();
         let observer = Some(AutomationObserver::new(
             validate_script(document, "state-test.json")
                 .unwrap_or_else(|error| panic!("validate state test script: {error}")),
             directory.into(),
             game.world.activity_control(),
+            input.clone(),
+            game.kernel.configuration.clone(),
         ));
-        uqm_rust::app::Application::new(game, observer)
+        let mut application = uqm_rust::app::Application::new(game, observer);
+        application.install_input(input);
+        application
     };
     let observer = _application
         .observer()

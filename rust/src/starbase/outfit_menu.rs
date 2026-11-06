@@ -1,6 +1,6 @@
 //! Outfit menu states.
 //!
-//! Ports the decision logic of `DoOutfit` (`outfit.c:605-795`) and the
+//! Ports the decision logic of `do_outfit` (`outfit.c:605-795`) and the
 //! `PM_FUEL` stepping of `DoMenuChooser` (`menu.c:410-467`,
 //! `NextMenuState` `menu.c:211`, `PreviousMenuState` `menu.c:245`) as a pure
 //! frame step.
@@ -148,7 +148,7 @@ impl OutfitMenu {
         self.initialized
     }
 
-    /// One `DoOutfit` call.
+    /// One `do_outfit` call.
     #[must_use]
     pub fn step(self, input: OutfitFrameInput) -> (Self, OutfitStep) {
         let pulses = input.pulses;
@@ -398,7 +398,7 @@ mod tests {
 
     #[test]
     fn a_pending_load_does_not_exit_the_outfit_screen() {
-        // DoOutfit tests CHECK_ABORT only (outfit.c:607).
+        // do_outfit tests CHECK_ABORT only (outfit.c:607).
         let input = OutfitFrameInput {
             pulses: MenuPulses::default(),
             activity: ActivityValue::new(activity_flags::CHECK_LOAD),

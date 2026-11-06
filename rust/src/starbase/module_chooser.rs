@@ -385,7 +385,7 @@ pub struct ModuleChooser {
 }
 
 impl ModuleChooser {
-    /// The chooser as `DoOutfit` sets it up for the Modules entry
+    /// The chooser as `do_outfit` sets it up for the Modules entry
     /// (`outfit.c:737-745`).
     #[must_use]
     pub const fn new(chmmr_bomb_state: u32) -> Self {

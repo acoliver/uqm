@@ -149,8 +149,11 @@ pub(super) unsafe fn draw_star_con_box(
         convert(inside),
     );
 }
-pub(super) unsafe fn do_text_entry(entry: *mut TEXTENTRY_STATE) -> u32 {
-    crate::ui::getchar::DoTextEntry(entry.cast())
+pub(super) unsafe fn do_text_entry(
+    input: &crate::engine::input::InputSession,
+    entry: *mut TEXTENTRY_STATE,
+) -> u32 {
+    crate::ui::getchar::do_text_entry(entry.cast(), input)
 }
 
 pub(super) unsafe fn get_context_clip_rect(rect: *mut RECT) -> u32 {

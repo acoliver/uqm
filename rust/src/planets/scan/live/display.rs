@@ -54,8 +54,8 @@ unsafe fn pc_value(x: i16, y: i16, label: i32, value: String) {
     text(x + rect.width, y, Align::Left, value);
 }
 
-pub(super) unsafe fn coarse() {
-    if optWhichCoarseScan == 2 {
+pub(super) unsafe fn coarse(style: i32) {
+    if style == 2 {
         pc();
     } else {
         three_do();

@@ -11,7 +11,7 @@ use uqm_rust::ships::native::abi::*;
 
 #[test]
 fn descriptor_and_plasmoid_callbacks_match_mycon_c_data() {
-    battle_context::run(|| unsafe {
+    battle_context::run(|_| unsafe {
         let d = descriptor(SPECIES_ID_MYCON_ID);
         assert_eq!(d.ship_info.ship_flags, (FIRES_FORE | SEEKING_WEAPON) as u16);
         assert_eq!(d.ship_info.ship_cost, 21);
@@ -72,7 +72,7 @@ fn descriptor_and_plasmoid_callbacks_match_mycon_c_data() {
 
 #[test]
 fn plasma_launch_and_postprocess_boundaries_match_c() {
-    battle_context::run(|| unsafe {
+    battle_context::run(|_| unsafe {
         let _battle = Battle::new(8);
         let mut fixture = Ship::bare(&_battle, SPECIES_ID_MYCON_ID, 0);
         let ship = fixture.ptr();

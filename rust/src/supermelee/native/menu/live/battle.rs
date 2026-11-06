@@ -26,20 +26,24 @@ pub(super) unsafe fn ready() -> isize {
         done
     }
 }
-unsafe fn prepare_confirmation(state: *mut MELEE_STATE, controls: [u8; 2]) -> Option<u32> {
+unsafe fn prepare_confirmation(
+    input: &crate::engine::input::InputSession,
+    state: *mut MELEE_STATE,
+    controls: [u8; 2],
+) -> Option<u32> {
     let session = &(*state).netplay;
-    GamePaused = 0;
-    if key(KEY_MENU_CANCEL) {
+    input.set_paused(false);
+    if key(input, KEY_MENU_CANCEL) {
         (*state).phase = crate::supermelee::netplay::session::MenuPhase::Menu;
         (*state).netplay.cancel_confirmations();
         status(game_string(NETMELEE_STRING_BASE as i32 + 4));
         return Some(1);
     }
-    if key(KEY_MENU_LEFT) || key(KEY_MENU_UP) || key(KEY_MENU_DOWN) {
+    if key(input, KEY_MENU_LEFT) || key(input, KEY_MENU_UP) || key(input, KEY_MENU_DOWN) {
         (*state).phase = crate::supermelee::netplay::session::MenuPhase::Menu;
         (*state).netplay.cancel_confirmations();
         status(c"".as_ptr());
-        return Some(DoMelee(state));
+        return Some(do_melee(state, input));
     }
     (*state).netplay.close_disconnected_connections();
     poll_menu(state, 0);
@@ -83,11 +87,12 @@ unsafe fn prepare_confirmation(state: *mut MELEE_STATE, controls: [u8; 2]) -> Op
     None
 }
 pub(super) unsafe fn confirm(
+    input: &crate::engine::input::InputSession,
     state: *mut MELEE_STATE,
     cx: &mut crate::engine::battle::Cx<'_>,
 ) -> u32 {
     let controls = cx.kernel.player_control;
-    if let Some(result) = cx.with_legacy(|| prepare_confirmation(state, controls)) {
+    if let Some(result) = cx.with_legacy(|| prepare_confirmation(input, state, controls)) {
         return result;
     }
     let session = (*state).netplay.clone();
@@ -196,18 +201,21 @@ pub(super) unsafe fn start_button(state: *mut MELEE_STATE) {
     (*state).netplay.confirm_connections();
     (*state).phase = crate::supermelee::netplay::session::MenuPhase::Confirm;
 }
-pub(super) unsafe extern "C" fn connecting(state: *mut MELEE_STATE) -> u32 {
+pub(super) unsafe fn connecting(
+    state: *mut MELEE_STATE,
+    input: &crate::engine::input::InputSession,
+) -> u32 {
     // SAFETY: the function contract requires live, game-thread-owned records
     // and callback arguments for all legacy accesses in this operation.
     unsafe {
         let time = GetTimeCounter();
         let side = usize::from((*state).melee_option == 0);
-        GamePaused = 0;
+        input.set_paused(false);
         if crate::engine::World::current().read(|world| world.activity()) & CHECK_ABORT as u16 != 0
         {
             return 0;
         }
-        SetMenuSounds(0, 0);
+        SetMenuSounds(input, 0, 0);
         if (*state).initialized == 0 {
             if !connection(side).is_none() {
                 close_player_network_connection(side as u16);
@@ -244,7 +252,7 @@ pub(super) unsafe extern "C" fn connecting(state: *mut MELEE_STATE) -> u32 {
             UnbatchGraphics();
         }
         poll_menu(state, 0);
-        if key(KEY_MENU_CANCEL) {
+        if key(input, KEY_MENU_CANCEL) {
             if !connection(side).is_none() {
                 close_player_network_connection(side as u16);
                 status_player(side as isize);

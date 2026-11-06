@@ -319,17 +319,17 @@ impl RestartMenuOps for CffiOps<'_, '_, '_> {
     }
 
     fn get_menu_input(&self) -> MenuInputState {
-        self.legacy(|| {
-            // SAFETY: Reads global input state arrays via C accessors.
-            unsafe {
-                MenuInputState {
-                    select: c_extern::uqm_get_pulsed_menu_key(c_extern::KEY_MENU_SELECT) != 0,
-                    up: c_extern::uqm_get_pulsed_menu_key(c_extern::KEY_MENU_UP) != 0,
-                    down: c_extern::uqm_get_pulsed_menu_key(c_extern::KEY_MENU_DOWN) != 0,
-                    left: c_extern::uqm_get_pulsed_menu_key(c_extern::KEY_MENU_LEFT) != 0,
-                    right: c_extern::uqm_get_pulsed_menu_key(c_extern::KEY_MENU_RIGHT) != 0,
-                    mouse_down: c_extern::uqm_get_mouse_button_down() != 0,
-                }
+        self.owned(|cx, _| {
+            let menu = cx.kernel.input_controls().pulsed().menu;
+            MenuInputState {
+                select: menu[c_extern::KEY_MENU_SELECT as usize] != 0,
+                up: menu[c_extern::KEY_MENU_UP as usize] != 0,
+                down: menu[c_extern::KEY_MENU_DOWN as usize] != 0,
+                left: menu[c_extern::KEY_MENU_LEFT as usize] != 0,
+                right: menu[c_extern::KEY_MENU_RIGHT as usize] != 0,
+                // SAFETY: the SDL provider samples mouse input on this game thread.
+                mouse_down: cx
+                    .with_legacy(|| unsafe { c_extern::uqm_get_mouse_button_down() != 0 }),
             }
         })
     }
@@ -361,10 +361,7 @@ impl RestartMenuOps for CffiOps<'_, '_, '_> {
     }
 
     fn set_game_paused(&self, val: bool) {
-        self.legacy(|| {
-            // SAFETY: Writes a global pause flag.
-            unsafe { c_extern::uqm_set_game_paused(if val { 1 } else { 0 }) }
-        })
+        self.owned(|cx, _| cx.kernel.input_controls().set_paused(val));
     }
 
     fn reinit_race_queues(&self) {
@@ -500,17 +497,12 @@ impl RestartMenuOps for CffiOps<'_, '_, '_> {
         })
     }
     fn set_menu_sounds(&self, s0: u16, s1: u16) {
-        self.legacy(|| {
-            // SAFETY: SetMenuSounds configures menu sound effects.
-            unsafe { c_extern::SetMenuSounds(s0, s1) }
-        })
+        self.owned(|cx, _| cx.kernel.input_controls().set_menu_sounds(s0, s1));
     }
     fn set_default_menu_repeat_delay(&self) {
-        self.legacy(|| {
-            // SAFETY: SetDefaultMenuRepeatDelay resets menu timing.
-            unsafe { c_extern::SetDefaultMenuRepeatDelay() }
-        })
+        self.owned(|cx, _| c_extern::SetDefaultMenuRepeatDelay(cx.kernel.input_controls()));
     }
+
     fn set_transition_source_null(&self) {
         self.legacy(|| {
             // SAFETY: Passing null is the documented no-source pattern.
@@ -690,9 +682,16 @@ impl RestartMenuOps for CffiOps<'_, '_, '_> {
     fn do_popup_window_msg(&self, string_id: u16) {
         self.owned(|cx, _| {
             let strings = cx.kernel.game_strings;
+            let runtime = cx.kernel.input_runtime();
             cx.with_legacy(|| {
                 // SAFETY: the retained Kernel owns the table through synchronous popup rendering.
-                unsafe { super::menu_abi::uqm_do_popup_window_msg(strings.cast(), string_id) }
+                unsafe {
+                    super::menu_abi::uqm_do_popup_window_msg(
+                        runtime.input(),
+                        strings.cast(),
+                        string_id,
+                    )
+                }
             })
         })
     }

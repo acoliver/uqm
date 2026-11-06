@@ -60,7 +60,7 @@ unsafe fn avenger(fleet: &mut Ship<'_>) -> *mut ElementRecord {
 
 #[test]
 fn avenger_descriptor_matches_the_c_template() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let desc = battle::descriptor(SPECIES_ID_ILWRATH_ID);
             assert_eq!(desc.ship_info.ship_flags, FIRES_FORE as u16);
@@ -143,7 +143,7 @@ fn avenger_descriptor_matches_the_c_template() {
 
 #[test]
 fn flame_inherits_the_ship_velocity_and_starts_on_the_first_frame() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
             uqm_rust::engine::World::current().write(|world| world.set_activity(0));
@@ -189,7 +189,7 @@ fn flame_inherits_the_ship_velocity_and_starts_on_the_first_frame() {
 
 #[test]
 fn flame_advances_its_animation_every_next_turn_frames() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
             uqm_rust::engine::World::current().write(|world| world.set_activity(0));
@@ -234,7 +234,7 @@ fn flame_advances_its_animation_every_next_turn_frames() {
 
 #[test]
 fn flame_that_hits_goes_nonsolid_without_disappearing() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
             uqm_rust::engine::World::current().write(|world| world.set_activity(0));
@@ -275,7 +275,7 @@ fn flame_that_hits_goes_nonsolid_without_disappearing() {
 
 #[test]
 fn special_key_starts_the_cloak_and_spends_energy() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
             uqm_rust::engine::World::current().write(|world| world.set_activity(0));
@@ -303,7 +303,7 @@ fn special_key_starts_the_cloak_and_spends_energy() {
 
 #[test]
 fn cloak_needs_energy_and_a_ready_counter() {
-    battle_context::run(|| unsafe {
+    battle_context::run(|_| unsafe {
         let _battle = Battle::new(16);
         uqm_rust::engine::World::current().write(|world| world.set_activity(0));
         uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
@@ -337,7 +337,7 @@ fn cloak_needs_energy_and_a_ready_counter() {
 
 #[test]
 fn cloak_fades_to_black_one_step_per_frame_and_drops_pursuers() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
             uqm_rust::engine::World::current().write(|world| world.set_activity(0));
@@ -379,7 +379,7 @@ fn cloak_fades_to_black_one_step_per_frame_and_drops_pursuers() {
 
 #[test]
 fn decloak_walks_back_up_and_ends_as_a_plain_stamp() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
             uqm_rust::engine::World::current().write(|world| world.set_activity(0));
@@ -433,7 +433,7 @@ fn decloak_walks_back_up_and_ends_as_a_plain_stamp() {
 
 #[test]
 fn firing_while_cloaked_decloaks_and_turns_toward_the_target() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
             uqm_rust::engine::World::current().write(|world| world.set_activity(0));
@@ -466,7 +466,7 @@ fn firing_while_cloaked_decloaks_and_turns_toward_the_target() {
 
 #[test]
 fn decloak_aim_leads_the_target_by_four_frames_of_motion() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
             uqm_rust::engine::World::current().write(|world| world.set_activity(0));
@@ -495,7 +495,7 @@ fn decloak_aim_leads_the_target_by_four_frames_of_motion() {
 
 #[test]
 fn firing_while_cloaked_without_a_target_keeps_the_facing() {
-    battle_context::run(|| unsafe {
+    battle_context::run(|_| unsafe {
         let _battle = Battle::new(16);
         uqm_rust::engine::World::current().write(|world| world.set_activity(0));
         uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
@@ -519,7 +519,7 @@ fn firing_while_cloaked_without_a_target_keeps_the_facing() {
 
 #[test]
 fn firing_needs_energy_to_break_the_cloak() {
-    battle_context::run(|| unsafe {
+    battle_context::run(|_| unsafe {
         let _battle = Battle::new(16);
         uqm_rust::engine::World::current().write(|world| world.set_activity(0));
         uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
@@ -569,7 +569,7 @@ fn concerns_with(enemy: *mut ElementRecord, which_turn: COUNT) -> [EVALUATE_DESC
 
 #[test]
 fn intelligence_pursues_and_ignores_incoming_fire_when_flaming() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
             uqm_rust::engine::World::current().write(|world| world.set_activity(0));
@@ -603,7 +603,7 @@ fn intelligence_pursues_and_ignores_incoming_fire_when_flaming() {
 
 #[test]
 fn intelligence_fires_flames_in_range_and_unwinds_the_cloak_input() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
             uqm_rust::engine::World::current().write(|world| world.set_activity(0));
@@ -640,7 +640,7 @@ fn intelligence_fires_flames_in_range_and_unwinds_the_cloak_input() {
 
 #[test]
 fn intelligence_flame_window_depends_on_enemy_and_incoming_fire_timing() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
             uqm_rust::engine::World::current().write(|world| world.set_activity(0));
@@ -674,7 +674,7 @@ fn intelligence_flame_window_depends_on_enemy_and_incoming_fire_timing() {
 
 #[test]
 fn intelligence_cloaks_when_idle_and_ready() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
             uqm_rust::engine::World::current().write(|world| world.set_activity(0));
@@ -709,7 +709,7 @@ fn intelligence_cloaks_when_idle_and_ready() {
 
 #[test]
 fn intelligence_skips_cloaking_during_the_probe_encounter() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
             uqm_rust::engine::World::current().write(|world| world.set_activity(0));
@@ -745,7 +745,7 @@ fn intelligence_skips_cloaking_during_the_probe_encounter() {
 
 #[test]
 fn intelligence_runs_the_engine_pursuit_when_the_enemy_is_known() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
             uqm_rust::engine::World::current().write(|world| world.set_activity(0));

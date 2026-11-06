@@ -9,7 +9,7 @@ use uqm_rust::ships::native::abi::*;
 
 #[test]
 fn laser_construction_preserves_fields_and_pool_exhaustion() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _owner = Battle::new(1);
         // SAFETY: the serialized fixture owns the published context and its pool.
         unsafe {
@@ -59,7 +59,7 @@ fn laser_construction_preserves_fields_and_pool_exhaustion() {
 
 #[test]
 fn gravity_reads_next_positions_and_preserves_queue_order() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let owner = Battle::new(4);
         let ship = Ship::bare(&owner, SPECIES_ID_VUX_ID, 0);
         // SAFETY: the serialized fixture owns all records for this call.
@@ -88,7 +88,7 @@ fn gravity_reads_next_positions_and_preserves_queue_order() {
 
 #[test]
 fn insufficient_energy_sets_status_without_resetting_counter_or_energy() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let owner = Battle::new(4);
         let mut ship = Ship::bare(&owner, SPECIES_ID_VUX_ID, 0);
         // SAFETY: the fixture owns the published battle and this checked ship.
@@ -107,7 +107,7 @@ fn insufficient_energy_sets_status_without_resetting_counter_or_energy() {
 
 #[test]
 fn ion_trail_is_inserted_before_the_ship_and_keeps_its_owner() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let owner = Battle::new(4);
         // SAFETY: the serialized fixture retains the ship, its frames and the published context.
         unsafe {

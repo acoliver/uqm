@@ -2,14 +2,7 @@
 
 use crate::navigation::abi::Color;
 
-const fn rgb15(r: u8, g: u8, b: u8) -> Color {
-    Color {
-        r: (r << 3) | (r >> 2),
-        g: (g << 3) | (g >> 2),
-        b: (b << 3) | (b >> 2),
-        a: 255,
-    }
-}
+use super::rgb15;
 
 pub(super) const MENU_HIGHLIGHT_COLOR: Color = rgb15(0x1F, 0x1F, 0x00);
 pub(super) const MENU_TEXT_COLOR: Color = rgb15(0x06, 0x06, 0x06);

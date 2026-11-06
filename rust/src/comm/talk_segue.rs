@@ -16,11 +16,13 @@
 use super::response::ResponseFunc;
 use super::response_ui::{refresh_responses, select_conversation_summary};
 use super::state::CommState;
+use crate::engine::input::InputSession;
 #[cfg(not(test))]
 use crate::engine::observe::CheckpointView;
 #[cfg(not(test))]
 use crate::engine::Kernel;
 use crate::engine::{battle::Cx, observe::Io, World};
+use std::ffi::c_int;
 
 fn communication_background_volume(background: u8, using_speech: u32) -> u8 {
     if using_speech != 0 {
@@ -67,19 +69,14 @@ pub(super) mod c_bridge {
     pub fn set_color_map_from_comm_data() {}
     pub fn call_refresh_responses(_cx: &mut super::Cx<'_>, _top: u8, _count: u8, _cur: u8) {}
     pub fn call_select_conversation_summary(_cx: &mut super::Cx<'_>, _io: &mut super::Io<'_>) {}
-    pub fn call_update_comm_graphics() {}
+    pub fn call_update_comm_graphics(_input: &crate::engine::input::InputSession) {}
     pub fn call_feedback_player_phrase(_cx: &mut super::Cx<'_>) {}
 }
 
 #[cfg(not(test))]
 pub(super) mod c_bridge {
-    use crate::c_bindings::controller_input::{
-        CurrentInputState, PulsedInputState, CONTROLLER_INPUT_STATE as ControllerInputState,
-    };
     use crate::comm::locdata::COMM_DATA;
     #[cfg(not(test))]
-    use std::ffi::c_int;
-
     pub use crate::sound::heart_ffi::fade_music as FadeMusic;
     pub use crate::sound::heart_ffi::fast_forward_page as FastForward_Page;
     pub use crate::sound::heart_ffi::fast_forward_smooth as FastForward_Smooth;
@@ -90,6 +87,7 @@ pub(super) mod c_bridge {
     pub use crate::sound::heart_ffi::playing_track as PlayingTrack;
     pub use crate::sound::heart_ffi::stop_track as StopTrack;
     pub use crate::time::source as clock;
+    use std::ffi::c_int;
 
     pub use crate::comm::comm_abi::comm_CheckSubtitles;
 
@@ -117,7 +115,7 @@ pub(super) mod c_bridge {
 
     pub use crate::comm::commanim_abi::runtime::ProcessCommAnimations;
 
-    pub use crate::comm::comm_abi::comm_RedrawSubtitles;
+    pub use crate::comm::comm_abi::comm_redraw_subtitles;
 
     pub use crate::ui::settings::PlayMusic;
 
@@ -136,27 +134,12 @@ pub(super) mod c_bridge {
     pub use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
     pub use crate::threading::pacing::linked::sleep_thread as SleepThread;
 
-    extern "C" {
-
-        pub static mut optSmoothScroll: i32;
+    pub fn pulsed_menu_key(input: &super::InputSession, key_index: c_int) -> c_int {
+        input.pulsed().menu[key_index as usize]
     }
 
-    /// Direct access to PulsedInputState.menu[key_index] (replaces c_GetPulsedMenuKey)
-    pub unsafe fn pulsed_menu_key(key_index: c_int) -> c_int {
-        std::ptr::addr_of_mut!(PulsedInputState)
-            .cast::<ControllerInputState>()
-            .as_mut()
-            .map(|s| s.menu[key_index as usize])
-            .unwrap_or(0)
-    }
-
-    /// Direct access to CurrentInputState.menu[key_index] (replaces c_GetCurrentMenuKey)
-    pub unsafe fn current_menu_key(key_index: c_int) -> c_int {
-        std::ptr::addr_of!(CurrentInputState)
-            .cast::<ControllerInputState>()
-            .as_ref()
-            .map(|s| s.menu[key_index as usize])
-            .unwrap_or(0)
+    pub fn current_menu_key(input: &super::InputSession, key_index: c_int) -> c_int {
+        input.current().menu[key_index as usize]
     }
 
     /// Check if CommData.AlienTransitionDesc.NumFrames > 0 (replaces c_HasTransitionAnim)
@@ -249,8 +232,8 @@ pub(super) mod c_bridge {
         super::super::response_ui::select_conversation_summary_production(cx, io);
     }
     #[cfg(not(test))]
-    pub fn call_update_comm_graphics() {
-        unsafe { super::do_update_animations(false) }
+    pub fn call_update_comm_graphics(input: &crate::engine::input::InputSession) {
+        unsafe { super::do_update_animations(input, false) }
     }
     #[cfg(not(test))]
     pub fn call_feedback_player_phrase(cx: &mut super::Cx<'_>) {
@@ -282,10 +265,12 @@ pub(super) mod c_bridge {
 #[cfg(not(test))]
 pub mod dinput {
     use super::fresh_press::FreshPressLatch;
-    use super::{c_bridge, CheckpointView, KEY_MENU_CANCEL, KEY_MENU_LEFT, KEY_MENU_RIGHT};
+    use super::{
+        c_bridge, c_int, CheckpointView, InputSession, KEY_MENU_CANCEL, KEY_MENU_LEFT,
+        KEY_MENU_RIGHT,
+    };
     use crate::engine::{battle::Cx, observe::Io};
     use crate::mainloop::restart_menu::c_extern::SetMenuSounds;
-    use std::ffi::c_int;
 
     const MENU_SOUND_NONE: u32 = 0;
     const OPT_PC: c_int = 0x02;
@@ -315,7 +300,11 @@ pub mod dinput {
     }
 
     // DoInput callback for talk segue (replaces c_DoTalkSegue)
-    unsafe fn do_talk_segue_frame(ts: &mut TalkingStateDInput, activity: u16) -> c_int {
+    unsafe fn do_talk_segue_frame(
+        input: &InputSession,
+        ts: &mut TalkingStateDInput,
+        activity: u16,
+    ) -> c_int {
         // Abort check: GLOBAL(CurrentActivity) & CHECK_ABORT
         let activity = u32::from(activity);
         if (activity & CHECK_ABORT) != 0 {
@@ -324,28 +313,28 @@ pub mod dinput {
         }
 
         // Cancel: skip to end
-        if unsafe { c_bridge::pulsed_menu_key(KEY_MENU_CANCEL) } != 0 {
+        if c_bridge::pulsed_menu_key(input, KEY_MENU_CANCEL) != 0 {
             c_bridge::JumpTrack();
             ts.ended = 1;
             return 0;
         }
 
         // Seek input
-        let (left, right) = if c_bridge::optSmoothScroll == OPT_PC {
+        let (left, right) = if input.preferences().smooth_scroll == OPT_PC {
             (
-                unsafe { c_bridge::pulsed_menu_key(KEY_MENU_LEFT) } != 0,
-                unsafe { c_bridge::pulsed_menu_key(KEY_MENU_RIGHT) } != 0,
+                c_bridge::pulsed_menu_key(input, KEY_MENU_LEFT) != 0,
+                c_bridge::pulsed_menu_key(input, KEY_MENU_RIGHT) != 0,
             )
         } else {
             (
-                unsafe { c_bridge::current_menu_key(KEY_MENU_LEFT) } != 0,
-                unsafe { c_bridge::current_menu_key(KEY_MENU_RIGHT) } != 0,
+                c_bridge::current_menu_key(input, KEY_MENU_LEFT) != 0,
+                c_bridge::current_menu_key(input, KEY_MENU_RIGHT) != 0,
             )
         };
 
         if right {
             super::set_slider_image_frame(3);
-            if c_bridge::optSmoothScroll == OPT_PC {
+            if input.preferences().smooth_scroll == OPT_PC {
                 c_bridge::FastForward_Page();
             } else {
                 c_bridge::FastForward_Smooth();
@@ -354,7 +343,7 @@ pub mod dinput {
         } else if left || ts.rewind != 0 {
             ts.rewind = 0;
             super::set_slider_image_frame(4);
-            if c_bridge::optSmoothScroll == OPT_PC {
+            if input.preferences().smooth_scroll == OPT_PC {
                 c_bridge::FastReverse_Page();
             } else {
                 c_bridge::FastReverse_Smooth();
@@ -367,7 +356,7 @@ pub mod dinput {
             c_bridge::comm_CheckSubtitles();
         }
 
-        unsafe { super::do_update_animations(ts.seeking != 0) };
+        unsafe { super::do_update_animations(input, ts.seeking != 0) };
         rust_update_speech_graphics();
 
         let cur_track = c_bridge::PlayingTrack();
@@ -381,7 +370,12 @@ pub mod dinput {
 
     /// Ported from c_RunTalkSegue — runs the talk segue via DoInput.
     /// Returns true if playback reached its natural end.
-    pub fn run_talk_segue_dinput(cx: &mut Cx<'_>, io: &mut Io<'_>, wait_track: u32) -> bool {
+    pub fn run_talk_segue_dinput(
+        input: &InputSession,
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
+        wait_track: u32,
+    ) -> bool {
         cx.with_legacy(|| {
             // Transition animation to talking state
             if unsafe { c_bridge::want_talking_anim() } != 0
@@ -392,7 +386,7 @@ pub mod dinput {
                 }
                 unsafe { c_bridge::set_run_talking_anim() };
                 while unsafe { c_bridge::running_intro_anim() } != 0 {
-                    unsafe { super::do_run_comm_anim_frame() };
+                    unsafe { super::do_run_comm_anim_frame(input) };
                 }
             }
         });
@@ -416,11 +410,11 @@ pub mod dinput {
                 c_bridge::PlayTrack();
             }
 
-            unsafe { SetMenuSounds(MENU_SOUND_NONE as u16, MENU_SOUND_NONE as u16) };
+            SetMenuSounds(input, MENU_SOUND_NONE as u16, MENU_SOUND_NONE as u16);
         });
         cx.run_input(io, false, |cx, _| {
             let activity = cx.world.activity();
-            cx.with_legacy(|| unsafe { do_talk_segue_frame(&mut ts, activity) != 0 })
+            cx.with_legacy(|| unsafe { do_talk_segue_frame(input, &mut ts, activity) != 0 })
         });
         cx.with_legacy(|| {
             if wait_track == 0 {
@@ -438,7 +432,7 @@ pub mod dinput {
                 unsafe { c_bridge::set_stop_talking_anim() };
             }
             while unsafe { c_bridge::running_talking_anim() } != 0 {
-                unsafe { super::do_run_comm_anim_frame() };
+                unsafe { super::do_run_comm_anim_frame(input) };
             }
         });
         ts.ended != 0
@@ -446,6 +440,7 @@ pub mod dinput {
 
     // DoInput callback for last replay (replaces c_DoLastReplay)
     unsafe fn do_last_replay_frame(
+        input: &InputSession,
         lrs: &mut LastReplayStateDInput,
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
@@ -463,8 +458,8 @@ pub mod dinput {
 
         // Both latches advance every callback so neither goes stale while the
         // other acts.
-        let cancel_pressed = lrs.cancel.pressed(KEY_MENU_CANCEL);
-        let left_pressed = lrs.left.pressed(KEY_MENU_LEFT);
+        let cancel_pressed = lrs.cancel.pressed(input, KEY_MENU_CANCEL);
+        let left_pressed = lrs.left.pressed(input, KEY_MENU_LEFT);
 
         if cancel_pressed && !won_last_battle {
             let speech = cx.kernel.using_speech;
@@ -492,13 +487,13 @@ pub mod dinput {
                     c_bridge::ONE_SECOND_TICKS as i16,
                 )
             });
-            run_talk_segue_dinput(cx, io, 0);
+            run_talk_segue_dinput(input, cx, io, 0);
             lrs.time_out = cx
                 .with_legacy(|| c_bridge::FadeMusic(0, (c_bridge::ONE_SECOND_TICKS * 2) as i16))
                 + (c_bridge::ONE_SECOND_TICKS as u32) / 60;
         }
 
-        unsafe { cx.with_legacy(|| super::do_update_animations(false)) };
+        unsafe { cx.with_legacy(|| super::do_update_animations(input, false)) };
 
         unsafe { cx.with_legacy(|| SleepThreadUntil(lrs.next_time)) };
         lrs.next_time = c_bridge::clock::now_ticks() + (c_bridge::ONE_SECOND_TICKS as u32) / 40;
@@ -508,14 +503,16 @@ pub mod dinput {
 
     /// Ported from c_RunLastReplay — runs the last replay via DoInput.
     pub fn run_last_replay_dinput(cx: &mut Cx<'_>, io: &mut Io<'_>, timeout: i32) {
+        let runtime = cx.kernel.input_runtime();
+        let input = runtime.input();
         let mut lrs = LastReplayStateDInput {
             next_time: 0,
             time_out: timeout as u32 + (c_bridge::ONE_SECOND_TICKS as u32) / 60,
-            cancel: FreshPressLatch::entering(KEY_MENU_CANCEL),
-            left: FreshPressLatch::entering(KEY_MENU_LEFT),
+            cancel: FreshPressLatch::entering(input, KEY_MENU_CANCEL),
+            left: FreshPressLatch::entering(input, KEY_MENU_LEFT),
         };
         cx.run_input(io, false, |cx, io| unsafe {
-            do_last_replay_frame(&mut lrs, cx, io) != 0
+            do_last_replay_frame(input, &mut lrs, cx, io) != 0
         });
     }
 }
@@ -523,19 +520,12 @@ pub mod dinput {
 // Menu key indices — matches the second enum in sc2/src/uqm/controls.h
 // (KEY_PAUSE=0..KEY_FULLSCREEN=4 precede these)
 // @plan PLAN-20260326-COMMPT2.P03
-#[cfg(not(test))]
-use std::ffi::c_int;
-#[cfg(not(test))]
+
 const KEY_MENU_UP: c_int = 5;
-#[cfg(not(test))]
 const KEY_MENU_DOWN: c_int = 6;
-#[cfg(not(test))]
 const KEY_MENU_LEFT: c_int = 7;
-#[cfg(not(test))]
 const KEY_MENU_RIGHT: c_int = 8;
-#[cfg(not(test))]
 const KEY_MENU_SELECT: c_int = 9;
-#[cfg(not(test))]
 const KEY_MENU_CANCEL: c_int = 10;
 
 // ============================================================================
@@ -619,7 +609,12 @@ impl Eq for CommunicationResult {}
 /// In production the caller loops over this inside `DoInput`; here we expose
 /// the per-iteration logic so it can be driven by the Rust loop in
 /// `talk_segue`.
-pub fn do_talk_segue(world: &World, state: &mut CommState, ts: &mut TalkingState) -> bool {
+pub fn do_talk_segue(
+    input: &InputSession,
+    world: &World,
+    state: &mut CommState,
+    ts: &mut TalkingState,
+) -> bool {
     // ---- abort check -------------------------------------------------------
     if check_abort_external(world) {
         ts.ended = true;
@@ -632,28 +627,28 @@ pub fn do_talk_segue(world: &World, state: &mut CommState, ts: &mut TalkingState
     // and PulsedInputState from ImmediateInputState.
     #[cfg(not(test))]
     unsafe {
-        c_bridge::UpdateInputState();
+        c_bridge::UpdateInputState(input);
     }
 
     // ---- cancel (skip to end of current phrase) ----------------------------
-    if check_cancel_input(state) {
+    if check_cancel_input(input) {
         jump_track(state);
         ts.ended = true;
         return false;
     }
 
     // ---- seek input --------------------------------------------------------
-    let left = check_left_input(state);
-    let right = check_right_input(state);
+    let left = check_left_input(input);
+    let right = check_right_input(input);
 
     if right {
         set_slider_image(state, SliderImage::FastForward);
-        fast_forward(state);
+        fast_forward(input, state);
         ts.seeking = true;
     } else if left || ts.rewind {
         ts.rewind = false;
         set_slider_image(state, SliderImage::FastReverse);
-        fast_reverse(state);
+        fast_reverse(input, state);
         ts.seeking = true;
     } else if ts.seeking {
         // Seeking just ended — restore play slider
@@ -663,7 +658,7 @@ pub fn do_talk_segue(world: &World, state: &mut CommState, ts: &mut TalkingState
         check_subtitles(state);
     }
 
-    update_animations(state, ts.seeking);
+    update_animations(input, state, ts.seeking);
     update_speech_graphics(state);
 
     // In test mode, advance the track each iteration to prevent infinite loops.
@@ -692,7 +687,12 @@ pub fn do_talk_segue(world: &World, state: &mut CommState, ts: &mut TalkingState
 ///
 /// Matches C `TalkSegue`.  Returns `true` if playback reached its natural
 /// end (i.e. `talkingState.ended`).
-pub fn talk_segue(world: &World, state: &mut CommState, wait_track: u32) -> bool {
+pub fn talk_segue(
+    input: &InputSession,
+    world: &World,
+    state: &mut CommState,
+    wait_track: u32,
+) -> bool {
     // ---- transition to talking animation, if available ---------------------
     if want_talking_anim(state) && have_talking_anim(state) {
         if has_transition_anim(state) {
@@ -702,7 +702,7 @@ pub fn talk_segue(world: &World, state: &mut CommState, wait_track: u32) -> bool
 
         // wait for intro animation to finish
         while running_intro_anim(state) {
-            run_comm_anim_frame(state);
+            run_comm_anim_frame(input, state);
         }
     }
 
@@ -724,7 +724,7 @@ pub fn talk_segue(world: &World, state: &mut CommState, wait_track: u32) -> bool
     ts.wait_track = effective_wait;
 
     // ---- main loop ---------------------------------------------------------
-    while do_talk_segue(world, state, &mut ts) {
+    while do_talk_segue(input, world, state, &mut ts) {
         // loop body is in do_talk_segue
     }
 
@@ -741,7 +741,7 @@ pub fn talk_segue(world: &World, state: &mut CommState, wait_track: u32) -> bool
     }
 
     while running_talking_anim(state) {
-        run_comm_anim_frame(state);
+        run_comm_anim_frame(input, state);
     }
 
     ts.ended
@@ -756,7 +756,12 @@ pub fn talk_segue(world: &World, state: &mut CommState, wait_track: u32) -> bool
 /// Matches C `AlienTalkSegue`.  On the first call this encounter, initialises
 /// speech graphics, starts music, sets up animations.  Subsequent calls just
 /// delegate to `talk_segue`.
-pub fn alien_talk_segue(cx: &mut Cx<'_>, state: &mut CommState, wait_track: u32) {
+pub fn alien_talk_segue(
+    input: &InputSession,
+    cx: &mut Cx<'_>,
+    state: &mut CommState,
+    wait_track: u32,
+) {
     // Skip if abort or already finished
     if check_abort_external(cx.world) || state.is_talking_finished() {
         return;
@@ -783,7 +788,7 @@ pub fn alien_talk_segue(cx: &mut Cx<'_>, state: &mut CommState, wait_track: u32)
         cx.kernel.last_activity &= !0x1000;
     }
 
-    let finished = talk_segue(cx.world, state, wait_track);
+    let finished = talk_segue(input, cx.world, state, wait_track);
     state.set_talking_finished(finished);
 
     if finished {
@@ -842,6 +847,7 @@ pub fn select_response(activity: u16, state: &mut CommState) -> Option<(Response
 ///
 /// Matches C `PlayerResponseInput`.
 pub fn player_response_input(
+    input: &InputSession,
     cx: &mut Cx<'_>,
     io: &mut Io<'_>,
     state: &mut CommState,
@@ -852,24 +858,20 @@ pub fn player_response_input(
         refresh_responses(cx.world.activity(), state);
     }
 
-    if check_select_input(state) {
-        #[cfg(test)]
-        {
-            state.select_input_pending = false;
-        }
+    if check_select_input(input) {
         return PlayerInputResult::Selected;
     }
 
-    if check_cancel_input(state) && !won_last_battle_external(cx.world) {
+    if check_cancel_input(input) && !won_last_battle_external(cx.world) {
         select_conversation_summary(cx, io, state);
         return PlayerInputResult::Summary;
     }
 
-    if check_left_input(state) {
+    if check_left_input(input) {
         // Replay last phrase
         fade_music_to_background(state);
         state.response_ui().draw_feedback(cx.world.activity(), "");
-        talk_segue(cx.world, state, 0);
+        talk_segue(input, cx.world, state, 0);
         if !check_abort_external(cx.world) {
             refresh_responses(cx.world.activity(), state);
             fade_music_to_foreground(state);
@@ -885,17 +887,17 @@ pub fn player_response_input(
 
     let cur = state.responses().selected().max(0) as usize;
 
-    if check_up_input(state) {
+    if check_up_input(input) {
         let next = if cur == 0 { count - 1 } else { cur - 1 };
         state.responses_mut().select(next as i32);
         update_response_scroll(cx.world.activity(), state);
-    } else if check_down_input(state) {
+    } else if check_down_input(input) {
         let next = (cur + 1) % count;
         state.responses_mut().select(next as i32);
         update_response_scroll(cx.world.activity(), state);
     }
 
-    update_comm_graphics(state);
+    update_comm_graphics(input, state);
 
     PlayerInputResult::Continue
 }
@@ -955,16 +957,17 @@ pub fn fade_music_to_foreground_bridge() {
 /// @requirement REQ-DC-001..005, REQ-RL-004
 /// @pseudocode 003-do-communication-rewrite lines 07-40
 pub fn do_communication(
+    input: &InputSession,
     cx: &mut Cx<'_>,
     io: &mut Io<'_>,
     state: &mut CommState,
 ) -> CommunicationResult {
     if !state.is_talking_finished() {
-        alien_talk_segue(cx, state, WAIT_TRACK_ALL);
+        alien_talk_segue(input, cx, state, WAIT_TRACK_ALL);
         return CommunicationResult::Talking;
     }
 
-    do_communication_responses(cx, io, state)
+    do_communication_responses(input, cx, io, state)
 }
 
 /// Response-only phase of do_communication (talking is already finished).
@@ -972,6 +975,7 @@ pub fn do_communication(
 /// Called from rust_do_communication when talking_finished is true.
 /// Handles abort, last-replay, and player response input.
 pub fn do_communication_responses(
+    input: &InputSession,
     cx: &mut Cx<'_>,
     io: &mut Io<'_>,
     state: &mut CommState,
@@ -986,7 +990,7 @@ pub fn do_communication_responses(
     }
 
     // Handle one frame of player input
-    let input = player_response_input(cx, io, state);
+    let input = player_response_input(input, cx, io, state);
     match input {
         PlayerInputResult::Selected => match select_response(cx.world.activity(), state) {
             Some((func, rref)) => CommunicationResult::Selected(func, rref),
@@ -1035,99 +1039,34 @@ enum SliderImage {
 
 // ---------- abort / input --------------------------------------------------
 
-fn check_cancel_input(state: &CommState) -> bool {
-    // @plan PLAN-20260326-COMMPT2.P03 @requirement REQ-IP-002
-    #[cfg(not(test))]
-    unsafe {
-        let _ = state;
-        c_bridge::pulsed_menu_key(KEY_MENU_CANCEL) != 0
-    }
-    #[cfg(test)]
-    {
-        // Tests drive cancel via a dedicated flag in CommState.
-        let _ = state;
-        false // overridden per-test via state fields
+fn check_cancel_input(input: &InputSession) -> bool {
+    input.pulsed().menu[KEY_MENU_CANCEL as usize] != 0
+}
+
+fn check_select_input(input: &InputSession) -> bool {
+    input.pulsed().menu[KEY_MENU_SELECT as usize] != 0
+}
+
+fn check_left_input(input: &InputSession) -> bool {
+    match get_scroll_mode(input) {
+        ScrollMode::Page => input.pulsed().menu[KEY_MENU_LEFT as usize] != 0,
+        ScrollMode::Smooth => input.current().menu[KEY_MENU_LEFT as usize] != 0,
     }
 }
 
-fn check_select_input(state: &CommState) -> bool {
-    // @plan PLAN-20260326-COMMPT2.P03 @requirement REQ-IP-001
-    #[cfg(not(test))]
-    unsafe {
-        let _ = state;
-        c_bridge::pulsed_menu_key(KEY_MENU_SELECT) != 0
-    }
-    #[cfg(test)]
-    {
-        // In tests, driven by the select_input_pending flag set by tests.
-        // The flag is consumed by player_response_input which has &mut state.
-        // We read it here; the &mut version resets it after reading.
-        state.select_input_pending
+fn check_right_input(input: &InputSession) -> bool {
+    match get_scroll_mode(input) {
+        ScrollMode::Page => input.pulsed().menu[KEY_MENU_RIGHT as usize] != 0,
+        ScrollMode::Smooth => input.current().menu[KEY_MENU_RIGHT as usize] != 0,
     }
 }
 
-fn check_left_input(state: &CommState) -> bool {
-    // @plan PLAN-20260326-COMMPT2.P03 @requirement REQ-IP-005
-    // C parity: optSmoothScroll==OPT_PC uses PulsedInputState, OPT_3DO uses CurrentInputState
-    #[cfg(not(test))]
-    unsafe {
-        let _ = state;
-        match get_scroll_mode() {
-            ScrollMode::Page => c_bridge::pulsed_menu_key(KEY_MENU_LEFT) != 0,
-            ScrollMode::Smooth => c_bridge::current_menu_key(KEY_MENU_LEFT) != 0,
-        }
-    }
-    #[cfg(test)]
-    {
-        let _ = state;
-        false
-    }
+fn check_up_input(input: &InputSession) -> bool {
+    input.pulsed().menu[KEY_MENU_UP as usize] != 0
 }
 
-fn check_right_input(state: &CommState) -> bool {
-    // @plan PLAN-20260326-COMMPT2.P03 @requirement REQ-IP-006
-    // C parity: optSmoothScroll==OPT_PC uses PulsedInputState, OPT_3DO uses CurrentInputState
-    #[cfg(not(test))]
-    unsafe {
-        let _ = state;
-        match get_scroll_mode() {
-            ScrollMode::Page => c_bridge::pulsed_menu_key(KEY_MENU_RIGHT) != 0,
-            ScrollMode::Smooth => c_bridge::current_menu_key(KEY_MENU_RIGHT) != 0,
-        }
-    }
-    #[cfg(test)]
-    {
-        let _ = state;
-        false
-    }
-}
-
-fn check_up_input(state: &CommState) -> bool {
-    // @plan PLAN-20260326-COMMPT2.P03 @requirement REQ-IP-003
-    #[cfg(not(test))]
-    unsafe {
-        let _ = state;
-        c_bridge::pulsed_menu_key(KEY_MENU_UP) != 0
-    }
-    #[cfg(test)]
-    {
-        let _ = state;
-        false
-    }
-}
-
-fn check_down_input(state: &CommState) -> bool {
-    // @plan PLAN-20260326-COMMPT2.P03 @requirement REQ-IP-004
-    #[cfg(not(test))]
-    unsafe {
-        let _ = state;
-        c_bridge::pulsed_menu_key(KEY_MENU_DOWN) != 0
-    }
-    #[cfg(test)]
-    {
-        let _ = state;
-        false
-    }
+fn check_down_input(input: &InputSession) -> bool {
+    input.pulsed().menu[KEY_MENU_DOWN as usize] != 0
 }
 
 // ---------- lock-free input checks for ffi.rs response phase ---------------
@@ -1138,29 +1077,24 @@ pub fn check_abort_external(world: &World) -> bool {
     world.activity() & 0x4000 != 0
 }
 
-#[cfg(not(test))]
-pub fn check_select_external() -> bool {
-    unsafe { c_bridge::pulsed_menu_key(KEY_MENU_SELECT) != 0 }
+pub fn check_select_external(input: &InputSession) -> bool {
+    input.pulsed().menu[KEY_MENU_SELECT as usize] != 0
 }
 
-#[cfg(not(test))]
-pub fn check_cancel_external() -> bool {
-    unsafe { c_bridge::pulsed_menu_key(KEY_MENU_CANCEL) != 0 }
+pub fn check_cancel_external(input: &InputSession) -> bool {
+    input.pulsed().menu[KEY_MENU_CANCEL as usize] != 0
 }
 
-#[cfg(not(test))]
-pub fn check_up_external() -> bool {
-    unsafe { c_bridge::pulsed_menu_key(KEY_MENU_UP) != 0 }
+pub fn check_up_external(input: &InputSession) -> bool {
+    input.pulsed().menu[KEY_MENU_UP as usize] != 0
 }
 
-#[cfg(not(test))]
-pub fn check_down_external() -> bool {
-    unsafe { c_bridge::pulsed_menu_key(KEY_MENU_DOWN) != 0 }
+pub fn check_down_external(input: &InputSession) -> bool {
+    input.pulsed().menu[KEY_MENU_DOWN as usize] != 0
 }
 
-#[cfg(not(test))]
-pub fn check_left_external() -> bool {
-    unsafe { c_bridge::pulsed_menu_key(KEY_MENU_LEFT) != 0 }
+pub fn check_left_external(input: &InputSession) -> bool {
+    input.pulsed().menu[KEY_MENU_LEFT as usize] != 0
 }
 
 pub fn won_last_battle_external(world: &World) -> bool {
@@ -1184,26 +1118,6 @@ pub fn fade_music_to_background_bridge() {
 }
 
 // Test stubs for lock-free external functions (prod versions are cfg(not(test)))
-#[cfg(test)]
-pub fn check_select_external() -> bool {
-    false
-}
-#[cfg(test)]
-pub fn check_cancel_external() -> bool {
-    false
-}
-#[cfg(test)]
-pub fn check_up_external() -> bool {
-    false
-}
-#[cfg(test)]
-pub fn check_down_external() -> bool {
-    false
-}
-#[cfg(test)]
-pub fn check_left_external() -> bool {
-    false
-}
 #[cfg(test)]
 pub fn run_last_replay_bridge(
     _cx: &mut crate::engine::battle::Cx<'_>,
@@ -1270,11 +1184,11 @@ fn stop_track(state: &mut CommState) {
     }
 }
 
-fn fast_forward(state: &mut CommState) {
+fn fast_forward(_input: &InputSession, state: &mut CommState) {
     #[cfg(not(test))]
     {
         let _ = state;
-        match get_scroll_mode() {
+        match get_scroll_mode(_input) {
             ScrollMode::Page => c_bridge::FastForward_Page(),
             ScrollMode::Smooth => c_bridge::FastForward_Smooth(),
         }
@@ -1285,11 +1199,11 @@ fn fast_forward(state: &mut CommState) {
     }
 }
 
-fn fast_reverse(state: &mut CommState) {
+fn fast_reverse(_input: &InputSession, state: &mut CommState) {
     #[cfg(not(test))]
     {
         let _ = state;
-        match get_scroll_mode() {
+        match get_scroll_mode(_input) {
             ScrollMode::Page => c_bridge::FastReverse_Page(),
             ScrollMode::Smooth => c_bridge::FastReverse_Smooth(),
         }
@@ -1300,9 +1214,8 @@ fn fast_reverse(state: &mut CommState) {
     }
 }
 
-#[cfg(not(test))]
-fn get_scroll_mode() -> ScrollMode {
-    let v = unsafe { c_bridge::optSmoothScroll };
+fn get_scroll_mode(input: &InputSession) -> ScrollMode {
+    let v = input.preferences().smooth_scroll;
     if v == 0 {
         ScrollMode::Page
     } else {
@@ -1398,11 +1311,15 @@ fn set_slider_image(state: &mut CommState, img: SliderImage) {
     }
 }
 
-fn update_animations(state: &mut CommState, seeking: bool) {
+fn update_animations(
+    _input: &crate::engine::input::InputSession,
+    state: &mut CommState,
+    seeking: bool,
+) {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        do_update_animations(seeking);
+        do_update_animations(_input, seeking);
     }
     #[cfg(test)]
     {
@@ -1416,13 +1333,13 @@ fn update_animations(state: &mut CommState, seeking: bool) {
 /// # Safety
 /// Must be called from the game thread with initialized graphics context.
 #[cfg(not(test))]
-unsafe fn do_update_animations(seeking: bool) {
+unsafe fn do_update_animations(input: &crate::engine::input::InputSession, seeking: bool) {
     let do_clear = c_bridge::c_GetClearSubtitles();
     let old_ctx = c_bridge::SetContext((c_bridge::c_GetAnimContext()).cast());
     c_bridge::BatchGraphics();
     let change = c_bridge::ProcessCommAnimations(do_clear, if seeking { 1 } else { 0 });
     if change != 0 || do_clear != 0 {
-        c_bridge::comm_RedrawSubtitles();
+        c_bridge::comm_redraw_subtitles(input.preferences().subtitles != 0);
     }
     c_bridge::UnbatchGraphics();
     c_bridge::c_ResetClearSubtitles();
@@ -1434,17 +1351,17 @@ unsafe fn do_update_animations(seeking: bool) {
 /// # Safety
 /// Must be called from the game thread.
 #[cfg(not(test))]
-unsafe fn do_run_comm_anim_frame() {
-    do_update_animations(false);
+unsafe fn do_run_comm_anim_frame(input: &crate::engine::input::InputSession) {
+    do_update_animations(input, false);
     c_bridge::SleepThread(840 / 40); // ONE_SECOND / 40
 }
 
-fn update_comm_graphics(state: &mut CommState) {
+fn update_comm_graphics(_input: &crate::engine::input::InputSession, state: &mut CommState) {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
         // UpdateCommGraphics() — calls UpdateAnimations + redraw
-        do_update_animations(false);
+        do_update_animations(_input, false);
     }
     #[cfg(test)]
     {
@@ -1551,11 +1468,11 @@ fn running_talking_anim(state: &CommState) -> bool {
     }
 }
 
-fn run_comm_anim_frame(state: &mut CommState) {
+fn run_comm_anim_frame(_input: &crate::engine::input::InputSession, state: &mut CommState) {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        do_run_comm_anim_frame();
+        do_run_comm_anim_frame(_input);
     }
     #[cfg(test)]
     {
@@ -1827,6 +1744,7 @@ mod tests {
 
     #[test]
     fn test_do_talk_segue_cancel_ends() {
+        let input = InputSession::default();
         let mut world = crate::engine::World::new();
         let mut s = playing_state();
         let mut ts = TalkingState {
@@ -1835,20 +1753,21 @@ mod tests {
         };
         // Set the campaign abort flag to end the segue.
         world.set_activity(0x4000);
-        let cont = do_talk_segue(&world, &mut s, &mut ts);
+        let cont = do_talk_segue(&input, &world, &mut s, &mut ts);
         assert!(!cont, "abort should stop loop");
         assert!(ts.ended);
     }
 
     #[test]
     fn test_do_talk_segue_continues_while_playing() {
+        let input = InputSession::default();
         let world = crate::engine::World::new();
         let mut s = playing_state();
         let mut ts = TalkingState {
             wait_track: WAIT_TRACK_ALL,
             ..Default::default()
         };
-        let cont = do_talk_segue(&world, &mut s, &mut ts);
+        let cont = do_talk_segue(&input, &world, &mut s, &mut ts);
         // Track is playing → should continue
         assert!(cont, "should continue while track is playing");
         assert!(!ts.ended);
@@ -1856,19 +1775,21 @@ mod tests {
 
     #[test]
     fn test_do_talk_segue_ends_when_not_playing() {
+        let input = InputSession::default();
         let world = crate::engine::World::new();
         let mut s = finished_state();
         let mut ts = TalkingState {
             wait_track: WAIT_TRACK_ALL,
             ..Default::default()
         };
-        let cont = do_talk_segue(&world, &mut s, &mut ts);
+        let cont = do_talk_segue(&input, &world, &mut s, &mut ts);
         assert!(!cont, "should stop when track not playing");
         assert!(ts.ended);
     }
 
     #[test]
     fn test_do_talk_segue_seek_mode_stops_when_seeking() {
+        let input = InputSession::default();
         let world = crate::engine::World::new();
         let mut s = playing_state();
         let mut ts = TalkingState {
@@ -1877,7 +1798,7 @@ mod tests {
             ..Default::default()
         };
         // While seeking, should return true even if track stops (seeking || ...)
-        let cont = do_talk_segue(&world, &mut s, &mut ts);
+        let cont = do_talk_segue(&input, &world, &mut s, &mut ts);
         // seeking starts true, no right/left input → seeking is cleared this iter
         // then we check track, which is playing → cont should be true (playing)
         assert!(cont);
@@ -1887,6 +1808,7 @@ mod tests {
 
     #[test]
     fn test_talk_segue_ends_when_not_playing() {
+        let input = InputSession::default();
         let world = crate::engine::World::new();
         let mut s = CommState::new();
         s.init().unwrap();
@@ -1897,12 +1819,13 @@ mod tests {
         s.track_mut().start();
         s.track_mut().update(0.1); // finish immediately
 
-        let ended = talk_segue(&world, &mut s, WAIT_TRACK_ALL);
+        let ended = talk_segue(&input, &world, &mut s, WAIT_TRACK_ALL);
         assert!(ended, "should return ended=true when track not playing");
     }
 
     #[test]
     fn test_talk_segue_rewind_mode() {
+        let input = InputSession::default();
         let mut world = crate::engine::World::new();
         let mut s = playing_state();
         // wait_track = 0 → rewind mode, ts.rewind set to true
@@ -1911,7 +1834,7 @@ mod tests {
         // Force-stop with the campaign abort flag.
         world.set_activity(0x4000);
 
-        let ended = talk_segue(&world, &mut s, 0);
+        let ended = talk_segue(&input, &world, &mut s, 0);
         // abort was set, so ended = true from abort path
         assert!(ended);
     }
@@ -1919,20 +1842,26 @@ mod tests {
     // ---- alien_talk_segue tests --------------------------------------------
 
     #[test]
+    #[serial]
     fn test_alien_talk_segue_skips_if_finished() {
+        let input = InputSession::default();
         let world = crate::engine::World::new();
         let mut s = CommState::new();
         s.init().unwrap();
         s.set_talking_finished(true);
 
         // Should be a no-op
-        with_world(world, |cx, _| alien_talk_segue(cx, &mut s, WAIT_TRACK_ALL));
+        with_world(world, |cx, _| {
+            alien_talk_segue(&input, cx, &mut s, WAIT_TRACK_ALL)
+        });
         // still finished, no crash
         assert!(s.is_talking_finished());
     }
 
     #[test]
+    #[serial]
     fn test_alien_talk_segue_first_call_sets_flag() {
+        let input = InputSession::default();
         let world = crate::engine::World::new();
         with_world(world, |cx, _| {
             let mut s = CommState::new();
@@ -1941,7 +1870,7 @@ mod tests {
 
             // Set abort immediately so we don't actually loop
             cx.world.set_activity(0x4000);
-            alien_talk_segue(cx, &mut s, WAIT_TRACK_ALL);
+            alien_talk_segue(&input, cx, &mut s, WAIT_TRACK_ALL);
 
             // first_talk_call should be set (but then skip due to abort)
             // check_abort returns true before first_talk_call check → skip
@@ -1951,7 +1880,7 @@ mod tests {
             s2.init().unwrap();
             // With no track loaded, the first segue finishes immediately.
             cx.world.set_activity(0);
-            alien_talk_segue(cx, &mut s2, WAIT_TRACK_ALL);
+            alien_talk_segue(&input, cx, &mut s2, WAIT_TRACK_ALL);
             assert!(
                 s2.first_talk_call,
                 "first_talk_call should be set after first call"
@@ -1960,13 +1889,17 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_alien_talk_segue_skips_if_abort() {
+        let input = InputSession::default();
         let mut world = crate::engine::World::new();
         let mut s = CommState::new();
         s.init().unwrap();
         world.set_activity(0x4000);
 
-        with_world(world, |cx, _| alien_talk_segue(cx, &mut s, WAIT_TRACK_ALL));
+        with_world(world, |cx, _| {
+            alien_talk_segue(&input, cx, &mut s, WAIT_TRACK_ALL)
+        });
         assert!(!s.first_talk_call, "should not initialize if abort");
     }
 
@@ -2048,7 +1981,9 @@ mod tests {
     // ---- player_response_input tests --------------------------------------
 
     #[test]
+    #[serial]
     fn test_player_input_initializes_top_response() {
+        let input = InputSession::default();
         let world = crate::engine::World::new();
         let mut s = CommState::new();
         s.init().unwrap();
@@ -2056,7 +1991,9 @@ mod tests {
         s.add_response(2, "B", None);
 
         assert!(s.top_response.is_none());
-        with_world(world, |cx, io| player_response_input(cx, io, &mut s));
+        with_world(world, |cx, io| {
+            player_response_input(&input, cx, io, &mut s)
+        });
         assert!(
             s.top_response.is_some(),
             "top_response should be set after first call"
@@ -2064,7 +2001,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_player_input_navigate() {
+        let input = InputSession::default();
         let world = crate::engine::World::new();
         // up/down navigation is driven by check_up/down_input which return false
         // in test mode; verify that calling player_response_input is a no-op
@@ -2075,43 +2014,51 @@ mod tests {
         s.add_response(2, "B", None);
         s.responses_mut().start_display();
 
-        let result = with_world(world, |cx, io| player_response_input(cx, io, &mut s));
+        let result = with_world(world, |cx, io| {
+            player_response_input(&input, cx, io, &mut s)
+        });
         assert_eq!(result, PlayerInputResult::Continue);
     }
 
     // ---- do_communication tests --------------------------------------------
 
     #[test]
+    #[serial]
     fn test_communication_talks_first() {
+        let input = InputSession::default();
         let world = crate::engine::World::new();
         let mut s = CommState::new();
         s.init().unwrap();
         assert!(!s.is_talking_finished());
 
-        let result = with_world(world, |cx, io| do_communication(cx, io, &mut s));
+        let result = with_world(world, |cx, io| do_communication(&input, cx, io, &mut s));
         assert_eq!(result, CommunicationResult::Talking);
     }
 
     #[test]
+    #[serial]
     fn test_communication_exits_no_responses() {
+        let input = InputSession::default();
         let world = crate::engine::World::new();
         let mut s = CommState::new();
         s.init().unwrap();
         s.set_talking_finished(true);
         // No responses → run_last_replay + Done.
-        let result = with_world(world, |cx, io| do_communication(cx, io, &mut s));
+        let result = with_world(world, |cx, io| do_communication(&input, cx, io, &mut s));
         assert_eq!(result, CommunicationResult::Done);
     }
 
     #[test]
+    #[serial]
     fn test_communication_shows_responses_when_ready() {
+        let input = InputSession::default();
         let world = crate::engine::World::new();
         let mut s = CommState::new();
         s.init().unwrap();
         s.set_talking_finished(true);
         s.add_response(1, "Choice A", None);
         // player_response_input returns Continue (no select input in tests) → ResponseContinue.
-        let result = with_world(world, |cx, io| do_communication(cx, io, &mut s));
+        let result = with_world(world, |cx, io| do_communication(&input, cx, io, &mut s));
         assert_eq!(result, CommunicationResult::ResponseContinue);
     }
 
@@ -2132,7 +2079,9 @@ mod tests {
     /// (not a null_mut stub).  In test mode the bridge is a no-op, so we verify
     /// the structural invariant: first_talk_call is set iff the init block ran.
     #[test]
+    #[serial]
     fn test_set_colormap_calls_bridge() {
+        let input = InputSession::default();
         let world = crate::engine::World::new();
         let mut s = CommState::new();
         s.init().unwrap();
@@ -2141,7 +2090,9 @@ mod tests {
             "precondition: first_talk_call not yet set"
         );
 
-        with_world(world, |cx, _| alien_talk_segue(cx, &mut s, WAIT_TRACK_ALL));
+        with_world(world, |cx, _| {
+            alien_talk_segue(&input, cx, &mut s, WAIT_TRACK_ALL)
+        });
 
         assert!(
             s.first_talk_call,
@@ -2152,7 +2103,9 @@ mod tests {
     /// REQ-MU-001: play_alien_music() executes inside alien_talk_segue's first-call
     /// initialization block.  Same structural witness as test_set_colormap_calls_bridge.
     #[test]
+    #[serial]
     fn test_play_alien_music_calls_bridge() {
+        let input = InputSession::default();
         let world = crate::engine::World::new();
         let mut s = CommState::new();
         s.init().unwrap();
@@ -2161,7 +2114,9 @@ mod tests {
             "precondition: first_talk_call not yet set"
         );
 
-        with_world(world, |cx, _| alien_talk_segue(cx, &mut s, WAIT_TRACK_ALL));
+        with_world(world, |cx, _| {
+            alien_talk_segue(&input, cx, &mut s, WAIT_TRACK_ALL)
+        });
 
         assert!(
             s.first_talk_call,
@@ -2296,14 +2251,16 @@ mod tests {
     ///
     /// PASSES against stub (stub returns Talking unconditionally).
     #[test]
+    #[serial]
     fn test_do_comm_talking_phase_p10() {
+        let input = InputSession::default();
         let world = crate::engine::World::new();
         let mut s = CommState::new();
         s.init().unwrap();
         // talking_finished starts false
         assert!(!s.is_talking_finished());
 
-        let result = with_world(world, |cx, io| do_communication(cx, io, &mut s));
+        let result = with_world(world, |cx, io| do_communication(&input, cx, io, &mut s));
         assert_eq!(
             result,
             CommunicationResult::Talking,
@@ -2324,7 +2281,9 @@ mod tests {
     ///
     /// EXPECTED FAIL against P09 stubs (stub always returns Talking).
     #[test]
+    #[serial]
     fn test_do_comm_abort_exit_p10() {
+        let input = InputSession::default();
         let mut world = crate::engine::World::new();
         let mut s = CommState::new();
         s.init().unwrap();
@@ -2332,7 +2291,7 @@ mod tests {
         // Use the campaign abort flag.
         world.set_activity(0x4000);
 
-        let result = with_world(world, |cx, io| do_communication(cx, io, &mut s));
+        let result = with_world(world, |cx, io| do_communication(&input, cx, io, &mut s));
         assert_eq!(
             result,
             CommunicationResult::Done,
@@ -2347,7 +2306,9 @@ mod tests {
     ///
     /// EXPECTED FAIL against P09 stubs (stub always returns Talking).
     #[test]
+    #[serial]
     fn test_do_comm_no_responses_done_p10() {
+        let input = InputSession::default();
         let world = crate::engine::World::new();
         let mut s = CommState::new();
         s.init().unwrap();
@@ -2355,7 +2316,7 @@ mod tests {
         // No responses added — count() == 0.
         assert_eq!(s.responses().count(), 0);
 
-        let result = with_world(world, |cx, io| do_communication(cx, io, &mut s));
+        let result = with_world(world, |cx, io| do_communication(&input, cx, io, &mut s));
         assert_eq!(
             result,
             CommunicationResult::Done,
@@ -2370,7 +2331,9 @@ mod tests {
     ///
     /// EXPECTED FAIL against P09 stubs (stub always returns Talking).
     #[test]
+    #[serial]
     fn test_do_comm_response_continue_p10() {
+        let input = InputSession::default();
         let world = crate::engine::World::new();
         fn noop(_cx: &mut crate::engine::battle::Cx<'_>, _: u32) {}
 
@@ -2381,7 +2344,7 @@ mod tests {
         s.add_response(2, "Option B", Some(noop));
         // Do NOT select: player_response_input returns Continue this frame.
 
-        let result = with_world(world, |cx, io| do_communication(cx, io, &mut s));
+        let result = with_world(world, |cx, io| do_communication(&input, cx, io, &mut s));
         assert_eq!(
             result,
             CommunicationResult::ResponseContinue,
@@ -2396,7 +2359,9 @@ mod tests {
     ///
     /// EXPECTED FAIL against P09 stubs (stub always returns Talking).
     #[test]
+    #[serial]
     fn test_do_comm_selected_p10() {
+        let input = InputSession::default();
         let world = crate::engine::World::new();
         use std::sync::atomic::{AtomicBool, Ordering};
         static CALLED: AtomicBool = AtomicBool::new(false);
@@ -2411,9 +2376,10 @@ mod tests {
         s.responses_mut().start_display();
         // Ensure index 0 is selected and simulate the select key press.
         s.responses_mut().select(0);
-        s.select_input_pending = true;
+        input.set_menu_key(KEY_MENU_SELECT as usize, true);
+        input.advance(input.immediate(), input.immediate(), 0);
 
-        let result = with_world(world, |cx, io| do_communication(cx, io, &mut s));
+        let result = with_world(world, |cx, io| do_communication(&input, cx, io, &mut s));
         match result {
             CommunicationResult::Selected(func, rref) => {
                 assert_eq!(rref, 99, "response_ref must match the registered value");
@@ -2518,11 +2484,11 @@ mod tests {
 
         for key in ["KEY_MENU_CANCEL", "KEY_MENU_LEFT"] {
             assert!(
-                body.contains(&format!(".pressed({key})")),
+                body.contains(&format!(".pressed(input, {key})")),
                 "last replay must consume {key} through the fresh-press latch"
             );
             assert!(
-                !body.contains(&format!("pulsed_menu_key({key})")),
+                !body.contains(&format!("pulsed_menu_key(input, {key})")),
                 "last replay must not act on a raw {key} pulse, which repeats while held"
             );
         }
@@ -2531,7 +2497,7 @@ mod tests {
             .expect("run_last_replay_dinput must be in talk_segue.rs");
         for key in ["KEY_MENU_CANCEL", "KEY_MENU_LEFT"] {
             assert!(
-                entry.contains(&format!("FreshPressLatch::entering({key})")),
+                entry.contains(&format!("FreshPressLatch::entering(input, {key})")),
                 "entering the loop must disarm an inherited {key} hold"
             );
         }
@@ -3040,23 +3006,24 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn first_talk_consumes_only_the_supplied_kernel_load_flag() {
+        let input = InputSession::default();
         let world = World::new();
         let mut state = CommState::new();
         with_world(world, |cx, _| {
             cx.kernel.last_activity = 0x5003;
             cx.world.set_activity(0x4003);
-            alien_talk_segue(cx, &mut state, WAIT_TRACK_ALL);
+            alien_talk_segue(&input, cx, &mut state, WAIT_TRACK_ALL);
             assert_eq!(cx.kernel.last_activity, 0x5003);
             assert!(!state.first_talk_call);
 
             cx.world.set_activity(3);
-            alien_talk_segue(cx, &mut state, WAIT_TRACK_ALL);
+            alien_talk_segue(&input, cx, &mut state, WAIT_TRACK_ALL);
             assert_eq!(cx.kernel.last_activity, 0x4003);
             assert!(state.first_talk_call);
 
             state.set_talking_finished(false);
             cx.kernel.last_activity |= 0x1000;
-            alien_talk_segue(cx, &mut state, WAIT_TRACK_ALL);
+            alien_talk_segue(&input, cx, &mut state, WAIT_TRACK_ALL);
             assert_eq!(cx.kernel.last_activity, 0x5003);
         });
     }

@@ -39,7 +39,7 @@ fn velocity_toward(speed: SIZE, facing: COUNT) -> [i32; 9] {
 
 #[test]
 fn descriptor_matches_the_c_race_data() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let desc = descriptor(SPECIES_ID_SYREEN_ID);
             assert!(std::ptr::eq(
@@ -106,7 +106,7 @@ fn descriptor_matches_the_c_race_data() {
 
 #[test]
 fn dagger_is_launched_with_the_c_missile_block() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battlefield::new(QUEUE_SLOTS + 5);
         unsafe {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_SYREEN_ID, 0);
@@ -135,7 +135,7 @@ fn dagger_is_launched_with_the_c_missile_block() {
 
 #[test]
 fn song_needs_the_special_key_a_ready_cooldown_and_energy() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battlefield::new(QUEUE_SLOTS + 5);
         unsafe {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_SYREEN_ID, 0);
@@ -165,7 +165,7 @@ fn song_needs_the_special_key_a_ready_cooldown_and_energy() {
 
 #[test]
 fn song_pays_energy_and_queues_the_deferred_scan() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battlefield::new(QUEUE_SLOTS + 5);
         unsafe {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_SYREEN_ID, 0);
@@ -218,7 +218,7 @@ unsafe fn queued_scan(
 
 #[test]
 fn deferred_scan_requeues_nothing_and_leaves_out_of_range_crews_alone() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battlefield::new(QUEUE_SLOTS + 5);
         unsafe {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_SYREEN_ID, 0);
@@ -274,7 +274,7 @@ unsafe fn walk_queue() -> Vec<*mut std::ffi::c_void> {
 
 #[test]
 fn deferred_scan_survives_a_ship_in_range_when_no_crew_elements_are_available() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battlefield::new(QUEUE_SLOTS + 5);
         unsafe {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_SYREEN_ID, 0);
@@ -350,7 +350,7 @@ impl<'a> Duel<'a> {
 
 #[test]
 fn ai_sings_only_when_it_can_drain_a_reachable_crew() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battlefield::new(QUEUE_SLOTS + 5);
         unsafe {
             let special = SPECIAL as u8;

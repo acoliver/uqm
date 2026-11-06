@@ -62,7 +62,7 @@ fn sentinel(_: &mut uqm_rust::engine::battle::Cx<'_>, _: uqm_rust::engine::battl
 
 #[test]
 fn descriptor_matches_every_c_initializer_field() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(64);
         unsafe {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_CHENJESU_ID, 0);
@@ -173,7 +173,7 @@ fn descriptor_matches_every_c_initializer_field() {
 
 #[test]
 fn crystal_launch_hold_release_and_count_truncation_match_c() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(64);
         unsafe {
             let mut ship =
@@ -235,7 +235,7 @@ fn crystal_launch_hold_release_and_count_truncation_match_c() {
 
 #[test]
 fn released_crystal_queues_eight_fragments_in_facing_order() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(64);
         unsafe {
             let mut ship =
@@ -302,7 +302,7 @@ fn released_crystal_queues_eight_fragments_in_facing_order() {
 
 #[test]
 fn allocation_failure_preserves_weapon_count_and_partial_fragment_order() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(4);
         unsafe {
             let mut ship =
@@ -332,7 +332,7 @@ fn allocation_failure_preserves_weapon_count_and_partial_fragment_order() {
 
 #[test]
 fn crystal_collision_creates_sparkles_at_the_target_and_animates_current_frame() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(64);
         unsafe {
             let mut ship =
@@ -421,7 +421,7 @@ fn crystal_collision_creates_sparkles_at_the_target_and_animates_current_frame()
 
 #[test]
 fn doggy_spawns_behind_ship_with_exact_state_and_coordinate_truncation() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(64);
         unsafe {
             let mut ship =
@@ -478,7 +478,7 @@ fn doggy_spawns_behind_ship_with_exact_state_and_coordinate_truncation() {
 
 #[test]
 fn special_checks_key_counter_and_energy_but_always_resets_the_counter() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(64);
         unsafe {
             let mut ship =
@@ -512,7 +512,7 @@ fn special_checks_key_counter_and_energy_but_always_resets_the_counter() {
 
 #[test]
 fn failed_doggy_allocation_still_spends_the_energy() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(1);
         unsafe {
             let mut ship =
@@ -530,7 +530,7 @@ fn failed_doggy_allocation_still_spends_the_energy() {
 
 #[test]
 fn ship_preprocess_matches_byte_promotion_and_wrap_boundaries() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(64);
         unsafe {
             let mut ship =
@@ -558,7 +558,7 @@ fn ship_preprocess_matches_byte_promotion_and_wrap_boundaries() {
 
 #[test]
 fn doggy_collision_drains_only_enemy_ships_and_extends_only_short_waits() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(64);
         unsafe {
             let mut ship =
@@ -639,7 +639,7 @@ fn doggy_collision_drains_only_enemy_ships_and_extends_only_short_waits() {
 
 #[test]
 fn doggy_death_preserves_unrelated_fields_and_starts_six_frame_animation() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(64);
         unsafe {
             let mut ship =
@@ -695,7 +695,7 @@ fn doggy_death_preserves_unrelated_fields_and_starts_six_frame_animation() {
 
 #[test]
 fn doggy_wait_counts_before_tracking_and_random_roaming_consumes_one_draw() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(64);
         unsafe {
             let mut ship =
@@ -731,7 +731,7 @@ fn doggy_wait_counts_before_tracking_and_random_roaming_consumes_one_draw() {
 
 #[test]
 fn doggy_steering_uses_exact_rear_facing_boundaries_not_trackships_single_step() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(64);
         unsafe {
             let mut ship =
@@ -774,7 +774,7 @@ fn doggy_steering_uses_exact_rear_facing_boundaries_not_trackships_single_step()
 
 #[test]
 fn doggy_uses_current_unwrapped_coordinates_and_truncates_arctan_arguments() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(64);
         unsafe {
             let mut ship =
@@ -812,7 +812,7 @@ fn doggy_uses_current_unwrapped_coordinates_and_truncates_arctan_arguments() {
 
 #[test]
 fn doggy_acquires_nearest_visible_ship_but_retains_an_existing_cloaked_target() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(64);
         unsafe {
             let mut ship =
@@ -850,7 +850,7 @@ fn doggy_acquires_nearest_visible_ship_but_retains_an_existing_cloaked_target() 
 
 #[test]
 fn ai_pursuit_boundaries_match_turn_maneuverability_range_and_seeking_flags() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(64);
         unsafe {
             let mut ship =
@@ -900,7 +900,7 @@ fn ai_pursuit_boundaries_match_turn_maneuverability_range_and_seeking_flags() {
 
 #[test]
 fn ai_special_budget_uses_less_than_four_and_energy_less_than_or_equal_to_cost() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(64);
         unsafe {
             let mut ship =
@@ -935,7 +935,7 @@ fn ai_special_budget_uses_less_than_four_and_energy_less_than_or_equal_to_cost()
 
 #[test]
 fn ai_weapon_threat_selection_and_release_cooldown_use_exact_boundaries() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(64);
         unsafe {
             let mut ship =
@@ -993,7 +993,7 @@ fn ai_weapon_threat_selection_and_release_cooldown_use_exact_boundaries() {
 
 #[test]
 fn ai_crystal_intercept_holds_or_releases_at_the_fragment_margin() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(64);
         unsafe {
             let mut ship =
@@ -1039,7 +1039,7 @@ fn ai_crystal_intercept_holds_or_releases_at_the_fragment_margin() {
 
 #[test]
 fn ai_scans_from_tail_skips_every_noncrystal_case_and_stops_at_the_first_match() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(64);
         unsafe {
             let mut ship =
@@ -1100,7 +1100,7 @@ fn ai_scans_from_tail_skips_every_noncrystal_case_and_stops_at_the_first_match()
 
 #[test]
 fn ai_launch_probe_uses_the_selected_target_and_respects_weapon_cooldown() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(64);
         unsafe {
             let mut ship =

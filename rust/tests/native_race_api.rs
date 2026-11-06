@@ -11,7 +11,7 @@ use uqm_rust::ships::native::abi::*;
 
 #[test]
 fn ship_teardown_is_idempotent_without_an_arena_and_preserves_encounter_recovery() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _owner = Battle::new(4);
         // SAFETY: the serialized fixture publishes the game only for this owner borrow.
         unsafe {
@@ -47,7 +47,7 @@ fn alternate_post(cx: &mut Cx<'_>, ship: ShipId) {
 
 #[test]
 fn escaped_frame_retains_drawable_after_last_array_and_resource_owner_drop() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let resource = battle::FrameSet::new(1);
         let original = resource.array();
         let view = original.view(0).to_owned();
@@ -77,7 +77,7 @@ fn alternate_weapon(cx: &mut Cx<'_>, ship: ShipId, subject: WeaponOrigin) -> Wea
 
 #[test]
 fn callback_modes_control_dispatch_metadata_and_observations() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let owner = Battle::new(8);
         let ship = Ship::bare(&owner, SPECIES_ID_VUX_ID, 0);
         // SAFETY: owner keeps the serialized test battle published until all fixtures drop.
@@ -113,7 +113,7 @@ fn callback_modes_control_dispatch_metadata_and_observations() {
 
 #[test]
 fn ordered_lifecycle_preserves_reverse_order_exhaustion_and_primitive_reuse() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _owner = Battle::new(3);
         // SAFETY: this test owns all element slots and the game-thread context.
         unsafe {
@@ -149,7 +149,7 @@ fn ordered_lifecycle_preserves_reverse_order_exhaustion_and_primitive_reuse() {
 
 #[test]
 fn projected_autoaim_uses_both_positions_without_mutating_live_target() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let owner = Battle::new(8);
         // SAFETY: fixtures retain the frame and descriptor resources for these hook calls.
         unsafe {

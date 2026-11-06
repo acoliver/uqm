@@ -17,11 +17,7 @@ use std::{
 
 pub use crate::io::handles::{repository, rootDir};
 
-use crate::mainloop::options_abi::loadIndices;
-
-use crate::mainloop::options_abi::loadAddon;
-
-use crate::mainloop::options_abi::prepareAddons;
+use crate::mainloop::options_abi::{loadAddon, loadIndices, prepareAddons};
 
 unsafe fn context(name: &CStr) -> CONTEXT {
     #[cfg(feature = "debug-process")]
@@ -70,20 +66,21 @@ pub unsafe fn LoadKernel(
         if loadIndices(contentDir.cast()) == 0 {
             return 0;
         }
-        if opt3doMusic != 0 {
+        let preferences = kernel.configuration.preferences();
+        if preferences.music_3do != 0 {
             loadAddon(c"3domusic".as_ptr());
         }
-        kernel.using_speech = optSpeech;
-        if optSpeech != 0 && loadAddon(c"3dovoice".as_ptr()) == 0 {
+        kernel.using_speech = preferences.speech;
+        if preferences.speech != 0 && loadAddon(c"3dovoice".as_ptr()) == 0 {
             kernel.using_speech = 0;
         }
-        if optRemixMusic != 0 {
+        if preferences.music_remix != 0 {
             loadAddon(c"remix".as_ptr());
         }
-        if optWhichIntro == OPT_3DO as i32 {
+        if preferences.intro == OPT_3DO as i32 {
             loadAddon(c"3dovideo".as_ptr());
         }
-        prepareAddons(optAddons);
+        prepareAddons(&kernel.configuration.addons());
         let map = CaptureStringTable(LoadStringTableInstance(c"colortable.main".as_ptr()));
         if map.is_null() {
             return 0;

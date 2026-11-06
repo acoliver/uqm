@@ -154,7 +154,10 @@ impl Battle {
                     cx.kernel_mut().reset_ship_capacity(side, 32);
                 }
             });
-            uqm_rust::app::bridge::enter(|cx| init_display_list(cx, optMeleeScale == 0));
+            uqm_rust::app::bridge::enter(|cx| {
+                let scaled = cx.kernel_mut().configuration.preferences().melee_scale == 0;
+                init_display_list(cx, scaled);
+            });
             ScreenWidth = 320;
             ScreenHeight = 240;
             Self {

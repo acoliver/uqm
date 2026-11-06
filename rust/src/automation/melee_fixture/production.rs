@@ -146,11 +146,16 @@ fn drive(
                         Reply::None
                     }
                     Effect::Scale(value) => {
-                        old_scale = ptr::replace(&raw mut optMeleeScale, value);
+                        old_scale = cx.kernel.configuration.preferences().melee_scale;
+                        cx.kernel
+                            .configuration
+                            .update_preferences(|options| options.melee_scale = value);
                         Reply::None
                     }
                     Effect::RestoreScale => {
-                        optMeleeScale = old_scale;
+                        cx.kernel
+                            .configuration
+                            .update_preferences(|options| options.melee_scale = old_scale);
                         Reply::None
                     }
                     other => apply(cx, other, checkpoint)?,

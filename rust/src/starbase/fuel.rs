@@ -174,7 +174,7 @@ impl FuelRuState {
     }
 }
 
-/// `DoOutfit` rounds the fuel to the nearest whole unit when the screen
+/// `do_outfit` rounds the fuel to the nearest whole unit when the screen
 /// opens (`outfit.c:702-706`): `(fuel + 50) / 100 * 100`. Half a unit rounds
 /// up. The result of any fuel at or below a tank capacity stays at or below
 /// it because capacities are whole multiples of 100.

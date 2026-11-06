@@ -60,8 +60,7 @@ pub extern "C" fn GetCrewPodCapacity() -> COUNT {
 }
 /// # Safety
 /// ppt must be writable; SIS state and graphics context must be initialized.
-#[no_mangle]
-pub unsafe extern "C" fn GetCPodCapacity(ppt: *mut POINT) -> COUNT {
+pub unsafe fn get_c_pod_capacity(pc_fonts: bool, ppt: *mut POINT) -> COUNT {
     let crew = GetCrewCount();
     let modules = sis().read(|state| state.module_slots);
     let (slot, seat) = match crate::ui::sis_capacity_math::crew_pod_for(&modules, crew) {
@@ -70,7 +69,7 @@ pub unsafe extern "C" fn GetCPodCapacity(ppt: *mut POINT) -> COUNT {
     };
     let row = i32::from(seat) / CREW_PER_ROW as i32;
     let col = i32::from(seat) % CREW_PER_ROW as i32;
-    if optWhichFonts == OPT_PC {
+    if pc_fonts {
         SetContextForeGroundColor(crew_color(row as usize));
     } else {
         SetContextForeGroundColor(rgb15(5, 0x10, 5));

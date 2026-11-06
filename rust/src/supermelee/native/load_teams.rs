@@ -231,15 +231,17 @@ pub(crate) mod live {
     }
     /// # Safety
     /// State and its load view must be live on the game thread.
-    #[no_mangle]
-    pub unsafe extern "C" fn DoLoadTeam(state: *mut MELEE_STATE) -> u32 {
+    pub unsafe fn do_load_team(
+        state: *mut MELEE_STATE,
+        input: &crate::engine::input::InputSession,
+    ) -> u32 {
         let time = GetTimeCounter();
-        GamePaused = 0;
+        input.set_paused(false);
         if crate::engine::World::current().read(|world| world.activity()) & CHECK_ABORT as u16 != 0
         {
             return 0;
         }
-        SetMenuSounds(1 | 2 | 128 | 256, 16);
+        SetMenuSounds(input, 1 | 2 | 128 | 256, 16);
         if (*state).initialized == 0 {
             draw(state);
             select(state, true);
@@ -247,7 +249,7 @@ pub(crate) mod live {
             (*state).phase = crate::supermelee::netplay::session::MenuPhase::Loading;
             return 1;
         }
-        let keys = PulsedInputState.menu;
+        let keys = input.pulsed().menu;
         if keys[KEY_MENU_SELECT as usize] != 0 || keys[KEY_MENU_CANCEL as usize] != 0 {
             if keys[KEY_MENU_SELECT as usize] != 0 {
                 Melee_LocalChange_team(

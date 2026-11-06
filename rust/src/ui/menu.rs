@@ -187,32 +187,40 @@ fn convert_alternate(base: u8, state: u8) -> u8 {
 
 /// # Safety
 /// Menu state and input globals must be initialized on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn DoMenuChooser(menu: *mut MENU_STATE, base_state: BYTE) -> BOOLEAN {
+pub unsafe fn do_menu_chooser(
+    input: &crate::engine::input::InputSession,
+    menu: *mut MENU_STATE,
+    base_state: BYTE,
+) -> BOOLEAN {
     let flags = WorldData::current().read(|owner| owner.game.glob_flags);
-    choose_menu_state(&mut (*menu).CurState, base_state, flags)
+    choose_menu_state(input, &mut (*menu).CurState, base_state, flags)
 }
 
 /// # Safety
 /// The game thread owns initialized menu input and display resources.
-pub(crate) unsafe fn choose_menu_state(state: &mut u8, base_state: BYTE, flags: u8) -> BOOLEAN {
+pub(crate) unsafe fn choose_menu_state(
+    input: &crate::engine::input::InputSession,
+    state: &mut u8,
+    base_state: BYTE,
+    flags: u8,
+) -> BOOLEAN {
     let mut new_state = *state;
     let original_base = base_state;
     let mut base = base_state;
-    let use_alt = if optWhichMenu == OPT_PC {
+    let use_alt = if input.preferences().menu == OPT_PC {
         alternate(&mut base, &mut new_state)
     } else {
         false
     };
-    if PulsedInputState.menu[KEY_MENU_LEFT as usize] != 0
-        || PulsedInputState.menu[KEY_MENU_UP as usize] != 0
+    if input.pulsed().menu[KEY_MENU_LEFT as usize] != 0
+        || input.pulsed().menu[KEY_MENU_UP as usize] != 0
     {
         new_state = super::menu_state::previous_state(base, new_state, flags);
-    } else if PulsedInputState.menu[KEY_MENU_RIGHT as usize] != 0
-        || PulsedInputState.menu[KEY_MENU_DOWN as usize] != 0
+    } else if input.pulsed().menu[KEY_MENU_RIGHT as usize] != 0
+        || input.pulsed().menu[KEY_MENU_DOWN as usize] != 0
     {
         new_state = next_state(base, new_state, flags);
-    } else if use_alt && PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0 {
+    } else if use_alt && input.pulsed().menu[KEY_MENU_SELECT as usize] != 0 {
         new_state = convert_alternate(base, new_state);
         if new_state == ALT_MANIFEST {
             DrawMenuStateStrings(PM_ALT_CARGO, 0);
@@ -229,8 +237,8 @@ pub(crate) unsafe fn choose_menu_state(state: &mut u8, base_state: BYTE, flags: 
             return 1;
         }
         return 0;
-    } else if optWhichMenu == OPT_PC
-        && PulsedInputState.menu[KEY_MENU_CANCEL as usize] != 0
+    } else if input.preferences().menu == OPT_PC
+        && input.pulsed().menu[KEY_MENU_CANCEL as usize] != 0
         && base == PM_ALT_CARGO
     {
         if original_base == PM_SCAN {
@@ -256,12 +264,13 @@ pub(crate) unsafe fn choose_menu_state(state: &mut u8, base_state: BYTE, flags: 
 /// The status context, graphics resources, and menu string tables must be initialized.
 #[no_mangle]
 pub unsafe extern "C" fn DrawMenuStateStrings(mut begin: BYTE, mut state: SWORD) {
-    let mut highlight = 1;
+    let (retained_play_frame, preferences) =
+        Kernel::current().read(|owner| (owner.play_frame, owner.configuration.preferences()));
+    let highlight = BYTE::from(state >= 0);
     if state < 0 {
         state = -state;
-        highlight = 0;
     }
-    if optWhichMenu == OPT_PC {
+    if preferences.menu == OPT_PC {
         let mut temp = state as u8;
         alternate(&mut begin, &mut temp);
         state = i16::from(temp);
@@ -271,8 +280,7 @@ pub unsafe extern "C" fn DrawMenuStateStrings(mut begin: BYTE, mut state: SWORD)
     }
     let mut frame: FRAME = ptr::null_mut();
     if state <= i16::from(end_state(begin)) - i16::from(begin) {
-        let play_frame = Kernel::current().read(|owner| owner.play_frame);
-        frame = SetAbsFrameIndex(play_frame, (i16::from(begin) + state) as u16);
+        frame = SetAbsFrameIndex(retained_play_frame, (i16::from(begin) + state) as u16);
     }
     pre_update_flash_rect();
     let old_context = SetContext(Kernel::current().read(|owner| owner.status_context));
@@ -295,7 +303,7 @@ pub unsafe extern "C" fn DrawMenuStateStrings(mut begin: BYTE, mut state: SWORD)
         b: 82,
         a: 255,
     });
-    if !frame.is_null() && optWhichMenu == OPT_PC {
+    if !frame.is_null() && preferences.menu == OPT_PC {
         let mut end = end_state(begin);
         let mut selected = state as u8;
         if begin == PM_SOUND_ON {
@@ -314,7 +322,7 @@ pub unsafe extern "C" fn DrawMenuStateStrings(mut begin: BYTE, mut state: SWORD)
         draw_pc_menu(begin, end, selected, highlight, &mut rect);
         stamp.frame = ptr::null_mut();
     } else {
-        if optWhichMenu == OPT_PC {
+        if preferences.menu == OPT_PC {
             rect.corner.x -= 1;
             rect.extent.width += 1;
             rect.extent.height = 53 + 11;

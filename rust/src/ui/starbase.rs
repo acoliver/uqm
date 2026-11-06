@@ -1,7 +1,7 @@
 //! Starbase encounters, menus and flagship-piece rendering, ported from starbase.c.
 #![cfg(not(test))]
 
-use super::{outfit::DoOutfit, shipyard::DoShipyard};
+use super::{outfit::do_outfit, shipyard::do_shipyard};
 use crate::comm::comm_abi::SetCommIntroMode;
 use crate::engine::{
     battle::Cx,
@@ -11,7 +11,6 @@ use crate::engine::{
 use crate::navigation::abi::*;
 
 use std::{mem, ptr};
-extern "C" {}
 const CROSSFADE_SCREEN: u32 = 2;
 const FADE_IN_SCREEN: u32 = 3;
 
@@ -297,6 +296,7 @@ unsafe fn finish_starbase_screen(menu: *mut MENU_STATE) -> BOOLEAN {
 }
 
 unsafe fn activate_starbase_selection(
+    input: &crate::engine::input::InputSession,
     cx: &mut Cx<'_>,
     io: &mut Io<'_>,
     menu: &mut MENU_STATE,
@@ -307,7 +307,7 @@ unsafe fn activate_starbase_selection(
     if menu.CurState == TALK_COMMANDER {
         io.observer.checkpoint(&CheckpointView::StarbaseMenu(false));
         // SAFETY: the starbase session owns initialized game-thread input.
-        cx.with_legacy(|| unsafe { FlushInput() });
+        cx.with_legacy(|| unsafe { FlushInput(input) });
         crate::comm::dispatch::init_communication(cx, io, CONVERSATION_COMMANDER_CONVERSATION);
         io.observer.checkpoint(&CheckpointView::StarbaseMenu(true));
         cx.world
@@ -315,17 +315,17 @@ unsafe fn activate_starbase_selection(
     } else {
         let old = menu.CurState;
         menu.InputFunc = Some(match old {
-            OUTFIT_STARSHIP => DoOutfit,
-            SHIPYARD => DoShipyard,
+            OUTFIT_STARSHIP => do_outfit,
+            SHIPYARD => do_shipyard,
             _ => unreachable!("invalid Starbase submenu"),
         });
-        cx.with_legacy(|| SetMenuSounds(SOUND_ARROWS, SOUND_SELECT));
+        cx.with_legacy(|| SetMenuSounds(input, SOUND_ARROWS, SOUND_SELECT));
         cx.run_input(io, true, |cx, _| {
             cx.with_legacy(|| {
                 let callback = menu
                     .InputFunc
                     .unwrap_or_else(|| panic!("missing Starbase submenu callback"));
-                callback(menu) != 0
+                callback(menu, input) != 0
             })
         });
         menu.Initialized = 0;
@@ -335,7 +335,10 @@ unsafe fn activate_starbase_selection(
     1
 }
 
-unsafe fn update_starbase_screen(menu: *mut MENU_STATE) -> bool {
+unsafe fn update_starbase_screen(
+    input: &crate::engine::input::InputSession,
+    menu: *mut MENU_STATE,
+) -> bool {
     if crate::engine::World::current().read(|world| world.activity())
         & (CHECK_ABORT | CHECK_LOAD) as u16
         != 0
@@ -343,7 +346,7 @@ unsafe fn update_starbase_screen(menu: *mut MENU_STATE) -> bool {
         (*menu).CurState = DEPART_BASE;
         return false;
     }
-    SetMenuSounds(SOUND_ARROWS, SOUND_SELECT);
+    SetMenuSounds(input, SOUND_ARROWS, SOUND_SELECT);
     if (*menu).Initialized == 0 {
         (**Kernel::current()).last_activity &= !(CHECK_LOAD as u16);
         SetFlashRect(ptr::null());
@@ -366,20 +369,20 @@ unsafe fn update_starbase_screen(menu: *mut MENU_STATE) -> bool {
         ScreenTransition(3, ptr::null());
         PlayMusic((*menu).hMusic, 1, 1);
         UnbatchGraphics();
-    } else if PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0 {
+    } else if input.pulsed().menu[KEY_MENU_SELECT as usize] != 0 {
         return false;
     } else {
         let mut state = (*menu).CurState;
-        if PulsedInputState.menu[KEY_MENU_LEFT as usize] != 0
-            || PulsedInputState.menu[KEY_MENU_UP as usize] != 0
+        if input.pulsed().menu[KEY_MENU_LEFT as usize] != 0
+            || input.pulsed().menu[KEY_MENU_UP as usize] != 0
         {
             let old = state;
             state = state.wrapping_sub(1);
             if old == TALK_COMMANDER {
                 state = DEPART_BASE;
             }
-        } else if PulsedInputState.menu[KEY_MENU_RIGHT as usize] != 0
-            || PulsedInputState.menu[KEY_MENU_DOWN as usize] != 0
+        } else if input.pulsed().menu[KEY_MENU_RIGHT as usize] != 0
+            || input.pulsed().menu[KEY_MENU_DOWN as usize] != 0
         {
             let old = state;
             state = state.wrapping_add(1);
@@ -483,15 +486,17 @@ pub unsafe fn run_starbase_visit(cx: &mut Cx<'_>, io: &mut Io<'_>) {
     let Some(previous) = prepare_starbase_visit(cx, io) else {
         return;
     };
+    let runtime = cx.kernel.input_runtime();
+    let input = runtime.input();
     let mut menu: MENU_STATE = mem::zeroed();
     let context = cx.kernel.screen_context;
     let old = cx.with_legacy(|| SetContext(context));
     io.observer.checkpoint(&CheckpointView::StarbaseMenu(true));
     cx.run_input(io, true, |cx, io| {
-        if cx.with_legacy(|| update_starbase_screen(&mut menu)) {
+        if cx.with_legacy(|| update_starbase_screen(input, &mut menu)) {
             true
         } else {
-            activate_starbase_selection(cx, io, &mut menu) != 0
+            activate_starbase_selection(input, cx, io, &mut menu) != 0
         }
     });
     io.observer.checkpoint(&CheckpointView::StarbaseMenu(false));

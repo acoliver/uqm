@@ -130,7 +130,7 @@ unsafe fn junk(ship: &Ship<'_>, dx: i32, dy: i32, flags: u16, mass: BYTE) -> Poo
 #[test]
 fn native_weapon_uses_the_projected_source_without_mutating_its_live_target() {
     // SAFETY: the serialized fixture owns the source, target, and frame resources.
-    battle_context::run(|| unsafe {
+    battle_context::run(|_| unsafe {
         let battle = Battle::new(8);
         let ship = Ship::with_frames(&battle._pool, SPECIES_ID_SLYLANDRO_ID, 0, [16; 3], [4, 4]);
         (*ship.ptr()).target = Some(battle::id((ship.handle).cast()));
@@ -159,7 +159,7 @@ fn native_weapon_uses_the_projected_source_without_mutating_its_live_target() {
 
 #[test]
 fn descriptor_matches_all_c_stats_resources_and_callbacks() {
-    battle_context::run(|| unsafe {
+    battle_context::run(|_| unsafe {
         let _battle = Battle::new(8);
         let d = battle::descriptor(SPECIES_ID_SLYLANDRO_ID);
         assert_eq!(
@@ -288,7 +288,7 @@ fn descriptor_matches_all_c_stats_resources_and_callbacks() {
 
 #[test]
 fn root_bolts_have_exact_random_color_length_angle_and_folded_chain_length() {
-    battle_context::run(|| unsafe {
+    battle_context::run(|_| unsafe {
         let _battle = Battle::new(8);
         let mut ship =
             Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 0, [16; 3], [4, 4]);
@@ -346,7 +346,7 @@ fn root_bolts_have_exact_random_color_length_angle_and_folded_chain_length() {
 
 #[test]
 fn lightning_tracks_all_turn_directions_and_draws_the_bolt_random_before_opposite_turn() {
-    battle_context::run(|| unsafe {
+    battle_context::run(|_| unsafe {
         let _battle = Battle::new(8);
         let ship = Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 0, [16; 3], [4, 4]);
         let mut enemy =
@@ -383,7 +383,7 @@ fn lightning_tracks_all_turn_directions_and_draws_the_bolt_random_before_opposit
 
 #[test]
 fn roots_choose_nearest_live_visible_opponent_not_a_cached_target_ally_or_dead_ship() {
-    battle_context::run(|| unsafe {
+    battle_context::run(|_| unsafe {
         let _battle = Battle::new(16);
         let ship = Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 0, [16; 3], [4, 4]);
         let mut ally =
@@ -433,7 +433,7 @@ fn roots_choose_nearest_live_visible_opponent_not_a_cached_target_ally_or_dead_s
 
 #[test]
 fn child_segments_keep_unrounded_travel_angle_inherit_color_and_retain_selected_target() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
             let ship =
@@ -522,7 +522,7 @@ fn child_segments_keep_unrounded_travel_angle_inherit_color_and_retain_selected_
 
 #[test]
 fn lightning_postprocess_extends_chains_until_zero_or_collision() {
-    battle_context::run(|| unsafe {
+    battle_context::run(|_| unsafe {
         let _battle = Battle::new(32);
         let mut ship =
             Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 0, [16; 3], [4, 4]);
@@ -559,7 +559,7 @@ fn lightning_postprocess_extends_chains_until_zero_or_collision() {
 
 #[test]
 fn allocation_failure_consumes_no_lightning_random_and_keeps_initializer_count() {
-    battle_context::run(|| unsafe {
+    battle_context::run(|_| unsafe {
         let _battle = Battle::new(2);
         let mut ship =
             Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 0, [16; 3], [4, 4]);
@@ -579,7 +579,7 @@ fn allocation_failure_consumes_no_lightning_random_and_keeps_initializer_count()
 
 #[test]
 fn lightning_collision_folds_and_subtracts_counter_then_calls_generic_weapon_collision() {
-    battle_context::run(|| unsafe {
+    battle_context::run(|_| unsafe {
         let _battle = Battle::new(32);
         let mut ship =
             Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 0, [16; 3], [4, 4]);
@@ -647,7 +647,7 @@ fn lightning_collision_folds_and_subtracts_counter_then_calls_generic_weapon_col
 
 #[test]
 fn ship_postprocess_emits_only_during_the_sixteen_active_weapon_ticks() {
-    battle_context::run(|| unsafe {
+    battle_context::run(|_| unsafe {
         let _battle = Battle::new(32);
         let mut ship =
             Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 0, [16; 3], [4, 4]);
@@ -670,7 +670,7 @@ fn ship_postprocess_emits_only_during_the_sixteen_active_weapon_ticks() {
 
 #[test]
 fn movement_reverses_on_thrust_press_turns_with_left_priority_and_animates_next_frame() {
-    battle_context::run(|| unsafe {
+    battle_context::run(|_| unsafe {
         let _battle = Battle::new(8);
         let mut ship =
             Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 0, [16; 3], [4, 4]);
@@ -747,7 +747,7 @@ fn movement_reverses_on_thrust_press_turns_with_left_priority_and_animates_next_
 
 #[test]
 fn harvester_filters_all_junk_flags_collision_rules_and_inclusive_distance_boundaries() {
-    battle_context::run(|| unsafe {
+    battle_context::run(|_| unsafe {
         let _battle = Battle::new(64);
         let mut ship =
             Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 0, [16; 3], [4, 4]);
@@ -801,7 +801,7 @@ fn harvester_filters_all_junk_flags_collision_rules_and_inclusive_distance_bound
 
 #[test]
 fn harvester_same_parent_zero_mass_and_ship_solidity_match_collision_possible_macro() {
-    battle_context::run(|| unsafe {
+    battle_context::run(|_| unsafe {
         for (ship_flags, obj_flags, same_parent, ship_mass, obj_mass, harvest) in [
             (IGNORE_SIMILAR, IGNORE_SIMILAR, true, 1, 1, false),
             (IGNORE_SIMILAR, IGNORE_SIMILAR, false, 1, 1, true),
@@ -834,7 +834,7 @@ fn harvester_same_parent_zero_mass_and_ship_solidity_match_collision_possible_ma
 
 #[test]
 fn harvester_requires_key_and_ready_counter_but_can_run_at_full_energy() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
             let mut ship =
@@ -890,7 +890,7 @@ fn harvester_requires_key_and_ready_counter_but_can_run_at_full_energy() {
 
 #[test]
 fn ai_encounter_weapon_range_recharge_range_and_close_pursuit_boundaries() {
-    battle_context::run(|| unsafe {
+    battle_context::run(|_| unsafe {
         let _battle = Battle::new(8);
         let mut ship =
             Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 0, [16; 3], [4, 4]);
@@ -950,7 +950,7 @@ fn ai_encounter_weapon_range_recharge_range_and_close_pursuit_boundaries() {
 
 #[test]
 fn empty_energy_expands_concerns_only_without_gravity_and_cooldown_and_suppresses_thrust() {
-    battle_context::run(|| unsafe {
+    battle_context::run(|_| unsafe {
         let _battle = Battle::new(8);
         let mut ship =
             Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 0, [16; 3], [4, 4]);
@@ -989,7 +989,7 @@ fn empty_energy_expands_concerns_only_without_gravity_and_cooldown_and_suppresse
 #[test]
 fn native_ai_preserves_fifth_concern_and_expands_active_count() {
     // SAFETY: battle_context serializes the pool, ship, and loaded fixture resources.
-    battle_context::run(|| unsafe {
+    battle_context::run(|_| unsafe {
         use uqm_rust::engine::battle::{Concern, Concerns};
         let battle = Battle::new(8);
         let mut ship =
@@ -1033,7 +1033,7 @@ fn native_ai_preserves_fifth_concern_and_expands_active_count() {
 
 #[test]
 fn shared_ai_turns_toward_a_ship_without_applying_generic_thrust() {
-    battle_context::run(|| unsafe {
+    battle_context::run(|_| unsafe {
         let _battle = Battle::new(8);
         let mut ship =
             Ship::with_frames(&_battle._pool, SPECIES_ID_SLYLANDRO_ID, 0, [16; 3], [4, 4]);

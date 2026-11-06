@@ -1,5 +1,6 @@
 //! Phase contracts use real borrowed records; engine execution is integration-tested.
 use super::*;
+use std::ptr;
 fn frame_views(views: Frames) -> [FRAME; 3] {
     std::array::from_fn(|index| views.view(index).raw())
 }

@@ -83,7 +83,7 @@ unsafe fn think(ship: &mut Ship, c: &mut [EVALUATE_DESC; 4], input: u8, count: C
 
 #[test]
 fn descriptor_matches_all_c_initializer_fields_and_resources() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(8);
         unsafe {
             let d = battle::descriptor(SPECIES_ID_THRADDASH_ID);
@@ -190,7 +190,7 @@ fn descriptor_matches_all_c_initializer_fields_and_resources() {
 
 #[test]
 fn horn_uses_next_location_exact_facing_speed_and_offsets_without_inheriting_velocity() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(8);
         unsafe {
             let mut ship =
@@ -250,7 +250,7 @@ fn horn_uses_next_location_exact_facing_speed_and_offsets_without_inheriting_vel
 
 #[test]
 fn failed_horn_and_napalm_allocation_keep_the_c_return_and_energy_semantics() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(1);
         unsafe {
             let mut ship =
@@ -276,7 +276,7 @@ fn failed_horn_and_napalm_allocation_keep_the_c_return_and_energy_semantics() {
 
 #[test]
 fn afterburner_inserts_owned_invisible_napalm_at_the_head_in_newest_first_order() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(8);
         unsafe {
             let mut ship =
@@ -323,7 +323,7 @@ fn afterburner_inserts_owned_invisible_napalm_at_the_head_in_newest_first_order(
 
 #[test]
 fn boost_uses_temporary_characteristics_and_preserves_the_inertial_thrust_result() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(64);
         unsafe {
             let mut ship =
@@ -400,7 +400,7 @@ fn boost_uses_temporary_characteristics_and_preserves_the_inertial_thrust_result
 
 #[test]
 fn repeated_boost_reaches_72_and_release_marks_coasting_beyond_normal_speed() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(16);
         unsafe {
             let mut ship =
@@ -431,7 +431,7 @@ fn repeated_boost_reaches_72_and_release_marks_coasting_beyond_normal_speed() {
 
 #[test]
 fn no_key_and_exhausted_energy_leave_velocity_and_queue_alone() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(8);
         unsafe {
             let mut ship =
@@ -477,7 +477,7 @@ fn no_key_and_exhausted_energy_leave_velocity_and_queue_alone() {
 
 #[test]
 fn napalm_materializes_without_decaying_and_initializes_the_intersection_from_next_image() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(8);
         unsafe {
             let mut ship =
@@ -518,7 +518,7 @@ fn napalm_materializes_without_decaying_and_initializes_the_intersection_from_ne
 
 #[test]
 fn napalm_decay_wait_and_loop_boundary_match_c_including_last_frame_wrap() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(8);
         unsafe {
             let mut ship =
@@ -562,7 +562,7 @@ fn napalm_decay_wait_and_loop_boundary_match_c_including_last_frame_wrap() {
 
 #[test]
 fn intelligence_classifies_stationary_threshold_and_turn_limit_without_rng() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(8);
         unsafe {
             let mut ship =
@@ -598,7 +598,7 @@ fn intelligence_classifies_stationary_threshold_and_turn_limit_without_rng() {
 
 #[test]
 fn pursuit_boost_requires_three_energy_ready_turn_and_no_active_speed_limit() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(8);
         unsafe {
             let mut ship =
@@ -636,7 +636,7 @@ fn pursuit_boost_requires_three_energy_ready_turn_and_no_active_speed_limit() {
 
 #[test]
 fn enticing_weapon_takes_priority_and_uses_rounded_wrapped_travel_angle() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(8);
         unsafe {
             let mut ship =
@@ -686,7 +686,7 @@ fn enticing_weapon_takes_priority_and_uses_rounded_wrapped_travel_angle() {
 
 #[test]
 fn entice_ship_geometry_uses_next_locations_and_size_truncation() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(8);
         unsafe {
             let mut ship =
@@ -718,7 +718,7 @@ fn entice_ship_geometry_uses_next_locations_and_size_truncation() {
 
 #[test]
 fn shared_ai_steers_before_thraddash_decides_whether_to_boost() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(8);
         unsafe {
             let mut ship =
@@ -741,7 +741,7 @@ fn shared_ai_steers_before_thraddash_decides_whether_to_boost() {
 
 #[test]
 fn owner_cleanup_during_collision_scan_invalidates_the_active_napalm() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(16);
         unsafe {
             let mut ship =
@@ -798,7 +798,7 @@ fn owner_cleanup_during_collision_scan_invalidates_the_active_napalm() {
 
 #[test]
 fn napalm_and_horn_collide_with_battle_objects_without_optional_callback_skips() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         // The non-solid categories deliberately have no collision callback, just
         // like their constructors. Solid categories use the live collision code.
         for (flags, hp, mass, damage) in [

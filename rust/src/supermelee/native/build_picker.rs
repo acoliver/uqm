@@ -138,16 +138,16 @@ pub(super) mod live {
         GetFrameRect(BUILD_PICK_FRAME, rect);
     }
 
-    unsafe extern "C" fn pick(state: *mut MELEE_STATE) -> u32 {
+    unsafe fn pick(state: *mut MELEE_STATE, input: &crate::engine::input::InputSession) -> u32 {
         let time = GetTimeCounter();
-        GamePaused = 0;
+        input.set_paused(false);
         if crate::engine::World::current().read(|world| world.activity()) & CHECK_ABORT as u16 != 0
         {
             (*state).build_pick_confirmed = 0;
             return 0;
         }
-        SetMenuSounds(15, 16);
-        let keys = PulsedInputState.menu;
+        SetMenuSounds(input, 15, 16);
+        let keys = input.pulsed().menu;
         if keys[KEY_MENU_SELECT as usize] != 0 || keys[KEY_MENU_CANCEL as usize] != 0 {
             (*state).build_pick_confirmed = u32::from(keys[KEY_MENU_CANCEL as usize] == 0);
             return 0;
@@ -176,8 +176,11 @@ pub(super) mod live {
     }
     /// # Safety
     /// State must be the active fleet editor on the game thread.
-    pub unsafe extern "C" fn build_pick_ship(state: *mut MELEE_STATE) -> bool {
-        FlushInput();
+    pub unsafe fn build_pick_ship(
+        input: &crate::engine::input::InputSession,
+        state: *mut MELEE_STATE,
+    ) -> bool {
+        FlushInput(input);
         if (*state).current_ship == 255 {
             (*state).current_ship = 0;
         }
@@ -189,7 +192,9 @@ pub(super) mod live {
             let mut io = crate::engine::observe::Io {
                 observer: &mut *observer,
             };
-            cx.run_input(&mut io, false, |cx, _| cx.with_legacy(|| pick(state) != 0));
+            cx.run_input(&mut io, false, |cx, _| {
+                cx.with_legacy(|| pick(state, input) != 0)
+            });
         });
         (*state).build_pick_confirmed != 0
     }

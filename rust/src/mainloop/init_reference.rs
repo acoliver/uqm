@@ -1,22 +1,11 @@
-//! C startup sequence — reference documentation ONLY.
+//! Historical C startup order.
 //!
-//! **This module contains NO executable code.** It exists solely to
-//! document the C `main()` startup sequence that `sc2/src/uqm.c` owns, so
-//! that future Rust main-loop work has an accurate reference for what
-//! happens before `Starcon2Main()` (and therefore before any Rust
-//! `rust_game_loop()` entry point) is ever invoked.
+//! The live Rust entry point retains ParsedOptions and Application. `app::run`
+//! calls `startup::initialize` with its owned input and configuration. Options,
+//! addon names and the content path no longer live in the globals listed below.
 //!
-//! # Architectural Rule
-//!
-//! **Rust must NOT call, replicate, or wrap the C startup sequence.**
-//!
-//! Per `PLAN-20260707-MAINLOOP.P04` (REQ-ML-002), the full init sequence
-//! — option parsing, config loading, graphics/input/audio subsystem
-//! bring-up, threading, and shutdown — remains entirely in C `main()`.
-//! Rust only replaces the *body* of `Starcon2Main()` (the per-frame game
-//! loop), which is launched as a separate thread *after* startup is
-//! complete. Anything that must happen before the first frame belongs to
-//! C `main()`, not to Rust.
+//! These tables record the pre-port sequence for ordering comparisons, not the
+//! current ownership rules.
 //!
 //! # Verified C Init Order
 //!

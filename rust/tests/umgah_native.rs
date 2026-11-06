@@ -91,7 +91,7 @@ unsafe fn think(ship: &mut Ship<'_>, c: &mut [EVALUATE_DESC; 4], input: u8, coun
 
 #[test]
 fn descriptor_matches_all_c_initializer_fields_and_resources() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(8);
         unsafe {
             let d = battle::descriptor(SPECIES_ID_UMGAH_ID);
@@ -198,7 +198,7 @@ fn descriptor_matches_all_c_initializer_fields_and_resources() {
 
 #[test]
 fn per_init_descriptor_copies_isolate_energy_resources_animation_and_custom_data() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(8);
         unsafe {
             let mut first =
@@ -271,7 +271,7 @@ fn per_init_descriptor_copies_isolate_energy_resources_animation_and_custom_data
 
 #[test]
 fn cone_initialization_fixes_intersection_and_does_not_inherit_velocity() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(8);
         unsafe {
             let mut ship =
@@ -318,7 +318,7 @@ fn cone_initialization_fixes_intersection_and_does_not_inherit_velocity() {
 
 #[test]
 fn held_cone_advances_by_16_preserves_phase_and_resets_only_when_facing_changes() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(8);
         unsafe {
             let mut ship =
@@ -375,7 +375,7 @@ fn held_cone_advances_by_16_preserves_phase_and_resets_only_when_facing_changes(
 
 #[test]
 fn appearance_and_uninit_free_only_the_instance_custom_data_and_are_repeatable() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(8);
         unsafe {
             let mut ship =
@@ -408,7 +408,7 @@ fn appearance_and_uninit_free_only_the_instance_custom_data_and_are_repeatable()
 
 #[test]
 fn failed_cone_allocation_still_updates_private_facing_and_returns_one_slot() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(1);
         unsafe {
             let mut ship =
@@ -446,7 +446,7 @@ unsafe fn target(finite: bool) -> PoolElement {
 
 #[test]
 fn collision_removes_and_frees_the_blast_but_does_not_restore_cone_life_or_solidity() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(4);
         unsafe {
             let mut ship =
@@ -495,7 +495,7 @@ fn collision_removes_and_frees_the_blast_but_does_not_restore_cone_life_or_solid
 
 #[test]
 fn collision_preserves_disappearing_when_blast_allocation_fails() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(3);
         unsafe {
             let mut ship =
@@ -525,7 +525,7 @@ fn collision_preserves_disappearing_when_blast_allocation_fails() {
 
 #[test]
 fn finite_weapon_hit_damages_once_without_a_blast_and_does_not_clear_disappearing() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(8);
         unsafe {
             let mut ship =
@@ -567,7 +567,7 @@ fn finite_weapon_hit_damages_once_without_a_blast_and_does_not_clear_disappearin
 
 #[test]
 fn retropropulsion_adds_the_exact_reverse_vector_for_every_facing_then_stops_all_velocity_fields() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(8);
         unsafe {
             let mut ship =
@@ -621,7 +621,7 @@ fn retropropulsion_adds_the_exact_reverse_vector_for_every_facing_then_stops_all
 
 #[test]
 fn retropropulsion_gates_on_appearance_thrust_wait_key_and_energy() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(8);
         unsafe {
             let mut ship =
@@ -671,7 +671,7 @@ fn retropropulsion_gates_on_appearance_thrust_wait_key_and_energy() {
 
 #[test]
 fn intelligence_filters_enticing_weapons_before_the_shared_pass() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(8);
         unsafe {
             let mut ship =
@@ -710,7 +710,7 @@ fn intelligence_filters_enticing_weapons_before_the_shared_pass() {
 
 #[test]
 fn short_range_ai_resets_special_wait_and_fires_only_before_turn_16() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(8);
         unsafe {
             let mut ship =
@@ -748,7 +748,7 @@ fn short_range_ai_resets_special_wait_and_fires_only_before_turn_16() {
 
 #[test]
 fn rearward_zip_uses_one_draw_with_both_random_turn_directions() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(8);
         unsafe {
             let mut ship =
@@ -769,7 +769,7 @@ fn rearward_zip_uses_one_draw_with_both_random_turn_directions() {
 
 #[test]
 fn ai_rng_follows_shared_steering_and_uses_old_turn_flags_for_alignment() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(8);
         unsafe {
             let mut ship =
@@ -807,7 +807,7 @@ fn ai_rng_follows_shared_steering_and_uses_old_turn_flags_for_alignment() {
 
 #[test]
 fn rear_zip_alignment_and_randomness_change_at_turns_8_and_16() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(8);
         unsafe {
             let mut ship =
@@ -845,7 +845,7 @@ fn rear_zip_alignment_and_randomness_change_at_turns_8_and_16() {
 
 #[test]
 fn ai_energy_test_is_strict_and_uses_world_to_turn_shift() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(8);
         unsafe {
             let mut ship =
@@ -878,7 +878,7 @@ fn ai_energy_test_is_strict_and_uses_world_to_turn_shift() {
 
 #[test]
 fn ai_uses_enemy_maneuverability_and_inclusive_16_through_24_range() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(8);
         unsafe {
             let mut ship =
@@ -914,7 +914,7 @@ fn ai_uses_enemy_maneuverability_and_inclusive_16_through_24_range() {
 
 #[test]
 fn active_zip_continues_on_nonincreasing_turns_then_exits_with_thrust_and_no_steering() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(8);
         unsafe {
             let mut ship =
@@ -964,7 +964,7 @@ fn active_zip_continues_on_nonincreasing_turns_then_exits_with_thrust_and_no_ste
 
 #[test]
 fn rear_arc_uses_unwrapped_next_location_difference_and_inclusive_angle_bounds() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(8);
         unsafe {
             let mut ship =

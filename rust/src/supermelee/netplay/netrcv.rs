@@ -49,12 +49,12 @@ impl SessionCore {
         }
     }
     pub fn net_input(&self) {
-        self.net_input_with(0, &mut super::battle::effect);
+        self.net_input_with(0, &mut |event| self.effect(event));
     }
     pub fn net_input_blocking(&self, timeout: u32) {
         self.net_input_with(
             timeout.min(crate::callback::ffi::Async_timeBeforeNextMs()),
-            &mut super::battle::effect,
+            &mut |event| self.effect(event),
         );
     }
     pub fn net_input_with(&self, timeout: u32, emit: &mut dyn FnMut(Event)) {

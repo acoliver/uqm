@@ -8,18 +8,6 @@ use std::{
     ptr,
 };
 
-macro_rules! global {
-    ($($name:ident: $ty:ty),* $(,)?) => { $(#[no_mangle] pub static mut $name: $ty = unsafe { std::mem::zeroed() };)* };
-}
-global!(
-    optWhichCoarseScan: i32, optWhichMenu: i32, optWhichFonts: i32,
-    optWhichIntro: i32, optWhichShield: i32, optSmoothScroll: i32, optMeleeScale: i32,
-    optAddons: *const *const c_char,
-    opt3doMusic: u32, optRemixMusic: u32, optSpeech: u32, optSubtitles: u32,
-    optStereoSFX: u32, optKeepAspectRatio: u32, optGamma: f32,
-    baseContentPath: [c_char; super::dir_prep::PATH_MAX],
-);
-
 /// # Safety
 /// Directory is a live UIO handle on the IO owner thread.
 #[no_mangle]
@@ -73,17 +61,12 @@ pub unsafe extern "C" fn loadAddon(addon: *const c_char) -> u32 {
 
 /// # Safety
 /// Addons is a NUL-terminated array of NUL-terminated names; resources are initialized.
-#[no_mangle]
-pub unsafe extern "C" fn prepareAddons(mut addons: *const *const c_char) {
-    while !(*addons).is_null() {
-        log::info!(
-            "Loading addon '{}'",
-            CStr::from_ptr(*addons).to_string_lossy()
-        );
-        if loadAddon(*addons) == 0 {
+pub unsafe fn prepareAddons(addons: &[std::ffi::CString]) {
+    for addon in addons {
+        log::info!("Loading addon '{}'", addon.to_string_lossy());
+        if loadAddon(addon.as_ptr()) == 0 {
             break;
         }
-        addons = addons.add(1);
     }
 }
 

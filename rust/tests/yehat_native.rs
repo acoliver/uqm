@@ -11,7 +11,7 @@ use uqm_rust::collections::observation;
 use uqm_rust::ships::native::{abi::*, frame_index};
 #[test]
 fn descriptor_and_twin_missile_launch() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(16);
         unsafe {
             let mut ship = Ship::new(&_battle, SPECIES_ID_YEHAT_ID, 0);
@@ -60,7 +60,7 @@ fn descriptor_and_twin_missile_launch() {
 }
 #[test]
 fn shield_uses_equivalent_facing_expires_and_recharges_on_postprocess() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(16);
         unsafe {
             let mut ship = Ship::new(&_battle, SPECIES_ID_YEHAT_ID, 0);
@@ -100,7 +100,7 @@ fn shield_uses_equivalent_facing_expires_and_recharges_on_postprocess() {
 }
 #[test]
 fn low_energy_flashes_without_shield_and_appearing_or_nonsolid_skips_callbacks() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(16);
         unsafe {
             let mut ship = Ship::new(&_battle, SPECIES_ID_YEHAT_ID, 0);
@@ -128,7 +128,7 @@ fn low_energy_flashes_without_shield_and_appearing_or_nonsolid_skips_callbacks()
 }
 #[test]
 fn ai_doubles_nonfinite_crew_turns_halves_finite_turns_and_obeys_life_boundary() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(16);
         unsafe {
             let mut ship = Ship::new(&_battle, SPECIES_ID_YEHAT_ID, 0);

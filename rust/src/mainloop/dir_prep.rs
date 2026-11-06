@@ -140,14 +140,6 @@ fn expand_dollar_vars(input: &str) -> String {
 pub use crate::io::handles::{
     configDir, contentDir, contentMountHandle, meleeDir, repository, saveDir,
 };
-#[cfg(not(test))]
-pub use crate::mainloop::options_abi::baseContentPath;
-#[cfg(test)]
-#[allow(non_upper_case_globals)]
-static mut baseContentPath: [c_char; PATH_MAX] = [0; PATH_MAX];
-
-/// Maximum path length, matching C's PATH_MAX on macOS.
-pub(crate) const PATH_MAX: usize = 4096;
 
 // uio_* are Rust-implemented (USE_RUST_UIO) — same crate, call directly
 use crate::io::uio_bridge::{
@@ -310,6 +302,7 @@ pub fn prepare_melee_dir() -> Result<(), DirPrepError> {
 /// Finds the content dir (by looking for a `version` file), mounts it at
 /// "/", mounts any `/packages/*.zip` files, and mounts addon packs.
 pub fn prepare_content_dir(
+    configuration: &uqm_engine::configuration::Configuration,
     content_dir: Option<&str>,
     addon_dir: Option<&str>,
 ) -> Result<(), DirPrepError> {
@@ -320,19 +313,9 @@ pub fn prepare_content_dir(
 
     tracing::debug!("Using '{}' as base content dir.", path_str);
 
-    // Set the C global
-    let c_path = CString::new(path_str.as_str()).unwrap();
-    let path_len = c_path.as_bytes().len();
-    unsafe {
-        let dst = std::ptr::addr_of_mut!(baseContentPath) as *mut u8;
-        std::ptr::copy_nonoverlapping(c_path.as_ptr().cast::<u8>(), dst, path_len);
-        // Null-terminate at path_len (at most PATH_MAX - 1)
-        if path_len < PATH_MAX {
-            *dst.add(path_len) = 0;
-        } else {
-            *dst.add(PATH_MAX - 1) = 0;
-        }
-    }
+    let retained_path = CString::new(path_str.as_str())
+        .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidInput, error))?;
+    configuration.set_content_path(retained_path);
 
     let repo = unsafe { repository };
 
@@ -594,7 +577,8 @@ pub unsafe extern "C" fn rust_prepare_config_dir(config_dir: *const c_char) -> c
 
 /// # Safety
 /// C strings must be valid UTF-8 or NULL.
-pub unsafe extern "C" fn rust_prepare_content_dir(
+pub unsafe fn rust_prepare_content_dir(
+    configuration: &uqm_engine::configuration::Configuration,
     content_dir: *const c_char,
     addon_dir: *const c_char,
     _exec_file: *const c_char,
@@ -617,7 +601,7 @@ pub unsafe extern "C" fn rust_prepare_content_dir(
                 .to_string(),
         )
     };
-    match prepare_content_dir(cdir.as_deref(), adir.as_deref()) {
+    match prepare_content_dir(configuration, cdir.as_deref(), adir.as_deref()) {
         Ok(()) => 0,
         Err(e) => {
             tracing::error!("prepare_content_dir failed: {:?}", e);

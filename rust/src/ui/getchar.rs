@@ -1,6 +1,6 @@
 #![cfg(not(test))]
-#![allow(non_snake_case)]
 
+use crate::engine::input::InputSession;
 use crate::memory::{rust_hfree as HFree, rust_hmalloc as HMalloc};
 use crate::navigation::abi::*;
 
@@ -45,88 +45,87 @@ unsafe fn switch_case(ch: &mut JoyChar, from: *const JoyChar, to: *const JoyChar
 }
 
 /// # Safety
-/// pTES and its strings, callbacks, and input subsystem must remain valid for the duration of the call.
-#[no_mangle]
-pub unsafe extern "C" fn DoTextEntry(pTES: *mut TEXTENTRY_STATE) -> BOOLEAN {
+/// text and its strings, callbacks, and input subsystem must remain valid for the duration of the call.
+pub unsafe fn do_text_entry(text: *mut TEXTENTRY_STATE, input: &InputSession) -> BOOLEAN {
     if crate::engine::World::current().read(|world| world.activity()) & CHECK_ABORT as u16 != 0 {
         return 0;
     }
-    if (*pTES).Initialized == 0 {
+    if (*text).Initialized == 0 {
         let mut lower_len = 0;
-        (*pTES).InputFunc = Some(DoTextEntry);
-        (*pTES).Success = 0;
-        (*pTES).Initialized = 1;
-        (*pTES).JoystickMode = 0;
-        (*pTES).UpperRegister = 1;
-        let chars = utf8StringCount(((*pTES).BaseStr).cast());
-        if (*pTES).CursorPos as usize > chars {
-            (*pTES).CursorPos = chars as i32;
+        (*text).InputFunc = Some(do_text_entry);
+        (*text).Success = 0;
+        (*text).Initialized = 1;
+        (*text).JoystickMode = 0;
+        (*text).UpperRegister = 1;
+        let chars = utf8StringCount(((*text).BaseStr).cast());
+        if (*text).CursorPos as usize > chars {
+            (*text).CursorPos = chars as i32;
         }
-        (*pTES).InsPt =
-            (skipUTF8Chars(((*pTES).BaseStr).cast(), (*pTES).CursorPos as usize)).cast();
-        (*pTES).JoyAlphaString = CaptureStringTable(LoadStringTableInstance(
+        (*text).InsPt =
+            (skipUTF8Chars(((*text).BaseStr).cast(), (*text).CursorPos as usize)).cast();
+        (*text).JoyAlphaString = CaptureStringTable(LoadStringTableInstance(
             JOYSTICK_ALPHA_STRTAB.as_ptr().cast(),
         ));
-        let table = (*pTES).JoyAlphaString;
-        (*pTES).JoyAlpha = load_alpha(
+        let table = (*text).JoyAlphaString;
+        (*text).JoyAlpha = load_alpha(
             SetAbsStringTableIndex(table, 0),
-            &mut (*pTES).JoyAlphaLength,
+            &mut (*text).JoyAlphaLength,
         )
         .cast();
-        (*pTES).JoyUpper =
-            load_alpha(SetAbsStringTableIndex(table, 1), &mut (*pTES).JoyRegLength).cast();
-        (*pTES).JoyLower = load_alpha(SetAbsStringTableIndex(table, 2), &mut lower_len).cast();
-        if lower_len != (*pTES).JoyRegLength {
-            if lower_len < (*pTES).JoyRegLength {
-                (*pTES).JoyRegLength = lower_len;
+        (*text).JoyUpper =
+            load_alpha(SetAbsStringTableIndex(table, 1), &mut (*text).JoyRegLength).cast();
+        (*text).JoyLower = load_alpha(SetAbsStringTableIndex(table, 2), &mut lower_len).cast();
+        if lower_len != (*text).JoyRegLength {
+            if lower_len < (*text).JoyRegLength {
+                (*text).JoyRegLength = lower_len;
             }
-            crate::log_abi::log_message(log_Level_log_Warning as i32, &format!("Warning: Joystick upper-lower registers size mismatch; using the smallest subset ({})", (*pTES).JoyRegLength));
+            crate::log_abi::log_message(log_Level_log_Warning as i32, &format!("Warning: Joystick upper-lower registers size mismatch; using the smallest subset ({})", (*text).JoyRegLength));
         }
-        (*pTES).CacheStr =
-            HMalloc(((*pTES).MaxSize as usize).wrapping_mul(mem::size_of::<UNICODE>())).cast();
+        (*text).CacheStr =
+            HMalloc(((*text).MaxSize as usize).wrapping_mul(mem::size_of::<UNICODE>())).cast();
         EnterCharacterMode();
-        DoInput(pTES.cast(), 1);
+        DoInput(text.cast(), 1);
         ExitCharacterMode();
-        if !(*pTES).CacheStr.is_null() {
-            HFree((*pTES).CacheStr.cast());
+        if !(*text).CacheStr.is_null() {
+            HFree((*text).CacheStr.cast());
         }
-        if !(*pTES).JoyLower.is_null() {
-            HFree((*pTES).JoyLower.cast());
+        if !(*text).JoyLower.is_null() {
+            HFree((*text).JoyLower.cast());
         }
-        if !(*pTES).JoyUpper.is_null() {
-            HFree((*pTES).JoyUpper.cast());
+        if !(*text).JoyUpper.is_null() {
+            HFree((*text).JoyUpper.cast());
         }
-        if !(*pTES).JoyAlpha.is_null() {
-            HFree((*pTES).JoyAlpha.cast());
+        if !(*text).JoyAlpha.is_null() {
+            HFree((*text).JoyAlpha.cast());
         }
-        DestroyStringTable(ReleaseStringTable((*pTES).JoyAlphaString));
-        return (*pTES).Success;
+        DestroyStringTable(ReleaseStringTable((*text).JoyAlphaString));
+        return (*text).Success;
     }
-    let mut string = (*pTES).InsPt;
+    let pulse = input.pulsed();
+    let mut string = (*text).InsPt;
     let mut len = strlen(string.cast()) as i32;
-    let cached_ins = string;
-    let cached_cursor = (*pTES).CursorPos;
-    ptr::copy_nonoverlapping((*pTES).BaseStr, (*pTES).CacheStr, (*pTES).MaxSize as usize);
+    let (cached_ins, cached_cursor) = (string, (*text).CursorPos);
+    ptr::copy_nonoverlapping((*text).BaseStr, (*text).CacheStr, (*text).MaxSize as usize);
     let mut changed = false;
     let mut ch = GetNextCharacter();
-    if ch == 0 && PulsedInputState.menu[KEY_MENU_ANY as usize] != 0 {
+    if ch == 0 && pulse.menu[KEY_MENU_ANY as usize] != 0 {
         ch = GetLastCharacter();
     }
     while ch != 0 {
         let mut encoded = [0 as UNICODE; 8];
-        (*pTES).JoystickMode = 0;
+        (*text).JoystickMode = 0;
         let size = getStringFromChar(
             (encoded.as_mut_ptr()).cast(),
             mem::size_of_val(&encoded),
             ch,
         );
         if UniChar_isPrint(ch) != 0 && size > 0 {
-            let offset = string.offset_from((*pTES).BaseStr);
-            if offset + len as isize + (size as isize) < (*pTES).MaxSize as isize {
+            let offset = string.offset_from((*text).BaseStr);
+            if offset + len as isize + (size as isize) < (*text).MaxSize as isize {
                 ptr::copy(string, string.add(size as usize), len as usize + 1);
                 ptr::copy_nonoverlapping(encoded.as_ptr(), string, size as usize);
                 string = string.add(size as usize);
-                (*pTES).CursorPos += 1;
+                (*text).CursorPos += 1;
                 changed = true;
             } else {
                 PlayMenuSound(MENU_SOUND_EFFECT_MENU_SOUND_FAILURE);
@@ -134,7 +133,7 @@ pub unsafe extern "C" fn DoTextEntry(pTES: *mut TEXTENTRY_STATE) -> BOOLEAN {
         }
         ch = GetNextCharacter();
     }
-    if PulsedInputState.menu[KEY_MENU_DELETE as usize] != 0 {
+    if pulse.menu[KEY_MENU_DELETE as usize] != 0 {
         if len != 0 {
             let current = char_from_utf8(string.cast());
             ptr::copy(
@@ -145,46 +144,46 @@ pub unsafe extern "C" fn DoTextEntry(pTES: *mut TEXTENTRY_STATE) -> BOOLEAN {
             len -= current.len as i32;
             changed = true;
         }
-    } else if PulsedInputState.menu[KEY_MENU_BACKSPACE as usize] != 0 {
-        if string > (*pTES).BaseStr {
+    } else if pulse.menu[KEY_MENU_BACKSPACE as usize] != 0 {
+        if string > (*text).BaseStr {
             let previous =
-                skipUTF8Chars(((*pTES).BaseStr).cast(), ((*pTES).CursorPos - 1) as usize);
+                skipUTF8Chars(((*text).BaseStr).cast(), ((*text).CursorPos - 1) as usize);
             ptr::copy(string, (previous).cast(), len as usize + 1);
             string = (previous).cast();
-            (*pTES).CursorPos -= 1;
+            (*text).CursorPos -= 1;
             changed = true;
         }
-    } else if PulsedInputState.menu[KEY_MENU_LEFT as usize] != 0 {
-        if string > (*pTES).BaseStr {
+    } else if pulse.menu[KEY_MENU_LEFT as usize] != 0 {
+        if string > (*text).BaseStr {
             let previous =
-                skipUTF8Chars(((*pTES).BaseStr).cast(), ((*pTES).CursorPos - 1) as usize);
+                skipUTF8Chars(((*text).BaseStr).cast(), ((*text).CursorPos - 1) as usize);
             string = (previous).cast();
             // The C code subtracts prev after assigning pStr to prev, so len is unchanged.
-            (*pTES).CursorPos -= 1;
+            (*text).CursorPos -= 1;
             changed = true;
         }
-    } else if PulsedInputState.menu[KEY_MENU_RIGHT as usize] != 0 {
+    } else if pulse.menu[KEY_MENU_RIGHT as usize] != 0 {
         if len > 0 {
             let current = char_from_utf8(string.cast());
             string = string.add(current.len as usize);
             len -= current.len as i32;
-            (*pTES).CursorPos += 1;
+            (*text).CursorPos += 1;
             changed = true;
         }
-    } else if PulsedInputState.menu[KEY_MENU_HOME as usize] != 0 {
-        if string > (*pTES).BaseStr {
-            string = (*pTES).BaseStr;
+    } else if pulse.menu[KEY_MENU_HOME as usize] != 0 {
+        if string > (*text).BaseStr {
+            string = (*text).BaseStr;
             len = strlen(string.cast()) as i32;
-            (*pTES).CursorPos = 0;
+            (*text).CursorPos = 0;
             changed = true;
         }
-    } else if PulsedInputState.menu[KEY_MENU_END as usize] != 0 && len > 0 {
-        (*pTES).CursorPos += utf8StringCount((string).cast()) as i32;
+    } else if pulse.menu[KEY_MENU_END as usize] != 0 && len > 0 {
+        (*text).CursorPos += utf8StringCount((string).cast()) as i32;
         string = string.add(len as usize);
         len = 0;
         changed = true;
     }
-    if !(*pTES).JoyAlpha.is_null()
+    if !(*text).JoyAlpha.is_null()
         && [
             KEY_MENU_UP,
             KEY_MENU_DOWN,
@@ -192,29 +191,29 @@ pub unsafe extern "C" fn DoTextEntry(pTES: *mut TEXTENTRY_STATE) -> BOOLEAN {
             KEY_MENU_PAGE_DOWN,
         ]
         .iter()
-        .any(|key| PulsedInputState.menu[*key as usize] != 0)
+        .any(|key| pulse.menu[*key as usize] != 0)
     {
-        joystick_character(pTES, &mut string, &mut len, &mut changed);
+        joystick_character(input, text, &mut string, &mut len, &mut changed);
     }
-    if PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0 {
-        (*pTES).Success = 1;
+    if pulse.menu[KEY_MENU_SELECT as usize] != 0 {
+        (*text).Success = 1;
         return 0;
     }
-    if PulsedInputState.menu[KEY_MENU_EDIT_CANCEL as usize] != 0 {
-        (*pTES).Success = 0;
+    if pulse.menu[KEY_MENU_EDIT_CANCEL as usize] != 0 {
+        (*text).Success = 0;
         return 0;
     }
-    (*pTES).InsPt = string;
-    if let Some(callback) = (*pTES).ChangeCallback.filter(|_| changed) {
-        if callback(pTES) == 0 {
-            ptr::copy_nonoverlapping((*pTES).CacheStr, (*pTES).BaseStr, (*pTES).MaxSize as usize);
-            (*pTES).InsPt = cached_ins;
-            (*pTES).CursorPos = cached_cursor;
+    (*text).InsPt = string;
+    if let Some(callback) = (*text).ChangeCallback.filter(|_| changed) {
+        if callback(text, input) == 0 {
+            ptr::copy_nonoverlapping((*text).CacheStr, (*text).BaseStr, (*text).MaxSize as usize);
+            (*text).InsPt = cached_ins;
+            (*text).CursorPos = cached_cursor;
             PlayMenuSound(MENU_SOUND_EFFECT_MENU_SOUND_FAILURE);
         }
     }
-    if let Some(callback) = (*pTES).FrameCallback {
-        callback(pTES)
+    if let Some(callback) = (*text).FrameCallback {
+        callback(text, input)
     } else {
         SleepThread(ONE_SECOND / 30);
         1
@@ -243,62 +242,63 @@ unsafe fn load_alpha(string: STRING, count: *mut i32) -> *mut JoyChar {
 }
 
 unsafe fn joystick_character(
-    pTES: *mut TEXTENTRY_STATE,
+    input: &InputSession,
+    text: *mut TEXTENTRY_STATE,
     string: &mut *mut UNICODE,
     len: &mut i32,
     changed: &mut bool,
 ) {
-    let alpha = (*pTES).JoyAlpha.cast::<JoyChar>();
-    let upper = (*pTES).JoyUpper.cast::<JoyChar>();
-    let lower = (*pTES).JoyLower.cast::<JoyChar>();
-    (*pTES).JoystickMode = 1;
+    let alpha = (*text).JoyAlpha.cast::<JoyChar>();
+    let upper = (*text).JoyUpper.cast::<JoyChar>();
+    let lower = (*text).JoyLower.cast::<JoyChar>();
+    (*text).JoystickMode = 1;
     let (current, upper_case) = if *len != 0 {
         let c = char_from_utf8((*string).cast());
-        (c, find_char(&c, lower, (*pTES).JoyRegLength) < 0)
+        (c, find_char(&c, lower, (*text).JoyRegLength) < 0)
     } else {
-        (*alpha, (*pTES).UpperRegister != 0)
+        (*alpha, (*text).UpperRegister != 0)
     };
     let mut next = current;
     let mut compare = current;
-    switch_case(&mut compare, lower, upper, (*pTES).JoyRegLength);
-    let mut index = find_char(&compare, alpha, (*pTES).JoyAlphaLength);
-    if PulsedInputState.menu[KEY_MENU_UP as usize] != 0 {
+    switch_case(&mut compare, lower, upper, (*text).JoyRegLength);
+    let mut index = find_char(&compare, alpha, (*text).JoyAlphaLength);
+    if input.pulsed().menu[KEY_MENU_UP as usize] != 0 {
         index -= 1;
         if index < 0 {
-            index = (*pTES).JoyAlphaLength - 1;
+            index = (*text).JoyAlphaLength - 1;
         }
         next = *alpha.add(index as usize);
-    } else if PulsedInputState.menu[KEY_MENU_DOWN as usize] != 0 {
+    } else if input.pulsed().menu[KEY_MENU_DOWN as usize] != 0 {
         index += 1;
-        if index >= (*pTES).JoyAlphaLength {
+        if index >= (*text).JoyAlphaLength {
             index = 0;
         }
         next = *alpha.add(index as usize);
     }
-    if PulsedInputState.menu[KEY_MENU_PAGE_UP as usize] != 0
-        || PulsedInputState.menu[KEY_MENU_PAGE_DOWN as usize] != 0
+    if input.pulsed().menu[KEY_MENU_PAGE_UP as usize] != 0
+        || input.pulsed().menu[KEY_MENU_PAGE_DOWN as usize] != 0
     {
         if *len != 0 {
             if upper_case {
-                switch_case(&mut next, upper, lower, (*pTES).JoyRegLength);
+                switch_case(&mut next, upper, lower, (*text).JoyRegLength);
             } else {
-                switch_case(&mut next, lower, upper, (*pTES).JoyRegLength);
+                switch_case(&mut next, lower, upper, (*text).JoyRegLength);
             }
         } else {
-            (*pTES).UpperRegister = u32::from((*pTES).UpperRegister == 0);
+            (*text).UpperRegister = u32::from((*text).UpperRegister == 0);
         }
     } else if upper_case {
-        switch_case(&mut next, lower, upper, (*pTES).JoyRegLength);
+        switch_case(&mut next, lower, upper, (*text).JoyRegLength);
     } else {
-        switch_case(&mut next, upper, lower, (*pTES).JoyRegLength);
+        switch_case(&mut next, upper, lower, (*text).JoyRegLength);
     }
     if strcmp(next.enc.as_ptr(), current.enc.as_ptr()) == 0 {
         return;
     }
-    let offset = (*string).offset_from((*pTES).BaseStr);
+    let offset = (*string).offset_from((*text).BaseStr);
     if *len != 0 {
         let rest = *len - current.len as i32;
-        if offset + rest as isize + (next.len as isize) < (*pTES).MaxSize as isize {
+        if offset + rest as isize + (next.len as isize) < (*text).MaxSize as isize {
             if next.len != current.len {
                 ptr::copy(
                     (*string).add(current.len as usize),
@@ -310,7 +310,7 @@ unsafe fn joystick_character(
             *len = rest + next.len as i32;
             *changed = true;
         }
-    } else if offset + *len as isize + (next.len as isize) < (*pTES).MaxSize as isize {
+    } else if offset + *len as isize + (next.len as isize) < (*text).MaxSize as isize {
         ptr::copy_nonoverlapping(next.enc.as_ptr(), (*string).cast(), next.len as usize);
         *(*string).add(next.len as usize) = 0;
         *len += next.len as i32;

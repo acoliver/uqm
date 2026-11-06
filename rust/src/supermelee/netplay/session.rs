@@ -44,6 +44,7 @@ pub(super) struct Selection {
     pub choices: [Option<u16>; 2],
 }
 pub struct SessionCore {
+    controller: Option<crate::engine::input::InputSession>,
     pub options: Options,
     pub(super) replay_remote_player: Option<usize>,
     pub(super) transport: RefCell<Box<dyn uqm_engine::host::Net>>,
@@ -54,8 +55,17 @@ pub struct SessionCore {
     pub(super) selection: RefCell<Selection>,
 }
 impl SessionCore {
-    fn new(transport: Box<dyn uqm_engine::host::Net>) -> Self {
+    pub(crate) fn controller(&self) -> &crate::engine::input::InputSession {
+        self.controller
+            .as_ref()
+            .unwrap_or_else(|| panic!("native protocol controller is not installed"))
+    }
+    fn new(
+        transport: Box<dyn uqm_engine::host::Net>,
+        controller: Option<crate::engine::input::InputSession>,
+    ) -> Self {
         Self {
+            controller,
             options: Options::default(),
             replay_remote_player: None,
             transport: RefCell::new(transport),
@@ -101,7 +111,7 @@ impl SessionCore {
 }
 impl Default for SessionCore {
     fn default() -> Self {
-        Self::new(uqm_engine::host::native_net())
+        Self::new(uqm_engine::host::native_net(), None)
     }
 }
 impl Drop for SessionCore {
@@ -126,6 +136,12 @@ impl std::ops::Deref for NetplaySession {
     }
 }
 impl NetplaySession {
+    pub fn with_input(input: crate::engine::input::InputSession) -> Self {
+        Self(std::rc::Rc::new(SessionCore::new(
+            uqm_engine::host::native_net(),
+            Some(input),
+        )))
+    }
     pub fn battle_net(&self) -> std::rc::Rc<dyn crate::engine::battle::net::BattleNet> {
         self.0.clone()
     }
@@ -135,7 +151,7 @@ impl NetplaySession {
             .options
     }
     pub fn with_net(net: impl uqm_engine::host::Net + 'static) -> Self {
-        Self(std::rc::Rc::new(SessionCore::new(Box::new(net))))
+        Self(std::rc::Rc::new(SessionCore::new(Box::new(net), None)))
     }
     pub(crate) fn configure_peer(&mut self, side: usize, server: bool, port: u16) {
         let core = std::rc::Rc::get_mut(&mut self.0)
@@ -174,6 +190,18 @@ fn poll_replay_wait(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn protocol_session_retains_the_supplied_input_and_configuration() {
+        let input = crate::engine::input::InputSession::default();
+        let session = NetplaySession::with_input(input.clone());
+        input.set_player_control(1, 5);
+        input
+            .configuration
+            .update_preferences(|options| options.menu = 2);
+        assert_eq!(session.controller().player_controls()[1], 5);
+        assert_eq!(session.controller().preferences().menu, 2);
+        assert_eq!(session.controller().immediate_ptr(), input.immediate_ptr());
+    }
     #[test]
     fn fixture_server_retains_its_bound_port_until_connection() {
         use uqm_engine::host::Net;

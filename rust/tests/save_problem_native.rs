@@ -46,16 +46,20 @@ impl Observer<Option<CampaignView>> for WaitObserver {
     fn presented(&mut self, _: &mut Presented) {}
 }
 
-struct Runtime(WaitObserver);
+struct Runtime(WaitObserver, uqm_rust::engine::input::InputSession);
 
 impl InputRuntime for Runtime {
+    fn input(&self) -> &uqm_rust::engine::input::InputSession {
+        &self.1
+    }
+
     fn observer(&self) -> Box<dyn Observer<Option<CampaignView>>> {
         Box::new(self.0.clone())
     }
     fn update(&self) {
         panic!("the observer must stop the wait before sampling input");
     }
-    fn run(&self, _: &mut Cx<'_>, _: &mut Io<'_>, _: bool, _: &mut Frame<'_>) {
+    fn run(&self, _: &mut Cx<'_>, _: &mut Io<'_>, _: bool, _: &mut dyn Frame) {
         panic!("the popup uses the nested wait, not a second input driver");
     }
     fn battle_input(&self, _: &uqm_rust::engine::battle::input::InputContext) -> u8 {
@@ -130,11 +134,13 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
         game.kernel.space_context = context;
         game.kernel.star_con_font = &mut font;
         game.kernel.game_strings = CaptureStringTable(strings).cast();
-        game.kernel
-            .install_input_runtime(Rc::new(Runtime(WaitObserver {
+        game.kernel.install_input_runtime(Rc::new(Runtime(
+            WaitObserver {
                 waits: waits.clone(),
                 frame,
-            })));
+            },
+            uqm_rust::engine::input::InputSession::default(),
+        )));
         uqm_rust::app::bridge::with_game(&mut game, || {
             for text in [b'A', 0] {
                 *(*message).data = text as std::ffi::c_char;

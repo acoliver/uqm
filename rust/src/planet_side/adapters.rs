@@ -4,33 +4,20 @@ use super::runtime::{AdapterError, PlanetSideClock, PlanetSideInput, ShipStatusP
 use super::session::{ShipDelta, ShipStatus};
 use super::simulation::FrameInput;
 #[cfg(not(test))]
-use crate::c_bindings::controller_input::{CurrentInputState, CONTROL_TEMPLATE_NUM_TEMPLATES};
-#[cfg(not(test))]
-use crate::c_bindings::player_control_template;
-#[cfg(not(test))]
-use crate::engine::World as WorldOwner;
-#[cfg(not(test))]
 use crate::engine::WorldData as WorldFields;
+use crate::engine::{input::InputControls, world::activity::ActivityControl};
 
-#[cfg(not(test))]
-const KEY_UP: usize = 0;
-#[cfg(not(test))]
-const KEY_LEFT: usize = 2;
-#[cfg(not(test))]
-const KEY_RIGHT: usize = 3;
-#[cfg(not(test))]
-const KEY_WEAPON: usize = 4;
-#[cfg(not(test))]
-const KEY_SPECIAL: usize = 5;
-#[cfg(not(test))]
-const KEY_ESCAPE: usize = 6;
-#[cfg(not(test))]
-const NUM_TEMPLATES: usize = CONTROL_TEMPLATE_NUM_TEMPLATES as usize;
-
-/// Input adapter reading the resolved player-one control template.
-pub struct CffiPlanetSideInput;
+/// Input adapter retaining the resolved player-one controls and activity signal.
+pub struct CffiPlanetSideInput {
+    controls: InputControls,
+    activity: ActivityControl,
+}
 
 impl CffiPlanetSideInput {
+    pub fn new(controls: InputControls, activity: ActivityControl) -> Self {
+        Self { controls, activity }
+    }
+
     pub fn poll_observed(
         &mut self,
         cx: &mut crate::engine::battle::Cx<'_>,
@@ -69,13 +56,13 @@ impl CffiPlanetSideInput {
                 ..FrameInput::default()
             });
         }
-        cx.with_legacy(|| self.poll())
+        self.poll()
     }
 }
 
 impl PlanetSideInput for CffiPlanetSideInput {
     fn poll(&mut self) -> Result<FrameInput, AdapterError> {
-        Ok(read_player_one_input())
+        Ok(read_player_one_input(&self.controls, &self.activity))
     }
 }
 
@@ -92,32 +79,20 @@ use crate::ui::sis::DeltaSISGauges;
 #[cfg(not(test))]
 use crate::ui::sis::DrawStorageBays;
 
-#[cfg(not(test))]
-fn read_player_one_input() -> FrameInput {
-    // The game loop updates these globals synchronously before invoking the
-    // active input callback, so one snapshot cannot race another game tick.
-    unsafe {
-        let Some(template) = player_control_template(0).map(|template| template as usize) else {
-            return FrameInput::default();
-        };
-        if template >= NUM_TEMPLATES {
-            return FrameInput::default();
-        }
-        let key = &CurrentInputState.key[template];
-        FrameInput {
-            turn_left: key[KEY_LEFT] != 0,
-            turn_right: key[KEY_RIGHT] != 0,
-            thrust: key[KEY_UP] != 0,
-            fire: key[KEY_WEAPON] != 0,
-            takeoff: key[KEY_ESCAPE] != 0 || key[KEY_SPECIAL] != 0,
-            abort: WorldOwner::current().read(WorldOwner::activity) & 0x4000 != 0,
-        }
+fn read_player_one_input(input: &InputControls, activity: &ActivityControl) -> FrameInput {
+    use uqm_engine::input::frames::{
+        KEY_ESCAPE, KEY_LEFT, KEY_RIGHT, KEY_SPECIAL, KEY_UP, KEY_WEAPON,
+    };
+    let snapshot = input.current();
+    let key = &snapshot.key[input.player_controls()[0] as usize];
+    FrameInput {
+        turn_left: key[KEY_LEFT as usize] != 0,
+        turn_right: key[KEY_RIGHT as usize] != 0,
+        thrust: key[KEY_UP as usize] != 0,
+        fire: key[KEY_WEAPON as usize] != 0,
+        takeoff: key[KEY_ESCAPE as usize] != 0 || key[KEY_SPECIAL as usize] != 0,
+        abort: activity.activity() & 0x4000 != 0,
     }
-}
-
-#[cfg(test)]
-fn read_player_one_input() -> FrameInput {
-    FrameInput::default()
 }
 
 /// Main-thread clock adapter preserving the established pump-and-flush sleep path.
@@ -235,7 +210,12 @@ mod tests {
 
     #[test]
     fn non_linked_input_is_neutral() {
-        assert_eq!(read_player_one_input(), FrameInput::default());
+        let input = InputControls::default();
+        let game = crate::engine::Game::new();
+        assert_eq!(
+            read_player_one_input(&input, &game.world.activity_control()),
+            FrameInput::default()
+        );
     }
 
     #[test]
@@ -310,14 +290,15 @@ mod tests {
                 stop,
                 inputs: Vec::new(),
             };
-            let input = CffiPlanetSideInput
-                .poll_observed(
-                    &mut cx,
-                    &mut Io {
-                        observer: &mut observer,
-                    },
-                )
-                .unwrap();
+            let input =
+                CffiPlanetSideInput::new(InputControls::default(), cx.world.activity_control())
+                    .poll_observed(
+                        &mut cx,
+                        &mut Io {
+                            observer: &mut observer,
+                        },
+                    )
+                    .unwrap();
             assert_eq!(input.abort, stop.is_some());
             let mut expected = vec![(InputView::BeforeUpdate, Some(0x1234))];
             if stop != Some(InputView::BeforeUpdate) {

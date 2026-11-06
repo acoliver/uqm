@@ -17,9 +17,11 @@
 //! from event handlers.
 
 mod c_api;
+pub mod controls;
 pub mod ffi;
 #[cfg(test)]
 mod ffi_behavior_tests;
+pub mod frames;
 pub mod joystick;
 pub mod keyboard;
 pub mod keynames;
@@ -35,3 +37,5 @@ pub use keynames::{key_from_name, key_name};
 pub use menu_binding::{query_menu_binding, MenuBindingResult};
 pub use templates::ControlTemplate;
 pub use vcontrol::{VControl, VControlError, VCONTROL};
+
+pub mod session;

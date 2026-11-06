@@ -2,9 +2,11 @@
 
 #[cfg(not(test))]
 use super::*;
+use super::{box_union, EXTENT, POINT, RECT};
 
 #[cfg(not(test))]
 pub(super) unsafe fn prepare_star_map(
+    input: &crate::engine::input::InputSession,
     misc_data: *mut c_void,
     space: *mut c_void,
     autopilot: POINT,
@@ -23,7 +25,7 @@ pub(super) unsafe fn prepare_star_map(
         menu.Initialized = 0;
         TRANSITION_PENDING = true;
         if which_space() <= 1 {
-            update_map();
+            update_map(input);
         }
         DrawStarMap(0, (-1isize) as *mut RECT);
         TRANSITION_PENDING = false;
@@ -47,4 +49,46 @@ pub(super) unsafe fn finish_star_map(universe: POINT) {
         DrawSISMessage(ptr::null());
         DrawStatusMessage(ptr::null());
     }
+}
+
+pub(super) fn repair_rectangle(last: RECT, next: RECT, width: i32, height: i32) -> RECT {
+    let mut r = RECT {
+        corner: POINT {
+            x: (i32::from(next.corner.x) + i32::from(next.extent.width >> 1) - 25) as i16,
+            y: (i32::from(next.corner.y) + i32::from(next.extent.height >> 1) - 9) as i16,
+        },
+        extent: EXTENT {
+            width: 50,
+            height: 9,
+        },
+    };
+    if r.corner.x < 0 {
+        r.corner.x = 0;
+    } else if i32::from(r.corner.x) + 50 >= width {
+        r.corner.x = (width - 50) as i16;
+    }
+    if r.corner.y < 0 {
+        r.corner.y = 0;
+    } else if i32::from(r.corner.y) + 9 >= height {
+        r.corner.y = (height - 9) as i16;
+    }
+    r = box_union(last, r);
+    r = box_union(next, r);
+    if r.corner.x < 0 {
+        r.extent.width = r.extent.width.wrapping_add(r.corner.x);
+        r.corner.x = 0;
+    }
+    if i32::from(r.corner.x) + i32::from(r.extent.width) > width {
+        r.extent.width = (width - i32::from(r.corner.x)) as i16;
+    }
+    if r.corner.y < 0 {
+        r.extent.height = r.extent.height.wrapping_add(r.corner.y);
+        r.corner.y = 0;
+    }
+    if i32::from(r.corner.y) + i32::from(r.extent.height) > height {
+        r.extent.height = (height - i32::from(r.corner.y)) as i16;
+    }
+    r.extent.height = r.extent.height.wrapping_add(r.corner.y & 1);
+    r.corner.y &= !1;
+    r
 }

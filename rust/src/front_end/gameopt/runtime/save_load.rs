@@ -1,6 +1,7 @@
 use super::*;
 
 pub(super) unsafe fn save_load_game(
+    input: &crate::engine::input::InputSession,
     pick_state: &mut PickGameState,
     game_index: COUNT,
     canceled_by_user: &mut BOOLEAN,
@@ -23,7 +24,7 @@ pub(super) unsafe fn save_load_game(
         }
         name_buf[SAVE_NAME_SIZE as usize] = 0;
         // SAFETY: the game-thread picker retains its graphics context and the writable name buffer.
-        if unsafe { name_save_game(game_index, name_buf.as_mut_ptr()) } != 0 {
+        if unsafe { name_save_game(input, game_index, name_buf.as_mut_ptr()) } != 0 {
             // SAFETY: the game-thread picker retains the stamp, selected summary and name buffer.
             unsafe {
                 PlayMenuSound(MENU_SOUND_EFFECT_MENU_SOUND_SUCCESS);
@@ -72,6 +73,8 @@ pub(super) fn pick_game(
     saving: BOOLEAN,
     from_main_menu: BOOLEAN,
 ) -> BOOLEAN {
+    let runtime = cx.kernel.input_runtime();
+    let input = runtime.input();
     let activity = cx.world.activity();
     log::info!(
         "RUST_PICKER: enter saving={saving} main_menu={from_main_menu} activity={activity:#x}"
@@ -81,26 +84,23 @@ pub(super) fn pick_game(
     pick_state.saving = saving;
     // SAFETY: this native record contains integers and nullable pointers.
     let mut menu_state: MENU_STATE = unsafe { mem::zeroed() };
-    let play_frame = cx.kernel.play_frame;
-    let space_context = cx.kernel.space_context;
+    let (frame, context) = (cx.kernel.play_frame, cx.kernel.space_context);
     // SAFETY: the synchronous picker owns these published native resources.
     let (old_callback, old_context, mut dlg_stamp, dlg_rect) = cx.with_legacy(|| unsafe {
-        pick_state.summary_frame = SetAbsFrameIndex(play_frame, 39);
+        pick_state.summary_frame = SetAbsFrameIndex(frame, 39);
         menu_state.privData = ptr::addr_of_mut!(pick_state).cast();
         menu_state.CurState = LAST_USED_SLOT as BYTE;
         let time_out = FadeMusic(0, (ONE_SECOND / 2) as SIZE);
-        let old_callback = SetInputCallback(None);
+        let old_callback = SetInputCallback(runtime.input(), None);
         let (old_context, dlg_stamp, dlg_rect) = prepare_display(
             &mut pick_state,
             &menu_state,
             from_main_menu,
-            space_context,
+            context,
             time_out,
         );
-        SetMenuSounds(
-            MENU_SOUND_ARROWS | MENU_SOUND_PAGEUP | MENU_SOUND_PAGEDOWN,
-            0,
-        );
+        let navigation_sounds = MENU_SOUND_ARROWS | MENU_SOUND_PAGEUP | MENU_SOUND_PAGEDOWN;
+        SetMenuSounds(input, navigation_sounds, 0);
         log::info!("RUST_PICKER: list_drawn slots=50");
         (old_callback, old_context, dlg_stamp, dlg_rect)
     });
@@ -110,7 +110,9 @@ pub(super) fn pick_game(
         cx.run_input(io, true, |cx, _| {
             let activity = cx.world.activity();
             // SAFETY: the synchronous picker owns these published native resources.
-            cx.with_legacy(|| unsafe { do_pick_game(ptr::addr_of_mut!(menu_state), activity) }) != 0
+            cx.with_legacy(|| unsafe {
+                do_pick_game(input, ptr::addr_of_mut!(menu_state), activity)
+            }) != 0
         });
         if pick_state.success == 0 {
             break;
@@ -120,6 +122,7 @@ pub(super) fn pick_game(
         // SAFETY: the synchronous picker owns these published native resources.
         if cx.with_legacy(|| unsafe {
             save_load_game(
+                input,
                 &mut pick_state,
                 menu_state.CurState as COUNT,
                 &mut canceled_by_user,
@@ -142,7 +145,7 @@ pub(super) fn pick_game(
         });
     }
     // SAFETY: the picker owns initialized game-thread menu audio.
-    cx.with_legacy(|| unsafe { SetMenuSounds(MENU_SOUND_ARROWS, MENU_SOUND_SELECT) });
+    SetMenuSounds(input, MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
     if pick_state.success != 0 && saving == 0 {
         cx.world
             .set_activity(cx.world.activity() | CHECK_LOAD as ACTIVITY);
@@ -155,7 +158,7 @@ pub(super) fn pick_game(
         save_load::restore_display(&mut dlg_stamp, &dlg_rect, restore);
         SetContext(old_context);
         resume_music();
-        SetInputCallback(old_callback);
+        SetInputCallback(runtime.input(), old_callback);
     });
     pick_state.success
 }

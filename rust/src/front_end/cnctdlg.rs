@@ -15,7 +15,8 @@ const MENU_FRAME_RATE: DWORD = ONE_SECOND / 20;
 
 #[repr(C)]
 pub struct ConnectDialogState {
-    pub input_func: Option<unsafe extern "C" fn(*mut ConnectDialogState) -> BOOLEAN>,
+    pub input_func:
+        Option<unsafe fn(*mut ConnectDialogState, &crate::engine::input::InputSession) -> BOOLEAN>,
     pub next_time: DWORD,
     pub initialized: BOOLEAN,
     pub which_side: c_int,
@@ -202,7 +203,10 @@ unsafe extern "C" fn mcd_draw_text_entry(widget: *mut WIDGET, x: c_int, y: c_int
     SetContextFont(old_font);
     SetContextForeGroundColor(old_text);
 }
-unsafe extern "C" fn on_text_entry_change(state: *mut TEXTENTRY_STATE) -> BOOLEAN {
+unsafe fn on_text_entry_change(
+    state: *mut TEXTENTRY_STATE,
+    _input: &crate::engine::input::InputSession,
+) -> BOOLEAN {
     let widget = (*state).CbParam.cast::<WIDGET_TEXTENTRY>();
     (*widget).cursor_pos = (*state).CursorPos;
     if (*state).JoystickMode != 0 {
@@ -212,13 +216,19 @@ unsafe extern "C" fn on_text_entry_change(state: *mut TEXTENTRY_STATE) -> BOOLEA
     }
     1
 }
-unsafe extern "C" fn on_text_entry_frame(state: *mut TEXTENTRY_STATE) -> BOOLEAN {
+unsafe fn on_text_entry_frame(
+    state: *mut TEXTENTRY_STATE,
+    _input: &crate::engine::input::InputSession,
+) -> BOOLEAN {
     draw_connect_dialog();
     SleepThreadUntil((*state).NextTime);
     (*state).NextTime = GetTimeCounter().wrapping_add(MENU_FRAME_RATE);
     1
 }
-unsafe extern "C" fn on_text_entry_event(widget: *mut WIDGET_TEXTENTRY) -> c_int {
+unsafe fn on_text_entry_event(
+    widget: *mut WIDGET_TEXTENTRY,
+    input: &crate::engine::input::InputSession,
+) -> c_int {
     (*widget).cursor_pos = utf8StringCount(((*widget).value.as_ptr()).cast()) as c_int;
     (*widget).state = WIDGET_TEXTENTRY_STATE_WTE_EDITING;
     draw_connect_dialog();
@@ -237,7 +247,7 @@ unsafe extern "C" fn on_text_entry_event(widget: *mut WIDGET_TEXTENTRY) -> c_int
     state.CbParam = widget.cast();
     state.ChangeCallback = Some(on_text_entry_change);
     state.FrameCallback = Some(on_text_entry_frame);
-    if DoTextEntry(&mut state) == 0 {
+    if do_text_entry(&mut state, input) == 0 {
         utf8StringCopy(
             ((*widget).value.as_mut_ptr()).cast(),
             (*widget).maxlen as usize,
@@ -267,19 +277,31 @@ unsafe fn apply_connection_options(server: bool) {
     state.confirmed = 1;
     DONE = 1;
 }
-unsafe extern "C" fn do_connect(_: *mut WIDGET, event: c_int) -> c_int {
+unsafe fn do_connect(
+    _: *mut WIDGET,
+    event: c_int,
+    _input: &crate::engine::input::InputSession,
+) -> c_int {
     if event == WIDGET_EVENT_SELECT as c_int {
         apply_connection_options(false);
     }
     0
 }
-unsafe extern "C" fn do_listen(_: *mut WIDGET, event: c_int) -> c_int {
+unsafe fn do_listen(
+    _: *mut WIDGET,
+    event: c_int,
+    _input: &crate::engine::input::InputSession,
+) -> c_int {
     if event == WIDGET_EVENT_SELECT as c_int {
         apply_connection_options(true);
     }
     0
 }
-unsafe extern "C" fn do_cancel(_: *mut WIDGET, event: c_int) -> c_int {
+unsafe fn do_cancel(
+    _: *mut WIDGET,
+    event: c_int,
+    _input: &crate::engine::input::InputSession,
+) -> c_int {
     if event == WIDGET_EVENT_SELECT as c_int {
         (*CURRENT_STATE).confirmed = 0;
         DONE = 1;
@@ -322,7 +344,7 @@ unsafe fn create_widgets() {
     widget_header!(
         ptr::addr_of_mut!(MENU),
         WIDGET_TYPE_WIDGET_TYPE_MENU_SCREEN,
-        Widget_HandleEventMenuScreen,
+        widget_handle_event_menu_screen,
         Widget_ReceiveFocusMenuScreen,
         mcd_draw_menu_screen,
         Widget_HeightFullScreen
@@ -340,7 +362,7 @@ unsafe fn create_widgets() {
     widget_header!(
         ptr::addr_of_mut!(SLIDER),
         WIDGET_TYPE_WIDGET_TYPE_SLIDER,
-        Widget_HandleEventSlider,
+        widget_handle_event_slider,
         Widget_ReceiveFocusSimple,
         mcd_draw_slider,
         Widget_HeightOneLine
@@ -358,7 +380,7 @@ unsafe fn create_widgets() {
         widget_header!(
             entry,
             WIDGET_TYPE_WIDGET_TYPE_TEXTENTRY,
-            Widget_HandleEventTextEntry,
+            widget_handle_event_text_entry,
             Widget_ReceiveFocusSimple,
             mcd_draw_text_entry,
             Widget_HeightOneLine
@@ -408,11 +430,14 @@ unsafe fn draw_connect_dialog() {
         rectangle.corner.y as c_int + 10,
     );
 }
-unsafe extern "C" fn do_melee_connect_dialog(state: *mut ConnectDialogState) -> BOOLEAN {
-    GamePaused = 0;
+unsafe fn do_melee_connect_dialog(
+    state: *mut ConnectDialogState,
+    input: &crate::engine::input::InputSession,
+) -> BOOLEAN {
+    input.set_paused(false);
     if (*state).initialized == 0 {
         (*state).initialized = 1;
-        SetDefaultMenuRepeatDelay();
+        SetDefaultMenuRepeatDelay(input);
         (*state).next_time = GetTimeCounter();
         create_widgets();
         draw_connect_dialog();
@@ -428,13 +453,13 @@ unsafe extern "C" fn do_melee_connect_dialog(state: *mut ConnectDialogState) -> 
         (KEY_MENU_CANCEL, WIDGET_EVENT_CANCEL),
         (KEY_MENU_DELETE, WIDGET_EVENT_DELETE),
     ] {
-        if PulsedInputState.menu[key as usize] != 0 {
+        if input.pulsed().menu[key as usize] != 0 {
             event = Some(value);
             break;
         }
     }
     if let Some(event) = event {
-        Widget_Event(event as c_int);
+        widget_event(event as c_int, input);
     } else {
         changed = false;
     }

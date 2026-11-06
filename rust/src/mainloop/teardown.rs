@@ -62,11 +62,6 @@ pub fn teardown_subsystems() {
         // 10. Memory (USE_RUST_MEM=1 maps mem_uninit() to rust_mem_uninit())
         let _ = crate::memory::rust_mem_uninit();
     }
-
-    // 11. Free options.addons (C-managed memory via HFree)
-    unsafe {
-        c_main_extern::uqm_free_options_addons();
-    }
 }
 
 /// Constants from C headers needed by the init/teardown sequence.

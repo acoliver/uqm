@@ -26,7 +26,7 @@ fn call_transition(id: ElementId) {
 
 #[test]
 fn encounter_transition_preserves_frame_cadence_and_completion() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let owner = Battle::new(8);
         let frames = NativeFrames::new(12);
         let mut element = Object::new(&owner);
@@ -83,7 +83,7 @@ fn encounter_transition_preserves_frame_cadence_and_completion() {
 
 #[test]
 fn interplanetary_flagship_keeps_motion_and_native_hooks() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _owner = Battle::new(8);
         let frames = NativeFrames::new(16);
         // SAFETY: the serialized fixture owns and restores navigation's live projections.
@@ -143,7 +143,7 @@ fn interplanetary_flagship_keeps_motion_and_native_hooks() {
 
 #[test]
 fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _owner = Battle::new(8);
         let frames = NativeFrames::new(16);
         // SAFETY: this serialized fixture owns the group pool, solar descriptors and frames.

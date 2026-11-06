@@ -28,7 +28,7 @@ unsafe fn modules() {
 }
 #[test]
 fn module_configuration_preserves_weapon_order_energy_caps_and_drive_rounding() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(32);
         unsafe {
             modules();
@@ -106,7 +106,7 @@ fn module_configuration_preserves_weapon_order_energy_caps_and_drive_rounding() 
 }
 #[test]
 fn no_weapons_disable_inputs_and_bomb_state_marks_carrier() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(16);
         unsafe {
             modules();
@@ -146,7 +146,7 @@ fn no_weapons_disable_inputs_and_bomb_state_marks_carrier() {
 }
 #[test]
 fn hyperspace_fuel_brakes_and_quasispace_allows_thrust_without_fuel() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(16);
         unsafe {
             modules();
@@ -193,7 +193,7 @@ fn hyperspace_fuel_brakes_and_quasispace_allows_thrust_without_fuel() {
 }
 #[test]
 fn autopilot_accelerates_toward_target_and_cancels_on_manual_turn() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(16);
         unsafe {
             modules();

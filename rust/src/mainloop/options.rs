@@ -1,12 +1,10 @@
 //! Command-line option parsing for UQM — replaces C `parseOptions()`.
 //!
-//! Uses clap for parsing, then exposes the result to C via FFI globals.
+//! Uses clap for parsing and returns the application-owned startup configuration.
 //!
 //! @plan Port parseOptions to Rust
 
-use std::ffi::CString;
-use std::os::raw::{c_char, c_int};
-use std::sync::OnceLock;
+use std::os::raw::c_int;
 
 use clap::{Arg, ArgAction, Command};
 
@@ -158,22 +156,6 @@ impl Default for ParsedOptions {
             replay_summary: None,
         }
     }
-}
-
-// ===========================================================================
-//  Global storage — read by C bridge `rust_get_parsed_options_*`
-// ===========================================================================
-
-static PARSED: OnceLock<ParsedOptions> = OnceLock::new();
-
-/// Return a reference to the globally-stored parsed options.
-///
-/// # Panics
-/// Panics if [`parse_and_store`] has not been called yet.
-pub fn parsed() -> &'static ParsedOptions {
-    PARSED
-        .get()
-        .expect("parse_and_store() must be called first")
 }
 
 // ===========================================================================
@@ -443,7 +425,7 @@ fn build_command() -> Command {
 /// If no content directory is specified, searches common locations.
 ///
 /// Priority: CLI args > config file (`uqm.cfg`) > compiled defaults.
-pub fn parse_and_store(args: &[String]) -> ParsedOptions {
+pub fn parse(args: &[String]) -> ParsedOptions {
     // Start with config file values (lowest explicit priority)
     let mut opts = ParsedOptions::default();
     parse_args_into(args, &mut opts);
@@ -459,7 +441,6 @@ pub fn parse_and_store(args: &[String]) -> ParsedOptions {
             .ok()
             .map(|path| path.to_string_lossy().into_owned());
     }
-    let _ = PARSED.set(opts.clone());
     opts
 }
 
@@ -833,280 +814,6 @@ fn parse_choice(v: &str, opts: &mut ParsedOptions) -> c_int {
         }
     }
 }
-
-// ===========================================================================
-//  FFI exports — called by C bridge to read parsed values
-// ===========================================================================
-
-/// C-callable accessor for the parsed options. Returns a semicolon-separated
-/// string that the C bridge unpacks into the `options_struct`.
-///
-/// Format: `log_file\0run_mode\0config_dir\0content_dir\0...`
-/// Each field is separated by NUL. Empty values are represented as empty strings.
-pub extern "C" fn rust_options_get_run_mode() -> c_int {
-    parsed().run_mode as c_int
-}
-
-pub extern "C" fn rust_options_parse_error() -> c_int {
-    if parsed().parse_error {
-        1
-    } else {
-        0
-    }
-}
-
-// --- String getters (return owned C string, caller must free) ---
-
-/// Returns a heap-allocated C string. Caller MUST call `rust_options_free_string`.
-fn to_c_string(s: &Option<String>) -> *mut c_char {
-    let val = s.as_deref().unwrap_or("");
-    CString::new(val).unwrap_or_default().into_raw()
-}
-
-pub extern "C" fn rust_options_get_log_file() -> *mut c_char {
-    to_c_string(&parsed().log_file)
-}
-
-pub extern "C" fn rust_options_get_config_dir() -> *mut c_char {
-    to_c_string(&parsed().config_dir)
-}
-
-pub extern "C" fn rust_options_get_content_dir() -> *mut c_char {
-    to_c_string(&parsed().content_dir)
-}
-
-pub extern "C" fn rust_options_get_addon_dir() -> *mut c_char {
-    to_c_string(&parsed().addon_dir)
-}
-
-pub extern "C" fn rust_options_get_graphics_backend() -> *mut c_char {
-    to_c_string(&parsed().graphics_backend)
-}
-
-#[no_mangle]
-/// # Safety
-/// A nonnull `s` must have been returned by `CString::into_raw` in this
-/// library, and must not have been freed or changed in length.
-pub unsafe extern "C" fn rust_options_free_string(s: *mut c_char) {
-    if !s.is_null() {
-        unsafe {
-            let _ = CString::from_raw(s);
-        }
-    }
-}
-
-pub extern "C" fn rust_options_get_addon_count() -> c_int {
-    parsed().addons.len() as c_int
-}
-
-pub extern "C" fn rust_options_get_addon(index: c_int) -> *mut c_char {
-    let addons = &parsed().addons;
-    if index < 0 || index as usize >= addons.len() {
-        return std::ptr::null_mut();
-    }
-    CString::new(addons[index as usize].as_str())
-        .unwrap_or_default()
-        .into_raw()
-}
-
-// --- Bool getters ---
-
-#[no_mangle]
-pub extern "C" fn rust_options_opengl() -> c_int {
-    if parsed().opengl {
-        1
-    } else {
-        0
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn rust_options_fullscreen() -> c_int {
-    if parsed().fullscreen {
-        1
-    } else {
-        0
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn rust_options_scanlines() -> c_int {
-    if parsed().scanlines {
-        1
-    } else {
-        0
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn rust_options_show_fps() -> c_int {
-    if parsed().show_fps {
-        1
-    } else {
-        0
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn rust_options_keep_aspect_ratio() -> c_int {
-    if parsed().keep_aspect_ratio {
-        1
-    } else {
-        0
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn rust_options_use_3do_music() -> c_int {
-    if parsed().use_3do_music {
-        1
-    } else {
-        0
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn rust_options_use_remix_music() -> c_int {
-    if parsed().use_remix_music {
-        1
-    } else {
-        0
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn rust_options_use_speech() -> c_int {
-    if parsed().use_speech {
-        1
-    } else {
-        0
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn rust_options_subtitles() -> c_int {
-    if parsed().subtitles {
-        1
-    } else {
-        0
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn rust_options_stereo_sfx() -> c_int {
-    if parsed().stereo_sfx {
-        1
-    } else {
-        0
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn rust_options_safe_mode() -> c_int {
-    if parsed().safe_mode {
-        1
-    } else {
-        0
-    }
-}
-
-// --- Int getters ---
-
-#[no_mangle]
-pub extern "C" fn rust_options_scaler() -> c_int {
-    parsed().scaler
-}
-
-#[no_mangle]
-pub extern "C" fn rust_options_sound_driver() -> c_int {
-    parsed().sound_driver
-}
-
-#[no_mangle]
-pub extern "C" fn rust_options_sound_quality() -> c_int {
-    parsed().sound_quality
-}
-
-#[no_mangle]
-pub extern "C" fn rust_options_which_coarse_scan() -> c_int {
-    parsed().which_coarse_scan
-}
-
-#[no_mangle]
-pub extern "C" fn rust_options_which_menu() -> c_int {
-    parsed().which_menu
-}
-
-#[no_mangle]
-pub extern "C" fn rust_options_which_fonts() -> c_int {
-    parsed().which_fonts
-}
-
-#[no_mangle]
-pub extern "C" fn rust_options_which_intro() -> c_int {
-    parsed().which_intro
-}
-
-#[no_mangle]
-pub extern "C" fn rust_options_which_shield() -> c_int {
-    parsed().which_shield
-}
-
-#[no_mangle]
-pub extern "C" fn rust_options_smooth_scroll() -> c_int {
-    parsed().smooth_scroll
-}
-
-#[no_mangle]
-pub extern "C" fn rust_options_melee_scale() -> c_int {
-    parsed().melee_scale
-}
-
-#[no_mangle]
-pub extern "C" fn rust_options_resolution_width() -> c_int {
-    parsed().resolution_width
-}
-
-#[no_mangle]
-pub extern "C" fn rust_options_resolution_height() -> c_int {
-    parsed().resolution_height
-}
-
-/// Player control overrides from config file. Returns -1 if not set.
-pub extern "C" fn rust_options_player1_control() -> c_int {
-    parsed().player1_control.unwrap_or(-1)
-}
-
-/// Player control overrides from config file. Returns -1 if not set.
-pub extern "C" fn rust_options_player2_control() -> c_int {
-    parsed().player2_control.unwrap_or(-1)
-}
-
-// --- Float getters ---
-
-#[no_mangle]
-pub extern "C" fn rust_options_gamma() -> f32 {
-    parsed().gamma
-}
-
-#[no_mangle]
-pub extern "C" fn rust_options_music_volume_scale() -> f32 {
-    parsed().music_volume_scale
-}
-
-#[no_mangle]
-pub extern "C" fn rust_options_sfx_volume_scale() -> f32 {
-    parsed().sfx_volume_scale
-}
-
-#[no_mangle]
-pub extern "C" fn rust_options_speech_volume_scale() -> f32 {
-    parsed().speech_volume_scale
-}
-
-// ===========================================================================
-//  Tests
-// ===========================================================================
 
 #[cfg(test)]
 mod tests {
@@ -1683,71 +1390,50 @@ mod config_file_tests {
         .map(|s| s.to_string())
         .collect();
 
-        let opts = parse_and_store(&args);
+        let opts = super::parse(&args);
 
         assert!(!opts.fullscreen, "the command line beats the file");
         assert_eq!((opts.resolution_width, opts.resolution_height), (800, 600));
         assert_eq!(opts.player1_control, Some(4), "file-only settings survive");
         assert!((opts.gamma - 1.5).abs() < 1e-6);
-        assert_eq!(rust_options_get_run_mode(), RunMode::Normal as c_int);
-        assert_eq!(rust_options_parse_error(), 0);
-        assert_eq!(rust_options_fullscreen(), 0);
-        assert_eq!(rust_options_scanlines(), 1);
-        assert_eq!(rust_options_show_fps(), 1);
-        assert_eq!(rust_options_subtitles(), 0);
-        assert_eq!(rust_options_safe_mode(), 1);
-        assert_eq!(rust_options_opengl(), 0);
-        assert_eq!(rust_options_keep_aspect_ratio(), 1);
-        assert_eq!(rust_options_use_3do_music(), 1);
-        assert_eq!(rust_options_use_remix_music(), 1);
-        assert_eq!(rust_options_use_speech(), 1);
-        assert_eq!(rust_options_stereo_sfx(), 1);
-        assert_eq!(rust_options_resolution_width(), 800);
-        assert_eq!(rust_options_resolution_height(), 600);
-        assert_eq!(rust_options_scaler(), TFB_GFXFLAGS_SCALE_XBRZ4);
-        assert_eq!(rust_options_sound_driver(), AUDIO_DRIVER_NOSOUND);
-        assert_eq!(rust_options_sound_quality(), AUDIO_QUALITY_HIGH);
-        assert_eq!(rust_options_which_coarse_scan(), OPT_3DO);
-        assert_eq!(rust_options_which_menu(), OPT_PC);
-        assert_eq!(rust_options_which_fonts(), OPT_PC);
-        assert_eq!(rust_options_which_intro(), OPT_3DO);
-        assert_eq!(rust_options_which_shield(), OPT_3DO);
-        assert_eq!(rust_options_smooth_scroll(), OPT_3DO);
-        assert_eq!(rust_options_melee_scale(), TFB_SCALE_TRILINEAR);
-        assert_eq!(rust_options_player1_control(), 4);
-        assert_eq!(rust_options_player2_control(), -1, "unset reads as -1");
-        assert!((rust_options_gamma() - 1.5).abs() < 1e-6);
-        assert_eq!(rust_options_music_volume_scale(), 1.0);
-        assert_eq!(rust_options_sfx_volume_scale(), 1.0);
-        assert_eq!(rust_options_speech_volume_scale(), 1.0);
+        assert_eq!(opts.run_mode as c_int, RunMode::Normal as c_int);
+        assert_eq!(i32::from(opts.parse_error), 0);
+        assert_eq!(i32::from(opts.fullscreen), 0);
+        assert_eq!(i32::from(opts.scanlines), 1);
+        assert_eq!(i32::from(opts.show_fps), 1);
+        assert_eq!(i32::from(opts.subtitles), 0);
+        assert_eq!(i32::from(opts.safe_mode), 1);
+        assert_eq!(i32::from(opts.opengl), 0);
+        assert_eq!(i32::from(opts.keep_aspect_ratio), 1);
+        assert_eq!(i32::from(opts.use_3do_music), 1);
+        assert_eq!(i32::from(opts.use_remix_music), 1);
+        assert_eq!(i32::from(opts.use_speech), 1);
+        assert_eq!(i32::from(opts.stereo_sfx), 1);
+        assert_eq!(opts.resolution_width, 800);
+        assert_eq!(opts.resolution_height, 600);
+        assert_eq!(opts.scaler, TFB_GFXFLAGS_SCALE_XBRZ4);
+        assert_eq!(opts.sound_driver, AUDIO_DRIVER_NOSOUND);
+        assert_eq!(opts.sound_quality, AUDIO_QUALITY_HIGH);
+        assert_eq!(opts.which_coarse_scan, OPT_3DO);
+        assert_eq!(opts.which_menu, OPT_PC);
+        assert_eq!(opts.which_fonts, OPT_PC);
+        assert_eq!(opts.which_intro, OPT_3DO);
+        assert_eq!(opts.which_shield, OPT_3DO);
+        assert_eq!(opts.smooth_scroll, OPT_3DO);
+        assert_eq!(opts.melee_scale, TFB_SCALE_TRILINEAR);
+        assert_eq!(opts.player1_control.unwrap(), 4);
+        assert_eq!(opts.player2_control.unwrap_or(-1), -1, "unset reads as -1");
+        assert!((opts.gamma - 1.5).abs() < 1e-6);
+        assert_eq!(opts.music_volume_scale, 1.0);
+        assert_eq!(opts.sfx_volume_scale, 1.0);
+        assert_eq!(opts.speech_volume_scale, 1.0);
 
-        let text = |ptr: *mut c_char| {
-            assert!(!ptr.is_null());
-            let value = unsafe { std::ffi::CStr::from_ptr(ptr) }
-                .to_str()
-                .unwrap()
-                .to_string();
-            unsafe {
-                // SAFETY: The test owns this CString allocation and releases it exactly once.
-                rust_options_free_string(ptr)
-            };
-            value
-        };
-        assert_eq!(text(rust_options_get_log_file()), "run.log");
-        assert_eq!(text(rust_options_get_config_dir()), config_path);
-        assert_eq!(text(rust_options_get_addon_dir()), "/addons");
-        assert_eq!(text(rust_options_get_content_dir()), "/content");
-        assert_eq!(text(rust_options_get_graphics_backend()), "sdl2");
-
-        assert_eq!(rust_options_get_addon_count(), 2);
-        assert_eq!(text(rust_options_get_addon(0)), "first");
-        assert_eq!(text(rust_options_get_addon(1)), "second");
-        assert!(rust_options_get_addon(2).is_null());
-        assert!(rust_options_get_addon(-1).is_null());
-        unsafe {
-            // SAFETY: The test owns this CString allocation and releases it exactly once.
-            rust_options_free_string(std::ptr::null_mut())
-        };
+        assert_eq!(opts.log_file.as_deref(), Some("run.log"));
+        assert_eq!(opts.config_dir.as_deref(), Some(config_path));
+        assert_eq!(opts.addon_dir.as_deref(), Some("/addons"));
+        assert_eq!(opts.content_dir.as_deref(), Some("/content"));
+        assert_eq!(opts.graphics_backend.as_deref(), Some("sdl2"));
+        assert_eq!(opts.addons, ["first", "second"]);
     }
 
     fn parse(args: &[&str]) -> ParsedOptions {

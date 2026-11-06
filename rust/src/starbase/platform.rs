@@ -139,7 +139,7 @@ impl MenuSounds {
         select_mask: Self::SELECT,
     };
 
-    /// The fuel adjust sounds of `DoOutfit` (`outfit.c:775-778`).
+    /// The fuel adjust sounds of `do_outfit` (`outfit.c:775-778`).
     /// `SetMenuSounds (MENU_SOUND_UP | MENU_SOUND_DOWN, MENU_SOUND_SELECT |
     /// MENU_SOUND_CANCEL)` while the Shipyard edits crew.
     pub const EDIT_CREW: Self = Self {

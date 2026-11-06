@@ -59,8 +59,6 @@ pub(super) mod c_bridge {
 
     pub use crate::ui::sis::DrawSISMessage;
 
-    pub use crate::mainloop::input_abi::live::SetMenuSounds;
-
     pub use crate::comm::comm_abi::c_SetCurInputState;
 
     pub use crate::graphics::cmap_abi::FlushColorXForms;
@@ -76,7 +74,6 @@ pub(super) mod c_bridge {
         pub static mut ScreenWidth: c_int;
         pub static mut ScreenHeight: c_int;
         #[allow(dead_code)]
-        pub static mut optSmoothScroll: c_int;
         pub static mut CommWndRect: crate::comm::locdata::CRect;
 
     }
@@ -298,8 +295,8 @@ pub unsafe fn hail_alien(cx: &mut Cx<'_>, io: &mut Io<'_>) {
     #[cfg(not(test))]
     use crate::engine::observe::{CheckpointView, InputView};
     #[cfg(not(test))]
-    #[cfg(not(test))]
     {
+        let input = cx.kernel.input_runtime().input().clone();
         use super::player_font::CONVERSATION_PLAYER_FONT;
         use c_bridge::*;
         use std::ptr;
@@ -531,12 +528,12 @@ pub unsafe fn hail_alien(cx: &mut Cx<'_>, io: &mut Io<'_>) {
             es.input = None;
             cx.with_legacy(|| {
                 c_bridge::c_SetCurInputState(&mut es as *mut _ as *mut std::ffi::c_void);
-                c_bridge::SetMenuSounds(MENU_SOUND_UP | MENU_SOUND_DOWN, MENU_SOUND_SELECT);
+                input.set_menu_sounds(MENU_SOUND_UP | MENU_SOUND_DOWN, MENU_SOUND_SELECT);
             });
             io.observer
                 .checkpoint(&CheckpointView::CommunicationStarted);
             cx.run_input(io, false, |cx, io| {
-                crate::comm::ffi::rust_do_communication(cx, io) != 0
+                crate::comm::ffi::rust_do_communication(&input, cx, io) != 0
             });
             io.observer.checkpoint(&CheckpointView::CommunicationEnded);
             cx.with_legacy(|| c_bridge::c_SetCurInputState(std::ptr::null_mut()));

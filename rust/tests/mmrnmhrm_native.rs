@@ -17,7 +17,7 @@ use battle::Battle as Battlefield;
 
 #[test]
 fn descriptor_exposes_xwing_defaults_and_both_form_resources() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battlefield::new(8);
         unsafe {
             let mut fixture = Ship::bare(&_battle, SPECIES_ID_MMRNMHRM_ID, 0);
@@ -72,7 +72,7 @@ fn descriptor_exposes_xwing_defaults_and_both_form_resources() {
 
 #[test]
 fn special_transform_checks_appearance_energy_and_cooldown() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battlefield::new(8);
         unsafe {
             let mut fixture = Ship::bare(&_battle, SPECIES_ID_MMRNMHRM_ID, 0);
@@ -109,7 +109,7 @@ fn special_transform_checks_appearance_energy_and_cooldown() {
 
 #[test]
 fn missile_mode_returns_two_missiles_with_c_boundary_values() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battlefield::new(8);
         unsafe {
             let mut fixture = Ship::bare(&_battle, SPECIES_ID_MMRNMHRM_ID, 0);
@@ -142,7 +142,7 @@ fn missile_mode_returns_two_missiles_with_c_boundary_values() {
 
 #[test]
 fn transforming_swaps_characteristics_and_each_ship_owns_its_alternate_form() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battlefield::new(8);
         unsafe {
             let mut first_fixture = Ship::bare(&_battle, SPECIES_ID_MMRNMHRM_ID, 0);
@@ -270,7 +270,7 @@ fn transforming_swaps_characteristics_and_each_ship_owns_its_alternate_form() {
 
 #[test]
 fn xwing_launches_two_lasers_and_preserves_friendly_ships() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battlefield::new(8);
         unsafe {
             let mut fixture = Ship::bare(&_battle, SPECIES_ID_MMRNMHRM_ID, 0);

@@ -24,10 +24,7 @@ mod live {
     use std::{
         ffi::{c_char, CString},
         ptr,
-        sync::Mutex,
     };
-
-    static ADDON_NAMES: Mutex<Vec<CString>> = Mutex::new(Vec::new());
 
     fn c_option(value: &Option<String>) -> Option<CString> {
         value
@@ -38,11 +35,12 @@ mod live {
     /// # Safety
     /// Called once on the SDL owner thread after command-line parsing.
     pub unsafe fn initialize(
+        input: &crate::engine::input::InputSession,
+        parsed: &options::ParsedOptions,
         argc: i32,
         argv: *mut *mut c_char,
         observer: Option<std::sync::Arc<crate::automation::AutomationObserver>>,
     ) -> i32 {
-        let parsed = options::parsed();
         crate::log_abi::log_init(15);
         crate::bridge_log::rust_bridge_init();
         if let Some(path) = &parsed.log_file {
@@ -74,48 +72,43 @@ mod live {
             return 1;
         }
 
-        use crate::ships::native::abi;
-        let controls = ptr::addr_of_mut!(abi::PlayerControls).cast::<u32>();
-        *controls = parsed.player1_control.unwrap_or(0) as u32;
-        *controls.add(1) = parsed.player2_control.unwrap_or(3) as u32;
+        input.set_player_control(0, parsed.player1_control.unwrap_or(0) as u32);
+        input.set_player_control(1, parsed.player2_control.unwrap_or(3) as u32);
         for i in 1..=6 {
             let key = CString::new(format!("config.keys.{i}.name")).unwrap();
             crate::resource::ffi_bridge::res_Remove(key.as_ptr());
         }
         volume_globals::snddriver = parsed.sound_driver;
         volume_globals::soundflags = parsed.sound_quality;
-        globals::opt3doMusic = parsed.use_3do_music as u32;
-        globals::optRemixMusic = parsed.use_remix_music as u32;
-        globals::optSpeech = parsed.use_speech as u32;
-        globals::optSubtitles = parsed.subtitles as u32;
-        globals::optStereoSFX = parsed.stereo_sfx as u32;
-        globals::optKeepAspectRatio = parsed.keep_aspect_ratio as u32;
-        globals::optWhichCoarseScan = parsed.which_coarse_scan;
-        globals::optWhichMenu = parsed.which_menu;
-        globals::optWhichFonts = parsed.which_fonts;
-        globals::optWhichIntro = parsed.which_intro;
-        globals::optWhichShield = parsed.which_shield;
-        globals::optSmoothScroll = parsed.smooth_scroll;
-        globals::optMeleeScale = parsed.melee_scale;
+        let preferences = uqm_engine::configuration::Preferences {
+            music_3do: parsed.use_3do_music as u32,
+            music_remix: parsed.use_remix_music as u32,
+            speech: parsed.use_speech as u32,
+            subtitles: parsed.subtitles as u32,
+            stereo_sfx: parsed.stereo_sfx as u32,
+            keep_aspect_ratio: parsed.keep_aspect_ratio as u32,
+            coarse_scan: parsed.which_coarse_scan,
+            menu: parsed.which_menu,
+            fonts: parsed.which_fonts,
+            intro: parsed.which_intro,
+            shield: parsed.which_shield,
+            smooth_scroll: parsed.smooth_scroll,
+            melee_scale: parsed.melee_scale,
+            ..Default::default()
+        };
+        input.configuration.set_preferences(preferences);
         volume_globals::musicVolumeScale = parsed.music_volume_scale;
         volume_globals::sfxVolumeScale = parsed.sfx_volume_scale;
         volume_globals::speechVolumeScale = parsed.speech_volume_scale;
-        let mut names = ADDON_NAMES.lock().unwrap();
-        *names = parsed
-            .addons
-            .iter()
-            .map(|name| CString::new(name.as_str()).expect("addon name contains NUL"))
-            .collect();
-        let addons =
-            crate::memory::rust_hmalloc((names.len() + 1) * std::mem::size_of::<*const c_char>())
-                .cast::<*const c_char>();
-        for (i, name) in names.iter().enumerate() {
-            *addons.add(i) = name.as_ptr();
-        }
-        *addons.add(names.len()) = ptr::null();
-        globals::optAddons = addons;
-        drop(names);
+        input.configuration.set_addons(
+            parsed
+                .addons
+                .iter()
+                .map(|name| CString::new(name.as_str()).expect("addon name contains NUL"))
+                .collect(),
+        );
         if let Err(error) = dir_prep::prepare_content_dir(
+            &input.configuration,
             parsed.content_dir.as_deref(),
             parsed.addon_dir.as_deref(),
         ) {
@@ -150,16 +143,19 @@ mod live {
         {
             return 1;
         }
-        globals::optGamma = if globals::setGammaCorrection(parsed.gamma) {
+        let gamma = if globals::setGammaCorrection(parsed.gamma) {
             parsed.gamma
         } else {
             1.0
         };
+        input
+            .configuration
+            .update_preferences(|preferences| preferences.gamma = gamma);
         crate::graphics::cmap_abi::InitColorMaps();
         if crate::comm::ffi::rust_init_communication() == 0 {
             return 1;
         }
-        let immediate = ptr::addr_of_mut!(abi::ImmediateInputState);
+        let immediate = input.immediate_ptr();
         crate::input::sdl_input::tfb_set_input_vectors(
             ptr::addr_of_mut!((*immediate).menu).cast(),
             24,
@@ -171,14 +167,6 @@ mod live {
             return 1;
         }
         0
-    }
-
-    /// # Safety
-    /// The game has stopped using addon names and resources.
-    pub unsafe fn free_addons() {
-        crate::memory::rust_hfree(globals::optAddons.cast_mut().cast());
-        globals::optAddons = ptr::null();
-        ADDON_NAMES.lock().unwrap().clear();
     }
 }
 
