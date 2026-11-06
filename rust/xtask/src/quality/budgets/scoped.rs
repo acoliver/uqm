@@ -118,6 +118,7 @@ pub(super) fn check(measured: &Measurement, budget: &Budget) -> Result<(), Strin
 fn accessor_identity(name: &str, identity: &str) -> bool {
     [
         "uqm::engine::battle::access::",
+        "uqm-engine::battle::access::",
         "uqm::battle::context_access::",
     ]
     .iter()
