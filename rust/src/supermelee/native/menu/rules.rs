@@ -1,6 +1,14 @@
 //! Cursor and control transitions of the Super Melee setup menu.
 use crate::battle::{COMPUTER_CONTROL, HUMAN_CONTROL};
 
+pub(super) fn name_editor_buffer(name: &std::ffi::CStr) -> [u8; 31] {
+    let mut buffer = [0; 31];
+    let name = name.to_bytes();
+    let length = name.len().min(buffer.len() - 1);
+    buffer[..length].copy_from_slice(&name[..length]);
+    buffer
+}
+
 pub(super) fn advance_cursor(row: u16, col: u16) -> (u16, u16) {
     let col = col + 1;
     if col != 7 {

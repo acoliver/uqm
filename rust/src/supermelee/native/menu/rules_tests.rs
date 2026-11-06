@@ -1,6 +1,23 @@
 use super::rules::{advance_cursor, move_cursor, network_status_side, next_control, next_option};
 
 #[test]
+fn name_editor_keeps_legacy_byte_limit_and_zero_padding() {
+    let empty = super::rules::name_editor_buffer(c"");
+    assert_eq!(empty, [0; 31]);
+    let short = super::rules::name_editor_buffer(c"Team");
+    assert_eq!(&short[..5], b"Team\0");
+    assert_eq!(&short[5..], &[0; 26]);
+    let full = super::rules::name_editor_buffer(c"123456789012345678901234567890extra");
+    assert_eq!(&full[..30], b"123456789012345678901234567890");
+    assert_eq!(full[30], 0);
+    let bytes = std::ffi::CStr::from_bytes_with_nul(&[0xff, 0xfe, 0]).unwrap();
+    assert_eq!(
+        &super::rules::name_editor_buffer(bytes)[..3],
+        &[0xff, 0xfe, 0]
+    );
+}
+
+#[test]
 fn slot_advance_wraps_first_row_and_clamps_at_last_slot() {
     assert_eq!(advance_cursor(0, 5), (0, 6));
     assert_eq!(advance_cursor(0, 6), (1, 0));

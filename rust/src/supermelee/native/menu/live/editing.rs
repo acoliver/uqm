@@ -33,15 +33,11 @@ unsafe fn edit_name(
 ) {
     (*state).cur_index = 0;
     name(state, side, 1, ptr::null());
-    let mut buf = [0 as std::ffi::c_char; 31];
-    libc::strncpy(
-        buf.as_mut_ptr(),
-        (*state).melee_setup.teams[side as usize].c_name().as_ptr(),
-        30,
-    );
+    let mut buf =
+        super::super::rules::name_editor_buffer((*state).melee_setup.teams[side as usize].c_name());
     let mut entry: TEXTENTRY_STATE = mem::zeroed();
     entry.Initialized = 0;
-    entry.BaseStr = buf.as_mut_ptr();
+    entry.BaseStr = buf.as_mut_ptr().cast();
     entry.CursorPos = 0;
     entry.MaxSize = 31;
     entry.CbParam = state.cast();
@@ -50,7 +46,7 @@ unsafe fn edit_name(
     do_text_entry(input, &mut entry);
     (*state).cur_index = u16::MAX;
     if entry.Success == 0
-        || !local_change_team_name(state, side, std::ffi::CStr::from_ptr(buf.as_ptr()))
+        || !local_change_team_name(state, side, std::ffi::CStr::from_ptr(buf.as_ptr().cast()))
     {
         view_name(state, side);
     }
